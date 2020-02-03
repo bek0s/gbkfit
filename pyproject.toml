@@ -1,0 +1,6 @@
+[build-system]
+requires = ['cmake', 'setuptools>=42', 'setuptools_scm[toml]', 'wheel']
+
+[tool.setuptools_scm]
+write_to = 'src/gbkfit/_version.py'
+write_to_template = '__version__ = "{version}"'

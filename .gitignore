@@ -1,0 +1,15 @@
+*~
+*.fits
+*.json
+*.so
+*.user
+.DS_Store
+Thumbs.db
+__pycache__/
+.idea/
+.pytest_cache/
+build/
+dist/
+gbkfit.egg-info/
+src/gbkfit/native/build*/
+src/gbkfit/_version.py
