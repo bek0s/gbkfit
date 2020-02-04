@@ -53,7 +53,7 @@ setup(
     description='description',
     long_description='long description',
     author='Georgios Bekiaris',
-    author_email='geobekiaris_@AT@_gmail_@DOT@_com',
+    author_email='gbkfit@gmail.com',
     url='https://github.com/bek0s/gbkfit',
     license='BSD (3-clause)',
     classifiers=[
