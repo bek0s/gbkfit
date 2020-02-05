@@ -7,6 +7,7 @@ import numpy as np
 
 import gbkfit.params
 from gbkfit.brokers import BrokerNone
+from gbkfit.drivers import BackendOpenMP
 from gbkfit.utils import iterutils
 
 log = logging.getLogger(__name__)
@@ -16,12 +17,15 @@ class Model:
 
     def __init__(self, dmodels, gmodels, drivers, brokers):
 
+        if not drivers:
+            drivers = BackendOpenMP()
+        if not brokers:
+            brokers = BrokerNone()
+
         dmodels = iterutils.listify(dmodels)
         gmodels = iterutils.listify(gmodels)
         drivers = iterutils.listify(drivers)
         brokers = iterutils.listify(brokers)
-
-        iterutils.replace_items_in_place(brokers, None, BrokerNone(), True)
 
         ndmodels = len(dmodels)
         ngmodels = len(gmodels)
@@ -30,20 +34,20 @@ class Model:
 
         if ndmodels != ngmodels:
             raise RuntimeError(
-                f"the number of DModels ({ndmodels}) and GModels ({ngmodels}) "
-                f"must be the same")
+                f"The number of gmodels ({ngmodels}) "
+                f"must be equal to the number of dmodels ({ndmodels}).")
 
-        if ndrivers == 1 and ndmodels > 1:
-            drivers = iterutils.make_list(ndmodels, drivers[0], True)
-
-        if nbrokers == 1 and ndmodels > 1:
-            brokers = iterutils.make_list(ndmodels, brokers[0], True)
-
-        if ndrivers != ndmodels or ndrivers != ngmodels:
+        if ((nbrokers != ndmodels and nbrokers != 1)
+                or (ndrivers != ndmodels and ndrivers != 1)):
             raise RuntimeError(
-                f"the number of supplied Drivers ({ndrivers}), "
-                f"DModels ({ndmodels}), and GModels ({ngmodels}) "
-                f"must be the same")
+                f"The number of brokers ({nbrokers}) and drivers ({ndrivers}) "
+                f"must be equal to the number of dmodels ({ndmodels}) or 1.")
+
+        if len(drivers) == 1 and ndmodels > 1:
+            drivers = iterutils.make_list((ndmodels,), drivers[0], True)
+
+        if len(brokers) == 1 and ndmodels > 1:
+            brokers = iterutils.make_list((ndmodels,), brokers[0], True)
 
         self._nmodels = ndrivers
         self._brokers = tuple(brokers)

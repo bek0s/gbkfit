@@ -20,16 +20,13 @@ log = logging.getLogger(__name__)
 def _prepare_config(config):
 
     _detail.require_config_sections(
-        config,
-        ['drivers', 'datasets', 'dmodels', 'gmodels', 'fitter', 'params'])
+        config, ['datasets', 'dmodels', 'gmodels', 'fitter', 'params'])
 
     _detail.listify_config_sections(
-        config,
-        ['brokers', 'drivers', 'datasets', 'dmodels', 'gmodels'])
+        config, ['brokers', 'drivers', 'datasets', 'dmodels', 'gmodels'])
 
     _detail.check_config_sections_length(
-        config,
-        ['brokers', 'drivers', 'datasets', 'dmodels', 'gmodels'])
+        config, ['datasets', 'dmodels'])
 
 
 def fit(config):
@@ -41,11 +38,15 @@ def fit(config):
     config = json.load(open(config))
     _prepare_config(config)
 
-    log.info("Setting up brokers...")
-    brokers = gbkfit.broker.parser.load(config.get('brokers'))
+    brokers = None
+    if config.get('brokers'):
+        log.info("Setting up brokers...")
+        brokers = gbkfit.broker.parser.load(config['brokers'])
 
-    log.info("Setting up backends...")
-    drivers = gbkfit.driver.parser.load(config['drivers'])
+    drivers = None
+    if config.get('drivers'):
+        log.info("Setting up drivers...")
+        drivers = gbkfit.driver.parser.load(config['drivers'])
 
     log.info("Setting up datasets...")
     datasets = gbkfit.dataset.parser.load(config['datasets'])

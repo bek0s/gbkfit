@@ -61,8 +61,16 @@ class TypedParser:
 
     def load_many2(self, x, *args, **kwargs):
         nitems = len(x)
-        if any([nitems != len(arg) for arg in args + tuple(kwargs.values())]):
-            raise RuntimeError("All arguments must have the same length.")
+        args = list(args)
+        for i, value in enumerate(args):
+            if value is None:
+                args[i] = nitems * [None]
+        for key, value in kwargs.items():
+            if value is None:
+                kwargs[key] = nitems * [None]
+        if any([nitems != len(arg) for arg in args + list(kwargs.values())]):
+            raise RuntimeError(
+                "All arguments must have the same length or be None.")
         nargs = len(args)
         args_list_shape = (nitems, nargs)
         args_list = iterutils.make_list(args_list_shape, [], True)
