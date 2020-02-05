@@ -481,7 +481,7 @@ gmodel_mcdisk_evaluate(
 
     bool is_thin = false;
 
-    #pragma omp parallel for
+    //#pragma omp parallel for
     for(int ci = 0; ci < nclouds; ++ci)
     {
 
@@ -550,6 +550,7 @@ gmodel_mcdisk_evaluate(
         // Only if needed (i.e., after passing the selection traits)
         rh_trait_rnd<T>(zd, rng, rht_uids[tidx], rht_cptr, rht_pptr);
     //  zd = 0;
+    //  zd = 0;
 
         // Warp traits
         if (wpt_uids)
@@ -578,16 +579,34 @@ gmodel_mcdisk_evaluate(
 
         T xn = xd, yn = yd, zn = zd;
 
+    //  std::cout << "rd: " << rd << std::endl;
+    //  std::cout << "theta: " << theta << std::endl;
+    //  std::cout << "1: xn, yn, zn: " << xn << ", " << yn << ", " << zn << std::endl;
+
         transform_incl_posa_cpos(xn, yn, zn, xposi, yposi, posai, incli);
+
+    //  std::cout << xposi << " " << yposi << " " << posai << " " << incli << std::endl;
+    //  std::cout << "2: xn, yn, zn: " << xn << ", " << yn << ", " << zn << std::endl;
+
+        /*
+        int x = std::rint(xn - spat_zero_x - 0.5);
+        int y = std::rint(yn - spat_zero_y - 0.5);
+        int z = std::rint(zn - spat_zero_z - 0.5);
+        */
 
         int x = std::rint(xn - spat_zero_x - 0.5);
         int y = std::rint(yn - spat_zero_y - 0.5);
         int z = std::rint(zn - spat_zero_z - 0.5);
 
+        //std::cout << "0: " << xn << " " << yn << " " << zn << std::endl;
+        //std::cout << "3: " << x << " " << y << " " << z << std::endl;
+
         if (x < 0 || x >= spat_size_x ||
             y < 0 || y >= spat_size_y ||
             z < 0 || z >= spat_size_z)
             continue;
+
+        //std::cout << "4: " << x << " " << y << " " << z << std::endl;
 
         // Velocity traits
         if (vpt_uids)

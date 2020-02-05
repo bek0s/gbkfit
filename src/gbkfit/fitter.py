@@ -11,4 +11,4 @@ class Fitter(abc.ABC):
         pass
 
 
-parser = parseutils.SimpleParser(Fitter)
+parser = parseutils.TypedParser(Fitter)

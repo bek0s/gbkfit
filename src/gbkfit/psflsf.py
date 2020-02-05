@@ -78,5 +78,5 @@ class PSF(abc.ABC):
         pass
 
 
-lsf_parser = parseutils.SimpleParser(LSF)
-psf_parser = parseutils.SimpleParser(PSF)
+lsf_parser = parseutils.TypedParser(LSF)
+psf_parser = parseutils.TypedParser(PSF)

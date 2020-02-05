@@ -7,13 +7,30 @@ import astropy.io.fits as fits
 
 import gbkfit
 import gbkfit.broker
+import gbkfit.dataset
 import gbkfit.dmodel
 import gbkfit.driver
 import gbkfit.gmodel
 import gbkfit.model
 import gbkfit.params
+from . import _detail
 
 log = logging.getLogger(__name__)
+
+
+def _prepare_config(config):
+
+    _detail.require_config_sections(
+        config,
+        [ 'dmodels', 'gmodels', 'params'])
+
+    _detail.listify_config_sections(
+        config,
+        ['brokers', 'drivers', 'datasets', 'dmodels', 'gmodels'])
+
+    _detail.check_config_sections_length(
+        config,
+        ['brokers', 'drivers', 'datasets', 'dmodels', 'gmodels'])
 
 
 def eval_(config):
@@ -23,15 +40,25 @@ def eval_(config):
 
     log.info(f"Reading configuration file: '{config}'...")
     config = json.load(open(config))
+    _prepare_config(config)
 
-    log.info("Setting up brokers...")
-    brokers = gbkfit.broker.parser.load(config.get('brokers'))
+    brokers = None
+    if 'brokers' in config:
+        log.info("Setting up brokers...")
+        brokers = gbkfit.broker.parser.load(config.get('brokers'))
 
-    log.info("Setting up backends...")
-    drivers = gbkfit.driver.parser.load(config['drivers'])
+    drivers = None
+    if 'drivers' in config:
+        log.info("Setting up drivers...")
+        drivers = gbkfit.driver.parser.load(config['drivers'])
+
+    datasets = None
+    if 'datasets' in config:
+        log.info("Setting up datasets...")
+        datasets = gbkfit.dataset.parser.load(config['datasets'])
 
     log.info("Setting up dmodels...")
-    dmodels = gbkfit.dmodel.parser.load(config['dmodels'])
+    dmodels = gbkfit.dmodel.parser.load_many2(config['dmodels'], datasets)
 
     log.info("Setting up gmodels...")
     gmodels = gbkfit.gmodel.parser.load(config['gmodels'])
@@ -58,7 +85,7 @@ def eval_(config):
         t2 = time.time_ns()
         t_ms = (t2 - t1) // 1000000
         log.info("Model evaluation completed.")
-        log.info(f"Total evaluation time: {t_ms} ms.")
+        log.info(f"Elapsed time: {t_ms} ms.")
 
     def save_output(filename, data):
         hdu = fits.PrimaryHDU(data)

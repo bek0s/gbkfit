@@ -1071,14 +1071,14 @@ class SPTraitNWAzimuthalRange(ParamSupportNW, SPTrait):
 
 
 # Trait parsers
-rpt_parser = parseutils.SimpleParser(RPTrait)
-rht_parser = parseutils.SimpleParser(RHTrait)
-vpt_parser = parseutils.SimpleParser(VPTrait)
-vht_parser = parseutils.SimpleParser(VHTrait)
-dpt_parser = parseutils.SimpleParser(DPTrait)
-dht_parser = parseutils.SimpleParser(DHTrait)
-wpt_parser = parseutils.SimpleParser(WPTrait)
-spt_parser = parseutils.SimpleParser(SPTrait)
+rpt_parser = parseutils.TypedParser(RPTrait)
+rht_parser = parseutils.TypedParser(RHTrait)
+vpt_parser = parseutils.TypedParser(VPTrait)
+vht_parser = parseutils.TypedParser(VHTrait)
+dpt_parser = parseutils.TypedParser(DPTrait)
+dht_parser = parseutils.TypedParser(DHTrait)
+wpt_parser = parseutils.TypedParser(WPTrait)
+spt_parser = parseutils.TypedParser(SPTrait)
 
 # Density traits (polar)
 rpt_parser.register(RPTraitUniform)

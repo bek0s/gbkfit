@@ -41,4 +41,4 @@ class GModelSCubeSupport(abc.ABC):
         pass
 
 
-parser = parseutils.SimpleParser(GModel)
+parser = parseutils.TypedParser(GModel)

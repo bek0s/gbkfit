@@ -51,4 +51,4 @@ class Broker(abc.ABC):
         pass
 
 
-parser = parseutils.SimpleParser(Broker)
+parser = parseutils.TypedParser(Broker)

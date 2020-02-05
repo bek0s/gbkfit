@@ -86,4 +86,4 @@ class DModel(abc.ABC):
         pass
 
 
-parser = parseutils.SimpleParser(DModel)
+parser = parseutils.TypedParser(DModel)

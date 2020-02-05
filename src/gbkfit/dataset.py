@@ -1,27 +1,18 @@
 
 import abc
-import collections
 
+from gbkfit.data import Data
 from gbkfit.utils import parseutils
 
 
 class Dataset(abc.ABC):
 
-    @staticmethod
-    @abc.abstractmethod
-    def type():
-        pass
-
     @classmethod
-    @abc.abstractmethod
     def load(cls, info):
-        pass
+        return Dataset({k: Data.load(v) for k, v in info.items()})
 
     def dump(self, prefix=''):
-        info = {'type': self.type()}
-        for key, value in self.items():
-            info[key] = value.dump(prefix + key + '_')
-        return info
+        return {k: v.dump(prefix + k + '_') for k, v in self.items()}
 
     def __init__(self, data):
         self._data = data

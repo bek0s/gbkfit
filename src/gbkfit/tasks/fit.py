@@ -6,13 +6,30 @@ import time
 
 import gbkfit
 import gbkfit.broker
+import gbkfit.dataset
 import gbkfit.dmodel
 import gbkfit.driver
 import gbkfit.gmodel
 import gbkfit.model
 import gbkfit.params
+from . import _detail
 
 log = logging.getLogger(__name__)
+
+
+def _prepare_config(config):
+
+    _detail.require_config_sections(
+        config,
+        ['drivers', 'datasets', 'dmodels', 'gmodels', 'fitter', 'params'])
+
+    _detail.listify_config_sections(
+        config,
+        ['brokers', 'drivers', 'datasets', 'dmodels', 'gmodels'])
+
+    _detail.check_config_sections_length(
+        config,
+        ['brokers', 'drivers', 'datasets', 'dmodels', 'gmodels'])
 
 
 def fit(config):
@@ -22,12 +39,16 @@ def fit(config):
 
     log.info(f"Reading configuration file: '{config}'...")
     config = json.load(open(config))
+    _prepare_config(config)
 
     log.info("Setting up brokers...")
     brokers = gbkfit.broker.parser.load(config.get('brokers'))
 
     log.info("Setting up backends...")
     drivers = gbkfit.driver.parser.load(config['drivers'])
+
+    log.info("Setting up datasets...")
+    datasets = gbkfit.dataset.parser.load(config['datasets'])
 
     log.info("Setting up dmodels...")
     dmodels = gbkfit.dmodel.parser.load(config['dmodels'])
@@ -41,3 +62,11 @@ def fit(config):
     log.info("Setting up params...")
     params = gbkfit.params.convert_params_free_to_fixed(config['params'])
     model.set_param_exprs(params)
+
+    log.info("Model-fitting started")
+    t1 = time.time_ns()
+
+    t2 = time.time_ns()
+    t_ms = (t2 - t1) // 1000000
+    log.info("Model-fitting completed.")
+    log.info(f"Elapsed time: {t_ms} ms.")

@@ -133,4 +133,4 @@ class GModelSMDisk(abc.ABC):
         pass
 
 
-parser = parseutils.SimpleParser(Driver)
+parser = parseutils.TypedParser(Driver)

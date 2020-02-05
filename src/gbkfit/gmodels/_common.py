@@ -118,10 +118,10 @@ class SpectralComponent3D(abc.ABC):
         pass
 
 
-density_component_2d_parser = parseutils.SimpleParser(DensityComponent2D)
-density_component_3d_parser = parseutils.SimpleParser(DensityComponent3D)
-spectral_component_2d_parser = parseutils.SimpleParser(SpectralComponent2D)
-spectral_component_3d_parser = parseutils.SimpleParser(SpectralComponent3D)
+density_component_2d_parser = parseutils.TypedParser(DensityComponent2D)
+density_component_3d_parser = parseutils.TypedParser(DensityComponent3D)
+spectral_component_2d_parser = parseutils.TypedParser(SpectralComponent2D)
+spectral_component_3d_parser = parseutils.TypedParser(SpectralComponent3D)
 
 
 def _make_component_params(components, prefix, force_prefix):
