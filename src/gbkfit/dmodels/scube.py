@@ -18,15 +18,16 @@ class DModelSCube(gbkfit.dmodel.DModel):
         return isinstance(gmodel, gbkfit.gmodel.GModelSCubeSupport)
 
     @classmethod
-    def load(cls, info):
+    def load(cls, info, *args, **kwargs):
         size = info['size']
         step = info.get('step')
         cval = info.get('cval')
         scale = info.get('scale')
         dtype = info.get('dtype')
+        dataset = args[0] if len(args) > 0 else None
         psf = gbkfit.psflsf.psf_parser.load(info.get('psf'))
         lsf = gbkfit.psflsf.lsf_parser.load(info.get('lsf'))
-        return cls(size, step, cval, scale, psf, lsf, dtype)
+        return cls(size, step, cval, scale, psf, lsf, dtype, dataset)
 
     def dump(self):
         return {
@@ -42,8 +43,19 @@ class DModelSCube(gbkfit.dmodel.DModel):
 
     def __init__(
             self, size, step, cval, scale,
-            psf=None, lsf=None, dtype=None):
+            psf=None, lsf=None, dtype=None, dataset=None):
         super().__init__()
+
+        scube = dataset.get('scube') if dataset else None
+        if scube:
+            size = scube.size()
+            if step is None:
+                step = scube.step()
+            if cval is None:
+                cval = scube.cval()
+            if dtype is None:
+                #dtype = scube.data().dtype
+                pass
         size = tuple(size[:3])
         step = tuple(step[:3]) if step else (1, 1, 1)
         cval = tuple(cval[:3]) if cval else (0, 0, 0)

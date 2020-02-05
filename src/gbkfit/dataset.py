@@ -35,6 +35,9 @@ class Dataset(abc.ABC):
     def values(self):
         return self._data.values()
 
+    def get(self, item):
+        return self._data.get(item)
+
     @property
     def size(self):
         return next(iter(self._data.values())).size

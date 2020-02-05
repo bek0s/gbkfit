@@ -22,7 +22,7 @@ def listify_config_sections(config, sections):
 def check_config_sections_length(config, sections):
     lengths = {}
     for section in sections:
-        if section in config:
+        if config.get(section):
             lengths[section] = len(config[section])
     if len(set(lengths.values())) > 1:
         raise RuntimeError(

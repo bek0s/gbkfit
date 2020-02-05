@@ -56,10 +56,7 @@ class TypedParser:
         return self.load_many(x) if iterutils.is_sequence(x) \
             else self.load_one(x)
 
-    def load_many(self, x):
-        return [self.load_one(item) for item in iterutils.listify(x)]
-
-    def load_many2(self, x, *args, **kwargs):
+    def load_many(self, x, *args, **kwargs):
         nitems = len(x)
         args = list(args)
         for i, value in enumerate(args):
@@ -90,7 +87,11 @@ class TypedParser:
     def load_one(self, x, *args, **kwargs):
         if x is None:
             return self._noneval
-        type_ = x['type']
+        type_ = x.get('type')
+        if not type_:
+            raise RuntimeError(
+                f"Key 'type' must be defined in all '{self._clsname}' "
+                f"descriptions.")
         if type_ not in self._parsers:
             raise RuntimeError(
                 f"{self._clsname} parser for type '{type_}' is not registered."

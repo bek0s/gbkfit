@@ -20,16 +20,14 @@ class DModelMMaps(gbkfit.dmodel.DModel):
 
     @classmethod
     def load(cls, info, *args, **kwargs):
-        print("args:", args)
-        print("kwargs:", kwargs)
         size = info['size']
         step = info.get('step')
         cval = info.get('cval')
         scale = info.get('scale')
         orders = info.get('orders')
         dtype = info.get('dtype')
-        psf = None # gbkfit.psflsf.psf_parser.load(info.get('psf'))
-        lsf = None # gbkfit.psflsf.lsf_parser.load(info.get('lsf'))
+        psf = gbkfit.psflsf.psf_parser.load(info.get('psf'))
+        lsf = gbkfit.psflsf.lsf_parser.load(info.get('lsf'))
         return cls(size, step, cval, scale, orders, psf, lsf, dtype)
 
     def dump(self):

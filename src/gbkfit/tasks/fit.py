@@ -41,21 +41,21 @@ def fit(config):
     brokers = None
     if config.get('brokers'):
         log.info("Setting up brokers...")
-        brokers = gbkfit.broker.parser.load(config['brokers'])
+        brokers = gbkfit.broker.parser.load_many(config['brokers'])
 
     drivers = None
     if config.get('drivers'):
         log.info("Setting up drivers...")
-        drivers = gbkfit.driver.parser.load(config['drivers'])
+        drivers = gbkfit.driver.parser.load_many(config['drivers'])
 
     log.info("Setting up datasets...")
-    datasets = gbkfit.dataset.parser.load(config['datasets'])
+    datasets = gbkfit.dataset.parser.load_many(config['datasets'])
 
     log.info("Setting up dmodels...")
-    dmodels = gbkfit.dmodel.parser.load(config['dmodels'])
+    dmodels = gbkfit.dmodel.parser.load_many(config['dmodels'])
 
     log.info("Setting up gmodels...")
-    gmodels = gbkfit.gmodel.parser.load(config['gmodels'])
+    gmodels = gbkfit.gmodel.parser.load_many(config['gmodels'], datasets)
 
     log.info("Setting up model...")
     model = gbkfit.model.Model(dmodels, gmodels, drivers, brokers)

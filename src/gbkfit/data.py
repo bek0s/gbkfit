@@ -56,7 +56,9 @@ class Data:
                 f"step (length={len(step)}) and cval (length={len(cval)}) "
                 f"must have a length equal to the dimensionality of the "
                 f"data (ndim={data.ndim}).")
-        self._data = data.copy().astype(dtype)
+        self._data = data.copy().astype('float32')
+        print(self._data.dtype)
+
         self._mask = mask.copy().astype(dtype)
         self._error = error.copy().astype(dtype)
         self._step = tuple(step)
@@ -75,6 +77,7 @@ class Data:
         return self._cval
 
     def data(self):
+
         return self._data
 
     def mask(self):
