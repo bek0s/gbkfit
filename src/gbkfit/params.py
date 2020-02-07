@@ -201,7 +201,7 @@ def _explode_param_vector(value, size):
     values = []
 
     for i in range(size):
-
+        values.append({})
         for akey, avalue in value.items():
             akey = akey.strip()
             if akey.startswith('*'):
@@ -734,3 +734,97 @@ def parse_param_values(
         raise RuntimeError(invalid_values_bad_scalar)
 
     return keys_2, values_2, key_names_2, key_indices_list_2
+
+
+def parse_param_fit_info(
+        params, descs,
+        throw_on_errors=True,
+        throw_on_warnings=False,
+        invalid_keys_syntax=None,
+        invalid_keys_unknown=None,
+        invalid_keys_repeated=None,
+        invalid_keys_bad_scalar=None,
+        invalid_keys_bad_vector=None,
+        invalid_values_bad_value=None,
+        invalid_values_attrib_bad_value=None,
+        invalid_values_attrib_bad_size=None):
+
+    if invalid_keys_syntax is None:
+        invalid_keys_syntax = []
+    if invalid_keys_unknown is None:
+        invalid_keys_unknown = []
+    if invalid_keys_repeated is None:
+        invalid_keys_repeated = {}
+    if invalid_keys_bad_scalar is None:
+        invalid_keys_bad_scalar = []
+    if invalid_keys_bad_vector is None:
+        invalid_keys_bad_vector = {}
+
+    if invalid_values_bad_value is None:
+        invalid_values_bad_value = {}
+    if invalid_values_attrib_bad_value is None:
+        invalid_values_attrib_bad_value = {}
+    if invalid_values_attrib_bad_size is None:
+        invalid_values_attrib_bad_size = {}
+
+    # First, parse and validate the param keys
+    keys, values, key_names, key_indices_list = parse_param_keys(
+        params, descs,
+        throw_on_errors,
+        throw_on_warnings,
+        invalid_keys_syntax,
+        invalid_keys_unknown,
+        invalid_keys_repeated,
+        invalid_keys_bad_scalar,
+        invalid_keys_bad_vector)
+
+    ekeys = explode_param_symbols(key_names, key_indices_list)
+    evalues = []
+
+    oopsie = []
+
+    for key, value, key_indices in zip(keys, values, key_indices_list):
+
+        # Fit info values must be dicts
+        if not isinstance(value, dict):
+            invalid_values_bad_value[key] = value
+            continue
+
+        # When the key is just a single value
+        if not isinstance(key_indices, list):
+            evalues.append(value)
+        # ..
+        else:
+            curr_evalues = iterutils.make_list((len(key_indices),), {}, True)
+            for akey, avalue in value.items():
+                for i in range(len(key_indices)):
+                    akey = akey.strip()
+                    if akey.startswith('*'):
+                        aakey = akey[1:]
+                        if not isinstance(avalue, list):
+                            invalid_values_attrib_bad_value[key] = akey
+                            break
+                        if len(avalue) != len(key_indices):
+                            invalid_values_attrib_bad_size[key] = akey
+                            break
+                        curr_evalues[i][aakey] = avalue[i]
+                    else:
+                        curr_evalues[i][akey] = avalue
+
+            evalues.extend(curr_evalues)
+
+    if invalid_values_bad_value:
+        raise RuntimeError()
+
+    if invalid_values_attrib_bad_value:
+        raise RuntimeError()
+
+    if invalid_values_attrib_bad_size:
+        raise RuntimeError()
+
+
+    parset = dict(zip(ekeys, evalues))
+
+
+
+    return parset

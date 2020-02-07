@@ -3,12 +3,12 @@ import json
 import logging
 import time
 
-
 import gbkfit
 import gbkfit.broker
 import gbkfit.dataset
 import gbkfit.dmodel
 import gbkfit.driver
+import gbkfit.fitter
 import gbkfit.gmodel
 import gbkfit.model
 import gbkfit.params
@@ -27,6 +27,18 @@ def _prepare_config(config):
 
     _detail.check_config_sections_length(
         config, ['datasets', 'dmodels'])
+
+
+def _prepare_params(params):
+    param_infos = {}
+    param_exprs = {}
+    for key, value in params.items():
+        if isinstance(value, dict):
+            param_infos[key] = value
+        else:
+            param_exprs[key] = value
+    return param_infos, param_exprs
+
 
 
 def fit(config):
@@ -52,20 +64,27 @@ def fit(config):
     datasets = gbkfit.dataset.parser.load_many(config['datasets'])
 
     log.info("Setting up dmodels...")
-    dmodels = gbkfit.dmodel.parser.load_many(config['dmodels'])
+    dmodels = gbkfit.dmodel.parser.load_many(config['dmodels'], datasets)
 
     log.info("Setting up gmodels...")
-    gmodels = gbkfit.gmodel.parser.load_many(config['gmodels'], datasets)
+    gmodels = gbkfit.gmodel.parser.load_many(config['gmodels'])
 
     log.info("Setting up model...")
     model = gbkfit.model.Model(dmodels, gmodels, drivers, brokers)
 
     log.info("Setting up params...")
-    params = gbkfit.params.convert_params_free_to_fixed(config['params'])
-    model.set_param_exprs(params)
+    param_infos, param_exprs = _prepare_params(config['params'])
+    model.set_param_exprs(param_exprs)
+
+    log.info("Setting up fitter...")
+    fitter = gbkfit.fitter.parser.load_one(config['fitter'])
 
     log.info("Model-fitting started")
     t1 = time.time_ns()
+
+    result = fitter.fit(datasets, model, param_infos)
+
+
 
     t2 = time.time_ns()
     t_ms = (t2 - t1) // 1000000

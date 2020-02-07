@@ -18,12 +18,13 @@ class DModelImage(gbkfit.dmodel.DModel):
         return isinstance(gmodel, gbkfit.gmodel.GModelImageSupport)
 
     @classmethod
-    def load(cls, info):
+    def load(cls, info, *args, **kwargs):
         size = info['size']
         step = info.get('step')
         cval = info.get('cval')
         scale = info.get('scale')
         dtype = info.get('dtype')
+        dataset = args[0] if len(args) > 0 else None
         psf = gbkfit.psflsf.psf_parser.load(info.get('psf'))
         return cls(size, step, cval, scale, psf, dtype)
 

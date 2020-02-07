@@ -36,6 +36,14 @@ def _register_drivers():
     _register_factories(parser, factories)
 
 
+def _register_fitters():
+    from gbkfit.fitter import parser
+    factories = [
+        'gbkfit.fitters.lmfit.FitterLMFit',
+        'gbkfit.fitters.pygmo.FitterPygmo']
+    _register_factories(parser, factories)
+
+
 def _register_dmodels():
     from gbkfit.dmodel import parser
     from gbkfit.dmodels import (
@@ -86,3 +94,4 @@ def init():
     _register_gmodels()
     _register_psfs()
     _register_lsfs()
+    _register_fitters()
