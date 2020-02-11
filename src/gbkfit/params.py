@@ -781,7 +781,7 @@ def parse_param_fit_info(
     ekeys = explode_param_symbols(key_names, key_indices_list)
     evalues = []
 
-    oopsie = []
+
 
     for key, value, key_indices in zip(keys, values, key_indices_list):
 
@@ -822,9 +822,6 @@ def parse_param_fit_info(
     if invalid_values_attrib_bad_size:
         raise RuntimeError()
 
-
     parset = dict(zip(ekeys, evalues))
-
-
 
     return parset

@@ -39,6 +39,10 @@ class Dataset(abc.ABC):
         return self._data.get(item)
 
     @property
+    def npix(self):
+        return next(iter(self._data.values())).npix
+
+    @property
     def size(self):
         return next(iter(self._data.values())).size
 

@@ -4,33 +4,44 @@ import abc
 import gbkfit.params
 from gbkfit.utils import parseutils
 
+"""
+mode.has_param_info
+mode.get_params()
 
-def _make_list(items):
-    return list(items) if isinstance(items, list) else [items]
+result.param_exprs()
+result.model.
 
-
-def _expand_param_vector_value_list(value_list, size):
-    values = []
-    for i in range(size):
-        if i < len(value_list):
-            values.append(value_list[i])
-        else:
-            values.append(value_list[-1])
-    return values
+params.get_exprs()
+params.get_info()
+"""
 
 
-def _expand_param_vector_value_dict(value_dict, size):
-    values = []
-    for i in range(size):
-        values.append({})
-        for akey, avalue in value_dict.items():
-            if akey.startswith('*'):
-                akey = akey[1:]
-                avalue = _make_list(avalue)
-                values[i][akey] = avalue[i] if i < len(avalue) else avalue[-1]
-            else:
-                values[i][akey] = avalue
-    return values
+
+
+
+
+class FitterResultMode:
+
+    def __init__(self):
+        pass
+
+
+class FitterResult:
+
+    @classmethod
+    def load(cls, info):
+        pass
+
+    def dump(self):
+        pass
+
+    def __init__(self):
+        pass
+
+    def datasets(self):
+        pass
+
+
 
 class Fitter(abc.ABC):
 
@@ -52,11 +63,12 @@ class Fitter(abc.ABC):
 
         param_info = gbkfit.params.parse_param_fit_info(param_info, model.get_param_descs())
 
+        result = self._impl_fit(dataset, model, param_info)
 
-        self._fit_impl(dataset, model, param_info)
+        return result
 
     @abc.abstractmethod
-    def _fit_impl(self):
+    def _impl_fit(self, data, model, params):
         pass
 
 

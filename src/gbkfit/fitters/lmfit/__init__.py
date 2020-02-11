@@ -1,2 +1,0 @@
-
-from .lmfit import FitterLMFit

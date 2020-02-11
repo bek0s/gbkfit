@@ -14,6 +14,7 @@ import gbkfit.model
 import gbkfit.params
 from . import _detail
 
+
 log = logging.getLogger(__name__)
 
 
@@ -33,12 +34,15 @@ def _prepare_params(params):
     param_infos = {}
     param_exprs = {}
     for key, value in params.items():
+
+        if isinstance(value, dict) and value.get('fixed'):
+            value = value['init']
+
         if isinstance(value, dict):
             param_infos[key] = value
         else:
             param_exprs[key] = value
     return param_infos, param_exprs
-
 
 
 def fit(config):
@@ -73,8 +77,20 @@ def fit(config):
     model = gbkfit.model.Model(dmodels, gmodels, drivers, brokers)
 
     log.info("Setting up params...")
+    param_info = gbkfit.params.parse_param_fit_info(config['params'], model.get_param_descs())
+    param_infos, param_exprs = _prepare_params(param_info)
+    model.set_param_exprs(param_exprs)
+    """
+    for k, v in param_infos.items():
+        print(k, ': ', v)
+    print(param_exprs)
+    exit()
+    """
+
+    """
     param_infos, param_exprs = _prepare_params(config['params'])
     model.set_param_exprs(param_exprs)
+    """
 
     log.info("Setting up fitter...")
     fitter = gbkfit.fitter.parser.load_one(config['fitter'])
@@ -83,6 +99,14 @@ def fit(config):
     t1 = time.time_ns()
 
     result = fitter.fit(datasets, model, param_infos)
+
+    """
+    print("-----------------------------")
+    print(result)
+    print("-----------------------------")
+    for k, v in zip(model.get_param_names(), result.x):
+        print(f'{k}: {round(v, 3)}')
+    """
 
 
 

@@ -35,6 +35,43 @@ class MCDisk(_disk.Disk):
         self._cflux = cflux
         self._ncloudspt = None
 
+        """
+        xdata = np.array([0, 20, 40, 60, 80, 90, 100, 120, 140, 160, 180, 200])
+        ydata = np.array([0, 40, 80, 50, 20, 10, 100, 110, 170, 190, 120, 200])
+        self._rnodes = xdata
+        rnodes = xdata
+        use_subnodes = True
+        radsep = 1.0
+        subnodes_rmid = []
+        subnodes_frac = []
+        subnodes_dict = []
+        rcur = self._rnodes[0]
+        for i in range(len(rnodes) - 1):
+            while rcur < self._rnodes[i + 1] - radsep:
+                rcur += radsep if subnodes_rmid else radsep / 2
+                subnodes_dict.append(i)
+                subnodes_rmid.append(rcur)
+        nsubnodes = len(subnodes_rmid)
+        print(subnodes_rmid)
+        import scipy.interpolate
+        import time
+        xdata_interp = subnodes_rmid
+        t1 = time.time()
+        for i in range(100):
+            interp = scipy.interpolate.Akima1DInterpolator(xdata, ydata)
+            ydata_interp = interp(xdata_interp)
+        t2 = time.time()
+        print(t2 - t1)
+        import matplotlib.pyplot as plt
+        plt.plot(xdata, ydata)
+        plt.plot(xdata_interp, ydata_interp)
+        plt.show()
+        """
+
+        #exit()
+
+
+
     def cflux(self):
         return self._cflux
 

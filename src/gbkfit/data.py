@@ -3,6 +3,15 @@ import astropy.io.fits as fits
 import numpy as np
 
 
+def make_mask(data_list):
+    if any([data.shape != data_list[0].shape for data in data_list]):
+        raise RuntimeError('')
+    mask = np.ones_like(data_list[0])
+    for data in data_list:
+        mask *= np.isfinite(data)
+    return mask
+
+
 class Data:
 
     @classmethod
@@ -56,11 +65,25 @@ class Data:
                 f"step (length={len(step)}) and cval (length={len(cval)}) "
                 f"must have a length equal to the dimensionality of the "
                 f"data (ndim={data.ndim}).")
+        mmask = make_mask([data, error, mask])
+        data[mmask == 0] = np.nan
+        mask[mmask == 0] = 0
+        error[mmask == 0] = np.nan
+        mask[mmask != 0] = 1
+        """
+        import astropy.io.fits as fits
+        fits.writeto(f'mmask_d.fits', data, overwrite=True)
+        fits.writeto(f'mmask_m.fits', mask, overwrite=True)
+        fits.writeto(f'mmask_e.fits', error, overwrite=True)
+        """
         self._data = data.copy().astype(dtype)
         self._mask = mask.copy().astype(dtype)
         self._error = error.copy().astype(dtype)
         self._step = tuple(step)
         self._cval = tuple(cval)
+
+    def npix(self):
+        return self._data.size
 
     def ndim(self):
         return self._data.ndim

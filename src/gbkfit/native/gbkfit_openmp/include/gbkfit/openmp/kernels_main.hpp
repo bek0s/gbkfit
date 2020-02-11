@@ -233,7 +233,7 @@ gmodel_smdisk_evaluate(
     {
     for(int z = 0; z < spat_size_z; ++z)
     {
-        T xposi, yposi, posai, incli;
+        T vsysi, xposi, yposi, posai, incli;
         T xn = x, yn = y, zn = z, rn, theta;
         int rnidx = -1;
 
@@ -256,6 +256,7 @@ gmodel_smdisk_evaluate(
                 continue;
         }
 
+        vsysi = loose ? interp_linear(rn, rnidx, rnodes, xpos) : vsys[0];
         xposi = loose ? interp_linear(rn, rnidx, rnodes, xpos) : xpos[0];
         yposi = loose ? interp_linear(rn, rnidx, rnodes, ypos) : ypos[0];
         posai = tilted ? interp_linear(rn, rnidx, rnodes, posa) : posa[0];
@@ -280,7 +281,7 @@ gmodel_smdisk_evaluate(
         T ptvalues[TRAIT_NUM_MAX];
         T htvalues[TRAIT_NUM_MAX];
         T bvalue = 0;
-        T vvalue = 0;
+        T vvalue = vsysi;
         T dvalue = 0;
         T wvalue = 0;
         T svalue = 0;

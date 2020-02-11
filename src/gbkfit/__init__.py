@@ -39,7 +39,7 @@ def _register_drivers():
 def _register_fitters():
     from gbkfit.fitter import parser
     factories = [
-        'gbkfit.fitters.lmfit.FitterLMFit',
+        'gbkfit.fitters.scipy.FitterScipyLeastSquares',
         'gbkfit.fitters.pygmo.FitterPygmo']
     _register_factories(parser, factories)
 

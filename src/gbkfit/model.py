@@ -292,3 +292,5 @@ class Model:
             raise RuntimeError(
                 f"the following supplied parameters are fixed: "
                 f"{isfixed}")
+
+    #def __deepcopy__(self, memodict={}):

@@ -1,8 +1,14 @@
 
+import abc
+import logging
+
 import numpy as np
 import pygmo as pg
 
 import gbkfit.fitter
+
+
+log = logging.getLogger(__name__)
 
 
 class FitterPygmo(gbkfit.fitter.Fitter):
@@ -30,35 +36,18 @@ class FitterPygmo(gbkfit.fitter.Fitter):
         self._size = size
         self._gen = gen
 
-    def _fit_impl(self, datasets, model, param_info):
+    def _impl_fit(self, data, model, params):
 
-        params_name = param_info.keys()
-        params_val = []
-        params_min = []
-        params_max = []
-        for pname, pinfo in param_info.items():
-            params_val.append(pinfo['init'])
-            params_min.append(pinfo['min'])
-            params_max.append(pinfo['max'])
+        pvals = []
+        pmins = []
+        pmaxs = []
 
-        class Prob:
-
-            def fitness(self, x):
-                params = list(zip(params_name, x))
-                res = 0
-                outputs = model.evaluate(params, False)
-                for dataset, output in zip(datasets, outputs):
-                    for name in output:
-                        dat = dataset[name].data()
-                        mdl = output[name]
-                        res += np.nansum(np.abs(dat - mdl).astype(np.float64))
-                return (res,)
-
-            def get_bounds(self):
-                return (params_min, params_max)
-
-            def gradient(self, x):
-                return pg.estimate_gradient_h(lambda x: self.fitness(x), x)
+        # Prepare parameter properties
+        for pname in model.get_param_names():
+            pinfo = params[pname]
+            pvals.append(pinfo['init'])
+            pmins.append(pinfo.get('min', -np.nan))
+            pmaxs.append(pinfo.get('max', +np.nan))
 
         gopt_algos = {
             'gaco': pg.gaco,
@@ -81,21 +70,82 @@ class FitterPygmo(gbkfit.fitter.Fitter):
             'nspso': pg.nspso
         }
 
-        prob = pg.problem(Prob())
+        class Problem:
+
+            def fitness(self, pvalues):
+                params = dict(zip(model.get_param_names(), pvalues))
+                log.info(params)
+                outputs = model.evaluate(params, False)
+                tres = 0
+                for dataset, output in zip(data, outputs):
+                    for name in output:
+                        dat = dataset[name].data()
+                        msk = dataset[name].mask()
+                        err = dataset[name].error()
+                        mdl = output[name]
+                        res = msk * (mdl - dat) / err
+                        #res[np.isnan(res)] = 0
+
+                        """
+                        msk_dat = msk
+                        msk_mdl = np.isfinite(mdl).astype(np.int)
+                        import astropy.io.fits as fits
+                        mm = (msk_dat + msk_mdl) * msk
+                        fits.writeto(f'mask_{name}.fits', msk, overwrite=True)
+                        fits.writeto(f'test_{name}.fits', mm, overwrite=True)
+                        """
+                        """
+                        if name != 'mmap0':
+                            res *= 0.1
+                        """
+
+                        tres += np.nansum(np.abs(res))
+
+                #tres = np.abs(tres)
+                print("Residual sum: ", tres)
+                return tres,
+
+            def get_bounds(self):
+                return pmins, pmaxs
+
+            def gradient(self, x):
+                return pg.estimate_gradient_h(lambda x: self.fitness(x), x)
+
+        pp = Problem()
+        prob = pg.problem(pp)
 
         if self._algo in gopt_algos:
-            uda = pg.cmaes(gen=self._gen)
+            uda = pg.cmaes(gen=250, force_bounds=True, sigma0=1)
         else:
             uda = pg.nlopt(self._algo)
 
         algo = pg.algorithm(uda)
         algo.set_verbosity(10)
         pop = pg.population(prob, size=self._size)
-        pop.set_x(0, params_val)
+        pop.set_x(0, pvals)
+        pop.set_x(1, pvals)
         pop = algo.evolve(pop)
 
-        print(f"I used size={self._size} and gen={self._gen}.")
+        print("------------------------------")
+        print("Results")
+        print("------------------------------")
+        print(f"size={self._size} and gen={self._gen}")
+        for key, value in zip(params.keys(), pop.champion_x):
+            print(f"{key:<{6}}: {round(value, 3):<{6}}")
         print("best fit (params): ", pop.champion_x)
         print("best fit (chi2): ", pop.champion_f)
         print("done")
         # #algo.extract(pg.nlopt).ftol_rel = 1e-8
+
+        final_params = dict(zip(params.keys(), pop.champion_x))
+        outputs = model.evaluate(final_params, explode_params=False)
+
+        import astropy.io.fits as fits
+        for dataset, output in zip(data, outputs):
+            for name in output.keys():
+                dat = dataset[name].data()
+                mdl = output[name]
+                residual = mdl - dat
+                fits.writeto(f'result_data_{name}.fits', dat, overwrite=True)
+                fits.writeto(f'result_model_{name}.fits', mdl, overwrite=True)
+                fits.writeto(f'result_residual_{name}.fits', residual, overwrite=True)
