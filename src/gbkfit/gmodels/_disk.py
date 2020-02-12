@@ -110,9 +110,6 @@ class Disk(abc.ABC):
          self._spt_ponames,
          self._spt_pnnames) = _common.trait_info(sptraits, 'spt', nrnodes)
 
-        #print(self._rpt_pdescs)
-        #exit()
-
         self._pdescs = {
             **self._vsys_pdescs,
             **self._xpos_pdescs,
