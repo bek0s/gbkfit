@@ -131,7 +131,14 @@ class Trait(abc.ABC):
 
 
 class RPTrait(Trait, abc.ABC):
-    pass
+
+    @abc.abstractmethod
+    def has_ordinary_integral(self):
+        pass
+
+    @abc.abstractmethod
+    def integrate(self, params, nodes):
+        pass
 
 
 class RHTrait(Trait, abc.ABC):
@@ -176,11 +183,14 @@ class RPTraitUniform(RPTrait):
         return (
             ParamScalarDesc('a'),)
 
-    def integrate(self, params, rnodes):
+    def has_ordinary_integral(self):
+        return True
+
+    def integrate(self, params, nodes):
         ampl = params['a']
-        rsep = rnodes[1] - rnodes[0]
-        rmin = rnodes[0] - rsep
-        rmax = rnodes[-1] + rsep
+        rsep = nodes[1] - nodes[0]
+        rmin = nodes[0] - rsep
+        rmax = nodes[-1] + rsep
         return np.pi * ampl * (rmax * rmax - rmin * rmin)
 
 
@@ -198,6 +208,9 @@ class RPTraitExponential(RPTrait):
         return (
             ParamScalarDesc('a'),
             ParamScalarDesc('s'))
+
+    def has_ordinary_integral(self):
+        return False
 
     def integrate(self, params, nodes):
         a = params['a']
@@ -219,6 +232,9 @@ class RPTraitGauss(RPTrait):
         return (
             ParamScalarDesc('a'),
             ParamScalarDesc('s'))
+
+    def has_ordinary_integral(self):
+        return False
 
     def integrate(self, params, nodes):
         a = params['a']
@@ -242,6 +258,9 @@ class RPTraitGGauss(RPTrait):
             ParamScalarDesc('s'),
             ParamScalarDesc('b'))
 
+    def has_ordinary_integral(self):
+        return False
+
     def integrate(self, params, nodes):
         a = params['a']
         s = params['s']
@@ -263,6 +282,9 @@ class RPTraitLorentz(RPTrait):
         return (
             ParamScalarDesc('a'),
             ParamScalarDesc('s'))
+
+    def has_ordinary_integral(self):
+        return False
 
     def integrate(self, params, nodes):
         a = params['a']
@@ -286,6 +308,9 @@ class RPTraitMoffat(RPTrait):
             ParamScalarDesc('s'),
             ParamScalarDesc('b'))
 
+    def has_ordinary_integral(self):
+        return False
+
     def integrate(self, params, nodes):
         a = params['a']
         s = params['s']
@@ -307,6 +332,9 @@ class RPTraitSech2(RPTrait):
         return (
             ParamScalarDesc('a'),
             ParamScalarDesc('s'))
+
+    def has_ordinary_integral(self):
+        return False
 
     def integrate(self, params, nodes):
         a = params['a']
@@ -340,6 +368,12 @@ class RPTraitMixtureGGauss(RPTrait):
     def params_sm(self):
         return _params_mixture(self._n)
 
+    def has_ordinary_integral(self):
+        return True
+
+    def integrate(self, params, nodes):
+        raise NotImplementedError()
+
 
 class RPTraitMixtureMoffat(RPTrait):
 
@@ -367,6 +401,12 @@ class RPTraitMixtureMoffat(RPTrait):
     def params_sm(self):
         return _params_mixture(self._n)
 
+    def has_ordinary_integral(self):
+        return True
+
+    def integrate(self, params, nodes):
+        raise NotImplementedError()
+
 
 class RPTraitNWUniform(RPTrait):
 
@@ -381,6 +421,9 @@ class RPTraitNWUniform(RPTrait):
     def params_nw(self, nnodes):
         return (
             ParamVectorDesc('a', nnodes),)
+
+    def has_ordinary_integral(self):
+        return False
 
     def integrate(self, params, nodes):
         a = params['a']
@@ -414,6 +457,9 @@ class RPTraitNWHarmonic(RPTrait):
     def params_nw(self, nnodes):
         return _params_pw_harmonic(self._k, nnodes)
 
+    def has_ordinary_integral(self):
+        return False
+
     def integrate(self, params, nodes):
         a = params['a']
         s = nodes[-1] - nodes[0]
@@ -435,6 +481,12 @@ class RPTraitNWDistortion(RPTrait):
             ParamVectorDesc('a', nnodes),
             ParamVectorDesc('p', nnodes),
             ParamVectorDesc('s', nnodes))
+
+    def has_ordinary_integral(self):
+        return False
+
+    def integrate(self, params, nodes):
+        raise NotImplementedError()
 
 
 class RHTraitUniform(RHTrait):
