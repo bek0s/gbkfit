@@ -35,6 +35,8 @@ class MCDisk(_disk.Disk):
         self._cflux = cflux
         self._ncloudspt = None
 
+        self._ncloudsptor = None
+
 
     def cflux(self):
         return self._cflux
@@ -50,27 +52,34 @@ class MCDisk(_disk.Disk):
             self._disk = backend.make_gmodel_mcdisk(dtype)
             self._ncloudspt = backend.mem_alloc(len(self._rptraits), np.int32)
 
+            size = 0
+            for trait in self._rptraits:
+                pass
+
         # Calculate the number of clouds
         nclouds = 0
         ncloudspt = []
         for trait, names, in zip(self._rptraits, self._rpt_pnames):
             tparams = {oname: params[nname] for oname, nname in names.items()}
             integral = trait.integrate(tparams, self._m_subrnodes[0])
-            print(np.atleast_1d(integral))
+
+            print(integral)
             foo = sum(np.atleast_1d(integral))
 
             ncloudspt.append(int(foo / self._cflux))
             nclouds += ncloudspt[-1]
-            print(ncloudspt)
+            #print(ncloudspt)
 
         log.info(
             f"nclouds (total): {nclouds}\n"
             f"nclouds (per trait): {ncloudspt}")
 
-        print('foo:', self._ncloudspt)
+        #print('foo:', self._ncloudspt)
 
         self._ncloudspt[0][:] = ncloudspt
         backend.mem_copy_h2d(self._ncloudspt[0], self._ncloudspt[1])
+
+        exit()
 
         rdata = None
         vdata = None

@@ -515,6 +515,28 @@ gmodel_mcdisk_evaluate(
             tidx++;
         }
 
+        /*
+        int sum_ = 0;
+        int idx = 0;
+        T* ispw = nullptr;
+        while(sum_ <= ci)
+        {
+            if (ispw[tidx])
+            {
+
+            }
+            else
+            {
+
+            }
+        }
+
+        while(tidx < nrt)
+        {
+            auto ispw_ = ispw[tid];
+
+        }*/
+
         // Density polar trait
         T sign;
         rp_trait_rnd<T>(
