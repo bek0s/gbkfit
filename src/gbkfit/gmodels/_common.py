@@ -144,43 +144,97 @@ def make_model_3d_params(components, tcomponents, tauto):
     return {**params, **tparams}, mappings, tmappings
 
 
-def trait_info(traitslist, prefix, nnodes=None):
+def trait_param_info(traits, prefix, nnodes=None):
+    descs = {}
+    mappings = []
+    for i, trait in enumerate(traits):
+        if trait.params_nw(nnodes) and not nnodes:
+            raise RuntimeError()
+        prefix += str(i + 1) * (i > 0)
+        params = trait.params_sm() + trait.params_nw(nnodes)
+        mapping = {}
+        for param in params:
+            old_pname = param.name()
+            new_pname = f'{prefix}_{old_pname}'
+            descs[new_pname] = param
+            mapping[old_pname] = new_pname
+        mappings.append(mapping)
+    return descs, mappings
+
+
+def prepare_trait_arrays(
+        traits, nnodes, nsubnodes,
+        ary_uids,
+        ary_ccounts, ary_pcounts,
+        ary_cvalues, ary_pvalues,
+        dtype, driver):
     uids = []
-    cvalues = []
     ccounts = []
     pcounts = []
-    pdescs = {}
-    ponames = []
-    pnnames = []
-    for i, trait in enumerate(traitslist):
-        is_piecewise = isinstance(trait, traits.ParamSupportNW)
-        if is_piecewise and not nnodes:
-            raise RuntimeError()
-        prefix += str(i) * (i > 0)
+    cvalues = []
+    for trait in traits:
         consts = trait.consts()
-        params = trait.params(nnodes) if is_piecewise else trait.params()
-        uids += [trait.uid()]
+        params_sm = trait.params_sm()
+        params_nw = trait.params_nw(nnodes)
+        pcounts_sm = sum(p.size() for p in params_sm)
+        pcounts_nw = len(params_nw) * nsubnodes
+        uids.append(trait.uid())
         cvalues += consts
         ccounts += [len(consts)]
-        pcounts += [sum(p.size() for p in params)]
-        foo = {f'{prefix}_{p.name()}': p for p in params}
-        pdescs.update(foo)
-        ponames.append([p.name() for p in params])
-        pnnames.append(list(foo.keys()))
-    return uids, cvalues, ccounts, pcounts, pdescs, ponames, pnnames
+        pcounts += [pcounts_sm + pcounts_nw]
+    ary_uids[:] = driver.mem_alloc(len(uids), np.int32)
+    ary_ccounts[:] = driver.mem_alloc(len(ccounts), np.int32)
+    ary_pcounts[:] = driver.mem_alloc(len(pcounts), np.int32)
+    ary_cvalues[:] = driver.mem_alloc(len(cvalues), dtype)
+    ary_pvalues[:] = driver.mem_alloc(sum(pcounts), dtype)
+    ary_uids[0][:] = uids
+    ary_ccounts[0][:] = ccounts
+    ary_pcounts[0][:] = pcounts
+    ary_cvalues[0][:] = cvalues
+    driver.mem_copy_h2d(ary_uids[0], ary_uids[1])
+    driver.mem_copy_h2d(ary_ccounts[0], ary_ccounts[1])
+    driver.mem_copy_h2d(ary_pcounts[0], ary_pcounts[1])
+    driver.mem_copy_h2d(ary_cvalues[0], ary_cvalues[1])
+
 
 
 def make_param_descs(key, nnodes, pw):
     return {key: ParamVectorDesc(key, nnodes) if pw else ParamScalarDesc(key)}
 
 
-def prepare_param_array(backend, values, array, descs):
+
+def prepare_traits_params_array(
+        driver, params, ary, descs, nodes, subnodes, interp, mappings, traits):
     start = 0
-    for key, desc in descs.items():
-        stop = start + desc.size()
-        array[0][start:stop] = values[key]
+    for trait, mapping in zip(traits, mappings):
+        for pname in trait.params_sm():
+            new_pname = mapping[pname.name()]
+            stop = start + descs[new_pname].size()
+            ary[0][start:stop] = params[new_pname]
+            start = stop
+        for pname in trait.params_nw(len(nodes)):
+            new_pname = mapping[pname.name()]
+            stop = start + len(subnodes)
+            params[new_pname] = interp(nodes, params[new_pname])(subnodes)
+            ary[0][start:stop] = params[new_pname]
+            start = stop
+    driver.mem_copy_h2d(ary[0], ary[1])
+
+
+def prepare_common_params_array(
+        driver, params, ary, descs, nodes, subnodes, interp, nodewise):
+    start = 0
+    for pname, desc in descs.items():
+        if nodewise:
+            stop = start + len(subnodes)
+            params[pname] = interp(nodes, params[pname])(subnodes)
+            ary[0][start:stop] = params[pname]
+        else:
+            stop = start + desc.size()
+            ary[0][start:stop] = params[pname]
         start = stop
-    backend.mem_copy_h2d(array[0], array[1])
+    driver.mem_copy_h2d(ary[0], ary[1])
+
 
 
 def prepare_rnode_array(backend, dtype, array_rnodes, rnodes):
@@ -189,26 +243,6 @@ def prepare_rnode_array(backend, dtype, array_rnodes, rnodes):
     backend.mem_copy_h2d(array_rnodes[0], array_rnodes[1])
 
 
-def prepare_trait_arrays(
-        backend, dtype,
-        array_uids, uids,
-        array_ccounts, ccounts,
-        array_pcounts, pcounts,
-        array_cvalues, cvalues,
-        array_pvalues):
-    array_uids[:] = backend.mem_alloc(len(uids), np.int32)
-    array_ccounts[:] = backend.mem_alloc(len(ccounts), np.int32)
-    array_pcounts[:] = backend.mem_alloc(len(pcounts), np.int32)
-    array_cvalues[:] = backend.mem_alloc(len(cvalues), dtype)
-    array_pvalues[:] = backend.mem_alloc(sum(pcounts), dtype)
-    array_uids[0][:] = uids
-    array_ccounts[0][:] = ccounts
-    array_pcounts[0][:] = pcounts
-    array_cvalues[0][:] = cvalues
-    backend.mem_copy_h2d(array_uids[0], array_uids[1])
-    backend.mem_copy_h2d(array_ccounts[0], array_ccounts[1])
-    backend.mem_copy_h2d(array_pcounts[0], array_pcounts[1])
-    backend.mem_copy_h2d(array_cvalues[0], array_cvalues[1])
 
 
 def parse_density_disk_2d_common_args(

@@ -165,6 +165,8 @@ ring_info(
     if (radius_max >= nodes[nnodes-1])
         return false;
 
+
+    /*
     // Linear search
     for(index = 1; index < nnodes; ++index)
     {
@@ -172,7 +174,22 @@ ring_info(
                 x, y, z, loose, tilted, index, xpos, ypos, posa, incl);
         if (radius_cur < nodes[index])
             break;
+    }*/
+
+
+    size_t ilo = 1;
+    size_t ihi = nnodes - 1;
+    while(ihi > ilo + 1)
+    {
+        size_t i = (ihi + ilo)/2;
+        if(nodes[i] > rnode_radius(
+                    x, y, z, loose, tilted, i, xpos, ypos, posa, incl))
+            ihi = i;
+        else
+            ilo = i;
     }
+    index = ilo;
+
 
     // The radius is calculated using the velfi strategy
     T d1 = nodes[index-1] - rnode_radius(
@@ -218,7 +235,6 @@ evaluate_scube(
                 + y * spat_size_x
                 + z * spat_size_x * spat_size_y;
         T zvel = spec_zero + z * spec_step;
-        #pragma omp atomic update
         scube[idx] += bvalue * gauss_1d_pdf<T>(zvel, vvalue, dvalue);
     }
 }

@@ -35,66 +35,6 @@ class MCDisk(_disk.Disk):
         self._cflux = cflux
         self._ncloudspt = None
 
-        """
-        radsep = 1.0
-        subnodes_rmid = []
-        subnodes_dict = []
-        rcur = self._rnodes[0]
-        for i in range(len(rnodes) - 1):
-            while rcur < self._rnodes[i + 1] - radsep:
-                rcur += radsep if subnodes_rmid else radsep / 2
-                subnodes_dict.append(i)
-                subnodes_rmid.append(rcur)
-        nsubnodes = len(subnodes_rmid)
-        """
-
-        #self._m_
-
-
-
-        """
-        xdata = np.array([0, 20, 40, 60, 80, 90, 100, 120, 140, 160, 180, 200])
-        ydata = np.array([0, 40, 80, 50, 20, 10, 100, 110, 170, 190, 120, 200])
-        self._rnodes = xdata
-        rnodes = xdata
-        use_subnodes = True
-        radsep = 1.0
-        subnodes_rmid = []
-        subnodes_frac = []
-        subnodes_dict = []
-        rcur = self._rnodes[0]
-        for i in range(len(rnodes) - 1):
-            while rcur < self._rnodes[i + 1] - radsep:
-                rcur += radsep if subnodes_rmid else radsep / 2
-                subnodes_dict.append(i)
-                subnodes_rmid.append(rcur)
-        nsubnodes = len(subnodes_rmid)
-        print(subnodes_rmid)
-        import scipy.interpolate
-        import time
-        xdata_interp = subnodes_rmid
-        t1 = time.time()
-        for i in range(100):
-            interp = scipy.interpolate.Akima1DInterpolator(xdata, ydata)
-            ydata_interp = interp(xdata_interp)
-        t2 = time.time()
-        print(t2 - t1)
-        interp = scipy.interpolate.Akima1DInterpolator(xdata, ydata)
-        interp2 = scipy.interpolate.PchipInterpolator(xdata, ydata)
-        interp3 = scipy.interpolate.CubicSpline(xdata, ydata)
-        ydata_interp = interp(xdata_interp)
-        ydata_interp2 = interp2(xdata_interp)
-        ydata_interp3 = interp3(xdata_interp)
-        import matplotlib.pyplot as plt
-        plt.plot(xdata, ydata, color='red')
-        plt.plot(xdata_interp, ydata_interp, color='green')
-        plt.plot(xdata_interp, ydata_interp2, color='blue')
-        plt.plot(xdata_interp, ydata_interp3, color='orange')
-        plt.show()
-        exit()
-        """
-
-
 
     def cflux(self):
         return self._cflux
@@ -113,16 +53,21 @@ class MCDisk(_disk.Disk):
         # Calculate the number of clouds
         nclouds = 0
         ncloudspt = []
-        for i, (trait, onames, nnames), in enumerate(zip(
-                self._rptraits, self._rpt_ponames, self._rpt_pnnames)):
-            tparams = {o: params[n] for o, n in zip(onames, nnames)}
-            integral = trait.integrate(tparams, self._rnodes)
-            ncloudspt.append(int(integral / self._cflux))
+        for trait, names, in zip(self._rptraits, self._rpt_pnames):
+            tparams = {oname: params[nname] for oname, nname in names.items()}
+            integral = trait.integrate(tparams, self._m_subrnodes[0])
+            print(np.atleast_1d(integral))
+            foo = sum(np.atleast_1d(integral))
+
+            ncloudspt.append(int(foo / self._cflux))
             nclouds += ncloudspt[-1]
+            print(ncloudspt)
 
         log.info(
             f"nclouds (total): {nclouds}\n"
             f"nclouds (per trait): {ncloudspt}")
+
+        print('foo:', self._ncloudspt)
 
         self._ncloudspt[0][:] = ncloudspt
         backend.mem_copy_h2d(self._ncloudspt[0], self._ncloudspt[1])
@@ -147,7 +92,7 @@ class MCDisk(_disk.Disk):
             self._cflux, nclouds, self._ncloudspt[1],
             self._loose,
             self._tilted,
-            self._m_rnodes[1],
+            self._m_subrnodes[1],
             self._m_vsys_pvalues[1],
             self._m_xpos_pvalues[1],
             self._m_ypos_pvalues[1],

@@ -37,6 +37,22 @@ class Disk(abc.ABC):
         self._rnodes = rnodes
         self._nrnodes = nrnodes
 
+        self._radsep = radsep = 1.0
+        self._subrnodes = subrnodes = []
+        rcur = rnodes[0]
+        for i in range(nrnodes - 1):
+            while rcur < rnodes[i + 1] - radsep:
+                rcur += radsep if subrnodes else radsep / 2
+                subrnodes.append(rcur)
+
+        #self._subrnodes =
+        #print(subrnodes)
+        #exit()
+
+
+
+        self._nsubrnodes = len(subrnodes)
+
         self._rptraits = tuple(rptraits)
         self._rhtraits = tuple(rhtraits)
         self._vptraits = tuple(vptraits)
@@ -53,62 +69,22 @@ class Disk(abc.ABC):
         self._posa_pdescs = _common.make_param_descs('posa', nrnodes, tilted)
         self._incl_pdescs = _common.make_param_descs('incl', nrnodes, tilted)
 
-        (self._rpt_uids,
-         self._rpt_cvalues,
-         self._rpt_ccounts,
-         self._rpt_pcounts,
-         self._rpt_pdescs,
-         self._rpt_ponames,
-         self._rpt_pnnames) = _common.trait_info(rptraits, 'rpt', nrnodes)
-        (self._rht_uids,
-         self._rht_cvalues,
-         self._rht_ccounts,
-         self._rht_pcounts,
-         self._rht_pdescs,
-         self._rht_ponames,
-         self._rht_pnnames) = _common.trait_info(rhtraits, 'rht')
-        (self._vpt_uids,
-         self._vpt_cvalues,
-         self._vpt_ccounts,
-         self._vpt_pcounts,
-         self._vpt_pdescs,
-         self._vpt_ponames,
-         self._vpt_pnnames) = _common.trait_info(vptraits, 'vpt', nrnodes)
-        (self._vht_uids,
-         self._vht_cvalues,
-         self._vht_ccounts,
-         self._vht_pcounts,
-         self._vht_pdescs,
-         self._vht_ponames,
-         self._vht_pnnames) = _common.trait_info(vhtraits, 'vht')
-        (self._dpt_uids,
-         self._dpt_cvalues,
-         self._dpt_ccounts,
-         self._dpt_pcounts,
-         self._dpt_pdescs,
-         self._dpt_ponames,
-         self._dpt_pnnames) = _common.trait_info(dptraits, 'dpt', nrnodes)
-        (self._dht_uids,
-         self._dht_cvalues,
-         self._dht_ccounts,
-         self._dht_pcounts,
-         self._dht_pdescs,
-         self._dht_ponames,
-         self._dht_pnnames) = _common.trait_info(dhtraits, 'dht')
-        (self._wpt_uids,
-         self._wpt_cvalues,
-         self._wpt_ccounts,
-         self._wpt_pcounts,
-         self._wpt_pdescs,
-         self._wpt_ponames,
-         self._wpt_pnnames) = _common.trait_info(wptraits, 'wpt', nrnodes)
-        (self._spt_uids,
-         self._spt_cvalues,
-         self._spt_ccounts,
-         self._spt_pcounts,
-         self._spt_pdescs,
-         self._spt_ponames,
-         self._spt_pnnames) = _common.trait_info(sptraits, 'spt', nrnodes)
+        (self._rpt_pdescs,
+         self._rpt_pnames) = _common.trait_param_info(rptraits, 'rpt', nrnodes)
+        (self._rht_pdescs,
+         self._rht_pnames) = _common.trait_param_info(rhtraits, 'rht')
+        (self._vpt_pdescs,
+         self._vpt_pnames) = _common.trait_param_info(vptraits, 'vpt', nrnodes)
+        (self._vht_pdescs,
+         self._vht_pnames) = _common.trait_param_info(vhtraits, 'vht')
+        (self._dpt_pdescs,
+         self._dpt_pnames) = _common.trait_param_info(dptraits, 'dpt', nrnodes)
+        (self._dht_pdescs,
+         self._dht_pnames) = _common.trait_param_info(dhtraits, 'dht')
+        (self._wpt_pdescs,
+         self._wpt_pnames) = _common.trait_param_info(wptraits, 'wpt', nrnodes)
+        (self._spt_pdescs,
+         self._spt_pnames) = _common.trait_param_info(sptraits, 'spt', nrnodes)
 
         self._pdescs = {
             **self._vsys_pdescs,
@@ -131,6 +107,11 @@ class Disk(abc.ABC):
         self._m_ypos_pvalues = [None, None]
         self._m_posa_pvalues = [None, None]
         self._m_incl_pvalues = [None, None]
+
+        self._m_subrnodes = [None, None]
+
+        from gbkfit.math.interpolation import InterpolatorAkima, InterpolatorLinear
+        self._interpolator_cls = InterpolatorAkima
 
         (self._m_rpt_uids,
          self._m_rpt_cvalues,
@@ -225,8 +206,8 @@ class Disk(abc.ABC):
         self._backend = backend
         self._dtype = dtype
 
-        lcount = self._nrnodes if self._loose else 1
-        tcount = self._nrnodes if self._tilted else 1
+        lcount = self._nsubrnodes if self._loose else 1
+        tcount = self._nsubrnodes if self._tilted else 1
 
         if self._vptraits:
             self._m_vsys_pvalues = backend.mem_alloc(lcount, dtype)
@@ -239,108 +220,127 @@ class Disk(abc.ABC):
         _common.prepare_rnode_array(
             backend, dtype, self._m_rnodes, self._rnodes)
 
+        _common.prepare_rnode_array(
+            backend, dtype, self._m_subrnodes, self._subrnodes)
+
         if self._rptraits:
             _common.prepare_trait_arrays(
-                backend, dtype,
-                self._m_rpt_uids, self._rpt_uids,
-                self._m_rpt_ccounts, self._rpt_ccounts,
-                self._m_rpt_pcounts, self._rpt_pcounts,
-                self._m_rpt_cvalues, self._rpt_cvalues,
-                self._m_rpt_pvalues)
+                self._rptraits, self._nrnodes, self._nsubrnodes,
+                self._m_rpt_uids,
+                self._m_rpt_ccounts, self._m_rpt_pcounts,
+                self._m_rpt_cvalues, self._m_rpt_pvalues,
+                dtype, backend)
         if self._rhtraits:
             _common.prepare_trait_arrays(
-                backend, dtype,
-                self._m_rht_uids, self._rht_uids,
-                self._m_rht_ccounts, self._rht_ccounts,
-                self._m_rht_pcounts, self._rht_pcounts,
-                self._m_rht_cvalues, self._rht_cvalues,
-                self._m_rht_pvalues)
+                self._rhtraits, 0, 0,
+                self._m_rht_uids,
+                self._m_rht_ccounts, self._m_rht_pcounts,
+                self._m_rht_cvalues, self._m_rht_pvalues,
+                dtype, backend)
         if self._vptraits:
             _common.prepare_trait_arrays(
-                backend, dtype,
-                self._m_vpt_uids, self._vpt_uids,
-                self._m_vpt_ccounts, self._vpt_ccounts,
-                self._m_vpt_pcounts, self._vpt_pcounts,
-                self._m_vpt_cvalues, self._vpt_cvalues,
-                self._m_vpt_pvalues)
+                self._vptraits, self._nrnodes, self._nsubrnodes,
+                self._m_vpt_uids,
+                self._m_vpt_ccounts, self._m_vpt_pcounts,
+                self._m_vpt_cvalues, self._m_vpt_pvalues,
+                dtype, backend)
         if self._vhtraits:
             _common.prepare_trait_arrays(
-                backend, dtype,
-                self._m_vht_uids, self._vht_uids,
-                self._m_vht_ccounts, self._vht_ccounts,
-                self._m_vht_pcounts, self._vht_pcounts,
-                self._m_vht_cvalues, self._vht_cvalues,
-                self._m_vht_pvalues)
+                self._vhtraits, 0, 0,
+                self._m_vht_uids,
+                self._m_vht_ccounts, self._m_vht_pcounts,
+                self._m_vht_cvalues, self._m_vht_pvalues,
+                dtype, backend)
         if self._dptraits:
             _common.prepare_trait_arrays(
-                backend, dtype,
-                self._m_dpt_uids, self._dpt_uids,
-                self._m_dpt_ccounts, self._dpt_ccounts,
-                self._m_dpt_pcounts, self._dpt_pcounts,
-                self._m_dpt_cvalues, self._dpt_cvalues,
-                self._m_dpt_pvalues)
+                self._dptraits, self._nrnodes, self._nsubrnodes,
+                self._m_dpt_uids,
+                self._m_dpt_ccounts, self._m_dpt_pcounts,
+                self._m_dpt_cvalues, self._m_dpt_pvalues,
+                dtype, backend)
         if self._dhtraits:
             _common.prepare_trait_arrays(
-                backend, dtype,
-                self._m_dht_uids, self._dht_uids,
-                self._m_dht_ccounts, self._dht_ccounts,
-                self._m_dht_pcounts, self._dht_pcounts,
-                self._m_dht_cvalues, self._dht_cvalues,
-                self._m_dht_pvalues)
+                self._dhtraits, 0, 0,
+                self._m_dht_uids,
+                self._m_dht_ccounts, self._m_dht_pcounts,
+                self._m_dht_cvalues, self._m_dht_pvalues,
+                dtype, backend)
         if self._wptraits:
             _common.prepare_trait_arrays(
-                backend, dtype,
-                self._m_wpt_uids, self._wpt_uids,
-                self._m_wpt_ccounts, self._wpt_ccounts,
-                self._m_wpt_pcounts, self._wpt_pcounts,
-                self._m_wpt_cvalues, self._wpt_cvalues,
-                self._m_wpt_pvalues)
+                self._wptraits, self._nrnodes, self._nsubrnodes,
+                self._m_wpt_uids,
+                self._m_wpt_ccounts, self._m_wpt_pcounts,
+                self._m_wpt_cvalues, self._m_wpt_pvalues,
+                dtype, backend)
         if self._sptraits:
             _common.prepare_trait_arrays(
-                backend, dtype,
-                self._m_spt_uids, self._spt_uids,
-                self._m_spt_ccounts, self._spt_ccounts,
-                self._m_spt_pcounts, self._spt_pcounts,
-                self._m_spt_cvalues, self._spt_cvalues,
-                self._m_spt_pvalues)
+                self._sptraits, self._nrnodes, self._nsubrnodes,
+                self._m_spt_uids,
+                self._m_spt_ccounts, self._m_spt_pcounts,
+                self._m_spt_cvalues, self._m_spt_pvalues,
+                dtype, backend)
 
     def evaluate(
-            self, backend, params, image, scube, rcube, dtype,
+            self, driver, params, image, scube, rcube, dtype,
             spat_size, spat_step, spat_zero,
             spec_size, spec_step, spec_zero,
             out_extra):
 
         # Perform preparations if needed
-        if self._backend is not backend or self._dtype is not dtype:
-            self._prepare(backend, dtype)
+        if self._backend is not driver or self._dtype is not dtype:
+            self._prepare(driver, dtype)
 
-        def prepare_param_array(array, descs):
-            _common.prepare_param_array(backend, params, array, descs)
+        def prepare_common_params(ary, descs, nodewise):
+            _common.prepare_common_params_array(
+                driver, params, ary, descs,
+                self._rnodes, self._subrnodes, self._interpolator_cls, nodewise)
 
-        prepare_param_array(self._m_vsys_pvalues, self._vsys_pdescs)
-        prepare_param_array(self._m_xpos_pvalues, self._xpos_pdescs)
-        prepare_param_array(self._m_ypos_pvalues, self._ypos_pdescs)
-        prepare_param_array(self._m_posa_pvalues, self._posa_pdescs)
-        prepare_param_array(self._m_incl_pvalues, self._incl_pdescs)
-        if self._rpt_pdescs:
-            prepare_param_array(self._m_rpt_pvalues, self._rpt_pdescs)
-        if self._rht_pdescs:
-            prepare_param_array(self._m_rht_pvalues, self._rht_pdescs)
-        if self._vpt_pdescs:
-            prepare_param_array(self._m_vpt_pvalues, self._vpt_pdescs)
-        if self._vht_pdescs:
-            prepare_param_array(self._m_vht_pvalues, self._vht_pdescs)
-        if self._dpt_pdescs:
-            prepare_param_array(self._m_dpt_pvalues, self._dpt_pdescs)
-        if self._dht_pdescs:
-            prepare_param_array(self._m_dht_pvalues, self._dht_pdescs)
-        if self._wpt_pdescs:
-            prepare_param_array(self._m_wpt_pvalues, self._wpt_pdescs)
-        if self._spt_pdescs:
-            prepare_param_array(self._m_spt_pvalues, self._spt_pdescs)
+        def prepare_traits_params(ary, descs, mappings, traits):
+            _common.prepare_traits_params_array(
+                driver, params, ary, descs,
+                self._rnodes, self._subrnodes, self._interpolator_cls, mappings, traits)
+
+        prepare_common_params(self._m_vsys_pvalues, self._vsys_pdescs, self._loose)
+        prepare_common_params(self._m_xpos_pvalues, self._xpos_pdescs, self._loose)
+        prepare_common_params(self._m_ypos_pvalues, self._ypos_pdescs, self._loose)
+        prepare_common_params(self._m_posa_pvalues, self._posa_pdescs, self._tilted)
+        prepare_common_params(self._m_incl_pvalues, self._incl_pdescs, self._tilted)
+
+        if self._rptraits:
+            prepare_traits_params(
+                self._m_rpt_pvalues, self._rpt_pdescs, self._rpt_pnames,
+                self._rptraits)
+        if self._rhtraits:
+            prepare_traits_params(
+                self._m_rht_pvalues, self._rht_pdescs, self._rht_pnames,
+                self._rhtraits)
+        if self._vptraits:
+            prepare_traits_params(
+                self._m_vpt_pvalues, self._vpt_pdescs, self._vpt_pnames,
+                self._vptraits)
+        if self._rhtraits:
+            prepare_traits_params(
+                self._m_vht_pvalues, self._vht_pdescs, self._vht_pnames,
+                self._vhtraits)
+        if self._dptraits:
+            prepare_traits_params(
+                self._m_dpt_pvalues, self._dpt_pdescs, self._dpt_pnames,
+                self._dptraits)
+        if self._dhtraits:
+            prepare_traits_params(
+                self._m_dht_pvalues, self._dht_pdescs, self._dht_pnames,
+                self._dhtraits)
+        if self._wptraits:
+            prepare_traits_params(
+                self._m_wpt_pvalues, self._wpt_pdescs, self._wpt_pnames,
+                self._wptraits)
+        if self._sptraits:
+            prepare_traits_params(
+                self._m_spt_pvalues, self._spt_pdescs, self._spt_pnames,
+                self._sptraits)
 
         self._evaluate_impl(
-            backend, params, image, scube, rcube, dtype,
+            driver, params, image, scube, rcube, dtype,
             spat_size, spat_step, spat_zero,
             spec_size, spec_step, spec_zero,
             out_extra)

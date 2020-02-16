@@ -12,6 +12,7 @@ class DensitySMDisk2D(_common.DensityComponent2D):
     def load(cls, info):
         loose = info.get('loose')
         tilted = info.get('tilted')
+        interp = info.get('interp')
         rnodes = info['rnodes']
         rptraits = traits.rpt_parser.load(info.get('rptraits'))
         sptraits = traits.spt_parser.load(info.get('sptraits'))

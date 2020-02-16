@@ -163,7 +163,8 @@ exponential_1d_fun(T x, T a, T b, T c)
 template<typename T> constexpr T
 exponential_1d_cdf(T x, T b, T c)
 {
-    return T{0.5} + T{0.5} * sign(x - b) * (1 - std::exp(-std::abs(x - b) / c));
+    std::cout << "commented out" << std::endl;
+//  return T{0.5} + T{0.5} * sign(x - b) * (1 - std::exp(-std::abs(x - b) / c));
 }
 
 template<typename T> constexpr T
@@ -265,6 +266,23 @@ ggauss_1d_pdf_trunc(T x, T b, T c, T d, T xmin, T xmax)
 }
 
 template<typename T> constexpr T
+ggauss_1d_rnd(RNG<T>& rng, T b, T c, T d)
+{
+    (void)rng;
+    (void)b;
+    (void)c;
+    (void)d;
+    assert(false);
+    return 0;
+}
+
+template<typename T> constexpr T
+ggauss_1d_rnd_trunc(RNG<T>& rng, T b, T c, T d, T xmin, T xmax)
+{
+    return _trunc_1d_rnd<ggauss_1d_rnd<T>>(xmin, xmax, rng, b, c, d);
+}
+
+template<typename T> constexpr T
 lorentz_1d_fun(T x, T a, T b, T c)
 {
     return a * c * c / ((x - b) * (x - b) + c * c);
@@ -357,11 +375,30 @@ interp_linear(T t, T y1, T y2)
 template<typename T> T
 interp_linear(T x, int index, const T* xdata, const T* ydata)
 {
+    //return ydata[index];
     T x1 = xdata[index-1];
     T x2 = xdata[index];
     T y1 = ydata[index-1];
     T y2 = ydata[index];
     return y1 + (x - x1) / (x2 - x1) * (y2 - y1);
+}
+
+
+
+template<typename T> size_t
+gsl_interp_bsearch(const T x_array[], T x, size_t index_lo, size_t index_hi)
+{
+    size_t ilo = index_lo;
+    size_t ihi = index_hi;
+    while(ihi > ilo + 1) {
+        size_t i = (ihi + ilo)/2;
+        if(x_array[i] > x)
+            ihi = i;
+        else
+            ilo = i;
+    }
+
+    return ilo;
 }
 
 }}} // namespace gbkfit::openmp::kernels

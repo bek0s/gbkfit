@@ -3,6 +3,7 @@ import abc
 
 import numpy as np
 
+import gbkfit.math
 from gbkfit.params import ParamScalarDesc, ParamVectorDesc
 from gbkfit.utils import parseutils
 
@@ -92,16 +93,25 @@ def _params_pw_harmonic(k, nnodes):
     return tuple(params)
 
 
-class ParamSupport:
+def _integrate_nw(nodes, fun, *args):
+    rsep = nodes[1] - nodes[0]
+    rmin = nodes - rsep / 2
+    rmax = nodes + rsep / 2
+    ampl = fun(nodes, *args)
+    return np.pi * ampl * (rmax * rmax - rmin * rmin)
 
-    def params(self):
+
+class ParamSupportSmooth(abc.ABC):
+
+    @abc.abstractmethod
+    def params_sm(self):
         return tuple()
 
 
-class ParamSupportNW:
+class ParamSupportNodeWise(abc.ABC):
 
     @abc.abstractmethod
-    def params(self, nnodes):
+    def params_nw(self, nnodes):
         return tuple()
 
 
@@ -125,6 +135,12 @@ class Trait(abc.ABC):
         return {'type': self.type()}
 
     def consts(self):
+        return tuple()
+
+    def params_sm(self):
+        return tuple()
+
+    def params_nw(self, nnodes):
         return tuple()
 
 
@@ -160,7 +176,7 @@ class SPTrait(Trait, abc.ABC):
     pass
 
 
-class RPTraitUniform(ParamSupport, RPTrait):
+class RPTraitUniform(ParamSupportSmooth, RPTrait):
 
     @staticmethod
     def type():
@@ -170,18 +186,19 @@ class RPTraitUniform(ParamSupport, RPTrait):
     def uid():
         return RP_TRAIT_UID_UNIFORM
 
-    def params(self):
+    def params_sm(self):
         return (
             ParamScalarDesc('a'),)
 
     def integrate(self, params, rnodes):
-        a = params['a']
-        rmin = rnodes[0]
-        rmax = rnodes[-1]
-        return np.pi * a * (rmax * rmax - rmin * rmin)
+        ampl = params['a']
+        rsep = rnodes[1] - rnodes[0]
+        rmin = rnodes - rsep
+        rmax = rnodes + rsep
+        return np.pi * ampl * (rmax * rmax - rmin * rmin)
 
 
-class RPTraitExponential(ParamSupport, RPTrait):
+class RPTraitExponential(ParamSupportSmooth, RPTrait):
 
     @staticmethod
     def type():
@@ -191,13 +208,18 @@ class RPTraitExponential(ParamSupport, RPTrait):
     def uid():
         return RP_TRAIT_UID_EXPONENTIAL
 
-    def params(self):
+    def params_sm(self):
         return (
             ParamScalarDesc('a'),
             ParamScalarDesc('s'))
 
+    def integrate(self, params, nodes):
+        a = params['a']
+        s = params['s']
+        return _integrate_nw(nodes, gbkfit.math.expon_1d_fun, a, 0, s)
 
-class RPTraitGauss(ParamSupport, RPTrait):
+
+class RPTraitGauss(ParamSupportSmooth, RPTrait):
 
     @staticmethod
     def type():
@@ -207,13 +229,18 @@ class RPTraitGauss(ParamSupport, RPTrait):
     def uid():
         return RP_TRAIT_UID_GAUSS
 
-    def params(self):
+    def params_sm(self):
         return (
             ParamScalarDesc('a'),
             ParamScalarDesc('s'))
 
+    def integrate(self, params, nodes):
+        a = params['a']
+        s = params['s']
+        return _integrate_nw(nodes, gbkfit.math.gauss_1d_fun, a, 0, s)
 
-class RPTraitGGauss(ParamSupport, RPTrait):
+
+class RPTraitGGauss(ParamSupportSmooth, RPTrait):
 
     @staticmethod
     def type():
@@ -223,14 +250,20 @@ class RPTraitGGauss(ParamSupport, RPTrait):
     def uid():
         return RP_TRAIT_UID_GGAUSS
 
-    def params(self):
+    def params_sm(self):
         return (
             ParamScalarDesc('a'),
             ParamScalarDesc('s'),
             ParamScalarDesc('b'))
 
+    def integrate(self, params, nodes):
+        a = params['a']
+        s = params['s']
+        b = params['b']
+        return _integrate_nw(nodes, gbkfit.math.ggauss_1d_fun, a, 0, s, b)
 
-class RPTraitLorentz(ParamSupport, RPTrait):
+
+class RPTraitLorentz(ParamSupportSmooth, RPTrait):
 
     @staticmethod
     def type():
@@ -240,13 +273,18 @@ class RPTraitLorentz(ParamSupport, RPTrait):
     def uid():
         return RP_TRAIT_UID_LORENTZ
 
-    def params(self):
+    def params_sm(self):
         return (
             ParamScalarDesc('a'),
             ParamScalarDesc('s'))
 
+    def integrate(self, params, nodes):
+        a = params['a']
+        s = params['s']
+        return _integrate_nw(nodes, gbkfit.math.lorentz_1d_fun, a, 0, s)
 
-class RPTraitMoffat(ParamSupport, RPTrait):
+
+class RPTraitMoffat(ParamSupportSmooth, RPTrait):
 
     @staticmethod
     def type():
@@ -256,14 +294,20 @@ class RPTraitMoffat(ParamSupport, RPTrait):
     def uid():
         return RP_TRAIT_UID_MOFFAT
 
-    def params(self):
+    def params_sm(self):
         return (
             ParamScalarDesc('a'),
             ParamScalarDesc('s'),
             ParamScalarDesc('b'))
 
+    def integrate(self, params, nodes):
+        a = params['a']
+        s = params['s']
+        b = params['b']
+        return _integrate_nw(nodes, gbkfit.math.moffat_1d_fun, a, 0, s, b)
 
-class RPTraitSech2(ParamSupport, RPTrait):
+
+class RPTraitSech2(ParamSupportSmooth, RPTrait):
 
     @staticmethod
     def type():
@@ -273,13 +317,18 @@ class RPTraitSech2(ParamSupport, RPTrait):
     def uid():
         return RP_TRAIT_UID_SECH2
 
-    def params(self):
+    def params_sm(self):
         return (
             ParamScalarDesc('a'),
             ParamScalarDesc('s'))
 
+    def integrate(self, params, nodes):
+        a = params['a']
+        s = params['s']
+        return _integrate_nw(nodes, gbkfit.math.sech2_1d_pdf, a, 0, s)
 
-class RPTraitMixtureGGauss(ParamSupport, RPTrait):
+
+class RPTraitMixtureGGauss(ParamSupportSmooth, RPTrait):
 
     @staticmethod
     def type():
@@ -302,11 +351,11 @@ class RPTraitMixtureGGauss(ParamSupport, RPTrait):
     def consts(self):
         return self._n,
 
-    def params(self):
+    def params_sm(self):
         return _params_mixture(self._n)
 
 
-class RPTraitMixtureMoffat(ParamSupport, RPTrait):
+class RPTraitMixtureMoffat(ParamSupportSmooth, RPTrait):
 
     @staticmethod
     def type():
@@ -329,11 +378,11 @@ class RPTraitMixtureMoffat(ParamSupport, RPTrait):
     def consts(self):
         return self._n,
 
-    def params(self):
+    def params_sm(self):
         return _params_mixture(self._n)
 
 
-class RPTraitNWUniform(ParamSupportNW, RPTrait):
+class RPTraitNWUniform(ParamSupportNodeWise, RPTrait):
 
     @staticmethod
     def type():
@@ -343,12 +392,17 @@ class RPTraitNWUniform(ParamSupportNW, RPTrait):
     def uid():
         return RP_TRAIT_UID_NW_UNIFORM
 
-    def params(self, nnodes):
+    def params_nw(self, nnodes):
         return (
             ParamVectorDesc('a', nnodes),)
 
+    def integrate(self, params, nodes):
+        a = params['a']
+        s = nodes[-1] - nodes[0]
+        return _integrate_nw(nodes, gbkfit.math.uniform_1d_fun, a, 0, s)
 
-class RPTraitNWHarmonic(ParamSupportNW, RPTrait):
+
+class RPTraitNWHarmonic(ParamSupportNodeWise, RPTrait):
 
     @staticmethod
     def type():
@@ -371,11 +425,16 @@ class RPTraitNWHarmonic(ParamSupportNW, RPTrait):
     def consts(self, nnodes=None):
         return self._k,
 
-    def params(self, nnodes):
+    def params_nw(self, nnodes):
         return _params_pw_harmonic(self._k, nnodes)
 
+    def integrate(self, params, nodes):
+        a = params['a']
+        s = nodes[-1] - nodes[0]
+        return _integrate_nw(nodes, gbkfit.math.uniform_1d_fun, a, 0, s) * 2
 
-class RPTraitNWDistortion(ParamSupportNW, RPTrait):
+
+class RPTraitNWDistortion(ParamSupportNodeWise, RPTrait):
 
     @staticmethod
     def type():
@@ -385,14 +444,14 @@ class RPTraitNWDistortion(ParamSupportNW, RPTrait):
     def uid():
         return RP_TRAIT_UID_NW_DISTORTION
 
-    def params(self, nnodes):
+    def params_nw(self, nnodes):
         return (
             ParamVectorDesc('a', nnodes),
             ParamVectorDesc('p', nnodes),
             ParamVectorDesc('s', nnodes))
 
 
-class RHTraitUniform(ParamSupport, RHTrait):
+class RHTraitUniform(ParamSupportSmooth, RHTrait):
 
     @staticmethod
     def type():
@@ -402,12 +461,12 @@ class RHTraitUniform(ParamSupport, RHTrait):
     def uid():
         return RH_TRAIT_UID_UNIFORM
 
-    def params(self):
+    def params_sm(self):
         return (
             ParamScalarDesc('s'),)
 
 
-class RHTraitExponential(ParamSupport, RHTrait):
+class RHTraitExponential(ParamSupportSmooth, RHTrait):
 
     @staticmethod
     def type():
@@ -417,12 +476,12 @@ class RHTraitExponential(ParamSupport, RHTrait):
     def uid():
         return RH_TRAIT_UID_EXPONENTIAL
 
-    def params(self):
+    def params_sm(self):
         return (
             ParamScalarDesc('s'),)
 
 
-class RHTraitGauss(ParamSupport, RHTrait):
+class RHTraitGauss(ParamSupportSmooth, RHTrait):
 
     @staticmethod
     def type():
@@ -432,12 +491,12 @@ class RHTraitGauss(ParamSupport, RHTrait):
     def uid():
         return RH_TRAIT_UID_GAUSS
 
-    def params(self):
+    def params_sm(self):
         return (
             ParamScalarDesc('s'),)
 
 
-class RHTraitGGauss(ParamSupport, RHTrait):
+class RHTraitGGauss(ParamSupportSmooth, RHTrait):
 
     @staticmethod
     def type():
@@ -447,13 +506,13 @@ class RHTraitGGauss(ParamSupport, RHTrait):
     def uid():
         return RH_TRAIT_UID_GGAUSS
 
-    def params(self):
+    def params_sm(self):
         return (
             ParamScalarDesc('s'),
             ParamScalarDesc('b'))
 
 
-class RHTraitLorentz(ParamSupport, RHTrait):
+class RHTraitLorentz(ParamSupportSmooth, RHTrait):
 
     @staticmethod
     def type():
@@ -463,12 +522,12 @@ class RHTraitLorentz(ParamSupport, RHTrait):
     def uid():
         return RH_TRAIT_UID_LORENTZ
 
-    def params(self):
+    def params_sm(self):
         return (
             ParamScalarDesc('s'),)
 
 
-class RHTraitSech2(ParamSupport, RHTrait):
+class RHTraitSech2(ParamSupportSmooth, RHTrait):
 
     @staticmethod
     def type():
@@ -478,12 +537,12 @@ class RHTraitSech2(ParamSupport, RHTrait):
     def uid():
         return RH_TRAIT_UID_SECH2
 
-    def params(self):
+    def params_sm(self):
         return (
             ParamScalarDesc('s'),)
 
 
-class VPTraitTanUniform(ParamSupport, VPTrait):
+class VPTraitTanUniform(ParamSupportSmooth, VPTrait):
 
     @staticmethod
     def type():
@@ -493,12 +552,12 @@ class VPTraitTanUniform(ParamSupport, VPTrait):
     def uid():
         return VP_TRAIT_UID_TAN_UNIFORM
 
-    def params(self):
+    def params_sm(self):
         return (
             ParamScalarDesc('vt'),)
 
 
-class VPTraitTanArctan(ParamSupport, VPTrait):
+class VPTraitTanArctan(ParamSupportSmooth, VPTrait):
 
     @staticmethod
     def type():
@@ -508,13 +567,13 @@ class VPTraitTanArctan(ParamSupport, VPTrait):
     def uid():
         return VP_TRAIT_UID_TAN_ARCTAN
 
-    def params(self):
+    def params_sm(self):
         return (
             ParamScalarDesc('rt'),
             ParamScalarDesc('vt'))
 
 
-class VPTraitTanBoissier(ParamSupport, VPTrait):
+class VPTraitTanBoissier(ParamSupportSmooth, VPTrait):
 
     @staticmethod
     def type():
@@ -524,13 +583,13 @@ class VPTraitTanBoissier(ParamSupport, VPTrait):
     def uid():
         return VP_TRAIT_UID_TAN_BOISSIER
 
-    def params(self):
+    def params_sm(self):
         return (
             ParamScalarDesc('rt'),
             ParamScalarDesc('vt'))
 
 
-class VPTraitTanEpinat(ParamSupport, VPTrait):
+class VPTraitTanEpinat(ParamSupportSmooth, VPTrait):
 
     @staticmethod
     def type():
@@ -540,7 +599,7 @@ class VPTraitTanEpinat(ParamSupport, VPTrait):
     def uid():
         return VP_TRAIT_UID_TAN_EPINAT
 
-    def params(self):
+    def params_sm(self):
         return (
             ParamScalarDesc('rt'),
             ParamScalarDesc('vt'),
@@ -548,7 +607,7 @@ class VPTraitTanEpinat(ParamSupport, VPTrait):
             ParamScalarDesc('eb'))
 
 
-class VPTraitTanLRamp(ParamSupport, VPTrait):
+class VPTraitTanLRamp(ParamSupportSmooth, VPTrait):
 
     @staticmethod
     def type():
@@ -558,13 +617,13 @@ class VPTraitTanLRamp(ParamSupport, VPTrait):
     def uid():
         return VP_TRAIT_UID_TAN_LRAMP
 
-    def params(self):
+    def params_sm(self):
         return (
             ParamScalarDesc('rt'),
             ParamScalarDesc('vt'))
 
 
-class VPTraitTanTanh(ParamSupport, VPTrait):
+class VPTraitTanTanh(ParamSupportSmooth, VPTrait):
 
     @staticmethod
     def type():
@@ -574,13 +633,13 @@ class VPTraitTanTanh(ParamSupport, VPTrait):
     def uid():
         return VP_TRAIT_UID_TAN_TANH
 
-    def params(self):
+    def params_sm(self):
         return (
             ParamScalarDesc('rt'),
             ParamScalarDesc('vt'))
 
 
-class VPTraitNWTanUniform(ParamSupportNW, VPTrait):
+class VPTraitNWTanUniform(ParamSupportNodeWise, VPTrait):
 
     @staticmethod
     def type():
@@ -590,12 +649,12 @@ class VPTraitNWTanUniform(ParamSupportNW, VPTrait):
     def uid():
         return VP_TRAIT_UID_NW_TAN_UNIFORM
 
-    def params(self, nnodes):
+    def params_nw(self, nnodes):
         return (
             ParamVectorDesc('vt', nnodes),)
 
 
-class VPTraitNWTanHarmonic(ParamSupportNW, VPTrait):
+class VPTraitNWTanHarmonic(ParamSupportNodeWise, VPTrait):
 
     @staticmethod
     def type():
@@ -618,11 +677,11 @@ class VPTraitNWTanHarmonic(ParamSupportNW, VPTrait):
     def consts(self):
         return self._k,
 
-    def params(self, nnodes):
+    def params_nw(self, nnodes):
         return _params_pw_harmonic(self._k, nnodes)
 
 
-class VPTraitNWRadUniform(ParamSupportNW, VPTrait):
+class VPTraitNWRadUniform(ParamSupportNodeWise, VPTrait):
 
     @staticmethod
     def type():
@@ -632,12 +691,12 @@ class VPTraitNWRadUniform(ParamSupportNW, VPTrait):
     def uid():
         return VP_TRAIT_UID_NW_RAD_UNIFORM
 
-    def params(self, nnodes):
+    def params_nw(self, nnodes):
         return (
             ParamVectorDesc('vr', nnodes),)
 
 
-class VPTraitNWRadHarmonic(ParamSupportNW, VPTrait):
+class VPTraitNWRadHarmonic(ParamSupportNodeWise, VPTrait):
 
     @staticmethod
     def type():
@@ -660,11 +719,11 @@ class VPTraitNWRadHarmonic(ParamSupportNW, VPTrait):
     def consts(self):
         return self._k,
 
-    def params(self, nnodes):
+    def params_nw(self, nnodes):
         return _params_pw_harmonic(self._k, nnodes)
 
 
-class VPTraitNWVerUniform(ParamSupportNW, VPTrait):
+class VPTraitNWVerUniform(ParamSupportNodeWise, VPTrait):
 
     @staticmethod
     def type():
@@ -674,12 +733,12 @@ class VPTraitNWVerUniform(ParamSupportNW, VPTrait):
     def uid():
         return VP_TRAIT_UID_NW_VER_UNIFORM
 
-    def params(self, nnodes):
+    def params_nw(self, nnodes):
         return (
             ParamVectorDesc('vv', nnodes),)
 
 
-class VPTraitNWVerHarmonic(ParamSupportNW, VPTrait):
+class VPTraitNWVerHarmonic(ParamSupportNodeWise, VPTrait):
 
     @staticmethod
     def type():
@@ -702,11 +761,11 @@ class VPTraitNWVerHarmonic(ParamSupportNW, VPTrait):
     def consts(self):
         return self._k,
 
-    def params(self, nnodes):
+    def params_nw(self, nnodes):
         return _params_pw_harmonic(self._k, nnodes)
 
 
-class VPTraitNWLOSUniform(ParamSupportNW, VPTrait):
+class VPTraitNWLOSUniform(ParamSupportNodeWise, VPTrait):
 
     @staticmethod
     def type():
@@ -716,12 +775,12 @@ class VPTraitNWLOSUniform(ParamSupportNW, VPTrait):
     def uid():
         return VP_TRAIT_UID_NW_LOS_UNIFORM
 
-    def params(self, nnodes):
+    def params_nw(self, nnodes):
         return (
             ParamVectorDesc('vl', nnodes),)
 
 
-class VPTraitNWLOSHarmonic(ParamSupportNW, VPTrait):
+class VPTraitNWLOSHarmonic(ParamSupportNodeWise, VPTrait):
 
     @staticmethod
     def type():
@@ -744,11 +803,11 @@ class VPTraitNWLOSHarmonic(ParamSupportNW, VPTrait):
     def consts(self):
         return self._k,
 
-    def params(self, nnodes):
+    def params_nw(self, nnodes):
         return _params_pw_harmonic(self._k, nnodes)
 
 
-class VHTraitOne(ParamSupport, VHTrait):
+class VHTraitOne(VHTrait):
 
     @staticmethod
     def type():
@@ -759,7 +818,7 @@ class VHTraitOne(ParamSupport, VHTrait):
         return VH_TRAIT_UID_ONE
 
 
-class DPTraitUniform(ParamSupport, DPTrait):
+class DPTraitUniform(ParamSupportSmooth, DPTrait):
 
     @staticmethod
     def type():
@@ -769,12 +828,12 @@ class DPTraitUniform(ParamSupport, DPTrait):
     def uid():
         return DP_TRAIT_UID_UNIFORM
 
-    def params(self):
+    def params_sm(self):
         return (
             ParamScalarDesc('a'),)
 
 
-class DPTraitExponential(ParamSupport, DPTrait):
+class DPTraitExponential(ParamSupportSmooth, DPTrait):
 
     @staticmethod
     def type():
@@ -784,13 +843,13 @@ class DPTraitExponential(ParamSupport, DPTrait):
     def uid():
         return DP_TRAIT_UID_EXPONENTIAL
 
-    def params(self):
+    def params_sm(self):
         return (
             ParamScalarDesc('a'),
             ParamScalarDesc('s'))
 
 
-class DPTraitGauss(ParamSupport, DPTrait):
+class DPTraitGauss(ParamSupportSmooth, DPTrait):
 
     @staticmethod
     def type():
@@ -800,13 +859,13 @@ class DPTraitGauss(ParamSupport, DPTrait):
     def uid():
         return DP_TRAIT_UID_GAUSS
 
-    def params(self):
+    def params_sm(self):
         return (
             ParamScalarDesc('a'),
             ParamScalarDesc('s'))
 
 
-class DPTraitGGauss(ParamSupport, DPTrait):
+class DPTraitGGauss(ParamSupportSmooth, DPTrait):
 
     @staticmethod
     def type():
@@ -816,14 +875,14 @@ class DPTraitGGauss(ParamSupport, DPTrait):
     def uid():
         return DP_TRAIT_UID_GGAUSS
 
-    def params(self):
+    def params_sm(self):
         return (
             ParamScalarDesc('a'),
             ParamScalarDesc('s'),
             ParamScalarDesc('b'))
 
 
-class DPTraitLorentz(ParamSupport, DPTrait):
+class DPTraitLorentz(ParamSupportSmooth, DPTrait):
 
     @staticmethod
     def type():
@@ -833,13 +892,13 @@ class DPTraitLorentz(ParamSupport, DPTrait):
     def uid():
         return DP_TRAIT_UID_LORENTZ
 
-    def params(self):
+    def params_sm(self):
         return (
             ParamScalarDesc('a'),
             ParamScalarDesc('s'))
 
 
-class DPTraitMoffat(ParamSupport, DPTrait):
+class DPTraitMoffat(ParamSupportSmooth, DPTrait):
 
     @staticmethod
     def type():
@@ -849,14 +908,14 @@ class DPTraitMoffat(ParamSupport, DPTrait):
     def uid():
         return DP_TRAIT_UID_MOFFAT
 
-    def params(self):
+    def params_sm(self):
         return (
             ParamScalarDesc('a'),
             ParamScalarDesc('s'),
             ParamScalarDesc('b'))
 
 
-class DPTraitSech2(ParamSupport, DPTrait):
+class DPTraitSech2(ParamSupportSmooth, DPTrait):
 
     @staticmethod
     def type():
@@ -866,13 +925,13 @@ class DPTraitSech2(ParamSupport, DPTrait):
     def uid():
         return DP_TRAIT_UID_SECH2
 
-    def params(self):
+    def params_sm(self):
         return (
             ParamScalarDesc('a'),
             ParamScalarDesc('s'))
 
 
-class DPTraitMixtureGGauss(ParamSupport, DPTrait):
+class DPTraitMixtureGGauss(ParamSupportSmooth, DPTrait):
 
     @staticmethod
     def type():
@@ -895,11 +954,11 @@ class DPTraitMixtureGGauss(ParamSupport, DPTrait):
     def consts(self):
         return self._n,
 
-    def params(self):
+    def params_sm(self):
         return _params_mixture(self._n)
 
 
-class DPTraitMixtureMoffat(ParamSupport, DPTrait):
+class DPTraitMixtureMoffat(ParamSupportSmooth, DPTrait):
 
     @staticmethod
     def type():
@@ -922,11 +981,11 @@ class DPTraitMixtureMoffat(ParamSupport, DPTrait):
     def consts(self):
         return self._n,
 
-    def params(self):
+    def params_sm(self):
         return _params_mixture(self._n)
 
 
-class DPTraitNWUniform(ParamSupportNW, DPTrait):
+class DPTraitNWUniform(ParamSupportNodeWise, DPTrait):
 
     @staticmethod
     def type():
@@ -936,12 +995,12 @@ class DPTraitNWUniform(ParamSupportNW, DPTrait):
     def uid():
         return DP_TRAIT_UID_NW_UNIFORM
 
-    def params(self, nnodes):
+    def params_nw(self, nnodes):
         return (
             ParamVectorDesc('a', nnodes),)
 
 
-class DPTraitNWHarmonic(ParamSupportNW, DPTrait):
+class DPTraitNWHarmonic(ParamSupportNodeWise, DPTrait):
 
     @staticmethod
     def type():
@@ -964,11 +1023,11 @@ class DPTraitNWHarmonic(ParamSupportNW, DPTrait):
     def consts(self, nnodes=None):
         return self._k,
 
-    def params(self, nnodes):
+    def params_nw(self, nnodes):
         return _params_pw_harmonic(self._k, nnodes)
 
 
-class DPTraitNWDistortion(ParamSupportNW, DPTrait):
+class DPTraitNWDistortion(ParamSupportNodeWise, DPTrait):
 
     @staticmethod
     def type():
@@ -978,14 +1037,14 @@ class DPTraitNWDistortion(ParamSupportNW, DPTrait):
     def uid():
         return DP_TRAIT_UID_NW_DISTORTION
 
-    def params(self, nnodes):
+    def params_nw(self, nnodes):
         return (
             ParamVectorDesc('a', nnodes),
             ParamVectorDesc('p', nnodes),
             ParamVectorDesc('s', nnodes))
 
 
-class DHTraitOne(ParamSupport, DHTrait):
+class DHTraitOne(DHTrait):
 
     @staticmethod
     def type():
@@ -996,7 +1055,7 @@ class DHTraitOne(ParamSupport, DHTrait):
         return DH_TRAIT_UID_ONE
 
 
-class WPTraitNWUniform(ParamSupportNW, WPTrait):
+class WPTraitNWUniform(ParamSupportNodeWise, WPTrait):
 
     @staticmethod
     def type():
@@ -1006,12 +1065,12 @@ class WPTraitNWUniform(ParamSupportNW, WPTrait):
     def uid():
         return DP_TRAIT_UID_NW_UNIFORM
 
-    def params(self, nnodes):
+    def params_nw(self, nnodes):
         return (
             ParamVectorDesc('a', nnodes),)
 
 
-class WPTraitNWHarmonic(ParamSupportNW, WPTrait):
+class WPTraitNWHarmonic(ParamSupportNodeWise, WPTrait):
 
     @staticmethod
     def type():
@@ -1034,11 +1093,11 @@ class WPTraitNWHarmonic(ParamSupportNW, WPTrait):
     def consts(self, nnodes=None):
         return self._k,
 
-    def params(self, nnodes):
+    def params_nw(self, nnodes):
         return _params_pw_harmonic(self._k, nnodes)
 
 
-class SPTraitAzimuthalRange(ParamSupport, SPTrait):
+class SPTraitAzimuthalRange(ParamSupportSmooth, SPTrait):
 
     @staticmethod
     def type():
@@ -1048,13 +1107,13 @@ class SPTraitAzimuthalRange(ParamSupport, SPTrait):
     def uid():
         return SP_TRAIT_UID_AZRANGE
 
-    def params(self):
+    def params_sm(self):
         return (
             ParamScalarDesc('p'),
             ParamScalarDesc('s'))
 
 
-class SPTraitNWAzimuthalRange(ParamSupportNW, SPTrait):
+class SPTraitNWAzimuthalRange(ParamSupportNodeWise, SPTrait):
 
     @staticmethod
     def type():
@@ -1064,7 +1123,7 @@ class SPTraitNWAzimuthalRange(ParamSupportNW, SPTrait):
     def uid():
         return SP_TRAIT_UID_NW_AZRANGE
 
-    def params(self, nnodes):
+    def params_nw(self, nnodes):
         return (
             ParamVectorDesc('p', nnodes),
             ParamVectorDesc('s', nnodes))

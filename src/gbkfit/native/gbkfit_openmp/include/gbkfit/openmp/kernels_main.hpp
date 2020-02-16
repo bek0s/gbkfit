@@ -264,6 +264,7 @@ gmodel_smdisk_evaluate(
         posai *= DEG_TO_RAD<T>;
         incli *= DEG_TO_RAD<T>;
 
+
         if (is_thin)
             transform_cpos_posa_incl(xn, yn, xposi, yposi, posai, incli);
         else

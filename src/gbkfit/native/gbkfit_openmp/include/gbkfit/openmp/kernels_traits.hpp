@@ -219,9 +219,12 @@ rp_trait_uniform(T& out, const T* params)
 
 template<typename T> void
 rp_trait_uniform_rnd(
-        T& out_r, T& out_t, RNG<T>& rng, T rmin, T rmax, const T* params)
+        T& out_r, T& out_t,
+        RNG<T>& rng, const T* nodes, int nnodes, const T* params)
 {
     T a = params[0];
+    T rmin = nodes[0];
+    T rmax = nodes[nnodes - 1];
     out_r = std::sqrt(rmax * rmax + (rmin * rmin - rmax * rmax) *  rng());
     out_t = 2 * PI<T> * rng();
 }
@@ -230,6 +233,12 @@ template<typename T> void
 rp_trait_exponential(T& out, T r, const T* params)
 {
     p_trait_exponential(out, r, params);
+}
+
+template<typename T> void
+rp_trait_exponential_rnd(T& out_r, T& out_t, RNG<T>& rng)
+{
+
 }
 
 template<typename T> void
@@ -254,9 +263,19 @@ rp_trait_ggauss(T& out, T r, const T* params)
 }
 
 template<typename T> void
+rp_trait_ggauss_rnd(T& out_r, T& out_t, RNG<T>& rng, const T* params)
+{
+}
+
+template<typename T> void
 rp_trait_lorentz(T& out, T r, const T* params)
 {
     p_trait_lorentz(out, r, params);
+}
+
+template<typename T> void
+rp_trait_lorentz_rnd(T& out_r, T& out_t, RNG<T>& rng, const T* params)
+{
 }
 
 template<typename T> void
@@ -266,9 +285,19 @@ rp_trait_moffat(T& out, T r, const T* params)
 }
 
 template<typename T> void
+rp_trait_moffat_rnd(T& out_r, T& out_t, RNG<T>& rng, const T* params)
+{
+}
+
+template<typename T> void
 rp_trait_sech2(T& out, T r, const T* params)
 {
     p_trait_sech2(out, r, params);
+}
+
+template<typename T> void
+rp_trait_sech2_rnd(T& out_r, T& out_t, RNG<T>& rng, const T* params)
+{
 }
 
 template<typename T> void
@@ -278,9 +307,19 @@ rp_trait_mixture_ggauss(T& out, T r, T theta, const T* consts, const T* params)
 }
 
 template<typename T> void
+rp_trait_mixture_ggauss_rnd(T& out_r, T& out_t, RNG<T>& rng, const T* params)
+{
+}
+
+template<typename T> void
 rp_trait_mixture_moffat(T& out, T r, T theta, const T* consts, const T* params)
 {
     p_trait_mixture_moffat(out, r, theta, consts, params);
+}
+
+template<typename T> void
+rp_trait_mixture_moffat_rnd(T& out_r, T& out_t, RNG<T>& rng, const T* params)
+{
 }
 
 template<typename T> void
@@ -293,6 +332,26 @@ rp_trait_nw_uniform(
 }
 
 template<typename T> void
+rp_trait_nw_uniform_rnd(
+        T& out_r, T& out_t,
+        RNG<T>& rng, int nidx, const T* nodes, int nnodes, const T* params)
+{
+    T rsep = 1;
+    T rmin = nodes[nidx] - rsep;
+    T rmax = nodes[nidx] + rsep;
+    out_r = std::sqrt(rmax * rmax + (rmin * rmin - rmax * rmax) *  rng());
+    out_t = 2 * PI<T> * rng();
+
+    /*
+    T a = params[0];
+    T rmin = nodes[0];
+    T rmax = nodes[nnodes - 1];
+    out_r = std::sqrt(rmax * rmax + (rmin * rmin - rmax * rmax) *  rng());
+    out_t = 2 * PI<T> * rng();
+    */
+}
+
+template<typename T> void
 rp_trait_nw_harmonic(
         T& out,
         int nidx, const T* nodes, int nnodes, T r, T theta,
@@ -302,12 +361,22 @@ rp_trait_nw_harmonic(
 }
 
 template<typename T> void
+rp_trait_nw_harmonic_rnd(T& out_r, T& out_t, RNG<T>& rng, const T* params)
+{
+}
+
+template<typename T> void
 rp_trait_nw_distortion(
         T& out,
         int nidx, const T* nodes, int nnodes, T r, T theta,
         const T* params)
 {
     p_trait_nw_distortion(out, nidx, nodes, nnodes, r, theta, params);
+}
+
+template<typename T> void
+rp_trait_nw_distortion_rnd(T& out_r, T& out_t, RNG<T>& rng, const T* params)
+{
 }
 
 template<typename T> void
@@ -358,6 +427,14 @@ rh_trait_ggauss(T& out, T z, const T* params)
     T size = params[0];
     T shape = params[1];
     out = ggauss_1d_pdf(z, T{0}, size, shape);
+}
+
+template<typename T> void
+rh_trait_ggauss_rnd(T& out, RNG<T>& rng, const T* params)
+{
+    T size = params[0];
+    T shape = params[1];
+    out = ggauss_1d_rnd(rng, T{0}, size, shape);
 }
 
 template<typename T> void
@@ -771,23 +848,51 @@ rp_trait_rnd(
     out_s = 1;
     out_r = NAN;
     out_t = NAN;
-    T rmin = nodes[0];
-    T rmax = nodes[nnodes - 1];
     switch (uid)
     {
     case RP_TRAIT_UID_UNIFORM:
-        rp_trait_uniform_rnd(out_r, out_t, rng, rmin, rmax, params);
+        rp_trait_uniform_rnd(
+                out_r, out_t, rng, nodes, nnodes, params);
         break;
     case RP_TRAIT_UID_EXPONENTIAL:
+        rp_trait_exponential_rnd(
+                out_r, out_t, rng);
         break;
     case RP_TRAIT_UID_GAUSS:
-        rp_trait_gauss_rnd(out_r, out_t, rng, params);
+        rp_trait_gauss_rnd(
+                out_r, out_t, rng, params);
         break;
     case RP_TRAIT_UID_GGAUSS:
+        rp_trait_ggauss_rnd(
+                out_r, out_t, rng, params);
         break;
     case RP_TRAIT_UID_LORENTZ:
+        rp_trait_lorentz_rnd(
+                out_r, out_t, rng, params);
         break;
     case RP_TRAIT_UID_SECH2:
+        rp_trait_sech2_rnd(
+                out_r, out_t, rng, params);
+        break;
+    case RP_TRAIT_UID_MIXTURE_GGAUSS:
+        rp_trait_mixture_ggauss_rnd(
+                out_r, out_t, rng, params);
+        break;
+    case RP_TRAIT_UID_MIXTURE_MOFFAT:
+        rp_trait_mixture_moffat_rnd(
+                out_r, out_t, rng, params);
+        break;
+    case RP_TRAIT_UID_NW_UNIFORM:
+        rp_trait_nw_uniform_rnd(
+                out_r, out_t, rng, nidx, nodes, nnodes, params);
+        break;
+    case RP_TRAIT_UID_NW_HARMONIC:
+        rp_trait_nw_harmonic_rnd(
+                out_r, out_t, rng, params);
+        break;
+    case RP_TRAIT_UID_NW_DISTORTION:
+        rp_trait_nw_distortion_rnd(
+                out_r, out_t, rng, params);
         break;
     default:
         assert(false);
@@ -818,8 +923,8 @@ rh_trait_rnd(
                 out, rng, params);
         break;
     case RH_TRAIT_UID_GGAUSS:
-    //  rh_trait_ggauss_rnd(
-    //          out, rng, params);
+        rh_trait_ggauss_rnd(
+                out, rng, params);
         break;
     case RH_TRAIT_UID_LORENTZ:
         rh_trait_lorentz_rnd(

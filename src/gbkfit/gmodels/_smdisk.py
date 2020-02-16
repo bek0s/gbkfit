@@ -52,7 +52,7 @@ class SMDisk(_disk.Disk):
         self._disk.evaluate(
             self._loose,
             self._tilted,
-            self._m_rnodes[1],
+            self._m_subrnodes[1],
             self._m_vsys_pvalues[1],
             self._m_xpos_pvalues[1],
             self._m_ypos_pvalues[1],
