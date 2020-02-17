@@ -57,52 +57,28 @@ class MCDisk(_disk.Disk):
 
         # Calculate the number of clouds
         ncloudspt = []
-        start = 0
+
         for trait, names, in zip(self._rptraits, self._rpt_pnames):
             tparams = {oname: params[nname] for oname, nname in names.items()}
-            integral = trait.integrate(tparams, self._m_subrnodes[0])
+            nclouds = trait.integrate(tparams, self._m_subrnodes[0]) / self._cflux
 
             if trait.has_ordinary_integral():
-                ncloudspt.append(integral / self._cflux)
-                size = 1
-                self._ncloudsptor[0][start] = integral / self._cflux
+                ncloudspt.append(nclouds)
             else:
-                ncloudspt.extend((integral / self._cflux).astype(np.int32))
-                size = self._nsubrnodes
-                self._ncloudsptor[0][start:start + size] = integral / self._cflux
+                ncloudspt.extend(nclouds.astype(np.int32))
 
-            start += size
-
-        #self._ncloudsptor[0][:] = self._ncloudsptor[0][:] / self._cflux
-
-
-        print("integral:", integral)
-        print("nclouds:", self._ncloudsptor[0])
+        print("nclouds:", nclouds)
         print("nclouds:", ncloudspt)
 
-
-        from time import time_ns
-        t1 = time_ns()
-        np.cumsum(self._ncloudsptor[0], out=self._ncloudsptor[0])
-        t2 = time_ns()
-        print("T:", t2 - t1)
-        print("foo:", self._ncloudsptor[0])
-
         import itertools
-        t1 = time_ns()
         ncloudspt = list(itertools.accumulate(ncloudspt))
-        t2 = time_ns()
-        print("T:", t2 - t1)
-        print("bar:", ncloudspt)
-
-
-        nclouds = self._ncloudsptor[0][-1]
-        print(self._ncloudsptor[0].size)
+        nclouds = ncloudspt[-1]
 
         log.info(
             f"nclouds (total): {nclouds}\n"
             f"nclouds (per trait): {ncloudspt}")
 
+        self._ncloudsptor[0][:] = ncloudspt
         driver.mem_copy_h2d(self._ncloudsptor[0], self._ncloudsptor[1])
 
         rdata = None
@@ -168,8 +144,11 @@ class MCDisk(_disk.Disk):
             if self._dptraits:
                 out_extra['ddata'] = driver.mem_copy_d2h(ddata)
             if self._rptraits:
-                print("sum(abs(rdata)): ", np.nansum(np.abs(out_extra['rdata'])))
+                sumabs = np.nansum(np.abs(out_extra['rdata']))
+                log.debug(f"sum(abs(rdata)): {sumabs}")
             if self._vptraits:
-                print("sum(abs(vdata)): ", np.nansum(np.abs(out_extra['vdata'])))
+                sumabs = np.nansum(np.abs(out_extra['vdata']))
+                log.debug(f"sum(abs(vdata)): {sumabs}")
             if self._dptraits:
-                print("sum(abs(ddata)): ", np.nansum(np.abs(out_extra['ddata'])))
+                sumabs = np.nansum(np.abs(out_extra['ddata']))
+                log.debug(f"sum(abs(ddata)): {sumabs}")

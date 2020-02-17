@@ -31,7 +31,7 @@ logging.config.dictConfig({
     },
     'loggers': {
         'gbkfit': {
-            'level': 'INFO',
+            'level': 'DEBUG',
             'handlers': ['console', 'file']
         }
     }

@@ -1,7 +1,12 @@
 
+import logging
+
 import numpy as np
 
 from . import _disk
+
+
+log = logging.getLogger(__name__)
 
 
 class SMDisk(_disk.Disk):
@@ -94,8 +99,11 @@ class SMDisk(_disk.Disk):
             if self._dptraits:
                 out_extra['ddata'] = driver.mem_copy_d2h(ddata)
             if self._rptraits:
-                print("sum(abs(rdata)): ", np.nansum(np.abs(out_extra['rdata'])))
+                sumabs = np.nansum(np.abs(out_extra['rdata']))
+                log.debug(f"sum(abs(rdata)): {sumabs}")
             if self._vptraits:
-                print("sum(abs(vdata)): ", np.nansum(np.abs(out_extra['vdata'])))
+                sumabs = np.nansum(np.abs(out_extra['vdata']))
+                log.debug(f"sum(abs(vdata)): {sumabs}")
             if self._dptraits:
-                print("sum(abs(ddata)): ", np.nansum(np.abs(out_extra['ddata'])))
+                sumabs = np.nansum(np.abs(out_extra['ddata']))
+                log.debug(f"sum(abs(ddata)): {sumabs}")
