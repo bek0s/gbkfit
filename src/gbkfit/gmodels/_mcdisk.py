@@ -1,4 +1,5 @@
 
+import itertools
 import logging
 
 import numpy as np
@@ -55,22 +56,20 @@ class MCDisk(_disk.Disk):
             spec_size, spec_step, spec_zero,
             out_extra):
 
-        # Calculate the number of clouds
+        # Calculate the number of clouds per trait and subring.
+        # The latter happens when the trait has no ordinary integral.
         ncloudspt = []
-
-        for trait, names, in zip(self._rptraits, self._rpt_pnames):
-            tparams = {oname: params[nname] for oname, nname in names.items()}
-            nclouds = trait.integrate(tparams, self._m_subrnodes[0]) / self._cflux
+        for trait, pnames, in zip(self._rptraits, self._rpt_pnames):
+            tparams = {oname: params[nname] for oname, nname in pnames.items()}
+            integral = trait.integrate(tparams, self._m_subrnodes[0])
+            tnclouds = integral / self._cflux
 
             if trait.has_ordinary_integral():
-                ncloudspt.append(nclouds)
+                ncloudspt.append(tnclouds)
             else:
-                ncloudspt.extend(nclouds.astype(np.int32))
+                ncloudspt.extend(tnclouds.astype(np.int32))
 
-        print("nclouds:", nclouds)
-        print("nclouds:", ncloudspt)
 
-        import itertools
         ncloudspt = list(itertools.accumulate(ncloudspt))
         nclouds = ncloudspt[-1]
 
