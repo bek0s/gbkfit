@@ -63,12 +63,10 @@ class MCDisk(_disk.Disk):
             tparams = {oname: params[nname] for oname, nname in pnames.items()}
             integral = trait.integrate(tparams, self._m_subrnodes[0])
             tnclouds = integral / self._cflux
-
             if trait.has_ordinary_integral():
                 ncloudspt.append(tnclouds)
             else:
                 ncloudspt.extend(tnclouds.astype(np.int32))
-
 
         ncloudspt = list(itertools.accumulate(ncloudspt))
         nclouds = ncloudspt[-1]

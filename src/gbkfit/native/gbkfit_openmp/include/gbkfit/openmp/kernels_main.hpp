@@ -485,7 +485,7 @@ gmodel_mcdisk_evaluate(
 
     bool is_thin = false;
 
-    #pragma omp parallel for
+    //#pragma omp parallel for
     for(int ci = 0; ci < nclouds; ++ci)
     {
 
