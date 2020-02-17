@@ -11,7 +11,9 @@ struct GModelMCDisk
 {
     void
     evaluate(
-            T cflux, int nclouds, CPtr ncloudspt,
+            T cflux, int nclouds,
+            CPtr ncloudscsum, int ncloudscsum_len,
+            CPtr hasordint,
             bool loose, bool tilted,
             int nrnodes, CPtr rnodes,
             CPtr vsys,
@@ -57,7 +59,9 @@ struct GModelMCDisk
     {
         kernels::gmodel_mcdisk_evaluate<T>(
                 cflux, nclouds,
-                reinterpret_cast<const int*>(ncloudspt),
+                reinterpret_cast<const int*>(ncloudscsum),
+                ncloudscsum_len,
+                reinterpret_cast<const bool*>(hasordint),
                 loose, tilted,
                 nrnodes,
                 reinterpret_cast<const T*>(rnodes),

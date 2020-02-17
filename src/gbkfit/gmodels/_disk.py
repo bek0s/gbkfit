@@ -1,8 +1,18 @@
 
 import abc
 
+import numpy as np
+
+from gbkfit.math import interpolation
 from gbkfit.utils import iterutils
 from . import _common
+
+
+_INTERPOLATIONS = {
+    'linear': interpolation.InterpolatorLinear,
+    'akima': interpolation.InterpolatorAkima,
+    'pchip': interpolation.InterpolatorPCHIP
+}
 
 
 class Disk(abc.ABC):
@@ -16,6 +26,8 @@ class Disk(abc.ABC):
             wptraits,
             sptraits):
 
+        interp = 'linear'
+
         if rnodes is None or len(rnodes) < 2:
             raise RuntimeError(
                 "at least two radial nodes must be provided ")
@@ -28,6 +40,10 @@ class Disk(abc.ABC):
         if rnodes is not None and not iterutils.all_unique(rnodes):
             raise RuntimeError(
                 "radial nodes must be unique")
+        if interp not in _INTERPOLATIONS:
+            raise RuntimeError(
+                "interpolation type must be one of the following: "
+                f"{list(_INTERPOLATIONS.keys())}")
 
         rnodes = tuple(rnodes)
         nrnodes = len(rnodes)
@@ -37,21 +53,15 @@ class Disk(abc.ABC):
         self._rnodes = rnodes
         self._nrnodes = nrnodes
 
-        self._radsep = radsep = 1.0
-        self._subrnodes = subrnodes = []
-        rcur = rnodes[0]
-        for i in range(nrnodes - 1):
-            while rcur < rnodes[i + 1] - radsep:
-                rcur += radsep if subrnodes else radsep / 2
-                subrnodes.append(rcur)
+        subrsep = 1.0
+        subrmin = rnodes[0] + subrsep / 2
+        subrmax = rnodes[-1]
+        subrnodes = list(np.arange(subrmin, subrmax, subrsep))
 
-        #self._subrnodes =
-        #print(subrnodes)
-        #exit()
-
-
-
+        self._subrsep = subrsep
+        self._subrnodes = subrnodes
         self._nsubrnodes = len(subrnodes)
+        self._interp_cls = _INTERPOLATIONS[interp]
 
         self._rptraits = tuple(rptraits)
         self._rhtraits = tuple(rhtraits)
@@ -101,17 +111,15 @@ class Disk(abc.ABC):
             **self._wpt_pdescs,
             **self._spt_pdescs}
 
-        self._m_rnodes = [None, None]
+        self._m_subrnodes = [None, None]
         self._m_vsys_pvalues = [None, None]
         self._m_xpos_pvalues = [None, None]
         self._m_ypos_pvalues = [None, None]
         self._m_posa_pvalues = [None, None]
         self._m_incl_pvalues = [None, None]
 
-        self._m_subrnodes = [None, None]
 
-        from gbkfit.math.interpolation import InterpolatorAkima, InterpolatorLinear
-        self._interpolator_cls = InterpolatorAkima
+
 
         (self._m_rpt_uids,
          self._m_rpt_cvalues,
@@ -218,9 +226,6 @@ class Disk(abc.ABC):
         self._m_incl_pvalues = backend.mem_alloc(tcount, dtype)
 
         _common.prepare_rnode_array(
-            backend, dtype, self._m_rnodes, self._rnodes)
-
-        _common.prepare_rnode_array(
             backend, dtype, self._m_subrnodes, self._subrnodes)
 
         if self._rptraits:
@@ -293,12 +298,12 @@ class Disk(abc.ABC):
         def prepare_common_params(ary, descs, nodewise):
             _common.prepare_common_params_array(
                 driver, params, ary, descs,
-                self._rnodes, self._subrnodes, self._interpolator_cls, nodewise)
+                self._rnodes, self._subrnodes, self._interp_cls, nodewise)
 
         def prepare_traits_params(ary, descs, mappings, traits):
             _common.prepare_traits_params_array(
                 driver, params, ary, descs,
-                self._rnodes, self._subrnodes, self._interpolator_cls, mappings, traits)
+                self._rnodes, self._subrnodes, self._interp_cls, mappings, traits)
 
         prepare_common_params(self._m_vsys_pvalues, self._vsys_pdescs, self._loose)
         prepare_common_params(self._m_xpos_pvalues, self._xpos_pdescs, self._loose)

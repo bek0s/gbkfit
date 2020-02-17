@@ -1,7 +1,7 @@
 #pragma once
 
 #include <omp.h>
-
+#include <fstream>
 #include "kernels_misc.hpp"
 #include "kernels_traits.hpp"
 
@@ -434,7 +434,9 @@ gmodel_smdisk_evaluate(
 
 template<typename T> void
 gmodel_mcdisk_evaluate(
-        T cflux, int nclouds, const int* ncloudspt,
+        T cflux, int nclouds,
+        const int* ncloudscsum, int ncloudscsum_len,
+        const bool* hasordint,
         bool loose, bool tilted,
         int nrnodes, const T* rnodes,
         const T* vsys,
@@ -499,15 +501,25 @@ gmodel_mcdisk_evaluate(
         T xd, yd, zd, rd, theta;
         int rnidx = -1;
 
-        // Calculate the density trait index of the current cloud
         int tidx = 0;
         int csum = 0;
         const T* rpt_cptr = rpt_cvalues;
         const T* rpt_pptr = rpt_pvalues;
         const T* rht_cptr = rht_cvalues;
         const T* rht_pptr = rht_pvalues;
-        while((csum += ncloudspt[tidx]) <= ci)
+
+        int idxx = 0;
+        while(ci >= ncloudscsum[idxx])
+            idxx++;
+
+
+        for(int i = 0; i < nrt; ++i)
         {
+            int size = hasordint[i] ? 1 : nrnodes;
+            if (idxx - size < 0)
+                break;
+            idxx -= size;
+
             rpt_cptr += rpt_ccounts[tidx];
             rpt_pptr += rpt_pcounts[tidx];
             rht_cptr += rht_ccounts[tidx];
@@ -515,27 +527,11 @@ gmodel_mcdisk_evaluate(
             tidx++;
         }
 
-        /*
-        int sum_ = 0;
-        int idx = 0;
-        T* ispw = nullptr;
-        while(sum_ <= ci)
-        {
-            if (ispw[tidx])
-            {
 
-            }
-            else
-            {
+        rnidx = idxx;
 
-            }
-        }
 
-        while(tidx < nrt)
-        {
-            auto ispw_ = ispw[tid];
 
-        }*/
 
         // Density polar trait
         T sign;

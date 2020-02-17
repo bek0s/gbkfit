@@ -129,7 +129,7 @@ class GModelMCDisk(gbkfit.driver.GModelMCDisk):
 
     def evaluate(
             self,
-            cflux, nclouds, ncloudspt,
+            cflux, nclouds, ncloudspt, hasordint,
             loose, tilted, rnodes,
             vsys, xpos, ypos, posa, incl,
             rpt_uids, rpt_cvalues, rpt_ccounts, rpt_pvalues, rpt_pcounts,
@@ -145,7 +145,7 @@ class GModelMCDisk(gbkfit.driver.GModelMCDisk):
             image, scube, rcube,
             rdata, vdata, ddata):
         self._disk.evaluate(
-            cflux, nclouds, _ptr(ncloudspt),
+            cflux, nclouds, _ptr(ncloudspt), _shape(ncloudspt)[0], _ptr(hasordint),
             loose, tilted,
             _shape(rnodes)[0],
             _ptr(rnodes),

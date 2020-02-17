@@ -95,8 +95,8 @@ def _params_pw_harmonic(k, nnodes):
 
 def _integrate_nw(nodes, fun, *args):
     rsep = nodes[1] - nodes[0]
-    rmin = nodes - rsep / 2
-    rmax = nodes + rsep / 2
+    rmin = nodes - rsep * 0.5
+    rmax = nodes + rsep * 0.5
     ampl = fun(nodes, *args)
     return np.pi * ampl * (rmax * rmax - rmin * rmin)
 
@@ -189,8 +189,8 @@ class RPTraitUniform(RPTrait):
     def integrate(self, params, nodes):
         ampl = params['a']
         rsep = nodes[1] - nodes[0]
-        rmin = nodes[0] - rsep
-        rmax = nodes[-1] + rsep
+        rmin = nodes[0] - 0.5 * rsep
+        rmax = nodes[-1] + 0.5 * rsep
         return np.pi * ampl * (rmax * rmax - rmin * rmin)
 
 
@@ -427,8 +427,7 @@ class RPTraitNWUniform(RPTrait):
 
     def integrate(self, params, nodes):
         a = params['a']
-        s = nodes[-1] - nodes[0]
-        return _integrate_nw(nodes, gbkfit.math.uniform_1d_fun, a, 0, s)
+        return _integrate_nw(nodes, gbkfit.math.uniform_1d_fun, a, 0, np.inf)
 
 
 class RPTraitNWHarmonic(RPTrait):
