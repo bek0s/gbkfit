@@ -118,9 +118,6 @@ class Disk(abc.ABC):
         self._m_posa_pvalues = [None, None]
         self._m_incl_pvalues = [None, None]
 
-
-
-
         (self._m_rpt_uids,
          self._m_rpt_cvalues,
          self._m_rpt_pvalues,
@@ -171,7 +168,7 @@ class Disk(abc.ABC):
 
         self._disk = None
         self._dtype = None
-        self._backend = None
+        self._driver = None
 
     def loose(self):
         return self._loose
@@ -209,24 +206,24 @@ class Disk(abc.ABC):
     def params(self):
         return self._pdescs
 
-    def _prepare(self, backend, dtype):
+    def _prepare(self, driver, dtype):
 
-        self._backend = backend
+        self._backend = driver
         self._dtype = dtype
 
         lcount = self._nsubrnodes if self._loose else 1
         tcount = self._nsubrnodes if self._tilted else 1
 
         if self._vptraits:
-            self._m_vsys_pvalues = backend.mem_alloc(lcount, dtype)
-        self._m_vsys_pvalues = backend.mem_alloc(lcount, dtype)
-        self._m_xpos_pvalues = backend.mem_alloc(lcount, dtype)
-        self._m_ypos_pvalues = backend.mem_alloc(lcount, dtype)
-        self._m_posa_pvalues = backend.mem_alloc(tcount, dtype)
-        self._m_incl_pvalues = backend.mem_alloc(tcount, dtype)
+            self._m_vsys_pvalues = driver.mem_alloc(lcount, dtype)
+        self._m_vsys_pvalues = driver.mem_alloc(lcount, dtype)
+        self._m_xpos_pvalues = driver.mem_alloc(lcount, dtype)
+        self._m_ypos_pvalues = driver.mem_alloc(lcount, dtype)
+        self._m_posa_pvalues = driver.mem_alloc(tcount, dtype)
+        self._m_incl_pvalues = driver.mem_alloc(tcount, dtype)
 
         _common.prepare_rnode_array(
-            backend, dtype, self._m_subrnodes, self._subrnodes)
+            driver, dtype, self._m_subrnodes, self._subrnodes)
 
         if self._rptraits:
             _common.prepare_trait_arrays(
@@ -234,56 +231,58 @@ class Disk(abc.ABC):
                 self._m_rpt_uids,
                 self._m_rpt_ccounts, self._m_rpt_pcounts,
                 self._m_rpt_cvalues, self._m_rpt_pvalues,
-                dtype, backend)
+                dtype, driver)
         if self._rhtraits:
             _common.prepare_trait_arrays(
                 self._rhtraits, 0, 0,
                 self._m_rht_uids,
                 self._m_rht_ccounts, self._m_rht_pcounts,
                 self._m_rht_cvalues, self._m_rht_pvalues,
-                dtype, backend)
+                dtype, driver)
         if self._vptraits:
             _common.prepare_trait_arrays(
                 self._vptraits, self._nrnodes, self._nsubrnodes,
                 self._m_vpt_uids,
                 self._m_vpt_ccounts, self._m_vpt_pcounts,
                 self._m_vpt_cvalues, self._m_vpt_pvalues,
-                dtype, backend)
+                dtype, driver)
         if self._vhtraits:
             _common.prepare_trait_arrays(
                 self._vhtraits, 0, 0,
                 self._m_vht_uids,
                 self._m_vht_ccounts, self._m_vht_pcounts,
                 self._m_vht_cvalues, self._m_vht_pvalues,
-                dtype, backend)
+                dtype, driver)
         if self._dptraits:
             _common.prepare_trait_arrays(
                 self._dptraits, self._nrnodes, self._nsubrnodes,
                 self._m_dpt_uids,
                 self._m_dpt_ccounts, self._m_dpt_pcounts,
                 self._m_dpt_cvalues, self._m_dpt_pvalues,
-                dtype, backend)
+                dtype, driver)
         if self._dhtraits:
             _common.prepare_trait_arrays(
                 self._dhtraits, 0, 0,
                 self._m_dht_uids,
                 self._m_dht_ccounts, self._m_dht_pcounts,
                 self._m_dht_cvalues, self._m_dht_pvalues,
-                dtype, backend)
+                dtype, driver)
         if self._wptraits:
             _common.prepare_trait_arrays(
                 self._wptraits, self._nrnodes, self._nsubrnodes,
                 self._m_wpt_uids,
                 self._m_wpt_ccounts, self._m_wpt_pcounts,
                 self._m_wpt_cvalues, self._m_wpt_pvalues,
-                dtype, backend)
+                dtype, driver)
         if self._sptraits:
             _common.prepare_trait_arrays(
                 self._sptraits, self._nrnodes, self._nsubrnodes,
                 self._m_spt_uids,
                 self._m_spt_ccounts, self._m_spt_pcounts,
                 self._m_spt_cvalues, self._m_spt_pvalues,
-                dtype, backend)
+                dtype, driver)
+
+        self._impl_prepare(driver, dtype)
 
     def evaluate(
             self, driver, params, image, scube, rcube, dtype,
@@ -292,7 +291,7 @@ class Disk(abc.ABC):
             out_extra):
 
         # Perform preparations if needed
-        if self._backend is not driver or self._dtype is not dtype:
+        if self._driver is not driver or self._dtype is not dtype:
             self._prepare(driver, dtype)
 
         def prepare_common_params(ary, descs, nodewise):
@@ -344,14 +343,18 @@ class Disk(abc.ABC):
                 self._m_spt_pvalues, self._spt_pdescs, self._spt_pnames,
                 self._sptraits)
 
-        self._evaluate_impl(
+        self._impl_evaluate(
             driver, params, image, scube, rcube, dtype,
             spat_size, spat_step, spat_zero,
             spec_size, spec_step, spec_zero,
             out_extra)
 
     @abc.abstractmethod
-    def _evaluate_impl(
+    def _impl_prepare(self, driver, dtype):
+        pass
+
+    @abc.abstractmethod
+    def _impl_evaluate(
             self, backend, params, image, scube, rcube, dtype,
             spat_size, spat_step, spat_zero,
             spec_size, spec_step, spec_zero,

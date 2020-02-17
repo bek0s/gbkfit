@@ -23,15 +23,14 @@ class SMDisk(_disk.Disk):
             wptraits,
             sptraits)
 
-    def _evaluate_impl(
-            self, backend, params, image, scube, rcube, dtype,
+    def _impl_prepare(self, driver, dtype):
+        self._disk = driver.make_gmodel_smdisk(dtype)
+
+    def _impl_evaluate(
+            self, driver, params, image, scube, rcube, dtype,
             spat_size, spat_step, spat_zero,
             spec_size, spec_step, spec_zero,
             out_extra):
-
-        # Perform preparations if needed
-        if self._backend is not backend or self._dtype is dtype:
-            self._disk = backend.make_gmodel_smdisk(dtype)
 
         rdata = None
         vdata = None
@@ -40,14 +39,14 @@ class SMDisk(_disk.Disk):
         if out_extra is not None:
             shape = spat_size[::-1]
             if self._rptraits:
-                rdata = backend.mem_alloc_d(shape, dtype)
-                backend.mem_fill_d(rdata, 0)
+                rdata = driver.mem_alloc_d(shape, dtype)
+                driver.mem_fill_d(rdata, 0)
             if self._vptraits:
-                vdata = backend.mem_alloc_d(shape, dtype)
-                backend.mem_fill_d(vdata, np.nan)
+                vdata = driver.mem_alloc_d(shape, dtype)
+                driver.mem_fill_d(vdata, np.nan)
             if self._dptraits:
-                ddata = backend.mem_alloc_d(shape, dtype)
-                backend.mem_fill_d(ddata, np.nan)
+                ddata = driver.mem_alloc_d(shape, dtype)
+                driver.mem_fill_d(ddata, np.nan)
 
         self._disk.evaluate(
             self._loose,
@@ -89,11 +88,11 @@ class SMDisk(_disk.Disk):
 
         if out_extra is not None:
             if self._rptraits:
-                out_extra['rdata'] = backend.mem_copy_d2h(rdata)
+                out_extra['rdata'] = driver.mem_copy_d2h(rdata)
             if self._vptraits:
-                out_extra['vdata'] = backend.mem_copy_d2h(vdata)
+                out_extra['vdata'] = driver.mem_copy_d2h(vdata)
             if self._dptraits:
-                out_extra['ddata'] = backend.mem_copy_d2h(ddata)
+                out_extra['ddata'] = driver.mem_copy_d2h(ddata)
             if self._rptraits:
                 print("sum(abs(rdata)): ", np.nansum(np.abs(out_extra['rdata'])))
             if self._vptraits:

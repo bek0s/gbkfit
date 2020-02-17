@@ -29,49 +29,38 @@ class MCDisk(_disk.Disk):
             wptraits,
             sptraits)
 
-        if cflux is None:
-            cflux = 0.1
-
         self._cflux = cflux
-        self._ncloudspt = None
-
         self._ncloudsptor = None
-
         self._hasordint = None
-
 
     def cflux(self):
         return self._cflux
 
-    def _evaluate_impl(
+    def _impl_prepare(self, driver, dtype):
+
+        self._disk = driver.make_gmodel_mcdisk(dtype)
+
+        self._hasordint = driver.mem_alloc(len(self._rptraits), np.bool)
+
+        size = 0
+        for i, trait in enumerate(self._rptraits):
+            size += 1 if trait.has_ordinary_integral() else self._nsubrnodes
+            self._hasordint[0][i] = trait.has_ordinary_integral()
+
+        self._ncloudsptor = driver.mem_alloc(size, np.int32)
+
+    def _impl_evaluate(
             self, driver, params, image, scube, rcube, dtype,
             spat_size, spat_step, spat_zero,
             spec_size, spec_step, spec_zero,
             out_extra):
 
-        # Perform preparations if needed
-        if self._backend is not driver or self._dtype is dtype:
-            self._disk = driver.make_gmodel_mcdisk(dtype)
-
-            self._foo = driver.mem_alloc(len(self._rptraits), np.bool)
-
-            size = 0
-            for trait in self._rptraits:
-                size += 1 if trait.has_ordinary_integral() else self._nsubrnodes
-
-            self._ncloudsptor = driver.mem_alloc(size, np.int32)
-
         # Calculate the number of clouds
-        nclouds = 0
         ncloudspt = []
         start = 0
-        i = 0
         for trait, names, in zip(self._rptraits, self._rpt_pnames):
             tparams = {oname: params[nname] for oname, nname in names.items()}
             integral = trait.integrate(tparams, self._m_subrnodes[0])
-
-            self._foo[0][i] = trait.has_ordinary_integral()
-            i += 1
 
             if trait.has_ordinary_integral():
                 ncloudspt.append(integral / self._cflux)
@@ -116,10 +105,6 @@ class MCDisk(_disk.Disk):
 
         driver.mem_copy_h2d(self._ncloudsptor[0], self._ncloudsptor[1])
 
-
-
-
-
         rdata = None
         vdata = None
         ddata = None
@@ -137,7 +122,7 @@ class MCDisk(_disk.Disk):
                 driver.mem_fill_d(ddata, np.nan)
 
         self._disk.evaluate(
-            self._cflux, nclouds, self._ncloudsptor[1], self._foo[1],
+            self._cflux, nclouds, self._ncloudsptor[1], self._hasordint[1],
             self._loose,
             self._tilted,
             self._m_subrnodes[1],
