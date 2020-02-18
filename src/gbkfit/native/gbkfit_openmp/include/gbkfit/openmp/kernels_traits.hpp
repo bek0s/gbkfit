@@ -223,10 +223,12 @@ rp_trait_uniform_rnd(
         RNG<T>& rng, const T* nodes, int nnodes, const T* params)
 {
     T a = params[0];
-    T rmin = nodes[0];
-    T rmax = nodes[nnodes - 1];
+    T rmin = nodes[0] - 0.5;
+    T rmax = nodes[nnodes - 1] + 0.5;
+    //std::cout << "rmin: " << rmin << ", rmax: " << rmax << std::endl;
     out_r = std::sqrt(rmax * rmax + (rmin * rmin - rmax * rmax) *  rng());
     out_t = 2 * PI<T> * rng();
+    //std::cout << out_r << " " << out_t << std::endl;
 }
 
 template<typename T> void
@@ -236,9 +238,15 @@ rp_trait_exponential(T& out, T r, const T* params)
 }
 
 template<typename T> void
-rp_trait_exponential_rnd(T& out_r, T& out_t, RNG<T>& rng)
+rp_trait_exponential_rnd(
+        T& out_r, T& out_t,
+        RNG<T>& rng, int nidx, const T* nodes)
 {
-
+    T rsep = 1;
+    T rmin = nodes[nidx] - rsep / 2;
+    T rmax = nodes[nidx] + rsep / 2;
+    out_r = std::sqrt(rmax * rmax + (rmin * rmin - rmax * rmax) *  rng());
+    out_t = 2 * PI<T> * rng();
 }
 
 template<typename T> void
@@ -337,18 +345,10 @@ rp_trait_nw_uniform_rnd(
         RNG<T>& rng, int nidx, const T* nodes, int nnodes, const T* params)
 {
     T rsep = 1;
-    T rmin = nodes[nidx] - rsep;
-    T rmax = nodes[nidx] + rsep;
+    T rmin = nodes[nidx] - rsep / 2;
+    T rmax = nodes[nidx] + rsep / 2;
     out_r = std::sqrt(rmax * rmax + (rmin * rmin - rmax * rmax) *  rng());
     out_t = 2 * PI<T> * rng();
-
-    /*
-    T a = params[0];
-    T rmin = nodes[0];
-    T rmax = nodes[nnodes - 1];
-    out_r = std::sqrt(rmax * rmax + (rmin * rmin - rmax * rmax) *  rng());
-    out_t = 2 * PI<T> * rng();
-    */
 }
 
 template<typename T> void
@@ -856,7 +856,7 @@ rp_trait_rnd(
         break;
     case RP_TRAIT_UID_EXPONENTIAL:
         rp_trait_exponential_rnd(
-                out_r, out_t, rng);
+                out_r, out_t, rng, nidx, nodes);
         break;
     case RP_TRAIT_UID_GAUSS:
         rp_trait_gauss_rnd(

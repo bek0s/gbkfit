@@ -223,8 +223,8 @@ gauss_1d_pdf_trunc(T x, T b, T c, T xmin, T xmax)
 template<typename T> constexpr T
 gauss_1d_rnd(RNG<T>& rng, T b, T c)
 {
-    T u1 = rng() * 2 - 1.0;
-    T u2 = rng() * 2 - 1.0;
+    T u1 = rng();
+    T u2 = rng();
     return b + c * std::sqrt(-2 * std::log(u1)) * std::cos(2 * PI<T> * u2);
 }
 

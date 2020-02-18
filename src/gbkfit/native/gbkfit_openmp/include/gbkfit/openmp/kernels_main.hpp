@@ -4,7 +4,7 @@
 #include <fstream>
 #include "kernels_misc.hpp"
 #include "kernels_traits.hpp"
-
+#include <thread>
 namespace gbkfit::openmp::kernels {
 
 template<typename T> void
@@ -345,10 +345,6 @@ gmodel_smdisk_evaluate(
         for (int i = 0; i < nrt; ++i)
             bvalue += ptvalues[i] * (is_thin ? 1 : htvalues[i] * spat_step_z);
 
-        // TODO: How to deal with negative bvalue?
-        if (bvalue < 0)
-            continue;
-
         // Velocity traits
         if (vpt_uids)
         {
@@ -395,38 +391,43 @@ gmodel_smdisk_evaluate(
         for (int i = 0; i < ndt; ++i)
             dvalue += ptvalues[i] * (is_thin ? 1 : htvalues[i]);
 
-        // TODO: How to deal with negative dvalue?
-        if (dvalue < 0)
-            continue;
+        // Ensure positive dispersion
+        dvalue = std::abs(dvalue);
 
-        if (image)
+        if (image) {
             evaluate_image(
                     image, x, y, bvalue,
                     spat_size_x);
+        }
 
-        if (scube)
+        if (scube) {
             evaluate_scube(
                     scube, x, y, bvalue, vvalue, dvalue,
                     spat_size_x, spat_size_y,
                     spec_size,
                     spec_step,
                     spec_zero);
+        }
 
         int idx = x
                 + y * spat_size_x
                 + z * spat_size_x * spat_size_y;
 
-        if (bcube)
+        if (bcube) {
             bcube[idx] += bvalue;
+        }
 
-        if (bdata)
+        if (bdata) {
             bdata[idx] = bvalue;
+        }
 
-        if (vdata)
+        if (vdata) {
             vdata[idx] = vvalue;
+        }
 
-        if (ddata)
+        if (ddata) {
             ddata[idx] = dvalue;
+        }
     }
     }
     }
@@ -480,16 +481,26 @@ gmodel_mcdisk_evaluate(
         T* image, T* scube, T* bcube,
         T* bdata, T* vdata, T* ddata)
 {
-
-    RNG<T> rngs[] = {RNG<T>(0, 1), RNG<T>(0, 1), RNG<T>(0, 1), RNG<T>(0, 1), RNG<T>(0, 1), RNG<T>(0, 1), RNG<T>(0, 1), RNG<T>(0, 1)};
-
+    // This is a placeholder in case we decide to explicitly
+    // add a Monte Carlo based thin disk in the future.
     bool is_thin = false;
 
-    //#pragma omp parallel for
+    // Each thread needs to have each own random number generator.
+    std::vector<RNG<T>> rngs;
+    for(int i = 0; i < omp_get_num_procs(); ++i)
+        rngs.push_back(RNG<T>(0, 1));
+
+    #pragma omp parallel for
     for(int ci = 0; ci < nclouds; ++ci)
     {
-
         RNG<T>& rng = rngs[omp_get_thread_num()];
+        int rnidx = 0, tidx;
+        const T* rpt_cptr = rpt_cvalues;
+        const T* rpt_pptr = rpt_pvalues;
+        const T* rht_cptr = rht_cvalues;
+        const T* rht_pptr = rht_pvalues;
+        T xd, yd, zd, rd, theta, sign;
+        T vsysi, xposi, yposi, posai, incli;
         T ptvalues[TRAIT_NUM_MAX];
         T htvalues[TRAIT_NUM_MAX];
         T bvalue = cflux;
@@ -497,54 +508,43 @@ gmodel_mcdisk_evaluate(
         T dvalue = 0;
         T wvalue = 0;
         T svalue = 0;
-        T vsysi, xposi, yposi, posai, incli;
-        T xd, yd, zd, rd, theta;
-        int rnidx = -1;
 
-        int tidx = 0;
-        int csum = 0;
-        const T* rpt_cptr = rpt_cvalues;
-        const T* rpt_pptr = rpt_pvalues;
-        const T* rht_cptr = rht_cvalues;
-        const T* rht_pptr = rht_pvalues;
+        // Find which comulative sum the cloud belongs to.
+        while(ci >= ncloudscsum[rnidx]) {
+            rnidx++;
+        }
 
-        int idxx = 0;
-        while(ci >= ncloudscsum[idxx])
-            idxx++;
-
-
-        for(int i = 0; i < nrt; ++i)
+        // Find which trait and subring the cloud belongs to.
+        for(tidx = 0; tidx < nrt; ++tidx)
         {
-            int size = hasordint[i] ? 1 : nrnodes;
-            if (idxx - size < 0)
+            int size = hasordint[tidx] ? 1 : nrnodes - 2;
+            if (rnidx < size)
                 break;
-            idxx -= size;
-
+            rnidx -= size;
             rpt_cptr += rpt_ccounts[tidx];
             rpt_pptr += rpt_pcounts[tidx];
             rht_cptr += rht_ccounts[tidx];
             rht_pptr += rht_pcounts[tidx];
-            tidx++;
         }
 
-
-        rnidx = idxx;
-
-
-
-
         // Density polar trait
-        T sign;
+        // The first and last radial nodes must be ignored.
         rp_trait_rnd<T>(
                 sign, rd, theta, rng,
-                rpt_uids[tidx], rpt_cptr, rpt_pptr, rnidx, rnodes, nrnodes);
+                rpt_uids[tidx], rpt_cptr, rpt_pptr,
+                rnidx, &rnodes[1], nrnodes - 2);
 
-        if (!disk_info(rnidx, rd, nrnodes, rnodes))
-            continue;
-
-        // Calculate cartesian coordinates on disk plane
+        // Calculate cartesian coordinates on disk plane.
         xd = rd * std::cos(theta);
         yd = rd * std::sin(theta);
+
+        // Recalculate radial node index.
+        // This is done in order to account for:
+        //  - rptraits with ordinary integral (no subrings).
+        //  - pixels in the first and last half subrings.
+        if (!disk_info(rnidx, rd, nrnodes, rnodes)) {
+            continue;
+        }
 
         // =====================================================================
 
@@ -567,10 +567,7 @@ gmodel_mcdisk_evaluate(
         }
 
         // Density height trait
-        // Only if needed (i.e., after passing the selection traits)
         rh_trait_rnd<T>(zd, rng, rht_uids[tidx], rht_cptr, rht_pptr);
-    //  zd = 0;
-    //  zd = 0;
 
         // Warp traits
         if (wpt_uids)
@@ -598,35 +595,18 @@ gmodel_mcdisk_evaluate(
         incli *= DEG_TO_RAD<T>;
 
         T xn = xd, yn = yd, zn = zd;
-
-    //  std::cout << "rd: " << rd << std::endl;
-    //  std::cout << "theta: " << theta << std::endl;
-    //  std::cout << "1: xn, yn, zn: " << xn << ", " << yn << ", " << zn << std::endl;
-
         transform_incl_posa_cpos(xn, yn, zn, xposi, yposi, posai, incli);
 
-    //  std::cout << xposi << " " << yposi << " " << posai << " " << incli << std::endl;
-    //  std::cout << "2: xn, yn, zn: " << xn << ", " << yn << ", " << zn << std::endl;
+        int x = std::rint(xn - spat_zero_x);
+        int y = std::rint(yn - spat_zero_y);
+        int z = std::rint(zn - spat_zero_z);
 
-        /*
-        int x = std::rint(xn - spat_zero_x - 0.5);
-        int y = std::rint(yn - spat_zero_y - 0.5);
-        int z = std::rint(zn - spat_zero_z - 0.5);
-        */
-
-        int x = std::rint(xn - spat_zero_x - 0.5);
-        int y = std::rint(yn - spat_zero_y - 0.5);
-        int z = std::rint(zn - spat_zero_z - 0.5);
-
-        //std::cout << "0: " << xn << " " << yn << " " << zn << std::endl;
-        //std::cout << "3: " << x << " " << y << " " << z << std::endl;
-
+        // Discard pixels outside the image/cube
         if (x < 0 || x >= spat_size_x ||
             y < 0 || y >= spat_size_y ||
-            z < 0 || z >= spat_size_z)
+            z < 0 || z >= spat_size_z) {
             continue;
-
-        //std::cout << "4: " << x << " " << y << " " << z << std::endl;
+        }
 
         // Velocity traits
         if (vpt_uids)
@@ -674,22 +654,23 @@ gmodel_mcdisk_evaluate(
         for (int i = 0; i < ndt; ++i)
             dvalue += ptvalues[i] * (is_thin ? 1 : htvalues[i]);
 
-        // TODO: How to deal with negative dvalue?
-        if (dvalue < 0)
-            continue;
+        // Ensure positive dispersion
+        dvalue = std::abs(dvalue);
 
-        if (image)
+        if (image) {
             evaluate_image(
                     image, x, y, bvalue,
                     spat_size_x);
+        }
 
-        if (scube)
+        if (scube) {
             evaluate_scube(
                     scube, x, y, bvalue, vvalue, dvalue,
                     spat_size_x, spat_size_y,
                     spec_size,
                     spec_step,
                     spec_zero);
+        }
 
         int idx = x
                 + y * spat_size_x

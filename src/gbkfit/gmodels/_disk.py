@@ -53,10 +53,20 @@ class Disk(abc.ABC):
         self._rnodes = rnodes
         self._nrnodes = nrnodes
 
-        subrsep = 1.0
+        subrsep = 1
         subrmin = rnodes[0] + subrsep / 2
         subrmax = rnodes[-1]
         subrnodes = list(np.arange(subrmin, subrmax, subrsep))
+
+        if True:
+            subrnodes.insert(0, subrnodes[0] - subrsep / 2)
+            subrnodes.append(rnodes[-1])
+
+        #print(len(subrnodes))
+        #print(subrnodes)
+
+        #exit()
+
 
         self._subrsep = subrsep
         self._subrnodes = subrnodes

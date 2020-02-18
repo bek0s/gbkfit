@@ -45,7 +45,7 @@ class MCDisk(_disk.Disk):
 
         size = 0
         for i, trait in enumerate(self._rptraits):
-            size += 1 if trait.has_ordinary_integral() else self._nsubrnodes
+            size += 1 if trait.has_ordinary_integral() else self._nsubrnodes - 2
             self._hasordint[0][i] = trait.has_ordinary_integral()
 
         self._ncloudsptor = driver.mem_alloc(size, np.int32)
@@ -61,7 +61,16 @@ class MCDisk(_disk.Disk):
         ncloudspt = []
         for trait, pnames, in zip(self._rptraits, self._rpt_pnames):
             tparams = {oname: params[nname] for oname, nname in pnames.items()}
-            integral = trait.integrate(tparams, self._m_subrnodes[0])
+
+            #
+            for pdesc in trait.params_nw(self._nrnodes):
+                #tparams[pdesc.name()] = tparams[pdesc.name()]
+                tparams[pdesc.name()] = tparams[pdesc.name()][1:-1]
+
+
+            #integral = trait.integrate(tparams, self._m_subrnodes[0])
+            integral = trait.integrate(tparams, self._m_subrnodes[0][1:-1], 1)
+
             tnclouds = integral / self._cflux
             if trait.has_ordinary_integral():
                 ncloudspt.append(tnclouds)
@@ -69,11 +78,20 @@ class MCDisk(_disk.Disk):
                 ncloudspt.extend(tnclouds.astype(np.int32))
 
         ncloudspt = list(itertools.accumulate(ncloudspt))
-        nclouds = ncloudspt[-1]
+        nclouds = int(ncloudspt[-1])
+        """
+        print(ncloudspt)
+        print(len(ncloudspt))
+        print(self._m_subrnodes[1])
+        print(len(self._m_subrnodes[1]))
+        print(self._hasordint[0])
+        """
 
+        """
         log.info(
             f"nclouds (total): {nclouds}\n"
             f"nclouds (per trait): {ncloudspt}")
+        """
 
         self._ncloudsptor[0][:] = ncloudspt
         driver.mem_copy_h2d(self._ncloudsptor[0], self._ncloudsptor[1])
