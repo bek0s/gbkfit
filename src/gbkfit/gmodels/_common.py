@@ -227,6 +227,10 @@ def prepare_common_params_array(
     for pname, desc in descs.items():
         if nodewise:
             stop = start + len(subnodes)
+            print(pname)
+            print(nodes)
+            print(subnodes)
+            print(params[pname])
             params[pname] = interp(nodes, params[pname])(subnodes)
             ary[0][start:stop] = params[pname]
         else:

@@ -1,8 +1,6 @@
 
 import abc
 
-import numpy as np
-
 from gbkfit.math import interpolation
 from gbkfit.utils import iterutils
 from . import _common
@@ -27,22 +25,27 @@ class Disk(abc.ABC):
             sptraits):
 
         interp = 'linear'
+        subrsep = 1.0
 
         if rnodes is None or len(rnodes) < 2:
             raise RuntimeError(
-                "at least two radial nodes must be provided ")
-        if rnodes is not None and not iterutils.is_ascending(rnodes):
+                "At least two radial nodes must be provided")
+        if not iterutils.is_ascending(rnodes):
             raise RuntimeError(
-                "radial nodes must be ascending")
-        if rnodes is not None and not iterutils.all_positive(rnodes):
+                "Radial nodes must be ascending")
+        if not iterutils.all_positive(rnodes):
             raise RuntimeError(
-                "radial nodes must be positive")
-        if rnodes is not None and not iterutils.all_unique(rnodes):
+                "Radial nodes must be positive")
+        if not iterutils.all_unique(rnodes):
             raise RuntimeError(
-                "radial nodes must be unique")
+                "Radial nodes must be unique")
+        if subrsep > (rnodes[-1] - rnodes[0]):
+            raise RuntimeError(
+                "The distance between sub radial nodes must be less or equal "
+                "than the distance between the first and last radial nodes")
         if interp not in _INTERPOLATIONS:
             raise RuntimeError(
-                "interpolation type must be one of the following: "
+                "Interpolation type must be one of the following: "
                 f"{list(_INTERPOLATIONS.keys())}")
 
         rnodes = tuple(rnodes)
@@ -53,20 +56,15 @@ class Disk(abc.ABC):
         self._rnodes = rnodes
         self._nrnodes = nrnodes
 
-        subrsep = 1
-        subrmin = rnodes[0] + subrsep / 2
-        subrmax = rnodes[-1]
-        subrnodes = list(np.arange(subrmin, subrmax, subrsep))
-
-        if True:
-            subrnodes.insert(0, subrnodes[0] - subrsep / 2)
-            subrnodes.append(rnodes[-1])
-
-        #print(len(subrnodes))
-        #print(subrnodes)
-
-        #exit()
-
+        # Calculate radial subnodes
+        subrsep2 = subrsep / 2
+        subrnodes = []
+        rcur = rnodes[0] + subrsep2
+        while rcur + subrsep2 <= rnodes[-1]:
+            subrnodes.append(rcur)
+            rcur += subrsep
+        subrnodes.insert(0, subrnodes[0] - subrsep2)
+        subrnodes.append(subrnodes[-1] + subrsep2)
 
         self._subrsep = subrsep
         self._subrnodes = subrnodes

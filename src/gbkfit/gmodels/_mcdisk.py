@@ -64,12 +64,9 @@ class MCDisk(_disk.Disk):
 
             #
             for pdesc in trait.params_nw(self._nrnodes):
-                #tparams[pdesc.name()] = tparams[pdesc.name()]
                 tparams[pdesc.name()] = tparams[pdesc.name()][1:-1]
 
-
-            #integral = trait.integrate(tparams, self._m_subrnodes[0])
-            integral = trait.integrate(tparams, self._m_subrnodes[0][1:-1], 1)
+            integral = trait.integrate(tparams, self._m_subrnodes[0][1:-1], self._subrsep)
 
             tnclouds = integral / self._cflux
             if trait.has_ordinary_integral():
@@ -79,19 +76,6 @@ class MCDisk(_disk.Disk):
 
         ncloudspt = list(itertools.accumulate(ncloudspt))
         nclouds = int(ncloudspt[-1])
-        """
-        print(ncloudspt)
-        print(len(ncloudspt))
-        print(self._m_subrnodes[1])
-        print(len(self._m_subrnodes[1]))
-        print(self._hasordint[0])
-        """
-
-        """
-        log.info(
-            f"nclouds (total): {nclouds}\n"
-            f"nclouds (per trait): {ncloudspt}")
-        """
 
         self._ncloudsptor[0][:] = ncloudspt
         driver.mem_copy_h2d(self._ncloudsptor[0], self._ncloudsptor[1])
