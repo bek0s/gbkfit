@@ -254,7 +254,7 @@ ggauss_1d_cdf(T x, T b, T c, T d)
 template<typename T> constexpr T
 ggauss_1d_pdf(T x, T b, T c, T d)
 {
-    T a = b / (2 * c * std::tgamma(1 / d));
+    T a = d / (2 * c * std::tgamma(1 / d));
     return ggauss_1d_fun(x, a, b, c, d);
 }
 
@@ -265,15 +265,41 @@ ggauss_1d_pdf_trunc(T x, T b, T c, T d, T xmin, T xmax)
             xmin, xmax, x, b, c, d);
 }
 
+
+template<auto Target, auto Proposal, typename T, typename ...Ts> constexpr T
+_reject_sample_trunc_1d_rnd(T xmin, T xmax, RNG<T>& rng, Ts ...args)
+{
+    //T a = Proposal()
+    T x;
+    do {
+        x = F(rng, args...);
+    } while (x < xmin && x > xmax);
+    return x;
+}
+
+template<typename T, typename TProposal, typename TTarget> constexpr T
+sample_distribution(RNG<T>& rng, T ampl, TProposal proposal, TTarget target)
+{
+    T x, y, z;
+    do {
+        x = proposal();
+        y = rng() * ampl;
+        z = target(x);
+    } while (y > z);
+    return x;
+
+}
+
+
 template<typename T> constexpr T
 ggauss_1d_rnd(RNG<T>& rng, T b, T c, T d)
 {
-    (void)rng;
-    (void)b;
-    (void)c;
-    (void)d;
-    assert(false);
-    return 0;
+    T s = 3 * c;
+    return sample_distribution(
+            rng,
+            ggauss_1d_pdf(T{0}, b, c, d),
+            [&] () { return uniform_1d_rnd(rng, -s, s); },
+            [&] (T x) { return ggauss_1d_pdf(x, b, c, d); });
 }
 
 template<typename T> constexpr T

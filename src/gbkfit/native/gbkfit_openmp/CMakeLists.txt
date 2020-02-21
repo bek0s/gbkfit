@@ -4,6 +4,7 @@ set(TARGET_NAME libgbkfit_openmp)
 project(${TARGET_NAME}-project CXX)
 
 find_package(OpenMP)
+find_package(fftw3)
 find_package(pybind11)
 
 set(HEADER_FILES
@@ -14,10 +15,15 @@ set(HEADER_FILES
   include/gbkfit/openmp/kernels_math.hpp
   include/gbkfit/openmp/kernels_misc.hpp
   include/gbkfit/openmp/kernels_traits.hpp
+
+  include/gbkfit/openmp/fftw3.hpp
 )
 
 set(SOURCE_FILES
   src/bindings.cpp
+  src/dmodels.cpp
+
+  src/fftw3.cpp
 )
 
 pybind11_add_module(
@@ -34,9 +40,11 @@ target_include_directories(
 
 target_link_libraries(
   ${TARGET_NAME}
-  PRIVATE
+  PUBLIC
   libgbkfit
   OpenMP::OpenMP_CXX
+  fftw3
+  fftw3f_omp
 )
 
 target_compile_options(

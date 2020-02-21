@@ -1,4 +1,7 @@
 
+import numpy as np
+
+
 class DCube:
 
     def __init__(self, size, step, cval, scale, psf, lsf, dtype):
@@ -37,6 +40,26 @@ class DCube:
             zero[1] - step[1] / 2 - (edge_hi[1] - 0.5) * step_hi[1],
             zero[2] - step[2] / 2 - (edge_hi[2] - 0.5) * step_hi[2])
 
+        # Create the psf/lsf images.
+        # If they have an even size, they must be offset by -1 pixel.
+        # Always assume an fft-based convolution.
+        # Hence, their centers must be rolled at their first pixel.
+
+        if psf:
+            psf_hi_offset = size_hi[0] % 2 - 1, size_hi[1] % 2 - 1
+            psf_hi = psf.asarray(step_hi[:2], size_hi[:2], psf_hi_offset)
+            psf_hi = np.roll(psf_hi, -size_hi[0] // 2 + 1, axis=1)
+            psf_hi = np.roll(psf_hi, -size_hi[1] // 2 + 1, axis=0)
+        else:
+            psf_hi = np.ones((1, 1), dtype)
+
+        if lsf:
+            lsf_hi_offset = size_hi[2] % 2 - 1
+            lsf_hi = lsf.asarray(step_hi[2], size_hi[2], lsf_hi_offset)
+            lsf_hi = np.roll(lsf_hi, -size_hi[2] // 2 + 1)
+        else:
+            lsf_hi = np.ones(1, dtype)
+
         self._cval = cval
         self._size_lo = size
         self._step_lo = step
@@ -50,6 +73,8 @@ class DCube:
         self._scale = scale
         self._psf = psf
         self._lsf = lsf
+        self._psf_hi = psf_hi
+        self._lsf_hi = lsf_hi
         self._dtype = dtype
         self._dcube = None
         self._driver = None
@@ -94,29 +119,63 @@ class DCube:
         return self._dtype
 
     def prepare(self, driver):
+
+        size_hi = self._size_hi
+        size_lo = self._size_lo
+        step_hi = self._step_hi
+        step_lo = self._step_lo
+        edge_hi = self._edge_hi
+        scale = self._scale
+        size_hi_fft = 2 * size_hi[2] * size_hi[1] * (size_hi[0] // 2 + 1)
+
         self._driver = driver
-        self._dcube = driver.make_dmodel_dcube(self._dtype)
         self._data_lo = driver.mem_alloc(self._size_lo[::-1], self._dtype)
         self._data_hi = driver.mem_alloc_d(self._size_hi[::-1], self._dtype) \
             if self._size_lo != self._size_hi else self._data_lo[1]
+        self._dcube = driver.make_dmodel_dcube(
+            size_lo, size_hi, edge_hi, scale,
+            self._data_lo[1],
+            self._data_hi[1], None,
+            None, None,
+            self._dtype)
+        """
+        size_lo, size_hi, edge_hi, scale,
+            scube_lo,
+            scube_hi, scube_hi_fft,
+            psf3d_hi, psf3d_hi_fft,
+            dtype
+        """
+
+
+
+        psf3d = self._psf_hi * self._lsf_hi[:, None, None]
+
+        """
+        print(psf3d.shape)
+        import astropy.io.fits as fits
+        fits.writeto('foo.fits', psf3d, overwrite=True)
+        exit()
+        """
 
     def evaluate(self, out_extra):
 
         if self._data_lo[1] is not self._data_hi:
-            self._dcube.downscale(
-                self._scale,
-                self._edge_hi,
-                self._size_hi, self._size_lo,
-                self._data_hi, self._data_lo[1])
+            self._dcube.downscale()
+
+        if True:
+            #self._dcube.convolve(self._size_hi, self._)
+            pass
 
         self._driver.mem_copy_d2h(self._data_lo[1], self._data_lo[0])
 
         if out_extra is not None:
-            out_extra['grid_hi'] = self._driver.mem_copy_d2h(self._data_hi)
             out_extra['grid_lo'] = self._driver.mem_copy_d2h(self._data_lo[0])
+            out_extra['grid_hi'] = self._driver.mem_copy_d2h(self._data_hi)
             if self._psf is not None:
-                out_extra['psf_hi'] = self._psf.asarray(self._step_hi[:2])
                 out_extra['psf_lo'] = self._psf.asarray(self._step_lo[:2])
+                out_extra['psf_hi'] = self._psf.asarray(self._step_hi[:2])
+                out_extra['psf_hi_fft'] = self._psf_hi.copy()
             if self._lsf is not None:
-                out_extra['lsf_hi'] = self._lsf.asarray(self._step_hi[2])
                 out_extra['lsf_lo'] = self._lsf.asarray(self._step_lo[2])
+                out_extra['lsf_hi'] = self._lsf.asarray(self._step_hi[2])
+                out_extra['lsf_hi_fft'] = self._lsf_hi.copy()

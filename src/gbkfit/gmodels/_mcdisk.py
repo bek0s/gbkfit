@@ -38,17 +38,13 @@ class MCDisk(_disk.Disk):
         return self._cflux
 
     def _impl_prepare(self, driver, dtype):
-
         self._disk = driver.make_gmodel_mcdisk(dtype)
-
+        hasordint = [t.has_ordinary_integral() for t in self._rptraits]
+        size = sum([1 if h else self._subrnodes - 2 for h in hasordint])
         self._hasordint = driver.mem_alloc(len(self._rptraits), np.bool)
-
-        size = 0
-        for i, trait in enumerate(self._rptraits):
-            size += 1 if trait.has_ordinary_integral() else self._nsubrnodes - 2
-            self._hasordint[0][i] = trait.has_ordinary_integral()
-
         self._ncloudsptor = driver.mem_alloc(size, np.int32)
+        self._hasordint[0][:] = hasordint
+        driver.mem_copy_h2d(self._hasordint[0], self._hasordint[1])
 
     def _impl_evaluate(
             self, driver, params, image, scube, rcube, dtype,

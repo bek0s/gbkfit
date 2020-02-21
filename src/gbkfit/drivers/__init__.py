@@ -4,7 +4,4 @@ try:
 except ImportError:
     pass
 
-try:
-    from .openmp.driver import BackendOpenMP
-except ImportError:
-    pass
+from .openmp.driver import BackendOpenMP

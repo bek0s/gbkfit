@@ -405,6 +405,7 @@ rh_trait_exponential_rnd(T& out, RNG<T>& rng, const T* params)
 {
     T size = params[0];
     out = exponential_1d_rnd(rng, T{0}, size);
+    std::cout << out << std::endl;
 }
 
 template<typename T> void

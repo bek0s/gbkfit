@@ -62,8 +62,19 @@ class BackendOpenMP(gbkfit.driver.Driver):
     def array_mul_d(self, ary, value):
         ary *= value
 
-    def make_dmodel_dcube(self, dtype):
-        return DModelDCube(dtype)
+    def make_dmodel_dcube(
+            self,
+            size_lo, size_hi, edge_hi, scale,
+            scube_lo,
+            scube_hi, scube_hi_fft,
+            psf3d_hi, psf3d_hi_fft,
+            dtype):
+        return DModelDCube(
+            size_lo, size_hi, edge_hi, scale,
+            scube_lo,
+            scube_hi, scube_hi_fft,
+            psf3d_hi, psf3d_hi_fft,
+            dtype)
 
     def make_dmodel_mmaps(self, dtype):
         return DModelMMaps(dtype)
@@ -80,17 +91,32 @@ class DModelDCube(gbkfit.driver.DModelDCube):
     _CLASSES = {
         np.float32: libgbkfit_openmp.DModelDCubef32}
 
-    def __init__(self, dtype):
+    def __init__2(self, dtype):
         _detail.check_dtype(self._CLASSES, dtype)
         self._dcube = self._CLASSES[dtype]()
 
-    def downscale(self, scale, offset, src_size, dst_size, src_cube, dst_cube):
-        self._dcube.downscale(
+    def __init__(
+            self,
+            size_lo, size_hi, edge_hi, scale,
+            scube_lo,
+            scube_hi, scube_hi_fft,
+            psf3d_hi, psf3d_hi_fft,
+            dtype):
+        _detail.check_dtype(self._CLASSES, dtype)
+        self._dcube = self._CLASSES[dtype](
+            size_lo[0], size_lo[1], size_lo[2],
+            size_hi[0], size_hi[1], size_hi[2],
+            edge_hi[0], edge_hi[1], edge_hi[2],
             scale[0], scale[1], scale[2],
-            offset[0], offset[1], offset[2],
-            src_size[0], src_size[1], src_size[2],
-            dst_size[0], dst_size[1], dst_size[2],
-            _ptr(src_cube), _ptr(dst_cube))
+            _ptr(scube_lo),
+            _ptr(scube_hi), _ptr(scube_hi_fft),
+            _ptr(psf3d_hi), _ptr(psf3d_hi_fft))
+
+    def convolve(self):
+        self._dcube.convolve()
+
+    def downscale(self):
+        self._dcube.downscale()
 
 
 class DModelMMaps(gbkfit.driver.DModelMMaps):

@@ -5,6 +5,7 @@
 #include "kernels_misc.hpp"
 #include "kernels_traits.hpp"
 #include <thread>
+#include <complex>
 namespace gbkfit::openmp::kernels {
 
 template<typename T> void
@@ -53,6 +54,25 @@ dcube_downscale(
         dst_cube[idx] = sum / (scale_x * scale_y * scale_z);
     }
     }
+    }
+}
+
+template<typename T> void
+complex_multiply_and_scale(
+        std::complex<T>* arr_a, std::complex<T>* arr_b, int size, float scale)
+{
+    #pragma omp parallel for
+    for(int i = 0; i < size; ++i)
+    {
+        T* a = &reinterpret_cast<T*>(arr_a)[2*i];
+        T* b = &reinterpret_cast<T*>(arr_b)[2*(i%size)];
+
+        std::complex<T> t(
+            (a[0]*b[0]-a[1]*b[1])*scale,
+            (a[0]*b[1]+a[1]*b[0])*scale);
+
+        a[0] = t.real();
+        a[1] = t.imag();
     }
 }
 
