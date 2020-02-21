@@ -6,8 +6,8 @@ project(${TARGET_NAME}-project CXX)
 set(FFTW3_USE_STATIC_LIBS 1)
 
 find_package(fftw3)
-find_package(OpenMP REQUIRED)
-find_package(pybind11 REQUIRED)
+find_package(OpenMP)
+find_package(pybind11)
 
 set(HEADER_FILES
   include/gbkfit/openmp/dmodels.hpp

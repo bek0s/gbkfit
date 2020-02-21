@@ -21,7 +21,7 @@ jobs:
     strategy:
       matrix:
         image:
-        - quay.io/pypa/manylinux2010_x86_64
+        - quay.io/pypa/manylinux2014_x86_64
         python: [3.7]
     steps:
     - uses: actions/checkout@v1
