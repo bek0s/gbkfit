@@ -2,6 +2,8 @@
 
 export GBKFIT_BUILD_OPENMP=1
 
+yum install fftw3
+
 . venv/bin/activate
 
 python -m pip install cmake
