@@ -2,8 +2,12 @@
 
 #include <cassert>
 #include <cmath>
+#include <complex>
 #include <iostream>
 #include <random>
+#include <thread>
+
+#include <omp.h>
 
 template<typename T>
 struct RNG

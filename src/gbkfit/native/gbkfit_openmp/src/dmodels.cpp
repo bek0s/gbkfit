@@ -28,7 +28,7 @@ DModelDCube<T>::DModelDCube(
 {
     if (psf3d_hi && psf3d_hi_fft)
     {
-        T* psf3d_hi = reinterpret_cast<T*>(psf3d_hi);
+        T* psf3d_hi_ptr = reinterpret_cast<T*>(psf3d_hi);
 
         int n0 = m_size_hi[2], n1 = m_size_hi[1], n2 = m_size_hi[0];
 
@@ -50,13 +50,13 @@ DModelDCube<T>::DModelDCube(
                 FFTW_ESTIMATE);
         std::copy_n(tmp.data(), n0*n1*n2, m_scube_hi);
 
-        std::copy_n(psf3d_hi, n0*n1*n2, tmp.data());
+        std::copy_n(psf3d_hi_ptr, n0*n1*n2, tmp.data());
         m_psf3d_fft_plan_r2c = fftw3<T>::plan_dft_r2c_3d(
                 n0, n1, n2,
-                psf3d_hi,
+                psf3d_hi_ptr,
                 reinterpret_cast<typename fftw3<T>::complex*>(m_psf3d_hi_fft),
                 FFTW_ESTIMATE);
-        std::copy_n(tmp.data(), n0*n1*n2, psf3d_hi);
+        std::copy_n(tmp.data(), n0*n1*n2, psf3d_hi_ptr);
         fftw3<T>::execute(reinterpret_cast<typename fftw3<T>::plan>(
                 m_psf3d_fft_plan_r2c));
     }

@@ -28,11 +28,18 @@ class DCube:
             psf_size_hi[1] // 2,
             lsf_size_hi // 2)
 
+        def fft_size(size):
+            import gbkfit.math
+            new_size = gbkfit.math.roundu_po2(size)
+            if new_size > 32:
+                new_size = gbkfit.math.roundu_multiple(size, 32)
+            return new_size
+
         # High-res cube size
         size_hi = (
-            (size[0] * scale[0] + psf_size_hi[0] - 1),
-            (size[1] * scale[1] + psf_size_hi[1] - 1),
-            (size[2] * scale[2] + lsf_size_hi - 1))
+            fft_size(size[0] * scale[0] + psf_size_hi[0] - 1),
+            fft_size(size[1] * scale[1] + psf_size_hi[1] - 1),
+            fft_size(size[2] * scale[2] + lsf_size_hi - 1))
 
         # High-res cube zero pixel center position
         zero_hi = (
@@ -132,23 +139,18 @@ class DCube:
         self._data_lo = driver.mem_alloc(self._size_lo[::-1], self._dtype)
         self._data_hi = driver.mem_alloc_d(self._size_hi[::-1], self._dtype) \
             if self._size_lo != self._size_hi else self._data_lo[1]
+
+        self._psf3d = (self._psf_hi * self._lsf_hi[:, None, None]).astype(np.float32)
+        self._d_scube_hi_fft = driver.mem_alloc_d(size_hi_fft, self._dtype)
+        self._d_psf3d_hi_fft = driver.mem_alloc_d(size_hi_fft, self._dtype)
+
+
         self._dcube = driver.make_dmodel_dcube(
             size_lo, size_hi, edge_hi, scale,
             self._data_lo[1],
-            self._data_hi[1], None,
-            None, None,
+            self._data_hi, self._d_scube_hi_fft,
+            self._psf3d, self._d_psf3d_hi_fft,
             self._dtype)
-        """
-        size_lo, size_hi, edge_hi, scale,
-            scube_lo,
-            scube_hi, scube_hi_fft,
-            psf3d_hi, psf3d_hi_fft,
-            dtype
-        """
-
-
-
-        psf3d = self._psf_hi * self._lsf_hi[:, None, None]
 
         """
         print(psf3d.shape)
@@ -159,12 +161,12 @@ class DCube:
 
     def evaluate(self, out_extra):
 
+        if True:
+            self._dcube.convolve()
+            pass
+
         if self._data_lo[1] is not self._data_hi:
             self._dcube.downscale()
-
-        if True:
-            #self._dcube.convolve(self._size_hi, self._)
-            pass
 
         self._driver.mem_copy_d2h(self._data_lo[1], self._data_lo[0])
 

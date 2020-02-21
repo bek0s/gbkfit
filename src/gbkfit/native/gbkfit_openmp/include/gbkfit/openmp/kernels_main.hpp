@@ -1,11 +1,8 @@
 #pragma once
 
-#include <omp.h>
-#include <fstream>
 #include "kernels_misc.hpp"
 #include "kernels_traits.hpp"
-#include <thread>
-#include <complex>
+
 namespace gbkfit::openmp::kernels {
 
 template<typename T> void
@@ -88,7 +85,7 @@ dcube_moments(
 {
     int max_morder = morders[mcount - 1];
 
-//  #pragma omp parallel for collapse(2)
+    #pragma omp parallel for collapse(2)
     for (int y = 0; y < spat_size_y; ++y)
     {
     for (int x = 0; x < spat_size_x; ++x)
