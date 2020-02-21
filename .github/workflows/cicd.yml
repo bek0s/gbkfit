@@ -24,7 +24,7 @@ jobs:
         - quay.io/pypa/manylinux2014_x86_64
         python: [3.7]
     steps:
-    - uses: actions/checkout@v1
+    - uses: actions/checkout@v2
     - name: bootstrap
       run: . tools/cicd/linux/bootstrap.sh ${{ matrix.python }}
     - name: analyse
