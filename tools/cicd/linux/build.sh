@@ -2,7 +2,7 @@
 
 export GBKFIT_BUILD_OPENMP=1
 
-yum install fftw3
+yum -y install fftw3
 
 . venv/bin/activate
 
