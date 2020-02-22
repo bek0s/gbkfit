@@ -27,7 +27,7 @@ def _prepare_config(config):
         config, ['brokers', 'drivers', 'datasets', 'dmodels', 'gmodels'])
 
     _detail.check_config_sections_length(
-        config, ['datasets', 'dmodels'])
+        config, ['datasets', 'dmodels', 'gmodels'])
 
 
 def eval_(config):

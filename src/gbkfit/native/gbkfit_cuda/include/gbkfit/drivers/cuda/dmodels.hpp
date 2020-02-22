@@ -39,7 +39,7 @@ public:
     prepare(void) {}
 
     void
-    moments(void) const;
+    moments(void) const {}
 };
 
 }} // namespace gbkfit::cuda
