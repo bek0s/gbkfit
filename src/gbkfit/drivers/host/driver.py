@@ -15,11 +15,11 @@ def _shape(a):
     return a.__array_interface__['shape'] if a is not None else (0,)
 
 
-class BackendOpenMP(gbkfit.driver.Driver):
+class DriverHost(gbkfit.driver.Driver):
 
     @staticmethod
     def type():
-        return 'openmp'
+        return 'host'
 
     @classmethod
     def load(cls, info):

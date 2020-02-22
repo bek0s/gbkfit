@@ -6,12 +6,12 @@ project(${TARGET_NAME}-project CXX CUDA)
 find_package(pybind11)
 
 set(HEADER_FILES
-  include/gbkfit/cuda/dmodels.hpp
-  include/gbkfit/cuda/gmodels.hpp
-  include/gbkfit/cuda/kernels_main.hpp
-  include/gbkfit/cuda/kernels_math.hpp
-  include/gbkfit/cuda/kernels_traits.hpp
-  include/gbkfit/cuda/wrapper.hpp
+  include/gbkfit/drivers/cuda/dmodels.hpp
+  include/gbkfit/drivers/cuda/gmodels.hpp
+  include/gbkfit/drivers/cuda/kernels_main.hpp
+  include/gbkfit/drivers/cuda/kernels_math.hpp
+  include/gbkfit/drivers/cuda/kernels_traits.hpp
+  include/gbkfit/drivers/cuda/wrapper.hpp
 )
 
 set(SOURCE_FILES
@@ -23,6 +23,7 @@ set(SOURCE_FILES
 
 pybind11_add_module(
   ${TARGET_NAME}
+  NO_EXTRAS
   ${HEADER_FILES}
   ${SOURCE_FILES}
 )

@@ -16,7 +16,7 @@ def _shape(a):
     return a.__cuda_array_interface__['shape'] if a is not None else (0,)
 
 
-class BackendCUDA(gbkfit.driver.Driver):
+class DriverCUDA(gbkfit.driver.Driver):
 
     @staticmethod
     def type():

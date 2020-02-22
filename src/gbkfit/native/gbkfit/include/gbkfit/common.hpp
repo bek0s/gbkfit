@@ -4,10 +4,10 @@
 #include <algorithm>
 #include <array>
 #include <complex>
+#include <iostream>
 
 namespace gbkfit {
 
 using Ptr = std::uintptr_t;
-using CPtr = const Ptr;
 
 } // namespace gbkfit

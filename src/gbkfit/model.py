@@ -7,7 +7,7 @@ import numpy as np
 
 import gbkfit.params
 from gbkfit.brokers import BrokerNone
-from gbkfit.drivers import BackendOpenMP
+from gbkfit.drivers import DriverHost
 from gbkfit.utils import iterutils
 
 log = logging.getLogger(__name__)
@@ -18,7 +18,7 @@ class Model:
     def __init__(self, dmodels, gmodels, drivers, brokers):
 
         if not drivers:
-            drivers = BackendOpenMP()
+            drivers = DriverHost()
         if not brokers:
             brokers = BrokerNone()
 

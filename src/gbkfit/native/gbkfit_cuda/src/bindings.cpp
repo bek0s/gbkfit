@@ -1,8 +1,8 @@
 
 #include <pybind11/pybind11.h>
 
-#include "gbkfit/cuda/dmodels.hpp"
-#include "gbkfit/cuda/gmodels.hpp"
+#include "gbkfit/drivers/cuda/dmodels.hpp"
+#include "gbkfit/drivers/cuda/gmodels.hpp"
 
 using namespace gbkfit::cuda;
 
@@ -12,8 +12,14 @@ PYBIND11_MODULE(EXTENSION_NAME, m)
 {
     py::class_<DModelDCube<float>>(m, "DModelDCubef32")
             .def(py::init<>())
-            .def("downscale", &DModelDCube<float>::downscale)
-            .def("moments", &DModelDCube<float>::moments);
+            .def("prepare", &DModelDCube<float>::prepare)
+            .def("convolve", &DModelDCube<float>::convolve)
+            .def("downscale", &DModelDCube<float>::downscale);
+
+    py::class_<DModelMMaps<float>>(m, "DModelMMapsf32")
+            .def(py::init<>())
+            .def("prepare", &DModelMMaps<float>::prepare)
+            .def("moments", &DModelMMaps<float>::moments);
 
     py::class_<GModelMCDisk<float>>(m, "GModelMCDiskf32")
             .def(py::init<>())

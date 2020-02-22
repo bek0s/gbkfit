@@ -2,7 +2,7 @@
 
 #include "kernels_math.hpp"
 
-namespace gbkfit { namespace openmp { namespace kernels {
+namespace gbkfit { namespace host { namespace kernels {
 
 constexpr int TRAIT_NUM_MAX = 16;
 
@@ -240,4 +240,4 @@ evaluate_scube(
     }
 }
 
-}}} // namespace gbkfit::openmp::kernels
+}}} // namespace gbkfit::host::kernels

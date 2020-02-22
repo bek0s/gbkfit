@@ -2,7 +2,7 @@
 
 #include "kernels_common.hpp"
 
-namespace gbkfit { namespace openmp { namespace kernels {
+namespace gbkfit { namespace host { namespace kernels {
 
 template<typename T>
 constexpr T PI = T{3.14159265358979323846};
@@ -427,4 +427,4 @@ gsl_interp_bsearch(const T x_array[], T x, size_t index_lo, size_t index_hi)
     return ilo;
 }
 
-}}} // namespace gbkfit::openmp::kernels
+}}} // namespace gbkfit::host::kernels

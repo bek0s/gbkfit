@@ -4,4 +4,4 @@ try:
 except ImportError:
     pass
 
-from .openmp.driver import BackendOpenMP
+from .host.driver import DriverHost

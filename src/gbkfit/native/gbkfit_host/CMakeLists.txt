@@ -1,5 +1,5 @@
 
-set(TARGET_NAME libgbkfit_openmp)
+set(TARGET_NAME libgbkfit_host)
 
 project(${TARGET_NAME}-project CXX)
 
@@ -10,15 +10,14 @@ find_package(OpenMP)
 find_package(pybind11)
 
 set(HEADER_FILES
-  include/gbkfit/openmp/dmodels.hpp
-  include/gbkfit/openmp/gmodels.hpp
-  include/gbkfit/openmp/kernels_common.hpp
-  include/gbkfit/openmp/kernels_main.hpp
-  include/gbkfit/openmp/kernels_math.hpp
-  include/gbkfit/openmp/kernels_misc.hpp
-  include/gbkfit/openmp/kernels_traits.hpp
-
-  include/gbkfit/openmp/fftw3.hpp
+  include/gbkfit/drivers/host/dmodels.hpp
+  include/gbkfit/drivers/host/fftw3.hpp
+  include/gbkfit/drivers/host/gmodels.hpp
+  include/gbkfit/drivers/host/kernels_common.hpp
+  include/gbkfit/drivers/host/kernels_main.hpp
+  include/gbkfit/drivers/host/kernels_math.hpp
+  include/gbkfit/drivers/host/kernels_misc.hpp
+  include/gbkfit/drivers/host/kernels_traits.hpp
 )
 
 set(SOURCE_FILES
@@ -42,11 +41,11 @@ target_link_libraries(
   ${TARGET_NAME}
   PRIVATE
   libgbkfit
-  OpenMP::OpenMP_CXX
   fftw3::fftw3
   fftw3::fftw3_omp
   fftw3::fftw3f
   fftw3::fftw3f_omp
+  OpenMP::OpenMP_CXX
 )
 
 target_compile_options(

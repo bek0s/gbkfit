@@ -2,7 +2,7 @@
 
 #include <gbkfit/common.hpp>
 
-namespace gbkfit { namespace openmp {
+namespace gbkfit { namespace host {
 
 template<typename T>
 struct DModelDCube
@@ -83,4 +83,4 @@ private:
     int* m_mmaps_orders;
 };
 
-}} // namespace gbkfit::openmp
+}} // namespace gbkfit::host

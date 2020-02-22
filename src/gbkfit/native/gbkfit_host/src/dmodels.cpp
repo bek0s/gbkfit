@@ -1,28 +1,9 @@
 
-#include "gbkfit/openmp/dmodels.hpp"
-#include "gbkfit/openmp/fftw3.hpp"
-#include "gbkfit/openmp/kernels_main.hpp"
+#include "gbkfit/drivers/host/dmodels.hpp"
+#include "gbkfit/drivers/host/fftw3.hpp"
+#include "gbkfit/drivers/host/kernels_main.hpp"
 
-namespace gbkfit { namespace openmp {
-
-/*
-template<typename T> std::vector<T>
-create_psf_cube(int size_x, int size_y, int size_z, const T* psf, const T* lsf)
-{
-    std::vector<T> psf_cube(size_x * size_y, size_z);
-    for(int z = 0; z < size_z; ++z) {
-        for(int y = 0; y < size_y; ++y) {
-            for(int x = 0; x < size_x; ++x) {
-                int idx_spec = z;
-                int idx_spat = x + y * size_x;
-                int idx_cube = x + y * size_x + z * size_x * size_y;
-                psf_cube[idx_cube] = lsf[idx_spec] * psf[idx_spat];
-            }
-        }
-    }
-    return psf_cube;
-}
-*/
+namespace gbkfit { namespace host {
 
 template<typename T>
 DModelDCube<T>::DModelDCube()
@@ -230,4 +211,4 @@ DModelMMaps<T>::moments(void) const
     INSTANTIATE(float)
 #undef INSTANTIATE
 
-}}
+}} // namespace gbkfit::host

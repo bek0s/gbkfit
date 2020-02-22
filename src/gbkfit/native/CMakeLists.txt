@@ -11,10 +11,10 @@ endif()
 
 add_subdirectory(gbkfit)
 
-if(DEFINED ENV{GBKFIT_BUILD_CUDA})
-  add_subdirectory(gbkfit_cuda)
+if($ENV{GBKFIT_BUILD_HOST})
+  add_subdirectory(gbkfit_host)
 endif()
 
-if(DEFINED ENV{GBKFIT_BUILD_OPENMP})
-  add_subdirectory(gbkfit_openmp)
+if($ENV{GBKFIT_BUILD_CUDA})
+  add_subdirectory(gbkfit_cuda)
 endif()

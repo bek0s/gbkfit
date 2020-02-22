@@ -3,7 +3,7 @@
 #include "kernels_misc.hpp"
 #include "kernels_traits.hpp"
 
-namespace gbkfit { namespace openmp { namespace kernels {
+namespace gbkfit { namespace host { namespace kernels {
 
 template<typename T> void
 dcube_downscale(
@@ -716,4 +716,4 @@ gmodel_mcdisk_evaluate(
     }
 }
 
-}}} // namespace gbkfit::openmp::kernels
+}}} // namespace gbkfit::host::kernels

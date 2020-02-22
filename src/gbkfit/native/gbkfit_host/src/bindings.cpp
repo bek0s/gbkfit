@@ -1,10 +1,10 @@
 
 #include <pybind11/pybind11.h>
 
-#include "gbkfit/openmp/dmodels.hpp"
-#include "gbkfit/openmp/gmodels.hpp"
+#include "gbkfit/drivers/host/dmodels.hpp"
+#include "gbkfit/drivers/host/gmodels.hpp"
 
-using namespace gbkfit::openmp;
+using namespace gbkfit::host;
 
 namespace py = pybind11;
 
