@@ -87,15 +87,14 @@ class TypedParser:
     def load_one(self, x, *args, **kwargs):
         if x is None:
             return self._noneval
-        type_ = x.get('type')
-        if not type_:
+        if 'type' not in x:
             raise RuntimeError(
-                f"Key 'type' must be defined in all '{self._clsname}' "
-                f"descriptions.")
+                f"All {self._clsname} descriptions must contain a 'type'.")
+        type_ = x.pop('type')
         if type_ not in self._parsers:
             raise RuntimeError(
-                f"{self._clsname} parser for type '{type_}' is not registered."
-                f" Available parsers are: {list(self._parsers.keys())}.")
+                f"Could not find a {self._clsname} parser for type '{type_}'. "
+                f"Available parsers are: {list(self._parsers.keys())}.")
         return self._parsers[type_].load(x, *args, **kwargs)
 
     @classmethod
