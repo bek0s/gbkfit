@@ -4,7 +4,7 @@ import numpy as np
 import gbkfit.driver
 from gbkfit.drivers import _detail
 
-import libgbkfit_openmp
+import libgbkfit_host
 
 
 def _ptr(a):
@@ -78,7 +78,7 @@ class DriverHost(gbkfit.driver.Driver):
 class DModelDCube(gbkfit.driver.DModelDCube):
 
     _CLASSES = {
-        np.float32: libgbkfit_openmp.DModelDCubef32}
+        np.float32: libgbkfit_host.DModelDCubef32}
 
     def __init__(self, dtype):
         _detail.check_dtype(self._CLASSES, dtype)
@@ -109,32 +109,34 @@ class DModelDCube(gbkfit.driver.DModelDCube):
 class DModelMMaps(gbkfit.driver.DModelMMaps):
 
     _CLASSES = {
-        np.float32: libgbkfit_openmp.DModelMMapsf32}
+        np.float32: libgbkfit_host.DModelMMapsf32}
 
     def __init__(self, dtype):
         _detail.check_dtype(self._CLASSES, dtype)
         self._mmaps = self._CLASSES[dtype]()
 
-    def moments(
+    def prepare(
             self,
             spat_size,
             spec_size, spec_step, spec_zero,
+            nanval,
             scube,
-            morders, mmaps):
-        self._mmaps.moments(
+            mmaps, mmaps_orders):
+        self._mmaps.prepare(
             spat_size[0], spat_size[1],
-            spec_size,
-            spec_step,
-            spec_zero,
-            np.nan,
+            spec_size, spec_step, spec_zero,
+            nanval,
             _ptr(scube),
-            _shape(morders)[0], _ptr(morders), _ptr(mmaps))
+            _ptr(mmaps), _shape(mmaps_orders)[0], _ptr(mmaps_orders))
+
+    def moments(self):
+        self._mmaps.moments()
 
 
 class GModelMCDisk(gbkfit.driver.GModelMCDisk):
 
     _CLASSES = {
-        np.float32: libgbkfit_openmp.GModelMCDiskf32}
+        np.float32: libgbkfit_host.GModelMCDiskf32}
 
     def __init__(self, dtype):
         _detail.check_dtype(self._CLASSES, dtype)
@@ -205,7 +207,7 @@ class GModelMCDisk(gbkfit.driver.GModelMCDisk):
 class GModelSMDisk(gbkfit.driver.GModelSMDisk):
 
     _CLASSES = {
-        np.float32: libgbkfit_openmp.GModelSMDiskf32}
+        np.float32: libgbkfit_host.GModelSMDiskf32}
 
     def __init__(self, dtype):
         _detail.check_dtype(self._CLASSES, dtype)

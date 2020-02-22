@@ -72,6 +72,15 @@ class Driver(abc.ABC):
 class DModelDCube(abc.ABC):
 
     @abc.abstractmethod
+    def prepare(
+            self,
+            size_lo, size_hi, edge_hi, scale,
+            scube_lo,
+            scube_hi, scube_hi_fft,
+            psf3d_hi, psf3d_hi_fft):
+        pass
+
+    @abc.abstractmethod
     def convolve(self):
         pass
 
@@ -83,12 +92,17 @@ class DModelDCube(abc.ABC):
 class DModelMMaps(abc.ABC):
 
     @abc.abstractmethod
-    def moments(
+    def prepare(
             self,
             spat_size,
             spec_size, spec_step, spec_zero,
+            nanval,
             scube,
-            morders, mmaps):
+            mmaps, mmaps_orders):
+        pass
+
+    @abc.abstractmethod
+    def moments(self):
         pass
 
 
