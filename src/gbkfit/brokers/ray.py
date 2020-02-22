@@ -8,7 +8,7 @@ except ImportError:
 import numpy as np
 
 import gbkfit.broker
-from . import _utils
+from . import _detail
 
 
 @ray.remote
@@ -63,7 +63,7 @@ class BrokerRay(gbkfit.broker.Broker):
         size = dmodel.size()
         dtype = dmodel.dtype()
         onames = dmodel.onames()
-        self._ranges = _utils.make_ranges(size, self._grid)
+        self._ranges = _detail.make_ranges(size, self._grid)
         for range_nd in self._ranges:
             idx_min = list(zip(*range_nd))[0]
             idx_max = list(zip(*range_nd))[1]
@@ -82,10 +82,10 @@ class BrokerRay(gbkfit.broker.Broker):
         for range_nd, future in zip(self._ranges, self._futures):
             suboutput, subout_dextra, subout_gextra = ray.get(future)
             for key, value in suboutput.items():
-                slice_nd = _utils.make_range_slice(range_nd)[::-1]
+                slice_nd = _detail.make_range_slice(range_nd)[::-1]
                 self._output[key][slice_nd] = value
             if subout_dextra:
-                out_dextra = _utils.rename_extra(subout_dextra, range_nd)
+                out_dextra = _detail.rename_extra(subout_dextra, range_nd)
             if subout_gextra:
-                out_gextra = _utils.rename_extra(subout_gextra, range_nd)
+                out_gextra = _detail.rename_extra(subout_gextra, range_nd)
         return self._output, out_dextra, out_gextra

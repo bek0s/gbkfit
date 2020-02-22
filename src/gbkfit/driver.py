@@ -21,7 +21,7 @@ class Driver(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def mem_alloc(self, shape, dtype):
+    def mem_alloc_s(self, shape, dtype):
         pass
 
     @abc.abstractmethod
@@ -72,7 +72,11 @@ class Driver(abc.ABC):
 class DModelDCube(abc.ABC):
 
     @abc.abstractmethod
-    def downscale(self, scale, offset, src_size, dst_size, src_cube, dst_cube):
+    def convolve(self):
+        pass
+
+    @abc.abstractmethod
+    def downscale(self):
         pass
 
 

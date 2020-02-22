@@ -29,7 +29,7 @@ class BackendCUDA(gbkfit.driver.Driver):
     def dump(self):
         return {'type': self.type()}
 
-    def mem_alloc(self, shape, dtype):
+    def mem_alloc_s(self, shape, dtype):
         h_data = np.empty(shape, dtype)
         d_data = cp.empty(shape, dtype)
         return h_data, d_data

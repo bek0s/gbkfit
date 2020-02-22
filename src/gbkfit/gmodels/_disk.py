@@ -223,12 +223,12 @@ class Disk(abc.ABC):
         tcount = self._nsubrnodes if self._tilted else 1
 
         if self._vptraits:
-            self._m_vsys_pvalues = driver.mem_alloc(lcount, dtype)
-        self._m_vsys_pvalues = driver.mem_alloc(lcount, dtype)
-        self._m_xpos_pvalues = driver.mem_alloc(lcount, dtype)
-        self._m_ypos_pvalues = driver.mem_alloc(lcount, dtype)
-        self._m_posa_pvalues = driver.mem_alloc(tcount, dtype)
-        self._m_incl_pvalues = driver.mem_alloc(tcount, dtype)
+            self._m_vsys_pvalues = driver.mem_alloc_s(lcount, dtype)
+        self._m_vsys_pvalues = driver.mem_alloc_s(lcount, dtype)
+        self._m_xpos_pvalues = driver.mem_alloc_s(lcount, dtype)
+        self._m_ypos_pvalues = driver.mem_alloc_s(lcount, dtype)
+        self._m_posa_pvalues = driver.mem_alloc_s(tcount, dtype)
+        self._m_incl_pvalues = driver.mem_alloc_s(tcount, dtype)
 
         _common.prepare_rnode_array(
             driver, dtype, self._m_subrnodes, self._subrnodes)

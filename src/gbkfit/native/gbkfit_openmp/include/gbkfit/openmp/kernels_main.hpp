@@ -3,7 +3,7 @@
 #include "kernels_misc.hpp"
 #include "kernels_traits.hpp"
 
-namespace gbkfit::openmp::kernels {
+namespace gbkfit { namespace openmp { namespace kernels {
 
 template<typename T> void
 dcube_downscale(
@@ -81,7 +81,8 @@ dcube_moments(
         T spec_zero,
         T nanval,
         const T* cube,
-        int mcount, const int* morders, T* mmaps)
+        T* mmaps,
+        int mcount, const int* morders)
 {
     int max_morder = morders[mcount - 1];
 
@@ -715,4 +716,4 @@ gmodel_mcdisk_evaluate(
     }
 }
 
-} // namespace gbkfit::openmp::kernels
+}}} // namespace gbkfit::openmp::kernels

@@ -122,7 +122,7 @@ class DModelMMaps(gbkfit.dmodel.DModel):
         self._dcube.prepare(driver)
         self._mmaps = driver.make_dmodel_mmaps(self.dtype())
         shape = (self.size() + (len(self.orders()),))[::-1]
-        self._m_mmaps = driver.mem_alloc(shape, self.dtype())
+        self._m_mmaps = driver.mem_alloc_s(shape, self.dtype())
         self._d_orders = driver.mem_copy_h2d(np.array(self.orders(), np.int32))
 
     def _evaluate_impl(self, params, out_dextra, out_gextra):

@@ -4,7 +4,6 @@
 #include "gbkfit/openmp/dmodels.hpp"
 #include "gbkfit/openmp/gmodels.hpp"
 
-using namespace gbkfit;
 using namespace gbkfit::openmp;
 
 namespace py = pybind11;
@@ -12,17 +11,14 @@ namespace py = pybind11;
 PYBIND11_MODULE(EXTENSION_NAME, m)
 {
     py::class_<DModelDCube<float>>(m, "DModelDCubef32")
-            .def(py::init<
-                 int, int, int,
-                 int, int, int,
-                 int, int, int,
-                 int, int, int,
-                 Ptr, Ptr, Ptr, Ptr, Ptr>())
-            .def("downscale", &DModelDCube<float>::downscale)
-            .def("convolve", &DModelDCube<float>::convolve);
+            .def(py::init<>())
+            .def("prepare", &DModelDCube<float>::prepare)
+            .def("convolve", &DModelDCube<float>::convolve)
+            .def("downscale", &DModelDCube<float>::downscale);
 
     py::class_<DModelMMaps<float>>(m, "DModelMMapsf32")
             .def(py::init<>())
+            .def("prepare", &DModelMMaps<float>::prepare)
             .def("moments", &DModelMMaps<float>::moments);
 
     py::class_<GModelMCDisk<float>>(m, "GModelMCDiskf32")

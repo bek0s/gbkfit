@@ -67,7 +67,7 @@ def eval_(config):
     params = gbkfit.params.convert_params_free_to_fixed(config['params'])
     model.set_param_exprs(params)
 
-    for i in range(1):
+    for i in range(10):
         log.info("Model evaluation started.")
         t1 = time.time_ns()
         out_dextra = []

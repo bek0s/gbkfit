@@ -2,15 +2,19 @@
 
 #include <gbkfit/common.hpp>
 
-#include "kernels_main.hpp"
-
 namespace gbkfit { namespace openmp {
 
 template<typename T>
 struct DModelDCube
 {
-    DModelDCube(
-            int size_lo_x, int size_lo_y, int size_lo_z,
+public:
+
+    DModelDCube(void);
+
+    ~DModelDCube();
+
+    void
+    prepare(int size_lo_x, int size_lo_y, int size_lo_z,
             int size_hi_x, int size_hi_y, int size_hi_z,
             int edge_hi_x, int edge_hi_y, int edge_hi_z,
             int scale_x, int scale_y, int scale_z,
@@ -18,7 +22,8 @@ struct DModelDCube
             Ptr scube_hi, Ptr scube_hi_fft,
             Ptr psf3d_hi, Ptr psf3d_hi_fft);
 
-    ~DModelDCube();
+    void
+    cleanup(void);
 
     void
     convolve(void) const;
@@ -43,36 +48,39 @@ private:
 
 template<typename T>
 struct DModelMMaps
-{/*
-    DModelMMaps(
-            int spat_size_x, int spat_size_y,
-            int spec_size,
-            T spec_step,
-            T spec_zero,
-            CPtr scube,)
-    {
+{
+public:
 
-    }*/
+    DModelMMaps(void);
+
+    ~DModelMMaps() {}
+
     void
-    moments(int spat_size_x, int spat_size_y,
+    prepare(int spat_size_x, int spat_size_y,
             int spec_size,
             T spec_step,
             T spec_zero,
             T nanval,
-            CPtr scube,
-            int mcount, CPtr morders, Ptr mmaps) const
-    {
-        kernels::dcube_moments(
-                spat_size_x, spat_size_y,
-                spec_size,
-                spec_step,
-                spec_zero,
-                nanval,
-                reinterpret_cast<const T*>(scube),
-                mcount,
-                reinterpret_cast<const int*>(morders),
-                reinterpret_cast<T*>(mmaps));
-    }
+            Ptr scube,
+            Ptr mmaps,
+            int mmaps_count,
+            Ptr mmaps_orders);
+
+    void
+    moments(void) const;
+
+private:
+
+    int m_spat_size_x;
+    int m_spat_size_y;
+    int m_spec_size;
+    T m_spec_step;
+    T m_spec_zero;
+    T m_nanval;
+    T* m_scube;
+    T* m_mmaps;
+    int m_mmaps_count;
+    int* m_mmaps_orders;
 };
 
 }} // namespace gbkfit::openmp

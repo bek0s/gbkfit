@@ -2,6 +2,8 @@
 
 #include <fftw3.h>
 
+namespace gbkfit {
+
 namespace {
 
 template<typename T>
@@ -40,6 +42,8 @@ struct wrapper<double>
 template<typename T>
 struct fftw3
 {
+public:
+
     using plan = typename wrapper<T>::plan;
     using complex = typename wrapper<T>::complex;
     static constexpr auto plan_with_nthreads = wrapper<T>::plan_with_nthreads;
@@ -66,8 +70,12 @@ struct fftw3
         }
     }
 
+private:
+
     static int refcount;
 };
 
 template<typename T>
 int fftw3<T>::refcount = 0;
+
+} // namespace gbkfit

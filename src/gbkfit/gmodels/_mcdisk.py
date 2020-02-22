@@ -41,8 +41,8 @@ class MCDisk(_disk.Disk):
         self._disk = driver.make_gmodel_mcdisk(dtype)
         hasordint = [t.has_ordinary_integral() for t in self._rptraits]
         size = sum([1 if h else self._subrnodes - 2 for h in hasordint])
-        self._hasordint = driver.mem_alloc(len(self._rptraits), np.bool)
-        self._ncloudsptor = driver.mem_alloc(size, np.int32)
+        self._hasordint = driver.mem_alloc_s(len(self._rptraits), np.bool)
+        self._ncloudsptor = driver.mem_alloc_s(size, np.int32)
         self._hasordint[0][:] = hasordint
         driver.mem_copy_h2d(self._hasordint[0], self._hasordint[1])
 

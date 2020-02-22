@@ -182,11 +182,11 @@ def prepare_trait_arrays(
         cvalues += consts
         ccounts += [len(consts)]
         pcounts += [pcounts_sm + pcounts_nw]
-    ary_uids[:] = driver.mem_alloc(len(uids), np.int32)
-    ary_ccounts[:] = driver.mem_alloc(len(ccounts), np.int32)
-    ary_pcounts[:] = driver.mem_alloc(len(pcounts), np.int32)
-    ary_cvalues[:] = driver.mem_alloc(len(cvalues), dtype)
-    ary_pvalues[:] = driver.mem_alloc(sum(pcounts), dtype)
+    ary_uids[:] = driver.mem_alloc_s(len(uids), np.int32)
+    ary_ccounts[:] = driver.mem_alloc_s(len(ccounts), np.int32)
+    ary_pcounts[:] = driver.mem_alloc_s(len(pcounts), np.int32)
+    ary_cvalues[:] = driver.mem_alloc_s(len(cvalues), dtype)
+    ary_pvalues[:] = driver.mem_alloc_s(sum(pcounts), dtype)
     ary_uids[0][:] = uids
     ary_ccounts[0][:] = ccounts
     ary_pcounts[0][:] = pcounts
@@ -238,7 +238,7 @@ def prepare_common_params_array(
 
 
 def prepare_rnode_array(backend, dtype, array_rnodes, rnodes):
-    array_rnodes[:] = backend.mem_alloc(len(rnodes), dtype)
+    array_rnodes[:] = backend.mem_alloc_s(len(rnodes), dtype)
     array_rnodes[0][:] = rnodes
     backend.mem_copy_h2d(array_rnodes[0], array_rnodes[1])
 

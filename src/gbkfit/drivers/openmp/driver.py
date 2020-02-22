@@ -28,7 +28,7 @@ class BackendOpenMP(gbkfit.driver.Driver):
     def dump(self):
         return {'type': self.type()}
 
-    def mem_alloc(self, shape, dtype):
+    def mem_alloc_s(self, shape, dtype):
         h_data = np.empty(shape, dtype)
         d_data = h_data
         return h_data, d_data
@@ -62,19 +62,8 @@ class BackendOpenMP(gbkfit.driver.Driver):
     def array_mul_d(self, ary, value):
         ary *= value
 
-    def make_dmodel_dcube(
-            self,
-            size_lo, size_hi, edge_hi, scale,
-            scube_lo,
-            scube_hi, scube_hi_fft,
-            psf3d_hi, psf3d_hi_fft,
-            dtype):
-        return DModelDCube(
-            size_lo, size_hi, edge_hi, scale,
-            scube_lo,
-            scube_hi, scube_hi_fft,
-            psf3d_hi, psf3d_hi_fft,
-            dtype)
+    def make_dmodel_dcube(self, dtype):
+        return DModelDCube(dtype)
 
     def make_dmodel_mmaps(self, dtype):
         return DModelMMaps(dtype)
@@ -91,19 +80,17 @@ class DModelDCube(gbkfit.driver.DModelDCube):
     _CLASSES = {
         np.float32: libgbkfit_openmp.DModelDCubef32}
 
-    def __init__2(self, dtype):
+    def __init__(self, dtype):
         _detail.check_dtype(self._CLASSES, dtype)
         self._dcube = self._CLASSES[dtype]()
 
-    def __init__(
+    def prepare(
             self,
             size_lo, size_hi, edge_hi, scale,
             scube_lo,
             scube_hi, scube_hi_fft,
-            psf3d_hi, psf3d_hi_fft,
-            dtype):
-        _detail.check_dtype(self._CLASSES, dtype)
-        self._dcube = self._CLASSES[dtype](
+            psf3d_hi, psf3d_hi_fft):
+        self._dcube.prepare(
             size_lo[0], size_lo[1], size_lo[2],
             size_hi[0], size_hi[1], size_hi[2],
             edge_hi[0], edge_hi[1], edge_hi[2],
