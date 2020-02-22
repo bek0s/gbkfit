@@ -31,8 +31,8 @@ def _register_brokers():
 def _register_drivers():
     from gbkfit.driver import parser
     factories = [
-        'gbkfit.drivers.cuda.driver.BackendCUDA',
-        'gbkfit.drivers.openmp.driver.BackendOpenMP']
+        'gbkfit.drivers.cuda.driver.DriverCUDA',
+        'gbkfit.drivers.host.driver.DriverHost']
     _register_factories(parser, factories)
 
 

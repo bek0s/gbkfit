@@ -1,6 +1,6 @@
 
 try:
-    from .cuda.driver import BackendCUDA
+    from .cuda.driver import DriverCUDA
 except ImportError:
     pass
 
