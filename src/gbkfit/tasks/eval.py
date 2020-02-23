@@ -98,3 +98,20 @@ def eval_(config):
             save_output(f'{prefix}_extra_dmodel_{key}.fits', value)
         for key, value in out_gextra[i].items():
             save_output(f'{prefix}_extra_gmodel_{key}.fits', value)
+
+
+
+"""
+gbkfit.driver.drivers.DriverHost()
+gbkfit.driver.drivers.DriverCUDA()
+gbkfit.dmodel.dmodels.DModelSCube()
+gbkfit.gmodel.gmodels.GModelKinematics3D()
+gbkfit.psflsf.psflsfs.PSFGauss()
+gbkfit.psflsf.psflsfs.LSFGauss()
+gbkfit.fitter.fitters.FitterDynestyDynamicNS()
+gbkfit.fitter.fitters.FitterDynestyStaticNS()
+
+
+gbkfit.params.params
+gbkfit.model.Model()
+"""

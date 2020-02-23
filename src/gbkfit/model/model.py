@@ -6,8 +6,8 @@ import asteval
 import numpy as np
 
 import gbkfit.params
-from gbkfit.brokers import BrokerNone
-from gbkfit.drivers import DriverHost
+from gbkfit.broker.brokers import BrokerNone
+from gbkfit.driver.drivers import DriverHost
 from gbkfit.utils import iterutils
 
 log = logging.getLogger(__name__)

@@ -2,7 +2,7 @@
 import numpy as np
 
 import gbkfit.driver
-from gbkfit.drivers import _detail
+from gbkfit.driver.drivers import _detail
 
 import libgbkfit_host
 

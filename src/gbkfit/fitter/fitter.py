@@ -4,21 +4,6 @@ import abc
 import gbkfit.params
 from gbkfit.utils import parseutils
 
-"""
-mode.has_param_info
-mode.get_params()
-
-result.param_exprs()
-result.model.
-
-params.get_exprs()
-params.get_info()
-"""
-
-
-
-
-
 
 class FitterResultMode:
 

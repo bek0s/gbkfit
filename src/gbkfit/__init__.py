@@ -23,16 +23,16 @@ def _register_factories(parser, factories):
 def _register_brokers():
     from gbkfit.broker import parser
     factories = [
-        'gbkfit.brokers.dask.BrokerDask',
-        'gbkfit.brokers.ray.BrokerRay']
+        'gbkfit.broker.brokers.dask.BrokerDask',
+        'gbkfit.broker.brokers.ray.BrokerRay']
     _register_factories(parser, factories)
 
 
 def _register_drivers():
     from gbkfit.driver import parser
     factories = [
-        'gbkfit.drivers.cuda.driver.DriverCUDA',
-        'gbkfit.drivers.host.driver.DriverHost']
+        'gbkfit.driver.drivers.cuda.driver.DriverCUDA',
+        'gbkfit.driver.drivers.host.driver.DriverHost']
     _register_factories(parser, factories)
 
 
@@ -46,7 +46,7 @@ def _register_fitters():
 
 def _register_dmodels():
     from gbkfit.dmodel import parser
-    from gbkfit.dmodels import (
+    from gbkfit.dmodel.dmodels import (
         DModelImage, DModelLSlit, DModelMMaps, DModelSCube)
     parser.register(DModelImage)
     parser.register(DModelLSlit)
@@ -56,7 +56,7 @@ def _register_dmodels():
 
 def _register_gmodels():
     from gbkfit.gmodel import parser
-    from gbkfit.gmodels import (
+    from gbkfit.gmodel.gmodels import (
         GModelIntensity2D, GModelIntensity3D,
         GModelKinematics2D, GModelKinematics3D)
     parser.register(GModelIntensity2D)
@@ -67,7 +67,7 @@ def _register_gmodels():
 
 def _register_psfs():
     from gbkfit.psflsf import psf_parser
-    from gbkfit.psflsfs.psfmodels import (
+    from gbkfit.psflsf.psflsfs.psfmodels import (
         PSFGauss, PSFGGauss, PSFImage, PSFLorentz, PSFMoffat)
     psf_parser.register(PSFGauss)
     psf_parser.register(PSFGGauss)
@@ -78,7 +78,7 @@ def _register_psfs():
 
 def _register_lsfs():
     from gbkfit.psflsf import lsf_parser
-    from gbkfit.psflsfs.lsfmodels import (
+    from gbkfit.psflsf.psflsfs.lsfmodels import (
         LSFGauss, LSFGGauss, LSFImage, LSFLorentz, LSFMoffat)
     lsf_parser.register(LSFGauss)
     lsf_parser.register(LSFGGauss)
