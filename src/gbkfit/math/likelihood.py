@@ -1,37 +1,45 @@
 
+import abc
+
 
 class Likelihood:
 
     def __init__(self, data, model):
         self._data = data
         self._model = model
+        self._residual = []
 
-    def log_likelihood(self):
+        """
+        for model_item in model:
+            residual_item = {}
+            for oname in model_item.onames():
+                residual_item[oname] = np.
+        """
+
+    def residual_scalar(self):
         pass
 
     def residual_vector(self):
         pass
 
-    def residual_scalar(self):
+    @abc.abstractmethod
+    def log_likelihood(self):
         pass
 
 
-class LikelihoodExponential(Likelihood):
-    pass
-
-
 class LikelihoodGaussian(Likelihood):
-    pass
 
+    def __init__(self, data, model):
+        super().__init__(data, model)
 
-class LikelihoodPoisson(Likelihood):
-    pass
+    def log_likelihood(self):
+        pass
 
 
 class LikelihoodStudentT(Likelihood):
-    pass
 
-
-class LikelihoodUniform(Likelihood):
     def __init__(self, data, model):
         super().__init__(data, model)
+
+    def log_likelihood(self):
+        pass

@@ -1,0 +1,2 @@
+
+from .dynesty import FitterDynestySNestedSampling

@@ -74,7 +74,6 @@ class FitterScipyLeastSquares(FitterScipy):
 
     @classmethod
     def load(cls, info):
-        info.pop('type')
         return cls(**info)
 
     def dump(self):

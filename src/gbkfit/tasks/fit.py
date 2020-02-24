@@ -98,12 +98,12 @@ def fit(config):
     log.info("Model-fitting started")
     t1 = time.time_ns()
 
-    #result = fitter.fit(datasets, model, param_infos)
+    result = fitter.fit(datasets, model, param_infos)
+    """
     from gbkfit.fitters.dynesty.dynesty import FitterDynestyStaticNestedSampling
-
     fitter = FitterDynestyStaticNestedSampling(foo='bar')
-
     fitter.fit(datasets, model, param_infos)
+    """
 
 
 

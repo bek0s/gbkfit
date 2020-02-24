@@ -1,11 +1,14 @@
 
 set(TARGET_NAME libgbkfit_cuda)
 
-project(${TARGET_NAME}-project CXX CUDA)
+project(${TARGET_NAME}-project CUDA CXX)
 
 find_package(pybind11)
+find_package(CUDA REQUIRED)
 
 set(HEADER_FILES
+  include/gbkfit/drivers/cuda/common.hpp
+  include/gbkfit/drivers/cuda/cufft.hpp
   include/gbkfit/drivers/cuda/dmodels.hpp
   include/gbkfit/drivers/cuda/gmodels.hpp
   include/gbkfit/drivers/cuda/kernels_main.hpp
@@ -32,12 +35,14 @@ target_include_directories(
   ${TARGET_NAME}
   PRIVATE
   include
+  ${CUDA_INCLUDE_DIRS}
 )
 
 target_link_libraries(
   ${TARGET_NAME}
   PRIVATE
   libgbkfit
+  ${CUDA_CUFFT_LIBRARIES}
 )
 
 target_compile_options(

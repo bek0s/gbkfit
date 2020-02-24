@@ -5,6 +5,37 @@
 namespace gbkfit { namespace cuda {
 
 template<typename T> void
+Wrapper<T>::dmodel_dcube_complex_multiply_and_scale(
+        typename cufft<T>::complex* ary1,
+        typename cufft<T>::complex* ary2,
+        int n, T scale)
+{
+    dim3 bsize(256);
+    dim3 gsize((n + bsize.x - 1) / bsize.x);
+    kernels::dmodel_dcube_complex_multiply_and_scale<<<bsize, gsize>>>(
+            ary1, ary2, n, scale);
+}
+
+template<typename T> void
+Wrapper<T>::dmodel_dcube_downscale(
+        int scale_x, int scale_y, int scale_z,
+        int offset_x, int offset_y, int offset_z,
+        int src_size_x, int src_size_y, int src_size_z,
+        int dst_size_x, int dst_size_y, int dst_size_z,
+        const T* src_cube, T* dst_cube)
+{
+    unsigned int n = dst_size_x * dst_size_y * dst_size_z;
+    dim3 bsize(256);
+    dim3 gsize((n + bsize.x - 1) / bsize.x);
+    kernels::dmodel_dcube_downscale<<<bsize, gsize>>>(
+            scale_x, scale_y, scale_z,
+            offset_x, offset_y, offset_z,
+            src_size_x, src_size_y, src_size_z,
+            dst_size_x, dst_size_y, dst_size_z,
+            src_cube, dst_cube);
+}
+
+template<typename T> void
 Wrapper<T>::gmodel_mcdisk_evaluate(
         T cflux, int nclouds, const int* ncloudspt,
         bool loose, bool tilted,
@@ -51,7 +82,7 @@ Wrapper<T>::gmodel_mcdisk_evaluate(
         T* rdata, T* vdata, T* ddata)
 {
     const int n = spat_size_x * spat_size_y;
-
+    /*
     dim3 bsize(256);
     dim3 gsize((n + bsize.x - 1) / bsize.x);
     kernels::gmodel_mcdisk_evaluate<<<bsize, gsize>>>(
@@ -98,6 +129,7 @@ Wrapper<T>::gmodel_mcdisk_evaluate(
             spec_zero,
             image, scube, rcube,
             rdata, vdata, ddata);
+            */
 }
 
 template<typename T> void
@@ -146,7 +178,7 @@ Wrapper<T>::gmodel_smdisk_evaluate(
         T* rdata, T* vdata, T* ddata)
 {
     const int n = spat_size_x * spat_size_y;
-
+/*
     dim3 bsize(256);
     dim3 gsize((n + bsize.x - 1) / bsize.x);
     kernels::gmodel_smdisk_evaluate<<<bsize, gsize>>>(
@@ -191,7 +223,7 @@ Wrapper<T>::gmodel_smdisk_evaluate(
             spec_step,
             spec_zero,
             image, scube, rcube,
-            rdata, vdata, ddata);
+            rdata, vdata, ddata);*/
 }
 
 #define INSTANTIATE(T)          \

@@ -1,8 +1,8 @@
 
 import abc
 
-from gbkfit.data import Data
 from gbkfit.utils import parseutils
+from .data import Data
 
 
 class Dataset(abc.ABC):

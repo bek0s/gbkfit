@@ -1,9 +1,26 @@
+#pragma once
+
+#include "gbkfit/drivers/cuda/cufft.hpp"
 
 namespace gbkfit { namespace cuda {
 
 template<typename T>
 struct Wrapper
 {
+    static void
+    dmodel_dcube_complex_multiply_and_scale(
+            typename cufft<T>::complex* ary1,
+            typename cufft<T>::complex* ary2,
+            int n, T scale);
+
+    static void
+    dmodel_dcube_downscale(
+            int scale_x, int scale_y, int scale_z,
+            int offset_x, int offset_y, int offset_z,
+            int src_size_x, int src_size_y, int src_size_z,
+            int dst_size_x, int dst_size_y, int dst_size_z,
+            const T* src_cube, T* dst_cube);
+
     static void
     gmodel_mcdisk_evaluate(
             T cflux, int nclouds, const int* ncloudspt,

@@ -33,7 +33,7 @@ class DCube:
             new_size = gbkfit.math.roundu_po2(size)
             if new_size > 32:
                 new_size = gbkfit.math.roundu_multiple(size, 32)
-            return new_size
+            return int(new_size)
 
         # High-res cube size
         size_hi = (
@@ -154,6 +154,8 @@ class DCube:
             self._psf3d_hi_fft = driver.mem_alloc_d(size_hi_fft, dtype)
 
         self._dcube = driver.make_dmodel_dcube(dtype)
+
+        psf3d_hi = driver.mem_copy_h2d(psf3d_hi)
 
         self._dcube.prepare(
             size_lo, size_hi, edge_hi, scale,

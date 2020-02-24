@@ -8,13 +8,17 @@ import ultranest
 
 import gbkfit.fitter
 
+import inspect
+import dynesty
+import dynesty.dynamicsampler
+import dynesty.sampler
 
 log = logging.getLogger(__name__)
 
 
 def residual_fun(pvalues, data, model):
     params = dict(zip(model.get_param_names(), pvalues))
-    log.info(params)
+    #log.info(params)
     outputs = model.evaluate(params, False)
     chi2 = 0
     for dataset, output in zip(data, outputs):
@@ -27,9 +31,9 @@ def residual_fun(pvalues, data, model):
             #import astropy.io.fits as fits
             #fits.writeto('residual.fits', res, overwrite=True)
             res[np.isnan(res)] = 0
-            print(np.nansum(res))
+            #print(np.nansum(res))
             chi2 += np.nansum(res)
-    print("chi2: ", chi2)
+    #print("chi2: ", chi2)
     return -0.5 * chi2
 
 
@@ -97,7 +101,88 @@ class FitterDynesty(gbkfit.fitter.Fitter):
         pass
 
 
-class FitterDynestyStaticNestedSampling(FitterDynesty):
+SSAMPLER_GLOBAL_ARGS_REQ = dict(
+    # dynesty.NestedSampler()
+    nlive=500
+)
+
+SSAMPLER_GLOBAL_ARGS_OPT = dict(
+    # dynesty.NestedSampler()
+    bound='multi', sample='auto',
+    update_interval=None, first_update=None, rstate=None,
+    enlarge=None, bootstrap=0, vol_dec=0.5, vol_check=2.0,
+    walks=25, facc=0.5, slices=5, fmove=0.9, max_move=100,
+    # dynesty.sampler.Sampler.run_nested()
+    maxiter=None, maxcall=None, dlogz=None,
+    logl_max=np.inf, n_effective=None,
+    add_live=True, print_progress=True,
+    print_func=None, save_bounds=True
+)
+
+SSAMPLER_PARAMS_ARGS_OPT = dict(
+    # dynesty.NestedSampler()
+    periodic=None,
+    reflective=None,
+    live_points=None
+)
+
+DSAMPLER_GLOBAL_ARGS_REQ = dict(
+    # dynesty.dynamicsampler.DynamicNestedSampler.run_nested()
+    nlive_init=100,
+    nlive_batch=500
+)
+
+DSAMPLER_GLOBAL_ARGS_OPT = dict(
+    # dynesty.DynamicNestedSampler()
+    bound='multi', sample='auto',
+    update_interval=None, first_update=None, rstate=None,
+    enlarge=None, bootstrap=0, vol_dec=0.5, vol_check=2.0,
+    walks=25, facc=0.5, slices=5, fmove=0.9, max_move=100,
+    # dynesty.dynamicsampler.DynamicNestedSampler.run_nested()
+    maxiter_init=None,
+    maxcall_init=None, dlogz_init=0.01, logl_max_init=np.inf,
+    n_effective_init=np.inf,
+    wt_function=None, wt_kwargs=None,
+    maxiter_batch=None, maxcall_batch=None,
+    maxiter=None, maxcall=None, maxbatch=None,
+    n_effective=np.inf,
+    stop_function=None, stop_kwargs=None, use_stop=True,
+    save_bounds=True, print_progress=True, print_func=None
+)
+
+DSAMPLER_PARAMS_ARGS_OPT = dict(
+    # dynesty.DynamicNestedSampler()
+    periodic=None,
+    reflective=None,
+    # dynesty.dynamicsampler.DynamicNestedSampler.run_nested()
+    live_points=None
+)
+
+
+def check_args(args, required_args, optional_args):
+
+    required_args = required_args.copy()
+    optional_args = optional_args.copy()
+
+    missing_args = set(required_args).difference(args)
+
+    if missing_args:
+        raise RuntimeError(
+            f"The following Fitter arguments are "
+            f"required: {missing_args}.")
+
+    unknown_args = set(args).difference({**required_args, **optional_args})
+
+    if unknown_args:
+        raise RuntimeError(
+            f"The following Fitter arguments are "
+            f"not recognised and will be ignored: {unknown_args}.")
+
+
+
+
+
+class FitterDynestySNestedSampling(FitterDynesty):
 
     @staticmethod
     def type():
@@ -105,7 +190,6 @@ class FitterDynestyStaticNestedSampling(FitterDynesty):
 
     @classmethod
     def load(cls, info):
-        info.pop('type')
         return cls(**info)
 
     def dump(self):
@@ -114,6 +198,8 @@ class FitterDynestyStaticNestedSampling(FitterDynesty):
     def __init__(self, **kwargs):
         super().__init__()
         self._kwargs = kwargs
+
+        check_args(kwargs, SSAMPLER_GLOBAL_ARGS_REQ, SSAMPLER_GLOBAL_ARGS_OPT)
 
     def _impl_impl_fit(self, data, model, params):
 
@@ -134,31 +220,14 @@ class FitterDynestyStaticNestedSampling(FitterDynesty):
         logl_args = [data, model]
         ptform_args = [pmins, pmaxs]
 
-        sampler = ultranest.ReactiveNestedSampler(model.get_param_names(), Likelihood(data, model), Prior(pmins, pmaxs))
-        result = sampler.run(min_num_live_points=200)
-        sampler.print_results()
 
-        """
-        exit()
+
         sampler = dynesty.NestedSampler(
-            residual_fun, ptform_func, ndim, nlive=100, logl_args=logl_args, ptform_args=ptform_args, **self._kwargs)
+            residual_fun, ptform_func, ndim, nlive=1, logl_args=logl_args, ptform_args=ptform_args, **self._kwargs)
+
+
 
         result = sampler.run_nested()
-
-        res2 = sampler.results
-        import matplotlib.pyplot as plt
-        from dynesty import plotting as dyplot
-
-        fig, axes = dyplot.traceplot(res2, truths=np.zeros(ndim),
-                                     truth_color='black', show_titles=True,
-                                     trace_cmap='viridis', connect=True,
-                                     connect_highlight=range(5))
-
-
-        plt.show()
-
-        print("Result: ", result)
-        """
 
 
         pass

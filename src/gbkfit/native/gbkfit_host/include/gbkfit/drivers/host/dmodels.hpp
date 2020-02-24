@@ -1,6 +1,7 @@
 #pragma once
 
-#include <gbkfit/common.hpp>
+#include "gbkfit/drivers/host/common.hpp"
+#include "gbkfit/drivers/host/fftw3.hpp"
 
 namespace gbkfit { namespace host {
 
@@ -41,9 +42,9 @@ private:
     T* m_scube_hi;
     T* m_scube_hi_fft;
     T* m_psf3d_hi_fft;
-    void* m_scube_fft_plan_r2c;
-    void* m_scube_fft_plan_c2r;
-    void* m_psf3d_fft_plan_r2c;
+    typename fftw3<T>::plan m_scube_fft_plan_r2c;
+    typename fftw3<T>::plan m_scube_fft_plan_c2r;
+    typename fftw3<T>::plan m_psf3d_fft_plan_r2c;
 };
 
 template<typename T>

@@ -3,7 +3,7 @@ import cupy as cp
 import numpy as np
 
 import gbkfit.driver
-from gbkfit.drivers import _detail
+from gbkfit.driver.drivers import _detail
 
 import libgbkfit_cuda
 
@@ -66,6 +66,9 @@ class DriverCUDA(gbkfit.driver.Driver):
     def make_dmodel_dcube(self, dtype):
         return DModelDCube(dtype)
 
+    def make_dmodel_mmaps(self, dtype):
+        return DModelMMaps(dtype)
+
     def make_gmodel_mcdisk(self, dtype):
         return GModelMCDisk(dtype)
 
@@ -82,28 +85,53 @@ class DModelDCube(gbkfit.driver.DModelDCube):
         _detail.check_dtype(self._CLASSES, dtype)
         self._dcube = self._CLASSES[dtype]()
 
-    def downscale(self, scale, offset, src_size, dst_size, src_cube, dst_cube):
-        self._dcube.downscale(
+    def prepare(
+            self,
+            size_lo, size_hi, edge_hi, scale,
+            scube_lo,
+            scube_hi, scube_hi_fft,
+            psf3d_hi, psf3d_hi_fft):
+        self._dcube.prepare(
+            size_lo[0], size_lo[1], size_lo[2],
+            size_hi[0], size_hi[1], size_hi[2],
+            edge_hi[0], edge_hi[1], edge_hi[2],
             scale[0], scale[1], scale[2],
-            offset[0], offset[1], offset[2],
-            src_size[0], src_size[1], src_size[2],
-            dst_size[0], dst_size[1], dst_size[2],
-            _ptr(src_cube), _ptr(dst_cube))
+            _ptr(scube_lo),
+            _ptr(scube_hi), _ptr(scube_hi_fft),
+            _ptr(psf3d_hi), _ptr(psf3d_hi_fft))
 
-    def moments(
+    def convolve(self):
+        self._dcube.convolve()
+
+    def downscale(self):
+        self._dcube.downscale()
+
+
+class DModelMMaps(gbkfit.driver.DModelMMaps):
+
+    _CLASSES = {
+        np.float32: libgbkfit_cuda.DModelMMapsf32}
+
+    def __init__(self, dtype):
+        _detail.check_dtype(self._CLASSES, dtype)
+        self._mmaps = self._CLASSES[dtype]()
+
+    def prepare(
             self,
             spat_size,
             spec_size, spec_step, spec_zero,
+            nanval,
             scube,
-            morders, mmaps):
-        self._dcube.moments(
+            mmaps, mmaps_orders):
+        self._mmaps.prepare(
             spat_size[0], spat_size[1],
-            spec_size,
-            spec_step,
-            spec_zero,
-            np.nan,
+            spec_size, spec_step, spec_zero,
+            nanval,
             _ptr(scube),
-            _shape(morders)[0], _ptr(morders), _ptr(mmaps))
+            _ptr(mmaps), _shape(mmaps_orders)[0], _ptr(mmaps_orders))
+
+    def moments(self):
+        self._mmaps.moments()
 
 
 class GModelMCDisk(gbkfit.driver.GModelMCDisk):

@@ -1,12 +1,11 @@
 
 #include "gbkfit/drivers/host/dmodels.hpp"
-#include "gbkfit/drivers/host/fftw3.hpp"
 #include "gbkfit/drivers/host/kernels_main.hpp"
 
 namespace gbkfit { namespace host {
 
 template<typename T>
-DModelDCube<T>::DModelDCube()
+DModelDCube<T>::DModelDCube(void)
     : m_size_lo{0, 0, 0}
     , m_size_hi{0, 0, 0}
     , m_edge_hi{0, 0, 0}
@@ -47,9 +46,6 @@ DModelDCube<T>::prepare(
     m_scube_hi = reinterpret_cast<T*>(scube_hi);
     m_scube_hi_fft = reinterpret_cast<T*>(scube_hi_fft);
     m_psf3d_hi_fft = reinterpret_cast<T*>(psf3d_hi_fft);
-    m_scube_fft_plan_r2c = nullptr;
-    m_scube_fft_plan_c2r = nullptr;
-    m_psf3d_fft_plan_r2c = nullptr;
 
     if (psf3d_hi && psf3d_hi_fft)
     {
@@ -91,16 +87,13 @@ template<typename T> void
 DModelDCube<T>::cleanup(void)
 {
     if (m_scube_fft_plan_r2c) {
-        fftw3<T>::destroy_plan(reinterpret_cast<typename fftw3<T>::plan>(
-                m_scube_fft_plan_r2c));
+        fftw3<T>::destroy_plan(m_scube_fft_plan_r2c);
     }
     if (m_scube_fft_plan_c2r) {
-        fftw3<T>::destroy_plan(reinterpret_cast<typename fftw3<T>::plan>(
-                m_scube_fft_plan_c2r));
+        fftw3<T>::destroy_plan(m_scube_fft_plan_c2r);
     }
     if (m_psf3d_fft_plan_r2c) {
-        fftw3<T>::destroy_plan(reinterpret_cast<typename fftw3<T>::plan>(
-                m_psf3d_fft_plan_r2c));
+        fftw3<T>::destroy_plan(m_psf3d_fft_plan_r2c);
     }
 
     fftw3<T>::cleanup_threads();
@@ -121,11 +114,9 @@ DModelDCube<T>::cleanup(void)
 template<typename T> void
 DModelDCube<T>::convolve(void) const
 {
-
     int n0 = m_size_hi[2], n1 = m_size_hi[1], n2 = m_size_hi[0];
 
-    fftw3<T>::execute(reinterpret_cast<typename fftw3<T>::plan>(
-            m_scube_fft_plan_r2c));
+    fftw3<T>::execute(m_scube_fft_plan_r2c);
 
     const int size = n0 * n1 * (n2 / 2 + 1);
     const T nfactor = T{1} / (n0 * n1 * n2);
@@ -135,8 +126,7 @@ DModelDCube<T>::convolve(void) const
             reinterpret_cast<std::complex<T>*>(m_psf3d_hi_fft),
             size, nfactor);
 
-    fftw3<T>::execute(reinterpret_cast<typename fftw3<T>::plan>(
-            m_scube_fft_plan_c2r));
+    fftw3<T>::execute(m_scube_fft_plan_c2r);
 }
 
 template<typename T> void

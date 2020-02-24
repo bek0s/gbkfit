@@ -10,6 +10,7 @@ find_package(OpenMP)
 find_package(pybind11)
 
 set(HEADER_FILES
+  include/gbkfit/drivers/host/common.hpp
   include/gbkfit/drivers/host/dmodels.hpp
   include/gbkfit/drivers/host/fftw3.hpp
   include/gbkfit/drivers/host/gmodels.hpp
