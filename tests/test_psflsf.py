@@ -1,5 +1,5 @@
 
-from gbkfit.psflsfs import *
+from gbkfit.psflsf.psflsfs import *
 
 
 def test_psfs():
