@@ -1,6 +1,6 @@
 
-#include "gbkfit/drivers/cuda/kernels_main.hpp"
-#include "gbkfit/drivers/cuda/wrapper.hpp"
+#include "gbkfit/cuda/kernels_main.hpp"
+#include "gbkfit/cuda/wrapper.hpp"
 
 namespace gbkfit { namespace cuda {
 
@@ -178,7 +178,7 @@ Wrapper<T>::gmodel_smdisk_evaluate(
         T* rdata, T* vdata, T* ddata)
 {
     const int n = spat_size_x * spat_size_y;
-/*
+
     dim3 bsize(256);
     dim3 gsize((n + bsize.x - 1) / bsize.x);
     kernels::gmodel_smdisk_evaluate<<<bsize, gsize>>>(
@@ -223,7 +223,7 @@ Wrapper<T>::gmodel_smdisk_evaluate(
             spec_step,
             spec_zero,
             image, scube, rcube,
-            rdata, vdata, ddata);*/
+            rdata, vdata, ddata);
 }
 
 #define INSTANTIATE(T)          \

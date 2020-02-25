@@ -1,7 +1,7 @@
 #pragma once
 
-#include "gbkfit/drivers/host/common.hpp"
-#include "gbkfit/drivers/host/fftw3.hpp"
+#include "gbkfit/host/common.hpp"
+#include "gbkfit/host/fftw3_utils.hpp"
 
 namespace gbkfit { namespace host {
 

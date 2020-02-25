@@ -44,6 +44,9 @@ class Fitter(abc.ABC):
     def dump(self):
         pass
 
+    def __init__(self):
+        pass
+
     def fit(self, dataset, model, param_info):
 
         param_info = gbkfit.params.parse_param_fit_info(param_info, model.get_param_descs())

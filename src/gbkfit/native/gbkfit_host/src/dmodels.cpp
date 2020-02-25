@@ -1,6 +1,6 @@
 
-#include "gbkfit/drivers/host/dmodels.hpp"
-#include "gbkfit/drivers/host/kernels_main.hpp"
+#include "gbkfit/host/dmodels.hpp"
+#include "gbkfit/host/kernels_main.hpp"
 
 namespace gbkfit { namespace host {
 

@@ -1,7 +1,7 @@
 #pragma once
 
-#include "gbkfit/drivers/cuda/common.hpp"
-#include "gbkfit/drivers/cuda/cufft.hpp"
+#include "gbkfit/cuda/common.hpp"
+#include "gbkfit/cuda/cufft_utils.hpp"
 
 namespace gbkfit { namespace cuda {
 

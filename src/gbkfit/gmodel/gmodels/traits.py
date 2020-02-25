@@ -186,8 +186,9 @@ class RPTraitUniform(RPTrait):
     def has_ordinary_integral(self):
         return True
 
-    def integrate(self, params, nodes, rsep):
+    def integrate(self, params, nodes):
         ampl = params['a']
+        rsep = nodes[1] - nodes[0]
         rmin = nodes[0] - 0.5 * rsep
         rmax = nodes[-1] + 0.5 * rsep
         return np.pi * ampl * (rmax * rmax - rmin * rmin)

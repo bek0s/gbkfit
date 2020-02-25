@@ -1,6 +1,6 @@
 
-#include "gbkfit/drivers/cuda/gmodels.hpp"
-#include "gbkfit/drivers/cuda/wrapper.hpp"
+#include "gbkfit/cuda/gmodels.hpp"
+#include "gbkfit/cuda/wrapper.hpp"
 
 namespace gbkfit { namespace cuda {
 

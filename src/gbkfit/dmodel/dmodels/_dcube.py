@@ -36,6 +36,7 @@ class DCube:
             return int(new_size)
 
         # High-res cube size
+        # TODO: fft_size
         size_hi = (
             fft_size(size[0] * scale[0] + psf_size_hi[0] - 1),
             fft_size(size[1] * scale[1] + psf_size_hi[1] - 1),
@@ -155,7 +156,8 @@ class DCube:
 
         self._dcube = driver.make_dmodel_dcube(dtype)
 
-        psf3d_hi = driver.mem_copy_h2d(psf3d_hi)
+        if self._psf or self._lsf:
+            psf3d_hi = driver.mem_copy_h2d(psf3d_hi)
 
         self._dcube.prepare(
             size_lo, size_hi, edge_hi, scale,

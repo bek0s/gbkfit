@@ -552,6 +552,11 @@ gmodel_mcdisk_evaluate(
                 rpt_uids[tidx], rpt_cptr, rpt_pptr,
                 rnidx, &rnodes[1], nrnodes - 2);
 
+        if (sign < 0) {
+            bvalue = -bvalue;
+            //std::cout << bvalue << std::endl;
+        }
+
         // Calculate cartesian coordinates on disk plane.
         xd = rd * std::cos(theta);
         yd = rd * std::sin(theta);

@@ -119,6 +119,13 @@ SSAMPLER_GLOBAL_ARGS_OPT = dict(
     print_func=None, save_bounds=True
 )
 
+SSAMPLER_PARAMS_ARGS_REQ = dict(
+    # custom
+    min=None,
+    max=None,
+    prior=None,
+)
+
 SSAMPLER_PARAMS_ARGS_OPT = dict(
     # dynesty.NestedSampler()
     periodic=None,
@@ -166,20 +173,66 @@ def check_args(args, required_args, optional_args):
 
     missing_args = set(required_args).difference(args)
 
+    """
     if missing_args:
         raise RuntimeError(
             f"The following Fitter arguments are "
             f"required: {missing_args}.")
+    """
 
     unknown_args = set(args).difference({**required_args, **optional_args})
 
+    """
     if unknown_args:
         raise RuntimeError(
             f"The following Fitter arguments are "
             f"not recognised and will be ignored: {unknown_args}.")
+    """
+
+    valid_args = set(args).difference(unknown_args)
+
+    return {arg: args[arg] for arg in valid_args }, missing_args, unknown_args
 
 
+def process_global_args(args, req_args, opt_args):
 
+    accepted, missing, unknown = check_args(args, req_args, opt_args)
+
+    if missing:
+        raise RuntimeError()
+
+    if unknown:
+        log.warning("")
+
+    return accepted
+
+
+def process_params_args(params, req_args, opt_args):
+
+    accepted_params = {}
+    missing_params = {}
+    unknown_params = {}
+
+    for pname, pinfo in params.items():
+
+        accepted, missing, unknown = check_args(pinfo, req_args, opt_args)
+
+        if accepted:
+            accepted_params[pname] = accepted
+
+        if missing:
+            missing_params[pname] = missing
+
+        if unknown:
+            unknown_params[pname] = unknown
+
+    if missing_params:
+        raise RuntimeError()
+
+    if unknown_params:
+        log.warning("")
+
+    return accepted_params
 
 
 class FitterDynestySNestedSampling(FitterDynesty):
@@ -197,11 +250,15 @@ class FitterDynestySNestedSampling(FitterDynesty):
 
     def __init__(self, **kwargs):
         super().__init__()
-        self._kwargs = kwargs
 
-        check_args(kwargs, SSAMPLER_GLOBAL_ARGS_REQ, SSAMPLER_GLOBAL_ARGS_OPT)
+        self._kwargs = process_params_args(
+            kwargs, SSAMPLER_GLOBAL_ARGS_REQ, SSAMPLER_GLOBAL_ARGS_OPT)
 
     def _impl_impl_fit(self, data, model, params):
+
+        params = process_params_args(
+            params, SSAMPLER_GLOBAL_ARGS_OPT, SSAMPLER_GLOBAL_ARGS_OPT)
+
 
         pmins = []
         pmaxs = []

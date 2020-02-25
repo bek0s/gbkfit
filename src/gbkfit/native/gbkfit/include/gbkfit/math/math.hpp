@@ -1,8 +1,8 @@
 #pragma once
 
-#include "kernels_common.hpp"
+namespace gbkfit {
 
-namespace gbkfit { namespace host { namespace kernels {
+template <typename T> class RNG;
 
 template<typename T>
 constexpr T PI = T{3.14159265358979323846};
@@ -95,20 +95,20 @@ transform_rh_rotate_z(T& out_x, T& out_y, T x, T y, T theta)
     out_y = x * sintheta + y * costheta;
 }
 
-template<auto PDF, auto CDF, typename T, typename ...Ts> constexpr T
-_trunc_1d_pdf(T xmin, T xmax, T x, Ts ...args)
+template<typename PDF, typename CDF, typename T, typename ...Ts> constexpr T
+_trunc_1d_pdf(PDF pdf, CDF cdf, T xmin, T xmax, T x, Ts ...args)
 {
     return x >= xmin && x <= xmax
-            ? PDF(x, args...) / (CDF(xmax, args...) - CDF(xmin, args...))
+            ? pdf(x, args...) / (cdf(xmax, args...) - cdf(xmin, args...))
             : 0;
 }
 
-template<auto F, typename T, typename ...Ts> constexpr T
-_trunc_1d_rnd(T xmin, T xmax, RNG<T>& rng, Ts ...args)
+template<typename F, typename T, typename ...Ts> constexpr T
+_trunc_1d_rnd(F fun, T xmin, T xmax, RNG<T>& rng, Ts ...args)
 {
     T x;
     do {
-        x = F(rng, args...);
+        x = fun(rng, args...);
     } while (x < xmin && x > xmax);
     return x;
 }
@@ -151,7 +151,7 @@ uniform_1d_rnd(RNG<T>& rng, T xmin, T xmax)
 template<typename T> constexpr T
 uniform_1d_rnd_trunc(RNG<T>& rng, T b, T c, T xmin, T xmax)
 {
-    return _trunc_1d_rnd<uniform_1d_rnd<T>>(xmin, xmax, rng, b, c);
+    return _trunc_1d_rnd(uniform_1d_rnd<T>, xmin, xmax, rng, b, c);
 }
 
 template<typename T> constexpr T
@@ -163,7 +163,6 @@ exponential_1d_fun(T x, T a, T b, T c)
 template<typename T> constexpr T
 exponential_1d_cdf(T x, T b, T c)
 {
-    std::cout << "commented out" << std::endl;
 //  return T{0.5} + T{0.5} * sign(x - b) * (1 - std::exp(-std::abs(x - b) / c));
 }
 
@@ -231,7 +230,7 @@ gauss_1d_rnd(RNG<T>& rng, T b, T c)
 template<typename T> constexpr T
 gauss_1d_rnd_trunc(RNG<T>& rng, T b, T c, T xmin, T xmax)
 {
-    return _trunc_1d_rnd<gauss_1d_rnd<T>>(xmin, xmax, rng, b, c);
+    return _trunc_1d_rnd(gauss_1d_rnd<T>, xmin, xmax, rng, b, c);
 }
 
 template<typename T> constexpr T
@@ -247,7 +246,7 @@ ggauss_1d_cdf(T x, T b, T c, T d)
     (void)b;
     (void)c;
     (void)d;
-    assert(false);
+//  assert(false);
     return 0;
 }
 
@@ -265,7 +264,7 @@ ggauss_1d_pdf_trunc(T x, T b, T c, T d, T xmin, T xmax)
             xmin, xmax, x, b, c, d);
 }
 
-
+/*
 template<auto Target, auto Proposal, typename T, typename ...Ts> constexpr T
 _reject_sample_trunc_1d_rnd(T xmin, T xmax, RNG<T>& rng, Ts ...args)
 {
@@ -276,6 +275,7 @@ _reject_sample_trunc_1d_rnd(T xmin, T xmax, RNG<T>& rng, Ts ...args)
     } while (x < xmin && x > xmax);
     return x;
 }
+*/
 
 template<typename T, typename TProposal, typename TTarget> constexpr T
 sample_distribution(RNG<T>& rng, T ampl, TProposal proposal, TTarget target)
@@ -427,4 +427,4 @@ gsl_interp_bsearch(const T x_array[], T x, size_t index_lo, size_t index_hi)
     return ilo;
 }
 
-}}} // namespace gbkfit::host::kernels
+} // namespace gbkfit::host::kernels

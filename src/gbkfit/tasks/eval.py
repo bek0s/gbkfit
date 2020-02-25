@@ -31,6 +31,47 @@ def _prepare_config(config):
 
 
 def eval_(config):
+    """
+    import abc
+
+    class Base:
+
+        def __new__(cls):
+            print("Base.__new__")
+            print(super(Base, cls))
+            print(super())
+            instance = super(Base, cls).__new__(cls)
+            return instance
+
+        def __init__(self):
+            print("Base.__init__")
+            self.foo()
+
+        def foo(self):
+            print("Base:foo")
+
+    class Derived(Base):
+
+        def __new__(cls):
+            print("Derived.__new__")
+            print(super(Derived, cls))
+            print(super())
+            instance = super(Derived, cls).__new__(cls)
+            return instance
+
+        def __init__(self):
+            super().__init__()
+
+        def foo(self):
+            print("Derived:foo")
+
+
+    a = Derived()
+
+
+
+    exit()
+    """
 
     log.info("Initializing gbkfit...")
     gbkfit.init()

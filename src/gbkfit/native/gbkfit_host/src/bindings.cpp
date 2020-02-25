@@ -1,8 +1,8 @@
 
 #include <pybind11/pybind11.h>
 
-#include "gbkfit/drivers/host/dmodels.hpp"
-#include "gbkfit/drivers/host/gmodels.hpp"
+#include "gbkfit/host/dmodels.hpp"
+#include "gbkfit/host/gmodels.hpp"
 
 using namespace gbkfit::host;
 

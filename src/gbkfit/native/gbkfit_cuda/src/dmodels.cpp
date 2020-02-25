@@ -1,6 +1,6 @@
 
-#include "gbkfit/drivers/cuda/dmodels.hpp"
-#include "gbkfit/drivers/cuda/wrapper.hpp"
+#include "gbkfit/cuda/dmodels.hpp"
+#include "gbkfit/cuda/wrapper.hpp"
 
 namespace gbkfit { namespace cuda {
 
@@ -113,6 +113,13 @@ DModelDCube<T>::convolve(void) const
 template<typename T> void
 DModelDCube<T>::downscale(void) const
 {
+    Wrapper<T>::dmodel_dcube_downscale(
+            m_scale[0], m_scale[1], m_scale[2],
+            m_edge_hi[0], m_edge_hi[1], m_edge_hi[2],
+            m_size_hi[0], m_size_hi[1], m_size_hi[2],
+            m_size_lo[0], m_size_lo[1], m_size_lo[2],
+            m_scube_hi,
+            m_scube_lo);
 }
 
 #define INSTANTIATE(T)\

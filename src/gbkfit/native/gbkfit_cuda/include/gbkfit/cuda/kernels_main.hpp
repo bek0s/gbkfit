@@ -1,9 +1,40 @@
 #pragma once
 
-#include "gbkfit/drivers/cuda/cufft.hpp"
+#include "gbkfit/cuda/cufft_utils.hpp"
+
+#include "gbkfit/math/math.hpp"
+
+namespace gbkfit {
+/*
+template<typename T>
+struct RNG
+{
+    __device__
+    RNG(void) {}
+
+    __device__
+    T operator ()(void) {
+        return 0.2;
+    }
+};
+
+template<typename F, typename T, typename ...Ts> __device__ constexpr T
+_trunc_1d_rnd(F fun, T xmin, T xmax, RNG<T>& rng, Ts ...args);
+
+template<typename T> __device__ constexpr T
+gauss_1d_rnd(RNG<T>& rng, T b, T c);
+
+template<typename T> __device__ constexpr T
+gauss_1d_rnd_trunc(RNG<T>& rng, T b, T c, T xmin, T xmax);
+
+*/
+
+
+}
 
 
 namespace gbkfit { namespace cuda { namespace kernels {
+
 
 __device__
 void map_index_1d_to_3d(int& out_xidx,
@@ -190,11 +221,31 @@ gmodel_smdisk_evaluate(
         T* image, T* scube, T* bcube,
         T* bdata, T* vdata, T* ddata)
 {
-    if (image)
-        image[0] = 42;
+    int n = spat_size_x * spat_size_y * spat_size_z;
 
-    if (scube)
-        scube[0] = 42;
+    unsigned int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (tid >= n)
+        return;
+
+    if (image) {
+        image[tid] = 42;
+    }
+
+    if (scube) {
+        scube[tid] = 42;
+    }
+
+    if (bdata) {
+        bdata[tid] = 45;
+    }
+
+    if (vdata) {
+        vdata[tid] = 42;
+    }
+
+    if (ddata) {
+        ddata[tid] = 42;
+    }
 }
 
 }}} // namespace gbkfit::cuda::kernels

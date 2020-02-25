@@ -7,14 +7,15 @@ find_package(pybind11)
 find_package(CUDA REQUIRED)
 
 set(HEADER_FILES
-  include/gbkfit/drivers/cuda/common.hpp
-  include/gbkfit/drivers/cuda/cufft.hpp
-  include/gbkfit/drivers/cuda/dmodels.hpp
-  include/gbkfit/drivers/cuda/gmodels.hpp
-  include/gbkfit/drivers/cuda/kernels_main.hpp
-  include/gbkfit/drivers/cuda/kernels_math.hpp
-  include/gbkfit/drivers/cuda/kernels_traits.hpp
-  include/gbkfit/drivers/cuda/wrapper.hpp
+  include/gbkfit/cuda/common.hpp
+  include/gbkfit/cuda/cufft_utils.hpp
+  include/gbkfit/cuda/dmodels.hpp
+  include/gbkfit/cuda/gmodels.hpp
+  include/gbkfit/cuda/kernels_main.hpp
+  include/gbkfit/cuda/kernels_math.hpp
+  include/gbkfit/cuda/kernels_misc.hpp
+  include/gbkfit/cuda/kernels_traits.hpp
+  include/gbkfit/cuda/wrapper.hpp
 )
 
 set(SOURCE_FILES

@@ -1,6 +1,9 @@
 #pragma once
 
-#include "gbkfit/drivers/cuda/cufft.hpp"
+#include "gbkfit/cuda/cufft_utils.hpp"
+
+#include <cuda.h>
+#include <cuda_runtime_api.h>
 
 namespace gbkfit { namespace cuda {
 

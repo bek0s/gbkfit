@@ -1,8 +1,8 @@
 
 #include <pybind11/pybind11.h>
 
-#include "gbkfit/drivers/cuda/dmodels.hpp"
-#include "gbkfit/drivers/cuda/gmodels.hpp"
+#include "gbkfit/cuda/dmodels.hpp"
+#include "gbkfit/cuda/gmodels.hpp"
 
 using namespace gbkfit::cuda;
 

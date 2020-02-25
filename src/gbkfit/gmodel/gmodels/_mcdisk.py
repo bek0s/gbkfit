@@ -40,7 +40,7 @@ class MCDisk(_disk.Disk):
     def _impl_prepare(self, driver, dtype):
         self._disk = driver.make_gmodel_mcdisk(dtype)
         hasordint = [t.has_ordinary_integral() for t in self._rptraits]
-        size = sum([1 if h else self._subrnodes - 2 for h in hasordint])
+        size = sum([1 if h else len(self._subrnodes) - 2 for h in hasordint])
         self._hasordint = driver.mem_alloc_s(len(self._rptraits), np.bool)
         self._ncloudsptor = driver.mem_alloc_s(size, np.int32)
         self._hasordint[0][:] = hasordint
@@ -62,7 +62,7 @@ class MCDisk(_disk.Disk):
             for pdesc in trait.params_nw(self._nrnodes):
                 tparams[pdesc.name()] = tparams[pdesc.name()][1:-1]
 
-            integral = trait.integrate(tparams, self._m_subrnodes[0][1:-1], self._subrsep)
+            integral = trait.integrate(tparams, self._m_subrnodes[0][1:-1])
 
             tnclouds = integral / self._cflux
             if trait.has_ordinary_integral():
