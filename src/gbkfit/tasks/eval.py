@@ -4,6 +4,8 @@ import logging
 import time
 
 import astropy.io.fits as fits
+import numpy as np
+import scipy.stats as stats
 
 import gbkfit
 import gbkfit.broker
@@ -30,48 +32,7 @@ def _prepare_config(config):
         config, ['datasets', 'dmodels', 'gmodels'])
 
 
-def eval_(config):
-    """
-    import abc
-
-    class Base:
-
-        def __new__(cls):
-            print("Base.__new__")
-            print(super(Base, cls))
-            print(super())
-            instance = super(Base, cls).__new__(cls)
-            return instance
-
-        def __init__(self):
-            print("Base.__init__")
-            self.foo()
-
-        def foo(self):
-            print("Base:foo")
-
-    class Derived(Base):
-
-        def __new__(cls):
-            print("Derived.__new__")
-            print(super(Derived, cls))
-            print(super())
-            instance = super(Derived, cls).__new__(cls)
-            return instance
-
-        def __init__(self):
-            super().__init__()
-
-        def foo(self):
-            print("Derived:foo")
-
-
-    a = Derived()
-
-
-
-    exit()
-    """
+def eval_(config, perf=None):
 
     log.info("Initializing gbkfit...")
     gbkfit.init()
@@ -108,22 +69,21 @@ def eval_(config):
     params = gbkfit.params.convert_params_free_to_fixed(config['params'])
     model.set_param_exprs(params)
 
-    for i in range(10):
-        log.info("Model evaluation started.")
-        t1 = time.time_ns()
-        out_dextra = []
-        out_gextra = []
-        out_params = {}
-        out_eparams = {}
-        out_eparams_free = {}
-        out_eparams_fixed = {}
-        out_models = model.evaluate(
-            {}, True, True, out_dextra, out_gextra,
-            out_params, out_eparams, out_eparams_free, out_eparams_fixed)
-        t2 = time.time_ns()
-        t_ms = (t2 - t1) // 1000000
-        log.info("Model evaluation completed.")
-        log.info(f"Elapsed time: {t_ms} ms.")
+    log.info("Model evaluation started.")
+    t1 = time.time_ns()
+    out_dextra = []
+    out_gextra = []
+    out_params = {}
+    out_eparams = {}
+    out_eparams_free = {}
+    out_eparams_fixed = {}
+    out_models = model.evaluate(
+        {}, True, True, out_dextra, out_gextra,
+        out_params, out_eparams, out_eparams_free, out_eparams_fixed)
+    t2 = time.time_ns()
+    t_ms = (t2 - t1) // 1000000
+    log.info("Model evaluation completed.")
+    log.info(f"Elapsed time: {t_ms} ms.")
 
     def save_output(filename, data):
         hdu = fits.PrimaryHDU(data)
@@ -140,19 +100,27 @@ def eval_(config):
         for key, value in out_gextra[i].items():
             save_output(f'{prefix}_extra_gmodel_{key}.fits', value)
 
-
-
-"""
-gbkfit.driver.drivers.DriverHost()
-gbkfit.driver.drivers.DriverCUDA()
-gbkfit.dmodel.dmodels.DModelSCube()
-gbkfit.gmodel.gmodels.GModelKinematics3D()
-gbkfit.psflsf.psflsfs.PSFGauss()
-gbkfit.psflsf.psflsfs.LSFGauss()
-gbkfit.fitter.fitters.FitterDynestyDynamicNS()
-gbkfit.fitter.fitters.FitterDynestyStaticNS()
-
-
-gbkfit.params.params
-gbkfit.model.Model()
-"""
+    if perf > 0:
+        times = []
+        log.info("Model evaluation performance test started.")
+        for i in range(perf):
+            t1 = time.time_ns()
+            model.evaluate({}, True, True)
+            t2 = time.time_ns()
+            t_ms = (t2 - t1) // 1000000
+            times.append(t_ms)
+            log.info(f"Evaluation {i}: {t_ms} ms")
+        tmin = np.round(np.min(times), 1)
+        tmax = np.round(np.max(times), 1)
+        tmean = np.round(np.mean(times), 1)
+        tstddev = np.round(np.std(times), 1)
+        tmedian = np.round(np.median(times), 1)
+        tmad = np.round(stats.median_absolute_deviation(times), 1)
+        log.info(
+            f"Model evaluation performance test completed. \n"
+            f"min: {tmin} ms, "
+            f"max: {tmax} ms, "
+            f"mean: {tmean} ms, "
+            f"stddev: {tstddev} ms, "
+            f"median: {tmedian} ms, "
+            f"mad: {tmad} ms.")

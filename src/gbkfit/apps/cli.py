@@ -44,16 +44,8 @@ class _CheckDataCount(argparse.Action):
     def __call__(self, parser, namespace, values, option_string=None):
         if len(namespace.data) != len(values):
             parser.error(
-                f"argument {option_string} must have the same length with "
-                f"argument data")
-
-
-class _CheckDataCount2(argparse.Action):
-    def __call__(self, parser, namespace, values, option_string=None):
-        if len(namespace.data) != len(values):
-            parser.error(
-                f"argument {option_string} must have the same length with "
-                f"argument data")
+                f"Argument '{option_string}' must have the same length with "
+                f"argument 'data'")
 
 
 def main():
@@ -74,6 +66,7 @@ def main():
 
     parser_eval = parsers_task.add_parser('eval', parents=[parser_common])
     parser_eval.add_argument('config', type=str)
+    parser_eval.add_argument('--perf', type=int, default=0)
 
     #
     # Create parser for prep task
@@ -84,15 +77,11 @@ def main():
     parser_prep_common.add_argument('--dtype', type=str, default='float32')
     parser_prep_input_1 = argparse.ArgumentParser(add_help=False)
     parser_prep_input_1.add_argument('data', type=str)
-    parser_prep_input_1.add_argument('--unit', type=str)
     parser_prep_input_1.add_argument('--data-e', type=str)
-    parser_prep_input_1.add_argument('--unit-e', type=str)
     parser_prep_input_1.add_argument('--data-m', type=str)
     parser_prep_input_n = argparse.ArgumentParser(add_help=False)
     parser_prep_input_n.add_argument('data', nargs='+', type=str)
-    parser_prep_input_n.add_argument('--unit', nargs='+', type=str, action=_CheckDataCount)
     parser_prep_input_n.add_argument('--data-e', nargs='+', type=str, action=_CheckDataCount)
-    parser_prep_input_n.add_argument('--unit-e', nargs='+', type=str, action=_CheckDataCount)
     parser_prep_input_n.add_argument('--data-m', nargs='+', type=str, action=_CheckDataCount)
     parser_prep_roi_spat_1d = argparse.ArgumentParser(add_help=False)
     parser_prep_roi_spat_1d.add_argument('--roi-spat', nargs=2, type=int)
@@ -109,8 +98,7 @@ def main():
     parser_prep_clip_n.add_argument('--clip-min', nargs='+', type=float, action=_CheckDataCount)
     parser_prep_clip_n.add_argument('--clip-max', nargs='+', type=float, action=_CheckDataCount)
     parser_prep_clip_n.add_argument('--sclip-sigma', nargs='+', type=float, action=_CheckDataCount)
-    parser_prep_clip_n.add_argument('--sclip-iters', nargs='+', type=int, default=1, action=_CheckDataCount2)
-
+    parser_prep_clip_n.add_argument('--sclip-iters', nargs='+', type=int, default=1, action=_CheckDataCount)
     parser_prep_ccl = argparse.ArgumentParser(add_help=False)
     parser_prep_ccl.add_argument('--ccl-lcount', type=int)
     parser_prep_ccl.add_argument('--ccl-pcount', type=int)
@@ -119,22 +107,22 @@ def main():
     parser_prep = parsers_task.add_parser('prep')
     parsers_prep = parser_prep.add_subparsers(dest='prep_task')
     parsers_prep.required = True
-    parser_prep_image = parsers_prep.add_parser('image', parents=[
+    parsers_prep.add_parser('image', parents=[
         parser_prep_input_1,
         parser_prep_roi_spat_2d,
         parser_prep_clip_1, parser_prep_ccl,
         parser_prep_common, parser_common])
-    parser_prep_lslit = parsers_prep.add_parser('lslit', parents=[
+    parsers_prep.add_parser('lslit', parents=[
         parser_prep_input_1,
         parser_prep_roi_spat_1d, parser_prep_roi_spec_1d,
         parser_prep_clip_1, parser_prep_ccl,
         parser_prep_common, parser_common])
-    parser_prep_mmaps = parsers_prep.add_parser('mmaps', parents=[
+    parsers_prep.add_parser('mmaps', parents=[
         parser_prep_input_n,
         parser_prep_roi_spat_2d,
         parser_prep_clip_n, parser_prep_ccl,
         parser_prep_common, parser_common])
-    parser_prep_scube = parsers_prep.add_parser('scube', parents=[
+    parsers_prep.add_parser('scube', parents=[
         parser_prep_input_1,
         parser_prep_roi_spat_2d, parser_prep_roi_spec_1d,
         parser_prep_clip_1, parser_prep_ccl,
@@ -164,31 +152,31 @@ def main():
 
     if args.task == 'eval':
         import gbkfit.tasks.eval
-        gbkfit.tasks.eval.eval_(args.config)
+        gbkfit.tasks.eval.eval_(args.config, args.perf)
 
     elif args.task == 'prep':
         import gbkfit.tasks.prep
         if args.prep_task == 'image':
             gbkfit.tasks.prep.prep_image(
-                args.data, args.data_e, args.data_m, args.unit, args.unit_e,
+                args.data, args.data_e, args.data_m,
                 args.roi_spat, args.clip_min, args.clip_max,
                 args.ccl_lcount, args.ccl_pcount, args.ccl_lratio,
                 args.sclip_sigma, args.sclip_iters, args.minify, args.dtype)
         elif args.prep_task == 'lslit':
             gbkfit.tasks.prep.prep_lslit(
-                args.data, args.data_e, args.data_m, args.unit, args.unit_e,
+                args.data, args.data_e, args.data_m,
                 args.roi_spat, args.roi_spec, args.clip_min, args.clip_max,
                 args.ccl_lcount, args.ccl_pcount, args.ccl_lratio,
                 args.sclip_sigma, args.sclip_iters, args.minify, args.dtype)
         elif args.prep_task == 'mmaps':
             gbkfit.tasks.prep.prep_mmaps(
-                args.data, args.data_e, args.data_m, args.unit, args.unit_e,
+                args.data, args.data_e, args.data_m,
                 args.roi_spat, args.clip_min, args.clip_max,
                 args.ccl_lcount, args.ccl_pcount, args.ccl_lratio,
                 args.sclip_sigma, args.sclip_iters, args.minify, args.dtype)
         elif args.prep_task == 'scube':
             gbkfit.tasks.prep.prep_scube(
-                args.data, args.data_e, args.data_m, args.unit, args.unit_e,
+                args.data, args.data_e, args.data_m,
                 args.roi_spat, args.roi_spec, args.clip_min, args.clip_max,
                 args.ccl_lcount, args.ccl_pcount, args.ccl_lratio,
                 args.sclip_sigma, args.sclip_iters, args.minify, args.dtype)

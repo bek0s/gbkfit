@@ -28,16 +28,7 @@ def _read_data(file_d, file_e, file_m):
     if data_m is not None:
         data_m[np.nonzero(data_m)] = 1
         data_m[np.isnan(data_m)] = 0
-    """
-    wcs_d = astropy.wcs.WCS(header_d)
-    wcs_e = astropy.wcs.WCS(header_e)
-    if unit_d is None or not unit_d.strip() or unit_d.lower() == 'auto':
-        unit_d = header_d.get('BUNIT', '')
-    if unit_e is None or not unit_e.strip() or unit_e.lower() == 'auto':
-        unit_e = header_e.get('BUNIT', unit_d)
-    unit_d = units.Unit(unit_d)
-    unit_e = units.Unit(unit_e)
-    """
+
     return data_d, data_e, data_m, header_d, header_e
 
 
@@ -131,7 +122,7 @@ def _minify_data(data_d, data_e, data_m, mask):
 
 
 def prep_image(
-        file_d, file_e, file_m, unit_d, unit_e,
+        file_d, file_e, file_m,
         roi_spat, clip_min, clip_max, ccl_lcount, ccl_pcount, ccl_lratio,
         sclip_sigma, sclip_iters, minify, dtype):
 
@@ -168,7 +159,7 @@ def prep_image(
 
 
 def prep_lslit(
-        file_d, file_e, file_m, unit_d, unit_e,
+        file_d, file_e, file_m,
         roi_spat, roi_spec, clip_min, clip_max,
         ccl_lcount, ccl_pcount, ccl_lratio,
         sclip_sigma, sclip_iters, minify, dtype):
@@ -207,7 +198,7 @@ def prep_lslit(
 
 
 def prep_mmaps(
-        file_d, file_e, file_m, unit_d, unit_e,
+        file_d, file_e, file_m,
         roi_spat, clip_min, clip_max, ccl_lcount, ccl_pcount, ccl_lratio,
         sclip_sigma, sclip_iters, minify, dtype):
 
@@ -262,7 +253,7 @@ def prep_mmaps(
 
 
 def prep_scube(
-        file_d, file_e, file_m, unit_d, unit_e,
+        file_d, file_e, file_m,
         roi_spat, roi_spec, clip_min, clip_max,
         ccl_lcount, ccl_pcount, ccl_lratio,
         sclip_sigma, sclip_iters, minify, dtype):
