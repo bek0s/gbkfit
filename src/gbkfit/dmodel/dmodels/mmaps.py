@@ -48,13 +48,13 @@ class DModelMMaps(gbkfit.dmodel.DModel):
             self, size, step, cval, scale, orders,
             psf=None, lsf=None, dtype=None, dataset=None):
         super().__init__()
-        if any(order < 0 or order > 2 for order in orders):
-            raise RuntimeError("moment orders must be between 0 and 2")
         size = tuple(size[:3])
         step = tuple(step[:3]) if step else (1, 1)
         cval = tuple(cval[:3]) if cval else (0, 0)
         scale = tuple(scale[:3]) if scale else (1, 1)
         orders = tuple(sorted(set(orders))) if orders else (0, 1, 2)
+        if any(order < 0 or order > 2 for order in orders):
+            raise RuntimeError("moment orders must be between 0 and 2")
         if dtype is None:
             dtype = np.float32
         if len(step) == 2:
@@ -121,9 +121,16 @@ class DModelMMaps(gbkfit.dmodel.DModel):
         driver = self._driver
         self._dcube.prepare(driver)
         self._mmaps = driver.make_dmodel_mmaps(self.dtype())
+
         shape = (self.size() + (len(self.orders()),))[::-1]
         self._m_mmaps = driver.mem_alloc_s(shape, self.dtype())
         self._d_orders = driver.mem_copy_h2d(np.array(self.orders(), np.int32))
+
+        self._mmaps.prepare(
+            self._dcube.size()[:2],
+            self._dcube.size()[2], self._dcube.step()[2], self._dcube.zero()[2],
+            np.nan,
+            self._dcube.data()[1], self._m_mmaps[1], self._d_orders)
 
     def _evaluate_impl(self, params, out_dextra, out_gextra):
         driver = self._driver
@@ -139,13 +146,7 @@ class DModelMMaps(gbkfit.dmodel.DModel):
             dcube.scratch_zero(),
             out_gextra)
         dcube.evaluate(out_dextra)
-        self._mmaps.moments(
-            dcube.size()[:2],
-            dcube.size()[2],
-            dcube.step()[2],
-            dcube.zero()[2],
-            dcube.data()[1],
-            self._d_orders, mmaps[1])
+        self._mmaps.moments()
         output = {}
         for i, oname in enumerate(self.onames()):
             h_mmap = mmaps[0][i, :, :]

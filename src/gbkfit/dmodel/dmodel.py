@@ -31,6 +31,9 @@ class DModel(abc.ABC):
         self._driver = None
         self._gmodel = None
 
+    def ndim(self):
+        return len(self.size())
+
     @abc.abstractmethod
     def size(self):
         pass
@@ -48,6 +51,8 @@ class DModel(abc.ABC):
         pass
 
     def submodel(self, min_, max_):
+        if self.ndim() != len(min_) != len(max_):
+            raise RuntimeError()
         min_ = np.asarray(min_)
         max_ = np.asarray(max_)
         size = np.asarray(self.size())
@@ -62,8 +67,8 @@ class DModel(abc.ABC):
     def prepare(self, driver, gmodel):
         if not self.is_compatible(gmodel):
             raise RuntimeError(
-                f"dmodel of type '{self.type()}' is not compatible with "
-                f"gmodel of type '{gmodel.type()}")
+                f"DModel of type '{self.type()}' is not compatible with "
+                f"GModel of type '{gmodel.type()}'")
         self._driver = driver
         self._gmodel = gmodel
         self._prepare_impl()

@@ -485,7 +485,11 @@ class RPTraitNWDistortion(RPTrait):
         return False
 
     def integrate(self, params, nodes):
-        raise NotImplementedError()
+        a = params['a']
+        s = params['s']
+        foo = _integrate_nw(nodes, gbkfit.math.gauss_1d_fun, a, 0, s * nodes)
+        #foo = a * np.sqrt(2 * np.pi) / np.sqrt(1 / s * s) * (nodes[1] - nodes[0])
+        return foo
 
 
 class RHTraitUniform(RHTrait):

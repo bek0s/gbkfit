@@ -50,8 +50,6 @@ class _CheckDataCount(argparse.Action):
 
 class _CheckDataCount2(argparse.Action):
     def __call__(self, parser, namespace, values, option_string=None):
-        print(len(namespace.data))
-        print(len(values))
         if len(namespace.data) != len(values):
             parser.error(
                 f"argument {option_string} must have the same length with "
@@ -60,8 +58,10 @@ class _CheckDataCount2(argparse.Action):
 
 def main():
 
+    from gbkfit import __version__ as version
+
     parser = argparse.ArgumentParser()
-    parser.add_argument('--version', action='version', version='alpha')
+    parser.add_argument('-v', '--version', action='version', version=version)
     parsers_task = parser.add_subparsers(dest='task')
     parsers_task.required = True
 
@@ -110,7 +110,6 @@ def main():
     parser_prep_clip_n.add_argument('--clip-max', nargs='+', type=float, action=_CheckDataCount)
     parser_prep_clip_n.add_argument('--sclip-sigma', nargs='+', type=float, action=_CheckDataCount)
     parser_prep_clip_n.add_argument('--sclip-iters', nargs='+', type=int, default=1, action=_CheckDataCount2)
-
 
     parser_prep_ccl = argparse.ArgumentParser(add_help=False)
     parser_prep_ccl.add_argument('--ccl-lcount', type=int)

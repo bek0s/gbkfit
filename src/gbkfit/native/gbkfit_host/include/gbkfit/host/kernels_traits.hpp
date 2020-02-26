@@ -143,8 +143,6 @@ p_trait_nw_distortion(
     out = a * std::exp(-(t * t * r * r) / (2 * s * s));
 }
 
-// ----
-
 template<typename T> void
 rp_trait_sample_polar_coords(T& out_r, T& out_t, RNG<T>& rng, T rmin, T rmax)
 {
@@ -348,6 +346,14 @@ rp_trait_nw_distortion_rnd(
         RNG<T>& rng, int nidx, const T* nodes, int nnodes,
         const T* params)
 {
+    T p = params[1 * nnodes + nidx] * DEG_TO_RAD<T>;
+    T s = params[2 * nnodes + nidx];
+    T rsep = nodes[1] - nodes[0];
+    T rmin = nodes[nidx] - rsep * T{0.5};
+    T rmax = nodes[nidx] + rsep * T{0.5};
+    out_r = std::sqrt(rmax * rmax + (rmin * rmin - rmax * rmax) * rng());
+//  out_t = 2 * PI<T> * rng();
+    out_t = gauss_1d_rnd(rng, p, s / nodes[nidx]);
 }
 
 template<typename T> void
