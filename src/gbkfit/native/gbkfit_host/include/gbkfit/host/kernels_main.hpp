@@ -308,7 +308,8 @@ gmodel_smdisk_evaluate(
         // Selection traits
         if (spt_uids)
         {
-            p_traits<sp_trait<T>>(
+            p_traits(
+                    sp_trait<T>,
                     ptvalues,
                     nst, spt_uids,
                     spt_cvalues, spt_ccounts,
@@ -326,7 +327,8 @@ gmodel_smdisk_evaluate(
         // Warp traits
         if (wpt_uids)
         {
-            p_traits<wp_trait<T>>(
+            p_traits(
+                    wp_trait<T>,
                     ptvalues,
                     nwt, wpt_uids,
                     wpt_cvalues, wpt_ccounts,
@@ -343,7 +345,8 @@ gmodel_smdisk_evaluate(
         // Brightness traits
         if (rpt_uids)
         {
-            p_traits<rp_trait<T>>(
+            p_traits(
+                    rp_trait<T>,
                     ptvalues,
                     nrt, rpt_uids,
                     rpt_cvalues, rpt_ccounts,
@@ -353,7 +356,8 @@ gmodel_smdisk_evaluate(
         }
         if (rht_uids)
         {
-            h_traits<rh_trait<T>>(
+            h_traits(
+                    rh_trait<T>,
                     htvalues,
                     nrt, rht_uids,
                     rht_cvalues, rht_ccounts,
@@ -366,7 +370,8 @@ gmodel_smdisk_evaluate(
         // Velocity traits
         if (vpt_uids)
         {
-            p_traits<vp_trait<T>>(
+            p_traits(
+                    vp_trait<T>,
                     ptvalues,
                     nvt, vpt_uids,
                     vpt_cvalues, vpt_ccounts,
@@ -376,7 +381,8 @@ gmodel_smdisk_evaluate(
         }
         if (vht_uids)
         {
-            h_traits<vh_trait<T>>(
+            h_traits(
+                    vh_trait<T>,
                     htvalues,
                     nvt, vht_uids,
                     vht_cvalues, vht_ccounts,
@@ -389,7 +395,8 @@ gmodel_smdisk_evaluate(
         // Dispersion traits
         if (dpt_uids)
         {
-            p_traits<dp_trait<T>>(
+            p_traits(
+                    dp_trait<T>,
                     ptvalues,
                     ndt, dpt_uids,
                     dpt_cvalues, dpt_ccounts,
@@ -399,7 +406,8 @@ gmodel_smdisk_evaluate(
         }
         if (dht_uids)
         {
-            h_traits<dh_trait<T>>(
+            h_traits(
+                    dh_trait<T>,
                     htvalues,
                     ndt, dht_uids,
                     dht_cvalues, dht_ccounts,
@@ -574,7 +582,8 @@ gmodel_mcdisk_evaluate(
         // Selection traits
         if (spt_uids)
         {
-            p_traits<sp_trait<T>>(
+            p_traits(
+                    sp_trait<T>,
                     ptvalues,
                     nst, spt_uids,
                     spt_cvalues, spt_ccounts,
@@ -595,7 +604,8 @@ gmodel_mcdisk_evaluate(
         // Warp traits
         if (wpt_uids)
         {
-            p_traits<wp_trait<T>>(
+            p_traits(
+                    wp_trait<T>,
                     ptvalues,
                     nwt, wpt_uids,
                     wpt_cvalues, wpt_ccounts,
@@ -634,7 +644,8 @@ gmodel_mcdisk_evaluate(
         // Velocity traits
         if (vpt_uids)
         {
-            p_traits<vp_trait<T>>(
+            p_traits(
+                    vp_trait<T>,
                     ptvalues,
                     nvt, vpt_uids,
                     vpt_cvalues, vpt_ccounts,
@@ -644,7 +655,8 @@ gmodel_mcdisk_evaluate(
         }
         if (vht_uids)
         {
-            h_traits<vh_trait<T>>(
+            h_traits(
+                    vh_trait<T>,
                     htvalues,
                     nvt, vht_uids,
                     vht_cvalues, vht_ccounts,
@@ -657,7 +669,8 @@ gmodel_mcdisk_evaluate(
         // Dispersion traits
         if (dpt_uids)
         {
-            p_traits<dp_trait<T>>(
+            p_traits(
+                    dp_trait<T>,
                     ptvalues,
                     ndt, dpt_uids,
                     dpt_cvalues, dpt_ccounts,
@@ -667,7 +680,8 @@ gmodel_mcdisk_evaluate(
         }
         if (dht_uids)
         {
-            h_traits<dh_trait<T>>(
+            h_traits(
+                    dh_trait<T>,
                     htvalues,
                     ndt, dht_uids,
                     dht_cvalues, dht_ccounts,

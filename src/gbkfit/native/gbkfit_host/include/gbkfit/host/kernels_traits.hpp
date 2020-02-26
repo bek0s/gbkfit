@@ -74,14 +74,14 @@ p_trait_sech2(T& out, T r, const T* params)
     out = sech2_1d_fun(r, a, T{0}, s);
 }
 
-template<typename T, typename F> void
-p_trait_mixture(T& out, F fun, T r, T theta, const T* consts, const T* params)
+template<typename F, typename T> void
+p_trait_mixture(F fun, T& out, T r, T theta, const T* consts, const T* params)
 {
     T res = 0;
     int nblobs = std::rint(consts[0]);
     for(int i = 0; i < nblobs; ++i)
     {
-        T blob_r = params[0*nblobs+i];  // polar coord (radius)
+        T blob_r = params[         i];  // polar coord (radius)
         T blob_t = params[1*nblobs+i];  // polar coord (angle)
         T blob_a = params[2*nblobs+i];  // amplitude
         T blob_s = params[3*nblobs+i];  // scale
@@ -103,27 +103,23 @@ p_trait_mixture(T& out, F fun, T r, T theta, const T* consts, const T* params)
 template<typename T> void
 p_trait_mixture_moffat(T& out, T r, T theta, const T* consts, const T* params)
 {
-    p_trait_mixture(out, moffat_1d_fun<T>, r, theta, consts, params);
+    p_trait_mixture(moffat_1d_fun<T>, out, r, theta, consts, params);
 }
 
 template<typename T> void
 p_trait_mixture_sgauss(T& out, T r, T theta, const T* consts, const T* params)
 {
-    p_trait_mixture(out, ggauss_1d_fun<T>, r, theta, consts, params);
+    p_trait_mixture(ggauss_1d_fun<T>, out, r, theta, consts, params);
 }
 
 template <typename T> void
-p_trait_nw_uniform(
-        T& out,
-        int nidx, const T* nodes, T r,
-        const T* params)
+p_trait_nw_uniform(T& out, int nidx, const T* nodes, T r, const T* params)
 {
     out = piecewise(0, 1, r, nidx, nodes, params);
 }
 
 template<typename T> void
-sample_polar_coords(
-        T& out_r, T& out_t, RNG<T>& rng, T rmin, T rmax)
+sample_polar_coords(T& out_r, T& out_t, RNG<T>& rng, T rmin, T rmax)
 {
     out_r = std::sqrt(rmax * rmax + (rmin * rmin - rmax * rmax) * rng());
     out_t = 2 * PI<T> * rng();
@@ -131,9 +127,10 @@ sample_polar_coords(
 
 template<typename T> void
 sample_polar_coords_nw(
-        T& out_r, T& out_t, RNG<T>& rng, int nidx, const T* nodes)
+        T& out_r, T& out_t,
+        RNG<T>& rng, int nidx, const T* nodes)
 {
-    T rsep = nodes[0] + nodes[1];
+    T rsep = nodes[1] - nodes[0];
     T rmin = nodes[nidx] - rsep * T{0.5};
     T rmax = nodes[nidx] + rsep * T{0.5};
     sample_polar_coords(out_r, out_t, rng, rmin, rmax);
@@ -244,7 +241,7 @@ template<typename T> void
 rp_trait_moffat_rnd(
         T& out_r, T& out_t, RNG<T>& rng, int nidx, const T* nodes)
 {
-    p_trait_nw_uniform_rnd(out_r, out_t, rng, nidx, nodes);
+    sample_polar_coords_nw(out_r, out_t, rng, nidx, nodes);
 }
 
 template<typename T> void
@@ -328,8 +325,8 @@ rp_trait_nw_harmonic_rnd(
     sample_polar_coords_nw(out_r, out_t, rng, nidx, nodes);
 
     T k = consts[0];
-    T a = params[0 * nnodes + nidx];
-    T p = params[1 * nnodes + nidx];
+    T a = params[         nidx];
+    T p = params[nnodes + nidx];
 
     T value_rnd = a * (rng() * 2 - T{1});
     T value_fun = a * std::cos(k * (out_t - p));
@@ -346,7 +343,10 @@ rp_trait_nw_distortion(
 }
 
 template<typename T> void
-rp_trait_nw_distortion_rnd(T& out_r, T& out_t, RNG<T>& rng, int nidx, const T* nodes, int nnodes, const T* params)
+rp_trait_nw_distortion_rnd(
+        T& out_r, T& out_t,
+        RNG<T>& rng, int nidx, const T* nodes, int nnodes,
+        const T* params)
 {
 }
 
@@ -376,7 +376,6 @@ rh_trait_exponential_rnd(T& out, RNG<T>& rng, const T* params)
 {
     T size = params[0];
     out = exponential_1d_rnd(rng, T{0}, size);
-    std::cout << out << std::endl;
 }
 
 template<typename T> void
@@ -438,11 +437,29 @@ rh_trait_sech2_rnd(T& out, RNG<T>& rng, const T* params)
 }
 
 template<typename T> void
+vp_trait_make_tan(T& out, T theta, T incl)
+{
+    out *= std::cos(theta) * std::sin(incl);
+}
+
+template<typename T> void
+vp_trait_make_rad(T& out, T theta, T incl)
+{
+    out *= std::sin(theta) * std::sin(incl);
+}
+
+template<typename T> void
+vp_trait_make_ver(T& out, T incl)
+{
+    out *= std::cos(incl);
+}
+
+template<typename T> void
 vp_trait_tan_uniform(T& out, T theta, T incl, const T* params)
 {
     T vt = params[0];
     out = vt;
-    out *= std::cos(theta) * std::sin(incl);
+    vp_trait_make_tan(out, theta, incl);
 }
 
 template<typename T> void
@@ -451,7 +468,7 @@ vp_trait_tan_arctan(T& out, T r, T theta, T incl, const T* params)
     T rt = params[0];
     T vt = params[1];
     out = vt * (2/PI<T>) * std::atan(r/rt);
-    out *= std::cos(theta) * std::sin(incl);
+    vp_trait_make_tan(out, theta, incl);
 }
 
 template<typename T> void
@@ -460,7 +477,7 @@ vp_trait_tan_boissier(T& out, T r, T theta, T incl, const T* params)
     T rt = params[0];
     T vt = params[1];
     out =  vt * (1 - std::exp(-r/rt));
-    out *= std::cos(theta) * std::sin(incl);
+    vp_trait_make_tan(out, theta, incl);
 }
 
 template<typename T> void
@@ -471,7 +488,7 @@ vp_trait_tan_epinat(T& out, T r, T theta, T incl, const T* params)
     T a = params[2];
     T b = params[3];
     out = vt * std::pow(r/rt, b) / (1 + std::pow(r/rt, a));
-    out *= std::cos(theta) * std::sin(incl);
+    vp_trait_make_tan(out, theta, incl);
 }
 
 template<typename T> void
@@ -480,7 +497,7 @@ vp_trait_tan_flat(T& out, T r, T theta, T incl, const T* params)
     T rt = params[0];
     T vt = params[1];
     out = r < rt ? vt * r/rt : vt;
-    out *= std::cos(theta) * std::sin(incl);
+    vp_trait_make_tan(out, theta, incl);
 }
 
 template<typename T> void
@@ -489,7 +506,7 @@ vp_trait_tan_tanh(T& out, T r, T theta, T incl, const T* params)
     T rt = params[0];
     T vt = params[1];
     out = vt * std::tanh(r/rt);
-    out *= std::cos(theta) * std::sin(incl);
+    vp_trait_make_tan(out, theta, incl);
 }
 
 template<typename T> void
@@ -499,7 +516,7 @@ vp_trait_nw_tan_uniform(
         const T* params)
 {
     p_trait_nw_uniform(out, nidx, nodes, r, params);
-    out *= std::cos(theta) * std::sin(incl);
+    vp_trait_make_tan(out, theta, incl);
 }
 
 template<typename T> void
@@ -509,7 +526,7 @@ vp_trait_nw_tan_harmonic(
         const T* consts, const T* params)
 {
     p_trait_nw_harmonic(out, nidx, nodes, nnodes, r, theta, consts, params);
-    out *= std::cos(theta) * std::sin(incl);
+    vp_trait_make_tan(out, theta, incl);
 }
 
 template<typename T> void
@@ -519,7 +536,7 @@ vp_trait_nw_rad_uniform(
         const T* params)
 {
     p_trait_nw_uniform(out, nidx, nodes, r, params);
-    out *= std::sin(theta) * std::sin(incl);
+    vp_trait_make_rad(out, theta, incl);
 }
 
 template<typename T> void
@@ -529,7 +546,7 @@ vp_trait_nw_rad_harmonic(
         const T* consts, const T* params)
 {
     p_trait_nw_harmonic(out, nidx, nodes, nnodes, r, theta, consts, params);
-    out *= std::sin(theta) * std::sin(incl);
+    vp_trait_make_rad(out, theta, incl);
 }
 
 template<typename T> void
@@ -539,7 +556,7 @@ vp_trait_nw_ver_uniform(
         const T* params)
 {
     p_trait_nw_uniform(out, nidx, nodes, r, params);
-    out *= std::cos(incl);
+    vp_trait_make_ver(out, incl);
 }
 
 template<typename T> void
@@ -549,14 +566,11 @@ vp_trait_nw_ver_harmonic(
         const T* consts, const T* params)
 {
     p_trait_nw_harmonic(out, nidx, nodes, nnodes, r, theta, consts, params);
-    out *= std::cos(incl);
+    vp_trait_make_ver(out, incl);
 }
 
 template<typename T> void
-vp_trait_nw_los_uniform(
-        T& out,
-        int nidx, const T* nodes, T r,
-        const T* params)
+vp_trait_nw_los_uniform(T& out, int nidx, const T* nodes, T r, const T* params)
 {
     p_trait_nw_uniform(out, nidx, nodes, r, params);
 }
@@ -625,10 +639,7 @@ dp_trait_mixture_moffat(T& out, T r, T theta, const T* consts, const T* params)
 }
 
 template<typename T> void
-dp_trait_nw_uniform(
-        T& out,
-        int nidx, const T* nodes, T r,
-        const T* params)
+dp_trait_nw_uniform(T& out, int nidx, const T* nodes, T r, const T* params)
 {
     p_trait_nw_uniform(out, nidx, nodes, r, params);
 }
@@ -652,10 +663,7 @@ dp_trait_nw_distortion(
 }
 
 template<typename T> void
-wp_trait_nw_uniform(
-        T& out,
-        int nidx, const T* nodes, T r,
-        const T* params)
+wp_trait_nw_uniform(T& out, int nidx, const T* nodes, T r, const T* params)
 {
     p_trait_nw_uniform(out, nidx, nodes, r, params);
 }
@@ -814,9 +822,6 @@ rp_trait_rnd(
         int uid, const T* consts, const T* params,
         int nidx, const T* nodes, int nnodes)
 {
-    (void)consts;
-    (void)nidx;
-
     out_s = 1;
     out_r = NAN;
     out_t = NAN;
@@ -840,6 +845,10 @@ rp_trait_rnd(
         break;
     case RP_TRAIT_UID_LORENTZ:
         rp_trait_lorentz_rnd(
+                out_r, out_t, rng, nidx, nodes);
+        break;
+    case RP_TRAIT_UID_MOFFAT:
+        rp_trait_moffat_rnd(
                 out_r, out_t, rng, nidx, nodes);
         break;
     case RP_TRAIT_UID_SECH2:
@@ -1143,8 +1152,9 @@ sp_trait(T& out,
     }
 }
 
-template<auto F, typename T, typename ...Ts> void
+template<typename F, typename T, typename ...Ts> void
 p_traits(
+        F fun,
         T* out,
         int ntraits, const int* uids,
         const T* cvalues, const int* ccounts,
@@ -1154,14 +1164,15 @@ p_traits(
 {
     for(int i = 0; i < ntraits; ++i)
     {
-        F(out[i], uids[i], cvalues, pvalues, nidx, nodes, nnodes, args...);
+        fun(out[i], uids[i], cvalues, pvalues, nidx, nodes, nnodes, args...);
         cvalues += ccounts[i];
         pvalues += pcounts[i];
     }
 }
 
-template<auto F, typename T> void
+template<typename F, typename T> void
 h_traits(
+        F fun,
         T* out,
         int ntraits, const int* uids,
         const T* cvalues, const int* ccounts,
@@ -1170,7 +1181,7 @@ h_traits(
 {
     for(int i = 0; i < ntraits; ++i)
     {
-        F(out[i], uids[i], cvalues, pvalues, z);
+        fun(out[i], uids[i], cvalues, pvalues, z);
         cvalues += ccounts[i];
         pvalues += pcounts[i];
     }
