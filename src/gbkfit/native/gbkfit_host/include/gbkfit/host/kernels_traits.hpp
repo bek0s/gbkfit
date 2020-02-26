@@ -118,24 +118,6 @@ p_trait_nw_uniform(T& out, int nidx, const T* nodes, T r, const T* params)
     out = piecewise(0, 1, r, nidx, nodes, params);
 }
 
-template<typename T> void
-sample_polar_coords(T& out_r, T& out_t, RNG<T>& rng, T rmin, T rmax)
-{
-    out_r = std::sqrt(rmax * rmax + (rmin * rmin - rmax * rmax) * rng());
-    out_t = 2 * PI<T> * rng();
-}
-
-template<typename T> void
-sample_polar_coords_nw(
-        T& out_r, T& out_t,
-        RNG<T>& rng, int nidx, const T* nodes)
-{
-    T rsep = nodes[1] - nodes[0];
-    T rmin = nodes[nidx] - rsep * T{0.5};
-    T rmax = nodes[nidx] + rsep * T{0.5};
-    sample_polar_coords(out_r, out_t, rng, rmin, rmax);
-}
-
 template <typename T> void
 p_trait_nw_harmonic(
         T& out,
@@ -164,6 +146,24 @@ p_trait_nw_distortion(
 // ----
 
 template<typename T> void
+rp_trait_sample_polar_coords(T& out_r, T& out_t, RNG<T>& rng, T rmin, T rmax)
+{
+    out_r = std::sqrt(rmax * rmax + (rmin * rmin - rmax * rmax) * rng());
+    out_t = 2 * PI<T> * rng();
+}
+
+template<typename T> void
+rp_trait_sample_polar_coords_nw(
+        T& out_r, T& out_t,
+        RNG<T>& rng, int nidx, const T* nodes)
+{
+    T rsep = nodes[1] - nodes[0];
+    T rmin = nodes[nidx] - rsep * T{0.5};
+    T rmax = nodes[nidx] + rsep * T{0.5};
+    rp_trait_sample_polar_coords(out_r, out_t, rng, rmin, rmax);
+}
+
+template<typename T> void
 rp_trait_uniform(T& out, const T* params)
 {
     p_trait_uniform(out, params);
@@ -176,7 +176,7 @@ rp_trait_uniform_rnd(
     T rsep = nodes[1] - nodes[0];
     T rmin = nodes[0] - rsep;
     T rmax = nodes[nnodes - 1] + rsep;
-    sample_polar_coords(out_r, out_t, rng, rmin, rmax);
+    rp_trait_sample_polar_coords(out_r, out_t, rng, rmin, rmax);
 }
 
 template<typename T> void
@@ -189,7 +189,7 @@ template<typename T> void
 rp_trait_exponential_rnd(
         T& out_r, T& out_t, RNG<T>& rng, int nidx, const T* nodes)
 {
-    sample_polar_coords_nw(out_r, out_t, rng, nidx, nodes);
+    rp_trait_sample_polar_coords_nw(out_r, out_t, rng, nidx, nodes);
 }
 
 template<typename T> void
@@ -202,7 +202,7 @@ template<typename T> void
 rp_trait_gauss_rnd(
         T& out_r, T& out_t, RNG<T>& rng, int nidx, const T* nodes)
 {
-    sample_polar_coords_nw(out_r, out_t, rng, nidx, nodes);
+    rp_trait_sample_polar_coords_nw(out_r, out_t, rng, nidx, nodes);
 }
 
 template<typename T> void
@@ -215,7 +215,7 @@ template<typename T> void
 rp_trait_ggauss_rnd(
         T& out_r, T& out_t, RNG<T>& rng, int nidx, const T* nodes)
 {
-    sample_polar_coords_nw(out_r, out_t, rng, nidx, nodes);
+    rp_trait_sample_polar_coords_nw(out_r, out_t, rng, nidx, nodes);
 }
 
 template<typename T> void
@@ -228,7 +228,7 @@ template<typename T> void
 rp_trait_lorentz_rnd(
         T& out_r, T& out_t, RNG<T>& rng, int nidx, const T* nodes)
 {
-    sample_polar_coords_nw(out_r, out_t, rng, nidx, nodes);
+    rp_trait_sample_polar_coords_nw(out_r, out_t, rng, nidx, nodes);
 }
 
 template<typename T> void
@@ -241,7 +241,7 @@ template<typename T> void
 rp_trait_moffat_rnd(
         T& out_r, T& out_t, RNG<T>& rng, int nidx, const T* nodes)
 {
-    sample_polar_coords_nw(out_r, out_t, rng, nidx, nodes);
+    rp_trait_sample_polar_coords_nw(out_r, out_t, rng, nidx, nodes);
 }
 
 template<typename T> void
@@ -254,7 +254,7 @@ template<typename T> void
 rp_trait_sech2_rnd(
         T& out_r, T& out_t, RNG<T>& rng, int nidx, const T* nodes)
 {
-    sample_polar_coords_nw(out_r, out_t, rng, nidx, nodes);
+    rp_trait_sample_polar_coords_nw(out_r, out_t, rng, nidx, nodes);
 }
 
 template<typename T> void
@@ -304,7 +304,7 @@ template<typename T> void
 rp_trait_nw_uniform_rnd(
         T& out_r, T& out_t, RNG<T>& rng, int nidx, const T* nodes)
 {
-    sample_polar_coords_nw(out_r, out_t, rng, nidx, nodes);
+    rp_trait_sample_polar_coords_nw(out_r, out_t, rng, nidx, nodes);
 }
 
 template<typename T> void
@@ -322,7 +322,7 @@ rp_trait_nw_harmonic_rnd(
         RNG<T>& rng, int nidx, const T* nodes, int nnodes,
         const T* consts, const T* params)
 {
-    sample_polar_coords_nw(out_r, out_t, rng, nidx, nodes);
+    rp_trait_sample_polar_coords_nw(out_r, out_t, rng, nidx, nodes);
 
     T k = consts[0];
     T a = params[         nidx];
