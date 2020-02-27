@@ -274,11 +274,11 @@ gmodel_smdisk_evaluate(
                 continue;
         }
 
-        vsysi = loose ? interp_linear(rn, rnidx, rnodes, xpos) : vsys[0];
-        xposi = loose ? interp_linear(rn, rnidx, rnodes, xpos) : xpos[0];
-        yposi = loose ? interp_linear(rn, rnidx, rnodes, ypos) : ypos[0];
-        posai = tilted ? interp_linear(rn, rnidx, rnodes, posa) : posa[0];
-        incli = tilted ? interp_linear(rn, rnidx, rnodes, incl) : incl[0];
+        vsysi = loose ? lerp(rn, rnidx, rnodes, xpos) : vsys[0];
+        xposi = loose ? lerp(rn, rnidx, rnodes, xpos) : xpos[0];
+        yposi = loose ? lerp(rn, rnidx, rnodes, ypos) : ypos[0];
+        posai = tilted ? lerp(rn, rnidx, rnodes, posa) : posa[0];
+        incli = tilted ? lerp(rn, rnidx, rnodes, incl) : incl[0];
         posai *= DEG_TO_RAD<T>;
         incli *= DEG_TO_RAD<T>;
 
@@ -619,11 +619,11 @@ gmodel_mcdisk_evaluate(
             zd += wvalue;
         }
 
-        vsysi = loose ? interp_linear(rd, rnidx, rnodes, vsys) : (vsys ? vsys[0] : 0);
-        xposi = loose ? interp_linear(rd, rnidx, rnodes, xpos) : xpos[0];
-        yposi = loose ? interp_linear(rd, rnidx, rnodes, ypos) : ypos[0];
-        posai = tilted ? interp_linear(rd, rnidx, rnodes, posa) : posa[0];
-        incli = tilted ? interp_linear(rd, rnidx, rnodes, incl) : incl[0];
+        vsysi = loose ? lerp(rd, rnidx, rnodes, vsys) : (vsys ? vsys[0] : 0);
+        xposi = loose ? lerp(rd, rnidx, rnodes, xpos) : xpos[0];
+        yposi = loose ? lerp(rd, rnidx, rnodes, ypos) : ypos[0];
+        posai = tilted ? lerp(rd, rnidx, rnodes, posa) : posa[0];
+        incli = tilted ? lerp(rd, rnidx, rnodes, incl) : incl[0];
         posai *= DEG_TO_RAD<T>;
         incli *= DEG_TO_RAD<T>;
 

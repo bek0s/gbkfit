@@ -390,23 +390,24 @@ sech2_1d_rnd_trunc(RNG<T>& rng, T b, T c, T xmin, T xmax)
     return _trunc_1d_rnd(sech2_1d_rnd<T>, xmin, xmax, rng, b, c);
 }
 
-template<typename T> T
-interp_linear(T t, T y1, T y2)
+template <typename T> T
+lerp(T x, int idx, const T* xdata, const T* ydata, int offset, int stride)
 {
+    int idx1 = idx - 1;
+    int idx2 = idx;
+    T x1 = xdata[idx1];
+    T x2 = xdata[idx2];
+    T y1 = ydata[offset + idx1 * stride];
+    T y2 = ydata[offset + idx2 * stride];
+    T t = (x - x1) / (x2 - x1);
     return y1 + t * (y2 - y1);
 }
 
 template<typename T> T
-interp_linear(T x, int index, const T* xdata, const T* ydata)
+lerp(T x, int index, const T* xdata, const T* ydata)
 {
-    T x1 = xdata[index-1];
-    T x2 = xdata[index];
-    T y1 = ydata[index-1];
-    T y2 = ydata[index];
-    return y1 + (x - x1) / (x2 - x1) * (y2 - y1);
+    return lerp(x, index, xdata, ydata, 0, 1);
 }
-
-
 
 template<typename T> size_t
 gsl_interp_bsearch(const T x_array[], T x, size_t index_lo, size_t index_hi)

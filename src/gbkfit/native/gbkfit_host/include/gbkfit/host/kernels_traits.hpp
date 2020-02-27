@@ -6,16 +6,9 @@
 namespace gbkfit { namespace host { namespace kernels {
 
 template <typename T> T
-piecewise(int offset, int stride, T x, int idx, const T* xdata, const T* ydata)
+nodewise(T x, int idx, const T* xdata, const T* ydata, int offset, int stride)
 {
-    int idx1 = idx - 1;
-    int idx2 = idx;
-    T x1 = xdata[idx1];
-    T x2 = xdata[idx2];
-    T y1 = ydata[offset+idx1*stride];
-    T y2 = ydata[offset+idx2*stride];
-    T t = (x - x1) / (x2 - x1);
-    return y1 + t * (y2 - y1);
+    return lerp(x, idx, xdata, ydata, offset, stride);
 }
 
 template<typename T> void
@@ -115,7 +108,7 @@ p_trait_mixture_sgauss(T& out, T r, T theta, const T* consts, const T* params)
 template <typename T> void
 p_trait_nw_uniform(T& out, int nidx, const T* nodes, T r, const T* params)
 {
-    out = piecewise(0, 1, r, nidx, nodes, params);
+    out = nodewise(r, nidx, nodes, params, 0, 1);
 }
 
 template <typename T> void
@@ -125,8 +118,8 @@ p_trait_nw_harmonic(
         const T* consts, const T* params)
 {
     int k = std::rint(consts[0]);
-    T a =     piecewise(     0, 1, r, nidx, nodes, params);
-    T p = k ? piecewise(nnodes, 1, r, nidx, nodes, params) * DEG_TO_RAD<T> : 0;
+    T a =     nodewise(r, nidx, nodes, params,      0, 1);
+    T p = k ? nodewise(r, nidx, nodes, params, nnodes, 1) * DEG_TO_RAD<T> : 0;
     out = a * std::cos(k * (theta - p));
 }
 
@@ -136,9 +129,9 @@ p_trait_nw_distortion(
         int nidx, const T* nodes, int nnodes, T r, T theta,
         const T* params)
 {
-    T a = piecewise(         0, 1, r, nidx, nodes, params);
-    T p = piecewise(    nnodes, 1, r, nidx, nodes, params) * DEG_TO_RAD<T>;
-    T s = piecewise(2 * nnodes, 1, r, nidx, nodes, params);
+    T a = nodewise(r, nidx, nodes, params,          0, 1);
+    T p = nodewise(r, nidx, nodes, params,     nnodes, 1) * DEG_TO_RAD<T>;
+    T s = nodewise(r, nidx, nodes, params, 2 * nnodes, 1);
     T t = wrap_angle(theta - p);
     out = a * std::exp(-(t * t * r * r) / (2 * s * s));
 }
@@ -713,8 +706,8 @@ sp_trait_nw_azrange(
         int nidx, const T* nodes, int nnodes, T r, T theta,
         const T* params)
 {
-    T p = piecewise(     0, 1, r, nidx, nodes, params) * DEG_TO_RAD<T>;
-    T s = piecewise(nnodes, 1, r, nidx, nodes, params) * DEG_TO_RAD<T>;
+    T p = nodewise(r, nidx, nodes, params,      0, 1) * DEG_TO_RAD<T>;
+    T s = nodewise(r, nidx, nodes, params, nnodes, 1) * DEG_TO_RAD<T>;
     _azrange(out, theta, p, s);
 }
 
