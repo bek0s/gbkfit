@@ -15,7 +15,7 @@ python -m pip install auditwheel
 ls wheels
 
 for whl in wheels/*.whl; do
-    python -m auditwheel repair "$whl" -w wheels
+    python -m auditwheel -v repair "$whl" -w wheels_fixed
 done
 
-ls wheels
+ls wheels_fixed
