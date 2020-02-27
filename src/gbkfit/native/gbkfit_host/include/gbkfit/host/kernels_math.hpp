@@ -409,20 +409,4 @@ lerp(T x, int index, const T* xdata, const T* ydata)
     return lerp(x, index, xdata, ydata, 0, 1);
 }
 
-template<typename T> size_t
-gsl_interp_bsearch(const T x_array[], T x, size_t index_lo, size_t index_hi)
-{
-    size_t ilo = index_lo;
-    size_t ihi = index_hi;
-    while(ihi > ilo + 1) {
-        size_t i = (ihi + ilo)/2;
-        if(x_array[i] > x)
-            ihi = i;
-        else
-            ilo = i;
-    }
-
-    return ilo;
-}
-
 }}} // namespace gbkfit::host::kernels
