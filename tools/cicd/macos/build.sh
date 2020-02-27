@@ -3,7 +3,7 @@
 brew install fftw
 
 export MACOSX_DEPLOYMENT_TARGET=10.9
-export GBKFIT_BUILD_OPENMP=1
+export GBKFIT_BUILD_HOST=1
 
 . venv/bin/activate
 
