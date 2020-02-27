@@ -239,8 +239,8 @@ gmodel_smdisk_evaluate(
         int spec_size,
         T spec_step,
         T spec_zero,
-        T* image, T* scube, T* bcube,
-        T* bdata, T* vdata, T* ddata)
+        T* image, T* scube, T* rcube,
+        T* rdata, T* vdata, T* ddata)
 {
     bool is_thin = rht_uids == nullptr;
 
@@ -439,12 +439,12 @@ gmodel_smdisk_evaluate(
                 + y * spat_size_x
                 + z * spat_size_x * spat_size_y;
 
-        if (bcube) {
-            bcube[idx] += bvalue;
+        if (rcube) {
+            rcube[idx] += bvalue;
         }
 
-        if (bdata) {
-            bdata[idx] = bvalue;
+        if (rdata) {
+            rdata[idx] = bvalue;
         }
 
         if (vdata) {
@@ -504,8 +504,8 @@ gmodel_mcdisk_evaluate(
         int spec_size,
         T spec_step,
         T spec_zero,
-        T* image, T* scube, T* bcube,
-        T* bdata, T* vdata, T* ddata)
+        T* image, T* scube, T* rcube,
+        T* rdata, T* vdata, T* ddata)
 {
     // This is a placeholder in case we decide to explicitly
     // add a Monte Carlo based thin disk in the future.
@@ -713,14 +713,14 @@ gmodel_mcdisk_evaluate(
                 + y * spat_size_x
                 + z * spat_size_x * spat_size_y;
 
-        if (bcube) {
+        if (rcube) {
             #pragma omp atomic update
-            bcube[idx] += bvalue;
+            rcube[idx] += bvalue;
         }
 
-        if (bdata) {
+        if (rdata) {
             #pragma omp atomic update
-            bdata[idx] += bvalue;
+            rdata[idx] += bvalue;
         }
 
         if (vdata) {

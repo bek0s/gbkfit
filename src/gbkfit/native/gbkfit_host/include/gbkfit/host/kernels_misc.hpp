@@ -97,7 +97,7 @@ disk_info(int& index, T radius, int nnodes, const T* nodes)
         return false;
 
     // Linear search
-    for(index = 0; index < nnodes; ++index)
+    for(index = 1; index < nnodes; ++index)
         if (radius < nodes[index])
             break;
 
@@ -124,7 +124,7 @@ ring_info(
     // Ignore anything larger than the last node
     if (radius_max >= nodes[nnodes-1])
         return false;
-
+#if 0
     // Linear search
     for(index = 1; index < nnodes; ++index)
     {
@@ -133,7 +133,21 @@ ring_info(
         if (radius_cur < nodes[index])
             break;
     }
-
+#else
+    // Binary search
+    int ilo = 1;
+    int ihi = nnodes - 1;
+    while(ihi > ilo + 1)
+    {
+        index = (ihi + ilo)/2;
+        T radius_cur = rnode_radius(
+                x, y, loose, tilted, index, xpos, ypos, posa, incl);
+        if(nodes[index] > radius_cur)
+            ihi = index;
+        else
+            ilo = index;
+    }
+#endif
     // The radius is calculated using the velfi strategy
     T d1 = nodes[index-1] - rnode_radius(
             x, y, loose, tilted, index-1, xpos, ypos, posa, incl);
@@ -164,9 +178,7 @@ ring_info(
     // Ignore anything larger than the last node
     if (radius_max >= nodes[nnodes-1])
         return false;
-
-
-    /*
+#if 0
     // Linear search
     for(index = 1; index < nnodes; ++index)
     {
@@ -174,23 +186,22 @@ ring_info(
                 x, y, z, loose, tilted, index, xpos, ypos, posa, incl);
         if (radius_cur < nodes[index])
             break;
-    }*/
-
-
-    size_t ilo = 1;
-    size_t ihi = nnodes - 1;
+    }
+#else
+    // Binary search
+    int ilo = 1;
+    int ihi = nnodes - 1;
     while(ihi > ilo + 1)
     {
-        size_t i = (ihi + ilo)/2;
-        if(nodes[i] > rnode_radius(
-                    x, y, z, loose, tilted, i, xpos, ypos, posa, incl))
-            ihi = i;
+        index = (ihi + ilo)/2;
+        T radius_cur = rnode_radius(
+                x, y, z, loose, tilted, index, xpos, ypos, posa, incl);
+        if(nodes[index] > radius_cur)
+            ihi = index;
         else
-            ilo = i;
+            ilo = index;
     }
-    index = ilo;
-
-
+#endif
     // The radius is calculated using the velfi strategy
     T d1 = nodes[index-1] - rnode_radius(
             x, y, z, loose, tilted, index-1, xpos, ypos, posa, incl);
@@ -203,17 +214,17 @@ ring_info(
 
 template<typename T> void
 evaluate_image(
-        T* image, int x, int y, T bvalue,
+        T* image, int x, int y, T rvalue,
         int spat_size_x)
 {
     int idx = x + y * spat_size_x;
     #pragma omp atomic update
-    image[idx] += bvalue;
+    image[idx] += rvalue;
 }
 
 template<typename T> void
 evaluate_scube(
-        T* scube, int x, int y, T bvalue, T vvalue, T dvalue,
+        T* scube, int x, int y, T rvalue, T vvalue, T dvalue,
         int spat_size_x, int spat_size_y,
         int spec_size,
         T spec_step,
@@ -236,7 +247,7 @@ evaluate_scube(
                 + z * spat_size_x * spat_size_y;
         T zvel = spec_zero + z * spec_step;
         #pragma omp atomic update
-        scube[idx] += bvalue * gauss_1d_pdf<T>(zvel, vvalue, dvalue);
+        scube[idx] += rvalue * gauss_1d_pdf<T>(zvel, vvalue, dvalue);
     }
 }
 
