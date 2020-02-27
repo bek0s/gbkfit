@@ -9,8 +9,8 @@ def require_config_sections(config, sections):
             missing.append(section)
     if len(missing) > 0:
         raise RuntimeError(
-            f"The following configuration keys must be defined empty/null: "
-            f"{missing}.")
+            f"The following configuration keys must be defined "
+            f"and not empty/null: {missing}.")
 
 
 def listify_config_sections(config, sections):
