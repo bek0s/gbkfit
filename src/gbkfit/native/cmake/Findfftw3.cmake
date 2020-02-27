@@ -24,6 +24,10 @@
 #
 #   FFTW3_USE_STATIC_LIBS
 #
+# Checks the following environment variables:
+#
+#   FFTW3_ROOT
+#
 # Declares the following targets:
 #
 #   fftw3::fftw3
@@ -164,7 +168,6 @@ foreach(i RANGE ${LIBRARY_LIB_NAME_LIST_LENGTH})
     INTERFACE_INCLUDE_DIRECTORIES "${FFTW3_INCLUDE_DIR}"
     INTERFACE_LINK_LIBRARIES "${${LIB_NAME_VAR}}"
   )
-  message("${${LIB_NAME_VAR}}")
 endforeach(i)
 
 if(${FFTW3_USE_STATIC_LIBS})
