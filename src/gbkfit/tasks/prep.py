@@ -11,9 +11,10 @@ def _read_data(file_d, file_e, file_m):
 
     data_d = fits.getdata(file_d)
     data_e = fits.getdata(file_e) if file_e else None
-    data_m = fits.getdata(file_m) if file_m else None
+    data_m = fits.getdata(file_m) if file_m else data_d.copy()
     header_d = fits.getheader(file_d)
-    header_e = fits.getheader(file_e) if file_e else dict()
+    header_e = fits.getheader(file_e) if file_e else None
+    header_m = fits.getheader(file_m) if file_m else None
 
     data_d = np.squeeze(data_d)
     if data_e is not None:
@@ -26,32 +27,35 @@ def _read_data(file_d, file_e, file_m):
         data_e[~np.isfinite(data_e)] = np.nan
         data_e[data_e <= 0] = np.nan
     if data_m is not None:
+        data_m[~np.isfinite(data_m)] = 0
         data_m[np.nonzero(data_m)] = 1
-        data_m[np.isnan(data_m)] = 0
 
-    return data_d, data_e, data_m, header_d, header_e
-
-
-def _save_data(file_d, file_e, file_m, data_d, data_e, data_m, dtype):
-    if dtype is not None:
-        data_d = data_d.astype(dtype)
-    base_file_d = os.path.splitext(os.path.basename(file_d))[0]
-    fits.writeto(f'prep_{base_file_d}.fits', data_d, overwrite=True)
-    if file_e:
-        if dtype is not None:
-            data_e = data_e.astype(dtype)
-        base_file_e = os.path.splitext(os.path.basename(file_e))[0]
-        fits.writeto(f'prep_{base_file_e}.fits', data_e, overwrite=True)
-    if file_m:
-        if dtype is not None:
-            data_m = data_m.astype(dtype)
-        base_file_m = os.path.splitext(os.path.basename(file_m))[0]
-        fits.writeto(f'prep_{base_file_m}.fits', data_m, overwrite=True)
+    return data_d, header_d, data_e, header_e, data_m, header_m
 
 
-def _crop_data(data_d, data_e, data_m, axis, range):
+def _save_data(
+        file_d, data_d, header_d,
+        file_e, data_e, header_e,
+        file_m, data_m, header_m,
+        dtype):
+    basename = os.path.basename
+    splitext = os.path.splitext
+    data_d = data_d.astype(dtype)
+    file_d = splitext(basename(file_d))[0]
+    fits.writeto(f'prep_{file_d}.fits', data_d, header_d, overwrite=True)
+    if data_e is not None:
+        data_e = data_e.astype(dtype)
+        file_e = splitext(basename(file_e))[0]
+        fits.writeto(f'prep_{file_e}.fits', data_e, header_e, overwrite=True)
+    if data_m is not None:
+        data_m = data_m.astype(dtype)
+        file_m = splitext(basename(file_m))[0] if file_m else file_d + '_mask'
+        fits.writeto(f'prep_{file_m}.fits', data_m, header_m, overwrite=True)
+
+
+def _crop_data(data_d, data_e, data_m, axis, range_):
     s = [slice(None), ] * data_d.ndim
-    s[axis] = slice(range[0], range[1])
+    s[axis] = slice(range_[0], range_[1])
     data_d = data_d[tuple(s)]
     if data_e is not None:
         data_e = data_e[tuple(s)]
@@ -63,8 +67,8 @@ def _crop_data(data_d, data_e, data_m, axis, range):
 def _make_mask(data_d, data_e, data_m):
     mask = np.ones_like(data_d)
     mask *= np.isfinite(data_d)
-    mask *= np.isfinite(data_e) if data_e else 1
-    mask *= np.isfinite(data_m) if data_m else 1
+    mask *= np.isfinite(data_e) if data_e is not None else 1
+    mask *= np.isfinite(data_m) if data_m is not None else 1
     return mask
 
 
@@ -126,8 +130,9 @@ def prep_image(
         roi_spat, clip_min, clip_max, ccl_lcount, ccl_pcount, ccl_lratio,
         sclip_sigma, sclip_iters, minify, dtype):
 
-    data_d, data_e, data_m, _, _ = _read_data(
-        file_d, file_e, file_m)
+    (data_d, header_d,
+     data_e, header_e,
+     data_m, header_m) = _read_data(file_d, file_e, file_m)
 
     if roi_spat is not None:
         xrange = roi_spat[0:2]
@@ -155,7 +160,11 @@ def prep_image(
         data_d, data_e, data_m = _minify_data(
             data_d, data_e, data_m, mask)
 
-    _save_data(file_d, file_e, file_m, data_d, data_e, data_m, dtype)
+    _save_data(
+        file_d, data_d, header_d,
+        file_e, data_e, header_e,
+        file_m, data_m, header_m,
+        dtype)
 
 
 def prep_lslit(
@@ -164,8 +173,9 @@ def prep_lslit(
         ccl_lcount, ccl_pcount, ccl_lratio,
         sclip_sigma, sclip_iters, minify, dtype):
 
-    data_d, data_e, data_m, _, _ = _read_data(
-        file_d, file_e, file_m)
+    (data_d, header_d,
+     data_e, header_e,
+     data_m, header_m) = _read_data(file_d, file_e, file_m)
 
     if roi_spat is not None:
         xrange = roi_spat
@@ -194,7 +204,11 @@ def prep_lslit(
         data_d, data_e, data_m = _minify_data(
             data_d, data_e, data_m, mask)
 
-    _save_data(file_d, file_e, file_m, data_d, data_e, data_m, dtype)
+    _save_data(
+        file_d, data_d, header_d,
+        file_e, data_e, header_e,
+        file_m, data_m, header_m,
+        dtype)
 
 
 def prep_mmaps(
@@ -212,11 +226,15 @@ def prep_mmaps(
     data_d = [None] * nmmaps
     data_e = [None] * nmmaps
     data_m = [None] * nmmaps
+    header_d = [None] * nmmaps
+    header_e = [None] * nmmaps
+    header_m = [None] * nmmaps
 
     for i in range(nmmaps):
 
-        data_d[i], data_e[i], data_m[i], _, _ = _read_data(
-            file_d[i], file_e[i], file_m[i])
+        (data_d[i], header_d[i],
+         data_e[i], header_e[i],
+         data_m[i], header_m[i]) = _read_data(file_d[i], file_e[i], file_m[i])
 
         if roi_spat is not None:
             xrange = roi_spat[0:2]
@@ -231,6 +249,7 @@ def prep_mmaps(
     for i in range(nmmaps):
 
         mask *= _make_mask(data_d[i], data_e[i], data_m[i])
+
         if clip_min is not None:
             mask *= _make_mask_clip_min(data_d[i], clip_min[i])
         if clip_max is not None:
@@ -249,7 +268,11 @@ def prep_mmaps(
             data_d[i], data_e[i], data_m[i] = _minify_data(
                 data_d[i], data_e[i], data_m[i], mask)
 
-        _save_data(file_d[i], file_e[i], file_m[i], data_d[i], data_e[i], data_m[i], dtype)
+        _save_data(
+            file_d[i], data_d[i], header_d[i],
+            file_e[i], data_e[i], header_e[i],
+            file_m[i], data_m[i], header_m[i],
+            dtype)
 
 
 def prep_scube(
@@ -258,8 +281,9 @@ def prep_scube(
         ccl_lcount, ccl_pcount, ccl_lratio,
         sclip_sigma, sclip_iters, minify, dtype):
 
-    data_d, data_e, data_m, _, _ = _read_data(
-        file_d, file_e, file_m)
+    (data_d, header_d,
+     data_e, header_e,
+     data_m, header_m) = _read_data(file_d, file_e, file_m)
 
     if roi_spat is not None:
         xrange = roi_spat[0:2]
@@ -291,4 +315,8 @@ def prep_scube(
         data_d, data_e, data_m = _minify_data(
             data_d, data_e, data_m, mask)
 
-    _save_data(file_d, file_e, file_m, data_d, data_e, data_m, dtype)
+    _save_data(
+        file_d, data_d, header_d,
+        file_e, data_e, header_e,
+        file_m, data_m, header_m,
+        dtype)
