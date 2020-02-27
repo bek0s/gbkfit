@@ -16,7 +16,7 @@ python -m pip install delocate
 ls wheels
 
 for whl in wheels/*.whl; do
-    delocate-wheel -v "$whl" -w wheels_fixed
+    delocate-wheel -w wheels_fixed -v "$whl"
 done
 
 ls wheels_fixed
