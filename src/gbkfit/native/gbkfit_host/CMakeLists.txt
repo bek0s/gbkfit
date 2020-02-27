@@ -3,8 +3,6 @@ set(TARGET_NAME libgbkfit_host)
 
 project(${TARGET_NAME}-project CXX)
 
-set(FFTW3_USE_STATIC_LIBS 1)
-
 find_package(fftw3)
 find_package(OpenMP)
 find_package(pybind11)
