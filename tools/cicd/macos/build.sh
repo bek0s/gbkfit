@@ -1,13 +1,9 @@
 #!/usr/bin/env bash
 
-brew install fftw libomp
-
-#export CC=/usr/local/Cellar/gcc/9.2.0_3/bin/gcc-9
-#export CXX=/usr/local/Cellar/gcc/9.2.0_3/bin/g++-9
-#export CPP=/usr/local/Cellar/gcc/9.2.0_3/bin/cpp-9
-
 export MACOSX_DEPLOYMENT_TARGET=10.9
 export GBKFIT_BUILD_HOST=1
+
+brew install fftw libomp
 
 . venv/bin/activate
 
