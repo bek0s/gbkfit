@@ -41,9 +41,9 @@ target_link_libraries(
   PRIVATE
   libgbkfit
   fftw3::fftw3
-  fftw3::fftw3_omp
+  fftw3::fftw3_threads
   fftw3::fftw3f
-  fftw3::fftw3f_omp
+  fftw3::fftw3f_threads
   OpenMP::OpenMP_CXX
 )
 
