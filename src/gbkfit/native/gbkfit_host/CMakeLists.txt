@@ -39,13 +39,11 @@ target_include_directories(
 target_link_libraries(
   ${TARGET_NAME}
   PRIVATE
-  -static-libgcc
-  -static-libstdc++
   libgbkfit
   fftw3::fftw3
-  fftw3::fftw3_threads
+  fftw3::fftw3_omp
   fftw3::fftw3f
-  fftw3::fftw3f_threads
+  fftw3::fftw3f_omp
   OpenMP::OpenMP_CXX
 )
 
