@@ -4,7 +4,7 @@ import numpy as np
 import gbkfit.driver
 from gbkfit.driver.drivers import _detail
 
-import libgbkfit_host
+import gbkfit.native.libgbkfit_host
 
 
 def _ptr(a):
@@ -78,7 +78,7 @@ class DriverHost(gbkfit.driver.Driver):
 class DModelDCube(gbkfit.driver.DModelDCube):
 
     _CLASSES = {
-        np.float32: libgbkfit_host.DModelDCubef32}
+        np.float32: gbkfit.native.libgbkfit_host.DModelDCubef32}
 
     def __init__(self, dtype):
         _detail.check_dtype(self._CLASSES, dtype)
@@ -109,7 +109,7 @@ class DModelDCube(gbkfit.driver.DModelDCube):
 class DModelMMaps(gbkfit.driver.DModelMMaps):
 
     _CLASSES = {
-        np.float32: libgbkfit_host.DModelMMapsf32}
+        np.float32: gbkfit.native.libgbkfit_host.DModelMMapsf32}
 
     def __init__(self, dtype):
         _detail.check_dtype(self._CLASSES, dtype)
@@ -136,7 +136,7 @@ class DModelMMaps(gbkfit.driver.DModelMMaps):
 class GModelMCDisk(gbkfit.driver.GModelMCDisk):
 
     _CLASSES = {
-        np.float32: libgbkfit_host.GModelMCDiskf32}
+        np.float32: gbkfit.native.libgbkfit_host.GModelMCDiskf32}
 
     def __init__(self, dtype):
         _detail.check_dtype(self._CLASSES, dtype)
@@ -207,7 +207,7 @@ class GModelMCDisk(gbkfit.driver.GModelMCDisk):
 class GModelSMDisk(gbkfit.driver.GModelSMDisk):
 
     _CLASSES = {
-        np.float32: libgbkfit_host.GModelSMDiskf32}
+        np.float32: gbkfit.native.libgbkfit_host.GModelSMDiskf32}
 
     def __init__(self, dtype):
         _detail.check_dtype(self._CLASSES, dtype)

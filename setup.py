@@ -87,6 +87,7 @@ setup(
             'gbkfit-gui = gbkfit.apps.gui:main'
         ]
     },
+    ext_package='gbkfit/native',
     ext_modules=[CMakeExtension('libgbkfit', 'src/gbkfit/native')],
     cmdclass={'build_ext': CMakeExtensionBuild}
 )
