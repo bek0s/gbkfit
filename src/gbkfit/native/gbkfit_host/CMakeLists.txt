@@ -3,8 +3,6 @@ set(TARGET_NAME libgbkfit_host)
 
 project(${TARGET_NAME}-project CXX)
 
-set(FFTW3_USE_STATIC_LIBS 1)
-
 find_package(fftw3)
 find_package(OpenMP)
 find_package(pybind11)
@@ -43,9 +41,9 @@ target_link_libraries(
   PRIVATE
   libgbkfit
   fftw3::fftw3
-  fftw3::fftw3_omp
+  fftw3::fftw3_threads
   fftw3::fftw3f
-  fftw3::fftw3f_omp
+  fftw3::fftw3f_threads
   OpenMP::OpenMP_CXX
 )
 
