@@ -39,7 +39,6 @@ target_include_directories(
 target_link_libraries(
   ${TARGET_NAME}
   PRIVATE
-  -static
   -static-libgcc
   -static-libstdc++
   libgbkfit
