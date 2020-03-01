@@ -121,14 +121,14 @@ dmodel_dcube_downscale(
     dst_cube[idx] = sum * nfactor;
 }
 
-template<typename T> constexpr void
+template<typename T> __device__ void
 evaluate_image(T* image, int x, int y, T rvalue, int spat_size_x)
 {
     int idx = x + y * spat_size_x;
     atomicAdd(&image[idx], rvalue);
 }
 
-template<typename T> constexpr void
+template<typename T> __device__ void
 evaluate_scube(
         T* scube, int x, int y, T rvalue, T vvalue, T dvalue,
         int spat_size_x, int spat_size_y,
