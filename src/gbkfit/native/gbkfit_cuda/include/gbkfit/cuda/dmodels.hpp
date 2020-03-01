@@ -1,7 +1,7 @@
 #pragma once
 
 #include "gbkfit/cuda/common.hpp"
-#include "gbkfit/cuda/cufft_utils.hpp"
+#include "gbkfit/cuda/fftutils.hpp"
 
 namespace gbkfit { namespace cuda {
 
@@ -12,7 +12,7 @@ public:
 
     DModelDCube(void);
 
-    ~DModelDCube() {}
+    ~DModelDCube();
 
     void
     prepare(int size_lo_x, int size_lo_y, int size_lo_z,

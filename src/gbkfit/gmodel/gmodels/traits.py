@@ -487,8 +487,9 @@ class RPTraitNWDistortion(RPTrait):
     def integrate(self, params, nodes):
         a = params['a']
         s = params['s']
-        foo = _integrate_nw(nodes, gbkfit.math.gauss_1d_fun, a, 0, s * nodes)
-        #foo = a * np.sqrt(2 * np.pi) / np.sqrt(1 / s * s) * (nodes[1] - nodes[0])
+        #foo = _integrate_nw(nodes, gbkfit.math.gauss_1d_fun, a, 0, s * nodes)
+        # foo = a * np.sqrt(2 * np.pi) / np.sqrt(1 / s * s) * (nodes[1] - nodes[0])
+        foo = a * np.sqrt(2 * np.pi) / np.sqrt((1) / (s * s)) * 1
         return foo
 
 

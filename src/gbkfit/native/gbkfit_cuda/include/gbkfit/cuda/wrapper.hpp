@@ -1,6 +1,6 @@
 #pragma once
 
-#include "gbkfit/cuda/cufft_utils.hpp"
+#include "gbkfit/cuda/fftutils.hpp"
 
 #include <cuda.h>
 #include <cuda_runtime_api.h>
@@ -26,7 +26,9 @@ struct Wrapper
 
     static void
     gmodel_mcdisk_evaluate(
-            T cflux, int nclouds, const int* ncloudspt,
+            T cflux, int nclouds,
+            const int* ncloudscsum, int ncloudscsum_len,
+            const bool* hasordint,
             bool loose, bool tilted,
             int nrnodes, const T* rnodes,
             const T* vsys,

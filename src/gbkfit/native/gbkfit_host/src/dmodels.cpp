@@ -1,6 +1,6 @@
 
 #include "gbkfit/host/dmodels.hpp"
-#include "gbkfit/host/kernels_main.hpp"
+#include "gbkfit/host/kernels.hpp"
 
 namespace gbkfit { namespace host {
 
@@ -56,7 +56,7 @@ DModelDCube<T>::prepare(
         std::vector<T> tmp(n0*n1*n2);
 
         fftw3<T>::init_threads();
-        fftw3<T>::plan_with_nthreads(std::thread::hardware_concurrency());
+        fftw3<T>::plan_with_nthreads(omp_get_num_procs());
 
         std::copy_n(m_scube_hi, n0*n1*n2, tmp.data());
         m_scube_fft_plan_r2c = fftw3<T>::plan_dft_r2c_3d(
@@ -118,13 +118,13 @@ DModelDCube<T>::convolve(void) const
 
     fftw3<T>::execute(m_scube_fft_plan_r2c);
 
-    const int size = n0 * n1 * (n2 / 2 + 1);
+    const int n = n0 * n1 * (n2 / 2 + 1);
     const T nfactor = T{1} / (n0 * n1 * n2);
 
-    kernels::complex_multiply_and_scale(
-            reinterpret_cast<std::complex<T>*>(m_scube_hi_fft),
-            reinterpret_cast<std::complex<T>*>(m_psf3d_hi_fft),
-            size, nfactor);
+    kernels::complex_multiply_and_scale<T>(
+            reinterpret_cast<typename fftw3<T>::complex*>(m_scube_hi_fft),
+            reinterpret_cast<typename fftw3<T>::complex*>(m_psf3d_hi_fft),
+            n, nfactor);
 
     fftw3<T>::execute(m_scube_fft_plan_c2r);
 }

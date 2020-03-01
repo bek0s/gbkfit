@@ -20,6 +20,12 @@ DModelDCube<T>::DModelDCube(void)
 {
 }
 
+template<typename T>
+DModelDCube<T>::~DModelDCube()
+{
+    cleanup();
+}
+
 template<typename T> void
 DModelDCube<T>::prepare(
         int size_lo_x, int size_lo_y, int size_lo_z,
@@ -96,13 +102,13 @@ DModelDCube<T>::convolve(void) const
             reinterpret_cast<typename cufft<T>::real*>(m_scube_hi),
             reinterpret_cast<typename cufft<T>::complex*>(m_scube_hi_fft));
 
-    const int size = n0 * n1 * (n2 / 2 + 1);
+    const int n = n0 * n1 * (n2 / 2 + 1);
     const T nfactor = T{1} / (n0 * n1 * n2);
 
     Wrapper<T>::dmodel_dcube_complex_multiply_and_scale(
             reinterpret_cast<typename cufft<T>::complex*>(m_scube_hi_fft),
             reinterpret_cast<typename cufft<T>::complex*>(m_psf3d_hi_fft),
-            size, nfactor);
+            n, nfactor);
 
     cufft<T>::cufftExecC2R(
             m_scube_fft_plan_c2r,
@@ -125,7 +131,6 @@ DModelDCube<T>::downscale(void) const
 #define INSTANTIATE(T)\
     template struct DModelDCube<T>;
 INSTANTIATE(float)
-INSTANTIATE(double)
 #undef INSTANTIATE
 
 }} // namespace gbkfit::cuda

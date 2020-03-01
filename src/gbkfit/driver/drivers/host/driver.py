@@ -229,6 +229,8 @@ class GModelSMDisk(gbkfit.driver.GModelSMDisk):
             spec_size, spec_step, spec_zero,
             image, scube, rcube,
             rdata, vdata, ddata):
+        import time
+        t1 = time.time()
         self._disk.evaluate(
             loose, tilted,
             _shape(rnodes)[0],
@@ -271,3 +273,5 @@ class GModelSMDisk(gbkfit.driver.GModelSMDisk):
             spec_zero,
             _ptr(image), _ptr(scube), _ptr(rcube),
             _ptr(rdata), _ptr(vdata), _ptr(ddata))
+        t2 = time.time()
+        print("smdisk: time: ", (t2 - t1) * 1000)

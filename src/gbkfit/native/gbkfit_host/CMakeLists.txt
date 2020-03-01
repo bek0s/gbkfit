@@ -10,13 +10,9 @@ find_package(pybind11)
 set(HEADER_FILES
   include/gbkfit/host/common.hpp
   include/gbkfit/host/dmodels.hpp
-  include/gbkfit/host/fftw3_utils.hpp
+  include/gbkfit/host/fftutils.hpp
   include/gbkfit/host/gmodels.hpp
-  include/gbkfit/host/kernels_common.hpp
-  include/gbkfit/host/kernels_main.hpp
-  include/gbkfit/host/kernels_math.hpp
-  include/gbkfit/host/kernels_misc.hpp
-  include/gbkfit/host/kernels_traits.hpp
+  include/gbkfit/host/kernels.hpp
 )
 
 set(SOURCE_FILES
@@ -61,6 +57,6 @@ target_compile_definitions(
 set_target_properties(
   ${TARGET_NAME}
   PROPERTIES
-  CXX_STANDARD 17
+  CXX_STANDARD 14
   CXX_EXTENSIONS OFF
 )

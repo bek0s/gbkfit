@@ -8,13 +8,10 @@ find_package(CUDA REQUIRED)
 
 set(HEADER_FILES
   include/gbkfit/cuda/common.hpp
-  include/gbkfit/cuda/cufft_utils.hpp
   include/gbkfit/cuda/dmodels.hpp
+  include/gbkfit/cuda/fftutils.hpp
   include/gbkfit/cuda/gmodels.hpp
-  include/gbkfit/cuda/kernels_main.hpp
-  include/gbkfit/cuda/kernels_math.hpp
-  include/gbkfit/cuda/kernels_misc.hpp
-  include/gbkfit/cuda/kernels_traits.hpp
+  include/gbkfit/cuda/kernels.hpp
   include/gbkfit/cuda/wrapper.hpp
 )
 
@@ -24,6 +21,8 @@ set(SOURCE_FILES
   src/gmodels.cpp
   src/wrapper.cu
 )
+
+set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --expt-relaxed-constexpr")
 
 pybind11_add_module(
   ${TARGET_NAME}

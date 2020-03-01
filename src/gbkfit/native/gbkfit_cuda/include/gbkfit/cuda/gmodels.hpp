@@ -1,6 +1,6 @@
 #pragma once
 
-#include <gbkfit/common.hpp>
+#include "gbkfit/cuda/common.hpp"
 
 namespace gbkfit { namespace cuda {
 
@@ -9,7 +9,9 @@ struct GModelMCDisk
 {
     void
     evaluate(
-            T cflux, int nclouds, Ptr ncloudspt,
+            T cflux, int nclouds,
+            Ptr ncloudscsum, int ncloudscsum_len,
+            Ptr hasordint,
             bool loose, bool tilted,
             int nrnodes, Ptr rnodes,
             Ptr vsys,
@@ -50,8 +52,8 @@ struct GModelMCDisk
             int spec_size,
             T spec_step,
             T spec_zero,
-            Ptr image, Ptr scube, Ptr bcube,
-            Ptr bdata, Ptr vdata, Ptr ddata) const;
+            Ptr image, Ptr scube, Ptr rcube,
+            Ptr rdata, Ptr vdata, Ptr ddata) const;
 };
 
 template<typename T>

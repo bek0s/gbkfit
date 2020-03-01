@@ -6,7 +6,9 @@ namespace gbkfit { namespace cuda {
 
 template<typename T> void
 GModelMCDisk<T>::evaluate(
-        T cflux, int nclouds, Ptr ncloudspt,
+        T cflux, int nclouds,
+        Ptr ncloudscsum, int ncloudscsum_len,
+        Ptr hasordint,
         bool loose, bool tilted,
         int nrnodes, Ptr rnodes,
         Ptr vsys,
@@ -52,7 +54,9 @@ GModelMCDisk<T>::evaluate(
 {
     Wrapper<T>::gmodel_mcdisk_evaluate(
             cflux, nclouds,
-            reinterpret_cast<const int*>(ncloudspt),
+            reinterpret_cast<const int*>(ncloudscsum),
+            ncloudscsum_len,
+            reinterpret_cast<const bool*>(hasordint),
             loose, tilted,
             nrnodes,
             reinterpret_cast<const T*>(rnodes),
@@ -237,7 +241,6 @@ GModelSMDisk<T>::evaluate(
     template struct GModelMCDisk<T>; \
     template struct GModelSMDisk<T>;
 INSTANTIATE(float)
-INSTANTIATE(double)
 #undef INSTANTIATE
 
 }} // namespace gbkfit::cuda

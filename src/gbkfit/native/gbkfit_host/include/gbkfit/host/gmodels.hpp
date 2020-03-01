@@ -1,8 +1,7 @@
 #pragma once
 
-#include <gbkfit/common.hpp>
-
-#include "kernels_main.hpp"
+#include "gbkfit/host/common.hpp"
+#include "gbkfit/host/kernels.hpp"
 
 namespace gbkfit { namespace host {
 
@@ -57,7 +56,7 @@ struct GModelMCDisk
             Ptr image, Ptr scube, Ptr rcube,
             Ptr rdata, Ptr vdata, Ptr ddata) const
     {
-        kernels::gmodel_mcdisk_evaluate<T>(
+        kernels::gmodel_mcdisk_evaluate(
                 cflux, nclouds,
                 reinterpret_cast<const int*>(ncloudscsum),
                 ncloudscsum_len,
@@ -178,7 +177,7 @@ struct GModelSMDisk
             Ptr image, Ptr scube, Ptr rcube,
             Ptr rdata, Ptr vdata, Ptr ddata) const
     {
-        kernels::gmodel_smdisk_evaluate<T>(
+        kernels::gmodel_smdisk_evaluate(
                 loose, tilted,
                 nrnodes,
                 reinterpret_cast<const T*>(rnodes),

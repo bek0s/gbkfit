@@ -1,5 +1,5 @@
 
-#include "gbkfit/cuda/kernels_main.hpp"
+#include "gbkfit/cuda/kernels.hpp"
 #include "gbkfit/cuda/wrapper.hpp"
 
 namespace gbkfit { namespace cuda {
@@ -37,7 +37,9 @@ Wrapper<T>::dmodel_dcube_downscale(
 
 template<typename T> void
 Wrapper<T>::gmodel_mcdisk_evaluate(
-        T cflux, int nclouds, const int* ncloudspt,
+        T cflux, int nclouds,
+        const int* ncloudscsum, int ncloudscsum_len,
+        const bool* hasordint,
         bool loose, bool tilted,
         int nrnodes, const T* rnodes,
         const T* vsys,
@@ -81,12 +83,13 @@ Wrapper<T>::gmodel_mcdisk_evaluate(
         T* image, T* scube, T* rcube,
         T* rdata, T* vdata, T* ddata)
 {
-    const int n = spat_size_x * spat_size_y;
-    /*
+    const int n = nclouds;
     dim3 bsize(256);
     dim3 gsize((n + bsize.x - 1) / bsize.x);
     kernels::gmodel_mcdisk_evaluate<<<bsize, gsize>>>(
-            cflux, nclouds, ncloudspt,
+            cflux, nclouds,
+            ncloudscsum, ncloudscsum_len,
+            hasordint,
             loose, tilted,
             nrnodes, rnodes,
             vsys,
@@ -129,7 +132,8 @@ Wrapper<T>::gmodel_mcdisk_evaluate(
             spec_zero,
             image, scube, rcube,
             rdata, vdata, ddata);
-            */
+
+    cudaDeviceSynchronize();
 }
 
 template<typename T> void
@@ -224,12 +228,13 @@ Wrapper<T>::gmodel_smdisk_evaluate(
             spec_zero,
             image, scube, rcube,
             rdata, vdata, ddata);
+
+    cudaDeviceSynchronize();
 }
 
 #define INSTANTIATE(T)          \
     template struct Wrapper<T>;
 INSTANTIATE(float)
-INSTANTIATE(double)
 #undef INSTANTIATE
 
 }} // namespace gbkfit::cuda::wrapper

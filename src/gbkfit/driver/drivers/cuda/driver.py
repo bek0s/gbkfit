@@ -5,7 +5,7 @@ import numpy as np
 import gbkfit.driver
 from gbkfit.driver.drivers import _detail
 
-import libgbkfit_cuda
+import gbkfit.native.libgbkfit_cuda
 
 
 def _ptr(a):
@@ -79,7 +79,7 @@ class DriverCUDA(gbkfit.driver.Driver):
 class DModelDCube(gbkfit.driver.DModelDCube):
 
     _CLASSES = {
-        np.float32: libgbkfit_cuda.DModelDCubef32}
+        np.float32: gbkfit.native.libgbkfit_cuda.DModelDCubef32}
 
     def __init__(self, dtype):
         _detail.check_dtype(self._CLASSES, dtype)
@@ -110,7 +110,7 @@ class DModelDCube(gbkfit.driver.DModelDCube):
 class DModelMMaps(gbkfit.driver.DModelMMaps):
 
     _CLASSES = {
-        np.float32: libgbkfit_cuda.DModelMMapsf32}
+        np.float32: gbkfit.native.libgbkfit_cuda.DModelMMapsf32}
 
     def __init__(self, dtype):
         _detail.check_dtype(self._CLASSES, dtype)
@@ -137,7 +137,7 @@ class DModelMMaps(gbkfit.driver.DModelMMaps):
 class GModelMCDisk(gbkfit.driver.GModelMCDisk):
 
     _CLASSES = {
-        np.float32: libgbkfit_cuda.GModelMCDiskf32}
+        np.float32: gbkfit.native.libgbkfit_cuda.GModelMCDiskf32}
 
     def __init__(self, dtype):
         _detail.check_dtype(self._CLASSES, dtype)
@@ -145,7 +145,7 @@ class GModelMCDisk(gbkfit.driver.GModelMCDisk):
 
     def evaluate(
             self,
-            cflux, nclouds, ncloudspt,
+            cflux, nclouds, ncloudspt, hasordint,
             loose, tilted, rnodes,
             vsys, xpos, ypos, posa, incl,
             rpt_uids, rpt_cvalues, rpt_ccounts, rpt_pvalues, rpt_pcounts,
@@ -161,7 +161,7 @@ class GModelMCDisk(gbkfit.driver.GModelMCDisk):
             image, scube, rcube,
             rdata, vdata, ddata):
         self._disk.evaluate(
-            cflux, nclouds, _ptr(ncloudspt),
+            cflux, nclouds, _ptr(ncloudspt), _shape(ncloudspt)[0], _ptr(hasordint),
             loose, tilted,
             _shape(rnodes)[0],
             _ptr(rnodes),
@@ -208,7 +208,7 @@ class GModelMCDisk(gbkfit.driver.GModelMCDisk):
 class GModelSMDisk(gbkfit.driver.GModelSMDisk):
 
     _CLASSES = {
-        np.float32: libgbkfit_cuda.GModelSMDiskf32}
+        np.float32: gbkfit.native.libgbkfit_cuda.GModelSMDiskf32}
 
     def __init__(self, dtype):
         _detail.check_dtype(self._CLASSES, dtype)
@@ -230,6 +230,8 @@ class GModelSMDisk(gbkfit.driver.GModelSMDisk):
             spec_size, spec_step, spec_zero,
             image, scube, rcube,
             rdata, vdata, ddata):
+        import time
+        t1 = time.time()
         self._disk.evaluate(
             loose, tilted,
             _shape(rnodes)[0],
@@ -272,3 +274,5 @@ class GModelSMDisk(gbkfit.driver.GModelSMDisk):
             spec_zero,
             _ptr(image), _ptr(scube), _ptr(rcube),
             _ptr(rdata), _ptr(vdata), _ptr(ddata))
+        t2 = time.time()
+        print("smdisk: time: ", (t2 - t1) * 1000)
