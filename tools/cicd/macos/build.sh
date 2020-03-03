@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-export MACOSX_DEPLOYMENT_TARGET=10.9
+export MACOSX_DEPLOYMENT_TARGET=10.8
 export GBKFIT_BUILD_HOST=1
 
 brew install fftw libomp

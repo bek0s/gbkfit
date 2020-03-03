@@ -2,6 +2,14 @@
 import numpy as np
 
 
+def fft_size(size):
+    import gbkfit.math
+    new_size = gbkfit.math.roundu_po2(size)
+    if new_size > 64:
+        new_size = gbkfit.math.roundu_multiple(size, 64)
+    return int(new_size)
+
+
 class DCube:
 
     def __init__(self, size, step, cval, scale, psf, lsf, dtype):
@@ -28,19 +36,20 @@ class DCube:
             psf_size_hi[1] // 2,
             lsf_size_hi // 2)
 
-        def fft_size(size):
-            import gbkfit.math
-            new_size = gbkfit.math.roundu_po2(size)
-            if new_size > 32:
-                new_size = gbkfit.math.roundu_multiple(size, 32)
-            return int(new_size)
-
         # High-res cube size
-        # TODO: fft_size
-        size_hi = (
-            fft_size(size[0] * scale[0] + psf_size_hi[0] - 1),
-            fft_size(size[1] * scale[1] + psf_size_hi[1] - 1),
-            fft_size(size[2] * scale[2] + lsf_size_hi - 1))
+        size_hi = [
+            size[0] * scale[0] + psf_size_hi[0] - 1,
+            size[1] * scale[1] + psf_size_hi[1] - 1,
+            size[2] * scale[2] + lsf_size_hi - 1]
+
+        # If we need to perform fft-based convolution,
+        # adjust sizes for optimal performance
+        if psf or lsf:
+            size_hi[0] = fft_size(size_hi[0])
+            size_hi[1] = fft_size(size_hi[1])
+            size_hi[2] = fft_size(size_hi[2])
+
+        size_hi = tuple(size_hi)
 
         # High-res cube zero pixel center position
         zero_hi = (
@@ -87,6 +96,7 @@ class DCube:
         self._lsf = lsf
         self._psf_hi = psf_hi
         self._lsf_hi = lsf_hi
+        self._psf3d_hi = psf_hi * lsf_hi[:, None, None]
         self._dtype = dtype
         self._dcube = None
         self._driver = None
@@ -187,11 +197,13 @@ class DCube:
         if out_extra is not None:
             out_extra['dcube_lo'] = self._driver.mem_copy_d2h(d_dcube_lo)
             out_extra['dcube_hi'] = self._driver.mem_copy_d2h(d_dcube_hi)
-            if self._psf is not None:
+            if self._psf:
                 out_extra['psf_lo'] = self._psf.asarray(self._step_lo[:2])
                 out_extra['psf_hi'] = self._psf.asarray(self._step_hi[:2])
                 out_extra['psf_hi_fft'] = self._psf_hi.copy()
-            if self._lsf is not None:
+            if self._lsf:
                 out_extra['lsf_lo'] = self._lsf.asarray(self._step_lo[2])
                 out_extra['lsf_hi'] = self._lsf.asarray(self._step_hi[2])
                 out_extra['lsf_hi_fft'] = self._lsf_hi.copy()
+            if self._psf or self._lsf:
+                out_extra['psf3d_hi'] = self._psf3d_hi.copy()
