@@ -46,6 +46,7 @@ target_link_libraries(
 target_compile_options(
   ${TARGET_NAME}
   PRIVATE
+  -stdlib=libc++
 )
 
 target_compile_definitions(
