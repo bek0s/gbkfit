@@ -77,6 +77,7 @@ setup(
         'funcy',
         'numpy',
         'networkx',
+        'ruamel.yaml',
         'scikit-image'
     ],
     entry_points={

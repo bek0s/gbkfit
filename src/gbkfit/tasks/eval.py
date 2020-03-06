@@ -1,10 +1,10 @@
 
-import json
 import logging
 import time
 
 import astropy.io.fits as fits
 import numpy as np
+import ruamel.yaml as yaml
 import scipy.stats as stats
 
 import gbkfit
@@ -38,7 +38,7 @@ def eval_(config, perf=None):
     gbkfit.init()
 
     log.info(f"Reading configuration file: '{config}'...")
-    config = json.load(open(config))
+    config = yaml.YAML().load(open(config))
     _prepare_config(config)
 
     brokers = None

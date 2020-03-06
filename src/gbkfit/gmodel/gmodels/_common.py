@@ -243,6 +243,25 @@ def prepare_rnode_array(backend, dtype, array_rnodes, rnodes):
     backend.mem_copy_h2d(array_rnodes[0], array_rnodes[1])
 
 
+def parse_node_args(nodes, nnodes, nodemin, nodemax, nodesep):
+    nodes_list = nodes is not None
+    nodes_arange = [nodemin, nodemax, nodesep].count(None) != 0
+    nodes_linspace = [nodemin, nodemax, nnodes].count(None) != 0
+    if [nodes_list, nodes_arange, nodes_linspace].count(True) != 1:
+        raise RuntimeError()
+
+    if nodes_arange:
+        nodedist = nodemax - nodemin
+        if nodemin < 0 or nodemax < 0 or nodedist <= 0 or nodedist < nodesep:
+            raise RuntimeError()
+        nodes = np.arange(nodemin, nodemax, nodesep).tolist()
+
+    if nodes_linspace:
+        if nodemin < 0 or nodemax < 0 or nnodes < 2:
+            raise RuntimeError()
+        nodes = np.linspace(nodemin, nodemax, nnodes).tolist()
+
+    return nodes
 
 
 def parse_density_disk_2d_common_args(
