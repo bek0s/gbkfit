@@ -50,13 +50,13 @@ On macOS:
 The above lines will create an isolated Python environment (*venv*) which
 can be used to install and run GBKFIT.
 
-To activate the environment run:
+To activate the environment, run:
 
 .. code-block:: console
 
    . venv/bin/activate
 
-To deactivate the environment run:
+To deactivate the environment, run:
 
 .. code-block:: console
 
