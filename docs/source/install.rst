@@ -144,8 +144,10 @@ To enable CUDA GPU support, run:
 .. attention::
    Support for CUDA GPUs is not working yet. Do not enable it.
 
-You can now compile and install your local copy of GBKFIT using:
+To compile and install your local copy of GBKFIT, run:
 
 .. code-block:: console
 
    pip install ./gbkfit
+
+Congratulations! It is time to model some galaxies!

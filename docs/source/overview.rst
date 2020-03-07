@@ -6,8 +6,8 @@ modelling galaxy surface brightness and kinematics. Its goal is to
 provide a solution for a wide range of galaxy modelling studies.
 
 .. attention::
-   This documentation covers the latest version of the software. If you are
-   interested in the old (and deprecated) version of GBKFIT, visit
+   This documentation covers the latest version of GBKFIT. If you are
+   interested in the old and deprecated version of the software, visit
    `gbkfit-legacy <https://github.com/bek0s/gbkfit-legacy>`_.
 
 Features
@@ -24,6 +24,6 @@ important features of the software are listed below.
   velocity dispersion, and optical depth functions.
 - Supports the most popular optimisation and sampling techniques, including
   Least-Squares minimisation, Swarm Intelligence, Markov Chain Monte Carlo,
-  and (Dynamic) Nested Sampling.
+  and Nested Sampling.
 - Supports multi-core CPUs and CUDA GPU accelerators on workstation,
   distributed, and cloud computing environments.
