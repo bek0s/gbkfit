@@ -18,12 +18,14 @@ modelling codes, while also offering insane computational performance. The most
 important features of the software are listed below.
 
 - Fits models to images, spectral cubes, moment maps, and long-slit data.
+- Performs great with low-resolution observations by utilising supersampling
+  and supporting a wide variety of point and line spread functions.
 - Supports superpositions of various galaxy model geometries, including
   thin-disk, thick-disk, and tilted-ring models.
 - Supports a plethora of superimposed surface brightness, velocity,
   velocity dispersion, and optical depth functions.
-- Supports the most popular optimisation and sampling techniques, including
+- Utilises the most popular optimisation and sampling techniques, including
   Least-Squares minimisation, Swarm Intelligence, Markov Chain Monte Carlo,
   and Nested Sampling.
-- Supports multi-core CPUs and CUDA GPU accelerators on workstation,
+- Takes advantage of multi-core CPUs and CUDA GPU accelerators on workstation,
   distributed, and cloud computing environments.
