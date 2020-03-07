@@ -143,7 +143,7 @@ To enable CUDA GPU support, run:
    export GBKFIT_BUILD_CUDA=1
 
 .. attention::
-   Support for CUDA GPUs is not working yet. Do not enable it.
+   Support for CUDA GPUs is not fully functional yet. Do not enable it.
 
 To compile and install your local copy of GBKFIT, run:
 
