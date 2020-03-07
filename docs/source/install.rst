@@ -119,8 +119,8 @@ To install GBKFIT from source you will need:
 - An OpenMP library.
   This usually comes with your compiler and you do not have to install
   anything. However, this is not always the case. For example, when compiling
-  with Apple Clang compiler, you may have to install the libomp library (which
-  is available through Homebrew and MacPorts).
+  with Apple Clang compiler, you may have to install the libomp library
+  (available through Homebrew and MacPorts).
 
 Once all required dependencies are installed, run:
 
