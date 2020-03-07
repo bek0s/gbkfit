@@ -29,7 +29,7 @@ reason you cannot update it, you could try running the commands below.
 
 On Linux:
 
-.. code-block:: bash
+.. code-block:: console
 
    mkdir gbkfit && cd gbkfit
    wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
@@ -39,7 +39,7 @@ On Linux:
 
 On macOS:
 
-.. code-block:: bash
+.. code-block:: console
 
    mkdir gbkfit && cd gbkfit
    curl -O -L https://repo.anaconda.com/miniconda/Miniconda3-latest-MacOSX-x86_64.sh
@@ -52,13 +52,13 @@ can be used to install and run GBKFIT.
 
 To activate the environment run:
 
-.. code-block:: bash
+.. code-block:: console
 
    . venv/bin/activate
 
 To deactivate the environment run:
 
-.. code-block:: bash
+.. code-block:: console
 
    deactivate
 
@@ -71,32 +71,31 @@ To deactivate the environment run:
 Dependencies
 ------------
 
-The only requirement of GBKFIT is a working Python 3.7+ environment. The rest
-of the required dependencies are downloaded automatically during its
-installation.
+All required run-time dependencies are installed automatically during
+GBKFIT's installation.
 
 Optional Dependencies
 ^^^^^^^^^^^^^^^^^^^^^
 
-GBFKFIT has a series of optional dependencies which can be installed by
-the user in order to activate particular features:
+The following optional run-time dependencies can be installed by the user
+in order to activate additional functionality:
 
 - TODO
 
-Install from PyPI
------------------
+Installing from PyPI
+--------------------
 
-Use the following steps to install GBKFIT from the Python Package Index (PyPI):
+Use the steps below to install GBKFIT from the Python Package Index (PyPI).
 
 - Upgrade pip to the latest version (optional step, but highly recommended):
 
-  .. code-block:: bash
+  .. code-block:: console
 
      pip install pip -U
 
 - Install GBKFIT:
 
-  .. code-block:: bash
+  .. code-block:: console
 
      pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple --no-cache-dir gbkfit
 
@@ -107,22 +106,46 @@ Use the following steps to install GBKFIT from the Python Package Index (PyPI):
    ``pip install gbkfit``.
 
 
-Install from Source
--------------------
+Installing from Source
+----------------------
 
-When installing GBKFIT from source, the following dependencies are required:
+To install GBKFIT from source you will need:
 
-- **FFTW3**: This should be available through your OS package manager
-  (apt, yum, pacman, Homebrew, MacPorts, etc). Alternatively, it can be
-  obtained from `here <http://www.fftw.org/>`_.
+- A C++ 14 capable compiler.
+  Any recent version of GCC, Clang, ICC, or PGI will do.
+- The FFTW3 library.
+  This should be available through your OS package manager. Alternatively, it
+  can be obtained from `here <http://www.fftw.org/>`_.
+- An OpenMP library.
+  This usually comes with your compiler and you do not have to install
+  anything. However, this is not always the case. For example, when compiling
+  with Apple Clang compiler, you may have to install the libomp library.
 
-- **OpenMP**: This usually comes with your compiler and you don't have to
-  install anything. However, this is not always the case. For example, when
-  compiling with Apple Clang compiler, you may have to install the
-  libomp library.
+Once all required dependencies are installed, run:
 
-.. code-block:: bash
+.. code-block:: console
 
    git clone --recurse-submodules --remote-submodules https://github.com/bek0s/gbkfit.git
 
+Before compiling the source code, we need to specify what hardware support we want to compile GBKFIT with.
 
+To enable multi-core CPU support, run:
+
+.. code-block:: console
+
+   export GBKFIT_BUILD_HOST=1
+
+To enable CUDA GPU support, run:
+
+.. code-block:: console
+
+   export GBKFIT_BUILD_CUDA=1
+
+.. attention::
+   Support for CUDA GPUs is not working yet. Do not enable it.
+
+You can now compile and install your local copy of GBKFIT using:
+
+.. code-block:: console
+
+   pip install ./gbkfit
