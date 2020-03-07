@@ -243,7 +243,7 @@ def prepare_rnode_array(backend, dtype, array_rnodes, rnodes):
     backend.mem_copy_h2d(array_rnodes[0], array_rnodes[1])
 
 
-def parse_node_args(nodes, nnodes, nodemin, nodemax, nodesep):
+def parse_node_args(nodes, nodemin, nodemax, nodesep, nnodes):
     nodes_list = nodes is not None
     nodes_arange = [nodemin, nodemax, nodesep].count(None) != 0
     nodes_linspace = [nodemin, nodemax, nnodes].count(None) != 0
