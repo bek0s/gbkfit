@@ -100,7 +100,7 @@ Use the steps below to install GBKFIT from the Python Package Index (PyPI).
      pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple --no-cache-dir gbkfit
 
 .. attention::
-   Because GBKFIT is currently on a testing phase, it is located on the Test
+   Because GBKFIT is currently in Alpha phase, it is located on the Test
    instance of PyPI. Once the testing phase is complete, the software will be
    moved to the production version of PyPI and will be installable using:
    ``pip install gbkfit``.
