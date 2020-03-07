@@ -106,7 +106,7 @@ Use the steps below to install GBKFIT from the Python Package Index (PyPI).
    ``pip install gbkfit``.
 
 
-Installing from Source
+Installing from source
 ----------------------
 
 To install GBKFIT from source you will need:
