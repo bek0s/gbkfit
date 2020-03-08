@@ -47,8 +47,9 @@ On macOS:
    ./Miniconda3-latest-MacOSX-x86_64.sh -b -s -p ./miniconda
    ./miniconda/bin/python -m venv venv
 
-The above lines will create an isolated Python environment (*venv*) which
-can be used to install and run GBKFIT.
+The above lines will create an isolated Python environment (*venv*) which will
+not affect your system's Python environment and can be used to install and run
+GBKFIT.
 
 To activate the environment, run:
 
@@ -100,14 +101,21 @@ Use the steps below to install GBKFIT from the Python Package Index (PyPI).
      pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple --no-cache-dir gbkfit
 
 .. attention::
-   Because GBKFIT is currently in Alpha phase, it is located on the Test
-   instance of PyPI. Once the testing phase is complete, the software will be
-   moved to the production version of PyPI and will be installable using:
+   Because GBKFIT is currently in Alpha development phase, it is located on the
+   Test instance of PyPI. Once the Alpha phase is complete, the software will
+   be moved to the production version of PyPI and will be installable using:
    ``pip install gbkfit``.
 
 
 Installing from source
 ----------------------
+
+Installing GBKFIT from source requires additional technical expertise and you
+should have a good reason for preferring it over installing from PyPI. The two
+most common reasons are:
+
+- GBKFIT is not available on PyPI for your platform
+- You want to compile GBKFIT with a specific compiler
 
 To install GBKFIT from source you will need:
 
@@ -151,4 +159,4 @@ To compile and install your local copy of GBKFIT, run:
 
    pip install ./gbkfit
 
-Congratulations! It is time to model some galaxies!
+Congratulations! Now it is time to model some galaxies!

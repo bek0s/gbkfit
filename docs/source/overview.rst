@@ -11,8 +11,8 @@ provide a solution for a wide range of galaxy modelling studies.
    `gbkfit-legacy <https://github.com/bek0s/gbkfit-legacy>`_.
 
 .. warning::
-   GBKFIT is currently in Alpha phase and is expected to contain incomplete
-   features and bugs.
+   GBKFIT is currently in Alpha development phase and is expected to contain
+   incomplete features and bugs.
 
 Features
 --------
