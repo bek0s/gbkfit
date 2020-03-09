@@ -56,20 +56,19 @@ The configuration file
 ----------------------
 
 All the configuration files used by the CLI and GUI must be in a format that is
-flexible enough to describe the flexible and complex modelling strategies
+flexible enough to describe the complex and sophisticated modelling strategies
 available in GBKFIT. Furthermore, the configuration files must be
 human-readable/writable, but also supported by a wide range of programming
 languages in case the user wishes to read/write them programmatically.
 
-For this reason we chose to make use of the JSON and YAML file formats. While
+For this reason we decided to make use of the JSON and YAML file formats. While
 the JSON format is enough to describe the modelling strategies of GBKFIT, many
 users may find it a bit too verbose. To overcome this issue, GBKFIT also
 supports configuration files in the YAML file format. In fact, YAML 1.2 is
 a superset of JSON, and as a result, users could also use JSON syntax inside
 YAML configuration files if they wish to do so. Throughout this documentation
 we will adopt a hybrid approach. While for the most part we will be using YAML,
-for some parts we may have to use JSON in order to improve the clarity of the
-configuration files.
+for some parts we may have to use JSON.
 
 To learn more about the JSON and YAML file formats, see
 `JSON <https://json.org>`_ and `YAML <https://yaml.org>`_.
