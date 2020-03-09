@@ -2,8 +2,6 @@
 |gbkfit|
 ========
 
-|Actions Status|
-
 **This repository is currently being set up and the code is not usable at the
 moment. Please check again at a later time.**
 
