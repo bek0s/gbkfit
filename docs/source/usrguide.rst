@@ -14,7 +14,7 @@ The command line interface (``gbkfit-cli``)
 The CLI of GBKFIT can be run using the command ``gbkfit-cli`` followed by a
 positional argument indicating the task the user wants to execute, which in
 turn is followed by a series of positional and optional arguments specific to
-that task . There are four available tasks: ``eval``, ``prep``, ``fit``, and
+that task. There are four available tasks: ``eval``, ``prep``, ``fit``, and
 ``plot``. The first generates mock models; the second provides a series of
 pre-processing functions to prepare data for fitting; the third fits models to
 data; and finally, the fourth creates visualisations for the results of the
@@ -23,11 +23,19 @@ data; and finally, the fourth creates visualisations for the results of the
 The ``eval`` task
 ^^^^^^^^^^^^^^^^^
 
+The ``eval`` task can be used to generate models without performing any
+fitting. The description of the model must be supplied to GBKFIT in the form of
+a text-based configuration file.
+
 To generate a mock model, run:
 
 .. code-block:: console
 
-   gbkfit-cli eval config.yaml
+   gbkfit-cli eval path/to/configuration/file
+
+After ..., a series of output files created ...
+
+Instructions on how to create a configuration file see link.
 
 The ``prep`` task
 ^^^^^^^^^^^^^^^^^
@@ -47,9 +55,24 @@ The graphical user interface (``gbkfit-gui``)
 The configuration file
 ----------------------
 
-`JSON <https://json.org>`_.
+All the configuration files used by the CLI and GUI must be in a format that is
+flexible enough to describe the flexible and complex modelling strategies
+available in GBKFIT. Furthermore, the configuration files must be
+human-readable/writable, but also supported by a wide range of programming
+languages in case the user wishes to read/write them programmatically.
 
-`YAML <https://yaml.org>`_.
+For this reason we chose to make use of the JSON and YAML file formats. While
+the JSON format is enough to describe the modelling strategies of GBKFIT, many
+users may find it a bit too verbose. To overcome this issue, GBKFIT also
+supports configuration files in the YAML file format. In fact, YAML 1.2 is
+a superset of JSON, and as a result, users could also use JSON syntax inside
+YAML configuration files if they wish to do so. Throughout this documentation
+we will adopt a hybrid approach. While for the most part we will be using YAML,
+for some parts we may have to use JSON in order to improve the clarity of the
+configuration files.
+
+To learn more about the JSON and YAML file formats, see
+`JSON <https://json.org>`_ and `YAML <https://yaml.org>`_.
 
 Example
 ^^^^^^^^^^^^^^^^^^^
