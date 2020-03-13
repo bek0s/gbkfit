@@ -10,10 +10,12 @@ Welcome to gbkfit's documentation!
    The documentation is under development. Please check again in a few weeks.
 
 .. toctree::
+   :numbered:
    :maxdepth: 2
    :caption: Contents:
 
    overview
+   concepts
    install
    usrguide
    devguide

@@ -115,3 +115,20 @@ Example
      vpt_rt: 10
      vpt_vt: 200
      dpt_a: 10
+
+Cookbook
+--------
+
+Data Model descriptions
+^^^^^^^^^^^^^^^^^^^^^^^
+
+Galaxy Model descriptions
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Thin flat disk
+
+Thick flat disk
+
+Fitter descriptions
+^^^^^^^^^^^^^^^^^^^
+
