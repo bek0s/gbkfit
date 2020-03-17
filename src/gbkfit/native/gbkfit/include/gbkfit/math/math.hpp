@@ -152,6 +152,55 @@ uniform_1d_rnd_trunc(RNG<T>& rng, T b, T c, T xmin, T xmax)
 }
 
 template<typename T> constexpr T
+uniform_wm_1d_fun(T x, T a, T b, T c)
+{
+    T newb = b - c;
+    T newc = b + c;
+    return uniform_1d_fun(x, a, newb, newc);
+}
+
+template<typename T> constexpr T
+uniform_wm_1d_cdf(T x, T b, T c)
+{
+    T newb = b - c;
+    T newc = b + c;
+    return uniform_1d_cdf(x, newb, newc);
+}
+
+template<typename T> constexpr T
+uniform_wm_1d_pdf(T x, T b, T c)
+{
+    T newb = b - c;
+    T newc = b + c;
+    return uniform_1d_pdf(x, newb, newc);
+}
+
+template<typename T> constexpr T
+uniform_wm_1d_pdf_trunc(T x, T b, T c, T xmin, T xmax)
+{
+    T newb = b - c;
+    T newc = b + c;
+    return _trunc_1d_pdf(
+            uniform_1d_pdf<T>, uniform_1d_cdf<T>, xmin, xmax, x, newb, newc);
+}
+
+template<typename T> constexpr T
+uniform_wm_1d_rnd(RNG<T>& rng, T b, T c)
+{
+    T newb = b - c;
+    T newc = b + c;
+    return uniform_1d_rnd(rng, newb, newc);
+}
+
+template<typename T> constexpr T
+uniform_wm_1d_rnd_trunc(RNG<T>& rng, T b, T c, T xmin, T xmax)
+{
+    T newb = b - c;
+    T newc = b + c;
+    return _trunc_1d_rnd(uniform_1d_rnd<T>, xmin, xmax, rng, newb, newc);
+}
+
+template<typename T> constexpr T
 exponential_1d_fun(T x, T a, T b, T c)
 {
     return a * std::exp(-std::abs(x - b) / c);
@@ -355,6 +404,49 @@ template<typename T> constexpr T
 moffat_1d_fun(T x, T a, T b, T c, T d)
 {
     return a / std::pow(1 + ((x - b) / c) * ((x - b) / c), d);
+}
+
+template<typename T> constexpr T
+moffat_1d_cdf(T x, T b, T c, T d)
+{
+    (void)x;
+    (void)b;
+    (void)c;
+    (void)d;
+    return 0;
+}
+
+template<typename T> constexpr T
+moffat_1d_pdf(T x, T b, T c, T d)
+{
+    (void)x;
+    (void)b;
+    (void)c;
+    (void)d;
+    return 0;
+}
+
+template<typename T> constexpr T
+moffat_1d_pdf_trunc(T x, T b, T c, T d, T xmin, T xmax)
+{
+    return _trunc_1d_pdf(moffat_1d_pdf<T>, moffat_1d_cdf<T>,
+            xmin, xmax, x, b, c, d);
+}
+
+template<typename T> constexpr T
+moffat_1d_rnd(RNG<T>& rng, T b, T c, T d)
+{
+    (void)rng;
+    (void)b;
+    (void)c;
+    (void)d;
+    return 0;
+}
+
+template<typename T> constexpr T
+moffat_1d_rnd_trunc(RNG<T>& rng, T b, T c, T d, T xmin, T xmax)
+{
+    return _trunc_1d_rnd<moffat_1d_rnd<T>>(xmin, xmax, rng, b, c, d);
 }
 
 template<typename T> constexpr T

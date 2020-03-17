@@ -90,15 +90,15 @@ class Disk(abc.ABC):
         (self._rpt_pdescs,
          self._rpt_pnames) = _common.trait_param_info(rptraits, 'rpt', nrnodes)
         (self._rht_pdescs,
-         self._rht_pnames) = _common.trait_param_info(rhtraits, 'rht')
+         self._rht_pnames) = _common.trait_param_info(rhtraits, 'rht', nrnodes)
         (self._vpt_pdescs,
          self._vpt_pnames) = _common.trait_param_info(vptraits, 'vpt', nrnodes)
         (self._vht_pdescs,
-         self._vht_pnames) = _common.trait_param_info(vhtraits, 'vht')
+         self._vht_pnames) = _common.trait_param_info(vhtraits, 'vht', nrnodes)
         (self._dpt_pdescs,
          self._dpt_pnames) = _common.trait_param_info(dptraits, 'dpt', nrnodes)
         (self._dht_pdescs,
-         self._dht_pnames) = _common.trait_param_info(dhtraits, 'dht')
+         self._dht_pnames) = _common.trait_param_info(dhtraits, 'dht', nrnodes)
         (self._wpt_pdescs,
          self._wpt_pnames) = _common.trait_param_info(wptraits, 'wpt', nrnodes)
         (self._spt_pdescs,
@@ -232,7 +232,7 @@ class Disk(abc.ABC):
 
         _common.prepare_rnode_array(
             driver, dtype, self._m_subrnodes, self._subrnodes)
-
+        # TODO self._nrnodes, self._nsubrnodes,
         if self._rptraits:
             _common.prepare_trait_arrays(
                 self._rptraits, self._nrnodes, self._nsubrnodes,
@@ -242,7 +242,7 @@ class Disk(abc.ABC):
                 dtype, driver)
         if self._rhtraits:
             _common.prepare_trait_arrays(
-                self._rhtraits, 0, 0,
+                self._rhtraits, self._nrnodes, self._nsubrnodes,
                 self._m_rht_uids,
                 self._m_rht_ccounts, self._m_rht_pcounts,
                 self._m_rht_cvalues, self._m_rht_pvalues,
@@ -256,7 +256,7 @@ class Disk(abc.ABC):
                 dtype, driver)
         if self._vhtraits:
             _common.prepare_trait_arrays(
-                self._vhtraits, 0, 0,
+                self._vhtraits, self._nrnodes, self._nsubrnodes,
                 self._m_vht_uids,
                 self._m_vht_ccounts, self._m_vht_pcounts,
                 self._m_vht_cvalues, self._m_vht_pvalues,
@@ -270,7 +270,7 @@ class Disk(abc.ABC):
                 dtype, driver)
         if self._dhtraits:
             _common.prepare_trait_arrays(
-                self._dhtraits, 0, 0,
+                self._dhtraits, self._nrnodes, self._nsubrnodes,
                 self._m_dht_uids,
                 self._m_dht_ccounts, self._m_dht_pcounts,
                 self._m_dht_cvalues, self._m_dht_pvalues,
@@ -354,6 +354,10 @@ class Disk(abc.ABC):
                 self._sptraits)
         t2 = time.time()
         print("params: time: ", (t2 - t1) * 1000)
+
+        print("rht:", self._m_rht_pvalues)
+        print("vpt1:", self._vptraits)
+        print("vpt2:", self._m_vpt_pvalues)
 
         self._impl_evaluate(
             driver, params, image, scube, rcube, dtype,

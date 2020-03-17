@@ -270,7 +270,7 @@ gmodel_mcdisk_evaluate_cloud(
     const T* rpt_pptr = rpt_pvalues;
     const T* rht_cptr = rht_cvalues;
     const T* rht_pptr = rht_pvalues;
-    T xd=0, yd=0, zd=0, rd=0, theta=0, sign=0;
+    T xd=0, yd=0, zd=0, rd=0, theta=0, sign=1;
     T vsysi=0, xposi=0, yposi=0, posai=0, incli=0;
     T ptvalues[] = {0, 0, 0, 0};
     T htvalues[] = {0, 0, 0, 0};
@@ -344,7 +344,9 @@ gmodel_mcdisk_evaluate_cloud(
     }
 
     // Density height trait
-    rh_trait_rnd<T>(zd, rng, rht_uids[tidx], rht_cptr, rht_pptr);
+    rh_trait_rnd<T>(
+                zd, rng, rht_uids[tidx], rht_cptr, rht_pptr,
+                rnidx, rnodes, nrnodes, rd);
 
     // Warp traits
     if (wpt_uids)
@@ -406,7 +408,8 @@ gmodel_mcdisk_evaluate_cloud(
                 nvt, vht_uids,
                 vht_cvalues, vht_ccounts,
                 vht_pvalues, vht_pcounts,
-                std::abs(zd));
+                rnidx, rnodes, nrnodes,
+                rd, std::abs(zd));
     }
     for (int i = 0; i < nvt; ++i)
         vvalue += ptvalues[i] * (is_thin ? 1 : htvalues[i]);
@@ -431,7 +434,8 @@ gmodel_mcdisk_evaluate_cloud(
                 ndt, dht_uids,
                 dht_cvalues, dht_ccounts,
                 dht_pvalues, dht_pcounts,
-                std::abs(zd));
+                rnidx, rnodes, nrnodes,
+                rd, std::abs(zd));
     }
     for (int i = 0; i < ndt; ++i)
         dvalue += ptvalues[i] * (is_thin ? 1 : htvalues[i]);
@@ -603,7 +607,8 @@ gmodel_smdisk_evaluate_pixel(
                 nrt, rht_uids,
                 rht_cvalues, rht_ccounts,
                 rht_pvalues, rht_pcounts,
-                std::abs(zn));
+                rnidx, rnodes, nrnodes,
+                rn, std::abs(zn));
     }
     for (int i = 0; i < nrt; ++i)
         bvalue += ptvalues[i] * (is_thin ? 1 : htvalues[i] * spat_step_z);
@@ -628,7 +633,8 @@ gmodel_smdisk_evaluate_pixel(
                 nvt, vht_uids,
                 vht_cvalues, vht_ccounts,
                 vht_pvalues, vht_pcounts,
-                std::abs(zn));
+                rnidx, rnodes, nrnodes,
+                rn, std::abs(zn));
     }
     for (int i = 0; i < nvt; ++i)
         vvalue += ptvalues[i] * (is_thin ? 1 : htvalues[i]);
@@ -653,7 +659,8 @@ gmodel_smdisk_evaluate_pixel(
                 ndt, dht_uids,
                 dht_cvalues, dht_ccounts,
                 dht_pvalues, dht_pcounts,
-                std::abs(zn));
+                rnidx, rnodes, nrnodes,
+                rn, std::abs(zn));
     }
     for (int i = 0; i < ndt; ++i)
         dvalue += ptvalues[i] * (is_thin ? 1 : htvalues[i]);

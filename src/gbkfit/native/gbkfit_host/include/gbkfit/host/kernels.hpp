@@ -259,7 +259,7 @@ evaluate_scube(
                 + y * spat_size_x
                 + z * spat_size_x * spat_size_y;
         T zvel = spec_zero + z * spec_step;
-        T flux = gauss_1d_pdf<T>(zvel, vvalue, dvalue);
+        T flux = rvalue * gauss_1d_pdf<T>(zvel, vvalue, dvalue);
         #pragma omp atomic update
         scube[idx] += flux;
     }

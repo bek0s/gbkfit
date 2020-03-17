@@ -128,6 +128,7 @@ def _make_component_params(components, prefix, force_prefix):
     params = {}
     mappings = []
     for i, cmp in enumerate(components):
+        print(cmp)
         prefix = f'{prefix}{i}_' * (i > 0 or force_prefix)
         params.update({prefix + k: v for k, v in cmp.params().items()})
         mappings.append(dict(zip(cmp.params().keys(), params.keys())))
@@ -144,15 +145,14 @@ def make_model_3d_params(components, tcomponents, tauto):
     return {**params, **tparams}, mappings, tmappings
 
 
-def trait_param_info(traits, prefix, nnodes=None):
+def trait_param_info(traits, prefix, nrnodes):
     descs = {}
     mappings = []
     for i, trait in enumerate(traits):
-        if trait.params_nw(nnodes) and not nnodes:
-            raise RuntimeError()
         prefix += str(i + 1) * (i > 0)
-        params = trait.params_sm() + trait.params_nw(nnodes)
+        params = trait.params_sm() + trait.params_rnw(nrnodes)
         mapping = {}
+        print(params)
         for param in params:
             old_pname = param.name()
             new_pname = f'{prefix}_{old_pname}'
@@ -160,6 +160,10 @@ def trait_param_info(traits, prefix, nnodes=None):
             mapping[old_pname] = new_pname
         mappings.append(mapping)
     return descs, mappings
+
+
+
+
 
 
 def prepare_trait_arrays(
@@ -175,7 +179,7 @@ def prepare_trait_arrays(
     for trait in traits:
         consts = trait.consts()
         params_sm = trait.params_sm()
-        params_nw = trait.params_nw(nnodes)
+        params_nw = trait.params_rnw(nnodes)
         pcounts_sm = sum(p.size() for p in params_sm)
         pcounts_nw = len(params_nw) * nsubnodes
         uids.append(trait.uid())
@@ -201,7 +205,7 @@ def prepare_trait_arrays(
 def make_param_descs(key, nnodes, pw):
     return {key: ParamVectorDesc(key, nnodes) if pw else ParamScalarDesc(key)}
 
-
+# TODO all trait.params_nw occurrences
 
 def prepare_traits_params_array(
         driver, params, ary, descs, nodes, subnodes, interp, mappings, traits):
@@ -212,7 +216,7 @@ def prepare_traits_params_array(
             stop = start + descs[new_pname].size()
             ary[0][start:stop] = params[new_pname]
             start = stop
-        for pname in trait.params_nw(len(nodes)):
+        for pname in trait.params_rnw(len(nodes)):
             new_pname = mapping[pname.name()]
             stop = start + len(subnodes)
             params[new_pname] = interp(nodes, params[new_pname])(subnodes)

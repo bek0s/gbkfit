@@ -28,7 +28,8 @@ RH_TRAIT_UID_EXPONENTIAL = 2
 RH_TRAIT_UID_GAUSS = 3
 RH_TRAIT_UID_GGAUSS = 4
 RH_TRAIT_UID_LORENTZ = 5
-RH_TRAIT_UID_SECH2 = 6
+RH_TRAIT_UID_MOFFAT = 6
+RH_TRAIT_UID_SECH2 = 7
 
 # Velocity traits (polar)
 VP_TRAIT_UID_TAN_UNIFORM = 1
@@ -86,10 +87,10 @@ def _params_mixture(n):
         ParamVectorDesc('p', n))  # position angle relative to t
 
 
-def _params_pw_harmonic(k, nnodes):
+def _params_pw_harmonic(order, nnodes):
     params = []
     params += [ParamVectorDesc(f'a', nnodes)]
-    params += [ParamVectorDesc(f'p', nnodes)] * (k > 0)
+    params += [ParamVectorDesc(f'p', nnodes)] * (order > 0)
     return tuple(params)
 
 
@@ -115,57 +116,72 @@ class Trait(abc.ABC):
 
     @classmethod
     def load(cls, info):
-        return cls()
+        return cls(**info)
+
+    def __init__(self, **kwargs):
+        self._kwargs = kwargs.copy()
 
     def dump(self):
-        return {'type': self.type()}
+        return {'type': self.type(), **self._kwargs}
 
     def consts(self):
-        return tuple()
+        return tuple(self._kwargs.values())
+
+
+class PTraitParams(abc.ABC):
 
     def params_sm(self):
         return tuple()
 
-    def params_nw(self, nnodes):
+    def params_rnw(self, nrnodes):
         return tuple()
 
 
-class RPTrait(Trait, abc.ABC):
+class HTraitParams(abc.ABC):
+
+    def params_sm(self):
+        return tuple()
+
+    def params_rnw(self, nrnodes):
+        return tuple()
+
+
+class RPTrait(PTraitParams, Trait, abc.ABC):
 
     @abc.abstractmethod
     def has_ordinary_integral(self):
         pass
 
     @abc.abstractmethod
-    def integrate(self, params, nodes, rsep):
+    def integrate(self, params, rnodes):
         pass
 
 
-class RHTrait(Trait, abc.ABC):
+class RHTrait(HTraitParams, Trait, abc.ABC):
     pass
 
 
-class VPTrait(Trait, abc.ABC):
+class VPTrait(PTraitParams, Trait, abc.ABC):
     pass
 
 
-class VHTrait(Trait, abc.ABC):
+class VHTrait(HTraitParams, Trait, abc.ABC):
     pass
 
 
-class DPTrait(Trait, abc.ABC):
+class DPTrait(PTraitParams, Trait, abc.ABC):
     pass
 
 
-class DHTrait(Trait, abc.ABC):
+class DHTrait(HTraitParams, Trait, abc.ABC):
     pass
 
 
-class WPTrait(Trait, abc.ABC):
+class WPTrait(PTraitParams, Trait, abc.ABC):
     pass
 
 
-class SPTrait(Trait, abc.ABC):
+class SPTrait(PTraitParams, Trait, abc.ABC):
     pass
 
 
@@ -352,21 +368,11 @@ class RPTraitMixtureGGauss(RPTrait):
     def uid():
         return RP_TRAIT_UID_MIXTURE_GGAUSS
 
-    @classmethod
-    def load(cls, info):
-        return cls(info['n'])
-
-    def dump(self):
-        return {'type': self.type(), 'n': self._n}
-
-    def __init__(self, n):
-        self._n = n
-
-    def consts(self):
-        return self._n,
+    def __init__(self, nblobs):
+        Trait.__init__(self, nblobs=nblobs)
 
     def params_sm(self):
-        return _params_mixture(self._n)
+        return _params_mixture(self._kwargs['nblobs'])
 
     def has_ordinary_integral(self):
         return True
@@ -385,21 +391,11 @@ class RPTraitMixtureMoffat(RPTrait):
     def uid():
         return RP_TRAIT_UID_MIXTURE_MOFFAT
 
-    @classmethod
-    def load(cls, info):
-        return cls(info['n'])
-
-    def dump(self):
-        return {'type': self.type(), 'n': self._n}
-
-    def __init__(self, n):
-        self._n = n
-
-    def consts(self):
-        return self._n,
+    def __init__(self, nblobs):
+        Trait.__init__(self, nblobs=nblobs)
 
     def params_sm(self):
-        return _params_mixture(self._n)
+        return _params_mixture(self._kwargs['nblobs'])
 
     def has_ordinary_integral(self):
         return True
@@ -418,7 +414,7 @@ class RPTraitNWUniform(RPTrait):
     def uid():
         return RP_TRAIT_UID_NW_UNIFORM
 
-    def params_nw(self, nnodes):
+    def params_rnw(self, nnodes):
         return (
             ParamVectorDesc('a', nnodes),)
 
@@ -440,21 +436,11 @@ class RPTraitNWHarmonic(RPTrait):
     def uid():
         return RP_TRAIT_UID_NW_HARMONIC
 
-    @classmethod
-    def load(cls, info):
-        return cls(info['k'])
+    def __init__(self, order):
+        super().__init__(order=order)
 
-    def dump(self):
-        return {'type': self.type(), 'k': self._k}
-
-    def __init__(self, k):
-        self._k = k
-
-    def consts(self, nnodes=None):
-        return self._k,
-
-    def params_nw(self, nnodes):
-        return _params_pw_harmonic(self._k, nnodes)
+    def params_rnw(self, nnodes):
+        return _params_pw_harmonic(self._kwargs['order'], nnodes)
 
     def has_ordinary_integral(self):
         return False
@@ -475,7 +461,7 @@ class RPTraitNWDistortion(RPTrait):
     def uid():
         return RP_TRAIT_UID_NW_DISTORTION
 
-    def params_nw(self, nnodes):
+    def params_rnw(self, nnodes):
         return (
             ParamVectorDesc('a', nnodes),
             ParamVectorDesc('p', nnodes),
@@ -487,13 +473,32 @@ class RPTraitNWDistortion(RPTrait):
     def integrate(self, params, nodes):
         a = params['a']
         s = params['s']
-        #foo = _integrate_nw(nodes, gbkfit.math.gauss_1d_fun, a, 0, s * nodes)
+        # foo = _integrate_nw(nodes, gbkfit.math.gauss_1d_fun, a, 0, s * nodes)
         # foo = a * np.sqrt(2 * np.pi) / np.sqrt(1 / s * s) * (nodes[1] - nodes[0])
         foo = a * np.sqrt(2 * np.pi) / np.sqrt((1) / (s * s)) * 1
         return foo
 
 
-class RHTraitUniform(RHTrait):
+class _RHTraitSM(RHTrait, abc.ABC):
+
+    def __init__(self, rnodes, params):
+        Trait.__init__(self, rnodes=rnodes)
+        self._params = tuple(params)
+
+    def params_sm(self):
+        if self._kwargs['rnodes']:
+            return tuple()
+        else:
+            return tuple([ParamScalarDesc(p) for p in self._params])
+
+    def params_rnw(self, nrnodes):
+        if self._kwargs['rnodes']:
+            return tuple([ParamVectorDesc(p, nrnodes) for p in self._params])
+        else:
+            return tuple()
+
+
+class RHTraitUniform(_RHTraitSM):
 
     @staticmethod
     def type():
@@ -503,12 +508,11 @@ class RHTraitUniform(RHTrait):
     def uid():
         return RH_TRAIT_UID_UNIFORM
 
-    def params_sm(self):
-        return (
-            ParamScalarDesc('s'),)
+    def __init__(self, rnodes=False):
+        super().__init__(rnodes, ['s'])
 
 
-class RHTraitExponential(RHTrait):
+class RHTraitExponential(_RHTraitSM):
 
     @staticmethod
     def type():
@@ -518,12 +522,11 @@ class RHTraitExponential(RHTrait):
     def uid():
         return RH_TRAIT_UID_EXPONENTIAL
 
-    def params_sm(self):
-        return (
-            ParamScalarDesc('s'),)
+    def __init__(self, rnodes=False):
+        super().__init__(rnodes, ['s'])
 
 
-class RHTraitGauss(RHTrait):
+class RHTraitGauss(_RHTraitSM):
 
     @staticmethod
     def type():
@@ -533,12 +536,11 @@ class RHTraitGauss(RHTrait):
     def uid():
         return RH_TRAIT_UID_GAUSS
 
-    def params_sm(self):
-        return (
-            ParamScalarDesc('s'),)
+    def __init__(self, rnodes=False):
+        super().__init__(rnodes, ['s'])
 
 
-class RHTraitGGauss(RHTrait):
+class RHTraitGGauss(_RHTraitSM):
 
     @staticmethod
     def type():
@@ -548,13 +550,11 @@ class RHTraitGGauss(RHTrait):
     def uid():
         return RH_TRAIT_UID_GGAUSS
 
-    def params_sm(self):
-        return (
-            ParamScalarDesc('s'),
-            ParamScalarDesc('b'))
+    def __init__(self, rnodes=False):
+        super().__init__(rnodes, ['s', 'b'])
 
 
-class RHTraitLorentz(RHTrait):
+class RHTraitLorentz(_RHTraitSM):
 
     @staticmethod
     def type():
@@ -564,12 +564,25 @@ class RHTraitLorentz(RHTrait):
     def uid():
         return RH_TRAIT_UID_LORENTZ
 
-    def params_sm(self):
-        return (
-            ParamScalarDesc('s'),)
+    def __init__(self, rnodes=False):
+        super().__init__(rnodes, ['s'])
 
 
-class RHTraitSech2(RHTrait):
+class RHTraitMoffat(_RHTraitSM):
+
+    @staticmethod
+    def type():
+        return 'moffat'
+
+    @staticmethod
+    def uid():
+        return RH_TRAIT_UID_MOFFAT
+
+    def __init__(self, rnodes=False):
+        super().__init__(rnodes, ['s', 'b'])
+
+
+class RHTraitSech2(_RHTraitSM):
 
     @staticmethod
     def type():
@@ -579,9 +592,8 @@ class RHTraitSech2(RHTrait):
     def uid():
         return RH_TRAIT_UID_SECH2
 
-    def params_sm(self):
-        return (
-            ParamScalarDesc('s'),)
+    def __init__(self, rnodes=False):
+        super().__init__(rnodes, ['s'])
 
 
 class VPTraitTanUniform(VPTrait):
@@ -691,7 +703,7 @@ class VPTraitNWTanUniform(VPTrait):
     def uid():
         return VP_TRAIT_UID_NW_TAN_UNIFORM
 
-    def params_nw(self, nnodes):
+    def params_rnw(self, nnodes):
         return (
             ParamVectorDesc('vt', nnodes),)
 
@@ -706,21 +718,11 @@ class VPTraitNWTanHarmonic(VPTrait):
     def uid():
         return VP_TRAIT_UID_NW_TAN_HARMONIC
 
-    @classmethod
-    def load(cls, info):
-        return cls(info['k'])
+    def __init__(self, order):
+        Trait.__init__(self, order=order)
 
-    def dump(self):
-        return {'type': self.type(), 'k': self._k}
-
-    def __init__(self, k):
-        self._k = k
-
-    def consts(self):
-        return self._k,
-
-    def params_nw(self, nnodes):
-        return _params_pw_harmonic(self._k, nnodes)
+    def params_rnw(self, nnodes):
+        return _params_pw_harmonic(self._kwargs['order'], nnodes)
 
 
 class VPTraitNWRadUniform(VPTrait):
@@ -733,7 +735,7 @@ class VPTraitNWRadUniform(VPTrait):
     def uid():
         return VP_TRAIT_UID_NW_RAD_UNIFORM
 
-    def params_nw(self, nnodes):
+    def params_rnw(self, nnodes):
         return (
             ParamVectorDesc('vr', nnodes),)
 
@@ -748,21 +750,11 @@ class VPTraitNWRadHarmonic(VPTrait):
     def uid():
         return VP_TRAIT_UID_NW_RAD_HARMONIC
 
-    @classmethod
-    def load(cls, info):
-        return cls(info['k'])
+    def __init__(self, order):
+        Trait.__init__(self, order=order)
 
-    def dump(self):
-        return {'type': self.type(), 'k': self._k}
-
-    def __init__(self, k):
-        self._k = k
-
-    def consts(self):
-        return self._k,
-
-    def params_nw(self, nnodes):
-        return _params_pw_harmonic(self._k, nnodes)
+    def params_rnw(self, nnodes):
+        return _params_pw_harmonic(self._kwargs['order'], nnodes)
 
 
 class VPTraitNWVerUniform(VPTrait):
@@ -775,7 +767,7 @@ class VPTraitNWVerUniform(VPTrait):
     def uid():
         return VP_TRAIT_UID_NW_VER_UNIFORM
 
-    def params_nw(self, nnodes):
+    def params_rnw(self, nnodes):
         return (
             ParamVectorDesc('vv', nnodes),)
 
@@ -790,21 +782,11 @@ class VPTraitNWVerHarmonic(VPTrait):
     def uid():
         return VP_TRAIT_UID_NW_VER_HARMONIC
 
-    @classmethod
-    def load(cls, info):
-        return cls(info['k'])
+    def __init__(self, order):
+        Trait.__init__(self, order=order)
 
-    def dump(self):
-        return {'type': self.type(), 'k': self._k}
-
-    def __init__(self, k):
-        self._k = k
-
-    def consts(self):
-        return self._k,
-
-    def params_nw(self, nnodes):
-        return _params_pw_harmonic(self._k, nnodes)
+    def params_rnw(self, nnodes):
+        return _params_pw_harmonic(self._kwargs['order'], nnodes)
 
 
 class VPTraitNWLOSUniform(VPTrait):
@@ -817,7 +799,7 @@ class VPTraitNWLOSUniform(VPTrait):
     def uid():
         return VP_TRAIT_UID_NW_LOS_UNIFORM
 
-    def params_nw(self, nnodes):
+    def params_rnw(self, nnodes):
         return (
             ParamVectorDesc('vl', nnodes),)
 
@@ -832,21 +814,11 @@ class VPTraitNWLOSHarmonic(VPTrait):
     def uid():
         return VP_TRAIT_UID_NW_LOS_HARMONIC
 
-    @classmethod
-    def load(cls, info):
-        return cls(info['k'])
+    def __init__(self, order):
+        Trait.__init__(self, order=order)
 
-    def dump(self):
-        return {'type': self.type(), 'k': self._k}
-
-    def __init__(self, k):
-        self._k = k
-
-    def consts(self):
-        return self._k,
-
-    def params_nw(self, nnodes):
-        return _params_pw_harmonic(self._k, nnodes)
+    def params_rnw(self, nnodes):
+        return _params_pw_harmonic(self._kwargs['order'], nnodes)
 
 
 class VHTraitOne(VHTrait):
@@ -983,21 +955,11 @@ class DPTraitMixtureGGauss(DPTrait):
     def uid():
         return DP_TRAIT_UID_MIXTURE_GGAUSS
 
-    @classmethod
-    def load(cls, info):
-        return cls(info['n'])
-
-    def dump(self):
-        return {'type': self.type(), 'n': self._n}
-
-    def __init__(self, n):
-        self._n = n
-
-    def consts(self):
-        return self._n,
+    def __init__(self, nblobs):
+        Trait.__init__(self, nblobs=nblobs)
 
     def params_sm(self):
-        return _params_mixture(self._n)
+        return _params_mixture(self._kwargs['nblobs'])
 
 
 class DPTraitMixtureMoffat(DPTrait):
@@ -1010,21 +972,11 @@ class DPTraitMixtureMoffat(DPTrait):
     def uid():
         return DP_TRAIT_UID_MIXTURE_MOFFAT
 
-    @classmethod
-    def load(cls, info):
-        return cls(info['n'])
-
-    def dump(self):
-        return {'type': self.type(), 'n': self._n}
-
-    def __init__(self, n):
-        self._n = n
-
-    def consts(self):
-        return self._n,
+    def __init__(self, nblobs):
+        Trait.__init__(self, nblobs=nblobs)
 
     def params_sm(self):
-        return _params_mixture(self._n)
+        return _params_mixture(self._kwargs['nblobs'])
 
 
 class DPTraitNWUniform(DPTrait):
@@ -1037,7 +989,7 @@ class DPTraitNWUniform(DPTrait):
     def uid():
         return DP_TRAIT_UID_NW_UNIFORM
 
-    def params_nw(self, nnodes):
+    def params_rnw(self, nnodes):
         return (
             ParamVectorDesc('a', nnodes),)
 
@@ -1052,21 +1004,11 @@ class DPTraitNWHarmonic(DPTrait):
     def uid():
         return DP_TRAIT_UID_NW_HARMONIC
 
-    @classmethod
-    def load(cls, info):
-        return cls(info['k'])
+    def __init__(self, order):
+        Trait.__init__(self, order=order)
 
-    def dump(self):
-        return {'type': self.type(), 'k': self._k}
-
-    def __init__(self, k):
-        self._k = k
-
-    def consts(self, nnodes=None):
-        return self._k,
-
-    def params_nw(self, nnodes):
-        return _params_pw_harmonic(self._k, nnodes)
+    def params_rnw(self, nnodes):
+        return _params_pw_harmonic(self._kwargs['order'], nnodes)
 
 
 class DPTraitNWDistortion(DPTrait):
@@ -1079,7 +1021,7 @@ class DPTraitNWDistortion(DPTrait):
     def uid():
         return DP_TRAIT_UID_NW_DISTORTION
 
-    def params_nw(self, nnodes):
+    def params_rnw(self, nnodes):
         return (
             ParamVectorDesc('a', nnodes),
             ParamVectorDesc('p', nnodes),
@@ -1107,7 +1049,7 @@ class WPTraitNWUniform(WPTrait):
     def uid():
         return DP_TRAIT_UID_NW_UNIFORM
 
-    def params_nw(self, nnodes):
+    def params_rnw(self, nnodes):
         return (
             ParamVectorDesc('a', nnodes),)
 
@@ -1122,21 +1064,11 @@ class WPTraitNWHarmonic(WPTrait):
     def uid():
         return DP_TRAIT_UID_NW_HARMONIC
 
-    @classmethod
-    def load(cls, info):
-        return cls(info['k'])
+    def __init__(self, order):
+        Trait.__init__(self, order=order)
 
-    def dump(self):
-        return {'type': self.type(), 'k': self._k}
-
-    def __init__(self, k):
-        self._k = k
-
-    def consts(self, nnodes=None):
-        return self._k,
-
-    def params_nw(self, nnodes):
-        return _params_pw_harmonic(self._k, nnodes)
+    def params_rnw(self, nnodes):
+        return _params_pw_harmonic(self._kwargs['order'], nnodes)
 
 
 class SPTraitAzimuthalRange(SPTrait):
@@ -1165,7 +1097,7 @@ class SPTraitNWAzimuthalRange(SPTrait):
     def uid():
         return SP_TRAIT_UID_NW_AZRANGE
 
-    def params_nw(self, nnodes):
+    def params_rnw(self, nnodes):
         return (
             ParamVectorDesc('p', nnodes),
             ParamVectorDesc('s', nnodes))

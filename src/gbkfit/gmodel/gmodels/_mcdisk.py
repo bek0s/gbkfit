@@ -59,7 +59,7 @@ class MCDisk(_disk.Disk):
             tparams = {oname: params[nname] for oname, nname in pnames.items()}
 
             #
-            for pdesc in trait.params_nw(self._nrnodes):
+            for pdesc in trait.params_rnw(self._nrnodes):
                 tparams[pdesc.name()] = tparams[pdesc.name()][1:-1]
 
             integral = trait.integrate(tparams, self._m_subrnodes[0][1:-1])

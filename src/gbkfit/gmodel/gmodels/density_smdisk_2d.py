@@ -10,6 +10,9 @@ class DensitySMDisk2D(_common.DensityComponent2D):
 
     @classmethod
     def load(cls, info):
+
+        parseutils.validate_options(cls.__init__, info)
+
         loose = info.get('loose')
         tilted = info.get('tilted')
         interp = info.get('interp')
