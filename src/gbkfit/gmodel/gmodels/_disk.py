@@ -332,7 +332,7 @@ class Disk(abc.ABC):
             prepare_traits_params(
                 self._m_vpt_pvalues, self._vpt_pdescs, self._vpt_pnames,
                 self._vptraits)
-        if self._rhtraits:
+        if self._vhtraits:
             prepare_traits_params(
                 self._m_vht_pvalues, self._vht_pdescs, self._vht_pnames,
                 self._vhtraits)
@@ -354,10 +354,6 @@ class Disk(abc.ABC):
                 self._sptraits)
         t2 = time.time()
         print("params: time: ", (t2 - t1) * 1000)
-
-        print("rht:", self._m_rht_pvalues)
-        print("vpt1:", self._vptraits)
-        print("vpt2:", self._m_vpt_pvalues)
 
         self._impl_evaluate(
             driver, params, image, scube, rcube, dtype,

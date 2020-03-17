@@ -24,6 +24,8 @@ class DensityMCDisk3D(_common.DensityComponent3D):
         sptraits = traits.spt_parser.load(info.get('sptraits'))
         return cls(
             cflux,
+            loose,
+            tilted,
             rptraits,
             rhtraits,
             wptraits,

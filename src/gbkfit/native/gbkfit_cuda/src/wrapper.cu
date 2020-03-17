@@ -83,6 +83,7 @@ Wrapper<T>::gmodel_mcdisk_evaluate(
         T* image, T* scube, T* rcube,
         T* rdata, T* vdata, T* ddata)
 {
+#if 1
     const int n = nclouds;
     dim3 bsize(256);
     dim3 gsize((n + bsize.x - 1) / bsize.x);
@@ -132,7 +133,7 @@ Wrapper<T>::gmodel_mcdisk_evaluate(
             spec_zero,
             image, scube, rcube,
             rdata, vdata, ddata);
-
+#endif
     cudaDeviceSynchronize();
 }
 

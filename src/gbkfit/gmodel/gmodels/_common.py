@@ -128,7 +128,6 @@ def _make_component_params(components, prefix, force_prefix):
     params = {}
     mappings = []
     for i, cmp in enumerate(components):
-        print(cmp)
         prefix = f'{prefix}{i}_' * (i > 0 or force_prefix)
         params.update({prefix + k: v for k, v in cmp.params().items()})
         mappings.append(dict(zip(cmp.params().keys(), params.keys())))
@@ -152,7 +151,6 @@ def trait_param_info(traits, prefix, nrnodes):
         prefix += str(i + 1) * (i > 0)
         params = trait.params_sm() + trait.params_rnw(nrnodes)
         mapping = {}
-        print(params)
         for param in params:
             old_pname = param.name()
             new_pname = f'{prefix}_{old_pname}'

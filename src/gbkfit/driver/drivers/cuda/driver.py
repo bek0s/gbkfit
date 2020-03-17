@@ -160,6 +160,7 @@ class GModelMCDisk(gbkfit.driver.GModelMCDisk):
             spec_size, spec_step, spec_zero,
             image, scube, rcube,
             rdata, vdata, ddata):
+        #print(locals())
         self._disk.evaluate(
             cflux, nclouds, _ptr(ncloudspt), _shape(ncloudspt)[0], _ptr(hasordint),
             loose, tilted,

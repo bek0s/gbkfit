@@ -348,6 +348,7 @@ gmodel_mcdisk_evaluate(
         T* image, T* scube, T* rcube,
         T* rdata, T* vdata, T* ddata)
 {
+    /*
     unsigned int tid = blockIdx.x * blockDim.x + threadIdx.x;
     if (tid >= nclouds)
         return;
@@ -444,7 +445,7 @@ gmodel_mcdisk_evaluate(
     if (ddata) {
         #pragma omp atomic write
         ddata[idx] = dvalue;
-    }
+    }*/
 }
 
 }}} // namespace gbkfit::cuda::kernels
