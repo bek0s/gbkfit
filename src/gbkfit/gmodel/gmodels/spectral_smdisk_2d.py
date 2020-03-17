@@ -10,18 +10,22 @@ class SpectralSMDisk2D(_common.SpectralComponent2D):
 
     @classmethod
     def load(cls, info):
-        loose = info.get('loose')
-        tilted = info.get('tilted')
-        rnodes = info['rnodes']
+        loose = info['loose']
+        tilted = info['tilted']
+        rnmin = info.get('rnmin')
+        rnmax = info.get('rnmax')
+        rnsep = info.get('rnsep')
+        rnlen = info.get('rnlen')
+        rnodes = info.get('rnodes')
         rptraits = traits.rpt_parser.load(info.get('rptraits'))
         vptraits = traits.vpt_parser.load(info.get('vptraits'))
         dptraits = traits.dpt_parser.load(info.get('dptraits'))
         sptraits = traits.spt_parser.load(info.get('sptraits'))
         return cls(
-            rnodes,
+            tilted, loose,
             rptraits, vptraits, dptraits,
             sptraits,
-            tilted, loose)
+            rnmin, rnmax, rnsep, rnlen, rnodes)
 
     def dump(self):
         return {
@@ -36,16 +40,21 @@ class SpectralSMDisk2D(_common.SpectralComponent2D):
 
     def __init__(
             self,
-            rnodes,
+            loose,
+            tilted,
             rptraits,
             vptraits,
             dptraits,
             sptraits=None,
-            tilted=None,
-            loose=None):
+            rnmin=None,
+            rnmax=None,
+            rnsep=None,
+            rnlen=None,
+            rnodes=None):
 
         args = _common.parse_spectral_disk_2d_common_args(
-            loose, tilted, rnodes,
+            loose, tilted,
+            rnmin, rnmax, rnsep, rnlen, rnodes,
             rptraits,
             vptraits,
             dptraits,

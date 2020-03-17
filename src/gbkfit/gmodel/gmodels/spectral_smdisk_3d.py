@@ -10,9 +10,13 @@ class SpectralSMDisk3D(_common.SpectralComponent3D):
 
     @classmethod
     def load(cls, info):
-        loose = info.get('loose')
-        tilted = info.get('tilted')
-        rnodes = info['rnodes']
+        loose = info['loose']
+        tilted = info['tilted']
+        rnmin = info.get('rnmin')
+        rnmax = info.get('rnmax')
+        rnsep = info.get('rnsep')
+        rnlen = info.get('rnlen')
+        rnodes = info.get('rnodes')
         rptraits = traits.rpt_parser.load(info.get('rptraits'))
         rhtraits = traits.rht_parser.load(info.get('rhtraits'))
         vptraits = traits.vpt_parser.load(info.get('vptraits'))
@@ -22,12 +26,12 @@ class SpectralSMDisk3D(_common.SpectralComponent3D):
         wptraits = traits.wpt_parser.load(info.get('wptraits'))
         sptraits = traits.spt_parser.load(info.get('sptraits'))
         return cls(
-            rnodes,
+            loose, tilted,
             rptraits, vptraits, dptraits,
             rhtraits, vhtraits, dhtraits,
             wptraits,
             sptraits,
-            tilted, loose)
+            rnmin, rnmax, rnsep, rnlen, rnodes)
 
     def dump(self):
         return {
@@ -46,7 +50,8 @@ class SpectralSMDisk3D(_common.SpectralComponent3D):
 
     def __init__(
             self,
-            rnodes,
+            loose,
+            tilted,
             rptraits,
             vptraits,
             dptraits,
@@ -55,11 +60,15 @@ class SpectralSMDisk3D(_common.SpectralComponent3D):
             dhtraits=None,
             wptraits=None,
             sptraits=None,
-            tilted=None,
-            loose=None):
+            rnmin=None,
+            rnmax=None,
+            rnsep=None,
+            rnlen=None,
+            rnodes=None):
 
         args = _common.parse_spectral_disk_3d_common_args(
-            loose, tilted, rnodes,
+            loose, tilted,
+            rnmin, rnmax, rnsep, rnlen, rnodes,
             rptraits, rhtraits,
             vptraits, vhtraits,
             dptraits, dhtraits,

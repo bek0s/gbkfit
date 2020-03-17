@@ -240,43 +240,52 @@ def prepare_common_params_array(
     driver.mem_copy_h2d(ary[0], ary[1])
 
 
-
 def prepare_rnode_array(backend, dtype, array_rnodes, rnodes):
     array_rnodes[:] = backend.mem_alloc_s(len(rnodes), dtype)
     array_rnodes[0][:] = rnodes
     backend.mem_copy_h2d(array_rnodes[0], array_rnodes[1])
 
 
-def parse_node_args(nodes, nodemin, nodemax, nodesep, nnodes):
+def parse_node_args(prefix, nodes, nmin, nmax, nsep, nlen):
     nodes_list = nodes is not None
-    nodes_arange = [nodemin, nodemax, nodesep].count(None) != 0
-    nodes_linspace = [nodemin, nodemax, nnodes].count(None) != 0
+    nodes_arange = [nmin, nmax, nsep].count(None) == 0
+    nodes_linspace = [nmin, nmax, nlen].count(None) == 0
     if [nodes_list, nodes_arange, nodes_linspace].count(True) != 1:
-        raise RuntimeError()
-
+        raise RuntimeError(
+            f'Only one of the following groups must be defined: '
+            f'(1) {prefix}nodes; '
+            f'(2) {prefix}nmin, {prefix}nmax, {prefix}nsep; '
+            f'(3) {prefix}nmin, {prefix}nmax, {prefix}nlen')
+    if nmin is not None and not (0 <= nmin < nmax):
+        raise RuntimeError(
+            f'The following expression must be true: '
+            f'0 <= {prefix}nmin < {prefix}nmax')
+    if nsep is not None and not (0 < nsep <= nmax - nmin):
+        raise RuntimeError(
+            f'The following expression must be true: '
+            f'0 < {prefix}nsep <= {prefix}nmax - {prefix}nmin')
+    if nlen is not None and not 2 <= nlen:
+        raise RuntimeError(
+            f'The following expression must be true: '
+            f'2 =< {prefix}nlen')
     if nodes_arange:
-        nodedist = nodemax - nodemin
-        if nodemin < 0 or nodemax < 0 or nodedist <= 0 or nodedist < nodesep:
-            raise RuntimeError()
-        nodes = np.arange(nodemin, nodemax, nodesep).tolist()
-
-    if nodes_linspace:
-        if nodemin < 0 or nodemax < 0 or nnodes < 2:
-            raise RuntimeError()
-        nodes = np.linspace(nodemin, nodemax, nnodes).tolist()
-
+        nodes = np.arange(nmin, nmax + nsep, nsep).tolist()
+    elif nodes_linspace:
+        nodes = np.linspace(nmin, nmax, nlen).tolist()
     return nodes
 
 
 def parse_density_disk_2d_common_args(
-        loose, tilted, rnodes,
+        loose, tilted,
+        rnmin, rnmax, rnsep, rnlen, rnodes,
         rptraits,
         sptraits):
+
+    rnodes = parse_node_args('r', rnodes, rnmin, rnmax, rnsep, rnlen)
 
     if not rptraits:
         raise RuntimeError("at least one rptrait is required")
 
-    # For convenience, convert all traits to tuples
     rptraits = iterutils.tuplify(rptraits)
     sptraits = iterutils.tuplify(sptraits) if sptraits is not None else ()
 
@@ -287,23 +296,24 @@ def parse_density_disk_2d_common_args(
 
 
 def parse_density_disk_3d_common_args(
-        loose, tilted, rnodes,
+        loose, tilted,
+        rnmin, rnmax, rnsep, rnlen, rnodes,
         rptraits, rhtraits,
         wptraits,
         sptraits):
+
+    rnodes = parse_node_args('r', rnodes, rnmin, rnmax, rnsep, rnlen)
 
     if not rptraits:
         raise RuntimeError("at least one rptrait is required")
     if not rhtraits:
         raise RuntimeError("at least one rhtrait is required")
 
-    # For convenience, convert all traits to tuples
     rptraits = iterutils.tuplify(rptraits)
     rhtraits = iterutils.tuplify(rhtraits)
     wptraits = iterutils.tuplify(wptraits) if wptraits is not None else ()
     sptraits = iterutils.tuplify(sptraits) if sptraits is not None else ()
 
-    # The number of polar and height traits must match
     rptraits_len = len(rptraits)
     rhtraits_len = len(rhtraits)
     if rptraits_len != rhtraits_len:
@@ -319,11 +329,14 @@ def parse_density_disk_3d_common_args(
 
 
 def parse_spectral_disk_2d_common_args(
-        loose, tilted, rnodes,
+        loose, tilted,
+        rnmin, rnmax, rnsep, rnlen, rnodes,
         rptraits,
         vptraits,
         dptraits,
         sptraits):
+
+    rnodes = parse_node_args('r', rnodes, rnmin, rnmax, rnsep, rnlen)
 
     if not rptraits:
         raise RuntimeError("at least one rptrait is required")
@@ -332,7 +345,6 @@ def parse_spectral_disk_2d_common_args(
     if not dptraits:
         raise RuntimeError("at least one dptrait is required")
 
-    # For convenience, convert all traits to tuples
     rptraits = iterutils.tuplify(rptraits)
     vptraits = iterutils.tuplify(vptraits)
     dptraits = iterutils.tuplify(dptraits)
@@ -347,12 +359,15 @@ def parse_spectral_disk_2d_common_args(
 
 
 def parse_spectral_disk_3d_common_args(
-        loose, tilted, rnodes,
+        loose, tilted,
+        rnmin, rnmax, rnsep, rnlen, rnodes,
         rptraits, rhtraits,
         vptraits, vhtraits,
         dptraits, dhtraits,
         wptraits,
         sptraits):
+
+    rnodes = parse_node_args('r', rnodes, rnmin, rnmax, rnsep, rnlen)
 
     if not rptraits:
         raise RuntimeError("at least one rptrait is required")
@@ -363,17 +378,17 @@ def parse_spectral_disk_3d_common_args(
     if not dptraits:
         raise RuntimeError("at least one dptrait is required")
 
-    # For convenience, convert all traits to tuples.
     rptraits = iterutils.tuplify(rptraits)
     rhtraits = iterutils.tuplify(rhtraits)
     vptraits = iterutils.tuplify(vptraits)
-    vhtraits = iterutils.tuplify(vhtraits)
+    vhtraits = iterutils.tuplify(vhtraits) \
+        if vhtraits else tuple([None] * len(vptraits))
     dptraits = iterutils.tuplify(dptraits)
-    dhtraits = iterutils.tuplify(dhtraits)
-    wptraits = iterutils.tuplify(wptraits) if wptraits is not None else ()
-    sptraits = iterutils.tuplify(sptraits) if sptraits is not None else ()
+    dhtraits = iterutils.tuplify(dhtraits) \
+        if dhtraits else tuple([None] * len(dptraits))
+    wptraits = iterutils.tuplify(wptraits) if wptraits else tuple()
+    sptraits = iterutils.tuplify(sptraits) if sptraits else tuple()
 
-    # ...
     if None in vhtraits:
         vhtraits = iterutils.replace_items_and_copy(
             vhtraits, None, traits.VHTraitOne())
@@ -381,7 +396,6 @@ def parse_spectral_disk_3d_common_args(
         dhtraits = iterutils.replace_items_and_copy(
             dhtraits, None, traits.DHTraitOne())
 
-    # The number of polar and height traits must match
     rptraits_len = len(rptraits)
     rhtraits_len = len(rhtraits)
     vptraits_len = len(vptraits)
