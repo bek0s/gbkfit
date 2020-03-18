@@ -1,7 +1,8 @@
 
-import json
 import logging
 import time
+
+import ruamel.yaml as yaml
 
 import gbkfit
 import gbkfit.broker
@@ -27,17 +28,13 @@ def _prepare_config(config):
         config, ['brokers', 'drivers', 'datasets', 'dmodels', 'gmodels'])
 
     _detail.check_config_sections_length(
-        config, ['datasets', 'dmodels'])
+        config, ['datasets', 'dmodels', 'gmodels'])
 
 
 def _prepare_params(params):
     param_infos = {}
     param_exprs = {}
     for key, value in params.items():
-
-        if isinstance(value, dict) and value.get('fixed'):
-            value = value['init']
-
         if isinstance(value, dict):
             param_infos[key] = value
         else:
@@ -51,7 +48,7 @@ def fit(config):
     gbkfit.init()
 
     log.info(f"Reading configuration file: '{config}'...")
-    config = json.load(open(config))
+    config = yaml.YAML().load(open(config))
     _prepare_config(config)
 
     brokers = None
@@ -77,9 +74,13 @@ def fit(config):
     model = gbkfit.model.Model(dmodels, gmodels, drivers, brokers)
 
     log.info("Setting up params...")
-    param_info = gbkfit.params.parse_param_fit_info(config['params'], model.get_param_descs())
-    param_infos, param_exprs = _prepare_params(param_info)
+    param_infos, param_exprs = _prepare_params(config['params'])
+    param_info = gbkfit.params.parse_param_fit_info(param_infos, model.get_param_descs())
     model.set_param_exprs(param_exprs)
+    print(param_infos, param_exprs)
+
+    exit()
+
     """
     for k, v in param_infos.items():
         print(k, ': ', v)

@@ -3,6 +3,8 @@ import abc
 
 import numpy as np
 
+import gbkfit.math
+
 
 class Prior(abc.ABC):
 
@@ -61,8 +63,17 @@ class PriorUniform(Prior):
 
 
 class PriorGauss(Prior):
-    pass
 
+    def __init__(self, mean, sigma):
+        super().__init__()
+        self._mean = mean
+        self._sigma = sigma
 
-class PriorExponential(Prior):
-    pass
+    def rescale(self, x):
+        pass
+
+    def prob(self, x):
+        return gbkfit.math.gauss_1d_pdf(x, self._mean, self._sigma)
+
+    def ln_prob(self, x):
+        pass
