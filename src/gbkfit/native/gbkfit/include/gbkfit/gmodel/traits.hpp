@@ -257,7 +257,7 @@ template<typename T> constexpr void
 rp_trait_uniform_rnd(
         T& out_r, T& out_t, RNG<T>& rng, const T* rnodes, int nrnodes)
 {
-    T rsep = rnodes[1] - rnodes[0] * 2;
+    T rsep = rnodes[1] - rnodes[0] * 2; // TODO: why?
     T rmin = rnodes[0] - rsep;
     T rmax = rnodes[nrnodes - 1] + rsep;
     rp_trait_sample_polar_coords(out_r, out_t, rng, rmin, rmax);

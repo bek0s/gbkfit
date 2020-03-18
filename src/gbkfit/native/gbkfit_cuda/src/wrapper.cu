@@ -12,7 +12,7 @@ Wrapper<T>::dmodel_dcube_complex_multiply_and_scale(
 {
     dim3 bsize(256);
     dim3 gsize((n + bsize.x - 1) / bsize.x);
-    kernels::dmodel_dcube_complex_multiply_and_scale<<<bsize, gsize>>>(
+    kernels::dmodel_dcube_complex_multiply_and_scale<<<gsize, bsize>>>(
             ary1, ary2, n, scale);
 }
 
@@ -27,7 +27,7 @@ Wrapper<T>::dmodel_dcube_downscale(
     unsigned int n = dst_size_x * dst_size_y * dst_size_z;
     dim3 bsize(256);
     dim3 gsize((n + bsize.x - 1) / bsize.x);
-    kernels::dmodel_dcube_downscale<<<bsize, gsize>>>(
+    kernels::dmodel_dcube_downscale<<<gsize, bsize>>>(
             scale_x, scale_y, scale_z,
             offset_x, offset_y, offset_z,
             src_size_x, src_size_y, src_size_z,
