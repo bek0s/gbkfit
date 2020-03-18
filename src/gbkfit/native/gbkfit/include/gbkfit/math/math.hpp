@@ -309,50 +309,22 @@ ggauss_1d_pdf_trunc(T x, T b, T c, T d, T xmin, T xmax)
             xmin, xmax, x, b, c, d);
 }
 
-/*
-template<auto Target, auto Proposal, typename T, typename ...Ts> constexpr T
-_reject_sample_trunc_1d_rnd(T xmin, T xmax, RNG<T>& rng, Ts ...args)
+template<typename T, typename TTarget, typename ...Ts> constexpr T
+rejection_sampling(TTarget target, RNG<T>& rng, T trunc, Ts... args)
 {
-    //T a = Proposal()
-    T x;
+    T x=0, y=0, z=0;
     do {
-        x = F(rng, args...);
-    } while (x < xmin && x > xmax);
-    return x;
-}
-*/
-/*
-template<typename Prop, typename Targ, typename T, typename ...Ts> constexpr T
-sample_distribution(
-        Prop pfun, Ts ...pfun_args, Targ tfun, Ts ...tfun_args, RNG<T>& rng)
-{
-
-}
-*/
-
-template<typename T, typename TProposal, typename TTarget> constexpr T
-sample_distribution(RNG<T>& rng, T ampl, TProposal proposal, TTarget target)
-{
-    T x, y, z;
-    do {
-        x = proposal();
-        y = rng() * ampl;
-        z = target(x);
+        x = uniform_wm_1d_rnd<T>(rng, 0, trunc);
+        y = target(0, args...) * rng();
+        z = target(x, args...);
     } while (y > z);
     return x;
-
 }
-
 
 template<typename T> constexpr T
 ggauss_1d_rnd(RNG<T>& rng, T b, T c, T d)
 {
-    T s = 3 * c;
-    return sample_distribution(
-            rng,
-            ggauss_1d_pdf(T{0}, b, c, d),
-            [&] () { return uniform_1d_rnd(rng, -s, s); },
-            [&] (T x) { return ggauss_1d_pdf(x, b, c, d); });
+    return rejection_sampling<T>(ggauss_1d_pdf<T>, rng, 5 * c, b, c, d);
 }
 
 template<typename T> constexpr T

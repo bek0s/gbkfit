@@ -52,7 +52,7 @@ struct DModelMMaps
 {
 public:
 
-    DModelMMaps(void) {}
+    DModelMMaps(void);
 
     ~DModelMMaps() {}
 
@@ -61,6 +61,19 @@ public:
 
     void
     moments(void) const {}
+
+private:
+
+    int m_spat_size_x;
+    int m_spat_size_y;
+    int m_spec_size;
+    T m_spec_step;
+    T m_spec_zero;
+    T m_nanval;
+    T* m_scube;
+    T* m_mmaps;
+    int m_mmaps_count;
+    int* m_mmaps_orders;
 };
 
 }} // namespace gbkfit::cuda

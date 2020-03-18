@@ -3,7 +3,6 @@
 #include <cinttypes>
 #include <algorithm>
 #include <array>
-#include <complex>
 #include <iostream>
 
 namespace gbkfit {

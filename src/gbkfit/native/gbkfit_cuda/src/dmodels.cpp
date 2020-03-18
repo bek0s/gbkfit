@@ -128,8 +128,24 @@ DModelDCube<T>::downscale(void) const
             m_scube_lo);
 }
 
+template<typename T>
+DModelMMaps<T>::DModelMMaps(void)
+    : m_spat_size_x{0}
+    , m_spat_size_y{0}
+    , m_spec_size{0}
+    , m_spec_step{0}
+    , m_spec_zero{0}
+    , m_nanval{0}
+    , m_scube{nullptr}
+    , m_mmaps{nullptr}
+    , m_mmaps_count{0}
+    , m_mmaps_orders{nullptr}
+{
+}
+
 #define INSTANTIATE(T)\
-    template struct DModelDCube<T>;
+    template struct DModelDCube<T>;\
+    template struct DModelMMaps<T>;
 INSTANTIATE(float)
 #undef INSTANTIATE
 

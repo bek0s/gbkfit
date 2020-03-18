@@ -60,3 +60,9 @@ class PriorUniform(Prior):
         pass
 
 
+class PriorGauss(Prior):
+    pass
+
+
+class PriorExponential(Prior):
+    pass
