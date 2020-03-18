@@ -4,15 +4,17 @@
 
 #include <gbkfit/gmodel/disks.hpp>
 #include "gbkfit/cuda/fftutils.hpp"
+#include <thrust/random.h>
+
 
 namespace gbkfit {
 
 template<typename T>
-struct RNG
+struct RNG1
 {
     __device__
-    RNG(unsigned int tid) {
-        curand_init(tid, 0, 0, &state);
+    RNG1(unsigned int tid) {
+        curand_init(tid, tid, 0, &state);
     }
 
     __device__ T
@@ -21,6 +23,23 @@ struct RNG
     }
 
     curandState state;
+};
+
+template<typename T>
+struct RNG
+{
+    __device__
+    RNG(unsigned int tid)
+        : gen(tid)
+        , dis(0, 1) { gen.discard(tid); }
+
+    __device__ T
+    operator ()(void) {
+        return dis(gen);
+    }
+
+    thrust::default_random_engine gen;
+    thrust::uniform_real_distribution<T> dis;
 };
 
 } // namespace gbkfit
@@ -348,7 +367,6 @@ gmodel_mcdisk_evaluate(
         T* image, T* scube, T* rcube,
         T* rdata, T* vdata, T* ddata)
 {
-    /*
     unsigned int tid = blockIdx.x * blockDim.x + threadIdx.x;
     if (tid >= nclouds)
         return;
@@ -445,7 +463,7 @@ gmodel_mcdisk_evaluate(
     if (ddata) {
         #pragma omp atomic write
         ddata[idx] = dvalue;
-    }*/
+    }
 }
 
 }}} // namespace gbkfit::cuda::kernels
