@@ -200,6 +200,18 @@ uniform_wm_1d_rnd_trunc(RNG<T>& rng, T b, T c, T xmin, T xmax)
     return _trunc_1d_rnd(uniform_1d_rnd<T>, xmin, xmax, rng, newb, newc);
 }
 
+template<typename T, typename TTarget, typename ...Ts> constexpr T
+rejection_sampling(TTarget target, RNG<T>& rng, T trunc, Ts... args)
+{
+    T x=0, y=0, z=0;
+    do {
+        x = uniform_wm_1d_rnd<T>(rng, 0, trunc);
+        y = target(0, args...) * rng();
+        z = target(x, args...);
+    } while (y > z);
+    return x;
+}
+
 template<typename T> constexpr T
 exponential_1d_fun(T x, T a, T b, T c)
 {
@@ -229,7 +241,7 @@ exponential_1d_pdf_trunc(T x, T b, T c, T xmin, T xmax)
 template<typename T> constexpr T
 exponential_1d_rnd(RNG<T>& rng, T b, T c)
 {
-    T u = rng() * 2 - 1.0;
+    T u = rng() * 2 - T{1};
     return b - c * sign(u) * std::log(1 - 2 * std::abs(u));
 }
 
@@ -309,22 +321,10 @@ ggauss_1d_pdf_trunc(T x, T b, T c, T d, T xmin, T xmax)
             xmin, xmax, x, b, c, d);
 }
 
-template<typename T, typename TTarget, typename ...Ts> constexpr T
-rejection_sampling(TTarget target, RNG<T>& rng, T trunc, Ts... args)
-{
-    T x=0, y=0, z=0;
-    do {
-        x = uniform_wm_1d_rnd<T>(rng, 0, trunc);
-        y = target(0, args...) * rng();
-        z = target(x, args...);
-    } while (y > z);
-    return x;
-}
-
 template<typename T> constexpr T
 ggauss_1d_rnd(RNG<T>& rng, T b, T c, T d)
 {
-    return rejection_sampling<T>(ggauss_1d_pdf<T>, rng, 5 * c, b, c, d);
+    return rejection_sampling(ggauss_1d_pdf<T>, rng, 5 * c, b, c, d);
 }
 
 template<typename T> constexpr T
@@ -362,7 +362,7 @@ lorentz_1d_pdf_trunc(T x, T b, T c, T xmin, T xmax)
 template<typename T> constexpr T
 lorentz_1d_rnd(RNG<T>& rng, T b, T c)
 {
-    T u = rng() * 2 - 1.0;
+    T u = rng() * 2 - T{1};
     return b + c * std::tan(PI<T> * T{0.5} * u);
 }
 
@@ -401,24 +401,20 @@ moffat_1d_pdf(T x, T b, T c, T d)
 template<typename T> constexpr T
 moffat_1d_pdf_trunc(T x, T b, T c, T d, T xmin, T xmax)
 {
-    return _trunc_1d_pdf(moffat_1d_pdf<T>, moffat_1d_cdf<T>,
-            xmin, xmax, x, b, c, d);
+    return _trunc_1d_pdf(
+            moffat_1d_pdf<T>, moffat_1d_cdf<T>, xmin, xmax, x, b, c, d);
 }
 
 template<typename T> constexpr T
 moffat_1d_rnd(RNG<T>& rng, T b, T c, T d)
 {
-    (void)rng;
-    (void)b;
-    (void)c;
-    (void)d;
-    return 0;
+    return rejection_sampling(moffat_1d_pdf<T>, rng, 5 * c, b, c, d);
 }
 
 template<typename T> constexpr T
 moffat_1d_rnd_trunc(RNG<T>& rng, T b, T c, T d, T xmin, T xmax)
 {
-    return _trunc_1d_rnd<moffat_1d_rnd<T>>(xmin, xmax, rng, b, c, d);
+    return _trunc_1d_rnd(moffat_1d_rnd<T>, xmin, xmax, rng, b, c, d);
 }
 
 template<typename T> constexpr T
@@ -450,7 +446,7 @@ sech2_1d_pdf_trunc(T x, T b, T c, T xmin, T xmax)
 template<typename T> constexpr T
 sech2_1d_rnd(RNG<T>& rng, T b, T c)
 {
-    T u = rng() * 2 - 1.0;
+    T u = rng() * 2 - T{1};
     return b + c * std::atanh(u);
 }
 
