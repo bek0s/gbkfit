@@ -375,7 +375,7 @@ gmodel_mcdisk_evaluate_cloud(
     incli *= DEG_TO_RAD<T>;
 
     T xn = xd, yn = yd, zn = zd;
-    transform_incl_posa_cpos(xn, yn, zn, xposi, yposi, posai, incli);
+    transform_incl_posa_cpos(xn, yn, zn, xposi, yposi, -posai, -incli);
 
     x = std::rint(xn - spat_zero_x);
     y = std::rint(yn - spat_zero_y);
