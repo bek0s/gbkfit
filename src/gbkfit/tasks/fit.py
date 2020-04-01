@@ -76,28 +76,109 @@ def fit(config):
     log.info("Setting up params...")
     param_infos, param_exprs = _prepare_params(config['params'])
     param_info = gbkfit.params.parse_param_fit_info(param_infos, model.get_param_descs())
-    model.set_param_exprs(param_exprs)
-    print(param_infos, param_exprs)
+
+    print(param_info)
 
     exit()
-
-    """
-    for k, v in param_infos.items():
-        print(k, ': ', v)
-    print(param_exprs)
-    exit()
-    """
-
-    """
-    param_infos, param_exprs = _prepare_params(config['params'])
     model.set_param_exprs(param_exprs)
-    """
 
     log.info("Setting up fitter...")
     fitter = gbkfit.fitter.parser.load_one(config['fitter'])
 
     log.info("Model-fitting started")
     t1 = time.time_ns()
+
+    # eval
+    model = Model()
+    outputs = model.evaluate(params)
+
+    # eval from json expressions
+    model = Model()
+    params = ParamGroup(model.descs() + descs, exprs).evaluate(json_params)
+    outputs = model.evaluate(params)
+
+    # fit
+    model = Model()
+    lhood = LikelihoodGauss(data, model, descs, exprs)
+
+    lhood1 = LikelihoodGauss(data, model)
+    lhood2 = LikelihoodGauss(data, model)
+    lhood3 = LikelihoodJoint(lhood1, lhood2)
+    result = fitter.fit(lhood3, descs, exprs, params)
+
+
+
+
+    fitter.fit(data, model, descs, exprs, params)
+
+    class ParamInterpreter:
+        pass
+
+    model = foo()
+    model.add_parameter(gbkfit.params.ParamScalarDesc('foo'))
+    model.add_parameters(gbkfit.params.ParamScalarDesc('bar'))
+    model.set_expressions(existing, derived)
+
+    descs = model.descs() + more_descs
+
+    pgroup = ParamGroup(descs, exprs)
+    fitter = FitterDynesty()
+    params = fitter.parse_params(json['params'], json['params_extra'])
+    fitter.fit(data, model, params)
+
+
+
+    model = Model()
+
+    problem = Problem(data, model, pdescs, pexprs)
+
+    fitter.fit(problem, params)
+
+    model = Model()
+    pgroup = ParamGroup(descs, exprs)
+    model.evaluate(pgroup.evaluate(values))
+
+    pgroup = ParamGroup()
+    pgroup.set(descs=None, exprs=None)
+    pgroup.evaluate()
+
+
+
+
+
+    class ParamGroup:
+
+        def __init__(self, descs, exprs):
+            pass
+
+        def add_descs(self):
+            pass
+
+        def add_exprs(self):
+            pass
+
+        def get_descs(self):
+            pass
+
+        def get_exprs(self):
+            pass
+
+        def evaluate(
+                self, values,
+                out_params, out_eparams, out_params_free, out_params_fixed):
+            # return params, eparams, eparams_free, eparams_fixed
+            pass
+
+
+
+    class ParamFitInfo:
+        pass
+
+    class ParamInfoV:
+        pass
+
+    class ParamInfoF:
+        pass
 
     result = fitter.fit(datasets, model, param_infos)
     """
@@ -106,19 +187,76 @@ def fit(config):
     fitter.fit(datasets, model, param_infos)
     """
 
-
-
-    """
-    print("-----------------------------")
-    print(result)
-    print("-----------------------------")
-    for k, v in zip(model.get_param_names(), result.x):
-        print(f'{k}: {round(v, 3)}')
-    """
-
-
-
     t2 = time.time_ns()
     t_ms = (t2 - t1) // 1000000
     log.info("Model-fitting completed.")
     log.info(f"Elapsed time: {t_ms} ms.")
+
+
+import abc
+import typing
+
+
+class FitterParam(abc.ABC):
+    @classmethod
+    def load(cls, info):
+        return cls()
+
+    def __init__(self, **kwargs):
+        self._kwargs = kwargs.copy()
+
+
+class FitterParamDict(dict):
+
+    def __init__(self, param_dict):
+        super().__init__(param_dict)
+
+    def get_dict(self, attribs=None):
+        dict_ = dict()
+        for param in self:
+            for attrib in attribs:
+                param.get_attribs().get(attrib, None)
+        return dict_
+
+    def get_list(self, attribs=None):
+        pass
+
+
+class FitterScipyLeastSquaresParam(FitterParam):
+    def __init__(self, minimum=None, maximum=None):
+        super().__init__(**dict(minimum=minimum, maximum=maximum))
+
+
+class FitterScipyLeastSquaresParamDict(FitterParamDict):
+    pass
+
+
+
+
+
+class FitterParamPygmoPSO(FitterParam):
+    def __init__(self, minimum=None, maximum=None):
+        super().__init__(**dict(minimum=minimum, maximum=maximum))
+
+
+class FitterParamDynesty(FitterParam):
+    def __init__(self, prior):
+        super().__init__(**dict(prior=prior))
+
+
+#params = fitter.parse_params()
+
+#fitter.explore(likelihood, params)
+
+
+import typing
+
+
+class Base:
+    def foo(self, x: typing.Mapping):
+        pass
+
+
+class Child:
+    def foo(self, x: typing.List):
+        pass

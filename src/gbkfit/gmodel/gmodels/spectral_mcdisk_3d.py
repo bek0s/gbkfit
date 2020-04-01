@@ -1,5 +1,6 @@
 
 from . import _common, _mcdisk, traits
+from gbkfit.utils import parseutils
 
 
 class SpectralMCDisk3D(_common.SpectralComponent3D):
@@ -10,46 +11,33 @@ class SpectralMCDisk3D(_common.SpectralComponent3D):
 
     @classmethod
     def load(cls, info):
-        cflux = info['cflux']
-        loose = info['loose']
-        tilted = info['tilted']
-        rnmin = info.get('rnmin')
-        rnmax = info.get('rnmax')
-        rnsep = info.get('rnsep')
-        rnlen = info.get('rnlen')
-        rnodes = info.get('rnodes')
-        rptraits = traits.rpt_parser.load(info.get('rptraits'))
-        rhtraits = traits.rht_parser.load(info.get('rhtraits'))
-        vptraits = traits.vpt_parser.load(info.get('vptraits'))
-        vhtraits = traits.vht_parser.load(info.get('vhtraits'))
-        dptraits = traits.dpt_parser.load(info.get('dptraits'))
-        dhtraits = traits.dht_parser.load(info.get('dhtraits'))
-        wptraits = traits.wpt_parser.load(info.get('wptraits'))
-        sptraits = traits.spt_parser.load(info.get('sptraits'))
-        return cls(
-            cflux,
-            loose, tilted,
-            rptraits, vptraits, dptraits,
-            rhtraits, vhtraits, dhtraits,
-            wptraits,
-            sptraits,
-            rnmin, rnmax, rnsep, rnlen, rnodes)
+        info = parseutils.parse_class_args(cls, info)
+        info.update(dict(
+            rptraits=traits.rpt_parser.load(info.get('rptraits')),
+            rhtraits=traits.rht_parser.load(info.get('rhtraits')),
+            vptraits=traits.vpt_parser.load(info.get('vptraits')),
+            vhtraits=traits.vht_parser.load(info.get('vhtraits')),
+            dptraits=traits.dpt_parser.load(info.get('dptraits')),
+            dhtraits=traits.dht_parser.load(info.get('dhtraits')),
+            wptraits=traits.wpt_parser.load(info.get('wptraits')),
+            sptraits=traits.spt_parser.load(info.get('sptraits'))))
+        return cls(**info)
 
     def dump(self):
-        return {
-            'type': self.type(),
-            'cflux': self._disk.cflux(),
-            'loose': self._disk.loose(),
-            'tilted': self._disk.tilted(),
-            'rnodes': self._disk.rnodes(),
-            'rptraits': traits.rpt_parser.dump(self._disk.rptraits()),
-            'rhtraits': traits.rht_parser.dump(self._disk.rhtraits()),
-            'vptraits': traits.vpt_parser.dump(self._disk.vptraits()),
-            'vhtraits': traits.vht_parser.dump(self._disk.vhtraits()),
-            'dptraits': traits.dpt_parser.dump(self._disk.dptraits()),
-            'dhtraits': traits.dht_parser.dump(self._disk.dhtraits()),
-            'wptraits': traits.wpt_parser.dump(self._disk.wptraits()),
-            'sptraits': traits.spt_parser.dump(self._disk.sptraits())}
+        return dict(
+            type=self.type(),
+            cflux=self._disk.cflux(),
+            loose=self._disk.loose(),
+            tilted=self._disk.tilted(),
+            rnodes=self._disk.rnodes(),
+            rptraits=traits.rpt_parser.dump(self._disk.rptraits()),
+            rhtraits=traits.rht_parser.dump(self._disk.rhtraits()),
+            vptraits=traits.vpt_parser.dump(self._disk.vptraits()),
+            vhtraits=traits.vht_parser.dump(self._disk.vhtraits()),
+            dptraits=traits.dpt_parser.dump(self._disk.dptraits()),
+            dhtraits=traits.dht_parser.dump(self._disk.dhtraits()),
+            wptraits=traits.wpt_parser.dump(self._disk.wptraits()),
+            sptraits=traits.spt_parser.dump(self._disk.sptraits()))
 
     def __init__(
             self,

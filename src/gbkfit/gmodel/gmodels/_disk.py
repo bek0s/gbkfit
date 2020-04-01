@@ -312,8 +312,6 @@ class Disk(abc.ABC):
                 driver, params, ary, descs,
                 self._rnodes, self._subrnodes, self._interp_cls, mappings, traits)
 
-        import time
-        t1 = time.time()
         prepare_common_params(self._m_vsys_pvalues, self._vsys_pdescs, self._loose)
         prepare_common_params(self._m_xpos_pvalues, self._xpos_pdescs, self._loose)
         prepare_common_params(self._m_ypos_pvalues, self._ypos_pdescs, self._loose)
@@ -352,8 +350,6 @@ class Disk(abc.ABC):
             prepare_traits_params(
                 self._m_spt_pvalues, self._spt_pdescs, self._spt_pnames,
                 self._sptraits)
-        t2 = time.time()
-        print("params: time: ", (t2 - t1) * 1000)
 
         self._impl_evaluate(
             driver, params, image, scube, rcube, dtype,

@@ -8,11 +8,15 @@ from . import iterutils
 _log = logging.getLogger(__name__)
 
 
-def check_options(info, cls):
+def parse_class_args(cls, info, skip_args=()):
+    type_ = f'(type: {cls.type()})' if getattr(cls, 'type', None) else ''
+    type_name = f'{cls.__qualname__} {type_}'
     required = set()
     optional = set()
     signature = inspect.signature(cls.__init__)
     for pname, pinfo in list(signature.parameters.items())[1:]:
+        if pname in skip_args:
+            continue
         if pinfo.kind == inspect.Parameter.VAR_POSITIONAL:
             continue
         if pinfo.kind == inspect.Parameter.VAR_KEYWORD:
@@ -26,11 +30,11 @@ def check_options(info, cls):
     options = {k: v for k, v in info.items() if k in required | optional}
     if unknown:
         _log.warning(
-            f'The following {cls.__name__} options are '
+            f'The following {type_name} options are '
             f'not recognised and will be ignored: {unknown}')
     if missing:
         raise RuntimeError(
-            f'The following {cls.__name__} options are '
+            f'The following {type_name} options are '
             f'required but missing: {missing}')
     return options
 
@@ -132,7 +136,7 @@ class TypedParser:
 
         factory = self._parsers[type_]
 
-        check_options(x, factory)
+        #x = check_options(factory, x)
 
         return self._parsers[type_].load(x, *args, **kwargs)
 

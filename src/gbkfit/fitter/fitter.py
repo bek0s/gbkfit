@@ -27,7 +27,6 @@ class FitterResult:
         pass
 
 
-
 class Fitter(abc.ABC):
 
     @staticmethod
@@ -45,6 +44,9 @@ class Fitter(abc.ABC):
         pass
 
     def __init__(self):
+        pass
+
+    def parse_params(self, params):
         pass
 
     def fit(self, dataset, model, param_info):

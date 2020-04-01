@@ -11,6 +11,7 @@ import networkx
 import networkx.algorithms.dag
 
 from gbkfit.utils import iterutils
+from gbkfit.utils import parseutils
 
 
 log = logging.getLogger(__name__)
@@ -733,7 +734,9 @@ def parse_param_values(
     if invalid_values_bad_scalar:
         raise RuntimeError(invalid_values_bad_scalar)
 
-    return keys_2, values_2, key_names_2, key_indices_list_2
+    enames = explode_param_symbols(key_names_2, key_indices_list_2)
+
+    return keys_2, values_2, key_names_2, key_indices_list_2, dict(zip(enames, iterutils.flatten(values_2)))
 
 
 def parse_param_fit_info(
@@ -781,8 +784,6 @@ def parse_param_fit_info(
     ekeys = explode_param_symbols(key_names, key_indices_list)
     evalues = []
 
-
-
     for key, value, key_indices in zip(keys, values, key_indices_list):
 
         # Fit info values must be dicts
@@ -825,3 +826,214 @@ def parse_param_fit_info(
     parset = dict(zip(ekeys, evalues))
 
     return parset
+
+
+def parse_params_for_fit():
+    pass
+
+
+import asteval
+import numpy as np
+
+
+class _StdWriter:
+    @staticmethod
+    def write(msg):
+        log.warning(msg)
+
+
+class _ErrWriter:
+    @staticmethod
+    def write(msg):
+        log.error(msg)
+
+
+import copy
+
+"""
+interp = ParamInterpreter(descs, exprs)
+interp.get_param_descs()
+interp.get_param_names()
+interp.get_param_exprs()
+interp.set_param_exprs()
+interp.evaluate()
+"""
+
+
+def is_scalar(x):
+    success = True
+    try:
+        float(x)
+    except TypeError:
+        success = False
+    return success
+
+
+def is_vector(x):
+    return isinstance(x, (tuple, list, np.ndarray)) \
+           and iterutils.is_sequence_of_type(x, (int, float, np.number))
+
+
+class ParamInterpreter:
+
+    def __init__(self, descs, exprs=None):
+        descs = copy.deepcopy(descs)
+        exprs = copy.deepcopy(exprs) if exprs else dict()
+        self._descs = descs
+        self._exprs = {}
+        self._enames_all = []
+        self._enames_free = []
+        self._enames_fixed = []
+        self._interpr = None
+        self._reset_interpreter()
+        self._reset_param_names()
+        self._reset_param_exprs(exprs)
+
+    def get_param_descs(self):
+        return self._descs
+
+    def get_param_exprs(self):
+        return self._exprs
+
+    def get_param_names(self, free=True, fixed=False):
+        return self._enames_free * free + self._enames_fixed * fixed
+
+    def evaluate(
+            self, eparams, check=True,
+            out_eparams=None, out_eparams_free=None, out_eparams_fixed=None):
+
+        # Check for undefined and already-fixed exploded parameters
+        if check:
+            self._check_param_enames(eparams.keys())
+
+        # Set exploded parameter values
+        for ename in self._enames_free:
+            self._interpr(f'{ename}={eparams[ename]}')
+
+        # Apply expressions
+        for lhs_expr, rhs_expr in self._exprs.items():
+            lhs_value = self._interpr(lhs_expr)
+            rhs_value = self._interpr(rhs_expr)
+            full_expr = f'{lhs_expr}={rhs_expr}'
+            if self._interpr.error:
+                raise RuntimeError(
+                    f"problem with expression '{full_expr}'; "
+                    f"exception thrown while evaluating rhs; "
+                    f"exception type: {self._interpr.error[0].exc.__name__}; "
+                    f"exception message: {self._interpr.error[0].msg}")
+            if not (is_scalar(rhs_value) or is_vector(rhs_value)):
+                raise RuntimeError(
+                    f"problem with expression '{full_expr}'; "
+                    f"the rhs value after evaluation is invalid: '{rhs_value}'")
+            if (is_scalar(lhs_value)
+                    and is_vector(rhs_value)
+                    and 1 < len(rhs_value)):
+                raise RuntimeError(
+                    f"problem with expression '{full_expr}'; "
+                    f"cannot assign sequence of size {len(rhs_value)} "
+                    f"to scalar")
+            if (is_vector(lhs_value)
+                    and is_vector(rhs_value)
+                    and 1 < len(rhs_value) != len(lhs_value)):
+                raise RuntimeError(
+                    f"problem with expression '{full_expr}'; "
+                    f"cannot assign sequence of size {len(rhs_value)} "
+                    f"to sequence of size {len(lhs_value)}")
+            self._interpr(f'{lhs_expr}={rhs_value}')
+
+        # Retrieve expanded (free or fixed) parameter dicts
+        if out_eparams is not None:
+            out_eparams.clear()
+            out_eparams.update({
+                p: self._interpr(p) for p in self._enames_all})
+        if out_eparams_free is not None:
+            out_eparams_free.clear()
+            out_eparams_free.update({
+                p: self._interpr(p) for p in self._enames_free})
+        if out_eparams_fixed is not None:
+            out_eparams_fixed.clear()
+            out_eparams_fixed.update({
+                p: self._interpr(p) for p in self._enames_fixed})
+
+        # Build the final parameter dict directly from the symbol table
+        return {k: self._interpr.symtable[k] for k in self._descs}
+
+    def _reset_interpreter(self):
+        self._interpr = asteval.Interpreter(
+            minimal=True, use_numpy=False,
+            writer=_StdWriter, err_writer=_ErrWriter)
+        for name, desc in self._descs.items():
+            self._interpr.symtable[name] = np.nan if desc.is_scalar() \
+                else np.full(desc.size(), np.nan)
+
+    def _reset_param_names(self):
+        self._exprs.clear()
+        self._enames_all.clear()
+        self._enames_free.clear()
+        self._enames_fixed.clear()
+        for name, desc in self._descs.items():
+            for i in range(desc.size()):
+                ename = name if desc.is_scalar() \
+                    else make_param_symbol(name, i)
+                self._enames_all.append(ename)
+                self._enames_free.append(ename)
+
+    def _reset_param_exprs(self, exprs):
+        self._reset_interpreter()
+        self._reset_param_names()
+        self._exprs, enames = self._prepare_param_exprs(exprs)
+        for ename in enames:
+            self._enames_free.remove(ename)
+            self._enames_fixed.append(ename)
+
+    def _prepare_param_exprs(self, params):
+
+        # Parse and validate expressions
+        keys, values, key_names, key_indices_list = \
+            parse_param_exprs(params, self._descs)
+
+        # Make sure all whole vector params are followed by [:]
+        for i, (key, key_name) in enumerate(zip(keys, key_names)):
+            is_vector_desc = self._descs[key_name].is_vector()
+            is_vector_name = _is_param_symbol_vector(key)
+            if is_vector_desc and not is_vector_name:
+                keys[i] += '[:]'
+
+        # Exploded parameter names
+        enames = explode_param_symbols(
+            key_names, key_indices_list)
+
+        return dict(zip(keys, values)), enames
+
+    def _prepare_param_values(self, params):
+
+        # Parse and validate values
+        keys, values, key_names, key_indices_list = \
+            parse_param_values(params, self._descs)
+
+        # Exploded parameter names
+        enames = explode_param_symbols(key_names, key_indices_list)
+
+        return dict(zip(enames, iterutils.flatten(values)))
+
+    def _check_param_enames(self, param_enames):
+
+        # Check for missing parameters
+        missing = set(self._enames_free).difference(set(param_enames))
+        if missing:
+            raise RuntimeError(
+                f"the following parameters are missing: "
+                f"{missing}")
+
+        # Check if any of the supplied parameters is fixed.
+        fixed = set(self._enames_fixed).intersection(set(param_enames))
+        if fixed:
+            raise RuntimeError(
+                f"the following parameters are fixed but values were "
+                f"provided: {fixed}")
+
+        unknown = set(param_enames).difference(set(self._enames_all))
+        if unknown:
+            print("unknown: ", unknown)
+
+

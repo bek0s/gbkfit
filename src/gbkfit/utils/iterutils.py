@@ -1,8 +1,10 @@
 
+import collections
 import collections.abc
 import copy
 
 import funcy
+import iteration_utilities
 
 
 def is_iterable(x):
@@ -76,6 +78,10 @@ def is_sequence_of_type(x, type_):
 
 def flatten(x):
     return funcy.flatten(x)
+
+
+def duplicates(x, key=None):
+    return list(iteration_utilities.duplicates(x, key))
 
 
 def seq_to_string(x):

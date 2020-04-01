@@ -6,6 +6,7 @@ import numpy as np
 import scipy.optimize
 
 import gbkfit.fitter
+from gbkfit.utils import parseutils
 
 
 log = logging.getLogger(__name__)
@@ -74,28 +75,25 @@ class FitterScipyLeastSquares(FitterScipy):
 
     @classmethod
     def load(cls, info):
-        return cls(**info)
+        return cls(**parseutils.parse_class_args(cls, info))
 
     def dump(self):
         return self._kwargs
 
-    def __init__(self, **kwargs):
+    def __init__(
+            self, ftol=1e-08, xtol=1e-08, gtol=1e-08, x_scale=1.0,
+            loss='linear', f_scale=1.0, diff_step=None,
+            tr_solver=None, tr_options=None, max_nfev=None, verbose=0):
+
         super().__init__()
-        x_scale = kwargs.get('x_scale')
-        x_scale_is_num = isinstance(x_scale, (int, float))
-        if x_scale is not None and not x_scale_is_num and x_scale != 'jac':
-            raise RuntimeError(
-                "When given as a fitter constructor argument, "
-                "x_scale must be None or a number or 'jac'")
-        diff_step = kwargs.get('diff_step')
-        diff_step_is_num = isinstance(diff_step, (int, float))
-        if diff_step is not None and not diff_step_is_num:
-            raise RuntimeError(
-                "When given as a fitter constructor argument, "
-                "diff_step must be None or a number")
-        self._kwargs = kwargs.copy()
+        self._kwargs = locals()
+        self._kwargs.pop('self')
+        self._kwargs.pop('__class__')
+        self._kwargs.update(dict(jac='3-point', method='trf'))
 
     def _impl_impl_fit(self, data, model, params):
+
+        print(params)
 
         kwargs = self._kwargs.copy()
         pvals = []
@@ -108,16 +106,40 @@ class FitterScipyLeastSquares(FitterScipy):
 
         for pname in model.get_param_names():
             pinfo = params[pname]
+
             if 'x_scale' in pinfo and x_scale == 'jac':
                 raise RuntimeError(
                     f"When given as a fitter constructor argument, "
                     f"x_scale can not be also given as a parameter attribute "
                     f"(see {pname} parameter)")
+
+            init = 0
+            if init is None:
+                pass
+
+
+            min_ = pinfo.get('min')
+            max_ = pinfo.get('max')
+            init = pinfo.get('init')
+            prior = pinfo.get('prior')
+
+            if isinstance(prior, int):
+                raise RuntimeError()
+
+            if None in [min_, max_] and prior:
+                raise RuntimeError()
+
+
+
+
+
             pvals.append(pinfo['init'])
             pmins.append(pinfo.get('min', -np.nan))
             pmaxs.append(pinfo.get('max', +np.nan))
             x_scales.append(pinfo.get('x_scale', x_scale))
             diff_steps.append(pinfo.get('diff_step', diff_step))
+
+        exit()
 
         # Preallocate residual
         residuals_size = 0

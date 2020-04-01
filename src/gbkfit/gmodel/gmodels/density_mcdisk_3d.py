@@ -1,5 +1,6 @@
 
 from . import _common, _mcdisk, traits
+from gbkfit.utils import parseutils
 
 
 class DensityMCDisk3D(_common.DensityComponent3D):
@@ -10,39 +11,25 @@ class DensityMCDisk3D(_common.DensityComponent3D):
 
     @classmethod
     def load(cls, info):
-        cflux = info['cflux']
-        loose = info['loose']
-        tilted = info['tilted']
-        rnmin = info.get('rnmin')
-        rnmax = info.get('rnmax')
-        rnsep = info.get('rnsep')
-        rnlen = info.get('rnlen')
-        rnodes = info.get('rnodes')
-        rptraits = traits.rpt_parser.load(info.get('rptraits'))
-        rhtraits = traits.rht_parser.load(info.get('rhtraits'))
-        wptraits = traits.wpt_parser.load(info.get('sptraits'))
-        sptraits = traits.spt_parser.load(info.get('sptraits'))
-        return cls(
-            cflux,
-            loose,
-            tilted,
-            rptraits,
-            rhtraits,
-            wptraits,
-            sptraits,
-            rnmin, rnmax, rnsep, rnlen, rnodes)
+        info = parseutils.parse_class_args(cls, info)
+        info.update(dict(
+            rptraits=traits.rpt_parser.load(info.get('rptraits')),
+            rhtraits=traits.rht_parser.load(info.get('rhtraits')),
+            wptraits=traits.wpt_parser.load(info.get('wptraits')),
+            sptraits=traits.spt_parser.load(info.get('sptraits'))))
+        return cls(**info)
 
     def dump(self):
-        return {
-            'type': self.type(),
-            'cflux': self._disk.cflux(),
-            'loose': self._disk.loose(),
-            'tilted': self._disk.tilted(),
-            'rnodes': self._disk.rnodes(),
-            'rptraits': traits.rpt_parser.dump(self._disk.rptraits()),
-            'rhtraits': traits.rht_parser.dump(self._disk.rhtraits()),
-            'wptraits': traits.wpt_parser.dump(self._disk.wptraits()),
-            'sptraits': traits.spt_parser.dump(self._disk.sptraits())}
+        return dict(
+            type=self.type(),
+            cflux=self._disk.cflux(),
+            loose=self._disk.loose(),
+            tilted=self._disk.tilted(),
+            rnodes=self._disk.rnodes(),
+            rptraits=traits.rpt_parser.dump(self._disk.rptraits()),
+            rhtraits=traits.rht_parser.dump(self._disk.rhtraits()),
+            wptraits=traits.wpt_parser.dump(self._disk.wptraits()),
+            sptraits=traits.spt_parser.dump(self._disk.sptraits()))
 
     def __init__(
             self,

@@ -25,29 +25,28 @@ class Broker(abc.ABC):
         self._dmodel = None
         self._gmodel = None
 
-    def prepare(self, driver, dmodel, gmodel):
+    def _prepare(self, driver, dmodel, gmodel):
         self._driver = driver
         self._dmodel = dmodel
         self._gmodel = gmodel
-        self._prepare_impl()
+        self._impl_prepare(driver, dmodel, gmodel)
 
-    def evaluate(self, driver, dmodel, gmodel, params, dextra, gextra):
+    def evaluate(
+            self, driver, dmodel, gmodel, params,
+            out_dextra=None, out_gextra=None):
         if (self._driver is not driver
                 or self._dmodel is not dmodel
                 or self._gmodel is not gmodel):
-            self.prepare(driver, dmodel, gmodel)
-        self._evaluate_impl(params, dextra, gextra)
+            self._prepare(driver, dmodel, gmodel)
+        return self._impl_evaluate(
+            driver, dmodel, gmodel, params, out_dextra, out_gextra)
 
     @abc.abstractmethod
-    def output(self):
+    def _impl_prepare(self, driver, dmodel, gmodel):
         pass
 
     @abc.abstractmethod
-    def _prepare_impl(self):
-        pass
-
-    @abc.abstractmethod
-    def _evaluate_impl(self, params, dextra, gextra):
+    def _impl_evaluate(self, driver, dmodel, gmodel, params, dextra, gextra):
         pass
 
 

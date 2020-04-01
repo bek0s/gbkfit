@@ -13,6 +13,8 @@ import dynesty
 import dynesty.dynamicsampler
 import dynesty.sampler
 
+from gbkfit.utils import parseutils
+
 log = logging.getLogger(__name__)
 
 
@@ -227,7 +229,7 @@ def process_params_args(params, req_args, opt_args):
             unknown_params[pname] = unknown
 
     if missing_params:
-        raise RuntimeError()
+        raise RuntimeError(missing_params)
 
     if unknown_params:
         log.warning("")
@@ -235,29 +237,56 @@ def process_params_args(params, req_args, opt_args):
     return accepted_params
 
 
+def _parse_init_args(args):
+    args.pop('self')
+    args.pop('__class__')
+    return args
+
+
 class FitterDynestySNestedSampling(FitterDynesty):
 
     @staticmethod
     def type():
-        return 'dynesty.sns'
+        return 'dynesty.ns'
 
     @classmethod
     def load(cls, info):
-        return cls(**info)
+        info['rstate'] = np.random.RandomState(info.get('seed'))
+        return cls(**parseutils.parse_class_args(info, cls))
 
     def dump(self):
-        pass
+        return {'type': self.type(), **self._kwargs}
 
-    def __init__(self, **kwargs):
+    def __init__(
+            self,
+            # Required, dynesty.NestedSampler
+            nlive,
+            # Optional, dynesty.NestedSampler
+            bound='multi', sample='auto',
+            update_interval=None, first_update=None, rstate=None,
+            enlarge=None, bootstrap=0, vol_dec=0.5, vol_check=2.0,
+            walks=25, facc=0.5, slices=5, fmove=0.9, max_move=100,
+            # Optional, dynesty.sampler.Sampler.run_nested()
+            maxiter=None, maxcall=None, dlogz=None,
+            logl_max=np.inf, n_effective=None,
+            add_live=True, print_progress=True,
+            print_func=None, save_bounds=True):
+
         super().__init__()
+        self._kwargs = _parse_init_args(locals())
 
-        self._kwargs = process_params_args(
-            kwargs, SSAMPLER_GLOBAL_ARGS_REQ, SSAMPLER_GLOBAL_ARGS_OPT)
+        exit()
+
+    def parse_params(self, params):
+        pass
 
     def _impl_impl_fit(self, data, model, params):
 
         params = process_params_args(
             params, SSAMPLER_GLOBAL_ARGS_OPT, SSAMPLER_GLOBAL_ARGS_OPT)
+
+        def patch_priors(priors, descs):
+            pass
 
 
         pmins = []
@@ -267,6 +296,15 @@ class FitterDynestySNestedSampling(FitterDynesty):
             pinfo = params[pname]
             pmins.append(pinfo['min'])
             pmaxs.append(pinfo['max'])
+
+            if 'prior' in pinfo:
+                prior_info = pinfo['prior']
+            else:
+                prior_info = dict(min=pinfo.get('min'), max=pinfo.get('max'))
+
+
+
+
 
 
         pmins = np.array(pmins)
@@ -279,6 +317,7 @@ class FitterDynestySNestedSampling(FitterDynesty):
 
 
 
+
         sampler = dynesty.NestedSampler(
             residual_fun, ptform_func, ndim, nlive=1, logl_args=logl_args, ptform_args=ptform_args, **self._kwargs)
 
@@ -288,3 +327,35 @@ class FitterDynestySNestedSampling(FitterDynesty):
 
 
         pass
+
+
+#results = fitter.fit(..., params)
+
+#new_params = results.best_fit
+
+def func(posa, incl):
+    return posa if posa > incl else incl
+
+
+class ParamValueDict(dict):
+    pass
+
+
+class ParamPriorDict(dict):
+
+    def __init__(self):
+        super().__init__()
+
+    def sample(self, size):
+        pass
+
+    def prob(self, sample):
+        pass
+
+    def lnprob(self, sample):
+        pass
+
+    def rescale(self):
+        pass
+
+

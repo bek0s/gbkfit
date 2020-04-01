@@ -1,5 +1,6 @@
 
 from . import _common, _smdisk, traits
+from gbkfit.utils import parseutils
 
 
 class DensitySMDisk2D(_common.DensityComponent2D):
@@ -10,29 +11,20 @@ class DensitySMDisk2D(_common.DensityComponent2D):
 
     @classmethod
     def load(cls, info):
-
-        parseutils.validate_options(cls.__init__, info)
-
-        loose = info.get('loose')
-        tilted = info.get('tilted')
-        interp = info.get('interp')
-        rnodes = info['rnodes']
-        rptraits = traits.rpt_parser.load(info.get('rptraits'))
-        sptraits = traits.spt_parser.load(info.get('sptraits'))
-        return cls(
-            rnodes,
-            rptraits,
-            sptraits,
-            tilted, loose)
+        info = parseutils.parse_class_args(cls, info)
+        info.update(dict(
+            rptraits=traits.rpt_parser.load(info.get('rptraits')),
+            sptraits=traits.spt_parser.load(info.get('sptraits'))))
+        return cls(**info)
 
     def dump(self):
-        return {
-            'type': self.type(),
-            'loose': self._disk.loose(),
-            'tilted': self._disk.tilted(),
-            'rnodes': self._disk.rnodes(),
-            'rptraits': traits.rpt_parser.dump(self._disk.rptraits()),
-            'sptraits': traits.spt_parser.dump(self._disk.sptraits())}
+        return dict(
+            type=self.type(),
+            loose=self._disk.loose(),
+            tilted=self._disk.tilted(),
+            rnodes=self._disk.rnodes(),
+            rptraits=traits.rpt_parser.dump(self._disk.rptraits()),
+            sptraits=traits.spt_parser.dump(self._disk.sptraits()))
 
     def __init__(
             self,

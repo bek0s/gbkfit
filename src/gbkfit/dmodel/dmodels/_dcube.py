@@ -187,12 +187,7 @@ class DCube:
         if d_dcube_lo is not d_dcube_hi:
             self._dcube.downscale()
 
-        import time
-        t1 = time.time()
         self._driver.mem_copy_d2h(d_dcube_lo, h_dcube_lo)
-        t2 = time.time()
-        print("time: d2h:", (t2 - t1) * 1000)
-        print(d_dcube_lo.shape)
 
         if out_extra is not None:
             out_extra['dcube_lo'] = self._driver.mem_copy_d2h(d_dcube_lo)

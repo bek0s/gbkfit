@@ -9,6 +9,7 @@ except ImportError:
 import numpy as np
 
 import gbkfit.broker
+from gbkfit.utils import parseutils
 from . import _detail
 
 
@@ -19,9 +20,9 @@ class _Actor:
         self._dmodel = dmodel
         self._gmodel = gmodel
 
-    def evaluate(self, params, dextra, gextra):
-        out_dextra = {} if dextra else None
-        out_gextra = {} if gextra else None
+    def evaluate(self, params, request_dextra, request_gextra):
+        out_dextra = {} if request_dextra else None
+        out_gextra = {} if request_gextra else None
         output = self._dmodel.evaluate(
             self._driver, self._gmodel, params, out_dextra, out_gextra)
         return output, out_dextra, out_gextra
@@ -35,17 +36,14 @@ class BrokerDask(gbkfit.broker.Broker):
 
     @classmethod
     def load(cls, info):
-        grid = info.get('grid')
-        address = info.get('address')
-        return cls(grid, address)
+        return cls(**parseutils.parse_class_args(cls, info))
 
     def dump(self):
-        return {
-            'grid': self._grid,
-            'address': self._address
-        }
+        return dict(
+            grid=self._grid,
+            address=self._address)
 
-    def __init__(self, grid, address):
+    def __init__(self, grid=(1, 1, 1), address=None):
         super().__init__()
         self._grid = tuple(grid)
         self._address = address
@@ -55,10 +53,7 @@ class BrokerDask(gbkfit.broker.Broker):
         self._output = {}
         self._client = dask.distributed.Client(address)
 
-    def _prepare_impl(self):
-        driver = self._driver
-        dmodel = self._dmodel
-        gmodel = self._gmodel
+    def _impl_prepare(self, driver, dmodel, gmodel):
         size = dmodel.size()
         dtype = dmodel.dtype()
         onames = dmodel.onames()
@@ -71,21 +66,19 @@ class BrokerDask(gbkfit.broker.Broker):
                 _Actor, driver, dmodel_tile, gmodel, actor=True).result())
         self._output = {oname: np.empty(size[::-1], dtype) for oname in onames}
 
-    def _evaluate_impl(self, params, dextra, gextra):
+    def _impl_evaluate(
+            self, driver, dmodel, gmodel, params, out_dextra, out_gextra):
         self._futures = []
         for tile in self._tiles:
-            self._futures.append(tile.evaluate(params, dextra, gextra))
-
-    def output(self):
-        out_dextra = {}
-        out_gextra = {}
+            self._futures.append(tile.evaluate(
+                params, out_dextra is not None, out_gextra is not None))
         for range_nd, future in zip(self._ranges, self._futures):
             suboutput, subout_dextra, subout_gextra = future.result()
             for key, value in suboutput.items():
                 slice_nd = _detail.make_range_slice(range_nd)[::-1]
                 self._output[key][slice_nd] = value
             if subout_dextra:
-                out_dextra = _detail.rename_extra(subout_dextra, range_nd)
+                out_dextra.update(_detail.rename_extra(subout_dextra, range_nd))
             if subout_gextra:
-                out_gextra = _detail.rename_extra(subout_gextra, range_nd)
-        return self._output, out_dextra, out_gextra
+                out_gextra.update(_detail.rename_extra(subout_gextra, range_nd))
+        return self._output

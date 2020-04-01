@@ -4,9 +4,19 @@ import abc
 import numpy as np
 
 import gbkfit.math
+from gbkfit.utils import parseutils
 
 
 class Prior(abc.ABC):
+
+    @staticmethod
+    @abc.abstractmethod
+    def type():
+        pass
+
+    @classmethod
+    def load(cls, info):
+        return cls(**parseutils.parse_class_args(cls, info))
 
     def __init__(self, minimum=-np.inf, maximum=np.inf):
         self.min = minimum
@@ -42,12 +52,12 @@ class Prior(abc.ABC):
     def ln_prob(self, x):
         return np.log(self.prob(x))
 
-    @abc.abstractmethod
-    def cdf(self):
-        pass
-
 
 class PriorUniform(Prior):
+
+    @staticmethod
+    def type():
+        return 'uniform'
 
     def __init__(self, minimum, maximum):
         super().__init__(minimum, maximum)
@@ -64,6 +74,10 @@ class PriorUniform(Prior):
 
 class PriorGauss(Prior):
 
+    @staticmethod
+    def type():
+        return 'gauss'
+
     def __init__(self, mean, sigma):
         super().__init__()
         self._mean = mean
@@ -77,3 +91,6 @@ class PriorGauss(Prior):
 
     def ln_prob(self, x):
         pass
+
+
+parser = parseutils.TypedParser(Prior)

@@ -116,7 +116,7 @@ class Trait(abc.ABC):
 
     @classmethod
     def load(cls, info):
-        return cls(**info)
+        return cls(**parseutils.parse_class_args(cls, info))
 
     def __init__(self, **kwargs):
         self._kwargs = kwargs.copy()
