@@ -1,4 +1,5 @@
 
+import json
 import logging
 import time
 
@@ -13,6 +14,7 @@ import gbkfit.fitter
 import gbkfit.gmodel
 import gbkfit.model
 import gbkfit.params
+import gbkfit.params.descs
 from . import _detail
 
 
@@ -21,20 +23,26 @@ log = logging.getLogger(__name__)
 
 def _prepare_config(config):
 
-    _detail.require_config_sections(
+    _detail.prepare_config_require_sections(
         config, ['datasets', 'dmodels', 'gmodels', 'fitter', 'params'])
 
-    _detail.listify_config_sections(
+    _detail.prepare_config_listify_sections(
         config, ['brokers', 'drivers', 'datasets', 'dmodels', 'gmodels'])
 
-    _detail.check_config_sections_length(
-        config, ['datasets', 'dmodels', 'gmodels'])
+    _detail.prepare_config_check_sections_length(
+        config, ['brokers', 'drivers', 'datasets', 'dmodels', 'gmodels'])
 
 
-def _prepare_params(params):
-    param_infos = {}
+def _prepare_params(info, descs):
+
+    # Remove all param info pairs with invalid keys
+    info_keys, info_values, _, _ = \
+        gbkfit.params.parse_param_keys(info, descs)
+    info = dict(zip(info_keys, info_values))
+
     param_exprs = {}
-    for key, value in params.items():
+    param_infos = {}
+    for key, value in info.items():
         if isinstance(value, dict):
             param_infos[key] = value
         else:
@@ -51,6 +59,10 @@ def fit(config):
     config = yaml.YAML().load(open(config))
     _prepare_config(config)
 
+    #
+    # Setup optional stuff
+    #
+
     brokers = None
     if config.get('brokers'):
         log.info("Setting up brokers...")
@@ -61,6 +73,19 @@ def fit(config):
         log.info("Setting up drivers...")
         drivers = gbkfit.driver.parser.load_many(config['drivers'])
 
+    pdescs = None
+    if config.get('pdescs'):
+        log.info("Setting up pdescs...")
+        pdesc_info = _detail.prepare_config_pdescs(config['pdescs'])
+        pdesc_keys = pdesc_info.keys()
+        pdesc_vals = pdesc_info.values()
+        pdesc_list = gbkfit.params.descs.parser.load_many(pdesc_vals)
+        pdescs = dict(zip(pdesc_keys, pdesc_list))
+
+    #
+    # Setup required stuff
+    #
+
     log.info("Setting up datasets...")
     datasets = gbkfit.dataset.parser.load_many(config['datasets'])
 
@@ -70,12 +95,17 @@ def fit(config):
     log.info("Setting up gmodels...")
     gmodels = gbkfit.gmodel.parser.load_many(config['gmodels'])
 
-    log.info("Setting up model...")
-    model = gbkfit.model.Model(dmodels, gmodels, drivers, brokers)
+    log.info("Setting up models...")
+    models, param_descs, param_mappings = _detail.make_models(
+        dmodels, gmodels, drivers, brokers, pdescs)
 
     log.info("Setting up params...")
-    param_infos, param_exprs = _prepare_params(config['params'])
-    param_info = gbkfit.params.parse_param_fit_info(param_infos, model.get_param_descs())
+    param_exprs, param_values = _prepare_params(config['params'], param_descs)
+
+    exit()
+
+    #param_infos, param_exprs = _prepare_params(config['params'])
+    #param_info = gbkfit.params.parse_param_fit_info(param_infos, model.get_param_descs())
 
     print(param_info)
 
@@ -106,9 +136,6 @@ def fit(config):
     lhood3 = LikelihoodJoint(lhood1, lhood2)
     result = fitter.fit(lhood3, descs, exprs, params)
 
-
-
-
     fitter.fit(data, model, descs, exprs, params)
 
     class ParamInterpreter:
@@ -125,8 +152,6 @@ def fit(config):
     fitter = FitterDynesty()
     params = fitter.parse_params(json['params'], json['params_extra'])
     fitter.fit(data, model, params)
-
-
 
     model = Model()
 
@@ -146,28 +171,6 @@ def fit(config):
 
 
 
-    class ParamGroup:
-
-        def __init__(self, descs, exprs):
-            pass
-
-        def add_descs(self):
-            pass
-
-        def add_exprs(self):
-            pass
-
-        def get_descs(self):
-            pass
-
-        def get_exprs(self):
-            pass
-
-        def evaluate(
-                self, values,
-                out_params, out_eparams, out_params_free, out_params_fixed):
-            # return params, eparams, eparams_free, eparams_fixed
-            pass
 
 
 
@@ -243,20 +246,3 @@ class FitterParamDynesty(FitterParam):
     def __init__(self, prior):
         super().__init__(**dict(prior=prior))
 
-
-#params = fitter.parse_params()
-
-#fitter.explore(likelihood, params)
-
-
-import typing
-
-
-class Base:
-    def foo(self, x: typing.Mapping):
-        pass
-
-
-class Child:
-    def foo(self, x: typing.List):
-        pass

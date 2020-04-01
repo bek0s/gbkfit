@@ -24,17 +24,20 @@ log = logging.getLogger(__name__)
 
 
 def _prepare_config(config):
+
     _detail.prepare_config_require_sections(
         config, ['dmodels', 'gmodels', 'params'])
+
     _detail.prepare_config_listify_sections(
         config, ['brokers', 'drivers', 'datasets', 'dmodels', 'gmodels'])
+
     _detail.prepare_config_check_sections_length(
         config, ['brokers', 'drivers', 'datasets', 'dmodels', 'gmodels'])
 
 
 def _prepare_params(info, descs):
 
-    # Overwrite param info with only known and valid keys
+    # Remove all param info pairs with invalid keys
     info_keys, info_values, _, _ = \
         gbkfit.params.parse_param_keys(info, descs)
     info = dict(zip(info_keys, info_values))
