@@ -24,13 +24,13 @@ log = logging.getLogger(__name__)
 def _prepare_config(config):
 
     _detail.prepare_config_require_sections(
-        config, ['datasets', 'dmodels', 'gmodels', 'fitter', 'params'])
+        config, ['datasets', 'dmodels', 'gmodels', 'fitter', 'objectives', 'params'])
 
     _detail.prepare_config_listify_sections(
-        config, ['brokers', 'drivers', 'datasets', 'dmodels', 'gmodels'])
+        config, ['brokers', 'drivers', 'datasets', 'dmodels', 'gmodels', 'objectives'])
 
     _detail.prepare_config_check_sections_length(
-        config, ['brokers', 'drivers', 'datasets', 'dmodels', 'gmodels'])
+        config, ['brokers', 'drivers', 'datasets', 'dmodels', 'gmodels', 'objectives'])
 
 
 def _prepare_params(info, descs):
@@ -43,11 +43,19 @@ def _prepare_params(info, descs):
     param_exprs = {}
     param_infos = {}
     for key, value in info.items():
-        if isinstance(value, dict):
-            param_infos[key] = value
-        else:
+
+        if not isinstance(value, dict):
             param_exprs[key] = value
-    return param_infos, param_exprs
+        elif 'expr' in value:
+            param_exprs[key] = value['expr']
+        else:
+            param_infos[key] = value
+
+    # ...
+    gbkfit.params.parse_param_exprs(param_exprs, descs)
+    foo = gbkfit.params.parse_param_fit_info(param_infos, descs)
+
+    return param_exprs, foo
 
 
 def fit(config):
@@ -81,6 +89,12 @@ def fit(config):
         pdesc_vals = pdesc_info.values()
         pdesc_list = gbkfit.params.descs.parser.load_many(pdesc_vals)
         pdescs = dict(zip(pdesc_keys, pdesc_list))
+    """
+    objectives = None
+    if config.get('objectives'):
+        log.info("Setting up objectives...")
+        objectives = gbkfit.fitting.objective.load(config['objectives'])
+    """
 
     #
     # Setup required stuff
@@ -100,54 +114,29 @@ def fit(config):
         dmodels, gmodels, drivers, brokers, pdescs)
 
     log.info("Setting up params...")
-    param_exprs, param_values = _prepare_params(config['params'], param_descs)
-
-    exit()
-
-    #param_infos, param_exprs = _prepare_params(config['params'])
-    #param_info = gbkfit.params.parse_param_fit_info(param_infos, model.get_param_descs())
-
-    print(param_info)
-
-    exit()
-    model.set_param_exprs(param_exprs)
+    param_exprs, param_infos = _prepare_params(config['params'], param_descs)
 
     log.info("Setting up fitter...")
     fitter = gbkfit.fitter.parser.load_one(config['fitter'])
 
+    exit()
+    objectives = [fitter.FOO(dataset, model) for datasets, model in zip(datasets, models)]
+
+    fitter.fit(objectives, objective_weights, descs, exprs, param_info, param_extra)
+
+    fitter.fit((objective), weights)
+    fitter.fit((data, model), weights, param_descs, param_exprs, param_infos, param_extra)
+
+    fitter.fit(dict(data=data, model=model), (1,))
+    fitter.fit(None, None,)
+
+    exit()
+
     log.info("Model-fitting started")
     t1 = time.time_ns()
 
-    # eval
-    model = Model()
-    outputs = model.evaluate(params)
-
-    # eval from json expressions
-    model = Model()
-    params = ParamGroup(model.descs() + descs, exprs).evaluate(json_params)
-    outputs = model.evaluate(params)
-
     # fit
-    model = Model()
-    lhood = LikelihoodGauss(data, model, descs, exprs)
-
-    lhood1 = LikelihoodGauss(data, model)
-    lhood2 = LikelihoodGauss(data, model)
-    lhood3 = LikelihoodJoint(lhood1, lhood2)
-    result = fitter.fit(lhood3, descs, exprs, params)
-
-    fitter.fit(data, model, descs, exprs, params)
-
-    class ParamInterpreter:
-        pass
-
-    model = foo()
-    model.add_parameter(gbkfit.params.ParamScalarDesc('foo'))
-    model.add_parameters(gbkfit.params.ParamScalarDesc('bar'))
-    model.set_expressions(existing, derived)
-
     descs = model.descs() + more_descs
-
     pgroup = ParamGroup(descs, exprs)
     fitter = FitterDynesty()
     params = fitter.parse_params(json['params'], json['params_extra'])
@@ -156,23 +145,6 @@ def fit(config):
     model = Model()
 
     problem = Problem(data, model, pdescs, pexprs)
-
-    fitter.fit(problem, params)
-
-    model = Model()
-    pgroup = ParamGroup(descs, exprs)
-    model.evaluate(pgroup.evaluate(values))
-
-    pgroup = ParamGroup()
-    pgroup.set(descs=None, exprs=None)
-    pgroup.evaluate()
-
-
-
-
-
-
-
 
     class ParamFitInfo:
         pass

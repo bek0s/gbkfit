@@ -49,7 +49,20 @@ class Fitter(abc.ABC):
     def parse_params(self, params):
         pass
 
-    def fit(self, dataset, model, param_info):
+    def fit(self, objectives,
+            param_descs, param_exprs, param_infos, param_extra=None):
+
+
+        # validate descs
+        # validate exprs
+        # validate infos
+
+
+
+        pass
+
+
+    def fit_(self, dataset, model, param_info):
 
         param_info = gbkfit.params.parse_param_fit_info(param_info, model.get_param_descs())
 
