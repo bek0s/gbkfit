@@ -78,7 +78,8 @@ setup(
         'numpy',
         'networkx',
         'ruamel.yaml',
-        'scikit-image'
+        'scikit-image',
+        'scipy'
     ],
     entry_points={
         'console_scripts': [

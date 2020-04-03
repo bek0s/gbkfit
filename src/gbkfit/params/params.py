@@ -289,7 +289,7 @@ class _ParamExprVisitor(ast.NodeVisitor):
         # Symbol is recognised and valid, add it to the list.
         self._symbols[name].update(indices)
 
-
+"""
 class ParamDesc(abc.ABC):
 
     def __init__(self, name, size):
@@ -333,7 +333,7 @@ class ParamVectorDesc(ParamDesc):
 
     def __repr__(self):
         return f'{self.__class__.__name__}({self.name()!r}, {self.size()!r})'
-
+"""
 
 def parse_param_keys(
         params, descs,

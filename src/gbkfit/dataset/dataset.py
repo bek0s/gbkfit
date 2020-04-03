@@ -51,8 +51,8 @@ class Dataset(abc.ABC):
         return next(iter(self._data.values())).step
 
     @property
-    def zero(self):
-        return next(iter(self._data.values())).zero
+    def cval(self):
+        return next(iter(self._data.values())).cval
 
 
 parser = parseutils.SimpleParser(Dataset)

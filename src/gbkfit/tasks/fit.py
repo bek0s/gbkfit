@@ -6,13 +6,13 @@ import time
 import ruamel.yaml as yaml
 
 import gbkfit
-import gbkfit.broker
 import gbkfit.dataset
-import gbkfit.dmodel
-import gbkfit.driver
-import gbkfit.fitter
-import gbkfit.gmodel
+import gbkfit.fitting.fitter
 import gbkfit.model
+import gbkfit.model.broker
+import gbkfit.model.dmodel
+import gbkfit.model.driver
+import gbkfit.model.gmodel
 import gbkfit.params
 import gbkfit.params.descs
 from . import _detail
@@ -74,12 +74,12 @@ def fit(config):
     brokers = None
     if config.get('brokers'):
         log.info("Setting up brokers...")
-        brokers = gbkfit.broker.parser.load_many(config['brokers'])
+        brokers = gbkfit.model.broker.parser.load_many(config['brokers'])
 
     drivers = None
     if config.get('drivers'):
         log.info("Setting up drivers...")
-        drivers = gbkfit.driver.parser.load_many(config['drivers'])
+        drivers = gbkfit.model.driver.parser.load_many(config['drivers'])
 
     pdescs = None
     if config.get('pdescs'):
@@ -104,10 +104,10 @@ def fit(config):
     datasets = gbkfit.dataset.parser.load_many(config['datasets'])
 
     log.info("Setting up dmodels...")
-    dmodels = gbkfit.dmodel.parser.load_many(config['dmodels'], datasets)
+    dmodels = gbkfit.model.dmodel.parser.load_many(config['dmodels'], datasets)
 
     log.info("Setting up gmodels...")
-    gmodels = gbkfit.gmodel.parser.load_many(config['gmodels'])
+    gmodels = gbkfit.model.gmodel.parser.load_many(config['gmodels'])
 
     log.info("Setting up models...")
     models, param_descs, param_mappings = _detail.make_models(
@@ -117,7 +117,7 @@ def fit(config):
     param_exprs, param_infos = _prepare_params(config['params'], param_descs)
 
     log.info("Setting up fitter...")
-    fitter = gbkfit.fitter.parser.load_one(config['fitter'])
+    fitter = gbkfit.fitting.fitter.parser.load_one(config['fitter'])
 
     exit()
     objectives = [fitter.FOO(dataset, model) for datasets, model in zip(datasets, models)]

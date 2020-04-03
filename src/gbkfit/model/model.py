@@ -1,15 +1,15 @@
 
-from gbkfit.broker.brokers import BrokerNone
-from gbkfit.driver.drivers import DriverHost
+import gbkfit.model.brokers
+import gbkfit.model.drivers
 
 
 class Model:
 
     def __init__(self, dmodel, gmodel, driver, broker):
         if not driver:
-            driver = DriverHost()
+            driver = gbkfit.model.drivers.DriverHost()
         if not broker:
-            broker = BrokerNone()
+            broker = gbkfit.model.brokers.BrokerNone()
         self._dmodel = dmodel
         self._gmodel = gmodel
         self._driver = driver

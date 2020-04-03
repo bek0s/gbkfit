@@ -1,7 +1,7 @@
 
 import numpy as np
 
-import gbkfit.model
+import gbkfit.model.model
 from gbkfit.utils import iterutils
 
 
@@ -52,7 +52,7 @@ def prepare_config_pdescs(config):
 def make_models(dmodels, gmodels, drivers, brokers, pdescs):
     models = []
     for i in range(len(dmodels)):
-        models.append(gbkfit.model.Model(
+        models.append(gbkfit.model.model.Model(
             dmodels[i], gmodels[i],
             drivers[i] if drivers else None,
             brokers[i] if brokers else None))

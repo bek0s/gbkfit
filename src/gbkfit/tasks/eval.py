@@ -9,12 +9,12 @@ import ruamel.yaml as yaml
 import scipy.stats as stats
 
 import gbkfit
-import gbkfit.broker
 import gbkfit.dataset
-import gbkfit.dmodel
-import gbkfit.driver
-import gbkfit.gmodel
 import gbkfit.model
+import gbkfit.model.broker
+import gbkfit.model.dmodel
+import gbkfit.model.driver
+import gbkfit.model.gmodel
 import gbkfit.params
 import gbkfit.params.descs
 from . import _detail
@@ -100,12 +100,12 @@ def eval_(config, perf=None):
     brokers = None
     if config.get('brokers'):
         log.info("Setting up brokers...")
-        brokers = gbkfit.broker.parser.load_many(config['brokers'])
+        brokers = gbkfit.model.broker.parser.load_many(config['brokers'])
 
     drivers = None
     if config.get('drivers'):
         log.info("Setting up drivers...")
-        drivers = gbkfit.driver.parser.load_many(config['drivers'])
+        drivers = gbkfit.model.driver.parser.load_many(config['drivers'])
 
     datasets = None
     if config.get('datasets'):
@@ -126,10 +126,10 @@ def eval_(config, perf=None):
     #
 
     log.info("Setting up dmodels...")
-    dmodels = gbkfit.dmodel.parser.load_many(config['dmodels'], datasets)
+    dmodels = gbkfit.model.dmodel.parser.load_many(config['dmodels'], dataset=datasets)
 
     log.info("Setting up gmodels...")
-    gmodels = gbkfit.gmodel.parser.load_many(config['gmodels'])
+    gmodels = gbkfit.model.gmodel.parser.load_many(config['gmodels'])
 
     log.info("Setting up models...")
     models, param_descs, param_mappings = _detail.make_models(

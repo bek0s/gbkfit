@@ -21,34 +21,35 @@ def _register_factories(parser, factories):
 
 
 def _register_brokers():
-    from gbkfit.broker import parser
+    from gbkfit.model.broker import parser
     factories = [
-        'gbkfit.broker.brokers.dask.BrokerDask',
-        'gbkfit.broker.brokers.ray.BrokerRay']
+        'gbkfit.model.brokers.dask.BrokerDask',
+        'gbkfit.model.brokers.ray.BrokerRay']
     _register_factories(parser, factories)
 
 
 def _register_drivers():
-    from gbkfit.driver import parser
+    from gbkfit.model.driver import parser
     factories = [
-        'gbkfit.driver.drivers.cuda.driver.DriverCUDA',
-        'gbkfit.driver.drivers.host.driver.DriverHost']
+        'gbkfit.model.drivers.cuda.driver.DriverCUDA',
+        'gbkfit.model.drivers.host.driver.DriverHost']
     _register_factories(parser, factories)
 
 
 def _register_fitters():
-    from gbkfit.fitter import parser
+    from gbkfit.fitting.fitter import parser
     factories = [
-        'gbkfit.fitter.fitters.dynesty.FitterDynestyDNestedSampling',
-        'gbkfit.fitter.fitters.dynesty.FitterDynestySNestedSampling',
-        'gbkfit.fitter.fitters.scipy.FitterScipyLeastSquares',
-        'gbkfit.fitter.fitters.pygmo.FitterPygmo']
+        'gbkfit.fitting.fitters.dynesty.FitterDynestyDNestedSampling',
+        'gbkfit.fitting.fitters.dynesty.FitterDynestySNestedSampling',
+        'gbkfit.fitting.fitters.emcee.FitterEmcee',
+        'gbkfit.fitting.fitters.pygmo.FitterPygmo',
+        'gbkfit.fitting.fitters.scipy.FitterScipyLeastSquares']
     _register_factories(parser, factories)
 
 
 def _register_dmodels():
-    from gbkfit.dmodel import parser
-    from gbkfit.dmodel.dmodels import (
+    from gbkfit.model.dmodel import parser
+    from gbkfit.model.dmodels import (
         DModelImage, DModelLSlit, DModelMMaps, DModelSCube)
     parser.register(DModelImage)
     parser.register(DModelLSlit)
@@ -57,8 +58,8 @@ def _register_dmodels():
 
 
 def _register_gmodels():
-    from gbkfit.gmodel import parser
-    from gbkfit.gmodel.gmodels import (
+    from gbkfit.model.gmodel import parser
+    from gbkfit.model.gmodels import (
         GModelIntensity2D, GModelIntensity3D,
         GModelKinematics2D, GModelKinematics3D)
     parser.register(GModelIntensity2D)

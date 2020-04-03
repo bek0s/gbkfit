@@ -70,12 +70,6 @@ class Data:
         mask[mmask == 0] = 0
         error[mmask == 0] = np.nan
         mask[mmask != 0] = 1
-        """
-        import astropy.io.fits as fits
-        fits.writeto(f'mmask_d.fits', data, overwrite=True)
-        fits.writeto(f'mmask_m.fits', mask, overwrite=True)
-        fits.writeto(f'mmask_e.fits', error, overwrite=True)
-        """
         self._data = data.copy().astype(dtype)
         self._mask = mask.copy().astype(dtype)
         self._error = error.copy().astype(dtype)
