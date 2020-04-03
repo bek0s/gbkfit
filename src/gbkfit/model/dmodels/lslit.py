@@ -45,10 +45,12 @@ class DModelLSlit(gbkfit.model.dmodel.DModel):
 
     def __init__(
             self, size, step=None, cval=None, scale=None,
-            psf=None, lsf=None, dtype=None, dataset=None):
+            psf=None, lsf=None, dtype=np.float32):
         super().__init__()
-        if dtype is None:
-            dtype = np.float32
+        size = tuple(size)
+        step = tuple(step)
+        cval = tuple(cval)
+        scale = tuple(scale)
         self._dcube = _dcube.DCube(size, step, cval, scale, psf, lsf, dtype)
 
     def size(self):

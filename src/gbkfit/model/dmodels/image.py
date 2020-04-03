@@ -42,19 +42,13 @@ class DModelImage(gbkfit.model.dmodel.DModel):
             psf=gbkfit.psflsf.psf_parser.dump(self.psf()))
 
     def __init__(
-            self, size, step, cval, scale,
-            psf=None, dtype=None):
+            self, size, step=(1, 1), cval=(0, 0), scale=(1, 1),
+            psf=None, dtype=np.float32):
         super().__init__()
-        size = tuple(size[:2])
-        step = tuple(step[:2]) if step else (1, 1)
-        cval = tuple(cval[:2]) if cval else (0, 0)
-        scale = tuple(scale[:2]) if scale else (1, 1)
-        if dtype is None:
-            dtype = np.float32
-        size = size + (1,)
-        step = step + (0,)
-        cval = cval + (0,)
-        scale = scale + (1,)
+        size = tuple(size) + (1,)
+        step = tuple(step) + (0,)
+        cval = tuple(cval) + (0,)
+        scale = tuple(scale) + (1,)
         self._dcube = _dcube.DCube(size, step, cval, scale, psf, None, dtype)
 
     def size(self):

@@ -46,18 +46,16 @@ class DModelMMaps(gbkfit.model.dmodel.DModel):
             lsf=gbkfit.psflsf.lsf_parser.dump(self.lsf()))
 
     def __init__(
-            self, size, step=None, cval=None, scale=None, orders=None,
-            psf=None, lsf=None, dtype=None, dataset=None):
+            self, size, step=(1, 1), cval=(0, 0), scale=(1, 1), orders=(0, 1, 2),
+            psf=None, lsf=None, dtype=np.float32):
         super().__init__()
-        size = tuple(size[:3])
-        step = tuple(step[:3]) if step else (1, 1)
-        cval = tuple(cval[:3]) if cval else (0, 0)
-        scale = tuple(scale[:3]) if scale else (1, 1)
-        orders = tuple(sorted(set(orders))) if orders else (0, 1, 2)
+        size = tuple(size)
+        step = tuple(step)
+        cval = tuple(cval)
+        scale = tuple(scale)
+        orders = tuple(sorted(set(orders)))
         if any(order < 0 or order > 2 for order in orders):
             raise RuntimeError("moment orders must be between 0 and 2")
-        if dtype is None:
-            dtype = np.float32
         if len(step) == 2:
             step = step + (1,)
         if len(size) == 2:
