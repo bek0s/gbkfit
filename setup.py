@@ -74,16 +74,18 @@ setup(
         'asteval',
         'astor',
         'astropy',
-        'dynesty',
-        'emcee',
         'funcy',
         'numpy',
         'networkx',
-        'pygmo',
         'ruamel.yaml',
         'scikit-image',
         'scipy'
     ],
+    extras_require={
+        'dynesty': ['dynesty'],
+        'emcee': ['emcee'],
+        'pygmo': ['pygmo']
+    },
     entry_points={
         'console_scripts': [
             'gbkfit-cli = gbkfit.apps.cli:main'

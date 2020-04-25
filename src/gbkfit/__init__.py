@@ -17,7 +17,7 @@ def _register_factories(parser, factories):
             cls = getattr(mod, cls_name)
             parser.register(cls)
         except (AttributeError, ImportError) as e:
-            log.warning(f"could not load factory {factory}: {str(e)}")
+            log.warning(f"Could not load factory {factory}: {str(e)}")
 
 
 def _register_drivers():
@@ -25,6 +25,18 @@ def _register_drivers():
     factories = [
         'gbkfit.driver.drivers.cuda.driver.DriverCUDA',
         'gbkfit.driver.drivers.host.driver.DriverHost']
+    _register_factories(parser, factories)
+
+
+def _register_fitters():
+    from gbkfit.fitting.fitter import parser
+    factories = [
+        'gbkfit.fitting.fitters.dynesty.FitterDynestyDNS',
+        'gbkfit.fitting.fitters.dynesty.FitterDynestySNS',
+        'gbkfit.fitting.fitters.emcee.FitterEmcee',
+        'gbkfit.fitting.fitters.pygmo.FitterPygmo',
+        'gbkfit.fitting.fitters.scipy.FitterScipyLeastSquares',
+        'gbkfit.fitting.fitters.scipy.FitterScipyMinimize']
     _register_factories(parser, factories)
 
 
@@ -79,19 +91,6 @@ def _register_lsfs():
     lsf_parser.register(LSFImage)
     lsf_parser.register(LSFLorentz)
     lsf_parser.register(LSFMoffat)
-
-
-def _register_fitters():
-    from gbkfit.fitting.fitter import parser
-    from gbkfit.fitting.fitters import (
-        FitterDynestyDNS, FitterDynestySNS, FitterEmcee, FitterPygmo,
-        FitterScipyLeastSquares, FitterScipyMinimize)
-    parser.register(FitterDynestyDNS)
-    parser.register(FitterDynestySNS)
-    parser.register(FitterEmcee)
-    parser.register(FitterPygmo)
-    parser.register(FitterScipyLeastSquares)
-    parser.register(FitterScipyMinimize)
 
 
 def _init():
