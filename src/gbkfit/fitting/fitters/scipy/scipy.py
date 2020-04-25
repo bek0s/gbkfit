@@ -5,7 +5,7 @@ import logging
 import numpy as np
 import scipy.optimize
 
-import gbkfit.fitting
+import gbkfit.fitting.fitter
 from gbkfit.utils import parseutils
 
 
@@ -53,7 +53,7 @@ def residual_fun(pvalues, data, model, residual):
     return np.array(residual.ravel())
 
 
-class FitterScipy(gbkfit.fitting.Fitter):
+class FitterScipy(gbkfit.fitting.fitter.Fitter):
 
     def __init__(self):
         super().__init__()
@@ -64,6 +64,14 @@ class FitterScipy(gbkfit.fitting.Fitter):
 
     @abc.abstractmethod
     def _impl_impl_fit(self, data, model, params):
+        pass
+
+    def _fit_impl(self, objective, params):
+        result = self._fit_impl_impl(objective, params)
+        return result
+
+    @abc.abstractmethod
+    def _fit_impl_impl(self, objective, params):
         pass
 
 
@@ -90,6 +98,12 @@ class FitterScipyLeastSquares(FitterScipy):
         self._kwargs.pop('self')
         self._kwargs.pop('__class__')
         self._kwargs.update(dict(jac='3-point', method='trf'))
+
+    def _fit_impl_impl(self, objective, params):
+
+        print(params)
+
+        return None
 
     def _impl_impl_fit(self, data, model, params):
 

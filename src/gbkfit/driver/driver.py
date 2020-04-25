@@ -68,6 +68,12 @@ class Driver(abc.ABC):
     def make_gmodel_smdisk(self, dtype):
         pass
 
+    def residual_type_0(self, model, data, mask):
+        pass
+
+    def residual_type_1(self):
+        pass
+
 
 class DModelDCube(abc.ABC):
 

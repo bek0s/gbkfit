@@ -1,2 +1,2 @@
 
-from .dynesty import FitterDynestySNestedSampling
+from .dynesty import FitterDynestyDNS, FitterDynestySNS

@@ -62,7 +62,7 @@ class DCube:
         # Always assume an fft-based convolution.
         # Hence, their centers must be rolled at their first pixel.
 
-        psf_hi = np.zeros(size_hi[:2], dtype=dtype)
+        psf_hi = np.zeros(size_hi[:2][::-1], dtype=dtype)
         psf_hi[0, 0] = 1
 
         if psf:
@@ -153,7 +153,7 @@ class DCube:
         # If they have the same size, just create one and have the
         # latter point to the former. This can happen when there is no
         # super sampling and psf+lsf.
-        self._dcube_lo = driver.mem_alloc_s(size_lo[::-1], dtype)
+        self._dcube_lo = driver.mem_alloc_d(size_lo[::-1], dtype)
         self._dcube_hi = driver.mem_alloc_d(size_hi[::-1], dtype) \
             if size_lo != size_hi else self._dcube_lo[1]
 
@@ -171,27 +171,21 @@ class DCube:
 
         self._dcube.prepare(
             size_lo, size_hi, edge_hi, scale,
-            self._dcube_lo[1],
+            self._dcube_lo,
             self._dcube_hi, self._dcube_hi_fft,
             psf3d_hi, self._psf3d_hi_fft)
 
     def evaluate(self, out_extra):
 
-        d_dcube_hi = self._dcube_hi
-        h_dcube_lo = self._dcube_lo[0]
-        d_dcube_lo = self._dcube_lo[1]
-
         if self._psf or self._lsf:
             self._dcube.convolve()
 
-        if d_dcube_lo is not d_dcube_hi:
+        if self._dcube_lo is not self._dcube_hi:
             self._dcube.downscale()
 
-        self._driver.mem_copy_d2h(d_dcube_lo, h_dcube_lo)
-
         if out_extra is not None:
-            out_extra['dcube_lo'] = self._driver.mem_copy_d2h(d_dcube_lo)
-            out_extra['dcube_hi'] = self._driver.mem_copy_d2h(d_dcube_hi)
+            out_extra['dcube_lo'] = self._driver.mem_copy_d2h(self._dcube_lo)
+            out_extra['dcube_hi'] = self._driver.mem_copy_d2h(self._dcube_hi)
             if self._psf:
                 out_extra['psf_lo'] = self._psf.asarray(self._step_lo[:2])
                 out_extra['psf_hi'] = self._psf.asarray(self._step_hi[:2])

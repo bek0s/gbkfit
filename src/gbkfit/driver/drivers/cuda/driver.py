@@ -2,8 +2,8 @@
 import cupy as cp
 import numpy as np
 
-import gbkfit.model.driver
-from gbkfit.model.driver.drivers import _detail
+import gbkfit.driver.driver
+from gbkfit.driver.drivers import _detail
 
 import gbkfit.native.libgbkfit_cuda
 
@@ -16,7 +16,7 @@ def _shape(a):
     return a.__cuda_array_interface__['shape'] if a is not None else (0,)
 
 
-class DriverCUDA(gbkfit.model.driver.Driver):
+class DriverCUDA(gbkfit.driver.driver.Driver):
 
     @staticmethod
     def type():
@@ -76,7 +76,7 @@ class DriverCUDA(gbkfit.model.driver.Driver):
         return GModelSMDisk(dtype)
 
 
-class DModelDCube(gbkfit.model.driver.DModelDCube):
+class DModelDCube(gbkfit.driver.driver.DModelDCube):
 
     _CLASSES = {
         np.float32: gbkfit.native.libgbkfit_cuda.DModelDCubef32}
@@ -107,7 +107,7 @@ class DModelDCube(gbkfit.model.driver.DModelDCube):
         self._dcube.downscale()
 
 
-class DModelMMaps(gbkfit.model.driver.DModelMMaps):
+class DModelMMaps(gbkfit.driver.driver.DModelMMaps):
 
     _CLASSES = {
         np.float32: gbkfit.native.libgbkfit_cuda.DModelMMapsf32}
@@ -134,7 +134,7 @@ class DModelMMaps(gbkfit.model.driver.DModelMMaps):
         self._mmaps.moments()
 
 
-class GModelMCDisk(gbkfit.model.driver.GModelMCDisk):
+class GModelMCDisk(gbkfit.driver.driver.GModelMCDisk):
 
     _CLASSES = {
         np.float32: gbkfit.native.libgbkfit_cuda.GModelMCDiskf32}
@@ -205,7 +205,7 @@ class GModelMCDisk(gbkfit.model.driver.GModelMCDisk):
             _ptr(rdata), _ptr(vdata), _ptr(ddata))
 
 
-class GModelSMDisk(gbkfit.model.driver.GModelSMDisk):
+class GModelSMDisk(gbkfit.driver.driver.GModelSMDisk):
 
     _CLASSES = {
         np.float32: gbkfit.native.libgbkfit_cuda.GModelSMDiskf32}

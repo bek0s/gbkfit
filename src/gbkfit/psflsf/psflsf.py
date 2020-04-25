@@ -29,7 +29,8 @@ class LSF(abc.ABC):
         if size is None:
             size = self.size(step, offset)
         if gbkfit.math.is_even(size + offset):
-            raise RuntimeError(f"size {size} + offset {offset} must be odd")
+            raise RuntimeError(
+                f"size ({size}) + offset ({offset}) must be odd")
         return self._asarray_impl(step, size, offset)
 
     @abc.abstractmethod
@@ -66,7 +67,8 @@ class PSF(abc.ABC):
         if size is None:
             size = self.size(step, offset)
         if any(gbkfit.math.is_even(s + o) for s, o in zip(size, offset)):
-            raise RuntimeError(f"size {size} + offset {offset} must be odd")
+            raise RuntimeError(
+                f"size ({size}) + offset ({offset}) must be odd")
         return self._asarray_impl(step, size, offset)
 
     @abc.abstractmethod

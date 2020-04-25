@@ -1,4 +1,4 @@
-
+"""
 import gbkfit.model.brokers
 import gbkfit.model.drivers
 
@@ -37,3 +37,11 @@ class Model:
         broker = self._broker
         return broker.evaluate(
             driver, dmodel, gmodel, params, out_dextra, out_gextra)
+
+
+
+class ModelEvaluator:
+
+    def __init__(self, dmodels):
+        pass
+"""

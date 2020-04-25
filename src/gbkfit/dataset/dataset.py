@@ -2,17 +2,18 @@
 import abc
 
 from gbkfit.utils import parseutils
-from .data import Data
 
 
 class Dataset(abc.ABC):
 
     @classmethod
+    @abc.abstractmethod
     def load(cls, info):
-        return Dataset({k: Data.load(v) for k, v in info.items()})
+        pass
 
-    def dump(self, prefix=''):
-        return {k: v.dump(prefix + k + '_') for k, v in self.items()}
+    @abc.abstractmethod
+    def dump(self, **kwargs):
+        pass
 
     def __init__(self, data):
         self._data = data
@@ -39,20 +40,20 @@ class Dataset(abc.ABC):
         return self._data.get(item)
 
     @property
-    def npix(self):
-        return next(iter(self._data.values())).npix
+    def npixs(self):
+        return tuple(data.npix for data in self.values())
 
     @property
-    def size(self):
-        return next(iter(self._data.values())).size
+    def sizes(self):
+        return tuple(data.size for data in self.values())
 
     @property
-    def step(self):
-        return next(iter(self._data.values())).step
+    def steps(self):
+        return tuple(data.step for data in self.values())
 
     @property
-    def cval(self):
-        return next(iter(self._data.values())).cval
+    def cvals(self):
+        return tuple(data.cval for data in self.values())
 
 
-parser = parseutils.SimpleParser(Dataset)
+parser = parseutils.TypedParser(Dataset)

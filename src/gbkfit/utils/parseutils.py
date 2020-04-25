@@ -1,4 +1,5 @@
 
+import abc
 import inspect
 import logging
 
@@ -8,9 +9,9 @@ from . import iterutils
 _log = logging.getLogger(__name__)
 
 
-def parse_class_args(cls, info, skip_args=()):
-    type_ = f'(type: {cls.type()})' if getattr(cls, 'type', None) else ''
-    type_name = f'{cls.__qualname__} {type_}'
+def parse_class_args(cls, info, add_args=(), skip_args=()):
+    type_name = f' (type: {cls.type()})' if getattr(cls, 'type', None) else ''
+    type_desc = f'{cls.__qualname__}{type_name}'
     required = set()
     optional = set()
     signature = inspect.signature(cls.__init__)
@@ -25,73 +26,42 @@ def parse_class_args(cls, info, skip_args=()):
             required.add(pname)
         else:
             optional.add(pname)
+    required.update(add_args)
+    required.difference_update(skip_args)
+    optional.difference_update(skip_args)
     unknown = set(info) - (required | optional)
     missing = required - set(info)
     options = {k: v for k, v in info.items() if k in required | optional}
     if unknown:
         _log.warning(
-            f'The following {type_name} options are '
-            f'not recognised and will be ignored: {unknown}')
+            f"the following {type_desc} options are "
+            f"not recognised and will be ignored: {', '.join(unknown)}")
     if missing:
         raise RuntimeError(
-            f'The following {type_name} options are '
-            f'required but missing: {missing}')
+            f"the following {type_desc} options are "
+            f"required but missing: {', '.join(missing)}")
     return options
 
 
-class SimpleParser:
+class Parser(abc.ABC):
 
     def __init__(self, cls):
         self._clstype = cls
-
-    def load(self, x):
-        return self.load_many(x) if iterutils.is_sequence(x) \
-            else self.load_one(x)
-
-    def load_one(self, x):
-        return self._clstype.load(x)
-
-    def load_many(self, x):
-        return [self.load_one(item) for item in iterutils.listify(x)]
-
-    @classmethod
-    def dump(cls, x):
-        return cls.dump_many(x) if iterutils.is_sequence(x) \
-            else cls.dump_one(x)
-
-    @classmethod
-    def dump_many(cls, x):
-        return [cls.dump_one(item) for item in iterutils.listify(x)]
-
-    @staticmethod
-    def dump_one(x):
-        return x.dump() if x is not None else None
-
-
-class TypedParser:
-
-    def __init__(self, cls, noneval=None):
-        self._clstype = cls
         self._clsname = cls.__name__
-        self._parsers = {}
-        self._noneval = noneval
 
-    def type(self):
+    def clstype(self):
+        return self._clstype
+
+    def clsname(self):
         return self._clsname
 
-    def dict(self):
-        return dict(self._parsers)
-
-    def register(self, factory):
-        type_ = factory.type()
-        if type_ in self._parsers:
-            raise RuntimeError(
-                f"{self._clsname} parser is already registered: '{type_}'.")
-        self._parsers[type_] = factory
-
     def load(self, x):
         return self.load_many(x) if iterutils.is_sequence(x) \
             else self.load_one(x)
+
+    @abc.abstractmethod
+    def load_one(self, x, *args, **kwargs):
+        pass
 
     def load_many(self, x, *args, **kwargs):
         nitems = len(x)
@@ -104,7 +74,7 @@ class TypedParser:
                 kwargs[key] = nitems * [None]
         if any([nitems != len(arg) for arg in args + list(kwargs.values())]):
             raise RuntimeError(
-                "All arguments must have the same length or be None.")
+                "all arguments must have the same length or be None")
         nargs = len(args)
         args_list_shape = (nitems, nargs)
         args_list = iterutils.make_list(args_list_shape, [], True)
@@ -121,6 +91,51 @@ class TypedParser:
             results.append(self.load_one(item, *item_args, **item_kwargs))
         return results
 
+    def dump(self, x):
+        return self.dump_many(x) if iterutils.is_sequence(x) \
+            else self.dump_one(x)
+
+    def dump_many(self, x):
+        return [self.dump_one(item) for item in iterutils.listify(x)]
+
+    def dump_one(self, x):
+        return x.dump() if x is not None else None
+
+
+class SimpleParser(Parser):
+
+    def __init__(self, cls):
+        super().__init__(cls)
+
+    def load(self, x):
+        return self.load_many(x) if iterutils.is_sequence(x) \
+            else self.load_one(x)
+
+    def load_one(self, x, *args, **kwargs):
+        return self._clstype.load(x)
+
+
+class TypedParser(Parser):
+
+    def __init__(self, cls, noneval=None):
+        super().__init__(cls)
+        self._parsers = {}
+        self._noneval = noneval
+
+    def dict(self):
+        return dict(self._parsers)
+
+    def register(self, factory):
+        type_ = factory.type()
+        if type_ in self._parsers:
+            raise RuntimeError(
+                f"{self._clsname} parser is already registered: '{type_}'.")
+        self._parsers[type_] = factory
+
+    def load(self, x):
+        return self.load_many(x) if iterutils.is_sequence(x) \
+            else self.load_one(x)
+
     def load_one(self, x, *args, **kwargs):
         if x is None:
             return self._noneval
@@ -133,22 +148,6 @@ class TypedParser:
                 f"Could not find a {self._clsname} parser for type '{type_}'. "
                 f"Available parsers are: {list(self._parsers.keys())}.")
 
+        obj = self._parsers[type_].load(x, *args, **kwargs)
 
-        factory = self._parsers[type_]
-
-        #x = check_options(factory, x)
-
-        return self._parsers[type_].load(x, *args, **kwargs)
-
-    @classmethod
-    def dump(cls, x):
-        return cls.dump_many(x) if iterutils.is_sequence(x) \
-            else cls.dump_one(x)
-
-    @classmethod
-    def dump_many(cls, x):
-        return [cls.dump_one(item) for item in iterutils.listify(x)]
-
-    @staticmethod
-    def dump_one(x):
-        return x.dump() if x is not None else None
+        return obj

@@ -1,6 +1,6 @@
 
 import gbkfit.model.gmodel
-from gbkfit.utils import iterutils
+from gbkfit.utils import iterutils, parseutils
 from . import _common
 
 
@@ -13,23 +13,24 @@ class GModelKinematics3D(
 
     @classmethod
     def load(cls, info):
-        tauto = info.get('tauto')
-        size_z = info.get('size_z')
-        step_z = info.get('step_z')
-        cmp = _common.spectral_component_3d_parser.load(info['components'])
-        tcmp = _common.density_component_3d_parser.load(info.get('tcomponents'))
-        return cls(cmp, size_z, step_z, tauto, tcmp)
+        args = parseutils.parse_class_args(cls, info)
+        args.update(
+            components=_common.spectral_component_3d_parser.load(
+                info['components']),
+            tcomponents=_common.density_component_3d_parser.load(
+                info.get('tcomponents')))
+        return cls(**args)
 
     def dump(self):
-        return {
-            'type': self.type(),
-            'tauto': self._tauto,
-            'size_z': self._size_z,
-            'step_z': self._step_z,
-            'components': _common.spectral_component_3d_parser.dump(
+        return dict(
+            type=self.type(),
+            tauto=self._tauto,
+            size_z=self._size_z,
+            step_z=self._step_z,
+            components=_common.spectral_component_3d_parser.dump(
                 self._components),
-            'tcomponents': _common.density_component_3d_parser.dump(
-                self._tcomponents)}
+            tcomponents=_common.density_component_3d_parser.dump(
+                self._tcomponents))
 
     def __init__(
             self, components, size_z=None, step_z=None,

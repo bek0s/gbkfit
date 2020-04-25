@@ -296,7 +296,7 @@ def prep_scube(
         srange = roi_spec
         data_d, data_e, data_m = _crop_data(
             data_d, data_e, data_m, 0, srange)
-
+    # TODO check shapes
     mask = _make_mask(data_d, data_e, data_m)
 
     if clip_min is not None:

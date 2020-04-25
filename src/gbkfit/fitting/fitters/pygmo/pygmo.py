@@ -5,13 +5,13 @@ import logging
 import numpy as np
 import pygmo as pg
 
-import gbkfit.fitting
+import gbkfit.fitting.fitter
 
 
 log = logging.getLogger(__name__)
 
 
-class FitterPygmo(gbkfit.fitting.Fitter):
+class FitterPygmo(gbkfit.fitting.fitter.Fitter):
 
     @staticmethod
     def type():

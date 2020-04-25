@@ -94,3 +94,5 @@ class PriorGauss(Prior):
 
 
 parser = parseutils.TypedParser(Prior)
+parser.register(PriorUniform)
+parser.register(PriorGauss)

@@ -88,7 +88,7 @@ class DModelSCube(gbkfit.model.dmodel.DModel):
     def _evaluate_impl(self, params, out_dextra, out_gextra):
         driver = self._driver
         dcube = self._dcube
-        scube = dcube.data()[0]
+        scube = dcube.data()
         driver.mem_fill_d(dcube.scratch_data(), 0)
         self._gmodel.evaluate_scube(
             driver, params,

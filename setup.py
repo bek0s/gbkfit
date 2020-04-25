@@ -74,9 +74,12 @@ setup(
         'asteval',
         'astor',
         'astropy',
+        'dynesty'
+        'emcee',
         'funcy',
         'numpy',
         'networkx',
+        'pygmo',
         'ruamel.yaml',
         'scikit-image',
         'scipy'

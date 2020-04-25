@@ -4,9 +4,8 @@ import logging
 
 import dynesty
 import numpy as np
-import ultranest
 
-import gbkfit.fitting
+import gbkfit.fitting.fitter
 
 import inspect
 import dynesty
@@ -90,7 +89,7 @@ class Prior:
         return params
 
 
-class FitterDynesty(gbkfit.fitting.Fitter):
+class FitterDynesty(gbkfit.fitting.fitter.Fitter):
 
     def __init__(self):
         super().__init__()
@@ -243,7 +242,11 @@ def _parse_init_args(args):
     return args
 
 
-class FitterDynestySNestedSampling(FitterDynesty):
+class FitterDynestyDNS(FitterDynesty):
+    pass
+
+
+class FitterDynestySNS(FitterDynesty):
 
     @staticmethod
     def type():

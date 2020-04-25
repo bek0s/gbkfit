@@ -49,15 +49,13 @@ class Fitter(abc.ABC):
     def parse_params(self, params):
         pass
 
-    def fit(self, objectives,
-            param_descs, param_exprs, param_infos, param_extra=None):
+    def fit(self, objective, extra_pdescs, param_exprs, param_info, param_info_extra=None):
 
 
         # validate descs
         # validate exprs
         # validate infos
-
-
+        result = self._fit_impl(objective, param_info)
 
         pass
 
@@ -72,6 +70,10 @@ class Fitter(abc.ABC):
 
     @abc.abstractmethod
     def _impl_fit(self, data, model, params):
+        pass
+
+    @abc.abstractmethod
+    def _fit_impl(self, objective, params):
         pass
 
 

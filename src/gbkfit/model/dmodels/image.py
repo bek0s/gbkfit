@@ -1,14 +1,16 @@
 
 import numpy as np
 
-import gbkfit.model.dmodel
+#import gbkfit.model.dmodel
 import gbkfit.model.gmodel
 import gbkfit.psflsf
 from gbkfit.utils import parseutils
 from . import _dcube
 
+from gbkfit.model.dmodel import DModel
+#from gbkfit.model.gmodel import GModel
 
-class DModelImage(gbkfit.model.dmodel.DModel):
+class DModelImage(DModel):
 
     @staticmethod
     def type():
@@ -84,7 +86,7 @@ class DModelImage(gbkfit.model.dmodel.DModel):
         driver = self._driver
         gmodel = self._gmodel
         dcube = self._dcube
-        image = dcube.data()[0][0, :, :]
+        image = dcube.data()[0, :, :]
         driver.mem_fill_d(dcube.scratch_data(), 0)
         gmodel.evaluate_image(
             driver, params,

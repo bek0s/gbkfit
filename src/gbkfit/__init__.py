@@ -17,34 +17,25 @@ def _register_factories(parser, factories):
             cls = getattr(mod, cls_name)
             parser.register(cls)
         except (AttributeError, ImportError) as e:
-            log.warning(f"Could not load factory {factory}: {str(e)}")
-
-
-def _register_brokers():
-    from gbkfit.model.broker import parser
-    factories = [
-        'gbkfit.model.brokers.dask.BrokerDask',
-        'gbkfit.model.brokers.ray.BrokerRay']
-    _register_factories(parser, factories)
+            log.warning(f"could not load factory {factory}: {str(e)}")
 
 
 def _register_drivers():
-    from gbkfit.model.driver import parser
+    from gbkfit.driver.driver import parser
     factories = [
-        'gbkfit.model.drivers.cuda.driver.DriverCUDA',
-        'gbkfit.model.drivers.host.driver.DriverHost']
+        'gbkfit.driver.drivers.cuda.driver.DriverCUDA',
+        'gbkfit.driver.drivers.host.driver.DriverHost']
     _register_factories(parser, factories)
 
 
-def _register_fitters():
-    from gbkfit.fitting.fitter import parser
-    factories = [
-        'gbkfit.fitting.fitters.dynesty.FitterDynestyDNestedSampling',
-        'gbkfit.fitting.fitters.dynesty.FitterDynestySNestedSampling',
-        'gbkfit.fitting.fitters.emcee.FitterEmcee',
-        'gbkfit.fitting.fitters.pygmo.FitterPygmo',
-        'gbkfit.fitting.fitters.scipy.FitterScipyLeastSquares']
-    _register_factories(parser, factories)
+def _register_datasets():
+    from gbkfit.dataset.dataset import parser
+    from gbkfit.dataset.datasets import (
+        DatasetImage, DatasetLSlit, DatasetMMaps, DatasetSCube)
+    parser.register(DatasetImage)
+    parser.register(DatasetLSlit)
+    parser.register(DatasetMMaps)
+    parser.register(DatasetSCube)
 
 
 def _register_dmodels():
@@ -69,7 +60,7 @@ def _register_gmodels():
 
 
 def _register_psfs():
-    from gbkfit.psflsf import psf_parser
+    from gbkfit.psflsf.psflsf import psf_parser
     from gbkfit.psflsf.psflsfs.psfmodels import (
         PSFGauss, PSFGGauss, PSFImage, PSFLorentz, PSFMoffat)
     psf_parser.register(PSFGauss)
@@ -80,7 +71,7 @@ def _register_psfs():
 
 
 def _register_lsfs():
-    from gbkfit.psflsf import lsf_parser
+    from gbkfit.psflsf.psflsf import lsf_parser
     from gbkfit.psflsf.psflsfs.lsfmodels import (
         LSFGauss, LSFGGauss, LSFImage, LSFLorentz, LSFMoffat)
     lsf_parser.register(LSFGauss)
@@ -90,11 +81,27 @@ def _register_lsfs():
     lsf_parser.register(LSFMoffat)
 
 
-def init():
-    _register_brokers()
+def _register_fitters():
+    from gbkfit.fitting.fitter import parser
+    from gbkfit.fitting.fitters import (
+        FitterDynestyDNS, FitterDynestySNS, FitterEmcee, FitterPygmo,
+        FitterScipyLeastSquares, FitterScipyMinimize)
+    parser.register(FitterDynestyDNS)
+    parser.register(FitterDynestySNS)
+    parser.register(FitterEmcee)
+    parser.register(FitterPygmo)
+    parser.register(FitterScipyLeastSquares)
+    parser.register(FitterScipyMinimize)
+
+
+def _init():
+    _register_datasets()
     _register_drivers()
     _register_dmodels()
     _register_gmodels()
     _register_psfs()
     _register_lsfs()
     _register_fitters()
+
+
+_init()

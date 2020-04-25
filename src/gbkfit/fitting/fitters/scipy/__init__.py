@@ -1,2 +1,2 @@
 
-from .scipy import FitterScipyLeastSquares
+from .scipy import FitterScipyLeastSquares, FitterScipyMinimize
