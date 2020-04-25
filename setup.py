@@ -74,7 +74,7 @@ setup(
         'asteval',
         'astor',
         'astropy',
-        'dynesty'
+        'dynesty',
         'emcee',
         'funcy',
         'numpy',
