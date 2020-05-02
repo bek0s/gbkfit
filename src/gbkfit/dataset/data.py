@@ -64,6 +64,8 @@ class Data:
         mask[finite_mask == 0] = 0
         mask[finite_mask != 0] = 1
         error[finite_mask == 0] = np.nan
+        # TODO: fix this
+        data = data.astype(np.float32)
         self._data = data.copy()
         self._mask = mask.copy().astype(data.dtype)
         self._error = error.copy().astype(data.dtype)

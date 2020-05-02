@@ -63,6 +63,12 @@ class DriverCUDA(gbkfit.driver.driver.Driver):
     def array_mul_d(self, ary, value):
         ary *= value
 
+    def math_abs(self, ary, out=None):
+        return cp.abs(ary, out=out)
+
+    def math_sum(self, ary, out=None):
+        return cp.sum(ary, out=out)
+
     def make_dmodel_dcube(self, dtype):
         return DModelDCube(dtype)
 

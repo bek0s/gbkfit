@@ -74,6 +74,14 @@ class Driver(abc.ABC):
     def residual_type_1(self):
         pass
 
+    def math_abs(self, ary, out=None):
+        pass
+
+    def math_sum(self, ary, out=None):
+        pass
+
+    #def math_add(self, ary, ):
+
 
 class DModelDCube(abc.ABC):
 

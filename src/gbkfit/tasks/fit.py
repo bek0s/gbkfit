@@ -104,16 +104,13 @@ def fit(config):
         objectives = gbkfit.fitting.objective.parser.load_many(
             config['objectives'],
             dataset=datasets, driver=drivers, dmodel=dmodels, gmodel=gmodels)
-        objectives_weight = [o.get('weight', 1.) for o in config['objectives']]
     else:
         objectives = []
-        objectives_weight = []
         for dataset, driver, dmodel, gmodel in zip(
                 datasets, drivers, dmodels, gmodels):
             objectives.append(fitter.default_objective(
                 dataset, driver, dmodel, gmodel))
-            objectives_weight.append(1.0)
-    objective = gbkfit.fitting.objective.JointObjective(objectives, objectives_weight)
+    objective = gbkfit.fitting.objective.JointObjective(objectives)
 
     log.info("setting up pdescs...")
     pdescs_extra = None
@@ -136,7 +133,10 @@ def fit(config):
 
     print(param_exprs)
 
-    residual = objectives[0].residual(param_exprs)
+    #print(objectives[0].params())
+    residual = objectives[0].residual_scalar(param_exprs)
+
+    print(residual)
 
     exit()
 

@@ -17,7 +17,8 @@ def _register_factories(parser, factories):
             cls = getattr(mod, cls_name)
             parser.register(cls)
         except (AttributeError, ImportError) as e:
-            log.warning(f"Could not load factory {factory}: {str(e)}")
+            log.warning(
+                f"could not register factory for type {factory}: {str(e)}")
 
 
 def _register_drivers():
@@ -31,7 +32,7 @@ def _register_drivers():
 def _register_fitters():
     from gbkfit.fitting.fitter import parser
     factories = [
-        'gbkfit.fitting.fitters.dynesty.FitterDynestyDNS',
+        'gbkfit.fitting.fitters.dynesty.FitterDyneestyDNS',
         'gbkfit.fitting.fitters.dynesty.FitterDynestySNS',
         'gbkfit.fitting.fitters.emcee.FitterEmcee',
         'gbkfit.fitting.fitters.pygmo.FitterPygmo',

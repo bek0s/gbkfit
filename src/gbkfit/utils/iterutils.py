@@ -4,15 +4,21 @@ import collections.abc
 import copy
 
 import funcy
-#import iteration_utilities
 
 
-def is_iterable(x):
-    return isinstance(x, collections.abc.Iterable)
+def is_iterable(x, strict=True):
+    return isinstance(x, (tuple, list, set, dict)) if strict \
+        else isinstance(x, collections.abc.Iterable)
 
 
-def is_sequence(x):
-    return isinstance(x, (list, tuple, set))
+def is_mapping(x, strict=True):
+    return isinstance(x, (dict,)) if strict \
+        else isinstance(x, collections.abc.Mapping)
+
+
+def is_sequence(x, strict=True):
+    return isinstance(x, (tuple, list, set)) if strict \
+        else isinstance(x, collections.abc.Sequence)
 
 
 def listify(x):
@@ -20,7 +26,7 @@ def listify(x):
 
 
 def tuplify(x):
-    return tuple([i for i in x] if is_sequence(x) else [x])
+    return tuple(listify(x))
 
 
 def _make_seq(s, v, t, copy_):
@@ -63,7 +69,7 @@ def all_positive(x, include_zero=True):
     return all(i >= 0 if include_zero else i > 0 for i in x)
 
 
-def all_negative(x, include_zero=True):
+def all_negative(x, include_zero=False):
     return all(i <= 0 if include_zero else i < 0 for i in x)
 
 
@@ -79,14 +85,3 @@ def is_sequence_of_type(x, type_):
 def flatten(x):
     return funcy.flatten(x)
 
-"""
-def duplicates(x, key=None):
-    return list(iteration_utilities.duplicates(x, key))
-"""
-
-def seq_to_string(x):
-    return str(list(x))[1:-1]
-
-
-def map_to_string(x):
-    return str(x)[1:-1]
