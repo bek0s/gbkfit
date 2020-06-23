@@ -91,7 +91,6 @@ class MCDisk(_disk.Disk):
             if self._dptraits:
                 ddata = driver.mem_alloc_d(shape, dtype)
                 driver.mem_fill_d(ddata, np.nan)
-
         self._disk.evaluate(
             self._cflux, nclouds, self._ncloudsptor[1], self._hasordint[1],
             self._loose,

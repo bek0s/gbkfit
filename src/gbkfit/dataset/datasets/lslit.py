@@ -12,14 +12,16 @@ class DatasetLSlit(gbkfit.dataset.dataset.Dataset):
         return 'lslit'
 
     @classmethod
-    def load(cls, info):
-        args = parseutils.parse_class_args(cls, info)
-        args.update(dict(
+    def load(cls, info, *args, **kwargs):
+        cls_args = parseutils.parse_class_args(cls, info)
+        cls_args.update(dict(
             lslit=gbkfit.dataset.data.parser.load_one(
-                args['lslit'], step=info.get('step'), cval=info.get('cval'))))
-        return cls(**args)
+                cls_args['lslit'],
+                step=info.get('step'),
+                cval=info.get('cval'))))
+        return cls(**cls_args)
 
-    def dump(self, **kwargs):
+    def dump(self, *args, **kwargs):
         lslit = self['lslit']
         return dict(
             lslit=lslit.dump(prefix=kwargs.get('prefix', '')),

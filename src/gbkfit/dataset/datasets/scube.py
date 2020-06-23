@@ -12,14 +12,16 @@ class DatasetSCube(gbkfit.dataset.dataset.Dataset):
         return 'scube'
 
     @classmethod
-    def load(cls, info):
-        args = parseutils.parse_class_args(cls, info)
-        args.update(dict(
+    def load(cls, info, *args, **kwargs):
+        cls_args = parseutils.parse_class_args(cls, info)
+        cls_args.update(dict(
             scube=gbkfit.dataset.data.parser.load_one(
-                args['scube'], step=info.get('step'), cval=info.get('cval'))))
-        return cls(**args)
+                cls_args['scube'],
+                step=info.get('step'),
+                cval=info.get('cval'))))
+        return cls(**cls_args)
 
-    def dump(self, **kwargs):
+    def dump(self, *args, **kwargs):
         scube = self['scube']
         return dict(
             scube=scube.dump(prefix=kwargs.get('prefix', '')),

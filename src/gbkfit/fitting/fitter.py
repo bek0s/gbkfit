@@ -2,29 +2,9 @@
 import abc
 
 import gbkfit.params
+import gbkfit.params.interpreter
+import gbkfit.params.utils
 from gbkfit.utils import parseutils
-
-
-class FitterResultMode:
-
-    def __init__(self):
-        pass
-
-
-class FitterResult:
-
-    @classmethod
-    def load(cls, info):
-        pass
-
-    def dump(self):
-        pass
-
-    def __init__(self):
-        pass
-
-    def datasets(self):
-        pass
 
 
 class Fitter(abc.ABC):
@@ -43,37 +23,27 @@ class Fitter(abc.ABC):
     def dump(self):
         pass
 
+    @staticmethod
+    @abc.abstractmethod
+    def load_params(info, desc):
+        pass
+
     def __init__(self):
         pass
 
-    def parse_params(self, params):
-        pass
-
-    def fit(self, objective, extra_pdescs, param_exprs, param_info, param_info_extra=None):
-
-
-        # validate descs
-        # validate exprs
-        # validate infos
-        result = self._fit_impl(objective, param_info)
-
-        pass
-
-
-    def fit_(self, dataset, model, param_info):
-
-        param_info = gbkfit.params.parse_param_fit_info(param_info, model.get_param_descs())
-
-        result = self._impl_fit(dataset, model, param_info)
-
+    def fit(self, objectives, params):
+        missing = set(objectives.params()).difference(params.descs())
+        if missing:
+            raise RuntimeError(
+                f"fitting cannot start because information for the following "
+                f"parameters is missing: {', '.join(missing)}")
+        interpreter = gbkfit.params.interpreter.ParamInterpreter(
+            params.descs(), params.exprs())
+        result = self._fit_impl(objectives, params, interpreter)
         return result
 
     @abc.abstractmethod
-    def _impl_fit(self, data, model, params):
-        pass
-
-    @abc.abstractmethod
-    def _fit_impl(self, objective, params):
+    def _fit_impl(self, objective, params, interpreter):
         pass
 
 

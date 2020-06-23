@@ -8,11 +8,11 @@ class Dataset(abc.ABC):
 
     @classmethod
     @abc.abstractmethod
-    def load(cls, info):
+    def load(cls, info, *args, **kwargs):
         pass
 
     @abc.abstractmethod
-    def dump(self, **kwargs):
+    def dump(self, *args, **kwargs):
         pass
 
     def __init__(self, data):

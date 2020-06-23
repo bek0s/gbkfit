@@ -12,7 +12,8 @@ template<typename T>
 struct RNG
 {
     RNG(T a, T b)
-        : gen(std::random_device()())
+        //: gen(std::random_device()())
+        : gen(42)
         , dis(a, b) {}
 
     T

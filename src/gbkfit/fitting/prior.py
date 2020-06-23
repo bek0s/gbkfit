@@ -18,6 +18,9 @@ class Prior(abc.ABC):
     def load(cls, info):
         return cls(**parseutils.parse_class_args(cls, info))
 
+    def dump(self):
+        pass
+
     def __init__(self, minimum=-np.inf, maximum=np.inf):
         self.min = minimum
         self.max = maximum
@@ -51,6 +54,10 @@ class Prior(abc.ABC):
 
     def ln_prob(self, x):
         return np.log(self.prob(x))
+
+
+class Constraint:
+    pass
 
 
 class PriorUniform(Prior):

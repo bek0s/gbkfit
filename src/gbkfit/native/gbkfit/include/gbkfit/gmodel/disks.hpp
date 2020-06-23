@@ -411,6 +411,7 @@ gmodel_mcdisk_evaluate_cloud(
                 rnidx, rnodes, nrnodes,
                 rd, std::abs(zd));
     }
+    vvalue += vsysi;
     for (int i = 0; i < nvt; ++i)
         vvalue += ptvalues[i] * (is_thin ? 1 : htvalues[i]);
 

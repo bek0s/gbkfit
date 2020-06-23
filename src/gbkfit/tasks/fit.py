@@ -15,6 +15,7 @@ import gbkfit.model.gmodel
 import gbkfit.params
 import gbkfit.params.descs
 import gbkfit.params.utils
+import gbkfit.utils.miscutils
 from . import _detail
 
 
@@ -26,42 +27,17 @@ yaml.add_representer(dict, lambda self, data: self.represent_mapping(
     'tag:yaml.org,2002:map', data.items()))
 
 
-def _prepare_pdescs(objectives, extra_pdescs=None):
-    pdescs, pdescs_mappings = gbkfit.params.utils.merge_pdescs(
-        [objective.params() for objective in objectives])
+def _prepare_pdescs(objectives, extra_pdescs):
+    pdescs, mappings = gbkfit.utils.miscutils.merge_dicts_and_make_mappings(
+        [objective.params() for objective in objectives], 'model')
     if extra_pdescs:
         duplicates = set(pdescs).intersection(extra_pdescs)
         if duplicates:
             raise RuntimeError(
                 f"the following parameter descriptions are present in both "
-                f"model and pdescs: {', '.join(duplicates)}")
+                f"model and pdescs: {str(duplicates)}")
         pdescs.update(extra_pdescs)
-    return pdescs, pdescs_mappings
-
-
-def _prepare_params(info, descs):
-
-    # Remove all param info pairs with invalid keys
-    info_keys, info_values, _, _ = \
-        gbkfit.params.parse_param_keys(info, descs)
-    info = dict(zip(info_keys, info_values))
-
-    param_exprs = {}
-    param_infos = {}
-    for key, value in info.items():
-
-        if not isinstance(value, dict):
-            param_exprs[key] = value
-        elif 'expr' in value:
-            param_exprs[key] = value['expr']
-        else:
-            param_infos[key] = value
-
-    # ...
-    gbkfit.params.parse_param_exprs(param_exprs, descs)
-    foo = gbkfit.params.parse_param_fit_info(param_infos, descs)
-
-    return param_exprs, foo
+    return pdescs, mappings
 
 
 def fit(config):
@@ -90,8 +66,7 @@ def fit(config):
         drivers = gbkfit.driver.driver.parser.load_many(config['drivers'])
 
     log.info("setting up dmodels...")
-    dmodels = gbkfit.model.dmodel.parser.load_many(
-        config['dmodels'], dataset=datasets)
+    dmodels = gbkfit.model.dmodel.parser.load_many(config['dmodels'], dataset=datasets)
 
     log.info("setting up gmodels...")
     gmodels = gbkfit.model.gmodel.parser.load_many(config['gmodels'])
@@ -110,7 +85,7 @@ def fit(config):
                 datasets, drivers, dmodels, gmodels):
             objectives.append(fitter.default_objective(
                 dataset, driver, dmodel, gmodel))
-    objective = gbkfit.fitting.objective.JointObjective(objectives)
+    objective = gbkfit.fitting.objective.ObjectiveGroup(objectives)
 
     log.info("setting up pdescs...")
     pdescs_extra = None
@@ -122,7 +97,8 @@ def fit(config):
     pdescs_all, pdescs_mappings = _prepare_pdescs(gmodels, pdescs_extra)
 
     log.info("setting up params...")
-    param_exprs, param_infos = _prepare_params(config['params'], objective.params())
+    params = fitter.load_params(config['params'], pdescs_all)
+    #param_infos, param_exprs = _prepare_params(config['params'], pdescs_all)
 
     #
     # Perform fit
@@ -130,19 +106,8 @@ def fit(config):
 
     log.info("model-fitting started")
     t1 = time.time_ns()
-
-    print(param_exprs)
-
-    #print(objectives[0].params())
-    residual = objectives[0].residual_scalar(param_exprs)
-
-    print(residual)
-
-    exit()
-
-    #exit()
-    result = fitter.fit(objectives, None, None, param_infos, None)
-    #exit()
+    print(params)
+    result = fitter.fit(objective, params)
 
     t2 = time.time_ns()
     t_ms = (t2 - t1) // 1000000

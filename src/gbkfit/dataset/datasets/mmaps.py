@@ -12,7 +12,7 @@ class DatasetMMaps(gbkfit.dataset.dataset.Dataset):
         return 'mmaps'
 
     @classmethod
-    def load(cls, info):
+    def load(cls, info, *args, **kwargs):
         mmaps = {}
         for key, data in info.items():
             match = re.findall(r'^mmap([0-9]|[1-9][0-9]*)$', key)
@@ -23,7 +23,7 @@ class DatasetMMaps(gbkfit.dataset.dataset.Dataset):
             raise RuntimeError("at least one moment map must be provided")
         return dict(sorted(mmaps.items()))
 
-    def dump(self, **kwargs):
+    def dump(self, *args, **kwargs):
         prefix = kwargs.get('prefix', '')
         info = dict((k, v.dump(prefix=prefix)) for k, v in self.items())
         info.update(dict(

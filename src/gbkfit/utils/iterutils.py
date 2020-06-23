@@ -78,8 +78,18 @@ def all_unique(x):
     return not any(i in seen or seen.append(i) for i in x)
 
 
+"""
 def is_sequence_of_type(x, type_):
     return all(isinstance(i, type_) for i in x)
+"""
+
+
+def is_iterable_of_type(x, type_):
+    return is_iterable(x) and all(isinstance(i, type_) for i in x)
+
+
+def is_sequence_of_type(x, type_):
+    return is_sequence(x) and all(isinstance(i, type_) for i in x)
 
 
 def flatten(x):

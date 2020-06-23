@@ -1,6 +1,7 @@
 
 import json
 import logging
+import numbers
 import time
 
 import astropy.io.fits as fits
@@ -15,7 +16,9 @@ import gbkfit.model.dmodel
 import gbkfit.model.gmodel
 import gbkfit.params
 import gbkfit.params.descs
+import gbkfit.params.interpreter
 import gbkfit.params.utils
+import gbkfit.utils.miscutils
 from . import _detail
 
 
@@ -27,63 +30,43 @@ yaml.add_representer(dict, lambda self, data: self.represent_mapping(
     'tag:yaml.org,2002:map', data.items()))
 
 
-def _prepare_pdescs(gmodels, extra_pdescs=None):
-    pdescs, pdescs_mappings = gbkfit.params.utils.merge_pdescs(
-        [gmodel.params() for gmodel in gmodels])
+def _prepare_pdescs(gmodels, extra_pdescs):
+    pdescs, mappings = gbkfit.utils.miscutils.merge_dicts_and_make_mappings(
+        [gmodel.params() for gmodel in gmodels], 'model')
     if extra_pdescs:
         duplicates = set(pdescs).intersection(extra_pdescs)
         if duplicates:
             raise RuntimeError(
-                f"the following parameter descriptions are present in both "
-                f"model and pdescs: {', '.join(duplicates)}")
+                f"the following parameter descriptions are present "
+                f"in both the model and pdescs: {str(duplicates)}")
         pdescs.update(extra_pdescs)
-    return pdescs, pdescs_mappings
+    return pdescs, mappings
 
 
 def _prepare_params(info, descs):
-
-    # Validate and cleanup param info dict keys
-    info_keys, info_values = gbkfit.params.parse_param_keys(info, descs)[:2]
-    info = dict(zip(info_keys, info_values))
-
-    # Check if the values of the
-    param_exprs = {}
-    param_values = {}
-    required_xor = ['expr', 'init', 'value']
+    keys, values = gbkfit.params.utils.parse_param_keys(info, descs)[:2]
+    info = {}
     recovery_failed = []
     recovery_succeed = {}
-    for key, value in info.items():
-        # Values of dictionary type are assumed to be fit configs.
-        # Try to transform the dictionary to a valid value.
+    for key, value in zip(keys, values):
         if isinstance(value, dict):
-            items_found = list(set(value).intersection(required_xor))
-            if len(items_found) != 1:
+            value = value.get('init')
+            if value is None:
                 recovery_failed.append(key)
                 continue
-            value = value[items_found[0]]
             recovery_succeed[key] = value
-        # Values of string type are treated as expressions
-        if isinstance(value, str):
-            param_exprs[key] = value
-        # Values of any other type are treated as normal values
-        else:
-            param_values[key] = value
+        info[key] = value
     if recovery_succeed:
         log.info(
-            f"successfully recovered expressions and/or values "
-            f"from the following: {recovery_succeed}")
+            f"successfully recovered values "
+            f"for the following keys: {recovery_succeed}")
     if recovery_failed:
         raise RuntimeError(
-            f"failed to recover expressions and/or values "
-            f"from the following keys: {recovery_failed}; "
-            f"only one of the following keys must be provided: {required_xor}")
-
-    # Validate param expressions
-    gbkfit.params.parse_param_exprs(param_exprs, descs)
-    # Validate and explode param values
-    param_values = gbkfit.params.parse_param_values(param_values, descs)[4]
-
-    return param_exprs, param_values
+            f"failed to recover values "
+            f"for the following keys: {recovery_failed}")
+    values, exprs = gbkfit.params.utils.parse_param_values(
+        info, descs, lambda x: isinstance(x, numbers.Number))[4:]
+    return values, exprs
 
 
 def eval_(config, perf=None):
@@ -114,30 +97,29 @@ def eval_(config, perf=None):
         drivers = gbkfit.driver.driver.parser.load_many(config['drivers'])
 
     log.info("setting up dmodels...")
-    dmodels = gbkfit.model.dmodel.parser.load_many(
-        config['dmodels'], dataset=datasets)
+    dmodels = gbkfit.model.dmodel.parser.load_many(config['dmodels'], dataset=datasets)
 
     log.info("setting up gmodels...")
     gmodels = gbkfit.model.gmodel.parser.load_many(config['gmodels'])
 
-    log.info("setting up pdescs...")
-    pdescs_extra = None
+    pdescs = None
     if config.get('pdescs'):
+        log.info("setting up pdescs...")
         pdesc_keys = config['pdescs'].keys()
         pdesc_vals = config['pdescs'].values()
         pdesc_list = gbkfit.params.descs.parser.load_many(pdesc_vals)
-        pdescs_extra = dict(zip(pdesc_keys, pdesc_list))
-    pdescs_all, pdescs_mappings = _prepare_pdescs(gmodels, pdescs_extra)
+        pdescs = dict(zip(pdesc_keys, pdesc_list))
+    pdescs_all, pdescs_mappings = _prepare_pdescs(gmodels, pdescs)
 
     log.info("setting up params...")
-    exprs, eparams = _prepare_params(config['params'], pdescs_all)
+    values, exprs = _prepare_params(config['params'], pdescs_all)
 
     #
     # Calculate model parameters
     #
 
-    interpreter = gbkfit.params.ParamInterpreter(pdescs_all, exprs)
-    params_all = interpreter.evaluate(eparams, True)
+    interpreter = gbkfit.params.interpreter.ParamInterpreter(pdescs_all, exprs)
+    params_all = interpreter.evaluate(values)
     params_list = [{param: params_all[mapping[param]] for param in mapping}
                    for mapping in pdescs_mappings]
 

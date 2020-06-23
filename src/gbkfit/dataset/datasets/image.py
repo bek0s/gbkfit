@@ -12,14 +12,16 @@ class DatasetImage(gbkfit.dataset.dataset.Dataset):
         return 'image'
 
     @classmethod
-    def load(cls, info):
-        args = parseutils.parse_class_args(cls, info)
-        args.update(dict(
+    def load(cls, info, *args, **kwargs):
+        cls_args = parseutils.parse_class_args(cls, info)
+        cls_args.update(dict(
             image=gbkfit.dataset.data.parser.load_one(
-                args['image'], step=info.get('step'), cval=info.get('cval'))))
-        return cls(**args)
+                cls_args['image'],
+                step=info.get('step'),
+                cval=info.get('cval'))))
+        return cls(**cls_args)
 
-    def dump(self, **kwargs):
+    def dump(self, *args, **kwargs):
         image = self['image']
         return dict(
             image=image.dump(prefix=kwargs.get('prefix', '')),

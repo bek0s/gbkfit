@@ -3,10 +3,46 @@ import abc
 import inspect
 import logging
 
-from . import iterutils
+from . import funcutils, iterutils
 
 
 _log = logging.getLogger(__name__)
+
+
+def parse_options(
+        info, desc, add_required=None, add_optional=None,
+        fun=None, fun_ignore_args=None, fun_rename_args=None):
+    required = set()
+    optional = set()
+    if add_required:
+        required.update(add_required)
+    if add_optional:
+        optional.update(add_optional)
+    # Infer required and optional options from callable
+    if fun:
+        fun_required, fun_optional = funcutils.extract_args(fun)
+        if fun_ignore_args:
+            fun_required.difference_update(fun_ignore_args)
+            fun_optional.difference_update(fun_ignore_args)
+        if fun_rename_args:
+            for arg_name, opt_name in fun_rename_args.items():
+                if opt_name in info:
+                    info[arg_name] = info.pop(opt_name)
+        required.update(fun_required)
+        optional.update(fun_optional)
+    # Check for missing or unknown options
+    unknown = set(info) - (required | optional)
+    missing = required - set(info)
+    if unknown:
+        _log.warning(
+            f"the following {desc} options are "
+            f"not recognised and will be ignored: {', '.join(unknown)}")
+    if missing:
+        raise RuntimeError(
+            f"the following {desc} options are "
+            f"required but missing: {', '.join(missing)}")
+    # Return all recognised options
+    return {k: v for k, v in info.items() if k in required | optional}
 
 
 def parse_class_args(cls, info, add_args=(), skip_args=()):
@@ -112,7 +148,7 @@ class SimpleParser(Parser):
             else self.load_one(x)
 
     def load_one(self, x, *args, **kwargs):
-        return self._clstype.load(x)
+        return self._clstype.load(x, *args, **kwargs)
 
 
 class TypedParser(Parser):

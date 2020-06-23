@@ -74,6 +74,12 @@ class DriverHost(gbkfit.driver.Driver):
     def make_gmodel_smdisk(self, dtype):
         return GModelSMDisk(dtype)
 
+    def math_abs(self, ary, out=None):
+        return np.abs(ary, out=out)
+
+    def math_sum(self, ary, out=None):
+        return np.sum(ary, out=out, keepdims=True)
+
 
 class DModelDCube(gbkfit.driver.driver.DModelDCube):
 

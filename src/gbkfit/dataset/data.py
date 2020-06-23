@@ -1,4 +1,6 @@
 
+import sys
+
 import astropy.io.fits as fits
 import numpy as np
 
@@ -8,29 +10,30 @@ from gbkfit.utils import parseutils
 class Data:
 
     @classmethod
-    def load(cls, info, **kwargs):
-        args = parseutils.parse_class_args(Data, info)
-        data_d_data = fits.getdata(info['data'])
-        data_m_data = None
-        if 'mask' in info:
-            data_m_data = fits.getdata(info['mask'])
-        data_e_data = None
-        if 'error' in info:
-            data_e_data = fits.getdata(info['error'])
-        args.update(
-            data=data_d_data,
-            mask=data_m_data,
-            error=data_e_data,
-            step=kwargs.get('step'),
-            cval=kwargs.get('cval'))
-        return cls(**args)
+    def load(cls, info, *args, **kwargs):
+        cls_args = parseutils.parse_class_args(cls, info)
+    #   byteorder = dict(little='<', big='>')[sys.byteorder]
+        data_d = fits.getdata(cls_args['data']).astype(np.float32)
+        data_m = fits.getdata(cls_args['mask']).astype(np.float32) \
+            if 'mask' in info else None
+        data_e = fits.getdata(cls_args['error']).astype(np.float32) \
+            if 'error' in info else None
+        step = None
+        cval = None
+        cls_args.update(
+            data=data_d,
+            mask=data_m,
+            error=data_e,
+            step=kwargs.get('step', step),
+            cval=kwargs.get('cval', cval))
+        return cls(**cls_args)
 
-    def dump(self, **kwargs):
+    def dump(self, *args, **kwargs):
         prefix = kwargs.get('prefix', '')
         info = dict(
-            data=f'{prefix}_d.fits',
-            mask=f'{prefix}_m.fits',
-            error=f'{prefix}_e.fits',
+            data=f'{prefix}d.fits',
+            mask=f'{prefix}m.fits',
+            error=f'{prefix}e.fits',
             step=self.step(),
             cval=self.cval())
         fits.writeto(info['data'], self.data(), overwrite=True)
@@ -47,15 +50,22 @@ class Data:
             step = [1] * data.ndim
         if cval is None:
             cval = [0] * data.ndim
-        if data.shape != mask.shape or data.shape != error.shape:
+        if data.shape != mask.shape:
             raise RuntimeError(
-                f"data (shape={data.shape}), mask (shape={mask.shape}), and "
-                f"error (shape={error.shape}) arrays must have the same shape")
-        if data.ndim != len(step) or data.ndim != len(cval):
+                f"data and mask have incompatible shapes "
+                f"({data.shape} != {mask.shape})")
+        if data.shape != error.shape:
             raise RuntimeError(
-                f"step (length={len(step)}) and cval (length={len(cval)}) "
-                f"must have a length equal to the dimensionality of the "
-                f"data (ndim={data.ndim})")
+                f"data and error have incompatible shapes "
+                f"({data.shape} != {mask.shape})")
+        if data.ndim != len(step):
+            raise RuntimeError(
+                f"data dimensionality and step length are incompatible "
+                f"({data.dim} != {len(step)})")
+        if data.ndim != len(cval):
+            raise RuntimeError(
+                f"data dimensionality and cval length are incompatible "
+                f"({data.dim} != {len(cval)})")
         finite_mask = np.ones_like(data)
         finite_mask *= np.isfinite(data)
         finite_mask *= np.isfinite(mask)
@@ -64,8 +74,6 @@ class Data:
         mask[finite_mask == 0] = 0
         mask[finite_mask != 0] = 1
         error[finite_mask == 0] = np.nan
-        # TODO: fix this
-        data = data.astype(np.float32)
         self._data = data.copy()
         self._mask = mask.copy().astype(data.dtype)
         self._error = error.copy().astype(data.dtype)
@@ -95,6 +103,9 @@ class Data:
 
     def error(self):
         return self._error
+
+    def dtype(self):
+        return self._data.dtype
 
 
 parser = parseutils.SimpleParser(Data)
