@@ -47,3 +47,12 @@ class FitParams(abc.ABC):
 
     def infos(self):
         return self._infos
+
+    def enames(self):
+        pass
+
+    def enames_free(self):
+        pass
+
+    def enames_fixed(self):
+        pass

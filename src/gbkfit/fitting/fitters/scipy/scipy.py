@@ -2,35 +2,38 @@
 import abc
 import copy
 import logging
-import math
 
 import numpy as np
 import scipy.optimize
 
 import gbkfit.fitting.fitter
 import gbkfit.fitting.params
+import gbkfit.params.utils
 from gbkfit.utils import parseutils
 
-import gbkfit.params.utils
+from gbkfit.fitting.result import FitterResult, FitterResultSolution
+
 
 log = logging.getLogger(__name__)
 
 
-class FitParamScipy(gbkfit.fitting.params.FitParam):
-    pass
+class FitParamScipy(gbkfit.fitting.params.FitParam, abc.ABC):
+    def __init__(self):
+        super().__init__()
 
 
 class FitParamScipyLeastSqr(FitParamScipy):
 
     @classmethod
     def load(cls, info):
+        desc = f'fit parameter (class: {cls.__qualname__})'
         cls_args = parseutils.parse_options(
-            info, 'foo', fun=cls.__init__, fun_rename_args={
-                'initial': 'init', 'minimum': 'min', 'maximum': 'max'})
+            info, desc, fun=cls.__init__, fun_rename_args=dict(
+                initial='init', minimum='min', maximum='max'))
         return cls(**cls_args)
 
     def __init__(
-            self, initial, minimum=-math.inf, maximum=math.inf,
+            self, initial, minimum=-np.inf, maximum=np.inf,
             x_scale=None, diff_step=None):
         super().__init__()
         self._initial = initial
@@ -55,11 +58,21 @@ class FitParamScipyLeastSqr(FitParamScipy):
         return self._diff_step
 
 
-class FitParamScipyOptimize(FitParamScipy):
+class FitParamScipyMinimize(FitParamScipy):
+
+    @classmethod
+    def load(cls, info):
+        desc = f'fit parameter (class: {cls.__qualname__})'
+        cls_args = parseutils.parse_options(
+            info, desc, fun=cls.__init__, fun_rename_args=dict(
+                initial='init', minimum='min', maximum='max'))
+        return cls(**cls_args)
 
     def __init__(
-            self, initial, minimum=-math.inf, maximum=math.inf, options=None):
+            self, initial, minimum=-np.inf, maximum=np.inf, options=None):
         super().__init__()
+        if options is None:
+            options = dict()
         self._initial = initial
         self._minimum = minimum
         self._maximum = maximum
@@ -78,7 +91,7 @@ class FitParamScipyOptimize(FitParamScipy):
         return self._options
 
 
-class FitParamsScipy(gbkfit.fitting.params.FitParams):
+class FitParamsScipy(gbkfit.fitting.params.FitParams, abc.ABC):
     def __init__(self, params, descs):
         super().__init__(params, descs)
 
@@ -87,7 +100,7 @@ class FitParamsScipyLeastSqr(FitParamsScipy):
 
     @classmethod
     def load(cls, info, descs):
-        infos, exprs = gbkfit.params.utils.parse_param_info(info, descs)[4:]
+        infos, exprs = gbkfit.params.utils.parse_param_info(info, descs)[4:6]
         for k, v in infos.items():
             infos[k] = FitParamScipyLeastSqr.load(v)
         return cls({**infos, **exprs}, descs)
@@ -96,7 +109,15 @@ class FitParamsScipyLeastSqr(FitParamsScipy):
         super().__init__(params, descs)
 
 
-class FitParamsScipyOptimize(FitParamsScipy):
+class FitParamsScipyMinimize(FitParamsScipy):
+
+    @classmethod
+    def load(cls, info, descs):
+        infos, exprs = gbkfit.params.utils.parse_param_info(info, descs)[4:6]
+        for k, v in infos.items():
+            infos[k] = FitParamScipyMinimize.load(v)
+        return cls({**infos, **exprs}, descs)
+
     def __init__(self, params, descs):
         super().__init__(params, descs)
 
@@ -106,24 +127,23 @@ class FitterScipy(gbkfit.fitting.fitter.Fitter):
     def __init__(self):
         super().__init__()
 
-    def _fit_impl(self, objective, param_info, param_interp, **kwargs):
-        result = self._fit_impl2(objective, param_info, param_interp, **kwargs)
-        return result
+    def _fit_impl(self, objective, parameters, interpreter, **kwargs):
+        result1 = self._fit_impl2(objective, parameters, interpreter, **kwargs)
+        extra = dict()
+        definite_attrs = ['status', 'message', 'nit', 'nfev']
+        optional_attrs = ['jac', 'hess', 'njev', 'nhev']
+        for attr in definite_attrs:
+            extra[attr] = getattr(result1, attr)
+        for attr in optional_attrs:
+            if hasattr(result1, attr):
+                extra[attr] = getattr(result1, attr)
+        result2 = FitterResult(objective, parameters, extra)
+        result2.add_mode(mode=result1.x)
+        return result2
 
     @abc.abstractmethod
-    def _fit_impl2(self, objective, param_info, param_interp, **kwargs):
+    def _fit_impl2(self, objective, parameters, interpreter, **kwargs):
         pass
-
-    @staticmethod
-    def _residual(x, objective, interpreter):
-
-        eparams = dict(zip(interpreter.get_param_names(), x))
-
-        params = interpreter.evaluate(eparams)
-
-        residual = objective.residual_vector(params)
-        print(eparams)
-        return np.concatenate(residual)
 
 
 class FitterScipyLeastSquares(FitterScipy):
@@ -134,13 +154,13 @@ class FitterScipyLeastSquares(FitterScipy):
 
     @classmethod
     def load(cls, info):
-        desc = f'{cls.__qualname__}(type: {cls.type()})'
+        desc = f'{cls.type()} fitter (class: {cls.__qualname__})'
         cls_args = parseutils.parse_options(info, desc, fun=cls.__init__)
         return cls(**cls_args)
 
     @staticmethod
-    def load_params(info, desc):
-        return FitParamsScipyLeastSqr.load(info, desc)
+    def load_params(info, descs):
+        return FitParamsScipyLeastSqr.load(info, descs)
 
     def dump(self):
         return self._props
@@ -148,16 +168,17 @@ class FitterScipyLeastSquares(FitterScipy):
     def __init__(
             self, ftol=1e-08, xtol=1e-08, gtol=1e-08, x_scale=1.0,
             loss='linear', f_scale=1.0, diff_step=None,
-            tr_solver=None, tr_options=None, max_nfev=None, verbose=0):
+            tr_solver=None, tr_options=None, jac_sparsity=None,
+            max_nfev=None, verbose=0):
         if tr_options is None:
-            tr_options = {}
+            tr_options = dict()
         super().__init__()
         self._props = locals()
         self._props.pop('self')
         self._props.pop('__class__')
         self._props.update(dict(jac='3-point', method='trf'))
 
-    def _fit_impl2(self, objective, param_info, param_interp, **kwargs):
+    def _fit_impl2(self, objective, parameters, interpreter, **kwargs):
         props = self._props.copy()
         initials = []
         minimums = []
@@ -168,7 +189,7 @@ class FitterScipyLeastSquares(FitterScipy):
         if diff_step is None:
             diff_step = np.finfo(np.float64).eps ** (1 / 3)
         diff_steps = []
-        for pname, pinfo in param_info.infos().items():
+        for pname, pinfo in parameters.infos().items():
             p_x_scale = pinfo.x_scale()
             p_diff_step = pinfo.diff_step()
             if p_x_scale is not None and x_scale == 'jac':
@@ -188,8 +209,16 @@ class FitterScipyLeastSquares(FitterScipy):
         result = scipy.optimize.least_squares(
             self._residual, initials, bounds=(minimums, maximums),
             x_scale=x_scales, diff_step=diff_steps, **props,
-            args=(objective, param_interp))
+            args=(objective, interpreter))
         return result
+
+    @staticmethod
+    def _residual(x, objective, interpreter):
+        eparams = dict(zip(interpreter.get_param_names(), x))
+        params = interpreter.evaluate(eparams)
+        residual = np.concatenate(objective.residual_vector(params))
+        print(eparams)
+        return residual
 
 
 class FitterScipyMinimize(FitterScipy):
@@ -200,18 +229,39 @@ class FitterScipyMinimize(FitterScipy):
 
     @classmethod
     def load(cls, info):
-        desc = f'{cls.__qualname__}(type: {cls.type()})'
+        desc = f'{cls.type()} fitter (class: {cls.__qualname__})'
         cls_args = parseutils.parse_options(info, desc, fun=cls.__init__)
         return cls(**cls_args)
 
+    @staticmethod
+    def load_params(info, descs):
+        return FitParamsScipyMinimize.load(info, descs)
+
     def dump(self):
-        return self._kwargs
+        return self._props
 
     def __init__(self, method=None, jac=None, tol=None, options=None):
         super().__init__()
-        self._kwargs = locals()
-        self._kwargs.pop('self')
-        self._kwargs.pop('__class__')
+        if options is None:
+            options = dict()
+        self._props = locals()
+        self._props.pop('self')
+        self._props.pop('__class__')
+        #self._props.update(dict(jac='3-point', hess='3-point'))
 
-    def _fit_impl2(self, objective, param_info, param_interp, **kwargs):
-        scipy.optimize.minimize(self._residual, initials, args=())
+    def _fit_impl2(self, objective, parameters, interpreter, **kwargs):
+        props = copy.deepcopy(self._props)
+        initials = []
+        for pname, pinfo in parameters.infos().items():
+            initials.append(pinfo.initial())
+        result = scipy.optimize.minimize(
+            self._residual, initials, args=(objective, interpreter), **props)
+        return result
+
+    @staticmethod
+    def _residual(x, objective, interpreter):
+        eparams = dict(zip(interpreter.get_param_names(), x))
+        params = interpreter.evaluate(eparams)
+        residual = objective.residual_scalar(params)
+        print(eparams)
+        return residual

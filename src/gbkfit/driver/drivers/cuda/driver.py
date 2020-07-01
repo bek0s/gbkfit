@@ -6,7 +6,7 @@ import gbkfit.driver.driver
 from gbkfit.driver.drivers import _detail
 
 import gbkfit.native.libgbkfit_cuda
-
+import cupy.cuda
 
 def _ptr(a):
     return a.__cuda_array_interface__['data'][0] if a is not None else 0
@@ -67,6 +67,7 @@ class DriverCUDA(gbkfit.driver.driver.Driver):
         return cp.abs(ary, out=out)
 
     def math_sum(self, ary, out=None):
+        print("cub:", cupy.cuda.cub_enabled)
         return cp.sum(ary, out=out, keepdims=True)
 
     def make_dmodel_dcube(self, dtype):

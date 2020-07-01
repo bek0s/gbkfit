@@ -1,5 +1,6 @@
 
 import abc
+import copy
 import inspect
 import logging
 
@@ -9,9 +10,18 @@ from . import funcutils, iterutils
 _log = logging.getLogger(__name__)
 
 
+def _replace_items(data, mappings):
+    data = list(data)
+    for k, v in mappings.items():
+        if k in data:
+            data[data.index(k)] = v
+    return set(data)
+
+
 def parse_options(
         info, desc, add_required=None, add_optional=None,
         fun=None, fun_ignore_args=None, fun_rename_args=None):
+    info = copy.deepcopy(info)
     required = set()
     optional = set()
     if add_required:
@@ -34,13 +44,17 @@ def parse_options(
     unknown = set(info) - (required | optional)
     missing = required - set(info)
     if unknown:
+        if fun_rename_args:
+            unknown = _replace_items(unknown, fun_rename_args)
         _log.warning(
             f"the following {desc} options are "
-            f"not recognised and will be ignored: {', '.join(unknown)}")
+            f"not recognised and will be ignored: {str(unknown)}")
     if missing:
+        if fun_rename_args:
+            missing = _replace_items(missing, fun_rename_args)
         raise RuntimeError(
             f"the following {desc} options are "
-            f"required but missing: {', '.join(missing)}")
+            f"required but missing: {str(missing)}")
     # Return all recognised options
     return {k: v for k, v in info.items() if k in required | optional}
 

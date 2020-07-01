@@ -1,30 +1,17 @@
 
-import abc
-
 import numpy as np
 
-from gbkfit.utils import iterutils, miscutils, parseutils
+from gbkfit.utils import iterutils, miscutils
 
 
-class Objective:
+class _ObjectiveItem:
 
-    @classmethod
-    def load(cls, info, driver, dataset, dmodel, gmodel):
-        info.update(dict(
-            driver=driver, dataset=dataset, dmodel=dmodel, gmodel=gmodel))
-        cls_args = parseutils.parse_class_args(cls, info)
-        return cls(**cls_args)
-
-    def __init__(
-            self, dataset, driver, dmodel, gmodel,
-            residual=None, likelihood=None):
+    def __init__(self, driver, dataset, dmodel, gmodel):
         super().__init__()
-        self._dataset = dataset
         self._driver = driver
+        self._dataset = dataset
         self._dmodel = dmodel
         self._gmodel = gmodel
-        self._residual = residual
-        self._likelihood = likelihood
         self._nitems = 0
         self._names = []
         self._sizes = []
@@ -32,15 +19,11 @@ class Objective:
         self._cvals = []
         self._npixs = []
         self._dtype = np.float32
-
         self._d_dataset_d_vector = None
         self._d_dataset_m_vector = None
         self._d_dataset_e_vector = None
         self._s_residual_vector = None
         self._s_residual_scalar = None
-
-        # Make sure dataset and dmodel are compatible
-        # While doing so, put together some information for convenience.
         for name in dmodel.onames():
             data = dataset.get(name)
             if data is None:
@@ -60,8 +43,7 @@ class Objective:
                     f"for item '{name}' ({data.cval()} != {dmodel.cval()})")
             if data.dtype() != dmodel.dtype():
                 raise RuntimeError(
-                    f"dataset and dmodel have incompatible dtypes "
-                )
+                    f"dataset and dmodel have incompatible dtypes ")
             self._names.append(name)
             self._sizes.append(data.size())
             self._steps.append(data.step())
@@ -73,7 +55,6 @@ class Objective:
         self._steps = tuple(self._steps)
         self._cvals = tuple(self._cvals)
         self._npixs = tuple(self._npixs)
-
         self.prepare()
 
     def residual_count(self):
@@ -127,6 +108,13 @@ class Objective:
         # Dataset no longer needed in host memory
         self._dataset = None
 
+    def model(self, params, out_extra=None):
+        h_models = []
+        for d_model in self._model_d(params, out_extra):
+            h_models.append(
+                {k: self._driver.mem_copy_d2h(v) for k, v in d_model.items()})
+        return h_models
+
     def residual_nddata(self, params, out_extra=None):
         # Convenience variables
         driver = self._driver
@@ -165,6 +153,7 @@ class Objective:
     def residual_scalar(self, params, out_extra=None):
         # Convenience variables
         driver = self._driver
+        h_residual_vector = self._s_residual_vector[0]
         d_residual_vector = self._s_residual_vector[1]
         h_residual_scalar = self._s_residual_scalar[0]
         d_residual_scalar = self._s_residual_scalar[1]
@@ -172,11 +161,16 @@ class Objective:
         self._residual_d(params, out_extra)
         # Calculate the sum of absolute residuals
         driver.math_abs(d_residual_vector, out=d_residual_vector)
+
         driver.math_sum(d_residual_vector, out=d_residual_scalar)
         # Transfer residuals from device to host
         driver.mem_copy_d2h(d_residual_scalar, h_residual_scalar)
         # Return the host memory
         return h_residual_scalar[0]
+        """
+        driver.mem_copy_d2h(d_residual_vector, h_residual_vector)
+        return np.sum(h_residual_vector)
+        """
 
     def likelihood(self, params, out_extra=None):
         pass
@@ -184,17 +178,14 @@ class Objective:
     def log_likelihood(self, params, out_extra=None):
         pass
 
+    def _model_d(self, params, out_extra=None):
+        return self._dmodel.evaluate(
+            self._driver, self._gmodel, params, out_extra)
+
     def _residual_d(self, params, out_extra=None):
-        # Convenience variables
-        driver = self._driver
-        gmodel = self._gmodel
-        dmodel = self._dmodel
-        nitems = self._nitems
-        # Evaluate model
-        models = dmodel.evaluate(driver, gmodel, params, out_extra)
-        # Calculate residuals
+        models = self._model_d(params, out_extra)
         ipix = 0
-        for i in range(nitems):
+        for i in range(self._nitems):
             name = self._names[i]
             npix = self._npixs[i]
             model = models[name].ravel()
@@ -207,10 +198,30 @@ class Objective:
             ipix += npix
 
 
-class ObjectiveGroup:
+class Objective:
 
-    def __init__(self, objectives):
-        super().__init__()
+    def __init__(self, datasets, dmodels, gmodels, drivers):
+
+        datasets = iterutils.listify(datasets)
+        dmodels = iterutils.listify(dmodels)
+        gmodels = iterutils.listify(gmodels)
+        drivers = iterutils.listify(drivers)
+
+        ndatasets = len(datasets)
+        ndmodels = len(dmodels)
+        ngmodels = len(gmodels)
+        ndrivers = len(drivers)
+
+        if not (ndatasets == ndmodels == ngmodels == ndrivers):
+            raise RuntimeError(
+                f"the number of datasets ({ndatasets}), dmodels ({ndmodels}), "
+                f"gmodels ({ngmodels}), drivers ({ndrivers}) must be equal")
+
+        objectives = []
+        for i in range(ndatasets):
+            objectives.append(
+                _ObjectiveItem(datasets[i], dmodels[i], gmodels[i], drivers[i]))
+
         self._objectives = iterutils.tuplify(objectives)
         pdescs, pdescs_mappings = miscutils.merge_dicts_and_make_mappings(
             [o.params() for o in objectives], 'model')
@@ -227,6 +238,18 @@ class ObjectiveGroup:
             rnpixs.extend(objective.residual_npixs())
         self._rsizes = tuple(rsizes)
         self._rnpixs = tuple(rnpixs)
+
+    def datasets(self):
+        return []
+
+    def dmodels(self):
+        return []
+
+    def gmodels(self):
+        return []
+
+    def drivers(self):
+        return []
 
     def params(self):
         return self._pdescs
@@ -263,6 +286,3 @@ class ObjectiveGroup:
         for objective in self._objectives:
             log_likelihoods.append(objective.log_likelihood(params, out_extra))
         return sum(log_likelihoods)
-
-
-parser = parseutils.SimpleParser(Objective)

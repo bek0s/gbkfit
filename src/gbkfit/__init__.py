@@ -35,7 +35,12 @@ def _register_fitters():
         'gbkfit.fitting.fitters.dynesty.FitterDyneestyDNS',
         'gbkfit.fitting.fitters.dynesty.FitterDynestySNS',
         'gbkfit.fitting.fitters.emcee.FitterEmcee',
+        'gbkfit.fitting.fitters.lmfit.FitterLMFitLeastSquares',
+        'gbkfit.fitting.fitters.lmfit.FitterLMFitNelderMead',
         'gbkfit.fitting.fitters.pygmo.FitterPygmo',
+        'gbkfit.fitting.fitters.pyswarms.FitterPySwarmsGeneral',
+        'gbkfit.fitting.fitters.pyswarms.FitterPySwarmsGlobal',
+        'gbkfit.fitting.fitters.pyswarms.FitterPySwarmsLocal',
         'gbkfit.fitting.fitters.scipy.FitterScipyLeastSquares',
         'gbkfit.fitting.fitters.scipy.FitterScipyMinimize']
     _register_factories(parser, factories)

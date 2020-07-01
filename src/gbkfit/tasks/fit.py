@@ -18,7 +18,8 @@ import gbkfit.params.utils
 import gbkfit.utils.miscutils
 from . import _detail
 
-
+import gbkfit.params.interpreter
+import numpy as np
 log = logging.getLogger(__name__)
 
 
@@ -51,7 +52,7 @@ def fit(config):
     config = _detail.prepare_config(
         yaml.YAML().load(open(config)),
         ('datasets', 'drivers', 'dmodels', 'gmodels', 'params', 'fitter'),
-        ('objectives', 'pdescs'))
+        ('pdescs',))
 
     #
     # Setup all the components described in the configuration
@@ -74,18 +75,9 @@ def fit(config):
     log.info("setting up fitter...")
     fitter = gbkfit.fitting.fitter.parser.load_one(config['fitter'])
 
-    log.info("setting up objectives...")
-    if config.get('objectives'):
-        objectives = gbkfit.fitting.objective.parser.load_many(
-            config['objectives'],
-            dataset=datasets, driver=drivers, dmodel=dmodels, gmodel=gmodels)
-    else:
-        objectives = []
-        for dataset, driver, dmodel, gmodel in zip(
-                datasets, drivers, dmodels, gmodels):
-            objectives.append(fitter.default_objective(
-                dataset, driver, dmodel, gmodel))
-    objective = gbkfit.fitting.objective.ObjectiveGroup(objectives)
+    log.info("setting up objective...")
+    objective = gbkfit.fitting.objective.Objective(
+        drivers, datasets, dmodels, gmodels)
 
     log.info("setting up pdescs...")
     pdescs_extra = None
@@ -98,7 +90,6 @@ def fit(config):
 
     log.info("setting up params...")
     params = fitter.load_params(config['params'], pdescs_all)
-    #param_infos, param_exprs = _prepare_params(config['params'], pdescs_all)
 
     #
     # Perform fit
@@ -107,7 +98,19 @@ def fit(config):
     log.info("model-fitting started")
     t1 = time.time_ns()
     print(params)
-    result = fitter.fit(objective, params)
+
+
+    interpreter = gbkfit.params.interpreter.ParamInterpreter(
+        params.descs(), params.exprs())
+
+    for i in range(100):
+        residual = objective.residual_scalar(interpreter.evaluate(dict(
+            xpos=10, ypos=10
+        )))
+        print(residual)
+        #print(np.sum(np.abs(residual)))
+
+    #result = fitter.fit(objective, params)
 
     t2 = time.time_ns()
     t_ms = (t2 - t1) // 1000000

@@ -69,6 +69,22 @@ class ParamInterpreter:
     def get_param_names(self, free=True, fixed=False):
         return self._eparams_free * free + self._eparams_fixed * fixed
 
+    def evaluate_params(self, eparams, check=True):
+        return self.evaluate_params(eparams, check)
+
+    def evaluate_eparams(self, eparams, check=True):
+        self.evaluate_params(eparams, check)
+        # Retrieve exploded (free or fixed) parameter dicts
+        eparams = {}
+        eparams.update({
+            p: self._interpr(p) for p in self._eparams_all})
+        eparams_free = {}
+        eparams_free.update({
+            p: self._interpr(p) for p in self._eparams_free})
+        eparams_fixed = {}
+        eparams_fixed.update({
+            p: self._interpr(p) for p in self._eparams_fixed})
+
     def evaluate(
             self, eparams, check=True,
             out_eparams=None, out_eparams_free=None, out_eparams_fixed=None):

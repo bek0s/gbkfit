@@ -13,11 +13,23 @@ from gbkfit.utils import parseutils
 log = logging.getLogger(__name__)
 
 
+def _prior_tansform_wrapper(theta):
+    pass
+
+
+def _log_likelihood_wrapper(theta):
+    pass
+
+
 class FitParamDynesty(gbkfit.fitting.params.FitParam):
 
     @classmethod
     def load(cls, info):
-        return cls(**info)
+        desc = f'fit parameter (class: {cls.__qualname__})'
+        cls_args = parseutils.parse_options(
+            info, desc, fun=cls.__init__, fun_rename_args=dict(
+                initial='init', minimum='min', maximum='max'))
+        return cls(**cls_args)
 
     def __init__(self, prior, periodic=None, reflective=None):
         pass
@@ -81,29 +93,13 @@ class FitterDynestySNS(FitterDynesty):
 
     def _fit_impl(self, objective, param_info, param_interp, **kwargs):
 
-        pmins = []
-        pmaxs = []
-
-        for pname in model.get_param_names():
-            pinfo = params[pname]
-            pmins.append(pinfo['min'])
-            pmaxs.append(pinfo['max'])
-
-            if 'prior' in pinfo:
-                prior_info = pinfo['prior']
-            else:
-                prior_info = dict(min=pinfo.get('min'), max=pinfo.get('max'))
-
-        pmins = np.array(pmins)
-        pmaxs = np.array(pmaxs)
-
-        ndim = len(pmins)
-
-        logl_args = [data, model]
-        ptform_args = [pmins, pmaxs]
+        ndim = 3
 
         sampler = dynesty.NestedSampler(
-            residual_fun, ptform_func, ndim, nlive=1, logl_args=logl_args, ptform_args=ptform_args, **self._kwargs)
+            _log_likelihood_wrapper, _prior_tansform_wrapper, ndim,
+            logl_args=(objective, param_interp),
+            ptform_args=(),
+            **self._props)
 
 
 
