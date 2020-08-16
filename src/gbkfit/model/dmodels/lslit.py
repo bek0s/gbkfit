@@ -1,14 +1,19 @@
 
 import numpy as np
 
-import gbkfit.model.dmodel
-import gbkfit.model.gmodel
-import gbkfit.psflsf
-from gbkfit.utils import parseutils
-from . import _dcube
+from gbkfit.dataset.datasets import DatasetLSlit
+from gbkfit.model import DModel, GModelSCubeSupport
+from . import _dcube, _detail
 
 
-class DModelLSlit(gbkfit.model.dmodel.DModel):
+__all__ = ['DModelLSlit']
+
+
+class DModelLSlit(DModel):
+
+    @staticmethod
+    def desc():
+        return 'long slit'
 
     @staticmethod
     def type():
@@ -16,58 +21,46 @@ class DModelLSlit(gbkfit.model.dmodel.DModel):
 
     @staticmethod
     def is_compatible(gmodel):
-        return isinstance(gmodel, gbkfit.model.gmodel.GModelSCubeSupport)
+        return isinstance(gmodel, GModelSCubeSupport)
 
     @classmethod
-    def load(cls, info, *args, **kwargs):
-        dataset = kwargs.get('dataset')
-        if dataset is not None:
-            info.update(dict(
-                size=dataset.size(),
-                step=info.get('step', dataset.step()),
-                cval=info.get('cval', dataset.cval())))
-        args = parseutils.parse_class_args(cls, info)
-        args.update(
-            psf=gbkfit.psflsf.psf_parser.load(info.get('psf')),
-            lsf=gbkfit.psflsf.lsf_parser.load(info.get('lsf')))
-        return cls(**args)
+    def load(cls, info, dataset=None):
+        opts = _detail.load_dmodel_common(cls, info, 3, dataset, DatasetLSlit)
+        opts.update(size=opts['size'][:2])
+        return cls(**opts)
 
     def dump(self):
-        return dict(
-            type=self.type(),
-            size=self.size(),
-            step=self.step(),
-            cval=self.cval(),
-            scale=self.scale(),
-            dtype=self.dtype(),
-            psf=gbkfit.psflsf.psf_parser.dump(self.psf()),
-            lsf=gbkfit.psflsf.lsf_parser.dump(self.lsf()))
+        return _detail.dump_dmodel_common(self)
 
     def __init__(
-            self, size, step=None, cval=None, scale=None,
-            psf=None, lsf=None, dtype=np.float32):
+            self, size, step=(1, 1, 1), cval=(0, 0, 0), rota=0,
+            scale=(1, 1, 1), psf=None, lsf=None,
+            dtype=np.float32):
         super().__init__()
-        size = tuple(size)
+        size = tuple([size[0], 1, size[1]])
         step = tuple(step)
         cval = tuple(cval)
         scale = tuple(scale)
-        self._dcube = _dcube.DCube(size, step, cval, scale, psf, lsf, dtype)
+        self._dcube = _dcube.DCube(
+            size, step, cval, rota, scale, psf, lsf, dtype)
 
     def size(self):
-        size = self._dcube.size()
-        return size[0], size[2]
+        return self._dcube.size()
 
     def step(self):
-        step = self._dcube.step()
-        return step[0], step[2]
+        return self._dcube.step()
+
+    def cpix(self):
+        return self._dcube.cpix()
 
     def cval(self):
-        cval = self._dcube.cval()
-        return cval[0], cval[2]
+        return self._dcube.cval()
+
+    def zero(self):
+        return self._dcube.zero()
 
     def scale(self):
-        scale = self._dcube.scale()
-        return scale[0], scale[2]
+        return self._dcube.scale()
 
     def psf(self):
         return self._dcube.psf()
@@ -91,16 +84,17 @@ class DModelLSlit(gbkfit.model.dmodel.DModel):
 
     def _evaluate_impl(self, params, out_dextra, out_gextra):
         driver = self._driver
+        gmodel = self._gmodel
         dcube = self._dcube
-        lslit = dcube.data()[0][:, 0, :]
-        driver.mem_fill_d(dcube.scratch_data(), 0)
-        self._gmodel.evaluate_scube(
+        driver.mem_fill(dcube.scratch_data(), 0)
+        gmodel.evaluate_scube(
             driver, params,
             dcube.scratch_data(),
-            dcube.dtype(),
             dcube.scratch_size(),
             dcube.scratch_step(),
             dcube.scratch_zero(),
+            dcube.rota(),
+            dcube.dtype(),
             out_gextra)
         dcube.evaluate(out_dextra)
-        return {'lslit': lslit}
+        return dict(lslit=dcube.data()[0][:, 0, :])

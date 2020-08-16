@@ -1,16 +1,19 @@
 
 import numpy as np
 
-#import gbkfit.model.dmodel
-import gbkfit.model.gmodel
-import gbkfit.psflsf
-from gbkfit.utils import parseutils
-from . import _dcube
+from gbkfit.dataset.datasets import DatasetImage
+from gbkfit.model import DModel, GModelImageSupport
+from . import _dcube, _detail
 
-from gbkfit.model.dmodel import DModel
-#from gbkfit.model.gmodel import GModel
+
+__all__ = ['DModelImage']
+
 
 class DModelImage(DModel):
+
+    @staticmethod
+    def desc():
+        return 'image'
 
     @staticmethod
     def type():
@@ -18,40 +21,27 @@ class DModelImage(DModel):
 
     @staticmethod
     def is_compatible(gmodel):
-        return isinstance(gmodel, gbkfit.model.gmodel.GModelImageSupport)
+        return isinstance(gmodel, GModelImageSupport)
 
     @classmethod
-    def load(cls, info, *args, **kwargs):
-        dataset = kwargs.get('dataset')
-        if dataset is not None:
-            info.update(dict(
-                size=dataset.size(),
-                step=info.get('step', dataset.step()),
-                cval=info.get('cval', dataset.cval())))
-        args = parseutils.parse_class_args(cls, info)
-        args.update(
-            psf=gbkfit.psflsf.psf_parser.load(info.get('psf')))
-        return cls(**args)
+    def load(cls, info, dataset=None):
+        opts = _detail.load_dmodel_common(cls, info, 2, dataset, DatasetImage)
+        return cls(**opts)
 
     def dump(self):
-        return dict(
-            type=self.type(),
-            size=self.size(),
-            step=self.step(),
-            cval=self.cval(),
-            scale=self.scale(),
-            dtype=self.dtype(),
-            psf=gbkfit.psflsf.psf_parser.dump(self.psf()))
+        return _detail.dump_dmodel_common(self)
 
     def __init__(
-            self, size, step=(1, 1), cval=(0, 0), scale=(1, 1),
-            psf=None, dtype=np.float32):
+            self, size, step=(1, 1), cval=(0, 0), rota=0,
+            scale=(1, 1), psf=None,
+            dtype=np.float32):
         super().__init__()
         size = tuple(size) + (1,)
         step = tuple(step) + (0,)
         cval = tuple(cval) + (0,)
         scale = tuple(scale) + (1,)
-        self._dcube = _dcube.DCube(size, step, cval, scale, psf, None, dtype)
+        self._dcube = _dcube.DCube(
+            size, step, cval, rota, scale, psf, None, dtype)
 
     def size(self):
         return self._dcube.size()[:2]
@@ -59,8 +49,17 @@ class DModelImage(DModel):
     def step(self):
         return self._dcube.step()[:2]
 
+    def cpix(self):
+        return self._dcube.cpix()[:2]
+
     def cval(self):
         return self._dcube.cval()[:2]
+
+    def zero(self):
+        return self._dcube.zero()[:2]
+
+    def rota(self):
+        return self._dcube.rota()
 
     def scale(self):
         return self._dcube.scale()[:2]
@@ -86,15 +85,15 @@ class DModelImage(DModel):
         driver = self._driver
         gmodel = self._gmodel
         dcube = self._dcube
-        image = dcube.data()[0, :, :]
-        driver.mem_fill_d(dcube.scratch_data(), 0)
+        driver.mem_fill(dcube.scratch_data(), 0)
         gmodel.evaluate_image(
             driver, params,
             dcube.scratch_data()[0, :, :],
-            dcube.dtype(),
             dcube.scratch_size()[:2],
             dcube.scratch_step()[:2],
             dcube.scratch_zero()[:2],
+            dcube.rota(),
+            dcube.dtype(),
             out_gextra)
         dcube.evaluate(out_dextra)
-        return {'image': image}
+        return dict(image=dcube.data()[0, :, :])

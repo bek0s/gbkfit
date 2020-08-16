@@ -1,8 +1,10 @@
 #pragma once
 
 #include <random>
+
 #include <omp.h>
 
+#include <gbkfit/dmodel/dmodels.hpp>
 #include <gbkfit/gmodel/disks.hpp>
 #include "gbkfit/host/fftutils.hpp"
 
@@ -11,18 +13,17 @@ namespace gbkfit {
 template<typename T>
 struct RNG
 {
-    RNG(T a, T b)
-        //: gen(std::random_device()())
-        : gen(42)
-        , dis(a, b) {}
+    RNG(T a, T b, int seed)
+        : dis(a, b)
+        , gen(seed) {}
 
     T
-    operator ()(void) {
+    operator()(void) {
         return dis(gen);
     }
 
-    std::mt19937 gen;
     std::uniform_real_distribution<T> dis;
+    std::mt19937 gen;
 };
 
 } // namespace gbkfit
@@ -31,25 +32,22 @@ namespace gbkfit { namespace host { namespace kernels {
 
 template<typename T> void
 complex_multiply_and_scale(
-        typename fftw3<T>::complex* ary1,
-        typename fftw3<T>::complex* ary2,
+        typename fftw3<T>::complex* arr1,
+        typename fftw3<T>::complex* arr2,
         int n, float scale)
 {
     #pragma omp parallel for
     for(int i = 0; i < n; ++i)
     {
-        typename fftw3<T>::complex a, b, c;
+        typename fftw3<T>::complex a, b;
 
-        a[0] = ary1[i][0];
-        a[1] = ary1[i][1];
-        b[0] = ary2[i % n][0];
-        b[1] = ary2[i % n][1];
+        a[0] = arr1[i][0];
+        a[1] = arr1[i][1];
+        b[0] = arr2[i % n][0];
+        b[1] = arr2[i % n][1];
 
-        c[0] = (a[0]*b[0]-a[1]*b[1])*scale;
-        c[1] = (a[0]*b[1]+a[1]*b[0])*scale;
-
-        ary1[i][0] = c[0];
-        ary1[i][1] = c[1];
+        arr1[i][0] = (a[0]*b[0]-a[1]*b[1])*scale;
+        arr1[i][1] = (a[0]*b[1]+a[1]*b[0])*scale;
     }
 }
 
@@ -104,6 +102,8 @@ dcube_downscale(
     }
 }
 
+
+
 template<typename T> void
 dcube_moments(
         int spat_size_x, int spat_size_y,
@@ -111,119 +111,22 @@ dcube_moments(
         T spec_step,
         T spec_zero,
         T nanval,
-        const T* cube,
-        T* mmaps,
-        int mcount, const int* morders)
+        const T* scube,
+        T* mmaps, const int* orders, int norders)
 {
-    int max_morder = morders[mcount - 1];
-
-    #pragma omp parallel for collapse(2)
+    //#pragma omp parallel for collapse(2)
     for (int y = 0; y < spat_size_y; ++y)
     {
     for (int x = 0; x < spat_size_x; ++x)
     {
-        int m = 0;
-        T m0, m1, m2, m0_sum=0, m1_sum=0, m2_sum=0;
-
-        // Moment 0
-        for (int z = 0; z < spec_size; ++z)
-        {
-            int idx = x
-                    + y * spat_size_x
-                    + z * spat_size_x * spat_size_y;
-
-            T flx = std::max(T{0}, cube[idx]);
-            m0_sum += flx;
-        }
-        m0 = m0_sum;
-
-        if (morders[m] == 0)
-        {
-            int idx = x
-                    + y * spat_size_x
-                    + m * spat_size_x * spat_size_y;
-
-            mmaps[idx] = m0;
-            m++;
-        }
-
-        if (max_morder == 0)
-            continue;
-
-        // Moment 1
-        for (int z = 0; z < spec_size; ++z)
-        {
-            int idx = x
-                    + y * spat_size_x
-                    + z*spat_size_x*spat_size_y;
-
-            T flx = std::max(T{0}, cube[idx]);
-            T vel = spec_zero + z * spec_step;
-            m1_sum += flx * vel;
-        }
-        m1 = m0 > 0 ? m1_sum / m0 : nanval;
-
-        if (morders[m] == 1)
-        {
-            int idx = x
-                    + y * spat_size_x
-                    + m * spat_size_x * spat_size_y;
-
-            mmaps[idx] = m1;
-            m++;
-        }
-
-        if (max_morder == 1)
-            continue;
-
-        // Moment 2
-        for (int z = 0; z < spec_size; ++z)
-        {
-            int idx = x
-                    + y * spat_size_x
-                    + z * spat_size_x*spat_size_y;
-
-            T flx = std::max(T{0}, cube[idx]);
-            T vel = spec_zero + z * spec_step;
-            m2_sum += flx * (vel - m1) * (vel - m1);
-        }
-        m2 = m0 > 0 ? std::sqrt(m2_sum / m0) : nanval;
-
-        if (morders[m] == 2)
-        {
-            int idx = x
-                    + y * spat_size_x
-                    + m * spat_size_x * spat_size_y;
-
-            mmaps[idx] = m2;
-            m++;
-        }
-
-        if (max_morder == 2)
-            continue;
-
-        // Higher order moments
-        for(; m < mcount; ++m)
-        {
-            T mn, mn_sum = 0;
-            for (int z = 0; z < spec_size; ++z)
-            {
-                int idx = x
-                        + y * spat_size_x
-                        + z * spat_size_x*spat_size_y;
-
-                T flx = std::max(T{0}, cube[idx]);
-                T vel = spec_zero + z * spec_step;
-                mn_sum += flx * std::pow(vel - m1, morders[m]);
-            }
-            mn = m0 > 0 ? mn_sum / m0 : nanval;
-
-            int idx = x
-                    + y * spat_size_x
-                    + m * spat_size_x * spat_size_y;
-
-            mmaps[idx] = mn;
-        }
+        moments(x, y,
+                spat_size_x, spat_size_y,
+                spec_size,
+                spec_step,
+                spec_zero,
+                nanval,
+                scube,
+                mmaps, orders, norders);
     }
     }
 }
@@ -260,7 +163,7 @@ evaluate_scube(
                 + y * spat_size_x
                 + z * spat_size_x * spat_size_y;
         T zvel = spec_zero + z * spec_step;
-        T flux = rvalue * gauss_1d_pdf<T>(zvel, vvalue, dvalue);
+        T flux = rvalue * gauss_1d_pdf<T>(zvel, vvalue, dvalue) * spec_step;
         #pragma omp atomic update
         scube[idx] += flux;
     }
@@ -311,7 +214,7 @@ gmodel_smdisk_evaluate(
         T* image, T* scube, T* rcube,
         T* rdata, T* vdata, T* ddata)
 {
-    #pragma omp parallel for collapse(2)
+//  #pragma omp parallel for collapse(2)
     for(int y = 0; y < spat_size_y; ++y)
     {
     for(int x = 0; x < spat_size_x; ++x)
@@ -457,7 +360,7 @@ gmodel_mcdisk_evaluate(
     // Each thread needs to have each own random number generator.
     std::vector<RNG<T>> rngs;
     for(int i = 0; i < omp_get_num_procs(); ++i)
-        rngs.push_back(RNG<T>(0, 1));
+        rngs.push_back(RNG<T>(0, 1, 42));
 
     #pragma omp parallel for
     for(int ci = 0; ci < nclouds; ++ci)

@@ -57,6 +57,6 @@ target_compile_definitions(
 set_target_properties(
   ${TARGET_NAME}
   PROPERTIES
-  CXX_STANDARD 14
+  CXX_STANDARD 17
   CXX_EXTENSIONS OFF
 )

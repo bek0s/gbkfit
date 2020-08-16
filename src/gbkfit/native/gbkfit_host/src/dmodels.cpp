@@ -151,8 +151,8 @@ DModelMMaps<T>::DModelMMaps(void)
     , m_nanval{0}
     , m_scube{nullptr}
     , m_mmaps{nullptr}
-    , m_mmaps_count{0}
     , m_mmaps_orders{nullptr}
+    , m_mmaps_norders{0}
 {
 }
 
@@ -165,8 +165,8 @@ DModelMMaps<T>::prepare(
         T nanval,
         Ptr scube,
         Ptr mmaps,
-        int mmaps_count,
-        Ptr mmaps_orders)
+        Ptr mmaps_orders,
+        int mmaps_norders)
 {
     m_spat_size_x = spat_size_x;
     m_spat_size_y = spat_size_y;
@@ -176,8 +176,8 @@ DModelMMaps<T>::prepare(
     m_nanval = nanval;
     m_scube = reinterpret_cast<T*>(scube);
     m_mmaps = reinterpret_cast<T*>(mmaps);
-    m_mmaps_count = mmaps_count;
     m_mmaps_orders = reinterpret_cast<int*>(mmaps_orders);
+    m_mmaps_norders = mmaps_norders;
 }
 
 template<typename T> void
@@ -191,8 +191,8 @@ DModelMMaps<T>::moments(void) const
             m_nanval,
             m_scube,
             m_mmaps,
-            m_mmaps_count,
-            m_mmaps_orders);
+            m_mmaps_orders,
+            m_mmaps_norders);
 }
 
 #define INSTANTIATE(T)\

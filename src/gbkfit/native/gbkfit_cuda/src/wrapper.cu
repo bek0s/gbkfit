@@ -6,14 +6,14 @@ namespace gbkfit { namespace cuda {
 
 template<typename T> void
 Wrapper<T>::dmodel_dcube_complex_multiply_and_scale(
-        typename cufft<T>::complex* ary1,
-        typename cufft<T>::complex* ary2,
+        typename cufft<T>::complex* arr1,
+        typename cufft<T>::complex* arr2,
         int n, T scale)
 {
     dim3 bsize(256);
     dim3 gsize((n + bsize.x - 1) / bsize.x);
     kernels::dmodel_dcube_complex_multiply_and_scale<<<gsize, bsize>>>(
-            ary1, ary2, n, scale);
+            arr1, arr2, n, scale);
 }
 
 template<typename T> void

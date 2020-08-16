@@ -18,7 +18,7 @@ class LSF(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def dump(self, **kwargs):
+    def dump(self, *args, **kwargs):
         pass
 
     def size(self, step, offset=0):
@@ -55,7 +55,7 @@ class PSF(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def dump(self, **kwargs):
+    def dump(self, *args, **kwargs):
         pass
 
     def size(self, step, offset=(0, 0)):
@@ -82,3 +82,11 @@ class PSF(abc.ABC):
 
 lsf_parser = parseutils.TypedParser(LSF)
 psf_parser = parseutils.TypedParser(PSF)
+
+
+def make_psf_desc(cls):
+    return f'{cls.type()} PSF (class={cls.__qualname__})'
+
+
+def make_lsf_desc(cls):
+    return f'{cls.type()} LSF (class={cls.__qualname__})'

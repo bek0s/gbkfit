@@ -95,20 +95,20 @@ transform_rh_rotate_z(T& out_x, T& out_y, T x, T y, T theta)
     out_y = x * sintheta + y * costheta;
 }
 
-template<typename PDF, typename CDF, typename T, typename ...Ts> constexpr T
-_trunc_1d_pdf(PDF pdf, CDF cdf, T xmin, T xmax, T x, Ts ...args)
+template<auto PDF, auto CDF, typename T, typename ...Ts> constexpr T
+_trunc_1d_pdf(T xmin, T xmax, T x, Ts ...args)
 {
     return x >= xmin && x <= xmax
-            ? pdf(x, args...) / (cdf(xmax, args...) - cdf(xmin, args...))
+            ? PDF(x, args...) / (CDF(xmax, args...) - CDF(xmin, args...))
             : 0;
 }
 
-template<typename F, typename T, typename ...Ts> constexpr T
-_trunc_1d_rnd(F fun, T xmin, T xmax, RNG<T>& rng, Ts ...args)
+template<auto FUN, typename T, typename ...Ts> constexpr T
+_trunc_1d_rnd(T xmin, T xmax, RNG<T>& rng, Ts ...args)
 {
     T x;
     do {
-        x = fun(rng, args...);
+        x = FUN(rng, args...);
     } while (x < xmin && x > xmax);
     return x;
 }
@@ -135,8 +135,8 @@ uniform_1d_pdf(T x, T b, T c)
 template<typename T> constexpr T
 uniform_1d_pdf_trunc(T x, T b, T c, T xmin, T xmax)
 {
-    return _trunc_1d_pdf(uniform_1d_pdf<T>, uniform_1d_cdf<T>,
-                    xmin, xmax, x, b, c);
+    return _trunc_1d_pdf<uniform_1d_pdf<T>, uniform_1d_cdf<T>>(
+            xmin, xmax, x, b, c);
 }
 
 template<typename T> constexpr T
@@ -148,7 +148,7 @@ uniform_1d_rnd(RNG<T>& rng, T b, T c)
 template<typename T> constexpr T
 uniform_1d_rnd_trunc(RNG<T>& rng, T b, T c, T xmin, T xmax)
 {
-    return _trunc_1d_rnd(uniform_1d_rnd<T>, xmin, xmax, rng, b, c);
+    return _trunc_1d_rnd<uniform_1d_rnd<T>>(xmin, xmax, rng, b, c);
 }
 
 template<typename T> constexpr T
@@ -180,7 +180,7 @@ uniform_wm_1d_pdf_trunc(T x, T b, T c, T xmin, T xmax)
 {
     T newb = b - c;
     T newc = b + c;
-    return _trunc_1d_pdf(uniform_1d_pdf<T>, uniform_1d_cdf<T>,
+    return _trunc_1d_pdf<uniform_1d_pdf<T>, uniform_1d_cdf<T>>(
             xmin, xmax, x, newb, newc);
 }
 
@@ -197,7 +197,7 @@ uniform_wm_1d_rnd_trunc(RNG<T>& rng, T b, T c, T xmin, T xmax)
 {
     T newb = b - c;
     T newc = b + c;
-    return _trunc_1d_rnd(uniform_1d_rnd<T>, xmin, xmax, rng, newb, newc);
+    return _trunc_1d_rnd<uniform_1d_rnd<T>>(xmin, xmax, rng, newb, newc);
 }
 
 template<typename T, typename TTarget, typename ...Ts> constexpr T
@@ -234,7 +234,7 @@ exponential_1d_pdf(T x, T b, T c)
 template<typename T> constexpr T
 exponential_1d_pdf_trunc(T x, T b, T c, T xmin, T xmax)
 {
-    return _trunc_1d_pdf(exponential_1d_pdf<T>, exponential_1d_cdf<T>,
+    return _trunc_1d_pdf<exponential_1d_pdf<T>, exponential_1d_cdf<T>>(
             xmin, xmax, x, b, c);
 }
 
@@ -248,7 +248,7 @@ exponential_1d_rnd(RNG<T>& rng, T b, T c)
 template<typename T> constexpr T
 exponential_1d_rnd_trunc(RNG<T>& rng, T b, T c, T xmin, T xmax)
 {
-    return _trunc_1d_rnd(exponential_1d_rnd<T>, xmin, xmax, rng, b, c);
+    return _trunc_1d_rnd<exponential_1d_rnd<T>>(xmin, xmax, rng, b, c);
 }
 
 template<typename T> constexpr T
@@ -273,7 +273,7 @@ gauss_1d_pdf(T x, T b, T c)
 template<typename T> constexpr T
 gauss_1d_pdf_trunc(T x, T b, T c, T xmin, T xmax)
 {
-    return _trunc_1d_pdf(gauss_1d_pdf<T>, gauss_1d_cdf<T>,
+    return _trunc_1d_pdf<gauss_1d_pdf<T>, gauss_1d_cdf<T>>(
             xmin, xmax, x, b, c);
 }
 
@@ -288,7 +288,7 @@ gauss_1d_rnd(RNG<T>& rng, T b, T c)
 template<typename T> constexpr T
 gauss_1d_rnd_trunc(RNG<T>& rng, T b, T c, T xmin, T xmax)
 {
-    return _trunc_1d_rnd(gauss_1d_rnd<T>, xmin, xmax, rng, b, c);
+    return _trunc_1d_rnd<gauss_1d_rnd<T>>(xmin, xmax, rng, b, c);
 }
 
 template<typename T> constexpr T
@@ -317,7 +317,7 @@ ggauss_1d_pdf(T x, T b, T c, T d)
 template<typename T> constexpr T
 ggauss_1d_pdf_trunc(T x, T b, T c, T d, T xmin, T xmax)
 {
-    return _trunc_1d_pdf(ggauss_1d_pdf<T>, ggauss_1d_cdf<T>,
+    return _trunc_1d_pdf<ggauss_1d_pdf<T>, ggauss_1d_cdf<T>>(
             xmin, xmax, x, b, c, d);
 }
 
@@ -355,7 +355,7 @@ lorentz_1d_pdf(T x, T b, T c)
 template<typename T> constexpr T
 lorentz_1d_pdf_trunc(T x, T b, T c, T xmin, T xmax)
 {
-    return _trunc_1d_pdf(lorentz_1d_pdf<T>, lorentz_1d_cdf<T>,
+    return _trunc_1d_pdf<lorentz_1d_pdf<T>, lorentz_1d_cdf<T>>(
             xmin, xmax, x, b, c);
 }
 
@@ -369,7 +369,7 @@ lorentz_1d_rnd(RNG<T>& rng, T b, T c)
 template<typename T> constexpr T
 lorentz_1d_rnd_trunc(RNG<T>& rng, T b, T c, T xmin, T xmax)
 {
-    return _trunc_1d_rnd(lorentz_1d_rnd<T>, xmin, xmax, rng, b, c);
+    return _trunc_1d_rnd<lorentz_1d_rnd<T>>(xmin, xmax, rng, b, c);
 }
 
 template<typename T> constexpr T
@@ -401,7 +401,7 @@ moffat_1d_pdf(T x, T b, T c, T d)
 template<typename T> constexpr T
 moffat_1d_pdf_trunc(T x, T b, T c, T d, T xmin, T xmax)
 {
-    return _trunc_1d_pdf(moffat_1d_pdf<T>, moffat_1d_cdf<T>,
+    return _trunc_1d_pdf<moffat_1d_pdf<T>, moffat_1d_cdf<T>>(
             xmin, xmax, x, b, c, d);
 }
 
@@ -414,7 +414,7 @@ moffat_1d_rnd(RNG<T>& rng, T b, T c, T d)
 template<typename T> constexpr T
 moffat_1d_rnd_trunc(RNG<T>& rng, T b, T c, T d, T xmin, T xmax)
 {
-    return _trunc_1d_rnd(moffat_1d_rnd<T>, xmin, xmax, rng, b, c, d);
+    return _trunc_1d_rnd<moffat_1d_rnd<T>>(xmin, xmax, rng, b, c, d);
 }
 
 template<typename T> constexpr T
@@ -439,7 +439,7 @@ sech2_1d_pdf(T x, T b, T c)
 template<typename T> constexpr T
 sech2_1d_pdf_trunc(T x, T b, T c, T xmin, T xmax)
 {
-    return _trunc_1d_pdf(sech2_1d_pdf<T>, sech2_1d_cdf<T>,
+    return _trunc_1d_pdf<sech2_1d_pdf<T>, sech2_1d_cdf<T>>(
             xmin, xmax, x, b, c);
 }
 
@@ -453,7 +453,7 @@ sech2_1d_rnd(RNG<T>& rng, T b, T c)
 template<typename T> constexpr T
 sech2_1d_rnd_trunc(RNG<T>& rng, T b, T c, T xmin, T xmax)
 {
-    return _trunc_1d_rnd(sech2_1d_rnd<T>, xmin, xmax, rng, b, c);
+    return _trunc_1d_rnd<sech2_1d_rnd<T>>(xmin, xmax, rng, b, c);
 }
 
 template<typename T> constexpr T

@@ -2,11 +2,11 @@
 import cupy as cp
 import numpy as np
 
-import gbkfit.driver.driver
-from gbkfit.driver.drivers import _detail
+import gbkfit.driver
+from gbkfit.driver import _detail
 
 import gbkfit.native.libgbkfit_cuda
-import cupy.cuda
+
 
 def _ptr(a):
     return a.__cuda_array_interface__['data'][0] if a is not None else 0
@@ -16,7 +16,7 @@ def _shape(a):
     return a.__cuda_array_interface__['shape'] if a is not None else (0,)
 
 
-class DriverCUDA(gbkfit.driver.driver.Driver):
+class DriverCUDA(gbkfit.driver.Driver):
 
     @staticmethod
     def type():
@@ -27,7 +27,7 @@ class DriverCUDA(gbkfit.driver.driver.Driver):
         return cls()
 
     def dump(self):
-        return {'type': self.type()}
+        return dict(type=self.type())
 
     def mem_alloc_s(self, shape, dtype):
         h_data = np.empty(shape, dtype)
@@ -54,21 +54,26 @@ class DriverCUDA(gbkfit.driver.driver.Driver):
             h_dst[:] = d_src.get()
         return h_dst
 
-    def mem_fill_d(self, ary, value):
-        ary.fill(value)
+    def mem_fill(self, x, value):
+        x.fill(value)
 
-    def array_add_d(self, ary, value):
-        ary += value
+    def math_abs(self, x, out=None):
+        return np.abs(x, out=out)
 
-    def array_mul_d(self, ary, value):
-        ary *= value
+    def math_sum(self, x, out=None):
+        return np.sum(x, out=out, keepdims=True)
 
-    def math_abs(self, ary, out=None):
-        return cp.abs(ary, out=out)
+    def math_add(self, x1, x2, out=None):
+        return np.add(x1, x2, out=out)
 
-    def math_sum(self, ary, out=None):
-        print("cub:", cupy.cuda.cub_enabled)
-        return cp.sum(ary, out=out, keepdims=True)
+    def math_sub(self, x1, x2, out=None):
+        return np.sub(x1, x2, out=out)
+
+    def math_mul(self, x1, x2, out=None):
+        return np.mul(x1, x2, out=out)
+
+    def math_div(self, x1, x2, out=None):
+        return np.div(x1, x2, out=out)
 
     def make_dmodel_dcube(self, dtype):
         return DModelDCube(dtype)
@@ -127,15 +132,17 @@ class DModelMMaps(gbkfit.driver.driver.DModelMMaps):
             self,
             spat_size,
             spec_size, spec_step, spec_zero,
-            nanval,
             scube,
-            mmaps, mmaps_orders):
+            mmaps,
+            mmaps_orders):
         self._mmaps.prepare(
             spat_size[0], spat_size[1],
             spec_size, spec_step, spec_zero,
-            nanval,
+            np.nan,
             _ptr(scube),
-            _ptr(mmaps), _shape(mmaps_orders)[0], _ptr(mmaps_orders))
+            _ptr(mmaps),
+            _ptr(mmaps_orders),
+            _shape(mmaps_orders)[0])
 
     def moments(self):
         self._mmaps.moments()
@@ -163,7 +170,7 @@ class GModelMCDisk(gbkfit.driver.driver.GModelMCDisk):
             dht_uids, dht_cvalues, dht_ccounts, dht_pvalues, dht_pcounts,
             wpt_uids, wpt_cvalues, wpt_ccounts, wpt_pvalues, wpt_pcounts,
             spt_uids, spt_cvalues, spt_ccounts, spt_pvalues, spt_pcounts,
-            spat_size, spat_step, spat_zero,
+            spat_size, spat_step, spat_zero, spat_rota,
             spec_size, spec_step, spec_zero,
             image, scube, rcube,
             rdata, vdata, ddata):
@@ -233,12 +240,10 @@ class GModelSMDisk(gbkfit.driver.driver.GModelSMDisk):
             dht_uids, dht_cvalues, dht_ccounts, dht_pvalues, dht_pcounts,
             wpt_uids, wpt_cvalues, wpt_ccounts, wpt_pvalues, wpt_pcounts,
             spt_uids, spt_cvalues, spt_ccounts, spt_pvalues, spt_pcounts,
-            spat_size, spat_step, spat_zero,
+            spat_size, spat_step, spat_zero, spat_rota,
             spec_size, spec_step, spec_zero,
             image, scube, rcube,
             rdata, vdata, ddata):
-        import time
-        t1 = time.time()
         self._disk.evaluate(
             loose, tilted,
             _shape(rnodes)[0],
@@ -281,5 +286,3 @@ class GModelSMDisk(gbkfit.driver.driver.GModelSMDisk):
             spec_zero,
             _ptr(image), _ptr(scube), _ptr(rcube),
             _ptr(rdata), _ptr(vdata), _ptr(ddata))
-        t2 = time.time()
-        print("smdisk: time: ", (t2 - t1) * 1000)

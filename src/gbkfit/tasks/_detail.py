@@ -3,8 +3,6 @@ import logging
 
 import numpy as np
 
-import gbkfit.model.model
-import gbkfit.model.utils
 from gbkfit.utils import iterutils
 
 

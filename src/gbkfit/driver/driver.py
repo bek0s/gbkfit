@@ -4,20 +4,11 @@ import abc
 from gbkfit.utils import parseutils
 
 
-class Driver(abc.ABC):
+class Driver(parseutils.SimpleParserSupport, abc.ABC):
 
     @staticmethod
     @abc.abstractmethod
     def type():
-        pass
-
-    @classmethod
-    @abc.abstractmethod
-    def load(cls, info):
-        pass
-
-    @abc.abstractmethod
-    def dump(self):
         pass
 
     @abc.abstractmethod
@@ -41,46 +32,44 @@ class Driver(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def mem_fill_d(self, ary, value):
+    def mem_fill(self, x, value):
         pass
 
     @abc.abstractmethod
-    def array_add_d(self, ary, value):
+    def math_abs(self, x, out=None):
         pass
 
     @abc.abstractmethod
-    def array_mul_d(self, ary, value):
+    def math_sum(self, x, out=None):
         pass
 
     @abc.abstractmethod
+    def math_add(self, x1, x2, out=None):
+        pass
+
+    @abc.abstractmethod
+    def math_sub(self, x1, x2, out=None):
+        pass
+
+    @abc.abstractmethod
+    def math_mul(self, x1, x2, out=None):
+        pass
+
+    @abc.abstractmethod
+    def math_div(self, x1, x2, out=None):
+        pass
+
     def make_dmodel_dcube(self, dtype):
-        pass
+        raise NotImplementedError()
 
-    @abc.abstractmethod
     def make_dmodel_mmaps(self, dtype):
-        pass
+        raise NotImplementedError()
 
-    @abc.abstractmethod
     def make_gmodel_mcdisk(self, dtype):
-        pass
+        raise NotImplementedError()
 
-    @abc.abstractmethod
     def make_gmodel_smdisk(self, dtype):
-        pass
-
-    def residual_type_0(self, model, data, mask):
-        pass
-
-    def residual_type_1(self):
-        pass
-
-    def math_abs(self, ary, out=None):
-        pass
-
-    def math_sum(self, ary, out=None):
-        pass
-
-    #def math_add(self, ary, ):
+        raise NotImplementedError()
 
 
 class DModelDCube(abc.ABC):
@@ -110,9 +99,9 @@ class DModelMMaps(abc.ABC):
             self,
             spat_size,
             spec_size, spec_step, spec_zero,
-            nanval,
             scube,
-            mmaps, mmaps_orders):
+            mmaps,
+            mmaps_orders):
         pass
 
     @abc.abstractmethod
@@ -125,7 +114,7 @@ class GModelMCDisk(abc.ABC):
     @abc.abstractmethod
     def evaluate(
             self,
-            cflux, nclouds, ncloudspt,
+            cflux, nclouds, ncloudspt, hasordint,
             loose, tilted, rnodes,
             vsys, xpos, ypos, posa, incl,
             rpt_uids, rpt_cvalues, rpt_ccounts, rpt_pvalues, rpt_pcounts,
@@ -136,7 +125,7 @@ class GModelMCDisk(abc.ABC):
             dht_uids, dht_cvalues, dht_ccounts, dht_pvalues, dht_pcounts,
             wpt_uids, wpt_cvalues, wpt_ccounts, wpt_pvalues, wpt_pcounts,
             spt_uids, spt_cvalues, spt_ccounts, spt_pvalues, spt_pcounts,
-            spat_size, spat_step, spat_zero,
+            spat_size, spat_step, spat_zero, spat_rota,
             spec_size, spec_step, spec_zero,
             image, scube, rcube,
             rdata, vdata, ddata):
@@ -158,7 +147,7 @@ class GModelSMDisk(abc.ABC):
             dht_uids, dht_cvalues, dht_ccounts, dht_pvalues, dht_pcounts,
             wpt_uids, wpt_cvalues, wpt_ccounts, wpt_pvalues, wpt_pcounts,
             spt_uids, spt_cvalues, spt_ccounts, spt_pvalues, spt_pcounts,
-            spat_size, spat_step, spat_zero,
+            spat_size, spat_step, spat_zero, spat_rota,
             spec_size, spec_step, spec_zero,
             image, scube, rcube,
             rdata, vdata, ddata):

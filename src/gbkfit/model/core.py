@@ -43,7 +43,7 @@ class DModel(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def cval(self):
+    def zero(self):
         pass
 
     @abc.abstractmethod
@@ -67,8 +67,9 @@ class DModel(abc.ABC):
     def prepare(self, driver, gmodel):
         if not self.is_compatible(gmodel):
             raise RuntimeError(
-                f"DModel of type '{self.type()}' is not compatible with "
-                f"GModel of type '{gmodel.type()}'")
+                f"{make_dmodel_desc(self.__class__)} "
+                f"is not compatible with "
+                f"{make_gmodel_desc(gmodel.__class__)}")
         self._driver = driver
         self._gmodel = gmodel
         self._prepare_impl()
@@ -76,17 +77,13 @@ class DModel(abc.ABC):
     def evaluate(self, driver, gmodel, params, out_extra=None):
         if self._driver is not driver or self._gmodel is not gmodel:
             self.prepare(driver, gmodel)
-
         out_dextra = None if out_extra is None else {}
         out_gextra = None if out_extra is None else {}
-
         out = self._evaluate_impl(params, out_dextra, out_gextra)
-
-        if out_dextra is not None:
+        if out_dextra:
             out_extra.update({f'dmodel_{k}': v for k, v in out_dextra.items()})
-        if out_gextra is not None:
+        if out_gextra:
             out_extra.update({f'gmodel_{k}': v for k, v in out_gextra.items()})
-
         return out
 
     @abc.abstractmethod
@@ -102,4 +99,52 @@ class DModel(abc.ABC):
         pass
 
 
-parser = parseutils.TypedParser(DModel)
+class GModel(abc.ABC):
+
+    @staticmethod
+    @abc.abstractmethod
+    def type():
+        pass
+
+    @classmethod
+    @abc.abstractmethod
+    def load(cls, info):
+        pass
+
+    @abc.abstractmethod
+    def dump(self):
+        pass
+
+    @abc.abstractmethod
+    def params(self):
+        pass
+
+
+class GModelImageSupport(abc.ABC):
+
+    @abc.abstractmethod
+    def evaluate_image(
+            self, driver, params, image, size, step, zero, rota, dtype,
+            out_extra):
+        pass
+
+
+class GModelSCubeSupport(abc.ABC):
+
+    @abc.abstractmethod
+    def evaluate_scube(
+            self, driver, params, scube, size, step, zero, rota, dtype,
+            out_extra):
+        pass
+
+
+dmodel_parser = parseutils.TypedParser(DModel)
+gmodel_parser = parseutils.TypedParser(GModel)
+
+
+def make_dmodel_desc(cls):
+    return f'{cls.type()} dmodel (class={cls.__qualname__})'
+
+
+def make_gmodel_desc(cls):
+    return f'{cls.type()} gmodel (class={cls.__qualname__})'

@@ -90,7 +90,7 @@ class FitterPySwarms(gbkfit.fitting.fitter.Fitter):
     @classmethod
     def load(cls, info):
         desc = f'{cls.type()} fitter (class: {cls.__qualname__})'
-        cls_args = parseutils.parse_options(info, desc, fun=cls.__init__)
+        cls_args = parseutils.parse_options(info, desc, fun=cls.__init__)[0]
         return cls(**cls_args)
 
     @staticmethod

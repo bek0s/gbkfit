@@ -1,11 +1,11 @@
 
-import astropy.io.fits as fits  # TODO: Remove dependency.
+import astropy.io.fits as fits  # TODO: Remove dependency somehow
 import numpy as np
 import scipy.ndimage
 
 import gbkfit.math
-import gbkfit.psflsf
-from gbkfit.utils import iterutils
+from gbkfit.psflsf import PSF, make_psf_desc
+from gbkfit.utils import iterutils, parseutils
 
 
 def _create_grid_2d(size, step, offset, ratio, posa):
@@ -19,9 +19,14 @@ def _create_grid_2d(size, step, offset, ratio, posa):
     return np.sqrt(x * x + y * y / (ratio * ratio))
 
 
-class PSFGauss(gbkfit.psflsf.PSF):
+def _load_psf_common(cls, info):
+    desc = make_psf_desc(cls)
+    return parseutils.parse_options(info, desc, fun=cls.__init__)[0]
 
-    _CUTOFF_COEFF = 6
+
+class PSFGauss(PSF):
+
+    _CUTOFF_COEFF = 8
 
     @staticmethod
     def type():
@@ -29,23 +34,17 @@ class PSFGauss(gbkfit.psflsf.PSF):
 
     @classmethod
     def load(cls, info):
-        sigma = info['sigma']
-        ratio = info.get('ratio')
-        posa = info.get('posa')
-        return cls(sigma, ratio, posa)
+        opts = _load_psf_common(cls, info)
+        return cls(**opts)
 
-    def dump(self, **kwargs):
-        return {
-            'type': self.type(),
-            'sigma': self._sigma,
-            'ratio': self._ratio,
-            'posa': self._posa}
+    def dump(self):
+        return dict(
+            type=self.type(),
+            sigma=self._sigma,
+            ratio=self._ratio,
+            posa=self._posa)
 
-    def __init__(self, sigma, ratio=None, posa=None):
-        if ratio is None:
-            ratio = 1
-        if posa is None:
-            posa = 0
+    def __init__(self, sigma, ratio=1, posa=0):
         self._sigma = sigma
         self._ratio = ratio
         self._posa = posa
@@ -56,15 +55,14 @@ class PSFGauss(gbkfit.psflsf.PSF):
 
     def _asarray_impl(self, step, size, offset):
         r = _create_grid_2d(size, step, offset, self._ratio, self._posa)
-        indices = r > self._CUTOFF_COEFF * self._sigma
         data = gbkfit.math.gauss_1d_fun(r, 1, 0, self._sigma)
-        data[indices] = 0
+        data[r > self._CUTOFF_COEFF * self._sigma] = 0
         return data / np.sum(data)
 
 
-class PSFGGauss(gbkfit.psflsf.PSF):
+class PSFGGauss(PSF):
 
-    _CUTOFF_COEFF = 10
+    _CUTOFF_COEFF = 8
 
     @staticmethod
     def type():
@@ -72,25 +70,18 @@ class PSFGGauss(gbkfit.psflsf.PSF):
 
     @classmethod
     def load(cls, info):
-        alpha = info['alpha']
-        beta = info['beta']
-        ratio = info.get('ratio')
-        posa = info.get('posa')
-        return cls(alpha, beta, ratio, posa)
+        opts = _load_psf_common(cls, info)
+        return cls(**opts)
 
-    def dump(self, **kwargs):
-        return {
-            'type': self.type(),
-            'alpha': self._alpha,
-            'beta': self._beta,
-            'ratio': self._ratio,
-            'posa': self._posa}
+    def dump(self):
+        return dict(
+            type=self.type(),
+            alpha=self._alpha,
+            beta=self._beta,
+            ratio=self._ratio,
+            posa=self._posa)
 
-    def __init__(self, alpha, beta, ratio=None, posa=None):
-        if ratio is None:
-            ratio = 1
-        if posa is None:
-            posa = 0
+    def __init__(self, alpha, beta, ratio=1, posa=0):
         self._alpha = alpha
         self._beta = beta
         self._ratio = ratio
@@ -102,15 +93,14 @@ class PSFGGauss(gbkfit.psflsf.PSF):
 
     def _asarray_impl(self, step, size, offset):
         r = _create_grid_2d(size, step, offset, self._ratio, self._posa)
-        indices = r > self._CUTOFF_COEFF * self._alpha
         data = gbkfit.math.ggauss_1d_fun(r, 1, 0, self._alpha, self._beta)
-        data[indices] = 0
+        data[r > self._CUTOFF_COEFF * self._alpha] = 0
         return data / np.sum(data)
 
 
-class PSFLorentz(gbkfit.psflsf.PSF):
+class PSFLorentz(PSF):
 
-    _CUTOFF_COEFF = 10
+    _CUTOFF_COEFF = 8
 
     @staticmethod
     def type():
@@ -118,23 +108,17 @@ class PSFLorentz(gbkfit.psflsf.PSF):
 
     @classmethod
     def load(cls, info):
-        gamma = info['gamma']
-        ratio = info.get('ratio')
-        posa = info.get('posa')
-        return cls(gamma, ratio, posa)
+        opts = _load_psf_common(cls, info)
+        return cls(**opts)
 
-    def dump(self, **kwargs):
-        return {
-            'type': self.type(),
-            'gamma': self._gamma,
-            'ratio': self._ratio,
-            'posa': self._posa}
+    def dump(self):
+        return dict(
+            type=self.type(),
+            gamma=self._gamma,
+            ratio=self._ratio,
+            posa=self._posa)
 
-    def __init__(self, gamma, ratio=None, posa=None):
-        if ratio is None:
-            ratio = 1
-        if posa is None:
-            posa = 0
+    def __init__(self, gamma, ratio=1, posa=0):
         self._gamma = gamma
         self._ratio = ratio
         self._posa = posa
@@ -145,15 +129,14 @@ class PSFLorentz(gbkfit.psflsf.PSF):
 
     def _asarray_impl(self, step, size, offset):
         r = _create_grid_2d(size, step, offset, self._ratio, self._posa)
-        indices = r > self._CUTOFF_COEFF * self._gamma
         data = gbkfit.math.lorentz_1d_fun(r, 1, 0, self._gamma)
-        data[indices] = 0
+        data[r > self._CUTOFF_COEFF * self._gamma] = 0
         return data / np.sum(data)
 
 
-class PSFMoffat(gbkfit.psflsf.PSF):
+class PSFMoffat(PSF):
 
-    _CUTOFF_COEFF = 10
+    _CUTOFF_COEFF = 8
 
     @staticmethod
     def type():
@@ -161,25 +144,18 @@ class PSFMoffat(gbkfit.psflsf.PSF):
 
     @classmethod
     def load(cls, info):
-        alpha = info['alpha']
-        beta = info['beta']
-        ratio = info.get('ratio')
-        posa = info.get('posa')
-        return cls(alpha, beta, ratio, posa)
+        opts = _load_psf_common(cls, info)
+        return cls(**opts)
 
-    def dump(self, **kwargs):
-        return {
-            'type': self.type(),
-            'alpha': self._alpha,
-            'beta': self._beta,
-            'ratio': self._ratio,
-            'posa': self._posa}
+    def dump(self):
+        return dict(
+            type=self.type(),
+            alpha=self._alpha,
+            beta=self._beta,
+            ratio=self._ratio,
+            posa=self._posa)
 
-    def __init__(self, alpha, beta, ratio=None, posa=None):
-        if ratio is None:
-            ratio = 1
-        if posa is None:
-            posa = 0
+    def __init__(self, alpha, beta, ratio=1, posa=0):
         self._alpha = alpha
         self._beta = beta
         self._ratio = ratio
@@ -191,13 +167,12 @@ class PSFMoffat(gbkfit.psflsf.PSF):
 
     def _asarray_impl(self, step, size, offset):
         r = _create_grid_2d(size, step, offset, self._ratio, self._posa)
-        indices = r > self._CUTOFF_COEFF * self._alpha
         data = gbkfit.math.moffat_1d_fun(r, 1, 0, self._alpha, self._beta)
-        data[indices] = 0
+        data[r > self._CUTOFF_COEFF * self._alpha] = 0
         return data / np.sum(data)
 
 
-class PSFImage(gbkfit.psflsf.PSF):
+class PSFImage(PSF):
 
     @staticmethod
     def type():
@@ -205,17 +180,19 @@ class PSFImage(gbkfit.psflsf.PSF):
 
     @classmethod
     def load(cls, info):
-        file = info['file']
-        step = info['step']
-        data = fits.getdata(file)
-        return cls(data, step)
+        opts = _load_psf_common(cls, info)
+        opts.update(dict(
+            data=fits.getdata(opts['data'])))
+        return cls(**opts)
 
-    def dump(self, **kwargs):
-        file = kwargs['file']
-        fits.writeto(file, self._data)
-        return {
-            'file': file,
-            'step': self._step}
+    def dump(self, file=None):
+        if not file:
+            file = 'psf.fits'
+        info = dict(
+            data=file,
+            step=self._step)
+        fits.writeto(file, self._data, overwrite=True)
+        return info
 
     def __init__(self, data, step):
         step = iterutils.tuplify(step)

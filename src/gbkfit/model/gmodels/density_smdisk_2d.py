@@ -1,9 +1,16 @@
 
-from . import _common, _smdisk, traits
+from . import DensityComponent2D, _detail, _smdisk, make_component_desc, traits
 from gbkfit.utils import parseutils
 
 
-class DensitySMDisk2D(_common.DensityComponent2D):
+__all__ = ['DensitySMDisk2D']
+
+
+class DensitySMDisk2D(DensityComponent2D):
+
+    @staticmethod
+    def desc():
+        return 'smooth density disk (2D)'
 
     @staticmethod
     def type():
@@ -11,11 +18,12 @@ class DensitySMDisk2D(_common.DensityComponent2D):
 
     @classmethod
     def load(cls, info):
-        info = parseutils.parse_class_args(cls, info)
-        info.update(dict(
-            rptraits=traits.rpt_parser.load(info.get('rptraits')),
-            sptraits=traits.spt_parser.load(info.get('sptraits'))))
-        return cls(**info)
+        desc = make_component_desc(cls)
+        opts = parseutils.parse_options(info, desc, fun=cls.__init__)[0]
+        opts.update(dict(
+            rptraits=traits.rpt_parser.load(opts.get('rptraits')),
+            sptraits=traits.spt_parser.load(opts.get('sptraits'))))
+        return cls(**opts)
 
     def dump(self):
         return dict(
@@ -23,24 +31,32 @@ class DensitySMDisk2D(_common.DensityComponent2D):
             loose=self._disk.loose(),
             tilted=self._disk.tilted(),
             rnodes=self._disk.rnodes(),
+            rnstep=self._disk.rnstep(),
+            interp=self._disk.interp().type(),
             rptraits=traits.rpt_parser.dump(self._disk.rptraits()),
             sptraits=traits.spt_parser.dump(self._disk.sptraits()))
 
     def __init__(
             self,
-            rnodes,
+            loose,
+            tilted,
             rptraits,
             sptraits=None,
-            tilted=None,
-            loose=None):
-
-        args = _common.parse_density_disk_2d_common_args(
-            loose, tilted, rnodes,
+            rnmin=None,
+            rnmax=None,
+            rnsep=None,
+            rnlen=None,
+            rnodes=None,
+            rnstep=None,
+            interp='linear'):
+        rnode_args = _detail.parse_component_rnode_args(
+            rnmin, rnmax, rnsep, rnlen, rnodes, rnstep, interp)
+        trait_args = _detail.parse_component_d2d_trait_args(
             rptraits,
             sptraits)
-
         self._disk = _smdisk.SMDisk(
-            **args,
+            loose=loose, tilted=tilted,
+            **rnode_args, **trait_args,
             rhtraits=(),
             vptraits=(), vhtraits=(),
             dptraits=(), dhtraits=(),
@@ -50,9 +66,9 @@ class DensitySMDisk2D(_common.DensityComponent2D):
         return self._disk.params()
 
     def evaluate(
-            self, driver, params, image, dtype,
-            spat_size, spat_step, spat_zero,
-            out_extra):
+            self, driver, params, image,
+            spat_size, spat_step, spat_zero, spat_rota,
+            dtype, out_extra):
         spat_size = spat_size + (1,)
         spat_step = spat_step + (0,)
         spat_zero = spat_zero + (0,)
@@ -60,7 +76,7 @@ class DensitySMDisk2D(_common.DensityComponent2D):
         spec_step = 0
         spec_zero = 0
         self._disk.evaluate(
-            driver, params, image, None, None, dtype,
-            spat_size, spat_step, spat_zero,
+            driver, params, image, None, None,
+            spat_size, spat_step, spat_zero, spat_rota,
             spec_size, spec_step, spec_zero,
-            out_extra)
+            dtype, out_extra)

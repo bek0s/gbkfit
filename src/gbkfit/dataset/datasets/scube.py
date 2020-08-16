@@ -1,11 +1,12 @@
 
-import gbkfit.dataset.data
-import gbkfit.dataset.dataset
-
-from gbkfit.utils import parseutils
+from gbkfit.dataset import Dataset
+from . import _detail
 
 
-class DatasetSCube(gbkfit.dataset.dataset.Dataset):
+__all__ = ['DatasetSCube']
+
+
+class DatasetSCube(Dataset):
 
     @staticmethod
     def type():
@@ -13,22 +14,15 @@ class DatasetSCube(gbkfit.dataset.dataset.Dataset):
 
     @classmethod
     def load(cls, info, *args, **kwargs):
-        cls_args = parseutils.parse_class_args(cls, info)
-        cls_args.update(dict(
-            scube=gbkfit.dataset.data.parser.load_one(
-                cls_args['scube'],
-                step=info.get('step'),
-                cval=info.get('cval'))))
-        return cls(**cls_args)
+        names = ['scube']
+        opts = _detail.load_dataset_common(cls, info, names)
+        return cls(**opts)
 
-    def dump(self, *args, **kwargs):
-        scube = self['scube']
-        return dict(
-            scube=scube.dump(prefix=kwargs.get('prefix', '')),
-            step=scube.step,
-            cval=scube.cval)
+    def dump(self, prefix=''):
+        return _detail.dump_dataset_common(self, prefix)
 
     def __init__(self, scube):
+        # TODO: validate wcs
         super().__init__(dict(scube=scube))
 
     @property
@@ -42,6 +36,10 @@ class DatasetSCube(gbkfit.dataset.dataset.Dataset):
     @property
     def step(self):
         return self.steps[0]
+
+    @property
+    def cpix(self):
+        return self.cpixs[0]
 
     @property
     def cval(self):

@@ -272,11 +272,11 @@ gmodel_mcdisk_evaluate_cloud(
     const T* rht_pptr = rht_pvalues;
     T xd=0, yd=0, zd=0, rd=0, theta=0, sign=1;
     T vsysi=0, xposi=0, yposi=0, posai=0, incli=0;
-    T ptvalues[] = {0, 0, 0, 0};
-    T htvalues[] = {0, 0, 0, 0};
+    T ptvalues[TRAIT_NUM_MAX] = {0};
+    T htvalues[TRAIT_NUM_MAX] = {0};
     T wvalue = 0;
     T svalue = 0;
-    bvalue = cflux;
+    bvalue = cflux * spat_step_z;
     vvalue = 0;
     dvalue = 0;
 
@@ -327,8 +327,7 @@ gmodel_mcdisk_evaluate_cloud(
     // Selection traits
     if (spt_uids)
     {
-        p_traits(
-                sp_trait<T>,
+        p_traits<sp_trait<T>>(
                 ptvalues,
                 nst, spt_uids,
                 spt_cvalues, spt_ccounts,
@@ -351,8 +350,7 @@ gmodel_mcdisk_evaluate_cloud(
     // Warp traits
     if (wpt_uids)
     {
-        p_traits(
-                wp_trait<T>,
+        p_traits<wp_trait<T>>(
                 ptvalues,
                 nwt, wpt_uids,
                 wpt_cvalues, wpt_ccounts,
@@ -375,6 +373,9 @@ gmodel_mcdisk_evaluate_cloud(
     incli *= DEG_TO_RAD<T>;
 
     T xn = xd, yn = yd, zn = zd;
+    xn = xn / spat_step_x;
+    yn = yn / spat_step_y;
+    zn = zn / spat_step_z;
     transform_incl_posa_cpos(xn, yn, zn, xposi, yposi, -posai, -incli);
 
     x = std::rint(xn - spat_zero_x);
@@ -391,8 +392,7 @@ gmodel_mcdisk_evaluate_cloud(
     // Velocity traits
     if (vpt_uids)
     {
-        p_traits(
-                vp_trait<T>,
+        p_traits<vp_trait<T>>(
                 ptvalues,
                 nvt, vpt_uids,
                 vpt_cvalues, vpt_ccounts,
@@ -402,8 +402,7 @@ gmodel_mcdisk_evaluate_cloud(
     }
     if (vht_uids)
     {
-        h_traits(
-                vh_trait<T>,
+        h_traits<vh_trait<T>>(
                 htvalues,
                 nvt, vht_uids,
                 vht_cvalues, vht_ccounts,
@@ -411,15 +410,16 @@ gmodel_mcdisk_evaluate_cloud(
                 rnidx, rnodes, nrnodes,
                 rd, std::abs(zd));
     }
-    vvalue += vsysi;
     for (int i = 0; i < nvt; ++i)
         vvalue += ptvalues[i] * (is_thin ? 1 : htvalues[i]);
+
+    // Apply systemic velocity
+    vvalue += vsysi;
 
     // Dispersion traits
     if (dpt_uids)
     {
-        p_traits(
-                dp_trait<T>,
+        p_traits<dp_trait<T>>(
                 ptvalues,
                 ndt, dpt_uids,
                 dpt_cvalues, dpt_ccounts,
@@ -429,8 +429,7 @@ gmodel_mcdisk_evaluate_cloud(
     }
     if (dht_uids)
     {
-        h_traits(
-                dh_trait<T>,
+        h_traits<dh_trait<T>>(
                 htvalues,
                 ndt, dht_uids,
                 dht_cvalues, dht_ccounts,
@@ -496,29 +495,31 @@ gmodel_smdisk_evaluate_pixel(
     bool is_thin = rht_uids == nullptr;
 
     T vsysi=0, xposi=0, yposi=0, posai=0, incli=0;
-    T xn = x, yn = y, zn = z, rn=0, theta=0;
+    T xn=x, yn=y, zn=z, rn=0, theta=0;
     int rnidx = -1;
 
+    // image-to-world transform
     xn = spat_zero_x + x * spat_step_x;
     yn = spat_zero_y + y * spat_step_y;
     zn = spat_zero_z + z * spat_step_z;
 
+    // If the disk is loose or tilted,
+    // calculate pixel's radial node index and radius
     if (loose || tilted)
     {
-        bool success = false;
-        if (is_thin)
-            success = ring_info(
-                    rnidx, rn, xn, yn, loose, tilted,
-                    nrnodes, rnodes, xpos, ypos, posa, incl);
-        else
-            success = ring_info(
+        bool success = is_thin
+                ? ring_info(
+                      rnidx, rn, xn, yn, loose, tilted,
+                      nrnodes, rnodes, xpos, ypos, posa, incl)
+                : ring_info(
                     rnidx, rn, xn, yn, zn, loose, tilted,
                     nrnodes, rnodes, xpos, ypos, posa, incl);
         if (!success)
             return false;
     }
 
-    vsysi = loose ? lerp(rn, rnidx, rnodes, xpos) : vsys[0];
+    // Interpolate systemic velocity and geometrical parameters
+    vsysi = loose ? lerp(rn, rnidx, rnodes, xpos) : (vsys ? vsys[0] : 0);
     xposi = loose ? lerp(rn, rnidx, rnodes, xpos) : xpos[0];
     yposi = loose ? lerp(rn, rnidx, rnodes, ypos) : ypos[0];
     posai = tilted ? lerp(rn, rnidx, rnodes, posa) : posa[0];
@@ -526,7 +527,7 @@ gmodel_smdisk_evaluate_pixel(
     posai *= DEG_TO_RAD<T>;
     incli *= DEG_TO_RAD<T>;
 
-
+    // world-to-disk transform
     if (is_thin)
         transform_cpos_posa_incl(xn, yn, xposi, yposi, posai, incli);
     else
@@ -534,6 +535,8 @@ gmodel_smdisk_evaluate_pixel(
 
     theta = std::atan2(yn, xn);
 
+    // If the disk is not loose or tilted,
+    // ...
     if (!(loose || tilted)) {
         rn = std::sqrt(xn * xn + yn * yn);
         if (!disk_info(rnidx, rn, nrnodes, rnodes))
@@ -541,21 +544,18 @@ gmodel_smdisk_evaluate_pixel(
     }
 
     // These are needed for trait evaluation
-//  T ptvalues[TRAIT_NUM_MAX];
-//  T htvalues[TRAIT_NUM_MAX];
-    T ptvalues[] = {0, 0, 0, 0};
-    T htvalues[] = {0, 0, 0, 0};
+    T ptvalues[TRAIT_NUM_MAX] = {0};
+    T htvalues[TRAIT_NUM_MAX] = {0};
     T wvalue = 0;
     T svalue = 0;
     bvalue = 0;
-    vvalue = vsysi;
+    vvalue = 0;
     dvalue = 0;
 
     // Selection traits
     if (spt_uids)
     {
-        p_traits(
-                sp_trait<T>,
+        p_traits<sp_trait<T>>(
                 ptvalues,
                 nst, spt_uids,
                 spt_cvalues, spt_ccounts,
@@ -573,8 +573,7 @@ gmodel_smdisk_evaluate_pixel(
     // Warp traits
     if (wpt_uids)
     {
-        p_traits(
-                wp_trait<T>,
+        p_traits<wp_trait<T>>(
                 ptvalues,
                 nwt, wpt_uids,
                 wpt_cvalues, wpt_ccounts,
@@ -591,8 +590,7 @@ gmodel_smdisk_evaluate_pixel(
     // Brightness traits
     if (rpt_uids)
     {
-        p_traits(
-                rp_trait<T>,
+        p_traits<rp_trait<T>>(
                 ptvalues,
                 nrt, rpt_uids,
                 rpt_cvalues, rpt_ccounts,
@@ -602,8 +600,7 @@ gmodel_smdisk_evaluate_pixel(
     }
     if (rht_uids)
     {
-        h_traits(
-                rh_trait<T>,
+        h_traits<rh_trait<T>>(
                 htvalues,
                 nrt, rht_uids,
                 rht_cvalues, rht_ccounts,
@@ -612,13 +609,18 @@ gmodel_smdisk_evaluate_pixel(
                 rn, std::abs(zn));
     }
     for (int i = 0; i < nrt; ++i)
-        bvalue += ptvalues[i] * (is_thin ? 1 : htvalues[i] * spat_step_z);
+        bvalue += ptvalues[i] * (is_thin ? 1 : htvalues[i]);
+
+    // Thin disk requires surface brightness correction
+    if (is_thin) bvalue /= std::cos(incli);
+
+    // Thick disk requires integration along the z axis.
+    if (!is_thin) bvalue *= spat_step_z;
 
     // Velocity traits
     if (vpt_uids)
     {
-        p_traits(
-                vp_trait<T>,
+        p_traits<vp_trait<T>>(
                 ptvalues,
                 nvt, vpt_uids,
                 vpt_cvalues, vpt_ccounts,
@@ -628,8 +630,7 @@ gmodel_smdisk_evaluate_pixel(
     }
     if (vht_uids)
     {
-        h_traits(
-                vh_trait<T>,
+        h_traits<vh_trait<T>>(
                 htvalues,
                 nvt, vht_uids,
                 vht_cvalues, vht_ccounts,
@@ -640,11 +641,13 @@ gmodel_smdisk_evaluate_pixel(
     for (int i = 0; i < nvt; ++i)
         vvalue += ptvalues[i] * (is_thin ? 1 : htvalues[i]);
 
+    // Apply systemic velocity
+    vvalue += vsysi;
+
     // Dispersion traits
     if (dpt_uids)
     {
-        p_traits(
-                dp_trait<T>,
+        p_traits<dp_trait<T>>(
                 ptvalues,
                 ndt, dpt_uids,
                 dpt_cvalues, dpt_ccounts,
@@ -654,8 +657,7 @@ gmodel_smdisk_evaluate_pixel(
     }
     if (dht_uids)
     {
-        h_traits(
-                dh_trait<T>,
+        h_traits<dh_trait<T>>(
                 htvalues,
                 ndt, dht_uids,
                 dht_cvalues, dht_ccounts,

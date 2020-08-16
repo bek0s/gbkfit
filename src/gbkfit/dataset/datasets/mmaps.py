@@ -1,11 +1,12 @@
 
-import re
-
-import gbkfit.dataset.data
-import gbkfit.dataset.dataset
+from gbkfit.dataset import Dataset, _detail as dataset_detail, make_dataset_desc
+from . import _detail
 
 
-class DatasetMMaps(gbkfit.dataset.dataset.Dataset):
+__all__ = ['DatasetMMaps']
+
+
+class DatasetMMaps(Dataset):
 
     @staticmethod
     def type():
@@ -13,26 +14,29 @@ class DatasetMMaps(gbkfit.dataset.dataset.Dataset):
 
     @classmethod
     def load(cls, info, *args, **kwargs):
-        mmaps = {}
-        for key, data in info.items():
-            match = re.findall(r'^mmap([0-9]|[1-9][0-9]*)$', key)
-            if match:
-                mmaps[int(match[0])] = gbkfit.dataset.data.parser.load_one(
-                    data, step=info.get('step'), cval=info.get('cval'))
-        if not mmaps:
-            raise RuntimeError("at least one moment map must be provided")
-        return dict(sorted(mmaps.items()))
+        names = [f'mmap{i}' for i in range(7)]
+        opts = _detail.load_dataset_common(cls, info, names)
+        return cls(**opts)
 
-    def dump(self, *args, **kwargs):
-        prefix = kwargs.get('prefix', '')
-        info = dict((k, v.dump(prefix=prefix)) for k, v in self.items())
-        info.update(dict(
-            step=self[0].step,
-            cval=self[0].cval))
-        return info
+    def dump(self, prefix=''):
+        return _detail.dump_dataset_common(self, prefix)
 
-    def __init__(self, mmaps):
-        super().__init__({f'mmap{order}': map for order, map in mmaps.items()})
+    def __init__(
+            self,
+            mmap0=None, mmap1=None, mmap2=None, mmap3=None,
+            mmap4=None, mmap5=None, mmap6=None, mmap7=None):
+        mmaps_args = locals()
+        mmaps_args.pop('self')
+        mmaps_args.pop('__class__')
+        mmaps = {k: v for k, v in mmaps_args.items() if v}
+        # All moment maps must have the same attributes
+        desc = make_dataset_desc(self.__class__)
+        dataset_detail.ensure_same_attrib_value(mmaps, 'size', desc)
+        dataset_detail.ensure_same_attrib_value(mmaps, 'step', desc)
+        dataset_detail.ensure_same_attrib_value(mmaps, 'cval', desc)
+        dataset_detail.ensure_same_attrib_value(mmaps, 'rota', desc)
+        # TODO: validate wcs
+        super().__init__(mmaps)
 
     @property
     def npix(self):
@@ -45,6 +49,10 @@ class DatasetMMaps(gbkfit.dataset.dataset.Dataset):
     @property
     def step(self):
         return self.steps[0]
+
+    @property
+    def cpix(self):
+        return self.cpixs[0]
 
     @property
     def cval(self):

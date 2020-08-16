@@ -1,9 +1,16 @@
 
-from . import _common, _smdisk, traits
+from . import DensityComponent3D, _detail, _smdisk, traits, make_component_desc
 from gbkfit.utils import parseutils
 
 
-class DensitySMDisk3D(_common.DensityComponent3D):
+__all__ = ['DensitySMDisk3D']
+
+
+class DensitySMDisk3D(DensityComponent3D):
+
+    @staticmethod
+    def desc():
+        return 'smooth density disk (3D)'
 
     @staticmethod
     def type():
@@ -11,13 +18,14 @@ class DensitySMDisk3D(_common.DensityComponent3D):
 
     @classmethod
     def load(cls, info):
-        info = parseutils.parse_class_args(cls, info)
-        info.update(dict(
-            rptraits=traits.rpt_parser.load(info.get('rptraits')),
-            rhtraits=traits.rht_parser.load(info.get('rhtraits')),
-            wptraits=traits.wpt_parser.load(info.get('wptraits')),
-            sptraits=traits.spt_parser.load(info.get('sptraits'))))
-        return cls(**info)
+        desc = make_component_desc(cls)
+        opts = parseutils.parse_options(info, desc, fun=cls.__init__)[0]
+        opts.update(dict(
+            rptraits=traits.rpt_parser.load(opts.get('rptraits')),
+            rhtraits=traits.rht_parser.load(opts.get('rhtraits')),
+            wptraits=traits.wpt_parser.load(opts.get('wptraits')),
+            sptraits=traits.spt_parser.load(opts.get('sptraits'))))
+        return cls(**opts)
 
     def dump(self):
         return dict(
@@ -25,6 +33,8 @@ class DensitySMDisk3D(_common.DensityComponent3D):
             loose=self._disk.loose(),
             tilted=self._disk.tilted(),
             rnodes=self._disk.rnodes(),
+            rnstep=self._disk.rnstep(),
+            interp=self._disk.interp().type(),
             rptraits=traits.rpt_parser.dump(self._disk.rptraits()),
             rhtraits=traits.rht_parser.dump(self._disk.rhtraits()),
             wptraits=traits.wpt_parser.dump(self._disk.wptraits()),
@@ -42,17 +52,18 @@ class DensitySMDisk3D(_common.DensityComponent3D):
             rnmax=None,
             rnsep=None,
             rnlen=None,
-            rnodes=None):
-
-        args = _common.parse_density_disk_3d_common_args(
-            loose, tilted,
-            rnmin, rnmax, rnsep, rnlen, rnodes,
+            rnodes=None,
+            rnstep=None,
+            interp='linear'):
+        rnode_args = _detail.parse_component_rnode_args(
+            rnmin, rnmax, rnsep, rnlen, rnodes, rnstep, interp)
+        trait_args = _detail.parse_component_d3d_trait_args(
             rptraits, rhtraits,
             wptraits,
             sptraits)
-
         self._disk = _smdisk.SMDisk(
-            **args,
+            loose=loose, tilted=tilted,
+            **rnode_args, **trait_args,
             vptraits=(), vhtraits=(),
             dptraits=(), dhtraits=())
 
@@ -61,14 +72,14 @@ class DensitySMDisk3D(_common.DensityComponent3D):
 
     def evaluate(
             self,
-            driver, params, image, rcube, dtype,
-            spat_size, spat_step, spat_zero,
-            out_extra):
+            driver, params, image, rcube,
+            spat_size, spat_step, spat_zero, spat_rota,
+            dtype, out_extra):
         spec_size = 1
         spec_step = 0
         spec_zero = 0
         self._disk.evaluate(
-            driver, params, image, None, rcube, dtype,
-            spat_size, spat_step, spat_zero,
+            driver, params, image, None, rcube,
+            spat_size, spat_step, spat_zero, spat_rota,
             spec_size, spec_step, spec_zero,
-            out_extra)
+            dtype, out_extra)

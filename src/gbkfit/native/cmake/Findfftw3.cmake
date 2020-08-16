@@ -30,6 +30,7 @@
 #
 # Declares the following targets:
 #
+#   fftw3::all
 #   fftw3::fftw3
 #   fftw3::fftw3_omp
 #   fftw3::fftw3_threads
@@ -67,10 +68,6 @@ elseif(UNIX)
     "/usr/fftw3/include"
     "/usr/local/include"
     "/usr/local/fftw3/include"
-    "~/usr/include"
-    "~/usr/fftw3/include"
-    "~/usr/local/include"
-    "~/usr/local/fftw3/include"
   )
   set(INCLUDE_SEARCH_HINTS
   )
@@ -80,10 +77,6 @@ elseif(UNIX)
     "/usr/fftw3/lib"
     "/usr/local/lib"
     "/usr/local/fftw3/lib"
-    "~/usr/lib"
-    "~/usr/fftw3/lib"
-    "~/usr/local/lib"
-    "~/usr/local/fftw3/lib"
   )
   set(LIBRARY_SEARCH_HINTS
   )
@@ -139,14 +132,15 @@ set(LIBRARY_LIB_VARIABLE_NAME_LIST
   "FFTW3_LONGDOUBLE_THREADS_LIBRARY"
 )
 
-#
-# Detect the paths of the above libraries and declare export targets.
-#
-
+# Set library suffixes
 if(${FFTW3_USE_STATIC_LIBS})
   set(CMAKE_FIND_LIBRARY_SUFFIXES_DEFAULT ${CMAKE_FIND_LIBRARY_SUFFIXES})
   set(CMAKE_FIND_LIBRARY_SUFFIXES ${CMAKE_STATIC_LIBRARY_SUFFIX})
 endif()
+
+#
+# Detect the paths of the above libraries and declare export targets.
+#
 
 list(LENGTH LIBRARY_LIB_VARIABLE_NAME_LIST LIBRARY_LIB_NAME_LIST_LENGTH)
 MATH(EXPR LIBRARY_LIB_NAME_LIST_LENGTH "${LIBRARY_LIB_NAME_LIST_LENGTH}-1")
@@ -170,6 +164,7 @@ foreach(i RANGE ${LIBRARY_LIB_NAME_LIST_LENGTH})
   )
 endforeach(i)
 
+# Restore default library suffixes
 if(${FFTW3_USE_STATIC_LIBS})
   set(CMAKE_FIND_LIBRARY_SUFFIXES ${CMAKE_FIND_LIBRARY_SUFFIXES_DEFAULT})
 endif()

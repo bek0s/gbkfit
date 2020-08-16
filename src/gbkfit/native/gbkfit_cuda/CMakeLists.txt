@@ -22,7 +22,7 @@ set(SOURCE_FILES
   src/wrapper.cu
 )
 
-set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --expt-relaxed-constexpr")
+set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -arch=sm_50 --std=c++17 --expt-relaxed-constexpr")
 
 pybind11_add_module(
   ${TARGET_NAME}
@@ -37,6 +37,8 @@ target_include_directories(
   include
   ${CUDA_INCLUDE_DIRS}
 )
+
+message(${CUDA_INCLUDE_DIRS})
 
 target_link_libraries(
   ${TARGET_NAME}

@@ -65,7 +65,11 @@ def fit(config):
     if config.get('drivers'):
         log.info("setting up drivers...")
         drivers = gbkfit.driver.driver.parser.load_many(config['drivers'])
-
+    """
+    foo = [d.dump() for d in datasets]
+    print(foo)
+    exit()
+    """
     log.info("setting up dmodels...")
     dmodels = gbkfit.model.dmodel.parser.load_many(config['dmodels'], dataset=datasets)
 
@@ -77,7 +81,7 @@ def fit(config):
 
     log.info("setting up objective...")
     objective = gbkfit.fitting.objective.Objective(
-        drivers, datasets, dmodels, gmodels)
+        datasets, dmodels, gmodels, drivers)
 
     log.info("setting up pdescs...")
     pdescs_extra = None
@@ -99,18 +103,19 @@ def fit(config):
     t1 = time.time_ns()
     print(params)
 
-
+    """
     interpreter = gbkfit.params.interpreter.ParamInterpreter(
         params.descs(), params.exprs())
 
-    for i in range(100):
+    for i in range(1000):
         residual = objective.residual_scalar(interpreter.evaluate(dict(
             xpos=10, ypos=10
         )))
         print(residual)
         #print(np.sum(np.abs(residual)))
+    """
 
-    #result = fitter.fit(objective, params)
+    result = fitter.fit(objective, params)
 
     t2 = time.time_ns()
     t_ms = (t2 - t1) // 1000000

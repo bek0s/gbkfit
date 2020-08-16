@@ -135,8 +135,8 @@ p_trait_sech2(T& out, T r, const T* params)
     out = sech2_1d_fun(r, a, T{0}, s);
 }
 
-template<typename F, typename T> constexpr void
-p_trait_mixture_1p(F fun, T& out, T r, T theta, const T* consts, const T* params)
+template<auto FUN, typename T> constexpr void
+p_trait_mixture_1p(T& out, T r, T theta, const T* consts, const T* params)
 {
     T res = 0;
     int nblobs = std::rint(consts[0]);
@@ -155,13 +155,13 @@ p_trait_mixture_1p(F fun, T& out, T r, T theta, const T* consts, const T* params
         T xd = r * std::cos(theta + blob_p - blob_t) - xb;
         T yd = r * std::sin(theta + blob_p - blob_t) - yb;
         T rd = std::sqrt(xd * xd + (yd * yd) / (blob_q * blob_q));
-        res += fun(rd, blob_a, T{0}, blob_s);
+        res += FUN(rd, blob_a, T{0}, blob_s);
     }
     out = res;
 }
 
-template<typename F, typename T> constexpr void
-p_trait_mixture_2p(F fun, T& out, T r, T theta, const T* consts, const T* params)
+template<auto FUN, typename T> constexpr void
+p_trait_mixture_2p(T& out, T r, T theta, const T* consts, const T* params)
 {
     T res = 0;
     int nblobs = std::rint(consts[0]);
@@ -181,7 +181,7 @@ p_trait_mixture_2p(F fun, T& out, T r, T theta, const T* consts, const T* params
         T xd = r * std::cos(theta + blob_p - blob_t) - xb;
         T yd = r * std::sin(theta + blob_p - blob_t) - yb;
         T rd = std::sqrt(xd * xd + (yd * yd) / (blob_q * blob_q));
-        res += fun(rd, blob_a, T{0}, blob_s, blob_b);
+        res += FUN(rd, blob_a, T{0}, blob_s, blob_b);
     }
     out = res;
 }
@@ -189,13 +189,13 @@ p_trait_mixture_2p(F fun, T& out, T r, T theta, const T* consts, const T* params
 template<typename T> constexpr void
 p_trait_mixture_ggauss(T& out, T r, T theta, const T* consts, const T* params)
 {
-    p_trait_mixture_2p(ggauss_1d_fun<T>, out, r, theta, consts, params);
+    p_trait_mixture_2p<ggauss_1d_fun<T>>(out, r, theta, consts, params);
 }
 
 template<typename T> constexpr void
 p_trait_mixture_moffat(T& out, T r, T theta, const T* consts, const T* params)
 {
-    p_trait_mixture_2p(moffat_1d_fun<T>, out, r, theta, consts, params);
+    p_trait_mixture_2p<moffat_1d_fun<T>>(out, r, theta, consts, params);
 }
 
 template <typename T> constexpr void
@@ -1095,7 +1095,8 @@ template<typename T> constexpr void
 rh_trait_rnd(
         T& out, RNG<T>& rng,
         int uid, const T* consts, const T* params,
-        int rnidx, const T* rnodes, int nrnodes, T r)
+        int rnidx, const T* rnodes, int nrnodes,
+        T r)
 {
     switch (uid)
     {
@@ -1379,9 +1380,8 @@ sp_trait(T& out,
     }
 }
 
-template<typename F, typename T, typename ...Ts> constexpr void
+template<auto FUN, typename T, typename ...Ts> constexpr void
 p_traits(
-        F fun,
         T* out,
         int ntraits, const int* uids,
         const T* cvalues, const int* ccounts,
@@ -1391,25 +1391,24 @@ p_traits(
 {
     for(int i = 0; i < ntraits; ++i)
     {
-        fun(out[i], uids[i], cvalues, pvalues, rnidx, rnodes, nrnodes, args...);
+        FUN(out[i], uids[i], cvalues, pvalues, rnidx, rnodes, nrnodes, args...);
         cvalues += ccounts[i];
         pvalues += pcounts[i];
     }
 }
 
-template<typename F, typename T> constexpr void
+template<auto FUN, typename T, typename ...Ts> constexpr void
 h_traits(
-        F fun,
         T* out,
         int ntraits, const int* uids,
         const T* cvalues, const int* ccounts,
         const T* pvalues, const int* pcounts,
         int rnidx, const T* rnodes, int nrnodes,
-        T r, T z)
+        Ts ...args)
 {
     for(int i = 0; i < ntraits; ++i)
     {
-        fun(out[i], uids[i], cvalues, pvalues, rnidx, rnodes, nrnodes, r, z);
+        FUN(out[i], uids[i], cvalues, pvalues, rnidx, rnodes, nrnodes, args...);
         cvalues += ccounts[i];
         pvalues += pcounts[i];
     }

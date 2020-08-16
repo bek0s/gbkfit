@@ -635,8 +635,6 @@ def parse_param_values(
     enames = []
     evalues = []
 
-    print(keys)
-
     for key, value, name, indices in zip(
             keys, values, param_names, param_indices):
         if is_value_fun(value):

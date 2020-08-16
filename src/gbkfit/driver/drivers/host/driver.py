@@ -2,7 +2,7 @@
 import numpy as np
 
 import gbkfit.driver
-from gbkfit.driver.drivers import _detail
+from gbkfit.driver import _detail
 
 import gbkfit.native.libgbkfit_host
 
@@ -18,6 +18,10 @@ def _shape(a):
 class DriverHost(gbkfit.driver.Driver):
 
     @staticmethod
+    def desc():
+        return 'host'
+
+    @staticmethod
     def type():
         return 'host'
 
@@ -26,7 +30,7 @@ class DriverHost(gbkfit.driver.Driver):
         return cls()
 
     def dump(self):
-        return {'type': self.type()}
+        return dict(type=self.type())
 
     def mem_alloc_s(self, shape, dtype):
         h_data = np.empty(shape, dtype)
@@ -41,26 +45,38 @@ class DriverHost(gbkfit.driver.Driver):
 
     def mem_copy_h2d(self, h_src, d_dst=None):
         if d_dst is None:
-            d_dst = h_src
+            d_dst = self.mem_alloc_d(h_src.shape, h_src.dtype)
         if h_src is not d_dst:
             d_dst[:] = h_src
         return d_dst
 
     def mem_copy_d2h(self, d_src, h_dst=None):
         if h_dst is None:
-            h_dst = d_src
+            h_dst = self.mem_alloc_h(d_src.shape, d_src.dtype)
         if d_src is not h_dst:
             h_dst[:] = d_src
         return h_dst
 
-    def mem_fill_d(self, ary, value):
-        ary.fill(value)
+    def mem_fill(self, x, value):
+        x.fill(value)
 
-    def array_add_d(self, ary, value):
-        ary += value
+    def math_abs(self, x, out=None):
+        return np.abs(x, out=out)
 
-    def array_mul_d(self, ary, value):
-        ary *= value
+    def math_sum(self, x, out=None):
+        return np.sum(x, out=out, keepdims=True)
+
+    def math_add(self, x1, x2, out=None):
+        return np.add(x1, x2, out=out)
+
+    def math_sub(self, x1, x2, out=None):
+        return np.sub(x1, x2, out=out)
+
+    def math_mul(self, x1, x2, out=None):
+        return np.mul(x1, x2, out=out)
+
+    def math_div(self, x1, x2, out=None):
+        return np.div(x1, x2, out=out)
 
     def make_dmodel_dcube(self, dtype):
         return DModelDCube(dtype)
@@ -73,12 +89,6 @@ class DriverHost(gbkfit.driver.Driver):
 
     def make_gmodel_smdisk(self, dtype):
         return GModelSMDisk(dtype)
-
-    def math_abs(self, ary, out=None):
-        return np.abs(ary, out=out)
-
-    def math_sum(self, ary, out=None):
-        return np.sum(ary, out=out, keepdims=True)
 
 
 class DModelDCube(gbkfit.driver.driver.DModelDCube):
@@ -125,15 +135,17 @@ class DModelMMaps(gbkfit.driver.driver.DModelMMaps):
             self,
             spat_size,
             spec_size, spec_step, spec_zero,
-            nanval,
             scube,
-            mmaps, mmaps_orders):
+            mmaps,
+            mmaps_orders):
         self._mmaps.prepare(
             spat_size[0], spat_size[1],
             spec_size, spec_step, spec_zero,
-            nanval,
+            np.nan,
             _ptr(scube),
-            _ptr(mmaps), _shape(mmaps_orders)[0], _ptr(mmaps_orders))
+            _ptr(mmaps),
+            _ptr(mmaps_orders),
+            _shape(mmaps_orders)[0])
 
     def moments(self):
         self._mmaps.moments()
@@ -161,7 +173,7 @@ class GModelMCDisk(gbkfit.driver.driver.GModelMCDisk):
             dht_uids, dht_cvalues, dht_ccounts, dht_pvalues, dht_pcounts,
             wpt_uids, wpt_cvalues, wpt_ccounts, wpt_pvalues, wpt_pcounts,
             spt_uids, spt_cvalues, spt_ccounts, spt_pvalues, spt_pcounts,
-            spat_size, spat_step, spat_zero,
+            spat_size, spat_step, spat_zero, spat_rota,
             spec_size, spec_step, spec_zero,
             image, scube, rcube,
             rdata, vdata, ddata):
@@ -231,7 +243,7 @@ class GModelSMDisk(gbkfit.driver.driver.GModelSMDisk):
             dht_uids, dht_cvalues, dht_ccounts, dht_pvalues, dht_pcounts,
             wpt_uids, wpt_cvalues, wpt_ccounts, wpt_pvalues, wpt_pcounts,
             spt_uids, spt_cvalues, spt_ccounts, spt_pvalues, spt_pcounts,
-            spat_size, spat_step, spat_zero,
+            spat_size, spat_step, spat_zero, spat_rota,
             spec_size, spec_step, spec_zero,
             image, scube, rcube,
             rdata, vdata, ddata):

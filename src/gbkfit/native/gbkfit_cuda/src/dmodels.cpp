@@ -53,13 +53,13 @@ DModelDCube<T>::prepare(
 
         int n0 = m_size_hi[2], n1 = m_size_hi[1], n2 = m_size_hi[0];
 
-        cufftPlan3d(&m_scube_fft_plan_r2c, n0, n1, n2, cufft<T>::cufftTypeR2C);
+        cufftPlan3d(&m_scube_fft_plan_r2c, n0, n1, n2, cufft<T>::R2C);
 
-        cufftPlan3d(&m_scube_fft_plan_c2r, n0, n1, n2, cufft<T>::cufftTypeC2R);
+        cufftPlan3d(&m_scube_fft_plan_c2r, n0, n1, n2, cufft<T>::C2R);
 
-        cufftPlan3d(&m_psf3d_fft_plan_r2c, n0, n1, n2, cufft<T>::cufftTypeR2C);
+        cufftPlan3d(&m_psf3d_fft_plan_r2c, n0, n1, n2, cufft<T>::R2C);
 
-        cufft<T>::cufftExecR2C(
+        cufft<T>::execR2C(
                 m_psf3d_fft_plan_r2c,
                 reinterpret_cast<typename cufft<T>::real*>(psf3d_hi_ptr),
                 reinterpret_cast<typename cufft<T>::complex*>(m_psf3d_hi_fft));
@@ -97,7 +97,7 @@ DModelDCube<T>::convolve(void) const
 {
     int n0 = m_size_hi[2], n1 = m_size_hi[1], n2 = m_size_hi[0];
 
-    cufft<T>::cufftExecR2C(
+    cufft<T>::execR2C(
             m_scube_fft_plan_r2c,
             reinterpret_cast<typename cufft<T>::real*>(m_scube_hi),
             reinterpret_cast<typename cufft<T>::complex*>(m_scube_hi_fft));
@@ -110,7 +110,7 @@ DModelDCube<T>::convolve(void) const
             reinterpret_cast<typename cufft<T>::complex*>(m_psf3d_hi_fft),
             n, nfactor);
 
-    cufft<T>::cufftExecC2R(
+    cufft<T>::execC2R(
             m_scube_fft_plan_c2r,
             reinterpret_cast<typename cufft<T>::complex*>(m_scube_hi_fft),
             reinterpret_cast<typename cufft<T>::real*>(m_scube_hi));

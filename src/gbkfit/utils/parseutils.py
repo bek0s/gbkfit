@@ -1,7 +1,6 @@
 
 import abc
 import copy
-import inspect
 import logging
 
 from . import funcutils, iterutils
@@ -24,20 +23,33 @@ def parse_options(
     info = copy.deepcopy(info)
     required = set()
     optional = set()
-    if add_required:
-        required.update(add_required)
-    if add_optional:
-        optional.update(add_optional)
-    # Infer required and optional options from callable
+    add_required = set(add_required if add_required else [])
+    add_optional = set(add_optional if add_optional else [])
+    add_all = add_required | add_optional
+    fun_all = set()
+    # Required added options must not clash with optional added options
+    if add_required.intersection(add_optional):
+        raise RuntimeError()
+    # Update total options with added options
+    required.update(add_required)
+    optional.update(add_optional)
+    # Infer options from callable
     if fun:
         fun_required, fun_optional = funcutils.extract_args(fun)
+        fun_all = fun_required | fun_optional
+        # Callable options must not clash with added options
+        if fun_all.intersection(add_all):
+            raise RuntimeError()
+        # Ignore callable options if requested
         if fun_ignore_args:
             fun_required.difference_update(fun_ignore_args)
             fun_optional.difference_update(fun_ignore_args)
+        # Rename callable options if requested
         if fun_rename_args:
             for arg_name, opt_name in fun_rename_args.items():
                 if opt_name in info:
                     info[arg_name] = info.pop(opt_name)
+        # Update total options with callable options
         required.update(fun_required)
         optional.update(fun_optional)
     # Check for missing or unknown options
@@ -56,86 +68,87 @@ def parse_options(
             f"the following {desc} options are "
             f"required but missing: {str(missing)}")
     # Return all recognised options
-    return {k: v for k, v in info.items() if k in required | optional}
+    add_options = {k: v for k, v in info.items() if k in add_all}
+    fun_options = {k: v for k, v in info.items() if k in fun_all}
+    all_options = {**add_options, **fun_options}
+    return all_options, add_options, fun_options
 
 
-def parse_class_args(cls, info, add_args=(), skip_args=()):
-    type_name = f' (type: {cls.type()})' if getattr(cls, 'type', None) else ''
-    type_desc = f'{cls.__qualname__}{type_name}'
-    required = set()
-    optional = set()
-    signature = inspect.signature(cls.__init__)
-    for pname, pinfo in list(signature.parameters.items())[1:]:
-        if pname in skip_args:
-            continue
-        if pinfo.kind == inspect.Parameter.VAR_POSITIONAL:
-            continue
-        if pinfo.kind == inspect.Parameter.VAR_KEYWORD:
-            continue
-        if pinfo.default is inspect.Parameter.empty:
-            required.add(pname)
-        else:
-            optional.add(pname)
-    required.update(add_args)
-    required.difference_update(skip_args)
-    optional.difference_update(skip_args)
-    unknown = set(info) - (required | optional)
-    missing = required - set(info)
-    options = {k: v for k, v in info.items() if k in required | optional}
-    if unknown:
-        _log.warning(
-            f"the following {type_desc} options are "
-            f"not recognised and will be ignored: {', '.join(unknown)}")
-    if missing:
+class Serializable(abc.ABC):
+
+    @classmethod
+    @abc.abstractmethod
+    def load(cls, *args, **kwargs):
+        pass
+
+    @abc.abstractmethod
+    def dump(self, *args, **kwargs):
+        pass
+
+
+class ParserSupport(Serializable, abc.ABC):
+    pass
+
+
+class SimpleParserSupport(ParserSupport, abc.ABC):
+    pass
+
+
+class TypedParserSupport(ParserSupport, abc.ABC):
+
+    @staticmethod
+    @abc.abstractmethod
+    def type():
+        pass
+
+
+def _prepare_args_and_kwargs(length, args, kwargs):
+    args = list(args)
+    for i, value in enumerate(args):
+        if value is None:
+            args[i] = length * [None]
+    for key, value in kwargs.items():
+        if value is None:
+            kwargs[key] = length * [None]
+    if any([length != len(arg) for arg in args + list(kwargs.values())]):
         raise RuntimeError(
-            f"the following {type_desc} options are "
-            f"required but missing: {', '.join(missing)}")
-    return options
+            "all arguments must have the same length or be None")
+    nargs = len(args)
+    args_list_shape = (length, nargs)
+    args_list = iterutils.make_list(args_list_shape, [], True)
+    for i in range(length):
+        for j, arg in enumerate(args):
+            args_list[i][j] = arg[i]
+    kwargs_list_shape = (length,)
+    kwargs_list = iterutils.make_list(kwargs_list_shape, {}, True)
+    for i in range(length):
+        for key, value in kwargs.items():
+            kwargs_list[i][key] = value[i]
+    return args_list, kwargs_list
 
 
 class Parser(abc.ABC):
 
     def __init__(self, cls):
-        self._clstype = cls
-        self._clsname = cls.__name__
+        self._cls = cls
 
-    def clstype(self):
-        return self._clstype
-
-    def clsname(self):
-        return self._clsname
+    def cls(self):
+        return self._cls
 
     def load(self, x):
         return self.load_many(x) if iterutils.is_sequence(x) \
             else self.load_one(x)
 
-    @abc.abstractmethod
     def load_one(self, x, *args, **kwargs):
+        x = copy.deepcopy(x)
+        return self._load_one_impl(x, *args, **kwargs) if x else None
+
+    @abc.abstractmethod
+    def _load_one_impl(self, x, *args, **kwargs):
         pass
 
     def load_many(self, x, *args, **kwargs):
-        nitems = len(x)
-        args = list(args)
-        for i, value in enumerate(args):
-            if value is None:
-                args[i] = nitems * [None]
-        for key, value in kwargs.items():
-            if value is None:
-                kwargs[key] = nitems * [None]
-        if any([nitems != len(arg) for arg in args + list(kwargs.values())]):
-            raise RuntimeError(
-                "all arguments must have the same length or be None")
-        nargs = len(args)
-        args_list_shape = (nitems, nargs)
-        args_list = iterutils.make_list(args_list_shape, [], True)
-        for i in range(len(x)):
-            for j, arg in enumerate(args):
-                args_list[i][j] = arg[i]
-        kwargs_list_shape = (nitems,)
-        kwargs_list = iterutils.make_list(kwargs_list_shape, {}, True)
-        for i in range(len(x)):
-            for key, value in kwargs.items():
-                kwargs_list[i][key] = value[i]
+        args_list, kwargs_list = _prepare_args_and_kwargs(len(x), args, kwargs)
         results = []
         for item, item_args, item_kwargs in zip(x, args_list, kwargs_list):
             results.append(self.load_one(item, *item_args, **item_kwargs))
@@ -145,11 +158,19 @@ class Parser(abc.ABC):
         return self.dump_many(x) if iterutils.is_sequence(x) \
             else self.dump_one(x)
 
-    def dump_many(self, x):
-        return [self.dump_one(item) for item in iterutils.listify(x)]
+    def dump_one(self, x, *args, **kwargs):
+        return self._dump_one_impl(x, *args, **kwargs) if x else None
 
-    def dump_one(self, x):
-        return x.dump() if x is not None else None
+    @abc.abstractmethod
+    def _dump_one_impl(self, x, *args, **kwargs):
+        pass
+
+    def dump_many(self, x, *args, **kwargs):
+        args_list, kwargs_list = _prepare_args_and_kwargs(len(x), args, kwargs)
+        results = []
+        for item, item_args, item_kwargs in zip(x, args_list, kwargs_list):
+            results.append(self.dump_one(item, *item_args, **item_kwargs))
+        return results
 
 
 class SimpleParser(Parser):
@@ -157,47 +178,41 @@ class SimpleParser(Parser):
     def __init__(self, cls):
         super().__init__(cls)
 
-    def load(self, x):
-        return self.load_many(x) if iterutils.is_sequence(x) \
-            else self.load_one(x)
+    def _load_one_impl(self, x, *args, **kwargs):
+        return self.cls().load(x, *args, **kwargs)
 
-    def load_one(self, x, *args, **kwargs):
-        return self._clstype.load(x, *args, **kwargs)
+    def _dump_one_impl(self, x, *args, **kwargs):
+        return x.dump(*args, **kwargs)
 
 
 class TypedParser(Parser):
 
-    def __init__(self, cls, noneval=None):
+    def __init__(self, cls):
         super().__init__(cls)
         self._parsers = {}
-        self._noneval = noneval
 
-    def dict(self):
-        return dict(self._parsers)
-
-    def register(self, factory):
-        type_ = factory.type()
+    def register(self, parser):
+        desc = self.cls().__name__
+        type_ = parser.type()
         if type_ in self._parsers:
             raise RuntimeError(
-                f"{self._clsname} parser is already registered: '{type_}'.")
-        self._parsers[type_] = factory
+                f"{desc} parser already registered: {type_}")
+        self._parsers[type_] = parser
 
-    def load(self, x):
-        return self.load_many(x) if iterutils.is_sequence(x) \
-            else self.load_one(x)
-
-    def load_one(self, x, *args, **kwargs):
-        if x is None:
-            return self._noneval
+    def _load_one_impl(self, x, *args, **kwargs):
+        #print(x)
+        desc = self.cls().__name__
         if 'type' not in x:
             raise RuntimeError(
-                f"All {self._clsname} descriptions must contain a 'type'.")
+                f"{desc} description must define a type")
         type_ = x.pop('type')
         if type_ not in self._parsers:
             raise RuntimeError(
-                f"Could not find a {self._clsname} parser for type '{type_}'. "
-                f"Available parsers are: {list(self._parsers.keys())}.")
+                f"could not find a {desc} parser for type '{type_}'; "
+                f"the available parsers are: {list(self._parsers.keys())}")
+        return self._parsers[type_].load(x, *args, **kwargs)
 
-        obj = self._parsers[type_].load(x, *args, **kwargs)
-
-        return obj
+    def _dump_one_impl(self, x, *args, **kwargs):
+        info = x.dump(*args, **kwargs)
+        info['type'] = x.type()
+        return info

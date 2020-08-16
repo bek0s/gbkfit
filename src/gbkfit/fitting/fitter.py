@@ -7,21 +7,7 @@ import gbkfit.params.utils
 from gbkfit.utils import parseutils
 
 
-class Fitter(abc.ABC):
-
-    @staticmethod
-    @abc.abstractmethod
-    def type():
-        pass
-
-    @classmethod
-    @abc.abstractmethod
-    def load(cls, info):
-        pass
-
-    @abc.abstractmethod
-    def dump(self):
-        pass
+class Fitter(parseutils.TypedParserSupport, abc.ABC):
 
     @staticmethod
     @abc.abstractmethod

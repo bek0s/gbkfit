@@ -1,2 +1,2 @@
 
-from .psflsf import *
+from .core import *

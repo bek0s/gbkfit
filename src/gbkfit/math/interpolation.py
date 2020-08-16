@@ -5,10 +5,17 @@ import scipy.interpolate
 
 
 class Interpolator(abc.ABC):
-    pass
+
+    @staticmethod
+    def type():
+        pass
 
 
 class InterpolatorLinear(Interpolator):
+
+    @staticmethod
+    def type():
+        return 'linear'
 
     def __init__(self, x, y):
         self._interp = scipy.interpolate.interp1d(x, y, 'linear')
@@ -19,6 +26,10 @@ class InterpolatorLinear(Interpolator):
 
 class InterpolatorAkima(Interpolator):
 
+    @staticmethod
+    def type():
+        return 'akima'
+
     def __init__(self, x, y):
         self._interp = scipy.interpolate.Akima1DInterpolator(x, y)
 
@@ -27,6 +38,10 @@ class InterpolatorAkima(Interpolator):
 
 
 class InterpolatorPCHIP(Interpolator):
+
+    @staticmethod
+    def type():
+        return 'pchip'
 
     def __init__(self, x, y):
         self._interp = scipy.interpolate.PchipInterpolator(x, y)

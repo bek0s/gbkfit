@@ -47,17 +47,18 @@ def _register_fitters():
 
 
 def _register_datasets():
-    from gbkfit.dataset.dataset import parser
+    from gbkfit.dataset import dataset_parser as parser
     from gbkfit.dataset.datasets import (
         DatasetImage, DatasetLSlit, DatasetMMaps, DatasetSCube)
     parser.register(DatasetImage)
+    #parser.register(DatasetImage)
     parser.register(DatasetLSlit)
     parser.register(DatasetMMaps)
     parser.register(DatasetSCube)
 
 
 def _register_dmodels():
-    from gbkfit.model.dmodel import parser
+    from gbkfit.model import dmodel_parser as parser
     from gbkfit.model.dmodels import (
         DModelImage, DModelLSlit, DModelMMaps, DModelSCube)
     parser.register(DModelImage)
@@ -67,7 +68,7 @@ def _register_dmodels():
 
 
 def _register_gmodels():
-    from gbkfit.model.gmodel import parser
+    from gbkfit.model import gmodel_parser as parser
     from gbkfit.model.gmodels import (
         GModelIntensity2D, GModelIntensity3D,
         GModelKinematics2D, GModelKinematics3D)
@@ -78,8 +79,8 @@ def _register_gmodels():
 
 
 def _register_psfs():
-    from gbkfit.psflsf.psflsf import psf_parser
-    from gbkfit.psflsf.psflsfs.psfmodels import (
+    from gbkfit.psflsf import psf_parser
+    from gbkfit.psflsf.psfs.psfs import (
         PSFGauss, PSFGGauss, PSFImage, PSFLorentz, PSFMoffat)
     psf_parser.register(PSFGauss)
     psf_parser.register(PSFGGauss)
@@ -89,8 +90,8 @@ def _register_psfs():
 
 
 def _register_lsfs():
-    from gbkfit.psflsf.psflsf import lsf_parser
-    from gbkfit.psflsf.psflsfs.lsfmodels import (
+    from gbkfit.psflsf import lsf_parser
+    from gbkfit.psflsf.lsfs.lsfs import (
         LSFGauss, LSFGGauss, LSFImage, LSFLorentz, LSFMoffat)
     lsf_parser.register(LSFGauss)
     lsf_parser.register(LSFGGauss)

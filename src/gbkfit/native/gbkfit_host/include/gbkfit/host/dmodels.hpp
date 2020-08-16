@@ -64,8 +64,8 @@ public:
             T nanval,
             Ptr scube,
             Ptr mmaps,
-            int mmaps_count,
-            Ptr mmaps_orders);
+            Ptr mmaps_orders,
+            int mmaps_norders);
 
     void
     moments(void) const;
@@ -80,8 +80,8 @@ private:
     T m_nanval;
     T* m_scube;
     T* m_mmaps;
-    int m_mmaps_count;
     int* m_mmaps_orders;
+    int m_mmaps_norders;
 };
 
 }} // namespace gbkfit::host

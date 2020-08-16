@@ -1,9 +1,12 @@
 
-from . import _common, _smdisk, traits
+from . import SpectralComponent2D, _detail, _smdisk, make_component_desc, traits
 from gbkfit.utils import parseutils
 
 
-class SpectralSMDisk2D(_common.SpectralComponent2D):
+__all__ = ['SpectralSMDisk2D']
+
+
+class SpectralSMDisk2D(SpectralComponent2D):
 
     @staticmethod
     def type():
@@ -11,13 +14,14 @@ class SpectralSMDisk2D(_common.SpectralComponent2D):
 
     @classmethod
     def load(cls, info):
-        info = parseutils.parse_class_args(cls, info)
-        info.update(dict(
-            rptraits=traits.rpt_parser.load(info.get('rptraits')),
-            vptraits=traits.vpt_parser.load(info.get('vptraits')),
-            dptraits=traits.dpt_parser.load(info.get('dptraits')),
-            sptraits=traits.spt_parser.load(info.get('sptraits'))))
-        return cls(**info)
+        desc = make_component_desc(cls)
+        opts = parseutils.parse_options(info, desc, fun=cls.__init__)[0]
+        opts.update(dict(
+            rptraits=traits.rpt_parser.load(opts.get('rptraits')),
+            vptraits=traits.vpt_parser.load(opts.get('vptraits')),
+            dptraits=traits.dpt_parser.load(opts.get('dptraits')),
+            sptraits=traits.spt_parser.load(opts.get('sptraits'))))
+        return cls(**opts)
 
     def dump(self):
         return dict(
@@ -25,6 +29,8 @@ class SpectralSMDisk2D(_common.SpectralComponent2D):
             loose=self._disk.loose(),
             tilted=self._disk.tilted(),
             rnodes=self._disk.rnodes(),
+            rnstep=self._disk.rnstep(),
+            interp=self._disk.interp().type(),
             rptraits=traits.rpt_parser.dump(self._disk.rptraits()),
             vptraits=traits.vpt_parser.dump(self._disk.vptraits()),
             dptraits=traits.dpt_parser.dump(self._disk.dptraits()),
@@ -42,18 +48,19 @@ class SpectralSMDisk2D(_common.SpectralComponent2D):
             rnmax=None,
             rnsep=None,
             rnlen=None,
-            rnodes=None):
-
-        args = _common.parse_spectral_disk_2d_common_args(
-            loose, tilted,
-            rnmin, rnmax, rnsep, rnlen, rnodes,
+            rnodes=None,
+            rnstep=None,
+            interp='linear'):
+        rnode_args = _detail.parse_component_rnode_args(
+            rnmin, rnmax, rnsep, rnlen, rnodes, rnstep, interp)
+        trait_args = _detail.parse_component_s2d_trait_args(
             rptraits,
             vptraits,
             dptraits,
             sptraits)
-
         self._disk = _smdisk.SMDisk(
-            **args,
+            loose=loose, tilted=tilted,
+            **rnode_args, **trait_args,
             rhtraits=(),
             vhtraits=(), dhtraits=(),
             wptraits=())
@@ -63,15 +70,15 @@ class SpectralSMDisk2D(_common.SpectralComponent2D):
 
     def evaluate(
             self,
-            driver, params, scube, dtype,
-            spat_size, spat_step, spat_zero,
+            driver, params, scube,
+            spat_size, spat_step, spat_zero, spat_rota,
             spec_size, spec_step, spec_zero,
-            out_extra):
+            dtype, out_extra):
         spat_size = spat_size + (1,)
         spat_step = spat_step + (0,)
         spat_zero = spat_zero + (0,)
         self._disk.evaluate(
-            driver, params, None, scube, None, dtype,
-            spat_size, spat_step, spat_zero,
+            driver, params, None, scube, None,
+            spat_size, spat_step, spat_zero, spat_rota,
             spec_size, spec_step, spec_zero,
-            out_extra)
+            dtype, out_extra)

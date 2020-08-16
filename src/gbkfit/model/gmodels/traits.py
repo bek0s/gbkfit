@@ -89,8 +89,8 @@ def _params_mixture(n):
 
 def _params_pw_harmonic(order, nnodes):
     params = []
-    params += [ParamVectorDesc(f'a', nnodes)]
-    params += [ParamVectorDesc(f'p', nnodes)] * (order > 0)
+    params += [ParamVectorDesc('a', nnodes)]
+    params += [ParamVectorDesc('p', nnodes)] * (order > 0)
     return tuple(params)
 
 
@@ -102,12 +102,24 @@ def _integrate_nw(nodes, fun, *args):
     return np.pi * ampl * (rmax * rmax - rmin * rmin)
 
 
-class Trait(abc.ABC):
+def _trait_desc(cls):
+    descs = {
+        RPTrait: 'density polar',
+        RHTrait: 'density height',
+        VPTrait: 'velocity polar',
+        VHTrait: 'velocity height',
+        DPTrait: 'velocity dispersion polar',
+        DHTrait: 'velocity dispersion height',
+        WPTrait: 'warp polar',
+        SPTrait: 'selection polar'}
+    postfix = None
+    for k, v in descs.items():
+        if issubclass(cls, k):
+            postfix = v
+    return f'{cls.type()} {postfix} trait ({cls.__name__})'
 
-    @staticmethod
-    @abc.abstractmethod
-    def type():
-        pass
+
+class Trait(parseutils.TypedParserSupport, abc.ABC):
 
     @staticmethod
     @abc.abstractmethod
@@ -116,13 +128,15 @@ class Trait(abc.ABC):
 
     @classmethod
     def load(cls, info):
-        return cls(**parseutils.parse_class_args(cls, info))
+        desc = _trait_desc(cls)
+        opts = parseutils.parse_options(info, desc, fun=cls.__init__)[0]
+        return cls(**opts)
 
     def __init__(self, **kwargs):
         self._kwargs = kwargs.copy()
 
     def dump(self):
-        return {'type': self.type(), **self._kwargs}
+        return dict(**self._kwargs)
 
     def consts(self):
         return tuple(self._kwargs.values())

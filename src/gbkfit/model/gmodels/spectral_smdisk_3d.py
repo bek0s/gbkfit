@@ -1,9 +1,12 @@
 
-from . import _common, _smdisk, traits
+from . import SpectralComponent3D, _detail, _smdisk, make_component_desc, traits
 from gbkfit.utils import parseutils
 
 
-class SpectralSMDisk3D(_common.SpectralComponent3D):
+__all__ = ['SpectralSMDisk3D']
+
+
+class SpectralSMDisk3D(SpectralComponent3D):
 
     @staticmethod
     def type():
@@ -11,17 +14,18 @@ class SpectralSMDisk3D(_common.SpectralComponent3D):
 
     @classmethod
     def load(cls, info):
-        info = parseutils.parse_class_args(cls, info)
-        info.update(dict(
-            rptraits=traits.rpt_parser.load(info.get('rptraits')),
-            rhtraits=traits.rht_parser.load(info.get('rhtraits')),
-            vptraits=traits.vpt_parser.load(info.get('vptraits')),
-            vhtraits=traits.vht_parser.load(info.get('vhtraits')),
-            dptraits=traits.dpt_parser.load(info.get('dptraits')),
-            dhtraits=traits.dht_parser.load(info.get('dhtraits')),
-            wptraits=traits.wpt_parser.load(info.get('wptraits')),
-            sptraits=traits.spt_parser.load(info.get('sptraits'))))
-        return cls(**info)
+        desc = make_component_desc(cls)
+        opts = parseutils.parse_options(info, desc, fun=cls.__init__)[0]
+        opts.update(dict(
+            rptraits=traits.rpt_parser.load(opts.get('rptraits')),
+            rhtraits=traits.rht_parser.load(opts.get('rhtraits')),
+            vptraits=traits.vpt_parser.load(opts.get('vptraits')),
+            vhtraits=traits.vht_parser.load(opts.get('vhtraits')),
+            dptraits=traits.dpt_parser.load(opts.get('dptraits')),
+            dhtraits=traits.dht_parser.load(opts.get('dhtraits')),
+            wptraits=traits.wpt_parser.load(opts.get('wptraits')),
+            sptraits=traits.spt_parser.load(opts.get('sptraits'))))
+        return cls(**opts)
 
     def dump(self):
         return dict(
@@ -29,6 +33,8 @@ class SpectralSMDisk3D(_common.SpectralComponent3D):
             loose=self._disk.loose(),
             tilted=self._disk.tilted(),
             rnodes=self._disk.rnodes(),
+            rnstep=self._disk.rnstep(),
+            interp=self._disk.interp().type(),
             rptraits=traits.rpt_parser.dump(self._disk.rptraits()),
             rhtraits=traits.rht_parser.dump(self._disk.rhtraits()),
             vptraits=traits.vpt_parser.dump(self._disk.vptraits()),
@@ -54,30 +60,32 @@ class SpectralSMDisk3D(_common.SpectralComponent3D):
             rnmax=None,
             rnsep=None,
             rnlen=None,
-            rnodes=None):
-
-        args = _common.parse_spectral_disk_3d_common_args(
-            loose, tilted,
-            rnmin, rnmax, rnsep, rnlen, rnodes,
+            rnodes=None,
+            rnstep=None,
+            interp='linear'):
+        rnode_args = _detail.parse_component_rnode_args(
+            rnmin, rnmax, rnsep, rnlen, rnodes, rnstep, interp)
+        trait_args = _detail.parse_component_s3d_trait_args(
             rptraits, rhtraits,
             vptraits, vhtraits,
             dptraits, dhtraits,
             wptraits,
             sptraits)
-
-        self._disk = _smdisk.SMDisk(**args)
+        self._disk = _smdisk.SMDisk(
+            loose=loose, tilted=tilted,
+            **rnode_args, **trait_args)
 
     def params(self):
         return self._disk.params()
 
     def evaluate(
             self,
-            driver, params, scube, rcube, dtype,
-            spat_size, spat_step, spat_zero,
+            driver, params, scube, rcube,
+            spat_size, spat_step, spat_zero, spat_rota,
             spec_size, spec_step, spec_zero,
-            out_extra):
+            dtype, out_extra):
         self._disk.evaluate(
-            driver, params, None, scube, rcube, dtype,
-            spat_size, spat_step, spat_zero,
+            driver, params, None, scube, rcube,
+            spat_size, spat_step, spat_zero, spat_rota,
             spec_size, spec_step, spec_zero,
-            out_extra)
+            dtype, out_extra)

@@ -1,34 +1,55 @@
 
-import numpy as np
-
 from gbkfit.utils import iterutils, miscutils
 
 
 class _ObjectiveItem:
 
-    def __init__(self, driver, dataset, dmodel, gmodel):
+    def __init__(self, dataset, dmodel, gmodel, driver):
         super().__init__()
-        self._driver = driver
         self._dataset = dataset
         self._dmodel = dmodel
         self._gmodel = gmodel
+        self._driver = driver
         self._nitems = 0
-        self._names = []
-        self._sizes = []
-        self._steps = []
-        self._cvals = []
-        self._npixs = []
-        self._dtype = np.float32
+        self._names = tuple()
+        self._sizes = tuple()
+        self._steps = tuple()
+        self._cvals = tuple()
+        self._npixs = tuple()
         self._d_dataset_d_vector = None
         self._d_dataset_m_vector = None
         self._d_dataset_e_vector = None
         self._s_residual_vector = None
         self._s_residual_scalar = None
+
+        dataset_cls = dataset.__class__.__qualname__
+        dmodel_cls = dmodel.__class__.__qualname__
+        gmodel_cls = gmodel.__class__.__qualname__
+
+        if not dmodel.is_compatible_with_dataset(dataset):
+            raise RuntimeError(
+                f"dmodel of type '{dmodel.type()}' (class={dmodel_cls})"
+                f" is not compatible with "
+                f"dataset of type '{dataset.type()}' (class={dataset_cls})")
+
+
+
+        if not dmodel.is_compatible_with_gmodel(gmodel):
+            raise RuntimeError(
+                f"dmodel of type '{dmodel.type()}' (class={dmodel_cls})"
+                f" is not compatible with "
+                f"gmodel of type '{gmodel.type()}' (class={gmodel_cls})")
+
+        if dataset.dtype != dmodel.dtype():
+            raise RuntimeError(
+                f"dataset and dmodel have incompatible dtypes "
+                f"({dataset.dtype} != {dmodel.dtype()})")
         for name in dmodel.onames():
             data = dataset.get(name)
             if data is None:
                 raise RuntimeError(
-                    f"could not find dataset item '{name}' required by dmodel")
+                    f"could not find dataset "
+                    f"for item '{name}' required by dmodel")
             if data.size() != dmodel.size():
                 raise RuntimeError(
                     f"dataset and dmodel have incompatible sizes "
@@ -41,20 +62,12 @@ class _ObjectiveItem:
                 raise RuntimeError(
                     f"dataset and dmodel have incompatible cvals "
                     f"for item '{name}' ({data.cval()} != {dmodel.cval()})")
-            if data.dtype() != dmodel.dtype():
-                raise RuntimeError(
-                    f"dataset and dmodel have incompatible dtypes ")
-            self._names.append(name)
-            self._sizes.append(data.size())
-            self._steps.append(data.step())
-            self._cvals.append(data.cval())
-            self._npixs.append(data.npix())
-        self._nitems = len(self._names)
-        self._names = tuple(self._names)
-        self._sizes = tuple(self._sizes)
-        self._steps = tuple(self._steps)
-        self._cvals = tuple(self._cvals)
-        self._npixs = tuple(self._npixs)
+            self._nitems += 1
+            self._names += (name,)
+            self._sizes += (data.size(),)
+            self._steps += (data.step(),)
+            self._cvals += (data.cval(),)
+            self._npixs += (data.npix(),)
         self.prepare()
 
     def residual_count(self):
@@ -66,6 +79,9 @@ class _ObjectiveItem:
     def residual_sizes(self):
         return self._sizes
 
+    def residual_cvals(self):
+        return self._cvals
+
     def residual_steps(self):
         return self._steps
 
@@ -73,7 +89,7 @@ class _ObjectiveItem:
         return self._npixs
 
     def dtype(self):
-        return self._dtype
+        return self._dmodel.dtype()
 
     def params(self):
         return self._gmodel.params()
@@ -83,7 +99,7 @@ class _ObjectiveItem:
         driver = self._driver
         nitems = self._nitems
         npixel = sum(self._npixs)
-        dtype = self._dtype
+        dtype = self.dtype()
         # Allocate host and device memory for residuals
         self._s_residual_vector = driver.mem_alloc_s(npixel, dtype)
         self._s_residual_scalar = driver.mem_alloc_s((1,), dtype)
@@ -97,15 +113,15 @@ class _ObjectiveItem:
             name = self._names[i]
             npix = self._npixs[i]
             data = self._dataset[name]
-            data_d_1d = data.data().ravel()
-            data_m_1d = data.mask().ravel()
-            data_e_1d = data.error().ravel()
+            data_d_1d = data.data().copy().ravel().astype(dtype)
+            data_m_1d = data.mask().copy().ravel().astype(dtype)
+            data_e_1d = data.error().copy().ravel().astype(dtype)
             slice_ = slice(ipix, ipix + npix)
             driver.mem_copy_h2d(data_d_1d, self._d_dataset_d_vector[slice_])
             driver.mem_copy_h2d(data_m_1d, self._d_dataset_m_vector[slice_])
             driver.mem_copy_h2d(data_e_1d, self._d_dataset_e_vector[slice_])
             ipix += npix
-        # Dataset no longer needed in host memory
+        # Dataset reference no longer needed
         self._dataset = None
 
     def model(self, params, out_extra=None):
@@ -163,6 +179,7 @@ class _ObjectiveItem:
         driver.math_abs(d_residual_vector, out=d_residual_vector)
 
         driver.math_sum(d_residual_vector, out=d_residual_scalar)
+
         # Transfer residuals from device to host
         driver.mem_copy_d2h(d_residual_scalar, h_residual_scalar)
         # Return the host memory
@@ -171,6 +188,7 @@ class _ObjectiveItem:
         driver.mem_copy_d2h(d_residual_vector, h_residual_vector)
         return np.sum(h_residual_vector)
         """
+
 
     def likelihood(self, params, out_extra=None):
         pass

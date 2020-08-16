@@ -57,7 +57,15 @@ public:
     ~DModelMMaps() {}
 
     void
-    prepare(void) {}
+    prepare(int spat_size_x, int spat_size_y,
+            int spec_size,
+            T spec_step,
+            T spec_zero,
+            T nanval,
+            Ptr scube,
+            Ptr mmaps,
+            Ptr mmaps_orders,
+            int mmaps_count) {};
 
     void
     moments(void) const {}
