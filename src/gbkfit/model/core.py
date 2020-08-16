@@ -6,25 +6,11 @@ import numpy as np
 from gbkfit.utils import parseutils
 
 
-class DModel(abc.ABC):
-
-    @staticmethod
-    @abc.abstractmethod
-    def type():
-        pass
+class DModel(parseutils.TypedParserSupport, abc.ABC):
 
     @staticmethod
     @abc.abstractmethod
     def is_compatible(gmodel):
-        pass
-
-    @classmethod
-    @abc.abstractmethod
-    def load(cls, info):
-        pass
-
-    @abc.abstractmethod
-    def dump(self):
         pass
 
     def __init__(self):
@@ -99,21 +85,7 @@ class DModel(abc.ABC):
         pass
 
 
-class GModel(abc.ABC):
-
-    @staticmethod
-    @abc.abstractmethod
-    def type():
-        pass
-
-    @classmethod
-    @abc.abstractmethod
-    def load(cls, info):
-        pass
-
-    @abc.abstractmethod
-    def dump(self):
-        pass
+class GModel(parseutils.TypedParserSupport, abc.ABC):
 
     @abc.abstractmethod
     def params(self):
