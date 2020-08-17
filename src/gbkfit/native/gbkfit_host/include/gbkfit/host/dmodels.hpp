@@ -19,7 +19,7 @@ public:
             int size_hi_x, int size_hi_y, int size_hi_z,
             int edge_hi_x, int edge_hi_y, int edge_hi_z,
             int scale_x, int scale_y, int scale_z,
-            Ptr scube_lo,
+            Ptr scube_lo, Ptr dmask_hi,
             Ptr scube_hi, Ptr scube_hi_fft,
             Ptr psf3d_hi, Ptr psf3d_hi_fft);
 
@@ -32,12 +32,19 @@ public:
     void
     downscale(void) const;
 
+    void
+    make_mask(void) const;
+
+    void
+    apply_mask(void) const;
+
 private:
 
     std::array<int, 3> m_size_lo;
     std::array<int, 3> m_size_hi;
     std::array<int, 3> m_edge_hi;
     std::array<int, 3> m_scale;
+    T* m_mask_hi;
     T* m_scube_lo;
     T* m_scube_hi;
     T* m_scube_hi_fft;

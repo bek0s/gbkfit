@@ -93,9 +93,9 @@ class DCube:
         self._cval = cval
         self._rota = rota
         self._scale = scale
-        self._dmask_lo = None
         self._dcube_lo = None
         self._dcube_hi = None
+        self._dmask_hi = None
         self._dcube_hi_fft = None
         self._psf3d_hi_fft = None
         self._psf = psf
@@ -173,33 +173,47 @@ class DCube:
             size_hi_fft = 2 * size_hi[2] * size_hi[1] * (size_hi[0] // 2 + 1)
             self._dcube_hi_fft = driver.mem_alloc_d(size_hi_fft, dtype)
             self._psf3d_hi_fft = driver.mem_alloc_d(size_hi_fft, dtype)
+        # The psf convolution also affects pixels outside the galaxy model
+        # Allocate a spatial mask for all the pixels of the galaxy model
+        if self._psf:
+            self._dmask_hi = driver.mem_alloc_d(size_hi[::-1][:2], dtype)
+            driver.mem_fill(self._dmask_hi, 0)
         # Create and prepare dcube backend
         self._dcube = driver.make_dmodel_dcube(dtype)
         self._dcube.prepare(
             size_lo, size_hi, edge_hi, scale,
-            self._dcube_lo,
+            self._dcube_lo, self._dmask_hi,
             self._dcube_hi, self._dcube_hi_fft,
             self._psf3d_hi, self._psf3d_hi_fft)
 
     def evaluate(self, out_extra):
 
+        if self._psf:
+            self._dcube.make_mask()
 
         if self._psf or self._lsf:
             self._dcube.convolve()
+
+        if self._psf:
+            self._dcube.apply_mask()
 
         if self._dcube_lo is not self._dcube_hi:
             self._dcube.downscale()
 
         if out_extra is not None:
-            out_extra['dcube_lo'] = self._driver.mem_copy_d2h(self._dcube_lo)
-            out_extra['dcube_hi'] = self._driver.mem_copy_d2h(self._dcube_hi)
+            out_extra.update(
+                dcube_lo=self._driver.mem_copy_d2h(self._dcube_lo),
+                dcube_hi=self._driver.mem_copy_d2h(self._dcube_hi))
             if self._psf:
-                out_extra['psf_lo'] = self._psf.asarray(self._step_lo[:2])
-                out_extra['psf_hi'] = self._psf.asarray(self._step_hi[:2])
-                out_extra['psf_hi_fft'] = self._psf_hi.copy()
+                out_extra.update(
+                    psf_lo=self._psf.asarray(self._step_lo[:2]),
+                    psf_hi=self._psf.asarray(self._step_hi[:2]),
+                    psf_hi_fft=self._psf_hi.copy())
             if self._lsf:
-                out_extra['lsf_lo'] = self._lsf.asarray(self._step_lo[2])
-                out_extra['lsf_hi'] = self._lsf.asarray(self._step_hi[2])
-                out_extra['lsf_hi_fft'] = self._lsf_hi.copy()
+                out_extra.update(
+                    lsf_lo=self._lsf.asarray(self._step_lo[2]),
+                    lsf_hi=self._lsf.asarray(self._step_hi[2]),
+                    lsf_hi_fft=self._lsf_hi.copy())
             if self._psf or self._lsf:
-                out_extra['psf3d_hi_fft'] = self._psf3d_hi.copy()
+                out_extra.update(
+                    psf3d_hi_fft=self._psf3d_hi.copy())

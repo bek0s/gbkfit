@@ -103,7 +103,7 @@ class DModelDCube(gbkfit.driver.driver.DModelDCube):
     def prepare(
             self,
             size_lo, size_hi, edge_hi, scale,
-            scube_lo,
+            scube_lo, dmask_hi,
             scube_hi, scube_hi_fft,
             psf3d_hi, psf3d_hi_fft):
         self._dcube.prepare(
@@ -111,7 +111,7 @@ class DModelDCube(gbkfit.driver.driver.DModelDCube):
             size_hi[0], size_hi[1], size_hi[2],
             edge_hi[0], edge_hi[1], edge_hi[2],
             scale[0], scale[1], scale[2],
-            _ptr(scube_lo),
+            _ptr(scube_lo), _ptr(dmask_hi),
             _ptr(scube_hi), _ptr(scube_hi_fft),
             _ptr(psf3d_hi), _ptr(psf3d_hi_fft))
 
@@ -120,6 +120,12 @@ class DModelDCube(gbkfit.driver.driver.DModelDCube):
 
     def downscale(self):
         self._dcube.downscale()
+
+    def make_mask(self):
+        self._dcube.make_mask()
+
+    def apply_mask(self):
+        self._dcube.apply_mask()
 
 
 class DModelMMaps(gbkfit.driver.driver.DModelMMaps):

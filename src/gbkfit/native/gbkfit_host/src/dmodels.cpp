@@ -10,6 +10,7 @@ DModelDCube<T>::DModelDCube(void)
     , m_size_hi{0, 0, 0}
     , m_edge_hi{0, 0, 0}
     , m_scale{0, 0, 0}
+    , m_mask_hi{nullptr}
     , m_scube_lo{nullptr}
     , m_scube_hi{nullptr}
     , m_scube_hi_fft{nullptr}
@@ -32,7 +33,7 @@ DModelDCube<T>::prepare(
         int size_hi_x, int size_hi_y, int size_hi_z,
         int edge_hi_x, int edge_hi_y, int edge_hi_z,
         int scale_x, int scale_y, int scale_z,
-        Ptr scube_lo,
+        Ptr scube_lo, Ptr dmask_hi,
         Ptr scube_hi, Ptr scube_hi_fft,
         Ptr psf3d_hi, Ptr psf3d_hi_fft)
 {
@@ -42,6 +43,7 @@ DModelDCube<T>::prepare(
     m_size_hi = {size_hi_x, size_hi_y, size_hi_z};
     m_edge_hi = {edge_hi_x, edge_hi_y, edge_hi_z};
     m_scale = {scale_x, scale_y, scale_z};
+    m_mask_hi = reinterpret_cast<T*>(dmask_hi);
     m_scube_lo = reinterpret_cast<T*>(scube_lo);
     m_scube_hi = reinterpret_cast<T*>(scube_hi);
     m_scube_hi_fft = reinterpret_cast<T*>(scube_hi_fft);
@@ -139,6 +141,22 @@ DModelDCube<T>::downscale(void) const
             m_size_lo[0], m_size_lo[1], m_size_lo[2],
             m_scube_hi,
             m_scube_lo);
+}
+
+template<typename T> void
+DModelDCube<T>::make_mask(void) const
+{
+    kernels::dcube_make_mask(
+            m_size_hi[0], m_size_hi[1], m_size_hi[2],
+            m_scube_hi, m_mask_hi);
+}
+
+template<typename T> void
+DModelDCube<T>::apply_mask(void) const
+{
+    kernels::dcube_apply_mask(
+            m_size_hi[0], m_size_hi[1], m_size_hi[2],
+            m_scube_hi, m_mask_hi);
 }
 
 template<typename T>

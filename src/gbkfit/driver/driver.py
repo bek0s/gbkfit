@@ -78,7 +78,7 @@ class DModelDCube(abc.ABC):
     def prepare(
             self,
             size_lo, size_hi, edge_hi, scale,
-            scube_lo,
+            scube_lo, dmask_hi,
             scube_hi, scube_hi_fft,
             psf3d_hi, psf3d_hi_fft):
         pass
@@ -89,6 +89,14 @@ class DModelDCube(abc.ABC):
 
     @abc.abstractmethod
     def downscale(self):
+        pass
+
+    @abc.abstractmethod
+    def make_mask(self):
+        pass
+
+    @abc.abstractmethod
+    def apply_mask(self):
         pass
 
 

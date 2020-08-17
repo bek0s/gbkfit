@@ -31,6 +31,59 @@ struct RNG
 namespace gbkfit { namespace host { namespace kernels {
 
 template<typename T> void
+dcube_make_mask(int size_x, int size_y, int size_z, const T* cube, T* mask)
+{
+    #pragma omp parallel for collapse(2)
+    for(int y = 0; y < size_y; ++y)
+    {
+    for(int x = 0; x < size_x; ++x)
+    {
+        for(int z = 0; z < size_z; ++z)
+        {
+            int idx = x
+                    + y * size_x
+                    + z * size_x * size_y;
+
+            if (cube[idx])
+            {
+                int idx = x
+                        + y * size_x;
+
+                mask[idx] = 1;
+                break;
+            }
+        }
+    }
+    }
+}
+
+template<typename T> void
+dcube_apply_mask(int size_x, int size_y, int size_z, T* cube, const T* mask)
+{
+    #pragma omp parallel for collapse(2)
+    for(int y = 0; y < size_y; ++y)
+    {
+    for(int x = 0; x < size_x; ++x)
+    {
+        int idx = x
+                + y * size_x;
+
+        if (!mask[idx])
+        {
+            for(int z = 0; z < size_z; ++z)
+            {
+                int idx = x
+                        + y * size_x
+                        + z * size_x * size_y;
+
+                cube[idx] = 0;
+            }
+        }
+    }
+    }
+}
+
+template<typename T> void
 complex_multiply_and_scale(
         typename fftw3<T>::complex* arr1,
         typename fftw3<T>::complex* arr2,
