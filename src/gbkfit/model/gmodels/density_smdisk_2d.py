@@ -9,10 +9,6 @@ __all__ = ['DensitySMDisk2D']
 class DensitySMDisk2D(DensityComponent2D):
 
     @staticmethod
-    def desc():
-        return 'smooth density disk (2D)'
-
-    @staticmethod
     def type():
         return 'smdisk'
 

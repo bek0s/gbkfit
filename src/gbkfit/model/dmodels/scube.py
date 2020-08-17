@@ -12,10 +12,6 @@ __all__ = ['DModelSCube']
 class DModelSCube(DModel):
 
     @staticmethod
-    def desc():
-        return 'spectral cube'
-
-    @staticmethod
     def type():
         return 'scube'
 

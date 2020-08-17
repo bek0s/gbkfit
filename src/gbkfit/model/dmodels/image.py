@@ -12,10 +12,6 @@ __all__ = ['DModelImage']
 class DModelImage(DModel):
 
     @staticmethod
-    def desc():
-        return 'image'
-
-    @staticmethod
     def type():
         return 'image'
 

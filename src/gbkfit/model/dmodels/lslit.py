@@ -12,10 +12,6 @@ __all__ = ['DModelLSlit']
 class DModelLSlit(DModel):
 
     @staticmethod
-    def desc():
-        return 'long slit'
-
-    @staticmethod
     def type():
         return 'lslit'
 

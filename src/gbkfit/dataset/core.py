@@ -148,10 +148,6 @@ class Data:
 
 class Dataset(parseutils.TypedParserSupport, abc.ABC):
 
-    @staticmethod
-    def desc():
-        return 'dataset'
-
     def __init__(self, data):
         desc = make_dataset_desc(self.__class__)
         # At least one data item must be defined

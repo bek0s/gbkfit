@@ -13,10 +13,6 @@ __all__ = ['DModelMMaps']
 class DModelMMaps(DModel):
 
     @staticmethod
-    def desc():
-        return 'moment maps'
-
-    @staticmethod
     def type():
         return 'mmaps'
 

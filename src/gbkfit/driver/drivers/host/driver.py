@@ -18,10 +18,6 @@ def _shape(a):
 class DriverHost(gbkfit.driver.Driver):
 
     @staticmethod
-    def desc():
-        return 'host'
-
-    @staticmethod
     def type():
         return 'host'
 
