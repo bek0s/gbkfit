@@ -93,30 +93,41 @@ class DModelDCube(gbkfit.driver.driver.DModelDCube):
     _CLASSES = {
         np.float32: gbkfit.native.libgbkfit_cuda.DModelDCubef32}
 
+    def __deepcopy__(self, memodict):
+        return DModelDCube(self._dtype)
+
     def __init__(self, dtype):
         _detail.check_dtype(self._CLASSES, dtype)
         self._dcube = self._CLASSES[dtype]()
+        self._dtype = dtype
 
-    def prepare(
+    def convolve(
             self,
-            size_lo, size_hi, edge_hi, scale,
-            scube_lo,
+            size_hi,
             scube_hi, scube_hi_fft,
             psf3d_hi, psf3d_hi_fft):
-        self._dcube.prepare(
-            size_lo[0], size_lo[1], size_lo[2],
-            size_hi[0], size_hi[1], size_hi[2],
-            edge_hi[0], edge_hi[1], edge_hi[2],
-            scale[0], scale[1], scale[2],
-            _ptr(scube_lo),
+        self._dcube.convolve(
+            size_hi,
             _ptr(scube_hi), _ptr(scube_hi_fft),
             _ptr(psf3d_hi), _ptr(psf3d_hi_fft))
 
-    def convolve(self):
-        self._dcube.convolve()
+    def downscale(
+            self,
+            scale,
+            edge_hi,
+            size_hi, size_lo,
+            scube_hi, scube_lo):
+        self._dcube.downscale(
+            scale,
+            edge_hi,
+            size_hi, size_lo,
+            _ptr(scube_hi), _ptr(scube_lo))
 
-    def downscale(self):
-        self._dcube.downscale()
+    def make_mask(self, size, data, mask):
+        self._dcube.make_mask(size, _ptr(data), _ptr(mask))
+
+    def apply_mask(self, size, data, mask):
+        self._dcube.apply_mask(size, _ptr(data), _ptr(mask))
 
 
 class DModelMMaps(gbkfit.driver.driver.DModelMMaps):
@@ -124,9 +135,13 @@ class DModelMMaps(gbkfit.driver.driver.DModelMMaps):
     _CLASSES = {
         np.float32: gbkfit.native.libgbkfit_cuda.DModelMMapsf32}
 
+    def __deepcopy__(self, memodict):
+        return DModelMMaps(self._dtype)
+
     def __init__(self, dtype):
         _detail.check_dtype(self._CLASSES, dtype)
         self._mmaps = self._CLASSES[dtype]()
+        self._dtype = dtype
 
     def prepare(
             self,
@@ -153,9 +168,13 @@ class GModelMCDisk(gbkfit.driver.driver.GModelMCDisk):
     _CLASSES = {
         np.float32: gbkfit.native.libgbkfit_cuda.GModelMCDiskf32}
 
+    def __deepcopy__(self, memodict):
+        return GModelMCDisk(self._dtype)
+
     def __init__(self, dtype):
         _detail.check_dtype(self._CLASSES, dtype)
         self._disk = self._CLASSES[dtype]()
+        self._dtype = dtype
 
     def evaluate(
             self,
@@ -224,9 +243,13 @@ class GModelSMDisk(gbkfit.driver.driver.GModelSMDisk):
     _CLASSES = {
         np.float32: gbkfit.native.libgbkfit_cuda.GModelSMDiskf32}
 
+    def __deepcopy__(self, memodict):
+        return GModelSMDisk(self._dtype)
+
     def __init__(self, dtype):
         _detail.check_dtype(self._CLASSES, dtype)
         self._disk = self._CLASSES[dtype]()
+        self._dtype = dtype
 
     def evaluate(
             self,

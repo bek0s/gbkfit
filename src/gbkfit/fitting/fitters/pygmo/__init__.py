@@ -3,6 +3,6 @@ try:
     import pygmo
 except ImportError:
     raise ImportError(
-        "to use the pygmo fitter please install pygmo")
+        "could not import pygmo fitter; make sure pygmo is installed")
 
-from .pygmo import FitterPygmo
+from .fitter import *

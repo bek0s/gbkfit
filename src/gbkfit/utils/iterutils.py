@@ -3,8 +3,6 @@ import collections
 import collections.abc
 import copy
 
-import funcy
-
 
 def is_iterable(x, strict=True):
     return isinstance(x, (tuple, list, set, dict)) if strict \
@@ -90,8 +88,4 @@ def is_iterable_of_type(x, type_):
 
 def is_sequence_of_type(x, type_):
     return is_sequence(x) and all(isinstance(i, type_) for i in x)
-
-
-def flatten(x):
-    return funcy.flatten(x)
 

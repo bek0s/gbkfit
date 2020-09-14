@@ -6,7 +6,11 @@ import numbers
 import asteval
 import numpy as np
 
+from gbkfit.params.descs import ParamScalarDesc
 from . import utils
+
+
+__all__ = ['ParamInterpreter']
 
 
 log = logging.getLogger(__name__)
@@ -37,18 +41,13 @@ class ParamInterpreter:
             minimal=True, use_numpy=False,
             writer=_StdWriter, err_writer=_ErrWriter)
         for name, desc in descs.items():
-            self._interpr.symtable[name] = np.nan if desc.is_scalar() \
+            self._interpr.symtable[name] = np.nan \
+                if isinstance(desc, ParamScalarDesc) \
                 else np.full(desc.size(), np.nan, dtype)
         # Setup exploded parameter names
-        self._eparams_all = []
-        self._eparams_free = []
+        self._eparams_all = utils.explode_pdescs(descs.values(), descs.keys())
+        self._eparams_free = self._eparams_all.copy()
         self._eparams_fixed = []
-        for name, desc in descs.items():
-            for i in range(desc.size()):
-                eparam = name if desc.is_scalar() \
-                    else utils.make_param_symbol(name, i)
-                self._eparams_all.append(eparam)
-                self._eparams_free.append(eparam)
         # Parse and validate expressions
         (self._expr_keys,
          self._expr_values,
@@ -56,7 +55,7 @@ class ParamInterpreter:
          self._expr_indices,
          self._expr_asts) = utils.parse_param_exprs(exprs, descs)
         # Adjust exploded parameter names based on the expressions
-        for ename in utils.explode_params(self._expr_names, self._expr_indices):
+        for ename in utils.explode_pnames(self._expr_names, self._expr_indices):
             self._eparams_free.remove(ename)
             self._eparams_fixed.append(ename)
 
@@ -68,22 +67,6 @@ class ParamInterpreter:
 
     def get_param_names(self, free=True, fixed=False):
         return self._eparams_free * free + self._eparams_fixed * fixed
-
-    def evaluate_params(self, eparams, check=True):
-        return self.evaluate_params(eparams, check)
-
-    def evaluate_eparams(self, eparams, check=True):
-        self.evaluate_params(eparams, check)
-        # Retrieve exploded (free or fixed) parameter dicts
-        eparams = {}
-        eparams.update({
-            p: self._interpr(p) for p in self._eparams_all})
-        eparams_free = {}
-        eparams_free.update({
-            p: self._interpr(p) for p in self._eparams_free})
-        eparams_fixed = {}
-        eparams_fixed.update({
-            p: self._interpr(p) for p in self._eparams_fixed})
 
     def evaluate(
             self, eparams, check=True,
@@ -143,7 +126,7 @@ class ParamInterpreter:
                     f"to sequence of size {len(lhs_indices)}")
 
             # lhs and rhs are valid and compatible with each other
-            if self._descs[lhs_name].is_scalar():
+            if isinstance(self._descs[lhs_name], ParamScalarDesc):
                 self._interpr.symtable[lhs_name] = rhs_value
             else:
                 self._interpr.symtable[lhs_name][lhs_indices] = rhs_value

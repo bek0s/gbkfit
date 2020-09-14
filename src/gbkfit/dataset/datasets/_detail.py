@@ -5,9 +5,9 @@ from gbkfit.utils import parseutils
 
 def load_dataset_common(cls, info, names):
     desc = gbkfit.dataset.make_dataset_desc(cls)
-    opts = parseutils.parse_options(
-        info, desc, add_optional=['step', 'rpix', 'rval', 'rota'],
-        fun=cls.__init__)[0]
+    opts = parseutils.parse_options_for_callable(
+        info, desc, cls.__init__,
+        add_optional=['step', 'rpix', 'rval', 'rota'])
     for name in names:
         if name in opts:
             opts[name] = gbkfit.dataset.data_parser.load_one(

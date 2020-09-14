@@ -12,6 +12,7 @@ import networkx
 import networkx.algorithms.dag
 import numpy as np
 
+from gbkfit.params.descs import ParamScalarDesc, ParamVectorDesc
 from gbkfit.utils import iterutils
 
 
@@ -68,10 +69,6 @@ _REGEX_PARAM_SYMBOL = (
 _REGEX_PARAM_ATTRIB_NAME = r'\*?[_a-zA-Z]'
 
 
-def _remove_white_space(x):
-    return ''.join(x.split())
-
-
 def _is_param_symbol(x):
     return re.match(fr'^{_REGEX_PARAM_SYMBOL}$', x)
 
@@ -120,6 +117,10 @@ def _is_param_attrib_name(x):
     return re.match(fr'^{_REGEX_PARAM_ATTRIB_NAME}$', x)
 
 
+def _remove_white_space(x):
+    return ''.join(x.split())
+
+
 def _split_param_symbol(x):
     x = _remove_white_space(x)
     name = x[:x.find('[')].strip() if '[' in x else x
@@ -152,8 +153,10 @@ def _parse_param_symbol_subscript(x, size):
         indices = _parse_param_symbol_subscript_bindx(x)
     elif _is_param_symbol_subscript_slice(x):
         indices = _parse_param_symbol_subscript_slice(x, size)
-    else:  # _is_param_symbol_subscript_aindx(x)
+    elif _is_param_symbol_subscript_aindx(x):
         indices = _parse_param_symbol_subscript_aindx(x)
+    else:
+        raise RuntimeError()
     return indices
 
 
@@ -162,7 +165,7 @@ def _validate_param_indices(indices, size):
     def is_invalid(i): return not is_valid(i)
     valid_indices = set(filter(is_valid, indices))
     invalid_indices = set(filter(is_invalid, indices))
-    return valid_indices, sorted(invalid_indices)
+    return sorted(valid_indices), sorted(invalid_indices)
 
 
 def _unwrap_param_indices(indices, size):
@@ -186,15 +189,36 @@ def make_param_symbol(name, index):
         else f'{name}{make_param_symbol_subscript_bindx(index)}'
 
 
-def explode_param(name, indices):
-    return [make_param_symbol(name, i) for i in iterutils.listify(indices)]
+def explode_pname(name, indices):
+    eparams = []
+    for index in iterutils.listify(indices):
+        eparams.append(make_param_symbol(name, index))
+    return eparams
 
 
-def explode_params(name_list, indices_list):
+def explode_pnames(name_list, indices_list):
     eparams = []
     for name, indices in zip(name_list, indices_list):
-        eparams.extend(explode_param(name, indices))
+        eparams.extend(explode_pname(name, indices))
     return eparams
+
+
+def explode_pdesc(desc, name=None):
+    enames = []
+    name = name if name else desc.name()
+    if isinstance(desc, ParamScalarDesc):
+        enames.append(explode_pname(name, None)[0])
+    elif isinstance(desc, ParamVectorDesc):
+        enames.extend(explode_pname(name, list(range(desc.size()))))
+    return enames
+
+
+def explode_pdescs(descs, names=None):
+    enames = []
+    names = names if names else [desc.name() for desc in descs]
+    for name, desc in zip(names, descs):
+        enames.extend(explode_pdesc(desc, name))
+    return enames
 
 
 def is_param_value_expr(x, accept_num=True, accept_vec=True):
@@ -203,22 +227,8 @@ def is_param_value_expr(x, accept_num=True, accept_vec=True):
     is_str = isinstance(x, str)
     is_num = isinstance(x, ntypes)
     is_vec = isinstance(x, vtypes) and all(isinstance(n, ntypes) for n in x)
-    result = is_str
-    if accept_num:
-        result = result or is_num
-    if accept_vec:
-        result = result or is_vec
-    return result
-
-
-def explode_pdescs(descs):
-    enames = []
-    for name, desc in descs.items():
-        if desc.is_scalar():
-            enames.append(name)
-        else:
-            enames.extend(explode_param(name, list(range(desc.size()))))
-    return enames
+    is_none = x is None
+    return is_str or (accept_num and is_num) or (accept_vec and is_vec) or is_none
 
 
 class _ParamExprVisitor(ast.NodeVisitor):
@@ -246,7 +256,8 @@ class _ParamExprVisitor(ast.NodeVisitor):
         if not desc:
             return
         # If symbol is a vector, generate all possible indices.
-        indices = list(range(desc.size())) if desc.is_vector() else None
+        indices = list(range(desc.size())) \
+            if isinstance(desc, ParamVectorDesc) else None
         # Store symbol name along with its indices (if a vector).
         self._symbols[name] = indices
 
@@ -261,7 +272,7 @@ class _ParamExprVisitor(ast.NodeVisitor):
             return
         # If symbol is a scalar,
         # mark symbol as invalid and ignore this node.
-        if desc.is_scalar():
+        if isinstance(desc, ParamScalarDesc):
             self._invalid_scalars.add(code)
             return
         # If symbol subscript syntax is not supported,
@@ -327,7 +338,7 @@ def parse_param_keys(
         if not desc:
             invalid_keys_unknown.append(rkey)
             continue
-        if desc.is_scalar():
+        if isinstance(desc, ParamScalarDesc):
             # Skip keys which are supposed to be scalars,
             # but have a subscript
             if subscript is not None:
@@ -503,7 +514,7 @@ def parse_param_exprs(
             continue
         # Keep track of the parent key for each exploded param
         eparams_to_keys.update(
-            {eparam: key for eparam in explode_param(name, indices)})
+            {eparam: key for eparam in explode_pname(name, indices)})
         # This is a valid key-value pair
         keys_2.append(key)
         values_2.append(value)
@@ -549,8 +560,8 @@ def parse_param_exprs(
     graph = networkx.DiGraph()
     for name, indices, symbols in zip(
             param_names_2, param_indices_2, expr_param_symbols):
-        eparams_lhs = explode_param(name, indices)
-        eparams_rhs = explode_params(symbols.keys(), symbols.values())
+        eparams_lhs = explode_pname(name, indices)
+        eparams_rhs = explode_pnames(symbols.keys(), symbols.values())
         for pair in itertools.product(eparams_lhs, eparams_rhs):
             graph.add_edge(pair[0], pair[1])
 
@@ -643,10 +654,10 @@ def parse_param_values(
                 evalues.append(value)
             else:
                 indices = iterutils.listify(indices)
-                enames.extend(explode_param(name, indices))
+                enames.extend(explode_pname(name, indices))
                 evalues.extend([copy.deepcopy(value) for _ in indices])
         elif isinstance(value, (tuple, list, np.ndarray)):
-            ienames = explode_param(name, indices)
+            ienames = explode_pname(name, indices)
             if len(ienames) == len(value):
                 for iename, ievalue in zip(ienames, value):
                     if is_value_fun(ievalue):
@@ -758,7 +769,7 @@ def parse_param_info(
             # This is a vector with slice or advanced indexing
             else:
                 nindices = len(indices)
-                ieparams = explode_param(name, indices)
+                ieparams = explode_pname(name, indices)
                 ievalues = iterutils.make_list((nindices,), {}, True)
                 for akey, avalue in value.items():
                     if _is_param_attrib_name(akey):
@@ -828,3 +839,56 @@ def parse_param_info(
 
     return (keys_2, values_2, param_names_2, param_indices_2,
             dict(zip(eparams, evalues)), exprs)
+
+
+import inspect
+import textwrap
+
+from gbkfit.utils import miscutils, parseutils
+
+
+
+
+
+def load_expressions(info):
+    if not info:
+        return None
+    desc = 'parameter expressions'
+    opts = parseutils.parse_options(info, desc, ['file', 'func'])
+    return miscutils.get_attr_from_file(opts['file'], opts['func'])
+
+
+def load_econstraints(info):
+    if not info:
+        return None
+    desc = 'parameter equality constraints'
+    opts = parseutils.parse_options(info, desc, ['file', 'func'])
+    return miscutils.get_attr_from_file(opts['file'], opts['func'])
+
+
+def load_iconstraints(info):
+    if not info:
+        return None
+    desc = 'parameter inequality constraints'
+    opts = parseutils.parse_options(info, desc, ['file', 'func'])
+    return miscutils.get_attr_from_file(opts['file'], opts['func'])
+
+
+def _dump_function(func, file):
+    with open(file, 'a') as f:
+        f.write('\n')
+        f.write(textwrap.dedent(inspect.getsource(func)))
+        f.write('\n')
+    return dict(file=file, func=func.__name__)
+
+
+def dump_expressions(func, file='gbkfit_config_expressions.py'):
+    return _dump_function(func, file) if func else None
+
+
+def dump_econstraints(func, file='gbkfit_config_econstraints.py'):
+    return _dump_function(func, file) if func else None
+
+
+def dump_iconstraints(func, file='gbkfit_config_iconstraints.py'):
+    return _dump_function(func, file) if func else None

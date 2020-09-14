@@ -1,58 +1,67 @@
 
 import abc
-import logging
+import copy
+import numbers
 
 from gbkfit.params.utils import (
-    explode_params, explode_pdescs,
-    parse_param_exprs, parse_param_values)
+    explode_pdescs,
+    explode_pnames,
+    parse_param_values)
+
+from gbkfit.utils import parseutils
+from gbkfit.params.expressions import Expressions
 
 
-log = logging.getLogger(__name__)
-
-
-class FitParam(abc.ABC):
+class FitParam(parseutils.BasicParserSupport, abc.ABC):
     pass
 
 
-class FitParams(abc.ABC):
+class FitParams(parseutils.BasicParserSupport, abc.ABC):
 
-    @classmethod
-    @abc.abstractmethod
-    def load(cls, info, descs):
-        pass
+    def __init__(self, descs, params, exprs_func):
 
-    def __init__(self, params, descs):
+        def is_nfo(x): return isinstance(x, FitParam)
+        def is_nil(x): return isinstance(x, type(None))
+        def is_num(x): return isinstance(x, numbers.Number)
+        def is_val(x): return is_nfo(x) or is_nil(x) or is_num(x)
+        names, indices, values, exprs = parse_param_values(
+            params, descs, is_val)[2:]
+        vals_nfo = dict(filter(lambda x: is_nfo(x[1]), values.items()))
+        vals_nil = dict(filter(lambda x: is_nil(x[1]), values.items()))
+        vals_num = dict(filter(lambda x: is_num(x[1]), values.items()))
 
-        # Extract information about the parameters
-        keys, values, names, indices, infos, exprs = parse_param_values(
-            params, descs, lambda x: isinstance(x, FitParam))
-
-        # Make sure all parameters have been provided
-        missing = set(explode_pdescs(descs)).difference(
-            explode_params(names, indices))
+        enames_from_params = explode_pnames(names, indices)
+        enames_from_pdescs = explode_pdescs(descs.values(), descs.keys())
+        missing = set(enames_from_pdescs).difference(enames_from_params)
         if missing:
             raise RuntimeError(
-                f"the following parameters are required but not provided: "
-                f"{str(missing)}")
+                f"information for the following parameters is required "
+                f"but not provided: {str(missing)}")
 
-        self._descs = descs
-        self._infos = infos
-        self._exprs = dict(zip(*parse_param_exprs(exprs, descs)[0:2]))
+        self._descs = copy.deepcopy(descs)
+        self._infos = vals_nfo
+        exprs = {**vals_nil, **vals_num, **exprs}
+        self._exprs = Expressions(descs, exprs, exprs_func)
 
     def descs(self):
         return self._descs
 
-    def exprs(self):
-        return self._exprs
-
     def infos(self):
         return self._infos
 
-    def enames(self):
-        pass
+    def exprs(self):
+        return self._exprs
 
-    def enames_free(self):
-        pass
+    def names(self, free=True, fixed=False):
+        return self._exprs.names(free, fixed)
 
-    def enames_fixed(self):
-        pass
+    def expressions(self):
+        return self._exprs
+
+
+def make_fitparam_desc(cls):
+    return f'fit parameter (class={cls.__qualname__})'
+
+
+def make_fitparams_desc(cls):
+    return f'fit parameters (class={cls.__qualname__})'

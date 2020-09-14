@@ -1,13 +1,10 @@
 
 try:
-    import emcee
+    import emcee as _emcee
 except ImportError:
-    raise ImportError(
+    raise ModuleNotFoundError(
         "to use the emcee fitter please install emcee")
 
-
-class FitterEmcee:
-
-    @staticmethod
-    def type():
-        return "emcee"
+from .core import *
+from .moves import *
+from .sampler import *

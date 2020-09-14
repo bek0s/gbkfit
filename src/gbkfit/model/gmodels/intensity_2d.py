@@ -16,7 +16,7 @@ class GModelIntensity2D(GModelImageSupport, GModel):
     @classmethod
     def load(cls, info):
         desc = make_gmodel_desc(cls)
-        opts = parseutils.parse_options(info, desc, fun=cls.__init__)[0]
+        opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
         opts.update(
             components=component_d2d_parser.load(info['components']))
         return cls(**opts)

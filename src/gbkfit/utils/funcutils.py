@@ -16,4 +16,4 @@ def extract_args(func):
         else:
             optional.add(pname)
     required.discard('self')
-    return required, optional
+    return required | optional, required, optional

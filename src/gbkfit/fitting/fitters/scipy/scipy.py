@@ -29,7 +29,7 @@ class FitParamScipyLeastSqr(FitParamScipy):
         desc = f'fit parameter (class: {cls.__qualname__})'
         cls_args = parseutils.parse_options(
             info, desc, fun=cls.__init__, fun_rename_args=dict(
-                initial='init', minimum='min', maximum='max'))
+                initial='init', minimum='min', maximum='max'))[0]
         return cls(**cls_args)
 
     def __init__(
@@ -65,7 +65,7 @@ class FitParamScipyMinimize(FitParamScipy):
         desc = f'fit parameter (class: {cls.__qualname__})'
         cls_args = parseutils.parse_options(
             info, desc, fun=cls.__init__, fun_rename_args=dict(
-                initial='init', minimum='min', maximum='max'))
+                initial='init', minimum='min', maximum='max'))[0]
         return cls(**cls_args)
 
     def __init__(
@@ -133,7 +133,7 @@ class FitterScipy(gbkfit.fitting.fitter.Fitter):
         definite_attrs = ['status', 'message', 'nit', 'nfev']
         optional_attrs = ['jac', 'hess', 'njev', 'nhev']
         for attr in definite_attrs:
-            extra[attr] = getattr(result1, attr)
+            extra[attr] = getattr(result1, attr, None)
         for attr in optional_attrs:
             if hasattr(result1, attr):
                 extra[attr] = getattr(result1, attr)
@@ -155,7 +155,7 @@ class FitterScipyLeastSquares(FitterScipy):
     @classmethod
     def load(cls, info):
         desc = f'{cls.type()} fitter (class: {cls.__qualname__})'
-        cls_args = parseutils.parse_options(info, desc, fun=cls.__init__)
+        cls_args = parseutils.parse_options(info, desc, fun=cls.__init__)[0]
         return cls(**cls_args)
 
     @staticmethod

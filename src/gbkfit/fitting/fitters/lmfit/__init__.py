@@ -13,6 +13,10 @@ from gbkfit.fitting import result
 from gbkfit.utils import parseutils
 
 
+from gbkfit.fitting.fitter import Fitter
+from gbkfit.fitting.params import FitParam, FitParams
+
+
 log = logging.getLogger(__name__)
 
 
@@ -21,7 +25,6 @@ def _residual_params(x, interpreter):
     evalues = x.valuesdict().values()
     eparams = dict(zip(enames, evalues))
     params = interpreter.evaluate(eparams)
-    print(params)
     return params
 
 
@@ -29,15 +32,17 @@ def _residual_scalar(params, objective, interpreter):
     return objective.residual_scalar(_residual_params(params, interpreter))
 
 
-def _residual_vector(params, objective, interpreter):
-    return objective.residual_vector(_residual_params(params, interpreter))
+def _residual_vector(params, objective, interpreter, callback):
+    params = _residual_params(params, interpreter)
+    callback(objective, params)
+    return objective.residual_vector(params)
 
 
-class FitParamLMFit(gbkfit.fitting.params.FitParam, abc.ABC):
+class FitParamLMFit(FitParam, abc.ABC):
     pass
 
 
-class FitParamsLMFit(gbkfit.fitting.params.FitParams, abc.ABC):
+class FitParamsLMFit(FitParams, abc.ABC):
     pass
 
 
@@ -45,11 +50,14 @@ class FitParamLMFitLeastSqr(FitParamLMFit):
 
     @classmethod
     def load(cls, info):
-        desc = f'fit parameter (class: {cls.__qualname__})'
-        cls_args = parseutils.parse_options(
-            info, desc, fun=cls.__init__, fun_rename_args=dict(
-                initial='init', minimum='min', maximum='max'))
-        return cls(**cls_args)
+        desc = gbkfit.fitting.params.make_fitparam_desc(cls)
+        opts = parseutils.parse_options_for_callable(
+            info, desc, cls.__init__, fun_rename_args=dict(
+                initial='val', minimum='min', maximum='max'))
+        return cls(**opts)
+
+    def dump(self):
+        pass
 
     def __init__(
             self, initial, minimum=-np.inf, maximum=np.inf,
@@ -81,11 +89,11 @@ class FitParamLMFitNelderMead(FitParamLMFit):
 
     @classmethod
     def load(cls, info):
-        desc = f'fit parameter (class: {cls.__qualname__})'
-        cls_args = parseutils.parse_options(
-            info, desc, fun=cls.__init__, fun_rename_args=dict(
+        desc = gbkfit.fitting.params.make_fitparam_desc(cls)
+        opts = parseutils.parse_options_for_callable(
+            info, desc, cls.__init__, fun_rename_args=dict(
                 initial='init', minimum='min', maximum='max'))
-        return cls(**cls_args)
+        return cls(**opts)
 
     def __init__(
             self, initial, minimum=-np.inf, maximum=np.inf):
@@ -113,6 +121,9 @@ class FitParamsLMFitLeastSquares(FitParamsLMFit):
             infos[k] = FitParamLMFitLeastSqr.load(v)
         return cls({**infos, **exprs}, descs)
 
+    def dump(self):
+        pass
+
     def __init__(self, params, descs):
         super().__init__(params, descs)
 
@@ -130,7 +141,7 @@ class FitParamsLMFitNelderMead(FitParamsLMFit):
         super().__init__(params, descs)
 
 
-class FitterLMFit(gbkfit.fitting.fitter.Fitter):
+class FitterLMFit(Fitter):
 
     def __init__(self, method, iter_cb, scale_covar, max_nfev):
         super().__init__()
@@ -142,21 +153,24 @@ class FitterLMFit(gbkfit.fitting.fitter.Fitter):
             calc_covar=True,
             max_nfev=max_nfev)
 
-    def _fit_impl(self, objective, parameters, interpreter):
-        result1 = self._fit_impl2(objective, parameters, interpreter)
+    def _fit_impl(self, objective, parameters, interpreter, **kwargs):
+        result1 = self._fit_impl2(objective, parameters, interpreter, **kwargs)
         extra = dict()
         attrs = [
             'success', 'status', 'message', 'nfev',
-            'chisqr',  'redchi', 'aic', 'bic']
+            'chisqr',  'redchi', 'aic', 'bic', 'covar']
         for attr in attrs:
             if hasattr(result1, attr):
                 extra[attr] = getattr(result1, attr)
-        result2 = result.FitterResult(objective, parameters, extra)
+
+        print(extra)
+        exit()
+        result2 = result.FitterResult(objective, parameters, extra=extra)
         result2.add_mode(mode=[p.value for p in result1.params.values()])
         return result2
 
     @abc.abstractmethod
-    def _fit_impl2(self, objective, parameters, interpreter):
+    def _fit_impl2(self, objective, parameters, interpreter, **kwargs):
         pass
 
 
@@ -169,8 +183,8 @@ class FitterLMFitLeastSquares(FitterLMFit):
     @classmethod
     def load(cls, info):
         desc = f'{cls.type()} fitter (class: {cls.__qualname__})'
-        cls_args = parseutils.parse_options(info, desc, fun=cls.__init__)
-        return cls(**cls_args)
+        opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
+        return cls(**opts)
 
     @staticmethod
     def load_params(info, descs):
@@ -193,7 +207,7 @@ class FitterLMFitLeastSquares(FitterLMFit):
             tr_solver=tr_solver, tr_options=tr_options if tr_options else {},
             jac_sparsity=jac_sparsity, verbose=verbose)
 
-    def _fit_impl2(self, objective, parameters, interpreter):
+    def _fit_impl2(self, objective, parameters, interpreter, **kwargs):
         common_kws = copy.deepcopy(self._common_kws)
         method_kws = copy.deepcopy(self._method_kws)
         x_scale = method_kws.pop('x_scale')
@@ -222,8 +236,9 @@ class FitterLMFitLeastSquares(FitterLMFit):
             x_scales.append(p_x_scale)
             diff_steps.append(p_diff_step)
         result = lmfit.minimize(
-            _residual_vector, args=(objective, interpreter),
-            params=parameters_, **common_kws, **method_kws)
+            _residual_vector, args=(objective, interpreter, kwargs['callback']),
+            params=parameters_, x_scale=x_scales, diff_step=diff_steps,
+            **common_kws, **method_kws)
         return result
 
 
@@ -236,8 +251,8 @@ class FitterLMFitNelderMead(FitterLMFit):
     @classmethod
     def load(cls, info):
         desc = f'{cls.type()} fitter (class: {cls.__qualname__})'
-        cls_args = parseutils.parse_options(info, desc, fun=cls.__init__)
-        return cls(**cls_args)
+        opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
+        return cls(**opts)
 
     @staticmethod
     def load_params(info, descs):

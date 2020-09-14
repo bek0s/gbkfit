@@ -4,7 +4,7 @@ import abc
 from gbkfit.utils import parseutils
 
 
-class Driver(parseutils.SimpleParserSupport, abc.ABC):
+class Driver(parseutils.BasicParserSupport, abc.ABC):
 
     @staticmethod
     @abc.abstractmethod
@@ -75,28 +75,28 @@ class Driver(parseutils.SimpleParserSupport, abc.ABC):
 class DModelDCube(abc.ABC):
 
     @abc.abstractmethod
-    def prepare(
+    def convolve(
             self,
-            size_lo, size_hi, edge_hi, scale,
-            scube_lo, dmask_hi,
+            size_hi,
             scube_hi, scube_hi_fft,
             psf3d_hi, psf3d_hi_fft):
         pass
 
     @abc.abstractmethod
-    def convolve(self):
+    def downscale(
+            self,
+            scale,
+            edge_hi,
+            size_hi, size_lo,
+            scube_hi, scube_lo):
         pass
 
     @abc.abstractmethod
-    def downscale(self):
+    def make_mask(self, size, data, mask):
         pass
 
     @abc.abstractmethod
-    def make_mask(self):
-        pass
-
-    @abc.abstractmethod
-    def apply_mask(self):
+    def apply_mask(self, size, data, mask):
         pass
 
 

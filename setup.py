@@ -71,12 +71,10 @@ setup(
     package_dir={'': 'src'},
     python_requires='>=3.7',
     install_requires=[
-        'asteval',
         'astor',
         'astropy',
-        'funcy',
-        'numpy',
         'networkx',
+        'numpy',
         'ruamel.yaml',
         'scikit-image',
         'scipy'

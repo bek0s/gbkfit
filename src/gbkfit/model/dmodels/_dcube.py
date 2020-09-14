@@ -176,29 +176,31 @@ class DCube:
         # The psf convolution also affects pixels outside the galaxy model
         # Allocate a spatial mask for all the pixels of the galaxy model
         if self._psf:
-            self._dmask_hi = driver.mem_alloc_d(size_hi[::-1][:2], dtype)
+            self._dmask_hi = driver.mem_alloc_d(size_hi[:2][::-1], dtype)
             driver.mem_fill(self._dmask_hi, 0)
         # Create and prepare dcube backend
         self._dcube = driver.make_dmodel_dcube(dtype)
-        self._dcube.prepare(
-            size_lo, size_hi, edge_hi, scale,
-            self._dcube_lo, self._dmask_hi,
-            self._dcube_hi, self._dcube_hi_fft,
-            self._psf3d_hi, self._psf3d_hi_fft)
 
     def evaluate(self, out_extra):
 
         if self._psf:
-            self._dcube.make_mask()
+            self._dcube.make_mask(
+                self._size_hi, self._dcube_hi, self._dmask_hi)
 
         if self._psf or self._lsf:
-            self._dcube.convolve()
+            self._dcube.convolve(
+                self._size_hi,
+                self._dcube_hi, self._dcube_hi_fft,
+                self._psf3d_hi, self._psf3d_hi_fft)
 
         if self._psf:
-            self._dcube.apply_mask()
+            self._dcube.apply_mask(
+                self._size_hi, self._dcube_hi, self._dmask_hi)
 
         if self._dcube_lo is not self._dcube_hi:
-            self._dcube.downscale()
+            self._dcube.downscale(
+                self._scale, self._edge_hi, self._size_hi, self._size_lo,
+                self._dcube_hi, self._dcube_lo)
 
         if out_extra is not None:
             out_extra.update(
@@ -216,4 +218,4 @@ class DCube:
                     lsf_hi_fft=self._lsf_hi.copy())
             if self._psf or self._lsf:
                 out_extra.update(
-                    psf3d_hi_fft=self._psf3d_hi.copy())
+                    psf3d_hi_fft=self._driver.mem_copy_d2h(self._psf3d_hi))

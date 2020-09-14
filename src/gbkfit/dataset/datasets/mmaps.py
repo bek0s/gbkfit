@@ -57,3 +57,7 @@ class DatasetMMaps(Dataset):
     @property
     def cval(self):
         return self.cvals[0]
+
+    @property
+    def rota(self):
+        return self.rotas[0]

@@ -1,306 +1,161 @@
 
-from gbkfit.utils import iterutils, miscutils
-
-
-class _ObjectiveItem:
-
-    def __init__(self, dataset, dmodel, gmodel, driver):
-        super().__init__()
-        self._dataset = dataset
-        self._dmodel = dmodel
-        self._gmodel = gmodel
-        self._driver = driver
-        self._nitems = 0
-        self._names = tuple()
-        self._sizes = tuple()
-        self._steps = tuple()
-        self._cvals = tuple()
-        self._npixs = tuple()
-        self._d_dataset_d_vector = None
-        self._d_dataset_m_vector = None
-        self._d_dataset_e_vector = None
-        self._s_residual_vector = None
-        self._s_residual_scalar = None
-
-        dataset_cls = dataset.__class__.__qualname__
-        dmodel_cls = dmodel.__class__.__qualname__
-        gmodel_cls = gmodel.__class__.__qualname__
-
-        if not dmodel.is_compatible_with_dataset(dataset):
-            raise RuntimeError(
-                f"dmodel of type '{dmodel.type()}' (class={dmodel_cls})"
-                f" is not compatible with "
-                f"dataset of type '{dataset.type()}' (class={dataset_cls})")
-
-
-
-        if not dmodel.is_compatible_with_gmodel(gmodel):
-            raise RuntimeError(
-                f"dmodel of type '{dmodel.type()}' (class={dmodel_cls})"
-                f" is not compatible with "
-                f"gmodel of type '{gmodel.type()}' (class={gmodel_cls})")
-
-        if dataset.dtype != dmodel.dtype():
-            raise RuntimeError(
-                f"dataset and dmodel have incompatible dtypes "
-                f"({dataset.dtype} != {dmodel.dtype()})")
-        for name in dmodel.onames():
-            data = dataset.get(name)
-            if data is None:
-                raise RuntimeError(
-                    f"could not find dataset "
-                    f"for item '{name}' required by dmodel")
-            if data.size() != dmodel.size():
-                raise RuntimeError(
-                    f"dataset and dmodel have incompatible sizes "
-                    f"for item '{name}' ({data.size()} != {dmodel.size()})")
-            if data.step() != dmodel.step():
-                raise RuntimeError(
-                    f"dataset and dmodel have incompatible steps "
-                    f"for item '{name}' ({data.step()} != {dmodel.step()})")
-            if data.cval() != dmodel.cval():
-                raise RuntimeError(
-                    f"dataset and dmodel have incompatible cvals "
-                    f"for item '{name}' ({data.cval()} != {dmodel.cval()})")
-            self._nitems += 1
-            self._names += (name,)
-            self._sizes += (data.size(),)
-            self._steps += (data.step(),)
-            self._cvals += (data.cval(),)
-            self._npixs += (data.npix(),)
-        self.prepare()
-
-    def residual_count(self):
-        return self._nitems
-
-    def residual_names(self):
-        return self._names
-
-    def residual_sizes(self):
-        return self._sizes
-
-    def residual_cvals(self):
-        return self._cvals
-
-    def residual_steps(self):
-        return self._steps
-
-    def residual_npixs(self):
-        return self._npixs
-
-    def dtype(self):
-        return self._dmodel.dtype()
-
-    def params(self):
-        return self._gmodel.params()
-
-    def prepare(self):
-        # Convenience variables
-        driver = self._driver
-        nitems = self._nitems
-        npixel = sum(self._npixs)
-        dtype = self.dtype()
-        # Allocate host and device memory for residuals
-        self._s_residual_vector = driver.mem_alloc_s(npixel, dtype)
-        self._s_residual_scalar = driver.mem_alloc_s((1,), dtype)
-        # Allocate device memory for dataset
-        self._d_dataset_d_vector = driver.mem_alloc_d(npixel, dtype)
-        self._d_dataset_m_vector = driver.mem_alloc_d(npixel, dtype)
-        self._d_dataset_e_vector = driver.mem_alloc_d(npixel, dtype)
-        # Copy dataset to the device memory
-        ipix = 0
-        for i in range(nitems):
-            name = self._names[i]
-            npix = self._npixs[i]
-            data = self._dataset[name]
-            data_d_1d = data.data().copy().ravel().astype(dtype)
-            data_m_1d = data.mask().copy().ravel().astype(dtype)
-            data_e_1d = data.error().copy().ravel().astype(dtype)
-            slice_ = slice(ipix, ipix + npix)
-            driver.mem_copy_h2d(data_d_1d, self._d_dataset_d_vector[slice_])
-            driver.mem_copy_h2d(data_m_1d, self._d_dataset_m_vector[slice_])
-            driver.mem_copy_h2d(data_e_1d, self._d_dataset_e_vector[slice_])
-            ipix += npix
-        # Dataset reference no longer needed
-        self._dataset = None
-
-    def model(self, params, out_extra=None):
-        h_models = []
-        for d_model in self._model_d(params, out_extra):
-            h_models.append(
-                {k: self._driver.mem_copy_d2h(v) for k, v in d_model.items()})
-        return h_models
-
-    def residual_nddata(self, params, out_extra=None):
-        # Convenience variables
-        driver = self._driver
-        nitems = self._nitems
-        h_residual_vector = self._s_residual_vector[0]
-        d_residual_vector = self._s_residual_vector[1]
-        # Calculate and place residuals on the device arrays
-        self._residual_d(params, out_extra)
-        # Transfer residuals from device to host
-        driver.mem_copy_d2h(d_residual_vector, h_residual_vector)
-        # Transform 1d residual to multiple nd residuals
-        ipix = 0
-        h_residual_nddata = []
-        for i in range(nitems):
-            size = self._sizes[i]
-            npix = self._npixs[i]
-            shape = size[::-1]
-            slice_ = slice(ipix, ipix + npix)
-            h_residual_nddata.append(h_residual_vector[slice_].reshape(shape))
-            ipix += npix
-        # Return the host memory
-        return h_residual_nddata
-
-    def residual_vector(self, params, out_extra=None):
-        # Convenience variables
-        driver = self._driver
-        h_residual_vector = self._s_residual_vector[0]
-        d_residual_vector = self._s_residual_vector[1]
-        # Calculate and place residuals on the device arrays
-        self._residual_d(params, out_extra)
-        # Transfer residuals from device to host
-        driver.mem_copy_d2h(d_residual_vector, h_residual_vector)
-        # Return the host memory
-        return h_residual_vector
-
-    def residual_scalar(self, params, out_extra=None):
-        # Convenience variables
-        driver = self._driver
-        h_residual_vector = self._s_residual_vector[0]
-        d_residual_vector = self._s_residual_vector[1]
-        h_residual_scalar = self._s_residual_scalar[0]
-        d_residual_scalar = self._s_residual_scalar[1]
-        # Calculate and place residuals on the device arrays
-        self._residual_d(params, out_extra)
-        # Calculate the sum of absolute residuals
-        driver.math_abs(d_residual_vector, out=d_residual_vector)
-
-        driver.math_sum(d_residual_vector, out=d_residual_scalar)
-
-        # Transfer residuals from device to host
-        driver.mem_copy_d2h(d_residual_scalar, h_residual_scalar)
-        # Return the host memory
-        return h_residual_scalar[0]
-        """
-        driver.mem_copy_d2h(d_residual_vector, h_residual_vector)
-        return np.sum(h_residual_vector)
-        """
-
-
-    def likelihood(self, params, out_extra=None):
-        pass
-
-    def log_likelihood(self, params, out_extra=None):
-        pass
-
-    def _model_d(self, params, out_extra=None):
-        return self._dmodel.evaluate(
-            self._driver, self._gmodel, params, out_extra)
-
-    def _residual_d(self, params, out_extra=None):
-        models = self._model_d(params, out_extra)
-        ipix = 0
-        for i in range(self._nitems):
-            name = self._names[i]
-            npix = self._npixs[i]
-            model = models[name].ravel()
-            slice_ = slice(ipix, ipix + npix)
-            data = self._d_dataset_d_vector[slice_]
-            mask = self._d_dataset_m_vector[slice_]
-            error = self._d_dataset_e_vector[slice_]
-            resid = self._s_residual_vector[1][slice_]
-            resid[:] = mask * (data - model) / error
-            ipix += npix
+from gbkfit.utils import iterutils
 
 
 class Objective:
 
-    def __init__(self, datasets, dmodels, gmodels, drivers):
-
-        datasets = iterutils.listify(datasets)
-        dmodels = iterutils.listify(dmodels)
-        gmodels = iterutils.listify(gmodels)
-        drivers = iterutils.listify(drivers)
-
-        ndatasets = len(datasets)
-        ndmodels = len(dmodels)
-        ngmodels = len(gmodels)
-        ndrivers = len(drivers)
-
-        if not (ndatasets == ndmodels == ngmodels == ndrivers):
+    def __init__(self, datasets, model):
+        self._datasets = datasets = iterutils.tuplify(datasets)
+        self._model = model
+        if len(datasets) != model.nitems():
             raise RuntimeError(
-                f"the number of datasets ({ndatasets}), dmodels ({ndmodels}), "
-                f"gmodels ({ngmodels}), drivers ({ndrivers}) must be equal")
-
-        objectives = []
-        for i in range(ndatasets):
-            objectives.append(
-                _ObjectiveItem(datasets[i], dmodels[i], gmodels[i], drivers[i]))
-
-        self._objectives = iterutils.tuplify(objectives)
-        pdescs, pdescs_mappings = miscutils.merge_dicts_and_make_mappings(
-            [o.params() for o in objectives], 'model')
-        rnames, rnames_mappings = miscutils.merge_lists_and_make_mappings(
-            [o.residual_names() for o in objectives], 'model')
-        self._pdescs = pdescs
-        self._rnames = tuple(rnames)
-        self._pdescs_mappings = tuple(pdescs_mappings)
-        self._rnames_mappings = tuple(rnames_mappings)
-        rsizes = []
-        rnpixs = []
-        for objective in objectives:
-            rsizes.extend(objective.residual_sizes())
-            rnpixs.extend(objective.residual_npixs())
-        self._rsizes = tuple(rsizes)
-        self._rnpixs = tuple(rnpixs)
-
-    def datasets(self):
-        return []
-
-    def dmodels(self):
-        return []
-
-    def gmodels(self):
-        return []
-
-    def drivers(self):
-        return []
+                f"the number of dataset items and model items are not equal"
+                f"({len(datasets)} != {model.nitems()})")
+        n = model.nitems()
+        self._nitems = iterutils.make_list((n,), 0, True)
+        self._names = iterutils.make_list((n,), list(), True)
+        self._sizes = iterutils.make_list((n,), list(), True)
+        self._steps = iterutils.make_list((n,), list(), True)
+        self._cvals = iterutils.make_list((n,), list(), True)
+        self._npixs = iterutils.make_list((n,), list(), True)
+        self._d_dataset_d_vector = [None] * n
+        self._d_dataset_m_vector = [None] * n
+        self._d_dataset_e_vector = [None] * n
+        self._s_residual_vector = [None] * n
+        self._s_residual_scalar = [None] * n
+        for i in range(model.nitems()):
+            dataset = datasets[i]
+            dmodel = model.dmodels()[i]
+            if dataset.dtype != dmodel.dtype():
+                raise RuntimeError(
+                    f"dataset and dmodel have incompatible dtypes "
+                    f"({dataset.dtype} != {dmodel.dtype()})")
+            for name in dmodel.onames():
+                data = dataset.get(name)
+                if data is None:
+                    raise RuntimeError(
+                        f"could not find dataset "
+                        f"for item '{name}' required by dmodel")
+                if data.size() != dmodel.size():
+                    raise RuntimeError(
+                        f"dataset and dmodel have incompatible sizes "
+                        f"for item '{name}' ({data.size()} != {dmodel.size()})")
+                if data.step() != dmodel.step():
+                    raise RuntimeError(
+                        f"dataset and dmodel have incompatible steps "
+                        f"for item '{name}' ({data.step()} != {dmodel.step()})")
+                if data.cval() != dmodel.cval():
+                    raise RuntimeError(
+                        f"dataset and dmodel have incompatible cvals "
+                        f"for item '{name}' ({data.cval()} != {dmodel.cval()})")
+                self._nitems[i] += 1
+                self._names[i] += [name]
+                self._sizes[i] += [data.size()]
+                self._steps[i] += [data.step()]
+                self._cvals[i] += [data.cval()]
+                self._npixs[i] += [data.npix()]
+        self.prepare()
 
     def params(self):
-        return self._pdescs
+        return self._model.pdescs()
 
-    def residual_names(self):
-        return self._rnames
+    def prepare(self):
+        for i in range(self._model.nitems()):
+            driver = self._model.drivers()[i]
+            dmodel = self._model.dmodels()[i]
+            nitems = self._nitems[i]
+            npixs = self._npixs[i]
+            dtype = dmodel.dtype()
+            # Allocate host and device memory for residuals
+            self._s_residual_vector[i] = driver.mem_alloc_s(sum(npixs), dtype)
+            self._s_residual_scalar[i] = driver.mem_alloc_s((1,), dtype)
+            # Allocate device memory for dataset
+            self._d_dataset_d_vector[i] = driver.mem_alloc_d(sum(npixs), dtype)
+            self._d_dataset_m_vector[i] = driver.mem_alloc_d(sum(npixs), dtype)
+            self._d_dataset_e_vector[i] = driver.mem_alloc_d(sum(npixs), dtype)
+            # Copy dataset to the device memory
+            ipix = 0
+            for j in range(nitems):
+                name = self._names[i][j]
+                npix = self._npixs[i][j]
+                data = self._datasets[i][name]
+                data_d_1d = data.data().copy().ravel().astype(dtype)
+                data_m_1d = data.mask().copy().ravel().astype(dtype)
+                data_e_1d = data.error().copy().ravel().astype(dtype)
+                slice_ = slice(ipix, ipix + npix)
+                driver.mem_copy_h2d(
+                    data_d_1d, self._d_dataset_d_vector[i][slice_])
+                driver.mem_copy_h2d(
+                    data_m_1d, self._d_dataset_m_vector[i][slice_])
+                driver.mem_copy_h2d(
+                    data_e_1d, self._d_dataset_e_vector[i][slice_])
+                ipix += npix
+        # Dataset references no longer needed
+        self._datasets = None
 
     def residual_nddata(self, params, out_extra=None):
+        self._residual_d(params, out_extra)
         residuals = []
-        for objective in self._objectives:
-            residuals.append(objective.residual_nddata(params, out_extra))
+        for i in range(self._model.nitems()):
+            driver = self._model.drivers()[i]
+            nitems = self._nitems[i]
+            h_residual_vector = self._s_residual_vector[i][0]
+            d_residual_vector = self._s_residual_vector[i][1]
+            driver.mem_copy_d2h(d_residual_vector, h_residual_vector)
+            ipix = 0
+            h_residual_nddata = []
+            for j in range(nitems):
+                size = self._sizes[i][j]
+                npix = self._npixs[i][j]
+                shape = size[::-1]
+                slice_ = slice(ipix, ipix + npix)
+                h_residual_nddata.append(h_residual_vector[slice_].reshape(shape))
+                ipix += npix
+            residuals.append(h_residual_nddata)
         return residuals
 
     def residual_vector(self, params, out_extra=None):
+        self._residual_d(params, out_extra)
         residuals = []
-        for objective in self._objectives:
-            residuals.append(objective.residual_vector(params, out_extra))
+        for i in range(self._model.nitems()):
+            driver = self._model.drivers()[i]
+            h_residual_vector = self._s_residual_vector[i][0]
+            d_residual_vector = self._s_residual_vector[i][1]
+            driver.mem_copy_d2h(d_residual_vector, h_residual_vector)
+            residuals.append(h_residual_vector)
         return residuals
 
     def residual_scalar(self, params, out_extra=None):
+        self._residual_d(params, out_extra)
         residuals = []
-        for objective in self._objectives:
-            residuals.append(objective.residual_scalar(params, out_extra))
-        return sum(residuals)
-
-    def likelihood(self, params, out_extra=None):
-        likelihoods = []
-        for objective in self._objectives:
-            likelihoods.append(objective.likelihood(params, out_extra))
-        return sum(likelihoods)
+        for i in range(self._model.nitems()):
+            driver = self._model.drivers()[i]
+            h_residual_vector = self._s_residual_vector[i][0]
+            d_residual_vector = self._s_residual_vector[i][1]
+            h_residual_scalar = self._s_residual_scalar[i][0]
+            d_residual_scalar = self._s_residual_scalar[i][1]
+            driver.math_abs(d_residual_vector, out=d_residual_vector)
+            driver.math_sum(d_residual_vector, out=d_residual_scalar)
+            driver.mem_copy_d2h(d_residual_scalar, h_residual_scalar)
+            residuals.append(h_residual_scalar[0])
+        print(params)
+        return residuals
 
     def log_likelihood(self, params, out_extra=None):
-        log_likelihoods = []
-        for objective in self._objectives:
-            log_likelihoods.append(objective.log_likelihood(params, out_extra))
-        return sum(log_likelihoods)
+        return -0.5 * self.residual_scalar(params, out_extra) ** 2
+
+    def _residual_d(self, params, out_extra=None):
+        models = self._model.evaluate_d(params, out_extra)
+        for i in range(self._model.nitems()):
+            ipix = 0
+            for j in range(self._nitems[i]):
+                name = self._names[i][j]
+                npix = self._npixs[i][j]
+                model = models[i][name].ravel()
+                slice_ = slice(ipix, ipix + npix)
+                data = self._d_dataset_d_vector[i][slice_]
+                mask = self._d_dataset_m_vector[i][slice_]
+                error = self._d_dataset_e_vector[i][slice_]
+                resid = self._s_residual_vector[i][1][slice_]
+                resid[:] = mask * (data - model) / error
+                ipix += npix

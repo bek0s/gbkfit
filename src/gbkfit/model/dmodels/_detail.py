@@ -25,7 +25,7 @@ def load_dmodel_common(cls, info, ndim, dataset, dataset_cls):
             cval=info.get('cval', dataset.cval()),
             rota=info.get('rota', dataset.rota()),
             dtype=info.get('dtype', str(dataset.dtype))))
-    opts = parseutils.parse_options(info, desc, fun=cls.__init__)[0]
+    opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
     for attr in ['size', 'step', 'cval', 'scale']:
         if attr in opts:
             opts[attr] = opts[attr][:ndim]

@@ -34,13 +34,22 @@ def _register_fitters():
     factories = [
         'gbkfit.fitting.fitters.dynesty.FitterDyneestyDNS',
         'gbkfit.fitting.fitters.dynesty.FitterDynestySNS',
+
         'gbkfit.fitting.fitters.emcee.FitterEmcee',
+
         'gbkfit.fitting.fitters.lmfit.FitterLMFitLeastSquares',
         'gbkfit.fitting.fitters.lmfit.FitterLMFitNelderMead',
-        'gbkfit.fitting.fitters.pygmo.FitterPygmo',
-        'gbkfit.fitting.fitters.pyswarms.FitterPySwarmsGeneral',
-        'gbkfit.fitting.fitters.pyswarms.FitterPySwarmsGlobal',
-        'gbkfit.fitting.fitters.pyswarms.FitterPySwarmsLocal',
+
+        'gbkfit.fitting.fitters.pygmo.FitterPygmoDE',
+        'gbkfit.fitting.fitters.pygmo.FitterPygmoSADE',
+        'gbkfit.fitting.fitters.pygmo.FitterPygmoDE1220',
+        'gbkfit.fitting.fitters.pygmo.FitterPygmoPSO',
+        'gbkfit.fitting.fitters.pygmo.FitterPygmoCMAES',
+        'gbkfit.fitting.fitters.pygmo.FitterPygmoXNES',
+        'gbkfit.fitting.fitters.pygmo.FitterPygmoIpopt',
+        'gbkfit.fitting.fitters.pygmo.FitterPygmoNLopt',
+        'gbkfit.fitting.fitters.pygmo.FitterPygmoScipy',
+
         'gbkfit.fitting.fitters.scipy.FitterScipyLeastSquares',
         'gbkfit.fitting.fitters.scipy.FitterScipyMinimize']
     _register_factories(parser, factories)
@@ -51,7 +60,6 @@ def _register_datasets():
     from gbkfit.dataset.datasets import (
         DatasetImage, DatasetLSlit, DatasetMMaps, DatasetSCube)
     parser.register(DatasetImage)
-    #parser.register(DatasetImage)
     parser.register(DatasetLSlit)
     parser.register(DatasetMMaps)
     parser.register(DatasetSCube)

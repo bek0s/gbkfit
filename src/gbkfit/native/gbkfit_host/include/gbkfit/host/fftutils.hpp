@@ -65,7 +65,8 @@ public:
         if (refcount) {
             refcount--;
             if (!refcount) {
-                wrapper<T>::cleanup_threads();
+                // No idea why this causes segmentation fault
+            //  wrapper<T>::cleanup_threads();
             }
         }
     }

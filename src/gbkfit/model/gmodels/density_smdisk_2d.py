@@ -15,7 +15,7 @@ class DensitySMDisk2D(DensityComponent2D):
     @classmethod
     def load(cls, info):
         desc = make_component_desc(cls)
-        opts = parseutils.parse_options(info, desc, fun=cls.__init__)[0]
+        opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
         opts.update(dict(
             rptraits=traits.rpt_parser.load(opts.get('rptraits')),
             sptraits=traits.spt_parser.load(opts.get('sptraits'))))

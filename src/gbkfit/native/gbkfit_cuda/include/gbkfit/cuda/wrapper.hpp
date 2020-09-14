@@ -25,6 +25,23 @@ struct Wrapper
             const T* src_cube, T* dst_cube);
 
     static void
+    dmodel_dcube_make_mask(
+            int size_x, int size_y, int size_z, const T* cube, T* mask);
+
+    static void
+    dmodel_dcube_apply_mask(
+            int size_x, int size_y, int size_z, T* cube, const T* mask);
+
+    static void
+    dmodel_mmaps_moments(
+            int size_x, int size_y, int size_z,
+            T step_z,
+            T zero_z,
+            T nanval,
+            const T* scube,
+            T* mmaps, const int* orders, int norders);
+
+    static void
     gmodel_mcdisk_evaluate(
             T cflux, int nclouds,
             const int* ncloudscsum, int ncloudscsum_len,

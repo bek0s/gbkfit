@@ -6,7 +6,7 @@ import logging
 import astropy.io.fits as fits
 import numpy as np
 
-from gbkfit.utils import parseutils
+from gbkfit.utils import miscutils, parseutils
 from . import _detail
 
 
@@ -18,9 +18,9 @@ class Data:
     @classmethod
     def load(cls, info, step=None, rpix=None, rval=None, rota=None):
         desc = make_data_desc(cls)
-        opts = parseutils.parse_options(
-            info, desc, add_optional=['rpix', 'rval'],
-            fun=cls.__init__, fun_ignore_args=['cval'])[0]
+        opts = parseutils.parse_options_for_callable(
+            info, desc, cls.__init__,
+            fun_ignore_args=['cval'], add_optional=['rpix', 'rval'])
         data_d = fits.getdata(opts['data'])
         data_m = fits.getdata(opts['mask']) if 'mask' in info else None
         data_e = fits.getdata(opts['error']) if 'error' in info else None
@@ -78,6 +78,9 @@ class Data:
             mask = np.ones_like(data)
         if error is None:
             error = np.ones_like(data)
+        data = miscutils.to_native_byteorder(data)
+        mask = miscutils.to_native_byteorder(mask)
+        error = miscutils.to_native_byteorder(error)
         step = (1,) * data.ndim if step is None else tuple(step)
         cval = (0,) * data.ndim if cval is None else tuple(cval)
         if data.shape != mask.shape:
@@ -208,7 +211,7 @@ class Dataset(parseutils.TypedParserSupport, abc.ABC):
         return next(iter(self.values())).dtype()
 
 
-data_parser = parseutils.SimpleParser(Data)
+data_parser = parseutils.BasicParser(Data)
 dataset_parser = parseutils.TypedParser(Dataset)
 
 

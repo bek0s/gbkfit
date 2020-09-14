@@ -44,7 +44,7 @@ struct RNG
 
 } // namespace gbkfit
 
-namespace gbkfit { namespace cuda { namespace kernels {
+namespace gbkfit::cuda::kernels {
 
 constexpr void
 index_1d_to_3d(
@@ -66,6 +66,43 @@ index_1d_to_2d(
     out_y = idx/size_x;
     idx -= out_y*size_x;
     out_x = idx;
+}
+
+template<typename T> __global__ void
+dmodel_dcube_make_mask(int size_x, int size_y, int size_z, const T* cube, T* mask)
+{
+    int n = size_x * size_y;
+    int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (tid >= n)
+        return;
+
+    int x, y;
+    index_1d_to_2d(x, y, tid, size_x);
+
+    for(int z = 0; z < size_z; ++z) {
+        if (cube[x + y * size_x + z * size_x * size_y]) {
+            mask[x + y * size_x] = 1;
+            break;
+        }
+    }
+}
+
+template<typename T> __global__ void
+dmodel_dcube_apply_mask(int size_x, int size_y, int size_z, T* cube, const T* mask)
+{
+    int n = size_x * size_y;
+    int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (tid >= n)
+        return;
+
+    int x, y;
+    index_1d_to_2d(x, y, tid, size_x);
+
+    if (!mask[x + y * size_x]) {
+        for(int z = 0; z < size_z; ++z) {
+            cube[x + y * size_x + z * size_x * size_y] = 0;
+        }
+    }
 }
 
 template<typename T> __global__ void
@@ -466,4 +503,4 @@ gmodel_mcdisk_evaluate(
     }
 }
 
-}}} // namespace gbkfit::cuda::kernels
+} // namespace gbkfit::cuda::kernels

@@ -1,7 +1,7 @@
 #pragma once
 
 #include <random>
-
+#include <iostream>
 #include <omp.h>
 
 #include <gbkfit/dmodel/dmodels.hpp>
@@ -38,18 +38,9 @@ dcube_make_mask(int size_x, int size_y, int size_z, const T* cube, T* mask)
     {
     for(int x = 0; x < size_x; ++x)
     {
-        for(int z = 0; z < size_z; ++z)
-        {
-            int idx = x
-                    + y * size_x
-                    + z * size_x * size_y;
-
-            if (cube[idx])
-            {
-                int idx = x
-                        + y * size_x;
-
-                mask[idx] = 1;
+        for(int z = 0; z < size_z; ++z) {
+            if (cube[x + y * size_x + z * size_x * size_y]) {
+                mask[x + y * size_x] = 1;
                 break;
             }
         }
@@ -65,18 +56,9 @@ dcube_apply_mask(int size_x, int size_y, int size_z, T* cube, const T* mask)
     {
     for(int x = 0; x < size_x; ++x)
     {
-        int idx = x
-                + y * size_x;
-
-        if (!mask[idx])
-        {
-            for(int z = 0; z < size_z; ++z)
-            {
-                int idx = x
-                        + y * size_x
-                        + z * size_x * size_y;
-
-                cube[idx] = 0;
+        if (!mask[x + y * size_x]) {
+            for(int z = 0; z < size_z; ++z) {
+                cube[x + y * size_x + z * size_x * size_y] = 0;
             }
         }
     }
@@ -267,7 +249,7 @@ gmodel_smdisk_evaluate(
         T* image, T* scube, T* rcube,
         T* rdata, T* vdata, T* ddata)
 {
-//  #pragma omp parallel for collapse(2)
+    #pragma omp parallel for collapse(2)
     for(int y = 0; y < spat_size_y; ++y)
     {
     for(int x = 0; x < spat_size_x; ++x)

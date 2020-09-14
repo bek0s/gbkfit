@@ -16,7 +16,7 @@ class GModelKinematics3D(GModelSCubeSupport, GModel):
     @classmethod
     def load(cls, info):
         desc = make_gmodel_desc(cls)
-        opts = parseutils.parse_options(info, desc, fun=cls.__init__)[0]
+        opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
         opts.update(
             components=component_s3d_parser.load(info['components']),
             tcomponents=component_s3d_parser.load(info.get('tcomponents')))

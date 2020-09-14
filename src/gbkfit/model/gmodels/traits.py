@@ -129,7 +129,7 @@ class Trait(parseutils.TypedParserSupport, abc.ABC):
     @classmethod
     def load(cls, info):
         desc = _trait_desc(cls)
-        opts = parseutils.parse_options(info, desc, fun=cls.__init__)[0]
+        opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
         return cls(**opts)
 
     def __init__(self, **kwargs):

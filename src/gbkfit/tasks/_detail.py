@@ -1,5 +1,8 @@
 
+import contextlib
+import json
 import logging
+import os
 
 import numpy as np
 
@@ -102,7 +105,13 @@ def prepare_config(config, req_sections=(), opt_sections=()):
         if invalid_pdescs:
             raise RuntimeError(
                 f"the values of the following pdescs must be a dictionary: "
-                f"{', '.joint(invalid_pdescs)}")
+                f"{str(invalid_pdescs)}")
+
+    for pname, pinfo in config['params'].items():
+        #print(';')
+        pass
+
+    config = json.loads(json.dumps(config))
 
     return config
 
@@ -182,3 +191,23 @@ def setup_pdescs(cfg):
         pdesc_list = gbkfit.params.descs.parser.load_many(pdesc_vals)
         pdescs = dict(zip(pdesc_keys, pdesc_list))
     return pdescs
+
+
+def make_output_dir(path):
+    i = 0
+    base = path
+    while os.path.exists(path):
+        i += 1
+        path = f'{base}_{i}'
+    os.makedirs(path)
+    return path
+
+
+@contextlib.contextmanager
+def cd(newdir):
+    prevdir = os.getcwd()
+    os.chdir(os.path.expanduser(newdir))
+    try:
+        yield
+    finally:
+        os.chdir(prevdir)

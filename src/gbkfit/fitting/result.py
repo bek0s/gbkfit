@@ -100,6 +100,7 @@ class FitterResult:
 
     def dump(self):
 
+
         objective = self.objective()
         info = dict(
             drivers=[driver.dump() for driver in objective.drivers()],
@@ -130,7 +131,11 @@ class FitterResult:
                     file = f'{prefix}mdl_{j}_{k}'
                     fits.writeto(file, v)
 
-    def __init__(self, objective, params, extra=None):
+    def __init__(
+            self, objective, params,
+            samples=None, loglikes=None, logprobs=None,
+            extra=None):
+
         self._objective = objective
         self._params = params
         self._solutions = []

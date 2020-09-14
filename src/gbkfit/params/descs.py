@@ -4,20 +4,16 @@ import abc
 from gbkfit.utils import parseutils
 
 
-class ParamDesc(abc.ABC):
+__all__ = ['ParamScalarDesc', 'ParamVectorDesc']
 
-    @staticmethod
-    @abc.abstractmethod
-    def type():
-        pass
+
+class ParamDesc(parseutils.TypedParserSupport, abc.ABC):
 
     @classmethod
     def load(cls, info):
-        return cls(**parseutils.parse_class_args(cls, info))
-
-    @abc.abstractmethod
-    def dump(self):
-        pass
+        desc = f'{cls.type()} parameter description (class={cls.__qualname__})'
+        opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
+        return cls(**opts)
 
     def __init__(self, name, size):
         self._name = name
@@ -28,13 +24,6 @@ class ParamDesc(abc.ABC):
 
     def size(self):
         return self._size
-
-    def is_scalar(self):
-        return not self.is_vector()
-
-    @abc.abstractmethod
-    def is_vector(self):
-        pass
 
 
 class ParamScalarDesc(ParamDesc):
@@ -48,9 +37,6 @@ class ParamScalarDesc(ParamDesc):
 
     def __init__(self, name):
         super().__init__(name, 1)
-
-    def is_vector(self):
-        return False
 
     def __repr__(self):
         return f'{self.__class__.__name__}({self.name()!r})'
@@ -68,11 +54,32 @@ class ParamVectorDesc(ParamDesc):
     def __init__(self, name, size):
         super().__init__(name, size)
 
-    def is_vector(self):
-        return True
-
     def __repr__(self):
         return f'{self.__class__.__name__}({self.name()!r}, {self.size()!r})'
+
+
+def load_descriptions(info):
+    descs = {}
+    for key, val in info.items():
+        descs[key] = parser.load({'name': key, **val})
+    return descs
+
+
+def dump_descriptions(descs):
+    info = {key: parser.dump(val) for key, val in descs.items()}
+    for val in info.values():
+        val.pop('name')
+    return info
+
+
+def merge_descriptions(descs1, descs2):
+    if descs1 is None:
+        descs1 = {}
+    if descs2 is None:
+        descs2 = {}
+    if set(descs1).intersection(descs2):
+        raise RuntimeError()
+    return {**descs1, **descs2}
 
 
 parser = parseutils.TypedParser(ParamDesc)

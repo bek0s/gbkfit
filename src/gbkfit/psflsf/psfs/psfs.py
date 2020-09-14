@@ -5,7 +5,7 @@ import scipy.ndimage
 
 import gbkfit.math
 from gbkfit.psflsf import PSF, make_psf_desc
-from gbkfit.utils import iterutils, parseutils
+from gbkfit.utils import iterutils, miscutils, parseutils
 
 
 def _create_grid_2d(size, step, offset, ratio, posa):
@@ -21,7 +21,7 @@ def _create_grid_2d(size, step, offset, ratio, posa):
 
 def _load_psf_common(cls, info):
     desc = make_psf_desc(cls)
-    return parseutils.parse_options(info, desc, fun=cls.__init__)[0]
+    return parseutils.parse_options_for_callable(info, desc, cls.__init__)
 
 
 class PSFGauss(PSF):
@@ -182,7 +182,7 @@ class PSFImage(PSF):
     def load(cls, info):
         opts = _load_psf_common(cls, info)
         opts.update(dict(
-            data=fits.getdata(opts['data'])))
+            data=miscutils.to_native_byteorder(fits.getdata(opts['data']))))
         return cls(**opts)
 
     def dump(self, file=None):

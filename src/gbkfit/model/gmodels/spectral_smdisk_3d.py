@@ -15,7 +15,7 @@ class SpectralSMDisk3D(SpectralComponent3D):
     @classmethod
     def load(cls, info):
         desc = make_component_desc(cls)
-        opts = parseutils.parse_options(info, desc, fun=cls.__init__)[0]
+        opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
         opts.update(dict(
             rptraits=traits.rpt_parser.load(opts.get('rptraits')),
             rhtraits=traits.rht_parser.load(opts.get('rhtraits')),

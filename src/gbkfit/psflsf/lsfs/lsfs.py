@@ -5,7 +5,7 @@ import scipy.ndimage
 
 import gbkfit.math
 from gbkfit.psflsf import LSF, make_lsf_desc
-from gbkfit.utils import parseutils
+from gbkfit.utils import miscutils, parseutils
 
 
 def _create_grid_1d(size, step, offset):
@@ -15,7 +15,7 @@ def _create_grid_1d(size, step, offset):
 
 def _load_lsf_common(cls, info):
     desc = make_lsf_desc(cls)
-    return parseutils.parse_options(info, desc, fun=cls.__init__)[0]
+    return parseutils.parse_options_for_callable(info, desc, cls.__init__)
 
 
 class LSFGauss(LSF):
@@ -156,7 +156,7 @@ class LSFImage(LSF):
     def load(cls, info):
         opts = _load_lsf_common(cls, info)
         opts.update(dict(
-            data=fits.getdata(opts['data'])))
+            data=miscutils.to_native_byteorder(fits.getdata(opts['data']))))
         return cls(**opts)
 
     def dump(self, file=None):

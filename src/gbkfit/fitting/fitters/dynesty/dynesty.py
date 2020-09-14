@@ -21,7 +21,7 @@ def _log_likelihood_wrapper(theta):
     pass
 
 
-class FitParamDynesty(gbkfit.fitting.params.FitParam):
+class FitParameterDynesty(gbkfit.fitting.params.FitParam):
 
     @classmethod
     def load(cls, info):
@@ -50,11 +50,13 @@ class FitterDynesty(gbkfit.fitting.fitter.Fitter):
     def __init__(self):
         super().__init__()
 
-    def _impl_fit(self, data, model, params):
-        return self._impl_impl_fit(data, model, params)
+    def _fit_impl(self, objective, parameters, interpreter):
+        result1 = self._fit_impl_impl(objective, parameters, interpreter)
+        result2 = result1
+        return result2
 
     @abc.abstractmethod
-    def _impl_impl_fit(self, data, model, params):
+    def _fit_impl_impl(self, objective, parameters, interpreter):
         pass
 
 
@@ -66,8 +68,13 @@ class FitterDynestySNS(FitterDynesty):
 
     @classmethod
     def load(cls, info):
-        info['rstate'] = np.random.RandomState(info.get('seed'))
-        return cls(**parseutils.parse_class_args(info, cls))
+        desc = ''
+        opts = parseutils.parse_options_for_callable(
+            info, desc, cls.__init__, fun_rename_args=dict(
+                rstate='seed'))
+        if 'rstate' in opts:
+            opts['rstate'] = np.random.RandomState(opts['rstate'])
+        return cls(**opts)
 
     def dump(self):
         return {'type': self.type(), **self._props}
@@ -91,13 +98,13 @@ class FitterDynestySNS(FitterDynesty):
         self._props.pop('self')
         self._props.pop('__class__')
 
-    def _fit_impl(self, objective, param_info, param_interp, **kwargs):
+    def _fit_impl_impl(self, objective, parameters, interpreter):
 
         ndim = 3
 
         sampler = dynesty.NestedSampler(
             _log_likelihood_wrapper, _prior_tansform_wrapper, ndim,
-            logl_args=(objective, param_interp),
+            logl_args=(objective, interpreter),
             ptform_args=(),
             **self._props)
 
