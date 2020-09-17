@@ -498,7 +498,7 @@ def parse_param_exprs(
         # Parse expression and retrieve AST root node
         try:
             ast_root = ast.parse(value)
-        except RuntimeError:
+        except SyntaxError:
             invalid_exprs_bad_syntax.append(key)
             continue
         # Discover all symbols in expression

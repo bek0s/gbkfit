@@ -52,8 +52,10 @@ class FitParams(parseutils.BasicParserSupport, abc.ABC):
     def exprs(self):
         return self._exprs
 
-    def names(self, free=True, fixed=False):
-        return self._exprs.names(free, fixed)
+    def names(self, free=True, tied=False, fixed=False):
+        return self._exprs.enames(free, tied, fixed)
+
+
 
     def expressions(self):
         return self._exprs

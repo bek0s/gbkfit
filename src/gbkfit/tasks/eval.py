@@ -5,7 +5,7 @@ import time
 
 import astropy.io.fits as fits
 import numpy as np
-import ruamel.yaml as yaml
+import ruamel.yaml
 import scipy.stats as stats
 
 import gbkfit
@@ -18,11 +18,15 @@ import gbkfit.params.descs
 import gbkfit.params.utils
 from . import _detail
 
+
 log = logging.getLogger(__name__)
 
 
+# Use this object to load and dump yaml
+yaml = ruamel.yaml.YAML()
+
 # This is needed for dumping ordered dicts
-yaml.add_representer(dict, lambda self, data: self.represent_mapping(
+ruamel.yaml.add_representer(dict, lambda self, data: self.represent_mapping(
     'tag:yaml.org,2002:map', data.items()))
 
 
@@ -58,7 +62,7 @@ def eval_(config, perf=None):
 
     log.info(f"reading configuration file: '{config}'...")
     cfg = _detail.prepare_config(
-        yaml.YAML().load(open(config)),
+        yaml.load(open(config)),
         ('drivers', 'dmodels', 'gmodels', 'params'),
         ('datasets', 'pdescs'))
 
@@ -98,11 +102,28 @@ def eval_(config, perf=None):
     # Calculate model parameters
     #
 
-    params = params.expressions().evaluate({})
+    log.info("calculating model parameters...")
+
+    eparams_all = {}
+    eparams_free = {}
+    eparams_tied = {}
+    eparams_fixed = {}
+    eparams_notfree = {}
+    params = params.expressions().evaluate(
+        {}, True,
+        eparams_all, eparams_free,
+        eparams_tied, eparams_fixed, eparams_notfree)
+
+    params_info = _detail.nativify(dict(
+        params=params,
+        eparams_all=eparams_all,
+        eparams_free=eparams_free,
+        eparams_tied=eparams_tied,
+        eparams_fixed=eparams_fixed,
+        eparams_notfree=eparams_notfree))
     filename = 'gbkfit_result_params'
-    params = _detail.nativify(params)
-    json.dump(params, open(f'{filename}.json', 'w+'))
-    yaml.dump(params, open(f'{filename}.yaml', 'w+'))
+    json.dump(params_info, open(f'{filename}.json', 'w+'), indent=2)
+    yaml.dump(params_info, open(f'{filename}.yaml', 'w+'))
 
     #
     # Evaluate models
@@ -137,18 +158,19 @@ def eval_(config, perf=None):
             t1 = time.time_ns()
             model.evaluate_h(params)
             t2 = time.time_ns()
-            t_ms = (t2 - t1) // 1000000
+            t_ms = (t2 - t1) / 1000000
             times.append(t_ms)
             log.info(f"evaluation {i}: {t_ms} ms")
         log.info("calculating performance test statistics...")
-        time_stats = _detail.nativify(dict(
-            min=np.round(np.min(times), 1),
-            max=np.round(np.max(times), 1),
-            mean=np.round(np.mean(times), 1),
-            median=np.round(np.median(times), 1),
-            stddev=np.round(np.std(times), 1),
-            mad=np.round(stats.median_absolute_deviation(times), 1)))
+        time_stats = dict(unit='milliseconds')
+        time_stats.update(_detail.nativify(dict(
+            min=np.round(np.min(times), 2),
+            max=np.round(np.max(times), 2),
+            mean=np.round(np.mean(times), 2),
+            median=np.round(np.median(times), 2),
+            stddev=np.round(np.std(times), 2),
+            mad=np.round(stats.median_absolute_deviation(times), 2))))
         log.info(', '.join(f'{k}: {v} ms' for k, v in time_stats.items()))
         filename = 'gbkfit_result_time'
-        json.dump(time_stats, open(f'{filename}.json', 'w+'))
+        json.dump(time_stats, open(f'{filename}.json', 'w+'), indent=2)
         yaml.dump(time_stats, open(f'{filename}.yaml', 'w+'))

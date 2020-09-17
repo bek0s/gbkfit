@@ -3,7 +3,7 @@ import json
 import logging
 import time
 
-import ruamel.yaml as yaml
+import ruamel.yaml
 
 import gbkfit
 import gbkfit.dataset
@@ -16,14 +16,14 @@ import gbkfit.params.descs
 import gbkfit.params.utils
 from . import _detail
 
-import gbkfit.params.interpreter
-
 
 log = logging.getLogger(__name__)
 
+# Use this object to load and dump yaml
+yaml = ruamel.yaml.YAML()
 
 # This is needed for dumping ordered dicts
-yaml.add_representer(dict, lambda self, data: self.represent_mapping(
+ruamel.yaml.add_representer(dict, lambda self, data: self.represent_mapping(
     'tag:yaml.org,2002:map', data.items()))
 
 
@@ -44,7 +44,7 @@ def fit(config):
 
     log.info(f"reading configuration file: '{config}'...")
     cfg = _detail.prepare_config(
-        yaml.YAML().load(open(config)),
+        yaml.load(open(config)),
         ('datasets', 'drivers', 'dmodels', 'gmodels', 'params', 'fitter'),
         ('pdescs',))
 

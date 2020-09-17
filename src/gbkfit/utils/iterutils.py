@@ -19,12 +19,18 @@ def is_sequence(x, strict=True):
         else isinstance(x, collections.abc.Sequence)
 
 
-def listify(x):
+def listify_old(x):
     return list([i for i in x] if is_sequence(x) else [x])
 
 
-def tuplify(x):
-    return tuple(listify(x))
+def listify(x, none_is_val=True):
+    if x is None and not none_is_val:
+        return []
+    return list([i for i in x] if is_sequence(x) else [x])
+
+
+def tuplify(x, none_is_val=True):
+    return tuple(listify(x, none_is_val))
 
 
 def _make_seq(s, v, t, copy_):

@@ -59,6 +59,12 @@ class Objective:
     def params(self):
         return self._model.pdescs()
 
+    def datasets(self):
+        return self._datasets
+
+    def model(self):
+        return self._model
+
     def prepare(self):
         for i in range(self._model.nitems()):
             driver = self._model.drivers()[i]
@@ -91,10 +97,10 @@ class Objective:
                     data_e_1d, self._d_dataset_e_vector[i][slice_])
                 ipix += npix
         # Dataset references no longer needed
-        self._datasets = None
+        #self._datasets = None
 
-    def residual_nddata(self, params, out_extra=None):
-        self._residual_d(params, out_extra)
+    def residual_nddata(self, params, weighted=True, out_extra=None):
+        self._residual_d(params, weighted, out_extra)
         residuals = []
         for i in range(self._model.nitems()):
             driver = self._model.drivers()[i]
@@ -114,8 +120,8 @@ class Objective:
             residuals.append(h_residual_nddata)
         return residuals
 
-    def residual_vector(self, params, out_extra=None):
-        self._residual_d(params, out_extra)
+    def residual_vector(self, params, weighted=True, out_extra=None):
+        self._residual_d(params, weighted, out_extra)
         residuals = []
         for i in range(self._model.nitems()):
             driver = self._model.drivers()[i]
@@ -125,8 +131,8 @@ class Objective:
             residuals.append(h_residual_vector)
         return residuals
 
-    def residual_scalar(self, params, out_extra=None):
-        self._residual_d(params, out_extra)
+    def residual_scalar(self, params, weighed=True, out_extra=None):
+        self._residual_d(params, weighed, out_extra)
         residuals = []
         for i in range(self._model.nitems()):
             driver = self._model.drivers()[i]
@@ -144,7 +150,7 @@ class Objective:
     def log_likelihood(self, params, out_extra=None):
         return -0.5 * self.residual_scalar(params, out_extra) ** 2
 
-    def _residual_d(self, params, out_extra=None):
+    def _residual_d(self, params, weighted=True, out_extra=None):
         models = self._model.evaluate_d(params, out_extra)
         for i in range(self._model.nitems()):
             ipix = 0
@@ -157,5 +163,8 @@ class Objective:
                 mask = self._d_dataset_m_vector[i][slice_]
                 error = self._d_dataset_e_vector[i][slice_]
                 resid = self._s_residual_vector[i][1][slice_]
-                resid[:] = mask * (data - model) / error
+                if weighted:
+                    resid[:] = mask * (data - model) / error
+                else:
+                    resid[:] = mask * (data - model)
                 ipix += npix

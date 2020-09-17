@@ -10,6 +10,7 @@ from gbkfit.fitting.fitter import Fitter
 from .params import FitParamsPygmo
 from .problem import Problem
 
+from gbkfit.fitting.result import FitterResultSolution, FitterResult, make_fitter_result
 
 __all__ = [
     'FitterPygmo', 'FitterPygmoDE', 'FitterPygmoSADE', 'FitterPygmoDE1220',
@@ -62,12 +63,48 @@ class FitterPygmo(Fitter, abc.ABC):
         for i in range(self._size):
             pop.set_x(i, initials[:, i])
         pop = alg.evolve(pop)
-        print(pop.champion_f, pop.champion_x)
-        return pop
+
+        solutions = [FitterResultSolution(mode=pop.champion_x)]
+
+        result = make_fitter_result(objective, parameters, solutions=solutions)
+
+        print("------")
+        exit()
+
+        result = FitterResult()
+        params_free = parameters.names()
+
+        print("------")
+
+        exit()
+
+
+        datasets = objective.datasets()
+        params_free = parameters.expressions().names(params=True, consts=False)
+        params_fixed = parameters.expressions().names(params=False, consts=True)
+        result = FitterResult(objective.datasets(), params_free, params_fixed)
+
+        mode = pop.champion_x
+        eparams_dict = dict(zip(params_free, mode))
+        params_dict = parameters.expressions().evaluate(eparams_dict)
+        models = objective.model().evaluate_h(params_dict)
+
+
+
+        result.add_solution(mode=pop.champion_x, models=models)
+
+        exit()
+        return result
 
     @abc.abstractmethod
     def _setup_algorithm(self, attributes, parameters):
         pass
+
+
+
+
+
+    pass
 
 
 class FitterPygmoDE(FitterPygmo):

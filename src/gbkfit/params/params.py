@@ -4,8 +4,8 @@ import numbers
 
 from gbkfit.params.expressions import (
     Expressions,
-    load_expr_file,
-    dump_expr_file)
+    load_exprs_file,
+    dump_exprs_file)
 from gbkfit.params.utils import (
     explode_pdescs,
     explode_pnames,
@@ -20,13 +20,16 @@ class EvalParams(parseutils.Serializable):
         desc = 'parameters'
         opts = parseutils.parse_options_for_callable(
             info, desc, cls.__init__, fun_ignore_args=['descs'])
-        opts['expressions'] = load_expr_file(opts.get('expressions'))
+        if 'expressions' in opts:
+            opts['expressions'] = load_exprs_file(opts['expressions'])
         return cls(descs, **opts)
 
-    def dump(self, *args, **kwargs):
-        return dict(
-            parameters=self.parameters(),
-            expressions=dump_expr_file(self.expressions()))
+    def dump(self, exprs_file='gbkfit_config_expressions.py'):
+        info = dict(parameters=self.parameters())
+        exprs = self._expressions
+        if exprs.exprs_func_src() and not exprs.exprs_func_gen():
+            info['expressions'] = dump_exprs_file(exprs_file, exprs)
+        return info
 
     def __init__(self, descs, parameters, expressions=None):
         super().__init__()
