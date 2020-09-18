@@ -76,6 +76,9 @@ SP_TRAIT_UID_AZRANGE = 1
 SP_TRAIT_UID_NW_AZRANGE = 101
 
 
+TRUNC_DEFAULT = 5
+
+
 def _params_mixture(n):
     return (
         ParamVectorDesc('r', n),  # polar coord (radius)
@@ -495,8 +498,8 @@ class RPTraitNWDistortion(RPTrait):
 
 class _RHTraitSM(RHTrait, abc.ABC):
 
-    def __init__(self, rnodes, params):
-        Trait.__init__(self, rnodes=rnodes)
+    def __init__(self, consts, params):
+        Trait.__init__(self, **consts)
         self._params = tuple(params)
 
     def params_sm(self):
@@ -523,7 +526,9 @@ class RHTraitUniform(_RHTraitSM):
         return RH_TRAIT_UID_UNIFORM
 
     def __init__(self, rnodes=False):
-        super().__init__(rnodes, ['s'])
+        consts = dict(rnodes=rnodes)
+        params = ['s']
+        super().__init__(consts, params)
 
 
 class RHTraitExponential(_RHTraitSM):
@@ -536,8 +541,10 @@ class RHTraitExponential(_RHTraitSM):
     def uid():
         return RH_TRAIT_UID_EXPONENTIAL
 
-    def __init__(self, rnodes=False):
-        super().__init__(rnodes, ['s'])
+    def __init__(self, rnodes=False, trunc=TRUNC_DEFAULT):
+        consts = dict(rnodes=rnodes, trunc=trunc)
+        params = ['s']
+        super().__init__(consts, params)
 
 
 class RHTraitGauss(_RHTraitSM):
@@ -550,8 +557,10 @@ class RHTraitGauss(_RHTraitSM):
     def uid():
         return RH_TRAIT_UID_GAUSS
 
-    def __init__(self, rnodes=False):
-        super().__init__(rnodes, ['s'])
+    def __init__(self, rnodes=False, trunc=TRUNC_DEFAULT):
+        consts = dict(rnodes=rnodes, trunc=trunc)
+        params = ['s']
+        super().__init__(consts, params)
 
 
 class RHTraitGGauss(_RHTraitSM):
@@ -564,8 +573,10 @@ class RHTraitGGauss(_RHTraitSM):
     def uid():
         return RH_TRAIT_UID_GGAUSS
 
-    def __init__(self, rnodes=False):
-        super().__init__(rnodes, ['s', 'b'])
+    def __init__(self, rnodes=False, trunc=TRUNC_DEFAULT):
+        consts = dict(rnodes=rnodes, trunc=trunc)
+        params = ['s', 'b']
+        super().__init__(consts, params)
 
 
 class RHTraitLorentz(_RHTraitSM):
@@ -578,8 +589,10 @@ class RHTraitLorentz(_RHTraitSM):
     def uid():
         return RH_TRAIT_UID_LORENTZ
 
-    def __init__(self, rnodes=False):
-        super().__init__(rnodes, ['s'])
+    def __init__(self, rnodes=False, trunc=TRUNC_DEFAULT):
+        consts = dict(rnodes=rnodes, trunc=trunc)
+        params = ['s']
+        super().__init__(consts, params)
 
 
 class RHTraitMoffat(_RHTraitSM):
@@ -592,8 +605,10 @@ class RHTraitMoffat(_RHTraitSM):
     def uid():
         return RH_TRAIT_UID_MOFFAT
 
-    def __init__(self, rnodes=False):
-        super().__init__(rnodes, ['s', 'b'])
+    def __init__(self, rnodes=False, trunc=TRUNC_DEFAULT):
+        consts = dict(rnodes=rnodes, trunc=trunc)
+        params = ['s', 'b']
+        super().__init__(consts, params)
 
 
 class RHTraitSech2(_RHTraitSM):
@@ -606,8 +621,10 @@ class RHTraitSech2(_RHTraitSM):
     def uid():
         return RH_TRAIT_UID_SECH2
 
-    def __init__(self, rnodes=False):
-        super().__init__(rnodes, ['s'])
+    def __init__(self, rnodes=False, trunc=TRUNC_DEFAULT):
+        consts = dict(rnodes=rnodes, trunc=trunc)
+        params = ['s']
+        super().__init__(consts, params)
 
 
 class VPTraitTanUniform(VPTrait):

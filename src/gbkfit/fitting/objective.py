@@ -145,6 +145,7 @@ class Objective:
             driver.mem_copy_d2h(d_residual_scalar, h_residual_scalar)
             residuals.append(h_residual_scalar[0])
         print(params)
+        print(residuals)
         return residuals
 
     def log_likelihood(self, params, out_extra=None):

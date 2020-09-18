@@ -23,7 +23,7 @@ def load_dmodel_common(cls, info, ndim, dataset, dataset_cls):
             size=dataset.size(),
             step=info.get('step', dataset.step()),
             cval=info.get('cval', dataset.cval()),
-            rota=info.get('rota', dataset.rota()),
+            rota=info.get('rota', 0), #dataset.rota()),
             dtype=info.get('dtype', str(dataset.dtype))))
     opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
     for attr in ['size', 'step', 'cval', 'scale']:

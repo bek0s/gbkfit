@@ -33,9 +33,11 @@ class FitParamPygmo(FitParam):
 
     def __init__(self, minimum, maximum, initial_value=None, initial_scale=None):
         super().__init__()
+        """
         if (initial_value is None) != (initial_scale is None):
             raise RuntimeError(
                 "the initial value and initial scale must be defined together")
+        """
         self._has_initial = None not in [initial_value, initial_scale]
         self._initial_value = initial_value
         self._initial_scale = initial_scale

@@ -162,8 +162,7 @@ def eval_(config, perf=None):
             times.append(t_ms)
             log.info(f"evaluation {i}: {t_ms} ms")
         log.info("calculating performance test statistics...")
-        time_stats = dict(unit='milliseconds')
-        time_stats.update(_detail.nativify(dict(
+        time_stats = dict(_detail.nativify(dict(
             min=np.round(np.min(times), 2),
             max=np.round(np.max(times), 2),
             mean=np.round(np.mean(times), 2),
@@ -171,6 +170,7 @@ def eval_(config, perf=None):
             stddev=np.round(np.std(times), 2),
             mad=np.round(stats.median_absolute_deviation(times), 2))))
         log.info(', '.join(f'{k}: {v} ms' for k, v in time_stats.items()))
+        time_stats = dict(unit='milliseconds', **time_stats)
         filename = 'gbkfit_result_time'
         json.dump(time_stats, open(f'{filename}.json', 'w+'), indent=2)
         yaml.dump(time_stats, open(f'{filename}.yaml', 'w+'))

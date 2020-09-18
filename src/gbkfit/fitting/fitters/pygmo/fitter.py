@@ -49,8 +49,8 @@ class FitterPygmo(Fitter, abc.ABC):
             value = pinfo.initial_value()
             scale = pinfo.initial_scale()
             has_init = pinfo.has_initial()
-            init_min = value - 0.5 * scale if not has_init else minimum
-            init_max = value + 0.5 * scale if not has_init else maximum
+            init_min = value - 0.5 * scale if has_init else minimum
+            init_max = value + 0.5 * scale if has_init else maximum
             init_min = max(init_min, minimum)
             init_max = min(init_max, maximum)
             initials[i, :] = random.uniform(init_min, init_max, self._size)
@@ -63,6 +63,8 @@ class FitterPygmo(Fitter, abc.ABC):
         for i in range(self._size):
             pop.set_x(i, initials[:, i])
         pop = alg.evolve(pop)
+
+        print(pop.champion_x)
 
         solutions = [FitterResultSolution(mode=pop.champion_x)]
 

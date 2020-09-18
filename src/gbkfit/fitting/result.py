@@ -89,7 +89,7 @@ def make_fitter_result(
     dof = 100
     # For each solution, try to generate more information (if possible)
     for s in solutions:
-        if s.posterior.logprobs and s.posterior.samples:
+        if s.posterior and s.posterior.logprobs and s.posterior.samples:
             if s.mode is None:
                 s.mode = s.posterior.samples[np.argmax(s.posterior.logprobs)]
             if s.mean is None:
