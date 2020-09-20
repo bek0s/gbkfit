@@ -16,9 +16,9 @@ def _register_factories(parser, factories):
             mod = importlib.import_module(mod_name)
             cls = getattr(mod, cls_name)
             parser.register(cls)
-        except (AttributeError, ImportError) as e:
+        except Exception as e:
             log.warning(
-                f"could not register factory for type {factory}: {str(e)}")
+                f"could not register factory for type {factory}; {str(e)}")
 
 
 def _register_drivers():
