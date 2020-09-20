@@ -16,6 +16,10 @@ def load_dataset_common(cls, info, names):
                 opts.get('rpix'),
                 opts.get('rval'),
                 opts.get('rota'))
+    opts.pop('step', None)
+    opts.pop('rpix', None)
+    opts.pop('rval', None)
+    opts.pop('rota', None)
     return opts
 
 

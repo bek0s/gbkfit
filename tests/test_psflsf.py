@@ -1,5 +1,7 @@
 
-from gbkfit.psflsf.psflsfs import *
+import numpy as np
+
+from gbkfit.psflsf.psfs import PSFGauss
 
 
 def test_psfs():
