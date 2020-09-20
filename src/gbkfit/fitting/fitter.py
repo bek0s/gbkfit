@@ -2,7 +2,6 @@
 import abc
 
 import gbkfit.params
-import gbkfit.params.interpreter
 import gbkfit.params.utils
 from gbkfit.utils import parseutils
 
