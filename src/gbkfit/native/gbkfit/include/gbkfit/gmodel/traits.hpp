@@ -73,7 +73,7 @@ constexpr int WP_TRAIT_UID_NW_HARMONIC = 102;
 constexpr int SP_TRAIT_UID_AZRANGE = 1;
 constexpr int SP_TRAIT_UID_NW_AZRANGE = 101;
 
-template <typename T> constexpr T
+template<typename T> constexpr T
 nodewise(T x, int idx, const T* xdata, const T* ydata, int offset, int stride)
 {
     return lerp(x, idx, xdata, ydata, offset, stride);

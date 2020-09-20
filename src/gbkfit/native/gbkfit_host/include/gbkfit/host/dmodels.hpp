@@ -62,11 +62,10 @@ public:
     moments(std::array<int, 3> size,
             std::array<T, 3> step,
             std::array<T, 3> zero,
-            T nanval,
             Ptr scube,
             Ptr mmaps,
-            Ptr mmaps_orders,
-            int mmaps_count) const;
+            Ptr orders,
+            int norders) const;
 };
 
 } // namespace gbkfit::host

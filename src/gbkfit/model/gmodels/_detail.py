@@ -43,10 +43,10 @@ def _parse_component_node_args(
     if not iterutils.all_unique(nodes):
         raise RuntimeError(f"{prefix}nodes must be unique")
     if nstep is None:
-        nstep = min(np.diff(nodes))
-    if 0 > nstep > min(np.diff(nodes)):
+        nstep = min(np.diff(nodes)) / 2
+    if nstep <= 0 or nstep > min(np.diff(nodes)) / 2:
         raise RuntimeError(
-            f"{prefix}nstep must be greater than zero and less than the "
+            f"{prefix}nstep must be greater than zero and less than half the "
             f"smallest difference between two consecutive {prefix}nodes")
     interpolations = dict(
         linear=interpolation.InterpolatorLinear,

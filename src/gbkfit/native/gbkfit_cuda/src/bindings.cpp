@@ -14,9 +14,7 @@ PYBIND11_MODULE(EXTENSION_NAME, m)
     py::class_<DModelDCube<float>>(m, "DModelDCubef32")
             .def(py::init<>())
             .def("convolve", &DModelDCube<float>::convolve)
-            .def("downscale", &DModelDCube<float>::downscale)
-            .def("make_mask", &DModelDCube<float>::make_mask)
-            .def("apply_mask", &DModelDCube<float>::apply_mask);
+            .def("downscale", &DModelDCube<float>::downscale);
 
     py::class_<DModelMMaps<float>>(m, "DModelMMapsf32")
             .def(py::init<>())

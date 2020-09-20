@@ -122,12 +122,6 @@ class DModelDCube(gbkfit.driver.driver.DModelDCube):
             size_hi, size_lo,
             _ptr(scube_hi), _ptr(scube_lo))
 
-    def make_mask(self, size, data, mask):
-        self._dcube.make_mask(size, _ptr(data), _ptr(mask))
-
-    def apply_mask(self, size, data, mask):
-        self._dcube.apply_mask(size, _ptr(data), _ptr(mask))
-
 
 class DModelMMaps(gbkfit.driver.driver.DModelMMaps):
 
@@ -142,24 +136,13 @@ class DModelMMaps(gbkfit.driver.driver.DModelMMaps):
         self._mmaps = self._CLASSES[dtype]()
         self._dtype = dtype
 
-    def prepare(
-            self,
-            spat_size,
-            spec_size, spec_step, spec_zero,
-            scube,
-            mmaps,
-            mmaps_orders):
-        self._mmaps.prepare(
-            spat_size[0], spat_size[1],
-            spec_size, spec_step, spec_zero,
-            np.nan,
+    def moments(self, size, step, zero, scube, mmaps, orders):
+        self._mmaps.moments(
+            size, step, zero,
             _ptr(scube),
             _ptr(mmaps),
-            _ptr(mmaps_orders),
-            _shape(mmaps_orders)[0])
-
-    def moments(self):
-        self._mmaps.moments()
+            _ptr(orders),
+            _shape(orders)[0])
 
 
 class GModelMCDisk(gbkfit.driver.driver.GModelMCDisk):

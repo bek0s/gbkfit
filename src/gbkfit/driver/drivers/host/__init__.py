@@ -1,7 +1,7 @@
 
 try:
     import gbkfit.native.libgbkfit_host
-except ImportError:
+except ModuleNotFoundError:
     raise RuntimeError(
         "the host driver is not enabled in your gbkfit installation")
 

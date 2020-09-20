@@ -91,29 +91,11 @@ class DModelDCube(abc.ABC):
             scube_hi, scube_lo):
         pass
 
-    @abc.abstractmethod
-    def make_mask(self, size, data, mask):
-        pass
-
-    @abc.abstractmethod
-    def apply_mask(self, size, data, mask):
-        pass
-
 
 class DModelMMaps(abc.ABC):
 
     @abc.abstractmethod
-    def prepare(
-            self,
-            spat_size,
-            spec_size, spec_step, spec_zero,
-            scube,
-            mmaps,
-            mmaps_orders):
-        pass
-
-    @abc.abstractmethod
-    def moments(self):
+    def moments(self, size, step, zero, scube, mmaps, orders):
         pass
 
 

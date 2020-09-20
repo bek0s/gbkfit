@@ -129,43 +129,23 @@ DModelDCube<T>::downscale(
 }
 
 template<typename T> void
-DModelDCube<T>::make_mask(std::array<int, 3> size, Ptr cube, Ptr mask) const
-{
-    kernels::dcube_make_mask(
-            size[0], size[1], size[2],
-            reinterpret_cast<T*>(cube),
-            reinterpret_cast<T*>(mask));
-}
-
-template<typename T> void
-DModelDCube<T>::apply_mask(std::array<int, 3> size, Ptr cube, Ptr mask) const
-{
-    kernels::dcube_apply_mask(
-            size[0], size[1], size[2],
-            reinterpret_cast<T*>(cube),
-            reinterpret_cast<T*>(mask));
-}
-
-template<typename T> void
 DModelMMaps<T>::moments(
         std::array<int, 3> size,
         std::array<T, 3> step,
         std::array<T, 3> zero,
-        T nanval,
         Ptr scube,
         Ptr mmaps,
-        Ptr mmaps_orders,
-        int mmaps_count) const
+        Ptr orders,
+        int norders) const
 {
     kernels::dcube_moments(
             size[0], size[1], size[2],
-            step[2],
-            zero[2],
-            nanval,
+            step[0], step[1], step[2],
+            zero[0], zero[1], zero[2],
             reinterpret_cast<T*>(scube),
             reinterpret_cast<T*>(mmaps),
-            reinterpret_cast<int*>(mmaps_orders),
-            mmaps_count);
+            reinterpret_cast<int*>(orders),
+            norders);
 }
 
 #define INSTANTIATE(T)\

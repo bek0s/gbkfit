@@ -5,7 +5,7 @@ import gbkfit.math
 
 
 def fft_size(size):
-    mul_size = 64
+    mul_size = 16
     new_size = gbkfit.math.roundu_po2(size)
     if new_size > mul_size:
         new_size = gbkfit.math.roundu_multiple(size, mul_size)
@@ -183,19 +183,11 @@ class DCube:
 
     def evaluate(self, out_extra):
 
-        if self._psf:
-            self._dcube.make_mask(
-                self._size_hi, self._dcube_hi, self._dmask_hi)
-
         if self._psf or self._lsf:
             self._dcube.convolve(
                 self._size_hi,
                 self._dcube_hi, self._dcube_hi_fft,
                 self._psf3d_hi, self._psf3d_hi_fft)
-
-        if self._psf:
-            self._dcube.apply_mask(
-                self._size_hi, self._dcube_hi, self._dmask_hi)
 
         if self._dcube_lo is not self._dcube_hi:
             self._dcube.downscale(

@@ -38,8 +38,8 @@ class DModelMMaps(DModel):
         cval = tuple(cval)
         scale = tuple(scale)
         orders = tuple(sorted(set(orders)))
-        if any(order < 0 or order > 2 for order in orders):
-            raise RuntimeError("moment orders must be between 0 and 2")
+        if any(order < 0 or order > 7 for order in orders):
+            raise RuntimeError("moment orders must be between 0 and 7")
         if len(step) == 2:
             step = step + (1,)
         if len(size) == 2:
@@ -98,22 +98,14 @@ class DModelMMaps(DModel):
     def _prepare_impl(self):
         # Allocate buffers for moment map data
         shape = (self.size() + (len(self.orders()),))[::-1]
-        self._s_mmap_data = self._driver.mem_alloc_s(shape, self.dtype())
+        self._s_mmap_data = self._driver.mem_alloc_d(shape, self.dtype())
+        self._driver.mem_fill(self._s_mmap_data, np.nan)
         self._d_mmap_order = self._driver.mem_copy_h2d(
             np.array(self.orders(), np.int32))
         # Prepare dcube
         self._dcube.prepare(self._driver)
-        # Create and prepare moment map backend
-        # Preparation must be done after dcube preparation
+        # Create moment maps backend
         self._mmaps = self._driver.make_dmodel_mmaps(self.dtype())
-        self._mmaps.prepare(
-            self._dcube.size()[:2],
-            self._dcube.size()[2],
-            self._dcube.step()[2],
-            self._dcube.zero()[2],
-            self._dcube.data(),
-            self._s_mmap_data[1],
-            self._d_mmap_order)
 
     def _evaluate_impl(self, params, out_dextra, out_gextra):
         driver = self._driver
@@ -131,10 +123,14 @@ class DModelMMaps(DModel):
             dcube.dtype(),
             out_gextra)
         dcube.evaluate(out_dextra)
-        mmaps.moments()
+        mmaps.moments(
+            self._dcube.size(),
+            self._dcube.step(),
+            self._dcube.zero(),
+            self._dcube.data(),
+            self._s_mmap_data,
+            self._d_mmap_order)
         out = dict()
         for i, oname in enumerate(self.onames()):
-            out[oname] = driver.mem_copy_d2h(
-                self._s_mmap_data[0][i, :, :],
-                self._s_mmap_data[1][i, :, :])
+            out[oname] = self._s_mmap_data[i, :, :]
         return out

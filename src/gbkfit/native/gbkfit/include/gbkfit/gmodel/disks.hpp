@@ -614,8 +614,11 @@ gmodel_smdisk_evaluate_pixel(
     // Thin disk requires surface brightness correction
     if (is_thin) bvalue /= std::cos(incli);
 
-    // Thick disk requires integration along the z axis.
+    // Thick disk requires integration along the z axis
     if (!is_thin) bvalue *= spat_step_z;
+
+    // Discart pixels with zero emission
+    if (bvalue == 0) return false;
 
     // Velocity traits
     if (vpt_uids)

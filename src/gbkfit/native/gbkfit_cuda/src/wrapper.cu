@@ -38,40 +38,24 @@ Wrapper<T>::dmodel_dcube_downscale(
 }
 
 template<typename T> void
-Wrapper<T>::dmodel_dcube_make_mask(
-        int size_x, int size_y, int size_z, const T* cube, T* mask)
-{
-    unsigned int n = size_x * size_y;
-    dim3 bsize(256);
-    dim3 gsize((n + bsize.x - 1) / bsize.x);
-    kernels::dmodel_dcube_make_mask<<<gsize, bsize>>>(
-            size_x, size_y, size_z, cube, mask);
-
-    cudaDeviceSynchronize();
-}
-
-template<typename T> void
-Wrapper<T>::dmodel_dcube_apply_mask(
-        int size_x, int size_y, int size_z, T* cube, const T* mask)
-{
-    unsigned int n = size_x * size_y;
-    dim3 bsize(256);
-    dim3 gsize((n + bsize.x - 1) / bsize.x);
-    kernels::dmodel_dcube_apply_mask<<<gsize, bsize>>>(
-            size_x, size_y, size_z, cube, mask);
-
-    cudaDeviceSynchronize();
-}
-
-template<typename T> void
 Wrapper<T>::dmodel_mmaps_moments(
         int size_x, int size_y, int size_z,
-        T step_z,
-        T zero_z,
-        T nanval,
+        T step_x, T step_y, T step_z,
+        T zero_x, T zero_y, T zero_z,
         const T* scube,
         T* mmaps, const int* orders, int norders)
 {
+    unsigned int n = size_x * size_y;
+    dim3 bsize(256);
+    dim3 gsize((n + bsize.x - 1) / bsize.x);
+
+    kernels::dcube_moments<<<gsize, bsize>>>(
+            size_x, size_y, size_z,
+            step_x, step_y, step_z,
+            zero_x, zero_y, zero_z,
+            scube,
+            mmaps, orders, norders);
+
     cudaDeviceSynchronize();
 }
 

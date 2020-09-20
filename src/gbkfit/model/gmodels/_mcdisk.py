@@ -52,8 +52,6 @@ class MCDisk(_disk.Disk):
             spec_size, spec_step, spec_zero,
             dtype, out_extra):
 
-        print(spat_step, spec_step)
-
         # Calculate the number of clouds per trait and subring.
         # The latter happens when the trait has no ordinary integral.
         ncloudspt = []

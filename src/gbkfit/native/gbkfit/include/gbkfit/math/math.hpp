@@ -106,7 +106,7 @@ _trunc_1d_pdf(T xmin, T xmax, T x, Ts ...args)
 template<auto FUN, typename T, typename ...Ts> constexpr T
 _trunc_1d_rnd(T xmin, T xmax, RNG<T>& rng, Ts ...args)
 {
-    T x;
+    T x = 0;
     do {
         x = FUN(rng, args...);
     } while (x < xmin && x > xmax);
@@ -154,52 +154,40 @@ uniform_1d_rnd_trunc(RNG<T>& rng, T b, T c, T xmin, T xmax)
 template<typename T> constexpr T
 uniform_wm_1d_fun(T x, T a, T b, T c)
 {
-    T newb = b - c;
-    T newc = b + c;
-    return uniform_1d_fun(x, a, newb, newc);
+    return uniform_1d_fun(x, a, b - c, b + c);
 }
 
 template<typename T> constexpr T
 uniform_wm_1d_cdf(T x, T b, T c)
 {
-    T newb = b - c;
-    T newc = b + c;
-    return uniform_1d_cdf(x, newb, newc);
+    return uniform_1d_cdf(x, b - c, b + c);
 }
 
 template<typename T> constexpr T
 uniform_wm_1d_pdf(T x, T b, T c)
 {
-    T newb = b - c;
-    T newc = b + c;
-    return uniform_1d_pdf(x, newb, newc);
+    return uniform_1d_pdf(x, b - c, b + c);
 }
 
 template<typename T> constexpr T
 uniform_wm_1d_pdf_trunc(T x, T b, T c, T xmin, T xmax)
 {
-    T newb = b - c;
-    T newc = b + c;
     return _trunc_1d_pdf<uniform_1d_pdf<T>, uniform_1d_cdf<T>>(
-            xmin, xmax, x, newb, newc);
+            xmin, xmax, x, b - c, b + c);
 }
 
 template<typename T> constexpr T
 uniform_wm_1d_rnd(RNG<T>& rng, T b, T c)
 {
-    T newb = b - c;
-    T newc = b + c;
-    return uniform_1d_rnd(rng, newb, newc);
+    return uniform_1d_rnd(rng, b - c, b + c);
 }
 
 template<typename T> constexpr T
 uniform_wm_1d_rnd_trunc(RNG<T>& rng, T b, T c, T xmin, T xmax)
 {
-    T newb = b - c;
-    T newc = b + c;
-    return _trunc_1d_rnd<uniform_1d_rnd<T>>(xmin, xmax, rng, newb, newc);
+    return _trunc_1d_rnd<uniform_1d_rnd<T>>(xmin, xmax, rng, b - c, b + c);
 }
-
+// todo: verify this is correct
 template<typename T, typename TTarget, typename ...Ts> constexpr T
 rejection_sampling(TTarget target, RNG<T>& rng, T trunc, Ts... args)
 {
@@ -217,11 +205,11 @@ exponential_1d_fun(T x, T a, T b, T c)
 {
     return a * std::exp(-std::abs(x - b) / c);
 }
-
+// todo: implement this
 template<typename T> constexpr T
 exponential_1d_cdf(T x, T b, T c)
 {
-//  return T{0.5} + T{0.5} * sign(x - b) * (1 - std::exp(-std::abs(x - b) / c));
+    return T{0.5} + T{0.5} * sign(x - b) * (1 - std::exp(-std::abs(x - b) / c));
 }
 
 template<typename T> constexpr T
@@ -296,7 +284,7 @@ ggauss_1d_fun(T x, T a, T b, T c, T d)
 {
     return a * std::exp(-std::pow(std::abs(x - b) / c, d));
 }
-
+// todo: implement this
 template<typename T> constexpr T
 ggauss_1d_cdf(T x, T b, T c, T d)
 {
@@ -377,7 +365,7 @@ moffat_1d_fun(T x, T a, T b, T c, T d)
 {
     return a / std::pow(1 + ((x - b) / c) * ((x - b) / c), d);
 }
-
+// todo: implement this
 template<typename T> constexpr T
 moffat_1d_cdf(T x, T b, T c, T d)
 {
@@ -387,7 +375,7 @@ moffat_1d_cdf(T x, T b, T c, T d)
     (void)d;
     return 0;
 }
-
+// todo: implement this
 template<typename T> constexpr T
 moffat_1d_pdf(T x, T b, T c, T d)
 {

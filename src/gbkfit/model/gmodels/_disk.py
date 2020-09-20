@@ -123,6 +123,8 @@ class Disk(abc.ABC):
         self._rnstep = rnstep
 
         # Inner radial sub nodes
+        # The end node will not be exact, but it will be good enough
+        # The smaller the rnstep the better
         subrnodes = np.arange(rnodes[0] + rnstep / 2, rnodes[-1], rnstep)
         # Outer radial sub nodes
         subrnodes = np.insert(subrnodes, 0, rnodes[0])

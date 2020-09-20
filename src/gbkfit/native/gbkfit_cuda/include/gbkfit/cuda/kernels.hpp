@@ -2,6 +2,7 @@
 
 #include <curand_kernel.h>
 
+#include <gbkfit/dmodel/dmodels.hpp>
 #include <gbkfit/gmodel/disks.hpp>
 #include "gbkfit/cuda/fftutils.hpp"
 #include <thrust/random.h>
@@ -68,42 +69,6 @@ index_1d_to_2d(
     out_x = idx;
 }
 
-template<typename T> __global__ void
-dmodel_dcube_make_mask(int size_x, int size_y, int size_z, const T* cube, T* mask)
-{
-    int n = size_x * size_y;
-    int tid = blockIdx.x * blockDim.x + threadIdx.x;
-    if (tid >= n)
-        return;
-
-    int x, y;
-    index_1d_to_2d(x, y, tid, size_x);
-
-    for(int z = 0; z < size_z; ++z) {
-        if (cube[x + y * size_x + z * size_x * size_y]) {
-            mask[x + y * size_x] = 1;
-            break;
-        }
-    }
-}
-
-template<typename T> __global__ void
-dmodel_dcube_apply_mask(int size_x, int size_y, int size_z, T* cube, const T* mask)
-{
-    int n = size_x * size_y;
-    int tid = blockIdx.x * blockDim.x + threadIdx.x;
-    if (tid >= n)
-        return;
-
-    int x, y;
-    index_1d_to_2d(x, y, tid, size_x);
-
-    if (!mask[x + y * size_x]) {
-        for(int z = 0; z < size_z; ++z) {
-            cube[x + y * size_x + z * size_x * size_y] = 0;
-        }
-    }
-}
 
 template<typename T> __global__ void
 dmodel_dcube_complex_multiply_and_scale(
@@ -177,6 +142,7 @@ dmodel_dcube_downscale(
     dst_cube[idx] = sum * nfactor;
 }
 
+
 template<typename T> __device__ void
 evaluate_image(T* image, int x, int y, T rvalue, int spat_size_x)
 {
@@ -193,8 +159,8 @@ evaluate_scube(
         T spec_zero)
 {
     // Calculate a spectral range that encloses most of the flux.
-    T zmin = vvalue - dvalue * 4;
-    T zmax = vvalue + dvalue * 4;
+    T zmin = vvalue - dvalue * 3;
+    T zmax = vvalue + dvalue * 3;
     int zmin_idx = fmax<T>(std::rint(
             (zmin - spec_zero)/spec_step), 0);
     int zmax_idx = fmin<T>(std::rint(
@@ -212,6 +178,31 @@ evaluate_scube(
     //  scube[idx] += flux;
         atomicAdd(&scube[idx], flux);
     }
+}
+
+template<typename T> __global__ void
+dcube_moments(
+        int size_x, int size_y, int size_z,
+        T step_x, T step_y, T step_z,
+        T zero_x, T zero_y, T zero_z,
+        const T* scube,
+        T* mmaps, const int* orders, int norders)
+{
+    int n = size_x * size_y;
+
+    int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (tid >= n)
+        return;
+
+    int x, y;
+    index_1d_to_2d(x, y, tid, size_x);
+
+    gbkfit::moments(x, y,
+            size_x, size_y, size_z,
+            step_x, step_y, step_z,
+            zero_x, zero_y, zero_z,
+            scube,
+            mmaps, orders, norders);
 }
 
 template<typename T> __global__ void

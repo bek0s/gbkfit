@@ -28,42 +28,7 @@ struct RNG
 
 } // namespace gbkfit
 
-namespace gbkfit { namespace host { namespace kernels {
-
-template<typename T> void
-dcube_make_mask(int size_x, int size_y, int size_z, const T* cube, T* mask)
-{
-    #pragma omp parallel for collapse(2)
-    for(int y = 0; y < size_y; ++y)
-    {
-    for(int x = 0; x < size_x; ++x)
-    {
-        for(int z = 0; z < size_z; ++z) {
-            if (cube[x + y * size_x + z * size_x * size_y]) {
-                mask[x + y * size_x] = 1;
-                break;
-            }
-        }
-    }
-    }
-}
-
-template<typename T> void
-dcube_apply_mask(int size_x, int size_y, int size_z, T* cube, const T* mask)
-{
-    #pragma omp parallel for collapse(2)
-    for(int y = 0; y < size_y; ++y)
-    {
-    for(int x = 0; x < size_x; ++x)
-    {
-        if (!mask[x + y * size_x]) {
-            for(int z = 0; z < size_z; ++z) {
-                cube[x + y * size_x + z * size_x * size_y] = 0;
-            }
-        }
-    }
-    }
-}
+namespace gbkfit::host::kernels {
 
 template<typename T> void
 complex_multiply_and_scale(
@@ -141,25 +106,21 @@ dcube_downscale(
 
 template<typename T> void
 dcube_moments(
-        int spat_size_x, int spat_size_y,
-        int spec_size,
-        T spec_step,
-        T spec_zero,
-        T nanval,
+        int size_x, int size_y, int size_z,
+        T step_x, T step_y, T step_z,
+        T zero_x, T zero_y, T zero_z,
         const T* scube,
         T* mmaps, const int* orders, int norders)
 {
-    //#pragma omp parallel for collapse(2)
-    for (int y = 0; y < spat_size_y; ++y)
+    #pragma omp parallel for collapse(2)
+    for (int y = 0; y < size_y; ++y)
     {
-    for (int x = 0; x < spat_size_x; ++x)
+    for (int x = 0; x < size_x; ++x)
     {
         moments(x, y,
-                spat_size_x, spat_size_y,
-                spec_size,
-                spec_step,
-                spec_zero,
-                nanval,
+                size_x, size_y, size_z,
+                step_x, step_y, step_z,
+                zero_x, zero_y, zero_z,
                 scube,
                 mmaps, orders, norders);
     }
@@ -183,8 +144,8 @@ evaluate_scube(
         T spec_zero)
 {
     // Calculate a spectral range that encloses most of the flux.
-    T zmin = vvalue - dvalue * 4;
-    T zmax = vvalue + dvalue * 4;
+    T zmin = vvalue - dvalue * 3;
+    T zmax = vvalue + dvalue * 3;
     int zmin_idx = std::max<T>(std::rint(
             (zmin - spec_zero)/spec_step), 0);
     int zmax_idx = std::min<T>(std::rint(
@@ -496,4 +457,4 @@ gmodel_mcdisk_evaluate(
     }
 }
 
-}}} // namespace gbkfit::host::kernels
+} // namespace gbkfit::host::kernels

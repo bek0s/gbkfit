@@ -76,7 +76,7 @@ SP_TRAIT_UID_AZRANGE = 1
 SP_TRAIT_UID_NW_AZRANGE = 101
 
 
-TRUNC_DEFAULT = 5
+TRUNC_DEFAULT = 0
 
 
 def _params_mixture(n):

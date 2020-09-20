@@ -31,12 +31,6 @@ public:
             std::array<int, 3> dst_size,
             Ptr src_cube, Ptr dst_cube) const;
 
-    void
-    make_mask(std::array<int, 3> size, Ptr cube, Ptr mask) const;
-
-    void
-    apply_mask(std::array<int, 3> size, Ptr cube, Ptr mask) const;
-
 private:
 
     mutable std::array<int, 3> m_size;
@@ -62,11 +56,10 @@ public:
     moments(std::array<int, 3> size,
             std::array<T, 3> step,
             std::array<T, 3> zero,
-            T nanval,
             Ptr scube,
             Ptr mmaps,
-            Ptr mmaps_orders,
-            int mmaps_count) const;
+            Ptr orders,
+            int norders) const;
 };
 
 } // namespace gbkfit::cuda
