@@ -28,28 +28,24 @@ class DModelImage(DModel):
         return _detail.dump_dmodel_common(self)
 
     def __init__(
-            self, size, step=(1, 1), cval=(0, 0), rota=0,
+            self, size, step=(1, 1), rpix=None, rval=(0, 0), rota=0,
             scale=(1, 1), psf=None,
             dtype=np.float32):
         super().__init__()
+        if rpix is None:
+            rpix = tuple((np.array(size) / 2 - 0.5).tolist())
         size = tuple(size) + (1,)
         step = tuple(step) + (0,)
-        cval = tuple(cval) + (0,)
+        rval = tuple(rval) + (0,)
         scale = tuple(scale) + (1,)
         self._dcube = _dcube.DCube(
-            size, step, cval, rota, scale, psf, None, dtype)
+            size, step, rpix, rval, rota, scale, psf, None, dtype)
 
     def size(self):
         return self._dcube.size()[:2]
 
     def step(self):
         return self._dcube.step()[:2]
-
-    def cpix(self):
-        return self._dcube.cpix()[:2]
-
-    def cval(self):
-        return self._dcube.cval()[:2]
 
     def zero(self):
         return self._dcube.zero()[:2]
@@ -68,11 +64,6 @@ class DModelImage(DModel):
 
     def onames(self):
         return ['image']
-
-    def _submodel_impl(self, size, cval):
-        return DModelImage(
-            size, self.step(), cval, self.scale(),
-            self.psf(), self.dtype())
 
     def _prepare_impl(self):
         self._dcube.prepare(self._driver)

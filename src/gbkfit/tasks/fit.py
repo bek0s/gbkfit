@@ -16,6 +16,9 @@ import gbkfit.params.descs
 import gbkfit.params.utils
 from . import _detail
 
+import numpy as np
+import astropy.wcs
+import astropy.io.fits as fits
 
 log = logging.getLogger(__name__)
 
@@ -35,7 +38,38 @@ class Foo:
 callback = Foo()
 
 
+def foobar(filename, data, cdelt=None, crpix=None, crval=None, crota=None, overwrite=False):
+    crota = np.radians(crota)
+    wcs = astropy.wcs.WCS(naxis=data.ndim, relax=False)
+    if cdelt is not None:
+        wcs.wcs.cdelt = cdelt
+    if crpix is not None:
+        wcs.wcs.crpix = crpix
+    if crval is not None:
+        wcs.wcs.crval = crval
+    if crota is not None:
+        wcs.wcs.pc = np.identity(data.ndim)
+        wcs.wcs.pc[0][0] = +np.cos(crota)
+        wcs.wcs.pc[0][1] = -np.sin(crota)
+        wcs.wcs.pc[1][0] = +np.sin(crota)
+        wcs.wcs.pc[1][1] = +np.cos(crota)
+    fits.writeto(
+        filename, data, header=wcs.to_header(),
+        output_verify='exception', overwrite=overwrite, checksum=True)
+
+    eleos = fits.getheader(filename)
+    wcs1 = astropy.wcs.WCS(eleos)
+    print(wcs1)
+
+
+
 def fit(config):
+
+    #data = np.ones((51, 51, 51))
+
+    #foobar('foo.fits', data, [10, 10, 5], crpix=[10, 10, 10], crval=[0, 0, 0], rota=45.0, overwrite=True)
+
+    #exit()
 
     #
     # Read configuration file and
@@ -92,4 +126,9 @@ def fit(config):
     t2 = time.time_ns()
     t_ms = (t2 - t1) // 1000000
     log.info(f"model-fitting completed (elapsed time: {t_ms} ms)")
-    print(result)
+
+    from gbkfit.fitting.result import dump_result
+
+    dump_result('out', result)
+
+    #print(result)

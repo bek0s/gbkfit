@@ -25,5 +25,6 @@ def load_dataset_common(cls, info, names):
 
 def dump_dataset_common(dataset, prefix=''):
     out = dict(dtype=dataset.type())
-    out.update({name: data.dump(prefix) for name, data in dataset.items()})
+    for key, data in dataset.items():
+        out[key] = data.dump(f"{prefix}{key}_")
     return out

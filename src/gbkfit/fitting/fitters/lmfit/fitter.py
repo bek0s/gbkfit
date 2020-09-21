@@ -1,50 +1,20 @@
 
 import abc
 import copy
-import logging
 
-import lmfit
 import numpy as np
-
-import gbkfit.fitting.fitter
-import gbkfit.fitting.params
-import gbkfit.params.utils
-from gbkfit.fitting import result
-from gbkfit.utils import parseutils
-
+import numpy.random as random
+import pygmo as pg
 
 from gbkfit.fitting.fitter import Fitter
-from gbkfit.fitting.params import FitParam, FitParams
+from .params import FitParamsLMFitLeastSquares, FitParamsLMFitNelderMead
 
 
-log = logging.getLogger(__name__)
-
-
-def _residual_params(x, interpreter):
-    enames = interpreter.get_param_names()
-    evalues = x.valuesdict().values()
-    eparams = dict(zip(enames, evalues))
-    params = interpreter.evaluate(eparams)
-    return params
-
-
-def _residual_scalar(params, objective, interpreter):
-    return objective.residual_scalar(_residual_params(params, interpreter))
-
-
-def _residual_vector(params, objective, interpreter, callback):
-    params = _residual_params(params, interpreter)
-    callback(objective, params)
-    return objective.residual_vector(params)
-
-
-
-
-class FitterLMFit(Fitter):
+class FitterLMFit(Fitter, abc.ABC):
 
     def __init__(self, method, iter_cb, scale_covar, max_nfev):
         super().__init__()
-        self._common_kws = dict(
+        self._common_attrs = dict(
             method=method,
             iter_cb=iter_cb,
             scale_covar=scale_covar,
@@ -52,8 +22,8 @@ class FitterLMFit(Fitter):
             calc_covar=True,
             max_nfev=max_nfev)
 
-    def _fit_impl(self, objective, parameters, interpreter, **kwargs):
-        result1 = self._fit_impl2(objective, parameters, interpreter, **kwargs)
+    def _fit_impl(self, objective, parameters):
+        result1 = self._fit_impl2(objective, parameters)
         extra = dict()
         attrs = [
             'success', 'status', 'message', 'nfev',
@@ -64,12 +34,10 @@ class FitterLMFit(Fitter):
 
         print(extra)
         exit()
-        result2 = result.FitterResult(objective, parameters, extra=extra)
-        result2.add_mode(mode=[p.value for p in result1.params.values()])
-        return result2
+        return None
 
     @abc.abstractmethod
-    def _fit_impl2(self, objective, parameters, interpreter, **kwargs):
+    def _fit_impl2(self, objective, parameters):
         pass
 
 
@@ -78,12 +46,6 @@ class FitterLMFitLeastSquares(FitterLMFit):
     @staticmethod
     def type():
         return 'lmfit.least_squares'
-
-    @classmethod
-    def load(cls, info):
-        desc = f'{cls.type()} fitter (class: {cls.__qualname__})'
-        opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
-        return cls(**opts)
 
     @staticmethod
     def load_params(info, descs):
@@ -106,7 +68,7 @@ class FitterLMFitLeastSquares(FitterLMFit):
             tr_solver=tr_solver, tr_options=tr_options if tr_options else {},
             jac_sparsity=jac_sparsity, verbose=verbose)
 
-    def _fit_impl2(self, objective, parameters, interpreter, **kwargs):
+    def _fit_impl2(self, objective, parameters):
         common_kws = copy.deepcopy(self._common_kws)
         method_kws = copy.deepcopy(self._method_kws)
         x_scale = method_kws.pop('x_scale')
@@ -146,12 +108,6 @@ class FitterLMFitNelderMead(FitterLMFit):
     @staticmethod
     def type():
         return 'lmfit.nelder_mead'
-
-    @classmethod
-    def load(cls, info):
-        desc = f'{cls.type()} fitter (class: {cls.__qualname__})'
-        opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
-        return cls(**opts)
 
     @staticmethod
     def load_params(info, descs):

@@ -33,7 +33,8 @@ class DatasetMMaps(Dataset):
         desc = make_dataset_desc(self.__class__)
         dataset_detail.ensure_same_attrib_value(mmaps, 'size', desc)
         dataset_detail.ensure_same_attrib_value(mmaps, 'step', desc)
-        dataset_detail.ensure_same_attrib_value(mmaps, 'cval', desc)
+        dataset_detail.ensure_same_attrib_value(mmaps, 'rpix', desc)
+        dataset_detail.ensure_same_attrib_value(mmaps, 'rval', desc)
         dataset_detail.ensure_same_attrib_value(mmaps, 'rota', desc)
         # TODO: validate wcs
         super().__init__(mmaps)
@@ -51,12 +52,16 @@ class DatasetMMaps(Dataset):
         return self.steps[0]
 
     @property
-    def cpix(self):
-        return self.cpixs[0]
+    def zero(self):
+        return self.zeros[0]
 
     @property
-    def cval(self):
-        return self.cvals[0]
+    def rpix(self):
+        return self.rpixs[0]
+
+    @property
+    def rval(self):
+        return self.rvals[0]
 
     @property
     def rota(self):

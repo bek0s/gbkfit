@@ -18,39 +18,24 @@ class Data:
     @classmethod
     def load(cls, info, step=None, rpix=None, rval=None, rota=None):
         desc = make_data_desc(cls)
-        opts = parseutils.parse_options_for_callable(
-            info, desc, cls.__init__,
-            fun_ignore_args=['cval'], add_optional=['rpix', 'rval'])
+        opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
         data_d = fits.getdata(opts['data'])
         data_m = fits.getdata(opts['mask']) if 'mask' in info else None
         data_e = fits.getdata(opts['error']) if 'error' in info else None
-        size = np.array(data_d.shape[::-1])
-        ndim = len(size)
         # Local information has higher priority than global
         step = opts.get('step', step)
         rpix = opts.get('rpix', rpix)
         rval = opts.get('rval', rval)
         rota = opts.get('rota', rota)
         # TODO: If no information is provided yet, use fits header
-        # If no information is provided yet, use defaults
-        if step is None:
-            step = np.ones(ndim)
-        if rpix is None:
-            rpix = size / 2 - 0.5
-        if rval is None:
-            rval = np.zeros(ndim)
-        if rota is None:
-            rota = 0.0
-        # Calculate central pixel coord and value
-        cpix = size / 2 - 0.5
-        cval = _detail.pix2world(cpix, step, rpix, rval, rota)
         # Build class arguments dict
         opts.update(dict(
             data=data_d,
             mask=data_m,
             error=data_e,
-            step=tuple(step),
-            cval=tuple(cval),
+            step=step,
+            rpix=rpix,
+            rval=rval,
             rota=rota))
         return cls(**opts)
 
@@ -63,8 +48,8 @@ class Data:
             mask=file_m,
             error=file_e,
             step=self.step(),
-            rpix=self.cpix(),
-            rval=self.cval(),
+            rpix=self.rpix(),
+            rval=self.rval(),
             rota=self.rota())
         fits.writeto(file_d, self.data(), overwrite=True)
         fits.writeto(file_m, self.mask(), overwrite=True)
@@ -73,16 +58,20 @@ class Data:
 
     def __init__(
             self, data, mask=None, error=None,
-            step=None, cval=None, rota=0):
+            step=None, rpix=None, rval=None, rota=0):
         if mask is None:
             mask = np.ones_like(data)
         if error is None:
             error = np.ones_like(data)
+        if step is None:
+            step = (1,) * data.ndim
+        if rpix is None:
+            rpix = tuple((np.array(data.shape[::-1]) / 2 - 0.5).tolist())
+        if rval is None:
+            rval = (0,) * data.ndim
         data = miscutils.to_native_byteorder(data)
         mask = miscutils.to_native_byteorder(mask)
         error = miscutils.to_native_byteorder(error)
-        step = (1,) * data.ndim if step is None else tuple(step)
-        cval = (0,) * data.ndim if cval is None else tuple(cval)
         if data.shape != mask.shape:
             raise RuntimeError(
                 f"data and mask have incompatible shapes "
@@ -95,10 +84,14 @@ class Data:
             raise RuntimeError(
                 f"data dimensionality and step length are incompatible "
                 f"({data.dim} != {len(step)})")
-        if data.ndim != len(cval):
+        if data.ndim != len(rpix):
             raise RuntimeError(
-                f"data dimensionality and cval length are incompatible "
-                f"({data.dim} != {len(cval)})")
+                f"data dimensionality and rpix length are incompatible "
+                f"({data.dim} != {len(rpix)})")
+        if data.ndim != len(rval):
+            raise RuntimeError(
+                f"data dimensionality and rval length are incompatible "
+                f"({data.dim} != {len(rval)})")
         finite_mask = np.ones_like(data)
         finite_mask *= np.isfinite(data)
         finite_mask *= np.isfinite(mask)
@@ -107,12 +100,17 @@ class Data:
         mask[finite_mask == 0] = 0
         mask[finite_mask != 0] = 1
         error[finite_mask == 0] = np.nan
+        zero = (
+            rval[0] - rpix[0] * step[0],
+            rval[1] - rpix[1] * step[1],
+            rval[2] - rpix[2] * step[2])
         self._data = data.copy()
         self._mask = mask.copy().astype(data.dtype)
         self._error = error.copy().astype(data.dtype)
-        self._cpix = tuple(np.array(data.shape[::-1]) / 2 - 0.5)
-        self._step = step
-        self._cval = cval
+        self._step = tuple(step)
+        self._zero = tuple(zero)
+        self._rpix = tuple(rpix)
+        self._rval = tuple(rval)
         self._rota = rota
 
     def ndim(self):
@@ -127,11 +125,14 @@ class Data:
     def step(self):
         return self._step
 
-    def cpix(self):
-        return self._cpix
+    def zero(self):
+        return self._zero
 
-    def cval(self):
-        return self._cval
+    def rpix(self):
+        return self._rpix
+
+    def rval(self):
+        return self._rval
 
     def rota(self):
         return self._rota
@@ -195,12 +196,16 @@ class Dataset(parseutils.TypedParserSupport, abc.ABC):
         return tuple(data.step for data in self.values())
 
     @property
-    def cpixs(self):
-        return tuple(data.cpix for data in self.values())
+    def zeros(self):
+        return tuple(data.zero for data in self.values())
 
     @property
-    def cvals(self):
-        return tuple(data.cval for data in self.values())
+    def rpixs(self):
+        return tuple(data.rpix for data in self.values())
+
+    @property
+    def rvals(self):
+        return tuple(data.rval for data in self.values())
 
     @property
     def rotas(self):

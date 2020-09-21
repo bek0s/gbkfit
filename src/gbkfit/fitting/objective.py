@@ -16,7 +16,7 @@ class Objective:
         self._names = iterutils.make_list((n,), list(), True)
         self._sizes = iterutils.make_list((n,), list(), True)
         self._steps = iterutils.make_list((n,), list(), True)
-        self._cvals = iterutils.make_list((n,), list(), True)
+        self._zeros = iterutils.make_list((n,), list(), True)
         self._npixs = iterutils.make_list((n,), list(), True)
         self._d_dataset_d_vector = [None] * n
         self._d_dataset_m_vector = [None] * n
@@ -44,15 +44,15 @@ class Objective:
                     raise RuntimeError(
                         f"dataset and dmodel have incompatible steps "
                         f"for item '{name}' ({data.step()} != {dmodel.step()})")
-                if data.cval() != dmodel.cval():
+                if data.zero() != dmodel.zero():
                     raise RuntimeError(
-                        f"dataset and dmodel have incompatible cvals "
-                        f"for item '{name}' ({data.cval()} != {dmodel.cval()})")
+                        f"dataset and dmodel have incompatible zeros "
+                        f"for item '{name}' ({data.zero()} != {dmodel.zero()})")
                 self._nitems[i] += 1
                 self._names[i] += [name]
                 self._sizes[i] += [data.size()]
                 self._steps[i] += [data.step()]
-                self._cvals[i] += [data.cval()]
+                self._zeros[i] += [data.zero()]
                 self._npixs[i] += [data.npix()]
         self.prepare()
 

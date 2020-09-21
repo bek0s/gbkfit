@@ -29,16 +29,19 @@ class DModelLSlit(DModel):
         return _detail.dump_dmodel_common(self)
 
     def __init__(
-            self, size, step=(1, 1, 1), cval=(0, 0, 0), rota=0,
+            self, size, step=(1, 1, 1), rpix=None, rval=(0, 0, 0), rota=0,
             scale=(1, 1, 1), psf=None, lsf=None,
             dtype=np.float32):
         super().__init__()
+        if rpix is None:
+            rpix = tuple((np.array(size) / 2 - 0.5).tolist())
         size = tuple([size[0], 1, size[1]])
         step = tuple(step)
-        cval = tuple(cval)
+        rpix = tuple(rpix)
+        rval = tuple(rval)
         scale = tuple(scale)
         self._dcube = _dcube.DCube(
-            size, step, cval, rota, scale, psf, lsf, dtype)
+            size, step, rpix, rval, rota, scale, psf, lsf, dtype)
 
     def size(self):
         return self._dcube.size()
@@ -46,14 +49,11 @@ class DModelLSlit(DModel):
     def step(self):
         return self._dcube.step()
 
-    def cpix(self):
-        return self._dcube.cpix()
-
-    def cval(self):
-        return self._dcube.cval()
-
     def zero(self):
         return self._dcube.zero()
+
+    def rota(self):
+        return self._dcube.rota()
 
     def scale(self):
         return self._dcube.scale()
@@ -69,11 +69,6 @@ class DModelLSlit(DModel):
 
     def onames(self):
         return ['lslit']
-
-    def _submodel_impl(self, size, cval):
-        return DModelLSlit(
-            size, self.step(), cval, self.scale(),
-            self.psf(), self.lsf(), self.dtype())
 
     def _prepare_impl(self):
         self._dcube.prepare(self._driver)

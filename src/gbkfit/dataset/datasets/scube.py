@@ -38,9 +38,19 @@ class DatasetSCube(Dataset):
         return self.steps[0]
 
     @property
-    def cpix(self):
-        return self.cpixs[0]
+    def zero(self):
+        return self.zeros[0]
 
     @property
-    def cval(self):
-        return self.cvals[0]
+    def rpix(self):
+        return self.rpixs[0]
+
+    @property
+    def rval(self):
+        return self.rvals[0]
+
+    @property
+    def rota(self):
+        return self.rotas[0]
+
+

@@ -132,75 +132,7 @@ def nativify(node):
     return node
 
 
-def setup_datasets(cfg):
-    datasets = None
-    if cfg.get('datasets'):
-        log.info("setting up datasets...")
-        datasets = gbkfit.dataset.parser.load_many(cfg['datasets'])
-    return datasets
 
-
-def setup_drivers(cfg):
-    drivers = None
-    if cfg.get('drivers'):
-        log.info("setting up drivers...")
-        drivers = gbkfit.driver.driver.parser.load_many(cfg['drivers'])
-    return drivers
-
-
-def setup_dmodels(cfg, datasets):
-    log.info("setting up dmodels...")
-    return gbkfit.model.dmodel.parser.load_many(cfg['dmodels'], datasets)
-
-
-def setup_gmodels(cfg):
-    log.info("setting up gmodels...")
-    return gbkfit.model.gmodel.parser.load_many(cfg['gmodels'])
-
-
-def setup_fitter(cfg):
-    log.info("setting up fitter...")
-    return gbkfit.fitting.fitter.parser.load_one(cfg['fitter'])
-
-
-def setup_objectives(cfg, datasets, drivers, dmodels, gmodels, fitter):
-    if cfg.get('objectives'):
-        log.info("setting up objectives...")
-        objectives = gbkfit.fitting.objective.parser.load_many(
-            cfg['objectives'],
-            dataset=datasets, driver=drivers, dmodel=dmodels, gmodel=gmodels)
-        objectives_weight = [o.get('weight', 1.) for o in cfg['objectives']]
-    else:
-        objectives = []
-        objectives_weight = []
-        for i in range(len(drivers)):
-            objectives.append(fitter.default_objective(
-                datasets[i], drivers[i], dmodels[i], gmodels[i]))
-            objectives_weight.append(1.0)
-    objective = gbkfit.fitting.objective.JointObjective(objectives, objectives_weight)
-
-    return objective, objectives_weight
-
-
-def setup_pdescs(cfg):
-    pdescs = None
-    if cfg.get('pdescs'):
-        log.info("setting up pdescs...")
-        pdesc_keys = cfg['pdescs'].keys()
-        pdesc_vals = cfg['pdescs'].values()
-        pdesc_list = gbkfit.params.descs.parser.load_many(pdesc_vals)
-        pdescs = dict(zip(pdesc_keys, pdesc_list))
-    return pdescs
-
-
-def make_output_dir(path):
-    i = 0
-    base = path
-    while os.path.exists(path):
-        i += 1
-        path = f'{base}_{i}'
-    os.makedirs(path)
-    return path
 
 
 @contextlib.contextmanager

@@ -132,6 +132,9 @@ class MCDisk(_disk.Disk):
             rdata, vdata, ddata)
 
         if out_extra is not None:
+
+            #from gbkfit.dataset import Data
+
             if self._rptraits:
                 out_extra['rdata'] = driver.mem_copy_d2h(rdata)
             if self._vptraits:

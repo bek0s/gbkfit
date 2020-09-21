@@ -1,11 +1,18 @@
 
 import copy
+import logging
+import os
+import pathlib
+
 from dataclasses import dataclass
-from typing import Optional, Tuple
+from typing import Any, Optional, Tuple
 from operator import attrgetter
 
 import astropy.io.fits as fits
 import numpy as np
+
+
+log = logging.getLogger(__name__)
 
 
 def _dump_posterior(params, posterior, prefix=''):
@@ -30,8 +37,44 @@ def load_result(filename):
     pass
 
 
-def dump_result(filename, result):
-    pass
+def make_unique_path(path):
+    i = 0
+    base = path
+    while os.path.exists(path):
+        i += 1
+        path = f'{base}_{i}'
+    return path
+
+
+def dump_result(output_dir, result):
+
+    output_dir = make_unique_path(output_dir)
+    os.makedirs(output_dir)
+
+    # ...
+    for i, dataset in enumerate(result.datasets):
+        dataset_prefix = os.path.join(output_dir, f"dataset_{i}_")
+        result.datasets[i].dump(prefix=dataset_prefix)
+
+    # ...
+    for i, solution in enumerate(result.solutions):
+
+        solution_dir = os.path.join(output_dir, 'solutions', str(i))
+        os.makedirs(solution_dir)
+
+        # ...
+        for dat, mdl, res in zip(result.datasets, solution.model, solution.residual):
+
+        #   fits.writeto('')
+        #   fits.writeto
+            pass
+
+
+
+        print(solution_dir)
+
+
+    log.info(f"result saved under {output_dir}")
 
 
 @dataclass()
@@ -59,6 +102,7 @@ class FitterResultSolution:
 @dataclass()
 class FitterResult:
 
+    datasets: Any = ()
     param_names: tuple = ()
     param_names_tied: tuple = ()
     param_names_fixed: tuple = ()
@@ -98,7 +142,7 @@ def make_fitter_result(
                 s.covar = None
         params = dict(zip(params_free, s.mode))
         params = parameters.expressions().evaluate(params)
-        s.model = objective.model().evaluate(params)
+        s.model = objective.model().evaluate_h(params)
         s.residual = objective.residual_nddata(params)
         s.wresidual = objective.residual_nddata(params)
         s.chisqr = 1.0
@@ -106,4 +150,6 @@ def make_fitter_result(
         s.wchisqr = 1.0
         s.rwchisqr = s.wchisqr / (dof - len(params_free))
 
-    return FitterResult(params_all, params_free, posterior, solutions, extra)
+    return FitterResult(
+        objective.datasets(),
+        params_all, params_free, posterior, extra, solutions=solutions)

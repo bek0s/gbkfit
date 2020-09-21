@@ -57,7 +57,7 @@ class FitterPygmo(Fitter, abc.ABC):
             minimums[i] = minimum
             maximums[i] = maximum
         prb = pg.problem(Problem(objective, parameters, minimums, maximums))
-        alg = pg.algorithm(self._setup_algorithm(self._alg_attrs, parameters))
+        alg = pg.algorithm(self._setup_algorithm(parameters))
         alg.set_verbosity(self._verbosity)
         pop = pg.population(prb, size=self._size, seed=self._seed)
         for i in range(self._size):
@@ -66,40 +66,18 @@ class FitterPygmo(Fitter, abc.ABC):
 
         print(pop.champion_x)
 
-        solutions = [FitterResultSolution(mode=pop.champion_x)]
 
+        eparams_all = {}
+        params_free = dict(zip(parameters.infos().keys(), pop.champion_x))
+        parameters.expressions().evaluate(params_free, True, eparams_all)
+
+        solutions = [FitterResultSolution(mode=list(eparams_all.values()))]
         result = make_fitter_result(objective, parameters, solutions=solutions)
 
-        print("------")
-        exit()
-
-        result = FitterResult()
-        params_free = parameters.names()
-
-        print("------")
-
-        exit()
-
-
-        datasets = objective.datasets()
-        params_free = parameters.expressions().names(params=True, consts=False)
-        params_fixed = parameters.expressions().names(params=False, consts=True)
-        result = FitterResult(objective.datasets(), params_free, params_fixed)
-
-        mode = pop.champion_x
-        eparams_dict = dict(zip(params_free, mode))
-        params_dict = parameters.expressions().evaluate(eparams_dict)
-        models = objective.model().evaluate_h(params_dict)
-
-
-
-        result.add_solution(mode=pop.champion_x, models=models)
-
-        exit()
         return result
 
     @abc.abstractmethod
-    def _setup_algorithm(self, attributes, parameters):
+    def _setup_algorithm(self, parameters):
         pass
 
 
@@ -123,8 +101,8 @@ class FitterPygmoDE(FitterPygmo):
                 gen=gen, F=F, CR=CR, variant=variant, ftol=ftol, xtol=xtol,
                 seed=seed))
 
-    def _setup_algorithm(self, attributes, parameters):
-        alg = pg.de(**attributes)
+    def _setup_algorithm(self, parameters):
+        alg = pg.de(**self._alg_attrs)
         return alg
 
 
@@ -142,8 +120,8 @@ class FitterPygmoSADE(FitterPygmo):
                 gen=gen, variant=variant, variant_adptv=variant_adptv,
                 ftol=ftol, xtol=xtol, memory=memory, seed=seed))
 
-    def _setup_algorithm(self, attributes, parameters):
-        alg = pg.sade(**attributes)
+    def _setup_algorithm(self, parameters):
+        alg = pg.sade(**self._alg_attrs)
         return alg
 
 
@@ -163,8 +141,8 @@ class FitterPygmoDE1220(FitterPygmo):
                 variant_adptv=variant_adptv, ftol=ftol, xtol=xtol,
                 memory=memory, seed=seed))
 
-    def _setup_algorithm(self, attributes, parameters):
-        alg = pg.de1220(**attributes)
+    def _setup_algorithm(self, parameters):
+        alg = pg.de1220(**self._alg_attrs)
         return alg
 
 
@@ -184,8 +162,8 @@ class FitterPygmoPSO(FitterPygmo):
                 variant=variant, neighb_type=neighb_type,
                 neighb_param=neighb_param, memory=memory, seed=seed))
 
-    def _setup_algorithm(self, attributes, parameters):
-        alg = pg.pso(**attributes)
+    def _setup_algorithm(self, parameters):
+        alg = pg.pso(**self._alg_attrs)
         return alg
 
 
@@ -205,8 +183,8 @@ class FitterPygmoCMAES(FitterPygmo):
                 ftol=ftol, xtol=xtol, memory=memory, force_bounds=force_bounds,
                 seed=seed))
 
-    def _setup_algorithm(self, attributes, parameters):
-        alg = pg.cmaes(**attributes)
+    def _setup_algorithm(self, parameters):
+        alg = pg.cmaes(**self._alg_attrs)
         return alg
 
 
@@ -226,8 +204,8 @@ class FitterPygmoXNES(FitterPygmo):
                 sigma0=sigma0, ftol=ftol, xtol=xtol, memory=memory,
                 force_bounds=force_bounds, seed=seed))
 
-    def _setup_algorithm(self, attributes, parameters):
-        alg = pg.xnes(**attributes)
+    def _setup_algorithm(self, parameters):
+        alg = pg.xnes(**self._alg_attrs)
         return alg
 
 
@@ -240,7 +218,7 @@ class FitterPygmoIpopt(FitterPygmo):
     def __init__(self, size, seed=0, verbosity=0):
         super().__init__(size, seed, verbosity, dict())
 
-    def _setup_algorithm(self, attributes, parameters):
+    def _setup_algorithm(self, parameters):
         alg = pg.ipopt()
         return alg
 
@@ -254,8 +232,8 @@ class FitterPygmoNLopt(FitterPygmo):
     def __init__(self, method, size, seed=0, verbosity=0):
         super().__init__(size, seed, verbosity, dict(method=method))
 
-    def _setup_algorithm(self, attributes, parameters):
-        alg = pg.nlopt(attributes['method'])
+    def _setup_algorithm(self, parameters):
+        alg = pg.nlopt(self._alg_attrs['method'])
         return alg
 
 
@@ -268,6 +246,6 @@ class FitterPygmoScipy(FitterPygmo):
     def __init__(self, method, size, seed=0, verbosity=0):
         super().__init__(size, seed, verbosity, dict(method=method))
 
-    def _setup_algorithm(self, attributes, parameters):
-        alg = pg.scipy_optimize(attributes['method'])
+    def _setup_algorithm(self, parameters):
+        alg = pg.scipy_optimize(self._alg_attrs['method'])
         return alg

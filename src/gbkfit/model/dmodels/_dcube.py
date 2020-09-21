@@ -4,7 +4,20 @@ import numpy as np
 import gbkfit.math
 
 
-def fft_size(size):
+def _pix2world(pos, step, rpix, rval, rota):
+    pos = [
+        pos[0] - rpix[0],
+        pos[1] - rpix[1],
+        pos[2] - rpix[2]]
+    pos[0], pos[1] = gbkfit.math.transform_lh_rotate_z(pos[0], pos[1], rota)
+    pos = [
+        (pos[0] - rpix[0]) * step[0] + rval[0],
+        pos[1] * step[1] + rval[1],
+        pos[2] * step[2] + rval[2]]
+    return pos
+
+
+def _fft_size(size):
     mul_size = 16
     new_size = gbkfit.math.roundu_po2(size)
     if new_size > mul_size:
@@ -14,19 +27,13 @@ def fft_size(size):
 
 class DCube:
 
-    def __init__(self, size, step, cval, rota, scale, psf, lsf, dtype):
-
-        # Central position in pixel space
-        cpix = (
-            size[0] / 2 - 0.5,
-            size[1] / 2 - 0.5,
-            size[2] / 2 - 0.5)
+    def __init__(self, size, step, rpix, rval, rota, scale, psf, lsf, dtype):
 
         # Low-res cube zero pixel center position
         zero = (
-            cval[0] - cpix[0] * step[0],
-            cval[1] - cpix[1] * step[1],
-            cval[2] - cpix[2] * step[2])
+            rval[0] - rpix[0] * step[0],
+            rval[1] - rpix[1] * step[1],
+            rval[2] - rpix[2] * step[2])
 
         # High-res cube step
         step_hi = (
@@ -54,9 +61,9 @@ class DCube:
         # adjust sizes for optimal performance
         if psf or lsf:
             size_hi = (
-                fft_size(size_hi[0]),
-                fft_size(size_hi[1]),
-                fft_size(size_hi[2]))
+                _fft_size(size_hi[0]),
+                _fft_size(size_hi[1]),
+                _fft_size(size_hi[2]))
 
         # High-res cube zero pixel center position
         zero_hi = (
@@ -89,8 +96,6 @@ class DCube:
         self._size_hi = size_hi
         self._step_hi = step_hi
         self._zero_hi = zero_hi
-        self._cpix = cpix
-        self._cval = cval
         self._rota = rota
         self._scale = scale
         self._dcube_lo = None
@@ -116,6 +121,9 @@ class DCube:
     def zero(self):
         return self._zero_lo
 
+    def rota(self):
+        return self._rota
+
     def data(self):
         return self._dcube_lo
 
@@ -130,15 +138,6 @@ class DCube:
 
     def scratch_data(self):
         return self._dcube_hi
-
-    def cpix(self):
-        return self._cpix
-
-    def cval(self):
-        return self._cval
-
-    def rota(self):
-        return self._rota
 
     def scale(self):
         return self._scale

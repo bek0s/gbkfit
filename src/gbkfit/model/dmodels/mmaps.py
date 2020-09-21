@@ -29,13 +29,16 @@ class DModelMMaps(DModel):
         return _detail.dump_dmodel_common(self)
 
     def __init__(
-            self, size, step=(1, 1), cval=(0, 0), rota=0,
+            self, size, step=(1, 1), rpix=None, rval=(0, 0), rota=0,
             scale=(1, 1), psf=None, lsf=None, orders=(0, 1, 2),
             dtype=np.float32):
         super().__init__()
+        if rpix is None:
+            rpix = tuple((np.array(size) / 2 - 0.5).tolist())
         size = tuple(size)
         step = tuple(step)
-        cval = tuple(cval)
+        rpix = tuple(rpix)
+        rval = tuple(rval)
         scale = tuple(scale)
         orders = tuple(sorted(set(orders)))
         if any(order < 0 or order > 7 for order in orders):
@@ -44,13 +47,15 @@ class DModelMMaps(DModel):
             step = step + (1,)
         if len(size) == 2:
             size = size + (int(gbkfit.math.roundu_odd(1000/step[2])),)
-        if len(cval) == 2:
-            cval = cval + (0,)
+        if len(rpix) == 2:
+            rpix = rpix + (size[2] / 2 - 0.5,)
+        if len(rval) == 2:
+            rval = rval + (0,)
         if len(scale) == 2:
             scale = scale + (1,)
         self._orders = orders
         self._dcube = _dcube.DCube(
-            size, step, cval, rota, scale, psf, lsf, dtype)
+            size, step, rpix, rval, rota, scale, psf, lsf, dtype)
         self._mmaps = None
         self._s_mmap_data = None
         self._d_mmap_order = None
@@ -61,14 +66,11 @@ class DModelMMaps(DModel):
     def step(self):
         return self._dcube.step()[:2]
 
-    def cpix(self):
-        return self._dcube.cpix()[:2]
-
-    def cval(self):
-        return self._dcube.cval()[:2]
-
     def zero(self):
         return self._dcube.zero()[:2]
+
+    def rota(self):
+        return self._dcube.rota()
 
     def scale(self):
         return self._dcube.scale()[:2]
@@ -87,13 +89,6 @@ class DModelMMaps(DModel):
 
     def onames(self):
         return tuple([f'mmap{i}' for i in self._orders])
-
-    def _submodel_impl(self, size, cval):
-        size = size + (self._dcube.size()[2],)
-        cval = cval + (self._dcube.cval()[2],)
-        return DModelMMaps(
-            size, self._dcube.step(), cval, self._dcube.scale(),
-            self.orders(), self.psf(), self.lsf(), self.dtype())
 
     def _prepare_impl(self):
         # Allocate buffers for moment map data

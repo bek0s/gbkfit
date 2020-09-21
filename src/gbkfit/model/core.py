@@ -36,20 +36,6 @@ class DModel(parseutils.TypedParserSupport, abc.ABC):
     def onames(self):
         pass
 
-    def submodel(self, min_, max_):
-        if self.ndim() != len(min_) != len(max_):
-            raise RuntimeError()
-        min_ = np.asarray(min_)
-        max_ = np.asarray(max_)
-        size = np.asarray(self.size())
-        step = np.asarray(self.step())
-        cval = np.asarray(self.cval())
-        cpix = (size - 1) / 2
-        new_size = (max_ - min_ + 1)
-        new_cpix = (min_ + max_) / 2
-        new_cval = cval + (new_cpix - cpix) * step
-        return self._submodel_impl(tuple(new_size), tuple(new_cval))
-
     def prepare(self, driver, gmodel):
         if not self.is_compatible(gmodel):
             raise RuntimeError(
@@ -71,10 +57,6 @@ class DModel(parseutils.TypedParserSupport, abc.ABC):
         if out_gextra:
             out_extra.update({f'gmodel_{k}': v for k, v in out_gextra.items()})
         return out
-
-    @abc.abstractmethod
-    def _submodel_impl(self, size, cval):
-        pass
 
     @abc.abstractmethod
     def _prepare_impl(self):
