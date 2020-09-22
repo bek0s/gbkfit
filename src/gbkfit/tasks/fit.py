@@ -1,6 +1,7 @@
 
 import json
 import logging
+import os
 import time
 
 import ruamel.yaml
@@ -85,5 +86,7 @@ def fit(config):
     t_ms = (t2 - t1) // 1000000
     log.info(f"model-fitting completed (elapsed time: {t_ms} ms)")
 
+    output_dir = 'out'
+    log.info(f"saving result under '{os.path.abspath(output_dir)}'...")
     from gbkfit.fitting.result import dump_result
     dump_result('out', result)
