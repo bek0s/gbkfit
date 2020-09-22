@@ -23,6 +23,7 @@ log = logging.getLogger(__name__)
 # Use this object to load and dump yaml
 yaml = ruamel.yaml.YAML()
 
+
 def _dump_posterior(params, posterior, prefix=''):
     data = []
     data += posterior.logprobs * bool(posterior.logprobs)
