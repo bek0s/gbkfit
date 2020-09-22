@@ -109,13 +109,16 @@ class Objective:
             d_residual_vector = self._s_residual_vector[i][1]
             driver.mem_copy_d2h(d_residual_vector, h_residual_vector)
             ipix = 0
-            h_residual_nddata = []
+        #   h_residual_nddata = []
+            h_residual_nddata = {}
             for j in range(nitems):
+                name = self._names[i][j]  # !!!
                 size = self._sizes[i][j]
                 npix = self._npixs[i][j]
                 shape = size[::-1]
                 slice_ = slice(ipix, ipix + npix)
-                h_residual_nddata.append(h_residual_vector[slice_].reshape(shape))
+            #   h_residual_nddata.append(h_residual_vector[slice_].reshape(shape))
+                h_residual_nddata[name] = h_residual_vector[slice_].reshape(shape)
                 ipix += npix
             residuals.append(h_residual_nddata)
         return residuals
@@ -144,8 +147,8 @@ class Objective:
             driver.math_sum(d_residual_vector, out=d_residual_scalar)
             driver.mem_copy_d2h(d_residual_scalar, h_residual_scalar)
             residuals.append(h_residual_scalar[0])
-        print(params)
-        print(residuals)
+        print('chi2:', residuals)
+        print('values:', params)
         return residuals
 
     def log_likelihood(self, params, out_extra=None):

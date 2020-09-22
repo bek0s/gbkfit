@@ -22,13 +22,13 @@ class Fitter(parseutils.TypedParserSupport, abc.ABC):
     def __init__(self):
         pass
 
-    def fit(self, objectives, params, **kwargs):
-        missing = set(objectives.params()).difference(params.descs())
+    def fit(self, objectives, parameters):
+        missing = set(objectives.params()).difference(parameters.descs())
         if missing:
             raise RuntimeError(
                 f"fitting cannot start because information for the following "
                 f"parameters is missing: {', '.join(missing)}")
-        result = self._fit_impl(objectives, params, **kwargs)
+        result = self._fit_impl(objectives, parameters)
         return result
 
     @abc.abstractmethod

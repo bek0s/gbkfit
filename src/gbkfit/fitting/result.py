@@ -4,13 +4,16 @@ import logging
 import os
 import pathlib
 
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 from typing import Any, Optional, Tuple
 from operator import attrgetter
 
 import astropy.io.fits as fits
 import numpy as np
 
+import pandas as pd
+
+import gbkfit.dataset
 
 log = logging.getLogger(__name__)
 
@@ -51,30 +54,59 @@ def dump_result(output_dir, result):
     output_dir = make_unique_path(output_dir)
     os.makedirs(output_dir)
 
-    # ...
     for i, dataset in enumerate(result.datasets):
-        dataset_prefix = os.path.join(output_dir, f"dataset_{i}_")
+        dataset_prefix = os.path.join(output_dir, f'dataset_{i}_')
         result.datasets[i].dump(prefix=dataset_prefix)
 
-    # ...
     for i, solution in enumerate(result.solutions):
 
         solution_dir = os.path.join(output_dir, 'solutions', str(i))
         os.makedirs(solution_dir)
 
-        # ...
-        for dat, mdl, res in zip(result.datasets, solution.model, solution.residual):
+        data = []
 
-        #   fits.writeto('')
-        #   fits.writeto
-            pass
+        sol_dict = asdict(solution)
+        for col_name in ['mode', 'mean', 'stddev']:
+            col_data = sol_dict[col_name]
+            if col_data is None:
+                continue
+            print(col_data)
+            data.append(col_data)
+
+
+            print(data)
+
+        data = np.column_stack(data)
+
+        df = pd.DataFrame(
+            data,
+            index=result.param_names,
+            columns=['mode', 'mean'])
+
+        print(df)
+
+        filename_params = os.path.join(solution_dir, 'parameters.txt')
+
+        np.savetxt(filename_params, data, fmt=f'%{20}.{10}e', header='')
 
 
 
-        print(solution_dir)
 
 
-    log.info(f"result saved under {output_dir}")
+
+
+        for j, dataset in enumerate(result.datasets):
+            model = solution.model[j]
+            resid = solution.residual[j]
+            for key in dataset:
+                gbkfit.dataset.Data(model[key]).dump(
+                    os.path.join(
+                        solution_dir, f'bestfit_{j}_mdl_{key}.fits'))
+                gbkfit.dataset.Data(resid[key]).dump(
+                    os.path.join(
+                        solution_dir, f'bestfit_{j}_res_{key}.fits'))
+
+    log.info(f"result saved under {os.path.abspath(output_dir)}")
 
 
 @dataclass()

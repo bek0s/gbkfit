@@ -43,7 +43,9 @@ class FitterPygmo(Fitter, abc.ABC):
         minimums = ndim * [-np.inf]
         maximums = ndim * [+np.inf]
         initials = np.empty((ndim, self._size))
-        for i, pinfo in enumerate(parameters.infos().values()):
+    #   for i, pinfo in enumerate(parameters.infos().values()):
+        for i, name in enumerate(parameters.names()):
+            pinfo = parameters.infos()[name]
             minimum = pinfo.minimum()
             maximum = pinfo.maximum()
             value = pinfo.initial_value()
@@ -56,6 +58,8 @@ class FitterPygmo(Fitter, abc.ABC):
             initials[i, :] = random.uniform(init_min, init_max, self._size)
             minimums[i] = minimum
             maximums[i] = maximum
+    #   print(parameters.names())
+        #exit()
         prb = pg.problem(Problem(objective, parameters, minimums, maximums))
         alg = pg.algorithm(self._setup_algorithm(parameters))
         alg.set_verbosity(self._verbosity)
@@ -68,10 +72,14 @@ class FitterPygmo(Fitter, abc.ABC):
 
 
         eparams_all = {}
-        params_free = dict(zip(parameters.infos().keys(), pop.champion_x))
+        params_free = dict(zip(parameters.names(), pop.champion_x))
         parameters.expressions().evaluate(params_free, True, eparams_all)
 
-        solutions = [FitterResultSolution(mode=list(eparams_all.values()))]
+        solutions = [FitterResultSolution(
+            mode=list(eparams_all.values()),
+            stddev=list(eparams_all.values())
+        )]
+
         result = make_fitter_result(objective, parameters, solutions=solutions)
 
         return result

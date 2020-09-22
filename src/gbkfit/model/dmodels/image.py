@@ -36,6 +36,7 @@ class DModelImage(DModel):
             rpix = tuple((np.array(size) / 2 - 0.5).tolist())
         size = tuple(size) + (1,)
         step = tuple(step) + (0,)
+        rpix = tuple(rpix) + (0,)
         rval = tuple(rval) + (0,)
         scale = tuple(scale) + (1,)
         self._dcube = _dcube.DCube(

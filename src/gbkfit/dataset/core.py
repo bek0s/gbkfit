@@ -4,6 +4,7 @@ import copy
 import logging
 
 import astropy.io.fits as fits
+import astropy.wcs
 import numpy as np
 
 from gbkfit.utils import miscutils, parseutils
@@ -13,21 +14,62 @@ from . import _detail
 log = logging.getLogger(__name__)
 
 
+def load_fits(filename):
+    data = fits.getdata(filename)
+    header = fits.getheader(filename)
+    wcs = astropy.wcs.WCS(header)
+    return data, header, wcs
+
+
+def dump_fits(
+        filename, data, cdelt=None, crpix=None, crval=None, crota=None,
+        overwrite=False):
+    wcs = astropy.wcs.WCS(naxis=data.ndim, relax=False)
+    if cdelt is not None:
+        wcs.wcs.cdelt = cdelt
+    if crpix is not None:
+        wcs.wcs.crpix = crpix
+    if crval is not None:
+        wcs.wcs.crval = crval
+    if crota is not None:
+        crota = np.radians(crota)
+        wcs.wcs.pc = np.identity(data.ndim)
+        wcs.wcs.pc[0][0] = +np.cos(crota)
+        wcs.wcs.pc[0][1] = -np.sin(crota)
+        wcs.wcs.pc[1][0] = +np.sin(crota)
+        wcs.wcs.pc[1][1] = +np.cos(crota)
+    fits.writeto(
+        filename, data, header=wcs.to_header(),
+        output_verify='exception', overwrite=overwrite, checksum=True)
+
+
 class Data:
 
     @classmethod
     def load(cls, info, step=None, rpix=None, rval=None, rota=None):
         desc = make_data_desc(cls)
         opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
-        data_d = fits.getdata(opts['data'])
-        data_m = fits.getdata(opts['mask']) if 'mask' in info else None
-        data_e = fits.getdata(opts['error']) if 'error' in info else None
+        data_d, header_d, wcs_d = None, None, None
+        data_m, header_m, wcs_m = None, None, None
+        data_e, header_e, wcs_e = None, None, None
+        if 'data' in opts:
+            data_d, header_d, wcs_d = load_fits(opts['data'])
+        if 'mask' in opts:
+            data_m, header_m, wcs_m = load_fits(opts['mask'])
+        if 'error' in opts:
+            data_e, header_e, wcs_e = load_fits(opts['error'])
         # Local information has higher priority than global
         step = opts.get('step', step)
         rpix = opts.get('rpix', rpix)
         rval = opts.get('rval', rval)
-        rota = opts.get('rota', rota)
-        # TODO: If no information is provided yet, use fits header
+        # If no information is provided, use fits header
+        if step is None:
+            step = wcs_d.wcs.cdelt
+        if rpix is None:
+            rpix = wcs_d.wcs.crpix
+        if rval is None:
+            rval = wcs_d.wcs.crval
+        # todo: deal with rotation (PC Matrix and CROTA (deprecated))
         # Build class arguments dict
         opts.update(dict(
             data=data_d,
@@ -36,24 +78,33 @@ class Data:
             step=step,
             rpix=rpix,
             rval=rval,
-            rota=rota))
+            rota=0))
         return cls(**opts)
 
-    def dump(self, prefix=''):
-        file_d = f'{prefix}d.fits'
-        file_m = f'{prefix}m.fits'
-        file_e = f'{prefix}e.fits'
+    def dump(
+            self, filename_d=None, filename_m=None, filename_e=None,
+            overwrite=False):
+        dat = self.data()
+        msk = self.mask()
+        err = self.error()
+        step = self.step()
+        rpix = self.rpix()
+        rval = self.rval()
+        rota = self.rota()
         info = dict(
-            data=file_d,
-            mask=file_m,
-            error=file_e,
-            step=self.step(),
-            rpix=self.rpix(),
-            rval=self.rval(),
-            rota=self.rota())
-        fits.writeto(file_d, self.data(), overwrite=True)
-        fits.writeto(file_m, self.mask(), overwrite=True)
-        fits.writeto(file_e, self.error(), overwrite=True)
+            step=step,
+            rpix=rpix,
+            rval=rval,
+            rota=rota)
+        if filename_d and dat is not None:
+            info['data'] = filename_d
+            dump_fits(filename_d, dat, step, rpix, rval, rota, overwrite)
+        if filename_m and msk is not None:
+            info['mask'] = filename_m
+            dump_fits(filename_m, msk, step, rpix, rval, rota, overwrite)
+        if filename_e and err is not None:
+            info['error'] = filename_e
+            dump_fits(filename_e, err, step, rpix, rval, rota, overwrite)
         return info
 
     def __init__(

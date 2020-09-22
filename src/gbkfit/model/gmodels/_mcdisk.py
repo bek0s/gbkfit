@@ -76,6 +76,10 @@ class MCDisk(_disk.Disk):
         self._ncloudsptor[0][:] = ncloudspt
         driver.mem_copy_h2d(self._ncloudsptor[0], self._ncloudsptor[1])
 
+        if nclouds < 0:
+            raise RuntimeError('negative flux not working yet')
+        #print(nclouds)
+
         rdata = None
         vdata = None
         ddata = None
@@ -132,9 +136,6 @@ class MCDisk(_disk.Disk):
             rdata, vdata, ddata)
 
         if out_extra is not None:
-
-            #from gbkfit.dataset import Data
-
             if self._rptraits:
                 out_extra['rdata'] = driver.mem_copy_d2h(rdata)
             if self._vptraits:

@@ -1,5 +1,6 @@
 
 import cupy as cp
+import cupy.cuda.cub
 import numpy as np
 
 import gbkfit.driver
@@ -58,22 +59,23 @@ class DriverCUDA(gbkfit.driver.Driver):
         x.fill(value)
 
     def math_abs(self, x, out=None):
-        return np.abs(x, out=out)
+        return cp.abs(x, out=out)
 
     def math_sum(self, x, out=None):
-        return np.sum(x, out=out, keepdims=True)
+        # return cp.sum(x, out=out, keepdims=True)
+        return cupy.cuda.cub.cub_reduction(x, 0, out=out, keepdims=True)
 
     def math_add(self, x1, x2, out=None):
-        return np.add(x1, x2, out=out)
+        return cp.add(x1, x2, out=out)
 
     def math_sub(self, x1, x2, out=None):
-        return np.sub(x1, x2, out=out)
+        return cp.subtract(x1, x2, out=out)
 
     def math_mul(self, x1, x2, out=None):
-        return np.mul(x1, x2, out=out)
+        return cp.multiply(x1, x2, out=out)
 
     def math_div(self, x1, x2, out=None):
-        return np.div(x1, x2, out=out)
+        return cp.divide(x1, x2, out=out)
 
     def make_dmodel_dcube(self, dtype):
         return DModelDCube(dtype)
