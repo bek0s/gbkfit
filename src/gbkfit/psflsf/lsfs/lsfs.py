@@ -4,7 +4,7 @@ import numpy as np
 import scipy.ndimage
 
 import gbkfit.math
-from gbkfit.psflsf import LSF, make_lsf_desc
+from gbkfit.psflsf import LSF
 from gbkfit.utils import miscutils, parseutils
 
 
@@ -14,7 +14,7 @@ def _create_grid_1d(size, step, offset):
 
 
 def _load_lsf_common(cls, info):
-    desc = make_lsf_desc(cls)
+    desc = parseutils.make_typed_desc(cls, 'LSF')
     return parseutils.parse_options_for_callable(info, desc, cls.__init__)
 
 

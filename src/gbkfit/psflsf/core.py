@@ -82,11 +82,3 @@ class PSF(abc.ABC):
 
 lsf_parser = parseutils.TypedParser(LSF)
 psf_parser = parseutils.TypedParser(PSF)
-
-
-def make_psf_desc(cls):
-    return f'{cls.type()} PSF (class={cls.__qualname__})'
-
-
-def make_lsf_desc(cls):
-    return f'{cls.type()} LSF (class={cls.__qualname__})'

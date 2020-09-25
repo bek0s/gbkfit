@@ -4,7 +4,7 @@ import numpy as np
 import scipy.ndimage
 
 import gbkfit.math
-from gbkfit.psflsf import PSF, make_psf_desc
+from gbkfit.psflsf import PSF
 from gbkfit.utils import iterutils, miscutils, parseutils
 
 
@@ -20,7 +20,7 @@ def _create_grid_2d(size, step, offset, ratio, posa):
 
 
 def _load_psf_common(cls, info):
-    desc = make_psf_desc(cls)
+    desc = parseutils.make_typed_desc(cls, 'PSF')
     return parseutils.parse_options_for_callable(info, desc, cls.__init__)
 
 
