@@ -1,10 +1,6 @@
 
 import gbkfit.params.utils as paramutils
-from gbkfit.fitting.params import (
-    FitParam,
-    FitParams,
-    make_fitparam_desc,
-    make_fitparams_desc)
+from gbkfit.fitting.params import FitParam, FitParams
 from gbkfit.utils import parseutils
 
 
@@ -15,7 +11,7 @@ class FitParamPygmo(FitParam):
 
     @classmethod
     def load(cls, info):
-        desc = make_fitparam_desc(cls)
+        desc = parseutils.make_basic_desc(cls, 'fit parameter')
         opts = parseutils.parse_options_for_callable(
             info, desc, cls.__init__, fun_rename_args=dict(
                 initial_value='val',
@@ -64,7 +60,7 @@ class FitParamsPygmo(FitParams):
 
     @classmethod
     def load(cls, info, descs):
-        desc = make_fitparams_desc(cls)
+        desc = parseutils.make_basic_desc(cls, 'fit parameters')
         opts = parseutils.parse_options_for_callable(
             info, desc, cls.__init__, fun_ignore_args=['descs'])
         infos, exprs = paramutils.parse_param_info(

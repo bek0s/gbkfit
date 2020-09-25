@@ -4,16 +4,14 @@ import copy
 import numpy as np
 
 import gbkfit.psflsf
-from gbkfit.dataset import make_dataset_desc
-from gbkfit.model import make_dmodel_desc
 from gbkfit.utils import parseutils
 
 
 def load_dmodel_common(cls, info, ndim, dataset, dataset_cls):
-    desc = make_dmodel_desc(cls)
+    desc = parseutils.make_typed_desc(cls, 'dmodel')
     info = copy.deepcopy(info)
     if dataset:
-        dataset_desc = make_dataset_desc(dataset_cls)
+        dataset_desc = parseutils.make_typed_desc(dataset_cls, 'dataset')
         if not isinstance(dataset, dataset_cls):
             raise RuntimeError(
                 f"{desc} "

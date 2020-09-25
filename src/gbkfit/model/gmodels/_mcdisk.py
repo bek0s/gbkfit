@@ -78,7 +78,7 @@ class MCDisk(_disk.Disk):
 
         if nclouds < 0:
             raise RuntimeError('negative flux not working yet')
-        #print(nclouds)
+        print(nclouds)
 
         rdata = None
         vdata = None

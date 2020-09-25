@@ -87,6 +87,7 @@ def dump_result(output_dir, result):
             json.dump(json.loads(df.to_json(orient='index')), f, indent=2)
         with open(filename_params + '.yaml', 'w+') as f:
             yaml.dump(json.loads(df.to_json(orient='index')), f)
+        print(df.to_string())
 
         for j, dataset in enumerate(result.datasets):
             model = sol.model[j]

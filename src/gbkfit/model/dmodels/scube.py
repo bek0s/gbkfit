@@ -2,7 +2,7 @@
 import numpy as np
 
 from gbkfit.dataset.datasets import DatasetSCube
-from gbkfit.model import DModel, GModelSCubeSupport
+from gbkfit.model import DModel, GModelSCube
 from . import _dcube, _detail
 
 
@@ -17,7 +17,7 @@ class DModelSCube(DModel):
 
     @staticmethod
     def is_compatible(gmodel):
-        return isinstance(gmodel, GModelSCubeSupport)
+        return isinstance(gmodel, GModelSCube)
 
     @classmethod
     def load(cls, info, dataset=None):

@@ -15,7 +15,7 @@ class Fitter(parseutils.TypedParserSupport, abc.ABC):
 
     @classmethod
     def load(cls, info):
-        desc = make_fitter_desc(cls)
+        desc = parseutils.make_typed_desc(cls, 'fitter')
         opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
         return cls(**opts)
 
@@ -37,7 +37,3 @@ class Fitter(parseutils.TypedParserSupport, abc.ABC):
 
 
 parser = parseutils.TypedParser(Fitter)
-
-
-def make_fitter_desc(cls):
-    return f'{cls.type()} fitter (class={cls.__qualname__})'

@@ -1,5 +1,5 @@
 
-from gbkfit.model import GModel, GModelImageSupport, make_gmodel_desc
+from gbkfit.model import GModelImage
 from gbkfit.utils import iterutils, parseutils
 from . import _detail, component_d3d_parser
 
@@ -7,7 +7,7 @@ from . import _detail, component_d3d_parser
 __all__ = ['GModelIntensity3D']
 
 
-class GModelIntensity3D(GModelImageSupport, GModel):
+class GModelIntensity3D(GModelImage):
 
     @staticmethod
     def type():
@@ -15,7 +15,7 @@ class GModelIntensity3D(GModelImageSupport, GModel):
 
     @classmethod
     def load(cls, info):
-        desc = make_gmodel_desc(cls)
+        desc = parseutils.make_typed_desc(cls, 'gmodel')
         opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
         opts.update(
             components=component_d3d_parser.load(opts['components']),

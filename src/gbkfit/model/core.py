@@ -74,31 +74,21 @@ class GModel(parseutils.TypedParserSupport, abc.ABC):
         pass
 
 
-class GModelImageSupport(abc.ABC):
+class GModelImage(GModel, abc.ABC):
 
-    @abc.abstractmethod
     def evaluate_image(
             self, driver, params, image, size, step, zero, rota, dtype,
             out_extra):
-        pass
+        raise NotImplementedError()
 
 
-class GModelSCubeSupport(abc.ABC):
+class GModelSCube(GModel, abc.ABC):
 
-    @abc.abstractmethod
     def evaluate_scube(
             self, driver, params, scube, size, step, zero, rota, dtype,
             out_extra):
-        pass
+        raise NotImplementedError()
 
 
 dmodel_parser = parseutils.TypedParser(DModel)
 gmodel_parser = parseutils.TypedParser(GModel)
-
-
-def make_dmodel_desc(cls):
-    return f'{cls.type()} dmodel (class={cls.__qualname__})'
-
-
-def make_gmodel_desc(cls):
-    return f'{cls.type()} gmodel (class={cls.__qualname__})'

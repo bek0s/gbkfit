@@ -59,11 +59,3 @@ class FitParams(parseutils.BasicParserSupport, abc.ABC):
 
     def expressions(self):
         return self._exprs
-
-
-def make_fitparam_desc(cls):
-    return f'fit parameter (class={cls.__qualname__})'
-
-
-def make_fitparams_desc(cls):
-    return f'fit parameters (class={cls.__qualname__})'

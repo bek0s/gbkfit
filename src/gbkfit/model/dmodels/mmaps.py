@@ -3,7 +3,7 @@ import numpy as np
 
 import gbkfit.math
 from gbkfit.dataset.datasets import DatasetMMaps
-from gbkfit.model import DModel, GModelSCubeSupport
+from gbkfit.model import DModel, GModelSCube
 from . import _dcube, _detail
 
 
@@ -18,7 +18,7 @@ class DModelMMaps(DModel):
 
     @staticmethod
     def is_compatible(gmodel):
-        return isinstance(gmodel, GModelSCubeSupport)
+        return isinstance(gmodel, GModelSCube)
 
     @classmethod
     def load(cls, info, dataset=None):

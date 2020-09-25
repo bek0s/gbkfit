@@ -1,5 +1,5 @@
 
-from . import DensityComponent2D, _detail, _smdisk, make_component_desc, traits
+from . import DensityComponent2D, _detail, _smdisk, traits
 from gbkfit.utils import parseutils
 
 
@@ -14,7 +14,7 @@ class DensitySMDisk2D(DensityComponent2D):
 
     @classmethod
     def load(cls, info):
-        desc = make_component_desc(cls)
+        desc = parseutils.make_typed_desc(cls, 'gmodel component')
         opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
         opts.update(dict(
             rptraits=traits.rpt_parser.load(opts.get('rptraits')),

@@ -2,7 +2,7 @@
 import numpy as np
 
 from gbkfit.dataset.datasets import DatasetLSlit
-from gbkfit.model import DModel, GModelSCubeSupport
+from gbkfit.model import DModel
 from . import _dcube, _detail
 
 
@@ -17,6 +17,7 @@ class DModelLSlit(DModel):
 
     @staticmethod
     def is_compatible(gmodel):
+        return hasattr(gmodel, 'evaluate_')
         return isinstance(gmodel, GModelSCubeSupport)
 
     @classmethod

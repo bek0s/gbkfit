@@ -66,7 +66,3 @@ component_d2d_parser = parseutils.TypedParser(DensityComponent2D)
 component_d3d_parser = parseutils.TypedParser(DensityComponent3D)
 component_s2d_parser = parseutils.TypedParser(SpectralComponent2D)
 component_s3d_parser = parseutils.TypedParser(SpectralComponent3D)
-
-
-def make_component_desc(cls):
-    return f'{cls.type()} gmodel component (class={cls.__qualname__})'

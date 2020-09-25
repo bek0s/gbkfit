@@ -2,7 +2,7 @@
 import numpy as np
 
 from gbkfit.dataset.datasets import DatasetImage
-from gbkfit.model import DModel, GModelImageSupport
+from gbkfit.model import DModel
 from . import _dcube, _detail
 
 
@@ -17,7 +17,7 @@ class DModelImage(DModel):
 
     @staticmethod
     def is_compatible(gmodel):
-        return isinstance(gmodel, GModelImageSupport)
+        return hasattr(gmodel, 'evaluate_image')
 
     @classmethod
     def load(cls, info, dataset=None):

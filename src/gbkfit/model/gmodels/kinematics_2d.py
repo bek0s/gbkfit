@@ -1,5 +1,5 @@
 
-from gbkfit.model import GModel, GModelSCubeSupport, make_gmodel_desc
+from gbkfit.model import GModelSCube
 from gbkfit.utils import iterutils, parseutils
 from . import _detail, component_s2d_parser
 
@@ -7,7 +7,7 @@ from . import _detail, component_s2d_parser
 __all__ = ['GModelKinematics2D']
 
 
-class GModelKinematics2D(GModelSCubeSupport, GModel):
+class GModelKinematics2D(GModelSCube):
 
     @staticmethod
     def type():
@@ -15,7 +15,7 @@ class GModelKinematics2D(GModelSCubeSupport, GModel):
 
     @classmethod
     def load(cls, info):
-        desc = make_gmodel_desc(cls)
+        desc = parseutils.make_typed_desc(cls, 'gmodel')
         opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
         opts.update(
             components=component_s2d_parser.load(info['components']))

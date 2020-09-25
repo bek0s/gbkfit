@@ -1,5 +1,6 @@
 
-from gbkfit.dataset import Dataset, _detail as dataset_detail, make_dataset_desc
+from gbkfit.dataset import Dataset, _detail as dataset_detail
+from gbkfit.utils import parseutils
 from . import _detail
 
 
@@ -30,7 +31,7 @@ class DatasetMMaps(Dataset):
         mmaps_args.pop('__class__')
         mmaps = {k: v for k, v in mmaps_args.items() if v}
         # All moment maps must have the same attributes
-        desc = make_dataset_desc(self.__class__)
+        desc = parseutils.make_typed_desc(self.__class__, 'dataset')
         dataset_detail.ensure_same_attrib_value(mmaps, 'size', desc)
         dataset_detail.ensure_same_attrib_value(mmaps, 'step', desc)
         dataset_detail.ensure_same_attrib_value(mmaps, 'rpix', desc)

@@ -47,7 +47,7 @@ class Data:
 
     @classmethod
     def load(cls, info, step=None, rpix=None, rval=None, rota=None):
-        desc = make_data_desc(cls)
+        desc = parseutils.make_basic_desc(cls, 'data')
         opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
         data_d, header_d, wcs_d = None, None, None
         data_m, header_m, wcs_m = None, None, None
@@ -134,11 +134,11 @@ class Data:
         if data.ndim != len(step):
             raise RuntimeError(
                 f"data dimensionality and step length are incompatible "
-                f"({data.dim} != {len(step)})")
+                f"({data.ndim} != {len(step)})")
         if data.ndim != len(rpix):
             raise RuntimeError(
                 f"data dimensionality and rpix length are incompatible "
-                f"({data.dim} != {len(rpix)})")
+                f"({data.ndim} != {len(rpix)})")
         if data.ndim != len(rval):
             raise RuntimeError(
                 f"data dimensionality and rval length are incompatible "
@@ -204,7 +204,7 @@ class Data:
 class Dataset(parseutils.TypedParserSupport, abc.ABC):
 
     def __init__(self, data):
-        desc = make_dataset_desc(self.__class__)
+        desc = parseutils.make_typed_desc(self.__class__, 'dataset')
         # At least one data item must be defined
         if not data:
             raise RuntimeError(f"{desc} contains no data items")
@@ -269,11 +269,3 @@ class Dataset(parseutils.TypedParserSupport, abc.ABC):
 
 data_parser = parseutils.BasicParser(Data)
 dataset_parser = parseutils.TypedParser(Dataset)
-
-
-def make_data_desc(cls):
-    return f'data (class={cls.__qualname__})'
-
-
-def make_dataset_desc(cls):
-    return f'{cls.type()} dataset (class={cls.__qualname__})'

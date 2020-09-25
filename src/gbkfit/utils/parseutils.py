@@ -17,6 +17,14 @@ def _dump_function(func, file):
     return dict(file=file, func=func.__name__)
 
 
+def make_basic_desc(cls, label):
+    return f'{label} (class={cls.__qualname__})'
+
+
+def make_typed_desc(cls, label):
+    return f'{cls.type()} {label} (class={cls.__qualname__})'
+
+
 def parse_options(info, desc, required=None, optional=None):
     info = copy.deepcopy(info)
     required = set(required if required else [])
