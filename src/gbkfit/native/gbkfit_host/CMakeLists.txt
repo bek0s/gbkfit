@@ -5,7 +5,6 @@ project(${TARGET_NAME}-project CXX)
 
 find_package(fftw3)
 find_package(OpenMP)
-find_package(pybind11)
 
 set(HEADER_FILES
   include/gbkfit/host/common.hpp

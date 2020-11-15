@@ -37,9 +37,9 @@ class DModel(parseutils.TypedParserSupport, abc.ABC):
     def prepare(self, driver, gmodel):
         if not self.is_compatible(gmodel):
             raise RuntimeError(
-                f"{make_dmodel_desc(self.__class__)} "
+                f"{parseutils.make_typed_desc(self.__class__, 'dmodel')}"
                 f"is not compatible with "
-                f"{make_gmodel_desc(gmodel.__class__)}")
+                f"{parseutils.make_typed_desc(gmodel.__class__, 'gmodel')}")
         self._driver = driver
         self._gmodel = gmodel
         self._prepare_impl()

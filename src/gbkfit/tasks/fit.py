@@ -11,10 +11,12 @@ import gbkfit.dataset
 import gbkfit.driver
 import gbkfit.fitting.fitter
 import gbkfit.fitting.objective
+import gbkfit.fitting.result
 import gbkfit.model
 import gbkfit.params
 import gbkfit.params.descs
 import gbkfit.params.utils
+from gbkfit.utils import miscutils
 from . import _detail
 
 
@@ -49,7 +51,7 @@ def fit(config):
     datasets = gbkfit.dataset.dataset_parser.load(cfg['datasets'])
 
     log.info("setting up drivers...")
-    drivers = gbkfit.driver.driver.parser.load(cfg['drivers'])
+    drivers = gbkfit.driver.parser.load(cfg['drivers'])
 
     log.info("setting up dmodels...")
     dmodels = gbkfit.model.dmodel_parser.load(cfg['dmodels'], dataset=datasets)
@@ -58,19 +60,21 @@ def fit(config):
     gmodels = gbkfit.model.gmodel_parser.load(cfg['gmodels'])
 
     log.info("setting up model...")
-    model = gbkfit.model.Model(dmodels, gmodels, drivers)
+    models = []
+    for i in range(len(dmodels)):
+        models.append(gbkfit.model.Model(dmodels[i], gmodels[i], drivers[i]))
 
     log.info("setting up fitter...")
     fitter = gbkfit.fitting.fitter.parser.load(cfg['fitter'])
 
     log.info("setting up objective...")
-    objective = gbkfit.fitting.objective.Objective(datasets, model)
+    objective = gbkfit.fitting.objective.Objective(datasets, models)
 
     pdescs = None
     if 'pdescs' in cfg:
         log.info("setting up pdescs...")
-        pdescs = gbkfit.params.descs.load_descriptions(cfg['pdescs'])
-    pdescs = gbkfit.params.descs.merge_descriptions(model.pdescs(), pdescs)
+        pdescs = gbkfit.params.descs.load_descs(cfg['pdescs'])
+    pdescs = gbkfit.params.descs.merge_descs(objective.pdescs(), pdescs)
 
     log.info("setting up params...")
     params = fitter.load_params(cfg['params'], pdescs)
@@ -86,7 +90,7 @@ def fit(config):
     t_ms = (t2 - t1) // 1000000
     log.info(f"model-fitting completed (elapsed time: {t_ms} ms)")
 
-    output_dir = 'out'
-    log.info(f"saving result under '{os.path.abspath(output_dir)}'...")
-    from gbkfit.fitting.result import dump_result
-    dump_result('out', result)
+    output_dir = os.path.abspath(miscutils.make_unique_path('out'))
+    log.info(f"saving result under '{output_dir}'...")
+    gbkfit.fitting.result.dump_result(output_dir, result)
+    print(result.summary())

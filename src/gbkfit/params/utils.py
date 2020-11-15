@@ -306,6 +306,8 @@ def parse_param_keys(
         invalid_keys_bad_scalar=None,
         invalid_keys_bad_vector=None):
 
+    if params is None:
+        params = {}
     if invalid_keys_syntax is None:
         invalid_keys_syntax = []
     if invalid_keys_unknown is None:
@@ -892,3 +894,8 @@ def dump_econstraints(func, file='gbkfit_config_econstraints.py'):
 
 def dump_iconstraints(func, file='gbkfit_config_iconstraints.py'):
     return _dump_function(func, file) if func else None
+
+
+def order_eparams(descs, enames):
+    enames_all = explode_pdescs(descs.values(), descs.keys())
+    return [ename for ename in enames_all if ename in enames]

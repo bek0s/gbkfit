@@ -1,5 +1,6 @@
 
 import importlib.util
+import os
 import pathlib
 
 
@@ -53,3 +54,12 @@ def merge_dicts_and_make_mappings(
 
 def to_native_byteorder(arr):
     return arr if arr.dtype.isnative else arr.byteswap().newbyteorder()
+
+
+def make_unique_path(path):
+    i = 0
+    base = path
+    while os.path.exists(path):
+        i += 1
+        path = f'{base}_{i}'
+    return path

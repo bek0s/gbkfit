@@ -70,7 +70,7 @@ class FitParamLMFitNelderMead(FitParamLMFit):
         desc = parseutils.make_basic_desc(cls, 'fit parameter')
         opts = parseutils.parse_options_for_callable(
             info, desc, cls.__init__, fun_rename_args=dict(
-                initial_value='init',
+                initial_value='val',
                 minimum='min',
                 maximum='max'))
         return cls(**opts)

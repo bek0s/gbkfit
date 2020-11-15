@@ -1,17 +1,74 @@
 
+from gbkfit.model import ModelGroup
 from gbkfit.utils import iterutils
 
 
+__all__ = ['Objective']
+
+"""
+from gbkfit.utils import iterutils, miscutils
+    def evaluate_d(self, params, out_extra=None):
+        d_data = []
+        for i in range(self.nitems()):
+            dmodel = self.dmodels()[i]
+            gmodel = self.gmodels()[i]
+            driver = self.drivers()[i]
+            mapping = self._mappings[i]
+            if out_extra is not None:
+                out_extra.append({})
+            d_data.append(dmodel.evaluate(
+                driver, gmodel,
+                {param: params[mapping[param]] for param in mapping},
+                out_extra[-1] if out_extra is not None else None))
+        return d_data
+"""
+
+"""
+    def evaluate_h(self, params, out_extra=None):
+        d_data = self.evaluate_d(params, out_extra)
+        h_data = self._h_data
+        for i in range(self.nitems()):
+            for key in d_data[i]:
+                h_data[i][key] = self._drivers[i].mem_copy_d2h(
+                    d_data[i][key], h_data[i][key])
+        return h_data
+"""
+
+"""
+dmodels = iterutils.tuplify(dmodels)
+        gmodels = iterutils.tuplify(gmodels)
+        drivers = iterutils.tuplify(drivers)
+        ndmodels = len(dmodels)
+        ngmodels = len(gmodels)
+        ndrivers = len(drivers)
+        self._drivers = drivers
+        self._dmodels = dmodels
+        self._gmodels = gmodels
+        if not (ndmodels == ngmodels == ndrivers):
+            raise RuntimeError(
+                f"the number of "
+                f"gmodels ({ngmodels}), "
+                f"dmodels ({ndmodels}), and "
+                f"drivers ({ndrivers}) must be equal")
+        # ...
+        pdescs, mappings = miscutils.merge_dicts_and_make_mappings(
+            [g.params() for g in gmodels], 'model')
+        self._pdescs = pdescs
+        self._mappings = mappings
+        # ...
+        self._h_data = [{key: None for key in mdl.onames()} for mdl in dmodels]
+"""
+
 class Objective:
 
-    def __init__(self, datasets, model):
+    def __init__(self, datasets, models):
         self._datasets = datasets = iterutils.tuplify(datasets)
-        self._model = model
-        if len(datasets) != model.nitems():
+        self._models = models = ModelGroup(iterutils.tuplify(models))
+        if len(datasets) != models.nmodels():
             raise RuntimeError(
-                f"the number of dataset items and model items are not equal"
-                f"({len(datasets)} != {model.nitems()})")
-        n = model.nitems()
+                f"the number of dataset and model are not equal"
+                f"({len(datasets)} != {len(models)})")
+        n = models.nmodels()
         self._nitems = iterutils.make_list((n,), 0, True)
         self._names = iterutils.make_list((n,), list(), True)
         self._sizes = iterutils.make_list((n,), list(), True)
@@ -23,9 +80,9 @@ class Objective:
         self._d_dataset_e_vector = [None] * n
         self._s_residual_vector = [None] * n
         self._s_residual_scalar = [None] * n
-        for i in range(model.nitems()):
+        for i in range(n):
             dataset = datasets[i]
-            dmodel = model.dmodels()[i]
+            dmodel = models.models()[i].dmodel()
             if dataset.dtype != dmodel.dtype():
                 raise RuntimeError(
                     f"dataset and dmodel have incompatible dtypes "
@@ -57,18 +114,21 @@ class Objective:
         self.prepare()
 
     def params(self):
-        return self._model.pdescs()
+        return self._models.pdescs()
+
+    def pdescs(self):
+        return self._models.pdescs()
 
     def datasets(self):
         return self._datasets
 
     def model(self):
-        return self._model
+        return self._models
 
     def prepare(self):
-        for i in range(self._model.nitems()):
-            driver = self._model.drivers()[i]
-            dmodel = self._model.dmodels()[i]
+        for i in range(self._models.nmodels()):
+            driver = self._models.models()[i].driver()
+            dmodel = self._models.models()[i].dmodel()
             nitems = self._nitems[i]
             npixs = self._npixs[i]
             dtype = dmodel.dtype()
@@ -102,8 +162,8 @@ class Objective:
     def residual_nddata(self, params, weighted=True, out_extra=None):
         self._residual_d(params, weighted, out_extra)
         residuals = []
-        for i in range(self._model.nitems()):
-            driver = self._model.drivers()[i]
+        for i in range(self._models.nmodels()):
+            driver = self._models.models()[i].driver()
             nitems = self._nitems[i]
             h_residual_vector = self._s_residual_vector[i][0]
             d_residual_vector = self._s_residual_vector[i][1]
@@ -137,8 +197,8 @@ class Objective:
     def residual_scalar(self, params, weighed=True, out_extra=None):
         self._residual_d(params, weighed, out_extra)
         residuals = []
-        for i in range(self._model.nitems()):
-            driver = self._model.drivers()[i]
+        for i in range(self._models.nmodels()):
+            driver = self._models.models()[i].driver()
             h_residual_vector = self._s_residual_vector[i][0]
             d_residual_vector = self._s_residual_vector[i][1]
             h_residual_scalar = self._s_residual_scalar[i][0]
@@ -155,8 +215,8 @@ class Objective:
         return -0.5 * self.residual_scalar(params, out_extra) ** 2
 
     def _residual_d(self, params, weighted=True, out_extra=None):
-        models = self._model.evaluate_d(params, out_extra)
-        for i in range(self._model.nitems()):
+        models = self._models.evaluate_d(params, out_extra)
+        for i in range(self._models.nmodels()):
             ipix = 0
             for j in range(self._nitems[i]):
                 name = self._names[i][j]

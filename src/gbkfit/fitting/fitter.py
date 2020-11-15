@@ -1,8 +1,6 @@
 
 import abc
 
-import gbkfit.params
-import gbkfit.params.utils
 from gbkfit.utils import parseutils
 
 

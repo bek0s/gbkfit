@@ -129,7 +129,7 @@ class FitterLMFitNelderMead(FitterLMFit):
                 fatol=fatol,
                 adaptive=adaptive))
 
-    def _fit_impl2(self, objective, parameters, interpreter):
+    def _fit_impl2(self, objective, parameters):
         common_kws = copy.deepcopy(self._common_kws)
         method_kws = copy.deepcopy(self._method_kws)
         parameters_ = lmfit.Parameters()

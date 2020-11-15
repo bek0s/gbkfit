@@ -87,7 +87,7 @@ class DriverHost(gbkfit.driver.Driver):
         return GModelSMDisk(dtype)
 
 
-class DModelDCube(gbkfit.driver.driver.DModelDCube):
+class DModelDCube(gbkfit.driver.DModelDCube):
 
     _CLASSES = {
         np.float32: gbkfit.native.libgbkfit_host.DModelDCubef32}
@@ -123,7 +123,7 @@ class DModelDCube(gbkfit.driver.driver.DModelDCube):
             _ptr(scube_hi), _ptr(scube_lo))
 
 
-class DModelMMaps(gbkfit.driver.driver.DModelMMaps):
+class DModelMMaps(gbkfit.driver.DModelMMaps):
 
     _CLASSES = {
         np.float32: gbkfit.native.libgbkfit_host.DModelMMapsf32}
@@ -145,7 +145,7 @@ class DModelMMaps(gbkfit.driver.driver.DModelMMaps):
             _shape(orders)[0])
 
 
-class GModelMCDisk(gbkfit.driver.driver.GModelMCDisk):
+class GModelMCDisk(gbkfit.driver.GModelMCDisk):
 
     _CLASSES = {
         np.float32: gbkfit.native.libgbkfit_host.GModelMCDiskf32}
@@ -220,7 +220,7 @@ class GModelMCDisk(gbkfit.driver.driver.GModelMCDisk):
             _ptr(rdata), _ptr(vdata), _ptr(ddata))
 
 
-class GModelSMDisk(gbkfit.driver.driver.GModelSMDisk):
+class GModelSMDisk(gbkfit.driver.GModelSMDisk):
 
     _CLASSES = {
         np.float32: gbkfit.native.libgbkfit_host.GModelSMDiskf32}

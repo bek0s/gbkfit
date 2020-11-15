@@ -38,6 +38,8 @@ VP_TRAIT_UID_TAN_BOISSIER = 3
 VP_TRAIT_UID_TAN_EPINAT = 4
 VP_TRAIT_UID_TAN_LRAMP = 5
 VP_TRAIT_UID_TAN_TANH = 6
+VP_TRAIT_UID_TAN_POLYEX = 7
+VP_TRAIT_UID_TAN_RIX = 8
 VP_TRAIT_UID_NW_TAN_UNIFORM = 101
 VP_TRAIT_UID_NW_TAN_HARMONIC = 102
 VP_TRAIT_UID_NW_RAD_UNIFORM = 103
@@ -272,6 +274,7 @@ class RPTraitGauss(RPTrait):
     def integrate(self, params, nodes):
         a = params['a']
         s = params['s']
+        #return np.array([a * 2 * np.pi * s * s])
         return _integrate_nw(nodes, gbkfit.math.gauss_1d_fun, a, 0, s)
 
 
@@ -688,8 +691,8 @@ class VPTraitTanEpinat(VPTrait):
         return (
             ParamScalarDesc('rt'),
             ParamScalarDesc('vt'),
-            ParamScalarDesc('ea'),
-            ParamScalarDesc('eb'))
+            ParamScalarDesc('a'),
+            ParamScalarDesc('g'))
 
 
 class VPTraitTanLRamp(VPTrait):
@@ -722,6 +725,41 @@ class VPTraitTanTanh(VPTrait):
         return (
             ParamScalarDesc('rt'),
             ParamScalarDesc('vt'))
+
+
+class VPTraitTanPolyex(VPTrait):
+
+    @staticmethod
+    def type():
+        return 'tan_polyex'
+
+    @staticmethod
+    def uid():
+        return VP_TRAIT_UID_TAN_POLYEX
+
+    def params_sm(self):
+        return (
+            ParamScalarDesc('rt'),
+            ParamScalarDesc('vt'),
+            ParamScalarDesc('a'))
+
+
+class VPTraitTanRix(VPTrait):
+
+    @staticmethod
+    def type():
+        return 'tan_rix'
+
+    @staticmethod
+    def uid():
+        return VP_TRAIT_UID_TAN_RIX
+
+    def params_sm(self):
+        return (
+            ParamScalarDesc('rt'),
+            ParamScalarDesc('vt'),
+            ParamScalarDesc('b'),
+            ParamScalarDesc('g'))
 
 
 class VPTraitNWTanUniform(VPTrait):
@@ -1173,6 +1211,8 @@ vpt_parser.register(VPTraitTanBoissier)
 vpt_parser.register(VPTraitTanEpinat)
 vpt_parser.register(VPTraitTanLRamp)
 vpt_parser.register(VPTraitTanTanh)
+vpt_parser.register(VPTraitTanPolyex)
+vpt_parser.register(VPTraitTanRix)
 vpt_parser.register(VPTraitNWTanUniform)
 vpt_parser.register(VPTraitNWTanHarmonic)
 vpt_parser.register(VPTraitNWRadUniform)

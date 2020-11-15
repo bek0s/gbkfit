@@ -6,11 +6,6 @@ from gbkfit.utils import parseutils
 
 class Driver(parseutils.BasicParserSupport, abc.ABC):
 
-    @staticmethod
-    @abc.abstractmethod
-    def type():
-        pass
-
     @abc.abstractmethod
     def mem_alloc_s(self, shape, dtype):
         pass

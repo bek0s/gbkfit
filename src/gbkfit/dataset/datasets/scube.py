@@ -2,7 +2,6 @@
 from gbkfit.dataset import Dataset
 from . import _detail
 
-
 __all__ = ['DatasetSCube']
 
 
@@ -13,7 +12,7 @@ class DatasetSCube(Dataset):
         return 'scube'
 
     @classmethod
-    def load(cls, info, *args, **kwargs):
+    def load(cls, info):
         names = ['scube']
         opts = _detail.load_dataset_common(cls, info, names)
         return cls(**opts)

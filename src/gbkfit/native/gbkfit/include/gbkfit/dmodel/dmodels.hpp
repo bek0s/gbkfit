@@ -77,7 +77,7 @@ moments(int x, int y,
                 + y * size_x
                 + z * size_x * size_y;
         T flx = std::max(T{0}, cube[idx]);
-        m0_sum += flx;
+        m0_sum += flx * step_z;
     }
     m0 = m0_sum;
 
@@ -103,7 +103,7 @@ moments(int x, int y,
                 + z * size_x * size_y;
         T flx = std::max(T{0}, cube[idx]);
         T vel = zero_z + z * step_z;
-        m1_sum += flx * vel;
+        m1_sum += flx * vel  * step_z;
     }
     m1 = m0 > 0 ? m1_sum / m0 : NAN;
 
@@ -129,7 +129,7 @@ moments(int x, int y,
                 + z * size_x * size_y;
         T flx = std::max(T{0}, cube[idx]);
         T vel = zero_z + z * step_z;
-        m2_sum += flx * (vel - m1) * (vel - m1);
+        m2_sum += flx * std::pow(vel - m1, 2);
     }
     m2 = m0 > 0 ? std::sqrt(m2_sum / m0) : NAN;
 

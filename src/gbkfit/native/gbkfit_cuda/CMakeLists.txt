@@ -3,8 +3,7 @@ set(TARGET_NAME libgbkfit_cuda)
 
 project(${TARGET_NAME}-project CUDA CXX)
 
-find_package(pybind11)
-find_package(CUDA REQUIRED)
+find_package(CUDAToolkit REQUIRED)
 
 set(HEADER_FILES
   include/gbkfit/cuda/common.hpp
@@ -22,7 +21,7 @@ set(SOURCE_FILES
   src/wrapper.cu
 )
 
-set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -arch=sm_50 --std=c++17 --expt-relaxed-constexpr")
+set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --expt-relaxed-constexpr")
 
 pybind11_add_module(
   ${TARGET_NAME}
@@ -35,16 +34,13 @@ target_include_directories(
   ${TARGET_NAME}
   PRIVATE
   include
-  ${CUDA_INCLUDE_DIRS}
 )
-
-message(${CUDA_INCLUDE_DIRS})
 
 target_link_libraries(
   ${TARGET_NAME}
   PRIVATE
   libgbkfit
-  ${CUDA_CUFFT_LIBRARIES}
+  CUDA::cufft
 )
 
 target_compile_options(
@@ -63,4 +59,7 @@ set_target_properties(
   PROPERTIES
   CXX_STANDARD 17
   CXX_EXTENSIONS OFF
+  CUDA_STANDARD 17
+  CUDA_EXTENSIONS OFF
+  CUDA_ARCHITECTURES 50 52 53 60 61 62 70 72 73 75 80
 )

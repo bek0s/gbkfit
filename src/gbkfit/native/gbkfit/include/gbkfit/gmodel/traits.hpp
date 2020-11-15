@@ -1,7 +1,7 @@
 #pragma once
 
 #include <cassert>
-
+#include <iostream>
 #include "gbkfit/math/math.hpp"
 
 namespace gbkfit {
@@ -36,6 +36,8 @@ constexpr int VP_TRAIT_UID_TAN_BOISSIER = 3;
 constexpr int VP_TRAIT_UID_TAN_EPINAT = 4;
 constexpr int VP_TRAIT_UID_TAN_LRAMP = 5;
 constexpr int VP_TRAIT_UID_TAN_TANH = 6;
+constexpr int VP_TRAIT_UID_TAN_POLYEX = 7;
+constexpr int VP_TRAIT_UID_TAN_RIX = 8;
 constexpr int VP_TRAIT_UID_NW_TAN_UNIFORM = 101;
 constexpr int VP_TRAIT_UID_NW_TAN_HARMONIC = 102;
 constexpr int VP_TRAIT_UID_NW_RAD_UNIFORM = 103;
@@ -176,12 +178,11 @@ p_trait_mixture_2p(T& out, T r, T theta, const T* consts, const T* params)
         T blob_p = params[6*nblobs+i];  // blob roll (relative to blob_t)
         blob_t *= DEG_TO_RAD<T>;
         blob_p *= DEG_TO_RAD<T>;
-        T xb = blob_r * std::cos(blob_p);
-        T yb = blob_r * std::sin(blob_p);
-        T xd = r * std::cos(theta + blob_p - blob_t) - xb;
-        T yd = r * std::sin(theta + blob_p - blob_t) - yb;
-        T rd = std::sqrt(xd * xd + (yd * yd) / (blob_q * blob_q));
-        res += FUN(rd, blob_a, 0, blob_s, blob_b);
+        T xn = r * std::cos(theta) - blob_r * std::cos(blob_t);
+        T yn = r * std::sin(theta) - blob_r * std::sin(blob_t);
+        transform_lh_rotate_z(xn, yn, xn, yn, blob_t + blob_p);
+        T rn = std::sqrt(xn * xn + (yn * yn) / (blob_q * blob_q));
+        res += FUN(rn, blob_a, 0, blob_s, blob_b);
     }
     out = res;
 }
@@ -286,6 +287,10 @@ template<typename T> constexpr void
 rp_trait_gauss_rnd(
         T& out_r, T& out_t, RNG<T>& rng, int rnidx, const T* rnodes)
 {
+    //out_r = gauss_1d_rnd<T>(rng, 0, 20);
+    //out_t = 2 * PI<T> * rng();
+    //out_r = 20 * std::sqrt(-2 * std::log(rng()));
+    //out_t = 2 * PI<T> * rng();
     rp_trait_sample_polar_coords_nw(out_r, out_t, rng, rnidx, rnodes);
 }
 
@@ -686,8 +691,8 @@ vp_trait_tan_epinat(T& out, T r, T theta, T incl, const T* params)
     T rt = params[0];
     T vt = params[1];
     T a = params[2];
-    T b = params[3];
-    out = vt * std::pow(r/rt, b) / (1 + std::pow(r/rt, a));
+    T g = params[3];
+    out = vt * std::pow(r/rt, g) / (1 + std::pow(r/rt, a));
     vp_trait_make_tan(out, theta, incl);
 }
 
@@ -706,6 +711,27 @@ vp_trait_tan_tanh(T& out, T r, T theta, T incl, const T* params)
     T rt = params[0];
     T vt = params[1];
     out = vt * std::tanh(r/rt);
+    vp_trait_make_tan(out, theta, incl);
+}
+
+template<typename T> constexpr void
+vp_trait_tan_polyex(T& out, T r, T theta, T incl, const T* params)
+{
+    T rt = params[0];
+    T vt = params[1];
+    T a = params[2];
+    out = vt * (1 - std::exp(-r/rt)) * (1 + a * r/rt);
+    vp_trait_make_tan(out, theta, incl);
+}
+
+template<typename T> constexpr void
+vp_trait_tan_rix(T& out, T r, T theta, T incl, const T* params)
+{
+    T rt = params[0];
+    T vt = params[1];
+    T b = params[2];
+    T g = params[3];
+    out = vt * std::pow(1 + r/rt, b) * std::pow(1 + std::pow(r/rt, -g), -1/g);
     vp_trait_make_tan(out, theta, incl);
 }
 
@@ -1172,6 +1198,14 @@ vp_trait(T& out,
         break;
     case VP_TRAIT_UID_TAN_TANH:
         vp_trait_tan_tanh(
+                out, r, theta, incl, params);
+        break;
+    case VP_TRAIT_UID_TAN_POLYEX:
+        vp_trait_tan_polyex(
+                out, r, theta, incl, params);
+        break;
+    case VP_TRAIT_UID_TAN_RIX:
+        vp_trait_tan_rix(
                 out, r, theta, incl, params);
         break;
     case VP_TRAIT_UID_NW_TAN_UNIFORM:

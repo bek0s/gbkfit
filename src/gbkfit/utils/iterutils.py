@@ -95,3 +95,13 @@ def is_iterable_of_type(x, type_):
 def is_sequence_of_type(x, type_):
     return is_sequence(x) and all(isinstance(i, type_) for i in x)
 
+
+"""
+def sequence_difference(a, b):
+    return []
+
+
+def sequence_intersection(a, b):
+    return [x for x in a if x in b]
+"""
+

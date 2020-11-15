@@ -1,5 +1,5 @@
 
-from gbkfit.dataset import Dataset, _detail as dataset_detail
+from gbkfit.dataset import Dataset, _detail as _dataset_detail
 from gbkfit.utils import parseutils
 from . import _detail
 
@@ -26,17 +26,17 @@ class DatasetMMaps(Dataset):
             self,
             mmap0=None, mmap1=None, mmap2=None, mmap3=None,
             mmap4=None, mmap5=None, mmap6=None, mmap7=None):
-        mmaps_args = locals()
+        mmaps_args = locals().copy()
         mmaps_args.pop('self')
         mmaps_args.pop('__class__')
         mmaps = {k: v for k, v in mmaps_args.items() if v}
         # All moment maps must have the same attributes
         desc = parseutils.make_typed_desc(self.__class__, 'dataset')
-        dataset_detail.ensure_same_attrib_value(mmaps, 'size', desc)
-        dataset_detail.ensure_same_attrib_value(mmaps, 'step', desc)
-        dataset_detail.ensure_same_attrib_value(mmaps, 'rpix', desc)
-        dataset_detail.ensure_same_attrib_value(mmaps, 'rval', desc)
-        dataset_detail.ensure_same_attrib_value(mmaps, 'rota', desc)
+        _dataset_detail.ensure_same_attrib_value(mmaps, 'size', desc)
+        _dataset_detail.ensure_same_attrib_value(mmaps, 'step', desc)
+        _dataset_detail.ensure_same_attrib_value(mmaps, 'rpix', desc)
+        _dataset_detail.ensure_same_attrib_value(mmaps, 'rval', desc)
+        _dataset_detail.ensure_same_attrib_value(mmaps, 'rota', desc)
         # TODO: validate wcs
         super().__init__(mmaps)
 

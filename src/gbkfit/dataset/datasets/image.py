@@ -13,7 +13,7 @@ class DatasetImage(Dataset):
         return 'image'
 
     @classmethod
-    def load(cls, info, *args, **kwargs):
+    def load(cls, info):
         names = ['image']
         opts = _detail.load_dataset_common(cls, info, names)
         return cls(**opts)

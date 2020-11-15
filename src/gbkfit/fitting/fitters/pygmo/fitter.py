@@ -67,21 +67,8 @@ class FitterPygmo(Fitter, abc.ABC):
         for i in range(self._size):
             pop.set_x(i, initials[:, i])
         pop = alg.evolve(pop)
-
-        print(pop.champion_x)
-
-
-        eparams_all = {}
-        params_free = dict(zip(parameters.names(), pop.champion_x))
-        parameters.expressions().evaluate(params_free, True, eparams_all)
-
-        solutions = [FitterResultSolution(
-            mode=list(eparams_all.values()),
-            stddev=list(eparams_all.values())
-        )]
-
-        result = make_fitter_result(objective, parameters, solutions=solutions)
-
+        solution = dict(mode=pop.champion_x)
+        result = make_fitter_result(objective, parameters, solutions=solution)
         return result
 
     @abc.abstractmethod
@@ -183,7 +170,7 @@ class FitterPygmoCMAES(FitterPygmo):
 
     def __init__(
             self, gen, size, cc=-1, cs=-1, c1=-1, cmu=-1, sigma0=0.5,
-            ftol=1e-06, xtol=1e-06, memory=False, force_bounds=False, seed=0,
+            ftol=1e-06, xtol=1e-06, memory=False, force_bounds=True, seed=0,
             verbosity=0):
         super().__init__(
             size, seed, verbosity, dict(

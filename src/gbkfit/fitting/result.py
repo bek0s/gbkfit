@@ -1,5 +1,6 @@
 
 import copy
+import inspect
 import json
 import logging
 import os
@@ -7,15 +8,14 @@ import pathlib
 import ruamel.yaml
 
 from dataclasses import dataclass, asdict
-from typing import Any, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 from operator import attrgetter
 
-import astropy.io.fits as fits
 import numpy as np
-
 import pandas as pd
 
 import gbkfit.dataset
+from gbkfit.utils import iterutils
 
 log = logging.getLogger(__name__)
 
@@ -42,63 +42,87 @@ def _dump_posterior(params, posterior, prefix=''):
     np.savetxt(filename, data, fmt=f'%{width1}.{width2}e', header=header)
 
 
-def load_result(filename):
+def load_result(input_dir):
+
+    #json.load()
     pass
 
 
-def make_unique_path(path):
-    i = 0
-    base = path
-    while os.path.exists(path):
-        i += 1
-        path = f'{base}_{i}'
-    return path
+def _dump_object(filename, obj, json_=True, yaml_=True):
+    if json_:
+        with open(filename + '.json', 'w+') as f:
+            json.dump(obj, f, indent=2)
+    if yaml_:
+        with open(filename + '.yaml', 'w+') as f:
+            yaml.dump(obj, f)
 
 
 def dump_result(output_dir, result):
 
-    output_dir = make_unique_path(output_dir)
     os.makedirs(output_dir)
 
+    root_info = dict(
+        params_all=result.params_all,
+        params_free=result.params_free,
+        params_tied=result.params_tied,
+        params_fixed=result.params_fixed,
+        params_varying=result.params_varying,
+        extra=result.extra)
+
+    filename_root = os.path.join(output_dir, 'result')
+    with open(filename_root + '.json', 'w+') as f:
+        f.write(json.dumps(root_info, indent=2))
+
+    # Dump datasets
     for i, dataset in enumerate(result.datasets):
-        dataset_prefix = os.path.join(output_dir, f'dataset_{i}_')
-        result.datasets[i].dump(prefix=dataset_prefix)
+        prefix = os.path.join(output_dir, f'dataset_{i}_')
+        result.datasets[i].dump(prefix=prefix)
 
+    # Dump global posterior
+    if result.posterior:
+        prefix = os.path.join(output_dir, '')
+        _dump_posterior(result.params_varying, result.posterior, prefix)
+
+    # Dump solutions
     for i, sol in enumerate(result.solutions):
-
         solution_dir = os.path.join(output_dir, 'solutions', str(i))
         os.makedirs(solution_dir)
-
+        # Build parameter data frame
         sol_dict = asdict(sol)
         col_names = []
-        for col_name in ['mode', 'mean', 'stddev']:
+        for col_name in ['mode', 'mean', 'std']:
             if sol_dict[col_name] is not None:
                 col_names.append(col_name)
         df = pd.DataFrame(
-            index=result.param_names,
+            index=result.params_varying,
             columns=col_names)
         for col_name in col_names:
             df[col_name] = sol_dict[col_name]
+        # Dump the parameter data frame on various formats
         filename_params = os.path.join(solution_dir, 'parameters')
-        df.to_csv(filename_params + '.csv')
+        with open(filename_params + '.csv', 'w+') as f:
+            f.write(df.to_csv())
         with open(filename_params + '.txt', 'w+') as f:
             f.write(df.to_string())
         with open(filename_params + '.json', 'w+') as f:
             json.dump(json.loads(df.to_json(orient='index')), f, indent=2)
         with open(filename_params + '.yaml', 'w+') as f:
             yaml.dump(json.loads(df.to_json(orient='index')), f)
-        print(df.to_string())
-
+        # Dump model and residual data
         for j, dataset in enumerate(result.datasets):
             model = sol.model[j]
             resid = sol.residual[j]
             for key in dataset:
                 gbkfit.dataset.Data(model[key]).dump(
-                    os.path.join(
-                        solution_dir, f'bestfit_{j}_mdl_{key}.fits'))
+                    os.path.join(solution_dir, f'bestfit_{j}_mdl_{key}.fits'))
                 gbkfit.dataset.Data(resid[key]).dump(
-                    os.path.join(
-                        solution_dir, f'bestfit_{j}_res_{key}.fits'))
+                    os.path.join(solution_dir, f'bestfit_{j}_res_{key}.fits'))
+        # Dump posterior
+        if sol.posterior:
+            prefix = os.path.join(solution_dir, '')
+            _dump_posterior(result.params_varying, result.posterior, prefix)
+
+        print(df.to_string())
 
 
 @dataclass()
@@ -111,10 +135,11 @@ class FitterResultPosterior:
 
 @dataclass()
 class FitterResultSolution:
-    mode: np.ndarray = None
-    mean: np.ndarray = None
+
+    mode: dict = None
+    mean: dict = None
+    std: dict = None
     covar: np.ndarray = None
-    stddev: np.ndarray = None
     posterior: FitterResultPosterior = None
     model: np.ndarray = None
     residual: np.ndarray = None
@@ -122,58 +147,135 @@ class FitterResultSolution:
     rchisqr: float = None
     extra: dict = None
 
+    def summary(self):
+        summary = inspect.cleandoc(
+            f"""
+            """)
+        return summary
 
-@dataclass()
+
+@dataclass
 class FitterResult:
 
-    datasets: Any = ()
-    param_names: tuple = ()
-    param_names_tied: tuple = ()
-    param_names_fixed: tuple = ()
-    posterior: FitterResultPosterior = None
-    extras: dict = None
-    solutions: Tuple[FitterResultSolution] = ()
+    datasets: Any
+    params_all: Tuple
+    params_free: Tuple
+    params_tied: Tuple
+    params_fixed: Dict
+    params_varying: Tuple
+    solutions: Tuple[FitterResultSolution]
+    posterior: FitterResultPosterior
+    extra: Dict
 
     @property
     def champion(self):
         return max(self.solutions, key=attrgetter('chisqr'))
 
+    def summary(self):
+        summary = inspect.cleandoc(
+            f"""
+            -------
+            summary
+            -------
+            number of all parameters: {len(self.params_all)}
+            number of free parameters: {len(self.params_free)}
+            number of tied parameters: {len(self.params_tied)}
+            number of fixed parameters: {len(self.params_fixed)}
+            number of solutions: {len(self.solutions)}
+            """)
+        return summary
 
 def make_fitter_result(
         objective, parameters, posterior=None, extra=None, solutions=()):
-    # We need to have at least one solution.
-    # If not, try to calculate one using the posterior (if exists)
+
+    # At least one solution or a global posterior is required
     if not solutions:
         if not posterior:
             raise RuntimeError(
-                "at least one solution or a posterior distribution "
-                "must be provided")
-        solutions = (FitterResultSolution(posterior=posterior),)
-    # ...
-    params_all = parameters.names(free=True, tied=True, fixed=True)
-    params_free = parameters.names(free=True, tied=False, fixed=False)
-    params_tied = parameters.names(free=False, tied=True, fixed=False)
-    params_fixed = parameters.names(free=False, tied=False, fixed=True)
-    dof = 100
-    # For each solution, try to generate more information (if possible)
-    for s in solutions:
-        if s.posterior and s.posterior.logprobs and s.posterior.samples:
-            if s.mode is None:
-                s.mode = s.posterior.samples[np.argmax(s.posterior.logprobs)]
-            if s.mean is None:
-                s.mean = np.mean(s.posterior.samples, axis=0)
-            if s.covar is None:
-                s.covar = None
-        params = dict(zip(params_free, s.mode))
-        params = parameters.expressions().evaluate(params)
-        s.model = objective.model().evaluate_h(params)
-        s.residual = objective.residual_nddata(params)
-        s.wresidual = objective.residual_nddata(params)
-        s.chisqr = 1.0
-        s.rchisqr = s.chisqr / (dof - len(params_free))
-        s.wchisqr = 1.0
-        s.rwchisqr = s.wchisqr / (dof - len(params_free))
+                "at least one solution or a global posterior "
+                "is required")
+        solutions = dict(posterior=posterior)
+
+    # Ensure solutions are iterable for convenience
+    solutions = iterutils.tuplify(solutions)
+
+    # Make some arrays with exploded param names for later use
+    exprs = parameters.exprs()
+    enames_all = exprs.enames(True, True, True)
+    enames_free = exprs.enames(True, False, False)
+    enames_tied = exprs.enames(False, True, False)
+    enames_fixed = exprs.enames(False, False, True)
+    enames_varying = exprs.enames(True, True, False)
+    params_fixed = exprs.fixed_dict()
+
+    sols = []
+
+    for i, s in enumerate(solutions):
+
+        sol = FitterResultSolution()
+
+        if 'mode' in s:
+            eparams_free = dict(zip(enames_free, s['mode']))
+            eparams_varying = {p: None for p in enames_varying}
+            exprs.evaluate(eparams_free, eparams_varying)
+            sol.mode = np.array(list(eparams_varying.values()))
+
+        # Calculate statistical quantities from posterior
+        if 'posterior' in s:
+            sposterior = s['posterior']
+            sol.posterior = FitterResultPosterior()
+            sol.posterior.logpriors = sposterior.get('logpriors')
+            sol.posterior.loglikes = sposterior.get('loglikes')
+            sol.posterior.logprobs = sposterior.get('logprobs')
+            sol.posterior.samples = np.full((0, 0), np.nan)
+            for j, row in enumerate(sposterior['samples']):
+                eparams_free = dict(zip(enames_free, row))
+                eparams_varying = {p: None for p in enames_varying}
+                exprs.evaluate(eparams_free, eparams_varying)
+                sol.posterior.samples[j, :] = eparams_varying.values()
+            sol.covar = np.cov(sol.posterior.samples, rowvar=False)
+            sol.mean = np.mean(s.posterior.samples, axis=0)
+            sol.std = np.std(s.posterior.samples, axis=0)
+            if not sol.mode:
+                sol.mode = s.posterior.samples[np.argmax(s.posterior.logprobs)]
+
+        # Otherwise, salvage whatever is available
+        else:
+            if 'mean' in s:
+                sol.mean = np.full(len(enames_varying), np.nan)
+                for j, param in enumerate(enames_free):
+                    sol.mean[enames_varying.index(param)] = s['mean'][j]
+            if 'std' in s:
+                sol.std = np.full(len(enames_varying), np.nan)
+                for j, param in enumerate(enames_free):
+                    sol.std[enames_varying.index(param)] = s['std'][j]
+            if 'covar' in s:
+                pass
+
+        # Mode must be provided or recovered somehow
+        if sol.mode is None:
+            raise RuntimeError(
+                f"mode was not provided or could not be recovered "
+                f"for solution {i}")
+
+        # Calculate quantities using the mode
+        eparams_varying = dict(zip(enames_varying, sol.mode))
+        eparams_free = {n: eparams_varying[n] for n in enames_free}
+        print(eparams_free)
+        params = parameters.expressions().evaluate(eparams_free)
+        dof = 100
+        sol.model = objective.model().evaluate_h(params)
+        sol.residual = objective.residual_nddata(params)
+        sol.wresidual = objective.residual_nddata(params)
+        sol.chisqr = 1.0
+        sol.rchisqr = sol.chisqr / (dof - len(enames_free))
+        sol.wchisqr = 1.0
+        sol.rwchisqr = sol.wchisqr / (dof - len(enames_free))
+
+        # ...
+        sols.append(sol)
 
     return FitterResult(
         objective.datasets(),
-        params_all, params_free, posterior, extra, solutions=solutions)
+        enames_all, enames_free, enames_tied, params_fixed, enames_varying, sols, posterior, extra)
+

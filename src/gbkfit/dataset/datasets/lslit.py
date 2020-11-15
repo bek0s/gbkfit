@@ -13,7 +13,7 @@ class DatasetLSlit(Dataset):
         return 'lslit'
 
     @classmethod
-    def load(cls, info, *args, **kwargs):
+    def load(cls, info):
         names = ['lslit']
         opts = _detail.load_dataset_common(cls, info, names)
         return cls(**opts)

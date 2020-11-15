@@ -58,21 +58,21 @@ class ParamVectorDesc(ParamDesc):
         return f'{self.__class__.__name__}({self.name()!r}, {self.size()!r})'
 
 
-def load_descriptions(info):
+def load_descs(info):
     descs = {}
     for key, val in info.items():
         descs[key] = parser.load({'name': key, **val})
     return descs
 
 
-def dump_descriptions(descs):
+def dump_descs(descs):
     info = {key: parser.dump(val) for key, val in descs.items()}
     for val in info.values():
         val.pop('name')
     return info
 
 
-def merge_descriptions(descs1, descs2):
+def merge_descs(descs1, descs2):
     if descs1 is None:
         descs1 = {}
     if descs2 is None:

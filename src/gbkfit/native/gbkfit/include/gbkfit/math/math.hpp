@@ -64,8 +64,10 @@ transform_lh_rotate_z(T& out_x, T& out_y, T x, T y, T theta)
 {
     T sintheta = std::sin(theta);
     T costheta = std::cos(theta);
-    out_x =   x * costheta + y * sintheta;
-    out_y = - x * sintheta + y * costheta;
+//  out_x = + x * costheta + y * sintheta;
+//  out_y = - x * sintheta + y * costheta;
+    out_x = - x * sintheta + y * costheta;
+    out_y = - x * costheta - y * sintheta;
 }
 
 template<typename T> constexpr void

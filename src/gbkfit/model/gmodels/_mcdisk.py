@@ -71,6 +71,8 @@ class MCDisk(_disk.Disk):
                 ncloudspt.extend(tnclouds.astype(np.int32))
 
         ncloudspt = list(itertools.accumulate(ncloudspt))
+        #print("ncloudspt:", ncloudspt)
+
         nclouds = int(ncloudspt[-1])
 
         self._ncloudsptor[0][:] = ncloudspt

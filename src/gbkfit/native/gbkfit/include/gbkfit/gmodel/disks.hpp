@@ -1,7 +1,7 @@
 #pragma once
 
 #include "gbkfit/gmodel/traits.hpp"
-
+#include <iostream>
 namespace gbkfit {
 
 constexpr int TRAIT_NUM_MAX = 4;
@@ -124,7 +124,7 @@ ring_info(
     // Ignore anything larger than the last node
     if (radius_max >= nodes[nnodes-1])
         return false;
-#if 0
+#if 1
     // Linear search
     for(index = 1; index < nnodes; ++index)
     {
@@ -178,7 +178,7 @@ ring_info(
     // Ignore anything larger than the last node
     if (radius_max >= nodes[nnodes-1])
         return false;
-#if 0
+#if 1
     // Linear search
     for(index = 1; index < nnodes; ++index)
     {
@@ -280,7 +280,7 @@ gmodel_mcdisk_evaluate_cloud(
     vvalue = 0;
     dvalue = 0;
 
-    // Find which comulative sum the cloud belongs to.
+    // Find which cumulative sum the cloud belongs to.
     while(ci >= ncloudscsum[rnidx]) {
         rnidx++;
     }
@@ -309,6 +309,11 @@ gmodel_mcdisk_evaluate_cloud(
         bvalue = -bvalue;
         //std::cout << bvalue << std::endl;
     }
+
+    // Integrate along z dimension
+    bvalue /= spat_step_z;
+    // Convert to surface brightness
+    bvalue /= spat_step_x * spat_step_y;
 
     // Calculate cartesian coordinates on disk plane.
     xd = rd * std::cos(theta);
@@ -373,14 +378,12 @@ gmodel_mcdisk_evaluate_cloud(
     incli *= DEG_TO_RAD<T>;
 
     T xn = xd, yn = yd, zn = zd;
-    xn = xn / spat_step_x;
-    yn = yn / spat_step_y;
-    zn = zn / spat_step_z;
-    transform_incl_posa_cpos(xn, yn, zn, xposi, yposi, -posai, -incli);
+    transform_incl_posa_cpos(xn, yn, zn, -xposi, -yposi, -posai, -incli);
 
-    x = std::rint(xn - spat_zero_x);
-    y = std::rint(yn - spat_zero_y);
-    z = std::rint(zn - spat_zero_z);
+    //
+    x = std::rint((xn - spat_zero_x)/spat_step_x);
+    y = std::rint((yn - spat_zero_y)/spat_step_y);
+    z = std::rint((zn - spat_zero_z)/spat_step_z);
 
     // Discard pixels outside the image/cube
     if (x < 0 || x >= spat_size_x ||
@@ -611,14 +614,14 @@ gmodel_smdisk_evaluate_pixel(
     for (int i = 0; i < nrt; ++i)
         bvalue += ptvalues[i] * (is_thin ? 1 : htvalues[i]);
 
+    // Discart pixels with zero emission
+    if (bvalue == 0) return false;
+
     // Thin disk requires surface brightness correction
     if (is_thin) bvalue /= std::cos(incli);
 
     // Thick disk requires integration along the z axis
     if (!is_thin) bvalue *= spat_step_z;
-
-    // Discart pixels with zero emission
-    if (bvalue == 0) return false;
 
     // Velocity traits
     if (vpt_uids)

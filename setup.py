@@ -73,8 +73,10 @@ setup(
     install_requires=[
         'astor',
         'astropy',
+        'matplotlib',
         'networkx',
         'numpy',
+        'pandas',
         'ruamel.yaml',
         'scikit-image',
         'scipy'

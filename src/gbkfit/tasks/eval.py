@@ -76,7 +76,7 @@ def eval_(config, perf=None):
         datasets = gbkfit.dataset.dataset_parser.load(cfg['datasets'])
 
     log.info("setting up drivers...")
-    drivers = gbkfit.driver.driver.parser.load(cfg['drivers'])
+    drivers = gbkfit.driver.parser.load(cfg['drivers'])
 
     log.info("setting up dmodels...")
     dmodels = gbkfit.model.dmodel_parser.load(cfg['dmodels'], dataset=datasets)
@@ -84,14 +84,14 @@ def eval_(config, perf=None):
     log.info("setting up gmodels...")
     gmodels = gbkfit.model.gmodel_parser.load(cfg['gmodels'])
 
-    log.info("setting up model...")
-    model = gbkfit.model.Model(dmodels, gmodels, drivers)
+    log.info("setting up models...")
+    models = gbkfit.model.make_model_group(dmodels, gmodels, drivers)
 
     pdescs = None
     if 'pdescs' in cfg:
         log.info("setting up pdescs...")
-        pdescs = gbkfit.params.descs.load_descriptions(cfg['pdescs'])
-    pdescs = gbkfit.params.descs.merge_descriptions(model.pdescs(), pdescs)
+        pdescs = gbkfit.params.descs.load_descs(cfg['pdescs'])
+    pdescs = gbkfit.params.descs.merge_descs(models.pdescs(), pdescs)
 
     log.info("setting up params...")
     cfg['params']['parameters'] = _patch_parameters(
@@ -104,23 +104,12 @@ def eval_(config, perf=None):
 
     log.info("calculating model parameters...")
 
-    eparams_all = {}
-    eparams_free = {}
-    eparams_tied = {}
-    eparams_fixed = {}
-    eparams_notfree = {}
-    params = params.expressions().evaluate(
-        {}, True,
-        eparams_all, eparams_free,
-        eparams_tied, eparams_fixed, eparams_notfree)
+    eparams = {ename: None for ename in params.expressions().enames()}
+    params = params.expressions().evaluate({}, eparams)
 
     params_info = _detail.nativify(dict(
         params=params,
-        eparams_all=eparams_all,
-        eparams_free=eparams_free,
-        eparams_tied=eparams_tied,
-        eparams_fixed=eparams_fixed,
-        eparams_notfree=eparams_notfree))
+        eparams=eparams))
     filename = 'gbkfit_result_params'
     json.dump(params_info, open(f'{filename}.json', 'w+'), indent=2)
     yaml.dump(params_info, open(f'{filename}.yaml', 'w+'))
@@ -132,7 +121,7 @@ def eval_(config, perf=None):
     log.info("evaluating model...")
 
     extras = []
-    models = model.evaluate_h(params, extras)
+    output = models.evaluate_h(params, extras)
 
     def save_model(file, data):
         hdu = fits.PrimaryHDU(data)
@@ -140,12 +129,46 @@ def eval_(config, perf=None):
         hdulist.writeto(file, overwrite=True)
 
     log.info("writing model to the filesystem...")
-    for i in range(len(models)):
+    for i in range(len(output)):
         prefix = 'model' + f'_{i}' * bool(i)
-        for key, value in models[i].items():
+        for key, value in output[i].items():
             save_model(f'{prefix}_{key}.fits', value)
         for key, value in extras[i].items():
             save_model(f'{prefix}_extra_{key}.fits', value)
+
+    """
+    import scipy.signal
+    from gbkfit.psflsf.psfs import PSFGauss
+    from gbkfit.psflsf.lsfs import LSFGauss
+
+    gauss1d = LSFGauss(2).asarray(1)
+    gauss2d = PSFGauss(2).asarray((1, 1))
+    gauss3d = gauss2d * gauss1d[:, None, None]
+    rcube = extras[0]['gmodel_component0_rdata']
+    rcube_sm = scipy.signal.fftconvolve(rcube, gauss3d, mode='full')
+
+    fits.writeto('warp_psf_3d.fits', gauss3d, overwrite=True)
+    fits.writeto('warp_rcube.fits', rcube, overwrite=True)
+    fits.writeto('warp_rcube_sm.fits', rcube_sm, overwrite=True)
+
+    rcube_sm = np.swapaxes(rcube_sm, 1, 2)
+    import pyvista as pv
+    p = pv.Plotter(
+        off_screen=False, window_size=(1024, 768), multi_samples=8,
+        line_smoothing=True, point_smoothing=True, polygon_smoothing=True)
+    p.enable_anti_aliasing()
+    p.enable_depth_peeling(number_of_peels=0, occlusion_ratio=0)
+    p.disable_parallel_projection()
+    p.add_axes()
+    p.set_background('black')
+    p.add_volume(
+        rcube_sm, cmap='twilight_shifted', n_colors=512, opacity='linear',
+        opacity_unit_distance=1, mapper='gpu')
+    p.camera_position = [0, 1, 0.2]
+    p.show()
+    print("BYE")
+    exit()
+    """
 
     #
     # Run performance tests
@@ -156,7 +179,7 @@ def eval_(config, perf=None):
         times = []
         for i in range(perf):
             t1 = time.time_ns()
-            model.evaluate_h(params)
+            models.evaluate_h(params)
             t2 = time.time_ns()
             t_ms = (t2 - t1) / 1000000
             times.append(t_ms)

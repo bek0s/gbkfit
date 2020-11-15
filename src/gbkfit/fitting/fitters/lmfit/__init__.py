@@ -16,6 +16,8 @@ from gbkfit.utils import parseutils
 from gbkfit.fitting.fitter import Fitter
 from gbkfit.fitting.params import FitParam, FitParams
 
+from .params import FitParamsLMFitNelderMead, FitParamsLMFitLeastSquares
+
 
 log = logging.getLogger(__name__)
 
