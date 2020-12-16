@@ -75,8 +75,12 @@ def dump_result(output_dir, result):
 
     # Dump datasets
     for i, dataset in enumerate(result.datasets):
-        prefix = os.path.join(output_dir, f'dataset_{i}_')
-        result.datasets[i].dump(prefix=prefix)
+        for key, data in result.datasets[i].items():
+            prefix = os.path.join(output_dir, f'dataset_{i}_{key}')
+            filename_d = f'{prefix}_d.fits'
+            filename_m = f'{prefix}_m.fits'
+            filename_e = f'{prefix}_e.fits'
+            data.dump(filename_d, filename_m, filename_e)
 
     # Dump global posterior
     if result.posterior:
@@ -113,10 +117,12 @@ def dump_result(output_dir, result):
             model = sol.model[j]
             resid = sol.residual[j]
             for key in dataset:
-                gbkfit.dataset.Data(model[key]).dump(
-                    os.path.join(solution_dir, f'bestfit_{j}_mdl_{key}.fits'))
+                filename_mdl = f'bestfit_{j}_mdl_{key}_d.fits'
+                filename_res = f'bestfit_{j}_res_{key}_d.fits'
+                gbkfit.dataset.Data(model[key]['data']).dump(
+                    os.path.join(solution_dir, filename_mdl))
                 gbkfit.dataset.Data(resid[key]).dump(
-                    os.path.join(solution_dir, f'bestfit_{j}_res_{key}.fits'))
+                    os.path.join(solution_dir, filename_res))
         # Dump posterior
         if sol.posterior:
             prefix = os.path.join(solution_dir, '')

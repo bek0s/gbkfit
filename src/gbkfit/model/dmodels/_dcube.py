@@ -100,7 +100,7 @@ class DCube:
         self._scale = scale
         self._dcube_lo = None
         self._dcube_hi = None
-        self._dmask_hi = None
+        self._dmask_lo = None
         self._dcube_hi_fft = None
         self._psf3d_hi_fft = None
         self._psf = psf
@@ -126,6 +126,9 @@ class DCube:
 
     def data(self):
         return self._dcube_lo
+
+    def mask(self):
+        return self._dmask_lo
 
     def scratch_size(self):
         return self._size_hi
@@ -174,9 +177,9 @@ class DCube:
             self._psf3d_hi_fft = driver.mem_alloc_d(size_hi_fft, dtype)
         # The psf convolution also affects pixels outside the galaxy model
         # Allocate a spatial mask for all the pixels of the galaxy model
-        if self._psf:
-            self._dmask_hi = driver.mem_alloc_d(size_hi[:2][::-1], dtype)
-            driver.mem_fill(self._dmask_hi, 0)
+
+        self._dmask_lo = driver.mem_alloc_d(size_lo[::-1], dtype)
+
         # Create and prepare dcube backend
         self._dcube = driver.make_dmodel_dcube(dtype)
 
@@ -193,10 +196,14 @@ class DCube:
                 self._scale, self._edge_hi, self._size_hi, self._size_lo,
                 self._dcube_hi, self._dcube_lo)
 
+        self._dcube.make_mask(
+            True, True, 1e-6, self._size_lo, self._dcube_lo, self._dmask_lo)
+
         if out_extra is not None:
             out_extra.update(
                 dcube_lo=self._driver.mem_copy_d2h(self._dcube_lo),
-                dcube_hi=self._driver.mem_copy_d2h(self._dcube_hi))
+                dcube_hi=self._driver.mem_copy_d2h(self._dcube_hi),
+                dmask_lo=self._driver.mem_copy_d2h(self._dmask_lo))
             if self._psf:
                 out_extra.update(
                     psf_lo=self._psf.asarray(self._step_lo[:2]),

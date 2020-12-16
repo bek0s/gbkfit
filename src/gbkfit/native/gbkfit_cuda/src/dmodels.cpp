@@ -116,12 +116,26 @@ DModelDCube<T>::downscale(
 }
 
 template<typename T> void
+DModelDCube<T>::make_mask(
+        bool mask_spat, bool mask_spec, T mask_coef,
+        std::array<int, 3> size,
+        Ptr cube, Ptr mask) const
+{
+    Wrapper<T>::dmodel_dcube_make_mask(
+            mask_spat, mask_spec, mask_coef,
+            size[0], size[1], size[2],
+            reinterpret_cast<T*>(cube),
+            reinterpret_cast<T*>(mask));
+}
+
+template<typename T> void
 DModelMMaps<T>::moments(
         std::array<int, 3> size,
         std::array<T, 3> step,
         std::array<T, 3> zero,
         Ptr scube,
         Ptr mmaps,
+        Ptr masks,
         Ptr orders,
         int norders) const
 {
@@ -131,6 +145,7 @@ DModelMMaps<T>::moments(
             zero[0], zero[1], zero[2],
             reinterpret_cast<T*>(scube),
             reinterpret_cast<T*>(mmaps),
+            reinterpret_cast<T*>(masks),
             reinterpret_cast<int*>(orders),
             norders);
 }

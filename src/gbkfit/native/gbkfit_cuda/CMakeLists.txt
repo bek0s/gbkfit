@@ -11,6 +11,7 @@ set(HEADER_FILES
   include/gbkfit/cuda/fftutils.hpp
   include/gbkfit/cuda/gmodels.hpp
   include/gbkfit/cuda/kernels.hpp
+  include/gbkfit/cuda/objective.hpp
   include/gbkfit/cuda/wrapper.hpp
 )
 
@@ -18,6 +19,7 @@ set(SOURCE_FILES
   src/bindings.cpp
   src/dmodels.cpp
   src/gmodels.cpp
+  src/objective.cpp
   src/wrapper.cu
 )
 

@@ -17,8 +17,7 @@ class DModelLSlit(DModel):
 
     @staticmethod
     def is_compatible(gmodel):
-        return hasattr(gmodel, 'evaluate_')
-        return isinstance(gmodel, GModelSCubeSupport)
+        return hasattr(gmodel, 'evaluate_scube')
 
     @classmethod
     def load(cls, info, dataset=None):
@@ -89,4 +88,4 @@ class DModelLSlit(DModel):
             dcube.dtype(),
             out_gextra)
         dcube.evaluate(out_dextra)
-        return dict(lslit=dcube.data()[0][:, 0, :])
+        return dict(lslit=dict(data=dcube.data()[0][:, 0, :], mask=dcube.mask()[0][:, 0, :]))

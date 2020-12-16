@@ -31,6 +31,12 @@ public:
             std::array<int, 3> dst_size,
             Ptr src_cube, Ptr dst_cube) const;
 
+    void
+    make_mask(
+            bool mask_spat, bool mask_spec, T mask_coef,
+            std::array<int, 3> size,
+            Ptr cube, Ptr mask) const;
+
 private:
 
     mutable std::array<int, 3> m_size;
@@ -58,6 +64,7 @@ public:
             std::array<T, 3> zero,
             Ptr scube,
             Ptr mmaps,
+            Ptr masks,
             Ptr orders,
             int norders) const;
 };

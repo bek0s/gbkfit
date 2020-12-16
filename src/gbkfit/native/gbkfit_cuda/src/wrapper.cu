@@ -5,6 +5,18 @@
 namespace gbkfit { namespace cuda {
 
 template<typename T> void
+Wrapper<T>::objective_count_pixels(
+        const T* data, const T* model, int size, int* counts)
+{
+    unsigned int n = size;
+    dim3 bsize(256);
+    dim3 gsize((n + bsize.x - 1) / bsize.x);
+    kernels::objective_count_pixels<<<gsize, bsize>>>(
+            data, model, size, counts);
+    cudaDeviceSynchronize();
+}
+
+template<typename T> void
 Wrapper<T>::dmodel_dcube_complex_multiply_and_scale(
         typename cufft<T>::complex* arr1,
         typename cufft<T>::complex* arr2,
@@ -38,12 +50,28 @@ Wrapper<T>::dmodel_dcube_downscale(
 }
 
 template<typename T> void
+Wrapper<T>::dmodel_dcube_make_mask(
+        bool mask_spat, bool mask_spec, T mask_coef,
+        int size_x, int size_y, int size_z,
+        T* cube, T* mask)
+{
+    unsigned int n = size_x * size_y;
+    dim3 bsize(256);
+    dim3 gsize((n + bsize.x - 1) / bsize.x);
+    kernels::dmodel_dcube_make_mask<<<gsize, bsize>>>(
+            mask_spat, mask_spec, mask_coef,
+            size_x, size_y, size_z,
+            cube, mask);
+    cudaDeviceSynchronize();
+}
+
+template<typename T> void
 Wrapper<T>::dmodel_mmaps_moments(
         int size_x, int size_y, int size_z,
         T step_x, T step_y, T step_z,
         T zero_x, T zero_y, T zero_z,
         const T* scube,
-        T* mmaps, const int* orders, int norders)
+        T* mmaps, T* masks, const int* orders, int norders)
 {
     unsigned int n = size_x * size_y;
     dim3 bsize(256);
@@ -54,7 +82,7 @@ Wrapper<T>::dmodel_mmaps_moments(
             step_x, step_y, step_z,
             zero_x, zero_y, zero_z,
             scube,
-            mmaps, orders, norders);
+            mmaps, masks, orders, norders);
 
     cudaDeviceSynchronize();
 }

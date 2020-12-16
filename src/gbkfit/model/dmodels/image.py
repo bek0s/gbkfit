@@ -84,4 +84,4 @@ class DModelImage(DModel):
             dcube.dtype(),
             out_gextra)
         dcube.evaluate(out_dextra)
-        return dict(image=dcube.data()[0, :, :])
+        return dict(image=dict(data=dcube.data()[0, :, :], mask=dcube.mask()[0, :, :]))

@@ -66,6 +66,21 @@ class Driver(parseutils.BasicParserSupport, abc.ABC):
     def make_gmodel_smdisk(self, dtype):
         raise NotImplementedError()
 
+    def make_backend_dmodel_dcube(self, dtype):
+        raise NotImplementedError()
+
+    def make_backend_dmodel_mmaps(self, dtype):
+        raise NotImplementedError()
+
+    def make_backend_gmodel_mcdisk(self, dtype):
+        raise NotImplementedError()
+
+    def make_backend_gmodel_smdisk(self, dtype):
+        raise NotImplementedError()
+
+    def make_backend_objective(self, dtype):
+        raise NotImplementedError()
+
 
 class DModelDCube(abc.ABC):
 
@@ -84,6 +99,10 @@ class DModelDCube(abc.ABC):
             edge_hi,
             size_hi, size_lo,
             scube_hi, scube_lo):
+        pass
+
+    @abc.abstractmethod
+    def make_mask(self, mask_spat, mask_spec, mask_coef, size, cube, mask):
         pass
 
 

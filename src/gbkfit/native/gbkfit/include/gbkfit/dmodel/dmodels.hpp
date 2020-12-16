@@ -8,62 +8,12 @@ moments(int x, int y,
         T step_x, T step_y, T step_z,
         T zero_x, T zero_y, T zero_z,
         const T* cube,
-        T* mmaps, const int* orders, int norders)
+        T* mmaps, T* masks, const int* orders, int norders)
 {
     (void)step_x;
     (void)step_y;
     (void)zero_x;
     (void)zero_y;
-
-    //
-    // Check if spectrum has enough signal to extract moments
-    // This is a very crude and primitive approach
-    //
-
-    constexpr T EPS1 = 1e-5;
-    constexpr T EPS2 = 5e-2;
-
-    int nbump = 0;
-    T minimum = 0;
-    T maximum = 0;
-    T amplitude = 0;
-
-    // Calculate amplitude range
-    for(int z = 0; z < size_z; ++z)
-    {
-        int idx = x
-                + y * size_x
-                + z * size_x * size_y;
-        T value = cube[idx];
-        minimum = std::min(minimum, value);
-        maximum = std::max(maximum, value);
-    }
-    amplitude = maximum - minimum;
-
-    // Count the number of trend micro-changes in the spectrum
-    T prev = cube[1] - cube[0];
-    for(int z = 1; z < size_z - 1; ++z)
-    {
-        int idx1 = x
-                + y * size_x
-                + (z+0) * size_x * size_y;
-        int idx2 = x
-                + y * size_x
-                + (z+1) * size_x * size_y;
-        T diff = cube[idx2] - cube[idx1];
-        if (diff == 0)
-            continue;
-        if (prev * diff < 0 && std::fabs(diff) / amplitude > EPS1)
-            nbump += 1;
-        prev = diff;
-    }
-
-    if (float(nbump) / size_z > EPS2)
-        return;
-
-    //
-    // The spectrum signal is good enough to calculate moments
-    //
 
     int max_order = orders[norders - 1];
 
@@ -76,7 +26,7 @@ moments(int x, int y,
         int idx = x
                 + y * size_x
                 + z * size_x * size_y;
-        T flx = std::max(T{0}, cube[idx]);
+        T flx = cube[idx];
         m0_sum += flx * step_z;
     }
     m0 = m0_sum;
@@ -101,11 +51,14 @@ moments(int x, int y,
         int idx = x
                 + y * size_x
                 + z * size_x * size_y;
-        T flx = std::max(T{0}, cube[idx]);
+        T flx = cube[idx];
         T vel = zero_z + z * step_z;
-        m1_sum += flx * vel  * step_z;
+        m1_sum += flx * vel * step_z;
     }
     m1 = m0 > 0 ? m1_sum / m0 : NAN;
+    int idx = x
+            + y * size_x;
+    masks[idx] = m0 > 0;
 
     // Only output requested moments
     if (orders[m] == 1)
@@ -127,9 +80,9 @@ moments(int x, int y,
         int idx = x
                 + y * size_x
                 + z * size_x * size_y;
-        T flx = std::max(T{0}, cube[idx]);
+        T flx = cube[idx];
         T vel = zero_z + z * step_z;
-        m2_sum += flx * std::pow(vel - m1, 2);
+        m2_sum += flx * std::pow(vel - m1, 2) * step_z;
     }
     m2 = m0 > 0 ? std::sqrt(m2_sum / m0) : NAN;
 
@@ -156,7 +109,7 @@ moments(int x, int y,
             int idx = x
                     + y * size_x
                     + z * size_x * size_y;
-            T flx = std::max(T{0}, cube[idx]);
+            T flx = cube[idx];
             T vel = zero_z + z * step_z;
             mn_sum += flx * std::pow(vel - m1, orders[m]);
         }

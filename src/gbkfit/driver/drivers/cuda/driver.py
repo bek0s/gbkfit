@@ -1,6 +1,5 @@
 
 import cupy as cp
-import cupy.cuda.cub
 import numpy as np
 
 import gbkfit.driver
@@ -8,6 +7,7 @@ from gbkfit.driver import _detail
 
 import gbkfit.native.libgbkfit_cuda
 
+#export CUPY_ACCELERATORS=cub
 
 def _ptr(a):
     return a.__cuda_array_interface__['data'][0] if a is not None else 0
@@ -62,8 +62,7 @@ class DriverCUDA(gbkfit.driver.Driver):
         return cp.abs(x, out=out)
 
     def math_sum(self, x, out=None):
-        # return cp.sum(x, out=out, keepdims=True)
-        return cupy.cuda.cub.cub_reduction(x, 0, out=out, keepdims=True)
+        return cp.nansum(x, out=out, keepdims=True)
 
     def math_add(self, x1, x2, out=None):
         return cp.add(x1, x2, out=out)
@@ -88,6 +87,26 @@ class DriverCUDA(gbkfit.driver.Driver):
 
     def make_gmodel_smdisk(self, dtype):
         return GModelSMDisk(dtype)
+
+    def make_backend_objective(self, dtype):
+        return BackendObjective(dtype)
+
+
+class BackendObjective:
+    _CLASSES = {
+        np.float32: gbkfit.native.libgbkfit_cuda.Objectivef32}
+
+    def __deepcopy__(self, memodict):
+        return BackendObjective(self._dtype)
+
+    def __init__(self, dtype):
+        _detail.check_dtype(self._CLASSES, dtype)
+        self._backend = self._CLASSES[dtype]()
+        self._dtype = dtype
+
+    def count_pixels(self, data, model, size, count):
+        self._backend.count_pixels(
+            _ptr(data), _ptr(model), size, _ptr(count))
 
 
 class DModelDCube(gbkfit.driver.DModelDCube):

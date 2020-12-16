@@ -31,7 +31,13 @@ ruamel.yaml.add_representer(dict, lambda self, data: self.represent_mapping(
 
 
 def fit(config):
-
+    """
+    def run(n):
+        if n == 0 or n == 1:
+            return 1
+        else:
+            return n * run(n-1) * run(n-2)
+    """
     #
     # Read configuration file and
     # perform all necessary validation/patching/preparation

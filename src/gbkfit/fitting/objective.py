@@ -2,7 +2,7 @@
 from gbkfit.model import ModelGroup
 from gbkfit.utils import iterutils
 
-
+import numpy as np
 __all__ = ['Objective']
 
 """
@@ -62,13 +62,15 @@ dmodels = iterutils.tuplify(dmodels)
 class Objective:
 
     def __init__(self, datasets, models):
-        self._datasets = datasets = iterutils.tuplify(datasets)
+        datasets = iterutils.tuplify(datasets)
+
         self._models = models = ModelGroup(iterutils.tuplify(models))
         if len(datasets) != models.nmodels():
             raise RuntimeError(
                 f"the number of dataset and model are not equal"
                 f"({len(datasets)} != {len(models)})")
         n = models.nmodels()
+        self._datasets = iterutils.make_list((n,), dict(), True)
         self._nitems = iterutils.make_list((n,), 0, True)
         self._names = iterutils.make_list((n,), list(), True)
         self._sizes = iterutils.make_list((n,), list(), True)
@@ -111,7 +113,15 @@ class Objective:
                 self._steps[i] += [data.step()]
                 self._zeros[i] += [data.zero()]
                 self._npixs[i] += [data.npix()]
+                self._datasets[i][name] = data
+
+        self._backends = [None] * n
+        self._s_counts = [None] * n
+
+        self._backend = None
+        self._counts = None
         self.prepare()
+
 
     def params(self):
         return self._models.pdescs()
@@ -132,6 +142,11 @@ class Objective:
             nitems = self._nitems[i]
             npixs = self._npixs[i]
             dtype = dmodel.dtype()
+
+
+            self._backends[i] = driver.make_backend_objective(dtype)
+            self._s_counts[i] = driver.mem_alloc_s(3, np.int32)
+
             # Allocate host and device memory for residuals
             self._s_residual_vector[i] = driver.mem_alloc_s(sum(npixs), dtype)
             self._s_residual_scalar[i] = driver.mem_alloc_s((1,), dtype)
@@ -186,8 +201,8 @@ class Objective:
     def residual_vector(self, params, weighted=True, out_extra=None):
         self._residual_d(params, weighted, out_extra)
         residuals = []
-        for i in range(self._model.nitems()):
-            driver = self._model.drivers()[i]
+        for i in range(self._models.nmodels()):
+            driver = self._models.models()[i].driver()
             h_residual_vector = self._s_residual_vector[i][0]
             d_residual_vector = self._s_residual_vector[i][1]
             driver.mem_copy_d2h(d_residual_vector, h_residual_vector)
@@ -204,6 +219,7 @@ class Objective:
             h_residual_scalar = self._s_residual_scalar[i][0]
             d_residual_scalar = self._s_residual_scalar[i][1]
             driver.math_abs(d_residual_vector, out=d_residual_vector)
+            #driver.math_mul(d_residual_vector, d_residual_vector, out=d_residual_vector)
             driver.math_sum(d_residual_vector, out=d_residual_scalar)
             driver.mem_copy_d2h(d_residual_scalar, h_residual_scalar)
             residuals.append(h_residual_scalar[0])
@@ -221,14 +237,26 @@ class Objective:
             for j in range(self._nitems[i]):
                 name = self._names[i][j]
                 npix = self._npixs[i][j]
-                model = models[i][name].ravel()
+                model_d = models[i][name]['data'].ravel()
+                model_m = models[i][name]['mask'].ravel()
                 slice_ = slice(ipix, ipix + npix)
-                data = self._d_dataset_d_vector[i][slice_]
-                mask = self._d_dataset_m_vector[i][slice_]
-                error = self._d_dataset_e_vector[i][slice_]
+                dataset_d = self._d_dataset_d_vector[i][slice_]
+                dataset_m = self._d_dataset_m_vector[i][slice_]
+                dataset_e = self._d_dataset_e_vector[i][slice_]
+
+
                 resid = self._s_residual_vector[i][1][slice_]
+
+
+                self._backends[i].count_pixels(dataset_m, model_m, model_m.size, self._s_counts[i][1])
+
+                resid[:] = dataset_m * (dataset_d - model_d) / dataset_e
+
+
+                """
                 if weighted:
                     resid[:] = mask * (data - model) / error
                 else:
                     resid[:] = mask * (data - model)
+                """
                 ipix += npix

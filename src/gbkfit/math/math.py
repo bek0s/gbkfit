@@ -1,4 +1,7 @@
 
+import functools
+import operator
+
 import numpy as np
 import scipy.special
 
@@ -48,6 +51,10 @@ def roundu_po2(num):
     while power < num:
         power *= 2
     return power
+
+
+def prod(nums):
+    return functools.reduce(operator.mul, nums, 1)
 
 
 def transform_lh_rotate_x(y, z, theta):

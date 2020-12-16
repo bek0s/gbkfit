@@ -11,6 +11,10 @@ template<typename T>
 struct Wrapper
 {
     static void
+    objective_count_pixels(
+            const T* data, const T* model, int size, int* counts);
+
+    static void
     dmodel_dcube_complex_multiply_and_scale(
             typename cufft<T>::complex* ary1,
             typename cufft<T>::complex* ary2,
@@ -25,12 +29,18 @@ struct Wrapper
             const T* src_cube, T* dst_cube);
 
     static void
+    dmodel_dcube_make_mask(
+            bool mask_spat, bool mask_spec, T mask_coef,
+            int size_x, int size_y, int size_z,
+            T* cube, T* mask);
+
+    static void
     dmodel_mmaps_moments(
             int size_x, int size_y, int size_z,
             T step_x, T step_y, T step_z,
             T zero_x, T zero_y, T zero_z,
             const T* scube,
-            T* mmaps, const int* orders, int norders);
+            T* mmaps, T* masks, const int* orders, int norders);
 
     static void
     gmodel_mcdisk_evaluate(

@@ -2,6 +2,7 @@
 import numpy as np
 
 import gbkfit.driver
+import gbkfit.math
 from gbkfit.driver import _detail
 
 import gbkfit.native.libgbkfit_host
@@ -13,6 +14,10 @@ def _ptr(a):
 
 def _shape(a):
     return a.__array_interface__['shape'] if a is not None else (0,)
+
+
+def _size(x):
+    return gbkfit.math.prod(x.__array_interface__['shape']) if x is not None else 0
 
 
 class DriverHost(gbkfit.driver.Driver):
@@ -60,7 +65,7 @@ class DriverHost(gbkfit.driver.Driver):
         return np.abs(x, out=out)
 
     def math_sum(self, x, out=None):
-        return np.sum(x, out=out, keepdims=True)
+        return np.nansum(x, out=out, keepdims=True)
 
     def math_add(self, x1, x2, out=None):
         return np.add(x1, x2, out=out)
@@ -85,6 +90,26 @@ class DriverHost(gbkfit.driver.Driver):
 
     def make_gmodel_smdisk(self, dtype):
         return GModelSMDisk(dtype)
+
+    def make_backend_objective(self, dtype):
+        return BackendObjective(dtype)
+
+
+class BackendObjective:
+    _CLASSES = {
+        np.float32: gbkfit.native.libgbkfit_host.Objectivef32}
+
+    def __deepcopy__(self, memodict):
+        return BackendObjective(self._dtype)
+
+    def __init__(self, dtype):
+        _detail.check_dtype(self._CLASSES, dtype)
+        self._backend = self._CLASSES[dtype]()
+        self._dtype = dtype
+
+    def count_pixels(self, data, model, size, count):
+        self._backend.count_pixels(
+            _ptr(data), _ptr(model), size, _ptr(count))
 
 
 class DModelDCube(gbkfit.driver.DModelDCube):
@@ -122,6 +147,10 @@ class DModelDCube(gbkfit.driver.DModelDCube):
             size_hi, size_lo,
             _ptr(scube_hi), _ptr(scube_lo))
 
+    def make_mask(self, mask_spat, mask_spec, mask_coef, size, cube, mask):
+        self._dcube.make_mask(
+            mask_spat, mask_spec, mask_coef, size, _ptr(cube), _ptr(mask))
+
 
 class DModelMMaps(gbkfit.driver.DModelMMaps):
 
@@ -136,11 +165,12 @@ class DModelMMaps(gbkfit.driver.DModelMMaps):
         self._mmaps = self._CLASSES[dtype]()
         self._dtype = dtype
 
-    def moments(self, size, step, zero, scube, mmaps, orders):
+    def moments(self, size, step, zero, scube, mmaps, masks, orders):
         self._mmaps.moments(
             size, step, zero,
             _ptr(scube),
             _ptr(mmaps),
+            _ptr(masks),
             _ptr(orders),
             _shape(orders)[0])
 

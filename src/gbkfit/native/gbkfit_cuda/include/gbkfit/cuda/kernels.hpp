@@ -80,19 +80,17 @@ dmodel_dcube_complex_multiply_and_scale(
     if (tid >= n)
         return;
 
-    typename cufft<T>::complex a, b, c;
+    typename cufft<T>::complex a, b;
 
     a.x = ary1[tid].x;
     a.y = ary1[tid].y;
     b.x = ary2[tid % n].x;
     b.y = ary2[tid % n].y;
 
-    c.x = (a.x*b.x-a.y*b.y)*scale;
-    c.y = (a.x*b.y+a.y*b.x)*scale;
-
-    ary1[tid].x = c.x;
-    ary1[tid].y = c.y;
+    ary1[tid].x = (a.x*b.x-a.y*b.y)*scale;
+    ary1[tid].y = (a.x*b.y+a.y*b.x)*scale;
 }
+
 
 template<typename T> __global__ void
 dmodel_dcube_downscale(
@@ -142,6 +140,40 @@ dmodel_dcube_downscale(
     dst_cube[idx] = sum * nfactor;
 }
 
+template<typename T> __global__ void
+objective_count_pixels(const T* data, const T* model, int size, int* counts)
+{
+    const int nworkers = 1024 * 8;
+
+    int n = size;
+    int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (tid >= nworkers)
+        return;
+
+    int count_dat = 0;
+    int count_mdl = 0;
+    int count_bth = 0;
+
+    for (int i = tid; i < size; i += nworkers)
+    {
+        const T dat = data[i];
+        const T mdl = model[i];
+        count_dat += dat && !mdl;
+        count_mdl += mdl && !dat;
+        count_bth += dat && mdl;
+    }
+
+    if (count_dat) {
+        atomicAdd(&counts[0], count_dat);
+    }
+    if (count_mdl) {
+        atomicAdd(&counts[1], count_mdl);
+    }
+    if (count_bth) {
+        atomicAdd(&counts[2], count_bth);
+    }
+}
+
 
 template<typename T> __device__ void
 evaluate_image(T* image, int x, int y, T rvalue, int spat_size_x)
@@ -180,13 +212,55 @@ evaluate_scube(
     }
 }
 
+
+template<typename T> __global__ void
+dmodel_dcube_make_mask(
+        bool mask_spat, bool mask_spec, T mask_coef,
+        int size_x, int size_y, int size_z, T* cube, T* mask)
+{
+    int n = size_x * size_y;
+    int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (tid >= n)
+        return;
+
+    int x, y;
+    index_1d_to_2d(x, y, tid, size_x);
+
+    T sum = 0;
+
+    for(int z = 0; z < size_z; ++z)
+    {
+        int idx = x + y * size_x + z * size_x * size_y;
+        T val = std::fabs(cube[idx]);
+        sum += val;
+    }
+
+    for(int z = 0; z < size_z; ++z)
+    {
+        int idx = x + y * size_x + z * size_x * size_y;
+        T val = std::fabs(cube[idx]);
+        T msk = 1;
+        if (val < mask_coef)
+        {
+            cube[idx] = 0;
+            msk *= !mask_spec;
+        }
+        if (sum < mask_coef * size_z)
+        {
+            cube[idx] = 0;
+            msk *= !mask_spat;
+        }
+        mask[idx] = msk;
+    }
+}
+
 template<typename T> __global__ void
 dcube_moments(
         int size_x, int size_y, int size_z,
         T step_x, T step_y, T step_z,
         T zero_x, T zero_y, T zero_z,
         const T* scube,
-        T* mmaps, const int* orders, int norders)
+        T* mmaps, T* masks, const int* orders, int norders)
 {
     int n = size_x * size_y;
 
@@ -202,7 +276,7 @@ dcube_moments(
             step_x, step_y, step_z,
             zero_x, zero_y, zero_z,
             scube,
-            mmaps, orders, norders);
+            mmaps, masks, orders, norders);
 }
 
 template<typename T> __global__ void

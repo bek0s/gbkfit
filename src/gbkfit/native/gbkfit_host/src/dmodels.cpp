@@ -103,7 +103,7 @@ DModelDCube<T>::convolve(
     const int n = n0 * n1 * (n2 / 2 + 1);
     const T nfactor = T{1} / (n0 * n1 * n2);
 
-    kernels::complex_multiply_and_scale<T>(
+    kernels::dmodel_dcube_complex_multiply_and_scale<T>(
             reinterpret_cast<typename fftw3<T>::complex*>(scube_fft_ptr),
             reinterpret_cast<typename fftw3<T>::complex*>(psf3d_fft_ptr),
             n, nfactor);
@@ -119,7 +119,7 @@ DModelDCube<T>::downscale(
         std::array<int, 3> dst_size,
         Ptr src_cube, Ptr dst_cube) const
 {
-    kernels::dcube_downscale(
+    kernels::dmodel_dcube_downscale(
             scale[0], scale[1], scale[2],
             offset[0], offset[1], offset[2],
             src_size[0], src_size[1], src_size[2],
@@ -129,21 +129,36 @@ DModelDCube<T>::downscale(
 }
 
 template<typename T> void
+DModelDCube<T>::make_mask(
+        bool mask_spat, bool mask_spec, T mask_coef,
+        std::array<int, 3> size,
+        Ptr cube, Ptr mask) const
+{
+    kernels::dmodel_dcube_make_mask(
+            mask_spat, mask_spec, mask_coef,
+            size[0], size[1], size[2],
+            reinterpret_cast<T*>(cube),
+            reinterpret_cast<T*>(mask));
+}
+
+template<typename T> void
 DModelMMaps<T>::moments(
         std::array<int, 3> size,
         std::array<T, 3> step,
         std::array<T, 3> zero,
         Ptr scube,
         Ptr mmaps,
+        Ptr masks,
         Ptr orders,
         int norders) const
 {
-    kernels::dcube_moments(
+    kernels::dmodel_dcube_moments(
             size[0], size[1], size[2],
             step[0], step[1], step[2],
             zero[0], zero[1], zero[2],
             reinterpret_cast<T*>(scube),
             reinterpret_cast<T*>(mmaps),
+            reinterpret_cast<T*>(masks),
             reinterpret_cast<int*>(orders),
             norders);
 }

@@ -31,7 +31,7 @@ struct RNG
 namespace gbkfit::host::kernels {
 
 template<typename T> void
-complex_multiply_and_scale(
+dmodel_dcube_complex_multiply_and_scale(
         typename fftw3<T>::complex* arr1,
         typename fftw3<T>::complex* arr2,
         int n, float scale)
@@ -52,7 +52,7 @@ complex_multiply_and_scale(
 }
 
 template<typename T> void
-dcube_downscale(
+dmodel_dcube_downscale(
         int scale_x, int scale_y, int scale_z,
         int offset_x, int offset_y, int offset_z,
         int src_size_x, int src_size_y, int src_size_z,
@@ -102,15 +102,103 @@ dcube_downscale(
     }
 }
 
+template<typename T> void
+objective_count_pixels(const T* data, const T* model, int size, int* counts)
+{
+    counts[0] = 0;
+    counts[1] = 0;
+    counts[2] = 0;
+
+    #pragma omp parallel
+    {
+        int count_dat = 0;
+        int count_mdl = 0;
+        int count_bth = 0;
+
+        #pragma omp for nowait
+        for(int i = 0; i < size; ++i)
+        {
+            const T dat = data[i];
+            const T mdl = model[i];
+            count_dat += dat && !mdl;
+            count_mdl += mdl && !dat;
+            count_bth += dat && mdl;
+        }
+
+        if (count_dat) {
+            #pragma omp atomic update
+            counts[0] += count_dat;
+        }
+        if (count_mdl) {
+            #pragma omp atomic update
+            counts[1] += count_mdl;
+        }
+        if (count_bth) {
+            #pragma omp atomic update
+            counts[2] += count_bth;
+        }
+    }
+}
 
 
 template<typename T> void
-dcube_moments(
+objective_residual(const T* data, const T* mask, T* residual, int size)
+{
+    for(int i = 0; i < size; ++i)
+    {
+        //residual[i] = data[i] - model[i];
+    }
+}
+
+template<typename T> void
+dmodel_dcube_make_mask(
+        bool mask_spat, bool mask_spec, T mask_coef,
+        int size_x, int size_y, int size_z, T* cube, T* mask)
+{
+    #pragma omp parallel for collapse(2)
+    for(int y = 0; y < size_y; ++y)
+    {
+    for(int x = 0; x < size_x; ++x)
+    {
+
+    T sum = 0;
+
+    for(int z = 0; z < size_z; ++z)
+    {
+        int idx = x + y * size_x + z * size_x * size_y;
+        T val = std::fabs(cube[idx]);
+        sum += val;
+    }
+
+    for(int z = 0; z < size_z; ++z)
+    {
+        int idx = x + y * size_x + z * size_x * size_y;
+        T val = std::fabs(cube[idx]);
+        T msk = 1;
+        if (val < mask_coef)
+        {
+            cube[idx] = 0;
+            msk *= !mask_spec;
+        }
+        if (sum < mask_coef * size_z)
+        {
+            cube[idx] = 0;
+            msk *= !mask_spat;
+        }
+        mask[idx] = msk;
+    }
+
+    }
+    }
+}
+
+template<typename T> void
+dmodel_dcube_moments(
         int size_x, int size_y, int size_z,
         T step_x, T step_y, T step_z,
         T zero_x, T zero_y, T zero_z,
         const T* scube,
-        T* mmaps, const int* orders, int norders)
+        T* mmaps, T* masks, const int* orders, int norders)
 {
     #pragma omp parallel for collapse(2)
     for (int y = 0; y < size_y; ++y)
@@ -122,7 +210,7 @@ dcube_moments(
                 step_x, step_y, step_z,
                 zero_x, zero_y, zero_z,
                 scube,
-                mmaps, orders, norders);
+                mmaps, masks, orders, norders);
     }
     }
 }

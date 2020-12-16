@@ -11,7 +11,7 @@ class Model:
         self._driver = driver
         self._dmodel = dmodel
         self._gmodel = gmodel
-        self._h_data = {key: None for key in dmodel.onames()}
+        self._h_data = {key: dict(data=None, mask=None) for key in dmodel.onames()}
 
     def dmodel(self):
         return self._dmodel
@@ -33,7 +33,8 @@ class Model:
         d_data = self.evaluate_d(params, out_extra)
         h_data = self._h_data
         for key in d_data:
-            h_data[key] = self._driver.mem_copy_d2h(d_data[key], h_data[key])
+            h_data[key]['data'] = self._driver.mem_copy_d2h(d_data[key]['data'], h_data[key]['data'])
+            h_data[key]['mask'] = self._driver.mem_copy_d2h(d_data[key]['mask'], h_data[key]['mask'])
         return h_data
 
 

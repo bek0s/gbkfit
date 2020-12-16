@@ -2,7 +2,7 @@
 
 #include "gbkfit/cuda/common.hpp"
 
-namespace gbkfit { namespace cuda {
+namespace gbkfit::cuda {
 
 template<typename T>
 struct GModelMCDisk
@@ -105,4 +105,4 @@ struct GModelSMDisk
             Ptr bdata, Ptr vdata, Ptr ddata) const;
 };
 
-}} // namespace gbkfit::cuda
+} // namespace gbkfit::cuda

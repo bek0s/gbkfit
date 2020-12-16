@@ -58,6 +58,7 @@ class DModelMMaps(DModel):
             size, step, rpix, rval, rota, scale, psf, lsf, dtype)
         self._mmaps = None
         self._s_mmap_data = None
+        self._s_mmap_mask = None
         self._d_mmap_order = None
 
     def size(self):
@@ -94,6 +95,7 @@ class DModelMMaps(DModel):
         # Allocate buffers for moment map data
         shape = (self.size() + (len(self.orders()),))[::-1]
         self._s_mmap_data = self._driver.mem_alloc_d(shape, self.dtype())
+        self._s_mmap_mask = self._driver.mem_alloc_d(self.size()[::-1], self.dtype())
         self._driver.mem_fill(self._s_mmap_data, np.nan)
         self._d_mmap_order = self._driver.mem_copy_h2d(
             np.array(self.orders(), np.int32))
@@ -124,8 +126,11 @@ class DModelMMaps(DModel):
             self._dcube.zero(),
             self._dcube.data(),
             self._s_mmap_data,
+            self._s_mmap_mask,
             self._d_mmap_order)
         out = dict()
         for i, oname in enumerate(self.onames()):
-            out[oname] = self._s_mmap_data[i, :, :]
+            out[oname] = dict(
+                data=self._s_mmap_data[i, :, :],
+                mask=self._s_mmap_mask)
         return out

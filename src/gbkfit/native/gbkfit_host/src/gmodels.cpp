@@ -1,8 +1,7 @@
 
-#include "gbkfit/cuda/gmodels.hpp"
-#include "gbkfit/cuda/wrapper.hpp"
+#include "gbkfit/host/gmodels.hpp"
 
-namespace gbkfit::cuda {
+namespace gbkfit::host {
 
 template<typename T> void
 GModelMCDisk<T>::evaluate(
@@ -52,7 +51,7 @@ GModelMCDisk<T>::evaluate(
         Ptr image, Ptr scube, Ptr rcube,
         Ptr rdata, Ptr vdata, Ptr ddata) const
 {
-    Wrapper<T>::gmodel_mcdisk_evaluate(
+    kernels::gmodel_mcdisk_evaluate(
             cflux, nclouds,
             reinterpret_cast<const int*>(ncloudscsum),
             ncloudscsum_len,
@@ -169,7 +168,7 @@ GModelSMDisk<T>::evaluate(
         Ptr image, Ptr scube, Ptr rcube,
         Ptr rdata, Ptr vdata, Ptr ddata) const
 {
-    Wrapper<T>::gmodel_smdisk_evaluate(
+    kernels::gmodel_smdisk_evaluate(
             loose, tilted,
             nrnodes,
             reinterpret_cast<const T*>(rnodes),
@@ -243,4 +242,4 @@ GModelSMDisk<T>::evaluate(
 INSTANTIATE(float)
 #undef INSTANTIATE
 
-} // namespace gbkfit::cuda
+} // namespace gbkfit::host

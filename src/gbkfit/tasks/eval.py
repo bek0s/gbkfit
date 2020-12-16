@@ -132,7 +132,8 @@ def eval_(config, perf=None):
     for i in range(len(output)):
         prefix = 'model' + f'_{i}' * bool(i)
         for key, value in output[i].items():
-            save_model(f'{prefix}_{key}.fits', value)
+            save_model(f'{prefix}_{key}_data.fits', value['data'])
+            save_model(f'{prefix}_{key}_mask.fits', value['mask'])
         for key, value in extras[i].items():
             save_model(f'{prefix}_extra_{key}.fits', value)
 

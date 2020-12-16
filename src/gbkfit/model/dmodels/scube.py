@@ -71,12 +71,16 @@ class DModelSCube(DModel):
 
     def _prepare_impl(self):
         self._dcube.prepare(self._driver)
+        self._mask = self._driver.mem_alloc_d(self.size(), self.dtype())
 
     def _evaluate_impl(self, params, out_dextra, out_gextra):
         driver = self._driver
         gmodel = self._gmodel
         dcube = self._dcube
         driver.mem_fill(dcube.scratch_data(), 0)
+
+
+
         gmodel.evaluate_scube(
             driver, params,
             dcube.scratch_data(),
@@ -87,4 +91,5 @@ class DModelSCube(DModel):
             dcube.dtype(),
             out_gextra)
         dcube.evaluate(out_dextra)
-        return dict(scube=dcube.data())
+
+        return dict(scube=dict(data=dcube.data(), mask=dcube.mask()))
