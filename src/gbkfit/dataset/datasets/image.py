@@ -24,31 +24,3 @@ class DatasetImage(Dataset):
     def __init__(self, image):
         # TODO: validate wcs
         super().__init__(dict(image=image))
-
-    @property
-    def npix(self):
-        return self.npixs[0]
-
-    @property
-    def size(self):
-        return self.sizes[0]
-
-    @property
-    def step(self):
-        return self.steps[0]
-
-    @property
-    def zero(self):
-        return self.zeros[0]
-
-    @property
-    def rpix(self):
-        return self.rpixs[0]
-
-    @property
-    def rval(self):
-        return self.rvals[0]
-
-    @property
-    def rota(self):
-        return self.rotas[0]

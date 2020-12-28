@@ -13,7 +13,12 @@ class Dataset(parseutils.TypedParserSupport, abc.ABC):
         # At least one data item must be defined
         if not data:
             raise RuntimeError(f"{desc} contains no data items")
-        # All data items must have the same dtype
+        # All data items must have the same properties
+        _detail.ensure_same_attrib_value(data, 'size', desc)
+        _detail.ensure_same_attrib_value(data, 'step', desc)
+        _detail.ensure_same_attrib_value(data, 'rpix', desc)
+        _detail.ensure_same_attrib_value(data, 'rval', desc)
+        _detail.ensure_same_attrib_value(data, 'rota', desc)
         _detail.ensure_same_attrib_value(data, 'dtype', desc)
         # We need to copy the data to ensure they are kept intact
         self._data = copy.deepcopy(data)
@@ -40,32 +45,32 @@ class Dataset(parseutils.TypedParserSupport, abc.ABC):
         return self._data.get(item)
 
     @property
-    def npixs(self):
-        return tuple(data.npix for data in self.values())
+    def npix(self):
+        return next(iter(self.values())).npix
 
     @property
-    def sizes(self):
-        return tuple(data.size for data in self.values())
+    def size(self):
+        return next(iter(self.values())).size
 
     @property
-    def steps(self):
-        return tuple(data.step for data in self.values())
+    def step(self):
+        return next(iter(self.values())).step
 
     @property
-    def zeros(self):
-        return tuple(data.zero for data in self.values())
+    def zero(self):
+        return next(iter(self.values())).zero
 
     @property
-    def rpixs(self):
-        return tuple(data.rpix for data in self.values())
+    def rpix(self):
+        return next(iter(self.values())).rpix
 
     @property
-    def rvals(self):
-        return tuple(data.rval for data in self.values())
+    def rval(self):
+        return next(iter(self.values())).rval
 
     @property
-    def rotas(self):
-        return tuple(data.rota for data in self.values())
+    def rota(self):
+        return next(iter(self.values())).rota
 
     @property
     def dtype(self):

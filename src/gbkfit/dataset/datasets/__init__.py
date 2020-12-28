@@ -1,5 +1,5 @@
 
-from .image import DatasetImage
-from .lslit import DatasetLSlit
-from .mmaps import DatasetMMaps
-from .scube import DatasetSCube
+from .image import *
+from .lslit import *
+from .mmaps import *
+from .scube import *

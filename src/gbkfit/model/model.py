@@ -45,11 +45,14 @@ class ModelGroup:
         self._pdescs, self._mappings = miscutils.merge_dicts_and_make_mappings(
             [model.pdescs() for model in models], 'model')
 
-    def nmodels(self):
-        return len(self._models)
+    def __getitem__(self, index):
+        return self._models[index]
 
-    def models(self):
-        return self._models
+    def __iter__(self):
+        return iter(self._models)
+
+    def __len__(self):
+        return len(self._models)
 
     def pdescs(self):
         return self._pdescs

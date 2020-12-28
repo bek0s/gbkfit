@@ -4,7 +4,14 @@ import abc
 from gbkfit.utils import parseutils
 
 
-class Driver(parseutils.BasicParserSupport, abc.ABC):
+class Driver(parseutils.TypedParserSupport, abc.ABC):
+
+    @classmethod
+    def load(cls, info):
+        return cls()
+
+    def dump(self):
+        return dict(type=self.type())
 
     @abc.abstractmethod
     def mem_alloc_s(self, shape, dtype):
@@ -66,19 +73,7 @@ class Driver(parseutils.BasicParserSupport, abc.ABC):
     def make_gmodel_smdisk(self, dtype):
         raise NotImplementedError()
 
-    def make_backend_dmodel_dcube(self, dtype):
-        raise NotImplementedError()
-
-    def make_backend_dmodel_mmaps(self, dtype):
-        raise NotImplementedError()
-
-    def make_backend_gmodel_mcdisk(self, dtype):
-        raise NotImplementedError()
-
-    def make_backend_gmodel_smdisk(self, dtype):
-        raise NotImplementedError()
-
-    def make_backend_objective(self, dtype):
+    def make_objective(self, dtype):
         raise NotImplementedError()
 
 
@@ -109,7 +104,7 @@ class DModelDCube(abc.ABC):
 class DModelMMaps(abc.ABC):
 
     @abc.abstractmethod
-    def moments(self, size, step, zero, scube, mmaps, orders):
+    def moments(self, size, step, zero, scube, mmaps, masks, orders):
         pass
 
 
@@ -155,6 +150,13 @@ class GModelSMDisk(abc.ABC):
             spec_size, spec_step, spec_zero,
             image, scube, rcube,
             rdata, vdata, ddata):
+        pass
+
+
+class Objective(abc.ABC):
+
+    @abc.abstractmethod
+    def count_pixels(self, data, model, size, count):
         pass
 
 

@@ -3,11 +3,13 @@ import cupy as cp
 import numpy as np
 
 import gbkfit.driver
-from gbkfit.driver import _detail
+import gbkfit.math
 
-import gbkfit.native.libgbkfit_cuda
+import gbkfit.native.libgbkfit_cuda as native_module
 
-#export CUPY_ACCELERATORS=cub
+
+__all__ = ['DriverCUDA']
+
 
 def _ptr(a):
     return a.__cuda_array_interface__['data'][0] if a is not None else 0
@@ -17,18 +19,25 @@ def _shape(a):
     return a.__cuda_array_interface__['shape'] if a is not None else (0,)
 
 
+def _size(x):
+    return gbkfit.math.prod(_shape(x))
+
+
+def _get_class(classes, dtype):
+    if dtype not in classes:
+        requested = np.dtype(dtype).name
+        supported = ', '.join([np.dtype(dt).name for dt in classes])
+        raise RuntimeError(
+            f"the requested dtype is not supported "
+            f"(requested: {requested}; supported: {supported})")
+    return classes[dtype]
+
+
 class DriverCUDA(gbkfit.driver.Driver):
 
     @staticmethod
     def type():
         return 'cuda'
-
-    @classmethod
-    def load(cls, info):
-        return cls()
-
-    def dump(self):
-        return dict(type=self.type())
 
     def mem_alloc_s(self, shape, dtype):
         h_data = np.empty(shape, dtype)
@@ -88,38 +97,20 @@ class DriverCUDA(gbkfit.driver.Driver):
     def make_gmodel_smdisk(self, dtype):
         return GModelSMDisk(dtype)
 
-    def make_backend_objective(self, dtype):
-        return BackendObjective(dtype)
-
-
-class BackendObjective:
-    _CLASSES = {
-        np.float32: gbkfit.native.libgbkfit_cuda.Objectivef32}
-
-    def __deepcopy__(self, memodict):
-        return BackendObjective(self._dtype)
-
-    def __init__(self, dtype):
-        _detail.check_dtype(self._CLASSES, dtype)
-        self._backend = self._CLASSES[dtype]()
-        self._dtype = dtype
-
-    def count_pixels(self, data, model, size, count):
-        self._backend.count_pixels(
-            _ptr(data), _ptr(model), size, _ptr(count))
+    def make_objective(self, dtype):
+        return Objective(dtype)
 
 
 class DModelDCube(gbkfit.driver.DModelDCube):
 
     _CLASSES = {
-        np.float32: gbkfit.native.libgbkfit_cuda.DModelDCubef32}
+        np.float32: native_module.DModelDCubef32}
 
     def __deepcopy__(self, memodict):
         return DModelDCube(self._dtype)
 
     def __init__(self, dtype):
-        _detail.check_dtype(self._CLASSES, dtype)
-        self._dcube = self._CLASSES[dtype]()
+        self._backend = _get_class(self._CLASSES, dtype)()
         self._dtype = dtype
 
     def convolve(
@@ -127,7 +118,7 @@ class DModelDCube(gbkfit.driver.DModelDCube):
             size_hi,
             scube_hi, scube_hi_fft,
             psf3d_hi, psf3d_hi_fft):
-        self._dcube.convolve(
+        self._backend.convolve(
             size_hi,
             _ptr(scube_hi), _ptr(scube_hi_fft),
             _ptr(psf3d_hi), _ptr(psf3d_hi_fft))
@@ -138,46 +129,49 @@ class DModelDCube(gbkfit.driver.DModelDCube):
             edge_hi,
             size_hi, size_lo,
             scube_hi, scube_lo):
-        self._dcube.downscale(
+        self._backend.downscale(
             scale,
             edge_hi,
             size_hi, size_lo,
             _ptr(scube_hi), _ptr(scube_lo))
 
+    def make_mask(self, mask_spat, mask_spec, mask_coef, size, cube, mask):
+        self._backend.make_mask(
+            mask_spat, mask_spec, mask_coef, size, _ptr(cube), _ptr(mask))
+
 
 class DModelMMaps(gbkfit.driver.DModelMMaps):
 
     _CLASSES = {
-        np.float32: gbkfit.native.libgbkfit_cuda.DModelMMapsf32}
+        np.float32: native_module.DModelMMapsf32}
 
     def __deepcopy__(self, memodict):
         return DModelMMaps(self._dtype)
 
     def __init__(self, dtype):
-        _detail.check_dtype(self._CLASSES, dtype)
-        self._mmaps = self._CLASSES[dtype]()
+        self._backend = _get_class(self._CLASSES, dtype)()
         self._dtype = dtype
 
-    def moments(self, size, step, zero, scube, mmaps, orders):
-        self._mmaps.moments(
+    def moments(self, size, step, zero, scube, mmaps, masks, orders):
+        self._backend.moments(
             size, step, zero,
             _ptr(scube),
             _ptr(mmaps),
+            _ptr(masks),
             _ptr(orders),
-            _shape(orders)[0])
+            _size(orders))
 
 
 class GModelMCDisk(gbkfit.driver.GModelMCDisk):
 
     _CLASSES = {
-        np.float32: gbkfit.native.libgbkfit_cuda.GModelMCDiskf32}
+        np.float32: native_module.GModelMCDiskf32}
 
     def __deepcopy__(self, memodict):
         return GModelMCDisk(self._dtype)
 
     def __init__(self, dtype):
-        _detail.check_dtype(self._CLASSES, dtype)
-        self._disk = self._CLASSES[dtype]()
+        self._backend = _get_class(self._CLASSES, dtype)()
         self._dtype = dtype
 
     def evaluate(
@@ -197,38 +191,38 @@ class GModelMCDisk(gbkfit.driver.GModelMCDisk):
             spec_size, spec_step, spec_zero,
             image, scube, rcube,
             rdata, vdata, ddata):
-        self._disk.evaluate(
-            cflux, nclouds, _ptr(ncloudspt), _shape(ncloudspt)[0], _ptr(hasordint),
+        self._backend.evaluate(
+            cflux, nclouds, _ptr(ncloudspt), _size(ncloudspt), _ptr(hasordint),
             loose, tilted,
-            _shape(rnodes)[0],
+            _size(rnodes),
             _ptr(rnodes),
             _ptr(vsys), _ptr(xpos), _ptr(ypos), _ptr(posa), _ptr(incl),
-            _shape(rpt_uids)[0],
+            _size(rpt_uids),
             _ptr(rpt_uids),
             _ptr(rpt_cvalues), _ptr(rpt_ccounts),
             _ptr(rpt_pvalues), _ptr(rpt_pcounts),
             _ptr(rht_uids),
             _ptr(rht_cvalues), _ptr(rht_ccounts),
             _ptr(rht_pvalues), _ptr(rht_pcounts),
-            _shape(vpt_uids)[0],
+            _size(vpt_uids),
             _ptr(vpt_uids),
             _ptr(vpt_cvalues), _ptr(vpt_ccounts),
             _ptr(vpt_pvalues), _ptr(vpt_pcounts),
             _ptr(vht_uids),
             _ptr(vht_cvalues), _ptr(vht_ccounts),
             _ptr(vht_pvalues), _ptr(vht_pcounts),
-            _shape(dpt_uids)[0],
+            _size(dpt_uids),
             _ptr(dpt_uids),
             _ptr(dpt_cvalues), _ptr(dpt_ccounts),
             _ptr(dpt_pvalues), _ptr(dpt_pcounts),
             _ptr(dht_uids),
             _ptr(dht_cvalues), _ptr(dht_ccounts),
             _ptr(dht_pvalues), _ptr(dht_pcounts),
-            _shape(wpt_uids)[0],
+            _size(wpt_uids),
             _ptr(wpt_uids),
             _ptr(wpt_cvalues), _ptr(wpt_ccounts),
             _ptr(wpt_pvalues), _ptr(wpt_pcounts),
-            _shape(spt_uids)[0],
+            _size(spt_uids),
             _ptr(spt_uids),
             _ptr(spt_cvalues), _ptr(spt_ccounts),
             _ptr(spt_pvalues), _ptr(spt_pcounts),
@@ -245,14 +239,13 @@ class GModelMCDisk(gbkfit.driver.GModelMCDisk):
 class GModelSMDisk(gbkfit.driver.GModelSMDisk):
 
     _CLASSES = {
-        np.float32: gbkfit.native.libgbkfit_cuda.GModelSMDiskf32}
+        np.float32: native_module.GModelSMDiskf32}
 
     def __deepcopy__(self, memodict):
         return GModelSMDisk(self._dtype)
 
     def __init__(self, dtype):
-        _detail.check_dtype(self._CLASSES, dtype)
-        self._disk = self._CLASSES[dtype]()
+        self._backend = _get_class(self._CLASSES, dtype)()
         self._dtype = dtype
 
     def evaluate(
@@ -271,37 +264,37 @@ class GModelSMDisk(gbkfit.driver.GModelSMDisk):
             spec_size, spec_step, spec_zero,
             image, scube, rcube,
             rdata, vdata, ddata):
-        self._disk.evaluate(
+        self._backend.evaluate(
             loose, tilted,
-            _shape(rnodes)[0],
+            _size(rnodes),
             _ptr(rnodes),
             _ptr(vsys), _ptr(xpos), _ptr(ypos), _ptr(posa), _ptr(incl),
-            _shape(rpt_uids)[0],
+            _size(rpt_uids),
             _ptr(rpt_uids),
             _ptr(rpt_cvalues), _ptr(rpt_ccounts),
             _ptr(rpt_pvalues), _ptr(rpt_pcounts),
             _ptr(rht_uids),
             _ptr(rht_cvalues), _ptr(rht_ccounts),
             _ptr(rht_pvalues), _ptr(rht_pcounts),
-            _shape(vpt_uids)[0],
+            _size(vpt_uids),
             _ptr(vpt_uids),
             _ptr(vpt_cvalues), _ptr(vpt_ccounts),
             _ptr(vpt_pvalues), _ptr(vpt_pcounts),
             _ptr(vht_uids),
             _ptr(vht_cvalues), _ptr(vht_ccounts),
             _ptr(vht_pvalues), _ptr(vht_pcounts),
-            _shape(dpt_uids)[0],
+            _size(dpt_uids),
             _ptr(dpt_uids),
             _ptr(dpt_cvalues), _ptr(dpt_ccounts),
             _ptr(dpt_pvalues), _ptr(dpt_pcounts),
             _ptr(dht_uids),
             _ptr(dht_cvalues), _ptr(dht_ccounts),
             _ptr(dht_pvalues), _ptr(dht_pcounts),
-            _shape(wpt_uids)[0],
+            _size(wpt_uids),
             _ptr(wpt_uids),
             _ptr(wpt_cvalues), _ptr(wpt_ccounts),
             _ptr(wpt_pvalues), _ptr(wpt_pcounts),
-            _shape(spt_uids)[0],
+            _size(spt_uids),
             _ptr(spt_uids),
             _ptr(spt_cvalues), _ptr(spt_ccounts),
             _ptr(spt_pvalues), _ptr(spt_pcounts),
@@ -313,3 +306,19 @@ class GModelSMDisk(gbkfit.driver.GModelSMDisk):
             spec_zero,
             _ptr(image), _ptr(scube), _ptr(rcube),
             _ptr(rdata), _ptr(vdata), _ptr(ddata))
+
+
+class Objective(gbkfit.driver.Objective):
+
+    _CLASSES = {
+        np.float32: native_module.Objectivef32}
+
+    def __deepcopy__(self, memodict):
+        return Objective(self._dtype)
+
+    def __init__(self, dtype):
+        self._backend = _get_class(self._CLASSES, dtype)()
+        self._dtype = dtype
+
+    def count_pixels(self, data, model, size, count):
+        self._backend.count_pixels(_ptr(data), _ptr(model), size, _ptr(count))
