@@ -105,10 +105,6 @@ dmodel_dcube_downscale(
 template<typename T> void
 objective_count_pixels(const T* data, const T* model, int size, int* counts)
 {
-    counts[0] = 0;
-    counts[1] = 0;
-    counts[2] = 0;
-
     #pragma omp parallel
     {
         int count_dat = 0;

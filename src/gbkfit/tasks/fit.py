@@ -22,6 +22,7 @@ from . import _detail
 
 log = logging.getLogger(__name__)
 
+
 # Use this object to load and dump yaml
 yaml = ruamel.yaml.YAML()
 
@@ -31,13 +32,7 @@ ruamel.yaml.add_representer(dict, lambda self, data: self.represent_mapping(
 
 
 def fit(config):
-    """
-    def run(n):
-        if n == 0 or n == 1:
-            return 1
-        else:
-            return n * run(n-1) * run(n-2)
-    """
+
     #
     # Read configuration file and
     # perform all necessary validation/patching/preparation
@@ -46,18 +41,18 @@ def fit(config):
     log.info(f"reading configuration file: '{config}'...")
     cfg = _detail.prepare_config(
         yaml.load(open(config)),
-        ('datasets', 'drivers', 'dmodels', 'gmodels', 'params', 'fitter'),
-        ('pdescs',))
+        ('drivers', 'datasets', 'dmodels', 'gmodels', 'params', 'fitter'),
+        ('objective', 'pdescs'))
 
     #
     # Setup all the components described in the configuration
     #
 
-    log.info("setting up datasets...")
-    datasets = gbkfit.dataset.dataset_parser.load(cfg['datasets'])
-
     log.info("setting up drivers...")
     drivers = gbkfit.driver.parser.load(cfg['drivers'])
+
+    log.info("setting up datasets...")
+    datasets = gbkfit.dataset.dataset_parser.load(cfg['datasets'])
 
     log.info("setting up dmodels...")
     dmodels = gbkfit.model.dmodel_parser.load(cfg['dmodels'], dataset=datasets)
@@ -66,15 +61,17 @@ def fit(config):
     gmodels = gbkfit.model.gmodel_parser.load(cfg['gmodels'])
 
     log.info("setting up model...")
-    models = []
-    for i in range(len(dmodels)):
-        models.append(gbkfit.model.Model(dmodels[i], gmodels[i], drivers[i]))
+    models = gbkfit.model.make_model_group(dmodels, gmodels, drivers)
 
     log.info("setting up fitter...")
     fitter = gbkfit.fitting.fitter.parser.load(cfg['fitter'])
 
     log.info("setting up objective...")
-    objective = gbkfit.fitting.objective.Objective(datasets, models)
+    objective = gbkfit.fitting.objective.parser.load(
+        cfg.get('objective', {}), datasets=datasets, models=models)
+
+    #print(objective)
+    #exit()
 
     pdescs = None
     if 'pdescs' in cfg:
@@ -83,6 +80,9 @@ def fit(config):
     pdescs = gbkfit.params.descs.merge_descs(objective.pdescs(), pdescs)
 
     log.info("setting up params...")
+    print('pdescs:', pdescs)
+    print('config:', cfg['params'])
+    #exit()
     params = fitter.load_params(cfg['params'], pdescs)
 
     #

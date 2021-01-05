@@ -15,6 +15,7 @@ moments(int x, int y,
     (void)zero_x;
     (void)zero_y;
 
+    // Orders are sorted
     int max_order = orders[norders - 1];
 
     int m = 0;
@@ -29,7 +30,8 @@ moments(int x, int y,
         T flx = cube[idx];
         m0_sum += flx * step_z;
     }
-    m0 = m0_sum;
+    m0 = m0_sum == 0 ? NAN : m0_sum;
+    masks[x + y * size_x] = m0_sum != 0;
 
     // Only output requested moments
     if (orders[m] == 0)
@@ -41,7 +43,7 @@ moments(int x, int y,
         m++;
     }
 
-    // Max order just reached. We are done
+    // Max order reached
     if (max_order == 0)
         return;
 
@@ -55,10 +57,7 @@ moments(int x, int y,
         T vel = zero_z + z * step_z;
         m1_sum += flx * vel * step_z;
     }
-    m1 = m0 > 0 ? m1_sum / m0 : NAN;
-    int idx = x
-            + y * size_x;
-    masks[idx] = m0 > 0;
+    m1 = m0_sum == 0 ? NAN : m1_sum / m0;
 
     // Only output requested moments
     if (orders[m] == 1)
@@ -70,7 +69,7 @@ moments(int x, int y,
         m++;
     }
 
-    // Max order just reached. We are done
+    // Max order reached
     if (max_order == 1)
         return;
 
@@ -84,7 +83,7 @@ moments(int x, int y,
         T vel = zero_z + z * step_z;
         m2_sum += flx * std::pow(vel - m1, 2) * step_z;
     }
-    m2 = m0 > 0 ? std::sqrt(m2_sum / m0) : NAN;
+    m2 = m0_sum == 0 ? NAN : std::sqrt(m2_sum / m0);
 
     // Only output requested moments
     if (orders[m] == 2)
@@ -96,14 +95,14 @@ moments(int x, int y,
         m++;
     }
 
-    // Max order just reached. We are done
+    // Max order reached
     if (max_order == 2)
         return;
-    // todo: fix the math
+
     // Higher order moments
     for(; m < norders; ++m)
     {
-        T mn=0, mn_sum = 0;
+        T mn=0, mn_sum=0;
         for (int z = 0; z < size_z; ++z)
         {
             int idx = x
@@ -111,9 +110,9 @@ moments(int x, int y,
                     + z * size_x * size_y;
             T flx = cube[idx];
             T vel = zero_z + z * step_z;
-            mn_sum += flx * std::pow(vel - m1, orders[m]);
+            mn_sum += flx * std::pow(vel - m1, orders[m]); // * step_z;
         }
-        mn = m0 > 0 ? mn_sum / m0 : NAN;
+        mn = m0_sum == 0 ? NAN : mn_sum / m0;
 
         int idx = x
                 + y * size_x

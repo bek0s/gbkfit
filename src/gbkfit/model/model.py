@@ -5,6 +5,26 @@ from gbkfit.utils import iterutils, miscutils
 __all__ = ['Model', 'ModelGroup', 'make_model_group']
 
 
+class Model_:
+
+    def __init__(self, dmodels, gmodels, drivers):
+        dmodels = iterutils.tuplify(dmodels)
+        gmodels = iterutils.tuplify(gmodels)
+        drivers = iterutils.tuplify(drivers)
+        ndmodels = len(dmodels)
+        ngmodels = len(gmodels)
+        ndrivers = len(drivers)
+        if not (ndmodels == ngmodels == ndrivers):
+            raise RuntimeError(
+                f"could not create model; the number of "
+                f"gmodels ({ngmodels}), "
+                f"dmodels ({ndmodels}), and "
+                f"drivers ({ndrivers}) must be equal")
+        models = []
+        for dmodel, gmodel, driver in zip(dmodels, gmodels, drivers):
+            models.append(Model(dmodel, gmodel, driver))
+
+
 class Model:
 
     def __init__(self, dmodel, gmodel, driver):

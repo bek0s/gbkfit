@@ -72,7 +72,31 @@ def dump_descs(descs):
     return info
 
 
+def load_desc_dicts(info):
+    descs = {}
+    for key, val in info.items():
+        descs[key] = parser.load({'name': key, **val})
+    return descs
+
+
+def dump_desc_dicts(descs):
+    info = {key: parser.dump(val) for key, val in descs.items()}
+    for val in info.values():
+        val.pop('name')
+    return info
+
+
 def merge_descs(descs1, descs2):
+    if descs1 is None:
+        descs1 = {}
+    if descs2 is None:
+        descs2 = {}
+    if set(descs1).intersection(descs2):
+        raise RuntimeError()
+    return {**descs1, **descs2}
+
+
+def merge_desc_dicts(descs1, descs2):
     if descs1 is None:
         descs1 = {}
     if descs2 is None:

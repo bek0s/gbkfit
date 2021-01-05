@@ -1,8 +1,6 @@
 
-import contextlib
 import json
 import logging
-import os
 
 import numpy as np
 
@@ -14,103 +12,91 @@ log = logging.getLogger(__name__)
 
 def prepare_config(config, req_sections=(), opt_sections=()):
 
-    # Get rid of all unrecognised sections and
-    # all empty optional sections
+    def _is_empty_section(info):
+        return info is None or (iterutils.is_iterable(info) and len(info) == 0)
+
+    # Get rid of unrecognised and empty optional sections
     empty_sections = []
     known_sections = []
     unknown_sections = []
-    for section in config:
-        if section in opt_sections and not config[section]:
-            empty_sections.append(section)
-        elif section in req_sections + opt_sections:
-            known_sections.append(section)
+    for scn in config:
+        if scn in opt_sections and _is_empty_section(config[scn]):
+            empty_sections.append(scn)
+        elif scn in req_sections + opt_sections:
+            known_sections.append(scn)
         else:
-            unknown_sections.append(section)
+            unknown_sections.append(scn)
     if empty_sections:
         log.info(
             f"the following optional sections are empty and will be ignored: "
-            f"{', '.join(empty_sections)}")
+            f"{str(empty_sections)}")
     if unknown_sections:
         log.info(
             f"the following sections are not recognised and will be ignored: "
-            f"{', '.join(unknown_sections)}")
-    config = {section: config[section] for section in known_sections}
+            f"{str(unknown_sections)}")
+    config = {scn: config[scn] for scn in known_sections}
 
     # Ensure that the required sections are present
     missing_sections = []
-    for section in req_sections:
-        if not config.get(section):
-            missing_sections.append(section)
-    if len(missing_sections) > 0:
+    for scn in req_sections:
+        if not config.get(scn):
+            missing_sections.append(scn)
+    if missing_sections:
         raise RuntimeError(
-            f"the following sections must be defined and not empty/null: "
-            f"{', '.join(missing_sections)}")
+            f"the following sections must be defined: "
+            f"{str(missing_sections)}")
 
-    # Make sure the sections have the right type
+    # Ensure that the sections have the right type
     wrong_type_dict = []
     wrong_type_dict_seq = []
-    for section in ['fitter', 'pdescs', 'params']:
-        if (section in config
-                and not isinstance(config[section], (dict,))):
-            wrong_type_dict.append(section)
-    for section in ['objectives', 'datasets', 'drivers', 'dmodels', 'gmodels']:
-        if (section in config
-                and not isinstance(config[section], (dict, list, tuple, set))):
-            wrong_type_dict_seq.append(section)
+    for scn in ['obj'
+                'ective', 'fitter', 'pdescs', 'params']:
+        if scn in config and not iterutils.is_mapping(config[scn]):
+            wrong_type_dict.append(scn)
+    for scn in ['datasets', 'drivers', 'dmodels', 'gmodels']:
+        if scn in config and not iterutils.is_iterable(config[scn]):
+            wrong_type_dict_seq.append(scn)
     if wrong_type_dict:
         raise RuntimeError(
             f"the following sections must be dictionaries: "
-            f"{', '.join(wrong_type_dict)}")
+            f"{str(wrong_type_dict)}")
     if wrong_type_dict_seq:
         raise RuntimeError(
             f"the following sections must be dictionaries or sequences: "
-            f"{', '.join(wrong_type_dict_seq)}")
+            f"{str(wrong_type_dict_seq)}")
 
     # Listify some sections to make parsing more streamlined
-    for section in ['objectives', 'datasets', 'drivers', 'dmodels', 'gmodels']:
-        if section in config:
-            config[section] = iterutils.listify(config[section])
+    for scn in ['datasets', 'drivers', 'dmodels', 'gmodels']:
+        if scn in config:
+            config[scn] = iterutils.listify(config[scn])
 
-    # Make sure some sections have the same length
+    # Ensure that some sections have the same length
     lengths = {}
-    for section in ['objectives', 'datasets', 'drivers', 'dmodels', 'gmodels']:
-        if section in config:
-            lengths[section] = len(config[section])
+    for scn in ['datasets', 'drivers', 'dmodels', 'gmodels']:
+        if scn in config:
+            lengths[scn] = len(config[scn])
     if len(set(lengths.values())) > 1:
         raise RuntimeError(
             f"the following sections must have the same length: "
-            f"{', '.join(lengths)}")
+            f"{str(lengths)}")
 
-    """
-    datasets = config.get('datasets')
-    dmodels = config.get('dmodels')
-    if datasets and dmodels:
-        for dataset, dmodel in zip(datasets, dmodels):
-            if dataset.get('type') is None:
-                dataset['type'] = dmodel.get('type')
-
-        pass
-    """
-
-    # Place pdesc keys inside values
-    # in order to make them readable by the pdesc parser.
+    # Place pdesc keys as names inside values.
+    # This will make them readable by the pdesc parser.
     invalid_pdescs = []
-    if 'pdescs' in config:
-        for key, value in config['pdescs'].items():
-            if not isinstance(value, dict):
+    pdesc_info = config.get('pdesc')
+    if pdesc_info:
+        for key, val in pdesc_info.items():
+            if not iterutils.is_mapping(val):
                 invalid_pdescs.append(key)
                 continue
-            value['name'] = key
-            config['pdescs'][key] = value
+            val['name'] = key
+            pdesc_info[key] = val
         if invalid_pdescs:
             raise RuntimeError(
                 f"the values of the following pdescs must be a dictionary: "
                 f"{str(invalid_pdescs)}")
 
-    for pname, pinfo in config['params'].items():
-        #print(';')
-        pass
-
+    # Is this needed?
     config = json.loads(json.dumps(config))
 
     return config
@@ -127,19 +113,6 @@ def nativify(node):
         for i in range(len(node)):
             node[i] = nativify(node[i])
     elif isinstance(node, dict):
-        for key in node:
-            node[key] = nativify(node[key])
+        for k in node:
+            node[k] = nativify(node[k])
     return node
-
-
-
-
-
-@contextlib.contextmanager
-def cd(newdir):
-    prevdir = os.getcwd()
-    os.chdir(os.path.expanduser(newdir))
-    try:
-        yield
-    finally:
-        os.chdir(prevdir)

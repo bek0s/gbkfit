@@ -61,20 +61,25 @@ class Driver(parseutils.TypedParserSupport, abc.ABC):
     def math_div(self, x1, x2, out=None):
         pass
 
+    @abc.abstractmethod
     def make_dmodel_dcube(self, dtype):
-        raise NotImplementedError()
+        pass
 
+    @abc.abstractmethod
     def make_dmodel_mmaps(self, dtype):
-        raise NotImplementedError()
+        pass
 
+    @abc.abstractmethod
     def make_gmodel_mcdisk(self, dtype):
-        raise NotImplementedError()
+        pass
 
+    @abc.abstractmethod
     def make_gmodel_smdisk(self, dtype):
-        raise NotImplementedError()
+        pass
 
+    @abc.abstractmethod
     def make_objective(self, dtype):
-        raise NotImplementedError()
+        pass
 
 
 class DModelDCube(abc.ABC):

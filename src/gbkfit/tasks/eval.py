@@ -16,6 +16,7 @@ import gbkfit.params
 import gbkfit.params.params
 import gbkfit.params.descs
 import gbkfit.params.utils
+from gbkfit.utils import iterutils
 from . import _detail
 
 
@@ -30,15 +31,16 @@ ruamel.yaml.add_representer(dict, lambda self, data: self.represent_mapping(
     'tag:yaml.org,2002:map', data.items()))
 
 
-def _patch_parameters(info, descs):
-    keys, values = gbkfit.params.utils.parse_param_keys(info, descs)[:2]
-    info = dict(zip(keys, values))
+def _prepare_params(info, descs):
+    parameters = info['parameters']
+    keys, values = gbkfit.params.utils.parse_param_keys(parameters, descs)[:2]
+    parameters = dict(zip(keys, values))
     recovery_failed = []
     recovery_succeed = []
-    for key, val in info.items():
-        if isinstance(val, dict):
+    for key, val in parameters.items():
+        if iterutils.is_mapping(val):
             if 'val' in val:
-                info[key] = val['val']
+                parameters[key] = val['val']
                 recovery_succeed.append(key)
             else:
                 recovery_failed.append(key)
@@ -50,6 +52,7 @@ def _patch_parameters(info, descs):
         raise RuntimeError(
             f"failed to recover values "
             f"for the following parameter keys: {recovery_failed}")
+    info['parameters'] = parameters
     return info
 
 
@@ -70,13 +73,13 @@ def eval_(config, perf=None):
     # Setup all the components described in the configuration
     #
 
+    log.info("setting up drivers...")
+    drivers = gbkfit.driver.parser.load(cfg['drivers'])
+
     datasets = None
     if 'datasets' in cfg:
         log.info("setting up datasets...")
         datasets = gbkfit.dataset.dataset_parser.load(cfg['datasets'])
-
-    log.info("setting up drivers...")
-    drivers = gbkfit.driver.parser.load(cfg['drivers'])
 
     log.info("setting up dmodels...")
     dmodels = gbkfit.model.dmodel_parser.load(cfg['dmodels'], dataset=datasets)
@@ -90,13 +93,15 @@ def eval_(config, perf=None):
     pdescs = None
     if 'pdescs' in cfg:
         log.info("setting up pdescs...")
-        pdescs = gbkfit.params.descs.load_descs(cfg['pdescs'])
-    pdescs = gbkfit.params.descs.merge_descs(models.pdescs(), pdescs)
+        pdescs = gbkfit.params.descs.load_desc_dicts(cfg['pdescs'])
+    pdescs = gbkfit.params.descs.merge_desc_dicts(models.pdescs(), pdescs)
 
     log.info("setting up params...")
-    cfg['params']['parameters'] = _patch_parameters(
-        cfg['params']['parameters'], pdescs)
+    cfg['params'] = _prepare_params(cfg['params'], pdescs)
     params = gbkfit.params.params.EvalParams.load(cfg['params'], pdescs)
+
+    #print(pdescs)
+    exit()
 
     #
     # Calculate model parameters
@@ -136,40 +141,6 @@ def eval_(config, perf=None):
             save_model(f'{prefix}_{key}_mask.fits', value['mask'])
         for key, value in extras[i].items():
             save_model(f'{prefix}_extra_{key}.fits', value)
-
-    """
-    import scipy.signal
-    from gbkfit.psflsf.psfs import PSFGauss
-    from gbkfit.psflsf.lsfs import LSFGauss
-
-    gauss1d = LSFGauss(2).asarray(1)
-    gauss2d = PSFGauss(2).asarray((1, 1))
-    gauss3d = gauss2d * gauss1d[:, None, None]
-    rcube = extras[0]['gmodel_component0_rdata']
-    rcube_sm = scipy.signal.fftconvolve(rcube, gauss3d, mode='full')
-
-    fits.writeto('warp_psf_3d.fits', gauss3d, overwrite=True)
-    fits.writeto('warp_rcube.fits', rcube, overwrite=True)
-    fits.writeto('warp_rcube_sm.fits', rcube_sm, overwrite=True)
-
-    rcube_sm = np.swapaxes(rcube_sm, 1, 2)
-    import pyvista as pv
-    p = pv.Plotter(
-        off_screen=False, window_size=(1024, 768), multi_samples=8,
-        line_smoothing=True, point_smoothing=True, polygon_smoothing=True)
-    p.enable_anti_aliasing()
-    p.enable_depth_peeling(number_of_peels=0, occlusion_ratio=0)
-    p.disable_parallel_projection()
-    p.add_axes()
-    p.set_background('black')
-    p.add_volume(
-        rcube_sm, cmap='twilight_shifted', n_colors=512, opacity='linear',
-        opacity_unit_distance=1, mapper='gpu')
-    p.camera_position = [0, 1, 0.2]
-    p.show()
-    print("BYE")
-    exit()
-    """
 
     #
     # Run performance tests

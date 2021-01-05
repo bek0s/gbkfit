@@ -162,7 +162,7 @@ class Parser(abc.ABC):
 
     def load_one(self, x, *args, **kwargs):
         x = copy.deepcopy(x)
-        return self._load_one_impl(x, *args, **kwargs) if x else None
+        return self._load_one_impl(x, *args, **kwargs) if x is not None else None
 
     @abc.abstractmethod
     def _load_one_impl(self, x, *args, **kwargs):

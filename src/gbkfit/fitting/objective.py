@@ -1,76 +1,40 @@
 
-from gbkfit.model import ModelGroup
-from gbkfit.utils import iterutils
+import numbers
 
 import numpy as np
+
+from gbkfit.model import ModelGroup
+from gbkfit.utils import iterutils, parseutils
+
+
 __all__ = ['Objective']
 
-"""
-from gbkfit.utils import iterutils, miscutils
-    def evaluate_d(self, params, out_extra=None):
-        d_data = []
-        for i in range(self.nitems()):
-            dmodel = self.dmodels()[i]
-            gmodel = self.gmodels()[i]
-            driver = self.drivers()[i]
-            mapping = self._mappings[i]
-            if out_extra is not None:
-                out_extra.append({})
-            d_data.append(dmodel.evaluate(
-                driver, gmodel,
-                {param: params[mapping[param]] for param in mapping},
-                out_extra[-1] if out_extra is not None else None))
-        return d_data
-"""
 
-"""
-    def evaluate_h(self, params, out_extra=None):
-        d_data = self.evaluate_d(params, out_extra)
-        h_data = self._h_data
-        for i in range(self.nitems()):
-            for key in d_data[i]:
-                h_data[i][key] = self._drivers[i].mem_copy_d2h(
-                    d_data[i][key], h_data[i][key])
-        return h_data
-"""
+class Objective(parseutils.BasicParserSupport):
 
-"""
-dmodels = iterutils.tuplify(dmodels)
-        gmodels = iterutils.tuplify(gmodels)
-        drivers = iterutils.tuplify(drivers)
-        ndmodels = len(dmodels)
-        ngmodels = len(gmodels)
-        ndrivers = len(drivers)
-        self._drivers = drivers
-        self._dmodels = dmodels
-        self._gmodels = gmodels
-        if not (ndmodels == ngmodels == ndrivers):
-            raise RuntimeError(
-                f"the number of "
-                f"gmodels ({ngmodels}), "
-                f"dmodels ({ndmodels}), and "
-                f"drivers ({ndrivers}) must be equal")
-        # ...
-        pdescs, mappings = miscutils.merge_dicts_and_make_mappings(
-            [g.params() for g in gmodels], 'model')
-        self._pdescs = pdescs
-        self._mappings = mappings
-        # ...
-        self._h_data = [{key: None for key in mdl.onames()} for mdl in dmodels]
-"""
+    @classmethod
+    def load(cls, info, datasets, models):
+        desc = parseutils.make_basic_desc(cls, 'objective')
+        opts = parseutils.parse_options_for_callable(
+            info, desc, cls.__init__, fun_ignore_args=['datasets', 'models'])
+        return cls(datasets, models, **opts)
 
-class Objective:
+    def dump(self):
+        return dict(
+            wd=self._wd,
+            wu=self._wu,
+            wp=self._wp)
 
-    def __init__(self, datasets, models):
+    def __init__(self, datasets, models, wd=False, wu=1.0, wp=0.0):
         datasets = iterutils.tuplify(datasets)
-        models = iterutils.tuplify(models)
+        #models = iterutils.tuplify(models)
         if len(datasets) != len(models):
             raise RuntimeError(
                 f"the number of datasets and models are not equal "
                 f"({len(datasets)} != {len(models)})")
         n = len(models)
         self._datasets = iterutils.make_list((n,), dict(), True)
-        self._models = models = ModelGroup(models)
+        self._models = models # = ModelGroup(models)
         self._nitems = [None] * n
         self._names = [None] * n
         self._sizes = [None] * n
@@ -85,11 +49,29 @@ class Objective:
         self._s_counts = [None] * n
         self._backends = [None] * n
         self._prepared = False
+        self._wd = wd
+        self._wp = wp
+        self._wu = wu
+        self._weights_d = iterutils.make_tuple((n,), dict(), True)
+        self._weights_p = iterutils.make_tuple((n,), dict(), True)
+        self._weights_u = iterutils.make_tuple((n,), dict(), True)
+        if not iterutils.is_sequence(wu):
+            wu = iterutils.make_tuple((n,), wu)
+        if not iterutils.is_sequence(wp):
+            wp = iterutils.make_tuple((n,), wp)
+        if len(wu) != n:
+            raise RuntimeError(
+                f"the length of wu and the number of models are not equal "
+                f"({len(wu)} != {n})")
+        if len(wp) != n:
+            raise RuntimeError(
+                f"the length of wp and the number of models are not equal "
+                f"({len(wp)} != {n})")
         for i in range(n):
             dataset = datasets[i]
             dmodel = models[i].dmodel()
+            names_mdl = dmodel.onames()
             if set(dataset.keys()) != set(dmodel.onames()):
-                names_mdl = dmodel.onames()
                 names_dat = tuple([n for n in names_mdl if n in dataset])
                 raise RuntimeError(
                     f"dataset and dmodel are incompatible "
@@ -122,6 +104,25 @@ class Objective:
             self._steps[i] = dataset.step()
             self._zeros[i] = dataset.zero()
             self._npixs[i] = dataset.npix()
+            for k in names_mdl:
+                # ...
+                min_ = np.nanmin(dataset[k].data())
+                max_ = np.nanmax(dataset[k].data())
+                self._weights_d[i][k] = 1 / (max_ - min_) if wd else 1.0
+                # ...
+                if isinstance(wu[i], type(None)):
+                    self._weights_u[i][k] = 1.0
+                elif isinstance(wu[i], numbers.Real):
+                    self._weights_u[i][k] = wu[i]
+                elif isinstance(wu[i], dict):
+                    self._weights_u[i][k] = wu[i].get(k, 1.0)
+                # ...
+                if isinstance(wp[i], type(None)):
+                    self._weights_p[i][k] = 0.0
+                elif isinstance(wp[i], numbers.Real):
+                    self._weights_p[i][k] = wp[i]
+                elif isinstance(wp[i], dict):
+                    self._weights_p[i][k] = wp[i].get(k, 0.0)
 
     def datasets(self):
         return self._datasets
@@ -240,6 +241,8 @@ class Objective:
             npix = self._npixs[i]
             ipix = 0
             for name in self._names[i]:
+
+
                 slice_ = slice(ipix, ipix + npix)
                 mdl_d = models_out[i][name]['data'].ravel()
                 mdl_m = models_out[i][name]['mask'].ravel()
@@ -247,7 +250,26 @@ class Objective:
                 dat_m = self._d_dataset_m_vector[i][slice_]
                 dat_e = self._d_dataset_e_vector[i][slice_]
                 res = self._s_residual_vector[i][1][slice_]
+
+                weight = 0
+
+                weight *= self._weights_d[i][name]
+                weight *= self._weights_u[i][name]
+
+                if self._weights_p[i][name] != 0:
+                    driver.mem_fill(counts[1], 0)
+                    backend.count_pixels(dat_m, mdl_m, mdl_m.size, counts[1])
+                    driver.mem_copy_d2h(counts[1], counts[0])
+                    weight *= counts[0][1]**self._weights_p[i][name]
+
                 backend.count_pixels(dat_m, mdl_m, mdl_m.size, counts[1])
-                driver.mem_copy_d2h(counts[1], counts[0])
-                res[:] = (dat_d - mdl_d) / dat_e
+                #print('dat: ', np.sum(dat_m), dat_m.size)
+                #print('mdl: ', np.sum(mdl_m), mdl_m.size)
+                #import astropy.io.fits as fits
+                #fits.writeto('_dat.fits', dat_m, overwrite=True)
+                #fits.writeto('_mdl.fits', mdl_m, overwrite=True)
+                res[:] = weight * (dat_d - mdl_d) / dat_e
                 ipix += npix
+
+
+parser = parseutils.BasicParser(Objective)
