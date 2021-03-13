@@ -38,7 +38,7 @@ def roundd_multiple(num, multiple):
 
 def roundu_multiple(num, multiple):
     return num - np.mod(num, multiple) + multiple \
-        if np.mod(num, multiple) is not 0 else num
+        if np.mod(num, multiple) != 0 else num
 
 
 def roundd_po2(num):

@@ -74,7 +74,7 @@ def eval_(config, perf=None):
     #
 
     log.info("setting up drivers...")
-    drivers = gbkfit.driver.parser.load(cfg['drivers'])
+    drivers = gbkfit.driver.driver_parser.load(cfg['drivers'])
 
     datasets = None
     if 'datasets' in cfg:
@@ -99,9 +99,6 @@ def eval_(config, perf=None):
     log.info("setting up params...")
     cfg['params'] = _prepare_params(cfg['params'], pdescs)
     params = gbkfit.params.params.EvalParams.load(cfg['params'], pdescs)
-
-    #print(pdescs)
-    exit()
 
     #
     # Calculate model parameters

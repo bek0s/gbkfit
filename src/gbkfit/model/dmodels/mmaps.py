@@ -3,7 +3,7 @@ import numpy as np
 
 import gbkfit.math
 from gbkfit.dataset.datasets import DatasetMMaps
-from gbkfit.model import DModel, GModelSCube
+from gbkfit.model.core import DModel, GModelSCube
 from . import _dcube, _detail
 
 

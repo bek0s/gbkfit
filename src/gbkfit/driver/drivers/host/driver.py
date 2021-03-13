@@ -1,11 +1,16 @@
 
 import numpy as np
 
-
-import gbkfit.driver
 import gbkfit.math
 
-import gbkfit.native.libgbkfit_host as native_module
+from gbkfit.driver.core import (
+    Driver, DModelDCube, DModelMMaps, GModelMCDisk, GModelSMDisk, Objective)
+
+try:
+    import gbkfit.native.libgbkfit_host as native_module
+except ModuleNotFoundError:
+    raise RuntimeError(
+        "the host driver is not enabled in your gbkfit installation")
 
 
 __all__ = ['DriverHost']
@@ -33,7 +38,7 @@ def _get_class(classes, dtype):
     return classes[dtype]
 
 
-class DriverHost(gbkfit.driver.Driver):
+class DriverHost(Driver):
 
     @staticmethod
     def type():
@@ -101,7 +106,7 @@ class DriverHost(gbkfit.driver.Driver):
         return Objective(dtype)
 
 
-class DModelDCube(gbkfit.driver.DModelDCube):
+class DModelDCube(DModelDCube):
 
     _CLASSES = {
         np.float32: native_module.DModelDCubef32}
@@ -140,7 +145,7 @@ class DModelDCube(gbkfit.driver.DModelDCube):
             mask_spat, mask_spec, mask_coef, size, _ptr(cube), _ptr(mask))
 
 
-class DModelMMaps(gbkfit.driver.DModelMMaps):
+class DModelMMaps(DModelMMaps):
 
     _CLASSES = {
         np.float32: native_module.DModelMMapsf32}
@@ -162,7 +167,7 @@ class DModelMMaps(gbkfit.driver.DModelMMaps):
             _size(orders))
 
 
-class GModelMCDisk(gbkfit.driver.GModelMCDisk):
+class GModelMCDisk(GModelMCDisk):
 
     _CLASSES = {
         np.float32: native_module.GModelMCDiskf32}
@@ -236,7 +241,7 @@ class GModelMCDisk(gbkfit.driver.GModelMCDisk):
             _ptr(rdata), _ptr(vdata), _ptr(ddata))
 
 
-class GModelSMDisk(gbkfit.driver.GModelSMDisk):
+class GModelSMDisk(GModelSMDisk):
 
     _CLASSES = {
         np.float32: native_module.GModelSMDiskf32}
@@ -308,7 +313,7 @@ class GModelSMDisk(gbkfit.driver.GModelSMDisk):
             _ptr(rdata), _ptr(vdata), _ptr(ddata))
 
 
-class Objective(gbkfit.driver.Objective):
+class Objective(Objective):
 
     _CLASSES = {
         np.float32: native_module.Objectivef32}

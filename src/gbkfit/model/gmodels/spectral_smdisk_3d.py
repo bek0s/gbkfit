@@ -1,5 +1,6 @@
 
-from . import SpectralComponent3D, _detail, _smdisk, traits
+from . import _detail, _smdisk, traits
+from .core import SpectralComponent3D
 from gbkfit.utils import parseutils
 
 

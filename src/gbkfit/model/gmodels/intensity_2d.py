@@ -1,10 +1,22 @@
 
-from gbkfit.model import GModelImage
+from gbkfit.model.core import GModelImage
 from gbkfit.utils import iterutils, parseutils
-from . import _detail, component_d2d_parser
+from . import _detail
+from .core import DensityComponent2D
+from .density_smdisk_2d import DensitySMDisk2D
 
 
 __all__ = ['GModelIntensity2D']
+
+
+_dcmp_parser = parseutils.TypedParser(DensityComponent2D)
+
+
+def _register_components():
+    _dcmp_parser.register(DensitySMDisk2D)
+
+
+_register_components()
 
 
 class GModelIntensity2D(GModelImage):
@@ -18,13 +30,13 @@ class GModelIntensity2D(GModelImage):
         desc = parseutils.make_typed_desc(cls, 'gmodel')
         opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
         opts.update(
-            components=component_d2d_parser.load(info['components']))
+            components=_dcmp_parser.load(info['components']))
         return cls(**opts)
 
     def dump(self):
         return dict(
             type=self.type(),
-            components=component_d2d_parser.dump(self._cmps))
+            components=_dcmp_parser.dump(self._cmps))
 
     def __init__(self, components):
         self._cmps = iterutils.tuplify(components)

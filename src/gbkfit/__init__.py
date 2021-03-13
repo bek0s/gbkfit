@@ -55,67 +55,9 @@ def _register_fitters():
     _register_factories(parser, factories)
 
 
-def _register_datasets():
-    from gbkfit.dataset import dataset_parser as parser
-    from gbkfit.dataset.datasets import (
-        DatasetImage, DatasetLSlit, DatasetMMaps, DatasetSCube)
-    parser.register(DatasetImage)
-    parser.register(DatasetLSlit)
-    parser.register(DatasetMMaps)
-    parser.register(DatasetSCube)
-
-
-def _register_dmodels():
-    from gbkfit.model import dmodel_parser as parser
-    from gbkfit.model.dmodels import (
-        DModelImage, DModelLSlit, DModelMMaps, DModelSCube)
-    parser.register(DModelImage)
-    parser.register(DModelLSlit)
-    parser.register(DModelMMaps)
-    parser.register(DModelSCube)
-
-
-def _register_gmodels():
-    from gbkfit.model import gmodel_parser as parser
-    from gbkfit.model.gmodels import (
-        GModelIntensity2D, GModelIntensity3D,
-        GModelKinematics2D, GModelKinematics3D)
-    parser.register(GModelIntensity2D)
-    parser.register(GModelIntensity3D)
-    parser.register(GModelKinematics2D)
-    parser.register(GModelKinematics3D)
-
-
-def _register_psfs():
-    from gbkfit.psflsf import psf_parser
-    from gbkfit.psflsf.psfs.psfs import (
-        PSFGauss, PSFGGauss, PSFImage, PSFLorentz, PSFMoffat)
-    psf_parser.register(PSFGauss)
-    psf_parser.register(PSFGGauss)
-    psf_parser.register(PSFImage)
-    psf_parser.register(PSFLorentz)
-    psf_parser.register(PSFMoffat)
-
-
-def _register_lsfs():
-    from gbkfit.psflsf import lsf_parser
-    from gbkfit.psflsf.lsfs.lsfs import (
-        LSFGauss, LSFGGauss, LSFImage, LSFLorentz, LSFMoffat)
-    lsf_parser.register(LSFGauss)
-    lsf_parser.register(LSFGGauss)
-    lsf_parser.register(LSFImage)
-    lsf_parser.register(LSFLorentz)
-    lsf_parser.register(LSFMoffat)
-
-
 def _init():
-    _register_datasets()
-    _register_drivers()
-    _register_dmodels()
-    _register_gmodels()
-    _register_psfs()
-    _register_lsfs()
-    _register_fitters()
+    #_register_fitters()
+    pass
 
 
 _init()

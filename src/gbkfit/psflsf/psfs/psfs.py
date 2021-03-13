@@ -4,7 +4,7 @@ import numpy as np
 import scipy.ndimage
 
 import gbkfit.math
-from gbkfit.psflsf import PSF
+from gbkfit.psflsf.core import PSF
 from gbkfit.utils import iterutils, miscutils, parseutils
 
 

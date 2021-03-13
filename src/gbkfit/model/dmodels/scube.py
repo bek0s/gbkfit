@@ -2,7 +2,7 @@
 import numpy as np
 
 from gbkfit.dataset.datasets import DatasetSCube
-from gbkfit.model import DModel, GModelSCube
+from gbkfit.model.core import DModel, GModelSCube
 from . import _dcube, _detail
 
 

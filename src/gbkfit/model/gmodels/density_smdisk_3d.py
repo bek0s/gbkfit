@@ -1,5 +1,6 @@
 
-from . import DensityComponent3D, _detail, _smdisk, traits
+from . import _detail, _smdisk, traits
+from .core import DensityComponent3D
 from gbkfit.utils import parseutils
 
 

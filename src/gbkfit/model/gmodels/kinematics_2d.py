@@ -1,10 +1,22 @@
 
-from gbkfit.model import GModelSCube
+from gbkfit.model.core import GModelSCube
 from gbkfit.utils import iterutils, parseutils
-from . import _detail, component_s2d_parser
+from . import _detail
+from .core import SpectralComponent2D
+from .spectral_smdisk_2d import SpectralSMDisk2D
 
 
 __all__ = ['GModelKinematics2D']
+
+
+_scmp_parser = parseutils.TypedParser(SpectralComponent2D)
+
+
+def _register_components():
+    _scmp_parser.register(SpectralSMDisk2D)
+
+
+_register_components()
 
 
 class GModelKinematics2D(GModelSCube):
@@ -18,13 +30,13 @@ class GModelKinematics2D(GModelSCube):
         desc = parseutils.make_typed_desc(cls, 'gmodel')
         opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
         opts.update(
-            components=component_s2d_parser.load(info['components']))
+            components=_scmp_parser.load(info['components']))
         return cls(**opts)
 
     def dump(self):
         return dict(
             type=self.type(),
-            components=component_s2d_parser.dump(self._cmps))
+            components=_scmp_parser.dump(self._cmps))
 
     def __init__(self, components):
         self._cmps = iterutils.tuplify(components)

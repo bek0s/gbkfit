@@ -5,7 +5,7 @@ import copy
 import lmfit
 import numpy as np
 import numpy.random as random
-import pygmo as pg
+
 
 from gbkfit.fitting.fitter import Fitter
 from .params import FitParamsLMFitLeastSquares, FitParamsLMFitNelderMead

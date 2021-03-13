@@ -2,7 +2,7 @@
 import numpy as np
 
 from gbkfit.dataset.datasets import DatasetLSlit
-from gbkfit.model import DModel
+from gbkfit.model.core import DModel
 from . import _dcube, _detail
 
 

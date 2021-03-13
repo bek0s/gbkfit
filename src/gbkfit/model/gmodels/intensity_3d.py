@@ -1,10 +1,25 @@
 
-from gbkfit.model import GModelImage
+from gbkfit.model.core import GModelImage
 from gbkfit.utils import iterutils, parseutils
-from . import _detail, component_d3d_parser
+from . import _detail
+from .core import DensityComponent3D
+from .density_mcdisk_3d import DensityMCDisk3D
+from .density_smdisk_3d import DensitySMDisk3D
 
 
 __all__ = ['GModelIntensity3D']
+
+
+_dcmp_parser = parseutils.TypedParser(DensityComponent3D)
+
+
+def _register_components():
+
+    _dcmp_parser.register(DensityMCDisk3D)
+    _dcmp_parser.register(DensitySMDisk3D)
+
+
+_register_components()
 
 
 class GModelIntensity3D(GModelImage):
@@ -18,8 +33,8 @@ class GModelIntensity3D(GModelImage):
         desc = parseutils.make_typed_desc(cls, 'gmodel')
         opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
         opts.update(
-            components=component_d3d_parser.load(opts['components']),
-            tcomponents=component_d3d_parser.load(opts.get('tcomponents')))
+            components=_dcmp_parser.load(opts['components']),
+            tcomponents=_dcmp_parser.load(opts.get('tcomponents')))
         return cls(**opts)
 
     def dump(self):
@@ -28,8 +43,8 @@ class GModelIntensity3D(GModelImage):
             tauto=self._tauto,
             size_z=self._size_z,
             step_z=self._step_z,
-            components=component_d3d_parser.dump(self._cmps),
-            tcomponents=component_d3d_parser.dump(self._tcmps))
+            components=_dcmp_parser.dump(self._cmps),
+            tcomponents=_dcmp_parser.dump(self._tcmps))
 
     def __init__(
             self, components, size_z=None, step_z=None,

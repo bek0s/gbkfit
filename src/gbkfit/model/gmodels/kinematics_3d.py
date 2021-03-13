@@ -1,10 +1,29 @@
 
-from gbkfit.model import GModelSCube
+from gbkfit.model.core import GModelSCube
 from gbkfit.utils import iterutils, parseutils
-from . import _detail, component_s3d_parser
+from . import _detail
+from .core import DensityComponent3D, SpectralComponent3D
+from .density_mcdisk_3d import DensityMCDisk3D
+from .density_smdisk_3d import DensitySMDisk3D
+from .spectral_mcdisk_3d import SpectralMCDisk3D
+from .spectral_smdisk_3d import SpectralSMDisk3D
 
 
 __all__ = ['GModelKinematics3D']
+
+
+_dcmp_parser = parseutils.TypedParser(DensityComponent3D)
+_scmp_parser = parseutils.TypedParser(SpectralComponent3D)
+
+
+def _register_components():
+    _dcmp_parser.register(DensityMCDisk3D)
+    _dcmp_parser.register(DensitySMDisk3D)
+    _scmp_parser.register(SpectralMCDisk3D)
+    _scmp_parser.register(SpectralSMDisk3D)
+
+
+_register_components()
 
 
 class GModelKinematics3D(GModelSCube):
@@ -18,8 +37,8 @@ class GModelKinematics3D(GModelSCube):
         desc = parseutils.make_typed_desc(cls, 'gmodel')
         opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
         opts.update(
-            components=component_s3d_parser.load(info['components']),
-            tcomponents=component_s3d_parser.load(info.get('tcomponents')))
+            components=_scmp_parser.load(info['components']),
+            tcomponents=_dcmp_parser.load(info.get('tcomponents')))
         return cls(**opts)
 
     def dump(self):
@@ -28,8 +47,8 @@ class GModelKinematics3D(GModelSCube):
             tauto=self._tauto,
             size_z=self._size_z,
             step_z=self._step_z,
-            components=component_s3d_parser.dump(self._cmps),
-            tcomponents=component_s3d_parser.dump(self._tcmps))
+            components=_scmp_parser.dump(self._cmps),
+            tcomponents=_dcmp_parser.dump(self._tcmps))
 
     def __init__(
             self, components, size_z=None, step_z=None,

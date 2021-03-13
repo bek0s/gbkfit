@@ -165,4 +165,4 @@ class Objective(abc.ABC):
         pass
 
 
-parser = parseutils.TypedParser(Driver)
+driver_parser = parseutils.TypedParser(Driver)

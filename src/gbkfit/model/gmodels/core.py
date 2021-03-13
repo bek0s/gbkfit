@@ -60,9 +60,3 @@ class SpectralComponent3D(parseutils.TypedParserSupport, abc.ABC):
             spec_size, spec_step, spec_zero,
             dtype, out_extra):
         pass
-
-
-component_d2d_parser = parseutils.TypedParser(DensityComponent2D)
-component_d3d_parser = parseutils.TypedParser(DensityComponent3D)
-component_s2d_parser = parseutils.TypedParser(SpectralComponent2D)
-component_s3d_parser = parseutils.TypedParser(SpectralComponent3D)
