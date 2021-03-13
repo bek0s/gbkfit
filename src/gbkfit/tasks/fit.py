@@ -49,7 +49,7 @@ def fit(config):
     #
 
     log.info("setting up drivers...")
-    drivers = gbkfit.driver.parser.load(cfg['drivers'])
+    drivers = gbkfit.driver.driver_parser.load(cfg['drivers'])
 
     log.info("setting up datasets...")
     datasets = gbkfit.dataset.dataset_parser.load(cfg['datasets'])
