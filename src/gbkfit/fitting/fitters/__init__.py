@@ -20,7 +20,7 @@ def _register_factories(parser, factories):
 
 
 def _register_fitters():
-    from gbkfit.fitting.fitter import parser
+    from gbkfit.fitting.core import fitter_parser as parser
     factories = [
         # dynesty
         'gbkfit.fitting.fitters.dynesty.FitterDyneestyDNS',
@@ -44,3 +44,6 @@ def _register_fitters():
         'gbkfit.fitting.fitters.scipy.FitterScipyLeastSquares',
         'gbkfit.fitting.fitters.scipy.FitterScipyMinimize']
     _register_factories(parser, factories)
+
+
+_register_fitters()

@@ -7,7 +7,7 @@ import numpy as np
 import numpy.random as random
 
 
-from gbkfit.fitting.fitter import Fitter
+from gbkfit.fitting.core import Fitter
 from .params import FitParamsLMFitLeastSquares, FitParamsLMFitNelderMead
 
 from gbkfit.fitting.result import make_fitter_result

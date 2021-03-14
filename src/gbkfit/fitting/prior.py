@@ -9,6 +9,7 @@ import gbkfit.math
 from gbkfit.utils import parseutils
 import bilby.core.prior.analytical
 
+
 def _load(cls, prior_info, param_info):
     if 'min' not in prior_info and 'min' in param_info:
         prior_info['min'] = param_info.pop('min')

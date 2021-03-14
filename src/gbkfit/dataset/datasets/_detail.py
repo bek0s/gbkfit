@@ -1,5 +1,5 @@
 
-from gbkfit.dataset import data_parser
+from gbkfit.dataset.data import data_parser
 from gbkfit.utils import parseutils
 
 
@@ -10,7 +10,7 @@ def load_dataset_common(cls, info, names):
         add_optional=['step', 'rpix', 'rval', 'rota'])
     for name in names:
         if name in opts:
-            opts[name] = data_parser.load_one(
+            opts[name] = data_parser.load(
                 opts[name],
                 opts.get('step'),
                 opts.get('rpix'),

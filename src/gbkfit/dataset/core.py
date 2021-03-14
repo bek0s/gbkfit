@@ -3,7 +3,14 @@ import abc
 import copy
 
 from gbkfit.utils import parseutils
-from . import _detail
+
+
+def _ensure_same_attrib_value(data, method, class_desc):
+    attr = {k: getattr(v, method)() for k, v in data.items()}
+    if len(set(attr.values())) > 1:
+        raise RuntimeError(
+            f"{class_desc} contains data items of different {method}: "
+            f"{str(attr)}")
 
 
 class Dataset(parseutils.TypedParserSupport, abc.ABC):
@@ -14,12 +21,12 @@ class Dataset(parseutils.TypedParserSupport, abc.ABC):
         if not data:
             raise RuntimeError(f"{desc} contains no data items")
         # All data items must have the same properties
-        _detail.ensure_same_attrib_value(data, 'size', desc)
-        _detail.ensure_same_attrib_value(data, 'step', desc)
-        _detail.ensure_same_attrib_value(data, 'rpix', desc)
-        _detail.ensure_same_attrib_value(data, 'rval', desc)
-        _detail.ensure_same_attrib_value(data, 'rota', desc)
-        _detail.ensure_same_attrib_value(data, 'dtype', desc)
+        _ensure_same_attrib_value(data, 'size', desc)
+        _ensure_same_attrib_value(data, 'step', desc)
+        _ensure_same_attrib_value(data, 'rpix', desc)
+        _ensure_same_attrib_value(data, 'rval', desc)
+        _ensure_same_attrib_value(data, 'rota', desc)
+        _ensure_same_attrib_value(data, 'dtype', desc)
         # We need to copy the data to ensure they are kept intact
         self._data = copy.deepcopy(data)
 

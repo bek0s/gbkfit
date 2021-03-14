@@ -9,7 +9,7 @@ import ruamel.yaml
 import gbkfit
 import gbkfit.dataset
 import gbkfit.driver
-import gbkfit.fitting.fitter
+import gbkfit.fitting
 import gbkfit.fitting.objective
 import gbkfit.fitting.result
 import gbkfit.model
@@ -64,7 +64,7 @@ def fit(config):
     models = gbkfit.model.make_model_group(dmodels, gmodels, drivers)
 
     log.info("setting up fitter...")
-    fitter = gbkfit.fitting.fitter.parser.load(cfg['fitter'])
+    fitter = gbkfit.fitting.fitter_parser.load(cfg['fitter'])
 
     log.info("setting up objective...")
     objective = gbkfit.fitting.objective.parser.load(

@@ -36,21 +36,20 @@ def prepare_config(config, req_sections=(), opt_sections=()):
             f"{str(unknown_sections)}")
     config = {scn: config[scn] for scn in known_sections}
 
-    # Ensure that the required sections are present
+    # Ensure that the required sections are present and valid
     missing_sections = []
     for scn in req_sections:
-        if not config.get(scn):
+        if scn not in config or _is_empty_section(config[scn]):
             missing_sections.append(scn)
     if missing_sections:
         raise RuntimeError(
-            f"the following sections must be defined: "
+            f"the following sections must be defined and not empty/null: "
             f"{str(missing_sections)}")
 
     # Ensure that the sections have the right type
     wrong_type_dict = []
     wrong_type_dict_seq = []
-    for scn in ['obj'
-                'ective', 'fitter', 'pdescs', 'params']:
+    for scn in ['objective', 'fitter', 'pdescs', 'params']:
         if scn in config and not iterutils.is_mapping(config[scn]):
             wrong_type_dict.append(scn)
     for scn in ['datasets', 'drivers', 'dmodels', 'gmodels']:
@@ -96,7 +95,7 @@ def prepare_config(config, req_sections=(), opt_sections=()):
                 f"the values of the following pdescs must be a dictionary: "
                 f"{str(invalid_pdescs)}")
 
-    # Is this needed?
+    # Make sure the return value is pure json
     config = json.loads(json.dumps(config))
 
     return config
