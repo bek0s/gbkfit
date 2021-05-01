@@ -741,6 +741,7 @@ vp_trait_nw_tan_uniform(
         int rnidx, const T* rnodes, T r, T theta, T incl,
         const T* params)
 {
+    if (r == 0) { out = 0; return; }
     p_trait_nw_uniform(out, rnidx, rnodes, r, params);
     vp_trait_make_tan(out, theta, incl);
 }
@@ -751,6 +752,7 @@ vp_trait_nw_tan_harmonic(
         int rnidx, const T* rnodes, int nrnodes, T r, T theta, T incl,
         const T* consts, const T* params)
 {
+    if (r == 0) { out = 0; return; }
     p_trait_nw_harmonic(out, rnidx, rnodes, nrnodes, r, theta, consts, params);
     vp_trait_make_tan(out, theta, incl);
 }
@@ -761,6 +763,7 @@ vp_trait_nw_rad_uniform(
         int rnidx, const T* rnodes, T r, T theta, T incl,
         const T* params)
 {
+    if (r == 0) { out = 0; return; }
     p_trait_nw_uniform(out, rnidx, rnodes, r, params);
     vp_trait_make_rad(out, theta, incl);
 }
@@ -771,6 +774,7 @@ vp_trait_nw_rad_harmonic(
         int rnidx, const T* rnodes, int nrnodes, T r, T theta, T incl,
         const T* consts, const T* params)
 {
+    if (r == 0) { out = 0; return; }
     p_trait_nw_harmonic(out, rnidx, rnodes, nrnodes, r, theta, consts, params);
     vp_trait_make_rad(out, theta, incl);
 }

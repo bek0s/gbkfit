@@ -772,7 +772,7 @@ def parse_param_info(
             else:
                 nindices = len(indices)
                 ieparams = explode_pname(name, indices)
-                ievalues = iterutils.make_list((nindices,), {}, True)
+                ievalues = iterutils.make_list(nindices, {}, True)
                 for akey, avalue in value.items():
                     if _is_param_attrib_name(akey):
                         invalid_infos_bad_attr_name[key].append(akey)

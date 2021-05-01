@@ -62,6 +62,10 @@ class Driver(parseutils.TypedParserSupport, abc.ABC):
         pass
 
     @abc.abstractmethod
+    def math_pow(self, x1, x2, out=None):
+        pass
+
+    @abc.abstractmethod
     def make_dmodel_dcube(self, dtype):
         pass
 

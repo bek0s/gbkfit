@@ -34,15 +34,16 @@ def tuplify(x, none_is_val=True):
 
 
 def _make_seq(s, v, t, copy_):
+    s = tuplify(s)
     return t([_make_seq(s[1:], v, t, copy_) for _ in range(s[0])]) \
         if s else (copy.deepcopy(v) if copy_ else v)
 
 
-def make_list(shape, v, copy_=False):
+def make_list(shape, v, copy_=True):
     return _make_seq(shape, v, list, copy_)
 
 
-def make_tuple(shape, v, copy_=False):
+def make_tuple(shape, v, copy_=True):
     return _make_seq(shape, v, tuple, copy_)
 
 

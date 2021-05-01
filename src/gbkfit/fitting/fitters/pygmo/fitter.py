@@ -6,7 +6,7 @@ import numpy as np
 import numpy.random as random
 import pygmo as pg
 
-from gbkfit.fitting.fitter import Fitter
+from gbkfit.fitting.core import Fitter
 from .params import FitParamsPygmo
 from .problem import Problem
 

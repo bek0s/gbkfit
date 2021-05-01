@@ -16,7 +16,8 @@ def _register_factories(parser, factories):
             parser.register(cls)
         except Exception as e:
             log.warning(
-                f"could not register factory for type {factory}; {str(e)}")
+                f"could not register factory for type {factory}; "
+                f"{e.__class__.__name__}: {e}")
 
 
 def _register_fitters():
@@ -39,10 +40,7 @@ def _register_fitters():
         'gbkfit.fitting.fitters.pygmo.FitterPygmoXNES',
         'gbkfit.fitting.fitters.pygmo.FitterPygmoIpopt',
         'gbkfit.fitting.fitters.pygmo.FitterPygmoNLopt',
-        'gbkfit.fitting.fitters.pygmo.FitterPygmoScipy',
-        # scipy
-        'gbkfit.fitting.fitters.scipy.FitterScipyLeastSquares',
-        'gbkfit.fitting.fitters.scipy.FitterScipyMinimize']
+        'gbkfit.fitting.fitters.pygmo.FitterPygmoScipy']
     _register_factories(parser, factories)
 
 

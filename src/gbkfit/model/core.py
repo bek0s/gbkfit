@@ -1,6 +1,8 @@
 
 import abc
 
+import numpy as np
+
 from gbkfit.utils import parseutils
 
 
@@ -17,6 +19,9 @@ class DModel(parseutils.TypedParserSupport, abc.ABC):
 
     def ndim(self):
         return len(self.size())
+
+    def npix(self):
+        return int(np.prod(self.size()))
 
     @abc.abstractmethod
     def size(self):

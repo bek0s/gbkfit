@@ -16,7 +16,8 @@ def _register_factories(parser, factories):
             parser.register(cls)
         except Exception as e:
             log.warning(
-                f"could not register factory for type {factory}; {str(e)}")
+                f"could not register factory for type {factory}; "
+                f"{e.__class__.__name__}: {e}")
 
 
 def _register_drivers():

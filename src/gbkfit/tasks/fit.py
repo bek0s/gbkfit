@@ -10,8 +10,6 @@ import gbkfit
 import gbkfit.dataset
 import gbkfit.driver
 import gbkfit.fitting
-import gbkfit.fitting.objective
-import gbkfit.fitting.result
 import gbkfit.model
 import gbkfit.params
 import gbkfit.params.descs
@@ -61,17 +59,14 @@ def fit(config):
     gmodels = gbkfit.model.gmodel_parser.load(cfg['gmodels'])
 
     log.info("setting up model...")
-    models = gbkfit.model.make_model_group(dmodels, gmodels, drivers)
+    models = gbkfit.model.make_model_group_from_cmp(dmodels, gmodels, drivers)
 
     log.info("setting up fitter...")
     fitter = gbkfit.fitting.fitter_parser.load(cfg['fitter'])
 
     log.info("setting up objective...")
-    objective = gbkfit.fitting.objective.parser.load(
+    objective = gbkfit.fitting.objective_parser.load(
         cfg.get('objective', {}), datasets=datasets, models=models)
-
-    #print(objective)
-    #exit()
 
     pdescs = None
     if 'pdescs' in cfg:
@@ -80,15 +75,15 @@ def fit(config):
     pdescs = gbkfit.params.descs.merge_descs(objective.pdescs(), pdescs)
 
     log.info("setting up params...")
-    print('pdescs:', pdescs)
-    print('config:', cfg['params'])
+    #print('pdescs:', pdescs)
+    #print('config:', cfg['params'])
     #exit()
     params = fitter.load_params(cfg['params'], pdescs)
 
     #
     # Perform fit
     #
-
+    #exit()
     log.info("model-fitting started")
     t1 = time.time_ns()
     result = fitter.fit(objective, params)

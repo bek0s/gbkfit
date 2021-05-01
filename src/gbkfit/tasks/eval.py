@@ -88,7 +88,7 @@ def eval_(config, perf=None):
     gmodels = gbkfit.model.gmodel_parser.load(cfg['gmodels'])
 
     log.info("setting up models...")
-    models = gbkfit.model.make_model_group(dmodels, gmodels, drivers)
+    models = gbkfit.model.make_model_group_from_cmp(dmodels, gmodels, drivers)
 
     pdescs = None
     if 'pdescs' in cfg:

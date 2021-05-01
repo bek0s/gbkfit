@@ -2,15 +2,10 @@
 import numpy as np
 
 import gbkfit.math
+import gbkfit.native.libgbkfit_host as native_module
 
 from gbkfit.driver.core import (
     Driver, DModelDCube, DModelMMaps, GModelMCDisk, GModelSMDisk, Objective)
-
-try:
-    import gbkfit.native.libgbkfit_host as native_module
-except ModuleNotFoundError:
-    raise RuntimeError(
-        "the host driver is not enabled in your gbkfit installation")
 
 
 __all__ = ['DriverHost']
@@ -89,6 +84,9 @@ class DriverHost(Driver):
 
     def math_div(self, x1, x2, out=None):
         return np.div(x1, x2, out=out)
+
+    def math_pow(self, x1, x2, out=None):
+        return np.power(x1, x2, out=out)
 
     def make_dmodel_dcube(self, dtype):
         return DModelDCube(dtype)

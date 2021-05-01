@@ -1,9 +1,9 @@
 
 try:
-    import emcee as _emcee
-except ImportError:
+    import emcee
+except ModuleNotFoundError:
     raise ModuleNotFoundError(
-        "to use the emcee fitter please install emcee")
+        "to use the emcee fitter, please install emcee")
 
 from .core import *
 from .moves import *

@@ -19,13 +19,13 @@ def prepare_config(config, req_sections=(), opt_sections=()):
     empty_sections = []
     known_sections = []
     unknown_sections = []
-    for scn in config:
-        if scn in opt_sections and _is_empty_section(config[scn]):
-            empty_sections.append(scn)
-        elif scn in req_sections + opt_sections:
-            known_sections.append(scn)
+    for s in config:
+        if s in opt_sections and _is_empty_section(config[s]):
+            empty_sections.append(s)
+        elif s in req_sections + opt_sections:
+            known_sections.append(s)
         else:
-            unknown_sections.append(scn)
+            unknown_sections.append(s)
     if empty_sections:
         log.info(
             f"the following optional sections are empty and will be ignored: "
@@ -34,13 +34,13 @@ def prepare_config(config, req_sections=(), opt_sections=()):
         log.info(
             f"the following sections are not recognised and will be ignored: "
             f"{str(unknown_sections)}")
-    config = {scn: config[scn] for scn in known_sections}
+    config = {s: config[s] for s in known_sections}
 
     # Ensure that the required sections are present and valid
     missing_sections = []
-    for scn in req_sections:
-        if scn not in config or _is_empty_section(config[scn]):
-            missing_sections.append(scn)
+    for s in req_sections:
+        if s not in config or _is_empty_section(config[s]):
+            missing_sections.append(s)
     if missing_sections:
         raise RuntimeError(
             f"the following sections must be defined and not empty/null: "
@@ -49,12 +49,12 @@ def prepare_config(config, req_sections=(), opt_sections=()):
     # Ensure that the sections have the right type
     wrong_type_dict = []
     wrong_type_dict_seq = []
-    for scn in ['objective', 'fitter', 'pdescs', 'params']:
-        if scn in config and not iterutils.is_mapping(config[scn]):
-            wrong_type_dict.append(scn)
-    for scn in ['datasets', 'drivers', 'dmodels', 'gmodels']:
-        if scn in config and not iterutils.is_iterable(config[scn]):
-            wrong_type_dict_seq.append(scn)
+    for s in ['objective', 'fitter', 'pdescs', 'params']:
+        if s in config and not iterutils.is_mapping(config[s]):
+            wrong_type_dict.append(s)
+    for s in ['datasets', 'drivers', 'dmodels', 'gmodels']:
+        if s in config and not iterutils.is_iterable(config[s]):
+            wrong_type_dict_seq.append(s)
     if wrong_type_dict:
         raise RuntimeError(
             f"the following sections must be dictionaries: "
@@ -65,15 +65,15 @@ def prepare_config(config, req_sections=(), opt_sections=()):
             f"{str(wrong_type_dict_seq)}")
 
     # Listify some sections to make parsing more streamlined
-    for scn in ['datasets', 'drivers', 'dmodels', 'gmodels']:
-        if scn in config:
-            config[scn] = iterutils.listify(config[scn])
+    for s in ['datasets', 'drivers', 'dmodels', 'gmodels']:
+        if s in config:
+            config[s] = iterutils.listify(config[s])
 
     # Ensure that some sections have the same length
     lengths = {}
-    for scn in ['datasets', 'drivers', 'dmodels', 'gmodels']:
-        if scn in config:
-            lengths[scn] = len(config[scn])
+    for s in ['datasets', 'drivers', 'dmodels', 'gmodels']:
+        if s in config:
+            lengths[s] = len(config[s])
     if len(set(lengths.values())) > 1:
         raise RuntimeError(
             f"the following sections must have the same length: "

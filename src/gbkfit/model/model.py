@@ -2,7 +2,7 @@
 from gbkfit.utils import iterutils, miscutils
 
 
-__all__ = ['Model', 'ModelGroup', 'make_model_group']
+__all__ = ['Model', 'ModelGroup', 'make_model_group', 'make_model_group_from_cmp', 'make_model_group_from_seq']
 
 
 class Model_:
@@ -115,3 +115,26 @@ def make_model_group(dmodels, gmodels, drivers):
     for dmodel, gmodel, driver in zip(dmodels, gmodels, drivers):
         models.append(Model(dmodel, gmodel, driver))
     return ModelGroup(models)
+
+
+def make_model_group_from_seq(models):
+    return ModelGroup(iterutils.tuplify(models))
+
+
+def make_model_group_from_cmp(dmodels, gmodels, drivers):
+    dmodels = iterutils.tuplify(dmodels)
+    gmodels = iterutils.tuplify(gmodels)
+    drivers = iterutils.tuplify(drivers)
+    ndmodels = len(dmodels)
+    ngmodels = len(gmodels)
+    ndrivers = len(drivers)
+    if not (ndmodels == ngmodels == ndrivers):
+        raise RuntimeError(
+            f"could not create model group; the number of "
+            f"gmodels ({ngmodels}), "
+            f"dmodels ({ndmodels}), and "
+            f"drivers ({ndrivers}) must be equal")
+    models = []
+    for dmodel, gmodel, driver in zip(dmodels, gmodels, drivers):
+        models.append(Model(dmodel, gmodel, driver))
+    return make_model_group_from_seq(models)

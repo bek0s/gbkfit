@@ -31,6 +31,7 @@ def _residual_vector(x, objective, parameters, callback=None):
     foo = objective.residual_vector(params)
     #print('len0:', len(foo[0]))
     bar = np.nan_to_num(foo[0])
+    print(np.nansum(foo))
     return bar
 
 

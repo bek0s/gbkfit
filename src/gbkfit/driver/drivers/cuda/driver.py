@@ -3,15 +3,10 @@ import cupy as cp
 import numpy as np
 
 import gbkfit.math
+import gbkfit.native.libgbkfit_cuda as native_module
 
 from gbkfit.driver.core import (
     Driver, DModelDCube, DModelMMaps, GModelMCDisk, GModelSMDisk, Objective)
-
-try:
-    import gbkfit.native.libgbkfit_cuda as native_module
-except ModuleNotFoundError as e:
-    raise RuntimeError(
-        "the cuda driver is not enabled in your gbkfit installation") from e
 
 
 __all__ = ['DriverCUDA']
@@ -48,7 +43,7 @@ class DriverCUDA(Driver):
     def mem_alloc_s(self, shape, dtype):
         h_data = np.empty(shape, dtype)
         d_data = cp.empty(shape, dtype)
-        return h_data, d_data
+        return [h_data, d_data]
 
     def mem_alloc_h(self, shape, dtype):
         return np.empty(shape, dtype)
@@ -90,6 +85,9 @@ class DriverCUDA(Driver):
 
     def math_div(self, x1, x2, out=None):
         return cp.divide(x1, x2, out=out)
+
+    def math_pow(self, x1, x2, out=None):
+        return cp.power(x1, x2, out=out)
 
     def make_dmodel_dcube(self, dtype):
         return DModelDCube(dtype)

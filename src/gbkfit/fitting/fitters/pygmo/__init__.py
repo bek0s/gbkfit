@@ -1,8 +1,8 @@
 
 try:
     import pygmo
-except ImportError:
-    raise ImportError(
-        "could not import pygmo fitter; make sure pygmo is installed")
+except ModuleNotFoundError:
+    raise ModuleNotFoundError(
+        "to use the pygmo fitter, please install pygmo")
 
 from .fitter import *
