@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 PYTHON_VERSIONS=(
-  ["39"]="cp39-cp39m"
+  ["39"]="cp39-cp39"
 )
 
 PYTHON_VERSION="${1//./}"
