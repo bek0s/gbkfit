@@ -2,14 +2,12 @@
 import ast
 import collections
 import copy
+import graphlib
 import itertools
 import logging
 import numbers
 import re
 
-import astor
-import networkx
-import networkx.algorithms.dag
 import numpy as np
 
 from gbkfit.params.descs import ParamScalarDesc, ParamVectorDesc
@@ -249,7 +247,7 @@ class _ParamExprVisitor(ast.NodeVisitor):
         return self._invalid_vectors
 
     def visit_Name(self, node):
-        code = astor.to_source(node).strip('\n')
+        code = ast.unparse(node).strip('\n')
         name = code
         desc = self._descs.get(name)
         # If symbol is not recognised, ignore this node.
@@ -262,7 +260,7 @@ class _ParamExprVisitor(ast.NodeVisitor):
         self._symbols[name] = indices
 
     def visit_Subscript(self, node):
-        code = astor.to_source(node).strip('\n')
+        code = ast.unparse(node).strip('\n')
         name, subscript = _split_param_symbol(code)
         desc = self._descs.get(name)
         # If symbol is not recognised,
@@ -559,22 +557,21 @@ def parse_param_exprs(
             f"{str(invalid_exprs_bad_vector)}")
 
     # Build dependency graph of all exploded parameters
-    graph = networkx.DiGraph()
+    graph = graphlib.TopologicalSorter()
     for name, indices, symbols in zip(
             param_names_2, param_indices_2, expr_param_symbols):
         eparams_lhs = explode_pname(name, indices)
         eparams_rhs = explode_pnames(symbols.keys(), symbols.values())
         for pair in itertools.product(eparams_lhs, eparams_rhs):
-            graph.add_edge(pair[0], pair[1])
+            graph.add(pair[1], pair[0])
 
     # Perform topological sorting on the graph
-    # This is a fatal error
     try:
-        sorted_eparams = list(reversed(list(
-            networkx.algorithms.dag.topological_sort(graph))))
-    except networkx.NetworkXUnfeasible:
+        sorted_eparams = list(reversed(list(graph.static_order())))
+    except graphlib.CycleError as e:
         raise RuntimeError(
-            "circular dependencies found between param expressions")
+            f"circular dependencies found between param expressions; "
+            f"have a look at the following cycle: {e.args[1]}") from e
 
     # Using the sorted exploded parameters derive a list of keys
     # The order of keys reflects the expression evaluation order

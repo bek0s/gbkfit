@@ -40,7 +40,7 @@ class FitParams(parseutils.BasicParserSupport, abc.ABC):
 
         self._descs = copy.deepcopy(descs)
         self._infos = vals_nfo
-        exprs = {**vals_nil, **vals_num, **exprs}
+        exprs = vals_nil | vals_num | exprs
         self._exprs = Expressions(descs, exprs, exprs_func)
 
     def descs(self):

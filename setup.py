@@ -69,12 +69,10 @@ setup(
     ],
     packages=find_packages('src'),
     package_dir={'': 'src'},
-    python_requires='>=3.7',
+    python_requires='>=3.9',
     install_requires=[
-        'astor',
         'astropy',
         'matplotlib',
-        'networkx',
         'numpy',
         'pandas',
         'ruamel.yaml',

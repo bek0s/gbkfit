@@ -116,7 +116,7 @@ class FitParamsLMFitLeastSquares(FitParamsLMFit):
                 raise RuntimeError(
                     f"could not parse information for parameter '{key}'; "
                     f"reason: {str(e)}") from e
-        parameters = {**infos, **exprs}
+        parameters = infos | exprs
         expressions = paramutils.load_expressions(opts.get('expressions'))
         return cls(descs, parameters, expressions)
 
@@ -143,7 +143,7 @@ class FitParamsLMFitNelderMead(FitParamsLMFit):
                 raise RuntimeError(
                     f"could not parse information for parameter '{key}'; "
                     f"reason: {str(e)}") from e
-        parameters = {**infos, **exprs}
+        parameters = infos | exprs
         expressions = paramutils.load_expressions(opts.get('expressions'))
         return cls(descs, parameters, expressions)
 

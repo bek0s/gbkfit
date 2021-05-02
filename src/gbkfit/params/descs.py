@@ -93,7 +93,7 @@ def merge_descs(descs1, descs2):
         descs2 = {}
     if set(descs1).intersection(descs2):
         raise RuntimeError()
-    return {**descs1, **descs2}
+    return descs1 | descs2
 
 
 def merge_desc_dicts(descs1, descs2):
@@ -103,7 +103,7 @@ def merge_desc_dicts(descs1, descs2):
         descs2 = {}
     if set(descs1).intersection(descs2):
         raise RuntimeError()
-    return {**descs1, **descs2}
+    return descs1 | descs2
 
 
 parser = parseutils.TypedParser(ParamDesc)

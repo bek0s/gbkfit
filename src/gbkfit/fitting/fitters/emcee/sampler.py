@@ -92,7 +92,7 @@ class FitParamsEmcee(gbkfit.fitting.params.FitParams):
             opts['parameters'], descs)[4:]
         for k, v in infos.items():
             infos[k] = FitParamEmcee.load(v)
-        return cls(descs, {**infos, **exprs})
+        return cls(descs, infos | exprs)
 
     def dump(self):
         pass

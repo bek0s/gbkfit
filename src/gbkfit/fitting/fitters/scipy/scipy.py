@@ -103,7 +103,7 @@ class FitParamsScipyLeastSqr(FitParamsScipy):
         infos, exprs = gbkfit.params.utils.parse_param_info(info, descs)[4:6]
         for k, v in infos.items():
             infos[k] = FitParamScipyLeastSqr.load(v)
-        return cls({**infos, **exprs}, descs)
+        return cls(infos | exprs, descs)
 
     def __init__(self, params, descs):
         super().__init__(params, descs)
@@ -116,7 +116,7 @@ class FitParamsScipyMinimize(FitParamsScipy):
         infos, exprs = gbkfit.params.utils.parse_param_info(info, descs)[4:6]
         for k, v in infos.items():
             infos[k] = FitParamScipyMinimize.load(v)
-        return cls({**infos, **exprs}, descs)
+        return cls(infos | exprs, descs)
 
     def __init__(self, params, descs):
         super().__init__(params, descs)

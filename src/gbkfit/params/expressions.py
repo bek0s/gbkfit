@@ -1,6 +1,5 @@
 
 import ast
-import astor
 import copy
 import inspect
 import numbers
@@ -32,7 +31,7 @@ def _create_exprs_func(descs, exprs):
     source = 'def expressions(params):\n'
     for key, val in exprs.items():
         line_ast = _Transformer(descs).visit(ast.parse(f'{key} = {val}'))
-        line_src = astor.to_source(line_ast).strip('\n')
+        line_src = ast.unparse(line_ast).strip('\n')
         source += f'    {line_src}\n'
     source += '    return params\n'
     try:
