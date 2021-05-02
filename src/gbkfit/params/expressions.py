@@ -26,14 +26,15 @@ class _Transformer(ast.NodeTransformer):
         return node
 
 
-def _create_exprs_func(descs, exprs):
+def _make_exprs_func(descs, exprs):
+    indent = ' ' * 4
     globals_ = dict(np=np)
     source = 'def expressions(params):\n'
     for key, val in exprs.items():
         line_ast = _Transformer(descs).visit(ast.parse(f'{key} = {val}'))
         line_src = ast.unparse(line_ast).strip('\n')
-        source += f'    {line_src}\n'
-    source += '    return params\n'
+        source += f'{indent}{line_src}\n'
+    source += f'{indent}return params\n'
     try:
         codeobj = compile(source, filename='<string>', mode='exec')
         funcobj = types.FunctionType(codeobj.co_consts[0], globals_)
@@ -118,7 +119,7 @@ class Expressions:
         # This is because it is just very hard to implement it robustly
         if exprs and exprs_func:
             func_file = exprs_func.__code__.co_filename
-            func_name = exprs_func.__name__
+            func_name = exprs_func.__qualname__
             func_full = f"{func_file}:{func_name}"
             raise RuntimeError(
                 f"the following expression strings were provided: {exprs}; "
@@ -136,7 +137,7 @@ class Expressions:
         # If expressions are given in the form of strings,
         # generate the expression function
         if exprs:
-            exprs_func_obj, exprs_func_src = _create_exprs_func(descs, exprs)
+            exprs_func_obj, exprs_func_src = _make_exprs_func(descs, exprs)
             exprs_func_gen = True
         # If we are given the expression function directly,
         # try to retrieve, cleanup, and store its source code.
@@ -193,18 +194,15 @@ class Expressions:
         return copy.deepcopy(self._values)
 
     def _check_eparams(self, eparams):
-        missing = set(self._enames_free).difference(eparams)
-        if missing:
+        if missing := set(self._enames_free).difference(eparams):
             raise RuntimeError(
                 f"the following parameters are missing: "
                 f"{utils.order_eparams(self._descs, missing)}")
-        notfree = set(self._enames_notfree).intersection(eparams)
-        if notfree:
+        if notfree := set(self._enames_notfree).intersection(eparams):
             raise RuntimeError(
                 f"the following parameters are not free: "
                 f"{utils.order_eparams(self._descs, notfree)}")
-        unknown = set(eparams).difference(self._enames_all)
-        if unknown:
+        if unknown := set(eparams).difference(self._enames_all):
             raise RuntimeError(
                 f"the following parameters are not recognised: "
                 f"{unknown}")
@@ -219,7 +217,7 @@ class Expressions:
                 self._values[name][index] = val
 
     def _extract_eparams(self, out_eparams):
-        if out_eparams is None:
+        if out_eparams:
             return
         for ename in out_eparams:
             name = self._values_nmapping[ename]
