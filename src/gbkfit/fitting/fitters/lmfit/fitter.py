@@ -22,17 +22,17 @@ def _residual_params(x, parameters):
 
 def _residual_scalar(x, objective, parameters, callback=None):
     params = _residual_params(x, parameters)
-    return objective.residual_scalar(params)
+    residual = objective.residual_scalar(params)
+    print(params)
+    return residual
 
 
 def _residual_vector(x, objective, parameters, callback=None):
     params = _residual_params(x, parameters)
+    residuals = objective.residual_vector(params)
+    residuals = np.nan_to_num(np.concatenate(residuals, casting='safe'))
     print(params)
-    foo = objective.residual_vector(params)
-    #print('len0:', len(foo[0]))
-    bar = np.nan_to_num(foo[0])
-    print(np.nansum(foo))
-    return bar
+    return residuals
 
 
 class FitterLMFit(Fitter, abc.ABC):
@@ -52,14 +52,17 @@ class FitterLMFit(Fitter, abc.ABC):
 
     def _fit_impl(self, objective, parameters):
 
+        # Create lmfit parameters for all free parameters.
+        # We also need to transform the parameter names because
+        # brackets are not supported by lmfit.
         lmfit_params = lmfit.Parameters()
         for pname, pinfo in parameters.infos().items():
             lmfit_params.add(
                 pname.replace('[', '_obracket_').replace(']', '_cbracket_'),
                 pinfo.initial_value(), True, pinfo.minimum(), pinfo.maximum())
-
+        # Setup minimiser-specific options
         options = self._setup_minimizer_options(parameters)
-
+        # Run minimisation
         lmfit_result = lmfit.minimize(
             _residual_vector, args=(objective, parameters), params=lmfit_params,
             method=self._method, iter_cb=self._iter_cb,
@@ -69,13 +72,11 @@ class FitterLMFit(Fitter, abc.ABC):
         #
         solution = dict(mode=list(lmfit_result.params.valuesdict().values()))
 
+        # Extract covariance and std error (if available)
         if hasattr(lmfit_result, 'covar'):
             covar = lmfit_result.covar
-            solution.update(
-                covar=covar,
-                std=list(np.sqrt(np.diag(covar))))
-
-        # Extract extras
+            solution.update(covar=covar, std=list(np.sqrt(np.diag(covar))))
+        # Extract trivial information (if available)
         extra = dict()
         attrs = [
             'success', 'status', 'message', 'nfev',
@@ -83,10 +84,11 @@ class FitterLMFit(Fitter, abc.ABC):
         for attr in attrs:
             if hasattr(lmfit_result, attr):
                 extra[attr] = getattr(lmfit_result, attr)
+        #
+        result = make_fitter_result(
+            objective, parameters, solutions=solution)
 
         print(extra)
-
-        result = make_fitter_result(objective, parameters, solutions=solution)
 
         return result
 
@@ -117,7 +119,8 @@ class FitterLMFitLeastSquares(FitterLMFit):
                 jac='3-point',
                 ftol=ftol, xtol=xtol, gtol=gtol, x_scale=x_scale,
                 loss=loss, f_scale=f_scale, diff_step=diff_step,
-                tr_solver=tr_solver, tr_options=tr_options if tr_options else {},
+                tr_solver=tr_solver,
+                tr_options=tr_options if tr_options else dict(),
                 jac_sparsity=jac_sparsity, verbose=verbose))
 
     def _setup_minimizer_options(self, parameters):

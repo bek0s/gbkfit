@@ -19,6 +19,7 @@ class Problem:
     def fitness(self, x):
         eparams = dict(zip(self._parameters.names(), x))
         params = self._parameters.expressions().evaluate(eparams)
+        print(params)
         return self._objective.residual_scalar(params)
 
     def gradient(self, x):
