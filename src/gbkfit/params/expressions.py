@@ -100,7 +100,7 @@ class Expressions:
         nones_dict = dict(filter(lambda x: is_none(x[1]), values.items()))
         numbs_dict = dict(filter(lambda x: is_numb(x[1]), values.items()))
         # Apply None (tied) and Real (fixed) values
-        # on the (imploded) parameter storage
+        # on the iparams storage
         self._apply_eparams(values)
         # Extract the name and indices of each expression
         expr_names, expr_indices = utils.parse_param_exprs(exprs, descs)[2:4]
@@ -190,11 +190,11 @@ class Expressions:
         # Verify supplied eparams
         if check:
             self._check_eparams(eparams)
-        # Apply supplied eparams to the (imploded) parameter storage
+        # Apply supplied eparams on the iparams
         self._apply_eparams(eparams)
-        # Apply expressions to the (imploded) parameter storage
+        # Apply expressions on the iparams
         self._apply_exprs()
-        # Extract all eparams from the (imploded) parameter storage
+        # Extract all eparams from the iparams
         if out_eparams:
             self._extract_eparams(out_eparams)
         # Return a copy of the params (for safety)
@@ -280,7 +280,7 @@ class Expressions:
                     f"vector parameter of size {lhs_length}; "
                     f"{lhs}: {rhs}")
             result[lhs] = rhs
-        # Copy results to the (imploded) parameter storage
+        # Copy results to the iparams
         for ename in self._enames_tied:
             name = self._eparams_nmapping[ename]
             index = self._eparams_imapping[ename]
