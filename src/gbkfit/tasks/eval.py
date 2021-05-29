@@ -39,6 +39,7 @@ def _prepare_params(info, descs):
     recovery_succeed = []
     for key, val in parameters.items():
         if iterutils.is_mapping(val):
+            val = {k.lstrip('*'): v for k, v in val.items()}
             if 'val' in val:
                 parameters[key] = val['val']
                 recovery_succeed.append(key)
@@ -60,12 +61,20 @@ def eval_(config, perf=None):
 
     #
     # Read configuration file and
-    # perform all necessary validation/patching/preparation
+    # perform all necessary validation/preparation
     #
 
     log.info(f"reading configuration file: '{config}'...")
+
+    try:
+        cfg = yaml.load(open(config))
+    except Exception as e:
+        raise RuntimeError(
+            "error while reading configuration file; "
+            "see preceding exception for additional information") from e
+
     cfg = _detail.prepare_config(
-        yaml.load(open(config)),
+        cfg,
         ('drivers', 'dmodels', 'gmodels', 'params'),
         ('datasets', 'pdescs'))
 
@@ -98,6 +107,7 @@ def eval_(config, perf=None):
 
     log.info("setting up params...")
     cfg['params'] = _prepare_params(cfg['params'], pdescs)
+    #exit()
     params = gbkfit.params.params.EvalParams.load(cfg['params'], pdescs)
 
     #

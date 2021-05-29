@@ -29,16 +29,32 @@ ruamel.yaml.add_representer(dict, lambda self, data: self.represent_mapping(
     'tag:yaml.org,2002:map', data.items()))
 
 
+def _prepare_params(info, descs):
+
+    parameters = info['parameters']
+    keys, values = gbkfit.params.utils.parse_param_keys(parameters, descs)[:2]
+
+    return 1
+
+
 def fit(config):
 
     #
     # Read configuration file and
-    # perform all necessary validation/patching/preparation
+    # perform all necessary validation/preparation
     #
 
     log.info(f"reading configuration file: '{config}'...")
+
+    try:
+        cfg = yaml.load(open(config))
+    except Exception as e:
+        raise RuntimeError(
+            "error while reading configuration file; "
+            "see preceding exception for additional information") from e
+
     cfg = _detail.prepare_config(
-        yaml.load(open(config)),
+        cfg,
         ('drivers', 'datasets', 'dmodels', 'gmodels', 'params', 'fitter'),
         ('objective', 'pdescs'))
 
@@ -75,9 +91,10 @@ def fit(config):
     pdescs = gbkfit.params.descs.merge_descs(objective.pdescs(), pdescs)
 
     log.info("setting up params...")
-    #print('pdescs:', pdescs)
-    #print('config:', cfg['params'])
-    #exit()
+
+    cfg['params'] = _prepare_params(cfg['params'], pdescs)
+
+    exit()
     params = fitter.load_params(cfg['params'], pdescs)
 
     #

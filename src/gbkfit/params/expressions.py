@@ -67,30 +67,31 @@ class Expressions:
 
     def __init__(self, descs, exprs_dict=None, exprs_func=None):
         self._descs = copy.deepcopy(descs)
-        # Prepare a dict of imploded parameters
-        # For scalar parameters we use float values
-        # For vector parameters we use numpy array values
-        # Also create mappings that map the exploded parameter names
+        # Create mapping of imploded parameters (name=>value)
+        # For scalar parameters we use floats
+        # For vector parameters we use numpy arrays
+        # Also create mappings that map exploded parameter names
         # to imploded parameter names and indices
-        self._values = dict()
-        self._values_nmapping = dict()
-        self._values_imapping = dict()
+        self._iparams = dict()
+        self._eparams_nmapping = dict()
+        self._eparams_imapping = dict()
         for name, desc in descs.items():
             if isinstance(desc, ParamScalarDesc):
-                self._values_nmapping[name] = name
-                self._values_imapping[name] = None
-                self._values[name] = np.nan
+                self._iparams[name] = np.nan
+                self._eparams_nmapping[name] = name
+                self._eparams_imapping[name] = None
             elif isinstance(desc, ParamVectorDesc):
-                indices = list(range(desc.size()))
+                size = desc.size()
+                indices = list(range(size))
                 eparams = utils.explode_pname(name, indices)
-                self._values_nmapping.update(zip(eparams, [name] * desc.size()))
-                self._values_imapping.update(zip(eparams, indices))
-                self._values[name] = np.full(desc.size(), np.nan)
+                self._iparams[name] = np.full(desc.size(), np.nan)
+                self._eparams_nmapping.update(zip(eparams, [name] * size))
+                self._eparams_imapping.update(zip(eparams, indices))
             else:
-                raise RuntimeError()
+                assert False
         # Extract pairs with:
         # - Nones (tied parameters)
-        # - Numbers (fixed parameters)
+        # - Reals (fixed parameters)
         # - Expressions (tied parameters)
         def is_none(x): return isinstance(x, type(None))
         def is_numb(x): return isinstance(x, numbers.Real)
@@ -98,9 +99,10 @@ class Expressions:
             exprs_dict, descs, lambda x: is_none(x) or is_numb(x))[4:6]
         nones_dict = dict(filter(lambda x: is_none(x[1]), values.items()))
         numbs_dict = dict(filter(lambda x: is_numb(x[1]), values.items()))
-        # Initialise imploded parameters storage with Nones and Numbers
+        # Apply None (tied) and Real (fixed) values
+        # on the (imploded) parameter storage
         self._apply_eparams(values)
-        # Extract the name and indices for expression pair
+        # Extract the name and indices of each expression
         expr_names, expr_indices = utils.parse_param_exprs(exprs, descs)[2:4]
         # Extract the exploded names for all parameters and create
         # various groups for convenience
@@ -124,13 +126,16 @@ class Expressions:
             raise RuntimeError(
                 f"the following expression strings were provided: {exprs}; "
                 f"the following expression function was provided: {func_full}; "
-                f"these two are mutually exclusive")
+                f"expression strings and expression functions "
+                f"are mutually exclusive")
         # Parameters with value None are considered tied parameters and
-        # their value is expected to change in the supplied function
+        # their value is expected to be defined in the supplied function
         if enames_none and not exprs_func:
             raise RuntimeError(
                 f"the following parameters are set to None: {enames_none}; "
-                f"an expression function must be provided")
+                f"this implies that they are tied parameters and hence "
+                f"they are expected to be defined in an expression function; "
+                f"however, an expression function was not provided")
         exprs_func_obj = None
         exprs_func_src = None
         exprs_func_gen = False
@@ -181,27 +186,29 @@ class Expressions:
                 (p in self._enames_tied * tied) or
                 (p in self._enames_fixed * fixed)]
 
-    def evaluate(self, eparams, out_eparams=None):
-        # Verify all required eparams are provided
-        self._check_eparams(eparams)
-        # Assign supplied eparams
+    def evaluate(self, eparams, check=True, out_eparams=None):
+        # Verify supplied eparams
+        if check:
+            self._check_eparams(eparams)
+        # Apply supplied eparams to the (imploded) parameter storage
         self._apply_eparams(eparams)
-        # Apply expressions
+        # Apply expressions to the (imploded) parameter storage
         self._apply_exprs()
-        # Extract resulting eparams (if requested)
-        self._extract_eparams(out_eparams)
+        # Extract all eparams from the (imploded) parameter storage
+        if out_eparams:
+            self._extract_eparams(out_eparams)
         # Return a copy of the params (for safety)
-        return copy.deepcopy(self._values)
+        return copy.deepcopy(self._iparams)
 
     def _check_eparams(self, eparams):
         if missing := set(self._enames_free).difference(eparams):
             raise RuntimeError(
                 f"the following parameters are missing: "
-                f"{utils.order_eparams(self._descs, missing)}")
+                f"{utils.sort_eparams(self._descs, missing)}")
         if notfree := set(self._enames_notfree).intersection(eparams):
             raise RuntimeError(
                 f"the following parameters are not free: "
-                f"{utils.order_eparams(self._descs, notfree)}")
+                f"{utils.sort_eparams(self._descs, notfree)}")
         if unknown := set(eparams).difference(self._enames_all):
             raise RuntimeError(
                 f"the following parameters are not recognised: "
@@ -209,36 +216,37 @@ class Expressions:
 
     def _apply_eparams(self, eparams):
         for key, val in eparams.items():
-            name = self._values_nmapping[key]
-            index = self._values_imapping[key]
+            name = self._eparams_nmapping[key]
+            index = self._eparams_imapping[key]
             if index is None:
-                self._values[name] = val
+                self._iparams[name] = val
             else:
-                self._values[name][index] = val
+                self._iparams[name][index] = val
 
     def _extract_eparams(self, out_eparams):
-        if out_eparams:
-            return
         for ename in out_eparams:
-            name = self._values_nmapping[ename]
-            index = self._values_imapping[ename]
-            out_eparams[ename] = self._values[name][index] \
-                if index is not None else self._values[name]
+            name = self._eparams_nmapping[ename]
+            index = self._eparams_imapping[ename]
+            out_eparams[ename] = self._iparams[name] \
+                if index is None else self._iparams[name][index]
 
     def _apply_exprs(self):
         if self._exprs_func_obj is None:
             return
-        # Apply the expressions on a copy of the main dict
-        # This will leave the main dict intact in case of error
+        # Apply the expressions on a copy of the param dict
+        # This will leave the original dict intact in case of error
         try:
-            result = copy.deepcopy(self._values)
+            result = copy.deepcopy(self._iparams)
             self._exprs_func_obj(result)
         except Exception as e:
             raise RuntimeError(
                 f"exception thrown while evaluating parameter expressions: "
                 f"{str(e)}") from e
-        # Validate parameter values and copy them to the main dict
+        # Validate resulting values
         for lhs, rhs in result.items():
+            # Ignore unknown parameters
+            # This may occur if the expression function
+            # adds new parameters in the 'result' dict
             if lhs not in self._descs:
                 continue
             desc = self._descs[lhs]
@@ -249,7 +257,9 @@ class Expressions:
             def is_num(x): return isinstance(x, numbers.Real) and np.isfinite(x)
             if any([not is_num(x) for x in np.atleast_1d(rhs)]):
                 raise RuntimeError(
-                    f"invalid value(s) encountered after parameter evaluation; "
+                    f"failed to validate parameter values "
+                    f"after evaluating parameter expressions; "
+                    f"invalid value(s) encountered; "
                     f"{lhs}: {rhs}")
             lhs_length = 1 if lhs_is_scalar else desc.size()
             rhs_length = 1 if rhs_is_scalar else len(rhs)
@@ -257,12 +267,25 @@ class Expressions:
                 rhs = np.full(desc.size(), rhs)
             if lhs_is_scalar and rhs_is_vector:
                 raise RuntimeError(
+                    f"failed to validate parameter values "
+                    f"after evaluating parameter expressions; "
                     f"cannot assign sequence of size {rhs_length} to "
                     f"scalar parameter; "
                     f"{lhs}: {rhs}")
             if lhs_is_vector and rhs_is_vector and lhs_length != rhs_length:
                 raise RuntimeError(
+                    f"failed to validate parameter values "
+                    f"after evaluating parameter expressions; "
                     f"cannot assign sequence of size {rhs_length} to "
                     f"vector parameter of size {lhs_length}; "
                     f"{lhs}: {rhs}")
-            self._values[lhs] = rhs
+            result[lhs] = rhs
+        # Copy results to the (imploded) parameter storage
+        for ename in self._enames_tied:
+            name = self._eparams_nmapping[ename]
+            index = self._eparams_imapping[ename]
+            value = result[name] if index is None else result[name][index]
+            if index is None:
+                self._iparams[name] = value
+            else:
+                self._iparams[name][index] = value

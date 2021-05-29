@@ -50,19 +50,24 @@ _REGEX_PARAM_SYMBOL_NAME = r'[_a-zA-Z]\w*'
 _REGEX_PARAM_SYMBOL_SCALAR = _REGEX_PARAM_SYMBOL_NAME
 
 _REGEX_PARAM_SYMBOL_VECTOR_BINDX = (
-    fr'\s*{_REGEX_PARAM_SYMBOL_NAME}\s*{_REGEX_PARAM_SYMBOL_SUBSCRIPT_BINDX}\s*')
+    fr'\s*{_REGEX_PARAM_SYMBOL_NAME}'
+    fr'\s*{_REGEX_PARAM_SYMBOL_SUBSCRIPT_BINDX}\s*')
 
 _REGEX_PARAM_SYMBOL_VECTOR_SLICE = (
-    fr'\s*{_REGEX_PARAM_SYMBOL_NAME}\s*{_REGEX_PARAM_SYMBOL_SUBSCRIPT_SLICE}\s*')
+    fr'\s*{_REGEX_PARAM_SYMBOL_NAME}'
+    fr'\s*{_REGEX_PARAM_SYMBOL_SUBSCRIPT_SLICE}\s*')
 
 _REGEX_PARAM_SYMBOL_VECTOR_AINDX = (
-    fr'\s*{_REGEX_PARAM_SYMBOL_NAME}\s*{_REGEX_PARAM_SYMBOL_SUBSCRIPT_AINDX}\s*')
+    fr'\s*{_REGEX_PARAM_SYMBOL_NAME}'
+    fr'\s*{_REGEX_PARAM_SYMBOL_SUBSCRIPT_AINDX}\s*')
 
 _REGEX_PARAM_SYMBOL_VECTOR = (
-    fr'\s*{_REGEX_PARAM_SYMBOL_NAME}\s*{_REGEX_PARAM_SYMBOL_SUBSCRIPT}\s*')
+    fr'\s*{_REGEX_PARAM_SYMBOL_NAME}'
+    fr'\s*{_REGEX_PARAM_SYMBOL_SUBSCRIPT}\s*')
 
 _REGEX_PARAM_SYMBOL = (
-    fr'\s*{_REGEX_PARAM_SYMBOL_NAME}\s*{_REGEX_PARAM_SYMBOL_SUBSCRIPT}?\s*')
+    fr'\s*{_REGEX_PARAM_SYMBOL_NAME}'
+    fr'\s*{_REGEX_PARAM_SYMBOL_SUBSCRIPT}?\s*')
 
 _REGEX_PARAM_ATTRIB_NAME = r'\*?[_a-zA-Z]'
 
@@ -147,6 +152,7 @@ def _parse_param_symbol_subscript_aindx(x):
 
 
 def _parse_param_symbol_subscript(x, size):
+    indices = None
     if _is_param_symbol_subscript_bindx(x):
         indices = _parse_param_symbol_subscript_bindx(x)
     elif _is_param_symbol_subscript_slice(x):
@@ -154,7 +160,7 @@ def _parse_param_symbol_subscript(x, size):
     elif _is_param_symbol_subscript_aindx(x):
         indices = _parse_param_symbol_subscript_aindx(x)
     else:
-        raise RuntimeError()
+        assert False
     return indices
 
 
@@ -170,27 +176,27 @@ def _unwrap_param_indices(indices, size):
     return [i + size if i < 0 else i for i in indices]
 
 
-def make_param_symbol_subscript_bindx(index):
+def _make_param_symbol_subscript_bindx(index):
     return f'[{index}]'
 
 
-def make_param_symbol_subscript_slice(start='', stop='', step=''):
+def _make_param_symbol_subscript_slice(start='', stop='', step=''):
     return f'[{start}:{stop}:{step}]'
 
 
-def make_param_symbol_subscript_aindx(indices):
+def _make_param_symbol_subscript_aindx(indices):
     return f'[{", ".join(indices)}]'
 
 
-def make_param_symbol(name, index):
+def _make_param_symbol(name, index):
     return name if index is None \
-        else f'{name}{make_param_symbol_subscript_bindx(index)}'
+        else f'{name}{_make_param_symbol_subscript_bindx(index)}'
 
 
 def explode_pname(name, indices):
     eparams = []
     for index in iterutils.listify(indices):
-        eparams.append(make_param_symbol(name, index))
+        eparams.append(_make_param_symbol(name, index))
     return eparams
 
 
@@ -205,7 +211,7 @@ def explode_pdesc(desc, name=None):
     enames = []
     name = name if name else desc.name()
     if isinstance(desc, ParamScalarDesc):
-        enames.append(explode_pname(name, None)[0])
+        enames.extend(explode_pname(name, None))
     elif isinstance(desc, ParamVectorDesc):
         enames.extend(explode_pname(name, list(range(desc.size()))))
     return enames
@@ -226,7 +232,9 @@ def is_param_value_expr(x, accept_num=True, accept_vec=True):
     is_num = isinstance(x, ntypes)
     is_vec = isinstance(x, vtypes) and all(isinstance(n, ntypes) for n in x)
     is_none = x is None
-    return is_str or (accept_num and is_num) or (accept_vec and is_vec) or is_none
+    return (is_none or is_str
+            or (accept_num and is_num)
+            or (accept_vec and is_vec))
 
 
 class _ParamExprVisitor(ast.NodeVisitor):
@@ -365,7 +373,7 @@ def parse_param_keys(
             indices = _unwrap_param_indices(indices, size)
             # Explode vector
             for i in indices:
-                eparams_to_keys[make_param_symbol(name, i)].append(rkey)
+                eparams_to_keys[_make_param_symbol(name, i)].append(rkey)
             # We differentiate basic indexing from slicing or advanced
             # indexing by using an integer instead of a list of integers
             if _is_param_symbol_subscript_bindx(subscript):
@@ -893,6 +901,6 @@ def dump_iconstraints(func, file='gbkfit_config_iconstraints.py'):
     return _dump_function(func, file) if func else None
 
 
-def order_eparams(descs, enames):
+def sort_eparams(descs, enames):
     enames_all = explode_pdescs(descs.values(), descs.keys())
     return [ename for ename in enames_all if ename in enames]
