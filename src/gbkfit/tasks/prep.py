@@ -87,7 +87,7 @@ def _make_mask_clip_max(data, max_value):
 
 
 def _make_mask_clip_sig(data, sigma, maxiters):
-    return ~stats.sigma_clip(data, sigma=sigma, maxiters=maxiters).mask
+    return stats.sigma_clip(data, sigma=sigma, maxiters=maxiters).mask
 
 
 def _make_mask_clip_ccl(data, lcount, pcount, lratio):
