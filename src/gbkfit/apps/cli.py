@@ -139,6 +139,12 @@ def main():
         '--minify', action='store_true',
         help='crop the edges of the input data until valid pixels are found')
     # ...
+    parser_prep_zpad = argparse.ArgumentParser(add_help=False)
+    parser_prep_zpad.add_argument(
+        '--zpad', type=int,
+        metavar='SIZE',
+        help='zero-pad the resulting data by SIZE')
+    # ...
     parser_prep_input_1 = argparse.ArgumentParser(add_help=False)
     parser_prep_input_1.add_argument(
         '--data-d', type=str, required=True,
@@ -255,12 +261,12 @@ def main():
     parsers_prep.add_parser('image', parents=[
         parser_prep_input_1,
         parser_prep_roi_spat_2d,
-        parser_prep_clip_1, parser_prep_ccl,
+        parser_prep_clip_1, parser_prep_ccl, parser_prep_zpad,
         parser_prep_common, parser_common])
     parsers_prep.add_parser('lslit', parents=[
         parser_prep_input_1,
         parser_prep_roi_spat_1d, parser_prep_roi_spec_1d,
-        parser_prep_clip_1, parser_prep_ccl,
+        parser_prep_clip_1, parser_prep_ccl, parser_prep_zpad,
         parser_prep_common, parser_common])
     parsers_prep.add_parser('mmaps', parents=[
         parser_prep_orders,
@@ -271,7 +277,7 @@ def main():
     parsers_prep.add_parser('scube', parents=[
         parser_prep_input_1,
         parser_prep_roi_spat_2d, parser_prep_roi_spec_1d,
-        parser_prep_clip_1, parser_prep_ccl,
+        parser_prep_clip_1, parser_prep_ccl, parser_prep_zpad,
         parser_prep_common, parser_common])
 
     #
@@ -313,25 +319,29 @@ def main():
                 args.data, args.data_e, args.data_m,
                 args.roi_spat, args.clip_min, args.clip_max,
                 args.ccl_lcount, args.ccl_pcount, args.ccl_lratio,
-                args.sclip_sigma, args.sclip_iters, args.minify, args.dtype)
+                args.sclip_sigma, args.sclip_iters,
+                args.minify, args.zpad, args.dtype)
         elif args.prep_task == 'lslit':
             gbkfit.tasks.prep.prep_lslit(
                 args.data, args.data_e, args.data_m,
                 args.roi_spat, args.roi_spec, args.clip_min, args.clip_max,
                 args.ccl_lcount, args.ccl_pcount, args.ccl_lratio,
-                args.sclip_sigma, args.sclip_iters, args.minify, args.dtype)
+                args.sclip_sigma, args.sclip_iters,
+                args.minify, args.zpad, args.dtype)
         elif args.prep_task == 'mmaps':
             gbkfit.tasks.prep.prep_mmaps(
                 args.orders, args.data_d, args.data_e, args.data_m,
                 args.roi_spat, args.clip_min, args.clip_max,
                 args.ccl_lcount, args.ccl_pcount, args.ccl_lratio,
-                args.sclip_sigma, args.sclip_iters, args.minify, args.dtype)
+                args.sclip_sigma, args.sclip_iters,
+                args.minify, args.dtype)
         elif args.prep_task == 'scube':
             gbkfit.tasks.prep.prep_scube(
                 args.data, args.data_e, args.data_m,
                 args.roi_spat, args.roi_spec, args.clip_min, args.clip_max,
                 args.ccl_lcount, args.ccl_pcount, args.ccl_lratio,
-                args.sclip_sigma, args.sclip_iters, args.minify, args.dtype)
+                args.sclip_sigma, args.sclip_iters,
+                args.minify, args.zpad, args.dtype)
 
     elif args.task == 'fit':
         import gbkfit.tasks.fit

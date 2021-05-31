@@ -128,7 +128,7 @@ def _minify_data(data_d, data_e, data_m, mask):
 def prep_image(
         file_d, file_e, file_m,
         roi_spat, clip_min, clip_max, ccl_lcount, ccl_pcount, ccl_lratio,
-        sclip_sigma, sclip_iters, minify, dtype):
+        sclip_sigma, sclip_iters, minify, zpad, dtype):
 
     (data_d, header_d,
      data_e, header_e,
@@ -174,7 +174,7 @@ def prep_lslit(
         file_d, file_e, file_m,
         roi_spat, roi_spec, clip_min, clip_max,
         ccl_lcount, ccl_pcount, ccl_lratio,
-        sclip_sigma, sclip_iters, minify, dtype):
+        sclip_sigma, sclip_iters, minify, zpad, dtype):
 
     (data_d, header_d,
      data_e, header_e,
@@ -282,7 +282,7 @@ def prep_scube(
         file_d, file_e, file_m,
         roi_spat, roi_spec, clip_min, clip_max,
         ccl_lcount, ccl_pcount, ccl_lratio,
-        sclip_sigma, sclip_iters, minify, dtype):
+        sclip_sigma, sclip_iters, minify, zpad, dtype):
 
     (data_d, header_d,
      data_e, header_e,
