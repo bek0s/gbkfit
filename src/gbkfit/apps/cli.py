@@ -1,7 +1,6 @@
 
 import argparse
 import logging.config
-import os
 
 
 logging.config.dictConfig({
@@ -37,43 +36,46 @@ logging.config.dictConfig({
     }
 })
 
-log = logging.getLogger(__name__)
+_log = logging.getLogger(__name__)
 
 
-class _CheckDataCount(argparse.Action):
+class _CheckMomentCount(argparse.Action):
     def __call__(self, parser, namespace, values, option_string=None):
-        if len(namespace.data) != len(values):
+        if namespace.orders and len(namespace.orders) != len(values):
             parser.error(
-                f"Argument '{option_string}' must have the same length with "
-                f"argument 'data'")
+                f"the length of argument {option_string} must be equal to "
+                f"the number of the specified moment orders")
+        setattr(namespace, self.dest, values)
 
 
-def number_range(type_, min_, max_):
+def _number_range(type_, min_, max_):
 
     if min_ is not None:
         assert isinstance(min_, type_)
     if max_ is not None:
         assert isinstance(max_, type_)
 
-    def number_range_checker(arg):
+    def _number_range_checker(arg):
         try:
             num = type_(arg)
         except ValueError:
             raise argparse.ArgumentTypeError(
                 f"must be of type {type_.__name__}")
-        if min_ is not None and max_ is None:
-            if num < min_:
-                raise argparse.ArgumentTypeError(f"must be larger than {min_}")
-        if max_ is not None and min_ is None:
-            if num > max_:
-                raise argparse.ArgumentTypeError(f"must be smaller than {max_}")
         if min_ is not None and max_ is not None:
             if num < min_ or num > max_:
                 raise argparse.ArgumentTypeError(
                     f"must be in range [{min_}, {max_}]")
+        elif min_ is not None and max_ is None:
+            if num < min_:
+                raise argparse.ArgumentTypeError(
+                    f"must be larger than {min_}")
+        elif max_ is not None and min_ is None:
+            if num > max_:
+                raise argparse.ArgumentTypeError(
+                    f"must be smaller than {max_}")
         return num
 
-    return number_range_checker
+    return _number_range_checker
 
 
 def main():
@@ -85,8 +87,11 @@ def main():
     parsers_task = parser.add_subparsers(dest='task')
     parsers_task.required = True
 
+    #
+    # Define common arguments across all tasks
+    #
+
     parser_common = argparse.ArgumentParser(add_help=False)
-    parser_common.add_argument('--workdir', type=str, default='.')
 
     #
     # Create parser for eval task
@@ -94,14 +99,37 @@ def main():
 
     parser_eval = parsers_task.add_parser('eval', parents=[parser_common])
     parser_eval.add_argument(
-        'config', type=str)
+        'config', type=str,
+        help='configuration file path; json and yaml formats are supported')
     parser_eval.add_argument(
-        '--perf', type=int, default=0, help='')
+        '--prof', type=int, default=0,
+        metavar='ITERS',
+        help='if ITERS=0, profiling mode is disabled; '
+             'if ITERS>0, profiling mode is enabled; '
+             'when in profiling mode, the software will evaluate the model '
+             'ITERS times and provide performance evaluation statistics')
 
     #
     # Create parser for prep task
     #
 
+    _DATA_D_HELP = "input data (measurements)"
+    _DATA_E_HELP = "input data (uncertainties)"
+    _DATA_M_HELP = "input data (mask)"
+    _CLIP_MIN_HELP = """
+            minimum clip threshold value; 
+            all values below MIN will be set to nan
+            """
+    _CLIP_MAX_HELP = """
+            maximum clip threshold value; 
+            all values above MAX will be set to nan
+            """
+    _SCLIP_SIGMA_HELP = """
+            the number of standard deviations to use for sigma-clipping
+            """
+    _SCLIP_ITERS_HELP = """
+            the maximum number of sigma-clipping iterations to perform
+            """
     # ...
     parser_prep_common = argparse.ArgumentParser(add_help=False)
     parser_prep_common.add_argument(
@@ -113,93 +141,113 @@ def main():
     # ...
     parser_prep_input_1 = argparse.ArgumentParser(add_help=False)
     parser_prep_input_1.add_argument(
-        'data', type=str,
-        help="input data (measurements)")
+        '--data-d', type=str, required=True,
+        metavar='DATA',
+        help=_DATA_D_HELP)
     parser_prep_input_1.add_argument(
         '--data-e', type=str,
         metavar='ERRORS',
-        help='input data (uncertainties)')
+        help=_DATA_E_HELP)
     parser_prep_input_1.add_argument(
         '--data-m', type=str,
         metavar='MASK',
-        help='input data (mask)')
+        help=_DATA_M_HELP)
+    # ...
+    parser_prep_orders = argparse.ArgumentParser(add_help=False)
+    parser_prep_orders.add_argument(
+        'orders', nargs='+', type=int,
+        help='the orders of the provided moment map data')
     # ...
     parser_prep_input_n = argparse.ArgumentParser(add_help=False)
     parser_prep_input_n.add_argument(
-        'data', nargs='+', type=str,
-        help="input data (measurements)")
+        '--data-d', nargs='+', type=str, required=True,
+        action=_CheckMomentCount,
+        metavar='DATA',
+        help=_DATA_D_HELP)
     parser_prep_input_n.add_argument(
-        '--data-e', nargs='+', type=str, action=_CheckDataCount,
-        help='input data (uncertainties)')
+        '--data-e', nargs='+', type=str,
+        action=_CheckMomentCount,
+        metavar='ERRORS',
+        help=_DATA_E_HELP)
     parser_prep_input_n.add_argument(
-        '--data-m', nargs='+', type=str, action=_CheckDataCount,
-        help='input data (mask)')
+        '--data-m', nargs='+', type=str,
+        action=_CheckMomentCount,
+        metavar='MASK',
+        help=_DATA_M_HELP)
     # ...
     parser_prep_roi_spat_1d = argparse.ArgumentParser(add_help=False)
     parser_prep_roi_spat_1d.add_argument(
         '--roi-spat', nargs=2, type=int,
         metavar=('MIN', 'MAX'),
-        help='region of interest (spatial)')
+        help='crop input data around a region of interest (spatial)')
     # ...
     parser_prep_roi_spat_2d = argparse.ArgumentParser(add_help=False)
     parser_prep_roi_spat_2d.add_argument(
         '--roi-spat', nargs=4, type=int,
         metavar=('L', 'R', 'B', 'T'),
-        help='region of interest (spatial)')
+        help='crop input data around a region of interest (spatial); '
+             'L: Left, R: Right, B: Bottom, T: Top')
     # ...
     parser_prep_roi_spec_1d = argparse.ArgumentParser(add_help=False)
     parser_prep_roi_spec_1d.add_argument(
         '--roi-spec', nargs=2, type=int,
         metavar=('MIN', 'MAX'),
-        help='region of interest (spectral)')
+        help='crop input data around a region of interest (spectral)')
     # ...
     parser_prep_clip_1 = argparse.ArgumentParser(add_help=False)
     parser_prep_clip_1.add_argument(
         '--clip-min', nargs=1, type=float,
         metavar='MIN',
-        help='minimum clip threshold value; '
-             'all values below this threshold will be set to nan')
+        help=_CLIP_MIN_HELP)
     parser_prep_clip_1.add_argument(
         '--clip-max', nargs=1, type=float,
         metavar='MAX',
-        help='maximum clip threshold value; '
-             'all values above this threshold will be set to nan')
+        help=_CLIP_MAX_HELP)
     parser_prep_clip_1.add_argument(
         '--sclip-sigma', type=float,
         metavar='SIGMA',
-        help='the number of standard deviations to use for clipping')
+        help=_SCLIP_SIGMA_HELP)
     parser_prep_clip_1.add_argument(
         '--sclip-iters', type=int, default=5,
         metavar='ITERS',
-        help='the maximum number of sigma-clipping iterations to perform')
+        help=_SCLIP_ITERS_HELP)
     # ...
     parser_prep_clip_n = argparse.ArgumentParser(add_help=False)
     parser_prep_clip_n.add_argument(
-        '--clip-min', nargs='+', type=float, action=_CheckDataCount,
-        help='')
+        '--clip-min', nargs='+', type=float,
+        action=_CheckMomentCount,
+        metavar='MIN',
+        help=_CLIP_MIN_HELP)
     parser_prep_clip_n.add_argument(
-        '--clip-max', nargs='+', type=float, action=_CheckDataCount,
-        help='')
+        '--clip-max', nargs='+', type=float,
+        action=_CheckMomentCount,
+        metavar='MAX',
+        help=_CLIP_MAX_HELP)
     parser_prep_clip_n.add_argument(
-        '--sclip-sigma', nargs='+', type=float, action=_CheckDataCount,
-        help='')
+        '--sclip-sigma', nargs='+', type=float,
+        action=_CheckMomentCount,
+        metavar='SIGMA',
+        help=_SCLIP_SIGMA_HELP)
     parser_prep_clip_n.add_argument(
-        '--sclip-iters', nargs='+', type=int, default=1, action=_CheckDataCount,
-        help='')
+        '--sclip-iters', nargs='+', type=int, default=1,
+        action=_CheckMomentCount,
+        metavar='ITERS',
+        help=_SCLIP_ITERS_HELP)
     # ...
     parser_prep_ccl = argparse.ArgumentParser(add_help=False)
     parser_prep_ccl.add_argument(
-        '--ccl-lcount', type=number_range(int, 1, None),
+        '--ccl-lcount', type=_number_range(int, 1, None),
         metavar='COUNT',
         help='connected component labeling; maximum number of labels')
     parser_prep_ccl.add_argument(
-        '--ccl-pcount', type=number_range(int, 1, None),
+        '--ccl-pcount', type=_number_range(int, 1, None),
         metavar='COUNT',
         help='connected component labeling; minimum area per label')
     parser_prep_ccl.add_argument(
-        '--ccl-lratio', type=number_range(float, 0.0, 1.0),
+        '--ccl-lratio', type=_number_range(float, 0.0, 1.0),
         metavar='RATIO',
-        help='connected component labeling; minimum area ratio per label')
+        help='connected component labeling; minimum area ratio per label; '
+             'RATIO = (label area) / (largest label area)')
     # ...
     parser_prep = parsers_task.add_parser('prep')
     parsers_prep = parser_prep.add_subparsers(dest='prep_task')
@@ -215,6 +263,7 @@ def main():
         parser_prep_clip_1, parser_prep_ccl,
         parser_prep_common, parser_common])
     parsers_prep.add_parser('mmaps', parents=[
+        parser_prep_orders,
         parser_prep_input_n,
         parser_prep_roi_spat_2d,
         parser_prep_clip_n, parser_prep_ccl,
@@ -230,26 +279,32 @@ def main():
     #
 
     parser_fit = parsers_task.add_parser('fit', parents=[parser_common])
-    parser_fit.add_argument('config', type=str)
+    parser_fit.add_argument(
+        'config', type=str,
+        help='configuration file path; json and yaml formats are supported')
 
     #
     # Create parser for plot task
     #
 
     parser_plot = parsers_task.add_parser('plot', parents=[parser_common])
-    parser_plot.add_argument('result', type=str)
-    parser_plot.add_argument('--show', action='store_true')
-    parser_plot.add_argument('--params', nargs='+', type=str)
+    parser_plot.add_argument(
+        'result', type=str,
+        help='path of the output directory of a fitting run')
+    parser_plot.add_argument(
+        '--params', nargs='+', type=str,
+        help='only plot results for the parameters in the PARAMS list')
+
+    #
+    # Parse arguments and run the appropriate task
+    #
 
     args = parser.parse_args()
-
-    if not os.path.exists(args.workdir):
-        os.makedirs(args.workdir)
-    os.chdir(args.workdir)
+    # _log.debug(f"CLI was called with the following arguments: {vars(args)}")
 
     if args.task == 'eval':
         import gbkfit.tasks.eval
-        gbkfit.tasks.eval.eval_(args.config, args.perf)
+        gbkfit.tasks.eval.eval_(args.config, args.prof)
 
     elif args.task == 'prep':
         import gbkfit.tasks.prep
@@ -267,7 +322,7 @@ def main():
                 args.sclip_sigma, args.sclip_iters, args.minify, args.dtype)
         elif args.prep_task == 'mmaps':
             gbkfit.tasks.prep.prep_mmaps(
-                args.data, args.data_e, args.data_m,
+                args.orders, args.data_d, args.data_e, args.data_m,
                 args.roi_spat, args.clip_min, args.clip_max,
                 args.ccl_lcount, args.ccl_pcount, args.ccl_lratio,
                 args.sclip_sigma, args.sclip_iters, args.minify, args.dtype)
@@ -284,9 +339,9 @@ def main():
 
     elif args.task == 'plot':
         import gbkfit.tasks.plot
-        gbkfit.tasks.plot.plot(args.result, args.show)
+        gbkfit.tasks.plot.plot(args.result)
 
-    print("So long and thanks for all the fish!")
+    _log.info("So long and thanks for all the fish!")
 
 
 if __name__ == '__main__':

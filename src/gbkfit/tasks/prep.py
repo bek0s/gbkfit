@@ -134,6 +134,7 @@ def prep_image(
      data_e, header_e,
      data_m, header_m) = _read_data(file_d, file_e, file_m)
 
+    # Crop data around the ROI
     if roi_spat is not None:
         xrange = roi_spat[0:2]
         yrange = roi_spat[2:4]
@@ -142,8 +143,10 @@ def prep_image(
         data_d, data_e, data_m = _crop_data(
             data_d, data_e, data_m, 1, yrange)
 
+    # ...
     mask = _make_mask(data_d, data_e, data_m)
 
+    #
     if clip_min is not None:
         mask *= _make_mask_clip_min(data_d, clip_min)
     if clip_max is not None:
@@ -212,7 +215,7 @@ def prep_lslit(
 
 
 def prep_mmaps(
-        file_d, file_e, file_m,
+        orders, file_d, file_e, file_m,
         roi_spat, clip_min, clip_max, ccl_lcount, ccl_pcount, ccl_lratio,
         sclip_sigma, sclip_iters, minify, dtype):
 

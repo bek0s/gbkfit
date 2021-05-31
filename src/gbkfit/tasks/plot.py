@@ -1,3 +1,3 @@
 
-def plot(result, show):
+def plot(result):
     pass
