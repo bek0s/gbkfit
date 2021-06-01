@@ -139,9 +139,9 @@ def prep_image(
         xrange = roi_spat[0:2]
         yrange = roi_spat[2:4]
         data_d, data_e, data_m = _crop_data(
-            data_d, data_e, data_m, 2, xrange)
+            data_d, data_e, data_m, 1, xrange)
         data_d, data_e, data_m = _crop_data(
-            data_d, data_e, data_m, 1, yrange)
+            data_d, data_e, data_m, 0, yrange)
 
     # ...
     mask = _make_mask(data_d, data_e, data_m)

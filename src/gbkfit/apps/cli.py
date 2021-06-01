@@ -39,13 +39,43 @@ logging.config.dictConfig({
 _log = logging.getLogger(__name__)
 
 
-class _CheckMomentCount(argparse.Action):
-    def __call__(self, parser, namespace, values, option_string=None):
-        if namespace.orders and len(namespace.orders) != len(values):
-            parser.error(
-                f"the length of argument {option_string} must be equal to "
-                f"the number of the specified moment orders")
-        setattr(namespace, self.dest, values)
+def _validate_moment_count(parser, namespace, values, option_string):
+    if namespace.orders and len(namespace.orders) != len(values):
+        parser.error(
+            f"argument {option_string}: invalid length; "
+            f"must be equal to the number of the specified moment orders")
+
+
+def _validate_range_1d(parser, namespace, values, option_string):
+    min_, max_ = values
+    if min_ >= max_:
+        parser.error(
+            f"argument {option_string}: invalid range; "
+            f"[MIN: {min_}, MAX: {max_}]; "
+            f"Maximum (MAX) must be greater or equal to Minimum (MIN)")
+
+
+def _validate_range_2d(parser, namespace, values, option_string):
+    left, right, bottom, top = values
+    if left >= right:
+        parser.error(
+            f"argument {option_string}: invalid range; "
+            f"[L: {left}, R: {right}]; "
+            f"Right (R) must be greater or equal to Left (L)")
+    if bottom >= top:
+        parser.error(
+            f"argument {option_string}: invalid range; "
+            f"[B: {bottom}, T: {top}]; "
+            f"Top (T) must be greater or equal to Bottom (B)")
+
+
+def _create_validator(validators):
+    class Validator(argparse.Action):
+        def __call__(self, parser, namespace, values, option_string=None):
+            for validator in validators:
+                validator(parser, namespace, values, option_string)
+            setattr(namespace, self.dest, values)
+    return Validator
 
 
 def _number_range(type_, min_, max_):
@@ -68,11 +98,11 @@ def _number_range(type_, min_, max_):
         elif min_ is not None and max_ is None:
             if num < min_:
                 raise argparse.ArgumentTypeError(
-                    f"must be larger than {min_}")
+                    f"must be greater or equal to {min_}")
         elif max_ is not None and min_ is None:
             if num > max_:
                 raise argparse.ArgumentTypeError(
-                    f"must be smaller than {max_}")
+                    f"must be less or equal to {max_}")
         return num
 
     return _number_range_checker
@@ -102,7 +132,7 @@ def main():
         'config', type=str,
         help='configuration file path; json and yaml formats are supported')
     parser_eval.add_argument(
-        '--prof', type=int, default=0,
+        '--prof', type=_number_range(int, 0, None), default=0,
         metavar='ITERS',
         help='if ITERS=0, profiling mode is disabled; '
              'if ITERS>0, profiling mode is enabled; '
@@ -133,7 +163,7 @@ def main():
     # ...
     parser_prep_common = argparse.ArgumentParser(add_help=False)
     parser_prep_common.add_argument(
-        '--dtype', type=str, default='float32',
+        '--dtype', type=str, default='float32', choices=['float32', 'float64'],
         help='data type of the output')
     parser_prep_common.add_argument(
         '--minify', action='store_true',
@@ -141,9 +171,14 @@ def main():
     # ...
     parser_prep_zpad = argparse.ArgumentParser(add_help=False)
     parser_prep_zpad.add_argument(
-        '--zpad', type=int,
+        '--zpad', type=_number_range(int, 0, None),
         metavar='SIZE',
         help='zero-pad the resulting data by SIZE')
+    # ...
+    parser_prep_orders = argparse.ArgumentParser(add_help=False)
+    parser_prep_orders.add_argument(
+        'orders', type=_number_range(int, 0, 7), nargs='+',
+        help='the orders of the provided moment map data')
     # ...
     parser_prep_input_1 = argparse.ArgumentParser(add_help=False)
     parser_prep_input_1.add_argument(
@@ -159,84 +194,82 @@ def main():
         metavar='MASK',
         help=_DATA_M_HELP)
     # ...
-    parser_prep_orders = argparse.ArgumentParser(add_help=False)
-    parser_prep_orders.add_argument(
-        'orders', nargs='+', type=int,
-        help='the orders of the provided moment map data')
-    # ...
     parser_prep_input_n = argparse.ArgumentParser(add_help=False)
     parser_prep_input_n.add_argument(
-        '--data-d', nargs='+', type=str, required=True,
-        action=_CheckMomentCount,
+        '--data-d', type=str, nargs='+', required=True,
+        action=_create_validator([_validate_moment_count]),
         metavar='DATA',
         help=_DATA_D_HELP)
     parser_prep_input_n.add_argument(
-        '--data-e', nargs='+', type=str,
-        action=_CheckMomentCount,
+        '--data-e', type=str, nargs='+',
+        action=_create_validator([_validate_moment_count]),
         metavar='ERRORS',
         help=_DATA_E_HELP)
     parser_prep_input_n.add_argument(
-        '--data-m', nargs='+', type=str,
-        action=_CheckMomentCount,
+        '--data-m', type=str, nargs='+',
+        action=_create_validator([_validate_moment_count]),
         metavar='MASK',
         help=_DATA_M_HELP)
     # ...
     parser_prep_roi_spat_1d = argparse.ArgumentParser(add_help=False)
     parser_prep_roi_spat_1d.add_argument(
-        '--roi-spat', nargs=2, type=int,
+        '--roi-spat', type=_number_range(int, 0, None), nargs=2,
+        action=_create_validator([_validate_range_1d]),
         metavar=('MIN', 'MAX'),
         help='crop input data around a region of interest (spatial)')
     # ...
     parser_prep_roi_spat_2d = argparse.ArgumentParser(add_help=False)
     parser_prep_roi_spat_2d.add_argument(
-        '--roi-spat', nargs=4, type=int,
+        '--roi-spat', type=_number_range(int, 0, None), nargs=4,
+        action=_create_validator([_validate_range_2d]),
         metavar=('L', 'R', 'B', 'T'),
         help='crop input data around a region of interest (spatial); '
              'L: Left, R: Right, B: Bottom, T: Top')
     # ...
     parser_prep_roi_spec_1d = argparse.ArgumentParser(add_help=False)
     parser_prep_roi_spec_1d.add_argument(
-        '--roi-spec', nargs=2, type=int,
+        '--roi-spec', type=_number_range(int, 0, None), nargs=2,
+        action=_create_validator([_validate_range_1d]),
         metavar=('MIN', 'MAX'),
         help='crop input data around a region of interest (spectral)')
     # ...
     parser_prep_clip_1 = argparse.ArgumentParser(add_help=False)
     parser_prep_clip_1.add_argument(
-        '--clip-min', nargs=1, type=float,
+        '--clip-min', type=float, nargs=1,
         metavar='MIN',
         help=_CLIP_MIN_HELP)
     parser_prep_clip_1.add_argument(
-        '--clip-max', nargs=1, type=float,
+        '--clip-max', type=float, nargs=1,
         metavar='MAX',
         help=_CLIP_MAX_HELP)
     parser_prep_clip_1.add_argument(
-        '--sclip-sigma', type=float,
+        '--sclip-sigma', type=_number_range(float, 0.0, None),
         metavar='SIGMA',
         help=_SCLIP_SIGMA_HELP)
     parser_prep_clip_1.add_argument(
-        '--sclip-iters', type=int, default=5,
+        '--sclip-iters', type=_number_range(int, 1, None), default=5,
         metavar='ITERS',
         help=_SCLIP_ITERS_HELP)
     # ...
     parser_prep_clip_n = argparse.ArgumentParser(add_help=False)
     parser_prep_clip_n.add_argument(
-        '--clip-min', nargs='+', type=float,
-        action=_CheckMomentCount,
+        '--clip-min', type=float, nargs='+',
+        action=_create_validator([_validate_moment_count]),
         metavar='MIN',
         help=_CLIP_MIN_HELP)
     parser_prep_clip_n.add_argument(
-        '--clip-max', nargs='+', type=float,
-        action=_CheckMomentCount,
+        '--clip-max', type=float, nargs='+',
+        action=_create_validator([_validate_moment_count]),
         metavar='MAX',
         help=_CLIP_MAX_HELP)
     parser_prep_clip_n.add_argument(
-        '--sclip-sigma', nargs='+', type=float,
-        action=_CheckMomentCount,
+        '--sclip-sigma', type=_number_range(float, 0.0, None), nargs='+',
+        action=_create_validator([_validate_moment_count]),
         metavar='SIGMA',
         help=_SCLIP_SIGMA_HELP)
     parser_prep_clip_n.add_argument(
-        '--sclip-iters', nargs='+', type=int, default=1,
-        action=_CheckMomentCount,
+        '--sclip-iters', type=_number_range(int, 1, None), nargs='+', default=5,
+        action=_create_validator([_validate_moment_count]),
         metavar='ITERS',
         help=_SCLIP_ITERS_HELP)
     # ...
@@ -316,14 +349,14 @@ def main():
         import gbkfit.tasks.prep
         if args.prep_task == 'image':
             gbkfit.tasks.prep.prep_image(
-                args.data, args.data_e, args.data_m,
+                args.data_d, args.data_e, args.data_m,
                 args.roi_spat, args.clip_min, args.clip_max,
                 args.ccl_lcount, args.ccl_pcount, args.ccl_lratio,
                 args.sclip_sigma, args.sclip_iters,
                 args.minify, args.zpad, args.dtype)
         elif args.prep_task == 'lslit':
             gbkfit.tasks.prep.prep_lslit(
-                args.data, args.data_e, args.data_m,
+                args.data_d, args.data_e, args.data_m,
                 args.roi_spat, args.roi_spec, args.clip_min, args.clip_max,
                 args.ccl_lcount, args.ccl_pcount, args.ccl_lratio,
                 args.sclip_sigma, args.sclip_iters,
@@ -337,7 +370,7 @@ def main():
                 args.minify, args.dtype)
         elif args.prep_task == 'scube':
             gbkfit.tasks.prep.prep_scube(
-                args.data, args.data_e, args.data_m,
+                args.data_d, args.data_e, args.data_m,
                 args.roi_spat, args.roi_spec, args.clip_min, args.clip_max,
                 args.ccl_lcount, args.ccl_pcount, args.ccl_lratio,
                 args.sclip_sigma, args.sclip_iters,
