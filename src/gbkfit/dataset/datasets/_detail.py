@@ -8,18 +8,13 @@ def load_dataset_common(cls, info, names):
     opts = parseutils.parse_options_for_callable(
         info, desc, cls.__init__,
         add_optional=['step', 'rpix', 'rval', 'rota'])
+    step = opts.pop('step', None)
+    rpix = opts.pop('rpix', None)
+    rval = opts.pop('rval', None)
+    rota = opts.pop('rota', None)
     for name in names:
         if name in opts:
-            opts[name] = data_parser.load(
-                opts[name],
-                opts.get('step'),
-                opts.get('rpix'),
-                opts.get('rval'),
-                opts.get('rota'))
-    opts.pop('step', None)
-    opts.pop('rpix', None)
-    opts.pop('rval', None)
-    opts.pop('rota', None)
+            opts[name] = data_parser.load(opts[name], step, rpix, rval, rota)
     return opts
 
 

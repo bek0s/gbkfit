@@ -135,14 +135,15 @@ class Data:
             raise RuntimeError(
                 f"data dimensionality and rval length are incompatible "
                 f"({data.dim} != {len(rval)})")
-        finite_mask = np.ones_like(data)
-        finite_mask *= np.isfinite(data)
-        finite_mask *= np.isfinite(mask)
-        finite_mask *= np.isfinite(error)
-        data[finite_mask == 0] = np.nan
-        mask[finite_mask == 0] = 0
-        mask[finite_mask != 0] = 1
-        error[finite_mask == 0] = np.nan
+        total_mask = np.ones_like(data)
+        total_mask *= np.isfinite(data)
+        total_mask *= np.isfinite(mask)
+        total_mask *= np.isfinite(error)
+        total_mask *= mask != 0
+        data[total_mask == 0] = np.nan
+        mask[total_mask == 0] = 0
+        mask[total_mask != 0] = 1
+        error[total_mask == 0] = np.nan
         rpix = (np.array(data.shape[::-1]) / 2 - 0.5).tolist()
         zero = (np.array(rval) - np.array(rpix) * np.array(step)).tolist()
         self._data = data.copy()
