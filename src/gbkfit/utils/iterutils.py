@@ -1,5 +1,4 @@
 
-import collections
 import collections.abc
 import copy
 
@@ -17,10 +16,6 @@ def is_mapping(x, strict=True):
 def is_sequence(x, strict=True):
     return isinstance(x, (tuple, list, set)) if strict \
         else isinstance(x, collections.abc.Sequence)
-
-
-def listify_old(x):
-    return list([i for i in x] if is_sequence(x) else [x])
 
 
 def listify(x, none_is_val=True):
@@ -83,26 +78,9 @@ def all_unique(x):
     return not any(i in seen or seen.append(i) for i in x)
 
 
-"""
-def is_sequence_of_type(x, type_):
-    return all(isinstance(i, type_) for i in x)
-"""
-
-
 def is_iterable_of_type(x, type_):
     return is_iterable(x) and all(isinstance(i, type_) for i in x)
 
 
 def is_sequence_of_type(x, type_):
     return is_sequence(x) and all(isinstance(i, type_) for i in x)
-
-
-"""
-def sequence_difference(a, b):
-    return []
-
-
-def sequence_intersection(a, b):
-    return [x for x in a if x in b]
-"""
-

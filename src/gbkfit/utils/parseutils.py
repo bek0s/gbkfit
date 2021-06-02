@@ -9,14 +9,6 @@ from . import funcutils, iterutils
 _log = logging.getLogger(__name__)
 
 
-def _dump_function(func, file):
-    with open(file, 'a') as f:
-        f.write('\n')
-        f.write(textwrap.dedent(inspect.getsource(func)))
-        f.write('\n')
-    return dict(file=file, func=func.__name__)
-
-
 def make_basic_desc(cls, label):
     return f'{label} (class={cls.__qualname__})'
 
@@ -162,7 +154,8 @@ class Parser(abc.ABC):
 
     def load_one(self, x, *args, **kwargs):
         x = copy.deepcopy(x)
-        return self._load_one_impl(x, *args, **kwargs) if x is not None else None
+        return self._load_one_impl(x, *args, **kwargs) \
+            if x is not None else None
 
     @abc.abstractmethod
     def _load_one_impl(self, x, *args, **kwargs):
@@ -180,7 +173,9 @@ class Parser(abc.ABC):
             else self.dump_one(x, *args, **kwargs)
 
     def dump_one(self, x, *args, **kwargs):
-        return self._dump_one_impl(x, *args, **kwargs) if x else None
+        x = copy.deepcopy(x)
+        return self._dump_one_impl(x, *args, **kwargs) \
+            if x is not None else None
 
     @abc.abstractmethod
     def _dump_one_impl(self, x, *args, **kwargs):

@@ -1,4 +1,5 @@
 
+import importlib.abc
 import importlib.util
 import os
 import pathlib
@@ -8,6 +9,7 @@ def get_attr_from_file(file, attr):
     module_name = pathlib.Path(file).stem
     module_spec = importlib.util.spec_from_file_location(module_name, file)
     module = importlib.util.module_from_spec(module_spec)
+    assert isinstance(module_spec.loader, importlib.abc.Loader)
     module_spec.loader.exec_module(module)
     return getattr(module, attr)
 
