@@ -46,7 +46,7 @@ def _validate_moment_count(parser, namespace, values, option_string):
             f"must be equal to the number of the specified moment orders")
 
 
-def _validate_range_1d(parser, namespace, values, option_string):
+def _validate_range_1d(parser, _namespace, values, option_string):
     min_, max_ = values
     if min_ >= max_:
         parser.error(
@@ -55,7 +55,7 @@ def _validate_range_1d(parser, namespace, values, option_string):
             f"Maximum (MAX) must be greater or equal to Minimum (MIN)")
 
 
-def _validate_range_2d(parser, namespace, values, option_string):
+def _validate_range_2d(parser, _namespace, values, option_string):
     left, right, bottom, top = values
     if left >= right:
         parser.error(
@@ -169,11 +169,11 @@ def main():
         '--minify', action='store_true',
         help='crop the edges of the input data until valid pixels are found')
     # ...
-    parser_prep_zpad = argparse.ArgumentParser(add_help=False)
-    parser_prep_zpad.add_argument(
-        '--zpad', type=_number_range(int, 0, None),
+    parser_prep_nanpad = argparse.ArgumentParser(add_help=False)
+    parser_prep_nanpad.add_argument(
+        '--nanpad', type=_number_range(int, 0, None),
         metavar='SIZE',
-        help='zero-pad the resulting data by SIZE')
+        help='nan-pad the resulting data by SIZE along all dimensions')
     # ...
     parser_prep_orders = argparse.ArgumentParser(add_help=False)
     parser_prep_orders.add_argument(
@@ -294,23 +294,23 @@ def main():
     parsers_prep.add_parser('image', parents=[
         parser_prep_input_1,
         parser_prep_roi_spat_2d,
-        parser_prep_clip_1, parser_prep_ccl, parser_prep_zpad,
+        parser_prep_clip_1, parser_prep_ccl, parser_prep_nanpad,
         parser_prep_common, parser_common])
     parsers_prep.add_parser('lslit', parents=[
         parser_prep_input_1,
         parser_prep_roi_spat_1d, parser_prep_roi_spec_1d,
-        parser_prep_clip_1, parser_prep_ccl, parser_prep_zpad,
+        parser_prep_clip_1, parser_prep_ccl, parser_prep_nanpad,
         parser_prep_common, parser_common])
     parsers_prep.add_parser('mmaps', parents=[
         parser_prep_orders,
         parser_prep_input_n,
         parser_prep_roi_spat_2d,
-        parser_prep_clip_n, parser_prep_ccl,
+        parser_prep_clip_n, parser_prep_ccl, parser_prep_nanpad,
         parser_prep_common, parser_common])
     parsers_prep.add_parser('scube', parents=[
         parser_prep_input_1,
         parser_prep_roi_spat_2d, parser_prep_roi_spec_1d,
-        parser_prep_clip_1, parser_prep_ccl, parser_prep_zpad,
+        parser_prep_clip_1, parser_prep_ccl, parser_prep_nanpad,
         parser_prep_common, parser_common])
 
     #
@@ -353,28 +353,28 @@ def main():
                 args.roi_spat, args.clip_min, args.clip_max,
                 args.ccl_lcount, args.ccl_pcount, args.ccl_lratio,
                 args.sclip_sigma, args.sclip_iters,
-                args.minify, args.zpad, args.dtype)
+                args.minify, args.nanpad, args.dtype)
         elif args.prep_task == 'lslit':
             gbkfit.tasks.prep.prep_lslit(
                 args.data_d, args.data_e, args.data_m,
                 args.roi_spat, args.roi_spec, args.clip_min, args.clip_max,
                 args.ccl_lcount, args.ccl_pcount, args.ccl_lratio,
                 args.sclip_sigma, args.sclip_iters,
-                args.minify, args.zpad, args.dtype)
+                args.minify, args.nanpad, args.dtype)
         elif args.prep_task == 'mmaps':
             gbkfit.tasks.prep.prep_mmaps(
                 args.orders, args.data_d, args.data_e, args.data_m,
                 args.roi_spat, args.clip_min, args.clip_max,
                 args.ccl_lcount, args.ccl_pcount, args.ccl_lratio,
                 args.sclip_sigma, args.sclip_iters,
-                args.minify, args.dtype)
+                args.minify, args.nanpad, args.dtype)
         elif args.prep_task == 'scube':
             gbkfit.tasks.prep.prep_scube(
                 args.data_d, args.data_e, args.data_m,
                 args.roi_spat, args.roi_spec, args.clip_min, args.clip_max,
                 args.ccl_lcount, args.ccl_pcount, args.ccl_lratio,
                 args.sclip_sigma, args.sclip_iters,
-                args.minify, args.zpad, args.dtype)
+                args.minify, args.nanpad, args.dtype)
 
     elif args.task == 'fit':
         import gbkfit.tasks.fit
