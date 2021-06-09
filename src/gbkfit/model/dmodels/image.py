@@ -30,6 +30,7 @@ class DModelImage(DModel):
     def __init__(
             self, size, step=(1, 1), rpix=None, rval=(0, 0), rota=0,
             scale=(1, 1), psf=None,
+            weights=False, weights_conv=False,
             dtype=np.float32):
         super().__init__()
         if rpix is None:
@@ -40,7 +41,8 @@ class DModelImage(DModel):
         rval = tuple(rval) + (0,)
         scale = tuple(scale) + (1,)
         self._dcube = _dcube.DCube(
-            size, step, rpix, rval, rota, scale, psf, None, dtype)
+            size, step, rpix, rval, rota, scale, psf, None,
+            weights, weights_conv, dtype)
 
     def size(self):
         return self._dcube.size()[:2]
@@ -73,10 +75,11 @@ class DModelImage(DModel):
         driver = self._driver
         gmodel = self._gmodel
         dcube = self._dcube
-        driver.mem_fill(dcube.scratch_data(), 0)
+        driver.mem_fill(dcube.scratch_dcube(), 0)
         gmodel.evaluate_image(
             driver, params,
-            dcube.scratch_data()[0, :, :],
+            dcube.scratch_dcube()[0, :, :],
+            dcube.scratch_wcube()[0, :, :] if dcube.weights() else None,
             dcube.scratch_size()[:2],
             dcube.scratch_step()[:2],
             dcube.scratch_zero()[:2],
@@ -84,4 +87,7 @@ class DModelImage(DModel):
             dcube.dtype(),
             out_gextra)
         dcube.evaluate(out_dextra)
-        return dict(image=dict(data=dcube.data()[0, :, :], mask=dcube.mask()[0, :, :]))
+        return dict(image=dict(
+            d=dcube.dcube()[0, :, :],
+            m=dcube.mcube()[0, :, :],
+            w=dcube.wcube()[0, :, :] if dcube.weights() else None))

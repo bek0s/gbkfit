@@ -361,7 +361,7 @@ class Disk(abc.ABC):
         self._impl_prepare(driver, dtype)
 
     def evaluate(
-            self, driver, params, image, scube, rcube,
+            self, driver, params, image, scube, rcube, weights,
             spat_size, spat_step, spat_zero, spat_rota,
             spec_size, spec_step, spec_zero,
             dtype, out_extra):
@@ -416,7 +416,7 @@ class Disk(abc.ABC):
             self._sptraits)
 
         self._impl_evaluate(
-            driver, params, image, scube, rcube,
+            driver, params, image, scube, rcube, weights,
             spat_size, spat_step, spat_zero, spat_rota,
             spec_size, spec_step, spec_zero,
             dtype, out_extra)
@@ -427,7 +427,7 @@ class Disk(abc.ABC):
 
     @abc.abstractmethod
     def _impl_evaluate(
-            self, driver, params, image, scube, rcube,
+            self, driver, params, image, scube, rcube, weights,
             spat_size, spat_step, spat_zero, spat_rota,
             spec_size, spec_step, spec_zero,
             dtype, out_extra):

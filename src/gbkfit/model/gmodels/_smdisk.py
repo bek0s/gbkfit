@@ -32,7 +32,7 @@ class SMDisk(_disk.Disk):
         self._disk = driver.make_gmodel_smdisk(dtype)
 
     def _impl_evaluate(
-            self, driver, params, image, scube, rcube,
+            self, driver, params, image, scube, rcube, weights,
             spat_size, spat_step, spat_zero, spat_rota,
             spec_size, spec_step, spec_zero,
             dtype, out_extra):

@@ -84,7 +84,7 @@ class GModelIntensity3D(GModelImage):
             self._tcube = driver.mem_alloc_d(self._spat_size[::-1], dtype)
 
     def evaluate_image(
-            self, driver, params, image, size, step, zero, rota, dtype,
+            self, driver, params, image, weights, size, step, zero, rota, dtype,
             out_extra):
 
         if (self._driver is not driver
@@ -106,7 +106,7 @@ class GModelIntensity3D(GModelImage):
                 cparams = {p: params[mapping[p]] for p in cmp.params()}
                 cmp_out_extra = {} if out_extra is not None else None
                 cmp.evaluate(
-                    driver, cparams, None, tcube,
+                    driver, cparams, None, tcube, None,
                     spat_size, spat_step, spat_zero, spat_rota,
                     dtype, cmp_out_extra)
             driver.math_mul(tcube, params['tauto'], out=tcube)
@@ -119,7 +119,7 @@ class GModelIntensity3D(GModelImage):
             cparams = {p: params[mapping[p]] for p in cmp.params()}
             cmp_out_extra = {} if out_extra is not None else None
             cmp.evaluate(
-                driver, cparams, None, tcube,
+                driver, cparams, None, tcube, None,
                 spat_size, spat_step, spat_zero, spat_rota,
                 dtype, cmp_out_extra)
             if out_extra is not None:
@@ -135,7 +135,7 @@ class GModelIntensity3D(GModelImage):
             cparams = {p: params[mapping[p]] for p in cmp.params()}
             cmp_out_extra = {} if out_extra is not None else None
             cmp.evaluate(
-                driver, cparams, image, tcube,
+                driver, cparams, image, tcube, weights,
                 spat_size, spat_step, spat_zero, spat_rota,
                 dtype, cmp_out_extra)
             if out_extra is not None:

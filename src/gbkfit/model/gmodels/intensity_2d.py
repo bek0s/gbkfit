@@ -51,7 +51,7 @@ class GModelIntensity2D(GModelImage):
         self._driver = driver
 
     def evaluate_image(
-            self, driver, params, image, size, step, zero, rota, dtype,
+            self, driver, params, image, weights, size, step, zero, rota, dtype,
             out_extra):
 
         if self._driver is not driver:
@@ -67,7 +67,7 @@ class GModelIntensity2D(GModelImage):
             cparams = {p: params[mapping[p]] for p in cmp.params()}
             cmp_out_extra = {} if out_extra is not None else None
             cmp.evaluate(
-                driver, cparams, image,
+                driver, cparams, image, weights,
                 spat_size, spat_step, spat_zero, spat_rota,
                 dtype, cmp_out_extra)
             if out_extra is not None:

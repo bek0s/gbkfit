@@ -81,12 +81,12 @@ class SpectralSMDisk3D(SpectralComponent3D):
 
     def evaluate(
             self,
-            driver, params, scube, rcube,
+            driver, params, scube, rcube, weights,
             spat_size, spat_step, spat_zero, spat_rota,
             spec_size, spec_step, spec_zero,
             dtype, out_extra):
         self._disk.evaluate(
-            driver, params, None, scube, rcube,
+            driver, params, None, scube, rcube, weights,
             spat_size, spat_step, spat_zero, spat_rota,
             spec_size, spec_step, spec_zero,
             dtype, out_extra)

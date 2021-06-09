@@ -51,7 +51,7 @@ class GModelKinematics2D(GModelSCube):
         self._driver = driver
 
     def evaluate_scube(
-            self, driver, params, scube, size, step, zero, rota, dtype,
+            self, driver, params, scube, weights, size, step, zero, rota, dtype,
             out_extra):
 
         if self._driver is not driver:
@@ -70,7 +70,7 @@ class GModelKinematics2D(GModelSCube):
             cparams = {p: params[mapping[p]] for p in cmp.params()}
             cmp_out_extra = {} if out_extra is not None else None
             cmp.evaluate(
-                driver, cparams, scube,
+                driver, cparams, scube, weights,
                 spat_size, spat_step, spat_zero, spat_rota,
                 spec_size, spec_step, spec_zero,
                 dtype, cmp_out_extra)

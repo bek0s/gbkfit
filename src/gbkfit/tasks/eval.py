@@ -136,16 +136,18 @@ def eval_(config, perf=None):
     output = models.evaluate_h(params, extras)
 
     def save_model(file, data):
-        hdu = fits.PrimaryHDU(data)
-        hdulist = fits.HDUList([hdu])
-        hdulist.writeto(file, overwrite=True)
+        if data is not None:
+            hdu = fits.PrimaryHDU(data)
+            hdulist = fits.HDUList([hdu])
+            hdulist.writeto(file, overwrite=True)
 
     log.info("writing model to the filesystem...")
     for i in range(len(output)):
         prefix = 'model' + f'_{i}' * bool(i)
         for key, value in output[i].items():
-            save_model(f'{prefix}_{key}_data.fits', value['data'])
-            save_model(f'{prefix}_{key}_mask.fits', value['mask'])
+            save_model(f'{prefix}_{key}_d.fits', value.get('d'))
+            save_model(f'{prefix}_{key}_m.fits', value.get('m'))
+            save_model(f'{prefix}_{key}_w.fits', value.get('w'))
         for key, value in extras[i].items():
             save_model(f'{prefix}_extra_{key}.fits', value)
 

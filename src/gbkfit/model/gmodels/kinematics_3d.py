@@ -88,7 +88,7 @@ class GModelKinematics3D(GModelSCube):
             self._tcube = driver.mem_alloc_d(self._spat_size[::-1], dtype)
 
     def evaluate_scube(
-            self, driver, params, scube, size, step, zero, rota, dtype,
+            self, driver, params, scube, weights, size, step, zero, rota, dtype,
             out_extra):
 
         if (self._driver is not driver
@@ -113,7 +113,7 @@ class GModelKinematics3D(GModelSCube):
                 cparams = {p: params[mapping[p]] for p in cmp.params()}
                 cmp_out_extra = {} if out_extra is not None else None
                 cmp.evaluate(
-                    driver, cparams, None, tcube,
+                    driver, cparams, None, tcube, None,
                     spat_size, spat_step, spat_zero, spat_rota,
                     spec_size, spec_step, spec_zero,
                     dtype, cmp_out_extra)
@@ -127,7 +127,7 @@ class GModelKinematics3D(GModelSCube):
             cparams = {p: params[mapping[p]] for p in cmp.params()}
             cmp_out_extra = {} if out_extra is not None else None
             cmp.evaluate(
-                driver, cparams, None, tcube,
+                driver, cparams, None, tcube, None,
                 spat_size, spat_step, spat_zero, spat_rota,
                 dtype, cmp_out_extra)
             if out_extra is not None:
@@ -143,7 +143,7 @@ class GModelKinematics3D(GModelSCube):
             cparams = {p: params[mapping[p]] for p in cmp.params()}
             cmp_out_extra = {} if out_extra is not None else None
             cmp.evaluate(
-                driver, cparams, scube, None,
+                driver, cparams, scube, None, weights,
                 spat_size, spat_step, spat_zero, spat_rota,
                 spec_size, spec_step, spec_zero,
                 dtype, cmp_out_extra)

@@ -30,6 +30,7 @@ class DModelSCube(DModel):
     def __init__(
             self, size, step=(1, 1, 1), rpix=None, rval=(0, 0, 0), rota=0,
             scale=(1, 1, 1), psf=None, lsf=None,
+            weights=False, weights_conv=False,
             dtype=np.float32):
         super().__init__()
         if rpix is None:
@@ -40,7 +41,8 @@ class DModelSCube(DModel):
         rval = tuple(rval)
         scale = tuple(scale)
         self._dcube = _dcube.DCube(
-            size, step, rpix, rval, rota, scale, psf, lsf, dtype)
+            size, step, rpix, rval, rota, scale, psf, lsf,
+            weights, weights_conv, dtype)
 
     def size(self):
         return self._dcube.size()
@@ -66,24 +68,24 @@ class DModelSCube(DModel):
     def dtype(self):
         return self._dcube.dtype()
 
+    def convw(self):
+        return self._dcube.convw()
+
     def onames(self):
         return ['scube']
 
     def _prepare_impl(self):
         self._dcube.prepare(self._driver)
-        self._mask = self._driver.mem_alloc_d(self.size(), self.dtype())
 
     def _evaluate_impl(self, params, out_dextra, out_gextra):
         driver = self._driver
         gmodel = self._gmodel
         dcube = self._dcube
-        driver.mem_fill(dcube.scratch_data(), 0)
-
-
-
+        driver.mem_fill(dcube.scratch_dcube(), 0)
         gmodel.evaluate_scube(
             driver, params,
-            dcube.scratch_data(),
+            dcube.scratch_dcube(),
+            dcube.scratch_wcube() if gmodel.weighted() else None,
             dcube.scratch_size(),
             dcube.scratch_step(),
             dcube.scratch_zero(),
@@ -91,5 +93,7 @@ class DModelSCube(DModel):
             dcube.dtype(),
             out_gextra)
         dcube.evaluate(out_dextra)
-
-        return dict(scube=dict(data=dcube.data(), mask=dcube.mask()))
+        return dict(scube=dict(
+            d=dcube.dcube(),
+            m=dcube.mcube(),
+            w=dcube.wcube() if True else None))

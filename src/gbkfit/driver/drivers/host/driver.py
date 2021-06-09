@@ -120,10 +120,12 @@ class DModelDCube(DModelDCube):
             self,
             size_hi,
             scube_hi, scube_hi_fft,
+            wcube_hi, wcube_hi_fft,
             psf3d_hi, psf3d_hi_fft):
         self._backend.convolve(
             size_hi,
             _ptr(scube_hi), _ptr(scube_hi_fft),
+            _ptr(wcube_hi), _ptr(wcube_hi_fft),
             _ptr(psf3d_hi), _ptr(psf3d_hi_fft))
 
     def downscale(

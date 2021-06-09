@@ -92,6 +92,7 @@ class DModelDCube(abc.ABC):
     def convolve(
             self,
             size_hi,
+            wcube_hi, wcube_hi_fft,
             scube_hi, scube_hi_fft,
             psf3d_hi, psf3d_hi_fft):
         pass

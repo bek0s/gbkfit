@@ -41,11 +41,15 @@ private:
 
     mutable std::array<int, 3> m_size;
     mutable T* m_scube;
+    mutable T* m_wcube;
     mutable T* m_psf3d;
     mutable T* m_scube_fft;
+    mutable T* m_wcube_fft;
     mutable T* m_psf3d_fft;
     mutable cufftHandle m_scube_fft_plan_r2c;
     mutable cufftHandle m_scube_fft_plan_c2r;
+    mutable cufftHandle m_wcube_fft_plan_r2c;
+    mutable cufftHandle m_wcube_fft_plan_c2r;
     mutable cufftHandle m_psf3d_fft_plan_r2c;
 };
 

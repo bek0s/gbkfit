@@ -30,7 +30,9 @@ class DModelMMaps(DModel):
 
     def __init__(
             self, size, step=(1, 1), rpix=None, rval=(0, 0), rota=0,
-            scale=(1, 1), psf=None, lsf=None, orders=(0, 1, 2),
+            scale=(1, 1), psf=None, lsf=None,
+            weights=False, weights_conv=False,
+            orders=(0, 1, 2),
             dtype=np.float32):
         super().__init__()
         if rpix is None:
@@ -55,7 +57,8 @@ class DModelMMaps(DModel):
             scale = scale + (1,)
         self._orders = orders
         self._dcube = _dcube.DCube(
-            size, step, rpix, rval, rota, scale, psf, lsf, dtype)
+            size, step, rpix, rval, rota, scale, psf, lsf,
+            weights, weights_conv, dtype)
         self._mmaps = None
         self._s_mmap_data = None
         self._s_mmap_mask = None

@@ -12,7 +12,7 @@ class DensityComponent2D(parseutils.TypedParserSupport, abc.ABC):
 
     @abc.abstractmethod
     def evaluate(
-            self, driver, params, image,
+            self, driver, params, image, weights,
             spat_size, spat_step, spat_zero, spat_rota,
             dtype, out_extra):
         pass
@@ -26,7 +26,7 @@ class DensityComponent3D(parseutils.TypedParserSupport, abc.ABC):
 
     @abc.abstractmethod
     def evaluate(
-            self, driver, params, image, rcube,
+            self, driver, params, image, rcube, weights,
             spat_size, spat_step, spat_zero, spat_rota,
             dtype, out_extra):
         pass
@@ -40,7 +40,7 @@ class SpectralComponent2D(parseutils.TypedParserSupport, abc.ABC):
 
     @abc.abstractmethod
     def evaluate(
-            self, driver, params, scube,
+            self, driver, params, scube, weights,
             spat_size, spat_step, spat_zero, spat_rota,
             spec_size, spec_step, spec_zero,
             dtype, out_extra):
@@ -55,7 +55,7 @@ class SpectralComponent3D(parseutils.TypedParserSupport, abc.ABC):
 
     @abc.abstractmethod
     def evaluate(
-            self, driver, params, scube, rcube,
+            self, driver, params, scube, rcube, weights,
             spat_size, spat_step, spat_zero, spat_rota,
             spec_size, spec_step, spec_zero,
             dtype, out_extra):

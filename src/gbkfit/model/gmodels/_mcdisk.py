@@ -47,7 +47,7 @@ class MCDisk(_disk.Disk):
         driver.mem_copy_h2d(self._hasordint[0], self._hasordint[1])
 
     def _impl_evaluate(
-            self, driver, params, image, scube, rcube,
+            self, driver, params, image, scube, rcube, weights,
             spat_size, spat_step, spat_zero, spat_rota,
             spec_size, spec_step, spec_zero,
             dtype, out_extra):

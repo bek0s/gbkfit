@@ -27,7 +27,9 @@ def _fft_size(size):
 
 class DCube:
 
-    def __init__(self, size, step, rpix, rval, rota, scale, psf, lsf, dtype):
+    def __init__(
+            self, size, step, rpix, rval, rota, scale, psf, lsf,
+            weights, weights_conv, dtype):
 
         # Low-res cube zero pixel center position
         zero = (
@@ -100,14 +102,19 @@ class DCube:
         self._scale = scale
         self._dcube_lo = None
         self._dcube_hi = None
-        self._dmask_lo = None
+        self._wcube_lo = None
+        self._wcube_hi = None
+        self._mcube_lo = None
         self._dcube_hi_fft = None
+        self._wcube_hi_fft = None
         self._psf3d_hi_fft = None
         self._psf = psf
         self._lsf = lsf
         self._psf_hi = psf_hi
         self._lsf_hi = lsf_hi
         self._psf3d_hi = None
+        self._weights = weights
+        self._weights_conv = weights_conv
         self._dtype = dtype
         self._dcube = None
         self._driver = None
@@ -124,11 +131,14 @@ class DCube:
     def rota(self):
         return self._rota
 
-    def data(self):
+    def dcube(self):
         return self._dcube_lo
 
-    def mask(self):
-        return self._dmask_lo
+    def wcube(self):
+        return self._wcube_lo
+
+    def mcube(self):
+        return self._mcube_lo
 
     def scratch_size(self):
         return self._size_hi
@@ -139,8 +149,11 @@ class DCube:
     def scratch_zero(self):
         return self._zero_hi
 
-    def scratch_data(self):
+    def scratch_dcube(self):
         return self._dcube_hi
+
+    def scratch_wcube(self):
+        return self._wcube_hi
 
     def scale(self):
         return self._scale
@@ -151,6 +164,12 @@ class DCube:
     def lsf(self):
         return self._lsf
 
+    def weights(self):
+        return self._weights
+
+    def weights_conv(self):
+        return self._weights_conv
+
     def dtype(self):
         return self._dtype
 
@@ -158,8 +177,6 @@ class DCube:
         self._driver = driver
         size_lo = self._size_lo
         size_hi = self._size_hi
-        edge_hi = self._edge_hi
-        scale = self._scale
         dtype = self._dtype
         # Allocate the low- and high-resolution data cubes.
         # If they have the same size, just create one and have the
@@ -168,18 +185,22 @@ class DCube:
         self._dcube_lo = driver.mem_alloc_d(size_lo[::-1], dtype)
         self._dcube_hi = driver.mem_alloc_d(size_hi[::-1], dtype) \
             if size_lo != size_hi else self._dcube_lo
+        if self._weights:
+            self._wcube_lo = driver.mem_alloc_d(size_lo[::-1], dtype)
+            self._wcube_hi = driver.mem_alloc_d(size_hi[::-1], dtype) \
+                if size_lo != size_hi else self._wcube_lo
         # Allocate buffers for the fft-transformed 3d psf and data cube
         if self._psf or self._lsf:
             self._psf3d_hi = self._psf_hi * self._lsf_hi[:, None, None]
             self._psf3d_hi = driver.mem_copy_h2d(self._psf3d_hi)
             size_hi_fft = 2 * size_hi[2] * size_hi[1] * (size_hi[0] // 2 + 1)
             self._dcube_hi_fft = driver.mem_alloc_d(size_hi_fft, dtype)
+            self._wcube_hi_fft = driver.mem_alloc_d(size_hi_fft, dtype)
             self._psf3d_hi_fft = driver.mem_alloc_d(size_hi_fft, dtype)
-        # The psf convolution also affects pixels outside the galaxy model
-        # Allocate a spatial mask for all the pixels of the galaxy model
-
-        self._dmask_lo = driver.mem_alloc_d(size_lo[::-1], dtype)
-
+        # The psf convolution affects pixels outside the galaxy model
+        # This can create unwanted noise in the model
+        # Hence, we use a spatial mask to mark all the good pixels
+        self._mcube_lo = driver.mem_alloc_d(size_lo[::-1], dtype)
         # Create and prepare dcube backend
         self._dcube = driver.make_dmodel_dcube(dtype)
 
@@ -189,6 +210,7 @@ class DCube:
             self._dcube.convolve(
                 self._size_hi,
                 self._dcube_hi, self._dcube_hi_fft,
+                self._wcube_hi, self._wcube_hi_fft,
                 self._psf3d_hi, self._psf3d_hi_fft)
 
         if self._dcube_lo is not self._dcube_hi:
@@ -197,13 +219,13 @@ class DCube:
                 self._dcube_hi, self._dcube_lo)
 
         self._dcube.make_mask(
-            True, True, 1e-6, self._size_lo, self._dcube_lo, self._dmask_lo)
+            True, True, 1e-6, self._size_lo, self._dcube_lo, self._mcube_lo)
 
         if out_extra is not None:
             out_extra.update(
                 dcube_lo=self._driver.mem_copy_d2h(self._dcube_lo),
                 dcube_hi=self._driver.mem_copy_d2h(self._dcube_hi),
-                dmask_lo=self._driver.mem_copy_d2h(self._dmask_lo))
+                mcube_lo=self._driver.mem_copy_d2h(self._mcube_lo))
             if self._psf:
                 out_extra.update(
                     psf_lo=self._psf.asarray(self._step_lo[:2]),

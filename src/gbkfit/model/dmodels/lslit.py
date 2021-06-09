@@ -31,6 +31,7 @@ class DModelLSlit(DModel):
     def __init__(
             self, size, step=(1, 1, 1), rpix=None, rval=(0, 0, 0), rota=0,
             scale=(1, 1, 1), psf=None, lsf=None,
+            weights=False, weights_conv=False,
             dtype=np.float32):
         super().__init__()
         if rpix is None:
@@ -41,7 +42,8 @@ class DModelLSlit(DModel):
         rval = tuple(rval)
         scale = tuple(scale)
         self._dcube = _dcube.DCube(
-            size, step, rpix, rval, rota, scale, psf, lsf, dtype)
+            size, step, rpix, rval, rota, scale, psf, lsf,
+            weights, weights_conv, dtype)
 
     def size(self):
         return self._dcube.size()
@@ -77,10 +79,11 @@ class DModelLSlit(DModel):
         driver = self._driver
         gmodel = self._gmodel
         dcube = self._dcube
-        driver.mem_fill(dcube.scratch_data(), 0)
+        driver.mem_fill(dcube.scratch_dcube(), 0)
         gmodel.evaluate_scube(
             driver, params,
-            dcube.scratch_data(),
+            dcube.scratch_dcube(),
+            dcube.scratch_wcube() if dcube.weights() else None,
             dcube.scratch_size(),
             dcube.scratch_step(),
             dcube.scratch_zero(),
@@ -88,4 +91,7 @@ class DModelLSlit(DModel):
             dcube.dtype(),
             out_gextra)
         dcube.evaluate(out_dextra)
-        return dict(lslit=dict(data=dcube.data()[0][:, 0, :], mask=dcube.mask()[0][:, 0, :]))
+        return dict(lslit=dict(
+            d=dcube.dcube()[0][:, 0, :],
+            m=dcube.mcube()[0][:, 0, :],
+            w=dcube.mcube()[0][:, 0, :] if dcube.weights() else None))

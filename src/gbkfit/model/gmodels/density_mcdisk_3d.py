@@ -72,14 +72,14 @@ class DensityMCDisk3D(DensityComponent3D):
 
     def evaluate(
             self,
-            driver, params, image, rcube,
+            driver, params, image, rcube, weights,
             spat_size, spat_step, spat_zero, spat_rota,
             dtype, out_extra):
         spec_size = 1
         spec_step = 0
         spec_zero = 0
         self._disk.evaluate(
-            driver, params, image, None, rcube,
+            driver, params, image, None, rcube, weights,
             spat_size, spat_step, spat_zero, spat_rota,
             spec_size, spec_step, spec_zero,
             dtype, out_extra)

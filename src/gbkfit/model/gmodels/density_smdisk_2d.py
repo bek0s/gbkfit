@@ -63,7 +63,7 @@ class DensitySMDisk2D(DensityComponent2D):
         return self._disk.params()
 
     def evaluate(
-            self, driver, params, image,
+            self, driver, params, image, weights,
             spat_size, spat_step, spat_zero, spat_rota,
             dtype, out_extra):
         spat_size = spat_size + (1,)
@@ -73,7 +73,7 @@ class DensitySMDisk2D(DensityComponent2D):
         spec_step = 0
         spec_zero = 0
         self._disk.evaluate(
-            driver, params, image, None, None,
+            driver, params, image, None, None, weights,
             spat_size, spat_step, spat_zero, spat_rota,
             spec_size, spec_step, spec_zero,
             dtype, out_extra)

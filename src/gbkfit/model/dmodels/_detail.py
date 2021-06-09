@@ -45,7 +45,8 @@ def dump_dmodel_common(dmodel):
         cval=dmodel.cval(),
         rota=dmodel.rota(),
         scale=dmodel.scale(),
-        dtype=dmodel.dtype())
+        dtype=dmodel.dtype(),
+        convw=dmodel.convw())
     if hasattr(dmodel, 'psf'):
         info.update(psf=gbkfit.psflsf.psf_parser.dump(dmodel.psf()))
     if hasattr(dmodel, 'lsf'):

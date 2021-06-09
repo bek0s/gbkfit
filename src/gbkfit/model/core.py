@@ -81,7 +81,7 @@ class GModelImage(GModel, abc.ABC):
 
     @abc.abstractmethod
     def evaluate_image(
-            self, driver, params, image, size, step, zero, rota, dtype,
+            self, driver, params, image, weights, size, step, zero, rota, dtype,
             out_extra):
         pass
 
@@ -90,7 +90,7 @@ class GModelSCube(GModel, abc.ABC):
 
     @abc.abstractmethod
     def evaluate_scube(
-            self, driver, params, scube, size, step, zero, rota, dtype,
+            self, driver, params, scube, weights, size, step, zero, rota, dtype,
             out_extra):
         pass
 
