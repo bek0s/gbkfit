@@ -85,7 +85,7 @@ class DModelSCube(DModel):
         gmodel.evaluate_scube(
             driver, params,
             dcube.scratch_dcube(),
-            dcube.scratch_wcube() if gmodel.weighted() else None,
+            dcube.scratch_wcube() if dcube.weights() else None,
             dcube.scratch_size(),
             dcube.scratch_step(),
             dcube.scratch_zero(),

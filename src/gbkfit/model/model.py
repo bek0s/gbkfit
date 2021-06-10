@@ -55,8 +55,9 @@ class Model:
         h_data = self._h_data
         for key in d_data:
             for k in h_data[key].keys():
-                h_data[key][k] = self._driver.mem_copy_d2h(
-                    d_data[key][k], h_data[key][k])
+                if d_data[key][k] is not None:
+                    h_data[key][k] = self._driver.mem_copy_d2h(
+                        d_data[key][k], h_data[key][k])
         return h_data
 
 

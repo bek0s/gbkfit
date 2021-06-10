@@ -94,7 +94,7 @@ DModelDCube<T>::convolve(
 
         std::vector<T> tmp(n0*n1*n2);
 
-        if (scube_ptr)
+        if (scube_fft_ptr)
         {
             std::copy_n(scube_ptr, n0*n1*n2, tmp.data());
             m_scube_fft_plan_r2c = fftw3<T>::plan_dft_r2c_3d(
@@ -112,7 +112,7 @@ DModelDCube<T>::convolve(
             std::copy_n(tmp.data(), n0*n1*n2, scube_ptr);
         }
 
-        if (wcube_ptr)
+        if (wcube_fft_ptr)
         {
             std::copy_n(wcube_ptr, n0*n1*n2, tmp.data());
             m_wcube_fft_plan_r2c = fftw3<T>::plan_dft_r2c_3d(
@@ -141,7 +141,7 @@ DModelDCube<T>::convolve(
                 m_psf3d_fft_plan_r2c));
     }
 
-    if (scube_ptr)
+    if (scube_fft_ptr)
     {
         fftw3<T>::execute(m_scube_fft_plan_r2c);
 
@@ -156,7 +156,7 @@ DModelDCube<T>::convolve(
         fftw3<T>::execute(m_scube_fft_plan_c2r);
     }
 
-    if (wcube_ptr)
+    if (wcube_fft_ptr)
     {
         fftw3<T>::execute(m_wcube_fft_plan_r2c);
 

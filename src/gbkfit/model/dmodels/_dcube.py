@@ -195,8 +195,9 @@ class DCube:
             self._psf3d_hi = driver.mem_copy_h2d(self._psf3d_hi)
             size_hi_fft = 2 * size_hi[2] * size_hi[1] * (size_hi[0] // 2 + 1)
             self._dcube_hi_fft = driver.mem_alloc_d(size_hi_fft, dtype)
-            self._wcube_hi_fft = driver.mem_alloc_d(size_hi_fft, dtype)
             self._psf3d_hi_fft = driver.mem_alloc_d(size_hi_fft, dtype)
+            if self._weights and self._weights_conv:
+                self._wcube_hi_fft = driver.mem_alloc_d(size_hi_fft, dtype)
         # The psf convolution affects pixels outside the galaxy model
         # This can create unwanted noise in the model
         # Hence, we use a spatial mask to mark all the good pixels
