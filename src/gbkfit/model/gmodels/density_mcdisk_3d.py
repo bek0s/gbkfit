@@ -20,7 +20,7 @@ class DensityMCDisk3D(DensityComponent3D):
         opts.update(dict(
             rptraits=traits.rpt_parser.load(opts.get('rptraits')),
             rhtraits=traits.rht_parser.load(opts.get('rhtraits')),
-            wptraits=traits.wpt_parser.load(opts.get('wptraits')),
+            zptraits=traits.zpt_parser.load(opts.get('zptraits')),
             sptraits=traits.spt_parser.load(opts.get('sptraits'))))
         return cls(**opts)
 
@@ -35,9 +35,9 @@ class DensityMCDisk3D(DensityComponent3D):
             interp=self._disk.interp().type(),
             rptraits=traits.rpt_parser.dump(self._disk.rptraits()),
             rhtraits=traits.rht_parser.dump(self._disk.rhtraits()),
-            wptraits=traits.wpt_parser.dump(self._disk.wptraits()),
+            zptraits=traits.zpt_parser.dump(self._disk.zptraits()),
             sptraits=traits.spt_parser.dump(self._disk.sptraits()),
-            jptraits=traits.jpt_parser.dump(self._disk.jptraits()))
+            wptraits=traits.wpt_parser.dump(self._disk.wptraits()))
 
     def __init__(
             self,
@@ -46,9 +46,9 @@ class DensityMCDisk3D(DensityComponent3D):
             tilted,
             rptraits,
             rhtraits,
-            wptraits=None,
+            zptraits=None,
             sptraits=None,
-            jptraits=None,
+            wptraits=None,
             rnmin=None,
             rnmax=None,
             rnsep=None,
@@ -60,9 +60,9 @@ class DensityMCDisk3D(DensityComponent3D):
             rnmin, rnmax, rnsep, rnlen, rnodes, rnstep, interp)
         trait_args = _detail.parse_component_d3d_trait_args(
             rptraits, rhtraits,
-            wptraits,
+            zptraits,
             sptraits,
-            jptraits)
+            wptraits)
         self._disk = _mcdisk.MCDisk(
             cflux=cflux,
             loose=loose, tilted=tilted,

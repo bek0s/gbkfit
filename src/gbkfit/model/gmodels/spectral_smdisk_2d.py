@@ -22,7 +22,7 @@ class SpectralSMDisk2D(SpectralComponent2D):
             vptraits=traits.vpt_parser.load(opts.get('vptraits')),
             dptraits=traits.dpt_parser.load(opts.get('dptraits')),
             sptraits=traits.spt_parser.load(opts.get('sptraits')),
-            jptraits=traits.jpt_parser.load(opts.get('jptraits'))))
+            wptraits=traits.wpt_parser.load(opts.get('wptraits'))))
         return cls(**opts)
 
     def dump(self):
@@ -37,7 +37,7 @@ class SpectralSMDisk2D(SpectralComponent2D):
             vptraits=traits.vpt_parser.dump(self._disk.vptraits()),
             dptraits=traits.dpt_parser.dump(self._disk.dptraits()),
             sptraits=traits.spt_parser.dump(self._disk.sptraits()),
-            jptraits=traits.jpt_parser.dump(self._disk.jptraits()))
+            wptraits=traits.wpt_parser.dump(self._disk.wptraits()))
 
     def __init__(
             self,
@@ -47,7 +47,7 @@ class SpectralSMDisk2D(SpectralComponent2D):
             vptraits,
             dptraits,
             sptraits=None,
-            jptraits=None,
+            wptraits=None,
             rnmin=None,
             rnmax=None,
             rnsep=None,
@@ -62,13 +62,13 @@ class SpectralSMDisk2D(SpectralComponent2D):
             vptraits,
             dptraits,
             sptraits,
-            jptraits)
+            wptraits)
         self._disk = _smdisk.SMDisk(
             loose=loose, tilted=tilted,
             **rnode_args, **trait_args,
             rhtraits=(),
             vhtraits=(), dhtraits=(),
-            wptraits=())
+            zptraits=())
 
     def params(self):
         return self._disk.params()

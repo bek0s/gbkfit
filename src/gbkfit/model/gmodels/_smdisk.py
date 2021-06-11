@@ -17,18 +17,18 @@ class SMDisk(_disk.Disk):
             rptraits, rhtraits,
             vptraits, vhtraits,
             dptraits, dhtraits,
-            wptraits,
+            zptraits,
             sptraits,
-            jptraits):
+            wptraits):
 
         super().__init__(
             loose, tilted, rnodes, rnstep, interp,
             rptraits, rhtraits,
             vptraits, vhtraits,
             dptraits, dhtraits,
-            wptraits,
+            zptraits,
             sptraits,
-            jptraits)
+            wptraits)
 
     def _impl_prepare(self, driver, dtype):
         self._disk = driver.make_gmodel_smdisk(dtype)
@@ -82,15 +82,15 @@ class SMDisk(_disk.Disk):
             self._s_dht_uids[1],
             self._s_dht_cvalues[1], self._s_dht_ccounts[1],
             self._s_dht_pvalues[1], self._s_dht_pcounts[1],
-            self._s_wpt_uids[1],
-            self._s_wpt_cvalues[1], self._s_wpt_ccounts[1],
-            self._s_wpt_pvalues[1], self._s_wpt_pcounts[1],
+            self._s_zpt_uids[1],
+            self._s_zpt_cvalues[1], self._s_zpt_ccounts[1],
+            self._s_zpt_pvalues[1], self._s_zpt_pcounts[1],
             self._s_spt_uids[1],
             self._s_spt_cvalues[1], self._s_spt_ccounts[1],
             self._s_spt_pvalues[1], self._s_spt_pcounts[1],
-            self._s_jpt_uids[1],
-            self._s_jpt_cvalues[1], self._s_jpt_ccounts[1],
-            self._s_jpt_pvalues[1], self._s_jpt_pcounts[1],
+            self._s_wpt_uids[1],
+            self._s_wpt_cvalues[1], self._s_wpt_ccounts[1],
+            self._s_wpt_pvalues[1], self._s_wpt_pcounts[1],
             spat_size, spat_step, spat_zero, spat_rota,
             spec_size, spec_step, spec_zero,
             image, scube, rcube, wcube,

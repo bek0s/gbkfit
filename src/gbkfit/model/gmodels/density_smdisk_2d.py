@@ -20,7 +20,7 @@ class DensitySMDisk2D(DensityComponent2D):
         opts.update(dict(
             rptraits=traits.rpt_parser.load(opts.get('rptraits')),
             sptraits=traits.spt_parser.load(opts.get('sptraits')),
-            jptraits=traits.jpt_parser.load(opts.get('jptraits'))))
+            wptraits=traits.wpt_parser.load(opts.get('wptraits'))))
         return cls(**opts)
 
     def dump(self):
@@ -33,7 +33,7 @@ class DensitySMDisk2D(DensityComponent2D):
             interp=self._disk.interp().type(),
             rptraits=traits.rpt_parser.dump(self._disk.rptraits()),
             sptraits=traits.spt_parser.dump(self._disk.sptraits()),
-            jptraits=traits.jpt_parser.dump(self._disk.jptraits()))
+            wptraits=traits.wpt_parser.dump(self._disk.wptraits()))
 
     def __init__(
             self,
@@ -41,7 +41,7 @@ class DensitySMDisk2D(DensityComponent2D):
             tilted,
             rptraits,
             sptraits=None,
-            jptraits=None,
+            wptraits=None,
             rnmin=None,
             rnmax=None,
             rnsep=None,
@@ -54,14 +54,14 @@ class DensitySMDisk2D(DensityComponent2D):
         trait_args = _detail.parse_component_d2d_trait_args(
             rptraits,
             sptraits,
-            jptraits)
+            wptraits)
         self._disk = _smdisk.SMDisk(
             loose=loose, tilted=tilted,
             **rnode_args, **trait_args,
             rhtraits=(),
             vptraits=(), vhtraits=(),
             dptraits=(), dhtraits=(),
-            wptraits=())
+            zptraits=())
 
     def params(self):
         return self._disk.params()

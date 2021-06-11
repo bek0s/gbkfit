@@ -69,9 +69,9 @@ DP_TRAIT_UID_NW_DISTORTION = 103
 # Dispersion traits (height)
 DH_TRAIT_UID_ONE = 1
 
-# Warp traits (polar)
-WP_TRAIT_UID_NW_UNIFORM = 101
-WP_TRAIT_UID_NW_HARMONIC = 102
+# Vertical distortion traits (polar)
+ZP_TRAIT_UID_NW_UNIFORM = 101
+ZP_TRAIT_UID_NW_HARMONIC = 102
 
 # Selection traits (polar)
 SP_TRAIT_UID_AZRANGE = 1
@@ -118,7 +118,7 @@ def _trait_desc(cls):
         VHTrait: 'velocity height',
         DPTrait: 'velocity dispersion polar',
         DHTrait: 'velocity dispersion height',
-        WPTrait: 'warp polar',
+        ZPTrait: 'vertical distortion',
         SPTrait: 'selection polar'}
     postfix = None
     for k, v in descs.items():
@@ -199,7 +199,7 @@ class DHTrait(HTraitParams, Trait, abc.ABC):
     pass
 
 
-class WPTrait(PTraitParams, Trait, abc.ABC):
+class ZPTrait(PTraitParams, Trait, abc.ABC):
     pass
 
 
@@ -207,7 +207,7 @@ class SPTrait(PTraitParams, Trait, abc.ABC):
     pass
 
 
-class JPTrait(PTraitParams, Trait, abc.ABC):
+class WPTrait(PTraitParams, Trait, abc.ABC):
     pass
 
 
@@ -1115,7 +1115,7 @@ class DHTraitOne(DHTrait):
         return DH_TRAIT_UID_ONE
 
 
-class WPTraitNWUniform(WPTrait):
+class ZPTraitNWUniform(ZPTrait):
 
     @staticmethod
     def type():
@@ -1123,14 +1123,14 @@ class WPTraitNWUniform(WPTrait):
 
     @staticmethod
     def uid():
-        return DP_TRAIT_UID_NW_UNIFORM
+        return ZP_TRAIT_UID_NW_UNIFORM
 
     def params_rnw(self, nnodes):
         return (
             ParamVectorDesc('a', nnodes),)
 
 
-class WPTraitNWHarmonic(WPTrait):
+class ZPTraitNWHarmonic(ZPTrait):
 
     @staticmethod
     def type():
@@ -1138,7 +1138,7 @@ class WPTraitNWHarmonic(WPTrait):
 
     @staticmethod
     def uid():
-        return DP_TRAIT_UID_NW_HARMONIC
+        return ZP_TRAIT_UID_NW_HARMONIC
 
     def __init__(self, order):
         Trait.__init__(self, order=order)
@@ -1179,7 +1179,7 @@ class SPTraitNWAzimuthalRange(SPTrait):
             ParamVectorDesc('s', nnodes))
 
 
-class JPTraitConstantRange(JPTrait):
+class WPTraitConstantRange(WPTrait):
 
     @staticmethod
     def type():
@@ -1200,9 +1200,9 @@ vpt_parser = parseutils.TypedParser(VPTrait)
 vht_parser = parseutils.TypedParser(VHTrait)
 dpt_parser = parseutils.TypedParser(DPTrait)
 dht_parser = parseutils.TypedParser(DHTrait)
-wpt_parser = parseutils.TypedParser(WPTrait)
+zpt_parser = parseutils.TypedParser(ZPTrait)
 spt_parser = parseutils.TypedParser(SPTrait)
-jpt_parser = parseutils.TypedParser(JPTrait)
+wpt_parser = parseutils.TypedParser(WPTrait)
 
 # Density traits (polar)
 rpt_parser.register(RPTraitUniform)
@@ -1264,13 +1264,13 @@ dpt_parser.register(DPTraitNWDistortion)
 # Dispersion traits (height)
 dht_parser.register(DHTraitOne)
 
-# Warp traits (polar)
-wpt_parser.register(WPTraitNWUniform)
-wpt_parser.register(WPTraitNWHarmonic)
+# Vertical distortion traits (polar)
+zpt_parser.register(ZPTraitNWUniform)
+zpt_parser.register(ZPTraitNWHarmonic)
 
 # Selection traits (polar)
 spt_parser.register(SPTraitAzimuthalRange)
 spt_parser.register(SPTraitNWAzimuthalRange)
 
 # Weight traits (polar)
-jpt_parser.register(JPTraitConstantRange)
+wpt_parser.register(WPTraitConstantRange)

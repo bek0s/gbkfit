@@ -24,9 +24,9 @@ class SpectralMCDisk3D(SpectralComponent3D):
             vhtraits=traits.vht_parser.load(opts.get('vhtraits')),
             dptraits=traits.dpt_parser.load(opts.get('dptraits')),
             dhtraits=traits.dht_parser.load(opts.get('dhtraits')),
-            wptraits=traits.wpt_parser.load(opts.get('wptraits')),
+            zptraits=traits.zpt_parser.load(opts.get('zptraits')),
             sptraits=traits.spt_parser.load(opts.get('sptraits')),
-            jptraits=traits.jpt_parser.load(opts.get('jptraits'))))
+            wptraits=traits.wpt_parser.load(opts.get('wptraits'))))
         return cls(**opts)
 
     def dump(self):
@@ -44,9 +44,9 @@ class SpectralMCDisk3D(SpectralComponent3D):
             vhtraits=traits.vht_parser.dump(self._disk.vhtraits()),
             dptraits=traits.dpt_parser.dump(self._disk.dptraits()),
             dhtraits=traits.dht_parser.dump(self._disk.dhtraits()),
-            wptraits=traits.wpt_parser.dump(self._disk.wptraits()),
+            zptraits=traits.zpt_parser.dump(self._disk.zptraits()),
             sptraits=traits.spt_parser.dump(self._disk.sptraits()),
-            jptraits=traits.spt_parser.dump(self._disk.jptraits()))
+            wptraits=traits.wpt_parser.dump(self._disk.wptraits()))
 
     def __init__(
             self,
@@ -59,9 +59,9 @@ class SpectralMCDisk3D(SpectralComponent3D):
             rhtraits,
             vhtraits=None,
             dhtraits=None,
-            wptraits=None,
+            zptraits=None,
             sptraits=None,
-            jptraits=None,
+            wptraits=None,
             rnmin=None,
             rnmax=None,
             rnsep=None,
@@ -75,9 +75,9 @@ class SpectralMCDisk3D(SpectralComponent3D):
             rptraits, rhtraits,
             vptraits, vhtraits,
             dptraits, dhtraits,
-            wptraits,
+            zptraits,
             sptraits,
-            jptraits)
+            wptraits)
         self._disk = _mcdisk.MCDisk(
             cflux=cflux,
             loose=loose, tilted=tilted,

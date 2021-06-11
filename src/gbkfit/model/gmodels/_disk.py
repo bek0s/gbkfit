@@ -110,9 +110,9 @@ class Disk(abc.ABC):
             rptraits, rhtraits,
             vptraits, vhtraits,
             dptraits, dhtraits,
-            wptraits,
+            zptraits,
             sptraits,
-            jptraits):
+            wptraits):
 
         rnodes = tuple(rnodes)
         nrnodes = len(rnodes)
@@ -142,9 +142,9 @@ class Disk(abc.ABC):
         self._vhtraits = tuple(vhtraits)
         self._dptraits = tuple(dptraits)
         self._dhtraits = tuple(dhtraits)
-        self._wptraits = tuple(wptraits)
+        self._zptraits = tuple(zptraits)
         self._sptraits = tuple(sptraits)
-        self._jptraits = tuple(jptraits)
+        self._wptraits = tuple(wptraits)
 
         self._vsys_pdescs = _make_param_descs('vsys', nrnodes, loose) \
             if self._vptraits else {}
@@ -165,12 +165,12 @@ class Disk(abc.ABC):
          self._dpt_pnames) = _trait_param_info(dptraits, 'dpt', nrnodes)
         (self._dht_pdescs,
          self._dht_pnames) = _trait_param_info(dhtraits, 'dht', nrnodes)
-        (self._wpt_pdescs,
-         self._wpt_pnames) = _trait_param_info(wptraits, 'wpt', nrnodes)
+        (self._zpt_pdescs,
+         self._zpt_pnames) = _trait_param_info(zptraits, 'zpt_', nrnodes)
         (self._spt_pdescs,
          self._spt_pnames) = _trait_param_info(sptraits, 'spt', nrnodes)
-        (self._jpt_pdescs,
-         self._jpt_pnames) = _trait_param_info(jptraits, 'jpt', nrnodes)
+        (self._wpt_pdescs,
+         self._wpt_pnames) = _trait_param_info(wptraits, 'wpt', nrnodes)
 
         self._pdescs = {
             **self._vsys_pdescs,
@@ -184,9 +184,9 @@ class Disk(abc.ABC):
             **self._vht_pdescs,
             **self._dpt_pdescs,
             **self._dht_pdescs,
-            **self._wpt_pdescs,
+            **self._zpt_pdescs,
             **self._spt_pdescs,
-            **self._jpt_pdescs}
+            **self._wpt_pdescs}
 
         self._s_subrnodes = [None, None]
         self._s_vsys_pvalues = [None, None]
@@ -225,21 +225,21 @@ class Disk(abc.ABC):
          self._s_dht_pvalues,
          self._s_dht_ccounts,
          self._s_dht_pcounts) = iterutils.make_tuple((5,), [None, None], True)
-        (self._s_wpt_uids,
-         self._s_wpt_cvalues,
-         self._s_wpt_pvalues,
-         self._s_wpt_ccounts,
-         self._s_wpt_pcounts) = iterutils.make_tuple((5,), [None, None], True)
+        (self._s_zpt_uids,
+         self._s_zpt_cvalues,
+         self._s_zpt_pvalues,
+         self._s_zpt_ccounts,
+         self._s_zpt_pcounts) = iterutils.make_tuple((5,), [None, None], True)
         (self._s_spt_uids,
          self._s_spt_cvalues,
          self._s_spt_pvalues,
          self._s_spt_ccounts,
          self._s_spt_pcounts) = iterutils.make_tuple((5,), [None, None], True)
-        (self._s_jpt_uids,
-         self._s_jpt_cvalues,
-         self._s_jpt_pvalues,
-         self._s_jpt_ccounts,
-         self._s_jpt_pcounts) = iterutils.make_tuple((5,), [None, None], True)
+        (self._s_wpt_uids,
+         self._s_wpt_cvalues,
+         self._s_wpt_pvalues,
+         self._s_wpt_ccounts,
+         self._s_wpt_pcounts) = iterutils.make_tuple((5,), [None, None], True)
 
         self._spat_size = None
         self._spat_step = None
@@ -285,14 +285,14 @@ class Disk(abc.ABC):
     def dhtraits(self):
         return self._dhtraits
 
-    def wptraits(self):
-        return self._wptraits
+    def zptraits(self):
+        return self._zptraits
 
     def sptraits(self):
         return self._sptraits
 
-    def jptraits(self):
-        return self._jptraits
+    def wptraits(self):
+        return self._wptraits
 
     def params(self):
         return self._pdescs
@@ -358,10 +358,10 @@ class Disk(abc.ABC):
             dtype)
         _prepare_trait_arrays(
             driver,
-            self._wptraits, self._nrnodes, self._nsubrnodes,
-            self._s_wpt_uids,
-            self._s_wpt_ccounts, self._s_wpt_pcounts,
-            self._s_wpt_cvalues, self._s_wpt_pvalues,
+            self._zptraits, self._nrnodes, self._nsubrnodes,
+            self._s_zpt_uids,
+            self._s_zpt_ccounts, self._s_zpt_pcounts,
+            self._s_zpt_cvalues, self._s_zpt_pvalues,
             dtype)
         _prepare_trait_arrays(
             driver,
@@ -372,10 +372,10 @@ class Disk(abc.ABC):
             dtype)
         _prepare_trait_arrays(
             driver,
-            self._jptraits, self._nrnodes, self._nsubrnodes,
-            self._s_jpt_uids,
-            self._s_jpt_ccounts, self._s_jpt_pcounts,
-            self._s_jpt_cvalues, self._s_jpt_pvalues,
+            self._wptraits, self._nrnodes, self._nsubrnodes,
+            self._s_wpt_uids,
+            self._s_wpt_ccounts, self._s_wpt_pcounts,
+            self._s_wpt_cvalues, self._s_wpt_pvalues,
             dtype)
 
         self._impl_prepare(driver, dtype)
@@ -429,14 +429,14 @@ class Disk(abc.ABC):
             self._s_dht_pvalues, self._dht_pdescs, self._dht_pnames,
             self._dhtraits)
         prepare_traits_params(
-            self._s_wpt_pvalues, self._wpt_pdescs, self._wpt_pnames,
-            self._wptraits)
+            self._s_zpt_pvalues, self._zpt_pdescs, self._zpt_pnames,
+            self._zptraits)
         prepare_traits_params(
             self._s_spt_pvalues, self._spt_pdescs, self._spt_pnames,
             self._sptraits)
         prepare_traits_params(
-            self._s_jpt_pvalues, self._jpt_pdescs, self._jpt_pnames,
-            self._jptraits)
+            self._s_wpt_pvalues, self._wpt_pdescs, self._wpt_pnames,
+            self._wptraits)
 
         self._impl_evaluate(
             driver, params, image, scube, rcube, wcube,
