@@ -111,7 +111,8 @@ class Disk(abc.ABC):
             vptraits, vhtraits,
             dptraits, dhtraits,
             wptraits,
-            sptraits):
+            sptraits,
+            jptraits):
 
         rnodes = tuple(rnodes)
         nrnodes = len(rnodes)
@@ -143,6 +144,7 @@ class Disk(abc.ABC):
         self._dhtraits = tuple(dhtraits)
         self._wptraits = tuple(wptraits)
         self._sptraits = tuple(sptraits)
+        self._jptraits = tuple(jptraits)
 
         self._vsys_pdescs = _make_param_descs('vsys', nrnodes, loose) \
             if self._vptraits else {}
@@ -167,6 +169,8 @@ class Disk(abc.ABC):
          self._wpt_pnames) = _trait_param_info(wptraits, 'wpt', nrnodes)
         (self._spt_pdescs,
          self._spt_pnames) = _trait_param_info(sptraits, 'spt', nrnodes)
+        (self._jpt_pdescs,
+         self._jpt_pnames) = _trait_param_info(jptraits, 'jpt', nrnodes)
 
         self._pdescs = {
             **self._vsys_pdescs,
@@ -181,7 +185,8 @@ class Disk(abc.ABC):
             **self._dpt_pdescs,
             **self._dht_pdescs,
             **self._wpt_pdescs,
-            **self._spt_pdescs}
+            **self._spt_pdescs,
+            **self._jpt_pdescs}
 
         self._s_subrnodes = [None, None]
         self._s_vsys_pvalues = [None, None]
@@ -230,6 +235,11 @@ class Disk(abc.ABC):
          self._s_spt_pvalues,
          self._s_spt_ccounts,
          self._s_spt_pcounts) = iterutils.make_tuple((5,), [None, None], True)
+        (self._s_jpt_uids,
+         self._s_jpt_cvalues,
+         self._s_jpt_pvalues,
+         self._s_jpt_ccounts,
+         self._s_jpt_pcounts) = iterutils.make_tuple((5,), [None, None], True)
 
         self._spat_size = None
         self._spat_step = None
@@ -280,6 +290,9 @@ class Disk(abc.ABC):
 
     def sptraits(self):
         return self._sptraits
+
+    def jptraits(self):
+        return self._jptraits
 
     def params(self):
         return self._pdescs
@@ -357,11 +370,18 @@ class Disk(abc.ABC):
             self._s_spt_ccounts, self._s_spt_pcounts,
             self._s_spt_cvalues, self._s_spt_pvalues,
             dtype)
+        _prepare_trait_arrays(
+            driver,
+            self._jptraits, self._nrnodes, self._nsubrnodes,
+            self._s_jpt_uids,
+            self._s_jpt_ccounts, self._s_jpt_pcounts,
+            self._s_jpt_cvalues, self._s_jpt_pvalues,
+            dtype)
 
         self._impl_prepare(driver, dtype)
 
     def evaluate(
-            self, driver, params, image, scube, rcube, weights,
+            self, driver, params, image, scube, rcube, wcube,
             spat_size, spat_step, spat_zero, spat_rota,
             spec_size, spec_step, spec_zero,
             dtype, out_extra):
@@ -414,9 +434,12 @@ class Disk(abc.ABC):
         prepare_traits_params(
             self._s_spt_pvalues, self._spt_pdescs, self._spt_pnames,
             self._sptraits)
+        prepare_traits_params(
+            self._s_jpt_pvalues, self._jpt_pdescs, self._jpt_pnames,
+            self._jptraits)
 
         self._impl_evaluate(
-            driver, params, image, scube, rcube, weights,
+            driver, params, image, scube, rcube, wcube,
             spat_size, spat_step, spat_zero, spat_rota,
             spec_size, spec_step, spec_zero,
             dtype, out_extra)
@@ -427,7 +450,7 @@ class Disk(abc.ABC):
 
     @abc.abstractmethod
     def _impl_evaluate(
-            self, driver, params, image, scube, rcube, weights,
+            self, driver, params, image, scube, rcube, wcube,
             spat_size, spat_step, spat_zero, spat_rota,
             spec_size, spec_step, spec_zero,
             dtype, out_extra):

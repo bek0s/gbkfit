@@ -21,7 +21,8 @@ class DensitySMDisk3D(DensityComponent3D):
             rptraits=traits.rpt_parser.load(opts.get('rptraits')),
             rhtraits=traits.rht_parser.load(opts.get('rhtraits')),
             wptraits=traits.wpt_parser.load(opts.get('wptraits')),
-            sptraits=traits.spt_parser.load(opts.get('sptraits'))))
+            sptraits=traits.spt_parser.load(opts.get('sptraits')),
+            jptraits=traits.jpt_parser.load(opts.get('jptraits'))))
         return cls(**opts)
 
     def dump(self):
@@ -35,7 +36,8 @@ class DensitySMDisk3D(DensityComponent3D):
             rptraits=traits.rpt_parser.dump(self._disk.rptraits()),
             rhtraits=traits.rht_parser.dump(self._disk.rhtraits()),
             wptraits=traits.wpt_parser.dump(self._disk.wptraits()),
-            sptraits=traits.spt_parser.dump(self._disk.sptraits()))
+            sptraits=traits.spt_parser.dump(self._disk.sptraits()),
+            jptraits=traits.jpt_parser.dump(self._disk.jptraits()))
 
     def __init__(
             self,
@@ -45,6 +47,7 @@ class DensitySMDisk3D(DensityComponent3D):
             rhtraits,
             wptraits=None,
             sptraits=None,
+            jptraits=None,
             rnmin=None,
             rnmax=None,
             rnsep=None,
@@ -57,7 +60,8 @@ class DensitySMDisk3D(DensityComponent3D):
         trait_args = _detail.parse_component_d3d_trait_args(
             rptraits, rhtraits,
             wptraits,
-            sptraits)
+            sptraits,
+            jptraits)
         self._disk = _smdisk.SMDisk(
             loose=loose, tilted=tilted,
             **rnode_args, **trait_args,
@@ -69,14 +73,14 @@ class DensitySMDisk3D(DensityComponent3D):
 
     def evaluate(
             self,
-            driver, params, image, rcube, weights,
+            driver, params, image, rcube, wcube,
             spat_size, spat_step, spat_zero, spat_rota,
             dtype, out_extra):
         spec_size = 1
         spec_step = 0
         spec_zero = 0
         self._disk.evaluate(
-            driver, params, image, None, rcube, weights,
+            driver, params, image, None, rcube, wcube,
             spat_size, spat_step, spat_zero, spat_rota,
             spec_size, spec_step, spec_zero,
             dtype, out_extra)

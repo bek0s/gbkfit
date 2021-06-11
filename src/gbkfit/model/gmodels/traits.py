@@ -77,6 +77,9 @@ WP_TRAIT_UID_NW_HARMONIC = 102
 SP_TRAIT_UID_AZRANGE = 1
 SP_TRAIT_UID_NW_AZRANGE = 101
 
+# Weight traits (polar)
+JP_TRAIT_UID_CRANGE = 1
+
 
 TRUNC_DEFAULT = 0
 
@@ -201,6 +204,10 @@ class WPTrait(PTraitParams, Trait, abc.ABC):
 
 
 class SPTrait(PTraitParams, Trait, abc.ABC):
+    pass
+
+
+class JPTrait(PTraitParams, Trait, abc.ABC):
     pass
 
 
@@ -1172,6 +1179,20 @@ class SPTraitNWAzimuthalRange(SPTrait):
             ParamVectorDesc('s', nnodes))
 
 
+class JPTraitConstantRange(JPTrait):
+
+    @staticmethod
+    def type():
+        return 'crange'
+
+    @staticmethod
+    def uid():
+        return JP_TRAIT_UID_CRANGE
+
+    def __init__(self, angle):
+        Trait.__init__(self, angle=angle)
+
+
 # Trait parsers
 rpt_parser = parseutils.TypedParser(RPTrait)
 rht_parser = parseutils.TypedParser(RHTrait)
@@ -1181,6 +1202,7 @@ dpt_parser = parseutils.TypedParser(DPTrait)
 dht_parser = parseutils.TypedParser(DHTrait)
 wpt_parser = parseutils.TypedParser(WPTrait)
 spt_parser = parseutils.TypedParser(SPTrait)
+jpt_parser = parseutils.TypedParser(JPTrait)
 
 # Density traits (polar)
 rpt_parser.register(RPTraitUniform)
@@ -1249,3 +1271,6 @@ wpt_parser.register(WPTraitNWHarmonic)
 # Selection traits (polar)
 spt_parser.register(SPTraitAzimuthalRange)
 spt_parser.register(SPTraitNWAzimuthalRange)
+
+# Weight traits (polar)
+jpt_parser.register(JPTraitConstantRange)

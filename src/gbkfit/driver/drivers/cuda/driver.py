@@ -193,9 +193,10 @@ class GModelMCDisk(GModelMCDisk):
             dht_uids, dht_cvalues, dht_ccounts, dht_pvalues, dht_pcounts,
             wpt_uids, wpt_cvalues, wpt_ccounts, wpt_pvalues, wpt_pcounts,
             spt_uids, spt_cvalues, spt_ccounts, spt_pvalues, spt_pcounts,
+            jpt_uids, jpt_cvalues, jpt_ccounts, jpt_pvalues, jpt_pcounts,
             spat_size, spat_step, spat_zero, spat_rota,
             spec_size, spec_step, spec_zero,
-            image, scube, rcube,
+            image, scube, rcube, wcube,
             rdata, vdata, ddata):
         self._backend.evaluate(
             cflux, nclouds, _ptr(ncloudspt), _size(ncloudspt), _ptr(hasordint),
@@ -266,9 +267,10 @@ class GModelSMDisk(GModelSMDisk):
             dht_uids, dht_cvalues, dht_ccounts, dht_pvalues, dht_pcounts,
             wpt_uids, wpt_cvalues, wpt_ccounts, wpt_pvalues, wpt_pcounts,
             spt_uids, spt_cvalues, spt_ccounts, spt_pvalues, spt_pcounts,
+            jpt_uids, jpt_cvalues, jpt_ccounts, jpt_pvalues, jpt_pcounts,
             spat_size, spat_step, spat_zero, spat_rota,
             spec_size, spec_step, spec_zero,
-            image, scube, rcube,
+            image, scube, rcube, wcube,
             rdata, vdata, ddata):
         self._backend.evaluate(
             loose, tilted,

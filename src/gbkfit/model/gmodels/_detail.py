@@ -14,15 +14,16 @@ def _parse_component_node_args(
     nodes_linspace = [nmin, nmax, nlen].count(None) == 0
     if [nodes_list, nodes_arange, nodes_linspace].count(True) != 1:
         raise RuntimeError(
-            f"only one of the following groups must be defined: "
+            f"only one of the following sets of options "
+            f"must be defined: "
             f"(1) {prefix}nodes; "
             f"(2) {prefix}nmin, {prefix}nmax, {prefix}nsep; "
             f"(3) {prefix}nmin, {prefix}nmax, {prefix}nlen")
-    if nmin is not None and not (0 <= nmin < nmax):
+    if (nodes_arange or nodes_linspace) and not (0 <= nmin < nmax):
         raise RuntimeError(
             f"the following expression must be true: "
             f"0 <= {prefix}nmin < {prefix}nmax")
-    if nsep is not None and not (0 < nsep <= nmax - nmin):
+    if nodes_arange and not (0 < nsep <= nmax - nmin):
         raise RuntimeError(
             f"the following expression must be true: "
             f"0 < {prefix}nsep <= {prefix}nmax - {prefix}nmin")
@@ -74,21 +75,25 @@ def parse_component_hnode_args(nmin, nmax, nsep, nlen, nodes, nstep, interp):
 
 def parse_component_d2d_trait_args(
         rptraits,
-        sptraits):
+        sptraits,
+        jptraits):
     if not rptraits:
         raise RuntimeError("at least one rptrait is required")
     rptraits = iterutils.tuplify(rptraits)
     sptraits = iterutils.tuplify(sptraits) if sptraits is not None else ()
+    jptraits = iterutils.tuplify(jptraits) if jptraits is not None else ()
     return dict(
         rptraits=rptraits,
-        sptraits=sptraits)
+        sptraits=sptraits,
+        jptraits=jptraits)
 
 
 def parse_component_s2d_trait_args(
         rptraits,
         vptraits,
         dptraits,
-        sptraits):
+        sptraits,
+        jptraits):
     if not rptraits:
         raise RuntimeError("at least one rptrait is required")
     if not vptraits:
@@ -99,17 +104,20 @@ def parse_component_s2d_trait_args(
     vptraits = iterutils.tuplify(vptraits)
     dptraits = iterutils.tuplify(dptraits)
     sptraits = iterutils.tuplify(sptraits) if sptraits is not None else ()
+    jptraits = iterutils.tuplify(jptraits) if jptraits is not None else ()
     return dict(
         rptraits=rptraits,
         vptraits=vptraits,
         dptraits=dptraits,
-        sptraits=sptraits)
+        sptraits=sptraits,
+        jptraits=jptraits)
 
 
 def parse_component_d3d_trait_args(
         rptraits, rhtraits,
         wptraits,
-        sptraits):
+        sptraits,
+        jptraits):
     if not rptraits:
         raise RuntimeError("at least one rptrait is required")
     if not rhtraits:
@@ -118,6 +126,7 @@ def parse_component_d3d_trait_args(
     rhtraits = iterutils.tuplify(rhtraits)
     wptraits = iterutils.tuplify(wptraits) if wptraits is not None else ()
     sptraits = iterutils.tuplify(sptraits) if sptraits is not None else ()
+    jptraits = iterutils.tuplify(jptraits) if jptraits is not None else ()
     rptraits_len = len(rptraits)
     rhtraits_len = len(rhtraits)
     if rptraits_len != rhtraits_len:
@@ -127,7 +136,8 @@ def parse_component_d3d_trait_args(
     return dict(
         rptraits=rptraits, rhtraits=rhtraits,
         wptraits=wptraits,
-        sptraits=sptraits)
+        sptraits=sptraits,
+        jptraits=jptraits)
 
 
 def parse_component_s3d_trait_args(
@@ -135,7 +145,8 @@ def parse_component_s3d_trait_args(
         vptraits, vhtraits,
         dptraits, dhtraits,
         wptraits,
-        sptraits):
+        sptraits,
+        jptraits):
     if not rptraits:
         raise RuntimeError("at least one rptrait is required")
     if not rhtraits:
@@ -154,6 +165,7 @@ def parse_component_s3d_trait_args(
         if dhtraits else tuple([None] * len(dptraits))
     wptraits = iterutils.tuplify(wptraits) if wptraits else tuple()
     sptraits = iterutils.tuplify(sptraits) if sptraits else tuple()
+    jptraits = iterutils.tuplify(jptraits) if jptraits else tuple()
     if None in vhtraits:
         vhtraits = iterutils.replace_items_and_copy(
             vhtraits, None, traits.VHTraitOne())
@@ -183,7 +195,8 @@ def parse_component_s3d_trait_args(
         vptraits=vptraits, vhtraits=vhtraits,
         dptraits=dptraits, dhtraits=dhtraits,
         wptraits=wptraits,
-        sptraits=sptraits)
+        sptraits=sptraits,
+        jptraits=jptraits)
 
 
 def _make_gmodel_params_cmp(components, prefix, force_prefix):

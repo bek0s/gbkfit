@@ -19,7 +19,8 @@ class DensitySMDisk2D(DensityComponent2D):
         opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
         opts.update(dict(
             rptraits=traits.rpt_parser.load(opts.get('rptraits')),
-            sptraits=traits.spt_parser.load(opts.get('sptraits'))))
+            sptraits=traits.spt_parser.load(opts.get('sptraits')),
+            jptraits=traits.jpt_parser.load(opts.get('jptraits'))))
         return cls(**opts)
 
     def dump(self):
@@ -31,7 +32,8 @@ class DensitySMDisk2D(DensityComponent2D):
             rnstep=self._disk.rnstep(),
             interp=self._disk.interp().type(),
             rptraits=traits.rpt_parser.dump(self._disk.rptraits()),
-            sptraits=traits.spt_parser.dump(self._disk.sptraits()))
+            sptraits=traits.spt_parser.dump(self._disk.sptraits()),
+            jptraits=traits.jpt_parser.dump(self._disk.jptraits()))
 
     def __init__(
             self,
@@ -39,6 +41,7 @@ class DensitySMDisk2D(DensityComponent2D):
             tilted,
             rptraits,
             sptraits=None,
+            jptraits=None,
             rnmin=None,
             rnmax=None,
             rnsep=None,
@@ -50,7 +53,8 @@ class DensitySMDisk2D(DensityComponent2D):
             rnmin, rnmax, rnsep, rnlen, rnodes, rnstep, interp)
         trait_args = _detail.parse_component_d2d_trait_args(
             rptraits,
-            sptraits)
+            sptraits,
+            jptraits)
         self._disk = _smdisk.SMDisk(
             loose=loose, tilted=tilted,
             **rnode_args, **trait_args,
@@ -63,7 +67,7 @@ class DensitySMDisk2D(DensityComponent2D):
         return self._disk.params()
 
     def evaluate(
-            self, driver, params, image, weights,
+            self, driver, params, image, wcube,
             spat_size, spat_step, spat_zero, spat_rota,
             dtype, out_extra):
         spat_size = spat_size + (1,)
@@ -73,7 +77,7 @@ class DensitySMDisk2D(DensityComponent2D):
         spec_step = 0
         spec_zero = 0
         self._disk.evaluate(
-            driver, params, image, None, None, weights,
+            driver, params, image, None, None, wcube,
             spat_size, spat_step, spat_zero, spat_rota,
             spec_size, spec_step, spec_zero,
             dtype, out_extra)

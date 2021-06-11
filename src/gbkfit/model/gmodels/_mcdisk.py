@@ -20,7 +20,8 @@ class MCDisk(_disk.Disk):
             vptraits, vhtraits,
             dptraits, dhtraits,
             wptraits,
-            sptraits):
+            sptraits,
+            jptraits):
 
         super().__init__(
             loose, tilted, rnodes, rnstep, interp,
@@ -28,7 +29,8 @@ class MCDisk(_disk.Disk):
             vptraits, vhtraits,
             dptraits, dhtraits,
             wptraits,
-            sptraits)
+            sptraits,
+            jptraits)
 
         self._cflux = cflux
         self._ncloudsptor = None
@@ -47,7 +49,7 @@ class MCDisk(_disk.Disk):
         driver.mem_copy_h2d(self._hasordint[0], self._hasordint[1])
 
     def _impl_evaluate(
-            self, driver, params, image, scube, rcube, weights,
+            self, driver, params, image, scube, rcube, wcube,
             spat_size, spat_step, spat_zero, spat_rota,
             spec_size, spec_step, spec_zero,
             dtype, out_extra):
@@ -132,9 +134,12 @@ class MCDisk(_disk.Disk):
             self._s_spt_uids[1],
             self._s_spt_cvalues[1], self._s_spt_ccounts[1],
             self._s_spt_pvalues[1], self._s_spt_pcounts[1],
+            self._s_jpt_uids[1],
+            self._s_jpt_cvalues[1], self._s_jpt_ccounts[1],
+            self._s_jpt_pvalues[1], self._s_jpt_pcounts[1],
             spat_size, spat_step, spat_zero, spat_rota,
             spec_size, spec_step, spec_zero,
-            image, scube, rcube,
+            image, scube, rcube, wcube,
             rdata, vdata, ddata)
 
         if out_extra is not None:
