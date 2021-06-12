@@ -246,14 +246,18 @@ gmodel_mcdisk_evaluate_cloud(
         const int* dht_uids,
         const T* dht_cvalues, const int* dht_ccounts,
         const T* dht_pvalues, const int* dht_pcounts,
-        int nwt,
-        const int* wpt_uids,
-        const T* wpt_cvalues, const int* wpt_ccounts,
-        const T* wpt_pvalues, const int* wpt_pcounts,
+        int nzt,
+        const int* zpt_uids,
+        const T* zpt_cvalues, const int* zpt_ccounts,
+        const T* zpt_pvalues, const int* zpt_pcounts,
         int nst,
         const int* spt_uids,
         const T* spt_cvalues, const int* spt_ccounts,
         const T* spt_pvalues, const int* spt_pcounts,
+        int nwt,
+        const int* wpt_uids,
+        const T* wpt_cvalues, const int* wpt_ccounts,
+        const T* wpt_pvalues, const int* wpt_pcounts,
         int spat_size_x, int spat_size_y, int spat_size_z,
         T spat_step_x, T spat_step_y, T spat_step_z,
         T spat_zero_x, T spat_zero_y, T spat_zero_z,
@@ -353,17 +357,17 @@ gmodel_mcdisk_evaluate_cloud(
                 rnidx, rnodes, nrnodes, rd);
 
     // Warp traits
-    if (wpt_uids)
+    if (zpt_uids)
     {
-        p_traits<wp_trait<T>>(
+        p_traits<zp_trait<T>>(
                 ptvalues,
-                nwt, wpt_uids,
-                wpt_cvalues, wpt_ccounts,
-                wpt_pvalues, wpt_pcounts,
+                nzt, zpt_uids,
+                zpt_cvalues, zpt_ccounts,
+                zpt_pvalues, zpt_pcounts,
                 rnidx, rnodes, nrnodes,
                 xd, yd, rd, theta);
 
-        for (int i = 0; i < nwt; ++i)
+        for (int i = 0; i < nzt; ++i)
             wvalue += ptvalues[i];
 
         zd += wvalue;
@@ -480,14 +484,18 @@ gmodel_smdisk_evaluate_pixel(
         const int* dht_uids,
         const T* dht_cvalues, const int* dht_ccounts,
         const T* dht_pvalues, const int* dht_pcounts,
-        int nwt,
-        const int* wpt_uids,
-        const T* wpt_cvalues, const int* wpt_ccounts,
-        const T* wpt_pvalues, const int* wpt_pcounts,
+        int nzt,
+        const int* zpt_uids,
+        const T* zpt_cvalues, const int* zpt_ccounts,
+        const T* zpt_pvalues, const int* zpt_pcounts,
         int nst,
         const int* spt_uids,
         const T* spt_cvalues, const int* spt_ccounts,
         const T* spt_pvalues, const int* spt_pcounts,
+        int nwt,
+        const int* wpt_uids,
+        const T* wpt_cvalues, const int* wpt_ccounts,
+        const T* wpt_pvalues, const int* wpt_pcounts,
         int spat_size_x, int spat_size_y, int spat_size_z,
         T spat_step_x, T spat_step_y, T spat_step_z,
         T spat_zero_x, T spat_zero_y, T spat_zero_z,
@@ -574,17 +582,17 @@ gmodel_smdisk_evaluate_pixel(
     }
 
     // Warp traits
-    if (wpt_uids)
+    if (zpt_uids)
     {
-        p_traits<wp_trait<T>>(
+        p_traits<zp_trait<T>>(
                 ptvalues,
-                nwt, wpt_uids,
-                wpt_cvalues, wpt_ccounts,
-                wpt_pvalues, wpt_pcounts,
+                nzt, zpt_uids,
+                zpt_cvalues, zpt_ccounts,
+                zpt_pvalues, zpt_pcounts,
                 rnidx, rnodes, nrnodes,
                 xn, yn, rn, theta);
 
-        for (int i = 0; i < nwt; ++i)
+        for (int i = 0; i < nzt; ++i)
             wvalue += ptvalues[i];
 
         zn += wvalue;

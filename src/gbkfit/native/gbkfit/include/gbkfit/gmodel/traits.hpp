@@ -67,13 +67,16 @@ constexpr int DP_TRAIT_UID_NW_DISTORTION = 103;
 // Dispersion height traits
 constexpr int DH_TRAIT_UID_ONE = 1;
 
-// Warp polar traits
-constexpr int WP_TRAIT_UID_NW_UNIFORM = 101;
-constexpr int WP_TRAIT_UID_NW_HARMONIC = 102;
+// Vertical distortion polar traits
+constexpr int ZP_TRAIT_UID_NW_UNIFORM = 101;
+constexpr int ZP_TRAIT_UID_NW_HARMONIC = 102;
 
 // Selection polar traits
 constexpr int SP_TRAIT_UID_AZRANGE = 1;
 constexpr int SP_TRAIT_UID_NW_AZRANGE = 101;
+
+// Weight polar traits
+constexpr int WP_TRAIT_UID_CRANGE = 1;
 
 template<typename T> constexpr T
 nodewise(T x, int idx, const T* xdata, const T* ydata, int offset, int stride)
@@ -899,7 +902,7 @@ dp_trait_nw_distortion(
 }
 
 template<typename T> constexpr void
-wp_trait_nw_uniform(
+zp_trait_nw_uniform(
         T& out,
         int rnidx, const T* rnodes, T r,
         const T* params)
@@ -908,7 +911,7 @@ wp_trait_nw_uniform(
 }
 
 template<typename T> constexpr void
-wp_trait_nw_harmonic(
+zp_trait_nw_harmonic(
         T& out,
         int rnidx, const T* rnodes, int nrnodes, T r, T theta,
         const T* consts, const T* params)
@@ -1370,7 +1373,7 @@ dh_trait(T& out,
 }
 
 template<typename T> constexpr void
-wp_trait(T& out,
+zp_trait(T& out,
          int uid, const T* consts, const T* params,
          int rnidx, const T* rnodes, int nrnodes,
          T x, T y, T r, T theta)
@@ -1380,12 +1383,12 @@ wp_trait(T& out,
 
     switch (uid)
     {
-    case WP_TRAIT_UID_NW_UNIFORM:
-        wp_trait_nw_uniform(
+    case ZP_TRAIT_UID_NW_UNIFORM:
+        zp_trait_nw_uniform(
                 out, rnidx, rnodes, r, params);
         break;
-    case WP_TRAIT_UID_NW_HARMONIC:
-        wp_trait_nw_harmonic(
+    case ZP_TRAIT_UID_NW_HARMONIC:
+        zp_trait_nw_harmonic(
                 out, rnidx, rnodes, nrnodes, r, theta, consts, params);
         break;
     default:

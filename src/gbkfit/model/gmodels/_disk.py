@@ -7,8 +7,8 @@ from gbkfit.params.descs import ParamScalarDesc, ParamVectorDesc
 from gbkfit.utils import iterutils, miscutils
 
 
-def _make_param_descs(key, nnodes, pw):
-    return {key: ParamVectorDesc(key, nnodes) if pw else ParamScalarDesc(key)}
+def _make_param_descs(key, nnodes, nw):
+    return {key: ParamVectorDesc(key, nnodes) if nw else ParamScalarDesc(key)}
 
 
 def _trait_param_info(traits, prefix, nrnodes):
