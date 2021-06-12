@@ -955,6 +955,12 @@ sp_trait_nw_azrange(
 }
 
 template<typename T> constexpr void
+wp_trait_crange(T& out, T theta, const T* params)
+{
+    // TODO
+}
+
+template<typename T> constexpr void
 rp_trait(T& out,
          int uid, const T* consts, const T* params,
          int rnidx, const T* rnodes, int nrnodes,
@@ -1417,6 +1423,29 @@ sp_trait(T& out,
     case SP_TRAIT_UID_NW_AZRANGE:
         sp_trait_nw_azrange(
                 out, rnidx, rnodes, nrnodes, r, theta, params);
+        break;
+    default:
+        out = NAN;
+        assert(false);
+        break;
+    }
+}
+
+template<typename T> constexpr void
+wp_trait(T& out,
+         int uid, const T* consts, const T* params,
+         int rnidx, const T* rnodes, int nrnodes,
+         T x, T y, T r, T theta)
+{
+    (void)x;
+    (void)y;
+    (void)consts;
+
+    switch (uid)
+    {
+    case WP_TRAIT_UID_CRANGE:
+        wp_trait_crange(
+                out, theta, params);
         break;
     default:
         out = NAN;

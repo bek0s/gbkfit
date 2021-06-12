@@ -226,6 +226,8 @@ class DCube:
             out_extra.update(
                 dcube_lo=self._driver.mem_copy_d2h(self._dcube_lo),
                 dcube_hi=self._driver.mem_copy_d2h(self._dcube_hi),
+                wcube_lo=self._driver.mem_copy_d2h(self._wcube_lo),
+                wcube_hi=self._driver.mem_copy_d2h(self._wcube_hi),
                 mcube_lo=self._driver.mem_copy_d2h(self._mcube_lo))
             if self._psf:
                 out_extra.update(

@@ -278,7 +278,7 @@ gmodel_mcdisk_evaluate_cloud(
     T vsysi=0, xposi=0, yposi=0, posai=0, incli=0;
     T ptvalues[TRAIT_NUM_MAX] = {0};
     T htvalues[TRAIT_NUM_MAX] = {0};
-    T wvalue = 0;
+    T zvalue = 0;
     T svalue = 0;
     bvalue = cflux * spat_step_z;
     vvalue = 0;
@@ -356,7 +356,7 @@ gmodel_mcdisk_evaluate_cloud(
                 zd, rng, rht_uids[tidx], rht_cptr, rht_pptr,
                 rnidx, rnodes, nrnodes, rd);
 
-    // Warp traits
+    // Vertical distortion traits
     if (zpt_uids)
     {
         p_traits<zp_trait<T>>(
@@ -368,9 +368,9 @@ gmodel_mcdisk_evaluate_cloud(
                 xd, yd, rd, theta);
 
         for (int i = 0; i < nzt; ++i)
-            wvalue += ptvalues[i];
+            zvalue += ptvalues[i];
 
-        zd += wvalue;
+        zd += zvalue;
     }
 
     vsysi = loose ? lerp(rd, rnidx, rnodes, vsys) : (vsys ? vsys[0] : 0);
@@ -557,7 +557,7 @@ gmodel_smdisk_evaluate_pixel(
     // These are needed for trait evaluation
     T ptvalues[TRAIT_NUM_MAX] = {0};
     T htvalues[TRAIT_NUM_MAX] = {0};
-    T wvalue = 0;
+    T zvalue = 0;
     T svalue = 0;
     bvalue = 0;
     vvalue = 0;
@@ -581,7 +581,7 @@ gmodel_smdisk_evaluate_pixel(
             return false;
     }
 
-    // Warp traits
+    // Vertical distortion traits
     if (zpt_uids)
     {
         p_traits<zp_trait<T>>(
@@ -593,9 +593,9 @@ gmodel_smdisk_evaluate_pixel(
                 xn, yn, rn, theta);
 
         for (int i = 0; i < nzt; ++i)
-            wvalue += ptvalues[i];
+            zvalue += ptvalues[i];
 
-        zn += wvalue;
+        zn += zvalue;
     }
 
     // Brightness traits
