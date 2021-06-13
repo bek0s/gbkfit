@@ -166,7 +166,7 @@ class Disk(abc.ABC):
         (self._dht_pdescs,
          self._dht_pnames) = _trait_param_info(dhtraits, 'dht', nrnodes)
         (self._zpt_pdescs,
-         self._zpt_pnames) = _trait_param_info(zptraits, 'zpt_', nrnodes)
+         self._zpt_pnames) = _trait_param_info(zptraits, 'zpt', nrnodes)
         (self._spt_pdescs,
          self._spt_pnames) = _trait_param_info(sptraits, 'spt', nrnodes)
         (self._wpt_pdescs,
