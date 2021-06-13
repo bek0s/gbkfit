@@ -958,6 +958,7 @@ template<typename T> constexpr void
 wp_trait_crange(T& out, T theta, const T* params)
 {
     // TODO
+    out = 7;
 }
 
 template<typename T> constexpr void

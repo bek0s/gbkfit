@@ -232,13 +232,17 @@ class GModelMCDisk(GModelMCDisk):
             _ptr(spt_uids),
             _ptr(spt_cvalues), _ptr(spt_ccounts),
             _ptr(spt_pvalues), _ptr(spt_pcounts),
+            _size(wpt_uids),
+            _ptr(wpt_uids),
+            _ptr(wpt_cvalues), _ptr(wpt_ccounts),
+            _ptr(wpt_pvalues), _ptr(wpt_pcounts),
             spat_size[0], spat_size[1], spat_size[2],
             spat_step[0], spat_step[1], spat_step[2],
             spat_zero[0], spat_zero[1], spat_zero[2],
             spec_size,
             spec_step,
             spec_zero,
-            _ptr(image), _ptr(scube), _ptr(rcube),
+            _ptr(image), _ptr(scube), _ptr(rcube), _ptr(wcube),
             _ptr(rdata), _ptr(vdata), _ptr(ddata))
 
 
@@ -305,13 +309,17 @@ class GModelSMDisk(GModelSMDisk):
             _ptr(spt_uids),
             _ptr(spt_cvalues), _ptr(spt_ccounts),
             _ptr(spt_pvalues), _ptr(spt_pcounts),
+            _size(wpt_uids),
+            _ptr(wpt_uids),
+            _ptr(wpt_cvalues), _ptr(wpt_ccounts),
+            _ptr(wpt_pvalues), _ptr(wpt_pcounts),
             spat_size[0], spat_size[1], spat_size[2],
             spat_step[0], spat_step[1], spat_step[2],
             spat_zero[0], spat_zero[1], spat_zero[2],
             spec_size,
             spec_step,
             spec_zero,
-            _ptr(image), _ptr(scube), _ptr(rcube),
+            _ptr(image), _ptr(scube), _ptr(rcube), _ptr(wcube),
             _ptr(rdata), _ptr(vdata), _ptr(ddata))
 
 

@@ -305,9 +305,9 @@ gmodel_smdisk_evaluate(
     {
     for(int z = 0; z < spat_size_z; ++z)
     {
-        T bvalue, vvalue, dvalue;
+        T bvalue, vvalue, dvalue, wvalue = 1;
         bool success = gbkfit::gmodel_smdisk_evaluate_pixel(
-                bvalue, vvalue, dvalue,
+                bvalue, vvalue, dvalue, wcube ? &wvalue : nullptr,
                 x, y, z,
                 loose, tilted,
                 nrnodes, rnodes,
@@ -379,6 +379,10 @@ gmodel_smdisk_evaluate(
 
         if (rcube) {
             rcube[idx] += bvalue;
+        }
+
+        if (wcube) {
+            wcube[idx] = wvalue;
         }
 
         if (rdata) {
@@ -458,11 +462,11 @@ gmodel_mcdisk_evaluate(
     for(int ci = 0; ci < nclouds; ++ci)
     {
         int x, y, z;
-        T bvalue, vvalue, dvalue;
+        T bvalue, vvalue, dvalue, wvalue = 1;
         RNG<T>& rng = rngs[omp_get_thread_num()];
         bool success = gbkfit::gmodel_mcdisk_evaluate_cloud(
                 x, y, z,
-                bvalue, vvalue, dvalue,
+                bvalue, vvalue, dvalue, wcube ? &wvalue : nullptr,
                 rng, ci,
                 cflux, nclouds,
                 ncloudscsum, ncloudscsum_len,
@@ -538,6 +542,11 @@ gmodel_mcdisk_evaluate(
         if (rcube) {
             #pragma omp atomic update
             rcube[idx] += bvalue;
+        }
+
+        if (wcube) {
+            #pragma omp atomic write
+            wcube[idx] = wvalue;
         }
 
         if (rdata) {

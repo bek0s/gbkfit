@@ -20,9 +20,9 @@ public:
     void
     convolve(
             std::array<int, 3> size,
-            Ptr scube, Ptr scube_fft,
-            Ptr wcube, Ptr wcube_fft,
-            Ptr psf3d, Ptr psf3d_fft) const;
+            Ptr scube_r, Ptr scube_c,
+            Ptr wcube_r, Ptr wcube_c,
+            Ptr psf3d_r, Ptr psf3d_c) const;
 
     void
     downscale(
@@ -41,17 +41,17 @@ public:
 private:
 
     mutable std::array<int, 3> m_size;
-    mutable T* m_scube;
-    mutable T* m_wcube;
-    mutable T* m_psf3d;
-    mutable T* m_scube_fft;
-    mutable T* m_wcube_fft;
-    mutable T* m_psf3d_fft;
-    mutable typename fftw3<T>::plan m_scube_fft_plan_r2c;
-    mutable typename fftw3<T>::plan m_scube_fft_plan_c2r;
-    mutable typename fftw3<T>::plan m_wcube_fft_plan_r2c;
-    mutable typename fftw3<T>::plan m_wcube_fft_plan_c2r;
-    mutable typename fftw3<T>::plan m_psf3d_fft_plan_r2c;
+    mutable T* m_scube_r;
+    mutable T* m_wcube_r;
+    mutable T* m_psf3d_r;
+    mutable T* m_scube_c;
+    mutable T* m_wcube_c;
+    mutable T* m_psf3d_c;
+    mutable typename fftw3<T>::plan m_scube_plan_r2c;
+    mutable typename fftw3<T>::plan m_scube_plan_c2r;
+    mutable typename fftw3<T>::plan m_wcube_plan_r2c;
+    mutable typename fftw3<T>::plan m_wcube_plan_c2r;
+    mutable typename fftw3<T>::plan m_psf3d_plan_r2c;
 };
 
 template<typename T>

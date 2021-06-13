@@ -215,7 +215,7 @@ ring_info(
 template<typename T> constexpr bool
 gmodel_mcdisk_evaluate_cloud(
         int& x, int& y, int& z,
-        T& bvalue, T& vvalue, T& dvalue,
+        T& bvalue, T& vvalue, T& dvalue, T* wvalue,
         RNG<T>& rng, int ci,
         T cflux, int nclouds,
         const int* ncloudscsum, int ncloudscsum_len,
@@ -283,6 +283,7 @@ gmodel_mcdisk_evaluate_cloud(
     bvalue = cflux * spat_step_z;
     vvalue = 0;
     dvalue = 0;
+    *wvalue = 1;
 
     // Find which cumulative sum the cloud belongs to.
     while(ci >= ncloudscsum[rnidx]) {
@@ -450,13 +451,28 @@ gmodel_mcdisk_evaluate_cloud(
     // Ensure positive dispersion
     dvalue = std::abs(dvalue);
 
+    // Weight polar traits
+    if (wpt_uids && wvalue)
+    {
+        p_traits<wp_trait<T>>(
+                ptvalues,
+                nwt, wpt_uids,
+                wpt_cvalues, wpt_ccounts,
+                wpt_pvalues, wpt_pcounts,
+                rnidx, rnodes, nrnodes,
+                xd, yd, rd, theta);
+
+        for (int i = 0; i < nwt; ++i)
+            *wvalue *= ptvalues[i];
+    }
+
     return true;
 }
 
 
 template<typename T> constexpr bool
 gmodel_smdisk_evaluate_pixel(
-        T& bvalue, T& vvalue, T& dvalue,
+        T& bvalue, T& vvalue, T& dvalue, T* wvalue,
         int x, int y, int z,
         bool loose, bool tilted,
         int nrnodes, const T* rnodes,
@@ -684,6 +700,21 @@ gmodel_smdisk_evaluate_pixel(
 
     // Ensure positive dispersion
     dvalue = std::abs(dvalue);
+
+    // Weight polar traits
+    if (wpt_uids && wvalue)
+    {
+        p_traits<wp_trait<T>>(
+                ptvalues,
+                nwt, wpt_uids,
+                wpt_cvalues, wpt_ccounts,
+                wpt_pvalues, wpt_pcounts,
+                rnidx, rnodes, nrnodes,
+                xn, yn, rn, theta);
+
+        for (int i = 0; i < nwt; ++i)
+            *wvalue *= ptvalues[i];
+    }
 
     return true;
 }
