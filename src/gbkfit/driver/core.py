@@ -86,7 +86,10 @@ class Driver(parseutils.TypedParserSupport, abc.ABC):
         pass
 
 
-class DModelDCube(abc.ABC):
+driver_parser = parseutils.TypedParser(Driver)
+
+
+class BackendDModelDCube(abc.ABC):
 
     @abc.abstractmethod
     def convolve(
@@ -111,14 +114,14 @@ class DModelDCube(abc.ABC):
         pass
 
 
-class DModelMMaps(abc.ABC):
+class BackendDModelMMaps(abc.ABC):
 
     @abc.abstractmethod
     def moments(self, size, step, zero, scube, mmaps, masks, orders):
         pass
 
 
-class GModelMCDisk(abc.ABC):
+class BackendGModelMCDisk(abc.ABC):
 
     @abc.abstractmethod
     def evaluate(
@@ -142,7 +145,7 @@ class GModelMCDisk(abc.ABC):
         pass
 
 
-class GModelSMDisk(abc.ABC):
+class BackendGModelSMDisk(abc.ABC):
 
     @abc.abstractmethod
     def evaluate(
@@ -165,11 +168,8 @@ class GModelSMDisk(abc.ABC):
         pass
 
 
-class Objective(abc.ABC):
+class BackendObjective(abc.ABC):
 
     @abc.abstractmethod
     def count_pixels(self, data, model, size, count):
         pass
-
-
-driver_parser = parseutils.TypedParser(Driver)

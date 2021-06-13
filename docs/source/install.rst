@@ -19,7 +19,7 @@ The following operating systems are supported:
 Python environment requirements
 -------------------------------
 
-GBKFIT requires Python 3.7 or later.
+GBKFIT requires Python 3.9 or later.
 
 Dealing with old Python environments
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

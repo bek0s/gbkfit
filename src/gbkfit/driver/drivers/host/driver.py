@@ -2,10 +2,15 @@
 import numpy as np
 
 import gbkfit.math
-import gbkfit.native.libgbkfit_host as native_module
+import gbkfit.driver.native.libgbkfit_host as native_module
 
 from gbkfit.driver.core import (
-    Driver, DModelDCube, DModelMMaps, GModelMCDisk, GModelSMDisk, Objective)
+    Driver,
+    BackendDModelDCube,
+    BackendDModelMMaps,
+    BackendGModelMCDisk,
+    BackendGModelSMDisk,
+    BackendObjective)
 
 
 __all__ = ['DriverHost']
@@ -104,7 +109,7 @@ class DriverHost(Driver):
         return Objective(dtype)
 
 
-class DModelDCube(DModelDCube):
+class DModelDCube(BackendDModelDCube):
 
     _CLASSES = {
         np.float32: native_module.DModelDCubef32}
@@ -145,7 +150,7 @@ class DModelDCube(DModelDCube):
             mask_spat, mask_spec, mask_coef, size, _ptr(cube), _ptr(mask))
 
 
-class DModelMMaps(DModelMMaps):
+class DModelMMaps(BackendDModelMMaps):
 
     _CLASSES = {
         np.float32: native_module.DModelMMapsf32}
@@ -167,7 +172,7 @@ class DModelMMaps(DModelMMaps):
             _size(orders))
 
 
-class GModelMCDisk(GModelMCDisk):
+class GModelMCDisk(BackendGModelMCDisk):
 
     _CLASSES = {
         np.float32: native_module.GModelMCDiskf32}
@@ -246,7 +251,7 @@ class GModelMCDisk(GModelMCDisk):
             _ptr(rdata), _ptr(vdata), _ptr(ddata))
 
 
-class GModelSMDisk(GModelSMDisk):
+class GModelSMDisk(BackendGModelSMDisk):
 
     _CLASSES = {
         np.float32: native_module.GModelSMDiskf32}
@@ -323,7 +328,7 @@ class GModelSMDisk(GModelSMDisk):
             _ptr(rdata), _ptr(vdata), _ptr(ddata))
 
 
-class Objective(Objective):
+class Objective(BackendObjective):
 
     _CLASSES = {
         np.float32: native_module.Objectivef32}
