@@ -21,7 +21,8 @@ class DensityMCDisk3D(DensityComponent3D):
             rptraits=traits.rpt_parser.load(opts.get('rptraits')),
             rhtraits=traits.rht_parser.load(opts.get('rhtraits')),
             zptraits=traits.zpt_parser.load(opts.get('zptraits')),
-            sptraits=traits.spt_parser.load(opts.get('sptraits'))))
+            sptraits=traits.spt_parser.load(opts.get('sptraits')),
+            wptraits=traits.wpt_parser.load(opts.get('wptraits'))))
         return cls(**opts)
 
     def dump(self):

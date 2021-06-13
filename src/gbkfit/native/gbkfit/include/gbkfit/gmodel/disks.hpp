@@ -283,7 +283,6 @@ gmodel_mcdisk_evaluate_cloud(
     bvalue = cflux * spat_step_z;
     vvalue = 0;
     dvalue = 0;
-    *wvalue = 1;
 
     // Find which cumulative sum the cloud belongs to.
     while(ci >= ncloudscsum[rnidx]) {
@@ -454,6 +453,8 @@ gmodel_mcdisk_evaluate_cloud(
     // Weight polar traits
     if (wpt_uids && wvalue)
     {
+        *wvalue = 1;
+
         p_traits<wp_trait<T>>(
                 ptvalues,
                 nwt, wpt_uids,
@@ -704,6 +705,8 @@ gmodel_smdisk_evaluate_pixel(
     // Weight polar traits
     if (wpt_uids && wvalue)
     {
+        *wvalue = 1;
+
         p_traits<wp_trait<T>>(
                 ptvalues,
                 nwt, wpt_uids,

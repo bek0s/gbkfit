@@ -218,6 +218,10 @@ class DCube:
             self._dcube.downscale(
                 self._scale, self._edge_hi, self._size_hi, self._size_lo,
                 self._dcube_hi, self._dcube_lo)
+            if self._weights:
+                self._dcube.downscale(
+                    self._scale, self._edge_hi, self._size_hi, self._size_lo,
+                    self._wcube_hi, self._wcube_lo)
 
         self._dcube.make_mask(
             True, True, 1e-6, self._size_lo, self._dcube_lo, self._mcube_lo)
@@ -226,9 +230,11 @@ class DCube:
             out_extra.update(
                 dcube_lo=self._driver.mem_copy_d2h(self._dcube_lo),
                 dcube_hi=self._driver.mem_copy_d2h(self._dcube_hi),
-                wcube_lo=self._driver.mem_copy_d2h(self._wcube_lo),
-                wcube_hi=self._driver.mem_copy_d2h(self._wcube_hi),
                 mcube_lo=self._driver.mem_copy_d2h(self._mcube_lo))
+            if self._weights:
+                out_extra.update(
+                    wcube_lo=self._driver.mem_copy_d2h(self._wcube_lo),
+                    wcube_hi=self._driver.mem_copy_d2h(self._wcube_hi))
             if self._psf:
                 out_extra.update(
                     psf_lo=self._psf.asarray(self._step_lo[:2]),
