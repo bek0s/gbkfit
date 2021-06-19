@@ -1,7 +1,22 @@
 
 #include "gbkfit/host/gmodels.hpp"
+#include "gbkfit/host/kernels.hpp"
 
 namespace gbkfit::host {
+
+template<typename T>
+void GModel<T>::make_wcube(
+        int spat_size_x, int spat_size_y, int spat_size_z,
+        int spec_size,
+        Ptr spat_data,
+        Ptr spec_data) const
+{
+    kernels::gmodel_wcube(
+            spat_size_x, spat_size_y, spat_size_z,
+            spec_size,
+            reinterpret_cast<T*>(spat_data),
+            reinterpret_cast<T*>(spec_data));
+};
 
 template<typename T> void
 GModelMCDisk<T>::evaluate(
@@ -259,6 +274,7 @@ GModelSMDisk<T>::evaluate(
 }
 
 #define INSTANTIATE(T)               \
+    template struct GModel<T>;       \
     template struct GModelMCDisk<T>; \
     template struct GModelSMDisk<T>;
 INSTANTIATE(float)

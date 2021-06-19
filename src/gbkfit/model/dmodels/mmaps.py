@@ -105,7 +105,7 @@ class DModelMMaps(DModel):
         # Prepare dcube
         self._dcube.prepare(self._driver)
         # Create moment maps backend
-        self._mmaps = self._driver.make_backend_dmodel_mmaps(self.dtype())
+        self._mmaps = self._driver.backend().make_dmodel_mmaps(self.dtype())
 
     def _evaluate_impl(self, params, out_dextra, out_gextra):
         driver = self._driver

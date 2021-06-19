@@ -6,16 +6,16 @@ namespace gbkfit::cuda {
 
 template<typename T>
 void GModel<T>::make_wcube(
-        Ptr spat_data,
-        Ptr spec_data,
         int spat_size_x, int spat_size_y, int spat_size_z,
-        int spec_size) const
+        int spec_size,
+        Ptr spat_data,
+        Ptr spec_data) const
 {
     Wrapper<T>::gmodel_wcube(
-            reinterpret_cast<T*>(spat_data),
-            reinterpret_cast<T*>(spec_data),
             spat_size_x, spat_size_y, spat_size_z,
-            spec_size);
+            spec_size,
+            reinterpret_cast<T*>(spat_data),
+            reinterpret_cast<T*>(spec_data));
 };
 
 template<typename T> void

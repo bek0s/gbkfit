@@ -1,11 +1,13 @@
 #pragma once
 
-#include <random>
 #include <iostream>
+#include <random>
+
 #include <omp.h>
 
 #include <gbkfit/dmodel/dmodels.hpp>
 #include <gbkfit/gmodel/disks.hpp>
+#include <gbkfit/gmodel/gmodels.hpp>
 #include "gbkfit/host/fftutils.hpp"
 
 namespace gbkfit {
@@ -246,6 +248,23 @@ evaluate_scube(
         T flux = rvalue * gauss_1d_pdf<T>(zvel, vvalue, dvalue);
         #pragma omp atomic update
         scube[idx] += flux;
+    }
+}
+
+template<typename T> void
+gmodel_wcube(
+        int spat_size_x, int spat_size_y, int spat_size_z,
+        int spec_size,
+        T* src, T* dst)
+{
+    #pragma omp parallel for collapse(2)
+    for(int y = 0; y < spat_size_y; ++y)
+    {
+    for(int x = 0; x < spat_size_x; ++x)
+    {
+        gmodel_weight_scube_pixel(
+                x, y, spat_size_x, spat_size_y, spat_size_z, spec_size, src, dst);
+    }
     }
 }
 

@@ -9,10 +9,10 @@ struct GModel
 {
     void
     make_wcube(
-            Ptr spat_data,
-            Ptr spec_data,
             int spat_size_x, int spat_size_y, int spat_size_z,
-            int spec_size) const;
+            int spec_size,
+            Ptr spat_data,
+            Ptr spec_data) const;
 };
 
 template<typename T>

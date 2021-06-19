@@ -2,18 +2,11 @@
 
 #include "gbkfit/cuda/fftutils.hpp"
 
-#include <cuda.h>
-#include <cuda_runtime_api.h>
-
 namespace gbkfit { namespace cuda {
 
 template<typename T>
 struct Wrapper
 {
-    static void
-    objective_count_pixels(
-            const T* data, const T* model, int size, int* counts);
-
     static void
     dmodel_dcube_complex_multiply_and_scale(
             typename cufft<T>::complex* ary1,
@@ -44,10 +37,10 @@ struct Wrapper
 
     static void
     gmodel_wcube(
-            T* spat_data,
-            T* spec_data,
             int spat_size_x, int spat_size_y, int spat_size_z,
-            int spec_size);
+            int spec_size,
+            T* spat_data,
+            T* spec_data);
 
     static void
     gmodel_mcdisk_evaluate(
@@ -149,6 +142,10 @@ struct Wrapper
             T spec_zero,
             T* image, T* scube, T* rcube, T* wcube,
             T* rdata, T* vdata, T* ddata);
+
+    static void
+    objective_count_pixels(
+            const T* data, const T* model, int size, int* counts);
 };
 
 }} // namespace gbkfit::cuda

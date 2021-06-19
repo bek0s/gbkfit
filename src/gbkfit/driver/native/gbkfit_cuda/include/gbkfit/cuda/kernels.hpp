@@ -1,13 +1,12 @@
 #pragma once
 
 #include <curand_kernel.h>
+#include <thrust/random.h>
 
 #include <gbkfit/dmodel/dmodels.hpp>
 #include <gbkfit/gmodel/disks.hpp>
 #include <gbkfit/gmodel/gmodels.hpp>
 #include "gbkfit/cuda/fftutils.hpp"
-#include <thrust/random.h>
-
 
 namespace gbkfit {
 

@@ -2,19 +2,7 @@
 #include "gbkfit/cuda/kernels.hpp"
 #include "gbkfit/cuda/wrapper.hpp"
 
-namespace gbkfit { namespace cuda {
-
-template<typename T> void
-Wrapper<T>::objective_count_pixels(
-        const T* data, const T* model, int size, int* counts)
-{
-    unsigned int n = size;
-    dim3 bsize(256);
-    dim3 gsize((n + bsize.x - 1) / bsize.x);
-    kernels::objective_count_pixels<<<gsize, bsize>>>(
-            data, model, size, counts);
-    cudaDeviceSynchronize();
-}
+namespace gbkfit::cuda {
 
 template<typename T> void
 Wrapper<T>::dmodel_dcube_complex_multiply_and_scale(
@@ -76,32 +64,31 @@ Wrapper<T>::dmodel_mmaps_moments(
     unsigned int n = size_x * size_y;
     dim3 bsize(256);
     dim3 gsize((n + bsize.x - 1) / bsize.x);
-
     kernels::dcube_moments<<<gsize, bsize>>>(
             size_x, size_y, size_z,
             step_x, step_y, step_z,
             zero_x, zero_y, zero_z,
             scube,
             mmaps, masks, orders, norders);
-
     cudaDeviceSynchronize();
 }
 
 template<typename T> void
 Wrapper<T>::gmodel_wcube(
-        T* spat_data,
-        T* spec_data,
         int spat_size_x, int spat_size_y, int spat_size_z,
-        int spec_size)
+        int spec_size,
+        T* spat_data,
+        T* spec_data)
 {
     const int n = spat_size_x * spat_size_y;
-
     dim3 bsize(256);
     dim3 gsize((n + bsize.x - 1) / bsize.x);
-
-
     kernels::gmodel_wcube<<<gsize, bsize>>>(
-            spat_size_x, spat_size_y, spat_size_z, spec_size, spat_data, spec_data);
+            spat_size_x, spat_size_y, spat_size_z,
+            spec_size,
+            spat_data,
+            spec_data);
+   cudaDeviceSynchronize();
 }
 
 template<typename T> void
@@ -317,9 +304,21 @@ Wrapper<T>::gmodel_smdisk_evaluate(
     cudaDeviceSynchronize();
 }
 
+template<typename T> void
+Wrapper<T>::objective_count_pixels(
+        const T* data, const T* model, int size, int* counts)
+{
+    unsigned int n = size;
+    dim3 bsize(256);
+    dim3 gsize((n + bsize.x - 1) / bsize.x);
+    kernels::objective_count_pixels<<<gsize, bsize>>>(
+            data, model, size, counts);
+    cudaDeviceSynchronize();
+}
+
 #define INSTANTIATE(T)          \
     template struct Wrapper<T>;
 INSTANTIATE(float)
 #undef INSTANTIATE
 
-}} // namespace gbkfit::cuda::wrapper
+} // namespace gbkfit::cuda

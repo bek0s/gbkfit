@@ -37,7 +37,7 @@ struct wrapper<double>
     static constexpr auto execute = fftw_execute;
 };
 
-}
+} // namespace
 
 template<typename T>
 struct fftw3
@@ -77,6 +77,6 @@ private:
 };
 
 template<typename T>
-int fftw3<T>::refcount = 0;
+int fftw3<T>::refcount {0};
 
 } // namespace gbkfit
