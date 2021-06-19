@@ -118,7 +118,7 @@ class _DModelMMaps(backend.DModelMMaps):
 class _GModel(backend.GModel):
 
     _CLASSES = {
-        np.float32: native_module.GModelMCDiskf32}
+        np.float32: native_module.GModelf32}
 
     def __deepcopy__(self, memodict):
         return self.__class__(self._dtype)
@@ -128,7 +128,11 @@ class _GModel(backend.GModel):
         self._dtype = dtype
 
     def make_wcube(self, spat_size, spec_size, spat_data, spec_data):
-        pass
+        self._backend.make_wcube(
+            spat_size[0], spat_size[1], spat_size[2],
+            spec_size,
+            _ptr(spat_data),
+            _ptr(spec_data))
 
 
 class _GModelMCDisk(backend.GModelMCDisk):

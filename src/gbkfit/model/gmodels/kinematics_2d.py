@@ -38,6 +38,7 @@ class GModelKinematics2D(GModelSCube):
         self._wcube = None
         self._dtype = None
         self._driver = None
+        self._backend = None
         (self._params,
          self._mappings) = _detail.make_gmodel_2d_params(self._cmps)
 
@@ -50,6 +51,7 @@ class GModelKinematics2D(GModelSCube):
         self._size = size
         if wdata is not None:
             self._wcube = driver.mem_alloc_d(self._size[::-1], dtype)
+        self._backend = driver.backend().make_gmodel(dtype)
 
     def evaluate_scube(
             self, driver, params, scube, wdata, size, step, zero, rota, dtype,
@@ -84,4 +86,4 @@ class GModelKinematics2D(GModelSCube):
 
         # Generate weight cube
         if wcube is not None:
-            pass
+            self._backend.make_wcube(spat_size + (1,), spec_size, wcube, wdata)

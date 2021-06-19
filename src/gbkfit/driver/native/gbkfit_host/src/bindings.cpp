@@ -22,6 +22,10 @@ PYBIND11_MODULE(EXTENSION_NAME, m)
             .def(py::init<>())
             .def("moments", &DModelMMaps<float>::moments);
 
+    py::class_<GModel<float>>(m, "GModelf32")
+            .def(py::init<>())
+            .def("make_wcube", &GModel<float>::make_wcube);
+
     py::class_<GModelMCDisk<float>>(m, "GModelMCDiskf32")
             .def(py::init<>())
             .def("evaluate", &GModelMCDisk<float>::evaluate);

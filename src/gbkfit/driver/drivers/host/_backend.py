@@ -34,25 +34,25 @@ def _get_class(classes, dtype):
 class Backend(backend.Backend):
 
     def make_dmodel_dcube(self, dtype):
-        return DModelDCube(dtype)
+        return _DModelDCube(dtype)
 
     def make_dmodel_mmaps(self, dtype):
-        return DModelMMaps(dtype)
+        return _DModelMMaps(dtype)
 
     def make_gmodel(self, dtype):
-        return GModel(dtype)
+        return _GModel(dtype)
 
     def make_gmodel_mcdisk(self, dtype):
-        return GModelMCDisk(dtype)
+        return _GModelMCDisk(dtype)
 
     def make_gmodel_smdisk(self, dtype):
-        return GModelSMDisk(dtype)
+        return _GModelSMDisk(dtype)
 
     def make_objective(self, dtype):
-        return Objective(dtype)
+        return _Objective(dtype)
 
 
-class DModelDCube(backend.DModelDCube):
+class _DModelDCube(backend.DModelDCube):
 
     _CLASSES = {
         np.float32: native_module.DModelDCubef32}
@@ -93,7 +93,7 @@ class DModelDCube(backend.DModelDCube):
             mask_spat, mask_spec, mask_coef, size, _ptr(cube), _ptr(mask))
 
 
-class DModelMMaps(backend.DModelMMaps):
+class _DModelMMaps(backend.DModelMMaps):
 
     _CLASSES = {
         np.float32: native_module.DModelMMapsf32}
@@ -115,10 +115,10 @@ class DModelMMaps(backend.DModelMMaps):
             _size(orders))
 
 
-class GModel(backend.GModel):
+class _GModel(backend.GModel):
 
     _CLASSES = {
-        np.float32: native_module.GModelMCDiskf32}
+        np.float32: native_module.GModelf32}
 
     def __deepcopy__(self, memodict):
         return self.__class__(self._dtype)
@@ -128,10 +128,14 @@ class GModel(backend.GModel):
         self._dtype = dtype
 
     def make_wcube(self, spat_size, spec_size, spat_data, spec_data):
-        pass
+        self._backend.make_wcube(
+            spat_size[0], spat_size[1], spat_size[2],
+            spec_size,
+            _ptr(spat_data),
+            _ptr(spec_data))
 
 
-class GModelMCDisk(backend.GModelMCDisk):
+class _GModelMCDisk(backend.GModelMCDisk):
 
     _CLASSES = {
         np.float32: native_module.GModelMCDiskf32}
@@ -210,7 +214,7 @@ class GModelMCDisk(backend.GModelMCDisk):
             _ptr(rdata), _ptr(vdata), _ptr(ddata))
 
 
-class GModelSMDisk(backend.GModelSMDisk):
+class _GModelSMDisk(backend.GModelSMDisk):
 
     _CLASSES = {
         np.float32: native_module.GModelSMDiskf32}
@@ -287,7 +291,7 @@ class GModelSMDisk(backend.GModelSMDisk):
             _ptr(rdata), _ptr(vdata), _ptr(ddata))
 
 
-class Objective(backend.Objective):
+class _Objective(backend.Objective):
 
     _CLASSES = {
         np.float32: native_module.Objectivef32}

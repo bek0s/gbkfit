@@ -54,6 +54,7 @@ class GModelIntensity3D(GModelImage):
         self._wcube = None
         self._dtype = None
         self._driver = None
+        self._backend = None
         (self._params,
          self._mappings,
          self._tmappings) = _detail.make_gmodel_3d_params(
@@ -76,6 +77,7 @@ class GModelIntensity3D(GModelImage):
             self._tcube = driver.mem_alloc_d(self._size[::-1], dtype)
         if wdata is not None:
             self._wcube = driver.mem_alloc_d(self._size[::-1], dtype)
+        self._backend = driver.backend().make_gmodel(dtype)
 
     def evaluate_image(
             self, driver, params, image, wdata, size, step, zero, rota, dtype,
@@ -139,4 +141,4 @@ class GModelIntensity3D(GModelImage):
 
         # Generate weight image
         if wcube is not None:
-            pass
+            self._backend.make_wcube(spat_size, 1, wcube, wdata)
