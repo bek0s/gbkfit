@@ -140,7 +140,7 @@ class Objective(parseutils.BasicParserSupport):
             self._s_residual_vector[i] = driver.mem_alloc_s(nelem, dtype)
             self._s_residual_scalar[i] = driver.mem_alloc_s(1, dtype)
             self._s_counts[i] = driver.mem_alloc_s(3, np.int32)
-            self._backends[i] = driver.make_objective(dtype)
+            self._backends[i] = driver.make_backend_objective(dtype)
             # Copy dataset to the device memory
             ielem = 0
             for j in range(nitems):

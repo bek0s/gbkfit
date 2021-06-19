@@ -43,6 +43,13 @@ struct Wrapper
             T* mmaps, T* masks, const int* orders, int norders);
 
     static void
+    gmodel_wcube(
+            T* spat_data,
+            T* spec_data,
+            int spat_size_x, int spat_size_y, int spat_size_z,
+            int spec_size);
+
+    static void
     gmodel_mcdisk_evaluate(
             T cflux, int nclouds,
             const int* ncloudscsum, int ncloudscsum_len,

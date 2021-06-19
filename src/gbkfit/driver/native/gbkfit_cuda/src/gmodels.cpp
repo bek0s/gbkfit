@@ -4,6 +4,20 @@
 
 namespace gbkfit::cuda {
 
+template<typename T>
+void GModel<T>::make_wcube(
+        Ptr spat_data,
+        Ptr spec_data,
+        int spat_size_x, int spat_size_y, int spat_size_z,
+        int spec_size) const
+{
+    Wrapper<T>::gmodel_wcube(
+            reinterpret_cast<T*>(spat_data),
+            reinterpret_cast<T*>(spec_data),
+            spat_size_x, spat_size_y, spat_size_z,
+            spec_size);
+};
+
 template<typename T> void
 GModelMCDisk<T>::evaluate(
         T cflux, int nclouds,
@@ -260,6 +274,7 @@ GModelSMDisk<T>::evaluate(
 }
 
 #define INSTANTIATE(T)               \
+    template struct GModel<T>;       \
     template struct GModelMCDisk<T>; \
     template struct GModelSMDisk<T>;
 INSTANTIATE(float)

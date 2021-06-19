@@ -203,9 +203,12 @@ class DCube:
         # Hence, we use a spatial mask to mark all the good pixels
         self._mcube_lo = driver.mem_alloc_d(size_lo[::-1], dtype)
         # Create and prepare dcube backend
-        self._dcube = driver.make_dmodel_dcube(dtype)
+        self._dcube = driver.backend().make_dmodel_dcube(dtype)
 
     def evaluate(self, out_extra):
+
+
+
 
         if self._psf or self._lsf:
             self._dcube.convolve(

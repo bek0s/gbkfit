@@ -339,7 +339,8 @@ def main():
     #
 
     args = parser.parse_args()
-    # _log.debug(f"CLI was called with the following arguments: {vars(args)}")
+    _log.debug(
+        f"cli has been called with the following arguments: {vars(args)}")
 
     if args.task == 'eval':
         import gbkfit.tasks.eval

@@ -4,6 +4,7 @@
 
 #include <gbkfit/dmodel/dmodels.hpp>
 #include <gbkfit/gmodel/disks.hpp>
+#include <gbkfit/gmodel/gmodels.hpp>
 #include "gbkfit/cuda/fftutils.hpp"
 #include <thrust/random.h>
 
@@ -280,7 +281,26 @@ dcube_moments(
 }
 
 template<typename T> __global__ void
-gmodel_smdisk_evaluate1(
+gmodel_wcube(
+        int spat_size_x, int spat_size_y, int spat_size_z,
+        int spec_size,
+        T* src, T* dst)
+{
+    int n = spat_size_x * spat_size_y;
+
+    int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (tid >= n) return;
+
+    int x, y;
+    index_1d_to_2d(x, y, tid, spat_size_x);
+
+    gmodel_weight_scube_pixel(
+            x, y, spat_size_x, spat_size_y, spat_size_z, spec_size, src, dst);
+}
+
+
+template<typename T> __global__ void
+gmodel_smdisk_evaluate(
         bool loose, bool tilted,
         int nrnodes, const T* rnodes,
         const T* vsys,

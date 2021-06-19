@@ -31,7 +31,7 @@ class SMDisk(_disk.Disk):
             wptraits)
 
     def _impl_prepare(self, driver, dtype):
-        self._disk = driver.make_gmodel_smdisk(dtype)
+        self._disk = driver.make_backend_gmodel_smdisk(dtype)
 
     def _impl_evaluate(
             self, driver, params, image, scube, rcube, wcube,

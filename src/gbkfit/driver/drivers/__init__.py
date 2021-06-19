@@ -23,7 +23,7 @@ def _register_factories(parser, factories):
 def _register_drivers():
     from gbkfit.driver.core import driver_parser as parser
     factories = [
-        'gbkfit.driver.drivers.cuda.DriverCUDA',
+        'gbkfit.driver.drivers.cuda.DriverCuda',
         'gbkfit.driver.drivers.host.DriverHost']
     _register_factories(parser, factories)
 

@@ -5,6 +5,17 @@
 namespace gbkfit::cuda {
 
 template<typename T>
+struct GModel
+{
+    void
+    make_wcube(
+            Ptr spat_data,
+            Ptr spec_data,
+            int spat_size_x, int spat_size_y, int spat_size_z,
+            int spec_size) const;
+};
+
+template<typename T>
 struct GModelMCDisk
 {
     void

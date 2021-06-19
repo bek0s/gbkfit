@@ -88,6 +88,23 @@ Wrapper<T>::dmodel_mmaps_moments(
 }
 
 template<typename T> void
+Wrapper<T>::gmodel_wcube(
+        T* spat_data,
+        T* spec_data,
+        int spat_size_x, int spat_size_y, int spat_size_z,
+        int spec_size)
+{
+    const int n = spat_size_x * spat_size_y;
+
+    dim3 bsize(256);
+    dim3 gsize((n + bsize.x - 1) / bsize.x);
+
+
+    kernels::gmodel_wcube<<<gsize, bsize>>>(
+            spat_size_x, spat_size_y, spat_size_z, spec_size, spat_data, spec_data);
+}
+
+template<typename T> void
 Wrapper<T>::gmodel_mcdisk_evaluate(
         T cflux, int nclouds,
         const int* ncloudscsum, int ncloudscsum_len,
@@ -249,7 +266,7 @@ Wrapper<T>::gmodel_smdisk_evaluate(
 
     dim3 bsize(256);
     dim3 gsize((n + bsize.x - 1) / bsize.x);
-    kernels::gmodel_smdisk_evaluate1<float><<<gsize, bsize>>>(
+    kernels::gmodel_smdisk_evaluate<<<gsize, bsize>>>(
             loose, tilted,
             nrnodes, rnodes,
             vsys,
