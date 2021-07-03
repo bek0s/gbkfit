@@ -8,7 +8,7 @@ import pathlib
 import ruamel.yaml
 
 from dataclasses import dataclass, asdict
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Optional
 from operator import attrgetter
 
 import numpy as np
@@ -42,17 +42,39 @@ def _dump_posterior(params, posterior, prefix=''):
     np.savetxt(filename, data, fmt=f'%{width1}.{width2}e', header=header)
 
 
-def load_result(input_dir):
+def load_result(result_dir):
 
-    #json.load()
-    pass
+    # Work with absolute paths
+    result_dir = os.path.abspath(result_dir)
+
+    #
+    # Result directory contains a 'result.yaml' file with a bunch of
+    # important information.
+    #
+
+    try:
+        result = yaml.load(open(os.path.join(result_dir, 'result.yaml')))
+    except Exception as e:
+        raise RuntimeError(
+            "error while reading result directory; "
+            "see preceding exception for additional information") from e
+
+    # Discover solution directories
+    solution_dirs = sorted([str(path) for path in pathlib.Path(
+        os.path.join(result_dir, 'solutions')).glob('*')])
+
+    # Create solutions
+    for solution_dir in solution_dirs:
+        pass
+
+    return 1
 
 
-def _dump_object(filename, obj, json_=True, yaml_=True):
-    if json_:
+def _dump_object(filename, obj, dump_json=True, dump_yaml=True):
+    if dump_json:
         with open(filename + '.json', 'w+') as f:
             json.dump(obj, f, indent=2)
-    if yaml_:
+    if dump_yaml:
         with open(filename + '.yaml', 'w+') as f:
             yaml.dump(obj, f)
 
@@ -73,9 +95,12 @@ def dump_result(output_dir, result):
     with open(filename_root + '.json', 'w+') as f:
         f.write(json.dumps(root_info, indent=2))
 
+    with open(filename_root + '.yaml', 'w+') as f:
+        yaml.dump(root_info, f)
+
     # Dump datasets
     for i, dataset in enumerate(result.datasets):
-        for key, data in result.datasets[i].items():
+        for key, data in dataset.items():
             prefix = os.path.join(output_dir, f'dataset_{i}_{key}')
             filename_d = f'{prefix}_d.fits'
             filename_m = f'{prefix}_m.fits'
@@ -119,7 +144,7 @@ def dump_result(output_dir, result):
             for key in dataset:
                 filename_mdl = f'bestfit_{j}_mdl_{key}_d.fits'
                 filename_res = f'bestfit_{j}_res_{key}_d.fits'
-                gbkfit.dataset.Data(model[key]['data']).dump(
+                gbkfit.dataset.Data(model[key]['d']).dump(
                     os.path.join(solution_dir, filename_mdl))
                 gbkfit.dataset.Data(resid[key]).dump(
                     os.path.join(solution_dir, filename_res))
@@ -164,14 +189,14 @@ class FitterResultSolution:
 class FitterResult:
 
     datasets: Any
-    params_all: Tuple
-    params_free: Tuple
-    params_tied: Tuple
-    params_fixed: Dict
-    params_varying: Tuple
-    solutions: Tuple[FitterResultSolution]
+    params_all: tuple
+    params_free: tuple
+    params_tied: tuple
+    params_fixed: dict
+    params_varying: tuple
+    solutions: tuple[FitterResultSolution]
     posterior: FitterResultPosterior
-    extra: Dict
+    extra: dict
 
     @property
     def champion(self):
@@ -190,6 +215,7 @@ class FitterResult:
             number of solutions: {len(self.solutions)}
             """)
         return summary
+
 
 def make_fitter_result(
         objective, parameters, posterior=None, extra=None, solutions=()):
@@ -223,8 +249,9 @@ def make_fitter_result(
         if 'mode' in s:
             eparams_free = dict(zip(enames_free, s['mode']))
             eparams_varying = {p: None for p in enames_varying}
-            exprs.evaluate(eparams_free, eparams_varying)
+            exprs.evaluate(eparams_free, True, eparams_varying)
             sol.mode = np.array(list(eparams_varying.values()))
+
 
         # Calculate statistical quantities from posterior
         if 'posterior' in s:
@@ -280,6 +307,9 @@ def make_fitter_result(
 
         # ...
         sols.append(sol)
+
+    # Sort solution by chi-squared
+    sols = sorted(sols, key=lambda x: x.chisqr)
 
     return FitterResult(
         objective.datasets(),

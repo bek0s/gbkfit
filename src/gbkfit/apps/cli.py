@@ -130,14 +130,14 @@ def main():
     parser_eval = parsers_task.add_parser('eval', parents=[parser_common])
     parser_eval.add_argument(
         'config', type=str,
-        help='configuration file path; json and yaml formats are supported')
+        help="configuration file path; json and yaml formats are supported")
     parser_eval.add_argument(
         '--prof', type=_number_range(int, 0, None), default=0,
         metavar='ITERS',
-        help='if ITERS=0, profiling mode is disabled; '
-             'if ITERS>0, profiling mode is enabled; '
-             'when in profiling mode, the software will evaluate the model '
-             'ITERS times and provide performance evaluation statistics')
+        help="if ITERS=0, profiling mode is disabled; "
+             "if ITERS>0, profiling mode is enabled; "
+             "when in profiling mode, the software will evaluate the model "
+             "ITERS times and provide performance evaluation statistics")
 
     #
     # Create parser for prep task
@@ -164,21 +164,21 @@ def main():
     parser_prep_common = argparse.ArgumentParser(add_help=False)
     parser_prep_common.add_argument(
         '--dtype', type=str, default='float32', choices=['float32', 'float64'],
-        help='data type of the output')
+        help="data type of the output")
     parser_prep_common.add_argument(
         '--minify', action='store_true',
-        help='crop the edges of the input data until valid pixels are found')
+        help="crop the edges of the input data until valid pixels are found")
     # ...
     parser_prep_nanpad = argparse.ArgumentParser(add_help=False)
     parser_prep_nanpad.add_argument(
         '--nanpad', type=_number_range(int, 0, None),
         metavar='SIZE',
-        help='nan-pad the resulting data by SIZE along all dimensions')
+        help="nan-pad the resulting data by SIZE along all dimensions")
     # ...
     parser_prep_orders = argparse.ArgumentParser(add_help=False)
     parser_prep_orders.add_argument(
         'orders', type=_number_range(int, 0, 7), nargs='+',
-        help='the orders of the provided moment map data')
+        help="the orders of the provided moment map data")
     # ...
     parser_prep_input_1 = argparse.ArgumentParser(add_help=False)
     parser_prep_input_1.add_argument(
@@ -216,22 +216,22 @@ def main():
         '--roi-spat', type=_number_range(int, 0, None), nargs=2,
         action=_create_validator([_validate_range_1d]),
         metavar=('MIN', 'MAX'),
-        help='crop input data around a region of interest (spatial)')
+        help="crop input data around a region of interest (spatial)")
     # ...
     parser_prep_roi_spat_2d = argparse.ArgumentParser(add_help=False)
     parser_prep_roi_spat_2d.add_argument(
         '--roi-spat', type=_number_range(int, 0, None), nargs=4,
         action=_create_validator([_validate_range_2d]),
         metavar=('L', 'R', 'B', 'T'),
-        help='crop input data around a region of interest (spatial); '
-             'L: Left, R: Right, B: Bottom, T: Top')
+        help="crop input data around a region of interest (spatial); "
+             "L: Left, R: Right, B: Bottom, T: Top")
     # ...
     parser_prep_roi_spec_1d = argparse.ArgumentParser(add_help=False)
     parser_prep_roi_spec_1d.add_argument(
         '--roi-spec', type=_number_range(int, 0, None), nargs=2,
         action=_create_validator([_validate_range_1d]),
         metavar=('MIN', 'MAX'),
-        help='crop input data around a region of interest (spectral)')
+        help="crop input data around a region of interest (spectral)")
     # ...
     parser_prep_clip_1 = argparse.ArgumentParser(add_help=False)
     parser_prep_clip_1.add_argument(
@@ -277,16 +277,16 @@ def main():
     parser_prep_ccl.add_argument(
         '--ccl-lcount', type=_number_range(int, 1, None),
         metavar='COUNT',
-        help='connected component labeling; maximum number of labels')
+        help="connected component labeling; maximum number of labels")
     parser_prep_ccl.add_argument(
         '--ccl-pcount', type=_number_range(int, 1, None),
         metavar='COUNT',
-        help='connected component labeling; minimum area per label')
+        help="connected component labeling; minimum area per label")
     parser_prep_ccl.add_argument(
         '--ccl-lratio', type=_number_range(float, 0.0, 1.0),
         metavar='RATIO',
-        help='connected component labeling; minimum area ratio per label; '
-             'RATIO = (label area) / (largest label area)')
+        help="connected component labeling; minimum area ratio per label; "
+             "RATIO = (label area) / (largest label area)")
     # ...
     parser_prep = parsers_task.add_parser('prep')
     parsers_prep = parser_prep.add_subparsers(dest='prep_task')
@@ -320,7 +320,7 @@ def main():
     parser_fit = parsers_task.add_parser('fit', parents=[parser_common])
     parser_fit.add_argument(
         'config', type=str,
-        help='configuration file path; json and yaml formats are supported')
+        help="configuration file path; json and yaml formats are supported")
 
     #
     # Create parser for plot task
@@ -329,10 +329,28 @@ def main():
     parser_plot = parsers_task.add_parser('plot', parents=[parser_common])
     parser_plot.add_argument(
         'result', type=str,
-        help='path of the output directory of a fitting run')
+        metavar='RESULT',
+        help="the path of the output directory of a fitting run")
     parser_plot.add_argument(
-        '--params', nargs='+', type=str,
-        help='only plot results for the parameters in the PARAMS list')
+        '--format', type=str, default='pdf', choices=['pdf', 'png'],
+        metavar='FORMAT',
+        help="the format of the created figures")
+    parser_plot.add_argument(
+        '--dpi', type=_number_range(int, 100, None), default=150,
+        metavar='DPI',
+        help="the dpi of the created figures")
+    parser_plot.add_argument(
+        '--only-champion', action='store_true', default=True,
+        help="only plot results of the best solution; "
+             "only useful for results containing multiple solutions")
+    parser_plot.add_argument(
+        '--posterior-params', type=str, nargs='+',
+        metavar='PARAMS',
+        help="plot posterior only for the model parameters in the PARAMS list; "
+             "if not defined, all model parameters will be used")
+    parser_plot.add_argument(
+        '--skip-posterior', action='store_false', default=False,
+        help="do not create posterior distribution figures")
 
     #
     # Parse arguments and run the appropriate task
@@ -383,7 +401,9 @@ def main():
 
     elif args.task == 'plot':
         import gbkfit.tasks.plot
-        gbkfit.tasks.plot.plot(args.result)
+        gbkfit.tasks.plot.plot(
+            args.result, args.format, args.dpi,
+            args.only_champion, args.posterior_params, args.skip_posterior)
 
     _log.info("So long and thanks for all the fish!")
 

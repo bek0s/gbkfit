@@ -45,8 +45,8 @@ class FitterLMFit(Fitter, abc.ABC):
         self._method = method
         self._iter_cb = iter_cb
         self._scale_covar = scale_covar
-        self._nan_policy = 'raise'
         self._calc_covar = True
+        self._nan_policy = 'raise'
         self._max_nfev = max_nfev
         self._options = options
 
@@ -172,3 +172,14 @@ class FitterLMFitNelderMead(FitterLMFit):
 
     def _setup_minimizer_options(self, parameters):
         return copy.deepcopy(self._options)
+
+
+class FitterLMFitSHGO(FitterLMFit):
+
+    @staticmethod
+    def type():
+        return 'lmfit.shgo'
+
+    @staticmethod
+    def load_params(info, descs):
+        pass

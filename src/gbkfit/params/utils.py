@@ -3,15 +3,17 @@ import ast
 import collections
 import copy
 import graphlib
+import inspect
 import itertools
 import logging
 import numbers
 import re
+import textwrap
 
 import numpy as np
 
 from gbkfit.params.descs import ParamScalarDesc, ParamVectorDesc
-from gbkfit.utils import iterutils
+from gbkfit.utils import iterutils, miscutils, parseutils
 
 
 log = logging.getLogger(__name__)
@@ -152,7 +154,6 @@ def _parse_param_symbol_subscript_aindx(x):
 
 
 def _parse_param_symbol_subscript(x, size):
-    indices = None
     if _is_param_symbol_subscript_bindx(x):
         indices = _parse_param_symbol_subscript_bindx(x)
     elif _is_param_symbol_subscript_slice(x):
@@ -846,15 +847,6 @@ def parse_param_info(
 
     return (keys_2, values_2, param_names_2, param_indices_2,
             dict(zip(eparams, evalues)), exprs)
-
-
-import inspect
-import textwrap
-
-from gbkfit.utils import miscutils, parseutils
-
-
-
 
 
 def load_expressions(info):

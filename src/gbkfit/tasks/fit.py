@@ -92,10 +92,16 @@ def fit(config):
 
     log.info("setting up params...")
 
-    cfg['params'] = _prepare_params(cfg['params'], pdescs)
+    print(cfg['params']['parameters'])
 
     exit()
+
+    #cfg['params'] = _prepare_params(cfg['params'], pdescs)
+
+    #exit()
     params = fitter.load_params(cfg['params'], pdescs)
+    # print(cfg['params'])
+    # exit()
 
     #
     # Perform fit

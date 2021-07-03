@@ -232,8 +232,8 @@ class Objective(parseutils.BasicParserSupport):
             for name in names:
                 # Grub references to model and data
                 slice_ = slice(ielem, ielem + npix)
-                mdl_d = models_data[i][name]['data'].ravel()
-                mdl_m = models_data[i][name]['mask'].ravel()
+                mdl_d = models_data[i][name]['d'].ravel()
+                mdl_m = models_data[i][name]['m'].ravel()
                 dat_d = self._d_dataset_d_vector[i][slice_]
                 dat_m = self._d_dataset_m_vector[i][slice_]
                 dat_e = self._d_dataset_e_vector[i][slice_]
