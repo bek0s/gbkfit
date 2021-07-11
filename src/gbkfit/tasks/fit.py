@@ -18,7 +18,7 @@ from gbkfit.utils import miscutils
 from . import _detail
 
 
-log = logging.getLogger(__name__)
+_log = logging.getLogger(__name__)
 
 
 # Use this object to load and dump yaml
@@ -34,7 +34,7 @@ def _prepare_params(info, descs):
     parameters = info['parameters']
     keys, values = gbkfit.params.utils.parse_param_keys(parameters, descs)[:2]
 
-    return 1
+    return info
 
 
 def fit(config):
@@ -44,7 +44,7 @@ def fit(config):
     # perform all necessary validation/preparation
     #
 
-    log.info(f"reading configuration file: '{config}'...")
+    _log.info(f"reading configuration file: '{config}'...")
 
     try:
         cfg = yaml.load(open(config))
@@ -53,68 +53,59 @@ def fit(config):
             "error while reading configuration file; "
             "see preceding exception for additional information") from e
 
-    cfg = _detail.prepare_config(
-        cfg,
-        ('drivers', 'datasets', 'dmodels', 'gmodels', 'params', 'fitter'),
-        ('objective', 'pdescs'))
+    required_sections = (
+        'drivers', 'datasets', 'dmodels', 'gmodels', 'params', 'fitter')
+    optional_sections = ('objective', 'pdescs')
+    cfg = _detail.prepare_config(cfg, required_sections, optional_sections)
 
     #
     # Setup all the components described in the configuration
     #
 
-    log.info("setting up drivers...")
+    _log.info("setting up drivers...")
     drivers = gbkfit.driver.driver_parser.load(cfg['drivers'])
 
-    log.info("setting up datasets...")
+    _log.info("setting up datasets...")
     datasets = gbkfit.dataset.dataset_parser.load(cfg['datasets'])
 
-    log.info("setting up dmodels...")
+    _log.info("setting up dmodels...")
     dmodels = gbkfit.model.dmodel_parser.load(cfg['dmodels'], dataset=datasets)
 
-    log.info("setting up gmodels...")
+    _log.info("setting up gmodels...")
     gmodels = gbkfit.model.gmodel_parser.load(cfg['gmodels'])
 
-    log.info("setting up model...")
+    _log.info("setting up model...")
     models = gbkfit.model.make_model_group_from_cmp(dmodels, gmodels, drivers)
 
-    log.info("setting up fitter...")
+    _log.info("setting up fitter...")
     fitter = gbkfit.fitting.fitter_parser.load(cfg['fitter'])
 
-    log.info("setting up objective...")
+    _log.info("setting up objective...")
     objective = gbkfit.fitting.objective_parser.load(
         cfg.get('objective', {}), datasets=datasets, models=models)
 
     pdescs = None
     if 'pdescs' in cfg:
-        log.info("setting up pdescs...")
-        pdescs = gbkfit.params.descs.load_descs(cfg['pdescs'])
-    pdescs = gbkfit.params.descs.merge_descs(objective.pdescs(), pdescs)
+        _log.info("setting up pdescs...")
+        pdescs = gbkfit.params.descs.load_descs_dict(cfg['pdescs'])
+    pdescs = _detail.merge_pdescs(objective.pdescs(), pdescs)
 
-    log.info("setting up params...")
-
-    print(cfg['params']['parameters'])
-
-    exit()
-
-    #cfg['params'] = _prepare_params(cfg['params'], pdescs)
-
-    #exit()
+    _log.info("setting up params...")
+    cfg['params'] = _prepare_params(cfg['params'], pdescs)
     params = fitter.load_params(cfg['params'], pdescs)
-    # print(cfg['params'])
-    # exit()
 
     #
     # Perform fit
     #
-    #exit()
-    log.info("model-fitting started")
+
+    _log.info("model-fitting started")
     t1 = time.time_ns()
     result = fitter.fit(objective, params)
     t2 = time.time_ns()
-    t_ms = (t2 - t1) // 1000000
-    log.info(f"model-fitting completed (elapsed time: {t_ms} ms)")
+    t_ms = (t2 - t1) // 1_000_000
+    _log.info(f"model-fitting completed (elapsed time: {t_ms} ms)")
 
     output_dir = os.path.abspath(miscutils.make_unique_path('out'))
-    log.info(f"saving result under '{output_dir}'...")
+    _log.info(f"saving result under '{output_dir}'...")
     gbkfit.fitting.result.dump_result(output_dir, result)
     print(result.summary())

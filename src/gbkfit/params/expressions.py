@@ -51,10 +51,8 @@ def load_exprs_file(info):
     return miscutils.get_attr_from_file(opts['file'], opts['func'])
 
 
-def dump_exprs_file(file, exprs):
-    func_obj = exprs.exprs_func_obj()
-    func_src = exprs.exprs_func_src()
-    if func_obj and not func_src:
+def dump_exprs_file(file, func_obj, func_src):
+    if not func_src:
         raise RuntimeError(
             "failed to dump expression function "
             "because its source code is not available")
@@ -63,7 +61,7 @@ def dump_exprs_file(file, exprs):
     return dict(file=file, func=func_obj.__name__)
 
 
-class Expressions:
+class Interpreter:
 
     def __init__(self, descs, exprs_dict=None, exprs_func=None):
         self._descs = copy.deepcopy(descs)
@@ -195,7 +193,7 @@ class Expressions:
         # Apply expressions on the iparams
         self._apply_exprs()
         # Extract all eparams from the iparams
-        if out_eparams:
+        if out_eparams is not None:
             self._extract_eparams(out_eparams)
         # Return a copy of the params (for safety)
         return copy.deepcopy(self._iparams)
@@ -224,7 +222,7 @@ class Expressions:
                 self._iparams[name][index] = val
 
     def _extract_eparams(self, out_eparams):
-        for ename in out_eparams:
+        for ename in self.enames():
             name = self._eparams_nmapping[ename]
             index = self._eparams_imapping[ename]
             out_eparams[ename] = self._iparams[name] \

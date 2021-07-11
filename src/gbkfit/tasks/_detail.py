@@ -96,9 +96,21 @@ def prepare_config(config, req_sections=(), opt_sections=()):
                 f"{str(invalid_pdescs)}")
 
     # Make sure the return value is pure json
-    config = json.loads(json.dumps(config))
+    return json.loads(json.dumps(config))
 
-    return config
+
+def merge_pdescs(dict1, dict2):
+    if dict1 is None:
+        dict1 = {}
+    if dict2 is None:
+        dict2 = {}
+    if intersection := set(dict1) & set(dict2):
+        raise RuntimeError(
+            f"the following pdescs conflict with "
+            f"the parameters of the objective function: "
+            f"{str(intersection)}; "
+            f"please choose different names")
+    return dict1 | dict2
 
 
 def nativify(node):

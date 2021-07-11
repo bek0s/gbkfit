@@ -1,17 +1,16 @@
 
 import json
 import logging
-import time
 
 import astropy.io.fits as fits
-import numpy as np
+import pandas as pd
 import ruamel.yaml
-import scipy.stats as stats
 
 import gbkfit
 import gbkfit.dataset
 import gbkfit.driver
 import gbkfit.model
+import gbkfit.objective
 import gbkfit.params
 import gbkfit.params.params
 import gbkfit.params.descs
@@ -20,7 +19,7 @@ from gbkfit.utils import iterutils
 from . import _detail
 
 
-log = logging.getLogger(__name__)
+_log = logging.getLogger(__name__)
 
 
 # Use this object to load and dump yaml
@@ -46,7 +45,7 @@ def _prepare_params(info, descs):
             else:
                 recovery_failed.append(key)
     if recovery_succeed:
-        log.info(
+        _log.info(
             f"successfully recovered values "
             f"for the following parameter keys: {recovery_succeed}")
     if recovery_failed:
@@ -57,14 +56,14 @@ def _prepare_params(info, descs):
     return info
 
 
-def eval_(config, perf=None):
+def eval_(objective_type, config, perf=None):
 
     #
     # Read configuration file and
     # perform all necessary validation/preparation
     #
 
-    log.info(f"reading configuration file: '{config}'...")
+    _log.info(f"reading configuration file: '{config}'...")
 
     try:
         cfg = yaml.load(open(config))
@@ -73,52 +72,57 @@ def eval_(config, perf=None):
             "error while reading configuration file; "
             "see preceding exception for additional information") from e
 
-    cfg = _detail.prepare_config(
-        cfg,
-        ('drivers', 'dmodels', 'gmodels', 'params'),
-        ('datasets', 'pdescs'))
+    required_sections = ('drivers', 'dmodels', 'gmodels', 'params')
+    optional_sections = ('pdescs',)
+    if objective_type == 'model':
+        optional_sections += ('datasets',)
+    if objective_type == 'goodness':
+        required_sections += ('datasets',)
+        optional_sections += ('objective',)
+    cfg = _detail.prepare_config(cfg, required_sections, optional_sections)
 
     #
     # Setup all the components described in the configuration
     #
 
-    log.info("setting up drivers...")
+    _log.info("setting up drivers...")
     drivers = gbkfit.driver.driver_parser.load(cfg['drivers'])
 
     datasets = None
     if 'datasets' in cfg:
-        log.info("setting up datasets...")
+        _log.info("setting up datasets...")
         datasets = gbkfit.dataset.dataset_parser.load(cfg['datasets'])
 
-    log.info("setting up dmodels...")
+    _log.info("setting up dmodels...")
     dmodels = gbkfit.model.dmodel_parser.load(cfg['dmodels'], dataset=datasets)
 
-    log.info("setting up gmodels...")
+    _log.info("setting up gmodels...")
     gmodels = gbkfit.model.gmodel_parser.load(cfg['gmodels'])
 
-    log.info("setting up models...")
-    models = gbkfit.model.make_model_group_from_cmp(dmodels, gmodels, drivers)
+    _log.info("setting up objective...")
+    objective = gbkfit.objective.ObjectiveModel(drivers, dmodels, gmodels) \
+        if objective_type == 'model' \
+        else gbkfit.objective.goodness_objective_parser.load(
+            cfg.get('objective', {}), datasets, drivers, dmodels, gmodels)
 
     pdescs = None
     if 'pdescs' in cfg:
-        log.info("setting up pdescs...")
-        pdescs = gbkfit.params.descs.load_desc_dicts(cfg['pdescs'])
-    pdescs = gbkfit.params.descs.merge_desc_dicts(models.pdescs(), pdescs)
+        _log.info("setting up pdescs...")
+        pdescs = gbkfit.params.descs.load_descs_dict(cfg['pdescs'])
+    pdescs = _detail.merge_pdescs(objective.pdescs(), pdescs)
 
-    log.info("setting up params...")
+    _log.info("setting up params...")
     cfg['params'] = _prepare_params(cfg['params'], pdescs)
-    #exit()
-    params = gbkfit.params.params.EvalParams.load(cfg['params'], pdescs)
+    params = gbkfit.params.params.load_eval_params(cfg['params'], pdescs)
 
     #
     # Calculate model parameters
     #
 
-    log.info("calculating model parameters...")
+    _log.info("calculating model parameters...")
 
-    eparams = {ename: None for ename in params.expressions().enames()}
-    params = params.expressions().evaluate({}, eparams)
-
+    eparams = {}
+    params = params.interpreter().evaluate({}, True, eparams)
     params_info = _detail.nativify(dict(
         params=params,
         eparams=eparams))
@@ -127,13 +131,22 @@ def eval_(config, perf=None):
     yaml.dump(params_info, open(f'{filename}.yaml', 'w+'))
 
     #
-    # Evaluate models
+    # Evaluate objective
     #
 
-    log.info("evaluating model...")
+    _log.info("evaluating objective...")
 
-    extras = []
-    output = models.evaluate_h(params, extras)
+    # Always evaluate model
+    model_extra = {}
+    model_data = objective.model_h(params, model_extra)
+
+    resid_u_extra = {}
+    resid_u_data = []
+    resid_w_extra = {}
+    resid_w_data = []
+    if objective_type == 'goodness':
+        resid_u_data = objective.residual_nddata_h(params, False, resid_u_extra)
+        resid_w_data = objective.residual_nddata_h(params, True, resid_w_extra)
 
     def save_model(file, data):
         if data is not None:
@@ -141,40 +154,51 @@ def eval_(config, perf=None):
             hdulist = fits.HDUList([hdu])
             hdulist.writeto(file, overwrite=True)
 
-    log.info("writing model to the filesystem...")
-    for i in range(len(output)):
-        prefix = 'model' + f'_{i}' * bool(i)
-        for key, value in output[i].items():
-            save_model(f'{prefix}_{key}_d.fits', value.get('d'))
-            save_model(f'{prefix}_{key}_m.fits', value.get('m'))
-            save_model(f'{prefix}_{key}_w.fits', value.get('w'))
-        for key, value in extras[i].items():
-            save_model(f'{prefix}_extra_{key}.fits', value)
+    _log.info("writing objective output to the filesystem...")
+    model_prefix = 'model'
+    resid_u_prefix = 'residual'
+    resid_w_prefix = 'wresidual'
+    # Store model
+    for i, data_i in enumerate(model_data):
+        prefix_i = model_prefix + f'_{i}' * bool(objective.nitems() > 1)
+        for key, value in data_i.items():
+            save_model(f'{prefix_i}_{key}_d.fits', value.get('d'))
+            save_model(f'{prefix_i}_{key}_m.fits', value.get('m'))
+            save_model(f'{prefix_i}_{key}_w.fits', value.get('w'))
+    # Store residual (if available)
+    for i, data_i in enumerate(resid_u_data):
+        prefix_i = resid_u_prefix + f'_{i}' * bool(objective.nitems() > 1)
+        for key, value in data_i.items():
+            save_model(f'{prefix_i}_{key}_d.fits', value)
+    for i, data_i in enumerate(resid_w_data):
+        prefix_i = resid_w_prefix + f'_{i}' * bool(objective.nitems() > 1)
+        for key, value in data_i.items():
+            save_model(f'{prefix_i}_{key}_d.fits', value)
+    # Store model extra
+    for key, value in model_extra.items():
+        save_model(f'{model_prefix}_extra_{key}.fits', value)
+    # Store residual extra (if available)
+    for key, value in resid_u_extra.items():
+        save_model(f'{resid_u_prefix}_extra_{key}.fits', value)
+    for key, value in resid_w_extra.items():
+        save_model(f'{resid_w_prefix}_extra_{key}.fits', value)
 
     #
     # Run performance tests
     #
 
     if perf > 0:
-        log.info("running performance test...")
-        times = []
+        _log.info("running performance test...")
+        objective.time_stats_reset()
         for i in range(perf):
-            t1 = time.time_ns()
-            models.evaluate_h(params)
-            t2 = time.time_ns()
-            t_ms = (t2 - t1) / 1000000
-            times.append(t_ms)
-            log.info(f"evaluation {i}: {t_ms} ms")
-        log.info("calculating performance test statistics...")
-        time_stats = dict(_detail.nativify(dict(
-            min=np.round(np.min(times), 2),
-            max=np.round(np.max(times), 2),
-            mean=np.round(np.mean(times), 2),
-            median=np.round(np.median(times), 2),
-            stddev=np.round(np.std(times), 2),
-            mad=np.round(stats.median_absolute_deviation(times), 2))))
-        log.info(', '.join(f'{k}: {v} ms' for k, v in time_stats.items()))
-        time_stats = dict(unit='milliseconds', **time_stats)
+            if objective_type == 'model':
+                objective.model_h(params)
+            if objective_type == 'goodness':
+                objective.residual_nddata_h(params)
+        _log.info("calculating timing statistics...")
+        time_stats = _detail.nativify(objective.time_stats())
+        _log.info(pd.DataFrame.from_dict(time_stats, orient='index'))
         filename = 'gbkfit_result_time'
+        time_stats |= dict(unit='milliseconds')
         json.dump(time_stats, open(f'{filename}.json', 'w+'), indent=2)
         yaml.dump(time_stats, open(f'{filename}.yaml', 'w+'))

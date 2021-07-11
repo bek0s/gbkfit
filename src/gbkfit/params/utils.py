@@ -303,6 +303,7 @@ class _ParamExprVisitor(ast.NodeVisitor):
 
 def parse_param_keys(
         params, descs,
+        require_all=False,
         silent_errors=False,
         silent_warnings=False,
         throw_on_errors=True,

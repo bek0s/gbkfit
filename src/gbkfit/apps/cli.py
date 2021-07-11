@@ -129,15 +129,16 @@ def main():
 
     parser_eval = parsers_task.add_parser('eval', parents=[parser_common])
     parser_eval.add_argument(
+        'objective', type=str, choices=['model', 'goodness'],
+        help="the type of objective to evaluate")
+    parser_eval.add_argument(
         'config', type=str,
         help="configuration file path; json and yaml formats are supported")
     parser_eval.add_argument(
-        '--prof', type=_number_range(int, 0, None), default=0,
+        '--prof', type=_number_range(int, 1, None),
         metavar='ITERS',
-        help="if ITERS=0, profiling mode is disabled; "
-             "if ITERS>0, profiling mode is enabled; "
-             "when in profiling mode, the software will evaluate the model "
-             "ITERS times and provide performance evaluation statistics")
+        help="evaluate the objective ITERS times "
+             "and provide performance evaluation statistics")
 
     #
     # Create parser for prep task
@@ -333,7 +334,6 @@ def main():
         help="the path of the output directory of a fitting run")
     parser_plot.add_argument(
         '--format', type=str, default='pdf', choices=['pdf', 'png'],
-        metavar='FORMAT',
         help="the format of the created figures")
     parser_plot.add_argument(
         '--dpi', type=_number_range(int, 100, None), default=150,
@@ -362,7 +362,7 @@ def main():
 
     if args.task == 'eval':
         import gbkfit.tasks.eval
-        gbkfit.tasks.eval.eval_(args.config, args.prof)
+        gbkfit.tasks.eval.eval_(args.objective, args.config, args.prof)
 
     elif args.task == 'prep':
         import gbkfit.tasks.prep

@@ -11,7 +11,7 @@ class ParamDesc(parseutils.TypedParserSupport, abc.ABC):
 
     @classmethod
     def load(cls, info):
-        desc = f'{cls.type()} parameter description (class={cls.__qualname__})'
+        desc = parseutils.make_typed_desc(cls, 'parameter description')
         opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
         return cls(**opts)
 
@@ -58,55 +58,20 @@ class ParamVectorDesc(ParamDesc):
         return f'{self.__class__.__name__}({self.name()!r}, {self.size()!r})'
 
 
-def load_descs(info):
+def load_descs_dict(info):
     descs = {}
     for key, val in info.items():
-        descs[key] = parser.load({'name': key, **val})
+        descs[key] = pdesc_parser.load(dict(name=key) | val)
     return descs
 
 
-def dump_descs(descs):
-    info = {key: parser.dump(val) for key, val in descs.items()}
+def dump_descs_dict(descs):
+    info = {key: pdesc_parser.dump(val) for key, val in descs.items()}
     for val in info.values():
-        val.pop('name')
+        del val['name']
     return info
 
 
-def load_desc_dicts(info):
-    descs = {}
-    for key, val in info.items():
-        descs[key] = parser.load({'name': key, **val})
-    return descs
-
-
-def dump_desc_dicts(descs):
-    info = {key: parser.dump(val) for key, val in descs.items()}
-    for val in info.values():
-        val.pop('name')
-    return info
-
-
-def merge_descs(descs1, descs2):
-    if descs1 is None:
-        descs1 = {}
-    if descs2 is None:
-        descs2 = {}
-    if set(descs1).intersection(descs2):
-        raise RuntimeError()
-    return descs1 | descs2
-
-
-def merge_desc_dicts(descs1, descs2):
-    if descs1 is None:
-        descs1 = {}
-    if descs2 is None:
-        descs2 = {}
-    if set(descs1).intersection(descs2):
-        raise RuntimeError()
-    return descs1 | descs2
-
-
-parser = parseutils.TypedParser(ParamDesc)
-
-parser.register(ParamScalarDesc)
-parser.register(ParamVectorDesc)
+pdesc_parser = parseutils.TypedParser(ParamDesc)
+pdesc_parser.register(ParamScalarDesc)
+pdesc_parser.register(ParamVectorDesc)
