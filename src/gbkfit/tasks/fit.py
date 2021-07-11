@@ -74,15 +74,13 @@ def fit(config):
     _log.info("setting up gmodels...")
     gmodels = gbkfit.model.gmodel_parser.load(cfg['gmodels'])
 
-    _log.info("setting up model...")
-    models = gbkfit.model.make_model_group_from_cmp(dmodels, gmodels, drivers)
+    _log.info("setting up objective...")
+    objective = gbkfit.fitting.objective_parser.load(
+        cfg.get('objective', {}),
+        datasets=datasets, driver=drivers, dmodels=dmodels, gmodels=gmodels)
 
     _log.info("setting up fitter...")
     fitter = gbkfit.fitting.fitter_parser.load(cfg['fitter'])
-
-    _log.info("setting up objective...")
-    objective = gbkfit.fitting.objective_parser.load(
-        cfg.get('objective', {}), datasets=datasets, models=models)
 
     pdescs = None
     if 'pdescs' in cfg:

@@ -65,7 +65,7 @@ To deactivate the environment, run:
 
 .. attention::
    The above steps are just a suggestion and not required. It is up to the
-   user to choose how to update their Python version. Furthermore, the above
+   user to choose how to setup their Python version. Furthermore, the above
    snippets use Minicoda for convenience. Miniconda is not a GBKFIT
    requirement.
 
