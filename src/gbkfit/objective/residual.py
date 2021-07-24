@@ -193,7 +193,7 @@ class ObjectiveResidual(ObjectiveModel):
                 # Calculate residual
                 res[:] = dat_m * mdl_m * (dat_d - mdl_d) / dat_e
         t2 = time.time_ns()
-        self.time_stats_samples()['res_eval'].append(t2 - t1)
+        self.time_stats_samples(False)['res_eval'].append(t2 - t1)
 
     def _residual_h(
             self, params, weighted=True, out_extra=None, out_extra_model=None):
@@ -204,7 +204,7 @@ class ObjectiveResidual(ObjectiveModel):
             h_data = self._h_residual_vector
             driver.mem_copy_d2h(d_data, h_data)
         t2 = time.time_ns()
-        self.time_stats_samples()['res_d2h'].append(t2 - t1)
+        self.time_stats_samples(False)['res_d2h'].append(t2 - t1)
 
 
 residual_objective_parser = parseutils.BasicParser(ObjectiveResidual)

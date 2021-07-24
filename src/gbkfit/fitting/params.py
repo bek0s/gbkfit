@@ -22,7 +22,7 @@ class FitParams(parseutils.BasicParserSupport, abc.ABC):
 
         def is_nfo(x): return isinstance(x, FitParam)
         def is_nil(x): return isinstance(x, type(None))
-        def is_num(x): return isinstance(x, numbers.Number)
+        def is_num(x): return isinstance(x, numbers.Real)
         def is_val(x): return is_nfo(x)
         names, indices, values, exprs = parse_param_values(
             parameters, descs, is_val)[2:]

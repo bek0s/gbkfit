@@ -45,7 +45,7 @@ class ObjectiveGoodness(ObjectiveResidual):
             driver.mem_copy_d2h(d_residual_scalar, h_residual_scalar)
             residuals.append(h_residual_scalar[0])
         t2 = time.time_ns()
-        self.time_stats_samples()['gds_scalar'].append(t2 - t1)
+        self.time_stats_samples(False)['gds_scalar'].append(t2 - t1)
         return residuals
 
     def log_likelihood(self, params, out_extra=None):
@@ -56,7 +56,7 @@ class ObjectiveGoodness(ObjectiveResidual):
             # TODO
             log_likelihoods.append(0)
         t2 = time.time_ns()
-        self.time_stats_samples()['gds_loglike'].append(t2 - t1)
+        self.time_stats_samples(False)['gds_loglike'].append(t2 - t1)
         return log_likelihoods
 
 

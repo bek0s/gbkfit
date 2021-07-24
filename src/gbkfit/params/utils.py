@@ -71,7 +71,7 @@ _REGEX_PARAM_SYMBOL = (
     fr'\s*{_REGEX_PARAM_SYMBOL_NAME}'
     fr'\s*{_REGEX_PARAM_SYMBOL_SUBSCRIPT}?\s*')
 
-_REGEX_PARAM_ATTRIB_NAME = r'\*?[_a-zA-Z]'
+_REGEX_PARAM_ATTRIB_NAME = r'[_a-zA-Z]\w*'
 
 
 def _is_param_symbol(x):
@@ -708,6 +708,45 @@ def parse_param_values(
     return keys, values, param_names, param_indices, dict(zip(enames, evalues)), exprs
 
 
+def parse_param_info_item(info):
+    bad_keys = []
+    bad_vals = []
+    bad_lens = False
+    # Validate dictionary first
+    sizes = set()
+    for key, val in info.items():
+        needs_expansion = False
+        if key.startswith('*'):
+            key = key[1:]
+            needs_expansion = True
+        if not _is_param_attrib_name(key):
+            bad_keys.append(key)
+            continue
+        if needs_expansion:
+            if not iterutils.is_sequence(val):
+                bad_vals.append(val)
+                continue
+            sizes.add(len(iterutils.listify(val)))
+    if len(sizes) > 1:
+        bad_lens = True
+    # Any error causes failure
+    if bad_lens or bad_keys or bad_vals:
+        return [], bad_keys, bad_vals, bad_lens
+    # Expansion not needed
+    if len(sizes) == 0:
+        return info, bad_keys, bad_vals, bad_lens
+    # Expansion needed (len(sizes) == 1)
+    values = iterutils.make_list(sizes.pop(), {})
+    for key, val in info.items():
+        for i in range(len(values)):
+            needs_expansion = key.startswith('*')
+            if needs_expansion:
+                values[i][key[1:]] = val[i]
+            else:
+                values[i][key] = val
+    return values, bad_keys, bad_vals, bad_lens
+
+
 def parse_param_info(
         params, descs,
         silent_errors=False,
@@ -719,7 +758,6 @@ def parse_param_info(
         invalid_keys_repeated=None,
         invalid_keys_bad_scalar=None,
         invalid_keys_bad_vector=None,
-        invalid_infos_bad_value=None,
         invalid_infos_bad_attr_name=None,
         invalid_infos_bad_attr_value=None,
         invalid_infos_bad_attr_length=None):
@@ -735,14 +773,12 @@ def parse_param_info(
     if invalid_keys_bad_vector is None:
         invalid_keys_bad_vector = {}
 
-    if invalid_infos_bad_value is None:
-        invalid_infos_bad_value = []
     if invalid_infos_bad_attr_name is None:
-        invalid_infos_bad_attr_name = {}
+        invalid_infos_bad_attr_name = collections.defaultdict(list)
     if invalid_infos_bad_attr_value is None:
         invalid_infos_bad_attr_value = {}
     if invalid_infos_bad_attr_length is None:
-        invalid_infos_bad_attr_length = {}
+        invalid_infos_bad_attr_length = collections.defaultdict(list)
 
     keys, values, param_names, param_indices = parse_param_keys(
         params, descs,
@@ -756,74 +792,45 @@ def parse_param_info(
         invalid_keys_bad_scalar,
         invalid_keys_bad_vector)
 
-    keys_2 = []
-    values_2 = []
-    param_names_2 = []
-    param_indices_2 = []
-    exprs = {}
-    eparams = []
-    evalues = []
-
-    for key, value, name, indices in zip(
-            keys, values, param_names, param_indices):
-        # value contains parameter info
-        if isinstance(value, dict):
-            error = False
-            ieparams = []
-            ievalues = []
-            # This is a scalar or a vector with basic indexing
-            if not isinstance(indices, list):
-                ieparams.append(key)
-                ievalues.append(value)
-            # This is a vector with slice or advanced indexing
-            else:
-                nindices = len(indices)
-                ieparams = explode_pname(name, indices)
-                ievalues = iterutils.make_list(nindices, {}, True)
-                for akey, avalue in value.items():
-                    if _is_param_attrib_name(akey):
-                        invalid_infos_bad_attr_name[key].append(akey)
-                        error = True
-                        continue
-                    for i in range(nindices):
-                        if akey.startswith('*'):
-                            if not iterutils.is_sequence(avalue):
-                                invalid_infos_bad_attr_value[key] = akey
-                                error = True
-                                break
-                            if len(avalue) != nindices:
-                                invalid_infos_bad_attr_length[key] = akey
-                                error = True
-                                break
-                            ievalues[i][akey[1:]] = avalue[i]
-                        else:
-                            ievalues[i][akey] = avalue
-            # If an error was occurred during attribute parsing,
-            # we need to discard the entire key-value pair
-            if error:
+    # Expand (in-place) dicts that need expansion
+    for i, (key, value) in enumerate(zip(keys, values)):
+        if iterutils.is_mapping(value):
+            evalues, bad_attr_keys, bad_attr_vals, bad_attr_lens = \
+                parse_param_info_item(value)
+            if not evalues:
+                if bad_attr_lens:
+                    invalid_infos_bad_attr_length[key].append(0)
+                if bad_attr_keys:
+                    invalid_infos_bad_attr_name[key].append((0, bad_attr_keys))
+                if bad_attr_vals:
+                    invalid_infos_bad_attr_value[key].append((0, bad_attr_vals))
                 continue
-            eparams.extend(ieparams)
-            evalues.extend(ievalues)
-        # Value contains expression
-        elif is_param_value_expr(value, True, True):
-            exprs[key] = value
-        # Value contains something unexpected
-        else:
-            invalid_infos_bad_value.append(key)
-            continue
-        # This is a valid key-value pair
-        keys_2.append(key)
-        values_2.append(value)
-        param_names_2.append(name)
-        param_indices_2.append(indices)
+            # Expand in-place
+            values[i] = evalues
+        elif iterutils.is_sequence(value):
+            evalues = []
+            for j, item in enumerate(value):
+                # We are interested in dicts only
+                if iterutils.is_mapping(item):
+                    ievalues, bad_attr_keys, bad_attr_vals, bad_attr_lens = \
+                        parse_param_info_item(item)
+                    if not ievalues:
+                        if bad_attr_lens:
+                            invalid_infos_bad_attr_length[key].append(j)
+                        if bad_attr_keys:
+                            invalid_infos_bad_attr_name[key].append(
+                                (j, bad_attr_keys))
+                        if bad_attr_vals:
+                            invalid_infos_bad_attr_value[key].append(
+                                (j, bad_attr_vals))
+                        continue
+                    evalues.extend(iterutils.listify(ievalues))
+                # Not a dict, just copy it
+                else:
+                    evalues.append(item)
+            # Expand in-place
+            values[i] = evalues
 
-    if invalid_infos_bad_value:
-        _log_msg(
-            logging.ERROR,
-            silent_errors,
-            throw_on_errors,
-            f"keys with invalid values found: "
-            f"{str(invalid_infos_bad_value)}")
     if invalid_infos_bad_attr_name:
         _log_msg(
             logging.ERROR,
@@ -846,8 +853,9 @@ def parse_param_info(
             f"keys with invalid attributes found (bad length): "
             f"{str(invalid_infos_bad_attr_length)}")
 
-    return (keys_2, values_2, param_names_2, param_indices_2,
-            dict(zip(eparams, evalues)), exprs)
+    params = dict(zip(keys, values))
+    def is_dict(x): return iterutils.is_mapping(x)
+    return parse_param_values(params, descs, is_dict)
 
 
 def load_expressions(info):

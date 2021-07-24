@@ -1,5 +1,4 @@
 
-import json
 import logging
 import os
 import time
@@ -11,6 +10,7 @@ import gbkfit.dataset
 import gbkfit.driver
 import gbkfit.fitting
 import gbkfit.model
+import gbkfit.objective
 import gbkfit.params
 import gbkfit.params.descs
 import gbkfit.params.utils
@@ -27,14 +27,6 @@ yaml = ruamel.yaml.YAML()
 # This is needed for dumping ordered dicts
 ruamel.yaml.add_representer(dict, lambda self, data: self.represent_mapping(
     'tag:yaml.org,2002:map', data.items()))
-
-
-def _prepare_params(info, descs):
-
-    parameters = info['parameters']
-    keys, values = gbkfit.params.utils.parse_param_keys(parameters, descs)[:2]
-
-    return info
 
 
 def fit(config):
@@ -75,9 +67,8 @@ def fit(config):
     gmodels = gbkfit.model.gmodel_parser.load(cfg['gmodels'])
 
     _log.info("setting up objective...")
-    objective = gbkfit.fitting.objective_parser.load(
-        cfg.get('objective', {}),
-        datasets=datasets, driver=drivers, dmodels=dmodels, gmodels=gmodels)
+    objective = gbkfit.objective.goodness_objective_parser.load(
+        cfg.get('objective', {}), datasets, drivers, dmodels, gmodels)
 
     _log.info("setting up fitter...")
     fitter = gbkfit.fitting.fitter_parser.load(cfg['fitter'])
@@ -89,7 +80,6 @@ def fit(config):
     pdescs = _detail.merge_pdescs(objective.pdescs(), pdescs)
 
     _log.info("setting up params...")
-    cfg['params'] = _prepare_params(cfg['params'], pdescs)
     params = fitter.load_params(cfg['params'], pdescs)
 
     #

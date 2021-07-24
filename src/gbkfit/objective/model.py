@@ -61,14 +61,15 @@ class ObjectiveModel:
         return self._pdescs
 
     def time_stats(self):
-        return _detail.time_stats(self.time_stats_samples())
+        return _detail.time_stats(self.time_stats_samples(False))
 
     def time_stats_reset(self):
-        for samples in self.time_stats_samples().values():
+        for samples in self.time_stats_samples(False).values():
             samples.clear()
 
-    def time_stats_samples(self):
-        return copy.deepcopy(self._time_samples)
+    def time_stats_samples(self, copy_=True):
+        return copy.deepcopy(self._time_samples) \
+            if copy_ else self._time_samples
 
     def model_d(self, params, out_extra=None):
         t1 = time.time_ns()
@@ -86,7 +87,7 @@ class ObjectiveModel:
                 prefix = f'{i}_' * bool(self.nitems() > 1)
                 out_extra[f'{prefix}{key}'] = val
         t2 = time.time_ns()
-        self.time_stats_samples()['mdl_eval'].append(t2 - t1)
+        self.time_stats_samples(False)['mdl_eval'].append(t2 - t1)
         return self._d_model_data
 
     def model_h(self, params, out_extra=None):
@@ -101,5 +102,5 @@ class ObjectiveModel:
                         h_data[i][key][k] = self.drivers()[i].mem_copy_d2h(
                             d_data[i][key][k], h_data[i][key][k])
         t2 = time.time_ns()
-        self.time_stats_samples()['mdl_d2h'].append(t2 - t1)
+        self.time_stats_samples(False)['mdl_d2h'].append(t2 - t1)
         return self._h_model_data
