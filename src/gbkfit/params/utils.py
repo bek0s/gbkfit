@@ -16,14 +16,14 @@ from gbkfit.params.descs import ParamScalarDesc, ParamVectorDesc
 from gbkfit.utils import iterutils, miscutils, parseutils
 
 
-log = logging.getLogger(__name__)
+_log = logging.getLogger(__name__)
 
 
 def _log_msg(level, silent, throw, msg):
     if throw:
         raise RuntimeError(msg)
     elif not silent:
-        log.log(level, msg)
+        _log.log(level, msg)
 
 
 _REGEX_PARAM_SYMBOL_SUBSCRIPT_COMMON = r'(?!.*\D0+[1-9])'
@@ -227,7 +227,7 @@ def explode_pdescs(descs, names=None):
 
 
 def is_param_value_expr(x, accept_num=True, accept_vec=True):
-    ntypes = (numbers.Number,)
+    ntypes = (numbers.Real,)
     vtypes = (tuple, list, np.ndarray)
     is_str = isinstance(x, str)
     is_num = isinstance(x, ntypes)
@@ -266,7 +266,7 @@ class _ParamExprVisitor(ast.NodeVisitor):
         indices = list(range(desc.size())) \
             if isinstance(desc, ParamVectorDesc) else None
         # Store symbol name along with its indices (if a vector).
-        self._symbols[name] = indices
+        self._symbols[name] = set(indices)
 
     def visit_Subscript(self, node):
         code = ast.unparse(node).strip('\n')
@@ -303,7 +303,6 @@ class _ParamExprVisitor(ast.NodeVisitor):
 
 def parse_param_keys(
         params, descs,
-        require_all=False,
         silent_errors=False,
         silent_warnings=False,
         throw_on_errors=True,
@@ -321,7 +320,7 @@ def parse_param_keys(
     if invalid_keys_unknown is None:
         invalid_keys_unknown = []
     if invalid_keys_repeated is None:
-        invalid_keys_repeated = collections.defaultdict(list)
+        invalid_keys_repeated = {}
     if invalid_keys_bad_scalar is None:
         invalid_keys_bad_scalar = []
     if invalid_keys_bad_vector is None:
@@ -388,10 +387,12 @@ def parse_param_keys(
         param_indices.append(indices)
 
     # Collect all keys that refer to repeated exploded parameters
+    invalid_keys_repeated_ = collections.defaultdict(list)
     for eparam, parents in eparams_to_keys.items():
         if len(parents) > 1:
             for parent in parents:
                 invalid_keys_repeated[parent].append(eparam)
+    invalid_keys_repeated.update(invalid_keys_repeated_)
 
     # Remove all information related to repeated keys
     for rkey in invalid_keys_repeated:
@@ -462,7 +463,7 @@ def parse_param_exprs(
     if invalid_keys_unknown is None:
         invalid_keys_unknown = []
     if invalid_keys_repeated is None:
-        invalid_keys_repeated = collections.defaultdict(list)
+        invalid_keys_repeated = {}
     if invalid_keys_bad_scalar is None:
         invalid_keys_bad_scalar = []
     if invalid_keys_bad_vector is None:
@@ -626,7 +627,7 @@ def parse_param_values(
     if invalid_keys_unknown is None:
         invalid_keys_unknown = []
     if invalid_keys_repeated is None:
-        invalid_keys_repeated = collections.defaultdict(list)
+        invalid_keys_repeated = {}
     if invalid_keys_bad_scalar is None:
         invalid_keys_bad_scalar = []
     if invalid_keys_bad_vector is None:
@@ -635,7 +636,7 @@ def parse_param_values(
     if invalid_values_bad_value is None:
         invalid_values_bad_value = []
     if invalid_values_bad_evalue is None:
-        invalid_values_bad_evalue = collections.defaultdict(list)
+        invalid_values_bad_evalue = {}
     if invalid_values_bad_length is None:
         invalid_values_bad_length = []
 
@@ -654,6 +655,10 @@ def parse_param_values(
     exprs = {}
     enames = []
     evalues = []
+
+    # Use a default dicts internally.
+    # The api should use normal dicts through.
+    invalid_values_bad_evalue_ = collections.defaultdict(list)
 
     for key, value, name, indices in zip(
             keys, values, param_names, param_indices):
@@ -675,13 +680,15 @@ def parse_param_values(
                     elif isinstance(ievalue, (str, numbers.Number)):
                         exprs[iename] = ievalue
                     else:
-                        invalid_values_bad_evalue[key].append(iename)
+                        invalid_values_bad_evalue_[key].append(iename)
             else:
                 invalid_values_bad_length.append(key)
         elif is_param_value_expr(value, True, False):
             exprs[key] = value
         else:
             invalid_values_bad_value.append(key)
+
+    invalid_values_bad_evalue.update(invalid_values_bad_evalue_)
 
     if invalid_values_bad_value:
         _log_msg(
@@ -705,10 +712,11 @@ def parse_param_values(
             f"keys with value of incompatible length found: "
             f"{str(invalid_values_bad_length)}")
 
-    return keys, values, param_names, param_indices, dict(zip(enames, evalues)), exprs
+    eparams = dict(zip(enames, evalues))
+    return keys, values, param_names, param_indices, eparams, exprs
 
 
-def parse_param_info_item(info):
+def _parse_param_info_item(info):
     bad_keys = []
     bad_vals = []
     bad_lens = False
@@ -767,18 +775,18 @@ def parse_param_info(
     if invalid_keys_unknown is None:
         invalid_keys_unknown = []
     if invalid_keys_repeated is None:
-        invalid_keys_repeated = collections.defaultdict(list)
+        invalid_keys_repeated = {}
     if invalid_keys_bad_scalar is None:
         invalid_keys_bad_scalar = []
     if invalid_keys_bad_vector is None:
         invalid_keys_bad_vector = {}
 
     if invalid_infos_bad_attr_name is None:
-        invalid_infos_bad_attr_name = collections.defaultdict(list)
+        invalid_infos_bad_attr_name = {}
     if invalid_infos_bad_attr_value is None:
         invalid_infos_bad_attr_value = {}
     if invalid_infos_bad_attr_length is None:
-        invalid_infos_bad_attr_length = collections.defaultdict(list)
+        invalid_infos_bad_attr_length = {}
 
     keys, values, param_names, param_indices = parse_param_keys(
         params, descs,
@@ -792,33 +800,42 @@ def parse_param_info(
         invalid_keys_bad_scalar,
         invalid_keys_bad_vector)
 
-    # Expand (in-place) dicts that need expansion
+    # Use a default dicts internally.
+    # The api should use normal dicts through.
+    invalid_infos_bad_attr_name_ = collections.defaultdict(list)
+    invalid_infos_bad_attr_length_ = collections.defaultdict(list)
+
+    keys_2 = []
+    values_2 = []
+
+    # Copy keys-values while expanding values that need expansion
     for i, (key, value) in enumerate(zip(keys, values)):
         if iterutils.is_mapping(value):
             evalues, bad_attr_keys, bad_attr_vals, bad_attr_lens = \
-                parse_param_info_item(value)
+                _parse_param_info_item(value)
             if not evalues:
                 if bad_attr_lens:
-                    invalid_infos_bad_attr_length[key].append(0)
+                    invalid_infos_bad_attr_length_[key].append(0)
                 if bad_attr_keys:
-                    invalid_infos_bad_attr_name[key].append((0, bad_attr_keys))
+                    invalid_infos_bad_attr_name_[key].append(
+                        (0, bad_attr_keys))
                 if bad_attr_vals:
-                    invalid_infos_bad_attr_value[key].append((0, bad_attr_vals))
+                    invalid_infos_bad_attr_value[key].append(
+                        (0, bad_attr_vals))
                 continue
-            # Expand in-place
-            values[i] = evalues
+            value = evalues
         elif iterutils.is_sequence(value):
             evalues = []
             for j, item in enumerate(value):
                 # We are interested in dicts only
                 if iterutils.is_mapping(item):
                     ievalues, bad_attr_keys, bad_attr_vals, bad_attr_lens = \
-                        parse_param_info_item(item)
+                        _parse_param_info_item(item)
                     if not ievalues:
                         if bad_attr_lens:
-                            invalid_infos_bad_attr_length[key].append(j)
+                            invalid_infos_bad_attr_length_[key].append(j)
                         if bad_attr_keys:
-                            invalid_infos_bad_attr_name[key].append(
+                            invalid_infos_bad_attr_name_[key].append(
                                 (j, bad_attr_keys))
                         if bad_attr_vals:
                             invalid_infos_bad_attr_value[key].append(
@@ -828,8 +845,13 @@ def parse_param_info(
                 # Not a dict, just copy it
                 else:
                     evalues.append(item)
-            # Expand in-place
-            values[i] = evalues
+            value = evalues
+        # key-value is now a valid pair
+        keys_2.append(key)
+        values_2.append(value)
+
+    invalid_infos_bad_attr_name.update(invalid_infos_bad_attr_name_)
+    invalid_infos_bad_attr_length.update(invalid_infos_bad_attr_length_)
 
     if invalid_infos_bad_attr_name:
         _log_msg(
@@ -853,7 +875,7 @@ def parse_param_info(
             f"keys with invalid attributes found (bad length): "
             f"{str(invalid_infos_bad_attr_length)}")
 
-    params = dict(zip(keys, values))
+    params = dict(zip(keys_2, values_2))
     def is_dict(x): return iterutils.is_mapping(x)
     return parse_param_values(params, descs, is_dict)
 
