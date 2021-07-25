@@ -226,7 +226,12 @@ def explode_pdescs(descs, names=None):
     return enames
 
 
-def is_param_value_expr(x, accept_num=True, accept_vec=True):
+def sort_eparams(descs, enames):
+    enames_all = explode_pdescs(descs.values(), descs.keys())
+    return [ename for ename in enames_all if ename in enames]
+
+
+def _is_param_value_expr(x, accept_num=True, accept_vec=True):
     ntypes = (numbers.Real,)
     vtypes = (tuple, list, np.ndarray)
     is_str = isinstance(x, str)
@@ -501,7 +506,7 @@ def parse_param_exprs(
     for key, value, name, indices in zip(
             keys, values, param_names, param_indices):
         # Skip invalid expressions
-        if not is_param_value_expr(value, True, True):
+        if not _is_param_value_expr(value, True, True):
             invalid_exprs_bad_value.append(key)
             continue
         # All expressions can be converted to str
@@ -683,7 +688,7 @@ def parse_param_values(
                         invalid_values_bad_evalue_[key].append(iename)
             else:
                 invalid_values_bad_length.append(key)
-        elif is_param_value_expr(value, True, False):
+        elif _is_param_value_expr(value, True, False):
             exprs[key] = value
         else:
             invalid_values_bad_value.append(key)
@@ -922,8 +927,3 @@ def dump_econstraints(func, file='gbkfit_config_econstraints.py'):
 
 def dump_iconstraints(func, file='gbkfit_config_iconstraints.py'):
     return _dump_function(func, file) if func else None
-
-
-def sort_eparams(descs, enames):
-    enames_all = explode_pdescs(descs.values(), descs.keys())
-    return [ename for ename in enames_all if ename in enames]
