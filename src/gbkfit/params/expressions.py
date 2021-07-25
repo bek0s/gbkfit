@@ -238,8 +238,12 @@ class Interpreter:
             self._exprs_func_obj(result)
         except Exception as e:
             raise RuntimeError(
-                f"exception thrown while evaluating parameter expressions: "
-                f"{str(e)}") from e
+                f"exception thrown while evaluating parameter expressions; "
+                f"see preceding exception for additional information; "
+                f"the expressions function source code is the following:\n"
+                f"{'-' * 50}\n"
+                f"{str(self._exprs_func_src)}"
+                f"{'-' * 50}")
         # Validate resulting values
         for lhs, rhs in result.items():
             # Ignore unknown parameters

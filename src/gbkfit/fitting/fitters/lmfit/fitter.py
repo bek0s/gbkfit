@@ -14,10 +14,10 @@ from gbkfit.fitting.result import make_fitter_result
 
 
 def _residual_params(x, parameters):
-    enames = parameters.expressions().enames(free=True, tied=False, fixed=False)
+    enames = parameters.interpreter().enames(free=True, tied=False, fixed=False)
     evalues = x.valuesdict().values()
     eparams = dict(zip(enames, evalues))
-    return parameters.expressions().evaluate(eparams)
+    return parameters.interpreter().evaluate(eparams)
 
 
 def _residual_scalar(x, objective, parameters, callback=None):
@@ -29,7 +29,7 @@ def _residual_scalar(x, objective, parameters, callback=None):
 
 def _residual_vector(x, objective, parameters, callback=None):
     params = _residual_params(x, parameters)
-    residuals = objective.residual_vector(params)
+    residuals = objective.residual_vector_h(params)
     residuals = np.nan_to_num(np.concatenate(residuals, casting='safe'))
     print(params)
     return residuals

@@ -682,7 +682,7 @@ def parse_param_values(
                     if is_value_fun(ievalue):
                         enames.append(iename)
                         evalues.append(ievalue)
-                    elif isinstance(ievalue, (str, numbers.Number)):
+                    elif isinstance(ievalue, (type(None), numbers.Real, str)):
                         exprs[iename] = ievalue
                     else:
                         invalid_values_bad_evalue_[key].append(iename)
