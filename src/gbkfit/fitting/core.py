@@ -3,8 +3,8 @@ import abc
 import copy
 
 from gbkfit.params import Interpreter
-from gbkfit.params.params import parse_params_dict
-from gbkfit.params.utils import parseutils
+from gbkfit.params.utils import parse_param_values_strict
+from gbkfit.utils import parseutils
 
 
 class FitParam(parseutils.BasicParserSupport, abc.ABC):
@@ -15,9 +15,10 @@ class FitParams(parseutils.BasicParserSupport, abc.ABC):
 
     def __init__(self, descs, parameters, expressions, param_type):
         super().__init__()
-        values, exprs = parse_params_dict(descs, parameters, param_type)
+        values, exprs = parse_param_values_strict(descs, parameters, param_type)
         self._descs = copy.deepcopy(descs)
         self._infos = values
+        self._exprs = exprs
         self._parameters = copy.deepcopy(parameters)
         self._interpreter = Interpreter(descs, exprs, expressions)
 
@@ -26,6 +27,9 @@ class FitParams(parseutils.BasicParserSupport, abc.ABC):
 
     def infos(self):
         return self._infos
+
+    def exprs(self):
+        return self._exprs
 
     def parameters(self):
         return self._parameters

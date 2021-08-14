@@ -885,6 +885,18 @@ def parse_param_info(
     return parse_param_values(params, descs, is_dict)
 
 
+def parse_param_values_strict(descs, params_dict, value_type):
+    names, indices, values, exprs = parse_param_values(
+        params_dict, descs, lambda x: isinstance(x, value_type))[2:]
+    enames_from_params = explode_pnames(names, indices)
+    enames_from_pdescs = explode_pdescs(descs.values(), descs.keys())
+    if missing := set(enames_from_pdescs) - set(enames_from_params):
+        raise RuntimeError(
+            f"information for the following parameters is required "
+            f"but not provided: {str(missing)}")
+    return values, exprs
+
+
 def load_expressions(info):
     if not info:
         return None
@@ -927,3 +939,5 @@ def dump_econstraints(func, file='gbkfit_config_econstraints.py'):
 
 def dump_iconstraints(func, file='gbkfit_config_iconstraints.py'):
     return _dump_function(func, file) if func else None
+
+

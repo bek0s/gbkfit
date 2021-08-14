@@ -222,7 +222,8 @@ class Interpreter:
                 self._iparams[name][index] = val
 
     def _extract_eparams(self, out_eparams):
-        for ename in self.enames():
+        for ename in out_eparams:
+            assert ename in self.enames()  # todo: provide better error message
             name = self._eparams_nmapping[ename]
             index = self._eparams_imapping[ename]
             out_eparams[ename] = self._iparams[name] \

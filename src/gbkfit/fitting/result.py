@@ -232,13 +232,13 @@ def make_fitter_result(
     solutions = iterutils.tuplify(solutions)
 
     # Make some arrays with exploded param names for later use
-    exprs = parameters.exprs()
-    enames_all = exprs.enames(True, True, True)
-    enames_free = exprs.enames(True, False, False)
-    enames_tied = exprs.enames(False, True, False)
-    enames_fixed = exprs.enames(False, False, True)
-    enames_varying = exprs.enames(True, True, False)
-    params_fixed = exprs.fixed_dict()
+    interpreter = parameters.interpreter()
+    enames_all = interpreter.enames(True, True, True)
+    enames_free = interpreter.enames(True, False, False)
+    enames_tied = interpreter.enames(False, True, False)
+    enames_fixed = interpreter.enames(False, False, True)
+    enames_varying = interpreter.enames(True, True, False)
+    params_fixed = interpreter.fixed_dict()
 
     sols = []
 
@@ -249,7 +249,7 @@ def make_fitter_result(
         if 'mode' in s:
             eparams_free = dict(zip(enames_free, s['mode']))
             eparams_varying = {p: None for p in enames_varying}
-            exprs.evaluate(eparams_free, True, eparams_varying)
+            interpreter.evaluate(eparams_free, True, eparams_varying)
             sol.mode = np.array(list(eparams_varying.values()))
 
 
@@ -264,7 +264,7 @@ def make_fitter_result(
             for j, row in enumerate(sposterior['samples']):
                 eparams_free = dict(zip(enames_free, row))
                 eparams_varying = {p: None for p in enames_varying}
-                exprs.evaluate(eparams_free, eparams_varying)
+                interpreter.evaluate(eparams_free, eparams_varying)
                 sol.posterior.samples[j, :] = eparams_varying.values()
             sol.covar = np.cov(sol.posterior.samples, rowvar=False)
             sol.mean = np.mean(s.posterior.samples, axis=0)
@@ -295,11 +295,11 @@ def make_fitter_result(
         eparams_varying = dict(zip(enames_varying, sol.mode))
         eparams_free = {n: eparams_varying[n] for n in enames_free}
         print(eparams_free)
-        params = parameters.expressions().evaluate(eparams_free)
+        params = parameters.interpreter().evaluate(eparams_free)
         dof = 100
-        sol.model = objective.models().evaluate_h(params)
-        sol.residual = objective.residual_nddata(params)
-        sol.wresidual = objective.residual_nddata(params)
+        sol.model = objective.model_h(params)
+        sol.residual = objective.residual_nddata_h(params)
+        sol.wresidual = objective.residual_nddata_h(params)
         sol.chisqr = 1.0
         sol.rchisqr = sol.chisqr / (dof - len(enames_free))
         sol.wchisqr = 1.0

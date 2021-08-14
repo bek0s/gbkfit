@@ -6,23 +6,8 @@ from gbkfit.params.interpreter import (
     Interpreter,
     load_exprs_file,
     dump_exprs_file)
-from gbkfit.params.utils import (
-    explode_pdescs,
-    explode_pnames,
-    parse_param_values)
+from gbkfit.params.utils import parse_param_values_strict
 from gbkfit.utils import parseutils
-
-
-def parse_params_dict(descs, params_dict, value_types):
-    names, indices, values, exprs = parse_param_values(
-        params_dict, descs, lambda x: isinstance(x, value_types))[2:]
-    enames_from_params = explode_pnames(names, indices)
-    enames_from_pdescs = explode_pdescs(descs.values(), descs.keys())
-    if missing := set(enames_from_pdescs) - set(enames_from_params):
-        raise RuntimeError(
-            f"information for the following parameters is required "
-            f"but not provided: {str(missing)}")
-    return values, exprs
 
 
 def load_params_info_common(cls, info):
@@ -57,8 +42,8 @@ class EvalParams(parseutils.BasicParserSupport):
 
     def __init__(self, descs, parameters, expressions=None):
         super().__init__()
-        value_types = (type(None), numbers.Real)
-        values, exprs = parse_params_dict(descs, parameters, value_types)
+        value_type = (type(None), numbers.Real)
+        values, exprs = parse_param_values_strict(descs, parameters, value_type)
         self._descs = copy.deepcopy(descs)
         self._infos = values
         self._parameters = copy.deepcopy(parameters)
