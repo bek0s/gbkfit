@@ -5,4 +5,7 @@ except ModuleNotFoundError:
     raise ModuleNotFoundError(
         "to use the lmfit fitter, please install lmfit")
 
-from .fitter import *
+
+
+from .least_squares import FitterLMFitLeastSquares
+from .nelder_mead import FitterLMFitNelderMead
