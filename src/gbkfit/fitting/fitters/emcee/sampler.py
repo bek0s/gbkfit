@@ -8,11 +8,14 @@ import numpy.random as random
 
 from gbkfit.utils import funcutils, iterutils, parseutils
 import gbkfit.params.utils as paramutils
-import gbkfit.fitting.fitter
-import gbkfit.fitting.params
 import gbkfit.params.utils
 
 from gbkfit.fitting.prior import prior_parser
+
+from gbkfit.fitting.core import FitParam, FitParams, Fitter
+
+from . moves import move_parser
+
 
 log = logging.getLogger(__name__)
 
@@ -29,59 +32,54 @@ def _log_probability_wrapper(evalues, objective, parameters, interpreter):
         return log_like + log_prior, [log_like, log_prior]
 
 
-def foo(info, info_name, cls_name):
-    prior_info = info['prior']
-    prior_type = info['prior']['type']
-    prior_cls = prior_parser.parsers().get(prior_type)
-    if prior_cls:
-        prior_cls_args = funcutils.extract_args(prior_cls.__init__)[0]
-        if cls_name in prior_cls_args:
-            if info_name in info and info_name not in prior_info:
-                prior_info[info_name] = info[info_name]
-            info.pop(info_name, None)
-
-
 def ensure_prior(info):
-    info['prior'] = info.get('prior', dict(type='uniform'))
-    foo(info, 'min', 'minimum')
-    foo(info, 'max', 'maximum')
+    if 'prior' not in info:
+        if 'min' not in info or 'max' not in info:
+            raise RuntimeError(
+                f"no 'prior' found in the parameter description; "
+                f"an attempt to set a default uniform prior failed because "
+                f"'min' and/or 'max' are missing")
+        info['prior'] = dict(
+            type='uniform', min=info.pop('min'), max=info.pop('max'))
+    return info
 
 
-class FitParamEmcee(gbkfit.fitting.params.FitParam):
+class FitParamEmcee(FitParam):
 
     @classmethod
     def load(cls, info):
-        info['prior'] = info.get('prior', dict(type='uniform'))
+        info = ensure_prior(info)
         info['prior'] = prior_parser.load_one(info['prior'], param_info=info)
-        desc = ''
+        desc = parseutils.make_basic_desc(cls, 'fit parameter')
         opts = parseutils.parse_options_for_callable(
             info, desc, cls.__init__, fun_rename_args=dict(
-                initial_val='val',
-                initial_std='std'))
+                initial_value='val',
+                initial_width='width'))
         return cls(**opts)
 
     def dump(self):
         return dict(
-            val=self.initial_val(),
-            std=self.initial_std())
+            prior=prior_parser.dump(self.prior()),
+            initial_value=self.initial_value(),
+            initial_width=self.initial_width())
 
-    def __init__(self, prior, initial_val, initial_std=None):
+    def __init__(self, prior, initial_value=None, initial_width=None):
         super().__init__()
         self._prior = prior
-        self._initial_val = initial_val
-        self._initial_std = initial_std
+        self._initial_value = initial_value
+        self._initial_width = initial_width
 
     def prior(self):
         return self._prior
 
-    def initial_val(self):
-        return self._initial_val
+    def initial_value(self):
+        return self._initial_value
 
-    def initial_std(self):
-        return self._initial_std
+    def initial_width(self):
+        return self._initial_width
 
 
-class FitParamsEmcee(gbkfit.fitting.params.FitParams):
+class FitParamsEmcee(FitParams):
 
     @classmethod
     def load(cls, info, descs):
@@ -98,10 +96,10 @@ class FitParamsEmcee(gbkfit.fitting.params.FitParams):
         pass
 
     def __init__(self, descs, parameters):
-        super().__init__(descs, parameters, None)
+        super().__init__(descs, parameters, None, FitParamEmcee)
 
 
-class FitterEmcee(gbkfit.fitting.fitter.Fitter):
+class FitterEmcee(Fitter):
 
     @staticmethod
     def type():
@@ -109,16 +107,13 @@ class FitterEmcee(gbkfit.fitting.fitter.Fitter):
 
     @classmethod
     def load(cls, info):
-        from . import moves
-        desc = ''
+        desc = parseutils.make_typed_desc(cls, 'fitter')
         opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
-        opts_moves = opts.get('moves')
-        if opts_moves:
-            weights = [m.pop('weight') for m in opts_moves if 'weight' in m]
-            moves = moves.parser.load(opts_moves)
-            if len(moves) != len(weights) > 0:
-                raise RuntimeError()
-            opts.update(moves=tuple(zip(moves, weights)) if weights else moves)
+        if moves := opts.get('moves'):
+            moves = iterutils.tuplify(moves)
+            weights = [m.pop('weight', 1.0) for m in moves]
+            moves = move_parser.load(moves)
+            opts.update(moves=tuple(zip(moves, weights)))
         return cls(**opts)
 
     def dump(self):
@@ -129,11 +124,10 @@ class FitterEmcee(gbkfit.fitting.fitter.Fitter):
         return FitParamsEmcee.load(info, descs)
 
     def __init__(
-            self, nwalkers, nsteps, nsteps_burnin=0, thin_by=1,
+            self, nwalkers, nsteps, thin_by=1,
             moves=None, tune=False, seed=None):
         super().__init__()
-        if moves is None:
-            moves = tuple()
+        moves = iterutils.tuplify(moves, False)
         for i, move in enumerate(moves):
             if not iterutils.is_sequence(move):
                 moves[i] = (move, 1.0)
@@ -144,9 +138,30 @@ class FitterEmcee(gbkfit.fitting.fitter.Fitter):
         self._tune = tune
         self._seed = seed
 
-        self._kwargs_sampler = ()
-
     def _fit_impl(self, objective, parameters):
+
+        ndim = len(parameters.infos())
+        moves = [(m.obj(), w) for m, w in self._moves] if self._moves else None
+
+        sampler = emcee.EnsembleSampler(
+            self._nwalkers, ndim, log_prob_fn=_log_probability_wrapper,
+            moves=moves, args=[objective, parameters])
+
+        initial_vals = []
+        for pname, pinfo in parameters.items():
+            val = pinfo.initial_val()
+            std = pinfo.initial_std()
+            val = val + std * random.randn(self._nwalkers)
+            initial_vals.append(val)
+
+        initial_vals = np.array(initial_vals).transpose()
+
+        result = sampler.run_mcmc(
+            initial_vals,
+            nsteps=self._nsteps, tune=self._tune, thin_by=self._thin_by,
+            progress=True)
+
+        exit()
 
         ndim = len(parameters.infos())
         minimums = ndim * [-np.inf]
@@ -205,10 +220,5 @@ class FitterEmcee(gbkfit.fitting.fitter.Fitter):
         samples = sampler.get_chain(discard=100, thin=2, flat=True)
         print(samples)
 
-        import corner
-        import matplotlib.pyplot as plt
-        plt.hist(samples)
-        #fig = corner.corner(samples)
-        plt.show()
 
 

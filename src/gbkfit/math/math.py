@@ -4,57 +4,57 @@ import operator
 
 import numpy as np
 import scipy.special
+import scipy.stats
 
 
-def is_even(num):
-    return not is_odd(num)
+def is_even(x):
+    return not is_odd(x)
 
 
-def is_odd(num):
-    return int(num) & 1
+def is_odd(x):
+    return int(x) & 1
 
 
-def roundd_even(num):
-    return 2 * np.floor(0.5*num)
+def roundd_even(x):
+    return 2 * np.floor(0.5 * x)
 
 
-def roundu_even(num):
-    return 2 * np.ceil(0.5*num)
+def roundu_even(x):
+    return 2 * np.ceil(0.5 * x)
 
 
-def roundd_odd(num):
-    num_even = roundd_even(num)
-    return num_even - 1 if num_even + 1 > num else num_even + 1
+def roundd_odd(x):
+    x_even = roundd_even(x)
+    return x_even - 1 if x_even + 1 > x else x_even + 1
 
 
-def roundu_odd(num):
-    num_even = roundu_even(num)
-    return num_even + 1 if num_even - 1 < num else num_even - 1
+def roundu_odd(x):
+    x_even = roundu_even(x)
+    return x_even + 1 if x_even - 1 < x else x_even - 1
 
 
-def roundd_multiple(num, multiple):
-    return (num // multiple) * multiple
+def roundd_multiple(x, multiple):
+    return (x // multiple) * multiple
 
 
-def roundu_multiple(num, multiple):
-    return num - np.mod(num, multiple) + multiple \
-        if np.mod(num, multiple) != 0 else num
+def roundu_multiple(x, multiple):
+    return x - np.mod(x, multiple) + multiple if np.mod(x, multiple) != 0 else x
 
 
-def roundd_po2(num):
-    assert num > 1
-    return roundu_po2(num) // 2
+def roundd_po2(x):
+    assert x > 1
+    return roundu_po2(x) // 2
 
 
-def roundu_po2(num):
+def roundu_po2(x):
     power = 1
-    while power < num:
+    while power < x:
         power *= 2
     return power
 
 
-def prod(nums):
-    return functools.reduce(operator.mul, nums, 1)
+def prod(x):
+    return functools.reduce(operator.mul, x, 1)
 
 
 def transform_lh_rotate_x(y, z, theta):
@@ -129,51 +129,63 @@ def moffat_alpha_beta_to_fwhm(alpha, beta):
     return 2 * alpha * np.sqrt(np.power(2, 1 / beta) - 1)
 
 
-def _trunc_pdf(x, fun_pdf, fun_cdf, args, tmin, tmax):
-    pdf = fun_pdf(x, *args)
-    cdf_tmin = fun_cdf(tmin, *args) if tmin is not None else None
-    cdf_tmax = fun_cdf(tmax, *args) if tmax is not None else None
-    area = 1
-    indices = []
-    if (tmin and tmax) is not None:
-        area = cdf_tmax - cdf_tmin
-        indices = np.logical_or(x < tmin, x > tmax)
-    elif tmin is not None and tmax is None:
-        area = 1 - cdf_tmin
-        indices = np.where(x < tmin)
-    elif tmin is None and tmax is not None:
-        area = cdf_tmax
-        indices = np.where(x > tmax)
-    pdf /= area
-    pdf[indices] = 0
-    return pdf
+def _trunc_fun_1d(x, y, xmin, ymin, xmax, ymax):
+    if isinstance(x, np.ndarray):
+        if xmin is not None:
+            y[np.where(x < xmin)] = ymin
+        if xmax is not None:
+            y[np.where(x > xmax)] = ymax
+    else:
+        if xmin is not None and x < xmin:
+            y = ymin
+        if xmax is not None and x > xmax:
+            y = ymax
+    return y
 
 
-def uniform_1d_fun(x, a, x0, s):
-    res = np.empty_like(x)
-    lt = x < x0 - s
-    gt = x > x0 + s
-    res[:] = a
-    res[lt] = 0
-    res[gt] = 0
-    return res
+def _trunc_fun_1d_pdf(x, fun_pdf, fun_cdf, args, xmin, xmax):
+    pdf_x = fun_pdf(x, *args)
+    cdf_min = fun_cdf(xmin, *args)
+    cdf_max = fun_cdf(xmax, *args)
+    return _trunc_fun_1d(x, pdf_x / (cdf_max - cdf_min), xmin, 0, xmax, 0)
 
 
-def uniform_1d_pdf(x, x0, s):
-    a = 1 / (2 * s)
-    return uniform_1d_fun(x, a, x0, s)
+def _trunc_fun_1d_cdf(x, fun_cdf, args, xmin, xmax):
+    cdf_x = fun_cdf(x, *args)
+    cdf_min = fun_cdf(xmin, *args)
+    cdf_max = fun_cdf(xmax, *args)
+    cdf_scaled = (cdf_x - cdf_min) / (cdf_max - cdf_min)
+    return _trunc_fun_1d(x, cdf_scaled, xmin, 0, xmax, 1)
 
 
-def uniform_1d_rnd(u, b, c):
-    return b + c * u
+def _trunc_fun_1d_ppf(x, fun_cdf, fun_ppf, args, xmin, xmax):
+    # PPF_trunc = PPF(CDF(min) + u * (CDF(max) - CDF(min))
+    fa = fun_cdf(xmin, *args)
+    fb = fun_cdf(xmax, *args)
+    return fun_ppf(fa + x * (fb - fa), *args)
+
+
+def uniform_1d_fun(x, a, b, c):
+    y = np.full_like(x, a) if isinstance(x, np.ndarray) else a
+    return _trunc_fun_1d(x, y, b, 0, c, 0)
+
+
+def uniform_1d_cdf(x, b, c):
+    y = (x - b) / (c - b)
+    return _trunc_fun_1d(x, y, b, 0, c, 1)
+
+
+def uniform_1d_pdf(x, b, c):
+    a = 1 / (2 * c)
+    return uniform_1d_fun(x, a, b, c)
+
+
+def uniform_1d_ppf(u, b, c):
+    return b + u * (c - b)
 
 
 def expon_1d_fun(x, a, b, c):
-    return a * np.exp(-np.abs(x - b) / c)
-
-
-def expon_1d_cdf(x, b, c):
-    return 0.5 + 0.5 * np.sign(x - b) * (1 - np.exp(-np.abs(x - b) / c))
+    return (x >= 0) * (a * np.exp(-np.abs(x - b) / c))
 
 
 def expon_1d_pdf(x, b, c):
@@ -181,20 +193,83 @@ def expon_1d_pdf(x, b, c):
     return expon_1d_fun(x, a, b, c)
 
 
-def expon_1d_pdf_trunc(x, b, c, xmin, xmax):
-    return _trunc_pdf(x, expon_1d_pdf, expon_1d_cdf, (b, c), xmin, xmax)
+def expon_1d_cdf(x, b, c):
+    return (x >= 0) * (1 - np.exp(-np.abs(x - b) / c))
 
 
-def expon_1d_rnd(u, b, c):
-    return b - c * np.sign(u) * np.log(1 - 2 * np.abs(u))
+def expon_1d_ppf(x, b, c):
+    return b - c * np.log(1 - x)
+
+
+def expon_trunc_1d_fun(x, a, b, c, xmin, xmax):
+    y = expon_1d_fun(x, a, b, c)
+    return _trunc_fun_1d(x, y, xmin, 0, xmax, 0)
+
+
+def expon_trunc_1d_cdf(x, b, c, xmin, xmax):
+    cdf = expon_1d_cdf
+    args = (b, c)
+    return _trunc_fun_1d_cdf(x, cdf, args, xmin, xmax)
+
+
+def expon_trunc_1d_pdf(x, b, c, xmin, xmax):
+    pdf = expon_1d_pdf
+    cdf = expon_1d_cdf
+    args = (b, c)
+    return _trunc_fun_1d_pdf(x, pdf, cdf, args, xmin, xmax)
+
+
+def expon_trunc_1d_ppf(x, b, c, xmin, xmax):
+    cdf = expon_1d_cdf
+    ppf = expon_1d_ppf
+    args = (b, c)
+    return _trunc_fun_1d_ppf(x, cdf, ppf, args, xmin, xmax)
+
+
+def laplace_1d_fun(x, a, b, c):
+    return a * np.exp(-np.abs(x - b) / c)
+
+
+def laplace_1d_pdf(x, b, c):
+    a = 1 / (2 * c)
+    return a * laplace_1d_fun(x, a, b, c)
+
+
+def laplace_1d_cdf(x, b, c):
+    return 0.5 + 0.5 * np.sign(x - b) * (1 - np.exp(-np.abs(x - b) / c))
+
+
+def laplace_1d_ppf(x, b, c):
+    return b - c * np.sign(x - 0.5) * np.log(1 - 2 * np.abs(x - 0.5))
+
+
+def laplace_trunc_1d_fun(x, a, b, c, xmin, xmax):
+    y = laplace_1d_fun(x, a, b, c)
+    return _trunc_fun_1d(x, y, xmin, 0, xmax, 0)
+
+
+def laplace_trunc_1d_pdf(x, b, c, xmin, xmax):
+    pdf = laplace_1d_pdf
+    cdf = laplace_1d_cdf
+    args = (b, c)
+    return _trunc_fun_1d_pdf(x, pdf, cdf, args, xmin, xmax)
+
+
+def laplace_trunc_1d_cdf(x, b, c, xmin, xmax):
+    cdf = laplace_1d_cdf
+    args = (b, c)
+    return _trunc_fun_1d_cdf(x, cdf, args, xmin, xmax)
+
+
+def laplace_trunc_1d_ppf(x, b, c, xmin, xmax):
+    cdf = laplace_1d_cdf
+    ppf = laplace_1d_ppf
+    args = (b, c)
+    return _trunc_fun_1d_ppf(x, cdf, ppf, args, xmin, xmax)
 
 
 def gauss_1d_fun(x, a, b, c):
     return a * np.exp(- (x - b) * (x - b) / (2 * c * c))
-
-
-def gauss_1d_cdf(x, b, c):
-    return 0.5 * (1 + scipy.special.erf((x - b)/(c * np.sqrt(2))))
 
 
 def gauss_1d_pdf(x, b, c):
@@ -202,21 +277,41 @@ def gauss_1d_pdf(x, b, c):
     return gauss_1d_fun(x, a, b, c)
 
 
-def gauss_1d_pdf_trunc(x, b, c, xmin, xmax):
-    return _trunc_pdf(x, gauss_1d_pdf, gauss_1d_cdf, (b, c), xmin, xmax)
+def gauss_1d_cdf(x, b, c):
+    return 0.5 * (1 + scipy.special.erf((x - b)/(c * np.sqrt(2))))
 
 
-def gauss_1d_rnd(u1, u2, b, c):
-    return b + c * np.sqrt(-2 * np.log(u1)) * np.cos(2 * np.pi * u2)
+def gauss_1d_ppf(x, b, c):
+    return b + c * np.sqrt(2) * scipy.special.erfinv(2 * x - 1)
+
+
+def gauss_trunc_1d_fun(x, a, b, c, xmin, xmax):
+    y = gauss_1d_fun(x, a, b, c)
+    return _trunc_fun_1d(x, y, xmin, 0, xmax, 0)
+
+
+def gauss_trunc_1d_pdf(x, b, c, xmin, xmax):
+    pdf = gauss_1d_pdf
+    cdf = gauss_1d_cdf
+    args = (b, c)
+    return _trunc_fun_1d_pdf(x, pdf, cdf, args, xmin, xmax)
+
+
+def gauss_trunc_1d_cdf(x, b, c, xmin, xmax):
+    cdf = gauss_1d_cdf
+    args = (b, c)
+    return _trunc_fun_1d_cdf(x, cdf, args, xmin, xmax)
+
+
+def gauss_trunc_1d_ppf(x, b, c, xmin, xmax):
+    cdf = gauss_1d_cdf
+    ppf = gauss_1d_ppf
+    args = (b, c)
+    return _trunc_fun_1d_ppf(x, cdf, ppf, args, xmin, xmax)
 
 
 def ggauss_1d_fun(x, a, b, c, d):
     return a * np.exp(-np.power(np.abs(x - b) / c, d))
-
-
-def ggauss_1d_cdf(x, b, c, d):
-    return 0.5 + 0.5 * np.sign(x - b) * scipy.special.gammainc(
-            1 / d, np.power(np.abs(x - b) / c, d))
 
 
 def ggauss_1d_pdf(x, b, c, d):
@@ -224,16 +319,46 @@ def ggauss_1d_pdf(x, b, c, d):
     return ggauss_1d_fun(x, a, b, c, d)
 
 
-def ggauss_1d_pdf_trunc(x, b, c, d, xmin, xmax):
-    return _trunc_pdf(x, ggauss_1d_pdf, ggauss_1d_cdf, (b, c, d), xmin, xmax)
+def ggauss_1d_cdf(x, b, c, d):
+    return 0.5 + 0.5 * np.sign(x - b) * scipy.special.gammainc(
+            1 / d, np.power(np.abs(x - b) / c, d))
+
+
+def ggauss_1d_ppf(x, b, c, d):
+    arg0 = 2 * np.abs(x - 0.5)
+    arg1 = 1 / d
+    arg2 = 1 / np.power(c, d)
+    gamma_ppf = scipy.stats.gamma.ppf(q=arg0, a=arg1, loc=0, scale=1/arg2)
+    return np.sign(x - 0.5) * np.power(gamma_ppf, 1.0 / d) + b
+
+
+def ggauss_trunc_1d_fun(x, a, b, c, d, xmin, xmax):
+    y = ggauss_1d_fun(x, a, b, c, d)
+    return _trunc_fun_1d(x, y, xmin, 0, xmax, 0)
+
+
+def ggauss_trunc_1d_pdf(x, b, c, d, xmin, xmax):
+    pdf = ggauss_1d_pdf
+    cdf = ggauss_1d_cdf
+    args = (b, c, d)
+    return _trunc_fun_1d_pdf(x, pdf, cdf, args, xmin, xmax)
+
+
+def ggauss_trunc_1d_cdf(x, b, c, d, xmin, xmax):
+    cdf = ggauss_1d_cdf
+    args = (b, c, d)
+    return _trunc_fun_1d_cdf(x, cdf, args, xmin, xmax)
+
+
+def ggauss_trunc_1d_ppf(x, b, c, d, xmin, xmax):
+    cdf = ggauss_1d_cdf
+    ppf = ggauss_1d_ppf
+    args = (b, c, d)
+    return _trunc_fun_1d_ppf(x, cdf, ppf, args, xmin, xmax)
 
 
 def lorentz_1d_fun(x, a, b, c):
     return a * c * c / ((x - b) * (x - b) + c * c)
-
-
-def lorentz_1d_cdf(x, b, c):
-    return 0.5 + np.arctan((x - b) / c) / np.pi
 
 
 def lorentz_1d_pdf(x, b, c):
@@ -241,22 +366,41 @@ def lorentz_1d_pdf(x, b, c):
     return lorentz_1d_fun(x, a, b, c)
 
 
-def lorentz_1d_pdf_trunc(x, b, c, xmin, xmax):
-    return _trunc_pdf(x, lorentz_1d_pdf, lorentz_1d_cdf, (b, c), xmin, xmax)
+def lorentz_1d_cdf(x, b, c):
+    return 0.5 + np.arctan((x - b) / c) / np.pi
 
 
-def lorentz_1d_rnd(u, b, c):
-    return b + c * np.tan(np.pi * 0.5 * u)
+def lorentz_1d_ppf(x, b, c):
+    return b + c * np.tan(np.pi * (x - 0.5))
+
+
+def lorentz_trunc_1d_fun(x, a, b, c, xmin, xmax):
+    y = lorentz_1d_fun(x, a, b, c)
+    return _trunc_fun_1d(x, y, xmin, 0, xmax, 0)
+
+
+def lorentz_trunc_1d_pdf(x, b, c, xmin, xmax):
+    pdf = lorentz_1d_pdf
+    cdf = lorentz_1d_cdf
+    args = (b, c)
+    return _trunc_fun_1d_pdf(x, pdf, cdf, args, xmin, xmax)
+
+
+def lorentz_trunc_1d_cdf(x, b, c, xmin, xmax):
+    cdf = lorentz_1d_cdf
+    args = (b, c)
+    return _trunc_fun_1d_cdf(x, cdf, args, xmin, xmax)
+
+
+def lorentz_trunc_1d_ppf(x, b, c, xmin, xmax):
+    cdf = lorentz_1d_cdf
+    ppf = lorentz_1d_ppf
+    args = (b, c)
+    return _trunc_fun_1d_ppf(x, cdf, ppf, args, xmin, xmax)
 
 
 def moffat_1d_fun(x, a, b, c, d):
     return a * np.power(1 + np.power((x - b) / c, 2), -d)
-
-
-"""
-def moffat_1d_cdf(x, b, c, d):
-    raise NotImplementedError()
-"""
 
 
 def moffat_1d_pdf(x, b, c, d):
@@ -264,24 +408,41 @@ def moffat_1d_pdf(x, b, c, d):
     return moffat_1d_fun(x, a, b, c, d)
 
 
-"""
-def moffat_1d_pdf_trunc(x, b, c, d, xmin, xmax):
-    return _trunc_pdf(x, moffat_1d_pdf, moffat_1d_cdf, (b, c, d), xmin, xmax)
-"""
-
-
-"""
-def moffat_1d_rnd(u, b, c, d):
+def moffat_1d_cdf(x, b, c, d):
     raise NotImplementedError()
-"""
+
+
+def moffat_1d_ppf(x, b, c, d):
+    raise NotImplementedError()
+
+
+def moffat_trunc_1d_fun(x, a, b, c, d, xmin, xmax):
+    y = moffat_1d_fun(x, a, b, c, d)
+    return _trunc_fun_1d(x, y, xmin, 0, xmax, 0)
+
+
+def moffat_trunc_1d_pdf(x, b, c, d, xmin, xmax):
+    pdf = moffat_1d_pdf
+    cdf = moffat_1d_cdf
+    args = (b, c, d)
+    return _trunc_fun_1d_pdf(x, pdf, cdf, args, xmin, xmax)
+
+
+def moffat_trunc_1d_cdf(x, b, c, d, xmin, xmax):
+    cdf = moffat_1d_cdf
+    args = (b, c, d)
+    return _trunc_fun_1d_cdf(x, cdf, args, xmin, xmax)
+
+
+def moffat_trunc_1d_ppf(x, b, c, d, xmin, xmax):
+    cdf = moffat_1d_cdf
+    ppf = moffat_1d_ppf
+    args = (b, c, d)
+    return _trunc_fun_1d_ppf(x, cdf, ppf, args, xmin, xmax)
 
 
 def sech2_1d_fun(x, a, b, c):
     return a * np.power(1 / np.cosh((x - b) / c), 2)
-
-
-def sech2_1d_cdf(x, b, c):
-    return 0.5 * (1 + np.tanh((x - b) / c))
 
 
 def sech2_1d_pdf(x, b, c):
@@ -289,46 +450,34 @@ def sech2_1d_pdf(x, b, c):
     return sech2_1d_fun(x, a, b, c)
 
 
-def sech2_1d_pdf_trunc(x, b, c, xmin, xmax):
-    return _trunc_pdf(x, sech2_1d_pdf, sech2_1d_cdf, (b, c), xmin, xmax)
+def sech2_1d_cdf(x, b, c):
+    return 0.5 * (1 + np.tanh((x - b) / c))
 
 
-def sech2_1d_rnd(u, b, c):
-    return b + c * np.arctanh(u)
+def sech2_1d_ppf(x, b, c):
+    raise NotImplementedError()
 
 
-def _calculate_ellipse_abc(size_x, size_y, phi):
-    cosphi = np.cos(phi)
-    sinphi = np.sin(phi)
-    size_x2 = np.power(size_x, 2)
-    size_y2 = np.power(size_y, 2)
-    a = np.power(cosphi / size_x, 2) + np.power(sinphi / size_y, 2)
-    b = np.power(sinphi / size_x, 2) + np.power(cosphi / size_y, 2)
-    c = 2 * sinphi * cosphi * ((1 / size_x2) - (1 / size_y2))
-    return a, b, c
+def sech2_trunc_1d_fun(x, a, b, c, xmin, xmax):
+    y = sech2_1d_fun(x, a, b, c)
+    return _trunc_fun_1d(x, y, xmin, 0, xmax, 0)
 
 
-def gauss_2d_(x, y, ampl, x0, y0, sigma_x, sigma_y, phi):
-    a, b, c = _calculate_ellipse_abc(sigma_x, sigma_y, phi)
-    return ampl * np.exp(-0.5 * (a * np.power(x - x0, 2) +
-                                 b * np.power(y - y0, 2) +
-                                 c * (x - x0) * (y - y0)))
+def sech2_trunc_1d_pdf(x, b, c, xmin, xmax):
+    pdf = sech2_1d_pdf
+    cdf = sech2_1d_cdf
+    args = (b, c)
+    return _trunc_fun_1d_pdf(x, pdf, cdf, args, xmin, xmax)
 
 
-def lorentz_2d_(x, y, ampl, x0, y0, gamma_x, gamma_y, phi):
-    a, b, c = _calculate_ellipse_abc(gamma_x, gamma_y, phi)
-    return ampl / (a * np.power(x - x0, 2) +
-                   b * np.power(y - y0, 2) +
-                   c * (x - x0) * (y - y0) + 1)
+def sech2_trunc_1d_cdf(x, b, c, xmin, xmax):
+    cdf = sech2_1d_cdf
+    args = (b, c)
+    return _trunc_fun_1d_cdf(x, cdf, args, xmin, xmax)
 
 
-def lorentz_2d(x, y, ampl, x0, y0, gamma_x, gamma_y, phi):
-    x, y = transform_lh_rotate_z(x - x0, y - y0, phi)
-    return ampl * 1 / (1 + np.power(x / gamma_x, 2) + np.power(y / gamma_y, 2))
-
-
-def moffat_2d_(x, y, ampl, x0, y0, alpha_x, alpha_y, beta, phi):
-    a, b, c = _calculate_ellipse_abc(alpha_x, alpha_y, phi)
-    return ampl / np.power((a * np.power(x - x0, 2) +
-                            b * np.power(y - y0, 2) +
-                            c * (x - x0) * (y - y0) + 1), beta)
+def sech2_trunc_1d_ppf(x, b, c, xmin, xmax):
+    cdf = sech2_1d_cdf
+    ppf = sech2_1d_ppf
+    args = (b, c)
+    return _trunc_fun_1d_ppf(x, cdf, ppf, args, xmin, xmax)

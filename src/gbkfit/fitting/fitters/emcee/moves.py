@@ -7,11 +7,22 @@ import emcee.moves
 from gbkfit.utils import parseutils
 
 
+__all__ = [
+    'FitterEmceeMoveDE',
+    'FitterEmceeMoveDESnooker',
+    'FitterEmceeMoveGaussian',
+    'FitterEmceeMoveKDE',
+    'FitterEmceeMoveMH',
+    'FitterEmceeMoveStretch',
+    'FitterEmceeMoveWalk',
+    'move_parser']
+
+
 class FitterEmceeMove(parseutils.TypedParserSupport, abc.ABC):
 
     @classmethod
     def load(cls, info):
-        desc = f'{cls.type()} emcee fitter move (class={cls.__qualname__})'
+        desc = parseutils.make_typed_desc(cls, 'emcee fitter move')
         opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
         return cls(**opts)
 
@@ -24,7 +35,7 @@ class FitterEmceeMove(parseutils.TypedParserSupport, abc.ABC):
         self._kwargs.pop('__class__')
         self._move = cls(**self._kwargs)
 
-    def move_obj(self):
+    def obj(self):
         return self._move
 
 
@@ -37,7 +48,7 @@ class FitterEmceeMoveStretch(FitterEmceeMove):
     def __init__(
             self, a=2.0,
             nsplits=2, randomize_split=True, live_dangerously=False):
-        super().__init__(emcee.moves.StretchMove, locals())
+        super().__init__(emcee.moves.StretchMove, copy.deepcopy(locals()))
 
 
 class FitterEmceeMoveWalk(FitterEmceeMove):
@@ -49,7 +60,7 @@ class FitterEmceeMoveWalk(FitterEmceeMove):
     def __init__(
             self, s=None,
             nsplits=2, randomize_split=True, live_dangerously=False):
-        super().__init__(emcee.moves.WalkMove, locals())
+        super().__init__(emcee.moves.WalkMove, copy.deepcopy(locals()))
 
 
 class FitterEmceeMoveKDE(FitterEmceeMove):
@@ -61,7 +72,7 @@ class FitterEmceeMoveKDE(FitterEmceeMove):
     def __init__(
             self, bw_method=None,
             nsplits=2, randomize_split=True, live_dangerously=False):
-        super().__init__(emcee.moves.KDEMove, locals())
+        super().__init__(emcee.moves.KDEMove, copy.deepcopy(locals()))
 
 
 class FitterEmceeMoveDE(FitterEmceeMove):
@@ -73,7 +84,7 @@ class FitterEmceeMoveDE(FitterEmceeMove):
     def __init__(
             self, sigma=1e-05, gamma0=None,
             nsplits=2, randomize_split=True, live_dangerously=False):
-        super().__init__(emcee.moves.DEMove, locals())
+        super().__init__(emcee.moves.DEMove, copy.deepcopy(locals()))
 
 
 class FitterEmceeMoveDESnooker(FitterEmceeMove):
@@ -85,7 +96,7 @@ class FitterEmceeMoveDESnooker(FitterEmceeMove):
     def __init__(
             self, gammas=1.7,
             nsplits=2, randomize_split=True, live_dangerously=False):
-        super().__init__(emcee.moves.DESnookerMove, locals())
+        super().__init__(emcee.moves.DESnookerMove, copy.deepcopy(locals()))
 
 
 class FitterEmceeMoveMH(FitterEmceeMove):
@@ -95,7 +106,7 @@ class FitterEmceeMoveMH(FitterEmceeMove):
         return 'mh'
 
     def __init__(self, proposal_function, ndim=None):
-        super().__init__(emcee.moves.MHMove, locals())
+        super().__init__(emcee.moves.MHMove, copy.deepcopy(locals()))
 
 
 class FitterEmceeMoveGaussian(FitterEmceeMove):
@@ -105,14 +116,14 @@ class FitterEmceeMoveGaussian(FitterEmceeMove):
         return 'gauss'
 
     def __init__(self, cov, mode='vector', factor=None):
-        super().__init__(emcee.moves.GaussianMove, locals())
+        super().__init__(emcee.moves.GaussianMove, copy.deepcopy(locals()))
 
 
-parser = parseutils.TypedParser(FitterEmceeMove)
-parser.register(FitterEmceeMoveStretch)
-parser.register(FitterEmceeMoveWalk)
-parser.register(FitterEmceeMoveKDE)
-parser.register(FitterEmceeMoveDE)
-parser.register(FitterEmceeMoveDESnooker)
-parser.register(FitterEmceeMoveMH)
-parser.register(FitterEmceeMoveGaussian)
+move_parser = parseutils.TypedParser(FitterEmceeMove)
+move_parser.register(FitterEmceeMoveStretch)
+move_parser.register(FitterEmceeMoveWalk)
+move_parser.register(FitterEmceeMoveKDE)
+move_parser.register(FitterEmceeMoveDE)
+move_parser.register(FitterEmceeMoveDESnooker)
+move_parser.register(FitterEmceeMoveMH)
+move_parser.register(FitterEmceeMoveGaussian)
