@@ -39,8 +39,8 @@ def _prepare_params(info, descs):
     for key, val in parameters.items():
         if iterutils.is_mapping(val):
             val = {k.lstrip('*'): v for k, v in val.items()}
-            if 'val' in val:
-                parameters[key] = val['val']
+            if 'value' in val:
+                parameters[key] = val['value']
                 recovery_succeed.append(key)
             else:
                 recovery_failed.append(key)
@@ -56,7 +56,7 @@ def _prepare_params(info, descs):
     return info
 
 
-def eval_(objective_type, config, perf=None):
+def eval_(objective_type, config, profile=None):
 
     #
     # Read configuration file and
@@ -187,10 +187,10 @@ def eval_(objective_type, config, perf=None):
     # Run performance tests
     #
 
-    if perf > 0:
+    if profile > 0:
         _log.info("running performance test...")
         objective.time_stats_reset()
-        for i in range(perf):
+        for i in range(profile):
             if objective_type == 'model':
                 objective.model_h(params)
             if objective_type == 'goodness':

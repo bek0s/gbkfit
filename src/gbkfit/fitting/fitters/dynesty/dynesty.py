@@ -5,12 +5,18 @@ import logging
 import dynesty
 import numpy as np
 
-import gbkfit.fitting.fitter
-import gbkfit.fitting.params
-from gbkfit.utils import parseutils
+from gbkfit.fitting.core import FitParam, FitParams, Fitter
 
 
-log = logging.getLogger(__name__)
+from gbkfit.utils import iterutils, parseutils
+
+from gbkfit.fitting.prior import prior_parser
+
+from gbkfit.fitting.utils import *
+
+
+
+_log = logging.getLogger(__name__)
 
 
 def _prior_tansform_wrapper(theta):
@@ -21,31 +27,61 @@ def _log_likelihood_wrapper(theta):
     pass
 
 
-class FitParameterDynesty(gbkfit.fitting.params.FitParam):
+class FitParamDynesty(FitParam):
 
     @classmethod
     def load(cls, info):
-        desc = f'fit parameter (class: {cls.__qualname__})'
-        cls_args = parseutils.parse_options(
-            info, desc, fun=cls.__init__, fun_rename_args=dict(
-                initial='init', minimum='min', maximum='max'))
-        return cls(**cls_args)
+        info['prior'] = prepare_param_prior_info(info)
+        info['prior'] = prior_parser.load(info['prior'], param_info=info)
+        desc = parseutils.make_basic_desc(cls, 'fit parameter')
+        opts = parseutils.parse_options_for_callable(
+            info, desc, cls.__init__)
+        return cls(**opts)
 
-    def __init__(self, prior, periodic=None, reflective=None):
-        pass
+    def dump(self):
+        return dict()
+
+    def __init__(self, prior):
+        super().__init__()
+
+    def prior(self):
+        return None
 
 
-class FitParamsDynesty(gbkfit.fitting.params.FitParams):
+class FitParamsDynesty(FitParams):
 
     @classmethod
     def load(cls, info, descs):
-        return cls(info, descs)
 
-    def __init__(self, params, descs, live_points=None):
-        super().__init__(params, descs)
+        desc = parseutils.make_basic_desc(cls, 'fit params')
+        opts = parseutils.parse_options_for_callable(
+            info, desc, cls.__init__, fun_ignore_args=['descs'])
+        parameters = load_parameters(
+            opts.get('parameters'), descs, cls.load_param)
+        value_conversions = paramutils.load_parameter_value_conversions(
+            opts.get('value_conversions'))
+        prior_conversions = paramutils.load_parameter_prior_conversions(
+            opts.get('prior_conversions'))
+        return cls(descs, parameters, value_conversions, prior_conversions)
+
+    @staticmethod
+    def load_param(info):
+        return FitParamDynesty.load(info)
+
+    def dump(self):
+        return ()
+
+    def __init__(
+            self, descs, parameters,
+            value_conversions=None, prior_conversions=None):
+        super().__init__(descs, parameters, None, FitParamDynesty)
 
 
-class FitterDynesty(gbkfit.fitting.fitter.Fitter):
+class FitterDynesty(Fitter):
+
+    @staticmethod
+    def load_params(info, descs):
+        return FitParamsDynesty.load(info, descs)
 
     def __init__(self):
         super().__init__()
@@ -68,7 +104,7 @@ class FitterDynestySNS(FitterDynesty):
 
     @classmethod
     def load(cls, info):
-        desc = ''
+        desc = parseutils.make_typed_desc(cls, 'fitter')
         opts = parseutils.parse_options_for_callable(
             info, desc, cls.__init__, fun_rename_args=dict(
                 rstate='seed'))
@@ -137,16 +173,16 @@ class FitterDynestyDNS(FitterDynesty):
             # see dynesty.DynamicNestedSampler()
             bound='multi', sample='auto',
             update_interval=None, first_update=None, rstate=None,
-            enlarge=None, bootstrap=0, vol_dec=0.5, vol_check=2.0,
-            walks=25, facc=0.5, slices=5, fmove=0.9, max_move=100,
-            # dynesty.dynamicsampler.DynamicNestedSampler.run_nested()
+            enlarge=None, bootstrap=0,
+            walks=25, facc=0.5, slices=None, fmove=0.9, max_move=100,
+            # dynesty.dynamicsampler.DynamicSampler.run_nested()
             nlive_init=500, maxiter_init=None,
             maxcall_init=None, dlogz_init=0.01, logl_max_init=np.inf,
             n_effective_init=np.inf, nlive_batch=500,
             wt_function=None, wt_kwargs=None,
             maxiter_batch=None, maxcall_batch=None,
             maxiter=None, maxcall=None, maxbatch=None,
-            n_effective=np.inf,
+            n_effective=None,
             stop_function=None, stop_kwargs=None, use_stop=True,
             save_bounds=True, print_progress=True, print_func=None):
         super().__init__()

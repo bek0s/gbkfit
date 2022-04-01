@@ -247,7 +247,6 @@ class PriorDeltaFunction(Prior):
         pass
 
 
-
 class PriorDict(dict):
 
     def __init__(self, dictionary):
@@ -269,8 +268,6 @@ class PriorDict(dict):
 
     def rescale(self, keys, vals):
         return [self[key].rescale(val) for key, val in zip(keys, vals)]
-
-
 
 
 prior_parser = parseutils.TypedParser(Prior)

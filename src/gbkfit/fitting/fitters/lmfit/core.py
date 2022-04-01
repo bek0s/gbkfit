@@ -9,6 +9,7 @@ from gbkfit.fitting.core import FitParam, FitParams, Fitter
 
 from gbkfit.fitting.result import make_fitter_result
 
+
 def _residual_params(x, parameters):
     enames = parameters.interpreter().enames(free=True, tied=False, fixed=False)
     evalues = x.valuesdict().values()

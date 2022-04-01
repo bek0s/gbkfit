@@ -24,7 +24,7 @@ def _register_fitters():
     from gbkfit.fitting.core import fitter_parser as parser
     factories = [
         # dynesty
-        'gbkfit.fitting.fitters.dynesty.FitterDyneestyDNS',
+        'gbkfit.fitting.fitters.dynesty.FitterDynestyDNS',
         'gbkfit.fitting.fitters.dynesty.FitterDynestySNS',
         # emcee
         'gbkfit.fitting.fitters.emcee.FitterEmcee',

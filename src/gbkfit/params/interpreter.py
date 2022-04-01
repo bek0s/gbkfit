@@ -61,6 +61,14 @@ def dump_exprs_file(file, func_obj, func_src):
     return dict(file=file, func=func_obj.__name__)
 
 
+class ParamValueConversions:
+    pass
+
+
+class ParamPriorConversions:
+    pass
+
+
 class Interpreter:
 
     def __init__(self, descs, exprs_dict=None, exprs_func=None):
@@ -151,6 +159,8 @@ class Interpreter:
                 exprs_func_src = textwrap.dedent(inspect.getsource(exprs_func))
             except AttributeError:
                 exprs_func_src = ''
+        print(exprs_func_src)
+        #exit(locals())
         # ...
         self._exprs_dict = exprs_dict
         self._fixed_dict = numbs_dict

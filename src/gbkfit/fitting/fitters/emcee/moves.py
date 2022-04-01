@@ -4,7 +4,7 @@ import copy
 
 import emcee.moves
 
-from gbkfit.utils import parseutils
+from gbkfit.utils import iterutils, parseutils
 
 
 __all__ = [
@@ -15,7 +15,9 @@ __all__ = [
     'FitterEmceeMoveMH',
     'FitterEmceeMoveStretch',
     'FitterEmceeMoveWalk',
-    'move_parser']
+    'move_parser',
+    'dump_moves_with_weights',
+    'load_moves_with_weights']
 
 
 class FitterEmceeMove(parseutils.TypedParserSupport, abc.ABC):
@@ -127,3 +129,14 @@ move_parser.register(FitterEmceeMoveDE)
 move_parser.register(FitterEmceeMoveDESnooker)
 move_parser.register(FitterEmceeMoveMH)
 move_parser.register(FitterEmceeMoveGaussian)
+
+
+def load_moves_with_weights(info):
+    moves = iterutils.tuplify(info, False)
+    weights = [move.pop('weight', 1) for move in moves]
+    moves = move_parser.load(moves)
+    return tuple(zip(moves, weights))
+
+
+def dump_moves_with_weights(moves):
+    return [move.dump() | dict(weight=weight) for move, weight in moves]

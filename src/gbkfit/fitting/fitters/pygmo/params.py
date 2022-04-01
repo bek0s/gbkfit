@@ -14,7 +14,7 @@ class FitParamPygmo(FitParam):
         desc = parseutils.make_basic_desc(cls, 'fit parameter')
         opts = parseutils.parse_options_for_callable(
             info, desc, cls.__init__, fun_rename_args=dict(
-                initial_value='val',
+                initial_value='value',
                 initial_scale='scale',
                 minimum='min',
                 maximum='max'))

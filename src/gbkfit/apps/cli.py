@@ -135,7 +135,7 @@ def main():
         'config', type=str,
         help="configuration file path; json and yaml formats are supported")
     parser_eval.add_argument(
-        '--prof', type=_number_range(int, 1, None),
+        '--profile', type=_number_range(int, 0, None), default=0,
         metavar='ITERS',
         help="evaluate the objective ITERS times "
              "and provide performance evaluation statistics")
@@ -362,7 +362,7 @@ def main():
 
     if args.task == 'eval':
         import gbkfit.tasks.eval
-        gbkfit.tasks.eval.eval_(args.objective, args.config, args.prof)
+        gbkfit.tasks.eval.eval_(args.objective, args.config, args.profile)
 
     elif args.task == 'prep':
         import gbkfit.tasks.prep

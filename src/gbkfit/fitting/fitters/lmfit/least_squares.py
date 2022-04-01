@@ -8,7 +8,7 @@ from gbkfit.utils import parseutils
 from .core import FitParamLMFit, FitParamsLMFit, FitterLMFit, residual_vector
 
 
-from gbkfit.fitting.utils import parse_parameters
+from gbkfit.fitting.utils import load_parameters
 
 
 class FitParamLMFitLeastSquares(FitParamLMFit):
@@ -18,7 +18,7 @@ class FitParamLMFitLeastSquares(FitParamLMFit):
         desc = parseutils.make_basic_desc(cls, 'param')
         opts = parseutils.parse_options_for_callable(
             info, desc, cls.__init__, fun_rename_args=dict(
-                initial_value='val',
+                initial_value='value',
                 minimum='min',
                 maximum='max'))
         return cls(**opts)
@@ -65,7 +65,7 @@ class FitParamsLMFitLeastSquares(FitParamsLMFit):
         desc = parseutils.make_basic_desc(cls, 'params')
         opts = parseutils.parse_options_for_callable(
             info, desc, cls.__init__, fun_ignore_args=['descs'])
-        parameters = parse_parameters(opts['parameters'], descs, cls.load_param)
+        parameters = load_parameters(opts['parameters'], descs, cls.load_param)
         expressions = paramutils.load_expressions(opts.get('expressions'))
         return cls(descs, parameters, expressions)
 

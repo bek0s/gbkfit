@@ -267,11 +267,19 @@ class _ParamExprVisitor(ast.NodeVisitor):
         # If symbol is not recognised, ignore this node.
         if not desc:
             return
-        # If symbol is a vector, generate all possible indices.
+        # # If symbol is a vector, generate all possible indices.
         indices = list(range(desc.size())) \
             if isinstance(desc, ParamVectorDesc) else None
-        # Store symbol name along with its indices (if a vector).
-        self._symbols[name] = set(indices)
+        # # Store symbol name along with its indices (if a vector).
+        # print("foo:", desc)
+        # self._symbols[name] = set(indices)
+
+        if isinstance(desc, ParamScalarDesc):
+            self._symbols[name] = None
+        elif isinstance(desc, ParamVectorDesc):
+            self._symbols[name] = set(indices)
+        else:
+            assert False
 
     def visit_Subscript(self, node):
         code = ast.unparse(node).strip('\n')
@@ -895,6 +903,21 @@ def parse_param_values_strict(descs, params_dict, value_type):
             f"information for the following parameters is required "
             f"but not provided: {str(missing)}")
     return values, exprs
+
+
+def _load_parameter_conversions(info, desc):
+    if not info:
+        return info
+    opts = parseutils.parse_options(info, desc, ['file', 'func'])
+    return miscutils.get_attr_from_file(opts['file'], opts['func'])
+
+
+def load_parameter_value_conversions(info):
+    return _load_parameter_conversions(info, 'parameter value conversions')
+
+
+def load_parameter_prior_conversions(info):
+    return _load_parameter_conversions(info, 'parameter prior conversions')
 
 
 def load_expressions(info):
