@@ -73,7 +73,8 @@ class FitParamsPygmo(FitParams):
                     f"could not parse information for parameter '{key}'; "
                     f"reason: {str(e)}") from e
         parameters = infos | exprs
-        expressions = paramutils.load_expressions(opts.get('expressions'))
+        expressions = paramutils.load_param_value_conversions(
+            opts.get('value_conversions'))
         return cls(descs, parameters, expressions)
 
     def dump(self):

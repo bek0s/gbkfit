@@ -16,11 +16,20 @@ class FitParams(parseutils.BasicParserSupport, abc.ABC):
     def __init__(self, descs, parameters, expressions, param_type):
         super().__init__()
         values, exprs = parse_param_values_strict(descs, parameters, param_type)
+
         self._descs = copy.deepcopy(descs)
         self._infos = values
         self._exprs = exprs
         self._parameters = copy.deepcopy(parameters)
+
         self._interpreter = Interpreter(descs, exprs, expressions)
+
+
+        exit(self._interpreter.enames(free=True, tied=False, fixed=False))
+
+        # print(values)
+        # print(exprs)
+        # exit()
 
     def descs(self):
         return self._descs
@@ -51,7 +60,7 @@ class Fitter(parseutils.TypedParserSupport, abc.ABC):
         opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
         return cls(**opts)
 
-    def __init__(self):
+    def __init__(self, *args, **kwargs):
         pass
 
     def fit(self, objectives, parameters):

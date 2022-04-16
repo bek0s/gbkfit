@@ -1,6 +1,5 @@
 
 import abc
-import collections.abc
 
 import numpy as np
 import scipy.integrate
@@ -10,8 +9,7 @@ import gbkfit.math
 from gbkfit.utils import parseutils
 
 
-__all__ = [
-    'Prior', 'PriorDict', 'PriorGauss', 'PriorGaussTrunc', 'PriorUniform']
+__all__ = ['Prior', 'PriorGauss', 'PriorGaussTrunc', 'PriorUniform']
 
 
 def _parse_min_and_max(prior_info, param_info):
@@ -214,11 +212,3 @@ class PriorGaussTrunc(Prior):
         return gbkfit.math.gauss_trunc_1d_cdf(
             x, self.mean, self.std, self.minimum, self.maximum)
 
-
-
-
-
-prior_parser = parseutils.TypedParser(Prior)
-
-prior_parser.register(PriorUniform)
-prior_parser.register(PriorGauss)

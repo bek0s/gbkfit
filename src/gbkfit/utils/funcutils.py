@@ -3,8 +3,8 @@ import inspect
 
 
 def extract_args(func):
-    required = set()
-    optional = set()
+    required = []
+    optional = []
     parameters = inspect.signature(func).parameters
     for pname, pinfo in parameters.items():
         if pinfo.kind == inspect.Parameter.VAR_POSITIONAL:
@@ -12,8 +12,9 @@ def extract_args(func):
         if pinfo.kind == inspect.Parameter.VAR_KEYWORD:
             continue
         if pinfo.default is inspect.Parameter.empty:
-            required.add(pname)
+            required.append(pname)
         else:
-            optional.add(pname)
-    required.discard('self')
-    return required | optional, required, optional
+            optional.append(pname)
+    if 'self' in required:
+        required.remove('self')
+    return required + optional, required, optional

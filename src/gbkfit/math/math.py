@@ -34,10 +34,12 @@ def roundu_odd(x):
 
 
 def roundd_multiple(x, multiple):
+    assert multiple > 0
     return (x // multiple) * multiple
 
 
 def roundu_multiple(x, multiple):
+    assert multiple > 0
     return x - np.mod(x, multiple) + multiple if np.mod(x, multiple) != 0 else x
 
 
@@ -176,7 +178,7 @@ def uniform_1d_cdf(x, b, c):
 
 
 def uniform_1d_pdf(x, b, c):
-    a = 1 / (2 * c)
+    a = 1 / (c - b)
     return uniform_1d_fun(x, a, b, c)
 
 

@@ -1,8 +1,10 @@
 
 import importlib.abc
 import importlib.util
+import inspect
 import os
 import pathlib
+import textwrap
 
 
 def get_attr_from_file(file, attr):
@@ -65,3 +67,14 @@ def make_unique_path(path):
         i += 1
         path = f'{base}_{i}'
     return path
+
+
+def get_source(obj, dedent=True):
+    src = None
+    success = True
+    try:
+        src = inspect.getsource(obj)
+        src = textwrap.dedent(src) if dedent else src
+    except (TypeError, OSError):
+        success = False
+    return src, success

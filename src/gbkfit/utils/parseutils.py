@@ -57,6 +57,8 @@ def parse_options_for_callable(
     # Infer options from callable
     if fun:
         fun_required, fun_optional = funcutils.extract_args(fun)[1:]
+        fun_required = set(fun_required) #  TODO clean up
+        fun_optional = set(fun_optional)
         fun_all = fun_required | fun_optional
         # Callable options must not clash with added options
         if fun_all.intersection(add_all):

@@ -84,3 +84,33 @@ def is_iterable_of_type(x, type_):
 
 def is_sequence_of_type(x, type_):
     return is_sequence(x) and all(isinstance(i, type_) for i in x)
+
+
+def extract_subdict(d, keys, on_missing_keys='ignore'):
+    assert on_missing_keys in ['ignore', 'none', 'raise']
+    result = {}
+    keys_intersection = set(keys).intersection(d.keys())
+    if on_missing_keys == 'raise' and len(keys) != len(keys_intersection):
+        raise RuntimeError()
+    for key in keys:
+        if key not in d and on_missing_keys == 'ignore':
+            continue
+        result[key] = d.get(key)
+    return result
+
+
+def validate_sequence_indices(indices, length):
+    def is_valid(i): return -length <= i < length
+    def is_invalid(i): return not is_valid(i)
+    valid_indices = set(filter(is_valid, indices))
+    invalid_indices = set(filter(is_invalid, indices))
+    return list(sorted(valid_indices)), list(sorted(invalid_indices))
+
+
+def unwrap_sequence_indices(indices, length):
+    return [i + length if i < 0 else i for i in indices]
+
+
+def sorted_sequence(b, value_order):
+
+    return sorted(b, key=lambda x: value_order.index(x))

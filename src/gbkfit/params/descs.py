@@ -1,10 +1,21 @@
 
 import abc
+import collections.abc
+
+import numpy as np
 
 from gbkfit.utils import parseutils
 
 
-__all__ = ['ParamScalarDesc', 'ParamVectorDesc']
+__all__ = ['ParamDescDict', 'ParamScalarDesc', 'ParamVectorDesc']
+
+
+def explode_peram_desc(desc, override_name=None):
+    pass
+
+
+def explode_param_descs(descs, override_names=None):
+    pass
 
 
 class ParamDesc(parseutils.TypedParserSupport, abc.ABC):
@@ -19,28 +30,22 @@ class ParamDesc(parseutils.TypedParserSupport, abc.ABC):
         info = dict(type=self.type(), name=self.name(), size=self.size())
         if self.desc() is not None:
             info.update(desc=self.desc())
-        if self.minimum() is not None:
-            info.update(
-                minimum=self.minimum(),
-                exclusive_minimum=self.exclusive_minimum())
-        if self.maximum() is not None:
-            info.update(
-                maximum=self.maximum(),
-                exclusive_maximum=self.exclusive_maximum())
+        if self.default() is not None:
+            info.update(default=self.default())
+        if self.minimum() is not None and np.isfinite(self.minimum()):
+            info.update(minimum=self.minimum())
+        if self.maximum() is not None and np.isfinite(self.maximum()):
+            info.update(maximum=self.maximum())
         return info
 
-    def __init__(
-            self, name, size, desc=None, default=None,
-            minimum=None, exclusive_minimum=False,
-            maximum=None, exclusive_maximum=False):
+    def __init__(self, name, size, desc, default, minimum, maximum):
+        assert minimum <= maximum
         self._name = name
         self._size = size
         self._desc = desc
         self._default = default
         self._minimum = minimum
         self._maximum = maximum
-        self._exclusive_minimum = exclusive_minimum
-        self._exclusive_maximum = exclusive_maximum
 
     def name(self):
         return self._name
@@ -60,12 +65,6 @@ class ParamDesc(parseutils.TypedParserSupport, abc.ABC):
     def maximum(self):
         return self._maximum
 
-    def exclusive_maximum(self):
-        return self._exclusive_minimum
-
-    def exclusive_minimum(self):
-        return self._exclusive_maximum
-
 
 class ParamScalarDesc(ParamDesc):
 
@@ -79,13 +78,9 @@ class ParamScalarDesc(ParamDesc):
         return info
 
     def __init__(
-            self, name, desc=None, default=None,
-            minimum=None, exclusive_minimum=False,
-            maximum=None, exclusive_maximum=False):
-        super().__init__(
-            name, 1, desc, default,
-            minimum, exclusive_minimum,
-            maximum, exclusive_maximum)
+            self, name, desc=None,
+            default=None, minimum=-np.inf, maximum=+np.inf):
+        super().__init__(name, 1, desc, default, minimum, maximum)
 
 
 class ParamVectorDesc(ParamDesc):
@@ -96,12 +91,42 @@ class ParamVectorDesc(ParamDesc):
 
     def __init__(
             self, name, size, desc=None,
-            minimum=None, exclusive_minimum=False,
-            maximum=None, exclusive_maximum=False):
-        super().__init__(
-            name, size, desc,
-            minimum, exclusive_minimum,
-            maximum, exclusive_maximum)
+            default=None, minimum=-np.inf, maximum=+np.inf):
+        super().__init__(name, size, desc, default, minimum, maximum)
+
+
+class ParamDescDict(collections.abc.MutableMapping):
+
+    def __init__(self, descs):
+        self._dict = dict()
+        self.update(descs)
+
+    def __getitem__(self, key):
+        return self._dict.__getitem__(key)
+
+    def __setitem__(self, key, value):
+        assert isinstance(value, ParamDesc)
+        assert key == value.name()
+        self._dict.__setitem__(key, value)
+
+    def __delitem__(self, key):
+        self._dict.__delitem__(key)
+
+    def __iter__(self):
+        return self._dict.__iter__()
+
+    def __len__(self):
+        return self._dict.__len__()
+
+    def __repr__(self):
+        return self._dict.__repr__()
+
+    def __str__(self):
+        return self._dict.__str__()
+
+    def exploded_names(self):
+        from gbkfit.params.paramutils import explode_param_names
+        return explode_param_names(self)
 
 
 def load_descs_dict(info):

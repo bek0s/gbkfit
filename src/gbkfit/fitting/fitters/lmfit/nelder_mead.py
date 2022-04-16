@@ -55,7 +55,8 @@ class FitParamsLMFitNelderMead(FitParamsLMFit):
         opts = parseutils.parse_options_for_callable(
             info, desc, cls.__init__, fun_ignore_args=['descs'])
         parameters = load_parameters(opts['parameters'], descs, cls.load_param)
-        expressions = paramutils.load_expressions(opts.get('expressions'))
+        expressions = paramutils.load_param_value_conversions(
+            opts.get('value_conversions'))
         return cls(descs, parameters, expressions)
 
     @staticmethod

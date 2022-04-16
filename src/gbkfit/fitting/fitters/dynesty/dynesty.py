@@ -1,30 +1,28 @@
 
 import abc
+import copy
 import logging
 
 import dynesty
+import dynesty.dynamicsampler
 import numpy as np
 
 from gbkfit.fitting.core import FitParam, FitParams, Fitter
-
-
-from gbkfit.utils import iterutils, parseutils
-
+from gbkfit.utils import funcutils, iterutils, parseutils
 from gbkfit.fitting.prior import prior_parser
-
 from gbkfit.fitting.utils import *
-
 
 
 _log = logging.getLogger(__name__)
 
 
-def _prior_tansform_wrapper(theta):
+def _prior_tansform_wrapper(theta, parameters):
     pass
 
 
-def _log_likelihood_wrapper(theta):
-    pass
+def _log_likelihood_wrapper(theta, parameters, objective):
+    import numpy.random
+    return numpy.random.uniform(0, 10.0)
 
 
 class FitParamDynesty(FitParam):
@@ -39,20 +37,21 @@ class FitParamDynesty(FitParam):
         return cls(**opts)
 
     def dump(self):
-        return dict()
+        return dict(
+            prior=prior_parser.dump(self.prior()))
 
     def __init__(self, prior):
         super().__init__()
+        self._prior = prior
 
     def prior(self):
-        return None
+        return self._prior
 
 
 class FitParamsDynesty(FitParams):
 
     @classmethod
     def load(cls, info, descs):
-
         desc = parseutils.make_basic_desc(cls, 'fit params')
         opts = parseutils.parse_options_for_callable(
             info, desc, cls.__init__, fun_ignore_args=['descs'])
@@ -69,30 +68,76 @@ class FitParamsDynesty(FitParams):
         return FitParamDynesty.load(info)
 
     def dump(self):
-        return ()
+        info = dict()
+        return info
 
     def __init__(
             self, descs, parameters,
             value_conversions=None, prior_conversions=None):
         super().__init__(descs, parameters, None, FitParamDynesty)
 
+        prior_dict = PriorDict(prior_conversions)
 
-class FitterDynesty(Fitter):
+        prior_dict.evaluate(param_values)
+
+        import inspect
+        import textwrap
+
+        prior_conversions_obj = prior_conversions
+        prior_conversions_src, _ = funcutils.getsource(prior_conversions)
+
+        try:
+            prior_conversions_src = textwrap.dedent(inspect.getsource(prior_conversions))
+        except AttributeError:
+            pass
+
+        try:
+            result = copy.deepcopy(prior_values)
+            result = prior_conversions_obj(param_values, result)
+        except Exception as e:
+            raise RuntimeError("error") from e
+
+        # validate
+        # copy
+        priors = result
+        # priors ready for evaluation
+
+
+
+
+
+
+
+
+
+class FitterDynesty(Fitter, abc.ABC):
 
     @staticmethod
     def load_params(info, descs):
         return FitParamsDynesty.load(info, descs)
 
-    def __init__(self):
-        super().__init__()
+    @classmethod
+    def load(cls, info):
+        desc = parseutils.make_typed_desc(cls, 'fitter')
+        opts = parseutils.parse_options_for_callable(
+            info, desc, cls.__init__)
+        return cls(**opts)
 
-    def _fit_impl(self, objective, parameters, interpreter):
-        result1 = self._fit_impl_impl(objective, parameters, interpreter)
+    def dump(self):
+        return self._options_constructor | self._options_run_nested
+
+    def __init__(self, options_constructor, options_run_nested):
+        super().__init__()
+        self._options_constructor = options_constructor
+        self._options_run_nested = options_run_nested
+
+    def _fit_impl(self, objective, parameters):
+        result1 = self._fit_impl_impl(objective, parameters)
         result2 = result1
         return result2
 
     @abc.abstractmethod
-    def _fit_impl_impl(self, objective, parameters, interpreter):
+    def _fit_impl_impl(self, objective, parameters):
         pass
 
 
@@ -102,55 +147,55 @@ class FitterDynestySNS(FitterDynesty):
     def type():
         return 'dynesty.sns'
 
-    @classmethod
-    def load(cls, info):
-        desc = parseutils.make_typed_desc(cls, 'fitter')
-        opts = parseutils.parse_options_for_callable(
-            info, desc, cls.__init__, fun_rename_args=dict(
-                rstate='seed'))
-        if 'rstate' in opts:
-            opts['rstate'] = np.random.RandomState(opts['rstate'])
-        return cls(**opts)
-
-    def dump(self):
-        return {'type': self.type(), **self._props}
-
     def __init__(
             self,
-            # see dynesty.NestedSampler()
+            # dynesty.NestedSampler()
             nlive=500,
-            bound='multi', sample='auto',
-            update_interval=None, first_update=None, rstate=None,
-            enlarge=None, bootstrap=0, vol_dec=0.5, vol_check=2.0,
-            walks=25, facc=0.5, slices=5, fmove=0.9, max_move=100,
-            # see dynesty.sampler.Sampler.run_nested()
-            maxiter=None, maxcall=None, dlogz=None,
-            logl_max=np.inf, n_effective=None,
-            add_live=True, print_progress=True,
-            print_func=None, save_bounds=True):
+            bound='multi',
+            sample='auto',
+            update_interval=None,
+            first_update=None,
+            rstate=None,
+            enlarge=None,
+            bootstrap=None,
+            walks=25,
+            facc=0.5,
+            slices=5,
+            fmove=0.9,
+            max_move=100,
+            # dynesty.sampler.Sampler.run_nested()
+            maxiter=None,
+            maxcall=None,
+            dlogz=None,
+            logl_max=np.inf,
+            n_effective=None,
+            add_live=True,
+            print_progress=True,
+            print_func=None,
+            save_bounds=True):
+        # Extract dynesty.NestedSampler() arguments
+        args_factory = iterutils.extract_subdict(
+            locals(), funcutils.extract_args(
+                dynesty.DynamicNestedSampler)[0])
+        # Extract dynesty.sampler.Sampler.run_nested() arguments
+        args_run_nested = iterutils.extract_subdict(
+            locals(), funcutils.extract_args(
+                dynesty.dynamicsampler.DynamicSampler.run_nested)[0])
+        super().__init__(args_factory, args_run_nested)
 
-        super().__init__()
-        self._props = locals()
-        self._props.pop('self')
-        self._props.pop('__class__')
+    def _fit_impl_impl(self, objective, parameters):
 
-    def _fit_impl_impl(self, objective, parameters, interpreter):
-
-        ndim = 3
+        ndim = parameters.infos()
 
         sampler = dynesty.NestedSampler(
             _log_likelihood_wrapper, _prior_tansform_wrapper, ndim,
-            logl_args=(objective, interpreter),
-            ptform_args=(),
-            **self._props)
+            logl_args=(parameters, objective),
+            ptform_args=(parameters,),
+            **self._options_constructor)
 
+        result = sampler.run_nested(**self._options_run_nested)
 
-
-        result = sampler.run_nested()
-
-
-        pass
-
+        return result
 
 
 class FitterDynestyDNS(FitterDynesty):
@@ -159,36 +204,63 @@ class FitterDynestyDNS(FitterDynesty):
     def type():
         return 'dynesty.dns'
 
-    @classmethod
-    def load(cls, info):
-        info['rstate'] = np.random.RandomState(info.get('seed'))
-        cls_args = parseutils.parse_options(info, 'foo', fun=cls.__init__)
-        return cls(**cls_args)
-
-    def dump(self):
-        return {'type': self.type(), **self._props}
-
     def __init__(
             self,
-            # see dynesty.DynamicNestedSampler()
-            bound='multi', sample='auto',
-            update_interval=None, first_update=None, rstate=None,
-            enlarge=None, bootstrap=0,
-            walks=25, facc=0.5, slices=None, fmove=0.9, max_move=100,
-            # dynesty.dynamicsampler.DynamicSampler.run_nested()
-            nlive_init=500, maxiter_init=None,
-            maxcall_init=None, dlogz_init=0.01, logl_max_init=np.inf,
-            n_effective_init=np.inf, nlive_batch=500,
-            wt_function=None, wt_kwargs=None,
-            maxiter_batch=None, maxcall_batch=None,
-            maxiter=None, maxcall=None, maxbatch=None,
+            # dynesty.DynamicNestedSampler() arguments
+            bound='multi',
+            sample='auto',
+            update_interval=None,
+            first_update=None,
+            rstate=None,
+            enlarge=None,
+            bootstrap=0,
+            walks=25,
+            facc=0.5,
+            slices=None,
+            fmove=0.9,
+            max_move=100,
+            # dynesty.dynamicsampler.DynamicSampler.run_nested() arguments
+            nlive_init=500,
+            maxiter_init=None,
+            maxcall_init=None,
+            dlogz_init=0.01,
+            logl_max_init=np.inf,
+            n_effective_init=np.inf,
+            nlive_batch=500,
+            wt_function=None,
+            wt_kwargs=None,
+            maxiter_batch=None,
+            maxcall_batch=None,
+            maxiter=None,
+            maxcall=None,
+            maxbatch=None,
             n_effective=None,
-            stop_function=None, stop_kwargs=None, use_stop=True,
-            save_bounds=True, print_progress=True, print_func=None):
-        super().__init__()
-        self._props = locals()
-        self._props.pop('self')
-        self._props.pop('__class__')
+            stop_function=None,
+            stop_kwargs=None,
+            use_stop=True,
+            save_bounds=True,
+            print_progress=True,
+            print_func=None):
+        # Extract dynesty.DynamicNestedSampler() arguments
+        args_factory = iterutils.extract_subdict(
+            locals(), funcutils.extract_args(
+                dynesty.DynamicNestedSampler)[0])
+        # Extract dynesty.dynamicsampler.DynamicSampler.run_nested() arguments
+        args_run_nested = iterutils.extract_subdict(
+            locals(), funcutils.extract_args(
+                dynesty.dynamicsampler.DynamicSampler.run_nested)[0])
+        super().__init__(args_factory, args_run_nested)
 
-    def _fit_impl(self, objective, param_info, param_interp, **kwargs):
-        pass
+    def _fit_impl_impl(self, objective, parameters):
+        ndim = 3
+
+        sampler = dynesty.DynamicNestedSampler(
+            _log_likelihood_wrapper, _prior_tansform_wrapper, ndim,
+            logl_args=(objective, parameters),
+            ptform_args=(),
+            **self._options_constructor)
+
+        print(self._options_run_nested)
+        result = sampler.run_nested(**self._options_run_nested)
+
+        return result

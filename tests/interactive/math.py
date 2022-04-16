@@ -32,10 +32,10 @@ COLOR4 = '#5e3c99'
 
 
 FUNCTIONS = dict(
-    # uniform_1d=dict(
-    #     ampl=AMPLITUDE,
-    #     args=(POSITION - SCALE, POSITION + SCALE),
-    # ),
+    uniform_1d=dict(
+        ampl=AMPLITUDE,
+        args=(POSITION - SCALE, POSITION + SCALE),
+    ),
     # expon_1d=dict(
     #     ampl=AMPLITUDE,
     #     args=(POSITION, SCALE)
@@ -76,10 +76,10 @@ FUNCTIONS = dict(
     #     ampl=AMPLITUDE,
     #     args=(POSITION, SCALE, TRUNC_MIN, TRUNC_MAX)
     # ),
-    moffat_1d=dict(
-        ampl=AMPLITUDE,
-        args=(POSITION, SCALE, 2.0)
-    ),
+    # moffat_1d=dict(
+    #     ampl=AMPLITUDE,
+    #     args=(POSITION, SCALE, 2.0)
+    # ),
     # moffat_trunc_1d=dict(
     #     ampl=AMPLITUDE,
     #     args=(POSITION, SCALE, 2.0, TRUNC_MIN, TRUNC_MAX)
@@ -100,7 +100,7 @@ for key, value in FUNCTIONS.items():
         return getattr(gbkfit.math, f'{name}_{postfix}')
 
 
-    def call_function(fun, xdata, args):
+    def call_function(fun, xdata, *args):
         ydata = np.full_like(xdata, np.nan)
         try:
             ydata = fun(xdata, *args)
@@ -108,10 +108,14 @@ for key, value in FUNCTIONS.items():
             pass
         return ydata
 
-    fun = get_function(key, 'fun')(XDATA, value['ampl'], *value['args'])
-    pdf = call_function(get_function(key, 'pdf'), XDATA, value['args'])
-    cdf = call_function(get_function(key, 'cdf'), XDATA, value['args'])
-    ppf = call_function(get_function(key, 'ppf'), UDATA, value['args'])
+    fun = get_function(key, 'fun')
+    pdf = get_function(key, 'pdf')
+    cdf = get_function(key, 'cdf')
+    ppf = get_function(key, 'ppf')
+    fun_ydata = call_function(fun, XDATA, value['ampl'], *value['args'])
+    pdf_ydata = call_function(pdf, XDATA, *value['args'])
+    cdf_ydata = call_function(cdf, XDATA, *value['args'])
+    ppf_ydata = call_function(ppf, UDATA, *value['args'])
 
     def setup_axes_common(ax):
         ax.set_xlim(XDATA_MIN, XDATA_MAX)
@@ -126,28 +130,28 @@ for key, value in FUNCTIONS.items():
     ax1.set_ylabel('FUN')
     ax1.tick_params(labelbottom=False)
     setup_axes_common(ax1)
-    ax1.plot(XDATA, fun, color=COLOR1)
+    ax1.plot(XDATA, fun_ydata, color=COLOR1)
 
     ax2 = fig.add_subplot(4, 1, 2)
     ax2.set_ylabel('PDF')
     ax2.tick_params(labelbottom=False)
     setup_axes_common(ax2)
-    ax2.plot(XDATA, pdf, color=COLOR2)
+    ax2.plot(XDATA, pdf_ydata, color=COLOR2)
 
     ax3 = fig.add_subplot(4, 1, 3)
     ax3.set_ylabel('CDF')
     ax3.set_ylim(-0.05, 1.05)
     ax3.tick_params(labelbottom=False)
     setup_axes_common(ax3)
-    ax3.plot(XDATA, cdf, color=COLOR3)
-    ax3.plot(ppf, UDATA, color=COLOR4, linestyle=':')
+    ax3.plot(XDATA, cdf_ydata, color=COLOR3)
+    ax3.plot(ppf_ydata, UDATA, color=COLOR4, linestyle=':')
 
     ax4 = fig.add_subplot(4, 1, 4)
     ax4.set_ylabel('PPF (transposed)')
     ax4.set_ylim(-0.05, 1.05)
     ax4.tick_params(labelbottom=True)
     setup_axes_common(ax4)
-    ax4.plot(ppf, UDATA, color=COLOR4)
+    ax4.plot(ppf_ydata, UDATA, color=COLOR4)
 
     fig.subplots_adjust(wspace=0.0, hspace=0.1)
 

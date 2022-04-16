@@ -7,13 +7,14 @@ import inspect
 import itertools
 import logging
 import numbers
-import re
 import textwrap
 
 import numpy as np
 
 from gbkfit.params.descs import ParamScalarDesc, ParamVectorDesc
-from gbkfit.utils import iterutils, miscutils, parseutils
+from .core import *
+from .paramutils import *
+
 
 
 _log = logging.getLogger(__name__)
@@ -24,211 +25,6 @@ def _log_msg(level, silent, throw, msg):
         raise RuntimeError(msg)
     elif not silent:
         _log.log(level, msg)
-
-
-_REGEX_PARAM_SYMBOL_SUBSCRIPT_COMMON = r'(?!.*\D0+[1-9])'
-
-_REGEX_PARAM_SYMBOL_SUBSCRIPT_BINDX = (
-    fr'{_REGEX_PARAM_SYMBOL_SUBSCRIPT_COMMON}'
-    r'\[\s*([-+]?\s*\d+)\s*\]')
-
-_REGEX_PARAM_SYMBOL_SUBSCRIPT_SLICE = (
-    fr'{_REGEX_PARAM_SYMBOL_SUBSCRIPT_COMMON}'
-    r'\[\s*([+-]?\s*\d+)?\s*:\s*([+-]?\s*\d+)?\s*(:\s*([+-]?\s*[1-9]+)?\s*)?\]')
-
-_REGEX_PARAM_SYMBOL_SUBSCRIPT_AINDX = (
-    fr'{_REGEX_PARAM_SYMBOL_SUBSCRIPT_COMMON}'
-    r'\[\s*\[\s*([-+]?\s*\d+\s*,\s*)*\s*([-+]?\s*\d+\s*)?\]\s*,?\s*\]')
-
-_REGEX_PARAM_SYMBOL_SUBSCRIPT = (
-    r'('
-    fr'{_REGEX_PARAM_SYMBOL_SUBSCRIPT_BINDX}|'
-    fr'{_REGEX_PARAM_SYMBOL_SUBSCRIPT_SLICE}|'
-    fr'{_REGEX_PARAM_SYMBOL_SUBSCRIPT_AINDX}'
-    r')')
-
-_REGEX_PARAM_SYMBOL_NAME = r'[_a-zA-Z]\w*'
-
-_REGEX_PARAM_SYMBOL_SCALAR = _REGEX_PARAM_SYMBOL_NAME
-
-_REGEX_PARAM_SYMBOL_VECTOR_BINDX = (
-    fr'\s*{_REGEX_PARAM_SYMBOL_NAME}'
-    fr'\s*{_REGEX_PARAM_SYMBOL_SUBSCRIPT_BINDX}\s*')
-
-_REGEX_PARAM_SYMBOL_VECTOR_SLICE = (
-    fr'\s*{_REGEX_PARAM_SYMBOL_NAME}'
-    fr'\s*{_REGEX_PARAM_SYMBOL_SUBSCRIPT_SLICE}\s*')
-
-_REGEX_PARAM_SYMBOL_VECTOR_AINDX = (
-    fr'\s*{_REGEX_PARAM_SYMBOL_NAME}'
-    fr'\s*{_REGEX_PARAM_SYMBOL_SUBSCRIPT_AINDX}\s*')
-
-_REGEX_PARAM_SYMBOL_VECTOR = (
-    fr'\s*{_REGEX_PARAM_SYMBOL_NAME}'
-    fr'\s*{_REGEX_PARAM_SYMBOL_SUBSCRIPT}\s*')
-
-_REGEX_PARAM_SYMBOL = (
-    fr'\s*{_REGEX_PARAM_SYMBOL_NAME}'
-    fr'\s*{_REGEX_PARAM_SYMBOL_SUBSCRIPT}?\s*')
-
-_REGEX_PARAM_ATTRIB_NAME = r'[_a-zA-Z]\w*'
-
-
-def _is_param_symbol(x):
-    return re.match(fr'^{_REGEX_PARAM_SYMBOL}$', x)
-
-
-def _is_param_symbol_name(x):
-    return re.match(fr'^{_REGEX_PARAM_SYMBOL_NAME}$', x)
-
-
-def _is_param_symbol_scalar(x):
-    return re.match(fr'^{_REGEX_PARAM_SYMBOL_SCALAR}$', x)
-
-
-def _is_param_symbol_vector(x):
-    return re.match(fr'^{_REGEX_PARAM_SYMBOL_VECTOR}$', x)
-
-
-def _is_param_symbol_vector_bindx(x):
-    return re.match(fr'^{_REGEX_PARAM_SYMBOL_VECTOR_BINDX}$', x)
-
-
-def _is_param_symbol_vector_slice(x):
-    return re.match(fr'^{_REGEX_PARAM_SYMBOL_VECTOR_SLICE}$', x)
-
-
-def _is_param_symbol_vector_aindx(x):
-    return re.match(fr'^{_REGEX_PARAM_SYMBOL_VECTOR_AINDX}$', x)
-
-
-def _is_param_symbol_subscript(x):
-    return re.match(fr'^{_REGEX_PARAM_SYMBOL_SUBSCRIPT}$', x)
-
-
-def _is_param_symbol_subscript_bindx(x):
-    return re.match(fr'^{_REGEX_PARAM_SYMBOL_SUBSCRIPT_BINDX}$', x)
-
-
-def _is_param_symbol_subscript_slice(x):
-    return re.match(fr'^{_REGEX_PARAM_SYMBOL_SUBSCRIPT_SLICE}$', x)
-
-
-def _is_param_symbol_subscript_aindx(x):
-    return re.match(fr'^{_REGEX_PARAM_SYMBOL_SUBSCRIPT_AINDX}$', x)
-
-
-def _is_param_attrib_name(x):
-    return re.match(fr'^{_REGEX_PARAM_ATTRIB_NAME}$', x)
-
-
-def _remove_white_space(x):
-    return ''.join(x.split())
-
-
-def _split_param_symbol(x):
-    x = _remove_white_space(x)
-    name = x[:x.find('[')].strip() if '[' in x else x
-    sbsc = x[x.find('['):].strip() if '[' in x else None
-    return name, sbsc
-
-
-def _parse_param_symbol_subscript_bindx(x):
-    x = _remove_white_space(x).strip('[]')
-    return [int(x)]
-
-
-def _parse_param_symbol_subscript_slice(x, size):
-    x = _remove_white_space(x).strip('[]')
-    x += ':' * (2 - x.count(':'))
-    strt_str, stop_str, step_str = x.split(':')
-    strt = int(strt_str) if strt_str else None
-    stop = int(stop_str) if stop_str else None
-    step = int(step_str) if step_str else None
-    return list(range(*slice(strt, stop, step).indices(size)))
-
-
-def _parse_param_symbol_subscript_aindx(x):
-    x = _remove_white_space(x).strip('[],')
-    return [int(i) for i in x.split(',')]
-
-
-def _parse_param_symbol_subscript(x, size):
-    if _is_param_symbol_subscript_bindx(x):
-        indices = _parse_param_symbol_subscript_bindx(x)
-    elif _is_param_symbol_subscript_slice(x):
-        indices = _parse_param_symbol_subscript_slice(x, size)
-    elif _is_param_symbol_subscript_aindx(x):
-        indices = _parse_param_symbol_subscript_aindx(x)
-    else:
-        assert False
-    return indices
-
-
-def _validate_param_indices(indices, size):
-    def is_valid(i): return -size <= i < size
-    def is_invalid(i): return not is_valid(i)
-    valid_indices = set(filter(is_valid, indices))
-    invalid_indices = set(filter(is_invalid, indices))
-    return sorted(valid_indices), sorted(invalid_indices)
-
-
-def _unwrap_param_indices(indices, size):
-    return [i + size if i < 0 else i for i in indices]
-
-
-def _make_param_symbol_subscript_bindx(index):
-    return f'[{index}]'
-
-
-def _make_param_symbol_subscript_slice(start='', stop='', step=''):
-    return f'[{start}:{stop}:{step}]'
-
-
-def _make_param_symbol_subscript_aindx(indices):
-    return f'[{", ".join(indices)}]'
-
-
-def _make_param_symbol(name, index):
-    return name if index is None \
-        else f'{name}{_make_param_symbol_subscript_bindx(index)}'
-
-
-def explode_pname(name, indices):
-    eparams = []
-    for index in iterutils.listify(indices):
-        eparams.append(_make_param_symbol(name, index))
-    return eparams
-
-
-def explode_pnames(name_list, indices_list):
-    eparams = []
-    for name, indices in zip(name_list, indices_list):
-        eparams.extend(explode_pname(name, indices))
-    return eparams
-
-
-def explode_pdesc(desc, name=None):
-    enames = []
-    name = name if name else desc.name()
-    if isinstance(desc, ParamScalarDesc):
-        enames.extend(explode_pname(name, None))
-    elif isinstance(desc, ParamVectorDesc):
-        enames.extend(explode_pname(name, list(range(desc.size()))))
-    return enames
-
-
-def explode_pdescs(descs, names=None):
-    enames = []
-    names = names if names else [desc.name() for desc in descs]
-    for name, desc in zip(names, descs):
-        enames.extend(explode_pdesc(desc, name))
-    return enames
-
-
-def sort_eparams(descs, enames):
-    enames_all = explode_pdescs(descs.values(), descs.keys())
-    return [ename for ename in enames_all if ename in enames]
 
 
 def _is_param_value_expr(x, accept_num=True, accept_vec=True):
@@ -283,7 +79,7 @@ class _ParamExprVisitor(ast.NodeVisitor):
 
     def visit_Subscript(self, node):
         code = ast.unparse(node).strip('\n')
-        name, subscript = _split_param_symbol(code)
+        name, subscript = parse_param_symbol_into_name_and_subscript_str(code)
         desc = self._descs.get(name)
         # If symbol is not recognised,
         # ignore this node but keep traversing this branch.
@@ -297,14 +93,15 @@ class _ParamExprVisitor(ast.NodeVisitor):
             return
         # If symbol subscript syntax is not supported,
         # mark symbol as invalid and ignore this node.
-        if not _is_param_symbol_subscript(subscript):
+        if not is_param_symbol_subscript(subscript):
             self._invalid_vectors[code] = None
             return
         # Extract indices while unwrapping the negative ones.
         size = desc.size()
-        indices = _parse_param_symbol_subscript(subscript, size)
-        indices, invalid_indices = _validate_param_indices(indices, size)
-        indices = _unwrap_param_indices(indices, size)
+        indices = parse_param_symbol_subscript(subscript, size)
+        indices, invalid_indices = iterutils.validate_sequence_indices(
+            indices, size)
+        indices = iterutils.unwrap_sequence_indices(indices, size)
         # If out-of-range indices are found,
         # mark symbol as invalid and ignore this node.
         if invalid_indices:
@@ -347,14 +144,14 @@ def parse_param_keys(
     eparams_to_keys = collections.defaultdict(list)
 
     for rkey, value in params.items():
-        skey = _remove_white_space(rkey)
+        skey = stringutils.remove_white_space(rkey)
         # Skip keys with invalid syntax
-        if not _is_param_symbol(rkey):
+        if not is_param_symbol(rkey):
             invalid_keys_syntax.append(rkey)
             continue
         # Extract parameter name and subscript as strings
         # The latter will be None if key has scalar syntax
-        name, subscript = _split_param_symbol(rkey)
+        name, subscript = parse_param_symbol_into_name_and_subscript_str(rkey)
         # Skip keys with unknown parameters
         desc = descs.get(name)
         if not desc:
@@ -376,21 +173,22 @@ def parse_param_keys(
             if subscript is None:
                 subscript = '[:]'
             # Extract indices
-            indices = _parse_param_symbol_subscript(subscript, size)
+            indices = parse_param_symbol_subscript(subscript, size)
             # Validate indices
-            indices, invalid_indices = _validate_param_indices(indices, size)
+            indices, invalid_indices = iterutils.validate_sequence_indices(
+                indices, size)
             # Skip keys with invalid indices
             if invalid_indices:
                 invalid_keys_bad_vector[rkey] = invalid_indices
                 continue
             # Ensure positive indices
-            indices = _unwrap_param_indices(indices, size)
+            indices = iterutils.unwrap_sequence_indices(indices, size)
             # Explode vector
             for i in indices:
-                eparams_to_keys[_make_param_symbol(name, i)].append(rkey)
+                eparams_to_keys[make_param_symbol(name, i)].append(rkey)
             # We differentiate basic indexing from slicing or advanced
             # indexing by using an integer instead of a list of integers
-            if _is_param_symbol_subscript_bindx(subscript):
+            if is_param_symbol_subscript_bindx(subscript):
                 indices = indices[0]
         # This is a valid key-value pair
         rkeys.append(rkey)
@@ -404,7 +202,7 @@ def parse_param_keys(
     for eparam, parents in eparams_to_keys.items():
         if len(parents) > 1:
             for parent in parents:
-                invalid_keys_repeated[parent].append(eparam)
+                invalid_keys_repeated_[parent].append(eparam)
     invalid_keys_repeated.update(invalid_keys_repeated_)
 
     # Remove all information related to repeated keys
@@ -538,7 +336,7 @@ def parse_param_exprs(
             continue
         # Keep track of the parent key for each exploded param
         eparams_to_keys.update(
-            {eparam: key for eparam in explode_pname(name, indices)})
+            {eparam: key for eparam in explode_param_name_from_indices(name, indices)})
         # This is a valid key-value pair
         keys_2.append(key)
         values_2.append(value)
@@ -584,8 +382,8 @@ def parse_param_exprs(
     graph = graphlib.TopologicalSorter()
     for name, indices, symbols in zip(
             param_names_2, param_indices_2, expr_param_symbols):
-        eparams_lhs = explode_pname(name, indices)
-        eparams_rhs = explode_pnames(symbols.keys(), symbols.values())
+        eparams_lhs = explode_param_name_from_indices(name, indices)
+        eparams_rhs = explode_param_names_from_indices(symbols.keys(), symbols.values())
         for pair in itertools.product(eparams_lhs, eparams_rhs):
             graph.add(pair[1], pair[0])
 
@@ -681,11 +479,11 @@ def parse_param_values(
                 evalues.append(value)
             else:
                 indices = iterutils.listify(indices)
-                enames.extend(explode_pname(name, indices))
+                enames.extend(explode_param_name_from_indices(name, indices))
                 evalues.extend([copy.deepcopy(value) for _ in indices])
         elif isinstance(value, (tuple, list, np.ndarray)):
-            ienames = explode_pname(name, indices)
-            if len(ienames) == len(value):
+            ienames = explode_param_name_from_indices(name, indices)
+            if len(ienames) == len(value) and not is_param_symbol_vector_bindx(key):
                 for iename, ievalue in zip(ienames, value):
                     if is_value_fun(ievalue):
                         enames.append(iename)
@@ -740,7 +538,7 @@ def _parse_param_info_item(info):
         if key.startswith('*'):
             key = key[1:]
             needs_expansion = True
-        if not _is_param_attrib_name(key):
+        if not is_param_attrib_symbol(key):
             bad_keys.append(key)
             continue
         if needs_expansion:
@@ -896,8 +694,8 @@ def parse_param_info(
 def parse_param_values_strict(descs, params_dict, value_type):
     names, indices, values, exprs = parse_param_values(
         params_dict, descs, lambda x: isinstance(x, value_type))[2:]
-    enames_from_params = explode_pnames(names, indices)
-    enames_from_pdescs = explode_pdescs(descs.values(), descs.keys())
+    enames_from_params = explode_param_names_from_indices(names, indices)
+    enames_from_pdescs = explode_param_names_from_descs(descs.values(), descs.keys())
     if missing := set(enames_from_pdescs) - set(enames_from_params):
         raise RuntimeError(
             f"information for the following parameters is required "
@@ -905,41 +703,9 @@ def parse_param_values_strict(descs, params_dict, value_type):
     return values, exprs
 
 
-def _load_parameter_conversions(info, desc):
+def _load_function(info, desc):
     if not info:
         return info
-    opts = parseutils.parse_options(info, desc, ['file', 'func'])
-    return miscutils.get_attr_from_file(opts['file'], opts['func'])
-
-
-def load_parameter_value_conversions(info):
-    return _load_parameter_conversions(info, 'parameter value conversions')
-
-
-def load_parameter_prior_conversions(info):
-    return _load_parameter_conversions(info, 'parameter prior conversions')
-
-
-def load_expressions(info):
-    if not info:
-        return None
-    desc = 'parameter expressions'
-    opts = parseutils.parse_options(info, desc, ['file', 'func'])
-    return miscutils.get_attr_from_file(opts['file'], opts['func'])
-
-
-def load_econstraints(info):
-    if not info:
-        return None
-    desc = 'parameter equality constraints'
-    opts = parseutils.parse_options(info, desc, ['file', 'func'])
-    return miscutils.get_attr_from_file(opts['file'], opts['func'])
-
-
-def load_iconstraints(info):
-    if not info:
-        return None
-    desc = 'parameter inequality constraints'
     opts = parseutils.parse_options(info, desc, ['file', 'func'])
     return miscutils.get_attr_from_file(opts['file'], opts['func'])
 
@@ -952,15 +718,33 @@ def _dump_function(func, file):
     return dict(file=file, func=func.__name__)
 
 
-def dump_expressions(func, file='gbkfit_config_expressions.py'):
+def load_params_value_conversions(info):
+    return _load_function(info, 'parameter value conversions')
+
+
+def load_params_prior_conversions(info):
+    return _load_function(info, 'parameter prior conversions')
+
+
+def load_params_econstraints(info):
+    return _load_function(info, 'parameter equality constraints')
+
+
+def load_params_iconstraints(info):
+    return _load_function(info, 'parameter inequality constraints')
+
+
+def dump_params_value_conversions(func, file='conversions.py'):
     return _dump_function(func, file) if func else None
 
 
-def dump_econstraints(func, file='gbkfit_config_econstraints.py'):
+def dump_params_prior_conversions(func, file='conversions.py'):
     return _dump_function(func, file) if func else None
 
 
-def dump_iconstraints(func, file='gbkfit_config_iconstraints.py'):
+def dump_params_econstraints(func, file='constraints.py'):
     return _dump_function(func, file) if func else None
 
 
+def dump_params_iconstraints(func, file='constraints.py'):
+    return _dump_function(func, file) if func else None

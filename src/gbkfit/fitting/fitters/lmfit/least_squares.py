@@ -60,21 +60,22 @@ class FitParamLMFitLeastSquares(FitParamLMFit):
 
 class FitParamsLMFitLeastSquares(FitParamsLMFit):
 
+    @staticmethod
+    def load_param(info):
+        return FitParamLMFitLeastSquares.load(info)
+
     @classmethod
     def load(cls, info, descs):
         desc = parseutils.make_basic_desc(cls, 'params')
         opts = parseutils.parse_options_for_callable(
             info, desc, cls.__init__, fun_ignore_args=['descs'])
         parameters = load_parameters(opts['parameters'], descs, cls.load_param)
-        expressions = paramutils.load_expressions(opts.get('expressions'))
+        expressions = paramutils.load_param_value_conversions(
+            opts.get('value_conversions'))
         return cls(descs, parameters, expressions)
 
-    @staticmethod
-    def load_param(info):
-        return FitParamLMFitLeastSquares.load(info)
-
-    def dump(self):
-        return dict()
+    def dump(self, value_conversions=None):
+        return dump_params_info_common(self, value_conversions)
 
     def __init__(self, descs, parameters, expressions=None):
         super().__init__(
