@@ -35,13 +35,13 @@ def _prepare_params(info, pdescs):
     parameters = paramutils.prepare_param_info(info.get('parameters'), pdescs)
 
     recovery_failed = []
-    recovery_succeed = []
+    recovery_succeed = {}
 
     def recover_value(dict_, key_, index_):
         value = dict_.get('value')
         value_id = key if index_ is None else (key_, index_)
         if 'value' in dict_:
-            recovery_succeed.append(value_id)
+            recovery_succeed[value_id] = value
         else:
             recovery_failed.append(value_id)
         return value
@@ -130,9 +130,6 @@ def eval_(objective_type, config, profile=None):
     params = gbkfit.params.params.evaluation_params_parser.load(
         cfg['params'], pdescs)
 
-    print(params.dump('foo.py'))
-    exit()
-
     #
     # Calculate model parameters
     #
@@ -140,7 +137,7 @@ def eval_(objective_type, config, profile=None):
     _log.info("calculating model parameters...")
 
     eparams = {}
-    params = params.evaluate({}, True, eparams)
+    params = params.evaluate(eparams)
     params_info = _detail.nativify(dict(
         params=params,
         eparams=eparams))

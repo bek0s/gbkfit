@@ -14,6 +14,7 @@ import gbkfit.objective
 import gbkfit.params
 import gbkfit.params.pdescs
 import gbkfit.params.parsers
+from gbkfit.params import paramutils
 from gbkfit.utils import miscutils
 from . import _detail
 
@@ -27,6 +28,14 @@ yaml = ruamel.yaml.YAML()
 # This is needed for dumping ordered dicts
 ruamel.yaml.add_representer(dict, lambda self, data: self.represent_mapping(
     'tag:yaml.org,2002:map', data.items()))
+
+
+def _prepare_params(info, pdescs):
+
+    parameters = paramutils.prepare_param_info(info.get('parameters'), pdescs)
+
+    # Update parameter info and return it
+    return info | dict(parameters=parameters)
 
 
 def fit(config):
@@ -83,6 +92,7 @@ def fit(config):
     pdescs = _detail.merge_pdescs(objective.pdescs(), pdescs)
 
     _log.info("setting up params...")
+    cfg['params'] = _prepare_params(cfg['params'], pdescs)
     params = fitter.load_params(cfg['params'], pdescs)
 
     #

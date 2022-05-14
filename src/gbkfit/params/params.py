@@ -60,7 +60,7 @@ class EvaluationParams(parseutils.BasicParserSupport, Params):
         return self._interpreter.enames(fixed=fixed, tied=tied, free=False)
 
     def evaluate(self, out_eparams):
-        return self._interpreter.evaluate(dict(), out_eparams, False)
+        return self._interpreter.evaluate(dict(), out_eparams, True)
 
 
 evaluation_params_parser = parseutils.BasicParser(EvaluationParams)

@@ -1,3 +1,5 @@
+
+import collections.abc
 import copy
 import logging
 
@@ -92,21 +94,13 @@ class FitParamsEmcee(FitParams):
         desc = parseutils.make_basic_desc(cls, 'fit params')
         opts = parseutils.parse_options_for_callable(
             info, desc, cls.__init__, fun_ignore_args=['pdescs'])
-        opts['parameters'] = fitutils.load_params_dict(
-            opts['parameters'], pdescs, cls.load_param)
-        if 'conversions' in opts:
-            opts['conversions'] = paramutils.load_params_conversions(
-                opts['conversions'])
+        opts = paramutils.load_params_parameters_conversions(
+            opts, pdescs, collections.abc.Mapping, cls.load_param)
         return cls(pdescs, **opts)
 
-    def dump(self, conversions_filename):
-        info = dict()
-        info.update(parameters=fitutils.dump_params_dict(
-            self.parameters(), FitParamEmcee))
-        if self.conversions():
-            info.update(conversions=paramutils.dump_params_conversions(
-                self.conversions(), conversions_filename))
-        return info
+    def dump(self, conversions_file):
+        return paramutils.dump_params_parameters_conversions(
+            self, FitParamEmcee, lambda x: x.dump(), conversions_file)
 
     def __init__(self, pdescs, parameters, conversions=None):
         super().__init__(
