@@ -3,7 +3,7 @@ import importlib
 import logging
 
 
-log = logging.getLogger(__name__)
+_log = logging.getLogger(__name__)
 
 
 def _register_factories(parser, factories):
@@ -15,8 +15,8 @@ def _register_factories(parser, factories):
             cls = getattr(mod, cls_name)
             parser.register(cls)
         except Exception as e:
-            log.warning(
-                f"could not register factory for type {factory}; "
+            _log.warning(
+                f"could not register fitter factory {factory}; "
                 f"{e.__class__.__name__}: {e}")
 
 

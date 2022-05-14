@@ -1,6 +1,6 @@
 
-import gbkfit.params.utils as paramutils
-from gbkfit.fitting.params import FitParam, FitParams
+import gbkfit.params.paramutils as paramutils
+from gbkfit.fitting.core import FitParam, FitParams
 from gbkfit.utils import parseutils
 
 

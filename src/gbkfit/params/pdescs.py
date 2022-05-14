@@ -1,6 +1,7 @@
 
 import abc
 import collections.abc
+import copy
 
 import numpy as np
 
@@ -8,14 +9,6 @@ from gbkfit.utils import parseutils
 
 
 __all__ = ['ParamDescDict', 'ParamScalarDesc', 'ParamVectorDesc']
-
-
-def explode_peram_desc(desc, override_name=None):
-    pass
-
-
-def explode_param_descs(descs, override_names=None):
-    pass
 
 
 class ParamDesc(parseutils.TypedParserSupport, abc.ABC):
@@ -32,13 +25,15 @@ class ParamDesc(parseutils.TypedParserSupport, abc.ABC):
             info.update(desc=self.desc())
         if self.default() is not None:
             info.update(default=self.default())
-        if self.minimum() is not None and np.isfinite(self.minimum()):
+        if np.isfinite(self.minimum()):
             info.update(minimum=self.minimum())
-        if self.maximum() is not None and np.isfinite(self.maximum()):
+        if np.isfinite(self.maximum()):
             info.update(maximum=self.maximum())
         return info
 
     def __init__(self, name, size, desc, default, minimum, maximum):
+        minimum = -np.inf if minimum is None else minimum
+        maximum = +np.inf if maximum is None else maximum
         assert minimum <= maximum
         self._name = name
         self._size = size
@@ -79,7 +74,7 @@ class ParamScalarDesc(ParamDesc):
 
     def __init__(
             self, name, desc=None,
-            default=None, minimum=-np.inf, maximum=+np.inf):
+            default=None, minimum=None, maximum=None):
         super().__init__(name, 1, desc, default, minimum, maximum)
 
 
@@ -91,53 +86,43 @@ class ParamVectorDesc(ParamDesc):
 
     def __init__(
             self, name, size, desc=None,
-            default=None, minimum=-np.inf, maximum=+np.inf):
+            default=None, minimum=None, maximum=None):
         super().__init__(name, size, desc, default, minimum, maximum)
 
 
-class ParamDescDict(collections.abc.MutableMapping):
+class ParamDescDict(collections.abc.Mapping):
 
-    def __init__(self, descs):
-        self._dict = dict()
-        self.update(descs)
+    def __init__(self, pdescs):
+        self._pdescs = copy.deepcopy(pdescs)
 
     def __getitem__(self, key):
-        return self._dict.__getitem__(key)
-
-    def __setitem__(self, key, value):
-        assert isinstance(value, ParamDesc)
-        assert key == value.name()
-        self._dict.__setitem__(key, value)
+        return self._pdescs.__getitem__(key)
 
     def __delitem__(self, key):
-        self._dict.__delitem__(key)
+        self._pdescs.__delitem__(key)
 
     def __iter__(self):
-        return self._dict.__iter__()
+        return self._pdescs.__iter__()
 
     def __len__(self):
-        return self._dict.__len__()
+        return self._pdescs.__len__()
 
     def __repr__(self):
-        return self._dict.__repr__()
+        return self._pdescs.__repr__()
 
     def __str__(self):
-        return self._dict.__str__()
-
-    def exploded_names(self):
-        from gbkfit.params.paramutils import explode_param_names
-        return explode_param_names(self)
+        return self._pdescs.__str__()
 
 
-def load_descs_dict(info):
-    descs = {}
+def load_pdescs_dict(info):
+    pdescs = {}
     for key, val in info.items():
-        descs[key] = pdesc_parser.load(dict(name=key) | val)
-    return descs
+        pdescs[key] = pdesc_parser.load(dict(name=key) | val)
+    return pdescs
 
 
-def dump_descs_dict(descs):
-    info = {key: pdesc_parser.dump(val) for key, val in descs.items()}
+def dump_pdescs_dict(pdescs):
+    info = {key: pdesc_parser.dump(val) for key, val in pdescs.items()}
     for val in info.values():
         del val['name']
     return info

@@ -102,9 +102,7 @@ def extract_subdict(d, keys, on_missing_keys='ignore'):
 def validate_sequence_indices(indices, length):
     def is_valid(i): return -length <= i < length
     def is_invalid(i): return not is_valid(i)
-    valid_indices = set(filter(is_valid, indices))
-    invalid_indices = set(filter(is_invalid, indices))
-    return list(sorted(valid_indices)), list(sorted(invalid_indices))
+    return list(filter(is_valid, indices)), list(filter(is_invalid, indices))
 
 
 def unwrap_sequence_indices(indices, length):
@@ -114,3 +112,21 @@ def unwrap_sequence_indices(indices, length):
 def sorted_sequence(b, value_order):
 
     return sorted(b, key=lambda x: value_order.index(x))
+
+
+def traverse_and_replace(x, func):
+    node = func(x)
+    if is_sequence(node):
+        for i in range(len(node)):
+            node[i] = traverse_and_replace(node[i], func)
+    elif is_mapping(node):
+        for k in node:
+            node[k] = traverse_and_replace(node[k], func)
+    return node
+
+
+def traverse_and_replace_2(x, mapping):
+    pass
+
+
+

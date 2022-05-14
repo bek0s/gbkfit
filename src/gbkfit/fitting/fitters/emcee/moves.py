@@ -17,7 +17,8 @@ __all__ = [
     'FitterEmceeMoveWalk',
     'move_parser',
     'dump_moves_with_weights',
-    'load_moves_with_weights']
+    'load_moves_with_weights'
+]
 
 
 class FitterEmceeMove(parseutils.TypedParserSupport, abc.ABC):
@@ -29,7 +30,9 @@ class FitterEmceeMove(parseutils.TypedParserSupport, abc.ABC):
         return cls(**opts)
 
     def dump(self):
-        return copy.deepcopy(self._kwargs)
+        options = copy.deepcopy(self._kwargs)
+        parseutils.prepare_for_dump(options)
+        return dict(type=self.type()) | options
 
     def __init__(self, cls, kwargs):
         self._kwargs = copy.deepcopy(kwargs)
@@ -139,4 +142,4 @@ def load_moves_with_weights(info):
 
 
 def dump_moves_with_weights(moves):
-    return [move.dump() | dict(weight=weight) for move, weight in moves]
+    return [dict(weight=weight) | move.dump() for move, weight in moves]

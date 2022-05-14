@@ -1,3 +1,4 @@
 
-from .descs import *
+from .pdescs import *
 from .interpreter import *
+

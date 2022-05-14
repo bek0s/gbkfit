@@ -12,8 +12,8 @@ import gbkfit.fitting
 import gbkfit.model
 import gbkfit.objective
 import gbkfit.params
-import gbkfit.params.descs
-import gbkfit.params.utils
+import gbkfit.params.pdescs
+import gbkfit.params.parsers
 from gbkfit.utils import miscutils
 from . import _detail
 
@@ -73,10 +73,13 @@ def fit(config):
     _log.info("setting up fitter...")
     fitter = gbkfit.fitting.fitter_parser.load(cfg['fitter'])
 
+    # exit(fitter.dump())
+    yaml.dump(fitter.dump(), open(f'fitter.yaml', 'w+'))
+
     pdescs = None
     if 'pdescs' in cfg:
         _log.info("setting up pdescs...")
-        pdescs = gbkfit.params.descs.load_descs_dict(cfg['pdescs'])
+        pdescs = gbkfit.params.pdescs.load_pdescs_dict(cfg['pdescs'])
     pdescs = _detail.merge_pdescs(objective.pdescs(), pdescs)
 
     _log.info("setting up params...")

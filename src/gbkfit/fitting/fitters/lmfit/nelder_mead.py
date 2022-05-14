@@ -2,12 +2,19 @@
 import copy
 
 import numpy as np
-import gbkfit.params.utils as paramutils
+
+from gbkfit.fitting import fitutils
+from gbkfit.params import paramutils
 from gbkfit.utils import parseutils
 
-from .core import FitParamLMFit, FitParamsLMFit, FitterLMFit, residual_scalar, residual_vector
+from .core import FitParamLMFit, FitParamsLMFit, FitterLMFit, residual_scalar
 
-from gbkfit.fitting.utils import load_parameters
+
+__all__ = [
+    'FitParamLMFitNelderMead',
+    'FitParamsLMFitNelderMead',
+    'FitterLMFitNelderMead'
+]
 
 
 class FitParamLMFitNelderMead(FitParamLMFit):
@@ -30,9 +37,10 @@ class FitParamLMFitNelderMead(FitParamLMFit):
             info.update(max=self.maximum())
         return info
 
-    def __init__(
-            self, initial_value, minimum=-np.inf, maximum=np.inf):
+    def __init__(self, initial_value, minimum=None, maximum=None):
         super().__init__()
+        minimum = -np.inf if minimum is None else minimum
+        maximum = +np.inf if maximum is None else maximum
         self._initial_value = initial_value
         self._minimum = minimum
         self._maximum = maximum
@@ -49,26 +57,34 @@ class FitParamLMFitNelderMead(FitParamLMFit):
 
 class FitParamsLMFitNelderMead(FitParamsLMFit):
 
-    @classmethod
-    def load(cls, info, descs):
-        desc = parseutils.make_basic_desc(cls, 'params')
-        opts = parseutils.parse_options_for_callable(
-            info, desc, cls.__init__, fun_ignore_args=['descs'])
-        parameters = load_parameters(opts['parameters'], descs, cls.load_param)
-        expressions = paramutils.load_param_value_conversions(
-            opts.get('value_conversions'))
-        return cls(descs, parameters, expressions)
-
     @staticmethod
     def load_param(info):
         return FitParamLMFitNelderMead.load(info)
 
-    def dump(self):
-        return dict()
+    @classmethod
+    def load(cls, info, pdescs):
+        desc = parseutils.make_basic_desc(cls, 'params')
+        opts = parseutils.parse_options_for_callable(
+            info, desc, cls.__init__, fun_ignore_args=['pdescs'])
+        opts['parameters'] = fitutils.load_params_dict(
+            opts['parameters'], pdescs, cls.load_param)
+        if 'conversions' in opts:
+            opts['conversions'] = paramutils.load_params_conversions(
+                opts['conversions'])
+        return cls(pdescs, **opts)
 
-    def __init__(self, descs, parameters, expressions=None):
+    def dump(self, conversions_filename):
+        info = dict()
+        info.update(parameters=fitutils.dump_params_dict(
+            self.parameters(), FitParamLMFitNelderMead))
+        if self.conversions():
+            info.update(conversions=paramutils.dump_params_conversions(
+                self.conversions(), conversions_filename))
+        return info
+
+    def __init__(self, pdescs, parameters, conversions=None):
         super().__init__(
-            descs, parameters, expressions, FitParamLMFitNelderMead)
+            pdescs, parameters, conversions, FitParamLMFitNelderMead)
 
 
 class FitterLMFitNelderMead(FitterLMFit):
@@ -78,19 +94,43 @@ class FitterLMFitNelderMead(FitterLMFit):
         return 'lmfit.nelder_mead'
 
     @staticmethod
-    def load_params(info, descs):
-        return FitParamsLMFitNelderMead.load(info, descs)
+    def load_params(info, pdescs):
+        return FitParamsLMFitNelderMead.load(info, pdescs)
+
+    @classmethod
+    def load(cls, info):
+        desc = parseutils.make_typed_desc(cls, 'fitter')
+        opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
+        return cls(**opts)
+
+    def dump(self):
+        info = dict(type=self.type())
+        global_options = copy.deepcopy(self._global_options)
+        method_options = copy.deepcopy(self._method_options)
+        parseutils.prepare_for_dump(
+            global_options,
+            remove_nones=True,
+            remove_keys=('nan_policy', 'calc_covar'))
+        parseutils.prepare_for_dump(
+            method_options,
+            remove_nones=True,
+            remove_keys=())
+        parseutils.prepare_for_dump(
+            method_options['options'],
+            remove_nones=True,
+            remove_keys=('return_all',))
+        return info | global_options | method_options
 
     def __init__(
-            self, iter_cb=None, scale_covar=False, max_nfev=None,
+            self, scale_covar=False, max_nfev=None,
             tol=None, disp=False, xatol=1e-4, fatol=1e-4, adaptive=False):
         super().__init__(
-            'nelder', iter_cb, scale_covar, max_nfev, residual_scalar,
+            residual_scalar, 'nelder', scale_covar, max_nfev,
             options=dict(
                 tol=tol,
                 options=dict(
                     disp=disp, return_all=False, xatol=xatol, fatol=fatol,
                     adaptive=adaptive)))
 
-    def _setup_minimizer_options(self, parameters):
-        return copy.deepcopy(self._options)
+    def _setup_options(self, parameters, global_options, method_options):
+        return global_options, method_options

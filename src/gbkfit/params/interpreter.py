@@ -14,11 +14,11 @@ from . import ParamScalarDesc, ParamVectorDesc, paramutils, parsers
 
 class _Transformer(ast.NodeTransformer):
 
-    def __init__(self, descs):
-        self._descs = descs
+    def __init__(self, pdescs):
+        self._pdescs = pdescs
 
     def visit_Name(self, node):
-        if node.id in self._descs:
+        if node.id in self._pdescs:
             node = ast.Subscript(
                 value=ast.Name(id='params', ctx=ast.Load()),
                 slice=ast.Index(value=ast.Constant(value=node.id)),
@@ -26,12 +26,12 @@ class _Transformer(ast.NodeTransformer):
         return node
 
 
-def _make_exprs_func(descs, exprs):
+def _make_exprs_func(pdescs, exprs):
     indent = ' ' * 4
     globals_ = dict(np=np)
     source = 'def expressions(params):\n'
     for key, val in exprs.items():
-        line_ast = _Transformer(descs).visit(ast.parse(f'{key} = {val}'))
+        line_ast = _Transformer(pdescs).visit(ast.parse(f'{key} = {val}'))
         line_src = ast.unparse(line_ast).strip('\n')
         source += f'{indent}{line_src}\n'
     source += f'{indent}return params\n'
@@ -45,34 +45,10 @@ def _make_exprs_func(descs, exprs):
             f"auto-generated expression function: {str(e)}") from e
 
 
-def load_exprs_file(info):
-    desc = 'parameter expressions'
-    opts = parseutils.parse_options(info, desc, ['file', 'func'])
-    return miscutils.get_attr_from_file(opts['file'], opts['func'])
-
-
-def dump_exprs_file(file, func_obj, func_src):
-    if not func_src:
-        raise RuntimeError(
-            "failed to dump expression function "
-            "because its source code is not available")
-    with open(file, 'a') as f:
-        f.write(func_src)
-    return dict(file=file, func=func_obj.__name__)
-
-
-class ParamValueConversions:
-    pass
-
-
-class ParamPriorConversions:
-    pass
-
-
 class Interpreter:
 
-    def __init__(self, descs, exprs_dict=None, exprs_func=None):
-        self._descs = copy.deepcopy(descs)
+    def __init__(self, pdescs, exprs_dict=None, exprs_func=None):
+        self._pdescs = copy.deepcopy(pdescs)
         # Create mapping of imploded parameters (name=>value)
         # For scalar parameters we use floats
         # For vector parameters we use numpy arrays
@@ -81,41 +57,47 @@ class Interpreter:
         self._iparams = dict()
         self._eparams_nmapping = dict()
         self._eparams_imapping = dict()
-        for name, desc in descs.items():
-            if isinstance(desc, ParamScalarDesc):
+        for name, pdesc in pdescs.items():
+            if isinstance(pdesc, ParamScalarDesc):
                 self._iparams[name] = np.nan
                 self._eparams_nmapping[name] = name
                 self._eparams_imapping[name] = None
-            elif isinstance(desc, ParamVectorDesc):
-                size = desc.size()
+            elif isinstance(pdesc, ParamVectorDesc):
+                size = pdesc.size()
+                names = [name] * size
                 indices = list(range(size))
-                eparams = paramutils.explode_pname(name, indices)
-                self._iparams[name] = np.full(desc.size(), np.nan)
-                self._eparams_nmapping.update(zip(eparams, [name] * size))
-                self._eparams_imapping.update(zip(eparams, indices))
+                enames = paramutils.explode_param_name_from_indices(
+                    name, indices)
+                self._iparams[name] = np.full(size, np.nan)
+                self._eparams_nmapping.update(zip(enames, names))
+                self._eparams_imapping.update(zip(enames, indices))
             else:
-                assert False
+                raise RuntimeError()
         # Extract pairs with:
         # - Nones (tied parameters)
         # - Reals (fixed parameters)
         # - Expressions (tied parameters)
         def is_none(x): return isinstance(x, type(None))
-        def is_numb(x): return isinstance(x, numbers.Real)
-        values, exprs = parsers.parse_param_values(
-            exprs_dict, descs, lambda x: is_none(x) or is_numb(x))[4:6]
+        def is_real(x): return isinstance(x, numbers.Real)
+        values, exprs = paramutils.parse_param_values(
+            exprs_dict, pdescs, lambda x: is_none(x) or is_real(x))[4:6]
         nones_dict = dict(filter(lambda x: is_none(x[1]), values.items()))
-        numbs_dict = dict(filter(lambda x: is_numb(x[1]), values.items()))
-        # Apply None (tied) and Real (fixed) values
-        # on the iparams storage
+        reals_dict = dict(filter(lambda x: is_real(x[1]), values.items()))
+        # Apply None and Real values to the params storage
         self._apply_eparams(values)
-        # Extract the name and indices of each expression
-        expr_names, expr_indices = parsers.parse_param_exprs(exprs, descs)[2:4]
+        # Parse expressions and extract various ordered information
+        expr_keys, expr_values, expr_keys_names, expr_keys_indices = \
+            paramutils.parse_param_exprs(exprs, pdescs)[:4]
+        # From now on, work with the ordered expressions
+        exprs = dict(zip(expr_keys, expr_values))
         # Extract the exploded names for all parameters and create
         # various groups for convenience
-        enames_all = paramutils.explode_pdescs(descs.values(), descs.keys())
+        enames_all = paramutils.explode_param_names_from_pdescs(
+            pdescs.values(), pdescs.keys())
         enames_none = list(nones_dict.keys())
-        enames_fixed = list(numbs_dict.keys())
-        enames_tied = paramutils.explode_pnames(expr_names, expr_indices)
+        enames_fixed = list(reals_dict.keys())
+        enames_tied = paramutils.explode_param_names_from_indices(
+            expr_keys_names, expr_keys_indices)
         enames_tied += enames_none
         enames_notfree = enames_tied + enames_fixed
         # Order exploded names based on the supplied descriptions
@@ -145,25 +127,20 @@ class Interpreter:
         exprs_func_obj = None
         exprs_func_src = None
         exprs_func_gen = False
-        # If expressions are given in the form of strings,
+        # If expressions are given via exprs_dict,
         # generate the expression function
         if exprs:
-            exprs_func_obj, exprs_func_src = _make_exprs_func(descs, exprs)
+            exprs_func_obj, exprs_func_src = _make_exprs_func(pdescs, exprs)
             exprs_func_gen = True
         # If we are given the expression function directly,
         # try to retrieve, cleanup, and store its source code.
         # The source code may not always be available.
         elif exprs_func:
             exprs_func_obj = exprs_func
-            try:
-                exprs_func_src = textwrap.dedent(inspect.getsource(exprs_func))
-            except AttributeError:
-                exprs_func_src = ''
-        print(exprs_func_src)
-        #exit(locals())
+            exprs_func_src = miscutils.get_source(exprs_func_src)
         # ...
         self._exprs_dict = exprs_dict
-        self._fixed_dict = numbs_dict
+        self._fixed_dict = reals_dict
         self._exprs_func_obj = exprs_func_obj
         self._exprs_func_src = exprs_func_src
         self._exprs_func_gen = exprs_func_gen
@@ -179,27 +156,19 @@ class Interpreter:
     def fixed_dict(self):
         return copy.deepcopy(self._fixed_dict)
 
-    def exprs_func_obj(self):
-        return self._exprs_func_obj
-
-    def exprs_func_src(self):
-        return self._exprs_func_src
-
-    def exprs_func_gen(self):
-        return self._exprs_func_gen
-
-    def enames(self, free=True, tied=True, fixed=True):
+    def enames(self, fixed=True, tied=True, free=True):
         return [p for p in self._enames_all if
-                (p in self._enames_free * free) or
+                (p in self._enames_fixed * fixed) or
                 (p in self._enames_tied * tied) or
-                (p in self._enames_fixed * fixed)]
+                (p in self._enames_free * free)]
 
-    def evaluate(self, eparams, check=True, out_eparams=None):
+    def evaluate(self, eparams, out_eparams=None, check=True):
         # Verify supplied eparams
         if check:
             self._check_eparams(eparams)
         # Apply supplied eparams on the iparams
         self._apply_eparams(eparams)
+        # exit(self._iparams)
         # Apply expressions on the iparams
         self._apply_exprs()
         # Extract all eparams from the iparams
@@ -212,11 +181,11 @@ class Interpreter:
         if missing := set(self._enames_free).difference(eparams):
             raise RuntimeError(
                 f"the following parameters are missing: "
-                f"{paramutils.sort_eparams(self._descs, missing)}")
+                f"{paramutils.sort_param_enames(self._pdescs, missing)}")
         if notfree := set(self._enames_notfree).intersection(eparams):
             raise RuntimeError(
                 f"the following parameters are not free: "
-                f"{paramutils.sort_eparams(self._descs, notfree)}")
+                f"{paramutils.sort_param_enames(self._pdescs, notfree)}")
         if unknown := set(eparams).difference(self._enames_all):
             raise RuntimeError(
                 f"the following parameters are not recognised: "
@@ -247,6 +216,7 @@ class Interpreter:
         try:
             result = copy.deepcopy(self._iparams)
             self._exprs_func_obj(result)
+
         except Exception as e:
             raise RuntimeError(
                 f"exception thrown while evaluating parameter expressions; "
@@ -260,9 +230,9 @@ class Interpreter:
             # Ignore unknown parameters
             # This may occur if the expression function
             # adds new parameters in the 'result' dict
-            if lhs not in self._descs:
+            if lhs not in self._pdescs:
                 continue
-            desc = self._descs[lhs]
+            desc = self._pdescs[lhs]
             lhs_is_scalar = isinstance(desc, ParamScalarDesc)
             lhs_is_vector = isinstance(desc, ParamVectorDesc)
             rhs_is_scalar = isinstance(rhs, numbers.Real)

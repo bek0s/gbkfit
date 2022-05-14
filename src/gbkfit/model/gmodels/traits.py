@@ -4,7 +4,7 @@ import abc
 import numpy as np
 
 import gbkfit.math
-from gbkfit.params.descs import ParamScalarDesc, ParamVectorDesc
+from gbkfit.params.pdescs import ParamScalarDesc, ParamVectorDesc
 from gbkfit.utils import parseutils
 
 

@@ -7,22 +7,38 @@ import dynesty
 import dynesty.dynamicsampler
 import numpy as np
 
+from gbkfit.fitting import fitutils
 from gbkfit.fitting.core import FitParam, FitParams, Fitter
-from gbkfit.utils import funcutils, iterutils, parseutils
 from gbkfit.fitting.prior import prior_parser
-from gbkfit.fitting.utils import *
+from gbkfit.fitting.result import make_fitter_result
+from gbkfit.params import paramutils
+from gbkfit.utils import funcutils, iterutils, parseutils
+
+
+from gbkfit.fitting.prior.prior_dict import PriorDict
 
 
 _log = logging.getLogger(__name__)
 
 
-def _prior_tansform_wrapper(theta, parameters):
-    pass
+__all__ = []
+
+
+def _prior_transform_wrapper(theta, parameters):
+    return parameters.priors().rescale(
+        dict(zip(parameters.enames(fixed=False, tied=False, free=True), theta)))
 
 
 def _log_likelihood_wrapper(theta, parameters, objective):
-    import numpy.random
-    return numpy.random.uniform(0, 10.0)
+
+    eparams = dict(zip(parameters.enames(fixed=False, tied=False, free=True), theta))
+
+    print(eparams)
+    params = parameters.evaluate(eparams, check=False)
+
+    return objective.log_likelihood(params)
+    # import numpy.random
+    # return numpy.random.uniform(0, 10.0)
 
 
 class FitParamDynesty(FitParam):
@@ -57,11 +73,9 @@ class FitParamsDynesty(FitParams):
             info, desc, cls.__init__, fun_ignore_args=['descs'])
         parameters = load_parameters(
             opts.get('parameters'), descs, cls.load_param)
-        value_conversions = paramutils.load_parameter_value_conversions(
+        value_conversions = paramparsers.load_params_value_conversions(
             opts.get('value_conversions'))
-        prior_conversions = paramutils.load_parameter_prior_conversions(
-            opts.get('prior_conversions'))
-        return cls(descs, parameters, value_conversions, prior_conversions)
+        return cls(descs, parameters, value_conversions)
 
     @staticmethod
     def load_param(info):
@@ -71,41 +85,16 @@ class FitParamsDynesty(FitParams):
         info = dict()
         return info
 
-    def __init__(
-            self, descs, parameters,
-            value_conversions=None, prior_conversions=None):
-        super().__init__(descs, parameters, None, FitParamDynesty)
+    def __init__(self, descs, parameters, value_conversions=None):
+        super().__init__(descs, parameters, value_conversions, FitParamDynesty)
 
-        prior_dict = PriorDict(prior_conversions)
+        self._priors = PriorDict(
+            {k: v.prior() for k, v in self.infos().items()}, descs)
 
-        prior_dict.evaluate(param_values)
+        # exit(priors)
 
-        import inspect
-        import textwrap
-
-        prior_conversions_obj = prior_conversions
-        prior_conversions_src, _ = funcutils.getsource(prior_conversions)
-
-        try:
-            prior_conversions_src = textwrap.dedent(inspect.getsource(prior_conversions))
-        except AttributeError:
-            pass
-
-        try:
-            result = copy.deepcopy(prior_values)
-            result = prior_conversions_obj(param_values, result)
-        except Exception as e:
-            raise RuntimeError("error") from e
-
-        # validate
-        # copy
-        priors = result
-        # priors ready for evaluation
-
-
-
-
-
+    def priors(self):
+        return self._priors
 
 
 
@@ -185,10 +174,10 @@ class FitterDynestySNS(FitterDynesty):
 
     def _fit_impl_impl(self, objective, parameters):
 
-        ndim = parameters.infos()
+        ndim = len(parameters.infos())
 
         sampler = dynesty.NestedSampler(
-            _log_likelihood_wrapper, _prior_tansform_wrapper, ndim,
+            _log_likelihood_wrapper, _prior_transform_wrapper, ndim,
             logl_args=(parameters, objective),
             ptform_args=(parameters,),
             **self._options_constructor)

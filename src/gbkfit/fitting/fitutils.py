@@ -1,10 +1,11 @@
 
 import numpy as np
 
-import gbkfit.params.utils as paramutils
+from gbkfit.params import paramutils
+from gbkfit.utils import iterutils
 
 
-def load_parameters(info, descs, loader):
+def load_params_dict(info, descs, loader):
     infos, exprs = paramutils.parse_param_info(info, descs)[4:]
     for key, val in infos.items():
         try:
@@ -14,6 +15,17 @@ def load_parameters(info, descs, loader):
                 f"could not parse information for parameter '{key}'; "
                 f"reason: {str(e)}") from e
     return infos | exprs
+
+
+def dump_params_dict(parameters, type_):
+    info = dict()
+    for key, value in parameters.items():
+        if isinstance(value, type_):
+            value = value.dump()
+        elif iterutils.is_sequence(value):
+            value = [p.dump() if isinstance(p, type_) else p for p in value]
+        info[key] = value
+    return info
 
 
 def prepare_param_prior_info(info):
@@ -38,7 +50,7 @@ def prepare_param_initial_value_from_value_min_max(
             f"no initial value for the parameter was provided; "
             f"an attempt to recover the initial value failed "
             f"because the minimum and/or maximum values are not provided")
-    return init_value if init_value is not None else (minimum + maximum) / 2
+    return init_value if has_init_value else (minimum + maximum) / 2
 
 
 def prepare_param_initial_width_from_width_min_max(
@@ -54,7 +66,7 @@ def prepare_param_initial_width_from_width_min_max(
     return init_width if has_init_width else maximum - minimum
 
 
-def prepare_param_initial_value_and_range_from_value_width_min_max(
+def prepare_param_initial_value_range_from_value_width_min_max(
         init_value, init_width, minimum, maximum):
     init_value = prepare_param_initial_value_from_value_min_max(
         init_value, minimum, maximum)
@@ -69,3 +81,28 @@ def prepare_param_initial_value_and_range_from_value_width_min_max(
     if has_maximum:
         init_value_max = min(init_value_max, maximum)
     return init_value, init_value_min, init_value_max
+
+
+def residual_scalar(eparams, parameters, objective, callback):
+    params = parameters.evaluate(eparams)
+    print(params)
+    residual = objective.residual_scalar(params)
+    if callback:
+        raise NotImplementedError()
+    return residual
+
+
+def residual_vector(eparams, parameters, objective, callback):
+    params = parameters.evaluate(eparams)
+    print(params)
+    residual = objective.residual_vector_h(params)
+    residual = np.nan_to_num(np.concatenate(residual, casting='safe'))
+    if callback:
+        raise NotImplementedError()
+    return residual
+
+
+def log_likelihood_for_mcmc():
+    pass
+
+

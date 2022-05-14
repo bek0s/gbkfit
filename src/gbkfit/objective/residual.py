@@ -200,8 +200,8 @@ class ObjectiveResidual(ObjectiveModel):
         self._residual_d(params, weighted, out_extra, out_extra_model)
         t1 = time.time_ns()
         for i, driver in enumerate(self.drivers()):
-            d_data = self._d_residual_vector
-            h_data = self._h_residual_vector
+            d_data = self._d_residual_vector[i]
+            h_data = self._h_residual_vector[i]
             driver.mem_copy_d2h(d_data, h_data)
         t2 = time.time_ns()
         self.time_stats_samples(False)['res_d2h'].append(t2 - t1)

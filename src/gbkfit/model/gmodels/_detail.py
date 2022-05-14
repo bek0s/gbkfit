@@ -2,7 +2,7 @@
 import numpy as np
 
 from gbkfit.math import interpolation
-from gbkfit.params.descs import ParamScalarDesc
+from gbkfit.params.pdescs import ParamScalarDesc
 from gbkfit.utils import iterutils
 from . import traits
 

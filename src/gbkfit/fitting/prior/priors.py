@@ -81,6 +81,37 @@ class Prior(parseutils.TypedParserSupport, abc.ABC):
         return interp(x)
 
 
+class PriorDelta(Prior):
+
+    @staticmethod
+    def type():
+        return 'delta'
+
+    @classmethod
+    def load(cls, info, **kwargs):
+        desc = parseutils.make_typed_desc(cls, 'prior')
+        opts = parseutils.parse_options_for_callable(
+            info, desc, cls.__init__)
+        return cls(**opts)
+
+    def dump(self):
+        return super().dump() | dict(peak=self._peak)
+
+    def __init__(self, peak):
+        super().__init__(minimum=peak, maximum=peak)
+        self._peak = peak
+
+    def rescale(self, x):
+        return self._peak * x ** 0
+
+    def prob(self, x):
+        at_peak = (x == self._peak)
+        return np.nan_to_num(np.multiply(at_peak, np.inf))
+
+    def cdf(self, x):
+        return np.ones_like(x) * (x > self._peak)
+
+
 class PriorUniform(Prior):
 
     @staticmethod

@@ -89,6 +89,17 @@ def parse_options_for_callable(
     return options
 
 
+def prepare_for_dump(options, remove_nones=True, remove_keys=()):
+    for key in list(options.keys()):
+        if key in remove_keys or (remove_nones and options[key] is None):
+            del options[key]
+    return options
+
+
+
+
+
+
 class Serializable(abc.ABC):
 
     @classmethod

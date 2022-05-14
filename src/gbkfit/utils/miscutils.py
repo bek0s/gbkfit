@@ -70,11 +70,9 @@ def make_unique_path(path):
 
 
 def get_source(obj, dedent=True):
-    src = None
-    success = True
     try:
         src = inspect.getsource(obj)
         src = textwrap.dedent(src) if dedent else src
     except (TypeError, OSError):
-        success = False
-    return src, success
+        src = None
+    return src

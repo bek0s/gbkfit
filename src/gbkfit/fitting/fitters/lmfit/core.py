@@ -1,35 +1,38 @@
 
 import abc
+import copy
 
 import lmfit
 import numpy as np
 
-
+from gbkfit.fitting import fitutils
 from gbkfit.fitting.core import FitParam, FitParams, Fitter
-
 from gbkfit.fitting.result import make_fitter_result
 
 
-def _residual_params(x, parameters):
-    enames = parameters.interpreter().enames(free=True, tied=False, fixed=False)
+__all__ = [
+    'FitParamLMFit',
+    'FitParamsLMFit',
+    'FitterLMFit',
+    'residual_scalar',
+    'residual_vector'
+]
+
+
+def _make_eparams_dict(x, parameters):
+    enames = parameters.enames(fixed=False, tied=False, free=True)
     evalues = x.valuesdict().values()
-    eparams = dict(zip(enames, evalues))
-    return parameters.interpreter().evaluate(eparams)
+    return dict(zip(enames, evalues))
 
 
-def residual_scalar(x, objective, parameters, callback=None):
-    params = _residual_params(x, parameters)
-    residual = objective.residual_scalar(params)
-    print(params)
-    return residual
+def residual_scalar(x, parameters, objective, callback=None):
+    eparams = _make_eparams_dict(x, parameters)
+    return fitutils.residual_scalar(eparams, parameters, objective, callback)
 
 
-def residual_vector(x, objective, parameters, callback=None):
-    params = _residual_params(x, parameters)
-    residuals = objective.residual_vector_h(params)
-    residuals = np.nan_to_num(np.concatenate(residuals, casting='safe'))
-    print(params)
-    return residuals
+def residual_vector(x, parameters, objective, callback=None):
+    eparams = _make_eparams_dict(x, parameters)
+    return fitutils.residual_vector(eparams, parameters, objective, callback)
 
 
 class FitParamLMFit(FitParam, abc.ABC):
@@ -42,45 +45,40 @@ class FitParamsLMFit(FitParams, abc.ABC):
 
 class FitterLMFit(Fitter, abc.ABC):
 
-    def dump(self):
-        return dict()
-
-    def __init__(
-            self, method, iter_cb, scale_covar, max_nfev, residual_fun,
-            options):
+    def __init__(self, residual_func, method, scale_covar, max_nfev, options):
         super().__init__()
+        self._residual_func = residual_func
         self._method = method
-        self._iter_cb = iter_cb
-        self._scale_covar = scale_covar
-        self._calc_covar = True
-        self._nan_policy = 'raise'
-        self._max_nfev = max_nfev
-        self._residual_fun = residual_fun
-        self._options = options
+        self._global_options = dict(
+            scale_covar=scale_covar,
+            nan_policy='raise',
+            calc_covar=True,
+            max_nfev=max_nfev)
+        self._method_options = copy.deepcopy(options)
 
     def _fit_impl(self, objective, parameters):
-
         # Create lmfit parameters for all free parameters.
-        # We also need to transform the parameter names because
-        # brackets are not supported by lmfit.
+        # Replace brackets in parameters names
+        # because lmfit does not support them.
         lmfit_params = lmfit.Parameters()
         for pname, pinfo in parameters.infos().items():
             lmfit_params.add(
-                pname.replace('[', '_obracket_').replace(']', '_cbracket_'),
+                pname.replace('[', '__obr__').replace(']', '__cbr__'),
                 pinfo.initial_value(), True, pinfo.minimum(), pinfo.maximum())
         # Setup minimiser-specific options
-        options = self._setup_minimizer_options(parameters)
+        global_options, method_options = self._setup_options(
+            parameters,
+            copy.deepcopy(self._global_options),
+            copy.deepcopy(self._method_options))
         # Run minimisation
-        lmfit_result = lmfit.minimize(
-            self._residual_fun, args=(objective, parameters),
-            params=lmfit_params, method=self._method, iter_cb=self._iter_cb,
-            scale_covar=self._scale_covar, nan_policy=self._nan_policy,
-            calc_covar=self._calc_covar, max_nfev=self._max_nfev, **options)
-
-        #
+        minimizer = lmfit.Minimizer(
+            self._residual_func, params=lmfit_params,
+            fcn_args=(parameters, objective),
+            **global_options, **method_options)
+        lmfit_result = minimizer.minimize(method=self._method)
+        # Extract the best-fit solution
         solution = dict(mode=list(lmfit_result.params.valuesdict().values()))
-
-        # Extract covariance and std error (if available)
+        # Extract covariance and std error
         if hasattr(lmfit_result, 'covar'):
             covar = lmfit_result.covar
             solution.update(covar=covar, std=list(np.sqrt(np.diag(covar))))
@@ -101,5 +99,5 @@ class FitterLMFit(Fitter, abc.ABC):
         return result
 
     @abc.abstractmethod
-    def _setup_minimizer_options(self, parameters):
+    def _setup_options(self, parameters, global_options, method_options):
         pass

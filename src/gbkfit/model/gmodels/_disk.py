@@ -3,7 +3,7 @@ import abc
 
 import numpy as np
 
-from gbkfit.params.descs import ParamScalarDesc, ParamVectorDesc
+from gbkfit.params.pdescs import ParamScalarDesc, ParamVectorDesc
 from gbkfit.utils import iterutils, miscutils
 
 

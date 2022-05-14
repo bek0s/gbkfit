@@ -13,8 +13,8 @@ import gbkfit.model
 import gbkfit.objective
 import gbkfit.params
 import gbkfit.params.params
-import gbkfit.params.descs
-import gbkfit.params.utils
+import gbkfit.params.pdescs
+from gbkfit.params import paramutils
 from gbkfit.utils import iterutils
 from . import _detail
 
@@ -30,30 +30,44 @@ ruamel.yaml.add_representer(dict, lambda self, data: self.represent_mapping(
     'tag:yaml.org,2002:map', data.items()))
 
 
-def _prepare_params(info, descs):
-    parameters = info['parameters']
-    keys, values = gbkfit.params.utils.parse_param_keys(parameters, descs)[:2]
-    parameters = dict(zip(keys, values))
+def _prepare_params(info, pdescs):
+
+    parameters = paramutils.prepare_param_info(info.get('parameters'), pdescs)
+
     recovery_failed = []
     recovery_succeed = []
+
+    def recover_value(dict_, key_, index_):
+        value = dict_.get('value')
+        value_id = key if index_ is None else (key_, index_)
+        if 'value' in dict_:
+            recovery_succeed.append(value_id)
+        else:
+            recovery_failed.append(value_id)
+        return value
+
     for key, val in parameters.items():
         if iterutils.is_mapping(val):
-            val = {k.lstrip('*'): v for k, v in val.items()}
-            if 'value' in val:
-                parameters[key] = val['value']
-                recovery_succeed.append(key)
-            else:
-                recovery_failed.append(key)
+            parameters[key] = recover_value(val, key, None)
+        elif iterutils.is_sequence(val):
+            parameters[key] = [recover_value(ival, key, i)
+                               if iterutils.is_mapping(ival) else ival
+                               for i, ival in enumerate(val)]
+
+    # Report successful recoveries
     if recovery_succeed:
         _log.info(
             f"successfully recovered values "
             f"for the following parameter keys: {recovery_succeed}")
+
+    # Check for errors
     if recovery_failed:
         raise RuntimeError(
             f"failed to recover values "
             f"for the following parameter keys: {recovery_failed}")
-    info['parameters'] = parameters
-    return info
+
+    # Update parameter info and return it
+    return info | dict(parameters=parameters)
 
 
 def eval_(objective_type, config, profile=None):
@@ -108,12 +122,16 @@ def eval_(objective_type, config, profile=None):
     pdescs = None
     if 'pdescs' in cfg:
         _log.info("setting up pdescs...")
-        pdescs = gbkfit.params.descs.load_descs_dict(cfg['pdescs'])
+        pdescs = gbkfit.params.pdescs.load_pdescs_dict(cfg['pdescs'])
     pdescs = _detail.merge_pdescs(objective.pdescs(), pdescs)
 
     _log.info("setting up params...")
     cfg['params'] = _prepare_params(cfg['params'], pdescs)
-    params = gbkfit.params.params.load_eval_params(cfg['params'], pdescs)
+    params = gbkfit.params.params.evaluation_params_parser.load(
+        cfg['params'], pdescs)
+
+    print(params.dump('foo.py'))
+    exit()
 
     #
     # Calculate model parameters
@@ -122,7 +140,7 @@ def eval_(objective_type, config, profile=None):
     _log.info("calculating model parameters...")
 
     eparams = {}
-    params = params.interpreter().evaluate({}, True, eparams)
+    params = params.evaluate({}, True, eparams)
     params_info = _detail.nativify(dict(
         params=params,
         eparams=eparams))

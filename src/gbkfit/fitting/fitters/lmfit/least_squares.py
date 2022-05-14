@@ -2,13 +2,19 @@
 import copy
 
 import numpy as np
-import gbkfit.params.utils as paramutils
+
+from gbkfit.fitting import fitutils
+from gbkfit.params import paramutils
 from gbkfit.utils import parseutils
 
 from .core import FitParamLMFit, FitParamsLMFit, FitterLMFit, residual_vector
 
 
-from gbkfit.fitting.utils import load_parameters
+__all__ = [
+    'FitParamLMFitLeastSquares',
+    'FitParamsLMFitLeastSquares',
+    'FitterLMFitLeastSquares'
+]
 
 
 class FitParamLMFitLeastSquares(FitParamLMFit):
@@ -29,13 +35,18 @@ class FitParamLMFitLeastSquares(FitParamLMFit):
             info.update(min=self.minimum())
         if np.isfinite(self.maximum()):
             info.update(max=self.maximum())
-        info.update(x_scale=self.x_scale(), diff_step=self.diff_step())
+        if self.x_scale() is not None:
+            info.update(x_scale=self.x_scale())
+        if self.diff_step() is not None:
+            info.update(xdiff_step=self.diff_step())
         return info
 
     def __init__(
-            self, initial_value, minimum=-np.inf, maximum=np.inf,
+            self, initial_value, minimum=None, maximum=None,
             x_scale=None, diff_step=None):
         super().__init__()
+        minimum = -np.inf if minimum is None else minimum
+        maximum = +np.inf if maximum is None else maximum
         self._initial_value = initial_value
         self._minimum = minimum
         self._maximum = maximum
@@ -65,21 +76,29 @@ class FitParamsLMFitLeastSquares(FitParamsLMFit):
         return FitParamLMFitLeastSquares.load(info)
 
     @classmethod
-    def load(cls, info, descs):
-        desc = parseutils.make_basic_desc(cls, 'params')
+    def load(cls, info, pdescs):
+        desc = parseutils.make_basic_desc(cls, 'fit params')
         opts = parseutils.parse_options_for_callable(
-            info, desc, cls.__init__, fun_ignore_args=['descs'])
-        parameters = load_parameters(opts['parameters'], descs, cls.load_param)
-        expressions = paramutils.load_param_value_conversions(
-            opts.get('value_conversions'))
-        return cls(descs, parameters, expressions)
+            info, desc, cls.__init__, fun_ignore_args=['pdescs'])
+        opts['parameters'] = fitutils.load_params_dict(
+            opts['parameters'], pdescs, cls.load_param)
+        if 'conversions' in opts:
+            opts['conversions'] = paramutils.load_params_conversions(
+                opts['conversions'])
+        return cls(pdescs, **opts)
 
-    def dump(self, value_conversions=None):
-        return dump_params_info_common(self, value_conversions)
+    def dump(self, conversions_filename):
+        info = dict()
+        info.update(parameters=fitutils.dump_params_dict(
+            self.parameters(), FitParamLMFitLeastSquares))
+        if self.conversions():
+            info.update(conversions=paramutils.dump_params_conversions(
+                self.conversions(), conversions_filename))
+        return info
 
-    def __init__(self, descs, parameters, expressions=None):
+    def __init__(self, pdescs, parameters, conversions=None):
         super().__init__(
-            descs, parameters, expressions, FitParamLMFitLeastSquares)
+            pdescs, parameters, conversions, FitParamLMFitLeastSquares)
 
 
 class FitterLMFitLeastSquares(FitterLMFit):
@@ -89,30 +108,49 @@ class FitterLMFitLeastSquares(FitterLMFit):
         return 'lmfit.least_squares'
 
     @staticmethod
-    def load_params(info, descs):
-        return FitParamsLMFitLeastSquares.load(info, descs)
+    def load_params(info, pdescs):
+        return FitParamsLMFitLeastSquares.load(info, pdescs)
+
+    @classmethod
+    def load(cls, info):
+        desc = parseutils.make_typed_desc(cls, 'fitter')
+        opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
+        return cls(**opts)
+
+    def dump(self):
+        info = dict(type=self.type())
+        global_options = copy.deepcopy(self._global_options)
+        method_options = copy.deepcopy(self._method_options)
+        parseutils.prepare_for_dump(
+            global_options,
+            remove_nones=True,
+            remove_keys=('nan_policy', 'calc_covar'))
+        parseutils.prepare_for_dump(
+            method_options,
+            remove_nones=True,
+            remove_keys=('method', 'jac'))
+        return info | global_options | method_options
 
     def __init__(
-            self, iter_cb=None, scale_covar=False, max_nfev=None,
+            self, scale_covar=False, max_nfev=None,
             ftol=1e-08, xtol=1e-08, gtol=1e-08, x_scale=1.0,
             loss='linear', f_scale=1.0, diff_step=None,
             tr_solver=None, tr_options=None,
             jac_sparsity=None, verbose=0):
         super().__init__(
-            'least_squares', iter_cb, scale_covar, max_nfev, residual_vector,
+            residual_vector, 'least_squares', scale_covar, max_nfev,
             options=dict(
-                jac='3-point',
+                method='trf', jac='3-point',
                 ftol=ftol, xtol=xtol, gtol=gtol, x_scale=x_scale,
                 loss=loss, f_scale=f_scale, diff_step=diff_step,
                 tr_solver=tr_solver,
                 tr_options=tr_options if tr_options else dict(),
                 jac_sparsity=jac_sparsity, verbose=verbose))
 
-    def _setup_minimizer_options(self, parameters):
-        options = copy.deepcopy(self._options)
-        x_scale = options.pop('x_scale')
+    def _setup_options(self, parameters, global_options, method_options):
+        x_scale = method_options.pop('x_scale')
         x_scales = []
-        diff_step = options.pop('diff_step')
+        diff_step = method_options.pop('diff_step')
         if diff_step is None:
             diff_step = np.finfo(np.float64).eps ** (1 / 3)
         diff_steps = []
@@ -121,14 +159,16 @@ class FitterLMFitLeastSquares(FitterLMFit):
             p_diff_step = pinfo.diff_step()
             if p_x_scale is not None and x_scale == 'jac':
                 raise RuntimeError(
-                    f"when given as a fitter option, "
-                    f"x_scale cannot be also given as a parameter attribute "
-                    f"(see {pname} parameter)")
+                    f"problem with parameter '{pname}': "
+                    f"x_scale cannot be given as a parameter option when "
+                    f"it is also given as a fitter option with value 'jac'")
             if p_x_scale is None:
                 p_x_scale = x_scale
             if p_diff_step is None:
                 p_diff_step = diff_step
             x_scales.append(p_x_scale)
             diff_steps.append(p_diff_step)
-        options.update(diff_step=diff_steps, x_scale=x_scales)
-        return options
+        method_options.update(
+            diff_step=diff_steps,
+            x_scale=x_scale if x_scale == 'jac' else x_scales)
+        return global_options, method_options
