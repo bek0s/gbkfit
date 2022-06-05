@@ -50,11 +50,17 @@ class ObjectiveGoodness(ObjectiveResidual):
 
     def log_likelihood(self, params, out_extra=None):
         t1 = time.time_ns()
-        self.residual_vector_d(params, out_extra)
+        d_residual_vectors = self.residual_vector_d(params, out_extra)
         log_likelihoods = []
         for i, driver in enumerate(self.drivers()):
             # TODO
-            log_likelihoods.append(0)
+            d_residual_vector = d_residual_vectors[i]
+            h_residual_scalar = self._s_residual_scalar[i][0]
+            d_residual_scalar = self._s_residual_scalar[i][1]
+            driver.math_mul(d_residual_vector, d_residual_vector, out=d_residual_vector)
+            driver.math_sum(d_residual_vector, out=d_residual_scalar)
+            driver.mem_copy_d2h(d_residual_scalar, h_residual_scalar)
+            log_likelihoods.append(-0.5*h_residual_scalar[0])
         t2 = time.time_ns()
         self.time_stats_samples(False)['gds_loglike'].append(t2 - t1)
         return log_likelihoods

@@ -31,6 +31,10 @@ def _register_fitters():
         # lmfit
         'gbkfit.fitting.fitters.lmfit.FitterLMFitLeastSquares',
         'gbkfit.fitting.fitters.lmfit.FitterLMFitNelderMead',
+        # pymoo
+        'gbkfit.fitting.fitters.pymoo.FitterPymooCMAES',
+        'gbkfit.fitting.fitters.pymoo.FitterPymooNSGA2',
+        'gbkfit.fitting.fitters.pymoo.FitterPymooPSO',
         # pygmo
         'gbkfit.fitting.fitters.pygmo.FitterPygmoDE',
         'gbkfit.fitting.fitters.pygmo.FitterPygmoSADE',

@@ -55,7 +55,7 @@ class DriverHost(Driver):
         return np.sub(x1, x2, out=out)
 
     def math_mul(self, x1, x2, out=None):
-        return np.mul(x1, x2, out=out)
+        return np.multiply(x1, x2, out=out)
 
     def math_div(self, x1, x2, out=None):
         return np.div(x1, x2, out=out)

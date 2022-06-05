@@ -1036,9 +1036,9 @@ def parse_param_values_strict(descs, params_dict, value_type):
     return values, exprs
 
 
-def load_params_parameters(info, descs, types, loader):
+def load_params_parameters(info, pdescs, types, loader):
     info, expressions = parse_param_values(
-        info, descs, lambda x: isinstance(x, types))[4:]
+        info, pdescs, lambda x: isinstance(x, types))[4:]
     for key, val in info.items():
         try:
             info[key] = loader(val)

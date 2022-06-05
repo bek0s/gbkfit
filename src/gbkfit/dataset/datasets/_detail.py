@@ -18,11 +18,13 @@ def load_dataset_common(cls, info, names):
     return opts
 
 
-def dump_dataset_common(dataset, prefix='', overwrite=False):
-    out = dict(dtype=dataset.type())
+def dump_dataset_common(
+        dataset, prefix='', dump_full_path=True, overwrite=False):
+    out = dict(type=dataset.type())
     for key, data in dataset.items():
         filename_d = f'{prefix}{key}_d.fits'
         filename_m = f'{prefix}{key}_m.fits'
         filename_e = f'{prefix}{key}_e.fits'
-        out[key] = data.dump(filename_d, filename_m, filename_e, overwrite)
+        out[key] = data.dump(
+            filename_d, filename_m, filename_e, dump_full_path, overwrite)
     return out

@@ -84,4 +84,15 @@ class Dataset(parseutils.TypedParserSupport, abc.ABC):
         return next(iter(self.values())).dtype()
 
 
-dataset_parser = parseutils.TypedParser(Dataset)
+class DatasetTypedParser(parseutils.TypedParser):
+
+    def __init__(self):
+        super().__init__(Dataset)
+
+    def dump_many(self, x, *args, **kwargs):
+        raise RuntimeError(
+            "dumping many Datasets at once is not supported; "
+            "please dump each Dataset separately")
+
+
+dataset_parser = DatasetTypedParser()

@@ -2,6 +2,8 @@
 import collections.abc
 import copy
 
+import numpy as np
+
 
 def is_iterable(x, strict=True):
     return isinstance(x, (tuple, list, set, dict)) if strict \
@@ -9,6 +11,7 @@ def is_iterable(x, strict=True):
 
 
 def is_mapping(x, strict=True):
+    # todo: is set a sequence?
     return isinstance(x, (dict,)) if strict \
         else isinstance(x, collections.abc.Mapping)
 
@@ -122,6 +125,16 @@ def traverse_and_replace(x, func):
     elif is_mapping(node):
         for k in node:
             node[k] = traverse_and_replace(node[k], func)
+    return node
+
+
+def nativify(node):
+    if isinstance(node, (np.bool, np.integer, np.floating, np.ndarray)):
+        node = node.tolist()
+    elif is_sequence(node):
+        node = [nativify(item) for item in node]
+    elif is_mapping(node):
+        node = {k: nativify(v) for k, v in node.items()}
     return node
 
 

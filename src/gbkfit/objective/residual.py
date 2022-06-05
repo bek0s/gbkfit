@@ -28,13 +28,12 @@ class ObjectiveResidual(ObjectiveModel):
             self, datasets, drivers, dmodels, gmodels,
             wd=False, wp=0.0, wu=1.0):
         super().__init__(drivers, dmodels, gmodels)
-        datasets = iterutils.tuplify(datasets)
-        n = self.nitems()
-        if len(datasets) != n:
+        self._datasets = datasets = iterutils.tuplify(datasets)
+        if len(datasets) != len(dmodels):
             raise RuntimeError(
                 f"the number of datasets and dmodels must be equal "
-                f"({len(datasets)} != {n})")
-        self._datasets = iterutils.make_list(n, dict())
+                f"({len(datasets)} != {len(dmodels)})")
+        n = self.nitems()
         self._d_dataset_d_vector = iterutils.make_list(n, None)
         self._d_dataset_m_vector = iterutils.make_list(n, None)
         self._d_dataset_e_vector = iterutils.make_list(n, None)
@@ -63,7 +62,7 @@ class ObjectiveResidual(ObjectiveModel):
                 f"({len(wu)} != {n})")
         for i in range(n):
             dataset = datasets[i]
-            dmodel = self.dmodels()[i]
+            dmodel = dmodels[i]
             names_dat = tuple(dataset.keys())
             names_mdl = tuple(dmodel.onames())
             if set(names_dat) != set(names_mdl):
@@ -91,10 +90,9 @@ class ObjectiveResidual(ObjectiveModel):
                     f"dataset and dmodel have incompatible zeros "
                     f"for item #{i} "
                     f"({dataset.zero()} != {dmodel.zero()})")
-            self._datasets[i] = {name: dataset[name] for name in names_mdl}
             for name in names_mdl:
-                min_ = np.nanmin(self.datasets()[i][name].data())
-                max_ = np.nanmax(self.datasets()[i][name].data())
+                min_ = np.nanmin(dataset[name].data())
+                max_ = np.nanmax(dataset[name].data())
                 self._weights_d[i][name] = 1 / (max_ - min_) if wd else 1.0
                 if isinstance(wp[i], type(None)):
                     self._weights_p[i][name] = 0.0
@@ -128,8 +126,8 @@ class ObjectiveResidual(ObjectiveModel):
             self._d_dataset_d_vector[i] = driver.mem_alloc_d(nelem, dtype)
             self._d_dataset_m_vector[i] = driver.mem_alloc_d(nelem, dtype)
             self._d_dataset_e_vector[i] = driver.mem_alloc_d(nelem, dtype)
-            (self._d_residual_vector[i],
-             self._h_residual_vector[i]) = driver.mem_alloc_s(nelem, dtype)
+            (self._h_residual_vector[i],
+             self._d_residual_vector[i]) = driver.mem_alloc_s(nelem, dtype)
             for j, name in enumerate(onames):
                 slice_ = slice(j * npix, (j + 1) * npix)
                 # Copy dataset to the device memory

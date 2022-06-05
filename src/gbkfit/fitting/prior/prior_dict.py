@@ -7,9 +7,8 @@ import numpy as np
 
 class PriorDict(collections.abc.Mapping):
 
-    def __init__(self, priors, descs):
+    def __init__(self, priors):
         self._priors = copy.deepcopy(priors)
-        self._descs = copy.deepcopy(descs)
 
     def __getitem__(self, key):
         return self._priors.__getitem__(key)
@@ -36,4 +35,4 @@ class PriorDict(collections.abc.Mapping):
         return np.product([self[k].prob(v) for k, v in sample.items()])
 
     def log_prob(self, sample):
-        return np.product([self[k].log_prob(v) for k, v in sample.items()])
+        return np.sum([self[k].log_prob(v) for k, v in sample.items()])

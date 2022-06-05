@@ -8,6 +8,10 @@ import matplotlib.patheffects as patheffects
 import matplotlib.pyplot as plt
 import numpy as np
 
+import gbkfit.fitting.result
+
+from gbkfit.utils import miscutils
+
 
 _log = logging.getLogger(__name__)
 
@@ -171,14 +175,18 @@ def plot_solution(result, solution, posterior_params, skip_posterior):
 
 
 def plot(
-        result_dir, format_, dpi,
+        result_dir, output_dir, format_, dpi,
         only_champion, posterior_params, skip_posterior):
 
     result_dir = os.path.abspath(result_dir)
 
+    output_dir = os.path.abspath(miscutils.make_unique_path('figures'))
+
+    os.makedirs(output_dir)
+
     _log.info(f"reading result directory: '{result_dir}'...")
 
-    result = load_result(result_dir)
+    result = gbkfit.fitting.result.load_result(result_dir)
 
     # Decide which solutions to plot
     solutions = result.solutions

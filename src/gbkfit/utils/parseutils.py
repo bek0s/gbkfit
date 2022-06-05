@@ -90,6 +90,7 @@ def parse_options_for_callable(
 
 
 def prepare_for_dump(options, remove_nones=True, remove_keys=()):
+    options = copy.deepcopy(options)
     for key in list(options.keys()):
         if key in remove_keys or (remove_nones and options[key] is None):
             del options[key]
@@ -195,6 +196,9 @@ class Parser(abc.ABC):
         pass
 
     def dump_many(self, x, *args, **kwargs):
+        # print(args)
+        # print(kwargs)
+        # exit()
         args_list, kwargs_list = _prepare_args_and_kwargs(len(x), args, kwargs)
         results = []
         for item, item_args, item_kwargs in zip(x, args_list, kwargs_list):
@@ -216,17 +220,20 @@ class BasicParser(Parser):
 
 class TypedParser(Parser):
 
-    def __init__(self, cls):
+    def __init__(self, cls, parsers=None):
         super().__init__(cls)
         self._parsers = {}
+        self.register(parsers)
 
-    def register(self, parser):
-        desc = self.cls().__name__
-        type_ = parser.type()
-        if type_ in self._parsers:
-            raise RuntimeError(
-                f"{desc} parser already registered: {type_}")
-        self._parsers[type_] = parser
+    def register(self, parsers):
+        parsers = iterutils.listify(parsers, False)
+        for parser in parsers:
+            desc = self.cls().__name__
+            type_ = parser.type()
+            if type_ in self._parsers:
+                raise RuntimeError(
+                    f"{desc} parser already registered: {type_}")
+            self._parsers[type_] = parser
 
     def _load_one_impl(self, x, *args, **kwargs):
         desc = self.cls().__name__

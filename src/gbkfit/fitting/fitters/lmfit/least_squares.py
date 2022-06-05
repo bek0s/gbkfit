@@ -4,7 +4,6 @@ import copy
 
 import numpy as np
 
-from gbkfit.fitting import fitutils
 from gbkfit.params import paramutils
 from gbkfit.utils import parseutils
 

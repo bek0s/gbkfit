@@ -329,9 +329,13 @@ def main():
 
     parser_plot = parsers_task.add_parser('plot', parents=[parser_common])
     parser_plot.add_argument(
-        'result', type=str,
-        metavar='RESULT',
+        'result_dir', type=str,
+        metavar='result-dir',
         help="the path of the output directory of a fitting run")
+    parser_plot.add_argument(
+        '--output-dir', type=str, default=['figures'],
+        metavar='OUTPUT',
+        help="the path of the directory to store the generated figures")
     parser_plot.add_argument(
         '--format', type=str, default='pdf', choices=['pdf', 'png'],
         help="the format of the created figures")
@@ -340,17 +344,25 @@ def main():
         metavar='DPI',
         help="the dpi of the created figures")
     parser_plot.add_argument(
-        '--only-champion', action='store_true', default=True,
+        '--only-best', action='store_true', default=True,
         help="only plot results of the best solution; "
              "only useful for results containing multiple solutions")
     parser_plot.add_argument(
+        '--posterior-mode', type=str,
+        default='none', choices=['none', 'corner', 'separate'],
+        metavar='MODE',
+        help='select posterior plotting mode; '
+             'MODE=none: '
+             'do not create posterior plot, '
+             'MODE=corner: '
+             'create a single corner plot of all selected parameters, '
+             'MODE=separate: '
+             'create a separate corner plot for each parameter pair')
+    parser_plot.add_argument(
         '--posterior-params', type=str, nargs='+',
-        metavar='PARAMS',
+        metavar='PARAM',
         help="plot posterior only for the model parameters in the PARAMS list; "
              "if not defined, all model parameters will be used")
-    parser_plot.add_argument(
-        '--skip-posterior', action='store_false', default=False,
-        help="do not create posterior distribution figures")
 
     #
     # Parse arguments and run the appropriate task
@@ -402,8 +414,8 @@ def main():
     elif args.task == 'plot':
         import gbkfit.tasks.plot
         gbkfit.tasks.plot.plot(
-            args.result, args.format, args.dpi,
-            args.only_champion, args.posterior_params, args.skip_posterior)
+            args.result_dir, args.output_dir, args.format, args.dpi,
+            args.only_best, args.posterior_mode, args.posterior_params)
 
     _log.info("So long and thanks for all the fish!")
 

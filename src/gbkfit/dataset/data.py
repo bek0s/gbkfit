@@ -1,9 +1,15 @@
 
+import os.path
+
 import astropy.io.fits as fits
 import astropy.wcs
 import numpy as np
 
 from gbkfit.utils import miscutils, parseutils
+
+
+def _make_filename(filename, dump_full_path):
+    return filename if dump_full_path else os.path.basename(filename)
 
 
 def load_fits(filename):
@@ -75,7 +81,7 @@ class Data:
 
     def dump(
             self, filename_d=None, filename_m=None, filename_e=None,
-            overwrite=False):
+            dump_full_path=True, overwrite=False):
         dat = self.data()
         msk = self.mask()
         err = self.error()
@@ -89,13 +95,13 @@ class Data:
             rval=rval,
             rota=rota)
         if filename_d and dat is not None:
-            info['data'] = filename_d
+            info['data'] = _make_filename(filename_d, dump_full_path)
             dump_fits(filename_d, dat, step, rpix, rval, rota, overwrite)
         if filename_m and msk is not None:
-            info['mask'] = filename_m
+            info['mask'] = _make_filename(filename_m, dump_full_path)
             dump_fits(filename_m, msk, step, rpix, rval, rota, overwrite)
         if filename_e and err is not None:
-            info['error'] = filename_e
+            info['error'] = _make_filename(filename_e, dump_full_path)
             dump_fits(filename_e, err, step, rpix, rval, rota, overwrite)
         return info
 

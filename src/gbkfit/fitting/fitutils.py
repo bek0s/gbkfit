@@ -84,25 +84,43 @@ def prepare_param_initial_value_range_from_value_width_min_max(
 
 
 def residual_scalar(eparams, parameters, objective, callback):
-    params = parameters.evaluate(eparams)
-    print(params)
+    params = parameters.evaluate(eparams, check=True)
     residual = objective.residual_scalar(params)
+    print(f"residual scalar: {residual}, params: {params}")
     if callback:
         raise NotImplementedError()
     return residual
 
 
 def residual_vector(eparams, parameters, objective, callback):
-    params = parameters.evaluate(eparams)
-    print(params)
+    params = parameters.evaluate(eparams, check=True)
     residual = objective.residual_vector_h(params)
     residual = np.nan_to_num(np.concatenate(residual, casting='safe'))
+    print(f"residual vector: {residual}, params: {params}")
     if callback:
         raise NotImplementedError()
     return residual
 
 
-def log_likelihood_for_mcmc():
+def log_likelihood_with_prior(eparams):
     pass
 
 
+def log_likelihood_without_prior(eparams, parameters, objective):
+    params = parameters.evaluate(eparams, check=True)
+
+    foo = objective.log_likelihood(params)
+
+    return foo[0]
+
+
+def nested_sampling_prior_transform(eparams, parameters):
+    return parameters.priors().rescale(eparams)
+
+
+def reorder_log_likelihood(unsorted_loglikes, unsorted_samples, sorted_samples):
+    idxs = []
+    for i in range(len(unsorted_loglikes)):
+        idx = np.where(np.all(sorted_samples[i] == unsorted_samples, axis=1))[0]
+        idxs.append(idx[0])
+    return unsorted_loglikes[idxs]

@@ -9,7 +9,7 @@ import numpy.random as random
 
 from gbkfit.fitting import fitutils
 from gbkfit.fitting.core import FitParam, FitParams, Fitter
-from gbkfit.fitting.prior import prior_parser
+from gbkfit.fitting.prior import prior_parser, PriorDict
 from gbkfit.fitting.result import make_fitter_result
 from gbkfit.params import paramutils
 from gbkfit.utils import iterutils, parseutils
@@ -27,14 +27,14 @@ __all__ = [
 _log = logging.getLogger(__name__)
 
 
-def _log_probability_wrapper(eparams, objective, parameters):
+def log_probability(eparams, parameters, objective):
     params = parameters.evaluate(eparams)
-    log_prior = 1 #parameters.priors()
+    log_prior = parameters.priors().log_prob(eparams)
     if np.isinf(log_prior):
         return -np.inf, [np.nan, np.nan]
     else:
-        log_like = objective.log_likelihood(params)[0]
-        return log_like + log_prior, [log_like, log_prior]
+        log_like = sum(objective.log_likelihood(params))
+        return log_like + log_prior, log_like, log_prior
 
 
 class FitParamEmcee(FitParam):
@@ -105,6 +105,11 @@ class FitParamsEmcee(FitParams):
     def __init__(self, pdescs, parameters, conversions=None):
         super().__init__(
             pdescs, parameters, conversions, FitParamEmcee)
+        self._priors = PriorDict(
+            {k: v.prior() for k, v in self.infos().items()})
+
+    def priors(self):
+        return self._priors
 
 
 class FitterEmcee(Fitter):
@@ -158,9 +163,10 @@ class FitterEmcee(Fitter):
         moves = [(m.obj(), w) for m, w in self._moves] if self._moves else None
         # Create sampler
         sampler = emcee.EnsembleSampler(
-            self._nwalkers, ndim, log_prob_fn=_log_probability_wrapper,
-            moves=moves, args=[objective, parameters],
-            parameter_names=parameters.enames(False, False, True))
+            self._nwalkers, ndim, log_prob_fn=log_probability,
+            moves=moves, args=[parameters, objective],
+            parameter_names=parameters.enames(False, False, True),
+            blobs_dtype=[('log_like', float), ('log_prior', float)], backend=emcee.backends.HDFBackend('foo.h5'))
         # Calculate the starting positions of all walkers
         initial_values = np.empty((self._nwalkers, ndim))
         for i, (pname, pinfo) in enumerate(parameters.infos().items()):
@@ -169,14 +175,23 @@ class FitterEmcee(Fitter):
                 pinfo.initial_value_maximum(),
                 self._nwalkers)
         # Run mcmc sampling
-        result = sampler.run_mcmc(
+        sampler.run_mcmc(
             initial_values, nsteps=self._nsteps, tune=self._tune,
             thin_by=self._thin_by, progress=True)
 
-        print("initial values:", initial_values)
-        # print("result:", result)
-
-        samples = sampler.get_chain(discard=100, thin=1, flat=True)
-        print(samples)
-
+        print(sampler.acceptance_fraction)
+        print(sampler.get_autocorr_time())
         exit()
+
+        samples = sampler.get_chain(discard=0, thin=1, flat=True)
+        log_like = sampler.get_blobs(flat=True)['log_like']
+
+        posterior = dict(
+            samples=samples,
+            loglikes=log_like,
+        )
+
+        result = make_fitter_result(
+            objective, parameters, posterior, solutions=())
+
+        return result
