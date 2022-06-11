@@ -13,14 +13,13 @@ class DatasetImage(Dataset):
         return 'image'
 
     @classmethod
-    def load(cls, info):
+    def load(cls, info, **kwargs):
         names = ['image']
-        opts = _detail.load_dataset_common(cls, info, names)
+        opts = _detail.load_dataset_common(cls, info, names, **kwargs)
         return cls(**opts)
 
-    def dump(self, prefix='', dump_full_path=True):
-        return _detail.dump_dataset_common(
-            self, prefix=prefix, dump_full_path=dump_full_path)
+    def dump(self, **kwargs):
+        return _detail.dump_dataset_common(self, **kwargs)
 
     def __init__(self, image):
         # TODO: validate wcs

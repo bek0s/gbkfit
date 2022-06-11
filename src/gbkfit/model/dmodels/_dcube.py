@@ -207,9 +207,6 @@ class DCube:
 
     def evaluate(self, out_extra):
 
-
-
-
         if self._psf or self._lsf:
             self._dcube.convolve(
                 self._size_hi,

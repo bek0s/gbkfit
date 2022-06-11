@@ -131,15 +131,25 @@ class TypedParserSupport(ParserSupport, abc.ABC):
 
 def _prepare_args_and_kwargs(length, args, kwargs):
     args = list(args)
+    # Make sure all args and kwargs have the correct length or are None
+    bad_args_found = False
     for i, value in enumerate(args):
         if value is None:
             args[i] = length * [None]
+        elif not iterutils.is_sequence(value) or len(value) != length:
+            bad_args_found = True
+    bad_kwargs_found = False
     for key, value in kwargs.items():
         if value is None:
             kwargs[key] = length * [None]
-    if any([length != len(arg) for arg in args + list(kwargs.values())]):
+        elif not iterutils.is_sequence(value) or len(value) != length:
+            bad_kwargs_found = True
+    if bad_args_found or bad_kwargs_found:
         raise RuntimeError(
-            "all arguments must have the same length or be None")
+            f"when loading or dumping a list of items, "
+            f"args and kwargs must contain sequences with "
+            f"a length equal to the list length; "
+            f"list length: {length}; args: {tuple(args)}; kwargs: {kwargs}")
     nargs = len(args)
     args_list_shape = (length, nargs)
     args_list = iterutils.make_list(args_list_shape, [], True)
@@ -196,9 +206,6 @@ class Parser(abc.ABC):
         pass
 
     def dump_many(self, x, *args, **kwargs):
-        # print(args)
-        # print(kwargs)
-        # exit()
         args_list, kwargs_list = _prepare_args_and_kwargs(len(x), args, kwargs)
         results = []
         for item, item_args, item_kwargs in zip(x, args_list, kwargs_list):

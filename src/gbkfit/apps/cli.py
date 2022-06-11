@@ -333,7 +333,7 @@ def main():
         metavar='result-dir',
         help="the path of the output directory of a fitting run")
     parser_plot.add_argument(
-        '--output-dir', type=str, default=['figures'],
+        '--output-dir', type=str, default='result_figures',
         metavar='OUTPUT',
         help="the path of the directory to store the generated figures")
     parser_plot.add_argument(
@@ -353,9 +353,9 @@ def main():
         metavar='MODE',
         help='select posterior plotting mode; '
              'MODE=none: '
-             'do not create posterior plot, '
+             'do not create posterior plots, '
              'MODE=corner: '
-             'create a single corner plot of all selected parameters, '
+             'create a single corner plot for all selected parameters, '
              'MODE=separate: '
              'create a separate corner plot for each parameter pair')
     parser_plot.add_argument(

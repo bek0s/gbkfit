@@ -1,4 +1,5 @@
 
+import logging
 import os.path
 
 import astropy.io.fits as fits
@@ -8,65 +9,62 @@ import numpy as np
 from gbkfit.utils import miscutils, parseutils
 
 
-def _make_filename(filename, dump_full_path):
-    return filename if dump_full_path else os.path.basename(filename)
+__all__ = ['Data', 'data_parser']
 
 
-def load_fits(filename):
+_log = logging.getLogger(__name__)
+
+
+def _make_filename(filename, dump_path):
+    return filename if dump_path else os.path.basename(filename)
+
+
+def _load_fits(filename):
     data = fits.getdata(filename)
     header = fits.getheader(filename)
     wcs = astropy.wcs.WCS(header)
     return data, header, wcs
 
 
-def dump_fits(
-        filename, data, cdelt=None, crpix=None, crval=None, crota=None,
-        overwrite=False):
-    wcs = astropy.wcs.WCS(naxis=data.ndim, relax=False)
-    if cdelt is not None:
-        wcs.wcs.cdelt = cdelt
-    if crpix is not None:
-        wcs.wcs.crpix = crpix
-    if crval is not None:
-        wcs.wcs.crval = crval
-    if crota is not None:
-        crota = np.radians(crota)
-        wcs.wcs.pc = np.identity(data.ndim)
-        wcs.wcs.pc[0][0] = +np.cos(crota)
-        wcs.wcs.pc[0][1] = -np.sin(crota)
-        wcs.wcs.pc[1][0] = +np.sin(crota)
-        wcs.wcs.pc[1][1] = +np.cos(crota)
+def _dump_fits(filename, data, wcs, overwrite=False):
     fits.writeto(
         filename, data, header=wcs.to_header(),
         output_verify='exception', overwrite=overwrite, checksum=True)
 
 
+def _ensure_floating_or_float32(x, label):
+    result = x
+    if not np.issubdtype(x.dtype, np.floating):
+        _log.info(
+            f"{label} array is not of floating type; will convert to float32")
+        result = x.astype(np.float32)
+    return result
+
+
 class Data:
 
     @classmethod
-    def load(cls, info, step=None, rpix=None, rval=None, rota=None):
+    def load(cls, info, step=None, rpix=None, rval=None, rota=None, prefix=''):
         desc = parseutils.make_basic_desc(cls, 'data')
         opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
-        data_d, header_d, wcs_d = None, None, None
-        data_m, header_m, wcs_m = None, None, None
-        data_e, header_e, wcs_e = None, None, None
-        if 'data' in opts:
-            data_d, header_d, wcs_d = load_fits(opts['data'])
+        data_d, header_d, wcs_d = _load_fits(prefix + opts['data'])
+        data_m = None
+        data_e = None
         if 'mask' in opts:
-            data_m, header_m, wcs_m = load_fits(opts['mask'])
+            data_m = _load_fits(prefix + opts['mask'])[0]
         if 'error' in opts:
-            data_e, header_e, wcs_e = load_fits(opts['error'])
+            data_e = _load_fits(prefix + opts['error'])[0]
         # Local information has higher priority than global
         step = opts.get('step', step)
         rpix = opts.get('rpix', rpix)
         rval = opts.get('rval', rval)
         # If no information is provided, use fits header
         if step is None:
-            step = wcs_d.wcs.cdelt
+            step = wcs_d.wcs.cdelt  # noqa
         if rpix is None:
-            rpix = wcs_d.wcs.crpix
+            rpix = wcs_d.wcs.crpix  # noqa
         if rval is None:
-            rval = wcs_d.wcs.crval
+            rval = wcs_d.wcs.crval  # noqa
         # todo: deal with rotation (PC Matrix and CROTA (deprecated))
         # Build class arguments dict
         opts.update(dict(
@@ -80,8 +78,10 @@ class Data:
         return cls(**opts)
 
     def dump(
-            self, filename_d=None, filename_m=None, filename_e=None,
-            dump_full_path=True, overwrite=False):
+            self, filename_d, filename_m=None, filename_e=None,
+            dump_wcs=True, dump_path=True, overwrite=False):
+        info = dict()
+        # Some shortcuts
         dat = self.data()
         msk = self.mask()
         err = self.error()
@@ -89,20 +89,28 @@ class Data:
         rpix = self.rpix()
         rval = self.rval()
         rota = self.rota()
-        info = dict(
-            step=step,
-            rpix=rpix,
-            rval=rval,
-            rota=rota)
-        if filename_d and dat is not None:
-            info['data'] = _make_filename(filename_d, dump_full_path)
-            dump_fits(filename_d, dat, step, rpix, rval, rota, overwrite)
+        # Create WCS object
+        wcs = astropy.wcs.WCS(naxis=dat.ndim, relax=False)
+        wcs.wcs.cdelt = step    # noqa
+        wcs.wcs.crpix = rpix    # noqa
+        wcs.wcs.crval = rval    # noqa
+        wcs.wcs.pc = np.identity(dat.ndim)  # noqa
+        wcs.wcs.pc[0][0] = +np.cos(rota)    # noqa
+        wcs.wcs.pc[0][1] = -np.sin(rota)    # noqa
+        wcs.wcs.pc[1][0] = +np.sin(rota)    # noqa
+        wcs.wcs.pc[1][1] = +np.cos(rota)    # noqa
+        # Dump WCS as meta-data (if requested)
+        if dump_wcs:
+            info.update(dict(step=step, rpix=rpix, rval=rval, rota=rota))
+        # Dump data
+        info['data'] = filename_d = _make_filename(filename_d, dump_path)
+        _dump_fits(filename_d, dat, wcs, overwrite)
         if filename_m and msk is not None:
-            info['mask'] = _make_filename(filename_m, dump_full_path)
-            dump_fits(filename_m, msk, step, rpix, rval, rota, overwrite)
+            info['mask'] = filename_m = _make_filename(filename_m, dump_path)
+            _dump_fits(filename_m, msk, wcs, overwrite)
         if filename_e and err is not None:
-            info['error'] = _make_filename(filename_e, dump_full_path)
-            dump_fits(filename_e, err, step, rpix, rval, rota, overwrite)
+            info['error'] = filename_e = _make_filename(filename_e, dump_path)
+            _dump_fits(filename_e, err, wcs, overwrite)
         return info
 
     def __init__(
@@ -121,6 +129,9 @@ class Data:
         data = miscutils.to_native_byteorder(data)
         mask = miscutils.to_native_byteorder(mask)
         error = miscutils.to_native_byteorder(error)
+        data = _ensure_floating_or_float32(data, 'data')
+        mask = _ensure_floating_or_float32(mask, 'mask')
+        error = _ensure_floating_or_float32(error, 'error')
         if data.shape != mask.shape:
             raise RuntimeError(
                 f"data and mask have incompatible shapes "
@@ -150,7 +161,6 @@ class Data:
         mask[total_mask == 0] = 0
         mask[total_mask != 0] = 1
         error[total_mask == 0] = np.nan
-        rpix = (np.array(data.shape[::-1]) / 2 - 0.5).tolist()
         zero = (np.array(rval) - np.array(rpix) * np.array(step)).tolist()
         self._data = data.copy()
         self._mask = mask.copy().astype(data.dtype)

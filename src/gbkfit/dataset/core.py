@@ -5,6 +5,9 @@ import copy
 from gbkfit.utils import parseutils
 
 
+__all__ = ['Dataset', 'dataset_parser']
+
+
 def _ensure_same_attrib_value(data, method, class_desc):
     attr = {k: getattr(v, method)() for k, v in data.items()}
     if len(set(attr.values())) > 1:
@@ -20,6 +23,10 @@ class Dataset(parseutils.TypedParserSupport, abc.ABC):
         # At least one data item must be defined
         if not data:
             raise RuntimeError(f"{desc} contains no data items")
+
+        if all([v is None for v in data.values()]):
+            raise RuntimeError()
+
         # All data items must have the same properties
         _ensure_same_attrib_value(data, 'size', desc)
         _ensure_same_attrib_value(data, 'step', desc)

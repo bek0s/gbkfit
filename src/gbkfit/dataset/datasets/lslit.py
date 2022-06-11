@@ -13,15 +13,14 @@ class DatasetLSlit(Dataset):
         return 'lslit'
 
     @classmethod
-    def load(cls, info):
+    def load(cls, info, **kwargs):
         names = ['lslit']
-        opts = _detail.load_dataset_common(cls, info, names)
+        opts = _detail.load_dataset_common(cls, info, names, **kwargs)
         return cls(**opts)
 
-    def dump(self, prefix=''):
-        return _detail.dump_dataset_common(self, prefix)
+    def dump(self, **kwargs):
+        return _detail.dump_dataset_common(self, **kwargs)
 
     def __init__(self, lslit):
         # TODO: validate wcs
         super().__init__(dict(lslit=lslit))
-

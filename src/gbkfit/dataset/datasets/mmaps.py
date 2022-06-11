@@ -13,13 +13,13 @@ class DatasetMMaps(Dataset):
         return 'mmaps'
 
     @classmethod
-    def load(cls, info, *args, **kwargs):
+    def load(cls, info, **kwargs):
         names = [f'mmap{i}' for i in range(7)]
-        opts = _detail.load_dataset_common(cls, info, names)
+        opts = _detail.load_dataset_common(cls, info, names, **kwargs)
         return cls(**opts)
 
-    def dump(self, prefix=''):
-        return _detail.dump_dataset_common(self, prefix)
+    def dump(self, **kwargs):
+        return _detail.dump_dataset_common(self, **kwargs)
 
     def __init__(
             self,
@@ -29,4 +29,4 @@ class DatasetMMaps(Dataset):
         mmaps.pop('self')
         mmaps.pop('__class__')
         # TODO: validate wcs
-        super().__init__({k: v for k, v in mmaps.items() if v})
+        super().__init__({k: v for k, v in mmaps.items() if v is not None})

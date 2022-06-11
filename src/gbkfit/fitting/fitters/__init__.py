@@ -32,19 +32,19 @@ def _register_fitters():
         'gbkfit.fitting.fitters.lmfit.FitterLMFitLeastSquares',
         'gbkfit.fitting.fitters.lmfit.FitterLMFitNelderMead',
         # pymoo
-        'gbkfit.fitting.fitters.pymoo.FitterPymooCMAES',
         'gbkfit.fitting.fitters.pymoo.FitterPymooNSGA2',
         'gbkfit.fitting.fitters.pymoo.FitterPymooPSO',
         # pygmo
-        'gbkfit.fitting.fitters.pygmo.FitterPygmoDE',
-        'gbkfit.fitting.fitters.pygmo.FitterPygmoSADE',
-        'gbkfit.fitting.fitters.pygmo.FitterPygmoDE1220',
-        'gbkfit.fitting.fitters.pygmo.FitterPygmoPSO',
-        'gbkfit.fitting.fitters.pygmo.FitterPygmoCMAES',
-        'gbkfit.fitting.fitters.pygmo.FitterPygmoXNES',
-        'gbkfit.fitting.fitters.pygmo.FitterPygmoIpopt',
-        'gbkfit.fitting.fitters.pygmo.FitterPygmoNLopt',
-        'gbkfit.fitting.fitters.pygmo.FitterPygmoScipy']
+        # 'gbkfit.fitting.fitters.pygmo.FitterPygmoDE',
+        # 'gbkfit.fitting.fitters.pygmo.FitterPygmoSADE',
+        # 'gbkfit.fitting.fitters.pygmo.FitterPygmoDE1220',
+        # 'gbkfit.fitting.fitters.pygmo.FitterPygmoPSO',
+        # 'gbkfit.fitting.fitters.pygmo.FitterPygmoCMAES',
+        # 'gbkfit.fitting.fitters.pygmo.FitterPygmoXNES',
+        # 'gbkfit.fitting.fitters.pygmo.FitterPygmoIpopt',
+        # 'gbkfit.fitting.fitters.pygmo.FitterPygmoNLopt',
+        # 'gbkfit.fitting.fitters.pygmo.FitterPygmoScipy'
+    ]
     _register_factories(parser, factories)
 
 

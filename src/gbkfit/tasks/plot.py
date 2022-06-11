@@ -176,7 +176,7 @@ def plot_solution(result, solution, posterior_params, skip_posterior):
 
 def plot(
         result_dir, output_dir, format_, dpi,
-        only_champion, posterior_params, skip_posterior):
+        only_best, posterior_mode, posterior_params):
 
     result_dir = os.path.abspath(result_dir)
 
@@ -188,6 +188,9 @@ def plot(
 
     result = gbkfit.fitting.result.load_result(result_dir)
 
+    print(result)
+    exit()
+
     # Decide which solutions to plot
     solutions = result.solutions
 
@@ -196,11 +199,11 @@ def plot(
     # Create solution figures
     for i, solution in enumerate(solutions):
         figures |= plot_solution(
-            result, solution, posterior_params, skip_posterior)
+            result, solution, posterior_params, True)
 
     # Create global posterior figures
-    if result.posterior and not skip_posterior:
-        figures |= plot_posterior(result, result.posterior, posterior_params)
+    # if result.posterior and not skip_posterior:
+    #     figures |= plot_posterior(result, result.posterior, posterior_params)
 
     # Save figures
     for key, figure in figures.items():

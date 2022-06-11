@@ -1193,84 +1193,82 @@ class WPTraitConstantRange(WPTrait):
         Trait.__init__(self, angle=angle)
 
 
-# Trait parsers
-rpt_parser = parseutils.TypedParser(RPTrait)
-rht_parser = parseutils.TypedParser(RHTrait)
-vpt_parser = parseutils.TypedParser(VPTrait)
-vht_parser = parseutils.TypedParser(VHTrait)
-dpt_parser = parseutils.TypedParser(DPTrait)
-dht_parser = parseutils.TypedParser(DHTrait)
-zpt_parser = parseutils.TypedParser(ZPTrait)
-spt_parser = parseutils.TypedParser(SPTrait)
-wpt_parser = parseutils.TypedParser(WPTrait)
+# Density traits (polar) parser
+rpt_parser = parseutils.TypedParser(RPTrait, [
+    RPTraitUniform,
+    RPTraitExponential,
+    RPTraitGauss,
+    RPTraitGGauss,
+    RPTraitLorentz,
+    RPTraitMoffat,
+    RPTraitSech2,
+    RPTraitMixtureGGauss,
+    RPTraitMixtureMoffat,
+    RPTraitNWUniform,
+    RPTraitNWHarmonic,
+    RPTraitNWDistortion])
 
-# Density traits (polar)
-rpt_parser.register(RPTraitUniform)
-rpt_parser.register(RPTraitExponential)
-rpt_parser.register(RPTraitGauss)
-rpt_parser.register(RPTraitGGauss)
-rpt_parser.register(RPTraitLorentz)
-rpt_parser.register(RPTraitMoffat)
-rpt_parser.register(RPTraitSech2)
-rpt_parser.register(RPTraitMixtureGGauss)
-rpt_parser.register(RPTraitMixtureMoffat)
-rpt_parser.register(RPTraitNWUniform)
-rpt_parser.register(RPTraitNWHarmonic)
-rpt_parser.register(RPTraitNWDistortion)
+# Density traits (height) parser
+rht_parser = parseutils.TypedParser(RHTrait, [
+    RHTraitUniform,
+    RHTraitExponential,
+    RHTraitGauss,
+    RHTraitGGauss,
+    RHTraitLorentz,
+    RHTraitSech2])
 
-# Density traits (height)
-rht_parser.register(RHTraitUniform)
-rht_parser.register(RHTraitExponential)
-rht_parser.register(RHTraitGauss)
-rht_parser.register(RHTraitGGauss)
-rht_parser.register(RHTraitLorentz)
-rht_parser.register(RHTraitSech2)
+# Velocity traits (polar) parser
+vpt_parser = parseutils.TypedParser(VPTrait, [
+    VPTraitTanUniform,
+    VPTraitTanArctan,
+    VPTraitTanBoissier,
+    VPTraitTanEpinat,
+    VPTraitTanLRamp,
+    VPTraitTanTanh,
+    VPTraitTanPolyex,
+    VPTraitTanRix,
+    VPTraitNWTanUniform,
+    VPTraitNWTanHarmonic,
+    VPTraitNWRadUniform,
+    VPTraitNWRadHarmonic,
+    VPTraitNWVerUniform,
+    VPTraitNWVerHarmonic,
+    VPTraitNWLOSUniform,
+    VPTraitNWLOSHarmonic])
 
-# Velocity traits (polar)
-vpt_parser.register(VPTraitTanUniform)
-vpt_parser.register(VPTraitTanArctan)
-vpt_parser.register(VPTraitTanBoissier)
-vpt_parser.register(VPTraitTanEpinat)
-vpt_parser.register(VPTraitTanLRamp)
-vpt_parser.register(VPTraitTanTanh)
-vpt_parser.register(VPTraitTanPolyex)
-vpt_parser.register(VPTraitTanRix)
-vpt_parser.register(VPTraitNWTanUniform)
-vpt_parser.register(VPTraitNWTanHarmonic)
-vpt_parser.register(VPTraitNWRadUniform)
-vpt_parser.register(VPTraitNWRadHarmonic)
-vpt_parser.register(VPTraitNWVerUniform)
-vpt_parser.register(VPTraitNWVerHarmonic)
-vpt_parser.register(VPTraitNWLOSUniform)
-vpt_parser.register(VPTraitNWLOSHarmonic)
+# Velocity traits (height) parser
+vht_parser = parseutils.TypedParser(VHTrait, [
+    VHTraitOne])
 
-# Velocity traits (height)
-vht_parser.register(VHTraitOne)
+# Dispersion traits (polar) parser
+dpt_parser = parseutils.TypedParser(DPTrait, [
+    DPTraitUniform,
+    DPTraitExponential,
+    DPTraitGauss,
+    DPTraitGGauss,
+    DPTraitLorentz,
+    DPTraitMoffat,
+    DPTraitSech2,
+    DPTraitMixtureGGauss,
+    DPTraitMixtureMoffat,
+    DPTraitNWUniform,
+    DPTraitNWHarmonic,
+    DPTraitNWDistortion])
 
-# Dispersion traits (polar)
-dpt_parser.register(DPTraitUniform)
-dpt_parser.register(DPTraitExponential)
-dpt_parser.register(DPTraitGauss)
-dpt_parser.register(DPTraitGGauss)
-dpt_parser.register(DPTraitLorentz)
-dpt_parser.register(DPTraitMoffat)
-dpt_parser.register(DPTraitSech2)
-dpt_parser.register(DPTraitMixtureGGauss)
-dpt_parser.register(DPTraitMixtureMoffat)
-dpt_parser.register(DPTraitNWUniform)
-dpt_parser.register(DPTraitNWHarmonic)
-dpt_parser.register(DPTraitNWDistortion)
+# Dispersion traits (height) parser
+dht_parser = parseutils.TypedParser(DHTrait, [
+    DHTraitOne])
 
-# Dispersion traits (height)
-dht_parser.register(DHTraitOne)
+# Vertical distortion traits (polar) parser
+zpt_parser = parseutils.TypedParser(ZPTrait, [
+    ZPTraitNWUniform,
+    ZPTraitNWHarmonic])
 
-# Vertical distortion traits (polar)
-zpt_parser.register(ZPTraitNWUniform)
-zpt_parser.register(ZPTraitNWHarmonic)
+# Selection traits (polar) parser
+spt_parser = parseutils.TypedParser(SPTrait, [
+    SPTraitAzimuthalRange,
+    SPTraitNWAzimuthalRange])
 
-# Selection traits (polar)
-spt_parser.register(SPTraitAzimuthalRange)
-spt_parser.register(SPTraitNWAzimuthalRange)
-
-# Weight traits (polar)
-wpt_parser.register(WPTraitConstantRange)
+# Weight traits (polar) parser
+wpt_parser = parseutils.TypedParser(WPTrait, [
+    WPTraitConstantRange])

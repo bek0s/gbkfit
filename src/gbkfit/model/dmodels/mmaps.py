@@ -112,10 +112,11 @@ class DModelMMaps(DModel):
         gmodel = self._gmodel
         dcube = self._dcube
         mmaps = self._mmaps
-        driver.mem_fill(dcube.scratch_data(), 0)
+        driver.mem_fill(dcube.scratch_dcube(), 0)
         gmodel.evaluate_scube(
             driver, params,
-            dcube.scratch_data(),
+            dcube.scratch_dcube(),
+            dcube.scratch_wcube() if dcube.weights() else None,
             dcube.scratch_size(),
             dcube.scratch_step(),
             dcube.scratch_zero(),

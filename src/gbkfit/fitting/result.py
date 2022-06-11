@@ -50,7 +50,9 @@ def load_result(result_dir):
             "error while reading result directory; "
             "see preceding exception for additional information") from e
 
-    datasets = gbkfit.dataset.dataset_parser.load(result['datasets'])
+    prefix = os.path.join(result_dir, '')
+    datasets = gbkfit.dataset.dataset_parser.load(
+        result['datasets'], prefix=[prefix])
 
     # Discover solution directories
     solution_dirs = sorted([str(path) for path in pathlib.Path(
@@ -69,10 +71,11 @@ def load_result(result_dir):
     posterior = None
     extra = None
 
+    parameters = dict()
+    param_names = dict()
+
     return FitterResult(
-        datasets,
-        enames_all, enames_free, enames_free, enames_fixed, enames_varying,
-        sols, posterior, extra)
+        datasets, parameters, param_names, sols, posterior, extra)
 
 
 def dump_result(output_dir, result):
@@ -204,7 +207,7 @@ class FitterResult:
     parameters: dict
     param_names: dict
     solutions: tuple[FitterResultSolution]
-    posterior: FitterResultPosterior
+    posterior: None | FitterResultPosterior
     extra: dict
 
     @property

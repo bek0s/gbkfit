@@ -1,16 +1,17 @@
 
-from .image import DatasetImage
-from .lslit import DatasetLSlit
-from .mmaps import DatasetMMaps
-from .scube import DatasetSCube
+from .image import *
+from .lslit import *
+from .mmaps import *
+from .scube import *
 
 
 def _register_datasets():
     from gbkfit.dataset.core import dataset_parser as parser
-    parser.register(DatasetImage)
-    parser.register(DatasetLSlit)
-    parser.register(DatasetMMaps)
-    parser.register(DatasetSCube)
+    parser.register([
+        DatasetImage,
+        DatasetLSlit,
+        DatasetMMaps,
+        DatasetSCube])
 
 
 _register_datasets()
