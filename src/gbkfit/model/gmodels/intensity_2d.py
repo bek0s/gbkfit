@@ -45,13 +45,16 @@ class GModelIntensity2D(GModelImage):
     def params(self):
         return self._params
 
+    def is_weighted(self):
+        return True
+
     def _prepare(self, driver, wdata, size, dtype):
         self._driver = driver
         self._dtype = dtype
         self._size = size
         if wdata is not None:
             self._wcube = driver.mem_alloc_d(self._size[::-1], dtype)
-        self._backend = driver.backend().make_gmodel(dtype)
+        self._backend = driver.backend().gmodel(dtype)
 
     def evaluate_image(
             self, driver, params, image, wdata, size, step, zero, rota, dtype,

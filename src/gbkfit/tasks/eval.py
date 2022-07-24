@@ -1,4 +1,4 @@
-
+import copy
 import json
 import logging
 
@@ -15,7 +15,7 @@ import gbkfit.params
 import gbkfit.params.params
 import gbkfit.params.pdescs
 from gbkfit.params import paramutils
-from gbkfit.utils import iterutils
+from gbkfit.utils import iterutils, timeutils
 from . import _detail
 
 
@@ -211,7 +211,7 @@ def eval_(objective_type, config, profile=None):
             if objective_type == 'goodness':
                 objective.residual_nddata_h(params)
         _log.info("calculating timing statistics...")
-        time_stats = _detail.nativify(objective.time_stats())
+        time_stats = _detail.nativify(timeutils.get_time_stats())
         _log.info(pd.DataFrame.from_dict(time_stats, orient='index'))
         filename = 'gbkfit_result_time'
         time_stats |= dict(unit='milliseconds')

@@ -29,8 +29,8 @@ class DModelSCube(DModel):
 
     def __init__(
             self, size, step=(1, 1, 1), rpix=None, rval=(0, 0, 0), rota=0,
-            scale=(1, 1, 1), psf=None, lsf=None,
-            weights=False, weights_conv=False,
+            scale=(1, 1, 1), psf=None, lsf=None, weights=False,
+            mask_cutoff=None, mask_create=False, mask_apply=False,
             dtype=np.float32):
         super().__init__()
         if rpix is None:
@@ -42,7 +42,10 @@ class DModelSCube(DModel):
         scale = tuple(scale)
         self._dcube = _dcube.DCube(
             size, step, rpix, rval, rota, scale, psf, lsf,
-            weights, weights_conv, dtype)
+            weights, mask_cutoff, mask_create, mask_apply, dtype)
+
+    def keys(self):
+        return ['scube']
 
     def size(self):
         return self._dcube.size()
@@ -68,32 +71,28 @@ class DModelSCube(DModel):
     def dtype(self):
         return self._dcube.dtype()
 
-    def convw(self):
-        return self._dcube.convw()
-
-    def onames(self):
-        return ['scube']
-
     def _prepare_impl(self):
-        self._dcube.prepare(self._driver)
+        self._dcube.prepare(self._driver, self._gmodel.is_weighted())
 
-    def _evaluate_impl(self, params, out_dextra, out_gextra):
+    def _evaluate_impl(self, params, out_dmodel_extra, out_gmodel_extra):
         driver = self._driver
         gmodel = self._gmodel
         dcube = self._dcube
+        has_mcube = dcube.mcube() is not None
+        has_wcube = dcube.wcube() is not None
         driver.mem_fill(dcube.scratch_dcube(), 0)
         gmodel.evaluate_scube(
             driver, params,
             dcube.scratch_dcube(),
-            dcube.scratch_wcube() if dcube.weights() else None,
+            dcube.scratch_wcube(),
             dcube.scratch_size(),
             dcube.scratch_step(),
             dcube.scratch_zero(),
             dcube.rota(),
             dcube.dtype(),
-            out_gextra)
-        dcube.evaluate(out_dextra)
+            out_gmodel_extra)
+        dcube.evaluate(out_dmodel_extra)
         return dict(scube=dict(
             d=dcube.dcube(),
-            m=dcube.mcube(),
-            w=dcube.wcube() if True else None))
+            m=dcube.mcube() if has_mcube else None,
+            w=dcube.wcube() if has_wcube else None))

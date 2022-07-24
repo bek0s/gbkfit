@@ -19,7 +19,7 @@ void GModel<T>::make_wcube(
 };
 
 template<typename T> void
-GModelMCDisk<T>::evaluate(
+GModel<T>::mcdisk_evaluate(
         T cflux, int nclouds,
         Ptr ncloudscsum, int ncloudscsum_len,
         Ptr hasordint,
@@ -150,7 +150,7 @@ GModelMCDisk<T>::evaluate(
 }
 
 template<typename T> void
-GModelSMDisk<T>::evaluate(
+GModel<T>::smdisk_evaluate(
         bool loose, bool tilted,
         int nrnodes, Ptr rnodes,
         Ptr vsys,
@@ -273,10 +273,8 @@ GModelSMDisk<T>::evaluate(
             reinterpret_cast<T*>(ddata));
 }
 
-#define INSTANTIATE(T)               \
-    template struct GModel<T>;       \
-    template struct GModelMCDisk<T>; \
-    template struct GModelSMDisk<T>;
+#define INSTANTIATE(T)\
+    template struct GModel<T>;
 INSTANTIATE(float)
 #undef INSTANTIATE
 

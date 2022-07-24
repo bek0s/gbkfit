@@ -7,16 +7,21 @@ import gbkfit.psflsf
 from gbkfit.utils import parseutils
 
 
-def load_dmodel_common(cls, info, ndim, dataset, dataset_cls):
+def load_dmodel_common(cls, info, ndim, dataset, expected_dataset_cls):
     desc = parseutils.make_typed_desc(cls, 'dmodel')
     info = copy.deepcopy(info)
+    # Try to get information from the supplied dataset (optional)
     if dataset:
-        dataset_desc = parseutils.make_typed_desc(dataset_cls, 'dataset')
-        if not isinstance(dataset, dataset_cls):
+        if not isinstance(dataset, expected_dataset_cls):
+            expected_dataset_type_desc = parseutils.make_typed_desc(
+                expected_dataset_cls, 'dataset')
+            provided_dataset_type_desc = parseutils.make_typed_desc(
+                dataset.__class__, 'dataset')
             raise RuntimeError(
-                f"{desc} "
-                f"is not compatible with "
-                f"{dataset_desc}")
+                f"{desc} is not compatible with the supplied dataset "
+                f"and cannot be used to describe its properties; "
+                f"expected dataset type: {expected_dataset_type_desc}; "
+                f"provided dataset type: {provided_dataset_type_desc}")
         info.update(dict(
             size=dataset.size(),
             step=info.get('step', dataset.step()),
@@ -45,8 +50,7 @@ def dump_dmodel_common(dmodel):
         cval=dmodel.cval(),
         rota=dmodel.rota(),
         scale=dmodel.scale(),
-        dtype=dmodel.dtype(),
-        convw=dmodel.convw())
+        dtype=dmodel.dtype())
     if hasattr(dmodel, 'psf'):
         info.update(psf=gbkfit.psflsf.psf_parser.dump(dmodel.psf()))
     if hasattr(dmodel, 'lsf'):

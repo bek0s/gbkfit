@@ -15,6 +15,10 @@ def is_odd(x):
     return int(x) & 1
 
 
+is_even = np.vectorize(is_even)
+is_odd = np.vectorize(is_odd)
+
+
 def roundd_even(x):
     return 2 * np.floor(0.5 * x)
 
@@ -44,7 +48,7 @@ def roundu_multiple(x, multiple):
 
 
 def roundd_po2(x):
-    assert x > 1
+    assert x > 1, x
     return roundu_po2(x) // 2
 
 
@@ -53,6 +57,10 @@ def roundu_po2(x):
     while power < x:
         power *= 2
     return power
+
+
+roundd_po2 = np.vectorize(roundd_po2)
+roundu_po2 = np.vectorize(roundu_po2)
 
 
 def prod(x):

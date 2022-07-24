@@ -1,8 +1,8 @@
 
-from .image import DModelImage
-from .lslit import DModelLSlit
-from .mmaps import DModelMMaps
-from .scube import DModelSCube
+from .image import *
+from .lslit import *
+from .mmaps import *
+from .scube import *
 
 
 def _register_dmodels():

@@ -1,77 +1,34 @@
 #pragma once
 
 #include "gbkfit/host/common.hpp"
-#include "gbkfit/host/fftutils.hpp"
 
 namespace gbkfit::host {
 
 template<typename T>
-struct DModelDCube
+struct DModel
 {
-public:
-
-    DModelDCube(void);
-
-    ~DModelDCube();
-
     void
-    cleanup(void) const;
-
-    void
-    convolve(
-            std::array<int, 3> size,
-            Ptr scube_r, Ptr scube_c,
-            Ptr wcube_r, Ptr wcube_c,
-            Ptr psf3d_r, Ptr psf3d_c) const;
-
-    void
-    downscale(
+    dcube_downscale(
             std::array<int, 3> scale,
             std::array<int, 3> offset,
             std::array<int, 3> src_size,
             std::array<int, 3> dst_size,
-            Ptr src_cube, Ptr dst_cube) const;
+            Ptr src_dcube, Ptr dst_dcube) const;
 
     void
-    make_mask(
-            bool mask_spat, bool mask_spec, T mask_coef,
+    dcube_mask(
+            T cutoff, bool apply,
             std::array<int, 3> size,
-            Ptr cube, Ptr mask) const;
-
-private:
-
-    mutable std::array<int, 3> m_size;
-    mutable T* m_scube_r;
-    mutable T* m_wcube_r;
-    mutable T* m_psf3d_r;
-    mutable T* m_scube_c;
-    mutable T* m_wcube_c;
-    mutable T* m_psf3d_c;
-    mutable typename fftw3<T>::plan m_scube_plan_r2c;
-    mutable typename fftw3<T>::plan m_scube_plan_c2r;
-    mutable typename fftw3<T>::plan m_wcube_plan_r2c;
-    mutable typename fftw3<T>::plan m_wcube_plan_c2r;
-    mutable typename fftw3<T>::plan m_psf3d_plan_r2c;
-};
-
-template<typename T>
-struct DModelMMaps
-{
-public:
-
-    DModelMMaps(void) {}
-
-    ~DModelMMaps() {}
+            Ptr dcube_d, Ptr dcube_m, Ptr dcube_w) const;
 
     void
-    moments(std::array<int, 3> size,
+    mmaps_moments(
+            std::array<int, 3> size,
             std::array<T, 3> step,
             std::array<T, 3> zero,
-            Ptr scube,
-            Ptr mmaps,
-            Ptr masks,
-            Ptr orders,
-            int norders) const;
+            Ptr dcube_d, Ptr dcube_w,
+            T cutoff, int norders, Ptr orders,
+            Ptr mmaps_d, Ptr mmaps_m, Ptr mmaps_w) const;
 };
 
 } // namespace gbkfit::host

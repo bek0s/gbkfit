@@ -1,79 +1,27 @@
 #pragma once
 
-#include <curand_kernel.h>
-#include <thrust/random.h>
+#include <cmath>
+#include <iostream>
 
-#include <gbkfit/dmodel/dmodels.hpp>
 #include <gbkfit/gmodel/disks.hpp>
+#include <gbkfit/dmodel/dmodels.hpp>
 #include <gbkfit/gmodel/gmodels.hpp>
+
 #include "gbkfit/cuda/fftutils.hpp"
-
-namespace gbkfit {
-
-template<typename T>
-struct RNG1
-{
-    __device__
-    RNG1(unsigned int tid) {
-        curand_init(tid, tid, 0, &state);
-    }
-
-    __device__ T
-    operator ()(void) {
-        return curand_uniform(&state);
-    }
-
-    curandState state;
-};
-
-template<typename T>
-struct RNG
-{
-    __device__
-    RNG(unsigned int tid)
-        : gen(tid)
-        , dis(0, 1) { gen.discard(tid); }
-
-    __device__ T
-    operator ()(void) {
-        return dis(gen);
-    }
-
-    thrust::default_random_engine gen;
-    thrust::uniform_real_distribution<T> dis;
-};
-
-} // namespace gbkfit
+#include "gbkfit/cuda/random.hpp"
 
 namespace gbkfit::cuda::kernels {
 
-constexpr void
-index_1d_to_3d(
-        int& out_x, int& out_y, int& out_z,
-        int idx, int size_x, int size_y)
+template<typename T>
+inline void atomic_add(T* addr, T val)
 {
-    out_z = idx/(size_x*size_y);
-    idx -= out_z*size_x*size_y;
-    out_y = idx/size_x;
-    idx -= out_y*size_x;
-    out_x = idx;
+    atomicAdd(addr, val);
 }
-
-constexpr void
-index_1d_to_2d(
-        int& out_x, int& out_y,
-        int idx, int size_x)
-{
-    out_y = idx/size_x;
-    idx -= out_y*size_x;
-    out_x = idx;
-}
-
 
 template<typename T> __global__ void
-dmodel_dcube_complex_multiply_and_scale(
-        typename cufft<T>::complex* ary1,
-        typename cufft<T>::complex* ary2,
+math_complex_multiply_and_scale(
+        typename cufft<T>::complex* arr1,
+        typename cufft<T>::complex* arr2,
         int n, T scale)
 {
     unsigned int tid = blockIdx.x * blockDim.x + threadIdx.x;
@@ -82,15 +30,14 @@ dmodel_dcube_complex_multiply_and_scale(
 
     typename cufft<T>::complex a, b;
 
-    a.x = ary1[tid].x;
-    a.y = ary1[tid].y;
-    b.x = ary2[tid % n].x;
-    b.y = ary2[tid % n].y;
+    a.x = arr1[tid].x;
+    a.y = arr1[tid].y;
+    b.x = arr2[tid % n].x;
+    b.y = arr2[tid % n].y;
 
-    ary1[tid].x = (a.x*b.x-a.y*b.y)*scale;
-    ary1[tid].y = (a.x*b.y+a.y*b.x)*scale;
+    arr1[tid].x = (a.x*b.x-a.y*b.y)*scale;
+    arr1[tid].y = (a.x*b.y+a.y*b.x)*scale;
 }
-
 
 template<typename T> __global__ void
 dmodel_dcube_downscale(
@@ -100,158 +47,42 @@ dmodel_dcube_downscale(
         int dst_size_x, int dst_size_y, int dst_size_z,
         const T* src_cube, T* dst_cube)
 {
-    int n = dst_size_x * dst_size_y * dst_size_z;
-    int tid = blockIdx.x * blockDim.x + threadIdx.x;
-    if (tid >= n)
-        return;
-
-    const T nfactor = T{1} / (scale_x * scale_y * scale_z);
+    // Each thread is assigned a 3d position in the dst dcube
+    const int nthreads = dst_size_x * dst_size_y * dst_size_z;
+    const int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (tid >= nthreads) return;
 
     int x, y, z;
     index_1d_to_3d(x, y, z, tid, dst_size_x, dst_size_y);
 
-    // Src cube 3d index
-    int nx = offset_x + x * scale_x;
-    int ny = offset_y + y * scale_y;
-    int nz = offset_z + z * scale_z;
-
-    // Calculate average value under the current position
-    T sum = 0;
-    for(int dsz = 0; dsz < scale_z; ++dsz)
-    {
-    for(int dsy = 0; dsy < scale_y; ++dsy)
-    {
-    for(int dsx = 0; dsx < scale_x; ++dsx)
-    {
-        int idx = (nx + dsx)
-                + (ny + dsy) * src_size_x
-                + (nz + dsz) * src_size_x * src_size_y;
-
-        sum += src_cube[idx];
-    }
-    }
-    }
-
-    // Dst cube 1d index
-    int idx = x
-            + y * dst_size_x
-            + z * dst_size_x * dst_size_y;
-
-    dst_cube[idx] = sum * nfactor;
+    gbkfit::dmodel_dcube_downscale(
+            x, y, z,
+            scale_x, scale_y, scale_z,
+            offset_x, offset_y, offset_z,
+            src_size_x, src_size_y, src_size_z,
+            dst_size_x, dst_size_y, dst_size_z,
+            src_cube, dst_cube);
 }
-
-template<typename T> __global__ void
-objective_count_pixels(const T* data, const T* model, int size, int* counts)
-{
-    const int nworkers = 1024 * 8;
-
-    int n = size;
-    int tid = blockIdx.x * blockDim.x + threadIdx.x;
-    if (tid >= nworkers)
-        return;
-
-    int count_dat = 0;
-    int count_mdl = 0;
-    int count_bth = 0;
-
-    for (int i = tid; i < size; i += nworkers)
-    {
-        const T dat = data[i];
-        const T mdl = model[i];
-        count_dat += dat && !mdl;
-        count_mdl += mdl && !dat;
-        count_bth += dat && mdl;
-    }
-
-    if (count_dat) {
-        atomicAdd(&counts[0], count_dat);
-    }
-    if (count_mdl) {
-        atomicAdd(&counts[1], count_mdl);
-    }
-    if (count_bth) {
-        atomicAdd(&counts[2], count_bth);
-    }
-}
-
-
-template<typename T> __device__ void
-evaluate_image(T* image, int x, int y, T rvalue, int spat_size_x)
-{
-    int idx = x + y * spat_size_x;
-    atomicAdd(&image[idx], rvalue);
-}
-
-template<typename T> __device__ void
-evaluate_scube(
-        T* scube, int x, int y, T rvalue, T vvalue, T dvalue,
-        int spat_size_x, int spat_size_y,
-        int spec_size,
-        T spec_step,
-        T spec_zero)
-{
-    // Calculate a spectral range that encloses most of the flux.
-    T zmin = vvalue - dvalue * 3;
-    T zmax = vvalue + dvalue * 3;
-    int zmin_idx = fmax<T>(std::rint(
-            (zmin - spec_zero)/spec_step), 0);
-    int zmax_idx = fmin<T>(std::rint(
-            (zmax - spec_zero)/spec_step), spec_size - 1);
-
-    // Evaluate the spectral line within the range specified above
-    // Evaluating only within the range results in huge speed increase
-    for (int z = zmin_idx; z <= zmax_idx; ++z)
-    {
-        int idx = x
-                + y * spat_size_x
-                + z * spat_size_x * spat_size_y;
-        T zvel = spec_zero + z * spec_step;
-        T flux = rvalue * gauss_1d_pdf<T>(zvel, vvalue, dvalue);// * spec_step;
-    //  scube[idx] += flux;
-        atomicAdd(&scube[idx], flux);
-    }
-}
-
 
 template<typename T> __global__ void
 dmodel_dcube_make_mask(
-        bool mask_spat, bool mask_spec, T mask_coef,
-        int size_x, int size_y, int size_z, T* cube, T* mask)
+        T cutoff, bool apply,
+        int size_x, int size_y, int size_z,
+        T* dcube_d, T* dcube_m, T* dcube_w)
 {
-    int n = size_x * size_y;
-    int tid = blockIdx.x * blockDim.x + threadIdx.x;
-    if (tid >= n)
-        return;
+    // Each thread is assigned a 3d position in the dcube
+    const int nthreads = size_x * size_y;
+    const int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (tid >= nthreads) return;
 
-    int x, y;
-    index_1d_to_2d(x, y, tid, size_x);
+    int x, y, z;
+    index_1d_to_3d(x, y, z, tid, size_x, size_y);
 
-    T sum = 0;
-
-    for(int z = 0; z < size_z; ++z)
-    {
-        int idx = x + y * size_x + z * size_x * size_y;
-        T val = std::fabs(cube[idx]);
-        sum += val;
-    }
-
-    for(int z = 0; z < size_z; ++z)
-    {
-        int idx = x + y * size_x + z * size_x * size_y;
-        T val = std::fabs(cube[idx]);
-        T msk = 1;
-        if (val < mask_coef)
-        {
-            cube[idx] = 0;
-            msk *= !mask_spec;
-        }
-        if (sum < mask_coef * size_z)
-        {
-            cube[idx] = 0;
-            msk *= !mask_spat;
-        }
-        mask[idx] = msk;
-    }
+    gbkfit::dmodel_dcube_mask(
+            x, y, z,
+            cutoff, apply,
+            size_x, size_y, size_z,
+            dcube_d, dcube_m, dcube_w);
 }
 
 template<typename T> __global__ void
@@ -259,44 +90,55 @@ dcube_moments(
         int size_x, int size_y, int size_z,
         T step_x, T step_y, T step_z,
         T zero_x, T zero_y, T zero_z,
-        const T* scube,
-        T* mmaps, T* masks, const int* orders, int norders)
+        const T* dcube_d,
+        const T* dcube_w,
+        T cutoff,
+        int norders,
+        const int* orders,
+        T* mmaps_d,
+        T* mmaps_m,
+        T* mmaps_w)
 {
-    int n = size_x * size_y;
-
-    int tid = blockIdx.x * blockDim.x + threadIdx.x;
-    if (tid >= n)
-        return;
+    // Each thread is assigned a 2d spatial position
+    const int nthreads = size_x * size_y;
+    const int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (tid >= nthreads) return;
 
     int x, y;
     index_1d_to_2d(x, y, tid, size_x);
 
-    gbkfit::moments(x, y,
+    gbkfit::dmodel_mmaps_moments(
+            x, y,
             size_x, size_y, size_z,
             step_x, step_y, step_z,
             zero_x, zero_y, zero_z,
-            scube,
-            mmaps, masks, orders, norders);
+            dcube_d, dcube_w,
+            cutoff, norders, orders,
+            mmaps_d, mmaps_w, mmaps_m);
 }
 
 template<typename T> __global__ void
 gmodel_wcube(
         int spat_size_x, int spat_size_y, int spat_size_z,
-        int spec_size,
-        T* src, T* dst)
+        int spec_size_z,
+        const T* spat_cube,
+        T* spec_cube)
 {
-    int n = spat_size_x * spat_size_y;
-
-    int tid = blockIdx.x * blockDim.x + threadIdx.x;
-    if (tid >= n) return;
+    // Each thread is assigned a 2d spatial position
+    const int nthreads = spat_size_x * spat_size_y;
+    const int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (tid >= nthreads) return;
 
     int x, y;
     index_1d_to_2d(x, y, tid, spat_size_x);
 
-    gmodel_weight_scube_pixel(
-            x, y, spat_size_x, spat_size_y, spat_size_z, spec_size, src, dst);
+    gbkfit::gmodel_wcube_pixel(
+            x, y,
+            spat_size_x, spat_size_y, spat_size_z,
+            spec_size_z,
+            spat_cube,
+            spec_cube);
 }
-
 
 template<typename T> __global__ void
 gmodel_smdisk_evaluate(
@@ -347,11 +189,10 @@ gmodel_smdisk_evaluate(
         T* image, T* scube, T* rcube, T* wcube,
         T* rdata, T* vdata, T* ddata)
 {
-    int n = spat_size_x * spat_size_y * spat_size_z;
-
-    int tid = blockIdx.x * blockDim.x + threadIdx.x;
-    if (tid >= n)
-        return;
+    // Each thread is assigned a 3d spatial position
+    const int nthreads = spat_size_x * spat_size_y * spat_size_z;
+    const int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (tid >= nthreads) return;
 
     int x, y;
     index_1d_to_2d(x, y, tid, spat_size_x);
@@ -412,13 +253,13 @@ gmodel_smdisk_evaluate(
         }
 
         if (image) {
-            evaluate_image(
+            gbkfit::gmodel_image_evaluate<atomic_add<T>>(
                     image, x, y, bvalue,
                     spat_size_x);
         }
 
         if (scube) {
-            evaluate_scube(
+            gbkfit::gmodel_scube_evaluate<atomic_add<T>>(
                     scube, x, y, bvalue, vvalue, dvalue,
                     spat_size_x, spat_size_y,
                     spec_size,
@@ -426,26 +267,20 @@ gmodel_smdisk_evaluate(
                     spec_zero);
         }
 
-        int idx = x
-                + y * spat_size_x
-                + z * spat_size_x * spat_size_y;
+        int idx = index_3d_to_1d(x, y, z, spat_size_x, spat_size_y);
 
         if (rcube) {
             rcube[idx] += bvalue;
         }
-
         if (wcube) {
             wcube[idx] = wvalue;
         }
-
         if (rdata) {
             rdata[idx] = bvalue;
         }
-
         if (vdata) {
             vdata[idx] = vvalue;
         }
-
         if (ddata) {
             ddata[idx] = dvalue;
         }
@@ -504,9 +339,10 @@ gmodel_mcdisk_evaluate(
         T* image, T* scube, T* rcube, T* wcube,
         T* rdata, T* vdata, T* ddata)
 {
-    unsigned int tid = blockIdx.x * blockDim.x + threadIdx.x;
-    if (tid >= nclouds)
-        return;
+    // Each thread is assigned a cloud
+    const int nthreads = nclouds;
+    const int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (tid >= nthreads) return;
 
     int x, y, z;
     T bvalue, vvalue, dvalue, wvalue = 1;
@@ -568,13 +404,13 @@ gmodel_mcdisk_evaluate(
     }
 
     if (image) {
-        evaluate_image(
+        gbkfit::gmodel_image_evaluate<atomic_add<T>>(
                 image, x, y, bvalue,
                 spat_size_x);
     }
 
     if (scube) {
-        evaluate_scube(
+        gbkfit::gmodel_scube_evaluate<atomic_add<T>>(
                 scube, x, y, bvalue, vvalue, dvalue,
                 spat_size_x, spat_size_y,
                 spec_size,
@@ -582,33 +418,64 @@ gmodel_mcdisk_evaluate(
                 spec_zero);
     }
 
-    int idx = x
-            + y * spat_size_x
-            + z * spat_size_x * spat_size_y;
+    int idx = index_3d_to_1d(x, y, z, spat_size_x, spat_size_y);
 
     if (rcube) {
         #pragma omp atomic update
         rcube[idx] += bvalue;
     }
-
     if (wcube) {
         #pragma omp atomic write
         wcube[idx] = wvalue;
     }
-
     if (rdata) {
         #pragma omp atomic update
         rdata[idx] += bvalue;
     }
-
     if (vdata) {
         #pragma omp atomic write
-        vdata[idx] = vvalue;
+        vdata[idx] = vvalue; // for overlapping clouds, keep the last velocity
     }
-
     if (ddata) {
         #pragma omp atomic write
-        ddata[idx] = dvalue;
+        ddata[idx] = dvalue; // for overlapping clouds, keep the last dispersion
+    }
+}
+
+template<typename T> __global__ void
+objective_count_pixels(
+        const T* data1, const T* data2, int size, T epsilon, int* counts)
+{
+    // Instead of using as many threads as possible, use a fixed number of them
+    // This way we do not get too much overhead from the atomic adds
+    // Revise this decision in the future
+    // Each thread is assigned size/nthreads positions in data1 and data2
+    const int nthreads = 1024 * 4;
+    const int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (tid >= nthreads)
+        return;
+
+    int count_data1 = 0;
+    int count_data2 = 0;
+    int count_both = 0;
+
+    for (int i = tid; i < size; i += nthreads)
+    {
+        const bool has_data1 = std::abs(data1[i]) > epsilon;
+        const bool has_data2 = std::abs(data2[i]) > epsilon;
+        count_data1 += has_data1 && !has_data2;
+        count_data2 += !has_data1 && has_data2;
+        count_both += has_data1 && has_data2;
+    }
+
+    if (count_data1) {
+        atomicAdd(&counts[0], count_data1);
+    }
+    if (count_data2) {
+        atomicAdd(&counts[1], count_data2);
+    }
+    if (count_both) {
+        atomicAdd(&counts[2], count_both);
     }
 }
 

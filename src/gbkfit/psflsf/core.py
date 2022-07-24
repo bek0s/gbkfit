@@ -5,21 +5,7 @@ import gbkfit.math
 from gbkfit.utils import parseutils
 
 
-class LSF(abc.ABC):
-
-    @staticmethod
-    @abc.abstractmethod
-    def type():
-        pass
-
-    @classmethod
-    @abc.abstractmethod
-    def load(cls, info):
-        pass
-
-    @abc.abstractmethod
-    def dump(self, *args, **kwargs):
-        pass
+class LSF(parseutils.TypedParserSupport, abc.ABC):
 
     def size(self, step, offset=0):
         size = self._size_impl(step)
@@ -42,21 +28,7 @@ class LSF(abc.ABC):
         pass
 
 
-class PSF(abc.ABC):
-
-    @staticmethod
-    @abc.abstractmethod
-    def type():
-        pass
-
-    @classmethod
-    @abc.abstractmethod
-    def load(cls, info):
-        pass
-
-    @abc.abstractmethod
-    def dump(self, *args, **kwargs):
-        pass
+class PSF(parseutils.TypedParserSupport, abc.ABC):
 
     def size(self, step, offset=(0, 0)):
         size = self._size_impl(step)

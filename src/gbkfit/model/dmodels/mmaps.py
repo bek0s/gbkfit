@@ -1,13 +1,19 @@
 
+import logging
+
 import numpy as np
 
 import gbkfit.math
 from gbkfit.dataset.datasets import DatasetMMaps
 from gbkfit.model.core import DModel, GModelSCube
+from gbkfit.utils import parseutils
 from . import _dcube, _detail
 
 
 __all__ = ['DModelMMaps']
+
+
+_log = logging.getLogger(__name__)
 
 
 class DModelMMaps(DModel):
@@ -31,7 +37,7 @@ class DModelMMaps(DModel):
     def __init__(
             self, size, step=(1, 1), rpix=None, rval=(0, 0), rota=0,
             scale=(1, 1), psf=None, lsf=None,
-            weights=False, weights_conv=False,
+            mask_cutoff=1e-6,
             orders=(0, 1, 2),
             dtype=np.float32):
         super().__init__()
@@ -55,14 +61,34 @@ class DModelMMaps(DModel):
             rval = rval + (0,)
         if len(scale) == 2:
             scale = scale + (1,)
+        if mask_cutoff is None:
+            desc = parseutils.make_typed_desc(self.__class__, 'dmodel')
+            raise RuntimeError(
+                f"masking cannot be disabled for {desc}; "
+                f"set the mask_cutoff to a value greater or equal to 0")
+        if (psf or lsf) and mask_cutoff == 0:
+            _log.warning(
+                "mask_cutoff is set to 0 either by default or by choice; "
+                "fft-based convolution will be performed on the model "
+                "because psf and/or lsf were provided; "
+                "fft-based convolution can result in noise in the model; "
+                "extracting moments from noisy low-SNR spectra can be "
+                "erroneous and generate artefacts on the resulting maps; "
+                "because of this it is highly recommended to enable masking "
+                "by providing a value for mask_cutoff greater than 0")
         self._orders = orders
         self._dcube = _dcube.DCube(
             size, step, rpix, rval, rota, scale, psf, lsf,
-            weights, weights_conv, dtype)
+            False, None, False, False, dtype)
         self._mmaps = None
-        self._s_mmap_data = None
-        self._s_mmap_mask = None
-        self._d_mmap_order = None
+        self._mmaps_o = None
+        self._mmaps_d = None
+        self._mmaps_m = None
+        self._mmaps_w = None
+        self._mask_cutoff = mask_cutoff
+
+    def keys(self):
+        return tuple([f'mmap{i}' for i in self._orders])
 
     def size(self):
         return self._dcube.size()[:2]
@@ -91,50 +117,61 @@ class DModelMMaps(DModel):
     def dtype(self):
         return self._dcube.dtype()
 
-    def onames(self):
-        return tuple([f'mmap{i}' for i in self._orders])
-
     def _prepare_impl(self):
-        # Allocate buffers for moment map data
-        shape = (self.size() + (len(self.orders()),))[::-1]
-        self._s_mmap_data = self._driver.mem_alloc_d(shape, self.dtype())
-        self._s_mmap_mask = self._driver.mem_alloc_d(self.size()[::-1], self.dtype())
-        self._driver.mem_fill(self._s_mmap_data, np.nan)
-        self._d_mmap_order = self._driver.mem_copy_h2d(
-            np.array(self.orders(), np.int32))
+        # Some shortcuts
+        driver = self._driver
+        dtype = self.dtype()
+        orders = self.orders()
+        # Calculate data sizes
+        mmaps_size_all = self.size() + (len(orders),)
+        mmaps_size_one = self.size()
+        # Allocate memory
+        self._mmaps_o = driver.mem_alloc_d(len(orders), np.int32)
+        self._mmaps_d = driver.mem_alloc_d(mmaps_size_all[::-1], dtype)
+        self._mmaps_m = driver.mem_alloc_d(mmaps_size_one[::-1], dtype)
+        self._mmaps_w = driver.mem_alloc_d(mmaps_size_one[::-1], dtype)
+        # Initialize memory
+        driver.mem_copy_h2d(np.array(orders, dtype=np.int32), self._mmaps_o)
+        driver.mem_fill(self._mmaps_d, np.nan)
+        driver.mem_fill(self._mmaps_m, 0)
+        driver.mem_fill(self._mmaps_w, np.nan)
         # Prepare dcube
-        self._dcube.prepare(self._driver)
-        # Create moment maps backend
-        self._mmaps = self._driver.backend().make_dmodel_mmaps(self.dtype())
+        self._dcube.prepare(driver, self._gmodel.is_weighted())
+        # Create backend
+        self._backend = driver.backends().dmodel(dtype)
 
-    def _evaluate_impl(self, params, out_dextra, out_gextra):
+    def _evaluate_impl(self, params, out_dmodel_extra, out_gmodel_extra):
         driver = self._driver
         gmodel = self._gmodel
         dcube = self._dcube
-        mmaps = self._mmaps
+        backend = self._backend
         driver.mem_fill(dcube.scratch_dcube(), 0)
         gmodel.evaluate_scube(
             driver, params,
             dcube.scratch_dcube(),
-            dcube.scratch_wcube() if dcube.weights() else None,
+            dcube.scratch_wcube(),
             dcube.scratch_size(),
             dcube.scratch_step(),
             dcube.scratch_zero(),
             dcube.rota(),
             dcube.dtype(),
-            out_gextra)
-        dcube.evaluate(out_dextra)
-        mmaps.moments(
-            self._dcube.size(),
-            self._dcube.step(),
-            self._dcube.zero(),
-            self._dcube.data(),
-            self._s_mmap_data,
-            self._s_mmap_mask,
-            self._d_mmap_order)
+            out_gmodel_extra)
+        dcube.evaluate(out_dmodel_extra)
+        backend.moments(
+            dcube.size(),
+            dcube.step(),
+            dcube.zero(),
+            dcube.dcube(),
+            dcube.wcube(),
+            self._mask_cutoff,
+            self._mmaps_o,
+            self._mmaps_d,
+            self._mmaps_w,
+            self._mmaps_m)
         out = dict()
-        for i, oname in enumerate(self.onames()):
-            out[oname] = dict(
-                data=self._s_mmap_data[i, :, :],
-                mask=self._s_mmap_mask)
+        for i, key in enumerate(self.keys()):
+            out[key] = dict(
+                d=self._mmaps_d[i, :, :],
+                m=self._mmaps_m,
+                w=self._mmaps_w)
         return out

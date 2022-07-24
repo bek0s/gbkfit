@@ -13,13 +13,9 @@ struct GModel
             int spec_size,
             Ptr spat_data,
             Ptr spec_data) const;
-};
 
-template<typename T>
-struct GModelMCDisk
-{
     void
-    evaluate(
+    mcdisk_evaluate(
             T cflux, int nclouds,
             Ptr ncloudscsum, int ncloudscsum_len,
             Ptr hasordint,
@@ -69,13 +65,9 @@ struct GModelMCDisk
             T spec_zero,
             Ptr image, Ptr scube, Ptr rcube, Ptr wcube,
             Ptr rdata, Ptr vdata, Ptr ddata) const;
-};
 
-template<typename T>
-struct GModelSMDisk
-{
     void
-    evaluate(
+    smdisk_evaluate(
             bool loose, bool tilted,
             int nrnodes, Ptr rnodes,
             Ptr vsys,
@@ -121,7 +113,7 @@ struct GModelSMDisk
             T spec_step,
             T spec_zero,
             Ptr image, Ptr scube, Ptr rcube, Ptr wcube,
-            Ptr bdata, Ptr vdata, Ptr ddata) const;
+            Ptr rdata, Ptr vdata, Ptr ddata) const;
 };
 
 } // namespace gbkfit::cuda

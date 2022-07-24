@@ -1,35 +1,37 @@
 
-import numpy as np
+import logging
 
 import gbkfit.math
 
-
-def _pix2world(pos, step, rpix, rval, rota):
-    pos = [
-        pos[0] - rpix[0],
-        pos[1] - rpix[1],
-        pos[2] - rpix[2]]
-    pos[0], pos[1] = gbkfit.math.transform_lh_rotate_z(pos[0], pos[1], rota)
-    pos = [
-        (pos[0] - rpix[0]) * step[0] + rval[0],
-        pos[1] * step[1] + rval[1],
-        pos[2] * step[2] + rval[2]]
-    return pos
+from gbkfit.psflsf.lsfs import LSFPoint
+from gbkfit.psflsf.psfs import PSFPoint
 
 
-def _fft_size(size):
-    mul_size = 16
-    new_size = gbkfit.math.roundu_po2(size)
-    if new_size > mul_size:
-        new_size = gbkfit.math.roundu_multiple(size, mul_size)
-    return int(new_size)
+_log = logging.getLogger(__name__)
 
 
 class DCube:
 
     def __init__(
             self, size, step, rpix, rval, rota, scale, psf, lsf,
-            weights, weights_conv, dtype):
+            weights, mask_cutoff, mask_create, mask_apply, dtype):
+
+        if mask_cutoff is None and mask_apply:
+            raise RuntimeError(
+                "masking is disabled (i.e., mask_cutoff is None), "
+                "mask_apply can't be True")
+
+        if mask_cutoff is not None and not (mask_create or mask_apply):
+            raise RuntimeError(
+                "masking is enabled (i.e., mask_cutoff >= 0), "
+                "mask_create or mask_apply must be True")
+
+        if mask_cutoff is None and mask_create:
+            _log.warning(
+                "masking is disabled (i.e., mask_cutoff is None) but "
+                "mask creation is enabled (i.e., mask_create is True); "
+                "this will result in an unused mask; "
+                "are you sure you have compute cycles and memory to waste?")
 
         # Low-res cube zero pixel center position
         zero = (
@@ -37,67 +39,13 @@ class DCube:
             rval[1] - rpix[1] * step[1],
             rval[2] - rpix[2] * step[2])
 
-        # High-res cube step
-        step_hi = (
-            step[0] / scale[0],
-            step[1] / scale[1],
-            step[2] / scale[2])
-
-        # High-res psf/lsf size
-        psf_size_hi = psf.size(step_hi[:2]) if psf else (1, 1)
-        lsf_size_hi = lsf.size(step_hi[2]) if lsf else 1
-
-        # High-res cube left edge size (left padding)
-        edge_hi = (
-            psf_size_hi[0] // 2,
-            psf_size_hi[1] // 2,
-            lsf_size_hi // 2)
-
-        # High-res cube size
-        size_hi = (
-            size[0] * scale[0] + psf_size_hi[0] - 1,
-            size[1] * scale[1] + psf_size_hi[1] - 1,
-            size[2] * scale[2] + lsf_size_hi - 1)
-
-        # If we need to perform fft-based convolution,
-        # adjust sizes for optimal performance
-        if psf or lsf:
-            size_hi = (
-                _fft_size(size_hi[0]),
-                _fft_size(size_hi[1]),
-                _fft_size(size_hi[2]))
-
-        # High-res cube zero pixel center position
-        zero_hi = (
-            zero[0] - step[0] / 2 - (edge_hi[0] - 0.5) * step_hi[0],
-            zero[1] - step[1] / 2 - (edge_hi[1] - 0.5) * step_hi[1],
-            zero[2] - step[2] / 2 - (edge_hi[2] - 0.5) * step_hi[2])
-
-        # Create the psf/lsf images.
-        # Always assume an fft-based convolution.
-        # If they have an even size, they must be offset by -1 pixel.
-        # Their centers must be rolled at their first pixel.
-        psf_hi = np.zeros(size_hi[:2][::-1], dtype)
-        psf_hi[0, 0] = 1
-        if psf:
-            psf_hi_offset = size_hi[0] % 2 - 1, size_hi[1] % 2 - 1
-            psf_hi[:] = psf.asarray(step_hi[:2], size_hi[:2], psf_hi_offset)
-            psf_hi[:] = np.roll(psf_hi, -size_hi[0] // 2 + 1, axis=1)
-            psf_hi[:] = np.roll(psf_hi, -size_hi[1] // 2 + 1, axis=0)
-        lsf_hi = np.zeros(size_hi[2], dtype)
-        lsf_hi[0] = 1
-        if lsf:
-            lsf_hi_offset = size_hi[2] % 2 - 1
-            lsf_hi[:] = lsf.asarray(step_hi[2], size_hi[2], lsf_hi_offset)
-            lsf_hi[:] = np.roll(lsf_hi, -size_hi[2] // 2 + 1)
-
         self._size_lo = size
         self._step_lo = step
         self._zero_lo = zero
-        self._edge_hi = edge_hi
-        self._size_hi = size_hi
-        self._step_hi = step_hi
-        self._zero_hi = zero_hi
+        self._size_hi = None
+        self._step_hi = None
+        self._zero_hi = None
+        self._edge_hi = None
         self._rota = rota
         self._scale = scale
         self._dcube_lo = None
@@ -105,19 +53,17 @@ class DCube:
         self._wcube_lo = None
         self._wcube_hi = None
         self._mcube_lo = None
-        self._dcube_hi_fft = None
-        self._wcube_hi_fft = None
-        self._psf3d_hi_fft = None
+        self._pcube_hi = None
         self._psf = psf
         self._lsf = lsf
-        self._psf_hi = psf_hi
-        self._lsf_hi = lsf_hi
-        self._psf3d_hi = None
         self._weights = weights
-        self._weights_conv = weights_conv
+        self._mask_cutoff = mask_cutoff
+        self._mask_create = mask_create
+        self._mask_apply = mask_apply
         self._dtype = dtype
-        self._dcube = None
         self._driver = None
+        self._backend_fft = None
+        self._backend_dmodel = None
 
     def size(self):
         return self._size_lo
@@ -167,84 +113,161 @@ class DCube:
     def weights(self):
         return self._weights
 
-    def weights_conv(self):
-        return self._weights_conv
-
     def dtype(self):
         return self._dtype
 
-    def prepare(self, driver):
-        self._driver = driver
-        size_lo = self._size_lo
-        size_hi = self._size_hi
-        dtype = self._dtype
-        # Allocate the low- and high-resolution data cubes.
-        # If they have the same size, just create one and have the
-        # latter point to the former. This can happen when there is
-        # no super sampling, no psf, and no lsf.
+    def prepare(self, driver, weights):
+
+        # Shortcuts
+        size_lo = self.size()
+        step_lo = self.step()
+        zero_lo = self.zero()
+        scale = self.scale()
+        psf = self.psf()
+        lsf = self.lsf()
+        dtype = self.dtype()
+
+        # Use the native fft library
+        backend_fft = driver.backends().fft(dtype)
+
+        # High-res cube size (before taking padding into account)
+        size_hi = (
+            size_lo[0] * scale[0],
+            size_lo[1] * scale[1],
+            size_lo[2] * scale[2])
+
+        # High-res cube step
+        step_hi = (
+            step_lo[0] / scale[0],
+            step_lo[1] / scale[1],
+            step_lo[2] / scale[2])
+
+        # High-res psf/lsf size
+        psf_size_hi = psf.size(step_hi[:2]) if psf else (1, 1)
+        lsf_size_hi = lsf.size(step_hi[2]) if lsf else 1
+
+        # If psf/lsf was provided, we need to convolve the model cube with it.
+        # We always perform an fft-based convolution because it is faster.
+        # Fft-based convolution requires some padding on the model cube.
+        edge_hi = [0, 0, 0]
+        if psf or lsf:
+            # Get convolution shape and left offset due to padding
+            size_hi, edge_hi = backend_fft.fft_convolution_shape(
+                size_hi, psf_size_hi + (lsf_size_hi,))
+
+        # High-res cube zero pixel center position
+        zero_hi = (
+            zero_lo[0] - step_lo[0] / 2 - (edge_hi[0] - 0.5) * step_hi[0],
+            zero_lo[1] - step_lo[1] / 2 - (edge_hi[1] - 0.5) * step_hi[1],
+            zero_lo[2] - step_lo[2] / 2 - (edge_hi[2] - 0.5) * step_hi[2])
+
+        # Create high-res psf/lsf images if psf/lsf was provided
+        # If they have an even size, they must be offset by -1 pixel
+        # This is because in most cases the psf/lsf have a central peak
+        offset = gbkfit.math.is_odd(size_hi) - 1
+        psfargs = (step_hi[:2], size_hi[:2], offset[:2])
+        lsfargs = (step_hi[2], size_hi[2], offset[2])
+        psf_hi = psf.asarray(*psfargs) if psf else PSFPoint().asarray(*psfargs)
+        lsf_hi = lsf.asarray(*lsfargs) if lsf else LSFPoint().asarray(*lsfargs)
+
+        # Create high-res psf/lsf cube, if psf/lsf was provided
+        # The psf cube will be used for the fft-based convolution
+        if psf or lsf:
+            # Build high-res psf cube (psf + lsf)
+            self._pcube_hi = (psf_hi * lsf_hi[:, None, None]).astype(dtype)
+            # Roll the centre of the psf cube to (0, 0, 0)
+            self._pcube_hi = backend_fft.fft_convolution_shift(self._pcube_hi)
+            # Transfer the psf cube to device memory
+            self._pcube_hi = driver.mem_copy_h2d(self._pcube_hi)
+
+        # Create low- and high-res data and weight cubes.
+        # If the low- and high-res versions have the same size,
+        # just create one and have the latter point to the former.
+        # This can happen when there is no supersampling or padding.
         self._dcube_lo = driver.mem_alloc_d(size_lo[::-1], dtype)
         self._dcube_hi = driver.mem_alloc_d(size_hi[::-1], dtype) \
             if size_lo != size_hi else self._dcube_lo
-        if self._weights:
+        if weights:
             self._wcube_lo = driver.mem_alloc_d(size_lo[::-1], dtype)
             self._wcube_hi = driver.mem_alloc_d(size_hi[::-1], dtype) \
                 if size_lo != size_hi else self._wcube_lo
-        # Allocate buffers for the fft-transformed 3d psf and data cube
-        if self._psf or self._lsf:
-            self._psf3d_hi = self._psf_hi * self._lsf_hi[:, None, None]
-            self._psf3d_hi = driver.mem_copy_h2d(self._psf3d_hi)
-            size_hi_fft = 2 * size_hi[2] * size_hi[1] * (size_hi[0] // 2 + 1)
-            self._dcube_hi_fft = driver.mem_alloc_d(size_hi_fft, dtype)
-            self._psf3d_hi_fft = driver.mem_alloc_d(size_hi_fft, dtype)
-            if self._weights and self._weights_conv:
-                self._wcube_hi_fft = driver.mem_alloc_d(size_hi_fft, dtype)
-        # The psf convolution affects pixels outside the galaxy model
-        # This can create unwanted noise in the model
-        # Hence, we use a spatial mask to mark all the good pixels
-        self._mcube_lo = driver.mem_alloc_d(size_lo[::-1], dtype)
-        # Create and prepare dcube backend
-        self._dcube = driver.backend().make_dmodel_dcube(dtype)
+            driver.mem_fill(self._wcube_lo, 1)
+            driver.mem_fill(self._wcube_hi, 1)
+
+        # Create low-res mask cube if requested
+        if self._mask_create:
+            self._mcube_lo = driver.mem_alloc_d(size_lo[::-1], dtype)
+            driver.mem_fill(self._mcube_lo, 1)
+
+        self._size_hi = size_hi
+        self._step_hi = step_hi
+        self._zero_hi = zero_hi
+        self._edge_hi = edge_hi
+        self._weights = weights
+        self._driver = driver
+        self._backend_fft = backend_fft
+        self._backend_dmodel = driver.backends().dmodel(dtype)
 
     def evaluate(self, out_extra):
 
-        if self._psf or self._lsf:
-            self._dcube.convolve(
-                self._size_hi,
-                self._dcube_hi, self._dcube_hi_fft,
-                self._wcube_hi, self._wcube_hi_fft,
-                self._psf3d_hi, self._psf3d_hi_fft)
+        # ...
+        step_lo = self._step_lo
+        step_hi = self._step_hi
+        edge_hi = self._edge_hi
+        scale = self._scale
+        psf = self._psf
+        lsf = self._lsf
+        dcube_lo = self._dcube_lo
+        dcube_hi = self._dcube_hi
+        wcube_lo = self._wcube_lo
+        wcube_hi = self._wcube_hi
+        mcube_lo = self._mcube_lo
+        pcube_hi = self._pcube_hi
+        weights = self._weights
+        mask_cutoff = self._mask_cutoff
+        mask_create = self._mask_create
+        mask_apply = self._mask_apply
+        driver = self._driver
+        backend_fft = self._backend_fft
+        backend_dmodel = self._backend_dmodel
 
-        if self._dcube_lo is not self._dcube_hi:
-            self._dcube.downscale(
-                self._scale, self._edge_hi, self._size_hi, self._size_lo,
-                self._dcube_hi, self._dcube_lo)
-            if self._weights:
-                self._dcube.downscale(
-                    self._scale, self._edge_hi, self._size_hi, self._size_lo,
-                    self._wcube_hi, self._wcube_lo)
+        # Perform fft-based convolution
+        if psf or lsf:
+            backend_fft.fft_convolve_cached(dcube_hi, pcube_hi)
+            if weights:
+                backend_fft.fft_convolve_cached(wcube_hi, pcube_hi)
 
-        self._dcube.make_mask(
-            True, True, 1e-6, self._size_lo, self._dcube_lo, self._mcube_lo)
+        # Downscale data and weight cubes
+        if dcube_lo is not dcube_hi:
+            backend_dmodel.downscale(scale, edge_hi, dcube_hi, dcube_lo)
+            if weights:
+                backend_dmodel.downscale(scale, edge_hi, wcube_hi, wcube_lo)
 
+        # Apply masking.
+        # Checked if mask_create or mask_apply are True in __init__()
+        if mask_cutoff is not None:
+            backend_dmodel.mask(mask_cutoff, mask_apply, dcube_lo, mcube_lo)
+
+        # Output extra information
         if out_extra is not None:
             out_extra.update(
-                dcube_lo=self._driver.mem_copy_d2h(self._dcube_lo),
-                dcube_hi=self._driver.mem_copy_d2h(self._dcube_hi),
-                mcube_lo=self._driver.mem_copy_d2h(self._mcube_lo))
-            if self._weights:
+                dcube_lo=driver.mem_copy_d2h(dcube_lo),
+                dcube_hi=driver.mem_copy_d2h(dcube_hi))
+            if mask_create:
                 out_extra.update(
-                    wcube_lo=self._driver.mem_copy_d2h(self._wcube_lo),
-                    wcube_hi=self._driver.mem_copy_d2h(self._wcube_hi))
-            if self._psf:
+                    mcube_lo=driver.mem_copy_d2h(mcube_lo))
+            if weights:
                 out_extra.update(
-                    psf_lo=self._psf.asarray(self._step_lo[:2]),
-                    psf_hi=self._psf.asarray(self._step_hi[:2]),
-                    psf_hi_fft=self._psf_hi.copy())
-            if self._lsf:
+                    wcube_lo=driver.mem_copy_d2h(wcube_lo),
+                    wcube_hi=driver.mem_copy_d2h(wcube_hi))
+            if psf:
                 out_extra.update(
-                    lsf_lo=self._lsf.asarray(self._step_lo[2]),
-                    lsf_hi=self._lsf.asarray(self._step_hi[2]),
-                    lsf_hi_fft=self._lsf_hi.copy())
-            if self._psf or self._lsf:
+                    psf_lo=psf.asarray(step_lo[:2]),
+                    psf_hi=psf.asarray(step_hi[:2]))
+            if lsf:
                 out_extra.update(
-                    psf3d_hi_fft=self._driver.mem_copy_d2h(self._psf3d_hi))
+                    lsf_lo=lsf.asarray(step_lo[2]),
+                    lsf_hi=lsf.asarray(step_hi[2]))
+            if psf or lsf:
+                out_extra.update(
+                    psf3d_hi_fft=driver.mem_copy_d2h(pcube_hi))

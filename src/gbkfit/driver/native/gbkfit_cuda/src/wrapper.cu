@@ -5,14 +5,14 @@
 namespace gbkfit::cuda {
 
 template<typename T> void
-Wrapper<T>::dmodel_dcube_complex_multiply_and_scale(
+Wrapper<T>::math_complex_multiply_and_scale(
         typename cufft<T>::complex* arr1,
         typename cufft<T>::complex* arr2,
         int n, T scale)
 {
     dim3 bsize(256);
     dim3 gsize((n + bsize.x - 1) / bsize.x);
-    kernels::dmodel_dcube_complex_multiply_and_scale<<<gsize, bsize>>>(
+    kernels::math_complex_multiply_and_scale<<<gsize, bsize>>>(
             arr1, arr2, n, scale);
     cudaDeviceSynchronize();
 }
@@ -39,17 +39,17 @@ Wrapper<T>::dmodel_dcube_downscale(
 
 template<typename T> void
 Wrapper<T>::dmodel_dcube_make_mask(
-        bool mask_spat, bool mask_spec, T mask_coef,
+        T cutoff, bool apply,
         int size_x, int size_y, int size_z,
-        T* cube, T* mask)
+        T* dcube_d, T* dcube_m, T* dcube_w)
 {
     unsigned int n = size_x * size_y;
     dim3 bsize(256);
     dim3 gsize((n + bsize.x - 1) / bsize.x);
     kernels::dmodel_dcube_make_mask<<<gsize, bsize>>>(
-            mask_spat, mask_spec, mask_coef,
+            cutoff, apply,
             size_x, size_y, size_z,
-            cube, mask);
+            dcube_d, dcube_m, dcube_w);
     cudaDeviceSynchronize();
 }
 
@@ -58,8 +58,10 @@ Wrapper<T>::dmodel_mmaps_moments(
         int size_x, int size_y, int size_z,
         T step_x, T step_y, T step_z,
         T zero_x, T zero_y, T zero_z,
-        const T* scube,
-        T* mmaps, T* masks, const int* orders, int norders)
+        const T* dcube_d,
+        const T* dcube_w,
+        T cutoff, int norders, const int* orders,
+        T* mmaps_d, T* mmaps_m, T* mmaps_w)
 {
     unsigned int n = size_x * size_y;
     dim3 bsize(256);
@@ -68,26 +70,28 @@ Wrapper<T>::dmodel_mmaps_moments(
             size_x, size_y, size_z,
             step_x, step_y, step_z,
             zero_x, zero_y, zero_z,
-            scube,
-            mmaps, masks, orders, norders);
+            dcube_d,
+            dcube_w,
+            cutoff, norders, orders,
+            mmaps_d, mmaps_m, mmaps_w);
     cudaDeviceSynchronize();
 }
 
 template<typename T> void
 Wrapper<T>::gmodel_wcube(
         int spat_size_x, int spat_size_y, int spat_size_z,
-        int spec_size,
-        T* spat_data,
-        T* spec_data)
+        int spec_size_z,
+        const T* spat_cube,
+        T* spec_cube)
 {
     const int n = spat_size_x * spat_size_y;
     dim3 bsize(256);
     dim3 gsize((n + bsize.x - 1) / bsize.x);
     kernels::gmodel_wcube<<<gsize, bsize>>>(
             spat_size_x, spat_size_y, spat_size_z,
-            spec_size,
-            spat_data,
-            spec_data);
+            spec_size_z,
+            spat_cube,
+            spec_cube);
    cudaDeviceSynchronize();
 }
 
@@ -306,13 +310,13 @@ Wrapper<T>::gmodel_smdisk_evaluate(
 
 template<typename T> void
 Wrapper<T>::objective_count_pixels(
-        const T* data, const T* model, int size, int* counts)
+        const T* data1, const T* data2, int size, T epsilon, int* counts)
 {
     unsigned int n = size;
     dim3 bsize(256);
     dim3 gsize((n + bsize.x - 1) / bsize.x);
     kernels::objective_count_pixels<<<gsize, bsize>>>(
-            data, model, size, counts);
+            data1, data2, size, epsilon, counts);
     cudaDeviceSynchronize();
 }
 

@@ -63,6 +63,6 @@ class DriverHost(Driver):
     def math_pow(self, x1, x2, out=None):
         return np.power(x1, x2, out=out)
 
-    def backend(self):
-        from ._backend import Backend
-        return Backend()
+    def backends(self):
+        from ._backend import DriverBackendsHost
+        return DriverBackendsHost()

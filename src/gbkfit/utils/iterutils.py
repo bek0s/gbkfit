@@ -17,8 +17,12 @@ def is_mapping(x, strict=True):
 
 
 def is_sequence(x, strict=True):
-    return isinstance(x, (tuple, list, set)) if strict \
-        else isinstance(x, collections.abc.Sequence)
+    is_set = isinstance(x, set)
+    is_list = isinstance(x, list)
+    is_tuple = isinstance(x, tuple)
+    is_array = isinstance(x, np.ndarray) and x.ndim == 1
+    return (is_set or is_list or is_tuple or is_array) \
+        if strict else isinstance(x, collections.abc.Sequence)
 
 
 def listify(x, none_is_val=True):

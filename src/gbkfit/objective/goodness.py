@@ -1,7 +1,7 @@
 
 import time
 
-from gbkfit.utils import iterutils, parseutils
+from gbkfit.utils import iterutils, parseutils, timeutils
 from .residual import ObjectiveResidual
 
 
@@ -34,6 +34,8 @@ class ObjectiveGoodness(ObjectiveResidual):
 
     def residual_scalar(self, params, out_extra=None):
         t1 = time.time_ns()
+        t = timeutils.SimpleTimer('gds_scalar')
+        t.start()
         d_residual_vectors = self.residual_vector_d(params, out_extra)
         residuals = []
         for i, driver in enumerate(self.drivers()):
@@ -44,12 +46,15 @@ class ObjectiveGoodness(ObjectiveResidual):
             driver.math_sum(d_residual_vector, out=d_residual_scalar)
             driver.mem_copy_d2h(d_residual_scalar, h_residual_scalar)
             residuals.append(h_residual_scalar[0])
+        t.stop()
         t2 = time.time_ns()
         self.time_stats_samples(False)['gds_scalar'].append(t2 - t1)
         return residuals
 
     def log_likelihood(self, params, out_extra=None):
         t1 = time.time_ns()
+        t = timeutils.SimpleTimer('gds_loglike')
+        t.start()
         d_residual_vectors = self.residual_vector_d(params, out_extra)
         log_likelihoods = []
         for i, driver in enumerate(self.drivers()):
@@ -61,6 +66,7 @@ class ObjectiveGoodness(ObjectiveResidual):
             driver.math_sum(d_residual_vector, out=d_residual_scalar)
             driver.mem_copy_d2h(d_residual_scalar, h_residual_scalar)
             log_likelihoods.append(-0.5*h_residual_scalar[0])
+        t.stop()
         t2 = time.time_ns()
         self.time_stats_samples(False)['gds_loglike'].append(t2 - t1)
         return log_likelihoods

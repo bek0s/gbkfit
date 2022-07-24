@@ -3,6 +3,7 @@
 #include <pybind11/stl.h>
 
 #include "gbkfit/host/dmodels.hpp"
+#include "gbkfit/host/fft.hpp"
 #include "gbkfit/host/gmodels.hpp"
 #include "gbkfit/host/objective.hpp"
 
@@ -12,29 +13,26 @@ namespace py = pybind11;
 
 PYBIND11_MODULE(EXTENSION_NAME, m)
 {
-    py::class_<DModelDCube<float>>(m, "DModelDCubef32")
+    py::class_<DModel<float>>(m, "DModelf32")
             .def(py::init<>())
-            .def("convolve", &DModelDCube<float>::convolve)
-            .def("downscale", &DModelDCube<float>::downscale)
-            .def("make_mask", &DModelDCube<float>::make_mask);
-
-    py::class_<DModelMMaps<float>>(m, "DModelMMapsf32")
-            .def(py::init<>())
-            .def("moments", &DModelMMaps<float>::moments);
+            .def("dcube_downscale", &DModel<float>::dcube_downscale)
+            .def("dcube_mask", &DModel<float>::dcube_mask)
+            .def("mmaps_moments", &DModel<float>::mmaps_moments);
 
     py::class_<GModel<float>>(m, "GModelf32")
             .def(py::init<>())
-            .def("make_wcube", &GModel<float>::make_wcube);
-
-    py::class_<GModelMCDisk<float>>(m, "GModelMCDiskf32")
-            .def(py::init<>())
-            .def("evaluate", &GModelMCDisk<float>::evaluate);
-
-    py::class_<GModelSMDisk<float>>(m, "GModelSMDiskf32")
-            .def(py::init<>())
-            .def("evaluate", &GModelSMDisk<float>::evaluate);
+            .def("make_wcube", &GModel<float>::make_wcube)
+            .def("mcdisk_evaluate", &GModel<float>::mcdisk_evaluate)
+            .def("smdisk_evaluate", &GModel<float>::smdisk_evaluate);
 
     py::class_<Objective<float>>(m, "Objectivef32")
             .def(py::init<>())
             .def("count_pixels", &Objective<float>::count_pixels);
+
+    py::class_<FFT<float>>(m, "FFTf32")
+            .def(py::init<>())
+            .def("fft_r2c", &FFT<float>::fft_r2c)
+            .def("fft_c2r", &FFT<float>::fft_c2r)
+            .def("fft_convolve", &FFT<float>::fft_convolve)
+            .def("fft_convolve_cached", &FFT<float>::fft_convolve_cached);
 }

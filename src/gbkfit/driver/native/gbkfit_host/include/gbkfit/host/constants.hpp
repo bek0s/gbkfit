@@ -1,6 +1,6 @@
 #pragma once
 
-#include <gbkfit/common.hpp>
+#include <gbkfit/constants.hpp>
 
 namespace gbkfit::host {
 } // namespace gbkfit::host

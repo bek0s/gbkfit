@@ -8,7 +8,7 @@ template<typename T>
 struct Wrapper
 {
     static void
-    dmodel_dcube_complex_multiply_and_scale(
+    math_complex_multiply_and_scale(
             typename cufft<T>::complex* ary1,
             typename cufft<T>::complex* ary2,
             int n, T scale);
@@ -23,23 +23,25 @@ struct Wrapper
 
     static void
     dmodel_dcube_make_mask(
-            bool mask_spat, bool mask_spec, T mask_coef,
+            T cutoff, bool apply,
             int size_x, int size_y, int size_z,
-            T* cube, T* mask);
+            T* dcube_d, T* dcube_m, T* dcube_w);
 
     static void
     dmodel_mmaps_moments(
             int size_x, int size_y, int size_z,
             T step_x, T step_y, T step_z,
             T zero_x, T zero_y, T zero_z,
-            const T* scube,
-            T* mmaps, T* masks, const int* orders, int norders);
+            const T* dcube_d,
+            const T* dcube_w,
+            T cutoff, int norders, const int* orders,
+            T* mmaps_d, T* mmaps_m, T* mmaps_w);
 
     static void
     gmodel_wcube(
             int spat_size_x, int spat_size_y, int spat_size_z,
             int spec_size,
-            T* spat_data,
+            const T* spat_data,
             T* spec_data);
 
     static void
@@ -145,7 +147,7 @@ struct Wrapper
 
     static void
     objective_count_pixels(
-            const T* data, const T* model, int size, int* counts);
+            const T* data1, const T* data2, int size, T epsilon, int* counts);
 };
 
 }} // namespace gbkfit::cuda

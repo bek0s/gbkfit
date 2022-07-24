@@ -68,6 +68,9 @@ class GModelKinematics3D(GModelSCube):
     def params(self):
         return self._params
 
+    def is_weighted(self):
+        return True
+
     def _prepare(self, driver, wdata, size, step, zero, dtype):
         self._driver = driver
         self._dtype = dtype

@@ -7,6 +7,8 @@ find_package(CUDAToolkit REQUIRED)
 
 set(HEADER_FILES
   include/gbkfit/cuda/common.hpp
+  include/gbkfit/cuda/constants.hpp
+  include/gbkfit/cuda/dmodel.hpp
   include/gbkfit/cuda/dmodels.hpp
   include/gbkfit/cuda/fftutils.hpp
   include/gbkfit/cuda/gmodels.hpp
@@ -17,6 +19,7 @@ set(HEADER_FILES
 
 set(SOURCE_FILES
   src/bindings.cpp
+  src/dmodel.cpp
   src/dmodels.cpp
   src/gmodels.cpp
   src/objective.cpp

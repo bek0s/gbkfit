@@ -3,40 +3,42 @@ import argparse
 import logging.config
 
 
-logging.config.dictConfig({
-    'version': 1,
-    'formatters': {
-        'console': {
-            'format': '{message}',
-            'style': '{'
-        },
-        'file': {
-            'format':
-                '{asctime}:{processName}({process}):{threadName}({thread}):'
-                '{levelname}:{name}:{funcName}:{lineno}:{message}',
-            'style': '{'
-        },
-    },
-    'handlers': {
-        'console': {
-            'class': 'logging.StreamHandler',
-            'formatter': 'console'
-        },
-        'file': {
-            'class': 'logging.FileHandler',
-            'formatter': 'file',
-            'filename': 'gbkfit.log'
-        }
-    },
-    'loggers': {
-        'gbkfit': {
-            'level': 'DEBUG',
-            'handlers': ['console', 'file']
-        }
-    }
-})
-
 _log = logging.getLogger(__name__)
+
+
+def configure_logging(log_level):
+    logging.config.dictConfig({
+        'version': 1,
+        'formatters': {
+            'console': {
+                'format': '{message}',
+                'style': '{'
+            },
+            'file': {
+                'format':
+                    '{asctime}:{processName}({process}):{threadName}({thread}):'
+                    '{levelname}:{name}:{funcName}:{lineno}:{message}',
+                'style': '{'
+            },
+        },
+        'handlers': {
+            'console': {
+                'class': 'logging.StreamHandler',
+                'formatter': 'console'
+            },
+            'file': {
+                'class': 'logging.FileHandler',
+                'formatter': 'file',
+                'filename': 'gbkfit.log'
+            }
+        },
+        'loggers': {
+            'gbkfit': {
+                'level': f'{log_level}',
+                'handlers': ['console', 'file']
+            }
+        }
+    })
 
 
 def _validate_moment_count(parser, namespace, values, option_string):
@@ -122,12 +124,15 @@ def main():
     #
 
     parser_common = argparse.ArgumentParser(add_help=False)
+    parser_common.add_argument(
+        '--verbose', action='store_true', help="enable verbose logging")
 
     #
     # Create parser for eval task
     #
 
-    parser_eval = parsers_task.add_parser('eval', parents=[parser_common])
+    parser_eval = parsers_task.add_parser(
+        'eval', parents=[parser_common], help="evaluate model")
     parser_eval.add_argument(
         'objective', type=str, choices=['model', 'goodness'],
         help="the type of objective to evaluate")
@@ -289,36 +294,43 @@ def main():
         help="connected component labeling; minimum area ratio per label; "
              "RATIO = (label area) / (largest label area)")
     # ...
-    parser_prep = parsers_task.add_parser('prep')
-    parsers_prep = parser_prep.add_subparsers(dest='prep_task')
+    parser_prep = parsers_task.add_parser(
+        'prep', parents=[parser_common], help="prepare data for fitting")
+    parsers_prep = parser_prep.add_subparsers(
+        dest='prep_task', help="the type of data to prepare")
     parsers_prep.required = True
     parsers_prep.add_parser('image', parents=[
         parser_prep_input_1,
         parser_prep_roi_spat_2d,
         parser_prep_clip_1, parser_prep_ccl, parser_prep_nanpad,
-        parser_prep_common, parser_common])
+        parser_prep_common, parser_common],
+        help="image")
     parsers_prep.add_parser('lslit', parents=[
         parser_prep_input_1,
         parser_prep_roi_spat_1d, parser_prep_roi_spec_1d,
         parser_prep_clip_1, parser_prep_ccl, parser_prep_nanpad,
-        parser_prep_common, parser_common])
+        parser_prep_common, parser_common],
+        help="long slit")
     parsers_prep.add_parser('mmaps', parents=[
         parser_prep_orders,
         parser_prep_input_n,
         parser_prep_roi_spat_2d,
         parser_prep_clip_n, parser_prep_ccl, parser_prep_nanpad,
-        parser_prep_common, parser_common])
+        parser_prep_common, parser_common],
+        help="moment maps")
     parsers_prep.add_parser('scube', parents=[
         parser_prep_input_1,
         parser_prep_roi_spat_2d, parser_prep_roi_spec_1d,
         parser_prep_clip_1, parser_prep_ccl, parser_prep_nanpad,
-        parser_prep_common, parser_common])
+        parser_prep_common, parser_common],
+        help="spectral cube")
 
     #
     # Create parser for fit task
     #
 
-    parser_fit = parsers_task.add_parser('fit', parents=[parser_common])
+    parser_fit = parsers_task.add_parser(
+        'fit', parents=[parser_common], help="fit model to data")
     parser_fit.add_argument(
         'config', type=str,
         help="configuration file path; json and yaml formats are supported")
@@ -327,7 +339,8 @@ def main():
     # Create parser for plot task
     #
 
-    parser_plot = parsers_task.add_parser('plot', parents=[parser_common])
+    parser_plot = parsers_task.add_parser(
+        'plot', parents=[parser_common], help="plot fitting results")
     parser_plot.add_argument(
         'result_dir', type=str,
         metavar='result-dir',
@@ -351,13 +364,13 @@ def main():
         '--posterior-mode', type=str,
         default='none', choices=['none', 'corner', 'separate'],
         metavar='MODE',
-        help='select posterior plotting mode; '
-             'MODE=none: '
-             'do not create posterior plots, '
-             'MODE=corner: '
-             'create a single corner plot for all selected parameters, '
-             'MODE=separate: '
-             'create a separate corner plot for each parameter pair')
+        help="select posterior plotting mode; "
+             "MODE=none: "
+             "do not create posterior plots, "
+             "MODE=corner: "
+             "create a single corner plot for all selected parameters, "
+             "MODE=separate: "
+             "create a separate corner plot for each parameter pair")
     parser_plot.add_argument(
         '--posterior-params', type=str, nargs='+',
         metavar='PARAM',
@@ -369,6 +382,10 @@ def main():
     #
 
     args = parser.parse_args()
+
+    # Configure log level before doing anything else
+    configure_logging('DEBUG' if args.verbose else 'INFO')
+
     _log.debug(
         f"cli has been called with the following arguments: {vars(args)}")
 

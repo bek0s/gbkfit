@@ -4,7 +4,7 @@ import time
 
 import numpy as np
 
-from gbkfit.utils import iterutils, parseutils
+from gbkfit.utils import iterutils, parseutils, timeutils
 from .model import ObjectiveModel
 
 
@@ -174,6 +174,8 @@ class ObjectiveResidual(ObjectiveModel):
         if not self._prepared:
             self.prepare()
         t1 = time.time_ns()
+        t = timeutils.SimpleTimer('res_eval')
+        t.start()
         model_data = self.model_d(params, out_extra_model)
         for i, dmodel in enumerate(self.dmodels()):
             npix = dmodel.npix()
@@ -190,6 +192,7 @@ class ObjectiveResidual(ObjectiveModel):
                 # TODO
                 # Calculate residual
                 res[:] = dat_m * mdl_m * (dat_d - mdl_d) / dat_e
+        t.stop()
         t2 = time.time_ns()
         self.time_stats_samples(False)['res_eval'].append(t2 - t1)
 
@@ -197,10 +200,13 @@ class ObjectiveResidual(ObjectiveModel):
             self, params, weighted=True, out_extra=None, out_extra_model=None):
         self._residual_d(params, weighted, out_extra, out_extra_model)
         t1 = time.time_ns()
+        t = timeutils.SimpleTimer('res_d2h')
+        t.start()
         for i, driver in enumerate(self.drivers()):
             d_data = self._d_residual_vector[i]
             h_data = self._h_residual_vector[i]
             driver.mem_copy_d2h(d_data, h_data)
+        t.stop()
         t2 = time.time_ns()
         self.time_stats_samples(False)['res_d2h'].append(t2 - t1)
 

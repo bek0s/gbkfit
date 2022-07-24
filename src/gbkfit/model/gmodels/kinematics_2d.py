@@ -45,13 +45,16 @@ class GModelKinematics2D(GModelSCube):
     def params(self):
         return self._params
 
+    def is_weighted(self):
+        return True
+
     def _prepare(self, driver, wdata, size, dtype):
         self._driver = driver
         self._dtype = dtype
         self._size = size
         if wdata is not None:
             self._wcube = driver.mem_alloc_d(self._size[::-1], dtype)
-        self._backend = driver.backend().make_gmodel(dtype)
+        self._backend = driver.backends().gmodel(dtype)
 
     def evaluate_scube(
             self, driver, params, scube, wdata, size, step, zero, rota, dtype,

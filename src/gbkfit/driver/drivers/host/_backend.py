@@ -1,153 +1,147 @@
 
 import numpy as np
 
-import gbkfit.math
 import gbkfit.driver.native.libgbkfit_host as native_module
-from gbkfit.driver import backend
+from gbkfit.driver.modules import (
+    DriverBackends,
+    DriverBackendDModel,
+    DriverBackendFFT,
+    DriverBackendGModel)
 
 
-__all__ = ['Backend']
+__all__ = [
+    'DriverBackendsHost',
+    'DriverBackendFFTHost',
+    'DriverBackendDModelHost',
+    'DriverBackendGModelHost',
+]
 
 
 def _ptr(x):
     return x.__array_interface__['data'][0] if x is not None else 0
 
 
+def _dtype(x):
+    return x.__array_interface__['typestr'] if x is not None else None
+
+
 def _shape(x):
-    return x.__array_interface__['shape'] if x is not None else (0,)
+    return x.__array_interface__['shape'] if x is not None else None
 
 
 def _size(x):
-    return gbkfit.math.prod(_shape(x))
+    return x.size if x is not None else 0
 
 
-def _get_class(classes, dtype):
+class DriverBackendsHost(DriverBackends):
+
+    def fft(self, dtype):
+        return DriverBackendFFTHost(dtype)
+
+    def dmodel(self, dtype):
+        return DriverBackendDModelHost(dtype)
+
+    def gmodel(self, dtype):
+        return DriverBackendGModelHost(dtype)
+
+    def objective(self, dtype):
+        raise NotImplementedError()
+
+
+def _get_class(cls, dtype, classes):
     if dtype not in classes:
         requested = np.dtype(dtype).name
         supported = ', '.join([np.dtype(dt).name for dt in classes])
         raise RuntimeError(
-            f"the requested dtype is not supported "
+            f"could not create native module wrapper of type '{cls}'; "
+            f"the requested dtype is not supported by the native module "
             f"(requested: {requested}; supported: {supported})")
     return classes[dtype]
 
 
-class Backend(backend.Backend):
-
-    def make_dmodel_dcube(self, dtype):
-        return _DModelDCube(dtype)
-
-    def make_dmodel_mmaps(self, dtype):
-        return _DModelMMaps(dtype)
-
-    def make_gmodel(self, dtype):
-        return _GModel(dtype)
-
-    def make_gmodel_mcdisk(self, dtype):
-        return _GModelMCDisk(dtype)
-
-    def make_gmodel_smdisk(self, dtype):
-        return _GModelSMDisk(dtype)
-
-    def make_objective(self, dtype):
-        return _Objective(dtype)
-
-
-class _DModelDCube(backend.DModelDCube):
+class DriverBackendFFTHost(DriverBackendFFT):
 
     _CLASSES = {
-        np.float32: native_module.DModelDCubef32}
+        np.float32: native_module.FFTf32}
+
+    def __init__(self, dtype):
+        super().__init__(32)
+        self._dtype = dtype
+        self._module = _get_class(
+            self.__class__.__qualname__, dtype, self._CLASSES)()
 
     def __deepcopy__(self, memodict):
         return self.__class__(self._dtype)
 
-    def __init__(self, dtype):
-        self._backend = _get_class(self._CLASSES, dtype)()
-        self._dtype = dtype
+    def fft_r2c(self, data_r, data_c):
+        self._module.fft_r2c(_shape(data_r)[::-1], _ptr(data_r), _ptr(data_c))
 
-    def convolve(
-            self,
-            size_hi,
-            scube_hi, scube_hi_fft,
-            wcube_hi, wcube_hi_fft,
-            psf3d_hi, psf3d_hi_fft):
-        self._backend.convolve(
-            size_hi,
-            _ptr(scube_hi), _ptr(scube_hi_fft),
-            _ptr(wcube_hi), _ptr(wcube_hi_fft),
-            _ptr(psf3d_hi), _ptr(psf3d_hi_fft))
+    def fft_c2r(self, data_c, data_r):
+        self._module.fft_c2r(_shape(data_r)[::-1], _ptr(data_c), _ptr(data_r))
 
-    def downscale(
-            self,
-            scale,
-            edge_hi,
-            size_hi, size_lo,
-            scube_hi, scube_lo):
-        self._backend.downscale(
-            scale,
-            edge_hi,
-            size_hi, size_lo,
-            _ptr(scube_hi), _ptr(scube_lo))
+    def fft_convolve(self, data1_r, data1_c, data2_c):
+        self._module.fft_convolve(
+            _shape(data1_r)[::-1], _ptr(data1_r), _ptr(data1_c), _ptr(data2_c))
 
-    def make_mask(self, mask_spat, mask_spec, mask_coef, size, cube, mask):
-        self._backend.make_mask(
-            mask_spat, mask_spec, mask_coef, size, _ptr(cube), _ptr(mask))
+    def fft_convolve_cached(self, data1_r, data2_r):
+        self._module.fft_convolve_cached(
+            _shape(data1_r)[::-1], _ptr(data1_r), _ptr(data2_r))
 
 
-class _DModelMMaps(backend.DModelMMaps):
+class DriverBackendDModelHost(DriverBackendDModel):
 
     _CLASSES = {
-        np.float32: native_module.DModelMMapsf32}
+        np.float32: native_module.DModelf32}
+
+    def __init__(self, dtype):
+        self._dtype = dtype
+        self._module = _get_class(
+            self.__class__.__qualname__, dtype, self._CLASSES)()
 
     def __deepcopy__(self, memodict):
         return self.__class__(self._dtype)
 
-    def __init__(self, dtype):
-        self._backend = _get_class(self._CLASSES, dtype)()
-        self._dtype = dtype
+    def downscale(self, scale, edge_hi, cube_hi, cube_lo):
+        size_hi = _shape(cube_hi)[::-1]
+        size_lo = _shape(cube_lo)[::-1]
+        self._module.dcube_downscale(
+            scale, edge_hi, size_hi, size_lo, _ptr(cube_hi), _ptr(cube_lo))
 
-    def moments(self, size, step, zero, scube, mmaps, masks, orders):
-        self._backend.moments(
+    def mask(self, cutoff, apply, dcube, mcube):
+        self._module.mask(
+            cutoff, apply, _shape(dcube), _ptr(dcube), _ptr(mcube))
+
+    def moments(
+            self,
+            size, step, zero, dcube, wcube, cutoff, orders,
+            mmaps_d, mmaps_w, mmaps_m):
+        self._module.mmaps_moments(
             size, step, zero,
-            _ptr(scube),
-            _ptr(mmaps),
-            _ptr(masks),
-            _ptr(orders),
-            _size(orders))
+            _ptr(dcube), _ptr(wcube), cutoff, _size(orders), _ptr(orders),
+            _ptr(mmaps_d), _ptr(mmaps_w), _ptr(mmaps_m))
 
 
-class _GModel(backend.GModel):
+class DriverBackendGModelHost(DriverBackendGModel):
 
     _CLASSES = {
         np.float32: native_module.GModelf32}
 
+    def __init__(self, dtype):
+        self._dtype = dtype
+        self._module = _get_class(
+            self.__class__.__qualname__, dtype, self._CLASSES)()
+
     def __deepcopy__(self, memodict):
         return self.__class__(self._dtype)
 
-    def __init__(self, dtype):
-        self._backend = _get_class(self._CLASSES, dtype)()
-        self._dtype = dtype
-
     def make_wcube(self, spat_size, spec_size, spat_data, spec_data):
-        self._backend.make_wcube(
+        self._module.make_wcube(
             spat_size[0], spat_size[1], spat_size[2],
             spec_size,
             _ptr(spat_data),
             _ptr(spec_data))
 
-
-class _GModelMCDisk(backend.GModelMCDisk):
-
-    _CLASSES = {
-        np.float32: native_module.GModelMCDiskf32}
-
-    def __deepcopy__(self, memodict):
-        return self.__class__(self._dtype)
-
-    def __init__(self, dtype):
-        self._backend = _get_class(self._CLASSES, dtype)()
-        self._dtype = dtype
-
-    def evaluate(
+    def evaluate_mcdisk(
             self,
             cflux, nclouds, ncloudspt, hasordint,
             loose, tilted, rnodes,
@@ -165,7 +159,7 @@ class _GModelMCDisk(backend.GModelMCDisk):
             spec_size, spec_step, spec_zero,
             image, scube, rcube, wcube,
             rdata, vdata, ddata):
-        self._backend.evaluate(
+        self._module.evaluate(
             cflux, nclouds, _ptr(ncloudspt), _size(ncloudspt), _ptr(hasordint),
             loose, tilted,
             _size(rnodes),
@@ -213,20 +207,7 @@ class _GModelMCDisk(backend.GModelMCDisk):
             _ptr(image), _ptr(scube), _ptr(rcube), _ptr(wcube),
             _ptr(rdata), _ptr(vdata), _ptr(ddata))
 
-
-class _GModelSMDisk(backend.GModelSMDisk):
-
-    _CLASSES = {
-        np.float32: native_module.GModelSMDiskf32}
-
-    def __deepcopy__(self, memodict):
-        return self.__class__(self._dtype)
-
-    def __init__(self, dtype):
-        self._backend = _get_class(self._CLASSES, dtype)()
-        self._dtype = dtype
-
-    def evaluate(
+    def evaluate_smdisk(
             self,
             loose, tilted, rnodes,
             vsys, xpos, ypos, posa, incl,
@@ -243,7 +224,7 @@ class _GModelSMDisk(backend.GModelSMDisk):
             spec_size, spec_step, spec_zero,
             image, scube, rcube, wcube,
             rdata, vdata, ddata):
-        self._backend.evaluate(
+        self._module.smdisk_evaluate(
             loose, tilted,
             _size(rnodes),
             _ptr(rnodes),
@@ -289,19 +270,3 @@ class _GModelSMDisk(backend.GModelSMDisk):
             spec_zero,
             _ptr(image), _ptr(scube), _ptr(rcube), _ptr(wcube),
             _ptr(rdata), _ptr(vdata), _ptr(ddata))
-
-
-class _Objective(backend.Objective):
-
-    _CLASSES = {
-        np.float32: native_module.Objectivef32}
-
-    def __deepcopy__(self, memodict):
-        return self.__class__(self._dtype)
-
-    def __init__(self, dtype):
-        self._backend = _get_class(self._CLASSES, dtype)()
-        self._dtype = dtype
-
-    def count_pixels(self, data, model, size, count):
-        self._backend.count_pixels(_ptr(data), _ptr(model), size, _ptr(count))

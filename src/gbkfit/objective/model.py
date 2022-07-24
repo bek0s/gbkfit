@@ -1,10 +1,9 @@
 
 import collections
 import copy
-
 import time
 
-from gbkfit.utils import iterutils, miscutils
+from gbkfit.utils import iterutils, miscutils, timeutils
 from . import _detail
 
 
@@ -31,7 +30,7 @@ class ObjectiveModel:
         # Preallocate some data structures
         # It will make our life easier later on
         self._h_model_data = [
-            {key: dict(d=None, m=None, w=None) for key in dmodel.onames()}
+            {key: dict(d=None, m=None, w=None) for key in dmodel.keys()}
             for dmodel in self.dmodels()]
         self._d_model_data = copy.deepcopy(self._h_model_data)
         # Merge the pdescs of all models into a dict and ensure they
@@ -73,6 +72,8 @@ class ObjectiveModel:
 
     def model_d(self, params, out_extra=None):
         t1 = time.time_ns()
+        t = timeutils.SimpleTimer('mdl_eval')
+        t.start()
         for i in range(self.nitems()):
             driver = self.drivers()[i]
             dmodel = self.dmodels()[i]
@@ -86,6 +87,7 @@ class ObjectiveModel:
             for key, val in out_extra_i.items():
                 prefix = f'{i}_' * bool(self.nitems() > 1)
                 out_extra[f'{prefix}{key}'] = val
+        t.stop()
         t2 = time.time_ns()
         self.time_stats_samples(False)['mdl_eval'].append(t2 - t1)
         return self._d_model_data
@@ -93,6 +95,8 @@ class ObjectiveModel:
     def model_h(self, params, out_extra=None):
         self.model_d(params, out_extra)
         t1 = time.time_ns()
+        t = timeutils.SimpleTimer('mdl_d2h')
+        t.start()
         d_data = self._d_model_data
         h_data = self._h_model_data
         for i in range(self.nitems()):
@@ -101,6 +105,7 @@ class ObjectiveModel:
                     if d_data[i][key][k] is not None:
                         h_data[i][key][k] = self.drivers()[i].mem_copy_d2h(
                             d_data[i][key][k], h_data[i][key][k])
+        t.stop()
         t2 = time.time_ns()
         self.time_stats_samples(False)['mdl_d2h'].append(t2 - t1)
         return self._h_model_data

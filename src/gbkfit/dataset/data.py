@@ -2,11 +2,10 @@
 import logging
 import os.path
 
-import astropy.io.fits as fits
 import astropy.wcs
 import numpy as np
 
-from gbkfit.utils import miscutils, parseutils
+from gbkfit.utils import fitsutils, iterutils, miscutils, parseutils
 
 
 __all__ = ['Data', 'data_parser']
@@ -19,23 +18,10 @@ def _make_filename(filename, dump_path):
     return filename if dump_path else os.path.basename(filename)
 
 
-def _load_fits(filename):
-    data = fits.getdata(filename)
-    header = fits.getheader(filename)
-    wcs = astropy.wcs.WCS(header)
-    return data, header, wcs
-
-
-def _dump_fits(filename, data, wcs, overwrite=False):
-    fits.writeto(
-        filename, data, header=wcs.to_header(),
-        output_verify='exception', overwrite=overwrite, checksum=True)
-
-
 def _ensure_floating_or_float32(x, label):
     result = x
     if not np.issubdtype(x.dtype, np.floating):
-        _log.info(
+        _log.warning(
             f"{label} array is not of floating type; will convert to float32")
         result = x.astype(np.float32)
     return result
@@ -47,13 +33,13 @@ class Data:
     def load(cls, info, step=None, rpix=None, rval=None, rota=None, prefix=''):
         desc = parseutils.make_basic_desc(cls, 'data')
         opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
-        data_d, header_d, wcs_d = _load_fits(prefix + opts['data'])
+        data_d, wcs_d = fitsutils.load_fits(prefix + opts['data'])
         data_m = None
         data_e = None
         if 'mask' in opts:
-            data_m = _load_fits(prefix + opts['mask'])[0]
+            data_m = fitsutils.load_fits(prefix + opts['mask'])[0]
         if 'error' in opts:
-            data_e = _load_fits(prefix + opts['error'])[0]
+            data_e = fitsutils.load_fits(prefix + opts['error'])[0]
         # Local information has higher priority than global
         step = opts.get('step', step)
         rpix = opts.get('rpix', rpix)
@@ -74,7 +60,7 @@ class Data:
             step=step,
             rpix=rpix,
             rval=rval,
-            rota=0))
+            rota=rota))
         return cls(**opts)
 
     def dump(
@@ -104,18 +90,21 @@ class Data:
             info.update(dict(step=step, rpix=rpix, rval=rval, rota=rota))
         # Dump data
         info['data'] = filename_d = _make_filename(filename_d, dump_path)
-        _dump_fits(filename_d, dat, wcs, overwrite)
+        fitsutils.dump_fits(filename_d, dat, wcs, overwrite)
         if filename_m and msk is not None:
             info['mask'] = filename_m = _make_filename(filename_m, dump_path)
-            _dump_fits(filename_m, msk, wcs, overwrite)
+            fitsutils.dump_fits(filename_m, msk, wcs, overwrite)
         if filename_e and err is not None:
             info['error'] = filename_e = _make_filename(filename_e, dump_path)
-            _dump_fits(filename_e, err, wcs, overwrite)
+            fitsutils.dump_fits(filename_e, err, wcs, overwrite)
         return info
 
     def __init__(
             self, data, mask=None, error=None,
             step=None, rpix=None, rval=None, rota=0):
+        step = iterutils.tuplify(step, False)
+        rpix = iterutils.tuplify(rpix, False)
+        rval = iterutils.tuplify(rval, False)
         if mask is None:
             mask = np.ones_like(data)
         if error is None:
@@ -129,9 +118,12 @@ class Data:
         data = miscutils.to_native_byteorder(data)
         mask = miscutils.to_native_byteorder(mask)
         error = miscutils.to_native_byteorder(error)
+        # If data is not floating point, we need to convert it.
+        # float32 should be more than enough.
         data = _ensure_floating_or_float32(data, 'data')
         mask = _ensure_floating_or_float32(mask, 'mask')
         error = _ensure_floating_or_float32(error, 'error')
+        # Make sure the supplied arguments are compatible
         if data.shape != mask.shape:
             raise RuntimeError(
                 f"data and mask have incompatible shapes "
@@ -152,6 +144,8 @@ class Data:
             raise RuntimeError(
                 f"data dimensionality and rval length are incompatible "
                 f"({data.dim} != {len(rval)})")
+        # Create and apply the "total mask" which takes into account
+        # the supplied mask as well as all the nan values in the data.
         total_mask = np.ones_like(data)
         total_mask *= np.isfinite(data)
         total_mask *= np.isfinite(mask)
@@ -161,7 +155,9 @@ class Data:
         mask[total_mask == 0] = 0
         mask[total_mask != 0] = 1
         error[total_mask == 0] = np.nan
+        # Calculate the world coordinates at pixel (0, 0)
         zero = (np.array(rval) - np.array(rpix) * np.array(step)).tolist()
+        # Keep copies of the supplied data
         self._data = data.copy()
         self._mask = mask.copy().astype(data.dtype)
         self._error = error.copy().astype(data.dtype)

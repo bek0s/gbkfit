@@ -1,14 +1,22 @@
 
-import astropy.io.fits as fits  # TODO: Remove dependency somehow
+import astropy.wcs
 import numpy as np
 import scipy.ndimage
 
+import gbkfit.dataset
 import gbkfit.math
 from gbkfit.psflsf.core import LSF
-from gbkfit.utils import miscutils, parseutils
+from gbkfit.utils import fitsutils, parseutils
 
 
-__all__ = ['LSFGauss', 'LSFGGauss', 'LSFLorentz', 'LSFMoffat', 'LSFImage']
+__all__ = [
+    'LSFPoint',
+    'LSFGauss',
+    'LSFGGauss',
+    'LSFLorentz',
+    'LSFMoffat',
+    'LSFImage'
+]
 
 
 def _create_grid_1d(size, step, offset):
@@ -19,6 +27,28 @@ def _create_grid_1d(size, step, offset):
 def _load_lsf_common(cls, info):
     desc = parseutils.make_typed_desc(cls, 'LSF')
     return parseutils.parse_options_for_callable(info, desc, cls.__init__)
+
+
+class LSFPoint(LSF):
+
+    @staticmethod
+    def type():
+        return 'point'
+
+    @classmethod
+    def load(cls, info):
+        return cls()
+
+    def dump(self):
+        return dict(type=self.type())
+
+    def _size_impl(self, step):
+        return 1
+
+    def _asarray_impl(self, step, size, offset):
+        data = np.zeros(size)
+        data[size // 2 + offset] = 1
+        return data
 
 
 class LSFGauss(LSF):
@@ -158,21 +188,27 @@ class LSFImage(LSF):
     @classmethod
     def load(cls, info):
         opts = _load_lsf_common(cls, info)
-        opts.update(dict(
-            data=miscutils.to_native_byteorder(fits.getdata(opts['data']))))
+        try:
+            data, wcs = fitsutils.load_fits(opts['data'])
+        except Exception as e:
+            raise RuntimeError(
+                f"could not load LSF image with filename '{opts['data']}'; "
+                f"see preceding exception for additional information") from e
+        opts.update(dict(data=data, step=opts.get('step', wcs.wcs.cdelt[0])))
         return cls(**opts)
 
-    def dump(self, file=None):
-        if not file:
-            file = 'lsf.fits'
-        info = dict(
-            data=file,
-            step=self._step)
-        fits.writeto(file, self._data, overwrite=True)
+    def dump(self, filename='lsf.fits', overwrite=False):
+        info = dict(type=self.type(), data=filename, step=self._step)
+        wcs = astropy.wcs.WCS(naxis=1, relax=False)
+        wcs.wcs.cdelt = self._step  # noqa
+        fitsutils.dump_fits(filename, self._data, wcs, overwrite)
         return info
 
-    def __init__(self, data, step):
-        self._data = np.copy(data)
+    def __init__(self, data, step=1):
+        if not np.all(np.isfinite(data)):
+            raise RuntimeError(
+                "non-finite pixels found in the supplied LSF image")
+        self._data = data
         self._step = step
 
     def _size_impl(self, step):
@@ -180,8 +216,8 @@ class LSFImage(LSF):
 
     def _asarray_impl(self, step, size, offset):
         scale = step / self._step
-        old_center = self._data.shape[0] / 2 + 0.5
-        new_center = size / 2 + 0.5 + offset
+        old_center = self._data.shape[0] / 2 - 0.5
+        new_center = size / 2 - 0.5 + offset
         x = np.arange(size)
         nx = (x - new_center) * scale + old_center
         data = scipy.ndimage.map_coordinates(self._data, [nx], order=5)

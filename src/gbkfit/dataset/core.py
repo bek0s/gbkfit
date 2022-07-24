@@ -2,38 +2,38 @@
 import abc
 import copy
 
-from gbkfit.utils import parseutils
+from gbkfit.dataset.data import Data
+from gbkfit.utils import iterutils, parseutils
 
 
 __all__ = ['Dataset', 'dataset_parser']
 
 
-def _ensure_same_attrib_value(data, method, class_desc):
+def _ensure_same_attrib_value(data, method):
     attr = {k: getattr(v, method)() for k, v in data.items()}
     if len(set(attr.values())) > 1:
         raise RuntimeError(
-            f"{class_desc} contains data items of different {method}: "
-            f"{str(attr)}")
+            f"dataset contains data items of different {method}: {str(attr)}")
 
 
 class Dataset(parseutils.TypedParserSupport, abc.ABC):
 
     def __init__(self, data):
-        desc = parseutils.make_typed_desc(self.__class__, 'dataset')
         # At least one data item must be defined
         if not data:
-            raise RuntimeError(f"{desc} contains no data items")
-
-        if all([v is None for v in data.values()]):
-            raise RuntimeError()
-
+            raise RuntimeError("dataset contains no data items")
+        # All data items must be of the right type
+        invalid_data = [k for k, v in data.values() if not isinstance(v, Data)]
+        if invalid_data:
+            raise RuntimeError(
+                f"dataset contains valid data items: {invalid_data}")
         # All data items must have the same properties
-        _ensure_same_attrib_value(data, 'size', desc)
-        _ensure_same_attrib_value(data, 'step', desc)
-        _ensure_same_attrib_value(data, 'rpix', desc)
-        _ensure_same_attrib_value(data, 'rval', desc)
-        _ensure_same_attrib_value(data, 'rota', desc)
-        _ensure_same_attrib_value(data, 'dtype', desc)
+        _ensure_same_attrib_value(data, 'size')
+        _ensure_same_attrib_value(data, 'step')
+        _ensure_same_attrib_value(data, 'rpix')
+        _ensure_same_attrib_value(data, 'rval')
+        _ensure_same_attrib_value(data, 'rota')
+        _ensure_same_attrib_value(data, 'dtype')
         # We need to copy the data to ensure they are kept intact
         self._data = copy.deepcopy(data)
 
@@ -55,8 +55,8 @@ class Dataset(parseutils.TypedParserSupport, abc.ABC):
     def values(self):
         return self._data.values()
 
-    def get(self, item):
-        return self._data.get(item)
+    def get(self, item, default=None):
+        return self._data.get(item, default)
 
     @property
     def npix(self):
@@ -97,9 +97,14 @@ class DatasetTypedParser(parseutils.TypedParser):
         super().__init__(Dataset)
 
     def dump_many(self, x, *args, **kwargs):
-        raise RuntimeError(
-            "dumping many Datasets at once is not supported; "
-            "please dump each Dataset separately")
+        # Ensure that a unique prefix for each dataset is provided
+        # in order to avoid datasets overwriting each other
+        prefix = iterutils.listify(kwargs.get('prefix'), False)
+        if len(x) != len(set(prefix)):
+            raise RuntimeError(
+                "when dumping multiple datasets,"
+                "a unique prefix for each dataset must be provided")
+        return super().dump_many(x, *args, **kwargs)
 
 
 dataset_parser = DatasetTypedParser()

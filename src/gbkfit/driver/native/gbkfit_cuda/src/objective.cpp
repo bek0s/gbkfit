@@ -5,12 +5,14 @@
 namespace gbkfit::cuda {
 
 template<typename T> void
-Objective<T>::count_pixels(Ptr data, Ptr model, int size, Ptr counts) const
+Objective<T>::count_pixels(
+        Ptr data1, Ptr data2, int size, T epsilon, Ptr counts) const
 {
     Wrapper<T>::objective_count_pixels(
-                reinterpret_cast<const T*>(data),
-                reinterpret_cast<const T*>(model),
+                reinterpret_cast<const T*>(data1),
+                reinterpret_cast<const T*>(data2),
                 size,
+                epsilon,
                 reinterpret_cast<int*>(counts));
 }
 

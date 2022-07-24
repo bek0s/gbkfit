@@ -1,4 +1,6 @@
 
+import copy
+
 from gbkfit.dataset.core import Dataset
 from . import _detail
 
@@ -25,7 +27,7 @@ class DatasetMMaps(Dataset):
             self,
             mmap0=None, mmap1=None, mmap2=None, mmap3=None,
             mmap4=None, mmap5=None, mmap6=None, mmap7=None):
-        mmaps = locals().copy()
+        mmaps = copy.deepcopy(locals())
         mmaps.pop('self')
         mmaps.pop('__class__')
         # TODO: validate wcs

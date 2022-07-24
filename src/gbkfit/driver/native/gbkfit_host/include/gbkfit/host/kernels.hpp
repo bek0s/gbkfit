@@ -1,39 +1,22 @@
 #pragma once
 
+#include <cmath>
 #include <iostream>
-#include <random>
 
 #include <omp.h>
 
-#include <gbkfit/dmodel/dmodels.hpp>
 #include <gbkfit/gmodel/disks.hpp>
+#include <gbkfit/dmodel/dmodels.hpp>
 #include <gbkfit/gmodel/gmodels.hpp>
+
+#include "gbkfit/host/constants.hpp"
 #include "gbkfit/host/fftutils.hpp"
-
-namespace gbkfit {
-
-template<typename T>
-struct RNG
-{
-    RNG(T a, T b, int seed)
-        : dis(a, b)
-        , gen(seed) {}
-
-    T
-    operator()(void) {
-        return dis(gen);
-    }
-
-    std::uniform_real_distribution<T> dis;
-    std::mt19937 gen;
-};
-
-} // namespace gbkfit
+#include "gbkfit/host/random.hpp"
 
 namespace gbkfit::host::kernels {
 
 template<typename T> void
-dmodel_dcube_complex_multiply_and_scale(
+math_complex_multiply_and_scale(
         typename fftw3<T>::complex* arr1,
         typename fftw3<T>::complex* arr2,
         int n, float scale)
@@ -54,169 +37,9 @@ dmodel_dcube_complex_multiply_and_scale(
 }
 
 template<typename T> void
-dmodel_dcube_downscale(
-        int scale_x, int scale_y, int scale_z,
-        int offset_x, int offset_y, int offset_z,
-        int src_size_x, int src_size_y, int src_size_z,
-        int dst_size_x, int dst_size_y, int dst_size_z,
-        const T* src_cube, T* dst_cube)
-{
-    const T nfactor = T{1} / (scale_x * scale_y * scale_z);
-
-    #pragma omp parallel for collapse(3)
-    for(int z = 0; z < dst_size_z; ++z)
-    {
-    for(int y = 0; y < dst_size_y; ++y)
-    {
-    for(int x = 0; x < dst_size_x; ++x)
-    {
-        // Src cube 3d index
-        int nx = offset_x + x * scale_x;
-        int ny = offset_y + y * scale_y;
-        int nz = offset_z + z * scale_z;
-
-        // Calculate average value under the current position
-        T sum = 0;
-        #pragma omp simd collapse(3)
-        for(int dsz = 0; dsz < scale_z; ++dsz)
-        {
-        for(int dsy = 0; dsy < scale_y; ++dsy)
-        {
-        for(int dsx = 0; dsx < scale_x; ++dsx)
-        {
-            int idx = (nx + dsx)
-                    + (ny + dsy) * src_size_x
-                    + (nz + dsz) * src_size_x * src_size_y;
-
-            sum += src_cube[idx];
-        }
-        }
-        }
-
-        // Dst cube 1d index
-        int idx = x
-                + y * dst_size_x
-                + z * dst_size_x * dst_size_y;
-
-        dst_cube[idx] = sum * nfactor;
-    }
-    }
-    }
-}
-
-template<typename T> void
-objective_count_pixels(const T* data, const T* model, int size, int* counts)
-{
-    #pragma omp parallel
-    {
-        int count_dat = 0;
-        int count_mdl = 0;
-        int count_bth = 0;
-
-        #pragma omp for nowait
-        for(int i = 0; i < size; ++i)
-        {
-            const T dat = data[i];
-            const T mdl = model[i];
-            count_dat += dat && !mdl;
-            count_mdl += mdl && !dat;
-            count_bth += dat && mdl;
-        }
-
-        if (count_dat) {
-            #pragma omp atomic update
-            counts[0] += count_dat;
-        }
-        if (count_mdl) {
-            #pragma omp atomic update
-            counts[1] += count_mdl;
-        }
-        if (count_bth) {
-            #pragma omp atomic update
-            counts[2] += count_bth;
-        }
-    }
-}
-
-
-template<typename T> void
-objective_residual(const T* data, const T* mask, T* residual, int size)
-{
-    for(int i = 0; i < size; ++i)
-    {
-        //residual[i] = data[i] - model[i];
-    }
-}
-
-template<typename T> void
-dmodel_dcube_make_mask(
-        bool mask_spat, bool mask_spec, T mask_coef,
-        int size_x, int size_y, int size_z, T* cube, T* mask)
-{
-    #pragma omp parallel for collapse(2)
-    for(int y = 0; y < size_y; ++y)
-    {
-    for(int x = 0; x < size_x; ++x)
-    {
-
-    T sum = 0;
-
-    for(int z = 0; z < size_z; ++z)
-    {
-        int idx = x + y * size_x + z * size_x * size_y;
-        T val = std::fabs(cube[idx]);
-        sum += val;
-    }
-
-    for(int z = 0; z < size_z; ++z)
-    {
-        int idx = x + y * size_x + z * size_x * size_y;
-        T val = std::fabs(cube[idx]);
-        T msk = 1;
-        if (val < mask_coef)
-        {
-            cube[idx] = 0;
-            msk *= !mask_spec;
-        }
-        if (sum < mask_coef * size_z)
-        {
-            cube[idx] = 0;
-            msk *= !mask_spat;
-        }
-        mask[idx] = msk;
-    }
-
-    }
-    }
-}
-
-template<typename T> void
-dmodel_dcube_moments(
-        int size_x, int size_y, int size_z,
-        T step_x, T step_y, T step_z,
-        T zero_x, T zero_y, T zero_z,
-        const T* scube,
-        T* mmaps, T* masks, const int* orders, int norders)
-{
-    #pragma omp parallel for collapse(2)
-    for (int y = 0; y < size_y; ++y)
-    {
-    for (int x = 0; x < size_x; ++x)
-    {
-        moments(x, y,
-                size_x, size_y, size_z,
-                step_x, step_y, step_z,
-                zero_x, zero_y, zero_z,
-                scube,
-                mmaps, masks, orders, norders);
-    }
-    }
-}
-
-template<typename T> void
 evaluate_image(T* image, int x, int y, T rvalue, int spat_size_x)
 {
-    int idx = x + y * spat_size_x;
+    const int idx = index_2d_to_1d(x, y, spat_size_x);
     #pragma omp atomic update
     image[idx] += rvalue;
 }
@@ -230,40 +53,122 @@ evaluate_scube(
         T spec_zero)
 {
     // Calculate a spectral range that encloses most of the flux.
-    T zmin = vvalue - dvalue * 3;
-    T zmax = vvalue + dvalue * 3;
+    T zmin = vvalue - dvalue * LINE_WIDTH_MULTIPLIER<T>;
+    T zmax = vvalue + dvalue * LINE_WIDTH_MULTIPLIER<T>;
     int zmin_idx = std::max<T>(std::rint(
             (zmin - spec_zero)/spec_step), 0);
     int zmax_idx = std::min<T>(std::rint(
             (zmax - spec_zero)/spec_step), spec_size - 1);
 
     // Evaluate the spectral line within the range specified above
-    // Evaluating only within the range results in huge speed increase
+    // Evaluating only within the range can result in huge speed increase
     for (int z = zmin_idx; z <= zmax_idx; ++z)
     {
-        int idx = x
-                + y * spat_size_x
-                + z * spat_size_x * spat_size_y;
+        int idx = index_3d_to_1d(x, y, z, spat_size_x, spat_size_y);
         T zvel = spec_zero + z * spec_step;
-        T flux = rvalue * gauss_1d_pdf<T>(zvel, vvalue, dvalue);
+        T flux = rvalue * gauss_1d_pdf<T>(zvel, vvalue, dvalue); // * spec_step;
         #pragma omp atomic update
         scube[idx] += flux;
     }
 }
 
 template<typename T> void
-gmodel_wcube(
-        int spat_size_x, int spat_size_y, int spat_size_z,
-        int spec_size,
-        T* src, T* dst)
+dmodel_dcube_downscale(
+        int scale_x, int scale_y, int scale_z,
+        int offset_x, int offset_y, int offset_z,
+        int src_size_x, int src_size_y, int src_size_z,
+        int dst_size_x, int dst_size_y, int dst_size_z,
+        const T* src_dcube, T* dst_dcube)
+{
+    #pragma omp parallel for collapse(3)
+    for(int z = 0; z < dst_size_z; ++z) {
+    for(int y = 0; y < dst_size_y; ++y) {
+    for(int x = 0; x < dst_size_x; ++x) {
+
+    gbkfit::dmodel_dcube_downscale(
+            x, y, z,
+            scale_x, scale_y, scale_z,
+            offset_x, offset_y, offset_z,
+            src_size_x, src_size_y, src_size_z,
+            dst_size_x, dst_size_y, dst_size_z,
+            src_dcube, dst_dcube);
+
+    }
+    }
+    }
+}
+
+template<typename T> void
+dmodel_dcube_mask(
+        T cutoff, bool apply,
+        int size_x, int size_y, int size_z,
+        T* dcube_d, T* dcube_m, T* dcube_w)
+{
+    #pragma omp parallel for collapse(3)
+    for(int z = 0; z < size_z; ++z) {
+    for(int y = 0; y < size_y; ++y) {
+    for(int x = 0; x < size_x; ++x) {
+
+    gbkfit::dmodel_dcube_mask(
+            x, y, z,
+            cutoff, apply,
+            size_x, size_y, size_z,
+            dcube_d, dcube_m, dcube_w);
+
+    }
+    }
+    }
+}
+
+template<typename T> void
+dmodel_moments(
+        int size_x, int size_y, int size_z,
+        T step_x, T step_y, T step_z,
+        T zero_x, T zero_y, T zero_z,
+        const T* dcube_d,
+        const T* dcube_w,
+        T cutoff,
+        int norders,
+        const int* orders,
+        T* mmaps_d,
+        T* mmaps_m,
+        T* mmaps_w)
 {
     #pragma omp parallel for collapse(2)
-    for(int y = 0; y < spat_size_y; ++y)
-    {
-    for(int x = 0; x < spat_size_x; ++x)
-    {
-        gmodel_weight_scube_pixel(
-                x, y, spat_size_x, spat_size_y, spat_size_z, spec_size, src, dst);
+    for (int y = 0; y < size_y; ++y) {
+    for (int x = 0; x < size_x; ++x) {
+
+    gbkfit::dmodel_mmaps_moments(
+            x, y,
+            size_x, size_y, size_z,
+            step_x, step_y, step_z,
+            zero_x, zero_y, zero_z,
+            dcube_d, dcube_w,
+            cutoff, norders, orders,
+            mmaps_d, mmaps_w, mmaps_m);
+
+    }
+    }
+}
+
+template<typename T> void
+gmodel_wcube(
+        int spat_size_x, int spat_size_y, int spat_size_z,
+        int spec_size_z,
+        const T* spat_cube,
+        T* spec_cube)
+{
+    #pragma omp parallel for collapse(2)
+    for(int y = 0; y < spat_size_y; ++y) {
+    for(int x = 0; x < spat_size_x; ++x) {
+
+    gbkfit::gmodel_wcube_pixel(
+            x, y,
+            spat_size_x, spat_size_y, spat_size_z,
+            spec_size_z,
+            spat_cube,
+            spec_cube);
+
     }
     }
 }
@@ -318,10 +223,9 @@ gmodel_smdisk_evaluate(
         T* rdata, T* vdata, T* ddata)
 {
     #pragma omp parallel for collapse(2)
-    for(int y = 0; y < spat_size_y; ++y)
-    {
-    for(int x = 0; x < spat_size_x; ++x)
-    {
+    for(int y = 0; y < spat_size_y; ++y) {
+    for(int x = 0; x < spat_size_x; ++x) {
+
     for(int z = 0; z < spat_size_z; ++z)
     {
         T bvalue, vvalue, dvalue, wvalue = 1;
@@ -392,30 +296,25 @@ gmodel_smdisk_evaluate(
                     spec_zero);
         }
 
-        int idx = x
-                + y * spat_size_x
-                + z * spat_size_x * spat_size_y;
+        int idx = index_3d_to_1d(x, y, z, spat_size_x, spat_size_y);
 
         if (rcube) {
             rcube[idx] += bvalue;
         }
-
         if (wcube) {
             wcube[idx] = wvalue;
         }
-
         if (rdata) {
             rdata[idx] = bvalue;
         }
-
         if (vdata) {
             vdata[idx] = vvalue;
         }
-
         if (ddata) {
             ddata[idx] = dvalue;
         }
     }
+
     }
     }
 }
@@ -480,107 +379,138 @@ gmodel_mcdisk_evaluate(
     #pragma omp parallel for
     for(int ci = 0; ci < nclouds; ++ci)
     {
-        int x, y, z;
-        T bvalue, vvalue, dvalue, wvalue = 1;
-        RNG<T>& rng = rngs[omp_get_thread_num()];
-        bool success = gbkfit::gmodel_mcdisk_evaluate_cloud(
-                x, y, z,
-                bvalue, vvalue, dvalue, wcube ? &wvalue : nullptr,
-                rng, ci,
-                cflux, nclouds,
-                ncloudscsum, ncloudscsum_len,
-                hasordint,
-                loose, tilted,
-                nrnodes, rnodes,
-                vsys,
-                xpos, ypos,
-                posa, incl,
-                nrt,
-                rpt_uids,
-                rpt_cvalues, rpt_ccounts,
-                rpt_pvalues, rpt_pcounts,
-                rht_uids,
-                rht_cvalues, rht_ccounts,
-                rht_pvalues, rht_pcounts,
-                nvt,
-                vpt_uids,
-                vpt_cvalues, vpt_ccounts,
-                vpt_pvalues, vpt_pcounts,
-                vht_uids,
-                vht_cvalues, vht_ccounts,
-                vht_pvalues, vht_pcounts,
-                ndt,
-                dpt_uids,
-                dpt_cvalues, dpt_ccounts,
-                dpt_pvalues, dpt_pcounts,
-                dht_uids,
-                dht_cvalues, dht_ccounts,
-                dht_pvalues, dht_pcounts,
-                nzt,
-                zpt_uids,
-                zpt_cvalues, zpt_ccounts,
-                zpt_pvalues, zpt_pcounts,
-                nst,
-                spt_uids,
-                spt_cvalues, spt_ccounts,
-                spt_pvalues, spt_pcounts,
-                nwt,
-                wpt_uids,
-                wpt_cvalues, wpt_ccounts,
-                wpt_pvalues, wpt_pcounts,
-                spat_size_x, spat_size_y, spat_size_z,
-                spat_step_x, spat_step_y, spat_step_z,
-                spat_zero_x, spat_zero_y, spat_zero_z,
+
+    int x, y, z;
+    T bvalue, vvalue, dvalue, wvalue = 1;
+    RNG<T>& rng = rngs[omp_get_thread_num()];
+    bool success = gbkfit::gmodel_mcdisk_evaluate_cloud(
+            x, y, z,
+            bvalue, vvalue, dvalue, wcube ? &wvalue : nullptr,
+            rng, ci,
+            cflux, nclouds,
+            ncloudscsum, ncloudscsum_len,
+            hasordint,
+            loose, tilted,
+            nrnodes, rnodes,
+            vsys,
+            xpos, ypos,
+            posa, incl,
+            nrt,
+            rpt_uids,
+            rpt_cvalues, rpt_ccounts,
+            rpt_pvalues, rpt_pcounts,
+            rht_uids,
+            rht_cvalues, rht_ccounts,
+            rht_pvalues, rht_pcounts,
+            nvt,
+            vpt_uids,
+            vpt_cvalues, vpt_ccounts,
+            vpt_pvalues, vpt_pcounts,
+            vht_uids,
+            vht_cvalues, vht_ccounts,
+            vht_pvalues, vht_pcounts,
+            ndt,
+            dpt_uids,
+            dpt_cvalues, dpt_ccounts,
+            dpt_pvalues, dpt_pcounts,
+            dht_uids,
+            dht_cvalues, dht_ccounts,
+            dht_pvalues, dht_pcounts,
+            nzt,
+            zpt_uids,
+            zpt_cvalues, zpt_ccounts,
+            zpt_pvalues, zpt_pcounts,
+            nst,
+            spt_uids,
+            spt_cvalues, spt_ccounts,
+            spt_pvalues, spt_pcounts,
+            nwt,
+            wpt_uids,
+            wpt_cvalues, wpt_ccounts,
+            wpt_pvalues, wpt_pcounts,
+            spat_size_x, spat_size_y, spat_size_z,
+            spat_step_x, spat_step_y, spat_step_z,
+            spat_zero_x, spat_zero_y, spat_zero_z,
+            spec_size,
+            spec_step,
+            spec_zero);
+
+    if (!success) {
+        continue;
+    }
+
+    if (image) {
+        evaluate_image(
+                image, x, y, bvalue,
+                spat_size_x);
+    }
+
+    if (scube) {
+        evaluate_scube(
+                scube, x, y, bvalue, vvalue, dvalue,
+                spat_size_x, spat_size_y,
                 spec_size,
                 spec_step,
                 spec_zero);
+    }
 
-        if (!success) {
-            continue;
+    int idx = index_3d_to_1d(x, y, z, spat_size_x, spat_size_y);
+
+    if (rcube) {
+        #pragma omp atomic update
+        rcube[idx] += bvalue;
+    }
+    if (wcube) {
+        #pragma omp atomic write
+        wcube[idx] = wvalue;
+    }
+    if (rdata) {
+        #pragma omp atomic update
+        rdata[idx] += bvalue;
+    }
+    if (vdata) {
+        #pragma omp atomic write
+        vdata[idx] = vvalue; // for overlapping clouds, keep the last velocity
+    }
+    if (ddata) {
+        #pragma omp atomic write
+        ddata[idx] = dvalue; // for overlapping clouds, keep the last dispersion
+    }
+
+    }
+}
+
+template<typename T> void
+objective_count_pixels(
+        const T* data1, const T* data2, int size, T epsilon, int* counts)
+{
+    #pragma omp parallel
+    {
+        int count_data1 = 0;
+        int count_data2 = 0;
+        int count_both = 0;
+
+        #pragma omp for nowait
+        for(int i = 0; i < size; ++i)
+        {
+            const bool has_data1 = std::abs(data1[i]) > epsilon;
+            const bool has_data2 = std::abs(data2[i]) > epsilon;
+            count_data1 += has_data1 && !has_data2;
+            count_data2 += !has_data1 && has_data2;
+            count_both += has_data1 && has_data2;
         }
 
-        if (image) {
-            evaluate_image(
-                    image, x, y, bvalue,
-                    spat_size_x);
-        }
-
-        if (scube) {
-            evaluate_scube(
-                    scube, x, y, bvalue, vvalue, dvalue,
-                    spat_size_x, spat_size_y,
-                    spec_size,
-                    spec_step,
-                    spec_zero);
-        }
-
-        int idx = x
-                + y * spat_size_x
-                + z * spat_size_x * spat_size_y;
-
-        if (rcube) {
+        if (count_data1) {
             #pragma omp atomic update
-            rcube[idx] += bvalue;
+            counts[0] += count_data1;
         }
-
-        if (wcube) {
-            #pragma omp atomic write
-            wcube[idx] = wvalue;
-        }
-
-        if (rdata) {
+        if (count_data2) {
             #pragma omp atomic update
-            rdata[idx] += bvalue;
+            counts[1] += count_data2;
         }
-
-        if (vdata) {
-            #pragma omp atomic write
-            vdata[idx] = vvalue;
-        }
-
-        if (ddata) {
-            #pragma omp atomic write
-            ddata[idx] = dvalue;
+        if (count_both) {
+            #pragma omp atomic update
+            counts[2] += count_both;
         }
     }
 }

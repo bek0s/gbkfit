@@ -31,7 +31,7 @@ class SMDisk(_disk.Disk):
             wptraits)
 
     def _impl_prepare(self, driver, dtype):
-        self._disk = driver.backend().make_gmodel_smdisk(dtype)
+        self._disk = driver.backends().gmodel(dtype)
 
     def _impl_evaluate(
             self, driver, params, image, scube, rcube, wcube,
@@ -55,7 +55,7 @@ class SMDisk(_disk.Disk):
                 ddata = driver.mem_alloc_d(shape, dtype)
                 driver.mem_fill(ddata, np.nan)
 
-        self._disk.evaluate(
+        self._disk.evaluate_smdisk(
             self._loose,
             self._tilted,
             self._s_subrnodes[1],
