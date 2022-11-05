@@ -1,8 +1,48 @@
 #pragma once
 
 #include "gbkfit/gmodel/traits.hpp"
+
 #include <iostream>
+
+#include "gbkfit/constants.hpp"
+#include "gbkfit/utilities/indexutils.hpp"
+
 namespace gbkfit {
+
+
+template<auto AtomicAddFunT, typename T> void constexpr
+gmodel_image_evaluate(T* image, int x, int y, T rvalue, int spat_size_x)
+{
+    const int idx = index_2d_to_1d(x, y, spat_size_x);
+    AtomicAddFunT(&image[idx], rvalue);
+}
+
+template<auto AtomicAddFunT, typename T> void constexpr
+gmodel_scube_evaluate(
+        T* scube, int x, int y, T rvalue, T vvalue, T dvalue,
+        int spat_size_x, int spat_size_y,
+        int spec_size,
+        T spec_step,
+        T spec_zero)
+{
+    // Calculate a spectral range that encloses most of the flux.
+    T zmin = vvalue - dvalue * LINE_WIDTH_MULTIPLIER<T>;
+    T zmax = vvalue + dvalue * LINE_WIDTH_MULTIPLIER<T>;
+    int zmin_idx = std::max<T>(std::rint(
+            (zmin - spec_zero)/spec_step), 0);
+    int zmax_idx = std::min<T>(std::rint(
+            (zmax - spec_zero)/spec_step), spec_size - 1);
+
+    // Evaluate the spectral line within the range specified above
+    // Evaluating only within the range can result in huge speed increase
+    for (int z = zmin_idx; z <= zmax_idx; ++z)
+    {
+        int idx = index_3d_to_1d(x, y, z, spat_size_x, spat_size_y);
+        T zvel = spec_zero + z * spec_step;
+        T flux = rvalue * gauss_1d_pdf<T>(zvel, vvalue, dvalue); // * spec_step;
+        AtomicAddFunT(&scube[idx], flux);
+    }
+}
 
 constexpr int TRAIT_NUM_MAX = 4;
 
@@ -212,10 +252,8 @@ ring_info(
     return true;
 }
 
-template<typename T> constexpr bool
+template<auto AtomicAssignFunT, auto AtomicAddFunT, typename T> constexpr void
 gmodel_mcdisk_evaluate_cloud(
-        int& x, int& y, int& z,
-        T& bvalue, T& vvalue, T& dvalue, T* wvalue,
         RNG<T>& rng, int ci,
         T cflux, int nclouds,
         const int* ncloudscsum, int ncloudscsum_len,
@@ -263,13 +301,15 @@ gmodel_mcdisk_evaluate_cloud(
         T spat_zero_x, T spat_zero_y, T spat_zero_z,
         int spec_size,
         T spec_step,
-        T spec_zero)
+        T spec_zero,
+        T* image, T* scube, T* rcube, T* wcube,
+        T* rdata, T* vdata, T* ddata)
 {
     // This is a placeholder in case we decide to explicitly
     // add a Monte Carlo based thin disk in the future.
     bool is_thin = false;
 
-    int rnidx = 0, tidx=0;
+    int rnidx=0, tidx=0;
     const T* rpt_cptr = rpt_cvalues;
     const T* rpt_pptr = rpt_pvalues;
     const T* rht_cptr = rht_cvalues;
@@ -280,9 +320,10 @@ gmodel_mcdisk_evaluate_cloud(
     T htvalues[TRAIT_NUM_MAX] = {0};
     T zvalue = 0;
     T svalue = 0;
-    bvalue = cflux * spat_step_z;
-    vvalue = 0;
-    dvalue = 0;
+    T bvalue = cflux * spat_step_z;
+    T vvalue = 0;
+    T dvalue = 0;
+    T wvalue = 0;
 
     // Find which cumulative sum the cloud belongs to.
     while(ci >= ncloudscsum[rnidx]) {
@@ -311,7 +352,6 @@ gmodel_mcdisk_evaluate_cloud(
 
     if (sign < 0) {
         bvalue = -bvalue;
-        //std::cout << bvalue << std::endl;
     }
 
     // Integrate along z dimension
@@ -328,10 +368,8 @@ gmodel_mcdisk_evaluate_cloud(
     //  - rptraits with ordinary integral (no subrings).
     //  - pixels in the first and last half subrings.
     if (!disk_info(rnidx, rd, nrnodes, rnodes)) {
-        return false;
+        return;
     }
-
-    // =====================================================================
 
     // Selection traits
     if (spt_uids)
@@ -348,7 +386,7 @@ gmodel_mcdisk_evaluate_cloud(
             svalue += ptvalues[i];
 
         if (!svalue)
-            return false;
+            return;
     }
 
     // Density height trait
@@ -381,19 +419,19 @@ gmodel_mcdisk_evaluate_cloud(
     posai *= DEG_TO_RAD<T>;
     incli *= DEG_TO_RAD<T>;
 
-    T xn = xd, yn = yd, zn = zd;
+    T xn=xd, yn=yd, zn=zd;
     transform_incl_posa_cpos(xn, yn, zn, -xposi, -yposi, -posai, -incli);
 
     //
-    x = std::rint((xn - spat_zero_x)/spat_step_x);
-    y = std::rint((yn - spat_zero_y)/spat_step_y);
-    z = std::rint((zn - spat_zero_z)/spat_step_z);
+    int x = std::rint((xn - spat_zero_x)/spat_step_x);
+    int y = std::rint((yn - spat_zero_y)/spat_step_y);
+    int z = std::rint((zn - spat_zero_z)/spat_step_z);
 
     // Discard pixels outside the image/cube
     if (x < 0 || x >= spat_size_x ||
         y < 0 || y >= spat_size_y ||
         z < 0 || z >= spat_size_z) {
-        return false;
+        return;
     }
 
     // Velocity traits
@@ -451,9 +489,9 @@ gmodel_mcdisk_evaluate_cloud(
     dvalue = std::abs(dvalue);
 
     // Weight polar traits
-    if (wpt_uids && wvalue)
+    if (wpt_uids && wcube)
     {
-        *wvalue = 1;
+        wvalue = 1;
 
         p_traits<wp_trait<T>>(
                 ptvalues,
@@ -464,16 +502,47 @@ gmodel_mcdisk_evaluate_cloud(
                 xd, yd, rd, theta);
 
         for (int i = 0; i < nwt; ++i)
-            *wvalue *= ptvalues[i];
+            wvalue *= ptvalues[i];
     }
 
-    return true;
+    if (image) {
+        gbkfit::gmodel_image_evaluate<AtomicAddFunT>(
+                image, x, y, bvalue,
+                spat_size_x);
+    }
+
+    if (scube) {
+        gbkfit::gmodel_scube_evaluate<AtomicAddFunT>(
+                scube, x, y, bvalue, vvalue, dvalue,
+                spat_size_x, spat_size_y,
+                spec_size,
+                spec_step,
+                spec_zero);
+    }
+
+    int idx = index_3d_to_1d(x, y, z, spat_size_x, spat_size_y);
+
+    if (rcube) {
+        AtomicAddFunT(&rcube[idx], bvalue);
+    }
+    if (wcube) {
+        AtomicAssignFunT(&wcube[idx], wvalue);
+    }
+    if (rdata) {
+        AtomicAddFunT(&rdata[idx], bvalue);
+    }
+    if (vdata) {
+        // for overlapping clouds, keep the last velocity
+        AtomicAssignFunT(&vdata[idx], vvalue);
+    }
+    if (ddata) {
+        // for overlapping clouds, keep the last dispersion
+        AtomicAssignFunT(&ddata[idx], dvalue);
+    }
 }
 
-
-template<typename T> constexpr bool
+template<auto AtomicAddFunT, typename T> constexpr void
 gmodel_smdisk_evaluate_pixel(
-        T& bvalue, T& vvalue, T& dvalue, T* wvalue,
         int x, int y, int z,
         bool loose, bool tilted,
         int nrnodes, const T* rnodes,
@@ -518,7 +587,9 @@ gmodel_smdisk_evaluate_pixel(
         T spat_zero_x, T spat_zero_y, T spat_zero_z,
         int spec_size,
         T spec_step,
-        T spec_zero)
+        T spec_zero,
+        T* image, T* scube, T* rcube, T* wcube,
+        T* rdata, T* vdata, T* ddata)
 {
     bool is_thin = rht_uids == nullptr;
 
@@ -531,19 +602,19 @@ gmodel_smdisk_evaluate_pixel(
     yn = spat_zero_y + y * spat_step_y;
     zn = spat_zero_z + z * spat_step_z;
 
-    // If the disk is loose or tilted,
-    // calculate pixel's radial node index and radius
+    // If the disk is loose or tilted, we need to calculate the pixel's
+    // radial node index and radius now.
     if (loose || tilted)
     {
-        bool success = is_thin
+        bool is_on_disk = is_thin
                 ? ring_info(
-                      rnidx, rn, xn, yn, loose, tilted,
-                      nrnodes, rnodes, xpos, ypos, posa, incl)
+                    rnidx, rn, xn, yn, loose, tilted,
+                    nrnodes, rnodes, xpos, ypos, posa, incl)
                 : ring_info(
                     rnidx, rn, xn, yn, zn, loose, tilted,
                     nrnodes, rnodes, xpos, ypos, posa, incl);
-        if (!success)
-            return false;
+        if (!is_on_disk)
+            return;
     }
 
     // Interpolate systemic velocity and geometrical parameters
@@ -563,22 +634,19 @@ gmodel_smdisk_evaluate_pixel(
 
     theta = std::atan2(yn, xn);
 
-    // If the disk is not loose or tilted,
-    // ...
+    // If the disk is not loose or tilted, we need to calculate the pixel's
+    // radial node index and radius now.
     if (!(loose || tilted)) {
         rn = std::sqrt(xn * xn + yn * yn);
-        if (!disk_info(rnidx, rn, nrnodes, rnodes))
-            return false;
+        bool is_on_disk = disk_info(rnidx, rn, nrnodes, rnodes);
+        if (!is_on_disk)
+            return;
     }
 
     // These are needed for trait evaluation
     T ptvalues[TRAIT_NUM_MAX] = {0};
     T htvalues[TRAIT_NUM_MAX] = {0};
-    T zvalue = 0;
-    T svalue = 0;
-    bvalue = 0;
-    vvalue = 0;
-    dvalue = 0;
+    T bvalue=0, vvalue=0, dvalue=0, zvalue=0, svalue=0, wvalue=1;
 
     // Selection traits
     if (spt_uids)
@@ -595,7 +663,7 @@ gmodel_smdisk_evaluate_pixel(
             svalue += ptvalues[i];
 
         if (!svalue)
-            return false;
+            return;
     }
 
     // Vertical distortion traits
@@ -640,7 +708,7 @@ gmodel_smdisk_evaluate_pixel(
         bvalue += ptvalues[i] * (is_thin ? 1 : htvalues[i]);
 
     // Discart pixels with zero emission
-    if (bvalue == 0) return false;
+    if (!bvalue) return;
 
     // Thin disk requires surface brightness correction
     if (is_thin) bvalue /= std::cos(incli);
@@ -703,9 +771,9 @@ gmodel_smdisk_evaluate_pixel(
     dvalue = std::abs(dvalue);
 
     // Weight polar traits
-    if (wpt_uids && wvalue)
+    if (wpt_uids && wcube)
     {
-        *wvalue = 1;
+        wvalue = 1;
 
         p_traits<wp_trait<T>>(
                 ptvalues,
@@ -716,10 +784,41 @@ gmodel_smdisk_evaluate_pixel(
                 xn, yn, rn, theta);
 
         for (int i = 0; i < nwt; ++i)
-            *wvalue *= ptvalues[i];
+            wvalue *= ptvalues[i];
     }
 
-    return true;
+    if (image) {
+        gbkfit::gmodel_image_evaluate<AtomicAddFunT>(
+                image, x, y, bvalue,
+                spat_size_x);
+    }
+
+    if (scube) {
+        gbkfit::gmodel_scube_evaluate<AtomicAddFunT>(
+                scube, x, y, bvalue, vvalue, dvalue,
+                spat_size_x, spat_size_y,
+                spec_size,
+                spec_step,
+                spec_zero);
+    }
+
+    int idx = index_3d_to_1d(x, y, z, spat_size_x, spat_size_y);
+
+    if (rcube) {
+        rcube[idx] += bvalue;
+    }
+    if (wcube) {
+        wcube[idx] = wvalue;
+    }
+    if (rdata) {
+        rdata[idx] = bvalue;
+    }
+    if (vdata) {
+        vdata[idx] = vvalue;
+    }
+    if (ddata) {
+        ddata[idx] = dvalue;
+    }
 }
 
 } // namespace gbkfit

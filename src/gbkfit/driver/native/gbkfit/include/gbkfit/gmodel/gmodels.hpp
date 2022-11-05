@@ -37,38 +37,4 @@ gmodel_wcube_pixel(
     }
 }
 
-template<auto AtomicAddFunT, typename T> void constexpr
-gmodel_image_evaluate(T* image, int x, int y, T rvalue, int spat_size_x)
-{
-    const int idx = index_2d_to_1d(x, y, spat_size_x);
-    AtomicAddFunT(&image[idx], rvalue);
-}
-
-template<auto AtomicAddFunT, typename T> void constexpr
-gmodel_scube_evaluate(
-        T* scube, int x, int y, T rvalue, T vvalue, T dvalue,
-        int spat_size_x, int spat_size_y,
-        int spec_size,
-        T spec_step,
-        T spec_zero)
-{
-    // Calculate a spectral range that encloses most of the flux.
-    T zmin = vvalue - dvalue * LINE_WIDTH_MULTIPLIER<T>;
-    T zmax = vvalue + dvalue * LINE_WIDTH_MULTIPLIER<T>;
-    int zmin_idx = std::max<T>(std::rint(
-            (zmin - spec_zero)/spec_step), 0);
-    int zmax_idx = std::min<T>(std::rint(
-            (zmax - spec_zero)/spec_step), spec_size - 1);
-
-    // Evaluate the spectral line within the range specified above
-    // Evaluating only within the range can result in huge speed increase
-    for (int z = zmin_idx; z <= zmax_idx; ++z)
-    {
-        int idx = index_3d_to_1d(x, y, z, spat_size_x, spat_size_y);
-        T zvel = spec_zero + z * spec_step;
-        T flux = rvalue * gauss_1d_pdf<T>(zvel, vvalue, dvalue); // * spec_step;
-        AtomicAddFunT(&scube[idx], flux);
-    }
-}
-
 } // namespace

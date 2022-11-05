@@ -9,11 +9,24 @@
 #include <gbkfit/dmodel/dmodels.hpp>
 #include <gbkfit/gmodel/gmodels.hpp>
 
-#include "gbkfit/host/constants.hpp"
 #include "gbkfit/host/fftutils.hpp"
 #include "gbkfit/host/random.hpp"
 
 namespace gbkfit::host::kernels {
+
+template<typename T>
+inline void atomic_add(T* addr, T val)
+{
+    #pragma omp atomic update
+    *addr += val;
+}
+
+template<typename T>
+inline void atomic_assign(T* addr, T val)
+{
+    #pragma omp atomic write
+    *addr = val;
+}
 
 template<typename T> void
 math_complex_multiply_and_scale(
@@ -33,42 +46,6 @@ math_complex_multiply_and_scale(
 
         arr1[i][0] = (a[0]*b[0]-a[1]*b[1])*scale;
         arr1[i][1] = (a[0]*b[1]+a[1]*b[0])*scale;
-    }
-}
-
-template<typename T> void
-evaluate_image(T* image, int x, int y, T rvalue, int spat_size_x)
-{
-    const int idx = index_2d_to_1d(x, y, spat_size_x);
-    #pragma omp atomic update
-    image[idx] += rvalue;
-}
-
-template<typename T> void
-evaluate_scube(
-        T* scube, int x, int y, T rvalue, T vvalue, T dvalue,
-        int spat_size_x, int spat_size_y,
-        int spec_size,
-        T spec_step,
-        T spec_zero)
-{
-    // Calculate a spectral range that encloses most of the flux.
-    T zmin = vvalue - dvalue * LINE_WIDTH_MULTIPLIER<T>;
-    T zmax = vvalue + dvalue * LINE_WIDTH_MULTIPLIER<T>;
-    int zmin_idx = std::max<T>(std::rint(
-            (zmin - spec_zero)/spec_step), 0);
-    int zmax_idx = std::min<T>(std::rint(
-            (zmax - spec_zero)/spec_step), spec_size - 1);
-
-    // Evaluate the spectral line within the range specified above
-    // Evaluating only within the range can result in huge speed increase
-    for (int z = zmin_idx; z <= zmax_idx; ++z)
-    {
-        int idx = index_3d_to_1d(x, y, z, spat_size_x, spat_size_y);
-        T zvel = spec_zero + z * spec_step;
-        T flux = rvalue * gauss_1d_pdf<T>(zvel, vvalue, dvalue); // * spec_step;
-        #pragma omp atomic update
-        scube[idx] += flux;
     }
 }
 
@@ -228,9 +205,7 @@ gmodel_smdisk_evaluate(
 
     for(int z = 0; z < spat_size_z; ++z)
     {
-        T bvalue, vvalue, dvalue, wvalue = 1;
-        bool success = gbkfit::gmodel_smdisk_evaluate_pixel(
-                bvalue, vvalue, dvalue, wcube ? &wvalue : nullptr,
+        gbkfit::gmodel_smdisk_evaluate_pixel<atomic_add<T>>(
                 x, y, z,
                 loose, tilted,
                 nrnodes, rnodes,
@@ -275,44 +250,9 @@ gmodel_smdisk_evaluate(
                 spat_zero_x, spat_zero_y, spat_zero_z,
                 spec_size,
                 spec_step,
-                spec_zero);
-
-        if (!success) {
-            continue;
-        }
-
-        if (image) {
-            evaluate_image(
-                    image, x, y, bvalue,
-                    spat_size_x);
-        }
-
-        if (scube) {
-            evaluate_scube(
-                    scube, x, y, bvalue, vvalue, dvalue,
-                    spat_size_x, spat_size_y,
-                    spec_size,
-                    spec_step,
-                    spec_zero);
-        }
-
-        int idx = index_3d_to_1d(x, y, z, spat_size_x, spat_size_y);
-
-        if (rcube) {
-            rcube[idx] += bvalue;
-        }
-        if (wcube) {
-            wcube[idx] = wvalue;
-        }
-        if (rdata) {
-            rdata[idx] = bvalue;
-        }
-        if (vdata) {
-            vdata[idx] = vvalue;
-        }
-        if (ddata) {
-            ddata[idx] = dvalue;
-        }
+                spec_zero,
+                image, scube, rcube, wcube,
+                rdata, vdata, ddata);
     }
 
     }
@@ -380,12 +320,8 @@ gmodel_mcdisk_evaluate(
     for(int ci = 0; ci < nclouds; ++ci)
     {
 
-    int x, y, z;
-    T bvalue, vvalue, dvalue, wvalue = 1;
     RNG<T>& rng = rngs[omp_get_thread_num()];
-    bool success = gbkfit::gmodel_mcdisk_evaluate_cloud(
-            x, y, z,
-            bvalue, vvalue, dvalue, wcube ? &wvalue : nullptr,
+    gbkfit::gmodel_mcdisk_evaluate_cloud<atomic_assign<T>, atomic_add<T>>(
             rng, ci,
             cflux, nclouds,
             ncloudscsum, ncloudscsum_len,
@@ -433,49 +369,9 @@ gmodel_mcdisk_evaluate(
             spat_zero_x, spat_zero_y, spat_zero_z,
             spec_size,
             spec_step,
-            spec_zero);
-
-    if (!success) {
-        continue;
-    }
-
-    if (image) {
-        evaluate_image(
-                image, x, y, bvalue,
-                spat_size_x);
-    }
-
-    if (scube) {
-        evaluate_scube(
-                scube, x, y, bvalue, vvalue, dvalue,
-                spat_size_x, spat_size_y,
-                spec_size,
-                spec_step,
-                spec_zero);
-    }
-
-    int idx = index_3d_to_1d(x, y, z, spat_size_x, spat_size_y);
-
-    if (rcube) {
-        #pragma omp atomic update
-        rcube[idx] += bvalue;
-    }
-    if (wcube) {
-        #pragma omp atomic write
-        wcube[idx] = wvalue;
-    }
-    if (rdata) {
-        #pragma omp atomic update
-        rdata[idx] += bvalue;
-    }
-    if (vdata) {
-        #pragma omp atomic write
-        vdata[idx] = vvalue; // for overlapping clouds, keep the last velocity
-    }
-    if (ddata) {
-        #pragma omp atomic write
-        ddata[idx] = dvalue; // for overlapping clouds, keep the last dispersion
-    }
+            spec_zero,
+            image, scube, rcube, wcube,
+            rdata, vdata, ddata);
 
     }
 }

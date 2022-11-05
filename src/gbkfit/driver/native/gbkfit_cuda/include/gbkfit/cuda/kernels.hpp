@@ -18,6 +18,12 @@ inline void atomic_add(T* addr, T val)
     atomicAdd(addr, val);
 }
 
+template<typename T>
+inline void atomic_assign(T* addr, T val)
+{
+    *addr = val;
+}
+
 template<typename T> __global__ void
 math_complex_multiply_and_scale(
         typename cufft<T>::complex* arr1,
@@ -199,9 +205,7 @@ gmodel_smdisk_evaluate(
 
     for (int z = 0; z < spat_size_z; ++z)
     {
-        T bvalue, vvalue, dvalue, wvalue = 1;
-        bool success = gbkfit::gmodel_smdisk_evaluate_pixel(
-                bvalue, vvalue, dvalue, wcube ? &wvalue : nullptr,
+        gbkfit::gmodel_smdisk_evaluate_pixel<atomic_add<T>>(
                 x, y, z,
                 loose, tilted,
                 nrnodes, rnodes,
@@ -246,44 +250,9 @@ gmodel_smdisk_evaluate(
                 spat_zero_x, spat_zero_y, spat_zero_z,
                 spec_size,
                 spec_step,
-                spec_zero);
-
-        if (!success) {
-            continue;
-        }
-
-        if (image) {
-            gbkfit::gmodel_image_evaluate<atomic_add<T>>(
-                    image, x, y, bvalue,
-                    spat_size_x);
-        }
-
-        if (scube) {
-            gbkfit::gmodel_scube_evaluate<atomic_add<T>>(
-                    scube, x, y, bvalue, vvalue, dvalue,
-                    spat_size_x, spat_size_y,
-                    spec_size,
-                    spec_step,
-                    spec_zero);
-        }
-
-        int idx = index_3d_to_1d(x, y, z, spat_size_x, spat_size_y);
-
-        if (rcube) {
-            rcube[idx] += bvalue;
-        }
-        if (wcube) {
-            wcube[idx] = wvalue;
-        }
-        if (rdata) {
-            rdata[idx] = bvalue;
-        }
-        if (vdata) {
-            vdata[idx] = vvalue;
-        }
-        if (ddata) {
-            ddata[idx] = dvalue;
-        }
+                spec_zero,
+                image, scube, rcube, wcube,
+                rdata, vdata, ddata);
     }
 }
 
@@ -344,12 +313,8 @@ gmodel_mcdisk_evaluate(
     const int tid = blockIdx.x * blockDim.x + threadIdx.x;
     if (tid >= nthreads) return;
 
-    int x, y, z;
-    T bvalue, vvalue, dvalue, wvalue = 1;
     RNG<T> rng(tid);
-    bool success = gbkfit::gmodel_mcdisk_evaluate_cloud(
-            x, y, z,
-            bvalue, vvalue, dvalue, wcube ? &wvalue : nullptr,
+    gbkfit::gmodel_mcdisk_evaluate_cloud<atomic_assign<T>, atomic_add<T>>(
             rng, tid,
             cflux, nclouds,
             ncloudscsum, ncloudscsum_len,
@@ -397,49 +362,9 @@ gmodel_mcdisk_evaluate(
             spat_zero_x, spat_zero_y, spat_zero_z,
             spec_size,
             spec_step,
-            spec_zero);
-
-    if (!success) {
-        return;
-    }
-
-    if (image) {
-        gbkfit::gmodel_image_evaluate<atomic_add<T>>(
-                image, x, y, bvalue,
-                spat_size_x);
-    }
-
-    if (scube) {
-        gbkfit::gmodel_scube_evaluate<atomic_add<T>>(
-                scube, x, y, bvalue, vvalue, dvalue,
-                spat_size_x, spat_size_y,
-                spec_size,
-                spec_step,
-                spec_zero);
-    }
-
-    int idx = index_3d_to_1d(x, y, z, spat_size_x, spat_size_y);
-
-    if (rcube) {
-        #pragma omp atomic update
-        rcube[idx] += bvalue;
-    }
-    if (wcube) {
-        #pragma omp atomic write
-        wcube[idx] = wvalue;
-    }
-    if (rdata) {
-        #pragma omp atomic update
-        rdata[idx] += bvalue;
-    }
-    if (vdata) {
-        #pragma omp atomic write
-        vdata[idx] = vvalue; // for overlapping clouds, keep the last velocity
-    }
-    if (ddata) {
-        #pragma omp atomic write
-        ddata[idx] = dvalue; // for overlapping clouds, keep the last dispersion
-    }
+            spec_zero,
+            image, scube, rcube, wcube,
+            rdata, vdata, ddata);
 }
 
 template<typename T> __global__ void
