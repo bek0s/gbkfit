@@ -1,9 +1,9 @@
 #pragma once
 
+#include <cassert>
 #include <cmath>
 #include <iostream>
 
-#include <gbkfit/gmodel/disks.hpp>
 #include <gbkfit/dmodel/dmodels.hpp>
 #include <gbkfit/gmodel/gmodels.hpp>
 
@@ -210,7 +210,7 @@ gmodel_smdisk_evaluate(
     int x, y, z;
     index_1d_to_3d(x, y, z, tid, spat_size_x, spat_size_y);
 
-    gbkfit::gmodel_smdisk_evaluate_pixel<atomic_add<T>>(
+    gbkfit::gmodel_smdisk_evaluate_spaxel<atomic_add<T>>(
             x, y, z,
             loose, tilted,
             nrnodes, rnodes,

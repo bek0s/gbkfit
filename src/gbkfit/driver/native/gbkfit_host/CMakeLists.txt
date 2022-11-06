@@ -12,7 +12,6 @@ set(HEADER_FILES
   include/gbkfit/host/dmodels.hpp
   include/gbkfit/host/fftutils.hpp
   include/gbkfit/host/gmodels.hpp
-  include/gbkfit/host/image.hpp
   include/gbkfit/host/kernels.hpp
   include/gbkfit/host/objective.hpp
 )
@@ -21,7 +20,6 @@ set(SOURCE_FILES
   src/bindings.cpp
   src/dmodels.cpp
   src/gmodels.cpp
-  src/image.cpp
   src/objective.cpp
 )
 

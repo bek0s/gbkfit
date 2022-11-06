@@ -1,6 +1,6 @@
 #pragma once
 
-#include <gbkfit/utilities/indexutils.hpp>
+#include "gbkfit/utilities/indexutils.hpp"
 
 namespace gbkfit {
 

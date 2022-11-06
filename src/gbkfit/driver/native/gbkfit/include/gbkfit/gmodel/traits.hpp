@@ -1,7 +1,5 @@
 #pragma once
 
-#include <cassert>
-#include <iostream>
 #include "gbkfit/math/math.hpp"
 
 namespace gbkfit {

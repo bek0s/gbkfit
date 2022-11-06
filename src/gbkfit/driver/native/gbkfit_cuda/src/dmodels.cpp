@@ -5,18 +5,6 @@
 namespace gbkfit::cuda {
 
 template<typename T> void
-_complex_multiply(std::array<int, 3> size, T* cube_c, T* psf_c)
-{
-    int n0 = size[2], n1 = size[1], n2 = size[0];
-    const int n = n0 * n1 * (n2 / 2 + 1);
-    const T nfactor = T{1} / (n0 * n1 * n2);
-    Wrapper<T>::dmodel_dcube_complex_multiply_and_scale(
-            reinterpret_cast<typename cufft<T>::complex*>(cube_c),
-            reinterpret_cast<typename cufft<T>::complex*>(psf_c),
-            n, nfactor);
-}
-
-template<typename T> void
 DModel<T>::dcube_downscale(
         std::array<int, 3> scale,
         std::array<int, 3> offset,
