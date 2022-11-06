@@ -39,7 +39,7 @@ DModel<T>::dcube_mask(
         std::array<int, 3> size,
         Ptr dcube_d, Ptr dcube_m, Ptr dcube_w) const
 {
-    Wrapper<T>::dmodel_dcube_make_mask(
+    Wrapper<T>::dmodel_dcube_mask(
             cutoff, apply,
             size[0], size[1], size[2],
             reinterpret_cast<T*>(dcube_d),
@@ -56,15 +56,18 @@ DModel<T>::mmaps_moments(
         T cutoff, int norders, Ptr orders,
         Ptr mmaps_d, Ptr mmaps_m, Ptr mmaps_w) const
 {
-//    Wrapper<T>::dmodel_mmaps_moments(
-//            size[0], size[1], size[2],
-//            step[0], step[1], step[2],
-//            zero[0], zero[1], zero[2],
-//            reinterpret_cast<T*>(scube),
-//            reinterpret_cast<T*>(mmaps),
-//            reinterpret_cast<T*>(masks),
-//            reinterpret_cast<int*>(orders),
-//            norders);
+    Wrapper<T>::dmodel_mmaps_moments(
+            size[0], size[1], size[2],
+            step[0], step[1], step[2],
+            zero[0], zero[1], zero[2],
+            reinterpret_cast<T*>(dcube_d),
+            reinterpret_cast<T*>(dcube_w),
+            cutoff,
+            norders,
+            reinterpret_cast<int*>(orders),
+            reinterpret_cast<T*>(mmaps_d),
+            reinterpret_cast<T*>(mmaps_m),
+            reinterpret_cast<T*>(mmaps_w));
 }
 
 #define INSTANTIATE(T)\

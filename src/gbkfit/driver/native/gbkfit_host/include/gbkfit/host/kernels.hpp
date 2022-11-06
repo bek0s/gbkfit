@@ -14,15 +14,15 @@
 
 namespace gbkfit::host::kernels {
 
-template<typename T>
-inline void atomic_add(T* addr, T val)
+template<typename T> inline constexpr void
+atomic_add(T* addr, T val)
 {
     #pragma omp atomic update
     *addr += val;
 }
 
-template<typename T>
-inline void atomic_assign(T* addr, T val)
+template<typename T> inline constexpr void
+atomic_set(T* addr, T val)
 {
     #pragma omp atomic write
     *addr = val;
@@ -57,6 +57,7 @@ dmodel_dcube_downscale(
         int dst_size_x, int dst_size_y, int dst_size_z,
         const T* src_dcube, T* dst_dcube)
 {
+    // Parallelization: per 3d position in the dst dcube
     #pragma omp parallel for collapse(3)
     for(int z = 0; z < dst_size_z; ++z) {
     for(int y = 0; y < dst_size_y; ++y) {
@@ -81,6 +82,7 @@ dmodel_dcube_mask(
         int size_x, int size_y, int size_z,
         T* dcube_d, T* dcube_m, T* dcube_w)
 {
+    // Parallelization: per 3d position in the dcube
     #pragma omp parallel for collapse(3)
     for(int z = 0; z < size_z; ++z) {
     for(int y = 0; y < size_y; ++y) {
@@ -111,6 +113,7 @@ dmodel_moments(
         T* mmaps_m,
         T* mmaps_w)
 {
+    // Parallelization: per 2d spatial position
     #pragma omp parallel for collapse(2)
     for (int y = 0; y < size_y; ++y) {
     for (int x = 0; x < size_x; ++x) {
@@ -129,12 +132,13 @@ dmodel_moments(
 }
 
 template<typename T> void
-gmodel_wcube(
+gmodel_wcube_evaluate(
         int spat_size_x, int spat_size_y, int spat_size_z,
         int spec_size_z,
         const T* spat_cube,
         T* spec_cube)
 {
+    // Parallelization: per 2d spatial position
     #pragma omp parallel for collapse(2)
     for(int y = 0; y < spat_size_y; ++y) {
     for(int x = 0; x < spat_size_x; ++x) {
@@ -199,62 +203,62 @@ gmodel_smdisk_evaluate(
         T* image, T* scube, T* rcube, T* wcube,
         T* rdata, T* vdata, T* ddata)
 {
-    #pragma omp parallel for collapse(2)
+    // Parallelization: per 3d spatial position
+    // TODO: Implement ray marching and revise parallelization scheme
+    #pragma omp parallel for collapse(3)
     for(int y = 0; y < spat_size_y; ++y) {
     for(int x = 0; x < spat_size_x; ++x) {
+    for(int z = 0; z < spat_size_z; ++z) {
 
-    for(int z = 0; z < spat_size_z; ++z)
-    {
-        gbkfit::gmodel_smdisk_evaluate_pixel<atomic_add<T>>(
-                x, y, z,
-                loose, tilted,
-                nrnodes, rnodes,
-                vsys,
-                xpos, ypos,
-                posa, incl,
-                nrt,
-                rpt_uids,
-                rpt_cvalues, rpt_ccounts,
-                rpt_pvalues, rpt_pcounts,
-                rht_uids,
-                rht_cvalues, rht_ccounts,
-                rht_pvalues, rht_pcounts,
-                nvt,
-                vpt_uids,
-                vpt_cvalues, vpt_ccounts,
-                vpt_pvalues, vpt_pcounts,
-                vht_uids,
-                vht_cvalues, vht_ccounts,
-                vht_pvalues, vht_pcounts,
-                ndt,
-                dpt_uids,
-                dpt_cvalues, dpt_ccounts,
-                dpt_pvalues, dpt_pcounts,
-                dht_uids,
-                dht_cvalues, dht_ccounts,
-                dht_pvalues, dht_pcounts,
-                nzt,
-                zpt_uids,
-                zpt_cvalues, zpt_ccounts,
-                zpt_pvalues, zpt_pcounts,
-                nst,
-                spt_uids,
-                spt_cvalues, spt_ccounts,
-                spt_pvalues, spt_pcounts,
-                nwt,
-                wpt_uids,
-                wpt_cvalues, wpt_ccounts,
-                wpt_pvalues, wpt_pcounts,
-                spat_size_x, spat_size_y, spat_size_z,
-                spat_step_x, spat_step_y, spat_step_z,
-                spat_zero_x, spat_zero_y, spat_zero_z,
-                spec_size,
-                spec_step,
-                spec_zero,
-                image, scube, rcube, wcube,
-                rdata, vdata, ddata);
+    gbkfit::gmodel_smdisk_evaluate_pixel<atomic_add<T>>(
+            x, y, z,
+            loose, tilted,
+            nrnodes, rnodes,
+            vsys,
+            xpos, ypos,
+            posa, incl,
+            nrt,
+            rpt_uids,
+            rpt_cvalues, rpt_ccounts,
+            rpt_pvalues, rpt_pcounts,
+            rht_uids,
+            rht_cvalues, rht_ccounts,
+            rht_pvalues, rht_pcounts,
+            nvt,
+            vpt_uids,
+            vpt_cvalues, vpt_ccounts,
+            vpt_pvalues, vpt_pcounts,
+            vht_uids,
+            vht_cvalues, vht_ccounts,
+            vht_pvalues, vht_pcounts,
+            ndt,
+            dpt_uids,
+            dpt_cvalues, dpt_ccounts,
+            dpt_pvalues, dpt_pcounts,
+            dht_uids,
+            dht_cvalues, dht_ccounts,
+            dht_pvalues, dht_pcounts,
+            nzt,
+            zpt_uids,
+            zpt_cvalues, zpt_ccounts,
+            zpt_pvalues, zpt_pcounts,
+            nst,
+            spt_uids,
+            spt_cvalues, spt_ccounts,
+            spt_pvalues, spt_pcounts,
+            nwt,
+            wpt_uids,
+            wpt_cvalues, wpt_ccounts,
+            wpt_pvalues, wpt_pcounts,
+            spat_size_x, spat_size_y, spat_size_z,
+            spat_step_x, spat_step_y, spat_step_z,
+            spat_zero_x, spat_zero_y, spat_zero_z,
+            spec_size,
+            spec_step,
+            spec_zero,
+            image, scube, rcube, wcube,
+            rdata, vdata, ddata);
     }
-
     }
     }
 }
@@ -316,12 +320,13 @@ gmodel_mcdisk_evaluate(
     for(int i = 0; i < omp_get_num_procs(); ++i)
         rngs.push_back(RNG<T>(0, 1, 42));
 
+    // Parallelization: per cloud
     #pragma omp parallel for
     for(int ci = 0; ci < nclouds; ++ci)
     {
 
     RNG<T>& rng = rngs[omp_get_thread_num()];
-    gbkfit::gmodel_mcdisk_evaluate_cloud<atomic_assign<T>, atomic_add<T>>(
+    gbkfit::gmodel_mcdisk_evaluate_cloud<atomic_set<T>, atomic_add<T>>(
             rng, ci,
             cflux, nclouds,
             ncloudscsum, ncloudscsum_len,

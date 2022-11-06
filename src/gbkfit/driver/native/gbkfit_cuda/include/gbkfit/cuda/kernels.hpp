@@ -12,15 +12,16 @@
 
 namespace gbkfit::cuda::kernels {
 
-template<typename T>
-inline void atomic_add(T* addr, T val)
+template<typename T> inline constexpr void
+atomic_add(T* addr, T val)
 {
     atomicAdd(addr, val);
 }
 
-template<typename T>
-inline void atomic_assign(T* addr, T val)
+template<typename T> inline constexpr void
+atomic_set(T* addr, T val)
 {
+    // TODO: revise this
     *addr = val;
 }
 
@@ -53,10 +54,11 @@ dmodel_dcube_downscale(
         int dst_size_x, int dst_size_y, int dst_size_z,
         const T* src_cube, T* dst_cube)
 {
-    // Each thread is assigned a 3d position in the dst dcube
+    // Parallelization: per 3d position in the dst dcube
     const int nthreads = dst_size_x * dst_size_y * dst_size_z;
     const int tid = blockIdx.x * blockDim.x + threadIdx.x;
-    if (tid >= nthreads) return;
+    if (tid >= nthreads)
+        return;
 
     int x, y, z;
     index_1d_to_3d(x, y, z, tid, dst_size_x, dst_size_y);
@@ -71,15 +73,16 @@ dmodel_dcube_downscale(
 }
 
 template<typename T> __global__ void
-dmodel_dcube_make_mask(
+dmodel_dcube_mask(
         T cutoff, bool apply,
         int size_x, int size_y, int size_z,
         T* dcube_d, T* dcube_m, T* dcube_w)
 {
-    // Each thread is assigned a 3d position in the dcube
+    // Parallelization: per 3d position in the dcube
     const int nthreads = size_x * size_y;
     const int tid = blockIdx.x * blockDim.x + threadIdx.x;
-    if (tid >= nthreads) return;
+    if (tid >= nthreads)
+        return;
 
     int x, y, z;
     index_1d_to_3d(x, y, z, tid, size_x, size_y);
@@ -105,10 +108,11 @@ dcube_moments(
         T* mmaps_m,
         T* mmaps_w)
 {
-    // Each thread is assigned a 2d spatial position
+    // Parallelization: per 2d spatial position
     const int nthreads = size_x * size_y;
     const int tid = blockIdx.x * blockDim.x + threadIdx.x;
-    if (tid >= nthreads) return;
+    if (tid >= nthreads)
+        return;
 
     int x, y;
     index_1d_to_2d(x, y, tid, size_x);
@@ -124,16 +128,17 @@ dcube_moments(
 }
 
 template<typename T> __global__ void
-gmodel_wcube(
+gmodel_wcube_evaluate(
         int spat_size_x, int spat_size_y, int spat_size_z,
         int spec_size_z,
         const T* spat_cube,
         T* spec_cube)
 {
-    // Each thread is assigned a 2d spatial position
+    // Parallelization: per 2d spatial position
     const int nthreads = spat_size_x * spat_size_y;
     const int tid = blockIdx.x * blockDim.x + threadIdx.x;
-    if (tid >= nthreads) return;
+    if (tid >= nthreads)
+        return;
 
     int x, y;
     index_1d_to_2d(x, y, tid, spat_size_x);
@@ -195,65 +200,64 @@ gmodel_smdisk_evaluate(
         T* image, T* scube, T* rcube, T* wcube,
         T* rdata, T* vdata, T* ddata)
 {
-    // Each thread is assigned a 3d spatial position
+    // Parallelization: per 3d spatial position
+    // TODO: Implement ray marching and revise parallelization scheme
     const int nthreads = spat_size_x * spat_size_y * spat_size_z;
     const int tid = blockIdx.x * blockDim.x + threadIdx.x;
-    if (tid >= nthreads) return;
+    if (tid >= nthreads)
+        return;
 
-    int x, y;
-    index_1d_to_2d(x, y, tid, spat_size_x);
+    int x, y, z;
+    index_1d_to_3d(x, y, z, tid, spat_size_x, spat_size_y);
 
-    for (int z = 0; z < spat_size_z; ++z)
-    {
-        gbkfit::gmodel_smdisk_evaluate_pixel<atomic_add<T>>(
-                x, y, z,
-                loose, tilted,
-                nrnodes, rnodes,
-                vsys,
-                xpos, ypos,
-                posa, incl,
-                nrt,
-                rpt_uids,
-                rpt_cvalues, rpt_ccounts,
-                rpt_pvalues, rpt_pcounts,
-                rht_uids,
-                rht_cvalues, rht_ccounts,
-                rht_pvalues, rht_pcounts,
-                nvt,
-                vpt_uids,
-                vpt_cvalues, vpt_ccounts,
-                vpt_pvalues, vpt_pcounts,
-                vht_uids,
-                vht_cvalues, vht_ccounts,
-                vht_pvalues, vht_pcounts,
-                ndt,
-                dpt_uids,
-                dpt_cvalues, dpt_ccounts,
-                dpt_pvalues, dpt_pcounts,
-                dht_uids,
-                dht_cvalues, dht_ccounts,
-                dht_pvalues, dht_pcounts,
-                nzt,
-                zpt_uids,
-                zpt_cvalues, zpt_ccounts,
-                zpt_pvalues, zpt_pcounts,
-                nst,
-                spt_uids,
-                spt_cvalues, spt_ccounts,
-                spt_pvalues, spt_pcounts,
-                nwt,
-                wpt_uids,
-                wpt_cvalues, wpt_ccounts,
-                wpt_pvalues, wpt_pcounts,
-                spat_size_x, spat_size_y, spat_size_z,
-                spat_step_x, spat_step_y, spat_step_z,
-                spat_zero_x, spat_zero_y, spat_zero_z,
-                spec_size,
-                spec_step,
-                spec_zero,
-                image, scube, rcube, wcube,
-                rdata, vdata, ddata);
-    }
+    gbkfit::gmodel_smdisk_evaluate_pixel<atomic_add<T>>(
+            x, y, z,
+            loose, tilted,
+            nrnodes, rnodes,
+            vsys,
+            xpos, ypos,
+            posa, incl,
+            nrt,
+            rpt_uids,
+            rpt_cvalues, rpt_ccounts,
+            rpt_pvalues, rpt_pcounts,
+            rht_uids,
+            rht_cvalues, rht_ccounts,
+            rht_pvalues, rht_pcounts,
+            nvt,
+            vpt_uids,
+            vpt_cvalues, vpt_ccounts,
+            vpt_pvalues, vpt_pcounts,
+            vht_uids,
+            vht_cvalues, vht_ccounts,
+            vht_pvalues, vht_pcounts,
+            ndt,
+            dpt_uids,
+            dpt_cvalues, dpt_ccounts,
+            dpt_pvalues, dpt_pcounts,
+            dht_uids,
+            dht_cvalues, dht_ccounts,
+            dht_pvalues, dht_pcounts,
+            nzt,
+            zpt_uids,
+            zpt_cvalues, zpt_ccounts,
+            zpt_pvalues, zpt_pcounts,
+            nst,
+            spt_uids,
+            spt_cvalues, spt_ccounts,
+            spt_pvalues, spt_pcounts,
+            nwt,
+            wpt_uids,
+            wpt_cvalues, wpt_ccounts,
+            wpt_pvalues, wpt_pcounts,
+            spat_size_x, spat_size_y, spat_size_z,
+            spat_step_x, spat_step_y, spat_step_z,
+            spat_zero_x, spat_zero_y, spat_zero_z,
+            spec_size,
+            spec_step,
+            spec_zero,
+            image, scube, rcube, wcube,
+            rdata, vdata, ddata);
 }
 
 template<typename T> __global__ void
@@ -308,13 +312,14 @@ gmodel_mcdisk_evaluate(
         T* image, T* scube, T* rcube, T* wcube,
         T* rdata, T* vdata, T* ddata)
 {
-    // Each thread is assigned a cloud
+    // Parallelization: per cloud
     const int nthreads = nclouds;
     const int tid = blockIdx.x * blockDim.x + threadIdx.x;
-    if (tid >= nthreads) return;
+    if (tid >= nthreads)
+        return;
 
     RNG<T> rng(tid);
-    gbkfit::gmodel_mcdisk_evaluate_cloud<atomic_assign<T>, atomic_add<T>>(
+    gbkfit::gmodel_mcdisk_evaluate_cloud<atomic_set<T>, atomic_add<T>>(
             rng, tid,
             cflux, nclouds,
             ncloudscsum, ncloudscsum_len,

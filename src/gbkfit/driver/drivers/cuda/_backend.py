@@ -121,26 +121,6 @@ class DriverBackendDModelCuda(DriverBackendDModel):
             _ptr(mmaps_d), _ptr(mmaps_w), _ptr(mmaps_m))
 
 
-class _GModel(backend.GModel):
-
-    _CLASSES = {
-        np.float32: native_module.GModelf32}
-
-    def __deepcopy__(self, memodict):
-        return self.__class__(self._dtype)
-
-    def __init__(self, dtype):
-        self._backend = _get_class(self._CLASSES, dtype)()
-        self._dtype = dtype
-
-    def make_wcube(self, spat_size, spec_size, spat_data, spec_data):
-        self._backend.make_wcube(
-            spat_size[0], spat_size[1], spat_size[2],
-            spec_size,
-            _ptr(spat_data),
-            _ptr(spec_data))
-
-
 class DriverBackendGModelCuda(DriverBackendGModel):
 
     _CLASSES = {
@@ -154,8 +134,8 @@ class DriverBackendGModelCuda(DriverBackendGModel):
     def __deepcopy__(self, memodict):
         return self.__class__(self._dtype)
 
-    def make_wcube(self, spat_size, spec_size, spat_data, spec_data):
-        self._module.make_wcube(
+    def wcube_evaluate(self, spat_size, spec_size, spat_data, spec_data):
+        self._module.wcube_evaluate(
             spat_size[0], spat_size[1], spat_size[2],
             spec_size,
             _ptr(spat_data),
@@ -244,7 +224,7 @@ class DriverBackendGModelCuda(DriverBackendGModel):
             spec_size, spec_step, spec_zero,
             image, scube, rcube, wcube,
             rdata, vdata, ddata):
-        self._module.evaluate_smdisk(
+        self._module.smdisk_evaluate(
             loose, tilted,
             _size(rnodes),
             _ptr(rnodes),

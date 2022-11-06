@@ -9,8 +9,8 @@ struct Wrapper
 {
     static void
     math_complex_multiply_and_scale(
-            typename cufft<T>::complex* ary1,
-            typename cufft<T>::complex* ary2,
+            typename cufft<T>::complex* arr1,
+            typename cufft<T>::complex* arr2,
             int n, T scale);
 
     static void
@@ -22,7 +22,7 @@ struct Wrapper
             const T* src_cube, T* dst_cube);
 
     static void
-    dmodel_dcube_make_mask(
+    dmodel_dcube_mask(
             T cutoff, bool apply,
             int size_x, int size_y, int size_z,
             T* dcube_d, T* dcube_m, T* dcube_w);
@@ -38,9 +38,9 @@ struct Wrapper
             T* mmaps_d, T* mmaps_m, T* mmaps_w);
 
     static void
-    gmodel_wcube(
+    gmodel_wcube_evaluate(
             int spat_size_x, int spat_size_y, int spat_size_z,
-            int spec_size,
+            int spec_size_z,
             const T* spat_data,
             T* spec_data);
 

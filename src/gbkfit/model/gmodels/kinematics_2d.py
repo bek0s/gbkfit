@@ -89,4 +89,5 @@ class GModelKinematics2D(GModelSCube):
 
         # Generate weight cube
         if wcube is not None:
-            self._backend.make_wcube(spat_size + (1,), spec_size, wcube, wdata)
+            self._backend.wcube_evaluate(
+                spat_size + (1,), spec_size, wcube, wdata)

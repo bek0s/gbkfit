@@ -2,6 +2,7 @@
 
 #include "gbkfit/cuda/common.hpp"
 #include "gbkfit/cuda/fftutils.hpp"
+#include "gbkfit/cuda/wrapper.hpp"
 
 namespace gbkfit::cuda {
 
@@ -127,7 +128,7 @@ private:
     PlanType
     fft_r2c_plan(SizeType size, RealType* data_r, ComplexType* data_c)
     {
-        auto [n0, n1, n2] = size;
+        auto [n2, n1, n0] = size;
         cufftHandle plan;
         cufftPlan3d(&plan, n0, n1, n2, cufft<T>::R2C);
         return plan;
@@ -173,13 +174,13 @@ private:
             const std::array<int, 3> size,
             ComplexType* data1, ComplexType* data2)
     {
-//        const auto [n2, n0, n1] = size;
-//        const auto n = n0 * n1 * (n2 / 2 + 1);
-//        const auto nfactor = T{1} / (n0 * n1 * n2);
-//        kernels::dmodel_dcube_complex_multiply_and_scale<T>(
-//                reinterpret_cast<typename fftw3<T>::complex*>(data1),
-//                reinterpret_cast<typename fftw3<T>::complex*>(data2),
-//                n, nfactor);
+        const auto [n2, n0, n1] = size;
+        const auto n = n0 * n1 * (n2 / 2 + 1);
+        const auto nfactor = T{1} / (n0 * n1 * n2);
+        Wrapper<T>::math_complex_multiply_and_scale(
+                reinterpret_cast<typename cufft<T>::complex*>(data1),
+                reinterpret_cast<typename cufft<T>::complex*>(data2),
+                n, nfactor);
     }
 
     void

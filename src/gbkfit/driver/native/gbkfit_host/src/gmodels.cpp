@@ -5,15 +5,15 @@
 namespace gbkfit::host {
 
 template<typename T>
-void GModel<T>::make_wcube(
+void GModel<T>::wcube_evaluate(
         int spat_size_x, int spat_size_y, int spat_size_z,
-        int spec_size,
+        int spec_size_z,
         Ptr spat_data,
         Ptr spec_data) const
 {
-    kernels::gmodel_wcube(
+    kernels::gmodel_wcube_evaluate(
             spat_size_x, spat_size_y, spat_size_z,
-            spec_size,
+            spec_size_z,
             reinterpret_cast<T*>(spat_data),
             reinterpret_cast<T*>(spec_data));
 };

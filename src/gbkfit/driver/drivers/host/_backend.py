@@ -134,8 +134,8 @@ class DriverBackendGModelHost(DriverBackendGModel):
     def __deepcopy__(self, memodict):
         return self.__class__(self._dtype)
 
-    def make_wcube(self, spat_size, spec_size, spat_data, spec_data):
-        self._module.make_wcube(
+    def wcube_evaluate(self, spat_size, spec_size, spat_data, spec_data):
+        self._module.wcube_evaluate(
             spat_size[0], spat_size[1], spat_size[2],
             spec_size,
             _ptr(spat_data),

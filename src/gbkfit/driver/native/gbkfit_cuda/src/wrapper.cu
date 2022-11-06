@@ -4,13 +4,15 @@
 
 namespace gbkfit::cuda {
 
+constexpr int BLOCK_SIZE = 256;
+
 template<typename T> void
 Wrapper<T>::math_complex_multiply_and_scale(
         typename cufft<T>::complex* arr1,
         typename cufft<T>::complex* arr2,
         int n, T scale)
 {
-    dim3 bsize(256);
+    dim3 bsize(BLOCK_SIZE);
     dim3 gsize((n + bsize.x - 1) / bsize.x);
     kernels::math_complex_multiply_and_scale<<<gsize, bsize>>>(
             arr1, arr2, n, scale);
@@ -25,8 +27,8 @@ Wrapper<T>::dmodel_dcube_downscale(
         int dst_size_x, int dst_size_y, int dst_size_z,
         const T* src_cube, T* dst_cube)
 {
-    unsigned int n = dst_size_x * dst_size_y * dst_size_z;
-    dim3 bsize(256);
+    const int n = dst_size_x * dst_size_y * dst_size_z;
+    dim3 bsize(BLOCK_SIZE);
     dim3 gsize((n + bsize.x - 1) / bsize.x);
     kernels::dmodel_dcube_downscale<<<gsize, bsize>>>(
             scale_x, scale_y, scale_z,
@@ -38,15 +40,15 @@ Wrapper<T>::dmodel_dcube_downscale(
 }
 
 template<typename T> void
-Wrapper<T>::dmodel_dcube_make_mask(
+Wrapper<T>::dmodel_dcube_mask(
         T cutoff, bool apply,
         int size_x, int size_y, int size_z,
         T* dcube_d, T* dcube_m, T* dcube_w)
 {
-    unsigned int n = size_x * size_y;
-    dim3 bsize(256);
+    const int n = size_x * size_y;
+    dim3 bsize(BLOCK_SIZE);
     dim3 gsize((n + bsize.x - 1) / bsize.x);
-    kernels::dmodel_dcube_make_mask<<<gsize, bsize>>>(
+    kernels::dmodel_dcube_mask<<<gsize, bsize>>>(
             cutoff, apply,
             size_x, size_y, size_z,
             dcube_d, dcube_m, dcube_w);
@@ -63,8 +65,8 @@ Wrapper<T>::dmodel_mmaps_moments(
         T cutoff, int norders, const int* orders,
         T* mmaps_d, T* mmaps_m, T* mmaps_w)
 {
-    unsigned int n = size_x * size_y;
-    dim3 bsize(256);
+    const int n = size_x * size_y;
+    dim3 bsize(BLOCK_SIZE);
     dim3 gsize((n + bsize.x - 1) / bsize.x);
     kernels::dcube_moments<<<gsize, bsize>>>(
             size_x, size_y, size_z,
@@ -78,16 +80,16 @@ Wrapper<T>::dmodel_mmaps_moments(
 }
 
 template<typename T> void
-Wrapper<T>::gmodel_wcube(
+Wrapper<T>::gmodel_wcube_evaluate(
         int spat_size_x, int spat_size_y, int spat_size_z,
         int spec_size_z,
         const T* spat_cube,
         T* spec_cube)
 {
     const int n = spat_size_x * spat_size_y;
-    dim3 bsize(256);
+    dim3 bsize(BLOCK_SIZE);
     dim3 gsize((n + bsize.x - 1) / bsize.x);
-    kernels::gmodel_wcube<<<gsize, bsize>>>(
+    kernels::gmodel_wcube_evaluate<<<gsize, bsize>>>(
             spat_size_x, spat_size_y, spat_size_z,
             spec_size_z,
             spat_cube,
@@ -148,7 +150,7 @@ Wrapper<T>::gmodel_mcdisk_evaluate(
         T* rdata, T* vdata, T* ddata)
 {
     const int n = nclouds;
-    dim3 bsize(256);
+    dim3 bsize(BLOCK_SIZE);
     dim3 gsize((n + bsize.x - 1) / bsize.x);
     kernels::gmodel_mcdisk_evaluate<<<gsize, bsize>>>(
             cflux, nclouds,
@@ -200,7 +202,6 @@ Wrapper<T>::gmodel_mcdisk_evaluate(
             spec_zero,
             image, scube, rcube, wcube,
             rdata, vdata, ddata);
-
     cudaDeviceSynchronize();
 }
 
@@ -254,8 +255,7 @@ Wrapper<T>::gmodel_smdisk_evaluate(
         T* rdata, T* vdata, T* ddata)
 {
     const int n = spat_size_x * spat_size_y;
-
-    dim3 bsize(256);
+    dim3 bsize(BLOCK_SIZE);
     dim3 gsize((n + bsize.x - 1) / bsize.x);
     kernels::gmodel_smdisk_evaluate<<<gsize, bsize>>>(
             loose, tilted,
@@ -304,7 +304,6 @@ Wrapper<T>::gmodel_smdisk_evaluate(
             spec_zero,
             image, scube, rcube, wcube,
             rdata, vdata, ddata);
-
     cudaDeviceSynchronize();
 }
 
@@ -312,15 +311,15 @@ template<typename T> void
 Wrapper<T>::objective_count_pixels(
         const T* data1, const T* data2, int size, T epsilon, int* counts)
 {
-    unsigned int n = size;
-    dim3 bsize(256);
+    const int n = size;
+    dim3 bsize(BLOCK_SIZE);
     dim3 gsize((n + bsize.x - 1) / bsize.x);
     kernels::objective_count_pixels<<<gsize, bsize>>>(
             data1, data2, size, epsilon, counts);
     cudaDeviceSynchronize();
 }
 
-#define INSTANTIATE(T)          \
+#define INSTANTIATE(T)\
     template struct Wrapper<T>;
 INSTANTIATE(float)
 #undef INSTANTIATE

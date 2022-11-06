@@ -21,7 +21,7 @@ PYBIND11_MODULE(EXTENSION_NAME, m)
 
     py::class_<GModel<float>>(m, "GModelf32")
             .def(py::init<>())
-            .def("make_wcube", &GModel<float>::make_wcube)
+            .def("wcube_evaluate", &GModel<float>::wcube_evaluate)
             .def("mcdisk_evaluate", &GModel<float>::mcdisk_evaluate)
             .def("smdisk_evaluate", &GModel<float>::smdisk_evaluate);
 

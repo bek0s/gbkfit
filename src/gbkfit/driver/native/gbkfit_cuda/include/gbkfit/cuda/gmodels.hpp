@@ -8,9 +8,9 @@ template<typename T>
 struct GModel
 {
     void
-    make_wcube(
+    wcube_evaluate(
             int spat_size_x, int spat_size_y, int spat_size_z,
-            int spec_size,
+            int spec_size_z,
             Ptr spat_data,
             Ptr spec_data) const;
 
