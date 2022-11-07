@@ -116,7 +116,7 @@ class DCube:
     def dtype(self):
         return self._dtype
 
-    def prepare(self, driver, weights):
+    def prepare(self, driver):
 
         # Shortcuts
         size_lo = self.size()
@@ -187,7 +187,7 @@ class DCube:
         self._dcube_lo = driver.mem_alloc_d(size_lo[::-1], dtype)
         self._dcube_hi = driver.mem_alloc_d(size_hi[::-1], dtype) \
             if size_lo != size_hi else self._dcube_lo
-        if weights:
+        if self._weights:
             self._wcube_lo = driver.mem_alloc_d(size_lo[::-1], dtype)
             self._wcube_hi = driver.mem_alloc_d(size_hi[::-1], dtype) \
                 if size_lo != size_hi else self._wcube_lo
@@ -203,7 +203,6 @@ class DCube:
         self._step_hi = step_hi
         self._zero_hi = zero_hi
         self._edge_hi = edge_hi
-        self._weights = weights
         self._driver = driver
         self._backend_fft = backend_fft
         self._backend_dmodel = driver.backends().dmodel(dtype)
@@ -246,7 +245,8 @@ class DCube:
         # Apply masking.
         # Checked if mask_create or mask_apply are True in __init__()
         if mask_cutoff is not None:
-            backend_dmodel.mask(mask_cutoff, mask_apply, dcube_lo, mcube_lo)
+            backend_dmodel.mask(
+                mask_cutoff, mask_apply, dcube_lo, mcube_lo, wcube_lo)
 
         # Output extra information
         if out_extra is not None:

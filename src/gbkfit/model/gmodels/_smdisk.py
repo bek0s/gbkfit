@@ -55,7 +55,7 @@ class SMDisk(_disk.Disk):
                 ddata = driver.mem_alloc_d(shape, dtype)
                 driver.mem_fill(ddata, np.nan)
 
-        self._disk.evaluate_smdisk(
+        self._disk.smdisk_evaluate(
             self._loose,
             self._tilted,
             self._s_subrnodes[1],

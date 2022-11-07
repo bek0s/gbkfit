@@ -98,20 +98,20 @@ class DriverBackendDModelNative(DriverBackendDModel):
     def __deepcopy__(self, memodict):
         return self.__class__(self._dtype, self._memory, self._module)
 
-    def downscale(self, scale, edge_hi, cube_hi, cube_lo):
+    def dcube_downscale(self, scale, edge_hi, cube_hi, cube_lo):
         _ptr = self._memory.ptr
         _shape = self._memory.shape
         self._module.dcube_downscale(
             scale, edge_hi, _shape(cube_hi)[::-1], _shape(cube_lo)[::-1],
             _ptr(cube_hi), _ptr(cube_lo))
 
-    def mask(self, cutoff, apply, dcube, mcube):
+    def dcube_mask(self, cutoff, apply, dcube, mcube, wcube):
         _ptr = self._memory.ptr
         _shape = self._memory.shape
-        self._module.mask(
-            cutoff, apply, _shape(dcube), _ptr(dcube), _ptr(mcube))
+        self._module.dcube_mask(
+            cutoff, apply, _shape(dcube), _ptr(dcube), _ptr(mcube), _ptr(wcube))
 
-    def moments(
+    def mmaps_moments(
             self,
             size, step, zero, dcube, wcube, cutoff, orders,
             mmaps_d, mmaps_w, mmaps_m):
@@ -142,7 +142,7 @@ class DriverBackendGModelNative(DriverBackendGModel):
             _ptr(spat_data),
             _ptr(spec_data))
 
-    def evaluate_mcdisk(
+    def mcdisk_evaluate(
             self,
             cflux, nclouds, ncloudspt, hasordint,
             loose, tilted, rnodes,
@@ -162,7 +162,7 @@ class DriverBackendGModelNative(DriverBackendGModel):
             rdata, vdata, ddata):
         _ptr = self._memory.ptr
         _size = self._memory.size
-        self._module.evaluate(
+        self._module.mcdisk_evaluate(
             cflux, nclouds, _ptr(ncloudspt), _size(ncloudspt), _ptr(hasordint),
             loose, tilted,
             _size(rnodes),
@@ -210,7 +210,7 @@ class DriverBackendGModelNative(DriverBackendGModel):
             _ptr(image), _ptr(scube), _ptr(rcube), _ptr(wcube),
             _ptr(rdata), _ptr(vdata), _ptr(ddata))
 
-    def evaluate_smdisk(
+    def smdisk_evaluate(
             self,
             loose, tilted, rnodes,
             vsys, xpos, ypos, posa, incl,

@@ -54,7 +54,7 @@ class GModelIntensity2D(GModelImage):
         self._size = size
         if wdata is not None:
             self._wcube = driver.mem_alloc_d(self._size[::-1], dtype)
-        self._backend = driver.backend().gmodel(dtype)
+        self._backend = driver.backends().gmodel(dtype)
 
     def evaluate_image(
             self, driver, params, image, wdata, size, step, zero, rota, dtype,
@@ -85,4 +85,4 @@ class GModelIntensity2D(GModelImage):
 
         # Generate weight image
         if wcube is not None:
-            self._backend.make_wcube(spat_size + (1,), 1, wcube, wdata)
+            self._backend.wcube_evaluate(spat_size + (1,), 1, wcube, wdata)

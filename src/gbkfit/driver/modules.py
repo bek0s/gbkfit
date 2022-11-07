@@ -83,15 +83,15 @@ class DriverBackendFFT(abc.ABC):
 class DriverBackendDModel(abc.ABC):
 
     @abc.abstractmethod
-    def downscale(self, scale, edge_hi, cube_hi, cube_lo):
+    def dcube_downscale(self, scale, edge_hi, cube_hi, cube_lo):
         pass
 
     @abc.abstractmethod
-    def mask(self, cutoff, apply, dcube, mcube):
+    def dcube_mask(self, cutoff, apply, dcube, mcube, wcube):
         pass
 
     @abc.abstractmethod
-    def moments(
+    def mmaps_moments(
             self,
             size, step, zero, dcube, wcube, cutoff, orders,
             mmaps_d, mmaps_w, mmaps_m):
@@ -101,7 +101,7 @@ class DriverBackendDModel(abc.ABC):
 class DriverBackendGModel(abc.ABC):
 
     @abc.abstractmethod
-    def evaluate_mcdisk(
+    def mcdisk_evaluate(
             self,
             cflux, nclouds, ncloudspt, hasordint,
             loose, tilted, rnodes,
@@ -122,7 +122,7 @@ class DriverBackendGModel(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def evaluate_smdisk(
+    def smdisk_evaluate(
             self,
             loose, tilted, rnodes,
             vsys, xpos, ypos, posa, incl,

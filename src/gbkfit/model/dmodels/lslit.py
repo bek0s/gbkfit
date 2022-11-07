@@ -73,7 +73,7 @@ class DModelLSlit(DModel):
         return self._dcube.dtype()
 
     def _prepare_impl(self):
-        self._dcube.prepare(self._driver, self._gmodel.is_weighted())
+        self._dcube.prepare(self._driver)
 
     def _evaluate_impl(self, params, out_dmodel_extra, out_gmodel_extra):
         driver = self._driver

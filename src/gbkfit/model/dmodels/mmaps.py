@@ -136,7 +136,7 @@ class DModelMMaps(DModel):
         driver.mem_fill(self._mmaps_m, 0)
         driver.mem_fill(self._mmaps_w, np.nan)
         # Prepare dcube
-        self._dcube.prepare(driver, self._gmodel.is_weighted())
+        self._dcube.prepare(driver)
         # Create backend
         self._backend = driver.backends().dmodel(dtype)
 
