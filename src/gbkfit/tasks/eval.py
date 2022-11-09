@@ -1,8 +1,9 @@
-import copy
+
 import json
 import logging
 
 import astropy.io.fits as fits
+import numpy as np
 import pandas as pd
 import ruamel.yaml
 
@@ -138,10 +139,10 @@ def eval_(objective_type, config, profile=None):
 
     eparams = {}
     params = params.evaluate(eparams)
-    params_info = _detail.nativify(dict(
+    params_info = iterutils.nativify(dict(
         params=params,
         eparams=eparams))
-    filename = 'gbkfit_result_params'
+    filename = 'gbkfit_eval_params'
     json.dump(params_info, open(f'{filename}.json', 'w+'), indent=2)
     yaml.dump(params_info, open(f'{filename}.yaml', 'w+'))
 
@@ -163,40 +164,78 @@ def eval_(objective_type, config, profile=None):
         resid_u_data = objective.residual_nddata_h(params, False, resid_u_extra)
         resid_w_data = objective.residual_nddata_h(params, True, resid_w_extra)
 
-    def save_model(file, data):
-        if data is not None:
-            hdu = fits.PrimaryHDU(data)
-            hdulist = fits.HDUList([hdu])
-            hdulist.writeto(file, overwrite=True)
+    #
+    # Gather objective outputs
+    #
 
-    _log.info("writing objective output to the filesystem...")
+    _log.info("gathering outputs...")
+
+    outputs = {}
     model_prefix = 'model'
     resid_u_prefix = 'residual'
     resid_w_prefix = 'wresidual'
+
     # Store model
     for i, data_i in enumerate(model_data):
         prefix_i = model_prefix + f'_{i}' * bool(objective.nitems() > 1)
         for key, value in data_i.items():
-            save_model(f'{prefix_i}_{key}_d.fits', value.get('d'))
-            save_model(f'{prefix_i}_{key}_m.fits', value.get('m'))
-            save_model(f'{prefix_i}_{key}_w.fits', value.get('w'))
+            outputs |= {
+                f'{prefix_i}_{key}_d.fits': value.get('d'),
+                f'{prefix_i}_{key}_m.fits': value.get('m'),
+                f'{prefix_i}_{key}_w.fits': value.get('w')}
     # Store residual (if available)
     for i, data_i in enumerate(resid_u_data):
         prefix_i = resid_u_prefix + f'_{i}' * bool(objective.nitems() > 1)
         for key, value in data_i.items():
-            save_model(f'{prefix_i}_{key}_d.fits', value)
+            outputs |= {f'{prefix_i}_{key}_d.fits': value}
     for i, data_i in enumerate(resid_w_data):
         prefix_i = resid_w_prefix + f'_{i}' * bool(objective.nitems() > 1)
         for key, value in data_i.items():
-            save_model(f'{prefix_i}_{key}_d.fits', value)
+            outputs |= {f'{prefix_i}_{key}_d.fits': value}
     # Store model extra
     for key, value in model_extra.items():
-        save_model(f'{model_prefix}_extra_{key}.fits', value)
+        outputs |= {f'{model_prefix}_extra_{key}.fits': value}
     # Store residual extra (if available)
     for key, value in resid_u_extra.items():
-        save_model(f'{resid_u_prefix}_extra_{key}.fits', value)
+        outputs |= {f'{resid_u_prefix}_extra_{key}.fits': value}
     for key, value in resid_w_extra.items():
-        save_model(f'{resid_w_prefix}_extra_{key}.fits', value)
+        outputs |= {f'{resid_u_prefix}_extra_{key}.fits': value}
+
+    #
+    # Calculate outputs statistics
+    #
+
+    _log.info("calculating statistics for outputs...")
+
+    outputs_stats = {}
+    for filename, data in outputs.items():
+        if data is not None:
+            sum_ = np.nansum(data)
+            min_ = np.nanmin(data)
+            max_ = np.nanmax(data)
+            mean = np.nanmean(data)
+            stddev = np.nanstd(data)
+            median = np.nanmedian(data)
+            outputs_stats.update({filename: dict(
+                sum=sum_, min=min_, max=max_, mean=mean, stddev=stddev,
+                median=median)})
+
+    filename = 'gbkfit_eval_outputs'
+    outputs_stats = iterutils.nativify(outputs_stats)
+    json.dump(outputs_stats, open(f'{filename}.json', 'w+'), indent=2)
+    yaml.dump(outputs_stats, open(f'{filename}.yaml', 'w+'))
+
+    #
+    # Store outputs
+    #
+
+    _log.info("storing outputs to the filesystem...")
+
+    for filename, data in outputs.items():
+        if data is not None:
+            hdu = fits.PrimaryHDU(data)
+            hdulist = fits.HDUList([hdu])
+            hdulist.writeto(filename, overwrite=True)
 
     #
     # Run performance tests
@@ -211,9 +250,9 @@ def eval_(objective_type, config, profile=None):
             if objective_type == 'goodness':
                 objective.residual_nddata_h(params)
         _log.info("calculating timing statistics...")
-        time_stats = _detail.nativify(timeutils.get_time_stats())
+        time_stats = iterutils.nativify(timeutils.get_time_stats())
         _log.info(pd.DataFrame.from_dict(time_stats, orient='index'))
-        filename = 'gbkfit_result_time'
+        filename = 'gbkfit_eval_timings'
         time_stats |= dict(unit='milliseconds')
         json.dump(time_stats, open(f'{filename}.json', 'w+'), indent=2)
         yaml.dump(time_stats, open(f'{filename}.yaml', 'w+'))

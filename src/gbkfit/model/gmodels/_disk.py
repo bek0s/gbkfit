@@ -248,7 +248,7 @@ class Disk(abc.ABC):
         self._spec_step = None
         self._spec_zero = None
 
-        self._disk = None
+        self._backend = None
         self._dtype = None
         self._driver = None
 

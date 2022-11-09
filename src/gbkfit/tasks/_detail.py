@@ -111,19 +111,3 @@ def merge_pdescs(dict1, dict2):
             f"{str(intersection)}; "
             f"please choose different names")
     return dict1 | dict2
-
-
-def nativify(node):
-    if isinstance(node, np.ndarray):
-        node = node.tolist()
-    elif isinstance(node, np.integer):
-        node = int(node)
-    elif isinstance(node, np.floating):
-        node = float(node)
-    elif isinstance(node, list):
-        for i in range(len(node)):
-            node[i] = nativify(node[i])
-    elif isinstance(node, dict):
-        for k in node:
-            node[k] = nativify(node[k])
-    return node

@@ -40,7 +40,7 @@ class MCDisk(_disk.Disk):
         return self._cflux
 
     def _impl_prepare(self, driver, dtype):
-        self._disk = driver.backend().make_gmodel_mcdisk(dtype)
+        self._backend = driver.backends().gmodel(dtype)
         hasordint = [t.has_ordinary_integral() for t in self._rptraits]
         size = sum([1 if h else len(self._subrnodes) - 2 for h in hasordint])
         self._hasordint = driver.mem_alloc_s(len(self._rptraits), np.bool)
@@ -100,7 +100,7 @@ class MCDisk(_disk.Disk):
                 ddata = driver.mem_alloc_d(shape, dtype)
                 driver.mem_fill(ddata, np.nan)
 
-        self._disk.evaluate(
+        self._backend.mcdisk_evaluate(
             self._cflux, nclouds, self._ncloudsptor[1], self._hasordint[1],
             self._loose,
             self._tilted,

@@ -238,9 +238,10 @@ class DCube:
 
         # Downscale data and weight cubes
         if dcube_lo is not dcube_hi:
-            backend_dmodel.downscale(scale, edge_hi, dcube_hi, dcube_lo)
+            backend_dmodel.dcube_downscale(scale, edge_hi, dcube_hi, dcube_lo)
             if weights:
-                backend_dmodel.downscale(scale, edge_hi, wcube_hi, wcube_lo)
+                backend_dmodel.dcube_downscale(
+                    scale, edge_hi, wcube_hi, wcube_lo)
 
         # Apply masking.
         # Checked if mask_create or mask_apply are True in __init__()

@@ -80,7 +80,7 @@ class GModelIntensity3D(GModelImage):
             self._tcube = driver.mem_alloc_d(self._size[::-1], dtype)
         if wdata is not None:
             self._wcube = driver.mem_alloc_d(self._size[::-1], dtype)
-        self._backend = driver.backend().make_gmodel(dtype)
+        self._backend = driver.backends().gmodel(dtype)
 
     def evaluate_image(
             self, driver, params, image, wdata, size, step, zero, rota, dtype,

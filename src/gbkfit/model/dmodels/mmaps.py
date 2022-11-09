@@ -157,7 +157,7 @@ class DModelMMaps(DModel):
             dcube.dtype(),
             out_gmodel_extra)
         dcube.evaluate(out_dmodel_extra)
-        backend.moments(
+        backend.mmaps_moments(
             dcube.size(),
             dcube.step(),
             dcube.zero(),
