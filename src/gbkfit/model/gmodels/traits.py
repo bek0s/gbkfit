@@ -1,5 +1,6 @@
 
 import abc
+import copy
 
 import numpy as np
 
@@ -118,13 +119,33 @@ def _trait_desc(cls):
         VHTrait: 'velocity height',
         DPTrait: 'velocity dispersion polar',
         DHTrait: 'velocity dispersion height',
-        ZPTrait: 'vertical distortion',
+        ZPTrait: 'vertical distortion polar',
         SPTrait: 'selection polar'}
     postfix = None
     for k, v in descs.items():
         if issubclass(cls, k):
             postfix = v
+    assert postfix
     return f'{cls.type()} {postfix} trait ({cls.__name__})'
+
+
+class TraitNWModeSupport:
+
+    def dump(self):
+        return dict(nwmode=self.nwmode())
+
+    def __init__(self, nwmode=None, *args, **kwargs):
+        self._nwmode = nwmode
+        super().__init__(*args, **kwargs)
+
+    def nwmode(self):
+        return self._nwmode
+
+    def nwmode_type(self):
+        return self._nwmode['type']
+
+    def nwmode_origin(self):
+        return self._nwmode['origin']
 
 
 class Trait(parseutils.TypedParserSupport, abc.ABC):
@@ -138,10 +159,11 @@ class Trait(parseutils.TypedParserSupport, abc.ABC):
     def load(cls, info):
         desc = _trait_desc(cls)
         opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
+        print(opts)
         return cls(**opts)
 
     def __init__(self, **kwargs):
-        self._kwargs = kwargs.copy()
+        self._kwargs = copy.deepcopy(kwargs)
 
     def dump(self):
         return dict(**self._kwargs)
@@ -431,7 +453,7 @@ class RPTraitMixtureMoffat(RPTrait):
         raise NotImplementedError()
 
 
-class RPTraitNWUniform(RPTrait):
+class RPTraitNWUniform(TraitNWModeSupport, RPTrait):
 
     @staticmethod
     def type():
@@ -440,6 +462,9 @@ class RPTraitNWUniform(RPTrait):
     @staticmethod
     def uid():
         return RP_TRAIT_UID_NW_UNIFORM
+
+    def dump(self):
+        return RPTrait.dump(self) | TraitNWModeSupport.dump(self)
 
     def params_rnw(self, nnodes):
         return (
@@ -453,7 +478,7 @@ class RPTraitNWUniform(RPTrait):
         return _integrate_nw(nodes, gbkfit.math.uniform_1d_fun, a, 0, np.inf)
 
 
-class RPTraitNWHarmonic(RPTrait):
+class RPTraitNWHarmonic(TraitNWModeSupport, RPTrait):
 
     @staticmethod
     def type():
@@ -463,8 +488,11 @@ class RPTraitNWHarmonic(RPTrait):
     def uid():
         return RP_TRAIT_UID_NW_HARMONIC
 
-    def __init__(self, order):
-        super().__init__(order=order)
+    def dump(self):
+        return RPTrait.dump(self) | TraitNWModeSupport.dump(self)
+
+    def __init__(self, order, nwmode=None):
+        super().__init__(order=order, nwmode=nwmode)
 
     def params_rnw(self, nnodes):
         return _params_pw_harmonic(self._kwargs['order'], nnodes)
@@ -478,7 +506,7 @@ class RPTraitNWHarmonic(RPTrait):
         return _integrate_nw(nodes, gbkfit.math.uniform_1d_fun, a, 0, s) * 2
 
 
-class RPTraitNWDistortion(RPTrait):
+class RPTraitNWDistortion(TraitNWModeSupport, RPTrait):
 
     @staticmethod
     def type():
@@ -487,6 +515,9 @@ class RPTraitNWDistortion(RPTrait):
     @staticmethod
     def uid():
         return RP_TRAIT_UID_NW_DISTORTION
+
+    def dump(self):
+        return RPTrait.dump(self) | TraitNWModeSupport.dump(self)
 
     def params_rnw(self, nnodes):
         return (
@@ -769,11 +800,14 @@ class VPTraitTanRix(VPTrait):
             ParamScalarDesc('g'))
 
 
-class VPTraitNWTanUniform(VPTrait):
+class VPTraitNWTanUniform(TraitNWModeSupport, VPTrait):
 
     @staticmethod
     def type():
         return 'nw_tan_uniform'
+
+    def dump(self):
+        return VPTrait.dump(self) | TraitNWModeSupport.dump(self)
 
     @staticmethod
     def uid():
@@ -784,7 +818,7 @@ class VPTraitNWTanUniform(VPTrait):
             ParamVectorDesc('vt', nnodes),)
 
 
-class VPTraitNWTanHarmonic(VPTrait):
+class VPTraitNWTanHarmonic(TraitNWModeSupport, VPTrait):
 
     @staticmethod
     def type():
@@ -794,14 +828,17 @@ class VPTraitNWTanHarmonic(VPTrait):
     def uid():
         return VP_TRAIT_UID_NW_TAN_HARMONIC
 
-    def __init__(self, order):
-        Trait.__init__(self, order=order)
+    def dump(self):
+        return VPTrait.dump(self) | TraitNWModeSupport.dump(self)
+
+    def __init__(self, order, nwmode=None):
+        Trait.__init__(self, order=order, nwmode=nwmode)
 
     def params_rnw(self, nnodes):
         return _params_pw_harmonic(self._kwargs['order'], nnodes)
 
 
-class VPTraitNWRadUniform(VPTrait):
+class VPTraitNWRadUniform(TraitNWModeSupport, VPTrait):
 
     @staticmethod
     def type():
@@ -811,12 +848,15 @@ class VPTraitNWRadUniform(VPTrait):
     def uid():
         return VP_TRAIT_UID_NW_RAD_UNIFORM
 
+    def dump(self):
+        return VPTrait.dump(self) | TraitNWModeSupport.dump(self)
+
     def params_rnw(self, nnodes):
         return (
             ParamVectorDesc('vr', nnodes),)
 
 
-class VPTraitNWRadHarmonic(VPTrait):
+class VPTraitNWRadHarmonic(TraitNWModeSupport, VPTrait):
 
     @staticmethod
     def type():
@@ -826,14 +866,17 @@ class VPTraitNWRadHarmonic(VPTrait):
     def uid():
         return VP_TRAIT_UID_NW_RAD_HARMONIC
 
-    def __init__(self, order):
-        Trait.__init__(self, order=order)
+    def dump(self):
+        return VPTrait.dump(self) | TraitNWModeSupport.dump(self)
+
+    def __init__(self, order, nwmode=None):
+        Trait.__init__(self, order=order, nwmode=nwmode)
 
     def params_rnw(self, nnodes):
         return _params_pw_harmonic(self._kwargs['order'], nnodes)
 
 
-class VPTraitNWVerUniform(VPTrait):
+class VPTraitNWVerUniform(TraitNWModeSupport, VPTrait):
 
     @staticmethod
     def type():
@@ -843,12 +886,15 @@ class VPTraitNWVerUniform(VPTrait):
     def uid():
         return VP_TRAIT_UID_NW_VER_UNIFORM
 
+    def dump(self):
+        return VPTrait.dump(self) | TraitNWModeSupport.dump(self)
+
     def params_rnw(self, nnodes):
         return (
             ParamVectorDesc('vv', nnodes),)
 
 
-class VPTraitNWVerHarmonic(VPTrait):
+class VPTraitNWVerHarmonic(TraitNWModeSupport, VPTrait):
 
     @staticmethod
     def type():
@@ -858,14 +904,17 @@ class VPTraitNWVerHarmonic(VPTrait):
     def uid():
         return VP_TRAIT_UID_NW_VER_HARMONIC
 
-    def __init__(self, order):
-        Trait.__init__(self, order=order)
+    def dump(self):
+        return VPTrait.dump(self) | TraitNWModeSupport.dump(self)
+
+    def __init__(self, order, nwmode=None):
+        Trait.__init__(self, order=order, nwmode=nwmode)
 
     def params_rnw(self, nnodes):
         return _params_pw_harmonic(self._kwargs['order'], nnodes)
 
 
-class VPTraitNWLOSUniform(VPTrait):
+class VPTraitNWLOSUniform(TraitNWModeSupport, VPTrait):
 
     @staticmethod
     def type():
@@ -875,12 +924,15 @@ class VPTraitNWLOSUniform(VPTrait):
     def uid():
         return VP_TRAIT_UID_NW_LOS_UNIFORM
 
+    def dump(self):
+        return VPTrait.dump(self) | TraitNWModeSupport.dump(self)
+
     def params_rnw(self, nnodes):
         return (
             ParamVectorDesc('vl', nnodes),)
 
 
-class VPTraitNWLOSHarmonic(VPTrait):
+class VPTraitNWLOSHarmonic(TraitNWModeSupport, VPTrait):
 
     @staticmethod
     def type():
@@ -890,8 +942,11 @@ class VPTraitNWLOSHarmonic(VPTrait):
     def uid():
         return VP_TRAIT_UID_NW_LOS_HARMONIC
 
-    def __init__(self, order):
-        Trait.__init__(self, order=order)
+    def dump(self):
+        return VPTrait.dump(self) | TraitNWModeSupport.dump(self)
+
+    def __init__(self, order, nwmode=None):
+        Trait.__init__(self, order=order, nwmode=nwmode)
 
     def params_rnw(self, nnodes):
         return _params_pw_harmonic(self._kwargs['order'], nnodes)
@@ -1055,7 +1110,7 @@ class DPTraitMixtureMoffat(DPTrait):
         return _params_mixture(self._kwargs['nblobs'])
 
 
-class DPTraitNWUniform(DPTrait):
+class DPTraitNWUniform(TraitNWModeSupport, DPTrait):
 
     @staticmethod
     def type():
@@ -1065,12 +1120,15 @@ class DPTraitNWUniform(DPTrait):
     def uid():
         return DP_TRAIT_UID_NW_UNIFORM
 
+    def dump(self):
+        return DPTrait.dump(self) | TraitNWModeSupport.dump(self)
+
     def params_rnw(self, nnodes):
         return (
             ParamVectorDesc('a', nnodes),)
 
 
-class DPTraitNWHarmonic(DPTrait):
+class DPTraitNWHarmonic(TraitNWModeSupport, DPTrait):
 
     @staticmethod
     def type():
@@ -1080,14 +1138,17 @@ class DPTraitNWHarmonic(DPTrait):
     def uid():
         return DP_TRAIT_UID_NW_HARMONIC
 
-    def __init__(self, order):
-        Trait.__init__(self, order=order)
+    def dump(self):
+        return DPTrait.dump(self) | TraitNWModeSupport.dump(self)
+
+    def __init__(self, order, nwmode=None):
+        Trait.__init__(self, order=order, nwmode=nwmode)
 
     def params_rnw(self, nnodes):
         return _params_pw_harmonic(self._kwargs['order'], nnodes)
 
 
-class DPTraitNWDistortion(DPTrait):
+class DPTraitNWDistortion(TraitNWModeSupport, DPTrait):
 
     @staticmethod
     def type():
@@ -1096,6 +1157,9 @@ class DPTraitNWDistortion(DPTrait):
     @staticmethod
     def uid():
         return DP_TRAIT_UID_NW_DISTORTION
+
+    def dump(self):
+        return DPTrait.dump(self) | TraitNWModeSupport.dump(self)
 
     def params_rnw(self, nnodes):
         return (
@@ -1115,7 +1179,7 @@ class DHTraitOne(DHTrait):
         return DH_TRAIT_UID_ONE
 
 
-class ZPTraitNWUniform(ZPTrait):
+class ZPTraitNWUniform(TraitNWModeSupport, ZPTrait):
 
     @staticmethod
     def type():
@@ -1125,12 +1189,15 @@ class ZPTraitNWUniform(ZPTrait):
     def uid():
         return ZP_TRAIT_UID_NW_UNIFORM
 
+    def dump(self):
+        return ZPTrait.dump(self) | TraitNWModeSupport.dump(self)
+
     def params_rnw(self, nnodes):
         return (
             ParamVectorDesc('a', nnodes),)
 
 
-class ZPTraitNWHarmonic(ZPTrait):
+class ZPTraitNWHarmonic(TraitNWModeSupport, ZPTrait):
 
     @staticmethod
     def type():
@@ -1140,8 +1207,11 @@ class ZPTraitNWHarmonic(ZPTrait):
     def uid():
         return ZP_TRAIT_UID_NW_HARMONIC
 
-    def __init__(self, order):
-        Trait.__init__(self, order=order)
+    def dump(self):
+        return ZPTrait.dump(self) | TraitNWModeSupport.dump(self)
+
+    def __init__(self, order, nwmode=None):
+        Trait.__init__(self, order=order, nwmode=nwmode)
 
     def params_rnw(self, nnodes):
         return _params_pw_harmonic(self._kwargs['order'], nnodes)
@@ -1163,7 +1233,7 @@ class SPTraitAzimuthalRange(SPTrait):
             ParamScalarDesc('s'))
 
 
-class SPTraitNWAzimuthalRange(SPTrait):
+class SPTraitNWAzimuthalRange(TraitNWModeSupport, SPTrait):
 
     @staticmethod
     def type():
@@ -1172,6 +1242,9 @@ class SPTraitNWAzimuthalRange(SPTrait):
     @staticmethod
     def uid():
         return SP_TRAIT_UID_NW_AZRANGE
+
+    def dump(self):
+        return SPTrait.dump(self) | TraitNWModeSupport.dump(self)
 
     def params_rnw(self, nnodes):
         return (

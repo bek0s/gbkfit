@@ -11,12 +11,12 @@ def is_iterable(x, strict=True):
 
 
 def is_mapping(x, strict=True):
-    # todo: is set a sequence?
     return isinstance(x, (dict,)) if strict \
         else isinstance(x, collections.abc.Mapping)
 
 
 def is_sequence(x, strict=True):
+    # todo: is set a sequence?
     is_set = isinstance(x, set)
     is_list = isinstance(x, list)
     is_tuple = isinstance(x, tuple)
@@ -112,8 +112,12 @@ def validate_sequence_indices(indices, length):
     return list(filter(is_valid, indices)), list(filter(is_invalid, indices))
 
 
+def unwrap_sequence_index(index, length):
+    return index if length >= 0 else index + length
+
+
 def unwrap_sequence_indices(indices, length):
-    return [i + length if i < 0 else i for i in indices]
+    return [unwrap_sequence_index(i, length) for i in indices]
 
 
 def sorted_sequence(b, value_order):
@@ -140,10 +144,3 @@ def nativify(node):
     elif is_mapping(node):
         node = {k: nativify(v) for k, v in node.items()}
     return node
-
-
-def traverse_and_replace_2(x, mapping):
-    pass
-
-
-

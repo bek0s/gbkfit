@@ -72,7 +72,40 @@ def _prepare_params(info, pdescs):
 
 
 def eval_(objective_type, config, profile=None):
+    """
+    class Class1:
+        def __init__(self, **kwargs):
+            self._kwargs = kwargs
+            print("Class1:", kwargs)
 
+        def dump(self):
+            print("Class1::dump")
+
+    class Class2:
+        def __init__(self, *args, **kwargs):
+            arg2 = kwargs.pop('arg2')
+            super().__init__(*args, **kwargs)
+
+        def dump(self):
+            print("Class2::dump")
+
+    class Class3(Class2, Class1):
+        def __init__(self, arg1):
+            super().__init__(arg1=arg1, arg2=42)
+
+        def dump(self):
+            Class2.dump(self)
+            Class1.dump(self)
+
+    def foo(a=1, *args, **kwargs):
+        print("a:", a)
+        print("args:", args)
+        print("kwargs:", kwargs)
+
+    foo(a=1, b=2, c=3)
+
+    exit()
+    """
     #
     # Read configuration file and
     # perform all necessary validation/preparation

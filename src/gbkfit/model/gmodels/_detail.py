@@ -1,4 +1,6 @@
 
+import copy
+
 import numpy as np
 
 from gbkfit.math import interpolation
@@ -71,6 +73,82 @@ def parse_component_rnode_args(nmin, nmax, nsep, nlen, nodes, nstep, interp):
 def parse_component_hnode_args(nmin, nmax, nsep, nlen, nodes, nstep, interp):
     return _parse_component_node_args(
         'h', nmin, nmax, nsep, nlen, nodes, nstep, interp)
+
+
+def parse_nwmode(info, info_key):
+    error_header = \
+        "could not parse options for node-wise parameter mode (aka nwmode)"
+    relative_types = ['relative1', 'relative2']
+    allowed_types = ['absolute'] + relative_types
+    result = dict()
+    # Make sure the nwmode value is a mapping or None
+    if not (info is None or iterutils.is_mapping(info)):
+        raise RuntimeError(
+            f"{error_header}; "
+            f"{info_key} (value={info}) must be a mapping or None/null")
+    # Use 'absolute' mode by default
+    info = dict(type='absolute') if info is None else copy.deepcopy(info)
+    # Ensure type is provided
+    if 'type' not in info:
+        raise RuntimeError(
+            f"{error_header}; "
+            f"key 'type' is not provided; "
+            f"allowed values: {allowed_types}")
+    # Create a shortcut of the type, for convenience
+    type_ = info.get('type')
+    # Ensure a valid type is provided
+    if type_ not in allowed_types:
+        raise RuntimeError(
+            f"{error_header}; "
+            f"key 'type' set to an invalid value; "
+            f"allowed values: {allowed_types}; "
+            f"provided value: '{type_}'")
+    # type is now known and final - update result
+    result.update(type=type_)
+    # If type is relative, validate and extract origin
+    if type_ in relative_types:
+        if 'origin' not in info:
+            raise RuntimeError(
+                f"{error_header}; "
+                f"key 'origin' is not provided; "
+                f"its value must be an integer referencing a radial node; "
+                f"negative indexing is supported")
+        result.update(origin=info['origin'])
+    return result
+
+
+def _parse_component_nwmode(enabled, enabled_name, nwmode, nwmode_name):
+    nwmode = parse_nwmode(nwmode, nwmode_name)
+    if not enabled and nwmode['type'] in ['relative1', 'relative2']:
+        raise RuntimeError(
+            f"when {enabled_name} is False {nwmode_name} must be either "
+            f"not set or set to 'absolute'")
+    return nwmode
+
+
+def parse_component_nwmodes_for_loose(
+        loose, vsys_nwmode, xpos_nwmode, ypos_nwmode):
+    vsys_nwmode = _parse_component_nwmode(
+        loose, 'loose', vsys_nwmode, 'vsys_nwmode')
+    xpos_nwmode = _parse_component_nwmode(
+        loose, 'loose', xpos_nwmode, 'xpos_nwmode')
+    ypos_nwmode = _parse_component_nwmode(
+        loose, 'loose', ypos_nwmode, 'ypos_nwmode')
+    return dict(
+        vsys_nwmode=vsys_nwmode,
+        xpos_nwmode=xpos_nwmode,
+        ypos_nwmode=ypos_nwmode)
+
+
+def parse_component_nwmodes_for_tilted(
+        tilted, posa_nwmode, incl_nwmode):
+    posa_nwmode = _parse_component_nwmode(
+        tilted, 'tilted', posa_nwmode, 'posa_nwmode')
+    incl_nwmode = _parse_component_nwmode(
+        tilted, 'tilted', incl_nwmode, 'incl_nwmode')
+    return dict(
+        posa_nwmode=posa_nwmode,
+        incl_nwmode=incl_nwmode)
 
 
 def parse_component_d2d_trait_args(

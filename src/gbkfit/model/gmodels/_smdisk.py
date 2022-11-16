@@ -14,6 +14,9 @@ class SMDisk(_disk.Disk):
     def __init__(
             self,
             loose, tilted, rnodes, rnstep, interp,
+            vsys_nwmode,
+            xpos_nwmode, ypos_nwmode,
+            posa_nwmode, incl_nwmode,
             rptraits, rhtraits,
             vptraits, vhtraits,
             dptraits, dhtraits,
@@ -23,6 +26,9 @@ class SMDisk(_disk.Disk):
 
         super().__init__(
             loose, tilted, rnodes, rnstep, interp,
+            vsys_nwmode,
+            xpos_nwmode, ypos_nwmode,
+            posa_nwmode, incl_nwmode,
             rptraits, rhtraits,
             vptraits, vhtraits,
             dptraits, dhtraits,

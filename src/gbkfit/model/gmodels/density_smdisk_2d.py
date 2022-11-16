@@ -48,9 +48,16 @@ class DensitySMDisk2D(DensityComponent2D):
             rnlen=None,
             rnodes=None,
             rnstep=None,
-            interp='linear'):
+            interp='linear',
+            vsys_nwmode=None,
+            xpos_nwmode=None, ypos_nwmode=None,
+            posa_nwmode=None, incl_nwmode=None):
         rnode_args = _detail.parse_component_rnode_args(
             rnmin, rnmax, rnsep, rnlen, rnodes, rnstep, interp)
+        nwmode_loose_args = _detail.parse_component_nwmodes_for_loose(
+            loose, vsys_nwmode, xpos_nwmode, ypos_nwmode)
+        nwmode_tilted_args = _detail.parse_component_nwmodes_for_tilted(
+            tilted, posa_nwmode, incl_nwmode)
         trait_args = _detail.parse_component_d2d_trait_args(
             rptraits,
             sptraits,
@@ -61,7 +68,8 @@ class DensitySMDisk2D(DensityComponent2D):
             rhtraits=(),
             vptraits=(), vhtraits=(),
             dptraits=(), dhtraits=(),
-            zptraits=())
+            zptraits=(),
+            **nwmode_loose_args, **nwmode_tilted_args)
 
     def params(self):
         return self._disk.params()

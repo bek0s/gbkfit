@@ -5,7 +5,7 @@ import numpy as np
 
 from gbkfit.params.pdescs import ParamScalarDesc, ParamVectorDesc
 from gbkfit.utils import iterutils, miscutils
-
+from .traits import *
 
 def _make_param_descs(key, nnodes, nw):
     return {key: ParamVectorDesc(key, nnodes) if nw else ParamScalarDesc(key)}
@@ -107,6 +107,9 @@ class Disk(abc.ABC):
     def __init__(
             self,
             loose, tilted, rnodes, rnstep, interp,
+            vsys_nwmode,
+            xpos_nwmode, ypos_nwmode,
+            posa_nwmode, incl_nwmode,
             rptraits, rhtraits,
             vptraits, vhtraits,
             dptraits, dhtraits,
@@ -135,6 +138,12 @@ class Disk(abc.ABC):
         self._subrnodes = tuple(subrnodes)
         self._nsubrnodes = len(subrnodes)
         self._interp = interp
+
+        self._vsys_nwmode = vsys_nwmode
+        self._xpos_nwmode = xpos_nwmode
+        self._ypos_nwmode = ypos_nwmode
+        self._posa_nwmode = posa_nwmode
+        self._incl_nwmode = incl_nwmode
 
         self._rptraits = tuple(rptraits)
         self._rhtraits = tuple(rhtraits)
