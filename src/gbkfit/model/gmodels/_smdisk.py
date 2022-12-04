@@ -1,19 +1,12 @@
 
-import logging
-
-import numpy as np
-
 from . import _disk
-
-
-log = logging.getLogger(__name__)
 
 
 class SMDisk(_disk.Disk):
 
     def __init__(
             self,
-            loose, tilted, rnodes, rnstep, interp,
+            loose, tilted, rnodes, rstep, interp,
             vsys_nwmode,
             xpos_nwmode, ypos_nwmode,
             posa_nwmode, incl_nwmode,
@@ -25,7 +18,7 @@ class SMDisk(_disk.Disk):
             wptraits):
 
         super().__init__(
-            loose, tilted, rnodes, rnstep, interp,
+            loose, tilted, rnodes, rstep, interp,
             vsys_nwmode,
             xpos_nwmode, ypos_nwmode,
             posa_nwmode, incl_nwmode,
@@ -37,31 +30,19 @@ class SMDisk(_disk.Disk):
             wptraits)
 
     def _impl_prepare(self, driver, dtype):
-        self._disk = driver.backends().gmodel(dtype)
+        pass
 
     def _impl_evaluate(
-            self, driver, params, image, scube, rcube, wcube,
+            self, driver, params,
+            image, scube, rcube, wcube, rdata, vdata, ddata,
             spat_size, spat_step, spat_zero, spat_rota,
             spec_size, spec_step, spec_zero,
             dtype, out_extra):
 
-        rdata = None
-        vdata = None
-        ddata = None
-
         if out_extra is not None:
-            shape = spat_size[::-1]
-            if self._rptraits:
-                rdata = driver.mem_alloc_d(shape, dtype)
-                driver.mem_fill(rdata, 0)
-            if self._vptraits:
-                vdata = driver.mem_alloc_d(shape, dtype)
-                driver.mem_fill(vdata, np.nan)
-            if self._dptraits:
-                ddata = driver.mem_alloc_d(shape, dtype)
-                driver.mem_fill(ddata, np.nan)
+            pass
 
-        self._disk.smdisk_evaluate(
+        self._backend.smdisk_evaluate(
             self._loose,
             self._tilted,
             self._s_subrnodes[1],
@@ -103,18 +84,4 @@ class SMDisk(_disk.Disk):
             rdata, vdata, ddata)
 
         if out_extra is not None:
-            if self._rptraits:
-                out_extra['rdata'] = driver.mem_copy_d2h(rdata)
-            if self._vptraits:
-                out_extra['vdata'] = driver.mem_copy_d2h(vdata)
-            if self._dptraits:
-                out_extra['ddata'] = driver.mem_copy_d2h(ddata)
-            if self._rptraits:
-                sumabs = np.nansum(np.abs(out_extra['rdata']))
-                log.debug(f"sum(abs(rdata)): {sumabs}")
-            if self._vptraits:
-                sumabs = np.nansum(np.abs(out_extra['vdata']))
-                log.debug(f"sum(abs(vdata)): {sumabs}")
-            if self._dptraits:
-                sumabs = np.nansum(np.abs(out_extra['ddata']))
-                log.debug(f"sum(abs(ddata)): {sumabs}")
+            pass

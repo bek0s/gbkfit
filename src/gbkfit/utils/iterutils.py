@@ -113,7 +113,7 @@ def validate_sequence_indices(indices, length):
 
 
 def unwrap_sequence_index(index, length):
-    return index if length >= 0 else index + length
+    return index if index >= 0 else index + length
 
 
 def unwrap_sequence_indices(indices, length):

@@ -35,7 +35,7 @@ class SpectralSMDisk3D(SpectralComponent3D):
             loose=self._disk.loose(),
             tilted=self._disk.tilted(),
             rnodes=self._disk.rnodes(),
-            rnstep=self._disk.rnstep(),
+            rstep=self._disk.rstep(),
             interp=self._disk.interp().type(),
             rptraits=traits.rpt_parser.dump(self._disk.rptraits()),
             rhtraits=traits.rht_parser.dump(self._disk.rhtraits()),
@@ -65,10 +65,17 @@ class SpectralSMDisk3D(SpectralComponent3D):
             rnsep=None,
             rnlen=None,
             rnodes=None,
-            rnstep=None,
-            interp='linear'):
+            rstep=None,
+            interp='linear',
+            vsys_nwmode=None,
+            xpos_nwmode=None, ypos_nwmode=None,
+            posa_nwmode=None, incl_nwmode=None):
         rnode_args = _detail.parse_component_rnode_args(
-            rnmin, rnmax, rnsep, rnlen, rnodes, rnstep, interp)
+            rnmin, rnmax, rnsep, rnlen, rnodes, rstep, interp)
+        nwmode_velocity_args = _detail.parse_component_nwmodes_for_velocity(
+            loose, vsys_nwmode)
+        nwmode_geometry_args = _detail.parse_component_nwmodes_for_geometry(
+            loose, tilted, xpos_nwmode, ypos_nwmode, posa_nwmode, incl_nwmode)
         trait_args = _detail.parse_component_s3d_trait_args(
             rptraits, rhtraits,
             vptraits, vhtraits,
@@ -78,7 +85,10 @@ class SpectralSMDisk3D(SpectralComponent3D):
             wptraits)
         self._disk = _smdisk.SMDisk(
             loose=loose, tilted=tilted,
-            **rnode_args, **trait_args)
+            **rnode_args,
+            **nwmode_velocity_args,
+            **nwmode_geometry_args,
+            **trait_args)
 
     def params(self):
         return self._disk.params()

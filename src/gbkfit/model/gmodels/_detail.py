@@ -10,7 +10,7 @@ from . import traits
 
 
 def _parse_component_node_args(
-        prefix, nmin, nmax, nsep, nlen, nodes, nstep, interp):
+        prefix, nmin, nmax, nsep, nlen, nodes, step, interp):
     nodes_list = nodes is not None
     nodes_arange = [nmin, nmax, nsep].count(None) == 0
     nodes_linspace = [nmin, nmax, nlen].count(None) == 0
@@ -37,6 +37,7 @@ def _parse_component_node_args(
         nodes = np.arange(nmin, nmax + nsep, nsep).tolist()
     elif nodes_linspace:
         nodes = np.linspace(nmin, nmax, nlen).tolist()
+    nodes = tuple(nodes)
     if len(nodes) < 2:
         raise RuntimeError(f"at least two {prefix}nodes must be provided")
     if not iterutils.is_ascending(nodes):
@@ -45,11 +46,11 @@ def _parse_component_node_args(
         raise RuntimeError(f"{prefix}nodes must be positive")
     if not iterutils.all_unique(nodes):
         raise RuntimeError(f"{prefix}nodes must be unique")
-    if nstep is None:
-        nstep = min(np.diff(nodes)) / 2
-    if nstep <= 0 or nstep > min(np.diff(nodes)) / 2:
+    if step is None:
+        step = min(np.diff(nodes)) / 2
+    if step <= 0 or step > min(np.diff(nodes)) / 2:
         raise RuntimeError(
-            f"{prefix}nstep must be greater than zero and less than half the "
+            f"{prefix}step must be greater than zero and less than half the "
             f"smallest difference between two consecutive {prefix}nodes")
     interpolations = dict(
         linear=interpolation.InterpolatorLinear,
@@ -61,18 +62,18 @@ def _parse_component_node_args(
             f"{list(interpolations.keys())}")
     return {
         f'{prefix}nodes': nodes,
-        f'{prefix}nstep': nstep,
+        f'{prefix}step': step,
         'interp': interpolations[interp]}
 
 
-def parse_component_rnode_args(nmin, nmax, nsep, nlen, nodes, nstep, interp):
+def parse_component_rnode_args(nmin, nmax, nsep, nlen, nodes, step, interp):
     return _parse_component_node_args(
-        'r', nmin, nmax, nsep, nlen, nodes, nstep, interp)
+        'r', nmin, nmax, nsep, nlen, nodes, step, interp)
 
 
-def parse_component_hnode_args(nmin, nmax, nsep, nlen, nodes, nstep, interp):
+def parse_component_hnode_args(nmin, nmax, nsep, nlen, nodes, step, interp):
     return _parse_component_node_args(
-        'h', nmin, nmax, nsep, nlen, nodes, nstep, interp)
+        'h', nmin, nmax, nsep, nlen, nodes, step, interp)
 
 
 def parse_nwmode(info, info_key):
@@ -124,6 +125,31 @@ def _parse_component_nwmode(enabled, enabled_name, nwmode, nwmode_name):
             f"when {enabled_name} is False {nwmode_name} must be either "
             f"not set or set to 'absolute'")
     return nwmode
+
+
+def parse_component_nwmodes_for_geometry(
+        loose, tilted, xpos_nwmode, ypos_nwmode, posa_nwmode, incl_nwmode):
+    xpos_nwmode = _parse_component_nwmode(
+        loose, 'loose', xpos_nwmode, 'xpos_nwmode')
+    ypos_nwmode = _parse_component_nwmode(
+        loose, 'loose', ypos_nwmode, 'ypos_nwmode')
+    posa_nwmode = _parse_component_nwmode(
+        tilted, 'tilted', posa_nwmode, 'posa_nwmode')
+    incl_nwmode = _parse_component_nwmode(
+        tilted, 'tilted', incl_nwmode, 'incl_nwmode')
+    return dict(
+        xpos_nwmode=xpos_nwmode,
+        ypos_nwmode=ypos_nwmode,
+        posa_nwmode=posa_nwmode,
+        incl_nwmode=incl_nwmode)
+
+
+def parse_component_nwmodes_for_velocity(
+        loose, vsys_nwmode):
+    vsys_nwmode = _parse_component_nwmode(
+        loose, 'loose', vsys_nwmode, 'vsys_nwmode')
+    return dict(
+        vsys_nwmode=vsys_nwmode)
 
 
 def parse_component_nwmodes_for_loose(

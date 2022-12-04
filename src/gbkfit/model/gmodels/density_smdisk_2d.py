@@ -29,7 +29,7 @@ class DensitySMDisk2D(DensityComponent2D):
             loose=self._disk.loose(),
             tilted=self._disk.tilted(),
             rnodes=self._disk.rnodes(),
-            rnstep=self._disk.rnstep(),
+            rstep=self._disk.rstep(),
             interp=self._disk.interp().type(),
             rptraits=traits.rpt_parser.dump(self._disk.rptraits()),
             sptraits=traits.spt_parser.dump(self._disk.sptraits()),
@@ -47,29 +47,28 @@ class DensitySMDisk2D(DensityComponent2D):
             rnsep=None,
             rnlen=None,
             rnodes=None,
-            rnstep=None,
+            rstep=None,
             interp='linear',
-            vsys_nwmode=None,
             xpos_nwmode=None, ypos_nwmode=None,
             posa_nwmode=None, incl_nwmode=None):
         rnode_args = _detail.parse_component_rnode_args(
-            rnmin, rnmax, rnsep, rnlen, rnodes, rnstep, interp)
-        nwmode_loose_args = _detail.parse_component_nwmodes_for_loose(
-            loose, vsys_nwmode, xpos_nwmode, ypos_nwmode)
-        nwmode_tilted_args = _detail.parse_component_nwmodes_for_tilted(
-            tilted, posa_nwmode, incl_nwmode)
+            rnmin, rnmax, rnsep, rnlen, rnodes, rstep, interp)
+        nwmode_geometry_args = _detail.parse_component_nwmodes_for_geometry(
+            loose, tilted, xpos_nwmode, ypos_nwmode, posa_nwmode, incl_nwmode)
         trait_args = _detail.parse_component_d2d_trait_args(
             rptraits,
             sptraits,
             wptraits)
         self._disk = _smdisk.SMDisk(
             loose=loose, tilted=tilted,
-            **rnode_args, **trait_args,
+            **rnode_args,
+            vsys_nwmode=None,
+            **nwmode_geometry_args,
+            **trait_args,
             rhtraits=(),
             vptraits=(), vhtraits=(),
             dptraits=(), dhtraits=(),
-            zptraits=(),
-            **nwmode_loose_args, **nwmode_tilted_args)
+            zptraits=())
 
     def params(self):
         return self._disk.params()

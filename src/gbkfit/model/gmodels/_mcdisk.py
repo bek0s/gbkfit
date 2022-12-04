@@ -15,7 +15,10 @@ class MCDisk(_disk.Disk):
     def __init__(
             self,
             cflux,
-            loose, tilted, rnodes, rnstep, interp,
+            loose, tilted, rnodes, rstep, interp,
+            vsys_nwmode,
+            xpos_nwmode, ypos_nwmode,
+            posa_nwmode, incl_nwmode,
             rptraits, rhtraits,
             vptraits, vhtraits,
             dptraits, dhtraits,
@@ -24,7 +27,10 @@ class MCDisk(_disk.Disk):
             wptraits):
 
         super().__init__(
-            loose, tilted, rnodes, rnstep, interp,
+            loose, tilted, rnodes, rstep, interp,
+            vsys_nwmode,
+            xpos_nwmode, ypos_nwmode,
+            posa_nwmode, incl_nwmode,
             rptraits, rhtraits,
             vptraits, vhtraits,
             dptraits, dhtraits,
@@ -33,30 +39,37 @@ class MCDisk(_disk.Disk):
             wptraits)
 
         self._cflux = cflux
-        self._ncloudsptor = None
-        self._hasordint = None
+        # Array with number of clouds per trait.
+        # For traits without an analytical integral,
+        # we store the number of clouds in each of their rings
+        # Actually, we store the cumulative sum of the array.
+        # This reduces the number of calculations during evaluation.
+        self._s_nclouds = [None, None]
+        # Has-analytical-integral flag per trait
+        self._s_hasaintegral = [None, None]
 
     def cflux(self):
         return self._cflux
 
     def _impl_prepare(self, driver, dtype):
-        self._backend = driver.backends().gmodel(dtype)
-        hasordint = [t.has_ordinary_integral() for t in self._rptraits]
-        size = sum([1 if h else len(self._subrnodes) - 2 for h in hasordint])
-        self._hasordint = driver.mem_alloc_s(len(self._rptraits), np.bool)
-        self._ncloudsptor = driver.mem_alloc_s(size, np.int32)
-        self._hasordint[0][:] = hasordint
-        driver.mem_copy_h2d(self._hasordint[0], self._hasordint[1])
+        self._s_hasaintegral = driver.mem_alloc_s(len(self._rptraits), np.bool)
+        hasaintegral = [t.has_analytical_integral() for t in self._rptraits]
+        self._s_hasaintegral[0][:] = hasaintegral
+        driver.mem_copy_h2d(self._s_hasaintegral[0], self._s_hasaintegral[1])
+        nrings = self._nsubrnodes - 2
+        size = sum([1 if h else nrings for h in hasaintegral])
+        self._s_nclouds = driver.mem_alloc_s(size, np.int32)
 
     def _impl_evaluate(
-            self, driver, params, image, scube, rcube, wcube,
+            self, driver, params,
+            image, scube, rcube, wcube, rdata, vdata, ddata,
             spat_size, spat_step, spat_zero, spat_rota,
             spec_size, spec_step, spec_zero,
             dtype, out_extra):
 
-        # Calculate the number of clouds per trait and subring.
-        # The latter happens when the trait has no ordinary integral.
-        ncloudspt = []
+        # Calculate the number of clouds per trait or subring.
+        # The latter happens when the trait has no analytical integral.
+        nclouds = []
         for trait, pnames, in zip(self._rptraits, self._rpt_pnames):
             tparams = {oname: params[nname] for oname, nname in pnames.items()}
 
@@ -67,41 +80,28 @@ class MCDisk(_disk.Disk):
             integral = trait.integrate(tparams, self._s_subrnodes[0][1:-1])
 
             tnclouds = integral / self._cflux
-            if trait.has_ordinary_integral():
-                ncloudspt.append(tnclouds)
+            if trait.has_analytical_integral():
+                nclouds.append(tnclouds)
             else:
-                ncloudspt.extend(tnclouds.astype(np.int32))
+                nclouds.extend(tnclouds.astype(np.int32))
 
-        ncloudspt = list(itertools.accumulate(ncloudspt))
+        ncloudspt = list(itertools.accumulate(nclouds))
         #print("ncloudspt:", ncloudspt)
 
         nclouds = int(ncloudspt[-1])
 
-        self._ncloudsptor[0][:] = ncloudspt
-        driver.mem_copy_h2d(self._ncloudsptor[0], self._ncloudsptor[1])
+        self._s_nclouds[0][:] = ncloudspt
+        driver.mem_copy_h2d(self._s_nclouds[0], self._s_nclouds[1])
 
         if nclouds < 0:
             raise RuntimeError('negative flux not working yet')
         print(nclouds)
 
-        rdata = None
-        vdata = None
-        ddata = None
-
         if out_extra is not None:
-            shape = spat_size[::-1]
-            if self._rptraits:
-                rdata = driver.mem_alloc_d(shape, dtype)
-                driver.mem_fill(rdata, 0)
-            if self._vptraits:
-                vdata = driver.mem_alloc_d(shape, dtype)
-                driver.mem_fill(vdata, np.nan)
-            if self._dptraits:
-                ddata = driver.mem_alloc_d(shape, dtype)
-                driver.mem_fill(ddata, np.nan)
+            pass
 
         self._backend.mcdisk_evaluate(
-            self._cflux, nclouds, self._ncloudsptor[1], self._hasordint[1],
+            self._cflux, nclouds, self._s_nclouds[1], self._s_hasaintegral[1],
             self._loose,
             self._tilted,
             self._s_subrnodes[1],
@@ -143,18 +143,4 @@ class MCDisk(_disk.Disk):
             rdata, vdata, ddata)
 
         if out_extra is not None:
-            if self._rptraits:
-                out_extra['rdata'] = driver.mem_copy_d2h(rdata)
-            if self._vptraits:
-                out_extra['vdata'] = driver.mem_copy_d2h(vdata)
-            if self._dptraits:
-                out_extra['ddata'] = driver.mem_copy_d2h(ddata)
-            if self._rptraits:
-                sumabs = np.nansum(np.abs(out_extra['rdata']))
-                log.debug(f"sum(abs(rdata)): {sumabs}")
-            if self._vptraits:
-                sumabs = np.nansum(np.abs(out_extra['vdata']))
-                log.debug(f"sum(abs(vdata)): {sumabs}")
-            if self._dptraits:
-                sumabs = np.nansum(np.abs(out_extra['ddata']))
-                log.debug(f"sum(abs(ddata)): {sumabs}")
+            pass

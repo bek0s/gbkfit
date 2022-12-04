@@ -85,7 +85,7 @@ class GModelKinematics3D(GModelSCube):
             self._tcube = driver.mem_alloc_d(self._size[::-1], dtype)
         if wdata is not None:
             self._wcube = driver.mem_alloc_d(self._size[::-1], dtype)
-        self._backend = driver.backend().make_gmodel(dtype)
+        self._backend = driver.backends().gmodel(dtype)
 
     def evaluate_scube(
             self, driver, params, scube, wdata, size, step, zero, rota, dtype,
