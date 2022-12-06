@@ -1,6 +1,5 @@
 
 import abc
-import itertools
 import logging
 import typing
 
@@ -8,7 +7,6 @@ import numpy as np
 
 from gbkfit.params.pdescs import ParamScalarDesc, ParamVectorDesc
 from gbkfit.utils import iterutils, miscutils, numutils
-from .traits import *
 
 
 _log = logging.getLogger(__name__)
@@ -19,15 +17,25 @@ def _make_param_descs(key, nnodes, nw):
 
 
 def _trait_param_info(traits, prefix, nrnodes):
-    pdescs_list = []
+    params_list = []
     for i, trait in enumerate(traits):
-        pdescs_sm = trait.params_sm()
-        pdescs_nw = tuple([pdesc for pdesc, _ in trait.params_rnw(nrnodes)])
-        pdescs = pdescs_sm + pdescs_nw
-        pdescs_list.append({pdesc.name(): pdesc for pdesc in pdescs})
-    pdescs, mappings = miscutils.merge_dicts_and_make_mappings(
-        pdescs_list, prefix, True, False)
-    return pdescs, mappings
+        params_sm = trait.params_sm()
+        params_nw = trait.params_rnw(nrnodes)
+        params_sm = [(pdesc, None, False) for pdesc in params_sm]
+        params_nw = [(pdesc, nwmode, True) for pdesc, nwmode in params_nw]
+        params = params_sm + params_nw
+        params_list.append({tuple_[0].name(): tuple_ for tuple_ in params})
+    params, mappings = miscutils.merge_dicts_and_make_mappings(
+            params_list, prefix, True, False)
+    pdescs = {name: tuple_[0] for name, tuple_ in params.items()}
+    nwmodes = {name: tuple_[1] for name, tuple_ in params.items()}
+    isnodewise = {name: tuple_[2] for name, tuple_ in params.items()}
+    # The users of this function make the following assumptions about
+    # the pdescs, nwmodes, and isnodewise dictionaries:
+    # - their keys are in the same order
+    # - their keys are in the same order with the associated traits
+    # - for each trait, the nodewise come after the smooth parameters
+    return pdescs, nwmodes, isnodewise, mappings
 
 
 def _prepare_trait_arrays(
@@ -74,6 +82,8 @@ def _prepare_trait_arrays(
 
 
 def _nwmode_transform_for_param(param, nwmode):
+    if nwmode is None:
+        return
     match nwmode['type']:
         case 'absolute':
             pass
@@ -85,71 +95,50 @@ def _nwmode_transform_for_param(param, nwmode):
             pass
         case 'relative2':
             origin_idx = nwmode.get('origin', 0)
-            numutils.cumsum(param, origin_idx)
+            numutils.cumsum(param, origin_idx, out=param)
         case _:
             assert False, "impossible"
 
 
-def _nwmode_transform_for_common_params(params, descs, nwmode):
-    for name, desc in descs.items():
-        _nwmode_transform_for_param(params[name], nwmode)
-
-
-def _nwmode_transform_for_trait_params(params, descs, traits, nrnodes):
-
-    for trait in traits:
-
-        # if not isinstance(trait, TraitNWModeSupport):
-        #     continue
-
-        print("BEGIN")
-
-        for desc in trait.params_rnw(nrnodes):
-            #_nwmode_transform_for_param(params, trait.nwmode())
-            print(desc)
-        print("END")
-
-
-
 def _prepare_common_params_array(
-        driver, params, arr, descs, nodes, subnodes, interp, nodewise, nwmode):
+        driver, params, arr, descs, nodes, subnodes, interp, isnw):
     if not descs:
         return
     start = 0
     for name, desc in descs.items():
-        if nodewise:
-            stop = start + len(subnodes)
+        # Interpolate nodewise parameters
+        # This will replace the per-node parameter values
+        # with the interpolated per-subnode parameters values.
+        if isnw:
             params[name] = interp(nodes, params[name])(subnodes)
-            arr[0][start:stop] = params[name]
+            stop = start + len(subnodes)
         else:
             stop = start + desc.size()
-            arr[0][start:stop] = params[name]
+        # Copy parameter values into the host memory buffer
+        arr[0][start:stop] = params[name]
         start = stop
+    # Transfer data from host to device
     driver.mem_copy_h2d(arr[0], arr[1])
 
 
 def _prepare_traits_params_array(
-        driver, params, arr, descs, nodes, subnodes, interp, mappings, traits):
-    # print(params)
+        driver, params, arr, descs, nodes, subnodes, interp, isnw):
     if not descs:
         return
     start = 0
-    for trait, mapping in zip(traits, mappings):
-        print(descs)
-        print(mapping)
-        for name in trait.params_sm():
-            new_name = mapping[name.name()]
-            stop = start + descs[new_name].size()
-            arr[0][start:stop] = params[new_name]
-            start = stop
-        for desc, nwmode in trait.params_rnw(len(nodes)):
-            new_name = mapping[desc.name()]
-            print(desc)
-            print(new_name)
+    for name, desc in descs.items():
+        if isnw[name]:
+            # Interpolate nodewise parameters
+            # This will replace the per-node parameter values
+            # with the interpolated per-subnode parameters values.
+            params[name] = interp(nodes, params[name])(subnodes)
             stop = start + len(subnodes)
-            params[new_name] = interp(nodes, params[new_name])(subnodes)
-            arr[0][start:stop] = params[new_name]
-            start = stop
+        else:
+            stop = start + desc.size()
+        # Copy parameter values into the host memory buffer
+        arr[0][start:stop] = params[name]
+        start = stop
+    # Transfer data from host to device
     driver.mem_copy_h2d(arr[0], arr[1])
 
 
@@ -216,22 +205,40 @@ class Disk(abc.ABC):
 
         # Make descs for trait disk parameters
         (self._rpt_pdescs,
+         self._rpt_nwmodes,
+         self._rpt_isnw,
          self._rpt_pnames) = _trait_param_info(rptraits, 'rpt', nrnodes)
         (self._rht_pdescs,
+         self._rht_nwmodes,
+         self._rht_isnw,
          self._rht_pnames) = _trait_param_info(rhtraits, 'rht', nrnodes)
         (self._vpt_pdescs,
+         self._vpt_nwmodes,
+         self._vpt_isnw,
          self._vpt_pnames) = _trait_param_info(vptraits, 'vpt', nrnodes)
         (self._vht_pdescs,
+         self._vht_nwmodes,
+         self._vht_isnw,
          self._vht_pnames) = _trait_param_info(vhtraits, 'vht', nrnodes)
         (self._dpt_pdescs,
+         self._dpt_nwmodes,
+         self._dpt_isnw,
          self._dpt_pnames) = _trait_param_info(dptraits, 'dpt', nrnodes)
         (self._dht_pdescs,
+         self._dht_nwmodes,
+         self._dht_isnw,
          self._dht_pnames) = _trait_param_info(dhtraits, 'dht', nrnodes)
         (self._zpt_pdescs,
+         self._zpt_nwmodes,
+         self._zpt_isnw,
          self._zpt_pnames) = _trait_param_info(zptraits, 'zpt', nrnodes)
         (self._spt_pdescs,
+         self._spt_nwmodes,
+         self._spt_isnw,
          self._spt_pnames) = _trait_param_info(sptraits, 'spt', nrnodes)
         (self._wpt_pdescs,
+         self._wpt_nwmodes,
+         self._wpt_isnw,
          self._wpt_pnames) = _trait_param_info(wptraits, 'wpt', nrnodes)
 
         # Merge all parameter descs into the same dictionary
@@ -462,57 +469,83 @@ class Disk(abc.ABC):
         if self._driver is not driver or self._dtype is not dtype:
             self._prepare(driver, dtype)
 
-        def prepare_common_params(arr, descs, nodewise, nwmode):
+        #
+        # Apply nodewise mode transform to parameters
+        # TODO: revise the use of nested functions
+        #
+
+        def nwmode_transform_for_common_params(pdescs, nwmode):
+            if nwmode is None:
+                return
+            for pdesc in pdescs:
+                _nwmode_transform_for_param(params[pdesc], nwmode)
+
+        def nwmode_transform_for_trait_params(pdescs, nwmodes):
+            for pdesc in pdescs:
+                if nwmodes[pdesc] is None:
+                    continue
+                _nwmode_transform_for_param(params[pdesc], nwmodes[pdesc])
+
+        nwmode_transform_for_common_params(self._vsys_pdescs, self._vsys_nwmode)
+        nwmode_transform_for_common_params(self._xpos_pdescs, self._xpos_nwmode)
+        nwmode_transform_for_common_params(self._ypos_pdescs, self._ypos_nwmode)
+        nwmode_transform_for_common_params(self._posa_pdescs, self._posa_nwmode)
+        nwmode_transform_for_common_params(self._incl_pdescs, self._incl_nwmode)
+
+        nwmode_transform_for_trait_params(self._rpt_pdescs, self._rpt_nwmodes)
+        nwmode_transform_for_trait_params(self._rht_pdescs, self._rht_nwmodes)
+        nwmode_transform_for_trait_params(self._vpt_pdescs, self._vpt_nwmodes)
+        nwmode_transform_for_trait_params(self._vht_pdescs, self._vht_nwmodes)
+        nwmode_transform_for_trait_params(self._dpt_pdescs, self._dpt_nwmodes)
+        nwmode_transform_for_trait_params(self._dht_pdescs, self._dht_nwmodes)
+        nwmode_transform_for_trait_params(self._zpt_pdescs, self._zpt_nwmodes)
+        nwmode_transform_for_trait_params(self._spt_pdescs, self._spt_nwmodes)
+        nwmode_transform_for_trait_params(self._wpt_pdescs, self._wpt_nwmodes)
+
+        #
+        # Prepare parameters
+        # TODO: revise the use of nested functions
+        #
+
+        def prepare_common_params(arr, descs, isnw):
             _prepare_common_params_array(
                 driver, params, arr, descs,
-                self._rnodes, self._subrnodes, self._interp, nodewise, nwmode)
+                self._rnodes, self._subrnodes, self._interp, isnw)
 
-        def prepare_traits_params(arr, descs, mappings, traits):
-
-            _nwmode_transform_for_trait_params(params, descs, traits, self._nrnodes)
-
+        def prepare_traits_params(arr, descs, isnw):
             _prepare_traits_params_array(
                 driver, params, arr, descs,
-                self._rnodes, self._subrnodes, self._interp, mappings, traits)
+                self._rnodes, self._subrnodes, self._interp, isnw)
 
         prepare_common_params(
-            self._s_vsys_pvalues, self._vsys_pdescs, self._loose, self._vsys_nwmode)
+            self._s_vsys_pvalues, self._vsys_pdescs, self._loose)
         prepare_common_params(
-            self._s_xpos_pvalues, self._xpos_pdescs, self._loose, self._xpos_nwmode)
+            self._s_xpos_pvalues, self._xpos_pdescs, self._loose)
         prepare_common_params(
-            self._s_ypos_pvalues, self._ypos_pdescs, self._loose, self._ypos_nwmode)
+            self._s_ypos_pvalues, self._ypos_pdescs, self._loose)
         prepare_common_params(
-            self._s_posa_pvalues, self._posa_pdescs, self._tilted, self._posa_nwmode)
+            self._s_posa_pvalues, self._posa_pdescs, self._tilted)
         prepare_common_params(
-            self._s_incl_pvalues, self._incl_pdescs, self._tilted, self._incl_nwmode)
+            self._s_incl_pvalues, self._incl_pdescs, self._tilted)
 
         prepare_traits_params(
-            self._s_rpt_pvalues, self._rpt_pdescs, self._rpt_pnames,
-            self._rptraits)
+            self._s_rpt_pvalues, self._rpt_pdescs, self._rpt_isnw)
         prepare_traits_params(
-            self._s_rht_pvalues, self._rht_pdescs, self._rht_pnames,
-            self._rhtraits)
+            self._s_rht_pvalues, self._rht_pdescs, self._rht_isnw)
         prepare_traits_params(
-            self._s_vpt_pvalues, self._vpt_pdescs, self._vpt_pnames,
-            self._vptraits)
+            self._s_vpt_pvalues, self._vpt_pdescs, self._vpt_isnw)
         prepare_traits_params(
-            self._s_vht_pvalues, self._vht_pdescs, self._vht_pnames,
-            self._vhtraits)
+            self._s_vht_pvalues, self._vht_pdescs, self._vht_isnw)
         prepare_traits_params(
-            self._s_dpt_pvalues, self._dpt_pdescs, self._dpt_pnames,
-            self._dptraits)
+            self._s_dpt_pvalues, self._dpt_pdescs, self._dpt_isnw)
         prepare_traits_params(
-            self._s_dht_pvalues, self._dht_pdescs, self._dht_pnames,
-            self._dhtraits)
+            self._s_dht_pvalues, self._dht_pdescs, self._dht_isnw)
         prepare_traits_params(
-            self._s_zpt_pvalues, self._zpt_pdescs, self._zpt_pnames,
-            self._zptraits)
+            self._s_zpt_pvalues, self._zpt_pdescs, self._zpt_isnw)
         prepare_traits_params(
-            self._s_spt_pvalues, self._spt_pdescs, self._spt_pnames,
-            self._sptraits)
+            self._s_spt_pvalues, self._spt_pdescs, self._spt_isnw)
         prepare_traits_params(
-            self._s_wpt_pvalues, self._wpt_pdescs, self._wpt_pnames,
-            self._wptraits)
+            self._s_wpt_pvalues, self._wpt_pdescs, self._wpt_isnw)
 
         rdata = None
         vdata = None

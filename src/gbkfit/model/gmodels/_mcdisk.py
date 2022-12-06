@@ -7,7 +7,10 @@ import numpy as np
 from . import _disk
 
 
-log = logging.getLogger(__name__)
+__all__ = ['MCDisk']
+
+
+_log = logging.getLogger(__name__)
 
 
 class MCDisk(_disk.Disk):
@@ -98,7 +101,7 @@ class MCDisk(_disk.Disk):
         print(nclouds)
 
         if out_extra is not None:
-            pass
+            out_extra['nclouds'] = nclouds
 
         self._backend.mcdisk_evaluate(
             self._cflux, nclouds, self._s_nclouds[1], self._s_hasaintegral[1],

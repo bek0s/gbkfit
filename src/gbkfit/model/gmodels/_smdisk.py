@@ -2,6 +2,9 @@
 from . import _disk
 
 
+__all__ = ['SMDisk']
+
+
 class SMDisk(_disk.Disk):
 
     def __init__(
