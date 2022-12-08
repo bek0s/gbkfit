@@ -265,7 +265,8 @@ def eval_(objective_type, config, profile=None):
     _log.info("storing outputs to the filesystem...")
 
     for filename, data in outputs.items():
-        if data is not None:
+        print(filename)
+        if isinstance(data, np.ndarray):
             hdu = fits.PrimaryHDU(data)
             hdulist = fits.HDUList([hdu])
             hdulist.writeto(filename, overwrite=True)

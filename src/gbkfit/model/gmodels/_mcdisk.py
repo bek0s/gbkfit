@@ -42,12 +42,15 @@ class MCDisk(_disk.Disk):
             wptraits)
 
         self._cflux = cflux
-        # Array with number of clouds per trait.
-        # For traits without an analytical integral,
-        # we store the number of clouds in each of their rings
-        # Actually, we store the cumulative sum of the array.
-        # This reduces the number of calculations during evaluation.
-        self._s_nclouds = [None, None]
+        # Array containing the cumulative sum of the number of clouds
+        # per trait. For traits without an analytical integral we
+        # calculate the number of clouds per trait ring. The center of
+        # each ring coincides with a subnode. The first and last
+        # subnodes are excepted, as they are the inner and outer edges
+        # of the first and last rings. We use the cumulative sum in
+        # order to reduce the number of calculations during model
+        # evaluation.
+        self._s_ncloudsptor = [None, None]
         # Has-analytical-integral flag per trait
         self._s_hasaintegral = [None, None]
 
@@ -61,7 +64,7 @@ class MCDisk(_disk.Disk):
         driver.mem_copy_h2d(self._s_hasaintegral[0], self._s_hasaintegral[1])
         nrings = self._nsubrnodes - 2
         size = sum([1 if h else nrings for h in hasaintegral])
-        self._s_nclouds = driver.mem_alloc_s(size, np.int32)
+        self._s_ncloudsptor = driver.mem_alloc_s(size, np.int32)
 
     def _impl_evaluate(
             self, driver, params,
@@ -70,41 +73,40 @@ class MCDisk(_disk.Disk):
             spec_size, spec_step, spec_zero,
             dtype, out_extra):
 
-        # Calculate the number of clouds per trait or subring.
-        # The latter happens when the trait has no analytical integral.
-        nclouds = []
+        # Calculate the number of clouds per trait or ring.
+        ncloudsptor = []
         for trait, pnames, in zip(self._rptraits, self._rpt_pnames):
-            tparams = {oname: params[nname] for oname, nname in pnames.items()}
+            # Make a parameter dict for the current trait
+            # Use the original names and not the new/prefixed ones
+            trait_params = {}
+            for old_name, new_name in pnames.items():
+                trait_params[old_name] = params[new_name][1:-1]
+            # Calculate the integral of this trait.
+            # If the trait has an analytical integral, this will return
+            # a single value. Otherwise, it will return an iterable
+            # with the integral of each ring for that trait.
+            ring_centers = self._s_subrnodes[0][1:-1]
+            integral = trait.integrate(trait_params, ring_centers)
+            # Calculate the number of clouds per trait or ring
+            trait_nclouds = integral / self._cflux
+            ncloudsptor.extend(np.atleast_1d(trait_nclouds).astype(np.int32))
 
-            #
-            for pdesc in trait.params_rnw(self._nrnodes):
-                tparams[pdesc.name()] = tparams[pdesc.name()][1:-1]
+        # Calculate the cumsum and transfer it to the device memory
+        self._s_ncloudsptor[0][:] = list(itertools.accumulate(ncloudsptor))
+        driver.mem_copy_h2d(self._s_ncloudsptor[0], self._s_ncloudsptor[1])
 
-            integral = trait.integrate(tparams, self._s_subrnodes[0][1:-1])
+        # Store the total number of clouds across the entire disk
+        nclouds = ncloudsptor[-1]
 
-            tnclouds = integral / self._cflux
-            if trait.has_analytical_integral():
-                nclouds.append(tnclouds)
-            else:
-                nclouds.extend(tnclouds.astype(np.int32))
-
-        ncloudspt = list(itertools.accumulate(nclouds))
-        #print("ncloudspt:", ncloudspt)
-
-        nclouds = int(ncloudspt[-1])
-
-        self._s_nclouds[0][:] = ncloudspt
-        driver.mem_copy_h2d(self._s_nclouds[0], self._s_nclouds[1])
-
-        if nclouds < 0:
-            raise RuntimeError('negative flux not working yet')
-        print(nclouds)
+        # TODO: investigate negative flux
 
         if out_extra is not None:
             out_extra['nclouds'] = nclouds
 
         self._backend.mcdisk_evaluate(
-            self._cflux, nclouds, self._s_nclouds[1], self._s_hasaintegral[1],
+            self._cflux, nclouds,
+            self._s_ncloudsptor[1],
+            self._s_hasaintegral[1],
             self._loose,
             self._tilted,
             self._s_subrnodes[1],
