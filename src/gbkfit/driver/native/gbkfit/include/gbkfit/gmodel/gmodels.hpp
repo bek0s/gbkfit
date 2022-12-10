@@ -438,7 +438,7 @@ gmodel_mcdisk_evaluate_cloud(
         zd += zvalue;
     }
 
-    vsysi = loose ? lerp(rd, rnidx, rnodes, vsys) : (vsys ? vsys[0] : 0);
+    vsysi = vsys ? (loose ? lerp(rd, rnidx, rnodes, vsys) : vsys[0]) : 0;
     xposi = loose ? lerp(rd, rnidx, rnodes, xpos) : xpos[0];
     yposi = loose ? lerp(rd, rnidx, rnodes, ypos) : ypos[0];
     posai = tilted ? lerp(rd, rnidx, rnodes, posa) : posa[0];

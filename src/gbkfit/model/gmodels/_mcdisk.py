@@ -80,7 +80,11 @@ class MCDisk(_disk.Disk):
             # Use the original names and not the new/prefixed ones
             trait_params = {}
             for old_name, new_name in pnames.items():
-                trait_params[old_name] = params[new_name][1:-1]
+                if self._rpt_isnw[new_name]:
+                    trait_params[old_name] = params[new_name][1:-1]
+                else:
+                    trait_params[old_name] = params[new_name]
+
             # Calculate the integral of this trait.
             # If the trait has an analytical integral, this will return
             # a single value. Otherwise, it will return an iterable
@@ -91,17 +95,21 @@ class MCDisk(_disk.Disk):
             trait_nclouds = integral / self._cflux
             ncloudsptor.extend(np.atleast_1d(trait_nclouds).astype(np.int32))
 
-        # Calculate the cumsum and transfer it to the device memory
-        self._s_ncloudsptor[0][:] = list(itertools.accumulate(ncloudsptor))
+        # Calculate cumsum
+        ncloudsptor_cumsum = list(itertools.accumulate(ncloudsptor))
+
+        # Transfer cumsum to host and then device memory
+        self._s_ncloudsptor[0][:] = ncloudsptor_cumsum
         driver.mem_copy_h2d(self._s_ncloudsptor[0], self._s_ncloudsptor[1])
 
         # Store the total number of clouds across the entire disk
-        nclouds = ncloudsptor[-1]
+        nclouds = ncloudsptor_cumsum[-1]
 
         # TODO: investigate negative flux
 
         if out_extra is not None:
-            out_extra['nclouds'] = nclouds
+            # out_extra['nclouds'] = nclouds
+            pass
 
         self._backend.mcdisk_evaluate(
             self._cflux, nclouds,

@@ -246,7 +246,7 @@ class DCube:
         # Apply masking.
         # Checked if mask_create or mask_apply are True in __init__()
         if mask_cutoff is not None:
-            backend_dmodel.mask(
+            backend_dmodel.dcube_mask(
                 mask_cutoff, mask_apply, dcube_lo, mcube_lo, wcube_lo)
 
         # Output extra information

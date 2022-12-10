@@ -69,6 +69,7 @@ class DensitySMDisk3D(DensityComponent3D):
         self._disk = _smdisk.SMDisk(
             loose=loose, tilted=tilted,
             **rnode_args,
+            vsys_nwmode=None,
             **nwmode_geometry_args,
             **trait_args,
             vptraits=(), vhtraits=(),

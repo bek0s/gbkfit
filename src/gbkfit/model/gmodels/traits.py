@@ -288,7 +288,7 @@ class RPTraitGauss(RPTrait):
         a = params['a']
         s = params['s']
         #return np.array([a * 2 * np.pi * s * s])
-        return _integrate_nw(nodes, gbkfit.math.gauss_1d_fun, a, 0, s)
+        return _integrate_rings(nodes, gbkfit.math.gauss_1d_fun, a, 0, s)
 
 
 class RPTraitGGauss(RPTrait):
@@ -314,7 +314,7 @@ class RPTraitGGauss(RPTrait):
         a = params['a']
         s = params['s']
         b = params['b']
-        return _integrate_nw(nodes, gbkfit.math.ggauss_1d_fun, a, 0, s, b)
+        return _integrate_rings(nodes, gbkfit.math.ggauss_1d_fun, a, 0, s, b)
 
 
 class RPTraitLorentz(RPTrait):
@@ -338,7 +338,7 @@ class RPTraitLorentz(RPTrait):
     def integrate(self, params, nodes):
         a = params['a']
         s = params['s']
-        return _integrate_nw(nodes, gbkfit.math.lorentz_1d_fun, a, 0, s)
+        return _integrate_rings(nodes, gbkfit.math.lorentz_1d_fun, a, 0, s)
 
 
 class RPTraitMoffat(RPTrait):
@@ -364,7 +364,7 @@ class RPTraitMoffat(RPTrait):
         a = params['a']
         s = params['s']
         b = params['b']
-        return _integrate_nw(nodes, gbkfit.math.moffat_1d_fun, a, 0, s, b)
+        return _integrate_rings(nodes, gbkfit.math.moffat_1d_fun, a, 0, s, b)
 
 
 class RPTraitSech2(RPTrait):
@@ -388,7 +388,7 @@ class RPTraitSech2(RPTrait):
     def integrate(self, params, nodes):
         a = params['a']
         s = params['s']
-        return _integrate_nw(nodes, gbkfit.math.sech2_1d_pdf, a, 0, s)
+        return _integrate_rings(nodes, gbkfit.math.sech2_1d_fun, a, 0, s)
 
 
 class RPTraitMixtureGGauss(RPTrait):

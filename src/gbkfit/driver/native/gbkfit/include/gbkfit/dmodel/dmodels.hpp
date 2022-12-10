@@ -64,7 +64,7 @@ dmodel_dcube_mask(
     {
         mvalue = 0;
         if (apply) {
-            dcube_d[idx] = 0;
+            dcube_d[idx] = NAN;
         }
     }
 

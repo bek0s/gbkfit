@@ -152,31 +152,6 @@ def parse_component_nwmodes_for_velocity(
         vsys_nwmode=vsys_nwmode)
 
 
-def parse_component_nwmodes_for_loose(
-        loose, vsys_nwmode, xpos_nwmode, ypos_nwmode):
-    vsys_nwmode = _parse_component_nwmode(
-        loose, 'loose', vsys_nwmode, 'vsys_nwmode')
-    xpos_nwmode = _parse_component_nwmode(
-        loose, 'loose', xpos_nwmode, 'xpos_nwmode')
-    ypos_nwmode = _parse_component_nwmode(
-        loose, 'loose', ypos_nwmode, 'ypos_nwmode')
-    return dict(
-        vsys_nwmode=vsys_nwmode,
-        xpos_nwmode=xpos_nwmode,
-        ypos_nwmode=ypos_nwmode)
-
-
-def parse_component_nwmodes_for_tilted(
-        tilted, posa_nwmode, incl_nwmode):
-    posa_nwmode = _parse_component_nwmode(
-        tilted, 'tilted', posa_nwmode, 'posa_nwmode')
-    incl_nwmode = _parse_component_nwmode(
-        tilted, 'tilted', incl_nwmode, 'incl_nwmode')
-    return dict(
-        posa_nwmode=posa_nwmode,
-        incl_nwmode=incl_nwmode)
-
-
 def parse_component_d2d_trait_args(
         rptraits,
         sptraits,
