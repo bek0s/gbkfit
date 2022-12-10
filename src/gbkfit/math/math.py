@@ -418,11 +418,11 @@ def moffat_1d_pdf(x, b, c, d):
     return moffat_1d_fun(x, a, b, c, d)
 
 
-def moffat_1d_cdf(x, b, c, d):
+def moffat_1d_cdf(_x, _b, _c, _d):
     raise NotImplementedError()
 
 
-def moffat_1d_ppf(x, b, c, d):
+def moffat_1d_ppf(_x, _b, _c, _d):
     raise NotImplementedError()
 
 
@@ -464,7 +464,7 @@ def sech2_1d_cdf(x, b, c):
     return 0.5 * (1 + np.tanh((x - b) / c))
 
 
-def sech2_1d_ppf(x, b, c):
+def sech2_1d_ppf(_x, _b, _c):
     raise NotImplementedError()
 
 

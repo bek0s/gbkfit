@@ -1,12 +1,16 @@
 
 import copy
+import logging
 
 import numpy as np
 
 from gbkfit.math import interpolation
 from gbkfit.params.pdescs import ParamScalarDesc
-from gbkfit.utils import iterutils
+from gbkfit.utils import iterutils, parseutils
 from . import traits
+
+
+_log = logging.getLogger(__name__)
 
 
 def _parse_component_node_args(
@@ -276,6 +280,25 @@ def parse_component_s3d_trait_args(
         zptraits=zptraits,
         sptraits=sptraits,
         wptraits=wptraits)
+
+
+def check_rhtraits(rhtraits):
+    if any([isinstance(t, traits.RHTraitUniform) for t in rhtraits]):
+        _log.warning("")
+
+
+def check_rptraits_mcdisk(component, rptraits):
+    unsupported_rptraits = (
+        traits.RPTraitMixtureExponential,
+        traits.RPTraitMixtureGauss,
+        traits.RPTraitMixtureGGauss,
+        traits.RPTraitMixtureMoffat)
+
+    for trait in rptraits:
+        if isinstance(trait, unsupported_rptraits):
+            cdesc = parseutils.make_typed_desc(component.__class__, 'gmodel component')
+            tdesc = traits.trait_desc(trait.__class__)
+            raise RuntimeError(f"{cdesc} does not support {tdesc}")
 
 
 def _make_gmodel_params_cmp(components, prefix, force_prefix):

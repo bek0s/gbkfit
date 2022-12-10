@@ -14,7 +14,7 @@ def make_basic_desc(cls, label):
 
 
 def make_typed_desc(cls, label):
-    return f'{cls.type()} {label} (class={cls.__qualname__})'
+    return f'{label} {cls.type()} (class={cls.__qualname__})'
 
 
 def parse_options(info, desc, required=None, optional=None):

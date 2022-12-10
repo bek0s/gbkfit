@@ -122,23 +122,23 @@ def _integrate_rings(nodes, fun, *args):
     return ampl * np.pi * (rmax * rmax - rmin * rmin)
 
 
-def _trait_desc(cls):
+def trait_desc(cls):
     descs = {
-        RPTrait: 'density polar',
-        RHTrait: 'density height',
-        VPTrait: 'velocity polar',
-        VHTrait: 'velocity height',
-        DPTrait: 'velocity dispersion polar',
-        DHTrait: 'velocity dispersion height',
-        ZPTrait: 'vertical distortion polar',
-        SPTrait: 'selection polar',
-        WPTrait: 'weight  polar'}
-    postfix = None
+        RPTrait: 'density polar trait',
+        RHTrait: 'density height trait',
+        VPTrait: 'velocity polar trait',
+        VHTrait: 'velocity height trait',
+        DPTrait: 'velocity dispersion polar trait',
+        DHTrait: 'velocity dispersion height trait',
+        ZPTrait: 'vertical distortion polar trait',
+        SPTrait: 'selection polar trait',
+        WPTrait: 'weight polar trait'}
+    label = None
     for k, v in descs.items():
         if issubclass(cls, k):
-            postfix = v
-    assert postfix
-    return f'{cls.type()} {postfix} trait ({cls.__name__})'
+            label = v
+    assert label
+    return parseutils.make_typed_desc(cls, label)
 
 
 def _dump_nwmode(nwmode):
@@ -154,7 +154,7 @@ class Trait(parseutils.TypedParserSupport, abc.ABC):
 
     @classmethod
     def load(cls, info):
-        desc = _trait_desc(cls)
+        desc = trait_desc(cls)
         opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
         return cls(**opts)
 
@@ -287,7 +287,6 @@ class RPTraitGauss(RPTrait):
     def integrate(self, params, nodes):
         a = params['a']
         s = params['s']
-        #return np.array([a * 2 * np.pi * s * s])
         return _integrate_rings(nodes, gbkfit.math.gauss_1d_fun, a, 0, s)
 
 
@@ -391,6 +390,52 @@ class RPTraitSech2(RPTrait):
         return _integrate_rings(nodes, gbkfit.math.sech2_1d_fun, a, 0, s)
 
 
+class RPTraitMixtureExponential(RPTrait):
+
+    @staticmethod
+    def type():
+        return 'mixture_exponential'
+
+    @staticmethod
+    def uid():
+        return RP_TRAIT_UID_MIXTURE_EXPONENTIAL
+
+    def __init__(self, nblobs):
+        super().__init__(nblobs=nblobs)
+
+    def params_sm(self):
+        return _params_mixture(self._kwargs['nblobs'], False)
+
+    def has_analytical_integral(self):
+        return True
+
+    def integrate(self, params, nodes):
+        raise NotImplementedError()
+
+
+class RPTraitMixtureGauss(RPTrait):
+
+    @staticmethod
+    def type():
+        return 'mixture_gauss'
+
+    @staticmethod
+    def uid():
+        return RP_TRAIT_UID_MIXTURE_GAUSS
+
+    def __init__(self, nblobs):
+        super().__init__(nblobs=nblobs)
+
+    def params_sm(self):
+        return _params_mixture(self._kwargs['nblobs'], False)
+
+    def has_analytical_integral(self):
+        return True
+
+    def integrate(self, params, nodes):
+        raise NotImplementedError()
+
+
 class RPTraitMixtureGGauss(RPTrait):
 
     @staticmethod
@@ -405,7 +450,7 @@ class RPTraitMixtureGGauss(RPTrait):
         super().__init__(nblobs=nblobs)
 
     def params_sm(self):
-        return _params_mixture(self._kwargs['nblobs'])
+        return _params_mixture(self._kwargs['nblobs'], True)
 
     def has_analytical_integral(self):
         return True
@@ -428,7 +473,7 @@ class RPTraitMixtureMoffat(RPTrait):
         super().__init__(nblobs=nblobs)
 
     def params_sm(self):
-        return _params_mixture(self._kwargs['nblobs'])
+        return _params_mixture(self._kwargs['nblobs'], False)
 
     def has_analytical_integral(self):
         return True
@@ -1078,6 +1123,40 @@ class DPTraitSech2(DPTrait):
             ParamScalarDesc('s'))
 
 
+class DPTraitMixtureExponential(DPTrait):
+
+    @staticmethod
+    def type():
+        return 'mixture_exponential'
+
+    @staticmethod
+    def uid():
+        return DP_TRAIT_UID_MIXTURE_EXPONENTIAL
+
+    def __init__(self, nblobs):
+        super().__init__(nblobs=nblobs)
+
+    def params_sm(self):
+        return _params_mixture(self._kwargs['nblobs'], False)
+
+
+class DPTraitMixtureGauss(DPTrait):
+
+    @staticmethod
+    def type():
+        return 'mixture_gauss'
+
+    @staticmethod
+    def uid():
+        return DP_TRAIT_UID_MIXTURE_GAUSS
+
+    def __init__(self, nblobs):
+        super().__init__(nblobs=nblobs)
+
+    def params_sm(self):
+        return _params_mixture(self._kwargs['nblobs'], False)
+
+
 class DPTraitMixtureGGauss(DPTrait):
 
     @staticmethod
@@ -1092,7 +1171,7 @@ class DPTraitMixtureGGauss(DPTrait):
         super().__init__(nblobs=nblobs)
 
     def params_sm(self):
-        return _params_mixture(self._kwargs['nblobs'])
+        return _params_mixture(self._kwargs['nblobs'], True)
 
 
 class DPTraitMixtureMoffat(DPTrait):
@@ -1109,7 +1188,7 @@ class DPTraitMixtureMoffat(DPTrait):
         super().__init__(nblobs=nblobs)
 
     def params_sm(self):
-        return _params_mixture(self._kwargs['nblobs'])
+        return _params_mixture(self._kwargs['nblobs'], True)
 
 
 class DPTraitNWUniform(DPTrait):
@@ -1295,6 +1374,8 @@ rpt_parser = parseutils.TypedParser(RPTrait, [
     RPTraitLorentz,
     RPTraitMoffat,
     RPTraitSech2,
+    RPTraitMixtureExponential,
+    RPTraitMixtureGauss,
     RPTraitMixtureGGauss,
     RPTraitMixtureMoffat,
     RPTraitNWUniform,
@@ -1342,6 +1423,8 @@ dpt_parser = parseutils.TypedParser(DPTrait, [
     DPTraitLorentz,
     DPTraitMoffat,
     DPTraitSech2,
+    DPTraitMixtureExponential,
+    DPTraitMixtureGauss,
     DPTraitMixtureGGauss,
     DPTraitMixtureMoffat,
     DPTraitNWUniform,

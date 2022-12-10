@@ -12,8 +12,10 @@ constexpr int RP_TRAIT_UID_GGAUSS = 4;
 constexpr int RP_TRAIT_UID_LORENTZ = 5;
 constexpr int RP_TRAIT_UID_MOFFAT = 6;
 constexpr int RP_TRAIT_UID_SECH2 = 7;
-constexpr int RP_TRAIT_UID_MIXTURE_GGAUSS = 8;
-constexpr int RP_TRAIT_UID_MIXTURE_MOFFAT = 9;
+constexpr int RP_TRAIT_UID_MIXTURE_EXPONENTIAL = 51;
+constexpr int RP_TRAIT_UID_MIXTURE_GAUSS = 52;
+constexpr int RP_TRAIT_UID_MIXTURE_GGAUSS = 53;
+constexpr int RP_TRAIT_UID_MIXTURE_MOFFAT = 54;
 constexpr int RP_TRAIT_UID_NW_UNIFORM = 101;
 constexpr int RP_TRAIT_UID_NW_HARMONIC = 102;
 constexpr int RP_TRAIT_UID_NW_DISTORTION = 103;
@@ -56,8 +58,10 @@ constexpr int DP_TRAIT_UID_GGAUSS = 4;
 constexpr int DP_TRAIT_UID_LORENTZ = 5;
 constexpr int DP_TRAIT_UID_MOFFAT = 6;
 constexpr int DP_TRAIT_UID_SECH2 = 7;
-constexpr int DP_TRAIT_UID_MIXTURE_GGAUSS = 8;
-constexpr int DP_TRAIT_UID_MIXTURE_MOFFAT = 9;
+constexpr int DP_TRAIT_UID_MIXTURE_EXPONENTIAL = 51;
+constexpr int DP_TRAIT_UID_MIXTURE_GAUSS = 52;
+constexpr int DP_TRAIT_UID_MIXTURE_GGAUSS = 53;
+constexpr int DP_TRAIT_UID_MIXTURE_MOFFAT = 54;
 constexpr int DP_TRAIT_UID_NW_UNIFORM = 101;
 constexpr int DP_TRAIT_UID_NW_HARMONIC = 102;
 constexpr int DP_TRAIT_UID_NW_DISTORTION = 103;
@@ -153,12 +157,11 @@ p_trait_mixture_1p(T& out, T r, T theta, const T* consts, const T* params)
         T blob_p = params[5*nblobs+i];  // blob roll (relative to blob_t)
         blob_t *= DEG_TO_RAD<T>;
         blob_p *= DEG_TO_RAD<T>;
-        T xb = blob_r * std::cos(blob_p);
-        T yb = blob_r * std::sin(blob_p);
-        T xd = r * std::cos(theta + blob_p - blob_t) - xb;
-        T yd = r * std::sin(theta + blob_p - blob_t) - yb;
-        T rd = std::sqrt(xd * xd + (yd * yd) / (blob_q * blob_q));
-        res += FUN(rd, blob_a, 0, blob_s);
+        T xn = r * std::cos(theta) - blob_r * std::cos(blob_t);
+        T yn = r * std::sin(theta) - blob_r * std::sin(blob_t);
+        transform_lh_rotate_z(xn, yn, xn, yn, blob_t + blob_p);
+        T rn = std::sqrt(xn * xn + (yn * yn) / (blob_q * blob_q));
+        res += FUN(rn, blob_a, 0, blob_s);
     }
     out = res;
 }
@@ -189,13 +192,29 @@ p_trait_mixture_2p(T& out, T r, T theta, const T* consts, const T* params)
 }
 
 template<typename T> constexpr void
-p_trait_mixture_ggauss(T& out, T r, T theta, const T* consts, const T* params)
+p_trait_mixture_exponential(
+        T& out, T r, T theta, const T* consts, const T* params)
+{
+    p_trait_mixture_1p<exponential_1d_fun<T>>(out, r, theta, consts, params);
+}
+
+template<typename T> constexpr void
+p_trait_mixture_gauss(
+        T& out, T r, T theta, const T* consts, const T* params)
+{
+    p_trait_mixture_1p<gauss_1d_fun<T>>(out, r, theta, consts, params);
+}
+
+template<typename T> constexpr void
+p_trait_mixture_ggauss(
+        T& out, T r, T theta, const T* consts, const T* params)
 {
     p_trait_mixture_2p<ggauss_1d_fun<T>>(out, r, theta, consts, params);
 }
 
 template<typename T> constexpr void
-p_trait_mixture_moffat(T& out, T r, T theta, const T* consts, const T* params)
+p_trait_mixture_moffat(
+        T& out, T r, T theta, const T* consts, const T* params)
 {
     p_trait_mixture_2p<moffat_1d_fun<T>>(out, r, theta, consts, params);
 }
@@ -345,6 +364,41 @@ rp_trait_sech2_rnd(
         T& out_r, T& out_t, RNG<T>& rng, int rnidx, const T* rnodes)
 {
     rp_trait_sample_polar_coords_nw(out_r, out_t, rng, rnidx, rnodes);
+}
+
+template<typename T> constexpr void
+rp_trait_mixture_exponential(
+        T& out, T r, T theta, const T* consts, const T* params)
+{
+    p_trait_mixture_exponential(out, r, theta, consts, params);
+}
+
+template<typename T> constexpr void
+rp_trait_mixture_exponential_rnd(
+        T& out_r, T& out_t, RNG<T>& rng, const T* consts, const T* params)
+{
+    (void)out_r;
+    (void)out_t;
+    (void)rng;
+    (void)consts;
+    (void)params;
+}
+
+template<typename T> constexpr void
+rp_trait_mixture_gauss(T& out, T r, T theta, const T* consts, const T* params)
+{
+    p_trait_mixture_gauss(out, r, theta, consts, params);
+}
+
+template<typename T> constexpr void
+rp_trait_mixture_gauss_rnd(
+        T& out_r, T& out_t, RNG<T>& rng, const T* consts, const T* params)
+{
+    (void)out_r;
+    (void)out_t;
+    (void)rng;
+    (void)consts;
+    (void)params;
 }
 
 template<typename T> constexpr void
@@ -861,13 +915,29 @@ dp_trait_sech2(T& out, T r, const T* params)
 }
 
 template<typename T> constexpr void
-dp_trait_mixture_ggauss(T& out, T r, T theta, const T* consts, const T* params)
+dp_trait_mixture_exponential(
+        T& out, T r, T theta, const T* consts, const T* params)
+{
+    p_trait_mixture_exponential(out, r, theta, consts, params);
+}
+
+template<typename T> constexpr void
+dp_trait_mixture_gauss(
+        T& out, T r, T theta, const T* consts, const T* params)
+{
+    p_trait_mixture_gauss(out, r, theta, consts, params);
+}
+
+template<typename T> constexpr void
+dp_trait_mixture_ggauss(
+        T& out, T r, T theta, const T* consts, const T* params)
 {
     p_trait_mixture_ggauss(out, r, theta, consts, params);
 }
 
 template<typename T> constexpr void
-dp_trait_mixture_moffat(T& out, T r, T theta, const T* consts, const T* params)
+dp_trait_mixture_moffat(
+        T& out, T r, T theta, const T* consts, const T* params)
 {
     p_trait_mixture_moffat(out, r, theta, consts, params);
 }
@@ -998,6 +1068,14 @@ rp_trait(T& out,
         rp_trait_sech2(
                 out, r, params);
         break;
+    case RP_TRAIT_UID_MIXTURE_EXPONENTIAL:
+        rp_trait_mixture_exponential(
+                out, r, theta, consts, params);
+        break;
+    case RP_TRAIT_UID_MIXTURE_GAUSS:
+        rp_trait_mixture_gauss(
+                out, r, theta, consts, params);
+        break;
     case RP_TRAIT_UID_MIXTURE_GGAUSS:
         rp_trait_mixture_ggauss(
                 out, r, theta, consts, params);
@@ -1060,6 +1138,14 @@ rp_trait_rnd(
     case RP_TRAIT_UID_SECH2:
         rp_trait_sech2_rnd(
                 out_r, out_t, rng, rnidx, rnodes);
+        break;
+    case RP_TRAIT_UID_MIXTURE_EXPONENTIAL:
+        rp_trait_mixture_exponential_rnd(
+                out_r, out_t, rng, consts, params);
+        break;
+    case RP_TRAIT_UID_MIXTURE_GAUSS:
+        rp_trait_mixture_gauss_rnd(
+                out_r, out_t, rng, consts, params);
         break;
     case RP_TRAIT_UID_MIXTURE_GGAUSS:
         rp_trait_mixture_ggauss_rnd(
@@ -1323,6 +1409,14 @@ dp_trait(T& out,
     case DP_TRAIT_UID_SECH2:
         dp_trait_sech2(
                 out, r, params);
+        break;
+    case DP_TRAIT_UID_MIXTURE_EXPONENTIAL:
+        dp_trait_mixture_exponential(
+                out, r, theta, consts, params);
+        break;
+    case DP_TRAIT_UID_MIXTURE_GAUSS:
+        dp_trait_mixture_gauss(
+                out, r, theta, consts, params);
         break;
     case DP_TRAIT_UID_MIXTURE_GGAUSS:
         dp_trait_mixture_ggauss(
