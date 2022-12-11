@@ -83,6 +83,8 @@ class SpectralSMDisk3D(SpectralComponent3D):
             zptraits,
             sptraits,
             wptraits)
+        all_traits = sum(trait_args.values(), ())
+        _detail.check_traits_common(all_traits)
         self._disk = _smdisk.SMDisk(
             loose=loose, tilted=tilted,
             **rnode_args,

@@ -71,7 +71,9 @@ class DensityMCDisk3D(DensityComponent3D):
             zptraits,
             sptraits,
             wptraits)
-        _detail.check_rptraits_mcdisk(self, trait_args['rptraits'])
+        all_traits = sum(trait_args.values(), ())
+        _detail.check_traits_common(all_traits)
+        _detail.check_traits_mcdisk(self, all_traits)
         self._disk = _mcdisk.MCDisk(
             cflux=cflux,
             loose=loose, tilted=tilted,

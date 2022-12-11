@@ -262,9 +262,10 @@ rp_trait_sample_polar_coords_nw(
         T& out_r, T& out_t,
         RNG<T>& rng, int rnidx, const T* rnodes)
 {
-    T rsep = rnodes[1] - rnodes[0];
-    T rmin = rnodes[rnidx] - rsep * T{0.5};
-    T rmax = rnodes[rnidx] + rsep * T{0.5};
+    // The first and last nodes are the inner and outer ring edge radii
+    T half_ring_width = rnodes[1] - rnodes[0];
+    T rmin = rnodes[rnidx] - half_ring_width;
+    T rmax = rnodes[rnidx] + half_ring_width;
     rp_trait_sample_polar_coords(out_r, out_t, rng, rmin, rmax);
 }
 
@@ -278,9 +279,9 @@ template<typename T> constexpr void
 rp_trait_uniform_rnd(
         T& out_r, T& out_t, RNG<T>& rng, const T* rnodes, int nrnodes)
 {
-    T rsep = rnodes[1] - rnodes[0] * 2; // TODO: why?
-    T rmin = rnodes[0] - rsep;
-    T rmax = rnodes[nrnodes - 1] + rsep;
+    // The first and last nodes are the inner and outer ring edge radii
+    T rmin = rnodes[0];
+    T rmax = rnodes[nrnodes - 1];
     rp_trait_sample_polar_coords(out_r, out_t, rng, rmin, rmax);
 }
 
@@ -1107,8 +1108,11 @@ template<typename T> constexpr void
 rp_trait_rnd(
         T& out_s, T& out_r, T& out_t, RNG<T>& rng,
         int uid, const T* consts, const T* params,
-        int rnidx, const T* rnodes, int nrnodes)
+        int ridx, const T* rnodes, int nrnodes)
 {
+    // Convert ring index to rnode index
+    auto rnidx = ridx + 1;
+
     switch (uid)
     {
     case RP_TRAIT_UID_UNIFORM:

@@ -375,7 +375,7 @@ gmodel_mcdisk_evaluate_cloud(
     rp_trait_rnd<T>(
             sign, rd, theta, rng,
             rpt_uids[tidx], rpt_cptr, rpt_pptr,
-            rnidx, &rnodes[1], nrnodes - 2);
+            rnidx, rnodes, nrnodes);
 
     if (sign < 0) {
         bvalue = -bvalue;

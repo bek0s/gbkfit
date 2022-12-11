@@ -51,7 +51,7 @@ def _parse_component_node_args(
     if not iterutils.all_unique(nodes):
         raise RuntimeError(f"{prefix}nodes must be unique")
     if step is None:
-        step = min(np.diff(nodes)) / 2
+        step = min(1, min(np.diff(nodes)) / 2)
     if step <= 0 or step > min(np.diff(nodes)) / 2:
         raise RuntimeError(
             f"{prefix}step must be greater than zero and less than half the "
@@ -282,23 +282,37 @@ def parse_component_s3d_trait_args(
         wptraits=wptraits)
 
 
-def check_rhtraits(rhtraits):
-    if any([isinstance(t, traits.RHTraitUniform) for t in rhtraits]):
-        _log.warning("")
+def check_traits_common(traits_):
+    for trait in traits_:
+        trait_desc = traits.trait_desc(trait.__class__)
+        if isinstance(trait, traits.RPTraitUniform):
+            _log.warning(
+                f"the use of {trait_desc} is discouraged; "
+                f"its main purpose is to facilitate software testing")
+        if isinstance(trait, traits.RHTraitUniform):
+            _log.warning(
+                f"the use of {trait_desc} is discouraged; "
+                f"it may result in density overestimation due to aliasing")
 
 
-def check_rptraits_mcdisk(component, rptraits):
-    unsupported_rptraits = (
+def check_traits_mcdisk(component, traits_):
+    # mcdisk components do not support mixture traits yet
+    unsupported_traits = (
         traits.RPTraitMixtureExponential,
         traits.RPTraitMixtureGauss,
         traits.RPTraitMixtureGGauss,
-        traits.RPTraitMixtureMoffat)
-
-    for trait in rptraits:
-        if isinstance(trait, unsupported_rptraits):
-            cdesc = parseutils.make_typed_desc(component.__class__, 'gmodel component')
-            tdesc = traits.trait_desc(trait.__class__)
-            raise RuntimeError(f"{cdesc} does not support {tdesc}")
+        traits.RPTraitMixtureMoffat,
+        traits.DPTraitMixtureExponential,
+        traits.DPTraitMixtureGauss,
+        traits.DPTraitMixtureGGauss,
+        traits.DPTraitMixtureMoffat)
+    for trait in traits_:
+        if isinstance(trait, unsupported_traits):
+            cmp_class = component.__class__
+            cmp_label = 'gmodel component'
+            cmp_desc = parseutils.make_typed_desc(cmp_class, cmp_label)
+            trait_desc = traits.trait_desc(trait.__class__)
+            raise RuntimeError(f"{cmp_desc} does not support {trait_desc} yet")
 
 
 def _make_gmodel_params_cmp(components, prefix, force_prefix):

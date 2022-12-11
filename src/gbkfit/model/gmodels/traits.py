@@ -473,7 +473,7 @@ class RPTraitMixtureMoffat(RPTrait):
         super().__init__(nblobs=nblobs)
 
     def params_sm(self):
-        return _params_mixture(self._kwargs['nblobs'], False)
+        return _params_mixture(self._kwargs['nblobs'], True)
 
     def has_analytical_integral(self):
         return True
@@ -508,7 +508,8 @@ class RPTraitNWUniform(RPTrait):
 
     def integrate(self, params, nodes):
         a = params['a']
-        return _integrate_rings(nodes, gbkfit.math.uniform_1d_fun, a, 0, np.inf)
+        c = np.inf
+        return _integrate_rings(nodes, gbkfit.math.uniform_1d_fun, a, 0, c)
 
 
 class RPTraitNWHarmonic(RPTrait):
@@ -522,18 +523,19 @@ class RPTraitNWHarmonic(RPTrait):
         return RP_TRAIT_UID_NW_HARMONIC
 
     def __init__(self, order, nwmode=None):
-        super().__init__(order=order, nwmode=nwmode)
+        super().__init__(order=order)
+        self._nwmode = nwmode
 
     def params_rnw(self, nnodes):
-        return _params_pw_harmonic(self._kwargs['order'], nnodes)
+        return _params_pw_harmonic(self._kwargs['order'], nnodes, self._nwmode)
 
     def has_analytical_integral(self):
         return False
 
     def integrate(self, params, nodes):
         a = params['a']
-        s = nodes[-1] - nodes[0]
-        return _integrate_nw(nodes, gbkfit.math.uniform_1d_fun, a, 0, s) * 2
+        c = np.inf
+        return _integrate_rings(nodes, gbkfit.math.uniform_1d_fun, a, 0, c) * 2
 
 
 class RPTraitNWDistortion(RPTrait):
@@ -548,9 +550,9 @@ class RPTraitNWDistortion(RPTrait):
 
     def params_rnw(self, nnodes):
         return (
-            ParamVectorDesc('a', nnodes),
-            ParamVectorDesc('p', nnodes),
-            ParamVectorDesc('s', nnodes))
+            (ParamVectorDesc('a', nnodes), None),
+            (ParamVectorDesc('p', nnodes), None),
+            (ParamVectorDesc('s', nnodes), None))
 
     def has_analytical_integral(self):
         return False

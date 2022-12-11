@@ -321,7 +321,7 @@ gmodel_mcdisk_evaluate(
         rngs.push_back(RNG<T>(0, 1, 42));
 
     // Parallelization: per cloud
-    #pragma omp parallel for
+//    #pragma omp parallel for
     for(int ci = 0; ci < nclouds; ++ci)
     {
 
