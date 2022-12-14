@@ -1,18 +1,15 @@
 #!/usr/bin/env bash
 
 PYTHON_VERSIONS=(
-  ["39"]="3.9.0"
+  ["310"]="3.10.9"
 )
 
 PYTHON_VERSION="${1//./}"
 
-git submodule sync --recursive
-git submodule update --init --recursive
-
 brew update
-brew upgrade
+#brew upgrade
 brew install pyenv
-
+pyenv install -l
 export MACOSX_DEPLOYMENT_TARGET=10.9
 pyenv install "${PYTHON_VERSIONS[$PYTHON_VERSION]}"
 "$HOME"/.pyenv/versions/"${PYTHON_VERSIONS[$PYTHON_VERSION]}"/bin/python -m venv venv

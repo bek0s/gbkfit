@@ -2,7 +2,7 @@
 
 export GBKFIT_BUILD_HOST=1
 
-yum -y install fftw3-devel
+dnf -y install fftw3-devel
 
 . venv/bin/activate
 
