@@ -83,7 +83,7 @@ SP_TRAIT_UID_AZRANGE = 1
 SP_TRAIT_UID_NW_AZRANGE = 101
 
 # Weight traits (polar)
-WP_TRAIT_UID_CRANGE = 1
+WP_TRAIT_UID_AXIS_RANGE = 1
 
 
 TRUNC_DEFAULT = 0
@@ -181,7 +181,7 @@ class RPTrait(Trait, abc.ABC):
         pass
 
     @abc.abstractmethod
-    def integrate(self, params, rnodes):
+    def integrate(self, params, nodes):
         pass
 
 
@@ -535,7 +535,7 @@ class RPTraitNWHarmonic(RPTrait):
     def integrate(self, params, nodes):
         a = params['a']
         c = np.inf
-        return _integrate_rings(nodes, gbkfit.math.uniform_1d_fun, a, 0, c) * 2
+        return _integrate_rings(nodes, gbkfit.math.uniform_1d_fun, a, 0, c)
 
 
 class RPTraitNWDistortion(RPTrait):
@@ -558,12 +558,7 @@ class RPTraitNWDistortion(RPTrait):
         return False
 
     def integrate(self, params, nodes):
-        a = params['a']
-        s = params['s']
-        # foo = _integrate_nw(nodes, gbkfit.math.gauss_1d_fun, a, 0, s * nodes)
-        # foo = a * np.sqrt(2 * np.pi) / np.sqrt(1 / s * s) * (nodes[1] - nodes[0])
-        foo = a * np.sqrt(2 * np.pi) / np.sqrt((1) / (s * s)) * 1
-        return foo
+        raise NotImplementedError()
 
 
 class _RHTraitSM(RHTrait, abc.ABC):
@@ -1353,18 +1348,33 @@ class SPTraitNWAzimuthalRange(SPTrait):
             (ParamVectorDesc('s', nnodes), self._nwmode))
 
 
-class WPTraitConstantRange(WPTrait):
+class WPTraitAxisRange(WPTrait):
 
     @staticmethod
     def type():
-        return 'crange'
+        return 'axis_range'
 
     @staticmethod
     def uid():
-        return WP_TRAIT_UID_CRANGE
+        return WP_TRAIT_UID_AXIS_RANGE
 
-    def __init__(self, angle):
-        super().__init__(angle=angle)
+    def __init__(self, axis, angle, weight):
+        if axis not in [0, 1]:
+            raise RuntimeError(
+                f"invalid axis value; "
+                f"choose between 0 (minor axis) and 1 (major axis); "
+                f"supplied value: {axis}")
+        if 0 > angle > 180:
+            raise RuntimeError(
+                f"invalid angle value; "
+                f"angle must be between 0 and 180; "
+                f"supplied value: {angle}")
+        if weight < 0:
+            raise RuntimeError(
+                f"invalid weight value; "
+                f"weight must be a positive number or zero; "
+                f"supplied value: {weight}")
+        super().__init__(axis=axis, angle=angle, weight=weight)
 
 
 # Density traits (polar) parser
@@ -1449,4 +1459,4 @@ spt_parser = parseutils.TypedParser(SPTrait, [
 
 # Weight traits (polar) parser
 wpt_parser = parseutils.TypedParser(WPTrait, [
-    WPTraitConstantRange])
+    WPTraitAxisRange])

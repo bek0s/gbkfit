@@ -94,6 +94,10 @@ class MCDisk(_disk.Disk):
             # Calculate the number of clouds per trait or ring
             trait_nclouds = integral / self._cflux
             ncloudsptor.extend(np.atleast_1d(trait_nclouds).astype(np.int32))
+            print("ring params:", trait_params)
+            print("ring centres:", ring_centers)
+            print("ring integrals:", integral)
+            print("total integral:", sum(integral))
 
         # Calculate cumsum
         ncloudsptor_cumsum = list(itertools.accumulate(ncloudsptor))

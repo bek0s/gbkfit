@@ -112,10 +112,10 @@ dmodel_mmaps_moments(
     }
 
     // Check if we need to mask this spatial position
-    bool masked = mmaps_m[idx_2d] = std::abs(m0_sum) <= cutoff;
+    bool valid = mmaps_m[idx_2d] = std::abs(m0_sum) > cutoff;
 
     // Moment is valid only if not masked
-    m0 = masked ? NAN : m0_sum;
+    m0 = valid ? m0_sum : NAN;
 
     // Store moment if it was requested
     if (orders[m] == 0)
@@ -130,7 +130,7 @@ dmodel_mmaps_moments(
     //
 
     T w_sum = 0;
-    for (int z = 0; dcube_w && !masked && z < size_z; ++z)
+    for (int z = 0; dcube_w && valid && z < size_z; ++z)
     {
         const int idx = index_3d_to_1d(x, y, z, size_x, size_y);
         T i = dcube_d[idx];
@@ -139,7 +139,7 @@ dmodel_mmaps_moments(
     }
 
     // Weight is valid only if not masked
-    w_sum = masked ? NAN : w_sum;
+    w_sum = valid ? w_sum : NAN;
 
     if (dcube_w)
     {
@@ -156,7 +156,7 @@ dmodel_mmaps_moments(
     //
 
     T m1=0, m1_sum=0;
-    for (int z = 0; !masked && z < size_z; ++z)
+    for (int z = 0; valid && z < size_z; ++z)
     {
         const int idx = index_3d_to_1d(x, y, z, size_x, size_y);
         T i = dcube_d[idx];
@@ -165,7 +165,7 @@ dmodel_mmaps_moments(
     }
 
     // Moment is valid only if not masked
-    m1 = masked ? NAN : m1_sum / m0;
+    m1 = valid ? m1_sum / m0 : NAN;
 
     // Only output requested moments
     if (orders[m] == 1)
@@ -185,7 +185,7 @@ dmodel_mmaps_moments(
     //
 
     T m2=0, m2_sum=0;
-    for (int z = 0; !masked && z < size_z; ++z)
+    for (int z = 0; valid && z < size_z; ++z)
     {
         const int idx = index_3d_to_1d(x, y, z, size_x, size_y);
         T i = dcube_d[idx];
@@ -194,7 +194,7 @@ dmodel_mmaps_moments(
     }
 
     // Moment is valid only if not masked
-    m2 = masked ? NAN : std::sqrt(m2_sum / m0);
+    m2 = valid ? std::sqrt(m2_sum / m0) : NAN;
 
     // Only output requested moments
     if (orders[m] == 2)
@@ -211,7 +211,7 @@ dmodel_mmaps_moments(
     for(; m < norders; ++m)
     {
         T mn=0, mn_sum=0;
-        for (int z = 0; !masked && z < size_z; ++z)
+        for (int z = 0; valid && z < size_z; ++z)
         {
             const int idx = index_3d_to_1d(x, y, z, size_x, size_y);
             T flx = dcube_d[idx];
@@ -220,7 +220,7 @@ dmodel_mmaps_moments(
         }
 
         // Moment is valid only if not masked
-        mn = masked ? NAN : mn_sum / m0;
+        mn = valid ? mn_sum / m0 : NAN;
 
         const int idx = index_3d_to_1d(x, y, m, size_x, size_y);
         mmaps_d[idx] = mn;

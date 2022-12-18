@@ -283,8 +283,13 @@ def parse_component_s3d_trait_args(
 
 
 def check_traits_common(traits_):
+    unsupported_traits = (
+        traits.WPTraitAxisRange)
     for trait in traits_:
         trait_desc = traits.trait_desc(trait.__class__)
+        if isinstance(trait, unsupported_traits):
+            raise NotImplementedError(
+                f"{trait_desc} is not implemented yet")
         if isinstance(trait, traits.RPTraitUniform):
             _log.warning(
                 f"the use of {trait_desc} is discouraged; "
@@ -296,23 +301,25 @@ def check_traits_common(traits_):
 
 
 def check_traits_mcdisk(component, traits_):
-    # mcdisk components do not support mixture traits yet
     unsupported_traits = (
         traits.RPTraitMixtureExponential,
         traits.RPTraitMixtureGauss,
         traits.RPTraitMixtureGGauss,
         traits.RPTraitMixtureMoffat,
+        traits.RPTraitNWDistortion,
         traits.DPTraitMixtureExponential,
         traits.DPTraitMixtureGauss,
         traits.DPTraitMixtureGGauss,
-        traits.DPTraitMixtureMoffat)
+        traits.DPTraitMixtureMoffat,
+        traits.DPTraitNWDistortion)
     for trait in traits_:
         if isinstance(trait, unsupported_traits):
             cmp_class = component.__class__
             cmp_label = 'gmodel component'
             cmp_desc = parseutils.make_typed_desc(cmp_class, cmp_label)
             trait_desc = traits.trait_desc(trait.__class__)
-            raise RuntimeError(f"{cmp_desc} does not support {trait_desc} yet")
+            raise NotImplementedError(
+                f"{cmp_desc} does not support {trait_desc} yet")
 
 
 def _make_gmodel_params_cmp(components, prefix, force_prefix):

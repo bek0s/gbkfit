@@ -134,7 +134,7 @@ class DModelMMaps(DModel):
         driver.mem_copy_h2d(np.array(orders, dtype=np.int32), self._mmaps_o)
         driver.mem_fill(self._mmaps_d, np.nan)
         driver.mem_fill(self._mmaps_m, 0)
-        driver.mem_fill(self._mmaps_w, np.nan)
+        driver.mem_fill(self._mmaps_w, 1)
         # Prepare dcube
         self._dcube.prepare(driver)
         # Create backend
