@@ -132,6 +132,29 @@ dmodel_moments(
 }
 
 template<typename T> void
+gmodel_convolve(
+        int data1_size_x, int data1_size_y, int data1_size_z,
+        int data2_size_x, int data2_size_y, int data2_size_z,
+        const T* data1, const T* data2, T* result)
+{
+    // Parallelization: per 3d position in cube
+    #pragma omp parallel for collapse(3)
+    for(int z1 = 0; z1 < data1_size_z; ++z1) {
+    for(int y1 = 0; y1 < data1_size_y; ++y1) {
+    for(int x1 = 0; x1 < data1_size_x; ++x1) {
+
+    gbkfit::gmodel_convolve(
+            x1, y1, z1,
+            data1_size_x, data1_size_y, data1_size_z,
+            data2_size_x, data2_size_y, data2_size_z,
+            data1, data2, result);
+
+    }
+    }
+    }
+}
+
+template<typename T> void
 gmodel_wcube_evaluate(
         int spat_size_x, int spat_size_y, int spat_size_z,
         int spec_size_z,
@@ -158,6 +181,7 @@ template<typename T> void
 gmodel_smdisk_evaluate(
         bool loose, bool tilted,
         int nrnodes, const T* rnodes,
+        T tauto,
         const T* vsys,
         const T* xpos, const T* ypos,
         const T* posa, const T* incl,
@@ -200,8 +224,11 @@ gmodel_smdisk_evaluate(
         int spec_size,
         T spec_step,
         T spec_zero,
-        T* image, T* scube, T* rcube, T* wcube,
-        T* rdata, T* vdata, T* ddata)
+        T* image, T* scube, T* tdata, T* wdata,
+        T* extra_rdata_tot,
+        T* extra_rdata_cmp,
+        T* extra_vdata_cmp,
+        T* extra_ddata_cmp)
 {
     // Parallelization: per 3d spatial position
     // TODO: Implement ray marching and revise parallelization scheme
@@ -214,6 +241,7 @@ gmodel_smdisk_evaluate(
             x, y, z,
             loose, tilted,
             nrnodes, rnodes,
+            tauto,
             vsys,
             xpos, ypos,
             posa, incl,
@@ -256,8 +284,11 @@ gmodel_smdisk_evaluate(
             spec_size,
             spec_step,
             spec_zero,
-            image, scube, rcube, wcube,
-            rdata, vdata, ddata);
+            image, scube, tdata, wdata,
+            extra_rdata_tot,
+            extra_rdata_cmp,
+            extra_vdata_cmp,
+            extra_ddata_cmp);
     }
     }
     }
@@ -270,6 +301,7 @@ gmodel_mcdisk_evaluate(
         const bool* hasordint,
         bool loose, bool tilted,
         int nrnodes, const T* rnodes,
+        T tauto,
         const T* vsys,
         const T* xpos, const T* ypos,
         const T* posa, const T* incl,
@@ -312,8 +344,11 @@ gmodel_mcdisk_evaluate(
         int spec_size,
         T spec_step,
         T spec_zero,
-        T* image, T* scube, T* rcube, T* wcube,
-        T* rdata, T* vdata, T* ddata)
+        T* image, T* scube, T* tdata, T* wdata,
+        T* extra_rdata_tot,
+        T* extra_rdata_cmp,
+        T* extra_vdata_cmp,
+        T* extra_ddata_cmp)
 {
     // Each thread needs to have each own random number generator.
     std::vector<RNG<T>> rngs;
@@ -321,7 +356,7 @@ gmodel_mcdisk_evaluate(
         rngs.push_back(RNG<T>(0, 1, 42));
 
     // Parallelization: per cloud
-//    #pragma omp parallel for
+    #pragma omp parallel for
     for(int ci = 0; ci < nclouds; ++ci)
     {
 
@@ -333,6 +368,7 @@ gmodel_mcdisk_evaluate(
             hasordint,
             loose, tilted,
             nrnodes, rnodes,
+            tauto,
             vsys,
             xpos, ypos,
             posa, incl,
@@ -375,8 +411,11 @@ gmodel_mcdisk_evaluate(
             spec_size,
             spec_step,
             spec_zero,
-            image, scube, rcube, wcube,
-            rdata, vdata, ddata);
+            image, scube, tdata, wdata,
+            extra_rdata_tot,
+            extra_rdata_cmp,
+            extra_vdata_cmp,
+            extra_ddata_cmp);
 
     }
 }

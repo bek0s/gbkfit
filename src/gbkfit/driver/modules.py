@@ -105,6 +105,7 @@ class DriverBackendGModel(abc.ABC):
             self,
             cflux, nclouds, ncloudspt, hasordint,
             loose, tilted, rnodes,
+            tauto,
             vsys, xpos, ypos, posa, incl,
             rpt_uids, rpt_cvalues, rpt_ccounts, rpt_pvalues, rpt_pcounts,
             rht_uids, rht_cvalues, rht_ccounts, rht_pvalues, rht_pcounts,
@@ -117,14 +118,15 @@ class DriverBackendGModel(abc.ABC):
             wpt_uids, wpt_cvalues, wpt_ccounts, wpt_pvalues, wpt_pcounts,
             spat_size, spat_step, spat_zero, spat_rota,
             spec_size, spec_step, spec_zero,
-            image, scube, rcube, wcube,
-            rdata, vdata, ddata):
+            image, scube, tdata, wdata,
+            rdata_tot, rdata_cmp, vdata_cmp, ddata_cmp):
         pass
 
     @abc.abstractmethod
     def smdisk_evaluate(
             self,
             loose, tilted, rnodes,
+            tauto,
             vsys, xpos, ypos, posa, incl,
             rpt_uids, rpt_cvalues, rpt_ccounts, rpt_pvalues, rpt_pcounts,
             rht_uids, rht_cvalues, rht_ccounts, rht_pvalues, rht_pcounts,
@@ -137,6 +139,6 @@ class DriverBackendGModel(abc.ABC):
             wpt_uids, wpt_cvalues, wpt_ccounts, wpt_pvalues, wpt_pcounts,
             spat_size, spat_step, spat_zero, spat_rota,
             spec_size, spec_step, spec_zero,
-            image, scube, rcube, wcube,
-            rdata, vdata, ddata):
+            image, scube, tdata, wdata,
+            rdata_tot, rdata_cmp, vdata_cmp, ddata_cmp):
         pass

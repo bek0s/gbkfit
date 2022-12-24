@@ -104,6 +104,7 @@ Wrapper<T>::gmodel_mcdisk_evaluate(
         const bool* hasordint,
         bool loose, bool tilted,
         int nrnodes, const T* rnodes,
+        T tauto,
         const T* vsys,
         const T* xpos, const T* ypos,
         const T* posa, const T* incl,
@@ -146,8 +147,8 @@ Wrapper<T>::gmodel_mcdisk_evaluate(
         int spec_size,
         T spec_step,
         T spec_zero,
-        T* image, T* scube, T* rcube, T* wcube,
-        T* rdata, T* vdata, T* ddata)
+        T* image, T* scube, T* tdata, T* wdata,
+        T* rdata_tot, T* rdata_cmp, T* vdata_cmp, T* ddata_cmp)
 {
     const int n = nclouds;
     dim3 bsize(BLOCK_SIZE);
@@ -158,6 +159,7 @@ Wrapper<T>::gmodel_mcdisk_evaluate(
             hasordint,
             loose, tilted,
             nrnodes, rnodes,
+            tauto,
             vsys,
             xpos, ypos,
             posa, incl,
@@ -200,8 +202,8 @@ Wrapper<T>::gmodel_mcdisk_evaluate(
             spec_size,
             spec_step,
             spec_zero,
-            image, scube, rcube, wcube,
-            rdata, vdata, ddata);
+            image, scube, tdata, wdata,
+            rdata_tot, rdata_cmp, vdata_cmp, ddata_cmp);
     cudaDeviceSynchronize();
 }
 
@@ -209,6 +211,7 @@ template<typename T> void
 Wrapper<T>::gmodel_smdisk_evaluate(
         bool loose, bool tilted,
         int nrnodes, const T* rnodes,
+        T tauto,
         const T* vsys,
         const T* xpos, const T* ypos,
         const T* posa, const T* incl,
@@ -251,8 +254,8 @@ Wrapper<T>::gmodel_smdisk_evaluate(
         int spec_size,
         T spec_step,
         T spec_zero,
-        T* image, T* scube, T* rcube, T* wcube,
-        T* rdata, T* vdata, T* ddata)
+        T* image, T* scube, T* tdata, T* wdata,
+        T* rdata_tot, T* rdata_cmp, T* vdata_cmp, T* ddata_cmp)
 {
     const int n = spat_size_x * spat_size_y;
     dim3 bsize(BLOCK_SIZE);
@@ -260,6 +263,7 @@ Wrapper<T>::gmodel_smdisk_evaluate(
     kernels::gmodel_smdisk_evaluate<<<gsize, bsize>>>(
             loose, tilted,
             nrnodes, rnodes,
+            tauto,
             vsys,
             xpos, ypos,
             posa, incl,
@@ -302,8 +306,8 @@ Wrapper<T>::gmodel_smdisk_evaluate(
             spec_size,
             spec_step,
             spec_zero,
-            image, scube, rcube, wcube,
-            rdata, vdata, ddata);
+            image, scube, tdata, wdata,
+            rdata_tot, rdata_cmp, vdata_cmp, ddata_cmp);
     cudaDeviceSynchronize();
 }
 

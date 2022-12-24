@@ -155,6 +155,7 @@ template<typename T> __global__ void
 gmodel_smdisk_evaluate(
         bool loose, bool tilted,
         int nrnodes, const T* rnodes,
+        T tauto,
         const T* vsys,
         const T* xpos, const T* ypos,
         const T* posa, const T* incl,
@@ -197,8 +198,8 @@ gmodel_smdisk_evaluate(
         int spec_size,
         T spec_step,
         T spec_zero,
-        T* image, T* scube, T* rcube, T* wcube,
-        T* rdata, T* vdata, T* ddata)
+        T* image, T* scube, T* tdata, T* wdata,
+        T* rdata_tot, T* rdata_cmp, T* vdata_cmp, T* ddata_cmp)
 {
     // Parallelization: per 3d spatial position
     // TODO: Implement ray marching and revise parallelization scheme
@@ -214,6 +215,7 @@ gmodel_smdisk_evaluate(
             x, y, z,
             loose, tilted,
             nrnodes, rnodes,
+            tauto,
             vsys,
             xpos, ypos,
             posa, incl,
@@ -256,8 +258,8 @@ gmodel_smdisk_evaluate(
             spec_size,
             spec_step,
             spec_zero,
-            image, scube, rcube, wcube,
-            rdata, vdata, ddata);
+            image, scube, tdata, wdata,
+            rdata_tot, rdata_cmp, vdata_cmp, ddata_cmp);
 }
 
 template<typename T> __global__ void
@@ -267,6 +269,7 @@ gmodel_mcdisk_evaluate(
         const bool* hasordint,
         bool loose, bool tilted,
         int nrnodes, const T* rnodes,
+        T tauto,
         const T* vsys,
         const T* xpos, const T* ypos,
         const T* posa, const T* incl,
@@ -309,8 +312,8 @@ gmodel_mcdisk_evaluate(
         int spec_size,
         T spec_step,
         T spec_zero,
-        T* image, T* scube, T* rcube, T* wcube,
-        T* rdata, T* vdata, T* ddata)
+        T* image, T* scube, T* tdata, T* wdata,
+        T* rdata_tot, T* rdata_cmp, T* vdata_cmp, T* ddata_cmp)
 {
     // Parallelization: per cloud
     const int nthreads = nclouds;
@@ -326,6 +329,7 @@ gmodel_mcdisk_evaluate(
             hasordint,
             loose, tilted,
             nrnodes, rnodes,
+            tauto,
             vsys,
             xpos, ypos,
             posa, incl,
@@ -368,8 +372,8 @@ gmodel_mcdisk_evaluate(
             spec_size,
             spec_step,
             spec_zero,
-            image, scube, rcube, wcube,
-            rdata, vdata, ddata);
+            image, scube, tdata, wdata,
+            rdata_tot, rdata_cmp, vdata_cmp, ddata_cmp);
 }
 
 template<typename T> __global__ void

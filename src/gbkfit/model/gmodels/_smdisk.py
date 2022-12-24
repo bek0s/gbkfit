@@ -37,7 +37,8 @@ class SMDisk(_disk.Disk):
 
     def _impl_evaluate(
             self, driver, params,
-            image, scube, rcube, wcube, rdata, vdata, ddata,
+            image, scube, tdata, wdata, rdata,
+            rdata_cmp, vdata_cmp, ddata_cmp,
             spat_size, spat_step, spat_zero, spat_rota,
             spec_size, spec_step, spec_zero,
             dtype, out_extra):
@@ -49,6 +50,7 @@ class SMDisk(_disk.Disk):
             self._loose,
             self._tilted,
             self._s_subrnodes[1],
+            1,
             self._s_vsys_pvalues[1],
             self._s_xpos_pvalues[1],
             self._s_ypos_pvalues[1],
@@ -83,8 +85,8 @@ class SMDisk(_disk.Disk):
             self._s_wpt_pvalues[1], self._s_wpt_pcounts[1],
             spat_size, spat_step, spat_zero, spat_rota,
             spec_size, spec_step, spec_zero,
-            image, scube, rcube, wcube,
-            rdata, vdata, ddata)
+            image, scube, tdata, wdata, rdata,
+            rdata_cmp, vdata_cmp, ddata_cmp)
 
         if out_extra is not None:
             pass

@@ -7,6 +7,49 @@
 namespace gbkfit {
 
 template<typename T> constexpr void
+gmodel_convolve(
+        int x, int y, int z,
+        int data1_size_x, int data1_size_y, int data1_size_z,
+        int data2_size_x, int data2_size_y, int data2_size_z,
+        const T* data1, const T* data2, T* result)
+{
+    T sum = 0;
+    for(int z2 = 0; z2 < data2_size_z; ++z2)
+    {
+        for(int y2 = 0; y2 < data2_size_y; ++y2)
+        {
+            for(int x2 = 0; x2 < data2_size_x; ++x2)
+            {
+                int x1 = x - data2_size_x / 2 + x2;
+                int y1 = y - data2_size_y / 2 + y2;
+                int z1 = z - data2_size_z / 2 + z2;
+
+                // We do not do anything special about the edges.
+                // This is essentially zero padding and results in darker edges.
+                // In most cases this is acceptable because:
+                // - The edges do not contain much emission anyway
+                // - The edges are already the result of PSF convolution padding
+                if (x1 >= 0 && x1 < data1_size_x &&
+                    y1 >= 0 && y1 < data1_size_y &&
+                    z1 >= 0 && z1 < data1_size_z)
+                {
+                    int data1_idx = index_3d_to_1d(
+                            x1, y1, z1, data1_size_x, data1_size_y);
+
+                    int data2_idx = index_3d_to_1d(
+                            x2, y2, z2, data2_size_x, data2_size_y);
+
+                    sum += data1[data1_idx] * data2[data2_idx];
+                }
+            }
+        }
+    }
+
+    int idx = index_3d_to_1d(x, y, z, data1_size_x, data1_size_y);
+    result[idx] = sum;
+}
+
+template<typename T> constexpr void
 gmodel_wcube_pixel(
         int x, int y,
         int spat_size_x, int spat_size_y, int spat_size_z,
@@ -287,6 +330,7 @@ gmodel_mcdisk_evaluate_cloud(
         const bool* hasordint,
         bool loose, bool tilted,
         int nrnodes, const T* rnodes,
+        T tauto,
         const T* vsys,
         const T* xpos, const T* ypos,
         const T* posa, const T* incl,
@@ -329,8 +373,11 @@ gmodel_mcdisk_evaluate_cloud(
         int spec_size,
         T spec_step,
         T spec_zero,
-        T* image, T* scube, T* rcube, T* wcube,
-        T* rdata, T* vdata, T* ddata)
+        T* image, T* scube, T* tdata, T* wdata,
+        T* rdata_tot,
+        T* rdata_cmp,
+        T* vdata_cmp,
+        T* ddata_cmp)
 {
     // This is a placeholder in case we decide to explicitly
     // add a Monte Carlo based thin disk in the future.
@@ -516,7 +563,7 @@ gmodel_mcdisk_evaluate_cloud(
     dvalue = std::abs(dvalue);
 
     // Weight polar traits
-    if (wpt_uids && wcube)
+    if (wpt_uids && wdata)
     {
         wvalue = 1;
 
@@ -549,22 +596,24 @@ gmodel_mcdisk_evaluate_cloud(
 
     int idx = index_3d_to_1d(x, y, z, spat_size_x, spat_size_y);
 
-    if (rcube) {
-        AtomicAddFunT(&rcube[idx], bvalue);
+    if (tdata) {
+        AtomicAddFunT(&tdata[idx], bvalue * tauto);
     }
-    if (wcube) {
-        AtomicAssignFunT(&wcube[idx], wvalue);
+    if (wdata) {
+        AtomicAssignFunT(&wdata[idx], wvalue);
     }
-    if (rdata) {
-        AtomicAddFunT(&rdata[idx], bvalue);
+    if (rdata_cmp) {
+        AtomicAddFunT(&rdata_cmp[idx], bvalue);
     }
-    if (vdata) {
-        // for overlapping clouds, keep the last velocity
-        AtomicAssignFunT(&vdata[idx], vvalue);
+    if (vdata_cmp) {
+        // For overlapping clouds, keep the last velocity
+        // Storing the mean would be too much effort with little reward
+        AtomicAssignFunT(&vdata_cmp[idx], vvalue);
     }
-    if (ddata) {
-        // for overlapping clouds, keep the last dispersion
-        AtomicAssignFunT(&ddata[idx], dvalue);
+    if (ddata_cmp) {
+        // For overlapping clouds, keep the last dispersion
+        // Storing the mean would be too much effort with little reward
+        AtomicAssignFunT(&ddata_cmp[idx], dvalue);
     }
 }
 
@@ -573,6 +622,7 @@ gmodel_smdisk_evaluate_spaxel(
         int x, int y, int z,
         bool loose, bool tilted,
         int nrnodes, const T* rnodes,
+        T tauto,
         const T* vsys,
         const T* xpos, const T* ypos,
         const T* posa, const T* incl,
@@ -615,8 +665,11 @@ gmodel_smdisk_evaluate_spaxel(
         int spec_size,
         T spec_step,
         T spec_zero,
-        T* image, T* scube, T* rcube, T* wcube,
-        T* rdata, T* vdata, T* ddata)
+        T* image, T* scube, T* tdata, T* wdata,
+        T* rdata_tot,
+        T* rdata_cmp,
+        T* vdata_cmp,
+        T* ddata_cmp)
 {
     bool is_thin = rht_uids == nullptr;
 
@@ -798,7 +851,7 @@ gmodel_smdisk_evaluate_spaxel(
     dvalue = std::abs(dvalue);
 
     // Weight polar traits
-    if (wpt_uids && wcube)
+    if (wpt_uids && wdata)
     {
         wvalue = 1;
 
@@ -831,20 +884,23 @@ gmodel_smdisk_evaluate_spaxel(
 
     int idx = index_3d_to_1d(x, y, z, spat_size_x, spat_size_y);
 
-    if (rcube) {
-        rcube[idx] += bvalue;
+    if (tdata) {
+        tdata[idx] += bvalue * tauto;
     }
-    if (wcube) {
-        wcube[idx] = wvalue;
+    if (wdata) {
+        wdata[idx] += wvalue;
     }
-    if (rdata) {
-        rdata[idx] = bvalue;
+    if (rdata_tot) {
+        rdata_tot[idx] += bvalue;
     }
-    if (vdata) {
-        vdata[idx] = vvalue;
+    if (rdata_cmp) {
+        rdata_cmp[idx] = bvalue;
     }
-    if (ddata) {
-        ddata[idx] = dvalue;
+    if (vdata_cmp) {
+        vdata_cmp[idx] = vvalue;
+    }
+    if (ddata_cmp) {
+        ddata_cmp[idx] = dvalue;
     }
 }
 

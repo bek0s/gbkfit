@@ -21,6 +21,7 @@ struct GModel
             Ptr hasordint,
             bool loose, bool tilted,
             int nrnodes, Ptr rnodes,
+            T tauto,
             Ptr vsys,
             Ptr xpos, Ptr ypos,
             Ptr posa, Ptr incl,
@@ -63,13 +64,14 @@ struct GModel
             int spec_size,
             T spec_step,
             T spec_zero,
-            Ptr image, Ptr scube, Ptr rcube, Ptr wcube,
-            Ptr rdata, Ptr vdata, Ptr ddata) const;
+            Ptr image, Ptr scube, Ptr tdata, Ptr wdata,
+            Ptr rdata_tot, Ptr rdata_cmp, Ptr vdata_cmp, Ptr ddata_cmp) const;
 
     void
     smdisk_evaluate(
             bool loose, bool tilted,
             int nrnodes, Ptr rnodes,
+            T tauto,
             Ptr vsys,
             Ptr xpos, Ptr ypos,
             Ptr posa, Ptr incl,
@@ -112,8 +114,8 @@ struct GModel
             int spec_size,
             T spec_step,
             T spec_zero,
-            Ptr image, Ptr scube, Ptr rcube, Ptr wcube,
-            Ptr rdata, Ptr vdata, Ptr ddata) const;
+            Ptr image, Ptr scube, Ptr tdata, Ptr wdata,
+            Ptr rdata_tot, Ptr rdata_cmp, Ptr vdata_cmp, Ptr ddata_cmp) const;
 };
 
 } // namespace gbkfit::cuda

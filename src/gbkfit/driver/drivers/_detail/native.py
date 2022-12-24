@@ -134,6 +134,19 @@ class DriverBackendGModelNative(DriverBackendGModel):
     def __deepcopy__(self, memodict):
         return self.__class__(self._dtype, self._memory, self._module)
 
+    def convolve(self, data1, data2, result):
+        _ptr = self._memory.ptr
+        _shape = self._memory.shape
+        data1_size = _shape(data1)[::-1]
+        data2_size = _shape(data2)[::-1]
+        assert _shape(data1) == _shape(result)
+        self._module.convolve(
+            data1_size[0], data1_size[1], data1_size[2],
+            data2_size[0], data2_size[1], data2_size[2],
+            _ptr(data1),
+            _ptr(data2),
+            _ptr(result))
+
     def wcube_evaluate(self, spat_size, spec_size, spat_data, spec_data):
         _ptr = self._memory.ptr
         self._module.wcube_evaluate(
@@ -146,6 +159,7 @@ class DriverBackendGModelNative(DriverBackendGModel):
             self,
             cflux, nclouds, ncloudspt, hasordint,
             loose, tilted, rnodes,
+            tauto,
             vsys, xpos, ypos, posa, incl,
             rpt_uids, rpt_cvalues, rpt_ccounts, rpt_pvalues, rpt_pcounts,
             rht_uids, rht_cvalues, rht_ccounts, rht_pvalues, rht_pcounts,
@@ -158,8 +172,8 @@ class DriverBackendGModelNative(DriverBackendGModel):
             wpt_uids, wpt_cvalues, wpt_ccounts, wpt_pvalues, wpt_pcounts,
             spat_size, spat_step, spat_zero, spat_rota,
             spec_size, spec_step, spec_zero,
-            image, scube, rcube, wcube,
-            rdata, vdata, ddata):
+            image, scube, tdata, wdata,
+            rdata_tot, rdata_cmp, vdata_cmp, ddata_cmp):
         _ptr = self._memory.ptr
         _size = self._memory.size
         self._module.mcdisk_evaluate(
@@ -167,6 +181,7 @@ class DriverBackendGModelNative(DriverBackendGModel):
             loose, tilted,
             _size(rnodes),
             _ptr(rnodes),
+            tauto,
             _ptr(vsys), _ptr(xpos), _ptr(ypos), _ptr(posa), _ptr(incl),
             _size(rpt_uids),
             _ptr(rpt_uids),
@@ -207,12 +222,13 @@ class DriverBackendGModelNative(DriverBackendGModel):
             spec_size,
             spec_step,
             spec_zero,
-            _ptr(image), _ptr(scube), _ptr(rcube), _ptr(wcube),
-            _ptr(rdata), _ptr(vdata), _ptr(ddata))
+            _ptr(image), _ptr(scube), _ptr(tdata), _ptr(wdata),
+            _ptr(rdata_tot), _ptr(rdata_cmp), _ptr(vdata_cmp), _ptr(ddata_cmp))
 
     def smdisk_evaluate(
             self,
             loose, tilted, rnodes,
+            tauto,
             vsys, xpos, ypos, posa, incl,
             rpt_uids, rpt_cvalues, rpt_ccounts, rpt_pvalues, rpt_pcounts,
             rht_uids, rht_cvalues, rht_ccounts, rht_pvalues, rht_pcounts,
@@ -225,14 +241,15 @@ class DriverBackendGModelNative(DriverBackendGModel):
             wpt_uids, wpt_cvalues, wpt_ccounts, wpt_pvalues, wpt_pcounts,
             spat_size, spat_step, spat_zero, spat_rota,
             spec_size, spec_step, spec_zero,
-            image, scube, rcube, wcube,
-            rdata, vdata, ddata):
+            image, scube, tdata, wdata,
+            rdata_tot, rdata_cmp, vdata_cmp, ddata_cmp):
         _ptr = self._memory.ptr
         _size = self._memory.size
         self._module.smdisk_evaluate(
             loose, tilted,
             _size(rnodes),
             _ptr(rnodes),
+            tauto,
             _ptr(vsys), _ptr(xpos), _ptr(ypos), _ptr(posa), _ptr(incl),
             _size(rpt_uids),
             _ptr(rpt_uids),
@@ -273,5 +290,5 @@ class DriverBackendGModelNative(DriverBackendGModel):
             spec_size,
             spec_step,
             spec_zero,
-            _ptr(image), _ptr(scube), _ptr(rcube), _ptr(wcube),
-            _ptr(rdata), _ptr(vdata), _ptr(ddata))
+            _ptr(image), _ptr(scube), _ptr(tdata), _ptr(wdata),
+            _ptr(rdata_tot), _ptr(rdata_cmp), _ptr(vdata_cmp), _ptr(ddata_cmp))

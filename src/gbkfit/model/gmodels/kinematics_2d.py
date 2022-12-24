@@ -9,8 +9,8 @@ from .spectral_smdisk_2d import SpectralSMDisk2D
 __all__ = ['GModelKinematics2D']
 
 
-_scmp_parser = parseutils.TypedParser(SpectralComponent2D)
-_scmp_parser.register(SpectralSMDisk2D)
+_scmp_parser = parseutils.TypedParser(SpectralComponent2D, [
+    SpectralSMDisk2D])
 
 
 class GModelKinematics2D(GModelSCube):
@@ -30,17 +30,20 @@ class GModelKinematics2D(GModelSCube):
     def dump(self):
         return dict(
             type=self.type(),
-            components=_scmp_parser.dump(self._cmps))
+            components=_scmp_parser.dump(self._components))
 
     def __init__(self, components):
-        self._cmps = iterutils.tuplify(components)
+        self._components = iterutils.tuplify(components)
         self._size = [None, None]
+        self._step = [None, None]
+        self._zero = [None, None]
         self._wcube = None
         self._dtype = None
         self._driver = None
         self._backend = None
         (self._params,
-         self._mappings) = _detail.make_gmodel_2d_params(self._cmps)
+         self._mappings) = _detail.make_gmodel_2d_params(
+            self._components)
 
     def params(self):
         return self._params
@@ -48,12 +51,17 @@ class GModelKinematics2D(GModelSCube):
     def is_weighted(self):
         return True
 
-    def _prepare(self, driver, wdata, size, dtype):
+    def _prepare(self, driver, wdata, size, step, zero, dtype):
         self._driver = driver
-        self._dtype = dtype
         self._size = size
+        self._step = step
+        self._zero = zero
+        self._wcube = None
+        self._dtype = dtype
+        # If weighting is requested, store it in a 2d spatial array.
         if wdata is not None:
             self._wcube = driver.mem_alloc_d(self._size[::-1], dtype)
+        # Create backend
         self._backend = driver.backends().gmodel(dtype)
 
     def evaluate_scube(
@@ -63,31 +71,30 @@ class GModelKinematics2D(GModelSCube):
         if (self._driver is not driver
                 or self._size != size[:2]
                 or self._dtype != dtype):
-            self._prepare(driver, wdata, size[:2], dtype)
+            self._prepare(driver, wdata, size[:2], step[:2], zero[:2], dtype)
 
-        spat_size = size[:2]
-        spat_step = step[:2]
-        spat_zero = zero[:2]
+        # Convenience variables
+        spat_size = self._size
+        spat_step = self._step
+        spat_zero = self._zero
         spat_rota = rota
         spec_size = size[2]
         spec_step = step[2]
         spec_zero = zero[2]
         wcube = self._wcube
+        components = self._components
+        mappings = self._mappings
+        backend = self._backend
 
         # Evaluate components
-        for i, (cmp, mapping) in enumerate(zip(self._cmps, self._mappings)):
-            cparams = {p: params[mapping[p]] for p in cmp.params()}
-            cmp_out_extra = {} if out_extra is not None else None
-            cmp.evaluate(
-                driver, cparams, scube, wdata,
-                spat_size, spat_step, spat_zero, spat_rota,
-                spec_size, spec_step, spec_zero,
-                dtype, cmp_out_extra)
-            if out_extra is not None:
-                for k, v in cmp_out_extra.items():
-                    out_extra[f'component{i}_{k}'] = v
+        _detail.evaluate_components_s2d(
+            components, driver, params, mappings, scube, wcube,
+            spat_size, spat_step, spat_zero, spat_rota,
+            spec_size, spec_step, spec_zero,
+            dtype, out_extra, '')
 
-        # Generate weight cube
+        # Evaluate the provided spectral weight cube using
+        # the spatial weight cube evaluated above
         if wcube is not None:
-            self._backend.wcube_evaluate(
-                spat_size + (1,), spec_size, wcube, wdata)
+            backend.wcube_evaluate(
+                tuple(spat_size) + (1,), spec_size, wcube, wdata)

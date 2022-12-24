@@ -51,6 +51,7 @@ struct Wrapper
             const bool* hasordint,
             bool loose, bool tilted,
             int nrnodes, const T* rnodes,
+            T tauto,
             const T* vsys,
             const T* xpos, const T* ypos,
             const T* posa, const T* incl,
@@ -93,13 +94,14 @@ struct Wrapper
             int spec_size,
             T spec_step,
             T spec_zero,
-            T* image, T* scube, T* rcube, T* wcube,
-            T* rdata, T* vdata, T* ddata);
+            T* image, T* scube, T* tdata, T* wdata,
+            T* rdata_tot, T* rdata_cmp, T* vdata_cmp, T* ddata_cmp);
 
     static void
     gmodel_smdisk_evaluate(
             bool loose, bool tilted,
             int nrnodes, const T* rnodes,
+            T tauto,
             const T* vsys,
             const T* xpos, const T* ypos,
             const T* posa, const T* incl,
@@ -142,8 +144,8 @@ struct Wrapper
             int spec_size,
             T spec_step,
             T spec_zero,
-            T* image, T* scube, T* rcube, T* wcube,
-            T* rdata, T* vdata, T* ddata);
+            T* image, T* scube, T* tdata, T* wdata,
+            T* rdata_tot, T* rdata_cmp, T* vdata_cmp, T* ddata_cmp);
 
     static void
     objective_count_pixels(

@@ -25,6 +25,7 @@ GModel<T>::mcdisk_evaluate(
         Ptr hasordint,
         bool loose, bool tilted,
         int nrnodes, Ptr rnodes,
+        T tauto,
         Ptr vsys,
         Ptr xpos, Ptr ypos,
         Ptr posa, Ptr incl,
@@ -67,8 +68,8 @@ GModel<T>::mcdisk_evaluate(
         int spec_size,
         T spec_step,
         T spec_zero,
-        Ptr image, Ptr scube, Ptr rcube, Ptr wcube,
-        Ptr rdata, Ptr vdata, Ptr ddata) const
+        Ptr image, Ptr scube, Ptr tdata, Ptr wdata,
+        Ptr rdata_tot, Ptr rdata_cmp, Ptr vdata_cmp, Ptr ddata_cmp) const
 {
     Wrapper<T>::gmodel_mcdisk_evaluate(
             cflux, nclouds,
@@ -78,6 +79,7 @@ GModel<T>::mcdisk_evaluate(
             loose, tilted,
             nrnodes,
             reinterpret_cast<const T*>(rnodes),
+            tauto,
             reinterpret_cast<const T*>(vsys),
             reinterpret_cast<const T*>(xpos),
             reinterpret_cast<const T*>(ypos),
@@ -142,17 +144,19 @@ GModel<T>::mcdisk_evaluate(
             spec_zero,
             reinterpret_cast<T*>(image),
             reinterpret_cast<T*>(scube),
-            reinterpret_cast<T*>(rcube),
-            reinterpret_cast<T*>(wcube),
-            reinterpret_cast<T*>(rdata),
-            reinterpret_cast<T*>(vdata),
-            reinterpret_cast<T*>(ddata));
+            reinterpret_cast<T*>(tdata),
+            reinterpret_cast<T*>(wdata),
+            reinterpret_cast<T*>(rdata_tot),
+            reinterpret_cast<T*>(rdata_cmp),
+            reinterpret_cast<T*>(vdata_cmp),
+            reinterpret_cast<T*>(ddata_cmp));
 }
 
 template<typename T> void
 GModel<T>::smdisk_evaluate(
         bool loose, bool tilted,
         int nrnodes, Ptr rnodes,
+        T tauto,
         Ptr vsys,
         Ptr xpos, Ptr ypos,
         Ptr posa, Ptr incl,
@@ -195,13 +199,14 @@ GModel<T>::smdisk_evaluate(
         int spec_size,
         T spec_step,
         T spec_zero,
-        Ptr image, Ptr scube, Ptr rcube, Ptr wcube,
-        Ptr rdata, Ptr vdata, Ptr ddata) const
+        Ptr image, Ptr scube, Ptr tdata, Ptr wdata,
+        Ptr rdata_tot, Ptr rdata_cmp, Ptr vdata_cmp, Ptr ddata_cmp) const
 {
     Wrapper<T>::gmodel_smdisk_evaluate(
             loose, tilted,
             nrnodes,
             reinterpret_cast<const T*>(rnodes),
+            tauto,
             reinterpret_cast<const T*>(vsys),
             reinterpret_cast<const T*>(xpos),
             reinterpret_cast<const T*>(ypos),
@@ -266,11 +271,12 @@ GModel<T>::smdisk_evaluate(
             spec_zero,
             reinterpret_cast<T*>(image),
             reinterpret_cast<T*>(scube),
-            reinterpret_cast<T*>(rcube),
-            reinterpret_cast<T*>(wcube),
-            reinterpret_cast<T*>(rdata),
-            reinterpret_cast<T*>(vdata),
-            reinterpret_cast<T*>(ddata));
+            reinterpret_cast<T*>(tdata),
+            reinterpret_cast<T*>(wdata),
+            reinterpret_cast<T*>(rdata_tot),
+            reinterpret_cast<T*>(rdata_cmp),
+            reinterpret_cast<T*>(vdata_cmp),
+            reinterpret_cast<T*>(ddata_cmp));
 }
 
 #define INSTANTIATE(T)\

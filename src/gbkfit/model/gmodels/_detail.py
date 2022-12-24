@@ -250,11 +250,12 @@ def parse_component_s3d_trait_args(
     sptraits = iterutils.tuplify(sptraits) if sptraits else tuple()
     wptraits = iterutils.tuplify(wptraits) if wptraits else tuple()
     if None in vhtraits:
-        vhtraits = iterutils.replace_items_and_copy(
-            vhtraits, None, traits.VHTraitOne())
+        vhtraits = iterutils.tuplify(iterutils.replace_items_and_copy(
+            vhtraits, None, traits.VHTraitOne()))
     if None in dhtraits:
-        dhtraits = iterutils.replace_items_and_copy(
-            dhtraits, None, traits.DHTraitOne())
+        dhtraits = iterutils.tuplify(iterutils.replace_items_and_copy(
+            dhtraits, None, traits.DHTraitOne()))
+    # Convenience variables
     rptraits_len = len(rptraits)
     rhtraits_len = len(rhtraits)
     vptraits_len = len(vptraits)
@@ -335,6 +336,69 @@ def make_gmodel_2d_params(components):
 def make_gmodel_3d_params(components, tcomponents, tauto):
     params, mappings = _make_gmodel_params_cmp(components, 'cmp', False)
     tparams, tmappings = _make_gmodel_params_cmp(tcomponents, 'tcmp', True)
-    params.update(tparams)
-    params.update(dict(tauto=ParamScalarDesc('tauto')) if tauto else {})
-    return params, mappings, tmappings
+    tauto_param = dict(tauto=ParamScalarDesc('tauto')) if tauto else dict()
+    return params | tparams | tauto_param, mappings, tmappings
+
+
+def evaluate_components_d2d(
+        components, driver, params, mappings, image, wdata, rdata,
+        spat_size, spat_step, spat_zero, spat_rota,
+        dtype, out_extra, out_extra_label):
+    for i, (component, mapping) in enumerate(zip(components, mappings)):
+        component_params = {p: params[mapping[p]] for p in component.params()}
+        component_out_extra = {} if out_extra is not None else None
+        component.evaluate(
+            driver, component_params, image, wdata, rdata,
+            spat_size, spat_step, spat_zero, spat_rota,
+            dtype, component_out_extra)
+        for k, v in component_out_extra.items():
+            out_extra[f'{out_extra_label}component{i}_{k}'] = v
+
+
+def evaluate_components_d3d(
+        components, driver, params, mappings, image, tdata, wdata, rdata,
+        spat_size, spat_step, spat_zero, spat_rota,
+        dtype, out_extra, out_extra_label):
+    for i, (component, mapping) in enumerate(zip(components, mappings)):
+        component_params = {p: params[mapping[p]] for p in component.params()}
+        component_out_extra = {} if out_extra is not None else None
+        component.evaluate(
+            driver, component_params, image, tdata, wdata, rdata,
+            spat_size, spat_step, spat_zero, spat_rota,
+            dtype, component_out_extra)
+        for k, v in component_out_extra.items():
+            out_extra[f'{out_extra_label}component{i}_{k}'] = v
+
+
+def evaluate_components_s2d(
+        components, driver, params, mappings, scube, wdata, rdata,
+        spat_size, spat_step, spat_zero, spat_rota,
+        spec_size, spec_step, spec_zero,
+        dtype, out_extra, out_extra_label):
+    for i, (component, mapping) in enumerate(zip(components, mappings)):
+        component_params = {p: params[mapping[p]] for p in component.params()}
+        component_out_extra = {} if out_extra is not None else None
+        component.evaluate(
+            driver, component_params, scube, wdata, rdata,
+            spat_size, spat_step, spat_zero, spat_rota,
+            spec_size, spec_step, spec_zero,
+            dtype, component_out_extra)
+        for k, v in component_out_extra.items():
+            out_extra[f'{out_extra_label}component{i}_{k}'] = v
+
+
+def evaluate_components_s3d(
+        components, driver, params, mappings, scube, tdata, wdata, rdata,
+        spat_size, spat_step, spat_zero, spat_rota,
+        spec_size, spec_step, spec_zero,
+        dtype, out_extra, out_extra_label):
+    for i, (component, mapping) in enumerate(zip(components, mappings)):
+        component_params = {p: params[mapping[p]] for p in component.params()}
+        component_out_extra = {} if out_extra is not None else None
+        component.evaluate(
+            driver, component_params, scube, tdata, wdata, rdata,
+            spat_size, spat_step, spat_zero, spat_rota,
+            spec_size, spec_step, spec_zero,
+            dtype, component_out_extra)
+        for k, v in component_out_extra.items():
+            out_extra[f'{out_extra_label}component{i}_{k}'] = v

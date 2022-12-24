@@ -461,7 +461,7 @@ class Disk(abc.ABC):
         self._impl_prepare(driver, dtype)
 
     def evaluate(
-            self, driver, params, image, scube, rcube, wcube,
+            self, driver, params, image, scube, tdata, wdata, rdata,
             spat_size, spat_step, spat_zero, spat_rota,
             spec_size, spec_step, spec_zero,
             dtype, out_extra):
@@ -547,36 +547,36 @@ class Disk(abc.ABC):
         prepare_traits_params(
             self._s_wpt_pvalues, self._wpt_pdescs, self._wpt_isnw)
 
-        rdata = None
-        vdata = None
-        ddata = None
+        rdata_cmp = None
+        vdata_cmp = None
+        ddata_cmp = None
 
         if out_extra is not None:
             shape = spat_size[::-1]
             if self._rptraits:
-                rdata = driver.mem_alloc_d(shape, dtype)
-                driver.mem_fill(rdata, 0)
+                rdata_cmp = driver.mem_alloc_d(shape, dtype)
+                driver.mem_fill(rdata_cmp, 0)
             if self._vptraits:
-                vdata = driver.mem_alloc_d(shape, dtype)
-                driver.mem_fill(vdata, np.nan)
+                vdata_cmp = driver.mem_alloc_d(shape, dtype)
+                driver.mem_fill(vdata_cmp, np.nan)
             if self._dptraits:
-                ddata = driver.mem_alloc_d(shape, dtype)
-                driver.mem_fill(ddata, np.nan)
+                ddata_cmp = driver.mem_alloc_d(shape, dtype)
+                driver.mem_fill(ddata_cmp, np.nan)
 
         self._impl_evaluate(
-            driver, params, image, scube, rcube, wcube,
-            rdata, vdata, ddata,
+            driver, params, image, scube, tdata, wdata, rdata,
+            rdata_cmp, vdata_cmp, ddata_cmp,
             spat_size, spat_step, spat_zero, spat_rota,
             spec_size, spec_step, spec_zero,
             dtype, out_extra)
 
         if out_extra is not None:
             if self._rptraits:
-                out_extra['rdata'] = driver.mem_copy_d2h(rdata)
+                out_extra['rdata'] = driver.mem_copy_d2h(rdata_cmp)
             if self._vptraits:
-                out_extra['vdata'] = driver.mem_copy_d2h(vdata)
+                out_extra['vdata'] = driver.mem_copy_d2h(vdata_cmp)
             if self._dptraits:
-                out_extra['ddata'] = driver.mem_copy_d2h(ddata)
+                out_extra['ddata'] = driver.mem_copy_d2h(ddata_cmp)
             if self._rptraits:
                 sumabs = np.nansum(np.abs(out_extra['rdata']))
                 _log.debug(f"sum(abs(rdata)): {sumabs}")
@@ -594,7 +594,8 @@ class Disk(abc.ABC):
     @abc.abstractmethod
     def _impl_evaluate(
             self, driver, params,
-            image, scube, rcube, wcube, rdata, vdata, ddata,
+            image, scube, tdata, wdata, rdata,
+            rdata_cmp, vdata_cmp, ddata_cmp,
             spat_size, spat_step, spat_zero, spat_rota,
             spec_size, spec_step, spec_zero,
             dtype, out_extra):
