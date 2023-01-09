@@ -156,90 +156,117 @@ def parse_component_nwmodes_for_velocity(
         vsys_nwmode=vsys_nwmode)
 
 
-def parse_component_d2d_trait_args(
-        rptraits,
+def parse_component_b2d_trait_args(
+        bptraits,
         sptraits,
         wptraits):
-    if not rptraits:
-        raise RuntimeError("at least one rptrait is required")
-    rptraits = iterutils.tuplify(rptraits)
+    if not bptraits:
+        raise RuntimeError("at least one bptrait is required")
+    bptraits = iterutils.tuplify(bptraits)
     sptraits = iterutils.tuplify(sptraits) if sptraits is not None else ()
     wptraits = iterutils.tuplify(wptraits) if wptraits is not None else ()
     return dict(
-        rptraits=rptraits,
+        bptraits=bptraits,
         sptraits=sptraits,
         wptraits=wptraits)
 
 
 def parse_component_s2d_trait_args(
-        rptraits,
+        bptraits,
         vptraits,
         dptraits,
         sptraits,
         wptraits):
-    if not rptraits:
-        raise RuntimeError("at least one rptrait is required")
+    if not bptraits:
+        raise RuntimeError("at least one bptrait is required")
     if not vptraits:
         raise RuntimeError("at least one vptrait is required")
     if not dptraits:
         raise RuntimeError("at least one dptrait is required")
-    rptraits = iterutils.tuplify(rptraits)
+    bptraits = iterutils.tuplify(bptraits)
     vptraits = iterutils.tuplify(vptraits)
     dptraits = iterutils.tuplify(dptraits)
     sptraits = iterutils.tuplify(sptraits) if sptraits is not None else ()
     wptraits = iterutils.tuplify(wptraits) if wptraits is not None else ()
     return dict(
-        rptraits=rptraits,
+        bptraits=bptraits,
         vptraits=vptraits,
         dptraits=dptraits,
         sptraits=sptraits,
         wptraits=wptraits)
 
 
-def parse_component_d3d_trait_args(
-        rptraits, rhtraits,
+def parse_component_b3d_trait_args(
+        bptraits, bhtraits,
         zptraits,
         sptraits,
         wptraits):
-    if not rptraits:
-        raise RuntimeError("at least one rptrait is required")
-    if not rhtraits:
-        raise RuntimeError("at least one rhtrait is required")
-    rptraits = iterutils.tuplify(rptraits)
-    rhtraits = iterutils.tuplify(rhtraits)
+    if not bptraits:
+        raise RuntimeError("at least one bptrait is required")
+    if not bhtraits:
+        raise RuntimeError("at least one bhtrait is required")
+    bptraits = iterutils.tuplify(bptraits)
+    bhtraits = iterutils.tuplify(bhtraits)
     zptraits = iterutils.tuplify(zptraits) if zptraits is not None else ()
     sptraits = iterutils.tuplify(sptraits) if sptraits is not None else ()
     wptraits = iterutils.tuplify(wptraits) if wptraits is not None else ()
-    rptraits_len = len(rptraits)
-    rhtraits_len = len(rhtraits)
-    if rptraits_len != rhtraits_len:
+    bptraits_len = len(bptraits)
+    bhtraits_len = len(bhtraits)
+    if bptraits_len != bhtraits_len:
         raise RuntimeError(
-            f"the number of rhtraits must be equal to "
-            f"the number of rptraits ({rhtraits_len} != {rptraits_len})")
+            f"the number of bhtraits must be equal to "
+            f"the number of bptraits ({bhtraits_len} != {bptraits_len})")
     return dict(
-        rptraits=rptraits, rhtraits=rhtraits,
+        bptraits=bptraits, bhtraits=bhtraits,
+        zptraits=zptraits,
+        sptraits=sptraits,
+        wptraits=wptraits)
+
+
+def parse_component_o3d_trait_args(
+        optraits, ohtraits,
+        zptraits,
+        sptraits,
+        wptraits):
+    if not optraits:
+        raise RuntimeError("at least one optrait is required")
+    if not ohtraits:
+        raise RuntimeError("at least one ohtrait is required")
+    optraits = iterutils.tuplify(optraits)
+    ohtraits = iterutils.tuplify(ohtraits)
+    zptraits = iterutils.tuplify(zptraits) if zptraits is not None else ()
+    sptraits = iterutils.tuplify(sptraits) if sptraits is not None else ()
+    wptraits = iterutils.tuplify(wptraits) if wptraits is not None else ()
+    optraits_len = len(optraits)
+    ohtraits_len = len(ohtraits)
+    if optraits_len != ohtraits_len:
+        raise RuntimeError(
+            f"the number of ohtraits must be equal to "
+            f"the number of optraits ({ohtraits_len} != {optraits_len})")
+    return dict(
+        optraits=optraits, ohtraits=ohtraits,
         zptraits=zptraits,
         sptraits=sptraits,
         wptraits=wptraits)
 
 
 def parse_component_s3d_trait_args(
-        rptraits, rhtraits,
+        bptraits, bhtraits,
         vptraits, vhtraits,
         dptraits, dhtraits,
         zptraits,
         sptraits,
         wptraits):
-    if not rptraits:
-        raise RuntimeError("at least one rptrait is required")
-    if not rhtraits:
-        raise RuntimeError("at least one rhtrait is required")
+    if not bptraits:
+        raise RuntimeError("at least one bptrait is required")
+    if not bhtraits:
+        raise RuntimeError("at least one bhtrait is required")
     if not vptraits:
         raise RuntimeError("at least one vptrait is required")
     if not dptraits:
         raise RuntimeError("at least one dptrait is required")
-    rptraits = iterutils.tuplify(rptraits)
-    rhtraits = iterutils.tuplify(rhtraits)
+    bptraits = iterutils.tuplify(bptraits)
+    bhtraits = iterutils.tuplify(bhtraits)
     vptraits = iterutils.tuplify(vptraits)
     vhtraits = iterutils.tuplify(vhtraits) \
         if vhtraits else tuple([None] * len(vptraits))
@@ -256,16 +283,16 @@ def parse_component_s3d_trait_args(
         dhtraits = iterutils.tuplify(iterutils.replace_items_and_copy(
             dhtraits, None, traits.DHTraitOne()))
     # Convenience variables
-    rptraits_len = len(rptraits)
-    rhtraits_len = len(rhtraits)
+    bptraits_len = len(bptraits)
+    bhtraits_len = len(bhtraits)
     vptraits_len = len(vptraits)
     vhtraits_len = len(vhtraits)
     dptraits_len = len(dptraits)
     dhtraits_len = len(dhtraits)
-    if rptraits_len != rhtraits_len:
+    if bptraits_len != bhtraits_len:
         raise RuntimeError(
-            f"the number of rhtraits must be equal to "
-            f"the number of rptraits ({rhtraits_len} != {rptraits_len})")
+            f"the number of bhtraits must be equal to "
+            f"the number of bptraits ({bhtraits_len} != {bptraits_len})")
     if vptraits_len != vhtraits_len:
         raise RuntimeError(
             f"the number of vhtraits must be equal to "
@@ -275,7 +302,7 @@ def parse_component_s3d_trait_args(
             f"the number of dhtraits must be equal to "
             f"the number of dptraits ({dhtraits_len} != {dptraits_len})")
     return dict(
-        rptraits=rptraits, rhtraits=rhtraits,
+        bptraits=bptraits, bhtraits=bhtraits,
         vptraits=vptraits, vhtraits=vhtraits,
         dptraits=dptraits, dhtraits=dhtraits,
         zptraits=zptraits,
@@ -291,11 +318,11 @@ def check_traits_common(traits_):
         if isinstance(trait, unsupported_traits):
             raise NotImplementedError(
                 f"{trait_desc} is not implemented yet")
-        if isinstance(trait, traits.RPTraitUniform):
+        if isinstance(trait, traits.BPTraitUniform):
             _log.warning(
                 f"the use of {trait_desc} is discouraged; "
                 f"its main purpose is to facilitate software testing")
-        if isinstance(trait, traits.RHTraitUniform):
+        if isinstance(trait, traits.BHTraitUniform):
             _log.warning(
                 f"the use of {trait_desc} is discouraged; "
                 f"it may result in density overestimation due to aliasing")
@@ -303,16 +330,21 @@ def check_traits_common(traits_):
 
 def check_traits_mcdisk(component, traits_):
     unsupported_traits = (
-        traits.RPTraitMixtureExponential,
-        traits.RPTraitMixtureGauss,
-        traits.RPTraitMixtureGGauss,
-        traits.RPTraitMixtureMoffat,
-        traits.RPTraitNWDistortion,
+        traits.BPTraitMixtureExponential,
+        traits.BPTraitMixtureGauss,
+        traits.BPTraitMixtureGGauss,
+        traits.BPTraitMixtureMoffat,
+        traits.BPTraitNWDistortion,
         traits.DPTraitMixtureExponential,
         traits.DPTraitMixtureGauss,
         traits.DPTraitMixtureGGauss,
         traits.DPTraitMixtureMoffat,
-        traits.DPTraitNWDistortion)
+        traits.DPTraitNWDistortion,
+        traits.OPTraitMixtureExponential,
+        traits.OPTraitMixtureGauss,
+        traits.OPTraitMixtureGGauss,
+        traits.OPTraitMixtureMoffat,
+        traits.OPTraitNWDistortion)
     for trait in traits_:
         if isinstance(trait, unsupported_traits):
             cmp_class = component.__class__

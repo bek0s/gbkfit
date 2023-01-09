@@ -18,7 +18,7 @@ class SpectralSMDisk2D(SpectralComponent2D):
         desc = parseutils.make_typed_desc(cls, 'gmodel component')
         opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
         opts.update(dict(
-            rptraits=traits.rpt_parser.load(opts.get('rptraits')),
+            bptraits=traits.bpt_parser.load(opts.get('bptraits')),
             vptraits=traits.vpt_parser.load(opts.get('vptraits')),
             dptraits=traits.dpt_parser.load(opts.get('dptraits')),
             sptraits=traits.spt_parser.load(opts.get('sptraits')),
@@ -33,7 +33,7 @@ class SpectralSMDisk2D(SpectralComponent2D):
             rnodes=self._disk.rnodes(),
             rstep=self._disk.rstep(),
             interp=self._disk.interp().type(),
-            rptraits=traits.rpt_parser.dump(self._disk.rptraits()),
+            bptraits=traits.bpt_parser.dump(self._disk.rptraits()),
             vptraits=traits.vpt_parser.dump(self._disk.vptraits()),
             dptraits=traits.dpt_parser.dump(self._disk.dptraits()),
             sptraits=traits.spt_parser.dump(self._disk.sptraits()),
@@ -43,7 +43,7 @@ class SpectralSMDisk2D(SpectralComponent2D):
             self,
             loose,
             tilted,
-            rptraits,
+            bptraits,
             vptraits,
             dptraits,
             sptraits=None,
@@ -65,7 +65,7 @@ class SpectralSMDisk2D(SpectralComponent2D):
         nwmode_geometry_args = _detail.parse_component_nwmodes_for_geometry(
             loose, tilted, xpos_nwmode, ypos_nwmode, posa_nwmode, incl_nwmode)
         trait_args = _detail.parse_component_s2d_trait_args(
-            rptraits,
+            bptraits,
             vptraits,
             dptraits,
             sptraits,

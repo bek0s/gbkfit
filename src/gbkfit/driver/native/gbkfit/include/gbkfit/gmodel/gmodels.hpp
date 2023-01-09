@@ -374,10 +374,10 @@ gmodel_mcdisk_evaluate_cloud(
         T spec_step,
         T spec_zero,
         T* image, T* scube, T* tdata, T* wdata,
-        T* rdata_tot,
-        T* rdata_cmp,
-        T* vdata_cmp,
-        T* ddata_cmp)
+        T* extra_rdata_tot,
+        T* extra_rdata_cmp,
+        T* extra_vdata_cmp,
+        T* extra_ddata_cmp)
 {
     // This is a placeholder in case we decide to explicitly
     // add a Monte Carlo based thin disk in the future.
@@ -602,18 +602,18 @@ gmodel_mcdisk_evaluate_cloud(
     if (wdata) {
         AtomicAssignFunT(&wdata[idx], wvalue);
     }
-    if (rdata_cmp) {
-        AtomicAddFunT(&rdata_cmp[idx], bvalue);
+    if (extra_rdata_cmp) {
+        AtomicAddFunT(&extra_rdata_cmp[idx], bvalue);
     }
-    if (vdata_cmp) {
+    if (extra_vdata_cmp) {
         // For overlapping clouds, keep the last velocity
         // Storing the mean would be too much effort with little reward
-        AtomicAssignFunT(&vdata_cmp[idx], vvalue);
+        AtomicAssignFunT(&extra_vdata_cmp[idx], vvalue);
     }
-    if (ddata_cmp) {
+    if (extra_ddata_cmp) {
         // For overlapping clouds, keep the last dispersion
         // Storing the mean would be too much effort with little reward
-        AtomicAssignFunT(&ddata_cmp[idx], dvalue);
+        AtomicAssignFunT(&extra_ddata_cmp[idx], dvalue);
     }
 }
 

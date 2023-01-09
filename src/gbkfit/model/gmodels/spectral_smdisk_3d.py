@@ -18,8 +18,8 @@ class SpectralSMDisk3D(SpectralComponent3D):
         desc = parseutils.make_typed_desc(cls, 'gmodel component')
         opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
         opts.update(dict(
-            rptraits=traits.rpt_parser.load(opts.get('rptraits')),
-            rhtraits=traits.rht_parser.load(opts.get('rhtraits')),
+            bptraits=traits.bpt_parser.load(opts.get('bptraits')),
+            bhtraits=traits.bht_parser.load(opts.get('bhtraits')),
             vptraits=traits.vpt_parser.load(opts.get('vptraits')),
             vhtraits=traits.vht_parser.load(opts.get('vhtraits')),
             dptraits=traits.dpt_parser.load(opts.get('dptraits')),
@@ -37,8 +37,8 @@ class SpectralSMDisk3D(SpectralComponent3D):
             rnodes=self._disk.rnodes(),
             rstep=self._disk.rstep(),
             interp=self._disk.interp().type(),
-            rptraits=traits.rpt_parser.dump(self._disk.rptraits()),
-            rhtraits=traits.rht_parser.dump(self._disk.rhtraits()),
+            bptraits=traits.bpt_parser.dump(self._disk.rptraits()),
+            bhtraits=traits.bht_parser.dump(self._disk.rhtraits()),
             vptraits=traits.vpt_parser.dump(self._disk.vptraits()),
             vhtraits=traits.vht_parser.dump(self._disk.vhtraits()),
             dptraits=traits.dpt_parser.dump(self._disk.dptraits()),
@@ -51,10 +51,10 @@ class SpectralSMDisk3D(SpectralComponent3D):
             self,
             loose,
             tilted,
-            rptraits,
+            bptraits,
             vptraits,
             dptraits,
-            rhtraits,
+            bhtraits,
             vhtraits=None,
             dhtraits=None,
             zptraits=None,
@@ -77,7 +77,7 @@ class SpectralSMDisk3D(SpectralComponent3D):
         nwmode_geometry_args = _detail.parse_component_nwmodes_for_geometry(
             loose, tilted, xpos_nwmode, ypos_nwmode, posa_nwmode, incl_nwmode)
         trait_args = _detail.parse_component_s3d_trait_args(
-            rptraits, rhtraits,
+            bptraits, bhtraits,
             vptraits, vhtraits,
             dptraits, dhtraits,
             zptraits,

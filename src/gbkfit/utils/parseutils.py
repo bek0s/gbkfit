@@ -97,6 +97,14 @@ def prepare_for_dump(options, remove_nones=True, remove_keys=()):
     return options
 
 
+def prepare_for_dump2(options, predicate=lambda x: x is None, remove_keys=()):
+    options = copy.deepcopy(options)
+    for key in list(options.keys()):
+        if key in remove_keys or predicate(options[key]):
+            del options[key]
+    return options
+
+
 class Serializable(abc.ABC):
 
     @classmethod

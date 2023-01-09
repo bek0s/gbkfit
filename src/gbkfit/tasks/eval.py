@@ -1,4 +1,4 @@
-
+import abc
 import json
 import logging
 
@@ -72,40 +72,59 @@ def _prepare_params(info, pdescs):
 
 
 def eval_(objective_type, config, profile=None):
+
+    import gbkfit.math
+    integral1 = gbkfit.math.gauss_trunc_1d_int(1, 1, -100, 100)
+
+    print(integral1)
+
+    exit()
+
     """
+    class Class0:
+        def __init__(self, **kwargs):
+            pass
+
+        def dump(self):
+            return dict(class0='class0')
+
     class Class1:
         def __init__(self, **kwargs):
             self._kwargs = kwargs
             print("Class1:", kwargs)
+            super().__init__(**kwargs)
 
         def dump(self):
-            print("Class1::dump")
+            return super().dump() | dict(class1='class1') # noqa
 
-    class Class2:
-        def __init__(self, *args, **kwargs):
-            arg2 = kwargs.pop('arg2')
-            super().__init__(*args, **kwargs)
+    class Class2(abc.ABC):
+        def __init__(self, **kwargs):
+            super().__init__(**kwargs)
 
         def dump(self):
-            print("Class2::dump")
+            return super().dump() | dict(class2='class2')
 
-    class Class3(Class2, Class1):
+    class Class3(Class2, Class1, Class0):
         def __init__(self, arg1):
-            super().__init__(arg1=arg1, arg2=42)
+            super().__init__(arg1=arg1)
 
         def dump(self):
-            Class2.dump(self)
-            Class1.dump(self)
+            return super().dump() | dict(class3='class3')
 
     def foo(a=1, *args, **kwargs):
         print("a:", a)
         print("args:", args)
         print("kwargs:", kwargs)
 
-    foo(a=1, b=2, c=3)
+    obj = Class3(0)
+
+    print(obj.dump())
+
+    # foo(a=1, b=2, c=3)
 
     exit()
     """
+
     #
     # Read configuration file and
     # perform all necessary validation/preparation

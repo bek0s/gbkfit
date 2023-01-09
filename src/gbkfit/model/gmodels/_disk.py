@@ -21,6 +21,7 @@ def _trait_param_info(traits, prefix, nrnodes):
     for i, trait in enumerate(traits):
         params_sm = trait.params_sm()
         params_nw = trait.params_rnw(nrnodes)
+        print(params_nw)
         params_sm = [(pdesc, None, False) for pdesc in params_sm]
         params_nw = [(pdesc, nwmode, True) for pdesc, nwmode in params_nw]
         params = params_sm + params_nw

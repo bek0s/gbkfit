@@ -18,8 +18,8 @@ class DensitySMDisk3D(DensityComponent3D):
         desc = parseutils.make_typed_desc(cls, 'gmodel component')
         opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
         opts.update(dict(
-            rptraits=traits.rpt_parser.load(opts.get('rptraits')),
-            rhtraits=traits.rht_parser.load(opts.get('rhtraits')),
+            bptraits=traits.bpt_parser.load(opts.get('bptraits')),
+            bhtraits=traits.bht_parser.load(opts.get('bhtraits')),
             zptraits=traits.zpt_parser.load(opts.get('zptraits')),
             sptraits=traits.spt_parser.load(opts.get('sptraits')),
             wptraits=traits.wpt_parser.load(opts.get('wptraits'))))
@@ -33,8 +33,8 @@ class DensitySMDisk3D(DensityComponent3D):
             rnodes=self._disk.rnodes(),
             rstep=self._disk.rstep(),
             interp=self._disk.interp().type(),
-            rptraits=traits.rpt_parser.dump(self._disk.rptraits()),
-            rhtraits=traits.rht_parser.dump(self._disk.rhtraits()),
+            bptraits=traits.bpt_parser.dump(self._disk.rptraits()),
+            bhtraits=traits.bht_parser.dump(self._disk.rhtraits()),
             zptraits=traits.zpt_parser.dump(self._disk.zptraits()),
             sptraits=traits.spt_parser.dump(self._disk.sptraits()),
             wptraits=traits.wpt_parser.dump(self._disk.wptraits()))
@@ -43,8 +43,8 @@ class DensitySMDisk3D(DensityComponent3D):
             self,
             loose,
             tilted,
-            rptraits,
-            rhtraits,
+            bptraits,
+            bhtraits,
             zptraits=None,
             sptraits=None,
             wptraits=None,
@@ -61,8 +61,8 @@ class DensitySMDisk3D(DensityComponent3D):
             rnmin, rnmax, rnsep, rnlen, rnodes, rstep, interp)
         nwmode_geometry_args = _detail.parse_component_nwmodes_for_geometry(
             loose, tilted, xpos_nwmode, ypos_nwmode, posa_nwmode, incl_nwmode)
-        trait_args = _detail.parse_component_d3d_trait_args(
-            rptraits, rhtraits,
+        trait_args = _detail.parse_component_b3d_trait_args(
+            bptraits, bhtraits,
             zptraits,
             sptraits,
             wptraits)

@@ -175,6 +175,13 @@ def _trunc_fun_1d_ppf(x, fun_cdf, fun_ppf, args, xmin, xmax):
     return fun_ppf(fa + x * (fb - fa), *args)
 
 
+def _trunc_fun_1d_int(fun_int, fun_int_args, fun_cdf, fun_cdf_args, xmin, xmax):
+    full_integral = fun_int(*fun_int_args)
+    cdf_min = fun_cdf(xmin, *fun_cdf_args)
+    cdf_max = fun_cdf(xmax, *fun_cdf_args)
+    return (cdf_max - cdf_min) * full_integral
+
+
 def uniform_1d_fun(x, a, b, c):
     y = np.full_like(x, a) if isinstance(x, np.ndarray) else a
     return _trunc_fun_1d(x, y, b, 0, c, 0)
@@ -192,6 +199,10 @@ def uniform_1d_pdf(x, b, c):
 
 def uniform_1d_ppf(u, b, c):
     return b + u * (c - b)
+
+
+def uniform_1d_int(a, b, c):
+    return a * (c - b)
 
 
 def expon_1d_fun(x, a, b, c):
@@ -293,6 +304,18 @@ def gauss_1d_cdf(x, b, c):
 
 def gauss_1d_ppf(x, b, c):
     return b + c * np.sqrt(2) * scipy.special.erfinv(2 * x - 1)
+
+
+def gauss_1d_int(a, c):
+    return a * np.sqrt(2 * np.pi * c * c)
+
+
+def gauss_trunc_1d_int(a, c, xmin, xmax):
+    fun = gauss_1d_int
+    cdf = gauss_1d_cdf
+    fun_args = (a, c)
+    cdf_args = (0, c)
+    return _trunc_fun_1d_int(fun, fun_args, cdf, cdf_args, xmin, xmax)
 
 
 def gauss_trunc_1d_fun(x, a, b, c, xmin, xmax):

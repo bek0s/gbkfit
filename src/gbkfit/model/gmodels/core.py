@@ -32,6 +32,20 @@ class DensityComponent3D(parseutils.TypedParserSupport, abc.ABC):
         pass
 
 
+class OpacityComponent3D(parseutils.TypedParserSupport, abc.ABC):
+
+    @abc.abstractmethod
+    def params(self):
+        pass
+
+    @abc.abstractmethod
+    def evaluate(
+            self, driver, params, tdata,
+            spat_size, spat_step, spat_zero, spat_rota,
+            dtype, out_extra):
+        pass
+
+
 class SpectralComponent2D(parseutils.TypedParserSupport, abc.ABC):
 
     @abc.abstractmethod
