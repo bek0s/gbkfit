@@ -2,16 +2,25 @@
 from gbkfit.model.core import GModelImage
 from gbkfit.utils import iterutils, parseutils
 from . import _detail
-from .core import DensityComponent3D
-from .density_mcdisk_3d import DensityMCDisk3D
-from .density_smdisk_3d import DensitySMDisk3D
+from .core import BrightnessComponent3D, OpacityComponent3D
+from .brightness_mcdisk_3d import BrightnessMCDisk3D
+from .brightness_smdisk_3d import BrightnessSMDisk3D
+from .opacity_mcdisk_3d import OpacityMCDisk3D
+from .opacity_smdisk_3d import OpacitySMDisk3D
 
 
-__all__ = ['GModelIntensity3D']
+__all__ = [
+    'GModelIntensity3D'
+]
 
 
-_dcmp_parser = parseutils.TypedParser(DensityComponent3D, [
-    DensityMCDisk3D, DensitySMDisk3D])
+_bcmp_parser = parseutils.TypedParser(BrightnessComponent3D, [
+    BrightnessMCDisk3D,
+    BrightnessSMDisk3D])
+
+_ocmp_parser = parseutils.TypedParser(OpacityComponent3D, [
+    OpacityMCDisk3D,
+    OpacitySMDisk3D])
 
 
 class GModelIntensity3D(GModelImage):
@@ -25,8 +34,9 @@ class GModelIntensity3D(GModelImage):
         desc = parseutils.make_typed_desc(cls, 'gmodel')
         opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
         opts.update(
-            components=_dcmp_parser.load(opts['components']),
-            tcomponents=_dcmp_parser.load(opts.get('tcomponents')))
+            components=_bcmp_parser.load(opts['components']),
+            opacity_components=_ocmp_parser.load(
+                opts.get('opacity_components')))
         return cls(**opts)
 
     def dump(self):
@@ -35,44 +45,42 @@ class GModelIntensity3D(GModelImage):
             size_z=self._size[2],
             step_z=self._step[2],
             zero_z=self._zero[2],
-            tauto=self._tauto,
-            components=_dcmp_parser.dump(self._components),
-            tcomponents=_dcmp_parser.dump(self._tcomponents))
+            components=_bcmp_parser.dump(self._components),
+            opacity_components=_ocmp_parser.dump(self._ocomponents))
 
     def __init__(
-            self, components, size_z=None, step_z=None, zero_z=None,
-            tauto=False, tcomponents=None):
-        if tcomponents is None:
-            tcomponents = ()
-        self._tauto = tauto
+            self, components, opacity_components=None,
+            size_z=None, step_z=None, zero_z=None):
+        if opacity_components is None:
+            opacity_components = ()
         self._components = iterutils.tuplify(components)
-        self._tcomponents = iterutils.tuplify(tcomponents)
+        self._ocomponents = iterutils.tuplify(opacity_components)
         self._size = [None, None, size_z]
         self._step = [None, None, step_z]
         self._zero = [None, None, zero_z]
-        self._wcube = None
-        self._tcube = None
+        self._wdata = None
+        self._odata = None
         self._dtype = None
         self._driver = None
         self._backend = None
         (self._params,
          self._mappings,
-         self._tmappings) = _detail.make_gmodel_3d_params(
-            self._components, self._tcomponents, self._tauto)
+         self._omappings) = _detail.make_gmodel_3d_params(
+            self._components, self._ocomponents)
 
     def params(self):
         return self._params
 
     def is_weighted(self):
-        return True
+        return _detail.is_gmodel_weighted(self._components)
 
-    def _prepare(self, driver, wdata, size, step, zero, dtype):
+    def _prepare(self, driver, image_w, size, step, zero, dtype):
         self._driver = driver
         self._size[:2] = size
         self._step[:2] = step
         self._zero[:2] = zero
-        self._wcube = None
-        self._tcube = None
+        self._wdata = None
+        self._odata = None
         self._dtype = dtype
         # Calculate spatial size, step, zero for all three dimensions
         # For x and y we use the supplied x and y spatial dimensions.
@@ -88,19 +96,20 @@ class GModelIntensity3D(GModelImage):
             self._step[2] = step[int(size[0] < size[1])]
         if self._zero[2] is None:
             self._zero[2] = -(self._size[2] / 2 - 0.5) * self._step[2]
-        # If transparency is enabled, we need a 3d spatial cube to
-        # store it. The dimensions of the cube were calculated above
-        if self._tauto or self._tcomponents:
-            self._tcube = driver.mem_alloc_d(self._size[::-1], dtype)
         # If weighting is requested, store it in a 3d spatial array.
         # Its dimensions were calculated above
-        if wdata is not None:
-            self._wcube = driver.mem_alloc_d(self._size[::-1], dtype)
+        if image_w is not None:
+            self._wdata = driver.mem_alloc_d(self._size[::-1], dtype)
+        # If opacity is enabled, store it in a 3d spatial array.
+        # The dimensions of the cube were calculated above
+        if self._ocomponents:
+            self._odata = driver.mem_alloc_d(self._size[::-1], dtype)
         # Create backend
         self._backend = driver.backends().gmodel(dtype)
 
     def evaluate_image(
-            self, driver, params, image, wdata, size, step, zero, rota, dtype,
+            self, driver, params,
+            image_d, image_w, size, step, zero, rota, dtype,
             out_extra):
 
         if (self._driver is not driver
@@ -108,50 +117,57 @@ class GModelIntensity3D(GModelImage):
                 or self._step[:2] != step
                 or self._zero[:2] != zero
                 or self._dtype != dtype):
-            self._prepare(driver, wdata, size, step, zero, dtype)
+            self._prepare(driver, image_w, size, step, zero, dtype)
 
-        # Convenience variables
         spat_size = self._size
         spat_step = self._step
         spat_zero = self._zero
         spat_rota = rota
-        tcube = self._tcube
-        wcube = self._wcube
-        tauto = self._tauto
+        spec_size = 1
+        wdata = self._wdata
+        odata = self._odata
         components = self._components
-        tcomponents = self._tcomponents
+        ocomponents = self._ocomponents
         mappings = self._mappings
-        tmappings = self._tmappings
+        omappings = self._omappings
         backend = self._backend
 
-        # Evaluate transparency components
-        if tcomponents:
-            _detail.evaluate_components_d3d(
-                tcomponents, driver, params, tmappings, None, None, tcube,
-                spat_size, spat_step, spat_zero, spat_rota,
-                dtype, out_extra, 'transparency_manual')
+        bdata = None
+        obdata = None
+        if out_extra is not None:
+            bdata = driver.mem_alloc_d(spat_size[::-1], dtype)
+            driver.mem_fill(bdata, 0)
+            obdata = driver.mem_alloc_d(spat_size[::-1], dtype)
+            driver.mem_fill(obdata, 0)
 
-        # Evaluate the density of normal components as transparency
-        if tauto:
-            _detail.evaluate_components_d3d(
-                components, driver, params, mappings, None, None, tcube,
+        # Evaluate opacity components
+        if ocomponents:
+            _detail.evaluate_components_o3d(
+                ocomponents, driver, params, omappings,
+                odata,
                 spat_size, spat_step, spat_zero, spat_rota,
-                dtype, out_extra, 'transparency_auto')
+                dtype, out_extra, 'opacity_')
 
         # Evaluate normal components
         if components:
-            _detail.evaluate_components_d3d(
-                components, driver, params, mappings, image, wcube, tcube,
+            _detail.evaluate_components_b3d(
+                components, driver, params, mappings,
+                odata,
+                image_d, wdata, bdata, obdata,
                 spat_size, spat_step, spat_zero, spat_rota,
                 dtype, out_extra, '')
 
-        # Evaluate the provided spectral weight cube using
+        # Evaluate the provided weight image using
         # the spatial weight cube evaluated above
-        if wcube is not None:
-            backend.make_wcube(spat_size, 1, wcube, wdata)
+        if image_w is not None:
+            backend.wcube_evaluate(spat_size, spec_size, wdata, image_w)
 
-        # Save total transparency to extras
         if out_extra is not None:
-            if tcube is not None:
-                out_extra['transparency_total'] = \
-                    driver.mem_copy_d2h(tcube).copy()
+            if wdata is not None:
+                out_extra['wdata'] = driver.mem_copy_d2h(wdata)
+            if odata is not None:
+                out_extra['odata'] = driver.mem_copy_d2h(odata)
+            if bdata is not None:
+                out_extra['bdata'] = driver.mem_copy_d2h(bdata)
+            if obdata is not None:
+                out_extra['obdata'] = driver.mem_copy_d2h(obdata)

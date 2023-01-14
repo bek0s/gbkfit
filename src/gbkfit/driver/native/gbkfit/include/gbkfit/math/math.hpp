@@ -97,6 +97,14 @@ transform_rh_rotate_z(T& out_x, T& out_y, T x, T y, T theta)
     out_y = x * sintheta + y * costheta;
 }
 
+template<auto FUN, typename T, typename ...Ts> constexpr T
+_trunc_1d_fun(T xmin, T xmax, T x, Ts ...args)
+{
+    return x >= xmin && x <= xmax
+            ? FUN(x, args...)
+            : 0;
+}
+
 template<auto PDF, auto CDF, typename T, typename ...Ts> constexpr T
 _trunc_1d_pdf(T xmin, T xmax, T x, Ts ...args)
 {
@@ -160,6 +168,12 @@ uniform_wm_1d_fun(T x, T a, T b, T c)
 }
 
 template<typename T> constexpr T
+uniform_wm_1d_fun_trunc(T x, T a, T b, T c, T xmin, T xmax)
+{
+    return _trunc_1d_fun<uniform_wm_1d_fun<T>>(xmin, xmax, x, a, b, c);
+}
+
+template<typename T> constexpr T
 uniform_wm_1d_cdf(T x, T b, T c)
 {
     return uniform_1d_cdf(x, b - c, b + c);
@@ -207,6 +221,12 @@ exponential_1d_fun(T x, T a, T b, T c)
 {
     return a * std::exp(-std::abs(x - b) / c);
 }
+
+template<typename T> constexpr T
+exponential_1d_fun_trunc(T x, T a, T b, T c, T xmin, T xmax)
+{
+    return _trunc_1d_fun<exponential_1d_fun<T>>(xmin, xmax, x, a, b, c);
+}
 // todo: implement this
 template<typename T> constexpr T
 exponential_1d_cdf(T x, T b, T c)
@@ -248,6 +268,12 @@ gauss_1d_fun(T x, T a, T b, T c)
 }
 
 template<typename T> constexpr T
+gauss_1d_fun_trunc(T x, T a, T b, T c, T xmin, T xmax)
+{
+    return _trunc_1d_fun<gauss_1d_fun<T>>(xmin, xmax, x, a, b, c);
+}
+
+template<typename T> constexpr T
 gauss_1d_cdf(T x, T b, T c)
 {
     return T{0.5} * (1 + erf((x - b)/(c * std::sqrt(2))));
@@ -285,6 +311,12 @@ template<typename T> constexpr T
 ggauss_1d_fun(T x, T a, T b, T c, T d)
 {
     return a * std::exp(-std::pow(std::abs(x - b) / c, d));
+}
+
+template<typename T> constexpr T
+ggauss_1d_fun_trunc(T x, T a, T b, T c, T d, T xmin, T xmax)
+{
+    return _trunc_1d_fun<ggauss_1d_fun<T>>(xmin, xmax, x, a, b, c, d);
 }
 // todo: implement this
 template<typename T> constexpr T
@@ -330,6 +362,12 @@ lorentz_1d_fun(T x, T a, T b, T c)
 }
 
 template<typename T> constexpr T
+lorentz_1d_fun_trunc(T x, T a, T b, T c, T xmin, T xmax)
+{
+    return _trunc_1d_fun<lorentz_1d_fun<T>>(xmin, xmax, x, a, b, c);
+}
+
+template<typename T> constexpr T
 lorentz_1d_cdf(T x, T b, T c)
 {
     return T{0.5} + std::atan((x - b) / c) / PI<T>;
@@ -367,6 +405,13 @@ moffat_1d_fun(T x, T a, T b, T c, T d)
 {
     return a / std::pow(1 + ((x - b) / c) * ((x - b) / c), d);
 }
+
+template<typename T> constexpr T
+moffat_1d_fun_trunc(T x, T a, T b, T c, T d, T xmin, T xmax)
+{
+    return _trunc_1d_fun<moffat_1d_fun<T>>(xmin, xmax, x, a, b, c, d);
+}
+
 // todo: implement this
 template<typename T> constexpr T
 moffat_1d_cdf(T x, T b, T c, T d)
@@ -411,6 +456,12 @@ template<typename T> constexpr T
 sech2_1d_fun(T x, T a, T b, T c)
 {
     return a * std::pow(1 / std::cosh((x - b) / c), 2);
+}
+
+template<typename T> constexpr T
+sech2_1d_fun_trunc(T x, T a, T b, T c, T xmin, T xmax)
+{
+    return _trunc_1d_fun<sech2_1d_fun<T>>(xmin, xmax, x, a, b, c);
 }
 
 template<typename T> constexpr T

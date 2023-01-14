@@ -137,7 +137,7 @@ def traverse_and_replace(x, func):
 
 
 def nativify(node):
-    if isinstance(node, (np.bool, np.integer, np.floating, np.ndarray)):
+    if isinstance(node, (np.integer, np.floating, np.ndarray)):
         node = node.tolist()
     elif is_sequence(node):
         node = [nativify(item) for item in node]

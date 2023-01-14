@@ -51,7 +51,6 @@ struct Wrapper
             const bool* hasordint,
             bool loose, bool tilted,
             int nrnodes, const T* rnodes,
-            T tauto,
             const T* vsys,
             const T* xpos, const T* ypos,
             const T* posa, const T* incl,
@@ -88,20 +87,20 @@ struct Wrapper
             const int* wpt_uids,
             const T* wpt_cvalues, const int* wpt_ccounts,
             const T* wpt_pvalues, const int* wpt_pcounts,
+            const T* opacity,
             int spat_size_x, int spat_size_y, int spat_size_z,
             T spat_step_x, T spat_step_y, T spat_step_z,
             T spat_zero_x, T spat_zero_y, T spat_zero_z,
             int spec_size,
             T spec_step,
             T spec_zero,
-            T* image, T* scube, T* tdata, T* wdata,
-            T* rdata_tot, T* rdata_cmp, T* vdata_cmp, T* ddata_cmp);
+            T* image, T* scube, T* wdata, T* rdata, T* ordata,
+            T* rdata_cmp, T* vdata_cmp, T* ddata_cmp, T* ordata_cmp);
 
     static void
     gmodel_smdisk_evaluate(
             bool loose, bool tilted,
             int nrnodes, const T* rnodes,
-            T tauto,
             const T* vsys,
             const T* xpos, const T* ypos,
             const T* posa, const T* incl,
@@ -138,14 +137,15 @@ struct Wrapper
             const int* wpt_uids,
             const T* wpt_cvalues, const int* wpt_ccounts,
             const T* wpt_pvalues, const int* wpt_pcounts,
+            const T* opacity,
             int spat_size_x, int spat_size_y, int spat_size_z,
             T spat_step_x, T spat_step_y, T spat_step_z,
             T spat_zero_x, T spat_zero_y, T spat_zero_z,
             int spec_size,
             T spec_step,
             T spec_zero,
-            T* image, T* scube, T* tdata, T* wdata,
-            T* rdata_tot, T* rdata_cmp, T* vdata_cmp, T* ddata_cmp);
+            T* image, T* scube, T* wdata, T* rdata, T* ordata,
+            T* rdata_cmp, T* vdata_cmp, T* ddata_cmp, T* ordata_cmp);
 
     static void
     objective_count_pixels(

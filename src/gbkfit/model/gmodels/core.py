@@ -4,7 +4,16 @@ import abc
 from gbkfit.utils import parseutils
 
 
-class DensityComponent2D(parseutils.TypedParserSupport, abc.ABC):
+__all__ = [
+    'BrightnessComponent2D',
+    'BrightnessComponent3D',
+    'SpectralComponent2D',
+    'SpectralComponent3D',
+    'OpacityComponent3D'
+]
+
+
+class BrightnessComponent2D(parseutils.TypedParserSupport, abc.ABC):
 
     @abc.abstractmethod
     def params(self):
@@ -12,13 +21,14 @@ class DensityComponent2D(parseutils.TypedParserSupport, abc.ABC):
 
     @abc.abstractmethod
     def evaluate(
-            self, driver, params, image, wdata, rdata,
+            self, driver, params,
+            image_d, image_w, bdata,
             spat_size, spat_step, spat_zero, spat_rota,
             dtype, out_extra):
         pass
 
 
-class DensityComponent3D(parseutils.TypedParserSupport, abc.ABC):
+class BrightnessComponent3D(parseutils.TypedParserSupport, abc.ABC):
 
     @abc.abstractmethod
     def params(self):
@@ -26,21 +36,8 @@ class DensityComponent3D(parseutils.TypedParserSupport, abc.ABC):
 
     @abc.abstractmethod
     def evaluate(
-            self, driver, params, image, tdata, wdata, rdata,
-            spat_size, spat_step, spat_zero, spat_rota,
-            dtype, out_extra):
-        pass
-
-
-class OpacityComponent3D(parseutils.TypedParserSupport, abc.ABC):
-
-    @abc.abstractmethod
-    def params(self):
-        pass
-
-    @abc.abstractmethod
-    def evaluate(
-            self, driver, params, tdata,
+            self, driver, params, odata,
+            image, wdata, rdata, ordata,
             spat_size, spat_step, spat_zero, spat_rota,
             dtype, out_extra):
         pass
@@ -54,7 +51,8 @@ class SpectralComponent2D(parseutils.TypedParserSupport, abc.ABC):
 
     @abc.abstractmethod
     def evaluate(
-            self, driver, params, scube, wdata, rdata,
+            self, driver, params,
+            scube_d, scube_w, rdata,
             spat_size, spat_step, spat_zero, spat_rota,
             spec_size, spec_step, spec_zero,
             dtype, out_extra):
@@ -69,8 +67,24 @@ class SpectralComponent3D(parseutils.TypedParserSupport, abc.ABC):
 
     @abc.abstractmethod
     def evaluate(
-            self, driver, params, scube, tcube, wdata, rdata,
+            self, driver, params, odata,
+            scube_d, scube_w, rdata, ordata,
             spat_size, spat_step, spat_zero, spat_rota,
             spec_size, spec_step, spec_zero,
+            dtype, out_extra):
+        pass
+
+
+class OpacityComponent3D(parseutils.TypedParserSupport, abc.ABC):
+
+    @abc.abstractmethod
+    def params(self):
+        pass
+
+    @abc.abstractmethod
+    def evaluate(
+            self, driver, params,
+            odata,
+            spat_size, spat_step, spat_zero, spat_rota,
             dtype, out_extra):
         pass

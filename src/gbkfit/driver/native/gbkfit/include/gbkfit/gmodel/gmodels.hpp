@@ -330,7 +330,6 @@ gmodel_mcdisk_evaluate_cloud(
         const bool* hasordint,
         bool loose, bool tilted,
         int nrnodes, const T* rnodes,
-        T tauto,
         const T* vsys,
         const T* xpos, const T* ypos,
         const T* posa, const T* incl,
@@ -367,17 +366,18 @@ gmodel_mcdisk_evaluate_cloud(
         const int* wpt_uids,
         const T* wpt_cvalues, const int* wpt_ccounts,
         const T* wpt_pvalues, const int* wpt_pcounts,
+        const T* opacity,
         int spat_size_x, int spat_size_y, int spat_size_z,
         T spat_step_x, T spat_step_y, T spat_step_z,
         T spat_zero_x, T spat_zero_y, T spat_zero_z,
         int spec_size,
         T spec_step,
         T spec_zero,
-        T* image, T* scube, T* tdata, T* wdata,
-        T* extra_rdata_tot,
-        T* extra_rdata_cmp,
-        T* extra_vdata_cmp,
-        T* extra_ddata_cmp)
+        T* image, T* scube, T* wdata, T* rdata, T* ordata,
+        T* rdata_cmp,
+        T* vdata_cmp,
+        T* ddata_cmp,
+        T* ordata_cmp)
 {
     // This is a placeholder in case we decide to explicitly
     // add a Monte Carlo based thin disk in the future.
@@ -579,15 +579,25 @@ gmodel_mcdisk_evaluate_cloud(
             wvalue *= ptvalues[i];
     }
 
+    T foo = bvalue;
+    if (opacity)
+    {
+        for(int i = z; i < spat_size_z; ++i)
+        {
+            const auto idx = index_3d_to_1d(x, y, i, spat_size_x, spat_size_y);
+            foo -= opacity[idx] * foo;
+        }
+    }
+
     if (image) {
         gbkfit::gmodel_image_evaluate<AtomicAddFunT>(
-                image, x, y, bvalue,
+                image, x, y, foo,
                 spat_size_x);
     }
 
     if (scube) {
         gbkfit::gmodel_scube_evaluate<AtomicAddFunT>(
-                scube, x, y, bvalue, vvalue, dvalue,
+                scube, x, y, foo, vvalue, dvalue,
                 spat_size_x, spat_size_y,
                 spec_size,
                 spec_step,
@@ -596,33 +606,36 @@ gmodel_mcdisk_evaluate_cloud(
 
     int idx = index_3d_to_1d(x, y, z, spat_size_x, spat_size_y);
 
-    if (tdata) {
-        AtomicAddFunT(&tdata[idx], bvalue * tauto);
-    }
     if (wdata) {
         AtomicAssignFunT(&wdata[idx], wvalue);
     }
-    if (extra_rdata_cmp) {
-        AtomicAddFunT(&extra_rdata_cmp[idx], bvalue);
+    if (rdata) {
+        AtomicAddFunT(&rdata[idx], bvalue);
     }
-    if (extra_vdata_cmp) {
+    if (rdata_cmp) {
+        AtomicAddFunT(&rdata_cmp[idx], bvalue);
+    }
+    if (vdata_cmp) {
         // For overlapping clouds, keep the last velocity
         // Storing the mean would be too much effort with little reward
-        AtomicAssignFunT(&extra_vdata_cmp[idx], vvalue);
+        AtomicAssignFunT(&vdata_cmp[idx], vvalue);
     }
-    if (extra_ddata_cmp) {
+    if (ddata_cmp) {
         // For overlapping clouds, keep the last dispersion
         // Storing the mean would be too much effort with little reward
-        AtomicAssignFunT(&extra_ddata_cmp[idx], dvalue);
+        AtomicAssignFunT(&ddata_cmp[idx], dvalue);
+    }
+
+    if (ordata_cmp) {
+        AtomicAddFunT(&ordata_cmp[idx], foo);
     }
 }
 
 template<auto AtomicAddFunT, typename T> constexpr void
-gmodel_smdisk_evaluate_spaxel(
+gmodel_smdisk_evaluate_spaxel2(
         int x, int y, int z,
         bool loose, bool tilted,
         int nrnodes, const T* rnodes,
-        T tauto,
         const T* vsys,
         const T* xpos, const T* ypos,
         const T* posa, const T* incl,
@@ -659,19 +672,22 @@ gmodel_smdisk_evaluate_spaxel(
         const int* wpt_uids,
         const T* wpt_cvalues, const int* wpt_ccounts,
         const T* wpt_pvalues, const int* wpt_pcounts,
+        const T* opacity,
         int spat_size_x, int spat_size_y, int spat_size_z,
         T spat_step_x, T spat_step_y, T spat_step_z,
         T spat_zero_x, T spat_zero_y, T spat_zero_z,
         int spec_size,
         T spec_step,
         T spec_zero,
-        T* image, T* scube, T* tdata, T* wdata,
-        T* rdata_tot,
-        T* rdata_cmp,
-        T* vdata_cmp,
-        T* ddata_cmp)
+        T* image, T*  scube,
+        T* wdata, T* wdata_cmp,
+        T* odata, T* odata_cmp,
+        T* bdata, T* bdata_cmp,
+        T* obdata, T* obdata_cmp,
+        T* vdata_cmp, T* ddata_cmp)
 {
     bool is_thin = rht_uids == nullptr;
+    bool is_opacity = odata != nullptr;
 
     T vsysi=0, xposi=0, yposi=0, posai=0, incli=0;
     T xn=x, yn=y, zn=z, rn=0, theta=0;
@@ -726,7 +742,7 @@ gmodel_smdisk_evaluate_spaxel(
     // These are needed for trait evaluation
     T ptvalues[TRAIT_NUM_MAX] = {0};
     T htvalues[TRAIT_NUM_MAX] = {0};
-    T bvalue=0, vvalue=0, dvalue=0, zvalue=0, svalue=0, wvalue=1;
+    T bvalue=0, vvalue=0, dvalue=0, zvalue=0, svalue=0, wvalue=1, obvalue=0;
 
     // Selection traits
     if (spt_uids)
@@ -867,31 +883,343 @@ gmodel_smdisk_evaluate_spaxel(
             wvalue *= ptvalues[i];
     }
 
+    // Apply opacity to the calculated density
+    obvalue = bvalue;
+    if (opacity)
+    {
+        for(int oz = z + 1; oz < spat_size_z; ++oz)
+        {
+            const auto idx = index_3d_to_1d(x, y, oz, spat_size_x, spat_size_y);
+            obvalue -= obvalue * opacity[idx];
+        }
+    }
+
     if (image) {
         gbkfit::gmodel_image_evaluate<AtomicAddFunT>(
-                image, x, y, bvalue,
+                image, x, y, obvalue,
                 spat_size_x);
     }
 
     if (scube) {
         gbkfit::gmodel_scube_evaluate<AtomicAddFunT>(
-                scube, x, y, bvalue, vvalue, dvalue,
+                scube, x, y, obvalue, vvalue, dvalue,
                 spat_size_x, spat_size_y,
                 spec_size,
                 spec_step,
                 spec_zero);
     }
 
-    int idx = index_3d_to_1d(x, y, z, spat_size_x, spat_size_y);
+    const int idx = index_3d_to_1d(x, y, z, spat_size_x, spat_size_y);
 
-    if (tdata) {
-        tdata[idx] += bvalue * tauto;
+//    if (wdata) {
+//        wdata[idx] += wvalue;
+//    }
+//    if (rdata) {
+//        rdata[idx] += bvalue;
+//    }
+//    if (ordata) {
+//        ordata[idx] += obvalue;
+//    }
+//    if (rdata_cmp) {
+//        rdata_cmp[idx] = bvalue;
+//    }
+//    if (vdata_cmp) {
+//        vdata_cmp[idx] = vvalue;
+//    }
+//    if (ddata_cmp) {
+//        ddata_cmp[idx] = dvalue;
+//    }
+//    if (ordata_cmp) {
+//        ordata_cmp[idx] = obvalue;
+//    }
+}
+
+template<auto AtomicAddFunT, typename T> constexpr void
+gmodel_smdisk_evaluate_spaxel(
+        int x, int y, int z,
+        bool loose, bool tilted,
+        int nrnodes, const T* rnodes,
+        const T* vsys,
+        const T* xpos, const T* ypos,
+        const T* posa, const T* incl,
+        int nrt,
+        const int* rpt_uids,
+        const T* rpt_cvalues, const int* rpt_ccounts,
+        const T* rpt_pvalues, const int* rpt_pcounts,
+        const int* rht_uids,
+        const T* rht_cvalues, const int* rht_ccounts,
+        const T* rht_pvalues, const int* rht_pcounts,
+        int nvt,
+        const int* vpt_uids,
+        const T* vpt_cvalues, const int* vpt_ccounts,
+        const T* vpt_pvalues, const int* vpt_pcounts,
+        const int* vht_uids,
+        const T* vht_cvalues, const int* vht_ccounts,
+        const T* vht_pvalues, const int* vht_pcounts,
+        int ndt,
+        const int* dpt_uids,
+        const T* dpt_cvalues, const int* dpt_ccounts,
+        const T* dpt_pvalues, const int* dpt_pcounts,
+        const int* dht_uids,
+        const T* dht_cvalues, const int* dht_ccounts,
+        const T* dht_pvalues, const int* dht_pcounts,
+        int nzt,
+        const int* zpt_uids,
+        const T* zpt_cvalues, const int* zpt_ccounts,
+        const T* zpt_pvalues, const int* zpt_pcounts,
+        int nst,
+        const int* spt_uids,
+        const T* spt_cvalues, const int* spt_ccounts,
+        const T* spt_pvalues, const int* spt_pcounts,
+        int nwt,
+        const int* wpt_uids,
+        const T* wpt_cvalues, const int* wpt_ccounts,
+        const T* wpt_pvalues, const int* wpt_pcounts,
+        const T* opacity,
+        int spat_size_x, int spat_size_y, int spat_size_z,
+        T spat_step_x, T spat_step_y, T spat_step_z,
+        T spat_zero_x, T spat_zero_y, T spat_zero_z,
+        int spec_size,
+        T spec_step,
+        T spec_zero,
+        T* image, T* scube, T* wdata, T* rdata, T* ordata,
+        T* rdata_cmp,
+        T* vdata_cmp,
+        T* ddata_cmp,
+        T* ordata_cmp)
+{
+    bool is_thin = rht_uids == nullptr;
+
+    T vsysi=0, xposi=0, yposi=0, posai=0, incli=0;
+    T xn=x, yn=y, zn=z, rn=0, theta=0;
+    int rnidx = -1;
+
+    // image-to-world transform
+    xn = spat_zero_x + x * spat_step_x;
+    yn = spat_zero_y + y * spat_step_y;
+    zn = spat_zero_z + z * spat_step_z;
+
+    // If the disk is loose or tilted, we need to calculate the pixel's
+    // radial node index and radius now.
+    if (loose || tilted)
+    {
+        bool is_on_disk = is_thin
+                ? ring_info(
+                    rnidx, rn, xn, yn, loose, tilted,
+                    nrnodes, rnodes, xpos, ypos, posa, incl)
+                : ring_info(
+                    rnidx, rn, xn, yn, zn, loose, tilted,
+                    nrnodes, rnodes, xpos, ypos, posa, incl);
+        if (!is_on_disk)
+            return;
     }
+
+    // Interpolate systemic velocity and geometrical parameters
+    vsysi = loose ? lerp(rn, rnidx, rnodes, xpos) : (vsys ? vsys[0] : 0);
+    xposi = loose ? lerp(rn, rnidx, rnodes, xpos) : xpos[0];
+    yposi = loose ? lerp(rn, rnidx, rnodes, ypos) : ypos[0];
+    posai = tilted ? lerp(rn, rnidx, rnodes, posa) : posa[0];
+    incli = tilted ? lerp(rn, rnidx, rnodes, incl) : incl[0];
+    posai *= DEG_TO_RAD<T>;
+    incli *= DEG_TO_RAD<T>;
+
+    // world-to-disk transform
+    if (is_thin)
+        transform_cpos_posa_incl(xn, yn, xposi, yposi, posai, incli);
+    else
+        transform_cpos_posa_incl(xn, yn, zn, xposi, yposi, posai, incli);
+
+    theta = std::atan2(yn, xn);
+
+    // If the disk is not loose or tilted, we need to calculate the pixel's
+    // radial node index and radius now.
+    if (!(loose || tilted)) {
+        rn = std::sqrt(xn * xn + yn * yn);
+        bool is_on_disk = disk_info(rnidx, rn, nrnodes, rnodes);
+        if (!is_on_disk)
+            return;
+    }
+
+    // These are needed for trait evaluation
+    T ptvalues[TRAIT_NUM_MAX] = {0};
+    T htvalues[TRAIT_NUM_MAX] = {0};
+    T bvalue=0, vvalue=0, dvalue=0, zvalue=0, svalue=0, wvalue=1, obvalue=0;
+
+    // Selection traits
+    if (spt_uids)
+    {
+        p_traits<sp_trait<T>>(
+                ptvalues,
+                nst, spt_uids,
+                spt_cvalues, spt_ccounts,
+                spt_pvalues, spt_pcounts,
+                rnidx, rnodes, nrnodes,
+                xn, yn, rn, theta);
+
+        for (int i = 0; i < nst; ++i)
+            svalue += ptvalues[i];
+
+        if (!svalue)
+            return;
+    }
+
+    // Vertical distortion traits
+    if (zpt_uids)
+    {
+        p_traits<zp_trait<T>>(
+                ptvalues,
+                nzt, zpt_uids,
+                zpt_cvalues, zpt_ccounts,
+                zpt_pvalues, zpt_pcounts,
+                rnidx, rnodes, nrnodes,
+                xn, yn, rn, theta);
+
+        for (int i = 0; i < nzt; ++i)
+            zvalue += ptvalues[i];
+
+        zn += zvalue;
+    }
+
+    // Brightness traits
+    if (rpt_uids)
+    {
+        p_traits<rp_trait<T>>(
+                ptvalues,
+                nrt, rpt_uids,
+                rpt_cvalues, rpt_ccounts,
+                rpt_pvalues, rpt_pcounts,
+                rnidx, rnodes, nrnodes,
+                xn, yn, rn, theta);
+    }
+    if (rht_uids)
+    {
+        h_traits<rh_trait<T>>(
+                htvalues,
+                nrt, rht_uids,
+                rht_cvalues, rht_ccounts,
+                rht_pvalues, rht_pcounts,
+                rnidx, rnodes, nrnodes,
+                rn, std::abs(zn));
+    }
+    for (int i = 0; i < nrt; ++i)
+        bvalue += ptvalues[i] * (is_thin ? 1 : htvalues[i]);
+
+    // Discart pixels with zero emission
+    if (!bvalue) return;
+
+    // Thin disk requires surface brightness correction
+    if (is_thin) bvalue /= std::cos(incli);
+
+    // Thick disk requires integration along the z axis
+    if (!is_thin) bvalue *= spat_step_z;
+
+    // Velocity traits
+    if (vpt_uids)
+    {
+        p_traits<vp_trait<T>>(
+                ptvalues,
+                nvt, vpt_uids,
+                vpt_cvalues, vpt_ccounts,
+                vpt_pvalues, vpt_pcounts,
+                rnidx, rnodes, nrnodes,
+                xn, yn, rn, theta, incli);
+    }
+    if (vht_uids)
+    {
+        h_traits<vh_trait<T>>(
+                htvalues,
+                nvt, vht_uids,
+                vht_cvalues, vht_ccounts,
+                vht_pvalues, vht_pcounts,
+                rnidx, rnodes, nrnodes,
+                rn, std::abs(zn));
+    }
+    for (int i = 0; i < nvt; ++i)
+        vvalue += ptvalues[i] * (is_thin ? 1 : htvalues[i]);
+
+    // Apply systemic velocity
+    vvalue += vsysi;
+
+    // Dispersion traits
+    if (dpt_uids)
+    {
+        p_traits<dp_trait<T>>(
+                ptvalues,
+                ndt, dpt_uids,
+                dpt_cvalues, dpt_ccounts,
+                dpt_pvalues, dpt_pcounts,
+                rnidx, rnodes, nrnodes,
+                xn, yn, rn, theta);
+    }
+    if (dht_uids)
+    {
+        h_traits<dh_trait<T>>(
+                htvalues,
+                ndt, dht_uids,
+                dht_cvalues, dht_ccounts,
+                dht_pvalues, dht_pcounts,
+                rnidx, rnodes, nrnodes,
+                rn, std::abs(zn));
+    }
+    for (int i = 0; i < ndt; ++i)
+        dvalue += ptvalues[i] * (is_thin ? 1 : htvalues[i]);
+
+    // Ensure positive dispersion
+    dvalue = std::abs(dvalue);
+
+    // Weight polar traits
+    if (wpt_uids && wdata)
+    {
+        wvalue = 1;
+
+        p_traits<wp_trait<T>>(
+                ptvalues,
+                nwt, wpt_uids,
+                wpt_cvalues, wpt_ccounts,
+                wpt_pvalues, wpt_pcounts,
+                rnidx, rnodes, nrnodes,
+                xn, yn, rn, theta);
+
+        for (int i = 0; i < nwt; ++i)
+            wvalue *= ptvalues[i];
+    }
+
+    // Apply opacity to the calculated density
+    obvalue = bvalue;
+    if (opacity)
+    {
+        for(int oz = z + 1; oz < spat_size_z; ++oz)
+        {
+            const auto idx = index_3d_to_1d(x, y, oz, spat_size_x, spat_size_y);
+            obvalue -= obvalue * opacity[idx];
+        }
+    }
+
+    if (image) {
+        gbkfit::gmodel_image_evaluate<AtomicAddFunT>(
+                image, x, y, obvalue,
+                spat_size_x);
+    }
+
+    if (scube) {
+        gbkfit::gmodel_scube_evaluate<AtomicAddFunT>(
+                scube, x, y, obvalue, vvalue, dvalue,
+                spat_size_x, spat_size_y,
+                spec_size,
+                spec_step,
+                spec_zero);
+    }
+
+    const int idx = index_3d_to_1d(x, y, z, spat_size_x, spat_size_y);
+
     if (wdata) {
         wdata[idx] += wvalue;
     }
-    if (rdata_tot) {
-        rdata_tot[idx] += bvalue;
+    if (rdata) {
+        rdata[idx] += bvalue;
+    }
+    if (ordata) {
+        ordata[idx] += obvalue;
     }
     if (rdata_cmp) {
         rdata_cmp[idx] = bvalue;
@@ -902,7 +1230,9 @@ gmodel_smdisk_evaluate_spaxel(
     if (ddata_cmp) {
         ddata_cmp[idx] = dvalue;
     }
+    if (ordata_cmp) {
+        ordata_cmp[idx] = obvalue;
+    }
 }
-
 
 } // namespace

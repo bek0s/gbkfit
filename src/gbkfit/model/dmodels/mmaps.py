@@ -36,7 +36,7 @@ class DModelMMaps(DModel):
 
     def __init__(
             self, size, step=(1, 1), rpix=None, rval=(0, 0), rota=0,
-            scale=(1, 1), psf=None, lsf=None,
+            scale=(1, 1), psf=None, lsf=None, weights=None,
             mask_cutoff=1e-6,
             orders=(0, 1, 2),
             dtype=np.float32):
@@ -51,6 +51,13 @@ class DModelMMaps(DModel):
         orders = tuple(sorted(set(orders)))
         if any(order < 0 or order > 7 for order in orders):
             raise RuntimeError("moment orders must be between 0 and 7")
+        if weights is None:
+            weights = len(orders) * (1,)
+        if len(weights) != len(orders):
+            raise RuntimeError(
+                f"the number of provided weights must be equal to "
+                f"the number of provided orders; "
+                f"{len(weights)} != {len(orders)}")
         if len(step) == 2:
             step = step + (1,)
         if len(size) == 2:
@@ -76,11 +83,13 @@ class DModelMMaps(DModel):
                 "erroneous and generate artefacts on the resulting maps; "
                 "because of this it is highly recommended to enable masking "
                 "by providing a value for mask_cutoff greater than 0")
+        self._weights = weights
         self._orders = orders
         self._dcube = _dcube.DCube(
             size, step, rpix, rval, rota, scale, psf, lsf,
-            False, None, False, False, dtype)
-        self._mmaps = None
+            # Disable DCube's intrinsic weighting and masking
+            # We deal with those in this class
+            1, None, False, False, dtype)
         self._mmaps_o = None
         self._mmaps_d = None
         self._mmaps_m = None
@@ -117,8 +126,7 @@ class DModelMMaps(DModel):
     def dtype(self):
         return self._dcube.dtype()
 
-    def _prepare_impl(self):
-        # Some shortcuts
+    def _prepare_impl(self, gmodel):
         driver = self._driver
         dtype = self.dtype()
         orders = self.orders()
@@ -129,14 +137,14 @@ class DModelMMaps(DModel):
         self._mmaps_o = driver.mem_alloc_d(len(orders), np.int32)
         self._mmaps_d = driver.mem_alloc_d(mmaps_size_all[::-1], dtype)
         self._mmaps_m = driver.mem_alloc_d(mmaps_size_one[::-1], dtype)
-        self._mmaps_w = driver.mem_alloc_d(mmaps_size_one[::-1], dtype)
+        self._mmaps_w = driver.mem_alloc_d(mmaps_size_all[::-1], dtype)
         # Initialize memory
         driver.mem_copy_h2d(np.array(orders, dtype=np.int32), self._mmaps_o)
         driver.mem_fill(self._mmaps_d, np.nan)
         driver.mem_fill(self._mmaps_m, 0)
         driver.mem_fill(self._mmaps_w, 1)
         # Prepare dcube
-        self._dcube.prepare(driver)
+        self._dcube.prepare(driver, gmodel.is_weighted())
         # Create backend
         self._backend = driver.backends().dmodel(dtype)
 
@@ -145,7 +153,10 @@ class DModelMMaps(DModel):
         gmodel = self._gmodel
         dcube = self._dcube
         backend = self._backend
+        # Clear DCube arrays
+        # todo: investigate if this step can be skipped
         driver.mem_fill(dcube.scratch_dcube(), 0)
+        # Evaluate gmodel on DModel's arrays
         gmodel.evaluate_scube(
             driver, params,
             dcube.scratch_dcube(),
@@ -156,7 +167,10 @@ class DModelMMaps(DModel):
             dcube.rota(),
             dcube.dtype(),
             out_gmodel_extra)
+        # Evaluate gmodel on DCube's arrays
         dcube.evaluate(out_dmodel_extra)
+        # Extract moment maps from DCube's arrays
+        # Also evaluate one mask map and one weight map
         backend.mmaps_moments(
             dcube.size(),
             dcube.step(),
@@ -168,10 +182,22 @@ class DModelMMaps(DModel):
             self._mmaps_d,
             self._mmaps_w,
             self._mmaps_m)
+        # Create as many copies of the evaluated weight map as the
+        # number of orders, and apply the intrinsic weights
+        for i, weight in enumerate(self._weights):
+            # Avoid unnecessary work
+            if i == 0 and weight == 1:
+                continue
+            driver.math_mul(
+                self._mmaps_w[0, :, :], weight, self._mmaps_w[i, :, :])
+        # Model evaluation complete
+        # Return data, mask, and weight arrays
+        # The data and weight maps are different for each moment
+        # The same mask map is shared across all moments
         out = dict()
         for i, key in enumerate(self.keys()):
             out[key] = dict(
                 d=self._mmaps_d[i, :, :],
                 m=self._mmaps_m,
-                w=self._mmaps_w)
+                w=self._mmaps_w[i, :, :])
         return out

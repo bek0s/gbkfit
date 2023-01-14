@@ -58,7 +58,7 @@ class MCDisk(_disk.Disk):
         return self._cflux
 
     def _impl_prepare(self, driver, dtype):
-        self._s_hasaintegral = driver.mem_alloc_s(len(self._rptraits), np.bool)
+        self._s_hasaintegral = driver.mem_alloc_s(len(self._rptraits), bool)
         hasaintegral = [t.has_analytical_integral() for t in self._rptraits]
         self._s_hasaintegral[0][:] = hasaintegral
         driver.mem_copy_h2d(self._s_hasaintegral[0], self._s_hasaintegral[1])
@@ -68,8 +68,9 @@ class MCDisk(_disk.Disk):
 
     def _impl_evaluate(
             self, driver, params,
-            image, scube, tdata, wdata, rdata,
-            rdata_cmp, vdata_cmp, ddata_cmp,
+            odata,
+            image, scube, wdata, rdata, ordata,
+            rdata_cmp, vdata_cmp, ddata_cmp, ordata_cmp,
             spat_size, spat_step, spat_zero, spat_rota,
             spec_size, spec_step, spec_zero,
             dtype, out_extra):
@@ -95,10 +96,12 @@ class MCDisk(_disk.Disk):
             # Calculate the number of clouds per trait or ring
             trait_nclouds = integral / self._cflux
             ncloudsptor.extend(np.atleast_1d(trait_nclouds).astype(np.int32))
+            print(trait)
             print("ring params:", trait_params)
             print("ring centres:", ring_centers)
             print("ring integrals:", integral)
-            print("total integral:", sum(integral))
+            print("trait_nclouds:", trait_nclouds)
+            # print("total integral:", sum(integral))
 
         # Calculate cumsum
         ncloudsptor_cumsum = list(itertools.accumulate(ncloudsptor))
@@ -116,6 +119,7 @@ class MCDisk(_disk.Disk):
             # out_extra['nclouds'] = nclouds
             pass
 
+        print(trait)
         print("rstep:", self._rstep)
         print("subrnodes:", self._s_subrnodes[1])
         print("nclouds:", nclouds)
@@ -169,10 +173,11 @@ class MCDisk(_disk.Disk):
             self._s_wpt_uids[1],
             self._s_wpt_cvalues[1], self._s_wpt_ccounts[1],
             self._s_wpt_pvalues[1], self._s_wpt_pcounts[1],
+            odata,
             spat_size, spat_step, spat_zero, spat_rota,
             spec_size, spec_step, spec_zero,
-            image, scube, tdata, wdata, rdata,
-            rdata_cmp, vdata_cmp, ddata_cmp)
+            image, scube, wdata, rdata, ordata,
+            rdata_cmp, vdata_cmp, ddata_cmp, ordata_cmp)
 
         if out_extra is not None:
             pass

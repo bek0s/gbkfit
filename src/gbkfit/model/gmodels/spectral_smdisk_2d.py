@@ -1,10 +1,12 @@
 
-from . import _detail, _smdisk, traits
+from . import _detail, _smdisk, common, traits
 from .core import SpectralComponent2D
 from gbkfit.utils import parseutils
 
 
-__all__ = ['SpectralSMDisk2D']
+__all__ = [
+    'SpectralSMDisk2D'
+]
 
 
 class SpectralSMDisk2D(SpectralComponent2D):
@@ -18,6 +20,10 @@ class SpectralSMDisk2D(SpectralComponent2D):
         desc = parseutils.make_typed_desc(cls, 'gmodel component')
         opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
         opts.update(dict(
+            xpos_nwmode=common.nwmode_parser.load(opts.get('xpos_nwmode')),
+            ypos_nwmode=common.nwmode_parser.load(opts.get('ypos_nwmode')),
+            posa_nwmode=common.nwmode_parser.load(opts.get('posa_nwmode')),
+            incl_nwmode=common.nwmode_parser.load(opts.get('incl_nwmode')),
             bptraits=traits.bpt_parser.load(opts.get('bptraits')),
             vptraits=traits.vpt_parser.load(opts.get('vptraits')),
             dptraits=traits.dpt_parser.load(opts.get('dptraits')),
@@ -33,6 +39,10 @@ class SpectralSMDisk2D(SpectralComponent2D):
             rnodes=self._disk.rnodes(),
             rstep=self._disk.rstep(),
             interp=self._disk.interp().type(),
+            xpos_nwmode=common.nwmode_parser.dump(self._disk.xpos_nwmode()),
+            ypos_nwmode=common.nwmode_parser.dump(self._disk.ypos_nwmode()),
+            posa_nwmode=common.nwmode_parser.dump(self._disk.posa_nwmode()),
+            incl_nwmode=common.nwmode_parser.dump(self._disk.incl_nwmode()),
             bptraits=traits.bpt_parser.dump(self._disk.rptraits()),
             vptraits=traits.vpt_parser.dump(self._disk.vptraits()),
             dptraits=traits.dpt_parser.dump(self._disk.dptraits()),
@@ -60,16 +70,17 @@ class SpectralSMDisk2D(SpectralComponent2D):
             posa_nwmode=None, incl_nwmode=None):
         rnode_args = _detail.parse_component_rnode_args(
             rnmin, rnmax, rnsep, rnlen, rnodes, rstep, interp)
-        nwmode_velocity_args = _detail.parse_component_nwmodes_for_velocity(
+        nwmode_velocity_args = _detail.validate_component_nwmodes_for_velocity(
             loose, vsys_nwmode)
-        nwmode_geometry_args = _detail.parse_component_nwmodes_for_geometry(
+        nwmode_geometry_args = _detail.validate_component_nwmodes_for_geometry(
             loose, tilted, xpos_nwmode, ypos_nwmode, posa_nwmode, incl_nwmode)
-        trait_args = _detail.parse_component_s2d_trait_args(
+        trait_args = _detail.parse_component_s2d_traits(
             bptraits,
             vptraits,
             dptraits,
             sptraits,
             wptraits)
+        _detail.rename_bx_to_rx_traits(trait_args)
         all_traits = sum(trait_args.values(), ())
         _detail.check_traits_common(all_traits)
         self._disk = _smdisk.SMDisk(
@@ -85,9 +96,12 @@ class SpectralSMDisk2D(SpectralComponent2D):
     def params(self):
         return self._disk.params()
 
+    def is_weighted(self):
+        return bool(self._disk.wptraits())
+
     def evaluate(
             self,
-            driver, params, scube, wdata, rdata,
+            driver, params, scube, wdata, bdata,
             spat_size, spat_step, spat_zero, spat_rota,
             spec_size, spec_step, spec_zero,
             dtype, out_extra):
@@ -95,7 +109,7 @@ class SpectralSMDisk2D(SpectralComponent2D):
         spat_step = spat_step + (0,)
         spat_zero = spat_zero + (0,)
         self._disk.evaluate(
-            driver, params, None, scube, None, wdata, rdata,
+            driver, params, None, None, scube, wdata, bdata, None,
             spat_size, spat_step, spat_zero, spat_rota,
             spec_size, spec_step, spec_zero,
             dtype, out_extra)

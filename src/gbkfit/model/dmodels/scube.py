@@ -29,7 +29,7 @@ class DModelSCube(DModel):
 
     def __init__(
             self, size, step=(1, 1, 1), rpix=None, rval=(0, 0, 0), rota=0,
-            scale=(1, 1, 1), psf=None, lsf=None, weights=False,
+            scale=(1, 1, 1), psf=None, lsf=None, weight=False,
             mask_cutoff=None, mask_create=False, mask_apply=False,
             dtype=np.float32):
         super().__init__()
@@ -42,7 +42,7 @@ class DModelSCube(DModel):
         scale = tuple(scale)
         self._dcube = _dcube.DCube(
             size, step, rpix, rval, rota, scale, psf, lsf,
-            weights, mask_cutoff, mask_create, mask_apply, dtype)
+            weight, mask_cutoff, mask_create, mask_apply, dtype)
 
     def keys(self):
         return ['scube']
@@ -71,8 +71,8 @@ class DModelSCube(DModel):
     def dtype(self):
         return self._dcube.dtype()
 
-    def _prepare_impl(self):
-        self._dcube.prepare(self._driver)
+    def _prepare_impl(self, gmodel):
+        self._dcube.prepare(self._driver, gmodel.is_weighted())
 
     def _evaluate_impl(self, params, out_dmodel_extra, out_gmodel_extra):
         driver = self._driver
@@ -80,7 +80,10 @@ class DModelSCube(DModel):
         dcube = self._dcube
         has_mcube = dcube.mcube() is not None
         has_wcube = dcube.wcube() is not None
+        # Clear DCube arrays
+        # todo: investigate if this step can be skipped
         driver.mem_fill(dcube.scratch_dcube(), 0)
+        # Evaluate gmodel on DCube's arrays
         gmodel.evaluate_scube(
             driver, params,
             dcube.scratch_dcube(),
@@ -91,7 +94,10 @@ class DModelSCube(DModel):
             dcube.rota(),
             dcube.dtype(),
             out_gmodel_extra)
+        # Evaluate DCube (perform convolution, supersampling, etc)
         dcube.evaluate(out_dmodel_extra)
+        # Model evaluation complete.
+        # Return data, mask, and weight arrays (if available)
         return dict(scube=dict(
             d=dcube.dcube(),
             m=dcube.mcube() if has_mcube else None,

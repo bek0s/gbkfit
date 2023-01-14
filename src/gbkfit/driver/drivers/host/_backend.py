@@ -6,9 +6,7 @@ from gbkfit.driver.modules import DriverBackends
 from .._detail.native import *
 
 
-__all__ = [
-    'DriverBackendsHost'
-]
+__all__ = ['DriverBackendsHost']
 
 
 class NativeMemoryHost(NativeMemory):

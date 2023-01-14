@@ -21,7 +21,6 @@ def _trait_param_info(traits, prefix, nrnodes):
     for i, trait in enumerate(traits):
         params_sm = trait.params_sm()
         params_nw = trait.params_rnw(nrnodes)
-        print(params_nw)
         params_sm = [(pdesc, None, False) for pdesc in params_sm]
         params_nw = [(pdesc, nwmode, True) for pdesc, nwmode in params_nw]
         params = params_sm + params_nw
@@ -80,25 +79,6 @@ def _prepare_trait_arrays(
     driver.mem_copy_h2d(arr_cvalues[0], arr_cvalues[1])
     driver.mem_copy_h2d(arr_ccounts[0], arr_ccounts[1])
     driver.mem_copy_h2d(arr_pcounts[0], arr_pcounts[1])
-
-
-def _nwmode_transform_for_param(param, nwmode):
-    if nwmode is None:
-        return
-    match nwmode['type']:
-        case 'absolute':
-            pass
-        case 'relative1':
-            origin_idx = nwmode.get('origin', 0)
-            origin_val = param[origin_idx]
-            param += param[origin_idx]
-            param[origin_idx] = origin_val
-            pass
-        case 'relative2':
-            origin_idx = nwmode.get('origin', 0)
-            numutils.cumsum(param, origin_idx, out=param)
-        case _:
-            assert False, "impossible"
 
 
 def _prepare_common_params_array(
@@ -342,6 +322,18 @@ class Disk(abc.ABC):
     def interp(self):
         return self._interp
 
+    def xpos_nwmode(self):
+        return self._xpos_nwmode
+
+    def ypos_nwmode(self):
+        return self._ypos_nwmode
+
+    def posa_nwmode(self):
+        return self._posa_nwmode
+
+    def incl_nwmode(self):
+        return self._incl_nwmode
+
     def rptraits(self):
         return self._rptraits
 
@@ -462,7 +454,9 @@ class Disk(abc.ABC):
         self._impl_prepare(driver, dtype)
 
     def evaluate(
-            self, driver, params, image, scube, tdata, wdata, rdata,
+            self, driver, params,
+            odata,
+            image, scube, wdata, rdata, ordata,
             spat_size, spat_step, spat_zero, spat_rota,
             spec_size, spec_step, spec_zero,
             dtype, out_extra):
@@ -479,13 +473,13 @@ class Disk(abc.ABC):
             if nwmode is None:
                 return
             for pdesc in pdescs:
-                _nwmode_transform_for_param(params[pdesc], nwmode)
+                nwmode.transform(params[pdesc])
 
         def nwmode_transform_for_trait_params(pdescs, nwmodes):
             for pdesc in pdescs:
                 if nwmodes[pdesc] is None:
                     continue
-                _nwmode_transform_for_param(params[pdesc], nwmodes[pdesc])
+                nwmodes[pdesc].transform(params[pdesc])
 
         nwmode_transform_for_common_params(self._vsys_pdescs, self._vsys_nwmode)
         nwmode_transform_for_common_params(self._xpos_pdescs, self._xpos_nwmode)
@@ -551,6 +545,7 @@ class Disk(abc.ABC):
         rdata_cmp = None
         vdata_cmp = None
         ddata_cmp = None
+        ordata_cmp = None
 
         if out_extra is not None:
             shape = spat_size[::-1]
@@ -563,10 +558,15 @@ class Disk(abc.ABC):
             if self._dptraits:
                 ddata_cmp = driver.mem_alloc_d(shape, dtype)
                 driver.mem_fill(ddata_cmp, np.nan)
+            if odata is not None:
+                ordata_cmp = driver.mem_alloc_d(shape, dtype)
+                driver.mem_fill(ordata_cmp, np.nan)
 
         self._impl_evaluate(
-            driver, params, image, scube, tdata, wdata, rdata,
-            rdata_cmp, vdata_cmp, ddata_cmp,
+            driver, params,
+            odata,
+            image, scube, wdata, rdata, ordata,
+            rdata_cmp, vdata_cmp, ddata_cmp, ordata_cmp,
             spat_size, spat_step, spat_zero, spat_rota,
             spec_size, spec_step, spec_zero,
             dtype, out_extra)
@@ -578,6 +578,8 @@ class Disk(abc.ABC):
                 out_extra['vdata'] = driver.mem_copy_d2h(vdata_cmp)
             if self._dptraits:
                 out_extra['ddata'] = driver.mem_copy_d2h(ddata_cmp)
+            if odata is not None:
+                out_extra['obdata'] = driver.mem_copy_d2h(ordata_cmp)
             if self._rptraits:
                 sumabs = np.nansum(np.abs(out_extra['rdata']))
                 _log.debug(f"sum(abs(rdata)): {sumabs}")
@@ -595,8 +597,9 @@ class Disk(abc.ABC):
     @abc.abstractmethod
     def _impl_evaluate(
             self, driver, params,
-            image, scube, tdata, wdata, rdata,
-            rdata_cmp, vdata_cmp, ddata_cmp,
+            odata,
+            image, scube, wdata, rdata, ordata,
+            rdata_cmp, vdata_cmp, ddata_cmp, ordata_cmp,
             spat_size, spat_step, spat_zero, spat_rota,
             spec_size, spec_step, spec_zero,
             dtype, out_extra):

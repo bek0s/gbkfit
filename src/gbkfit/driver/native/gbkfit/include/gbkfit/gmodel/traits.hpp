@@ -29,6 +29,31 @@ constexpr int RH_TRAIT_UID_LORENTZ = 5;
 constexpr int RH_TRAIT_UID_MOFFAT = 6;
 constexpr int RH_TRAIT_UID_SECH2 = 7;
 
+// Opacity polar traits
+constexpr int OP_TRAIT_UID_UNIFORM = 1;
+constexpr int OP_TRAIT_UID_EXPONENTIAL = 2;
+constexpr int OP_TRAIT_UID_GAUSS = 3;
+constexpr int OP_TRAIT_UID_GGAUSS = 4;
+constexpr int OP_TRAIT_UID_LORENTZ = 5;
+constexpr int OP_TRAIT_UID_MOFFAT = 6;
+constexpr int OP_TRAIT_UID_SECH2 = 7;
+constexpr int OP_TRAIT_UID_MIXTURE_EXPONENTIAL = 51;
+constexpr int OP_TRAIT_UID_MIXTURE_GAUSS = 52;
+constexpr int OP_TRAIT_UID_MIXTURE_GGAUSS = 53;
+constexpr int OP_TRAIT_UID_MIXTURE_MOFFAT = 54;
+constexpr int OP_TRAIT_UID_NW_UNIFORM = 101;
+constexpr int OP_TRAIT_UID_NW_HARMONIC = 102;
+constexpr int OP_TRAIT_UID_NW_DISTORTION = 103;
+
+// Opacity height traits
+constexpr int OH_TRAIT_UID_UNIFORM = 1;
+constexpr int OH_TRAIT_UID_EXPONENTIAL = 2;
+constexpr int OH_TRAIT_UID_GAUSS = 3;
+constexpr int OH_TRAIT_UID_GGAUSS = 4;
+constexpr int OH_TRAIT_UID_LORENTZ = 5;
+constexpr int OH_TRAIT_UID_MOFFAT = 6;
+constexpr int OH_TRAIT_UID_SECH2 = 7;
+
 // Velocity polar traits
 constexpr int VP_TRAIT_UID_TAN_UNIFORM = 1;
 constexpr int VP_TRAIT_UID_TAN_ARCTAN = 2;
@@ -504,15 +529,125 @@ rp_trait_nw_distortion_rnd(
     // TODO: implement
 }
 
-template<typename T> constexpr void
-rh_trait_uniform(
+template<auto Fun, auto FunTrunc, typename T> constexpr void
+rh_trait_pdf_1p(
         T& out,
         int rnidx, const T* rnodes, T r, T z,
         const T* consts, const T* params)
 {
-    bool use_rn = consts[0];
-    T p1 = !use_rn ? params[0] : nodewise(r, rnidx, rnodes, params, 0, 1);
-    out = uniform_wm_1d_pdf<T>(z, 0, p1);
+    bool use_rnodes = consts[0];
+    T trunc = consts[1];
+    T p1 = use_rnodes
+            ? nodewise(r, rnidx, rnodes, params, 0, 1)
+            : params[0];
+    out = trunc == 0
+            ? Fun(z, 0, p1)
+            : FunTrunc(z, 0, p1, -trunc*p1, trunc*p1);
+}
+
+template<auto Fun, auto FunTrunc, typename T> constexpr void
+rh_trait_pdf_2p(
+        T& out,
+        int rnidx, const T* rnodes, int nrnodes, T r, T z,
+        const T* consts, const T* params)
+{
+    bool use_rnodes = consts[0];
+    T trunc = consts[1];
+    T p1 = use_rnodes
+            ? nodewise(r, rnidx, rnodes, params, 0, 1)
+            : params[0];
+    T p2 = use_rnodes
+            ? nodewise(r, rnidx, rnodes, params, nrnodes, 1)
+            : params[1];
+    out = trunc == 0
+            ? Fun(z, 0, p1, p2)
+            : FunTrunc(z, 0, p1, p2, -trunc*p1, trunc*p1);
+}
+
+template<auto Fun, auto FunTrunc, typename T> constexpr void
+rh_trait_rnd_1p(
+        T& out, RNG<T>& rng,
+        int rnidx, const T* rnodes, T r,
+        const T* consts, const T* params)
+{
+    bool use_rnodes = consts[0];
+    T trunc = consts[1];
+    T p1 = use_rnodes
+            ? nodewise(r, rnidx, rnodes, params, 0, 1)
+            : params[0];
+    out = trunc == 0
+            ? Fun(rng, 0, p1)
+            : FunTrunc(rng, 0, p1, -trunc*p1, trunc*p1);
+}
+
+template<auto Fun, auto FunTrunc, typename T> constexpr void
+rh_trait_rnd_2p(
+        T& out, RNG<T>& rng,
+        int rnidx, const T* rnodes, int nrnodes, T r,
+        const T* consts, const T* params)
+{
+    bool use_rnodes = consts[0];
+    T trunc = consts[1];
+    T p1 = use_rnodes
+            ? nodewise(r, rnidx, rnodes, params, 0, 1)
+            : params[0];
+    T p2 = use_rnodes
+            ? nodewise(r, rnidx, rnodes, params, nrnodes, 1)
+            : params[1];
+    out = trunc == 0
+            ? Fun(rng, 0, p1, p2)
+            : FunTrunc(rng, 0, p1, p2, -trunc*p1, trunc*p1);
+}
+
+template<auto Fun, auto FunTrunc, typename T> constexpr void
+rh_trait_fun_2p(
+        T& out,
+        int rnidx, const T* rnodes, int nrnodes, T r, T z,
+        const T* consts, const T* params)
+{
+    bool use_rnodes = consts[0];
+    T trunc = consts[1];
+    T p1 = use_rnodes
+            ? nodewise(r, rnidx, rnodes, params, 0, 1)
+            : params[0];
+    T p2 = use_rnodes
+            ? nodewise(r, rnidx, rnodes, params, nrnodes, 1)
+            : params[1];
+    out = trunc == 0
+            ? Fun(z, 0, p1, p2)
+            : FunTrunc(z, 0, p1, p2, -trunc*p2, trunc*p2);
+}
+
+template<auto Fun, auto FunTrunc, typename T> constexpr void
+rh_trait_fun_3p(
+        T& out,
+        int rnidx, const T* rnodes, int nrnodes, T r, T z,
+        const T* consts, const T* params)
+{
+    bool use_rnodes = consts[0];
+    T trunc = consts[1];
+    T p1 = use_rnodes
+            ? nodewise(r, rnidx, rnodes, params, 0, 1)
+            : params[0] ;
+    T p2 = use_rnodes
+            ? nodewise(r, rnidx, rnodes, params, nrnodes, 1)
+            : params[1];
+    T p3 = use_rnodes
+            ? nodewise(r, rnidx, rnodes, params, 2 * nrnodes, 1)
+            : params[1];
+    out = trunc == 0
+            ? Fun(z, 0, p1, p2, p3)
+            : FunTrunc(z, 0, p1, p2, p3, -trunc*p2, trunc*p2);
+}
+
+template<typename T> constexpr void
+rh_trait_uniform_pdf(
+        T& out,
+        int rnidx, const T* rnodes, T r, T z,
+        const T* consts, const T* params)
+{
+    rh_trait_pdf_1p<uniform_wm_1d_pdf<T>, uniform_wm_1d_pdf_trunc<T>>(
+            out, rnidx, rnodes, r, z, consts, params);
 }
 
 template<typename T> constexpr void
@@ -521,23 +656,28 @@ rh_trait_uniform_rnd(
         int rnidx, const T* rnodes, T r,
         const T* consts, const T* params)
 {
-    bool use_rn = consts[0];
-    T p1 = !use_rn ? params[0] : nodewise(r, rnidx, rnodes, params, 0, 1);
-    out = uniform_wm_1d_rnd<T>(rng, 0, p1);
+    rh_trait_rnd_1p<uniform_wm_1d_rnd<T>, uniform_wm_1d_rnd_trunc<T>>(
+            out, rng, rnidx, rnodes, r, consts, params);
 }
 
 template<typename T> constexpr void
-rh_trait_exponential(
+rh_trait_uniform_fun(
         T& out,
         int rnidx, const T* rnodes, T r, T z,
         const T* consts, const T* params)
 {
-    bool use_rn = consts[0];
-    T trunc = consts[1];
-    T p1 = !use_rn ? params[0] : nodewise(r, rnidx, rnodes, params, 0, 1);
-    out = trunc == 0
-            ? exponential_1d_pdf<T>(z, 0, p1)
-            : exponential_1d_pdf_trunc<T>(z, 0, p1, -trunc*p1, trunc*p1);
+    rh_trait_fun_2p<uniform_wm_1d_fun<T>, uniform_wm_1d_fun_trunc<T>>(
+            out, rnidx, rnodes, r, z, consts, params);
+}
+
+template<typename T> constexpr void
+rh_trait_exponential_pdf(
+        T& out,
+        int rnidx, const T* rnodes, T r, T z,
+        const T* consts, const T* params)
+{
+    rh_trait_pdf_1p<exponential_1d_pdf<T>, exponential_1d_pdf_trunc<T>>(
+            out, rnidx, rnodes, r, z, consts, params);
 }
 
 template<typename T> constexpr void
@@ -546,26 +686,28 @@ rh_trait_exponential_rnd(
         int rnidx, const T* rnodes, T r,
         const T* consts, const T* params)
 {
-    bool use_rn = consts[0];
-    T trunc = consts[1];
-    T p1 = !use_rn ? params[0] : nodewise(r, rnidx, rnodes, params, 0, 1);
-    out = trunc == 0
-            ? exponential_1d_rnd<T>(rng, 0, p1)
-            : exponential_1d_rnd_trunc<T>(rng, 0, p1, -trunc*p1, trunc*p1);
+    rh_trait_rnd_1p<exponential_1d_rnd<T>, exponential_1d_rnd_trunc<T>>(
+            out, rng, rnidx, rnodes, r, consts, params);
 }
 
 template<typename T> constexpr void
-rh_trait_gauss(
+rh_trait_exponential_fun(
         T& out,
         int rnidx, const T* rnodes, T r, T z,
         const T* consts, const T* params)
 {
-    bool use_rn = consts[0];
-    T trunc = consts[1];
-    T p1 = !use_rn ? params[0] : nodewise(r, rnidx, rnodes, params, 0, 1);
-    out = trunc == 0
-            ? gauss_1d_pdf<T>(z, 0, p1)
-            : gauss_1d_pdf_trunc<T>(z, 0, p1, -trunc*p1, trunc*p1);
+    rh_trait_fun_2p<exponential_1d_fun<T>, exponential_1d_fun_trunc<T>>(
+            out, rnidx, rnodes, r, z, consts, params);
+}
+
+template<typename T> constexpr void
+rh_trait_gauss_pdf(
+        T& out,
+        int rnidx, const T* rnodes, T r, T z,
+        const T* consts, const T* params)
+{
+    rh_trait_pdf_1p<gauss_1d_pdf<T>, gauss_1d_pdf_trunc<T>>(
+            out, rnidx, rnodes, r, z, consts, params);
 }
 
 template<typename T> constexpr void
@@ -574,27 +716,28 @@ rh_trait_gauss_rnd(
         int rnidx, const T* rnodes, T r,
         const T* consts, const T* params)
 {
-    bool use_rn = consts[0];
-    T trunc = consts[1];
-    T p1 = !use_rn ? params[0] : nodewise(r, rnidx, rnodes, params, 0, 1);
-    out = trunc == 0
-            ? gauss_1d_rnd<T>(rng, 0, p1)
-            : gauss_1d_rnd_trunc<T>(rng, 0, p1, -trunc*p1, trunc*p1);
+    rh_trait_rnd_1p<gauss_1d_rnd<T>, gauss_1d_rnd_trunc<T>>(
+            out, rng, rnidx, rnodes, r, consts, params);
 }
 
 template<typename T> constexpr void
-rh_trait_ggauss(
+rh_trait_gauss_fun(
+        T& out,
+        int rnidx, const T* rnodes, T r, T z,
+        const T* consts, const T* params)
+{
+    rh_trait_fun_2p<gauss_1d_fun<T>, gauss_1d_fun_trunc<T>>(
+            out, rnidx, rnodes, r, z, consts, params);
+}
+
+template<typename T> constexpr void
+rh_trait_ggauss_pdf(
         T& out,
         int rnidx, const T* rnodes, int nrnodes, T r, T z,
         const T* consts, const T* params)
 {
-    bool use_rn = consts[0];
-    T trunc = consts[1];
-    T p1 = !use_rn ? params[0] : nodewise(r, rnidx, rnodes, params, 0, 1);
-    T p2 = !use_rn ? params[1] : nodewise(r, rnidx, rnodes, params, nrnodes, 1);
-    out = trunc == 0
-            ? ggauss_1d_pdf<T>(z, 0, p1, p2)
-            : ggauss_1d_pdf_trunc<T>(z, 0, p1, p2, -trunc*p1, trunc*p1);
+    rh_trait_pdf_2p<ggauss_1d_pdf<T>, ggauss_1d_pdf_trunc<T>>(
+            out, rnidx, rnodes, nrnodes, r, z, consts, params);
 }
 
 template<typename T> constexpr void
@@ -603,27 +746,28 @@ rh_trait_ggauss_rnd(
         int rnidx, const T* rnodes, int nrnodes, T r,
         const T* consts, const T* params)
 {
-    bool use_rn = consts[0];
-    T trunc = consts[1];
-    T p1 = !use_rn ? params[0] : nodewise(r, rnidx, rnodes, params, 0, 1);
-    T p2 = !use_rn ? params[1] : nodewise(r, rnidx, rnodes, params, nrnodes, 1);
-    out = trunc == 0
-            ? ggauss_1d_rnd<T>(rng, 0, p1, p2)
-            : ggauss_1d_rnd_trunc<T>(rng, 0, p1, p2, -trunc*p1, trunc*p1);
+    rh_trait_rnd_2p<ggauss_1d_rnd<T>, ggauss_1d_rnd_trunc<T>>(
+            out, rng, rnidx, rnodes, nrnodes, r, consts, params);
 }
 
 template<typename T> constexpr void
-rh_trait_lorentz(
+rh_trait_ggauss_fun(
+        T& out,
+        int rnidx, const T* rnodes, int nrnodes, T r, T z,
+        const T* consts, const T* params)
+{
+    rh_trait_fun_3p<ggauss_1d_fun<T>, ggauss_1d_fun_trunc<T>>(
+            out, rnidx, rnodes, nrnodes, r, z, consts, params);
+}
+
+template<typename T> constexpr void
+rh_trait_lorentz_pdf(
         T& out,
         int rnidx, const T* rnodes, T r, T z,
         const T* consts, const T* params)
 {
-    bool use_rn = consts[0];
-    T trunc = consts[1];
-    T p1 = !use_rn ? params[0] : nodewise(r, rnidx, rnodes, params, 0, 1);
-    out = trunc == 0
-            ? lorentz_1d_pdf<T>(z, 0, p1)
-            : lorentz_1d_pdf_trunc<T>(z, 0, p1, -trunc*p1, trunc*p1);
+    rh_trait_pdf_1p<lorentz_1d_pdf<T>, lorentz_1d_pdf_trunc<T>>(
+            out, rnidx, rnodes, r, z, consts, params);
 }
 
 template<typename T> constexpr void
@@ -632,27 +776,28 @@ rh_trait_lorentz_rnd(
         int rnidx, const T* rnodes, T r,
         const T* consts, const T* params)
 {
-    bool use_rn = consts[0];
-    T trunc = consts[1];
-    T p1 = !use_rn ? params[0] : nodewise(r, rnidx, rnodes, params, 0, 1);
-    out = trunc == 0
-            ? lorentz_1d_rnd<T>(rng, 0, p1)
-            : lorentz_1d_rnd_trunc<T>(rng, 0, p1, -trunc*p1, trunc*p1);
+    rh_trait_rnd_1p<lorentz_1d_rnd<T>, lorentz_1d_rnd_trunc<T>>(
+            out, rng, rnidx, rnodes, r, consts, params);
 }
 
 template<typename T> constexpr void
-rh_trait_moffat(
+rh_trait_lorentz_fun(
+        T& out,
+        int rnidx, const T* rnodes, T r, T z,
+        const T* consts, const T* params)
+{
+    rh_trait_fun_2p<lorentz_1d_fun<T>, lorentz_1d_fun_trunc<T>>(
+            out, rnidx, rnodes, r, z, consts, params);
+}
+
+template<typename T> constexpr void
+rh_trait_moffat_pdf(
         T& out,
         int rnidx, const T* rnodes, int nrnodes, T r, T z,
         const T* consts, const T* params)
 {
-    bool use_rn = consts[0];
-    T trunc = consts[1];
-    T p1 = !use_rn ? params[0] : nodewise(r, rnidx, rnodes, params, 0, 1);
-    T p2 = !use_rn ? params[1] : nodewise(r, rnidx, rnodes, params, nrnodes, 1);
-    out = trunc == 0
-            ? moffat_1d_pdf<T>(z, 0, p1, p2)
-            : moffat_1d_pdf_trunc<T>(z, 0, p1, p2, -trunc*p1, trunc*p1);
+    rh_trait_pdf_2p<moffat_1d_pdf<T>, moffat_1d_pdf_trunc<T>>(
+            out, rnidx, rnodes, nrnodes, r, z, consts, params);
 }
 
 template<typename T> constexpr void
@@ -661,27 +806,28 @@ rh_trait_moffat_rnd(
         int rnidx, const T* rnodes, int nrnodes, T r,
         const T* consts, const T* params)
 {
-    bool use_rn = consts[0];
-    T trunc = consts[1];
-    T p1 = !use_rn ? params[0] : nodewise(r, rnidx, rnodes, params, 0, 1);
-    T p2 = !use_rn ? params[1] : nodewise(r, rnidx, rnodes, params, nrnodes, 1);
-    out = trunc == 0
-            ? moffat_1d_rnd<T>(rng, 0, p1, p2)
-            : moffat_1d_rnd_trunc<T>(rng, 0, p1, p2, -trunc*p1, trunc*p1);
+    rh_trait_rnd_2p<moffat_1d_rnd<T>, moffat_1d_rnd_trunc<T>>(
+            out, rng, rnidx, rnodes, nrnodes, r, consts, params);
 }
 
 template<typename T> constexpr void
-rh_trait_sech2(
+rh_trait_moffat_fun(
+        T& out,
+        int rnidx, const T* rnodes, int nrnodes, T r, T z,
+        const T* consts, const T* params)
+{
+    rh_trait_fun_3p<moffat_1d_fun<T>, moffat_1d_fun_trunc<T>>(
+            out, rnidx, rnodes, nrnodes, r, z, consts, params);
+}
+
+template<typename T> constexpr void
+rh_trait_sech2_pdf(
         T& out,
         int rnidx, const T* rnodes, T r, T z,
         const T* consts, const T* params)
 {
-    bool use_rn = consts[0];
-    T trunc = consts[1];
-    T p1 = !use_rn ? params[0] : nodewise(r, rnidx, rnodes, params, 0, 1);
-    out = trunc == 0
-            ? sech2_1d_pdf<T>(z, 0, p1)
-            : sech2_1d_pdf_trunc<T>(z, 0, p1, -trunc*p1, trunc*p1);
+    rh_trait_pdf_1p<sech2_1d_pdf<T>, sech2_1d_pdf_trunc<T>>(
+            out, rnidx, rnodes, r, z, consts, params);
 }
 
 template<typename T> constexpr void
@@ -690,12 +836,18 @@ rh_trait_sech2_rnd(
         int rnidx, const T* rnodes, T r,
         const T* consts, const T* params)
 {
-    bool use_rn = consts[0];
-    T trunc = consts[1];
-    T p1 = !use_rn ? params[0] : nodewise(r, rnidx, rnodes, params, 0, 1);
-    out = trunc == 0
-            ? sech2_1d_rnd<T>(rng, 0, p1)
-            : sech2_1d_rnd_trunc<T>(rng, 0, p1, -trunc*p1, trunc*p1);
+    rh_trait_rnd_1p<sech2_1d_rnd<T>, sech2_1d_rnd_trunc<T>>(
+            out, rng, rnidx, rnodes, r, consts, params);
+}
+
+template<typename T> constexpr void
+rh_trait_sech2_fun(
+        T& out,
+        int rnidx, const T* rnodes, T r,
+        const T* consts, const T* params)
+{
+    rh_trait_fun_2p<sech2_1d_fun<T>, sech2_1d_fun_trunc<T>>(
+            out, rnidx, rnodes, r, consts, params);
 }
 
 template<typename T> constexpr void
@@ -1202,31 +1354,31 @@ rh_trait(T& out,
     switch (uid)
     {
     case RH_TRAIT_UID_UNIFORM:
-        rh_trait_uniform(
+        rh_trait_uniform_pdf(
                 out, rnidx, rnodes, r, z, consts, params);
         break;
     case RH_TRAIT_UID_EXPONENTIAL:
-        rh_trait_exponential(
+        rh_trait_exponential_pdf(
                 out, rnidx, rnodes, r, z, consts, params);
         break;
     case RH_TRAIT_UID_GAUSS:
-        rh_trait_gauss(
+        rh_trait_gauss_pdf(
                 out, rnidx, rnodes, r, z, consts, params);
         break;
     case RH_TRAIT_UID_GGAUSS:
-        rh_trait_ggauss(
+        rh_trait_ggauss_pdf(
                 out, rnidx, rnodes, nrnodes, r, z, consts, params);
         break;
     case RH_TRAIT_UID_LORENTZ:
-        rh_trait_lorentz(
+        rh_trait_lorentz_pdf(
                 out, rnidx, rnodes, r, z, consts, params);
         break;
     case RH_TRAIT_UID_MOFFAT:
-        rh_trait_moffat(
+        rh_trait_moffat_pdf(
                 out, rnidx, rnodes, nrnodes, r, z, consts, params);
         break;
     case RH_TRAIT_UID_SECH2:
-        rh_trait_sech2(
+        rh_trait_sech2_pdf(
                 out, rnidx, rnodes, r, z, consts, params);
         break;
     default:
@@ -1279,6 +1431,87 @@ rh_trait_rnd(
         break;
     }
 }
+
+
+
+
+template<typename T> constexpr void
+op_trait(T& out,
+         int uid, const T* consts, const T* params,
+         int rnidx, const T* rnodes, int nrnodes,
+         T x, T y, T r, T theta)
+{
+    (void)x;
+    (void)y;
+
+    switch (uid)
+    {
+    case OP_TRAIT_UID_UNIFORM:
+        op_trait_uniform(
+                out, params);
+        break;
+    case OP_TRAIT_UID_EXPONENTIAL:
+        op_trait_exponential(
+                out, r, params);
+        break;
+    case OP_TRAIT_UID_GAUSS:
+        op_trait_gauss(
+                out, r, params);
+        break;
+    case OP_TRAIT_UID_GGAUSS:
+        op_trait_ggauss(
+                out, r, params);
+        break;
+    case OP_TRAIT_UID_LORENTZ:
+        op_trait_lorentz(
+                out, r, params);
+        break;
+    case OP_TRAIT_UID_MOFFAT:
+        op_trait_moffat(
+                out, r, params);
+        break;
+    case OP_TRAIT_UID_SECH2:
+        op_trait_sech2(
+                out, r, params);
+        break;
+    case OP_TRAIT_UID_MIXTURE_EXPONENTIAL:
+        op_trait_mixture_exponential(
+                out, r, theta, consts, params);
+        break;
+    case OP_TRAIT_UID_MIXTURE_GAUSS:
+        op_trait_mixture_gauss(
+                out, r, theta, consts, params);
+        break;
+    case OP_TRAIT_UID_MIXTURE_GGAUSS:
+        op_trait_mixture_ggauss(
+                out, r, theta, consts, params);
+        break;
+    case OP_TRAIT_UID_MIXTURE_MOFFAT:
+        op_trait_mixture_moffat(
+                out, r, theta, consts, params);
+        break;
+    case OP_TRAIT_UID_NW_UNIFORM:
+        op_trait_nw_uniform(
+                out, rnidx, rnodes, r, params);
+        break;
+    case OP_TRAIT_UID_NW_HARMONIC:
+        op_trait_nw_harmonic(
+                out, rnidx, rnodes, nrnodes, r, theta, consts, params);
+        break;
+    case OP_TRAIT_UID_NW_DISTORTION:
+        op_trait_nw_distortion(
+                out, rnidx, rnodes, nrnodes, r, theta, params);
+        break;
+    default:
+        out = NAN;
+        assert(false);
+        break;
+    }
+}
+
+
+
+
 
 template<typename T> constexpr void
 vp_trait(T& out,

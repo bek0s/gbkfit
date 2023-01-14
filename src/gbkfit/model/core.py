@@ -6,6 +6,16 @@ import numpy as np
 from gbkfit.utils import parseutils
 
 
+__all__ = [
+    'DModel',
+    'GModel',
+    'GModelImage',
+    'GModelSCube',
+    'dmodel_parser',
+    'gmodel_parser'
+]
+
+
 class DModel(parseutils.TypedParserSupport, abc.ABC):
 
     @staticmethod
@@ -47,7 +57,7 @@ class DModel(parseutils.TypedParserSupport, abc.ABC):
                 f"{dmodel_desc} is not compatible with {gmodel_desc}")
         self._driver = driver
         self._gmodel = gmodel
-        self._prepare_impl()
+        self._prepare_impl(gmodel)
 
     def evaluate(self, driver, gmodel, params, out_extra=None):
         if self._driver is not driver or self._gmodel is not gmodel:
@@ -64,7 +74,7 @@ class DModel(parseutils.TypedParserSupport, abc.ABC):
         return out
 
     @abc.abstractmethod
-    def _prepare_impl(self):
+    def _prepare_impl(self, gmodel):
         pass
 
     @abc.abstractmethod

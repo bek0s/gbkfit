@@ -1,10 +1,12 @@
 
-from . import _detail, _mcdisk, traits
+from . import _detail, _mcdisk, common, traits
 from .core import SpectralComponent3D
 from gbkfit.utils import parseutils
 
 
-__all__ = ['SpectralMCDisk3D']
+__all__ = [
+    'SpectralMCDisk3D'
+]
 
 
 class SpectralMCDisk3D(SpectralComponent3D):
@@ -18,6 +20,10 @@ class SpectralMCDisk3D(SpectralComponent3D):
         desc = parseutils.make_typed_desc(cls, 'gmodel component')
         opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
         opts.update(dict(
+            xpos_nwmode=common.nwmode_parser.load(opts.get('xpos_nwmode')),
+            ypos_nwmode=common.nwmode_parser.load(opts.get('ypos_nwmode')),
+            posa_nwmode=common.nwmode_parser.load(opts.get('posa_nwmode')),
+            incl_nwmode=common.nwmode_parser.load(opts.get('incl_nwmode')),
             bptraits=traits.bpt_parser.load(opts.get('bptraits')),
             bhtraits=traits.bht_parser.load(opts.get('bhtraits')),
             vptraits=traits.vpt_parser.load(opts.get('vptraits')),
@@ -38,6 +44,10 @@ class SpectralMCDisk3D(SpectralComponent3D):
             rnodes=self._disk.rnodes(),
             rstep=self._disk.rstep(),
             interp=self._disk.interp().type(),
+            xpos_nwmode=common.nwmode_parser.dump(self._disk.xpos_nwmode()),
+            ypos_nwmode=common.nwmode_parser.dump(self._disk.ypos_nwmode()),
+            posa_nwmode=common.nwmode_parser.dump(self._disk.posa_nwmode()),
+            incl_nwmode=common.nwmode_parser.dump(self._disk.incl_nwmode()),
             bptraits=traits.bpt_parser.dump(self._disk.rptraits()),
             bhtraits=traits.bht_parser.dump(self._disk.rhtraits()),
             vptraits=traits.vpt_parser.dump(self._disk.vptraits()),
@@ -74,17 +84,18 @@ class SpectralMCDisk3D(SpectralComponent3D):
             posa_nwmode=None, incl_nwmode=None):
         rnode_args = _detail.parse_component_rnode_args(
             rnmin, rnmax, rnsep, rnlen, rnodes, rstep, interp)
-        nwmode_velocity_args = _detail.parse_component_nwmodes_for_velocity(
+        nwmode_velocity_args = _detail.validate_component_nwmodes_for_velocity(
             loose, vsys_nwmode)
-        nwmode_geometry_args = _detail.parse_component_nwmodes_for_geometry(
+        nwmode_geometry_args = _detail.validate_component_nwmodes_for_geometry(
             loose, tilted, xpos_nwmode, ypos_nwmode, posa_nwmode, incl_nwmode)
-        trait_args = _detail.parse_component_s3d_trait_args(
+        trait_args = _detail.parse_component_s3d_traits(
             bptraits, bhtraits,
             vptraits, vhtraits,
             dptraits, dhtraits,
             zptraits,
             sptraits,
             wptraits)
+        _detail.rename_bx_to_rx_traits(trait_args)
         all_traits = sum(trait_args.values(), ())
         _detail.check_traits_common(all_traits)
         _detail.check_traits_mcdisk(self, all_traits)
@@ -99,14 +110,17 @@ class SpectralMCDisk3D(SpectralComponent3D):
     def params(self):
         return self._disk.params()
 
+    def is_weighted(self):
+        return bool(self._disk.wptraits())
+
     def evaluate(
             self,
-            driver, params, scube, tdata, wdata, rdata,
+            driver, params, odata, scube, wdata, bdata, obdata,
             spat_size, spat_step, spat_zero, spat_rota,
             spec_size, spec_step, spec_zero,
             dtype, out_extra):
         self._disk.evaluate(
-            driver, params, None, scube, tdata, wdata, rdata,
+            driver, params, odata, None, scube, wdata, bdata, obdata,
             spat_size, spat_step, spat_zero, spat_rota,
             spec_size, spec_step, spec_zero,
             dtype, out_extra)

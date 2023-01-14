@@ -104,7 +104,6 @@ Wrapper<T>::gmodel_mcdisk_evaluate(
         const bool* hasordint,
         bool loose, bool tilted,
         int nrnodes, const T* rnodes,
-        T tauto,
         const T* vsys,
         const T* xpos, const T* ypos,
         const T* posa, const T* incl,
@@ -141,14 +140,15 @@ Wrapper<T>::gmodel_mcdisk_evaluate(
         const int* wpt_uids,
         const T* wpt_cvalues, const int* wpt_ccounts,
         const T* wpt_pvalues, const int* wpt_pcounts,
+        const T* opacity,
         int spat_size_x, int spat_size_y, int spat_size_z,
         T spat_step_x, T spat_step_y, T spat_step_z,
         T spat_zero_x, T spat_zero_y, T spat_zero_z,
         int spec_size,
         T spec_step,
         T spec_zero,
-        T* image, T* scube, T* tdata, T* wdata,
-        T* rdata_tot, T* rdata_cmp, T* vdata_cmp, T* ddata_cmp)
+        T* image, T* scube, T* wdata, T* rdata, T* ordata,
+        T* rdata_cmp, T* vdata_cmp, T* ddata_cmp, T* ordata_cmp)
 {
     const int n = nclouds;
     dim3 bsize(BLOCK_SIZE);
@@ -159,7 +159,6 @@ Wrapper<T>::gmodel_mcdisk_evaluate(
             hasordint,
             loose, tilted,
             nrnodes, rnodes,
-            tauto,
             vsys,
             xpos, ypos,
             posa, incl,
@@ -196,14 +195,15 @@ Wrapper<T>::gmodel_mcdisk_evaluate(
             wpt_uids,
             wpt_cvalues, wpt_ccounts,
             wpt_pvalues, wpt_pcounts,
+            opacity,
             spat_size_x, spat_size_y, spat_size_z,
             spat_step_x, spat_step_y, spat_step_z,
             spat_zero_x, spat_zero_y, spat_zero_z,
             spec_size,
             spec_step,
             spec_zero,
-            image, scube, tdata, wdata,
-            rdata_tot, rdata_cmp, vdata_cmp, ddata_cmp);
+            image, scube, wdata, rdata, ordata,
+            rdata_cmp, vdata_cmp, ddata_cmp, ordata_cmp);
     cudaDeviceSynchronize();
 }
 
@@ -211,7 +211,6 @@ template<typename T> void
 Wrapper<T>::gmodel_smdisk_evaluate(
         bool loose, bool tilted,
         int nrnodes, const T* rnodes,
-        T tauto,
         const T* vsys,
         const T* xpos, const T* ypos,
         const T* posa, const T* incl,
@@ -248,14 +247,15 @@ Wrapper<T>::gmodel_smdisk_evaluate(
         const int* wpt_uids,
         const T* wpt_cvalues, const int* wpt_ccounts,
         const T* wpt_pvalues, const int* wpt_pcounts,
+        const T* opacity,
         int spat_size_x, int spat_size_y, int spat_size_z,
         T spat_step_x, T spat_step_y, T spat_step_z,
         T spat_zero_x, T spat_zero_y, T spat_zero_z,
         int spec_size,
         T spec_step,
         T spec_zero,
-        T* image, T* scube, T* tdata, T* wdata,
-        T* rdata_tot, T* rdata_cmp, T* vdata_cmp, T* ddata_cmp)
+        T* image, T* scube, T* wdata, T* rdata, T* ordata,
+        T* rdata_cmp, T* vdata_cmp, T* ddata_cmp, T* ordata_cmp)
 {
     const int n = spat_size_x * spat_size_y;
     dim3 bsize(BLOCK_SIZE);
@@ -263,7 +263,6 @@ Wrapper<T>::gmodel_smdisk_evaluate(
     kernels::gmodel_smdisk_evaluate<<<gsize, bsize>>>(
             loose, tilted,
             nrnodes, rnodes,
-            tauto,
             vsys,
             xpos, ypos,
             posa, incl,
@@ -300,14 +299,15 @@ Wrapper<T>::gmodel_smdisk_evaluate(
             wpt_uids,
             wpt_cvalues, wpt_ccounts,
             wpt_pvalues, wpt_pcounts,
+            opacity,
             spat_size_x, spat_size_y, spat_size_z,
             spat_step_x, spat_step_y, spat_step_z,
             spat_zero_x, spat_zero_y, spat_zero_z,
             spec_size,
             spec_step,
             spec_zero,
-            image, scube, tdata, wdata,
-            rdata_tot, rdata_cmp, vdata_cmp, ddata_cmp);
+            image, scube, wdata, rdata, ordata,
+            rdata_cmp, vdata_cmp, ddata_cmp, ordata_cmp);
     cudaDeviceSynchronize();
 }
 

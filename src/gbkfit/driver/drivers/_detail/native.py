@@ -159,7 +159,6 @@ class DriverBackendGModelNative(DriverBackendGModel):
             self,
             cflux, nclouds, ncloudspt, hasordint,
             loose, tilted, rnodes,
-            tauto,
             vsys, xpos, ypos, posa, incl,
             rpt_uids, rpt_cvalues, rpt_ccounts, rpt_pvalues, rpt_pcounts,
             rht_uids, rht_cvalues, rht_ccounts, rht_pvalues, rht_pcounts,
@@ -170,10 +169,11 @@ class DriverBackendGModelNative(DriverBackendGModel):
             zpt_uids, zpt_cvalues, zpt_ccounts, zpt_pvalues, zpt_pcounts,
             spt_uids, spt_cvalues, spt_ccounts, spt_pvalues, spt_pcounts,
             wpt_uids, wpt_cvalues, wpt_ccounts, wpt_pvalues, wpt_pcounts,
+            opacity,
             spat_size, spat_step, spat_zero, spat_rota,
             spec_size, spec_step, spec_zero,
-            image, scube, tdata, wdata,
-            rdata_tot, rdata_cmp, vdata_cmp, ddata_cmp):
+            image, scube, wdata, rdata, ordata,
+            rdata_cmp, vdata_cmp, ddata_cmp, ordata_cmp):
         _ptr = self._memory.ptr
         _size = self._memory.size
         self._module.mcdisk_evaluate(
@@ -181,7 +181,6 @@ class DriverBackendGModelNative(DriverBackendGModel):
             loose, tilted,
             _size(rnodes),
             _ptr(rnodes),
-            tauto,
             _ptr(vsys), _ptr(xpos), _ptr(ypos), _ptr(posa), _ptr(incl),
             _size(rpt_uids),
             _ptr(rpt_uids),
@@ -216,19 +215,19 @@ class DriverBackendGModelNative(DriverBackendGModel):
             _ptr(wpt_uids),
             _ptr(wpt_cvalues), _ptr(wpt_ccounts),
             _ptr(wpt_pvalues), _ptr(wpt_pcounts),
+            _ptr(opacity),
             spat_size[0], spat_size[1], spat_size[2],
             spat_step[0], spat_step[1], spat_step[2],
             spat_zero[0], spat_zero[1], spat_zero[2],
             spec_size,
             spec_step,
             spec_zero,
-            _ptr(image), _ptr(scube), _ptr(tdata), _ptr(wdata),
-            _ptr(rdata_tot), _ptr(rdata_cmp), _ptr(vdata_cmp), _ptr(ddata_cmp))
+            _ptr(image), _ptr(scube), _ptr(wdata), _ptr(rdata), _ptr(ordata),
+            _ptr(rdata_cmp), _ptr(vdata_cmp), _ptr(ddata_cmp), _ptr(ordata_cmp))
 
     def smdisk_evaluate(
             self,
             loose, tilted, rnodes,
-            tauto,
             vsys, xpos, ypos, posa, incl,
             rpt_uids, rpt_cvalues, rpt_ccounts, rpt_pvalues, rpt_pcounts,
             rht_uids, rht_cvalues, rht_ccounts, rht_pvalues, rht_pcounts,
@@ -239,17 +238,18 @@ class DriverBackendGModelNative(DriverBackendGModel):
             zpt_uids, zpt_cvalues, zpt_ccounts, zpt_pvalues, zpt_pcounts,
             spt_uids, spt_cvalues, spt_ccounts, spt_pvalues, spt_pcounts,
             wpt_uids, wpt_cvalues, wpt_ccounts, wpt_pvalues, wpt_pcounts,
+            opacity,
             spat_size, spat_step, spat_zero, spat_rota,
             spec_size, spec_step, spec_zero,
-            image, scube, tdata, wdata,
-            rdata_tot, rdata_cmp, vdata_cmp, ddata_cmp):
+            image, scube, wdata, rdata, ordata,
+            rdata_cmp, vdata_cmp, ddata_cmp, ordata_cmp):
         _ptr = self._memory.ptr
         _size = self._memory.size
+        print("SUM:", np.nansum(ordata_cmp))
         self._module.smdisk_evaluate(
             loose, tilted,
             _size(rnodes),
             _ptr(rnodes),
-            tauto,
             _ptr(vsys), _ptr(xpos), _ptr(ypos), _ptr(posa), _ptr(incl),
             _size(rpt_uids),
             _ptr(rpt_uids),
@@ -284,11 +284,13 @@ class DriverBackendGModelNative(DriverBackendGModel):
             _ptr(wpt_uids),
             _ptr(wpt_cvalues), _ptr(wpt_ccounts),
             _ptr(wpt_pvalues), _ptr(wpt_pcounts),
+            _ptr(opacity),
             spat_size[0], spat_size[1], spat_size[2],
             spat_step[0], spat_step[1], spat_step[2],
             spat_zero[0], spat_zero[1], spat_zero[2],
             spec_size,
             spec_step,
             spec_zero,
-            _ptr(image), _ptr(scube), _ptr(tdata), _ptr(wdata),
-            _ptr(rdata_tot), _ptr(rdata_cmp), _ptr(vdata_cmp), _ptr(ddata_cmp))
+            _ptr(image), _ptr(scube), _ptr(wdata), _ptr(rdata), _ptr(ordata),
+            _ptr(rdata_cmp), _ptr(vdata_cmp), _ptr(ddata_cmp), _ptr(ordata_cmp))
+        print("SUM:", np.nansum(ordata_cmp))

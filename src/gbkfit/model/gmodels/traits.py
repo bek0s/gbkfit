@@ -397,7 +397,8 @@ class PTrait(Trait, abc.ABC):
 
 class HTrait(TraitFeatureRNodes, TraitFeatureNWMode, Trait, abc.ABC):
 
-    def __init__(self, **kwargs):
+    def __init__(self, rnodes, nwmode, **kwargs):
+        kwargs.update(rnodes=rnodes, nwmode=nwmode)
         super().__init__(**kwargs)
         if not self.rnodes() and self.nwmode() not in [None, 'absolute']:
             _log.warning(
@@ -808,11 +809,11 @@ class BHTraitP1(BHTrait, abc.ABC):
 
     def params_sm(self):
         return () if self.rnodes() else (
-            ParamScalarDesc('s'))
+            ParamScalarDesc('s'),)
 
     def params_rnw(self, nrnodes):
         return () if not self.rnodes() else (
-            ParamVectorDesc('s', nrnodes))
+            ParamVectorDesc('s', nrnodes),)
 
 
 class BHTraitP2(BHTrait, abc.ABC):
@@ -1190,6 +1191,9 @@ class VHTraitOne(VHTrait):
     def uid():
         return VH_TRAIT_UID_ONE
 
+    def __init__(self):
+        super().__init__(rnodes=False, nwmode=None)
+
 
 class DPTraitUniform(DPTrait):
 
@@ -1434,6 +1438,9 @@ class DHTraitOne(DHTrait):
     def uid():
         return DH_TRAIT_UID_ONE
 
+    def __init__(self):
+        super().__init__(rnodes=False, nwmode=None)
+
 
 class ZPTraitNWUniform(TraitFeatureNWMode, ZPTrait):
 
@@ -1541,14 +1548,17 @@ class OPTraitUniform(OPTrait):
 
     def params_sm(self):
         return (
-            ParamScalarDesc('a'),
-            ParamScalarDesc('s'))
+            ParamScalarDesc('a'),)
 
     def has_analytical_integral(self):
         return True
 
     def integrate(self, params, rings):
-        return _ptrait_integrate_uniform(params, rings)
+        a = params['a']
+        rsep = rings[1] - rings[0]
+        rmin = rings[0] - 0.5 * rsep
+        rmax = rings[-1] + 0.5 * rsep
+        return np.pi * a * (rmax * rmax - rmin * rmin)
 
 
 class OPTraitExponential(OPTrait):

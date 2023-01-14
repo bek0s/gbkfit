@@ -73,12 +73,12 @@ def _prepare_params(info, pdescs):
 
 def eval_(objective_type, config, profile=None):
 
-    import gbkfit.math
-    integral1 = gbkfit.math.gauss_trunc_1d_int(1, 1, -100, 100)
-
-    print(integral1)
-
-    exit()
+    # import gbkfit.math
+    # integral1 = gbkfit.math.gauss_trunc_1d_int(1, 1, -100, 100)
+    #
+    # print(integral1)
+    #
+    # exit()
 
     """
     class Class0:

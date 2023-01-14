@@ -1,12 +1,10 @@
 
-import copy
 import logging
 
 import numpy as np
 
 from gbkfit.math import interpolation
-from gbkfit.params.pdescs import ParamScalarDesc
-from gbkfit.utils import iterutils, parseutils
+from gbkfit.utils import iterutils, miscutils, parseutils
 from . import traits
 
 
@@ -80,66 +78,25 @@ def parse_component_hnode_args(nmin, nmax, nsep, nlen, nodes, step, interp):
         'h', nmin, nmax, nsep, nlen, nodes, step, interp)
 
 
-def parse_nwmode(info, info_key):
-    error_header = \
-        "could not parse options for node-wise parameter mode (aka nwmode)"
-    relative_types = ['relative1', 'relative2']
-    allowed_types = ['absolute'] + relative_types
-    result = dict()
-    # Make sure the nwmode value is a mapping or None
-    if not (info is None or iterutils.is_mapping(info)):
-        raise RuntimeError(
-            f"{error_header}; "
-            f"{info_key} (value={info}) must be a mapping or None/null")
-    # Use 'absolute' mode by default
-    info = dict(type='absolute') if info is None else copy.deepcopy(info)
-    # Ensure type is provided
-    if 'type' not in info:
-        raise RuntimeError(
-            f"{error_header}; "
-            f"key 'type' is not provided; "
-            f"allowed values: {allowed_types}")
-    # Create a shortcut of the type, for convenience
-    type_ = info.get('type')
-    # Ensure a valid type is provided
-    if type_ not in allowed_types:
-        raise RuntimeError(
-            f"{error_header}; "
-            f"key 'type' set to an invalid value; "
-            f"allowed values: {allowed_types}; "
-            f"provided value: '{type_}'")
-    # type is now known and final - update result
-    result.update(type=type_)
-    # If type is relative, validate and extract origin
-    if type_ in relative_types:
-        if 'origin' not in info:
-            raise RuntimeError(
-                f"{error_header}; "
-                f"key 'origin' is not provided; "
-                f"its value must be an integer referencing a radial node; "
-                f"negative indexing is supported")
-        result.update(origin=info['origin'])
-    return result
-
-
-def _parse_component_nwmode(enabled, enabled_name, nwmode, nwmode_name):
-    nwmode = parse_nwmode(nwmode, nwmode_name)
-    if not enabled and nwmode['type'] in ['relative1', 'relative2']:
-        raise RuntimeError(
-            f"when {enabled_name} is False {nwmode_name} must be either "
-            f"not set or set to 'absolute'")
+def _validate_component_nwmode(enabled, enabled_name, nwmode, nwmode_name):
+    if nwmode is not None and not enabled:
+        _log.warning(
+            f"{nwmode_name} is set to '{nwmode.type()}', "
+            f"but it will be ignored because {enabled_name} is not set to True")
+        # ignore this nwmode
+        nwmode = None
     return nwmode
 
 
-def parse_component_nwmodes_for_geometry(
+def validate_component_nwmodes_for_geometry(
         loose, tilted, xpos_nwmode, ypos_nwmode, posa_nwmode, incl_nwmode):
-    xpos_nwmode = _parse_component_nwmode(
+    xpos_nwmode = _validate_component_nwmode(  # noqa
         loose, 'loose', xpos_nwmode, 'xpos_nwmode')
-    ypos_nwmode = _parse_component_nwmode(
+    ypos_nwmode = _validate_component_nwmode(  # noqa
         loose, 'loose', ypos_nwmode, 'ypos_nwmode')
-    posa_nwmode = _parse_component_nwmode(
+    posa_nwmode = _validate_component_nwmode(  # noqa
         tilted, 'tilted', posa_nwmode, 'posa_nwmode')
-    incl_nwmode = _parse_component_nwmode(
+    incl_nwmode = _validate_component_nwmode(  # noqa
         tilted, 'tilted', incl_nwmode, 'incl_nwmode')
     return dict(
         xpos_nwmode=xpos_nwmode,
@@ -148,15 +105,15 @@ def parse_component_nwmodes_for_geometry(
         incl_nwmode=incl_nwmode)
 
 
-def parse_component_nwmodes_for_velocity(
+def validate_component_nwmodes_for_velocity(
         loose, vsys_nwmode):
-    vsys_nwmode = _parse_component_nwmode(
+    vsys_nwmode = _validate_component_nwmode(  # noqa
         loose, 'loose', vsys_nwmode, 'vsys_nwmode')
     return dict(
         vsys_nwmode=vsys_nwmode)
 
 
-def parse_component_b2d_trait_args(
+def parse_component_b2d_traits(
         bptraits,
         sptraits,
         wptraits):
@@ -171,7 +128,7 @@ def parse_component_b2d_trait_args(
         wptraits=wptraits)
 
 
-def parse_component_s2d_trait_args(
+def parse_component_s2d_traits(
         bptraits,
         vptraits,
         dptraits,
@@ -196,7 +153,7 @@ def parse_component_s2d_trait_args(
         wptraits=wptraits)
 
 
-def parse_component_b3d_trait_args(
+def parse_component_b3d_traits(
         bptraits, bhtraits,
         zptraits,
         sptraits,
@@ -223,34 +180,7 @@ def parse_component_b3d_trait_args(
         wptraits=wptraits)
 
 
-def parse_component_o3d_trait_args(
-        optraits, ohtraits,
-        zptraits,
-        sptraits,
-        wptraits):
-    if not optraits:
-        raise RuntimeError("at least one optrait is required")
-    if not ohtraits:
-        raise RuntimeError("at least one ohtrait is required")
-    optraits = iterutils.tuplify(optraits)
-    ohtraits = iterutils.tuplify(ohtraits)
-    zptraits = iterutils.tuplify(zptraits) if zptraits is not None else ()
-    sptraits = iterutils.tuplify(sptraits) if sptraits is not None else ()
-    wptraits = iterutils.tuplify(wptraits) if wptraits is not None else ()
-    optraits_len = len(optraits)
-    ohtraits_len = len(ohtraits)
-    if optraits_len != ohtraits_len:
-        raise RuntimeError(
-            f"the number of ohtraits must be equal to "
-            f"the number of optraits ({ohtraits_len} != {optraits_len})")
-    return dict(
-        optraits=optraits, ohtraits=ohtraits,
-        zptraits=zptraits,
-        sptraits=sptraits,
-        wptraits=wptraits)
-
-
-def parse_component_s3d_trait_args(
+def parse_component_s3d_traits(
         bptraits, bhtraits,
         vptraits, vhtraits,
         dptraits, dhtraits,
@@ -282,7 +212,6 @@ def parse_component_s3d_trait_args(
     if None in dhtraits:
         dhtraits = iterutils.tuplify(iterutils.replace_items_and_copy(
             dhtraits, None, traits.DHTraitOne()))
-    # Convenience variables
     bptraits_len = len(bptraits)
     bhtraits_len = len(bhtraits)
     vptraits_len = len(vptraits)
@@ -308,6 +237,49 @@ def parse_component_s3d_trait_args(
         zptraits=zptraits,
         sptraits=sptraits,
         wptraits=wptraits)
+
+
+def parse_component_o3d_traits(
+        optraits, ohtraits,
+        zptraits,
+        sptraits,
+        wptraits):
+    if not optraits:
+        raise RuntimeError("at least one optrait is required")
+    if not ohtraits:
+        raise RuntimeError("at least one ohtrait is required")
+    optraits = iterutils.tuplify(optraits)
+    ohtraits = iterutils.tuplify(ohtraits)
+    zptraits = iterutils.tuplify(zptraits) if zptraits is not None else ()
+    sptraits = iterutils.tuplify(sptraits) if sptraits is not None else ()
+    wptraits = iterutils.tuplify(wptraits) if wptraits is not None else ()
+    optraits_len = len(optraits)
+    ohtraits_len = len(ohtraits)
+    if optraits_len != ohtraits_len:
+        raise RuntimeError(
+            f"the number of ohtraits must be equal to "
+            f"the number of optraits ({ohtraits_len} != {optraits_len})")
+    return dict(
+        optraits=optraits, ohtraits=ohtraits,
+        zptraits=zptraits,
+        sptraits=sptraits,
+        wptraits=wptraits)
+
+
+def rename_bx_to_rx_traits(traits_):
+    if 'bptraits' in traits_:
+        traits_.update(rptraits=traits_.pop('bptraits'))
+    if 'bhtraits' in traits_:
+        traits_.update(rhtraits=traits_.pop('bhtraits'))
+    return traits_
+
+
+def rename_ox_to_rx_traits(traits_):
+    if 'optraits' in traits_:
+        traits_.update(rptraits=traits_.pop('optraits'))
+    if 'ohtraits' in traits_:
+        traits_.update(rhtraits=traits_.pop('ohtraits'))
+    return traits_
 
 
 def check_traits_common(traits_):
@@ -356,8 +328,7 @@ def check_traits_mcdisk(component, traits_):
 
 
 def _make_gmodel_params_cmp(components, prefix, force_prefix):
-    import gbkfit.utils.miscutils
-    return gbkfit.utils.miscutils.merge_dicts_and_make_mappings(
+    return miscutils.merge_dicts_and_make_mappings(
         [cmp.params() for cmp in components], prefix, force_prefix)
 
 
@@ -365,37 +336,44 @@ def make_gmodel_2d_params(components):
     return _make_gmodel_params_cmp(components, 'cmp', False)
 
 
-def make_gmodel_3d_params(components, tcomponents, tauto):
+def make_gmodel_3d_params(components, ocomponents):
     params, mappings = _make_gmodel_params_cmp(components, 'cmp', False)
-    tparams, tmappings = _make_gmodel_params_cmp(tcomponents, 'tcmp', True)
-    tauto_param = dict(tauto=ParamScalarDesc('tauto')) if tauto else dict()
-    return params | tparams | tauto_param, mappings, tmappings
+    oparams, omappings = _make_gmodel_params_cmp(ocomponents, 'ocmp', True)
+    return params | oparams, mappings, omappings
 
 
-def evaluate_components_d2d(
-        components, driver, params, mappings, image, wdata, rdata,
+def is_gmodel_weighted(components):
+    return any([bool(cmp.is_weighted()) for cmp in components])
+
+
+def evaluate_components_b2d(
+        components, driver, params, mappings,
+        image, wdata, bdata,
         spat_size, spat_step, spat_zero, spat_rota,
         dtype, out_extra, out_extra_label):
     for i, (component, mapping) in enumerate(zip(components, mappings)):
         component_params = {p: params[mapping[p]] for p in component.params()}
         component_out_extra = {} if out_extra is not None else None
         component.evaluate(
-            driver, component_params, image, wdata, rdata,
+            driver, component_params,
+            image, wdata, bdata,
             spat_size, spat_step, spat_zero, spat_rota,
             dtype, component_out_extra)
         for k, v in component_out_extra.items():
             out_extra[f'{out_extra_label}component{i}_{k}'] = v
 
 
-def evaluate_components_d3d(
-        components, driver, params, mappings, image, tdata, wdata, rdata,
+def evaluate_components_b3d(
+        components, driver, params, mappings, odata,
+        image, wdata, bdata, obdata,
         spat_size, spat_step, spat_zero, spat_rota,
         dtype, out_extra, out_extra_label):
     for i, (component, mapping) in enumerate(zip(components, mappings)):
         component_params = {p: params[mapping[p]] for p in component.params()}
         component_out_extra = {} if out_extra is not None else None
         component.evaluate(
-            driver, component_params, image, tdata, wdata, rdata,
+            driver, component_params, odata,
+            image, wdata, bdata, obdata,
             spat_size, spat_step, spat_zero, spat_rota,
             dtype, component_out_extra)
         for k, v in component_out_extra.items():
@@ -403,7 +381,8 @@ def evaluate_components_d3d(
 
 
 def evaluate_components_s2d(
-        components, driver, params, mappings, scube, wdata, rdata,
+        components, driver, params, mappings,
+        scube, wdata, bdata,
         spat_size, spat_step, spat_zero, spat_rota,
         spec_size, spec_step, spec_zero,
         dtype, out_extra, out_extra_label):
@@ -411,7 +390,8 @@ def evaluate_components_s2d(
         component_params = {p: params[mapping[p]] for p in component.params()}
         component_out_extra = {} if out_extra is not None else None
         component.evaluate(
-            driver, component_params, scube, wdata, rdata,
+            driver, component_params,
+            scube, wdata, bdata,
             spat_size, spat_step, spat_zero, spat_rota,
             spec_size, spec_step, spec_zero,
             dtype, component_out_extra)
@@ -420,7 +400,8 @@ def evaluate_components_s2d(
 
 
 def evaluate_components_s3d(
-        components, driver, params, mappings, scube, tdata, wdata, rdata,
+        components, driver, params, mappings, odata,
+        scube, wdata, bdata, obdata,
         spat_size, spat_step, spat_zero, spat_rota,
         spec_size, spec_step, spec_zero,
         dtype, out_extra, out_extra_label):
@@ -428,9 +409,25 @@ def evaluate_components_s3d(
         component_params = {p: params[mapping[p]] for p in component.params()}
         component_out_extra = {} if out_extra is not None else None
         component.evaluate(
-            driver, component_params, scube, tdata, wdata, rdata,
+            driver, component_params, odata,
+            scube, wdata, bdata, obdata,
             spat_size, spat_step, spat_zero, spat_rota,
             spec_size, spec_step, spec_zero,
+            dtype, component_out_extra)
+        for k, v in component_out_extra.items():
+            out_extra[f'{out_extra_label}component{i}_{k}'] = v
+
+
+def evaluate_components_o3d(
+        components, driver, params, mappings, odata,
+        spat_size, spat_step, spat_zero, spat_rota,
+        dtype, out_extra, out_extra_label):
+    for i, (component, mapping) in enumerate(zip(components, mappings)):
+        component_params = {p: params[mapping[p]] for p in component.params()}
+        component_out_extra = {} if out_extra is not None else None
+        component.evaluate(
+            driver, component_params, odata,
+            spat_size, spat_step, spat_zero, spat_rota,
             dtype, component_out_extra)
         for k, v in component_out_extra.items():
             out_extra[f'{out_extra_label}component{i}_{k}'] = v

@@ -6,9 +6,7 @@ from gbkfit.driver.modules import DriverBackends
 from .._detail.native import *
 
 
-__all__ = [
-    'DriverBackendsCuda'
-]
+__all__ = ['DriverBackendsCuda']
 
 
 class NativeMemoryCuda(NativeMemory):

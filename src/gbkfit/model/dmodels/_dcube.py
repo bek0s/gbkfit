@@ -14,7 +14,7 @@ class DCube:
 
     def __init__(
             self, size, step, rpix, rval, rota, scale, psf, lsf,
-            weights, mask_cutoff, mask_create, mask_apply, dtype):
+            weight, mask_cutoff, mask_create, mask_apply, dtype):
 
         if mask_cutoff is None and mask_apply:
             raise RuntimeError(
@@ -56,7 +56,8 @@ class DCube:
         self._pcube_hi = None
         self._psf = psf
         self._lsf = lsf
-        self._weights = weights
+        self._weight = weight
+        self._weighting = weight != 1
         self._mask_cutoff = mask_cutoff
         self._mask_create = mask_create
         self._mask_apply = mask_apply
@@ -110,13 +111,10 @@ class DCube:
     def lsf(self):
         return self._lsf
 
-    def weights(self):
-        return self._weights
-
     def dtype(self):
         return self._dtype
 
-    def prepare(self, driver):
+    def prepare(self, driver, enable_weighting):
 
         # Shortcuts
         size_lo = self.size()
@@ -187,7 +185,9 @@ class DCube:
         self._dcube_lo = driver.mem_alloc_d(size_lo[::-1], dtype)
         self._dcube_hi = driver.mem_alloc_d(size_hi[::-1], dtype) \
             if size_lo != size_hi else self._dcube_lo
-        if self._weights:
+        # Enable weighing if requested and not already enabled
+        self._weighting = self._weighting or enable_weighting
+        if self._weighting:
             self._wcube_lo = driver.mem_alloc_d(size_lo[::-1], dtype)
             self._wcube_hi = driver.mem_alloc_d(size_hi[::-1], dtype) \
                 if size_lo != size_hi else self._wcube_lo
@@ -209,7 +209,7 @@ class DCube:
 
     def evaluate(self, out_extra):
 
-        # ...
+        # Convenience shortcuts
         step_lo = self._step_lo
         step_hi = self._step_hi
         edge_hi = self._edge_hi
@@ -222,7 +222,8 @@ class DCube:
         wcube_hi = self._wcube_hi
         mcube_lo = self._mcube_lo
         pcube_hi = self._pcube_hi
-        weights = self._weights
+        weight = self._weight
+        weighting = self._weighting
         mask_cutoff = self._mask_cutoff
         mask_create = self._mask_create
         mask_apply = self._mask_apply
@@ -233,15 +234,19 @@ class DCube:
         # Perform fft-based convolution
         if psf or lsf:
             backend_fft.fft_convolve_cached(dcube_hi, pcube_hi)
-            if weights:
+            if weighting:
                 backend_fft.fft_convolve_cached(wcube_hi, pcube_hi)
 
         # Downscale data and weight cubes
         if dcube_lo is not dcube_hi:
             backend_dmodel.dcube_downscale(scale, edge_hi, dcube_hi, dcube_lo)
-            if weights:
+            if weighting:
                 backend_dmodel.dcube_downscale(
                     scale, edge_hi, wcube_hi, wcube_lo)
+
+        # Apply intrinsic weighting
+        if weighting and weight != 1:
+            driver.math_mul(wcube_hi, weight, wcube_hi)
 
         # Apply masking.
         # Checked if mask_create or mask_apply are True in __init__()
@@ -257,7 +262,7 @@ class DCube:
             if mask_create:
                 out_extra.update(
                     mcube_lo=driver.mem_copy_d2h(mcube_lo))
-            if weights:
+            if weighting:
                 out_extra.update(
                     wcube_lo=driver.mem_copy_d2h(wcube_lo),
                     wcube_hi=driver.mem_copy_d2h(wcube_hi))
