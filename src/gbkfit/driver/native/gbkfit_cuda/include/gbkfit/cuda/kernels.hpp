@@ -203,8 +203,11 @@ gmodel_mcdisk_evaluate(
         int spec_size,
         T spec_step,
         T spec_zero,
-        T* image, T* scube, T* wdata, T* rdata, T* ordata,
-        T* rdata_cmp, T* vdata_cmp, T* ddata_cmp, T* ordata_cmp)
+        T* image, T* scube,
+        T* wdata, T* wdata_cmp,
+        T* rdata, T* rdata_cmp,
+        T* ordata, T* ordata_cmp,
+        T* vdata_cmp, T* ddata_cmp)
 {
     // Parallelization: per cloud
     const int nthreads = nclouds;
@@ -263,8 +266,11 @@ gmodel_mcdisk_evaluate(
             spec_size,
             spec_step,
             spec_zero,
-            image, scube, wdata, rdata, ordata,
-            rdata_cmp, vdata_cmp, ddata_cmp, ordata_cmp);
+            image, scube,
+            wdata, wdata_cmp,
+            rdata, rdata_cmp,
+            ordata, ordata_cmp,
+            vdata_cmp, ddata_cmp);
 }
 
 template<typename T> __global__ void
@@ -314,15 +320,18 @@ gmodel_smdisk_evaluate(
         int spec_size,
         T spec_step,
         T spec_zero,
-        T* image, T* scube, T* wdata, T* rdata, T* ordata,
-        T* rdata_cmp, T* vdata_cmp, T* ddata_cmp, T* ordata_cmp)
+        T* image, T* scube,
+        T* wdata, T* wdata_cmp,
+        T* rdata, T* rdata_cmp,
+        T* ordata, T* ordata_cmp,
+        T* vdata_cmp, T* ddata_cmp)
 {
     // Parallelization: per 3d spatial position
-    // TODO: Implement ray marching and revise parallelization scheme
     const int nthreads = spat_size_x * spat_size_y * spat_size_z;
     const int tid = blockIdx.x * blockDim.x + threadIdx.x;
-    if (tid >= nthreads)
+    if (tid >= nthreads) {
         return;
+    }
 
     int x, y, z;
     index_1d_to_3d(x, y, z, tid, spat_size_x, spat_size_y);
@@ -374,8 +383,11 @@ gmodel_smdisk_evaluate(
             spec_size,
             spec_step,
             spec_zero,
-            image, scube, wdata, rdata, ordata,
-            rdata_cmp, vdata_cmp, ddata_cmp, ordata_cmp);
+            image, scube,
+            wdata, wdata_cmp,
+            rdata, rdata_cmp,
+            ordata, ordata_cmp,
+            vdata_cmp, ddata_cmp);
 }
 
 template<typename T> __global__ void

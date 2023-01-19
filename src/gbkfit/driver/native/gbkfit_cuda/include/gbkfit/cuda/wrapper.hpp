@@ -94,8 +94,11 @@ struct Wrapper
             int spec_size,
             T spec_step,
             T spec_zero,
-            T* image, T* scube, T* wdata, T* rdata, T* ordata,
-            T* rdata_cmp, T* vdata_cmp, T* ddata_cmp, T* ordata_cmp);
+            T* image, T* scube,
+            T* wdata, T* wdata_cmp,
+            T* rdata, T* rdata_cmp,
+            T* ordata, T* ordata_cmp,
+            T* vdata_cmp, T* ddata_cmp);
 
     static void
     gmodel_smdisk_evaluate(
@@ -144,8 +147,11 @@ struct Wrapper
             int spec_size,
             T spec_step,
             T spec_zero,
-            T* image, T* scube, T* wdata, T* rdata, T* ordata,
-            T* rdata_cmp, T* vdata_cmp, T* ddata_cmp, T* ordata_cmp);
+            T* image, T* scube,
+            T* wdata, T* wdata_cmp,
+            T* rdata, T* rdata_cmp,
+            T* ordata, T* ordata_cmp,
+            T* vdata_cmp, T* ddata_cmp);
 
     static void
     objective_count_pixels(

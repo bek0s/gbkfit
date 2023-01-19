@@ -172,8 +172,11 @@ class DriverBackendGModelNative(DriverBackendGModel):
             opacity,
             spat_size, spat_step, spat_zero, spat_rota,
             spec_size, spec_step, spec_zero,
-            image, scube, wdata, rdata, ordata,
-            rdata_cmp, vdata_cmp, ddata_cmp, ordata_cmp):
+            image, scube,
+            wdata, wdata_cmp,
+            rdata, rdata_cmp,
+            ordata,ordata_cmp,
+            vdata_cmp, ddata_cmp):
         _ptr = self._memory.ptr
         _size = self._memory.size
         self._module.mcdisk_evaluate(
@@ -222,8 +225,11 @@ class DriverBackendGModelNative(DriverBackendGModel):
             spec_size,
             spec_step,
             spec_zero,
-            _ptr(image), _ptr(scube), _ptr(wdata), _ptr(rdata), _ptr(ordata),
-            _ptr(rdata_cmp), _ptr(vdata_cmp), _ptr(ddata_cmp), _ptr(ordata_cmp))
+            _ptr(image), _ptr(scube),
+            _ptr(wdata), _ptr(wdata_cmp),
+            _ptr(rdata), _ptr(rdata_cmp),
+            _ptr(ordata), _ptr(ordata_cmp),
+            _ptr(vdata_cmp), _ptr(ddata_cmp))
 
     def smdisk_evaluate(
             self,
@@ -241,11 +247,13 @@ class DriverBackendGModelNative(DriverBackendGModel):
             opacity,
             spat_size, spat_step, spat_zero, spat_rota,
             spec_size, spec_step, spec_zero,
-            image, scube, wdata, rdata, ordata,
-            rdata_cmp, vdata_cmp, ddata_cmp, ordata_cmp):
+            image, scube,
+            wdata, wdata_cmp,
+            rdata, rdata_cmp,
+            ordata, ordata_cmp,
+            vdata_cmp, ddata_cmp):
         _ptr = self._memory.ptr
         _size = self._memory.size
-        print("SUM:", np.nansum(ordata_cmp))
         self._module.smdisk_evaluate(
             loose, tilted,
             _size(rnodes),
@@ -291,6 +299,8 @@ class DriverBackendGModelNative(DriverBackendGModel):
             spec_size,
             spec_step,
             spec_zero,
-            _ptr(image), _ptr(scube), _ptr(wdata), _ptr(rdata), _ptr(ordata),
-            _ptr(rdata_cmp), _ptr(vdata_cmp), _ptr(ddata_cmp), _ptr(ordata_cmp))
-        print("SUM:", np.nansum(ordata_cmp))
+            _ptr(image), _ptr(scube),
+            _ptr(wdata), _ptr(wdata_cmp),
+            _ptr(rdata), _ptr(rdata_cmp),
+            _ptr(ordata), _ptr(ordata_cmp),
+            _ptr(vdata_cmp), _ptr(ddata_cmp))

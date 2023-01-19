@@ -64,8 +64,11 @@ struct GModel
             int spec_size,
             T spec_step,
             T spec_zero,
-            Ptr image, Ptr scube, Ptr wdata, Ptr rdata, Ptr ordata,
-            Ptr rdata_cmp, Ptr vdata_cmp, Ptr ddata_cmp, Ptr ordata_cmp) const;
+            Ptr image, Ptr scube,
+            Ptr wdata, Ptr wdata_cmp,
+            Ptr rdata, Ptr rdata_cmp,
+            Ptr ordata, Ptr ordata_cmp,
+            Ptr vdata_cmp, Ptr ddata_cmp) const;
 
     void
     smdisk_evaluate(
@@ -114,8 +117,11 @@ struct GModel
             int spec_size,
             T spec_step,
             T spec_zero,
-            Ptr image, Ptr scube, Ptr wdata, Ptr rdata, Ptr ordata,
-            Ptr rdata_cmp, Ptr vdata_cmp, Ptr ddata_cmp, Ptr ordata_cmp) const;
+            Ptr image, Ptr scube,
+            Ptr wdata, Ptr wdata_cmp,
+            Ptr rdata, Ptr rdata_cmp,
+            Ptr ordata, Ptr ordata_cmp,
+            Ptr vdata_cmp, Ptr ddata_cmp) const;
 };
 
 } // namespace gbkfit::cuda

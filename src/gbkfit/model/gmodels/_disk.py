@@ -542,6 +542,7 @@ class Disk(abc.ABC):
         prepare_traits_params(
             self._s_wpt_pvalues, self._wpt_pdescs, self._wpt_isnw)
 
+        wdata_cmp = None
         rdata_cmp = None
         vdata_cmp = None
         ddata_cmp = None
@@ -558,6 +559,9 @@ class Disk(abc.ABC):
             if self._dptraits:
                 ddata_cmp = driver.mem_alloc_d(shape, dtype)
                 driver.mem_fill(ddata_cmp, np.nan)
+            if self.wptraits():
+                wdata_cmp = driver.mem_alloc_d(shape, dtype)
+                driver.mem_fill(wdata_cmp, 1)
             if odata is not None:
                 ordata_cmp = driver.mem_alloc_d(shape, dtype)
                 driver.mem_fill(ordata_cmp, np.nan)
@@ -565,8 +569,11 @@ class Disk(abc.ABC):
         self._impl_evaluate(
             driver, params,
             odata,
-            image, scube, wdata, rdata, ordata,
-            rdata_cmp, vdata_cmp, ddata_cmp, ordata_cmp,
+            image, scube,
+            wdata, wdata_cmp,
+            rdata, rdata_cmp,
+            ordata, ordata_cmp,
+            vdata_cmp, ddata_cmp,
             spat_size, spat_step, spat_zero, spat_rota,
             spec_size, spec_step, spec_zero,
             dtype, out_extra)
@@ -578,6 +585,8 @@ class Disk(abc.ABC):
                 out_extra['vdata'] = driver.mem_copy_d2h(vdata_cmp)
             if self._dptraits:
                 out_extra['ddata'] = driver.mem_copy_d2h(ddata_cmp)
+            if self.wptraits():
+                out_extra['wdata'] = driver.mem_copy_d2h(wdata_cmp)
             if odata is not None:
                 out_extra['obdata'] = driver.mem_copy_d2h(ordata_cmp)
             if self._rptraits:
@@ -598,8 +607,11 @@ class Disk(abc.ABC):
     def _impl_evaluate(
             self, driver, params,
             odata,
-            image, scube, wdata, rdata, ordata,
-            rdata_cmp, vdata_cmp, ddata_cmp, ordata_cmp,
+            image, scube,
+            wdata, wdata_cmp,
+            rdata, rdata_cmp,
+            ordata, ordata_cmp,
+            vdata_cmp, ddata_cmp,
             spat_size, spat_step, spat_zero, spat_rota,
             spec_size, spec_step, spec_zero,
             dtype, out_extra):

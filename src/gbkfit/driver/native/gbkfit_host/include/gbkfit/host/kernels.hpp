@@ -229,11 +229,11 @@ gmodel_mcdisk_evaluate(
         int spec_size,
         T spec_step,
         T spec_zero,
-        T* image, T* scube, T* wdata, T* rdata, T* ordata,
-        T* rdata_cmp,
-        T* vdata_cmp,
-        T* ddata_cmp,
-        T* ordata_cmp)
+        T* image, T* scube,
+        T* wdata, T* wdata_cmp,
+        T* rdata, T* rdata_cmp,
+        T* ordata, T* ordata_cmp,
+        T* vdata_cmp, T* ddata_cmp)
 {
     // Each thread needs to have each own random number generator.
     std::vector<RNG<T>> rngs;
@@ -296,11 +296,11 @@ gmodel_mcdisk_evaluate(
             spec_size,
             spec_step,
             spec_zero,
-            image, scube, wdata, rdata, ordata,
-            rdata_cmp,
-            vdata_cmp,
-            ddata_cmp,
-            ordata_cmp);
+            image, scube,
+            wdata, wdata_cmp,
+            rdata, rdata_cmp,
+            ordata, ordata_cmp,
+            vdata_cmp, ddata_cmp);
     }
 }
 
@@ -351,8 +351,11 @@ gmodel_smdisk_evaluate(
         int spec_size,
         T spec_step,
         T spec_zero,
-        T* image, T* scube, T* wdata, T* rdata, T* ordata,
-        T* rdata_cmp, T* vdata_cmp, T* ddata_cmp, T* ordata_cmp)
+        T* image, T* scube,
+        T* wdata, T* wdata_cmp,
+        T* rdata, T* rdata_cmp,
+        T* ordata, T* ordata_cmp,
+        T* vdata_cmp, T* ddata_cmp)
 {
     // Parallelization: per 3d spatial position
     #pragma omp parallel for collapse(3)
@@ -407,8 +410,11 @@ gmodel_smdisk_evaluate(
             spec_size,
             spec_step,
             spec_zero,
-            image, scube, wdata, rdata, ordata,
-            rdata_cmp, vdata_cmp, ddata_cmp, ordata_cmp);
+            image, scube,
+            wdata, wdata_cmp,
+            rdata, rdata_cmp,
+            ordata, ordata_cmp,
+            vdata_cmp, ddata_cmp);
 
     }
     }

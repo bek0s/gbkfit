@@ -68,8 +68,11 @@ GModel<T>::mcdisk_evaluate(
         int spec_size,
         T spec_step,
         T spec_zero,
-        Ptr image, Ptr scube, Ptr wdata, Ptr rdata, Ptr ordata,
-        Ptr rdata_cmp, Ptr vdata_cmp, Ptr ddata_cmp, Ptr ordata_cmp) const
+        Ptr image, Ptr scube,
+        Ptr wdata, Ptr wdata_cmp,
+        Ptr rdata, Ptr rdata_cmp,
+        Ptr ordata, Ptr ordata_cmp,
+        Ptr vdata_cmp, Ptr ddata_cmp) const
 {
     Wrapper<T>::gmodel_mcdisk_evaluate(
             cflux, nclouds,
@@ -145,12 +148,13 @@ GModel<T>::mcdisk_evaluate(
             reinterpret_cast<T*>(image),
             reinterpret_cast<T*>(scube),
             reinterpret_cast<T*>(wdata),
+            reinterpret_cast<T*>(wdata_cmp),
             reinterpret_cast<T*>(rdata),
-            reinterpret_cast<T*>(ordata),
             reinterpret_cast<T*>(rdata_cmp),
+            reinterpret_cast<T*>(ordata),
+            reinterpret_cast<T*>(ordata_cmp),
             reinterpret_cast<T*>(vdata_cmp),
-            reinterpret_cast<T*>(ddata_cmp),
-            reinterpret_cast<T*>(ordata_cmp));
+            reinterpret_cast<T*>(ddata_cmp));
 }
 
 template<typename T> void
@@ -200,8 +204,11 @@ GModel<T>::smdisk_evaluate(
         int spec_size,
         T spec_step,
         T spec_zero,
-        Ptr image, Ptr scube, Ptr wdata, Ptr rdata, Ptr ordata,
-        Ptr rdata_cmp, Ptr vdata_cmp, Ptr ddata_cmp, Ptr ordata_cmp) const
+        Ptr image, Ptr scube,
+        Ptr wdata, Ptr wdata_cmp,
+        Ptr rdata, Ptr rdata_cmp,
+        Ptr ordata, Ptr ordata_cmp,
+        Ptr vdata_cmp, Ptr ddata_cmp) const
 {
     Wrapper<T>::gmodel_smdisk_evaluate(
             loose, tilted,
@@ -273,12 +280,13 @@ GModel<T>::smdisk_evaluate(
             reinterpret_cast<T*>(image),
             reinterpret_cast<T*>(scube),
             reinterpret_cast<T*>(wdata),
+            reinterpret_cast<T*>(wdata_cmp),
             reinterpret_cast<T*>(rdata),
-            reinterpret_cast<T*>(ordata),
             reinterpret_cast<T*>(rdata_cmp),
+            reinterpret_cast<T*>(ordata),
+            reinterpret_cast<T*>(ordata_cmp),
             reinterpret_cast<T*>(vdata_cmp),
-            reinterpret_cast<T*>(ddata_cmp),
-            reinterpret_cast<T*>(ordata_cmp));
+            reinterpret_cast<T*>(ddata_cmp));
 }
 
 #define INSTANTIATE(T)\

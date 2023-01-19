@@ -12,107 +12,135 @@ from gbkfit.utils import parseutils
 
 _log = logging.getLogger(__name__)
 
+# Density polar traits
+RPT_UID_UNIFORM = 1
+RPT_UID_EXP = 2
+RPT_UID_GAUSS = 3
+RPT_UID_GGAUSS = 4
+RPT_UID_LORENTZ = 5
+RPT_UID_MOFFAT = 6
+RPT_UID_SECH2 = 7
+RPT_UID_MIXTURE_EXP = 51
+RPT_UID_MIXTURE_GAUSS = 52
+RPT_UID_MIXTURE_GGAUSS = 53
+RPT_UID_MIXTURE_MOFFAT = 54
+RPT_UID_NW_UNIFORM = 101
+RPT_UID_NW_HARMONIC = 102
+RPT_UID_NW_DISTORTION = 103
+
+# Density height traits
+RHT_UID_UNIFORM = 1
+RHT_UID_EXP = 2
+RHT_UID_GAUSS = 3
+RHT_UID_GGAUSS = 4
+RHT_UID_LORENTZ = 5
+RHT_UID_MOFFAT = 6
+RHT_UID_SECH2 = 7
 
 # Surface Brightness polar traits
-BP_TRAIT_UID_UNIFORM = 1
-BP_TRAIT_UID_EXPONENTIAL = 2
-BP_TRAIT_UID_GAUSS = 3
-BP_TRAIT_UID_GGAUSS = 4
-BP_TRAIT_UID_LORENTZ = 5
-BP_TRAIT_UID_MOFFAT = 6
-BP_TRAIT_UID_SECH2 = 7
-BP_TRAIT_UID_MIXTURE_EXPONENTIAL = 51
-BP_TRAIT_UID_MIXTURE_GAUSS = 52
-BP_TRAIT_UID_MIXTURE_GGAUSS = 53
-BP_TRAIT_UID_MIXTURE_MOFFAT = 54
-BP_TRAIT_UID_NW_UNIFORM = 101
-BP_TRAIT_UID_NW_HARMONIC = 102
-BP_TRAIT_UID_NW_DISTORTION = 103
+BPT_UID_OFFSET = 0
+BPT_UID_UNIFORM = BPT_UID_OFFSET + RPT_UID_UNIFORM
+BPT_UID_EXP = BPT_UID_OFFSET + RPT_UID_EXP
+BPT_UID_GAUSS = BPT_UID_OFFSET + RPT_UID_GAUSS
+BPT_UID_GGAUSS = BPT_UID_OFFSET + RPT_UID_GGAUSS
+BPT_UID_LORENTZ = BPT_UID_OFFSET + RPT_UID_LORENTZ
+BPT_UID_MOFFAT = BPT_UID_OFFSET + RPT_UID_MOFFAT
+BPT_UID_SECH2 = BPT_UID_OFFSET + RPT_UID_SECH2
+BPT_UID_MIXTURE_EXP = BPT_UID_OFFSET + RPT_UID_MIXTURE_EXP
+BPT_UID_MIXTURE_GAUSS = BPT_UID_OFFSET + RPT_UID_MIXTURE_GAUSS
+BPT_UID_MIXTURE_GGAUSS = BPT_UID_OFFSET + RPT_UID_MIXTURE_GGAUSS
+BPT_UID_MIXTURE_MOFFAT = BPT_UID_OFFSET + RPT_UID_MIXTURE_MOFFAT
+BPT_UID_NW_UNIFORM = BPT_UID_OFFSET + RPT_UID_NW_UNIFORM
+BPT_UID_NW_HARMONIC = BPT_UID_OFFSET + RPT_UID_NW_HARMONIC
+BPT_UID_NW_DISTORTION = BPT_UID_OFFSET + RPT_UID_NW_DISTORTION
 
 # Surface Brightness height traits
-BH_TRAIT_UID_UNIFORM = 1
-BH_TRAIT_UID_EXPONENTIAL = 2
-BH_TRAIT_UID_GAUSS = 3
-BH_TRAIT_UID_GGAUSS = 4
-BH_TRAIT_UID_LORENTZ = 5
-BH_TRAIT_UID_MOFFAT = 6
-BH_TRAIT_UID_SECH2 = 7
-
-# Velocity polar traits
-VP_TRAIT_UID_TAN_UNIFORM = 1
-VP_TRAIT_UID_TAN_ARCTAN = 2
-VP_TRAIT_UID_TAN_BOISSIER = 3
-VP_TRAIT_UID_TAN_EPINAT = 4
-VP_TRAIT_UID_TAN_LRAMP = 5
-VP_TRAIT_UID_TAN_TANH = 6
-VP_TRAIT_UID_TAN_POLYEX = 7
-VP_TRAIT_UID_TAN_RIX = 8
-VP_TRAIT_UID_NW_TAN_UNIFORM = 101
-VP_TRAIT_UID_NW_TAN_HARMONIC = 102
-VP_TRAIT_UID_NW_RAD_UNIFORM = 103
-VP_TRAIT_UID_NW_RAD_HARMONIC = 104
-VP_TRAIT_UID_NW_VER_UNIFORM = 105
-VP_TRAIT_UID_NW_VER_HARMONIC = 106
-VP_TRAIT_UID_NW_LOS_UNIFORM = 107
-VP_TRAIT_UID_NW_LOS_HARMONIC = 108
-
-# Velocity height traits
-VH_TRAIT_UID_ONE = 1
-
-# Dispersion polar traits
-DP_TRAIT_UID_UNIFORM = 1
-DP_TRAIT_UID_EXPONENTIAL = 2
-DP_TRAIT_UID_GAUSS = 3
-DP_TRAIT_UID_GGAUSS = 4
-DP_TRAIT_UID_LORENTZ = 5
-DP_TRAIT_UID_MOFFAT = 6
-DP_TRAIT_UID_SECH2 = 7
-DP_TRAIT_UID_MIXTURE_EXPONENTIAL = 51
-DP_TRAIT_UID_MIXTURE_GAUSS = 52
-DP_TRAIT_UID_MIXTURE_GGAUSS = 53
-DP_TRAIT_UID_MIXTURE_MOFFAT = 54
-DP_TRAIT_UID_NW_UNIFORM = 101
-DP_TRAIT_UID_NW_HARMONIC = 102
-DP_TRAIT_UID_NW_DISTORTION = 103
-
-# Dispersion height traits
-DH_TRAIT_UID_ONE = 1
-
-# Vertical distortion polar traits
-ZP_TRAIT_UID_NW_UNIFORM = 101
-ZP_TRAIT_UID_NW_HARMONIC = 102
-
-# Selection polar traits
-SP_TRAIT_UID_AZRANGE = 1
-SP_TRAIT_UID_NW_AZRANGE = 101
-
-# Weight polar traits
-WP_TRAIT_UID_AXIS_RANGE = 1
+BHT_UID_OFFSET = 0
+BHT_UID_UNIFORM = BHT_UID_OFFSET + RHT_UID_UNIFORM
+BHT_UID_EXP = BHT_UID_OFFSET + RHT_UID_EXP
+BHT_UID_GAUSS = BHT_UID_OFFSET + RHT_UID_GAUSS
+BHT_UID_GGAUSS = BHT_UID_OFFSET + RHT_UID_GGAUSS
+BHT_UID_LORENTZ = BHT_UID_OFFSET + RHT_UID_LORENTZ
+BHT_UID_MOFFAT = BHT_UID_OFFSET + RHT_UID_MOFFAT
+BHT_UID_SECH2 = BHT_UID_OFFSET + RHT_UID_SECH2
 
 # Opacity polar traits
-OP_TRAIT_UID_UNIFORM = 1
-OP_TRAIT_UID_EXPONENTIAL = 2
-OP_TRAIT_UID_GAUSS = 3
-OP_TRAIT_UID_GGAUSS = 4
-OP_TRAIT_UID_LORENTZ = 5
-OP_TRAIT_UID_MOFFAT = 6
-OP_TRAIT_UID_SECH2 = 7
-OP_TRAIT_UID_MIXTURE_EXPONENTIAL = 51
-OP_TRAIT_UID_MIXTURE_GAUSS = 52
-OP_TRAIT_UID_MIXTURE_GGAUSS = 53
-OP_TRAIT_UID_MIXTURE_MOFFAT = 54
-OP_TRAIT_UID_NW_UNIFORM = 101
-OP_TRAIT_UID_NW_HARMONIC = 102
-OP_TRAIT_UID_NW_DISTORTION = 103
+OPT_UID_OFFSET = 1000
+OPT_UID_UNIFORM = OPT_UID_OFFSET + RPT_UID_UNIFORM
+OPT_UID_EXP = OPT_UID_OFFSET + RPT_UID_EXP
+OPT_UID_GAUSS = OPT_UID_OFFSET + RPT_UID_GAUSS
+OPT_UID_GGAUSS = OPT_UID_OFFSET + RPT_UID_GGAUSS
+OPT_UID_LORENTZ = OPT_UID_OFFSET + RPT_UID_LORENTZ
+OPT_UID_MOFFAT = OPT_UID_OFFSET + RPT_UID_MOFFAT
+OPT_UID_SECH2 = OPT_UID_OFFSET + RPT_UID_SECH2
+OPT_UID_MIXTURE_EXP = OPT_UID_OFFSET + RPT_UID_MIXTURE_EXP
+OPT_UID_MIXTURE_GAUSS = OPT_UID_OFFSET + RPT_UID_MIXTURE_GAUSS
+OPT_UID_MIXTURE_GGAUSS = OPT_UID_OFFSET + RPT_UID_MIXTURE_GGAUSS
+OPT_UID_MIXTURE_MOFFAT = OPT_UID_OFFSET + RPT_UID_MIXTURE_MOFFAT
+OPT_UID_NW_UNIFORM = OPT_UID_OFFSET + RPT_UID_NW_UNIFORM
+OPT_UID_NW_HARMONIC = OPT_UID_OFFSET + RPT_UID_NW_HARMONIC
+OPT_UID_NW_DISTORTION = OPT_UID_OFFSET + RPT_UID_NW_DISTORTION
 
 # Opacity height traits
-OH_TRAIT_UID_UNIFORM = 1
-OH_TRAIT_UID_EXPONENTIAL = 2
-OH_TRAIT_UID_GAUSS = 3
-OH_TRAIT_UID_GGAUSS = 4
-OH_TRAIT_UID_LORENTZ = 5
-OH_TRAIT_UID_MOFFAT = 6
-OH_TRAIT_UID_SECH2 = 7
+OHT_UID_OFFSET = 1000
+OHT_UID_UNIFORM = OHT_UID_OFFSET + RHT_UID_UNIFORM
+OHT_UID_EXP = OHT_UID_OFFSET + RHT_UID_EXP
+OHT_UID_GAUSS = OHT_UID_OFFSET + RHT_UID_GAUSS
+OHT_UID_GGAUSS = OHT_UID_OFFSET + RHT_UID_GGAUSS
+OHT_UID_LORENTZ = OHT_UID_OFFSET + RHT_UID_LORENTZ
+OHT_UID_MOFFAT = OHT_UID_OFFSET + RHT_UID_MOFFAT
+OHT_UID_SECH2 = OHT_UID_OFFSET + RHT_UID_SECH2
+
+# Velocity polar traits
+VPT_UID_TAN_UNIFORM = 1
+VPT_UID_TAN_ARCTAN = 2
+VPT_UID_TAN_BOISSIER = 3
+VPT_UID_TAN_EPINAT = 4
+VPT_UID_TAN_LRAMP = 5
+VPT_UID_TAN_TANH = 6
+VPT_UID_TAN_POLYEX = 7
+VPT_UID_TAN_RIX = 8
+VPT_UID_NW_TAN_UNIFORM = 101
+VPT_UID_NW_TAN_HARMONIC = 102
+VPT_UID_NW_RAD_UNIFORM = 103
+VPT_UID_NW_RAD_HARMONIC = 104
+VPT_UID_NW_VER_UNIFORM = 105
+VPT_UID_NW_VER_HARMONIC = 106
+VPT_UID_NW_LOS_UNIFORM = 107
+VPT_UID_NW_LOS_HARMONIC = 108
+
+# Velocity height traits
+VHT_UID_ONE = 1
+
+# Dispersion polar traits
+DPT_UID_UNIFORM = 1
+DPT_UID_EXP = 2
+DPT_UID_GAUSS = 3
+DPT_UID_GGAUSS = 4
+DPT_UID_LORENTZ = 5
+DPT_UID_MOFFAT = 6
+DPT_UID_SECH2 = 7
+DPT_UID_MIXTURE_EXP = 51
+DPT_UID_MIXTURE_GAUSS = 52
+DPT_UID_MIXTURE_GGAUSS = 53
+DPT_UID_MIXTURE_MOFFAT = 54
+DPT_UID_NW_UNIFORM = 101
+DPT_UID_NW_HARMONIC = 102
+DPT_UID_NW_DISTORTION = 103
+
+# Dispersion height traits
+DHT_UID_ONE = 1
+
+# Vertical distortion polar traits
+ZPT_UID_NW_UNIFORM = 101
+ZPT_UID_NW_HARMONIC = 102
+
+# Selection polar traits
+SPT_UID_AZRANGE = 1
+SPT_UID_NW_AZRANGE = 101
+
+# Weight polar traits
+WPT_UID_AXIS_RANGE = 1
 
 TRUNC_DEFAULT = 0
 
@@ -477,7 +505,7 @@ class BPTraitUniform(BPTrait):
 
     @staticmethod
     def uid():
-        return BP_TRAIT_UID_UNIFORM
+        return BPT_UID_UNIFORM
 
     def params_sm(self):
         return (
@@ -502,7 +530,7 @@ class BPTraitExponential(BPTrait):
 
     @staticmethod
     def uid():
-        return BP_TRAIT_UID_EXPONENTIAL
+        return BPT_UID_EXP
 
     def params_sm(self):
         return (
@@ -524,7 +552,7 @@ class BPTraitGauss(BPTrait):
 
     @staticmethod
     def uid():
-        return BP_TRAIT_UID_GAUSS
+        return BPT_UID_GAUSS
 
     def params_sm(self):
         return (
@@ -548,7 +576,7 @@ class BPTraitGGauss(BPTrait):
 
     @staticmethod
     def uid():
-        return BP_TRAIT_UID_GGAUSS
+        return BPT_UID_GGAUSS
 
     def params_sm(self):
         return (
@@ -574,7 +602,7 @@ class BPTraitLorentz(BPTrait):
 
     @staticmethod
     def uid():
-        return BP_TRAIT_UID_LORENTZ
+        return BPT_UID_LORENTZ
 
     def params_sm(self):
         return (
@@ -598,7 +626,7 @@ class BPTraitMoffat(BPTrait):
 
     @staticmethod
     def uid():
-        return BP_TRAIT_UID_MOFFAT
+        return BPT_UID_MOFFAT
 
     def params_sm(self):
         return (
@@ -624,7 +652,7 @@ class BPTraitSech2(BPTrait):
 
     @staticmethod
     def uid():
-        return BP_TRAIT_UID_SECH2
+        return BPT_UID_SECH2
 
     def params_sm(self):
         return (
@@ -648,7 +676,7 @@ class BPTraitMixtureExponential(TraitFeatureNBlobs, BPTrait):
 
     @staticmethod
     def uid():
-        return BP_TRAIT_UID_MIXTURE_EXPONENTIAL
+        return BPT_UID_MIXTURE_EXP
 
     def __init__(self, nblobs):
         super().__init__(nblobs=nblobs)
@@ -671,7 +699,7 @@ class BPTraitMixtureGauss(TraitFeatureNBlobs, BPTrait):
 
     @staticmethod
     def uid():
-        return BP_TRAIT_UID_MIXTURE_GAUSS
+        return BPT_UID_MIXTURE_GAUSS
 
     def __init__(self, nblobs):
         super().__init__(nblobs=nblobs)
@@ -694,7 +722,7 @@ class BPTraitMixtureGGauss(TraitFeatureNBlobs, BPTrait):
 
     @staticmethod
     def uid():
-        return BP_TRAIT_UID_MIXTURE_GGAUSS
+        return BPT_UID_MIXTURE_GGAUSS
 
     def __init__(self, nblobs):
         super().__init__(nblobs=nblobs)
@@ -717,7 +745,7 @@ class BPTraitMixtureMoffat(TraitFeatureNBlobs, BPTrait):
 
     @staticmethod
     def uid():
-        return BP_TRAIT_UID_MIXTURE_MOFFAT
+        return BPT_UID_MIXTURE_MOFFAT
 
     def __init__(self, nblobs):
         super().__init__(nblobs=nblobs)
@@ -740,7 +768,7 @@ class BPTraitNWUniform(TraitFeatureNWMode, BPTrait):
 
     @staticmethod
     def uid():
-        return BP_TRAIT_UID_NW_UNIFORM
+        return BPT_UID_NW_UNIFORM
 
     def __init__(self, nwmode=None):
         super().__init__(nwmode=nwmode)
@@ -764,7 +792,7 @@ class BPTraitNWHarmonic(TraitFeatureOrder, TraitFeatureNWMode, BPTrait):
 
     @staticmethod
     def uid():
-        return BP_TRAIT_UID_NW_HARMONIC
+        return BPT_UID_NW_HARMONIC
 
     def __init__(self, order, nwmode=None):
         super().__init__(order=order, nwmode=nwmode)
@@ -787,7 +815,7 @@ class BPTraitNWDistortion(TraitFeatureNWMode, BPTrait):
 
     @staticmethod
     def uid():
-        return BP_TRAIT_UID_NW_DISTORTION
+        return BPT_UID_NW_DISTORTION
 
     def __init__(self, nwmode=None):
         super().__init__(nwmode=nwmode)
@@ -840,7 +868,7 @@ class BHTraitUniform(BHTraitP1):
 
     @staticmethod
     def uid():
-        return BH_TRAIT_UID_UNIFORM
+        return BHT_UID_UNIFORM
 
 
 class BHTraitExponential(BHTraitP1):
@@ -851,7 +879,7 @@ class BHTraitExponential(BHTraitP1):
 
     @staticmethod
     def uid():
-        return BH_TRAIT_UID_EXPONENTIAL
+        return BHT_UID_EXP
 
 
 class BHTraitGauss(BHTraitP1):
@@ -862,7 +890,7 @@ class BHTraitGauss(BHTraitP1):
 
     @staticmethod
     def uid():
-        return BH_TRAIT_UID_GAUSS
+        return BHT_UID_GAUSS
 
 
 class BHTraitGGauss(BHTraitP2):
@@ -873,7 +901,7 @@ class BHTraitGGauss(BHTraitP2):
 
     @staticmethod
     def uid():
-        return BH_TRAIT_UID_GGAUSS
+        return BHT_UID_GGAUSS
 
 
 class BHTraitLorentz(BHTraitP1):
@@ -884,7 +912,7 @@ class BHTraitLorentz(BHTraitP1):
 
     @staticmethod
     def uid():
-        return BH_TRAIT_UID_LORENTZ
+        return BHT_UID_LORENTZ
 
 
 class BHTraitMoffat(BHTraitP2):
@@ -895,7 +923,7 @@ class BHTraitMoffat(BHTraitP2):
 
     @staticmethod
     def uid():
-        return BH_TRAIT_UID_MOFFAT
+        return BHT_UID_MOFFAT
 
 
 class BHTraitSech2(BHTraitP1):
@@ -906,7 +934,7 @@ class BHTraitSech2(BHTraitP1):
 
     @staticmethod
     def uid():
-        return BH_TRAIT_UID_SECH2
+        return BHT_UID_SECH2
 
 
 class VPTraitTanUniform(VPTrait):
@@ -917,7 +945,7 @@ class VPTraitTanUniform(VPTrait):
 
     @staticmethod
     def uid():
-        return VP_TRAIT_UID_TAN_UNIFORM
+        return VPT_UID_TAN_UNIFORM
 
     def params_sm(self):
         return (
@@ -932,7 +960,7 @@ class VPTraitTanArctan(VPTrait):
 
     @staticmethod
     def uid():
-        return VP_TRAIT_UID_TAN_ARCTAN
+        return VPT_UID_TAN_ARCTAN
 
     def params_sm(self):
         return (
@@ -948,7 +976,7 @@ class VPTraitTanBoissier(VPTrait):
 
     @staticmethod
     def uid():
-        return VP_TRAIT_UID_TAN_BOISSIER
+        return VPT_UID_TAN_BOISSIER
 
     def params_sm(self):
         return (
@@ -964,7 +992,7 @@ class VPTraitTanEpinat(VPTrait):
 
     @staticmethod
     def uid():
-        return VP_TRAIT_UID_TAN_EPINAT
+        return VPT_UID_TAN_EPINAT
 
     def params_sm(self):
         return (
@@ -982,7 +1010,7 @@ class VPTraitTanLRamp(VPTrait):
 
     @staticmethod
     def uid():
-        return VP_TRAIT_UID_TAN_LRAMP
+        return VPT_UID_TAN_LRAMP
 
     def params_sm(self):
         return (
@@ -998,7 +1026,7 @@ class VPTraitTanTanh(VPTrait):
 
     @staticmethod
     def uid():
-        return VP_TRAIT_UID_TAN_TANH
+        return VPT_UID_TAN_TANH
 
     def params_sm(self):
         return (
@@ -1014,7 +1042,7 @@ class VPTraitTanPolyex(VPTrait):
 
     @staticmethod
     def uid():
-        return VP_TRAIT_UID_TAN_POLYEX
+        return VPT_UID_TAN_POLYEX
 
     def params_sm(self):
         return (
@@ -1031,7 +1059,7 @@ class VPTraitTanRix(VPTrait):
 
     @staticmethod
     def uid():
-        return VP_TRAIT_UID_TAN_RIX
+        return VPT_UID_TAN_RIX
 
     def params_sm(self):
         return (
@@ -1049,7 +1077,7 @@ class VPTraitNWTanUniform(TraitFeatureNWMode, VPTrait):
 
     @staticmethod
     def uid():
-        return VP_TRAIT_UID_NW_TAN_UNIFORM
+        return VPT_UID_NW_TAN_UNIFORM
 
     def __init__(self, nwmode=None):
         super().__init__(nwmode=nwmode)
@@ -1067,7 +1095,7 @@ class VPTraitNWTanHarmonic(TraitFeatureOrder, TraitFeatureNWMode, VPTrait):
 
     @staticmethod
     def uid():
-        return VP_TRAIT_UID_NW_TAN_HARMONIC
+        return VPT_UID_NW_TAN_HARMONIC
 
     def __init__(self, order, nwmode=None):
         super().__init__(order=order, nwmode=nwmode)
@@ -1084,7 +1112,7 @@ class VPTraitNWRadUniform(TraitFeatureNWMode, VPTrait):
 
     @staticmethod
     def uid():
-        return VP_TRAIT_UID_NW_RAD_UNIFORM
+        return VPT_UID_NW_RAD_UNIFORM
 
     def __init__(self, nwmode=None):
         super().__init__(nwmode=nwmode)
@@ -1102,7 +1130,7 @@ class VPTraitNWRadHarmonic(TraitFeatureOrder, TraitFeatureNWMode, VPTrait):
 
     @staticmethod
     def uid():
-        return VP_TRAIT_UID_NW_RAD_HARMONIC
+        return VPT_UID_NW_RAD_HARMONIC
 
     def __init__(self, order, nwmode=None):
         super().__init__(order=order, nwmode=nwmode)
@@ -1119,7 +1147,7 @@ class VPTraitNWVerUniform(TraitFeatureNWMode, VPTrait):
 
     @staticmethod
     def uid():
-        return VP_TRAIT_UID_NW_VER_UNIFORM
+        return VPT_UID_NW_VER_UNIFORM
 
     def __init__(self, nwmode=None):
         super().__init__(nwmode=nwmode)
@@ -1137,7 +1165,7 @@ class VPTraitNWVerHarmonic(TraitFeatureOrder, TraitFeatureNWMode, VPTrait):
 
     @staticmethod
     def uid():
-        return VP_TRAIT_UID_NW_VER_HARMONIC
+        return VPT_UID_NW_VER_HARMONIC
 
     def __init__(self, order, nwmode=None):
         super().__init__(order=order, nwmode=nwmode)
@@ -1154,7 +1182,7 @@ class VPTraitNWLOSUniform(TraitFeatureNWMode, VPTrait):
 
     @staticmethod
     def uid():
-        return VP_TRAIT_UID_NW_LOS_UNIFORM
+        return VPT_UID_NW_LOS_UNIFORM
 
     def __init__(self, nwmode=None):
         super().__init__(nwmode=nwmode)
@@ -1172,7 +1200,7 @@ class VPTraitNWLOSHarmonic(TraitFeatureOrder, TraitFeatureNWMode, VPTrait):
 
     @staticmethod
     def uid():
-        return VP_TRAIT_UID_NW_LOS_HARMONIC
+        return VPT_UID_NW_LOS_HARMONIC
 
     def __init__(self, order, nwmode=None):
         super().__init__(order=order, nwmode=nwmode)
@@ -1189,7 +1217,7 @@ class VHTraitOne(VHTrait):
 
     @staticmethod
     def uid():
-        return VH_TRAIT_UID_ONE
+        return VHT_UID_ONE
 
     def __init__(self):
         super().__init__(rnodes=False, nwmode=None)
@@ -1203,7 +1231,7 @@ class DPTraitUniform(DPTrait):
 
     @staticmethod
     def uid():
-        return DP_TRAIT_UID_UNIFORM
+        return DPT_UID_UNIFORM
 
     def params_sm(self):
         return (
@@ -1218,7 +1246,7 @@ class DPTraitExponential(DPTrait):
 
     @staticmethod
     def uid():
-        return DP_TRAIT_UID_EXPONENTIAL
+        return DPT_UID_EXP
 
     def params_sm(self):
         return (
@@ -1234,7 +1262,7 @@ class DPTraitGauss(DPTrait):
 
     @staticmethod
     def uid():
-        return DP_TRAIT_UID_GAUSS
+        return DPT_UID_GAUSS
 
     def params_sm(self):
         return (
@@ -1250,7 +1278,7 @@ class DPTraitGGauss(DPTrait):
 
     @staticmethod
     def uid():
-        return DP_TRAIT_UID_GGAUSS
+        return DPT_UID_GGAUSS
 
     def params_sm(self):
         return (
@@ -1267,7 +1295,7 @@ class DPTraitLorentz(DPTrait):
 
     @staticmethod
     def uid():
-        return DP_TRAIT_UID_LORENTZ
+        return DPT_UID_LORENTZ
 
     def params_sm(self):
         return (
@@ -1283,7 +1311,7 @@ class DPTraitMoffat(DPTrait):
 
     @staticmethod
     def uid():
-        return DP_TRAIT_UID_MOFFAT
+        return DPT_UID_MOFFAT
 
     def params_sm(self):
         return (
@@ -1300,7 +1328,7 @@ class DPTraitSech2(DPTrait):
 
     @staticmethod
     def uid():
-        return DP_TRAIT_UID_SECH2
+        return DPT_UID_SECH2
 
     def params_sm(self):
         return (
@@ -1316,7 +1344,7 @@ class DPTraitMixtureExponential(TraitFeatureNBlobs, DPTrait):
 
     @staticmethod
     def uid():
-        return DP_TRAIT_UID_MIXTURE_EXPONENTIAL
+        return DPT_UID_MIXTURE_EXP
 
     def __init__(self, nblobs):
         super().__init__(nblobs=nblobs)
@@ -1333,7 +1361,7 @@ class DPTraitMixtureGauss(TraitFeatureNBlobs, DPTrait):
 
     @staticmethod
     def uid():
-        return DP_TRAIT_UID_MIXTURE_GAUSS
+        return DPT_UID_MIXTURE_GAUSS
 
     def __init__(self, nblobs):
         super().__init__(nblobs=nblobs)
@@ -1350,7 +1378,7 @@ class DPTraitMixtureGGauss(TraitFeatureNBlobs, DPTrait):
 
     @staticmethod
     def uid():
-        return DP_TRAIT_UID_MIXTURE_GGAUSS
+        return DPT_UID_MIXTURE_GGAUSS
 
     def __init__(self, nblobs):
         super().__init__(nblobs=nblobs)
@@ -1367,7 +1395,7 @@ class DPTraitMixtureMoffat(TraitFeatureNBlobs, DPTrait):
 
     @staticmethod
     def uid():
-        return DP_TRAIT_UID_MIXTURE_MOFFAT
+        return DPT_UID_MIXTURE_MOFFAT
 
     def __init__(self, nblobs):
         super().__init__(nblobs=nblobs)
@@ -1384,7 +1412,7 @@ class DPTraitNWUniform(TraitFeatureNWMode, DPTrait):
 
     @staticmethod
     def uid():
-        return DP_TRAIT_UID_NW_UNIFORM
+        return DPT_UID_NW_UNIFORM
 
     def __init__(self, nwmode=None):
         super().__init__(nwmode=nwmode)
@@ -1402,7 +1430,7 @@ class DPTraitNWHarmonic(TraitFeatureOrder, TraitFeatureNWMode, DPTrait):
 
     @staticmethod
     def uid():
-        return DP_TRAIT_UID_NW_HARMONIC
+        return DPT_UID_NW_HARMONIC
 
     def __init__(self, order, nwmode=None):
         super().__init__(order=order, nwmode=nwmode)
@@ -1419,7 +1447,7 @@ class DPTraitNWDistortion(TraitFeatureNWMode, DPTrait):
 
     @staticmethod
     def uid():
-        return DP_TRAIT_UID_NW_DISTORTION
+        return DPT_UID_NW_DISTORTION
 
     def __init__(self, nwmode=None):
         super().__init__(nwmode=nwmode)
@@ -1436,7 +1464,7 @@ class DHTraitOne(DHTrait):
 
     @staticmethod
     def uid():
-        return DH_TRAIT_UID_ONE
+        return DHT_UID_ONE
 
     def __init__(self):
         super().__init__(rnodes=False, nwmode=None)
@@ -1450,7 +1478,7 @@ class ZPTraitNWUniform(TraitFeatureNWMode, ZPTrait):
 
     @staticmethod
     def uid():
-        return ZP_TRAIT_UID_NW_UNIFORM
+        return ZPT_UID_NW_UNIFORM
 
     def __init__(self, nwmode=None):
         super().__init__(nwmode=nwmode)
@@ -1468,7 +1496,7 @@ class ZPTraitNWHarmonic(TraitFeatureOrder, TraitFeatureNWMode, ZPTrait):
 
     @staticmethod
     def uid():
-        return ZP_TRAIT_UID_NW_HARMONIC
+        return ZPT_UID_NW_HARMONIC
 
     def __init__(self, order, nwmode=None):
         super().__init__(order=order, nwmode=nwmode)
@@ -1485,7 +1513,7 @@ class SPTraitAzimuthalRange(SPTrait):
 
     @staticmethod
     def uid():
-        return SP_TRAIT_UID_AZRANGE
+        return SPT_UID_AZRANGE
 
     def params_sm(self):
         return (
@@ -1501,7 +1529,7 @@ class SPTraitNWAzimuthalRange(TraitFeatureNWMode, SPTrait):
 
     @staticmethod
     def uid():
-        return SP_TRAIT_UID_NW_AZRANGE
+        return SPT_UID_NW_AZRANGE
 
     def __init__(self, nwmode=None):
         super().__init__(nwmode=nwmode)
@@ -1520,7 +1548,7 @@ class WPTraitAxisRange(WPTrait):
 
     @staticmethod
     def uid():
-        return WP_TRAIT_UID_AXIS_RANGE
+        return WPT_UID_AXIS_RANGE
 
     def __init__(self, axis, angle, weight):
         if axis not in [0, 1]:
@@ -1544,7 +1572,7 @@ class OPTraitUniform(OPTrait):
 
     @staticmethod
     def uid():
-        return OP_TRAIT_UID_UNIFORM
+        return OPT_UID_UNIFORM
 
     def params_sm(self):
         return (
@@ -1569,7 +1597,7 @@ class OPTraitExponential(OPTrait):
 
     @staticmethod
     def uid():
-        return OP_TRAIT_UID_EXPONENTIAL
+        return OPT_UID_EXP
 
     def params_sm(self):
         return (
@@ -1591,7 +1619,7 @@ class OPTraitGauss(OPTrait):
 
     @staticmethod
     def uid():
-        return OP_TRAIT_UID_GAUSS
+        return OPT_UID_GAUSS
 
     def params_sm(self):
         return (
@@ -1613,7 +1641,7 @@ class OPTraitGGauss(OPTrait):
 
     @staticmethod
     def uid():
-        return OP_TRAIT_UID_GGAUSS
+        return OPT_UID_GGAUSS
 
     def params_sm(self):
         return (
@@ -1636,7 +1664,7 @@ class OPTraitLorentz(OPTrait):
 
     @staticmethod
     def uid():
-        return OP_TRAIT_UID_LORENTZ
+        return OPT_UID_LORENTZ
 
     def params_sm(self):
         return (
@@ -1658,7 +1686,7 @@ class OPTraitMoffat(OPTrait):
 
     @staticmethod
     def uid():
-        return OP_TRAIT_UID_MOFFAT
+        return OPT_UID_MOFFAT
 
     def params_sm(self):
         return (
@@ -1681,7 +1709,7 @@ class OPTraitSech2(OPTrait):
 
     @staticmethod
     def uid():
-        return OP_TRAIT_UID_SECH2
+        return OPT_UID_SECH2
 
     def params_sm(self):
         return (
@@ -1703,7 +1731,7 @@ class OPTraitMixtureExponential(TraitFeatureNBlobs, OPTrait):
 
     @staticmethod
     def uid():
-        return OP_TRAIT_UID_MIXTURE_EXPONENTIAL
+        return OPT_UID_MIXTURE_EXP
 
     def __init__(self, nblobs):
         super().__init__(nblobs=nblobs)
@@ -1726,7 +1754,7 @@ class OPTraitMixtureGauss(TraitFeatureNBlobs, OPTrait):
 
     @staticmethod
     def uid():
-        return OP_TRAIT_UID_MIXTURE_GAUSS
+        return OPT_UID_MIXTURE_GAUSS
 
     def __init__(self, nblobs):
         super().__init__(nblobs=nblobs)
@@ -1749,7 +1777,7 @@ class OPTraitMixtureGGauss(TraitFeatureNBlobs, OPTrait):
 
     @staticmethod
     def uid():
-        return OP_TRAIT_UID_MIXTURE_GGAUSS
+        return OPT_UID_MIXTURE_GGAUSS
 
     def __init__(self, nblobs):
         super().__init__(nblobs=nblobs)
@@ -1772,7 +1800,7 @@ class OPTraitMixtureMoffat(TraitFeatureNBlobs, OPTrait):
 
     @staticmethod
     def uid():
-        return OP_TRAIT_UID_MIXTURE_MOFFAT
+        return OPT_UID_MIXTURE_MOFFAT
 
     def __init__(self, nblobs):
         super().__init__(nblobs=nblobs)
@@ -1795,7 +1823,7 @@ class OPTraitNWUniform(TraitFeatureNWMode, OPTrait):
 
     @staticmethod
     def uid():
-        return OP_TRAIT_UID_NW_UNIFORM
+        return OPT_UID_NW_UNIFORM
 
     def __init__(self, nwmode=None):
         super().__init__(nwmode=nwmode)
@@ -1819,7 +1847,7 @@ class OPTraitNWHarmonic(TraitFeatureOrder, TraitFeatureNWMode, OPTrait):
 
     @staticmethod
     def uid():
-        return OP_TRAIT_UID_NW_HARMONIC
+        return OPT_UID_NW_HARMONIC
 
     def __init__(self, order, nwmode=None):
         super().__init__(order=order, nwmode=nwmode)
@@ -1842,7 +1870,7 @@ class OPTraitNWDistortion(TraitFeatureNWMode, OPTrait):
 
     @staticmethod
     def uid():
-        return OP_TRAIT_UID_NW_DISTORTION
+        return OPT_UID_NW_DISTORTION
 
     def __init__(self, nwmode=None):
         super().__init__(nwmode=nwmode)
@@ -1889,7 +1917,7 @@ class OHTraitUniform(OHTraitP2):
 
     @staticmethod
     def uid():
-        return OH_TRAIT_UID_UNIFORM
+        return OHT_UID_UNIFORM
 
     def integrate(self, params):
         a = params['a']
@@ -1906,7 +1934,7 @@ class OHTraitExponential(OHTraitP2):
 
     @staticmethod
     def uid():
-        return OH_TRAIT_UID_EXPONENTIAL
+        return OHT_UID_EXP
 
     def integrate(self, params):
         raise NotImplementedError()
@@ -1920,7 +1948,7 @@ class OHTraitGauss(OHTraitP2):
 
     @staticmethod
     def uid():
-        return OH_TRAIT_UID_GAUSS
+        return OHT_UID_GAUSS
 
     def integrate(self, params):
         a = params['a']
@@ -1939,7 +1967,7 @@ class OHTraitGGauss(OHTraitP3):
 
     @staticmethod
     def uid():
-        return OH_TRAIT_UID_GGAUSS
+        return OHT_UID_GGAUSS
 
     def integrate(self, params):
         raise NotImplementedError()
@@ -1953,7 +1981,7 @@ class OHTraitLorentz(OHTraitP2):
 
     @staticmethod
     def uid():
-        return OH_TRAIT_UID_LORENTZ
+        return OHT_UID_LORENTZ
 
     def integrate(self, params):
         raise NotImplementedError()
@@ -1967,7 +1995,7 @@ class OHTraitMoffat(OHTraitP3):
 
     @staticmethod
     def uid():
-        return OH_TRAIT_UID_MOFFAT
+        return OHT_UID_MOFFAT
 
     def integrate(self, params):
         raise NotImplementedError()
@@ -1981,7 +2009,7 @@ class OHTraitSech2(OHTraitP2):
 
     @staticmethod
     def uid():
-        return OH_TRAIT_UID_SECH2
+        return OHT_UID_SECH2
 
     def integrate(self, params):
         raise NotImplementedError()
@@ -2012,6 +2040,33 @@ bht_parser = parseutils.TypedParser(BHTrait, [
     BHTraitGGauss,
     BHTraitLorentz,
     BHTraitSech2])
+
+# Opacity traits (polar) parser
+opt_parser = parseutils.TypedParser(OPTrait, [
+    OPTraitUniform,
+    OPTraitExponential,
+    OPTraitGauss,
+    OPTraitGGauss,
+    OPTraitLorentz,
+    OPTraitMoffat,
+    OPTraitSech2,
+    OPTraitMixtureExponential,
+    OPTraitMixtureGauss,
+    OPTraitMixtureGGauss,
+    OPTraitMixtureMoffat,
+    OPTraitNWUniform,
+    OPTraitNWHarmonic,
+    OPTraitNWDistortion])
+
+# Opacity traits (height) parser
+oht_parser = parseutils.TypedParser(OHTrait, [
+    OHTraitUniform,
+    OHTraitExponential,
+    OHTraitGauss,
+    OHTraitGGauss,
+    OHTraitLorentz,
+    OHTraitMoffat,
+    OHTraitSech2])
 
 # Velocity traits (polar) parser
 vpt_parser = parseutils.TypedParser(VPTrait, [
@@ -2070,30 +2125,3 @@ spt_parser = parseutils.TypedParser(SPTrait, [
 # Weight traits (polar) parser
 wpt_parser = parseutils.TypedParser(WPTrait, [
     WPTraitAxisRange])
-
-# Opacity traits (polar) parser
-opt_parser = parseutils.TypedParser(OPTrait, [
-    OPTraitUniform,
-    OPTraitExponential,
-    OPTraitGauss,
-    OPTraitGGauss,
-    OPTraitLorentz,
-    OPTraitMoffat,
-    OPTraitSech2,
-    OPTraitMixtureExponential,
-    OPTraitMixtureGauss,
-    OPTraitMixtureGGauss,
-    OPTraitMixtureMoffat,
-    OPTraitNWUniform,
-    OPTraitNWHarmonic,
-    OPTraitNWDistortion])
-
-# Opacity traits (height) parser
-oht_parser = parseutils.TypedParser(OHTrait, [
-    OHTraitUniform,
-    OHTraitExponential,
-    OHTraitGauss,
-    OHTraitGGauss,
-    OHTraitLorentz,
-    OHTraitMoffat,
-    OHTraitSech2])

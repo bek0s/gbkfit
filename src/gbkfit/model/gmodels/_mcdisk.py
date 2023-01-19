@@ -69,8 +69,11 @@ class MCDisk(_disk.Disk):
     def _impl_evaluate(
             self, driver, params,
             odata,
-            image, scube, wdata, rdata, ordata,
-            rdata_cmp, vdata_cmp, ddata_cmp, ordata_cmp,
+            image, scube,
+            wdata, wdata_cmp,
+            rdata, rdata_cmp,
+            ordata, ordata_cmp,
+            vdata_cmp, ddata_cmp,
             spat_size, spat_step, spat_zero, spat_rota,
             spec_size, spec_step, spec_zero,
             dtype, out_extra):
@@ -176,8 +179,11 @@ class MCDisk(_disk.Disk):
             odata,
             spat_size, spat_step, spat_zero, spat_rota,
             spec_size, spec_step, spec_zero,
-            image, scube, wdata, rdata, ordata,
-            rdata_cmp, vdata_cmp, ddata_cmp, ordata_cmp)
+            image, scube,
+            wdata, wdata_cmp,
+            rdata, rdata_cmp,
+            ordata, ordata_cmp,
+            vdata_cmp, ddata_cmp)
 
         if out_extra is not None:
             pass

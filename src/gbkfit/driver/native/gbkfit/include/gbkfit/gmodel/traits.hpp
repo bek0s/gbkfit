@@ -5,105 +5,134 @@
 namespace gbkfit {
 
 // Density polar traits
-constexpr int RP_TRAIT_UID_UNIFORM = 1;
-constexpr int RP_TRAIT_UID_EXPONENTIAL = 2;
-constexpr int RP_TRAIT_UID_GAUSS = 3;
-constexpr int RP_TRAIT_UID_GGAUSS = 4;
-constexpr int RP_TRAIT_UID_LORENTZ = 5;
-constexpr int RP_TRAIT_UID_MOFFAT = 6;
-constexpr int RP_TRAIT_UID_SECH2 = 7;
-constexpr int RP_TRAIT_UID_MIXTURE_EXPONENTIAL = 51;
-constexpr int RP_TRAIT_UID_MIXTURE_GAUSS = 52;
-constexpr int RP_TRAIT_UID_MIXTURE_GGAUSS = 53;
-constexpr int RP_TRAIT_UID_MIXTURE_MOFFAT = 54;
-constexpr int RP_TRAIT_UID_NW_UNIFORM = 101;
-constexpr int RP_TRAIT_UID_NW_HARMONIC = 102;
-constexpr int RP_TRAIT_UID_NW_DISTORTION = 103;
+constexpr int RPT_UID_UNIFORM = 1;
+constexpr int RPT_UID_EXP = 2;
+constexpr int RPT_UID_GAUSS = 3;
+constexpr int RPT_UID_GGAUSS = 4;
+constexpr int RPT_UID_LORENTZ = 5;
+constexpr int RPT_UID_MOFFAT = 6;
+constexpr int RPT_UID_SECH2 = 7;
+constexpr int RPT_UID_MIXTURE_EXP = 51;
+constexpr int RPT_UID_MIXTURE_GAUSS = 52;
+constexpr int RPT_UID_MIXTURE_GGAUSS = 53;
+constexpr int RPT_UID_MIXTURE_MOFFAT = 54;
+constexpr int RPT_UID_NW_UNIFORM = 101;
+constexpr int RPT_UID_NW_HARMONIC = 102;
+constexpr int RPT_UID_NW_DISTORTION = 103;
 
 // Density height traits
-constexpr int RH_TRAIT_UID_UNIFORM = 1;
-constexpr int RH_TRAIT_UID_EXPONENTIAL = 2;
-constexpr int RH_TRAIT_UID_GAUSS = 3;
-constexpr int RH_TRAIT_UID_GGAUSS = 4;
-constexpr int RH_TRAIT_UID_LORENTZ = 5;
-constexpr int RH_TRAIT_UID_MOFFAT = 6;
-constexpr int RH_TRAIT_UID_SECH2 = 7;
+constexpr int RHT_UID_UNIFORM = 1;
+constexpr int RHT_UID_EXP = 2;
+constexpr int RHT_UID_GAUSS = 3;
+constexpr int RHT_UID_GGAUSS = 4;
+constexpr int RHT_UID_LORENTZ = 5;
+constexpr int RHT_UID_MOFFAT = 6;
+constexpr int RHT_UID_SECH2 = 7;
+
+// Surface Brightness polar traits
+constexpr int BPT_UID_OFFSET = 0;
+constexpr int BPT_UID_UNIFORM = BPT_UID_OFFSET + RPT_UID_UNIFORM;
+constexpr int BPT_UID_EXP = BPT_UID_OFFSET + RPT_UID_EXP;
+constexpr int BPT_UID_GAUSS = BPT_UID_OFFSET + RPT_UID_GAUSS;
+constexpr int BPT_UID_GGAUSS = BPT_UID_OFFSET + RPT_UID_GGAUSS;
+constexpr int BPT_UID_LORENTZ = BPT_UID_OFFSET + RPT_UID_LORENTZ;
+constexpr int BPT_UID_MOFFAT = BPT_UID_OFFSET + RPT_UID_MOFFAT;
+constexpr int BPT_UID_SECH2 = BPT_UID_OFFSET + RPT_UID_SECH2;
+constexpr int BPT_UID_MIXTURE_EXP = BPT_UID_OFFSET + RPT_UID_MIXTURE_EXP;
+constexpr int BPT_UID_MIXTURE_GAUSS = BPT_UID_OFFSET + RPT_UID_MIXTURE_GAUSS;
+constexpr int BPT_UID_MIXTURE_GGAUSS = BPT_UID_OFFSET + RPT_UID_MIXTURE_GGAUSS;
+constexpr int BPT_UID_MIXTURE_MOFFAT = BPT_UID_OFFSET + RPT_UID_MIXTURE_MOFFAT;
+constexpr int BPT_UID_NW_UNIFORM = BPT_UID_OFFSET + RPT_UID_NW_UNIFORM;
+constexpr int BPT_UID_NW_HARMONIC = BPT_UID_OFFSET + RPT_UID_NW_HARMONIC;
+constexpr int BPT_UID_NW_DISTORTION = BPT_UID_OFFSET + RPT_UID_NW_DISTORTION;
+
+// Surface Brightness height traits
+constexpr int BHT_UID_OFFSET = 0;
+constexpr int BHT_UID_UNIFORM = BHT_UID_OFFSET + RHT_UID_UNIFORM;
+constexpr int BHT_UID_EXP =BHT_UID_OFFSET + RHT_UID_EXP;
+constexpr int BHT_UID_GAUSS = BHT_UID_OFFSET + RHT_UID_GAUSS;
+constexpr int BHT_UID_GGAUSS = BHT_UID_OFFSET + RHT_UID_GGAUSS;
+constexpr int BHT_UID_LORENTZ = BHT_UID_OFFSET + RHT_UID_LORENTZ;
+constexpr int BHT_UID_MOFFAT = BHT_UID_OFFSET + RHT_UID_MOFFAT;
+constexpr int BHT_UID_SECH2 = BHT_UID_OFFSET + RHT_UID_SECH2;
 
 // Opacity polar traits
-constexpr int OP_TRAIT_UID_UNIFORM = 1;
-constexpr int OP_TRAIT_UID_EXPONENTIAL = 2;
-constexpr int OP_TRAIT_UID_GAUSS = 3;
-constexpr int OP_TRAIT_UID_GGAUSS = 4;
-constexpr int OP_TRAIT_UID_LORENTZ = 5;
-constexpr int OP_TRAIT_UID_MOFFAT = 6;
-constexpr int OP_TRAIT_UID_SECH2 = 7;
-constexpr int OP_TRAIT_UID_MIXTURE_EXPONENTIAL = 51;
-constexpr int OP_TRAIT_UID_MIXTURE_GAUSS = 52;
-constexpr int OP_TRAIT_UID_MIXTURE_GGAUSS = 53;
-constexpr int OP_TRAIT_UID_MIXTURE_MOFFAT = 54;
-constexpr int OP_TRAIT_UID_NW_UNIFORM = 101;
-constexpr int OP_TRAIT_UID_NW_HARMONIC = 102;
-constexpr int OP_TRAIT_UID_NW_DISTORTION = 103;
+constexpr int OPT_UID_OFFSET = 1000;
+constexpr int OPT_UID_UNIFORM = OPT_UID_OFFSET + RPT_UID_UNIFORM;
+constexpr int OPT_UID_EXP = OPT_UID_OFFSET + RPT_UID_EXP;
+constexpr int OPT_UID_GAUSS = OPT_UID_OFFSET + RPT_UID_GAUSS;
+constexpr int OPT_UID_GGAUSS = OPT_UID_OFFSET + RPT_UID_GGAUSS;
+constexpr int OPT_UID_LORENTZ = OPT_UID_OFFSET + RPT_UID_LORENTZ;
+constexpr int OPT_UID_MOFFAT = OPT_UID_OFFSET + RPT_UID_MOFFAT;
+constexpr int OPT_UID_SECH2 = OPT_UID_OFFSET + RPT_UID_SECH2;
+constexpr int OPT_UID_MIXTURE_EXP = OPT_UID_OFFSET + RPT_UID_MIXTURE_EXP;
+constexpr int OPT_UID_MIXTURE_GAUSS = OPT_UID_OFFSET + RPT_UID_MIXTURE_GAUSS;
+constexpr int OPT_UID_MIXTURE_GGAUSS = OPT_UID_OFFSET + RPT_UID_MIXTURE_GGAUSS;
+constexpr int OPT_UID_MIXTURE_MOFFAT = OPT_UID_OFFSET + RPT_UID_MIXTURE_MOFFAT;
+constexpr int OPT_UID_NW_UNIFORM = OPT_UID_OFFSET + RPT_UID_NW_UNIFORM;
+constexpr int OPT_UID_NW_HARMONIC = OPT_UID_OFFSET + RPT_UID_NW_HARMONIC;
+constexpr int OPT_UID_NW_DISTORTION = OPT_UID_OFFSET + RPT_UID_NW_DISTORTION;
 
 // Opacity height traits
-constexpr int OH_TRAIT_UID_UNIFORM = 1;
-constexpr int OH_TRAIT_UID_EXPONENTIAL = 2;
-constexpr int OH_TRAIT_UID_GAUSS = 3;
-constexpr int OH_TRAIT_UID_GGAUSS = 4;
-constexpr int OH_TRAIT_UID_LORENTZ = 5;
-constexpr int OH_TRAIT_UID_MOFFAT = 6;
-constexpr int OH_TRAIT_UID_SECH2 = 7;
+constexpr int OHT_UID_OFFSET = 1000;
+constexpr int OHT_UID_UNIFORM = OHT_UID_OFFSET + RHT_UID_UNIFORM;
+constexpr int OHT_UID_EXP = OHT_UID_OFFSET + RHT_UID_EXP;
+constexpr int OHT_UID_GAUSS = OHT_UID_OFFSET + RHT_UID_GAUSS;
+constexpr int OHT_UID_GGAUSS = OHT_UID_OFFSET + RHT_UID_GGAUSS;
+constexpr int OHT_UID_LORENTZ = OHT_UID_OFFSET + RHT_UID_LORENTZ;
+constexpr int OHT_UID_MOFFAT = OHT_UID_OFFSET + RHT_UID_MOFFAT;
+constexpr int OHT_UID_SECH2 = OHT_UID_OFFSET + RHT_UID_SECH2;
 
 // Velocity polar traits
-constexpr int VP_TRAIT_UID_TAN_UNIFORM = 1;
-constexpr int VP_TRAIT_UID_TAN_ARCTAN = 2;
-constexpr int VP_TRAIT_UID_TAN_BOISSIER = 3;
-constexpr int VP_TRAIT_UID_TAN_EPINAT = 4;
-constexpr int VP_TRAIT_UID_TAN_LRAMP = 5;
-constexpr int VP_TRAIT_UID_TAN_TANH = 6;
-constexpr int VP_TRAIT_UID_TAN_POLYEX = 7;
-constexpr int VP_TRAIT_UID_TAN_RIX = 8;
-constexpr int VP_TRAIT_UID_NW_TAN_UNIFORM = 101;
-constexpr int VP_TRAIT_UID_NW_TAN_HARMONIC = 102;
-constexpr int VP_TRAIT_UID_NW_RAD_UNIFORM = 103;
-constexpr int VP_TRAIT_UID_NW_RAD_HARMONIC = 104;
-constexpr int VP_TRAIT_UID_NW_VER_UNIFORM = 105;
-constexpr int VP_TRAIT_UID_NW_VER_HARMONIC = 106;
-constexpr int VP_TRAIT_UID_NW_LOS_UNIFORM = 107;
-constexpr int VP_TRAIT_UID_NW_LOS_HARMONIC = 108;
+constexpr int VPT_UID_TAN_UNIFORM = 1;
+constexpr int VPT_UID_TAN_ARCTAN = 2;
+constexpr int VPT_UID_TAN_BOISSIER = 3;
+constexpr int VPT_UID_TAN_EPINAT = 4;
+constexpr int VPT_UID_TAN_LRAMP = 5;
+constexpr int VPT_UID_TAN_TANH = 6;
+constexpr int VPT_UID_TAN_POLYEX = 7;
+constexpr int VPT_UID_TAN_RIX = 8;
+constexpr int VPT_UID_NW_TAN_UNIFORM = 101;
+constexpr int VPT_UID_NW_TAN_HARMONIC = 102;
+constexpr int VPT_UID_NW_RAD_UNIFORM = 103;
+constexpr int VPT_UID_NW_RAD_HARMONIC = 104;
+constexpr int VPT_UID_NW_VER_UNIFORM = 105;
+constexpr int VPT_UID_NW_VER_HARMONIC = 106;
+constexpr int VPT_UID_NW_LOS_UNIFORM = 107;
+constexpr int VPT_UID_NW_LOS_HARMONIC = 108;
 
 // Velocity height traits
-constexpr int VH_TRAIT_UID_ONE = 1;
+constexpr int VHT_UID_ONE = 1;
 
 // Dispersion polar traits
-constexpr int DP_TRAIT_UID_UNIFORM = 1;
-constexpr int DP_TRAIT_UID_EXPONENTIAL = 2;
-constexpr int DP_TRAIT_UID_GAUSS = 3;
-constexpr int DP_TRAIT_UID_GGAUSS = 4;
-constexpr int DP_TRAIT_UID_LORENTZ = 5;
-constexpr int DP_TRAIT_UID_MOFFAT = 6;
-constexpr int DP_TRAIT_UID_SECH2 = 7;
-constexpr int DP_TRAIT_UID_MIXTURE_EXPONENTIAL = 51;
-constexpr int DP_TRAIT_UID_MIXTURE_GAUSS = 52;
-constexpr int DP_TRAIT_UID_MIXTURE_GGAUSS = 53;
-constexpr int DP_TRAIT_UID_MIXTURE_MOFFAT = 54;
-constexpr int DP_TRAIT_UID_NW_UNIFORM = 101;
-constexpr int DP_TRAIT_UID_NW_HARMONIC = 102;
-constexpr int DP_TRAIT_UID_NW_DISTORTION = 103;
+constexpr int DPT_UID_UNIFORM = 1;
+constexpr int DPT_UID_EXP = 2;
+constexpr int DPT_UID_GAUSS = 3;
+constexpr int DPT_UID_GGAUSS = 4;
+constexpr int DPT_UID_LORENTZ = 5;
+constexpr int DPT_UID_MOFFAT = 6;
+constexpr int DPT_UID_SECH2 = 7;
+constexpr int DPT_UID_MIXTURE_EXP = 51;
+constexpr int DPT_UID_MIXTURE_GAUSS = 52;
+constexpr int DPT_UID_MIXTURE_GGAUSS = 53;
+constexpr int DPT_UID_MIXTURE_MOFFAT = 54;
+constexpr int DPT_UID_NW_UNIFORM = 101;
+constexpr int DPT_UID_NW_HARMONIC = 102;
+constexpr int DPT_UID_NW_DISTORTION = 103;
 
 // Dispersion height traits
-constexpr int DH_TRAIT_UID_ONE = 1;
+constexpr int DHT_UID_ONE = 1;
 
 // Vertical distortion polar traits
-constexpr int ZP_TRAIT_UID_NW_UNIFORM = 101;
-constexpr int ZP_TRAIT_UID_NW_HARMONIC = 102;
+constexpr int ZPT_UID_NW_UNIFORM = 101;
+constexpr int ZPT_UID_NW_HARMONIC = 102;
 
 // Selection polar traits
-constexpr int SP_TRAIT_UID_AZRANGE = 1;
-constexpr int SP_TRAIT_UID_NW_AZRANGE = 101;
+constexpr int SPT_UID_AZRANGE = 1;
+constexpr int SPT_UID_NW_AZRANGE = 101;
 
 // Weight polar traits
-constexpr int WP_TRAIT_UID_AXIS_RANGE = 1;
+constexpr int WPT_UID_AXIS_RANGE = 1;
 
 template<typename T> constexpr T
 nodewise(T x, int idx, const T* xdata, const T* ydata, int offset, int stride)
@@ -614,8 +643,8 @@ rh_trait_fun_2p(
             ? nodewise(r, rnidx, rnodes, params, nrnodes, 1)
             : params[1];
     out = trunc == 0
-            ? Fun(z, 0, p1, p2)
-            : FunTrunc(z, 0, p1, p2, -trunc*p2, trunc*p2);
+            ? Fun(z, p1, 0, p2)
+            : FunTrunc(z, p1, 0, p2, -trunc*p2, trunc*p2);
 }
 
 template<auto Fun, auto FunTrunc, typename T> constexpr void
@@ -636,8 +665,8 @@ rh_trait_fun_3p(
             ? nodewise(r, rnidx, rnodes, params, 2 * nrnodes, 1)
             : params[1];
     out = trunc == 0
-            ? Fun(z, 0, p1, p2, p3)
-            : FunTrunc(z, 0, p1, p2, p3, -trunc*p2, trunc*p2);
+            ? Fun(z, p1, 0, p2, p3)
+            : FunTrunc(z, p1, 0, p2, p3, -trunc*p2, trunc*p2);
 }
 
 template<typename T> constexpr void
@@ -663,11 +692,11 @@ rh_trait_uniform_rnd(
 template<typename T> constexpr void
 rh_trait_uniform_fun(
         T& out,
-        int rnidx, const T* rnodes, T r, T z,
+        int rnidx, const T* rnodes, int nrnodes, T r, T z,
         const T* consts, const T* params)
 {
     rh_trait_fun_2p<uniform_wm_1d_fun<T>, uniform_wm_1d_fun_trunc<T>>(
-            out, rnidx, rnodes, r, z, consts, params);
+            out, rnidx, rnodes, nrnodes, r, z, consts, params);
 }
 
 template<typename T> constexpr void
@@ -693,11 +722,11 @@ rh_trait_exponential_rnd(
 template<typename T> constexpr void
 rh_trait_exponential_fun(
         T& out,
-        int rnidx, const T* rnodes, T r, T z,
+        int rnidx, const T* rnodes, int nrnodes, T r, T z,
         const T* consts, const T* params)
 {
     rh_trait_fun_2p<exponential_1d_fun<T>, exponential_1d_fun_trunc<T>>(
-            out, rnidx, rnodes, r, z, consts, params);
+            out, rnidx, rnodes, nrnodes, r, z, consts, params);
 }
 
 template<typename T> constexpr void
@@ -723,11 +752,11 @@ rh_trait_gauss_rnd(
 template<typename T> constexpr void
 rh_trait_gauss_fun(
         T& out,
-        int rnidx, const T* rnodes, T r, T z,
+        int rnidx, const T* rnodes, int nrnodes, T r, T z,
         const T* consts, const T* params)
 {
     rh_trait_fun_2p<gauss_1d_fun<T>, gauss_1d_fun_trunc<T>>(
-            out, rnidx, rnodes, r, z, consts, params);
+            out, rnidx, rnodes, nrnodes, r, z, consts, params);
 }
 
 template<typename T> constexpr void
@@ -783,11 +812,11 @@ rh_trait_lorentz_rnd(
 template<typename T> constexpr void
 rh_trait_lorentz_fun(
         T& out,
-        int rnidx, const T* rnodes, T r, T z,
+        int rnidx, const T* rnodes, int nrnodes, T r, T z,
         const T* consts, const T* params)
 {
     rh_trait_fun_2p<lorentz_1d_fun<T>, lorentz_1d_fun_trunc<T>>(
-            out, rnidx, rnodes, r, z, consts, params);
+            out, rnidx, rnodes, nrnodes, r, z, consts, params);
 }
 
 template<typename T> constexpr void
@@ -843,11 +872,11 @@ rh_trait_sech2_rnd(
 template<typename T> constexpr void
 rh_trait_sech2_fun(
         T& out,
-        int rnidx, const T* rnodes, T r,
+        int rnidx, const T* rnodes, int nrnodes, T r, T z,
         const T* consts, const T* params)
 {
     rh_trait_fun_2p<sech2_1d_fun<T>, sech2_1d_fun_trunc<T>>(
-            out, rnidx, rnodes, r, consts, params);
+            out, rnidx, rnodes, nrnodes, r, z, consts, params);
 }
 
 template<typename T> constexpr void
@@ -1148,14 +1177,13 @@ zp_trait_nw_harmonic(
 }
 
 template<typename T> constexpr void
-_azrange(T& out, T theta, T p, T s)
+azrange(T& out, T theta, T p, T s)
 {
     T pmin = p - s * T{0.5};
     T pmax = p + s * T{0.5};
     p = wrap_angle(p);
     pmin = wrap_angle(pmin);
     pmax = wrap_angle(pmax);
-
     if (pmin < pmax) {
         out = (theta > pmin && theta < pmax) ? 1 : 0;
     } else {
@@ -1168,7 +1196,7 @@ sp_trait_azrange(T& out, T theta, const T* params)
 {
     T p = params[0] * DEG_TO_RAD<T>;
     T s = params[1] * DEG_TO_RAD<T>;
-    _azrange(out, theta, p, s);
+    azrange(out, theta, p, s);
 }
 
 template<typename T> constexpr void
@@ -1179,7 +1207,7 @@ sp_trait_nw_azrange(
 {
     T p = nodewise(r, rnidx, rnodes, params,       0, 1) * DEG_TO_RAD<T>;
     T s = nodewise(r, rnidx, rnodes, params, nrnodes, 1) * DEG_TO_RAD<T>;
-    _azrange(out, theta, p, s);
+    azrange(out, theta, p, s);
 }
 
 template<typename T> constexpr void
@@ -1206,59 +1234,73 @@ rp_trait(T& out,
 
     switch (uid)
     {
-    case RP_TRAIT_UID_UNIFORM:
+    case BPT_UID_UNIFORM:
+    case OPT_UID_UNIFORM:
         rp_trait_uniform(
                 out, params);
         break;
-    case RP_TRAIT_UID_EXPONENTIAL:
+    case BPT_UID_EXP:
+    case OPT_UID_EXP:
         rp_trait_exponential(
                 out, r, params);
         break;
-    case RP_TRAIT_UID_GAUSS:
+    case BPT_UID_GAUSS:
+    case OPT_UID_GAUSS:
         rp_trait_gauss(
                 out, r, params);
         break;
-    case RP_TRAIT_UID_GGAUSS:
+    case BPT_UID_GGAUSS:
+    case OPT_UID_GGAUSS:
         rp_trait_ggauss(
                 out, r, params);
         break;
-    case RP_TRAIT_UID_LORENTZ:
+    case BPT_UID_LORENTZ:
+    case OPT_UID_LORENTZ:
         rp_trait_lorentz(
                 out, r, params);
         break;
-    case RP_TRAIT_UID_MOFFAT:
+    case BPT_UID_MOFFAT:
+    case OPT_UID_MOFFAT:
         rp_trait_moffat(
                 out, r, params);
         break;
-    case RP_TRAIT_UID_SECH2:
+    case BPT_UID_SECH2:
+    case OPT_UID_SECH2:
         rp_trait_sech2(
                 out, r, params);
         break;
-    case RP_TRAIT_UID_MIXTURE_EXPONENTIAL:
+    case BPT_UID_MIXTURE_EXP:
+    case OPT_UID_MIXTURE_EXP:
         rp_trait_mixture_exponential(
                 out, r, theta, consts, params);
         break;
-    case RP_TRAIT_UID_MIXTURE_GAUSS:
+    case BPT_UID_MIXTURE_GAUSS:
+    case OPT_UID_MIXTURE_GAUSS:
         rp_trait_mixture_gauss(
                 out, r, theta, consts, params);
         break;
-    case RP_TRAIT_UID_MIXTURE_GGAUSS:
+    case BPT_UID_MIXTURE_GGAUSS:
+    case OPT_UID_MIXTURE_GGAUSS:
         rp_trait_mixture_ggauss(
                 out, r, theta, consts, params);
         break;
-    case RP_TRAIT_UID_MIXTURE_MOFFAT:
+    case BPT_UID_MIXTURE_MOFFAT:
+    case OPT_UID_MIXTURE_MOFFAT:
         rp_trait_mixture_moffat(
                 out, r, theta, consts, params);
         break;
-    case RP_TRAIT_UID_NW_UNIFORM:
+    case BPT_UID_NW_UNIFORM:
+    case OPT_UID_NW_UNIFORM:
         rp_trait_nw_uniform(
                 out, rnidx, rnodes, r, params);
         break;
-    case RP_TRAIT_UID_NW_HARMONIC:
+    case BPT_UID_NW_HARMONIC:
+    case OPT_UID_NW_HARMONIC:
         rp_trait_nw_harmonic(
                 out, rnidx, rnodes, nrnodes, r, theta, consts, params);
         break;
-    case RP_TRAIT_UID_NW_DISTORTION:
+    case BPT_UID_NW_DISTORTION:
+    case OPT_UID_NW_DISTORTION:
         rp_trait_nw_distortion(
                 out, rnidx, rnodes, nrnodes, r, theta, params);
         break;
@@ -1280,61 +1322,89 @@ rp_trait_rnd(
 
     switch (uid)
     {
-    case RP_TRAIT_UID_UNIFORM:
+    case BPT_UID_UNIFORM:
+    case OPT_UID_UNIFORM:
         rp_trait_uniform_rnd(
-                out_r, out_t, rng, rnodes, nrnodes);
+                out_r, out_t,
+                rng, rnodes, nrnodes);
         break;
-    case RP_TRAIT_UID_EXPONENTIAL:
+    case BPT_UID_EXP:
+    case OPT_UID_EXP:
         rp_trait_exponential_rnd(
-                out_r, out_t, rng, rnidx, rnodes);
+                out_r, out_t,
+                rng, rnidx, rnodes);
         break;
-    case RP_TRAIT_UID_GAUSS:
+    case BPT_UID_GAUSS:
+    case OPT_UID_GAUSS:
         rp_trait_gauss_rnd(
-                out_r, out_t, rng, rnidx, rnodes);
+                out_r, out_t,
+                rng, rnidx, rnodes);
         break;
-    case RP_TRAIT_UID_GGAUSS:
+    case BPT_UID_GGAUSS:
+    case OPT_UID_GGAUSS:
         rp_trait_ggauss_rnd(
-                out_r, out_t, rng, rnidx, rnodes);
+                out_r, out_t,
+                rng, rnidx, rnodes);
         break;
-    case RP_TRAIT_UID_LORENTZ:
+    case BPT_UID_LORENTZ:
+    case OPT_UID_LORENTZ:
         rp_trait_lorentz_rnd(
-                out_r, out_t, rng, rnidx, rnodes);
+                out_r, out_t,
+                rng, rnidx, rnodes);
         break;
-    case RP_TRAIT_UID_MOFFAT:
+    case BPT_UID_MOFFAT:
+    case OPT_UID_MOFFAT:
         rp_trait_moffat_rnd(
-                out_r, out_t, rng, rnidx, rnodes);
+                out_r, out_t,
+                rng, rnidx, rnodes);
         break;
-    case RP_TRAIT_UID_SECH2:
+    case BPT_UID_SECH2:
+    case OPT_UID_SECH2:
         rp_trait_sech2_rnd(
-                out_r, out_t, rng, rnidx, rnodes);
+                out_r, out_t,
+                rng, rnidx, rnodes);
         break;
-    case RP_TRAIT_UID_MIXTURE_EXPONENTIAL:
+    case BPT_UID_MIXTURE_EXP:
+    case OPT_UID_MIXTURE_EXP:
         rp_trait_mixture_exponential_rnd(
-                out_r, out_t, rng, consts, params);
+                out_r, out_t,
+                rng, consts, params);
         break;
-    case RP_TRAIT_UID_MIXTURE_GAUSS:
+    case BPT_UID_MIXTURE_GAUSS:
+    case OPT_UID_MIXTURE_GAUSS:
         rp_trait_mixture_gauss_rnd(
-                out_r, out_t, rng, consts, params);
+                out_r, out_t,
+                rng, consts, params);
         break;
-    case RP_TRAIT_UID_MIXTURE_GGAUSS:
+    case BPT_UID_MIXTURE_GGAUSS:
+    case OPT_UID_MIXTURE_GGAUSS:
         rp_trait_mixture_ggauss_rnd(
-                out_r, out_t, rng, consts, params);
+                out_r, out_t,
+                rng, consts, params);
         break;
-    case RP_TRAIT_UID_MIXTURE_MOFFAT:
+    case BPT_UID_MIXTURE_MOFFAT:
+    case OPT_UID_MIXTURE_MOFFAT:
         rp_trait_mixture_moffat_rnd(
-                out_r, out_t, rng, consts, params);
+                out_r, out_t,
+                rng, consts, params);
         break;
-    case RP_TRAIT_UID_NW_UNIFORM:
+    case BPT_UID_NW_UNIFORM:
+    case OPT_UID_NW_UNIFORM:
         rp_trait_nw_uniform_rnd(
-                out_r, out_t, rng, rnidx, rnodes);
+                out_r, out_t,
+                rng, rnidx, rnodes);
         break;
-    case RP_TRAIT_UID_NW_HARMONIC:
+    case BPT_UID_NW_HARMONIC:
+    case OPT_UID_NW_HARMONIC:
         rp_trait_nw_harmonic_rnd(
-                out_s, out_r, out_t, rng, rnidx, rnodes, nrnodes, consts, params);
+                out_s, out_r, out_t,
+                rng, rnidx, rnodes, nrnodes, consts, params);
         break;
-    case RP_TRAIT_UID_NW_DISTORTION:
+    case BPT_UID_NW_DISTORTION:
+    case OPT_UID_NW_DISTORTION:
         rp_trait_nw_distortion_rnd(
-                out_r, out_t, rng, rnidx, rnodes, nrnodes, params);
+                out_r, out_t,
+                rng, rnidx, rnodes, nrnodes, params);
         break;
     default:
         out_s = NAN;
@@ -1353,33 +1423,63 @@ rh_trait(T& out,
 {
     switch (uid)
     {
-    case RH_TRAIT_UID_UNIFORM:
+    // Surface brightness traits
+    case BHT_UID_UNIFORM:
         rh_trait_uniform_pdf(
                 out, rnidx, rnodes, r, z, consts, params);
         break;
-    case RH_TRAIT_UID_EXPONENTIAL:
+    case BHT_UID_EXP:
         rh_trait_exponential_pdf(
                 out, rnidx, rnodes, r, z, consts, params);
         break;
-    case RH_TRAIT_UID_GAUSS:
+    case BHT_UID_GAUSS:
         rh_trait_gauss_pdf(
                 out, rnidx, rnodes, r, z, consts, params);
         break;
-    case RH_TRAIT_UID_GGAUSS:
+    case BHT_UID_GGAUSS:
         rh_trait_ggauss_pdf(
                 out, rnidx, rnodes, nrnodes, r, z, consts, params);
         break;
-    case RH_TRAIT_UID_LORENTZ:
+    case BHT_UID_LORENTZ:
         rh_trait_lorentz_pdf(
                 out, rnidx, rnodes, r, z, consts, params);
         break;
-    case RH_TRAIT_UID_MOFFAT:
+    case BHT_UID_MOFFAT:
         rh_trait_moffat_pdf(
                 out, rnidx, rnodes, nrnodes, r, z, consts, params);
         break;
-    case RH_TRAIT_UID_SECH2:
+    case BHT_UID_SECH2:
         rh_trait_sech2_pdf(
                 out, rnidx, rnodes, r, z, consts, params);
+        break;
+    // Opacity traits
+    case OHT_UID_UNIFORM:
+        rh_trait_uniform_fun(
+                out, rnidx, rnodes, nrnodes, r, z, consts, params);
+        break;
+    case OHT_UID_EXP:
+        rh_trait_exponential_fun(
+                out, rnidx, rnodes, nrnodes, r, z, consts, params);
+        break;
+    case OHT_UID_GAUSS:
+        rh_trait_gauss_fun(
+                out, rnidx, rnodes, nrnodes, r, z, consts, params);
+        break;
+    case OHT_UID_GGAUSS:
+        rh_trait_ggauss_fun(
+                out, rnidx, rnodes, nrnodes, r, z, consts, params);
+        break;
+    case OHT_UID_LORENTZ:
+        rh_trait_lorentz_fun(
+                out, rnidx, rnodes, nrnodes, r, z, consts, params);
+        break;
+    case OHT_UID_MOFFAT:
+        rh_trait_moffat_fun(
+                out, rnidx, rnodes, nrnodes, r, z, consts, params);
+        break;
+    case OHT_UID_SECH2:
+        rh_trait_sech2_fun(
+                out, rnidx, rnodes, nrnodes, r, z, consts, params);
         break;
     default:
         out = NAN;
@@ -1397,31 +1497,38 @@ rh_trait_rnd(
 {
     switch (uid)
     {
-    case RH_TRAIT_UID_UNIFORM:
+    case BHT_UID_UNIFORM:
+    case OHT_UID_UNIFORM:
         rh_trait_uniform_rnd(
                 out, rng, rnidx, rnodes, r, consts, params);
         break;
-    case RH_TRAIT_UID_EXPONENTIAL:
+    case BHT_UID_EXP:
+    case OHT_UID_EXP:
         rh_trait_exponential_rnd(
                 out, rng, rnidx, rnodes, r, consts, params);
         break;
-    case RH_TRAIT_UID_GAUSS:
+    case BHT_UID_GAUSS:
+    case OHT_UID_GAUSS:
         rh_trait_gauss_rnd(
                 out, rng, rnidx, rnodes, r, consts, params);
         break;
-    case RH_TRAIT_UID_GGAUSS:
+    case BHT_UID_GGAUSS:
+    case OHT_UID_GGAUSS:
         rh_trait_ggauss_rnd(
                 out, rng, rnidx, rnodes, nrnodes, r, consts, params);
         break;
-    case RH_TRAIT_UID_LORENTZ:
+    case BHT_UID_LORENTZ:
+    case OHT_UID_LORENTZ:
         rh_trait_lorentz_rnd(
                 out, rng, rnidx, rnodes, r, consts, params);
         break;
-    case RH_TRAIT_UID_MOFFAT:
+    case BHT_UID_MOFFAT:
+    case OHT_UID_MOFFAT:
         rh_trait_moffat_rnd(
                 out, rng, rnidx, rnodes, nrnodes, r, consts, params);
         break;
-    case RH_TRAIT_UID_SECH2:
+    case BHT_UID_SECH2:
+    case OHT_UID_SECH2:
         rh_trait_sech2_rnd(
                 out, rng, rnidx, rnodes, r, consts, params);
         break;
@@ -1431,87 +1538,6 @@ rh_trait_rnd(
         break;
     }
 }
-
-
-
-
-template<typename T> constexpr void
-op_trait(T& out,
-         int uid, const T* consts, const T* params,
-         int rnidx, const T* rnodes, int nrnodes,
-         T x, T y, T r, T theta)
-{
-    (void)x;
-    (void)y;
-
-    switch (uid)
-    {
-    case OP_TRAIT_UID_UNIFORM:
-        op_trait_uniform(
-                out, params);
-        break;
-    case OP_TRAIT_UID_EXPONENTIAL:
-        op_trait_exponential(
-                out, r, params);
-        break;
-    case OP_TRAIT_UID_GAUSS:
-        op_trait_gauss(
-                out, r, params);
-        break;
-    case OP_TRAIT_UID_GGAUSS:
-        op_trait_ggauss(
-                out, r, params);
-        break;
-    case OP_TRAIT_UID_LORENTZ:
-        op_trait_lorentz(
-                out, r, params);
-        break;
-    case OP_TRAIT_UID_MOFFAT:
-        op_trait_moffat(
-                out, r, params);
-        break;
-    case OP_TRAIT_UID_SECH2:
-        op_trait_sech2(
-                out, r, params);
-        break;
-    case OP_TRAIT_UID_MIXTURE_EXPONENTIAL:
-        op_trait_mixture_exponential(
-                out, r, theta, consts, params);
-        break;
-    case OP_TRAIT_UID_MIXTURE_GAUSS:
-        op_trait_mixture_gauss(
-                out, r, theta, consts, params);
-        break;
-    case OP_TRAIT_UID_MIXTURE_GGAUSS:
-        op_trait_mixture_ggauss(
-                out, r, theta, consts, params);
-        break;
-    case OP_TRAIT_UID_MIXTURE_MOFFAT:
-        op_trait_mixture_moffat(
-                out, r, theta, consts, params);
-        break;
-    case OP_TRAIT_UID_NW_UNIFORM:
-        op_trait_nw_uniform(
-                out, rnidx, rnodes, r, params);
-        break;
-    case OP_TRAIT_UID_NW_HARMONIC:
-        op_trait_nw_harmonic(
-                out, rnidx, rnodes, nrnodes, r, theta, consts, params);
-        break;
-    case OP_TRAIT_UID_NW_DISTORTION:
-        op_trait_nw_distortion(
-                out, rnidx, rnodes, nrnodes, r, theta, params);
-        break;
-    default:
-        out = NAN;
-        assert(false);
-        break;
-    }
-}
-
-
-
-
 
 template<typename T> constexpr void
 vp_trait(T& out,
@@ -1524,67 +1550,67 @@ vp_trait(T& out,
 
     switch (uid)
     {
-    case VP_TRAIT_UID_TAN_UNIFORM:
+    case VPT_UID_TAN_UNIFORM:
         vp_trait_tan_uniform(
                 out, theta, incl, params);
         break;
-    case VP_TRAIT_UID_TAN_ARCTAN:
+    case VPT_UID_TAN_ARCTAN:
         vp_trait_tan_arctan(
                 out, r, theta, incl, params);
         break;
-    case VP_TRAIT_UID_TAN_BOISSIER:
+    case VPT_UID_TAN_BOISSIER:
         vp_trait_tan_boissier(
                 out, r, theta, incl, params);
         break;
-    case VP_TRAIT_UID_TAN_EPINAT:
+    case VPT_UID_TAN_EPINAT:
         vp_trait_tan_epinat(
                 out, r, theta, incl, params);
         break;
-    case VP_TRAIT_UID_TAN_LRAMP:
+    case VPT_UID_TAN_LRAMP:
         vp_trait_tan_flat(
                 out, r, theta, incl, params);
         break;
-    case VP_TRAIT_UID_TAN_TANH:
+    case VPT_UID_TAN_TANH:
         vp_trait_tan_tanh(
                 out, r, theta, incl, params);
         break;
-    case VP_TRAIT_UID_TAN_POLYEX:
+    case VPT_UID_TAN_POLYEX:
         vp_trait_tan_polyex(
                 out, r, theta, incl, params);
         break;
-    case VP_TRAIT_UID_TAN_RIX:
+    case VPT_UID_TAN_RIX:
         vp_trait_tan_rix(
                 out, r, theta, incl, params);
         break;
-    case VP_TRAIT_UID_NW_TAN_UNIFORM:
+    case VPT_UID_NW_TAN_UNIFORM:
         vp_trait_nw_tan_uniform(
                 out, rnidx, rnodes, r, theta, incl, params);
         break;
-    case VP_TRAIT_UID_NW_TAN_HARMONIC:
+    case VPT_UID_NW_TAN_HARMONIC:
         vp_trait_nw_tan_harmonic(
                 out, rnidx, rnodes, nrnodes, r, theta, incl, consts, params);
         break;
-    case VP_TRAIT_UID_NW_RAD_UNIFORM:
+    case VPT_UID_NW_RAD_UNIFORM:
         vp_trait_nw_rad_uniform(
                 out, rnidx, rnodes, r, theta, incl, params);
         break;
-    case VP_TRAIT_UID_NW_RAD_HARMONIC:
+    case VPT_UID_NW_RAD_HARMONIC:
         vp_trait_nw_rad_harmonic(
                 out, rnidx, rnodes, nrnodes, r, theta, incl, consts, params);
         break;
-    case VP_TRAIT_UID_NW_VER_UNIFORM:
+    case VPT_UID_NW_VER_UNIFORM:
         vp_trait_nw_ver_uniform(
                 out, rnidx, rnodes, r, incl, params);
         break;
-    case VP_TRAIT_UID_NW_VER_HARMONIC:
+    case VPT_UID_NW_VER_HARMONIC:
         vp_trait_nw_ver_harmonic(
                 out, rnidx, rnodes, nrnodes, r, theta, incl, consts, params);
         break;
-    case VP_TRAIT_UID_NW_LOS_UNIFORM:
+    case VPT_UID_NW_LOS_UNIFORM:
         vp_trait_nw_los_uniform(
                 out, rnidx, rnodes, r, params);
         break;
-    case VP_TRAIT_UID_NW_LOS_HARMONIC:
+    case VPT_UID_NW_LOS_HARMONIC:
         vp_trait_nw_los_harmonic(
                 out, rnidx, rnodes, nrnodes, r, theta, consts, params);
         break;
@@ -1611,7 +1637,7 @@ vh_trait(T& out,
 
     switch (uid)
     {
-    case VH_TRAIT_UID_ONE:
+    case VHT_UID_ONE:
         out = 1;
         break;
     default:
@@ -1632,59 +1658,59 @@ dp_trait(T& out,
 
     switch (uid)
     {
-    case DP_TRAIT_UID_UNIFORM:
+    case DPT_UID_UNIFORM:
         dp_trait_uniform(
                 out, params);
         break;
-    case DP_TRAIT_UID_EXPONENTIAL:
+    case DPT_UID_EXP:
         dp_trait_exponential(
                 out, r, params);
         break;
-    case DP_TRAIT_UID_GAUSS:
+    case DPT_UID_GAUSS:
         dp_trait_gauss(
                 out, r, params);
         break;
-    case DP_TRAIT_UID_GGAUSS:
+    case DPT_UID_GGAUSS:
         dp_trait_ggauss(
                 out, r, params);
         break;
-    case DP_TRAIT_UID_LORENTZ:
+    case DPT_UID_LORENTZ:
         dp_trait_lorentz(
                 out, r, params);
         break;
-    case DP_TRAIT_UID_MOFFAT:
+    case DPT_UID_MOFFAT:
         dp_trait_moffat(
                 out, r, params);
         break;
-    case DP_TRAIT_UID_SECH2:
+    case DPT_UID_SECH2:
         dp_trait_sech2(
                 out, r, params);
         break;
-    case DP_TRAIT_UID_MIXTURE_EXPONENTIAL:
+    case DPT_UID_MIXTURE_EXP:
         dp_trait_mixture_exponential(
                 out, r, theta, consts, params);
         break;
-    case DP_TRAIT_UID_MIXTURE_GAUSS:
+    case DPT_UID_MIXTURE_GAUSS:
         dp_trait_mixture_gauss(
                 out, r, theta, consts, params);
         break;
-    case DP_TRAIT_UID_MIXTURE_GGAUSS:
+    case DPT_UID_MIXTURE_GGAUSS:
         dp_trait_mixture_ggauss(
                 out, r, theta, consts, params);
         break;
-    case DP_TRAIT_UID_MIXTURE_MOFFAT:
+    case DPT_UID_MIXTURE_MOFFAT:
         dp_trait_mixture_moffat(
                 out, r, theta, consts, params);
         break;
-    case DP_TRAIT_UID_NW_UNIFORM:
+    case DPT_UID_NW_UNIFORM:
         dp_trait_nw_uniform(
                 out, rnidx, rnodes, r, params);
         break;
-    case DP_TRAIT_UID_NW_HARMONIC:
+    case DPT_UID_NW_HARMONIC:
         dp_trait_nw_harmonic(
                 out, rnidx, rnodes, nrnodes, r, theta, consts, params);
         break;
-    case DP_TRAIT_UID_NW_DISTORTION:
+    case DPT_UID_NW_DISTORTION:
         dp_trait_nw_distortion(
                 out, rnidx, rnodes, nrnodes, r, theta, params);
         break;
@@ -1711,7 +1737,7 @@ dh_trait(T& out,
 
     switch (uid)
     {
-    case DH_TRAIT_UID_ONE:
+    case DHT_UID_ONE:
         out = 1;
         break;
     default:
@@ -1732,11 +1758,11 @@ zp_trait(T& out,
 
     switch (uid)
     {
-    case ZP_TRAIT_UID_NW_UNIFORM:
+    case ZPT_UID_NW_UNIFORM:
         zp_trait_nw_uniform(
                 out, rnidx, rnodes, r, params);
         break;
-    case ZP_TRAIT_UID_NW_HARMONIC:
+    case ZPT_UID_NW_HARMONIC:
         zp_trait_nw_harmonic(
                 out, rnidx, rnodes, nrnodes, r, theta, consts, params);
         break;
@@ -1759,11 +1785,11 @@ sp_trait(T& out,
 
     switch (uid)
     {
-    case SP_TRAIT_UID_AZRANGE:
+    case SPT_UID_AZRANGE:
         sp_trait_azrange(
                 out, theta, params);
         break;
-    case SP_TRAIT_UID_NW_AZRANGE:
+    case SPT_UID_NW_AZRANGE:
         sp_trait_nw_azrange(
                 out, rnidx, rnodes, nrnodes, r, theta, params);
         break;
@@ -1790,7 +1816,7 @@ wp_trait(T& out,
 
     switch (uid)
     {
-    case WP_TRAIT_UID_AXIS_RANGE:
+    case WPT_UID_AXIS_RANGE:
         wp_trait_axis_range(
                 out, theta, consts);
         break;
@@ -1801,7 +1827,7 @@ wp_trait(T& out,
     }
 }
 
-template<auto FUN, typename T, typename ...Ts> constexpr void
+template<auto Fun, typename T, typename ...Ts> constexpr void
 p_traits(
         T* out,
         int ntraits, const int* uids,
@@ -1812,13 +1838,13 @@ p_traits(
 {
     for(int i = 0; i < ntraits; ++i)
     {
-        FUN(out[i], uids[i], cvalues, pvalues, rnidx, rnodes, nrnodes, args...);
+        Fun(out[i], uids[i], cvalues, pvalues, rnidx, rnodes, nrnodes, args...);
         cvalues += ccounts[i];
         pvalues += pcounts[i];
     }
 }
 
-template<auto FUN, typename T, typename ...Ts> constexpr void
+template<auto Fun, typename T, typename ...Ts> constexpr void
 h_traits(
         T* out,
         int ntraits, const int* uids,
@@ -1829,7 +1855,7 @@ h_traits(
 {
     for(int i = 0; i < ntraits; ++i)
     {
-        FUN(out[i], uids[i], cvalues, pvalues, rnidx, rnodes, nrnodes, args...);
+        Fun(out[i], uids[i], cvalues, pvalues, rnidx, rnodes, nrnodes, args...);
         cvalues += ccounts[i];
         pvalues += pcounts[i];
     }
