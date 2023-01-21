@@ -392,12 +392,10 @@ gmodel_mcdisk_evaluate_cloud(
     T vsysi=0, xposi=0, yposi=0, posai=0, incli=0;
     T ptvalues[TRAIT_NUM_MAX] = {0};
     T htvalues[TRAIT_NUM_MAX] = {0};
-    T zvalue = 0;
-    T svalue = 0;
-    T bvalue = cflux * spat_step_z;
-    T vvalue = 0;
-    T dvalue = 0;
-    T wvalue = 0;
+    T rvalue=0, vvalue=0, dvalue=0, zvalue=0, svalue=0, wvalue=1;
+
+    // All clouds have equal flux
+    rvalue = cflux / spat_step_z;
 
     // Find which cumulative sum the cloud belongs to.
     while(ci >= ncloudscsum[rnidx]) {
@@ -407,7 +405,7 @@ gmodel_mcdisk_evaluate_cloud(
     // Find which trait and subring the cloud belongs to.
     for(tidx = 0; tidx < nrt; ++tidx)
     {
-        int size = hasordint[tidx] ? 1 : nrnodes - 2;
+        int size = hasordint[tidx] ? 1 : nrnodes - 2; // -2 ?
         if (rnidx < size)
             break;
         rnidx -= size;
@@ -425,13 +423,14 @@ gmodel_mcdisk_evaluate_cloud(
             rnidx, rnodes, nrnodes);
 
     if (sign < 0) {
-        bvalue = -bvalue;
+        rvalue = -rvalue;
     }
 
     // Integrate along z dimension
-    bvalue /= spat_step_z;
+    rvalue *= spat_step_z;
+
     // Convert to surface brightness
-    bvalue /= spat_step_x * spat_step_y;
+    rvalue /= spat_step_x * spat_step_y;
 
     // Calculate cartesian coordinates on disk plane.
     xd = rd * std::cos(theta);
@@ -560,13 +559,14 @@ gmodel_mcdisk_evaluate_cloud(
         dvalue += ptvalues[i] * (is_thin ? 1 : htvalues[i]);
 
     // Ensure positive dispersion
+    // Ideally, we want the caller to never use parameter values that result in
+    // a negative dispersion. Unfortunatelly, this is hard to achieve.
+    // Forcing a positive dispersion is a reasonable solution.
     dvalue = std::abs(dvalue);
 
     // Weight polar traits
     if (wpt_uids && wdata)
     {
-        wvalue = 1;
-
         p_traits<wp_trait<T>>(
                 ptvalues,
                 nwt, wpt_uids,
@@ -579,25 +579,28 @@ gmodel_mcdisk_evaluate_cloud(
             wvalue *= ptvalues[i];
     }
 
-    T foo = bvalue;
+    // Apply opacity to the calculated density.
+    T orvalue = rvalue;
     if (opacity)
     {
-        for(int i = z; i < spat_size_z; ++i)
+        // Apply the opacity of all the spaxels between the current spatial
+        // position and the viewer. Do not include the current spatial position.
+        for(int oz = z + 1; oz < spat_size_z; ++oz)
         {
-            const auto idx = index_3d_to_1d(x, y, i, spat_size_x, spat_size_y);
-            foo -= opacity[idx] * foo;
+            const auto idx = index_3d_to_1d(x, y, oz, spat_size_x, spat_size_y);
+            orvalue -= orvalue * opacity[idx];
         }
     }
 
     if (image) {
         gbkfit::gmodel_image_evaluate<AtomicAddFunT>(
-                image, x, y, foo,
+                image, x, y, orvalue,
                 spat_size_x);
     }
 
     if (scube) {
         gbkfit::gmodel_scube_evaluate<AtomicAddFunT>(
-                scube, x, y, foo, vvalue, dvalue,
+                scube, x, y, orvalue, vvalue, dvalue,
                 spat_size_x, spat_size_y,
                 spec_size,
                 spec_step,
@@ -607,24 +610,26 @@ gmodel_mcdisk_evaluate_cloud(
     const int idx = index_3d_to_1d(x, y, z, spat_size_x, spat_size_y);
 
     if (wdata) {
+        // TODO
         AtomicAssignFunT(&wdata[idx], wvalue);
     }
     if (wdata_cmp) {
+        // For overlapping clouds, keep the last weight
+        // Storing the mean would be too much effort with little reward
         AtomicAssignFunT(&wdata_cmp[idx], wvalue);
     }
     if (rdata) {
-        AtomicAddFunT(&rdata[idx], bvalue);
+        AtomicAddFunT(&rdata[idx], rvalue);
     }
     if (rdata_cmp) {
-        AtomicAddFunT(&rdata_cmp[idx], bvalue);
+        AtomicAddFunT(&rdata_cmp[idx], rvalue);
     }
     if (ordata) {
-        AtomicAddFunT(&ordata[idx], foo);
+        AtomicAddFunT(&ordata[idx], orvalue);
     }
     if (ordata_cmp) {
-        AtomicAddFunT(&ordata_cmp[idx], foo);
+        AtomicAddFunT(&ordata_cmp[idx], orvalue);
     }
-
     if (vdata_cmp) {
         // For overlapping clouds, keep the last velocity
         // Storing the mean would be too much effort with little reward
@@ -635,8 +640,6 @@ gmodel_mcdisk_evaluate_cloud(
         // Storing the mean would be too much effort with little reward
         AtomicAssignFunT(&ddata_cmp[idx], dvalue);
     }
-
-
 }
 
 template<auto AtomicAddFunT, typename T> constexpr void
@@ -749,7 +752,7 @@ gmodel_smdisk_evaluate_spaxel(
     // These are needed for trait evaluation
     T ptvalues[TRAIT_NUM_MAX] = {0};
     T htvalues[TRAIT_NUM_MAX] = {0};
-    T rvalue=0, vvalue=0, dvalue=0, zvalue=0, svalue=0, wvalue=1, orvalue=0;
+    T rvalue=0, vvalue=0, dvalue=0, zvalue=0, svalue=0, wvalue=1;
 
     // Selection traits
     if (spt_uids)
@@ -815,7 +818,7 @@ gmodel_smdisk_evaluate_spaxel(
         return;
     }
 
-    // Thin disk requires density correction
+    // Thin disk requires density correction for inclination
     if (is_thin) {
         rvalue /= std::cos(incli);
     }
@@ -885,8 +888,6 @@ gmodel_smdisk_evaluate_spaxel(
     // Weight polar traits
     if (wpt_uids && wdata)
     {
-        wvalue = 1;
-
         p_traits<wp_trait<T>>(
                 ptvalues,
                 nwt, wpt_uids,
@@ -900,7 +901,7 @@ gmodel_smdisk_evaluate_spaxel(
     }
 
     // Apply opacity to the calculated density.
-    orvalue = rvalue;
+    T orvalue = rvalue;
     if (opacity)
     {
         // Apply the opacity of all the spaxels between the current spatial
@@ -930,6 +931,7 @@ gmodel_smdisk_evaluate_spaxel(
     const int idx = index_3d_to_1d(x, y, z, spat_size_x, spat_size_y);
 
     if (wdata) {
+        // TODO
         wdata[idx] += wvalue;
     }
     if (wdata_cmp) {
@@ -955,4 +957,4 @@ gmodel_smdisk_evaluate_spaxel(
     }
 }
 
-} // namespace
+} // namespace gbkfit

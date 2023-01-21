@@ -7,6 +7,7 @@ import numpy as np
 
 from gbkfit.params.pdescs import ParamScalarDesc, ParamVectorDesc
 from gbkfit.utils import iterutils, miscutils, numutils
+from . import traits
 
 
 _log = logging.getLogger(__name__)
@@ -16,9 +17,9 @@ def _make_param_descs(key, nnodes, nw):
     return {key: ParamVectorDesc(key, nnodes) if nw else ParamScalarDesc(key)}
 
 
-def _trait_param_info(traits, prefix, nrnodes):
+def _trait_param_info(traits_, prefix, nrnodes):
     params_list = []
-    for i, trait in enumerate(traits):
+    for i, trait in enumerate(traits_):
         params_sm = trait.params_sm()
         params_nw = trait.params_rnw(nrnodes)
         params_sm = [(pdesc, None, False) for pdesc in params_sm]
@@ -40,20 +41,20 @@ def _trait_param_info(traits, prefix, nrnodes):
 
 def _prepare_trait_arrays(
         driver,
-        traits, nnodes, nsubnodes,
+        traits_, nnodes, nsubnodes,
         arr_uids,
         arr_cvalues, arr_ccounts,
         arr_pvalues, arr_pcounts,
         dtype):
     # Ignore unused traits
-    if not traits:
+    if not traits_:
         return
     # Prepare trait data calculate their sizes
     uids = []
     cvalues = []
     ccounts = []
     pcounts = []
-    for trait in traits:
+    for trait in traits_:
         consts = trait.consts()
         params_sm = trait.params_sm()
         params_nw = trait.params_rnw(nnodes)
@@ -184,15 +185,19 @@ class Disk(abc.ABC):
         self._posa_pdescs = _make_param_descs('posa', nrnodes, tilted)
         self._incl_pdescs = _make_param_descs('incl', nrnodes, tilted)
 
+        # Select the right prefix for the density traits
+        rpt_prefix, rht_prefix = ('bpt', 'bht') \
+            if isinstance(rptraits[0], traits.BPTrait) else ('opt', 'oht')
+
         # Make descs for trait disk parameters
         (self._rpt_pdescs,
          self._rpt_nwmodes,
          self._rpt_isnw,
-         self._rpt_pnames) = _trait_param_info(rptraits, 'rpt', nrnodes)
+         self._rpt_pnames) = _trait_param_info(rptraits, rpt_prefix, nrnodes)
         (self._rht_pdescs,
          self._rht_nwmodes,
          self._rht_isnw,
-         self._rht_pnames) = _trait_param_info(rhtraits, 'rht', nrnodes)
+         self._rht_pnames) = _trait_param_info(rhtraits, rht_prefix, nrnodes)
         (self._vpt_pdescs,
          self._vpt_nwmodes,
          self._vpt_isnw,
@@ -564,7 +569,7 @@ class Disk(abc.ABC):
                 driver.mem_fill(wdata_cmp, 1)
             if odata is not None:
                 ordata_cmp = driver.mem_alloc_d(shape, dtype)
-                driver.mem_fill(ordata_cmp, np.nan)
+                driver.mem_fill(ordata_cmp, 0)
 
         self._impl_evaluate(
             driver, params,

@@ -13,6 +13,8 @@ from gbkfit.utils import parseutils
 _log = logging.getLogger(__name__)
 
 # Density polar traits
+# The density polar trait uids are used to generate uids for
+# the surface brightness and opacity polar traits.
 RPT_UID_UNIFORM = 1
 RPT_UID_EXP = 2
 RPT_UID_GAUSS = 3
@@ -29,6 +31,8 @@ RPT_UID_NW_HARMONIC = 102
 RPT_UID_NW_DISTORTION = 103
 
 # Density height traits
+# The density height trait uids are used to generate uids for
+# the surface brightness and opacity height traits.
 RHT_UID_UNIFORM = 1
 RHT_UID_EXP = 2
 RHT_UID_GAUSS = 3
@@ -178,32 +182,6 @@ def _ptrait_params_nw_distortion(nnodes, nwmode):
         (ParamVectorDesc('a', nnodes), nwmode),
         (ParamVectorDesc('p', nnodes), nwmode),
         (ParamVectorDesc('s', nnodes), nwmode))
-
-
-def _htrait_params_fun_2p_sm(rnodes_enabled):
-    return () if rnodes_enabled else (
-        ParamScalarDesc('a'),
-        ParamScalarDesc('s'))
-
-
-def _htrait_params_fun_2p_nw(rnodes_enabled, nrnodes):
-    return () if not rnodes_enabled else (
-        ParamVectorDesc('a', nrnodes),
-        ParamVectorDesc('s', nrnodes))
-
-
-def _htrait_params_fun_3p_sm(rnodes_enabled):
-    return () if rnodes_enabled else (
-        ParamScalarDesc('a'),
-        ParamScalarDesc('s'),
-        ParamScalarDesc('b'))
-
-
-def _htrait_params_fun_3p_nw(rnodes_enabled, nrnodes):
-    return () if not rnodes_enabled else (
-        ParamVectorDesc('a', nrnodes),
-        ParamVectorDesc('s', nrnodes),
-        ParamVectorDesc('b', nrnodes))
 
 
 def _integrate_rings(rings, fun, *args):
@@ -428,7 +406,7 @@ class HTrait(TraitFeatureRNodes, TraitFeatureNWMode, Trait, abc.ABC):
     def __init__(self, rnodes, nwmode, **kwargs):
         kwargs.update(rnodes=rnodes, nwmode=nwmode)
         super().__init__(**kwargs)
-        if not self.rnodes() and self.nwmode() not in [None, 'absolute']:
+        if not self.rnodes() and self.nwmode():
             _log.warning(
                 f"rnodes is set to {self.rnodes()}; "
                 f"nwmode {self.nwmode()} will be ignored")
@@ -441,13 +419,14 @@ class BPTrait(PTrait, abc.ABC):
         pass
 
     @abc.abstractmethod
-    def integrate(self, params, nodes):
+    def integrate(self, params, rings):
         pass
 
 
 class BHTrait(TraitFeatureTrunc, HTrait, abc.ABC):
 
     def integrate(self, params):  # noqa
+        # All surface brightness height traits are pdfs
         return 1
 
 
@@ -486,7 +465,7 @@ class OPTrait(PTrait, abc.ABC):
         pass
 
     @abc.abstractmethod
-    def integrate(self, params, nodes):
+    def integrate(self, params, rings):
         pass
 
 
@@ -515,11 +494,7 @@ class BPTraitUniform(BPTrait):
         return True
 
     def integrate(self, params, rings):
-        a = params['a']
-        rsep = rings[1] - rings[0]
-        rmin = rings[0] - 0.5 * rsep
-        rmax = rings[-1] + 0.5 * rsep
-        return np.pi * a * (rmax * rmax - rmin * rmin)
+        return _ptrait_integrate_uniform(params, rings)
 
 
 class BPTraitExponential(BPTrait):
@@ -563,9 +538,7 @@ class BPTraitGauss(BPTrait):
         return False
 
     def integrate(self, params, rings):
-        a = params['a']
-        s = params['s']
-        return _integrate_rings(rings, gbkfit.math.gauss_1d_fun, a, 0, s)
+        return _ptrait_integrate_gauss(params, rings)
 
 
 class BPTraitGGauss(BPTrait):
@@ -588,10 +561,7 @@ class BPTraitGGauss(BPTrait):
         return False
 
     def integrate(self, params, rings):
-        a = params['a']
-        s = params['s']
-        b = params['b']
-        return _integrate_rings(rings, gbkfit.math.ggauss_1d_fun, a, 0, s, b)
+        return _ptrait_integrate_ggauss(params, rings)
 
 
 class BPTraitLorentz(BPTrait):
@@ -613,9 +583,7 @@ class BPTraitLorentz(BPTrait):
         return False
 
     def integrate(self, params, rings):
-        a = params['a']
-        s = params['s']
-        return _integrate_rings(rings, gbkfit.math.lorentz_1d_fun, a, 0, s)
+        return _ptrait_integrate_lorentz(params, rings)
 
 
 class BPTraitMoffat(BPTrait):
@@ -638,10 +606,7 @@ class BPTraitMoffat(BPTrait):
         return False
 
     def integrate(self, params, rings):
-        a = params['a']
-        s = params['s']
-        b = params['b']
-        return _integrate_rings(rings, gbkfit.math.moffat_1d_fun, a, 0, s, b)
+        return _ptrait_integrate_moffat(params, rings)
 
 
 class BPTraitSech2(BPTrait):
@@ -663,9 +628,7 @@ class BPTraitSech2(BPTrait):
         return False
 
     def integrate(self, params, rings):
-        a = params['a']
-        s = params['s']
-        return _integrate_rings(rings, gbkfit.math.sech2_1d_fun, a, 0, s)
+        return _ptrait_integrate_sech2(params, rings)
 
 
 class BPTraitMixtureExponential(TraitFeatureNBlobs, BPTrait):
@@ -841,7 +804,7 @@ class BHTraitP1(BHTrait, abc.ABC):
 
     def params_rnw(self, nrnodes):
         return () if not self.rnodes() else (
-            ParamVectorDesc('s', nrnodes),)
+            (ParamVectorDesc('s', nrnodes), self.nwmode()),)
 
 
 class BHTraitP2(BHTrait, abc.ABC):
@@ -856,8 +819,8 @@ class BHTraitP2(BHTrait, abc.ABC):
 
     def params_rnw(self, nrnodes):
         return () if not self.rnodes() else (
-            ParamVectorDesc('s', nrnodes),
-            ParamVectorDesc('b', nrnodes))
+            (ParamVectorDesc('s', nrnodes), self.nwmode()),
+            (ParamVectorDesc('b', nrnodes), self.nwmode()))
 
 
 class BHTraitUniform(BHTraitP1):
@@ -1206,7 +1169,7 @@ class VPTraitNWLOSHarmonic(TraitFeatureOrder, TraitFeatureNWMode, VPTrait):
         super().__init__(order=order, nwmode=nwmode)
 
     def params_rnw(self, nnodes):
-        return _ptrait_params_nw_harmonic(self.order(), nnodes, self._nwmode)
+        return _ptrait_params_nw_harmonic(self.order(), nnodes, self.nwmode())
 
 
 class VHTraitOne(VHTrait):
@@ -1419,7 +1382,7 @@ class DPTraitNWUniform(TraitFeatureNWMode, DPTrait):
 
     def params_rnw(self, nnodes):
         return (
-            (ParamVectorDesc('a', nnodes), self._nwmode),)
+            (ParamVectorDesc('a', nnodes), self.nwmode()),)
 
 
 class DPTraitNWHarmonic(TraitFeatureOrder, TraitFeatureNWMode, DPTrait):
@@ -1485,7 +1448,7 @@ class ZPTraitNWUniform(TraitFeatureNWMode, ZPTrait):
 
     def params_rnw(self, nnodes):
         return (
-            (ParamVectorDesc('a', nnodes), self._nwmode),)
+            (ParamVectorDesc('a', nnodes), self.nwmode()),)
 
 
 class ZPTraitNWHarmonic(TraitFeatureOrder, TraitFeatureNWMode, ZPTrait):
@@ -1536,8 +1499,8 @@ class SPTraitNWAzimuthalRange(TraitFeatureNWMode, SPTrait):
 
     def params_rnw(self, nnodes):
         return (
-            (ParamVectorDesc('p', nnodes), self._nwmode),
-            (ParamVectorDesc('s', nnodes), self._nwmode))
+            (ParamVectorDesc('p', nnodes), self.nwmode()),
+            (ParamVectorDesc('s', nnodes), self.nwmode()))
 
 
 class WPTraitAxisRange(WPTrait):
@@ -1582,11 +1545,7 @@ class OPTraitUniform(OPTrait):
         return True
 
     def integrate(self, params, rings):
-        a = params['a']
-        rsep = rings[1] - rings[0]
-        rmin = rings[0] - 0.5 * rsep
-        rmax = rings[-1] + 0.5 * rsep
-        return np.pi * a * (rmax * rmax - rmin * rmin)
+        return _ptrait_integrate_uniform(params, rings)
 
 
 class OPTraitExponential(OPTrait):
@@ -1891,10 +1850,14 @@ class OHTraitP2(OHTrait, abc.ABC):
         super().__init__(rnodes=rnodes, nwmode=nwmode, trunc=trunc)
 
     def params_sm(self):
-        return _htrait_params_fun_2p_sm(self.rnodes())
+        return () if self.rnodes() else (
+            ParamScalarDesc('a'),
+            ParamScalarDesc('s'))
 
     def params_rnw(self, nrnodes):
-        return _htrait_params_fun_2p_nw(self.rnodes(), nrnodes)
+        return () if not self.rnodes() else (
+            (ParamVectorDesc('a', nrnodes), self.nwmode()),
+            (ParamVectorDesc('s', nrnodes), self.nwmode()))
 
 
 class OHTraitP3(OHTrait, abc.ABC):
@@ -1903,10 +1866,16 @@ class OHTraitP3(OHTrait, abc.ABC):
         super().__init__(rnodes=rnodes, nwmode=nwmode, trunc=trunc)
 
     def params_sm(self):
-        return _htrait_params_fun_3p_sm(self.rnodes())
+        return () if self.rnodes() else (
+            ParamScalarDesc('a'),
+            ParamScalarDesc('s'),
+            ParamScalarDesc('b'))
 
     def params_rnw(self, nrnodes):
-        return _htrait_params_fun_3p_nw(self.rnodes(), nrnodes)
+        return () if not self.rnodes() else (
+            (ParamVectorDesc('a', nrnodes), self.nwmode()),
+            (ParamVectorDesc('s', nrnodes), self.nwmode()),
+            (ParamVectorDesc('b', nrnodes), self.nwmode()))
 
 
 class OHTraitUniform(OHTraitP2):
@@ -2041,7 +2010,7 @@ bht_parser = parseutils.TypedParser(BHTrait, [
     BHTraitLorentz,
     BHTraitSech2])
 
-# Opacity traits (polar) parser
+# Opacity polar traits parser
 opt_parser = parseutils.TypedParser(OPTrait, [
     OPTraitUniform,
     OPTraitExponential,
@@ -2058,7 +2027,7 @@ opt_parser = parseutils.TypedParser(OPTrait, [
     OPTraitNWHarmonic,
     OPTraitNWDistortion])
 
-# Opacity traits (height) parser
+# Opacity height traits parser
 oht_parser = parseutils.TypedParser(OHTrait, [
     OHTraitUniform,
     OHTraitExponential,
@@ -2068,7 +2037,7 @@ oht_parser = parseutils.TypedParser(OHTrait, [
     OHTraitMoffat,
     OHTraitSech2])
 
-# Velocity traits (polar) parser
+# Velocity polar traits parser
 vpt_parser = parseutils.TypedParser(VPTrait, [
     VPTraitTanUniform,
     VPTraitTanArctan,
@@ -2087,11 +2056,11 @@ vpt_parser = parseutils.TypedParser(VPTrait, [
     VPTraitNWLOSUniform,
     VPTraitNWLOSHarmonic])
 
-# Velocity traits (height) parser
+# Velocity height traits parser
 vht_parser = parseutils.TypedParser(VHTrait, [
     VHTraitOne])
 
-# Dispersion traits (polar) parser
+# Dispersion polar traits parser
 dpt_parser = parseutils.TypedParser(DPTrait, [
     DPTraitUniform,
     DPTraitExponential,
@@ -2108,20 +2077,20 @@ dpt_parser = parseutils.TypedParser(DPTrait, [
     DPTraitNWHarmonic,
     DPTraitNWDistortion])
 
-# Dispersion traits (height) parser
+# Dispersion height traits parser
 dht_parser = parseutils.TypedParser(DHTrait, [
     DHTraitOne])
 
-# Vertical distortion traits (polar) parser
+# Vertical polar distortion traits parser
 zpt_parser = parseutils.TypedParser(ZPTrait, [
     ZPTraitNWUniform,
     ZPTraitNWHarmonic])
 
-# Selection traits (polar) parser
+# Selection polar traits parser
 spt_parser = parseutils.TypedParser(SPTrait, [
     SPTraitAzimuthalRange,
     SPTraitNWAzimuthalRange])
 
-# Weight traits (polar) parser
+# Weight polar traits parser
 wpt_parser = parseutils.TypedParser(WPTrait, [
     WPTraitAxisRange])

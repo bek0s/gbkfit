@@ -99,11 +99,11 @@ class MCDisk(_disk.Disk):
             # Calculate the number of clouds per trait or ring
             trait_nclouds = integral / self._cflux
             ncloudsptor.extend(np.atleast_1d(trait_nclouds).astype(np.int32))
-            print(trait)
-            print("ring params:", trait_params)
-            print("ring centres:", ring_centers)
-            print("ring integrals:", integral)
-            print("trait_nclouds:", trait_nclouds)
+            # print(trait)
+            # print("ring params:", trait_params)
+            # print("ring centres:", ring_centers)
+            # print("ring integrals:", integral)
+            # print("trait_nclouds:", trait_nclouds)
             # print("total integral:", sum(integral))
 
         # Calculate cumsum
@@ -122,19 +122,19 @@ class MCDisk(_disk.Disk):
             # out_extra['nclouds'] = nclouds
             pass
 
-        print(trait)
-        print("rstep:", self._rstep)
-        print("subrnodes:", self._s_subrnodes[1])
-        print("nclouds:", nclouds)
-        print("ncloudsptor:", ncloudsptor)
-        print("ncloudsptor(cumsum):", self._s_ncloudsptor[1])
-        print("rpt_uids:", self._s_rpt_uids[1])
-        print("rpt_ccounts:", self._s_rpt_ccounts[1])
-        print("rpt_cvalues:", self._s_rpt_cvalues[1])
-        print("rpt_pcounts:", self._s_rpt_pcounts[1])
-        print("rpt_pvalues:", self._s_rpt_pvalues[1])
-        print("hasaintegral:", self._s_hasaintegral[1])
-        print("params:", params)
+        # print(trait)
+        # print("rstep:", self._rstep)
+        # print("subrnodes:", self._s_subrnodes[1])
+        # print("nclouds:", nclouds)
+        # print("ncloudsptor:", ncloudsptor)
+        # print("ncloudsptor(cumsum):", self._s_ncloudsptor[1])
+        # print("rpt_uids:", self._s_rpt_uids[1])
+        # print("rpt_ccounts:", self._s_rpt_ccounts[1])
+        # print("rpt_cvalues:", self._s_rpt_cvalues[1])
+        # print("rpt_pcounts:", self._s_rpt_pcounts[1])
+        # print("rpt_pvalues:", self._s_rpt_pvalues[1])
+        # print("hasaintegral:", self._s_hasaintegral[1])
+        # print("params:", params)
         # exit()
 
         self._backend.mcdisk_evaluate(
