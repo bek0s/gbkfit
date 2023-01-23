@@ -64,7 +64,7 @@ class ObjectiveResidual(ObjectiveModel):
             dataset = datasets[i]
             dmodel = dmodels[i]
             names_dat = tuple(dataset.keys())
-            names_mdl = tuple(dmodel.onames())
+            names_mdl = tuple(dmodel.keys())
             if set(names_dat) != set(names_mdl):
                 raise RuntimeError(
                     f"dataset and dmodel are incompatible "

@@ -4,11 +4,16 @@ import copy
 from numbers import Real
 
 from gbkfit.params.interpreter import Interpreter
-from gbkfit.params import paramutils
+from gbkfit.params import parsers as param_parsers
 from gbkfit.utils import parseutils
 
 
-__all__ = ['Param', 'Params', 'EvaluationParams', 'evaluation_params_parser']
+__all__ = [
+    'Param',
+    'Params',
+    'EvaluationParams',
+    'evaluation_params_parser'
+]
 
 
 class Param(abc.ABC):
@@ -44,16 +49,19 @@ class EvaluationParams(parseutils.BasicParserSupport, Params):
         desc = parseutils.make_basic_desc(cls, 'params')
         opts = parseutils.parse_options_for_callable(
             info, desc, cls.__init__, fun_ignore_args=['pdescs'])
-        opts = paramutils.load_params_parameters_conversions(
+        opts = param_parsers.load_params_parameters_conversions(
             opts, pdescs, Real, lambda x: x)
         return cls(pdescs, **opts)
 
     def dump(self, conversions_file):
-        return paramutils.dump_params_parameters_conversions(
+        return param_parsers.dump_params_parameters_conversions(
             self, Param, lambda x: x, conversions_file)
 
     def __init__(self, pdescs, parameters, conversions=None):
-        expressions = paramutils.parse_param_values_strict(pdescs, parameters, ())[1]
+        expressions = param_parsers.parse_param_values_strict(
+            parameters, pdescs,
+            # Make everything to be considered an expression
+            value_types=())[1]
         super().__init__(pdescs, parameters, expressions, conversions)
 
     def enames(self, fixed=True, tied=True):

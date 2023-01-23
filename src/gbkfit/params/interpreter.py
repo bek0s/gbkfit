@@ -1,15 +1,14 @@
 
 import ast
 import copy
-import inspect
 import numbers
-import textwrap
 import types
 
 import numpy as np
 
-from gbkfit.utils import miscutils, parseutils
-from . import ParamScalarDesc, ParamVectorDesc, paramutils, parsers
+from gbkfit.params import parsers as param_parsers, utils as param_utils
+from gbkfit.params.pdescs import ParamScalarDesc, ParamVectorDesc
+from gbkfit.utils import miscutils
 
 
 class _Transformer(ast.NodeTransformer):
@@ -36,9 +35,9 @@ def _make_exprs_func(pdescs, exprs):
         source += f'{indent}{line_src}\n'
     source += f'{indent}return params\n'
     try:
-        codeobj = compile(source, filename='<string>', mode='exec')
-        funcobj = types.FunctionType(codeobj.co_consts[0], globals_)
-        return funcobj, source
+        code_obj = compile(source, filename='<string>', mode='exec')
+        func_obj = types.FunctionType(code_obj.co_consts[0], globals_)
+        return func_obj, source
     except Exception as e:
         raise RuntimeError(
             f"exception thrown while compiling "
@@ -66,7 +65,7 @@ class Interpreter:
                 size = pdesc.size()
                 names = [name] * size
                 indices = list(range(size))
-                enames = paramutils.explode_param_name_from_indices(
+                enames = param_utils.make_param_symbols_from_name_and_indices(
                     name, indices)
                 self._iparams[name] = np.full(size, np.nan)
                 self._eparams_nmapping.update(zip(enames, names))
@@ -79,7 +78,7 @@ class Interpreter:
         # - Expressions (tied parameters)
         def is_none(x): return isinstance(x, type(None))
         def is_real(x): return isinstance(x, numbers.Real)
-        values, exprs = paramutils.parse_param_values(
+        values, exprs = param_parsers.parse_param_values(
             exprs_dict, pdescs, lambda x: is_none(x) or is_real(x))[4:6]
         nones_dict = dict(filter(lambda x: is_none(x[1]), values.items()))
         reals_dict = dict(filter(lambda x: is_real(x[1]), values.items()))
@@ -87,16 +86,16 @@ class Interpreter:
         self._apply_eparams(values)
         # Parse expressions and extract various ordered information
         expr_keys, expr_values, expr_keys_names, expr_keys_indices = \
-            paramutils.parse_param_exprs(exprs, pdescs)[:4]
+            param_parsers.parse_param_exprs(exprs, pdescs)[:4]
         # From now on, work with the ordered expressions
         exprs = dict(zip(expr_keys, expr_values))
         # Extract the exploded names for all parameters and create
         # various groups for convenience
-        enames_all = paramutils.explode_param_names_from_pdescs(
+        enames_all = param_utils.make_param_symbols_from_pdescs(
             pdescs.values(), pdescs.keys())
         enames_none = list(nones_dict.keys())
         enames_fixed = list(reals_dict.keys())
-        enames_tied = paramutils.explode_param_names_from_indices(
+        enames_tied = param_utils.make_param_symbols_from_names_and_indices(
             expr_keys_names, expr_keys_indices)
         enames_tied += enames_none
         enames_notfree = enames_tied + enames_fixed
@@ -181,11 +180,11 @@ class Interpreter:
         if missing := set(self._enames_free).difference(eparams):
             raise RuntimeError(
                 f"the following parameters are missing: "
-                f"{paramutils.sort_param_enames(self._pdescs, missing)}")
+                f"{param_utils.sort_param_enames(self._pdescs, missing)}")
         if notfree := set(self._enames_notfree).intersection(eparams):
             raise RuntimeError(
                 f"the following parameters are not free: "
-                f"{paramutils.sort_param_enames(self._pdescs, notfree)}")
+                f"{param_utils.sort_param_enames(self._pdescs, notfree)}")
         if unknown := set(eparams).difference(self._enames_all):
             raise RuntimeError(
                 f"the following parameters are not recognised: "

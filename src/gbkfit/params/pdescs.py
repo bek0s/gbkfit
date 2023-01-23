@@ -8,7 +8,12 @@ import numpy as np
 from gbkfit.utils import parseutils
 
 
-__all__ = ['ParamDescDict', 'ParamScalarDesc', 'ParamVectorDesc']
+__all__ = [
+    'ParamDescDict',
+    'ParamScalarDesc',
+    'ParamVectorDesc',
+    'pdesc_parser'
+]
 
 
 class ParamDesc(parseutils.TypedParserSupport, abc.ABC):

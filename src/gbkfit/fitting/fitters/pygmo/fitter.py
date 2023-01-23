@@ -12,6 +12,8 @@ from .problem import Problem
 
 from gbkfit.fitting.result import FitterResultSolution, FitterResult, make_fitter_result
 
+from gbkfit.utils import parseutils
+
 __all__ = [
     'FitterPygmo', 'FitterPygmoDE', 'FitterPygmoSADE', 'FitterPygmoDE1220',
     'FitterPygmoPSO', 'FitterPygmoCMAES', 'FitterPygmoXNES', 'FitterPygmoIpopt',
@@ -23,6 +25,12 @@ class FitterPygmo(Fitter, abc.ABC):
     @staticmethod
     def load_params(info, descs):
         return FitParamsPygmo.load(info, descs)
+
+    @classmethod
+    def load(cls, info, *args, **kwargs):
+        desc = parseutils.make_typed_desc(cls, 'pygmo fitter')
+        opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
+        return cls(**opts)
 
     def dump(self):
         alg_attrs = copy.deepcopy(self._alg_attrs)

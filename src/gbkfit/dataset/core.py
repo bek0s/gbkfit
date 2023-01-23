@@ -23,7 +23,7 @@ class Dataset(parseutils.TypedParserSupport, abc.ABC):
         if not data:
             raise RuntimeError("dataset contains no data items")
         # All data items must be of the right type
-        invalid_data = [k for k, v in data.values() if not isinstance(v, Data)]
+        invalid_data = [k for k, v in data.items() if not isinstance(v, Data)]
         if invalid_data:
             raise RuntimeError(
                 f"dataset contains valid data items: {invalid_data}")

@@ -1,6 +1,7 @@
 
 import re
 
+from gbkfit.params.pdescs import ParamVectorDesc
 from gbkfit.utils import iterutils, stringutils
 
 
@@ -131,11 +132,11 @@ def _parse_param_symbol_subscript_bindx(x):
 def _parse_param_symbol_subscript_slice(x, size):
     x = stringutils.remove_white_space(x).strip('[]')
     x += ':' * (2 - x.count(':'))
-    strt_str, stop_str, step_str = x.split(':')
-    strt = int(strt_str) if strt_str else None
+    start_str, stop_str, step_str = x.split(':')
+    start = int(start_str) if start_str else None
     stop = int(stop_str) if stop_str else None
     step = int(step_str) if step_str else None
-    return tuple(range(*slice(strt, stop, step).indices(size)))
+    return tuple(range(*slice(start, stop, step).indices(size)))
 
 
 def _parse_param_symbol_subscript_aindx(x):
@@ -158,8 +159,8 @@ def parse_param_symbol_subscript(x, size):
 def parse_param_symbol_into_name_and_subscript_str(x):
     x = stringutils.remove_white_space(x)
     name = x[:x.find('[')].strip() if '[' in x else x
-    sbsc = x[x.find('['):].strip() if '[' in x else None
-    return name, sbsc
+    subscript = x[x.find('['):].strip() if '[' in x else None
+    return name, subscript
 
 
 def parse_param_symbol(x, vector_size=None):
@@ -176,3 +177,33 @@ def parse_param_symbol(x, vector_size=None):
         valid_indices = iterutils.unwrap_sequence_indices(
             valid_indices, vector_size)
     return name, valid_indices, invalid_indices
+
+
+def make_param_symbols_from_name_and_indices(name, indices):
+    symbols = []
+    for index in iterutils.listify(indices):
+        symbols.append(make_param_symbol(name, index))
+    return symbols
+
+
+def make_param_symbols_from_names_and_indices(name_list, indices_list):
+    symbols = []
+    for name, indices in zip(name_list, indices_list, strict=True):
+        symbols.extend(make_param_symbols_from_name_and_indices(name, indices))
+    return symbols
+
+
+def make_param_symbols_from_pdesc(pdesc, override_name=None):
+    name = override_name if override_name else pdesc.name()
+    indices = None
+    if isinstance(pdesc, ParamVectorDesc):
+        indices = list(range(pdesc.size()))
+    return make_param_symbols_from_name_and_indices(name, indices)
+
+
+def make_param_symbols_from_pdescs(pdescs, override_names=None):
+    symbols = []
+    names = override_names if override_names else [d.name() for d in pdescs]
+    for name, pdesc in zip(names, pdescs, strict=True):
+        symbols.extend(make_param_symbols_from_pdesc(pdesc, name))
+    return symbols

@@ -14,7 +14,7 @@ import gbkfit.objective
 import gbkfit.params
 import gbkfit.params.pdescs
 import gbkfit.params.parsers
-from gbkfit.params import paramutils
+from gbkfit.params import parsers as param_parsers
 from gbkfit.utils import miscutils
 from . import _detail
 
@@ -25,14 +25,17 @@ _log = logging.getLogger(__name__)
 # Use this object to load and dump yaml
 yaml = ruamel.yaml.YAML()
 
-# This is needed for dumping ordered dicts
+# This is needed for dumping dicts with correct order
 ruamel.yaml.add_representer(dict, lambda self, data: self.represent_mapping(
     'tag:yaml.org,2002:map', data.items()))
 
 
 def _prepare_params(info, pdescs):
-
-    parameters = paramutils.prepare_param_info(info.get('parameters'), pdescs)
+    # Prepare the supplied parameters. This will:
+    # - Ensure the parameter keys are valid
+    # - Explode parameter values that are dicts and can be exploded
+    parameters = param_parsers.prepare_param_info(
+        info.get('parameters'), pdescs)
 
     # Update parameter info and return it
     return info | dict(parameters=parameters)
@@ -83,7 +86,7 @@ def fit(config):
     fitter = gbkfit.fitting.fitter_parser.load(cfg['fitter'])
 
     # exit(fitter.dump())
-    yaml.dump(fitter.dump(), open(f'fitter.yaml', 'w+'))
+    # yaml.dump(fitter.dump(), open(f'fitter.yaml', 'w+'))
 
     pdescs = None
     if 'pdescs' in cfg:
@@ -93,7 +96,10 @@ def fit(config):
 
     _log.info("setting up params...")
     cfg['params'] = _prepare_params(cfg['params'], pdescs)
-    params = fitter.load_params(cfg['params'], pdescs)
+
+    print(cfg['params'])
+    exit()
+    # params = fitter.load_params(cfg['params'], pdescs)
 
     #
     # Perform fit

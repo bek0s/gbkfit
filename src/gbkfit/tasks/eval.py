@@ -1,4 +1,4 @@
-import abc
+
 import json
 import logging
 
@@ -15,7 +15,7 @@ import gbkfit.objective
 import gbkfit.params
 import gbkfit.params.params
 import gbkfit.params.pdescs
-from gbkfit.params import paramutils
+from gbkfit.params import parsers as param_parsers
 from gbkfit.utils import iterutils, timeutils
 from . import _detail
 
@@ -26,14 +26,18 @@ _log = logging.getLogger(__name__)
 # Use this object to load and dump yaml
 yaml = ruamel.yaml.YAML()
 
-# This is needed for dumping ordered dicts
+# This is needed for dumping dicts with correct order
 ruamel.yaml.add_representer(dict, lambda self, data: self.represent_mapping(
     'tag:yaml.org,2002:map', data.items()))
 
 
 def _prepare_params(info, pdescs):
 
-    parameters = paramutils.prepare_param_info(info.get('parameters'), pdescs)
+    # Prepare the supplied parameters. This will:
+    # - Ensure the parameter keys are valid
+    # - Explode parameter values that are dicts and can be exploded
+    parameters = param_parsers.prepare_param_info(
+        info.get('parameters'), pdescs)
 
     recovery_failed = []
     recovery_succeed = {}
@@ -47,6 +51,7 @@ def _prepare_params(info, pdescs):
             recovery_failed.append(value_id)
         return value
 
+    # Try to recover the parameter values from all (exploded) dicts
     for key, val in parameters.items():
         if iterutils.is_mapping(val):
             parameters[key] = recover_value(val, key, None)
@@ -61,7 +66,7 @@ def _prepare_params(info, pdescs):
             f"successfully recovered values "
             f"for the following parameter keys: {recovery_succeed}")
 
-    # Check for errors
+    # Check for errors (failed recoveries)
     if recovery_failed:
         raise RuntimeError(
             f"failed to recover values "
@@ -71,59 +76,7 @@ def _prepare_params(info, pdescs):
     return info | dict(parameters=parameters)
 
 
-def eval_(objective_type, config, profile=None):
-
-    # import gbkfit.math
-    # integral1 = gbkfit.math.gauss_trunc_1d_int(1, 1, -100, 100)
-    #
-    # print(integral1)
-    #
-    # exit()
-
-    """
-    class Class0:
-        def __init__(self, **kwargs):
-            pass
-
-        def dump(self):
-            return dict(class0='class0')
-
-    class Class1:
-        def __init__(self, **kwargs):
-            self._kwargs = kwargs
-            print("Class1:", kwargs)
-            super().__init__(**kwargs)
-
-        def dump(self):
-            return super().dump() | dict(class1='class1') # noqa
-
-    class Class2(abc.ABC):
-        def __init__(self, **kwargs):
-            super().__init__(**kwargs)
-
-        def dump(self):
-            return super().dump() | dict(class2='class2')
-
-    class Class3(Class2, Class1, Class0):
-        def __init__(self, arg1):
-            super().__init__(arg1=arg1)
-
-        def dump(self):
-            return super().dump() | dict(class3='class3')
-
-    def foo(a=1, *args, **kwargs):
-        print("a:", a)
-        print("args:", args)
-        print("kwargs:", kwargs)
-
-    obj = Class3(0)
-
-    print(obj.dump())
-
-    # foo(a=1, b=2, c=3)
-
-    exit()
-    """
+def eval_(objective_type, config, profile):
 
     #
     # Read configuration file and

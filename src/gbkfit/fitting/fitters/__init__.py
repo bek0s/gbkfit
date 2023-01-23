@@ -39,7 +39,7 @@ def _register_fitters():
         # 'gbkfit.fitting.fitters.pygmo.FitterPygmoSADE',
         # 'gbkfit.fitting.fitters.pygmo.FitterPygmoDE1220',
         # 'gbkfit.fitting.fitters.pygmo.FitterPygmoPSO',
-        # 'gbkfit.fitting.fitters.pygmo.FitterPygmoCMAES',
+        'gbkfit.fitting.fitters.pygmo.FitterPygmoCMAES',
         # 'gbkfit.fitting.fitters.pygmo.FitterPygmoXNES',
         # 'gbkfit.fitting.fitters.pygmo.FitterPygmoIpopt',
         # 'gbkfit.fitting.fitters.pygmo.FitterPygmoNLopt',
