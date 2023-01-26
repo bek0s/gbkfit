@@ -89,7 +89,7 @@ class GModelKinematics3D(GModelSCube):
         # hard to calculate. Instead, we pick the size and step of the
         # longest of the x and y axes, and we place zero in the middle.
         # Alternatively, the size, step, and zero of the z spatial axis
-        # can be provided in the constructor and hence by the user.
+        # can be provided in the constructor.
         if self._size[2] is None:
             self._size[2] = size[int(size[0] < size[1])]
         if self._step[2] is None:
@@ -161,16 +161,16 @@ class GModelKinematics3D(GModelSCube):
                 dtype, out_extra, '')
 
         # Evaluate the provided spectral weight cube using
-        # the spatial weight cube evaluated above
+        # the 3d spatial weight cube evaluated above
         if scube_w is not None:
             backend.wcube_evaluate(spat_size, spec_size, wdata, scube_w)
 
         if out_extra is not None:
             if wdata is not None:
-                out_extra['wdata'] = driver.mem_copy_d2h(wdata)
+                out_extra['total_wdata'] = driver.mem_copy_d2h(wdata)
             if odata is not None:
-                out_extra['odata'] = driver.mem_copy_d2h(odata)
+                out_extra['total_odata'] = driver.mem_copy_d2h(odata)
             if bdata is not None:
-                out_extra['bdata'] = driver.mem_copy_d2h(bdata)
+                out_extra['total_bdata'] = driver.mem_copy_d2h(bdata)
             if obdata is not None:
-                out_extra['obdata'] = driver.mem_copy_d2h(obdata)
+                out_extra['total_obdata'] = driver.mem_copy_d2h(obdata)

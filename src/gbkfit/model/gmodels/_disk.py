@@ -176,6 +176,7 @@ class Disk(abc.ABC):
         self._zptraits = zptraits
         self._sptraits = sptraits
         self._wptraits = wptraits
+        self._is_opacity_disk = isinstance(rptraits[0], traits.OPTrait)
 
         # Make descs for common disk parameters
         self._vsys_pdescs = _make_param_descs('vsys', nrnodes, loose) \
@@ -186,8 +187,8 @@ class Disk(abc.ABC):
         self._incl_pdescs = _make_param_descs('incl', nrnodes, tilted)
 
         # Select the right prefix for the density traits
-        rpt_prefix, rht_prefix = ('bpt', 'bht') \
-            if isinstance(rptraits[0], traits.BPTrait) else ('opt', 'oht')
+        rpt_prefix, rht_prefix = ('opt', 'oht') \
+            if self._is_opacity_disk else ('bpt', 'bht')
 
         # Make descs for trait disk parameters
         (self._rpt_pdescs,
@@ -326,6 +327,9 @@ class Disk(abc.ABC):
 
     def interp(self):
         return self._interp
+
+    def vsys_nwmode(self):
+        return self._vsys_nwmode
 
     def xpos_nwmode(self):
         return self._xpos_nwmode
@@ -584,8 +588,11 @@ class Disk(abc.ABC):
             dtype, out_extra)
 
         if out_extra is not None:
+
+            rdata_key = 'odata' if self._is_opacity_disk else 'bdata'
+
             if self._rptraits:
-                out_extra['rdata'] = driver.mem_copy_d2h(rdata_cmp)
+                out_extra[rdata_key] = driver.mem_copy_d2h(rdata_cmp)
             if self._vptraits:
                 out_extra['vdata'] = driver.mem_copy_d2h(vdata_cmp)
             if self._dptraits:
@@ -595,8 +602,8 @@ class Disk(abc.ABC):
             if odata is not None:
                 out_extra['obdata'] = driver.mem_copy_d2h(ordata_cmp)
             if self._rptraits:
-                sumabs = np.nansum(np.abs(out_extra['rdata']))
-                _log.debug(f"sum(abs(rdata)): {sumabs}")
+                sumabs = np.nansum(np.abs(out_extra[rdata_key]))
+                _log.debug(f"sum(abs({rdata_key})): {sumabs}")
             if self._vptraits:
                 sumabs = np.nansum(np.abs(out_extra['vdata']))
                 _log.debug(f"sum(abs(vdata)): {sumabs}")

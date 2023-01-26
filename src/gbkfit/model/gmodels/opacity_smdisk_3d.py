@@ -1,5 +1,5 @@
 
-from . import _detail, _smdisk, traits
+from . import _detail, _smdisk, common, traits
 from .core import OpacityComponent3D
 from gbkfit.utils import parseutils
 
@@ -18,6 +18,10 @@ class OpacitySMDisk3D(OpacityComponent3D):
         desc = parseutils.make_typed_desc(cls, 'gmodel component')
         opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
         opts.update(dict(
+            xpos_nwmode=common.nwmode_parser.load(opts.get('xpos_nwmode')),
+            ypos_nwmode=common.nwmode_parser.load(opts.get('ypos_nwmode')),
+            posa_nwmode=common.nwmode_parser.load(opts.get('posa_nwmode')),
+            incl_nwmode=common.nwmode_parser.load(opts.get('incl_nwmode')),
             optraits=traits.opt_parser.load(opts.get('optraits')),
             ohtraits=traits.oht_parser.load(opts.get('ohtraits')),
             zptraits=traits.zpt_parser.load(opts.get('zptraits')),
@@ -33,6 +37,10 @@ class OpacitySMDisk3D(OpacityComponent3D):
             rnodes=self._disk.rnodes(),
             rstep=self._disk.rstep(),
             interp=self._disk.interp().type(),
+            xpos_nwmode=common.nwmode_parser.dump(self._disk.xpos_nwmode()),
+            ypos_nwmode=common.nwmode_parser.dump(self._disk.ypos_nwmode()),
+            posa_nwmode=common.nwmode_parser.dump(self._disk.posa_nwmode()),
+            incl_nwmode=common.nwmode_parser.dump(self._disk.incl_nwmode()),
             optraits=traits.opt_parser.dump(self._disk.rptraits()),
             ohtraits=traits.oht_parser.dump(self._disk.rhtraits()),
             zptraits=traits.zpt_parser.dump(self._disk.zptraits()),

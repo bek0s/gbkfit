@@ -401,6 +401,11 @@ def test_param_parsers():
         'g': ['attr2'], 'e': [(4, ['attr2'])]}
     assert invalid_infos_bad_attr_length == {
         'h': ['attr1', 'attr2'], 'e': [(5, ['attr1', 'attr2'])]}
+
+
+def test_interpreter():
+    pass
+
 #
 #
 # def test_params():

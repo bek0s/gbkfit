@@ -20,6 +20,7 @@ class SpectralMCDisk3D(SpectralComponent3D):
         desc = parseutils.make_typed_desc(cls, 'gmodel component')
         opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
         opts.update(dict(
+            vsys_nwmode=common.nwmode_parser.load(opts.get('vsys_nwmode')),
             xpos_nwmode=common.nwmode_parser.load(opts.get('xpos_nwmode')),
             ypos_nwmode=common.nwmode_parser.load(opts.get('ypos_nwmode')),
             posa_nwmode=common.nwmode_parser.load(opts.get('posa_nwmode')),
@@ -44,6 +45,7 @@ class SpectralMCDisk3D(SpectralComponent3D):
             rnodes=self._disk.rnodes(),
             rstep=self._disk.rstep(),
             interp=self._disk.interp().type(),
+            vsys_nwmode=common.nwmode_parser.dump(self._disk.vsys_nwmode()),
             xpos_nwmode=common.nwmode_parser.dump(self._disk.xpos_nwmode()),
             ypos_nwmode=common.nwmode_parser.dump(self._disk.ypos_nwmode()),
             posa_nwmode=common.nwmode_parser.dump(self._disk.posa_nwmode()),

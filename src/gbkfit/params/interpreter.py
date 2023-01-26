@@ -208,14 +208,14 @@ class Interpreter:
                 if index is None else self._iparams[name][index]
 
     def _apply_exprs(self):
+        # If we have no expressions function, return immediately
         if self._exprs_func_obj is None:
             return
         # Apply the expressions on a copy of the param dict
-        # This will leave the original dict intact in case of error
+        # This will leave the original dict intact in case of an error
+        result = copy.deepcopy(self._iparams)
         try:
-            result = copy.deepcopy(self._iparams)
             self._exprs_func_obj(result)
-
         except Exception as e:
             raise RuntimeError(
                 f"exception thrown while evaluating parameter expressions; "
@@ -231,9 +231,9 @@ class Interpreter:
             # adds new parameters in the 'result' dict
             if lhs not in self._pdescs:
                 continue
-            desc = self._pdescs[lhs]
-            lhs_is_scalar = isinstance(desc, ParamScalarDesc)
-            lhs_is_vector = isinstance(desc, ParamVectorDesc)
+            pdesc = self._pdescs[lhs]
+            lhs_is_scalar = isinstance(pdesc, ParamScalarDesc)
+            lhs_is_vector = isinstance(pdesc, ParamVectorDesc)
             rhs_is_scalar = isinstance(rhs, numbers.Real)
             rhs_is_vector = isinstance(rhs, (tuple, list, np.ndarray))
             def is_num(x): return isinstance(x, numbers.Real) and np.isfinite(x)
@@ -243,10 +243,10 @@ class Interpreter:
                     f"after evaluating parameter expressions; "
                     f"invalid value(s) encountered; "
                     f"{lhs}: {rhs}")
-            lhs_length = 1 if lhs_is_scalar else desc.size()
+            lhs_length = 1 if lhs_is_scalar else pdesc.size()
             rhs_length = 1 if rhs_is_scalar else len(rhs)
             if lhs_is_vector and rhs_is_scalar:
-                rhs = np.full(desc.size(), rhs)
+                rhs = np.full(pdesc.size(), rhs)
             if lhs_is_scalar and rhs_is_vector:
                 raise RuntimeError(
                     f"failed to validate parameter values "

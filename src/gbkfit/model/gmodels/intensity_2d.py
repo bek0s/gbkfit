@@ -99,13 +99,13 @@ class GModelIntensity2D(GModelImage):
             dtype, out_extra, '')
 
         # Evaluate the provided weight image using
-        # the spatial weight cube evaluated above
+        # the 2d spatial weight data evaluated above
         if image_w is not None:
             backend.wcube_evaluate(
                 tuple(spat_size) + (1,), spec_size, wdata, image_w)
 
         if out_extra is not None:
             if wdata is not None:
-                out_extra['wdata'] = driver.mem_copy_d2h(wdata)
+                out_extra['total_wdata'] = driver.mem_copy_d2h(wdata)
             if bdata is not None:
-                out_extra['bdata'] = driver.mem_copy_d2h(bdata)
+                out_extra['total_bdata'] = driver.mem_copy_d2h(bdata)
