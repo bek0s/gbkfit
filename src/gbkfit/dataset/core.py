@@ -6,7 +6,10 @@ from gbkfit.dataset.data import Data
 from gbkfit.utils import iterutils, parseutils
 
 
-__all__ = ['Dataset', 'dataset_parser']
+__all__ = [
+    'Dataset',
+    'dataset_parser'
+]
 
 
 def _ensure_same_attrib_value(data, method):

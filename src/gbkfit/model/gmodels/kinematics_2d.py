@@ -105,7 +105,7 @@ class GModelKinematics2D(GModelSCube):
         # the 2d spatial weight data evaluated above
         if scube_w is not None:
             backend.wcube_evaluate(
-                tuple(spat_size) + (1,), spec_size, scube_w, wdata)
+                tuple(spat_size) + (1,), spec_size, wdata, scube_w)
 
         if out_extra is not None:
             if wdata is not None:

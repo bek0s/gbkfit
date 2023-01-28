@@ -23,5 +23,4 @@ class Problem:
         return self._objective.residual_scalar(params)
 
     def gradient(self, x):
-        return pg.estimate_gradient_h(lambda x_: self.fitness(x_), x)
-
+        return pg.estimate_gradient_h(lambda x_: self.fitness(x_), x)  # noqa

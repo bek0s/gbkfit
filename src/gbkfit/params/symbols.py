@@ -5,6 +5,33 @@ from gbkfit.params.pdescs import ParamVectorDesc
 from gbkfit.utils import iterutils, stringutils
 
 
+__all__ = [
+    'is_param_symbol',
+    'is_param_symbol_name',
+    'is_param_symbol_scalar',
+    'is_param_symbol_vector',
+    'is_param_symbol_vector_bindx',
+    'is_param_symbol_vector_slice',
+    'is_param_symbol_vector_aindx',
+    'is_param_symbol_subscript',
+    'is_param_symbol_subscript_bindx',
+    'is_param_symbol_subscript_slice',
+    'is_param_symbol_subscript_aindx',
+    'is_param_attrib_symbol',
+    'make_param_symbol_subscript_bindx',
+    'make_param_symbol_subscript_slice',
+    'make_param_symbol_subscript_aindx',
+    'make_param_symbol',
+    'parse_param_symbol_subscript',
+    'parse_param_symbol_into_name_and_subscript_str',
+    'parse_param_symbol',
+    'make_param_symbols_from_name_and_indices',
+    'make_param_symbols_from_names_and_indices',
+    'make_param_symbols_from_pdesc',
+    'make_param_symbols_from_pdescs'
+]
+
+
 _REGEX_PARAM_SYMBOL_SUBSCRIPT_COMMON = r'(?!.*\D0+[1-9])'
 
 _REGEX_PARAM_SYMBOL_SUBSCRIPT_BINDX = (

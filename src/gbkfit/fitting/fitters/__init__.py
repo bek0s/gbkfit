@@ -1,23 +1,5 @@
 
-import importlib
-import logging
-
-
-_log = logging.getLogger(__name__)
-
-
-def _register_factories(parser, factories):
-    for factory in factories:
-        try:
-            mod_name = factory.rsplit('.', 1)[0]
-            cls_name = factory.rsplit('.', 1)[1]
-            mod = importlib.import_module(mod_name)
-            cls = getattr(mod, cls_name)
-            parser.register(cls)
-        except Exception as e:
-            _log.warning(
-                f"could not register fitter factory {factory}; "
-                f"{e.__class__.__name__}: {e}")
+from gbkfit.utils import parseutils
 
 
 def _register_fitters():
@@ -35,17 +17,34 @@ def _register_fitters():
         'gbkfit.fitting.fitters.pymoo.FitterPymooNSGA2',
         'gbkfit.fitting.fitters.pymoo.FitterPymooPSO',
         # pygmo
-        # 'gbkfit.fitting.fitters.pygmo.FitterPygmoDE',
-        # 'gbkfit.fitting.fitters.pygmo.FitterPygmoSADE',
-        # 'gbkfit.fitting.fitters.pygmo.FitterPygmoDE1220',
-        # 'gbkfit.fitting.fitters.pygmo.FitterPygmoPSO',
+        'gbkfit.fitting.fitters.pygmo.FitterPygmoGACO',
+        'gbkfit.fitting.fitters.pygmo.FitterPygmoDE',
+        'gbkfit.fitting.fitters.pygmo.FitterPygmoSADE',
+        'gbkfit.fitting.fitters.pygmo.FitterPygmoDE1220',
+        'gbkfit.fitting.fitters.pygmo.FitterPygmoGWO',
+        'gbkfit.fitting.fitters.pygmo.FitterPygmoIHS',
+        'gbkfit.fitting.fitters.pygmo.FitterPygmoPSO',
+        'gbkfit.fitting.fitters.pygmo.FitterPygmoGPSO',
+        'gbkfit.fitting.fitters.pygmo.FitterPygmoSEA',
+        'gbkfit.fitting.fitters.pygmo.FitterPygmoSGA',
+        'gbkfit.fitting.fitters.pygmo.FitterPygmoSA',
+        'gbkfit.fitting.fitters.pygmo.FitterPygmoABC',
         'gbkfit.fitting.fitters.pygmo.FitterPygmoCMAES',
-        # 'gbkfit.fitting.fitters.pygmo.FitterPygmoXNES',
-        # 'gbkfit.fitting.fitters.pygmo.FitterPygmoIpopt',
-        # 'gbkfit.fitting.fitters.pygmo.FitterPygmoNLopt',
-        # 'gbkfit.fitting.fitters.pygmo.FitterPygmoScipy'
+        'gbkfit.fitting.fitters.pygmo.FitterPygmoXNES',
+        'gbkfit.fitting.fitters.pygmo.FitterPygmoNSGA2',
+        'gbkfit.fitting.fitters.pygmo.FitterPygmoMOAED',
+        'gbkfit.fitting.fitters.pygmo.FitterPygmoGMOAED',
+        'gbkfit.fitting.fitters.pygmo.FitterPygmoMACO',
+        'gbkfit.fitting.fitters.pygmo.FitterPygmoNSPSO',
+        'gbkfit.fitting.fitters.pygmo.FitterPygmoCompassSearch',
+        'gbkfit.fitting.fitters.pygmo.FitterPygmoNLopt',
+        'gbkfit.fitting.fitters.pygmo.FitterPygmoScipy',
+        'gbkfit.fitting.fitters.pygmo.FitterPygmoIpopt',
+        'gbkfit.fitting.fitters.pygmo.FitterPygmoSNOPT',
+        'gbkfit.fitting.fitters.pygmo.FitterPygmoWORHP',
+        'gbkfit.fitting.fitters.pygmo.FitterPygmoMBH'
     ]
-    _register_factories(parser, factories)
+    parseutils.register_optional_parser_factories(parser, factories, 'fitter')
 
 
 _register_fitters()

@@ -5,7 +5,9 @@ import numpy as np
 from gbkfit.driver.core import Driver
 
 
-__all__ = ['DriverHost']
+__all__ = [
+    'DriverHost'
+]
 
 
 class DriverHost(Driver):

@@ -64,6 +64,26 @@ def is_sorted(x, ascending=True):
                    for i in range(1, len(x)))
 
 
+def remove_from_list_if(x, predicate):
+    return [i for i in x if not predicate(i)]
+
+
+def remove_from_list(x, value):
+    return remove_from_list_if(x, lambda i: i == value)
+
+
+def remove_from_mapping_if(x, predicate):
+    return {k: v for k, v in x.items() if not predicate(k, v)}
+
+
+def remove_from_mapping_by_key(x, key):
+    return remove_from_mapping_if(x, lambda k, v: k == key)
+
+
+def remove_from_mapping_by_value(x, value):
+    return remove_from_mapping_if(x, lambda k, v: v == value)
+
+
 def is_ascending(x):
     return not any(x[i - 1] > x[i] for i in range(1, len(x)))
 

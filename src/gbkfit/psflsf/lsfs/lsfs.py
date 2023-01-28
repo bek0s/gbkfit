@@ -220,5 +220,5 @@ class LSFImage(LSF):
         new_center = size / 2 - 0.5 + offset
         x = np.arange(size)
         nx = (x - new_center) * scale + old_center
-        data = scipy.ndimage.map_coordinates(self._data, [nx], order=5)
+        data = scipy.ndimage.map_coordinates(self._data, [nx], order=5)  # noqa
         return data / np.sum(data)

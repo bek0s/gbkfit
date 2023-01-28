@@ -7,7 +7,11 @@ import numpy as np
 import scipy.stats as stats
 
 
-__all__ = ['clear_time_stats', 'get_time_stats', 'SimpleTimer']
+__all__ = [
+    'SimpleTimer',
+    'clear_time_stats',
+    'get_time_stats',
+]
 
 
 _log = logging.getLogger(__name__)
@@ -42,7 +46,7 @@ def get_time_stats(discard=1, num_samples_recommended=20):
             mean=np.round(np.mean(val), 2),
             median=np.round(np.median(val), 2),
             stddev=np.round(np.std(val), 2),
-            mad=np.round(stats.median_absolute_deviation(val), 2))
+            mad=np.round(stats.median_absolute_deviation(val), 2))  # noqa
     return stats_
 
 

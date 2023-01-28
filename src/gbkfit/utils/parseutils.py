@@ -1,6 +1,7 @@
 
 import abc
 import copy
+import importlib
 import logging
 
 from . import funcutils, iterutils
@@ -22,8 +23,10 @@ def parse_options(info, desc, required=None, optional=None):
     required = set(required if required else [])
     optional = set(optional if optional else [])
     # Required options must not clash with optional options
-    if required.intersection(optional):
-        raise RuntimeError()
+    if conflicting := required.intersection(optional):
+        raise RuntimeError(
+            f"the following required and optional options are conflicting: "
+            f"{conflicting}")
     # Check for missing or unknown options
     unknown = set(info) - (required | optional)
     missing = required - set(info)
@@ -262,3 +265,17 @@ class TypedParser(Parser):
         info = x.dump(*args, **kwargs)
         info['type'] = x.type()
         return info
+
+
+def register_optional_parser_factories(parser, factories, desc_label):
+    for factory in factories:
+        try:
+            mod_name = factory.rsplit('.', 1)[0]
+            cls_name = factory.rsplit('.', 1)[1]
+            mod = importlib.import_module(mod_name)
+            cls = getattr(mod, cls_name)
+            parser.register(cls)
+        except Exception as e:
+            _log.warning(
+                f"could not register {desc_label} factory {factory}; "
+                f"{e.__class__.__name__}: {e}")

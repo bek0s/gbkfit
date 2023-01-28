@@ -3,6 +3,8 @@ import numbers
 
 import numpy as np
 
+from gbkfit.params.interpreter import *
+from gbkfit.params.params import *
 from gbkfit.params.parsers import *
 from gbkfit.params.pdescs import *
 from gbkfit.params.symbols import *
@@ -404,41 +406,72 @@ def test_param_parsers():
 
 
 def test_interpreter():
-    pass
 
-#
-#
-# def test_params():
-#
-#     pdescs = dict(
-#         a=ParamScalarDesc('a'),
-#         b=ParamScalarDesc('b'),
-#         c=ParamVectorDesc('c', 3)
-#     )
-#
-#     pvalues1 = dict(
-#         a=1,
-#         b=None,
-#         c=[1, 2, None]
-#     )
-#
-#     pvalues2 = dict(
-#         a=1,
-#         b='1 + 1',
-#         c=[1, 2, '1 + 2']
-#     )
-#
-#     def conversions(params):
-#         return params
-#
-#     info = dict(
-#         parameters=pvalues1
-#     )
-#
-#     from gbkfit.params.params import EvaluationParams
-#
-#     params = EvaluationParams(pdescs, pvalues1, conversions)
-#
-#     foo = params.dump('foobar.py')
-#
-#     pass
+    pdescs = dict(
+        a=ParamScalarDesc('a'),
+        b=ParamScalarDesc('b'),
+        c=ParamScalarDesc('c'),
+        d=ParamVectorDesc('d', 3),
+        e=ParamVectorDesc('e', 3),
+        f=ParamVectorDesc('f', 3))
+
+    exprs_dict = {
+        'a': 1,
+        'b': '1 + 1',
+        'c': 'a + b',
+        'd': 4,
+        'e[0]': 5,
+        'e[1:]': [6, 7],
+        'f[1]': 'f[0]',
+        'f[2]': 'f[1] + 8'
+    }
+
+    interpreter01 = Interpreter(pdescs, exprs_dict, None)
+    enames_free = interpreter01.enames(fixed=False, tied=False, free=True)
+    enames_tied = interpreter01.enames(fixed=False, tied=True, free=False)
+    enames_fixed = interpreter01.enames(fixed=True, tied=False, free=False)
+    assert enames_free == ['f[0]']
+    assert enames_tied == ['b', 'c', 'f[1]', 'f[2]']
+    assert enames_fixed == ['a', 'd[0]', 'd[1]', 'd[2]', 'e[0]', 'e[1]', 'e[2]']
+
+    eparams = {}
+    params = interpreter01.evaluate({'f[0]': 1}, eparams, True)
+    assert params['a'] == 1
+    assert params['b'] == 2
+    assert params['c'] == 3
+    assert np.array_equal(params['d'], (4, 4, 4))
+    assert np.array_equal(params['e'], (5, 6, 7))
+    assert np.array_equal(params['f'], (1, 1, 9))
+    assert eparams == {
+        'a': 1, 'b': 2, 'c': 3,
+        'd[0]': 4, 'd[1]': 4, 'd[2]': 4,
+        'e[0]': 5, 'e[1]': 6, 'e[2]': 7,
+        'f[0]': 1, 'f[1]': 1, 'f[2]': 9}
+
+
+def test_evaluation_params():
+
+    pdescs = dict(
+        a=ParamScalarDesc('a'),
+        b=ParamScalarDesc('b'),
+        c=ParamVectorDesc('c', 3))
+
+    parameters = {
+        'a': 1,
+        'b': '2',
+        'c': 'a + b'
+    }
+
+    params = EvaluationParams(pdescs, parameters)
+    enames_tied = params.enames(fixed=False, tied=True)
+    enames_fixed = params.enames(fixed=True, tied=False)
+    assert enames_tied == ['b', 'c[0]', 'c[1]', 'c[2]']
+    assert enames_fixed == ['a']
+
+
+test_param_symbols()
+test_scalar_desc()
+test_vector_desc()
+test_param_parsers()
+test_interpreter()
+test_evaluation_params()

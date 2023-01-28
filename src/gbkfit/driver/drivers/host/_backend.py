@@ -2,11 +2,13 @@
 import numpy as np
 
 import gbkfit.driver.native.libgbkfit_host as native_module
-from gbkfit.driver.modules import DriverBackends
+from gbkfit.driver.backend import DriverBackends
 from .._detail.native import *
 
 
-__all__ = ['DriverBackendsHost']
+__all__ = [
+    'DriverBackendsHost'
+]
 
 
 class NativeMemoryHost(NativeMemory):

@@ -299,11 +299,11 @@ def gauss_1d_pdf(x, b, c):
 
 
 def gauss_1d_cdf(x, b, c):
-    return 0.5 * (1 + scipy.special.erf((x - b)/(c * np.sqrt(2))))
+    return 0.5 * (1 + scipy.special.erf((x - b)/(c * np.sqrt(2))))  # noqa
 
 
 def gauss_1d_ppf(x, b, c):
-    return b + c * np.sqrt(2) * scipy.special.erfinv(2 * x - 1)
+    return b + c * np.sqrt(2) * scipy.special.erfinv(2 * x - 1)  # noqa
 
 
 def gauss_1d_int(a, c):
@@ -348,12 +348,12 @@ def ggauss_1d_fun(x, a, b, c, d):
 
 
 def ggauss_1d_pdf(x, b, c, d):
-    a = d / (2 * c * scipy.special.gamma(1 / d))
+    a = d / (2 * c * scipy.special.gamma(1 / d))  # noqa
     return ggauss_1d_fun(x, a, b, c, d)
 
 
 def ggauss_1d_cdf(x, b, c, d):
-    return 0.5 + 0.5 * np.sign(x - b) * scipy.special.gammainc(
+    return 0.5 + 0.5 * np.sign(x - b) * scipy.special.gammainc(  # noqa
             1 / d, np.power(np.abs(x - b) / c, d))
 
 
@@ -361,7 +361,7 @@ def ggauss_1d_ppf(x, b, c, d):
     arg0 = 2 * np.abs(x - 0.5)
     arg1 = 1 / d
     arg2 = 1 / np.power(c, d)
-    gamma_ppf = scipy.stats.gamma.ppf(q=arg0, a=arg1, loc=0, scale=1/arg2)
+    gamma_ppf = scipy.stats.gamma.ppf(q=arg0, a=arg1, loc=0, scale=1/arg2)  # noqa
     return np.sign(x - 0.5) * np.power(gamma_ppf, 1.0 / d) + b
 
 

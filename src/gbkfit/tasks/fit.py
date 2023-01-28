@@ -98,8 +98,8 @@ def fit(config):
     cfg['params'] = _prepare_params(cfg['params'], pdescs)
 
     print(cfg['params'])
-    exit()
-    # params = fitter.load_params(cfg['params'], pdescs)
+
+    params = fitter.load_params(cfg['params'], pdescs)
 
     #
     # Perform fit

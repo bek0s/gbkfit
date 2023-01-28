@@ -1,14 +1,18 @@
 
 import logging
+import numbers
 import os.path
 
 import astropy.wcs
 import numpy as np
 
-from gbkfit.utils import fitsutils, iterutils, miscutils, parseutils
+from gbkfit.utils import fitsutils, miscutils, parseutils
 
 
-__all__ = ['Data', 'data_parser']
+__all__ = [
+    'Data',
+    'data_parser'
+]
 
 
 _log = logging.getLogger(__name__)
@@ -44,6 +48,7 @@ class Data:
         step = opts.get('step', step)
         rpix = opts.get('rpix', rpix)
         rval = opts.get('rval', rval)
+        rota = opts.get('rota', rota)
         # If no information is provided, use fits header
         if step is None:
             step = wcs_d.wcs.cdelt  # noqa
@@ -102,9 +107,6 @@ class Data:
     def __init__(
             self, data, mask=None, error=None,
             step=None, rpix=None, rval=None, rota=0):
-        step = iterutils.tuplify(step, False)
-        rpix = iterutils.tuplify(rpix, False)
-        rval = iterutils.tuplify(rval, False)
         if mask is None:
             mask = np.ones_like(data)
         if error is None:
@@ -115,6 +117,12 @@ class Data:
             rpix = tuple((np.array(data.shape[::-1]) / 2 - 0.5).tolist())
         if rval is None:
             rval = (0,) * data.ndim
+        if isinstance(step, numbers.Real):
+            step = (step,) * data.ndim
+        if isinstance(rpix, numbers.Real):
+            rpix = (rpix,) * data.ndim
+        if isinstance(rval, numbers.Real):
+            rval = (rval,) * data.ndim
         data = miscutils.to_native_byteorder(data)
         mask = miscutils.to_native_byteorder(mask)
         error = miscutils.to_native_byteorder(error)
@@ -143,7 +151,7 @@ class Data:
         if data.ndim != len(rval):
             raise RuntimeError(
                 f"data dimensionality and rval length are incompatible "
-                f"({data.dim} != {len(rval)})")
+                f"({data.ndim} != {len(rval)})")
         # Create and apply the "total mask" which takes into account
         # the supplied mask as well as all the nan values in the data.
         total_mask = np.ones_like(data)

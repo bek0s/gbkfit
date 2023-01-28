@@ -5,7 +5,9 @@ from gbkfit.dataset.core import Dataset
 from . import _detail
 
 
-__all__ = ['DatasetMMaps']
+__all__ = [
+    'DatasetMMaps'
+]
 
 
 class DatasetMMaps(Dataset):

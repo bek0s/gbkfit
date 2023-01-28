@@ -3,7 +3,9 @@ from gbkfit.dataset.core import Dataset
 from . import _detail
 
 
-__all__ = ['DatasetSCube']
+__all__ = [
+    'DatasetSCube'
+]
 
 
 class DatasetSCube(Dataset):

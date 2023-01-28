@@ -14,7 +14,7 @@ import numpy as np
 from gbkfit.params import utils as param_utils
 from gbkfit.params.pdescs import *
 from gbkfit.params.symbols import *
-from gbkfit.utils import miscutils, parseutils, stringutils
+from gbkfit.utils import iterutils, miscutils, parseutils, stringutils
 
 
 __all__ = [

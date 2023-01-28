@@ -1,12 +1,17 @@
 
+import logging
+
 import numpy as np
 
-from gbkfit.params import paramutils
+from gbkfit.params import parsers as param_parsers
 from gbkfit.utils import iterutils
 
 
+_log = logging.getLogger(__name__)
+
+
 def load_params_dict(info, descs, loader):
-    infos, exprs = paramutils.parse_param_info(info, descs)[4:]
+    infos, exprs = param_parsers.parse_param_info(info, descs)[4:]
     for key, val in infos.items():
         try:
             infos[key] = loader(val)
@@ -81,6 +86,20 @@ def prepare_param_initial_value_range_from_value_width_min_max(
     if has_maximum:
         init_value_max = min(init_value_max, maximum)
     return init_value, init_value_min, init_value_max
+
+
+def prepare_optional_initial_value_min_max(
+        initial_value, initial_width, minimum, maximum):
+    if (initial_value is None) != (initial_width is None):
+        _log.warning(
+            f"initial_value ({initial_value}) and "
+            f"initial_width ({initial_width}) will be ignored "
+            f"because at least one of them is not set")
+        return None, None, None, None
+    initial_value_min = max(initial_value - initial_width / 2.0, minimum)
+    initial_value_max = min(initial_value + initial_width / 2.0, maximum)
+    return initial_value, initial_width, initial_value_min, initial_value_max
+
 
 
 def residual_scalar(eparams, parameters, objective, callback):

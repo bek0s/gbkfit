@@ -7,8 +7,14 @@ import types
 import numpy as np
 
 from gbkfit.params import parsers as param_parsers, utils as param_utils
+from gbkfit.params.symbols import *
 from gbkfit.params.pdescs import ParamScalarDesc, ParamVectorDesc
 from gbkfit.utils import miscutils
+
+
+__all__ = [
+    'Interpreter'
+]
 
 
 class _Transformer(ast.NodeTransformer):
@@ -180,11 +186,11 @@ class Interpreter:
         if missing := set(self._enames_free).difference(eparams):
             raise RuntimeError(
                 f"the following parameters are missing: "
-                f"{param_utils.sort_param_enames(self._pdescs, missing)}")
+                f"{param_utils.sort_param_enames(missing, self._pdescs)}")
         if notfree := set(self._enames_notfree).intersection(eparams):
             raise RuntimeError(
                 f"the following parameters are not free: "
-                f"{param_utils.sort_param_enames(self._pdescs, notfree)}")
+                f"{param_utils.sort_param_enames(notfree, self._pdescs)}")
         if unknown := set(eparams).difference(self._enames_all):
             raise RuntimeError(
                 f"the following parameters are not recognised: "
@@ -200,6 +206,10 @@ class Interpreter:
                 self._iparams[name][index] = val
 
     def _extract_eparams(self, out_eparams):
+        if not out_eparams:
+            foo = make_param_symbols_from_pdescs(self._pdescs.values(), self._pdescs.keys())
+            for k in foo:
+                out_eparams[k] = None
         for ename in out_eparams:
             assert ename in self.enames()  # todo: provide better error message
             name = self._eparams_nmapping[ename]

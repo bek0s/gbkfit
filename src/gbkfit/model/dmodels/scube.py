@@ -29,7 +29,7 @@ class DModelSCube(DModel):
 
     def __init__(
             self, size, step=(1, 1, 1), rpix=None, rval=(0, 0, 0), rota=0,
-            scale=(1, 1, 1), psf=None, lsf=None, weight=False,
+            scale=(1, 1, 1), psf=None, lsf=None, weight=1,
             mask_cutoff=None, mask_create=False, mask_apply=False,
             dtype=np.float32):
         super().__init__()

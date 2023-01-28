@@ -251,5 +251,5 @@ class PSFImage(PSF):
         x, y = np.meshgrid(np.arange(size[1]), np.arange(size[0]))
         nx = (x - new_center_x) * scale_x + old_center_x
         ny = (y - new_center_y) * scale_y + old_center_y
-        data = scipy.ndimage.map_coordinates(self._data, [ny, nx], order=5)
+        data = scipy.ndimage.map_coordinates(self._data, [ny, nx], order=5)  # noqa
         return data / np.sum(data)

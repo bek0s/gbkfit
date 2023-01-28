@@ -3,7 +3,9 @@ from gbkfit.dataset.core import Dataset
 from . import _detail
 
 
-__all__ = ['DatasetLSlit']
+__all__ = [
+    'DatasetLSlit'
+]
 
 
 class DatasetLSlit(Dataset):

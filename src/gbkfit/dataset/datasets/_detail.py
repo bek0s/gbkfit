@@ -3,6 +3,12 @@ from gbkfit.dataset.data import data_parser
 from gbkfit.utils import parseutils
 
 
+__init__ = [
+    'load_dataset_common',
+    'dump_dataset_common'
+]
+
+
 def load_dataset_common(cls, info, names, **kwargs):
     prefix = kwargs.get('prefix', '')
     desc = parseutils.make_typed_desc(cls, 'dataset')

@@ -5,4 +5,4 @@ except ModuleNotFoundError:
     raise ModuleNotFoundError(
         "to use the pygmo fitter, please install pygmo")
 
-from .fitter import *
+from .fitters import *

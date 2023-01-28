@@ -1,7 +1,7 @@
 
 import abc
 
-from gbkfit.params.paramutils import parse_param_values_strict
+from gbkfit.params.parsers import parse_param_values_strict
 from gbkfit.utils import parseutils
 
 from gbkfit.params.params import Param, Params
@@ -14,7 +14,7 @@ class FitParam(Param, abc.ABC):
 class FitParams(Params, abc.ABC):
 
     def __init__(self, descs, parameters, conversions, param_type):
-        infos, exprs = parse_param_values_strict(descs, parameters, param_type)
+        infos, exprs = parse_param_values_strict(parameters, descs, param_type)
         super().__init__(descs, parameters, exprs, conversions)
         self._infos = infos
 

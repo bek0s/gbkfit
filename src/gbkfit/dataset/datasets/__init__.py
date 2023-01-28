@@ -11,7 +11,8 @@ def _register_datasets():
         DatasetImage,
         DatasetLSlit,
         DatasetMMaps,
-        DatasetSCube])
+        DatasetSCube
+    ])
 
 
 _register_datasets()

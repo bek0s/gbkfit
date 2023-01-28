@@ -3,7 +3,7 @@ import abc
 
 import numpy as np
 
-from gbkfit.driver.modules import (
+from gbkfit.driver.backend import (
     DriverBackendDModel,
     DriverBackendFFT,
     DriverBackendGModel)
@@ -13,7 +13,7 @@ __all__ = [
     'NativeMemory',
     'DriverBackendFFTNative',
     'DriverBackendDModelNative',
-    'DriverBackendGModelNative',
+    'DriverBackendGModelNative'
 ]
 
 
@@ -175,7 +175,7 @@ class DriverBackendGModelNative(DriverBackendGModel):
             image, scube,
             wdata, wdata_cmp,
             rdata, rdata_cmp,
-            ordata,ordata_cmp,
+            ordata, ordata_cmp,
             vdata_cmp, ddata_cmp):
         _ptr = self._memory.ptr
         _size = self._memory.size
