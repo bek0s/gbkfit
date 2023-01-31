@@ -52,6 +52,9 @@ class DriverBackendFFTHost(DriverBackendFFTNative):
             np.float32: native_module.FFTf32
         })
 
+    def __deepcopy__(self, memodict):
+        return self.__class__(self.dtype())
+
 
 class DriverBackendDModelHost(DriverBackendDModelNative):
 
@@ -60,6 +63,9 @@ class DriverBackendDModelHost(DriverBackendDModelNative):
             np.float32: native_module.DModelf32
         })
 
+    def __deepcopy__(self, memodict):
+        return self.__class__(self.dtype())
+
 
 class DriverBackendGModelHost(DriverBackendGModelNative):
 
@@ -67,3 +73,6 @@ class DriverBackendGModelHost(DriverBackendGModelNative):
         super().__init__(dtype, NativeMemoryHost, {
             np.float32: native_module.GModelf32
         })
+
+    def __deepcopy__(self, memodict):
+        return self.__class__(self.dtype())

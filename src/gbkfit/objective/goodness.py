@@ -29,7 +29,7 @@ class ObjectiveGoodness(ObjectiveResidual):
             driver = self.drivers()[i]
             dmodel = self.dmodels()[i]
             self._s_residual_scalar[i] = driver.mem_alloc_s(1, dmodel.dtype())
-            self._backends[i] = driver.backend().make_objective(dmodel.dtype())
+            # self._backends[i] = driver.backends().objective(dmodel.dtype())
         self._prepared = True
 
     def residual_scalar(self, params, out_extra=None):

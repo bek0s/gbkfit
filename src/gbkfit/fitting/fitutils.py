@@ -95,7 +95,7 @@ def prepare_optional_initial_value_min_max(
             f"initial_value ({initial_value}) and "
             f"initial_width ({initial_width}) will be ignored "
             f"because at least one of them is not set")
-        return None, None, None, None
+        return None, None, minimum, maximum
     initial_value_min = max(initial_value - initial_width / 2.0, minimum)
     initial_value_max = min(initial_value + initial_width / 2.0, maximum)
     return initial_value, initial_width, initial_value_min, initial_value_max

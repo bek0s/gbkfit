@@ -62,6 +62,9 @@ class DriverBackendFFTNative(DriverBackendFFT):
     def __deepcopy__(self, memodict):
         return self.__class__(self._dtype, self._memory, self._module)
 
+    def dtype(self):
+        return self._dtype
+
     def fft_r2c(self, data_r, data_c):
         _ptr = self._memory.ptr
         _shape = self._memory.shape
@@ -98,6 +101,9 @@ class DriverBackendDModelNative(DriverBackendDModel):
     def __deepcopy__(self, memodict):
         return self.__class__(self._dtype, self._memory, self._module)
 
+    def dtype(self):
+        return self._dtype
+
     def dcube_downscale(self, scale, edge_hi, cube_hi, cube_lo):
         _ptr = self._memory.ptr
         _shape = self._memory.shape
@@ -133,6 +139,9 @@ class DriverBackendGModelNative(DriverBackendGModel):
 
     def __deepcopy__(self, memodict):
         return self.__class__(self._dtype, self._memory, self._module)
+
+    def dtype(self):
+        return self._dtype
 
     def convolve(self, data1, data2, result):
         _ptr = self._memory.ptr

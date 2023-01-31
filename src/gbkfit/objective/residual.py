@@ -117,7 +117,7 @@ class ObjectiveResidual(ObjectiveModel):
             dataset = self.datasets()[i]
             driver = self.drivers()[i]
             dmodel = self.dmodels()[i]
-            onames = dmodel.onames()
+            onames = dmodel.keys()
             shape = dmodel.size()[::-1]
             dtype = dmodel.dtype()
             npix = dmodel.npix()
@@ -146,7 +146,7 @@ class ObjectiveResidual(ObjectiveModel):
                     slice_].reshape(shape)
                 self._h_residual_nddata[i][name] = self._h_residual_vector[i][
                     slice_].reshape(shape)
-            self._backends[i] = driver.backend().make_objective(dmodel.dtype())
+            # self._backends[i] = driver.backends().objective(dmodel.dtype())
         self._prepared = True
 
     def residual_vector_d(
@@ -179,11 +179,11 @@ class ObjectiveResidual(ObjectiveModel):
         model_data = self.model_d(params, out_extra_model)
         for i, dmodel in enumerate(self.dmodels()):
             npix = dmodel.npix()
-            for j, name in enumerate(dmodel.onames()):
+            for j, name in enumerate(dmodel.keys()):
                 # Grab references to model and data
                 slice_ = slice(j * npix, (j + 1) * npix)
                 mdl_d = model_data[i][name]['d'].ravel()
-                mdl_m = model_data[i][name]['m'].ravel()
+                # mdl_m = model_data[i][name]['m'].ravel()
                 dat_d = self._d_dataset_d_vector[i][slice_]
                 dat_m = self._d_dataset_m_vector[i][slice_]
                 dat_e = self._d_dataset_e_vector[i][slice_]
@@ -191,7 +191,8 @@ class ObjectiveResidual(ObjectiveModel):
                 # Calculate weights
                 # TODO
                 # Calculate residual
-                res[:] = dat_m * mdl_m * (dat_d - mdl_d) / dat_e
+                # res[:] = dat_m * mdl_m * (dat_d - mdl_d) / dat_e
+                res[:] = dat_m * (dat_d - mdl_d) / dat_e
         t.stop()
         t2 = time.time_ns()
         self.time_stats_samples(False)['res_eval'].append(t2 - t1)

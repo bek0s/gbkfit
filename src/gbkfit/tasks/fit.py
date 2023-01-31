@@ -57,6 +57,9 @@ def fit(config):
             "error while reading configuration file; "
             "see preceding exception for additional information") from e
 
+    # This is not a full-fledged validation. It just tries to catch
+    # and inform the user about the really obvious mistakes.
+    # todo: investigate the potential use of jsonschema for validation
     required_sections = (
         'drivers', 'datasets', 'dmodels', 'gmodels', 'params', 'fitter')
     optional_sections = ('objective', 'pdescs')

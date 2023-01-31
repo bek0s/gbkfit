@@ -80,6 +80,7 @@ class ObjectiveModel:
             gmodel = self.gmodels()[i]
             mapping = self._mappings[i]
             out_extra_i = dict()
+            print("mapping:", params)
             self._d_model_data[i].update(dmodel.evaluate(
                 driver, gmodel,
                 {param: params[mapping[param]] for param in mapping},

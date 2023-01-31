@@ -127,12 +127,26 @@ def main():
     parser_common.add_argument(
         '--verbose', action='store_true', help="enable verbose logging")
 
+    parser_common_output = argparse.ArgumentParser(add_help=False)
+    parser_common_output.add_argument(
+        '--output-dir', type=str, default='output',
+        metavar='OUTPUT',
+        help="the path of the directory to store the task's output")
+    parser_common_output.add_argument(
+        '--output-dir-unique', action='store_true',
+        help="ensure the output directory name is unique by "
+             "automatically appending a suffix number to it, if needed")
+    parser_common_output.add_argument(
+        '--output-overwrite', action='store_true',
+        help="overwrite all output files if they already exist")
+
     #
     # Create parser for eval task
     #
 
-    parser_eval = parsers_task.add_parser(
-        'eval', parents=[parser_common], help="evaluate model")
+    parser_eval = parsers_task.add_parser('eval', parents=[
+        parser_common_output, parser_common],
+        help="evaluate model")
     parser_eval.add_argument(
         'objective', type=str, choices=['model', 'goodness'],
         help="the type of objective to evaluate")
@@ -303,34 +317,35 @@ def main():
         parser_prep_input_1,
         parser_prep_roi_spat_2d,
         parser_prep_clip_1, parser_prep_ccl, parser_prep_nanpad,
-        parser_prep_common, parser_common],
+        parser_prep_common, parser_common_output, parser_common],
         help="image")
     parsers_prep.add_parser('lslit', parents=[
         parser_prep_input_1,
         parser_prep_roi_spat_1d, parser_prep_roi_spec_1d,
         parser_prep_clip_1, parser_prep_ccl, parser_prep_nanpad,
-        parser_prep_common, parser_common],
+        parser_prep_common, parser_common_output, parser_common],
         help="long slit")
     parsers_prep.add_parser('mmaps', parents=[
         parser_prep_orders,
         parser_prep_input_n,
         parser_prep_roi_spat_2d,
         parser_prep_clip_n, parser_prep_ccl, parser_prep_nanpad,
-        parser_prep_common, parser_common],
+        parser_prep_common, parser_common_output, parser_common],
         help="moment maps")
     parsers_prep.add_parser('scube', parents=[
         parser_prep_input_1,
         parser_prep_roi_spat_2d, parser_prep_roi_spec_1d,
         parser_prep_clip_1, parser_prep_ccl, parser_prep_nanpad,
-        parser_prep_common, parser_common],
+        parser_prep_common, parser_common_output, parser_common],
         help="spectral cube")
 
     #
     # Create parser for fit task
     #
 
-    parser_fit = parsers_task.add_parser(
-        'fit', parents=[parser_common], help="fit model to data")
+    parser_fit = parsers_task.add_parser('fit', parents=[
+        parser_common_output, parser_common],
+        help="fit model to data")
     parser_fit.add_argument(
         'config', type=str,
         help="configuration file path; json and yaml formats are supported")
@@ -339,16 +354,13 @@ def main():
     # Create parser for plot task
     #
 
-    parser_plot = parsers_task.add_parser(
-        'plot', parents=[parser_common], help="plot fitting results")
+    parser_plot = parsers_task.add_parser('plot', parents=[
+        parser_common_output, parser_common],
+        help="plot fitting results")
     parser_plot.add_argument(
         'result_dir', type=str,
         metavar='result-dir',
         help="the path of the output directory of a fitting run")
-    parser_plot.add_argument(
-        '--output-dir', type=str, default='result_figures',
-        metavar='OUTPUT',
-        help="the path of the directory to store the generated figures")
     parser_plot.add_argument(
         '--format', type=str, default='pdf', choices=['pdf', 'png'],
         help="the format of the created figures")
@@ -357,7 +369,7 @@ def main():
         metavar='DPI',
         help="the dpi of the created figures")
     parser_plot.add_argument(
-        '--only-best', action='store_true', default=True,
+        '--only-best', action='store_true',
         help="only plot results of the best solution; "
              "only useful for results containing multiple solutions")
     parser_plot.add_argument(
@@ -391,7 +403,9 @@ def main():
 
     if args.task == 'eval':
         import gbkfit.tasks.eval
-        gbkfit.tasks.eval.eval_(args.objective, args.config, args.profile)
+        gbkfit.tasks.eval.eval_(
+            args.objective, args.config, args.profile,
+            args.output_dir, args.output_dir_unique, args.output_overwrite)
 
     elif args.task == 'prep':
         import gbkfit.tasks.prep

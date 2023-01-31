@@ -359,8 +359,9 @@ def evaluate_components_b2d(
             image, wdata, bdata,
             spat_size, spat_step, spat_zero, spat_rota,
             dtype, component_out_extra)
-        for k, v in component_out_extra.items():
-            out_extra[f'{out_extra_label}component{i}_{k}'] = v
+        if component_out_extra is not None:
+            for k, v in component_out_extra.items():
+                out_extra[f'{out_extra_label}component{i}_{k}'] = v
 
 
 def evaluate_components_b3d(
@@ -376,8 +377,9 @@ def evaluate_components_b3d(
             image, wdata, bdata, obdata,
             spat_size, spat_step, spat_zero, spat_rota,
             dtype, component_out_extra)
-        for k, v in component_out_extra.items():
-            out_extra[f'{out_extra_label}component{i}_{k}'] = v
+        if component_out_extra is not None:
+            for k, v in component_out_extra.items():
+                out_extra[f'{out_extra_label}component{i}_{k}'] = v
 
 
 def evaluate_components_s2d(
@@ -395,8 +397,9 @@ def evaluate_components_s2d(
             spat_size, spat_step, spat_zero, spat_rota,
             spec_size, spec_step, spec_zero,
             dtype, component_out_extra)
-        for k, v in component_out_extra.items():
-            out_extra[f'{out_extra_label}component{i}_{k}'] = v
+        if component_out_extra is not None:
+            for k, v in component_out_extra.items():
+                out_extra[f'{out_extra_label}component{i}_{k}'] = v
 
 
 def evaluate_components_s3d(
@@ -414,8 +417,9 @@ def evaluate_components_s3d(
             spat_size, spat_step, spat_zero, spat_rota,
             spec_size, spec_step, spec_zero,
             dtype, component_out_extra)
-        for k, v in component_out_extra.items():
-            out_extra[f'{out_extra_label}component{i}_{k}'] = v
+        if component_out_extra is not None:
+            for k, v in component_out_extra.items():
+                out_extra[f'{out_extra_label}component{i}_{k}'] = v
 
 
 def evaluate_components_o3d(
@@ -429,5 +433,6 @@ def evaluate_components_o3d(
             driver, component_params, odata,
             spat_size, spat_step, spat_zero, spat_rota,
             dtype, component_out_extra)
-        for k, v in component_out_extra.items():
-            out_extra[f'{out_extra_label}component{i}_{k}'] = v
+        if component_out_extra is not None:
+            for k, v in component_out_extra.items():
+                out_extra[f'{out_extra_label}component{i}_{k}'] = v

@@ -30,9 +30,8 @@ class FitParams(Params, abc.ABC):
 
 class Fitter(parseutils.TypedParserSupport, abc.ABC):
 
-    @staticmethod
     @abc.abstractmethod
-    def load_params(info, desc):
+    def load_params(self, info, desc):
         pass
 
     def __init__(self, *args, **kwargs):

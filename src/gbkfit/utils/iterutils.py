@@ -59,6 +59,15 @@ def replace_items_and_copy(x, old_value, new_value):
     return [new_value if item == old_value else item for item in x]
 
 
+def rename_key(x, old_key, new_key):
+    result = {}
+    for key, val in x.items():
+        if key == old_key:
+            key = new_key
+        result[key] = val
+    return result
+
+
 def is_sorted(x, ascending=True):
     return not any(x[i-1] > x[i] if ascending else x[i-1] < x[i]
                    for i in range(1, len(x)))

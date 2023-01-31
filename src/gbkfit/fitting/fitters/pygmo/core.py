@@ -3,14 +3,20 @@ import abc
 import collections.abc
 import logging
 
+import numpy as np
+import pygmo as pg
+
 from gbkfit.fitting import fitutils
 from gbkfit.fitting.core import FitParam, FitParams, Fitter
 from gbkfit.params import parsers as param_parsers
 from gbkfit.utils import iterutils, parseutils
 
+from .problem import Problem
 
 __all__ = [
-    'FitParamPygmo'
+    'FitParamPygmo',
+    'FitParamsPygmo',
+    'FitterPygmo'
 ]
 
 
@@ -45,16 +51,12 @@ class FitParamPygmo(FitParam):
         initial_value, initial_width, initial_value_min, initial_value_max = \
             fitutils.prepare_optional_initial_value_min_max(
                 initial_value, initial_width, minimum, maximum)
-        self._has_initial = None not in [initial_value, initial_width]
         self._initial_value = initial_value
         self._initial_width = initial_width
         self._initial_value_minimum = initial_value_min
         self._initial_value_maximum = initial_value_max
         self._minimum = minimum
         self._maximum = maximum
-
-    def has_initial(self):
-        return self._has_initial
 
     def initial_value(self):
         return self._initial_value
@@ -100,8 +102,7 @@ class FitParamsPygmo(FitParams):
 
 class FitterPygmo(Fitter, abc.ABC):
 
-    @staticmethod
-    def load_params(info, descs):
+    def load_params(self, info, descs):
         return FitParamsPygmo.load(info, descs)
 
     @classmethod
@@ -113,17 +114,68 @@ class FitterPygmo(Fitter, abc.ABC):
     def dump(self):
         return dict()
 
-    def __init__(self, size, **kwargs):
+    def __init__(self, size, seed, verbosity, **kwargs):
         super().__init__(**kwargs)
+        self._size = size
+        self._seed = seed
+        self._verbosity = verbosity
+        self._rnd = np.random.default_rng(seed)
+        self._options = kwargs
 
-    def _setup_algorithm(self, options, parameters):
+    def size(self):
+        return self._size
+
+    def options(self):
+        return self._options
+
+    def is_multi_objective(self):
+        return False
+
+    @abc.abstractmethod
+    def create_algorithm(self, parameters):
         pass
 
     def _fit_impl(self, objective, parameters):
 
         ndim = len(parameters.infos())
-        print("OMG")
+        size = self._size
+        seed = self._seed
+        is_multi_objective = self.is_multi_objective()
+
+        minimums = ndim * [-np.inf]
+        maximums = ndim * [+np.inf]
+        initial_values = np.empty((ndim, size))
+
+        for i, (pname, pinfo) in enumerate(parameters.infos().items()):
+            minimums[i] = pinfo.minimum()
+            maximums[i] = pinfo.maximum()
+            initial_values[i, :] = self._rnd.uniform(
+                pinfo.initial_value_minimum(),
+                pinfo.initial_value_maximum(),
+                size)
+
+        prb = pg.problem(Problem(objective, parameters, minimums, maximums, is_multi_objective))
+        pop = pg.population(prb, size=size, seed=seed)
+
+        for i in range(size):
+            pop.set_x(i, initial_values[:, i])
+
+        alg = pg.algorithm(self.create_algorithm(parameters))
 
 
+        if alg.has_set_seed():
+            alg.set_seed(self._seed)
+        if alg.has_set_verbosity():
+            alg.set_verbosity(self._verbosity)
 
-        pass
+
+        pop = alg.evolve(pop)
+        exit()
+        print("----- RESULTS -----")
+        print(pg.sort_population_mo(pop.get_f()))
+        print("get_f():", pop.get_f().tolist())
+        print("get_x():", pop.get_x().tolist())
+        print(pop.champion_x)
+        print(pop.champion_f)
+        print("BYE")
+        exit()

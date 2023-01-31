@@ -1,13 +1,12 @@
 
 import json
 import logging
+import os
 
-import numpy as np
-
-from gbkfit.utils import iterutils
+from gbkfit.utils import iterutils, miscutils
 
 
-log = logging.getLogger(__name__)
+_log = logging.getLogger(__name__)
 
 
 def prepare_config(config, req_sections=(), opt_sections=()):
@@ -27,11 +26,11 @@ def prepare_config(config, req_sections=(), opt_sections=()):
         else:
             unknown_sections.append(s)
     if empty_sections:
-        log.info(
+        _log.info(
             f"the following optional sections are empty and will be ignored: "
             f"{str(empty_sections)}")
     if unknown_sections:
-        log.info(
+        _log.info(
             f"the following sections are not recognised and will be ignored: "
             f"{str(unknown_sections)}")
     config = {s: config[s] for s in known_sections}
@@ -111,3 +110,15 @@ def merge_pdescs(dict1, dict2):
             f"{str(intersection)}; "
             f"please choose different names")
     return dict1 | dict2
+
+
+def get_output_dir(output_dir, output_dir_unique):
+    output_dir = os.path.abspath(output_dir)
+    output_dir_exists = os.path.exists(output_dir)
+    output_dir_isdir = os.path.isdir(output_dir)
+    if output_dir_exists:
+        if output_dir_unique:
+            output_dir = miscutils.make_unique_path(output_dir)
+        elif not output_dir_isdir:
+            raise RuntimeError(f"{output_dir} already exists as a file")
+    return output_dir

@@ -1,6 +1,7 @@
 
 import json
 import logging
+import os
 
 import astropy.io.fits as fits
 import numpy as np
@@ -76,7 +77,9 @@ def _prepare_params(info, pdescs):
     return info | dict(parameters=parameters)
 
 
-def eval_(objective_type, config, profile):
+def eval_(
+        objective_type, config, profile,
+        output_dir, output_dir_unique, output_overwrite):
 
     #
     # Read configuration file and
@@ -92,6 +95,9 @@ def eval_(objective_type, config, profile):
             "error while reading configuration file; "
             "see preceding exception for additional information") from e
 
+    # This is not a full-fledged validation. It just tries to catch
+    # and inform the user about the really obvious mistakes.
+    # todo: investigate the potential use of jsonschema for validation
     required_sections = ('drivers', 'dmodels', 'gmodels', 'params')
     optional_sections = ('pdescs',)
     if objective_type == 'model':
@@ -135,6 +141,13 @@ def eval_(objective_type, config, profile):
     cfg['params'] = _prepare_params(cfg['params'], pdescs)
     params = gbkfit.params.params.evaluation_params_parser.load(
         cfg['params'], pdescs)
+
+    #
+    # Ensure an output directory is available for the outputs
+    #
+
+    output_dir = _detail.get_output_dir(output_dir, output_dir_unique)
+    _log.info(f"output will be stored under {output_dir}")
 
     #
     # Calculate model parameters
