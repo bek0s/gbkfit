@@ -12,6 +12,8 @@ __all__ = [
     'ParamDescDict',
     'ParamScalarDesc',
     'ParamVectorDesc',
+    'load_pdescs_dict',
+    'dump_pdescs_dict',
     'pdesc_parser'
 ]
 

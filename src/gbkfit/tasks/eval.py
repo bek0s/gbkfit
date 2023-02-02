@@ -8,15 +8,11 @@ import numpy as np
 import pandas as pd
 import ruamel.yaml
 
-import gbkfit
 import gbkfit.dataset
 import gbkfit.driver
 import gbkfit.model
 import gbkfit.objective
 import gbkfit.params
-import gbkfit.params.params
-import gbkfit.params.pdescs
-from gbkfit.params import parsers as param_parsers
 from gbkfit.utils import iterutils, timeutils
 from . import _detail
 
@@ -37,7 +33,7 @@ def _prepare_params(info, pdescs):
     # Prepare the supplied parameters. This will:
     # - Ensure the parameter keys are valid
     # - Explode parameter values that are dicts and can be exploded
-    parameters = param_parsers.prepare_param_info(
+    parameters = gbkfit.params.prepare_param_info(
         info.get('parameters'), pdescs)
 
     recovery_failed = []
@@ -46,6 +42,7 @@ def _prepare_params(info, pdescs):
     def recover_value(dict_, key_, index_):
         value = dict_.get('value')
         value_id = key if index_ is None else (key_, index_)
+        # We use the value of key 'value' as the parameter value
         if 'value' in dict_:
             recovery_succeed[value_id] = value
         else:
@@ -86,7 +83,8 @@ def eval_(
     # perform all necessary validation/preparation
     #
 
-    _log.info(f"reading configuration file: '{config}'...")
+    config = os.path.abspath(config)
+    _log.info(f"reading configuration file: {config}...")
 
     try:
         cfg = yaml.load(open(config))
@@ -106,6 +104,14 @@ def eval_(
         required_sections += ('datasets',)
         optional_sections += ('objective',)
     cfg = _detail.prepare_config(cfg, required_sections, optional_sections)
+
+    #
+    # Ensure an output directory is available for the outputs
+    #
+
+    _log.info("preparing output directory...")
+    output_dir = _detail.make_output_dir(output_dir, output_dir_unique)
+    _log.info(f"output will be stored under directory: {output_dir}")
 
     #
     # Setup all the components described in the configuration
@@ -134,20 +140,13 @@ def eval_(
     pdescs = None
     if 'pdescs' in cfg:
         _log.info("setting up pdescs...")
-        pdescs = gbkfit.params.pdescs.load_pdescs_dict(cfg['pdescs'])
+        pdescs = gbkfit.params.load_pdescs_dict(cfg['pdescs'])
     pdescs = _detail.merge_pdescs(objective.pdescs(), pdescs)
 
     _log.info("setting up params...")
     cfg['params'] = _prepare_params(cfg['params'], pdescs)
-    params = gbkfit.params.params.evaluation_params_parser.load(
+    params = gbkfit.params.evaluation_params_parser.load(
         cfg['params'], pdescs)
-
-    #
-    # Ensure an output directory is available for the outputs
-    #
-
-    output_dir = _detail.get_output_dir(output_dir, output_dir_unique)
-    _log.info(f"output will be stored under {output_dir}")
 
     #
     # Calculate model parameters
@@ -160,9 +159,8 @@ def eval_(
     params_info = iterutils.nativify(dict(
         params=params,
         eparams=eparams))
-    filename = 'gbkfit_eval_params'
-    json.dump(params_info, open(f'{filename}.json', 'w+'), indent=2)
-    yaml.dump(params_info, open(f'{filename}.yaml', 'w+'))
+    filename = os.path.join(output_dir, 'gbkfit_eval_params')
+    _detail.dump_dict(json, yaml, params_info, filename)
 
     #
     # Evaluate objective
@@ -238,10 +236,9 @@ def eval_(
                 sum=sum_, min=min_, max=max_, mean=mean, stddev=stddev,
                 median=median)})
 
-    filename = 'gbkfit_eval_outputs'
+    filename = os.path.join(output_dir, 'gbkfit_eval_outputs')
     outputs_stats = iterutils.nativify(outputs_stats)
-    json.dump(outputs_stats, open(f'{filename}.json', 'w+'), indent=2)
-    yaml.dump(outputs_stats, open(f'{filename}.yaml', 'w+'))
+    _detail.dump_dict(json, yaml, outputs_stats, filename)
 
     #
     # Store outputs
@@ -270,7 +267,6 @@ def eval_(
         _log.info("calculating timing statistics...")
         time_stats = iterutils.nativify(timeutils.get_time_stats())
         _log.info(pd.DataFrame.from_dict(time_stats, orient='index'))
-        filename = 'gbkfit_eval_timings'
+        filename = os.path.join(output_dir, 'gbkfit_eval_timings')
         time_stats |= dict(unit='milliseconds')
-        json.dump(time_stats, open(f'{filename}.json', 'w+'), indent=2)
-        yaml.dump(time_stats, open(f'{filename}.yaml', 'w+'))
+        _detail.dump_dict(json, yaml, time_stats, filename)

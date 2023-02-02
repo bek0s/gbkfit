@@ -14,6 +14,11 @@ def prepare_config(config, req_sections=(), opt_sections=()):
     def _is_empty_section(info):
         return info is None or (iterutils.is_iterable(info) and len(info) == 0)
 
+    # If the configuration file was empty, config will be None
+    # Convert it to an empty dict to keep the validation rolling
+    if config is None:
+        config = {}
+
     # Get rid of unrecognised and empty optional sections
     empty_sections = []
     known_sections = []
@@ -35,7 +40,8 @@ def prepare_config(config, req_sections=(), opt_sections=()):
             f"{str(unknown_sections)}")
     config = {s: config[s] for s in known_sections}
 
-    # Ensure that the required sections are present and valid
+    # Ensure that the required sections are present/valid
+    # and keep track of the missing ones
     missing_sections = []
     for s in req_sections:
         if s not in config or _is_empty_section(config[s]):
@@ -45,7 +51,7 @@ def prepare_config(config, req_sections=(), opt_sections=()):
             f"the following sections must be defined and not empty/null: "
             f"{str(missing_sections)}")
 
-    # Ensure that the sections have the right type
+    # Ensure the sections have the right type (if they are present)
     wrong_type_dict = []
     wrong_type_dict_seq = []
     for s in ['objective', 'fitter', 'pdescs', 'params']:
@@ -112,13 +118,21 @@ def merge_pdescs(dict1, dict2):
     return dict1 | dict2
 
 
-def get_output_dir(output_dir, output_dir_unique):
+def make_output_dir(output_dir, output_dir_unique):
     output_dir = os.path.abspath(output_dir)
     output_dir_exists = os.path.exists(output_dir)
     output_dir_isdir = os.path.isdir(output_dir)
     if output_dir_exists:
         if output_dir_unique:
             output_dir = miscutils.make_unique_path(output_dir)
+            os.makedirs(output_dir)
         elif not output_dir_isdir:
             raise RuntimeError(f"{output_dir} already exists as a file")
+    else:
+        os.makedirs(output_dir)
     return output_dir
+
+
+def dump_dict(json_, yaml_, info, filename):
+    json_.dump(info, open(f'{filename}.json', 'w+'), indent=2)
+    yaml_.dump(info, open(f'{filename}.yaml', 'w+'))

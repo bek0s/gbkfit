@@ -18,7 +18,7 @@ import gbkfit.dataset
 import gbkfit.model
 from gbkfit.utils import iterutils
 
-log = logging.getLogger(__name__)
+_log = logging.getLogger(__name__)
 
 
 # Use this object to load and dump yaml

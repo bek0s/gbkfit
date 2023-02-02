@@ -242,12 +242,18 @@ class TypedParser(Parser):
     def register(self, parsers):
         parsers = iterutils.listify(parsers, False)
         for parser in parsers:
-            desc = self.cls().__name__
-            type_ = parser.type()
-            if type_ in self._parsers:
+            parser_cls = self.cls().__name__
+            factory_type = parser.type()
+            factory_clss = parser.__name__
+
+            if not issubclass(parser, self.cls()):
                 raise RuntimeError(
-                    f"{desc} parser already registered: {type_}")
-            self._parsers[type_] = parser
+                    f"{parser_cls} parser cannot register factory of type {factory_clss}")
+
+            if factory_type in self._parsers:
+                raise RuntimeError(
+                    f"{parser_cls} parser already registered: {factory_type}")
+            self._parsers[factory_type] = parser
 
     def _load_one_impl(self, x, *args, **kwargs):
         desc = self.cls().__name__
