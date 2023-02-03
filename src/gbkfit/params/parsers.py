@@ -751,7 +751,7 @@ def load_params_parameters(info, pdescs, param_types, param_loader):
     for key, val in values.items():
         try:
             values[key] = param_loader(val)
-        except RuntimeError as e:
+        except Exception as e:
             raise RuntimeError(
                 f"could not parse information for parameter '{key}'; "
                 f"reason: {str(e)}") from e

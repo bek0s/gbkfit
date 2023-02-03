@@ -17,7 +17,7 @@ class DatasetLSlit(Dataset):
     @classmethod
     def load(cls, info, **kwargs):
         names = ['lslit']
-        opts = _detail.load_dataset_common(cls, info, names, **kwargs)
+        opts = _detail.load_dataset_common(cls, info, names, 2, **kwargs)
         return cls(**opts)
 
     def dump(self, **kwargs):

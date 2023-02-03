@@ -17,7 +17,7 @@ class DatasetSCube(Dataset):
     @classmethod
     def load(cls, info, **kwargs):
         names = ['scube']
-        opts = _detail.load_dataset_common(cls, info, names, **kwargs)
+        opts = _detail.load_dataset_common(cls, info, names, 3, **kwargs)
         return cls(**opts)
 
     def dump(self, **kwargs):

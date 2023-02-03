@@ -2,7 +2,9 @@
 import abc
 import copy
 import importlib
+import inspect
 import logging
+import typing
 
 from . import funcutils, iterutils
 
@@ -14,29 +16,29 @@ def make_basic_desc(cls, label):
     return f'{label} (class={cls.__qualname__})'
 
 
-def make_typed_desc(cls, label):
-    return f'{cls.type()} (class={cls.__qualname__}) {label}'
+def make_typed_desc(cls, label=None):
+    desc = f'{cls.type()} (class={cls.__qualname__})'
+    return f'{label} {desc}' if label else desc
 
 
 def parse_options(info, desc, required=None, optional=None):
     info = copy.deepcopy(info)
-    required = set(required if required else [])
-    optional = set(optional if optional else [])
+    required = iterutils.setify(required, False)
+    optional = iterutils.setify(optional, False)
     # Required options must not clash with optional options
-    if conflicting := required.intersection(optional):
+    if conflicting := required & optional:
         raise RuntimeError(
             f"the following required and optional options are conflicting: "
             f"{conflicting}")
-    # Check for missing or unknown options
-    unknown = set(info) - (required | optional)
-    missing = required - set(info)
-    if unknown:
+    # Check for unknown options
+    if unknown := set(info) - (required | optional):
         _log.warning(
             f"the following {desc} options are "
             f"not recognised and will be ignored: {str(unknown)}")
-    if missing:
+    # Check for missing options
+    if missing := required - set(info):
         raise RuntimeError(
-            f"the following {desc} options are "
+            f"the following options for {desc} are "
             f"required but missing: {str(missing)}")
     # Return all recognised options
     return {k: v for k, v in info.items() if k in required | optional}
@@ -46,65 +48,96 @@ def parse_options_for_callable(
         info, desc,
         fun, fun_ignore_args=None, fun_rename_args=None,
         add_required=None, add_optional=None):
-    required = set()
-    optional = set()
-    add_required = set(add_required if add_required else [])
-    add_optional = set(add_optional if add_optional else [])
-    add_all = add_required | add_optional
-    # Required added options must not clash with optional added options
-    if add_required.intersection(add_optional):
-        raise RuntimeError()
+    fun_ignore_args = iterutils.setify(fun_ignore_args, False)
+    fun_rename_args = fun_rename_args if fun_rename_args else {}
+    add_required = add_required if add_required else {}
+    add_optional = add_optional if add_optional else {}
+    add_required_keys = set(add_required.keys())
+    add_optional_keys = set(add_optional.keys())
+    # Extract required and optional options/arguments from callable
+    fun_required, fun_optional = funcutils.extract_args(fun)[1:]
+    fun_required = set(fun_required)  # todo: clean up
+    fun_optional = set(fun_optional)
+    fun_all = fun_required | fun_optional
+    # Ignore callable options if requested
+    if fun_ignore_args:
+        # Ensure the ignored options are known
+        if unknown := fun_ignore_args - fun_all:
+            raise RuntimeError(
+                f"the following ignored options do not exist "
+                f"in the callable's argument list: {unknown}")
+        fun_required.difference_update(fun_ignore_args)
+        fun_optional.difference_update(fun_ignore_args)
+    # Rename callable options if requested
+    if fun_rename_args:
+        # Ensure the old names of the rename options are known
+        if unknown := set(fun_rename_args.keys()) - fun_all:
+            raise RuntimeError(
+                f"the following rename options do not exist "
+                f"in the callable's argument list: {unknown}")
+        # Ensure the new names of the rename options are not
+        # in conflict with the arguments of the callable
+        if conflicting := set(fun_rename_args.values()) & fun_all:
+            raise RuntimeError(
+                f"the following rename options are in conflict "
+                f"with callable's argument list: {conflicting}")
+        for old_name, new_name in fun_rename_args.items():
+            if old_name in fun_required:
+                fun_required.discard(old_name)
+                fun_required.add(new_name)
+            if old_name in fun_optional:
+                fun_optional.discard(old_name)
+                fun_optional.add(new_name)
+    # These will hold the total required and optional options
+    required = set(fun_required)
+    optional = set(fun_optional)
+    # Added required options must not clash with added optional options
+    if intersection := add_required_keys & add_optional_keys:
+        raise RuntimeError(
+            f"the following options should not exist "
+            f"in both add_required and add_optional: "
+            f"{intersection}")
+    add_all_keys = add_required_keys | add_optional_keys
+    # Added options should not conflict with callable's options
+    if conflicting := add_all_keys & fun_all:
+        raise RuntimeError(
+            f"the following added options are in conflict "
+            f"with callable's argument list: {conflicting}")
+    # Renamed options must not clash with added options
+    rename_old_names = set(fun_rename_args.keys())
+    rename_new_names = set(fun_rename_args.values())
+    if intersection := add_all_keys & (rename_old_names | rename_new_names):
+        raise RuntimeError(
+            f"the following options should not exist "
+            f"in both fun_rename_args and add_[required|optional]: "
+            f"{intersection}")
     # Update total options with added options
-    required.update(add_required)
-    optional.update(add_optional)
-    # Infer options from callable
-    if fun:
-        fun_required, fun_optional = funcutils.extract_args(fun)[1:]
-        fun_required = set(fun_required)  # TODO clean up
-        fun_optional = set(fun_optional)
-        fun_all = fun_required | fun_optional
-        # Callable options must not clash with added options
-        if fun_all.intersection(add_all):
-            raise RuntimeError()
-        # Ignore callable options if requested
-        if fun_ignore_args:
-            fun_required.difference_update(fun_ignore_args)
-            fun_optional.difference_update(fun_ignore_args)
-        # Rename callable options if requested
-        if fun_rename_args:
-            for arg_name, opt_name in fun_rename_args.items():
-                if arg_name in fun_required:
-                    fun_required.discard(arg_name)
-                    fun_required.add(opt_name)
-                if arg_name in fun_optional:
-                    fun_optional.discard(arg_name)
-                    fun_optional.add(opt_name)
-        # Update total options with callable options
-        required.update(fun_required)
-        optional.update(fun_optional)
+    required.update(add_required_keys)
+    optional.update(add_optional_keys)
     # Parse required and optional options
     options = parse_options(info, desc, required, optional)
+    # Validate option types
+    option_types = inspect.get_annotations(fun)
+    option_types = option_types | add_required | add_optional
+    option_types = iterutils.remove_from_mapping_by_value(option_types, None)
+    for option_name, option_value in options.items():
+        if option_name in option_types:
+            option_type = option_types[option_name]
+            option_type_count = not bool(typing.get_args(option_type))
+            option_type_label = \
+                option_type.__name__ if option_type_count == 1 else option_type
+            option_value_type = type(option_value).__name__
+            if not isinstance(option_value, option_type):
+                raise RuntimeError(
+                    f"the value of option '{option_name}' is set to "
+                    f"'{option_value}', which is of type {option_value_type}; "
+                    f"however, the expected type for this option is: "
+                    f"{option_type_label}")
     # Rename options back to their argument name if needed
     if fun_rename_args:
         for arg_name, opt_name in fun_rename_args.items():
             if opt_name in options:
                 options[arg_name] = options.pop(opt_name)
-    return options
-
-
-def prepare_for_dump(options, remove_nones=True, remove_keys=()):
-    options = copy.deepcopy(options)
-    for key in list(options.keys()):
-        if key in remove_keys or (remove_nones and options[key] is None):
-            del options[key]
-    return options
-
-
-def prepare_for_dump2(options, predicate=lambda x: x is None, remove_keys=()):
-    options = copy.deepcopy(options)
-    for key in list(options.keys()):
-        if key in remove_keys or predicate(options[key]):
-            del options[key]
     return options
 
 
@@ -179,12 +212,21 @@ class Parser(abc.ABC):
     def cls(self):
         return self._cls
 
+    def cls_name(self):
+        return self.cls().__qualname__
+
     def load(self, x, *args, **kwargs):
+        print(locals())
         return self.load_many(x, *args, **kwargs) if iterutils.is_sequence(x) \
             else self.load_one(x, *args, **kwargs)
 
     def load_one(self, x, *args, **kwargs):
         x = copy.deepcopy(x)
+        if not isinstance(x, (dict, type(None))):
+            raise RuntimeError(
+                f"{self.cls_name()} parser "
+                f"expected configuration in the form of a dictionary; "
+                f"instead it found the following value: {x}")
         return self._load_one_impl(x, *args, **kwargs) \
             if x is not None else None
 
@@ -242,30 +284,40 @@ class TypedParser(Parser):
     def register(self, parsers):
         parsers = iterutils.listify(parsers, False)
         for parser in parsers:
-            parser_cls = self.cls().__name__
-            factory_type = parser.type()
-            factory_clss = parser.__name__
-
+            parser_desc = make_typed_desc(parser)
             if not issubclass(parser, self.cls()):
                 raise RuntimeError(
-                    f"{parser_cls} parser cannot register factory of type {factory_clss}")
-
-            if factory_type in self._parsers:
+                    f"{self.cls_name()} parser "
+                    f"could not register parser of type {parser_desc}; "
+                    f"the two parsers are incompatible")
+            if parser.type() in self._parsers:
                 raise RuntimeError(
-                    f"{parser_cls} parser already registered: {factory_type}")
-            self._parsers[factory_type] = parser
+                    f"{self.cls_name()} parser "
+                    f"could not register parser of type {parser_desc}; "
+                    f"a parser of the same type is already registered")
+            self._parsers[parser.type()] = parser
 
     def _load_one_impl(self, x, *args, **kwargs):
-        desc = self.cls().__name__
         if 'type' not in x:
             raise RuntimeError(
-                f"{desc} description must define a type")
+                f"{self.cls_name()} parser "
+                f"configurations must define a 'type'")
         type_ = x.pop('type')
         if type_ not in self._parsers:
             raise RuntimeError(
-                f"could not find a {desc} parser for type '{type_}'; "
+                f"{self.cls_name()} parser "
+                f"could not find a parser for type '{type_}'; "
                 f"the available parsers are: {list(self._parsers.keys())}")
-        return self._parsers[type_].load(x, *args, **kwargs)
+        # The parser exists. Get a reference to it for convenience
+        parser = self._parsers[type_]
+        try:
+            instance = parser.load(x, *args, **kwargs)
+        except Exception as e:
+            raise RuntimeError(
+                f"{self.cls_name()} parser "
+                f"could not parse configuration for item of type "
+                f"{make_typed_desc(parser)}, (reason)=> {e}") from e
+        return instance
 
     def _dump_one_impl(self, x, *args, **kwargs):
         info = x.dump(*args, **kwargs)
@@ -273,15 +325,15 @@ class TypedParser(Parser):
         return info
 
 
-def register_optional_parser_factories(parser, factories, desc_label):
-    for factory in factories:
+def register_optional_parsers(abstract_parser, parsers, desc_label):
+    for parser in parsers:
         try:
-            mod_name = factory.rsplit('.', 1)[0]
-            cls_name = factory.rsplit('.', 1)[1]
+            mod_name = parser.rsplit('.', 1)[0]
+            cls_name = parser.rsplit('.', 1)[1]
             mod = importlib.import_module(mod_name)
             cls = getattr(mod, cls_name)
-            parser.register(cls)
+            abstract_parser.register(cls)
         except Exception as e:
             _log.warning(
-                f"could not register {desc_label} factory {factory}; "
+                f"could not register {desc_label} parser {parser}; "
                 f"{e.__class__.__name__}: {e}")

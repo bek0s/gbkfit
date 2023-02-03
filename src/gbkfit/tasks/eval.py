@@ -78,6 +78,44 @@ def eval_(
         objective_type, config, profile,
         output_dir, output_dir_unique, output_overwrite):
 
+    # from gbkfit.utils import parseutils
+    #
+    # from typing import cast
+    #
+    # # print(cast(int, 2))
+    #
+    # def fun(a: bool | int, b, c=None, d=None):
+    #     pass
+    #
+    # info = dict(
+    #     foo=None,
+    #     bar=1,
+    #     baz={},
+    #     a=1,
+    #     b=2,
+    #     c=3,
+    #     d=4
+    # )
+    #
+    # import collections.abc
+    #
+    # parseutils.parse_options_for_callable(
+    #     info, 'desc', fun,
+    #     fun_ignore_args=[
+    #     ],
+    #     fun_rename_args={
+    #     },
+    #     add_required={
+    #         'foo': int | float | None,
+    #         'bar': int | float | bool,
+    #         'baz': collections.abc.Mapping
+    #     },
+    #     add_optional={
+    #     }
+    # )
+    #
+    # exit()
+
     #
     # Read configuration file and
     # perform all necessary validation/preparation

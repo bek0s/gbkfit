@@ -10,7 +10,9 @@ from gbkfit.utils import parseutils
 from . import _dcube, _detail
 
 
-__all__ = ['DModelMMaps']
+__all__ = [
+    'DModelMMaps'
+]
 
 
 _log = logging.getLogger(__name__)
@@ -28,7 +30,8 @@ class DModelMMaps(DModel):
 
     @classmethod
     def load(cls, info, dataset=None):
-        opts = _detail.load_dmodel_common(cls, info, 3, dataset, DatasetMMaps)
+        opts = _detail.load_dmodel_common(
+            cls, info, 3, True, True, dataset, DatasetMMaps)
         return cls(**opts)
 
     def dump(self):

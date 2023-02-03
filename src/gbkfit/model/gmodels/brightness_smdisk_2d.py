@@ -47,8 +47,8 @@ class BrightnessSMDisk2D(BrightnessComponent2D):
 
     def __init__(
             self,
-            loose,
-            tilted,
+            loose: bool | int,
+            tilted: bool,
             bptraits,
             sptraits=None,
             wptraits=None,

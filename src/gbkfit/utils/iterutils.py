@@ -35,6 +35,10 @@ def tuplify(x, none_is_val=True):
     return tuple(listify(x, none_is_val))
 
 
+def setify(x, none_is_val=True):
+    return set(listify(x, none_is_val))
+
+
 def _make_seq(s, v, t, copy_):
     s = tuplify(s)
     return t([_make_seq(s[1:], v, t, copy_) for _ in range(s[0])]) \

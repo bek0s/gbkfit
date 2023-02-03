@@ -3,12 +3,12 @@ from gbkfit.utils import parseutils
 
 
 def _register_drivers():
-    from gbkfit.driver.core import driver_parser as parser
-    factories = [
+    from gbkfit.driver.core import driver_parser as abstract_parser
+    parsers = [
         'gbkfit.driver.drivers.cuda.DriverCuda',
         'gbkfit.driver.drivers.host.DriverHost'
     ]
-    parseutils.register_optional_parser_factories(parser, factories, 'driver')
+    parseutils.register_optional_parsers(abstract_parser, parsers, 'driver')
 
 
 _register_drivers()

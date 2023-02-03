@@ -31,7 +31,7 @@ class FitterEmceeMove(parseutils.TypedParserSupport, abc.ABC):
 
     def dump(self):
         options = copy.deepcopy(self._kwargs)
-        parseutils.prepare_for_dump(options)
+        options = iterutils.remove_from_mapping_by_value(options, None)
         return dict(type=self.type()) | options
 
     def __init__(self, cls, kwargs):

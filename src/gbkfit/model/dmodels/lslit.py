@@ -6,7 +6,9 @@ from gbkfit.model.core import DModel, GModelSCube
 from . import _dcube, _detail
 
 
-__all__ = ['DModelLSlit']
+__all__ = [
+    'DModelLSlit'
+]
 
 
 class DModelLSlit(DModel):
@@ -21,8 +23,8 @@ class DModelLSlit(DModel):
 
     @classmethod
     def load(cls, info, dataset=None):
-        opts = _detail.load_dmodel_common(cls, info, 3, dataset, DatasetLSlit)
-        opts.update(size=opts['size'][:2])
+        opts = _detail.load_dmodel_common(
+            cls, info, 2, True, True, dataset, DatasetLSlit)
         return cls(**opts)
 
     def dump(self):

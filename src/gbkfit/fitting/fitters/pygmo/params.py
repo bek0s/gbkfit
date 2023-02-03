@@ -68,7 +68,7 @@ class FitParamsPygmo(FitParams):
         for key, val in infos.items():
             try:
                 infos[key] = FitParamPygmo.load(val)
-            except RuntimeError as e:
+            except Exception as e:
                 raise RuntimeError(
                     f"could not parse information for parameter '{key}'; "
                     f"reason: {str(e)}") from e

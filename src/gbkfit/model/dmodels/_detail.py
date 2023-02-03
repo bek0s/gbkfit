@@ -1,15 +1,64 @@
 
 import copy
+import logging
+from numbers import Integral, Real
 
 import numpy as np
 
 import gbkfit.psflsf
-from gbkfit.utils import parseutils
+from gbkfit.utils import iterutils, parseutils
 
 
-def load_dmodel_common(cls, info, ndim, dataset, expected_dataset_cls):
+__init__ = [
+    'load_dmodel_common',
+    'dump_dmodel_common'
+]
+
+
+_log = logging.getLogger(__name__)
+
+
+def _sanitize_dimensional_option(option, value, lengths, type_):
+    type_name = type_.__name__
+    lengths = iterutils.listify(lengths)
+    max_length = max(lengths)
+    if isinstance(value, type_):
+        return iterutils.make_list(max_length, value)
+    if iterutils.is_sequence_of_type(value, type_):
+        if len(value) < max_length:
+            raise RuntimeError(
+                f"option '{option}' has a value "
+                f"with a length shorter than expected; "
+                f"expected length: {' or '.join(map(str, lengths))}, "
+                f"current length: {len(value)}")
+        if len(value) > max_length:
+            new_value = value[:max_length]
+            _log.warning(
+                f"option '{option}' has a value "
+                f"with a length longer than expected; "
+                f"expected length: {' or '.join(map(str, lengths))}, "
+                f"current length: {len(value)}; "
+                f"the value will be trimmed to: {new_value}")
+            value = new_value
+        return value
+    raise RuntimeError(
+        f"option '{option}' should be a scalar of type {type_name}, "
+        f"or a sequence of type {type_name} and "
+        f"length of {' or '.join(map(str, lengths))}")
+
+
+def load_dmodel_common(
+        cls, info, ndim, has_psf, has_lsf, dataset, expected_dataset_cls):
     desc = parseutils.make_typed_desc(cls, 'dmodel')
-    info = copy.deepcopy(info)
+
+    # Load psf/lsf
+    if has_psf and 'psf' in info:
+        info['psf'] = gbkfit.psflsf.psf_parser.load_one(info['psf'])
+    if has_lsf and 'lsf' in info:
+        info['lsf'] = gbkfit.psflsf.lsf_parser.load_one(info['lsf'])
+    # ...
+    if 'dtype' in info:
+        info['dtype'] = np.dtype(info['dtype']).type
     # Try to get information from the supplied dataset (optional)
     if dataset:
         if not isinstance(dataset, expected_dataset_cls):
@@ -29,16 +78,26 @@ def load_dmodel_common(cls, info, ndim, dataset, expected_dataset_cls):
             rval=info.get('rval', dataset.rval()),
             rota=info.get('rota', dataset.rota()),
             dtype=info.get('dtype', str(dataset.dtype))))
+    # Validate, sanitize, and prepare dimensional options.
+    # While we could rely on the type hint validation of
+    # parseutils.parse_options_for_callable or other assertions inside
+    # the __init__() method, we prepare those options here. This allows
+    # us to be more tolerant with their values, when possible.
+    # For example, we can now convert an scube configuration to
+    # an image configuration by just changing its type, without
+    # having to adjust any dimensional options. The code will just use
+    # the first two dimensions and ignore the last one.
+    for option_name, option_type in [
+            ('size', Integral),
+            ('step', Real),
+            ('rpix', Real),
+            ('rval', Real),
+            ('scale', Integral)]:
+        if option_name in info:
+            info[option_name] = _sanitize_dimensional_option(
+                option_name, info[option_name], ndim, option_type)
+    # Parse options and create object
     opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
-    for attr in ['size', 'step', 'cval', 'scale']:
-        if attr in opts:
-            opts[attr] = opts[attr][:ndim]
-    if 'dtype' in opts:
-        opts['dtype'] = np.dtype(opts['dtype']).type
-    if 'psf' in opts:
-        opts['psf'] = gbkfit.psflsf.psf_parser.load(opts['psf'])
-    if 'lsf' in opts:
-        opts['lsf'] = gbkfit.psflsf.lsf_parser.load(opts['lsf'])
     return opts
 
 

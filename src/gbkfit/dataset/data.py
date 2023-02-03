@@ -1,7 +1,8 @@
 
 import logging
-import numbers
 import os.path
+from collections.abc import Sequence
+from numbers import Real
 
 import astropy.wcs
 import numpy as np
@@ -36,29 +37,28 @@ class Data:
     @classmethod
     def load(cls, info, step=None, rpix=None, rval=None, rota=None, prefix=''):
         desc = parseutils.make_basic_desc(cls, 'data')
-        opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
-        data_d, wcs_d = fitsutils.load_fits(prefix + opts['data'])
+        data_d, wcs_d = fitsutils.load_fits(prefix + info['data'])
         data_m = None
         data_e = None
-        if 'mask' in opts:
-            data_m = fitsutils.load_fits(prefix + opts['mask'])[0]
-        if 'error' in opts:
-            data_e = fitsutils.load_fits(prefix + opts['error'])[0]
+        if 'mask' in info:
+            data_m = fitsutils.load_fits(prefix + info['mask'])[0]
+        if 'error' in info:
+            data_e = fitsutils.load_fits(prefix + info['error'])[0]
         # Local information has higher priority than global
-        step = opts.get('step', step)
-        rpix = opts.get('rpix', rpix)
-        rval = opts.get('rval', rval)
-        rota = opts.get('rota', rota)
+        step = info.get('step', step)
+        rpix = info.get('rpix', rpix)
+        rval = info.get('rval', rval)
+        rota = info.get('rota', rota)
         # If no information is provided, use fits header
         if step is None:
-            step = wcs_d.wcs.cdelt  # noqa
+            step = wcs_d.wcs.cdelt.tolist()  # noqa
         if rpix is None:
-            rpix = wcs_d.wcs.crpix  # noqa
+            rpix = wcs_d.wcs.crpix.tolist()   # noqa
         if rval is None:
-            rval = wcs_d.wcs.crval  # noqa
+            rval = wcs_d.wcs.crval.tolist()   # noqa
         # todo: deal with rotation (PC Matrix and CROTA (deprecated))
         # Build class arguments dict
-        opts.update(dict(
+        info.update(dict(
             data=data_d,
             mask=data_m,
             error=data_e,
@@ -66,6 +66,8 @@ class Data:
             rpix=rpix,
             rval=rval,
             rota=rota))
+        # Parse options and create object
+        opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
         return cls(**opts)
 
     def dump(
@@ -105,8 +107,15 @@ class Data:
         return info
 
     def __init__(
-            self, data, mask=None, error=None,
-            step=None, rpix=None, rval=None, rota=0):
+            self,
+            data: np.ndarray,
+            mask: np.ndarray | None = None,
+            error: np.ndarray | None = None,
+            step: Sequence | None = None,
+            rpix: Sequence | None = None,
+            rval: Sequence | None = None,
+            rota: Real | None = 0
+    ):
         if mask is None:
             mask = np.ones_like(data)
         if error is None:
@@ -117,11 +126,13 @@ class Data:
             rpix = tuple((np.array(data.shape[::-1]) / 2 - 0.5).tolist())
         if rval is None:
             rval = (0,) * data.ndim
-        if isinstance(step, numbers.Real):
+        if rota is None:
+            rota = 0
+        if isinstance(step, Real):
             step = (step,) * data.ndim
-        if isinstance(rpix, numbers.Real):
+        if isinstance(rpix, Real):
             rpix = (rpix,) * data.ndim
-        if isinstance(rval, numbers.Real):
+        if isinstance(rval, Real):
             rval = (rval,) * data.ndim
         data = miscutils.to_native_byteorder(data)
         mask = miscutils.to_native_byteorder(mask)

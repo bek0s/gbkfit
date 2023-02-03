@@ -6,7 +6,9 @@ from gbkfit.model.core import DModel, GModelSCube
 from . import _dcube, _detail
 
 
-__all__ = ['DModelSCube']
+__all__ = [
+    'DModelSCube'
+]
 
 
 class DModelSCube(DModel):
@@ -21,7 +23,8 @@ class DModelSCube(DModel):
 
     @classmethod
     def load(cls, info, dataset=None):
-        opts = _detail.load_dmodel_common(cls, info, 3, dataset, DatasetSCube)
+        opts = _detail.load_dmodel_common(
+            cls, info, 3, True, True, dataset, DatasetSCube)
         return cls(**opts)
 
     def dump(self):

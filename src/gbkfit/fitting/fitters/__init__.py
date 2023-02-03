@@ -3,8 +3,8 @@ from gbkfit.utils import parseutils
 
 
 def _register_fitters():
-    from gbkfit.fitting.core import fitter_parser as parser
-    factories = [
+    from gbkfit.fitting.core import fitter_parser as abstract_parser
+    parsers = [
         # dynesty
         'gbkfit.fitting.fitters.dynesty.FitterDynestyDNS',
         'gbkfit.fitting.fitters.dynesty.FitterDynestySNS',
@@ -44,7 +44,7 @@ def _register_fitters():
         'gbkfit.fitting.fitters.pygmo.FitterPygmoWORHP',
         'gbkfit.fitting.fitters.pygmo.FitterPygmoMBH'
     ]
-    parseutils.register_optional_parser_factories(parser, factories, 'fitter')
+    parseutils.register_optional_parsers(abstract_parser, parsers, 'fitter')
 
 
 _register_fitters()
