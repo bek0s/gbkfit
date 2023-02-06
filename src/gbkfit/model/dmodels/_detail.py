@@ -50,7 +50,6 @@ def _sanitize_dimensional_option(option, value, lengths, type_):
 def load_dmodel_common(
         cls, info, ndim, has_psf, has_lsf, dataset, expected_dataset_cls):
     desc = parseutils.make_typed_desc(cls, 'dmodel')
-
     # Load psf/lsf
     if has_psf and 'psf' in info:
         info['psf'] = gbkfit.psflsf.psf_parser.load_one(info['psf'])

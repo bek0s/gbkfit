@@ -1,8 +1,12 @@
 
+from collections.abc import Sequence
+from numbers import Real
+
 import numpy as np
 
 from gbkfit.dataset.datasets import DatasetSCube
 from gbkfit.model.core import DModel, GModelSCube
+from gbkfit.psflsf import LSF, PSF
 from . import _dcube, _detail
 
 
@@ -31,10 +35,21 @@ class DModelSCube(DModel):
         return _detail.dump_dmodel_common(self)
 
     def __init__(
-            self, size, step=(1, 1, 1), rpix=None, rval=(0, 0, 0), rota=0,
-            scale=(1, 1, 1), psf=None, lsf=None, weight=1,
-            mask_cutoff=None, mask_create=False, mask_apply=False,
-            dtype=np.float32):
+            self,
+            size: Sequence,
+            step: Sequence = (1, 1, 1),
+            rpix: Sequence = None,
+            rval: Sequence = (0, 0, 0),
+            rota: Real = 0,
+            scale: Sequence = (1, 1, 1),
+            psf: PSF | None = None,
+            lsf: LSF | None = None,
+            weight: Real = 1,
+            mask_cutoff: Real | None = None,
+            mask_create: bool = False,
+            mask_apply: bool = False,
+            dtype=np.float32
+    ):
         super().__init__()
         if rpix is None:
             rpix = tuple((np.array(size) / 2 - 0.5).tolist())

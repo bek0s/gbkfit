@@ -31,10 +31,21 @@ class DModelLSlit(DModel):
         return _detail.dump_dmodel_common(self)
 
     def __init__(
-            self, size, step=(1, 1, 1), rpix=None, rval=(0, 0, 0), rota=0,
-            scale=(1, 1, 1), psf=None, lsf=None, weight=1,
-            mask_cutoff=None, mask_create=False, mask_apply=False,
-            dtype=np.float32):
+            self,
+            size,
+            step=(1, 1, 1),
+            rpix=None,
+            rval=(0, 0, 0),
+            rota=0,
+            scale=(1, 1, 1),
+            psf=None,
+            lsf=None,
+            weight=1,
+            mask_cutoff=None,
+            mask_create=False,
+            mask_apply=False,
+            dtype=np.float32
+    ):
         super().__init__()
         if rpix is None:
             rpix = tuple((np.array(size) / 2 - 0.5).tolist())

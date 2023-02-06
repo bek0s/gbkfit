@@ -78,43 +78,51 @@ def eval_(
         objective_type, config, profile,
         output_dir, output_dir_unique, output_overwrite):
 
-    # from gbkfit.utils import parseutils
+    # import typing
+    # from numbers import Integral, Real
+    # from collections.abc import Mapping, Sequence
+    # from gbkfit.utils import parseutils, typeutils
+    # from gbkfit.psflsf import PSF
+    # from gbkfit.psflsf.psfs import PSFGauss
     #
-    # from typing import cast
+    # info = {
+    #     'd': PSFGauss(1, 2, 3)
+    # }
     #
-    # # print(cast(int, 2))
+    # types = Mapping[str, PSF | None]
     #
-    # def fun(a: bool | int, b, c=None, d=None):
-    #     pass
+    # result = typeutils.validate_type(info, types)
     #
-    # info = dict(
-    #     foo=None,
-    #     bar=1,
-    #     baz={},
-    #     a=1,
-    #     b=2,
-    #     c=3,
-    #     d=4
-    # )
-    #
-    # import collections.abc
-    #
-    # parseutils.parse_options_for_callable(
-    #     info, 'desc', fun,
-    #     fun_ignore_args=[
-    #     ],
-    #     fun_rename_args={
-    #     },
-    #     add_required={
-    #         'foo': int | float | None,
-    #         'bar': int | float | bool,
-    #         'baz': collections.abc.Mapping
-    #     },
-    #     add_optional={
-    #     }
-    # )
+    # print("final:", result)
     #
     # exit()
+
+    from gbkfit.utils import parseutils
+    from collections.abc import Sequence
+
+    def fun(a: bool | int, b):
+        pass
+
+    info = dict(
+        a=1,
+        b=2,
+        foo=(7, 8)
+    )
+
+    parseutils.parse_options_for_callable(
+        info, 'desc', fun,
+        fun_ignore_args=[
+        ],
+        fun_rename_args={
+        },
+        add_required={
+            'foo': Sequence[int]
+        },
+        add_optional={
+        }
+    )
+
+    exit()
 
     #
     # Read configuration file and

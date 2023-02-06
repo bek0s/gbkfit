@@ -2,7 +2,7 @@
 import logging
 import os.path
 from collections.abc import Sequence
-from numbers import Real
+from numbers import Integral, Real
 
 import astropy.wcs
 import numpy as np

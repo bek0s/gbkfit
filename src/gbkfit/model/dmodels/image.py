@@ -40,7 +40,7 @@ class DModelImage(DModel):
             step: Sequence = (1, 1),
             rpix: Sequence = None,
             rval: Sequence = (0, 0),
-            rota: Integral = 0,
+            rota: Real = 0,
             scale: Sequence = (1, 1),
             psf: PSF | None = None,
             weight: Real = 1,

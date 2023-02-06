@@ -85,7 +85,11 @@ def load_dataset_common(cls, info, names, ndim, **kwargs):
             step=Sequence,
             rpix=Sequence,
             rval=Sequence,
-            rota=Real))
+            rota=Real),
+        types={
+
+        }
+    )
     return opts
 
 

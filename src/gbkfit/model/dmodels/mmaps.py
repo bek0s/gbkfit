@@ -1,11 +1,14 @@
 
 import logging
+from collections.abc import Sequence
+from numbers import Real
 
 import numpy as np
 
 import gbkfit.math
 from gbkfit.dataset.datasets import DatasetMMaps
 from gbkfit.model.core import DModel, GModelSCube
+from gbkfit.psflsf import LSF, PSF
 from gbkfit.utils import parseutils
 from . import _dcube, _detail
 
@@ -38,11 +41,20 @@ class DModelMMaps(DModel):
         return _detail.dump_dmodel_common(self)
 
     def __init__(
-            self, size, step=(1, 1), rpix=None, rval=(0, 0), rota=0,
-            scale=(1, 1), psf=None, lsf=None, weights=None,
-            mask_cutoff=1e-6,
-            orders=(0, 1, 2),
-            dtype=np.float32):
+            self,
+            size: Sequence,
+            step: Sequence = (1, 1),
+            rpix: Sequence = None,
+            rval: Sequence = (0, 0),
+            rota: Real = 0,
+            scale: Sequence = (1, 1),
+            psf: PSF | None = None,
+            lsf: LSF | None = None,
+            weights: Sequence | None = None,
+            mask_cutoff: Real = 1e-6,
+            orders: Sequence = (0, 1, 2),
+            dtype=np.float32
+    ):
         super().__init__()
         if rpix is None:
             rpix = tuple((np.array(size) / 2 - 0.5).tolist())
