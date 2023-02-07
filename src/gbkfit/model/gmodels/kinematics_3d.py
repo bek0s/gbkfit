@@ -1,4 +1,6 @@
 
+from collections.abc import Sequence
+
 from gbkfit.model.core import GModelSCube
 from gbkfit.utils import iterutils, parseutils
 from . import _detail
@@ -32,11 +34,9 @@ class GModelKinematics3D(GModelSCube):
     @classmethod
     def load(cls, info):
         desc = parseutils.make_typed_desc(cls, 'gmodel')
+        parseutils.load_if_exists(_scmp_parser, info, 'components')
+        parseutils.load_if_exists(_ocmp_parser, info, 'opacity_components')
         opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
-        opts.update(
-            components=_scmp_parser.load(info['components']),
-            opacity_components=_ocmp_parser.load(
-                info.get('opacity_components')))
         return cls(**opts)
 
     def dump(self):
@@ -49,12 +49,21 @@ class GModelKinematics3D(GModelSCube):
             opacity_components=_ocmp_parser.dump(self._ocomponents))
 
     def __init__(
-            self, components, opacity_components=None,
-            size_z=None, step_z=None, zero_z=None):
-        if opacity_components is None:
+            self,
+            components:
+            SpectralComponent3D | Sequence[SpectralComponent3D],
+            opacity_components:
+            OpacityComponent3D | Sequence[OpacityComponent3D] | None = None,
+            size_z: int | None = None,
+            step_z: int | float | None = None,
+            zero_z: int | float | None = None
+    ):
+        if not components:
+            raise RuntimeError("at least one component must be configured")
+        if not opacity_components:
             opacity_components = ()
-        self._components = iterutils.tuplify(components)
-        self._ocomponents = iterutils.tuplify(opacity_components)
+        self._components = iterutils.tuplify(components, False)
+        self._ocomponents = iterutils.tuplify(opacity_components, False)
         self._size = [None, None, size_z]
         self._step = [None, None, step_z]
         self._zero = [None, None, zero_z]

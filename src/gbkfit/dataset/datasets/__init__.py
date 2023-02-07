@@ -6,8 +6,8 @@ from .scube import *
 
 
 def _register_datasets():
-    from gbkfit.dataset.core import dataset_parser as parser
-    parser.register([
+    from gbkfit.dataset.core import dataset_parser as abstract_parser
+    abstract_parser.register([
         DatasetImage,
         DatasetLSlit,
         DatasetMMaps,

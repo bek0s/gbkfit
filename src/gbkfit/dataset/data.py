@@ -2,7 +2,6 @@
 import logging
 import os.path
 from collections.abc import Sequence
-from numbers import Integral, Real
 
 import astropy.wcs
 import numpy as np
@@ -53,9 +52,9 @@ class Data:
         if step is None:
             step = wcs_d.wcs.cdelt.tolist()  # noqa
         if rpix is None:
-            rpix = wcs_d.wcs.crpix.tolist()   # noqa
+            rpix = wcs_d.wcs.crpix.tolist()  # noqa
         if rval is None:
-            rval = wcs_d.wcs.crval.tolist()   # noqa
+            rval = wcs_d.wcs.crval.tolist()  # noqa
         # todo: deal with rotation (PC Matrix and CROTA (deprecated))
         # Build class arguments dict
         info.update(dict(
@@ -111,10 +110,10 @@ class Data:
             data: np.ndarray,
             mask: np.ndarray | None = None,
             error: np.ndarray | None = None,
-            step: Sequence | None = None,
-            rpix: Sequence | None = None,
-            rval: Sequence | None = None,
-            rota: Real | None = 0
+            step: Sequence[int | float] | None = None,
+            rpix: Sequence[int | float] | None = None,
+            rval: Sequence[int | float] | None = None,
+            rota: int | float | None = 0
     ):
         if mask is None:
             mask = np.ones_like(data)
@@ -128,11 +127,11 @@ class Data:
             rval = (0,) * data.ndim
         if rota is None:
             rota = 0
-        if isinstance(step, Real):
+        if isinstance(step, (int, float)):
             step = (step,) * data.ndim
-        if isinstance(rpix, Real):
+        if isinstance(rpix, (int, float)):
             rpix = (rpix,) * data.ndim
-        if isinstance(rval, Real):
+        if isinstance(rval, (int, float)):
             rval = (rval,) * data.ndim
         data = miscutils.to_native_byteorder(data)
         mask = miscutils.to_native_byteorder(mask)
@@ -174,7 +173,7 @@ class Data:
         mask[total_mask == 0] = 0
         mask[total_mask != 0] = 1
         error[total_mask == 0] = np.nan
-        # Calculate the world coordinates at pixel (0, 0)
+        # Calculate the world coordinates at the very first pixel
         zero = (np.array(rval) - np.array(rpix) * np.array(step)).tolist()
         # Keep copies of the supplied data
         self._data = data.copy()

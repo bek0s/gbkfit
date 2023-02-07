@@ -1,7 +1,6 @@
 
 import logging
 from collections.abc import Sequence
-from numbers import Real
 
 import numpy as np
 
@@ -34,7 +33,7 @@ class DModelMMaps(DModel):
     @classmethod
     def load(cls, info, dataset=None):
         opts = _detail.load_dmodel_common(
-            cls, info, 3, True, True, dataset, DatasetMMaps)
+            cls, info, 2, True, True, dataset, DatasetMMaps)
         return cls(**opts)
 
     def dump(self):
@@ -42,17 +41,17 @@ class DModelMMaps(DModel):
 
     def __init__(
             self,
-            size: Sequence,
-            step: Sequence = (1, 1),
-            rpix: Sequence = None,
-            rval: Sequence = (0, 0),
-            rota: Real = 0,
-            scale: Sequence = (1, 1),
+            size: Sequence[int],
+            step: Sequence[int | float] = (1, 1),
+            rpix: Sequence[int | float] | None = None,
+            rval: Sequence[int | float] = (0, 0),
+            rota: int | float = 0,
+            scale: Sequence[int] = (1, 1),
             psf: PSF | None = None,
             lsf: LSF | None = None,
-            weights: Sequence | None = None,
-            mask_cutoff: Real = 1e-6,
-            orders: Sequence = (0, 1, 2),
+            weights: Sequence[int | float] | None = None,
+            mask_cutoff: int | float = 1e-6,
+            orders: Sequence[int] = (0, 1, 2),
             dtype=np.float32
     ):
         super().__init__()

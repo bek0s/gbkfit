@@ -1,9 +1,8 @@
 
 import typing
 from collections.abc import Mapping, Sequence, Set
-from itertools import zip_longest
 from types import UnionType
-from typing import Any
+from typing import Any, Tuple
 
 
 __all__ = [
@@ -26,16 +25,23 @@ def validate_type(value, type_):
     if origin is None:
         result = result and (type_ == Any or isinstance(value, type_))
 
-    # Type expected: Union
+    # Type expected: union
     elif issubclass(origin, UnionType):
         result = any(validate_type(value, arg) for arg in args)
 
+    # Type expected: tuple
+    elif issubclass(origin, Tuple):
+        if isinstance(value, tuple) and (len(args) == len(value)):
+            for val, arg in zip(value, args):
+                result = result and validate_type(val, arg)
+        else:
+            result = False
+
     # Type expected: sequence
     elif issubclass(origin, Sequence):
-        if isinstance(value, Sequence) \
-                and (len(args) == len(value) or len(args) == 1):
-            for val, arg in zip_longest(value, args, fillvalue=args[0]):
-                result = result and validate_type(val, arg)
+        if isinstance(value, Sequence):
+            for val in value:
+                result = result and validate_type(val, args[0])
         else:
             result = False
 

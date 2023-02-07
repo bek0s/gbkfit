@@ -1,4 +1,6 @@
 
+from collections.abc import Sequence
+
 from gbkfit.model.core import GModelSCube
 from gbkfit.utils import iterutils, parseutils
 from . import _detail
@@ -24,9 +26,8 @@ class GModelKinematics2D(GModelSCube):
     @classmethod
     def load(cls, info):
         desc = parseutils.make_typed_desc(cls, 'gmodel')
+        parseutils.load_if_exists(_scmp_parser, info, 'components')
         opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
-        opts.update(
-            components=_scmp_parser.load(info['components']))
         return cls(**opts)
 
     def dump(self):
@@ -34,8 +35,13 @@ class GModelKinematics2D(GModelSCube):
             type=self.type(),
             components=_scmp_parser.dump(self._components))
 
-    def __init__(self, components):
-        self._components = iterutils.tuplify(components)
+    def __init__(
+            self,
+            components: SpectralComponent2D | Sequence[SpectralComponent2D]
+    ):
+        if not components:
+            raise RuntimeError("at least one component must be configured")
+        self._components = iterutils.tuplify(components, False)
         self._size = [None, None]
         self._step = [None, None]
         self._zero = [None, None]

@@ -21,78 +21,7 @@ def make_typed_desc(cls, label=None):
     return f'{label} {desc}' if label else desc
 
 
-def validate_option_value_type(options, types):
-    for option_name, option_value in options.items():
-        if option_name in types:
-            option_type_info = types[option_name]
-            option_type = option_type_info['type']
-            option_size = option_type_info.get('size')
-            option_trim = option_type_info.get('trim')
-            option_allow_scalar = option_type_info.get('allow_scalar')
-            option_is_scalar = option_size is None
-            option_is_vector = option_size is not None
-            option_type = iterutils.tuplify(option_type)
-            option_size = iterutils.tuplify(option_size, False)
-            option_type_name = [f"'{t.__name__}'" for t in option_type]
-            option_type_name_joined = " or ".join(option_type_name)
-            option_size_max = max(option_size) if option_size else None
-            option_type_size_joined = " or ".join(map(str, option_size))
-            # Option is scalar, value is scalar, type is correct
-            # All good. Proceed to the next option
-            if option_is_scalar and \
-                    isinstance(option_value, option_type):
-                continue
-            # Option is vector, value is scalar, type is correct
-            # and scalar values are allowed.
-            # Multiply the scalar and proceed to the next option
-            if option_is_vector and option_allow_scalar and \
-                    isinstance(option_value, option_type):
-                options[option_name] = iterutils.make_list(
-                    option_size_max, option_value)
-                continue
-            # Option is vector, value is vector, type is correct
-            # We need to check the size
-            if option_is_vector and \
-                    iterutils.is_sequence_of_type(option_value, option_type):
-                # Any size is allowed.
-                # Nothing to do. Proceed to the next option
-                if option_size_max == 0:
-                    continue
-                # Value size is larger and trimming is allowed
-                # Trim the value to maximum allowed size and
-                # proceed to the next option
-                if len(option_value) > option_size_max and option_trim:
-                    option_value_new = option_value[:option_size_max]
-                    _log.warning(
-                        f"option '{option_name}' has a sequence value "
-                        f"with a length longer than expected; "
-                        f"expected length: {option_type_size_joined}, "
-                        f"current length: {len(option_value)}; "
-                        f"the value will be trimmed to: {option_value_new}")
-                    options[option_name] = option_value_new
-                    continue
-                # Value size is allowed
-                # Nothing to do. Proceed to the next option
-                if len(option_value) in option_size:
-                    continue
-            # All the above checked failed.
-            # This means that the option value is invalid.
-            msg = f"option '{option_name}' should be "
-            if option_is_scalar or option_is_vector and option_allow_scalar:
-                msg += f"of type {option_type_name_joined}"
-            if option_is_vector:
-                if option_allow_scalar:
-                    msg += ", or "
-                msg += f"a sequence of type {option_type_name_joined}"
-                if option_size_max > 0:
-                    msg += f" and length {option_type_size_joined}"
-            msg += f"; instead, the following invalid value was provided: " \
-                   f"{option_value}"
-            raise RuntimeError(msg)
-
-
 def parse_options(info, desc, required=None, optional=None):
-    info = copy.deepcopy(info)
     required = iterutils.setify(required, False)
     optional = iterutils.setify(optional, False)
     # Required options must not clash with optional options
@@ -196,11 +125,15 @@ def parse_options_for_callable(
             option_type_count = not bool(typing.get_args(option_type))
             option_type_label = \
                 option_type.__name__ if option_type_count == 1 else option_type
+            # print(f"FOO - {option_name}:", "value:", option_value, ", type:", option_type)
             if not typeutils.validate_type(option_value, option_type):
                 raise RuntimeError(
                     f"option '{option_name}' is set to '{option_value}', "
                     f"however, the expected type for this option is: "
-                    f"{option_type_label}")
+                    f"{option_type_label}"
+                    .replace('collections.abc.', '')
+                    .replace('types.', '')
+                    .replace('typing.', ''))
     # Rename options back to their argument name if needed
     if fun_rename_args:
         for arg_name, opt_name in fun_rename_args.items():
@@ -284,11 +217,12 @@ class Parser(abc.ABC):
         return self.cls().__qualname__
 
     def load(self, x, *args, **kwargs):
-        print(locals())
         return self.load_many(x, *args, **kwargs) if iterutils.is_sequence(x) \
             else self.load_one(x, *args, **kwargs)
 
     def load_one(self, x, *args, **kwargs):
+        # Create a copy of the configuration for safety
+        # todo: investigate if this blows up memory utilization
         x = copy.deepcopy(x)
         if not isinstance(x, (dict, type(None))):
             raise RuntimeError(
@@ -314,6 +248,8 @@ class Parser(abc.ABC):
             else self.dump_one(x, *args, **kwargs)
 
     def dump_one(self, x, *args, **kwargs):
+        # Create a copy of the configuration for safety
+        # todo: investigate if this blows up memory utilization
         x = copy.deepcopy(x)
         return self._dump_one_impl(x, *args, **kwargs) \
             if x is not None else None
@@ -405,3 +341,11 @@ def register_optional_parsers(abstract_parser, parsers, desc_label):
             _log.warning(
                 f"could not register {desc_label} parser {parser}; "
                 f"{e.__class__.__name__}: {e}")
+
+
+def load_if_exists(parser, info, key, inplace=True, *args, **kwargs):
+    if not inplace:
+        info = copy.deepcopy(info)
+    if key in info:
+        info[key] = parser.load(info[key], *args, **kwargs)
+    return info

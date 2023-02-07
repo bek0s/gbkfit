@@ -39,7 +39,7 @@ class NWModeRelative(NWMode, abc.ABC):
     def dump(self):
         return super().dump() | dict(origin=self.origin())
 
-    def __init__(self, origin):
+    def __init__(self, origin: int):
         super().__init__()
         self._origin = origin
 

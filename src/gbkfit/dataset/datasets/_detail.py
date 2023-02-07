@@ -1,8 +1,6 @@
 
 import logging
-
-from collections.abc import Sequence
-from numbers import Integral, Real
+import typing
 
 from gbkfit.dataset.data import data_parser
 from gbkfit.utils import iterutils, parseutils
@@ -18,7 +16,9 @@ _log = logging.getLogger(__name__)
 
 
 def _sanitize_dimensional_option(option, value, lengths, type_):
-    type_name = type_.__name__
+    args = typing.get_args(type_)
+    types_ = args if args else [type_]
+    type_name = " | ".join([t.__name__ for t in types_])
     lengths = iterutils.listify(lengths)
     max_length = max(lengths)
     if isinstance(value, type_):
@@ -35,9 +35,9 @@ def _sanitize_dimensional_option(option, value, lengths, type_):
             _log.warning(
                 f"option '{option}' has a value "
                 f"with a length longer than expected; "
-                f"expected length: {' or '.join(map(str, lengths))}, "
                 f"current length: {len(value)}; "
-                f"the value will be trimmed to: {new_value}")
+                f"expected length: {' or '.join(map(str, lengths))}, "
+                f"the value will be trimmed from {value} to {new_value}")
             value = new_value
         return value
     raise RuntimeError(
@@ -59,10 +59,10 @@ def load_dataset_common(cls, info, names, ndim, **kwargs):
     # having to adjust any dimensional options. The code will just use
     # the first two dimensions and ignore the last one.
     for option_name, option_type in [
-            ('size', Integral),
-            ('step', Real),
-            ('rpix', Real),
-            ('rval', Real)]:
+            ('size', int),
+            ('step', int | float),
+            ('rpix', int | float),
+            ('rval', int | float)]:
         if option_name in info:
             info[option_name] = _sanitize_dimensional_option(
                 option_name, info[option_name], ndim, option_type)
@@ -79,17 +79,7 @@ def load_dataset_common(cls, info, names, ndim, **kwargs):
             info[name] = data_parser.load(
                 info[name], step, rpix, rval, rota, prefix)
     # Parse options and return them
-    opts = parseutils.parse_options_for_callable(
-        info, desc, cls.__init__,
-        add_optional=dict(
-            step=Sequence,
-            rpix=Sequence,
-            rval=Sequence,
-            rota=Real),
-        types={
-
-        }
-    )
+    opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
     return opts
 
 

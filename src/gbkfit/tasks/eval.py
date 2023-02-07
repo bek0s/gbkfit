@@ -84,12 +84,11 @@ def eval_(
     # from gbkfit.utils import parseutils, typeutils
     # from gbkfit.psflsf import PSF
     # from gbkfit.psflsf.psfs import PSFGauss
+    # from typing import Tuple
     #
-    # info = {
-    #     'd': PSFGauss(1, 2, 3)
-    # }
+    # info = tuple([1, 2])
     #
-    # types = Mapping[str, PSF | None]
+    # types = Sequence[float]
     #
     # result = typeutils.validate_type(info, types)
     #
@@ -97,32 +96,33 @@ def eval_(
     #
     # exit()
 
-    from gbkfit.utils import parseutils
-    from collections.abc import Sequence
+    # from gbkfit.utils import parseutils
+    # from collections.abc import Sequence
+    # from typing import Tuple
+    #
+    # def fun(a: bool | int, b):
+    #     pass
+    #
+    # info = dict(
+    #     a=1,
+    #     b=2,
+    #     foo=(7, 8)
+    # )
+    #
+    # parseutils.parse_options_for_callable(
+    #     info, 'desc', fun,
+    #     fun_ignore_args=[
+    #     ],
+    #     fun_rename_args={
+    #     },
+    #     add_required={
+    #         'foo': Tuple[int]
+    #     },
+    #     add_optional={
+    #     }
+    # )
 
-    def fun(a: bool | int, b):
-        pass
-
-    info = dict(
-        a=1,
-        b=2,
-        foo=(7, 8)
-    )
-
-    parseutils.parse_options_for_callable(
-        info, 'desc', fun,
-        fun_ignore_args=[
-        ],
-        fun_rename_args={
-        },
-        add_required={
-            'foo': Sequence[int]
-        },
-        add_optional={
-        }
-    )
-
-    exit()
+    # exit()
 
     #
     # Read configuration file and

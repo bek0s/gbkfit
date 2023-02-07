@@ -1,4 +1,6 @@
 
+from collections.abc import Sequence
+
 from . import _detail, _smdisk, common, traits
 from .core import OpacityComponent3D
 from gbkfit.utils import parseutils
@@ -16,17 +18,17 @@ class OpacitySMDisk3D(OpacityComponent3D):
     @classmethod
     def load(cls, info):
         desc = parseutils.make_typed_desc(cls, 'gmodel component')
+        info.update(dict(
+            xpos_nwmode=common.nwmode_parser.load(info.get('xpos_nwmode')),
+            ypos_nwmode=common.nwmode_parser.load(info.get('ypos_nwmode')),
+            posa_nwmode=common.nwmode_parser.load(info.get('posa_nwmode')),
+            incl_nwmode=common.nwmode_parser.load(info.get('incl_nwmode')),
+            optraits=traits.opt_parser.load(info.get('optraits')),
+            ohtraits=traits.oht_parser.load(info.get('ohtraits')),
+            zptraits=traits.zpt_parser.load(info.get('zptraits')),
+            sptraits=traits.spt_parser.load(info.get('sptraits')),
+            wptraits=traits.wpt_parser.load(info.get('wptraits'))))
         opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
-        opts.update(dict(
-            xpos_nwmode=common.nwmode_parser.load(opts.get('xpos_nwmode')),
-            ypos_nwmode=common.nwmode_parser.load(opts.get('ypos_nwmode')),
-            posa_nwmode=common.nwmode_parser.load(opts.get('posa_nwmode')),
-            incl_nwmode=common.nwmode_parser.load(opts.get('incl_nwmode')),
-            optraits=traits.opt_parser.load(opts.get('optraits')),
-            ohtraits=traits.oht_parser.load(opts.get('ohtraits')),
-            zptraits=traits.zpt_parser.load(opts.get('zptraits')),
-            sptraits=traits.spt_parser.load(opts.get('sptraits')),
-            wptraits=traits.wpt_parser.load(opts.get('wptraits'))))
         return cls(**opts)
 
     def dump(self):
@@ -49,22 +51,25 @@ class OpacitySMDisk3D(OpacityComponent3D):
 
     def __init__(
             self,
-            loose,
-            tilted,
-            optraits,
-            ohtraits,
-            zptraits=None,
-            sptraits=None,
-            wptraits=None,
-            rnmin=None,
-            rnmax=None,
-            rnsep=None,
-            rnlen=None,
-            rnodes=None,
-            rstep=None,
-            interp='linear',
-            xpos_nwmode=None, ypos_nwmode=None,
-            posa_nwmode=None, incl_nwmode=None):
+            loose: bool,
+            tilted: bool,
+            optraits: traits.OPTrait | Sequence[traits.OPTrait],
+            ohtraits: traits.OHTrait | Sequence[traits.OHTrait],
+            zptraits: traits.ZPTrait | Sequence[traits.ZPTrait] | None = None,
+            sptraits: traits.SPTrait | Sequence[traits.SPTrait] | None = None,
+            wptraits: traits.WPTrait | Sequence[traits.WPTrait] | None = None,
+            rnmin: int | float | None = None,
+            rnmax: int | float | None = None,
+            rnsep: int | float | None = None,
+            rnlen: int | None = None,
+            rnodes: Sequence[int | float] | None = None,
+            rstep: int | float | None = None,
+            interp: str = 'linear',
+            xpos_nwmode: common.NWMode | None = None,
+            ypos_nwmode: common.NWMode | None = None,
+            posa_nwmode: common.NWMode | None = None,
+            incl_nwmode: common.NWMode | None = None
+    ):
         nwmode_geometry_args = _detail.validate_component_nwmodes_for_geometry(
             loose, tilted, xpos_nwmode, ypos_nwmode, posa_nwmode, incl_nwmode)
         rnode_args = _detail.parse_component_rnode_args(

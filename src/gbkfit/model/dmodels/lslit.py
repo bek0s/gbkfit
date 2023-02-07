@@ -1,8 +1,11 @@
 
+from collections.abc import Sequence
+
 import numpy as np
 
 from gbkfit.dataset.datasets import DatasetLSlit
 from gbkfit.model.core import DModel, GModelSCube
+from gbkfit.psflsf import LSF, PSF
 from . import _dcube, _detail
 
 
@@ -32,18 +35,18 @@ class DModelLSlit(DModel):
 
     def __init__(
             self,
-            size,
-            step=(1, 1, 1),
-            rpix=None,
-            rval=(0, 0, 0),
-            rota=0,
-            scale=(1, 1, 1),
-            psf=None,
-            lsf=None,
-            weight=1,
-            mask_cutoff=None,
-            mask_create=False,
-            mask_apply=False,
+            size: Sequence[int],
+            step: Sequence[int | float] = (1, 1, 1),
+            rpix: Sequence[int | float] | None = None,
+            rval: Sequence[int | float] = (0, 0, 0),
+            rota: int | float = 0,
+            scale: Sequence[int] = (1, 1, 1),
+            psf: PSF | None = None,
+            lsf: LSF | None = None,
+            weight: int | float = 1,
+            mask_cutoff: int | float | None = None,
+            mask_create: bool = False,
+            mask_apply: bool = False,
             dtype=np.float32
     ):
         super().__init__()

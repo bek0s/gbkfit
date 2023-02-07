@@ -1,6 +1,5 @@
 
 from collections.abc import Sequence
-from numbers import Real
 
 import numpy as np
 
@@ -36,16 +35,16 @@ class DModelSCube(DModel):
 
     def __init__(
             self,
-            size: Sequence,
-            step: Sequence = (1, 1, 1),
-            rpix: Sequence = None,
-            rval: Sequence = (0, 0, 0),
-            rota: Real = 0,
-            scale: Sequence = (1, 1, 1),
+            size: Sequence[int],
+            step: Sequence[int | float] = (1, 1, 1),
+            rpix: Sequence[int | float] | None = None,
+            rval: Sequence[int | float] = (0, 0, 0),
+            rota: int | float = 0,
+            scale: Sequence[int] = (1, 1, 1),
             psf: PSF | None = None,
             lsf: LSF | None = None,
-            weight: Real = 1,
-            mask_cutoff: Real | None = None,
+            weight: int | float = 1,
+            mask_cutoff: int | float | None = None,
             mask_create: bool = False,
             mask_apply: bool = False,
             dtype=np.float32

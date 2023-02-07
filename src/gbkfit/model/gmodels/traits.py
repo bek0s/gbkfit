@@ -8,6 +8,7 @@ import numpy as np
 import gbkfit.math
 from gbkfit.params.pdescs import ParamScalarDesc, ParamVectorDesc
 from gbkfit.utils import parseutils
+from .common import NWMode, nwmode_parser
 
 
 _log = logging.getLogger(__name__)
@@ -341,9 +342,14 @@ class TraitFeatureTrunc:
 
 class TraitFeatureNWMode:
 
+    @classmethod
+    def load(cls, info):
+        parseutils.load_if_exists(nwmode_parser, info, 'nwmode')
+        return super().load(info)  # noqa
+
     def dump(self):
-        dump_nwmode = self.nwmode() not in [None, 'absolute']
-        info = dict(nwmode=self.nwmode()) if dump_nwmode else dict()
+        nwmode = self.nwmode()
+        info = dict(nwmode=nwmode_parser.dump(nwmode)) if nwmode else dict()
         return super().dump() | info  # noqa
 
     def __init__(self, **kwargs):
@@ -641,7 +647,7 @@ class BPTraitMixtureExponential(TraitFeatureNBlobs, BPTrait):
     def uid():
         return BPT_UID_MIXTURE_EXP
 
-    def __init__(self, nblobs):
+    def __init__(self, nblobs: int):
         super().__init__(nblobs=nblobs)
 
     def params_sm(self):
@@ -664,7 +670,7 @@ class BPTraitMixtureGauss(TraitFeatureNBlobs, BPTrait):
     def uid():
         return BPT_UID_MIXTURE_GAUSS
 
-    def __init__(self, nblobs):
+    def __init__(self, nblobs: int):
         super().__init__(nblobs=nblobs)
 
     def params_sm(self):
@@ -687,7 +693,7 @@ class BPTraitMixtureGGauss(TraitFeatureNBlobs, BPTrait):
     def uid():
         return BPT_UID_MIXTURE_GGAUSS
 
-    def __init__(self, nblobs):
+    def __init__(self, nblobs: int):
         super().__init__(nblobs=nblobs)
 
     def params_sm(self):
@@ -710,7 +716,7 @@ class BPTraitMixtureMoffat(TraitFeatureNBlobs, BPTrait):
     def uid():
         return BPT_UID_MIXTURE_MOFFAT
 
-    def __init__(self, nblobs):
+    def __init__(self, nblobs: int):
         super().__init__(nblobs=nblobs)
 
     def params_sm(self):
@@ -733,7 +739,7 @@ class BPTraitNWUniform(TraitFeatureNWMode, BPTrait):
     def uid():
         return BPT_UID_NW_UNIFORM
 
-    def __init__(self, nwmode=None):
+    def __init__(self, nwmode: NWMode | None = None):
         super().__init__(nwmode=nwmode)
 
     def params_rnw(self, nnodes):
@@ -757,7 +763,7 @@ class BPTraitNWHarmonic(TraitFeatureOrder, TraitFeatureNWMode, BPTrait):
     def uid():
         return BPT_UID_NW_HARMONIC
 
-    def __init__(self, order, nwmode=None):
+    def __init__(self, order: int, nwmode: NWMode | None = None):
         super().__init__(order=order, nwmode=nwmode)
 
     def params_rnw(self, nnodes):
@@ -780,7 +786,7 @@ class BPTraitNWDistortion(TraitFeatureNWMode, BPTrait):
     def uid():
         return BPT_UID_NW_DISTORTION
 
-    def __init__(self, nwmode=None):
+    def __init__(self, nwmode: NWMode | None = None):
         super().__init__(nwmode=nwmode)
 
     def params_rnw(self, nnodes):
@@ -795,7 +801,11 @@ class BPTraitNWDistortion(TraitFeatureNWMode, BPTrait):
 
 class BHTraitP1(BHTrait, abc.ABC):
 
-    def __init__(self, rnodes=False, nwmode=None, trunc=TRUNC_DEFAULT):
+    def __init__(
+            self,
+            rnodes: bool = False,
+            nwmode: NWMode | None = None,
+            trunc: int | float = TRUNC_DEFAULT):
         super().__init__(rnodes=rnodes, nwmode=nwmode, trunc=trunc)
 
     def params_sm(self):
@@ -809,7 +819,11 @@ class BHTraitP1(BHTrait, abc.ABC):
 
 class BHTraitP2(BHTrait, abc.ABC):
 
-    def __init__(self, rnodes=False, nwmode=None, trunc=TRUNC_DEFAULT):
+    def __init__(
+            self,
+            rnodes: bool = False,
+            nwmode: NWMode | None = None,
+            trunc: int | float = TRUNC_DEFAULT):
         super().__init__(rnodes=rnodes, nwmode=nwmode, trunc=trunc)
 
     def params_sm(self):
@@ -1042,7 +1056,7 @@ class VPTraitNWTanUniform(TraitFeatureNWMode, VPTrait):
     def uid():
         return VPT_UID_NW_TAN_UNIFORM
 
-    def __init__(self, nwmode=None):
+    def __init__(self, nwmode: NWMode | None = None):
         super().__init__(nwmode=nwmode)
 
     def params_rnw(self, nnodes):
@@ -1060,7 +1074,7 @@ class VPTraitNWTanHarmonic(TraitFeatureOrder, TraitFeatureNWMode, VPTrait):
     def uid():
         return VPT_UID_NW_TAN_HARMONIC
 
-    def __init__(self, order, nwmode=None):
+    def __init__(self, order: int, nwmode: NWMode | None = None):
         super().__init__(order=order, nwmode=nwmode)
 
     def params_rnw(self, nnodes):
@@ -1077,7 +1091,7 @@ class VPTraitNWRadUniform(TraitFeatureNWMode, VPTrait):
     def uid():
         return VPT_UID_NW_RAD_UNIFORM
 
-    def __init__(self, nwmode=None):
+    def __init__(self, nwmode: NWMode | None = None):
         super().__init__(nwmode=nwmode)
 
     def params_rnw(self, nnodes):
@@ -1095,7 +1109,7 @@ class VPTraitNWRadHarmonic(TraitFeatureOrder, TraitFeatureNWMode, VPTrait):
     def uid():
         return VPT_UID_NW_RAD_HARMONIC
 
-    def __init__(self, order, nwmode=None):
+    def __init__(self, order: int, nwmode: NWMode | None = None):
         super().__init__(order=order, nwmode=nwmode)
 
     def params_rnw(self, nnodes):
@@ -1112,7 +1126,7 @@ class VPTraitNWVerUniform(TraitFeatureNWMode, VPTrait):
     def uid():
         return VPT_UID_NW_VER_UNIFORM
 
-    def __init__(self, nwmode=None):
+    def __init__(self, nwmode: NWMode | None = None):
         super().__init__(nwmode=nwmode)
 
     def params_rnw(self, nnodes):
@@ -1130,7 +1144,7 @@ class VPTraitNWVerHarmonic(TraitFeatureOrder, TraitFeatureNWMode, VPTrait):
     def uid():
         return VPT_UID_NW_VER_HARMONIC
 
-    def __init__(self, order, nwmode=None):
+    def __init__(self, order: int, nwmode: NWMode | None = None):
         super().__init__(order=order, nwmode=nwmode)
 
     def params_rnw(self, nnodes):
@@ -1147,7 +1161,7 @@ class VPTraitNWLOSUniform(TraitFeatureNWMode, VPTrait):
     def uid():
         return VPT_UID_NW_LOS_UNIFORM
 
-    def __init__(self, nwmode=None):
+    def __init__(self, nwmode: NWMode | None = None):
         super().__init__(nwmode=nwmode)
 
     def params_rnw(self, nnodes):
@@ -1165,7 +1179,7 @@ class VPTraitNWLOSHarmonic(TraitFeatureOrder, TraitFeatureNWMode, VPTrait):
     def uid():
         return VPT_UID_NW_LOS_HARMONIC
 
-    def __init__(self, order, nwmode=None):
+    def __init__(self, order: int, nwmode: NWMode | None = None):
         super().__init__(order=order, nwmode=nwmode)
 
     def params_rnw(self, nnodes):
@@ -1309,7 +1323,7 @@ class DPTraitMixtureExponential(TraitFeatureNBlobs, DPTrait):
     def uid():
         return DPT_UID_MIXTURE_EXP
 
-    def __init__(self, nblobs):
+    def __init__(self, nblobs: int):
         super().__init__(nblobs=nblobs)
 
     def params_sm(self):
@@ -1326,7 +1340,7 @@ class DPTraitMixtureGauss(TraitFeatureNBlobs, DPTrait):
     def uid():
         return DPT_UID_MIXTURE_GAUSS
 
-    def __init__(self, nblobs):
+    def __init__(self, nblobs: int):
         super().__init__(nblobs=nblobs)
 
     def params_sm(self):
@@ -1343,7 +1357,7 @@ class DPTraitMixtureGGauss(TraitFeatureNBlobs, DPTrait):
     def uid():
         return DPT_UID_MIXTURE_GGAUSS
 
-    def __init__(self, nblobs):
+    def __init__(self, nblobs: int):
         super().__init__(nblobs=nblobs)
 
     def params_sm(self):
@@ -1360,7 +1374,7 @@ class DPTraitMixtureMoffat(TraitFeatureNBlobs, DPTrait):
     def uid():
         return DPT_UID_MIXTURE_MOFFAT
 
-    def __init__(self, nblobs):
+    def __init__(self, nblobs: int):
         super().__init__(nblobs=nblobs)
 
     def params_sm(self):
@@ -1377,7 +1391,7 @@ class DPTraitNWUniform(TraitFeatureNWMode, DPTrait):
     def uid():
         return DPT_UID_NW_UNIFORM
 
-    def __init__(self, nwmode=None):
+    def __init__(self, nwmode: NWMode | None = None):
         super().__init__(nwmode=nwmode)
 
     def params_rnw(self, nnodes):
@@ -1395,7 +1409,7 @@ class DPTraitNWHarmonic(TraitFeatureOrder, TraitFeatureNWMode, DPTrait):
     def uid():
         return DPT_UID_NW_HARMONIC
 
-    def __init__(self, order, nwmode=None):
+    def __init__(self, order: int, nwmode: NWMode | None = None):
         super().__init__(order=order, nwmode=nwmode)
 
     def params_rnw(self, nnodes):
@@ -1412,7 +1426,7 @@ class DPTraitNWDistortion(TraitFeatureNWMode, DPTrait):
     def uid():
         return DPT_UID_NW_DISTORTION
 
-    def __init__(self, nwmode=None):
+    def __init__(self, nwmode: NWMode | None = None):
         super().__init__(nwmode=nwmode)
 
     def params_rnw(self, nnodes):
@@ -1443,7 +1457,7 @@ class ZPTraitNWUniform(TraitFeatureNWMode, ZPTrait):
     def uid():
         return ZPT_UID_NW_UNIFORM
 
-    def __init__(self, nwmode=None):
+    def __init__(self, nwmode: NWMode | None = None):
         super().__init__(nwmode=nwmode)
 
     def params_rnw(self, nnodes):
@@ -1461,7 +1475,7 @@ class ZPTraitNWHarmonic(TraitFeatureOrder, TraitFeatureNWMode, ZPTrait):
     def uid():
         return ZPT_UID_NW_HARMONIC
 
-    def __init__(self, order, nwmode=None):
+    def __init__(self, order: int, nwmode: NWMode | None = None):
         super().__init__(order=order, nwmode=nwmode)
 
     def params_rnw(self, nnodes):
@@ -1513,7 +1527,7 @@ class WPTraitAxisRange(WPTrait):
     def uid():
         return WPT_UID_AXIS_RANGE
 
-    def __init__(self, axis, angle, weight):
+    def __init__(self, axis, angle: int | float, weight: int | float):
         if axis not in [0, 1]:
             raise RuntimeError(
                 f"invalid axis value; "
@@ -1692,7 +1706,7 @@ class OPTraitMixtureExponential(TraitFeatureNBlobs, OPTrait):
     def uid():
         return OPT_UID_MIXTURE_EXP
 
-    def __init__(self, nblobs):
+    def __init__(self, nblobs: int):
         super().__init__(nblobs=nblobs)
 
     def params_sm(self):
@@ -1715,7 +1729,7 @@ class OPTraitMixtureGauss(TraitFeatureNBlobs, OPTrait):
     def uid():
         return OPT_UID_MIXTURE_GAUSS
 
-    def __init__(self, nblobs):
+    def __init__(self, nblobs: int):
         super().__init__(nblobs=nblobs)
 
     def params_sm(self):
@@ -1738,7 +1752,7 @@ class OPTraitMixtureGGauss(TraitFeatureNBlobs, OPTrait):
     def uid():
         return OPT_UID_MIXTURE_GGAUSS
 
-    def __init__(self, nblobs):
+    def __init__(self, nblobs: int):
         super().__init__(nblobs=nblobs)
 
     def params_sm(self):
@@ -1761,7 +1775,7 @@ class OPTraitMixtureMoffat(TraitFeatureNBlobs, OPTrait):
     def uid():
         return OPT_UID_MIXTURE_MOFFAT
 
-    def __init__(self, nblobs):
+    def __init__(self, nblobs: int):
         super().__init__(nblobs=nblobs)
 
     def params_sm(self):
@@ -1784,7 +1798,7 @@ class OPTraitNWUniform(TraitFeatureNWMode, OPTrait):
     def uid():
         return OPT_UID_NW_UNIFORM
 
-    def __init__(self, nwmode=None):
+    def __init__(self, nwmode: NWMode | None = None):
         super().__init__(nwmode=nwmode)
 
     def params_rnw(self, nnodes):
@@ -1808,7 +1822,7 @@ class OPTraitNWHarmonic(TraitFeatureOrder, TraitFeatureNWMode, OPTrait):
     def uid():
         return OPT_UID_NW_HARMONIC
 
-    def __init__(self, order, nwmode=None):
+    def __init__(self, order: int, nwmode: NWMode | None = None):
         super().__init__(order=order, nwmode=nwmode)
 
     def params_rnw(self, nnodes):
@@ -1831,7 +1845,7 @@ class OPTraitNWDistortion(TraitFeatureNWMode, OPTrait):
     def uid():
         return OPT_UID_NW_DISTORTION
 
-    def __init__(self, nwmode=None):
+    def __init__(self, nwmode: NWMode | None = None):
         super().__init__(nwmode=nwmode)
 
     def params_rnw(self, nnodes):
@@ -1846,7 +1860,11 @@ class OPTraitNWDistortion(TraitFeatureNWMode, OPTrait):
 
 class OHTraitP2(OHTrait, abc.ABC):
 
-    def __init__(self, rnodes=False, nwmode=None, trunc=TRUNC_DEFAULT):
+    def __init__(
+            self,
+            rnodes: bool = False,
+            nwmode: NWMode | None = None,
+            trunc: int | float = TRUNC_DEFAULT):
         super().__init__(rnodes=rnodes, nwmode=nwmode, trunc=trunc)
 
     def params_sm(self):
@@ -1862,7 +1880,11 @@ class OHTraitP2(OHTrait, abc.ABC):
 
 class OHTraitP3(OHTrait, abc.ABC):
 
-    def __init__(self, rnodes=False, nwmode=None, trunc=TRUNC_DEFAULT):
+    def __init__(
+            self,
+            rnodes: bool = False,
+            nwmode: NWMode | None = None,
+            trunc: int | float = TRUNC_DEFAULT):
         super().__init__(rnodes=rnodes, nwmode=nwmode, trunc=trunc)
 
     def params_sm(self):
