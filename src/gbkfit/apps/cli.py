@@ -148,7 +148,7 @@ def main():
         parser_common_output, parser_common],
         help="evaluate model")
     parser_eval.add_argument(
-        'mode', type=str, choices=['model', 'goodness'],
+        'mode', type=str, choices=['model', 'objective'],
         help="the evaluation mode")
     parser_eval.add_argument(
         'config', type=str,

@@ -1,15 +1,34 @@
 
 import copy
 
-from gbkfit.utils import iterutils, miscutils, timeutils
-
+from gbkfit.driver import driver_parser
+from gbkfit.utils import iterutils, miscutils, parseutils, timeutils
+from .core import dmodel_parser, gmodel_parser
 
 __all__ = [
     'Model'
 ]
 
 
-class Model:
+class Model(parseutils.BasicParserSupport):
+
+    @classmethod
+    def load(cls, info, *args, **kwargs):
+        desc = parseutils.make_basic_desc(Model, 'model')
+        parseutils.load_if_exists(driver_parser, info, 'drivers')
+        parseutils.load_if_exists(dmodel_parser, info, 'dmodels')
+        parseutils.load_if_exists(gmodel_parser, info, 'gmodels')
+        opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
+        return cls(**opts)
+
+    def dump(self):
+        return dict(
+            drivers=driver_parser.dump(self.drivers()),
+            dmodels=dmodel_parser.dump(self.dmodels())
+
+        )
+
+
 
     def __init__(self, drivers, dmodels, gmodels):
         drivers = iterutils.tuplify(drivers)
@@ -88,3 +107,6 @@ class Model:
                             d_data[i][key][k], h_data[i][key][k])
         t.stop()
         return self._h_model_data
+
+
+model_parser = parseutils.BasicParser(Model)

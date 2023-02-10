@@ -125,6 +125,9 @@ class Objective:
     def datasets(self):
         return self._datasets
 
+    def pdescs(self):
+        return self.model().pdescs()
+
     def prepare(self):
         for i in range(self.nitems()):
             dataset = self.datasets()[i]

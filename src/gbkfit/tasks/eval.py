@@ -41,6 +41,7 @@ def _prepare_params(info, pdescs):
 
     def recover_value(dict_, key_, index_):
         value = dict_.get('value')
+        # Create a value id to facilitate logging
         value_id = key if index_ is None else (key_, index_)
         # We use the value of key 'value' as the parameter value
         if 'value' in dict_:
@@ -78,52 +79,6 @@ def eval_(
         mode, config, profile,
         output_dir, output_dir_unique, output_overwrite):
 
-    # import typing
-    # from numbers import Integral, Real
-    # from collections.abc import Mapping, Sequence
-    # from gbkfit.utils import parseutils, typeutils
-    # from gbkfit.psflsf import PSF
-    # from gbkfit.psflsf.psfs import PSFGauss
-    # from typing import Tuple
-    #
-    # info = tuple([1, 2])
-    #
-    # types = Sequence[float]
-    #
-    # result = typeutils.validate_type(info, types)
-    #
-    # print("final:", result)
-    #
-    # exit()
-
-    # from gbkfit.utils import parseutils
-    # from collections.abc import Sequence
-    # from typing import Tuple
-    #
-    # def fun(a: bool | int, b):
-    #     pass
-    #
-    # info = dict(
-    #     a=1,
-    #     b=2,
-    #     foo=(7, 8)
-    # )
-    #
-    # parseutils.parse_options_for_callable(
-    #     info, 'desc', fun,
-    #     fun_ignore_args=[
-    #     ],
-    #     fun_rename_args={
-    #     },
-    #     add_required={
-    #         'foo': Tuple[int]
-    #     },
-    #     add_optional={
-    #     }
-    # )
-
-    # exit()
-
     #
     # Read configuration file and
     # perform all necessary validation/preparation
@@ -136,8 +91,8 @@ def eval_(
         cfg = yaml.load(open(config))
     except Exception as e:
         raise RuntimeError(
-            "error while reading configuration file; "
-            "see preceding exception for additional information") from e
+            f"error while reading configuration file {config}; "
+            f"see preceding exception for additional information") from e
 
     # This is not a full-fledged validation. It just tries to catch
     # and inform the user about the really obvious mistakes.
@@ -146,9 +101,11 @@ def eval_(
     optional_sections = ('pdescs',)
     if mode == 'model':
         optional_sections += ('datasets',)
-    if mode == 'goodness':
+    elif mode == 'objective':
         required_sections += ('datasets',)
         optional_sections += ('objective',)
+    else:
+        raise RuntimeError(f"invalid evaluation mode: {mode}")
     cfg = _detail.prepare_config(cfg, required_sections, optional_sections)
 
     #
@@ -179,20 +136,19 @@ def eval_(
 
     _log.info("setting up model...")
     model = gbkfit.model.Model(drivers, dmodels, gmodels)
+    pdescs = model.pdescs()
 
-    exit()
+    objective = None
+    if mode == 'objective':
+        _log.info("setting up objective...")
+        objective = gbkfit.objective.objective_parser.load(
+            cfg.get('objective', {}), datasets, model)
+        pdescs = objective.pdescs()
 
-    _log.info("setting up objective...")
-    objective = gbkfit.objective.ObjectiveModel(drivers, dmodels, gmodels) \
-        if objective_type == 'model' \
-        else gbkfit.objective.goodness_objective_parser.load(
-            cfg.get('objective', {}), datasets, drivers, dmodels, gmodels)
-
-    pdescs = None
     if 'pdescs' in cfg:
         _log.info("setting up pdescs...")
-        pdescs = gbkfit.params.load_pdescs_dict(cfg['pdescs'])
-    pdescs = _detail.merge_pdescs(objective.pdescs(), pdescs)
+        user_pdescs = gbkfit.params.load_pdescs_dict(cfg['pdescs'])
+        pdescs = _detail.merge_pdescs(pdescs, user_pdescs)
 
     _log.info("setting up params...")
     cfg['params'] = _prepare_params(cfg['params'], pdescs)
@@ -214,6 +170,9 @@ def eval_(
         eparams=eparams))
     filename = os.path.join(output_dir, 'gbkfit_eval_params')
     _detail.dump_dict(json, yaml, params_info, filename)
+
+    print(objective)
+    exit()
 
     #
     # Evaluate objective
