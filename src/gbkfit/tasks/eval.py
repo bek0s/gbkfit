@@ -75,7 +75,7 @@ def _prepare_params(info, pdescs):
 
 
 def eval_(
-        objective_type, config, profile,
+        mode, config, profile,
         output_dir, output_dir_unique, output_overwrite):
 
     # import typing
@@ -144,9 +144,9 @@ def eval_(
     # todo: investigate the potential use of jsonschema for validation
     required_sections = ('drivers', 'dmodels', 'gmodels', 'params')
     optional_sections = ('pdescs',)
-    if objective_type == 'model':
+    if mode == 'model':
         optional_sections += ('datasets',)
-    if objective_type == 'goodness':
+    if mode == 'goodness':
         required_sections += ('datasets',)
         optional_sections += ('objective',)
     cfg = _detail.prepare_config(cfg, required_sections, optional_sections)
@@ -177,6 +177,11 @@ def eval_(
     _log.info("setting up gmodels...")
     gmodels = gbkfit.model.gmodel_parser.load(cfg['gmodels'])
 
+    _log.info("setting up model...")
+    model = gbkfit.model.Model(drivers, dmodels, gmodels)
+
+    exit()
+
     _log.info("setting up objective...")
     objective = gbkfit.objective.ObjectiveModel(drivers, dmodels, gmodels) \
         if objective_type == 'model' \
@@ -202,6 +207,8 @@ def eval_(
 
     eparams = {}
     params = params.evaluate(eparams)
+    # print(params)
+    # exit()
     params_info = iterutils.nativify(dict(
         params=params,
         eparams=eparams))
@@ -239,7 +246,7 @@ def eval_(
 
     # Store model
     for i, data_i in enumerate(model_data):
-        prefix_i = model_prefix + f'_{i}' * bool(objective.nitems() > 1)
+        prefix_i = model_prefix + f'_{i}' * bool(objective.nitems() > 0)
         for key, value in data_i.items():
             outputs |= {
                 f'{prefix_i}_{key}_d.fits': value.get('d'),

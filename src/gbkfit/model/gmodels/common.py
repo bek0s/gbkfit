@@ -54,6 +54,7 @@ class NWModeRelative1(NWModeRelative):
         return 'relative1'
 
     def _transform_in_place(self, param):
+        print(param)
         origin_idx = self.origin()
         origin_val = param[origin_idx]
         param += param[origin_idx]

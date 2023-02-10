@@ -59,8 +59,9 @@ class SimpleTimer:
     def start(self):
         if self._start_time is not None:
             raise RuntimeError(
-                "SimpleTimer is running; use .stop() to stop it")
+                f"SimpleTimer is running; use .stop() to stop it")
         self._start_time = time.perf_counter_ns()
+        return self
 
     def stop(self):
         global _times

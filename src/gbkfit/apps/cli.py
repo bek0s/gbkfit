@@ -148,15 +148,15 @@ def main():
         parser_common_output, parser_common],
         help="evaluate model")
     parser_eval.add_argument(
-        'objective', type=str, choices=['model', 'goodness'],
-        help="the type of objective to evaluate")
+        'mode', type=str, choices=['model', 'goodness'],
+        help="the evaluation mode")
     parser_eval.add_argument(
         'config', type=str,
         help="configuration file path; json and yaml formats are supported")
     parser_eval.add_argument(
         '--profile', type=_number_range(int, 0, None), default=0,
         metavar='ITERS',
-        help="evaluate the objective ITERS times "
+        help="perform the evaluation ITERS times "
              "and provide performance evaluation statistics")
 
     #
@@ -404,7 +404,7 @@ def main():
     if args.task == 'eval':
         import gbkfit.tasks.eval
         gbkfit.tasks.eval.eval_(
-            args.objective, args.config, args.profile,
+            args.mode, args.config, args.profile,
             args.output_dir, args.output_dir_unique, args.output_overwrite)
 
     elif args.task == 'prep':
