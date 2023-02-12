@@ -52,7 +52,7 @@ class DModelMMaps(DModel):
             weights: Sequence[int | float] | None = None,
             mask_cutoff: int | float = 1e-6,
             orders: Sequence[int] = (0, 1, 2),
-            dtype=np.float32
+            dtype: str = 'float32'
     ):
         super().__init__()
         if rpix is None:
@@ -63,6 +63,7 @@ class DModelMMaps(DModel):
         rval = tuple(rval)
         scale = tuple(scale)
         orders = tuple(sorted(set(orders)))
+        dtype = np.dtype(dtype)
         if any(order < 0 or order > 7 for order in orders):
             raise RuntimeError("moment orders must be between 0 and 7")
         if weights is None:

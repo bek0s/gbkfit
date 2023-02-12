@@ -10,7 +10,8 @@ __all__ = [
     'DriverBackends',
     'DriverBackendFFT',
     'DriverBackendDModel',
-    'DriverBackendGModel'
+    'DriverBackendGModel',
+    'DriverBackendObjective'
 ]
 
 
@@ -147,4 +148,11 @@ class DriverBackendGModel(abc.ABC):
             rdata, rdata_cmp,
             ordata, ordata_cmp,
             vdata_cmp, ddata_cmp):
+        pass
+
+
+class DriverBackendObjective(abc.ABC):
+
+    @abc.abstractmethod
+    def foo(self):
         pass

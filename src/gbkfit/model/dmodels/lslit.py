@@ -47,7 +47,7 @@ class DModelLSlit(DModel):
             mask_cutoff: int | float | None = None,
             mask_create: bool = False,
             mask_apply: bool = False,
-            dtype=np.float32
+            dtype: str = 'float32'
     ):
         super().__init__()
         if rpix is None:
@@ -57,6 +57,7 @@ class DModelLSlit(DModel):
         rpix = tuple(rpix)
         rval = tuple(rval)
         scale = tuple(scale)
+        dtype = np.dtype(dtype)
         self._dcube = _dcube.DCube(
             size, step, rpix, rval, rota, scale, psf, lsf,
             weight, mask_cutoff, mask_create, mask_apply, dtype)

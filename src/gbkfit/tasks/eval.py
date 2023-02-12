@@ -96,7 +96,7 @@ def eval_(
 
     # This is not a full-fledged validation. It just tries to catch
     # and inform the user about the really obvious mistakes.
-    # todo: investigate the potential use of jsonschema for validation
+    # todo: investigate the potential use of json schema for validation
     required_sections = ('drivers', 'dmodels', 'gmodels', 'params')
     optional_sections = ('pdescs',)
     if mode == 'model':
@@ -117,16 +117,19 @@ def eval_(
     _log.info(f"output will be stored under directory: {output_dir}")
 
     #
-    # Setup all the components described in the configuration
+    # Setup all the components described in the configuration.
+    # We assume that, the datasets, drivers, dmodels, and gmodels
+    # configurations are lists, while the objective, pdescs, and params
+    # configurations are dicts.
     #
-
-    _log.info("setting up drivers...")
-    drivers = gbkfit.driver.driver_parser.load(cfg['drivers'])
 
     datasets = None
     if 'datasets' in cfg:
         _log.info("setting up datasets...")
         datasets = gbkfit.dataset.dataset_parser.load(cfg['datasets'])
+
+    _log.info("setting up drivers...")
+    drivers = gbkfit.driver.driver_parser.load(cfg['drivers'])
 
     _log.info("setting up dmodels...")
     dmodels = gbkfit.model.dmodel_parser.load(cfg['dmodels'], dataset=datasets)
@@ -163,16 +166,11 @@ def eval_(
 
     eparams = {}
     params = params.evaluate(eparams)
-    # print(params)
-    # exit()
     params_info = iterutils.nativify(dict(
         params=params,
         eparams=eparams))
     filename = os.path.join(output_dir, 'gbkfit_eval_params')
     _detail.dump_dict(json, yaml, params_info, filename)
-
-    print(objective)
-    exit()
 
     #
     # Evaluate objective
@@ -182,15 +180,18 @@ def eval_(
 
     # Always evaluate model
     model_extra = {}
-    model_data = objective.model_h(params, model_extra)
+    model_data = []
+    if mode == 'model':
+        model_data = model.model_h(params, model_extra)
+
 
     resid_u_extra = {}
     resid_u_data = []
     resid_w_extra = {}
     resid_w_data = []
-    if objective_type == 'goodness':
+    if mode == 'objective':
         resid_u_data = objective.residual_nddata_h(params, False, resid_u_extra)
-        resid_w_data = objective.residual_nddata_h(params, True, resid_w_extra)
+        resid_w_data = []  # objective.residual_nddata_h(params, True, resid_w_extra)
 
     #
     # Gather objective outputs
@@ -205,7 +206,7 @@ def eval_(
 
     # Store model
     for i, data_i in enumerate(model_data):
-        prefix_i = model_prefix + f'_{i}' * bool(objective.nitems() > 0)
+        prefix_i = model_prefix + f'_{i}' * bool(model.nitems() > 0)
         for key, value in data_i.items():
             outputs |= {
                 f'{prefix_i}_{key}_d.fits': value.get('d'),
@@ -233,24 +234,24 @@ def eval_(
     # Calculate outputs statistics
     #
 
-    _log.info("calculating statistics for outputs...")
-
-    outputs_stats = {}
-    for filename, data in outputs.items():
-        if data is not None:
-            sum_ = np.nansum(data)
-            min_ = np.nanmin(data)
-            max_ = np.nanmax(data)
-            mean = np.nanmean(data)
-            stddev = np.nanstd(data)
-            median = np.nanmedian(data)
-            outputs_stats.update({filename: dict(
-                sum=sum_, min=min_, max=max_, mean=mean, stddev=stddev,
-                median=median)})
-
-    filename = os.path.join(output_dir, 'gbkfit_eval_outputs')
-    outputs_stats = iterutils.nativify(outputs_stats)
-    _detail.dump_dict(json, yaml, outputs_stats, filename)
+    # _log.info("calculating statistics for outputs...")
+    #
+    # outputs_stats = {}
+    # for filename, data in outputs.items():
+    #     if data is not None:
+    #         sum_ = np.nansum(data)
+    #         min_ = np.nanmin(data)
+    #         max_ = np.nanmax(data)
+    #         mean = np.nanmean(data)
+    #         stddev = np.nanstd(data)
+    #         median = np.nanmedian(data)
+    #         outputs_stats.update({filename: dict(
+    #             sum=sum_, min=min_, max=max_, mean=mean, stddev=stddev,
+    #             median=median)})
+    #
+    # filename = os.path.join(output_dir, 'gbkfit_eval_outputs')
+    # outputs_stats = iterutils.nativify(outputs_stats)
+    # _detail.dump_dict(json, yaml, outputs_stats, filename)
 
     #
     # Store outputs
@@ -272,9 +273,9 @@ def eval_(
         _log.info("running performance test...")
         objective.time_stats_reset()
         for i in range(profile):
-            if objective_type == 'model':
+            if mode == 'model':
                 objective.model_h(params)
-            if objective_type == 'goodness':
+            if mode == 'objective':
                 objective.residual_nddata_h(params)
         _log.info("calculating timing statistics...")
         time_stats = iterutils.nativify(timeutils.get_time_stats())

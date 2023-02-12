@@ -33,11 +33,11 @@ def prepare_config(config, req_sections=(), opt_sections=()):
     if empty_sections:
         _log.info(
             f"the following optional sections are empty and will be ignored: "
-            f"{str(empty_sections)}")
+            f"{empty_sections}")
     if unknown_sections:
         _log.info(
             f"the following sections are not recognised and will be ignored: "
-            f"{str(unknown_sections)}")
+            f"{unknown_sections}")
     config = {s: config[s] for s in known_sections}
 
     # Ensure that the required sections are present/valid
@@ -49,56 +49,37 @@ def prepare_config(config, req_sections=(), opt_sections=()):
     if missing_sections:
         raise RuntimeError(
             f"the following sections must be defined and not empty/null: "
-            f"{str(missing_sections)}")
+            f"{missing_sections}")
 
     # Ensure the sections have the right type (if they are present)
     wrong_type_dict = []
-    wrong_type_dict_seq = []
-    for s in ['objective', 'fitter', 'pdescs', 'params']:
+    wrong_type_dict_or_seq = []
+    for s in ['pdescs', 'params', 'objective', 'fitter']:
         if s in config and not iterutils.is_mapping(config[s]):
             wrong_type_dict.append(s)
     for s in ['datasets', 'drivers', 'dmodels', 'gmodels']:
         if s in config and not iterutils.is_iterable(config[s]):
-            wrong_type_dict_seq.append(s)
+            wrong_type_dict_or_seq.append(s)
     if wrong_type_dict:
         raise RuntimeError(
             f"the following sections must be dictionaries: "
-            f"{str(wrong_type_dict)}")
-    if wrong_type_dict_seq:
+            f"{wrong_type_dict}")
+    if wrong_type_dict_or_seq:
         raise RuntimeError(
             f"the following sections must be dictionaries or sequences: "
-            f"{str(wrong_type_dict_seq)}")
+            f"{wrong_type_dict_or_seq}")
 
     # Listify some sections to make parsing more streamlined
-    for s in ['datasets', 'drivers', 'dmodels', 'gmodels']:
-        if s in config:
-            config[s] = iterutils.listify(config[s])
-
-    # Ensure that some sections have the same length
+    # and ensure they have the same length
     lengths = {}
     for s in ['datasets', 'drivers', 'dmodels', 'gmodels']:
         if s in config:
+            config[s] = iterutils.listify(config[s])
             lengths[s] = len(config[s])
     if len(set(lengths.values())) > 1:
         raise RuntimeError(
             f"the following sections must have the same length: "
-            f"{str(lengths)}")
-
-    # Place pdesc keys as names inside values.
-    # This will make them readable by the pdesc parser.
-    invalid_pdescs = []
-    pdesc_info = config.get('pdesc')
-    if pdesc_info:
-        for key, val in pdesc_info.items():
-            if not iterutils.is_mapping(val):
-                invalid_pdescs.append(key)
-                continue
-            val['name'] = key
-            pdesc_info[key] = val
-        if invalid_pdescs:
-            raise RuntimeError(
-                f"the values of the following pdescs must be a dictionary: "
-                f"{str(invalid_pdescs)}")
+            f"{lengths}")
 
     # Make sure the return value is pure json
     return json.loads(json.dumps(config))
@@ -109,12 +90,10 @@ def merge_pdescs(dict1, dict2):
         dict1 = {}
     if dict2 is None:
         dict2 = {}
-    if intersection := set(dict1) & set(dict2):
+    if conflicting := set(dict1) & set(dict2):
         raise RuntimeError(
-            f"the following pdescs conflict with "
-            f"the parameters of the objective function: "
-            f"{str(intersection)}; "
-            f"please choose different names")
+            f"the names of the following user-defined pdescs "
+            f"conflict with the names of the model parameters: {conflicting}")
     return dict1 | dict2
 
 
@@ -126,8 +105,9 @@ def make_output_dir(output_dir, output_dir_unique):
         if output_dir_unique:
             output_dir = miscutils.make_unique_path(output_dir)
             os.makedirs(output_dir)
-        elif not output_dir_isdir:
-            raise RuntimeError(f"{output_dir} already exists as a file")
+        else:
+            if not output_dir_isdir:
+                raise RuntimeError(f"{output_dir} already exists as a file")
     else:
         os.makedirs(output_dir)
     return output_dir

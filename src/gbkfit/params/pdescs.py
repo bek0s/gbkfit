@@ -5,7 +5,7 @@ import copy
 
 import numpy as np
 
-from gbkfit.utils import parseutils
+from gbkfit.utils import iterutils, parseutils
 
 
 __all__ = [
@@ -22,7 +22,7 @@ class ParamDesc(parseutils.TypedParserSupport, abc.ABC):
 
     @classmethod
     def load(cls, info):
-        desc = parseutils.make_typed_desc(cls, 'parameter description')
+        desc = parseutils.make_typed_desc(cls, 'pdesc')
         opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
         return cls(**opts)
 
@@ -39,9 +39,16 @@ class ParamDesc(parseutils.TypedParserSupport, abc.ABC):
         return info
 
     def __init__(self, name, size, desc, default, minimum, maximum):
+        # Import here to avoid circular dependency
+        from .symbols import is_param_symbol_name
+        if not is_param_symbol_name(name):
+            raise RuntimeError(
+                f"'{name}' is not a valid parameter description name")
         minimum = -np.inf if minimum is None else minimum
         maximum = +np.inf if maximum is None else maximum
-        assert minimum <= maximum
+        if minimum > maximum:
+            raise RuntimeError(
+                f"minimum ({minimum}) is greater than maximum ({maximum})")
         self._name = name
         self._size = size
         self._desc = desc
@@ -80,8 +87,13 @@ class ParamScalarDesc(ParamDesc):
         return info
 
     def __init__(
-            self, name, desc=None,
-            default=None, minimum=None, maximum=None):
+            self,
+            name: str,
+            desc: str | None = None,
+            default: int | float | None = None,
+            minimum: int | float | None = None,
+            maximum: int | float | None = None
+    ):
         super().__init__(name, 1, desc, default, minimum, maximum)
 
 
@@ -92,12 +104,19 @@ class ParamVectorDesc(ParamDesc):
         return 'vector'
 
     def __init__(
-            self, name, size, desc=None,
-            default=None, minimum=None, maximum=None):
+            self,
+            name: str,
+            size: int,
+            desc: str | None = None,
+            default: int | float | None = None,
+            minimum: int | float | None = None,
+            maximum: int | float | None = None
+    ):
         super().__init__(name, size, desc, default, minimum, maximum)
 
 
 class ParamDescDict(collections.abc.Mapping):
+    """Not used at the moment"""
 
     def __init__(self, pdescs):
         self._pdescs = copy.deepcopy(pdescs)
@@ -122,6 +141,13 @@ class ParamDescDict(collections.abc.Mapping):
 
 
 def load_pdescs_dict(info):
+    if bad := [k for k, v in info.items() if not iterutils.is_mapping(v)]:
+        raise RuntimeError(
+            f"the value of the following keys must be a dictionary: {bad}")
+    if bad := [k for k, v in info.items() if k != v.get('name', k)]:
+        raise RuntimeError(
+            f"the following keys are not equal to "
+            f"their corresponding pdesc name: {bad}")
     pdescs = {}
     for key, val in info.items():
         pdescs[key] = pdesc_parser.load(dict(name=key) | val)
@@ -129,12 +155,51 @@ def load_pdescs_dict(info):
 
 
 def dump_pdescs_dict(pdescs):
+    if bad := [k for k, v in pdescs.items() if k != v.name()]:
+        raise RuntimeError(
+            f"the following keys are not equal to "
+            f"their corresponding pdesc name: {bad}")
     info = {key: pdesc_parser.dump(val) for key, val in pdescs.items()}
     for val in info.values():
         del val['name']
     return info
 
 
-pdesc_parser = parseutils.TypedParser(ParamDesc)
-pdesc_parser.register(ParamScalarDesc)
-pdesc_parser.register(ParamVectorDesc)
+class ParamDescTypedParser(parseutils.TypedParser):
+
+    def __init__(self):
+        super().__init__(ParamDesc, [ParamScalarDesc, ParamVectorDesc])
+
+    def load_many(self, x, allow_duplicates=False, *args, **kwargs):
+        pdescs = super().load_many(x, *args, **kwargs)
+        if not allow_duplicates:
+            self._check_for_duplicates(pdescs)
+        return pdescs
+
+    def dump_many(self, x, allow_duplicates=False, *args, **kwargs):
+        if not allow_duplicates:
+            self._check_for_duplicates(x)
+        return super().dump_many(x, *args, **kwargs)
+
+    @staticmethod
+    def _check_for_duplicates(x):
+        seen = []
+        duplicates = []
+        for pdesc in x:
+            name = pdesc.name()
+            # Already marked as a duplicate. Do nothing.
+            if name in duplicates:
+                continue
+            # Already marked as seen. Mark it as duplicate
+            if name in seen:
+                duplicates.append(name)
+                continue
+            # Not seen before. Mark it as seen
+            seen.append(name)
+        if duplicates:
+            raise RuntimeError(
+                f"the following pdescs names appear multiple times: "
+                f"{duplicates}")
+
+
+pdesc_parser = ParamDescTypedParser()

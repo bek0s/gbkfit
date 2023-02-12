@@ -46,7 +46,7 @@ class DModelImage(DModel):
             mask_cutoff: int | float | None = None,
             mask_create: bool = False,
             mask_apply: bool = False,
-            dtype=np.float32
+            dtype: str = 'float32'
     ):
         super().__init__()
         if rpix is None:
@@ -56,6 +56,7 @@ class DModelImage(DModel):
         rpix = tuple(rpix) + (0,)
         rval = tuple(rval) + (0,)
         scale = tuple(scale) + (1,)
+        dtype = np.dtype(dtype)
         self._dcube = _dcube.DCube(
             size, step, rpix, rval, rota, scale, psf, None,
             weight, mask_cutoff, mask_create, mask_apply, dtype)

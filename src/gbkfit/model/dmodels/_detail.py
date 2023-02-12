@@ -56,9 +56,6 @@ def load_dmodel_common(
         info['psf'] = gbkfit.psflsf.psf_parser.load_one(info['psf'])
     if has_lsf and 'lsf' in info:
         info['lsf'] = gbkfit.psflsf.lsf_parser.load_one(info['lsf'])
-    # ...
-    if 'dtype' in info:
-        info['dtype'] = np.dtype(info['dtype']).type
     # Try to get information from the supplied dataset (optional)
     if dataset:
         if not isinstance(dataset, expected_dataset_cls):
@@ -77,7 +74,7 @@ def load_dmodel_common(
             rpix=info.get('rpix', dataset.rpix()),
             rval=info.get('rval', dataset.rval()),
             rota=info.get('rota', dataset.rota()),
-            dtype=info.get('dtype', str(dataset.dtype))))
+            dtype=info.get('dtype', np.dtype(dataset.dtype).name)))
     # Validate, sanitize, and prepare dimensional options.
     # While we could rely on the type hint validation of
     # parseutils.parse_options_for_callable or other assertions inside

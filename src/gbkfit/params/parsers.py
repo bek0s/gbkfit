@@ -754,7 +754,7 @@ def load_params_parameters(info, pdescs, param_types, param_loader):
         except Exception as e:
             raise RuntimeError(
                 f"could not parse information for parameter '{key}'; "
-                f"reason: {str(e)}") from e
+                f"reason: {e}") from e
     return values | expressions
 
 
@@ -811,3 +811,30 @@ def dump_params_parameters_conversions(
         info.update(conversions=dump_params_conversions(
             params.conversions(), conversions_file))
     return info
+
+
+def _merge_pdescs(dict1, dict2):
+    if dict1 is None:
+        dict1 = {}
+    if dict2 is None:
+        dict2 = {}
+    if intersection := set(dict1) & set(dict2):
+        raise RuntimeError(
+            f"the following pdescs conflict with "
+            f"the parameters of the objective function: "
+            f"{str(intersection)}; "
+            f"please choose different names")
+    return dict1 | dict2
+
+
+def load_params_common(info, pdescs, param_types, param_loader):
+    info = copy.deepcopy(info)
+    if 'descriptions' in info:
+        pdescs_new = load_pdescs_dict(info['descriptions'])
+        pdescs = _merge_pdescs(pdescs, pdescs_new)
+    info['parameters'] = load_params_parameters(
+        info['parameters'], pdescs, param_types, param_loader)
+    if 'conversions' in info:
+        info['conversions'] = load_params_conversions(
+            info['conversions'])
+    return info, pdescs

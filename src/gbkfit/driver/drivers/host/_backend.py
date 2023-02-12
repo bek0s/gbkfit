@@ -42,14 +42,14 @@ class DriverBackendsHost(DriverBackends):
         return DriverBackendGModelHost(dtype)
 
     def objective(self, dtype):
-        raise NotImplementedError()
+        return DriverBackendObjectiveHost(dtype)
 
 
 class DriverBackendFFTHost(DriverBackendFFTNative):
 
     def __init__(self, dtype):
         super().__init__(dtype, NativeMemoryHost, {
-            np.float32: native_module.FFTf32
+            np.dtype(np.float32): native_module.FFTf32
         })
 
     def __deepcopy__(self, memodict):
@@ -60,7 +60,7 @@ class DriverBackendDModelHost(DriverBackendDModelNative):
 
     def __init__(self, dtype):
         super().__init__(dtype, NativeMemoryHost, {
-            np.float32: native_module.DModelf32
+            np.dtype(np.float32): native_module.DModelf32
         })
 
     def __deepcopy__(self, memodict):
@@ -71,7 +71,18 @@ class DriverBackendGModelHost(DriverBackendGModelNative):
 
     def __init__(self, dtype):
         super().__init__(dtype, NativeMemoryHost, {
-            np.float32: native_module.GModelf32
+            np.dtype(np.float32): native_module.GModelf32
+        })
+
+    def __deepcopy__(self, memodict):
+        return self.__class__(self.dtype())
+
+
+class DriverBackendObjectiveHost(DriverBackendObjectiveNative):
+
+    def __init__(self, dtype):
+        super().__init__(dtype, NativeMemoryHost, {
+            np.dtype(np.float32): native_module.GModelf32  # todo change this
         })
 
     def __deepcopy__(self, memodict):

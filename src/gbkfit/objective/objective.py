@@ -1,6 +1,8 @@
 
 from collections.abc import Mapping, Sequence
 
+from gbkfit.dataset import Dataset
+from gbkfit.model import Model
 from gbkfit.utils import iterutils, parseutils, timeutils
 
 
@@ -10,8 +12,7 @@ class Objective:
     def load(cls, info, datasets, model):
         desc = parseutils.make_basic_desc(cls, 'objective')
         opts = parseutils.parse_options_for_callable(
-            info, desc, cls.__init__, fun_ignore_args=[
-                'datasets', 'model'])
+            info, desc, cls.__init__, fun_ignore_args=['datasets', 'model'])
         return cls(datasets, model, **opts)
 
     def dump(self):
@@ -21,8 +22,8 @@ class Objective:
 
     def __init__(
             self,
-            datasets,
-            model,
+            datasets: Dataset | Sequence[Dataset],
+            model: Model,
             wp:
             int | float |
             Sequence[int | float] |
@@ -198,32 +199,48 @@ class Objective:
         t.stop()
         return log_likelihoods
 
-    def residual_vector_d(
-            self, params, weighted=True, out_extra=None, out_extra_model=None):
-        self._residual_d(params, weighted, out_extra, out_extra_model)
+    def residual_vector_d(self, params, weighted=True, out_extra=None):
+        self._residual_d(params, weighted, out_extra)
         return self._d_residual_vector
 
-    def residual_vector_h(
-            self, params, weighted=True, out_extra=None, out_extra_model=None):
-        self._residual_h(params, weighted, out_extra, out_extra_model)
+    def residual_vector_h(self, params, weighted=True, out_extra=None):
+        self._residual_h(params, weighted, out_extra)
         return self._h_residual_vector
 
-    def residual_nddata_d(
-            self, params, weighted=True, out_extra=None, out_extra_model=None):
-        self._residual_d(params, weighted, out_extra, out_extra_model)
+    def residual_nddata_d(self, params, weighted=True, out_extra=None):
+        self._residual_d(params, weighted, out_extra)
         return self._d_residual_nddata
 
-    def residual_nddata_h(
-            self, params, weighted=True, out_extra=None, out_extra_model=None):
-        self._residual_h(params, weighted, out_extra, out_extra_model)
+    def residual_nddata_h(self, params, weighted=True, out_extra=None):
+        self._residual_h(params, weighted, out_extra)
         return self._h_residual_nddata
 
-    def _residual_d(
-            self, params, weighted=True, out_extra=None, out_extra_model=None):
+    def _residual_d(self, params, weighted=True, out_extra=None):
+
         if not self._prepared:
             self.prepare()
+
         t = timeutils.SimpleTimer('residual_eval').start()
-        model_data = self._model.model_d(params, out_extra_model)
+
+        out_extra_model = {} if out_extra is not None else None
+        model_data = self.model().model_d(params, out_extra_model)
+
+        # for i in range(self.model().nitems()):
+        #     driver = self.model().drivers()[i]
+        #     dmodel = self.model().dmodels()[i]
+        #     npix = dmodel.npix()
+        #     for j, key in enumerate(dmodel.keys()):
+        #
+        #         submodel_data = model_data[i][key]
+        #
+        #         mdl_d = submodel_data['d'].ravel()
+        #         mdl_m = submodel_data['m'].ravel() if 'm' in submodel_data else None
+        #         mdl_e = submodel_data['e'].ravel() if 'e' in submodel_data else None
+        #
+        #         slice_ = slice(j * npix, (j + 1) * npix)
+
+
+
         for i, dmodel in enumerate(self._model.dmodels()):
             npix = dmodel.npix()
             for j, name in enumerate(dmodel.keys()):
@@ -239,12 +256,36 @@ class Objective:
                 # TODO
                 # Calculate residual
                 # res[:] = dat_m * mdl_m * (dat_d - mdl_d) / dat_e
-                res[:] = dat_m * (dat_d - mdl_d) / dat_e
+                import time
+                t1 = time.time_ns()
+                for k in range(100):
+                    res[:] = dat_m * (dat_d - mdl_d) / dat_e
+                t2 = time.time_ns()
+                print("time:", (t2 - t1) / 1000000000)
+
+                if out_extra is not None:
+
+                    print(f'model{i}_{name}')
+
         t.stop()
 
-    def _residual_h(
-            self, params, weighted=True, out_extra=None, out_extra_model=None):
-        self._residual_d(params, weighted, out_extra, out_extra_model)
+        if out_extra is not None:
+
+
+            for i, foo in enumerate(self._d_residual_nddata):
+                for key, val in foo.items():
+                    print(f'model{i}_residual_{key}')
+
+            for i, data in enumerate(model_data):
+                for key, val in data.items():
+                    for k, v in val.items():
+                        print(f'model{i}_{key}_{k}')
+
+            for key, val in out_extra_model.items():
+                print(f'extra_{key}')
+
+    def _residual_h(self, params, weighted=True, out_extra=None):
+        self._residual_d(params, weighted, out_extra)
         t = timeutils.SimpleTimer('residual_d2h').start()
         for i, driver in enumerate(self._model.drivers()):
             d_data = self._d_residual_vector[i]

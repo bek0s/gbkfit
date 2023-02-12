@@ -6,26 +6,28 @@ import numpy as np
 from gbkfit.driver.backend import (
     DriverBackendDModel,
     DriverBackendFFT,
-    DriverBackendGModel)
+    DriverBackendGModel,
+    DriverBackendObjective)
 
 
 __all__ = [
     'NativeMemory',
     'DriverBackendFFTNative',
     'DriverBackendDModelNative',
-    'DriverBackendGModelNative'
+    'DriverBackendGModelNative',
+    'DriverBackendObjectiveNative'
 ]
 
 
 def _get_class(cls, dtype, classes):
-    if dtype not in classes:
+    if np.dtype(dtype) not in classes:
         requested = np.dtype(dtype).name
         supported = ', '.join([np.dtype(dt).name for dt in classes])
         raise RuntimeError(
             f"could not create native module wrapper of type '{cls}'; "
             f"the requested dtype is not supported by the native module "
             f"(requested: {requested}; supported: {supported})")
-    return classes[dtype]
+    return classes[np.dtype(dtype)]
 
 
 class NativeMemory(abc.ABC):
@@ -313,3 +315,21 @@ class DriverBackendGModelNative(DriverBackendGModel):
             _ptr(rdata), _ptr(rdata_cmp),
             _ptr(ordata), _ptr(ordata_cmp),
             _ptr(vdata_cmp), _ptr(ddata_cmp))
+
+
+class DriverBackendObjectiveNative(DriverBackendObjective):
+
+    def __init__(self, dtype, memory, classes):
+        super().__init__()
+        self._dtype = dtype
+        self._memory = memory
+        self._module = _get_class(self.__class__.__qualname__, dtype, classes)()
+
+    def __deepcopy__(self, memodict):
+        return self.__class__(self._dtype, self._memory, self._module)
+
+    def dtype(self):
+        return self._dtype
+
+    def foo(self):
+        pass
