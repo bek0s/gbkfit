@@ -17,6 +17,16 @@ class Problem:
         self._multi_objective = multi_objective
         self._callback = callback
         self._bounds = (minimums, maximums)
+        print("PANA")
+
+    # def __copy__(self):
+    #     print("COPY")
+
+    def __deepcopy__(self, memodict={}):
+        print("DEEPCOPY=====================================================================")
+        import os
+        print("process id:", os.getpid())
+        return self.__class__(self._objective, self._parameters, self._minimums, self._maximums, self._multi_objective)
 
     def get_bounds(self):
         return self._bounds
@@ -25,13 +35,12 @@ class Problem:
         return 1 + int(self._multi_objective)
 
     def fitness(self, x):
+        # print("Problem::fitness::x:", x)
         enames = self._parameters.enames(fixed=False, tied=False, free=True)
         eparams = dict(zip(enames, x))
-        residual = fitutils.residual_scalar(
-            eparams, self._parameters, self._objective, None)
-        print(enames)
-        print(eparams)
-        print(residual)
+        # print("Problem::fitness::eparams:", eparams)
+        residual = fitutils.residual_scalar(eparams, self._parameters, self._objective, None)
+        # print("Problem::fitness::residual:", residual)
         return [sum(residual)] + [sum(residual)] * self._multi_objective
 
     def gradient(self, x):

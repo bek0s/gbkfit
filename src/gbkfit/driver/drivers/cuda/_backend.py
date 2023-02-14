@@ -82,7 +82,7 @@ class DriverBackendObjectiveCuda(DriverBackendObjectiveNative):
 
     def __init__(self, dtype):
         super().__init__(dtype, NativeMemoryCuda, {
-            np.dtype(np.float32): native_module.GModelf32  # todo change this
+            np.dtype(np.float32): native_module.Objectivef32  # todo change this
         })
 
     def __deepcopy__(self, memodict):

@@ -156,6 +156,16 @@ struct Wrapper
     static void
     objective_count_pixels(
             const T* data1, const T* data2, int size, T epsilon, int* counts);
+
+    static void
+    objective_residual(
+            const T* obs_d, const T* obs_e, const T* obs_m,
+            const T* mdl_d, const T* mdl_w, const T* mdl_m,
+            int size, T weight, T* res);
+
+    static void
+    objective_residual(
+            const T* data, const T*  data_w, const T* data_m, const T* model, const T* model_w, const T* model_m, int size, T* out);
 };
 
 }} // namespace gbkfit::cuda

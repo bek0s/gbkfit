@@ -331,5 +331,26 @@ class DriverBackendObjectiveNative(DriverBackendObjective):
     def dtype(self):
         return self._dtype
 
+    def residual(self, obs_d, obs_e, obs_m, mdl_d, mdl_w, mdl_m, weight, res):
+        _ptr = self._memory.ptr
+        _size = self._memory.size
+        self._module.residual(
+            _ptr(obs_d), _ptr(obs_e), _ptr(obs_m),
+            _ptr(mdl_d), _ptr(mdl_w), _ptr(mdl_m),
+            _size(obs_d), weight, _ptr(res))
+
+    def residual_sum(self, residual, squared, sum_):
+        _ptr = self._memory.ptr
+        _size = self._memory.size
+        self._module.residual_sum(
+            _ptr(residual), _size(residual), squared, _ptr(sum_))
+
+    def count_elements(self, array1, array2, threshold, counts):
+        _ptr = self._memory.ptr
+        _size = self._memory.size
+        self._module.count_pixels(
+            _ptr(array1), _ptr(array2), _size(array1), threshold, _ptr(counts))
+
     def foo(self):
         pass
+

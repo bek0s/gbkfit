@@ -154,11 +154,15 @@ class FitterPygmo(Fitter, abc.ABC):
                 pinfo.initial_value_maximum(),
                 size)
 
-        prb = pg.problem(Problem(objective, parameters, minimums, maximums, is_multi_objective))
+        pr = Problem(objective, parameters, minimums, maximums, is_multi_objective)
+        prb = pg.problem(pr)
         pop = pg.population(prb, size=size, seed=seed)
 
-        for i in range(size):
-            pop.set_x(i, initial_values[:, i])
+        # print(initial_values)
+        # exit()
+
+        # for i in range(size):
+        #     pop.set_x(i, initial_values[:, i])
 
         alg = pg.algorithm(self.create_algorithm(parameters))
 
@@ -170,12 +174,12 @@ class FitterPygmo(Fitter, abc.ABC):
 
 
         pop = alg.evolve(pop)
-        exit()
+        # exit()
         print("----- RESULTS -----")
-        print(pg.sort_population_mo(pop.get_f()))
-        print("get_f():", pop.get_f().tolist())
-        print("get_x():", pop.get_x().tolist())
-        print(pop.champion_x)
-        print(pop.champion_f)
+        # print(pg.sort_population_mo(pop.get_f()))
+        # print("get_f():", pop.get_f().tolist())
+        # print("get_x():", pop.get_x().tolist())
+        print("champion:", pop.champion_x)
+        print("f:", pop.champion_f)
         print("BYE")
         exit()

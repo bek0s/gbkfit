@@ -115,10 +115,13 @@ def parse_options_for_callable(
     optional.update(add_optional_keys)
     # Parse required and optional options
     options = parse_options(info, desc, required, optional)
-    # Validate option types
+    # Gather, prepare, and validate option types
     option_types = inspect.get_annotations(fun)
     option_types = option_types | add_required | add_optional
     option_types = iterutils.remove_from_mapping_by_value(option_types, None)
+    for old_name, new_name in fun_rename_args.items():
+        if old_name in option_types:
+            option_types[new_name] = option_types.pop(old_name)
     for option_name, option_value in options.items():
         if option_name in option_types:
             option_type = option_types[option_name]

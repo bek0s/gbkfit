@@ -85,15 +85,16 @@ def eval_(
     #
 
     config = os.path.abspath(config)
-    _log.info(f"reading configuration file: {config}...")
+    _log.info(f"reading configuration from file: {config}...")
 
     try:
         cfg = yaml.load(open(config))
     except Exception as e:
         raise RuntimeError(
             f"error while reading configuration file {config}; "
-            f"see preceding exception for additional information") from e
+            f"see reason below:\n{e}") from e
 
+    _log.info("preparing configuration...")
     # This is not a full-fledged validation. It just tries to catch
     # and inform the user about the really obvious mistakes.
     # todo: investigate the potential use of json schema for validation
@@ -118,9 +119,10 @@ def eval_(
 
     #
     # Setup all the components described in the configuration.
-    # We assume that, the datasets, drivers, dmodels, and gmodels
+    # We assume that the datasets, drivers, dmodels, and gmodels
     # configurations are lists, while the objective, pdescs, and params
-    # configurations are dicts.
+    # configurations are dicts. This assumption is based on the fact
+    # that the _detail.prepare_config() called above should do that
     #
 
     datasets = None
@@ -182,7 +184,8 @@ def eval_(
     model_extra = {}
     model_data = []
     if mode == 'model':
-        model_data = model.model_h(params, model_extra)
+        model_data = model.model_h(params, None)
+
 
 
     resid_u_extra = {}
@@ -190,8 +193,11 @@ def eval_(
     resid_w_extra = {}
     resid_w_data = []
     if mode == 'objective':
-        resid_u_data = objective.residual_nddata_h(params, False, resid_u_extra)
+        resid_u_data = objective.residual_nddata_h(params, resid_u_extra)
         resid_w_data = []  # objective.residual_nddata_h(params, True, resid_w_extra)
+        foo = objective.residual_scalar(params, True)
+        print(params)
+        print("residual:", foo)
 
     #
     # Gather objective outputs
@@ -230,10 +236,10 @@ def eval_(
     for key, value in resid_w_extra.items():
         outputs |= {f'{resid_u_prefix}_extra_{key}.fits': value}
 
+    # #
+    # # Calculate outputs statistics
+    # #
     #
-    # Calculate outputs statistics
-    #
-
     # _log.info("calculating statistics for outputs...")
     #
     # outputs_stats = {}
@@ -271,15 +277,14 @@ def eval_(
 
     if profile > 0:
         _log.info("running performance test...")
-        objective.time_stats_reset()
         for i in range(profile):
             if mode == 'model':
-                objective.model_h(params)
+                model.model_d(params)
             if mode == 'objective':
-                objective.residual_nddata_h(params)
+                objective.log_likelihood(params)
+                objective.residual_scalar(params, squared=True)
         _log.info("calculating timing statistics...")
         time_stats = iterutils.nativify(timeutils.get_time_stats())
         _log.info(pd.DataFrame.from_dict(time_stats, orient='index'))
         filename = os.path.join(output_dir, 'gbkfit_eval_timings')
-        time_stats |= dict(unit='milliseconds')
         _detail.dump_dict(json, yaml, time_stats, filename)

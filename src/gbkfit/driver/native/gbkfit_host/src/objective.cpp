@@ -16,7 +16,41 @@ Objective<T>::count_pixels(
             reinterpret_cast<int*>(counts));
 }
 
-#define INSTANTIATE(T)            \
+template<typename T> void
+Objective<T>::residual(
+        Ptr obs_d, Ptr obs_e, Ptr obs_m,
+        Ptr mdl_d, Ptr mdl_w, Ptr mdl_m,
+        int size, T weight, Ptr residual) const
+{
+    kernels::objective_residual(
+            reinterpret_cast<const T*>(obs_d),
+            reinterpret_cast<const T*>(obs_e),
+            reinterpret_cast<const T*>(obs_m),
+            reinterpret_cast<const T*>(mdl_d),
+            reinterpret_cast<const T*>(mdl_w),
+            reinterpret_cast<const T*>(mdl_m),
+            size, weight,
+            reinterpret_cast<T*>(residual));
+
+//    T* r = reinterpret_cast<T*>(residual);
+//    T sum = 0;
+//    #pragma omp parallel for reduction(+:sum)
+//    for(int i = 0; i < size; ++i) {
+//        sum = sum + std::fabs(r[i]);
+//    }
+//    r[0] = sum;
+}
+
+template<typename T> void
+Objective<T>::residual_sum(Ptr residual, int size, bool squared, Ptr sum) const
+{
+    kernels::objective_residual_sum(
+            reinterpret_cast<const T*>(residual),
+            size, squared,
+            reinterpret_cast<T*>(sum));
+}
+
+#define INSTANTIATE(T)\
     template struct Objective<T>;
 INSTANTIATE(float)
 #undef INSTANTIATE

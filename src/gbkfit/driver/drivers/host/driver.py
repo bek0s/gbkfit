@@ -54,13 +54,13 @@ class DriverHost(Driver):
         return np.add(x1, x2, out=out)
 
     def math_sub(self, x1, x2, out=None):
-        return np.sub(x1, x2, out=out)
+        return np.subtract(x1, x2, out=out)
 
     def math_mul(self, x1, x2, out=None):
         return np.multiply(x1, x2, out=out)
 
     def math_div(self, x1, x2, out=None):
-        return np.div(x1, x2, out=out)
+        return np.divide(x1, x2, out=out)
 
     def math_pow(self, x1, x2, out=None):
         return np.power(x1, x2, out=out)

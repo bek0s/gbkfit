@@ -49,6 +49,7 @@ class DModelImage(DModel):
             dtype: str = 'float32'
     ):
         super().__init__()
+        self._counter = 0
         if rpix is None:
             rpix = tuple((np.array(size) / 2 - 0.5).tolist())
         size = tuple(size) + (1,)
@@ -112,6 +113,11 @@ class DModelImage(DModel):
         dcube.evaluate(out_dmodel_extra)
         # Model evaluation complete.
         # Return data, mask, and weight arrays (if available)
+
+        # import astropy.io.fits as fits
+        # fits.writeto(f"omg_{self._counter}_{int(params['xpos'])}.fits", dcube.dcube()[0, :, :], overwrite=True)
+        # self._counter += 1
+
         return dict(image=dict(
             d=dcube.dcube()[0, :, :],
             m=dcube.mcube()[0, :, :] if has_mcube else None,

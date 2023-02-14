@@ -1,5 +1,6 @@
 
 import cupy as cp
+import cupyx as cpx
 import numpy as np
 
 from gbkfit.driver.core import Driver
@@ -17,12 +18,14 @@ class DriverCuda(Driver):
         return 'cuda'
 
     def mem_alloc_s(self, shape, dtype):
-        h_data = np.empty(shape, dtype)
+        # h_data = np.empty(shape, dtype)
+        h_data = cpx.empty_pinned(shape, dtype)
         d_data = cp.empty(shape, dtype)
         return h_data, d_data
 
     def mem_alloc_h(self, shape, dtype):
-        return np.empty(shape, dtype)
+        # return np.empty(shape, dtype)
+        return cpx.empty_pinned(shape, dtype)
 
     def mem_alloc_d(self, shape, dtype):
         return cp.empty(shape, dtype)
@@ -38,7 +41,7 @@ class DriverCuda(Driver):
         if h_dst is None:
             h_dst = self.mem_alloc_h(d_src.shape, d_src.dtype)
         if d_src is not h_dst:
-            h_dst[:] = d_src.get()
+            d_src.get(out=h_dst)
         return h_dst
 
     def mem_fill(self, x, value):

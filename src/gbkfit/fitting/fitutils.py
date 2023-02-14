@@ -33,14 +33,13 @@ def dump_params_dict(parameters, type_):
     return info
 
 
-def prepare_param_prior_info(info):
-    prior = info.get('prior')
-    if prior is None:
+def prepare_param_info_prior(info):
+    if (prior := info.get('prior')) is None:
         if 'min' not in info or 'max' not in info:
             raise RuntimeError(
-                f"no 'prior' key found in the parameter description; "
+                f"option 'prior' not found in the parameter configuration; "
                 f"an attempt to generate a default uniform prior failed "
-                f"because 'min' and/or 'max' keys are missing")
+                f"because 'min' and/or 'max' options are missing")
         prior = dict(type='uniform', min=info.pop('min'), max=info.pop('max'))
     return prior
 
@@ -101,11 +100,22 @@ def prepare_optional_initial_value_min_max(
     return initial_value, initial_width, initial_value_min, initial_value_max
 
 
+def prepare_param_initial_value_width(initial_value, initial_width):
+    if (initial_value is None) != (initial_width is None):
+        _log.warning(
+            f"initial_value ({initial_value}) and "
+            f"initial_width ({initial_width}) will be ignored "
+            f"because at least one of them is not set")
+        initial_value = None
+        initial_width = None
+    return initial_value, initial_width
+
 
 def residual_scalar(eparams, parameters, objective, callback):
     params = parameters.evaluate(eparams, check=True)
-    residual = objective.residual_scalar(params)
-    print(f"residual scalar: {residual}, params: {params}")
+    # params['xpos'] = 1
+    residual = objective.residual_scalar(params, squared=False)
+    # print(f"residual scalar: {residual}, params: {params}")
     if callback:
         raise NotImplementedError()
     return residual

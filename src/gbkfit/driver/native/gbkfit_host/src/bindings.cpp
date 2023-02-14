@@ -28,7 +28,9 @@ PYBIND11_MODULE(EXTENSION_NAME, m)
 
     py::class_<Objective<float>>(m, "Objectivef32")
             .def(py::init<>())
-            .def("count_pixels", &Objective<float>::count_pixels);
+            .def("count_pixels", &Objective<float>::count_pixels)
+            .def("residual", &Objective<float>::residual)
+            .def("residual_sum", &Objective<float>::residual_sum);
 
     py::class_<FFT<float>>(m, "FFTf32")
             .def(py::init<>())

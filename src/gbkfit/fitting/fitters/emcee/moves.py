@@ -1,6 +1,7 @@
 
 import abc
 import copy
+from typing import Literal
 
 import emcee.moves
 
@@ -8,6 +9,7 @@ from gbkfit.utils import iterutils, parseutils
 
 
 __all__ = [
+    'FitterEmceeMove',
     'FitterEmceeMoveDE',
     'FitterEmceeMoveDESnooker',
     'FitterEmceeMoveGaussian',
@@ -21,6 +23,13 @@ __all__ = [
 ]
 
 
+def _locals_to_options(locals_):
+    locals_ = copy.deepcopy(locals_)
+    locals_.pop('self')
+    locals_.pop('__class__')
+    return locals_
+
+
 class FitterEmceeMove(parseutils.TypedParserSupport, abc.ABC):
 
     @classmethod
@@ -30,15 +39,13 @@ class FitterEmceeMove(parseutils.TypedParserSupport, abc.ABC):
         return cls(**opts)
 
     def dump(self):
-        options = copy.deepcopy(self._kwargs)
-        options = iterutils.remove_from_mapping_by_value(options, None)
-        return dict(type=self.type()) | options
+        info = copy.deepcopy(self._options)
+        info = iterutils.remove_from_mapping_by_value(info, None)
+        return info
 
-    def __init__(self, cls, kwargs):
-        self._kwargs = copy.deepcopy(kwargs)
-        self._kwargs.pop('self')
-        self._kwargs.pop('__class__')
-        self._move = cls(**self._kwargs)
+    def __init__(self, cls, options):
+        self._options = copy.deepcopy(options)
+        self._move = cls(**self._options)
 
     def obj(self):
         return self._move
@@ -51,9 +58,14 @@ class FitterEmceeMoveStretch(FitterEmceeMove):
         return 'stretch'
 
     def __init__(
-            self, a=2.0,
-            nsplits=2, randomize_split=True, live_dangerously=False):
-        super().__init__(emcee.moves.StretchMove, copy.deepcopy(locals()))
+            self,
+            a: int | float = 2.0,
+            nsplits: int = 2,
+            randomize_split: bool = True,
+            live_dangerously: bool = False
+    ):
+        super().__init__(
+            emcee.moves.StretchMove, _locals_to_options(locals()))
 
 
 class FitterEmceeMoveWalk(FitterEmceeMove):
@@ -63,9 +75,14 @@ class FitterEmceeMoveWalk(FitterEmceeMove):
         return 'walk'
 
     def __init__(
-            self, s=None,
-            nsplits=2, randomize_split=True, live_dangerously=False):
-        super().__init__(emcee.moves.WalkMove, copy.deepcopy(locals()))
+            self,
+            s: int | None = None,
+            nsplits: int = 2,
+            randomize_split: bool = True,
+            live_dangerously: bool = False
+    ):
+        super().__init__(
+            emcee.moves.WalkMove, _locals_to_options(locals()))
 
 
 class FitterEmceeMoveKDE(FitterEmceeMove):
@@ -75,9 +92,14 @@ class FitterEmceeMoveKDE(FitterEmceeMove):
         return 'kde'
 
     def __init__(
-            self, bw_method=None,
-            nsplits=2, randomize_split=True, live_dangerously=False):
-        super().__init__(emcee.moves.KDEMove, copy.deepcopy(locals()))
+            self,
+            bw_method=None,  # todo: add type
+            nsplits: int = 2,
+            randomize_split: bool = True,
+            live_dangerously: bool = False
+    ):
+        super().__init__(
+            emcee.moves.KDEMove, _locals_to_options(locals()))
 
 
 class FitterEmceeMoveDE(FitterEmceeMove):
@@ -87,9 +109,15 @@ class FitterEmceeMoveDE(FitterEmceeMove):
         return 'de'
 
     def __init__(
-            self, sigma=1e-05, gamma0=None,
-            nsplits=2, randomize_split=True, live_dangerously=False):
-        super().__init__(emcee.moves.DEMove, copy.deepcopy(locals()))
+            self,
+            sigma: int | float = 1e-05,
+            gamma0: int | float | None = None,
+            nsplits: int = 2,
+            randomize_split: bool = True,
+            live_dangerously: bool = False
+    ):
+        super().__init__(
+            emcee.moves.DEMove, _locals_to_options(locals()))
 
 
 class FitterEmceeMoveDESnooker(FitterEmceeMove):
@@ -99,9 +127,14 @@ class FitterEmceeMoveDESnooker(FitterEmceeMove):
         return 'desnooker'
 
     def __init__(
-            self, gammas=1.7,
-            nsplits=2, randomize_split=True, live_dangerously=False):
-        super().__init__(emcee.moves.DESnookerMove, copy.deepcopy(locals()))
+            self,
+            gammas: int | float = 1.7,
+            nsplits: int = 2,
+            randomize_split: bool = True,
+            live_dangerously: bool = False
+    ):
+        super().__init__(
+            emcee.moves.DESnookerMove, _locals_to_options(locals()))
 
 
 class FitterEmceeMoveMH(FitterEmceeMove):
@@ -110,8 +143,13 @@ class FitterEmceeMoveMH(FitterEmceeMove):
     def type():
         return 'mh'
 
-    def __init__(self, proposal_function, ndim=None):
-        super().__init__(emcee.moves.MHMove, copy.deepcopy(locals()))
+    def __init__(
+            self,
+            proposal_function,  # todo: add type
+            ndim: int | None = None
+    ):
+        super().__init__(
+            emcee.moves.MHMove, _locals_to_options(locals()))
 
 
 class FitterEmceeMoveGaussian(FitterEmceeMove):
@@ -120,26 +158,32 @@ class FitterEmceeMoveGaussian(FitterEmceeMove):
     def type():
         return 'gauss'
 
-    def __init__(self, cov, mode='vector', factor=None):
-        super().__init__(emcee.moves.GaussianMove, copy.deepcopy(locals()))
+    def __init__(
+            self,
+            cov,  # todo: add type
+            mode: Literal['vector', 'random', 'sequential'] = 'vector',
+            factor: int | float | None = None
+    ):
+        super().__init__(
+            emcee.moves.GaussianMove, _locals_to_options(locals()))
 
 
-move_parser = parseutils.TypedParser(FitterEmceeMove)
-move_parser.register(FitterEmceeMoveStretch)
-move_parser.register(FitterEmceeMoveWalk)
-move_parser.register(FitterEmceeMoveKDE)
-move_parser.register(FitterEmceeMoveDE)
-move_parser.register(FitterEmceeMoveDESnooker)
-move_parser.register(FitterEmceeMoveMH)
-move_parser.register(FitterEmceeMoveGaussian)
+move_parser = parseutils.TypedParser(FitterEmceeMove, [
+    FitterEmceeMoveStretch,
+    FitterEmceeMoveWalk,
+    FitterEmceeMoveKDE,
+    FitterEmceeMoveDE,
+    FitterEmceeMoveDESnooker,
+    FitterEmceeMoveMH,
+    FitterEmceeMoveGaussian])
 
 
 def load_moves_with_weights(info):
-    moves = iterutils.tuplify(info, False)
-    weights = [move.pop('weight', 1) for move in moves]
-    moves = move_parser.load(moves)
+    info = iterutils.tuplify(info, False)
+    weights = [m.pop('weight', 1) for m in info]
+    moves = move_parser.load_many(info)
     return tuple(zip(moves, weights))
 
 
 def dump_moves_with_weights(moves):
-    return [dict(weight=weight) | move.dump() for move, weight in moves]
+    return [dict(weight=w) | move_parser.dump_one(m) for m, w in moves]

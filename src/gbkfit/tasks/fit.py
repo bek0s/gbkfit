@@ -1,20 +1,17 @@
-
+import copy
 import logging
 import os
 import time
 
+import numpy as np
 import ruamel.yaml
 
-import gbkfit
 import gbkfit.dataset
 import gbkfit.driver
 import gbkfit.fitting
 import gbkfit.model
 import gbkfit.objective
 import gbkfit.params
-import gbkfit.params.pdescs
-import gbkfit.params.parsers
-from gbkfit.params import parsers as param_parsers
 from gbkfit.utils import miscutils
 from . import _detail
 
@@ -31,10 +28,11 @@ ruamel.yaml.add_representer(dict, lambda self, data: self.represent_mapping(
 
 
 def _prepare_params(info, pdescs):
+
     # Prepare the supplied parameters. This will:
     # - Ensure the parameter keys are valid
     # - Explode parameter values that are dicts and can be exploded
-    parameters = param_parsers.prepare_param_info(
+    parameters = gbkfit.params.prepare_param_info(
         info.get('parameters'), pdescs)
 
     # Update parameter info and return it
@@ -43,37 +41,62 @@ def _prepare_params(info, pdescs):
 
 def fit(config):
 
+    # class Foo:
+    #
+    #     def __init__(self):
+    #         self._array1 = np.ones((2, 2))
+    #         self._array2 = self._array1.reshape((4,))
+    #
+    #     def check_arrays(self):
+    #         print("array1 address: ", self._array1.data)
+    #         print("array2 address: ", self._array2.data)
+    #         print("share memory:", np.shares_memory(self._array1, self._array2))
+    #
+    # a = Foo()
+    # a.check_arrays()
+    # b = copy.deepcopy(a)
+    # b.check_arrays()
+    #
+    #
+    # exit()
+
     #
     # Read configuration file and
     # perform all necessary validation/preparation
     #
 
-    _log.info(f"reading configuration file: '{config}'...")
+    config = os.path.abspath(config)
+    _log.info(f"reading configuration from file: {config}...")
 
     try:
         cfg = yaml.load(open(config))
     except Exception as e:
         raise RuntimeError(
-            "error while reading configuration file; "
-            "see preceding exception for additional information") from e
+            f"error while reading configuration file {config}; "
+            f"see reason below:\n{e}") from e
 
+    _log.info("preparing configuration...")
     # This is not a full-fledged validation. It just tries to catch
     # and inform the user about the really obvious mistakes.
     # todo: investigate the potential use of jsonschema for validation
     required_sections = (
-        'drivers', 'datasets', 'dmodels', 'gmodels', 'params', 'fitter')
-    optional_sections = ('objective', 'pdescs')
+        'datasets', 'drivers', 'dmodels', 'gmodels', 'params', 'fitter')
+    optional_sections = ('pdescs', 'objective')
     cfg = _detail.prepare_config(cfg, required_sections, optional_sections)
 
     #
-    # Setup all the components described in the configuration
+    # Setup all the components described in the configuration.
+    # We assume that the datasets, drivers, dmodels, and gmodels
+    # configurations are lists, while the objective, pdescs, and params
+    # configurations are dicts. This assumption is based on the fact
+    # that the _detail.prepare_config() called above should do that
     #
-
-    _log.info("setting up drivers...")
-    drivers = gbkfit.driver.driver_parser.load(cfg['drivers'])
 
     _log.info("setting up datasets...")
     datasets = gbkfit.dataset.dataset_parser.load(cfg['datasets'])
+
+    _log.info("setting up drivers...")
+    drivers = gbkfit.driver.driver_parser.load(cfg['drivers'])
 
     _log.info("setting up dmodels...")
     dmodels = gbkfit.model.dmodel_parser.load(cfg['dmodels'], dataset=datasets)
@@ -81,15 +104,15 @@ def fit(config):
     _log.info("setting up gmodels...")
     gmodels = gbkfit.model.gmodel_parser.load(cfg['gmodels'])
 
+    _log.info("setting up model...")
+    model = gbkfit.model.Model(drivers, dmodels, gmodels)
+
     _log.info("setting up objective...")
-    objective = gbkfit.objective.goodness_objective_parser.load(
-        cfg.get('objective', {}), datasets, drivers, dmodels, gmodels)
+    objective = gbkfit.objective.objective_parser.load(
+        cfg.get('objective', {}), datasets, model)
 
     _log.info("setting up fitter...")
     fitter = gbkfit.fitting.fitter_parser.load(cfg['fitter'])
-
-    # exit(fitter.dump())
-    # yaml.dump(fitter.dump(), open(f'fitter.yaml', 'w+'))
 
     pdescs = None
     if 'pdescs' in cfg:

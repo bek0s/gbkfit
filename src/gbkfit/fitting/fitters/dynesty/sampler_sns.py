@@ -1,5 +1,7 @@
+
 import collections.abc
 import copy
+from typing import Literal
 
 import dynesty
 import dynesty.sampler
@@ -9,11 +11,18 @@ import numpy as np
 from gbkfit.fitting import fitutils
 from gbkfit.fitting.prior import prior_parser, PriorDict
 from gbkfit.fitting.result import make_fitter_result
-from gbkfit.params import paramutils
+from gbkfit.params import parsers as param_parsers
 from gbkfit.utils import funcutils, iterutils, parseutils
 
 from .core import FitParamDynesty, FitParamsDynesty, FitterDynesty, \
     log_likelihood, prior_transform
+
+
+__all__ = [
+    'FitParamDynestySNS',
+    'FitParamsDynestySNS',
+    'FitterDynestySNS'
+]
 
 
 class FitParamDynestySNS(FitParamDynesty):
@@ -57,7 +66,7 @@ class FitParamsDynestySNS(FitParamsDynesty):
         desc = parseutils.make_basic_desc(cls, 'fit params')
         opts = parseutils.parse_options_for_callable(
             info, desc, cls.__init__, fun_ignore_args=['pdescs'])
-        opts = paramutils.load_params_parameters_conversions(
+        opts = param_parsers.load_params_parameters_conversions(
             opts, pdescs, collections.abc.Mapping, cls.load_param)
         return cls(pdescs, **opts)
 
@@ -100,31 +109,40 @@ class FitterDynestySNS(FitterDynesty):
 
     def __init__(
             self,
-            # dynesty.NestedSampler()
-            nlive=500,
-            bound='multi',
-            sample='auto',
-            update_interval=None,
-            first_update=None,
-            rstate=None,
-            enlarge=None,
-            bootstrap=None,
-            walks=None,
-            facc=0.5,
-            slices=None,
-            fmove=0.9,
-            max_move=100,
-            ncdim=None,
+            # dynesty.dynesty.NestedSampler()
+            nlive: int,
+            bound:
+            Literal['none', 'single', 'multi', 'balls', 'cubes'] = 'multi',
+            sample:
+            Literal['auto', 'unif', 'rwalk', 'slice', 'rslice'] = 'auto',
+            update_interval: int | float | None = None,
+            first_update: int | float | None = None,
+            seed: int = 0,
+            enlarge: int | float | None = None,
+            bootstrap: int | None = None,
+            walks: int | None = None,
+            facc: float | None = 0.5,
+            slices: int | None = None,
+            fmove: float | None = 0.9,
+            max_move: int | None = 100,
+            ncdim: int | None = None,
             # dynesty.sampler.Sampler.run_nested()
-            maxiter=None,
-            maxcall=None,
-            dlogz=None,
-            logl_max=np.inf,
-            n_effective=None,
-            add_live=True,
-            print_progress=True,
+            maxiter: int | None = None,
+            maxcall: int | None = None,
+            dlogz: float | None = None,
+            logl_max: float = np.inf,
+            n_effective: int | None = None,
+            add_live: bool = True,
+            print_progress: bool = True,
             print_func=None,
-            save_bounds=True):
+            save_bounds: bool = True
+            # todo: investigate options:
+            #   dynesty.dynesty.NestedSampler():
+            #     queue_size, pool, use_pool,
+            #     save_history, history_filename
+            #   dynesty.sampler.Sampler.run_nested():
+            #     checkpoint_file, checkpoint_every, resume
+    ):
         # Extract dynesty.NestedSampler() arguments
         args_factory = iterutils.extract_subdict(
             locals(), funcutils.extract_args(

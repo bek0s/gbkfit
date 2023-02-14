@@ -11,17 +11,22 @@ from gbkfit.utils import parseutils
 
 
 __all__ = [
-    'Prior', 'PriorDict', 'PriorGauss', 'PriorGaussTrunc', 'PriorUniform']
+    'Prior',
+    'PriorUniform',
+    'PriorGauss',
+    'PriorGaussTrunc'
+]
 
 
-def _parse_min_and_max(prior_info, param_info):
+def _recover_min_max(prior_info, param_info):
     for key in ['min', 'max']:
+        # todo: emit info/warning or recovery or duplicate
         if key not in prior_info and key in param_info:
             prior_info[key] = param_info.pop(key)
     return prior_info
 
 
-def _dump_min_and_max(prior):
+def _dump_min_max(prior):
     info = dict()
     for key, value in (('min', prior.minimum), ('max', prior.maximum)):
         if np.isfinite(value):
@@ -32,11 +37,13 @@ def _dump_min_and_max(prior):
 class Prior(parseutils.TypedParserSupport, abc.ABC):
 
     def dump(self):
-        return dict(type=self.type()) | _dump_min_and_max(self)
+        return _dump_min_max(self)
 
-    def __init__(self, minimum=-np.inf, maximum=np.inf):
+    def __init__(self, minimum=-np.inf, maximum=np.inf, seed=0):
         self._minimum = minimum
         self._maximum = maximum
+        self._seed = seed
+        self._rng = np.random.default_rng(seed)
 
     @property
     def minimum(self):
@@ -55,7 +62,7 @@ class Prior(parseutils.TypedParserSupport, abc.ABC):
         self._maximum = maximum
 
     def sample(self, size):
-        return self.rescale(np.random.uniform(0, 1, size))
+        return self.rescale(self._rng.uniform(0, 1, size))
 
     @abc.abstractmethod
     def rescale(self, x):
@@ -91,7 +98,7 @@ class PriorUniform(Prior):
 
     @classmethod
     def load(cls, info, **kwargs):
-        info = _parse_min_and_max(info, **kwargs)
+        info = _recover_min_max(info, **kwargs)
         desc = parseutils.make_typed_desc(cls, 'prior')
         opts = parseutils.parse_options_for_callable(
             info, desc, cls.__init__, fun_rename_args=dict(
@@ -102,7 +109,11 @@ class PriorUniform(Prior):
     def dump(self):
         return super().dump()
 
-    def __init__(self, minimum, maximum):
+    def __init__(
+            self,
+            minimum: int | float,
+            maximum: int | float
+    ):
         super().__init__(minimum, maximum)
 
     def rescale(self, x):
@@ -131,7 +142,11 @@ class PriorGauss(Prior):
     def dump(self):
         return super().dump() | dict(mean=self.mean, std=self.std)
 
-    def __init__(self, mean, std):
+    def __init__(
+            self,
+            mean: int | float,
+            std: int | float
+    ):
         super().__init__()
         self._mean = mean
         self._std = std
@@ -170,7 +185,7 @@ class PriorGaussTrunc(Prior):
 
     @classmethod
     def load(cls, info, **kwargs):
-        info = _parse_min_and_max(info, **kwargs)
+        info = _recover_min_max(info, **kwargs)
         desc = parseutils.make_typed_desc(cls, 'prior')
         opts = parseutils.parse_options_for_callable(
             info, desc, cls.__init__, fun_rename_args=dict(
@@ -181,7 +196,13 @@ class PriorGaussTrunc(Prior):
     def dump(self):
         return super().dump() | dict(mean=self.mean, std=self.std)
 
-    def __init__(self, mean, std, minimum, maximum):
+    def __init__(
+            self,
+            mean: int | float,
+            std: int | float,
+            minimum: int | float,
+            maximum: int | float
+    ):
         super().__init__(minimum, maximum)
         self._mean = mean
         self._std = std
@@ -215,10 +236,6 @@ class PriorGaussTrunc(Prior):
             x, self.mean, self.std, self.minimum, self.maximum)
 
 
-
-
-
-prior_parser = parseutils.TypedParser(Prior)
-
-prior_parser.register(PriorUniform)
-prior_parser.register(PriorGauss)
+prior_parser = parseutils.TypedParser(Prior, [
+    PriorUniform,
+    PriorGauss])

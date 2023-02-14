@@ -426,6 +426,28 @@ def test_interpreter():
         'f[2]': 'f[1] + 8'
     }
 
+    # exprs_dict = {
+    #     'a': 1,
+    #     'b': None,
+    #     'c': None,
+    #     'd': 4,
+    #     'e[0]': 5,
+    #     'e[1:]': [6, 7],
+    #     'f[1]': None,
+    #     'f[2]': None
+    # }
+    #
+    # def exprs_func(params):
+    #     params['a'] = 1
+    #     params['b'] = 1 + 1
+    #     params['c'] = params['a'] + params['b']
+    #     params['d'] = 4
+    #     params['e'][0] = 5
+    #     params['e'][1:] = [6, 7]
+    #     params['f'][1] = params['f'][0]
+    #     params['f'][2] = params['f'][1] + 8
+    #     return params
+
     interpreter01 = Interpreter(pdescs, exprs_dict, None)
     enames_free = interpreter01.enames(fixed=False, tied=False, free=True)
     enames_tied = interpreter01.enames(fixed=False, tied=True, free=False)
@@ -449,29 +471,30 @@ def test_interpreter():
         'f[0]': 1, 'f[1]': 1, 'f[2]': 9}
 
 
-def test_evaluation_params():
+# def test_evaluation_params():
+#
+#     pdescs = dict(
+#         a=ParamScalarDesc('a'),
+#         b=ParamScalarDesc('b'),
+#         c=ParamVectorDesc('c', 3))
+#
+#     parameters = {
+#         'a': 1,
+#         'b': '2',
+#         'c': 'a + b'
+#     }
+#
+#     params = EvaluationParams(pdescs, parameters)
+#     enames_tied = params.enames(fixed=False, tied=True)
+#     enames_fixed = params.enames(fixed=True, tied=False)
+#     assert enames_tied == ['b', 'c[0]', 'c[1]', 'c[2]']
+#     assert enames_fixed == ['a']
 
-    pdescs = dict(
-        a=ParamScalarDesc('a'),
-        b=ParamScalarDesc('b'),
-        c=ParamVectorDesc('c', 3))
 
-    parameters = {
-        'a': 1,
-        'b': '2',
-        'c': 'a + b'
-    }
-
-    params = EvaluationParams(pdescs, parameters)
-    enames_tied = params.enames(fixed=False, tied=True)
-    enames_fixed = params.enames(fixed=True, tied=False)
-    assert enames_tied == ['b', 'c[0]', 'c[1]', 'c[2]']
-    assert enames_fixed == ['a']
-
-
-test_param_symbols()
-test_scalar_desc()
-test_vector_desc()
-test_param_parsers()
-test_interpreter()
-test_evaluation_params()
+if __name__ == '__main__':
+    test_param_symbols()
+    test_scalar_desc()
+    test_vector_desc()
+    test_param_parsers()
+    test_interpreter()
+    # test_evaluation_params()

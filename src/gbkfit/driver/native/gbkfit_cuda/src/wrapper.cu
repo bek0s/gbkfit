@@ -335,6 +335,22 @@ Wrapper<T>::objective_count_pixels(
     cudaDeviceSynchronize();
 }
 
+template<typename T> void
+Wrapper<T>::objective_residual(
+        const T* obs_d, const T* obs_e, const T* obs_m,
+        const T* mdl_d, const T* mdl_w, const T* mdl_m,
+        int size, T weight, T* res)
+{
+    const int n = size;
+    dim3 bsize(BLOCK_SIZE);
+    dim3 gsize((n + bsize.x - 1) / bsize.x);
+    kernels::objective_residual<<<gsize, bsize>>>(
+            obs_d, obs_e, obs_m,
+            mdl_d, mdl_w, mdl_m,
+            size, weight, res);
+    cudaDeviceSynchronize();
+}
+
 #define INSTANTIATE(T)\
     template struct Wrapper<T>;
 INSTANTIATE(float)

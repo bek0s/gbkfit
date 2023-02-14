@@ -8,6 +8,7 @@
 
 #include <gbkfit/dmodel/dmodels.hpp>
 #include <gbkfit/gmodel/gmodels.hpp>
+#include <gbkfit/objective/objective.hpp>
 
 #include "gbkfit/host/fftutils.hpp"
 #include "gbkfit/host/random.hpp"
@@ -425,6 +426,30 @@ template<typename T> void
 objective_count_pixels(
         const T* data1, const T* data2, int size, T epsilon, int* counts)
 {
+//    {
+//        int count_data1 = 0;
+//        int count_data2 = 0;
+//        int count_both = 0;
+
+//        for(int i = 0; i < size; ++i)
+//        {
+//            const bool has_data1 = std::abs(data1[i]) > epsilon;
+//            const bool has_data2 = std::abs(data2[i]) > epsilon;
+//            count_data1 += has_data1 && !has_data2;
+//            count_data2 += !has_data1 && has_data2;
+//            count_both += has_data1 && has_data2;
+//        }
+
+//        if (count_data1) {
+//            counts[0] += count_data1;
+//        }
+//        if (count_data2) {
+//            counts[1] += count_data2;
+//        }
+//        if (count_both) {
+//            counts[2] += count_both;
+//        }
+//    }
     #pragma omp parallel
     {
         int count_data1 = 0;
@@ -454,6 +479,38 @@ objective_count_pixels(
             counts[2] += count_both;
         }
     }
+}
+
+template<typename T> void
+objective_residual(
+        const T* obs_d, const T* obs_e, const T* obs_m,
+        const T* mdl_d, const T* mdl_w, const T* mdl_m,
+        int size, T weight, T* res)
+{
+    #pragma omp parallel for
+    for(int i = 0; i < size; ++i) {
+
+        gbkfit::objective_residual(
+                i,
+                obs_d, obs_e, obs_m,
+                mdl_d, mdl_w, mdl_m,
+                size, weight, res);
+
+    }
+}
+
+template<typename T> void
+objective_residual_sum(const T* residual, int size, bool squared, T* sum)
+{
+    T sum_ = 0;
+    #pragma omp parallel for reduction(+:sum_)
+    for(int i = 0; i < size; ++i) {
+
+    const T r = residual[i];
+    sum_ += squared ? r * r : std::abs(r);
+
+    }
+    sum[0] = sum_;
 }
 
 } // namespace gbkfit::host::kernels

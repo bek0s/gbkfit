@@ -16,6 +16,23 @@ Objective<T>::count_pixels(
             reinterpret_cast<int*>(counts));
 }
 
+template<typename T> void
+Objective<T>::residual(
+        Ptr obs_d, Ptr obs_e, Ptr obs_m,
+        Ptr mdl_d, Ptr mdl_w, Ptr mdl_m,
+        int size, T weight, Ptr residual) const
+{
+    Wrapper<T>::objective_residual(
+            reinterpret_cast<const T*>(obs_d),
+            reinterpret_cast<const T*>(obs_e),
+            reinterpret_cast<const T*>(obs_m),
+            reinterpret_cast<const T*>(mdl_d),
+            reinterpret_cast<const T*>(mdl_w),
+            reinterpret_cast<const T*>(mdl_m),
+            size, weight,
+            reinterpret_cast<T*>(residual));
+}
+
 #define INSTANTIATE(T)\
     template struct Objective<T>;
 INSTANTIATE(float)

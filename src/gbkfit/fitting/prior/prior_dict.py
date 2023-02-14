@@ -5,6 +5,11 @@ import copy
 import numpy as np
 
 
+__all__ = [
+    'PriorDict'
+]
+
+
 class PriorDict(collections.abc.Mapping):
 
     def __init__(self, priors):

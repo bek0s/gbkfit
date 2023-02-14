@@ -6,6 +6,7 @@
 
 #include <gbkfit/dmodel/dmodels.hpp>
 #include <gbkfit/gmodel/gmodels.hpp>
+#include <gbkfit/objective/objective.hpp>
 
 #include "gbkfit/cuda/fftutils.hpp"
 #include "gbkfit/cuda/random.hpp"
@@ -425,6 +426,26 @@ objective_count_pixels(
     if (count_both) {
         atomicAdd(&counts[2], count_both);
     }
+}
+
+
+template<typename T> __global__ void
+objective_residual(
+        const T* obs_d, const T* obs_e, const T* obs_m,
+        const T* mdl_d, const T* mdl_w, const T* mdl_m,
+        int size, T weight, T* res)
+{
+    const int nthreads = size;
+    const int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (tid >= nthreads) {
+        return;
+    }
+
+    gbkfit::objective_residual(
+            tid,
+            obs_d, obs_e, obs_m,
+            mdl_d, mdl_w, mdl_m,
+            size, weight, res);
 }
 
 } // namespace gbkfit::cuda::kernels

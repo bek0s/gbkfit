@@ -25,12 +25,25 @@ _log = logging.getLogger(__name__)
 yaml = ruamel.yaml.YAML()
 
 
-def _dump_posterior(posterior, prefix=''):
-    float_format = '%.8f'
-    with open(f'{prefix}posterior' + '.csv', 'w+') as f:
+def _dump_posterior(posterior, prefix='', overwrite=True):
+    file_csv = f'{prefix}posterior.csv'
+    file_txt = f'{prefix}posterior.txt'
+    file_json = f'{prefix}posterior.json'
+    file_yaml = f'{prefix}posterior.yaml'
+    for file in [file_csv, file_txt, file_json, file_yaml]:
+        if not overwrite and os.path.exists(file):
+            raise RuntimeError(
+                f"the following file already exists but overwrite is disabled: "
+                f"'{file}'")
+    float_format = '%.12f'
+    with open(file_csv, 'w') as f:
         f.write(posterior.df.to_csv(index=False, float_format=float_format))
-    with open(f'{prefix}posterior' + '.txt', 'w+') as f:
+    with open(file_txt, 'w') as f:
         f.write(posterior.df.to_string(index=False, float_format=float_format))
+    with open(file_json, 'w') as f:
+        json.dump(posterior.df.to_dict('list'), f, indent=2)
+    with open(file_yaml, 'w') as f:
+        yaml.dump(posterior.df.to_dict('list'), f)
 
 
 def load_result(result_dir):
@@ -43,12 +56,13 @@ def load_result(result_dir):
     # important information.
     #
 
+    result_file = os.path.join(result_dir, 'result.yaml')
     try:
-        result = yaml.load(open(os.path.join(result_dir, 'result.yaml')))
+        result = yaml.load(open(result_file))
     except Exception as e:
         raise RuntimeError(
-            "error while reading result directory; "
-            "see preceding exception for additional information") from e
+            f"error while reading result file {result_file}; "
+            f"see reason below:\n{e}") from e
 
     prefix = os.path.join(result_dir, '')
     datasets = gbkfit.dataset.dataset_parser.load(
@@ -351,9 +365,9 @@ def make_fitter_result(
         print(eparams_free)
         params = parameters.evaluate(eparams_free)
         dof = 100
-        sol.model = objective.model_h(params)
-        sol.residual = objective.residual_nddata_h(params)
-        sol.wresidual = objective.residual_nddata_h(params)
+        sol.model = objective.model().model_h(params)
+        sol.residual = objective.residual_nddata_h(params, weighted=False)
+        sol.wresidual = objective.residual_nddata_h(params, weighted=True)
         sol.chisqr = 1.0
         sol.rchisqr = sol.chisqr / (dof - len(enames_free))
         sol.wchisqr = 1.0

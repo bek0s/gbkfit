@@ -98,6 +98,7 @@ def _prepare_common_params_array(
             stop = start + desc.size()
         # Copy parameter values into the host memory buffer
         arr[0][start:stop] = params[name]
+        # print(arr[0].dtype)
         start = stop
     # Transfer data from host to device
     driver.mem_copy_h2d(arr[0], arr[1])

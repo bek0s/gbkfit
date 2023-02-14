@@ -2,7 +2,7 @@
 import typing
 from collections.abc import Mapping, Sequence, Set
 from types import UnionType
-from typing import Any, Tuple
+from typing import Any, Literal, Tuple, Union
 
 
 __all__ = [
@@ -25,8 +25,12 @@ def validate_type(value, type_):
     if origin is None:
         result = result and (type_ == Any or isinstance(value, type_))
 
+    # Type expected: literal leaf
+    elif origin is Literal:
+        result = value in args
+
     # Type expected: union
-    elif issubclass(origin, UnionType):
+    elif origin is Union or issubclass(origin, UnionType):
         result = any(validate_type(value, arg) for arg in args)
 
     # Type expected: tuple

@@ -41,12 +41,13 @@ def get_time_stats(discard=1, num_samples_recommended=20):
                 f"{num_samples_recommended}+ measurements are recommended")
         val = np.array(val) / 1_000_000
         stats_[key] = dict(
+            unit='millisecond',
             min=np.round(np.min(val), 2),
             max=np.round(np.max(val), 2),
             mean=np.round(np.mean(val), 2),
             median=np.round(np.median(val), 2),
             stddev=np.round(np.std(val), 2),
-            mad=np.round(stats.median_absolute_deviation(val), 2))  # noqa
+            mad=np.round(stats.median_abs_deviation(val), 2))
     return stats_
 
 
