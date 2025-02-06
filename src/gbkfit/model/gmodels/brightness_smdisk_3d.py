@@ -18,18 +18,26 @@ class BrightnessSMDisk3D(BrightnessComponent3D):
         return 'smdisk'
 
     @classmethod
-    def load(cls, info):
+    def load(cls, info, *args, **kwargs):
         desc = parseutils.make_typed_desc(cls, 'gmodel component')
-        info.update(dict(
-            xpos_nwmode=common.nwmode_parser.load(info.get('xpos_nwmode')),
-            ypos_nwmode=common.nwmode_parser.load(info.get('ypos_nwmode')),
-            posa_nwmode=common.nwmode_parser.load(info.get('posa_nwmode')),
-            incl_nwmode=common.nwmode_parser.load(info.get('incl_nwmode')),
-            bptraits=traits.bpt_parser.load(info.get('bptraits')),
-            bhtraits=traits.bht_parser.load(info.get('bhtraits')),
-            zptraits=traits.zpt_parser.load(info.get('zptraits')),
-            sptraits=traits.spt_parser.load(info.get('sptraits')),
-            wptraits=traits.wpt_parser.load(info.get('wptraits'))))
+        parseutils.load_option_and_update_info(
+            traits.bpt_parser, info, 'bptraits', required=True)
+        parseutils.load_option_and_update_info(
+            traits.bht_parser, info, 'bhtraits', required=True)
+        parseutils.load_option_and_update_info(
+            traits.zpt_parser, info, 'zptraits', required=False)
+        parseutils.load_option_and_update_info(
+            traits.spt_parser, info, 'sptraits', required=False)
+        parseutils.load_option_and_update_info(
+            traits.wpt_parser, info, 'wptraits', required=False)
+        parseutils.load_option_and_update_info(
+            common.nwmode_parser, info, 'xpos_nwmode', required=False)
+        parseutils.load_option_and_update_info(
+            common.nwmode_parser, info, 'ypos_nwmode', required=False)
+        parseutils.load_option_and_update_info(
+            common.nwmode_parser, info, 'posa_nwmode', required=False)
+        parseutils.load_option_and_update_info(
+            common.nwmode_parser, info, 'incl_nwmode', required=False)
         opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
         return cls(**opts)
 

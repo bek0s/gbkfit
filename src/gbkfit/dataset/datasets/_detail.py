@@ -54,7 +54,7 @@ def load_dataset_common(cls, info, names, ndim, **kwargs):
     # parseutils.parse_options_for_callable or other assertions inside
     # the __init__() method, we prepare those options here. This allows
     # us to be more tolerant with their values, when possible.
-    # For example, we can now convert an scube configuration to
+    # For example, we can now convert a scube configuration to
     # an image configuration by just changing its type, without
     # having to adjust any dimensional options. The code will just use
     # the first two dimensions and ignore the last one.

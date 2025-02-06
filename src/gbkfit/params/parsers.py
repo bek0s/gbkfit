@@ -9,6 +9,9 @@ import logging
 import numbers
 import textwrap
 
+from dataclasses import dataclass
+from typing import Any
+
 import numpy as np
 
 from gbkfit.params import utils as param_utils
@@ -37,30 +40,34 @@ def _log_msg(level, silent, throw, msg):
         _log.log(level, msg)
 
 
+@dataclass(frozen=True)
+class ParseParamKeysResult:
+    keys: list[str]
+    values: list[Any]
+    param_names: list[str]
+    param_indices: list[int | list[int] | None]
+    invalid_keys_syntax: list | None
+    invalid_keys_unknown: list | None
+    invalid_keys_repeated: dict | None
+    invalid_keys_bad_scalar: list | None
+    invalid_keys_bad_vector: dict | None
+
+
 def parse_param_keys(
         params, descs,
-        silent_errors=False,
-        silent_warnings=False,
-        throw_on_errors=True,
-        throw_on_warnings=False,
-        invalid_keys_syntax=None,
-        invalid_keys_unknown=None,
-        invalid_keys_repeated=None,
-        invalid_keys_bad_scalar=None,
-        invalid_keys_bad_vector=None):
+        silent_errors: bool = False,
+        silent_warnings: bool = False,
+        throw_on_errors: bool = True,
+        throw_on_warnings: bool = False):
 
     if params is None:
         params = {}
-    if invalid_keys_syntax is None:
-        invalid_keys_syntax = []
-    if invalid_keys_unknown is None:
-        invalid_keys_unknown = []
-    if invalid_keys_repeated is None:
-        invalid_keys_repeated = {}
-    if invalid_keys_bad_scalar is None:
-        invalid_keys_bad_scalar = []
-    if invalid_keys_bad_vector is None:
-        invalid_keys_bad_vector = {}
+
+    invalid_keys_syntax = []
+    invalid_keys_unknown = []
+    invalid_keys_repeated = {}
+    invalid_keys_bad_scalar = []
+    invalid_keys_bad_vector = {}
 
     keys = []
     values = []
@@ -173,7 +180,14 @@ def parse_param_keys(
             f"vector parameter keys with out-of-range indices found: "
             f"{str(invalid_keys_bad_vector)}")
 
-    return keys, values, param_names, param_indices
+    return ParseParamKeysResult(
+        keys, values,
+        param_names, param_indices,
+        invalid_keys_syntax,
+        invalid_keys_unknown,
+        invalid_keys_repeated,
+        invalid_keys_bad_scalar,
+        invalid_keys_bad_vector)
 
 
 def _explode_param_info_item(info):
@@ -221,56 +235,39 @@ def _explode_param_info_item(info):
     return values, bad_keys, bad_vals, bad_lens, expandable_keys
 
 
+@dataclass(frozen=True)
+class ParseParamInfosResult:
+    infos: dict[str, Any]
+    invalid_keys_syntax: list | None
+    invalid_keys_unknown: list | None
+    invalid_keys_repeated: dict | None
+    invalid_keys_bad_scalar: list | None
+    invalid_keys_bad_vector: dict | None
+    invalid_infos_bad_attr_name: dict[str, list] | None
+    invalid_infos_bad_attr_value: dict[str, list] | None
+    invalid_infos_bad_attr_length: dict[str, list] | None
+
+
 def prepare_param_info(
         params, descs,
-        silent_errors=False,
-        silent_warnings=False,
-        throw_on_errors=True,
-        throw_on_warnings=False,
-        invalid_keys_syntax=None,
-        invalid_keys_unknown=None,
-        invalid_keys_repeated=None,
-        invalid_keys_bad_scalar=None,
-        invalid_keys_bad_vector=None,
-        invalid_infos_bad_attr_name=None,
-        invalid_infos_bad_attr_value=None,
-        invalid_infos_bad_attr_length=None):
+        silent_errors: bool = False,
+        silent_warnings: bool = False,
+        throw_on_errors: bool = True,
+        throw_on_warnings: bool = False):
 
-    if invalid_keys_syntax is None:
-        invalid_keys_syntax = []
-    if invalid_keys_unknown is None:
-        invalid_keys_unknown = []
-    if invalid_keys_repeated is None:
-        invalid_keys_repeated = {}
-    if invalid_keys_bad_scalar is None:
-        invalid_keys_bad_scalar = []
-    if invalid_keys_bad_vector is None:
-        invalid_keys_bad_vector = {}
-
-    if invalid_infos_bad_attr_name is None:
-        invalid_infos_bad_attr_name = {}
-    if invalid_infos_bad_attr_value is None:
-        invalid_infos_bad_attr_value = {}
-    if invalid_infos_bad_attr_length is None:
-        invalid_infos_bad_attr_length = {}
-
-    keys, values = parse_param_keys(
+    parse_param_keys_result = parse_param_keys(
         params, descs,
         silent_errors,
         silent_warnings,
         throw_on_errors,
-        throw_on_warnings,
-        invalid_keys_syntax,
-        invalid_keys_unknown,
-        invalid_keys_repeated,
-        invalid_keys_bad_scalar,
-        invalid_keys_bad_vector)[:2]
+        throw_on_warnings)
 
-    # Use default dicts internally for convenience.
-    # The api should use normal dicts through.
-    invalid_infos_bad_attr_name_ = collections.defaultdict(list)
-    invalid_infos_bad_attr_value_ = collections.defaultdict(list)
-    invalid_infos_bad_attr_length_ = collections.defaultdict(list)
+    keys = parse_param_keys_result.keys
+    values = parse_param_keys_result.values
+
+    invalid_infos_bad_attr_name = collections.defaultdict(list)
+    invalid_infos_bad_attr_value = collections.defaultdict(list)
+    invalid_infos_bad_attr_length = collections.defaultdict(list)
 
     # These will hold all valid key=>value pairs
     keys_2 = []
@@ -288,11 +285,11 @@ def prepare_param_info(
              eattr_keys) = _explode_param_info_item(value)
             # Check for errors
             if bad_attr_keys:
-                invalid_infos_bad_attr_name_[key].extend(bad_attr_keys)
+                invalid_infos_bad_attr_name[key].extend(bad_attr_keys)
             if bad_attr_vals:
-                invalid_infos_bad_attr_value_[key].extend(bad_attr_vals)
+                invalid_infos_bad_attr_value[key].extend(bad_attr_vals)
             if bad_attr_lens:
-                invalid_infos_bad_attr_length_[key].extend(eattr_keys)
+                invalid_infos_bad_attr_length[key].extend(eattr_keys)
             # On any error, ignore current value
             if bad_attr_keys or bad_attr_vals or bad_attr_lens:
                 continue
@@ -310,13 +307,13 @@ def prepare_param_info(
                      eattr_keys) = _explode_param_info_item(item)
                     # Check for errors
                     if bad_attr_keys:
-                        invalid_infos_bad_attr_name_[key].append(
+                        invalid_infos_bad_attr_name[key].append(
                             (j, bad_attr_keys))
                     if bad_attr_vals:
-                        invalid_infos_bad_attr_value_[key].append(
+                        invalid_infos_bad_attr_value[key].append(
                             (j, bad_attr_vals))
                     if bad_attr_lens:
-                        invalid_infos_bad_attr_length_[key].append(
+                        invalid_infos_bad_attr_length[key].append(
                             (j, eattr_keys))
                     # On any error, ignore current value item
                     if bad_attr_keys or bad_attr_vals or bad_attr_lens:
@@ -331,10 +328,10 @@ def prepare_param_info(
         keys_2.append(key)
         values_2.append(value)
 
-    # Copy the contents of the internal dicts to the api dicts
-    invalid_infos_bad_attr_name.update(invalid_infos_bad_attr_name_)
-    invalid_infos_bad_attr_value.update(invalid_infos_bad_attr_value_)
-    invalid_infos_bad_attr_length.update(invalid_infos_bad_attr_length_)
+    # Plain dict appears prettier than defaultdict when printed
+    invalid_infos_bad_attr_name = dict(invalid_infos_bad_attr_name)
+    invalid_infos_bad_attr_value = dict(invalid_infos_bad_attr_value)
+    invalid_infos_bad_attr_length = dict(invalid_infos_bad_attr_length)
 
     if invalid_infos_bad_attr_name:
         _log_msg(
@@ -358,7 +355,35 @@ def prepare_param_info(
             f"keys with invalid attributes found (bad length): "
             f"{str(invalid_infos_bad_attr_length)}")
 
-    return dict(zip(keys_2, values_2, strict=True))
+    return ParseParamInfosResult(
+        dict(zip(keys_2, values_2, strict=True)),
+        parse_param_keys_result.invalid_keys_syntax,
+        parse_param_keys_result.invalid_keys_unknown,
+        parse_param_keys_result.invalid_keys_repeated,
+        parse_param_keys_result.invalid_keys_bad_scalar,
+        parse_param_keys_result.invalid_keys_bad_vector,
+        invalid_infos_bad_attr_name,
+        invalid_infos_bad_attr_value,
+        invalid_infos_bad_attr_length)
+
+
+@dataclass(frozen=True)
+class ParseParamValuesResult:
+    keys: list
+    values: list
+    param_names: list
+    param_indices: list
+    eparams: list
+    exprs: list
+
+    invalid_keys_syntax: list | None
+    invalid_keys_unknown: list | None
+    invalid_keys_repeated: dict | None
+    invalid_keys_bad_scalar: list | None
+    invalid_keys_bad_vector: dict | None
+    invalid_values_bad_value: list | None
+    invalid_values_bad_evalue: dict | None
+    invalid_values_bad_length: list | None
 
 
 def _is_param_value_expr(x, accept_vec=True):
@@ -374,48 +399,26 @@ def _is_param_value_expr(x, accept_vec=True):
 def parse_param_values(
         params, pdescs,
         is_value_fun=None,
-        silent_errors=False,
-        silent_warnings=False,
-        throw_on_errors=True,
-        throw_on_warnings=False,
-        invalid_keys_syntax=None,
-        invalid_keys_unknown=None,
-        invalid_keys_repeated=None,
-        invalid_keys_bad_scalar=None,
-        invalid_keys_bad_vector=None,
-        invalid_values_bad_value=None,
-        invalid_values_bad_evalue=None,
-        invalid_values_bad_length=None):
+        silent_errors: bool = False,
+        silent_warnings: bool = False,
+        throw_on_errors: bool = True,
+        throw_on_warnings: bool = False):
 
-    if invalid_keys_syntax is None:
-        invalid_keys_syntax = []
-    if invalid_keys_unknown is None:
-        invalid_keys_unknown = []
-    if invalid_keys_repeated is None:
-        invalid_keys_repeated = {}
-    if invalid_keys_bad_scalar is None:
-        invalid_keys_bad_scalar = []
-    if invalid_keys_bad_vector is None:
-        invalid_keys_bad_vector = {}
-
-    if invalid_values_bad_value is None:
-        invalid_values_bad_value = []
-    if invalid_values_bad_evalue is None:
-        invalid_values_bad_evalue = {}
-    if invalid_values_bad_length is None:
-        invalid_values_bad_length = []
-
-    keys, values, param_names, param_indices = parse_param_keys(
+    parse_param_values_result = parse_param_keys(
         params, pdescs,
         silent_errors,
         silent_warnings,
         throw_on_errors,
-        throw_on_warnings,
-        invalid_keys_syntax,
-        invalid_keys_unknown,
-        invalid_keys_repeated,
-        invalid_keys_bad_scalar,
-        invalid_keys_bad_vector)
+        throw_on_warnings)
+
+    keys = parse_param_values_result.keys
+    values = parse_param_values_result.values
+    param_names = parse_param_values_result.param_names
+    param_indices = parse_param_values_result.param_indices
+
+    invalid_values_bad_value = []
+    invalid_values_bad_evalue = {}
+    invalid_values_bad_length = []
 
     exprs = {}
     enames = []
@@ -492,7 +495,17 @@ def parse_param_values(
             f"{str(invalid_values_bad_length)}")
 
     eparams = dict(zip(enames, evalues, strict=True))
-    return keys, values, param_names, param_indices, eparams, exprs
+
+    return ParseParamValuesResult(
+        keys, values, param_names, param_indices, eparams, exprs,
+        parse_param_values_result.invalid_keys_syntax,
+        parse_param_values_result.invalid_keys_unknown,
+        parse_param_values_result.invalid_keys_repeated,
+        parse_param_values_result.invalid_keys_bad_scalar,
+        parse_param_values_result.invalid_keys_bad_vector,
+        invalid_values_bad_value,
+        invalid_values_bad_evalue,
+        invalid_values_bad_length)
 
 
 def parse_param_values_strict(params, pdescs, value_types):
@@ -813,18 +826,16 @@ def dump_params_parameters_conversions(
     return info
 
 
-def _merge_pdescs(dict1, dict2):
-    if dict1 is None:
-        dict1 = {}
-    if dict2 is None:
-        dict2 = {}
-    if intersection := set(dict1) & set(dict2):
+def _merge_pdescs(pdescs1: dict, pdescs2: dict):
+    pdescs1 = pdescs1 or {}
+    pdescs2 = pdescs2 or {}
+    if intersection := set(pdescs1) & set(pdescs2):
         raise RuntimeError(
             f"the following pdescs conflict with "
             f"the parameters of the objective function: "
             f"{str(intersection)}; "
             f"please choose different names")
-    return dict1 | dict2
+    return pdescs1 | pdescs2
 
 
 def load_params_common(info, pdescs, param_types, param_loader):

@@ -36,7 +36,9 @@ class Data:
     @classmethod
     def load(cls, info, step=None, rpix=None, rval=None, rota=None, prefix=''):
         desc = parseutils.make_basic_desc(cls, 'data')
-        data_d, wcs_d = fitsutils.load_fits(prefix + info['data'])
+        data_d, wcs_d = parseutils.load_option(
+            lambda x: fitsutils.load_fits(x),
+            info, 'data', True, False)
         data_m = None
         data_e = None
         if mask := info.get('mask', None):

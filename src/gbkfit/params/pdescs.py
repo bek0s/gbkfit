@@ -3,12 +3,15 @@ import abc
 import collections.abc
 import copy
 
+from typing import Any
+
 import numpy as np
 
 from gbkfit.utils import iterutils, parseutils
 
 
 __all__ = [
+    'ParamDesc',
     'ParamDescDict',
     'ParamScalarDesc',
     'ParamVectorDesc',
@@ -21,12 +24,12 @@ __all__ = [
 class ParamDesc(parseutils.TypedParserSupport, abc.ABC):
 
     @classmethod
-    def load(cls, info):
+    def load(cls, info: dict[str, Any], *args, **kwargs) -> 'ParamDesc':
         desc = parseutils.make_typed_desc(cls, 'pdesc')
         opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
         return cls(**opts)
 
-    def dump(self):
+    def dump(self) -> dict[str, Any]:
         info = dict(type=self.type(), name=self.name(), size=self.size())
         if self.desc() is not None:
             info.update(desc=self.desc())
@@ -38,7 +41,15 @@ class ParamDesc(parseutils.TypedParserSupport, abc.ABC):
             info.update(maximum=self.maximum())
         return info
 
-    def __init__(self, name, size, desc, default, minimum, maximum):
+    def __init__(
+            self,
+            name: str,
+            size: int,
+            desc: None | str,
+            default: None | int | float,
+            minimum: None | int | float,
+            maximum: None | int | float
+    ):
         # Import here to avoid circular dependency
         from .symbols import is_param_symbol_name
         if not is_param_symbol_name(name):
@@ -48,7 +59,12 @@ class ParamDesc(parseutils.TypedParserSupport, abc.ABC):
         maximum = +np.inf if maximum is None else maximum
         if minimum > maximum:
             raise RuntimeError(
-                f"minimum ({minimum}) is greater than maximum ({maximum})")
+                f"minimum ({minimum}) must be <= maximum ({maximum})")
+        if default is not None and (default < minimum or default > maximum):
+            raise RuntimeError(
+                f"default ({default}) must be within "
+                f"[minimum ({minimum}), maximum ({maximum})]"
+            )
         self._name = name
         self._size = size
         self._desc = desc
@@ -56,32 +72,32 @@ class ParamDesc(parseutils.TypedParserSupport, abc.ABC):
         self._minimum = minimum
         self._maximum = maximum
 
-    def name(self):
+    def name(self) -> str:
         return self._name
 
-    def size(self):
+    def size(self) -> int:
         return self._size
 
-    def desc(self):
+    def desc(self) -> str:
         return self._desc
 
-    def default(self):
+    def default(self) -> None | int | float:
         return self._default
 
-    def minimum(self):
+    def minimum(self) -> None | int | float:
         return self._minimum
 
-    def maximum(self):
+    def maximum(self) -> None | int | float:
         return self._maximum
 
 
 class ParamScalarDesc(ParamDesc):
 
     @staticmethod
-    def type():
+    def type() -> str:
         return 'scalar'
 
-    def dump(self):
+    def dump(self) -> dict[str, Any]:
         info = super().dump()
         del info['size']
         return info
@@ -89,10 +105,10 @@ class ParamScalarDesc(ParamDesc):
     def __init__(
             self,
             name: str,
-            desc: str | None = None,
-            default: int | float | None = None,
-            minimum: int | float | None = None,
-            maximum: int | float | None = None
+            desc: None | str = None,
+            default: None | int | float = None,
+            minimum: None | int | float = None,
+            maximum: None | int | float = None
     ):
         super().__init__(name, 1, desc, default, minimum, maximum)
 
@@ -100,17 +116,17 @@ class ParamScalarDesc(ParamDesc):
 class ParamVectorDesc(ParamDesc):
 
     @staticmethod
-    def type():
+    def type() -> str:
         return 'vector'
 
     def __init__(
             self,
             name: str,
             size: int,
-            desc: str | None = None,
-            default: int | float | None = None,
-            minimum: int | float | None = None,
-            maximum: int | float | None = None
+            desc: None | str = None,
+            default: None | int | float = None,
+            minimum: None | int | float = None,
+            maximum: None | int | float = None
     ):
         super().__init__(name, size, desc, default, minimum, maximum)
 
@@ -140,7 +156,7 @@ class ParamDescDict(collections.abc.Mapping):
         return self._pdescs.__str__()
 
 
-def load_pdescs_dict(info):
+def load_pdescs_dict(info: dict[str, Any]) -> dict[str, Any]:
     if bad := [k for k, v in info.items() if not iterutils.is_mapping(v)]:
         raise RuntimeError(
             f"the value of the following keys must be a dictionary: {bad}")
@@ -154,7 +170,7 @@ def load_pdescs_dict(info):
     return pdescs
 
 
-def dump_pdescs_dict(pdescs):
+def dump_pdescs_dict(pdescs: dict[str, ParamDesc]) -> dict[str, Any]:
     if bad := [k for k, v in pdescs.items() if k != v.name()]:
         raise RuntimeError(
             f"the following keys are not equal to "
@@ -170,19 +186,19 @@ class ParamDescTypedParser(parseutils.TypedParser):
     def __init__(self):
         super().__init__(ParamDesc, [ParamScalarDesc, ParamVectorDesc])
 
-    def load_many(self, x, allow_duplicates=False, *args, **kwargs):
+    def load_many(self, x, allow_duplicates: bool = False, *args, **kwargs):
         pdescs = super().load_many(x, *args, **kwargs)
         if not allow_duplicates:
             self._check_for_duplicates(pdescs)
         return pdescs
 
-    def dump_many(self, x, allow_duplicates=False, *args, **kwargs):
+    def dump_many(self, x, allow_duplicates: bool = False, *args, **kwargs):
         if not allow_duplicates:
             self._check_for_duplicates(x)
         return super().dump_many(x, *args, **kwargs)
 
     @staticmethod
-    def _check_for_duplicates(x):
+    def _check_for_duplicates(x: list[ParamDesc]):
         seen = []
         duplicates = []
         for pdesc in x:

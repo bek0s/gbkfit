@@ -7,6 +7,7 @@ import astropy.io.fits as fits
 import numpy as np
 import pandas as pd
 import ruamel.yaml
+from typing import Any, Literal
 
 import gbkfit.dataset
 import gbkfit.driver
@@ -28,7 +29,10 @@ ruamel.yaml.add_representer(dict, lambda self, data: self.represent_mapping(
     'tag:yaml.org,2002:map', data.items()))
 
 
-def _prepare_params(info, pdescs):
+def _prepare_params(info: dict, pdescs: dict):
+
+    if info is None:
+        info = {}
 
     # Prepare the supplied parameters. This will:
     # - Ensure the parameter keys are valid
@@ -39,7 +43,7 @@ def _prepare_params(info, pdescs):
     recovery_failed = []
     recovery_succeed = {}
 
-    def recover_value(dict_, key_, index_):
+    def recover_value(dict_: dict, key_: str, index_):
         value = dict_.get('value')
         # Create a value id to facilitate logging
         value_id = key if index_ is None else (key_, index_)
@@ -76,8 +80,11 @@ def _prepare_params(info, pdescs):
 
 
 def eval_(
-        mode, config, profile,
-        output_dir, output_dir_unique, output_overwrite):
+        mode: Literal['model', 'objective'],
+        config: str,
+        profile_iters: int,
+        output_dir: str,
+        output_dir_mode: Literal['terminate', 'overwrite', 'unique']):
 
     #
     # Read configuration file and
@@ -97,8 +104,7 @@ def eval_(
     _log.info("preparing configuration...")
     # This is not a full-fledged validation. It just tries to catch
     # and inform the user about the really obvious mistakes.
-    # todo: investigate the potential use of json schema for validation
-    required_sections = ('drivers', 'dmodels', 'gmodels', 'params')
+    required_sections = ('models', 'params')
     optional_sections = ('pdescs',)
     if mode == 'model':
         optional_sections += ('datasets',)
@@ -114,15 +120,14 @@ def eval_(
     #
 
     _log.info("preparing output directory...")
-    output_dir = _detail.make_output_dir(output_dir, output_dir_unique)
+    output_dir = _detail.make_output_dir(output_dir, output_dir_mode)
     _log.info(f"output will be stored under directory: {output_dir}")
 
     #
     # Setup all the components described in the configuration.
-    # We assume that the datasets, drivers, dmodels, and gmodels
-    # configurations are lists, while the objective, pdescs, and params
-    # configurations are dicts. This assumption is based on the fact
-    # that the _detail.prepare_config() called above should do that
+    # After running the configuration through _detail.prepare_config(),
+    # we assume that the datasets and models configurations are lists,
+    # while the objective, pdescs, and params configurations are dicts.
     #
 
     datasets = None
@@ -130,41 +135,46 @@ def eval_(
         _log.info("setting up datasets...")
         datasets = gbkfit.dataset.dataset_parser.load(cfg['datasets'])
 
-    _log.info("setting up drivers...")
-    drivers = gbkfit.driver.driver_parser.load(cfg['drivers'])
-
-    _log.info("setting up dmodels...")
-    dmodels = gbkfit.model.dmodel_parser.load(cfg['dmodels'], dataset=datasets)
-
-    _log.info("setting up gmodels...")
-    gmodels = gbkfit.model.gmodel_parser.load(cfg['gmodels'])
-
     _log.info("setting up model...")
-    model = gbkfit.model.Model(drivers, dmodels, gmodels)
-    pdescs = model.pdescs()
+    models = gbkfit.model.model_parser.load(cfg['models'], dataset=datasets)
+    model_group = gbkfit.model.ModelGroup(models)
 
-    objective = None
-    if mode == 'objective':
-        _log.info("setting up objective...")
-        objective = gbkfit.objective.objective_parser.load(
-            cfg.get('objective', {}), datasets, model)
-        pdescs = objective.pdescs()
-
+    _log.info("setting up pdescs...")
+    pdescs = model_group.pdescs()
     if 'pdescs' in cfg:
-        _log.info("setting up pdescs...")
         user_pdescs = gbkfit.params.load_pdescs_dict(cfg['pdescs'])
         pdescs = _detail.merge_pdescs(pdescs, user_pdescs)
+    print("pdescs:", pdescs)
+
+    exit()
 
     _log.info("setting up params...")
     cfg['params'] = _prepare_params(cfg['params'], pdescs)
     params = gbkfit.params.evaluation_params_parser.load(
         cfg['params'], pdescs)
 
+    exit()
+
+    objective = None
+    if mode == 'objective':
+        _log.info("setting up objective...")
+        objective = gbkfit.objective.objective_parser.load(
+            cfg.get('objective', {}), datasets, model)
+
+    _log.info("setting up params...")
+    cfg['params'] = _prepare_params(cfg['params'], pdescs)
+    print("PARAMS:", cfg['params'])
+    params = gbkfit.params.evaluation_params_parser.load(
+        cfg['params'], pdescs)
+
+    exit()
+
     #
     # Calculate model parameters
     #
 
     _log.info("calculating model parameters...")
+    # HERE!!!! make null => {}
 
     eparams = {}
     params = params.evaluate(eparams)
@@ -275,9 +285,9 @@ def eval_(
     # Run performance tests
     #
 
-    if profile > 0:
+    if profile_iters > 0:
         _log.info("running performance test...")
-        for i in range(profile):
+        for i in range(profile_iters):
             if mode == 'model':
                 model.model_d(params)
             if mode == 'objective':

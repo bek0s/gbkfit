@@ -31,21 +31,27 @@ __all__ = [
     'make_param_symbols_from_pdescs'
 ]
 
-
+# Prevents leading zeros in nonzero indices.
+# (e.g., disallows `[03]`, allows `[0]`)
 _REGEX_PARAM_SYMBOL_SUBSCRIPT_COMMON = r'(?!.*\D0+[1-9])'
 
+# Matches brackets with basic (single-element) indexing
 _REGEX_PARAM_SYMBOL_SUBSCRIPT_BINDX = (
     fr'{_REGEX_PARAM_SYMBOL_SUBSCRIPT_COMMON}'
     r'\[\s*([-+]?\s*\d+)\s*\]')
 
+# Matches brackets with slice indexing
+# (uses `:` for range selection)
 _REGEX_PARAM_SYMBOL_SUBSCRIPT_SLICE = (
     fr'{_REGEX_PARAM_SYMBOL_SUBSCRIPT_COMMON}'
     r'\[\s*([+-]?\s*\d+)?\s*:\s*([+-]?\s*\d+)?\s*(:\s*([+-]?\s*[1-9]+)?\s*)?\]')
 
+# Matches brackets with advanced (list-based) indexing
 _REGEX_PARAM_SYMBOL_SUBSCRIPT_AINDX = (
     fr'{_REGEX_PARAM_SYMBOL_SUBSCRIPT_COMMON}'
     r'\[\s*\[\s*([-+]?\s*\d+\s*,\s*)*\s*([-+]?\s*\d+\s*)?\]\s*,?\s*\]')
 
+# Matches any supported bracket-based indexing mode
 _REGEX_PARAM_SYMBOL_SUBSCRIPT = (
     r'('
     fr'{_REGEX_PARAM_SYMBOL_SUBSCRIPT_BINDX}|'
@@ -53,94 +59,115 @@ _REGEX_PARAM_SYMBOL_SUBSCRIPT = (
     fr'{_REGEX_PARAM_SYMBOL_SUBSCRIPT_AINDX}'
     r')')
 
+# Used to match symbol names
 _REGEX_PARAM_SYMBOL_NAME = r'[_a-zA-Z]\w*'
 
+# Matches a scalar symbol (a variable without indexing)
 _REGEX_PARAM_SYMBOL_SCALAR = _REGEX_PARAM_SYMBOL_NAME
 
+# Matches a vector symbol using basic (single-element) indexing
+# (e.g., `A[3]`)
 _REGEX_PARAM_SYMBOL_VECTOR_BINDX = (
     fr'\s*{_REGEX_PARAM_SYMBOL_NAME}'
     fr'\s*{_REGEX_PARAM_SYMBOL_SUBSCRIPT_BINDX}\s*')
 
+# Matches a vector symbol using slice indexing
+# (e.g., `A[1:5]`)
 _REGEX_PARAM_SYMBOL_VECTOR_SLICE = (
     fr'\s*{_REGEX_PARAM_SYMBOL_NAME}'
     fr'\s*{_REGEX_PARAM_SYMBOL_SUBSCRIPT_SLICE}\s*')
 
+# Matches a vector symbol using advanced (list-based) indexing
+# (e.g., `A[[1, 3, 7]]`)
 _REGEX_PARAM_SYMBOL_VECTOR_AINDX = (
     fr'\s*{_REGEX_PARAM_SYMBOL_NAME}'
     fr'\s*{_REGEX_PARAM_SYMBOL_SUBSCRIPT_AINDX}\s*')
 
+# Matches any vector symbol with any supported indexing mode
 _REGEX_PARAM_SYMBOL_VECTOR = (
     fr'\s*{_REGEX_PARAM_SYMBOL_NAME}'
     fr'\s*{_REGEX_PARAM_SYMBOL_SUBSCRIPT}\s*')
 
+# Matches a general symbol, which can be either a scalar or a vector
 _REGEX_PARAM_SYMBOL = (
     fr'\s*{_REGEX_PARAM_SYMBOL_NAME}'
     fr'\s*{_REGEX_PARAM_SYMBOL_SUBSCRIPT}?\s*')
 
+# Matches an attribute name
 _REGEX_PARAM_ATTRIB_SYMBOL_NAME = r'[_a-zA-Z]\w*'
 
 
-def is_param_symbol(x):
+def is_param_symbol(x: str):
     return re.match(fr'^{_REGEX_PARAM_SYMBOL}$', x)
 
 
-def is_param_symbol_name(x):
+def is_param_symbol_name(x: str):
     return re.match(fr'^{_REGEX_PARAM_SYMBOL_NAME}$', x)
 
 
-def is_param_symbol_scalar(x):
+def is_param_symbol_scalar(x: str):
     return re.match(fr'^{_REGEX_PARAM_SYMBOL_SCALAR}$', x)
 
 
-def is_param_symbol_vector(x):
+def is_param_symbol_vector(x: str):
     return re.match(fr'^{_REGEX_PARAM_SYMBOL_VECTOR}$', x)
 
 
-def is_param_symbol_vector_bindx(x):
+def is_param_symbol_vector_bindx(x: str):
     return re.match(fr'^{_REGEX_PARAM_SYMBOL_VECTOR_BINDX}$', x)
 
 
-def is_param_symbol_vector_slice(x):
+def is_param_symbol_vector_slice(x: str):
     return re.match(fr'^{_REGEX_PARAM_SYMBOL_VECTOR_SLICE}$', x)
 
 
-def is_param_symbol_vector_aindx(x):
+def is_param_symbol_vector_aindx(x: str):
     return re.match(fr'^{_REGEX_PARAM_SYMBOL_VECTOR_AINDX}$', x)
 
 
-def is_param_symbol_subscript(x):
+def is_param_symbol_subscript(x: str):
     return re.match(fr'^{_REGEX_PARAM_SYMBOL_SUBSCRIPT}$', x)
 
 
-def is_param_symbol_subscript_bindx(x):
+def is_param_symbol_subscript_bindx(x: str):
     return re.match(fr'^{_REGEX_PARAM_SYMBOL_SUBSCRIPT_BINDX}$', x)
 
 
-def is_param_symbol_subscript_slice(x):
+def is_param_symbol_subscript_slice(x: str):
     return re.match(fr'^{_REGEX_PARAM_SYMBOL_SUBSCRIPT_SLICE}$', x)
 
 
-def is_param_symbol_subscript_aindx(x):
+def is_param_symbol_subscript_aindx(x: str):
     return re.match(fr'^{_REGEX_PARAM_SYMBOL_SUBSCRIPT_AINDX}$', x)
 
 
-def is_param_attrib_symbol(x):
+def is_param_attrib_symbol(x: str):
     return re.match(fr'^{_REGEX_PARAM_ATTRIB_SYMBOL_NAME}$', x)
 
 
-def make_param_symbol_subscript_bindx(index):
+def make_param_symbol_subscript_bindx(index: int) -> str:
+    """Create a basic bracket indexing expression."""
     return f'[{index}]'
 
 
-def make_param_symbol_subscript_slice(start='', stop='', step=''):
+def make_param_symbol_subscript_slice(
+        start: str = '', stop: str = '', step: str = ''
+) -> str:
+    """Create a slice indexing expression."""
     return f'[{start}:{stop}:{step}]'
 
 
-def make_param_symbol_subscript_aindx(indices):
+def make_param_symbol_subscript_aindx(
+        indices: tuple[int, ...] | list[int]
+) -> str:
+    """Create an advanced indexing expression with multiple indices."""
+    if not indices:
+        raise RuntimeError("advanced index list cannot be empty")
     return f'[[{", ".join(str(i) for i in indices)}]]'
 
 
-def make_param_symbol(name, indices):
+def make_param_symbol(name: str, indices: tuple[int, ...] | list[int]) -> str:
+    """Create a parameter symbol with optional indexing."""
     indices = iterutils.tuplify(indices, False)
     if not indices:
         result = name
@@ -151,7 +178,10 @@ def make_param_symbol(name, indices):
     return result
 
 
-def _parse_param_symbol_subscript_bindx(x):
+def _parse_param_symbol_subscript_bindx(x: str) -> tuple[int]:
+    """
+    Parse a basic bracket indexing expression and extract the index.
+    """
     x = stringutils.remove_white_space(x).strip('[]')
     return int(x),
 

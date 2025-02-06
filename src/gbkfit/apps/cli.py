@@ -1,14 +1,21 @@
 
 import argparse
 import logging.config
-
+from collections.abc import Callable, Sequence
+from typing import Any, Literal
 
 _log = logging.getLogger(__name__)
 
 
-def configure_logging(log_level):
+def configure_logging(
+        log_level: Literal['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']
+) -> None:
+    """
+    Configure logging with specified log level.
+    """
     logging.config.dictConfig({
         'version': 1,
+        'disable_existing_loggers': False,
         'formatters': {
             'console': {
                 'format': '{message}',
@@ -35,43 +42,85 @@ def configure_logging(log_level):
         'loggers': {
             'gbkfit': {
                 'level': f'{log_level}',
-                'handlers': ['console', 'file']
+                'handlers': ['console', 'file'],
+                'propagate': False
             }
         }
     })
 
 
-def _validate_moment_count(parser, namespace, values, option_string):
+def _validate_moment_count(
+        parser: argparse.ArgumentParser,
+        namespace: argparse.Namespace,
+        values: Sequence[str],
+        option_string: str
+) -> None:
+    """
+    Validate that the number of provided values matches the number of
+    specified moment orders in the namespace.
+
+    Raises an error if the lengths do not match.
+    """
     if namespace.orders and len(namespace.orders) != len(values):
         parser.error(
-            f"argument {option_string}: invalid length; "
-            f"must be equal to the number of the specified moment orders")
+            f"argument {option_string}: invalid length; the number of values "
+            f"must match the number of specified moment orders; expected "
+            f"{len(namespace.orders)}, but got {len(values)}")
 
 
-def _validate_range_1d(parser, _namespace, values, option_string):
+def _validate_range_1d(
+        parser: argparse.ArgumentParser,
+        _namespace: argparse.Namespace,
+        values: Sequence[float],
+        option_string: str
+) -> None:
+    """
+    Validate that the given range consists of exactly two values,
+    where the first value (minimum) must be less than the second
+    value (maximum).
+    """
     min_, max_ = values
     if min_ >= max_:
         parser.error(
             f"argument {option_string}: invalid range; "
             f"[MIN: {min_}, MAX: {max_}]; "
-            f"Maximum (MAX) must be greater or equal to Minimum (MIN)")
+            f"Maximum (MAX) must be greater than Minimum (MIN)")
 
 
-def _validate_range_2d(parser, _namespace, values, option_string):
+def _validate_range_2d(
+        parser: argparse.ArgumentParser,
+        _namespace: argparse.Namespace,
+        values: Sequence[float],
+        option_string: str
+):
+    """
+    Validate that the given 2D range consists of four values:
+    - Left (L) < Right (R)
+    - Bottom (B) < Top (T)
+    """
     left, right, bottom, top = values
     if left >= right:
         parser.error(
             f"argument {option_string}: invalid range; "
             f"[L: {left}, R: {right}]; "
-            f"Right (R) must be greater or equal to Left (L)")
+            f"Right (R) must be greater than Left (L)")
     if bottom >= top:
         parser.error(
             f"argument {option_string}: invalid range; "
             f"[B: {bottom}, T: {top}]; "
-            f"Top (T) must be greater or equal to Bottom (B)")
+            f"Top (T) must be greater than Bottom (B)")
 
 
-def _create_validator(validators):
+def _create_validator(
+        validators: list[Callable[
+            [argparse.ArgumentParser, argparse.Namespace, Sequence[Any], str],
+            None
+        ]]
+) -> type[argparse.Action]:
+    """
+    Creates a custom validator action for argparse that applies a list of
+    validation functions to the argument values.
+    """
     class Validator(argparse.Action):
         def __call__(self, parser, namespace, values, option_string=None):
             for validator in validators:
@@ -80,8 +129,15 @@ def _create_validator(validators):
     return Validator
 
 
-def _number_range(type_, min_, max_):
-
+def _number_range(
+        type_: type,
+        min_: float | None = None,
+        max_: float | None = None
+) -> Callable[[str], float]:
+    """
+    Creates a function that validates a number's type and ensures it
+    falls within a specified range.
+    """
     if min_ is not None:
         assert isinstance(min_, type_)
     if max_ is not None:
@@ -93,18 +149,10 @@ def _number_range(type_, min_, max_):
         except ValueError:
             raise argparse.ArgumentTypeError(
                 f"must be of type {type_.__name__}")
-        if min_ is not None and max_ is not None:
-            if num < min_ or num > max_:
-                raise argparse.ArgumentTypeError(
-                    f"must be in range [{min_}, {max_}]")
-        elif min_ is not None and max_ is None:
-            if num < min_:
-                raise argparse.ArgumentTypeError(
-                    f"must be greater or equal to {min_}")
-        elif max_ is not None and min_ is None:
-            if num > max_:
-                raise argparse.ArgumentTypeError(
-                    f"must be less or equal to {max_}")
+        if min_ is not None and num < min_:
+            raise argparse.ArgumentTypeError(f"must be >= {min_}")
+        if max_ is not None and num > max_:
+            raise argparse.ArgumentTypeError(f"must be <= {max_}")
         return num
 
     return _number_range_checker
@@ -133,12 +181,12 @@ def main():
         metavar='OUTPUT',
         help="the path of the directory to store the task's output")
     parser_common_output.add_argument(
-        '--output-dir-unique', action='store_true',
-        help="ensure the output directory name is unique by "
-             "automatically appending a suffix number to it, if needed")
-    parser_common_output.add_argument(
-        '--output-overwrite', action='store_true',
-        help="overwrite all output files if they already exist")
+        '--output-dir-mode', choices=['terminate', 'overwrite', 'unique'],
+        default='overwrite',
+        help="Specifies how to handle existing output directories: "
+             "'terminate' (fail if the directory exists), "
+             "'overwrite' (overwrite existing contents), or "
+             "'unique' (append a number suffix to ensure uniqueness)")
 
     #
     # Create parser for eval task
@@ -405,7 +453,7 @@ def main():
         import gbkfit.tasks.eval
         gbkfit.tasks.eval.eval_(
             args.mode, args.config, args.profile,
-            args.output_dir, args.output_dir_unique, args.output_overwrite)
+            args.output_dir, args.output_dir_mode)
 
     elif args.task == 'prep':
         import gbkfit.tasks.prep

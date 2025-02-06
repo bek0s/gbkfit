@@ -17,20 +17,46 @@ class SpectralSMDisk2D(SpectralComponent2D):
     def type():
         return 'smdisk'
 
+    # @classmethod
+    # def load(cls, info):
+    #     desc = parseutils.make_typed_desc(cls, 'gmodel component')
+    #     info.update(dict(
+    #         vsys_nwmode=common.nwmode_parser.load(info.get('vsys_nwmode')),
+    #         xpos_nwmode=common.nwmode_parser.load(info.get('xpos_nwmode')),
+    #         ypos_nwmode=common.nwmode_parser.load(info.get('ypos_nwmode')),
+    #         posa_nwmode=common.nwmode_parser.load(info.get('posa_nwmode')),
+    #         incl_nwmode=common.nwmode_parser.load(info.get('incl_nwmode')),
+    #         bptraits=traits.bpt_parser.load(info.get('bptraits')),
+    #         vptraits=traits.vpt_parser.load(info.get('vptraits')),
+    #         dptraits=traits.dpt_parser.load(info.get('dptraits')),
+    #         sptraits=traits.spt_parser.load(info.get('sptraits')),
+    #         wptraits=traits.wpt_parser.load(info.get('wptraits'))))
+    #     opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
+    #     return cls(**opts)
+
     @classmethod
     def load(cls, info):
         desc = parseutils.make_typed_desc(cls, 'gmodel component')
-        info.update(dict(
-            vsys_nwmode=common.nwmode_parser.load(info.get('vsys_nwmode')),
-            xpos_nwmode=common.nwmode_parser.load(info.get('xpos_nwmode')),
-            ypos_nwmode=common.nwmode_parser.load(info.get('ypos_nwmode')),
-            posa_nwmode=common.nwmode_parser.load(info.get('posa_nwmode')),
-            incl_nwmode=common.nwmode_parser.load(info.get('incl_nwmode')),
-            bptraits=traits.bpt_parser.load(info.get('bptraits')),
-            vptraits=traits.vpt_parser.load(info.get('vptraits')),
-            dptraits=traits.dpt_parser.load(info.get('dptraits')),
-            sptraits=traits.spt_parser.load(info.get('sptraits')),
-            wptraits=traits.wpt_parser.load(info.get('wptraits'))))
+        parseutils.load_option_and_update_info(
+            traits.bpt_parser, info, 'bptraits', required=True, allow_none=False)
+        parseutils.load_option_and_update_info(
+            traits.vpt_parser, info, 'vptraits', required=True, allow_none=False)
+        parseutils.load_option_and_update_info(
+            traits.dpt_parser, info, 'dptraits', required=True, allow_none=False)
+        parseutils.load_option_and_update_info(
+            traits.spt_parser, info, 'sptraits', required=False, allow_none=False)
+        parseutils.load_option_and_update_info(
+            traits.wpt_parser, info, 'wptraits', required=False, allow_none=False)
+        parseutils.load_option_and_update_info(
+            common.nwmode_parser, info, 'vsys_nwmode', False)
+        parseutils.load_option_and_update_info(
+            common.nwmode_parser, info, 'xpos_nwmode', False)
+        parseutils.load_option_and_update_info(
+            common.nwmode_parser, info, 'ypos_nwmode', False)
+        parseutils.load_option_and_update_info(
+            common.nwmode_parser, info, 'posa_nwmode', False)
+        parseutils.load_option_and_update_info(
+            common.nwmode_parser, info, 'incl_nwmode', False)
         opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
         return cls(**opts)
 

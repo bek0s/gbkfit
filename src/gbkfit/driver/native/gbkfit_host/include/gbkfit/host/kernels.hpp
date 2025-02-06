@@ -2,7 +2,7 @@
 
 #include <cassert>
 #include <cmath>
-#include <iostream>
+// #include <iostream>
 
 #include <omp.h>
 
@@ -15,18 +15,18 @@
 
 namespace gbkfit::host::kernels {
 
-template<typename T> inline constexpr void
+template<typename T> inline void
 atomic_add(T* addr, T val)
 {
     #pragma omp atomic update
-    *addr += val;
+    addr[0] += val;
 }
 
-template<typename T> inline constexpr void
+template<typename T> inline void
 atomic_set(T* addr, T val)
 {
     #pragma omp atomic write
-    *addr = val;
+    addr[0] = val;
 }
 
 template<typename T> void

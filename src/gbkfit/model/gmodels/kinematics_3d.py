@@ -32,10 +32,12 @@ class GModelKinematics3D(GModelSCube):
         return 'kinematics_3d'
 
     @classmethod
-    def load(cls, info):
+    def load(cls, info, *args, **kwargs):
         desc = parseutils.make_typed_desc(cls, 'gmodel')
-        parseutils.load_if_exists(_scmp_parser, info, 'components')
-        parseutils.load_if_exists(_ocmp_parser, info, 'opacity_components')
+        parseutils.load_option_and_update_info(
+            _scmp_parser, info, 'components', required=True)
+        parseutils.load_option_and_update_info(
+            _scmp_parser, info, 'opacity_components', required=False)
         opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
         return cls(**opts)
 

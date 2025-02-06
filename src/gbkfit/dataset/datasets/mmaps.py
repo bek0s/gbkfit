@@ -19,6 +19,8 @@ class DatasetMMaps(Dataset):
     @classmethod
     def load(cls, info, **kwargs):
         names = [f'mmap{i}' for i in range(7)]
+        print(names)
+        # exit()
         opts = _detail.load_dataset_common(cls, info, names, 2, **kwargs)
         return cls(**opts)
 

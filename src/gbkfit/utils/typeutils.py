@@ -18,8 +18,8 @@ def validate_type(value, type_):
     # print("get_args(type_):", typing.get_args(type_))
 
     result = True
-    args = typing.get_args(type_)
     origin = typing.get_origin(type_)
+    args = typing.get_args(type_)
 
     # Type expected: leaf
     if origin is None:

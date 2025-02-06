@@ -1,20 +1,25 @@
 
 import inspect
 
+from collections.abc import Callable
 
-def extract_args(func):
+
+def extract_args(func: Callable) -> tuple[list[str], list[str], list[str]]:
+    """
+    Extract required and optional arguments from a function.
+    """
     required = []
     optional = []
     parameters = inspect.signature(func).parameters
-    for pname, pinfo in parameters.items():
-        if pinfo.kind == inspect.Parameter.VAR_POSITIONAL:
+    for name, info in parameters.items():
+        if info.kind == inspect.Parameter.VAR_POSITIONAL:
             continue
-        if pinfo.kind == inspect.Parameter.VAR_KEYWORD:
+        if info.kind == inspect.Parameter.VAR_KEYWORD:
             continue
-        if pinfo.default is inspect.Parameter.empty:
-            required.append(pname)
+        if info.default is inspect.Parameter.empty:
+            required.append(name)
         else:
-            optional.append(pname)
+            optional.append(name)
     if 'self' in required:
         required.remove('self')
     return required + optional, required, optional

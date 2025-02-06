@@ -344,7 +344,8 @@ class TraitFeatureNWMode:
 
     @classmethod
     def load(cls, info):
-        parseutils.load_if_exists(nwmode_parser, info, 'nwmode')
+        parseutils.load_option_and_update_info(
+            nwmode_parser, info, 'nwmode', required=False)
         return super().load(info)  # noqa
 
     def dump(self):
