@@ -19,7 +19,7 @@ def _ensure_same_attrib_value(data, method):
             f"dataset contains data items of different {method}: {str(attr)}")
 
 
-class Dataset(parseutils.TypedParserSupport, abc.ABC):
+class Dataset(parseutils.TypedSerializable, abc.ABC):
 
     def __init__(self, data):
         # At least one data item must be defined

@@ -34,7 +34,7 @@ def _dump_min_max(prior):
     return info
 
 
-class Prior(parseutils.TypedParserSupport, abc.ABC):
+class Prior(parseutils.TypedSerializable, abc.ABC):
 
     def dump(self):
         return _dump_min_max(self)

@@ -15,7 +15,7 @@ __all__ = [
 ]
 
 
-class LSF(parseutils.TypedParserSupport, abc.ABC):
+class LSF(parseutils.TypedSerializable, abc.ABC):
 
     def size(self, step: float, offset: int = 0) -> int:
         """
@@ -63,7 +63,7 @@ class LSF(parseutils.TypedParserSupport, abc.ABC):
         pass
 
 
-class PSF(parseutils.TypedParserSupport, abc.ABC):
+class PSF(parseutils.TypedSerializable, abc.ABC):
 
     def size(
             self,

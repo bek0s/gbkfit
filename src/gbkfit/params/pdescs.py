@@ -1,7 +1,7 @@
 
 import abc
-import collections.abc
 import copy
+from collections.abc import Mapping
 
 from typing import Any
 
@@ -21,7 +21,7 @@ __all__ = [
 ]
 
 
-class ParamDesc(parseutils.TypedParserSupport, abc.ABC):
+class ParamDesc(parseutils.TypedSerializable, abc.ABC):
 
     @classmethod
     def load(cls, info: dict[str, Any], *args, **kwargs) -> 'ParamDesc':
@@ -30,7 +30,8 @@ class ParamDesc(parseutils.TypedParserSupport, abc.ABC):
         return cls(**opts)
 
     def dump(self) -> dict[str, Any]:
-        info = dict(type=self.type(), name=self.name(), size=self.size())
+        info: dict[str, str | int | float] = dict(
+            type=self.type(), name=self.name(), size=self.size())
         if self.desc() is not None:
             info.update(desc=self.desc())
         if self.default() is not None:
@@ -68,9 +69,9 @@ class ParamDesc(parseutils.TypedParserSupport, abc.ABC):
         self._name = name
         self._size = size
         self._desc = desc
-        self._default = default
-        self._minimum = minimum
-        self._maximum = maximum
+        self._default = float(default) if default is not None else None
+        self._minimum = float(minimum)
+        self._maximum = float(maximum)
 
     def name(self) -> str:
         return self._name
@@ -78,16 +79,16 @@ class ParamDesc(parseutils.TypedParserSupport, abc.ABC):
     def size(self) -> int:
         return self._size
 
-    def desc(self) -> str:
+    def desc(self) -> None | str:
         return self._desc
 
-    def default(self) -> None | int | float:
+    def default(self) -> None | float:
         return self._default
 
-    def minimum(self) -> None | int | float:
+    def minimum(self) -> float:
         return self._minimum
 
-    def maximum(self) -> None | int | float:
+    def maximum(self) -> float:
         return self._maximum
 
 
@@ -131,7 +132,7 @@ class ParamVectorDesc(ParamDesc):
         super().__init__(name, size, desc, default, minimum, maximum)
 
 
-class ParamDescDict(collections.abc.Mapping):
+class ParamDescDict(Mapping):
     """Not used at the moment"""
 
     def __init__(self, pdescs):
@@ -139,9 +140,6 @@ class ParamDescDict(collections.abc.Mapping):
 
     def __getitem__(self, key):
         return self._pdescs.__getitem__(key)
-
-    def __delitem__(self, key):
-        self._pdescs.__delitem__(key)
 
     def __iter__(self):
         return self._pdescs.__iter__()
@@ -156,7 +154,7 @@ class ParamDescDict(collections.abc.Mapping):
         return self._pdescs.__str__()
 
 
-def load_pdescs_dict(info: dict[str, Any]) -> dict[str, Any]:
+def load_pdescs_dict(info: dict[str, Any]) -> dict[str, ParamDesc]:
     if bad := [k for k, v in info.items() if not iterutils.is_mapping(v)]:
         raise RuntimeError(
             f"the value of the following keys must be a dictionary: {bad}")
@@ -186,19 +184,29 @@ class ParamDescTypedParser(parseutils.TypedParser):
     def __init__(self):
         super().__init__(ParamDesc, [ParamScalarDesc, ParamVectorDesc])
 
-    def load_many(self, x, allow_duplicates: bool = False, *args, **kwargs):
+    def load_many(
+            self,
+            x: list[dict[str, Any]],
+            allow_duplicates: bool = False,
+            *args, **kwargs
+    ) -> list[ParamDesc]:
         pdescs = super().load_many(x, *args, **kwargs)
         if not allow_duplicates:
-            self._check_for_duplicates(pdescs)
+            self._ensure_no_duplicates(pdescs)
         return pdescs
 
-    def dump_many(self, x, allow_duplicates: bool = False, *args, **kwargs):
+    def dump_many(
+            self,
+            x: list[ParamDesc],
+            allow_duplicates: bool = False,
+            *args, **kwargs
+    ) -> list[dict[str, Any]]:
         if not allow_duplicates:
-            self._check_for_duplicates(x)
+            self._ensure_no_duplicates(x)
         return super().dump_many(x, *args, **kwargs)
 
     @staticmethod
-    def _check_for_duplicates(x: list[ParamDesc]):
+    def _ensure_no_duplicates(x: list[ParamDesc]):
         seen = []
         duplicates = []
         for pdesc in x:

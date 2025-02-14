@@ -31,27 +31,29 @@ __all__ = [
     'make_param_symbols_from_pdescs'
 ]
 
-# Prevents leading zeros in nonzero indices.
-# (e.g., disallows `[03]`, allows `[0]`)
+# Prevents leading zeros in nonzero indices (numpy syntax).
+# Example: disallows `[03]`, allows `[0]`.
 _REGEX_PARAM_SYMBOL_SUBSCRIPT_COMMON = r'(?!.*\D0+[1-9])'
 
-# Matches brackets with basic (single-element) indexing
+# Matches basic (single-element) indexing (numpy syntax).
+# Example: `[0]`.
 _REGEX_PARAM_SYMBOL_SUBSCRIPT_BINDX = (
     fr'{_REGEX_PARAM_SYMBOL_SUBSCRIPT_COMMON}'
     r'\[\s*([-+]?\s*\d+)\s*\]')
 
-# Matches brackets with slice indexing
-# (uses `:` for range selection)
+# Matches slice indexing (numpy syntax).
+# Example: `[0:1:2]`.
 _REGEX_PARAM_SYMBOL_SUBSCRIPT_SLICE = (
     fr'{_REGEX_PARAM_SYMBOL_SUBSCRIPT_COMMON}'
     r'\[\s*([+-]?\s*\d+)?\s*:\s*([+-]?\s*\d+)?\s*(:\s*([+-]?\s*[1-9]+)?\s*)?\]')
 
-# Matches brackets with advanced (list-based) indexing
+# Matches advanced (list-based) indexing (numpy syntax).
+# Example: `[[0, 1, 2]]`.
 _REGEX_PARAM_SYMBOL_SUBSCRIPT_AINDX = (
     fr'{_REGEX_PARAM_SYMBOL_SUBSCRIPT_COMMON}'
     r'\[\s*\[\s*([-+]?\s*\d+\s*,\s*)*\s*([-+]?\s*\d+\s*)?\]\s*,?\s*\]')
 
-# Matches any supported bracket-based indexing mode
+# Matches any supported indexing mode (numpy syntax).
 _REGEX_PARAM_SYMBOL_SUBSCRIPT = (
     r'('
     fr'{_REGEX_PARAM_SYMBOL_SUBSCRIPT_BINDX}|'
@@ -59,41 +61,42 @@ _REGEX_PARAM_SYMBOL_SUBSCRIPT = (
     fr'{_REGEX_PARAM_SYMBOL_SUBSCRIPT_AINDX}'
     r')')
 
-# Used to match symbol names
+# Matches symbol names.
 _REGEX_PARAM_SYMBOL_NAME = r'[_a-zA-Z]\w*'
 
-# Matches a scalar symbol (a variable without indexing)
+# Matches a scalar symbol (no indexing).
+# Example: `A`.
 _REGEX_PARAM_SYMBOL_SCALAR = _REGEX_PARAM_SYMBOL_NAME
 
-# Matches a vector symbol using basic (single-element) indexing
-# (e.g., `A[3]`)
+# Matches basic (single-element) indexing (numpy syntax).
+# Example: `A[3]`.
 _REGEX_PARAM_SYMBOL_VECTOR_BINDX = (
     fr'\s*{_REGEX_PARAM_SYMBOL_NAME}'
     fr'\s*{_REGEX_PARAM_SYMBOL_SUBSCRIPT_BINDX}\s*')
 
-# Matches a vector symbol using slice indexing
-# (e.g., `A[1:5]`)
+# Matches slice indexing (numpy syntax).
+# Example: `A[1:5]`.
 _REGEX_PARAM_SYMBOL_VECTOR_SLICE = (
     fr'\s*{_REGEX_PARAM_SYMBOL_NAME}'
     fr'\s*{_REGEX_PARAM_SYMBOL_SUBSCRIPT_SLICE}\s*')
 
-# Matches a vector symbol using advanced (list-based) indexing
-# (e.g., `A[[1, 3, 7]]`)
+# Matches advanced (list-based) indexing (numpy syntax).
+# Example: `A[[1, 3, 7]]`.
 _REGEX_PARAM_SYMBOL_VECTOR_AINDX = (
     fr'\s*{_REGEX_PARAM_SYMBOL_NAME}'
     fr'\s*{_REGEX_PARAM_SYMBOL_SUBSCRIPT_AINDX}\s*')
 
-# Matches any vector symbol with any supported indexing mode
+# Matches any supported indexing mode (numpy syntax).
 _REGEX_PARAM_SYMBOL_VECTOR = (
     fr'\s*{_REGEX_PARAM_SYMBOL_NAME}'
     fr'\s*{_REGEX_PARAM_SYMBOL_SUBSCRIPT}\s*')
 
-# Matches a general symbol, which can be either a scalar or a vector
+# Matches any supported indexing mode (numpy syntax).
 _REGEX_PARAM_SYMBOL = (
     fr'\s*{_REGEX_PARAM_SYMBOL_NAME}'
     fr'\s*{_REGEX_PARAM_SYMBOL_SUBSCRIPT}?\s*')
 
-# Matches an attribute name
+# Matches attribute names.
 _REGEX_PARAM_ATTRIB_SYMBOL_NAME = r'[_a-zA-Z]\w*'
 
 
@@ -151,7 +154,7 @@ def make_param_symbol_subscript_bindx(index: int) -> str:
 
 
 def make_param_symbol_subscript_slice(
-        start: str = '', stop: str = '', step: str = ''
+        start: int = '', stop: int = '', step: int = ''
 ) -> str:
     """Create a slice indexing expression."""
     return f'[{start}:{stop}:{step}]'
@@ -166,7 +169,10 @@ def make_param_symbol_subscript_aindx(
     return f'[[{", ".join(str(i) for i in indices)}]]'
 
 
-def make_param_symbol(name: str, indices: tuple[int, ...] | list[int]) -> str:
+def make_param_symbol(
+        name: str,
+        indices: None | int | tuple[int, ...] | list[int]
+) -> str:
     """Create a parameter symbol with optional indexing."""
     indices = iterutils.tuplify(indices, False)
     if not indices:
@@ -209,7 +215,7 @@ def parse_param_symbol_subscript(x, size):
     elif is_param_symbol_subscript_aindx(x):
         indices = _parse_param_symbol_subscript_aindx(x)
     else:
-        raise RuntimeError(f"invalid subscript syntax: {x}")
+        raise RuntimeError(f"invalid subscript syntax: '{x}'")
     return indices
 
 

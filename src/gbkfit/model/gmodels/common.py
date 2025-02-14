@@ -14,7 +14,7 @@ __all__ = [
 ]
 
 
-class NWMode(parseutils.TypedParserSupport, abc.ABC):
+class NWMode(parseutils.TypedSerializable, abc.ABC):
 
     def dump(self):
         return dict(type=self.type())

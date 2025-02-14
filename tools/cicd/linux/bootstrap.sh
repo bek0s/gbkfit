@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 
 PYTHON_VERSIONS=(
-  ["310"]="cp310-cp310"
-  ["311"]="cp311-cp311"
+  ["312"]="cp312-cp312"
 )
 
 PYTHON_VERSION="${1//./}"

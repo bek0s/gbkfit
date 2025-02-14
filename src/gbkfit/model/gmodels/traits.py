@@ -296,7 +296,7 @@ def trait_desc(cls):
     return parseutils.make_typed_desc(cls, label)
 
 
-class Trait(parseutils.TypedParserSupport, abc.ABC):
+class Trait(parseutils.TypedSerializable, abc.ABC):
 
     @staticmethod
     @abc.abstractmethod

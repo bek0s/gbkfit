@@ -77,7 +77,7 @@ def _locals_to_options(locals_):
     return locals_
 
 
-class _Base(parseutils.TypedParserSupport, abc.ABC):
+class _Base(parseutils.TypedSerializable, abc.ABC):
 
     @classmethod
     def load(cls, info, *args, **kwargs):

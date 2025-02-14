@@ -15,7 +15,7 @@ __all__ = [
 ]
 
 
-class Model(parseutils.BasicParserSupport, abc.ABC):
+class Model(parseutils.BasicSerializable, abc.ABC):
 
     @classmethod
     def load(cls, info: dict[str, Any], *args, **kwargs) -> 'Model':

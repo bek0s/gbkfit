@@ -89,15 +89,21 @@ class Interpreter:
         # - Expressions (tied parameters)
         def is_none(x): return isinstance(x, type(None))
         def is_real(x): return isinstance(x, numbers.Real)
-        values, exprs = param_parsers.parse_param_values(
-            exprs_dict, pdescs, lambda x: is_none(x) or is_real(x))[4:6]
+        # TODO
+        parse_result = param_parsers.parse_param_values(
+            exprs_dict, pdescs, lambda x: is_none(x) or is_real(x))
+        values, exprs = parse_result.exploded_params, parse_result.expressions
         nones_dict = dict(filter(lambda x: is_none(x[1]), values.items()))
         reals_dict = dict(filter(lambda x: is_real(x[1]), values.items()))
         # Apply None and Real values to the params storage
         self._apply_eparams(values)
         # Parse expressions and extract various ordered information
-        expr_keys, expr_values, expr_keys_names, expr_keys_indices = \
-            param_parsers.parse_param_exprs(exprs, pdescs)[:4]
+        parse_result = param_parsers.parse_param_expressions(exprs, pdescs)
+        expr_keys, expr_values, expr_keys_names, expr_keys_indices = (
+            parse_result.expression_keys,
+            parse_result.expression_values,
+            parse_result.expression_param_names,
+            parse_result.expression_param_indices)
         # From now on, work with the ordered expressions
         exprs = dict(zip(expr_keys, expr_values, strict=True))
         # Extract the exploded names for all parameters and create
@@ -159,7 +165,7 @@ class Interpreter:
         # The source code may not always be available.
         elif exprs_func:
             exprs_func_obj = exprs_func
-            exprs_func_src = miscutils.get_source(exprs_func_src)
+            exprs_func_src = miscutils.get_source(exprs_func)
         self._exprs_dict = exprs_dict
         self._fixed_dict = reals_dict
         self._exprs_func_obj = exprs_func_obj

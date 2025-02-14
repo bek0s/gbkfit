@@ -19,7 +19,7 @@ TypeInfo: TypeInfoOne | TypeInfoMany
 
 
 def make_basic_desc(
-        cls: type['BasicParserSupport'],
+        cls: type['BasicSerializable'],
         label: str
 ) -> str:
     """
@@ -29,7 +29,7 @@ def make_basic_desc(
 
 
 def make_typed_desc(
-        cls: type['TypedParserSupport'],
+        cls: type['TypedSerializable'],
         label: str | None = None
 ) -> str:
     """
@@ -193,10 +193,6 @@ class Serializable(abc.ABC):
     This class defines the interface for objects that can be serialized
     to and deserialized from dictionaries.
     """
-
-    def desc(self) -> str:
-        return "fooFIXMEHEY"
-
     @classmethod
     @abc.abstractmethod
     def load(cls, info: dict[str, Any], *args, **kwargs) -> 'Serializable':
@@ -209,15 +205,11 @@ class Serializable(abc.ABC):
         pass
 
 
-class ParserSupport(Serializable, abc.ABC):
+class BasicSerializable(Serializable, abc.ABC):
     pass
 
 
-class BasicParserSupport(ParserSupport, abc.ABC):
-    pass
-
-
-class TypedParserSupport(ParserSupport, abc.ABC):
+class TypedSerializable(Serializable, abc.ABC):
 
     @staticmethod
     @abc.abstractmethod
@@ -240,47 +232,32 @@ def _prepare_args_and_kwargs(
     appropriate length. If any element is not a sequence of the
     required length, an exception is raised.
     """
-    args = list(args)
-    kwargs = dict(kwargs)
-    # Make sure all args and kwargs have the correct length or are None
-    bad_args_found = False
-    for i, value in enumerate(args):
+    def validate_sequence(value, name):
         if value is None:
-            args[i] = length * [None]
-        elif not iterutils.is_sequence(value) or len(value) != length:
-            bad_args_found = True
-    bad_kwargs_found = False
-    for key, value in kwargs.items():
-        if value is None:
-            kwargs[key] = length * [None]
-        elif not iterutils.is_sequence(value) or len(value) != length:
-            bad_kwargs_found = True
-    if bad_args_found or bad_kwargs_found:
-        raise RuntimeError(
-            f"when loading or dumping a list of items, "
-            f"args and kwargs must contain sequences with "
-            f"a length equal to the list length; "
-            f"list length: {length}; args: {tuple(args)}; kwargs: {kwargs}")
-    nargs = len(args)
-    args_list_shape = (length, nargs)
-    args_list = iterutils.make_list(args_list_shape, [], True)
-    for i in range(length):
-        for j, arg in enumerate(args):
-            args_list[i][j] = arg[i]
-    kwargs_list_shape = (length,)
-    kwargs_list = iterutils.make_list(kwargs_list_shape, {}, True)
-    for i in range(length):
-        for key, value in kwargs.items():
-            kwargs_list[i][key] = value[i]
+            return [None] * length
+        if not iterutils.is_sequence(value) or len(value) != length:
+            raise RuntimeError(
+                f"expected '{name}' to be a sequence of length {length},"
+                f"but got: {value}")
+        return value
+    args_list = [[] for _ in range(length)]
+    for i, arg in enumerate(args):
+        for j, value_ in enumerate(validate_sequence(arg, f"args[{i}]")):
+            args_list[j].append(value_)
+    kwargs_list = [{} for _ in range(length)]
+    for key, val in kwargs.items():
+        for j, value_ in enumerate(validate_sequence(val, f"kwargs['{key}']")):
+            kwargs_list[j][key] = value_
+
     return args_list, kwargs_list
 
 
 class Parser(abc.ABC):
 
-    def __init__(self, cls: type[ParserSupport]):
+    def __init__(self, cls: type[Serializable]):
         self._cls = cls
 
-    def cls(self) -> type[ParserSupport]:
+    def cls(self) -> type[Serializable]:
         return self._cls
 
     def cls_name(self) -> str:
@@ -311,7 +288,7 @@ class Parser(abc.ABC):
             instance = self._load_one_impl(x, *args, **kwargs) \
                 if x is not None else None
         except Exception as e:
-            index_msg = f"offending item index: {index}; " if index else ""
+            index_msg = f"offending item index: {index}; " if index is not None else ""
             raise RuntimeError(
                 f"{self.cls_name()} parser could not parse configuration; "
                 f"{index_msg}"
@@ -339,16 +316,16 @@ class Parser(abc.ABC):
             result = self.dump_one(x, *args, **kwargs)
         return result
 
-    def dump_one(self, x: ParserSupport, *args, **kwargs) -> dict[str, Any]:
+    def dump_one(self, x: Serializable, *args, **kwargs) -> dict[str, Any]:
         return None if x is None else self._dump_one_impl(x, *args, **kwargs)
 
     @abc.abstractmethod
-    def _dump_one_impl(self, x: ParserSupport, *args, **kwargs) -> dict[str, Any]:
+    def _dump_one_impl(self, x: Serializable, *args, **kwargs) -> dict[str, Any]:
         pass
 
     def dump_many(
             self,
-            x: list[ParserSupport],
+            x: list[Serializable],
             *args,
             **kwargs
     ) -> list[dict[str, Any]]:
@@ -376,8 +353,8 @@ class TypedParser(Parser):
 
     def __init__(
             self,
-            cls: type[TypedParserSupport],
-            parsers: type[TypedParserSupport] | list[type[TypedParserSupport]] | None = None
+            cls: type[TypedSerializable],
+            parsers: type[TypedSerializable] | list[type[TypedSerializable]] | None = None
     ):
         super().__init__(cls)
         self._parsers = {}
@@ -385,7 +362,7 @@ class TypedParser(Parser):
 
     def register(
             self,
-            parsers: type[TypedParserSupport] | list[type[TypedParserSupport]] | None
+            parsers: type[TypedSerializable] | list[type[TypedSerializable]] | None
     ) -> None:
         parsers = iterutils.listify(parsers, False)
         for parser in parsers:
@@ -406,7 +383,7 @@ class TypedParser(Parser):
             self,
             x: dict[str, Any],
             *args, **kwargs
-    ) -> TypedParserSupport:
+    ) -> TypedSerializable:
         if 'type' not in x:
             raise RuntimeError(
                 f"{self.cls_name()} parser "
@@ -428,14 +405,14 @@ class TypedParser(Parser):
 
     def _dump_one_impl(
             self,
-            x: ParserSupport,
+            x: Serializable,
             *args, **kwargs
     ) -> dict[str, Any]:
         """
-        Serializes an object of type `TypedParserSupport` into a
+        Serializes an object of type `TypedSerializable` into a
         dictionary. It also serializes the type automatically.
         """
-        if not isinstance(x, TypedParserSupport):
+        if not isinstance(x, TypedSerializable):
             raise RuntimeError(
                 f"unsupported object; value: {x}, type: {type(x)}")
         return dict(type=x.type()) | x.dump(*args, **kwargs)

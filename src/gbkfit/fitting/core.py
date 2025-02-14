@@ -28,7 +28,7 @@ class FitParams(Params, abc.ABC):
         return self._interpreter.evaluate(in_eparams, out_eparams, check)
 
 
-class Fitter(parseutils.TypedParserSupport, abc.ABC):
+class Fitter(parseutils.TypedSerializable, abc.ABC):
 
     @abc.abstractmethod
     def load_params(self, info, desc):

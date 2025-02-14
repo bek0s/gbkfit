@@ -13,7 +13,7 @@ __all__ = [
 ]
 
 
-class BrightnessComponent2D(parseutils.TypedParserSupport, abc.ABC):
+class BrightnessComponent2D(parseutils.TypedSerializable, abc.ABC):
 
     @abc.abstractmethod
     def params(self):
@@ -28,7 +28,7 @@ class BrightnessComponent2D(parseutils.TypedParserSupport, abc.ABC):
         pass
 
 
-class BrightnessComponent3D(parseutils.TypedParserSupport, abc.ABC):
+class BrightnessComponent3D(parseutils.TypedSerializable, abc.ABC):
 
     @abc.abstractmethod
     def params(self):
@@ -43,7 +43,7 @@ class BrightnessComponent3D(parseutils.TypedParserSupport, abc.ABC):
         pass
 
 
-class SpectralComponent2D(parseutils.TypedParserSupport, abc.ABC):
+class SpectralComponent2D(parseutils.TypedSerializable, abc.ABC):
 
     @abc.abstractmethod
     def params(self):
@@ -59,7 +59,7 @@ class SpectralComponent2D(parseutils.TypedParserSupport, abc.ABC):
         pass
 
 
-class SpectralComponent3D(parseutils.TypedParserSupport, abc.ABC):
+class SpectralComponent3D(parseutils.TypedSerializable, abc.ABC):
 
     @abc.abstractmethod
     def params(self):
@@ -75,7 +75,7 @@ class SpectralComponent3D(parseutils.TypedParserSupport, abc.ABC):
         pass
 
 
-class OpacityComponent3D(parseutils.TypedParserSupport, abc.ABC):
+class OpacityComponent3D(parseutils.TypedSerializable, abc.ABC):
 
     @abc.abstractmethod
     def params(self):

@@ -1,10 +1,12 @@
 
 import abc
 import copy
+import logging
 from numbers import Real
 
-from gbkfit.params.interpreter import Interpreter
 from gbkfit.params import parsers as param_parsers
+from gbkfit.params.interpreter import Interpreter
+from gbkfit.params.pdescs import ParamDesc
 from gbkfit.utils import parseutils
 
 
@@ -16,13 +18,22 @@ __all__ = [
 ]
 
 
+_log = logging.getLogger(__name__)
+
+
 class Param(abc.ABC):
     pass
 
 
 class Params(abc.ABC):
 
-    def __init__(self, pdescs, parameters, expressions, conversions):
+    def __init__(
+            self,
+            pdescs: dict[ParamDesc],
+            parameters,
+            expressions,
+            conversions
+    ):
         self._pdescs = copy.deepcopy(pdescs)
         self._parameters = copy.deepcopy(parameters)
         self._expressions = copy.deepcopy(expressions)
@@ -42,13 +53,17 @@ class Params(abc.ABC):
         return self._conversions
 
 
-class EvaluationParams(parseutils.BasicParserSupport, Params):
+class EvaluationParams(parseutils.BasicSerializable, Params):
 
     @classmethod
-    def load(cls, info, pdescs):
+    def load(cls, info, *args, **kwargs):
+        print("INFO:", info)
+        pdescs = kwargs.get('pdescs')
+        if pdescs is None:
+            raise RuntimeError("pdescs were not provided")
         desc = parseutils.make_basic_desc(cls, 'params')
         opts = parseutils.parse_options_for_callable(
-            info, desc, cls.__init__, fun_ignore_args=['pdescs'])
+            info, desc, cls.__init__, fun_ignore_args={'pdescs'})
         opts = param_parsers.load_params_parameters_conversions(
             opts, pdescs, Real, lambda x: x)
         return cls(pdescs, **opts)

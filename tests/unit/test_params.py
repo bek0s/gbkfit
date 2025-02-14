@@ -10,6 +10,70 @@ from gbkfit.params.pdescs import *
 from gbkfit.params.symbols import *
 
 
+def test_param_desc_scalar():
+    pdesc_name = 'name'
+    pdesc_desc = 'description'
+    pdesc_default = 10
+    pdesc_minimum = -10
+    pdesc_maximum = +np.inf
+    # Test __init__
+    pdesc = ParamScalarDesc(
+        pdesc_name, pdesc_desc, pdesc_default,
+        pdesc_minimum, pdesc_maximum)
+    assert pdesc.name() == pdesc_name
+    assert pdesc.size() == 1
+    assert pdesc.desc() == pdesc_desc
+    assert pdesc.default() == pdesc_default
+    assert pdesc.minimum() == pdesc_minimum
+    assert pdesc.maximum() == pdesc_maximum
+    # Test load
+    info = dict(
+        type='scalar',
+        name=pdesc_name,
+        desc=pdesc_desc,
+        default=pdesc_default,
+        minimum=pdesc_minimum)
+    desc_loaded = pdesc_parser.load(info)
+    assert desc_loaded.__class__ == pdesc.__class__ and \
+           desc_loaded.__dict__ == pdesc.__dict__
+    # Test dump
+    info_dumped = pdesc.dump()
+    assert info_dumped == info
+
+
+def test_param_desc_vector():
+    pdesc_name = 'name'
+    pdesc_size = 5
+    pdesc_desc = 'description'
+    pdesc_default = 10
+    pdesc_minimum = -10
+    pdesc_maximum = +np.inf
+    # Test __init__
+    pdesc = ParamVectorDesc(
+        pdesc_name, pdesc_size, pdesc_desc, pdesc_default,
+        pdesc_minimum, pdesc_maximum)
+    assert pdesc.name() == pdesc_name
+    assert pdesc.size() == pdesc_size
+    assert pdesc.desc() == pdesc_desc
+    assert pdesc.default() == pdesc_default
+    assert pdesc.minimum() == pdesc_minimum
+    assert pdesc.maximum() == pdesc_maximum
+    # Test load
+    info = dict(
+        type='vector',
+        name=pdesc_name,
+        size=pdesc_size,
+        desc=pdesc_desc,
+        default=pdesc_default,
+        minimum=pdesc_minimum)
+    desc_loaded = pdesc_parser.load(info)
+    assert desc_loaded.__class__ == pdesc.__class__ and \
+           desc_loaded.__dict__ == pdesc.__dict__
+    # Test dump
+    info_dumped = pdesc.dump()
+    assert info_dumped == info
+
+
 def test_param_symbols():
     # is_param_symbol()
     assert is_param_symbol('a ')
@@ -83,70 +147,6 @@ def test_param_symbols():
     assert parse_param_symbol('a[[2, 2, 1]]', 3) == ('a', [2, 2, 1], [])
 
 
-def test_scalar_desc():
-    desc_name = 'name'
-    desc_desc = 'description'
-    desc_default = 10
-    desc_minimum = -10
-    desc_maximum = +np.inf
-    # Test __init__
-    desc = ParamScalarDesc(
-        desc_name, desc_desc, desc_default,
-        desc_minimum, desc_maximum)
-    assert desc.name() == desc_name
-    assert desc.size() == 1
-    assert desc.desc() == desc_desc
-    assert desc.default() == desc_default
-    assert desc.minimum() == desc_minimum
-    assert desc.maximum() == desc_maximum
-    # Test load
-    info = dict(
-        type='scalar',
-        name=desc_name,
-        desc=desc_desc,
-        default=desc_default,
-        minimum=desc_minimum)
-    desc_loaded = pdesc_parser.load(info)
-    assert desc_loaded.__class__ == desc.__class__ and \
-           desc_loaded.__dict__ == desc.__dict__
-    # Test dump
-    info_dumped = desc.dump()
-    assert info_dumped == info
-
-
-def test_vector_desc():
-    desc_name = 'name'
-    desc_size = 5
-    desc_desc = 'description'
-    desc_default = 10
-    desc_minimum = -10
-    desc_maximum = +np.inf
-    # Test __init__
-    desc = ParamVectorDesc(
-        desc_name, desc_size, desc_desc, desc_default,
-        desc_minimum, desc_maximum)
-    assert desc.name() == desc_name
-    assert desc.size() == desc_size
-    assert desc.desc() == desc_desc
-    assert desc.default() == desc_default
-    assert desc.minimum() == desc_minimum
-    assert desc.maximum() == desc_maximum
-    # Test load
-    info = dict(
-        type='vector',
-        name=desc_name,
-        size=desc_size,
-        desc=desc_desc,
-        default=desc_default,
-        minimum=desc_minimum)
-    desc_loaded = pdesc_parser.load(info)
-    assert desc_loaded.__class__ == desc.__class__ and \
-           desc_loaded.__dict__ == desc.__dict__
-    # Test dump
-    info_dumped = desc.dump()
-    assert info_dumped == info
-
-
 def test_param_parsers():
 
     #
@@ -175,33 +175,25 @@ def test_param_parsers():
         'e[5]': 1
     }
 
-    invalid_keys_syntax = []
-    invalid_keys_unknown = []
-    invalid_keys_repeated = {}
-    invalid_keys_bad_scalar = []
-    invalid_keys_bad_vector = {}
-    keys, values, param_names, param_indices = parse_param_keys(
+    parse_param_keys_result = parse_param_keys(
         params, pdescs,
         silent_errors=True,
         silent_warnings=True,
         throw_on_errors=False,
-        throw_on_warnings=False,
-        invalid_keys_syntax=invalid_keys_syntax,
-        invalid_keys_unknown=invalid_keys_unknown,
-        invalid_keys_repeated=invalid_keys_repeated,
-        invalid_keys_bad_scalar=invalid_keys_bad_scalar,
-        invalid_keys_bad_vector=invalid_keys_bad_vector)
+        throw_on_warnings=False)
 
-    assert keys == ['a', 'b', 'c[0:2]']
-    assert values == [1, 1, 1]
-    assert param_names == ['a', 'b', 'c']
-    assert param_indices == [None, [0, 1, 2, 3, 4], [0, 1]]
+    assert parse_param_keys_result.keys == ['a', 'b', 'c[0:2]']
+    assert parse_param_keys_result.values == [1, 1, 1]
+    assert parse_param_keys_result.param_names == ['a', 'b', 'c']
+    assert parse_param_keys_result.param_indices == [
+        None, [0, 1, 2, 3, 4], [0, 1]]
 
-    assert invalid_keys_syntax == ['1invalid']
-    assert invalid_keys_unknown == ['unknown']
-    assert invalid_keys_repeated == {'d': ['d[0]'], 'd[0]': ['d[0]']}
-    assert invalid_keys_bad_scalar == ['a[0]']
-    assert invalid_keys_bad_vector == {'e[5]': [5]}
+    assert parse_param_keys_result.invalid_keys_syntax == ['1invalid']
+    assert parse_param_keys_result.invalid_keys_unknown == ['unknown']
+    assert parse_param_keys_result.invalid_keys_repeated == {
+        'd': ['d[0]'], 'd[0]': ['d[0]']}
+    assert parse_param_keys_result.invalid_keys_bad_scalar == ['a[0]']
+    assert parse_param_keys_result.invalid_keys_bad_vector == {'e[5]': [5]}
 
     #
     # parse_param_values()
@@ -248,41 +240,38 @@ def test_param_parsers():
         'o[0]': [1]
     }
 
-    invalid_values_bad_value = []
-    invalid_values_bad_evalue = {}
-    invalid_values_bad_length = []
-    param_names, param_indices, eparams, exprs = \
-        parse_param_values(
-            params, pdescs,
-            is_value_fun=lambda x: isinstance(x, (numbers.Real,)),
-            silent_errors=True,
-            silent_warnings=True,
-            throw_on_errors=False,
-            throw_on_warnings=False,
-            invalid_values_bad_value=invalid_values_bad_value,
-            invalid_values_bad_evalue=invalid_values_bad_evalue,
-            invalid_values_bad_length=invalid_values_bad_length)[2:]
+    parse_param_values_result = parse_param_values(
+        params, pdescs,
+        is_value_fun=lambda x: isinstance(x, (numbers.Real,)),
+        silent_errors=True,
+        silent_warnings=True,
+        throw_on_errors=False,
+        throw_on_warnings=False)
 
-    assert param_names == [
+    assert parse_param_values_result.parse_param_keys_result.param_names == [
         'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'j', 'k', 'l', 'm',
         'n', 'o']
-    assert param_indices == [
-        None, None, None, [0, 1, 2], [0, 1, 2], [0, 1, 2], [0, 1, 2], [0, 1, 2],
-        [0, 1, 2], 0, [1, 2], [0, 1, 2], [0, 1, 2], [0, 1, 2], [0, 1, 2], 0]
-    assert eparams == {
+    assert parse_param_values_result.parse_param_keys_result.param_indices == [
+        None, None, None, [0, 1, 2], [0, 1, 2], [0, 1, 2], [0, 1, 2],
+        [0, 1, 2], [0, 1, 2], 0, [1, 2], [0, 1, 2], [0, 1, 2], [0, 1, 2],
+        [0, 1, 2], 0]
+    assert parse_param_values_result.exploded_params == {
         'b': 1, 'e[0]': 1, 'e[1]': 1, 'e[2]': 1, 'g[0]': 0, 'g[1]': 1,
         'g[2]': 2, 'h[1]': 1, 'i[0]': 1, 'i[1]': 1, 'i[2]': 1, 'j[0]': 0,
         'j[1]': 1, 'j[2]': 2, 'k[0]': 0, 'k[1]': 1, 'k[2]': 2, 'n[1]': 1,
         'n[2]': 2}
-    assert exprs == {
+    assert parse_param_values_result.expressions == {
         'a': None, 'c': '1', 'd': None, 'f': '1', 'h[0]': None, 'h[2]': '1'}
 
-    assert invalid_values_bad_value == ['m']
-    assert invalid_values_bad_evalue == {'n': ['n[0]']}
-    assert invalid_values_bad_length == ['l', 'o[0]']
+    assert parse_param_values_result.invalid_values_bad_value == [
+        'm']
+    assert parse_param_values_result.invalid_values_bad_evalue == {
+        'n': ['n[0]']}
+    assert parse_param_values_result.invalid_values_bad_length == [
+        'l', 'o[0]']
 
     #
-    # parse_param_exprs()
+    # parse_param_expressions()
     #
 
     pdescs = dict(
@@ -310,27 +299,24 @@ def test_param_parsers():
         'g[2]': 'd[[0, 100]]'
     }
 
-    invalid_exprs_bad_value = []
-    invalid_exprs_bad_syntax = []
-    invalid_exprs_bad_scalar = {}
-    invalid_exprs_bad_vector = {}
-    keys = parse_param_exprs(
+    parse_param_expressions_result = parse_param_expressions(
         params, pdescs,
         silent_errors=True,
         silent_warnings=True,
         throw_on_errors=False,
-        throw_on_warnings=False,
-        invalid_exprs_bad_value=invalid_exprs_bad_value,
-        invalid_exprs_bad_syntax=invalid_exprs_bad_syntax,
-        invalid_exprs_bad_scalar=invalid_exprs_bad_scalar,
-        invalid_exprs_bad_vector=invalid_exprs_bad_vector)[0]
+        throw_on_warnings=False)
 
-    assert keys == ['c', 'b', 'a', 'd[2]', 'd[1]', 'd[0]']
+    assert parse_param_expressions_result.expression_keys == [
+        'c', 'b', 'a', 'd[2]', 'd[1]', 'd[0]']
 
-    assert invalid_exprs_bad_value == ['e', 'f']
-    assert invalid_exprs_bad_syntax == ['g[0]']
-    assert invalid_exprs_bad_scalar == {'g[1]': {'a[100]', 'a[101]'}}
-    assert invalid_exprs_bad_vector == {'g[2]': {'d[[0, 100]]': [100]}}
+    assert parse_param_expressions_result.invalid_expressions_bad_value == [
+        'e', 'f']
+    assert parse_param_expressions_result.invalid_expressions_bad_syntax == [
+        'g[0]']
+    assert parse_param_expressions_result.invalid_expressions_bad_scalar == {
+        'g[1]': {'a[100]', 'a[101]'}}
+    assert parse_param_expressions_result.invalid_expressions_bad_vector == {
+        'g[2]': {'d[[0, 100]]': [100]}}
 
     #
     # prepare_param_info()
@@ -365,20 +351,14 @@ def test_param_parsers():
         'h': {'*attr1': [1, 2], '*attr2': [3, 4, 5]}
     }
 
-    invalid_infos_bad_attr_name = {}
-    invalid_infos_bad_attr_value = {}
-    invalid_infos_bad_attr_length = {}
-    exploded_params = prepare_param_info(
+    parse_param_info_result = parse_param_info(
         params, pdescs,
         silent_errors=True,
         silent_warnings=True,
         throw_on_errors=False,
-        throw_on_warnings=False,
-        invalid_infos_bad_attr_name=invalid_infos_bad_attr_name,
-        invalid_infos_bad_attr_value=invalid_infos_bad_attr_value,
-        invalid_infos_bad_attr_length=invalid_infos_bad_attr_length)
+        throw_on_warnings=False)
 
-    assert exploded_params == {
+    assert parse_param_info_result.info == {
         'a': 1,
         'b': {'attr1': 1},
         'c': [
@@ -397,15 +377,15 @@ def test_param_parsers():
             {'attr1': 2, 'attr2': 4}
         ]
     }
-    assert invalid_infos_bad_attr_name == {
+    assert parse_param_info_result.invalid_infos_bad_attr_name == {
         'f': ['1invalid'], 'e': [(3, ['1invalid'])]}
-    assert invalid_infos_bad_attr_value == {
+    assert parse_param_info_result.invalid_infos_bad_attr_value == {
         'g': ['attr2'], 'e': [(4, ['attr2'])]}
-    assert invalid_infos_bad_attr_length == {
+    assert parse_param_info_result.invalid_infos_bad_attr_length == {
         'h': ['attr1', 'attr2'], 'e': [(5, ['attr1', 'attr2'])]}
 
 
-def test_interpreter():
+def test_param_interpreter():
 
     pdescs = dict(
         a=ParamScalarDesc('a'),
@@ -415,7 +395,7 @@ def test_interpreter():
         e=ParamVectorDesc('e', 3),
         f=ParamVectorDesc('f', 3))
 
-    exprs_dict = {
+    expressions_dict = {
         'a': 1,
         'b': '1 + 1',
         'c': 'a + b',
@@ -426,29 +406,29 @@ def test_interpreter():
         'f[2]': 'f[1] + 8'
     }
 
-    # exprs_dict = {
-    #     'a': 1,
-    #     'b': None,
-    #     'c': None,
-    #     'd': 4,
-    #     'e[0]': 5,
-    #     'e[1:]': [6, 7],
-    #     'f[1]': None,
-    #     'f[2]': None
-    # }
-    #
-    # def exprs_func(params):
-    #     params['a'] = 1
-    #     params['b'] = 1 + 1
-    #     params['c'] = params['a'] + params['b']
-    #     params['d'] = 4
-    #     params['e'][0] = 5
-    #     params['e'][1:] = [6, 7]
-    #     params['f'][1] = params['f'][0]
-    #     params['f'][2] = params['f'][1] + 8
-    #     return params
+    expressions_dict = {
+        'a': 1,
+        'b': None,
+        'c': None,
+        'd': 4,
+        'e[0]': 5,
+        'e[1:]': [6, 7],
+        'f[1]': None,
+        'f[2]': None
+    }
 
-    interpreter01 = Interpreter(pdescs, exprs_dict, None)
+    def expressions_func(params):
+        params['a'] = 1
+        params['b'] = 1 + 1
+        params['c'] = params['a'] + params['b']
+        params['d'] = 4
+        params['e'][0] = 5
+        params['e'][1:] = [6, 7]
+        params['f'][1] = params['f'][0]
+        params['f'][2] = params['f'][1] + 8
+        return params
+
+    interpreter01 = Interpreter(pdescs, expressions_dict, expressions_func)
     enames_free = interpreter01.enames(fixed=False, tied=False, free=True)
     enames_tied = interpreter01.enames(fixed=False, tied=True, free=False)
     enames_fixed = interpreter01.enames(fixed=True, tied=False, free=False)
@@ -492,9 +472,9 @@ def test_interpreter():
 
 
 if __name__ == '__main__':
+    test_param_desc_scalar()
+    test_param_desc_vector()
     test_param_symbols()
-    test_scalar_desc()
-    test_vector_desc()
     test_param_parsers()
-    test_interpreter()
+    test_param_interpreter()
     # test_evaluation_params()

@@ -30,7 +30,7 @@ def _locals_to_options(locals_):
     return locals_
 
 
-class FitterEmceeMove(parseutils.TypedParserSupport, abc.ABC):
+class FitterEmceeMove(parseutils.TypedSerializable, abc.ABC):
 
     @classmethod
     def load(cls, info):

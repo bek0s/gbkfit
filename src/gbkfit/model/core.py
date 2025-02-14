@@ -16,7 +16,7 @@ __all__ = [
 ]
 
 
-class DModel(parseutils.TypedParserSupport, abc.ABC):
+class DModel(parseutils.TypedSerializable, abc.ABC):
 
     @staticmethod
     @abc.abstractmethod
@@ -82,7 +82,7 @@ class DModel(parseutils.TypedParserSupport, abc.ABC):
         pass
 
 
-class GModel(parseutils.TypedParserSupport, abc.ABC):
+class GModel(parseutils.TypedSerializable, abc.ABC):
 
     @abc.abstractmethod
     def params(self):

@@ -23,7 +23,7 @@ class DriverNativeModules(abc.ABC):
         pass
 
 
-class Driver(parseutils.TypedParserSupport, abc.ABC):
+class Driver(parseutils.TypedSerializable, abc.ABC):
 
     @classmethod
     def load(cls, info):

@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 
 PYTHON_VERSIONS=(
-  ["310"]="3.10.9"
-  ["311"]="3.11.1"
+  ["312"]="3.12.8"
 )
 
 PYTHON_VERSION="${1//./}"
