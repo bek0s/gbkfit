@@ -74,6 +74,9 @@ class ModelGroup:
     def pdescs(self):
         return self._pdescs
 
+    def nmodels(self) -> int:
+        return len(self._models)
+
     def models(self) -> tuple[Model, ...]:
         return self._models
 

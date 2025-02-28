@@ -9,11 +9,11 @@ from gbkfit.utils import iterutils, parseutils, timeutils
 class Objective:
 
     @classmethod
-    def load(cls, info, datasets, model):
+    def load(cls, info, datasets, models):
         desc = parseutils.make_basic_desc(cls, 'objective')
         opts = parseutils.parse_options_for_callable(
-            info, desc, cls.__init__, fun_ignore_args=['datasets', 'model'])
-        return cls(datasets, model, **opts)
+            info, desc, cls.__init__, fun_ignore_args=['datasets', 'models'])
+        return cls(datasets, models, **opts)
 
     def dump(self):
         return dict(
@@ -23,7 +23,7 @@ class Objective:
     def __init__(
             self,
             datasets: Dataset | Sequence[Dataset],
-            model: Model,
+            models, # todo: add typing
             wp:
             int | float |
             Mapping[str, int | float] |
@@ -36,7 +36,7 @@ class Objective:
             Sequence[Mapping[str, int | float]] = 1.0
     ):
         self._datasets = datasets = iterutils.tuplify(datasets)
-        self._model = model
+        self._models = models
         n = self.nitems()
         if len(datasets) != n:
             raise RuntimeError(
@@ -88,7 +88,7 @@ class Objective:
         self._weights_u = iterutils.make_tuple(n, {})
         for i in range(n):
             dataset = datasets[i]
-            dmodel = self.model().dmodels()[i]
+            dmodel = self.models().models()[i].dmodel()
             keys_dat = tuple(dataset.keys())
             keys_mdl = tuple(dmodel.keys())
             if set(keys_dat) != set(keys_mdl):
@@ -133,13 +133,13 @@ class Objective:
         self._prepared = False
 
     def nitems(self):
-        return self._model.nitems()
+        return self._models.nmodels()
 
     def datasets(self):
         return self._datasets
 
-    def model(self):
-        return self._model
+    def models(self):
+        return self._models
 
     def pdescs(self):
         return self.model().pdescs()
