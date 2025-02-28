@@ -147,7 +147,7 @@ def eval_(
         required_sections += ('datasets',)
         optional_sections += ('objective',)
     else:
-        raise RuntimeError(f"invalid evaluation mode: {mode}")
+        raise RuntimeError("impossible")
     cfg = _detail.prepare_config(cfg, required_sections, optional_sections)
 
     #
@@ -206,6 +206,8 @@ def eval_(
     filename = os.path.join(output_dir, 'gbkfit_eval_params')
     _detail.dump_dict(json, yaml, params_info, filename)
 
+
+
     #
     # Evaluate objective
     #
@@ -216,8 +218,11 @@ def eval_(
     model_extra = {}
     model_data = []
     if mode == 'model':
+        print(params)
         model_data = model_group.model_h(params, None)
 
+    print("bye")
+    exit()
     exit()
 
     resid_u_extra = {}

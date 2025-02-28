@@ -2,7 +2,12 @@
 import abc
 import copy
 import logging
+import numbers
+from collections.abc import Callable
 from numbers import Real
+
+from typing import Any
+import numpy as np
 
 from gbkfit.params import parsers as param_parsers
 from gbkfit.params.interpreter import Interpreter
@@ -29,7 +34,7 @@ class Params(abc.ABC):
 
     def __init__(
             self,
-            pdescs: dict[ParamDesc],
+            pdescs: dict[str, ParamDesc],
             parameters,
             expressions,
             conversions
@@ -53,11 +58,18 @@ class Params(abc.ABC):
         return self._conversions
 
 
+# class EvaluationParams2(parseutils.BasicSerializable, Params):
+#
+#     @classmethod
+#     def l
+
+
+# type ParamDescType = ParamScalarDesc | ParamVectorDesc
+
 class EvaluationParams(parseutils.BasicSerializable, Params):
 
     @classmethod
     def load(cls, info, *args, **kwargs):
-        print("INFO:", info)
         pdescs = kwargs.get('pdescs')
         if pdescs is None:
             raise RuntimeError("pdescs were not provided")
@@ -72,18 +84,28 @@ class EvaluationParams(parseutils.BasicSerializable, Params):
         return param_parsers.dump_params_parameters_conversions(
             self, Param, lambda x: x, conversions_file)
 
-    def __init__(self, pdescs, parameters, conversions=None):
-        expressions = param_parsers.parse_param_values_strict(
+    def __init__(
+            self,
+            pdescs: dict[str, ParamDesc],
+            parameters: dict[str, Any],
+            conversions: Callable | None = None
+    ):
+        values, expressions = param_parsers.parse_param_values_strict(
             parameters, pdescs,
             # Make everything to be considered an expression
-            value_types=())[1]
+            value_types=(numbers.Real,))
+        print(values)
+        print(expressions)
+        self._v = values
         super().__init__(pdescs, parameters, expressions, conversions)
 
-    def enames(self, fixed=True, tied=True):
+    def names(self, fixed: bool = True, tied: bool = True) -> list[str]:
         return self._interpreter.enames(fixed=fixed, tied=tied, free=False)
 
+
+
     def evaluate(self, out_eparams, check=True):
-        return self._interpreter.evaluate(dict(), out_eparams, check)
+        return self._interpreter.evaluate(self._v, check, out_eparams)
 
 
 evaluation_params_parser = parseutils.BasicParser(EvaluationParams)
