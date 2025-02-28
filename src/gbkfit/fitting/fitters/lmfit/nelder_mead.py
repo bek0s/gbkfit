@@ -5,7 +5,7 @@ import copy
 import numpy as np
 
 from gbkfit.fitting import fitutils
-from gbkfit.params import paramutils
+from gbkfit.params import utils as paramutils
 from gbkfit.utils import parseutils
 
 from .core import FitParamLMFit, FitParamsLMFit, FitterLMFit, residual_scalar

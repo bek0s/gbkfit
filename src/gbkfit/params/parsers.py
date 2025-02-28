@@ -972,8 +972,9 @@ def load_params_parameters_conversions(
         param_loader
 ):
     info = copy.deepcopy(info)
-    info['parameters'] = load_params_parameters(
-        info['parameters'], pdescs, param_types, param_loader)
+    # parseutils.load_option_and_update_info(param_loader, info, 'properties', )
+    info['properties'] = load_params_parameters(
+        info['properties'], pdescs, param_types, param_loader)
     if 'conversions' in info:
         info['conversions'] = load_params_conversions(
             info['conversions'])

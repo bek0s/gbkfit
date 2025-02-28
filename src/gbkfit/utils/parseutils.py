@@ -75,7 +75,7 @@ def parse_options_for_callable(
         info: dict[str, Any],
         desc: str,
         fun: Callable,
-        fun_ignore_args: set[str] | None = None,
+        fun_ignore_args: list[str] | None = None,
         fun_rename_args: dict[str, str] | None = None,
         add_required: dict[str, type] = None,
         add_optional: dict[str, type] = None

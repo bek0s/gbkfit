@@ -2,6 +2,8 @@
 import logging
 import os.path
 from collections.abc import Sequence
+from numbers import Real
+from typing import Any
 
 import astropy.wcs
 import numpy as np
@@ -31,21 +33,29 @@ def _ensure_floating_or_float32(x, label):
     return result
 
 
-class Data:
+class Data(parseutils.BasicSerializable):
 
     @classmethod
-    def load(cls, info, step=None, rpix=None, rval=None, rota=None, prefix=''):
+    def load(
+            cls,
+            info: dict[str, Any],
+            step: Real = None,
+            rpix: Real = None,
+            rval: Real = None,
+            rota: Real = None,
+            prefix: str = ''
+    ):
         desc = parseutils.make_basic_desc(cls, 'data')
         data_d, wcs_d = parseutils.load_option(
-            lambda x: fitsutils.load_fits(x),
+            lambda x: fitsutils.load_fits(prefix + x),
             info, 'data', True, False)
         data_m = None
         data_e = None
-        if mask := info.get('mask', None):
+        if (mask := info.get('mask')) is not None:
             data_m = fitsutils.load_fits(prefix + mask)[0]
-        if error := info.get('error', None):
+        if (error := info.get('error')) is not None:
             if isinstance(error, (int, float)):
-                data_m = np.full_like(data_d, error)
+                data_e = np.full_like(data_d, error)
             elif isinstance(error, str):
                 data_e = fitsutils.load_fits(prefix + error)[0]
         # Local information has higher priority than global
@@ -75,8 +85,14 @@ class Data:
         return cls(**opts)
 
     def dump(
-            self, filename_d, filename_m=None, filename_e=None,
-            dump_wcs=True, dump_path=True, overwrite=False):
+            self,
+            filename_d: str,
+            filename_m: str | None = None,
+            filename_e: str | None = None,
+            dump_wcs: bool = True,
+            dump_path: bool = True,
+            overwrite: bool = False
+    ) -> dict[str, Any]:
         info = dict()
         # Some shortcuts
         dat = self.data()
@@ -115,41 +131,42 @@ class Data:
             data: np.ndarray,
             mask: np.ndarray | None = None,
             error: np.ndarray | None = None,
-            step: Sequence[int | float] | None = None,
-            rpix: Sequence[int | float] | None = None,
-            rval: Sequence[int | float] | None = None,
-            rota: int | float | None = 0
+            step: Real | Sequence[Real] | None = None,
+            rpix: Real | Sequence[Real] | None = None,
+            rval: Real | Sequence[Real] | None = None,
+            rota: Real | None = None
     ):
-        # if mask is None:
-        #     mask = np.ones_like(data)
-        # if error is None:
-        #     error = np.ones_like(data)
+        # If mask was not provided, use a default mask.
+        if mask is None:
+            mask = np.ones_like(data)
         if step is None:
             step = (1,) * data.ndim
+        # By default, origin is at the center of the dataset.
         if rpix is None:
-            rpix = tuple((np.array(data.shape[::-1]) / 2 - 0.5).tolist())
+            rpix = tuple((np.asarray(data.shape[::-1]) / 2 - 0.5).tolist())
         if rval is None:
             rval = (0,) * data.ndim
         if rota is None:
             rota = 0
-        if isinstance(step, (int, float)):
+        if isinstance(step, Real):
             step = (step,) * data.ndim
-        if isinstance(rpix, (int, float)):
+        if isinstance(rpix, Real):
             rpix = (rpix,) * data.ndim
-        if isinstance(rval, (int, float)):
+        if isinstance(rval, Real):
             rval = (rval,) * data.ndim
         # Convert to native byte order and ensure fp format.
-        # If not in fp format, converting to fp32 should be enough
         data = miscutils.to_native_byteorder(data)
         data = _ensure_floating_or_float32(data, 'data')
-        if mask is not None:
-            mask = miscutils.to_native_byteorder(mask)
-            mask = _ensure_floating_or_float32(mask, 'mask')
+        mask = miscutils.to_native_byteorder(mask)
+        mask = _ensure_floating_or_float32(mask, 'mask')
         if error is not None:
             error = miscutils.to_native_byteorder(error)
             error = _ensure_floating_or_float32(error, 'error')
-        # Make sure the supplied arguments are compatible
-        if mask is not None and data.shape != mask.shape:
+        # Ensure mask contains only finite values
+        if np.any(~np.isfinite(mask)):
+            raise RuntimeError("mask contains non-finite values")
+        # Validate shapes
+        if data.shape != mask.shape:
             raise RuntimeError(
                 f"data and mask have incompatible shapes "
                 f"({data.shape} != {mask.shape})")
@@ -169,33 +186,27 @@ class Data:
             raise RuntimeError(
                 f"data dimensionality and rval length are incompatible "
                 f"({data.ndim} != {len(rval)})")
-        # Create and apply the "total mask" which takes into account
-        # the supplied mask as well as all the nan values in the data.
-        total_mask = np.ones_like(data, dtype=int)
-        total_mask *= np.isfinite(data)
-        if mask is not None:
-            total_mask *= np.isfinite(mask)
-            total_mask *= mask != 0
+        # Create and apply the "total mask"
+        total_mask = np.isfinite(data) & (mask != 0)
         if error is not None:
-            total_mask *= np.isfinite(error)
-        # Apply the total mask to all available data
-        data[total_mask == 0] = np.nan
-        if mask is not None:
-            mask[total_mask == 0] = 0
-            mask[total_mask != 0] = 1
+            total_mask &= np.isfinite(error)
+        # Apply total mask to data
+        data[~total_mask] = np.nan
         if error is not None:
-            error[total_mask == 0] = np.nan
-        # If no mask was supplied but the global mask contains zeros,
-        # use the global mask as a mask
-        if mask is None and np.any(total_mask == 0):
-            mask = total_mask
+            error[~total_mask] = np.nan
+        # Convert mask to the same dtype as data
+        mask[:] = total_mask.astype(data.dtype)
+        # Ensure mask and total_mask are identical
+        if not np.array_equal(mask, total_mask):
+            raise RuntimeError("impossible")
+        del total_mask
         # Calculate the world coordinates at the very first pixel
         zero = (np.array(rval) - np.array(rpix) * np.array(step)).tolist()
         # Keep copies of the supplied data
         dtype = data.dtype
-        self._data = data.copy()
-        self._mask = mask.copy().astype(dtype) if mask is not None else None
-        self._error = error.copy().attype(dtype) if error is not None else None
+        self._data = data.astype(dtype)
+        self._mask = mask.astype(dtype)
+        self._error = error.astype(dtype) if error is not None else None
         self._step = tuple(step)
         self._zero = tuple(zero)
         self._rpix = tuple(rpix)

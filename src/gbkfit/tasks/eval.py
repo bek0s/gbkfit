@@ -65,11 +65,11 @@ def _prepare_params(
     # Copy info for safety
     info = copy.deepcopy(info)
 
-    # Prepare the supplied parameters. This will:
+    # Prepare the supplied parameter properties. This will:
     # - Ensure the parameter keys are valid
-    # - Explode all parameters that are can be exploded
+    # - Explode all parameter names that are can be exploded
     parameters = gbkfit.params.parse_param_info(
-        info.get('parameters'), pdescs).info
+        info.get('properties'), pdescs).info
 
     recovery_failed = []
     recovery_succeed = {}
@@ -147,7 +147,7 @@ def eval_(
         required_sections += ('datasets',)
         optional_sections += ('objective',)
     else:
-        raise RuntimeError(f"invalid evaluation mode: {mode}")
+        raise RuntimeError("impossible")
     cfg = _detail.prepare_config(cfg, required_sections, optional_sections)
 
     #
@@ -160,9 +160,9 @@ def eval_(
 
     #
     # Setup all the components described in the configuration.
-    # After running the configuration through _detail.prepare_config(),
-    # we assume that the datasets and models configurations are lists,
-    # while the objective, pdescs, and params configurations are dicts.
+    # After running the configuration through _detail.prepare_config():
+    # - datasets and models configurations are lists
+    # - objective, pdescs, and params configurations are dicts
     #
 
     datasets = None
@@ -216,9 +216,8 @@ def eval_(
     model_extra = {}
     model_data = []
     if mode == 'model':
+        print(params)
         model_data = model_group.model_h(params, None)
-
-    exit()
 
     resid_u_extra = {}
     resid_u_data = []
@@ -244,7 +243,8 @@ def eval_(
 
     # Store model
     for i, data_i in enumerate(model_data):
-        prefix_i = model_prefix + f'_{i}' * bool(model.nitems() > 0)
+        # prefix_i = model_prefix + f'_{i}' * bool(model.nitems() > 0)
+        prefix_i = model_prefix + f'_{i}'
         for key, value in data_i.items():
             outputs |= {
                 f'{prefix_i}_{key}_d.fits': value.get('d'),

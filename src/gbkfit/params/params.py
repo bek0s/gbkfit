@@ -2,7 +2,11 @@
 import abc
 import copy
 import logging
+from collections.abc import Callable
 from numbers import Real
+from typing import Any
+
+import numpy as np
 
 from gbkfit.params import parsers as param_parsers
 from gbkfit.params.interpreter import Interpreter
@@ -25,65 +29,95 @@ class Param(abc.ABC):
     pass
 
 
+class ParamProperty:
+    pass
+
+
+class FittingParamProperty(ParamProperty):
+    pass
+
+
+class ModelParams:
+    pass
+
+
+class FittingParams:
+    pass
+
+
 class Params(abc.ABC):
 
     def __init__(
             self,
-            pdescs: dict[ParamDesc],
-            parameters,
-            expressions,
-            conversions
+            pdescs: dict[str, ParamDesc],
+            expressions_dict: dict[str, Any],
+            expressions_func: Callable
     ):
         self._pdescs = copy.deepcopy(pdescs)
-        self._parameters = copy.deepcopy(parameters)
-        self._expressions = copy.deepcopy(expressions)
-        self._conversions = copy.deepcopy(conversions)
-        self._interpreter = Interpreter(pdescs, expressions, conversions)
+        self._expressions_dict = copy.deepcopy(expressions_dict)
+        self._expressions_func = copy.deepcopy(expressions_func)
+        self._interpreter = Interpreter(
+            pdescs, expressions_dict, expressions_func)
 
-    def pdescs(self):
+    def pdescs(self) -> dict[str, ParamDesc]:
         return self._pdescs
 
-    def parameters(self):
-        return self._parameters
+    def expressions_dict(self) -> dict[str, Any]:
+        return self._expressions_dict
 
-    def expressions(self):
-        return self._expressions
-
-    def conversions(self):
-        return self._conversions
+    def conversions_func(self) -> Callable:
+        return self._expressions_func
 
 
 class EvaluationParams(parseutils.BasicSerializable, Params):
 
     @classmethod
     def load(cls, info, *args, **kwargs):
-        print("INFO:", info)
         pdescs = kwargs.get('pdescs')
         if pdescs is None:
             raise RuntimeError("pdescs were not provided")
         desc = parseutils.make_basic_desc(cls, 'params')
+        info = param_parsers.load_params_parameters_conversions(
+            info, pdescs, Real, lambda x: x)
         opts = parseutils.parse_options_for_callable(
             info, desc, cls.__init__, fun_ignore_args={'pdescs'})
-        opts = param_parsers.load_params_parameters_conversions(
-            opts, pdescs, Real, lambda x: x)
         return cls(pdescs, **opts)
 
     def dump(self, conversions_file):
         return param_parsers.dump_params_parameters_conversions(
             self, Param, lambda x: x, conversions_file)
 
-    def __init__(self, pdescs, parameters, conversions=None):
-        expressions = param_parsers.parse_param_values_strict(
-            parameters, pdescs,
-            # Make everything to be considered an expression
-            value_types=())[1]
-        super().__init__(pdescs, parameters, expressions, conversions)
+    def __init__(
+            self,
+            pdescs: dict[str, ParamDesc],
+            properties: dict[str, Any],
+            expressions_func: Callable | None = None
+    ):
+        # Treat all acceptable values as expressions because
+        # we will be passing them to super()._interpreter which can
+        # handle everything correctly. No need to complicate things.
+        values_dict, expressions_dict = (
+            param_parsers.parse_param_values_strict(
+                properties, pdescs, value_types=()))
+        # Invalid values should have been caught by now.
+        if values_dict:
+            raise RuntimeError("impossible")
+        # print(f"values_dict: {values_dict}")
+        # print(f"expressions_dict: {expressions_dict}")
+        super().__init__(pdescs, expressions_dict, expressions_func)
 
-    def enames(self, fixed=True, tied=True):
-        return self._interpreter.enames(fixed=fixed, tied=tied, free=False)
+    def exploded_names(
+            self, fixed: bool = True, tied: bool = True
+    ) -> list[str]:
+        return self._interpreter.exploded_names(
+            fixed=fixed, tied=tied, free=False)
 
-    def evaluate(self, out_eparams, check=True):
-        return self._interpreter.evaluate(dict(), out_eparams, check)
+    def evaluate(
+            self,
+            check: bool = True,
+            out_exploded_params: dict[str, Real] | None = None
+    ) -> dict[str, Real | np.ndarray]:
+        return self._interpreter.evaluate({}, check, out_exploded_params)
 
 
 evaluation_params_parser = parseutils.BasicParser(EvaluationParams)

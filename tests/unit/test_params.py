@@ -314,7 +314,7 @@ def test_param_parsers():
     assert parse_param_expressions_result.invalid_expressions_bad_syntax == [
         'g[0]']
     assert parse_param_expressions_result.invalid_expressions_bad_scalar == {
-        'g[1]': {'a[100]', 'a[101]'}}
+        'g[1]': ['a[100]', 'a[101]']}
     assert parse_param_expressions_result.invalid_expressions_bad_vector == {
         'g[2]': {'d[[0, 100]]': [100]}}
 
@@ -395,10 +395,10 @@ def test_param_interpreter():
         e=ParamVectorDesc('e', 3),
         f=ParamVectorDesc('f', 3))
 
-    expressions_dict = {
+    expressions_dict_1 = {
+        'c': 'a + b',
         'a': 1,
         'b': '1 + 1',
-        'c': 'a + b',
         'd': 4,
         'e[0]': 5,
         'e[1:]': [6, 7],
@@ -406,10 +406,10 @@ def test_param_interpreter():
         'f[2]': 'f[1] + 8'
     }
 
-    expressions_dict = {
+    expressions_dict_2 = {
+        'c': None,
         'a': 1,
         'b': None,
-        'c': None,
         'd': 4,
         'e[0]': 5,
         'e[1:]': [6, 7],
@@ -417,7 +417,7 @@ def test_param_interpreter():
         'f[2]': None
     }
 
-    def expressions_func(params):
+    def expressions_func_2(params):
         params['a'] = 1
         params['b'] = 1 + 1
         params['c'] = params['a'] + params['b']
@@ -426,49 +426,62 @@ def test_param_interpreter():
         params['e'][1:] = [6, 7]
         params['f'][1] = params['f'][0]
         params['f'][2] = params['f'][1] + 8
-        return params
 
-    interpreter01 = Interpreter(pdescs, expressions_dict, expressions_func)
-    enames_free = interpreter01.enames(fixed=False, tied=False, free=True)
-    enames_tied = interpreter01.enames(fixed=False, tied=True, free=False)
-    enames_fixed = interpreter01.enames(fixed=True, tied=False, free=False)
-    assert enames_free == ['f[0]']
-    assert enames_tied == ['b', 'c', 'f[1]', 'f[2]']
-    assert enames_fixed == ['a', 'd[0]', 'd[1]', 'd[2]', 'e[0]', 'e[1]', 'e[2]']
+    def run_tests(expressions_dict, expressions_func):
+        interpreter = Interpreter(pdescs, expressions_dict, expressions_func)
+        enames_free = interpreter.exploded_names(
+            fixed=False, tied=False, free=True)
+        enames_tied = interpreter.exploded_names(
+            fixed=False, tied=True, free=False)
+        enames_fixed = interpreter.exploded_names(
+            fixed=True, tied=False, free=False)
+        assert enames_free == ['f[0]']
+        assert enames_tied == ['b', 'c', 'f[1]', 'f[2]']
+        assert enames_fixed == [
+            'a', 'd[0]', 'd[1]', 'd[2]', 'e[0]', 'e[1]', 'e[2]']
+        eparams = {}
+        params = interpreter.evaluate({'f[0]': 1}, True, eparams)
+        assert params['a'] == 1
+        assert params['b'] == 2
+        assert params['c'] == 3
+        assert np.array_equal(params['d'], (4, 4, 4))
+        assert np.array_equal(params['e'], (5, 6, 7))
+        assert np.array_equal(params['f'], (1, 1, 9))
+        assert eparams == {
+            'a': 1, 'b': 2, 'c': 3,
+            'd[0]': 4, 'd[1]': 4, 'd[2]': 4,
+            'e[0]': 5, 'e[1]': 6, 'e[2]': 7,
+            'f[0]': 1, 'f[1]': 1, 'f[2]': 9}
 
-    eparams = {}
-    params = interpreter01.evaluate({'f[0]': 1}, eparams, True)
-    assert params['a'] == 1
-    assert params['b'] == 2
-    assert params['c'] == 3
-    assert np.array_equal(params['d'], (4, 4, 4))
-    assert np.array_equal(params['e'], (5, 6, 7))
-    assert np.array_equal(params['f'], (1, 1, 9))
-    assert eparams == {
-        'a': 1, 'b': 2, 'c': 3,
-        'd[0]': 4, 'd[1]': 4, 'd[2]': 4,
-        'e[0]': 5, 'e[1]': 6, 'e[2]': 7,
-        'f[0]': 1, 'f[1]': 1, 'f[2]': 9}
+    run_tests(expressions_dict_1, None)
+    run_tests(expressions_dict_2, expressions_func_2)
 
 
-# def test_evaluation_params():
-#
-#     pdescs = dict(
-#         a=ParamScalarDesc('a'),
-#         b=ParamScalarDesc('b'),
-#         c=ParamVectorDesc('c', 3))
-#
-#     parameters = {
-#         'a': 1,
-#         'b': '2',
-#         'c': 'a + b'
-#     }
-#
-#     params = EvaluationParams(pdescs, parameters)
-#     enames_tied = params.enames(fixed=False, tied=True)
-#     enames_fixed = params.enames(fixed=True, tied=False)
-#     assert enames_tied == ['b', 'c[0]', 'c[1]', 'c[2]']
-#     assert enames_fixed == ['a']
+def test_evaluation_params():
+
+    pdescs = dict(
+        a=ParamScalarDesc('a'),
+        b=ParamScalarDesc('b'),
+        c=ParamVectorDesc('c', 3))
+
+    properties = {
+        'a': 1,
+        'b': '2',
+        'c': 'a + b'
+    }
+
+    params = EvaluationParams(pdescs, properties)
+    enames_tied = params.exploded_names(fixed=False, tied=True)
+    enames_fixed = params.exploded_names(fixed=True, tied=False)
+    assert enames_tied == ['b', 'c[0]', 'c[1]', 'c[2]']
+    assert enames_fixed == ['a']
+
+    params = {
+        'properties': properties,
+        'expressions': None
+    }
+
+    # evaluation_params = evaluation_params_parser.load(params, pdescs=pdescs)
 
 
 if __name__ == '__main__':
@@ -477,4 +490,4 @@ if __name__ == '__main__':
     test_param_symbols()
     test_param_parsers()
     test_param_interpreter()
-    # test_evaluation_params()
+    test_evaluation_params()

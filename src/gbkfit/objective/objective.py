@@ -1,19 +1,21 @@
 
 from collections.abc import Mapping, Sequence
+from numbers import Real
 
 from gbkfit.dataset import Dataset
-from gbkfit.model import Model
+from gbkfit.model import Model, ModelGroup
+from gbkfit.params import ParamDesc
 from gbkfit.utils import iterutils, parseutils, timeutils
 
 
-class Objective:
+class Objective():
 
     @classmethod
-    def load(cls, info, datasets, model):
+    def load(cls, info, datasets, models):
         desc = parseutils.make_basic_desc(cls, 'objective')
         opts = parseutils.parse_options_for_callable(
-            info, desc, cls.__init__, fun_ignore_args=['datasets', 'model'])
-        return cls(datasets, model, **opts)
+            info, desc, cls.__init__, fun_ignore_args=['datasets', 'models'])
+        return cls(datasets, models, **opts)
 
     def dump(self):
         return dict(
@@ -23,21 +25,21 @@ class Objective:
     def __init__(
             self,
             datasets: Dataset | Sequence[Dataset],
-            model: Model,
+            models: ModelGroup,
             wp:
-            int | float |
-            Mapping[str, int | float] |
-            Sequence[int | float] |
-            Sequence[Mapping[str, int | float]] = 0.0,
+            Real |
+            Mapping[str, Real] |
+            Sequence[Real] |
+            Sequence[Mapping[str, Real]] = 0.0,
             wu:
-            int | float |
-            Mapping[str, int | float] |
-            Sequence[int | float] |
-            Sequence[Mapping[str, int | float]] = 1.0
+            Real |
+            Mapping[str, Real] |
+            Sequence[Real] |
+            Sequence[Mapping[str, Real]] = 1.0
     ):
         self._datasets = datasets = iterutils.tuplify(datasets)
-        self._model = model
-        n = self.nitems()
+        self._models = models
+        n = models.nmodels()
         if len(datasets) != n:
             raise RuntimeError(
                 f"the number of datasets and models are not equal "
@@ -66,9 +68,9 @@ class Objective:
         self._d_pixel_counts = iterutils.make_list(n, None)
         # If we have one weight (or one dict of weights) but
         # multiple datasets, replicate the value multiple times.
-        if isinstance(wp, (int, float, Mapping)):
+        if isinstance(wp, (Real, Mapping)):
             wp = iterutils.make_tuple(n, wp)
-        if isinstance(wu, (int, float, Mapping)):
+        if isinstance(wu, (Real, Mapping)):
             wu = iterutils.make_tuple(n, wu)
         if len(wp) != n:
             raise RuntimeError(
@@ -88,7 +90,7 @@ class Objective:
         self._weights_u = iterutils.make_tuple(n, {})
         for i in range(n):
             dataset = datasets[i]
-            dmodel = self.model().dmodels()[i]
+            dmodel = self.models().models()[i].dmodel()
             keys_dat = tuple(dataset.keys())
             keys_mdl = tuple(dmodel.keys())
             if set(keys_dat) != set(keys_mdl):
@@ -132,23 +134,23 @@ class Objective:
         self._backends = iterutils.make_list(n, None)
         self._prepared = False
 
-    def nitems(self):
-        return self._model.nitems()
+    def nitems(self) -> int:
+        return self._models.nmodels()
 
-    def datasets(self):
+    def datasets(self) -> tuple[Dataset, ...]:
         return self._datasets
 
-    def model(self):
-        return self._model
+    def models(self) -> ModelGroup:
+        return self._models
 
-    def pdescs(self):
-        return self.model().pdescs()
+    def pdescs(self) -> dict[str, ParamDesc]:
+        return self.models().pdescs()
 
     def prepare(self):
         for i in range(self.nitems()):
             dataset = self.datasets()[i]
-            driver = self.model().drivers()[i]
-            dmodel = self.model().dmodels()[i]
+            driver = self.models().models()[i].driver()
+            dmodel = self.models().models()[i].dmodel()
             keys = dmodel.keys()
             shape = dmodel.size()[::-1]
             dtype = dmodel.dtype()

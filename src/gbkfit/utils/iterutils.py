@@ -289,20 +289,18 @@ def is_sequence_of_type(
 def extract_subdict(
         x: Mapping[Any, Any],
         keys: Iterable[Any],
-        on_missing_keys: Literal['ignore', 'none', 'raise'] = 'ignore'
-) -> dict[Any, Any]:
+) -> tuple[dict[Any, Any], list[Any]]:
     """
     Extract a subset of key-value pairs from a mapping as a dict.
     """
     result = {}
+    missing = []
     for key in keys:
         if key in x:
             result[key] = x[key]
-        elif on_missing_keys == 'none':
-            result[key] = None
-        elif on_missing_keys == 'raise':
-            raise RuntimeError(f"missing key: {key}")
-    return result
+        else:
+            missing.append(key)
+    return result, missing
 
 
 def validate_sequence_indices(

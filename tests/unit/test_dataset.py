@@ -18,10 +18,10 @@ def test_data():
     assert data01.dtype() == data_d.dtype
     assert np.array_equal(data01.data(), data_d)
     assert np.array_equal(data01.mask(), data_ones)
-    assert np.array_equal(data01.error(), data_ones)
-    assert data01.ndim() == 2
+    assert np.array_equal(data01.error(), None)
     assert data01.data().size == data01.npix()
-    assert data01.size() == (5, 2)
+    assert data01.ndim() == len(size)
+    assert data01.size() == size
     assert data01.step() == (1, 1)
     assert data01.zero() == (-2.0, -0.5)
     assert data01.rpix() == (2.0, 0.5)
@@ -42,7 +42,8 @@ def test_data():
     assert data03.rval() == (4, 4)
     assert data03.rota() == 5
     # Vector value wcs tests
-    data04 = Data(data_d, step=(1, 2), rpix=(3, 4), rval=(5, 6), rota=7)
+    data04 = Data(
+        data_d, error=data_e, step=(1, 2), rpix=(3, 4), rval=(5, 6), rota=7)
     assert data04.step() == (1, 2)
     assert data04.rpix() == (3, 4)
     assert data04.rval() == (5, 6)
@@ -76,8 +77,36 @@ def test_dataset_image():
     size = (5, 2)
     shape = size[::-1]
     data_d = np.full(shape, 10.0)
-    data01 = Data(data_d)
-    DatasetImage(data01)
+    data_m = np.full(shape, 1.0)
+    data_e = np.full(shape, 2.0)
+    data01 = Data(data_d, data_m, data_e)
+    # Default value tests
+    image01 = DatasetImage(data01)
+    assert image01.npix() == data01.npix()
+    assert image01.size() == data01.size()
+    assert image01.step() == data01.step()
+    assert image01.zero() == data01.zero()
+    assert image01.dtype == data01.dtype()
+    # Dump tests
+    image01_info_dumped = dataset_parser.dump(image01, overwrite=True)
+    image01_info = dict(
+        type='image',
+        image=dict(
+            data='image_d.fits',
+            mask='image_m.fits',
+            error='image_e.fits'),
+        step=(1.0, 1.0),
+        rpix=(2.0, 0.5),
+        rval=(0.0, 0.0),
+        rota=0)
+    assert image01_info_dumped == image01_info
+    # Load tests
+    image01_info_loaded = dataset_parser.load(image01_info)
+    assert image01_info_loaded.size() == image01.size()
+    assert image01_info_loaded.step() == image01.step()
+    assert image01_info_loaded.rpix() == image01.rpix()
+    assert image01_info_loaded.rval() == image01.rval()
+    assert image01_info_loaded.rota() == image01.rota()
 
 
 def test_dataset_lslit():

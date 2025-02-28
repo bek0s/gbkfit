@@ -43,3 +43,25 @@ def ensure_no_missing_params(eparams, pdescs):
     if missing := get_missing_params(eparams, pdescs):
         raise RuntimeError(
             f"the following parameters are missing: {missing}")
+
+
+# def foo(self, pdescs, params):
+#     missing = []
+#     invalid = []
+#     for name, pdesc in pdescs.items():
+#         if name not in params:
+#             continue
+#
+#         value = params[name]
+#
+#         if isinstance(pdesc, ParamScalarDesc):
+#             if not isinstance(value, Real):
+#                 invalid.append([])
+#                 continue
+#         elif isinstance(pdesc, ParamVectorDesc):
+#             if not iterutils.is_sequence(value):
+#                 invalid.append([])
+#                 continue
+#             elif pdesc.size() != len(value):
+#                 invalid.append([])
+#                 continue

@@ -488,7 +488,8 @@ def main():
 
     elif args.task == 'fit':
         import gbkfit.tasks.fit
-        gbkfit.tasks.fit.fit(args.config)
+        gbkfit.tasks.fit.fit(
+            args.config, args.output_dir, args.output_dir_mode)
 
     elif args.task == 'plot':
         import gbkfit.tasks.plot

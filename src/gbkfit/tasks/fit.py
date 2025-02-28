@@ -2,6 +2,7 @@ import copy
 import logging
 import os
 import time
+from typing import Any, Literal
 
 import numpy as np
 import ruamel.yaml
@@ -12,6 +13,7 @@ import gbkfit.fitting
 import gbkfit.model
 import gbkfit.objective
 import gbkfit.params
+from gbkfit.params import ParamDesc
 from gbkfit.utils import miscutils
 from . import _detail
 
@@ -27,38 +29,23 @@ ruamel.yaml.add_representer(dict, lambda self, data: self.represent_mapping(
     'tag:yaml.org,2002:map', data.items()))
 
 
-def _prepare_params(info, pdescs):
-
-    # Prepare the supplied parameters. This will:
+def _prepare_params(
+        info: dict[str, Any],
+        pdescs: dict[str, ParamDesc]
+) -> dict[str, Any]:
+    # Prepare the supplied parameter properties. This will:
     # - Ensure the parameter keys are valid
-    # - Explode parameter values that are dicts and can be exploded
-    parameters = gbkfit.params.prepare_param_info(
-        info.get('parameters'), pdescs)
+    # - Explode all parameter names that are can be exploded
+    parameters = gbkfit.params.parse_param_info(
+        info.get('properties'), pdescs)
 
     # Update parameter info and return it
     return info | dict(parameters=parameters)
 
 
-def fit(config):
-
-    # class Foo:
-    #
-    #     def __init__(self):
-    #         self._array1 = np.ones((2, 2))
-    #         self._array2 = self._array1.reshape((4,))
-    #
-    #     def check_arrays(self):
-    #         print("array1 address: ", self._array1.data)
-    #         print("array2 address: ", self._array2.data)
-    #         print("share memory:", np.shares_memory(self._array1, self._array2))
-    #
-    # a = Foo()
-    # a.check_arrays()
-    # b = copy.deepcopy(a)
-    # b.check_arrays()
-    #
-    #
-    # exit()
+def fit(config: str,
+        output_dir: str,
+        output_dir_mode: Literal['terminate', 'overwrite', 'unique']):
 
     #
     # Read configuration file and
@@ -78,38 +65,36 @@ def fit(config):
     _log.info("preparing configuration...")
     # This is not a full-fledged validation. It just tries to catch
     # and inform the user about the really obvious mistakes.
-    # todo: investigate the potential use of jsonschema for validation
     required_sections = (
-        'datasets', 'drivers', 'dmodels', 'gmodels', 'params', 'fitter')
+        'datasets', 'models', 'params', 'fitter')
     optional_sections = ('pdescs', 'objective')
     cfg = _detail.prepare_config(cfg, required_sections, optional_sections)
 
     #
+    # Ensure an output directory is available for the outputs
+    #
+
+    _log.info("preparing output directory...")
+    output_dir = _detail.make_output_dir(output_dir, output_dir_mode)
+    _log.info(f"output will be stored under directory: {output_dir}")
+
+    #
     # Setup all the components described in the configuration.
-    # We assume that the datasets, drivers, dmodels, and gmodels
-    # configurations are lists, while the objective, pdescs, and params
-    # configurations are dicts. This assumption is based on the fact
-    # that the _detail.prepare_config() called above should do that
+    # After running the configuration through _detail.prepare_config():
+    # - datasets and models configurations are lists
+    # - objective, pdescs, params, and fitter configurations are dicts
     #
 
     _log.info("setting up datasets...")
     datasets = gbkfit.dataset.dataset_parser.load(cfg['datasets'])
 
-    _log.info("setting up drivers...")
-    drivers = gbkfit.driver.driver_parser.load(cfg['drivers'])
-
-    _log.info("setting up dmodels...")
-    dmodels = gbkfit.model.dmodel_parser.load(cfg['dmodels'], dataset=datasets)
-
-    _log.info("setting up gmodels...")
-    gmodels = gbkfit.model.gmodel_parser.load(cfg['gmodels'])
-
     _log.info("setting up model...")
-    model = gbkfit.model.Model(drivers, dmodels, gmodels)
+    models = gbkfit.model.model_parser.load(cfg['models'], dataset=datasets)
+    model_group = gbkfit.model.ModelGroup(models)
 
     _log.info("setting up objective...")
     objective = gbkfit.objective.objective_parser.load(
-        cfg.get('objective', {}), datasets, model)
+        cfg.get('objective', {}), datasets, model_group)
 
     _log.info("setting up fitter...")
     fitter = gbkfit.fitting.fitter_parser.load(cfg['fitter'])
@@ -124,6 +109,7 @@ def fit(config):
     cfg['params'] = _prepare_params(cfg['params'], pdescs)
 
     print(cfg['params'])
+    exit()
 
     params = fitter.load_params(cfg['params'], pdescs)
 
