@@ -101,8 +101,8 @@ class BrightnessSMDisk3D(BrightnessComponent3D):
             vptraits=(), vhtraits=(),
             dptraits=(), dhtraits=())
 
-    def params(self):
-        return self._disk.params()
+    def pdescs(self):
+        return self._disk.pdescs()
 
     def is_weighted(self):
         return bool(self._disk.wptraits())

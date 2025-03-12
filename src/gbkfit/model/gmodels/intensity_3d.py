@@ -79,7 +79,7 @@ class GModelIntensity3D(GModelImage):
          self._omappings) = _detail.make_gmodel_3d_params(
             self._components, self._ocomponents)
 
-    def params(self):
+    def pdescs(self):
         return self._params
 
     def is_weighted(self):

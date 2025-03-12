@@ -1,36 +1,36 @@
 
+from abc import ABC
 from collections.abc import Mapping, Sequence
 from numbers import Real
+from typing import Any
+
+import numpy as np
 
 from gbkfit.dataset import Dataset
-from gbkfit.model import Model, ModelGroup
+from gbkfit.model import ModelGroup
 from gbkfit.params import ParamDesc
 from gbkfit.utils import iterutils, parseutils, timeutils
 
 
-class Objective():
+class Objective(parseutils.BasicSerializable, ABC):
 
     @classmethod
-    def load(cls, info, datasets, models):
+    def load(cls, info: dict[str, Any], *args, **kwargs) -> 'Objective':
+        datasets = kwargs.get('datasets')
+        models = kwargs.get('models')
         desc = parseutils.make_basic_desc(cls, 'objective')
         opts = parseutils.parse_options_for_callable(
             info, desc, cls.__init__, fun_ignore_args=['datasets', 'models'])
         return cls(datasets, models, **opts)
 
-    def dump(self):
+    def dump(self) -> dict[str, Any]:
         return dict(
-            wp=self._wp,
             wu=self._wu)
 
     def __init__(
             self,
             datasets: Dataset | Sequence[Dataset],
             models: ModelGroup,
-            wp:
-            Real |
-            Mapping[str, Real] |
-            Sequence[Real] |
-            Sequence[Mapping[str, Real]] = 0.0,
             wu:
             Real |
             Mapping[str, Real] |
@@ -63,30 +63,19 @@ class Objective():
         # These lists hold n x 1d arrays of size 1
         self._h_residual_scalar = iterutils.make_list(n, None)
         self._d_residual_scalar = iterutils.make_list(n, None)
-        # These lists hold n x 1d arrays of size 3
-        self._h_pixel_counts = iterutils.make_list(n, None)
-        self._d_pixel_counts = iterutils.make_list(n, None)
         # If we have one weight (or one dict of weights) but
         # multiple datasets, replicate the value multiple times.
-        if isinstance(wp, (Real, Mapping)):
-            wp = iterutils.make_tuple(n, wp)
         if isinstance(wu, (Real, Mapping)):
             wu = iterutils.make_tuple(n, wu)
-        if len(wp) != n:
+        if len(datasets) != len(wu):
             raise RuntimeError(
-                f"the length of wp and the number of datasets are not equal "
-                f"({len(wp)} != {n})")
-        if len(wu) != n:
-            raise RuntimeError(
-                f"the length of wu and the number of datasets are not equal "
-                f"({len(wu)} != {n})")
+                f"the number of datasets and the length of wu are not equal "
+                f"({len(datasets)} != {len(wu)})")
         # We will use these weight variables when dumping this object.
         # This is in both a compact and an ambiguity-free form.
-        self._wp = wp
         self._wu = wu
         # These variables will contain the fully-expanded weights,
         # and they are most convenient to work with.
-        self._weights_p = iterutils.make_tuple(n, {})
         self._weights_u = iterutils.make_tuple(n, {})
         for i in range(n):
             dataset = datasets[i]
@@ -120,18 +109,13 @@ class Objective():
                     f"({dataset.zero()} != {dmodel.zero()})")
             # Expand weights fully
             for key in keys_mdl:
-                # wp
-                if isinstance(wp[i], (int, float)):
-                    self._weights_p[i][key] = wp[i]
-                elif isinstance(wp[i], Mapping):
-                    self._weights_p[i][key] = wp[i].get(key, 0.0)  # noqa
-                # wu
-                if isinstance(wu[i], (int, float)):
+                if isinstance(wu[i], Real):
                     self._weights_u[i][key] = wu[i]
                 elif isinstance(wu[i], Mapping):
-                    self._weights_u[i][key] = wu[i].get(key, 1.0)  # noqa
+                    self._weights_u[i][key] = wu[i].get(key, 1.0)
         # One backend for each driver
         self._backends = iterutils.make_list(n, None)
+        # This class is lazily initialized
         self._prepared = False
 
     def nitems(self) -> int:
@@ -146,7 +130,7 @@ class Objective():
     def pdescs(self) -> dict[str, ParamDesc]:
         return self.models().pdescs()
 
-    def prepare(self):
+    def prepare(self) -> None:
         for i in range(self.nitems()):
             dataset = self.datasets()[i]
             driver = self.models().models()[i].driver()
@@ -164,24 +148,19 @@ class Objective():
              self._d_residual_vector[i]) = driver.mem_alloc_s(nelem, dtype)
             (self._h_residual_scalar[i],
              self._d_residual_scalar[i]) = driver.mem_alloc_s(1, dtype)
-
-            import numpy as np
-            (self._h_pixel_counts[i],
-             self._d_pixel_counts[i]) = driver.mem_alloc_s(3, dtype=np.int32)
-
             # Populate allocated arrays and create views
             for j, key in enumerate(keys):
                 data = dataset[key]
                 slice_ = slice(j * npix, (j + 1) * npix)
                 # Copy measurement data to the internal 1d array,
-                # and create nd array view for convenience
+                # and create nd array view
                 driver.mem_copy_h2d(
                     data.data().ravel().astype(dtype),
                     self._d_dataset_d_vector[i][slice_])
                 self._d_dataset_d_nddata[i][key] = \
                     self._d_dataset_d_vector[i][slice_].reshape(shape)
                 # Copy mask data to the internal 1d array,
-                # and create nd array view for convenience
+                # and create nd array view
                 if data.mask() is not None:
                     driver.mem_copy_h2d(
                         data.mask().ravel().astype(dtype),
@@ -189,7 +168,7 @@ class Objective():
                     self._d_dataset_m_nddata[i][key] = \
                         self._d_dataset_m_vector[i][slice_].reshape(shape)
                 # Copy uncertainty data to the internal 1d array,
-                # and create nd array view for convenience
+                # and create nd array view
                 if data.error() is not None:
                     driver.mem_copy_h2d(
                         data.error().ravel().astype(dtype),
@@ -205,32 +184,37 @@ class Objective():
             self._backends[i] = driver.backends().objective(dmodel.dtype())
         self._prepared = True
 
-    def residual_scalar(self, params, squared, out_extra=None):
+    def residual_scalar(
+            self,
+            params: dict[str, Real | np.ndarray],
+            squared: bool,
+            out_extra: dict[str, Any] | None = None
+    ) -> list[Real]:
         self._update_residual_d(params, True, out_extra)
         t = timeutils.SimpleTimer('objective_residual_sum_eval').start()
         residuals = []
         for i in range(self.nitems()):
-            driver = self.model().drivers()[i]
+            driver = self.models().models()[i].driver()
             backend = self._backends[i]
             d_residual_vector = self._d_residual_vector[i]
             h_residual_scalar = self._h_residual_scalar[i]
             d_residual_scalar = self._d_residual_scalar[i]
             backend.residual_sum(d_residual_vector, squared, d_residual_scalar)
-
-
-            # print("LALA:", d_residual_scalar)
-
             driver.mem_copy_d2h(d_residual_scalar, h_residual_scalar)
             residuals.append(h_residual_scalar[0])
         t.stop()
         return residuals
 
-    def log_likelihood(self, params, out_extra=None):
+    def log_likelihood(
+            self,
+            params: dict[str, Real | np.ndarray],
+            out_extra: dict[str, Any] | None = None
+    ) -> list[float]:
         self._update_residual_d(params, True, out_extra)
         t = timeutils.SimpleTimer('objective_log_likelihood_eval').start()
         log_likelihoods = []
         for i in range(self.nitems()):
-            driver = self.model().drivers()[i]
+            driver = self.models().models()[i].driver()
             backend = self._backends[i]
             d_residual_vector = self._d_residual_vector[i]
             h_residual_scalar = self._h_residual_scalar[i]
@@ -241,55 +225,75 @@ class Objective():
         t.stop()
         return log_likelihoods
 
-    def residual_vector_h(self, params, weighted, out_extra=None):
+    def residual_vector_h(
+            self,
+            params: dict[str, Real | np.ndarray],
+            weighted: bool,
+            out_extra: dict[str, Any] | None = None
+    ) -> list[np.ndarray]:
         self._update_residual_h(params, weighted, out_extra)
         return self._h_residual_vector
 
-    def residual_vector_d(self, params, weighted, out_extra=None):
+    def residual_vector_d(
+            self,
+            params: dict[str, Real | np.ndarray],
+            weighted: bool,
+            out_extra: dict[str, Any] | None = None
+    ) -> list[np.ndarray]:
         self._update_residual_d(params, weighted, out_extra)
         return self._d_residual_vector
 
-    def residual_nddata_h(self, params, weighted, out_extra=None):
+    def residual_nddata_h(
+            self,
+            params: dict[str, Real | np.ndarray],
+            weighted: bool,
+            out_extra: dict[str, Any] | None = None
+    ) -> list[dict[str, np.ndarray]]:
         self._update_residual_h(params, weighted, out_extra)
         return self._h_residual_nddata
 
-    def residual_nddata_d(self, params, weighted, out_extra=None):
+    def residual_nddata_d(
+            self,
+            params: dict[str, Real | np.ndarray],
+            weighted: bool,
+            out_extra: dict[str, Any] | None = None
+    ) -> list[dict[str, np.ndarray]]:
         self._update_residual_d(params, weighted, out_extra)
         return self._d_residual_nddata
 
-    def _update_residual_h(self, params, weighted, out_extra=None):
+    def _update_residual_h(
+            self,
+            params: dict[str, Real | np.ndarray],
+            weighted: bool,
+            out_extra: dict[str, Any] | None = None
+    ):
         self._update_residual_d(params, weighted, out_extra)
         t = timeutils.SimpleTimer('objective_residual_d2h').start()
         for i in range(self.nitems()):
-            driver = self.model().drivers()[i]
+            driver = self.models().models()[i].driver()
             d_data = self._d_residual_vector[i]
             h_data = self._h_residual_vector[i]
             driver.mem_copy_d2h(d_data, h_data)
         t.stop()
 
-    def _update_residual_d(self, params, weighted, out_extra=None):
-
+    def _update_residual_d(
+            self,
+            params: dict[str, Real | np.ndarray],
+            weighted: bool,
+            out_extra: dict[str, Any] | None = None
+    ) -> None:
         if not self._prepared:
-            self._counter = 0
             self.prepare()
-
         # Evaluate model
         out_extra_model = {} if out_extra is not None else None
-        model_data = self.model().model_d(params, out_extra_model)
-
+        model_data = self.models().model_d(params, out_extra_model)
         # Evaluate residuals
         t = timeutils.SimpleTimer('objective_residual_eval').start()
         for i in range(self.nitems()):
-            driver = self.model().drivers()[i]
-            dmodel = self.model().dmodels()[i]
+            dmodel = self.models().models()[i].dmodel()
             backend = self._backends[i]
             for j, key in enumerate(dmodel.keys()):
-                weights = 1.0 if weighted else 1.0
-
-                wp = 1
-                wu = self._weights_u[i][key]
-
-
+                weights = self._weights_u[i][key] if weighted else 1.0
                 residual = self._d_residual_nddata[i][key]
                 observed_d = self._d_dataset_d_nddata[i][key]
                 observed_m = self._d_dataset_m_nddata[i].get(key, None)
@@ -301,13 +305,7 @@ class Objective():
                     observed_d, observed_e, observed_m,
                     expected_d, expected_w, expected_m,
                     weights, residual)
-
-                driver.mem_fill(self._d_pixel_counts[i], 0)
-                backend.count_elements(observed_d, expected_d, 0, self._d_pixel_counts[i])
-                # print(self._d_pixel_counts[i])
         t.stop()
-
-
 
 
 objective_parser = parseutils.BasicParser(Objective)

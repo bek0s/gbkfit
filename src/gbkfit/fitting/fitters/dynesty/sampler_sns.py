@@ -63,6 +63,8 @@ class FitParamsDynestySNS(FitParamsDynesty):
 
     @classmethod
     def load(cls, info, pdescs):
+        print(info)
+        e
         desc = parseutils.make_basic_desc(cls, 'fit params')
         opts = parseutils.parse_options_for_callable(
             info, desc, cls.__init__, fun_ignore_args=['pdescs'])

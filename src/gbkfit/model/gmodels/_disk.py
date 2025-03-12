@@ -371,7 +371,7 @@ class Disk(abc.ABC):
     def wptraits(self):
         return self._wptraits
 
-    def params(self):
+    def pdescs(self):
         return self._pdescs
 
     def _prepare(self, driver, dtype):

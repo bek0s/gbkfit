@@ -189,7 +189,7 @@ def eval_(
     if mode == 'objective':
         _log.info("setting up objective...")
         objective = gbkfit.objective.objective_parser.load(
-            cfg.get('objective', {}), datasets, model_group)
+            cfg.get('objective', {}), datasets=datasets, models=model_group)
 
     #
     # Calculate model parameters

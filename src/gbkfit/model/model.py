@@ -1,9 +1,12 @@
 
-import abc
-import copy
+from abc import ABC
+from numbers import Real
 from typing import Any
 
+import numpy as np
+
 from gbkfit.driver import Driver, driver_parser
+from gbkfit.params import ParamDesc
 from gbkfit.utils import iterutils, miscutils, parseutils, timeutils
 from .core import DModel, GModel, dmodel_parser, gmodel_parser
 
@@ -15,7 +18,7 @@ __all__ = [
 ]
 
 
-class Model(parseutils.BasicSerializable, abc.ABC):
+class Model(parseutils.BasicSerializable, ABC):
 
     @classmethod
     def load(cls, info: dict[str, Any], *args, **kwargs) -> 'Model':
@@ -63,15 +66,17 @@ class ModelGroup:
         self._models = iterutils.tuplify(models)
         # Preallocate some data structures for convenience
         self._h_model_data = []
+        self._d_model_data = []
         for model in self.models():
             for key in model.dmodel().keys():
                 self._h_model_data.append({key: dict(d=None, m=None, w=None)})
-        self._d_model_data = copy.deepcopy(self._h_model_data)
+                self._d_model_data.append({key: dict(d=None, m=None, w=None)})
         # Merge all pdescs into a dict and ensure they have unique keys
         self._pdescs, self._mappings = miscutils.merge_dicts_and_make_mappings(
-            [model.gmodel().params() for model in self.models()], 'model')
+            [model.gmodel().pdescs() for model in self.models()],
+            'model')
 
-    def pdescs(self):
+    def pdescs(self) -> dict[str, ParamDesc]:
         return self._pdescs
 
     def nmodels(self) -> int:
@@ -82,8 +87,8 @@ class ModelGroup:
 
     def model_d(
             self,
-            params: dict[str, Any],
-            out_extra: dict[str, Any] = None
+            params: dict[str, Real | np.ndarray],
+            out_extra: dict[str, Any] | None = None
     ) -> list[dict[str, Any]]:
         t = timeutils.SimpleTimer('model_eval').start()
         for i, model in enumerate(self.models()):
@@ -105,8 +110,8 @@ class ModelGroup:
 
     def model_h(
             self,
-            params: dict[str, Any],
-            out_extra: dict[str, Any] = None
+            params: dict[str, Real | np.ndarray],
+            out_extra: dict[str, Any] | None = None
     ) -> list[dict[str, Any]]:
         self.model_d(params, out_extra)
         t = timeutils.SimpleTimer('model_d2h').start()

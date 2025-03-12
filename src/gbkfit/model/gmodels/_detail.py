@@ -329,7 +329,7 @@ def check_traits_mcdisk(component, traits_):
 
 def _make_gmodel_params_cmp(components, prefix, force_prefix):
     return miscutils.merge_dicts_and_make_mappings(
-        [cmp.params() for cmp in components], prefix, force_prefix)
+        [cmp.pdescs() for cmp in components], prefix, force_prefix)
 
 
 def make_gmodel_2d_params(components):
@@ -370,7 +370,7 @@ def evaluate_components_b3d(
         spat_size, spat_step, spat_zero, spat_rota,
         dtype, out_extra, out_extra_label):
     for i, (component, mapping) in enumerate(zip(components, mappings)):
-        component_params = {p: params[mapping[p]] for p in component.params()}
+        component_params = {p: params[mapping[p]] for p in component.pdescs()}
         component_out_extra = {} if out_extra is not None else None
         component.evaluate(
             driver, component_params, odata,

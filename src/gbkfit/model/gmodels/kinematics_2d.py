@@ -54,7 +54,7 @@ class GModelKinematics2D(GModelSCube):
          self._mappings) = _detail.make_gmodel_2d_params(
             self._components)
 
-    def params(self):
+    def pdescs(self):
         return self._params
 
     def is_weighted(self):

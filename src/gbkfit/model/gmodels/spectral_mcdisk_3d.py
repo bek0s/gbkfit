@@ -114,8 +114,8 @@ class SpectralMCDisk3D(SpectralComponent3D):
             **nwmode_geometry_args,
             **trait_args)
 
-    def params(self):
-        return self._disk.params()
+    def pdescs(self):
+        return self._disk.pdescs()
 
     def is_weighted(self):
         return bool(self._disk.wptraits())

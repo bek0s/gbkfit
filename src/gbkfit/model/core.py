@@ -85,7 +85,7 @@ class DModel(parseutils.TypedSerializable, abc.ABC):
 class GModel(parseutils.TypedSerializable, abc.ABC):
 
     @abc.abstractmethod
-    def params(self):
+    def pdescs(self):
         pass
 
     @abc.abstractmethod

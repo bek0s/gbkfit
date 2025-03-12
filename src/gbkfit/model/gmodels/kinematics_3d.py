@@ -79,7 +79,7 @@ class GModelKinematics3D(GModelSCube):
          self._omappings) = _detail.make_gmodel_3d_params(
             self._components, self._ocomponents)
 
-    def params(self):
+    def pdewcs(self):
         return self._params
 
     def is_weighted(self):

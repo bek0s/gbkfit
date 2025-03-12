@@ -96,8 +96,8 @@ class OpacityMCDisk3D(OpacityComponent3D):
             vptraits=(), vhtraits=(),
             dptraits=(), dhtraits=())
 
-    def params(self):
-        return self._disk.params()
+    def pdescs(self):
+        return self._disk.pdescs()
 
     def evaluate(
             self,
