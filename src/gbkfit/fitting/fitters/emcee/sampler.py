@@ -1,28 +1,29 @@
 
+import abc
 import collections.abc
 import copy
 import logging
 
 from collections.abc import Sequence
-from typing import Tuple
+from typing import Any, Tuple
 
 import emcee
 import numpy as np
 import numpy.random as random
 
 from gbkfit.fitting import fitutils
-from gbkfit.fitting.core import FitParam, FitParams, Fitter
+from gbkfit.fitting.core import FittingParamProperty, FittingParams, Fitter
 from gbkfit.fitting.prior import prior_parser, Prior, PriorDict, PriorUniform
 from gbkfit.fitting.result import make_fitter_result
-from gbkfit.params import parsers as param_parsers, utils as paramutils
+from gbkfit.params import parsers as param_parsers, utils as paramutils, ParamDesc
 from gbkfit.utils import iterutils, parseutils
 
 from .moves import *
 
 
 __all__ = [
-    'FitParamEmcee',
-    'FitParamsEmcee',
+    'FittingParamPropertyEmcee',
+    'FittingParamsEmcee',
     'FitterEmcee'
 ]
 
@@ -56,25 +57,25 @@ def log_probability(eparams, parameters, objective):
         return foo
 
 
-class FitParamEmcee(FitParam):
+class FittingParamPropertyEmcee(parseutils.BasicSerializable, FittingParamProperty):
 
     @classmethod
-    def load(cls, info):
-        info['prior'] = fitutils.prepare_param_info_prior(info)
+    def load(cls, info: dict[str, Any]) -> 'FittingParamPropertyEmcee':
+        info['prior'] = fitutils.prepare_param_property_prior(info)
         info['prior'] = prior_parser.load_one(info['prior'], param_info=info)
-        desc = parseutils.make_basic_desc(cls, 'fit parameter')
+        desc = parseutils.make_basic_desc(cls, 'fitting param property')
         opts = parseutils.parse_options_for_callable(
             info, desc, cls.__init__, fun_rename_args=dict(
                 initial_value='value',
                 initial_width='width'))
         return cls(**opts)
 
-    def dump(self):
+    def dump(self) -> dict[str, Any]:
         info = dict(
             value=self.initial_value(),
             width=self.initial_width(),
             prior=prior_parser.dump(self.prior()))
-        return iterutils.remove_from_mapping_by_value(info, None)
+        return dict(iterutils.remove_from_mapping_by_value(info, None))
 
     def __init__(
             self,
@@ -84,67 +85,76 @@ class FitParamEmcee(FitParam):
     ):
         super().__init__()
         initial_value, initial_width = \
-            fitutils.prepare_param_initial_value_width(
+            fitutils.prepare_param_property_initial_value_width(
                 initial_value, initial_width)
         self._prior = copy.deepcopy(prior)
+        if initial_value is not None:
+            initial_value = float(initial_value)
+        if initial_width is not None:
+            initial_width = float(initial_width)
         self._initial_value = initial_value
         self._initial_width = initial_width
 
-    def prior(self):
+    def prior(self) -> Prior:
         return self._prior
 
-    def has_initial(self):
+    def has_initial(self) -> bool:
         return (self.initial_value() is not None and
                 self.initial_width() is not None)
 
-    def initial_value(self):
+    def initial_value(self) -> float | None:
         return self._initial_value
 
-    def initial_width(self):
+    def initial_width(self) -> float | None:
         return self._initial_width
 
 
-class FitParamsEmcee(FitParams):
+_fitting_param_property_parser = parseutils.BasicParser(
+    FittingParamPropertyEmcee)
+
+
+class FittingParamsEmcee(FittingParams):
 
     @staticmethod
-    def load_param(info):
-        return FitParamEmcee.load(info)
+    def load_param_property(info: dict[str, Any]) -> FittingParamPropertyEmcee:
+        return FittingParamPropertyEmcee.load(info)
 
     @classmethod
-    def load(cls, info, pdescs):
-        desc = parseutils.make_basic_desc(cls, 'fit params')
+    def load(cls, info: dict[str, Any], pdescs):
+        desc = parseutils.make_basic_desc(cls, 'fitting params')
+        opts = param_parsers.load_params_properties_transforms(
+            info, pdescs, collections.abc.Mapping, cls.load_param_property)
         opts = parseutils.parse_options_for_callable(
-            info, desc, cls.__init__, fun_ignore_args=['pdescs'])
-        opts = param_parsers.load_params_parameters_conversions(
-            opts, pdescs, collections.abc.Mapping, cls.load_param)
+            opts, desc, cls.__init__, fun_ignore_args=['pdescs'])
         return cls(pdescs, **opts)
 
-    def dump(self, conversions_file):
-        return param_parsers.dump_params_parameters_conversions(
-            self, FitParamEmcee, lambda x: x.dump(), conversions_file)
+    def dump(self, transforms_filename: str) -> dict[str, Any]:
+        return param_parsers.dump_params_properties_transforms(
+            self, FittingParamPropertyEmcee, lambda x: x.dump(),
+            transforms_filename)
 
-    def __init__(self, pdescs, parameters, conversions=None):
+    def __init__(self, pdescs, properties, transforms=None):
         super().__init__(
-            pdescs, parameters, conversions, FitParamEmcee)
+            pdescs, properties, FittingParamPropertyEmcee, transforms)
         self._priors = PriorDict(
-            {k: v.prior() for k, v in self.infos().items()})
+            {k: v.prior() for k, v in self.exploded_properties_with_values().items()})
 
     def priors(self):
         return self._priors
 
 
-class FitterEmcee(Fitter):
+class FitterEmcee(Fitter, abc.ABC):
 
     @staticmethod
-    def type():
+    def type() -> str:
         return 'emcee'
 
     @staticmethod
-    def load_params(info, descs):
-        return FitParamsEmcee.load(info, descs)
+    def load_params(info: dict[str, Any], pdescs: dict[str, ParamDesc]):
+        return FittingParamsEmcee.load(info, pdescs)
 
     @classmethod
-    def load(cls, info):
+    def load(cls, info, *args, **kwargs):
         info['moves'] = load_moves_with_weights(info.get('moves'))
         desc = parseutils.make_typed_desc(cls, 'fitter')
         opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
@@ -188,20 +198,20 @@ class FitterEmcee(Fitter):
         seed = self._seed
         rng = np.random.default_rng(self._seed)
 
-        ndim = len(parameters.infos())
+        ndim = len(parameters.exploded_properties_with_values())
         # Build moves list
         moves = [(m.obj(), w) for m, w in self._moves] if self._moves else None
         # Create sampler
         sampler = emcee.EnsembleSampler(
             nwalkers, ndim, log_prob_fn=log_probability,
             moves=moves, args=[parameters, objective],
-            parameter_names=parameters.enames(False, False, True),
+            parameter_names=parameters.exploded_names(False, False, True),
             blobs_dtype=[('log_like', float), ('log_prior', float)])
             # blobs_dtype=[('log_like', float), ('log_prior', float)], backend=emcee.backends.HDFBackend('foo.h5'))
 
         # Calculate the starting positions of all walkers
         initial_values = np.empty((nwalkers, ndim))
-        for i, (pname, pinfo) in enumerate(parameters.infos().items()):
+        for i, (pname, pinfo) in enumerate(parameters.exploded_properties_with_values().items()):
             # Sample initial positions from a prior.
             # If an initial value/width is available,
             # use a uniform prior. Otherwise, use parameter's prior.

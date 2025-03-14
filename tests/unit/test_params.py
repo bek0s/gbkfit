@@ -470,18 +470,74 @@ def test_evaluation_params():
         'c': 'a + b'
     }
 
-    params = EvaluationParams(pdescs, properties)
-    enames_tied = params.exploded_names(fixed=False, tied=True)
+    # Creation tests
+    params = EvaluationParams(pdescs, properties, None)
     enames_fixed = params.exploded_names(fixed=True, tied=False)
-    assert enames_tied == ['b', 'c[0]', 'c[1]', 'c[2]']
+    enames_tied = params.exploded_names(fixed=False, tied=True)
     assert enames_fixed == ['a']
+    assert enames_tied == ['b', 'c[0]', 'c[1]', 'c[2]']
+    assert params.properties() == properties
+    assert params.expressions() == properties
+    assert params.exploded_properties_with_values() == {}
 
-    params = {
+    # Dump tests
+    params_dumped = params.dump()
+    params_info = {
         'properties': properties,
-        'expressions': None
+    }
+    assert params_dumped == params_info
+
+    # Load tests
+    loaded_params = evaluation_params_parser.load(params_info, pdescs=pdescs)
+    loaded_enames_fixed = loaded_params.exploded_names(fixed=True, tied=False)
+    loaded_enames_tied = loaded_params.exploded_names(fixed=False, tied=True)
+    assert loaded_enames_fixed == enames_fixed
+    assert loaded_enames_tied == enames_tied
+    assert loaded_params.properties() == params.properties()
+    assert loaded_params.expressions() == params.expressions()
+    assert loaded_params.exploded_properties_with_values() == {}
+
+
+def test_fitting_params():
+
+    from gbkfit.fitting.core import FittingParams
+
+    class MockFittingParamProperty:
+        pass
+
+    pdescs = dict(
+        a=ParamScalarDesc('a'),
+        b=ParamScalarDesc('b'),
+        c=ParamVectorDesc('c', 3),
+        d=ParamScalarDesc('d'),
+        e=ParamVectorDesc('e', 2))
+
+    properties = {
+        'a': 1,
+        'b': '2',
+        'c': 'a + b',
+        'd': MockFittingParamProperty(),
+        'e': MockFittingParamProperty()
     }
 
-    # evaluation_params = evaluation_params_parser.load(params, pdescs=pdescs)
+    # Creation tests
+    params = FittingParams(pdescs, properties, MockFittingParamProperty, None)
+    enames_fixed = params.exploded_names(fixed=True, tied=False, free=False)
+    enames_tied = params.exploded_names(fixed=False, tied=True, free=False)
+    enames_free = params.exploded_names(fixed=False, tied=False, free=True)
+    exploded_properties_with_values = params.exploded_properties_with_values()
+    assert enames_fixed == ['a']
+    assert enames_tied == ['b', 'c[0]', 'c[1]', 'c[2]']
+    assert enames_free == ['d', 'e[0]', 'e[1]']
+    # assert params.properties() == properties  # define __eq__() first
+    assert params.expressions() == {
+        'a': 1,
+        'b': '2',
+        'c': 'a + b'
+    }
+    assert list(exploded_properties_with_values.keys()) == enames_free
+    assert all([isinstance(x, MockFittingParamProperty)
+                for x in exploded_properties_with_values.values()])
 
 
 if __name__ == '__main__':
@@ -491,3 +547,4 @@ if __name__ == '__main__':
     test_param_parsers()
     test_param_interpreter()
     test_evaluation_params()
+    test_fitting_params()

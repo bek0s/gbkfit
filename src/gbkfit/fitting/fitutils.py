@@ -33,7 +33,7 @@ def dump_params_dict(parameters, type_):
     return info
 
 
-def prepare_param_info_prior(info):
+def prepare_param_property_prior(info):
     if (prior := info.get('prior')) is None:
         if 'min' not in info or 'max' not in info:
             raise RuntimeError(
@@ -100,11 +100,11 @@ def prepare_optional_initial_value_min_max(
     return initial_value, initial_width, initial_value_min, initial_value_max
 
 
-def prepare_param_initial_value_width(initial_value, initial_width):
+def prepare_param_property_initial_value_width(initial_value, initial_width):
     if (initial_value is None) != (initial_width is None):
         _log.warning(
-            f"initial_value ({initial_value}) and "
-            f"initial_width ({initial_width}) will be ignored "
+            f"initial value ({initial_value}) and "
+            f"initial width ({initial_width}) will be ignored "
             f"because at least one of them is not set")
         initial_value = None
         initial_width = None

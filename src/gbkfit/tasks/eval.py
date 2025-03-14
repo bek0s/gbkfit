@@ -170,12 +170,19 @@ def eval_(
         _log.info("setting up datasets...")
         datasets = gbkfit.dataset.dataset_parser.load(cfg['datasets'])
 
-    _log.info("setting up model...")
+    _log.info("setting up models...")
     models = gbkfit.model.model_parser.load(cfg['models'], dataset=datasets)
     model_group = gbkfit.model.ModelGroup(models)
 
+    objective = None
+    if mode == 'objective':
+        _log.info("setting up objective...")
+        objective = gbkfit.objective.objective_parser.load(
+            cfg.get('objective', {}), datasets=datasets, models=model_group)
+
     _log.info("setting up pdescs...")
-    pdescs = model_group.pdescs()
+    pdescs = objective.pdescs() \
+        if objective is not None else model_group.pdescs()
     if 'pdescs' in cfg:
         user_pdescs = gbkfit.params.load_pdescs_dict(cfg['pdescs'])
         pdescs = _detail.merge_pdescs(pdescs, user_pdescs)
@@ -185,24 +192,19 @@ def eval_(
     params = gbkfit.params.evaluation_params_parser.load(
         cfg['params'], pdescs=pdescs)
 
-    objective = None
-    if mode == 'objective':
-        _log.info("setting up objective...")
-        objective = gbkfit.objective.objective_parser.load(
-            cfg.get('objective', {}), datasets=datasets, models=model_group)
-
+    print(params.dump('foo.py'))
+    exit()
     #
     # Calculate model parameters
     #
 
     _log.info("calculating model parameters...")
-    # HERE!!!! make null => {}
 
-    eparams = {}
-    params = params.evaluate(eparams)
+    exploded_param_values = {}
+    param_values = params.evaluate(out_exploded_params=exploded_param_values)
     params_info = iterutils.nativify(dict(
-        params=params,
-        eparams=eparams))
+        params=param_values,
+        eparams=exploded_param_values))
     filename = os.path.join(output_dir, 'gbkfit_eval_params')
     _detail.dump_dict(json, yaml, params_info, filename)
 
@@ -210,23 +212,21 @@ def eval_(
     # Evaluate objective
     #
 
-    _log.info("evaluating objective...")
-
     # Always evaluate model
     model_extra = {}
     model_data = []
     if mode == 'model':
         print(params)
-        model_data = model_group.model_h(params, None)
+        model_data = model_group.model_h(param_values, None)
 
     resid_u_extra = {}
     resid_u_data = []
     resid_w_extra = {}
     resid_w_data = []
     if mode == 'objective':
-        resid_u_data = objective.residual_nddata_h(params, resid_u_extra)
+        resid_u_data = objective.residual_nddata_h(param_values, resid_u_extra)
         resid_w_data = []  # objective.residual_nddata_h(params, True, resid_w_extra)
-        foo = objective.residual_scalar(params, True)
+        foo = objective.residual_scalar(param_values, True)
         print(params)
         print("residual:", foo)
 

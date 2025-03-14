@@ -33,14 +33,18 @@ def _prepare_params(
         info: dict[str, Any],
         pdescs: dict[str, ParamDesc]
 ) -> dict[str, Any]:
+
+    # Copy info for safety
+    info = copy.deepcopy(info)
+
     # Prepare the supplied parameter properties. This will:
     # - Ensure the parameter keys are valid
     # - Explode all parameter names that are can be exploded
     parameters = gbkfit.params.parse_param_info(
-        info.get('properties'), pdescs)
+        info.get('properties'), pdescs).info
 
     # Update parameter info and return it
-    return info | dict(parameters=parameters)
+    return info | dict(properties=parameters)
 
 
 def fit(config: str,
@@ -94,7 +98,7 @@ def fit(config: str,
 
     _log.info("setting up objective...")
     objective = gbkfit.objective.objective_parser.load(
-        cfg.get('objective', {}), datasets, model_group)
+        cfg.get('objective', {}), datasets=datasets, models=model_group)
 
     _log.info("setting up fitter...")
     fitter = gbkfit.fitting.fitter_parser.load(cfg['fitter'])
@@ -107,9 +111,6 @@ def fit(config: str,
 
     _log.info("setting up params...")
     cfg['params'] = _prepare_params(cfg['params'], pdescs)
-
-    print(cfg['params'])
-    exit()
 
     params = fitter.load_params(cfg['params'], pdescs)
 
