@@ -102,7 +102,7 @@ def to_native_byteorder(arr: np.ndarray) -> np.ndarray:
     return arr if arr.dtype.isnative else arr.byteswap().view(arr.dtype.newbyteorder('='))
 
 
-def make_unique_path(path: str) -> str:
+def make_unique_path(path: pathlib.Path) -> pathlib.Path:
     """
     Generate a unique file path by appending an incrementing number.
 
@@ -111,12 +111,12 @@ def make_unique_path(path: str) -> str:
     """
     path = pathlib.Path(path)
     if not path.exists():
-        return str(path)
+        return path
     base, ext = path.stem, path.suffix
     i = 1
     while (new_path := path.with_name(f"{base}_{i}{ext}")).exists():
         i += 1
-    return str(new_path)
+    return new_path
 
 
 def get_source(

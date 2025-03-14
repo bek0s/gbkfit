@@ -7,12 +7,11 @@ import scipy.special
 import scipy.stats
 
 
-def is_even(x):
-    return not is_odd(x)
-
-
 def is_odd(x):
-    return int(x) & 1
+    return int(x) % 2 != 0
+
+def is_even(x):
+    return int(x) % 2 == 0
 
 
 is_even = np.vectorize(is_even)

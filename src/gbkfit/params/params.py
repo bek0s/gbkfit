@@ -15,8 +15,8 @@ from gbkfit.utils import parseutils
 
 
 __all__ = [
-    'Param',
     'Params',
+    'ParamProperty',
     'EvaluationParams',
     'evaluation_params_parser'
 ]
@@ -25,23 +25,7 @@ __all__ = [
 _log = logging.getLogger(__name__)
 
 
-class Param(abc.ABC):
-    pass
-
-
 class ParamProperty:
-    pass
-
-
-class FittingParamProperty(ParamProperty):
-    pass
-
-
-class ModelParams:
-    pass
-
-
-class FittingParams:
     pass
 
 
@@ -50,23 +34,34 @@ class Params(abc.ABC):
     def __init__(
             self,
             pdescs: dict[str, ParamDesc],
-            expressions_dict: dict[str, Any],
-            expressions_func: Callable
+            properties: dict[str, Any],
+            property_types: type | tuple[()] | tuple[type],
+            transforms: Callable | None
     ):
+        values, expressions = (
+            param_parsers.parse_param_values_strict(
+                properties, pdescs, value_types=property_types))
         self._pdescs = copy.deepcopy(pdescs)
-        self._expressions_dict = copy.deepcopy(expressions_dict)
-        self._expressions_func = copy.deepcopy(expressions_func)
-        self._interpreter = Interpreter(
-            pdescs, expressions_dict, expressions_func)
+        self._values = values
+        self._properties = copy.deepcopy(properties)
+        self._expressions = copy.deepcopy(expressions)
+        self._transforms = copy.deepcopy(transforms)
+        self._interpreter = Interpreter(pdescs, expressions, transforms)
 
     def pdescs(self) -> dict[str, ParamDesc]:
         return self._pdescs
 
-    def expressions_dict(self) -> dict[str, Any]:
-        return self._expressions_dict
+    def properties(self) -> dict[str, Any]:
+        return self._properties
 
-    def conversions_func(self) -> Callable:
-        return self._expressions_func
+    def expressions(self) -> dict[str, Any]:
+        return self._expressions
+
+    def transforms(self) -> Callable:
+        return self._transforms
+
+    def exploded_properties_with_values(self) -> dict[str, Any]:
+        return self._values
 
 
 class EvaluationParams(parseutils.BasicSerializable, Params):
@@ -77,34 +72,25 @@ class EvaluationParams(parseutils.BasicSerializable, Params):
         if pdescs is None:
             raise RuntimeError("pdescs were not provided")
         desc = parseutils.make_basic_desc(cls, 'params')
-        info = param_parsers.load_params_parameters_conversions(
+        info = param_parsers.load_params_properties_transforms(
             info, pdescs, Real, lambda x: x)
         opts = parseutils.parse_options_for_callable(
-            info, desc, cls.__init__, fun_ignore_args={'pdescs'})
+            info, desc, cls.__init__, fun_ignore_args=['pdescs'])
         return cls(pdescs, **opts)
 
-    def dump(self, conversions_file):
-        return param_parsers.dump_params_parameters_conversions(
-            self, Param, lambda x: x, conversions_file)
+    def dump(self, transforms_filename='transforms.py'):
+        return param_parsers.dump_params_properties_transforms(
+            self, ParamProperty, lambda x: x, transforms_filename)
 
     def __init__(
             self,
             pdescs: dict[str, ParamDesc],
             properties: dict[str, Any],
-            expressions_func: Callable | None = None
+            transforms: Callable | None = None
     ):
-        # Treat all acceptable values as expressions because
-        # we will be passing them to super()._interpreter which can
-        # handle everything correctly. No need to complicate things.
-        values_dict, expressions_dict = (
-            param_parsers.parse_param_values_strict(
-                properties, pdescs, value_types=()))
-        # Invalid values should have been caught by now.
-        if values_dict:
-            raise RuntimeError("impossible")
-        # print(f"values_dict: {values_dict}")
-        # print(f"expressions_dict: {expressions_dict}")
-        super().__init__(pdescs, expressions_dict, expressions_func)
+        # By passing an empty tuple we treat all acceptable values as
+        # expressions.
+        super().__init__(pdescs, properties, (), transforms)
 
     def exploded_names(
             self, fixed: bool = True, tied: bool = True

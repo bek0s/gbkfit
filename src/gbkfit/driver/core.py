@@ -26,7 +26,7 @@ class DriverNativeModules(abc.ABC):
 class Driver(parseutils.TypedSerializable, abc.ABC):
 
     @classmethod
-    def load(cls, info):
+    def load(cls, info, *args, **kwargs):
         return cls()
 
     def dump(self):

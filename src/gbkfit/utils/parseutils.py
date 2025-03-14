@@ -19,7 +19,7 @@ TypeInfo: TypeInfoOne | TypeInfoMany
 
 
 def make_basic_desc(
-        cls: type['BasicSerializable'],
+        cls: type,
         label: str
 ) -> str:
     """

@@ -1,38 +1,40 @@
 
 import abc
+from collections.abc import Callable
+from typing import Any
 
-from gbkfit.params.parsers import parse_param_values_strict
+from gbkfit.params import ParamDesc
 from gbkfit.utils import parseutils
 
-from gbkfit.params.params import Param, Params
+from gbkfit.params.params import ParamProperty, Params
 
 
-class FitParam(Param, abc.ABC):
+class FittingParamProperty(ParamProperty, abc.ABC):
     pass
 
 
-class FitParams(Params, abc.ABC):
+class FittingParams(Params, abc.ABC):
 
-    def __init__(self, descs, parameters, conversions, param_type):
-        infos, exprs = parse_param_values_strict(parameters, descs, param_type)
-        super().__init__(descs, parameters, exprs, conversions)
-        self._infos = infos
+    def __init__(
+            self,
+            pdescs: dict[str, ParamDesc],
+            properties: dict[str, Any],
+            property_types: type | tuple[()] | tuple[type],
+            transforms: Callable | None
+    ):
+        super().__init__(pdescs, properties, property_types, transforms)
 
-    def infos(self):
-        return self._infos
-
-    def enames(self, fixed=True, tied=True, free=True):
-        return self._interpreter.enames(fixed=fixed, tied=tied, free=free)
+    def exploded_names(
+            self, fixed: bool = True, tied: bool = True, free: bool = True
+    ) -> list[str]:
+        return self._interpreter.exploded_names(
+            fixed=fixed, tied=tied, free=free)
 
     def evaluate(self, in_eparams, out_eparams=None, check=True):
-        return self._interpreter.evaluate(in_eparams, out_eparams, check)
+        return self._interpreter.evaluate(in_eparams, check, out_eparams)
 
 
 class Fitter(parseutils.TypedSerializable, abc.ABC):
-
-    @abc.abstractmethod
-    def load_params(self, info, desc):
-        pass
 
     def __init__(self, *args, **kwargs):
         pass

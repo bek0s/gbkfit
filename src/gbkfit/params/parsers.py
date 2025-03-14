@@ -27,8 +27,8 @@ __all__ = [
     'parse_param_values',
     'parse_param_expressions',
     'parse_param_info',
-    'load_params_parameters',
-    'dump_params_parameters'
+    'load_params_properties',
+    'dump_params_properties'
 ]
 
 
@@ -377,7 +377,7 @@ def parse_param_values(
 def parse_param_values_strict(
         params: dict[str, Any],
         pdescs: dict[str, ParamDesc],
-        value_types: tuple[Any, ...]
+        value_types: tuple[Any, ...],
 ) -> tuple[dict[str, Any], dict[str, str]]:
     """
     Strictly parse parameter values, enforcing type constraints.
@@ -908,7 +908,7 @@ def parse_param_info(
         parse_param_keys_result)
 
 
-def load_params_parameters(
+def load_params_properties(
         info: dict[str, Any],
         pdescs: dict[str, ParamDesc],
         param_types: type | tuple[type, ...],
@@ -928,7 +928,7 @@ def load_params_parameters(
     return values | expressions
 
 
-def dump_params_parameters(
+def dump_params_properties(
         parameters,
         param_types,
         param_dumper
@@ -965,7 +965,7 @@ def dump_params_conversions(func, file):
     return _dump_function(func, file)
 
 
-def load_params_parameters_conversions(
+def load_params_properties_transforms(
         info: dict[str, Any],
         pdescs: dict[str, ParamDesc],
         param_types: type | tuple[type, ...],
@@ -973,7 +973,7 @@ def load_params_parameters_conversions(
 ):
     info = copy.deepcopy(info)
     # parseutils.load_option_and_update_info(param_loader, info, 'properties', )
-    info['properties'] = load_params_parameters(
+    info['properties'] = load_params_properties(
         info['properties'], pdescs, param_types, param_loader)
     if 'conversions' in info:
         info['conversions'] = load_params_conversions(
@@ -983,14 +983,14 @@ def load_params_parameters_conversions(
     return info
 
 
-def dump_params_parameters_conversions(
+def dump_params_properties_transforms(
         params, param_types, param_dumper, conversions_file):
     info = dict()
-    info.update(parameters=dump_params_parameters(
-        params.parameters(), param_types, param_dumper))
-    if params.conversions():
-        info.update(conversions=dump_params_conversions(
-            params.conversions(), conversions_file))
+    info.update(properties=dump_params_properties(
+        params.properties(), param_types, param_dumper))
+    # if params.conversions():
+    #     info.update(transforms=dump_params_conversions(
+    #         params.conversions(), conversions_file))
     return info
 
 
@@ -1016,7 +1016,7 @@ def load_params_common(
     if 'descriptions' in info:
         pdescs_new = load_pdescs_dict(info['descriptions'])
         pdescs = _merge_pdescs(pdescs, pdescs_new)
-    info['parameters'] = load_params_parameters(
+    info['parameters'] = load_params_properties(
         info['parameters'], pdescs, param_types, param_loader)
     if 'conversions' in info:
         info['conversions'] = load_params_conversions(

@@ -1,7 +1,8 @@
 
 import abc
 import copy
-from typing import Literal
+from collections.abc import Callable
+from typing import Any, Literal, Mapping, Sequence
 
 import emcee.moves
 
@@ -23,7 +24,7 @@ __all__ = [
 ]
 
 
-def _locals_to_options(locals_):
+def _locals_to_options(locals_: dict[str, Any]) -> dict[str, Any]:
     locals_ = copy.deepcopy(locals_)
     locals_.pop('self')
     locals_.pop('__class__')
@@ -33,28 +34,27 @@ def _locals_to_options(locals_):
 class FitterEmceeMove(parseutils.TypedSerializable, abc.ABC):
 
     @classmethod
-    def load(cls, info):
+    def load(cls, info: dict[str, Any], *args, **kwargs) -> 'FitterEmceeMove':
         desc = parseutils.make_typed_desc(cls, 'emcee fitter move')
         opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
         return cls(**opts)
 
-    def dump(self):
+    def dump(self) -> dict[str, Any]:
         info = copy.deepcopy(self._options)
-        info = iterutils.remove_from_mapping_by_value(info, None)
-        return info
+        return dict(iterutils.remove_from_mapping_by_value(info, None))
 
-    def __init__(self, cls, options):
+    def __init__(self, cls: type, options: dict[str, Any]):
         self._options = copy.deepcopy(options)
         self._move = cls(**self._options)
 
-    def obj(self):
+    def obj(self) -> emcee.moves.Move:
         return self._move
 
 
 class FitterEmceeMoveStretch(FitterEmceeMove):
 
     @staticmethod
-    def type():
+    def type() -> str:
         return 'stretch'
 
     def __init__(
@@ -71,7 +71,7 @@ class FitterEmceeMoveStretch(FitterEmceeMove):
 class FitterEmceeMoveWalk(FitterEmceeMove):
 
     @staticmethod
-    def type():
+    def type() -> str:
         return 'walk'
 
     def __init__(
@@ -88,12 +88,12 @@ class FitterEmceeMoveWalk(FitterEmceeMove):
 class FitterEmceeMoveKDE(FitterEmceeMove):
 
     @staticmethod
-    def type():
+    def type() -> str:
         return 'kde'
 
     def __init__(
             self,
-            bw_method=None,  # todo: add type
+            bw_method: str | int | float | Callable | None = None,
             nsplits: int = 2,
             randomize_split: bool = True,
             live_dangerously: bool = False
@@ -105,7 +105,7 @@ class FitterEmceeMoveKDE(FitterEmceeMove):
 class FitterEmceeMoveDE(FitterEmceeMove):
 
     @staticmethod
-    def type():
+    def type() -> str:
         return 'de'
 
     def __init__(
@@ -123,7 +123,7 @@ class FitterEmceeMoveDE(FitterEmceeMove):
 class FitterEmceeMoveDESnooker(FitterEmceeMove):
 
     @staticmethod
-    def type():
+    def type() -> str:
         return 'desnooker'
 
     def __init__(
@@ -140,12 +140,12 @@ class FitterEmceeMoveDESnooker(FitterEmceeMove):
 class FitterEmceeMoveMH(FitterEmceeMove):
 
     @staticmethod
-    def type():
+    def type() -> str:
         return 'mh'
 
     def __init__(
             self,
-            proposal_function,  # todo: add type
+            proposal_function: Callable,
             ndim: int | None = None
     ):
         super().__init__(
@@ -155,7 +155,7 @@ class FitterEmceeMoveMH(FitterEmceeMove):
 class FitterEmceeMoveGaussian(FitterEmceeMove):
 
     @staticmethod
-    def type():
+    def type() -> str:
         return 'gauss'
 
     def __init__(
@@ -178,12 +178,16 @@ move_parser = parseutils.TypedParser(FitterEmceeMove, [
     FitterEmceeMoveGaussian])
 
 
-def load_moves_with_weights(info):
+def load_moves_with_weights(
+        info: Mapping[str, Any] | Sequence[Mapping[str, Any]]
+) -> tuple[tuple[FitterEmceeMove, float], ...]:
     info = iterutils.tuplify(info, False)
-    weights = [m.pop('weight', 1) for m in info]
+    weights = [m.pop('weight', 1.0) for m in info]
     moves = move_parser.load_many(info)
     return tuple(zip(moves, weights))
 
 
-def dump_moves_with_weights(moves):
+def dump_moves_with_weights(
+        moves: tuple[tuple[FitterEmceeMove, int | float], ...]
+) -> list[dict[str, Any]]:
     return [dict(weight=w) | move_parser.dump_one(m) for m, w in moves]

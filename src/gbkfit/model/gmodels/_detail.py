@@ -352,7 +352,7 @@ def evaluate_components_b2d(
         spat_size, spat_step, spat_zero, spat_rota,
         dtype, out_extra, out_extra_label):
     for i, (component, mapping) in enumerate(zip(components, mappings)):
-        component_params = {p: params[mapping[p]] for p in component.params()}
+        component_params = {p: params[mapping[p]] for p in component.pdescs()}
         component_out_extra = {} if out_extra is not None else None
         component.evaluate(
             driver, component_params,

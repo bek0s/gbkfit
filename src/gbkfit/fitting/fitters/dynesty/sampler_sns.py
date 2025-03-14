@@ -1,7 +1,7 @@
 
 import collections.abc
 import copy
-from typing import Literal
+from typing import Any, Literal
 
 import dynesty
 import dynesty.sampler
@@ -25,11 +25,11 @@ __all__ = [
 ]
 
 
-class FitParamDynestySNS(FitParamDynesty):
+class FittingParamPropertyDynestySNS(FitParamDynesty):
 
     @classmethod
     def load(cls, info):
-        info['prior'] = fitutils.prepare_param_prior_info(info)
+        info['prior'] = fitutils.prepare_param_info_prior(info)
         info['prior'] = prior_parser.load(info['prior'], param_info=info)
         desc = parseutils.make_basic_desc(cls, 'fit parameter')
         opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
@@ -63,8 +63,6 @@ class FitParamsDynestySNS(FitParamsDynesty):
 
     @classmethod
     def load(cls, info, pdescs):
-        print(info)
-        e
         desc = parseutils.make_basic_desc(cls, 'fit params')
         opts = parseutils.parse_options_for_callable(
             info, desc, cls.__init__, fun_ignore_args=['pdescs'])
@@ -78,8 +76,8 @@ class FitParamsDynestySNS(FitParamsDynesty):
             info[k] = v.dump() if isinstance(v, FitParamDynestySNS) else v
         return info
 
-    def __init__(self, pdescs, parameters, value_conversions=None):
-        super().__init__(pdescs, parameters, value_conversions,
+    def __init__(self, pdescs, properties, value_conversions=None):
+        super().__init__(pdescs, properties, value_conversions,
                          FitParamDynestySNS)
 
         self._priors = PriorDict(
@@ -113,19 +111,20 @@ class FitterDynestySNS(FitterDynesty):
             self,
             # dynesty.dynesty.NestedSampler()
             nlive: int,
-            bound:
-            Literal['none', 'single', 'multi', 'balls', 'cubes'] = 'multi',
+            bound: Literal[
+                'none', 'single', 'multi', 'balls', 'cubes'] = 'multi',
             sample:
-            Literal['auto', 'unif', 'rwalk', 'slice', 'rslice'] = 'auto',
-            update_interval: int | float | None = None,
-            first_update: int | float | None = None,
+            Literal[
+                'auto', 'unif', 'rwalk', 'slice', 'rslice', 'hslice'] = 'auto',
+            update_interval: int | None = None,
+            first_update: dict[str, Any] | None = None,
             seed: int = 0,
             enlarge: int | float | None = None,
             bootstrap: int | None = None,
             walks: int | None = None,
-            facc: float | None = 0.5,
+            facc: int | float | None = 0.5,
             slices: int | None = None,
-            fmove: float | None = 0.9,
+            fmove: int | float | None = 0.9,
             max_move: int | None = 100,
             ncdim: int | None = None,
             # dynesty.sampler.Sampler.run_nested()
@@ -136,24 +135,18 @@ class FitterDynestySNS(FitterDynesty):
             n_effective: int | None = None,
             add_live: bool = True,
             print_progress: bool = True,
-            print_func=None,
             save_bounds: bool = True
-            # todo: investigate options:
-            #   dynesty.dynesty.NestedSampler():
-            #     queue_size, pool, use_pool,
-            #     save_history, history_filename
-            #   dynesty.sampler.Sampler.run_nested():
-            #     checkpoint_file, checkpoint_every, resume
     ):
-        # Extract dynesty.NestedSampler() arguments
-        args_factory = iterutils.extract_subdict(
-            locals(), funcutils.extract_args(
-                dynesty.NestedSampler)[0])
-        # Extract dynesty.sampler.Sampler.run_nested() arguments
-        args_run_nested = iterutils.extract_subdict(
-            locals(), funcutils.extract_args(
-                dynesty.sampler.Sampler.run_nested)[0])
-        super().__init__(args_factory, args_run_nested)
+        locals_ = copy.deepcopy(locals())
+        constructor_args = funcutils.extract_args(
+            dynesty.NestedSampler)[0]
+        run_nested_args = funcutils.extract_args(
+            dynesty.sampler.Sampler.run_nested)[0]
+        constructor_args_found = (
+            iterutils.extract_sublist(constructor_args, locals_))[0]
+        run_nested_args_found = (
+            iterutils.extract_sublist(run_nested_args, locals_))[0]
+        super().__init__(constructor_args, run_nested_args_found)
 
     def _fit_impl(self, objective, parameters):
         ndim = len(parameters.infos())

@@ -286,6 +286,23 @@ def is_sequence_of_type(
     return is_sequence_ and all(isinstance(i, type_) for i in x)
 
 
+def extract_sublist(
+        x: Sequence[Any],
+        items: Sequence[Any],
+) -> tuple[list[Any], list[Any]]:
+    """
+    Extract a subset of items from a sequence as a dict.
+    """
+    result = []
+    missing = []
+    for item in items:
+        if item in x:
+            result.append(item)
+        else:
+            missing.append(item)
+    return result, missing
+
+
 def extract_subdict(
         x: Mapping[Any, Any],
         keys: Iterable[Any],
