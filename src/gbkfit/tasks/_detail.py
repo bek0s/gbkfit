@@ -102,34 +102,33 @@ def make_output_dir(
     """
     Handle directory path based on specified mode and create the
     directory.
+
+    Notes
+    -----
+    TODO:
+        The code is susceptible to race conditions.
+        As a temporary measure, all calls to `pathlib.Path.mkdir()`
+        have the argument `exists_ok` set to `False`.
+        Update the code to handle race conditions gracefully.
     """
     path_obj = Path(path).absolute()
-    result_path = str(path_obj)
-
-    # Handle current directory case
-    if path_obj.samefile(Path.cwd()):
-        return result_path
-
     # Handle non-existent path case
     if not path_obj.exists():
-        Path(result_path).mkdir(parents=True, exist_ok=True)
-        return result_path
-
-    # At this point it is guaranteed that the path exists
-
+        # exists_ok=False: a crude way to protect from race conditions
+        path_obj.mkdir(parents=True, exist_ok=False)
+        return str(path_obj)
     # Handle file exists case
     if path_obj.is_file():
-        raise RuntimeError(f"path '{path}' exists as a file")
-
+        raise RuntimeError(f"path '{str(path_obj)}' exists as a file")
     # Handle directory exists case
     if mode == 'terminate':
-        raise RuntimeError(f"path '{path}' already exists")
+        raise RuntimeError(f"path '{str(path_obj)}' already exists")
     if mode == 'unique':
-        result_path = miscutils.make_unique_path(str(path_obj))
-        Path(result_path).mkdir(parents=True, exist_ok=True)
-
+        path_obj = miscutils.make_unique_path(path_obj)
+        # exists_ok=False: a crude way to protect from race conditions
+        path_obj.mkdir(parents=True, exist_ok=False)
     # Handle directory exists but mode == 'overwrite' case
-    return result_path
+    return str(path_obj)
 
 
 def dump_dict(json_, yaml_, info: Any, filename: str) -> None:

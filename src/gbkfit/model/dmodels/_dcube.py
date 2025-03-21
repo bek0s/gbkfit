@@ -1,8 +1,12 @@
 
 import logging
+from typing import Any
+
+import numpy as np
 
 import gbkfit.math
-
+from gbkfit.driver import Driver
+from gbkfit.psflsf import LSF, PSF
 from gbkfit.psflsf.lsfs import LSFPoint
 from gbkfit.psflsf.psfs import PSFPoint
 
@@ -13,8 +17,21 @@ _log = logging.getLogger(__name__)
 class DCube:
 
     def __init__(
-            self, size, step, rpix, rval, rota, scale, psf, lsf,
-            weight, mask_cutoff, mask_create, mask_apply, dtype):
+            self,
+            size: tuple[int, int, int],
+            step: tuple[float, float, float],
+            rpix: tuple[float, float, float],
+            rval: tuple[float, float, float],
+            rota: float,
+            scale: tuple[int, int, int],
+            psf: PSF | None,
+            lsf: LSF | None,
+            weight,
+            mask_cutoff: float | None,
+            mask_create: bool,
+            mask_apply: bool,
+            dtype: type[np.float16, np.float32, np.float64]
+    ):
 
         if mask_cutoff is None and mask_apply:
             raise RuntimeError(
@@ -66,57 +83,57 @@ class DCube:
         self._backend_fft = None
         self._backend_dmodel = None
 
-    def size(self):
+    def size(self) -> tuple[int, int, int]:
         return self._size_lo
 
-    def step(self):
+    def step(self) -> tuple[float, float, float]:
         return self._step_lo
 
-    def zero(self):
+    def zero(self) -> tuple[float, float, float]:
         return self._zero_lo
 
-    def rota(self):
+    def rota(self) -> float:
         return self._rota
 
-    def dcube(self):
-        return self._dcube_lo
-
-    def wcube(self):
-        return self._wcube_lo
-
-    def mcube(self):
-        return self._mcube_lo
-
-    def scratch_size(self):
-        return self._size_hi
-
-    def scratch_step(self):
-        return self._step_hi
-
-    def scratch_zero(self):
-        return self._zero_hi
-
-    def scratch_dcube(self):
-        return self._dcube_hi
-
-    def scratch_wcube(self):
-        return self._wcube_hi
-
-    def scale(self):
+    def scale(self) -> tuple[int, int, int]:
         return self._scale
 
-    def psf(self):
+    def dcube(self) -> Any:
+        return self._dcube_lo
+
+    def wcube(self) -> Any:
+        return self._wcube_lo
+
+    def mcube(self) -> Any:
+        return self._mcube_lo
+
+    def scratch_size(self) -> tuple[int, int, int]:
+        return self._size_hi
+
+    def scratch_step(self) -> tuple[float, float, float]:
+        return self._step_hi
+
+    def scratch_zero(self) -> tuple[float, float, float]:
+        return self._zero_hi
+
+    def scratch_dcube(self) -> Any:
+        return self._dcube_hi
+
+    def scratch_wcube(self) -> Any:
+        return self._wcube_hi
+
+    def psf(self) -> PSF | None:
         return self._psf
 
-    def lsf(self):
+    def lsf(self) -> LSF | None:
         return self._lsf
 
-    def dtype(self):
+    def dtype(self) -> type[np.float16, np.float32, np.float64]:
         return self._dtype
 
-    def prepare(self, driver, enable_weighting):
+    def prepare(self, driver: Driver, enable_weighting):
 
-        # Shortcuts
+        # Convenience variables
         size_lo = self.size()
         step_lo = self.step()
         zero_lo = self.zero()
@@ -140,13 +157,23 @@ class DCube:
             step_lo[1] / scale[1],
             step_lo[2] / scale[2])
 
-        # High-res psf/lsf size
-        psf_size_hi = psf.size(step_hi[:2]) if psf else (1, 1)
-        lsf_size_hi = lsf.size(step_hi[2]) if lsf else 1
+        # Convenience variables
+        spat_size_lo = (size_lo[0], size_lo[1])
+        spec_size_lo = size_lo[2]
+        spat_step_lo = (step_lo[0], step_lo[1])
+        spec_step_lo = step_lo[2]
+        spat_size_hi = (size_hi[0], size_hi[1])
+        spec_size_hi = size_hi[2]
+        spat_step_hi = (step_hi[0], step_hi[1])
+        spec_step_hi = step_hi[2]
 
-        # If psf/lsf was provided, we need to convolve the model cube with it.
-        # We always perform an fft-based convolution because it is faster.
-        # Fft-based convolution requires some padding on the model cube.
+        # High-res psf/lsf size
+        psf_size_hi = psf.size(spat_step_hi) if psf else (1, 1)
+        lsf_size_hi = lsf.size(spec_step_hi) if lsf else 1
+
+        # If psf/lsf was provided, we convolve the model cube with it.
+        # We always perform fft-based convolution because it is faster.
+        # Fft-based convolution requires padding on the model cube.
         edge_hi = [0, 0, 0]
         if psf or lsf:
             # Get convolution shape and left offset due to padding
@@ -163,10 +190,14 @@ class DCube:
         # If they have an even size, they must be offset by -1 pixel
         # This is because in most cases the psf/lsf have a central peak
         offset = gbkfit.math.is_odd(size_hi) - 1
-        psfargs = (step_hi[:2], size_hi[:2], offset[:2])
-        lsfargs = (step_hi[2], size_hi[2], offset[2])
-        psf_hi = psf.asarray(*psfargs) if psf else PSFPoint().asarray(*psfargs)
-        lsf_hi = lsf.asarray(*lsfargs) if lsf else LSFPoint().asarray(*lsfargs)
+        spat_offset = offset[:2]
+        spec_offset = offset[2]
+        psf_args = (spat_step_hi, spat_size_hi, spat_offset)
+        lsf_args = (spec_step_hi, spec_size_hi, spec_offset)
+        psf_hi = psf.asarray(*psf_args) if psf \
+            else PSFPoint().asarray(*psf_args)
+        lsf_hi = lsf.asarray(*lsf_args) if lsf \
+            else LSFPoint().asarray(*lsf_args)
 
         # Create high-res psf/lsf cube, if psf/lsf was provided
         # The psf cube will be used for the fft-based convolution
@@ -181,7 +212,7 @@ class DCube:
         # Create low- and high-res data and weight cubes.
         # If the low- and high-res versions have the same size,
         # just create one and have the latter point to the former.
-        # This can happen when there is no supersampling or padding.
+        # This can happen when there is no super-sampling or padding.
         self._dcube_lo = driver.mem_alloc_d(size_lo[::-1], dtype)
         self._dcube_hi = driver.mem_alloc_d(size_hi[::-1], dtype) \
             if size_lo != size_hi else self._dcube_lo
@@ -207,7 +238,7 @@ class DCube:
         self._backend_fft = backend_fft
         self._backend_dmodel = driver.backends().dmodel(dtype)
 
-    def evaluate(self, out_extra):
+    def evaluate(self, out_extra: dict[str, Any] | None) -> None:
 
         # Convenience shortcuts
         step_lo = self._step_lo

@@ -192,8 +192,6 @@ def eval_(
     params = gbkfit.params.evaluation_params_parser.load(
         cfg['params'], pdescs=pdescs)
 
-    print(params.dump('foo.py'))
-    exit()
     #
     # Calculate model parameters
     #
