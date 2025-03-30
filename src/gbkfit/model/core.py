@@ -89,7 +89,7 @@ class GModel(parseutils.TypedSerializable, abc.ABC):
         pass
 
     @abc.abstractmethod
-    def is_weighted(self):
+    def has_weights(self):
         pass
 
 

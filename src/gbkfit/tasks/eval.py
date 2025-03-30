@@ -215,7 +215,7 @@ def eval_(
     model_data = []
     if mode == 'model':
         print(params)
-        model_data = model_group.model_h(param_values, None)
+        model_data = model_group.model_h(param_values, model_extra)
 
     resid_u_extra = {}
     resid_u_data = []

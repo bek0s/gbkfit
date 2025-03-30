@@ -113,7 +113,7 @@ class DriverBackendDModelNative(DriverBackendDModel):
             scale, edge_hi, _shape(cube_hi)[::-1], _shape(cube_lo)[::-1],
             _ptr(cube_hi), _ptr(cube_lo))
 
-    def dcube_mask(self, cutoff, apply, dcube, mcube, wcube):
+    def dcube_mask(self, cutoff, apply, mcube, dcube, wcube):
         _ptr = self._memory.ptr
         _shape = self._memory.shape
         self._module.dcube_mask(

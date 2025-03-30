@@ -343,7 +343,7 @@ def make_gmodel_3d_params(components, ocomponents):
 
 
 def is_gmodel_weighted(components):
-    return any([bool(cmp.is_weighted()) for cmp in components])
+    return any([bool(cmp.has_weights()) for cmp in components])
 
 
 def evaluate_components_b2d(

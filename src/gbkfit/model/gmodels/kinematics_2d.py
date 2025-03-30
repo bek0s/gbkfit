@@ -57,7 +57,7 @@ class GModelKinematics2D(GModelSCube):
     def pdescs(self):
         return self._params
 
-    def is_weighted(self):
+    def has_weights(self):
         return _detail.is_gmodel_weighted(self._components)
 
     def _prepare(self, driver, scube_w, size, step, zero, dtype):

@@ -12,14 +12,13 @@ __all__ = [
 
 def validate_type(value, type_):
 
-    # print("value:", value)
-    # print("type_:", type_)
-    # print("get_origin(type_):", typing.get_origin(type_))
-    # print("get_args(type_):", typing.get_args(type_))
-
     result = True
     origin = typing.get_origin(type_)
     args = typing.get_args(type_)
+
+    # Special case: allow int when float is expected
+    if type_ is float and isinstance(value, int):
+        return True
 
     # Type expected: leaf
     if origin is None:

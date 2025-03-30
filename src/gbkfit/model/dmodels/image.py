@@ -25,7 +25,8 @@ class DModelImage(DModel):
         return isinstance(gmodel, GModelImage)
 
     @classmethod
-    def load(cls, info, dataset=None):
+    def load(cls, info, *args, **kwargs):
+        dataset = kwargs.get('dataset')
         opts = _detail.load_dmodel_common(
             cls, info, 2, True, False, dataset, DatasetImage)
         return cls(**opts)
@@ -39,12 +40,10 @@ class DModelImage(DModel):
             step: Sequence[int | float] = (1, 1),
             rpix: Sequence[int | float] | None = None,
             rval: Sequence[int | float] = (0, 0),
-            rota: int | float = 0,
+            rota: float = 0,
             scale: Sequence[int] = (1, 1),
             psf: PSF | None = None,
-            weight: int | float = 1,
             mask_cutoff: int | float | None = None,
-            mask_create: bool = False,
             mask_apply: bool = False,
             dtype: str = 'float32'
     ):
@@ -59,8 +58,8 @@ class DModelImage(DModel):
         scale = tuple(scale) + (1,)
         dtype = np.dtype(dtype)
         self._dcube = _dcube.DCube(
-            size, step, rpix, rval, rota, scale, psf, None,
-            weight, mask_cutoff, mask_create, mask_apply, dtype)
+            size, step, rpix, rval, rota, scale, psf, None, False,
+            mask_cutoff, mask_apply, dtype)
 
     def keys(self):
         return ['image']
@@ -87,7 +86,7 @@ class DModelImage(DModel):
         return self._dcube.dtype()
 
     def _prepare_impl(self, gmodel):
-        self._dcube.prepare(self._driver, gmodel.is_weighted())
+        self._dcube.prepare(self._driver, gmodel.has_weights())
 
     def _evaluate_impl(self, params, out_dmodel_extra, out_gmodel_extra):
         driver = self._driver
@@ -113,11 +112,6 @@ class DModelImage(DModel):
         dcube.evaluate(out_dmodel_extra)
         # Model evaluation complete.
         # Return data, mask, and weight arrays (if available)
-
-        # import astropy.io.fits as fits
-        # fits.writeto(f"omg_{self._counter}_{int(params['xpos'])}.fits", dcube.dcube()[0, :, :], overwrite=True)
-        # self._counter += 1
-
         return dict(image=dict(
             d=dcube.dcube()[0, :, :],
             m=dcube.mcube()[0, :, :] if has_mcube else None,

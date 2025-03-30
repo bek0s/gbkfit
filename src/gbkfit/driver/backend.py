@@ -88,7 +88,7 @@ class DriverBackendDModel(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def dcube_mask(self, cutoff, apply, dcube, mcube, wcube):
+    def dcube_mask(self, cutoff, apply, mcube, dcube, wcube):
         pass
 
     @abc.abstractmethod
