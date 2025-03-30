@@ -1,11 +1,14 @@
 from abc import ABC
+from typing import Any
 
 import numpy as np
+import pytest
 
 from gbkfit.driver import Driver
 from gbkfit.model.dmodels import DModelImage
 
 from gbkfit.model import GModelImage
+from gbkfit.psflsf.lsfs import LSFGauss
 
 
 def set_middle_pixel(image_h):
@@ -50,7 +53,7 @@ class GModelImageMock(GModelImage, ABC):
     def pdescs(self):
         return dict()
 
-    def is_weighted(self):
+    def has_weights(self):
         return False
 
     def evaluate_image(
@@ -60,7 +63,7 @@ class GModelImageMock(GModelImage, ABC):
         print(image)
 
 
-def test_dmodel_image():
+def _test_dmodel_image():
 
     from gbkfit.driver.drivers.host import DriverHost
 
@@ -86,32 +89,234 @@ def test_dmodel_image():
     assert 'd' in output['image']
 
 
-def test_dcube():
+def set_pixel(
+        coord: tuple[int, int, int],
+        value: float,
+        cube: np.ndarray,
+        size: tuple[int, int, int],
+        edge: tuple[int, int, int]
+) -> None:
+    pass
+
+
+
+def _test_dcube(driver: Driver):
 
     from gbkfit.model.dmodels._dcube import DCube
     from gbkfit.psflsf.psfs import PSFGauss
 
-    size = (51, 51, 1)
-    step = (1.0, 1.0, 1.0)
-    rpix = (0.0, 0.0, 0.0)
-    rval = (0.0, 0.0, 0.0)
-    rota = 0.0
-    scale = (1, 1, 1)
-    psf = PSFGauss(5)
-    lsf = None
-    weight = None
-    mask_cutoff = None
-    mask_create = None
-    mask_apply = None
+    size = (21, 30, 41)
+    step = (0.5, 1.5, 2.0)
+    rpix = (5.0, 6.5, 7.5)
+    rval = (1.0, 1.5, 2.0)
+    scale = (2, 3, 4)
+    psf = PSFGauss(2)
+    lsf = LSFGauss(5)
+
+    args = dict(
+        size=size,
+        step=step,
+        rpix=rpix,
+        rval=rval,
+        rota=0.0,
+        scale=(1, 1, 1),
+        psf=None,
+        lsf=None,
+        smooth_weights=False,
+        mask_cutoff=None,
+        mask_apply=False,
+        dtype=np.float32
+    )
+
+    #
+    # Test size, step, rpix, rval.
+    #
+
+    dcube = DCube(**args)
+    dcube.prepare(driver, False)
+
+    expected_zero = (-1.5, -8.25, -13.0)
+    expected_shape = size[::-1]
     dtype = np.float32
 
+    assert dcube.size() == size
+    assert dcube.step() == step
+    assert dcube.zero() == expected_zero
+    assert dcube.dcube() is not None
+    assert dcube.dcube().shape == expected_shape
+    assert dcube.wcube() is None
+    assert dcube.mcube() is None
+
+    assert dcube.scratch_size() == size
+    assert dcube.scratch_step() == step
+    assert dcube.scratch_zero() == expected_zero
+    assert dcube.scratch_dcube() is dcube.dcube()
+    assert dcube.scratch_dcube().shape == expected_shape
+    assert dcube.scratch_wcube() is None
+
+    dcube_h_1 = driver.mem_alloc_h(expected_shape, dtype)
+    dcube_h_2 = driver.mem_alloc_h(expected_shape, dtype)
+    dcube_h_1.fill(42)
+    driver.mem_copy_h2d(dcube_h_1, dcube.scratch_dcube())
+    out_extra = {}
+    dcube.evaluate(out_extra)
+    driver.mem_copy_d2h(dcube.scratch_dcube(), dcube_h_2)
+    assert np.array_equal(dcube_h_1, dcube_h_2)
+
+    #
+    # Test scale
+    #
+
+    args |= dict(scale=scale)
+
+    dcube = DCube(**args)
+    dcube.prepare(driver, False)
+
+    expected_size_hi = tuple((np.array(size) * np.array(scale)).tolist())
+    expected_step_hi = tuple((np.array(step) / np.array(scale)).tolist())
+    expected_zero_hi = tuple((np.array(expected_zero)
+                              - 0.5 * np.array(step)
+                              + 0.5 * np.array(expected_step_hi)
+                              ).tolist())
+    expected_shape_lo = size[::-1]
+    expected_shape_hi = expected_size_hi[::-1]
+
+    assert dcube.size() == size
+    assert dcube.step() == step
+    assert dcube.zero() == expected_zero
+    assert dcube.scale() == scale
+    assert dcube.dcube() is not None
+    assert dcube.dcube().shape == expected_shape_lo
+    assert dcube.wcube() is None
+    assert dcube.mcube() is None
+
+    assert dcube.scratch_size() == expected_size_hi
+    assert dcube.scratch_step() == expected_step_hi
+    assert dcube.scratch_zero() == expected_zero_hi
+    assert dcube.scratch_dcube() is not dcube.dcube()
+    assert dcube.scratch_dcube().shape == expected_shape_hi
+    assert dcube.scratch_wcube() is None
+
+    def _fill_and_read_back(driver_: Driver, dcube: DCube, value: float):
 
 
-    dcube = DCube(size, step, rpix, rval, rota, scale, psf, lsf, weight, mask_cutoff, mask_create, mask_apply, dtype)
 
-    pass
+        pass
+
+    dcube_lo_h_1 = driver.mem_alloc_h(expected_shape_lo, dtype)
+    dcube_lo_h_2 = driver.mem_alloc_h(expected_shape_lo, dtype)
+    dcube_hi_h_1 = driver.mem_alloc_h(expected_shape_hi, dtype)
+    dcube_hi_h_2 = driver.mem_alloc_h(expected_shape_hi, dtype)
+    dcube_lo_h_1.fill(42)
+    dcube_hi_h_1.fill(42)
+    driver.mem_copy_h2d(dcube_hi_h_1, dcube.scratch_dcube())
+    out_extra = {}
+    dcube.evaluate(out_extra)
+    driver.mem_copy_d2h(dcube.scratch_dcube(), dcube_hi_h_2)
+    driver.mem_copy_d2h(dcube.dcube(), dcube_lo_h_2)
+
+    assert np.array_equal(dcube_hi_h_1, dcube_hi_h_2)
+    assert np.array_equal(dcube_lo_h_1, dcube_lo_h_2)
+
+    #
+    # Test psf
+    #
+
+    # psf_min_size =
+
+    args |= dict(psf=psf, lsf=None)
+
+    dcube = DCube(**args)
+    dcube.prepare(driver, False)
+
+    assert dcube.size() == size
+    assert dcube.step() == step
+    assert dcube.zero() == expected_zero
+    assert dcube.scale() == scale
+    assert dcube.dcube() is not None
+    assert dcube.dcube().shape == expected_shape_lo
+    assert dcube.wcube() is None
+    assert dcube.mcube() is None
+
+    expected_step_hi = tuple((np.array(step) / np.array(scale)).tolist())
+    minimum_dcube_size = np.array(size) * np.array(scale)
+    minimum_pcube_size = np.array(psf.size(expected_step_hi[:2]) + (1,))
+
+    expected_dcube_size_hi, expected_edge_size_hi = (
+        driver.backends().fft(dtype).fft_convolution_shape(
+            minimum_dcube_size, minimum_pcube_size))
+
+    assert dcube.scratch_size() == expected_dcube_size_hi
+
+    dcube_lo_h_1 = driver.mem_alloc_h(expected_shape_lo, dtype)
+    dcube_lo_h_2 = driver.mem_alloc_h(expected_shape_lo, dtype)
+    dcube_hi_h_1 = driver.mem_alloc_h(expected_shape_hi, dtype)
+    dcube_hi_h_2 = driver.mem_alloc_h(expected_shape_hi, dtype)
+    dcube_lo_h_1.fill(0)
+    dcube_hi_h_1.fill(0)
+
+    # dcube_hi_h_1[expected_dcube_size_hi[1] * 15 + 10] = 1
+
+    out_extra = {}
+    dcube.evaluate(out_extra)
+
+    #
+    # Test lsf
+    #
+
+    args |= dict(psf=None, lsf=lsf)
+    dcube = DCube(**args)
+    dcube.prepare(driver, False)
+
+    #
+    # Test psf + lsf
+    #
+
+    args |= dict(psf=psf, lsf=lsf)
+    dcube = DCube(**args)
+    dcube.prepare(driver, True)
+
+    assert dcube.size() == size
+    assert dcube.step() == step
+    assert dcube.zero() == expected_zero
+    assert dcube.scale() == scale
+    assert dcube.dcube() is not None
+    assert dcube.dcube().shape == expected_shape_lo
+    assert dcube.wcube() is not None
+    assert dcube.wcube().shape == expected_shape_lo
+    assert dcube.mcube() is None
+    assert dcube.scratch_size() is not None
+    assert dcube.scratch_step() is not None
+    assert dcube.scratch_zero() is not None
+    assert dcube.scratch_edge() is not None
+    assert dcube.scratch_dcube() is not None
+    assert dcube.scratch_wcube() is not None
+    assert dcube.psf() is psf
+    assert dcube.lsf() is lsf
+    assert dcube.dtype() == np.float32
+
+
+def test_dcube_host():
+    try:
+        import gbkfit.driver.drivers.host
+    except Exception as e:
+        pytest.skip(f"host driver not available; reason: {e}")
+    from gbkfit.driver.drivers.host import DriverHost
+    _test_dcube(DriverHost())
+
+
+# def test_driver_cuda():
+#     try:
+#         import gbkfit.driver.drivers.cuda
+#         import cupy
+#         assert cupy.cuda.is_available()
+#     except Exception as e:
+#         pytest.skip(f"cuda driver not available; reason: {e}")
+#     from gbkfit.driver.drivers.cuda import DriverCuda
+#     _test_dcube(DriverCuda())
 
 
 if __name__ == '__main__':
     # test_dmodel_image()
-    test_dcube()
+    test_dcube_host()
+    # test_driver_cuda()

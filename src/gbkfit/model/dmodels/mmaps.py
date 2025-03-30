@@ -31,7 +31,8 @@ class DModelMMaps(DModel):
         return isinstance(gmodel, GModelSCube)
 
     @classmethod
-    def load(cls, info, dataset=None):
+    def load(cls, info, *args, **kwargs):
+        dataset = kwargs.get('dataset')
         opts = _detail.load_dmodel_common(
             cls, info, 2, True, True, dataset, DatasetMMaps)
         return cls(**opts)
@@ -49,7 +50,6 @@ class DModelMMaps(DModel):
             scale: Sequence[int] = (1, 1),
             psf: PSF | None = None,
             lsf: LSF | None = None,
-            weights: Sequence[int | float] | None = None,
             mask_cutoff: int | float = 1e-6,
             orders: Sequence[int] = (0, 1, 2),
             dtype: str = 'float32'
@@ -66,13 +66,6 @@ class DModelMMaps(DModel):
         dtype = np.dtype(dtype)
         if any(order < 0 or order > 7 for order in orders):
             raise RuntimeError("moment orders must be between 0 and 7")
-        if weights is None:
-            weights = len(orders) * (1,)
-        if len(weights) != len(orders):
-            raise RuntimeError(
-                f"the number of provided weights must be equal to "
-                f"the number of provided orders; "
-                f"{len(weights)} != {len(orders)}")
         if len(step) == 2:
             step = step + (1,)
         if len(size) == 2:
@@ -98,12 +91,10 @@ class DModelMMaps(DModel):
                 "erroneous and generate artefacts on the resulting maps; "
                 "because of this it is highly recommended to enable masking "
                 "by providing a value for mask_cutoff greater than 0")
-        self._weights = weights
         self._orders = orders
         self._dcube = _dcube.DCube(
             size, step, rpix, rval, rota, scale, psf, lsf,
-            # Disable DCube's intrinsic weighting and masking
-            # We deal with those in this class
+            # Disable DCube masking. We deal with it in this class.
             1, None, False, False, dtype)
         self._mmaps_o = None
         self._mmaps_d = None
@@ -159,7 +150,7 @@ class DModelMMaps(DModel):
         driver.mem_fill(self._mmaps_m, 0)
         driver.mem_fill(self._mmaps_w, 1)
         # Prepare dcube
-        self._dcube.prepare(driver, gmodel.is_weighted())
+        self._dcube.prepare(driver, gmodel.has_weights())
         # Create backend
         self._backend = driver.backends().dmodel(dtype)
 
@@ -197,14 +188,6 @@ class DModelMMaps(DModel):
             self._mmaps_d,
             self._mmaps_w,
             self._mmaps_m)
-        # Create as many copies of the evaluated weight map as the
-        # number of orders, and apply the intrinsic weights
-        for i, weight in enumerate(self._weights):
-            # Avoid unnecessary work
-            if i == 0 and weight == 1:
-                continue
-            driver.math_mul(
-                self._mmaps_w[0, :, :], weight, self._mmaps_w[i, :, :])
         # Model evaluation complete
         # Return data, mask, and weight arrays
         # The data and weight maps are different for each moment

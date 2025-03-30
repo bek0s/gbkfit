@@ -98,9 +98,9 @@ class BrightnessMCDisk3D(BrightnessComponent3D):
             dptraits=(), dhtraits=())
 
     def pdescs(self):
-        return self._disk.params()
+        return self._disk.pdescs()
 
-    def is_weighted(self):
+    def has_weights(self):
         return bool(self._disk.wptraits())
 
     def evaluate(

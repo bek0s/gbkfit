@@ -91,7 +91,7 @@ class BrightnessSMDisk2D(BrightnessComponent2D):
     def pdescs(self):
         return self._disk.pdescs()
 
-    def is_weighted(self):
+    def has_weights(self):
         return bool(self._disk.wptraits())
 
     def evaluate(
