@@ -98,6 +98,37 @@ def test_dcube_downscale(driver, ndarrays_regression):
         dict(result=memory.to_host(cube_lo)))
 
 
+def test_arrays_are_checked(driver):
+    # The native modules check the dtype, layout, device and shapes of
+    # their arrays, instead of reading them as raw memory or converting
+    # them to temporary copies (which would lose the outputs)
+    memory = Memory(driver)
+    dmodel = driver.backends().dmodel(DTYPE)
+    cube_hi = memory.to_device(smooth_cube((40, 60, 80)))
+
+    def downscale_into(cube_lo, scale=(4, 3, 2)):
+        dmodel.dcube_downscale(scale, (0, 0, 0), cube_hi, cube_lo)
+
+    with pytest.raises(TypeError, match="incompatible"):
+        downscale_into(memory.to_device(np.zeros((20, 20, 20), np.float64)))
+    with pytest.raises(TypeError, match="incompatible"):
+        downscale_into(memory.to_device(
+            np.zeros((20, 20, 40), DTYPE))[:, :, ::2])
+    with pytest.raises(TypeError, match="incompatible"):
+        downscale_into(_array_on_other_device(driver, (20, 20, 20)))
+    with pytest.raises(ValueError, match="does not fit"):
+        downscale_into(memory.to_device(np.zeros((20, 20, 20), DTYPE)),
+                       scale=(4, 4, 4))
+
+
+def _array_on_other_device(driver, shape):
+    """An array in host memory for cuda, and in device memory for host."""
+    if driver.type() == 'cuda':
+        return np.zeros(shape, DTYPE)
+    cupy = pytest.importorskip('cupy')
+    return cupy.zeros(shape, DTYPE)
+
+
 def _residual_inputs():
     """Observed and model data, errors, masks and weights for a residual."""
     n = 1000

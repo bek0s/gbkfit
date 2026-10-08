@@ -63,6 +63,12 @@ def test_higher_moments_of_a_gaussian_line(driver):
         vsys=0, xpos=0, ypos=0, posa=30, incl=60,
         bpt_a=1, bpt_s=4, vpt_rt=2, vpt_vt=40, dpt_a=20))
     mmaps = model_group.model_h(params.evaluate())[0]
+    # One mask for all moments: where the moments are defined.
+    # Without weight traits, all weights are 1.
+    for key in ('mmap1', 'mmap2', 'mmap3', 'mmap4'):
+        defined = np.isfinite(mmaps[key]['d'])
+        np.testing.assert_array_equal(mmaps[key]['m'], defined)
+        np.testing.assert_array_equal(mmaps[key]['w'], 1)
     sigma = mmaps['mmap2']['d']
     disk = np.isfinite(sigma)
     assert disk.sum() > 100

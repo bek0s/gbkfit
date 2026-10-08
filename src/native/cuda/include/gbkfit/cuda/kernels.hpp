@@ -101,7 +101,7 @@ dcube_moments(
             zero_x, zero_y, zero_z,
             dcube_d, dcube_w,
             cutoff, norders, orders,
-            mmaps_d, mmaps_w, mmaps_m);
+            mmaps_d, mmaps_m, mmaps_w);
 }
 
 template<typename T> __global__ void
@@ -365,44 +365,6 @@ gmodel_smdisk_evaluate(
             ordata, ordata_cmp,
             vdata_cmp, ddata_cmp);
 }
-
-template<typename T> __global__ void
-objective_count_pixels(
-        const T* data1, const T* data2, int size, T epsilon, int* counts)
-{
-    // Instead of using as many threads as possible, use a fixed number of them
-    // This way we do not get too much overhead from the atomic adds
-    // Revise this decision in the future
-    // Each thread is assigned size/nthreads positions in data1 and data2
-    const int nthreads = 1024 * 4;
-    const int tid = blockIdx.x * blockDim.x + threadIdx.x;
-    if (tid >= nthreads)
-        return;
-
-    int count_data1 = 0;
-    int count_data2 = 0;
-    int count_both = 0;
-
-    for (int i = tid; i < size; i += nthreads)
-    {
-        const bool has_data1 = std::abs(data1[i]) > epsilon;
-        const bool has_data2 = std::abs(data2[i]) > epsilon;
-        count_data1 += has_data1 && !has_data2;
-        count_data2 += !has_data1 && has_data2;
-        count_both += has_data1 && has_data2;
-    }
-
-    if (count_data1) {
-        atomicAdd(&counts[0], count_data1);
-    }
-    if (count_data2) {
-        atomicAdd(&counts[1], count_data2);
-    }
-    if (count_both) {
-        atomicAdd(&counts[2], count_both);
-    }
-}
-
 
 template<typename T> __global__ void
 objective_residual(

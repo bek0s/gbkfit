@@ -287,7 +287,7 @@ class DCube:
         # Create the mask and, if requested, apply it to the data.
         if mask_cutoff is not None:
             backend_dmodel.dcube_mask(
-                mask_cutoff, mask_apply, mcube_lo, dcube_lo, wcube_lo)
+                mask_cutoff, mask_apply, dcube_lo, mcube_lo, wcube_lo)
 
         # Output extra information
         if out_extra is not None:

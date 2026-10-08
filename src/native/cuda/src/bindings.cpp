@@ -2,31 +2,26 @@
 #include <nanobind/nanobind.h>
 #include <nanobind/stl/array.h>
 
-#include "gbkfit/cuda/dmodels.hpp"
+#include "gbkfit/bindings/dmodel.hpp"
+#include "gbkfit/bindings/objective.hpp"
 #include "gbkfit/cuda/gmodels.hpp"
-#include "gbkfit/cuda/objective.hpp"
+#include "gbkfit/cuda/wrapper.hpp"
 
-using namespace gbkfit::cuda;
+using namespace gbkfit;
 
 namespace nb = nanobind;
 
 NB_MODULE(EXTENSION_NAME, m)
 {
-    nb::class_<DModel<float>>(m, "DModelf32")
-            .def(nb::init<>())
-            .def("dcube_downscale", &DModel<float>::dcube_downscale)
-            .def("dcube_mask", &DModel<float>::dcube_mask)
-            .def("mmaps_moments", &DModel<float>::mmaps_moments);
+    using Device = nb::device::cuda;
+    using Kernels = cuda::Wrapper<float>;
 
-    nb::class_<GModel<float>>(m, "GModelf32")
-            .def(nb::init<>())
-            .def("wcube_evaluate", &GModel<float>::wcube_evaluate)
-            .def("mcdisk_evaluate", &GModel<float>::mcdisk_evaluate)
-            .def("smdisk_evaluate", &GModel<float>::smdisk_evaluate);
+    bindings::DModel<float, Device, Kernels>::bind(m, "DModelf32");
+    bindings::Objective<float, Device, Kernels>::bind(m, "Objectivef32");
 
-    nb::class_<Objective<float>>(m, "Objectivef32")
+    nb::class_<cuda::GModel<float>>(m, "GModelf32")
             .def(nb::init<>())
-            .def("count_pixels", &Objective<float>::count_pixels)
-            .def("residual", &Objective<float>::residual)
-            .def("residual_sum", &Objective<float>::residual_sum);
+            .def("wcube_evaluate", &cuda::GModel<float>::wcube_evaluate)
+            .def("mcdisk_evaluate", &cuda::GModel<float>::mcdisk_evaluate)
+            .def("smdisk_evaluate", &cuda::GModel<float>::smdisk_evaluate);
 }

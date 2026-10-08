@@ -12,15 +12,14 @@ nanobind_add_module(
   NOMINSIZE
   LTO
   src/bindings.cpp
-  src/dmodels.cpp
   src/gmodels.cpp
-  src/objective.cpp
 )
 
 target_include_directories(
   _host
   PRIVATE
   include
+  ${PROJECT_SOURCE_DIR}/src/native/bindings/include
   ${PROJECT_SOURCE_DIR}/src/native/third_party/pocketfft
 )
 

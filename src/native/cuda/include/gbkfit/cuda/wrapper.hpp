@@ -146,10 +146,6 @@ struct Wrapper
             T* vdata_cmp, T* ddata_cmp);
 
     static void
-    objective_count_pixels(
-            const T* data1, const T* data2, int size, T epsilon, int* counts);
-
-    static void
     objective_residual(
             const T* obs_d, const T* obs_e, const T* obs_m,
             const T* mdl_d, const T* mdl_w, const T* mdl_m,

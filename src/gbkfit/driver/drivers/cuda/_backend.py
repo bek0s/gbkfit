@@ -37,24 +37,15 @@ class DriverBackendsCuda(DriverBackends):
         return DriverBackendFFTCuda(dtype)
 
     def dmodel(self, dtype):
-        return DriverBackendDModelCuda(dtype)
+        return native_class('DModel', dtype, {
+            np.dtype(np.float32): native_module.DModelf32})()
 
     def gmodel(self, dtype):
         return DriverBackendGModelCuda(dtype)
 
     def objective(self, dtype):
-        return DriverBackendObjectiveCuda(dtype)
-
-
-class DriverBackendDModelCuda(DriverBackendDModelNative):
-
-    def __init__(self, dtype):
-        super().__init__(dtype, NativeMemoryCuda, {
-            np.dtype(np.float32): native_module.DModelf32
-        })
-
-    def __deepcopy__(self, memodict):
-        return self.__class__(self.dtype())
+        return native_class('Objective', dtype, {
+            np.dtype(np.float32): native_module.Objectivef32})()
 
 
 class DriverBackendGModelCuda(DriverBackendGModelNative):
@@ -62,17 +53,6 @@ class DriverBackendGModelCuda(DriverBackendGModelNative):
     def __init__(self, dtype):
         super().__init__(dtype, NativeMemoryCuda, {
             np.dtype(np.float32): native_module.GModelf32
-        })
-
-    def __deepcopy__(self, memodict):
-        return self.__class__(self.dtype())
-
-
-class DriverBackendObjectiveCuda(DriverBackendObjectiveNative):
-
-    def __init__(self, dtype):
-        super().__init__(dtype, NativeMemoryCuda, {
-            np.dtype(np.float32): native_module.Objectivef32  # todo change this
         })
 
     def __deepcopy__(self, memodict):

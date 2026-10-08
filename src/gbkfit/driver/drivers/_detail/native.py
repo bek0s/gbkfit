@@ -3,23 +3,19 @@ import abc
 
 import numpy as np
 
-from gbkfit.driver.backend import (
-    DriverBackendDModel,
-    DriverBackendFFT,
-    DriverBackendGModel,
-    DriverBackendObjective)
+from gbkfit.driver.backend import DriverBackendFFT, DriverBackendGModel
 
 
 __all__ = [
     'NativeMemory',
+    'native_class',
     'DriverBackendFFTNative',
-    'DriverBackendDModelNative',
-    'DriverBackendGModelNative',
-    'DriverBackendObjectiveNative'
+    'DriverBackendGModelNative'
 ]
 
 
-def _get_class(cls, dtype, classes):
+def native_class(cls, dtype, classes):
+    """The class of a native module for the given dtype."""
     if np.dtype(dtype) not in classes:
         requested = np.dtype(dtype).name
         supported = ', '.join([np.dtype(dt).name for dt in classes])
@@ -55,81 +51,23 @@ class NativeMemory(abc.ABC):
 
 class DriverBackendFFTNative(DriverBackendFFT):
 
-    def __init__(self, dtype, memory, classes):
+    def __init__(self, dtype, classes):
         super().__init__(32)
         self._dtype = dtype
-        self._memory = memory
-        self._module = _get_class(self.__class__.__qualname__, dtype, classes)()
-
-    def __deepcopy__(self, memodict):
-        return self.__class__(self._dtype, self._memory, self._module)
+        self._module = native_class(
+            self.__class__.__qualname__, dtype, classes)()
 
     def dtype(self):
         return self._dtype
 
     def fft_r2c(self, data_r, data_c):
-        _ptr = self._memory.ptr
-        _shape = self._memory.shape
-        self._module.fft_r2c(
-            _shape(data_r)[::-1], _ptr(data_r), _ptr(data_c))
+        self._module.fft_r2c(data_r, data_c)
 
     def fft_c2r(self, data_c, data_r):
-        _ptr = self._memory.ptr
-        _shape = self._memory.shape
-        self._module.fft_c2r(
-            _shape(data_r)[::-1], _ptr(data_c), _ptr(data_r))
-
-    def fft_convolve(self, data1_r, data1_c, data2_c):
-        _ptr = self._memory.ptr
-        _shape = self._memory.shape
-        self._module.fft_convolve(
-            _shape(data1_r)[::-1], _ptr(data1_r), _ptr(data1_c), _ptr(data2_c))
+        self._module.fft_c2r(data_c, data_r)
 
     def fft_convolve_cached(self, data1_r, data2_r):
-        _ptr = self._memory.ptr
-        _shape = self._memory.shape
-        self._module.fft_convolve_cached(
-            _shape(data1_r)[::-1], _ptr(data1_r), _ptr(data2_r))
-
-
-class DriverBackendDModelNative(DriverBackendDModel):
-
-    def __init__(self, dtype, memory, classes):
-        super().__init__()
-        self._dtype = dtype
-        self._memory = memory
-        self._module = _get_class(self.__class__.__qualname__, dtype, classes)()
-
-    def __deepcopy__(self, memodict):
-        return self.__class__(self._dtype, self._memory, self._module)
-
-    def dtype(self):
-        return self._dtype
-
-    def dcube_downscale(self, scale, edge_hi, cube_hi, cube_lo):
-        _ptr = self._memory.ptr
-        _shape = self._memory.shape
-        self._module.dcube_downscale(
-            scale, edge_hi, _shape(cube_hi)[::-1], _shape(cube_lo)[::-1],
-            _ptr(cube_hi), _ptr(cube_lo))
-
-    def dcube_mask(self, cutoff, apply, mcube, dcube, wcube):
-        _ptr = self._memory.ptr
-        _shape = self._memory.shape
-        self._module.dcube_mask(
-            cutoff, apply, _shape(dcube)[::-1],
-            _ptr(dcube), _ptr(mcube), _ptr(wcube))
-
-    def mmaps_moments(
-            self,
-            size, step, zero, dcube, wcube, cutoff, orders,
-            mmaps_d, mmaps_w, mmaps_m):
-        _ptr = self._memory.ptr
-        _size = self._memory.size
-        self._module.mmaps_moments(
-            size, step, zero,
-            _ptr(dcube), _ptr(wcube), cutoff, _size(orders), _ptr(orders),
-            _ptr(mmaps_d), _ptr(mmaps_w), _ptr(mmaps_m))
+        self._module.fft_convolve_cached(data1_r, data2_r)
 
 
 class DriverBackendGModelNative(DriverBackendGModel):
@@ -138,7 +76,7 @@ class DriverBackendGModelNative(DriverBackendGModel):
         super().__init__()
         self._dtype = dtype
         self._memory = memory
-        self._module = _get_class(self.__class__.__qualname__, dtype, classes)()
+        self._module = native_class(self.__class__.__qualname__, dtype, classes)()
 
     def __deepcopy__(self, memodict):
         return self.__class__(self._dtype, self._memory, self._module)
@@ -316,42 +254,3 @@ class DriverBackendGModelNative(DriverBackendGModel):
             _ptr(rdata), _ptr(rdata_cmp),
             _ptr(ordata), _ptr(ordata_cmp),
             _ptr(vdata_cmp), _ptr(ddata_cmp))
-
-
-class DriverBackendObjectiveNative(DriverBackendObjective):
-
-    def __init__(self, dtype, memory, classes):
-        super().__init__()
-        self._dtype = dtype
-        self._memory = memory
-        self._module = _get_class(self.__class__.__qualname__, dtype, classes)()
-
-    def __deepcopy__(self, memodict):
-        return self.__class__(self._dtype, self._memory, self._module)
-
-    def dtype(self):
-        return self._dtype
-
-    def residual(self, obs_d, obs_e, obs_m, mdl_d, mdl_w, mdl_m, weight, res):
-        _ptr = self._memory.ptr
-        _size = self._memory.size
-        self._module.residual(
-            _ptr(obs_d), _ptr(obs_e), _ptr(obs_m),
-            _ptr(mdl_d), _ptr(mdl_w), _ptr(mdl_m),
-            _size(obs_d), weight, _ptr(res))
-
-    def residual_sum(self, residual, squared, sum_):
-        _ptr = self._memory.ptr
-        _size = self._memory.size
-        self._module.residual_sum(
-            _ptr(residual), _size(residual), squared, _ptr(sum_))
-
-    def count_elements(self, array1, array2, threshold, counts):
-        _ptr = self._memory.ptr
-        _size = self._memory.size
-        self._module.count_pixels(
-            _ptr(array1), _ptr(array2), _size(array1), threshold, _ptr(counts))
-
-    def foo(self):
-        pass
-

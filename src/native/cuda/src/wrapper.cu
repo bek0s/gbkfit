@@ -324,15 +324,6 @@ Wrapper<T>::gmodel_smdisk_evaluate(
 }
 
 template<typename T> void
-Wrapper<T>::objective_count_pixels(
-        const T* data1, const T* data2, int size, T epsilon, int* counts)
-{
-    const int n = size;
-    launch("objective_count_pixels", n, kernels::objective_count_pixels<T>,
-            data1, data2, size, epsilon, counts);
-}
-
-template<typename T> void
 Wrapper<T>::objective_residual(
         const T* obs_d, const T* obs_e, const T* obs_m,
         const T* mdl_d, const T* mdl_w, const T* mdl_m,
