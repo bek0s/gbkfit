@@ -122,6 +122,8 @@ class DModelMMaps(DModel):
         scale = tuple(scale) + (1,)
         orders = tuple(sorted(set(orders)))
         dtype = np.dtype(dtype)
+        if not orders:
+            raise RuntimeError("at least one moment order is required")
         if any(order < 0 or order > 7 for order in orders):
             raise RuntimeError("moment orders must be between 0 and 7")
         if mask_cutoff is None:
