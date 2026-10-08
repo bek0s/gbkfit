@@ -548,3 +548,17 @@ if __name__ == '__main__':
     test_param_interpreter()
     test_evaluation_params()
     test_fitting_params()
+
+
+def test_evaluation_params_with_transforms_from_config(tmp_path):
+    # Parameters set to None are tied, and their values are set by a
+    # user function, loaded from a file named in the configuration
+    (tmp_path / 'transforms.py').write_text(
+        "def tie(params):\n"
+        "    params['b'] = 2 * params['a']\n")
+    pdescs = dict(a=ParamScalarDesc('a'), b=ParamScalarDesc('b'))
+    info = dict(
+        properties=dict(a=3, b=None),
+        transforms=dict(file=str(tmp_path / 'transforms.py'), func='tie'))
+    params = evaluation_params_parser.load(info, pdescs=pdescs)
+    assert params.evaluate() == dict(a=3, b=6)
