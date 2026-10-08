@@ -50,3 +50,22 @@ def test_weights_with_smoothing(driver):
     # Smoothing reduces the variations but keeps the average
     assert weights.std() < 0.8 * unsmoothed.std()
     assert abs(weights.mean() - unsmoothed.mean()) < 0.02
+
+
+def test_mask(driver):
+    # A pattern with values below and above the cutoff in every slice
+    dcube = DCube(
+        size=(12, 10, 8), step=(1, 1, 1), rpix=(5.5, 4.5, 3.5),
+        rval=(0, 0, 0), rota=0, scale=(1, 1, 1),
+        psf=None, lsf=None, smooth_weights=False,
+        mask_cutoff=0.5, mask_apply=True, dtype=np.float32)
+    dcube.prepare(driver, has_weights=False)
+    z, y, x = np.indices(dcube.size()[::-1])
+    pattern = (np.sin(0.7 * x + 0.3 * y + 0.5 * z) + 1).astype(np.float32)
+    driver.mem_copy_h2d(pattern, dcube.scratch_dcube())
+    dcube.evaluate(None)
+    data = np.asarray(driver.mem_copy_d2h(dcube.dcube()))
+    mask = np.asarray(driver.mem_copy_d2h(dcube.mcube()))
+    keep = pattern > 0.5
+    np.testing.assert_array_equal(mask, keep.astype(np.float32))
+    np.testing.assert_array_equal(data, np.where(keep, pattern, np.nan))

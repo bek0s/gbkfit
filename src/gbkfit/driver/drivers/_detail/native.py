@@ -117,7 +117,8 @@ class DriverBackendDModelNative(DriverBackendDModel):
         _ptr = self._memory.ptr
         _shape = self._memory.shape
         self._module.dcube_mask(
-            cutoff, apply, _shape(dcube), _ptr(dcube), _ptr(mcube), _ptr(wcube))
+            cutoff, apply, _shape(dcube)[::-1],
+            _ptr(dcube), _ptr(mcube), _ptr(wcube))
 
     def mmaps_moments(
             self,

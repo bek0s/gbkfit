@@ -32,7 +32,7 @@ Wrapper<T>::dmodel_dcube_mask(
         int size_x, int size_y, int size_z,
         T* dcube_d, T* dcube_m, T* dcube_w)
 {
-    const int n = size_x * size_y;
+    const int n = size_x * size_y * size_z;
     dim3 bsize(BLOCK_SIZE);
     dim3 gsize((n + bsize.x - 1) / bsize.x);
     kernels::dmodel_dcube_mask<<<gsize, bsize>>>(
@@ -253,7 +253,7 @@ Wrapper<T>::gmodel_smdisk_evaluate(
         T* ordata, T* ordata_cmp,
         T* vdata_cmp, T* ddata_cmp)
 {
-    const int n = spat_size_x * spat_size_y;
+    const int n = spat_size_x * spat_size_y * spat_size_z;
     dim3 bsize(BLOCK_SIZE);
     dim3 gsize((n + bsize.x - 1) / bsize.x);
     kernels::gmodel_smdisk_evaluate<<<gsize, bsize>>>(

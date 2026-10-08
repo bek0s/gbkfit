@@ -58,7 +58,7 @@ dmodel_dcube_mask(
         T* dcube_d, T* dcube_m, T* dcube_w)
 {
     // Parallelization: per 3d position in the dcube
-    const int nthreads = size_x * size_y;
+    const int nthreads = size_x * size_y * size_z;
     const int tid = blockIdx.x * blockDim.x + threadIdx.x;
     if (tid >= nthreads)
         return;
