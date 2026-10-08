@@ -1,9 +1,10 @@
 
 from collections.abc import Sequence
 
-from . import _detail, _mcdisk, common, traits
+from . import _mcdisk, common, traits
+from ._component import (
+    BPT, BHT, VPT, VHT, DPT, DHT, ZPT, SPT, WPT, DiskComponent)
 from .core import SpectralComponent3D
-from gbkfit.utils import parseutils
 
 
 __all__ = [
@@ -11,57 +12,14 @@ __all__ = [
 ]
 
 
-class SpectralMCDisk3D(SpectralComponent3D):
+class SpectralMCDisk3D(DiskComponent, SpectralComponent3D):
+
+    _disk_class = _mcdisk.MCDisk
+    _slots = (BPT, BHT, VPT, VHT, DPT, DHT, ZPT, SPT, WPT)
 
     @staticmethod
     def type():
         return 'mcdisk'
-
-    @classmethod
-    def load(cls, info):
-        desc = parseutils.make_typed_desc(cls, 'gmodel component')
-        info.update(dict(
-            vsys_nwmode=common.nwmode_parser.load(info.get('vsys_nwmode')),
-            xpos_nwmode=common.nwmode_parser.load(info.get('xpos_nwmode')),
-            ypos_nwmode=common.nwmode_parser.load(info.get('ypos_nwmode')),
-            posa_nwmode=common.nwmode_parser.load(info.get('posa_nwmode')),
-            incl_nwmode=common.nwmode_parser.load(info.get('incl_nwmode')),
-            bptraits=traits.bpt_parser.load(info.get('bptraits')),
-            bhtraits=traits.bht_parser.load(info.get('bhtraits')),
-            vptraits=traits.vpt_parser.load(info.get('vptraits')),
-            vhtraits=traits.vht_parser.load(info.get('vhtraits')),
-            dptraits=traits.dpt_parser.load(info.get('dptraits')),
-            dhtraits=traits.dht_parser.load(info.get('dhtraits')),
-            zptraits=traits.zpt_parser.load(info.get('zptraits')),
-            sptraits=traits.spt_parser.load(info.get('sptraits')),
-            wptraits=traits.wpt_parser.load(info.get('wptraits'))))
-        opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
-        return cls(**opts)
-
-    def dump(self):
-        return dict(
-            type=self.type(),
-            cflux=self._disk.cflux(),
-            seed=self._disk.seed(),
-            loose=self._disk.loose(),
-            tilted=self._disk.tilted(),
-            rnodes=self._disk.rnodes(),
-            rstep=self._disk.rstep(),
-            interp=self._disk.interp().type(),
-            vsys_nwmode=common.nwmode_parser.dump(self._disk.vsys_nwmode()),
-            xpos_nwmode=common.nwmode_parser.dump(self._disk.xpos_nwmode()),
-            ypos_nwmode=common.nwmode_parser.dump(self._disk.ypos_nwmode()),
-            posa_nwmode=common.nwmode_parser.dump(self._disk.posa_nwmode()),
-            incl_nwmode=common.nwmode_parser.dump(self._disk.incl_nwmode()),
-            bptraits=traits.bpt_parser.dump(self._disk.rptraits()),
-            bhtraits=traits.bht_parser.dump(self._disk.rhtraits()),
-            vptraits=traits.vpt_parser.dump(self._disk.vptraits()),
-            vhtraits=traits.vht_parser.dump(self._disk.vhtraits()),
-            dptraits=traits.dpt_parser.dump(self._disk.dptraits()),
-            dhtraits=traits.dht_parser.dump(self._disk.dhtraits()),
-            zptraits=traits.zpt_parser.dump(self._disk.zptraits()),
-            sptraits=traits.spt_parser.dump(self._disk.sptraits()),
-            wptraits=traits.wpt_parser.dump(self._disk.wptraits()))
 
     def __init__(
             self,
@@ -91,36 +49,18 @@ class SpectralMCDisk3D(SpectralComponent3D):
             incl_nwmode: common.NWMode | None = None,
             seed: int = 0
     ):
-        rnode_args = _detail.parse_component_rnode_args(
-            rnmin, rnmax, rnsep, rnlen, rnodes, rstep, interp)
-        nwmode_velocity_args = _detail.validate_component_nwmodes_for_velocity(
-            loose, vsys_nwmode)
-        nwmode_geometry_args = _detail.validate_component_nwmodes_for_geometry(
-            loose, tilted, xpos_nwmode, ypos_nwmode, posa_nwmode, incl_nwmode)
-        trait_args = _detail.parse_component_s3d_traits(
-            bptraits, bhtraits,
-            vptraits, vhtraits,
-            dptraits, dhtraits,
-            zptraits,
-            sptraits,
-            wptraits)
-        _detail.rename_bx_to_rx_traits(trait_args)
-        all_traits = sum(trait_args.values(), ())
-        _detail.check_traits_common(all_traits)
-        _detail.check_traits_mcdisk(self, all_traits)
-        self._disk = _mcdisk.MCDisk(
-            cflux=cflux, seed=seed,
+        super().__init__(
             loose=loose, tilted=tilted,
-            **rnode_args,
-            **nwmode_velocity_args,
-            **nwmode_geometry_args,
-            **trait_args)
-
-    def pdescs(self):
-        return self._disk.pdescs()
-
-    def has_weights(self):
-        return bool(self._disk.wptraits())
+            rnmin=rnmin, rnmax=rnmax, rnsep=rnsep, rnlen=rnlen,
+            rnodes=rnodes, rstep=rstep, interp=interp,
+            nwmodes=dict(
+                vsys=vsys_nwmode, xpos=xpos_nwmode, ypos=ypos_nwmode,
+                posa=posa_nwmode, incl=incl_nwmode),
+            traits_=dict(
+                bptraits=bptraits, bhtraits=bhtraits, vptraits=vptraits,
+                vhtraits=vhtraits, dptraits=dptraits, dhtraits=dhtraits,
+                zptraits=zptraits, sptraits=sptraits, wptraits=wptraits),
+            cflux=cflux, seed=seed)
 
     def evaluate(
             self,

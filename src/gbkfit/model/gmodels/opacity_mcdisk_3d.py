@@ -1,9 +1,9 @@
 
 from collections.abc import Sequence
 
-from . import _detail, _mcdisk, common, traits
+from . import _mcdisk, common, traits
+from ._component import OPT, OHT, ZPT, SPT, WPT, DiskComponent
 from .core import OpacityComponent3D
-from gbkfit.utils import parseutils
 
 
 __all__ = [
@@ -11,46 +11,14 @@ __all__ = [
 ]
 
 
-class OpacityMCDisk3D(OpacityComponent3D):
+class OpacityMCDisk3D(DiskComponent, OpacityComponent3D):
+
+    _disk_class = _mcdisk.MCDisk
+    _slots = (OPT, OHT, ZPT, SPT, WPT)
 
     @staticmethod
     def type():
         return 'mcdisk'
-
-    @classmethod
-    def load(cls, info):
-        desc = parseutils.make_typed_desc(cls, 'gmodel component')
-        info.update(dict(
-            xpos_nwmode=common.nwmode_parser.load(info.get('xpos_nwmode')),
-            ypos_nwmode=common.nwmode_parser.load(info.get('ypos_nwmode')),
-            posa_nwmode=common.nwmode_parser.load(info.get('posa_nwmode')),
-            incl_nwmode=common.nwmode_parser.load(info.get('incl_nwmode')),
-            optraits=traits.opt_parser.load(info.get('optraits')),
-            ohtraits=traits.oht_parser.load(info.get('ohtraits')),
-            zptraits=traits.zpt_parser.load(info.get('zptraits')),
-            sptraits=traits.spt_parser.load(info.get('sptraits'))))
-        opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
-        return cls(**opts)
-
-    def dump(self):
-        return dict(
-            type=self.type(),
-            cflux=self._disk.cflux(),
-            seed=self._disk.seed(),
-            loose=self._disk.loose(),
-            tilted=self._disk.tilted(),
-            rnodes=self._disk.rnodes(),
-            rstep=self._disk.rstep(),
-            interp=self._disk.interp().type(),
-            xpos_nwmode=common.nwmode_parser.dump(self._disk.xpos_nwmode()),
-            ypos_nwmode=common.nwmode_parser.dump(self._disk.ypos_nwmode()),
-            posa_nwmode=common.nwmode_parser.dump(self._disk.posa_nwmode()),
-            incl_nwmode=common.nwmode_parser.dump(self._disk.incl_nwmode()),
-            optraits=traits.opt_parser.dump(self._disk.rptraits()),
-            ohtraits=traits.oht_parser.dump(self._disk.rhtraits()),
-            zptraits=traits.zpt_parser.dump(self._disk.zptraits()),
-            sptraits=traits.spt_parser.dump(self._disk.sptraits()),
-            wptraits=traits.wpt_parser.dump(self._disk.wptraits()))
 
     def __init__(
             self,
@@ -75,31 +43,17 @@ class OpacityMCDisk3D(OpacityComponent3D):
             incl_nwmode: common.NWMode | None = None,
             seed: int = 0
     ):
-        nwmode_geometry_args = _detail.validate_component_nwmodes_for_geometry(
-            loose, tilted, xpos_nwmode, ypos_nwmode, posa_nwmode, incl_nwmode)
-        rnode_args = _detail.parse_component_rnode_args(
-            rnmin, rnmax, rnsep, rnlen, rnodes, rstep, interp)
-        trait_args = _detail.parse_component_o3d_traits(
-            optraits, ohtraits,
-            zptraits,
-            sptraits,
-            wptraits)
-        _detail.rename_ox_to_rx_traits(trait_args)
-        all_traits = sum(trait_args.values(), ())
-        _detail.check_traits_common(all_traits)
-        _detail.check_traits_mcdisk(self, all_traits)
-        self._disk = _mcdisk.MCDisk(
-            cflux=cflux, seed=seed,
+        super().__init__(
             loose=loose, tilted=tilted,
-            **rnode_args,
-            vsys_nwmode=None,
-            **nwmode_geometry_args,
-            **trait_args,
-            vptraits=(), vhtraits=(),
-            dptraits=(), dhtraits=())
-
-    def pdescs(self):
-        return self._disk.pdescs()
+            rnmin=rnmin, rnmax=rnmax, rnsep=rnsep, rnlen=rnlen,
+            rnodes=rnodes, rstep=rstep, interp=interp,
+            nwmodes=dict(
+                xpos=xpos_nwmode, ypos=ypos_nwmode,
+                posa=posa_nwmode, incl=incl_nwmode),
+            traits_=dict(
+                optraits=optraits, ohtraits=ohtraits, zptraits=zptraits,
+                sptraits=sptraits, wptraits=wptraits),
+            cflux=cflux, seed=seed)
 
     def evaluate(
             self,

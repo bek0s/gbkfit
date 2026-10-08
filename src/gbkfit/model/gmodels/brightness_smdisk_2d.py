@@ -1,9 +1,9 @@
 
 from collections.abc import Sequence
 
-from . import _detail, _smdisk, common, traits
+from . import _smdisk, common, traits
+from ._component import BPT, SPT, WPT, DiskComponent
 from .core import BrightnessComponent2D
-from gbkfit.utils import parseutils
 
 
 __all__ = [
@@ -11,41 +11,14 @@ __all__ = [
 ]
 
 
-class BrightnessSMDisk2D(BrightnessComponent2D):
+class BrightnessSMDisk2D(DiskComponent, BrightnessComponent2D):
+
+    _disk_class = _smdisk.SMDisk
+    _slots = (BPT, SPT, WPT)
 
     @staticmethod
     def type():
         return 'smdisk'
-
-    @classmethod
-    def load(cls, info):
-        desc = parseutils.make_typed_desc(cls, 'gmodel component')
-        info.update(dict(
-            xpos_nwmode=common.nwmode_parser.load(info.get('xpos_nwmode')),
-            ypos_nwmode=common.nwmode_parser.load(info.get('ypos_nwmode')),
-            posa_nwmode=common.nwmode_parser.load(info.get('posa_nwmode')),
-            incl_nwmode=common.nwmode_parser.load(info.get('incl_nwmode')),
-            bptraits=traits.bpt_parser.load(info.get('bptraits')),
-            sptraits=traits.spt_parser.load(info.get('sptraits')),
-            wptraits=traits.wpt_parser.load(info.get('wptraits'))))
-        opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
-        return cls(**opts)
-
-    def dump(self):
-        return dict(
-            type=self.type(),
-            loose=self._disk.loose(),
-            tilted=self._disk.tilted(),
-            rnodes=self._disk.rnodes(),
-            rstep=self._disk.rstep(),
-            interp=self._disk.interp().type(),
-            xpos_nwmode=common.nwmode_parser.dump(self._disk.xpos_nwmode()),
-            ypos_nwmode=common.nwmode_parser.dump(self._disk.ypos_nwmode()),
-            posa_nwmode=common.nwmode_parser.dump(self._disk.posa_nwmode()),
-            incl_nwmode=common.nwmode_parser.dump(self._disk.incl_nwmode()),
-            bptraits=traits.bpt_parser.dump(self._disk.rptraits()),
-            sptraits=traits.spt_parser.dump(self._disk.sptraits()),
-            wptraits=traits.wpt_parser.dump(self._disk.wptraits()))
 
     def __init__(
             self,
@@ -66,33 +39,15 @@ class BrightnessSMDisk2D(BrightnessComponent2D):
             posa_nwmode: common.NWMode | None = None,
             incl_nwmode: common.NWMode | None = None
     ):
-        rnode_args = _detail.parse_component_rnode_args(
-            rnmin, rnmax, rnsep, rnlen, rnodes, rstep, interp)
-        nwmode_geometry_args = _detail.validate_component_nwmodes_for_geometry(
-            loose, tilted, xpos_nwmode, ypos_nwmode, posa_nwmode, incl_nwmode)
-        trait_args = _detail.parse_component_b2d_traits(
-            bptraits,
-            sptraits,
-            wptraits)
-        _detail.rename_bx_to_rx_traits(trait_args)
-        all_traits = sum(trait_args.values(), ())
-        _detail.check_traits_common(all_traits)
-        self._disk = _smdisk.SMDisk(
+        super().__init__(
             loose=loose, tilted=tilted,
-            **rnode_args,
-            vsys_nwmode=None,
-            **nwmode_geometry_args,
-            **trait_args,
-            rhtraits=(),
-            vptraits=(), vhtraits=(),
-            dptraits=(), dhtraits=(),
-            zptraits=())
-
-    def pdescs(self):
-        return self._disk.pdescs()
-
-    def has_weights(self):
-        return bool(self._disk.wptraits())
+            rnmin=rnmin, rnmax=rnmax, rnsep=rnsep, rnlen=rnlen,
+            rnodes=rnodes, rstep=rstep, interp=interp,
+            nwmodes=dict(
+                xpos=xpos_nwmode, ypos=ypos_nwmode,
+                posa=posa_nwmode, incl=incl_nwmode),
+            traits_=dict(
+                bptraits=bptraits, sptraits=sptraits, wptraits=wptraits))
 
     def evaluate(
             self, driver, params, image, wdata, bdata,

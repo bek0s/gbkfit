@@ -4,7 +4,7 @@ import logging
 
 import numpy as np
 
-from . import _disk
+from . import _disk, traits
 
 
 __all__ = ['MCDisk']
@@ -15,32 +15,29 @@ _log = logging.getLogger(__name__)
 
 class MCDisk(_disk.Disk):
 
+    # The traits that the Monte Carlo disk does not support yet
+    unsupported_traits = (
+        traits.BPTraitMixtureExponential,
+        traits.BPTraitMixtureGauss,
+        traits.BPTraitMixtureGGauss,
+        traits.BPTraitMixtureMoffat,
+        traits.BPTraitNWDistortion,
+        traits.DPTraitMixtureExponential,
+        traits.DPTraitMixtureGauss,
+        traits.DPTraitMixtureGGauss,
+        traits.DPTraitMixtureMoffat,
+        traits.DPTraitNWDistortion,
+        traits.OPTraitMixtureExponential,
+        traits.OPTraitMixtureGauss,
+        traits.OPTraitMixtureGGauss,
+        traits.OPTraitMixtureMoffat,
+        traits.OPTraitNWDistortion)
+
     def __init__(
-            self,
-            cflux, seed,
-            loose, tilted, rnodes, rstep, interp,
-            vsys_nwmode,
-            xpos_nwmode, ypos_nwmode,
-            posa_nwmode, incl_nwmode,
-            rptraits, rhtraits,
-            vptraits, vhtraits,
-            dptraits, dhtraits,
-            zptraits,
-            sptraits,
-            wptraits):
-
+            self, cflux, seed,
+            loose, tilted, rnodes, rstep, interp, nwmodes, traits_):
         super().__init__(
-            loose, tilted, rnodes, rstep, interp,
-            vsys_nwmode,
-            xpos_nwmode, ypos_nwmode,
-            posa_nwmode, incl_nwmode,
-            rptraits, rhtraits,
-            vptraits, vhtraits,
-            dptraits, dhtraits,
-            zptraits,
-            sptraits,
-            wptraits)
-
+            loose, tilted, rnodes, rstep, interp, nwmodes, traits_)
         if seed < 0:
             raise RuntimeError(f"seed must be >= 0; supplied value: {seed}")
         self._cflux = cflux
@@ -58,14 +55,11 @@ class MCDisk(_disk.Disk):
         # Has-analytical-integral flag per trait
         self._s_hasaintegral = [None, None]
 
-    def cflux(self):
-        return self._cflux
-
-    def seed(self):
-        return self._seed
+    def options(self):
+        return dict(cflux=self._cflux, seed=self._seed)
 
     def _impl_prepare(self, driver, dtype):
-        rptraits = self.rptraits()
+        rptraits = self._traits['rpt']
         self._s_hasaintegral = driver.mem_alloc_s(len(rptraits), bool)
         hasaintegral = [t.has_analytical_integral() for t in rptraits]
         self._s_hasaintegral[0][:] = hasaintegral
@@ -80,7 +74,7 @@ class MCDisk(_disk.Disk):
         ncloudsptor = []
         rpt_params = self._trait_params['rpt']
         ring_centers = np.array(self._subrnodes[1:-1], self._dtype)
-        for trait, pnames in zip(self.rptraits(), rpt_params.pnames):
+        for trait, pnames in zip(self._traits['rpt'], rpt_params.pnames):
             # Make a parameter dict for the current trait
             # Use the original names and not the new/prefixed ones
             trait_params = {}

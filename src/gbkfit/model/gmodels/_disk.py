@@ -97,18 +97,16 @@ def _fill_param_values(
 
 class Disk(abc.ABC):
 
-    def __init__(
-            self,
-            loose, tilted, rnodes, rstep, interp,
-            vsys_nwmode,
-            xpos_nwmode, ypos_nwmode,
-            posa_nwmode, incl_nwmode,
-            rptraits, rhtraits,
-            vptraits, vhtraits,
-            dptraits, dhtraits,
-            zptraits,
-            sptraits,
-            wptraits):
+    # The traits that this type of disk does not support (yet)
+    unsupported_traits = ()
+
+    def __init__(self, loose, tilted, rnodes, rstep, interp, nwmodes, traits_):
+        """
+        nwmodes has the node-wise modes of the geometric parameters, and
+        traits_ the traits of each kind. Both are keyed as in
+        GEOMETRY_PARAMS and TRAIT_KINDS, and can leave keys out (no
+        node-wise mode, no traits).
+        """
 
         nrnodes = len(rnodes)
 
@@ -133,18 +131,10 @@ class Disk(abc.ABC):
         self._subrnodes = subrnodes
         self._nsubrnodes = len(subrnodes)
         self._interp = interp
-        self._nwmodes = dict(
-            vsys=vsys_nwmode,
-            xpos=xpos_nwmode, ypos=ypos_nwmode,
-            posa=posa_nwmode, incl=incl_nwmode)
-        self._traits = dict(
-            rpt=rptraits, rht=rhtraits,
-            vpt=vptraits, vht=vhtraits,
-            dpt=dptraits, dht=dhtraits,
-            zpt=zptraits,
-            spt=sptraits,
-            wpt=wptraits)
-        self._is_opacity_disk = isinstance(rptraits[0], traits.OPTrait)
+        self._nwmodes = {name: nwmodes.get(name) for name in GEOMETRY_PARAMS}
+        self._traits = {kind: traits_.get(kind, ()) for kind in TRAIT_KINDS}
+        self._is_opacity_disk = isinstance(
+            self._traits['rpt'][0], traits.OPTrait)
 
         # Make descs for the geometric parameters. There is no systemic
         # velocity without velocity traits.
@@ -153,7 +143,7 @@ class Disk(abc.ABC):
         self._geometry_pdescs = {
             name: _make_param_descs(name, nrnodes, self._geometry_isnw[name])
             for name in GEOMETRY_PARAMS
-            if name != 'vsys' or vptraits}
+            if name != 'vsys' or self._traits['vpt']}
 
         # Make descs for the trait parameters. The density traits of an
         # opacity disk are opacity traits.
@@ -200,47 +190,15 @@ class Disk(abc.ABC):
     def interp(self):
         return self._interp
 
-    def vsys_nwmode(self):
-        return self._nwmodes['vsys']
+    def nwmode(self, name):
+        return self._nwmodes[name]
 
-    def xpos_nwmode(self):
-        return self._nwmodes['xpos']
+    def traits(self, kind):
+        return self._traits[kind]
 
-    def ypos_nwmode(self):
-        return self._nwmodes['ypos']
-
-    def posa_nwmode(self):
-        return self._nwmodes['posa']
-
-    def incl_nwmode(self):
-        return self._nwmodes['incl']
-
-    def rptraits(self):
-        return self._traits['rpt']
-
-    def rhtraits(self):
-        return self._traits['rht']
-
-    def vptraits(self):
-        return self._traits['vpt']
-
-    def vhtraits(self):
-        return self._traits['vht']
-
-    def dptraits(self):
-        return self._traits['dpt']
-
-    def dhtraits(self):
-        return self._traits['dht']
-
-    def zptraits(self):
-        return self._traits['zpt']
-
-    def sptraits(self):
-        return self._traits['spt']
-
-    def wptraits(self):
-        return self._traits['wpt']
+    def options(self):
+        """The options of this type of disk, besides those of all disks."""
+        return {}
 
     def pdescs(self):
         return self._pdescs
@@ -351,16 +309,16 @@ class Disk(abc.ABC):
 
         if out_extra is not None:
             shape = spat_size[::-1]
-            if self.rptraits():
+            if self._traits['rpt']:
                 rdata_cmp = driver.mem_alloc_d(shape, dtype)
                 driver.mem_fill(rdata_cmp, 0)
-            if self.vptraits():
+            if self._traits['vpt']:
                 vdata_cmp = driver.mem_alloc_d(shape, dtype)
                 driver.mem_fill(vdata_cmp, np.nan)
-            if self.dptraits():
+            if self._traits['dpt']:
                 ddata_cmp = driver.mem_alloc_d(shape, dtype)
                 driver.mem_fill(ddata_cmp, np.nan)
-            if self.wptraits():
+            if self._traits['wpt']:
                 wdata_cmp = driver.mem_alloc_d(shape, dtype)
                 driver.mem_fill(wdata_cmp, 1)
             if odata is not None:
@@ -385,23 +343,23 @@ class Disk(abc.ABC):
 
             rdata_key = 'odata' if self._is_opacity_disk else 'bdata'
 
-            if self.rptraits():
+            if self._traits['rpt']:
                 out_extra[rdata_key] = driver.mem_copy_d2h(rdata_cmp)
-            if self.vptraits():
+            if self._traits['vpt']:
                 out_extra['vdata'] = driver.mem_copy_d2h(vdata_cmp)
-            if self.dptraits():
+            if self._traits['dpt']:
                 out_extra['ddata'] = driver.mem_copy_d2h(ddata_cmp)
-            if self.wptraits():
+            if self._traits['wpt']:
                 out_extra['wdata'] = driver.mem_copy_d2h(wdata_cmp)
             if odata is not None:
                 out_extra['obdata'] = driver.mem_copy_d2h(ordata_cmp)
-            if self.rptraits():
+            if self._traits['rpt']:
                 sumabs = np.nansum(np.abs(out_extra[rdata_key]))
                 _log.debug(f"sum(abs({rdata_key})): {sumabs}")
-            if self.vptraits():
+            if self._traits['vpt']:
                 sumabs = np.nansum(np.abs(out_extra['vdata']))
                 _log.debug(f"sum(abs(vdata)): {sumabs}")
-            if self.dptraits():
+            if self._traits['dpt']:
                 sumabs = np.nansum(np.abs(out_extra['ddata']))
                 _log.debug(f"sum(abs(ddata)): {sumabs}")
 

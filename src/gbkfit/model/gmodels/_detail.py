@@ -4,7 +4,7 @@ import logging
 import numpy as np
 
 from gbkfit.math import interpolation
-from gbkfit.utils import iterutils, miscutils, parseutils
+from gbkfit.utils import iterutils, miscutils
 from . import traits
 
 
@@ -88,198 +88,20 @@ def _validate_component_nwmode(enabled, enabled_name, nwmode, nwmode_name):
     return nwmode
 
 
-def validate_component_nwmodes_for_geometry(
-        loose, tilted, xpos_nwmode, ypos_nwmode, posa_nwmode, incl_nwmode):
-    xpos_nwmode = _validate_component_nwmode(  # noqa
-        loose, 'loose', xpos_nwmode, 'xpos_nwmode')
-    ypos_nwmode = _validate_component_nwmode(  # noqa
-        loose, 'loose', ypos_nwmode, 'ypos_nwmode')
-    posa_nwmode = _validate_component_nwmode(  # noqa
-        tilted, 'tilted', posa_nwmode, 'posa_nwmode')
-    incl_nwmode = _validate_component_nwmode(  # noqa
-        tilted, 'tilted', incl_nwmode, 'incl_nwmode')
-    return dict(
-        xpos_nwmode=xpos_nwmode,
-        ypos_nwmode=ypos_nwmode,
-        posa_nwmode=posa_nwmode,
-        incl_nwmode=incl_nwmode)
-
-
-def validate_component_nwmodes_for_velocity(
-        loose, vsys_nwmode):
-    vsys_nwmode = _validate_component_nwmode(  # noqa
-        loose, 'loose', vsys_nwmode, 'vsys_nwmode')
-    return dict(
-        vsys_nwmode=vsys_nwmode)
-
-
-def parse_component_b2d_traits(
-        bptraits,
-        sptraits,
-        wptraits):
-    if not bptraits:
-        raise RuntimeError("at least one bptrait is required")
-    bptraits = iterutils.tuplify(bptraits)
-    sptraits = iterutils.tuplify(sptraits) if sptraits is not None else ()
-    wptraits = iterutils.tuplify(wptraits) if wptraits is not None else ()
-    return dict(
-        bptraits=bptraits,
-        sptraits=sptraits,
-        wptraits=wptraits)
-
-
-def parse_component_s2d_traits(
-        bptraits,
-        vptraits,
-        dptraits,
-        sptraits,
-        wptraits):
-    if not bptraits:
-        raise RuntimeError("at least one bptrait is required")
-    if not vptraits:
-        raise RuntimeError("at least one vptrait is required")
-    if not dptraits:
-        raise RuntimeError("at least one dptrait is required")
-    bptraits = iterutils.tuplify(bptraits)
-    vptraits = iterutils.tuplify(vptraits)
-    dptraits = iterutils.tuplify(dptraits)
-    sptraits = iterutils.tuplify(sptraits) if sptraits is not None else ()
-    wptraits = iterutils.tuplify(wptraits) if wptraits is not None else ()
-    return dict(
-        bptraits=bptraits,
-        vptraits=vptraits,
-        dptraits=dptraits,
-        sptraits=sptraits,
-        wptraits=wptraits)
-
-
-def parse_component_b3d_traits(
-        bptraits, bhtraits,
-        zptraits,
-        sptraits,
-        wptraits):
-    if not bptraits:
-        raise RuntimeError("at least one bptrait is required")
-    if not bhtraits:
-        raise RuntimeError("at least one bhtrait is required")
-    bptraits = iterutils.tuplify(bptraits)
-    bhtraits = iterutils.tuplify(bhtraits)
-    zptraits = iterutils.tuplify(zptraits) if zptraits is not None else ()
-    sptraits = iterutils.tuplify(sptraits) if sptraits is not None else ()
-    wptraits = iterutils.tuplify(wptraits) if wptraits is not None else ()
-    bptraits_len = len(bptraits)
-    bhtraits_len = len(bhtraits)
-    if bptraits_len != bhtraits_len:
-        raise RuntimeError(
-            f"the number of bhtraits must be equal to "
-            f"the number of bptraits ({bhtraits_len} != {bptraits_len})")
-    return dict(
-        bptraits=bptraits, bhtraits=bhtraits,
-        zptraits=zptraits,
-        sptraits=sptraits,
-        wptraits=wptraits)
-
-
-def parse_component_s3d_traits(
-        bptraits, bhtraits,
-        vptraits, vhtraits,
-        dptraits, dhtraits,
-        zptraits,
-        sptraits,
-        wptraits):
-    if not bptraits:
-        raise RuntimeError("at least one bptrait is required")
-    if not bhtraits:
-        raise RuntimeError("at least one bhtrait is required")
-    if not vptraits:
-        raise RuntimeError("at least one vptrait is required")
-    if not dptraits:
-        raise RuntimeError("at least one dptrait is required")
-    bptraits = iterutils.tuplify(bptraits)
-    bhtraits = iterutils.tuplify(bhtraits)
-    vptraits = iterutils.tuplify(vptraits)
-    vhtraits = iterutils.tuplify(vhtraits) \
-        if vhtraits else tuple([None] * len(vptraits))
-    dptraits = iterutils.tuplify(dptraits)
-    dhtraits = iterutils.tuplify(dhtraits) \
-        if dhtraits else tuple([None] * len(dptraits))
-    zptraits = iterutils.tuplify(zptraits) if zptraits else tuple()
-    sptraits = iterutils.tuplify(sptraits) if sptraits else tuple()
-    wptraits = iterutils.tuplify(wptraits) if wptraits else tuple()
-    if None in vhtraits:
-        vhtraits = iterutils.tuplify(iterutils.replace_item_in_sequence(
-            list(vhtraits), None, traits.VHTraitOne()))
-    if None in dhtraits:
-        dhtraits = iterutils.tuplify(iterutils.replace_item_in_sequence(
-            list(dhtraits), None, traits.DHTraitOne()))
-    bptraits_len = len(bptraits)
-    bhtraits_len = len(bhtraits)
-    vptraits_len = len(vptraits)
-    vhtraits_len = len(vhtraits)
-    dptraits_len = len(dptraits)
-    dhtraits_len = len(dhtraits)
-    if bptraits_len != bhtraits_len:
-        raise RuntimeError(
-            f"the number of bhtraits must be equal to "
-            f"the number of bptraits ({bhtraits_len} != {bptraits_len})")
-    if vptraits_len != vhtraits_len:
-        raise RuntimeError(
-            f"the number of vhtraits must be equal to "
-            f"the number of vptraits ({vhtraits_len} != {vptraits_len})")
-    if len(dptraits) != len(dhtraits):
-        raise RuntimeError(
-            f"the number of dhtraits must be equal to "
-            f"the number of dptraits ({dhtraits_len} != {dptraits_len})")
-    return dict(
-        bptraits=bptraits, bhtraits=bhtraits,
-        vptraits=vptraits, vhtraits=vhtraits,
-        dptraits=dptraits, dhtraits=dhtraits,
-        zptraits=zptraits,
-        sptraits=sptraits,
-        wptraits=wptraits)
-
-
-def parse_component_o3d_traits(
-        optraits, ohtraits,
-        zptraits,
-        sptraits,
-        wptraits):
-    if not optraits:
-        raise RuntimeError("at least one optrait is required")
-    if not ohtraits:
-        raise RuntimeError("at least one ohtrait is required")
-    optraits = iterutils.tuplify(optraits)
-    ohtraits = iterutils.tuplify(ohtraits)
-    zptraits = iterutils.tuplify(zptraits) if zptraits is not None else ()
-    sptraits = iterutils.tuplify(sptraits) if sptraits is not None else ()
-    wptraits = iterutils.tuplify(wptraits) if wptraits is not None else ()
-    optraits_len = len(optraits)
-    ohtraits_len = len(ohtraits)
-    if optraits_len != ohtraits_len:
-        raise RuntimeError(
-            f"the number of ohtraits must be equal to "
-            f"the number of optraits ({ohtraits_len} != {optraits_len})")
-    return dict(
-        optraits=optraits, ohtraits=ohtraits,
-        zptraits=zptraits,
-        sptraits=sptraits,
-        wptraits=wptraits)
-
-
-def rename_bx_to_rx_traits(traits_):
-    if 'bptraits' in traits_:
-        traits_.update(rptraits=traits_.pop('bptraits'))
-    if 'bhtraits' in traits_:
-        traits_.update(rhtraits=traits_.pop('bhtraits'))
-    return traits_
-
-
-def rename_ox_to_rx_traits(traits_):
-    if 'optraits' in traits_:
-        traits_.update(rptraits=traits_.pop('optraits'))
-    if 'ohtraits' in traits_:
-        traits_.update(rhtraits=traits_.pop('ohtraits'))
-    return traits_
+def validate_component_nwmodes(loose, tilted, nwmodes):
+    """
+    The node-wise modes of the geometric parameters of a component (e.g.
+    'xpos'), without those of the parameters that are not node-wise:
+    vsys, xpos and ypos if the component is not loose, posa and incl if
+    it is not tilted.
+    """
+    result = {}
+    for name, nwmode in nwmodes.items():
+        enabled_name = 'tilted' if name in ('posa', 'incl') else 'loose'
+        enabled = tilted if enabled_name == 'tilted' else loose
+        result[name] = _validate_component_nwmode(
+            enabled, enabled_name, nwmode, f'{name}_nwmode')
+    return result
 
 
 def check_traits_common(traits_):
@@ -298,33 +120,6 @@ def check_traits_common(traits_):
             _log.warning(
                 f"the use of {trait_desc} is discouraged; "
                 f"it may result in density overestimation due to aliasing")
-
-
-def check_traits_mcdisk(component, traits_):
-    unsupported_traits = (
-        traits.BPTraitMixtureExponential,
-        traits.BPTraitMixtureGauss,
-        traits.BPTraitMixtureGGauss,
-        traits.BPTraitMixtureMoffat,
-        traits.BPTraitNWDistortion,
-        traits.DPTraitMixtureExponential,
-        traits.DPTraitMixtureGauss,
-        traits.DPTraitMixtureGGauss,
-        traits.DPTraitMixtureMoffat,
-        traits.DPTraitNWDistortion,
-        traits.OPTraitMixtureExponential,
-        traits.OPTraitMixtureGauss,
-        traits.OPTraitMixtureGGauss,
-        traits.OPTraitMixtureMoffat,
-        traits.OPTraitNWDistortion)
-    for trait in traits_:
-        if isinstance(trait, unsupported_traits):
-            cmp_class = component.__class__
-            cmp_label = 'gmodel component'
-            cmp_desc = parseutils.make_typed_desc(cmp_class, cmp_label)
-            trait_desc = traits.trait_desc(trait.__class__)
-            raise NotImplementedError(
-                f"{cmp_desc} does not support {trait_desc} yet")
 
 
 def _make_gmodel_params_cmp(components, prefix, force_prefix):
