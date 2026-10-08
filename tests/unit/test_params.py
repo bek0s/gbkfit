@@ -1,13 +1,15 @@
-
-import numbers
+"""
+Tests for the parameter descriptions, and the parsing of the keys and the
+expressions of parameter properties. Their behaviour as a whole is tested
+in test_paramspace.py.
+"""
 
 import numpy as np
+import pytest
 
-from gbkfit.params.interpreter import *
-from gbkfit.params.params import *
-from gbkfit.params.parsers import *
+from gbkfit.params.expressions import Expression, InvalidExpressionError
+from gbkfit.params.keys import InvalidKeyError, parse_key
 from gbkfit.params.pdescs import *
-from gbkfit.params.symbols import *
 
 
 def test_param_desc_scalar():
@@ -74,491 +76,98 @@ def test_param_desc_vector():
     assert info_dumped == info
 
 
-def test_param_symbols():
-    # is_param_symbol()
-    assert is_param_symbol('a ')
-    assert is_param_symbol(' a')
-    assert is_param_symbol(' a ')
-    assert is_param_symbol('a_1')
-    assert is_param_symbol('a[:]')
-    assert is_param_symbol('a[1]')
-    assert is_param_symbol('a [1]')
-    assert is_param_symbol('a[+1]')
-    assert is_param_symbol('a[-1]')
-    assert is_param_symbol('a[[1,2]]')
-    assert is_param_symbol('a[[1,2,2]]')
-    assert is_param_symbol('a[1:2]')
-    assert is_param_symbol('a[1:2:1]')
-    assert is_param_symbol('a[1:2:-1]')
-    assert not is_param_symbol('1')
-    assert not is_param_symbol('*')
-    assert not is_param_symbol('1a')
-    assert not is_param_symbol('*a')
-    assert not is_param_symbol('a*')
-    assert not is_param_symbol('a a')
-    assert not is_param_symbol('a[b]')
-    # is_param_attrib_symbol()
-    assert is_param_attrib_symbol('a')
-    assert not is_param_attrib_symbol('*a')
-    assert not is_param_attrib_symbol('a*')
-    assert not is_param_attrib_symbol('a[1]')
-    # make_param_symbol()
-    assert make_param_symbol('a', None) == 'a'
-    assert make_param_symbol('a', 0) == 'a[0]'
-    assert make_param_symbol('a', [0]) == 'a[0]'
-    assert make_param_symbol('a', [0, 1]) == 'a[[0, 1]]'
-    assert make_param_symbol('a', [1, 0]) == 'a[[1, 0]]'
-    # make_param_symbol_subscript_[bindx|slice|aindx]()
-    assert make_param_symbol_subscript_bindx(1) == '[1]'
-    assert make_param_symbol_subscript_bindx(-1) == '[-1]'
-    assert make_param_symbol_subscript_slice(1, 3) == '[1:3:]'
-    assert make_param_symbol_subscript_slice(1, 3, -1) == '[1:3:-1]'
-    assert make_param_symbol_subscript_aindx([1, 2]) == '[[1, 2]]'
-    assert make_param_symbol_subscript_aindx([2, 2, 1]) == '[[2, 2, 1]]'
-    # make_param_symbols_from_name[s]_and_indices()
-    assert make_param_symbols_from_name_and_indices(
-        'a', [1, 2]) == ['a[1]', 'a[2]']
-    assert make_param_symbols_from_names_and_indices(
-        ['a', 'b'], [[0, 1], [2, 3]]) == ['a[0]', 'a[1]', 'b[2]', 'b[3]']
-    # make_param_symbols_from_pdesc[s]()
-    assert make_param_symbols_from_pdesc(
-        ParamScalarDesc('a')) == ['a']
-    assert make_param_symbols_from_pdesc(
-        ParamScalarDesc('a'), 'b') == ['b']
-    assert make_param_symbols_from_pdesc(
-        ParamVectorDesc('a', 2)) == ['a[0]', 'a[1]']
-    assert make_param_symbols_from_pdesc(
-        ParamVectorDesc('a', 2), 'b') == ['b[0]', 'b[1]']
-    assert make_param_symbols_from_pdescs([
-        ParamScalarDesc('a'), ParamVectorDesc('b', 2)]
-    ) == ['a', 'b[0]', 'b[1]']
-    assert make_param_symbols_from_pdescs([
-        ParamScalarDesc('a'), ParamVectorDesc('b', 2)], ['c', 'd']
-    ) == ['c', 'd[0]', 'd[1]']
-    # parse_param_symbol()
-    assert parse_param_symbol('a', None) == ('a', None, None)
-    assert parse_param_symbol('a', 3) == ('a', [0, 1, 2], [])
-    assert parse_param_symbol('a[:]', 3) == ('a', [0, 1, 2], [])
-    assert parse_param_symbol('a[0]', 3) == ('a', [0], [])
-    assert parse_param_symbol('a[3]', 3) == ('a', [], [3])
-    assert parse_param_symbol('a[-1]', 3) == ('a', [2], [])
-    assert parse_param_symbol('a[-4]', 3) == ('a', [], [-4])
-    assert parse_param_symbol('a[[1, 2]]', 3) == ('a', [1, 2], [])
-    assert parse_param_symbol('a[[2, 2, 1]]', 3) == ('a', [2, 2, 1], [])
+PDESCS = dict(a=ParamScalarDesc('a'), v=ParamVectorDesc('v', 12))
 
 
-def test_param_parsers():
-
-    #
-    # parse_param_keys()
-    #
-
-    pdescs = dict(
-        a=ParamScalarDesc('a'),
-        b=ParamVectorDesc('b', 5),
-        c=ParamVectorDesc('c', 5),
-        d=ParamVectorDesc('d', 5),
-        e=ParamVectorDesc('b', 5),
-    )
-
-    params = {
-        # valid keys
-        'a ': 1,
-        'b': 1,
-        'c[0:2]': 1,
-        'd': 1,
-        # invalid keys
-        '1invalid': 1,
-        'unknown': 1,
-        'a[0]': 1,
-        'd[0]': 1,
-        'e[5]': 1
-    }
-
-    parse_param_keys_result = parse_param_keys(
-        params, pdescs,
-        silent_errors=True,
-        silent_warnings=True,
-        throw_on_errors=False,
-        throw_on_warnings=False)
-
-    assert parse_param_keys_result.keys == ['a', 'b', 'c[0:2]']
-    assert parse_param_keys_result.values == [1, 1, 1]
-    assert parse_param_keys_result.param_names == ['a', 'b', 'c']
-    assert parse_param_keys_result.param_indices == [
-        None, [0, 1, 2, 3, 4], [0, 1]]
-
-    assert parse_param_keys_result.invalid_keys_syntax == ['1invalid']
-    assert parse_param_keys_result.invalid_keys_unknown == ['unknown']
-    assert parse_param_keys_result.invalid_keys_repeated == {
-        'd': ['d[0]'], 'd[0]': ['d[0]']}
-    assert parse_param_keys_result.invalid_keys_bad_scalar == ['a[0]']
-    assert parse_param_keys_result.invalid_keys_bad_vector == {'e[5]': [5]}
-
-    #
-    # parse_param_values()
-    #
-
-    class InvalidValueType:
-        pass
-
-    pdescs = dict(
-        a=ParamScalarDesc('a'),
-        b=ParamScalarDesc('b'),
-        c=ParamScalarDesc('c'),
-        d=ParamVectorDesc('d', 3),
-        e=ParamVectorDesc('e', 3),
-        f=ParamVectorDesc('f', 3),
-        g=ParamVectorDesc('g', 3),
-        h=ParamVectorDesc('h', 3),
-        i=ParamVectorDesc('i', 3),
-        j=ParamVectorDesc('j', 3),
-        k=ParamVectorDesc('k', 3),
-        l=ParamVectorDesc('l', 3),
-        m=ParamVectorDesc('m', 3),
-        n=ParamVectorDesc('n', 3),
-        o=ParamVectorDesc('o', 3)
-    )
-
-    params = {
-        'a': None,
-        'b': 1,
-        'c': '1',
-        'd': None,
-        'e': 1,
-        'f': '1',
-        'g': [0, 1, 2],
-        'h': [None, 1, '1'],
-        'i[:]': 1,
-        'j[0]': 0,
-        'j[1:3]': [1, 2],
-        'k[[0, 1, 2]]': [0, 1, 2],
-        # Invalid values
-        'l': [0, 1],
-        'm': InvalidValueType(),
-        'n': [InvalidValueType(), 1, 2],
-        'o[0]': [1]
-    }
-
-    parse_param_values_result = parse_param_values(
-        params, pdescs,
-        is_value_fun=lambda x: isinstance(x, (numbers.Real,)),
-        silent_errors=True,
-        silent_warnings=True,
-        throw_on_errors=False,
-        throw_on_warnings=False)
-
-    assert parse_param_values_result.parse_param_keys_result.param_names == [
-        'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'j', 'k', 'l', 'm',
-        'n', 'o']
-    assert parse_param_values_result.parse_param_keys_result.param_indices == [
-        None, None, None, [0, 1, 2], [0, 1, 2], [0, 1, 2], [0, 1, 2],
-        [0, 1, 2], [0, 1, 2], 0, [1, 2], [0, 1, 2], [0, 1, 2], [0, 1, 2],
-        [0, 1, 2], 0]
-    assert parse_param_values_result.exploded_params == {
-        'b': 1, 'e[0]': 1, 'e[1]': 1, 'e[2]': 1, 'g[0]': 0, 'g[1]': 1,
-        'g[2]': 2, 'h[1]': 1, 'i[0]': 1, 'i[1]': 1, 'i[2]': 1, 'j[0]': 0,
-        'j[1]': 1, 'j[2]': 2, 'k[0]': 0, 'k[1]': 1, 'k[2]': 2, 'n[1]': 1,
-        'n[2]': 2}
-    assert parse_param_values_result.expressions == {
-        'a': None, 'c': '1', 'd': None, 'f': '1', 'h[0]': None, 'h[2]': '1'}
-
-    assert parse_param_values_result.invalid_values_bad_value == [
-        'm']
-    assert parse_param_values_result.invalid_values_bad_evalue == {
-        'n': ['n[0]']}
-    assert parse_param_values_result.invalid_values_bad_length == [
-        'l', 'o[0]']
-
-    #
-    # parse_param_expressions()
-    #
-
-    pdescs = dict(
-        a=ParamScalarDesc('a'),
-        b=ParamScalarDesc('b'),
-        c=ParamScalarDesc('c'),
-        d=ParamVectorDesc('d', 3),
-        e=ParamVectorDesc('e', 3),
-        f=ParamVectorDesc('f', 3),
-        g=ParamVectorDesc('g', 3)
-    )
-
-    params = {
-        'a': 'b',
-        'b': 'c',
-        'c': '1 + 1',
-        'd[0]': 'd[1]',
-        'd[1]': 'd[2]',
-        'd[2]': 'np.cos(a)',
-        # Invalid expressions
-        'e': InvalidValueType(),
-        'f': [1, 2, InvalidValueType()],
-        'g[0]': 'syntax error',
-        'g[1]': 'a[100] + a[101]',
-        'g[2]': 'd[[0, 100]]'
-    }
-
-    parse_param_expressions_result = parse_param_expressions(
-        params, pdescs,
-        silent_errors=True,
-        silent_warnings=True,
-        throw_on_errors=False,
-        throw_on_warnings=False)
-
-    assert parse_param_expressions_result.expression_keys == [
-        'c', 'b', 'a', 'd[2]', 'd[1]', 'd[0]']
-
-    assert parse_param_expressions_result.invalid_expressions_bad_value == [
-        'e', 'f']
-    assert parse_param_expressions_result.invalid_expressions_bad_syntax == [
-        'g[0]']
-    assert parse_param_expressions_result.invalid_expressions_bad_scalar == {
-        'g[1]': ['a[100]', 'a[101]']}
-    assert parse_param_expressions_result.invalid_expressions_bad_vector == {
-        'g[2]': {'d[[0, 100]]': [100]}}
-
-    #
-    # prepare_param_info()
-    #
-
-    pdescs = dict(
-        a=ParamScalarDesc('a'),
-        b=ParamScalarDesc('b'),
-        c=ParamVectorDesc('c', 2),
-        d=ParamVectorDesc('d', 2),
-        e=ParamVectorDesc('e', 8),
-        f=ParamVectorDesc('f', 5),
-        g=ParamVectorDesc('g', 5),
-        h=ParamVectorDesc('h', 5)
-    )
-
-    params = {
-        'a': 1,
-        'b': {'attr1': 1},
-        'c': {'*attr1': [1, 2], 'attr2': 3},
-        'd': {'*attr1': [1, 2], '*attr2': [3, 4]},
-        'e': [
-            {'attr1': 1},
-            {'*attr1': [1, 2], 'attr2': 3},
-            {'*attr1': [1, 2], '*attr2': [3, 4]},
-            {'1invalid': 1},
-            {'*attr1': [1, 2], '*attr2': 3},
-            {'*attr1': [1, 2], '*attr2': [3, 4, 5]},
-        ],
-        'f': {'1invalid': 1},
-        'g': {'*attr1': [1, 2], '*attr2': 3},
-        'h': {'*attr1': [1, 2], '*attr2': [3, 4, 5]}
-    }
-
-    parse_param_info_result = parse_param_info(
-        params, pdescs,
-        silent_errors=True,
-        silent_warnings=True,
-        throw_on_errors=False,
-        throw_on_warnings=False)
-
-    assert parse_param_info_result.info == {
-        'a': 1,
-        'b': {'attr1': 1},
-        'c': [
-            {'attr1': 1, 'attr2': 3},
-            {'attr1': 2, 'attr2': 3}
-        ],
-        'd': [
-            {'attr1': 1, 'attr2': 3},
-            {'attr1': 2, 'attr2': 4}
-        ],
-        'e': [
-            {'attr1': 1},
-            {'attr1': 1, 'attr2': 3},
-            {'attr1': 2, 'attr2': 3},
-            {'attr1': 1, 'attr2': 3},
-            {'attr1': 2, 'attr2': 4}
-        ]
-    }
-    assert parse_param_info_result.invalid_infos_bad_attr_name == {
-        'f': ['1invalid'], 'e': [(3, ['1invalid'])]}
-    assert parse_param_info_result.invalid_infos_bad_attr_value == {
-        'g': ['attr2'], 'e': [(4, ['attr2'])]}
-    assert parse_param_info_result.invalid_infos_bad_attr_length == {
-        'h': ['attr1', 'attr2'], 'e': [(5, ['attr1', 'attr2'])]}
+@pytest.mark.parametrize('key, name, indices, element', [
+    ('a', 'a', None, False),
+    (' a ', 'a', None, False),
+    ('v', 'v', range(12), False),
+    ('v[0]', 'v', [0], True),
+    ('v[-1]', 'v', [11], True),
+    ('v [ 2 ]', 'v', [2], True),
+    ('v[2:5]', 'v', [2, 3, 4], False),
+    ('v[::4]', 'v', [0, 4, 8], False),
+    ('v[1::10]', 'v', [1, 11], False),
+    ('v[-2:]', 'v', [10, 11], False),
+    ('v[::-5]', 'v', [11, 6, 1], False),
+    ('v[[0, 5, -1]]', 'v', [0, 5, 11], False),
+    ('v[[3]]', 'v', [3], False)])
+def test_keys(key, name, indices, element):
+    parsed = parse_key(key, PDESCS)
+    assert parsed.name == name
+    assert parsed.element == element
+    if indices is None:
+        assert parsed.indices is None
+    else:
+        np.testing.assert_array_equal(parsed.indices, list(indices))
 
 
-def test_param_interpreter():
-
-    pdescs = dict(
-        a=ParamScalarDesc('a'),
-        b=ParamScalarDesc('b'),
-        c=ParamScalarDesc('c'),
-        d=ParamVectorDesc('d', 3),
-        e=ParamVectorDesc('e', 3),
-        f=ParamVectorDesc('f', 3))
-
-    expressions_dict_1 = {
-        'c': 'a + b',
-        'a': 1,
-        'b': '1 + 1',
-        'd': 4,
-        'e[0]': 5,
-        'e[1:]': [6, 7],
-        'f[1]': 'f[0]',
-        'f[2]': 'f[1] + 8'
-    }
-
-    expressions_dict_2 = {
-        'c': None,
-        'a': 1,
-        'b': None,
-        'd': 4,
-        'e[0]': 5,
-        'e[1:]': [6, 7],
-        'f[1]': None,
-        'f[2]': None
-    }
-
-    def expressions_func_2(params):
-        params['a'] = 1
-        params['b'] = 1 + 1
-        params['c'] = params['a'] + params['b']
-        params['d'] = 4
-        params['e'][0] = 5
-        params['e'][1:] = [6, 7]
-        params['f'][1] = params['f'][0]
-        params['f'][2] = params['f'][1] + 8
-
-    def run_tests(expressions_dict, expressions_func):
-        interpreter = Interpreter(pdescs, expressions_dict, expressions_func)
-        enames_free = interpreter.exploded_names(
-            fixed=False, tied=False, free=True)
-        enames_tied = interpreter.exploded_names(
-            fixed=False, tied=True, free=False)
-        enames_fixed = interpreter.exploded_names(
-            fixed=True, tied=False, free=False)
-        assert enames_free == ['f[0]']
-        assert enames_tied == ['b', 'c', 'f[1]', 'f[2]']
-        assert enames_fixed == [
-            'a', 'd[0]', 'd[1]', 'd[2]', 'e[0]', 'e[1]', 'e[2]']
-        eparams = {}
-        params = interpreter.evaluate({'f[0]': 1}, True, eparams)
-        assert params['a'] == 1
-        assert params['b'] == 2
-        assert params['c'] == 3
-        assert np.array_equal(params['d'], (4, 4, 4))
-        assert np.array_equal(params['e'], (5, 6, 7))
-        assert np.array_equal(params['f'], (1, 1, 9))
-        assert eparams == {
-            'a': 1, 'b': 2, 'c': 3,
-            'd[0]': 4, 'd[1]': 4, 'd[2]': 4,
-            'e[0]': 5, 'e[1]': 6, 'e[2]': 7,
-            'f[0]': 1, 'f[1]': 1, 'f[2]': 9}
-
-    run_tests(expressions_dict_1, None)
-    run_tests(expressions_dict_2, expressions_func_2)
+def test_keys_of_unknown_parameters():
+    assert parse_key('b', PDESCS) is None
+    assert parse_key('b[0]', PDESCS) is None
 
 
-def test_evaluation_params():
-
-    pdescs = dict(
-        a=ParamScalarDesc('a'),
-        b=ParamScalarDesc('b'),
-        c=ParamVectorDesc('c', 3))
-
-    properties = {
-        'a': 1,
-        'b': '2',
-        'c': 'a + b'
-    }
-
-    # Creation tests
-    params = EvaluationParams(pdescs, properties, None)
-    enames_fixed = params.exploded_names(fixed=True, tied=False)
-    enames_tied = params.exploded_names(fixed=False, tied=True)
-    assert enames_fixed == ['a']
-    assert enames_tied == ['b', 'c[0]', 'c[1]', 'c[2]']
-    assert params.properties() == properties
-    assert params.expressions() == properties
-    assert params.exploded_properties_with_values() == {}
-
-    # Dump tests
-    params_dumped = params.dump()
-    params_info = {
-        'properties': properties,
-    }
-    assert params_dumped == params_info
-
-    # Load tests
-    loaded_params = evaluation_params_parser.load(params_info, pdescs=pdescs)
-    loaded_enames_fixed = loaded_params.exploded_names(fixed=True, tied=False)
-    loaded_enames_tied = loaded_params.exploded_names(fixed=False, tied=True)
-    assert loaded_enames_fixed == enames_fixed
-    assert loaded_enames_tied == enames_tied
-    assert loaded_params.properties() == params.properties()
-    assert loaded_params.expressions() == params.expressions()
-    assert loaded_params.exploded_properties_with_values() == {}
+@pytest.mark.parametrize('key, reason', [
+    ('1a', "invalid syntax"),
+    ('a b', "invalid syntax"),
+    ('v.x', "invalid syntax"),
+    ('v[0][1]', "invalid syntax"),
+    ('a[0]', "scalar"),
+    ('v[12]', "out of range"),
+    ('v[[0, 12]]', "out of range"),
+    ('v[1.5]', "integer constants"),
+    ('v[a]', "integer constants"),
+    ('v[[]]', "integer constants"),
+    ('v[03]', "invalid syntax")])
+def test_invalid_keys(key, reason):
+    with pytest.raises(InvalidKeyError, match=reason):
+        parse_key(key, PDESCS)
 
 
-def test_fitting_params():
-
-    from gbkfit.fitting.core import FittingParams
-
-    class MockFittingParamProperty:
-        pass
-
-    pdescs = dict(
-        a=ParamScalarDesc('a'),
-        b=ParamScalarDesc('b'),
-        c=ParamVectorDesc('c', 3),
-        d=ParamScalarDesc('d'),
-        e=ParamVectorDesc('e', 2))
-
-    properties = {
-        'a': 1,
-        'b': '2',
-        'c': 'a + b',
-        'd': MockFittingParamProperty(),
-        'e': MockFittingParamProperty()
-    }
-
-    # Creation tests
-    params = FittingParams(pdescs, properties, MockFittingParamProperty, None)
-    enames_fixed = params.exploded_names(fixed=True, tied=False, free=False)
-    enames_tied = params.exploded_names(fixed=False, tied=True, free=False)
-    enames_free = params.exploded_names(fixed=False, tied=False, free=True)
-    exploded_properties_with_values = params.exploded_properties_with_values()
-    assert enames_fixed == ['a']
-    assert enames_tied == ['b', 'c[0]', 'c[1]', 'c[2]']
-    assert enames_free == ['d', 'e[0]', 'e[1]']
-    # assert params.properties() == properties  # define __eq__() first
-    assert params.expressions() == {
-        'a': 1,
-        'b': '2',
-        'c': 'a + b'
-    }
-    assert list(exploded_properties_with_values.keys()) == enames_free
-    assert all([isinstance(x, MockFittingParamProperty)
-                for x in exploded_properties_with_values.values()])
+@pytest.mark.parametrize('source, value', [
+    ('1 + 2 * 3 - 4 / 2 + 7 // 2 + 7 % 2 + 2 ** 3 + -1', 16),
+    ('a * 2', 6),
+    ('v[0] + v[-1]', 11),
+    ('np.sum(v[1:3])', 3),
+    ('np.pi', np.pi),
+    ('np.linalg.norm(v[:2])', 1),
+    ('abs(-a) + min(a, 1) + max(a, 1) + round(1.6) + len(v)', 21),
+    ('sum([1, 2]) + sum((3, 4))', 10),
+    ('1 if a > 2 else 0', 1),
+    ('1 if a > 2 and a <= 3 or not a else 0', 1),
+    ('np.mean(v, axis=0)', 5.5)])
+def test_expressions(source, value):
+    namespace = dict(a=3.0, v=np.arange(12.0))
+    expression = Expression(source, PDESCS)
+    assert expression.evaluate(namespace) == pytest.approx(value)
 
 
-if __name__ == '__main__':
-    test_param_desc_scalar()
-    test_param_desc_vector()
-    test_param_symbols()
-    test_param_parsers()
-    test_param_interpreter()
-    test_evaluation_params()
-    test_fitting_params()
+@pytest.mark.parametrize('source, reason', [
+    ("__import__('os')", "__import__"),
+    ("open('file')", "open"),
+    ("a.__class__", "not allowed"),
+    ("v.sum()", "cannot be called"),
+    ("'text'", "numbers"),
+    ("True", "numbers"),
+    ("lambda: 1", "not allowed"),
+    ("[x for x in v]", "not allowed"),
+    ("b + 1", "unknown name 'b'"),
+    ("a[0]", "scalar"),
+    ("v[12]", "out of range"),
+    ("a +", "syntax")])
+def test_invalid_expressions(source, reason):
+    with pytest.raises(InvalidExpressionError, match=reason):
+        Expression(source, PDESCS)
 
 
-def test_evaluation_params_with_transforms_from_config(tmp_path):
-    # Parameters set to None are tied, and their values are set by a
-    # user function, loaded from a file named in the configuration
-    (tmp_path / 'transforms.py').write_text(
-        "def tie(params):\n"
-        "    params['b'] = 2 * params['a']\n")
-    pdescs = dict(a=ParamScalarDesc('a'), b=ParamScalarDesc('b'))
-    info = dict(
-        properties=dict(a=3, b=None),
-        transforms=dict(file=str(tmp_path / 'transforms.py'), func='tie'))
-    params = evaluation_params_parser.load(info, pdescs=pdescs)
-    assert params.evaluate() == dict(a=3, b=6)
+@pytest.mark.parametrize('source, reads', [
+    ('1', {}),
+    ('a', {'a': None}),
+    ('v[0] + v[[2, 3]]', {'v': {0, 2, 3}}),
+    ('v[1:3] + a', {'v': {1, 2}, 'a': None}),
+    ('np.sum(v)', {'v': set(range(12))}),
+    # An index that is not a constant can be any element
+    ('v[np.int64(a)]', {'v': set(range(12)), 'a': None})])
+def test_expression_reads(source, reads):
+    assert Expression(source, PDESCS).reads == reads

@@ -3,7 +3,8 @@ The behaviour of the parameters of the configurations: which elements
 are free, tied and fixed, the values they evaluate to, and the errors.
 
 Each case goes through the same path as a configuration file: the
-properties of the eval task, or those of the fit task.
+params of the eval task (EvaluationParams), or those of a fit
+(ParamSpace).
 """
 
 import re
@@ -24,8 +25,7 @@ def make_pdescs(**sizes):
 
 
 def load_eval_params(pdescs, properties, transforms=None):
-    from gbkfit.tasks.eval import _prepare_params
-    info = _prepare_params(dict(properties=properties), pdescs)
+    info = dict(properties=properties)
     if transforms:
         info['transforms'] = transforms
     return gbkfit.params.evaluation_params_parser.load(info, pdescs=pdescs)
@@ -36,9 +36,7 @@ def evaluate(pdescs, properties, transforms=None):
 
 
 def load_fit_params(pdescs, properties):
-    from gbkfit.fitting.core import FittingParams
-    info = gbkfit.params.parse_param_info(properties, pdescs).info
-    return FittingParams(pdescs, info, dict, None)
+    return gbkfit.params.ParamSpace(pdescs, properties)
 
 
 def write_transforms(path, source):
@@ -69,11 +67,9 @@ EVALUATION_CASES = dict(
     slice_with_step=(
         make_pdescs(v=6), {'v[::2]': 1, 'v[1::2]': 2},
         {'v': [1, 2, 1, 2, 1, 2]}),
-    slice_with_step_of_ten=pytest.param(
+    slice_with_step_of_ten=(
         make_pdescs(v=12), {'v[::10]': 5, 'v[1:10]': 2, 'v[11]': 3},
-        {'v': [5, 2, 2, 2, 2, 2, 2, 2, 2, 2, 5, 3]},
-        marks=pytest.mark.xfail(
-            strict=True, reason="slice steps of 10 or more are rejected")),
+        {'v': [5, 2, 2, 2, 2, 2, 2, 2, 2, 2, 5, 3]}),
     index_list=(
         make_pdescs(v=4), {'v[[0, 2]]': 1, 'v[[1, 3]]': 'v[0] + 5'},
         {'v': [1, 6, 1, 6]}),
@@ -157,10 +153,6 @@ def test_exploded_values():
     assert exploded == {'a': 1, 'v[0]': 1, 'v[1]': 2}
 
 
-def xfail(reason):
-    return pytest.mark.xfail(strict=True, reason=reason)
-
-
 # Evaluation errors: the parameters, their properties, and a pattern the
 # error message must contain (which names the problem)
 ERROR_CASES = dict(
@@ -185,10 +177,9 @@ ERROR_CASES = dict(
     expression_syntax=(
         make_pdescs(a=S, b=S), {'a': 1, 'b': 'a +'},
         r"'b'"),
-    expression_with_subscript_of_scalar=pytest.param(
+    expression_with_subscript_of_scalar=(
         make_pdescs(a=S, b=S, c=S), {'a': 1, 'b': 'a + 1', 'c': 'b[0]'},
-        r"b\[0\]",
-        marks=xfail("the last bad expression is not reported")),
+        r"b\[0\]"),
     expression_with_unknown_name=(
         make_pdescs(a=S), {'a': 'zzz + 1'},
         r"zzz"),
@@ -204,20 +195,18 @@ ERROR_CASES = dict(
     vector_expression_for_scalar=(
         make_pdescs(a=S), {'a': 'np.arange(2)'},
         r"scalar"),
-    boolean_value=pytest.param(
+    boolean_value=(
         make_pdescs(a=S), {'a': True},
-        r"'a'",
-        marks=xfail("booleans are accepted as numbers")),
+        r"'a'"),
     none_without_transforms=(
         make_pdescs(a=S), {'a': None},
         r"None"),
     fitting_properties_without_value=(
         make_pdescs(a=S), {'a': {'min': 0}},
         r"'a'"),
-    python_beyond_numpy=pytest.param(
+    python_beyond_numpy=(
         make_pdescs(a=S), {'a': "__import__('os').getpid() * 0"},
-        r"__import__",
-        marks=xfail("expressions can run any python")),
+        r"__import__"),
 )
 
 
@@ -254,13 +243,13 @@ FIT_PROPERTIES = {
 
 def test_fit_classification():
     params = load_fit_params(FIT_PDESCS, FIT_PROPERTIES)
-    assert params.exploded_names(fixed=False, tied=False, free=True) == [
+    assert params.names(free=True, tied=False, fixed=False) == [
         'c', 'v[0]', 'w[0]', 'w[1]']
-    assert params.exploded_names(fixed=False, tied=True, free=False) == [
+    assert params.names(free=False, tied=True, fixed=False) == [
         'b', 'v[1]']
-    assert params.exploded_names(fixed=True, tied=False, free=False) == [
+    assert params.names(free=False, tied=False, fixed=True) == [
         'a', 'v[2]']
-    assert params.exploded_properties_with_values() == {
+    assert params.free_properties() == {
         'c': {'value': 1, 'min': 0, 'max': 2},
         'v[0]': {'value': 1},
         'w[0]': {'value': 1, 'max': 5},
