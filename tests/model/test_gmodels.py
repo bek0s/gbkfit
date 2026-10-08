@@ -239,3 +239,21 @@ def test_2d_gmodel_weights_the_data(driver, gmodel_type, method, size, shape):
     desired = np.ones(shape)
     desired[:, 0, :] = 0
     np.testing.assert_array_equal(driver.mem_copy_d2h(weights), desired)
+
+
+def test_disk_derives_params_before_evaluation(
+        driver, evaluate_models, monkeypatch):
+    # A disk that derives a twice as bright disk makes a model that is
+    # twice as bright
+    from gbkfit.model.gmodels._smdisk import SMDisk
+    model, properties = MODELS['kinematics_2d']
+    model = dict(model, driver=dict(type=driver.type()))
+    data, _ = evaluate_models([model], properties)
+
+    def derive_params(self, params):
+        params['bpt_a'] = 2 * params['bpt_a']
+    monkeypatch.setattr(SMDisk, '_derive_params', derive_params)
+    data_derived, _ = evaluate_models([model], properties)
+    np.testing.assert_allclose(
+        data_derived[0]['scube']['d'], 2 * data[0]['scube']['d'],
+        rtol=1e-5, atol=1e-6 * np.abs(data[0]['scube']['d']).max())
