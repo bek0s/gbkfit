@@ -13,7 +13,6 @@ __all__ = [
     'PSFPoint',
     'PSFGauss',
     'PSFGGauss',
-    'PSFLorentz',
     'PSFMoffat',
     'PSFImage'
 ]
@@ -174,52 +173,6 @@ class PSFGGauss(PSF):
             size, step, offset, self._ratio, self._posa - rota)
         data = gbkfit.math.ggauss_1d_fun(r, 1, 0, self._alpha, self._beta)
         data[r > self._CUTOFF_FACTOR * self._alpha] = 0
-        return data / np.sum(data)
-
-
-class PSFLorentz(PSF):
-    """
-    A Lorentzian Point Spread Function (PSF).
-    """
-
-    _CUTOFF_FACTOR = 8
-
-    @staticmethod
-    def type():
-        return 'lorentz'
-
-    @classmethod
-    def load(cls, info: dict[str, Any], *args, **kwargs) -> 'PSFLorentz':
-        opts = _load_psf_common(cls, info)
-        return cls(**opts)
-
-    def dump(self) -> dict[str, Any]:
-        return dict(
-            type=self.type(),
-            gamma=self._gamma,
-            ratio=self._ratio,
-            posa=self._posa)
-
-    def __init__(self, gamma: float, ratio: float = 1.0, posa: float = 0.0):
-        self._gamma = gamma
-        self._ratio = ratio
-        self._posa = posa
-
-    def _size_impl(self, step: tuple[float, float]) -> tuple[float, float]:
-        return (2 * self._CUTOFF_FACTOR * self._gamma / step[0],
-                2 * self._CUTOFF_FACTOR * self._gamma / step[1])
-
-    def _asarray_impl(
-            self,
-            step: tuple[float, float],
-            size: tuple[int, int],
-            offset: tuple[int, int],
-            rota: float
-    ) -> np.ndarray:
-        r = _create_grid_2d(
-            size, step, offset, self._ratio, self._posa - rota)
-        data = gbkfit.math.lorentz_1d_fun(r, 1, 0, self._gamma)
-        data[r > self._CUTOFF_FACTOR * self._gamma] = 0
         return data / np.sum(data)
 
 

@@ -17,8 +17,6 @@ from gbkfit.psflsf.psfs import *
             sigma=5.0, ratio=1.0, posa=0.0)),
         ('ggauss', PSFGGauss, dict(
             alpha=5.0, beta=1.0, ratio=1.0, posa=0.0)),
-        ('lorentz', PSFLorentz, dict(
-            gamma=5.0, ratio=1.0, posa=0.0)),
         ('moffat', PSFMoffat, dict(
             alpha=5.0, beta=1.0, ratio=1.0, posa=0.0))
     ]

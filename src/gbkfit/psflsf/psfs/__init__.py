@@ -8,7 +8,6 @@ def _register_psfs():
         PSFPoint,
         PSFGauss,
         PSFGGauss,
-        PSFLorentz,
         PSFMoffat,
         PSFImage,
     ])
