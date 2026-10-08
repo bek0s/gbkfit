@@ -100,3 +100,29 @@ def test_grid_rotation_with_an_elongated_beam(driver, evaluate_models):
     expected = evaluate(posa=30, beam_posa=10, rota=0)
     difference = np.linalg.norm(rotated - expected) / np.linalg.norm(expected)
     assert difference < 1e-5
+
+
+def test_image_psf_matches_the_analytic_psf(driver, evaluate_models):
+    # A PSF image sampled from an analytic PSF gives the same model as
+    # that PSF, on a grid that is not square (an image PSF used to be
+    # transposed, and off-centre by half a pixel)
+    from astropy.io import fits
+    from gbkfit.psflsf.psfs import PSFGauss
+    gauss = dict(type='gauss', sigma=1.5, ratio=0.6, posa=30)
+    image = PSFGauss(1.5, 0.6, 30).asarray((1, 1), (21, 21))
+    fits.writeto('psf.fits', image)
+    properties = dict(
+        vsys=0, xpos=0, ypos=0, posa=60, incl=60,
+        bpt_a=1, bpt_s=4, bht_s=1, vpt_rt=2, vpt_vt=150, dpt_a=20)
+
+    def evaluate(psf):
+        model = kinematics_3d_model(driver, 'smdisk', 0, psf)
+        # The convolution pads the grid to 128 x 64
+        model['dmodel']['size'] = [61, 17, 41]
+        data, _ = evaluate_models([model], properties)
+        return data[0]['scube']['d'].copy()
+
+    expected = evaluate(gauss)
+    actual = evaluate(dict(type='image', data='psf.fits'))
+    difference = np.linalg.norm(actual - expected) / np.linalg.norm(expected)
+    assert difference < 1e-3

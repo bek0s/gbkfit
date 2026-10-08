@@ -177,3 +177,13 @@ def test_image_psf_and_lsf_are_centred_like_the_analytic_ones(size, offset):
     np.testing.assert_allclose(
         centroid(lsf_image.asarray(1, size, offset), 0),
         centroid(lsf.asarray(1, size, offset), 0), atol=1e-6)
+
+
+def test_image_psf_on_a_non_square_grid():
+    # An array of size (x, y) has shape (y, x), like the analytic PSFs
+    psf = PSFGauss(2, ratio=0.5, posa=30)
+    psf_image = PSFImage(psf.asarray((1, 1), (31, 31)))
+    expected = psf.asarray((1, 1), (65, 33))
+    actual = psf_image.asarray((1, 1), (65, 33))
+    assert actual.shape == expected.shape == (33, 65)
+    np.testing.assert_allclose(actual, expected, atol=1e-4 * expected.max())

@@ -337,7 +337,8 @@ class PSFImage(PSF):
         old_center_y = self._data.shape[0] / 2 - 0.5
         new_center_x = size[0] // 2 + offset[0]
         new_center_y = size[1] // 2 + offset[1]
-        x, y = np.meshgrid(np.arange(size[1]), np.arange(size[0]))
+        # Like all images, the arrays have shape (y, x)
+        x, y = np.meshgrid(np.arange(size[0]), np.arange(size[1]))
         nx = (x - new_center_x) * scale_x + old_center_x
         ny = (y - new_center_y) * scale_y + old_center_y
         data = scipy.ndimage.map_coordinates(self._data, [ny, nx], order=5)  # noqa
