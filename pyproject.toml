@@ -83,6 +83,28 @@ test-environment = { GBKFIT_REQUIRE_DRIVERS = 'host' }
 [tool.cibuildwheel.macos]
 environment = { MACOSX_DEPLOYMENT_TARGET = '14.0' }
 
+# Linux and Windows wheels also include the cuda module (built with
+# CUDA 12.9 for Pascal to Blackwell GPUs, plus PTX for newer ones). It
+# only needs the NVIDIA driver and CuPy (the 'cuda' extra) at run time.
+[tool.cibuildwheel.linux]
+before-all = '''
+dnf config-manager --add-repo https://developer.download.nvidia.com/compute/cuda/repos/rhel8/$(uname -m | sed s/aarch64/sbsa/)/cuda-rhel8.repo
+dnf install -y cuda-nvcc-12-9 cuda-cudart-devel-12-9
+'''
+environment = { CUDACXX = '/usr/local/cuda-12.9/bin/nvcc' }
+config-settings = { 'cmake.define.GBKFIT_CUDA' = 'ON', 'cmake.define.CMAKE_CUDA_ARCHITECTURES' = '60-real;70-real;75-real;80-real;86-real;89-real;90-real;100-real;120-real;120-virtual' }
+test-command = [
+    'pytest tests -m "not cuda"',
+    'python -c "import gbkfit.driver.native._cuda"',
+]
+
+[tool.cibuildwheel.windows]
+config-settings = { 'cmake.define.GBKFIT_CUDA' = 'ON', 'cmake.define.CMAKE_CUDA_ARCHITECTURES' = '60-real;70-real;75-real;80-real;86-real;89-real;90-real;100-real;120-real;120-virtual' }
+test-command = [
+    'pytest tests -m "not cuda"',
+    'python -c "import gbkfit.driver.native._cuda"',
+]
+
 [tool.ruff.lint]
 # Linting only (no automatic formatting for now): the core pyflakes and
 # pycodestyle error rules. Star imports are used on purpose.

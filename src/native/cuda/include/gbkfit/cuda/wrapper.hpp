@@ -1,18 +1,10 @@
 #pragma once
 
-#include "gbkfit/cuda/fftutils.hpp"
-
 namespace gbkfit { namespace cuda {
 
 template<typename T>
 struct Wrapper
 {
-    static void
-    math_complex_multiply_and_scale(
-            typename cufft<T>::complex* arr1,
-            typename cufft<T>::complex* arr2,
-            int n, T scale);
-
     static void
     dmodel_dcube_downscale(
             int scale_x, int scale_y, int scale_z,

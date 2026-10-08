@@ -38,7 +38,7 @@ class DriverBackendFFT(abc.ABC):
 
     @staticmethod
     def fft_complex_shape(shape):
-        return tuple(shape[:-1] + [shape[-1] // 2 + 1])
+        return tuple(shape[:-1]) + (shape[-1] // 2 + 1,)
 
     @staticmethod
     def fft_convolution_shift(data):

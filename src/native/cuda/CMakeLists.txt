@@ -20,11 +20,13 @@ target_include_directories(
   include
 )
 
+# Link the CUDA runtime statically, so that the module only needs the
+# NVIDIA driver at run time and can be shipped inside a wheel
 target_link_libraries(
   _cuda
   PRIVATE
   gbkfit::core
-  CUDA::cufft
+  CUDA::cudart_static
 )
 
 target_compile_features(

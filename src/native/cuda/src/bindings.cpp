@@ -3,7 +3,6 @@
 #include <nanobind/stl/array.h>
 
 #include "gbkfit/cuda/dmodels.hpp"
-#include "gbkfit/cuda/fft.hpp"
 #include "gbkfit/cuda/gmodels.hpp"
 #include "gbkfit/cuda/objective.hpp"
 
@@ -29,11 +28,4 @@ NB_MODULE(EXTENSION_NAME, m)
             .def(nb::init<>())
             .def("count_pixels", &Objective<float>::count_pixels)
             .def("residual", &Objective<float>::residual);
-
-    nb::class_<FFT<float>>(m, "FFTf32")
-            .def(nb::init<>())
-            .def("fft_r2c", &FFT<float>::fft_r2c)
-            .def("fft_c2r", &FFT<float>::fft_c2r)
-            .def("fft_convolve", &FFT<float>::fft_convolve)
-            .def("fft_convolve_cached", &FFT<float>::fft_convolve_cached);
 }

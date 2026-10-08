@@ -106,6 +106,19 @@ Use the steps below to install GBKFIT from the Python Package Index (PyPI).
    be moved to the production version of PyPI and will be installable using:
    ``pip install gbkfit``.
 
+On Linux and Windows, the GBKFIT packages on PyPI also support NVIDIA GPUs
+(Pascal or newer). To use them, install GBKFIT with the ``cuda`` extra, which
+also installs CuPy (for CUDA 12):
+
+.. code-block:: console
+
+   pip install "gbkfit[cuda]"
+
+Only the NVIDIA driver is needed; the CUDA Toolkit is not.
+
+.. attention::
+   Support for CUDA GPUs is not fully functional yet.
+
 
 Installing from source
 ----------------------
@@ -146,7 +159,7 @@ To also enable CUDA GPU support (requires the CUDA Toolkit), run instead:
 
 .. code-block:: console
 
-   pip install ./gbkfit -Ccmake.define.GBKFIT_CUDA=ON
+   pip install "./gbkfit[cuda]" -Ccmake.define.GBKFIT_CUDA=ON
 
 By default, the CUDA code is compiled for the GPU(s) present on the build
 machine. To target other GPUs, also pass, for example,

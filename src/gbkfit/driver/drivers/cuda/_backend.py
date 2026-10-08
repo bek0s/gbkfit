@@ -3,6 +3,7 @@ import numpy as np
 
 import gbkfit.driver.native._cuda as native_module
 from gbkfit.driver.backend import DriverBackends
+from ._fft import DriverBackendFFTCuda
 from .._detail.native import *
 
 
@@ -43,17 +44,6 @@ class DriverBackendsCuda(DriverBackends):
 
     def objective(self, dtype):
         return DriverBackendObjectiveCuda(dtype)
-
-
-class DriverBackendFFTCuda(DriverBackendFFTNative):
-
-    def __init__(self, dtype):
-        super().__init__(dtype, NativeMemoryCuda, {
-            np.dtype(np.float32): native_module.FFTf32
-        })
-
-    def __deepcopy__(self, memodict):
-        return self.__class__(self.dtype())
 
 
 class DriverBackendDModelCuda(DriverBackendDModelNative):
