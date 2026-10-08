@@ -51,12 +51,6 @@ class DriverBackendFFTCuda(DriverBackendFFT):
                 data_c, shape=data_r.shape, axes=(0, 1, 2), value_type='C2R')
         self._plans[key].fft(data_c, data_r, cufft.CUFFT_INVERSE)
 
-    def fft_convolve(self, data1_r, data1_c, data2_c):
-        self.fft_r2c(data1_r, data1_c)
-        data1_c *= data2_c
-        data1_c *= self._dtype.type(1 / data1_r.size)
-        self.fft_c2r(data1_c, data1_r)
-
     def fft_convolve_cached(self, data1_r, data2_r):
         shape = data1_r.shape
         data1_key = (shape, data1_r.data.ptr)

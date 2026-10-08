@@ -92,7 +92,7 @@ dmodel_dcube_mask(
 }
 
 template<typename T> void
-dmodel_moments(
+dmodel_mmaps_moments(
         int size_x, int size_y, int size_z,
         T step_x, T step_y, T step_z,
         T zero_x, T zero_y, T zero_z,
@@ -117,7 +117,7 @@ dmodel_moments(
             zero_x, zero_y, zero_z,
             dcube_d, dcube_w,
             cutoff, norders, orders,
-            mmaps_d, mmaps_w, mmaps_m);
+            mmaps_d, mmaps_m, mmaps_w);
 
     }
     }
@@ -408,65 +408,6 @@ gmodel_smdisk_evaluate(
 }
 
 template<typename T> void
-objective_count_pixels(
-        const T* data1, const T* data2, int size, T epsilon, int* counts)
-{
-//    {
-//        int count_data1 = 0;
-//        int count_data2 = 0;
-//        int count_both = 0;
-
-//        for(int i = 0; i < size; ++i)
-//        {
-//            const bool has_data1 = std::abs(data1[i]) > epsilon;
-//            const bool has_data2 = std::abs(data2[i]) > epsilon;
-//            count_data1 += has_data1 && !has_data2;
-//            count_data2 += !has_data1 && has_data2;
-//            count_both += has_data1 && has_data2;
-//        }
-
-//        if (count_data1) {
-//            counts[0] += count_data1;
-//        }
-//        if (count_data2) {
-//            counts[1] += count_data2;
-//        }
-//        if (count_both) {
-//            counts[2] += count_both;
-//        }
-//    }
-    #pragma omp parallel
-    {
-        int count_data1 = 0;
-        int count_data2 = 0;
-        int count_both = 0;
-
-        #pragma omp for nowait
-        for(int i = 0; i < size; ++i)
-        {
-            const bool has_data1 = std::abs(data1[i]) > epsilon;
-            const bool has_data2 = std::abs(data2[i]) > epsilon;
-            count_data1 += has_data1 && !has_data2;
-            count_data2 += !has_data1 && has_data2;
-            count_both += has_data1 && has_data2;
-        }
-
-        if (count_data1) {
-            #pragma omp atomic update
-            counts[0] += count_data1;
-        }
-        if (count_data2) {
-            #pragma omp atomic update
-            counts[1] += count_data2;
-        }
-        if (count_both) {
-            #pragma omp atomic update
-            counts[2] += count_both;
-        }
-    }
-}
-
-template<typename T> void
 objective_residual(
         const T* obs_d, const T* obs_e, const T* obs_m,
         const T* mdl_d, const T* mdl_w, const T* mdl_m,
@@ -500,3 +441,38 @@ objective_residual_sum(const T* residual, int size, bool squared, T* sum)
 }
 
 } // namespace gbkfit::host::kernels
+
+namespace gbkfit::host {
+
+// The kernels of the host module, with the interface of the kernel
+// wrapper of the cuda module (gbkfit::cuda::Wrapper)
+template<typename T>
+struct Wrapper
+{
+    static void
+    dmodel_dcube_downscale(auto... args) {
+        kernels::dmodel_dcube_downscale<T>(args...);
+    }
+
+    static void
+    dmodel_dcube_mask(auto... args) {
+        kernels::dmodel_dcube_mask<T>(args...);
+    }
+
+    static void
+    dmodel_mmaps_moments(auto... args) {
+        kernels::dmodel_mmaps_moments<T>(args...);
+    }
+
+    static void
+    objective_residual(auto... args) {
+        kernels::objective_residual<T>(args...);
+    }
+
+    static void
+    objective_residual_sum(auto... args) {
+        kernels::objective_residual_sum<T>(args...);
+    }
+};
+
+} // namespace gbkfit::host

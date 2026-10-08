@@ -178,7 +178,6 @@ class DModelMMaps(DModel):
         # Extract moment maps from DCube's arrays
         # Also evaluate one mask map and one weight map
         backend.mmaps_moments(
-            dcube.size(),
             dcube.step(),
             dcube.zero(),
             dcube.dcube(),
@@ -186,8 +185,8 @@ class DModelMMaps(DModel):
             self._mask_cutoff,
             self._mmaps_o,
             self._mmaps_d,
-            self._mmaps_w,
-            self._mmaps_m)
+            self._mmaps_m,
+            self._mmaps_w)
         # Model evaluation complete
         # Return data, mask, and weight arrays
         # The data and weight maps are different for each moment

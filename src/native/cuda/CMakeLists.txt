@@ -8,9 +8,7 @@ nanobind_add_module(
   NB_STATIC
   NOMINSIZE
   src/bindings.cpp
-  src/dmodels.cpp
   src/gmodels.cpp
-  src/objective.cpp
   src/wrapper.cu
 )
 
@@ -18,6 +16,7 @@ target_include_directories(
   _cuda
   PRIVATE
   include
+  ${PROJECT_SOURCE_DIR}/src/native/bindings/include
 )
 
 # Link the CUDA runtime statically, so that the module only needs the

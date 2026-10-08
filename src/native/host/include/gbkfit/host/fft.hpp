@@ -7,10 +7,12 @@
 
 #include <pocketfft_hdronly.h>
 
-#include "gbkfit/host/common.hpp"
+#include "gbkfit/bindings/arrays.hpp"
 #include "gbkfit/host/kernels.hpp"
 
 namespace gbkfit::host {
+
+namespace nb = nanobind;
 
 template<typename T>
 class FFT
@@ -20,8 +22,16 @@ public:
     using SizeType = std::array<int, 3>;
     using RealType = T;
     using ComplexType = std::complex<T>;
-    using DataCacheKeyType = std::pair<SizeType, RealType*>;
+    using DataCacheKeyType = std::pair<SizeType, const RealType*>;
     using DataCacheValueType = std::vector<ComplexType>;
+
+    // Real cubes of shape (z, y, x), and the non-redundant half of
+    // their spectra, of shape (z, y, x / 2 + 1)
+    using Real = bindings::Array<nb::device::cpu, RealType, nb::ndim<3>>;
+    using ConstReal = bindings::Array<
+            nb::device::cpu, const RealType, nb::ndim<3>>;
+    using Complex = bindings::Array<
+            nb::device::cpu, ComplexType, nb::ndim<3>>;
 
     struct DataCacheKeyHashType {
         std::size_t operator()(const DataCacheKeyType& k) const {
@@ -44,41 +54,32 @@ public:
     }
 
     void
-    fft_r2c(SizeType size, Ptr data_r, Ptr data_c)
+    fft_r2c(ConstReal data_r, Complex data_c)
     {
-        auto* data_r_ptr = reinterpret_cast<RealType*>(data_r);
-        auto* data_c_ptr = reinterpret_cast<ComplexType*>(data_c);
-        fft_r2c_exec(size, data_r_ptr, data_c_ptr);
+        const auto size = bindings::size_xyz(data_r);
+        require_spectrum_shape(size, data_c);
+        fft_r2c_exec(size, data_r.data(), data_c.data());
     }
 
     void
-    fft_c2r(SizeType size, Ptr data_c, Ptr data_r)
+    fft_c2r(Complex data_c, Real data_r)
     {
-        auto* data_c_ptr = reinterpret_cast<ComplexType*>(data_c);
-        auto* data_r_ptr = reinterpret_cast<RealType*>(data_r);
-        fft_c2r_exec(size, data_c_ptr, data_r_ptr);
+        const auto size = bindings::size_xyz(data_r);
+        require_spectrum_shape(size, data_c);
+        fft_c2r_exec(size, data_c.data(), data_r.data());
     }
 
+    // Convolve data1_r with data2_r, in place. The spectra of data2_r
+    // and of the buffer of data1_r are cached by their address.
     void
-    fft_convolve(
-            const std::array<int, 3> size,
-            Ptr data1_r, Ptr data1_c, Ptr data2_c)
+    fft_convolve_cached(Real data1_r, ConstReal data2_r)
     {
-        auto* data1_r_ptr = reinterpret_cast<RealType*>(data1_r);
-        auto* data1_c_ptr = reinterpret_cast<ComplexType*>(data1_c);
-        auto* data2_c_ptr = reinterpret_cast<ComplexType*>(data2_c);
-        fft_convolve_impl(size, data1_r_ptr, data1_c_ptr, data2_c_ptr);
-    }
-
-    void
-    fft_convolve_cached(
-            const std::array<int, 3> size,
-            Ptr data1_r, Ptr data2_r)
-    {
-        auto* data1_r_ptr = reinterpret_cast<RealType*>(data1_r);
-        auto* data2_r_ptr = reinterpret_cast<RealType*>(data2_r);
-        const auto data1_key = std::pair{size, data1_r_ptr};
-        const auto data2_key = std::pair{size, data2_r_ptr};
+        const auto size = bindings::size_xyz(data1_r);
+        bindings::require(
+                bindings::size_xyz(data2_r) == size,
+                "data1_r and data2_r must have the same shape");
+        const auto data1_key = std::pair{size, (const RealType*)data1_r.data()};
+        const auto data2_key = std::pair{size, data2_r.data()};
         const auto [n2, n1, n0] = size;
         const auto len = n0 * n1 * (n2 / 2 + 1);
 
@@ -92,13 +93,39 @@ public:
         if (data2_c.empty())
         {
             data2_c.resize(len);
-            fft_r2c_exec(size, data2_r_ptr, data2_c.data());
+            fft_r2c_exec(size, data2_r.data(), data2_c.data());
         }
 
-        fft_convolve_impl(size, data1_r_ptr, data1_c.data(), data2_c.data());
+        fft_convolve_impl(
+                size, data1_r.data(), data1_c.data(), data2_c.data());
+    }
+
+    static void
+    bind(nb::module_& m, const char* name)
+    {
+        nb::class_<FFT>(m, name)
+                .def(nb::init<>())
+                .def("fft_r2c", &FFT::fft_r2c,
+                        nb::arg("data_r").noconvert(),
+                        nb::arg("data_c").noconvert())
+                .def("fft_c2r", &FFT::fft_c2r,
+                        nb::arg("data_c").noconvert(),
+                        nb::arg("data_r").noconvert())
+                .def("fft_convolve_cached", &FFT::fft_convolve_cached,
+                        nb::arg("data1_r").noconvert(),
+                        nb::arg("data2_r").noconvert());
     }
 
 private:
+
+    static void
+    require_spectrum_shape(SizeType size, const Complex& data_c)
+    {
+        bindings::require(
+                bindings::size_xyz(data_c)
+                        == SizeType{size[0] / 2 + 1, size[1], size[2]},
+                "data_c must have shape (z, y, x / 2 + 1) of data_r");
+    }
 
     // The size is given as (x, y, z), while the data is stored in
     // row-major order, i.e., with shape (z, y, x).

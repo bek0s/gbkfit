@@ -9,9 +9,7 @@ import gbkfit.math
 __all__ = [
     'DriverBackends',
     'DriverBackendFFT',
-    'DriverBackendDModel',
-    'DriverBackendGModel',
-    'DriverBackendObjective'
+    'DriverBackendGModel'
 ]
 
 
@@ -73,29 +71,7 @@ class DriverBackendFFT(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def fft_convolve(self, data1_r, data1_c, data2_c):
-        pass
-
-    @abc.abstractmethod
     def fft_convolve_cached(self, data1_r, data2_r):
-        pass
-
-
-class DriverBackendDModel(abc.ABC):
-
-    @abc.abstractmethod
-    def dcube_downscale(self, scale, edge_hi, cube_hi, cube_lo):
-        pass
-
-    @abc.abstractmethod
-    def dcube_mask(self, cutoff, apply, mcube, dcube, wcube):
-        pass
-
-    @abc.abstractmethod
-    def mmaps_moments(
-            self,
-            size, step, zero, dcube, wcube, cutoff, orders,
-            mmaps_d, mmaps_w, mmaps_m):
         pass
 
 
@@ -148,11 +124,4 @@ class DriverBackendGModel(abc.ABC):
             rdata, rdata_cmp,
             ordata, ordata_cmp,
             vdata_cmp, ddata_cmp):
-        pass
-
-
-class DriverBackendObjective(abc.ABC):
-
-    @abc.abstractmethod
-    def foo(self):
         pass

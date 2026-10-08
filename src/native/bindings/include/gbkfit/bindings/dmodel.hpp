@@ -1,0 +1,106 @@
+#pragma once
+
+#include "gbkfit/bindings/arrays.hpp"
+
+namespace gbkfit::bindings {
+
+// The data model operations of a native module. Kernels launches the
+// kernels of the module, on the memory of Device.
+template<typename T, typename Device, typename Kernels>
+struct DModel
+{
+    using Cube = Array<Device, T, nb::ndim<3>>;
+    using ConstCube = Array<Device, const T, nb::ndim<3>>;
+    using Image = Array<Device, T, nb::ndim<2>>;
+    using Orders = Array<Device, const int, nb::ndim<1>>;
+
+    // Average blocks of scale pixels of src, starting at offset, into dst
+    static void
+    dcube_downscale(
+            std::array<int, 3> scale, std::array<int, 3> offset,
+            ConstCube src, Cube dst)
+    {
+        const auto src_size = size_xyz(src);
+        const auto dst_size = size_xyz(dst);
+        for (int i = 0; i < 3; ++i) {
+            require(offset[i] + dst_size[i] * scale[i] <= src_size[i],
+                    "the downscaled cube does not fit in the source cube");
+        }
+        Kernels::dmodel_dcube_downscale(
+                scale[0], scale[1], scale[2],
+                offset[0], offset[1], offset[2],
+                src_size[0], src_size[1], src_size[2],
+                dst_size[0], dst_size[1], dst_size[2],
+                src.data(), dst.data());
+    }
+
+    // Mark the pixels of dcube_d above the cutoff in dcube_m (optional),
+    // and if apply is true, set the rest to NaN
+    static void
+    dcube_mask(T cutoff, bool apply, Cube dcube_d, Cube dcube_m, Cube dcube_w)
+    {
+        require_same_shape(dcube_m, dcube_d, "dcube_m", "dcube_d");
+        require_same_shape(dcube_w, dcube_d, "dcube_w", "dcube_d");
+        const auto size = size_xyz(dcube_d);
+        Kernels::dmodel_dcube_mask(
+                cutoff, apply,
+                size[0], size[1], size[2],
+                dcube_d.data(), data(dcube_m), data(dcube_w));
+    }
+
+    // The moment maps of the given orders of dcube_d, with the moment
+    // map mask in mmaps_m and the moment map weights in mmaps_w
+    static void
+    mmaps_moments(
+            std::array<T, 3> step, std::array<T, 3> zero,
+            ConstCube dcube_d, ConstCube dcube_w,
+            T cutoff, Orders orders,
+            Cube mmaps_d, Image mmaps_m, Cube mmaps_w)
+    {
+        const auto size = size_xyz(dcube_d);
+        const int norders = int(orders.shape(0));
+        require_same_shape(dcube_w, dcube_d, "dcube_w", "dcube_d");
+        require(mmaps_d.shape(0) == size_t(norders)
+                && int(mmaps_d.shape(1)) == size[1]
+                && int(mmaps_d.shape(2)) == size[0],
+                "mmaps_d must have shape (norders, ny, nx)");
+        require(int(mmaps_m.shape(0)) == size[1]
+                && int(mmaps_m.shape(1)) == size[0],
+                "mmaps_m must have shape (ny, nx)");
+        require_same_shape(mmaps_w, mmaps_d, "mmaps_w", "mmaps_d");
+        Kernels::dmodel_mmaps_moments(
+                size[0], size[1], size[2],
+                step[0], step[1], step[2],
+                zero[0], zero[1], zero[2],
+                dcube_d.data(), data(dcube_w),
+                cutoff, norders, orders.data(),
+                mmaps_d.data(), mmaps_m.data(), data(mmaps_w));
+    }
+
+    static void
+    bind(nb::module_& m, const char* name)
+    {
+        nb::class_<DModel>(m, name)
+                .def(nb::init<>())
+                .def_static("dcube_downscale", &dcube_downscale,
+                        nb::arg("scale"), nb::arg("offset"),
+                        nb::arg("src").noconvert(),
+                        nb::arg("dst").noconvert())
+                .def_static("dcube_mask", &dcube_mask,
+                        nb::arg("cutoff"), nb::arg("apply"),
+                        nb::arg("dcube_d").noconvert(),
+                        nb::arg("dcube_m").noconvert().none(),
+                        nb::arg("dcube_w").noconvert().none())
+                .def_static("mmaps_moments", &mmaps_moments,
+                        nb::arg("step"), nb::arg("zero"),
+                        nb::arg("dcube_d").noconvert(),
+                        nb::arg("dcube_w").noconvert().none(),
+                        nb::arg("cutoff"),
+                        nb::arg("orders").noconvert(),
+                        nb::arg("mmaps_d").noconvert(),
+                        nb::arg("mmaps_m").noconvert(),
+                        nb::arg("mmaps_w").noconvert().none());
+    }
+};
+
+} // namespace gbkfit::bindings
