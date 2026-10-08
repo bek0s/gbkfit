@@ -119,3 +119,37 @@ def test_lsf_image_round_trip_and_channel_width_in_km_s():
     fits.writeto('lsf_m_s.fits', np.ones(11), header)
     loaded = lsf_parser.load(dict(type='image', data='lsf_m_s.fits'))
     np.testing.assert_allclose(loaded._step, 2.5, rtol=1e-12)
+
+
+def major_axis_position_angle(image):
+    """
+    The position angle (degrees, from +y towards -x, i.e. north through
+    east) of the major axis of an image, from its second moments.
+    """
+    y, x = np.indices(image.shape)
+    x = x - (image.shape[1] - 1) / 2
+    y = y - (image.shape[0] - 1) / 2
+    w = image / image.sum()
+    covariance = [
+        [(w * x * x).sum(), (w * x * y).sum()],
+        [(w * x * y).sum(), (w * y * y).sum()]]
+    _, vectors = np.linalg.eigh(covariance)
+    vx, vy = vectors[:, 1]
+    return np.degrees(np.arctan2(-vx, vy)) % 180
+
+
+@pytest.mark.parametrize('psf_type', [PSFGauss, PSFGGauss, PSFMoffat])
+@pytest.mark.parametrize('posa, rota', [(0, 0), (30, 0), (120, 0), (50, 20)])
+def test_psf_position_angle_is_that_of_its_major_axis(psf_type, posa, rota):
+    # Like the disks: posa is the position angle of the major axis, from
+    # north through east, and on a grid rotated by rota it is drawn at
+    # posa - rota
+    options = dict(ratio=0.5, posa=posa)
+    psf = (psf_type(2, **options) if psf_type is PSFGauss
+           else psf_type(2, 2, **options))
+    image = psf.asarray((1, 1), (41, 41), rota=rota)
+    # The second moments of profiles with wide wings depend on the pixels
+    # at their edge, so they measure the angle to a few hundredths of a
+    # degree
+    np.testing.assert_allclose(
+        major_axis_position_angle(image), (posa - rota) % 180, atol=0.1)
