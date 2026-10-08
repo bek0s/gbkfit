@@ -176,4 +176,13 @@ To make them fail instead, list the drivers that must be available in the
 ``GBKFIT_REQUIRE_DRIVERS`` environment variable (e.g.,
 ``GBKFIT_REQUIRE_DRIVERS=host,cuda pytest``).
 
+Optionally, to check the code with ruff before every commit, install
+`pre-commit <https://pre-commit.com>`_ and run ``pre-commit install`` once
+inside the repository.
+
+.. note::
+   The commands above use pip. If you prefer
+   `uv <https://docs.astral.sh/uv/>`_, the same steps work with
+   ``uv pip install`` in place of ``pip install``.
+
 Congratulations! Now it is time to model some galaxies!

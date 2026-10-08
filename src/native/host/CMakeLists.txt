@@ -1,4 +1,6 @@
 
+# The kernels need OpenMP 3.x; with MSVC, that means /openmp:llvm
+set(OpenMP_RUNTIME_MSVC llvm)
 find_package(OpenMP REQUIRED COMPONENTS CXX)
 find_package(Threads REQUIRED)
 
