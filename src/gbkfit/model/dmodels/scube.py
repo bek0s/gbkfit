@@ -16,6 +16,9 @@ __all__ = [
 
 class DModelSCube(DModel):
 
+    # The axes of a spectral cube: x, y and the spectral axis
+    _spectral_axis = 2
+
     @staticmethod
     def type():
         return 'scube'

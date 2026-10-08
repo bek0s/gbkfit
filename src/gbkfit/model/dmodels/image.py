@@ -16,6 +16,9 @@ __all__ = [
 
 class DModelImage(DModel):
 
+    # An image has no spectral axis
+    _spectral_axis = None
+
     @staticmethod
     def type():
         return 'image'

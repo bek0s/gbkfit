@@ -22,6 +22,9 @@ _log = logging.getLogger(__name__)
 
 class DModelMMaps(DModel):
 
+    # Moment maps have no spectral axis
+    _spectral_axis = None
+
     @staticmethod
     def type():
         return 'mmaps'
