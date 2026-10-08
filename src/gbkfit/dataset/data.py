@@ -1,5 +1,4 @@
 
-import logging
 import os.path
 from collections.abc import Sequence
 from numbers import Real
@@ -7,16 +6,13 @@ from typing import Any
 
 import numpy as np
 
-from gbkfit.utils import fitsutils, miscutils, parseutils
+from gbkfit.utils import fitsutils, parseutils
 
 
 __all__ = [
     'Data',
     'data_parser'
 ]
-
-
-_log = logging.getLogger(__name__)
 
 
 def _make_filename(filename, dump_path):
@@ -37,13 +33,12 @@ def _read_file(x, prefix, rpix=None, rval=None):
         prefix + options['file'], options.get('hdu', 0), rpix, rval)
 
 
-def _ensure_floating_or_float32(x, label):
-    result = x
-    if not np.issubdtype(x.dtype, np.floating):
-        _log.warning(
-            f"{label} array is not of floating type; will convert to float32")
-        result = x.astype(np.float32)
-    return result
+def _as_float32(x):
+    """
+    A float32 copy of an array, in native byte order. The drivers support
+    float32 only, and the copy leaves the caller's array unchanged.
+    """
+    return np.array(x, dtype=np.float32)
 
 
 class Data(parseutils.BasicSerializable):
@@ -86,7 +81,7 @@ class Data(parseutils.BasicSerializable):
             data_m = _read_file(mask, prefix)[0]
         if (error := info.get('error')) is not None:
             if isinstance(error, (int, float)):
-                data_e = np.full_like(data_d, error)
+                data_e = np.full(np.shape(data_d), error, dtype=float)
             else:
                 data_e = _read_file(error, prefix)[0]
         info.update(dict(
@@ -164,14 +159,10 @@ class Data(parseutils.BasicSerializable):
             rpix = (rpix,) * data.ndim
         if isinstance(rval, Real):
             rval = (rval,) * data.ndim
-        # Convert to native byte order and ensure fp format.
-        data = miscutils.to_native_byteorder(data)
-        data = _ensure_floating_or_float32(data, 'data')
-        mask = miscutils.to_native_byteorder(mask)
-        mask = _ensure_floating_or_float32(mask, 'mask')
+        data = _as_float32(data)
+        mask = _as_float32(mask)
         if error is not None:
-            error = miscutils.to_native_byteorder(error)
-            error = _ensure_floating_or_float32(error, 'error')
+            error = _as_float32(error)
         # Ensure mask contains only finite values
         if np.any(~np.isfinite(mask)):
             raise RuntimeError("mask contains non-finite values")
@@ -196,20 +187,15 @@ class Data(parseutils.BasicSerializable):
             raise RuntimeError(
                 f"data dimensionality and rval length are incompatible "
                 f"({data.ndim} != {len(rval)})")
-        # Create and apply the "total mask"
+        # The total mask: the pixels with a finite value, not masked, and
+        # with a finite, positive error
         total_mask = np.isfinite(data) & (mask != 0)
         if error is not None:
-            total_mask &= np.isfinite(error)
-        # Apply total mask to data
+            total_mask &= np.isfinite(error) & (error > 0)
         data[~total_mask] = np.nan
         if error is not None:
             error[~total_mask] = np.nan
-        # Convert mask to the same dtype as data
-        mask[:] = total_mask.astype(data.dtype)
-        # Ensure mask and total_mask are identical
-        if not np.array_equal(mask, total_mask):
-            raise RuntimeError("impossible")
-        del total_mask
+        mask = total_mask.astype(np.float32)
         # The world coordinates of the first pixel: the spatial axes are
         # measured from the reference pixel, and the spectral axis from
         # its world value there
@@ -217,11 +203,9 @@ class Data(parseutils.BasicSerializable):
             (rval[axis] if axis == spectral_axis else 0)
             - rpix[axis] * step[axis]
             for axis in range(data.ndim)]
-        # Keep copies of the supplied data
-        dtype = data.dtype
-        self._data = data.astype(dtype)
-        self._mask = mask.astype(dtype)
-        self._error = error.astype(dtype) if error is not None else None
+        self._data = data
+        self._mask = mask
+        self._error = error
         self._step = tuple(step)
         self._zero = tuple(zero)
         self._rpix = tuple(rpix)
