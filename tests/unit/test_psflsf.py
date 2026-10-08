@@ -153,3 +153,27 @@ def test_psf_position_angle_is_that_of_its_major_axis(psf_type, posa, rota):
     # degree
     np.testing.assert_allclose(
         major_axis_position_angle(image), (posa - rota) % 180, atol=0.1)
+
+
+def centroid(array, axis):
+    """The centroid of an array along an axis, in pixels."""
+    index = np.indices(array.shape)[axis]
+    return (index * array).sum() / array.sum()
+
+
+@pytest.mark.parametrize('size, offset', [(41, 0), (64, -1)])
+def test_image_psf_and_lsf_are_centred_like_the_analytic_ones(size, offset):
+    # The FFT convolution expects the centre at size // 2 + offset (with
+    # offset -1 for even sizes), as the analytic PSFs and LSFs put it
+    psf = PSFGauss(2)
+    psf_image = PSFImage(psf.asarray((1, 1), (21, 21)))
+    expected = psf.asarray((1, 1), (size, size), (offset, offset))
+    actual = psf_image.asarray((1, 1), (size, size), (offset, offset))
+    for axis in (0, 1):
+        np.testing.assert_allclose(
+            centroid(actual, axis), centroid(expected, axis), atol=1e-6)
+    lsf = LSFGauss(2)
+    lsf_image = LSFImage(lsf.asarray(1, 21))
+    np.testing.assert_allclose(
+        centroid(lsf_image.asarray(1, size, offset), 0),
+        centroid(lsf.asarray(1, size, offset), 0), atol=1e-6)

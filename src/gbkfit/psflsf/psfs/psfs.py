@@ -331,10 +331,12 @@ class PSFImage(PSF):
     ) -> np.ndarray:
         scale_x = step[0] / self._step[0]
         scale_y = step[1] / self._step[1]
+        # The centre of the image, and the centre of the PSF in the array,
+        # where the analytic PSFs put it
         old_center_x = self._data.shape[1] / 2 - 0.5
         old_center_y = self._data.shape[0] / 2 - 0.5
-        new_center_x = size[0] / 2 - 0.5 + offset[0]
-        new_center_y = size[1] / 2 - 0.5 + offset[1]
+        new_center_x = size[0] // 2 + offset[0]
+        new_center_y = size[1] // 2 + offset[1]
         x, y = np.meshgrid(np.arange(size[1]), np.arange(size[0]))
         nx = (x - new_center_x) * scale_x + old_center_x
         ny = (y - new_center_y) * scale_y + old_center_y
