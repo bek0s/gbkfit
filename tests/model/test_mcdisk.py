@@ -133,3 +133,14 @@ def test_mcdisk_without_clouds(driver):
     # A disk with zero flux has no clouds; its model is empty
     cube = evaluate_disk('mcdisk', driver.type(), properties=dict(bpt_a=0))
     assert not cube.any()
+
+
+def test_mcdisk_seed(driver):
+    # The seed (0 by default) selects the random realisation of the clouds
+    default = evaluate_disk('mcdisk', driver.type())
+    seed0 = evaluate_disk('mcdisk', driver.type(), dict(seed=0))
+    seed1 = evaluate_disk('mcdisk', driver.type(), dict(seed=1))
+    assert relative_difference(seed0, default) < SAME_REALISATION
+    assert relative_difference(seed1, default) > 1e-3
+    # Different realisations of the same disk
+    assert seed1.sum() == pytest.approx(default.sum(), rel=1e-5)

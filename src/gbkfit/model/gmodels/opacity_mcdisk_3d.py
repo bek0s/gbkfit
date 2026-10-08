@@ -36,6 +36,7 @@ class OpacityMCDisk3D(OpacityComponent3D):
         return dict(
             type=self.type(),
             cflux=self._disk.cflux(),
+            seed=self._disk.seed(),
             loose=self._disk.loose(),
             tilted=self._disk.tilted(),
             rnodes=self._disk.rnodes(),
@@ -71,7 +72,8 @@ class OpacityMCDisk3D(OpacityComponent3D):
             xpos_nwmode: common.NWMode | None = None,
             ypos_nwmode: common.NWMode | None = None,
             posa_nwmode: common.NWMode | None = None,
-            incl_nwmode: common.NWMode | None = None
+            incl_nwmode: common.NWMode | None = None,
+            seed: int = 0
     ):
         nwmode_geometry_args = _detail.validate_component_nwmodes_for_geometry(
             loose, tilted, xpos_nwmode, ypos_nwmode, posa_nwmode, incl_nwmode)
@@ -87,7 +89,7 @@ class OpacityMCDisk3D(OpacityComponent3D):
         _detail.check_traits_common(all_traits)
         _detail.check_traits_mcdisk(self, all_traits)
         self._disk = _mcdisk.MCDisk(
-            cflux=cflux,
+            cflux=cflux, seed=seed,
             loose=loose, tilted=tilted,
             **rnode_args,
             vsys_nwmode=None,

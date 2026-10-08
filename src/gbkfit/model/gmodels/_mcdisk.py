@@ -17,7 +17,7 @@ class MCDisk(_disk.Disk):
 
     def __init__(
             self,
-            cflux,
+            cflux, seed,
             loose, tilted, rnodes, rstep, interp,
             vsys_nwmode,
             xpos_nwmode, ypos_nwmode,
@@ -41,7 +41,11 @@ class MCDisk(_disk.Disk):
             sptraits,
             wptraits)
 
+        if seed < 0:
+            raise RuntimeError(f"seed must be >= 0; supplied value: {seed}")
         self._cflux = cflux
+        # The seed of the random numbers of the clouds
+        self._seed = seed
         # Array containing the cumulative sum of the number of clouds
         # per trait. For traits without an analytical integral we
         # calculate the number of clouds per trait ring. The center of
@@ -56,6 +60,9 @@ class MCDisk(_disk.Disk):
 
     def cflux(self):
         return self._cflux
+
+    def seed(self):
+        return self._seed
 
     def _impl_prepare(self, driver, dtype):
         rptraits = self.rptraits()
@@ -107,6 +114,7 @@ class MCDisk(_disk.Disk):
         self._backend.mcdisk_evaluate(
             self._native_disk,
             cflux=self._cflux,
+            seed=self._seed,
             nclouds=nclouds,
             ncloudscsum=self._s_ncloudsptor[1],
             hasordint=self._s_hasaintegral[1],
