@@ -25,16 +25,25 @@ _log = logging.getLogger(__name__)
 _SPEC_STEP = 1
 _SPEC_RANGE = 1000
 
+# The smallest dispersion (km/s) a spectral axis derived from the data
+# leaves room for (see _spectral_axis_from_data)
+_MIN_DISPERSION = 100
+
 
 def _spectral_axis_from_data(dataset, spec_step):
     """
     The size and the centre of a spectral axis with the given channel
     width that covers the velocities of a moment map dataset: the range
-    of mmap1, and three times the largest mmap2 on each side.
+    of mmap1, and three times the largest dispersion on each side. That
+    is the largest value of mmap2, but at least _MIN_DISPERSION (also
+    without mmap2), so that the lines of a model with a larger
+    dispersion than the data's are not cut.
     """
     velocity = dataset['mmap1'].data()
-    dispersion = dataset['mmap2'].data() if 'mmap2' in dataset else 0
-    margin = 3 * np.nanmax(dispersion)
+    dispersion = _MIN_DISPERSION
+    if 'mmap2' in dataset:
+        dispersion = max(dispersion, np.nanmax(dataset['mmap2'].data()))
+    margin = 3 * dispersion
     vmin = np.nanmin(velocity) - margin
     vmax = np.nanmax(velocity) + margin
     return dict(
