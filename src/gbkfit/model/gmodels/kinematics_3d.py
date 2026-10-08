@@ -3,7 +3,7 @@ from collections.abc import Sequence
 
 from gbkfit.model.core import GModelSCube
 from gbkfit.utils import parseutils
-from ._gmodel import ComponentGModel
+from ._gmodel import GModel3D
 from .core import OpacityComponent3D, SpectralComponent3D
 from .opacity_mcdisk_3d import OpacityMCDisk3D
 from .opacity_smdisk_3d import OpacitySMDisk3D
@@ -16,7 +16,7 @@ __all__ = [
 ]
 
 
-class GModelKinematics3D(ComponentGModel, GModelSCube):
+class GModelKinematics3D(GModel3D, GModelSCube):
 
     _cmp_parser = parseutils.TypedParser(SpectralComponent3D, [
         SpectralMCDisk3D,
@@ -47,5 +47,5 @@ class GModelKinematics3D(ComponentGModel, GModelSCube):
             self, driver, params, scube, weights, size, step, zero, rota,
             dtype, out_extra):
         self._evaluate(
-            driver, params, dict(scube=scube), weights,
-            size, step, zero, rota, dtype, out_extra)
+            driver, params, dict(scube=scube), (size[2], step[2], zero[2]),
+            weights, size, step, zero, rota, dtype, out_extra)

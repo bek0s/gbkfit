@@ -3,7 +3,7 @@ from collections.abc import Sequence
 
 from gbkfit.model.core import GModelSCube
 from gbkfit.utils import parseutils
-from ._gmodel import ComponentGModel
+from ._gmodel import GModel2D
 from .core import SpectralComponent2D
 from .spectral_smdisk_2d import SpectralSMDisk2D
 
@@ -13,7 +13,7 @@ __all__ = [
 ]
 
 
-class GModelKinematics2D(ComponentGModel, GModelSCube):
+class GModelKinematics2D(GModel2D, GModelSCube):
 
     _cmp_parser = parseutils.TypedParser(SpectralComponent2D, [
         SpectralSMDisk2D])
@@ -32,5 +32,5 @@ class GModelKinematics2D(ComponentGModel, GModelSCube):
             self, driver, params, scube, weights, size, step, zero, rota,
             dtype, out_extra):
         self._evaluate(
-            driver, params, dict(scube=scube), weights,
-            size, step, zero, rota, dtype, out_extra)
+            driver, params, dict(scube=scube), (size[2], step[2], zero[2]),
+            weights, size, step, zero, rota, dtype, out_extra)

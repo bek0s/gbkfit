@@ -3,7 +3,7 @@ from collections.abc import Sequence
 
 from gbkfit.model.core import GModelImage
 from gbkfit.utils import parseutils
-from ._gmodel import ComponentGModel
+from ._gmodel import GModel3D
 from .core import BrightnessComponent3D, OpacityComponent3D
 from .brightness_mcdisk_3d import BrightnessMCDisk3D
 from .brightness_smdisk_3d import BrightnessSMDisk3D
@@ -16,7 +16,7 @@ __all__ = [
 ]
 
 
-class GModelIntensity3D(ComponentGModel, GModelImage):
+class GModelIntensity3D(GModel3D, GModelImage):
 
     _cmp_parser = parseutils.TypedParser(BrightnessComponent3D, [
         BrightnessMCDisk3D,
@@ -46,6 +46,7 @@ class GModelIntensity3D(ComponentGModel, GModelImage):
     def evaluate_image(
             self, driver, params, image, weights, size, step, zero, rota,
             dtype, out_extra):
+        # An image has a spectral axis of size 1
         self._evaluate(
-            driver, params, dict(image=image), weights,
+            driver, params, dict(image=image), (1, 0, 0), weights,
             size, step, zero, rota, dtype, out_extra)
