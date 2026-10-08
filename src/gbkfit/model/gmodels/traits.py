@@ -652,7 +652,7 @@ class BPTraitMixtureExponential(TraitFeatureNBlobs, BPTrait):
         super().__init__(nblobs=nblobs)
 
     def params_sm(self):
-        return _ptrait_params_mixture_7p(self.nblobs())
+        return _ptrait_params_mixture_6p(self.nblobs())
 
     def has_analytical_integral(self):
         return True
