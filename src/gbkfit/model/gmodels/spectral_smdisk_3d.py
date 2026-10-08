@@ -66,7 +66,7 @@ class SpectralSMDisk3D(SpectralComponent3D):
             loose: bool,
             tilted: bool,
             bptraits: traits.BPTrait | Sequence[traits.BPTrait],
-            vptraits: traits.VPTrait | Sequence[traits.BHTrait],
+            vptraits: traits.VPTrait | Sequence[traits.VPTrait],
             dptraits: traits.DPTrait | Sequence[traits.DPTrait],
             bhtraits: traits.BHTrait | Sequence[traits.BHTrait],
             vhtraits: traits.VHTrait | Sequence[traits.VHTrait] | None = None,

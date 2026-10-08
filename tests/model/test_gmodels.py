@@ -167,3 +167,19 @@ def test_gmodel(driver, name, evaluate_models, ndarrays_regression):
     ndarrays_regression.check(outputs, tolerances={
         key: dict(rtol=1e-5, atol=1e-6 * np.nanmax(np.abs(value)))
         for key, value in outputs.items()})
+
+
+@pytest.mark.parametrize('name', MODELS)
+def test_gmodel_dump_and_load(driver, name, evaluate_models):
+    # A dumped gmodel loads back to the same gmodel
+    from gbkfit.model import gmodel_parser
+    model, properties = MODELS[name]
+    model = dict(model, driver=dict(type=driver.type()))
+    info = gmodel_parser.dump(gmodel_parser.load(model['gmodel']))
+    assert gmodel_parser.dump(gmodel_parser.load(info)) == info
+    data, _ = evaluate_models([model], properties)
+    data_loaded, _ = evaluate_models([dict(model, gmodel=info)], properties)
+    for key, value in data[0].items():
+        np.testing.assert_allclose(
+            data_loaded[0][key]['d'], value['d'],
+            rtol=1e-5, atol=1e-6 * np.abs(value['d']).max())
