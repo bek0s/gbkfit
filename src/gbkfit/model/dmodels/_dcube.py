@@ -137,7 +137,7 @@ class DCube:
         dtype = self.dtype()
 
         # Use the native fft library
-        backend_fft = driver.backends().fft(dtype)
+        backend_fft = driver.fft(dtype)
 
         # High-res cube size (before taking padding into account)
         size_hi = (
@@ -239,7 +239,7 @@ class DCube:
         self._has_weights = has_weights
         self._driver = driver
         self._backend_fft = backend_fft
-        self._backend_dmodel = driver.backends().dmodel(dtype)
+        self._backend_dmodel = driver.native_class('DModel', dtype)()
 
     def evaluate(self, out_extra: dict[str, Any] | None) -> None:
 

@@ -4,19 +4,19 @@ import numpy as np
 from cupy.cuda import cufft
 from cupyx.scipy import fft as cupyx_fft
 
-from gbkfit.driver.backend import DriverBackendFFT
+from gbkfit.driver.fft import DriverFFT
 
 
 __all__ = [
-    'DriverBackendFFTCuda'
+    'DriverFFTCuda'
 ]
 
 
-class DriverBackendFFTCuda(DriverBackendFFT):
+class DriverFFTCuda(DriverFFT):
     """
-    FFT backend of the cuda driver, using cuFFT through CuPy.
+    The FFT of the cuda driver: cuFFT, through CuPy.
 
-    Like the native backends, it caches one cuFFT plan per array shape
+    Like the host FFT, it caches one cuFFT plan per array shape
     and transform direction, and the buffers used by fft_convolve_cached()
     (including the spectrum of the second array, e.g., the PSF/LSF). After
     the first call, no device memory is allocated.

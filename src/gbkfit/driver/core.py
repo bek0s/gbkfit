@@ -1,7 +1,13 @@
 
 import abc
 
+import numpy as np
+
 from gbkfit.utils import parseutils
+
+
+# The suffix of the native classes for each supported dtype
+_NATIVE_CLASS_SUFFIXES = {np.dtype(np.float32): 'f32'}
 
 
 class Driver(parseutils.TypedSerializable, abc.ABC):
@@ -66,7 +72,27 @@ class Driver(parseutils.TypedSerializable, abc.ABC):
         pass
 
     @abc.abstractmethod
-    def backends(self):
+    def native_module(self):
+        """The native (C++/cuda) module of the driver."""
+        pass
+
+    def native_class(self, name, dtype):
+        """
+        The class of the native module with the given name, for the given
+        dtype (e.g., 'GModel' for float32 is the class GModelf32).
+        """
+        dtype = np.dtype(dtype)
+        if dtype not in _NATIVE_CLASS_SUFFIXES:
+            supported = [dt.name for dt in _NATIVE_CLASS_SUFFIXES]
+            raise RuntimeError(
+                f"the {self.type()} driver does not support dtype "
+                f"{dtype.name}; supported dtypes: {supported}")
+        return getattr(
+            self.native_module(), name + _NATIVE_CLASS_SUFFIXES[dtype])
+
+    @abc.abstractmethod
+    def fft(self, dtype):
+        """The FFT of the driver (a DriverFFT) for the given dtype."""
         pass
 
 

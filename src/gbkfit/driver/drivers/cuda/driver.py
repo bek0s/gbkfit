@@ -1,8 +1,8 @@
 
 import cupy as cp
 import cupyx as cpx
-import numpy as np
 
+import gbkfit.driver.native._cuda as native_module
 from gbkfit.driver.core import Driver
 
 
@@ -18,13 +18,11 @@ class DriverCuda(Driver):
         return 'cuda'
 
     def mem_alloc_s(self, shape, dtype):
-        # h_data = np.empty(shape, dtype)
         h_data = cpx.empty_pinned(shape, dtype)
         d_data = cp.empty(shape, dtype)
         return h_data, d_data
 
     def mem_alloc_h(self, shape, dtype):
-        # return np.empty(shape, dtype)
         return cpx.empty_pinned(shape, dtype)
 
     def mem_alloc_d(self, shape, dtype):
@@ -68,6 +66,9 @@ class DriverCuda(Driver):
     def math_pow(self, x1, x2, out=None):
         return cp.power(x1, x2, out=out)
 
-    def backends(self):
-        from ._backend import DriverBackendsCuda
-        return DriverBackendsCuda()
+    def native_module(self):
+        return native_module
+
+    def fft(self, dtype):
+        from ._fft import DriverFFTCuda
+        return DriverFFTCuda(dtype)

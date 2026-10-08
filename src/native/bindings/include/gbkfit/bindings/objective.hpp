@@ -43,9 +43,9 @@ struct Objective
     }
 
     static void
-    bind(nb::module_& m, const char* name)
+    bind(nb::module_& m, const std::string& suffix)
     {
-        nb::class_<Objective>(m, name)
+        nb::class_<Objective>(m, ("Objective" + suffix).c_str())
                 .def(nb::init<>())
                 .def_static("residual", &residual,
                         nb::arg("obs_d").noconvert(),

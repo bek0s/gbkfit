@@ -116,7 +116,7 @@ class GModelIntensity3D(GModelImage):
         if self._ocomponents:
             self._odata = driver.mem_alloc_d(self._size[::-1], dtype)
         # Create backend
-        self._backend = driver.backends().gmodel(dtype)
+        self._backend = driver.native_class('GModel', dtype)()
 
     def evaluate_image(
             self, driver, params,
@@ -134,7 +134,6 @@ class GModelIntensity3D(GModelImage):
         spat_step = self._step
         spat_zero = self._zero
         spat_rota = rota
-        spec_size = 1
         wdata = self._wdata
         odata = self._odata
         components = self._components
@@ -173,7 +172,7 @@ class GModelIntensity3D(GModelImage):
         # Evaluate the provided weight image using
         # the 3d spatial weight data evaluated above
         if image_w is not None:
-            backend.wcube_evaluate(spat_size, spec_size, wdata, image_w)
+            backend.wcube_evaluate(wdata, image_w)
 
         if out_extra is not None:
             if wdata is not None:
