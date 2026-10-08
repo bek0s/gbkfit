@@ -20,6 +20,28 @@ __all__ = [
 _log = logging.getLogger(__name__)
 
 
+# The default channel width (km/s) of the spectral axis of the cube that
+# the moments are computed from, and its default size (km/s)
+_SPEC_STEP = 1
+_SPEC_RANGE = 1000
+
+
+def _spectral_axis_from_data(dataset, spec_step):
+    """
+    The size and the centre of a spectral axis with the given channel
+    width that covers the velocities of a moment map dataset: the range
+    of mmap1, and three times the largest mmap2 on each side.
+    """
+    velocity = dataset['mmap1'].data()
+    dispersion = dataset['mmap2'].data() if 'mmap2' in dataset else 0
+    margin = 3 * np.nanmax(dispersion)
+    vmin = np.nanmin(velocity) - margin
+    vmax = np.nanmax(velocity) + margin
+    return dict(
+        spec_size=int(gbkfit.math.roundu_odd((vmax - vmin) / spec_step)),
+        spec_rval=float((vmin + vmax) / 2))
+
+
 class DModelMMaps(DModel):
 
     # Moment maps have no spectral axis
@@ -36,6 +58,12 @@ class DModelMMaps(DModel):
     @classmethod
     def load(cls, info, *args, **kwargs):
         dataset = kwargs.get('dataset')
+        # Without a spectral axis, cover the velocities of the data
+        spectral_options = ('spec_size', 'spec_rval')
+        if (dataset is not None and 'mmap1' in dataset
+                and all(info.get(key) is None for key in spectral_options)):
+            info.update(_spectral_axis_from_data(
+                dataset, info.get('spec_step', _SPEC_STEP)))
         opts = _detail.load_dmodel_common(
             cls, info, 2, True, True, dataset, DatasetMMaps)
         return cls(**opts)
@@ -53,6 +81,9 @@ class DModelMMaps(DModel):
             lsf=lsf_parser.dump(self.lsf()),
             mask_cutoff=self._mask_cutoff,
             orders=self.orders(),
+            spec_size=self.spec_size(),
+            spec_step=self.spec_step(),
+            spec_rval=self.spec_rval(),
             dtype=self.dtype().name)
 
     def __init__(
@@ -67,30 +98,32 @@ class DModelMMaps(DModel):
             lsf: LSF | None = None,
             mask_cutoff: int | float = 1e-6,
             orders: Sequence[int] = (0, 1, 2),
+            spec_size: int | None = None,
+            spec_step: int | float = _SPEC_STEP,
+            spec_rval: int | float = 0,
             dtype: str = 'float32'
     ):
+        """
+        The moments are computed from a spectral cube with the spatial
+        axes of the maps, and a spectral axis of spec_size channels of
+        spec_step (km/s) centred on spec_rval (km/s). By default it spans
+        1000 km/s. load() derives it from the moment maps of a dataset,
+        unless it is given.
+        """
         super().__init__()
         if rpix is None:
             rpix = tuple((np.array(size) / 2 - 0.5).tolist())
-        size = tuple(size)
-        step = tuple(step)
-        rpix = tuple(rpix)
-        rval = tuple(rval)
-        scale = tuple(scale)
+        if spec_size is None:
+            spec_size = int(gbkfit.math.roundu_odd(_SPEC_RANGE / spec_step))
+        size = tuple(size) + (spec_size,)
+        step = tuple(step) + (spec_step,)
+        rpix = tuple(rpix) + (spec_size / 2 - 0.5,)
+        rval = tuple(rval) + (spec_rval,)
+        scale = tuple(scale) + (1,)
         orders = tuple(sorted(set(orders)))
         dtype = np.dtype(dtype)
         if any(order < 0 or order > 7 for order in orders):
             raise RuntimeError("moment orders must be between 0 and 7")
-        if len(step) == 2:
-            step = step + (1,)
-        if len(size) == 2:
-            size = size + (int(gbkfit.math.roundu_odd(1000/step[2])),)
-        if len(rpix) == 2:
-            rpix = rpix + (size[2] / 2 - 0.5,)
-        if len(rval) == 2:
-            rval = rval + (0,)
-        if len(scale) == 2:
-            scale = scale + (1,)
         if mask_cutoff is None:
             desc = parseutils.make_typed_desc(self.__class__, 'dmodel')
             raise RuntimeError(
@@ -143,6 +176,15 @@ class DModelMMaps(DModel):
 
     def orders(self):
         return self._orders
+
+    def spec_size(self):
+        return self._dcube.size()[2]
+
+    def spec_step(self):
+        return self._dcube.step()[2]
+
+    def spec_rval(self):
+        return self._dcube.rval()[2]
 
     def psf(self):
         return self._dcube.psf()

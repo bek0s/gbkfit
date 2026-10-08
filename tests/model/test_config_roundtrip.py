@@ -125,7 +125,7 @@ DMODELS = dict(
     mmaps=dict(
         size=[20, 16], step=[2, 1], rpix=[3, 4], rval=[1, 2], rota=10,
         scale=[2, 1], psf=GAUSS, lsf=GAUSS, mask_cutoff=0.1, orders=[0, 1],
-        dtype='float64'))
+        spec_size=201, spec_step=2, spec_rval=1500, dtype='float64'))
 
 
 @pytest.mark.parametrize('dmodel_type', DMODELS)
