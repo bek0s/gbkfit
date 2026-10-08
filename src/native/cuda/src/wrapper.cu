@@ -1,4 +1,8 @@
 
+#include <thrust/execution_policy.h>
+#include <thrust/functional.h>
+#include <thrust/transform_reduce.h>
+
 #include "gbkfit/cuda/kernels.hpp"
 #include "gbkfit/cuda/wrapper.hpp"
 
@@ -336,6 +340,31 @@ Wrapper<T>::objective_residual(
             mdl_d, mdl_w, mdl_m,
             size, weight, res);
     cudaDeviceSynchronize();
+}
+
+// The term of a residual sum, in double precision
+template<typename T>
+struct ResidualSumTerm
+{
+    bool squared;
+
+    __host__ __device__ double
+    operator()(T residual) const
+    {
+        const double r = residual;
+        return squared ? r * r : fabs(r);
+    }
+};
+
+template<typename T> void
+Wrapper<T>::objective_residual_sum(
+        const T* residual, int size, bool squared, T* sum)
+{
+    // Accumulate in double precision: a cube can have millions of terms
+    const T result = thrust::transform_reduce(
+            thrust::device, residual, residual + size,
+            ResidualSumTerm<T>{squared}, 0.0, thrust::plus<double>());
+    cudaMemcpy(sum, &result, sizeof(T), cudaMemcpyHostToDevice);
 }
 
 #define INSTANTIATE(T)\
