@@ -56,7 +56,7 @@ class GModelIntensity3D(GModelImage):
             BrightnessComponent3D | Sequence[BrightnessComponent3D],
             opacity_components:
             OpacityComponent3D | Sequence[OpacityComponent3D] | None = None,
-            size_z: int = None,
+            size_z: int | None = None,
             step_z: int | float | None = None,
             zero_z: int | float | None = None
     ):
