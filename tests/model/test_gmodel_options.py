@@ -155,10 +155,20 @@ def test_opacity_components_have_no_vsys_nwmode(gmodel_type):
     assert "'vsys_nwmode'" in load_error(info)
 
 
-@pytest.mark.parametrize('gmodel_type', GMODELS)
-@pytest.mark.parametrize('nwmode, switch', [
-    ('xpos_nwmode', 'loose'), ('ypos_nwmode', 'loose'),
-    ('posa_nwmode', 'tilted'), ('incl_nwmode', 'tilted')])
+# Each node-wise mode of each type of gmodel, and the option it needs:
+# the spectral components also have a vsys node-wise mode
+NWMODE_SWITCHES = [
+    (gmodel_type, nwmode, switch)
+    for gmodel_type in GMODELS
+    for nwmode, switch in [
+        ('xpos_nwmode', 'loose'), ('ypos_nwmode', 'loose'),
+        ('posa_nwmode', 'tilted'), ('incl_nwmode', 'tilted')]
+] + [
+    (gmodel_type, 'vsys_nwmode', 'loose')
+    for gmodel_type in ['kinematics_2d', 'kinematics_3d']]
+
+
+@pytest.mark.parametrize('gmodel_type, nwmode, switch', NWMODE_SWITCHES)
 def test_nwmodes_are_ignored_without_their_switch(
         gmodel_type, nwmode, switch, caplog):
     component = GMODELS[gmodel_type] | {nwmode: RELATIVE}
