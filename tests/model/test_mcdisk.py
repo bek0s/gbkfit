@@ -162,3 +162,16 @@ def test_mcdisk_harmonic_brightness_matches_smdisk(driver, order):
     smdisk = evaluate_disk('smdisk', driver.type(), component, properties)
     assert relative_difference(mcdisk.sum(0), smdisk.sum(0)) < 0.02
 
+
+@pytest.mark.parametrize('p', [0, 90, -90, 180, 270])
+def test_mcdisk_azimuthal_selection_matches_smdisk(driver, p):
+    # Only the azimuths within s / 2 of p are kept, for any p. A third of
+    # the disk is kept, so more clouds keep the noise down.
+    component = dict(sptraits=dict(type='azrange'))
+    properties = dict(spt_p=p, spt_s=120)
+    mcdisk = evaluate_disk(
+        'mcdisk', driver.type(), component | dict(cflux=1e-5), properties)
+    smdisk = evaluate_disk('smdisk', driver.type(), component, properties)
+    # The smooth disk selects whole pixels at the edges of the range, which
+    # differs by about 2.5%; a wrong range gives 50-100%
+    assert relative_difference(mcdisk.sum(0), smdisk.sum(0)) < 0.05
