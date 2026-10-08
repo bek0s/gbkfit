@@ -109,7 +109,8 @@ struct GModel
     static void
     mcdisk_evaluate(
             const Disk& disk,
-            T cflux, int nclouds, Ints ncloudscsum, Bools hasordint,
+            T cflux, unsigned int seed,
+            int nclouds, Ints ncloudscsum, Bools hasordint,
             std::array<int, 3> spat_size,
             std::array<T, 3> spat_step,
             std::array<T, 3> spat_zero,
@@ -130,6 +131,7 @@ struct GModel
                 "hasordint needs one value for each density trait");
         MCDiskArgs<T> mc;
         mc.cflux = cflux;
+        mc.seed = seed;
         mc.nclouds = nclouds;
         mc.ncloudscsum = ncloudscsum.data();
         mc.ncloudscsum_len = int(ncloudscsum.shape(0));
@@ -218,7 +220,8 @@ struct GModel
         std::apply([&](auto&&... args) {
             cls.def_static("mcdisk_evaluate", &mcdisk_evaluate, args...);
         }, evaluate_args(
-                nb::arg("disk"), nb::arg("cflux"), nb::arg("nclouds"),
+                nb::arg("disk"), nb::arg("cflux"), nb::arg("seed"),
+                nb::arg("nclouds"),
                 nb::arg("ncloudscsum").noconvert(),
                 nb::arg("hasordint").noconvert()));
     }

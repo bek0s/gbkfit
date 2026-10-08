@@ -154,7 +154,7 @@ gmodel_mcdisk_evaluate(const DiskArgs<T>& a, const MCDiskArgs<T>& mc)
     #pragma omp parallel for
     for(int ci = 0; ci < mc.nclouds; ++ci)
     {
-        RNG<T> rng(MCDISK_SEED, ci);
+        RNG<T> rng(mc.seed, ci);
         gbkfit::gmodel_mcdisk_evaluate_cloud<atomic_set<T>, atomic_add<T>>(
                 rng, ci, a, mc);
     }

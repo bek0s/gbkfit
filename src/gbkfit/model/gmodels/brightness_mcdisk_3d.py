@@ -37,6 +37,7 @@ class BrightnessMCDisk3D(BrightnessComponent3D):
         return dict(
             type=self.type(),
             cflux=self._disk.cflux(),
+            seed=self._disk.seed(),
             loose=self._disk.loose(),
             tilted=self._disk.tilted(),
             rnodes=self._disk.rnodes(),
@@ -72,7 +73,8 @@ class BrightnessMCDisk3D(BrightnessComponent3D):
             xpos_nwmode: common.NWMode | None = None,
             ypos_nwmode: common.NWMode | None = None,
             posa_nwmode: common.NWMode | None = None,
-            incl_nwmode: common.NWMode | None = None
+            incl_nwmode: common.NWMode | None = None,
+            seed: int = 0
     ):
         rnode_args = _detail.parse_component_rnode_args(
             rnmin, rnmax, rnsep, rnlen, rnodes, rstep, interp)
@@ -88,7 +90,7 @@ class BrightnessMCDisk3D(BrightnessComponent3D):
         _detail.check_traits_common(all_traits)
         _detail.check_traits_mcdisk(self, all_traits)
         self._disk = _mcdisk.MCDisk(
-            cflux=cflux,
+            cflux=cflux, seed=seed,
             loose=loose, tilted=tilted,
             **rnode_args,
             vsys_nwmode=None,

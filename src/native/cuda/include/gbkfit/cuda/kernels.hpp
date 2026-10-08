@@ -137,7 +137,7 @@ gmodel_mcdisk_evaluate(DiskArgs<T> a, MCDiskArgs<T> mc)
         return;
 
     // Each cloud has its own stream of random numbers
-    RNG<T> rng(MCDISK_SEED, tid);
+    RNG<T> rng(mc.seed, tid);
     gbkfit::gmodel_mcdisk_evaluate_cloud<atomic_set<T>, atomic_add<T>>(
             rng, tid, a, mc);
 }
