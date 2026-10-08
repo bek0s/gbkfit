@@ -25,5 +25,5 @@ def evaluate_model(tmp_path):
             pytest.fail(f"gbkfit-cli failed:\n{result.stderr[-3000:]}")
         return {
             path.stem: np.array(fits.getdata(path))
-            for path in sorted(workdir.glob('*.fits'))}
+            for path in sorted((workdir / 'output').glob('*.fits'))}
     return evaluate

@@ -43,9 +43,8 @@ class DModelLSlit(DModel):
             scale: Sequence[int] = (1, 1, 1),
             psf: PSF | None = None,
             lsf: LSF | None = None,
-            weight: int | float = 1,
+            smooth_weights: bool = False,
             mask_cutoff: int | float | None = None,
-            mask_create: bool = False,
             mask_apply: bool = False,
             dtype: str = 'float32'
     ):
@@ -60,7 +59,7 @@ class DModelLSlit(DModel):
         dtype = np.dtype(dtype)
         self._dcube = _dcube.DCube(
             size, step, rpix, rval, rota, scale, psf, lsf,
-            weight, mask_cutoff, mask_create, mask_apply, dtype)
+            smooth_weights, mask_cutoff, mask_apply, dtype)
 
     def keys(self):
         return ['lslit']

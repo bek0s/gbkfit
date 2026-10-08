@@ -95,7 +95,7 @@ class DModelMMaps(DModel):
         self._dcube = _dcube.DCube(
             size, step, rpix, rval, rota, scale, psf, lsf,
             # Disable DCube masking. We deal with it in this class.
-            1, None, False, False, dtype)
+            False, None, False, dtype)
         self._mmaps_o = None
         self._mmaps_d = None
         self._mmaps_m = None

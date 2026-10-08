@@ -170,7 +170,6 @@ class DCube:
             # Get convolution shape and left offset due to padding
             size_hi, edge_hi = backend_fft.fft_convolution_shape(
                 size_hi, minimum_psf_size_hi + (minimum_lsf_size_hi,))
-            print(size_hi)
 
         # High-res cube zero pixel center position
         zero_hi = (
@@ -229,7 +228,7 @@ class DCube:
         # Create low-res mask cube if requested.
         # There is no high-res mask cube because masking is always done
         # on the low-res cubes.
-        if self._mask_cutoff:
+        if self._mask_cutoff is not None:
             self._mcube_lo = driver.mem_alloc_d(shape_lo, dtype)
             driver.mem_fill(self._mcube_lo, 1)
 
@@ -268,22 +267,24 @@ class DCube:
         backend_fft = self._backend_fft
         backend_dmodel = self._backend_dmodel
 
-        # Perform fft-based convolution
+        # Perform fft-based convolution.
+        # The weights are only smoothed if requested.
         if psf or lsf:
             backend_fft.fft_convolve_cached(dcube_hi, pcube_hi)
-            if has_weights:
+            if has_weights and self._smooth_weights:
                 backend_fft.fft_convolve_cached(wcube_hi, pcube_hi)
 
-        # Perform downscaling
+        # Perform downscaling, which also removes the padding.
+        # The weights always need it, smoothed or not, otherwise
+        # they never reach the low-res weight cube.
         if dcube_lo is not dcube_hi:
             backend_dmodel.dcube_downscale(
                 scale, edge_hi, dcube_hi, dcube_lo)
-            if has_weights and self._smooth_weights:
+            if has_weights:
                 backend_dmodel.dcube_downscale(
                     scale, edge_hi, wcube_hi, wcube_lo)
 
-        # Apply masking.
-        # Checked if mask_create or mask_apply are True in __init__()
+        # Create the mask and, if requested, apply it to the data.
         if mask_cutoff is not None:
             backend_dmodel.dcube_mask(
                 mask_cutoff, mask_apply, mcube_lo, dcube_lo, wcube_lo)
@@ -293,7 +294,7 @@ class DCube:
             out_extra.update(
                 dcube_lo=driver.mem_copy_d2h(dcube_lo),
                 dcube_hi=driver.mem_copy_d2h(dcube_hi))
-            if mask_cutoff:
+            if mask_cutoff is not None:
                 out_extra.update(
                     mcube_lo=driver.mem_copy_d2h(mcube_lo))
             if has_weights:

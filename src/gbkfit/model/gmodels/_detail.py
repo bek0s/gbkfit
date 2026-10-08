@@ -207,11 +207,11 @@ def parse_component_s3d_traits(
     sptraits = iterutils.tuplify(sptraits) if sptraits else tuple()
     wptraits = iterutils.tuplify(wptraits) if wptraits else tuple()
     if None in vhtraits:
-        vhtraits = iterutils.tuplify(iterutils.replace_items_and_copy(
-            vhtraits, None, traits.VHTraitOne()))
+        vhtraits = iterutils.tuplify(iterutils.replace_item_in_sequence(
+            list(vhtraits), None, traits.VHTraitOne()))
     if None in dhtraits:
-        dhtraits = iterutils.tuplify(iterutils.replace_items_and_copy(
-            dhtraits, None, traits.DHTraitOne()))
+        dhtraits = iterutils.tuplify(iterutils.replace_item_in_sequence(
+            list(dhtraits), None, traits.DHTraitOne()))
     bptraits_len = len(bptraits)
     bhtraits_len = len(bhtraits)
     vptraits_len = len(vptraits)
@@ -389,7 +389,7 @@ def evaluate_components_s2d(
         spec_size, spec_step, spec_zero,
         dtype, out_extra, out_extra_label):
     for i, (component, mapping) in enumerate(zip(components, mappings)):
-        component_params = {p: params[mapping[p]] for p in component.params()}
+        component_params = {p: params[mapping[p]] for p in component.pdescs()}
         component_out_extra = {} if out_extra is not None else None
         component.evaluate(
             driver, component_params,
@@ -409,7 +409,7 @@ def evaluate_components_s3d(
         spec_size, spec_step, spec_zero,
         dtype, out_extra, out_extra_label):
     for i, (component, mapping) in enumerate(zip(components, mappings)):
-        component_params = {p: params[mapping[p]] for p in component.params()}
+        component_params = {p: params[mapping[p]] for p in component.pdescs()}
         component_out_extra = {} if out_extra is not None else None
         component.evaluate(
             driver, component_params, odata,
@@ -427,7 +427,7 @@ def evaluate_components_o3d(
         spat_size, spat_step, spat_zero, spat_rota,
         dtype, out_extra, out_extra_label):
     for i, (component, mapping) in enumerate(zip(components, mappings)):
-        component_params = {p: params[mapping[p]] for p in component.params()}
+        component_params = {p: params[mapping[p]] for p in component.pdescs()}
         component_out_extra = {} if out_extra is not None else None
         component.evaluate(
             driver, component_params, odata,
