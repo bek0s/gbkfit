@@ -5,6 +5,7 @@ from collections.abc import Sequence
 from numbers import Real
 from typing import Any
 
+import astropy.io.fits
 import astropy.wcs
 import numpy as np
 
@@ -22,6 +23,29 @@ _log = logging.getLogger(__name__)
 
 def _make_filename(filename, dump_path):
     return filename if dump_path else os.path.basename(filename)
+
+
+def _rpix_from_fits_header(header, shape, filename):
+    """
+    Return the reference pixel of every axis, from the CRPIXn keywords
+    of a FITS header. FITS reference pixels are 1-based, while gbkfit's
+    are 0-based. Axes without a reference pixel use their centre, like
+    data created without a header.
+    """
+    rpix = []
+    missing = []
+    for axis, size in enumerate(shape[::-1], start=1):
+        crpix = header.get(f'CRPIX{axis}')
+        if crpix is None:
+            missing.append(axis)
+            rpix.append(size / 2 - 0.5)
+        else:
+            rpix.append(crpix - 1)
+    if missing:
+        _log.info(
+            f"file {filename} has no reference pixel (CRPIXn) "
+            f"for axes {missing}; using the centre of those axes")
+    return rpix
 
 
 def _ensure_floating_or_float32(x, label):
@@ -67,7 +91,9 @@ class Data(parseutils.BasicSerializable):
         if step is None:
             step = wcs_d.wcs.cdelt.tolist()  # noqa
         if rpix is None:
-            rpix = wcs_d.wcs.crpix.tolist()  # noqa
+            filename = prefix + info['data']
+            rpix = _rpix_from_fits_header(
+                astropy.io.fits.getheader(filename), data_d.shape, filename)
         if rval is None:
             rval = wcs_d.wcs.crval.tolist()  # noqa
         # todo: deal with rotation (PC Matrix and CROTA (deprecated))
@@ -104,8 +130,9 @@ class Data(parseutils.BasicSerializable):
         rota = self.rota()
         # Create WCS object
         wcs = astropy.wcs.WCS(naxis=dat.ndim, relax=False)
+        # FITS reference pixels are 1-based, gbkfit's are 0-based
         wcs.wcs.cdelt = step    # noqa
-        wcs.wcs.crpix = rpix    # noqa
+        wcs.wcs.crpix = np.add(rpix, 1)  # noqa
         wcs.wcs.crval = rval    # noqa
         wcs.wcs.pc = np.identity(dat.ndim)  # noqa
         wcs.wcs.pc[0][0] = +np.cos(rota)    # noqa
