@@ -213,7 +213,7 @@ class DCube:
             offset_hi = gbkfit.math.is_odd(size_hi) - 1
             psf_offset_hi = offset_hi[:2]
             lsf_offset_hi = offset_hi[2]
-            psf_args = (spat_step_hi, spat_size_hi, psf_offset_hi)
+            psf_args = (spat_step_hi, spat_size_hi, psf_offset_hi, self._rota)
             lsf_args = (spec_step_hi, spec_size_hi, lsf_offset_hi)
             psf_hi = psf.asarray(*psf_args) if psf \
                 else PSFPoint().asarray(*psf_args)
@@ -322,8 +322,8 @@ class DCube:
                     wcube_hi=driver.mem_copy_d2h(wcube_hi))
             if psf:
                 out_extra.update(
-                    psf_lo=psf.asarray(spat_step_lo),
-                    psf_hi=psf.asarray(spat_step_hi))
+                    psf_lo=psf.asarray(spat_step_lo, rota=self._rota),
+                    psf_hi=psf.asarray(spat_step_hi, rota=self._rota))
             if lsf:
                 out_extra.update(
                     lsf_lo=lsf.asarray(spec_step_lo),

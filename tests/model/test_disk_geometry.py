@@ -35,8 +35,11 @@ def test_loose_disk_systemic_velocity(driver, evaluate_models):
     np.testing.assert_allclose(velocity[on_disk], 50)
 
 
-def kinematics_3d_model(driver, disk, rota):
-    """An scube model with one thick disk, on a grid rotated by rota."""
+def kinematics_3d_model(driver, disk, rota, psf=None):
+    """
+    An scube model with one thick disk, on a grid rotated by rota, and
+    with the given PSF.
+    """
     component = dict(
         type=disk, loose=False, tilted=False,
         rnodes=list(range(0, 16, 2)),
@@ -49,7 +52,8 @@ def kinematics_3d_model(driver, disk, rota):
     return dict(
         driver=dict(type=driver.type()),
         dmodel=dict(
-            type='scube', size=[33, 33, 41], step=[1, 1, 10], rota=rota),
+            type='scube', size=[33, 33, 41], step=[1, 1, 10], rota=rota,
+            psf=psf),
         gmodel=dict(type='kinematics_3d', components=[component]))
 
 
@@ -75,3 +79,24 @@ def test_grid_rotation(driver, evaluate_models, disk):
     tolerance = 1e-5 if disk == 'smdisk' else 2e-3
     difference = np.linalg.norm(rotated - expected) / np.linalg.norm(expected)
     assert difference < tolerance
+
+
+def test_grid_rotation_with_an_elongated_beam(driver, evaluate_models):
+    # The position angle of the PSF is on the sky too, so a grid rotated
+    # by rota sees a beam with position angle posa like an unrotated grid
+    # sees one with posa - rota
+    properties = dict(
+        vsys=0, xpos=0, ypos=0, incl=60,
+        bpt_a=1, bpt_s=4, bht_s=1, vpt_rt=2, vpt_vt=150, dpt_a=20)
+
+    def evaluate(posa, beam_posa, rota):
+        beam = dict(type='gauss', sigma=1.5, ratio=0.4, posa=beam_posa)
+        data, _ = evaluate_models(
+            [kinematics_3d_model(driver, 'smdisk', rota, beam)],
+            properties | dict(posa=posa))
+        return data[0]['scube']['d'].copy()
+
+    rotated = evaluate(posa=70, beam_posa=50, rota=40)
+    expected = evaluate(posa=30, beam_posa=10, rota=0)
+    difference = np.linalg.norm(rotated - expected) / np.linalg.norm(expected)
+    assert difference < 1e-5

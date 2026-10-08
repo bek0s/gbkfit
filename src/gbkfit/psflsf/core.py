@@ -81,10 +81,13 @@ class PSF(parseutils.TypedSerializable, abc.ABC):
             self,
             step: tuple[float, float],
             size: tuple[int, int] | None = None,
-            offset: tuple[int, int] = (0, 0)
+            offset: tuple[int, int] = (0, 0),
+            rota: float = 0
     ) -> np.ndarray:
         """
-        Return the PSF as a NumPy array.
+        Return the PSF as a NumPy array, on a grid rotated on the sky by
+        rota (degrees, counterclockwise like a position angle): a PSF
+        with position angle posa (on the sky) is drawn at posa - rota.
 
         If `size` is None, it is set by `self.size(step, offset)`.
         Both (size + offset) values must be odd.
@@ -98,7 +101,7 @@ class PSF(parseutils.TypedSerializable, abc.ABC):
                 f"({size[0]} + {offset[0]} = {size[0] + offset[0]}, "
                 f"{size[1]} + {offset[1]} = {size[1] + offset[1]}), "
                 f"but both values must be odd")
-        return self._asarray_impl(step, size, offset)
+        return self._asarray_impl(step, size, offset, rota)
 
     @abc.abstractmethod
     def _size_impl(self, step: tuple[float, float]) -> tuple[float, float]:
@@ -110,10 +113,12 @@ class PSF(parseutils.TypedSerializable, abc.ABC):
             self,
             step: tuple[float, float],
             size: tuple[int, int],
-            offset: tuple[int, int]
+            offset: tuple[int, int],
+            rota: float
     ) -> np.ndarray:
         """
-        Abstract method to generate the PSF as a NumPy array.
+        Abstract method to generate the PSF as a NumPy array, on a grid
+        rotated by rota.
         """
         pass
 
