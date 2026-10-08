@@ -39,3 +39,35 @@ def test_mmaps_matches_moments_of_scube(evaluate_model):
         np.testing.assert_allclose(
             mmaps[f'model_0_mmap{order}_d'][bright], expected[bright],
             atol=0.01, err_msg=f"moment {order}")
+
+
+def test_higher_moments_of_a_gaussian_line(driver):
+    # Without a PSF and an LSF, every spaxel of a thin disk has a single
+    # Gaussian line, so its third central moment is zero and its fourth
+    # is 3 sigma^4, where sigma is the moment 2 map. A spectral step
+    # other than 1 checks that the moments are scaled correctly.
+    from gbkfit.model import Model, ModelGroup, gmodel_parser
+    from gbkfit.model.dmodels import DModelMMaps
+    from gbkfit.params import EvaluationParams
+    dmodel = DModelMMaps(
+        size=(32, 32, 81), step=(1, 1, 5), orders=(1, 2, 3, 4))
+    gmodel = gmodel_parser.load(dict(
+        type='kinematics_2d', components=[dict(
+            type='smdisk', loose=False, tilted=False,
+            rnodes=list(range(0, 12)),
+            bptraits=dict(type='exponential'),
+            vptraits=dict(type='tan_arctan'),
+            dptraits=dict(type='uniform'))]))
+    model_group = ModelGroup([Model(driver, dmodel, gmodel)])
+    params = EvaluationParams(model_group.pdescs(), dict(
+        vsys=0, xpos=0, ypos=0, posa=30, incl=60,
+        bpt_a=1, bpt_s=4, vpt_rt=2, vpt_vt=40, dpt_a=20))
+    mmaps = model_group.model_h(params.evaluate())[0]
+    sigma = mmaps['mmap2']['d']
+    disk = np.isfinite(sigma)
+    assert disk.sum() > 100
+    np.testing.assert_allclose(sigma[disk], 20, rtol=1e-3)
+    np.testing.assert_allclose(
+        mmaps['mmap3']['d'][disk], 0, atol=1e-3 * 20 ** 3)
+    np.testing.assert_allclose(
+        mmaps['mmap4']['d'][disk], 3 * sigma[disk] ** 4, rtol=1e-2)
