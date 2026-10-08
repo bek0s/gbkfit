@@ -10,6 +10,10 @@ __all__ = [
 
 class DatasetLSlit(Dataset):
 
+    # The axes of a long-slit spectrum: the position along the slit
+    # and the spectral axis
+    _spectral_axis = 1
+
     @staticmethod
     def type():
         return 'lslit'

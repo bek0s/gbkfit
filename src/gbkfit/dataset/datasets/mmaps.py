@@ -12,6 +12,9 @@ __all__ = [
 
 class DatasetMMaps(Dataset):
 
+    # Moment maps have no spectral axis
+    _spectral_axis = None
+
     @staticmethod
     def type():
         return 'mmaps'

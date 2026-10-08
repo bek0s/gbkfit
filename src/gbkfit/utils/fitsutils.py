@@ -90,6 +90,10 @@ def read_data(
         if axis in (wcs.wcs.lng, wcs.wcs.lat)
         else linear[axis, axis] * scale[axis]
         for axis in range(wcs.naxis)]
+    if rpix is not None:
+        rpix = np.broadcast_to(np.asarray(rpix, float), wcs.naxis)
+    if rval is not None:
+        rval = np.broadcast_to(np.asarray(rval, float), wcs.naxis)
     # The axes without a reference pixel have it at their centre
     for n, size in enumerate(data.shape[::-1], start=1):
         if f'CRPIX{n}' not in header:
@@ -115,13 +119,39 @@ def write_data(
         filename: str,
         data: np.ndarray,
         coords: Coords,
+        spectral_axis: int | None = None,
         overwrite: bool = False
 ) -> None:
     """
     Write data with the world coordinates of the model (see Coords) to a
-    FITS file: RA and Dec (TAN projection) for the x and y axes, rotated
-    with a PC matrix, and the radio velocity for the third axis, if any.
+    FITS file. The axes of the data are the x and y axes of the sky (RA
+    and Dec, TAN projection, rotated with a PC matrix), followed by the
+    spectral axis (spectral_axis = 2, a radio velocity), or a position
+    along a slit followed by the spectral axis (spectral_axis = 1).
     """
+    header = astropy.io.fits.Header()
+    if spectral_axis is None and data.ndim == 2:
+        header.update(_sky_header(coords))
+    elif spectral_axis == 2 and data.ndim == 3:
+        header.update(_sky_header(coords))
+        header.update(_velocity_header(coords, 3))
+    elif spectral_axis == 1 and data.ndim == 2:
+        # The position along the slit is an offset from its reference
+        header.update(
+            CTYPE1='OFFSET', CUNIT1='arcsec', CDELT1=coords.step[0],
+            CRPIX1=coords.rpix[0] + 1, CRVAL1=0.0)
+        header.update(_velocity_header(coords, 2))
+    else:
+        raise ValueError(
+            f"unsupported data: {data.ndim} axes, of which the spectral "
+            f"axis is {spectral_axis}")
+    astropy.io.fits.writeto(
+        filename, data, header,
+        output_verify='exception', overwrite=overwrite, checksum=True)
+
+
+def _sky_header(coords):
+    """The header keywords of the x and y axes on the sky."""
     step_x, step_y = coords.step[:2]
     rota = np.radians(coords.rota)
     # The +y axis points to the position angle rota, and the +x axis to
@@ -133,20 +163,22 @@ def write_data(
         [step_x * np.sin(rota), step_y * np.cos(rota)]]) / 3600
     cdelt = np.array([-step_x, step_y]) / 3600
     pc = cd / cdelt[:, None]
-    header = astropy.io.fits.Header()
-    header.update(
+    return dict(
         CTYPE1='RA---TAN', CUNIT1='deg', CDELT1=cdelt[0],
+        CRPIX1=coords.rpix[0] + 1, CRVAL1=coords.rval[0],
         CTYPE2='DEC--TAN', CUNIT2='deg', CDELT2=cdelt[1],
+        CRPIX2=coords.rpix[1] + 1, CRVAL2=coords.rval[1],
         PC1_1=pc[0, 0], PC1_2=pc[0, 1],
         PC2_1=pc[1, 0], PC2_2=pc[1, 1])
-    if data.ndim == 3:
-        header.update(CTYPE3='VRAD', CUNIT3='km/s', CDELT3=coords.step[2])
-    for n in range(1, data.ndim + 1):
-        header[f'CRPIX{n}'] = coords.rpix[n - 1] + 1
-        header[f'CRVAL{n}'] = coords.rval[n - 1]
-    astropy.io.fits.writeto(
-        filename, data, header,
-        output_verify='exception', overwrite=overwrite, checksum=True)
+
+
+def _velocity_header(coords, n):
+    """The header keywords of the spectral axis, FITS axis n."""
+    return {
+        f'CTYPE{n}': 'VRAD', f'CUNIT{n}': 'km/s',
+        f'CDELT{n}': coords.step[n - 1],
+        f'CRPIX{n}': coords.rpix[n - 1] + 1,
+        f'CRVAL{n}': coords.rval[n - 1]}
 
 
 def _axis_scale(filename, wcs, axis):

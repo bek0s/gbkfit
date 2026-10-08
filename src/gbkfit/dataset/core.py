@@ -20,6 +20,12 @@ def _ensure_same_attrib_value(data, method):
 
 
 class Dataset(parseutils.TypedSerializable, abc.ABC):
+    """
+    A set of data items on the same grid. A subclass declares the index
+    of the spectral axis of its data (_spectral_axis, None if none).
+    """
+
+    _spectral_axis: int | None
 
     def __init__(self, data):
         # At least one data item must be defined
@@ -30,6 +36,12 @@ class Dataset(parseutils.TypedSerializable, abc.ABC):
         if invalid_data:
             raise RuntimeError(
                 f"dataset contains invalid data items: {invalid_data}")
+        # All data items must have the spectral axis of the dataset
+        for key, item in data.items():
+            if item.spectral_axis() != self._spectral_axis:
+                raise RuntimeError(
+                    f"data item {key} has the spectral axis "
+                    f"{item.spectral_axis()}; expected {self._spectral_axis}")
         # All data items must have the same properties
         _ensure_same_attrib_value(data, 'size')
         _ensure_same_attrib_value(data, 'step')
@@ -85,6 +97,9 @@ class Dataset(parseutils.TypedSerializable, abc.ABC):
 
     def rota(self):
         return self._first().rota()
+
+    def spectral_axis(self):
+        return self._spectral_axis
 
     def dtype(self):
         return self._first().dtype()

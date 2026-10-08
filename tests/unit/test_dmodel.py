@@ -135,9 +135,11 @@ def _test_dcube(driver: Driver, dtype):
     dcube = DCube(**args)
     dcube.prepare(driver, True)
 
+    # The spatial axes are measured from the reference pixel, and the
+    # spectral axis from its world value there
     zero = (
-        rval[0] - rpix[0] * step[0],
-        rval[1] - rpix[1] * step[1],
+        -rpix[0] * step[0],
+        -rpix[1] * step[1],
         rval[2] - rpix[2] * step[2])
     scaled_size = scratch_size = (
         size[0] * scale[0],
@@ -223,9 +225,11 @@ def _test_dcube(driver: Driver, dtype):
 
     dcube = DCube(**args)
     dcube.prepare(driver, False)
+    # The spatial axes are measured from the reference pixel, and the
+    # spectral axis from its world value there
     zero = (
-        rval[0] - rpix[0] * step[0],
-        rval[1] - rpix[1] * step[1],
+        -rpix[0] * step[0],
+        -rpix[1] * step[1],
         rval[2] - rpix[2] * step[2])
 
     assert dcube.size() == size

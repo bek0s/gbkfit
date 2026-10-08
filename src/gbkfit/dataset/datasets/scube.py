@@ -10,6 +10,9 @@ __all__ = [
 
 class DatasetSCube(Dataset):
 
+    # The axes of a spectral cube: x, y and the spectral axis
+    _spectral_axis = 2
+
     @staticmethod
     def type():
         return 'scube'

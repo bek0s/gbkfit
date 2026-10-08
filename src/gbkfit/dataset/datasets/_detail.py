@@ -11,6 +11,10 @@ __all__ = [
 
 
 def load_dataset_common(cls, info, names, ndim, **kwargs):
+    """
+    The options of a dataset of class cls: its data items (names), each
+    with ndim axes, loaded.
+    """
     prefix = kwargs.get('prefix', '')
     desc = parseutils.make_typed_desc(cls, 'dataset')
     parseutils.sanitize_dimensional_options(info, dict(
@@ -28,7 +32,8 @@ def load_dataset_common(cls, info, names, ndim, **kwargs):
         if name in info:
             with parseutils.config_path(name):
                 info[name] = data_parser.load(
-                    info[name], step, rpix, rval, rota, prefix)
+                    info[name], step, rpix, rval, rota, prefix,
+                    spectral_axis=cls._spectral_axis)
     # Parse options and return them
     opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
     return opts

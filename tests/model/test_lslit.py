@@ -53,7 +53,8 @@ def test_lslit_objective_residual(driver):
     dmodel = dict(type='lslit', size=[32, 51], step=[1, 10], rota=30)
     model = evaluate(driver, dmodel)
     dataset = DatasetLSlit(Data(
-        model + 1, error=np.full_like(model, 2), step=(1, 10)))
+        model + 1, error=np.full_like(model, 2), step=(1, 10),
+        spectral_axis=1))
     model_group = gbkfit.model.ModelGroup(gbkfit.model.model_parser.load([
         dict(driver=dict(type=driver.type()), dmodel=dmodel, gmodel=GMODEL)],
         dataset=[dataset]))
