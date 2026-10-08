@@ -71,8 +71,9 @@ class PSFPoint(PSF):
             size: tuple[int, int],
             offset: tuple[int, int]
     ) -> np.ndarray:
-        data = np.zeros(size)
-        data[size[0] // 2 + offset[0], size[1] // 2 + offset[1]] = 1
+        # Like all images, the array has shape (y, x)
+        data = np.zeros(size[::-1])
+        data[size[1] // 2 + offset[1], size[0] // 2 + offset[0]] = 1
         return data
 
 
