@@ -972,14 +972,11 @@ def load_params_properties_transforms(
         param_loader
 ):
     info = copy.deepcopy(info)
-    # parseutils.load_option_and_update_info(param_loader, info, 'properties', )
     info['properties'] = load_params_properties(
         info['properties'], pdescs, param_types, param_loader)
-    if 'conversions' in info:
-        info['conversions'] = load_params_conversions(
-            info['conversions'])
-
-    # parseutils.load_option_and_update_info()
+    if 'transforms' in info:
+        info['transforms'] = _load_function(
+            info['transforms'], 'params transforms')
     return info
 
 
