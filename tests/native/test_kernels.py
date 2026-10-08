@@ -60,7 +60,7 @@ def check_against_reference(ndarrays_regression, basename, arrays):
 
 def test_fft_roundtrip(driver):
     memory = Memory(driver)
-    fft = driver.backends().fft(DTYPE)
+    fft = driver.fft(DTYPE)
     shape = (16, 24, 32)
     data = smooth_cube(shape)
     data_r = memory.to_device(data)
@@ -74,7 +74,7 @@ def test_fft_roundtrip(driver):
 
 def test_fft_convolve(driver, ndarrays_regression):
     memory = Memory(driver)
-    fft = driver.backends().fft(DTYPE)
+    fft = driver.fft(DTYPE)
     shape = (16, 24, 32)
     kernel = np.zeros(shape, DTYPE)
     kernel[8, 12, 16] = 0.5
@@ -89,7 +89,7 @@ def test_fft_convolve(driver, ndarrays_regression):
 
 def test_dcube_downscale(driver, ndarrays_regression):
     memory = Memory(driver)
-    dmodel = driver.backends().dmodel(DTYPE)
+    dmodel = driver.native_class('DModel', DTYPE)()
     cube_hi = memory.to_device(smooth_cube((40, 60, 80)))
     cube_lo = memory.to_device(np.zeros((20, 20, 20), DTYPE))
     dmodel.dcube_downscale((4, 3, 2), (0, 0, 0), cube_hi, cube_lo)
@@ -103,7 +103,7 @@ def test_arrays_are_checked(driver):
     # their arrays, instead of reading them as raw memory or converting
     # them to temporary copies (which would lose the outputs)
     memory = Memory(driver)
-    dmodel = driver.backends().dmodel(DTYPE)
+    dmodel = driver.native_class('DModel', DTYPE)()
     cube_hi = memory.to_device(smooth_cube((40, 60, 80)))
 
     def downscale_into(cube_lo, scale=(4, 3, 2)):
@@ -144,7 +144,7 @@ def _residual_inputs():
 
 def test_residual(driver, ndarrays_regression):
     memory = Memory(driver)
-    objective = driver.backends().objective(DTYPE)
+    objective = driver.native_class('Objective', DTYPE)()
     inputs = {k: memory.to_device(v) for k, v in _residual_inputs().items()}
     residual = memory.to_device(np.zeros(1000, DTYPE))
     objective.residual(**inputs, weight=0.7, res=residual)
@@ -155,7 +155,7 @@ def test_residual(driver, ndarrays_regression):
 
 def residual_sum(driver, values, squared):
     memory = Memory(driver)
-    objective = driver.backends().objective(DTYPE)
+    objective = driver.native_class('Objective', DTYPE)()
     total = memory.to_device(np.zeros(1, DTYPE))
     objective.residual_sum(
         memory.to_device(values.astype(DTYPE)), squared, total)
@@ -178,23 +178,15 @@ def test_residual_sum_precision(driver):
     assert residual_sum(driver, values, False) == np.float32(1e8 + 999)
 
 
-def _trait_args(kind, memory, trait=None, params=()):
-    """
-    Pack a single trait into the five arrays the native code expects,
-    as keyword arguments named after the trait kind (e.g. 'rpt_uids').
-    Without a trait, all five arrays are None.
-    """
-    arrays = (None,) * 5
-    if trait is not None:
-        consts = [float(c) for c in trait.consts()]
-        arrays = (
-            np.array([trait.uid()], np.int32),
-            np.array(consts, DTYPE), np.array([len(consts)], np.int32),
-            np.array(params, DTYPE), np.array([len(params)], np.int32))
-    names = ('uids', 'cvalues', 'ccounts', 'pvalues', 'pcounts')
-    return {
-        f'{kind}_{name}': memory.to_device(array)
-        for name, array in zip(names, arrays)}
+def _trait_set(driver, memory, trait, params=()):
+    """A native set of one trait, with the given parameter values."""
+    consts = [float(c) for c in trait.consts()]
+    return driver.native_class('TraitSet', DTYPE)(
+        uids=memory.to_device(np.array([trait.uid()], np.int32)),
+        cvalues=memory.to_device(np.array(consts, DTYPE)),
+        ccounts=memory.to_device(np.array([len(consts)], np.int32)),
+        pvalues=memory.to_device(np.array(params, DTYPE)),
+        pcounts=memory.to_device(np.array([len(params)], np.int32)))
 
 
 def evaluate_smdisk(driver, thick):
@@ -217,39 +209,31 @@ def evaluate_smdisk(driver, thick):
     def scalar(value):
         return memory.to_device(np.array([value], DTYPE))
 
-    # A disk without height traits is evaluated as a thin disk
-    brightness_height = traits.BHTraitSech2() if thick else None
-    velocity_height = traits.VHTraitOne() if thick else None
-    dispersion_height = traits.DHTraitOne() if thick else None
+    def trait_set(trait, params=()):
+        return _trait_set(driver, memory, trait, params)
 
-    gmodel = driver.backends().gmodel(DTYPE)
-    gmodel.smdisk_evaluate(
+    # A disk without height traits is evaluated as a thin disk
+    heights = dict(
+        rht=trait_set(traits.BHTraitSech2(), (1.0,)),
+        vht=trait_set(traits.VHTraitOne()),
+        dht=trait_set(traits.DHTraitOne())) if thick else {}
+
+    disk = driver.native_class('Disk', DTYPE)(
         loose=False, tilted=False,
         rnodes=memory.to_device(np.linspace(0, 20, 21, dtype=DTYPE)),
         vsys=scalar(10), xpos=scalar(0.5), ypos=scalar(-1.0),
         posa=scalar(30), incl=scalar(50),
-        **_trait_args(
-            'rpt', memory, traits.BPTraitExponential(), (1.0, 5.0)),
-        **_trait_args('rht', memory, brightness_height, (1.0,)),
-        **_trait_args(
-            'vpt', memory, traits.VPTraitTanArctan(), (3.0, 200.0)),
-        **_trait_args('vht', memory, velocity_height),
-        **_trait_args(
-            'dpt', memory, traits.DPTraitUniform(), (25.0,)),
-        **_trait_args('dht', memory, dispersion_height),
-        **_trait_args('zpt', memory),
-        **_trait_args('spt', memory),
-        **_trait_args('wpt', memory),
-        opacity=None,
+        rpt=trait_set(traits.BPTraitExponential(), (1.0, 5.0)),
+        vpt=trait_set(traits.VPTraitTanArctan(), (3.0, 200.0)),
+        dpt=trait_set(traits.DPTraitUniform(), (25.0,)),
+        **heights)
+    driver.native_class('GModel', DTYPE).smdisk_evaluate(
+        disk,
         spat_size=spat_size,
         spat_step=(1.0, 1.0, 1.0),
         spat_zero=(-24.0, -24.0, -(spat_size[2] // 2)),
-        spat_rota=0,
         spec_size=spec_size, spec_step=10.0, spec_zero=-300.0,
         image=outputs['image'], scube=outputs['scube'],
-        wdata=None, wdata_cmp=None,
-        rdata=None, rdata_cmp=None,
-        ordata=None, ordata_cmp=None,
         vdata_cmp=outputs['velocity'], ddata_cmp=outputs['dispersion'])
     return {name: memory.to_host(array) for name, array in outputs.items()}
 

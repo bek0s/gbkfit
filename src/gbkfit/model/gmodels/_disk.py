@@ -2,127 +2,97 @@
 import abc
 import logging
 import typing
+from dataclasses import dataclass
 
 import numpy as np
 
 from gbkfit.params.pdescs import ParamScalarDesc, ParamVectorDesc
-from gbkfit.utils import iterutils, miscutils, numutils
+from gbkfit.utils import miscutils
 from . import traits
 
 
 _log = logging.getLogger(__name__)
 
 
+# The kinds of traits of a disk: density (r), velocity (v) and dispersion
+# (d) polar (p) and height (h) traits, and vertical distortion (z),
+# selection (s) and weight (w) polar traits
+TRAIT_KINDS = ('rpt', 'rht', 'vpt', 'vht', 'dpt', 'dht', 'zpt', 'spt', 'wpt')
+
+# The geometric parameters of a disk, node-wise if the disk is loose
+# (vsys, xpos, ypos) or tilted (posa, incl)
+GEOMETRY_PARAMS = ('vsys', 'xpos', 'ypos', 'posa', 'incl')
+
+
 def _make_param_descs(key, nnodes, nw):
     return {key: ParamVectorDesc(key, nnodes) if nw else ParamScalarDesc(key)}
 
 
-def _trait_param_info(traits_, prefix, nrnodes):
+@dataclass
+class _TraitParams:
+    """
+    The parameters of the traits of one kind, with prefixed names, and for
+    each one its node-wise mode (if any), whether it is node-wise, and its
+    name in its trait. The keys of all dicts are in the same order: the
+    order of the traits, and for each trait, the smooth parameters before
+    the node-wise ones.
+    """
+    pdescs: dict
+    nwmodes: dict
+    isnw: dict
+    pnames: list
+
+
+def _trait_params(traits_, prefix, nrnodes):
     params_list = []
-    for i, trait in enumerate(traits_):
-        params_sm = trait.params_sm()
-        params_nw = trait.params_rnw(nrnodes)
-        params_sm = [(pdesc, None, False) for pdesc in params_sm]
-        params_nw = [(pdesc, nwmode, True) for pdesc, nwmode in params_nw]
-        params = params_sm + params_nw
-        params_list.append({tuple_[0].name(): tuple_ for tuple_ in params})
+    for trait in traits_:
+        params_sm = [(pdesc, None, False) for pdesc in trait.params_sm()]
+        params_nw = [
+            (pdesc, nwmode, True)
+            for pdesc, nwmode in trait.params_rnw(nrnodes)]
+        params_list.append(
+            {tuple_[0].name(): tuple_ for tuple_ in params_sm + params_nw})
     params, mappings = miscutils.merge_dicts_and_make_mappings(
-            params_list, prefix, True, False)
-    pdescs = {name: tuple_[0] for name, tuple_ in params.items()}
-    nwmodes = {name: tuple_[1] for name, tuple_ in params.items()}
-    isnodewise = {name: tuple_[2] for name, tuple_ in params.items()}
-    # The users of this function make the following assumptions about
-    # the pdescs, nwmodes, and isnodewise dictionaries:
-    # - their keys are in the same order
-    # - their keys are in the same order with the associated traits
-    # - for each trait, the nodewise come after the smooth parameters
-    return pdescs, nwmodes, isnodewise, mappings
+        params_list, prefix, True, False)
+    return _TraitParams(
+        pdescs={name: tuple_[0] for name, tuple_ in params.items()},
+        nwmodes={name: tuple_[1] for name, tuple_ in params.items()},
+        isnw={name: tuple_[2] for name, tuple_ in params.items()},
+        pnames=mappings)
 
 
-def _prepare_trait_arrays(
-        driver,
-        traits_, nnodes, nsubnodes,
-        arr_uids,
-        arr_cvalues, arr_ccounts,
-        arr_pvalues, arr_pcounts,
-        dtype):
-    # Ignore unused traits
-    if not traits_:
-        return
-    # Prepare trait data calculate their sizes
-    uids = []
-    cvalues = []
-    ccounts = []
-    pcounts = []
+def _trait_constants(traits_, nnodes, nsubnodes):
+    """
+    The uids, constant values and their counts, and the parameter value
+    counts of a set of traits. Each node-wise parameter has one value for
+    each subnode, because the node values are interpolated.
+    """
+    uids, cvalues, ccounts, pcounts = [], [], [], []
     for trait in traits_:
         consts = trait.consts()
-        params_sm = trait.params_sm()
-        params_nw = trait.params_rnw(nnodes)
-        pcounts_sm = sum(p.size() for p in params_sm)
-        # Each subring will have its own parameter values
-        # This is because of the interpolation we perform
-        pcounts_nw = len(params_nw) * nsubnodes
+        npvalues_sm = sum(p.size() for p in trait.params_sm())
+        npvalues_nw = len(trait.params_rnw(nnodes)) * nsubnodes
         uids.append(trait.uid())
         cvalues += consts
-        ccounts += [len(consts)]
-        pcounts += [pcounts_sm + pcounts_nw]
-    # Allocate memory for trait data and assign constants
-    arr_uids[:] = driver.mem_alloc_s(len(uids), np.int32)
-    arr_cvalues[:] = driver.mem_alloc_s(len(cvalues), dtype)
-    arr_ccounts[:] = driver.mem_alloc_s(len(ccounts), np.int32)
-    arr_pvalues[:] = driver.mem_alloc_s(sum(pcounts), dtype)
-    arr_pcounts[:] = driver.mem_alloc_s(len(pcounts), np.int32)
-    arr_uids[0][:] = uids
-    arr_cvalues[0][:] = cvalues
-    arr_ccounts[0][:] = ccounts
-    arr_pcounts[0][:] = pcounts
-    driver.mem_copy_h2d(arr_uids[0], arr_uids[1])
-    driver.mem_copy_h2d(arr_cvalues[0], arr_cvalues[1])
-    driver.mem_copy_h2d(arr_ccounts[0], arr_ccounts[1])
-    driver.mem_copy_h2d(arr_pcounts[0], arr_pcounts[1])
+        ccounts.append(len(consts))
+        pcounts.append(npvalues_sm + npvalues_nw)
+    return uids, cvalues, ccounts, pcounts
 
 
-def _prepare_common_params_array(
-        driver, params, arr, descs, nodes, subnodes, interp, isnw):
-    if not descs:
-        return
+def _fill_param_values(
+        values, params, pdescs, isnw, nodes, subnodes, interp):
+    """
+    Write the values of the given parameters one after the other into
+    values. The values of the node-wise parameters are replaced in params
+    with their values interpolated to the subnodes.
+    """
     start = 0
-    for name, desc in descs.items():
-        # Interpolate nodewise parameters
-        # This will replace the per-node parameter values
-        # with the interpolated per-subnode parameters values.
-        if isnw:
-            params[name] = interp(nodes, params[name])(subnodes)
-            stop = start + len(subnodes)
-        else:
-            stop = start + desc.size()
-        # Copy parameter values into the host memory buffer
-        arr[0][start:stop] = params[name]
-        # print(arr[0].dtype)
-        start = stop
-    # Transfer data from host to device
-    driver.mem_copy_h2d(arr[0], arr[1])
-
-
-def _prepare_traits_params_array(
-        driver, params, arr, descs, nodes, subnodes, interp, isnw):
-    if not descs:
-        return
-    start = 0
-    for name, desc in descs.items():
+    for name in pdescs:
         if isnw[name]:
-            # Interpolate nodewise parameters
-            # This will replace the per-node parameter values
-            # with the interpolated per-subnode parameters values.
             params[name] = interp(nodes, params[name])(subnodes)
-            stop = start + len(subnodes)
-        else:
-            stop = start + desc.size()
-        # Copy parameter values into the host memory buffer
-        arr[0][start:stop] = params[name]
+        stop = start + np.size(params[name])
+        values[start:stop] = params[name]
         start = stop
-    # Transfer data from host to device
-    driver.mem_copy_h2d(arr[0], arr[1])
 
 
 class Disk(abc.ABC):
@@ -163,152 +133,53 @@ class Disk(abc.ABC):
         self._subrnodes = subrnodes
         self._nsubrnodes = len(subrnodes)
         self._interp = interp
-        self._vsys_nwmode = vsys_nwmode
-        self._xpos_nwmode = xpos_nwmode
-        self._ypos_nwmode = ypos_nwmode
-        self._posa_nwmode = posa_nwmode
-        self._incl_nwmode = incl_nwmode
-        self._rptraits = rptraits
-        self._rhtraits = rhtraits
-        self._vptraits = vptraits
-        self._vhtraits = vhtraits
-        self._dptraits = dptraits
-        self._dhtraits = dhtraits
-        self._zptraits = zptraits
-        self._sptraits = sptraits
-        self._wptraits = wptraits
+        self._nwmodes = dict(
+            vsys=vsys_nwmode,
+            xpos=xpos_nwmode, ypos=ypos_nwmode,
+            posa=posa_nwmode, incl=incl_nwmode)
+        self._traits = dict(
+            rpt=rptraits, rht=rhtraits,
+            vpt=vptraits, vht=vhtraits,
+            dpt=dptraits, dht=dhtraits,
+            zpt=zptraits,
+            spt=sptraits,
+            wpt=wptraits)
         self._is_opacity_disk = isinstance(rptraits[0], traits.OPTrait)
 
-        # Make descs for common disk parameters
-        self._vsys_pdescs = _make_param_descs('vsys', nrnodes, loose) \
-            if self._vptraits else {}
-        self._xpos_pdescs = _make_param_descs('xpos', nrnodes, loose)
-        self._ypos_pdescs = _make_param_descs('ypos', nrnodes, loose)
-        self._posa_pdescs = _make_param_descs('posa', nrnodes, tilted)
-        self._incl_pdescs = _make_param_descs('incl', nrnodes, tilted)
+        # Make descs for the geometric parameters. There is no systemic
+        # velocity without velocity traits.
+        self._geometry_isnw = dict(
+            vsys=loose, xpos=loose, ypos=loose, posa=tilted, incl=tilted)
+        self._geometry_pdescs = {
+            name: _make_param_descs(name, nrnodes, self._geometry_isnw[name])
+            for name in GEOMETRY_PARAMS
+            if name != 'vsys' or vptraits}
 
-        # Select the right prefix for the density traits
-        rpt_prefix, rht_prefix = ('opt', 'oht') \
-            if self._is_opacity_disk else ('bpt', 'bht')
-
-        # Make descs for trait disk parameters
-        (self._rpt_pdescs,
-         self._rpt_nwmodes,
-         self._rpt_isnw,
-         self._rpt_pnames) = _trait_param_info(rptraits, rpt_prefix, nrnodes)
-        (self._rht_pdescs,
-         self._rht_nwmodes,
-         self._rht_isnw,
-         self._rht_pnames) = _trait_param_info(rhtraits, rht_prefix, nrnodes)
-        (self._vpt_pdescs,
-         self._vpt_nwmodes,
-         self._vpt_isnw,
-         self._vpt_pnames) = _trait_param_info(vptraits, 'vpt', nrnodes)
-        (self._vht_pdescs,
-         self._vht_nwmodes,
-         self._vht_isnw,
-         self._vht_pnames) = _trait_param_info(vhtraits, 'vht', nrnodes)
-        (self._dpt_pdescs,
-         self._dpt_nwmodes,
-         self._dpt_isnw,
-         self._dpt_pnames) = _trait_param_info(dptraits, 'dpt', nrnodes)
-        (self._dht_pdescs,
-         self._dht_nwmodes,
-         self._dht_isnw,
-         self._dht_pnames) = _trait_param_info(dhtraits, 'dht', nrnodes)
-        (self._zpt_pdescs,
-         self._zpt_nwmodes,
-         self._zpt_isnw,
-         self._zpt_pnames) = _trait_param_info(zptraits, 'zpt', nrnodes)
-        (self._spt_pdescs,
-         self._spt_nwmodes,
-         self._spt_isnw,
-         self._spt_pnames) = _trait_param_info(sptraits, 'spt', nrnodes)
-        (self._wpt_pdescs,
-         self._wpt_nwmodes,
-         self._wpt_isnw,
-         self._wpt_pnames) = _trait_param_info(wptraits, 'wpt', nrnodes)
+        # Make descs for the trait parameters. The density traits of an
+        # opacity disk are opacity traits.
+        prefixes = dict(zip(TRAIT_KINDS, TRAIT_KINDS))
+        if self._is_opacity_disk:
+            prefixes.update(rpt='opt', rht='oht')
+        else:
+            prefixes.update(rpt='bpt', rht='bht')
+        self._trait_params = {
+            kind: _trait_params(traits_, prefixes[kind], nrnodes)
+            for kind, traits_ in self._traits.items()}
 
         # Merge all parameter descs into the same dictionary
-        self._pdescs = {
-            **self._vsys_pdescs,
-            **self._xpos_pdescs,
-            **self._ypos_pdescs,
-            **self._posa_pdescs,
-            **self._incl_pdescs,
-            **self._rpt_pdescs,
-            **self._rht_pdescs,
-            **self._vpt_pdescs,
-            **self._vht_pdescs,
-            **self._dpt_pdescs,
-            **self._dht_pdescs,
-            **self._zpt_pdescs,
-            **self._spt_pdescs,
-            **self._wpt_pdescs}
+        self._pdescs = {}
+        for pdescs in self._geometry_pdescs.values():
+            self._pdescs.update(pdescs)
+        for params in self._trait_params.values():
+            self._pdescs.update(params.pdescs)
 
-        # This is where we store subrnodes and common parameter values
-        # Each variable will contain host and device memory
-        self._s_subrnodes = [None, None]
-        self._s_vsys_pvalues = [None, None]
-        self._s_xpos_pvalues = [None, None]
-        self._s_ypos_pvalues = [None, None]
-        self._s_posa_pvalues = [None, None]
-        self._s_incl_pvalues = [None, None]
-
-        # This is where we store the trait information
-        # Each variable will contain host and device memory
-        (self._s_rpt_uids,
-         self._s_rpt_cvalues,
-         self._s_rpt_pvalues,
-         self._s_rpt_ccounts,
-         self._s_rpt_pcounts) = iterutils.make_tuple((5,), [None, None], True)
-        (self._s_rht_uids,
-         self._s_rht_cvalues,
-         self._s_rht_pvalues,
-         self._s_rht_ccounts,
-         self._s_rht_pcounts) = iterutils.make_tuple((5,), [None, None], True)
-        (self._s_vpt_uids,
-         self._s_vpt_cvalues,
-         self._s_vpt_pvalues,
-         self._s_vpt_ccounts,
-         self._s_vpt_pcounts) = iterutils.make_tuple((5,), [None, None], True)
-        (self._s_vht_uids,
-         self._s_vht_cvalues,
-         self._s_vht_pvalues,
-         self._s_vht_ccounts,
-         self._s_vht_pcounts) = iterutils.make_tuple((5,), [None, None], True)
-        (self._s_dpt_uids,
-         self._s_dpt_cvalues,
-         self._s_dpt_pvalues,
-         self._s_dpt_ccounts,
-         self._s_dpt_pcounts) = iterutils.make_tuple((5,), [None, None], True)
-        (self._s_dht_uids,
-         self._s_dht_cvalues,
-         self._s_dht_pvalues,
-         self._s_dht_ccounts,
-         self._s_dht_pcounts) = iterutils.make_tuple((5,), [None, None], True)
-        (self._s_zpt_uids,
-         self._s_zpt_cvalues,
-         self._s_zpt_pvalues,
-         self._s_zpt_ccounts,
-         self._s_zpt_pcounts) = iterutils.make_tuple((5,), [None, None], True)
-        (self._s_spt_uids,
-         self._s_spt_cvalues,
-         self._s_spt_pvalues,
-         self._s_spt_ccounts,
-         self._s_spt_pcounts) = iterutils.make_tuple((5,), [None, None], True)
-        (self._s_wpt_uids,
-         self._s_wpt_cvalues,
-         self._s_wpt_pvalues,
-         self._s_wpt_ccounts,
-         self._s_wpt_pcounts) = iterutils.make_tuple((5,), [None, None], True)
-
-        self._spat_size = None
-        self._spat_step = None
-        self._spat_zero = None
-        self._spec_size = None
-        self._spec_step = None
-        self._spec_zero = None
+        # These are created by _prepare(): the native description of the
+        # disk, the host and device memory with its parameter values
+        # (geometry and traits, packed in one buffer), and the host view
+        # of each group of parameter values in it
+        self._native_disk = None
+        self._param_values = None
+        self._param_views = None
 
         self._dtype = None
         self._driver = None
@@ -330,135 +201,101 @@ class Disk(abc.ABC):
         return self._interp
 
     def vsys_nwmode(self):
-        return self._vsys_nwmode
+        return self._nwmodes['vsys']
 
     def xpos_nwmode(self):
-        return self._xpos_nwmode
+        return self._nwmodes['xpos']
 
     def ypos_nwmode(self):
-        return self._ypos_nwmode
+        return self._nwmodes['ypos']
 
     def posa_nwmode(self):
-        return self._posa_nwmode
+        return self._nwmodes['posa']
 
     def incl_nwmode(self):
-        return self._incl_nwmode
+        return self._nwmodes['incl']
 
     def rptraits(self):
-        return self._rptraits
+        return self._traits['rpt']
 
     def rhtraits(self):
-        return self._rhtraits
+        return self._traits['rht']
 
     def vptraits(self):
-        return self._vptraits
+        return self._traits['vpt']
 
     def vhtraits(self):
-        return self._vhtraits
+        return self._traits['vht']
 
     def dptraits(self):
-        return self._dptraits
+        return self._traits['dpt']
 
     def dhtraits(self):
-        return self._dhtraits
+        return self._traits['dht']
 
     def zptraits(self):
-        return self._zptraits
+        return self._traits['zpt']
 
     def sptraits(self):
-        return self._sptraits
+        return self._traits['spt']
 
     def wptraits(self):
-        return self._wptraits
+        return self._traits['wpt']
 
     def pdescs(self):
         return self._pdescs
 
     def _prepare(self, driver, dtype):
-        # Allocate memory for parameter values on host and device
-        loose_param_count = self._nsubrnodes if self._loose else 1
-        tilted_param_count = self._nsubrnodes if self._tilted else 1
-        self._s_vsys_pvalues = driver.mem_alloc_s(loose_param_count, dtype) \
-            if self._vptraits else [None, None]
-        self._s_xpos_pvalues = driver.mem_alloc_s(loose_param_count, dtype)
-        self._s_ypos_pvalues = driver.mem_alloc_s(loose_param_count, dtype)
-        self._s_posa_pvalues = driver.mem_alloc_s(tilted_param_count, dtype)
-        self._s_incl_pvalues = driver.mem_alloc_s(tilted_param_count, dtype)
 
-        # Allocate memory and copy the sub rnode data into it
-        self._s_subrnodes = driver.mem_alloc_s(self._nsubrnodes, dtype)
-        self._s_subrnodes[0][:] = self._subrnodes
-        driver.mem_copy_h2d(self._s_subrnodes[0], self._s_subrnodes[1])
+        # The number of values of each group of parameters: one value for
+        # each subnode for node-wise geometric parameters, and the values
+        # of all the traits of each kind
+        sizes = {
+            name: self._nsubrnodes if self._geometry_isnw[name] else 1
+            for name in self._geometry_pdescs}
+        constants = {}
+        for kind, traits_ in self._traits.items():
+            constants[kind] = _trait_constants(
+                traits_, self._nrnodes, self._nsubrnodes)
+            sizes[kind] = sum(constants[kind][3])
 
-        # Prepare trait data memory
-        # This includes trait memory allocation and initialization
-        _prepare_trait_arrays(
-            driver,
-            self._rptraits, self._nrnodes, self._nsubrnodes,
-            self._s_rpt_uids,
-            self._s_rpt_cvalues, self._s_rpt_ccounts,
-            self._s_rpt_pvalues, self._s_rpt_pcounts,
-            dtype)
-        _prepare_trait_arrays(
-            driver,
-            self._rhtraits, self._nrnodes, self._nsubrnodes,
-            self._s_rht_uids,
-            self._s_rht_cvalues, self._s_rht_ccounts,
-            self._s_rht_pvalues, self._s_rht_pcounts,
-            dtype)
-        _prepare_trait_arrays(
-            driver,
-            self._vptraits, self._nrnodes, self._nsubrnodes,
-            self._s_vpt_uids,
-            self._s_vpt_cvalues, self._s_vpt_ccounts,
-            self._s_vpt_pvalues, self._s_vpt_pcounts,
-            dtype)
-        _prepare_trait_arrays(
-            driver,
-            self._vhtraits, self._nrnodes, self._nsubrnodes,
-            self._s_vht_uids,
-            self._s_vht_cvalues, self._s_vht_ccounts,
-            self._s_vht_pvalues, self._s_vht_pcounts,
-            dtype)
-        _prepare_trait_arrays(
-            driver,
-            self._dptraits, self._nrnodes, self._nsubrnodes,
-            self._s_dpt_uids,
-            self._s_dpt_cvalues, self._s_dpt_ccounts,
-            self._s_dpt_pvalues, self._s_dpt_pcounts,
-            dtype)
-        _prepare_trait_arrays(
-            driver,
-            self._dhtraits, self._nrnodes, self._nsubrnodes,
-            self._s_dht_uids,
-            self._s_dht_cvalues, self._s_dht_ccounts,
-            self._s_dht_pvalues, self._s_dht_pcounts,
-            dtype)
-        _prepare_trait_arrays(
-            driver,
-            self._zptraits, self._nrnodes, self._nsubrnodes,
-            self._s_zpt_uids,
-            self._s_zpt_cvalues, self._s_zpt_ccounts,
-            self._s_zpt_pvalues, self._s_zpt_pcounts,
-            dtype)
-        _prepare_trait_arrays(
-            driver,
-            self._sptraits, self._nrnodes, self._nsubrnodes,
-            self._s_spt_uids,
-            self._s_spt_cvalues, self._s_spt_ccounts,
-            self._s_spt_pvalues, self._s_spt_pcounts,
-            dtype)
-        _prepare_trait_arrays(
-            driver,
-            self._wptraits, self._nrnodes, self._nsubrnodes,
-            self._s_wpt_uids,
-            self._s_wpt_cvalues, self._s_wpt_ccounts,
-            self._s_wpt_pvalues, self._s_wpt_pcounts,
-            dtype)
+        # Pack all parameter values in one buffer, so that they can be
+        # copied to the device with one copy per evaluation
+        values_h, values_d = driver.mem_alloc_s(sum(sizes.values()), dtype)
+        views_h, views_d = {}, {}
+        start = 0
+        for name, size in sizes.items():
+            views_h[name] = values_h[start:start + size]
+            views_d[name] = values_d[start:start + size]
+            start += size
 
+        def to_device(values, dtype_):
+            return driver.mem_copy_h2d(np.array(values, dtype_))
+
+        # Describe the disk to the native module: its (sub)nodes, the
+        # device memory of its geometric parameters, and its traits
+        trait_set_class = driver.native_class('TraitSet', dtype)
+        trait_sets = {}
+        for kind, (uids, cvalues, ccounts, pcounts) in constants.items():
+            if self._traits[kind]:
+                trait_sets[kind] = trait_set_class(
+                    uids=to_device(uids, np.int32),
+                    cvalues=to_device(cvalues, dtype),
+                    ccounts=to_device(ccounts, np.int32),
+                    pvalues=views_d[kind],
+                    pcounts=to_device(pcounts, np.int32))
+        self._native_disk = driver.native_class('Disk', dtype)(
+            loose=self._loose,
+            tilted=self._tilted,
+            rnodes=to_device(self._subrnodes, dtype),
+            **{name: views_d.get(name) for name in GEOMETRY_PARAMS},
+            **trait_sets)
+
+        self._param_values = (values_h, values_d)
+        self._param_views = views_h
         self._dtype = dtype
         self._driver = driver
-        self._backend = driver.backends().gmodel(dtype)
+        self._backend = driver.native_class('GModel', dtype)()
 
         # Perform preparation specific to the derived class
         self._impl_prepare(driver, dtype)
@@ -479,85 +316,32 @@ class Disk(abc.ABC):
         # never modify the caller's arrays in place.
         params = dict(params)
 
-        #
-        # Apply nodewise mode transform to parameters
-        # TODO: revise the use of nested functions
-        #
+        # Apply the nodewise mode transforms to the parameters
+        for name, pdescs in self._geometry_pdescs.items():
+            nwmode = self._nwmodes[name]
+            if nwmode is not None:
+                for pname in pdescs:
+                    params[pname] = nwmode.transform(
+                        params[pname], in_place=False)
+        for trait_params in self._trait_params.values():
+            for pname, nwmode in trait_params.nwmodes.items():
+                if nwmode is not None:
+                    params[pname] = nwmode.transform(
+                        params[pname], in_place=False)
 
-        def nwmode_transform_for_common_params(pdescs, nwmode):
-            if nwmode is None:
-                return
-            for pdesc in pdescs:
-                params[pdesc] = nwmode.transform(
-                    params[pdesc], in_place=False)
-
-        def nwmode_transform_for_trait_params(pdescs, nwmodes):
-            for pdesc in pdescs:
-                if nwmodes[pdesc] is None:
-                    continue
-                params[pdesc] = nwmodes[pdesc].transform(
-                    params[pdesc], in_place=False)
-
-        nwmode_transform_for_common_params(self._vsys_pdescs, self._vsys_nwmode)
-        nwmode_transform_for_common_params(self._xpos_pdescs, self._xpos_nwmode)
-        nwmode_transform_for_common_params(self._ypos_pdescs, self._ypos_nwmode)
-        nwmode_transform_for_common_params(self._posa_pdescs, self._posa_nwmode)
-        nwmode_transform_for_common_params(self._incl_pdescs, self._incl_nwmode)
-
-        nwmode_transform_for_trait_params(self._rpt_pdescs, self._rpt_nwmodes)
-        nwmode_transform_for_trait_params(self._rht_pdescs, self._rht_nwmodes)
-        nwmode_transform_for_trait_params(self._vpt_pdescs, self._vpt_nwmodes)
-        nwmode_transform_for_trait_params(self._vht_pdescs, self._vht_nwmodes)
-        nwmode_transform_for_trait_params(self._dpt_pdescs, self._dpt_nwmodes)
-        nwmode_transform_for_trait_params(self._dht_pdescs, self._dht_nwmodes)
-        nwmode_transform_for_trait_params(self._zpt_pdescs, self._zpt_nwmodes)
-        nwmode_transform_for_trait_params(self._spt_pdescs, self._spt_nwmodes)
-        nwmode_transform_for_trait_params(self._wpt_pdescs, self._wpt_nwmodes)
-
-        #
-        # Prepare parameters
-        # TODO: revise the use of nested functions
-        #
-
-        def prepare_common_params(arr, descs, isnw):
-            _prepare_common_params_array(
-                driver, params, arr, descs,
-                self._rnodes, self._subrnodes, self._interp, isnw)
-
-        def prepare_traits_params(arr, descs, isnw):
-            _prepare_traits_params_array(
-                driver, params, arr, descs,
-                self._rnodes, self._subrnodes, self._interp, isnw)
-
-        prepare_common_params(
-            self._s_vsys_pvalues, self._vsys_pdescs, self._loose)
-        prepare_common_params(
-            self._s_xpos_pvalues, self._xpos_pdescs, self._loose)
-        prepare_common_params(
-            self._s_ypos_pvalues, self._ypos_pdescs, self._loose)
-        prepare_common_params(
-            self._s_posa_pvalues, self._posa_pdescs, self._tilted)
-        prepare_common_params(
-            self._s_incl_pvalues, self._incl_pdescs, self._tilted)
-
-        prepare_traits_params(
-            self._s_rpt_pvalues, self._rpt_pdescs, self._rpt_isnw)
-        prepare_traits_params(
-            self._s_rht_pvalues, self._rht_pdescs, self._rht_isnw)
-        prepare_traits_params(
-            self._s_vpt_pvalues, self._vpt_pdescs, self._vpt_isnw)
-        prepare_traits_params(
-            self._s_vht_pvalues, self._vht_pdescs, self._vht_isnw)
-        prepare_traits_params(
-            self._s_dpt_pvalues, self._dpt_pdescs, self._dpt_isnw)
-        prepare_traits_params(
-            self._s_dht_pvalues, self._dht_pdescs, self._dht_isnw)
-        prepare_traits_params(
-            self._s_zpt_pvalues, self._zpt_pdescs, self._zpt_isnw)
-        prepare_traits_params(
-            self._s_spt_pvalues, self._spt_pdescs, self._spt_isnw)
-        prepare_traits_params(
-            self._s_wpt_pvalues, self._wpt_pdescs, self._wpt_isnw)
+        # Write the parameter values into the host memory, with the
+        # nodewise parameters interpolated to the subnodes, and copy
+        # them to the device
+        def fill(name, pdescs, isnw):
+            _fill_param_values(
+                self._param_views[name], params, pdescs, isnw,
+                self._rnodes, self._subrnodes, self._interp)
+        for name, pdescs in self._geometry_pdescs.items():
+            isnw = self._geometry_isnw[name]
+            fill(name, pdescs, dict.fromkeys(pdescs, isnw))
+        for kind, trait_params in self._trait_params.items():
+            fill(kind, trait_params.pdescs, trait_params.isnw)
+        driver.mem_copy_h2d(*self._param_values)
 
         wdata_cmp = None
         rdata_cmp = None
@@ -567,13 +351,13 @@ class Disk(abc.ABC):
 
         if out_extra is not None:
             shape = spat_size[::-1]
-            if self._rptraits:
+            if self.rptraits():
                 rdata_cmp = driver.mem_alloc_d(shape, dtype)
                 driver.mem_fill(rdata_cmp, 0)
-            if self._vptraits:
+            if self.vptraits():
                 vdata_cmp = driver.mem_alloc_d(shape, dtype)
                 driver.mem_fill(vdata_cmp, np.nan)
-            if self._dptraits:
+            if self.dptraits():
                 ddata_cmp = driver.mem_alloc_d(shape, dtype)
                 driver.mem_fill(ddata_cmp, np.nan)
             if self.wptraits():
@@ -583,39 +367,40 @@ class Disk(abc.ABC):
                 ordata_cmp = driver.mem_alloc_d(shape, dtype)
                 driver.mem_fill(ordata_cmp, 0)
 
-        self._impl_evaluate(
-            driver, params,
-            odata,
-            image, scube,
-            wdata, wdata_cmp,
-            rdata, rdata_cmp,
-            ordata, ordata_cmp,
-            vdata_cmp, ddata_cmp,
-            spat_size, spat_step, spat_zero, spat_rota,
-            spec_size, spec_step, spec_zero,
-            dtype, out_extra)
+        # The keyword arguments of the native evaluation functions
+        grid_and_outputs = dict(
+            spat_size=spat_size, spat_step=spat_step, spat_zero=spat_zero,
+            spec_size=spec_size, spec_step=spec_step, spec_zero=spec_zero,
+            opacity=odata,
+            image=image, scube=scube,
+            wdata=wdata, wdata_cmp=wdata_cmp,
+            rdata=rdata, rdata_cmp=rdata_cmp,
+            ordata=ordata, ordata_cmp=ordata_cmp,
+            vdata_cmp=vdata_cmp, ddata_cmp=ddata_cmp)
+
+        self._impl_evaluate(driver, params, grid_and_outputs, out_extra)
 
         if out_extra is not None:
 
             rdata_key = 'odata' if self._is_opacity_disk else 'bdata'
 
-            if self._rptraits:
+            if self.rptraits():
                 out_extra[rdata_key] = driver.mem_copy_d2h(rdata_cmp)
-            if self._vptraits:
+            if self.vptraits():
                 out_extra['vdata'] = driver.mem_copy_d2h(vdata_cmp)
-            if self._dptraits:
+            if self.dptraits():
                 out_extra['ddata'] = driver.mem_copy_d2h(ddata_cmp)
             if self.wptraits():
                 out_extra['wdata'] = driver.mem_copy_d2h(wdata_cmp)
             if odata is not None:
                 out_extra['obdata'] = driver.mem_copy_d2h(ordata_cmp)
-            if self._rptraits:
+            if self.rptraits():
                 sumabs = np.nansum(np.abs(out_extra[rdata_key]))
                 _log.debug(f"sum(abs({rdata_key})): {sumabs}")
-            if self._vptraits:
+            if self.vptraits():
                 sumabs = np.nansum(np.abs(out_extra['vdata']))
                 _log.debug(f"sum(abs(vdata)): {sumabs}")
-            if self._dptraits:
+            if self.dptraits():
                 sumabs = np.nansum(np.abs(out_extra['ddata']))
                 _log.debug(f"sum(abs(ddata)): {sumabs}")
 
@@ -624,15 +409,11 @@ class Disk(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def _impl_evaluate(
-            self, driver, params,
-            odata,
-            image, scube,
-            wdata, wdata_cmp,
-            rdata, rdata_cmp,
-            ordata, ordata_cmp,
-            vdata_cmp, ddata_cmp,
-            spat_size, spat_step, spat_zero, spat_rota,
-            spec_size, spec_step, spec_zero,
-            dtype, out_extra):
+    def _impl_evaluate(self, driver, params, grid_and_outputs, out_extra):
+        """
+        Evaluate the disk. params has the values of the node-wise
+        parameters interpolated to the subnodes, and grid_and_outputs
+        the keyword arguments of the grid and the outputs of the native
+        evaluation functions.
+        """
         pass

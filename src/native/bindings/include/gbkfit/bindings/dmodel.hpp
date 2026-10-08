@@ -78,9 +78,9 @@ struct DModel
     }
 
     static void
-    bind(nb::module_& m, const char* name)
+    bind(nb::module_& m, const std::string& suffix)
     {
-        nb::class_<DModel>(m, name)
+        nb::class_<DModel>(m, ("DModel" + suffix).c_str())
                 .def(nb::init<>())
                 .def_static("dcube_downscale", &dcube_downscale,
                         nb::arg("scale"), nb::arg("offset"),

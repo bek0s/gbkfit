@@ -1,7 +1,7 @@
 
 import numpy as np
 
-
+import gbkfit.driver.native._host as native_module
 from gbkfit.driver.core import Driver
 
 
@@ -65,6 +65,9 @@ class DriverHost(Driver):
     def math_pow(self, x1, x2, out=None):
         return np.power(x1, x2, out=out)
 
-    def backends(self):
-        from ._backend import DriverBackendsHost
-        return DriverBackendsHost()
+    def native_module(self):
+        return native_module
+
+    def fft(self, dtype):
+        from ._fft import DriverFFTHost
+        return DriverFFTHost(self.native_class('FFT', dtype)(), dtype)

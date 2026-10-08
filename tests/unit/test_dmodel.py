@@ -251,7 +251,7 @@ def _test_dcube(driver: Driver, dtype):
     psf_size_hi = psf.size(scaled_step_spat)
     lsf_size_hi = lsf.size(scaled_step_spec)
     scratch_size, scratch_edge = (
-        driver.backends().fft(dtype).fft_convolution_shape(
+        driver.fft(dtype).fft_convolution_shape(
             scaled_size, psf_size_hi + (lsf_size_hi,)))
     scratch_zero = (
         zero[0] - step[0] / 2 - (scratch_edge[0] - 0.5) * scaled_step[0],
@@ -451,7 +451,7 @@ def _test_dcube(driver: Driver, dtype):
     minimum_pcube_size = np.array(psf.size(expected_step_hi[:2]) + (1,))
 
     expected_dcube_size_hi, expected_edge_size_hi = (
-        driver.backends().fft(dtype).fft_convolution_shape(
+        driver.fft(dtype).fft_convolution_shape(
             minimum_dcube_size, minimum_pcube_size))
 
     assert dcube.scratch_size() == expected_dcube_size_hi
@@ -497,7 +497,7 @@ def _test_dcube(driver: Driver, dtype):
     psf_size_hi = psf.size(scaled_step_spat)
     lsf_size_hi = lsf.size(scaled_step_spec)
     scratch_size, scratch_edge = (
-        driver.backends().fft(dtype).fft_convolution_shape(
+        driver.fft(dtype).fft_convolution_shape(
             scaled_size, psf_size_hi + (lsf_size_hi,)))
 
     assert dcube.size() == size

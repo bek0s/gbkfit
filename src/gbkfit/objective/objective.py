@@ -181,7 +181,8 @@ class Objective(parseutils.BasicSerializable, ABC):
                 self._d_residual_nddata[i][key] = \
                     self._d_residual_vector[i][slice_].reshape(shape)
             # One backend for each driver
-            self._backends[i] = driver.backends().objective(dmodel.dtype())
+            self._backends[i] = driver.native_class(
+                'Objective', dmodel.dtype())()
         self._prepared = True
 
     def residual_scalar(

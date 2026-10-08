@@ -1,6 +1,7 @@
 #pragma once
 
 #include <complex>
+#include <string>
 #include <thread>
 #include <unordered_map>
 #include <vector>
@@ -101,9 +102,9 @@ public:
     }
 
     static void
-    bind(nb::module_& m, const char* name)
+    bind(nb::module_& m, const std::string& suffix)
     {
-        nb::class_<FFT>(m, name)
+        nb::class_<FFT>(m, ("FFT" + suffix).c_str())
                 .def(nb::init<>())
                 .def("fft_r2c", &FFT::fft_r2c,
                         nb::arg("data_r").noconvert(),

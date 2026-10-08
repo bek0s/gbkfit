@@ -124,29 +124,6 @@ dmodel_mmaps_moments(
 }
 
 template<typename T> void
-gmodel_convolve(
-        int data1_size_x, int data1_size_y, int data1_size_z,
-        int data2_size_x, int data2_size_y, int data2_size_z,
-        const T* data1, const T* data2, T* result)
-{
-    // Parallelization: per 3d position in cube
-    #pragma omp parallel for collapse(3)
-    for(int z1 = 0; z1 < data1_size_z; ++z1) {
-    for(int y1 = 0; y1 < data1_size_y; ++y1) {
-    for(int x1 = 0; x1 < data1_size_x; ++x1) {
-
-    gbkfit::gmodel_convolve(
-            x1, y1, z1,
-            data1_size_x, data1_size_y, data1_size_z,
-            data2_size_x, data2_size_y, data2_size_z,
-            data1, data2, result);
-
-    }
-    }
-    }
-}
-
-template<typename T> void
 gmodel_wcube_evaluate(
         int spat_size_x, int spat_size_y, int spat_size_z,
         int spec_size_z,
@@ -170,237 +147,29 @@ gmodel_wcube_evaluate(
 }
 
 template<typename T> void
-gmodel_mcdisk_evaluate(
-        T cflux, int nclouds,
-        const int* ncloudscsum, int ncloudscsum_len,
-        const bool* hasordint,
-        bool loose, bool tilted,
-        int nrnodes, const T* rnodes,
-        const T* vsys,
-        const T* xpos, const T* ypos,
-        const T* posa, const T* incl,
-        int nrt,
-        const int* rpt_uids,
-        const T* rpt_cvalues, const int* rpt_ccounts,
-        const T* rpt_pvalues, const int* rpt_pcounts,
-        const int* rht_uids,
-        const T* rht_cvalues, const int* rht_ccounts,
-        const T* rht_pvalues, const int* rht_pcounts,
-        int nvt,
-        const int* vpt_uids,
-        const T* vpt_cvalues, const int* vpt_ccounts,
-        const T* vpt_pvalues, const int* vpt_pcounts,
-        const int* vht_uids,
-        const T* vht_cvalues, const int* vht_ccounts,
-        const T* vht_pvalues, const int* vht_pcounts,
-        int ndt,
-        const int* dpt_uids,
-        const T* dpt_cvalues, const int* dpt_ccounts,
-        const T* dpt_pvalues, const int* dpt_pcounts,
-        const int* dht_uids,
-        const T* dht_cvalues, const int* dht_ccounts,
-        const T* dht_pvalues, const int* dht_pcounts,
-        int nzt,
-        const int* zpt_uids,
-        const T* zpt_cvalues, const int* zpt_ccounts,
-        const T* zpt_pvalues, const int* zpt_pcounts,
-        int nst,
-        const int* spt_uids,
-        const T* spt_cvalues, const int* spt_ccounts,
-        const T* spt_pvalues, const int* spt_pcounts,
-        int nwt,
-        const int* wpt_uids,
-        const T* wpt_cvalues, const int* wpt_ccounts,
-        const T* wpt_pvalues, const int* wpt_pcounts,
-        const T* opacity,
-        int spat_size_x, int spat_size_y, int spat_size_z,
-        T spat_step_x, T spat_step_y, T spat_step_z,
-        T spat_zero_x, T spat_zero_y, T spat_zero_z,
-        int spec_size,
-        T spec_step,
-        T spec_zero,
-        T* image, T* scube,
-        T* wdata, T* wdata_cmp,
-        T* rdata, T* rdata_cmp,
-        T* ordata, T* ordata_cmp,
-        T* vdata_cmp, T* ddata_cmp)
+gmodel_mcdisk_evaluate(const DiskArgs<T>& a, const MCDiskArgs<T>& mc)
 {
     // Parallelization: per cloud
     // Each cloud has its own stream of random numbers
     #pragma omp parallel for
-    for(int ci = 0; ci < nclouds; ++ci)
+    for(int ci = 0; ci < mc.nclouds; ++ci)
     {
-
-    RNG<T> rng(MCDISK_SEED, ci);
-    gbkfit::gmodel_mcdisk_evaluate_cloud<atomic_set<T>, atomic_add<T>>(
-            rng, ci,
-            cflux, nclouds,
-            ncloudscsum, ncloudscsum_len,
-            hasordint,
-            loose, tilted,
-            nrnodes, rnodes,
-            vsys,
-            xpos, ypos,
-            posa, incl,
-            nrt,
-            rpt_uids,
-            rpt_cvalues, rpt_ccounts,
-            rpt_pvalues, rpt_pcounts,
-            rht_uids,
-            rht_cvalues, rht_ccounts,
-            rht_pvalues, rht_pcounts,
-            nvt,
-            vpt_uids,
-            vpt_cvalues, vpt_ccounts,
-            vpt_pvalues, vpt_pcounts,
-            vht_uids,
-            vht_cvalues, vht_ccounts,
-            vht_pvalues, vht_pcounts,
-            ndt,
-            dpt_uids,
-            dpt_cvalues, dpt_ccounts,
-            dpt_pvalues, dpt_pcounts,
-            dht_uids,
-            dht_cvalues, dht_ccounts,
-            dht_pvalues, dht_pcounts,
-            nzt,
-            zpt_uids,
-            zpt_cvalues, zpt_ccounts,
-            zpt_pvalues, zpt_pcounts,
-            nst,
-            spt_uids,
-            spt_cvalues, spt_ccounts,
-            spt_pvalues, spt_pcounts,
-            nwt,
-            wpt_uids,
-            wpt_cvalues, wpt_ccounts,
-            wpt_pvalues, wpt_pcounts,
-            opacity,
-            spat_size_x, spat_size_y, spat_size_z,
-            spat_step_x, spat_step_y, spat_step_z,
-            spat_zero_x, spat_zero_y, spat_zero_z,
-            spec_size,
-            spec_step,
-            spec_zero,
-            image, scube,
-            wdata, wdata_cmp,
-            rdata, rdata_cmp,
-            ordata, ordata_cmp,
-            vdata_cmp, ddata_cmp);
+        RNG<T> rng(MCDISK_SEED, ci);
+        gbkfit::gmodel_mcdisk_evaluate_cloud<atomic_set<T>, atomic_add<T>>(
+                rng, ci, a, mc);
     }
 }
 
 template<typename T> void
-gmodel_smdisk_evaluate(
-        bool loose, bool tilted,
-        int nrnodes, const T* rnodes,
-        const T* vsys,
-        const T* xpos, const T* ypos,
-        const T* posa, const T* incl,
-        int nrt,
-        const int* rpt_uids,
-        const T* rpt_cvalues, const int* rpt_ccounts,
-        const T* rpt_pvalues, const int* rpt_pcounts,
-        const int* rht_uids,
-        const T* rht_cvalues, const int* rht_ccounts,
-        const T* rht_pvalues, const int* rht_pcounts,
-        int nvt,
-        const int* vpt_uids,
-        const T* vpt_cvalues, const int* vpt_ccounts,
-        const T* vpt_pvalues, const int* vpt_pcounts,
-        const int* vht_uids,
-        const T* vht_cvalues, const int* vht_ccounts,
-        const T* vht_pvalues, const int* vht_pcounts,
-        int ndt,
-        const int* dpt_uids,
-        const T* dpt_cvalues, const int* dpt_ccounts,
-        const T* dpt_pvalues, const int* dpt_pcounts,
-        const int* dht_uids,
-        const T* dht_cvalues, const int* dht_ccounts,
-        const T* dht_pvalues, const int* dht_pcounts,
-        int nzt,
-        const int* zpt_uids,
-        const T* zpt_cvalues, const int* zpt_ccounts,
-        const T* zpt_pvalues, const int* zpt_pcounts,
-        int nst,
-        const int* spt_uids,
-        const T* spt_cvalues, const int* spt_ccounts,
-        const T* spt_pvalues, const int* spt_pcounts,
-        int nwt,
-        const int* wpt_uids,
-        const T* wpt_cvalues, const int* wpt_ccounts,
-        const T* wpt_pvalues, const int* wpt_pcounts,
-        const T* opacity,
-        int spat_size_x, int spat_size_y, int spat_size_z,
-        T spat_step_x, T spat_step_y, T spat_step_z,
-        T spat_zero_x, T spat_zero_y, T spat_zero_z,
-        int spec_size,
-        T spec_step,
-        T spec_zero,
-        T* image, T* scube,
-        T* wdata, T* wdata_cmp,
-        T* rdata, T* rdata_cmp,
-        T* ordata, T* ordata_cmp,
-        T* vdata_cmp, T* ddata_cmp)
+gmodel_smdisk_evaluate(const DiskArgs<T>& a)
 {
     // Parallelization: per 3d spatial position
     #pragma omp parallel for collapse(3)
-    for(int y = 0; y < spat_size_y; ++y) {
-    for(int x = 0; x < spat_size_x; ++x) {
-    for(int z = 0; z < spat_size_z; ++z) {
+    for(int y = 0; y < a.spat_size[1]; ++y) {
+    for(int x = 0; x < a.spat_size[0]; ++x) {
+    for(int z = 0; z < a.spat_size[2]; ++z) {
 
-    gbkfit::gmodel_smdisk_evaluate_spaxel<atomic_add<T>>(
-            x, y, z,
-            loose, tilted,
-            nrnodes, rnodes,
-            vsys,
-            xpos, ypos,
-            posa, incl,
-            nrt,
-            rpt_uids,
-            rpt_cvalues, rpt_ccounts,
-            rpt_pvalues, rpt_pcounts,
-            rht_uids,
-            rht_cvalues, rht_ccounts,
-            rht_pvalues, rht_pcounts,
-            nvt,
-            vpt_uids,
-            vpt_cvalues, vpt_ccounts,
-            vpt_pvalues, vpt_pcounts,
-            vht_uids,
-            vht_cvalues, vht_ccounts,
-            vht_pvalues, vht_pcounts,
-            ndt,
-            dpt_uids,
-            dpt_cvalues, dpt_ccounts,
-            dpt_pvalues, dpt_pcounts,
-            dht_uids,
-            dht_cvalues, dht_ccounts,
-            dht_pvalues, dht_pcounts,
-            nzt,
-            zpt_uids,
-            zpt_cvalues, zpt_ccounts,
-            zpt_pvalues, zpt_pcounts,
-            nst,
-            spt_uids,
-            spt_cvalues, spt_ccounts,
-            spt_pvalues, spt_pcounts,
-            nwt,
-            wpt_uids,
-            wpt_cvalues, wpt_ccounts,
-            wpt_pvalues, wpt_pcounts,
-            opacity,
-            spat_size_x, spat_size_y, spat_size_z,
-            spat_step_x, spat_step_y, spat_step_z,
-            spat_zero_x, spat_zero_y, spat_zero_z,
-            spec_size,
-            spec_step,
-            spec_zero,
-            image, scube,
-            wdata, wdata_cmp,
-            rdata, rdata_cmp,
-            ordata, ordata_cmp,
-            vdata_cmp, ddata_cmp);
+    gbkfit::gmodel_smdisk_evaluate_spaxel<atomic_add<T>>(x, y, z, a);
 
     }
     }
@@ -462,6 +231,21 @@ struct Wrapper
     static void
     dmodel_mmaps_moments(auto... args) {
         kernels::dmodel_mmaps_moments<T>(args...);
+    }
+
+    static void
+    gmodel_wcube_evaluate(auto... args) {
+        kernels::gmodel_wcube_evaluate<T>(args...);
+    }
+
+    static void
+    gmodel_mcdisk_evaluate(const DiskArgs<T>& a, const MCDiskArgs<T>& mc) {
+        kernels::gmodel_mcdisk_evaluate<T>(a, mc);
+    }
+
+    static void
+    gmodel_smdisk_evaluate(const DiskArgs<T>& a) {
+        kernels::gmodel_smdisk_evaluate<T>(a);
     }
 
     static void

@@ -12,7 +12,6 @@ nanobind_add_module(
   NOMINSIZE
   LTO
   src/bindings.cpp
-  src/gmodels.cpp
 )
 
 target_include_directories(

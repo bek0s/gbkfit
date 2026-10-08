@@ -116,7 +116,7 @@ class GModelKinematics3D(GModelSCube):
         if self._ocomponents:
             self._odata = driver.mem_alloc_d(self._size[::-1], dtype)
         # Create backend
-        self._backend = driver.backends().gmodel(dtype)
+        self._backend = driver.native_class('GModel', dtype)()
 
     def evaluate_scube(
             self, driver, params,
@@ -176,7 +176,7 @@ class GModelKinematics3D(GModelSCube):
         # Evaluate the provided spectral weight cube using
         # the 3d spatial weight cube evaluated above
         if scube_w is not None:
-            backend.wcube_evaluate(spat_size, spec_size, wdata, scube_w)
+            backend.wcube_evaluate(wdata, scube_w)
 
         if out_extra is not None:
             if wdata is not None:

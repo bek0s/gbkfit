@@ -152,7 +152,7 @@ class DModelMMaps(DModel):
         # Prepare dcube
         self._dcube.prepare(driver, gmodel.has_weights())
         # Create backend
-        self._backend = driver.backends().dmodel(dtype)
+        self._backend = driver.native_class('DModel', dtype)()
 
     def _evaluate_impl(self, params, out_dmodel_extra, out_gmodel_extra):
         driver = self._driver

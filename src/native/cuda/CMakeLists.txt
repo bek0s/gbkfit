@@ -8,7 +8,6 @@ nanobind_add_module(
   NB_STATIC
   NOMINSIZE
   src/bindings.cpp
-  src/gmodels.cpp
   src/wrapper.cu
 )
 
