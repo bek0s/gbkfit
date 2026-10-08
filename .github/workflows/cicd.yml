@@ -1,63 +1,95 @@
 name: cicd
 
+# Builds and tests the wheels for every supported platform, checks that
+# the CUDA module compiles, and publishes to (Test)PyPI on a release.
+#
+# To build gbkfit locally, there is no need to replicate any of this; see
+# docs/source/install.rst (in short: `pip install .`). The wheel settings
+# used here (Python versions, tests, etc.) live under [tool.cibuildwheel]
+# in pyproject.toml.
+
 on:
   pull_request:
   push:
-    branches:
-      - '**'
+    branches: [master]
   release:
     types: [published]
-
-env:
-  TWINE_USERNAME: ${{secrets.PYPI_USERNAME}}
-  TWINE_PASSWORD: ${{secrets.PYPI_PASSWORD}}
-  TWINE_REPOSITORY_URL: https://test.pypi.org/legacy/
+  workflow_dispatch:
 
 jobs:
 
-  build_linux:
+  lint:
     runs-on: ubuntu-latest
-    container: ${{ matrix.image }}
-    strategy:
-      matrix:
-        image:
-        - quay.io/pypa/manylinux_2_28_x86_64
-        python: ['3.12']
     steps:
-    - name: gitconfig
-      run: git config --global --add safe.directory $PWD
-    - uses: actions/checkout@v3
-      with:
-        submodules: recursive
-    - name: bootstrap
-      run: . tools/cicd/linux/bootstrap.sh ${{ matrix.python }}
-    - name: analyse
-      run: . tools/cicd/linux/analyse.sh
-    - name: build
-      run: . tools/cicd/linux/build.sh
-    - name: test
-      run: . tools/cicd/linux/test.sh
-    - name: publish
-      if: github.event_name == 'release'
-      run: . tools/cicd/linux/publish.sh
+    - uses: actions/checkout@v7
+    - run: pipx run ruff check
 
-  build_macos:
-    runs-on: macos-latest
+  wheels:
+    name: wheels (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
-        python: ['3.12']
+        # Linux x86_64 and aarch64, macOS arm64, Windows x86_64
+        os: [ubuntu-latest, ubuntu-24.04-arm, macos-14, windows-latest]
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v7
       with:
-        submodules: recursive
-    - name: bootstrap
-      run: . tools/cicd/macos/bootstrap.sh ${{ matrix.python }}
-    - name: analyse
-      run: . tools/cicd/macos/analyse.sh
-    - name: build
-      run: . tools/cicd/macos/build.sh
-    - name: test
-      run: . tools/cicd/macos/test.sh
-    - name: publish
-      if: github.event_name == 'release'
-      run: . tools/cicd/macos/publish.sh
+        fetch-depth: 0  # setuptools-scm needs the history for the version
+    - name: install OpenMP (macOS)
+      if: runner.os == 'macOS'
+      run: |
+        brew install libomp
+        echo "OpenMP_ROOT=$(brew --prefix libomp)" >> "$GITHUB_ENV"
+    - uses: pypa/cibuildwheel@v4.3.0
+    - uses: actions/upload-artifact@v7
+      with:
+        name: wheels-${{ matrix.os }}
+        path: wheelhouse/*.whl
+
+  sdist:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v7
+      with:
+        fetch-depth: 0
+    - run: pipx run build --sdist
+    - uses: actions/upload-artifact@v7
+      with:
+        name: sdist
+        path: dist/*.tar.gz
+
+  cuda:
+    # GitHub-hosted runners have no GPU: only check that the module builds
+    name: cuda (build only)
+    runs-on: ubuntu-latest
+    container: nvidia/cuda:12.6.3-devel-ubuntu24.04
+    steps:
+    - run: apt-get update && apt-get install -y git python3-venv
+    - uses: actions/checkout@v7
+      with:
+        fetch-depth: 0
+    - run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+    - run: |
+        python3 -m venv venv
+        venv/bin/pip install . \
+          -Ccmake.define.GBKFIT_CUDA=ON \
+          -Ccmake.define.CMAKE_CUDA_ARCHITECTURES=75
+
+  publish:
+    # Requires a "Trusted Publisher" for this repository and workflow on
+    # (Test)PyPI, and a GitHub environment with the same name.
+    needs: [wheels, sdist]
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    environment: testpypi
+    permissions:
+      id-token: write
+    steps:
+    - uses: actions/download-artifact@v8
+      with:
+        path: dist
+        merge-multiple: true
+    - uses: pypa/gh-action-pypi-publish@release/v1
+      with:
+        repository-url: https://test.pypi.org/legacy/

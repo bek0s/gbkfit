@@ -69,6 +69,29 @@ addopts = ['-ra', '--strict-markers', '--strict-config']
 xfail_strict = true
 markers = ['cuda: needs the cuda driver and a CUDA GPU']
 
+[tool.cibuildwheel]
+# The wheels use the stable ABI (abi3): each one is built on Python 3.12
+# and then reused, and tested, on every later Python version listed here.
+build = ['cp312-*', 'cp313-*', 'cp314-*']
+skip = ['*-musllinux_*']
+archs = ['auto64']
+test-groups = ['test']
+test-sources = ['tests', 'pyproject.toml']
+test-command = 'pytest tests -m "not cuda"'
+test-environment = { GBKFIT_REQUIRE_DRIVERS = 'host' }
+
+[tool.cibuildwheel.macos]
+environment = { MACOSX_DEPLOYMENT_TARGET = '14.0' }
+
+[tool.ruff.lint]
+# Linting only (no automatic formatting for now): the core pyflakes and
+# pycodestyle error rules. Star imports are used on purpose.
+select = ['E4', 'E7', 'E9', 'F']
+ignore = ['F403', 'F405']
+
+[tool.ruff.lint.per-file-ignores]
+'__init__.py' = ['F401']
+
 [tool.setuptools_scm]
 version_file = 'src/gbkfit/_version.py'
 version_file_template = '__version__ = "{version}"'
