@@ -221,8 +221,12 @@ def eval_(
     resid_w_extra = {}
     resid_w_data = []
     if mode == 'objective':
-        resid_u_data = objective.residual_nddata_h(param_values, resid_u_extra)
-        resid_w_data = []  # objective.residual_nddata_h(params, True, resid_w_extra)
+        # The objective reuses its residual buffers on every call,
+        # so keep copies of the unweighted and weighted residuals
+        resid_u_data = copy.deepcopy(objective.residual_nddata_h(
+            param_values, False, resid_u_extra))
+        resid_w_data = copy.deepcopy(objective.residual_nddata_h(
+            param_values, True, resid_w_extra))
         residual_sum = objective.residual_scalar(param_values, True)
         _log.info(f"sum of squared residuals: {residual_sum}")
 
@@ -262,7 +266,7 @@ def eval_(
     for key, value in resid_u_extra.items():
         outputs |= {f'{resid_u_prefix}_extra_{key}.fits': value}
     for key, value in resid_w_extra.items():
-        outputs |= {f'{resid_u_prefix}_extra_{key}.fits': value}
+        outputs |= {f'{resid_w_prefix}_extra_{key}.fits': value}
 
     # #
     # # Calculate outputs statistics
