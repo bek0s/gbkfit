@@ -84,3 +84,19 @@ def test_gmodel_shared_by_grids_with_different_steps(driver, gmodel_type):
     np.testing.assert_array_equal(
         evaluate(shared, step=0.5),
         evaluate(gmodel_parser.load(gmodel_info), step=0.5))
+
+
+def test_failed_preparation_is_not_kept(driver):
+    # A dmodel that fails to prepare (here, a dtype the drivers do not
+    # support) must fail the same way on the next evaluation, not run
+    # half prepared
+    dmodel = gbkfit.model.dmodel_parser.load(
+        dict(type='image', size=[8, 8], dtype='float64'))
+    gmodel = gbkfit.model.gmodel_parser.load(dict(
+        type='intensity_2d', components=dict(
+            type='smdisk', loose=False, tilted=False, rnodes=[0, 2, 4],
+            bptraits=dict(type='uniform'))))
+    params = dict(xpos=0, ypos=0, posa=0, incl=0, bpt_a=1)
+    for _ in range(2):
+        with pytest.raises(RuntimeError, match="does not support dtype"):
+            dmodel.evaluate(driver, gmodel, params)

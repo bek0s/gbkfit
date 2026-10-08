@@ -66,7 +66,13 @@ class DModel(parseutils.TypedSerializable, abc.ABC):
                 f"{dmodel_desc} is not compatible with {gmodel_desc}")
         self._driver = driver
         self._gmodel = gmodel
-        self._prepare_impl(gmodel)
+        try:
+            self._prepare_impl(gmodel)
+        except Exception:
+            # Prepare again on the next evaluation
+            self._driver = None
+            self._gmodel = None
+            raise
 
     def evaluate(self, driver, gmodel, params, out_extra=None):
         if self._driver is not driver or self._gmodel is not gmodel:
