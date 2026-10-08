@@ -165,7 +165,7 @@ automatically when it changes can be set up with:
 
 .. code-block:: console
 
-   pip install scikit-build-core pybind11 setuptools-scm cmake ninja
+   pip install scikit-build-core nanobind setuptools-scm cmake ninja
    pip install --no-build-isolation -Ceditable.rebuild=true -e ./gbkfit
 
 To run the tests (requires pip 25.1 or later), run:

@@ -1,9 +1,12 @@
 
 find_package(CUDAToolkit REQUIRED)
 
-pybind11_add_module(
+# NOMINSIZE: nanobind optimises for size by default; we want speed
+nanobind_add_module(
   _cuda
-  NO_EXTRAS
+  STABLE_ABI
+  NB_STATIC
+  NOMINSIZE
   src/bindings.cpp
   src/dmodels.cpp
   src/gmodels.cpp
