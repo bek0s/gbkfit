@@ -171,3 +171,13 @@ def test_hdu_can_be_chosen():
 def test_coordinates_the_model_cannot_represent(header, shape, message):
     with pytest.raises(ConfigError, match=message):
         write(header, shape)
+
+
+def test_hdu_without_data():
+    # e.g. the empty primary HDU of JWST data: a clear error, not a crash
+    fits.HDUList([
+        fits.PrimaryHDU(),
+        fits.ImageHDU(np.ones((20, 24), np.float32), name='SCI')
+    ]).writeto('data.fits')
+    with pytest.raises(ConfigError, match="HDU 0 has no data"):
+        fitsutils.read_data('data.fits')
