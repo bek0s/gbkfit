@@ -99,22 +99,25 @@ def test_moment_maps_of_a_galaxy_at_a_high_velocity(driver):
     np.testing.assert_allclose(centre, 1500, atol=15)
 
 
-def test_spectral_axis_from_the_data():
-    # The spectral axis covers the range of mmap1, and three times the
-    # largest mmap2 on each side: 1400 - 60 to 1600 + 60
+@pytest.mark.parametrize('dispersion, spec_size', [
+    (None, 401), (20.0, 401), (150.0, 551)])
+def test_spectral_axis_from_the_data(dispersion, spec_size):
+    # The spectral axis covers the range of mmap1 (1400 to 1600), and
+    # three times the largest dispersion on each side: that of mmap2,
+    # but at least 100 km/s (also without mmap2), so that the lines of
+    # the model are not cut when its dispersion differs from the data's
     from gbkfit.dataset import Data
     from gbkfit.dataset.datasets import DatasetMMaps
     from gbkfit.model import dmodel_parser
     velocity = np.linspace(1400, 1600, 32 * 32).reshape(32, 32)
-    dataset = DatasetMMaps(
-        mmap0=Data(np.ones((32, 32))),
-        mmap1=Data(velocity),
-        mmap2=Data(np.full((32, 32), 20.0)))
+    maps = dict(mmap0=Data(np.ones((32, 32))), mmap1=Data(velocity))
+    if dispersion is not None:
+        maps['mmap2'] = Data(np.full((32, 32), dispersion))
     dmodel = dmodel_parser.load(
-        dict(type='mmaps', spec_step=2), dataset=dataset)
+        dict(type='mmaps', spec_step=2), dataset=DatasetMMaps(**maps))
     assert dmodel.spec_rval() == 1500
     assert dmodel.spec_step() == 2
-    assert dmodel.spec_size() == 161
+    assert dmodel.spec_size() == spec_size
 
 
 def test_at_least_one_moment_order():
