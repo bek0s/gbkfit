@@ -2,6 +2,7 @@
 
 #include "gbkfit/constants.hpp"
 #include "gbkfit/gmodel/traits.hpp"
+#include "gbkfit/random.hpp"
 #include "gbkfit/utilities/indexutils.hpp"
 
 namespace gbkfit {

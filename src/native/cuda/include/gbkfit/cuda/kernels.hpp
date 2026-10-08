@@ -8,8 +8,6 @@
 #include <gbkfit/gmodel/gmodels.hpp>
 #include <gbkfit/objective/objective.hpp>
 
-#include "gbkfit/cuda/random.hpp"
-
 namespace gbkfit::cuda::kernels {
 
 template<typename T> inline constexpr void
@@ -192,7 +190,8 @@ gmodel_mcdisk_evaluate(
     if (tid >= nthreads)
         return;
 
-    RNG<T> rng(tid);
+    // Each cloud has its own stream of random numbers
+    RNG<T> rng(MCDISK_SEED, tid);
     gbkfit::gmodel_mcdisk_evaluate_cloud<atomic_set<T>, atomic_add<T>>(
             rng, tid,
             cflux, nclouds,
