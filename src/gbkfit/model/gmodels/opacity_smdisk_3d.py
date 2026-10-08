@@ -2,17 +2,19 @@
 from collections.abc import Sequence
 
 from . import _smdisk, common, traits
-from ._component import OPT, OHT, ZPT, SPT, WPT, DiskComponent
+from ._component import (
+    OPT, OHT, ZPT, SPT, WPT, SPATIAL_NWMODES, OpacityDiskComponent)
 from .core import OpacityComponent3D
 
 
 __all__ = ['OpacitySMDisk3D']
 
 
-class OpacitySMDisk3D(DiskComponent, OpacityComponent3D):
+class OpacitySMDisk3D(OpacityDiskComponent, OpacityComponent3D):
 
     _disk_class = _smdisk.SMDisk
     _slots = (OPT, OHT, ZPT, SPT, WPT)
+    _nwmodes = SPATIAL_NWMODES
 
     @staticmethod
     def type():

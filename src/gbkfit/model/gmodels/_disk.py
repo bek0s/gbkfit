@@ -289,8 +289,6 @@ class Disk(abc.ABC):
                     params[pname] = nwmode.transform(
                         params[pname], in_place=False)
 
-        self._derive_params(params)
-
         # Write the parameter values into the host memory, with the
         # nodewise parameters interpolated to the subnodes, and copy
         # them to the device
@@ -360,17 +358,6 @@ class Disk(abc.ABC):
             if self._traits['dpt']:
                 sumabs = np.nansum(np.abs(out_extra['ddata']))
                 _log.debug(f"sum(abs(ddata)): {sumabs}")
-
-    def _derive_params(self, params):
-        """
-        Derive the values of parameters from others, before they are
-        written for the native evaluation functions; e.g. a rotation
-        curve from a mass model, or the values of a user-defined profile.
-        params has the values of all parameters after the node-wise mode
-        transforms. Replace them in it (it is a copy), but do not modify
-        its arrays in place. Nothing to derive by default.
-        """
-        pass
 
     @abc.abstractmethod
     def _impl_prepare(self, driver, dtype):

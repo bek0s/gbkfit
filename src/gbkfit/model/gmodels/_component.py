@@ -1,16 +1,21 @@
 
+import abc
 import dataclasses
 import inspect
 
 from gbkfit.utils import iterutils, parseutils
 from . import _detail, _disk, common, traits
+from .core import Component
 
 
 __all__ = [
     'Slot',
     'BPT', 'BHT', 'OPT', 'OHT', 'VPT', 'VHT',
     'DPT', 'DHT', 'ZPT', 'SPT', 'WPT',
-    'DiskComponent'
+    'SPATIAL_NWMODES', 'SPECTRAL_NWMODES',
+    'DiskComponent',
+    'EmissionDiskComponent',
+    'OpacityDiskComponent'
 ]
 
 
@@ -45,21 +50,29 @@ ZPT = Slot('zptraits', 'zpt', traits.zpt_parser)
 SPT = Slot('sptraits', 'spt', traits.spt_parser)
 WPT = Slot('wptraits', 'wpt', traits.wpt_parser)
 
+# The geometric parameters that can have a node-wise mode: those of all
+# components, and those of the spectral components, which also have a
+# systemic velocity
+SPATIAL_NWMODES = ('xpos', 'ypos', 'posa', 'incl')
+SPECTRAL_NWMODES = ('vsys',) + SPATIAL_NWMODES
 
-class DiskComponent:
+
+class DiskComponent(Component, abc.ABC):
     """
     The base of the gmodel components that are made of one disk.
 
-    A subclass declares the class of its disk (_disk_class) and its trait
-    slots (_slots, in the order of _disk.TRAIT_KINDS). Its __init__
+    A subclass declares the class of its disk (_disk_class), its trait
+    slots (_slots, in the order of _disk.TRAIT_KINDS) and the geometric
+    parameters that can have a node-wise mode (_nwmodes). Its __init__
     declares its options, which are also its configuration schema: the
     options without a default value are required. This class does the
     rest: load and dump, the validation of the options, and the disk.
-    A component can override any of this, or not use this class at all.
+    The kinds of disk components below evaluate it.
     """
 
     _disk_class: type[_disk.Disk]
     _slots: tuple[Slot, ...]
+    _nwmodes: tuple[str, ...]
 
     @classmethod
     def load(cls, info):
@@ -69,7 +82,7 @@ class DiskComponent:
             parseutils.load_option_and_update_info(
                 slot.parser, info, slot.key,
                 required=required, allow_none=not required)
-        for name in cls._nwmode_params():
+        for name in cls._nwmodes:
             parseutils.load_option_and_update_info(
                 common.nwmode_parser, info, f'{name}_nwmode')
         opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
@@ -105,35 +118,10 @@ class DiskComponent:
     def constants(self):
         return dict(rnodes=self._disk.rnodes())
 
-    def evaluate(self, driver, params, grid, outputs, dtype, out_extra):
-        if OPT in self._slots:
-            # The density of an opacity disk is the opacity
-            disk_outputs = dict(rdata=outputs['odata'])
-        else:
-            # The density of the other disks is their brightness, which
-            # the opacity absorbs
-            disk_outputs = dict(
-                opacity=outputs.get('odata'),
-                image=outputs.get('image'),
-                scube=outputs.get('scube'),
-                wdata=outputs.get('wdata'),
-                rdata=outputs.get('bdata'),
-                ordata=outputs.get('obdata'))
-        self._disk.evaluate(
-            driver, params, grid, disk_outputs, dtype, out_extra)
-
     @classmethod
     def _is_required(cls, option):
         parameter = inspect.signature(cls.__init__).parameters[option]
         return parameter.default is inspect.Parameter.empty
-
-    @classmethod
-    def _nwmode_params(cls):
-        # There is no systemic velocity without velocity traits
-        has_velocity = any(slot.kind == 'vpt' for slot in cls._slots)
-        return [
-            name for name in _disk.GEOMETRY_PARAMS
-            if name != 'vsys' or has_velocity]
 
     def _parse_traits(self, values):
         """
@@ -169,3 +157,30 @@ class DiskComponent:
                 trait_desc = traits.trait_desc(trait.__class__)
                 raise NotImplementedError(
                     f"{cmp_desc} does not support {trait_desc} yet")
+
+
+class EmissionDiskComponent(DiskComponent, abc.ABC):
+    """
+    A disk component that emits: a brightness or spectral component. Its
+    density is its brightness, which the opacity absorbs.
+    """
+
+    def evaluate(self, driver, params, grid, outputs, dtype, out_extra):
+        disk_outputs = dict(
+            opacity=outputs.get('odata'),
+            image=outputs.get('image'),
+            scube=outputs.get('scube'),
+            wdata=outputs.get('wdata'),
+            rdata=outputs.get('bdata'),
+            ordata=outputs.get('obdata'))
+        self._disk.evaluate(
+            driver, params, grid, disk_outputs, dtype, out_extra)
+
+
+class OpacityDiskComponent(DiskComponent, abc.ABC):
+    """An opacity component. Its density is the opacity."""
+
+    def evaluate(self, driver, params, grid, outputs, dtype, out_extra):
+        disk_outputs = dict(rdata=outputs['odata'])
+        self._disk.evaluate(
+            driver, params, grid, disk_outputs, dtype, out_extra)

@@ -2,7 +2,7 @@
 from collections.abc import Sequence
 
 from . import _smdisk, common, traits
-from ._component import BPT, SPT, WPT, DiskComponent
+from ._component import BPT, SPT, WPT, SPATIAL_NWMODES, EmissionDiskComponent
 from .core import BrightnessComponent2D
 
 
@@ -11,10 +11,11 @@ __all__ = [
 ]
 
 
-class BrightnessSMDisk2D(DiskComponent, BrightnessComponent2D):
+class BrightnessSMDisk2D(EmissionDiskComponent, BrightnessComponent2D):
 
     _disk_class = _smdisk.SMDisk
     _slots = (BPT, SPT, WPT)
+    _nwmodes = SPATIAL_NWMODES
 
     @staticmethod
     def type():

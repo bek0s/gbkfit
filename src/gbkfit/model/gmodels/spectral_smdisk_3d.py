@@ -3,7 +3,8 @@ from collections.abc import Sequence
 
 from . import _smdisk, common, traits
 from ._component import (
-    BPT, BHT, VPT, VHT, DPT, DHT, ZPT, SPT, WPT, DiskComponent)
+    BPT, BHT, VPT, VHT, DPT, DHT, ZPT, SPT, WPT, SPECTRAL_NWMODES,
+    EmissionDiskComponent)
 from .core import SpectralComponent3D
 
 
@@ -12,10 +13,11 @@ __all__ = [
 ]
 
 
-class SpectralSMDisk3D(DiskComponent, SpectralComponent3D):
+class SpectralSMDisk3D(EmissionDiskComponent, SpectralComponent3D):
 
     _disk_class = _smdisk.SMDisk
     _slots = (BPT, BHT, VPT, VHT, DPT, DHT, ZPT, SPT, WPT)
+    _nwmodes = SPECTRAL_NWMODES
 
     @staticmethod
     def type():

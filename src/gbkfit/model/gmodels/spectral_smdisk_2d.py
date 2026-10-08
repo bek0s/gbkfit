@@ -2,7 +2,8 @@
 from collections.abc import Sequence
 
 from . import _smdisk, common, traits
-from ._component import BPT, VPT, DPT, SPT, WPT, DiskComponent
+from ._component import (
+    BPT, VPT, DPT, SPT, WPT, SPECTRAL_NWMODES, EmissionDiskComponent)
 from .core import SpectralComponent2D
 
 
@@ -11,10 +12,11 @@ __all__ = [
 ]
 
 
-class SpectralSMDisk2D(DiskComponent, SpectralComponent2D):
+class SpectralSMDisk2D(EmissionDiskComponent, SpectralComponent2D):
 
     _disk_class = _smdisk.SMDisk
     _slots = (BPT, VPT, DPT, SPT, WPT)
+    _nwmodes = SPECTRAL_NWMODES
 
     @staticmethod
     def type():
