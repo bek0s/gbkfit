@@ -111,7 +111,7 @@ def _prepare_params(
             f"for {len(recovery_failed)} parameter keys: {recovery_failed}")
 
     # Update parameter info and return it
-    return info | dict(parameters=parameters)
+    return info | dict(properties=parameters)
 
 
 def eval_(
@@ -214,7 +214,6 @@ def eval_(
     model_extra = {}
     model_data = []
     if mode == 'model':
-        print(params)
         model_data = model_group.model_h(param_values, model_extra)
 
     resid_u_extra = {}
@@ -224,9 +223,8 @@ def eval_(
     if mode == 'objective':
         resid_u_data = objective.residual_nddata_h(param_values, resid_u_extra)
         resid_w_data = []  # objective.residual_nddata_h(params, True, resid_w_extra)
-        foo = objective.residual_scalar(param_values, True)
-        print(params)
-        print("residual:", foo)
+        residual_sum = objective.residual_scalar(param_values, True)
+        _log.info(f"sum of squared residuals: {residual_sum}")
 
     #
     # Gather objective outputs
@@ -299,7 +297,8 @@ def eval_(
         if isinstance(data, np.ndarray):
             hdu = fits.PrimaryHDU(data)
             hdulist = fits.HDUList([hdu])
-            hdulist.writeto(filename, overwrite=True)
+            hdulist.writeto(
+                os.path.join(output_dir, filename), overwrite=True)
 
     #
     # Run performance tests
@@ -309,10 +308,10 @@ def eval_(
         _log.info("running performance test...")
         for i in range(profile_iters):
             if mode == 'model':
-                model.model_d(params)
+                model_group.model_d(param_values)
             if mode == 'objective':
-                objective.log_likelihood(params)
-                objective.residual_scalar(params, squared=True)
+                objective.log_likelihood(param_values)
+                objective.residual_scalar(param_values, squared=True)
         _log.info("calculating timing statistics...")
         time_stats = iterutils.nativify(timeutils.get_time_stats())
         _log.info(pd.DataFrame.from_dict(time_stats, orient='index'))

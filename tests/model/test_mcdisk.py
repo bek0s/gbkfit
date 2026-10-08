@@ -1,8 +1,5 @@
 """
 Tests for the Monte Carlo disk (mcdisk) against the smooth disk (smdisk).
-
-The configurations use the config format of 6f79336 and need converting
-to the new `models` config format once the refactor at HEAD is finished.
 """
 
 import pathlib

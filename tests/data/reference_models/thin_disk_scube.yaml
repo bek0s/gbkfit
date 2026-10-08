@@ -1,24 +1,25 @@
-drivers: {type: host}
-dmodels:
-  type: scube
-  size: [48, 48, 50]
-  step: [1, 1, 10]
-  psf: {type: gauss, sigma: 1.5}
-  lsf: {type: gauss, sigma: 15.0}
-gmodels:
-  type: kinematics_2d
-  components:
-  - type: smdisk
-    loose: false
-    tilted: false
-    rnmin: 0
-    rnmax: 20
-    rnsep: 2
-    bptraits: {type: exponential}
-    vptraits: {type: tan_arctan}
-    dptraits: {type: uniform}
+models:
+- driver: {type: host}
+  dmodel:
+    type: scube
+    size: [48, 48, 50]
+    step: [1, 1, 10]
+    psf: {type: gauss, sigma: 1.5}
+    lsf: {type: gauss, sigma: 15.0}
+  gmodel:
+    type: kinematics_2d
+    components:
+    - type: smdisk
+      loose: false
+      tilted: false
+      rnmin: 0
+      rnmax: 20
+      rnsep: 2
+      bptraits: {type: exponential}
+      vptraits: {type: tan_arctan}
+      dptraits: {type: uniform}
 params:
-  parameters:
+  properties:
     vsys: 0
     xpos: 0.5
     ypos: -1.0

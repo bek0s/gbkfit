@@ -2,9 +2,12 @@
 Regenerate the reference model outputs stored in this directory.
 
 The references were produced with commit 6f79336 (the last version of
-gbkfit that evaluates models end to end, plus two small NumPy 2 fixes).
-They are used by tests/model/test_reference_models.py to check that the
-current code still produces the same models.
+gbkfit that evaluated models end to end before the 2025 refactor, plus
+two small NumPy 2 fixes), from these configurations in the config format
+of that version. The configurations have since been converted to the
+current format. The references are used by
+tests/model/test_reference_models.py to check that the current code still
+produces the same models.
 
 Usage:
 
@@ -16,7 +19,8 @@ evaluated with `gbkfit-cli eval model`, and its FITS outputs are stored
 in <case>.npz, keyed by file name.
 
 Note: commit 6f79336 only writes the first map of models with multiple
-maps, so the mmaps reference covers the moment 0 map only.
+maps, so the mmaps reference covers the moment 0 map only. The other
+moment maps are tested in tests/model/test_mmaps.py.
 """
 
 import pathlib
@@ -36,9 +40,11 @@ def evaluate_model(python, config, workdir):
     subprocess.run(
         [python, '-m', 'gbkfit.apps.cli', 'eval', 'model', str(config)],
         cwd=workdir, check=True, capture_output=True)
+    # Older versions write their outputs to the working directory, newer
+    # ones to an output directory, so search both
     return {
         path.stem: fits.getdata(path)
-        for path in sorted(workdir.glob('*.fits'))}
+        for path in sorted(workdir.rglob('model_[0-9]*.fits'))}
 
 
 def main():

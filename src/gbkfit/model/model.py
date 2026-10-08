@@ -67,10 +67,13 @@ class ModelGroup:
         # Preallocate some data structures for convenience
         self._h_model_data = []
         self._d_model_data = []
+        # One dict per model, with one entry per data model key
         for model in self.models():
-            for key in model.dmodel().keys():
-                self._h_model_data.append({key: dict(d=None, m=None, w=None)})
-                self._d_model_data.append({key: dict(d=None, m=None, w=None)})
+            keys = model.dmodel().keys()
+            self._h_model_data.append(
+                {key: dict(d=None, m=None, w=None) for key in keys})
+            self._d_model_data.append(
+                {key: dict(d=None, m=None, w=None) for key in keys})
         # Merge all pdescs into a dict and ensure they have unique keys
         self._pdescs, self._mappings = miscutils.merge_dicts_and_make_mappings(
             [model.gmodel().pdescs() for model in self.models()],
