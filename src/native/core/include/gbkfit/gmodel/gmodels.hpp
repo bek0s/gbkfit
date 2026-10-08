@@ -123,10 +123,20 @@ transform_cpos(T& x, T& y, T xpos, T ypos)
     y -= ypos;
 }
 
+// Rotates by posa + 90 degrees (see transform_lh_rotate_z()), so that
+// the position angle is measured from north (the y axis)
 template<typename T> constexpr void
 transform_posa(T& x, T& y, T posa)
 {
     transform_lh_rotate_z(x, y, x, y, posa);
+}
+
+// Inverse of transform_posa(). Note that it is not transform_posa()
+// with -posa, because transform_posa() is not a rotation by posa.
+template<typename T> constexpr void
+transform_posa_inverse(T& x, T& y, T posa)
+{
+    transform_lh_rotate_z(x, y, x, y, -posa - PI<T>);
 }
 
 template<typename T> constexpr void
@@ -157,12 +167,14 @@ transform_cpos_posa_incl(T& x, T& y, T& z, T xposi, T yposi, T posai, T incli)
     transform_incl(y, z, incli);
 }
 
+// Inverse of transform_cpos_posa_incl(): from disk to sky coordinates
 template<typename T> constexpr void
-transform_incl_posa_cpos(T& x, T& y, T& z, T xposi, T yposi, T posai, T incli)
+transform_cpos_posa_incl_inverse(
+        T& x, T& y, T& z, T xposi, T yposi, T posai, T incli)
 {
-    transform_incl(y, z, incli);
-    transform_posa(x, y, posai);
-    transform_cpos(x, y, xposi, yposi);
+    transform_incl(y, z, -incli);
+    transform_posa_inverse(x, y, posai);
+    transform_cpos(x, y, -xposi, -yposi);
 }
 
 template<typename T> constexpr T
@@ -494,7 +506,7 @@ gmodel_mcdisk_evaluate_cloud(
     incli *= DEG_TO_RAD<T>;
 
     T xn=xd, yn=yd, zn=zd;
-    transform_incl_posa_cpos(xn, yn, zn, -xposi, -yposi, -posai, -incli);
+    transform_cpos_posa_incl_inverse(xn, yn, zn, xposi, yposi, posai, incli);
 
     //
     int x = std::rint((xn - spat_zero_x)/spat_step_x);
