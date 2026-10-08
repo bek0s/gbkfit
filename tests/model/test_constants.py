@@ -1,0 +1,69 @@
+"""
+Tests for the constants of the models, which parameter expressions can
+use: the radial nodes of each disk.
+"""
+
+import numpy as np
+
+import gbkfit.model
+
+
+RNODES = list(range(0, 21, 2))
+
+PROPERTIES = dict(
+    vsys=0, xpos=0, ypos=0, posa=30, incl=45, bpt_a=1, bpt_s=4, dpt_a=10)
+
+
+def disk(**options):
+    return dict(
+        type='smdisk', loose=False, tilted=False, rnodes=RNODES,
+        bptraits=dict(type='exponential'), dptraits=dict(type='uniform'),
+    ) | options
+
+
+def kinematics_2d(components):
+    return dict(
+        driver=dict(type='host'),
+        dmodel=dict(type='scube', size=[32, 32, 41], step=[1, 1, 10]),
+        gmodel=dict(type='kinematics_2d', components=components))
+
+
+def test_rotation_curve_from_radial_nodes(evaluate_models):
+    # A node-wise rotation curve given by an expression of the radial
+    # nodes is the same as the one given by its values
+    model = kinematics_2d([disk(vptraits=dict(type='nw_tan_uniform'))])
+    curve = 200 * np.arctan(np.array(RNODES) / 3)
+    expression, _ = evaluate_models(
+        [model], PROPERTIES | dict(vpt_vt='200 * np.arctan(rnodes / 3)'))
+    values, _ = evaluate_models(
+        [model], PROPERTIES | dict(vpt_vt=curve.tolist()))
+    np.testing.assert_array_equal(
+        expression[0]['scube']['d'], values[0]['scube']['d'])
+
+
+def test_names_of_constants():
+    # The constants are named like the parameters of their components,
+    # opacity components and models
+    vptraits = dict(type='tan_arctan')
+    model0 = dict(
+        driver=dict(type='host'),
+        dmodel=dict(type='scube', size=[32, 32, 41], step=[1, 1, 10]),
+        gmodel=dict(
+            type='kinematics_3d',
+            components=[
+                disk(vptraits=vptraits, bhtraits=dict(type='sech2')),
+                disk(vptraits=vptraits, bhtraits=dict(type='sech2'),
+                     rnodes=[0, 5, 10])],
+            opacity_components=[dict(
+                type='smdisk', loose=False, tilted=False, rnodes=[0, 1],
+                optraits=dict(type='exponential'),
+                ohtraits=dict(type='sech2'))]))
+    model1 = kinematics_2d([disk(vptraits=vptraits, rnodes=[0, 3, 6])])
+    models = gbkfit.model.model_parser.load([model0, model1])
+    constants = gbkfit.model.ModelGroup(models).constants()
+    assert list(constants) == [
+        'rnodes', 'cmp1_rnodes', 'ocmp_rnodes', 'model1_rnodes']
+    assert constants['rnodes'] == tuple(RNODES)
+    assert constants['cmp1_rnodes'] == (0, 5, 10)
+    assert constants['ocmp_rnodes'] == (0, 1)
+    assert constants['model1_rnodes'] == (0, 3, 6)

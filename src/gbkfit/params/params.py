@@ -52,8 +52,9 @@ class EvaluationParams(parseutils.BasicSerializable):
             info['transforms'] = load_function(
                 info['transforms'], 'params transforms')
         opts = parseutils.parse_options_for_callable(
-            info, desc, cls.__init__, fun_ignore_args=['pdescs'])
-        return cls(pdescs, **opts)
+            info, desc, cls.__init__,
+            fun_ignore_args=['pdescs', 'constants'])
+        return cls(pdescs, **opts, constants=kwargs.get('constants'))
 
     def dump(self):
         return dict(properties=self._space.properties())
@@ -62,9 +63,14 @@ class EvaluationParams(parseutils.BasicSerializable):
             self,
             pdescs: dict[str, ParamDesc],
             properties: dict[str, Any],
-            transforms: Callable | None = None
+            transforms: Callable | None = None,
+            constants: dict[str, Any] | None = None
     ):
-        self._space = ParamSpace(pdescs, properties, transforms)
+        """
+        constants are values that expressions can use (e.g. the radial
+        nodes of the disks, from constants() of the models).
+        """
+        self._space = ParamSpace(pdescs, properties, transforms, constants)
         free = self._space.free_properties()
         if missing := [n for n, p in free.items() if 'value' not in p]:
             raise RuntimeError(

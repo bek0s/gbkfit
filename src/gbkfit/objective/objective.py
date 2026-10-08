@@ -130,6 +130,9 @@ class Objective(parseutils.BasicSerializable, ABC):
     def pdescs(self) -> dict[str, ParamDesc]:
         return self.models().pdescs()
 
+    def constants(self) -> dict[str, Any]:
+        return self.models().constants()
+
     def prepare(self) -> None:
         for i in range(self.nitems()):
             dataset = self.datasets()[i]

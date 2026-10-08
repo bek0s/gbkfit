@@ -44,7 +44,8 @@ def evaluate_models():
         model_group = gbkfit.model.ModelGroup(
             gbkfit.model.model_parser.load(models))
         params = gbkfit.params.EvaluationParams(
-            model_group.pdescs(), properties)
+            model_group.pdescs(), properties,
+            constants=model_group.constants())
         extra = {}
         data = model_group.model_h(params.evaluate(), extra)
         return data, extra

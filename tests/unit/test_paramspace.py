@@ -286,3 +286,23 @@ def test_evaluation_does_not_keep_state():
     first['v'][:] = -1
     second = params.evaluate(free)
     np.testing.assert_array_equal(second['v'], [2, 4, 3])
+
+
+def test_constants():
+    # Expressions can use constants (e.g. the radial nodes of a disk)
+    space = gbkfit.params.ParamSpace(
+        make_pdescs(v=3), {'v': 'rnodes * 2'},
+        constants=dict(rnodes=[0, 1, 2]))
+    np.testing.assert_array_equal(space.evaluate()['v'], [0, 2, 4])
+
+
+def test_constants_cannot_have_the_names_of_parameters():
+    with pytest.raises(Exception, match="constants cannot have the names"):
+        gbkfit.params.ParamSpace(
+            make_pdescs(a=S), {'a': 1}, constants=dict(a=1))
+
+
+def test_unknown_parameters_can_be_an_error():
+    with pytest.raises(Exception, match=r"unknown: \['old'\]"):
+        gbkfit.params.ParamSpace(
+            make_pdescs(a=S), {'a': 1, 'old': 2}, unknown='error')
