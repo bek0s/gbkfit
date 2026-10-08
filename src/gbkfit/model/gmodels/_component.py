@@ -121,6 +121,23 @@ class DiskComponent:
     def has_weights(self):
         return bool(self._disk.traits('wpt'))
 
+    def evaluate(self, driver, params, grid, outputs, dtype, out_extra):
+        if OPT in self._slots:
+            # The density of an opacity disk is the opacity
+            disk_outputs = dict(rdata=outputs['odata'])
+        else:
+            # The density of the other disks is their brightness, which
+            # the opacity absorbs
+            disk_outputs = dict(
+                opacity=outputs.get('odata'),
+                image=outputs.get('image'),
+                scube=outputs.get('scube'),
+                wdata=outputs.get('wdata'),
+                rdata=outputs.get('bdata'),
+                ordata=outputs.get('obdata'))
+        self._disk.evaluate(
+            driver, params, grid, disk_outputs, dtype, out_extra)
+
     @classmethod
     def _is_required(cls, option):
         parameter = inspect.signature(cls.__init__).parameters[option]

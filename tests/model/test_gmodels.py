@@ -10,6 +10,8 @@ change of the models.
 
 import numpy as np
 import pytest
+from gbkfit.model import gmodels
+from gbkfit.model.gmodels.core import Component
 
 
 RNODES = list(range(0, 10, 2))
@@ -183,3 +185,57 @@ def test_gmodel_dump_and_load(driver, name, evaluate_models):
         np.testing.assert_allclose(
             data_loaded[0][key]['d'], value['d'],
             rtol=1e-5, atol=1e-6 * np.abs(value['d']).max())
+
+
+class WeightComponent(Component):
+    """
+    A component that sets the spatial weights to 2, except those of the
+    first row of pixels, which it sets to 0.
+    """
+
+    @staticmethod
+    def type():
+        return 'weights'
+
+    @classmethod
+    def load(cls, info):
+        return cls()
+
+    def dump(self):
+        return {}
+
+    def pdescs(self):
+        return {}
+
+    def has_weights(self):
+        return True
+
+    def evaluate(self, driver, params, grid, outputs, dtype, out_extra):
+        wdata = np.full(outputs['wdata'].shape, 2, dtype)
+        wdata[..., 0, :] = 0
+        driver.mem_copy_h2d(wdata, outputs['wdata'])
+
+
+# The 2d gmodels, the method that evaluates them, and the size of their
+# data and its shape (an image is a cube with one channel)
+GMODELS_2D = [
+    (gmodels.GModelIntensity2D, 'evaluate_image', (20, 16), (1, 16, 20)),
+    (gmodels.GModelKinematics2D, 'evaluate_scube', (20, 16, 11), (11, 16, 20))]
+
+
+@pytest.mark.parametrize('gmodel_type, method, size, shape', GMODELS_2D)
+def test_2d_gmodel_weights_the_data(driver, gmodel_type, method, size, shape):
+    # The components of a 2d gmodel write their weights to its spatial
+    # weights, which then become the weights of the data: 0 where they
+    # are 0, and 1 elsewhere (normalised to their maximum along z)
+    gmodel = gmodel_type([WeightComponent()])
+    data = driver.mem_alloc_d(shape, np.float32)
+    weights = driver.mem_alloc_d(shape, np.float32)
+    driver.mem_fill(data, 0)
+    driver.mem_fill(weights, 1)
+    getattr(gmodel, method)(
+        driver, {}, data, weights,
+        size, (1,) * len(size), (0,) * len(size), 0, np.float32, None)
+    desired = np.ones(shape)
+    desired[:, 0, :] = 0
+    np.testing.assert_array_equal(driver.mem_copy_d2h(weights), desired)

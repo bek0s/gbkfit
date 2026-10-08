@@ -258,13 +258,15 @@ class Disk(abc.ABC):
         # Perform preparation specific to the derived class
         self._impl_prepare(driver, dtype)
 
-    def evaluate(
-            self, driver, params,
-            odata,
-            image, scube, wdata, rdata, ordata,
-            spat_size, spat_step, spat_zero, spat_rota,
-            spec_size, spec_step, spec_zero,
-            dtype, out_extra):
+    def evaluate(self, driver, params, grid, outputs, dtype, out_extra):
+        """
+        Add the disk to the outputs. grid has the grid of the native
+        evaluation functions (see Component.evaluate), and outputs the
+        arrays they add to (all optional): the opacity cube they read
+        ('opacity'), the 'image' or 'scube', and the 3d spatial weights
+        ('wdata'), density ('rdata') and density after the opacity
+        ('ordata').
+        """
 
         if self._driver is not driver or self._dtype is not dtype:
             self._prepare(driver, dtype)
@@ -307,8 +309,9 @@ class Disk(abc.ABC):
         ddata_cmp = None
         ordata_cmp = None
 
+        odata = outputs.get('opacity')
         if out_extra is not None:
-            shape = spat_size[::-1]
+            shape = tuple(grid['spat_size'][::-1])
             if self._traits['rpt']:
                 rdata_cmp = driver.mem_alloc_d(shape, dtype)
                 driver.mem_fill(rdata_cmp, 0)
@@ -326,15 +329,8 @@ class Disk(abc.ABC):
                 driver.mem_fill(ordata_cmp, 0)
 
         # The keyword arguments of the native evaluation functions
-        grid_and_outputs = dict(
-            spat_size=spat_size, spat_step=spat_step, spat_zero=spat_zero,
-            spat_rota=spat_rota,
-            spec_size=spec_size, spec_step=spec_step, spec_zero=spec_zero,
-            opacity=odata,
-            image=image, scube=scube,
-            wdata=wdata, wdata_cmp=wdata_cmp,
-            rdata=rdata, rdata_cmp=rdata_cmp,
-            ordata=ordata, ordata_cmp=ordata_cmp,
+        grid_and_outputs = grid | outputs | dict(
+            wdata_cmp=wdata_cmp, rdata_cmp=rdata_cmp, ordata_cmp=ordata_cmp,
             vdata_cmp=vdata_cmp, ddata_cmp=ddata_cmp)
 
         self._impl_evaluate(driver, params, grid_and_outputs, out_extra)

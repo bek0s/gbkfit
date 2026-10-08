@@ -52,18 +52,3 @@ class SpectralSMDisk2D(DiskComponent, SpectralComponent2D):
             traits_=dict(
                 bptraits=bptraits, vptraits=vptraits, dptraits=dptraits,
                 sptraits=sptraits, wptraits=wptraits))
-
-    def evaluate(
-            self,
-            driver, params, scube, wdata, bdata,
-            spat_size, spat_step, spat_zero, spat_rota,
-            spec_size, spec_step, spec_zero,
-            dtype, out_extra):
-        spat_size = spat_size + (1,)
-        spat_step = spat_step + (0,)
-        spat_zero = spat_zero + (0,)
-        self._disk.evaluate(
-            driver, params, None, None, scube, wdata, bdata, None,
-            spat_size, spat_step, spat_zero, spat_rota,
-            spec_size, spec_step, spec_zero,
-            dtype, out_extra)

@@ -122,112 +122,35 @@ def check_traits_common(traits_):
                 f"it may result in density overestimation due to aliasing")
 
 
-def _make_gmodel_params_cmp(components, prefix, force_prefix):
-    return miscutils.merge_dicts_and_make_mappings(
-        [cmp.pdescs() for cmp in components], prefix, force_prefix)
-
-
-def make_gmodel_2d_params(components):
-    return _make_gmodel_params_cmp(components, 'cmp', False)
-
-
-def make_gmodel_3d_params(components, ocomponents):
-    params, mappings = _make_gmodel_params_cmp(components, 'cmp', False)
-    oparams, omappings = _make_gmodel_params_cmp(ocomponents, 'ocmp', True)
+def make_gmodel_params(components, ocomponents):
+    """
+    The parameters of a gmodel, and the mapping of the parameters of each
+    of its components and opacity components to them. The parameters of
+    the opacity components are always prefixed (e.g. 'ocmp_opt_a'), and
+    those of the components only if there are more than one (e.g.
+    'cmp1_bpt_a').
+    """
+    params, mappings = miscutils.merge_dicts_and_make_mappings(
+        [cmp.pdescs() for cmp in components], 'cmp', False)
+    oparams, omappings = miscutils.merge_dicts_and_make_mappings(
+        [cmp.pdescs() for cmp in ocomponents], 'ocmp', True)
     return params | oparams, mappings, omappings
 
 
-def is_gmodel_weighted(components):
-    return any([bool(cmp.has_weights()) for cmp in components])
-
-
-def evaluate_components_b2d(
-        components, driver, params, mappings,
-        image, wdata, bdata,
-        spat_size, spat_step, spat_zero, spat_rota,
-        dtype, out_extra, out_extra_label):
+def evaluate_components(
+        components, mappings, driver, params, grid, outputs, dtype,
+        out_extra, out_extra_label):
+    """
+    Evaluate the components of a gmodel, each with its parameters. Their
+    extra outputs are named after their index and the given label (e.g.
+    'opacity_component0_odata').
+    """
     for i, (component, mapping) in enumerate(zip(components, mappings)):
         component_params = {p: params[mapping[p]] for p in component.pdescs()}
         component_out_extra = {} if out_extra is not None else None
         component.evaluate(
-            driver, component_params,
-            image, wdata, bdata,
-            spat_size, spat_step, spat_zero, spat_rota,
-            dtype, component_out_extra)
-        if component_out_extra is not None:
-            for k, v in component_out_extra.items():
-                out_extra[f'{out_extra_label}component{i}_{k}'] = v
-
-
-def evaluate_components_b3d(
-        components, driver, params, mappings, odata,
-        image, wdata, bdata, obdata,
-        spat_size, spat_step, spat_zero, spat_rota,
-        dtype, out_extra, out_extra_label):
-    for i, (component, mapping) in enumerate(zip(components, mappings)):
-        component_params = {p: params[mapping[p]] for p in component.pdescs()}
-        component_out_extra = {} if out_extra is not None else None
-        component.evaluate(
-            driver, component_params, odata,
-            image, wdata, bdata, obdata,
-            spat_size, spat_step, spat_zero, spat_rota,
-            dtype, component_out_extra)
-        if component_out_extra is not None:
-            for k, v in component_out_extra.items():
-                out_extra[f'{out_extra_label}component{i}_{k}'] = v
-
-
-def evaluate_components_s2d(
-        components, driver, params, mappings,
-        scube, wdata, bdata,
-        spat_size, spat_step, spat_zero, spat_rota,
-        spec_size, spec_step, spec_zero,
-        dtype, out_extra, out_extra_label):
-    for i, (component, mapping) in enumerate(zip(components, mappings)):
-        component_params = {p: params[mapping[p]] for p in component.pdescs()}
-        component_out_extra = {} if out_extra is not None else None
-        component.evaluate(
-            driver, component_params,
-            scube, wdata, bdata,
-            spat_size, spat_step, spat_zero, spat_rota,
-            spec_size, spec_step, spec_zero,
-            dtype, component_out_extra)
-        if component_out_extra is not None:
-            for k, v in component_out_extra.items():
-                out_extra[f'{out_extra_label}component{i}_{k}'] = v
-
-
-def evaluate_components_s3d(
-        components, driver, params, mappings, odata,
-        scube, wdata, bdata, obdata,
-        spat_size, spat_step, spat_zero, spat_rota,
-        spec_size, spec_step, spec_zero,
-        dtype, out_extra, out_extra_label):
-    for i, (component, mapping) in enumerate(zip(components, mappings)):
-        component_params = {p: params[mapping[p]] for p in component.pdescs()}
-        component_out_extra = {} if out_extra is not None else None
-        component.evaluate(
-            driver, component_params, odata,
-            scube, wdata, bdata, obdata,
-            spat_size, spat_step, spat_zero, spat_rota,
-            spec_size, spec_step, spec_zero,
-            dtype, component_out_extra)
-        if component_out_extra is not None:
-            for k, v in component_out_extra.items():
-                out_extra[f'{out_extra_label}component{i}_{k}'] = v
-
-
-def evaluate_components_o3d(
-        components, driver, params, mappings, odata,
-        spat_size, spat_step, spat_zero, spat_rota,
-        dtype, out_extra, out_extra_label):
-    for i, (component, mapping) in enumerate(zip(components, mappings)):
-        component_params = {p: params[mapping[p]] for p in component.pdescs()}
-        component_out_extra = {} if out_extra is not None else None
-        component.evaluate(
-            driver, component_params, odata,
-            spat_size, spat_step, spat_zero, spat_rota,
-            dtype, component_out_extra)
+            driver, component_params, grid, outputs, dtype,
+            component_out_extra)
         if component_out_extra is not None:
             for k, v in component_out_extra.items():
                 out_extra[f'{out_extra_label}component{i}_{k}'] = v

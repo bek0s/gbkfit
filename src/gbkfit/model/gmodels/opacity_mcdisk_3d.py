@@ -54,18 +54,3 @@ class OpacityMCDisk3D(DiskComponent, OpacityComponent3D):
                 optraits=optraits, ohtraits=ohtraits, zptraits=zptraits,
                 sptraits=sptraits, wptraits=wptraits),
             cflux=cflux, seed=seed)
-
-    def evaluate(
-            self,
-            driver, params,
-            odata,
-            spat_size, spat_step, spat_zero, spat_rota,
-            dtype, out_extra):
-        spec_size = 1
-        spec_step = 0
-        spec_zero = 0
-        self._disk.evaluate(
-            driver, params, None, None, None, None, odata, None,
-            spat_size, spat_step, spat_zero, spat_rota,
-            spec_size, spec_step, spec_zero,
-            dtype, out_extra)
