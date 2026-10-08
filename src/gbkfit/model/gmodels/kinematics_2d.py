@@ -79,7 +79,9 @@ class GModelKinematics2D(GModelSCube):
             out_extra):
 
         if (self._driver is not driver
-                or self._size != size[:2]
+                or tuple(self._size) != tuple(size[:2])
+                or tuple(self._step) != tuple(step[:2])
+                or tuple(self._zero) != tuple(zero[:2])
                 or self._dtype != dtype):
             self._prepare(driver, scube_w, size[:2], step[:2], zero[:2], dtype)
 

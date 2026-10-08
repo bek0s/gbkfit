@@ -79,7 +79,9 @@ class GModelIntensity2D(GModelImage):
             out_extra):
 
         if (self._driver is not driver
-                or self._size != size
+                or tuple(self._size) != tuple(size[:2])
+                or tuple(self._step) != tuple(step[:2])
+                or tuple(self._zero) != tuple(zero[:2])
                 or self._dtype != dtype):
             self._prepare(driver, image_w, size, step, zero, dtype)
 
