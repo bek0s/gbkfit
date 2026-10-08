@@ -1,9 +1,8 @@
-
 from collections.abc import Sequence
 
 from gbkfit.model.core import GModelSCube
 from gbkfit.utils import parseutils
-from ._gmodel import GModel3D
+from ._component_set import ComponentSet3D
 from .core import OpacityComponent3D, SpectralComponent3D
 from .opacity_mcdisk_3d import OpacityMCDisk3D
 from .opacity_smdisk_3d import OpacitySMDisk3D
@@ -16,19 +15,41 @@ __all__ = [
 ]
 
 
-class GModelKinematics3D(GModel3D, GModelSCube):
+_scmp_parser = parseutils.TypedParser(SpectralComponent3D, [
+    SpectralMCDisk3D,
+    SpectralSMDisk3D])
 
-    _cmp_parser = parseutils.TypedParser(SpectralComponent3D, [
-        SpectralMCDisk3D,
-        SpectralSMDisk3D])
+_ocmp_parser = parseutils.TypedParser(OpacityComponent3D, [
+    OpacityMCDisk3D,
+    OpacitySMDisk3D])
 
-    _ocmp_parser = parseutils.TypedParser(OpacityComponent3D, [
-        OpacityMCDisk3D,
-        OpacitySMDisk3D])
+
+class GModelKinematics3D(GModelSCube):
 
     @staticmethod
     def type():
         return 'kinematics_3d'
+
+    @classmethod
+    def load(cls, info, *args, **kwargs):
+        desc = parseutils.make_typed_desc(cls, 'gmodel')
+        parseutils.load_option_and_update_info(
+            _scmp_parser, info, 'components', required=True, allow_none=False)
+        parseutils.load_option_and_update_info(
+            _ocmp_parser, info, 'opacity_components')
+        opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
+        return cls(**opts)
+
+    def dump(self):
+        component_set = self._component_set
+        return dict(
+            type=self.type(),
+            size_z=component_set.size_z(),
+            step_z=component_set.step_z(),
+            zero_z=component_set.zero_z(),
+            components=_scmp_parser.dump(component_set.components()),
+            opacity_components=_ocmp_parser.dump(
+                component_set.opacity_components()))
 
     def __init__(
             self,
@@ -40,12 +61,21 @@ class GModelKinematics3D(GModel3D, GModelSCube):
             step_z: int | float | None = None,
             zero_z: int | float | None = None
     ):
-        super().__init__(
+        self._component_set = ComponentSet3D(
             components, opacity_components, size_z, step_z, zero_z)
+
+    def pdescs(self):
+        return self._component_set.pdescs()
+
+    def has_weights(self):
+        return self._component_set.has_weights()
+
+    def constants(self):
+        return self._component_set.constants()
 
     def evaluate_scube(
             self, driver, params, scube, weights, size, step, zero, rota,
             dtype, out_extra):
-        self._evaluate(
+        self._component_set.evaluate(
             driver, params, dict(scube=scube), (size[2], step[2], zero[2]),
             weights, size, step, zero, rota, dtype, out_extra)
