@@ -1,9 +1,8 @@
 
 from collections.abc import Sequence
 
-from . import _smdisk, common, traits
-from ._component import (
-    BPT, VPT, DPT, SPT, WPT, SPECTRAL_NWMODES, EmissionDiskComponent)
+from . import _component, _smdisk, common, traits
+from ._component import BPT, VPT, DPT, SPT, WPT, SPECTRAL_NWMODES
 from .core import SpectralComponent2D
 
 
@@ -12,15 +11,23 @@ __all__ = [
 ]
 
 
-class SpectralSMDisk2D(EmissionDiskComponent, SpectralComponent2D):
+class SpectralSMDisk2D(SpectralComponent2D):
 
-    _disk_class = _smdisk.SMDisk
     _slots = (BPT, VPT, DPT, SPT, WPT)
     _nwmodes = SPECTRAL_NWMODES
 
     @staticmethod
     def type():
         return 'smdisk'
+
+    @classmethod
+    def load(cls, info):
+        return cls(**_component.load_options(
+            cls, info, cls._slots, cls._nwmodes))
+
+    def dump(self):
+        return dict(type=self.type()) | _component.dump_disk(
+            self._disk, self._slots, self._nwmodes)
 
     def __init__(
             self,
@@ -44,7 +51,8 @@ class SpectralSMDisk2D(EmissionDiskComponent, SpectralComponent2D):
             posa_nwmode: common.NWMode | None = None,
             incl_nwmode: common.NWMode | None = None
     ):
-        super().__init__(
+        self._disk = _component.make_disk(
+            type(self), _smdisk.SMDisk, self._slots,
             loose=loose, tilted=tilted,
             rnmin=rnmin, rnmax=rnmax, rnsep=rnsep, rnlen=rnlen,
             rnodes=rnodes, rstep=rstep, interp=interp,
@@ -54,3 +62,21 @@ class SpectralSMDisk2D(EmissionDiskComponent, SpectralComponent2D):
             traits_=dict(
                 bptraits=bptraits, vptraits=vptraits, dptraits=dptraits,
                 sptraits=sptraits, wptraits=wptraits))
+
+    def pdescs(self):
+        return self._disk.pdescs()
+
+    def has_weights(self):
+        return bool(self._disk.traits('wpt'))
+
+    def constants(self):
+        return dict(rnodes=self._disk.rnodes())
+
+    def evaluate(self, driver, params, grid, outputs, dtype, out_extra):
+        # The density of the disk is its brightness
+        disk_outputs = dict(
+            scube=outputs['scube'],
+            wdata=outputs['wdata'],
+            rdata=outputs['bdata'])
+        self._disk.evaluate(
+            driver, params, grid, disk_outputs, dtype, out_extra)

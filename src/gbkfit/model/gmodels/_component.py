@@ -1,11 +1,9 @@
 
-import abc
 import dataclasses
 import inspect
 
 from gbkfit.utils import iterutils, parseutils
-from . import _detail, _disk, common, traits
-from .core import Component
+from . import _detail, common, traits
 
 
 __all__ = [
@@ -13,9 +11,9 @@ __all__ = [
     'BPT', 'BHT', 'OPT', 'OHT', 'VPT', 'VHT',
     'DPT', 'DHT', 'ZPT', 'SPT', 'WPT',
     'SPATIAL_NWMODES', 'SPECTRAL_NWMODES',
-    'DiskComponent',
-    'EmissionDiskComponent',
-    'OpacityDiskComponent'
+    'load_options',
+    'make_disk',
+    'dump_disk'
 ]
 
 
@@ -57,149 +55,107 @@ SPATIAL_NWMODES = ('xpos', 'ypos', 'posa', 'incl')
 SPECTRAL_NWMODES = ('vsys',) + SPATIAL_NWMODES
 
 
-class DiskComponent(Component, abc.ABC):
+def load_options(cls, info, slots, nwmodes):
     """
-    The base of the gmodel components that are made of one disk.
-
-    A subclass declares the class of its disk (_disk_class), its trait
-    slots (_slots, in the order of _disk.TRAIT_KINDS) and the geometric
-    parameters that can have a node-wise mode (_nwmodes). Its __init__
-    declares its options, which are also its configuration schema: the
-    options without a default value are required. This class does the
-    rest: load and dump, the validation of the options, and the disk.
-    The kinds of disk components below evaluate it.
+    The options of a component of class cls that is made of one disk,
+    with its traits and node-wise modes loaded: those of the given trait
+    slots and geometric parameters. The __init__ of cls declares the
+    options, and those without a default value are required.
     """
-
-    _disk_class: type[_disk.Disk]
-    _slots: tuple[Slot, ...]
-    _nwmodes: tuple[str, ...]
-
-    @classmethod
-    def load(cls, info):
-        desc = parseutils.make_typed_desc(cls, 'gmodel component')
-        for slot in cls._slots:
-            required = cls._is_required(slot.key)
-            parseutils.load_option_and_update_info(
-                slot.parser, info, slot.key,
-                required=required, allow_none=not required)
-        for name in cls._nwmodes:
-            parseutils.load_option_and_update_info(
-                common.nwmode_parser, info, f'{name}_nwmode')
-        opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
-        return cls(**opts)
-
-    def dump(self):
-        disk = self._disk
-        nwmodes = {
-            f'{name}_nwmode': common.nwmode_parser.dump(disk.nwmode(name))
-            for name in self._nwmodes}
-        traits_ = {
-            slot.key: slot.parser.dump(disk.traits(slot.kind))
-            for slot in self._slots}
-        return dict(
-            type=self.type(),
-            **disk.options(),
-            loose=disk.loose(),
-            tilted=disk.tilted(),
-            rnodes=list(disk.rnodes()),
-            rstep=disk.rstep(),
-            interp=disk.interp().type(),
-            **nwmodes,
-            **traits_)
-
-    def __init__(
-            self, loose, tilted,
-            rnmin, rnmax, rnsep, rnlen, rnodes, rstep, interp,
-            nwmodes, traits_, **disk_options):
-        """
-        nwmodes has the node-wise modes, keyed by geometric parameter
-        (e.g. 'xpos'), and traits_ the traits, keyed by option (e.g.
-        'bptraits'). disk_options are the options of the type of disk
-        (e.g. cflux and seed of MCDisk).
-        """
-        node_args = _detail.parse_component_rnode_args(
-            rnmin, rnmax, rnsep, rnlen, rnodes, rstep, interp)
-        nwmodes = _detail.validate_component_nwmodes(loose, tilted, nwmodes)
-        traits_ = self._parse_traits(traits_)
-        self._check_traits(sum(traits_.values(), ()))
-        self._disk = self._disk_class(
-            **disk_options,
-            loose=loose, tilted=tilted, **node_args,
-            nwmodes=nwmodes,
-            traits_={slot.kind: traits_[slot.key] for slot in self._slots})
-
-    def pdescs(self):
-        return self._disk.pdescs()
-
-    def has_weights(self):
-        return bool(self._disk.traits('wpt'))
-
-    def constants(self):
-        return dict(rnodes=self._disk.rnodes())
-
-    @classmethod
-    def _is_required(cls, option):
-        parameter = inspect.signature(cls.__init__).parameters[option]
-        return parameter.default is inspect.Parameter.empty
-
-    def _parse_traits(self, values):
-        """
-        Make a tuple with the traits of each slot, with the missing height
-        traits replaced by the default ones, and check their number.
-        """
-        result = {}
-        for slot in self._slots:
-            value = values[slot.key]
-            if not value and self._is_required(slot.key):
-                raise RuntimeError(f"at least one {slot.key[:-1]} is required")
-            value = iterutils.tuplify(value) if value else ()
-            if slot.pairs_with:
-                npolar = len(result[slot.pairs_with])
-                if slot.default:
-                    value = tuple(
-                        slot.default() if trait is None else trait
-                        for trait in value or (None,) * npolar)
-                if len(value) != npolar:
-                    raise RuntimeError(
-                        f"the number of {slot.key} must be equal to "
-                        f"the number of {slot.pairs_with} "
-                        f"({len(value)} != {npolar})")
-            result[slot.key] = value
-        return result
-
-    def _check_traits(self, traits_):
-        _detail.check_traits_common(traits_)
-        for trait in traits_:
-            if isinstance(trait, self._disk_class.unsupported_traits):
-                cmp_desc = parseutils.make_typed_desc(
-                    self.__class__, 'gmodel component')
-                trait_desc = traits.trait_desc(trait.__class__)
-                raise NotImplementedError(
-                    f"{cmp_desc} does not support {trait_desc} yet")
+    desc = parseutils.make_typed_desc(cls, 'gmodel component')
+    for slot in slots:
+        required = _is_required(cls, slot.key)
+        parseutils.load_option_and_update_info(
+            slot.parser, info, slot.key,
+            required=required, allow_none=not required)
+    for name in nwmodes:
+        parseutils.load_option_and_update_info(
+            common.nwmode_parser, info, f'{name}_nwmode')
+    return parseutils.parse_options_for_callable(info, desc, cls.__init__)
 
 
-class EmissionDiskComponent(DiskComponent, abc.ABC):
+def make_disk(
+        cls, disk_class, slots,
+        loose, tilted, rnmin, rnmax, rnsep, rnlen, rnodes, rstep, interp,
+        nwmodes, traits_, **disk_options):
     """
-    A disk component that emits: a brightness or spectral component. Its
-    density is its brightness, which the opacity absorbs.
+    The disk of a component of class cls, of class disk_class, with the
+    traits of the given slots. nwmodes has the node-wise modes, keyed by
+    geometric parameter (e.g. 'xpos'), and traits_ the traits, keyed by
+    option (e.g. 'bptraits'). disk_options are the options of the type
+    of disk (e.g. cflux and seed of MCDisk).
     """
+    node_args = _detail.parse_component_rnode_args(
+        rnmin, rnmax, rnsep, rnlen, rnodes, rstep, interp)
+    nwmodes = _detail.validate_component_nwmodes(loose, tilted, nwmodes)
+    traits_ = _parse_traits(cls, slots, traits_)
+    _check_traits(cls, disk_class, sum(traits_.values(), ()))
+    return disk_class(
+        **disk_options,
+        loose=loose, tilted=tilted, **node_args,
+        nwmodes=nwmodes,
+        traits_={slot.kind: traits_[slot.key] for slot in slots})
 
-    def evaluate(self, driver, params, grid, outputs, dtype, out_extra):
-        disk_outputs = dict(
-            opacity=outputs.get('odata'),
-            image=outputs.get('image'),
-            scube=outputs.get('scube'),
-            wdata=outputs.get('wdata'),
-            rdata=outputs.get('bdata'),
-            ordata=outputs.get('obdata'))
-        self._disk.evaluate(
-            driver, params, grid, disk_outputs, dtype, out_extra)
+
+def dump_disk(disk, slots, nwmodes):
+    """
+    The options of a component made of the given disk, with the traits
+    of the given slots and the node-wise modes of the given geometric
+    parameters.
+    """
+    nwmodes = {
+        f'{name}_nwmode': common.nwmode_parser.dump(disk.nwmode(name))
+        for name in nwmodes}
+    traits_ = {
+        slot.key: slot.parser.dump(disk.traits(slot.kind))
+        for slot in slots}
+    return dict(
+        **disk.options(),
+        loose=disk.loose(),
+        tilted=disk.tilted(),
+        rnodes=list(disk.rnodes()),
+        rstep=disk.rstep(),
+        interp=disk.interp().type(),
+        **nwmodes,
+        **traits_)
 
 
-class OpacityDiskComponent(DiskComponent, abc.ABC):
-    """An opacity component. Its density is the opacity."""
+def _is_required(cls, option):
+    parameter = inspect.signature(cls.__init__).parameters[option]
+    return parameter.default is inspect.Parameter.empty
 
-    def evaluate(self, driver, params, grid, outputs, dtype, out_extra):
-        disk_outputs = dict(rdata=outputs['odata'])
-        self._disk.evaluate(
-            driver, params, grid, disk_outputs, dtype, out_extra)
+
+def _parse_traits(cls, slots, values):
+    """
+    Make a tuple with the traits of each slot, with the missing height
+    traits replaced by the default ones, and check their number.
+    """
+    result = {}
+    for slot in slots:
+        value = values[slot.key]
+        if not value and _is_required(cls, slot.key):
+            raise RuntimeError(f"at least one {slot.key[:-1]} is required")
+        value = iterutils.tuplify(value) if value else ()
+        if slot.pairs_with:
+            npolar = len(result[slot.pairs_with])
+            if slot.default:
+                value = tuple(
+                    slot.default() if trait is None else trait
+                    for trait in value or (None,) * npolar)
+            if len(value) != npolar:
+                raise RuntimeError(
+                    f"the number of {slot.key} must be equal to "
+                    f"the number of {slot.pairs_with} "
+                    f"({len(value)} != {npolar})")
+        result[slot.key] = value
+    return result
+
+
+def _check_traits(cls, disk_class, traits_):
+    _detail.check_traits_common(traits_)
+    for trait in traits_:
+        if isinstance(trait, disk_class.unsupported_traits):
+            cmp_desc = parseutils.make_typed_desc(cls, 'gmodel component')
+            trait_desc = traits.trait_desc(trait.__class__)
+            raise NotImplementedError(
+                f"{cmp_desc} does not support {trait_desc} yet")
