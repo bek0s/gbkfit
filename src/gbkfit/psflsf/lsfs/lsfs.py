@@ -92,7 +92,7 @@ class LSFGauss(LSF):
     ) -> np.ndarray:
         z = _create_grid_1d(size, step, offset)
         data = gbkfit.math.gauss_1d_fun(z, 1, 0, self._sigma)
-        data[z > self._CUTOFF_FACTOR * self._sigma] = 0
+        data[np.abs(z) > self._CUTOFF_FACTOR * self._sigma] = 0
         return data / np.sum(data)
 
 
@@ -130,7 +130,7 @@ class LSFGGauss(LSF):
     ) -> np.ndarray:
         z = _create_grid_1d(size, step, offset)
         data = gbkfit.math.ggauss_1d_fun(z, 1, 0, self._alpha, self._beta)
-        data[z > self._CUTOFF_FACTOR * self._alpha] = 0
+        data[np.abs(z) > self._CUTOFF_FACTOR * self._alpha] = 0
         return data / np.sum(data)
 
 
@@ -166,7 +166,7 @@ class LSFLorentz(LSF):
     ) -> np.ndarray:
         z = _create_grid_1d(size, step, offset)
         data = gbkfit.math.lorentz_1d_fun(z, 1, 0, self._gamma)
-        data[z > self._CUTOFF_FACTOR * self._gamma] = 0
+        data[np.abs(z) > self._CUTOFF_FACTOR * self._gamma] = 0
         return data / np.sum(data)
 
 
@@ -204,7 +204,7 @@ class LSFMoffat(LSF):
     ) -> np.ndarray:
         z = _create_grid_1d(size, step, offset)
         data = gbkfit.math.moffat_1d_fun(z, 1, 0, self._alpha, self._beta)
-        data[z > self._CUTOFF_FACTOR * self._alpha] = 0
+        data[np.abs(z) > self._CUTOFF_FACTOR * self._alpha] = 0
         return data / np.sum(data)
 
 
