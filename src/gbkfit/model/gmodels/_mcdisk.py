@@ -35,9 +35,11 @@ class MCDisk(_disk.Disk):
 
     def __init__(
             self, cflux, seed,
-            loose, tilted, rnodes, rstep, interp, nwmodes, traits_):
+            loose, tilted, rnodes, rstep, interp, nwmodes, traits_,
+            prefixes, rdata_key):
         super().__init__(
-            loose, tilted, rnodes, rstep, interp, nwmodes, traits_)
+            loose, tilted, rnodes, rstep, interp, nwmodes, traits_,
+            prefixes, rdata_key)
         if seed < 0:
             raise RuntimeError(f"seed must be >= 0; supplied value: {seed}")
         self._cflux = cflux

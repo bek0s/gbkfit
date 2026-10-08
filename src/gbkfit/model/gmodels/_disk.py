@@ -8,7 +8,6 @@ import numpy as np
 
 from gbkfit.params.pdescs import ParamScalarDesc, ParamVectorDesc
 from gbkfit.utils import miscutils
-from . import traits
 
 
 _log = logging.getLogger(__name__)
@@ -102,12 +101,17 @@ class Disk(abc.ABC):
     # The traits that this type of disk does not support (yet)
     unsupported_traits = ()
 
-    def __init__(self, loose, tilted, rnodes, rstep, interp, nwmodes, traits_):
+    def __init__(
+            self, loose, tilted, rnodes, rstep, interp, nwmodes, traits_,
+            prefixes, rdata_key):
         """
         nwmodes has the node-wise modes of the geometric parameters, and
         traits_ the traits of each kind. Both are keyed as in
         GEOMETRY_PARAMS and TRAIT_KINDS, and can leave keys out (no
-        node-wise mode, no traits).
+        node-wise mode, no traits). prefixes has the prefix of the
+        parameters of the traits of each kind in traits_ (e.g. 'opt' for
+        the density traits of an opacity disk). rdata_key is the name of
+        the density map in the extra outputs (e.g. 'odata').
         """
 
         nrnodes = len(rnodes)
@@ -135,8 +139,7 @@ class Disk(abc.ABC):
         self._interp = interp
         self._nwmodes = {name: nwmodes.get(name) for name in GEOMETRY_PARAMS}
         self._traits = {kind: traits_.get(kind, ()) for kind in TRAIT_KINDS}
-        self._is_opacity_disk = isinstance(
-            self._traits['rpt'][0], traits.OPTrait)
+        self._rdata_key = rdata_key
 
         # Make descs for the geometric parameters. There is no systemic
         # velocity without velocity traits.
@@ -148,15 +151,10 @@ class Disk(abc.ABC):
             for name in GEOMETRY_PARAMS
             if name != 'vsys' or self._traits['vpt']}
 
-        # Make descs for the trait parameters. The density traits of an
-        # opacity disk are opacity traits.
-        prefixes = dict(zip(TRAIT_KINDS, TRAIT_KINDS))
-        if self._is_opacity_disk:
-            prefixes.update(rpt='opt', rht='oht')
-        else:
-            prefixes.update(rpt='bpt', rht='bht')
+        # Make descs for the trait parameters (the kinds without traits
+        # have no prefix, and no parameters)
         self._trait_params = {
-            kind: _trait_params(traits_, prefixes[kind], nrnodes)
+            kind: _trait_params(traits_, prefixes.get(kind), nrnodes)
             for kind, traits_ in self._traits.items()}
 
         # Merge all parameter descs into the same dictionary
@@ -340,7 +338,7 @@ class Disk(abc.ABC):
 
         if out_extra is not None:
 
-            rdata_key = 'odata' if self._is_opacity_disk else 'bdata'
+            rdata_key = self._rdata_key
 
             if self._traits['rpt']:
                 out_extra[rdata_key] = driver.mem_copy_d2h(rdata_cmp)
