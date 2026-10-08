@@ -68,7 +68,8 @@ class PSFPoint(PSF):
             self,
             step: tuple[float, float],
             size: tuple[int, int],
-            offset: tuple[int, int]
+            offset: tuple[int, int],
+            rota: float
     ) -> np.ndarray:
         # Like all images, the array has shape (y, x)
         data = np.zeros(size[::-1])
@@ -112,9 +113,11 @@ class PSFGauss(PSF):
             self,
             step: tuple[float, float],
             size: tuple[int, int],
-            offset: tuple[int, int]
+            offset: tuple[int, int],
+            rota: float
     ) -> np.ndarray:
-        r = _create_grid_2d(size, step, offset, self._ratio, self._posa)
+        r = _create_grid_2d(
+            size, step, offset, self._ratio, self._posa - rota)
         data = gbkfit.math.gauss_1d_fun(r, 1, 0, self._sigma)
         data[r > self._CUTOFF_FACTOR * self._sigma] = 0
         return data / np.sum(data)
@@ -164,9 +167,11 @@ class PSFGGauss(PSF):
             self,
             step: tuple[float, float],
             size: tuple[int, int],
-            offset: tuple[int, int]
+            offset: tuple[int, int],
+            rota: float
     ) -> np.ndarray:
-        r = _create_grid_2d(size, step, offset, self._ratio, self._posa)
+        r = _create_grid_2d(
+            size, step, offset, self._ratio, self._posa - rota)
         data = gbkfit.math.ggauss_1d_fun(r, 1, 0, self._alpha, self._beta)
         data[r > self._CUTOFF_FACTOR * self._alpha] = 0
         return data / np.sum(data)
@@ -208,9 +213,11 @@ class PSFLorentz(PSF):
             self,
             step: tuple[float, float],
             size: tuple[int, int],
-            offset: tuple[int, int]
+            offset: tuple[int, int],
+            rota: float
     ) -> np.ndarray:
-        r = _create_grid_2d(size, step, offset, self._ratio, self._posa)
+        r = _create_grid_2d(
+            size, step, offset, self._ratio, self._posa - rota)
         data = gbkfit.math.lorentz_1d_fun(r, 1, 0, self._gamma)
         data[r > self._CUTOFF_FACTOR * self._gamma] = 0
         return data / np.sum(data)
@@ -260,9 +267,11 @@ class PSFMoffat(PSF):
             self,
             step: tuple[float, float],
             size: tuple[int, int],
-            offset: tuple[int, int]
+            offset: tuple[int, int],
+            rota: float
     ) -> np.ndarray:
-        r = _create_grid_2d(size, step, offset, self._ratio, self._posa)
+        r = _create_grid_2d(
+            size, step, offset, self._ratio, self._posa - rota)
         data = gbkfit.math.moffat_1d_fun(r, 1, 0, self._alpha, self._beta)
         data[r > self._CUTOFF_FACTOR * self._alpha] = 0
         return data / np.sum(data)
@@ -272,7 +281,8 @@ class PSFImage(PSF):
     """
     An PSF defined by an image, loaded from a FITS file.
 
-    The image is resampled based on the provided step size.
+    The image is resampled based on the provided step size. It is in the
+    frame of the pixels of the data, so it is not rotated with the grid.
     """
 
     @staticmethod
@@ -316,7 +326,8 @@ class PSFImage(PSF):
             self,
             step: tuple[float, float],
             size: tuple[int, int],
-            offset: tuple[int, int]
+            offset: tuple[int, int],
+            rota: float
     ) -> np.ndarray:
         scale_x = step[0] / self._step[0]
         scale_y = step[1] / self._step[1]
