@@ -251,7 +251,9 @@ exponential_1d_pdf_trunc(T x, T b, T c, T xmin, T xmax)
 template<typename T> constexpr T
 exponential_1d_rnd(RNG<T>& rng, T b, T c)
 {
-    T u = rng() * 2 - T{1};
+    // Inverse transform sampling of the Laplace distribution,
+    // with u uniform in (-0.5, 0.5)
+    T u = rng() - T{0.5};
     return b - c * sign(u) * std::log(1 - 2 * std::abs(u));
 }
 
