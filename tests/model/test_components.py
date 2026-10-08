@@ -152,3 +152,12 @@ def test_spectral_3d_with_several_velocity_traits(name):
         DriverHost(), params, scube, None, (16, 16, 11), (1, 1, 10),
         (-7.5, -7.5, -50), 0, np.float32, None)
     assert scube.sum() > 0
+
+
+def test_errors_have_paths():
+    info = gmodel_info('spectral_smdisk_3d', vptraits=[
+        ARCTAN, dict(type='nw_rad_uniform', nwmode=dict(type='relative9'))])
+    with pytest.raises(Exception) as error:
+        gmodel_parser.load(info)
+    assert str(error.value).startswith(
+        "components[0].vptraits[1].nwmode: unknown NWMode type 'relative9'")

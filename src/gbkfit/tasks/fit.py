@@ -13,6 +13,7 @@ import gbkfit.model
 import gbkfit.objective
 import gbkfit.params
 from gbkfit.utils import miscutils
+from gbkfit.utils.parseutils import config_path
 from . import _detail
 
 
@@ -70,27 +71,34 @@ def fit(config: str,
     #
 
     _log.info("setting up datasets...")
-    datasets = gbkfit.dataset.dataset_parser.load(cfg['datasets'])
+    with config_path('datasets'):
+        datasets = gbkfit.dataset.dataset_parser.load(cfg['datasets'])
 
     _log.info("setting up model...")
-    models = gbkfit.model.model_parser.load(cfg['models'], dataset=datasets)
+    with config_path('models'):
+        models = gbkfit.model.model_parser.load(
+            cfg['models'], dataset=datasets)
     model_group = gbkfit.model.ModelGroup(models)
 
     _log.info("setting up objective...")
-    objective = gbkfit.objective.objective_parser.load(
-        cfg.get('objective', {}), datasets=datasets, models=model_group)
+    with config_path('objective'):
+        objective = gbkfit.objective.objective_parser.load(
+            cfg.get('objective', {}), datasets=datasets, models=model_group)
 
     _log.info("setting up fitter...")
-    fitter = gbkfit.fitting.fitter_parser.load(cfg['fitter'])
+    with config_path('fitter'):
+        fitter = gbkfit.fitting.fitter_parser.load(cfg['fitter'])
 
     pdescs = None
     if 'pdescs' in cfg:
         _log.info("setting up pdescs...")
-        pdescs = gbkfit.params.pdescs.load_pdescs_dict(cfg['pdescs'])
+        with config_path('pdescs'):
+            pdescs = gbkfit.params.pdescs.load_pdescs_dict(cfg['pdescs'])
     pdescs = _detail.merge_pdescs(objective.pdescs(), pdescs)
 
     _log.info("setting up params...")
-    params = fitter.load_params(cfg['params'], pdescs)
+    with config_path('params'):
+        params = fitter.load_params(cfg['params'], pdescs)
 
     #
     # Perform fit

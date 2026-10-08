@@ -15,10 +15,12 @@ def load_dmodel_common(
         cls, info, ndim, has_psf, has_lsf, dataset, expected_dataset_cls):
     desc = parseutils.make_typed_desc(cls, 'dmodel')
     # Load psf/lsf
-    if has_psf and 'psf' in info:
-        info['psf'] = gbkfit.psflsf.psf_parser.load_one(info['psf'])
-    if has_lsf and 'lsf' in info:
-        info['lsf'] = gbkfit.psflsf.lsf_parser.load_one(info['lsf'])
+    if has_psf:
+        parseutils.load_option_and_update_info(
+            gbkfit.psflsf.psf_parser, info, 'psf')
+    if has_lsf:
+        parseutils.load_option_and_update_info(
+            gbkfit.psflsf.lsf_parser, info, 'lsf')
     # Try to get information from the supplied dataset (optional)
     if dataset:
         if not isinstance(dataset, expected_dataset_cls):

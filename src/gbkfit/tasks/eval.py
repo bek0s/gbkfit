@@ -15,6 +15,7 @@ import gbkfit.model
 import gbkfit.objective
 import gbkfit.params
 from gbkfit.utils import iterutils, timeutils
+from gbkfit.utils.parseutils import config_path
 from . import _detail
 
 
@@ -83,30 +84,37 @@ def eval_(
     datasets = None
     if 'datasets' in cfg:
         _log.info("setting up datasets...")
-        datasets = gbkfit.dataset.dataset_parser.load(cfg['datasets'])
+        with config_path('datasets'):
+            datasets = gbkfit.dataset.dataset_parser.load(cfg['datasets'])
 
     _log.info("setting up models...")
-    models = gbkfit.model.model_parser.load(cfg['models'], dataset=datasets)
+    with config_path('models'):
+        models = gbkfit.model.model_parser.load(
+            cfg['models'], dataset=datasets)
     model_group = gbkfit.model.ModelGroup(models)
 
     objective = None
     if mode == 'objective':
         _log.info("setting up objective...")
-        objective = gbkfit.objective.objective_parser.load(
-            cfg.get('objective', {}), datasets=datasets, models=model_group)
+        with config_path('objective'):
+            objective = gbkfit.objective.objective_parser.load(
+                cfg.get('objective', {}),
+                datasets=datasets, models=model_group)
 
     _log.info("setting up pdescs...")
     pdescs = objective.pdescs() \
         if objective is not None else model_group.pdescs()
     if 'pdescs' in cfg:
-        user_pdescs = gbkfit.params.load_pdescs_dict(cfg['pdescs'])
+        with config_path('pdescs'):
+            user_pdescs = gbkfit.params.load_pdescs_dict(cfg['pdescs'])
         pdescs = _detail.merge_pdescs(pdescs, user_pdescs)
 
     _log.info("setting up params...")
     constants = objective.constants() \
         if objective is not None else model_group.constants()
-    params = gbkfit.params.evaluation_params_parser.load(
-        cfg['params'], pdescs=pdescs, constants=constants)
+    with config_path('params'):
+        params = gbkfit.params.evaluation_params_parser.load(
+            cfg['params'], pdescs=pdescs, constants=constants)
 
     #
     # Calculate model parameters
