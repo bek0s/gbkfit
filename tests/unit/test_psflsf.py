@@ -3,6 +3,8 @@ import math
 
 import numpy as np
 import pytest
+import scipy.integrate
+import scipy.special
 
 import gbkfit.math
 from gbkfit.psflsf import *
@@ -18,7 +20,7 @@ from gbkfit.psflsf.psfs import *
         ('ggauss', PSFGGauss, dict(
             alpha=5.0, beta=1.0, ratio=1.0, posa=0.0)),
         ('moffat', PSFMoffat, dict(
-            alpha=5.0, beta=1.0, ratio=1.0, posa=0.0))
+            alpha=5.0, beta=2.5, ratio=1.0, posa=0.0))
     ]
 )
 def test_psf_analytic(psf_type, psf_class, psf_params):
@@ -32,7 +34,7 @@ def test_psf_analytic(psf_type, psf_class, psf_params):
     arr_max_index = tuple(i.item() for i in arr_max_index)
     arr_max_index = arr_max_index[::-1]
     assert psf_arr.shape[::-1] == psf_size
-    assert gbkfit.math.is_odd(np.all(psf_size))
+    assert all(gbkfit.math.is_odd(n) for n in psf_size)
     assert math.isclose(np.sum(psf_arr), 1.0, abs_tol=1e-9)
     assert arr_max_index == (psf_size[0] // 2, psf_size[1] // 2)
     # Dump tests
@@ -195,3 +197,52 @@ def test_analytic_lsfs_are_symmetric(lsf):
     data = lsf.asarray(5, 257)
     np.testing.assert_allclose(data, data[::-1], rtol=1e-12)
     np.testing.assert_allclose(centroid(lsf.asarray(5, 256, -1), 0), 127)
+
+
+@pytest.mark.parametrize('profile, size', [
+    (PSFGauss(2), (33, 33)), (PSFGGauss(2, 2), (33, 33)),
+    (PSFMoffat(2, 4.765), (33, 33)), (LSFGauss(2), 33)])
+def test_compact_profiles_extend_to_the_minimum_extent(profile, size):
+    # 2 x MIN_EXTENT scale lengths of 2, made odd
+    step = (1, 1) if isinstance(profile, PSF) else 1
+    assert profile.size(step) == size
+
+
+def moffat_1d_flux(z1, z2, beta=0.75):
+    """The flux of a 1D Moffat profile with alpha 1 from z1 to z2."""
+    return scipy.integrate.quad(lambda z: (1 + z * z) ** -beta, z1, z2)[0]
+
+
+@pytest.mark.parametrize('profile, wing_flux', [
+    (PSFGGauss(1, 0.5),
+     lambda r: scipy.special.gammaincc(4, np.sqrt(r))),
+    (PSFMoffat(1, 1.5),
+     lambda r: (1 + r * r) ** (1 - 1.5)),
+    (LSFGGauss(1, 0.5),
+     lambda w: scipy.special.gammaincc(2, np.sqrt(w))),
+    (LSFLorentz(1),
+     lambda w: 1 - 2 / np.pi * np.arctan(w)),
+    (LSFMoffat(1, 0.75),
+     lambda w: moffat_1d_flux(w, np.inf) / moffat_1d_flux(0, np.inf))])
+def test_wide_wings_are_drawn_until_they_hold_the_wing_flux(
+        profile, wing_flux):
+    # Profiles with wide wings extend beyond the minimum extent, until
+    # their wings hold WING_FLUX of their flux (each wing_flux above is
+    # the fraction of the flux beyond a radius, for scale lengths of 1)
+    from gbkfit.psflsf.core import MIN_EXTENT, WING_FLUX
+    extent = profile._extent()
+    assert extent > MIN_EXTENT
+    np.testing.assert_allclose(wing_flux(extent), WING_FLUX, rtol=1e-6)
+
+
+@pytest.mark.parametrize('make, message', [
+    (lambda: PSFGauss(0), "sigma must be greater than 0"),
+    (lambda: PSFGauss(1, ratio=0), "ratio must be greater than 0"),
+    (lambda: PSFGGauss(1, 1, ratio=1.5), "ratio must be greater than 0"),
+    (lambda: PSFGGauss(1, -1), "beta must be greater than 0"),
+    (lambda: PSFMoffat(1, 1), "finite flux only for beta > 1"),
+    (lambda: LSFLorentz(-1), "gamma must be greater than 0"),
+    (lambda: LSFMoffat(1, 0.5), "finite flux only for beta > 0.5")])
+def test_invalid_profiles_are_rejected(make, message):
+    with pytest.raises(RuntimeError, match=message):
+        make()

@@ -11,8 +11,33 @@ __all__ = [
     'LSF',
     'PSF',
     'lsf_parser',
-    'psf_parser'
+    'psf_parser',
+    'MIN_EXTENT',
+    'WING_FLUX',
+    'check_scale',
+    'check_ratio'
 ]
+
+
+# The analytic PSFs and LSFs are drawn out to at least MIN_EXTENT scale
+# lengths (e.g. sigma), and further for profiles with wide wings: until
+# the wings beyond hold at most WING_FLUX of their flux. Beyond that
+# they are 0, and the arrays are normalised to sum to 1.
+MIN_EXTENT = 8
+WING_FLUX = 0.01
+
+
+def check_scale(name: str, value: float) -> None:
+    """Raise RuntimeError unless a scale length (e.g. sigma) is > 0."""
+    if not value > 0:
+        raise RuntimeError(f"{name} must be greater than 0; it is {value}")
+
+
+def check_ratio(ratio: float) -> None:
+    """Raise RuntimeError unless an axis ratio is in (0, 1]."""
+    if not 0 < ratio <= 1:
+        raise RuntimeError(
+            f"ratio must be greater than 0 and at most 1; it is {ratio}")
 
 
 class LSF(parseutils.TypedSerializable, abc.ABC):

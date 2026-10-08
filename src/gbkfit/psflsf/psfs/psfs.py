@@ -3,9 +3,11 @@ from typing import Any
 
 import numpy as np
 import scipy.ndimage
+import scipy.special
 
 import gbkfit.math
-from gbkfit.psflsf.core import PSF
+from gbkfit.psflsf.core import (
+    MIN_EXTENT, PSF, WING_FLUX, check_ratio, check_scale)
 from gbkfit.utils import fitsutils, parseutils
 
 
@@ -81,7 +83,6 @@ class PSFGauss(PSF):
     A Gaussian Point Spread Function (PSF).
     """
 
-    _CUTOFF_FACTOR = 8
 
     @staticmethod
     def type() -> str:
@@ -100,13 +101,24 @@ class PSFGauss(PSF):
             posa=self._posa)
 
     def __init__(self, sigma: float, ratio: float = 1.0, posa: float = 0.0):
+        check_scale('sigma', sigma)
+        check_ratio(ratio)
         self._sigma = sigma
         self._ratio = ratio
         self._posa = posa
 
+    def _extent(self):
+        """
+        The radius out to which it is drawn (see MIN_EXTENT). The
+        wings of a 2D Gaussian beyond r hold exp(-r^2 / 2 sigma^2).
+        """
+        return max(
+            MIN_EXTENT * self._sigma,
+            self._sigma * np.sqrt(-2 * np.log(WING_FLUX)))
+
     def _size_impl(self, step: tuple[float, float]) -> tuple[float, float]:
-        return (2 * self._CUTOFF_FACTOR * self._sigma / step[0],
-                2 * self._CUTOFF_FACTOR * self._sigma / step[1])
+        return (2 * self._extent() / step[0],
+                2 * self._extent() / step[1])
 
     def _asarray_impl(
             self,
@@ -118,7 +130,7 @@ class PSFGauss(PSF):
         r = _create_grid_2d(
             size, step, offset, self._ratio, self._posa - rota)
         data = gbkfit.math.gauss_1d_fun(r, 1, 0, self._sigma)
-        data[r > self._CUTOFF_FACTOR * self._sigma] = 0
+        data[r > self._extent()] = 0
         return data / np.sum(data)
 
 
@@ -127,7 +139,6 @@ class PSFGGauss(PSF):
     A Generalized Gaussian Point Spread Function (PSF).
     """
 
-    _CUTOFF_FACTOR = 8
 
     @staticmethod
     def type() -> str:
@@ -153,14 +164,28 @@ class PSFGGauss(PSF):
             ratio: float = 1.0,
             posa: float = 0.0
     ):
+        check_scale('alpha', alpha)
+        check_scale('beta', beta)
+        check_ratio(ratio)
         self._alpha = alpha
         self._beta = beta
         self._ratio = ratio
         self._posa = posa
 
+    def _extent(self):
+        """
+        The radius out to which it is drawn (see MIN_EXTENT). The
+        flux of a 2D ggauss within r is P(2 / beta, (r / alpha)^beta),
+        P the regularized lower incomplete gamma function.
+        """
+        return max(
+            MIN_EXTENT * self._alpha,
+            self._alpha * scipy.special.gammaincinv(
+                2 / self._beta, 1 - WING_FLUX) ** (1 / self._beta))
+
     def _size_impl(self, step: tuple[float, float]) -> tuple[float, float]:
-        return (2 * self._CUTOFF_FACTOR * self._alpha / step[0],
-                2 * self._CUTOFF_FACTOR * self._alpha / step[1])
+        return (2 * self._extent() / step[0],
+                2 * self._extent() / step[1])
 
     def _asarray_impl(
             self,
@@ -172,7 +197,7 @@ class PSFGGauss(PSF):
         r = _create_grid_2d(
             size, step, offset, self._ratio, self._posa - rota)
         data = gbkfit.math.ggauss_1d_fun(r, 1, 0, self._alpha, self._beta)
-        data[r > self._CUTOFF_FACTOR * self._alpha] = 0
+        data[r > self._extent()] = 0
         return data / np.sum(data)
 
 
@@ -181,7 +206,6 @@ class PSFMoffat(PSF):
    A Moffat Point Spread Function (PSF).
    """
 
-    _CUTOFF_FACTOR = 8
 
     @staticmethod
     def type():
@@ -207,14 +231,30 @@ class PSFMoffat(PSF):
             ratio: float = 1.0,
             posa: float = 0.0
     ):
+        check_scale('alpha', alpha)
+        if not beta > 1:
+            raise RuntimeError(
+                "a Moffat PSF has finite flux only for beta > 1; "
+                f"beta is {beta}")
+        check_ratio(ratio)
         self._alpha = alpha
         self._beta = beta
         self._ratio = ratio
         self._posa = posa
 
+    def _extent(self):
+        """
+        The radius out to which it is drawn (see MIN_EXTENT). The
+        wings of a 2D Moffat beyond r hold (1 + (r / alpha)^2)^(1 - beta).
+        """
+        return max(
+            MIN_EXTENT * self._alpha,
+            self._alpha * np.sqrt(
+                WING_FLUX ** (1 / (1 - self._beta)) - 1))
+
     def _size_impl(self, step: tuple[float, float]) -> tuple[float, float]:
-        return (2 * self._CUTOFF_FACTOR * self._alpha / step[0],
-                2 * self._CUTOFF_FACTOR * self._alpha / step[1])
+        return (2 * self._extent() / step[0],
+                2 * self._extent() / step[1])
 
     def _asarray_impl(
             self,
@@ -226,7 +266,7 @@ class PSFMoffat(PSF):
         r = _create_grid_2d(
             size, step, offset, self._ratio, self._posa - rota)
         data = gbkfit.math.moffat_1d_fun(r, 1, 0, self._alpha, self._beta)
-        data[r > self._CUTOFF_FACTOR * self._alpha] = 0
+        data[r > self._extent()] = 0
         return data / np.sum(data)
 
 
