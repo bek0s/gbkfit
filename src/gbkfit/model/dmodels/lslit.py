@@ -5,7 +5,7 @@ import numpy as np
 
 from gbkfit.dataset.datasets import DatasetLSlit
 from gbkfit.model.core import DModel, GModelSCube
-from gbkfit.psflsf import LSF, PSF
+from gbkfit.psflsf import LSF, PSF, lsf_parser, psf_parser
 from . import _dcube, _detail
 
 
@@ -29,6 +29,23 @@ class DModelLSlit(DModel):
         opts = _detail.load_dmodel_common(
             cls, info, 2, True, True, dataset, DatasetLSlit)
         return cls(**opts)
+
+    def dump(self):
+        return dict(
+            type=self.type(),
+            size=self.size(),
+            step=self.step(),
+            rpix=self.rpix(),
+            rval=self.rval(),
+            rota=self.rota(),
+            scale=self.scale(),
+            slit_width=self.slit_width(),
+            psf=psf_parser.dump(self.psf()),
+            lsf=lsf_parser.dump(self.lsf()),
+            smooth_weights=self._dcube.smooth_weights(),
+            mask_cutoff=self._dcube.mask_cutoff(),
+            mask_apply=self._dcube.mask_apply(),
+            dtype=self.dtype().name)
 
     def __init__(
             self,
@@ -81,6 +98,12 @@ class DModelLSlit(DModel):
 
     def zero(self):
         return _without_width(self._dcube.zero())
+
+    def rpix(self):
+        return _without_width(self._dcube.rpix())
+
+    def rval(self):
+        return _without_width(self._dcube.rval())
 
     def rota(self):
         return self._dcube.rota()

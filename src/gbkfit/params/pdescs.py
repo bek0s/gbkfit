@@ -25,6 +25,19 @@ class ParamDesc(parseutils.TypedSerializable, abc.ABC):
         opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
         return cls(**opts)
 
+    def dump(self) -> dict[str, Any]:
+        info: dict[str, str | int | float] = dict(
+            type=self.type(), name=self.name(), size=self.size())
+        if self.desc() is not None:
+            info.update(desc=self.desc())
+        if self.default() is not None:
+            info.update(default=self.default())
+        if np.isfinite(self.minimum()):
+            info.update(minimum=self.minimum())
+        if np.isfinite(self.maximum()):
+            info.update(maximum=self.maximum())
+        return info
+
     def __init__(
             self,
             name: str,
@@ -78,6 +91,11 @@ class ParamScalarDesc(ParamDesc):
     @staticmethod
     def type() -> str:
         return 'scalar'
+
+    def dump(self) -> dict[str, Any]:
+        info = super().dump()
+        del info['size']
+        return info
 
     def __init__(
             self,

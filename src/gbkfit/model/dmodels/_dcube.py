@@ -51,6 +51,8 @@ class DCube:
         self._size_lo = size
         self._step_lo = step
         self._zero_lo = zero
+        self._rpix_lo = rpix
+        self._rval_lo = rval
         self._size_hi = None
         self._step_hi = None
         self._zero_hi = None
@@ -82,6 +84,12 @@ class DCube:
 
     def zero(self) -> tuple[float, float, float]:
         return self._zero_lo
+
+    def rpix(self) -> tuple[float, float, float]:
+        return self._rpix_lo
+
+    def rval(self) -> tuple[float, float, float]:
+        return self._rval_lo
 
     def rota(self) -> float:
         return self._rota
@@ -121,6 +129,15 @@ class DCube:
 
     def lsf(self) -> LSF | None:
         return self._lsf
+
+    def smooth_weights(self) -> bool:
+        return self._smooth_weights
+
+    def mask_cutoff(self) -> float | None:
+        return self._mask_cutoff
+
+    def mask_apply(self) -> bool:
+        return self._mask_apply
 
     def dtype(self) -> type[np.float16] | type[np.float32] | type[np.float64]:
         return self._dtype

@@ -5,7 +5,7 @@ import numpy as np
 
 from gbkfit.dataset.datasets import DatasetImage
 from gbkfit.model.core import DModel, GModelImage
-from gbkfit.psflsf import PSF
+from gbkfit.psflsf import PSF, psf_parser
 from . import _dcube, _detail
 
 
@@ -30,6 +30,20 @@ class DModelImage(DModel):
         opts = _detail.load_dmodel_common(
             cls, info, 2, True, False, dataset, DatasetImage)
         return cls(**opts)
+
+    def dump(self):
+        return dict(
+            type=self.type(),
+            size=self.size(),
+            step=self.step(),
+            rpix=self.rpix(),
+            rval=self.rval(),
+            rota=self.rota(),
+            scale=self.scale(),
+            psf=psf_parser.dump(self.psf()),
+            mask_cutoff=self._dcube.mask_cutoff(),
+            mask_apply=self._dcube.mask_apply(),
+            dtype=self.dtype().name)
 
     def __init__(
             self,
@@ -69,6 +83,12 @@ class DModelImage(DModel):
 
     def zero(self):
         return self._dcube.zero()[:2]
+
+    def rpix(self):
+        return self._dcube.rpix()[:2]
+
+    def rval(self):
+        return self._dcube.rval()[:2]
 
     def rota(self):
         return self._dcube.rota()

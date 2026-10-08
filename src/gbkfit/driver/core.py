@@ -16,6 +16,9 @@ class Driver(parseutils.TypedSerializable, abc.ABC):
     def load(cls, info, *args, **kwargs):
         return cls()
 
+    def dump(self):
+        return dict(type=self.type())
+
     @abc.abstractmethod
     def mem_alloc_s(self, shape, dtype):
         pass

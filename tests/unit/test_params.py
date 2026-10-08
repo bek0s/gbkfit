@@ -23,10 +23,10 @@ def test_param_desc_scalar():
     pdesc = ParamScalarDesc('name', 'description', 10, -10)
     assert describe(pdesc) == (
         ParamScalarDesc, 'name', 1, 'description', 10, -10, np.inf)
-    # The dump has all options, as given, and loads to the same desc
+    # The dump leaves out the infinite bounds, and loads to the same desc
     info = dict(
         type='scalar', name='name', desc='description',
-        default=10, minimum=-10, maximum=None)
+        default=10, minimum=-10)
     assert pdesc.dump() == info
     assert describe(pdesc_parser.load(info)) == describe(pdesc)
 
@@ -37,7 +37,7 @@ def test_param_desc_vector():
         ParamVectorDesc, 'name', 5, 'description', 10, -10, np.inf)
     info = dict(
         type='vector', name='name', size=5, desc='description',
-        default=10, minimum=-10, maximum=None)
+        default=10, minimum=-10)
     assert pdesc.dump() == info
     assert describe(pdesc_parser.load(info)) == describe(pdesc)
 
