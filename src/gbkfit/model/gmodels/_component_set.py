@@ -1,13 +1,10 @@
-import abc
-
-from gbkfit.model.core import GModel
-from gbkfit.utils import iterutils, parseutils
+from gbkfit.utils import iterutils
 from . import _detail
 
 
 __all__ = [
-    'GModel2D',
-    'GModel3D'
+    'ComponentSet2D',
+    'ComponentSet3D'
 ]
 
 
@@ -18,31 +15,12 @@ _CMP_PREFIX = ('cmp', False)
 _OCMP_PREFIX = ('ocmp', True)
 
 
-class GModel2D(GModel, abc.ABC):
+class ComponentSet2D:
     """
-    A gmodel that adds up components on a 2d spatial grid: the x and y
-    axes of the data. Its components get a 3d grid with a z axis of size
-    1.
-
-    A subclass declares the parser of its components (_cmp_parser), and
-    its options (__init__).
+    The components of a 2d gmodel: their parameters, and their evaluation
+    on a 2d spatial grid, the x and y axes of the data. The components get
+    a 3d grid with a z axis of size 1.
     """
-
-    _cmp_parser: parseutils.TypedParser
-
-    @classmethod
-    def load(cls, info, *args, **kwargs):
-        desc = parseutils.make_typed_desc(cls, 'gmodel')
-        parseutils.load_option_and_update_info(
-            cls._cmp_parser, info, 'components',
-            required=True, allow_none=False)
-        opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
-        return cls(**opts)
-
-    def dump(self):
-        return dict(
-            type=self.type(),
-            components=self._cmp_parser.dump(self._components))
 
     def __init__(self, components):
         if not components:
@@ -58,6 +36,9 @@ class GModel2D(GModel, abc.ABC):
         self._dtype = None
         self._driver = None
         self._backend = None
+
+    def components(self):
+        return self._components
 
     def pdescs(self):
         return self._params
@@ -81,13 +62,13 @@ class GModel2D(GModel, abc.ABC):
             self._wdata = driver.mem_alloc_d(self._size[::-1], dtype)
         self._backend = driver.native_class('GModel', dtype)()
 
-    def _evaluate(
+    def evaluate(
             self, driver, params, outputs, spectral_axis, weights,
             size, step, zero, rota, dtype, out_extra):
         """
-        Evaluate the gmodel on the spatial grid of the data (size, step and
-        zero) and the given spectral axis (size, step and zero). outputs
-        has the array the components add to: the 'image' or the 'scube'.
+        Add the components to the output array, the 'image' or the
+        'scube' in outputs. The grid is the spatial grid of the data (size,
+        step and zero) and the given spectral axis (size, step and zero).
         """
         if (self._driver is not driver
                 or self._size != tuple(size[:2])
@@ -127,39 +108,14 @@ class GModel2D(GModel, abc.ABC):
             out_extra['total_bdata'] = driver.mem_copy_d2h(bdata)
 
 
-class GModel3D(GModel, abc.ABC):
+class ComponentSet3D:
     """
-    A gmodel that adds up components and opacity components on a 3d
-    spatial grid: the x and y axes of the data, and a z axis that can be
-    configured. The opacity components make an opacity cube, which
-    absorbs the brightness of the components.
-
-    A subclass declares the parsers of its components (_cmp_parser) and
-    opacity components (_ocmp_parser), and its options (__init__).
+    The components and opacity components of a 3d gmodel: their
+    parameters, and their evaluation on a 3d spatial grid, the x and y
+    axes of the data and a z axis that can be configured. The opacity
+    components make an opacity cube, which absorbs the brightness of the
+    components.
     """
-
-    _cmp_parser: parseutils.TypedParser
-    _ocmp_parser: parseutils.TypedParser
-
-    @classmethod
-    def load(cls, info, *args, **kwargs):
-        desc = parseutils.make_typed_desc(cls, 'gmodel')
-        parseutils.load_option_and_update_info(
-            cls._cmp_parser, info, 'components',
-            required=True, allow_none=False)
-        parseutils.load_option_and_update_info(
-            cls._ocmp_parser, info, 'opacity_components')
-        opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
-        return cls(**opts)
-
-    def dump(self):
-        return dict(
-            type=self.type(),
-            size_z=self._size_z,
-            step_z=self._step_z,
-            zero_z=self._zero_z,
-            components=self._cmp_parser.dump(self._components),
-            opacity_components=self._ocmp_parser.dump(self._ocomponents))
 
     def __init__(
             self, components, opacity_components=None,
@@ -186,6 +142,21 @@ class GModel3D(GModel, abc.ABC):
         self._dtype = None
         self._driver = None
         self._backend = None
+
+    def components(self):
+        return self._components
+
+    def opacity_components(self):
+        return self._ocomponents
+
+    def size_z(self):
+        return self._size_z
+
+    def step_z(self):
+        return self._step_z
+
+    def zero_z(self):
+        return self._zero_z
 
     def pdescs(self):
         return self._params
@@ -224,13 +195,13 @@ class GModel3D(GModel, abc.ABC):
             self._odata = driver.mem_alloc_d(self._size[::-1], dtype)
         self._backend = driver.native_class('GModel', dtype)()
 
-    def _evaluate(
+    def evaluate(
             self, driver, params, outputs, spectral_axis, weights,
             size, step, zero, rota, dtype, out_extra):
         """
-        Evaluate the gmodel on the spatial grid of the data (size, step and
-        zero) and the given spectral axis (size, step and zero). outputs
-        has the array the components add to: the 'image' or the 'scube'.
+        Add the components to the output array, the 'image' or the
+        'scube' in outputs. The grid is the spatial grid of the data (size,
+        step and zero) and the given spectral axis (size, step and zero).
         """
         if (self._driver is not driver
                 or self._size[:2] != tuple(size[:2])
