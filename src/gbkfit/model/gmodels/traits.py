@@ -1534,7 +1534,7 @@ class WPTraitAxisRange(WPTrait):
                 f"invalid axis value; "
                 f"choose between 0 (minor axis) and 1 (major axis); "
                 f"supplied value: {axis}")
-        if 0 > angle > 180:
+        if not 0 <= angle <= 180:
             raise RuntimeError(
                 f"invalid angle value; "
                 f"angle must be between 0 and 180; "
