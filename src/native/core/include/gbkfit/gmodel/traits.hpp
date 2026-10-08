@@ -1196,19 +1196,13 @@ zp_trait_nw_harmonic(
     p_trait_nw_harmonic(out, rnidx, rnodes, nrnodes, r, theta, consts, params);
 }
 
+// 1 for the angles theta within s / 2 of p, 0 for the others. Any angle
+// range works (e.g. the clouds of mcdisk are in [0, 2 pi), the smooth
+// disk in [-pi, pi]).
 template<typename T> constexpr void
 azrange(T& out, T theta, T p, T s)
 {
-    T pmin = p - s * T{0.5};
-    T pmax = p + s * T{0.5};
-    p = wrap_angle(p);
-    pmin = wrap_angle(pmin);
-    pmax = wrap_angle(pmax);
-    if (pmin < pmax) {
-        out = (theta > pmin && theta < pmax) ? 1 : 0;
-    } else {
-        out = (theta < pmin && theta > pmax) ? 0 : 1;
-    }
+    out = std::abs(wrap_angle(theta - p)) < s * T{0.5} ? 1 : 0;
 }
 
 template<typename T> constexpr void
