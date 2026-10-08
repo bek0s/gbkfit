@@ -126,3 +126,29 @@ def test_image_psf_matches_the_analytic_psf(driver, evaluate_models):
     actual = evaluate(dict(type='image', data='psf.fits'))
     difference = np.linalg.norm(actual - expected) / np.linalg.norm(expected)
     assert difference < 1e-3
+
+
+def uniform_disk_flux(driver, evaluate_models, rnodes, loose):
+    """The flux of a face-on uniform disk of brightness 1 per arcsec^2."""
+    nodes = len(rnodes)
+    model = dict(
+        driver=dict(type=driver.type()),
+        dmodel=dict(type='image', size=[80, 80], step=[0.2, 0.2]),
+        gmodel=dict(type='intensity_2d', components=[dict(
+            type='smdisk', loose=loose, tilted=False, rnodes=rnodes, rstep=1,
+            bptraits=dict(type='uniform'))]))
+    centre = [0] * nodes if loose else 0
+    properties = dict(xpos=centre, ypos=centre, posa=0, incl=0, bpt_a=1)
+    data, _ = evaluate_models([model], properties)
+    return data[0]['image']['d'].sum() * 0.2 * 0.2
+
+
+@pytest.mark.parametrize('loose', [False, True])
+@pytest.mark.parametrize('rnodes', [[0, 3, 6.7], [0.5, 3, 6]])
+def test_disk_ends_at_its_last_node(driver, evaluate_models, rnodes, loose):
+    # The rings of the disk (of width up to rstep = 1) cover exactly the
+    # radii from the first node to the last one, even when that range is
+    # not a whole number of rsteps
+    flux = uniform_disk_flux(driver, evaluate_models, rnodes, loose)
+    area = np.pi * (rnodes[-1] ** 2 - rnodes[0] ** 2)
+    assert flux == pytest.approx(area, rel=0.01)
