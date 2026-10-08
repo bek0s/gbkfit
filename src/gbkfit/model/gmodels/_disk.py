@@ -120,17 +120,13 @@ class Disk(abc.ABC):
 
         nrnodes = len(rnodes)
 
-        #
-        # Calculate radial sub nodes
-        # The end node will not be exact, but it will be good enough
-        # The smaller the rstep the better
-        #
-        # Inner radial sub nodes
-        subrnodes = np.arange(rnodes[0] + rstep / 2, rnodes[-1], rstep)
-        # Outer radial sub nodes
-        subrnodes = np.insert(subrnodes, 0, rnodes[0])
-        subrnodes = np.append(subrnodes, subrnodes[-1] + rstep / 2)
-        # Make some IDEs shut up
+        # The radial sub nodes: the first and the last node, and between
+        # them the centres of rings of equal width, at most rstep, that
+        # cover the radii between the two exactly
+        nrings = max(1, int(np.ceil((rnodes[-1] - rnodes[0]) / rstep - 1e-9)))
+        width = (rnodes[-1] - rnodes[0]) / nrings
+        centres = rnodes[0] + (np.arange(nrings) + 0.5) * width
+        subrnodes = np.concatenate(([rnodes[0]], centres, [rnodes[-1]]))
         subrnodes = tuple(typing.cast(list, subrnodes.tolist()))
 
         self._loose = loose
