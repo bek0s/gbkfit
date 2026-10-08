@@ -49,9 +49,9 @@ def test_data():
     assert data04.rval() == (5, 6)
     assert data04.rota() == 7
     # Dump tests
-    filename_data_d = '/tmp/data_d.fits'
-    filename_data_m = '/tmp/data_m.fits'
-    filename_data_e = '/tmp/data_e.fits'
+    filename_data_d = 'data_d.fits'
+    filename_data_m = 'data_m.fits'
+    filename_data_e = 'data_e.fits'
     data_info_dumped = data_parser.dump(
         data04, filename_data_d, filename_data_m, filename_data_e,
         overwrite=True)

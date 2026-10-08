@@ -6,6 +6,6 @@ for whl in wheels/*.whl; do
     python -m pip install "$whl"
 done
 
-python -m pip install pytest
+python -m pip install pytest pytest-regressions
 
-python -m pytest tests/
+GBKFIT_REQUIRE_DRIVERS=host python -m pytest tests/
