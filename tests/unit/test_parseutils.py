@@ -49,3 +49,21 @@ def test_config_error_context_is_for_the_part_itself():
             with parseutils.config_path('traits'):
                 raise parseutils.ConfigError("unknown type 'x'")
     assert str(error.value) == "component.traits: unknown type 'x'"
+
+
+def test_describe_unknown():
+    assert parseutils.describe_unknown(
+        ['rnmx', 'zzz'], ['rnmin', 'rnmax']) == (
+        "'rnmx' (did you mean 'rnmax'?), 'zzz'")
+
+
+def test_unknown_options_are_warnings_or_errors_in_strict_mode(caplog):
+    def parse():
+        return parseutils.parse_options(
+            dict(rnmax=1, rnmx=2), 'disk', optional={'rnmin', 'rnmax'})
+    assert parse() == dict(rnmax=1)
+    assert "'rnmx' (did you mean 'rnmax'?)" in caplog.text
+    with parseutils.strict_mode():
+        with pytest.raises(parseutils.ConfigError, match="'rnmx'"):
+            parse()
+    assert parse() == dict(rnmax=1)

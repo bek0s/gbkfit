@@ -1,6 +1,8 @@
 import abc
 import contextlib
+import contextvars
 import copy
+import difflib
 import functools
 import importlib
 import inspect
@@ -42,6 +44,52 @@ def make_typed_desc(
     """
     desc = f'{cls.type()} (class={cls.__qualname__})'
     return f'{label} {desc}' if label else desc
+
+
+# Whether unknown options are errors (strict) or warnings
+_strict = contextvars.ContextVar('strict', default=False)
+
+
+@contextlib.contextmanager
+def strict_mode(strict: bool = True):
+    """
+    In the block, unknown configuration options (and sections, and
+    parameters) are errors instead of warnings.
+    """
+    token = _strict.set(strict)
+    try:
+        yield
+    finally:
+        _strict.reset(token)
+
+
+def is_strict() -> bool:
+    return _strict.get()
+
+
+def describe_unknown(unknown, known) -> str:
+    """
+    The unknown names, each with the most similar known name, if any
+    (e.g. "'rnmx' (did you mean 'rnmax'?)").
+    """
+    descs = []
+    for name in sorted(unknown):
+        similar = difflib.get_close_matches(name, list(known), n=1)
+        descs.append(
+            f"'{name}' (did you mean '{similar[0]}'?)" if similar
+            else f"'{name}'")
+    return ', '.join(descs)
+
+
+def report_unknown(message: str, unknown, known) -> None:
+    """
+    Report unknown names: a warning that they will be ignored, or an
+    error in strict mode.
+    """
+    message = f"{message}: {describe_unknown(unknown, known)}"
+    if is_strict():
+        raise ConfigError(message)
+    _log.warning(f"{message}; they will be ignored")
 
 
 class ConfigError(RuntimeError):
@@ -105,9 +153,8 @@ def parse_options(
             f"{conflicting}")
     # Check for unknown options
     if unknown := set(info) - (required | optional):
-        _log.warning(
-            f"the following {desc} options are "
-            f"not recognised and will be ignored: {str(unknown)}")
+        report_unknown(
+            f"unknown options for {desc}", unknown, required | optional)
     # Check for missing options
     if missing := required - set(info):
         raise RuntimeError(

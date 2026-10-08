@@ -303,6 +303,6 @@ def test_constants_cannot_have_the_names_of_parameters():
 
 
 def test_unknown_parameters_can_be_an_error():
-    with pytest.raises(Exception, match=r"unknown: \['old'\]"):
+    with pytest.raises(Exception, match=r"unknown: 'old'"):
         gbkfit.params.ParamSpace(
             make_pdescs(a=S), {'a': 1, 'old': 2}, unknown='error')
