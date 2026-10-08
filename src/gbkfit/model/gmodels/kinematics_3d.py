@@ -37,7 +37,7 @@ class GModelKinematics3D(GModelSCube):
         parseutils.load_option_and_update_info(
             _scmp_parser, info, 'components', required=True)
         parseutils.load_option_and_update_info(
-            _scmp_parser, info, 'opacity_components', required=False)
+            _ocmp_parser, info, 'opacity_components', required=False)
         opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
         return cls(**opts)
 
@@ -124,9 +124,9 @@ class GModelKinematics3D(GModelSCube):
             out_extra):
 
         if (self._driver is not driver
-                or self._size[:2] != size[:2]
-                or self._step[:2] != step[:2]
-                or self._zero[:2] != zero[:2]
+                or tuple(self._size[:2]) != tuple(size[:2])
+                or tuple(self._step[:2]) != tuple(step[:2])
+                or tuple(self._zero[:2]) != tuple(zero[:2])
                 or self._dtype != dtype):
             self._prepare(driver, scube_w, size[:2], step[:2], zero[:2], dtype)
 
@@ -154,7 +154,9 @@ class GModelKinematics3D(GModelSCube):
             driver.mem_fill(obdata, 0)
 
         # Evaluate opacity components
+        # The opacity components add to the opacity cube, so clear it
         if ocomponents:
+            driver.mem_fill(odata, 0)
             _detail.evaluate_components_o3d(
                 ocomponents, driver, params, omappings,
                 odata,
