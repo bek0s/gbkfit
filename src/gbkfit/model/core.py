@@ -17,11 +17,20 @@ __all__ = [
 
 
 class DModel(parseutils.TypedSerializable, abc.ABC):
+    """
+    A data model. A subclass declares the index of the spectral axis of
+    its data (_spectral_axis, None if none), as the datasets do.
+    """
+
+    _spectral_axis: int | None
 
     @staticmethod
     @abc.abstractmethod
     def is_compatible(gmodel):
         pass
+
+    def spectral_axis(self):
+        return self._spectral_axis
 
     def __init__(self):
         self._driver = None

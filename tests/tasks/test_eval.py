@@ -91,3 +91,18 @@ def test_unknown_options(tmp_path):
     assert result.returncode != 0
     assert "models[0].gmodel.components[0]" in result.stderr
     assert "'rnmx' (did you mean 'rnmax'?)" in result.stderr
+
+
+def test_outputs_have_the_world_coordinates_of_the_model(tmp_path):
+    # The model is written with the coordinates of its dmodel, so it can
+    # be read back with them
+    from gbkfit.utils import fitsutils
+    config = yaml.load(REFERENCE_DIR / 'thin_disk_scube.yaml')
+    config['models'][0]['dmodel'].update(rval=[150, 2, 1500], rota=30)
+    run_eval('model', config, tmp_path / 'model')
+    _, coords = fitsutils.read_data(
+        tmp_path / 'model' / 'output' / 'model_0_scube_d.fits')
+    np.testing.assert_allclose(coords.step, [1, 1, 10], rtol=1e-12)
+    np.testing.assert_allclose(coords.rpix, [23.5, 23.5, 24.5], rtol=1e-12)
+    np.testing.assert_allclose(coords.rval, [150, 2, 1500], rtol=1e-12)
+    np.testing.assert_allclose(coords.rota, 30, atol=1e-9)

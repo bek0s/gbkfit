@@ -14,7 +14,7 @@ import gbkfit.driver
 import gbkfit.model
 import gbkfit.objective
 import gbkfit.params
-from gbkfit.utils import iterutils, timeutils
+from gbkfit.utils import fitsutils, iterutils, timeutils
 from gbkfit.utils.parseutils import config_path
 from . import _detail
 
@@ -160,6 +160,9 @@ def eval_(
 
     _log.info("gathering outputs...")
 
+    # The outputs by file name: the data, and the grid of the dmodel or
+    # dataset it is on (None for the extra outputs, which are not on
+    # the grid of the data)
     outputs = {}
     model_prefix = 'model'
     resid_u_prefix = 'residual'
@@ -169,28 +172,27 @@ def eval_(
     for i, data_i in enumerate(model_data):
         # prefix_i = model_prefix + f'_{i}' * bool(model.nitems() > 0)
         prefix_i = model_prefix + f'_{i}'
+        dmodel = model_group.models()[i].dmodel()
         for key, value in data_i.items():
             outputs |= {
-                f'{prefix_i}_{key}_d.fits': value.get('d'),
-                f'{prefix_i}_{key}_m.fits': value.get('m'),
-                f'{prefix_i}_{key}_w.fits': value.get('w')}
+                f'{prefix_i}_{key}_d.fits': (value.get('d'), dmodel),
+                f'{prefix_i}_{key}_m.fits': (value.get('m'), dmodel),
+                f'{prefix_i}_{key}_w.fits': (value.get('w'), dmodel)}
     # Store residual (if available)
-    for i, data_i in enumerate(resid_u_data):
-        prefix_i = resid_u_prefix + f'_{i}' * bool(objective.nitems() > 1)
-        for key, value in data_i.items():
-            outputs |= {f'{prefix_i}_{key}_d.fits': value}
-    for i, data_i in enumerate(resid_w_data):
-        prefix_i = resid_w_prefix + f'_{i}' * bool(objective.nitems() > 1)
-        for key, value in data_i.items():
-            outputs |= {f'{prefix_i}_{key}_d.fits': value}
-    # Store model extra
-    for key, value in model_extra.items():
-        outputs |= {f'{model_prefix}_extra_{key}.fits': value}
-    # Store residual extra (if available)
-    for key, value in resid_u_extra.items():
-        outputs |= {f'{resid_u_prefix}_extra_{key}.fits': value}
-    for key, value in resid_w_extra.items():
-        outputs |= {f'{resid_w_prefix}_extra_{key}.fits': value}
+    for resid_data, prefix in [
+            (resid_u_data, resid_u_prefix), (resid_w_data, resid_w_prefix)]:
+        for i, data_i in enumerate(resid_data):
+            prefix_i = prefix + f'_{i}' * bool(objective.nitems() > 1)
+            dataset = objective.datasets()[i]
+            for key, value in data_i.items():
+                outputs |= {f'{prefix_i}_{key}_d.fits': (value, dataset)}
+    # Store model and residual extra (if available)
+    for extra, prefix in [
+            (model_extra, model_prefix),
+            (resid_u_extra, resid_u_prefix),
+            (resid_w_extra, resid_w_prefix)]:
+        for key, value in extra.items():
+            outputs |= {f'{prefix}_extra_{key}.fits': (value, None)}
 
     # #
     # # Calculate outputs statistics
@@ -221,12 +223,17 @@ def eval_(
 
     _log.info("storing outputs to the filesystem...")
 
-    for filename, data in outputs.items():
-        if isinstance(data, np.ndarray):
-            hdu = fits.PrimaryHDU(data)
-            hdulist = fits.HDUList([hdu])
-            hdulist.writeto(
-                os.path.join(output_dir, filename), overwrite=True)
+    for filename, (data, grid) in outputs.items():
+        if not isinstance(data, np.ndarray):
+            continue
+        filename = os.path.join(output_dir, filename)
+        if grid is None:
+            fits.writeto(filename, data, overwrite=True)
+        else:
+            coords = fitsutils.Coords(
+                grid.step(), grid.rpix(), grid.rval(), grid.rota())
+            fitsutils.write_data(
+                filename, data, coords, grid.spectral_axis(), overwrite=True)
 
     #
     # Run performance tests
