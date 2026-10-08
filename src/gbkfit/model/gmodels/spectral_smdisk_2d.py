@@ -1,9 +1,9 @@
 
 from collections.abc import Sequence
 
-from . import _detail, _smdisk, common, traits
+from . import _smdisk, common, traits
+from ._component import BPT, VPT, DPT, SPT, WPT, DiskComponent
 from .core import SpectralComponent2D
-from gbkfit.utils import parseutils
 
 
 __all__ = [
@@ -11,73 +11,14 @@ __all__ = [
 ]
 
 
-class SpectralSMDisk2D(SpectralComponent2D):
+class SpectralSMDisk2D(DiskComponent, SpectralComponent2D):
+
+    _disk_class = _smdisk.SMDisk
+    _slots = (BPT, VPT, DPT, SPT, WPT)
 
     @staticmethod
     def type():
         return 'smdisk'
-
-    # @classmethod
-    # def load(cls, info):
-    #     desc = parseutils.make_typed_desc(cls, 'gmodel component')
-    #     info.update(dict(
-    #         vsys_nwmode=common.nwmode_parser.load(info.get('vsys_nwmode')),
-    #         xpos_nwmode=common.nwmode_parser.load(info.get('xpos_nwmode')),
-    #         ypos_nwmode=common.nwmode_parser.load(info.get('ypos_nwmode')),
-    #         posa_nwmode=common.nwmode_parser.load(info.get('posa_nwmode')),
-    #         incl_nwmode=common.nwmode_parser.load(info.get('incl_nwmode')),
-    #         bptraits=traits.bpt_parser.load(info.get('bptraits')),
-    #         vptraits=traits.vpt_parser.load(info.get('vptraits')),
-    #         dptraits=traits.dpt_parser.load(info.get('dptraits')),
-    #         sptraits=traits.spt_parser.load(info.get('sptraits')),
-    #         wptraits=traits.wpt_parser.load(info.get('wptraits'))))
-    #     opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
-    #     return cls(**opts)
-
-    @classmethod
-    def load(cls, info):
-        desc = parseutils.make_typed_desc(cls, 'gmodel component')
-        parseutils.load_option_and_update_info(
-            traits.bpt_parser, info, 'bptraits', required=True, allow_none=False)
-        parseutils.load_option_and_update_info(
-            traits.vpt_parser, info, 'vptraits', required=True, allow_none=False)
-        parseutils.load_option_and_update_info(
-            traits.dpt_parser, info, 'dptraits', required=True, allow_none=False)
-        parseutils.load_option_and_update_info(
-            traits.spt_parser, info, 'sptraits', required=False, allow_none=False)
-        parseutils.load_option_and_update_info(
-            traits.wpt_parser, info, 'wptraits', required=False, allow_none=False)
-        parseutils.load_option_and_update_info(
-            common.nwmode_parser, info, 'vsys_nwmode', False)
-        parseutils.load_option_and_update_info(
-            common.nwmode_parser, info, 'xpos_nwmode', False)
-        parseutils.load_option_and_update_info(
-            common.nwmode_parser, info, 'ypos_nwmode', False)
-        parseutils.load_option_and_update_info(
-            common.nwmode_parser, info, 'posa_nwmode', False)
-        parseutils.load_option_and_update_info(
-            common.nwmode_parser, info, 'incl_nwmode', False)
-        opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
-        return cls(**opts)
-
-    def dump(self):
-        return dict(
-            type=self.type(),
-            loose=self._disk.loose(),
-            tilted=self._disk.tilted(),
-            rnodes=self._disk.rnodes(),
-            rstep=self._disk.rstep(),
-            interp=self._disk.interp().type(),
-            vsys_nwmode=common.nwmode_parser.dump(self._disk.vsys_nwmode()),
-            xpos_nwmode=common.nwmode_parser.dump(self._disk.xpos_nwmode()),
-            ypos_nwmode=common.nwmode_parser.dump(self._disk.ypos_nwmode()),
-            posa_nwmode=common.nwmode_parser.dump(self._disk.posa_nwmode()),
-            incl_nwmode=common.nwmode_parser.dump(self._disk.incl_nwmode()),
-            bptraits=traits.bpt_parser.dump(self._disk.rptraits()),
-            vptraits=traits.vpt_parser.dump(self._disk.vptraits()),
-            dptraits=traits.dpt_parser.dump(self._disk.dptraits()),
-            sptraits=traits.spt_parser.dump(self._disk.sptraits()),
-            wptraits=traits.wpt_parser.dump(self._disk.wptraits()))
 
     def __init__(
             self,
@@ -101,36 +42,16 @@ class SpectralSMDisk2D(SpectralComponent2D):
             posa_nwmode: common.NWMode | None = None,
             incl_nwmode: common.NWMode | None = None
     ):
-        rnode_args = _detail.parse_component_rnode_args(
-            rnmin, rnmax, rnsep, rnlen, rnodes, rstep, interp)
-        nwmode_velocity_args = _detail.validate_component_nwmodes_for_velocity(
-            loose, vsys_nwmode)
-        nwmode_geometry_args = _detail.validate_component_nwmodes_for_geometry(
-            loose, tilted, xpos_nwmode, ypos_nwmode, posa_nwmode, incl_nwmode)
-        trait_args = _detail.parse_component_s2d_traits(
-            bptraits,
-            vptraits,
-            dptraits,
-            sptraits,
-            wptraits)
-        _detail.rename_bx_to_rx_traits(trait_args)
-        all_traits = sum(trait_args.values(), ())
-        _detail.check_traits_common(all_traits)
-        self._disk = _smdisk.SMDisk(
+        super().__init__(
             loose=loose, tilted=tilted,
-            **rnode_args,
-            **nwmode_velocity_args,
-            **nwmode_geometry_args,
-            **trait_args,
-            rhtraits=(),
-            vhtraits=(), dhtraits=(),
-            zptraits=())
-
-    def pdescs(self):
-        return self._disk.pdescs()
-
-    def has_weights(self):
-        return bool(self._disk.wptraits())
+            rnmin=rnmin, rnmax=rnmax, rnsep=rnsep, rnlen=rnlen,
+            rnodes=rnodes, rstep=rstep, interp=interp,
+            nwmodes=dict(
+                vsys=vsys_nwmode, xpos=xpos_nwmode, ypos=ypos_nwmode,
+                posa=posa_nwmode, incl=incl_nwmode),
+            traits_=dict(
+                bptraits=bptraits, vptraits=vptraits, dptraits=dptraits,
+                sptraits=sptraits, wptraits=wptraits))
 
     def evaluate(
             self,
