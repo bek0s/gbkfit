@@ -29,7 +29,7 @@ class Dataset(parseutils.TypedSerializable, abc.ABC):
         invalid_data = [k for k, v in data.items() if not isinstance(v, Data)]
         if invalid_data:
             raise RuntimeError(
-                f"dataset contains valid data items: {invalid_data}")
+                f"dataset contains invalid data items: {invalid_data}")
         # All data items must have the same properties
         _ensure_same_attrib_value(data, 'size')
         _ensure_same_attrib_value(data, 'step')

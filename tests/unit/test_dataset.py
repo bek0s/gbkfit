@@ -113,8 +113,17 @@ def test_dataset_lslit():
     pass
 
 
-def test_dataset_mmaps():
-    pass
+def test_dataset_mmaps(tmp_path):
+    # Every moment map, from mmap0 to mmap7, can be loaded from a file
+    from astropy.io import fits
+    for name in ['mmap0', 'mmap7']:
+        fits.writeto(tmp_path / f'{name}.fits', np.ones((8, 20)))
+    dataset = dataset_parser.load(dict(
+        type='mmaps',
+        mmap0=dict(data=str(tmp_path / 'mmap0.fits')),
+        mmap7=dict(data=str(tmp_path / 'mmap7.fits'))))
+    assert set(dataset.keys()) == {'mmap0', 'mmap7'}
+    assert dataset['mmap7'].size() == (20, 8)
 
 
 def test_dataset_scube():
