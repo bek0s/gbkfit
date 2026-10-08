@@ -34,19 +34,6 @@ class ComponentGModel:
         opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
         return cls(**opts)
 
-    def dump(self):
-        info = dict(type=self.type())
-        if self._is_3d():
-            info.update(
-                size_z=self._size[2],
-                step_z=self._step[2],
-                zero_z=self._zero[2])
-        info.update(components=self._cmp_parser.dump(self._components))
-        if self._is_3d():
-            info.update(opacity_components=self._ocmp_parser.dump(
-                self._ocomponents))
-        return info
-
     def __init__(
             self, components, opacity_components=None,
             size_z=None, step_z=None, zero_z=None):

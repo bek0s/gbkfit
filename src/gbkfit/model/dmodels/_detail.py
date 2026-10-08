@@ -9,8 +9,7 @@ from gbkfit.utils import iterutils, parseutils
 
 
 __all__ = [
-    'load_dmodel_common',
-    'dump_dmodel_common'
+    'load_dmodel_common'
 ]
 
 
@@ -90,25 +89,10 @@ def load_dmodel_common(
             ('rpix', int | float),
             ('rval', int | float),
             ('scale', int)]:
-        if option_name in info:
+        if info.get(option_name) is not None:
             info[option_name] = _sanitize_dimensional_option(
                 option_name, info[option_name], ndim, option_type)
     # Parse options and create object
     opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
     return opts
 
-
-def dump_dmodel_common(dmodel):
-    info = dict(
-        type=dmodel.type(),
-        size=dmodel.size(),
-        step=dmodel.step(),
-        cval=dmodel.cval(),
-        rota=dmodel.rota(),
-        scale=dmodel.scale(),
-        dtype=dmodel.dtype())
-    if hasattr(dmodel, 'psf'):
-        info.update(psf=gbkfit.psflsf.psf_parser.dump(dmodel.psf()))
-    if hasattr(dmodel, 'lsf'):
-        info.update(lsf=gbkfit.psflsf.lsf_parser.dump(dmodel.lsf()))
-    return info

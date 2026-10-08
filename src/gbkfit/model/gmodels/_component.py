@@ -75,25 +75,6 @@ class DiskComponent:
         opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
         return cls(**opts)
 
-    def dump(self):
-        disk = self._disk
-        nwmodes = {
-            f'{name}_nwmode': common.nwmode_parser.dump(disk.nwmode(name))
-            for name in self._nwmode_params()}
-        traits_ = {
-            slot.key: slot.parser.dump(disk.traits(slot.kind))
-            for slot in self._slots}
-        return dict(
-            type=self.type(),
-            **disk.options(),
-            loose=disk.loose(),
-            tilted=disk.tilted(),
-            rnodes=disk.rnodes(),
-            rstep=disk.rstep(),
-            interp=disk.interp().type(),
-            **nwmodes,
-            **traits_)
-
     def __init__(
             self, loose, tilted,
             rnmin, rnmax, rnsep, rnlen, rnodes, rstep, interp,

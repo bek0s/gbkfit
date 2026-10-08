@@ -59,9 +59,6 @@ class PSFPoint(PSF):
     def load(cls, info: dict[str, Any], *args, **kwargs) -> 'PSFPoint':
         return cls()
 
-    def dump(self) -> dict[str, Any]:
-        return dict(type=self.type())
-
     def _size_impl(self, step: tuple[float, float]) -> tuple[float, float]:
         return 1, 1
 
@@ -92,13 +89,6 @@ class PSFGauss(PSF):
     def load(cls, info: dict[str, Any], *args, **kwargs) -> 'PSFGauss':
         opts = _load_psf_common(cls, info)
         return cls(**opts)
-
-    def dump(self) -> dict[str, Any]:
-        return dict(
-            type=self.type(),
-            sigma=self._sigma,
-            ratio=self._ratio,
-            posa=self._posa)
 
     def __init__(self, sigma: float, ratio: float = 1.0, posa: float = 0.0):
         self._sigma = sigma
@@ -136,14 +126,6 @@ class PSFGGauss(PSF):
     def load(cls, info: dict[str, Any], *args, **kwargs):
         opts = _load_psf_common(cls, info)
         return cls(**opts)
-
-    def dump(self) -> dict[str, Any]:
-        return dict(
-            type=self.type(),
-            alpha=self._alpha,
-            beta=self._beta,
-            ratio=self._ratio,
-            posa=self._posa)
 
     def __init__(
             self,
@@ -189,13 +171,6 @@ class PSFLorentz(PSF):
         opts = _load_psf_common(cls, info)
         return cls(**opts)
 
-    def dump(self) -> dict[str, Any]:
-        return dict(
-            type=self.type(),
-            gamma=self._gamma,
-            ratio=self._ratio,
-            posa=self._posa)
-
     def __init__(self, gamma: float, ratio: float = 1.0, posa: float = 0.0):
         self._gamma = gamma
         self._ratio = ratio
@@ -232,14 +207,6 @@ class PSFMoffat(PSF):
     def load(cls, info: dict[str, Any], *args, **kwargs) -> 'PSFMoffat':
         opts = _load_psf_common(cls, info)
         return cls(**opts)
-
-    def dump(self) -> dict[str, Any]:
-        return dict(
-            type=self.type(),
-            alpha=self._alpha,
-            beta=self._beta,
-            ratio=self._ratio,
-            posa=self._posa)
 
     def __init__(
             self,

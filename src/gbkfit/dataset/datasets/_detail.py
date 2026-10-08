@@ -63,7 +63,7 @@ def load_dataset_common(cls, info, names, ndim, **kwargs):
             ('step', int | float),
             ('rpix', int | float),
             ('rval', int | float)]:
-        if option_name in info:
+        if info.get(option_name) is not None:
             info[option_name] = _sanitize_dimensional_option(
                 option_name, info[option_name], ndim, option_type)
     # Read global coordinate system options.
