@@ -187,3 +187,13 @@ def test_image_psf_on_a_non_square_grid():
     actual = psf_image.asarray((1, 1), (65, 33))
     assert actual.shape == expected.shape == (33, 65)
     np.testing.assert_allclose(actual, expected, atol=1e-4 * expected.max())
+
+
+@pytest.mark.parametrize('lsf', [
+    LSFGauss(10), LSFGGauss(10, 0.5), LSFLorentz(10), LSFMoffat(10, 1.5)])
+def test_analytic_lsfs_are_symmetric(lsf):
+    # Cut at the same distance on both sides, also when the array is much
+    # wider than the cut (as in the FFT convolution)
+    data = lsf.asarray(5, 257)
+    np.testing.assert_allclose(data, data[::-1], rtol=1e-12)
+    np.testing.assert_allclose(centroid(lsf.asarray(5, 256, -1), 0), 127)
