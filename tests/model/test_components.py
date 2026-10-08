@@ -161,3 +161,35 @@ def test_errors_have_paths():
         gmodel_parser.load(info)
     assert str(error.value).startswith(
         "components[0].vptraits[1].nwmode: unknown NWMode type 'relative9'")
+
+
+def component_error(name, **options):
+    """The error message of loading a gmodel with a bad component."""
+    with pytest.raises(Exception) as error:
+        gmodel_parser.load(gmodel_info(name, **options))
+    return str(error.value)
+
+
+def test_at_most_4_traits_of_a_kind():
+    # The native kernels take at most 4 traits of each kind
+    message = component_error(
+        'brightness_smdisk_2d', bptraits=[EXPONENTIAL] * 5)
+    assert "at most 4 bptraits" in message
+
+
+def test_trunc_cannot_be_negative():
+    message = component_error(
+        'brightness_smdisk_3d', bhtraits=dict(type='sech2', trunc=-1))
+    assert "trunc must be at least 0" in message
+
+
+def test_truncated_ggauss_brightness_height_is_not_supported():
+    message = component_error(
+        'brightness_smdisk_3d', bhtraits=dict(type='ggauss', trunc=2))
+    assert "truncated ggauss" in message
+
+
+def test_mcdisk_moffat_opacity_height_is_not_supported():
+    message = component_error(
+        'opacity_mcdisk_3d', ohtraits=dict(type='moffat'))
+    assert re.search("does not support .*moffat", message)

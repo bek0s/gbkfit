@@ -3,7 +3,7 @@ import dataclasses
 import inspect
 
 from gbkfit.utils import iterutils, parseutils
-from . import _detail, common, traits
+from . import _detail, _disk, common, traits
 
 
 __all__ = [
@@ -144,6 +144,10 @@ def _parse_traits(cls, slots, values):
         if not value and _is_required(cls, slot.key):
             raise RuntimeError(f"at least one {slot.key[:-1]} is required")
         value = iterutils.tuplify(value) if value else ()
+        if len(value) > _disk.MAX_TRAITS:
+            raise RuntimeError(
+                f"at most {_disk.MAX_TRAITS} {slot.key} are supported; "
+                f"{len(value)} were given")
         if slot.pairs_with:
             npolar = len(result[slot.pairs_with])
             if slot.default:

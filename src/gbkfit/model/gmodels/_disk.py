@@ -18,6 +18,10 @@ _log = logging.getLogger(__name__)
 # selection (s) and weight (w) polar traits
 TRAIT_KINDS = ('rpt', 'rht', 'vpt', 'vht', 'dpt', 'dht', 'zpt', 'spt', 'wpt')
 
+# The most traits of one kind that the native kernels take (TRAIT_NUM_MAX
+# in constants.hpp)
+MAX_TRAITS = 4
+
 # The geometric parameters of a disk, and the option that makes each of
 # them node-wise: loose (vsys, xpos, ypos) or tilted (posa, incl)
 NODEWISE_SWITCH = dict(
