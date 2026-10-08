@@ -15,7 +15,7 @@ def test_data():
     # Default value tests
     data01 = Data(data_d)
     assert data01.data() is not data_d
-    assert data01.dtype() == data_d.dtype
+    assert data01.dtype() == np.float32
     assert np.array_equal(data01.data(), data_d)
     assert np.array_equal(data01.mask(), data_ones)
     assert np.array_equal(data01.error(), None)
@@ -184,3 +184,40 @@ def test_data_can_be_read_from_extensions(tmp_path):
         error=dict(file=filename, hdu='ERR')))
     assert data.data().mean() == 3.0
     assert data.error().mean() == 0.5
+
+
+def test_data_does_not_change_the_callers_arrays():
+    data = np.ones((4, 4))
+    data[0, 0] = np.nan
+    error = np.ones((4, 4))
+    Data(data, error=error)
+    assert error[0, 0] == 1
+
+
+def test_data_masks_errors_that_are_not_positive():
+    error = np.ones((2, 3))
+    error[0, 0] = 0
+    error[0, 1] = -1
+    data = Data(np.ones((2, 3)), error=error)
+    assert data.mask().sum() == 4
+    assert np.isnan(data.data()[0, :2]).all()
+
+
+def test_data_is_float32(tmp_path):
+    # The drivers support float32 only, so float64 files (BITPIX = -64)
+    # and integer files become float32. A scalar error is not rounded
+    # to the type of the data.
+    from astropy.io import fits
+    fits.writeto(tmp_path / 'data.fits', np.ones((8, 20), np.int16))
+    data = data_parser.load(dict(data=str(tmp_path / 'data.fits'), error=0.5))
+    assert data.dtype() == np.float32
+    assert data.error()[0, 0] == 0.5
+    assert Data(np.ones((8, 20))).dtype() == np.float32
+
+
+def test_dmodel_of_a_float64_dataset_is_float32():
+    from gbkfit.dataset.datasets import DatasetImage
+    from gbkfit.model import dmodel_parser
+    dataset = DatasetImage(Data(np.ones((8, 20), np.float64)))
+    dmodel = dmodel_parser.load(dict(type='image'), dataset=dataset)
+    assert dmodel.dtype() == np.float32
