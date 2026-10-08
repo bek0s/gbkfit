@@ -484,6 +484,56 @@ class TypedParser(Parser):
         return dict(type=x.type()) | x.dump(*args, **kwargs)
 
 
+def _sanitize_dimensional_option(option, value, lengths, type_):
+    args = typing.get_args(type_)
+    types_ = args if args else [type_]
+    type_name = " | ".join([t.__name__ for t in types_])
+    lengths = iterutils.listify(lengths)
+    max_length = max(lengths)
+    if isinstance(value, type_):
+        return iterutils.make_list(max_length, value)
+    if iterutils.is_sequence_of_type(value, type_):
+        if len(value) < max_length:
+            raise RuntimeError(
+                f"option '{option}' has a value "
+                f"with a length shorter than expected; "
+                f"expected length: {' or '.join(map(str, lengths))}, "
+                f"current length: {len(value)}")
+        if len(value) > max_length:
+            new_value = value[:max_length]
+            _log.warning(
+                f"option '{option}' has a value "
+                f"with a length longer than expected; "
+                f"current length: {len(value)}; "
+                f"expected length: {' or '.join(map(str, lengths))}, "
+                f"the value will be trimmed from {value} to {new_value}")
+            value = new_value
+        return value
+    raise RuntimeError(
+        f"option '{option}' should be a scalar of type {type_name}, "
+        f"or a sequence of type {type_name} and "
+        f"length of {' or '.join(map(str, lengths))}")
+
+
+def sanitize_dimensional_options(
+        info: dict[str, Any],
+        options: dict[str, type],
+        lengths: int | list[int]
+) -> None:
+    """
+    Make the given options of a configuration (e.g. 'size', 'step'),
+    which have one value for each dimension, lists of the given type and
+    length, in place. A single value is repeated, and the extra values of
+    a longer list are dropped with a warning, so that, e.g., a spectral
+    cube configuration can be used for an image by changing its type.
+    Options that are missing or null are left as they are.
+    """
+    for option, type_ in options.items():
+        if info.get(option) is not None:
+            info[option] = _sanitize_dimensional_option(
+                option, info[option], lengths, type_)
+
+
 def load_option(
         loader: Callable,
         info: dict[str, Any],
