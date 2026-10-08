@@ -3,34 +3,8 @@ import logging
 
 import numpy as np
 
-from gbkfit.params import parsers as param_parsers
-from gbkfit.utils import iterutils
-
 
 _log = logging.getLogger(__name__)
-
-
-def load_params_dict(info, descs, loader):
-    infos, exprs = param_parsers.parse_param_info(info, descs)[4:]
-    for key, val in infos.items():
-        try:
-            infos[key] = loader(val)
-        except Exception as e:
-            raise RuntimeError(
-                f"could not parse information for parameter '{key}'; "
-                f"reason: {str(e)}") from e
-    return infos | exprs
-
-
-def dump_params_dict(parameters, type_):
-    info = dict()
-    for key, value in parameters.items():
-        if isinstance(value, type_):
-            value = value.dump()
-        elif iterutils.is_sequence(value):
-            value = [p.dump() if isinstance(p, type_) else p for p in value]
-        info[key] = value
-    return info
 
 
 def prepare_param_property_prior(info):

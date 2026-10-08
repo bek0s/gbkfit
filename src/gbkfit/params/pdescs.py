@@ -1,8 +1,5 @@
 
 import abc
-import copy
-from collections.abc import Mapping
-
 from typing import Any
 
 import numpy as np
@@ -12,7 +9,6 @@ from gbkfit.utils import iterutils, parseutils
 
 __all__ = [
     'ParamDesc',
-    'ParamDescDict',
     'ParamScalarDesc',
     'ParamVectorDesc',
     'load_pdescs_dict',
@@ -51,9 +47,7 @@ class ParamDesc(parseutils.TypedSerializable, abc.ABC):
             minimum: None | int | float,
             maximum: None | int | float
     ):
-        # Import here to avoid circular dependency
-        from .symbols import is_param_symbol_name
-        if not is_param_symbol_name(name):
+        if not name.isidentifier():
             raise RuntimeError(
                 f"'{name}' is not a valid parameter description name")
         minimum = -np.inf if minimum is None else minimum
@@ -130,28 +124,6 @@ class ParamVectorDesc(ParamDesc):
             maximum: None | int | float = None
     ):
         super().__init__(name, size, desc, default, minimum, maximum)
-
-
-class ParamDescDict(Mapping):
-    """Not used at the moment"""
-
-    def __init__(self, pdescs):
-        self._pdescs = copy.deepcopy(pdescs)
-
-    def __getitem__(self, key):
-        return self._pdescs.__getitem__(key)
-
-    def __iter__(self):
-        return self._pdescs.__iter__()
-
-    def __len__(self):
-        return self._pdescs.__len__()
-
-    def __repr__(self):
-        return self._pdescs.__repr__()
-
-    def __str__(self):
-        return self._pdescs.__str__()
 
 
 def load_pdescs_dict(info: dict[str, Any]) -> dict[str, ParamDesc]:

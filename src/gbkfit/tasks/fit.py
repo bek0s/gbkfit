@@ -1,8 +1,7 @@
-import copy
 import logging
 import os
 import time
-from typing import Any, Literal
+from typing import Literal
 
 import numpy as np
 import ruamel.yaml
@@ -13,7 +12,6 @@ import gbkfit.fitting
 import gbkfit.model
 import gbkfit.objective
 import gbkfit.params
-from gbkfit.params import ParamDesc
 from gbkfit.utils import miscutils
 from . import _detail
 
@@ -27,24 +25,6 @@ yaml = ruamel.yaml.YAML()
 # This is needed for dumping dicts with correct order
 ruamel.yaml.add_representer(dict, lambda self, data: self.represent_mapping(
     'tag:yaml.org,2002:map', data.items()))
-
-
-def _prepare_params(
-        info: dict[str, Any],
-        pdescs: dict[str, ParamDesc]
-) -> dict[str, Any]:
-
-    # Copy info for safety
-    info = copy.deepcopy(info)
-
-    # Prepare the supplied parameter properties. This will:
-    # - Ensure the parameter keys are valid
-    # - Explode all parameter names that are can be exploded
-    parameters = gbkfit.params.parse_param_info(
-        info.get('properties'), pdescs).info
-
-    # Update parameter info and return it
-    return info | dict(properties=parameters)
 
 
 def fit(config: str,
@@ -110,8 +90,6 @@ def fit(config: str,
     pdescs = _detail.merge_pdescs(objective.pdescs(), pdescs)
 
     _log.info("setting up params...")
-    cfg['params'] = _prepare_params(cfg['params'], pdescs)
-
     params = fitter.load_params(cfg['params'], pdescs)
 
     #
