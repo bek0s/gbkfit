@@ -474,6 +474,11 @@ class Disk(abc.ABC):
         if self._driver is not driver or self._dtype is not dtype:
             self._prepare(driver, dtype)
 
+        # The parameter values are replaced below (nodewise mode
+        # transforms, interpolation). Work on a copy of the dict, and
+        # never modify the caller's arrays in place.
+        params = dict(params)
+
         #
         # Apply nodewise mode transform to parameters
         # TODO: revise the use of nested functions
@@ -483,13 +488,15 @@ class Disk(abc.ABC):
             if nwmode is None:
                 return
             for pdesc in pdescs:
-                nwmode.transform(params[pdesc])
+                params[pdesc] = nwmode.transform(
+                    params[pdesc], in_place=False)
 
         def nwmode_transform_for_trait_params(pdescs, nwmodes):
             for pdesc in pdescs:
                 if nwmodes[pdesc] is None:
                     continue
-                nwmodes[pdesc].transform(params[pdesc])
+                params[pdesc] = nwmodes[pdesc].transform(
+                    params[pdesc], in_place=False)
 
         nwmode_transform_for_common_params(self._vsys_pdescs, self._vsys_nwmode)
         nwmode_transform_for_common_params(self._xpos_pdescs, self._xpos_nwmode)
