@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from gbkfit.params import ParamDesc
-from gbkfit.utils import iterutils, miscutils
+from gbkfit.utils import iterutils, miscutils, parseutils
 
 
 _log = logging.getLogger(__name__)
@@ -42,9 +42,9 @@ def prepare_config(
         else:
             unknown_sections.append(s)
     if unknown_sections:
-        _log.info(
-            f"the following sections are not recognised and will be ignored: "
-            f"{unknown_sections}")
+        parseutils.report_unknown(
+            "unknown configuration sections", unknown_sections,
+            req_sections + opt_sections)
     config = {s: config[s] for s in known_sections}
 
     # Ensure that the required sections are present

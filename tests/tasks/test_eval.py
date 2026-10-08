@@ -69,3 +69,25 @@ def test_rotation_curve_from_radial_nodes(tmp_path):
     values = run_eval('model', config, tmp_path / 'values')
     np.testing.assert_array_equal(
         expression['model_0_scube_d'], values['model_0_scube_d'])
+
+
+def test_unknown_options(tmp_path):
+    # A misspelt option is a warning that suggests the right one, or an
+    # error with --strict
+    config = yaml.load(REFERENCE_DIR / 'thin_disk_scube.yaml')
+    component = config['models'][0]['gmodel']['components'][0]
+    component['rnmx'] = component['rnmax']
+    yaml.dump(config, tmp_path / 'config.yaml')
+
+    def run(*options):
+        return subprocess.run(
+            [sys.executable, '-m', 'gbkfit.apps.cli', 'eval', 'model',
+             'config.yaml', *options],
+            cwd=tmp_path, capture_output=True, text=True)
+    result = run()
+    assert result.returncode == 0
+    assert "'rnmx' (did you mean 'rnmax'?)" in result.stderr
+    result = run('--strict')
+    assert result.returncode != 0
+    assert "models[0].gmodel.components[0]" in result.stderr
+    assert "'rnmx' (did you mean 'rnmax'?)" in result.stderr

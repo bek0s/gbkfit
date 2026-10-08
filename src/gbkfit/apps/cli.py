@@ -4,6 +4,8 @@ import logging.config
 from collections.abc import Callable, Sequence
 from typing import Any, Literal
 
+from gbkfit.utils import parseutils
+
 _log = logging.getLogger(__name__)
 
 
@@ -188,12 +190,18 @@ def main():
              "'overwrite' (overwrite existing contents), or "
              "'unique' (append a number suffix to ensure uniqueness)")
 
+    parser_common_config = argparse.ArgumentParser(add_help=False)
+    parser_common_config.add_argument(
+        '--strict', action='store_true',
+        help="treat unknown configuration options, sections and "
+             "parameters as errors instead of warnings")
+
     #
     # Create parser for eval task
     #
 
     parser_eval = parsers_task.add_parser('eval', parents=[
-        parser_common_output, parser_common],
+        parser_common_config, parser_common_output, parser_common],
         help="evaluate model")
     parser_eval.add_argument(
         'mode', type=str, choices=['model', 'objective'],
@@ -392,7 +400,7 @@ def main():
     #
 
     parser_fit = parsers_task.add_parser('fit', parents=[
-        parser_common_output, parser_common],
+        parser_common_config, parser_common_output, parser_common],
         help="fit model to data")
     parser_fit.add_argument(
         'config', type=str,
@@ -451,9 +459,10 @@ def main():
 
     if args.task == 'eval':
         import gbkfit.tasks.eval
-        gbkfit.tasks.eval.eval_(
-            args.mode, args.config, args.profile,
-            args.output_dir, args.output_dir_mode)
+        with parseutils.strict_mode(args.strict):
+            gbkfit.tasks.eval.eval_(
+                args.mode, args.config, args.profile,
+                args.output_dir, args.output_dir_mode)
 
     elif args.task == 'prep':
         import gbkfit.tasks.prep
@@ -488,8 +497,9 @@ def main():
 
     elif args.task == 'fit':
         import gbkfit.tasks.fit
-        gbkfit.tasks.fit.fit(
-            args.config, args.output_dir, args.output_dir_mode)
+        with parseutils.strict_mode(args.strict):
+            gbkfit.tasks.fit.fit(
+                args.config, args.output_dir, args.output_dir_mode)
 
     elif args.task == 'plot':
         import gbkfit.tasks.plot

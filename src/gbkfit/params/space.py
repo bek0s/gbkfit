@@ -26,6 +26,7 @@ from gbkfit.params.expressions import Expression, InvalidExpressionError
 from gbkfit.params.keys import (
     InvalidKeyError, element_name, parse_key)
 from gbkfit.params.pdescs import ParamDesc, ParamScalarDesc
+from gbkfit.utils import parseutils
 
 
 __all__ = [
@@ -81,12 +82,15 @@ class ParamSpace:
             properties: dict[str, Any],
             transforms: Callable | None = None,
             constants: dict[str, Any] | None = None,
-            unknown: str = 'warn'):
+            unknown: str | None = None):
         """
         constants are read-only values that expressions can use (e.g. the
         radial nodes of a disk). unknown is what to do with properties of
-        unknown parameters: 'warn' (and ignore them) or 'error'.
+        unknown parameters: 'warn' (and ignore them) or 'error'; by
+        default, 'error' in strict mode (see parseutils.strict_mode).
         """
+        if unknown is None:
+            unknown = 'error' if parseutils.is_strict() else 'warn'
         if unknown not in ('warn', 'error'):
             raise ValueError("unknown must be 'warn' or 'error'")
         self._pdescs = dict(pdescs)
@@ -144,7 +148,9 @@ class ParamSpace:
                 element_name(*e) for e in self._elements if e not in keys_of]:
             errors.append(f"these parameters have no value: {missing}")
         if unknown_keys:
-            message = f"these parameters are unknown: {unknown_keys}"
+            message = (
+                f"these parameters are unknown: "
+                f"{parseutils.describe_unknown(unknown_keys, pdescs)}")
             if unknown == 'error':
                 errors.append(message)
             else:
