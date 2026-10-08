@@ -152,5 +152,35 @@ def test_data_reference_pixel_survives_fits_round_trip(tmp_path):
     info = data.dump(str(tmp_path / 'data.fits'), dump_wcs=False)
     loaded = data_parser.load(info)
     assert loaded.rpix() == (3, 4)
-    assert loaded.step() == (2, 3)
+    np.testing.assert_allclose(loaded.step(), (2, 3), rtol=1e-12)
 
+
+
+def test_data_round_trip_keeps_the_rotation_and_the_velocities(tmp_path):
+    # rota is in degrees (Data.dump used to write it as radians)
+    data = Data(
+        np.zeros((6, 8, 20)), step=(2, 2, 10), rpix=(3, 4, 2),
+        rval=(150, 2, 1500), rota=30, spectral_axis=2)
+    info = data.dump(str(tmp_path / 'cube.fits'), dump_wcs=False)
+    loaded = data_parser.load(info, spectral_axis=2)
+    np.testing.assert_allclose(loaded.rota(), 30, atol=1e-9)
+    np.testing.assert_allclose(loaded.rval(), (150, 2, 1500), rtol=1e-12)
+    np.testing.assert_allclose(loaded.zero(), data.zero(), atol=1e-9)
+    # The spatial axes are measured from the reference pixel
+    np.testing.assert_allclose(loaded.zero(), (-6, -8, 1480), atol=1e-9)
+
+
+def test_data_can_be_read_from_extensions(tmp_path):
+    # e.g. JWST data, with the data in SCI and the error in ERR
+    from astropy.io import fits
+    fits.HDUList([
+        fits.PrimaryHDU(),
+        fits.ImageHDU(np.full((8, 20), 3.0), name='SCI'),
+        fits.ImageHDU(np.full((8, 20), 0.5), name='ERR')
+    ]).writeto(tmp_path / 'data.fits')
+    filename = str(tmp_path / 'data.fits')
+    data = data_parser.load(dict(
+        data=dict(file=filename, hdu='SCI'),
+        error=dict(file=filename, hdu='ERR')))
+    assert data.data().mean() == 3.0
+    assert data.error().mean() == 0.5

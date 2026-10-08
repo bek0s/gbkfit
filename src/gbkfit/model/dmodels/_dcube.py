@@ -42,10 +42,12 @@ class DCube:
                 "provided; if weights exist, they will not be smoothed")
             smooth_weights = False
 
-        # Low-res cube zero pixel center position
+        # Low-res cube zero pixel center position. The spatial axes are
+        # measured from the reference pixel, and the spectral axis from
+        # its world value there (see fitsutils.Coords).
         zero = (
-            rval[0] - rpix[0] * step[0],
-            rval[1] - rpix[1] * step[1],
+            -rpix[0] * step[0],
+            -rpix[1] * step[1],
             rval[2] - rpix[2] * step[2])
 
         self._size_lo = size

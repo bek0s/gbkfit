@@ -5,8 +5,6 @@ from collections.abc import Sequence
 from numbers import Real
 from typing import Any
 
-import astropy.io.fits
-import astropy.wcs
 import numpy as np
 
 from gbkfit.utils import fitsutils, miscutils, parseutils
@@ -25,27 +23,18 @@ def _make_filename(filename, dump_path):
     return filename if dump_path else os.path.basename(filename)
 
 
-def _rpix_from_fits_header(header, shape, filename):
+def _read_file(x, prefix, rpix=None, rval=None):
     """
-    Return the reference pixel of every axis, from the CRPIXn keywords
-    of a FITS header. FITS reference pixels are 1-based, while gbkfit's
-    are 0-based. Axes without a reference pixel use their centre, like
-    data created without a header.
+    The data of a file and its world coordinates (see fitsutils.Coords).
+    x is a filename, or a dict with the filename ('file') and the HDU to
+    read ('hdu', e.g. 'SCI'; by default the first).
     """
-    rpix = []
-    missing = []
-    for axis, size in enumerate(shape[::-1], start=1):
-        crpix = header.get(f'CRPIX{axis}')
-        if crpix is None:
-            missing.append(axis)
-            rpix.append(size / 2 - 0.5)
-        else:
-            rpix.append(crpix - 1)
-    if missing:
-        _log.info(
-            f"file {filename} has no reference pixel (CRPIXn) "
-            f"for axes {missing}; using the centre of those axes")
-    return rpix
+    if isinstance(x, str):
+        x = dict(file=x)
+    options = parseutils.parse_options(
+        x, 'data file', required={'file'}, optional={'hdu'})
+    return fitsutils.read_data(
+        prefix + options['file'], options.get('hdu', 0), rpix, rval)
 
 
 def _ensure_floating_or_float32(x, label):
@@ -58,6 +47,12 @@ def _ensure_floating_or_float32(x, label):
 
 
 class Data(parseutils.BasicSerializable):
+    """
+    An array of data, with its mask and error, and the world coordinates
+    of its pixels in the units of the model (see fitsutils.Coords). The
+    spatial axes are measured from the reference pixel; the spectral
+    axis (spectral_axis, if any) from its world value there.
+    """
 
     @classmethod
     def load(
@@ -67,48 +62,44 @@ class Data(parseutils.BasicSerializable):
             rpix: Real = None,
             rval: Real = None,
             rota: Real = None,
-            prefix: str = ''
+            prefix: str = '',
+            spectral_axis: int | None = None
     ):
+        """
+        Load data from files. step, rpix, rval and rota are the defaults
+        of the options of the same name (e.g. those of the dataset), and
+        spectral_axis the index of the spectral axis of the dataset.
+        """
         desc = parseutils.make_basic_desc(cls, 'data')
-        data_d, wcs_d = parseutils.load_option(
-            lambda x: fitsutils.load_fits(prefix + x),
-            info, 'data', True, False)
-        data_m = None
-        data_e = None
-        if (mask := info.get('mask')) is not None:
-            data_m = fitsutils.load_fits(prefix + mask)[0]
-        if (error := info.get('error')) is not None:
-            if isinstance(error, (int, float)):
-                data_e = np.full_like(data_d, error)
-            elif isinstance(error, str):
-                data_e = fitsutils.load_fits(prefix + error)[0]
-        # Local information has higher priority than global
+        # Local information has higher priority than global. Without
+        # either, the header has it.
         step = info.get('step', step)
         rpix = info.get('rpix', rpix)
         rval = info.get('rval', rval)
         rota = info.get('rota', rota)
-        # If no information is provided, use fits header
-        if step is None:
-            step = wcs_d.wcs.cdelt.tolist()  # noqa
-        if rpix is None:
-            filename = prefix + info['data']
-            rpix = _rpix_from_fits_header(
-                astropy.io.fits.getheader(filename), data_d.shape, filename)
-        if rval is None:
-            rval = wcs_d.wcs.crval.tolist()  # noqa
-        # todo: deal with rotation (PC Matrix and CROTA (deprecated))
-        # Build class arguments dict
+        data_d, coords = parseutils.load_option(
+            lambda x: _read_file(x, prefix, rpix, rval),
+            info, 'data', True, False)
+        data_m = None
+        data_e = None
+        if (mask := info.get('mask')) is not None:
+            data_m = _read_file(mask, prefix)[0]
+        if (error := info.get('error')) is not None:
+            if isinstance(error, (int, float)):
+                data_e = np.full_like(data_d, error)
+            else:
+                data_e = _read_file(error, prefix)[0]
         info.update(dict(
             data=data_d,
             mask=data_m,
             error=data_e,
-            step=step,
-            rpix=rpix,
-            rval=rval,
-            rota=rota))
-        # Parse options and create object
-        opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
-        return cls(**opts)
+            step=coords.step if step is None else step,
+            rpix=coords.rpix,
+            rval=coords.rval,
+            rota=coords.rota if rota is None else rota))
+        opts = parseutils.parse_options_for_callable(
+            info, desc, cls.__init__, fun_ignore_args=['spectral_axis'])
+        return cls(**opts, spectral_axis=spectral_axis)
 
     def dump(
             self,
@@ -120,37 +111,20 @@ class Data(parseutils.BasicSerializable):
             overwrite: bool = False
     ) -> dict[str, Any]:
         info = dict()
-        # Some shortcuts
-        dat = self.data()
-        msk = self.mask()
-        err = self.error()
-        step = self.step()
-        rpix = self.rpix()
-        rval = self.rval()
-        rota = self.rota()
-        # Create WCS object
-        wcs = astropy.wcs.WCS(naxis=dat.ndim, relax=False)
-        # FITS reference pixels are 1-based, gbkfit's are 0-based
-        wcs.wcs.cdelt = step    # noqa
-        wcs.wcs.crpix = np.add(rpix, 1)  # noqa
-        wcs.wcs.crval = rval    # noqa
-        wcs.wcs.pc = np.identity(dat.ndim)  # noqa
-        wcs.wcs.pc[0][0] = +np.cos(rota)    # noqa
-        wcs.wcs.pc[0][1] = -np.sin(rota)    # noqa
-        wcs.wcs.pc[1][0] = +np.sin(rota)    # noqa
-        wcs.wcs.pc[1][1] = +np.cos(rota)    # noqa
-        # Dump WCS as meta-data (if requested)
+        coords = fitsutils.Coords(
+            self.step(), self.rpix(), self.rval(), self.rota())
+        # Dump the world coordinates as options too (if requested)
         if dump_wcs:
-            info.update(dict(step=step, rpix=rpix, rval=rval, rota=rota))
-        # Dump data
-        info['data'] = filename_d = _make_filename(filename_d, dump_path)
-        fitsutils.dump_fits(filename_d, dat, wcs, overwrite)
-        if filename_m and msk is not None:
-            info['mask'] = filename_m = _make_filename(filename_m, dump_path)
-            fitsutils.dump_fits(filename_m, msk, wcs, overwrite)
-        if filename_e and err is not None:
-            info['error'] = filename_e = _make_filename(filename_e, dump_path)
-            fitsutils.dump_fits(filename_e, err, wcs, overwrite)
+            info.update(coords._asdict())
+        files = dict(
+            data=(filename_d, self.data()),
+            mask=(filename_m, self.mask()),
+            error=(filename_e, self.error()))
+        for key, (filename, data) in files.items():
+            if filename and data is not None:
+                info[key] = filename = _make_filename(filename, dump_path)
+                fitsutils.write_data(
+                    filename, data, coords, self._spectral_axis, overwrite)
         return info
 
     def __init__(
@@ -161,8 +135,17 @@ class Data(parseutils.BasicSerializable):
             step: Real | Sequence[Real] | None = None,
             rpix: Real | Sequence[Real] | None = None,
             rval: Real | Sequence[Real] | None = None,
-            rota: Real | None = None
+            rota: Real | None = None,
+            spectral_axis: int | None = None
     ):
+        """
+        spectral_axis is the index of the spectral axis (in FITS order,
+        e.g. 2 for a spectral cube), or None if there is none.
+        """
+        if spectral_axis is not None and not 0 <= spectral_axis < data.ndim:
+            raise RuntimeError(
+                f"spectral axis {spectral_axis} of data with {data.ndim} "
+                f"axes")
         # If mask was not provided, use a default mask.
         if mask is None:
             mask = np.ones_like(data)
@@ -227,8 +210,13 @@ class Data(parseutils.BasicSerializable):
         if not np.array_equal(mask, total_mask):
             raise RuntimeError("impossible")
         del total_mask
-        # Calculate the world coordinates at the very first pixel
-        zero = (np.array(rval) - np.array(rpix) * np.array(step)).tolist()
+        # The world coordinates of the first pixel: the spatial axes are
+        # measured from the reference pixel, and the spectral axis from
+        # its world value there
+        zero = [
+            (rval[axis] if axis == spectral_axis else 0)
+            - rpix[axis] * step[axis]
+            for axis in range(data.ndim)]
         # Keep copies of the supplied data
         dtype = data.dtype
         self._data = data.astype(dtype)
@@ -239,6 +227,7 @@ class Data(parseutils.BasicSerializable):
         self._rpix = tuple(rpix)
         self._rval = tuple(rval)
         self._rota = rota
+        self._spectral_axis = spectral_axis
 
     def ndim(self):
         return self._data.ndim
@@ -263,6 +252,9 @@ class Data(parseutils.BasicSerializable):
 
     def rota(self):
         return self._rota
+
+    def spectral_axis(self):
+        return self._spectral_axis
 
     def data(self):
         return self._data

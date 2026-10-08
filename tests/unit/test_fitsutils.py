@@ -43,7 +43,9 @@ def test_write_and_read_back(rota, shape):
     rpix = (11.5, 9.5, 5.0)[:len(shape)]
     rval = (150.0, 2.0, 1500.0)[:len(shape)]
     coords = fitsutils.Coords(step, rpix, rval, rota)
-    fitsutils.write_data('data.fits', np.ones(shape, np.float32), coords)
+    spectral_axis = 2 if len(shape) == 3 else None
+    fitsutils.write_data(
+        'data.fits', np.ones(shape, np.float32), coords, spectral_axis)
     data, coords_read = fitsutils.read_data('data.fits')
     assert data.shape == shape
     np.testing.assert_allclose(coords_read.step, step, rtol=1e-12)
@@ -62,6 +64,15 @@ def test_rota_is_the_position_angle_of_the_y_axis(rota):
     header = fits.getheader('data.fits')
     assert same_angle(position_angle(header, (10, 10), (10, 11)), rota)
     assert same_angle(position_angle(header, (10, 10), (11, 10)), rota - 90)
+
+
+def test_write_and_read_back_long_slit():
+    # The position along the slit is an offset from its reference pixel
+    coords = fitsutils.Coords((2.0, 10.0), (15.5, 5.0), (0.0, 1500.0), 0.0)
+    fitsutils.write_data(
+        'data.fits', np.ones((11, 32), np.float32), coords, spectral_axis=1)
+    _, coords_read = fitsutils.read_data('data.fits')
+    assert coords_read == coords
 
 
 def test_north_up_east_left():

@@ -10,6 +10,9 @@ __all__ = [
 
 class DatasetImage(Dataset):
 
+    # An image has no spectral axis
+    _spectral_axis = None
+
     @staticmethod
     def type():
         return 'image'
