@@ -218,11 +218,7 @@ def test_smdisk_thin(driver, ndarrays_regression):
         evaluate_smdisk(driver, thick=False))
 
 
-def test_smdisk_thick(driver, ndarrays_regression, request):
-    if driver.type() == 'cuda':
-        request.applymarker(pytest.mark.xfail(
-            reason="known bug: the cuda thick disk only evaluates the "
-                   "z=0 slice (it launches nx*ny threads, not nx*ny*nz)"))
+def test_smdisk_thick(driver, ndarrays_regression):
     check_against_reference(
         ndarrays_regression, 'smdisk_thick',
         evaluate_smdisk(driver, thick=True))

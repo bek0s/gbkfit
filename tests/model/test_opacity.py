@@ -8,7 +8,6 @@ import copy
 import gbkfit.model
 import gbkfit.params
 import numpy as np
-import pytest
 
 
 DISK = dict(
@@ -70,11 +69,7 @@ def test_zero_opacity_has_no_effect(driver):
     assert_same_model(with_zero, without)
 
 
-def test_opacity_absorbs_flux(driver, request):
-    if driver.type() == 'cuda':
-        request.applymarker(pytest.mark.xfail(
-            strict=True, reason="known bug: the cuda thick disk only "
-            "evaluates the z=0 slice, which no opacity is in front of"))
+def test_opacity_absorbs_flux(driver):
     without, = evaluate(driver, with_opacity=False, opacity=0)
     absorbed, = evaluate(driver, with_opacity=True, opacity=0.05)
     assert absorbed.sum() < 0.99 * without.sum()
