@@ -7,19 +7,6 @@ namespace gbkfit::cuda {
 constexpr int BLOCK_SIZE = 256;
 
 template<typename T> void
-Wrapper<T>::math_complex_multiply_and_scale(
-        typename cufft<T>::complex* arr1,
-        typename cufft<T>::complex* arr2,
-        int n, T scale)
-{
-    dim3 bsize(BLOCK_SIZE);
-    dim3 gsize((n + bsize.x - 1) / bsize.x);
-    kernels::math_complex_multiply_and_scale<<<gsize, bsize>>>(
-            arr1, arr2, n, scale);
-    cudaDeviceSynchronize();
-}
-
-template<typename T> void
 Wrapper<T>::dmodel_dcube_downscale(
         int scale_x, int scale_y, int scale_z,
         int offset_x, int offset_y, int offset_z,

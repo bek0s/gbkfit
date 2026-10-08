@@ -65,7 +65,7 @@ def test_fft_roundtrip(driver):
     data = smooth_cube(shape)
     data_r = memory.to_device(data)
     data_c = memory.to_device(
-        np.zeros(fft.fft_complex_shape(list(shape)), np.complex64))
+        np.zeros(fft.fft_complex_shape(shape), np.complex64))
     fft.fft_r2c(data_r, data_c)
     fft.fft_c2r(data_c, data_r)
     result = memory.to_host(data_r) / data.size

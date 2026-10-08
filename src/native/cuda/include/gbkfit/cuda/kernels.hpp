@@ -8,7 +8,6 @@
 #include <gbkfit/gmodel/gmodels.hpp>
 #include <gbkfit/objective/objective.hpp>
 
-#include "gbkfit/cuda/fftutils.hpp"
 #include "gbkfit/cuda/random.hpp"
 
 namespace gbkfit::cuda::kernels {
@@ -24,29 +23,6 @@ atomic_set(T* addr, T val)
 {
     // TODO: revise this
     *addr = val;
-}
-
-template<typename T> __global__ void
-math_complex_multiply_and_scale(
-        typename cufft<T>::complex* arr1,
-        typename cufft<T>::complex* arr2,
-        int n, T scale)
-{
-    // Parallelization: per item in arr1/arr2
-    const int nthreads = n;
-    const int tid = blockIdx.x * blockDim.x + threadIdx.x;
-    if (tid >= nthreads)
-        return;
-
-    typename cufft<T>::complex a, b;
-
-    a.x = arr1[tid].x;
-    a.y = arr1[tid].y;
-    b.x = arr2[tid % n].x;
-    b.y = arr2[tid % n].y;
-
-    arr1[tid].x = (a.x*b.x-a.y*b.y)*scale;
-    arr1[tid].y = (a.x*b.y+a.y*b.x)*scale;
 }
 
 template<typename T> __global__ void
