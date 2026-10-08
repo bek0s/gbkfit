@@ -23,8 +23,9 @@ if(GBKFIT_CUDA)
   enable_language(CUDA)
 endif()
 
-find_package(Python 3.12 REQUIRED COMPONENTS Interpreter Development.Module)
-find_package(pybind11 3.0 CONFIG REQUIRED)
+find_package(Python 3.12 REQUIRED
+  COMPONENTS Interpreter Development.Module Development.SABIModule)
+find_package(nanobind CONFIG REQUIRED)
 
 # Python package directory the native modules are installed into
 set(GBKFIT_NATIVE_INSTALL_DIR gbkfit/driver/native)

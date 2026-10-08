@@ -12,8 +12,13 @@ foreach(name fftw3f_threads fftw3f fftw3_threads fftw3)
   list(APPEND FFTW3_LIBRARIES ${FFTW3_${name}_LIBRARY})
 endforeach()
 
-pybind11_add_module(
+# NOMINSIZE: nanobind optimises for size by default; we want speed
+nanobind_add_module(
   _host
+  STABLE_ABI
+  NB_STATIC
+  NOMINSIZE
+  LTO
   src/bindings.cpp
   src/dmodels.cpp
   src/gmodels.cpp
