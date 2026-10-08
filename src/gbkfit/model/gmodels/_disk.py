@@ -19,9 +19,11 @@ _log = logging.getLogger(__name__)
 # selection (s) and weight (w) polar traits
 TRAIT_KINDS = ('rpt', 'rht', 'vpt', 'vht', 'dpt', 'dht', 'zpt', 'spt', 'wpt')
 
-# The geometric parameters of a disk, node-wise if the disk is loose
-# (vsys, xpos, ypos) or tilted (posa, incl)
-GEOMETRY_PARAMS = ('vsys', 'xpos', 'ypos', 'posa', 'incl')
+# The geometric parameters of a disk, and the option that makes each of
+# them node-wise: loose (vsys, xpos, ypos) or tilted (posa, incl)
+NODEWISE_SWITCH = dict(
+    vsys='loose', xpos='loose', ypos='loose', posa='tilted', incl='tilted')
+GEOMETRY_PARAMS = tuple(NODEWISE_SWITCH)
 
 
 def _make_param_descs(key, nnodes, nw):
@@ -138,8 +140,9 @@ class Disk(abc.ABC):
 
         # Make descs for the geometric parameters. There is no systemic
         # velocity without velocity traits.
-        self._geometry_isnw = dict(
-            vsys=loose, xpos=loose, ypos=loose, posa=tilted, incl=tilted)
+        switches = dict(loose=loose, tilted=tilted)
+        self._geometry_isnw = {
+            name: switches[switch] for name, switch in NODEWISE_SWITCH.items()}
         self._geometry_pdescs = {
             name: _make_param_descs(name, nrnodes, self._geometry_isnw[name])
             for name in GEOMETRY_PARAMS

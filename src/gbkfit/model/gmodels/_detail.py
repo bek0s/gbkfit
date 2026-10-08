@@ -5,7 +5,7 @@ import numpy as np
 
 from gbkfit.math import interpolation
 from gbkfit.utils import iterutils, miscutils
-from . import traits
+from . import _disk, traits
 
 
 _log = logging.getLogger(__name__)
@@ -95,12 +95,12 @@ def validate_component_nwmodes(loose, tilted, nwmodes):
     vsys, xpos and ypos if the component is not loose, posa and incl if
     it is not tilted.
     """
+    switches = dict(loose=loose, tilted=tilted)
     result = {}
     for name, nwmode in nwmodes.items():
-        enabled_name = 'tilted' if name in ('posa', 'incl') else 'loose'
-        enabled = tilted if enabled_name == 'tilted' else loose
+        switch = _disk.NODEWISE_SWITCH[name]
         result[name] = _validate_component_nwmode(
-            enabled, enabled_name, nwmode, f'{name}_nwmode')
+            switches[switch], switch, nwmode, f'{name}_nwmode')
     return result
 
 
