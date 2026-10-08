@@ -61,37 +61,33 @@ class Dataset(parseutils.TypedSerializable, abc.ABC):
     def get(self, item, default=None):
         return self._data.get(item, default)
 
-    @property
+    # All data items have the same properties (see __init__())
+    def _first(self):
+        return next(iter(self.values()))
+
     def npix(self):
-        return next(iter(self.values())).npix
+        return self._first().npix()
 
-    @property
     def size(self):
-        return next(iter(self.values())).size
+        return self._first().size()
 
-    @property
     def step(self):
-        return next(iter(self.values())).step
+        return self._first().step()
 
-    @property
     def zero(self):
-        return next(iter(self.values())).zero
+        return self._first().zero()
 
-    @property
     def rpix(self):
-        return next(iter(self.values())).rpix
+        return self._first().rpix()
 
-    @property
     def rval(self):
-        return next(iter(self.values())).rval
+        return self._first().rval()
 
-    @property
     def rota(self):
-        return next(iter(self.values())).rota
+        return self._first().rota()
 
-    @property
     def dtype(self):
-        return next(iter(self.values())).dtype()
+        return self._first().dtype()
 
 
 class DatasetTypedParser(parseutils.TypedParser):
