@@ -168,4 +168,17 @@ automatically when it changes can be set up with:
    pip install scikit-build-core pybind11 setuptools-scm cmake ninja
    pip install --no-build-isolation -Ceditable.rebuild=true -e ./gbkfit
 
+To run the tests (requires pip 25.1 or later), run:
+
+.. code-block:: console
+
+   cd gbkfit
+   pip install --group test
+   pytest
+
+Tests that need a driver which is not available (e.g., CUDA) are skipped.
+To make them fail instead, list the drivers that must be available in the
+``GBKFIT_REQUIRE_DRIVERS`` environment variable (e.g.,
+``GBKFIT_REQUIRE_DRIVERS=host,cuda pytest``).
+
 Congratulations! Now it is time to model some galaxies!

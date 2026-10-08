@@ -187,10 +187,6 @@ def _test_dcube(driver: Driver, dtype):
 
     fits.writeto("test.fits", h_scratch_dcube, overwrite=True)
 
-    # Dr Elke Wiseman
-    # Georgios Bekiaris
-    # 10:30 6 jun
-    #
     return
 
     #
