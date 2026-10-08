@@ -64,6 +64,10 @@ def read_data(
     with astropy.io.fits.open(filename) as hdulist:
         data = hdulist[hdu].data
         header = hdulist[hdu].header
+    if data is None:
+        raise ConfigError(
+            f"{filename}: HDU {hdu} has no data; choose the HDU with the "
+            f"data (e.g. hdu: SCI)")
     try:
         wcs = astropy.wcs.WCS(header)
     except Exception as e:
