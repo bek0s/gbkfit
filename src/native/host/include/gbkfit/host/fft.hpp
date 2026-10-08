@@ -1,7 +1,13 @@
 #pragma once
 
+#include <complex>
+#include <thread>
+#include <unordered_map>
+#include <vector>
+
+#include <pocketfft_hdronly.h>
+
 #include "gbkfit/host/common.hpp"
-#include "gbkfit/host/fftutils.hpp"
 #include "gbkfit/host/kernels.hpp"
 
 namespace gbkfit::host {
@@ -11,16 +17,11 @@ class FFT
 {
 public:
 
-    enum class FFTType { R2C, C2R };
-
     using SizeType = std::array<int, 3>;
-    using PlanType = typename fftw3<T>::plan;
-    using RealType = typename fftw3<T>::real;
-    using ComplexType = typename fftw3<T>::complex;
+    using RealType = T;
+    using ComplexType = std::complex<T>;
     using DataCacheKeyType = std::pair<SizeType, RealType*>;
-    using DataCacheValueType = ComplexType*;
-    using PlanCacheKeyType = std::pair<SizeType, FFTType>;
-    using PlanCacheValueType = PlanType;
+    using DataCacheValueType = std::vector<ComplexType>;
 
     struct DataCacheKeyHashType {
         std::size_t operator()(const DataCacheKeyType& k) const {
@@ -31,41 +32,15 @@ public:
         }
     };
 
-    struct PlanCacheKeyHashType {
-        std::size_t operator()(const PlanCacheKeyType& k) const {
-            const auto size = k.first;
-            const auto type = k.second;
-            return size[0] ^ size[1] ^ size[2] ^
-                    static_cast<std::underlying_type_t<FFTType>>(type);
-        }
-    };
-
     using DataCacheMappingContainer = std::unordered_map<
         DataCacheKeyType, DataCacheValueType, DataCacheKeyHashType>;
 
-    using PlanCacheMappingContainer = std::unordered_map<
-        PlanCacheKeyType, PlanCacheValueType, PlanCacheKeyHashType>;
-
     FFT() {}
-
-    ~FFT()
-    {
-        clear_cache();
-    }
 
     void
     clear_cache()
     {
-        for(auto& [_, data] : m_data_cache) {
-            fftw3<T>::free(data);
-        }
         m_data_cache.clear();
-
-        for(auto& [_, plan] : m_plan_cache) {
-            fftw3<T>::destroy_plan(plan);
-            fftw3<T>::cleanup_threads();
-        }
-        m_plan_cache.clear();
     }
 
     void
@@ -107,93 +82,94 @@ public:
         const auto [n2, n1, n0] = size;
         const auto len = n0 * n1 * (n2 / 2 + 1);
 
-        if (m_data_cache.find(data1_key) == m_data_cache.end())
+        auto& data1_c = m_data_cache[data1_key];
+        if (data1_c.empty())
         {
-            m_data_cache[data1_key] = fftw3<T>::alloc_complex(len);
+            data1_c.resize(len);
         }
 
-        if (m_data_cache.find(data2_key) == m_data_cache.end())
+        auto& data2_c = m_data_cache[data2_key];
+        if (data2_c.empty())
         {
-            m_data_cache[data2_key] = fftw3<T>::alloc_complex(len);
-            fft_r2c_exec(size, data2_r_ptr, m_data_cache[data2_key]);
+            data2_c.resize(len);
+            fft_r2c_exec(size, data2_r_ptr, data2_c.data());
         }
 
-        auto* data1_c_ptr = m_data_cache[data1_key];
-        auto* data2_c_ptr = m_data_cache[data2_key];
-
-        fft_convolve_impl(size, data1_r_ptr, data1_c_ptr, data2_c_ptr);
+        fft_convolve_impl(size, data1_r_ptr, data1_c.data(), data2_c.data());
     }
 
 private:
 
-    PlanType
-    fft_r2c_plan(SizeType size, RealType* data_r, ComplexType* data_c)
+    // The size is given as (x, y, z), while the data is stored in
+    // row-major order, i.e., with shape (z, y, x).
+    static pocketfft::shape_t
+    real_shape(SizeType size)
     {
         const auto [n2, n1, n0] = size;
-        const auto len = n0 * n1 * n2;
-        auto tmp = std::vector<T>(len);
-        std::copy_n(data_r, len, tmp.data());
-        fftw3<T>::init_threads();
-        fftw3<T>::plan_with_nthreads(std::thread::hardware_concurrency());
-        auto plan = fftw3<T>::plan_dft_r2c_3d(
-                n0, n1, n2, data_r, data_c, FFTW_ESTIMATE);
-        std::copy_n(tmp.data(), len, data_r);
-        return plan;
+        return {std::size_t(n0), std::size_t(n1), std::size_t(n2)};
     }
 
-    PlanType
-    fft_c2r_plan(SizeType size, ComplexType* data_c, RealType* data_r)
+    // Strides (in bytes) of a row-major array with the given shape
+    template<typename U>
+    static pocketfft::stride_t
+    strides(const pocketfft::shape_t& shape)
     {
-        const auto [n2, n1, n0] = size;
-        const auto len = n0 * n1 * n2;
-        auto tmp = std::vector<T>(len);
-        std::copy_n(data_r, len, tmp.data());
-        fftw3<T>::init_threads();
-        fftw3<T>::plan_with_nthreads(std::thread::hardware_concurrency());
-        auto plan = fftw3<T>::plan_dft_c2r_3d(
-                n0, n1, n2, data_c, data_r, FFTW_ESTIMATE);
-        std::copy_n(tmp.data(), n0*n1*n2, data_r);
-        return plan;
+        const auto row = shape[2] * sizeof(U);
+        const auto plane = shape[1] * row;
+        return {
+            std::ptrdiff_t(plane),
+            std::ptrdiff_t(row),
+            std::ptrdiff_t(sizeof(U))};
+    }
+
+    // Shape of the non-redundant half of the r2c output
+    static pocketfft::shape_t
+    complex_shape(const pocketfft::shape_t& shape)
+    {
+        return {shape[0], shape[1], shape[2] / 2 + 1};
+    }
+
+    static std::size_t
+    nthreads()
+    {
+        return std::thread::hardware_concurrency();
     }
 
     void
-    fft_r2c_exec(SizeType size, RealType* data_r, ComplexType* data_c)
+    fft_r2c_exec(SizeType size, const RealType* data_r, ComplexType* data_c)
     {
-        const auto key = std::pair{size, FFTType::R2C};
-
-        if (m_plan_cache.find(key) == m_plan_cache.end())
-        {
-            m_plan_cache[key] = fft_r2c_plan(size, data_r, data_c);
-        }
-
-        fftw3<T>::execute_dft_r2c(m_plan_cache[key], data_r, data_c);
+        const auto shape_r = real_shape(size);
+        const auto shape_c = complex_shape(shape_r);
+        pocketfft::r2c(
+                shape_r,
+                strides<RealType>(shape_r),
+                strides<ComplexType>(shape_c),
+                {0, 1, 2}, pocketfft::FORWARD,
+                data_r, data_c, T{1}, nthreads());
     }
 
     void
-    fft_c2r_exec(SizeType size, ComplexType* data_c, RealType* data_r)
+    fft_c2r_exec(SizeType size, const ComplexType* data_c, RealType* data_r)
     {
-        const auto key = std::pair{size, FFTType::C2R};
-
-        if (m_plan_cache.find(key) == m_plan_cache.end())
-        {
-            m_plan_cache[key] = fft_c2r_plan(size, data_c, data_r);
-        }
-
-        fftw3<T>::execute_dft_c2r(m_plan_cache[key], data_c, data_r);
+        const auto shape_r = real_shape(size);
+        const auto shape_c = complex_shape(shape_r);
+        pocketfft::c2r(
+                shape_r,
+                strides<ComplexType>(shape_c),
+                strides<RealType>(shape_r),
+                {0, 1, 2}, pocketfft::BACKWARD,
+                data_c, data_r, T{1}, nthreads());
     }
 
     void
     complex_multiply_and_scale(
             const std::array<int, 3> size,
-            ComplexType* data1, ComplexType* data2)
+            ComplexType* data1, const ComplexType* data2)
     {
         const auto [n2, n1, n0] = size;
         const auto n = n0 * n1 * (n2 / 2 + 1);
         const auto nfactor = T{1} / (n0 * n1 * n2);
-        kernels::math_complex_multiply_and_scale<T>(
-                reinterpret_cast<typename fftw3<T>::complex*>(data1),
-                reinterpret_cast<typename fftw3<T>::complex*>(data2),
-                n, nfactor);
+        kernels::math_complex_multiply_and_scale<T>(data1, data2, n, nfactor);
     }
 
     void
@@ -207,7 +183,6 @@ private:
     }
 
     DataCacheMappingContainer m_data_cache;
-    PlanCacheMappingContainer m_plan_cache;
 };
 
 } // namespace gbkfit::host

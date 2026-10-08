@@ -120,11 +120,6 @@ most common reasons are:
 To install GBKFIT from source you will need:
 
 - A C++20 capable compiler (e.g., GCC 10+ or Clang 12+).
-- The FFTW3 library (single and double precision, with threads support).
-  This should be available through your OS package manager. Alternatively, it
-  can be obtained from `here <http://www.fftw.org/>`_. If it is installed in
-  a non-standard location, set the ``FFTW3_ROOT`` environment variable to its
-  installation prefix.
 - An OpenMP library.
   This usually comes with your compiler and you do not have to install
   anything. However, this is not always the case. For example, when compiling

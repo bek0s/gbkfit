@@ -2,6 +2,7 @@
 
 #include <cassert>
 #include <cmath>
+#include <complex>
 // #include <iostream>
 
 #include <omp.h>
@@ -10,7 +11,6 @@
 #include <gbkfit/gmodel/gmodels.hpp>
 #include <gbkfit/objective/objective.hpp>
 
-#include "gbkfit/host/fftutils.hpp"
 #include "gbkfit/host/random.hpp"
 
 namespace gbkfit::host::kernels {
@@ -31,24 +31,15 @@ atomic_set(T* addr, T val)
 
 template<typename T> void
 math_complex_multiply_and_scale(
-        typename fftw3<T>::complex* arr1,
-        typename fftw3<T>::complex* arr2,
-        int n, float scale)
+        std::complex<T>* arr1, const std::complex<T>* arr2, int n, T scale)
 {
     // Parallelization: per item in arr1/arr2
     #pragma omp parallel for
-    for(int i = 0; i < n; ++i) {
-
-    typename fftw3<T>::complex a, b;
-
-    a[0] = arr1[i][0];
-    a[1] = arr1[i][1];
-    b[0] = arr2[i % n][0];
-    b[1] = arr2[i % n][1];
-
-    arr1[i][0] = (a[0]*b[0]-a[1]*b[1])*scale;
-    arr1[i][1] = (a[0]*b[1]+a[1]*b[0])*scale;
-
+    for(int i = 0; i < n; ++i)
+    {
+        const T ar = arr1[i].real(), ai = arr1[i].imag();
+        const T br = arr2[i].real(), bi = arr2[i].imag();
+        arr1[i] = {(ar*br - ai*bi) * scale, (ar*bi + ai*br) * scale};
     }
 }
 
