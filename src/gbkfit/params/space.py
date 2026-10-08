@@ -90,18 +90,13 @@ class ParamSpace:
             pdescs: dict[str, ParamDesc],
             properties: dict[str, Any],
             transforms: Callable | None = None,
-            constants: dict[str, Any] | None = None,
-            unknown: str | None = None):
+            constants: dict[str, Any] | None = None):
         """
         constants are read-only values that expressions can use (e.g. the
-        radial nodes of a disk). unknown is what to do with properties of
-        unknown parameters: 'warn' (and ignore them) or 'error'; by
-        default, 'error' in strict mode (see parseutils.strict_mode).
+        radial nodes of a disk). Properties of unknown parameters are
+        reported like unknown options (see parseutils.report_unknown): a
+        warning, and an error in strict mode.
         """
-        if unknown is None:
-            unknown = 'error' if parseutils.is_strict() else 'warn'
-        if unknown not in ('warn', 'error'):
-            raise ValueError("unknown must be 'warn' or 'error'")
         self._pdescs = dict(pdescs)
         self._properties = copy.deepcopy(properties)
         self._transforms = transforms
@@ -156,13 +151,12 @@ class ParamSpace:
                 element_name(*e) for e in self._elements if e not in keys_of]:
             errors.append(f"these parameters have no value: {missing}")
         if unknown_keys:
-            message = (
-                f"these parameters are unknown: "
-                f"{parseutils.describe_unknown(unknown_keys, pdescs)}")
-            if unknown == 'error':
-                errors.append(message)
-            else:
-                _log.warning(f"{message}; they will be ignored")
+            # In strict mode, an error among the others
+            try:
+                parseutils.report_unknown(
+                    "unknown parameters", unknown_keys, pdescs)
+            except parseutils.ConfigError as e:
+                errors.append(str(e))
         errors += self._check_transforms()
         if not errors:
             errors += self._order_assignments()
