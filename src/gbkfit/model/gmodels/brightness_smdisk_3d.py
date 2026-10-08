@@ -51,17 +51,3 @@ class BrightnessSMDisk3D(DiskComponent, BrightnessComponent3D):
             traits_=dict(
                 bptraits=bptraits, bhtraits=bhtraits, zptraits=zptraits,
                 sptraits=sptraits, wptraits=wptraits))
-
-    def evaluate(
-            self,
-            driver, params, odata, image, wdata, bdata, obdata,
-            spat_size, spat_step, spat_zero, spat_rota,
-            dtype, out_extra):
-        spec_size = 1
-        spec_step = 0
-        spec_zero = 0
-        self._disk.evaluate(
-            driver, params, odata, image, None, wdata, bdata, obdata,
-            spat_size, spat_step, spat_zero, spat_rota,
-            spec_size, spec_step, spec_zero,
-            dtype, out_extra)

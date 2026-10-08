@@ -5,6 +5,7 @@ from gbkfit.utils import parseutils
 
 
 __all__ = [
+    'Component',
     'BrightnessComponent2D',
     'BrightnessComponent3D',
     'SpectralComponent2D',
@@ -13,78 +14,65 @@ __all__ = [
 ]
 
 
-class BrightnessComponent2D(parseutils.TypedSerializable, abc.ABC):
+class Component(parseutils.TypedSerializable, abc.ABC):
+    """
+    A component of a gmodel. The kinds of components below differ only in
+    the gmodels that accept them, and in the outputs they get.
+    """
 
     @abc.abstractmethod
     def pdescs(self):
         pass
 
+    def has_weights(self):
+        return False
+
     @abc.abstractmethod
-    def evaluate(
-            self, driver, params,
-            image_d, image_w, bdata,
-            spat_size, spat_step, spat_zero, spat_rota,
-            dtype, out_extra):
+    def evaluate(self, driver, params, grid, outputs, dtype, out_extra):
+        """
+        Add the component to the outputs.
+
+        grid has the 3d spatial grid and the spectral axis: spat_size,
+        spat_step, spat_zero (each in x, y, z order), spat_rota (degrees)
+        and spec_size, spec_step, spec_zero. The z axis of 2d gmodels and
+        the spectral axis of image gmodels have size 1 (and step 0).
+
+        outputs has the (device) arrays the component adds to, which a
+        gmodel may leave out: the 'image' or 'scube', the 3d spatial
+        weights ('wdata'), brightness ('bdata'), opacity ('odata') and
+        brightness after the opacity ('obdata'). Opacity components add
+        to odata, and the other components read it.
+
+        out_extra is a dict for the extra outputs (on the host) of the
+        component, or None.
+        """
         pass
 
 
-class BrightnessComponent3D(parseutils.TypedSerializable, abc.ABC):
-
-    @abc.abstractmethod
-    def pdescs(self):
-        pass
-
-    @abc.abstractmethod
-    def evaluate(
-            self, driver, params, odata,
-            image, wdata, rdata, ordata,
-            spat_size, spat_step, spat_zero, spat_rota,
-            dtype, out_extra):
-        pass
+class BrightnessComponent2D(Component, abc.ABC):
+    """A component of intensity_2d. Its outputs: image, wdata, bdata."""
 
 
-class SpectralComponent2D(parseutils.TypedSerializable, abc.ABC):
-
-    @abc.abstractmethod
-    def pdescs(self):
-        pass
-
-    @abc.abstractmethod
-    def evaluate(
-            self, driver, params,
-            scube_d, scube_w, rdata,
-            spat_size, spat_step, spat_zero, spat_rota,
-            spec_size, spec_step, spec_zero,
-            dtype, out_extra):
-        pass
+class BrightnessComponent3D(Component, abc.ABC):
+    """
+    A component of intensity_3d. Its outputs: image, wdata, bdata, odata,
+    obdata.
+    """
 
 
-class SpectralComponent3D(parseutils.TypedSerializable, abc.ABC):
-
-    @abc.abstractmethod
-    def pdescs(self):
-        pass
-
-    @abc.abstractmethod
-    def evaluate(
-            self, driver, params, odata,
-            scube_d, scube_w, rdata, ordata,
-            spat_size, spat_step, spat_zero, spat_rota,
-            spec_size, spec_step, spec_zero,
-            dtype, out_extra):
-        pass
+class SpectralComponent2D(Component, abc.ABC):
+    """A component of kinematics_2d. Its outputs: scube, wdata, bdata."""
 
 
-class OpacityComponent3D(parseutils.TypedSerializable, abc.ABC):
+class SpectralComponent3D(Component, abc.ABC):
+    """
+    A component of kinematics_3d. Its outputs: scube, wdata, bdata, odata,
+    obdata.
+    """
 
-    @abc.abstractmethod
-    def pdescs(self):
-        pass
 
-    @abc.abstractmethod
-    def evaluate(
-            self, driver, params,
-            odata,
-            spat_size, spat_step, spat_zero, spat_rota,
-            dtype, out_extra):
-        pass
+class OpacityComponent3D(Component, abc.ABC):
+    """
+    An opacity component of intensity_3d and kinematics_3d. Its output:
+    odata.
+    """

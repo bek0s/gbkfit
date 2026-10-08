@@ -48,19 +48,3 @@ class BrightnessSMDisk2D(DiskComponent, BrightnessComponent2D):
                 posa=posa_nwmode, incl=incl_nwmode),
             traits_=dict(
                 bptraits=bptraits, sptraits=sptraits, wptraits=wptraits))
-
-    def evaluate(
-            self, driver, params, image, wdata, bdata,
-            spat_size, spat_step, spat_zero, spat_rota,
-            dtype, out_extra):
-        spat_size = spat_size + (1,)
-        spat_step = spat_step + (0,)
-        spat_zero = spat_zero + (0,)
-        spec_size = 1
-        spec_step = 0
-        spec_zero = 0
-        self._disk.evaluate(
-            driver, params, None, image, None, wdata, bdata, None,
-            spat_size, spat_step, spat_zero, spat_rota,
-            spec_size, spec_step, spec_zero,
-            dtype, out_extra)

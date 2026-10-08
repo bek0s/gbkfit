@@ -61,15 +61,3 @@ class SpectralMCDisk3D(DiskComponent, SpectralComponent3D):
                 vhtraits=vhtraits, dptraits=dptraits, dhtraits=dhtraits,
                 zptraits=zptraits, sptraits=sptraits, wptraits=wptraits),
             cflux=cflux, seed=seed)
-
-    def evaluate(
-            self,
-            driver, params, odata, scube, wdata, bdata, obdata,
-            spat_size, spat_step, spat_zero, spat_rota,
-            spec_size, spec_step, spec_zero,
-            dtype, out_extra):
-        self._disk.evaluate(
-            driver, params, odata, None, scube, wdata, bdata, obdata,
-            spat_size, spat_step, spat_zero, spat_rota,
-            spec_size, spec_step, spec_zero,
-            dtype, out_extra)
