@@ -60,13 +60,7 @@ def trait_configs(parser):
 KNOWN_FAILURES = {
     ('dptraits', 'mixture_ggauss'):
         "a dispersion of exactly 0 (where the blob underflows) gives NaN: "
-        "the kernel samples the line's pdf at the channel centres",
-    ('ohtraits', 'ggauss', False):
-        "3-parameter height traits read their shape from params[1] "
-        "without rnodes (traits.hpp)",
-    ('ohtraits', 'moffat', False):
-        "3-parameter height traits read their shape from params[1] "
-        "without rnodes (traits.hpp)"}
+        "the kernel samples the line's pdf at the channel centres"}
 
 
 def cases():
