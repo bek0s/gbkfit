@@ -1,4 +1,7 @@
 
+#include <stdexcept>
+#include <string>
+
 #include <thrust/execution_policy.h>
 #include <thrust/functional.h>
 #include <thrust/transform_reduce.h>
@@ -10,6 +13,30 @@ namespace gbkfit::cuda {
 
 constexpr int BLOCK_SIZE = 256;
 
+// Turn a cuda error into an exception, which nanobind raises in Python
+void
+check(cudaError_t error, const char* what)
+{
+    if (error != cudaSuccess) {
+        throw std::runtime_error(
+                std::string(what) + " failed: " + cudaGetErrorString(error));
+    }
+}
+
+// Launch a kernel with one thread per item, wait for it to finish, and
+// raise any error of its launch or execution
+template<typename Kernel, typename... Args> void
+launch(const char* name, int n, Kernel kernel, Args... args)
+{
+    if (n <= 0)
+        return;
+    const dim3 bsize(BLOCK_SIZE);
+    const dim3 gsize((n + bsize.x - 1) / bsize.x);
+    kernel<<<gsize, bsize>>>(args...);
+    check(cudaGetLastError(), name);
+    check(cudaDeviceSynchronize(), name);
+}
+
 template<typename T> void
 Wrapper<T>::dmodel_dcube_downscale(
         int scale_x, int scale_y, int scale_z,
@@ -19,15 +46,12 @@ Wrapper<T>::dmodel_dcube_downscale(
         const T* src_cube, T* dst_cube)
 {
     const int n = dst_size_x * dst_size_y * dst_size_z;
-    dim3 bsize(BLOCK_SIZE);
-    dim3 gsize((n + bsize.x - 1) / bsize.x);
-    kernels::dmodel_dcube_downscale<<<gsize, bsize>>>(
+    launch("dmodel_dcube_downscale", n, kernels::dmodel_dcube_downscale<T>,
             scale_x, scale_y, scale_z,
             offset_x, offset_y, offset_z,
             src_size_x, src_size_y, src_size_z,
             dst_size_x, dst_size_y, dst_size_z,
             src_cube, dst_cube);
-    cudaDeviceSynchronize();
 }
 
 template<typename T> void
@@ -37,13 +61,10 @@ Wrapper<T>::dmodel_dcube_mask(
         T* dcube_d, T* dcube_m, T* dcube_w)
 {
     const int n = size_x * size_y * size_z;
-    dim3 bsize(BLOCK_SIZE);
-    dim3 gsize((n + bsize.x - 1) / bsize.x);
-    kernels::dmodel_dcube_mask<<<gsize, bsize>>>(
+    launch("dmodel_dcube_mask", n, kernels::dmodel_dcube_mask<T>,
             cutoff, apply,
             size_x, size_y, size_z,
             dcube_d, dcube_m, dcube_w);
-    cudaDeviceSynchronize();
 }
 
 template<typename T> void
@@ -57,9 +78,7 @@ Wrapper<T>::dmodel_mmaps_moments(
         T* mmaps_d, T* mmaps_m, T* mmaps_w)
 {
     const int n = size_x * size_y;
-    dim3 bsize(BLOCK_SIZE);
-    dim3 gsize((n + bsize.x - 1) / bsize.x);
-    kernels::dcube_moments<<<gsize, bsize>>>(
+    launch("dcube_moments", n, kernels::dcube_moments<T>,
             size_x, size_y, size_z,
             step_x, step_y, step_z,
             zero_x, zero_y, zero_z,
@@ -67,7 +86,6 @@ Wrapper<T>::dmodel_mmaps_moments(
             dcube_w,
             cutoff, norders, orders,
             mmaps_d, mmaps_m, mmaps_w);
-    cudaDeviceSynchronize();
 }
 
 template<typename T> void
@@ -78,14 +96,11 @@ Wrapper<T>::gmodel_wcube_evaluate(
         T* spec_cube)
 {
     const int n = spat_size_x * spat_size_y;
-    dim3 bsize(BLOCK_SIZE);
-    dim3 gsize((n + bsize.x - 1) / bsize.x);
-    kernels::gmodel_wcube_evaluate<<<gsize, bsize>>>(
+    launch("gmodel_wcube_evaluate", n, kernels::gmodel_wcube_evaluate<T>,
             spat_size_x, spat_size_y, spat_size_z,
             spec_size_z,
             spat_cube,
             spec_cube);
-   cudaDeviceSynchronize();
 }
 
 template<typename T> void
@@ -145,9 +160,7 @@ Wrapper<T>::gmodel_mcdisk_evaluate(
         T* vdata_cmp, T* ddata_cmp)
 {
     const int n = nclouds;
-    dim3 bsize(BLOCK_SIZE);
-    dim3 gsize((n + bsize.x - 1) / bsize.x);
-    kernels::gmodel_mcdisk_evaluate<<<gsize, bsize>>>(
+    launch("gmodel_mcdisk_evaluate", n, kernels::gmodel_mcdisk_evaluate<T>,
             cflux, nclouds,
             ncloudscsum, ncloudscsum_len,
             hasordint,
@@ -201,7 +214,6 @@ Wrapper<T>::gmodel_mcdisk_evaluate(
             rdata, rdata_cmp,
             ordata, ordata_cmp,
             vdata_cmp, ddata_cmp);
-    cudaDeviceSynchronize();
 }
 
 template<typename T> void
@@ -258,9 +270,7 @@ Wrapper<T>::gmodel_smdisk_evaluate(
         T* vdata_cmp, T* ddata_cmp)
 {
     const int n = spat_size_x * spat_size_y * spat_size_z;
-    dim3 bsize(BLOCK_SIZE);
-    dim3 gsize((n + bsize.x - 1) / bsize.x);
-    kernels::gmodel_smdisk_evaluate<<<gsize, bsize>>>(
+    launch("gmodel_smdisk_evaluate", n, kernels::gmodel_smdisk_evaluate<T>,
             loose, tilted,
             nrnodes, rnodes,
             vsys,
@@ -311,7 +321,6 @@ Wrapper<T>::gmodel_smdisk_evaluate(
             rdata, rdata_cmp,
             ordata, ordata_cmp,
             vdata_cmp, ddata_cmp);
-    cudaDeviceSynchronize();
 }
 
 template<typename T> void
@@ -319,11 +328,8 @@ Wrapper<T>::objective_count_pixels(
         const T* data1, const T* data2, int size, T epsilon, int* counts)
 {
     const int n = size;
-    dim3 bsize(BLOCK_SIZE);
-    dim3 gsize((n + bsize.x - 1) / bsize.x);
-    kernels::objective_count_pixels<<<gsize, bsize>>>(
+    launch("objective_count_pixels", n, kernels::objective_count_pixels<T>,
             data1, data2, size, epsilon, counts);
-    cudaDeviceSynchronize();
 }
 
 template<typename T> void
@@ -333,13 +339,10 @@ Wrapper<T>::objective_residual(
         int size, T weight, T* res)
 {
     const int n = size;
-    dim3 bsize(BLOCK_SIZE);
-    dim3 gsize((n + bsize.x - 1) / bsize.x);
-    kernels::objective_residual<<<gsize, bsize>>>(
+    launch("objective_residual", n, kernels::objective_residual<T>,
             obs_d, obs_e, obs_m,
             mdl_d, mdl_w, mdl_m,
             size, weight, res);
-    cudaDeviceSynchronize();
 }
 
 // The term of a residual sum, in double precision
@@ -364,7 +367,8 @@ Wrapper<T>::objective_residual_sum(
     const T result = thrust::transform_reduce(
             thrust::device, residual, residual + size,
             ResidualSumTerm<T>{squared}, 0.0, thrust::plus<double>());
-    cudaMemcpy(sum, &result, sizeof(T), cudaMemcpyHostToDevice);
+    check(cudaMemcpy(sum, &result, sizeof(T), cudaMemcpyHostToDevice),
+          "objective_residual_sum");
 }
 
 #define INSTANTIATE(T)\

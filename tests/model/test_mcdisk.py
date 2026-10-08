@@ -127,3 +127,9 @@ def test_mcdisk_does_not_depend_on_thread_count(tmp_path):
             cwd=pathlib.Path(__file__).parent, check=True)
         cubes.append(np.load(output))
     assert relative_difference(cubes[1], cubes[0]) < SAME_REALISATION
+
+
+def test_mcdisk_without_clouds(driver):
+    # A disk with zero flux has no clouds; its model is empty
+    cube = evaluate_disk('mcdisk', driver.type(), properties=dict(bpt_a=0))
+    assert not cube.any()
