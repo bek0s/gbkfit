@@ -5,6 +5,7 @@ Tests for the moment maps data model (mmaps).
 import pathlib
 
 import numpy as np
+import pytest
 
 
 REFERENCE_DIR = pathlib.Path(__file__).parents[1] / 'data' / 'reference_models'
@@ -114,3 +115,10 @@ def test_spectral_axis_from_the_data():
     assert dmodel.spec_rval() == 1500
     assert dmodel.spec_step() == 2
     assert dmodel.spec_size() == 161
+
+
+def test_at_least_one_moment_order():
+    # The moments kernel reads past an empty list of orders
+    from gbkfit.model.dmodels import DModelMMaps
+    with pytest.raises(RuntimeError, match="at least one moment order"):
+        DModelMMaps(size=(8, 8), orders=[])
