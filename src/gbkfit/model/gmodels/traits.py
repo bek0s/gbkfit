@@ -333,6 +333,9 @@ class TraitFeatureTrunc:
         return super().dump() | info  # noqa
 
     def __init__(self, **kwargs):
+        if not kwargs['trunc'] >= 0:
+            raise RuntimeError(
+                f"trunc must be at least 0; it is {kwargs['trunc']}")
         self._trunc = kwargs['trunc']
         super().__init__(**kwargs)
 
@@ -880,6 +883,19 @@ class BHTraitGGauss(BHTraitP2):
     @staticmethod
     def uid():
         return BHT_UID_GGAUSS
+
+    def __init__(
+            self,
+            rnodes: bool = False,
+            nwmode: NWMode | None = None,
+            trunc: int | float = TRUNC_DEFAULT):
+        # Normalising a truncated profile needs its cumulative distribution,
+        # which is not implemented for ggauss (ggauss_1d_cdf, math.hpp)
+        if trunc > 0:
+            raise NotImplementedError(
+                "a truncated ggauss brightness height trait is not "
+                "supported yet")
+        super().__init__(rnodes=rnodes, nwmode=nwmode, trunc=trunc)
 
 
 class BHTraitLorentz(BHTraitP1):
