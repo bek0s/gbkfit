@@ -47,9 +47,6 @@ class LSFPoint(LSF):
     def load(cls, info: dict[str, Any], *args, **kwargs) -> 'LSFPoint':
         return cls()
 
-    def dump(self) -> dict[str, Any]:
-        return dict(type=self.type())
-
     def _size_impl(self, step: float) -> float:
         return 1
 
@@ -76,11 +73,6 @@ class LSFGauss(LSF):
     def load(cls, info: dict[str, Any], *args, **kwargs) -> 'LSFGauss':
         opts = _load_lsf_common(cls, info)
         return cls(**opts)
-
-    def dump(self) -> dict[str, Any]:
-        return dict(
-            type=self.type(),
-            sigma=self._sigma)
 
     def __init__(self, sigma: float):
         self._sigma = sigma
@@ -112,12 +104,6 @@ class LSFGGauss(LSF):
     def load(cls, info: dict[str, Any], *args, **kwargs) -> 'LSFGGauss':
         opts = _load_lsf_common(cls, info)
         return cls(**opts)
-
-    def dump(self) -> dict[str, Any]:
-        return dict(
-            type=self.type(),
-            alpha=self._alpha,
-            beta=self._beta)
 
     def __init__(self, alpha: float, beta: float):
         self._alpha = alpha
@@ -151,11 +137,6 @@ class LSFLorentz(LSF):
         opts = _load_lsf_common(cls, info)
         return cls(**opts)
 
-    def dump(self) -> dict[str, Any]:
-        return dict(
-            type=self.type(),
-            gamma=self._gamma)
-
     def __init__(self, gamma: float):
         self._gamma = gamma
 
@@ -186,12 +167,6 @@ class LSFMoffat(LSF):
     def load(cls, info: dict[str, Any], *args, **kwargs) -> 'LSFMoffat':
         opts = _load_lsf_common(cls, info)
         return cls(**opts)
-
-    def dump(self) -> dict[str, Any]:
-        return dict(
-            type=self.type(),
-            alpha=self._alpha,
-            beta=self._beta)
 
     def __init__(self, alpha: float, beta: float):
         self._alpha = alpha

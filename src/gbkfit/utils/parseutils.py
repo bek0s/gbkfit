@@ -1,11 +1,14 @@
 import abc
 import copy
+import functools
 import importlib
 import inspect
 import logging
 import typing
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from typing import Any, TypeAlias
+
+import numpy as np
 
 from . import funcutils, iterutils, typeutils
 
@@ -186,23 +189,83 @@ def parse_options_for_callable(
     return options
 
 
+def _record_config(init):
+    """
+    Wrap an __init__ so that it records its arguments in the object (see
+    Serializable.config). Only the outermost __init__ records them: that
+    of the class of the object, whose signature is its configuration.
+    """
+    signature = inspect.signature(init)
+
+    @functools.wraps(init)
+    def wrapper(self, *args, **kwargs):
+        if '_config' not in self.__dict__:
+            bound = signature.bind(self, *args, **kwargs)
+            bound.apply_defaults()
+            config = {}
+            for name, parameter in list(signature.parameters.items())[1:]:
+                if parameter.kind is inspect.Parameter.VAR_KEYWORD:
+                    config.update(bound.arguments[name])
+                elif parameter.kind is not inspect.Parameter.VAR_POSITIONAL:
+                    config[name] = bound.arguments[name]
+            self._config = config
+        init(self, *args, **kwargs)
+    return wrapper
+
+
+def dump_value(value: Any) -> Any:
+    """
+    A value as plain data (for YAML or JSON): serializable objects as
+    their dumps (with their type), sequences as lists, and numpy values
+    as Python values.
+    """
+    if isinstance(value, TypedSerializable):
+        return dict(type=value.type()) | value.dump()
+    if isinstance(value, Serializable):
+        return value.dump()
+    if isinstance(value, Mapping):
+        return {k: dump_value(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple, np.ndarray)):
+        return [dump_value(v) for v in value]
+    if isinstance(value, np.generic):
+        return value.item()
+    if isinstance(value, np.dtype):
+        return value.name
+    return value
+
+
 class Serializable(abc.ABC):
     """
     Abstract base class for serializable objects.
 
     This class defines the interface for objects that can be serialized
-    to and deserialized from dictionaries.
+    to and deserialized from dictionaries. The arguments of the __init__
+    of an object are recorded when it is created (see config()), and
+    dump() returns them by default, so that loading a dump gives the same
+    object.
     """
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        if '__init__' in cls.__dict__:
+            cls.__init__ = _record_config(cls.__init__)
+
     @classmethod
     @abc.abstractmethod
     def load(cls, info: dict[str, Any], *args, **kwargs) -> 'Serializable':
         """Load an instance from a dictionary."""
         pass
 
-    @abc.abstractmethod
     def dump(self, *args, **kwargs) -> dict[str, Any]:
-        """Serialize the instance into a dictionary."""
-        pass
+        """
+        Serialize the instance into a dictionary: by default, the
+        arguments it was created with (including the default ones).
+        """
+        return dump_value(self.config())
+
+    def config(self) -> dict[str, Any]:
+        """The arguments of the __init__ the object was created with."""
+        return self.__dict__.get('_config', {})
 
 
 class BasicSerializable(Serializable, abc.ABC):
@@ -215,6 +278,9 @@ class TypedSerializable(Serializable, abc.ABC):
     @abc.abstractmethod
     def type() -> str:
         pass
+
+    def dump(self, *args, **kwargs) -> dict[str, Any]:
+        return dict(type=self.type()) | super().dump(*args, **kwargs)
 
 
 def _prepare_args_and_kwargs(

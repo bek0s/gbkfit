@@ -4,6 +4,7 @@ Tests for the options of the gmodel components, and their errors.
 
 import re
 
+import numpy as np
 import pytest
 from gbkfit.model import gmodel_parser, gmodels
 
@@ -137,9 +138,17 @@ def test_mcdisk_rejects_unsupported_traits(name):
 
 @pytest.mark.parametrize('name', ['spectral_smdisk_3d', 'spectral_mcdisk_3d'])
 def test_spectral_3d_with_several_velocity_traits(name):
-    # Rotation and radial motions, each with the default height trait
+    # Rotation and radial motions, each with the default height trait.
+    # The disk needs a height trait for each velocity trait to evaluate.
+    from gbkfit.driver.drivers.host import DriverHost
     gmodel = gmodel_parser.load(gmodel_info(name, vptraits=[
         ARCTAN, dict(type='nw_rad_uniform')]))
     assert {'vpt_vt', 'vpt1_vr'} <= set(gmodel.pdescs())
-    component = gmodel_parser.dump(gmodel)['components'][0]
-    assert component['vhtraits'] == [dict(type='one'), dict(type='one')]
+    params = {
+        name: np.ones(pdesc.size()) if pdesc.type() == 'vector' else 1.0
+        for name, pdesc in gmodel.pdescs().items()}
+    scube = np.zeros((11, 16, 16), np.float32)
+    gmodel.evaluate_scube(
+        DriverHost(), params, scube, None, (16, 16, 11), (1, 1, 10),
+        (-7.5, -7.5, -50), 0, np.float32, None)
+    assert scube.sum() > 0

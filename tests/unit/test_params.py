@@ -12,68 +12,34 @@ from gbkfit.params.keys import InvalidKeyError, parse_key
 from gbkfit.params.pdescs import *
 
 
+def describe(pdesc):
+    """The properties of a parameter description."""
+    return (
+        type(pdesc), pdesc.name(), pdesc.size(), pdesc.desc(),
+        pdesc.default(), pdesc.minimum(), pdesc.maximum())
+
+
 def test_param_desc_scalar():
-    pdesc_name = 'name'
-    pdesc_desc = 'description'
-    pdesc_default = 10
-    pdesc_minimum = -10
-    pdesc_maximum = +np.inf
-    # Test __init__
-    pdesc = ParamScalarDesc(
-        pdesc_name, pdesc_desc, pdesc_default,
-        pdesc_minimum, pdesc_maximum)
-    assert pdesc.name() == pdesc_name
-    assert pdesc.size() == 1
-    assert pdesc.desc() == pdesc_desc
-    assert pdesc.default() == pdesc_default
-    assert pdesc.minimum() == pdesc_minimum
-    assert pdesc.maximum() == pdesc_maximum
-    # Test load
+    pdesc = ParamScalarDesc('name', 'description', 10, -10)
+    assert describe(pdesc) == (
+        ParamScalarDesc, 'name', 1, 'description', 10, -10, np.inf)
+    # The dump has all options, as given, and loads to the same desc
     info = dict(
-        type='scalar',
-        name=pdesc_name,
-        desc=pdesc_desc,
-        default=pdesc_default,
-        minimum=pdesc_minimum)
-    desc_loaded = pdesc_parser.load(info)
-    assert desc_loaded.__class__ == pdesc.__class__ and \
-           desc_loaded.__dict__ == pdesc.__dict__
-    # Test dump
-    info_dumped = pdesc.dump()
-    assert info_dumped == info
+        type='scalar', name='name', desc='description',
+        default=10, minimum=-10, maximum=None)
+    assert pdesc.dump() == info
+    assert describe(pdesc_parser.load(info)) == describe(pdesc)
 
 
 def test_param_desc_vector():
-    pdesc_name = 'name'
-    pdesc_size = 5
-    pdesc_desc = 'description'
-    pdesc_default = 10
-    pdesc_minimum = -10
-    pdesc_maximum = +np.inf
-    # Test __init__
-    pdesc = ParamVectorDesc(
-        pdesc_name, pdesc_size, pdesc_desc, pdesc_default,
-        pdesc_minimum, pdesc_maximum)
-    assert pdesc.name() == pdesc_name
-    assert pdesc.size() == pdesc_size
-    assert pdesc.desc() == pdesc_desc
-    assert pdesc.default() == pdesc_default
-    assert pdesc.minimum() == pdesc_minimum
-    assert pdesc.maximum() == pdesc_maximum
-    # Test load
+    pdesc = ParamVectorDesc('name', 5, 'description', 10, -10)
+    assert describe(pdesc) == (
+        ParamVectorDesc, 'name', 5, 'description', 10, -10, np.inf)
     info = dict(
-        type='vector',
-        name=pdesc_name,
-        size=pdesc_size,
-        desc=pdesc_desc,
-        default=pdesc_default,
-        minimum=pdesc_minimum)
-    desc_loaded = pdesc_parser.load(info)
-    assert desc_loaded.__class__ == pdesc.__class__ and \
-           desc_loaded.__dict__ == pdesc.__dict__
-    # Test dump
-    info_dumped = pdesc.dump()
-    assert info_dumped == info
+        type='vector', name='name', size=5, desc='description',
+        default=10, minimum=-10, maximum=None)
+    assert pdesc.dump() == info
+    assert describe(pdesc_parser.load(info)) == describe(pdesc)
 
 
 PDESCS = dict(a=ParamScalarDesc('a'), v=ParamVectorDesc('v', 12))

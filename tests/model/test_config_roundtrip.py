@@ -49,17 +49,9 @@ def sample_info(cls):
         name: SAMPLE_OPTIONS[name] for name in required}
 
 
-# The types whose dump loses options
-LOSSY_DUMPS = ('axis_range',)
-
-
 def registered_types(parsers):
     return [
-        pytest.param(
-            parser, cls, id=f'{name}-{cls.type()}',
-            marks=[pytest.mark.xfail(
-                strict=True, reason="the dump loses options")]
-            if cls.type() in LOSSY_DUMPS else [])
+        pytest.param(parser, cls, id=f'{name}-{cls.type()}')
         for name, parser in parsers.items()
         for cls in parser._parsers.values()
         if cls.type() not in FILE_TYPES]
@@ -93,8 +85,6 @@ def test_pdescs_roundtrip():
     assert again == dumped
 
 
-@pytest.mark.xfail(
-    strict=True, reason="dmodel dumps call cval(), which no longer exists")
 @pytest.mark.parametrize(
     'config', CONFIGS, ids=[f'{c.parent.name}/{c.stem}' for c in CONFIGS])
 def test_model_roundtrip(config, evaluate_models):
@@ -109,4 +99,4 @@ def test_model_roundtrip(config, evaluate_models):
         for key, value in model.items():
             np.testing.assert_allclose(
                 model_dumped[key]['d'], value['d'],
-                rtol=1e-5, atol=1e-6 * np.abs(value['d']).max())
+                rtol=1e-5, atol=1e-6 * np.nanmax(np.abs(value['d'])))

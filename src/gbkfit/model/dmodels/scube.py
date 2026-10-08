@@ -30,9 +30,6 @@ class DModelSCube(DModel):
             cls, info, 3, True, True, dataset, DatasetSCube)
         return cls(**opts)
 
-    def dump(self):
-        return _detail.dump_dmodel_common(self)
-
     def __init__(
             self,
             size: Sequence[int],

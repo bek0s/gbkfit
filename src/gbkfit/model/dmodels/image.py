@@ -31,9 +31,6 @@ class DModelImage(DModel):
             cls, info, 2, True, False, dataset, DatasetImage)
         return cls(**opts)
 
-    def dump(self):
-        return _detail.dump_dmodel_common(self)
-
     def __init__(
             self,
             size: Sequence[int],

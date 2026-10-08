@@ -37,9 +37,6 @@ class DModelMMaps(DModel):
             cls, info, 2, True, True, dataset, DatasetMMaps)
         return cls(**opts)
 
-    def dump(self):
-        return _detail.dump_dmodel_common(self)
-
     def __init__(
             self,
             size: Sequence[int],
