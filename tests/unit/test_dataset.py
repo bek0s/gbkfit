@@ -86,7 +86,7 @@ def test_dataset_image():
     assert image01.size() == data01.size()
     assert image01.step() == data01.step()
     assert image01.zero() == data01.zero()
-    assert image01.dtype == data01.dtype()
+    assert image01.dtype() == data01.dtype()
     # Dump tests
     image01_info_dumped = dataset_parser.dump(image01, overwrite=True)
     image01_info = dict(
@@ -144,3 +144,4 @@ def test_data_reference_pixel_survives_fits_round_trip(tmp_path):
     loaded = data_parser.load(info)
     assert loaded.rpix() == (3, 4)
     assert loaded.step() == (2, 3)
+

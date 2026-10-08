@@ -74,7 +74,7 @@ def load_dmodel_common(
             rpix=info.get('rpix', dataset.rpix()),
             rval=info.get('rval', dataset.rval()),
             rota=info.get('rota', dataset.rota()),
-            dtype=info.get('dtype', np.dtype(dataset.dtype).name)))
+            dtype=info.get('dtype', np.dtype(dataset.dtype()).name)))
     # Validate, sanitize, and prepare dimensional options.
     # While we could rely on the type hint validation of
     # parseutils.parse_options_for_callable or other assertions inside

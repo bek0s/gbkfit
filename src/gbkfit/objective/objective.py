@@ -87,11 +87,11 @@ class Objective(parseutils.BasicSerializable, ABC):
                     f"dataset and dmodel are incompatible "
                     f"for item #{i} "
                     f"({keys_dat} != {keys_mdl})")
-            if dataset.dtype != dmodel.dtype():
+            if dataset.dtype() != dmodel.dtype():
                 raise RuntimeError(
                     f"dataset and dmodel have incompatible dtypes "
                     f"for item #{i} "
-                    f"({dataset.dtype} != {dmodel.dtype()})")
+                    f"({dataset.dtype()} != {dmodel.dtype()})")
             if dataset.size() != dmodel.size():
                 raise RuntimeError(
                     f"dataset and dmodel have incompatible sizes "
