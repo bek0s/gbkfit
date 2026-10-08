@@ -56,20 +56,21 @@ def relative_difference(actual, desired):
     return np.linalg.norm(actual - desired) / np.linalg.norm(desired)
 
 
-@pytest.mark.xfail(
-    reason="known bug: the mcdisk position angle is off by 180 degrees")
-def test_mcdisk_velocity_field_matches_smdisk(evaluate_model):
-    # Both configurations describe the same thick disk
-    smdisk = evaluate_model(CONFIG_DIR / 'smdisk.yaml')
-    mcdisk = evaluate_model(CONFIG_DIR / 'mcdisk.yaml')
-    smdisk_velocity, smdisk_intensity = velocity_field(
-        smdisk['model_0_scube_d'])
-    mcdisk_velocity, _ = velocity_field(mcdisk['model_0_scube_d'])
+@pytest.mark.parametrize('posa', [30, 120, 250])
+def test_mcdisk_velocity_field_matches_smdisk(driver, posa):
+    # An off-centre thick disk, with more clouds to reduce the noise
+    properties = dict(posa=posa, xpos=5, ypos=-3, vsys=50)
+    smdisk = evaluate_disk('smdisk', driver.type(), properties=properties)
+    mcdisk = evaluate_disk(
+        'mcdisk', driver.type(), dict(cflux=2e-5), properties)
+    smdisk_velocity, smdisk_intensity = velocity_field(smdisk)
+    mcdisk_velocity, mcdisk_intensity = velocity_field(mcdisk)
     # Compare where the disk is bright enough for little Monte Carlo noise
     bright = smdisk_intensity > 0.05 * smdisk_intensity.max()
-    correlation = np.corrcoef(
-        smdisk_velocity[bright], mcdisk_velocity[bright])[0, 1]
-    assert correlation > 0.95
+    difference = mcdisk_velocity[bright] - smdisk_velocity[bright]
+    # The velocities span about +-18 channels; the noise is ~0.015
+    assert np.sqrt(np.mean(difference ** 2)) < 0.1
+    assert relative_difference(mcdisk_intensity, smdisk_intensity) < 0.02
 
 
 @pytest.mark.parametrize('trunc', [0, 1], ids=['full', 'truncated'])
