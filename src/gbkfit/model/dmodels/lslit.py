@@ -36,11 +36,12 @@ class DModelLSlit(DModel):
     def __init__(
             self,
             size: Sequence[int],
-            step: Sequence[int | float] = (1, 1, 1),
+            step: Sequence[int | float] = (1, 1),
             rpix: Sequence[int | float] | None = None,
-            rval: Sequence[int | float] = (0, 0, 0),
+            rval: Sequence[int | float] = (0, 0),
             rota: int | float = 0,
-            scale: Sequence[int] = (1, 1, 1),
+            scale: Sequence[int] = (1, 1),
+            slit_width: int | float | None = None,
             psf: PSF | None = None,
             lsf: LSF | None = None,
             smooth_weights: bool = False,
@@ -48,36 +49,50 @@ class DModelLSlit(DModel):
             mask_apply: bool = False,
             dtype: str = 'float32'
     ):
+        """
+        A long-slit spectrum: a position-velocity image along a slit.
+
+        The size, step, rpix, rval and scale are given for the position
+        along the slit and the spectral axis. The slit runs along the x
+        axis of the sky, rotated by rota, through the reference position.
+        It is modelled as a cube one pixel wide along the y axis, whose
+        step is the slit width (by default, the step along the slit).
+        """
         super().__init__()
         if rpix is None:
             rpix = tuple((np.array(size) / 2 - 0.5).tolist())
-        size = tuple([size[0], 1, size[1]])
-        step = tuple(step)
-        rpix = tuple(rpix)
-        rval = tuple(rval)
-        scale = tuple(scale)
-        dtype = np.dtype(dtype)
+        if slit_width is None:
+            slit_width = step[0]
         self._dcube = _dcube.DCube(
-            size, step, rpix, rval, rota, scale, psf, lsf,
-            smooth_weights, mask_cutoff, mask_apply, dtype)
+            (size[0], 1, size[1]),
+            (step[0], slit_width, step[1]),
+            (rpix[0], 0, rpix[1]),
+            (rval[0], 0, rval[1]),
+            rota,
+            (scale[0], scale[0], scale[1]),
+            psf, lsf, smooth_weights, mask_cutoff, mask_apply,
+            np.dtype(dtype))
 
     def keys(self):
         return ['lslit']
 
     def size(self):
-        return self._dcube.size()
+        return _without_width(self._dcube.size())
 
     def step(self):
-        return self._dcube.step()
+        return _without_width(self._dcube.step())
 
     def zero(self):
-        return self._dcube.zero()
+        return _without_width(self._dcube.zero())
 
     def rota(self):
         return self._dcube.rota()
 
     def scale(self):
-        return self._dcube.scale()
+        return _without_width(self._dcube.scale())
+
+    def slit_width(self):
+        return self._dcube.step()[1]
 
     def psf(self):
         return self._dcube.psf()
@@ -114,8 +129,14 @@ class DModelLSlit(DModel):
         # Evaluate DCube (perform convolution, supersampling, etc)
         dcube.evaluate(out_dmodel_extra)
         # Model evaluation complete.
-        # Return data, mask, and weight arrays (if available)
+        # Return data, mask, and weight arrays (if available),
+        # with shape (spectral, position)
         return dict(lslit=dict(
-            d=dcube.dcube()[0][:, 0, :],
-            m=dcube.mcube()[0][:, 0, :] if has_mcube else None,
-            w=dcube.mcube()[0][:, 0, :] if has_wcube else None))
+            d=dcube.dcube()[:, 0, :],
+            m=dcube.mcube()[:, 0, :] if has_mcube else None,
+            w=dcube.wcube()[:, 0, :] if has_wcube else None))
+
+
+def _without_width(values):
+    """The (position, spectral) values of a (position, width, spectral)."""
+    return values[0], values[2]
