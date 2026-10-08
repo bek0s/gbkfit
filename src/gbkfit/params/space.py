@@ -14,6 +14,7 @@ ParamSpace evaluates all parameters, given the values of the free ones.
 import collections
 import copy
 import dataclasses
+import enum
 import graphlib
 import logging
 import numbers
@@ -40,6 +41,14 @@ _log = logging.getLogger(__name__)
 
 class InvalidParamsError(ValueError):
     """Invalid parameter properties; the message lists all problems."""
+
+
+class _Kind(enum.Enum):
+    """What sets the value of an element of a parameter."""
+    FIXED = enum.auto()        # a number
+    FREE = enum.auto()         # its properties (e.g. its initial value)
+    TIED = enum.auto()         # an expression
+    TRANSFORMED = enum.auto()  # the transforms function (set to None)
 
 
 @dataclasses.dataclass
@@ -108,8 +117,7 @@ class ParamSpace:
             for index in (
                 [None] if isinstance(pdesc, ParamScalarDesc)
                 else range(pdesc.size()))]
-        # What sets each element: 'fixed', 'free', 'tied' (an expression)
-        # or 'none' (transforms)
+        # What sets each element (see _Kind)
         self._kinds = {}
         self._fixed = {}
         self._free = {}
@@ -197,9 +205,9 @@ class ParamSpace:
         are tied.
         """
         kinds = set()
-        kinds.update(['free'] if free else [])
-        kinds.update(['tied', 'none'] if tied else [])
-        kinds.update(['fixed'] if fixed else [])
+        kinds.update([_Kind.FREE] if free else [])
+        kinds.update([_Kind.TIED, _Kind.TRANSFORMED] if tied else [])
+        kinds.update([_Kind.FIXED] if fixed else [])
         return [
             element_name(*e) for e in self._elements
             if self._kinds[e] in kinds]
@@ -279,17 +287,17 @@ class ParamSpace:
         if isinstance(value, bool):
             raise ValueError(f"{value} is not a number")
         if isinstance(value, numbers.Real):
-            kind = 'fixed'
+            kind = _Kind.FIXED
             self._fixed.update(dict.fromkeys(elements, float(value)))
         elif isinstance(value, str):
-            kind = 'tied'
+            kind = _Kind.TIED
             expression = Expression(value, self._pdescs, self._constants)
             self._assignments.append(
                 _Assignment(key, name, indices, expression))
         elif value is None:
-            kind = 'none'
+            kind = _Kind.TRANSFORMED
         elif isinstance(value, Mapping):
-            kind = 'free'
+            kind = _Kind.FREE
             self._free.update({e: copy.deepcopy(value) for e in elements})
         else:
             raise ValueError(f"invalid value: {value!r}")
@@ -297,7 +305,7 @@ class ParamSpace:
 
     def _check_transforms(self):
         nones = [element_name(*e) for e, k in self._kinds.items()
-                 if k == 'none']
+                 if k is _Kind.TRANSFORMED]
         if self._transforms and self._assignments:
             return [
                 "expressions and a transforms function are mutually "
@@ -386,7 +394,7 @@ class ParamSpace:
         result = copy.deepcopy(values)
         self._transforms(result)
         for element, kind in self._kinds.items():
-            if kind != 'none':
+            if kind is not _Kind.TRANSFORMED:
                 continue
             name, index = element
             try:
