@@ -8,7 +8,7 @@ import gbkfit.psflsf
 from gbkfit.utils import iterutils, parseutils
 
 
-__init__ = [
+__all__ = [
     'load_dmodel_common',
     'dump_dmodel_common'
 ]
