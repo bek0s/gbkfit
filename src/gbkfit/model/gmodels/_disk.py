@@ -370,6 +370,7 @@ class Disk(abc.ABC):
         # The keyword arguments of the native evaluation functions
         grid_and_outputs = dict(
             spat_size=spat_size, spat_step=spat_step, spat_zero=spat_zero,
+            spat_rota=spat_rota,
             spec_size=spec_size, spec_step=spec_step, spec_zero=spec_zero,
             opacity=odata,
             image=image, scube=scube,

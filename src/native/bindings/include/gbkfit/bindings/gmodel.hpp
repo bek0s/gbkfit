@@ -91,6 +91,7 @@ struct GModel
             std::array<int, 3> spat_size,
             std::array<T, 3> spat_step,
             std::array<T, 3> spat_zero,
+            T spat_rota,
             int spec_size, T spec_step, T spec_zero,
             ConstData opacity,
             Data image, Data scube,
@@ -100,7 +101,7 @@ struct GModel
             Data vdata_cmp, Data ddata_cmp)
     {
         Kernels::gmodel_smdisk_evaluate(make_args(
-                disk, spat_size, spat_step, spat_zero,
+                disk, spat_size, spat_step, spat_zero, spat_rota,
                 spec_size, spec_step, spec_zero, opacity,
                 image, scube, wdata, wdata_cmp, rdata, rdata_cmp,
                 ordata, ordata_cmp, vdata_cmp, ddata_cmp));
@@ -114,6 +115,7 @@ struct GModel
             std::array<int, 3> spat_size,
             std::array<T, 3> spat_step,
             std::array<T, 3> spat_zero,
+            T spat_rota,
             int spec_size, T spec_step, T spec_zero,
             ConstData opacity,
             Data image, Data scube,
@@ -123,7 +125,7 @@ struct GModel
             Data vdata_cmp, Data ddata_cmp)
     {
         const auto args = make_args(
-                disk, spat_size, spat_step, spat_zero,
+                disk, spat_size, spat_step, spat_zero, spat_rota,
                 spec_size, spec_step, spec_zero, opacity,
                 image, scube, wdata, wdata_cmp, rdata, rdata_cmp,
                 ordata, ordata_cmp, vdata_cmp, ddata_cmp);
@@ -194,7 +196,8 @@ struct GModel
             return std::make_tuple(
                     first...,
                     nb::arg("spat_size"), nb::arg("spat_step"),
-                    nb::arg("spat_zero"), nb::arg("spec_size"),
+                    nb::arg("spat_zero"), nb::arg("spat_rota"),
+                    nb::arg("spec_size"),
                     nb::arg("spec_step"), nb::arg("spec_zero"),
                     nb::arg("opacity").noconvert().none() = nb::none(),
                     nb::arg("image").noconvert().none() = nb::none(),
@@ -234,6 +237,7 @@ private:
             std::array<int, 3> spat_size,
             std::array<T, 3> spat_step,
             std::array<T, 3> spat_zero,
+            T spat_rota,
             int spec_size, T spec_step, T spec_zero,
             const ConstData& opacity,
             const Data& image, const Data& scube,
@@ -285,6 +289,7 @@ private:
             a.spat_step[i] = spat_step[i];
             a.spat_zero[i] = spat_zero[i];
         }
+        a.spat_rota = spat_rota;
         a.spec_size = spec_size;
         a.spec_step = spec_step;
         a.spec_zero = spec_zero;

@@ -414,6 +414,9 @@ gmodel_mcdisk_evaluate_cloud(
     T xn=xd, yn=yd, zn=zd;
     transform_cpos_posa_incl_inverse(xn, yn, zn, xposi, yposi, posai, incli);
 
+    // world-to-image transform
+    transform_rh_rotate_z(xn, yn, xn, yn, -a.spat_rota * DEG_TO_RAD<T>);
+
     //
     int x = std::rint((xn - a.spat_zero[0])/a.spat_step[0]);
     int y = std::rint((yn - a.spat_zero[1])/a.spat_step[1]);
@@ -575,6 +578,7 @@ gmodel_smdisk_evaluate_spaxel(int x, int y, int z, const DiskArgs<T>& a)
     xn = a.spat_zero[0] + x * a.spat_step[0];
     yn = a.spat_zero[1] + y * a.spat_step[1];
     zn = a.spat_zero[2] + z * a.spat_step[2];
+    transform_rh_rotate_z(xn, yn, xn, yn, a.spat_rota * DEG_TO_RAD<T>);
 
     // If the disk is loose or tilted, we need to calculate the pixel's
     // radial node index and radius now.

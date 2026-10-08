@@ -43,10 +43,13 @@ struct DiskArgs
     // The opacity of the 3d spatial grid (optional)
     const T* opacity = nullptr;
 
-    // The 3d spatial grid, in (x, y, z) order, and the spectral axis
+    // The 3d spatial grid, in (x, y, z) order, and the spectral axis.
+    // The x and y axes of the grid are rotated on the sky by spat_rota
+    // degrees (counterclockwise, like a position angle).
     int spat_size[3] = {0, 0, 0};
     T spat_step[3] = {0, 0, 0};
     T spat_zero[3] = {0, 0, 0};
+    T spat_rota = 0;
     int spec_size = 0;
     T spec_step = 0;
     T spec_zero = 0;
