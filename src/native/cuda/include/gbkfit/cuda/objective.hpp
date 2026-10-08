@@ -15,6 +15,9 @@ struct Objective
             Ptr obs_d, Ptr obs_e, Ptr obs_m,
             Ptr mdl_d, Ptr mdl_w, Ptr mdl_m,
             int size, T weight, Ptr residual) const;
+
+    void
+    residual_sum(Ptr residual, int size, bool squared, Ptr sum) const;
 };
 
 } // namespace gbkfit::cuda

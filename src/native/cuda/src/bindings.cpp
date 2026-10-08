@@ -27,5 +27,6 @@ NB_MODULE(EXTENSION_NAME, m)
     nb::class_<Objective<float>>(m, "Objectivef32")
             .def(nb::init<>())
             .def("count_pixels", &Objective<float>::count_pixels)
-            .def("residual", &Objective<float>::residual);
+            .def("residual", &Objective<float>::residual)
+            .def("residual_sum", &Objective<float>::residual_sum);
 }

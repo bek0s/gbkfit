@@ -33,6 +33,15 @@ Objective<T>::residual(
             reinterpret_cast<T*>(residual));
 }
 
+template<typename T> void
+Objective<T>::residual_sum(Ptr residual, int size, bool squared, Ptr sum) const
+{
+    Wrapper<T>::objective_residual_sum(
+            reinterpret_cast<const T*>(residual),
+            size, squared,
+            reinterpret_cast<T*>(sum));
+}
+
 #define INSTANTIATE(T)\
     template struct Objective<T>;
 INSTANTIATE(float)

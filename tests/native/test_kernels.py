@@ -122,18 +122,29 @@ def test_residual(driver, ndarrays_regression):
         dict(result=memory.to_host(residual)))
 
 
-def test_residual_sum(driver, request):
-    if driver.type() == 'cuda':
-        request.applymarker(pytest.mark.xfail(
-            raises=AttributeError,
-            reason="residual_sum is not bound in the cuda module yet"))
+def residual_sum(driver, values, squared):
     memory = Memory(driver)
     objective = driver.backends().objective(DTYPE)
-    values = np.linspace(-1, 1, 1000, dtype=DTYPE)
     total = memory.to_device(np.zeros(1, DTYPE))
-    objective.residual_sum(memory.to_device(values), True, total)
-    assert memory.to_host(total)[0] == pytest.approx(
-        np.sum(values ** 2), rel=1e-5)
+    objective.residual_sum(
+        memory.to_device(values.astype(DTYPE)), squared, total)
+    return memory.to_host(total)[0]
+
+
+def test_residual_sum(driver):
+    values = np.linspace(-1, 1, 1000, dtype=DTYPE)
+    assert residual_sum(driver, values, True) == pytest.approx(
+        np.sum(values.astype(np.float64) ** 2), rel=1e-6)
+    assert residual_sum(driver, values, False) == pytest.approx(
+        np.sum(np.abs(values.astype(np.float64))), rel=1e-6)
+
+
+def test_residual_sum_precision(driver):
+    # Accumulated in float32, the small terms would be lost next to the
+    # large one (float32 numbers near 1e8 are 8 apart)
+    values = np.ones(1000)
+    values[0] = 1e8
+    assert residual_sum(driver, values, False) == np.float32(1e8 + 999)
 
 
 def _trait_args(kind, memory, trait=None, params=()):

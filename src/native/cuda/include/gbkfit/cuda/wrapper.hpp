@@ -156,8 +156,8 @@ struct Wrapper
             int size, T weight, T* res);
 
     static void
-    objective_residual(
-            const T* data, const T*  data_w, const T* data_m, const T* model, const T* model_w, const T* model_m, int size, T* out);
+    objective_residual_sum(
+            const T* residual, int size, bool squared, T* sum);
 };
 
 }} // namespace gbkfit::cuda

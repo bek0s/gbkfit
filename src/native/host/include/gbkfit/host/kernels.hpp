@@ -487,11 +487,12 @@ objective_residual(
 template<typename T> void
 objective_residual_sum(const T* residual, int size, bool squared, T* sum)
 {
-    T sum_ = 0;
+    // Accumulate in double precision: a cube can have millions of terms
+    double sum_ = 0;
     #pragma omp parallel for reduction(+:sum_)
     for(int i = 0; i < size; ++i) {
 
-    const T r = residual[i];
+    const double r = residual[i];
     sum_ += squared ? r * r : std::abs(r);
 
     }
