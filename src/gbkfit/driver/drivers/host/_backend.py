@@ -1,7 +1,7 @@
 
 import numpy as np
 
-import gbkfit.driver.native.libgbkfit_host as native_module
+import gbkfit.driver.native._host as native_module
 from gbkfit.driver.backend import DriverBackends
 from .._detail.native import *
 

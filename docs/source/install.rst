@@ -19,7 +19,7 @@ The following operating systems are supported:
 Python environment requirements
 -------------------------------
 
-GBKFIT requires Python 3.9 or later.
+GBKFIT requires Python 3.12 or later.
 
 Dealing with old Python environments
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -119,44 +119,53 @@ most common reasons are:
 
 To install GBKFIT from source you will need:
 
-- A C++ 14 capable compiler.
-  Any recent version of GCC, Clang, ICC, or PGI will do.
-- The FFTW3 library.
+- A C++20 capable compiler (e.g., GCC 10+ or Clang 12+).
+- The FFTW3 library (single and double precision, with threads support).
   This should be available through your OS package manager. Alternatively, it
-  can be obtained from `here <http://www.fftw.org/>`_.
+  can be obtained from `here <http://www.fftw.org/>`_. If it is installed in
+  a non-standard location, set the ``FFTW3_ROOT`` environment variable to its
+  installation prefix.
 - An OpenMP library.
   This usually comes with your compiler and you do not have to install
   anything. However, this is not always the case. For example, when compiling
   with Apple Clang compiler, you may have to install the libomp library
   (available through Homebrew and MacPorts).
 
+CMake, Ninja, and all other build-time dependencies are downloaded
+automatically by pip.
+
 Once all required dependencies are installed, run:
 
 .. code-block:: console
 
-   git clone --recurse-submodules --remote-submodules https://github.com/bek0s/gbkfit.git
+   git clone https://github.com/bek0s/gbkfit.git
 
-Before compiling the source code, we need to specify what hardware support we want to compile GBKFIT with.
-
-To enable multi-core CPU support, run:
-
-.. code-block:: console
-
-   export GBKFIT_BUILD_HOST=1
-
-To enable CUDA GPU support, run:
-
-.. code-block:: console
-
-   export GBKFIT_BUILD_CUDA=1
-
-.. attention::
-   Support for CUDA GPUs is not fully functional yet. Do not enable it.
-
-To compile and install your local copy of GBKFIT, run:
+To compile and install your local copy of GBKFIT with multi-core CPU support,
+run:
 
 .. code-block:: console
 
    pip install ./gbkfit
+
+To also enable CUDA GPU support (requires the CUDA Toolkit), run instead:
+
+.. code-block:: console
+
+   pip install ./gbkfit -Ccmake.define.GBKFIT_CUDA=ON
+
+By default, the CUDA code is compiled for the GPU(s) present on the build
+machine. To target other GPUs, also pass, for example,
+``-Ccmake.define.CMAKE_CUDA_ARCHITECTURES="75;86;89"``.
+
+.. attention::
+   Support for CUDA GPUs is not fully functional yet. Do not enable it.
+
+For development, an editable install that recompiles the native code
+automatically when it changes can be set up with:
+
+.. code-block:: console
+
+   pip install scikit-build-core pybind11 setuptools-scm cmake ninja
+   pip install --no-build-isolation -Ceditable.rebuild=true -e ./gbkfit
 
 Congratulations! Now it is time to model some galaxies!
