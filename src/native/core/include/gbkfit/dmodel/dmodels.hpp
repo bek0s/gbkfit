@@ -216,7 +216,7 @@ dmodel_mmaps_moments(
             const int idx = index_3d_to_1d(x, y, z, size_x, size_y);
             T flx = dcube_d[idx];
             T vel = zero_z + z * step_z;
-            mn_sum += flx * std::pow(vel - m1, orders[m]); // * step_z;
+            mn_sum += flx * std::pow(vel - m1, orders[m]) * step_z;
         }
 
         // Moment is valid only if not masked
