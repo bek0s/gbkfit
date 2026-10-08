@@ -34,16 +34,15 @@ def run_eval(mode, config, workdir):
 def test_objective_residuals(tmp_path):
     # Evaluate a model, and use it plus 1 as the data, with errors of 2.
     # Then the residual (model - data) / error is -0.5 everywhere, and
-    # the weighted residual (weight 0.5) is -0.25.
+    # the weighted residual (weight 0.5) is -0.25. The data file has no
+    # WCS, so its reference pixel is its centre, as in the model.
     config = yaml.load(REFERENCE_DIR / 'thin_disk_scube.yaml')
     model = run_eval('model', config, tmp_path / 'model')['model_0_scube_d']
     fits.writeto(tmp_path / 'data.fits', model + 1)
-    dmodel = config['models'][0]['dmodel']
     config['datasets'] = [dict(
         type='scube',
         scube=dict(data=str(tmp_path / 'data.fits'), error=2.0),
-        step=dmodel['step'],
-        rpix=[size / 2 - 0.5 for size in dmodel['size']])]
+        step=config['models'][0]['dmodel']['step'])]
     config['objective'] = dict(wu=0.5)
     outputs = run_eval('objective', config, tmp_path / 'objective')
     np.testing.assert_allclose(outputs['residual_scube_d'], -0.5, rtol=1e-5)

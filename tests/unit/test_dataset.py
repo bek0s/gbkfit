@@ -119,3 +119,28 @@ def test_dataset_mmaps():
 
 def test_dataset_scube():
     pass
+
+
+def test_data_reference_pixel_from_fits_header(tmp_path):
+    # The FITS reference pixel (CRPIX) is 1-based; gbkfit's is 0-based.
+    # Axes without a reference pixel use their centre.
+    from astropy.io import fits
+    header = fits.Header(dict(CRPIX1=10, CDELT1=1, CDELT2=1))
+    fits.writeto(tmp_path / 'data.fits', np.zeros((8, 20)), header)
+    data = data_parser.load(dict(data=str(tmp_path / 'data.fits')))
+    assert data.rpix() == (9, 3.5)
+
+
+def test_data_reference_pixel_without_fits_header(tmp_path):
+    from astropy.io import fits
+    fits.writeto(tmp_path / 'data.fits', np.zeros((8, 20)))
+    data = data_parser.load(dict(data=str(tmp_path / 'data.fits')))
+    assert data.rpix() == (9.5, 3.5)
+
+
+def test_data_reference_pixel_survives_fits_round_trip(tmp_path):
+    data = Data(np.zeros((8, 20)), rpix=(3, 4), step=(2, 3))
+    info = data.dump(str(tmp_path / 'data.fits'), dump_wcs=False)
+    loaded = data_parser.load(info)
+    assert loaded.rpix() == (3, 4)
+    assert loaded.step() == (2, 3)
