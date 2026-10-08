@@ -58,6 +58,7 @@ class SpectralSMDisk3D(SpectralComponent3D):
     ):
         self._disk = _component.make_disk(
             type(self), _smdisk.SMDisk, self._slots,
+            rdata_key='bdata',
             loose=loose, tilted=tilted,
             rnmin=rnmin, rnmax=rnmax, rnsep=rnsep, rnlen=rnlen,
             rnodes=rnodes, rstep=rstep, interp=interp,

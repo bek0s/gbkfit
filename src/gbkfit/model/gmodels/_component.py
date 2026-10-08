@@ -21,13 +21,14 @@ __all__ = [
 class Slot:
     """
     The option of a component with its traits of one kind: its name, the
-    kind of the traits in the disk (see _disk.TRAIT_KINDS), and their
-    parser. A height trait slot must have as many traits as the polar
-    trait slot it pairs with. If it has a default trait, it is used for
-    each polar trait without a height trait.
+    kind of the traits in the disk (see _disk.TRAIT_KINDS), the prefix of
+    their parameters, and their parser. A height trait slot must have as
+    many traits as the polar trait slot it pairs with. If it has a default
+    trait, it is used for each polar trait without a height trait.
     """
     key: str
     kind: str
+    prefix: str
     parser: parseutils.TypedParser
     pairs_with: str | None = None
     default: type[traits.Trait] | None = None
@@ -36,17 +37,21 @@ class Slot:
 # The trait slots. The density traits of a disk are surface brightness
 # traits in brightness and spectral components, and opacity traits in
 # opacity components.
-BPT = Slot('bptraits', 'rpt', traits.bpt_parser)
-BHT = Slot('bhtraits', 'rht', traits.bht_parser, 'bptraits')
-OPT = Slot('optraits', 'rpt', traits.opt_parser)
-OHT = Slot('ohtraits', 'rht', traits.oht_parser, 'optraits')
-VPT = Slot('vptraits', 'vpt', traits.vpt_parser)
-VHT = Slot('vhtraits', 'vht', traits.vht_parser, 'vptraits', traits.VHTraitOne)
-DPT = Slot('dptraits', 'dpt', traits.dpt_parser)
-DHT = Slot('dhtraits', 'dht', traits.dht_parser, 'dptraits', traits.DHTraitOne)
-ZPT = Slot('zptraits', 'zpt', traits.zpt_parser)
-SPT = Slot('sptraits', 'spt', traits.spt_parser)
-WPT = Slot('wptraits', 'wpt', traits.wpt_parser)
+BPT = Slot('bptraits', 'rpt', 'bpt', traits.bpt_parser)
+BHT = Slot('bhtraits', 'rht', 'bht', traits.bht_parser, 'bptraits')
+OPT = Slot('optraits', 'rpt', 'opt', traits.opt_parser)
+OHT = Slot('ohtraits', 'rht', 'oht', traits.oht_parser, 'optraits')
+VPT = Slot('vptraits', 'vpt', 'vpt', traits.vpt_parser)
+VHT = Slot(
+    'vhtraits', 'vht', 'vht', traits.vht_parser, 'vptraits',
+    traits.VHTraitOne)
+DPT = Slot('dptraits', 'dpt', 'dpt', traits.dpt_parser)
+DHT = Slot(
+    'dhtraits', 'dht', 'dht', traits.dht_parser, 'dptraits',
+    traits.DHTraitOne)
+ZPT = Slot('zptraits', 'zpt', 'zpt', traits.zpt_parser)
+SPT = Slot('sptraits', 'spt', 'spt', traits.spt_parser)
+WPT = Slot('wptraits', 'wpt', 'wpt', traits.wpt_parser)
 
 # The geometric parameters that can have a node-wise mode: those of all
 # components, and those of the spectral components, which also have a
@@ -75,12 +80,13 @@ def load_options(cls, info, slots, nwmodes):
 
 
 def make_disk(
-        cls, disk_class, slots,
+        cls, disk_class, slots, rdata_key,
         loose, tilted, rnmin, rnmax, rnsep, rnlen, rnodes, rstep, interp,
         nwmodes, traits_, **disk_options):
     """
     The disk of a component of class cls, of class disk_class, with the
-    traits of the given slots. nwmodes has the node-wise modes, keyed by
+    traits of the given slots, and its density map named rdata_key in the
+    extra outputs (e.g. 'bdata'). nwmodes has the node-wise modes, keyed by
     geometric parameter (e.g. 'xpos'), and traits_ the traits, keyed by
     option (e.g. 'bptraits'). disk_options are the options of the type
     of disk (e.g. cflux and seed of MCDisk).
@@ -94,7 +100,9 @@ def make_disk(
         **disk_options,
         loose=loose, tilted=tilted, **node_args,
         nwmodes=nwmodes,
-        traits_={slot.kind: traits_[slot.key] for slot in slots})
+        traits_={slot.kind: traits_[slot.key] for slot in slots},
+        prefixes={slot.kind: slot.prefix for slot in slots},
+        rdata_key=rdata_key)
 
 
 def dump_disk(disk, slots, nwmodes):
