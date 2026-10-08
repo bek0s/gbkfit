@@ -124,9 +124,9 @@ class GModelIntensity3D(GModelImage):
             out_extra):
 
         if (self._driver is not driver
-                or self._size[:2] != size
-                or self._step[:2] != step
-                or self._zero[:2] != zero
+                or tuple(self._size[:2]) != tuple(size[:2])
+                or tuple(self._step[:2]) != tuple(step[:2])
+                or tuple(self._zero[:2]) != tuple(zero[:2])
                 or self._dtype != dtype):
             self._prepare(driver, image_w, size, step, zero, dtype)
 
@@ -152,7 +152,9 @@ class GModelIntensity3D(GModelImage):
             driver.mem_fill(obdata, 0)
 
         # Evaluate opacity components
+        # The opacity components add to the opacity cube, so clear it
         if ocomponents:
+            driver.mem_fill(odata, 0)
             _detail.evaluate_components_o3d(
                 ocomponents, driver, params, omappings,
                 odata,
