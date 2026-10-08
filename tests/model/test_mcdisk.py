@@ -144,3 +144,21 @@ def test_mcdisk_seed(driver):
     assert relative_difference(seed1, default) > 1e-3
     # Different realisations of the same disk
     assert seed1.sum() == pytest.approx(default.sum(), rel=1e-5)
+
+
+@pytest.mark.parametrize('order', [0, 2])
+def test_mcdisk_harmonic_brightness_matches_smdisk(driver, order):
+    # An exponential disk plus a harmonic of the given order (a ring for
+    # order 0). The clouds of a harmonic carry the sign of cos(k(t - p)).
+    component = dict(
+        cflux=2e-5,
+        bptraits=[
+            dict(type='exponential'), dict(type='nw_harmonic', order=order)],
+        bhtraits=[dict(type='sech2'), dict(type='sech2')])
+    properties = dict(bpt1_a=[0.3] * 11, bht1_s=1) | (
+        dict(bpt1_p=[40] * 11) if order else {})
+    mcdisk = evaluate_disk('mcdisk', driver.type(), component, properties)
+    del component['cflux']
+    smdisk = evaluate_disk('smdisk', driver.type(), component, properties)
+    assert relative_difference(mcdisk.sum(0), smdisk.sum(0)) < 0.02
+
