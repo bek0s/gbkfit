@@ -92,6 +92,13 @@ class GModel(parseutils.TypedSerializable, abc.ABC):
     def has_weights(self):
         pass
 
+    def constants(self):
+        """
+        Values that parameter expressions can use (e.g. the radial nodes
+        of a disk), by name.
+        """
+        return {}
+
 
 class GModelImage(GModel, abc.ABC):
 

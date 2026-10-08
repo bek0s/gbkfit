@@ -121,6 +121,9 @@ class DiskComponent:
     def has_weights(self):
         return bool(self._disk.traits('wpt'))
 
+    def constants(self):
+        return dict(rnodes=self._disk.rnodes())
+
     def evaluate(self, driver, params, grid, outputs, dtype, out_extra):
         if OPT in self._slots:
             # The density of an opacity disk is the opacity

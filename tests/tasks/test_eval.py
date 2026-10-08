@@ -47,3 +47,25 @@ def test_objective_residuals(tmp_path):
     outputs = run_eval('objective', config, tmp_path / 'objective')
     np.testing.assert_allclose(outputs['residual_scube_d'], -0.5, rtol=1e-5)
     np.testing.assert_allclose(outputs['wresidual_scube_d'], -0.25, rtol=1e-5)
+
+
+def test_rotation_curve_from_radial_nodes(tmp_path):
+    # A rotation curve given by an expression of the radial nodes of the
+    # disk and of user-defined parameters is the same as the one given by
+    # its values
+    config = yaml.load(REFERENCE_DIR / 'thin_disk_scube.yaml')
+    component = config['models'][0]['gmodel']['components'][0]
+    for option in ('rnmin', 'rnmax', 'rnsep'):
+        component.pop(option, None)
+    rnodes = list(range(0, 21, 2))
+    component.update(rnodes=rnodes, vptraits=dict(type='nw_tan_uniform'))
+    properties = config['params']['properties']
+    del properties['vpt_rt']
+    config['pdescs'] = dict(vmax=dict(type='scalar'), rt=dict(type='scalar'))
+    properties.update(vmax=180, rt=3, vpt_vt='vmax * np.arctan(rnodes / rt)')
+    expression = run_eval('model', config, tmp_path / 'expression')
+    del config['pdescs'], properties['vmax'], properties['rt']
+    properties['vpt_vt'] = (180 * np.arctan(np.array(rnodes) / 3)).tolist()
+    values = run_eval('model', config, tmp_path / 'values')
+    np.testing.assert_array_equal(
+        expression['model_0_scube_d'], values['model_0_scube_d'])

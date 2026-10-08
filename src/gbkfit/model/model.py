@@ -47,6 +47,9 @@ class Model(parseutils.BasicSerializable, ABC):
     def pdescs(self):
         return self.gmodel().pdescs()
 
+    def constants(self):
+        return self.gmodel().constants()
+
     def driver(self) -> Driver:
         return self._driver
 
@@ -78,9 +81,15 @@ class ModelGroup:
         self._pdescs, self._mappings = miscutils.merge_dicts_and_make_mappings(
             [model.gmodel().pdescs() for model in self.models()],
             'model')
+        # The constants of the models, named like their parameters
+        self._constants, _ = miscutils.merge_dicts_and_make_mappings(
+            [model.constants() for model in self.models()], 'model')
 
     def pdescs(self) -> dict[str, ParamDesc]:
         return self._pdescs
+
+    def constants(self) -> dict[str, Any]:
+        return self._constants
 
     def nmodels(self) -> int:
         return len(self._models)

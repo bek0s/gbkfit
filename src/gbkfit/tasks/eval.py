@@ -103,8 +103,10 @@ def eval_(
         pdescs = _detail.merge_pdescs(pdescs, user_pdescs)
 
     _log.info("setting up params...")
+    constants = objective.constants() \
+        if objective is not None else model_group.constants()
     params = gbkfit.params.evaluation_params_parser.load(
-        cfg['params'], pdescs=pdescs)
+        cfg['params'], pdescs=pdescs, constants=constants)
 
     #
     # Calculate model parameters

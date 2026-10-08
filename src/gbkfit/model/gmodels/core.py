@@ -27,6 +27,13 @@ class Component(parseutils.TypedSerializable, abc.ABC):
     def has_weights(self):
         return False
 
+    def constants(self):
+        """
+        Values that parameter expressions can use (e.g. the radial nodes
+        of a disk), by name.
+        """
+        return {}
+
     @abc.abstractmethod
     def evaluate(self, driver, params, grid, outputs, dtype, out_extra):
         """

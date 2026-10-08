@@ -77,6 +77,10 @@ class ComponentGModel:
     def has_weights(self):
         return any(cmp.has_weights() for cmp in self._components)
 
+    def constants(self):
+        return _detail.make_gmodel_constants(
+            self._components, self._ocomponents)
+
     @classmethod
     def _is_3d(cls):
         return cls._ocmp_parser is not None

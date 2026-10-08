@@ -137,6 +137,18 @@ def make_gmodel_params(components, ocomponents):
     return params | oparams, mappings, omappings
 
 
+def make_gmodel_constants(components, ocomponents):
+    """
+    The constants of a gmodel: those of its components and opacity
+    components, named like their parameters (e.g. 'cmp1_rnodes').
+    """
+    constants, _ = miscutils.merge_dicts_and_make_mappings(
+        [cmp.constants() for cmp in components], 'cmp', False)
+    oconstants, _ = miscutils.merge_dicts_and_make_mappings(
+        [cmp.constants() for cmp in ocomponents], 'ocmp', True)
+    return constants | oconstants
+
+
 def evaluate_components(
         components, mappings, driver, params, grid, outputs, dtype,
         out_extra, out_extra_label):
