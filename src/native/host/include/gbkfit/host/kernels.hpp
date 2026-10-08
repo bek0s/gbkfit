@@ -11,8 +11,6 @@
 #include <gbkfit/gmodel/gmodels.hpp>
 #include <gbkfit/objective/objective.hpp>
 
-#include "gbkfit/host/random.hpp"
-
 namespace gbkfit::host::kernels {
 
 template<typename T> inline void
@@ -227,17 +225,13 @@ gmodel_mcdisk_evaluate(
         T* ordata, T* ordata_cmp,
         T* vdata_cmp, T* ddata_cmp)
 {
-    // Each thread needs to have each own random number generator.
-    std::vector<RNG<T>> rngs;
-    for(int i = 0; i < omp_get_num_procs(); ++i)
-        rngs.push_back(RNG<T>(0, 1, 42));
-
     // Parallelization: per cloud
+    // Each cloud has its own stream of random numbers
     #pragma omp parallel for
     for(int ci = 0; ci < nclouds; ++ci)
     {
 
-    RNG<T>& rng = rngs[omp_get_thread_num()];
+    RNG<T> rng(MCDISK_SEED, ci);
     gbkfit::gmodel_mcdisk_evaluate_cloud<atomic_set<T>, atomic_add<T>>(
             rng, ci,
             cflux, nclouds,
