@@ -665,7 +665,7 @@ rh_trait_fun_3p(
             : params[1];
     T p3 = use_rnodes
             ? nodewise(r, rnidx, rnodes, params, 2 * nrnodes, 1)
-            : params[1];
+            : params[2];
     out = trunc == 0
             ? Fun(z, p1, 0, p2, p3)
             : FunTrunc(z, p1, 0, p2, p3, -trunc*p2, trunc*p2);
