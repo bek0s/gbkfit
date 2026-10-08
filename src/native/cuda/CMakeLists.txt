@@ -1,0 +1,45 @@
+
+find_package(CUDAToolkit REQUIRED)
+
+pybind11_add_module(
+  _cuda
+  NO_EXTRAS
+  src/bindings.cpp
+  src/dmodels.cpp
+  src/gmodels.cpp
+  src/objective.cpp
+  src/wrapper.cu
+)
+
+target_include_directories(
+  _cuda
+  PRIVATE
+  include
+)
+
+target_link_libraries(
+  _cuda
+  PRIVATE
+  gbkfit::core
+  CUDA::cufft
+)
+
+target_compile_features(
+  _cuda
+  PRIVATE
+  cuda_std_20
+)
+
+target_compile_options(
+  _cuda
+  PRIVATE
+  $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr>
+)
+
+target_compile_definitions(
+  _cuda
+  PRIVATE
+  EXTENSION_NAME=_cuda
+)
+
+install(TARGETS _cuda LIBRARY DESTINATION ${GBKFIT_NATIVE_INSTALL_DIR})

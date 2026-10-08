@@ -11,5 +11,4 @@ __pycache__/
 build/
 dist/
 gbkfit.egg-info/
-src/gbkfit/driver/native/build*/
 src/gbkfit/_version.py

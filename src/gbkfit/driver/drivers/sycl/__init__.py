@@ -1,6 +1,6 @@
 
 try:
-    import gbkfit.driver.native.libgbkfit_sycl as native_module
+    import gbkfit.driver.native._sycl as native_module
 except ModuleNotFoundError as e:
     raise RuntimeError(
         "the native sycl backend is not enabled in your gbkfit installation; "
