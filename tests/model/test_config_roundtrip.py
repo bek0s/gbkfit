@@ -5,6 +5,7 @@ is plain data, so it can be written as YAML or JSON), and the same model.
 """
 
 import copy
+import io
 import json
 import pathlib
 
@@ -37,6 +38,7 @@ def roundtrip(parser, info):
     """Load, dump, load and dump; return the second dump."""
     dumped = parser.dump(parser.load(copy.deepcopy(info)))
     json.dumps(dumped)
+    ruamel.yaml.YAML(typ='safe').dump(dumped, io.StringIO())
     again = parser.dump(parser.load(copy.deepcopy(dumped)))
     assert again == dumped
     return again
@@ -100,3 +102,39 @@ def test_model_roundtrip(config, evaluate_models):
             np.testing.assert_allclose(
                 model_dumped[key]['d'], value['d'],
                 rtol=1e-5, atol=1e-6 * np.nanmax(np.abs(value['d'])))
+
+
+GAUSS = dict(type='gauss', sigma=1)
+
+# Each type of dmodel, with every option set to a value other than its
+# default
+DMODELS = dict(
+    image=dict(
+        size=[20, 16], step=[2, 1], rpix=[3, 4], rval=[1, 2], rota=10,
+        scale=[2, 1], psf=GAUSS, mask_cutoff=0.1, mask_apply=True,
+        dtype='float64'),
+    scube=dict(
+        size=[20, 16, 11], step=[2, 1, 10], rpix=[3, 4, 5], rval=[1, 2, 3],
+        rota=10, scale=[2, 1, 1], psf=GAUSS, lsf=GAUSS, smooth_weights=True,
+        mask_cutoff=0.1, mask_apply=True, dtype='float64'),
+    lslit=dict(
+        size=[20, 11], step=[2, 10], rpix=[3, 5], rval=[1, 3], rota=10,
+        scale=[2, 1], slit_width=3, psf=GAUSS, lsf=GAUSS,
+        smooth_weights=True, mask_cutoff=0.1, mask_apply=True,
+        dtype='float64'),
+    mmaps=dict(
+        size=[20, 16], step=[2, 1], rpix=[3, 4], rval=[1, 2], rota=10,
+        scale=[2, 1], psf=GAUSS, lsf=GAUSS, mask_cutoff=0.1, orders=[0, 1],
+        dtype='float64'))
+
+
+@pytest.mark.parametrize('dmodel_type', DMODELS)
+def test_dmodel_dump_has_every_option(dmodel_type):
+    info = dict(type=dmodel_type) | DMODELS[dmodel_type]
+    dumped = json.loads(json.dumps(
+        roundtrip(gbkfit.model.dmodel_parser, info)))
+    for key, value in info.items():
+        if key in ('psf', 'lsf'):
+            assert dumped[key]['sigma'] == value['sigma']
+        else:
+            assert dumped[key] == value, key

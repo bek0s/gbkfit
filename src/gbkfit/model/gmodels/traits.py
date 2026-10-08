@@ -309,6 +309,9 @@ class Trait(parseutils.TypedSerializable, abc.ABC):
         opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
         return cls(**opts)
 
+    def dump(self):
+        return dict(type=self.type())
+
     def __init__(self, **kwargs):
         self._kwargs = copy.deepcopy(kwargs)
 
@@ -323,6 +326,11 @@ class Trait(parseutils.TypedSerializable, abc.ABC):
 
 
 class TraitFeatureTrunc:
+
+    def dump(self):
+        dump_trunc = self.trunc() > 0
+        info = dict(trunc=self.trunc()) if dump_trunc else dict()
+        return super().dump() | info  # noqa
 
     def __init__(self, **kwargs):
         self._trunc = kwargs['trunc']
@@ -340,6 +348,11 @@ class TraitFeatureNWMode:
             nwmode_parser, info, 'nwmode', required=False)
         return super().load(info)  # noqa
 
+    def dump(self):
+        nwmode = self.nwmode()
+        info = dict(nwmode=nwmode_parser.dump(nwmode)) if nwmode else dict()
+        return super().dump() | info  # noqa
+
     def __init__(self, **kwargs):
         self._nwmode = kwargs.pop('nwmode')
         super().__init__(**kwargs)
@@ -349,6 +362,11 @@ class TraitFeatureNWMode:
 
 
 class TraitFeatureRNodes:
+
+    def dump(self):
+        dump_rnodes = self.rnodes()
+        info = dict(rnodes=self.rnodes()) if dump_rnodes else dict()
+        return super().dump() | info  # noqa
 
     def __init__(self, **kwargs):
         self._rnodes = kwargs['rnodes']
@@ -360,6 +378,10 @@ class TraitFeatureRNodes:
 
 class TraitFeatureNBlobs:
 
+    def dump(self):
+        info = dict(nblobs=self.nblobs())
+        return super().dump() | info  # noqa
+
     def __init__(self, **kwargs):
         self._nblobs = kwargs['nblobs']
         super().__init__(**kwargs)
@@ -369,6 +391,10 @@ class TraitFeatureNBlobs:
 
 
 class TraitFeatureOrder:
+
+    def dump(self):
+        info = dict(order=self.order())
+        return super().dump() | info  # noqa
 
     def __init__(self, **kwargs):
         self._order = kwargs['order']
@@ -1514,6 +1540,12 @@ class WPTraitAxisRange(WPTrait):
                 f"angle must be between 0 and 180; "
                 f"supplied value: {angle}")
         super().__init__(axis=axis, angle=angle, weight=weight)
+
+    def dump(self):
+        return super().dump() | dict(
+            axis=self._kwargs['axis'],
+            angle=self._kwargs['angle'],
+            weight=self._kwargs['weight'])
 
 
 class OPTraitUniform(OPTrait):

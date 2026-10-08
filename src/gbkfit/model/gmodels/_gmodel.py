@@ -39,6 +39,11 @@ class GModel2D(GModel, abc.ABC):
         opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
         return cls(**opts)
 
+    def dump(self):
+        return dict(
+            type=self.type(),
+            components=self._cmp_parser.dump(self._components))
+
     def __init__(self, components):
         if not components:
             raise RuntimeError("at least one component must be configured")
@@ -146,6 +151,15 @@ class GModel3D(GModel, abc.ABC):
             cls._ocmp_parser, info, 'opacity_components')
         opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
         return cls(**opts)
+
+    def dump(self):
+        return dict(
+            type=self.type(),
+            size_z=self._size_z,
+            step_z=self._step_z,
+            zero_z=self._zero_z,
+            components=self._cmp_parser.dump(self._components),
+            opacity_components=self._ocmp_parser.dump(self._ocomponents))
 
     def __init__(
             self, components, opacity_components=None,

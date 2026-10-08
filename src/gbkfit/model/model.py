@@ -33,6 +33,12 @@ class Model(parseutils.BasicSerializable, ABC):
         opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
         return cls(**opts)
 
+    def dump(self) -> dict[str, Any]:
+        return dict(
+            driver=driver_parser.dump(self.driver()),
+            dmodel=dmodel_parser.dump(self.dmodel()),
+            gmodel=gmodel_parser.dump(self.gmodel()))
+
     def __init__(self, driver: Driver, dmodel: DModel, gmodel: GModel):
         self._driver = driver
         self._dmodel = dmodel

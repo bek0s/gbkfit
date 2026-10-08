@@ -7,7 +7,7 @@ import numpy as np
 import gbkfit.math
 from gbkfit.dataset.datasets import DatasetMMaps
 from gbkfit.model.core import DModel, GModelSCube
-from gbkfit.psflsf import LSF, PSF
+from gbkfit.psflsf import LSF, PSF, lsf_parser, psf_parser
 from gbkfit.utils import parseutils
 from . import _dcube, _detail
 
@@ -36,6 +36,21 @@ class DModelMMaps(DModel):
         opts = _detail.load_dmodel_common(
             cls, info, 2, True, True, dataset, DatasetMMaps)
         return cls(**opts)
+
+    def dump(self):
+        return dict(
+            type=self.type(),
+            size=self.size(),
+            step=self.step(),
+            rpix=self.rpix(),
+            rval=self.rval(),
+            rota=self.rota(),
+            scale=self.scale(),
+            psf=psf_parser.dump(self.psf()),
+            lsf=lsf_parser.dump(self.lsf()),
+            mask_cutoff=self._mask_cutoff,
+            orders=self.orders(),
+            dtype=self.dtype().name)
 
     def __init__(
             self,
@@ -110,6 +125,12 @@ class DModelMMaps(DModel):
 
     def zero(self):
         return self._dcube.zero()[:2]
+
+    def rpix(self):
+        return self._dcube.rpix()[:2]
+
+    def rval(self):
+        return self._dcube.rval()[:2]
 
     def rota(self):
         return self._dcube.rota()
