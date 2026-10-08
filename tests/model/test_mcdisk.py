@@ -72,12 +72,14 @@ def test_mcdisk_velocity_field_matches_smdisk(evaluate_model):
     assert correlation > 0.95
 
 
+@pytest.mark.parametrize('trunc', [0, 1], ids=['full', 'truncated'])
 @pytest.mark.parametrize('height', ['exponential', 'gauss', 'sech2'])
-def test_mcdisk_vertical_profile_matches_smdisk(driver, height):
+def test_mcdisk_vertical_profile_matches_smdisk(driver, height, trunc):
     # An almost edge-on thick disk, with more clouds to reduce the noise.
     # Its image does not depend on the velocity field, so it is not
-    # affected by the position angle bug.
-    component = dict(bhtraits=dict(type=height))
+    # affected by the position angle bug. A truncated profile is cut at
+    # trunc times its scale height.
+    component = dict(bhtraits=dict(type=height, trunc=trunc))
     properties = dict(incl=85, bht_s=2)
     mcdisk = evaluate_disk(
         'mcdisk', driver.type(), component | dict(cflux=2e-5), properties)

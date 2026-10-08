@@ -116,10 +116,11 @@ _trunc_1d_pdf(T xmin, T xmax, T x, Ts ...args)
 template<auto FUN, typename T, typename ...Ts> constexpr T
 _trunc_1d_rnd(T xmin, T xmax, RNG<T>& rng, Ts ...args)
 {
+    // Rejection sampling: draw until the value is within the range
     T x = 0;
     do {
         x = FUN(rng, args...);
-    } while (x < xmin && x > xmax);
+    } while (x < xmin || x > xmax);
     return x;
 }
 
