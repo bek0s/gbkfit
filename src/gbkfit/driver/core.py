@@ -4,25 +4,6 @@ import abc
 from gbkfit.utils import parseutils
 
 
-class DriverNativeModules(abc.ABC):
-
-    @abc.abstractmethod
-    def fft(self, dtype):
-        pass
-
-    @abc.abstractmethod
-    def dmodel(self, dtype):
-        pass
-
-    @abc.abstractmethod
-    def gmodel(self, dtype):
-        pass
-
-    @abc.abstractmethod
-    def objective(self, dtype):
-        pass
-
-
 class Driver(parseutils.TypedSerializable, abc.ABC):
 
     @classmethod
