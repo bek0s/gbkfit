@@ -11,9 +11,7 @@ from gbkfit.utils.parseutils import ConfigError
 __all__ = [
     'Coords',
     'read_data',
-    'write_data',
-    'load_fits',
-    'dump_fits'
+    'write_data'
 ]
 
 
@@ -127,10 +125,13 @@ def write_data(
     FITS file. The axes of the data are the x and y axes of the sky (RA
     and Dec, TAN projection, rotated with a PC matrix), followed by the
     spectral axis (spectral_axis = 2, a radio velocity), or a position
-    along a slit followed by the spectral axis (spectral_axis = 1).
+    along a slit followed by the spectral axis (spectral_axis = 1), or
+    the spectral axis alone (spectral_axis = 0).
     """
     header = astropy.io.fits.Header()
-    if spectral_axis is None and data.ndim == 2:
+    if spectral_axis == 0 and data.ndim == 1:
+        header.update(_velocity_header(coords, 1))
+    elif spectral_axis is None and data.ndim == 2:
         header.update(_sky_header(coords))
     elif spectral_axis == 2 and data.ndim == 3:
         header.update(_sky_header(coords))
@@ -233,29 +234,3 @@ def _check_uncoupled(filename, wcs, linear):
             f"{filename}: the world coordinates couple axes that the model "
             f"keeps independent (e.g. the velocity varies along a spatial "
             f"axis)")
-
-
-def load_fits(
-        filename: str,
-        hdu: int = 0,
-        memmap: bool = True
-) -> tuple[np.ndarray, astropy.wcs.WCS]:
-    """Loads a FITS file and extracts data and WCS."""
-    with astropy.io.fits.open(filename, memmap=memmap) as hdulist:
-        data = hdulist[hdu].data
-        header = hdulist[hdu].header
-        wcs = astropy.wcs.WCS(header)
-    return data, wcs
-
-
-def dump_fits(
-        filename: str,
-        data: np.ndarray,
-        wcs: astropy.wcs.WCS | None = None,
-        overwrite: bool = False
-) -> None:
-    """Saves data to a FITS file, including WCS if available."""
-    header = wcs.to_header() if wcs else None
-    astropy.io.fits.writeto(
-        filename, data, header=header,
-        output_verify='exception', overwrite=overwrite, checksum=True)

@@ -89,3 +89,33 @@ def test_lsf_analytic(lsf_type, lsf_class, lsf_params):
 if __name__ == '__main__':
     test_psf_analytic()
     test_lsf_analytic()
+
+
+def test_psf_image_round_trip():
+    image = np.exp(-np.add.outer(np.arange(-4, 5) ** 2, np.arange(-3, 4) ** 2))
+    psf = PSFImage(image, step=(0.2, 0.3))
+    loaded = psf_parser.load(psf_parser.dump(psf))
+    np.testing.assert_allclose(loaded._step, (0.2, 0.3), rtol=1e-12)
+    np.testing.assert_array_equal(loaded._data, psf._data)
+
+
+def test_psf_image_pixel_scale_is_in_arcsec():
+    from astropy.io import fits
+    header = fits.Header(dict(
+        CTYPE1='RA---TAN', CUNIT1='deg', CDELT1=-0.1 / 3600, CRVAL1=150.0,
+        CTYPE2='DEC--TAN', CUNIT2='deg', CDELT2=0.1 / 3600, CRVAL2=2.0))
+    fits.writeto('psf.fits', np.ones((9, 9)), header)
+    psf = psf_parser.load(dict(type='image', data='psf.fits'))
+    np.testing.assert_allclose(psf._step, (0.1, 0.1), rtol=1e-12)
+
+
+def test_lsf_image_round_trip_and_channel_width_in_km_s():
+    from astropy.io import fits
+    lsf = LSFImage(np.exp(-np.arange(-5, 6) ** 2 / 4), step=2.5)
+    loaded = lsf_parser.load(lsf_parser.dump(lsf))
+    np.testing.assert_allclose(loaded._step, 2.5, rtol=1e-12)
+    np.testing.assert_array_equal(loaded._data, lsf._data)
+    header = fits.Header(dict(CTYPE1='VRAD', CUNIT1='m/s', CDELT1=2500.0))
+    fits.writeto('lsf_m_s.fits', np.ones(11), header)
+    loaded = lsf_parser.load(dict(type='image', data='lsf_m_s.fits'))
+    np.testing.assert_allclose(loaded._step, 2.5, rtol=1e-12)
