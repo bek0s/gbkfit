@@ -83,10 +83,15 @@ def transform_lh_rotate_y(x, z, theta):
 
 
 def transform_lh_rotate_z(x, y, theta):
+    """
+    The same transform as the native transform_lh_rotate_z (gmodels), so
+    that an angle theta is a position angle, measured from north (+y)
+    through east (-x).
+    """
     sintheta = np.sin(theta)
     costheta = np.cos(theta)
-    out_x = + x * costheta + y * sintheta
-    out_y = - x * sintheta + y * costheta
+    out_x = - x * sintheta + y * costheta
+    out_y = - x * costheta - y * sintheta
     return out_x, out_y
 
 
