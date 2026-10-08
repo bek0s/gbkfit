@@ -28,3 +28,24 @@ def test_sanitize_dimensional_options(info, sanitized):
 def test_sanitize_dimensional_options_errors(info):
     with pytest.raises(RuntimeError, match=f"option '{next(iter(info))}'"):
         parseutils.sanitize_dimensional_options(info, DIMENSIONAL, 3)
+
+
+def test_config_error_paths():
+    # Each level adds its part of the path; only the innermost type of
+    # the part with the error describes it
+    with pytest.raises(parseutils.ConfigError) as error:
+        with parseutils.config_path('models'):
+            with parseutils.config_path(0, context='outer'):
+                with parseutils.config_path('traits'):
+                    with parseutils.config_path(1, context='inner'):
+                        raise ValueError("a bad value")
+    assert str(error.value) == "models[0].traits[1] [inner]: a bad value"
+
+
+def test_config_error_context_is_for_the_part_itself():
+    # An error in an option of a part is not described by the part's type
+    with pytest.raises(parseutils.ConfigError) as error:
+        with parseutils.config_path('component', context='smdisk'):
+            with parseutils.config_path('traits'):
+                raise parseutils.ConfigError("unknown type 'x'")
+    assert str(error.value) == "component.traits: unknown type 'x'"

@@ -26,8 +26,9 @@ def load_dataset_common(cls, info, names, ndim, **kwargs):
     # Load all data in the dataset, using the above options
     for name in names:
         if name in info:
-            info[name] = data_parser.load(
-                info[name], step, rpix, rval, rota, prefix)
+            with parseutils.config_path(name):
+                info[name] = data_parser.load(
+                    info[name], step, rpix, rval, rota, prefix)
     # Parse options and return them
     opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
     return opts

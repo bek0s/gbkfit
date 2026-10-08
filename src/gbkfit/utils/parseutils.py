@@ -1,4 +1,5 @@
 import abc
+import contextlib
 import copy
 import functools
 import importlib
@@ -41,6 +42,48 @@ def make_typed_desc(
     """
     desc = f'{cls.type()} (class={cls.__qualname__})'
     return f'{label} {desc}' if label else desc
+
+
+class ConfigError(RuntimeError):
+    """
+    An error in a configuration. It has the path to the part of the
+    configuration with the error (e.g. models[0].gmodel.components[1]),
+    and the description of the type of that part, if any.
+    """
+
+    def __init__(self, message: str, path=(), context: str | None = None):
+        super().__init__(message)
+        self.message = message
+        self.path = list(path)
+        self.context = context
+
+    def __str__(self):
+        path = ''.join(
+            f'[{segment}]' if isinstance(segment, int) else f'.{segment}'
+            for segment in self.path).lstrip('.')
+        if self.context:
+            path = f'{path} [{self.context}]' if path else self.context
+        return f'{path}: {self.message}' if path else self.message
+
+
+@contextlib.contextmanager
+def config_path(*segments: str | int, context: str | None = None):
+    """
+    Add the given segments (option names or list indices) to the path of
+    the configuration errors raised in the block, and turn any other
+    errors into configuration errors. context describes the type of the
+    part of the configuration loaded in the block, for the errors in that
+    part itself (not in its options).
+    """
+    try:
+        yield
+    except ConfigError as e:
+        if e.context is None and not e.path:
+            e.context = context
+        e.path[:0] = segments
+        raise
+    except Exception as e:
+        raise ConfigError(str(e), segments, context) from e
 
 
 def parse_options(
@@ -342,24 +385,13 @@ class Parser(abc.ABC):
     def _load_one_impl_wrapper(self, x, index, *args, **kwargs):
         # Create a copy of the configuration for safety
         x = copy.deepcopy(x)
-        try:
-            # This used to accept None, but turns out it is a bad idea. # remove?
-            # allowed_types = (dict,)
-            allowed_types = (dict, type(None))
-            if not isinstance(x, allowed_types):
-                raise RuntimeError(
+        with config_path(*([] if index is None else [index])):
+            if not isinstance(x, (dict, type(None))):
+                raise ConfigError(
                     f"expected configuration in the form of a dictionary; "
                     f"instead it found the following value: {x}")
-            # print(x, args, kwargs)
-            instance = self._load_one_impl(x, *args, **kwargs) \
+            return self._load_one_impl(x, *args, **kwargs) \
                 if x is not None else None
-        except Exception as e:
-            index_msg = f"offending item index: {index}; " if index is not None else ""
-            raise RuntimeError(
-                f"{self.cls_name()} parser could not parse configuration; "
-                f"{index_msg}"
-                f"reason: {e}") from e
-        return instance
 
     @abc.abstractmethod
     def _load_one_impl(self, x, *args, **kwargs):
@@ -451,23 +483,16 @@ class TypedParser(Parser):
             *args, **kwargs
     ) -> TypedSerializable:
         if 'type' not in x:
-            raise RuntimeError(
-                f"{self.cls_name()} parser "
-                f"configurations must define a 'type'")
+            raise ConfigError(
+                f"a {self.cls_name()} configuration must define a 'type'")
         type_ = x.pop('type')
         if type_ not in self._parsers:
-            raise RuntimeError(
-                f"{self.cls_name()} parser "
-                f"could not find a parser for type '{type_}'; "
-                f"the available parsers are: {list(self._parsers.keys())}")
+            raise ConfigError(
+                f"unknown {self.cls_name()} type '{type_}'; "
+                f"the available types are: {list(self._parsers.keys())}")
         parser = self._parsers[type_]
-        try:
-            instance = parser.load(x, *args, **kwargs)
-        except Exception as e:
-            raise RuntimeError(
-                f"could not parse configuration for item of type "
-                f"{make_typed_desc(parser)}; reason: {e}") from e
-        return instance
+        with config_path(context=make_typed_desc(parser)):
+            return parser.load(x, *args, **kwargs)
 
     def _dump_one_impl(
             self,
@@ -544,10 +569,13 @@ def load_option(
 ) -> dict[str, Any] | None:
     exists = key in info
     if not exists and required:
-        raise RuntimeError(f"option '{key}' is required but not provided")
+        raise ConfigError(f"option '{key}' is required but not provided")
     if exists and info[key] is None and not allow_none:
-        raise RuntimeError(f"option '{key}' cannot be null")
-    return loader(info[key], *args, **kwargs) if exists else None
+        raise ConfigError(f"option '{key}' cannot be null")
+    if not exists:
+        return None
+    with config_path(key):
+        return loader(info[key], *args, **kwargs)
 
 
 def load_option_and_update_info(
@@ -572,11 +600,12 @@ def load_option_and_update_info(
     """
     exists = key in info
     if not exists and required:
-        raise RuntimeError(f"option '{key}' is required but not provided")
+        raise ConfigError(f"option '{key}' is required but not provided")
     if exists and info[key] is None and not allow_none:
-        raise RuntimeError(f"option '{key}' cannot be null")
+        raise ConfigError(f"option '{key}' cannot be null")
     if exists:
-        info[key] = parser.load(info[key], *args, **kwargs)
+        with config_path(key):
+            info[key] = parser.load(info[key], *args, **kwargs)
     return info
 
 
