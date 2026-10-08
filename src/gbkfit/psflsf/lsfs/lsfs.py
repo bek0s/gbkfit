@@ -1,7 +1,6 @@
 
 from typing import Any
 
-import astropy.wcs
 import numpy as np
 import scipy.ndimage
 
@@ -222,23 +221,19 @@ class LSFImage(LSF):
 
     @classmethod
     def load(cls, info: dict[str, Any], *args, **kwargs) -> 'LSFImage':
-        opts = _load_lsf_common(cls, info)
-        try:
-            data, wcs = fitsutils.load_fits(opts['data'])
-        except Exception as e:
-            raise RuntimeError(
-                f"could not load LSF image with filename '{opts['data']}'; "
-                f"see preceding exception for additional information") from e
-        opts.update(dict(data=data, step=opts.get('step', wcs.wcs.cdelt[0])))  # noqa
-        return cls(**opts)
+        # Read the image, and its channel width in km/s
+        data, coords = parseutils.load_option(
+            fitsutils.read_data, info, 'data', True, False)
+        info.update(data=data, step=info.get('step', coords.step[0]))
+        return cls(**_load_lsf_common(cls, info))
 
     def dump(
             self, filename='lsf.fits', overwrite: bool = False
     ) -> dict[str, Any]:
         info = dict(type=self.type(), data=filename, step=self._step)
-        wcs = astropy.wcs.WCS(naxis=1, relax=False)
-        wcs.wcs.cdelt = [self._step]  # noqa
-        fitsutils.dump_fits(filename, self._data, wcs, overwrite)
+        rpix = self._data.size / 2 - 0.5
+        coords = fitsutils.Coords((self._step,), (rpix,), (0.0,), 0.0)
+        fitsutils.write_data(filename, self._data, coords, 0, overwrite)
         return info
 
     def __init__(self, data: np.ndarray, step: float = 1.0):
