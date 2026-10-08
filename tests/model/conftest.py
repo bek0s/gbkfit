@@ -27,3 +27,25 @@ def evaluate_model(tmp_path):
             path.stem: np.array(fits.getdata(path))
             for path in sorted((workdir / 'output').glob('*.fits'))}
     return evaluate
+
+
+@pytest.fixture
+def evaluate_models():
+    """
+    Return a function that evaluates in-memory model configurations
+    through the Python API. It returns the model data of every model
+    (on the host) and the extra outputs (e.g. the velocity field of
+    each component), keyed as in `ModelGroup.model_h`.
+    """
+    import gbkfit.model
+    import gbkfit.params
+
+    def evaluate(models, properties):
+        model_group = gbkfit.model.ModelGroup(
+            gbkfit.model.model_parser.load(models))
+        params = gbkfit.params.EvaluationParams(
+            model_group.pdescs(), properties)
+        extra = {}
+        data = model_group.model_h(params.evaluate(), extra)
+        return data, extra
+    return evaluate

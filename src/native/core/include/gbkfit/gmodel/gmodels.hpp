@@ -723,7 +723,7 @@ gmodel_smdisk_evaluate_spaxel(
     }
 
     // Calculate systemic velocity and geometrical parameters
-    vsysi = loose ? lerp(rn, rnidx, rnodes, xpos) : (vsys ? vsys[0] : 0);
+    vsysi = vsys ? (loose ? lerp(rn, rnidx, rnodes, vsys) : vsys[0]) : 0;
     xposi = loose ? lerp(rn, rnidx, rnodes, xpos) : xpos[0];
     yposi = loose ? lerp(rn, rnidx, rnodes, ypos) : ypos[0];
     posai = tilted ? lerp(rn, rnidx, rnodes, posa) : posa[0];
