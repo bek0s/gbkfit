@@ -122,31 +122,26 @@ def check_traits_common(traits_):
                 f"it may result in density overestimation due to aliasing")
 
 
-def make_gmodel_params(components, ocomponents):
+def make_component_params(components, prefix, prefix_first):
     """
-    The parameters of a gmodel, and the mapping of the parameters of each
-    of its components and opacity components to them. The parameters of
-    the opacity components are always prefixed (e.g. 'ocmp_opt_a'), and
-    those of the components only if there are more than one (e.g.
-    'cmp1_bpt_a').
+    The parameters of a list of components, and the mapping of the
+    parameters of each component to them. The parameters of each
+    component but the first are prefixed with the given prefix and their
+    index (e.g. 'cmp1_bpt_a'). Those of the first are prefixed with the
+    given prefix only if prefix_first (e.g. 'ocmp_opt_a').
     """
-    params, mappings = miscutils.merge_dicts_and_make_mappings(
-        [cmp.pdescs() for cmp in components], 'cmp', False)
-    oparams, omappings = miscutils.merge_dicts_and_make_mappings(
-        [cmp.pdescs() for cmp in ocomponents], 'ocmp', True)
-    return params | oparams, mappings, omappings
+    return miscutils.merge_dicts_and_make_mappings(
+        [cmp.pdescs() for cmp in components], prefix, prefix_first)
 
 
-def make_gmodel_constants(components, ocomponents):
+def make_component_constants(components, prefix, prefix_first):
     """
-    The constants of a gmodel: those of its components and opacity
-    components, named like their parameters (e.g. 'cmp1_rnodes').
+    The constants of a list of components, named like their parameters
+    (e.g. 'cmp1_rnodes'; see make_component_params).
     """
     constants, _ = miscutils.merge_dicts_and_make_mappings(
-        [cmp.constants() for cmp in components], 'cmp', False)
-    oconstants, _ = miscutils.merge_dicts_and_make_mappings(
-        [cmp.constants() for cmp in ocomponents], 'ocmp', True)
-    return constants | oconstants
+        [cmp.constants() for cmp in components], prefix, prefix_first)
+    return constants
 
 
 def evaluate_components(

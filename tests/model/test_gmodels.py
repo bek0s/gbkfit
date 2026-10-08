@@ -10,7 +10,7 @@ change of the models.
 
 import numpy as np
 import pytest
-from gbkfit.model import gmodels
+from gbkfit.model import gmodel_parser, gmodels
 from gbkfit.model.gmodels.core import Component
 
 
@@ -239,6 +239,33 @@ def test_2d_gmodel_weights_the_data(driver, gmodel_type, method, size, shape):
     desired = np.ones(shape)
     desired[:, 0, :] = 0
     np.testing.assert_array_equal(driver.mem_copy_d2h(weights), desired)
+
+
+def test_3d_gmodel_picks_the_z_axis_of_each_grid(driver):
+    # Without a configured z axis, a 3d gmodel picks one from the x and y
+    # axes of the data. An edge-on thick disk is cut off by a z axis that
+    # is too short, so a gmodel evaluated on a small grid and then on a
+    # large one must give the same as one evaluated on the large one only.
+    info = dict(type='intensity_3d', components=smdisk(
+        loose=False, tilted=False,
+        bptraits=dict(type='exponential'), bhtraits=dict(type='sech2')))
+    params = dict(
+        xpos=0, ypos=0, posa=0, incl=90, bpt_a=1, bpt_s=4, bht_s=3)
+
+    def evaluate(gmodel, size):
+        image = driver.mem_alloc_d(size[::-1], np.float32)
+        driver.mem_fill(image, 0)
+        zero = tuple(-(n / 2 - 0.5) for n in size)
+        gmodel.evaluate_image(
+            driver, params, image, None, size, (1, 1), zero, 0,
+            np.float32, None)
+        return driver.mem_copy_d2h(image)
+
+    gmodel = gmodel_parser.load(info)
+    evaluate(gmodel, (6, 6))
+    np.testing.assert_allclose(
+        evaluate(gmodel, (32, 32)),
+        evaluate(gmodel_parser.load(info), (32, 32)), rtol=1e-5)
 
 
 def test_disk_derives_params_before_evaluation(
