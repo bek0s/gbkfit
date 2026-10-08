@@ -3,9 +3,11 @@ from typing import Any
 
 import numpy as np
 import scipy.ndimage
+import scipy.special
 
 import gbkfit.math
-from gbkfit.psflsf.core import LSF
+from gbkfit.psflsf.core import (
+    LSF, MIN_EXTENT, WING_FLUX, check_scale)
 from gbkfit.utils import fitsutils, parseutils
 
 
@@ -65,7 +67,6 @@ class LSFGauss(LSF):
     A Gaussian Line Spread Function (LSF).
     """
 
-    _CUTOFF_FACTOR = 8
 
     @staticmethod
     def type() -> str:
@@ -82,17 +83,27 @@ class LSFGauss(LSF):
             sigma=self._sigma)
 
     def __init__(self, sigma: float):
+        check_scale('sigma', sigma)
         self._sigma = sigma
 
+    def _extent(self):
+        """
+        The half-width out to which it is drawn (see MIN_EXTENT). The
+        flux of a Gaussian within |z| < w is erf(w / sqrt(2) sigma).
+        """
+        return max(
+            MIN_EXTENT * self._sigma,
+            self._sigma * np.sqrt(2) * scipy.special.erfinv(1 - WING_FLUX))
+
     def _size_impl(self, step: float) -> float:
-        return 2 * self._CUTOFF_FACTOR * self._sigma / step
+        return 2 * self._extent() / step
 
     def _asarray_impl(
             self, step: float, size: int, offset: int
     ) -> np.ndarray:
         z = _create_grid_1d(size, step, offset)
         data = gbkfit.math.gauss_1d_fun(z, 1, 0, self._sigma)
-        data[np.abs(z) > self._CUTOFF_FACTOR * self._sigma] = 0
+        data[np.abs(z) > self._extent()] = 0
         return data / np.sum(data)
 
 
@@ -101,7 +112,6 @@ class LSFGGauss(LSF):
     A Generalized Gaussian Line Spread Function (LSF).
     """
 
-    _CUTOFF_FACTOR = 8
 
     @staticmethod
     def type() -> str:
@@ -119,18 +129,31 @@ class LSFGGauss(LSF):
             beta=self._beta)
 
     def __init__(self, alpha: float, beta: float):
+        check_scale('alpha', alpha)
+        check_scale('beta', beta)
         self._alpha = alpha
         self._beta = beta
 
+    def _extent(self):
+        """
+        The half-width out to which it is drawn (see MIN_EXTENT). The
+        flux of a ggauss within |z| < w is P(1 / beta, (w / alpha)^beta),
+        P the regularized lower incomplete gamma function.
+        """
+        return max(
+            MIN_EXTENT * self._alpha,
+            self._alpha * scipy.special.gammaincinv(
+                1 / self._beta, 1 - WING_FLUX) ** (1 / self._beta))
+
     def _size_impl(self, step: float) -> float:
-        return 2 * self._CUTOFF_FACTOR * self._alpha / step
+        return 2 * self._extent() / step
 
     def _asarray_impl(
             self, step: float, size: int, offset: int
     ) -> np.ndarray:
         z = _create_grid_1d(size, step, offset)
         data = gbkfit.math.ggauss_1d_fun(z, 1, 0, self._alpha, self._beta)
-        data[np.abs(z) > self._CUTOFF_FACTOR * self._alpha] = 0
+        data[np.abs(z) > self._extent()] = 0
         return data / np.sum(data)
 
 
@@ -139,7 +162,6 @@ class LSFLorentz(LSF):
     A Lorentzian Line Spread Function (LSF).
     """
 
-    _CUTOFF_FACTOR = 8
 
     @staticmethod
     def type() -> str:
@@ -156,17 +178,27 @@ class LSFLorentz(LSF):
             gamma=self._gamma)
 
     def __init__(self, gamma: float):
+        check_scale('gamma', gamma)
         self._gamma = gamma
 
+    def _extent(self):
+        """
+        The half-width out to which it is drawn (see MIN_EXTENT). The
+        flux of a Lorentzian within |z| < w is 2 / pi arctan(w / gamma).
+        """
+        return max(
+            MIN_EXTENT * self._gamma,
+            self._gamma * np.tan(np.pi / 2 * (1 - WING_FLUX)))
+
     def _size_impl(self, step: float) -> float:
-        return 2 * self._CUTOFF_FACTOR * self._gamma / step
+        return 2 * self._extent() / step
 
     def _asarray_impl(
             self, step: float, size: int, offset: int
     ) -> np.ndarray:
         z = _create_grid_1d(size, step, offset)
         data = gbkfit.math.lorentz_1d_fun(z, 1, 0, self._gamma)
-        data[np.abs(z) > self._CUTOFF_FACTOR * self._gamma] = 0
+        data[np.abs(z) > self._extent()] = 0
         return data / np.sum(data)
 
 
@@ -175,7 +207,6 @@ class LSFMoffat(LSF):
     A Moffat Line Spread Function (LSF).
     """
 
-    _CUTOFF_FACTOR = 8
 
     @staticmethod
     def type() -> str:
@@ -193,18 +224,34 @@ class LSFMoffat(LSF):
             beta=self._beta)
 
     def __init__(self, alpha: float, beta: float):
+        check_scale('alpha', alpha)
+        if not beta > 0.5:
+            raise RuntimeError(
+                "a Moffat LSF has finite flux only for beta > 0.5; "
+                f"beta is {beta}")
         self._alpha = alpha
         self._beta = beta
 
+    def _extent(self):
+        """
+        The half-width out to which it is drawn (see MIN_EXTENT). The
+        flux of a Moffat within |z| < w is I_u(1/2, beta - 1/2), I the
+        regularized incomplete beta function and u = w^2 / (alpha^2 + w^2).
+        """
+        return max(
+            MIN_EXTENT * self._alpha,
+            self._alpha * np.sqrt(1 / (1 - scipy.special.betaincinv(
+                0.5, self._beta - 0.5, 1 - WING_FLUX)) - 1))
+
     def _size_impl(self, step: float) -> float:
-        return 2 * self._CUTOFF_FACTOR * self._alpha / step
+        return 2 * self._extent() / step
 
     def _asarray_impl(
             self, step: float, size: int, offset: int
     ) -> np.ndarray:
         z = _create_grid_1d(size, step, offset)
         data = gbkfit.math.moffat_1d_fun(z, 1, 0, self._alpha, self._beta)
-        data[np.abs(z) > self._CUTOFF_FACTOR * self._alpha] = 0
+        data[np.abs(z) > self._extent()] = 0
         return data / np.sum(data)
 
 
