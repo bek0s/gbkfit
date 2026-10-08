@@ -259,8 +259,10 @@ class LSFImage(LSF):
         size. Uses spline interpolation (order=5).
         """
         scale = step / self._step
+        # The centre of the image, and the centre of the LSF in the array,
+        # where the analytic LSFs put it
         old_center = self._data.shape[0] / 2 - 0.5
-        new_center = size / 2 - 0.5 + offset
+        new_center = size // 2 + offset
         x = np.arange(size)
         nx = (x - new_center) * scale + old_center
         data = scipy.ndimage.map_coordinates(self._data, [nx], order=5)  # noqa
