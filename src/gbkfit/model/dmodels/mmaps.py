@@ -150,6 +150,8 @@ class DModelMMaps(DModel):
             size, step, rpix, rval, rota, scale, psf, lsf,
             # Disable DCube masking. We deal with it in this class.
             False, None, False, dtype)
+        # The plan of the cube, made by _prepare_impl()
+        self._dcube_plan = None
         self._mmaps_o = None
         self._mmaps_d = None
         self._mmaps_m = None
@@ -219,18 +221,18 @@ class DModelMMaps(DModel):
         driver.mem_fill(self._mmaps_m, 0)
         driver.mem_fill(self._mmaps_w, 1)
         # Prepare dcube
-        self._dcube.prepare(driver, gmodel.has_weights())
+        self._dcube_plan = self._dcube.plan(
+            self._driver, gmodel.has_weights())
         # Create backend
         self._backend = driver.native_class('DModel', dtype)()
         # Plan the gmodel on the high-res grid of DCube
-        dcube = self._dcube
         self._gmodel_plan = gmodel.plan(
-            self._driver, dcube.scratch_grid(), gmodel.has_weights(),
-            dcube.dtype())
+            self._driver, self._dcube_plan.scratch_grid(),
+            gmodel.has_weights(), self._dcube.dtype())
 
     def _evaluate_impl(self, params, out_dmodel_extra, out_gmodel_extra):
         driver = self._driver
-        dcube = self._dcube
+        dcube = self._dcube_plan
         backend = self._backend
         # The gmodel adds to the data cube, so clear it
         driver.mem_fill(dcube.scratch_dcube(), 0)
@@ -244,8 +246,8 @@ class DModelMMaps(DModel):
         # Extract moment maps from DCube's arrays
         # Also evaluate one mask map and one weight map
         backend.mmaps_moments(
-            dcube.step(),
-            dcube.zero(),
+            self._dcube.step(),
+            self._dcube.zero(),
             dcube.dcube(),
             dcube.wcube(),
             self._mask_cutoff,

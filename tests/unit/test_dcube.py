@@ -29,7 +29,7 @@ def test_grids(driver, psf, lsf):
         size=size, step=step, rpix=rpix, rval=rval, rota=0, scale=scale,
         psf=psf, lsf=lsf, smooth_weights=False, mask_cutoff=1.0,
         mask_apply=True, dtype=np.dtype(np.float32))
-    dcube.prepare(driver, has_weights=True)
+    plan = dcube.plan(driver, has_weights=True)
     # The spatial axes are measured from the reference pixel, and the
     # spectral axis from its world value there
     zero = np.array([0, 0, rval[2]]) - np.multiply(rpix, step)
@@ -44,17 +44,17 @@ def test_grids(driver, psf, lsf):
     assert dcube.size() == size
     assert dcube.step() == step
     np.testing.assert_allclose(dcube.zero(), zero)
-    grid_hi = dcube.scratch_grid()
+    grid_hi = plan.scratch_grid()
     assert grid_hi.size == tuple(size_hi)
-    assert dcube.scratch_edge() == tuple(edge_hi)
+    assert plan.scratch_edge() == tuple(edge_hi)
     np.testing.assert_allclose(grid_hi.coords.step, step_hi)
     np.testing.assert_allclose(grid_hi.zero(), zero_hi)
-    for cube in (dcube.dcube(), dcube.mcube(), dcube.wcube()):
+    for cube in (plan.dcube(), plan.mcube(), plan.wcube()):
         assert cube.shape == size[::-1]
-    for cube in (dcube.scratch_dcube(), dcube.scratch_wcube()):
+    for cube in (plan.scratch_dcube(), plan.scratch_wcube()):
         assert cube.shape == tuple(size_hi)[::-1]
-    assert dcube.scratch_dcube() is not dcube.dcube()
-    assert dcube.scratch_wcube() is not dcube.wcube()
+    assert plan.scratch_dcube() is not plan.dcube()
+    assert plan.scratch_wcube() is not plan.wcube()
 
 
 def test_downscaling_keeps_a_uniform_cube(driver):
@@ -63,10 +63,10 @@ def test_downscaling_keeps_a_uniform_cube(driver):
         rval=(1.0, 1.5, 2.0), rota=0, scale=(2, 3, 4), psf=None, lsf=None,
         smooth_weights=False, mask_cutoff=None, mask_apply=False,
         dtype=np.dtype(np.float32))
-    dcube.prepare(driver, has_weights=False)
-    driver.mem_fill(dcube.scratch_dcube(), 42)
-    dcube.evaluate(None, cube_extra, cube_extra)
-    np.testing.assert_allclose(driver.mem_copy_d2h(dcube.dcube()), 42)
+    plan = dcube.plan(driver, has_weights=False)
+    driver.mem_fill(plan.scratch_dcube(), 42)
+    plan.evaluate(None, cube_extra, cube_extra)
+    np.testing.assert_allclose(driver.mem_copy_d2h(plan.dcube()), 42)
 
 
 def _evaluate_weights(driver, smooth_weights):
@@ -80,22 +80,22 @@ def _evaluate_weights(driver, smooth_weights):
         rval=(0, 0, 0), rota=0, scale=(1, 1, 1),
         psf=PSFGauss(1.5), lsf=None, smooth_weights=smooth_weights,
         mask_cutoff=None, mask_apply=False, dtype=np.float32)
-    dcube.prepare(driver, has_weights=True)
+    plan = dcube.plan(driver, has_weights=True)
 
-    z, y, x = np.indices(dcube.scratch_grid().size[::-1])
+    z, y, x = np.indices(plan.scratch_grid().size[::-1])
     pattern = (1 + 0.5 * np.sin(0.4 * x) * np.cos(0.3 * y))
     pattern = pattern.astype(np.float32)
-    driver.mem_copy_h2d(pattern, dcube.scratch_wcube())
-    driver.mem_fill(dcube.scratch_dcube(), 0)
-    dcube.evaluate(None, cube_extra, cube_extra)
+    driver.mem_copy_h2d(pattern, plan.scratch_wcube())
+    driver.mem_fill(plan.scratch_dcube(), 0)
+    plan.evaluate(None, cube_extra, cube_extra)
 
-    edge_z, edge_y, edge_x = dcube.scratch_edge()[::-1]
+    edge_z, edge_y, edge_x = plan.scratch_edge()[::-1]
     size_z, size_y, size_x = dcube.size()[::-1]
     expected = pattern[
         edge_z:edge_z + size_z,
         edge_y:edge_y + size_y,
         edge_x:edge_x + size_x]
-    weights = np.asarray(driver.mem_copy_d2h(dcube.wcube()))
+    weights = np.asarray(driver.mem_copy_d2h(plan.wcube()))
     return expected, weights
 
 
@@ -118,13 +118,13 @@ def test_mask(driver):
         rval=(0, 0, 0), rota=0, scale=(1, 1, 1),
         psf=None, lsf=None, smooth_weights=False,
         mask_cutoff=0.5, mask_apply=True, dtype=np.float32)
-    dcube.prepare(driver, has_weights=False)
+    plan = dcube.plan(driver, has_weights=False)
     z, y, x = np.indices(dcube.size()[::-1])
     pattern = (np.sin(0.7 * x + 0.3 * y + 0.5 * z) + 1).astype(np.float32)
-    driver.mem_copy_h2d(pattern, dcube.scratch_dcube())
-    dcube.evaluate(None, cube_extra, cube_extra)
-    data = np.asarray(driver.mem_copy_d2h(dcube.dcube()))
-    mask = np.asarray(driver.mem_copy_d2h(dcube.mcube()))
+    driver.mem_copy_h2d(pattern, plan.scratch_dcube())
+    plan.evaluate(None, cube_extra, cube_extra)
+    data = np.asarray(driver.mem_copy_d2h(plan.dcube()))
+    mask = np.asarray(driver.mem_copy_d2h(plan.mcube()))
     keep = pattern > 0.5
     np.testing.assert_array_equal(mask, keep.astype(np.float32))
     np.testing.assert_array_equal(data, np.where(keep, pattern, np.nan))
@@ -142,14 +142,14 @@ def test_lsf_only_keeps_the_image_on_a_non_square_cube(driver):
             rval=(0, 0, 0), rota=0, scale=(1, 1, 1),
             psf=None, lsf=lsf, smooth_weights=False,
             mask_cutoff=None, mask_apply=False, dtype=np.float32)
-        dcube.prepare(driver, has_weights=False)
+        plan = dcube.plan(driver, has_weights=False)
         # The same line in every case, in the pixels of the output cube
         # (the scratch cube may be padded for the convolution)
-        z, y, x = np.indices(dcube.scratch_grid().size[::-1])
-        z = z - dcube.scratch_edge()[2]
+        z, y, x = np.indices(plan.scratch_grid().size[::-1])
+        z = z - plan.scratch_edge()[2]
         line = np.exp(-0.5 * ((z - 20 - 0.1 * x) / 3) ** 2)
         cube = (line * (1 + np.sin(0.3 * x) * np.cos(0.4 * y)))
-        driver.mem_copy_h2d(cube.astype(np.float32), dcube.scratch_dcube())
-        dcube.evaluate(None, cube_extra, cube_extra)
-        images.append(np.asarray(driver.mem_copy_d2h(dcube.dcube())).sum(0))
+        driver.mem_copy_h2d(cube.astype(np.float32), plan.scratch_dcube())
+        plan.evaluate(None, cube_extra, cube_extra)
+        images.append(np.asarray(driver.mem_copy_d2h(plan.dcube())).sum(0))
     np.testing.assert_allclose(images[1], images[0], rtol=1e-4)
