@@ -574,3 +574,70 @@ def prep_scube(
         file_e, data_e, header_e,
         file_m, data_m, header_m,
         offset, dtype, velocity_rest)
+
+
+def _bin_values(bins, nbins, data, name):
+    """
+    The value of each bin of a map whose pixels hold the value of their bin
+    (NaN for a bin without finite pixels). Raise ConfigError if the finite
+    pixels of a bin hold different values.
+    """
+    values = np.full(nbins, np.nan)
+    for i in range(nbins):
+        pixels = data[(bins == i) & np.isfinite(data)]
+        if pixels.size == 0:
+            continue
+        if not np.allclose(pixels, pixels[0], rtol=1e-6, atol=0):
+            raise ConfigError(
+                f"{name}: the pixels of bin {i} hold different values; the "
+                f"map must hold the value of each bin on its pixels")
+        values[i] = pixels[0]
+    return values
+
+
+def prep_bmaps(file_bins, file_d, file_e, file_m, dtype):
+    """
+    Prepare binned moment maps (e.g. of MaNGA DAP or GIST) for bmaps: a
+    map of the bin of each pixel (file_bins; negative or NaN for no bin),
+    and moment maps (file_d, with optional errors file_e and masks file_m)
+    whose pixels hold the value of their bin. Write the bins, numbered
+    from 0 in the order of their numbers in the map
+    (prep_<bins>.fits), and for each map a vector of the value of each
+    bin (prep_<map>.fits), whose masked or empty bins are NaN.
+    """
+    nmmaps = len(file_d)
+    file_e = file_e or [None] * nmmaps
+    file_m = file_m or [None] * nmmaps
+    bins, header_bins = _read_fits(file_bins)
+    if bins.ndim != 2:
+        raise ConfigError(
+            f"{file_bins}: the bins must be an image; they have "
+            f"{bins.ndim} axes")
+    valid = np.isfinite(bins) & (bins >= 0)
+    if np.any(bins[valid] != np.round(bins[valid])):
+        raise ConfigError(f"{file_bins}: the bins must be integers")
+    numbers = np.unique(bins[valid])
+    index = np.full(bins.shape, -1, dtype=np.int32)
+    index[valid] = np.searchsorted(numbers, bins[valid])
+    _log.info(f"{len(numbers)} bins")
+
+    def save(filename, data, header=None):
+        name = os.path.splitext(os.path.basename(filename))[0]
+        fits.writeto(f'prep_{name}.fits', data, header, overwrite=True)
+
+    save(file_bins, index, header_bins)
+    for i in range(nmmaps):
+        data_d, _, data_e, _, data_m, _ = _read_data(
+            file_d[i], file_e[i], file_m[i])
+        for data in (data_d, data_e, data_m):
+            if data is not None and data.shape != bins.shape:
+                raise ConfigError(
+                    f"{file_d[i]}: the maps must have the shape of the bins "
+                    f"{bins.shape}; they have {data.shape}")
+        mask = _make_mask(data_d, data_e, data_m)
+        _apply_mask(data_d, data_e, None, mask)
+        save(file_d[i], _bin_values(
+            index, len(numbers), data_d, file_d[i]).astype(dtype))
+        if data_e is not None:
+            save(file_e[i], _bin_values(
+                index, len(numbers), data_e, file_e[i]).astype(dtype))
