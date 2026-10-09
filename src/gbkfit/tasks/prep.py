@@ -155,21 +155,33 @@ def _check_same_rest(wcs, rest):
             f"velocities to the new rest first")
 
 
-def _reverse_decreasing_velocity(data, header):
+def _decreasing_velocity_axis(header):
     """
-    The data and its header with the spectral axis reversed if it is a
-    velocity that decreases along the axis (the model needs increasing
-    velocities). Each channel keeps its velocity.
+    The index (FITS order, from 0) of the spectral axis of a header if it
+    is a velocity that decreases along the axis (the model needs
+    increasing velocities), or None.
     """
     if not _has_wcs(header):
-        return data, header
+        return None
     wcs = astropy.wcs.WCS(header)
     s = wcs.wcs.spec
     if s < 0 or wcs.wcs.ctype[s][:4] not in fitsutils.VELOCITY_TYPES:
-        return data, header
+        return None
     if wcs.wcs.get_cdelt()[s] * wcs.wcs.get_pc()[s, s] >= 0:
+        return None
+    return s
+
+
+def _reverse_axis(data, header, s):
+    """
+    The data and its header with the axis s (FITS order, from 0) reversed:
+    each pixel keeps its world coordinates. A header without world
+    coordinates stays as it is.
+    """
+    data = np.flip(data, data.ndim - 1 - s)
+    if not _has_wcs(header):
         return data, header
-    _log.info("reversing the spectral axis: the velocity decreases along it")
+    wcs = astropy.wcs.WCS(header)
     # Reversing pixel axis s negates column s of the linear transformation
     # (CD, or CDELT times the rows of PC). For PC, negating CDELT[s] and
     # row s of PC cancel out, leaving a positive CDELT[s].
@@ -184,7 +196,6 @@ def _reverse_decreasing_velocity(data, header):
         wcs.wcs.pc = pc
         wcs.wcs.cdelt[s] *= -1
     wcs.wcs.crpix[s] = data.shape[data.ndim - 1 - s] + 1 - wcs.wcs.crpix[s]
-    data = np.flip(data, data.ndim - 1 - s)
     return data, _with_wcs(header, wcs)
 
 
@@ -229,22 +240,31 @@ def _save_data(
     Save the data, whose first pixel is the pixel at the given offset (on
     each numpy axis) of the data read, with its spectral axis converted to
     the velocities of velocity_rest (see _spectral_to_velocity; the
-    error and mask files are converted if they have world coordinates),
-    and a decreasing velocity axis reversed.
+    error and mask files are converted if they have world coordinates).
+    If the velocity of the data decreases along the axis, the axis of the
+    data, error and mask is reversed (with or without world coordinates).
     """
     basename = os.path.basename
     splitext = os.path.splitext
 
-    def prepare(data, header, has_wcs):
+    def prepare(header, has_wcs):
         header = _shift_axes(header, offset)
         if has_wcs:
             header = _spectral_to_velocity(header, velocity_rest)
-        return _reverse_decreasing_velocity(data, header)
-    data_d, header_d = prepare(data_d, header_d, True)
+        return header
+    header_d = prepare(header_d, True)
     if header_e is not None:
-        data_e, header_e = prepare(data_e, header_e, _has_wcs(header_e))
+        header_e = prepare(header_e, _has_wcs(header_e))
     if header_m is not None:
-        data_m, header_m = prepare(data_m, header_m, _has_wcs(header_m))
+        header_m = prepare(header_m, _has_wcs(header_m))
+    if (axis := _decreasing_velocity_axis(header_d)) is not None:
+        _log.info(
+            "reversing the spectral axis: the velocity decreases along it")
+        data_d, header_d = _reverse_axis(data_d, header_d, axis)
+        if data_e is not None:
+            data_e, header_e = _reverse_axis(data_e, header_e, axis)
+        if data_m is not None:
+            data_m, header_m = _reverse_axis(data_m, header_m, axis)
     data_d = data_d.astype(dtype)
     file_d = splitext(basename(file_d))[0]
     fits.writeto(f'prep_{file_d}.fits', data_d, header_d, overwrite=True)

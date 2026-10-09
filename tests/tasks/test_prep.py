@@ -294,6 +294,31 @@ def test_frequency_axis_to_radio_velocities():
         velocity, C * (1 - frequency / 1.420405752e9), rtol=0, atol=1e-6)
 
 
+def test_error_and_mask_are_reversed_with_the_data():
+    # The error and mask files (here without world coordinates) are
+    # reversed with the data: each channel keeps its error and mask
+    header = dict(
+        HEADER, CTYPE3='FREQ', CUNIT3='Hz', CRVAL3=1.419e9, CRPIX3=1.0,
+        CDELT3=2e4)
+    write_cube('cube.fits', header)
+    data = fits.getdata('cube.fits')
+    fits.writeto('error.fits', data + 100)
+    mask = np.ones_like(data)
+    mask[0, 0] = 0
+    fits.writeto('mask.fits', mask)
+    defaults = dict.fromkeys([
+        'roi_spat', 'roi_spec', 'clip_min', 'clip_max', 'ccl_lcount',
+        'ccl_pcount', 'ccl_lratio', 'sclip_sigma', 'sclip_iters', 'nanpad'])
+    prep.prep_scube(
+        'cube.fits', 'error.fits', 'mask.fits', **defaults, minify=False,
+        dtype='float32', velocity_rest='1420.405752 MHz')
+    data_out = fits.getdata('prep_cube.fits')
+    error_out = fits.getdata('prep_error.fits')
+    mask_out = fits.getdata('prep_mask.fits')
+    np.testing.assert_allclose(error_out, data_out + 100, rtol=1e-6)
+    np.testing.assert_array_equal(mask_out[-1], 0)
+    np.testing.assert_array_equal(mask_out[:-1], 1)
+
 def test_velocity_axis_gets_the_rest():
     write_cube('cube.fits')
     _, header_out = prep_scube('cube.fits', velocity_rest='21.106 cm')
