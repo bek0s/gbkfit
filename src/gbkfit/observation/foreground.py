@@ -98,13 +98,17 @@ class LensPlan:
             self._source_x, self._source_y, source, image)
 
 
-def _read_map(x, prefix):
-    """A map and its world coordinates, from a file (see Data)."""
+def _read_map(x, prefix, rpix, rval):
+    """
+    A map and its world coordinates, from a file (see Data), with the
+    given rpix or rval (see fitsutils.read_data).
+    """
     if isinstance(x, str):
         x = dict(file=x)
     options = parseutils.parse_options(
         x, 'map file', required={'file'}, optional={'hdu'})
-    return fitsutils.read_data(prefix + options['file'], options.get('hdu', 0))
+    return fitsutils.read_data(
+        prefix + options['file'], options.get('hdu', 0), rpix, rval)
 
 
 class LensDeflectionMap(Lens):
@@ -126,16 +130,21 @@ class LensDeflectionMap(Lens):
         for key in ('alpha_x', 'alpha_y'):
             if info.get(key) is None:
                 raise ConfigError(f"option '{key}' of {desc} is required")
+        # (the world coordinates given are those of the maps, which the
+        # others come from)
+        rpix, rval = info.get('rpix'), info.get('rval')
         with parseutils.config_path('alpha_x'):
-            alpha_x, coords = _read_map(info['alpha_x'], prefix)
+            alpha_x, coords = _read_map(info['alpha_x'], prefix, rpix, rval)
         with parseutils.config_path('alpha_y'):
-            alpha_y, coords_y = _read_map(info['alpha_y'], prefix)
+            alpha_y, coords_y = _read_map(info['alpha_y'], prefix, rpix, rval)
         if coords_y != coords:
             raise ConfigError(
                 f"the maps of {desc} have different world coordinates")
         info = dict(info) | dict(
-            alpha_x=alpha_x, alpha_y=alpha_y, step=coords.step,
-            rpix=coords.rpix, rval=coords.rval, rota=coords.rota)
+            alpha_x=alpha_x, alpha_y=alpha_y, rpix=coords.rpix,
+            rval=coords.rval,
+            step=coords.step if info.get('step') is None else info['step'],
+            rota=coords.rota if info.get('rota') is None else info['rota'])
         return cls(**parseutils.parse_options_for_callable(
             info, desc, cls.__init__))
 

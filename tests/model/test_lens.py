@@ -119,6 +119,13 @@ def test_deflection_maps_from_files(tmp_path):
     dumped = foreground_parser.dump(foreground, prefix=str(tmp_path / 'd_'))
     again = foreground_parser.load(copy.deepcopy(dumped))
     assert again.lens().source_grid() == lens.source_grid()
+    # The world coordinates given replace those of the files
+    stretched = foreground_parser.load(dict(lens=dict(
+        type='deflection_map', alpha_x=str(tmp_path / 'ax.fits'),
+        alpha_y=str(tmp_path / 'ay.fits'), source_size=[10, 10],
+        source_step=[0.5, 0.5], step=[1, 1], rpix=[0, 0])))
+    assert stretched.lens()._grid.coords.step == (1, 1)
+    assert stretched.lens()._grid.coords.rpix == (0, 0)
 
 
 def test_deflection_maps_must_match():

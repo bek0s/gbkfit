@@ -125,11 +125,15 @@ class PrimaryBeamImage(PrimaryBeam):
             options = parseutils.parse_options(
                 file or {}, 'primary beam file', required={'file'},
                 optional={'hdu'})
+            # (the world coordinates given are those of the image, which
+            # the others come from)
             data, coords = fitsutils.read_data(
-                prefix + options['file'], options.get('hdu', 0))
+                prefix + options['file'], options.get('hdu', 0),
+                info.get('rpix'), info.get('rval'))
         info = dict(info) | dict(
-            data=data, step=coords.step, rpix=coords.rpix, rval=coords.rval,
-            rota=coords.rota)
+            data=data, rpix=coords.rpix, rval=coords.rval,
+            step=coords.step if info.get('step') is None else info['step'],
+            rota=coords.rota if info.get('rota') is None else info['rota'])
         info.pop('file')
         return cls(**parseutils.parse_options_for_callable(
             info, desc, cls.__init__))
