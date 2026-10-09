@@ -164,12 +164,12 @@ class FitterDynestySNS(FitterDynesty):
             save_bounds=True):
         # Extract dynesty.NestedSampler() arguments
         args_factory = iterutils.extract_subdict(
-            locals(), funcutils.extract_args(
-                dynesty.DynamicNestedSampler)[0])
+            locals(), funcutils.parameter_names(
+                dynesty.DynamicNestedSampler).all)
         # Extract dynesty.sampler.Sampler.run_nested() arguments
         args_run_nested = iterutils.extract_subdict(
-            locals(), funcutils.extract_args(
-                dynesty.dynamicsampler.DynamicSampler.run_nested)[0])
+            locals(), funcutils.parameter_names(
+                dynesty.dynamicsampler.DynamicSampler.run_nested).all)
         super().__init__(args_factory, args_run_nested)
 
     def _fit_impl_impl(self, objective, parameters):
@@ -232,12 +232,12 @@ class FitterDynestyDNS(FitterDynesty):
             print_func=None):
         # Extract dynesty.DynamicNestedSampler() arguments
         args_factory = iterutils.extract_subdict(
-            locals(), funcutils.extract_args(
-                dynesty.DynamicNestedSampler)[0])
+            locals(), funcutils.parameter_names(
+                dynesty.DynamicNestedSampler).all)
         # Extract dynesty.dynamicsampler.DynamicSampler.run_nested() arguments
         args_run_nested = iterutils.extract_subdict(
-            locals(), funcutils.extract_args(
-                dynesty.dynamicsampler.DynamicSampler.run_nested)[0])
+            locals(), funcutils.parameter_names(
+                dynesty.dynamicsampler.DynamicSampler.run_nested).all)
         super().__init__(args_factory, args_run_nested)
 
     def _fit_impl_impl(self, objective, parameters):
