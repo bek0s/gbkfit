@@ -89,7 +89,8 @@ class BMaps(Observable):
             spec_size=self._spec_size,
             spec_step=self._spec_step,
             spec_rval=self._spec_rval,
-            spec_rest=_detail.dump_rest(self._spec_rest))
+            spec_rest=_detail.dump_rest(self._spec_rest),
+            method=self._method)
 
     def __init__(
             self,
@@ -104,14 +105,16 @@ class BMaps(Observable):
             spec_size: int | None = None,
             spec_step: Real = _moments.SPEC_STEP,
             spec_rval: Real = 0,
-            spec_rest: str | astropy.units.Quantity | None = None
+            spec_rest: str | astropy.units.Quantity | None = None,
+            method: str = 'moments'
     ):
         """
         The spatial grid (size, step, rpix, rval, rota; see
         fitsutils.make_grid) is that of the regions if they have one
         (bins), and must not be given; else size is required. The
-        spectral axis and the moments are as those of mmaps (see MMaps):
-        the regions whose moment 0 is not above mask_cutoff are masked.
+        spectral axis and the moments are as those of mmaps (see MMaps,
+        also for method): the regions whose moment 0 is not above
+        mask_cutoff are masked.
         """
         spatial = _detail.spatial_grid_of_regions(
             regions, size, step, rpix, rval, rota)
@@ -122,9 +125,10 @@ class BMaps(Observable):
             spec_size = _moments.default_spec_size(spec_step)
         self._orders = _moments.check_moment_options(
             parseutils.make_typed_desc(self.__class__, 'observable'),
-            orders, mask_cutoff)
+            orders, mask_cutoff, method)
         self._regions = regions
         self._mask_cutoff = mask_cutoff
+        self._method = method
         self._spec_size = spec_size
         self._spec_step = spec_step
         self._spec_rval = spec_rval
@@ -141,6 +145,9 @@ class BMaps(Observable):
 
     def mask_cutoff(self) -> Real:
         return self._mask_cutoff
+
+    def method(self) -> str:
+        return self._method
 
     def spec_size(self) -> int:
         return self._spec_size
@@ -196,15 +203,15 @@ class BMaps(Observable):
             instrument.primary_beam(), psf, lsf,
             False, None, False, dtype)
         return BMapsPlan(
-            self._weights, self._orders, self._mask_cutoff, dcube, driver,
-            gmodel, dtype)
+            self._weights, self._orders, self._mask_cutoff, self._method,
+            dcube, driver, gmodel, dtype)
 
 
 class BMapsPlan(_detail.DCubePlanBase):
 
     def __init__(
-            self, weights, orders, mask_cutoff, dcube, driver, gmodel,
-            dtype):
+            self, weights, orders, mask_cutoff, method, dcube, driver,
+            gmodel, dtype):
         super().__init__(dcube, driver, gmodel, dtype)
         self._sums = RegionSumsPlan(weights, driver, dtype)
         nregions = self._sums.nregions()
@@ -212,7 +219,7 @@ class BMapsPlan(_detail.DCubePlanBase):
         self._spectra = driver.mem_alloc_d(
             (dcube.size()[2], 1, nregions), dtype)
         self._moments = _moments.MomentsPlan(
-            driver, (nregions, 1), orders, mask_cutoff, dtype)
+            driver, (nregions, 1), orders, mask_cutoff, method, dtype)
 
     def evaluate(self, params, out_extra):
         self._evaluate_cube(

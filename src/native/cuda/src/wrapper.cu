@@ -89,6 +89,23 @@ Wrapper<T>::dmodel_mmaps_moments(
 }
 
 template<typename T> void
+Wrapper<T>::dmodel_mmaps_gaussian(
+        int size_x, int size_y, int size_z,
+        T step_z, T zero_z,
+        const T* dcube_d,
+        T cutoff, int norders, const int* orders,
+        T* mmaps_d, T* mmaps_m)
+{
+    const int n = size_x * size_y;
+    launch("mmaps_gaussian", n, kernels::dmodel_mmaps_gaussian<T>,
+            size_x, size_y, size_z,
+            step_z, zero_z,
+            dcube_d,
+            cutoff, norders, orders,
+            mmaps_d, mmaps_m);
+}
+
+template<typename T> void
 Wrapper<T>::dmodel_regions_sum(
         int nregions, int npix, int size_z,
         const int* indptr, const int* indices, const T* weights,

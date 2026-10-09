@@ -124,6 +124,31 @@ dmodel_mmaps_moments(
 }
 
 template<typename T> void
+dmodel_mmaps_gaussian(
+        int size_x, int size_y, int size_z,
+        T step_z, T zero_z,
+        const T* dcube_d,
+        T cutoff, int norders, const int* orders,
+        T* mmaps_d, T* mmaps_m)
+{
+    // Parallelization: per 2d spatial position
+    #pragma omp parallel for collapse(2)
+    for (int y = 0; y < size_y; ++y) {
+    for (int x = 0; x < size_x; ++x) {
+
+    gbkfit::dmodel_mmaps_gaussian(
+            x, y,
+            size_x, size_y, size_z,
+            step_z, zero_z,
+            dcube_d,
+            cutoff, norders, orders,
+            mmaps_d, mmaps_m);
+
+    }
+    }
+}
+
+template<typename T> void
 dmodel_regions_sum(
         int nregions, int npix, int size_z,
         const int* indptr, const int* indices, const T* weights,
@@ -252,6 +277,11 @@ struct Wrapper
     static void
     dmodel_mmaps_moments(auto... args) {
         kernels::dmodel_mmaps_moments<T>(args...);
+    }
+
+    static void
+    dmodel_mmaps_gaussian(auto... args) {
+        kernels::dmodel_mmaps_gaussian<T>(args...);
     }
 
     static void

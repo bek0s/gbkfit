@@ -32,6 +32,14 @@ struct Wrapper
             T* mmaps_d, T* mmaps_m, T* mmaps_w);
 
     static void
+    dmodel_mmaps_gaussian(
+            int size_x, int size_y, int size_z,
+            T step_z, T zero_z,
+            const T* dcube_d,
+            T cutoff, int norders, const int* orders,
+            T* mmaps_d, T* mmaps_m);
+
+    static void
     dmodel_regions_sum(
             int nregions, int npix, int size_z,
             const int* indptr, const int* indices, const T* weights,

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "gbkfit/math/math.hpp"
 #include "gbkfit/utilities/indexutils.hpp"
 
 namespace gbkfit {
@@ -224,6 +225,151 @@ dmodel_mmaps_moments(
 
         const int idx = index_3d_to_1d(x, y, m, size_x, size_y);
         mmaps_d[idx] = mn;
+    }
+}
+
+// The sum of the squared residuals of the Gaussian a exp(-(k - c)^2 / (2
+// s^2)) (channel units) and the spectrum (x, y) of a cube
+template<typename T> constexpr T
+dmodel_gaussian_sse(
+        int x, int y, int size_x, int size_y, int size_z,
+        const T* dcube_d, T a, T c, T s)
+{
+    T sse = 0;
+    for (int z = 0; z < size_z; ++z)
+    {
+        const T u = (z - c) / s;
+        const T r = a * std::exp(T{-0.5} * u * u)
+                - dcube_d[index_3d_to_1d(x, y, z, size_x, size_y)];
+        sse += r * r;
+    }
+    return sse;
+}
+
+// The moment maps of a Gaussian fitted to the spectrum (x, y) of a cube
+// by least squares (Levenberg-Marquardt), as moments: its flux (order 0),
+// centre (1) and dispersion (2), the only orders. The spectra whose
+// moment 0 is not above the cutoff, and those whose fit fails, are
+// masked (NaN, and 0 in mmaps_m), as with the moments. The fit is of a
+// Gaussian sampled at the centres of the channels, in channel units,
+// and starts from the moments.
+template<typename T> constexpr void
+dmodel_mmaps_gaussian(
+        int x, int y,
+        int size_x, int size_y, int size_z,
+        T step_z, T zero_z,
+        const T* dcube_d,
+        T cutoff, int norders, const int* orders,
+        T* mmaps_d, T* mmaps_m)
+{
+    constexpr int MAX_ITERATIONS = 100;
+    constexpr T TOLERANCE = T{1e-6};
+    const int idx_2d = index_2d_to_1d(x, y, size_x);
+
+    // The moments, in channel units
+    T m0 = 0, m1 = 0, m2 = 0;
+    for (int z = 0; z < size_z; ++z)
+    {
+        const T i = dcube_d[index_3d_to_1d(x, y, z, size_x, size_y)];
+        m0 += i;
+        m1 += i * z;
+    }
+    m1 /= m0;
+    for (int z = 0; z < size_z; ++z)
+    {
+        const T i = dcube_d[index_3d_to_1d(x, y, z, size_x, size_y)];
+        m2 += i * (z - m1) * (z - m1);
+    }
+    m2 = std::sqrt(std::max(m2 / m0, T{0.25}));
+
+    // The fit: amplitude a, centre c and dispersion s, from the moments
+    T a = m0 / (m2 * std::sqrt(2 * PI<T>));
+    T c = m1;
+    T s = m2;
+    bool valid = std::abs(m0 * step_z) > cutoff && std::isfinite(a);
+    T sse = valid
+            ? dmodel_gaussian_sse(x, y, size_x, size_y, size_z, dcube_d,
+                                  a, c, s)
+            : T{0};
+    T lambda = T{1e-3};
+    for (int iteration = 0; valid && iteration < MAX_ITERATIONS; ++iteration)
+    {
+        // The normal equations J^T J and J^T r of the residuals
+        T jj[3][3] = {{0}}, jr[3] = {0};
+        for (int z = 0; z < size_z; ++z)
+        {
+            const T u = (z - c) / s;
+            const T g = std::exp(T{-0.5} * u * u);
+            const T r = a * g
+                    - dcube_d[index_3d_to_1d(x, y, z, size_x, size_y)];
+            const T j[3] = {g, a * g * u / s, a * g * u * u / s};
+            for (int p = 0; p < 3; ++p) {
+                jr[p] += j[p] * r;
+                for (int q = 0; q < 3; ++q)
+                    jj[p][q] += j[p] * j[q];
+            }
+        }
+        // Solve (J^T J + lambda diag(J^T J)) step = -J^T r (Cramer)
+        T m[3][3];
+        for (int p = 0; p < 3; ++p)
+            for (int q = 0; q < 3; ++q)
+                m[p][q] = jj[p][q] * (p == q ? 1 + lambda : 1);
+        const T det =
+                m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1])
+              - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0])
+              + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]);
+        if (!(std::abs(det) > 0)) {
+            break;
+        }
+        T delta[3];
+        for (int p = 0; p < 3; ++p) {
+            T n[3][3];
+            for (int i = 0; i < 3; ++i)
+                for (int k = 0; k < 3; ++k)
+                    n[i][k] = k == p ? -jr[i] : m[i][k];
+            delta[p] = (
+                    n[0][0] * (n[1][1] * n[2][2] - n[1][2] * n[2][1])
+                  - n[0][1] * (n[1][0] * n[2][2] - n[1][2] * n[2][0])
+                  + n[0][2] * (n[1][0] * n[2][1] - n[1][1] * n[2][0])) / det;
+        }
+        const T a_new = a + delta[0];
+        const T c_new = c + delta[1];
+        const T s_new = s + delta[2];
+        const T sse_new = s_new > 0
+                ? dmodel_gaussian_sse(x, y, size_x, size_y, size_z, dcube_d,
+                                      a_new, c_new, s_new)
+                : NAN;
+        if (sse_new < sse) {
+            const bool converged = sse - sse_new <= TOLERANCE * sse;
+            a = a_new;
+            c = c_new;
+            s = s_new;
+            sse = sse_new;
+            lambda /= 10;
+            if (converged) {
+                break;
+            }
+        } else {
+            lambda *= 10;
+            if (lambda > T{1e10}) {
+                break;
+            }
+        }
+    }
+    valid = valid && std::isfinite(a) && std::isfinite(c) && s > 0;
+    mmaps_m[idx_2d] = valid;
+
+    // The moments of the Gaussian, in the units of the spectral axis
+    for (int m = 0; m < norders; ++m)
+    {
+        T value = NAN;
+        if (valid && orders[m] == 0)
+            value = a * s * std::sqrt(2 * PI<T>) * step_z;
+        else if (valid && orders[m] == 1)
+            value = zero_z + c * step_z;
+        else if (valid && orders[m] == 2)
+            value = s * step_z;
+        mmaps_d[index_3d_to_1d(x, y, m, size_x, size_y)] = value;
     }
 }
 

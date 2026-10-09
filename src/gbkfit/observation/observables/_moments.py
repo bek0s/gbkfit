@@ -4,6 +4,7 @@ import gbkfit.math
 
 
 __all__ = [
+    'METHODS',
     'MomentsPlan',
     'SPEC_RANGE',
     'SPEC_STEP',
@@ -17,6 +18,11 @@ __all__ = [
 # moments are computed from, and its default size (km/s)
 SPEC_STEP = 1
 SPEC_RANGE = 1000
+
+# How the moment maps are measured from the spectra of a cube: their
+# moments, or the moments of a Gaussian fitted to them (its flux, centre
+# and dispersion)
+METHODS = ('moments', 'gaussian_fit')
 
 # The smallest dispersion (km/s) a spectral axis derived from the data
 # leaves room for (see spectral_axis_from_data)
@@ -49,16 +55,24 @@ def spectral_axis_from_data(dataset, spec_step):
         spec_rval=float((vmin + vmax) / 2))
 
 
-def check_moment_options(desc, orders, mask_cutoff):
+def check_moment_options(desc, orders, mask_cutoff, method):
     """
     The moment orders, sorted and unique; raise RuntimeError unless they
-    are valid and masking is enabled (mask_cutoff), as the moments need.
+    are valid for the method (see METHODS; a Gaussian has moments 0 to
+    2), and masking is enabled (mask_cutoff), as the moments need.
     """
+    if method not in METHODS:
+        raise RuntimeError(
+            f"the method of {desc} must be one of {list(METHODS)}; it is "
+            f"{method!r}")
+    max_order = 7 if method == 'moments' else 2
     orders = tuple(sorted(set(orders)))
     if not orders:
         raise RuntimeError("at least one moment order is required")
-    if any(order < 0 or order > 7 for order in orders):
-        raise RuntimeError("moment orders must be between 0 and 7")
+    if any(order < 0 or order > max_order for order in orders):
+        raise RuntimeError(
+            f"the moment orders of the method {method} must be between 0 "
+            f"and {max_order}")
     if mask_cutoff is None:
         raise RuntimeError(
             f"masking cannot be disabled for {desc}; "
@@ -69,16 +83,18 @@ def check_moment_options(desc, orders, mask_cutoff):
 class MomentsPlan:
     """
     The moments of the given orders of the spectra of cubes (nz, ny, nx)
-    on a driver: a map (ny, nx) for each order, one mask shared by them
-    (the spectra whose moment 0 is not above mask_cutoff), and the
-    weights of each.
+    on a driver, measured with the given method (see METHODS): a map
+    (ny, nx) for each order, one mask shared by them (the spectra whose
+    moment 0 is not above mask_cutoff, and those whose fit fails), and
+    the weights of each (with the method moments).
     """
 
-    def __init__(self, driver, size, orders, mask_cutoff, dtype):
+    def __init__(self, driver, size, orders, mask_cutoff, method, dtype):
         """size is that of the maps (nx, ny)."""
         size_all = tuple(size) + (len(orders),)
         self._orders = orders
         self._mask_cutoff = mask_cutoff
+        self._method = method
         self._mmaps_o = driver.mem_alloc_d(len(orders), np.int32)
         self._mmaps_d = driver.mem_alloc_d(size_all[::-1], dtype)
         self._mmaps_m = driver.mem_alloc_d(tuple(size)[::-1], dtype)
@@ -95,9 +111,14 @@ class MomentsPlan:
         coordinates are step and zero (see fitsutils.Grid): for each
         order, its map (d), the mask (m) and its weights (w).
         """
-        self._backend.mmaps_moments(
-            step, zero, cube, wcube, self._mask_cutoff, self._mmaps_o,
-            self._mmaps_d, self._mmaps_m, self._mmaps_w)
+        if self._method == 'gaussian_fit':
+            self._backend.mmaps_gaussian(
+                step, zero, cube, self._mask_cutoff, self._mmaps_o,
+                self._mmaps_d, self._mmaps_m)
+        else:
+            self._backend.mmaps_moments(
+                step, zero, cube, wcube, self._mask_cutoff, self._mmaps_o,
+                self._mmaps_d, self._mmaps_m, self._mmaps_w)
         return {
             f'mmap{order}': dict(
                 d=self._mmaps_d[i], m=self._mmaps_m, w=self._mmaps_w[i])
