@@ -158,9 +158,10 @@ def test_gmodel(driver, name, evaluate_models, ndarrays_regression):
         key: value.data if isinstance(value, fitsutils.GridData) else value
         for key, value in extra.items()}
     # Thick disks and Monte Carlo disks are not bitwise reproducible,
-    # because the threads add to the outputs in a different order
+    # because the threads add to the outputs in a different order; their
+    # float32 sums of many terms differ by about 1e-5
     ndarrays_regression.check(outputs, tolerances={
-        key: dict(rtol=1e-5, atol=1e-6 * np.nanmax(np.abs(value)))
+        key: dict(rtol=1e-4, atol=1e-6 * np.nanmax(np.abs(value)))
         for key, value in outputs.items()})
 
 
