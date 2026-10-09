@@ -31,10 +31,7 @@ class MCDisk(_disk.Disk):
         traits.OPTraitMixtureGauss,
         traits.OPTraitMixtureGGauss,
         traits.OPTraitMixtureMoffat,
-        traits.OPTraitNWDistortion,
-        # Sampling heights needs the Moffat pdf, which is not implemented
-        # (moffat_1d_pdf, math.hpp)
-        traits.OHTraitMoffat)
+        traits.OPTraitNWDistortion)
 
     def __init__(
             self, cflux, seed,
