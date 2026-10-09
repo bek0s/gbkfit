@@ -68,7 +68,7 @@ class NWModeRelative2(NWModeRelative):
         return 'relative2'
 
     def _transform_in_place(self, param):
-        return numutils.cumsum(param, self.origin(), out=param)
+        return numutils.cumsum_from(param, self.origin(), out=param)
 
 
 nwmode_parser = parseutils.TypedParser(NWMode, [
