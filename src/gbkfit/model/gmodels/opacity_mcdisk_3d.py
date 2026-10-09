@@ -77,7 +77,8 @@ class OpacityMCDisk3D(OpacityComponent3D):
         return bool(self._disk.traits('wpt'))
 
     def constants(self):
-        return dict(rnodes=self._disk.rnodes())
+        return dict(
+            rnodes=self._disk.rnodes(), subrnodes=self._disk.subrnodes())
 
     def evaluate(self, driver, params, grid, outputs, dtype, out_extra):
         # The density of the disk is the opacity

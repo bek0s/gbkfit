@@ -148,6 +148,12 @@ WPT_UID_AXIS_RANGE = 1
 
 TRUNC_DEFAULT = 0
 
+# Where the values of the node-wise parameters of a trait are given: at
+# the radial nodes of its disk, which interpolates them to the subnodes,
+# or at the subnodes themselves (see _disk.Disk)
+SAMPLINGS = ('rnodes', 'subrings')
+SAMPLING_DEFAULT = 'rnodes'
+
 
 def _ptrait_params_mixture_6p(nblobs):
     return (
@@ -323,6 +329,10 @@ class Trait(parseutils.TypedSerializable, abc.ABC):
     def params_rnw(self, nnodes):
         return tuple()
 
+    def sampling(self):
+        """Where the values of the node-wise parameters are given."""
+        return SAMPLING_DEFAULT
+
 
 class TraitFeatureTrunc:
 
@@ -361,6 +371,26 @@ class TraitFeatureNWMode:
 
     def nwmode(self):
         return self._nwmode
+
+
+class TraitFeatureSampling:
+
+    def dump(self):
+        dump_sampling = self.sampling() != SAMPLING_DEFAULT
+        info = dict(sampling=self.sampling()) if dump_sampling else dict()
+        return super().dump() | info  # noqa
+
+    def __init__(self, **kwargs):
+        sampling = kwargs.pop('sampling')
+        if sampling not in SAMPLINGS:
+            raise RuntimeError(
+                f"sampling must be one of {list(SAMPLINGS)}; "
+                f"it is '{sampling}'")
+        self._sampling = sampling
+        super().__init__(**kwargs)
+
+    def sampling(self):
+        return self._sampling
 
 
 class TraitFeatureRNodes:
@@ -416,15 +446,21 @@ class PTrait(Trait, abc.ABC):
     pass
 
 
-class HTrait(TraitFeatureRNodes, TraitFeatureNWMode, Trait, abc.ABC):
+class HTrait(
+        TraitFeatureRNodes, TraitFeatureNWMode, TraitFeatureSampling, Trait,
+        abc.ABC):
 
-    def __init__(self, rnodes, nwmode, **kwargs):
-        kwargs.update(rnodes=rnodes, nwmode=nwmode)
+    def __init__(self, rnodes, nwmode, sampling, **kwargs):
+        kwargs.update(rnodes=rnodes, nwmode=nwmode, sampling=sampling)
         super().__init__(**kwargs)
         if not self.rnodes() and self.nwmode():
             _log.warning(
                 f"rnodes is set to {self.rnodes()}; "
                 f"nwmode {self.nwmode()} will be ignored")
+        if not self.rnodes() and self.sampling() != SAMPLING_DEFAULT:
+            raise RuntimeError(
+                f"sampling is '{self.sampling()}', but rnodes is False: "
+                f"the trait has no node-wise parameters")
 
 
 class BPTrait(PTrait, abc.ABC):
@@ -766,7 +802,7 @@ class BPTraitMixtureMoffat(TraitFeatureNBlobs, BPTrait):
         return _ptrait_integrate_mixture_moffat(params, rings)
 
 
-class BPTraitNWUniform(TraitFeatureNWMode, BPTrait):
+class BPTraitNWUniform(TraitFeatureNWMode, TraitFeatureSampling, BPTrait):
 
     @staticmethod
     def type():
@@ -776,8 +812,11 @@ class BPTraitNWUniform(TraitFeatureNWMode, BPTrait):
     def uid():
         return BPT_UID_NW_UNIFORM
 
-    def __init__(self, nwmode: NWMode | None = None):
-        super().__init__(nwmode=nwmode)
+    def __init__(
+            self,
+            nwmode: NWMode | None = None,
+            sampling: str = SAMPLING_DEFAULT):
+        super().__init__(nwmode=nwmode, sampling=sampling)
 
     def params_rnw(self, nnodes):
         return (
@@ -790,7 +829,8 @@ class BPTraitNWUniform(TraitFeatureNWMode, BPTrait):
         return _ptrait_integrate_nw_uniform(params, rings)
 
 
-class BPTraitNWHarmonic(TraitFeatureOrder, TraitFeatureNWMode, BPTrait):
+class BPTraitNWHarmonic(
+        TraitFeatureOrder, TraitFeatureNWMode, TraitFeatureSampling, BPTrait):
 
     @staticmethod
     def type():
@@ -800,8 +840,12 @@ class BPTraitNWHarmonic(TraitFeatureOrder, TraitFeatureNWMode, BPTrait):
     def uid():
         return BPT_UID_NW_HARMONIC
 
-    def __init__(self, order: int, nwmode: NWMode | None = None):
-        super().__init__(order=order, nwmode=nwmode)
+    def __init__(
+            self,
+            order: int,
+            nwmode: NWMode | None = None,
+            sampling: str = SAMPLING_DEFAULT):
+        super().__init__(order=order, nwmode=nwmode, sampling=sampling)
 
     def params_rnw(self, nnodes):
         return _ptrait_params_nw_harmonic(self.order(), nnodes, self.nwmode())
@@ -814,7 +858,7 @@ class BPTraitNWHarmonic(TraitFeatureOrder, TraitFeatureNWMode, BPTrait):
             params, rings, self.order())
 
 
-class BPTraitNWDistortion(TraitFeatureNWMode, BPTrait):
+class BPTraitNWDistortion(TraitFeatureNWMode, TraitFeatureSampling, BPTrait):
 
     @staticmethod
     def type():
@@ -824,8 +868,11 @@ class BPTraitNWDistortion(TraitFeatureNWMode, BPTrait):
     def uid():
         return BPT_UID_NW_DISTORTION
 
-    def __init__(self, nwmode: NWMode | None = None):
-        super().__init__(nwmode=nwmode)
+    def __init__(
+            self,
+            nwmode: NWMode | None = None,
+            sampling: str = SAMPLING_DEFAULT):
+        super().__init__(nwmode=nwmode, sampling=sampling)
 
     def params_rnw(self, nnodes):
         return _ptrait_params_nw_distortion(nnodes, self.nwmode())
@@ -843,8 +890,10 @@ class BHTraitP1(BHTrait, abc.ABC):
             self,
             rnodes: bool = False,
             nwmode: NWMode | None = None,
+            sampling: str = SAMPLING_DEFAULT,
             trunc: int | float = TRUNC_DEFAULT):
-        super().__init__(rnodes=rnodes, nwmode=nwmode, trunc=trunc)
+        super().__init__(
+            rnodes=rnodes, nwmode=nwmode, sampling=sampling, trunc=trunc)
 
     def params_sm(self):
         return () if self.rnodes() else (
@@ -861,8 +910,10 @@ class BHTraitP2(BHTrait, abc.ABC):
             self,
             rnodes: bool = False,
             nwmode: NWMode | None = None,
+            sampling: str = SAMPLING_DEFAULT,
             trunc: int | float = TRUNC_DEFAULT):
-        super().__init__(rnodes=rnodes, nwmode=nwmode, trunc=trunc)
+        super().__init__(
+            rnodes=rnodes, nwmode=nwmode, sampling=sampling, trunc=trunc)
 
     def params_sm(self):
         return () if self.rnodes() else (
@@ -922,6 +973,7 @@ class BHTraitGGauss(BHTraitP2):
             self,
             rnodes: bool = False,
             nwmode: NWMode | None = None,
+            sampling: str = SAMPLING_DEFAULT,
             trunc: int | float = TRUNC_DEFAULT):
         # Normalising a truncated profile needs its cumulative distribution,
         # which is not implemented for ggauss (ggauss_1d_cdf, math.hpp)
@@ -929,7 +981,8 @@ class BHTraitGGauss(BHTraitP2):
             raise NotImplementedError(
                 "a truncated ggauss brightness height trait is not "
                 "supported yet")
-        super().__init__(rnodes=rnodes, nwmode=nwmode, trunc=trunc)
+        super().__init__(
+            rnodes=rnodes, nwmode=nwmode, sampling=sampling, trunc=trunc)
 
 
 class BHTraitLorentz(BHTraitP1):
@@ -1086,7 +1139,7 @@ class VPTraitTanRix(VPTrait):
             ParamScalarDesc('g'))
 
 
-class VPTraitNWTanUniform(TraitFeatureNWMode, VPTrait):
+class VPTraitNWTanUniform(TraitFeatureNWMode, TraitFeatureSampling, VPTrait):
 
     @staticmethod
     def type():
@@ -1096,15 +1149,19 @@ class VPTraitNWTanUniform(TraitFeatureNWMode, VPTrait):
     def uid():
         return VPT_UID_NW_TAN_UNIFORM
 
-    def __init__(self, nwmode: NWMode | None = None):
-        super().__init__(nwmode=nwmode)
+    def __init__(
+            self,
+            nwmode: NWMode | None = None,
+            sampling: str = SAMPLING_DEFAULT):
+        super().__init__(nwmode=nwmode, sampling=sampling)
 
     def params_rnw(self, nnodes):
         return (
             (ParamVectorDesc('vt', nnodes), self.nwmode()),)
 
 
-class VPTraitNWTanHarmonic(TraitFeatureOrder, TraitFeatureNWMode, VPTrait):
+class VPTraitNWTanHarmonic(
+        TraitFeatureOrder, TraitFeatureNWMode, TraitFeatureSampling, VPTrait):
 
     @staticmethod
     def type():
@@ -1114,14 +1171,18 @@ class VPTraitNWTanHarmonic(TraitFeatureOrder, TraitFeatureNWMode, VPTrait):
     def uid():
         return VPT_UID_NW_TAN_HARMONIC
 
-    def __init__(self, order: int, nwmode: NWMode | None = None):
-        super().__init__(order=order, nwmode=nwmode)
+    def __init__(
+            self,
+            order: int,
+            nwmode: NWMode | None = None,
+            sampling: str = SAMPLING_DEFAULT):
+        super().__init__(order=order, nwmode=nwmode, sampling=sampling)
 
     def params_rnw(self, nnodes):
         return _ptrait_params_nw_harmonic(self.order(), nnodes, self.nwmode())
 
 
-class VPTraitNWRadUniform(TraitFeatureNWMode, VPTrait):
+class VPTraitNWRadUniform(TraitFeatureNWMode, TraitFeatureSampling, VPTrait):
 
     @staticmethod
     def type():
@@ -1131,15 +1192,19 @@ class VPTraitNWRadUniform(TraitFeatureNWMode, VPTrait):
     def uid():
         return VPT_UID_NW_RAD_UNIFORM
 
-    def __init__(self, nwmode: NWMode | None = None):
-        super().__init__(nwmode=nwmode)
+    def __init__(
+            self,
+            nwmode: NWMode | None = None,
+            sampling: str = SAMPLING_DEFAULT):
+        super().__init__(nwmode=nwmode, sampling=sampling)
 
     def params_rnw(self, nnodes):
         return (
             (ParamVectorDesc('vr', nnodes), self.nwmode()),)
 
 
-class VPTraitNWRadHarmonic(TraitFeatureOrder, TraitFeatureNWMode, VPTrait):
+class VPTraitNWRadHarmonic(
+        TraitFeatureOrder, TraitFeatureNWMode, TraitFeatureSampling, VPTrait):
 
     @staticmethod
     def type():
@@ -1149,14 +1214,18 @@ class VPTraitNWRadHarmonic(TraitFeatureOrder, TraitFeatureNWMode, VPTrait):
     def uid():
         return VPT_UID_NW_RAD_HARMONIC
 
-    def __init__(self, order: int, nwmode: NWMode | None = None):
-        super().__init__(order=order, nwmode=nwmode)
+    def __init__(
+            self,
+            order: int,
+            nwmode: NWMode | None = None,
+            sampling: str = SAMPLING_DEFAULT):
+        super().__init__(order=order, nwmode=nwmode, sampling=sampling)
 
     def params_rnw(self, nnodes):
         return _ptrait_params_nw_harmonic(self.order(), nnodes, self.nwmode())
 
 
-class VPTraitNWVerUniform(TraitFeatureNWMode, VPTrait):
+class VPTraitNWVerUniform(TraitFeatureNWMode, TraitFeatureSampling, VPTrait):
 
     @staticmethod
     def type():
@@ -1166,15 +1235,19 @@ class VPTraitNWVerUniform(TraitFeatureNWMode, VPTrait):
     def uid():
         return VPT_UID_NW_VER_UNIFORM
 
-    def __init__(self, nwmode: NWMode | None = None):
-        super().__init__(nwmode=nwmode)
+    def __init__(
+            self,
+            nwmode: NWMode | None = None,
+            sampling: str = SAMPLING_DEFAULT):
+        super().__init__(nwmode=nwmode, sampling=sampling)
 
     def params_rnw(self, nnodes):
         return (
             (ParamVectorDesc('vv', nnodes), self.nwmode()),)
 
 
-class VPTraitNWVerHarmonic(TraitFeatureOrder, TraitFeatureNWMode, VPTrait):
+class VPTraitNWVerHarmonic(
+        TraitFeatureOrder, TraitFeatureNWMode, TraitFeatureSampling, VPTrait):
 
     @staticmethod
     def type():
@@ -1184,14 +1257,18 @@ class VPTraitNWVerHarmonic(TraitFeatureOrder, TraitFeatureNWMode, VPTrait):
     def uid():
         return VPT_UID_NW_VER_HARMONIC
 
-    def __init__(self, order: int, nwmode: NWMode | None = None):
-        super().__init__(order=order, nwmode=nwmode)
+    def __init__(
+            self,
+            order: int,
+            nwmode: NWMode | None = None,
+            sampling: str = SAMPLING_DEFAULT):
+        super().__init__(order=order, nwmode=nwmode, sampling=sampling)
 
     def params_rnw(self, nnodes):
         return _ptrait_params_nw_harmonic(self.order(), nnodes, self.nwmode())
 
 
-class VPTraitNWLOSUniform(TraitFeatureNWMode, VPTrait):
+class VPTraitNWLOSUniform(TraitFeatureNWMode, TraitFeatureSampling, VPTrait):
 
     @staticmethod
     def type():
@@ -1201,15 +1278,19 @@ class VPTraitNWLOSUniform(TraitFeatureNWMode, VPTrait):
     def uid():
         return VPT_UID_NW_LOS_UNIFORM
 
-    def __init__(self, nwmode: NWMode | None = None):
-        super().__init__(nwmode=nwmode)
+    def __init__(
+            self,
+            nwmode: NWMode | None = None,
+            sampling: str = SAMPLING_DEFAULT):
+        super().__init__(nwmode=nwmode, sampling=sampling)
 
     def params_rnw(self, nnodes):
         return (
             (ParamVectorDesc('vl', nnodes), self.nwmode()),)
 
 
-class VPTraitNWLOSHarmonic(TraitFeatureOrder, TraitFeatureNWMode, VPTrait):
+class VPTraitNWLOSHarmonic(
+        TraitFeatureOrder, TraitFeatureNWMode, TraitFeatureSampling, VPTrait):
 
     @staticmethod
     def type():
@@ -1219,8 +1300,12 @@ class VPTraitNWLOSHarmonic(TraitFeatureOrder, TraitFeatureNWMode, VPTrait):
     def uid():
         return VPT_UID_NW_LOS_HARMONIC
 
-    def __init__(self, order: int, nwmode: NWMode | None = None):
-        super().__init__(order=order, nwmode=nwmode)
+    def __init__(
+            self,
+            order: int,
+            nwmode: NWMode | None = None,
+            sampling: str = SAMPLING_DEFAULT):
+        super().__init__(order=order, nwmode=nwmode, sampling=sampling)
 
     def params_rnw(self, nnodes):
         return _ptrait_params_nw_harmonic(self.order(), nnodes, self.nwmode())
@@ -1237,7 +1322,8 @@ class VHTraitOne(VHTrait):
         return VHT_UID_ONE
 
     def __init__(self):
-        super().__init__(rnodes=False, nwmode=None)
+        super().__init__(
+            rnodes=False, nwmode=None, sampling=SAMPLING_DEFAULT)
 
 
 class DPTraitUniform(DPTrait):
@@ -1421,7 +1507,7 @@ class DPTraitMixtureMoffat(TraitFeatureNBlobs, DPTrait):
         return _ptrait_params_mixture_7p(self.nblobs())
 
 
-class DPTraitNWUniform(TraitFeatureNWMode, DPTrait):
+class DPTraitNWUniform(TraitFeatureNWMode, TraitFeatureSampling, DPTrait):
 
     @staticmethod
     def type():
@@ -1431,15 +1517,19 @@ class DPTraitNWUniform(TraitFeatureNWMode, DPTrait):
     def uid():
         return DPT_UID_NW_UNIFORM
 
-    def __init__(self, nwmode: NWMode | None = None):
-        super().__init__(nwmode=nwmode)
+    def __init__(
+            self,
+            nwmode: NWMode | None = None,
+            sampling: str = SAMPLING_DEFAULT):
+        super().__init__(nwmode=nwmode, sampling=sampling)
 
     def params_rnw(self, nnodes):
         return (
             (ParamVectorDesc('a', nnodes), self.nwmode()),)
 
 
-class DPTraitNWHarmonic(TraitFeatureOrder, TraitFeatureNWMode, DPTrait):
+class DPTraitNWHarmonic(
+        TraitFeatureOrder, TraitFeatureNWMode, TraitFeatureSampling, DPTrait):
 
     @staticmethod
     def type():
@@ -1449,14 +1539,18 @@ class DPTraitNWHarmonic(TraitFeatureOrder, TraitFeatureNWMode, DPTrait):
     def uid():
         return DPT_UID_NW_HARMONIC
 
-    def __init__(self, order: int, nwmode: NWMode | None = None):
-        super().__init__(order=order, nwmode=nwmode)
+    def __init__(
+            self,
+            order: int,
+            nwmode: NWMode | None = None,
+            sampling: str = SAMPLING_DEFAULT):
+        super().__init__(order=order, nwmode=nwmode, sampling=sampling)
 
     def params_rnw(self, nnodes):
         return _ptrait_params_nw_harmonic(self.order(), nnodes, self.nwmode())
 
 
-class DPTraitNWDistortion(TraitFeatureNWMode, DPTrait):
+class DPTraitNWDistortion(TraitFeatureNWMode, TraitFeatureSampling, DPTrait):
 
     @staticmethod
     def type():
@@ -1466,8 +1560,11 @@ class DPTraitNWDistortion(TraitFeatureNWMode, DPTrait):
     def uid():
         return DPT_UID_NW_DISTORTION
 
-    def __init__(self, nwmode: NWMode | None = None):
-        super().__init__(nwmode=nwmode)
+    def __init__(
+            self,
+            nwmode: NWMode | None = None,
+            sampling: str = SAMPLING_DEFAULT):
+        super().__init__(nwmode=nwmode, sampling=sampling)
 
     def params_rnw(self, nnodes):
         return _ptrait_params_nw_distortion(nnodes, self.nwmode())
@@ -1484,10 +1581,11 @@ class DHTraitOne(DHTrait):
         return DHT_UID_ONE
 
     def __init__(self):
-        super().__init__(rnodes=False, nwmode=None)
+        super().__init__(
+            rnodes=False, nwmode=None, sampling=SAMPLING_DEFAULT)
 
 
-class ZPTraitNWUniform(TraitFeatureNWMode, ZPTrait):
+class ZPTraitNWUniform(TraitFeatureNWMode, TraitFeatureSampling, ZPTrait):
 
     @staticmethod
     def type():
@@ -1497,15 +1595,19 @@ class ZPTraitNWUniform(TraitFeatureNWMode, ZPTrait):
     def uid():
         return ZPT_UID_NW_UNIFORM
 
-    def __init__(self, nwmode: NWMode | None = None):
-        super().__init__(nwmode=nwmode)
+    def __init__(
+            self,
+            nwmode: NWMode | None = None,
+            sampling: str = SAMPLING_DEFAULT):
+        super().__init__(nwmode=nwmode, sampling=sampling)
 
     def params_rnw(self, nnodes):
         return (
             (ParamVectorDesc('a', nnodes), self.nwmode()),)
 
 
-class ZPTraitNWHarmonic(TraitFeatureOrder, TraitFeatureNWMode, ZPTrait):
+class ZPTraitNWHarmonic(
+        TraitFeatureOrder, TraitFeatureNWMode, TraitFeatureSampling, ZPTrait):
 
     @staticmethod
     def type():
@@ -1515,8 +1617,12 @@ class ZPTraitNWHarmonic(TraitFeatureOrder, TraitFeatureNWMode, ZPTrait):
     def uid():
         return ZPT_UID_NW_HARMONIC
 
-    def __init__(self, order: int, nwmode: NWMode | None = None):
-        super().__init__(order=order, nwmode=nwmode)
+    def __init__(
+            self,
+            order: int,
+            nwmode: NWMode | None = None,
+            sampling: str = SAMPLING_DEFAULT):
+        super().__init__(order=order, nwmode=nwmode, sampling=sampling)
 
     def params_rnw(self, nnodes):
         return _ptrait_params_nw_harmonic(self.order(), nnodes, self.nwmode())
@@ -1538,7 +1644,8 @@ class SPTraitAzimuthalRange(SPTrait):
             ParamScalarDesc('s'))
 
 
-class SPTraitNWAzimuthalRange(TraitFeatureNWMode, SPTrait):
+class SPTraitNWAzimuthalRange(
+        TraitFeatureNWMode, TraitFeatureSampling, SPTrait):
 
     @staticmethod
     def type():
@@ -1548,8 +1655,8 @@ class SPTraitNWAzimuthalRange(TraitFeatureNWMode, SPTrait):
     def uid():
         return SPT_UID_NW_AZRANGE
 
-    def __init__(self, nwmode=None):
-        super().__init__(nwmode=nwmode)
+    def __init__(self, nwmode=None, sampling: str = SAMPLING_DEFAULT):
+        super().__init__(nwmode=nwmode, sampling=sampling)
 
     def params_rnw(self, nnodes):
         return (
@@ -1838,7 +1945,7 @@ class OPTraitMixtureMoffat(TraitFeatureNBlobs, OPTrait):
         return _ptrait_integrate_mixture_moffat(params, rings)
 
 
-class OPTraitNWUniform(TraitFeatureNWMode, OPTrait):
+class OPTraitNWUniform(TraitFeatureNWMode, TraitFeatureSampling, OPTrait):
 
     @staticmethod
     def type():
@@ -1848,8 +1955,11 @@ class OPTraitNWUniform(TraitFeatureNWMode, OPTrait):
     def uid():
         return OPT_UID_NW_UNIFORM
 
-    def __init__(self, nwmode: NWMode | None = None):
-        super().__init__(nwmode=nwmode)
+    def __init__(
+            self,
+            nwmode: NWMode | None = None,
+            sampling: str = SAMPLING_DEFAULT):
+        super().__init__(nwmode=nwmode, sampling=sampling)
 
     def params_rnw(self, nnodes):
         return (
@@ -1862,7 +1972,8 @@ class OPTraitNWUniform(TraitFeatureNWMode, OPTrait):
         return _ptrait_integrate_nw_uniform(params, rings)
 
 
-class OPTraitNWHarmonic(TraitFeatureOrder, TraitFeatureNWMode, OPTrait):
+class OPTraitNWHarmonic(
+        TraitFeatureOrder, TraitFeatureNWMode, TraitFeatureSampling, OPTrait):
 
     @staticmethod
     def type():
@@ -1872,8 +1983,12 @@ class OPTraitNWHarmonic(TraitFeatureOrder, TraitFeatureNWMode, OPTrait):
     def uid():
         return OPT_UID_NW_HARMONIC
 
-    def __init__(self, order: int, nwmode: NWMode | None = None):
-        super().__init__(order=order, nwmode=nwmode)
+    def __init__(
+            self,
+            order: int,
+            nwmode: NWMode | None = None,
+            sampling: str = SAMPLING_DEFAULT):
+        super().__init__(order=order, nwmode=nwmode, sampling=sampling)
 
     def params_rnw(self, nnodes):
         return _ptrait_params_nw_harmonic(self.order(), nnodes, self.nwmode())
@@ -1886,7 +2001,7 @@ class OPTraitNWHarmonic(TraitFeatureOrder, TraitFeatureNWMode, OPTrait):
             params, rings, self.order())
 
 
-class OPTraitNWDistortion(TraitFeatureNWMode, OPTrait):
+class OPTraitNWDistortion(TraitFeatureNWMode, TraitFeatureSampling, OPTrait):
 
     @staticmethod
     def type():
@@ -1896,8 +2011,11 @@ class OPTraitNWDistortion(TraitFeatureNWMode, OPTrait):
     def uid():
         return OPT_UID_NW_DISTORTION
 
-    def __init__(self, nwmode: NWMode | None = None):
-        super().__init__(nwmode=nwmode)
+    def __init__(
+            self,
+            nwmode: NWMode | None = None,
+            sampling: str = SAMPLING_DEFAULT):
+        super().__init__(nwmode=nwmode, sampling=sampling)
 
     def params_rnw(self, nnodes):
         return _ptrait_params_nw_distortion(nnodes, self.nwmode())
@@ -1915,8 +2033,10 @@ class OHTraitP1(OHTrait, abc.ABC):
             self,
             rnodes: bool = False,
             nwmode: NWMode | None = None,
+            sampling: str = SAMPLING_DEFAULT,
             trunc: int | float = TRUNC_DEFAULT):
-        super().__init__(rnodes=rnodes, nwmode=nwmode, trunc=trunc)
+        super().__init__(
+            rnodes=rnodes, nwmode=nwmode, sampling=sampling, trunc=trunc)
 
     def params_sm(self):
         return () if self.rnodes() else (
@@ -1933,8 +2053,10 @@ class OHTraitP2(OHTrait, abc.ABC):
             self,
             rnodes: bool = False,
             nwmode: NWMode | None = None,
+            sampling: str = SAMPLING_DEFAULT,
             trunc: int | float = TRUNC_DEFAULT):
-        super().__init__(rnodes=rnodes, nwmode=nwmode, trunc=trunc)
+        super().__init__(
+            rnodes=rnodes, nwmode=nwmode, sampling=sampling, trunc=trunc)
 
     def params_sm(self):
         return () if self.rnodes() else (
@@ -1994,6 +2116,7 @@ class OHTraitGGauss(OHTraitP2):
             self,
             rnodes: bool = False,
             nwmode: NWMode | None = None,
+            sampling: str = SAMPLING_DEFAULT,
             trunc: int | float = TRUNC_DEFAULT):
         # Normalising a truncated profile needs its cumulative distribution,
         # which is not implemented for ggauss (ggauss_1d_cdf, math.hpp)
@@ -2001,7 +2124,8 @@ class OHTraitGGauss(OHTraitP2):
             raise NotImplementedError(
                 "a truncated ggauss opacity height trait is not "
                 "supported yet")
-        super().__init__(rnodes=rnodes, nwmode=nwmode, trunc=trunc)
+        super().__init__(
+            rnodes=rnodes, nwmode=nwmode, sampling=sampling, trunc=trunc)
 
 
 class OHTraitLorentz(OHTraitP1):

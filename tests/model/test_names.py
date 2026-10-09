@@ -33,7 +33,8 @@ def test_without_names_the_prefixes_are_positions():
     gmodel = intensity_3d([disk(), disk()], [opacity()])
     assert {'xpos', 'cmp1_xpos', 'ocmp_xpos'} <= set(gmodel.pdescs())
     assert set(gmodel.constants()) == {
-        'rnodes', 'cmp1_rnodes', 'ocmp_rnodes'}
+        'rnodes', 'subrnodes', 'cmp1_rnodes', 'cmp1_subrnodes',
+        'ocmp_rnodes', 'ocmp_subrnodes'}
 
 
 def test_names_prefix_the_parameters_and_constants():
@@ -43,7 +44,8 @@ def test_names_prefix_the_parameters_and_constants():
     assert {'disk_xpos', 'bulge_bpt_s', 'dust_opt_a'} <= names
     assert not {'xpos', 'cmp1_xpos', 'ocmp_xpos'} & names
     assert set(gmodel.constants()) == {
-        'disk_rnodes', 'bulge_rnodes', 'dust_rnodes'}
+        'disk_rnodes', 'disk_subrnodes', 'bulge_rnodes', 'bulge_subrnodes',
+        'dust_rnodes', 'dust_subrnodes'}
 
 
 def test_names_do_not_depend_on_the_order():
@@ -87,7 +89,8 @@ def test_model_names_prefix_the_parameters():
     assert {'xpos', 'model1_xpos'} <= set(models(None, None).pdescs())
     group = models('hi', 'halpha')
     assert {'hi_xpos', 'halpha_xpos'} <= set(group.pdescs())
-    assert set(group.constants()) == {'hi_rnodes', 'halpha_rnodes'}
+    assert set(group.constants()) == {
+        'hi_rnodes', 'hi_subrnodes', 'halpha_rnodes', 'halpha_subrnodes'}
     assert group.models()[0].dump()['name'] == 'hi'
 
 

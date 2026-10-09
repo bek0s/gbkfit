@@ -1,6 +1,6 @@
 """
 Tests for the constants of the models, which parameter expressions can
-use: the radial nodes of each disk.
+use: the radial nodes and subnodes of each disk.
 """
 
 import numpy as np
@@ -62,7 +62,8 @@ def test_names_of_constants():
     models = gbkfit.model.model_parser.load([model0, model1])
     constants = gbkfit.model.ModelGroup(models).constants()
     assert list(constants) == [
-        'rnodes', 'cmp1_rnodes', 'ocmp_rnodes', 'model1_rnodes']
+        'rnodes', 'subrnodes', 'cmp1_rnodes', 'cmp1_subrnodes',
+        'ocmp_rnodes', 'ocmp_subrnodes', 'model1_rnodes', 'model1_subrnodes']
     assert constants['rnodes'] == tuple(RNODES)
     assert constants['cmp1_rnodes'] == (0, 5, 10)
     assert constants['ocmp_rnodes'] == (0, 1)
