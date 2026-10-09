@@ -178,12 +178,6 @@ def test_trunc_cannot_be_negative():
     assert "trunc must be at least 0" in message
 
 
-def test_truncated_ggauss_brightness_height_is_not_supported():
-    message = component_error(
-        'brightness_smdisk_3d', bhtraits=dict(type='ggauss', trunc=2))
-    assert "truncated ggauss" in message
-
-
 @pytest.mark.parametrize('name, key', [
     ('brightness_smdisk_3d', 'bhtraits'), ('opacity_smdisk_3d', 'ohtraits')])
 def test_moffat_heights_are_not_supported(name, key):
@@ -191,9 +185,3 @@ def test_moffat_heights_are_not_supported(name, key):
     # (moffat_1d_pdf, math.hpp)
     message = component_error(name, **{key: dict(type='moffat')})
     assert re.search("unknown .*type 'moffat'", message)
-
-
-def test_truncated_ggauss_opacity_height_is_not_supported():
-    message = component_error(
-        'opacity_smdisk_3d', ohtraits=dict(type='ggauss', trunc=2))
-    assert "truncated ggauss" in message

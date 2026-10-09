@@ -325,16 +325,61 @@ ggauss_1d_fun_trunc(T x, T a, T b, T c, T d, T xmin, T xmax)
 {
     return _trunc_1d_fun<ggauss_1d_fun<T>>(xmin, xmax, x, a, b, c, d);
 }
-// Not implemented yet (it needs the incomplete gamma function); the traits
-// that would use it are rejected at load
+// The regularised lower incomplete gamma function P(a, x), for a > 0 and
+// x >= 0: by its series for x < a + 1, and otherwise by the continued
+// fraction of 1 - P (modified Lentz)
+template<typename T> constexpr T
+gamma_p(T a, T x)
+{
+    constexpr int MAX_TERMS = 500;
+    constexpr T EPS = sizeof(T) == sizeof(float) ? T{1.2e-7} : T{2.3e-16};
+    constexpr T TINY = T{1e-30};
+    if (x <= 0)
+        return 0;
+    const T scale = std::exp(-x + a * std::log(x) - std::lgamma(a));
+    if (x < a + 1)
+    {
+        T ap = a;
+        T term = 1 / a;
+        T sum = term;
+        for (int n = 0; n < MAX_TERMS; ++n)
+        {
+            ap += 1;
+            term *= x / ap;
+            sum += term;
+            if (std::abs(term) < std::abs(sum) * EPS)
+                break;
+        }
+        return sum * scale;
+    }
+    T b = x + 1 - a;
+    T c = 1 / TINY;
+    T d = 1 / b;
+    T h = d;
+    for (int i = 1; i < MAX_TERMS; ++i)
+    {
+        const T an = -i * (i - a);
+        b += 2;
+        d = an * d + b;
+        d = std::abs(d) < TINY ? TINY : d;
+        c = b + an / c;
+        c = std::abs(c) < TINY ? TINY : c;
+        d = 1 / d;
+        const T delta = d * c;
+        h *= delta;
+        if (std::abs(delta - 1) < EPS)
+            break;
+    }
+    return 1 - scale * h;
+}
+
+// The cdf of the generalised Gaussian exp(-(|x - b| / c)^d) (normalised):
+// 1/2 + sign(x - b) P(1 / d, (|x - b| / c)^d) / 2
 template<typename T> constexpr T
 ggauss_1d_cdf(T x, T b, T c, T d)
 {
-    (void)x;
-    (void)b;
-    (void)c;
-    (void)d;
-    return 0;
+    const T p = gamma_p(1 / d, std::pow(std::abs(x - b) / c, d));
+    return T{0.5} + T{0.5} * (x < b ? -p : p);
 }
 
 template<typename T> constexpr T
