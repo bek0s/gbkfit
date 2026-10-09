@@ -152,6 +152,29 @@ def test_dataset_round_trip_keeps_the_rotation_and_the_velocities(tmp_path):
     np.testing.assert_allclose(loaded.zero(), (-6, -8, 1480), atol=1e-9)
 
 
+def test_dataset_options_replace_the_world_coordinates_of_files(tmp_path):
+    # step and rota replace those of the headers of the data files; rpix
+    # replaces the reference pixel, with the world position of the header
+    # there as rval, and rval the reference value, at its pixel
+    dataset = DatasetSCube(
+        Data(np.zeros((6, 8, 20))), step=(2, 2, 10), rpix=(3, 4, 2),
+        rval=(150, 2, 1500), rota=30)
+    info = dataset.dump(prefix=str(tmp_path / ''))
+    for key in ('step', 'rpix', 'rval', 'rota'):
+        info.pop(key)
+    coords = dataset_parser.load(
+        info | dict(step=(1, 1, 5), rota=45)).grid().coords
+    np.testing.assert_allclose(coords.step, (1, 1, 5))
+    assert coords.rota == 45
+    coords = dataset_parser.load(info | dict(rpix=(5, 6, 3))).grid().coords
+    assert coords.rpix == (5, 6, 3)
+    assert coords.rval[2] == pytest.approx(1510)
+    coords = dataset_parser.load(
+        info | dict(rval=(150, 2, 1520))).grid().coords
+    np.testing.assert_allclose(coords.rpix, (3, 4, 4), atol=1e-6)
+    np.testing.assert_allclose(coords.rval, (150, 2, 1520))
+
+
 def test_data_can_be_read_from_extensions(tmp_path):
     # e.g. JWST data, with the data in SCI and the error in ERR
     fits.HDUList([
