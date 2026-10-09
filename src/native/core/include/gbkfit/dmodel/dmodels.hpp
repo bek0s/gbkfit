@@ -78,9 +78,11 @@ dmodel_dcube_mask(
 // (x, y) of a cube: its flux (order 0), mean velocity (1), dispersion
 // (2), and central moments (above 2); with the weights of the spectrum,
 // their flux-weighted mean (mmaps_w). The spectra whose moment 0 is not
-// above the cutoff are masked (NaN, and 0 in mmaps_m). The channels of
-// the spectrum (and of its weights) are stride values apart: the
-// spectrum can be in the cube or in a contiguous copy.
+// above the cutoff are masked (NaN, and 0 in mmaps_m), and with orders
+// from 2, those whose variance is negative (e.g. the faint ringing of a
+// convolution), which have no dispersion. The channels of the spectrum
+// (and of its weights) are stride values apart: the spectrum can be in
+// the cube or in a contiguous copy.
 template<typename T> constexpr void
 dmodel_mmaps_moments(
         int x, int y,
@@ -90,20 +92,13 @@ dmodel_mmaps_moments(
         T cutoff, int norders, const int* orders,
         T* mmaps_d, T* mmaps_m, T* mmaps_w)
 {
-    // Index of the current spatial position
     const int idx_2d = index_2d_to_1d(x, y, size_x);
 
     // Moment orders are assumed to be sorted
     const int max_order = orders[norders - 1];
 
-    // Tracks the moment we are current processing
-    int m = 0;
-
-    //
-    // Moments 0 and 1 (their sums)
-    //
-
-    T m0=0, m0_sum=0, m1_sum=0;
+    // Moments 0 and 1
+    T m0_sum = 0, m1_sum = 0;
     for (int z = 0; z < size_z; ++z)
     {
         T i = spectrum_d[z * stride];
@@ -111,25 +106,25 @@ dmodel_mmaps_moments(
         m0_sum += i * step_z;
         m1_sum += i * v * step_z;
     }
+    bool valid = std::abs(m0_sum) > cutoff;
+    const T m0 = m0_sum;
+    const T m1 = m1_sum / m0;
 
-    // Check if we need to mask this spatial position
-    bool valid = mmaps_m[idx_2d] = std::abs(m0_sum) > cutoff;
-
-    // Moment is valid only if not masked
-    m0 = valid ? m0_sum : NAN;
-
-    // Store moment if it was requested
-    if (orders[m] == 0)
+    // The variance, about moment 1
+    T m2_sum = 0;
+    if (valid && max_order >= 2)
     {
-        const int idx = index_3d_to_1d(x, y, m, size_x, size_y);
-        mmaps_d[idx] = m0;
-        m++;
+        for (int z = 0; z < size_z; ++z)
+        {
+            T i = spectrum_d[z * stride];
+            T v = zero_z + z * step_z;
+            m2_sum += i * (v - m1) * (v - m1) * step_z;
+        }
+        valid = m2_sum / m0 >= 0;
     }
+    mmaps_m[idx_2d] = valid;
 
-    //
     // Weight
-    //
-
     T w_sum = 0;
     for (int z = 0; spectrum_w && valid && z < size_z; ++z)
     {
@@ -137,82 +132,40 @@ dmodel_mmaps_moments(
         T w = spectrum_w[z * stride];
         w_sum += w * i * step_z / m0;
     }
-
-    // Weight is valid only if not masked
-    w_sum = valid ? w_sum : NAN;
-
     if (spectrum_w)
     {
-        mmaps_w[idx_2d] = w_sum;
+        mmaps_w[idx_2d] = valid ? w_sum : NAN;
     }
 
-    // Max order reached
-    if (max_order == 0) {
-        return;
-    }
-
-    //
-    // Moment 1
-    //
-
-    // Moment is valid only if not masked
-    T m1 = valid ? m1_sum / m0 : NAN;
-
-    // Only output requested moments
-    if (orders[m] == 1)
+    // The moments of the given orders, valid only if not masked
+    for (int m = 0; m < norders; ++m)
     {
-        const int idx = index_3d_to_1d(x, y, m, size_x, size_y);
-        mmaps_d[idx] = m1;
-        m++;
-    }
-
-    // Max order reached
-    if (max_order == 1) {
-        return;
-    }
-
-    //
-    // Moment 2
-    //
-
-    T m2=0, m2_sum=0;
-    for (int z = 0; valid && z < size_z; ++z)
-    {
-        T i = spectrum_d[z * stride];
-        T v = zero_z + z * step_z;
-        m2_sum += i * (v - m1) * (v - m1) * step_z;
-    }
-
-    // Moment is valid only if not masked
-    m2 = valid ? std::sqrt(m2_sum / m0) : NAN;
-
-    // Only output requested moments
-    if (orders[m] == 2)
-    {
-        const int idx = index_3d_to_1d(x, y, m, size_x, size_y);
-        mmaps_d[idx] = m2;
-        m++;
-    }
-
-    //
-    // Higher order moments
-    //
-
-    for(; m < norders; ++m)
-    {
-        T mn=0, mn_sum=0;
-        for (int z = 0; valid && z < size_z; ++z)
+        const int order = orders[m];
+        T value = NAN;
+        if (valid && order == 0)
         {
-            T flx = spectrum_d[z * stride];
-            T vel = zero_z + z * step_z;
-            mn_sum += flx * ipow(vel - m1, orders[m]) * step_z;
+            value = m0;
         }
-
-        // Moment is valid only if not masked
-        mn = valid ? mn_sum / m0 : NAN;
-
-        const int idx = index_3d_to_1d(x, y, m, size_x, size_y);
-        mmaps_d[idx] = mn;
+        else if (valid && order == 1)
+        {
+            value = m1;
+        }
+        else if (valid && order == 2)
+        {
+            value = std::sqrt(m2_sum / m0);
+        }
+        else if (valid)
+        {
+            T mn_sum = 0;
+            for (int z = 0; z < size_z; ++z)
+            {
+                T flx = spectrum_d[z * stride];
+                T vel = zero_z + z * step_z;
+                mn_sum += flx * ipow(vel - m1, order) * step_z;
+            }
+            value = mn_sum / m0;
+        }
+        mmaps_d[index_3d_to_1d(x, y, m, size_x, size_y)] = value;
     }
 }
 
