@@ -504,6 +504,14 @@ class TypedParser(Parser):
                     f"a parser of the same type is already registered")
             self._parsers[parser.type()] = parser  # type: ignore
 
+    def registered_class(self, type_: str) -> type[TypedSerializable]:
+        """The class registered for the given type."""
+        if type_ not in self._parsers:
+            raise ConfigError(
+                f"unknown {self.cls_name()} type '{type_}'; "
+                f"the available types are: {list(self._parsers.keys())}")
+        return self._parsers[type_]
+
     def _load_one_impl(
             self,
             x: dict[str, Any],

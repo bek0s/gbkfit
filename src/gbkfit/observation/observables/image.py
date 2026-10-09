@@ -19,6 +19,9 @@ def _image_extra(data, grid):
 
 class Image(Observable):
 
+    # The form of the data this observable measures
+    dataset_class = DatasetImage
+
     # An image has no spectral axis
     _spectral_axis = None
 

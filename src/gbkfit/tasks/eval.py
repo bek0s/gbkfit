@@ -57,12 +57,7 @@ def eval_(
     # and inform the user about the really obvious mistakes.
     required_sections = ('gmodels', 'observations', 'params')
     optional_sections = ('pdescs',)
-    if mode == 'model':
-        optional_sections += ('datasets',)
-    elif mode == 'objective':
-        required_sections += ('datasets',)
-        optional_sections += ('objective',)
-    else:
+    if mode not in ('model', 'objective'):
         raise RuntimeError("impossible")
     cfg = _detail.prepare_config(cfg, required_sections, optional_sections)
 
@@ -77,26 +72,17 @@ def eval_(
     #
     # Setup all the components described in the configuration.
     # After running the configuration through _detail.prepare_config():
-    # - datasets, gmodels and observations configurations are lists
+    # - gmodels and observations configurations are lists
     # - objective, pdescs, and params configurations are dicts
     #
 
-    datasets = None
-    if 'datasets' in cfg:
-        _log.info("setting up datasets...")
-        with config_path('datasets'):
-            datasets = gbkfit.dataset.dataset_parser.load(cfg['datasets'])
-
     _log.info("setting up gmodels and observations...")
-    group = _detail.load_observation_group(cfg, datasets)
+    group = _detail.load_observation_group(cfg)
 
     objective = None
     if mode == 'objective':
         _log.info("setting up objective...")
-        with config_path('objective'):
-            objective = gbkfit.objective.objective_parser.load(
-                cfg.get('objective', {}),
-                datasets=datasets, group=group)
+        objective = gbkfit.objective.Objective(group)
 
     _log.info("setting up pdescs...")
     pdescs = objective.pdescs() \

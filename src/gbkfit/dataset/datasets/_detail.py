@@ -58,3 +58,23 @@ def dump_dataset_common(dataset, **kwargs):
             dump_wcs=False,  # Reduce unnecessary verbosity
             dump_path=dump_path, overwrite=overwrite)
     return info
+
+
+# The options of a whole dataset, as opposed to those of its data items
+_DATASET_OPTIONS = ('step', 'rpix', 'rval', 'rota')
+
+
+def nest_single_item(info, name):
+    """
+    The info of a dataset of one data item, given flat (the options of its
+    item beside those of the dataset), with the options of the item under
+    its name.
+    """
+    item = {k: v for k, v in info.items() if k not in _DATASET_OPTIONS}
+    return {k: info[k] for k in _DATASET_OPTIONS if k in info} | {name: item}
+
+
+def flatten_single_item(info, name):
+    """The inverse of nest_single_item."""
+    info = dict(info)
+    return info | info.pop(name)

@@ -1,6 +1,4 @@
 
-from abc import ABC
-from collections.abc import Mapping, Sequence
 from numbers import Real
 from typing import Any
 
@@ -9,41 +7,26 @@ import numpy as np
 from gbkfit.dataset import Dataset
 from gbkfit.observation import ObservationGroup
 from gbkfit.params import ParamDesc
-from gbkfit.utils import iterutils, parseutils, timeutils
+from gbkfit.utils import iterutils, timeutils
 
 
-class Objective(parseutils.BasicSerializable, ABC):
+class Objective:
+    """
+    The comparison of the models of a group of observations with their
+    data, each under its likelihood (which is Gaussian, with weights for
+    its data items).
+    """
 
-    @classmethod
-    def load(cls, info: dict[str, Any], *args, **kwargs) -> 'Objective':
-        datasets = kwargs.get('datasets')
-        group = kwargs.get('group')
-        desc = parseutils.make_basic_desc(cls, 'objective')
-        opts = parseutils.parse_options_for_callable(
-            info, desc, cls.__init__, fun_ignore_args=['datasets', 'group'])
-        return cls(datasets, group, **opts)
-
-    def dump(self) -> dict[str, Any]:
-        return dict(
-            wu=self._wu)
-
-    def __init__(
-            self,
-            datasets: Dataset | Sequence[Dataset],
-            group: ObservationGroup,
-            wu:
-            Real |
-            Mapping[str, Real] |
-            Sequence[Real] |
-            Sequence[Mapping[str, Real]] = 1.0
-    ):
-        self._datasets = datasets = iterutils.tuplify(datasets)
-        self._group = group
+    def __init__(self, group: ObservationGroup):
         n = group.nobservations()
-        if len(datasets) != n:
+        observations = group.observations()
+        missing = [i for i, obs in enumerate(observations) if obs.data() is None]
+        if missing:
             raise RuntimeError(
-                f"the number of datasets and observations are not equal "
-                f"({len(datasets)} != {n})")
+                f"every observation of an objective needs data; these have "
+                f"none: {missing}")
+        self._group = group
+        self._datasets = datasets = tuple(obs.data() for obs in observations)
         # These lists hold n x dataset data in 1d arrays
         self._d_dataset_d_vector = iterutils.make_list(n, None)
         self._d_dataset_m_vector = iterutils.make_list(n, None)
@@ -63,57 +46,31 @@ class Objective(parseutils.BasicSerializable, ABC):
         # These lists hold n x 1d arrays of size 1
         self._h_residual_scalar = iterutils.make_list(n, None)
         self._d_residual_scalar = iterutils.make_list(n, None)
-        # If we have one weight (or one dict of weights) but
-        # multiple datasets, replicate the value multiple times.
-        if isinstance(wu, (Real, Mapping)):
-            wu = iterutils.make_tuple(n, wu)
-        if len(datasets) != len(wu):
-            raise RuntimeError(
-                f"the number of datasets and the length of wu are not equal "
-                f"({len(datasets)} != {len(wu)})")
-        # We will use these weight variables when dumping this object.
-        # This is in both a compact and an ambiguity-free form.
-        self._wu = wu
-        # These variables will contain the fully-expanded weights,
-        # and they are most convenient to work with.
-        self._weights_u = iterutils.make_tuple(n, {})
-        for i in range(n):
-            dataset = datasets[i]
-            observation = group.observations()[i]
-            observable = observation.observable()
+        # The weight of each data item, from the likelihood
+        self._weights_u = tuple(
+            {key: obs.likelihood().weight(key)
+             for key in obs.observable().keys()}
+            for obs in observations)
+        for i, (dataset, obs) in enumerate(zip(datasets, observations)):
+            observable = obs.observable()
             keys_dat = tuple(dataset.keys())
             keys_mdl = tuple(observable.keys())
             if set(keys_dat) != set(keys_mdl):
                 raise RuntimeError(
                     f"dataset and observable are incompatible "
-                    f"for item #{i} "
-                    f"({keys_dat} != {keys_mdl})")
-            if dataset.dtype() != observation.dtype():
+                    f"for observation #{i} ({keys_dat} != {keys_mdl})")
+            if dataset.dtype() != obs.dtype():
                 raise RuntimeError(
-                    f"dataset and observable have incompatible dtypes "
-                    f"for item #{i} "
-                    f"({dataset.dtype()} != {observation.dtype()})")
-            if dataset.size() != observable.size():
-                raise RuntimeError(
-                    f"dataset and observable have incompatible sizes "
-                    f"for item #{i} "
-                    f"({dataset.size()} != {observable.size()})")
-            if dataset.step() != observable.step():
-                raise RuntimeError(
-                    f"dataset and observable have incompatible steps "
-                    f"for item #{i} "
-                    f"({dataset.step()} != {observable.step()})")
-            if dataset.zero() != observable.zero():
-                raise RuntimeError(
-                    f"dataset and observable have incompatible zeros "
-                    f"for item #{i} "
-                    f"({dataset.zero()} != {observable.zero()})")
-            # Expand weights fully
-            for key in keys_mdl:
-                if isinstance(wu[i], Real):
-                    self._weights_u[i][key] = wu[i]
-                elif isinstance(wu[i], Mapping):
-                    self._weights_u[i][key] = wu[i].get(key, 1.0)
+                    f"dataset and observation have incompatible dtypes "
+                    f"for observation #{i} "
+                    f"({dataset.dtype()} != {obs.dtype()})")
+            for attr in ('size', 'step', 'zero'):
+                if getattr(dataset, attr)() != getattr(observable, attr)():
+                    raise RuntimeError(
+                        f"dataset and observable have incompatible {attr}s "
+                        f"for observation #{i} "
+                        f"({getattr(dataset, attr)()} != "
+                        f"{getattr(observable, attr)()})")
         # One backend for each driver
         self._backends = iterutils.make_list(n, None)
         # This class is lazily initialized
@@ -313,5 +270,3 @@ class Objective(parseutils.BasicSerializable, ABC):
                     weights, residual)
         t.stop()
 
-
-objective_parser = parseutils.BasicParser(Objective)

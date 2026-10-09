@@ -39,11 +39,12 @@ def test_objective_residuals(tmp_path):
     config = yaml.load(REFERENCE_DIR / 'thin_disk_scube.yaml')
     model = run_eval('model', config, tmp_path / 'model')['model_0_scube_d']
     fits.writeto(tmp_path / 'data.fits', model + 1)
-    config['datasets'] = [dict(
-        type='scube',
-        scube=dict(data=str(tmp_path / 'data.fits'), error=2.0),
-        step=config['observations'][0]['observable']['step'])]
-    config['objective'] = dict(wu=0.5)
+    observation = config['observations'][0]
+    observation['data'] = dict(
+        data=str(tmp_path / 'data.fits'), error=2.0,
+        step=observation['observable'].pop('step'))
+    observation['observable'].pop('size')
+    observation['likelihood'] = dict(type='gaussian', weights=0.5)
     outputs = run_eval('objective', config, tmp_path / 'objective')
     np.testing.assert_allclose(outputs['residual_scube_d'], -0.5, rtol=1e-5)
     np.testing.assert_allclose(outputs['wresidual_scube_d'], -0.25, rtol=1e-5)

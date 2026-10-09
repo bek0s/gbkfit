@@ -28,17 +28,14 @@ def split_model(model):
     return gmodel, observation
 
 
-def observation_group(models, dataset=None):
-    """
-    An ObservationGroup of models of the tests (see split_model), with the
-    grids of the given datasets (if any).
-    """
+def observation_group(models):
+    """An ObservationGroup of models of the tests (see split_model)."""
     from gbkfit.model import gmodel_parser
     from gbkfit.observation import ObservationGroup, observation_parser
     gmodels, observations = zip(*[split_model(model) for model in models])
     return ObservationGroup(
         gmodel_parser.load(list(gmodels)),
-        observation_parser.load(list(observations), dataset=dataset))
+        observation_parser.load(list(observations)))
 
 
 def config_group(config):
