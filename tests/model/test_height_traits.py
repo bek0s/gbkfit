@@ -125,3 +125,32 @@ def test_radial_range_truncates_the_disk(driver):
         driver, component, PROPERTIES | dict(spt_rmin=6, spt_rmax=1e6))
     np.testing.assert_allclose(
         inner + ring + outer, plain, rtol=1e-5, atol=1e-7 * plain.max())
+
+
+@pytest.mark.parametrize('height, values, factor', [
+    (dict(type='linear'), dict(dht1_z0=1),
+     lambda z: np.maximum(0, np.abs(z) - 1)),
+    (dict(type='exponential'), dict(dht1_s=2),
+     lambda z: np.exp(-np.abs(z) / 2)),
+    (dict(type='gauss'), dict(dht1_s=2),
+     lambda z: np.exp(-0.5 * (z / 2) ** 2))])
+def test_height_traits_at_each_height(driver, height, values, factor):
+    # A face-on thick disk, whose voxels are at the height of their z:
+    # its dispersion is 20, plus 5 times the factor of the height trait
+    # (the velocity height traits have the same factors)
+    component, properties = with_second(
+        'd', dict(type='uniform'), height, dict(dpt1_a=5), values)
+    group = observation_group([dict(
+        driver=dict(type=driver.type()), dmodel=copy.deepcopy(SCUBE),
+        gmodel=dict(type='kinematics_3d', components=[component]))])
+    params = gbkfit.params.EvaluationParams(
+        group.pdescs(), properties | dict(incl=0))
+    extra = {}
+    group.model_h(params.evaluate(), extra)
+    ddata = extra['observation0_gmodel_component0_ddata']
+    coords = ddata.coords
+    nz = ddata.data.shape[0]
+    z = coords.rval[2] + (np.arange(nz) - coords.rpix[2]) * coords.step[2]
+    # (the spaxel nearest the centre of the disk, at pixel (15.8, 19.4))
+    centre = ddata.data[:, 19, 16]
+    np.testing.assert_allclose(centre, 20 + 5 * factor(z), rtol=1e-5)
