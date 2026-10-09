@@ -12,6 +12,7 @@ import numpy as np
 import pytest
 from gbkfit.model import gmodel_parser, gmodels
 from gbkfit.model.gmodels.core import Component
+from gbkfit.utils import fitsutils
 
 
 RNODES = list(range(0, 10, 2))
@@ -216,15 +217,20 @@ class WeightComponent(Component):
         driver.mem_copy_h2d(wdata, outputs['wdata'])
 
 
-# The 2d gmodels, the method that evaluates them, and the size of their
-# data and its shape (an image is a cube with one channel)
+# The 2d gmodels, the method that evaluates them, the size of their data
+# and its spectral axis, and its shape (an image is a cube with one
+# channel)
 GMODELS_2D = [
-    (gmodels.GModelIntensity2D, 'evaluate_image', (20, 16), (1, 16, 20)),
-    (gmodels.GModelKinematics2D, 'evaluate_scube', (20, 16, 11), (11, 16, 20))]
+    (gmodels.GModelIntensity2D, 'evaluate_image', (20, 16), None,
+     (1, 16, 20)),
+    (gmodels.GModelKinematics2D, 'evaluate_scube', (20, 16, 11), 2,
+     (11, 16, 20))]
 
 
-@pytest.mark.parametrize('gmodel_type, method, size, shape', GMODELS_2D)
-def test_2d_gmodel_weights_the_data(driver, gmodel_type, method, size, shape):
+@pytest.mark.parametrize(
+    'gmodel_type, method, size, spectral_axis, shape', GMODELS_2D)
+def test_2d_gmodel_weights_the_data(
+        driver, gmodel_type, method, size, spectral_axis, shape):
     # The components of a 2d gmodel write their weights to its spatial
     # weights, which then become the weights of the data: 0 where they
     # are 0, and 1 elsewhere (normalised to their maximum along z)
@@ -233,9 +239,10 @@ def test_2d_gmodel_weights_the_data(driver, gmodel_type, method, size, shape):
     weights = driver.mem_alloc_d(shape, np.float32)
     driver.mem_fill(data, 0)
     driver.mem_fill(weights, 1)
-    getattr(gmodel, method)(
-        driver, {}, data, weights,
-        size, (1,) * len(size), (0,) * len(size), 0, np.float32, None)
+    ndim = len(size)
+    grid = fitsutils.Grid(size, fitsutils.Coords(
+        (1,) * ndim, (0,) * ndim, (0,) * ndim, 0), spectral_axis)
+    getattr(gmodel, method)(driver, {}, data, weights, grid, np.float32, None)
     desired = np.ones(shape)
     desired[:, 0, :] = 0
     np.testing.assert_array_equal(driver.mem_copy_d2h(weights), desired)
@@ -255,10 +262,11 @@ def test_3d_gmodel_picks_the_z_axis_of_each_grid(driver):
     def evaluate(gmodel, size):
         image = driver.mem_alloc_d(size[::-1], np.float32)
         driver.mem_fill(image, 0)
-        zero = tuple(-(n / 2 - 0.5) for n in size)
-        gmodel.evaluate_image(
-            driver, params, image, None, size, (1, 1), zero, 0,
-            np.float32, None)
+        rpix = tuple(n / 2 - 0.5 for n in size)
+        grid = fitsutils.Grid(
+            size, fitsutils.Coords((1, 1), rpix, (0, 0), 0), None)
+        gmodel.evaluate_image(driver, params, image, None, grid,
+                              np.float32, None)
         return driver.mem_copy_d2h(image)
 
     gmodel = gmodel_parser.load(info)

@@ -51,8 +51,8 @@ class GModelKinematics2D(GModelSCube):
         return self._component_set.constants()
 
     def evaluate_scube(
-            self, driver, params, scube, weights, size, step, zero, rota,
-            dtype, out_extra):
+            self, driver, params, scube, weights, grid, dtype, out_extra):
+        spectral_axis = (grid.size[2], grid.coords.step[2], grid.zero()[2])
         self._component_set.evaluate(
-            driver, params, dict(scube=scube), (size[2], step[2], zero[2]),
-            weights, size, step, zero, rota, dtype, out_extra)
+            driver, params, dict(scube=scube), grid.spatial(), spectral_axis,
+            weights, dtype, out_extra)

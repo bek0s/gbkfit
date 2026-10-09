@@ -63,13 +63,17 @@ class ComponentSet2D:
         self._backend = driver.native_class('GModel', dtype)()
 
     def evaluate(
-            self, driver, params, outputs, spectral_axis, weights,
-            size, step, zero, rota, dtype, out_extra):
+            self, driver, params, outputs, grid, spectral_axis, weights,
+            dtype, out_extra):
         """
         Add the components to the output array, the 'image' or the
-        'scube' in outputs. The grid is the spatial grid of the data (size,
-        step and zero) and the given spectral axis (size, step and zero).
+        'scube' in outputs, on the given grid of the x and y axes
+        (fitsutils.Grid) and spectral axis (size, step and zero).
         """
+        size = grid.size
+        step = grid.coords.step
+        zero = grid.zero()
+        rota = grid.coords.rota
         if (self._driver is not driver
                 or self._size != tuple(size[:2])
                 or self._step != tuple(step[:2])
@@ -196,13 +200,17 @@ class ComponentSet3D:
         self._backend = driver.native_class('GModel', dtype)()
 
     def evaluate(
-            self, driver, params, outputs, spectral_axis, weights,
-            size, step, zero, rota, dtype, out_extra):
+            self, driver, params, outputs, grid, spectral_axis, weights,
+            dtype, out_extra):
         """
         Add the components to the output array, the 'image' or the
-        'scube' in outputs. The grid is the spatial grid of the data (size,
-        step and zero) and the given spectral axis (size, step and zero).
+        'scube' in outputs, on the given grid of the x and y axes
+        (fitsutils.Grid) and spectral axis (size, step and zero).
         """
+        size = grid.size
+        step = grid.coords.step
+        zero = grid.zero()
+        rota = grid.coords.rota
         if (self._driver is not driver
                 or self._size[:2] != tuple(size[:2])
                 or self._step[:2] != tuple(step[:2])

@@ -103,15 +103,6 @@ class DCube:
     def scratch_grid(self) -> fitsutils.Grid:
         return self._grid_hi
 
-    def scratch_size(self) -> tuple[int, int, int]:
-        return self._grid_hi.size
-
-    def scratch_step(self) -> tuple[float, float, float]:
-        return self._grid_hi.coords.step
-
-    def scratch_zero(self) -> tuple[float, float, float]:
-        return self._grid_hi.zero()
-
     def scratch_edge(self) -> tuple[int, int, int]:
         return self._edge_hi
 
@@ -261,7 +252,7 @@ class DCube:
 
         # Convenience variables
         step_lo = self.step()
-        step_hi = self.scratch_step()
+        step_hi = self.scratch_grid().coords.step
         spat_step_lo = (step_lo[0], step_lo[1])
         spec_step_lo = step_lo[2]
         spat_step_hi = (step_hi[0], step_hi[1])

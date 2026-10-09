@@ -7,6 +7,7 @@ import re
 import numpy as np
 import pytest
 from gbkfit.model import gmodel_parser, gmodels
+from gbkfit.utils import fitsutils
 
 
 EXPONENTIAL = dict(type='exponential')
@@ -148,9 +149,10 @@ def test_spectral_3d_with_several_velocity_traits(name):
         name: np.ones(pdesc.size()) if pdesc.type() == 'vector' else 1.0
         for name, pdesc in gmodel.pdescs().items()}
     scube = np.zeros((11, 16, 16), np.float32)
+    grid = fitsutils.Grid((16, 16, 11), fitsutils.Coords(
+        (1, 1, 10), (7.5, 7.5, 5), (0, 0, 0), 0), 2)
     gmodel.evaluate_scube(
-        DriverHost(), params, scube, None, (16, 16, 11), (1, 1, 10),
-        (-7.5, -7.5, -50), 0, np.float32, None)
+        DriverHost(), params, scube, None, grid, np.float32, None)
     assert scube.sum() > 0
 
 

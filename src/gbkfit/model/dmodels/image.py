@@ -119,10 +119,7 @@ class DModelImage(DModel):
             driver, params,
             dcube.scratch_dcube(),
             dcube.scratch_wcube(),
-            dcube.scratch_size()[:2],
-            dcube.scratch_step()[:2],
-            dcube.scratch_zero()[:2],
-            dcube.rota(),
+            dcube.scratch_grid().spatial(),
             dcube.dtype(),
             out_gmodel_extra)
         # Evaluate DCube (perform convolution, supersampling, etc)

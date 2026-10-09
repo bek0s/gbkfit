@@ -120,8 +120,11 @@ class GModelImage(GModel, abc.ABC):
 
     @abc.abstractmethod
     def evaluate_image(
-            self, driver, params, image, weights, size, step, zero, rota, dtype,
-            out_extra):
+            self, driver, params, image, weights, grid, dtype, out_extra):
+        """
+        Add the gmodel to the image, on the given grid (fitsutils.Grid of
+        the x and y axes).
+        """
         pass
 
 
@@ -129,8 +132,11 @@ class GModelSCube(GModel, abc.ABC):
 
     @abc.abstractmethod
     def evaluate_scube(
-            self, driver, params, scube, weights, size, step, zero, rota, dtype,
-            out_extra):
+            self, driver, params, scube, weights, grid, dtype, out_extra):
+        """
+        Add the gmodel to the spectral cube, on the given grid
+        (fitsutils.Grid of the x, y and spectral axes).
+        """
         pass
 
 

@@ -44,10 +44,11 @@ def test_grids(driver, psf, lsf):
     assert dcube.size() == size
     assert dcube.step() == step
     np.testing.assert_allclose(dcube.zero(), zero)
-    assert dcube.scratch_size() == tuple(size_hi)
+    grid_hi = dcube.scratch_grid()
+    assert grid_hi.size == tuple(size_hi)
     assert dcube.scratch_edge() == tuple(edge_hi)
-    np.testing.assert_allclose(dcube.scratch_step(), step_hi)
-    np.testing.assert_allclose(dcube.scratch_zero(), zero_hi)
+    np.testing.assert_allclose(grid_hi.coords.step, step_hi)
+    np.testing.assert_allclose(grid_hi.zero(), zero_hi)
     for cube in (dcube.dcube(), dcube.mcube(), dcube.wcube()):
         assert cube.shape == size[::-1]
     for cube in (dcube.scratch_dcube(), dcube.scratch_wcube()):
@@ -81,7 +82,7 @@ def _evaluate_weights(driver, smooth_weights):
         mask_cutoff=None, mask_apply=False, dtype=np.float32)
     dcube.prepare(driver, has_weights=True)
 
-    z, y, x = np.indices(dcube.scratch_size()[::-1])
+    z, y, x = np.indices(dcube.scratch_grid().size[::-1])
     pattern = (1 + 0.5 * np.sin(0.4 * x) * np.cos(0.3 * y))
     pattern = pattern.astype(np.float32)
     driver.mem_copy_h2d(pattern, dcube.scratch_wcube())
@@ -144,7 +145,7 @@ def test_lsf_only_keeps_the_image_on_a_non_square_cube(driver):
         dcube.prepare(driver, has_weights=False)
         # The same line in every case, in the pixels of the output cube
         # (the scratch cube may be padded for the convolution)
-        z, y, x = np.indices(dcube.scratch_size()[::-1])
+        z, y, x = np.indices(dcube.scratch_grid().size[::-1])
         z = z - dcube.scratch_edge()[2]
         line = np.exp(-0.5 * ((z - 20 - 0.1 * x) / 3) ** 2)
         cube = (line * (1 + np.sin(0.3 * x) * np.cos(0.4 * y)))
