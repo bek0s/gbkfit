@@ -152,3 +152,30 @@ def test_disk_ends_at_its_last_node(driver, evaluate_models, rnodes, loose):
     flux = uniform_disk_flux(driver, evaluate_models, rnodes, loose)
     area = np.pi * (rnodes[-1] ** 2 - rnodes[0] ** 2)
     assert flux == pytest.approx(area, rel=0.01)
+
+
+@pytest.mark.parametrize('incl', [90, 120])
+def test_thin_disk_seen_from_below(driver, evaluate_models, incl):
+    # A thin disk is seen from below at inclinations above 90 degrees:
+    # an axisymmetric one looks as it does at 180 - incl. At 90 degrees
+    # (edge-on), its light is on its major axis, and not negative (in
+    # float32 the cosine of 90 degrees is negative). The edge of the disk
+    # is between pixels, which the rounding of the cosines would move.
+    model = dict(
+        driver=dict(type=driver.type()),
+        dmodel=dict(type='image', size=[33, 33]),
+        gmodel=dict(type='intensity_2d', components=[dict(
+            type='smdisk', loose=False, tilted=False,
+            rnodes=[1.05 * i for i in range(14)],
+            bptraits=dict(type='exponential'))]))
+
+    def image(incl):
+        properties = dict(
+            xpos=0, ypos=0, posa=0, incl=incl, bpt_a=1, bpt_s=4)
+        data, _ = evaluate_models([model], properties)
+        return data[0]['image']['d']
+    below = image(incl)
+    assert (below >= 0).all()
+    if incl != 90:
+        np.testing.assert_allclose(
+            below, image(180 - incl), rtol=1e-5, atol=1e-6 * below.max())

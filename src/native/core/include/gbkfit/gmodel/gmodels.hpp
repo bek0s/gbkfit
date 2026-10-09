@@ -753,9 +753,11 @@ gmodel_smdisk_evaluate_spaxel(int x, int y, int z, const DiskArgs<T>& a)
         return;
     }
 
-    // Thin disk requires density correction for inclination
+    // Thin disk requires density correction for inclination (seen from
+    // either side: above 90 degrees, and at 90 in float, the cosine is
+    // negative)
     if (is_thin) {
-        rvalue /= std::cos(incli);
+        rvalue /= std::abs(std::cos(incli));
     }
 
     // Thick disk requires integration along the spatial z axis
