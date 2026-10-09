@@ -25,11 +25,10 @@ from gbkfit.psflsf.psfs import *
 )
 def test_psf_analytic(psf_type, psf_class, psf_params):
     step = (0.5, 0.2)
-    offset = (0, 0)
     # Creation tests
     psf = psf_class(**psf_params)
     psf_arr = psf.asarray(step)
-    psf_size = psf.size(step, offset)
+    psf_size = psf.size(step)
     arr_max_index = np.unravel_index(np.argmax(psf_arr), psf_arr.shape)
     arr_max_index = tuple(i.item() for i in arr_max_index)
     arr_max_index = arr_max_index[::-1]
@@ -63,11 +62,10 @@ def test_psf_analytic(psf_type, psf_class, psf_params):
 )
 def test_lsf_analytic(lsf_type, lsf_class, lsf_params):
     step = 0.5
-    offset = 0
     # Creation tests
     lsf = lsf_class(**lsf_params)
     lsf_arr = lsf.asarray(step)
-    lsf_size = lsf.size(step, offset)
+    lsf_size = lsf.size(step)
     arr_max_index = np.unravel_index(np.argmax(lsf_arr), lsf_arr.shape)
     arr_max_index = tuple(i.item() for i in arr_max_index)
     arr_max_index = arr_max_index[::-1][0]
@@ -84,11 +82,6 @@ def test_lsf_analytic(lsf_type, lsf_class, lsf_params):
     # Load tests
     loaded_lsf = lsf_parser.load(dumped_lsf_info)
     assert vars(loaded_lsf) == vars(lsf)
-
-
-if __name__ == '__main__':
-    test_psf_analytic()
-    test_lsf_analytic()
 
 
 def test_psf_image_round_trip():
@@ -246,3 +239,12 @@ def test_wide_wings_are_drawn_until_they_hold_the_wing_flux(
 def test_invalid_profiles_are_rejected(make, message):
     with pytest.raises(RuntimeError, match=message):
         make()
+
+
+def test_arrays_of_the_default_size_take_no_odd_offset():
+    # The default size is odd, so the centre needs offset 0: an odd
+    # offset (for even sizes) is rejected, like for any other size
+    with pytest.raises(RuntimeError, match="must be odd"):
+        PSFGauss(2).asarray((1, 1), None, (-1, 0))
+    with pytest.raises(RuntimeError, match="must be odd"):
+        LSFGauss(2).asarray(1, None, -1)

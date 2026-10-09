@@ -42,12 +42,9 @@ def check_ratio(ratio: float) -> None:
 
 class LSF(parseutils.TypedSerializable, abc.ABC):
 
-    def size(self, step: float, offset: int = 0) -> int:
-        """
-        Compute LSF size with offset, ensuring it's odd.
-        """
-        base_size = self._size_impl(step)
-        return int(gbkfit.math.roundu_odd(base_size + offset))
+    def size(self, step: float) -> int:
+        """The (odd) size of the array that holds the LSF."""
+        return int(gbkfit.math.roundu_odd(self._size_impl(step)))
 
     def asarray(
             self,
@@ -58,12 +55,12 @@ class LSF(parseutils.TypedSerializable, abc.ABC):
         """
         Return the LSF as a NumPy array.
 
-        If `size` is None, it is set by `self.size(step, offset)`.
+        If `size` is None, it is set by `self.size(step)`.
         The value (size + offset) must be odd.
         """
         if size is None:
-            size = self.size(step, offset)
-        elif gbkfit.math.is_even(size + offset):
+            size = self.size(step)
+        if gbkfit.math.is_even(size + offset):
             raise RuntimeError(
                 f"invalid LSF size: (size + offset) = "
                 f"({size} + {offset} = {size + offset}), "
@@ -90,17 +87,11 @@ class LSF(parseutils.TypedSerializable, abc.ABC):
 
 class PSF(parseutils.TypedSerializable, abc.ABC):
 
-    def size(
-            self,
-            step: tuple[float, float],
-            offset: tuple[int, int] = (0, 0)
-    ) -> tuple[int, int]:
-        """
-        Compute PSF size with offset, ensuring it's odd.
-        """
+    def size(self, step: tuple[float, float]) -> tuple[int, int]:
+        """The (odd) size of the array that holds the PSF."""
         base_size = self._size_impl(step)
-        return (int(gbkfit.math.roundu_odd(base_size[0] + offset[0])),
-                int(gbkfit.math.roundu_odd(base_size[1] + offset[1])))
+        return (int(gbkfit.math.roundu_odd(base_size[0])),
+                int(gbkfit.math.roundu_odd(base_size[1])))
 
     def asarray(
             self,
@@ -114,12 +105,12 @@ class PSF(parseutils.TypedSerializable, abc.ABC):
         rota (degrees, counterclockwise like a position angle): a PSF
         with position angle posa (on the sky) is drawn at posa - rota.
 
-        If `size` is None, it is set by `self.size(step, offset)`.
+        If `size` is None, it is set by `self.size(step)`.
         Both (size + offset) values must be odd.
         """
         if size is None:
-            size = self.size(step, offset)
-        elif (gbkfit.math.is_even(size[0] + offset[0]) or
+            size = self.size(step)
+        if (gbkfit.math.is_even(size[0] + offset[0]) or
               gbkfit.math.is_even(size[1] + offset[1])):
             raise RuntimeError(
                 f"invalid PSF size: (size + offset) = "
