@@ -45,7 +45,7 @@ class MMaps(Observable):
         return cls(**_detail.load_observable_common(
             cls, info, 2, dataset, DatasetMMaps))
 
-    def dump(self, data=None):
+    def dump(self, data=None, prefix='', dump_path=True, overwrite=False):
         return _detail.without_options_from_data(self, dict(
             type=self.type(),
             size=self.size(),

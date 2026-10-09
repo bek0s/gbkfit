@@ -139,6 +139,19 @@ def test_bmaps_observation_from_data(tmp_path):
             type='bmaps', orders=[0, 1], size=[3, 2])))
 
 
+
+def test_bmaps_observation_dumps_its_bins_with_the_prefix(driver, tmp_path):
+    # Without data, the bins are options of the observable: their file is
+    # named with the prefix of the dump, which can be dumped again
+    from gbkfit.observation import BMaps, Observation, observation_parser
+    observation = Observation(driver, BMaps(
+        RegionsBins(np.arange(16).reshape(4, 4) % 3), spec_size=11))
+    prefix = str(tmp_path / 'out_')
+    for _ in range(2):
+        dumped = observation_parser.dump(
+            observation, prefix=prefix, overwrite=True)
+    assert dumped['observable']['regions']['file'] == f'{prefix}bins.fits'
+
 def test_bmaps_objective_residual(driver):
     # Data equal to the model plus 1, with errors of 2: every residual
     # (model - data) / error is -0.5

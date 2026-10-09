@@ -79,7 +79,7 @@ class Observation(parseutils.BasicSerializable):
             instrument=instrument_parser.dump(
                 self._instrument, **dump_kwargs),
             observable=observable_parser.dump(
-                self._observable, data=self._data),
+                self._observable, data=self._data, **dump_kwargs),
             scale=self._scale,
             dtype=self._dtype.name)
 

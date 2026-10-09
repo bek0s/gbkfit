@@ -18,7 +18,8 @@ class Observable(parseutils.TypedSerializable, abc.ABC):
     grid. A subclass declares the index of the spectral axis of its data
     (_spectral_axis, None if none), as the datasets do. Its dump(data)
     leaves out the options that the given data give (see
-    options_from_data).
+    options_from_data); the files of its options (e.g. bins without
+    data) are named with the prefix, as those of the datasets.
     """
 
     _spectral_axis: int | None
