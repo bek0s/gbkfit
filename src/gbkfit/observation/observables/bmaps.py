@@ -2,6 +2,7 @@ import logging
 from collections.abc import Sequence
 from numbers import Real
 
+import astropy.units
 import numpy as np
 
 from gbkfit.dataset.datasets import DatasetBMaps
@@ -87,7 +88,8 @@ class BMaps(Observable):
             orders=self._orders,
             spec_size=self._spec_size,
             spec_step=self._spec_step,
-            spec_rval=self._spec_rval)
+            spec_rval=self._spec_rval,
+            spec_rest=_detail.dump_rest(self._spec_rest))
 
     def __init__(
             self,
@@ -101,7 +103,8 @@ class BMaps(Observable):
             orders: Sequence[int] = (0, 1, 2),
             spec_size: int | None = None,
             spec_step: Real = _moments.SPEC_STEP,
-            spec_rval: Real = 0
+            spec_rval: Real = 0,
+            spec_rest: str | astropy.units.Quantity | None = None
     ):
         """
         The spatial grid (size, step, rpix, rval, rota; see
@@ -125,6 +128,7 @@ class BMaps(Observable):
         self._spec_size = spec_size
         self._spec_step = spec_step
         self._spec_rval = spec_rval
+        self._spec_rest = fitsutils.make_rest(spec_rest)
         # The weights of the pixels in the regions (an error if apertures
         # are not inside the grid)
         self._weights = regions.weights(spatial)
@@ -188,7 +192,7 @@ class BMaps(Observable):
             self.step() + (self._spec_step,),
             self.rpix() + (spec_size / 2 - 0.5,),
             self.rval() + (self._spec_rval,),
-            self.rota(), tuple(scale) + (1,), psf, lsf,
+            self.rota(), self._spec_rest, tuple(scale) + (1,), psf, lsf,
             False, None, False, dtype)
         return BMapsPlan(
             self._weights, self._orders, self._mask_cutoff, dcube, driver,

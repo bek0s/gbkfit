@@ -1,9 +1,11 @@
 import logging
 from collections.abc import Sequence
 
+import astropy.units
+
 from gbkfit.dataset.datasets import DatasetMMaps
 from gbkfit.model.core import GModelSCube
-from gbkfit.utils import parseutils
+from gbkfit.utils import fitsutils, parseutils
 from . import _dcube, _detail, _moments
 from .core import Observable
 
@@ -55,7 +57,8 @@ class MMaps(Observable):
             orders=self.orders(),
             spec_size=self.spec_size(),
             spec_step=self.spec_step(),
-            spec_rval=self.spec_rval()), data)
+            spec_rval=self.spec_rval(),
+            spec_rest=_detail.dump_rest(self._spec_rest)), data)
 
     def __init__(
             self,
@@ -68,14 +71,16 @@ class MMaps(Observable):
             orders: Sequence[int] = (0, 1, 2),
             spec_size: int | None = None,
             spec_step: int | float = _moments.SPEC_STEP,
-            spec_rval: int | float = 0
+            spec_rval: int | float = 0,
+            spec_rest: str | astropy.units.Quantity | None = None
     ):
         """
         The moments are computed from a spectral cube with the spatial
         axes of the maps, and a spectral axis of spec_size channels of
         spec_step (km/s) centred on spec_rval (km/s). By default it spans
         1000 km/s. load() derives it from the moment maps of a dataset,
-        unless it is given.
+        unless it is given. spec_rest is the rest wavelength or frequency of
+        its velocities (see fitsutils.Coords), if known.
         """
         super().__init__(size, step, rpix, rval, rota)
         if spec_size is None:
@@ -88,6 +93,7 @@ class MMaps(Observable):
         self._spec_size = spec_size
         self._spec_step = spec_step
         self._spec_rval = spec_rval
+        self._spec_rest = fitsutils.make_rest(spec_rest)
 
     def keys(self):
         return tuple([f'mmap{i}' for i in self._orders])
@@ -124,7 +130,7 @@ class MMaps(Observable):
             self.step() + (self._spec_step,),
             self.rpix() + (spec_size / 2 - 0.5,),
             self.rval() + (self._spec_rval,),
-            self.rota(), tuple(scale) + (1,), psf, lsf,
+            self.rota(), self._spec_rest, tuple(scale) + (1,), psf, lsf,
             False, None, False, dtype)
         return MMapsPlan(self, dcube, driver, gmodel, dtype)
 

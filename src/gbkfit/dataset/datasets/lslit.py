@@ -1,6 +1,8 @@
 from collections.abc import Sequence
 from numbers import Real
 
+import astropy.units
+
 from gbkfit.dataset.core import Dataset
 from gbkfit.dataset.data import Data
 from gbkfit.utils import fitsutils
@@ -40,14 +42,16 @@ class DatasetLSlit(Dataset):
             step: Real | Sequence[Real] | None = None,
             rpix: Real | Sequence[Real] | None = None,
             rval: Real | Sequence[Real] | None = None,
-            rota: Real | None = None
+            rota: Real | None = None,
+            rest: str | astropy.units.Quantity | None = None
     ):
         """
         The world coordinates of the grid of the data (see
-        fitsutils.Coords) have defaults (see _detail.make_grid).
+        fitsutils.Coords; rest is that of the spectral axis) have defaults
+        (see _detail.make_grid).
         """
         super().__init__(dict(lslit=lslit))
-        self._grid = _detail.make_grid(self, step, rpix, rval, rota)
+        self._grid = _detail.make_grid(self, step, rpix, rval, rota, rest)
 
     def grid(self) -> fitsutils.Grid:
         return self._grid

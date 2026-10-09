@@ -1,5 +1,7 @@
 from collections.abc import Sequence
 
+import astropy.units
+
 from gbkfit.dataset.datasets import DatasetSCube
 from gbkfit.model.core import GModelSCube
 from . import _dcube, _detail
@@ -40,6 +42,7 @@ class SCube(Observable):
             rpix=self.rpix(),
             rval=self.rval(),
             rota=self.rota(),
+            rest=_detail.dump_rest(self.rest()),
             smooth_weights=self._smooth_weights,
             mask_cutoff=self._mask_cutoff,
             mask_apply=self._mask_apply), data)
@@ -51,11 +54,16 @@ class SCube(Observable):
             rpix: Sequence[int | float] | None = None,
             rval: Sequence[int | float] = (0, 0, 0),
             rota: int | float = 0,
+            rest: str | astropy.units.Quantity | None = None,
             smooth_weights: bool = False,
             mask_cutoff: int | float | None = None,
             mask_apply: bool = False
     ):
-        super().__init__(size, step, rpix, rval, rota)
+        """
+        rest is the rest wavelength or frequency of the velocities of the
+        spectral axis (see fitsutils.Coords), if known.
+        """
+        super().__init__(size, step, rpix, rval, rota, rest)
         self._smooth_weights = smooth_weights
         self._mask_cutoff = mask_cutoff
         self._mask_apply = mask_apply
@@ -66,7 +74,7 @@ class SCube(Observable):
     def plan(self, driver, gmodel, instrument, scale, dtype):
         dcube = _dcube.DCube(
             self.size(), self.step(), self.rpix(), self.rval(), self.rota(),
-            tuple(scale), instrument.psf(), instrument.lsf(),
+            self.rest(), tuple(scale), instrument.psf(), instrument.lsf(),
             self._smooth_weights, self._mask_cutoff, self._mask_apply, dtype)
         return SCubePlan(dcube, driver, gmodel, dtype)
 

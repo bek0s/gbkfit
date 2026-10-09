@@ -78,8 +78,7 @@ class GModelKinematics3D(GModelSCube):
         return self._component_set.constants()
 
     def plan(self, driver, grid, has_weights, dtype):
-        spectral_axis = (grid.size[2], grid.coords.step[2], grid.zero()[2])
         return ComponentSetGModelPlan(
             self._component_set.plan(
-                driver, grid.spatial(), spectral_axis, has_weights, dtype),
+                driver, grid.spatial(), grid.spectral(), has_weights, dtype),
             'scube')

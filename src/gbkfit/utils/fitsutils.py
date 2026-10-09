@@ -16,6 +16,7 @@ __all__ = [
     'VELOCITY_TYPES',
     'centre_missing_crpix',
     'make_grid',
+    'make_rest',
     'read_data',
     'write_data',
     'write_spectra'
@@ -40,6 +41,10 @@ class Coords(typing.NamedTuple):
       velocity (km/s). The model measures the spatial axes from rpix.
     - rota: the rotation of the pixel grid on the sky: the position angle
       (degrees, north through east) of the +y axis.
+    - rest: the rest wavelength or frequency that the velocities of the
+      spectral axis refer to (an astropy Quantity in m or Hz; see
+      make_rest), or None. The velocities of a rest wavelength are optical
+      (VOPT), and those of a rest frequency radio (VRAD).
 
     Axes without a known type have the values of their header.
     """
@@ -47,13 +52,15 @@ class Coords(typing.NamedTuple):
     rpix: tuple[float, ...]
     rval: tuple[float, ...]
     rota: float
+    rest: astropy.units.Quantity | None = None
 
     def axes(self, *indices: int) -> 'Coords':
         """The coordinates of the given axes."""
         def pick(values):
             return tuple(values[i] for i in indices)
         return Coords(
-            pick(self.step), pick(self.rpix), pick(self.rval), self.rota)
+            pick(self.step), pick(self.rpix), pick(self.rval), self.rota,
+            self.rest)
 
 
 class Grid(typing.NamedTuple):
@@ -79,7 +86,13 @@ class Grid(typing.NamedTuple):
 
     def spatial(self) -> 'Grid':
         """The grid of the x and y axes."""
-        return Grid(self.size[:2], self.coords.axes(0, 1), None)
+        return Grid(
+            self.size[:2], self.coords.axes(0, 1)._replace(rest=None), None)
+
+    def spectral(self) -> 'Grid':
+        """The grid of the spectral axis (one axis)."""
+        axis = self.spectral_axis
+        return Grid((self.size[axis],), self.coords.axes(axis), 0)
 
 
 def make_grid(
@@ -88,13 +101,14 @@ def make_grid(
         rpix: float | typing.Sequence[float] | None = None,
         rval: float | typing.Sequence[float] | None = None,
         rota: float | None = None,
-        spectral_axis: int | None = None
+        spectral_axis: int | None = None,
+        rest: typing.Any = None
 ) -> Grid:
     """
     A grid of the given size (FITS order) with the given world
     coordinates (see Coords), each a value or one per axis, or their
     defaults: step 1, the reference pixel at the centre, reference value 0
-    and no rotation.
+    and no rotation. rest (see make_rest) needs a spectral axis.
     """
     ndim = len(size)
     if step is None:
@@ -115,7 +129,32 @@ def make_grid(
                 f"values")
     if not all(value > 0 for value in step):
         raise RuntimeError(f"step must be positive; it is {step}")
-    return Grid(tuple(size), Coords(step, rpix, rval, rota), spectral_axis)
+    if rest is not None and spectral_axis is None:
+        raise RuntimeError("a grid without a spectral axis has no rest")
+    return Grid(
+        tuple(size), Coords(step, rpix, rval, rota, make_rest(rest)),
+        spectral_axis)
+
+
+def make_rest(value: typing.Any) -> astropy.units.Quantity | None:
+    """
+    The rest wavelength or frequency of a spectral axis (see Coords), in m
+    or Hz, from a Quantity or a string with units (e.g. '6562.8 Angstrom',
+    '1420.405752 MHz'), or None.
+    """
+    if value is None:
+        return None
+    error = ConfigError(
+        f"the rest of a spectral axis must be a positive wavelength or "
+        f"frequency with units (e.g. '6562.8 Angstrom'); it is {value!r}")
+    try:
+        rest = astropy.units.Quantity(value)
+    except (TypeError, ValueError) as e:
+        raise error from e
+    for unit in (astropy.units.m, astropy.units.Hz):
+        if rest.unit.is_equivalent(unit) and rest.isscalar and rest.value > 0:
+            return rest.to(unit)
+    raise error
 
 
 class GridData(typing.NamedTuple):
@@ -143,7 +182,8 @@ def read_data(
         filename: str,
         hdu: int | str = 0,
         rpix: typing.Sequence[float] | None = None,
-        rval: typing.Sequence[float] | None = None
+        rval: typing.Sequence[float] | None = None,
+        rest: typing.Any = None
 ) -> tuple[np.ndarray, Coords]:
     """
     The data of a FITS file (from the given HDU) and its world
@@ -151,7 +191,9 @@ def read_data(
 
     rpix is CRPIX - 1 (the centre of the axes without CRPIX), and rval is
     CRVAL, the world position at rpix. Either can be given instead (in
-    model units), and the other is computed from the header.
+    model units), and the other is computed from the header. The rest of
+    the spectral axis (see _spectral_rest) is that of the header (RESTWAV
+    or RESTFRQ), or rest if given.
 
     Raise ConfigError for coordinates the model cannot represent: a
     header it cannot read, a mirrored (east to the right of north) or
@@ -211,7 +253,8 @@ def read_data(
         tuple(float(x) for x in step),
         tuple(float(x) for x in rpix),
         tuple(float(x) for x in rval),
-        float(rota))
+        float(rota),
+        _spectral_rest(filename, wcs, make_rest(rest)))
     return data, coords
 
 
@@ -286,9 +329,7 @@ def write_spectra(
     y, with the world coordinates of a spectral axis (a Coords of one
     axis).
     """
-    header = astropy.io.fits.Header(dict(
-        CTYPE2='VRAD', CUNIT2='km/s', CDELT2=coords.step[0],
-        CRPIX2=coords.rpix[0] + 1, CRVAL2=coords.rval[0]))
+    header = astropy.io.fits.Header(_velocity_header(coords, 2, 0))
     astropy.io.fits.writeto(
         filename, data, header,
         output_verify='exception', overwrite=overwrite, checksum=True)
@@ -323,13 +364,54 @@ def _offset_header(n, step, rpix, rval):
         f'CRPIX{n}': rpix + 1, f'CRVAL{n}': rval}
 
 
-def _velocity_header(coords, n):
-    """The header keywords of the spectral axis, FITS axis n."""
-    return {
+def _velocity_header(coords, n, index=None):
+    """
+    The header keywords of the spectral axis, FITS axis n, whose world
+    coordinates are those of axis index of coords (by default n - 1):
+    optical velocities with a rest wavelength, radio velocities with a
+    rest frequency or without a rest.
+    """
+    index = n - 1 if index is None else index
+    rest = coords.rest
+    header = {
         f'CTYPE{n}': 'VRAD', f'CUNIT{n}': 'km/s',
-        f'CDELT{n}': coords.step[n - 1],
-        f'CRPIX{n}': coords.rpix[n - 1] + 1,
-        f'CRVAL{n}': coords.rval[n - 1]}
+        f'CDELT{n}': coords.step[index],
+        f'CRPIX{n}': coords.rpix[index] + 1,
+        f'CRVAL{n}': coords.rval[index]}
+    if rest is not None and rest.unit == astropy.units.m:
+        header.update({f'CTYPE{n}': 'VOPT', 'RESTWAV': rest.value})
+    elif rest is not None:
+        header.update(RESTFRQ=rest.value)
+    return header
+
+
+def _spectral_rest(filename, wcs, rest):
+    """
+    The rest of the spectral axis (see Coords): that given (rest, if not
+    None), or that of the header (RESTWAV or RESTFRQ), as a wavelength for
+    optical velocities (VOPT) and as a frequency for radio velocities
+    (VRAD). Without a spectral axis type, a given rest keeps its kind.
+    Relativistic velocities (VELO) have none: their lines are not at
+    linear offsets, so a given rest is an error.
+    """
+    if wcs.wcs.spec < 0:
+        return rest
+    kind = wcs.wcs.ctype[wcs.wcs.spec][:4]
+    if kind == 'VELO':
+        if rest is not None:
+            raise ConfigError(
+                f"{filename}: the spectral axis has relativistic velocities "
+                f"(VELO), which have no rest; convert it to optical (VOPT) "
+                f"or radio (VRAD) velocities")
+        return None
+    if rest is None and wcs.wcs.restwav > 0:
+        rest = wcs.wcs.restwav * astropy.units.m
+    if rest is None and wcs.wcs.restfrq > 0:
+        rest = wcs.wcs.restfrq * astropy.units.Hz
+    if rest is None:
+        return None
+    unit = astropy.units.m if kind == 'VOPT' else astropy.units.Hz
+    return rest.to(unit, astropy.units.spectral())
 
 
 def _axis_scale(filename, wcs, axis):

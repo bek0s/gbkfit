@@ -5,6 +5,7 @@ from .core import ObservablePlan
 
 __all__ = [
     'SPATIAL_OPTIONS',
+    'dump_rest',
     'dump_spatial_grid',
     'load_observable_common',
     'spatial_grid_of_regions',
@@ -53,6 +54,11 @@ def spatial_options_from_regions(regions):
     return SPATIAL_OPTIONS if regions.grid() is not None else ()
 
 
+def dump_rest(rest):
+    """The option of the rest of a spectral axis (see fitsutils.Coords)."""
+    return None if rest is None else str(rest)
+
+
 def dump_spatial_grid(observable, regions):
     """
     The options of the spatial grid of an observable of data in regions,
@@ -97,8 +103,8 @@ def without_options_from_data(observable, info, dataset):
 def load_observable_common(cls, info, ndim, dataset, expected_dataset_cls):
     """
     The options of an observable of class cls, with the grid of the given
-    dataset (if any), which must be of the expected class. The observable
-    must not be given the grid too.
+    dataset (if any; and the rest of its spectral axis), which must be of
+    the expected class. The observable must not be given the grid too.
     """
     desc = parseutils.make_typed_desc(cls, 'observable')
     if dataset is not None:
@@ -120,6 +126,8 @@ def load_observable_common(cls, info, ndim, dataset, expected_dataset_cls):
             rpix=grid.coords.rpix,
             rval=grid.coords.rval,
             rota=grid.coords.rota)
+        if cls._spectral_axis is not None:
+            info.update(rest=grid.coords.rest)
     parseutils.sanitize_dimensional_options(info, dict(
         size=int, step=int | float, rpix=int | float, rval=int | float),
         ndim)

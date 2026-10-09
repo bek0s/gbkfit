@@ -13,28 +13,31 @@ __all__ = [
 ]
 
 
-# The options of the world coordinates of the grid of a dataset
+# The options of the world coordinates of the grid of a dataset (and of
+# a spectral axis, rest)
 _GRID_OPTIONS = ('step', 'rpix', 'rval', 'rota')
+_SPECTRAL_OPTIONS = ('rest',)
 
 
 def load_grid_dataset(cls, info, names, prefix=''):
     """
     The options of a dataset of class cls whose data items (names) are on
     a grid (see make_grid): the items, loaded, and the world coordinates
-    of their grid. Those not given as options (step, rpix, rval, rota)
-    come from the headers of the data files of the items, which must
-    agree.
+    of their grid. Those not given as options (step, rpix, rval, rota and,
+    with a spectral axis, rest) come from the headers of the data files of
+    the items, which must agree.
     """
     desc = parseutils.make_typed_desc(cls, 'dataset')
     parseutils.sanitize_dimensional_options(info, dict(
         step=int | float, rpix=int | float, rval=int | float), cls._ndim)
     step, rpix, rval, rota = (info.pop(key, None) for key in _GRID_OPTIONS)
+    rest = info.pop('rest', None) if cls._spectral_axis is not None else None
     coords = {}
     for name in names:
         if name in info:
             with parseutils.config_path(name):
                 info[name], coords[name] = load_data(
-                    info[name], prefix, rpix, rval)
+                    info[name], prefix, rpix, rval, rest)
     if coords:
         first = next(iter(coords.values()))
         if any(value != first for value in coords.values()):
@@ -46,10 +49,12 @@ def load_grid_dataset(cls, info, names, prefix=''):
             rpix=first.rpix,
             rval=first.rval,
             rota=first.rota if rota is None else rota)
+        if cls._spectral_axis is not None:
+            info.update(rest=first.rest)
     return parseutils.parse_options_for_callable(info, desc, cls.__init__)
 
 
-def make_grid(dataset, step, rpix, rval, rota):
+def make_grid(dataset, step, rpix, rval, rota, rest=None):
     """
     The grid of the items of a dataset, with the given world coordinates
     or their defaults (see fitsutils.make_grid). The dataset declares its
@@ -57,7 +62,7 @@ def make_grid(dataset, step, rpix, rval, rota):
     """
     return fitsutils.make_grid(
         dataset.shape()[::-1], step, rpix, rval, rota,
-        dataset._spectral_axis)
+        dataset._spectral_axis, rest)
 
 
 def dump_grid_dataset(dataset, prefix='', dump_path=True, overwrite=False):
@@ -73,6 +78,8 @@ def dump_grid_dataset(dataset, prefix='', dump_path=True, overwrite=False):
         rpix=grid.coords.rpix,
         rval=grid.coords.rval,
         rota=grid.coords.rota)
+    if grid.coords.rest is not None:
+        info.update(rest=str(grid.coords.rest))
     def write(filename, array):
         fitsutils.write_data(
             filename, array, grid.coords, grid.spectral_axis, overwrite)
@@ -96,8 +103,9 @@ def nest_single_item(info, name):
     item beside those of the dataset), with the options of the item under
     its name.
     """
-    item = {k: v for k, v in info.items() if k not in _GRID_OPTIONS}
-    return {k: info[k] for k in _GRID_OPTIONS if k in info} | {name: item}
+    options = _GRID_OPTIONS + _SPECTRAL_OPTIONS
+    item = {k: v for k, v in info.items() if k not in options}
+    return {k: info[k] for k in options if k in info} | {name: item}
 
 
 def flatten_single_item(info, name):
