@@ -1,5 +1,6 @@
 
 import logging
+from collections.abc import Callable
 from typing import Any
 
 import numpy as np
@@ -13,6 +14,16 @@ from gbkfit.utils import fitsutils
 
 
 _log = logging.getLogger(__name__)
+
+
+def cube_extra(data, grid):
+    """An extra output on a grid of DCube, as a sky and velocity cube."""
+    return fitsutils.GridData(data, grid.coords, grid.spectral_axis)
+
+
+def plain_extra(data, grid):  # noqa
+    """An extra output on a grid of DCube, without world coordinates."""
+    return data
 
 
 class DCube:
@@ -248,7 +259,18 @@ class DCube:
         self._backend_fft = backend_fft
         self._backend_dmodel = driver.native_class('DModel', dtype)()
 
-    def evaluate(self, out_extra: dict[str, Any] | None) -> None:
+    def evaluate(
+            self,
+            out_extra: dict[str, Any] | None,
+            extra_lo: Callable[[np.ndarray, fitsutils.Grid], Any],
+            extra_hi: Callable[[np.ndarray, fitsutils.Grid], Any]
+    ) -> None:
+        """
+        Convolve, downscale and mask the high-res cube into the low-res
+        one. The extra outputs on the low- and high-res grids go to
+        out_extra as extra_lo and extra_hi make them from their data and
+        grid (e.g. cube_extra or plain_extra).
+        """
 
         # Convenience variables
         step_lo = self.step()
@@ -298,16 +320,17 @@ class DCube:
 
         # Output extra information
         if out_extra is not None:
-            out_extra.update(
-                dcube_lo=driver.mem_copy_d2h(dcube_lo),
-                dcube_hi=driver.mem_copy_d2h(dcube_hi))
+            def lo(data):
+                return extra_lo(driver.mem_copy_d2h(data), self.grid())
+
+            def hi(data):
+                return extra_hi(driver.mem_copy_d2h(data), self.scratch_grid())
+
+            out_extra.update(dcube_lo=lo(dcube_lo), dcube_hi=hi(dcube_hi))
             if mask_cutoff is not None:
-                out_extra.update(
-                    mcube_lo=driver.mem_copy_d2h(mcube_lo))
+                out_extra.update(mcube_lo=lo(mcube_lo))
             if has_weights:
-                out_extra.update(
-                    wcube_lo=driver.mem_copy_d2h(wcube_lo),
-                    wcube_hi=driver.mem_copy_d2h(wcube_hi))
+                out_extra.update(wcube_lo=lo(wcube_lo), wcube_hi=hi(wcube_hi))
             if psf:
                 out_extra.update(
                     psf_lo=psf.asarray(spat_step_lo, rota=self.rota()),

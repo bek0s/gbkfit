@@ -6,12 +6,18 @@ import numpy as np
 from gbkfit.dataset.datasets import DatasetImage
 from gbkfit.model.core import DModel, GModelImage
 from gbkfit.psflsf import PSF, psf_parser
+from gbkfit.utils import fitsutils
 from . import _dcube, _detail
 
 
 __all__ = [
     'DModelImage'
 ]
+
+
+def _image_extra(data, grid):
+    """An extra output on a grid of DCube, as an image (its one channel)."""
+    return fitsutils.GridData(data[0], grid.spatial().coords, None)
 
 
 class DModelImage(DModel):
@@ -123,7 +129,7 @@ class DModelImage(DModel):
             dcube.dtype(),
             out_gmodel_extra)
         # Evaluate DCube (perform convolution, supersampling, etc)
-        dcube.evaluate(out_dmodel_extra)
+        dcube.evaluate(out_dmodel_extra, _image_extra, _image_extra)
         # Model evaluation complete.
         # Return data, mask, and weight arrays (if available)
         return dict(image=dict(

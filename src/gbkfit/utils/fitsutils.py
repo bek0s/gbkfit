@@ -45,6 +45,13 @@ class Coords(typing.NamedTuple):
     rval: tuple[float, ...]
     rota: float
 
+    def axes(self, *indices: int) -> 'Coords':
+        """The coordinates of the given axes."""
+        def pick(values):
+            return tuple(values[i] for i in indices)
+        return Coords(
+            pick(self.step), pick(self.rpix), pick(self.rval), self.rota)
+
 
 class Grid(typing.NamedTuple):
     """
@@ -69,9 +76,7 @@ class Grid(typing.NamedTuple):
 
     def spatial(self) -> 'Grid':
         """The grid of the x and y axes."""
-        step, rpix, rval, rota = self.coords
-        return Grid(
-            self.size[:2], Coords(step[:2], rpix[:2], rval[:2], rota), None)
+        return Grid(self.size[:2], self.coords.axes(0, 1), None)
 
 
 class GridData(typing.NamedTuple):

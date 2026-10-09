@@ -130,7 +130,8 @@ class DModelSCube(DModel):
             dcube.dtype(),
             out_gmodel_extra)
         # Evaluate DCube (perform convolution, supersampling, etc)
-        dcube.evaluate(out_dmodel_extra)
+        dcube.evaluate(
+            out_dmodel_extra, _dcube.cube_extra, _dcube.cube_extra)
         # Model evaluation complete.
         # Return data, mask, and weight arrays (if available)
         return dict(scube=dict(

@@ -239,7 +239,8 @@ class DModelMMaps(DModel):
             dcube.dtype(),
             out_gmodel_extra)
         # Evaluate DCube (perform convolution, supersampling, etc)
-        dcube.evaluate(out_dmodel_extra)
+        dcube.evaluate(
+            out_dmodel_extra, _dcube.cube_extra, _dcube.cube_extra)
         # Extract moment maps from DCube's arrays
         # Also evaluate one mask map and one weight map
         backend.mmaps_moments(
