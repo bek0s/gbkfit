@@ -74,7 +74,7 @@ class BrightnessSMDisk2D(BrightnessComponent2D):
         return dict(
             rnodes=self._disk.rnodes(), subrnodes=self._disk.subrnodes())
 
-    def plan(self, driver, spectral, dtype):
+    def plan(self, driver, spectral, dtype, lines):
         return _component.DiskComponentPlan(
             self, self._disk.plan(driver, 0, dtype))
 

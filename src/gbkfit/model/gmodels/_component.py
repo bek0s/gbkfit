@@ -85,22 +85,25 @@ class DiskComponentPlan(ComponentPlan):
 class SpectralDiskComponentPlan(ComponentPlan):
     """
     The evaluation of a spectral component made of one disk: as
-    DiskComponentPlan, and its disk adds the emission lines of the
-    component (Lines) to the spectral cube, at their places on the given
-    spectral axis.
+    DiskComponentPlan, and its disk adds the selected emission lines of
+    the component (Lines; selected, their indices) to the spectral cube,
+    at their places on the given spectral axis.
     """
 
-    def __init__(self, component, disk_plan, lines_, spectral):
+    def __init__(self, component, disk_plan, lines_, selected, spectral):
         self._component = component
         self._disk_plan = disk_plan
-        # The offset, scale and flux of each line; the fluxes of the lines
-        # after the first are their ratios, which are parameters
-        self._lines = lines_.values(spectral)
-        self._ratio_names = lines_.ratio_names()
+        # The offset, scale and flux of each selected line; the fluxes of
+        # the lines after the first are their ratios, which are parameters
+        self._lines = lines_.values(spectral)[list(selected)]
+        self._ratios = [
+            (row, lines_.ratio_name(index))
+            for row, index in enumerate(selected)
+            if lines_.ratio_name(index) is not None]
 
     def evaluate(self, params, grid, outputs, out_extra):
-        for i, name in enumerate(self._ratio_names, start=1):
-            self._lines[i, 2] = params[name]
+        for row, name in self._ratios:
+            self._lines[row, 2] = params[name]
         self._disk_plan.evaluate(
             params, grid, self._component.disk_outputs(outputs), out_extra,
             self._lines)

@@ -95,10 +95,14 @@ class SpectralSMDisk3D(SpectralComponent3D):
         return dict(
             rnodes=self._disk.rnodes(), subrnodes=self._disk.subrnodes())
 
-    def plan(self, driver, spectral, dtype):
+    def line_names(self):
+        return self._lines.names()
+
+    def plan(self, driver, spectral, dtype, lines):
+        selected = self._lines.select(lines)
         return _component.SpectralDiskComponentPlan(
-            self, self._disk.plan(driver, self._lines.nlines(), dtype),
-            self._lines, spectral)
+            self, self._disk.plan(driver, len(selected), dtype),
+            self._lines, selected, spectral)
 
     def disk_outputs(self, outputs):
         """The outputs of the disk, from those of the component."""

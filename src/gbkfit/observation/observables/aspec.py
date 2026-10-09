@@ -152,7 +152,7 @@ class ASpec(Observable):
 
     def plan(
             self, driver, gmodel, foreground, instrument, scale, dtype,
-            components):
+            selection):
         if gmodel.has_weights():
             raise RuntimeError(
                 "aspec does not support gmodels with weights (wtraits) yet")
@@ -164,16 +164,16 @@ class ASpec(Observable):
             instrument.psf(), instrument.lsf(), False, None, False, dtype)
         return ASpecPlan(
             self._weights, dcube, driver, gmodel, foreground, dtype,
-            components)
+            selection)
 
 
 class ASpecPlan(_detail.DCubePlanBase):
 
     def __init__(
             self, weights, dcube, driver, gmodel, foreground, dtype,
-            components):
+            selection):
         super().__init__(
-            dcube, driver, gmodel, foreground, dtype, components)
+            dcube, driver, gmodel, foreground, dtype, selection)
         self._sums = RegionSumsPlan(weights, driver, dtype)
         self._spectra = driver.mem_alloc_d(
             (dcube.size()[2], self._sums.nregions()), dtype)

@@ -1,6 +1,6 @@
 from collections.abc import Sequence
 
-from gbkfit.model.core import GModelImage
+from gbkfit.model.core import GModelImage, Selection
 from gbkfit.utils import parseutils
 from ._component_set import (
     IMAGE_SPECTRAL_AXIS, ComponentSet2D, ComponentSetGModelPlan)
@@ -55,9 +55,9 @@ class GModelIntensity2D(GModelImage):
     def constants(self):
         return self._component_set.constants()
 
-    def plan(self, driver, grid, has_weights, dtype, components=None):
+    def plan(self, driver, grid, has_weights, dtype, selection=Selection()):
         return ComponentSetGModelPlan(
             self._component_set.plan(
                 driver, grid, IMAGE_SPECTRAL_AXIS, has_weights, dtype,
-                components),
+                selection),
             'image')

@@ -152,6 +152,22 @@ def select_components(components, names):
     return tuple(sorted(known.index(name) for name in names))
 
 
+def check_selected_lines(components, names):
+    """
+    Raise ConfigError unless each of the names of lines (None for all) is
+    a line of one of the components.
+    """
+    if names is None:
+        return
+    known = set()
+    for component in components:
+        known |= set(component.line_names())
+    if unknown := [name for name in names if name not in known]:
+        raise ConfigError(
+            f"no component has the lines {unknown}; the lines of the "
+            f"components are {sorted(known)}")
+
+
 def evaluate_components(
         components, plans, mappings, params, grid, outputs, out_extra,
         out_extra_label, extra):

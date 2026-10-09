@@ -182,7 +182,7 @@ class BMaps(Observable):
 
     def plan(
             self, driver, gmodel, foreground, instrument, scale, dtype,
-            components):
+            selection):
         if gmodel.has_weights():
             raise RuntimeError(
                 "bmaps does not support gmodels with weights (wtraits) yet")
@@ -207,16 +207,16 @@ class BMaps(Observable):
         return BMapsPlan(
             self._weights, self._orders, self._mask_cutoff, self._method,
             dcube, driver, gmodel, foreground, dtype,
-            components)
+            selection)
 
 
 class BMapsPlan(_detail.DCubePlanBase):
 
     def __init__(
             self, weights, orders, mask_cutoff, method, dcube, driver,
-            gmodel, foreground, dtype, components):
+            gmodel, foreground, dtype, selection):
         super().__init__(
-            dcube, driver, gmodel, foreground, dtype, components)
+            dcube, driver, gmodel, foreground, dtype, selection)
         self._sums = RegionSumsPlan(weights, driver, dtype)
         nregions = self._sums.nregions()
         # The spectra of the regions, as a cube of one row of regions

@@ -59,15 +59,15 @@ class ComponentSet2D:
             [cmp.constants() for cmp in self._components], self._prefixes)
         return constants
 
-    def plan(self, driver, grid, spectral, has_weights, dtype, components):
+    def plan(self, driver, grid, spectral, has_weights, dtype, selection):
         """
-        The evaluation of the components of the given names (all if None)
-        on the given driver, grid of the x and y axes and spectral axis
-        (fitsutils.Grid, the second of one axis) and dtype, with spatial
-        weights if has_weights.
+        The evaluation of the components and lines of the selection (see
+        Selection) on the given driver, grid of the x and y axes and
+        spectral axis (fitsutils.Grid, the second of one axis) and dtype,
+        with spatial weights if has_weights.
         """
         return ComponentSetPlan2D(
-            self, driver, grid, spectral, has_weights, dtype, components)
+            self, driver, grid, spectral, has_weights, dtype, selection)
 
 
 class ComponentSetPlan2D:
@@ -78,7 +78,7 @@ class ComponentSetPlan2D:
 
     def __init__(
             self, component_set, driver, grid, spectral, has_weights,
-            dtype, components):
+            dtype, selection):
         self._component_set = component_set
         self._driver = driver
         self._grid = grid
@@ -97,12 +97,14 @@ class ComponentSetPlan2D:
             spec_zero=spec_zero)
         # The selected components, their plans and their parameters
         selected = _detail.select_components(
-            component_set.components(), components)
+            component_set.components(), selection.components)
         self._components = tuple(
             component_set.components()[i] for i in selected)
         self._mappings = tuple(component_set.mappings()[i] for i in selected)
+        _detail.check_selected_lines(self._components, selection.lines)
         self._component_plans = tuple(
-            cmp.plan(driver, spectral, dtype) for cmp in self._components)
+            cmp.plan(driver, spectral, dtype, selection.lines)
+            for cmp in self._components)
         # The spatial weights, if weighting is requested
         self._wdata = None
         if has_weights:
@@ -223,15 +225,15 @@ class ComponentSet3D:
     def _all_components(self):
         return self._components + self._ocomponents
 
-    def plan(self, driver, grid, spectral, has_weights, dtype, components):
+    def plan(self, driver, grid, spectral, has_weights, dtype, selection):
         """
-        The evaluation of the components of the given names (all if None)
-        on the given driver, grid of the x and y axes and spectral axis
-        (fitsutils.Grid, the second of one axis) and dtype, with spatial
-        weights if has_weights.
+        The evaluation of the components and lines of the selection (see
+        Selection) on the given driver, grid of the x and y axes and
+        spectral axis (fitsutils.Grid, the second of one axis) and dtype,
+        with spatial weights if has_weights.
         """
         return ComponentSetPlan3D(
-            self, driver, grid, spectral, has_weights, dtype, components)
+            self, driver, grid, spectral, has_weights, dtype, selection)
 
 
 class ComponentSetPlan3D:
@@ -243,7 +245,7 @@ class ComponentSetPlan3D:
 
     def __init__(
             self, component_set, driver, grid, spectral, has_weights,
-            dtype, components):
+            dtype, selection):
         self._component_set = component_set
         self._driver = driver
         self._grid = grid
@@ -284,14 +286,16 @@ class ComponentSetPlan3D:
             grid.coords.rval + (0.0,), grid.coords.rota)
         # The selected components, their plans and their parameters
         selected = _detail.select_components(
-            component_set.components(), components)
+            component_set.components(), selection.components)
         self._components = tuple(
             component_set.components()[i] for i in selected)
         self._mappings = tuple(component_set.mappings()[i] for i in selected)
+        _detail.check_selected_lines(self._components, selection.lines)
         self._component_plans = tuple(
-            cmp.plan(driver, spectral, dtype) for cmp in self._components)
+            cmp.plan(driver, spectral, dtype, selection.lines)
+            for cmp in self._components)
         self._ocomponent_plans = tuple(
-            cmp.plan(driver, spectral, dtype)
+            cmp.plan(driver, spectral, dtype, None)
             for cmp in component_set.opacity_components())
         # The spatial weights, if weighting is requested, and the opacity,
         # if there are opacity components

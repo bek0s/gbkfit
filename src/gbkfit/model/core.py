@@ -1,5 +1,6 @@
 
 import abc
+import typing
 
 from gbkfit.utils import parseutils
 
@@ -9,8 +10,20 @@ __all__ = [
     'GModelImage',
     'GModelPlan',
     'GModelSCube',
+    'Selection',
     'gmodel_parser'
 ]
+
+
+class Selection(typing.NamedTuple):
+    """
+    What of a gmodel an observation sees: its components and the emission
+    lines of its components of the given names (all if None). Opacity
+    components always absorb; the components without lines have one,
+    which is always seen.
+    """
+    components: tuple[str, ...] | None = None
+    lines: tuple[str, ...] | None = None
 
 
 class GModel(parseutils.TypedSerializable, abc.ABC):
@@ -43,13 +56,12 @@ class GModel(parseutils.TypedSerializable, abc.ABC):
         return {}
 
     @abc.abstractmethod
-    def plan(self, driver, grid, has_weights, dtype, components=None):
+    def plan(self, driver, grid, has_weights, dtype, selection=Selection()):
         """
         The evaluation of the gmodel on the given driver, grid of its data
         (fitsutils.Grid: x and y, and the spectral axis of spectral cubes)
         and dtype, with spatial weights if has_weights (a GModelPlan), of
-        its components of the given names (all if None; opacity components
-        always absorb).
+        what the selection has (see Selection).
         """
         pass
 

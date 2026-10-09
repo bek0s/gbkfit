@@ -110,4 +110,4 @@ def test_selection_round_trip(driver):
     dumped = observation_parser.dump(observation(driver, ['co']))
     assert dumped['components'] == ['co']
     assert 'components' not in observation_parser.dump(observation(driver))
-    assert observation_parser.load(dumped).components() == ('co',)
+    assert observation_parser.load(dumped).selection().components == ('co',)

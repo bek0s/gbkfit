@@ -6,6 +6,7 @@ import numpy as np
 
 from gbkfit.params.pdescs import ParamScalarDesc
 from gbkfit.utils import fitsutils, parseutils
+from gbkfit.utils.parseutils import ConfigError
 
 
 __all__ = [
@@ -80,15 +81,39 @@ class Lines:
     def lines(self) -> tuple[Line, ...] | None:
         return self._lines
 
-    def nlines(self) -> int:
-        return 1 if self._lines is None else len(self._lines)
+    def names(self) -> tuple[str, ...]:
+        """The names of the lines (none without lines)."""
+        return () if self._lines is None else tuple(
+            line.name() for line in self._lines)
 
     def pdescs(self):
         return self._ratios
 
-    def ratio_names(self) -> tuple[str, ...]:
-        """The names of the flux ratios of the lines after the first."""
-        return tuple(self._ratios)
+    def select(self, names) -> tuple[int, ...]:
+        """
+        The indices of the lines of the given names (all if None). The
+        one line of a component without lines is always selected. Raise
+        ConfigError if none of the lines is selected.
+        """
+        if self._lines is None:
+            return (0,)
+        if names is None:
+            return tuple(range(len(self._lines)))
+        selected = tuple(
+            i for i, name in enumerate(self.names()) if name in names)
+        if not selected:
+            raise ConfigError(
+                f"a component of the lines {list(self.names())} has none of "
+                f"the selected lines {list(names)}; leave it out with the "
+                f"components of the observation")
+        return selected
+
+    def ratio_name(self, index: int) -> str | None:
+        """
+        The name of the flux ratio of the line of the given index: none for
+        the first line, whose flux is that of the component.
+        """
+        return None if index == 0 else f'{self.names()[index]}_ratio'
 
     def values(self, spectral: fitsutils.Grid) -> np.ndarray:
         """

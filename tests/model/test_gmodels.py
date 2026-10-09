@@ -208,7 +208,7 @@ class WeightComponent(Component):
     def has_weights(self):
         return True
 
-    def plan(self, driver, spectral, dtype):
+    def plan(self, driver, spectral, dtype, lines):
         return WeightComponentPlan(driver, dtype)
 
 
