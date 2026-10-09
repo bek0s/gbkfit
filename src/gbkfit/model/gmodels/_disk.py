@@ -41,12 +41,15 @@ class TraitParams:
     is node-wise (its trait's sampling, see traits.SAMPLINGS) or None, and
     its name in its trait. The keys of all dicts are in the same order:
     the order of the traits, and for each trait, the smooth parameters
-    before the node-wise ones.
+    before the node-wise ones. circular_velocity has the names of those
+    whose values are the circular velocity of the mass model of the
+    gmodel (see traits.Trait.circular_velocity_params).
     """
     pdescs: dict
     nwmodes: dict
     sampling: dict
     pnames: list
+    circular_velocity: tuple
 
 
 def _trait_params(traits_, prefix, nrnodes, nsubrnodes):
@@ -73,7 +76,11 @@ def _trait_params(traits_, prefix, nrnodes, nsubrnodes):
         pdescs={name: tuple_[0] for name, tuple_ in params.items()},
         nwmodes={name: tuple_[1] for name, tuple_ in params.items()},
         sampling={name: tuple_[2] for name, tuple_ in params.items()},
-        pnames=mappings)
+        pnames=mappings,
+        circular_velocity=tuple(
+            mapping[name]
+            for trait, mapping in zip(traits_, mappings)
+            for name in trait.circular_velocity_params()))
 
 
 def _trait_constants(traits_, nnodes, nsubnodes):
@@ -174,12 +181,22 @@ class Disk(abc.ABC):
                 traits_, prefixes.get(kind), nrnodes, self._nsubrnodes)
             for kind, traits_ in self._traits.items()}
 
-        # Merge all parameter descs into the same dictionary
+        # The parameters whose values are the circular velocity of the
+        # mass model of the gmodel, and the radii of their values
+        self._circular_velocity_params = {
+            name: subrnodes if params.sampling[name] == 'subrings' else rnodes
+            for params in self._trait_params.values()
+            for name in params.circular_velocity}
+
+        # Merge all parameter descs into the same dictionary, without those
+        # that the gmodel gives
         self._pdescs = {}
         for pdescs in self._geometry_pdescs.values():
             self._pdescs.update(pdescs)
         for params in self._trait_params.values():
             self._pdescs.update(params.pdescs)
+        for name in self._circular_velocity_params:
+            del self._pdescs[name]
 
     def loose(self):
         return self._loose
@@ -215,6 +232,14 @@ class Disk(abc.ABC):
 
     def pdescs(self):
         return self._pdescs
+
+    def circular_velocity_params(self):
+        """
+        The parameters that are not in pdescs, but whose values are the
+        circular velocity of the mass model of the gmodel at the given
+        radii (arcsec), by name. The disk plans need them with the others.
+        """
+        return self._circular_velocity_params
 
     @abc.abstractmethod
     def plan(self, driver, nlines, dtype):

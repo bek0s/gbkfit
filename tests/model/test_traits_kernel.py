@@ -45,6 +45,10 @@ def trait_configs(parser):
     """
     configs = []
     for type_, cls in parser._parsers.items():
+        # (the trait mass has no parameters: its values come from the
+        # mass model of the gmodel; see test_mass)
+        if cls is traits.VPTraitMass:
+            continue
         options = inspect.signature(cls.__init__).parameters
         config = dict(type=type_)
         if 'order' in options:

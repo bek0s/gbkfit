@@ -4,6 +4,7 @@ from gbkfit.model.core import GModelSCube, Selection
 from gbkfit.utils import parseutils
 from ._component_set import ComponentSet2D, ComponentSetGModelPlan
 from .core import SpectralComponent2D
+from .mass import MassModel, mass_model_parser
 from .spectral_point_2d import SpectralPoint2D
 from .spectral_smdisk_2d import SpectralSMDisk2D
 
@@ -29,23 +30,35 @@ class GModelKinematics2D(GModelSCube):
         desc = parseutils.make_typed_desc(cls, 'gmodel')
         parseutils.load_option_and_update_info(
             _scmp_parser, info, 'components', required=True, allow_none=False)
+        parseutils.load_option_and_update_info(
+            mass_model_parser, info, 'mass_model')
         opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
         return cls(**opts)
 
     def dump(self):
+        component_set = self._component_set
         name = dict(name=self.name()) if self.name() is not None else {}
+        mass_model = component_set.mass_model()
+        mass = dict(mass_model=mass_model_parser.dump(mass_model)) \
+            if mass_model is not None else {}
         return dict(
             type=self.type(),
             **name,
-            components=_scmp_parser.dump(self._component_set.components()))
+            components=_scmp_parser.dump(component_set.components()),
+            **mass)
 
     def __init__(
             self,
             components: SpectralComponent2D | Sequence[SpectralComponent2D],
+            mass_model: MassModel | None = None,
             name: str | None = None
     ):
+        """
+        mass_model is the mass of the galaxy, whose circular velocity the
+        'mass' velocity traits of the components take (see MassModel).
+        """
         super().__init__(name)
-        self._component_set = ComponentSet2D(components)
+        self._component_set = ComponentSet2D(components, mass_model)
 
     def pdescs(self):
         return self._component_set.pdescs()

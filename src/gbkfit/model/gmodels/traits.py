@@ -382,6 +382,14 @@ class Trait(parseutils.TypedSerializable, abc.ABC):
         """Where the values of the node-wise parameters are given."""
         return SAMPLING_DEFAULT
 
+    def circular_velocity_params(self):
+        """
+        The names of the node-wise parameters whose values are not given,
+        but are the circular velocity of the mass model of the gmodel at
+        the radii where they are sampled (see VPTraitMass); none here.
+        """
+        return ()
+
 
 class TraitFeatureTrunc:
 
@@ -1302,6 +1310,32 @@ class VPTraitNWTanUniform(TraitFeatureNWMode, TraitFeatureSampling, VPTrait):
     def params_rnw(self, nnodes):
         return (
             (ParamVectorDesc('vt', nnodes), self.nwmode()),)
+
+
+class VPTraitMass(VPTrait):
+    """
+    The circular velocity of the mass model of the gmodel (see
+    gmodels.mass): a node-wise tangential velocity whose values at the
+    subnodes of the disk the gmodel computes from the parameters of its
+    mass model at each evaluation. It has no parameters of its own.
+    """
+
+    @staticmethod
+    def type():
+        return 'mass'
+
+    @staticmethod
+    def uid():
+        return VPT_UID_NW_TAN_UNIFORM
+
+    def sampling(self):
+        return 'subrings'
+
+    def params_rnw(self, nnodes):
+        return ((ParamVectorDesc('vt', nnodes), None),)
+
+    def circular_velocity_params(self):
+        return ('vt',)
 
 
 class VPTraitNWTanHarmonic(
@@ -2542,6 +2576,7 @@ vpt_parser = parseutils.TypedParser(VPTrait, [
     VPTraitTanIso,
     VPTraitTanNFW,
     VPTraitNWTanUniform,
+    VPTraitMass,
     VPTraitNWTanHarmonic,
     VPTraitNWRadUniform,
     VPTraitNWRadHarmonic,
