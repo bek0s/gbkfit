@@ -481,17 +481,20 @@ gmodel_mcdisk_evaluate_cloud(
     // world-to-image transform
     transform_rh_rotate_z(xn, yn, xn, yn, -a.spat_rota * DEG_TO_RAD<T>);
 
-    //
-    int x = std::rint((xn - a.spat_zero[0])/a.spat_step[0]);
-    int y = std::rint((yn - a.spat_zero[1])/a.spat_step[1]);
-    int z = std::rint((zn - a.spat_zero[2])/a.spat_step[2]);
-
-    // Discard pixels outside the image/cube
-    if (x < 0 || x >= a.spat_size[0] ||
-        y < 0 || y >= a.spat_size[1] ||
-        z < 0 || z >= a.spat_size[2]) {
+    // The voxel of the cloud. Discard the clouds outside the cube, while
+    // their positions are floats: converting one out of the range of int
+    // (e.g. of a heavy-tailed height), or NaN, is undefined.
+    const T px = std::rint((xn - a.spat_zero[0]) / a.spat_step[0]);
+    const T py = std::rint((yn - a.spat_zero[1]) / a.spat_step[1]);
+    const T pz = std::rint((zn - a.spat_zero[2]) / a.spat_step[2]);
+    if (!(px >= 0 && px < a.spat_size[0] &&
+          py >= 0 && py < a.spat_size[1] &&
+          pz >= 0 && pz < a.spat_size[2])) {
         return;
     }
+    const int x = px;
+    const int y = py;
+    const int z = pz;
 
     // Velocity traits
     if (a.vpt.uids)
