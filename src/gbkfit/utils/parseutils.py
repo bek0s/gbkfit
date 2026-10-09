@@ -148,6 +148,7 @@ def check_name(name: str | None) -> None:
 
 def item_prefixes(
         names: typing.Sequence[str | None],
+        label: str,
         prefix: str,
         prefix_first: bool
 ) -> list[str]:
@@ -157,7 +158,8 @@ def item_prefixes(
     their name, if every item has one, or else their position (prefix and
     index, e.g. 'cmp1_'; the first item has no index, and has the prefix
     only if prefix_first). Raise ConfigError if only some of the items have
-    a name, or if the names are not unique.
+    a name, or if the names are not unique; label names the items in the
+    message (e.g. 'components').
     """
     named = [name is not None for name in names]
     if not any(named):
@@ -166,11 +168,12 @@ def item_prefixes(
             for i in range(len(names))]
     if not all(named):
         raise ConfigError(
-            f"either all or none of the items must have a name; only "
+            f"either all or none of the {label} must have a name; only "
             f"{sum(named)} of {len(names)} have one")
     repeated = sorted({name for name in names if names.count(name) > 1})
     if repeated:
-        raise ConfigError(f"names must be unique; repeated: {repeated}")
+        raise ConfigError(
+            f"the names of the {label} must be unique; repeated: {repeated}")
     return [f'{name}_' for name in names]
 
 

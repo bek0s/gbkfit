@@ -122,14 +122,14 @@ def check_traits_common(traits_):
                 f"it may result in density overestimation due to aliasing")
 
 
-def component_prefixes(components, prefix, prefix_first):
+def component_prefixes(components, label, prefix, prefix_first):
     """
     The prefix of the parameters, constants and extra outputs of each
-    component of a list: its position (e.g. 'cmp1_'; see
-    parseutils.item_prefixes).
+    component of a list: its name, or its position if the components have
+    no names (e.g. 'cmp1_'; see parseutils.item_prefixes).
     """
     return parseutils.item_prefixes(
-        [None] * len(components), prefix, prefix_first)
+        [cmp.name() for cmp in components], label, prefix, prefix_first)
 
 
 def evaluate_components(

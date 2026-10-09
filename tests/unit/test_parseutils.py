@@ -76,15 +76,17 @@ def test_unknown_options_are_warnings_or_errors_in_strict_mode(caplog):
     ([], 'cmp', False, [])])
 def test_item_prefixes(names, prefix, prefix_first, prefixes):
     # Names, if all items have one; positions, if none has
-    assert parseutils.item_prefixes(names, prefix, prefix_first) == prefixes
+    assert parseutils.item_prefixes(
+        names, 'items', prefix, prefix_first) == prefixes
 
 
 @pytest.mark.parametrize('names, message', [
-    (['disk', None], "either all or none of the items must have a name"),
-    (['disk', 'disk'], r"names must be unique; repeated: \['disk'\]")])
+    (['disk', None], "either all or none of the components must have a name"),
+    (['disk', 'disk'],
+     r"the names of the components must be unique; repeated: \['disk'\]")])
 def test_item_prefixes_errors(names, message):
     with pytest.raises(parseutils.ConfigError, match=message):
-        parseutils.item_prefixes(names, 'cmp', False)
+        parseutils.item_prefixes(names, 'components', 'cmp', False)
 
 
 @pytest.mark.parametrize('name', ['disk', 'Disk_2', '_x', '2'])

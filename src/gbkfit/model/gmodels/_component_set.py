@@ -1,4 +1,5 @@
 from gbkfit.utils import fitsutils, iterutils, miscutils
+from gbkfit.utils.parseutils import ConfigError
 from . import _detail
 
 
@@ -8,11 +9,11 @@ __all__ = [
 ]
 
 
-# The prefix of the parameters of the components and the opacity
-# components, and whether the parameters of the first one have it (see
-# _detail.component_prefixes)
-_CMP_PREFIX = ('cmp', False)
-_OCMP_PREFIX = ('ocmp', True)
+# The components and the opacity components: their label in messages, the
+# prefix of their parameters, and whether the parameters of the first one
+# have it (see _detail.component_prefixes)
+_CMP_PREFIX = ('components', 'cmp', False)
+_OCMP_PREFIX = ('opacity components', 'ocmp', True)
 
 
 class ComponentSet2D:
@@ -138,6 +139,13 @@ class ComponentSet3D:
         self._components = iterutils.tuplify(components, False)
         self._ocomponents = iterutils.tuplify(opacity_components, False)
         # The components and the opacity components share their names
+        repeated = sorted(
+            {cmp.name() for cmp in self._components}
+            & {cmp.name() for cmp in self._ocomponents} - {None})
+        if repeated:
+            raise ConfigError(
+                f"the components and the opacity components must have "
+                f"different names; repeated: {repeated}")
         self._prefixes = _detail.component_prefixes(
             self._components, *_CMP_PREFIX)
         self._oprefixes = _detail.component_prefixes(
