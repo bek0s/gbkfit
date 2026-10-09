@@ -11,6 +11,9 @@ __all__ = ['MCDisk', 'MCDiskPlan']
 
 _log = logging.getLogger(__name__)
 
+# The most clouds the kernels draw: they count them in int32
+_MAX_CLOUDS = np.iinfo(np.int32).max
+
 
 class MCDisk(_disk.Disk):
 
@@ -23,6 +26,8 @@ class MCDisk(_disk.Disk):
             prefixes, rdata_key)
         if seed < 0:
             raise RuntimeError(f"seed must be >= 0; supplied value: {seed}")
+        if not cflux > 0:
+            raise RuntimeError(f"cflux must be greater than 0; it is {cflux}")
         self._cflux = cflux
         # The seed of the random numbers of the clouds
         self._seed = seed
@@ -93,7 +98,13 @@ class MCDiskPlan(_disk.DiskPlan):
         nclouds = np.where(
             pool_flux != 0,
             np.maximum(np.rint(np.abs(pool_flux) / disk.cflux()), 1),
-            0).astype(np.int32)
+            0)
+        if not np.sum(nclouds) <= _MAX_CLOUDS:
+            raise RuntimeError(
+                f"the Monte Carlo disk needs {np.sum(nclouds):.3g} clouds "
+                f"of flux cflux = {disk.cflux()}, but the kernels draw at "
+                f"most {_MAX_CLOUDS}; give it a larger cflux")
+        nclouds = nclouds.astype(np.int32)
         cloud_flux = np.divide(
             pool_flux, nclouds, out=np.zeros_like(pool_flux),
             where=nclouds > 0)

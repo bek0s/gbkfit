@@ -168,6 +168,17 @@ def test_mcdisk_does_not_depend_on_thread_count(tmp_path):
     assert relative_difference(cubes[1], cubes[0]) < SAME_REALISATION
 
 
+def test_mcdisk_cflux_must_be_positive():
+    with pytest.raises(Exception, match="cflux must be greater than 0"):
+        evaluate_disk('mcdisk', 'host', dict(cflux=-0.01))
+
+
+def test_mcdisk_of_too_many_clouds_is_an_error(driver):
+    # The kernels count the clouds in int32: a disk that needs more (here
+    # about 1.6e11) is an error (it was an empty model)
+    with pytest.raises(RuntimeError, match="larger cflux"):
+        evaluate_disk('mcdisk', driver.type(), dict(cflux=1e-9))
+
 def test_mcdisk_without_clouds(driver):
     # A disk with zero flux has no clouds; its model is empty
     cube = evaluate_disk('mcdisk', driver.type(), properties=dict(bpt_a=0))
