@@ -157,9 +157,9 @@ def test_gmodel(driver, name, evaluate_models, ndarrays_regression):
         for data_ in data for key in data_} | {
         key: value.data if isinstance(value, fitsutils.GridData) else value
         for key, value in extra.items()}
-    # Thick disks and Monte Carlo disks are not bitwise reproducible,
-    # because the threads add to the outputs in a different order; their
-    # float32 sums of many terms differ by about 1e-5
+    # Thick disks on cuda and Monte Carlo disks are not bitwise
+    # reproducible, because the threads add to the outputs in a different
+    # order; their float32 sums of many terms differ by about 1e-5
     ndarrays_regression.check(outputs, tolerances={
         key: dict(rtol=1e-4, atol=1e-6 * np.nanmax(np.abs(value)))
         for key, value in outputs.items()})
@@ -175,7 +175,7 @@ def test_gmodel_dump_and_load(driver, name, evaluate_models):
     assert gmodel_parser.dump(gmodel_parser.load(info)) == info
     data, _ = evaluate_models([model], properties)
     data_loaded, _ = evaluate_models([dict(model, gmodel=info)], properties)
-    # Thick disks on the host differ by float32 rounding between runs
+    # Thick disks on cuda differ by float32 rounding between runs
     for key, value in data[0].items():
         np.testing.assert_allclose(
             data_loaded[0][key]['d'], value['d'],

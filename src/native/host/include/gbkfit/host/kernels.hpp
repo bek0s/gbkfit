@@ -22,6 +22,13 @@ atomic_add(T* addr, T val)
     addr[0] += val;
 }
 
+// A plain add, for outputs that one thread writes to
+template<typename T> inline void
+add(T* addr, T val)
+{
+    addr[0] += val;
+}
+
 template<typename T> inline void
 atomic_set(T* addr, T val)
 {
@@ -274,13 +281,17 @@ gmodel_mcdisk_evaluate(const DiskArgs<T>& a, const MCDiskArgs<T>& mc)
 template<typename T> void
 gmodel_smdisk_evaluate(const DiskArgs<T>& a)
 {
-    // Parallelization: per 3d spatial position
-    #pragma omp parallel for collapse(3)
+    // Parallelization: per 2d spatial position. Each thread evaluates the
+    // voxels of its spaxels in turn, so their light is added to the
+    // spaxel without atomics, and in the same order on every run. The
+    // spaxels off the disk take little time: chunks are handed out as
+    // threads become free.
+    #pragma omp parallel for collapse(2) schedule(dynamic, 16)
     for(int y = 0; y < a.spat_size[1]; ++y) {
     for(int x = 0; x < a.spat_size[0]; ++x) {
     for(int z = 0; z < a.spat_size[2]; ++z) {
 
-    gbkfit::gmodel_smdisk_evaluate_spaxel<atomic_add<T>>(x, y, z, a);
+    gbkfit::gmodel_smdisk_evaluate_spaxel<add<T>>(x, y, z, a);
 
     }
     }

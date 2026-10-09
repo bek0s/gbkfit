@@ -4,6 +4,10 @@ not modify its inputs, and must not depend on previous evaluations.
 """
 
 import copy
+import os
+import pathlib
+import subprocess
+import sys
 
 import gbkfit.model
 import gbkfit.params
@@ -40,6 +44,43 @@ def test_evaluation_does_not_modify_params(driver):
     np.testing.assert_array_equal(values['vpt_vt'], values_before['vpt_vt'])
     np.testing.assert_array_equal(first, second)
 
+
+
+# Evaluates a thick smooth disk on the host and saves its spectral cube.
+# Argument: the output file.
+_THICK_DISK_SCRIPT = """
+import sys
+import gbkfit.params
+import numpy as np
+from modelutils import observation_group
+group = observation_group([dict(
+    driver=dict(type='host'),
+    dmodel=dict(type='scube', size=[24, 24, 31], step=[1, 1, 10]),
+    gmodel=dict(type='kinematics_3d', components=[dict(
+        type='smdisk', loose=False, tilted=False,
+        rnodes=list(range(0, 12)),
+        bptraits=dict(type='exponential'), bhtraits=dict(type='sech2'),
+        vptraits=dict(type='tan_arctan'), dptraits=dict(type='uniform'))]))])
+params = gbkfit.params.EvaluationParams(group.pdescs(), dict(
+    vsys=0, xpos=0, ypos=0, posa=30, incl=60, bpt_a=1, bpt_s=4, bht_s=1,
+    vpt_rt=2, vpt_vt=150, dpt_a=20))
+np.save(sys.argv[1], group.model_h(params.evaluate())[0]['scube']['d'])
+"""
+
+
+def test_host_smooth_disk_does_not_depend_on_thread_count(tmp_path):
+    # Each thread adds the voxels of its spaxels in order, so a thick
+    # disk is the same to the bit with any number of threads
+    cubes = []
+    for threads in (1, 7):
+        output = tmp_path / f'threads_{threads}.npy'
+        subprocess.run(
+            [sys.executable, '-c', _THICK_DISK_SCRIPT, str(output)],
+            env=os.environ | dict(OMP_NUM_THREADS=str(threads)),
+            cwd=pathlib.Path(__file__).parent, check=True)
+        cubes.append(np.load(output))
+    assert cubes[0].any()
+    np.testing.assert_array_equal(cubes[1], cubes[0])
 
 # A model of each type of two-dimensional gmodel: the gmodel, its data
 # model, its data key, and its parameter properties
