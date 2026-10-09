@@ -1,9 +1,8 @@
 
 import os.path
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from typing import Any
 
-import astropy.io.fits
 import numpy as np
 
 from gbkfit.utils import fitsutils, parseutils
@@ -142,28 +141,20 @@ def load_data(
 def dump_data(
         data: Data,
         filenames: Mapping[str, str],
-        coords: fitsutils.Coords | None,
-        spectral_axis: int | None = None,
-        dump_path: bool = True,
-        overwrite: bool = False
+        write: Callable[[str, np.ndarray], None],
+        dump_path: bool = True
 ) -> dict[str, Any]:
     """
-    Write the arrays of a data item to FITS files, and return its info
-    (see load_data). filenames has a filename for each array to write
-    ('data', 'mask', 'error'). The files have the given world coordinates
-    (see fitsutils.write_data), or none if coords is None. Without
-    dump_path, the info has the filenames without their directories.
+    Write the arrays of a data item, and return its info (see load_data).
+    filenames has a filename for each array to write ('data', 'mask',
+    'error'), and write(filename, array) writes an array (e.g. with the
+    world coordinates of its dataset). Without dump_path, the info has the
+    filenames without their directories.
     """
     arrays = dict(data=data.data(), mask=data.mask(), error=data.error())
     info = {}
     for key, filename in filenames.items():
-        array = arrays[key]
-        if array is None:
-            continue
-        if coords is None:
-            astropy.io.fits.writeto(filename, array, overwrite=overwrite)
-        else:
-            fitsutils.write_data(
-                filename, array, coords, spectral_axis, overwrite)
-        info[key] = filename if dump_path else os.path.basename(filename)
+        if arrays[key] is not None:
+            write(filename, arrays[key])
+            info[key] = filename if dump_path else os.path.basename(filename)
     return info

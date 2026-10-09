@@ -1,0 +1,200 @@
+"""
+Tests for spectra in regions of the sky (aspec): the sums of a spectral
+cube in regions (apertures or bins), which must match those of an scube.
+"""
+
+import copy
+
+import gbkfit.dataset
+import gbkfit.params
+import numpy as np
+import pytest
+from modelutils import observation_group
+
+from gbkfit.dataset import Data, RegionsApertures, RegionsBins
+from gbkfit.dataset.datasets import DatasetASpec
+from gbkfit.utils import fitsutils
+
+
+GMODEL = dict(type='kinematics_2d', components=[dict(
+    type='smdisk', loose=False, tilted=False,
+    rnodes=list(range(0, 14)),
+    bptraits=dict(type='exponential'),
+    vptraits=dict(type='tan_arctan'),
+    dptraits=dict(type='uniform'))])
+
+PROPERTIES = dict(
+    vsys=0, xpos=0.3, ypos=-0.6, posa=50, incl=60,
+    bpt_a=1, bpt_s=4, vpt_rt=2, vpt_vt=150, dpt_a=20)
+
+INSTRUMENT = dict(
+    psf=dict(type='gauss', sigma=1.5), lsf=dict(type='gauss', sigma=15))
+
+SCUBE = dict(type='scube', size=[32, 41, 51], step=[1, 1, 10], **INSTRUMENT)
+
+APERTURES = [
+    dict(type='circle', x=2, y=-3, radius=2.5),
+    dict(type='rectangle', x=-1, y=1, length=12, width=1, posa=50),
+    dict(type='field')]
+
+
+def evaluate(driver, dmodel):
+    model_group = observation_group([
+        dict(driver=dict(type=driver.type()), dmodel=copy.deepcopy(dmodel),
+             gmodel=GMODEL)])
+    params = gbkfit.params.EvaluationParams(model_group.pdescs(), PROPERTIES)
+    data = model_group.model_h(params.evaluate())[0]
+    return next(iter(data.values()))['d'].copy()
+
+
+def aspec_of_apertures(apertures):
+    return dict(
+        type='aspec', regions=dict(type='apertures', apertures=apertures),
+        size=[32, 41], step=[1, 1], spec_size=51, spec_step=10,
+        **INSTRUMENT)
+
+
+def observable_of(dmodel):
+    """The observable of a dmodel of the tests, without the instrument."""
+    from gbkfit.observation import observable_parser
+    return observable_parser.load(
+        {k: v for k, v in copy.deepcopy(dmodel).items()
+         if k not in INSTRUMENT})
+
+
+def test_aspec_of_apertures_are_the_sums_of_an_scube(driver):
+    # The cube of aspec is that of the scube, so its spectra are the
+    # sums of the scube weighted by the overlaps of the apertures
+    scube = evaluate(driver, SCUBE)
+    aspec = evaluate(driver, aspec_of_apertures(APERTURES))
+    assert aspec.shape == (51, 3)
+    grid = fitsutils.make_grid((32, 41))
+    weights = gbkfit.dataset.regions_parser.load(
+        dict(type='apertures', apertures=APERTURES)).weights(grid)
+    expected = (weights @ scube.reshape(51, -1).T).T
+    np.testing.assert_allclose(aspec, expected, rtol=1e-5, atol=1e-6)
+    # The field is the whole cube: the integrated spectrum
+    np.testing.assert_allclose(
+        aspec[:, 2], scube.sum(axis=(1, 2)), rtol=1e-5)
+
+
+def test_aspec_of_bins_are_the_sums_of_an_scube(driver):
+    # Bins on the grid of the scube: the cube of aspec is on their grid
+    index = np.full((41, 32), -1)
+    index[10:20, 5:15] = 0
+    index[20:30, 10:25] = 1
+    index[5, 5] = 2
+    scube = evaluate(driver, SCUBE)
+    dmodel = dict(
+        type='aspec', spec_size=51, spec_step=10, **INSTRUMENT,
+        regions=dict(type='bins', file='bins.fits'))
+    fitsutils.write_data('bins.fits', index, fitsutils.Coords(
+        (1, 1), (15.5, 20), (0, 0), 0))
+    aspec = evaluate(driver, dmodel)
+    expected = np.stack(
+        [scube[:, index == i].sum(axis=1) for i in range(3)], axis=1)
+    np.testing.assert_allclose(aspec, expected, rtol=1e-5, atol=1e-6)
+
+
+def test_aspec_objective_residual(driver):
+    # Data equal to the model plus 1, with errors of 2: every residual
+    # (model - data) / error is -0.5
+    from gbkfit.model import gmodel_parser
+    from gbkfit.objective import Objective
+    from gbkfit.observation import (
+        Instrument, Observation, ObservationGroup, instrument_parser)
+    dmodel = aspec_of_apertures(APERTURES[:2])
+    model = evaluate(driver, dmodel)
+    observable = observable_of(dmodel)
+    dataset = DatasetASpec(
+        Data(model + 1, error=np.full_like(model, 2)),
+        observable.regions(), step=10)
+    observation = Observation(
+        driver, observable, Instrument(), data=dataset)
+    group = ObservationGroup(
+        [gmodel_parser.load(copy.deepcopy(GMODEL))], [observation])
+    params = gbkfit.params.EvaluationParams(group.pdescs(), PROPERTIES)
+    residual = Objective(group).residual_nddata_h(params.evaluate(), False)
+    # Without the instrument, the model differs from the data
+    assert not np.allclose(residual[0]['aspec'], -0.5)
+    observation = Observation(
+        driver, observable, instrument_parser.load(copy.deepcopy(INSTRUMENT)),
+        data=dataset)
+    group = ObservationGroup(
+        [gmodel_parser.load(copy.deepcopy(GMODEL))], [observation])
+    residual = Objective(group).residual_nddata_h(params.evaluate(), False)
+    np.testing.assert_allclose(residual[0]['aspec'], -0.5, rtol=1e-5)
+
+
+def test_aspec_data_round_trip(tmp_path):
+    # The spectra are written with the regions along x and the velocity
+    # along y, and read back with the world coordinates of the velocity
+    from gbkfit.dataset import dataset_parser
+    regions = RegionsApertures([
+        gbkfit.dataset.aperture_parser.load(info) for info in APERTURES])
+    dataset = DatasetASpec(
+        Data(np.arange(51 * 3.0).reshape(51, 3)), regions, step=10,
+        rpix=4, rval=1500)
+    info = dataset_parser.dump(dataset, prefix=str(tmp_path / ''))
+    for key in ('step', 'rpix', 'rval'):
+        info.pop(key)
+    loaded = dataset_parser.load(info)
+    assert loaded.regions() == regions
+    assert loaded.spectral_grid().size == (51,)
+    np.testing.assert_allclose(loaded.spectral_grid().coords.step, [10])
+    np.testing.assert_allclose(loaded.spectral_grid().coords.rpix, [4])
+    np.testing.assert_allclose(loaded.spectral_grid().coords.rval, [1500])
+    np.testing.assert_array_equal(
+        loaded['aspec'].data(), dataset['aspec'].data())
+
+
+def test_aspec_observation_from_data(tmp_path):
+    # The regions and the spectral axis come from the data; the spatial
+    # grid of apertures is given
+    from gbkfit.observation import observation_parser
+    regions = RegionsApertures([
+        gbkfit.dataset.aperture_parser.load(info) for info in APERTURES])
+    dataset = DatasetASpec(
+        Data(np.ones((51, 3))), regions, step=10, rval=1500)
+    data_info = dataset.dump(prefix=str(tmp_path / ''))
+    data_info.pop('type')
+    info = dict(
+        driver=dict(type='host'), data=data_info,
+        observable=dict(type='aspec', size=[32, 41]))
+    observation = observation_parser.load(copy.deepcopy(info))
+    observable = observation.observable()
+    assert observable.size() == (32, 41, 51)
+    assert observable.spectral_grid() == dataset.spectral_grid()
+    assert observable.regions() == regions
+    # A dump of the observation does not repeat what the data give
+    dumped = observation_parser.dump(
+        observation, prefix=str(tmp_path / 'dump_'))
+    assert set(dumped['observable']) == {
+        'type', 'size', 'step', 'rpix', 'rval', 'rota'}
+    with pytest.raises(Exception, match="give its options \\['spec_step'\\]"):
+        observation_parser.load(info | dict(observable=dict(
+            type='aspec', size=[32, 41], spec_step=10)))
+
+
+def test_aspec_of_spectra_with_another_spectral_axis_is_an_error(driver):
+    from gbkfit.observation import Observation
+    observable = observable_of(aspec_of_apertures(APERTURES))
+    dataset = DatasetASpec(
+        Data(np.ones((51, 3))), observable.regions(), step=5)
+    with pytest.raises(RuntimeError, match="spectral axis"):
+        Observation(driver, observable, data=dataset)
+
+
+def test_aspec_spatial_grid_options():
+    from gbkfit.observation import ASpec
+    bins = RegionsBins(np.zeros((4, 4)))
+    with pytest.raises(RuntimeError, match="remove the options \\['step'\\]"):
+        ASpec(bins, spec_size=5, step=[1, 1])
+    apertures = RegionsApertures([
+        gbkfit.dataset.aperture_parser.load(dict(type='field'))])
+    with pytest.raises(RuntimeError, match="size of the grid"):
+        ASpec(apertures, spec_size=5)
+    circle = RegionsApertures([gbkfit.dataset.aperture_parser.load(
+        dict(type='circle', x=0, y=0, radius=5))])
+    with pytest.raises(RuntimeError, match="not inside the grid"):
+        ASpec(circle, spec_size=5, size=[8, 8])

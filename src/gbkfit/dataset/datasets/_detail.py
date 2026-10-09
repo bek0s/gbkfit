@@ -6,6 +6,7 @@ from gbkfit.utils.parseutils import ConfigError
 __all__ = [
     'dump_grid_dataset',
     'flatten_single_item',
+    'item_filenames',
     'load_grid_dataset',
     'make_grid',
     'nest_single_item'
@@ -72,15 +73,21 @@ def dump_grid_dataset(dataset, prefix='', dump_path=True, overwrite=False):
         rpix=grid.coords.rpix,
         rval=grid.coords.rval,
         rota=grid.coords.rota)
+    def write(filename, array):
+        fitsutils.write_data(
+            filename, array, grid.coords, grid.spectral_axis, overwrite)
     for key, item in dataset.items():
-        filenames = dict(
-            data=f'{prefix}{key}_d.fits',
-            mask=f'{prefix}{key}_m.fits',
-            error=f'{prefix}{key}_e.fits')
         info[key] = dump_data(
-            item, filenames, grid.coords, grid.spectral_axis, dump_path,
-            overwrite)
+            item, item_filenames(prefix, key), write, dump_path)
     return info
+
+
+def item_filenames(prefix, key):
+    """The files of the arrays of a data item (see dump_data)."""
+    return dict(
+        data=f'{prefix}{key}_d.fits',
+        mask=f'{prefix}{key}_m.fits',
+        error=f'{prefix}{key}_e.fits')
 
 
 def nest_single_item(info, name):

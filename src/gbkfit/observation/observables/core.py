@@ -16,7 +16,9 @@ class Observable(parseutils.TypedSerializable, abc.ABC):
     What a dataset measures, made from a gmodel seen through an
     instrument: the form of the data (their items, see keys()) and their
     grid. A subclass declares the index of the spectral axis of its data
-    (_spectral_axis, None if none), as the datasets do.
+    (_spectral_axis, None if none), as the datasets do. Its dump(data)
+    leaves out the options that the given data give (see
+    options_from_data).
     """
 
     _spectral_axis: int | None
@@ -37,6 +39,15 @@ class Observable(parseutils.TypedSerializable, abc.ABC):
             tuple(size),
             fitsutils.Coords(tuple(step), tuple(rpix), tuple(rval), rota),
             self._spectral_axis)
+
+    @classmethod
+    def options_from_data(cls, dataset) -> tuple[str, ...]:
+        """
+        The options of the observable that its data (the given dataset)
+        give, and that it must not be given too: here, its grid.
+        Observables of other data override this.
+        """
+        return 'size', 'step', 'rpix', 'rval', 'rota'
 
     def spectral_axis(self):
         return self._spectral_axis

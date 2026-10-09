@@ -12,11 +12,13 @@ __all__ = [
     'Coords',
     'Grid',
     'GridData',
+    'SpectraData',
     'VELOCITY_TYPES',
     'centre_missing_crpix',
     'make_grid',
     'read_data',
-    'write_data'
+    'write_data',
+    'write_spectra'
 ]
 
 
@@ -124,6 +126,17 @@ class GridData(typing.NamedTuple):
     data: np.ndarray
     coords: Coords
     spectral_axis: int | None
+
+
+class SpectraData(typing.NamedTuple):
+    """
+    Spectra of regions of the sky (data of shape (nchannels, nregions);
+    FITS: the regions along x, the velocity along y), with the world
+    coordinates of their spectral axis (a Coords of one axis; see
+    write_spectra).
+    """
+    data: np.ndarray
+    coords: Coords
 
 
 def read_data(
@@ -256,6 +269,26 @@ def write_data(
         raise ValueError(
             f"unsupported data: {data.ndim} axes, of which the spectral "
             f"axis is {spectral_axis}")
+    astropy.io.fits.writeto(
+        filename, data, header,
+        output_verify='exception', overwrite=overwrite, checksum=True)
+
+
+def write_spectra(
+        filename: str,
+        data: np.ndarray,
+        coords: Coords,
+        overwrite: bool = False
+) -> None:
+    """
+    Write spectra of regions (see SpectraData) to a FITS file: the regions
+    along x (an index, without world coordinates), and the velocity along
+    y, with the world coordinates of a spectral axis (a Coords of one
+    axis).
+    """
+    header = astropy.io.fits.Header(dict(
+        CTYPE2='VRAD', CUNIT2='km/s', CDELT2=coords.step[0],
+        CRPIX2=coords.rpix[0] + 1, CRVAL2=coords.rval[0]))
     astropy.io.fits.writeto(
         filename, data, header,
         output_verify='exception', overwrite=overwrite, checksum=True)

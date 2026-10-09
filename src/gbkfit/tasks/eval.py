@@ -227,8 +227,9 @@ def eval_(
 
 def _write_outputs(output_dir, outputs):
     """
-    Write each output by its type: data on a grid (GridData) to a FITS
-    file with world coordinates, other arrays to a FITS file without, and
+    Write each output by its type: data on a grid (GridData) and spectra
+    (SpectraData) to a FITS file with world coordinates, other arrays to
+    a FITS file without, and
     the other values (numbers, strings, lists and dicts) together to
     gbkfit_eval_extra.json and .yaml.
     """
@@ -239,6 +240,9 @@ def _write_outputs(output_dir, outputs):
             fitsutils.write_data(
                 filename, value.data, value.coords, value.spectral_axis,
                 overwrite=True)
+        elif isinstance(value, fitsutils.SpectraData):
+            fitsutils.write_spectra(
+                filename, value.data, value.coords, overwrite=True)
         elif isinstance(value, np.ndarray):
             fits.writeto(filename, value, overwrite=True)
         elif isinstance(value, (bool, int, float, str, list, tuple, dict,

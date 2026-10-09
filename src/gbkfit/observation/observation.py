@@ -64,7 +64,8 @@ class Observation(parseutils.BasicSerializable):
         return name | gmodel | data | dict(
             driver=driver_parser.dump(self._driver),
             instrument=instrument_parser.dump(self._instrument),
-            observable=observable_parser.dump(self._observable),
+            observable=observable_parser.dump(
+                self._observable, data=self._data),
             scale=self._scale,
             dtype=self._dtype.name)
 

@@ -223,20 +223,24 @@ def test_datasets_check_the_number_of_axes(tmp_path, dataset_type, shape):
         dataset_parser.load(dict(type=dataset_type) | data)
 
 
-def test_observable_grid_options_must_agree_with_the_data(tmp_path):
-    # The grid comes from the data: the observable may repeat it, but a
-    # different value is an error
+def test_observable_grid_comes_from_the_data(tmp_path):
+    # The grid comes from the data, so the observable must not give it
+    # too, and a dump of the observation does not repeat it
     from gbkfit.observation import observation_parser
     fits.writeto(tmp_path / 'image.fits', np.ones((8, 20)))
     info = dict(
         driver=dict(type='host'),
         data=dict(data=str(tmp_path / 'image.fits')))
     observation = observation_parser.load(
-        info | dict(observable=dict(type='image', size=[20, 8], step=1)))
+        info | dict(observable=dict(type='image')))
     assert observation.observable().size() == (20, 8)
-    with pytest.raises(Exception, match="option 'step'.*the data have"):
+    observable_info = observation_parser.dump(
+        observation, prefix=str(tmp_path / 'dump_'))['observable']
+    assert observable_info == dict(
+        type='image', mask_cutoff=None, mask_apply=False)
+    with pytest.raises(Exception, match="give its options \\['step'\\]"):
         observation_parser.load(
-            info | dict(observable=dict(type='image', step=2)))
+            info | dict(observable=dict(type='image', step=1)))
 
 
 def test_observation_data_must_be_on_the_grid_of_the_observable():
