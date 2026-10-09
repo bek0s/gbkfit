@@ -82,10 +82,14 @@ def test_opacity_does_not_accumulate(driver):
     assert_same_model(second, first)
 
 
-def face_on_optical_depth(driver, evaluate_models, disk_type):
+def face_on_optical_depth(
+        driver, evaluate_models, disk_type,
+        optraits=(dict(type='exponential'),),
+        opacity_properties=dict(ocmp_opt_a=0.5, ocmp_opt_s=4, ocmp_oht_s=1)):
     """
     The optical depth of each line of sight through a face-on opacity disk
-    of the given type: the sum of the opacity cube along the z axis.
+    of the given type and opacity traits (each with a sech2 height trait,
+    and their properties): the sum of the opacity cube along the z axis.
     """
     gmodel = dict(
         type='intensity_3d', size_z=40, step_z=0.25,
@@ -95,8 +99,8 @@ def face_on_optical_depth(driver, evaluate_models, disk_type):
             bhtraits=dict(type='sech2'))],
         opacity_components=[dict(
             DISK, type=disk_type,
-            optraits=dict(type='exponential'),
-            ohtraits=dict(type='sech2'))])
+            optraits=list(optraits),
+            ohtraits=[dict(type='sech2')] * len(optraits))])
     if disk_type == 'mcdisk':
         gmodel['opacity_components'][0]['cflux'] = 1e-4
     model = dict(
@@ -106,7 +110,7 @@ def face_on_optical_depth(driver, evaluate_models, disk_type):
     properties = dict(
         xpos=0, ypos=0, posa=0, incl=0, bpt_a=1, bpt_s=4, bht_s=1,
         ocmp_xpos=0, ocmp_ypos=0, ocmp_posa=0, ocmp_incl=0,
-        ocmp_opt_a=0.5, ocmp_opt_s=4, ocmp_oht_s=1)
+        **opacity_properties)
     _, extra = evaluate_models([model], properties)
     return extra['observation0_gmodel_total_odata'].data.sum(axis=0)
 
@@ -126,6 +130,21 @@ def test_opacity_traits_give_the_face_on_optical_depth(
     mcdisk = face_on_optical_depth(driver, evaluate_models, 'mcdisk')
     np.testing.assert_allclose(
         mcdisk[inside].sum(), smdisk[inside].sum(), rtol=1e-2)
+
+
+def test_monte_carlo_opacity_mixtures(driver, evaluate_models):
+    # A mixture of blobs and an exponential profile: the clouds of the
+    # Monte Carlo disk add up to the optical depth of the smooth disk
+    optraits = (dict(type='mixture_gauss', nblobs=1), dict(type='exponential'))
+    properties = dict(
+        ocmp_opt_r=[3.0], ocmp_opt_t=[0.0], ocmp_opt_a=[0.5],
+        ocmp_opt_s=[2.0], ocmp_opt_q=[1.0], ocmp_opt_p=[0.0],
+        ocmp_opt1_a=0.2, ocmp_opt1_s=3.0, ocmp_oht_s=1, ocmp_oht1_s=1)
+    smdisk, mcdisk = (
+        face_on_optical_depth(
+            driver, evaluate_models, disk_type, optraits, properties)
+        for disk_type in ('smdisk', 'mcdisk'))
+    np.testing.assert_allclose(mcdisk.sum(), smdisk.sum(), rtol=1e-2)
 
 
 def image_and_optical_depth(driver, evaluate_models, opacity, step_z):
