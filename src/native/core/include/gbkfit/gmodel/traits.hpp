@@ -92,6 +92,10 @@ constexpr int VPT_UID_TAN_LRAMP = 5;
 constexpr int VPT_UID_TAN_TANH = 6;
 constexpr int VPT_UID_TAN_POLYEX = 7;
 constexpr int VPT_UID_TAN_RIX = 8;
+constexpr int VPT_UID_TAN_COURTEAU = 9;
+constexpr int VPT_UID_TAN_BRANDT = 10;
+constexpr int VPT_UID_TAN_ISO = 11;
+constexpr int VPT_UID_TAN_NFW = 12;
 constexpr int VPT_UID_NW_TAN_UNIFORM = 101;
 constexpr int VPT_UID_NW_TAN_HARMONIC = 102;
 constexpr int VPT_UID_NW_RAD_UNIFORM = 103;
@@ -898,6 +902,63 @@ vp_trait_tan_rix(T& out, T r, T theta, T incl, const T* params)
     vp_trait_make_tan(out, theta, incl);
 }
 
+// Courteau (1997): vt (1 + x)^b / (1 + x^g)^(1 / g), with x = rt / r (0
+// at the centre)
+template<typename T> constexpr void
+vp_trait_tan_courteau(T& out, T r, T theta, T incl, const T* params)
+{
+    T rt = params[0];
+    T vt = params[1];
+    T b = params[2];
+    T g = params[3];
+    const T x = rt / r;
+    out = r > 0
+            ? vt * std::pow(1 + x, b) / std::pow(1 + std::pow(x, g), 1 / g)
+            : 0;
+    vp_trait_make_tan(out, theta, incl);
+}
+
+// Brandt (1960): vt (r / rt) / (1/3 + 2/3 (r / rt)^n)^(3 / (2 n)), with
+// its maximum vt at rt
+template<typename T> constexpr void
+vp_trait_tan_brandt(T& out, T r, T theta, T incl, const T* params)
+{
+    T rt = params[0];
+    T vt = params[1];
+    T n = params[2];
+    const T x = r / rt;
+    out = vt * x
+            / std::pow(T{1} / 3 + T{2} / 3 * std::pow(x, n), 3 / (2 * n));
+    vp_trait_make_tan(out, theta, incl);
+}
+
+// A pseudo-isothermal sphere: vt sqrt(1 - (rt / r) atan(r / rt)), with the
+// core radius rt and the asymptotic velocity vt (0 at the centre)
+template<typename T> constexpr void
+vp_trait_tan_iso(T& out, T r, T theta, T incl, const T* params)
+{
+    T rt = params[0];
+    T vt = params[1];
+    out = r > 0 ? vt * std::sqrt(1 - rt / r * std::atan(r / rt)) : 0;
+    vp_trait_make_tan(out, theta, incl);
+}
+
+// The shape of the rotation curve of an NFW halo of scale radius rt, with
+// its maximum vt (at 2.1626 rt): vt sqrt(f(r / rt) / f_max), with
+// f(u) = (ln(1 + u) - u / (1 + u)) / u (0 at the centre)
+template<typename T> constexpr void
+vp_trait_tan_nfw(T& out, T r, T theta, T incl, const T* params)
+{
+    constexpr T F_MAX = T{0.21621659550187317};
+    T rt = params[0];
+    T vt = params[1];
+    const T u = r / rt;
+    out = u > 0
+            ? vt * std::sqrt((std::log1p(u) - u / (1 + u)) / u / F_MAX)
+            : 0;
+    vp_trait_make_tan(out, theta, incl);
+}
+
 template<typename T> constexpr void
 vp_trait_nw_tan_uniform(
         T& out,
@@ -1486,6 +1547,22 @@ vp_trait(
         break;
     case VPT_UID_TAN_RIX:
         vp_trait_tan_rix(
+                out, r, theta, incl, params);
+        break;
+    case VPT_UID_TAN_COURTEAU:
+        vp_trait_tan_courteau(
+                out, r, theta, incl, params);
+        break;
+    case VPT_UID_TAN_BRANDT:
+        vp_trait_tan_brandt(
+                out, r, theta, incl, params);
+        break;
+    case VPT_UID_TAN_ISO:
+        vp_trait_tan_iso(
+                out, r, theta, incl, params);
+        break;
+    case VPT_UID_TAN_NFW:
+        vp_trait_tan_nfw(
                 out, r, theta, incl, params);
         break;
     case VPT_UID_NW_TAN_UNIFORM:

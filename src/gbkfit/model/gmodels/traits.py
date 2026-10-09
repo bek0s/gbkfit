@@ -104,6 +104,10 @@ VPT_UID_TAN_LRAMP = 5
 VPT_UID_TAN_TANH = 6
 VPT_UID_TAN_POLYEX = 7
 VPT_UID_TAN_RIX = 8
+VPT_UID_TAN_COURTEAU = 9
+VPT_UID_TAN_BRANDT = 10
+VPT_UID_TAN_ISO = 11
+VPT_UID_TAN_NFW = 12
 VPT_UID_NW_TAN_UNIFORM = 101
 VPT_UID_NW_TAN_HARMONIC = 102
 VPT_UID_NW_RAD_UNIFORM = 103
@@ -1144,6 +1148,89 @@ class VPTraitTanRix(VPTrait):
             ParamScalarDesc('vt'),
             ParamScalarDesc('b'),
             ParamScalarDesc('g'))
+
+
+class VPTraitTanCourteau(VPTrait):
+    """
+    The rotation curve of Courteau (1997): vt (1 + x)^b / (1 + x^g)^(1 / g),
+    with x = rt / r.
+    """
+
+    @staticmethod
+    def type():
+        return 'tan_courteau'
+
+    @staticmethod
+    def uid():
+        return VPT_UID_TAN_COURTEAU
+
+    def params_sm(self):
+        return (
+            ParamScalarDesc('rt'),
+            ParamScalarDesc('vt'),
+            ParamScalarDesc('b'),
+            ParamScalarDesc('g'))
+
+
+class VPTraitTanBrandt(VPTrait):
+    """
+    The rotation curve of Brandt (1960), of maximum vt at the radius rt:
+    vt (r / rt) / (1/3 + 2/3 (r / rt)^n)^(3 / (2 n)).
+    """
+
+    @staticmethod
+    def type():
+        return 'tan_brandt'
+
+    @staticmethod
+    def uid():
+        return VPT_UID_TAN_BRANDT
+
+    def params_sm(self):
+        return (
+            ParamScalarDesc('rt'),
+            ParamScalarDesc('vt'),
+            ParamScalarDesc('n'))
+
+
+class VPTraitTanIso(VPTrait):
+    """
+    The rotation curve of a pseudo-isothermal sphere of core radius rt and
+    asymptotic velocity vt: vt sqrt(1 - (rt / r) atan(r / rt)).
+    """
+
+    @staticmethod
+    def type():
+        return 'tan_iso'
+
+    @staticmethod
+    def uid():
+        return VPT_UID_TAN_ISO
+
+    def params_sm(self):
+        return (
+            ParamScalarDesc('rt'),
+            ParamScalarDesc('vt'))
+
+
+class VPTraitTanNFW(VPTrait):
+    """
+    The shape of the rotation curve of an NFW halo of scale radius rt, with
+    its maximum vt (at 2.163 rt).
+    """
+
+    @staticmethod
+    def type():
+        return 'tan_nfw'
+
+    @staticmethod
+    def uid():
+        return VPT_UID_TAN_NFW
+
+    def params_sm(self):
+        return (
+            ParamScalarDesc('rt'),
+            ParamScalarDesc('vt'))
 
 
 class VPTraitNWTanUniform(TraitFeatureNWMode, TraitFeatureSampling, VPTrait):
@@ -2392,6 +2479,10 @@ vpt_parser = parseutils.TypedParser(VPTrait, [
     VPTraitTanTanh,
     VPTraitTanPolyex,
     VPTraitTanRix,
+    VPTraitTanCourteau,
+    VPTraitTanBrandt,
+    VPTraitTanIso,
+    VPTraitTanNFW,
     VPTraitNWTanUniform,
     VPTraitNWTanHarmonic,
     VPTraitNWRadUniform,
