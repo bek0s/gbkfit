@@ -10,6 +10,7 @@ from gbkfit.utils.parseutils import ConfigError
 
 __all__ = [
     'Coords',
+    'Grid',
     'GridData',
     'VELOCITY_TYPES',
     'centre_missing_crpix',
@@ -43,6 +44,34 @@ class Coords(typing.NamedTuple):
     rpix: tuple[float, ...]
     rval: tuple[float, ...]
     rota: float
+
+
+class Grid(typing.NamedTuple):
+    """
+    A grid of pixels: its size and world coordinates (see Coords) for each
+    axis in FITS order, and the index of its spectral axis (or None).
+    """
+    size: tuple[int, ...]
+    coords: Coords
+    spectral_axis: int | None
+
+    def zero(self) -> tuple[float, ...]:
+        """
+        The world position of the first pixel on each axis, in model units:
+        the spatial axes are measured from the reference pixel, and the
+        spectral axis from its world value there.
+        """
+        step, rpix, rval = self.coords.step, self.coords.rpix, self.coords.rval
+        return tuple(
+            (rval[axis] if axis == self.spectral_axis else 0)
+            - rpix[axis] * step[axis]
+            for axis in range(len(self.size)))
+
+    def spatial(self) -> 'Grid':
+        """The grid of the x and y axes."""
+        step, rpix, rval, rota = self.coords
+        return Grid(
+            self.size[:2], Coords(step[:2], rpix[:2], rval[:2], rota), None)
 
 
 class GridData(typing.NamedTuple):

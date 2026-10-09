@@ -9,6 +9,7 @@ from gbkfit.driver import Driver
 from gbkfit.psflsf import LSF, PSF
 from gbkfit.psflsf.lsfs import LSFPoint
 from gbkfit.psflsf.psfs import PSFPoint
+from gbkfit.utils import fitsutils
 
 
 _log = logging.getLogger(__name__)
@@ -42,24 +43,12 @@ class DCube:
                 "provided; if weights exist, they will not be smoothed")
             smooth_weights = False
 
-        # Low-res cube zero pixel center position. The spatial axes are
-        # measured from the reference pixel, and the spectral axis from
-        # its world value there (see fitsutils.Coords).
-        zero = (
-            -rpix[0] * step[0],
-            -rpix[1] * step[1],
-            rval[2] - rpix[2] * step[2])
-
-        self._size_lo = size
-        self._step_lo = step
-        self._zero_lo = zero
-        self._rpix_lo = rpix
-        self._rval_lo = rval
-        self._size_hi = None
-        self._step_hi = None
-        self._zero_hi = None
+        # The low-res grid (the grid of the data) and, once prepared, the
+        # high-res one, with their spectral axis last
+        self._grid_lo = fitsutils.Grid(
+            size, fitsutils.Coords(step, rpix, rval, rota), 2)
+        self._grid_hi = None
         self._edge_hi = None
-        self._rota = rota
         self._scale = scale
         self._dcube_lo = None
         self._dcube_hi = None
@@ -78,23 +67,26 @@ class DCube:
         self._backend_fft = None
         self._backend_dmodel = None
 
+    def grid(self) -> fitsutils.Grid:
+        return self._grid_lo
+
     def size(self) -> tuple[int, int, int]:
-        return self._size_lo
+        return self._grid_lo.size
 
     def step(self) -> tuple[float, float, float]:
-        return self._step_lo
+        return self._grid_lo.coords.step
 
     def zero(self) -> tuple[float, float, float]:
-        return self._zero_lo
+        return self._grid_lo.zero()
 
     def rpix(self) -> tuple[float, float, float]:
-        return self._rpix_lo
+        return self._grid_lo.coords.rpix
 
     def rval(self) -> tuple[float, float, float]:
-        return self._rval_lo
+        return self._grid_lo.coords.rval
 
     def rota(self) -> float:
-        return self._rota
+        return self._grid_lo.coords.rota
 
     def scale(self) -> tuple[int, int, int]:
         return self._scale
@@ -108,14 +100,17 @@ class DCube:
     def mcube(self) -> Any:
         return self._mcube_lo
 
+    def scratch_grid(self) -> fitsutils.Grid:
+        return self._grid_hi
+
     def scratch_size(self) -> tuple[int, int, int]:
-        return self._size_hi
+        return self._grid_hi.size
 
     def scratch_step(self) -> tuple[float, float, float]:
-        return self._step_hi
+        return self._grid_hi.coords.step
 
     def scratch_zero(self) -> tuple[float, float, float]:
-        return self._zero_hi
+        return self._grid_hi.zero()
 
     def scratch_edge(self) -> tuple[int, int, int]:
         return self._edge_hi
@@ -149,7 +144,7 @@ class DCube:
         # Convenience variables
         size_lo = self.size()
         step_lo = self.step()
-        zero_lo = self.zero()
+        rpix_lo = self.rpix()
         scale = self.scale()
         psf = self.psf()
         lsf = self.lsf()
@@ -190,11 +185,13 @@ class DCube:
             size_hi, edge_hi = backend_fft.fft_convolution_shape(
                 size_hi, minimum_psf_size_hi + (minimum_lsf_size_hi,))
 
-        # High-res cube zero pixel center position
-        zero_hi = (
-            zero_lo[0] - step_lo[0] / 2 - (edge_hi[0] - 0.5) * step_hi[0],
-            zero_lo[1] - step_lo[1] / 2 - (edge_hi[1] - 0.5) * step_hi[1],
-            zero_lo[2] - step_lo[2] / 2 - (edge_hi[2] - 0.5) * step_hi[2])
+        # The high-res grid: scale pixels for each low-res pixel, centred on
+        # it, after edge_hi pixels of padding
+        rpix_hi = tuple(
+            (rpix_lo[i] + 0.5) * scale[i] - 0.5 + edge_hi[i] for i in range(3))
+        grid_hi = fitsutils.Grid(
+            tuple(size_hi), self._grid_lo.coords._replace(
+                step=step_hi, rpix=rpix_hi), 2)
 
         # The shape of the arrays created below are the reversed size
         shape_lo = size_lo[::-1]
@@ -213,7 +210,7 @@ class DCube:
             offset_hi = gbkfit.math.is_odd(size_hi) - 1
             psf_offset_hi = offset_hi[:2]
             lsf_offset_hi = offset_hi[2]
-            psf_args = (spat_step_hi, spat_size_hi, psf_offset_hi, self._rota)
+            psf_args = (spat_step_hi, spat_size_hi, psf_offset_hi, self.rota())
             lsf_args = (spec_step_hi, spec_size_hi, lsf_offset_hi)
             psf_hi = psf.asarray(*psf_args) if psf \
                 else PSFPoint().asarray(*psf_args)
@@ -253,9 +250,7 @@ class DCube:
             self._mcube_lo = driver.mem_alloc_d(shape_lo, dtype)
             driver.mem_fill(self._mcube_lo, 1)
 
-        self._size_hi = size_hi
-        self._step_hi = step_hi
-        self._zero_hi = zero_hi
+        self._grid_hi = grid_hi
         self._edge_hi = edge_hi
         self._has_weights = has_weights
         self._driver = driver
@@ -265,8 +260,8 @@ class DCube:
     def evaluate(self, out_extra: dict[str, Any] | None) -> None:
 
         # Convenience variables
-        step_lo = self._step_lo
-        step_hi = self._step_hi
+        step_lo = self.step()
+        step_hi = self.scratch_step()
         spat_step_lo = (step_lo[0], step_lo[1])
         spec_step_lo = step_lo[2]
         spat_step_hi = (step_hi[0], step_hi[1])
@@ -324,8 +319,8 @@ class DCube:
                     wcube_hi=driver.mem_copy_d2h(wcube_hi))
             if psf:
                 out_extra.update(
-                    psf_lo=psf.asarray(spat_step_lo, rota=self._rota),
-                    psf_hi=psf.asarray(spat_step_hi, rota=self._rota))
+                    psf_lo=psf.asarray(spat_step_lo, rota=self.rota()),
+                    psf_hi=psf.asarray(spat_step_hi, rota=self.rota()))
             if lsf:
                 out_extra.update(
                     lsf_lo=lsf.asarray(spec_step_lo),

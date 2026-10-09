@@ -205,3 +205,16 @@ def test_decreasing_velocity_is_rejected():
         CTYPE3='VRAD', CUNIT3='km/s', CRVAL3=1500.0, CDELT3=-10.0)
     with pytest.raises(ConfigError, match="velocity decreases"):
         write(header, shape=(6, 20, 24))
+
+
+def test_grid_zero_and_spatial_axes():
+    # The spatial axes are measured from the reference pixel, and the
+    # spectral axis from its world value there
+    coords = fitsutils.Coords((2.0, 3.0, 10.0), (4.0, 5.0, 6.0),
+                              (150.0, 2.0, 1500.0), 30.0)
+    grid = fitsutils.Grid((8, 10, 12), coords, 2)
+    assert grid.zero() == (-8.0, -15.0, 1440.0)
+    spatial = grid.spatial()
+    assert spatial.size == (8, 10) and spatial.spectral_axis is None
+    assert spatial.coords == fitsutils.Coords(
+        (2.0, 3.0), (4.0, 5.0), (150.0, 2.0), 30.0)
