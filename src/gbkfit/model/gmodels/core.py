@@ -45,10 +45,11 @@ class Component(parseutils.TypedSerializable, abc.ABC):
         return {}
 
     @abc.abstractmethod
-    def plan(self, driver, dtype):
+    def plan(self, driver, spectral, dtype):
         """
         The evaluation of the component on the given driver and dtype (a
-        ComponentPlan), which owns the memory it needs.
+        ComponentPlan), which owns the memory it needs. spectral is the
+        spectral axis of the outputs (a fitsutils.Grid of one axis).
         """
         pass
 

@@ -1,10 +1,12 @@
 
 from collections.abc import Sequence
 
+from gbkfit.utils import parseutils
 from . import _component, _smdisk, common, traits
 from ._component import (
     BPT, BHT, VPT, VHT, DPT, DHT, ZPT, SPT, WPT, SPECTRAL_NWMODES)
 from .core import SpectralComponent3D
+from .lines import Line, line_parser
 
 
 __all__ = [
@@ -23,6 +25,8 @@ class SpectralSMDisk3D(SpectralComponent3D):
 
     @classmethod
     def load(cls, info):
+        parseutils.load_option_and_update_info(
+            line_parser, info, 'lines')
         return cls(**_component.load_options(
             cls, info, cls._slots, cls._nwmodes))
 
@@ -30,7 +34,8 @@ class SpectralSMDisk3D(SpectralComponent3D):
         return (
             dict(type=self.type())
             | _component.dump_name(self)
-            | _component.dump_disk(self._disk, self._slots, self._nwmodes))
+            | _component.dump_disk(self._disk, self._slots, self._nwmodes)
+            | _component.dump_lines(self._lines))
 
     def __init__(
             self,
@@ -57,8 +62,13 @@ class SpectralSMDisk3D(SpectralComponent3D):
             ypos_nwmode: common.NWMode | None = None,
             posa_nwmode: common.NWMode | None = None,
             incl_nwmode: common.NWMode | None = None,
+            lines: Sequence[Line] | None = None,
             name: str | None = None
     ):
+        """
+        lines are the emission lines of the component (see Lines; by
+        default one line at the velocity of the spectral axis).
+        """
         super().__init__(name)
         self._disk = _component.make_disk(
             type(self), _smdisk.SMDisk, self._slots,
@@ -73,9 +83,10 @@ class SpectralSMDisk3D(SpectralComponent3D):
                 bptraits=bptraits, bhtraits=bhtraits, vptraits=vptraits,
                 vhtraits=vhtraits, dptraits=dptraits, dhtraits=dhtraits,
                 zptraits=zptraits, sptraits=sptraits, wptraits=wptraits))
+        self._lines = _component.make_lines(self._disk, lines)
 
     def pdescs(self):
-        return self._disk.pdescs()
+        return self._disk.pdescs() | self._lines.pdescs()
 
     def has_weights(self):
         return bool(self._disk.traits('wpt'))
@@ -84,9 +95,10 @@ class SpectralSMDisk3D(SpectralComponent3D):
         return dict(
             rnodes=self._disk.rnodes(), subrnodes=self._disk.subrnodes())
 
-    def plan(self, driver, dtype):
+    def plan(self, driver, spectral, dtype):
         return _component.SpectralDiskComponentPlan(
-            self, self._disk.plan(driver, 1, dtype))
+            self, self._disk.plan(driver, self._lines.nlines(), dtype),
+            self._lines, spectral)
 
     def disk_outputs(self, outputs):
         """The outputs of the disk, from those of the component."""
