@@ -126,7 +126,7 @@ def load_observable_common(cls, info, ndim, dataset, expected_dataset_cls):
             rpix=grid.coords.rpix,
             rval=grid.coords.rval,
             rota=grid.coords.rota)
-        if cls._spectral_axis is not None:
+        if cls.spectral_axis is not None:
             info.update(rest=grid.coords.rest)
     parseutils.sanitize_dimensional_options(info, dict(
         size=int, step=int | float, rpix=int | float, rval=int | float),

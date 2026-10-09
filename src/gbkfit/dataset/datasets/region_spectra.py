@@ -22,7 +22,7 @@ class DatasetRegionSpectra(Dataset):
     of the spectral axis.
     """
 
-    _ndim = 2
+    ndim = 2
 
     @staticmethod
     def type():

@@ -19,7 +19,7 @@ class DatasetRegionMoments(Dataset):
     one value for each region.
     """
 
-    _ndim = 1
+    ndim = 1
 
     @staticmethod
     def type():

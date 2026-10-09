@@ -24,7 +24,7 @@ class PixelMoments(Observable):
     dataset_class = DatasetPixelMoments
 
     # Moment maps have no spectral axis
-    _spectral_axis = None
+    spectral_axis = None
 
     @staticmethod
     def type():

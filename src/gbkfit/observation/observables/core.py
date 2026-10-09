@@ -16,13 +16,13 @@ class Observable(parseutils.TypedSerializable, abc.ABC):
     What a dataset measures, made from a gmodel seen through an
     instrument: the form of the data (their items, see keys()) and their
     grid. A subclass declares the index of the spectral axis of its data
-    (_spectral_axis, None if none), as the datasets do. Its dump(data)
+    (spectral_axis, None if none), as the datasets do. Its dump(data)
     leaves out the options that the given data give (see
     options_from_data); the files of its options (e.g. bins without
     data) are named with the prefix, as those of the datasets.
     """
 
-    _spectral_axis: int | None
+    spectral_axis: int | None
 
     # The class of the datasets this observable measures (declared by
     # each subclass)
@@ -42,7 +42,7 @@ class Observable(parseutils.TypedSerializable, abc.ABC):
             rpix = tuple((np.array(size) / 2 - 0.5).tolist())
         self._grid = fitsutils.make_grid(
             tuple(size), tuple(step), tuple(rpix), tuple(rval), rota,
-            self._spectral_axis, rest)
+            self.spectral_axis, rest)
 
     @classmethod
     def options_from_data(cls, dataset) -> tuple[str, ...]:
@@ -53,10 +53,7 @@ class Observable(parseutils.TypedSerializable, abc.ABC):
         this.
         """
         grid = ('size', 'step', 'rpix', 'rval', 'rota')
-        return grid + (('rest',) if cls._spectral_axis is not None else ())
-
-    def spectral_axis(self):
-        return self._spectral_axis
+        return grid + (('rest',) if cls.spectral_axis is not None else ())
 
     def grid(self) -> fitsutils.Grid:
         """The grid of the data."""

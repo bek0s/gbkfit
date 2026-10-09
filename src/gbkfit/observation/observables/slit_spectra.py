@@ -29,7 +29,7 @@ class SlitSpectra(Observable):
 
     # The axes of a long-slit spectrum: the position along the slit
     # and the spectral axis
-    _spectral_axis = 1
+    spectral_axis = 1
 
     @staticmethod
     def type():

@@ -15,8 +15,8 @@ __all__ = [
 class DatasetPixelMoments(Dataset):
 
     # Moment maps have no spectral axis
-    _ndim = 2
-    _spectral_axis = None
+    ndim = 2
+    spectral_axis = None
 
     @staticmethod
     def type():
