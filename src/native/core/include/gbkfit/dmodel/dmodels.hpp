@@ -82,7 +82,9 @@ dmodel_dcube_mask(
 // from 2, those whose variance is negative (e.g. the faint ringing of a
 // convolution), which have no dispersion. The channels of the spectrum
 // (and of its weights) are stride values apart: the spectrum can be in
-// the cube or in a contiguous copy.
+// the cube or in a contiguous copy. The sums are in channels from the
+// centre of the axis, so that their precision does not depend on its
+// velocities.
 template<typename T> constexpr void
 dmodel_mmaps_moments(
         int x, int y,
@@ -97,30 +99,31 @@ dmodel_mmaps_moments(
     // Moment orders are assumed to be sorted
     const int max_order = orders[norders - 1];
 
-    // Moments 0 and 1
-    T m0_sum = 0, m1_sum = 0;
+    // The flux and the mean channel, from the centre of the axis
+    const T centre = T(size_z - 1) / 2;
+    T flux_sum = 0, mean_sum = 0;
     for (int z = 0; z < size_z; ++z)
     {
         T i = spectrum_d[z * stride];
-        T v = zero_z + z * step_z;
-        m0_sum += i * step_z;
-        m1_sum += i * v * step_z;
+        flux_sum += i;
+        mean_sum += i * (z - centre);
     }
-    bool valid = std::abs(m0_sum) > cutoff;
-    const T m0 = m0_sum;
-    const T m1 = m1_sum / m0;
+    const T m0 = flux_sum * step_z;
+    const T mean = mean_sum / flux_sum;
+    bool valid = std::abs(m0) > cutoff;
 
-    // The variance, about moment 1
-    T m2_sum = 0;
+    // The variance about the mean channel
+    T variance = 0;
     if (valid && max_order >= 2)
     {
+        T variance_sum = 0;
         for (int z = 0; z < size_z; ++z)
         {
             T i = spectrum_d[z * stride];
-            T v = zero_z + z * step_z;
-            m2_sum += i * (v - m1) * (v - m1) * step_z;
+            variance_sum += i * (z - centre - mean) * (z - centre - mean);
         }
-        valid = m2_sum / m0 >= 0;
+        variance = variance_sum / flux_sum;
+        valid = variance >= 0;
     }
     mmaps_m[idx_2d] = valid;
 
@@ -130,14 +133,15 @@ dmodel_mmaps_moments(
     {
         T i = spectrum_d[z * stride];
         T w = spectrum_w[z * stride];
-        w_sum += w * i * step_z / m0;
+        w_sum += w * i;
     }
     if (spectrum_w)
     {
-        mmaps_w[idx_2d] = valid ? w_sum : NAN;
+        mmaps_w[idx_2d] = valid ? w_sum / flux_sum : NAN;
     }
 
-    // The moments of the given orders, valid only if not masked
+    // The moments of the given orders, valid only if not masked, in the
+    // units of the spectral axis
     for (int m = 0; m < norders; ++m)
     {
         const int order = orders[m];
@@ -148,22 +152,21 @@ dmodel_mmaps_moments(
         }
         else if (valid && order == 1)
         {
-            value = m1;
+            value = (zero_z + centre * step_z) + mean * step_z;
         }
         else if (valid && order == 2)
         {
-            value = std::sqrt(m2_sum / m0);
+            value = std::sqrt(variance) * std::abs(step_z);
         }
         else if (valid)
         {
             T mn_sum = 0;
             for (int z = 0; z < size_z; ++z)
             {
-                T flx = spectrum_d[z * stride];
-                T vel = zero_z + z * step_z;
-                mn_sum += flx * ipow(vel - m1, order) * step_z;
+                T i = spectrum_d[z * stride];
+                mn_sum += i * ipow(z - centre - mean, order);
             }
-            value = mn_sum / m0;
+            value = mn_sum / flux_sum * ipow(step_z, order);
         }
         mmaps_d[index_3d_to_1d(x, y, m, size_x, size_y)] = value;
     }
