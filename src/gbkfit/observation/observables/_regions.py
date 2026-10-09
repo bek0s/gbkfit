@@ -3,7 +3,8 @@ import scipy.sparse
 
 
 __all__ = [
-    'RegionSumsPlan'
+    'RegionSumsPlan',
+    'flux_weights'
 ]
 
 
@@ -11,6 +12,18 @@ __all__ = [
 # summed in chunks of this many pixels, in parallel, and then the chunks of
 # each region are summed
 _CHUNK = 256
+
+
+def flux_weights(regions, grid):
+    """
+    The weights of the pixels of a spatial grid in regions (see
+    Regions.weights) times the area of a pixel (arcsec^2): the area of
+    each pixel inside each region. The sums of the surface brightness of
+    the model with them are the fluxes of the regions, whatever the size
+    of the pixels of the grid.
+    """
+    step_x, step_y = grid.coords.step[:2]
+    return regions.weights(grid) * abs(step_x * step_y)
 
 
 class RegionSumsPlan:

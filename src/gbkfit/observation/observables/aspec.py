@@ -8,7 +8,7 @@ from gbkfit.dataset.regions import Regions, regions_parser
 from gbkfit.model.core import GModelSCube
 from gbkfit.utils import fitsutils, parseutils
 from . import _dcube, _detail
-from ._regions import RegionSumsPlan
+from ._regions import RegionSumsPlan, flux_weights
 from .core import Observable
 
 
@@ -125,9 +125,9 @@ class ASpec(Observable):
             coords.rval + (spec_rval,),
             coords.rota, spec_rest)
         self._regions = regions
-        # The weights of the pixels in the regions (an error if apertures
-        # are not inside the grid)
-        self._weights = regions.weights(spatial)
+        # The area of each pixel in the regions, so that their sums are
+        # fluxes (an error if apertures are not inside the grid)
+        self._weights = flux_weights(regions, spatial)
 
     def regions(self) -> Regions:
         return self._regions
