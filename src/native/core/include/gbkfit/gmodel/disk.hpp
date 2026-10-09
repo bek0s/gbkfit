@@ -67,15 +67,16 @@ struct DiskArgs
     T* ddata_cmp = nullptr;
 };
 
-// The extra arguments of the Monte Carlo disk kernel: the flux of each
-// cloud, the seed of their random numbers, the cumulative number of
-// clouds of each trait (or of each ring of a trait), and whether each
-// density trait has an analytical integral (one number of clouds) or
-// not (one for each ring).
+// The extra arguments of the Monte Carlo disk kernel. The clouds are made
+// in pools: one for each density trait with an analytical integral, and
+// one for each ring of the others. The arguments are the seed of the
+// random numbers, the number of clouds, and for each pool the cumulative
+// number of clouds and the (signed) flux of each of its clouds; and
+// whether each density trait has an analytical integral.
 template<typename T>
 struct MCDiskArgs
 {
-    T cflux = 0;
+    const T* cloud_flux = nullptr;
     unsigned int seed = 0;
     int nclouds = 0;
     const int* ncloudscsum = nullptr;

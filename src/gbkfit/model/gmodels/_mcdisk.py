@@ -1,5 +1,4 @@
 
-import itertools
 import logging
 
 import numpy as np
@@ -45,15 +44,14 @@ class MCDisk(_disk.Disk):
         self._cflux = cflux
         # The seed of the random numbers of the clouds
         self._seed = seed
-        # Array containing the cumulative sum of the number of clouds
-        # per trait. For traits without an analytical integral we
-        # calculate the number of clouds per trait ring. The center of
-        # each ring coincides with a subnode. The first and last
-        # subnodes are excepted, as they are the inner and outer edges
-        # of the first and last rings. We use the cumulative sum in
-        # order to reduce the number of calculations during model
-        # evaluation.
-        self._s_ncloudsptor = [None, None]
+        # The clouds are made in pools: one for each density trait with
+        # an analytical integral, and one for each ring of the others
+        # (the rings are centred on the subnodes between the first and
+        # the last, which are the edges of the disk). For each pool: the
+        # cumulative number of clouds, and the (signed) flux of each of
+        # its clouds.
+        self._s_ncloudscsum = [None, None]
+        self._s_cloud_flux = [None, None]
         # Has-analytical-integral flag per trait
         self._s_has_analytical_integral = [None, None]
 
@@ -69,13 +67,14 @@ class MCDisk(_disk.Disk):
         host[:] = analytical
         driver.mem_copy_h2d(host, device)
         nrings = self._nsubrnodes - 2
-        size = sum([1 if h else nrings for h in analytical])
-        self._s_ncloudsptor = driver.mem_alloc_s(size, np.int32)
+        npools = sum([1 if h else nrings for h in analytical])
+        self._s_ncloudscsum = driver.mem_alloc_s(npools, np.int32)
+        self._s_cloud_flux = driver.mem_alloc_s(npools, dtype)
 
     def _impl_evaluate(self, driver, params, grid_and_outputs, out_extra):
 
-        # Calculate the number of clouds per trait or ring.
-        ncloudsptor = []
+        # The flux of each pool
+        pool_flux = []
         rpt_params = self._trait_params['rpt']
         ring_centers = np.array(self._subrnodes[1:-1], self._dtype)
         for trait, pnames in zip(self._traits['rpt'], rpt_params.pnames):
@@ -87,33 +86,33 @@ class MCDisk(_disk.Disk):
                     trait_params[old_name] = params[new_name][1:-1]
                 else:
                     trait_params[old_name] = params[new_name]
+            # The flux of the trait (one value if it has an analytical
+            # integral), or of each of its rings
+            pool_flux.extend(np.atleast_1d(
+                trait.integrate(trait_params, ring_centers)))
+        pool_flux = np.asarray(pool_flux, np.float64)
 
-            # Calculate the integral of this trait.
-            # If the trait has an analytical integral, this will return
-            # a single value. Otherwise, it will return an iterable
-            # with the integral of each ring for that trait.
-            integral = trait.integrate(trait_params, ring_centers)
-            # Calculate the number of clouds per trait or ring
-            trait_nclouds = integral / self._cflux
-            ncloudsptor.extend(np.atleast_1d(trait_nclouds).astype(np.int32))
+        # Each pool has as many clouds as its flux needs at cflux each
+        # (and at least one), which share its flux exactly: a negative
+        # flux gives negative clouds
+        nclouds = np.where(
+            pool_flux != 0,
+            np.maximum(np.rint(np.abs(pool_flux) / self._cflux), 1),
+            0).astype(np.int32)
+        cloud_flux = np.divide(
+            pool_flux, nclouds, out=np.zeros_like(pool_flux),
+            where=nclouds > 0)
 
-        # Calculate cumsum
-        ncloudsptor_cumsum = list(itertools.accumulate(ncloudsptor))
-
-        # Transfer cumsum to host and then device memory
-        self._s_ncloudsptor[0][:] = ncloudsptor_cumsum
-        driver.mem_copy_h2d(self._s_ncloudsptor[0], self._s_ncloudsptor[1])
-
-        # Store the total number of clouds across the entire disk
-        nclouds = ncloudsptor_cumsum[-1]
-
-        # TODO: investigate negative flux
+        self._s_ncloudscsum[0][:] = np.cumsum(nclouds)
+        self._s_cloud_flux[0][:] = cloud_flux
+        driver.mem_copy_h2d(self._s_ncloudscsum[0], self._s_ncloudscsum[1])
+        driver.mem_copy_h2d(self._s_cloud_flux[0], self._s_cloud_flux[1])
 
         self._backend.mcdisk_evaluate(
             self._native_disk,
-            cflux=self._cflux,
+            cloud_flux=self._s_cloud_flux[1],
             seed=self._seed,
-            nclouds=nclouds,
-            ncloudscsum=self._s_ncloudsptor[1],
+            nclouds=int(nclouds.sum()),
+            ncloudscsum=self._s_ncloudscsum[1],
             has_analytical_integral=self._s_has_analytical_integral[1],
             **grid_and_outputs)

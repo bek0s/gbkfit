@@ -336,13 +336,11 @@ gmodel_mcdisk_evaluate_cloud(
     T htvalues[TRAIT_NUM_MAX] = {0};
     T rvalue=0, vvalue=0, dvalue=0, zvalue=0, svalue=0, wvalue=1;
 
-    // All clouds have equal flux
-    rvalue = mc.cflux / a.spat_step[2];
-
-    // Find which cumulative sum the cloud belongs to.
+    // Find the pool of the cloud; its clouds share its flux
     while(ci >= mc.ncloudscsum[rnidx]) {
         rnidx++;
     }
+    rvalue = mc.cloud_flux[rnidx];
 
     // Find which trait and subring the cloud belongs to.
     for(tidx = 0; tidx < a.rpt.n; ++tidx)
@@ -366,12 +364,8 @@ gmodel_mcdisk_evaluate_cloud(
             a.rpt.uids[tidx], rpt_cptr, rpt_pptr,
             rnidx, a.rnodes, a.nrnodes);
 
-    if (sign < 0) {
-        rvalue = -rvalue;
-    }
-
-    // Integrate along z dimension
-    rvalue *= a.spat_step[2];
+    // The sign of the cloud within its pool (harmonics)
+    rvalue *= sign;
 
     // Convert to surface brightness
     rvalue /= a.spat_step[0] * a.spat_step[1];
