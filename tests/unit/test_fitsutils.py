@@ -167,8 +167,6 @@ def test_hdu_can_be_chosen():
 
 
 @pytest.mark.parametrize('header, shape, message', [
-    (CELESTIAL | dict(CDELT1=1 / 3600, CDELT2=1 / 3600), (20, 24),
-     "mirrored"),
     (CELESTIAL | dict(
         CD1_1=-1 / 3600, CD1_2=0.5 / 3600, CD2_1=0.0, CD2_2=1 / 3600),
      (20, 24), "skewed"),
@@ -188,30 +186,62 @@ def test_coordinates_the_model_cannot_represent(header, shape, message):
         write(header, shape)
 
 
-@pytest.mark.parametrize('header', [
+# A cube in the orientation of the model: RA, Dec and increasing velocity,
+# east to the left of north (reference pixels off the centre, so that a
+# reversed axis moves them)
+CUBE = CELESTIAL | dict(
+    CRPIX1=10.0, CDELT1=-1 / 3600, CDELT2=1 / 3600,
+    CTYPE3='VRAD', CUNIT3='km/s', CRVAL3=1500.0, CRPIX3=2.0, CDELT3=10.0)
+
+CUBE_DATA = np.arange(6 * 20 * 24, dtype=np.float32).reshape(6, 20, 24)
+
+DEC = dict(CTYPE='DEC--TAN', CRVAL=2.0, CRPIX=10.5, CUNIT='deg',
+           CDELT=1 / 3600)
+RA = dict(CTYPE='RA---TAN', CRVAL=150.0, CRPIX=10.0, CUNIT='deg',
+          CDELT=-1 / 3600)
+VEL = dict(CTYPE='VRAD', CUNIT='km/s', CRVAL=1500.0, CRPIX=2.0, CDELT=10.0)
+
+
+def axes_header(*axes):
+    """The header of the given axes, in FITS order."""
+    return {f'{key}{n}': value
+            for n, axis in enumerate(axes, start=1)
+            for key, value in axis.items()}
+
+
+@pytest.mark.parametrize('header, data', [
     # Dec before RA
-    dict(CELESTIAL, CTYPE1='DEC--TAN', CRVAL1=2.0,
-         CTYPE2='RA---TAN', CRVAL2=150.0),
+    (axes_header(DEC, RA, VEL), CUBE_DATA.transpose(0, 2, 1)),
     # The velocity before RA and Dec
-    dict(CTYPE1='VRAD', CUNIT1='km/s', CDELT1=10.0,
-         CTYPE2='RA---TAN', CDELT2=-1 / 3600, CUNIT2='deg',
-         CTYPE3='DEC--TAN', CDELT3=1 / 3600, CUNIT3='deg')])
-def test_celestial_axes_must_be_first(header):
-    # The model takes the first two axes as x and y on the sky
-    with pytest.raises(ConfigError, match="celestial axes must be the first"):
-        write(header, (6, 20, 24) if 'CTYPE3' in header else (20, 24))
+    (axes_header(VEL, RA, DEC), CUBE_DATA.transpose(1, 2, 0)),
+    # Mirrored (east to the right of north)
+    (CUBE | dict(CDELT1=1 / 3600, CRPIX1=15.0), CUBE_DATA[:, :, ::-1]),
+    # Velocities decreasing along the spectral axis
+    (CUBE | dict(CDELT3=-10.0, CRPIX3=5.0), CUBE_DATA[::-1])])
+def test_data_are_read_in_the_orientation_of_the_model(header, data):
+    # The same sky, stored in another legal way, reads the same
+    fits.writeto('model.fits', CUBE_DATA, fits.Header(CUBE))
+    fits.writeto('other.fits', data, fits.Header(header))
+    expected_data, expected = fitsutils.read_data('model.fits')
+    result_data, result = fitsutils.read_data('other.fits')
+    np.testing.assert_array_equal(result_data, expected_data)
+    for field in ('step', 'rpix', 'rval'):
+        np.testing.assert_allclose(
+            getattr(result, field), getattr(expected, field), atol=1e-9)
+    assert result.rota == pytest.approx(expected.rota, abs=1e-9)
 
 
-def test_spectral_axis_must_be_where_the_dataset_has_it():
+def test_spectral_axis_is_read_last():
     # e.g. a long slit (position, velocity) given as (velocity, position)
     header = dict(
         CTYPE1='VRAD', CUNIT1='km/s', CDELT1=10.0, CTYPE2='LINEAR',
         CDELT2=1.0)
-    fits.writeto('data.fits', np.zeros((8, 40), np.float32),
-                 fits.Header(header))
-    assert fitsutils.read_data('data.fits')[1].step == (10.0, 1.0)
-    with pytest.raises(ConfigError, match="spectral axis must be the axis 2"):
-        fitsutils.read_data('data.fits', spectral_axis=1)
+    data = np.arange(8 * 40, dtype=np.float32).reshape(8, 40)
+    fits.writeto('data.fits', data, fits.Header(header))
+    result, coords = fitsutils.read_data('data.fits', spectral_axis=1)
+    assert coords.step == (1.0, 10.0)
+    np.testing.assert_array_equal(result, data.T)
+
 
 def test_hdu_without_data():
     # e.g. the empty primary HDU of JWST data: a clear error, not a crash
@@ -221,15 +251,6 @@ def test_hdu_without_data():
     ]).writeto('data.fits')
     with pytest.raises(ConfigError, match="HDU 0 has no data"):
         fitsutils.read_data('data.fits')
-
-
-def test_decreasing_velocity_is_rejected():
-    # Common in radio cubes; prep reverses the axis
-    header = CELESTIAL | dict(
-        CDELT1=-1 / 3600, CDELT2=1 / 3600,
-        CTYPE3='VRAD', CUNIT3='km/s', CRVAL3=1500.0, CDELT3=-10.0)
-    with pytest.raises(ConfigError, match="velocity decreases"):
-        write(header, shape=(6, 20, 24))
 
 
 def test_grid_zero_and_spatial_axes():
