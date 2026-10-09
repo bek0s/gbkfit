@@ -1024,12 +1024,6 @@ class BHTraitGGauss(BHTraitP2):
             nwmode: NWMode | None = None,
             sampling: str = SAMPLING_DEFAULT,
             trunc: int | float = TRUNC_DEFAULT):
-        # Normalising a truncated profile needs its cumulative distribution,
-        # which is not implemented for ggauss (ggauss_1d_cdf, math.hpp)
-        if trunc > 0:
-            raise NotImplementedError(
-                "a truncated ggauss brightness height trait is not "
-                "supported yet")
         super().__init__(
             rnodes=rnodes, nwmode=nwmode, sampling=sampling, trunc=trunc)
 
@@ -2423,12 +2417,6 @@ class OHTraitGGauss(OHTraitP2):
             nwmode: NWMode | None = None,
             sampling: str = SAMPLING_DEFAULT,
             trunc: int | float = TRUNC_DEFAULT):
-        # Normalising a truncated profile needs its cumulative distribution,
-        # which is not implemented for ggauss (ggauss_1d_cdf, math.hpp)
-        if trunc > 0:
-            raise NotImplementedError(
-                "a truncated ggauss opacity height trait is not "
-                "supported yet")
         super().__init__(
             rnodes=rnodes, nwmode=nwmode, sampling=sampling, trunc=trunc)
 
