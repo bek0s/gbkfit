@@ -92,6 +92,10 @@ def read_data(
         if axis in (wcs.wcs.lng, wcs.wcs.lat)
         else linear[axis, axis] * scale[axis]
         for axis in range(wcs.naxis)]
+    if wcs.wcs.spec >= 0 and step[wcs.wcs.spec] < 0:
+        raise ConfigError(
+            f"{filename}: the velocity decreases along the spectral axis; "
+            f"reverse the axis with gbkfit-cli prep")
     if rpix is not None:
         rpix = np.broadcast_to(np.asarray(rpix, float), wcs.naxis)
     if rval is not None:

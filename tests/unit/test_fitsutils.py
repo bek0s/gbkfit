@@ -181,3 +181,12 @@ def test_hdu_without_data():
     ]).writeto('data.fits')
     with pytest.raises(ConfigError, match="HDU 0 has no data"):
         fitsutils.read_data('data.fits')
+
+
+def test_decreasing_velocity_is_rejected():
+    # Common in radio cubes; prep reverses the axis
+    header = CELESTIAL | dict(
+        CDELT1=-1 / 3600, CDELT2=1 / 3600,
+        CTYPE3='VRAD', CUNIT3='km/s', CRVAL3=1500.0, CDELT3=-10.0)
+    with pytest.raises(ConfigError, match="velocity decreases"):
+        write(header, shape=(6, 20, 24))
