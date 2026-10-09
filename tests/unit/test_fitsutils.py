@@ -75,6 +75,21 @@ def test_write_and_read_back_long_slit():
     assert coords_read == coords
 
 
+def test_write_and_read_back_line_of_sight_axis():
+    # A cube without a spectral axis has a third spatial axis, along the
+    # line of sight: an offset in arcsec from its reference pixel
+    coords = fitsutils.Coords((2.0, 3.0, 0.5), (11.5, 9.5, 7.5),
+                              (150.0, 2.0, 0.0), 30.0)
+    fitsutils.write_data('data.fits', np.ones((16, 20, 24), np.float32),
+                         coords, spectral_axis=None)
+    header = fits.getheader('data.fits')
+    assert header['CTYPE3'] == 'OFFSET' and header['CUNIT3'] == 'arcsec'
+    _, coords_read = fitsutils.read_data('data.fits')
+    np.testing.assert_allclose(coords_read.step, coords.step, rtol=1e-12)
+    np.testing.assert_allclose(coords_read.rpix, coords.rpix, rtol=1e-12)
+    np.testing.assert_allclose(coords_read.rval, coords.rval, rtol=1e-12)
+
+
 def test_north_up_east_left():
     coords = write(CELESTIAL | dict(CDELT1=-2 / 3600, CDELT2=2 / 3600))
     np.testing.assert_allclose(coords.step, [2, 2])

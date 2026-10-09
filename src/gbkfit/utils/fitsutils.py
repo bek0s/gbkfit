@@ -10,6 +10,7 @@ from gbkfit.utils.parseutils import ConfigError
 
 __all__ = [
     'Coords',
+    'GridData',
     'VELOCITY_TYPES',
     'centre_missing_crpix',
     'read_data',
@@ -42,6 +43,16 @@ class Coords(typing.NamedTuple):
     rpix: tuple[float, ...]
     rval: tuple[float, ...]
     rota: float
+
+
+class GridData(typing.NamedTuple):
+    """
+    Data on a grid with world coordinates (see Coords and write_data).
+    spectral_axis is the index of its spectral axis (FITS order), or None.
+    """
+    data: np.ndarray
+    coords: Coords
+    spectral_axis: int | None
 
 
 def read_data(
@@ -147,9 +158,11 @@ def write_data(
     Write data with the world coordinates of the model (see Coords) to a
     FITS file. The axes of the data are the x and y axes of the sky (RA
     and Dec, TAN projection, rotated with a PC matrix), followed by the
-    spectral axis (spectral_axis = 2, a radio velocity), or a position
-    along a slit followed by the spectral axis (spectral_axis = 1), or
-    the spectral axis alone (spectral_axis = 0).
+    spectral axis (spectral_axis = 2, a radio velocity) or by a position
+    along the line of sight (spectral_axis = None, an offset in arcsec
+    from its reference pixel), or a position along a slit followed by the
+    spectral axis (spectral_axis = 1), or the spectral axis alone
+    (spectral_axis = 0).
     """
     header = astropy.io.fits.Header()
     if spectral_axis == 0 and data.ndim == 1:
@@ -159,11 +172,14 @@ def write_data(
     elif spectral_axis == 2 and data.ndim == 3:
         header.update(_sky_header(coords))
         header.update(_velocity_header(coords, 3))
+    elif spectral_axis is None and data.ndim == 3:
+        header.update(_sky_header(coords))
+        header.update(_offset_header(
+            3, coords.step[2], coords.rpix[2], coords.rval[2]))
     elif spectral_axis == 1 and data.ndim == 2:
         # The position along the slit is an offset from its reference
-        header.update(
-            CTYPE1='OFFSET', CUNIT1='arcsec', CDELT1=coords.step[0],
-            CRPIX1=coords.rpix[0] + 1, CRVAL1=0.0)
+        header.update(_offset_header(
+            1, coords.step[0], coords.rpix[0], 0.0))
         header.update(_velocity_header(coords, 2))
     else:
         raise ValueError(
@@ -194,6 +210,13 @@ def _sky_header(coords):
         CRPIX2=coords.rpix[1] + 1, CRVAL2=coords.rval[1],
         PC1_1=pc[0, 0], PC1_2=pc[0, 1],
         PC2_1=pc[1, 0], PC2_2=pc[1, 1])
+
+
+def _offset_header(n, step, rpix, rval):
+    """The header keywords of an offset in arcsec, FITS axis n."""
+    return {
+        f'CTYPE{n}': 'OFFSET', f'CUNIT{n}': 'arcsec', f'CDELT{n}': step,
+        f'CRPIX{n}': rpix + 1, f'CRVAL{n}': rval}
 
 
 def _velocity_header(coords, n):
