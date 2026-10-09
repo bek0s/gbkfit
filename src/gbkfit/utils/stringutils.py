@@ -1,7 +1,24 @@
+"""
+Helpers for strings.
+"""
 
-def remove_white_space(x: str) -> str:
+__all__ = [
+    'remove_whitespace'
+]
+
+
+def remove_whitespace(x: str) -> str:
     """
-    Remove all whitespace characters from a string.
+    Return a string without any of its whitespace characters.
+
+    Parameters
+    ----------
+    x : str
+        A string.
+
+    Returns
+    -------
+    str
+        The string without spaces, tabs, newlines or other whitespace.
     """
-    # return re.sub(r"\s+", "", x)  # Alternative solution.
-    return ''.join(x.split())  # simpler alternative
+    return ''.join(x.split())
