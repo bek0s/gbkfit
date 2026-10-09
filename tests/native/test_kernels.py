@@ -260,6 +260,27 @@ def test_mmaps_gaussian(driver):
             result_map[valid], expected_map[valid], rtol=1e-3)
 
 
+def test_lens_resample(driver):
+    # Each pixel of the image takes the bilinear interpolation of the
+    # source (nz, sy, sx) at its position on the source (in pixels): exact
+    # for a ramp, and 0 beyond the source
+    memory = Memory(driver)
+    dmodel = driver.native_class('DModel', DTYPE)()
+    z, y, x = np.indices((2, 6, 8), dtype=DTYPE)
+    source = 1 + 2 * x + 3 * y + 10 * z
+    source_y, source_x = np.meshgrid(
+        np.linspace(0, 5, 7), np.linspace(0, 7, 9), indexing='ij')
+    source_x[0, 0], source_y[0, 0] = -2, 1
+    image = memory.to_device(np.zeros((2, 7, 9), DTYPE))
+    dmodel.lens_resample(
+        memory.to_device(source_x.astype(DTYPE)),
+        memory.to_device(source_y.astype(DTYPE)),
+        memory.to_device(source), image)
+    expected = 1 + 2 * source_x + 3 * source_y + 10 * np.arange(2)[:, None, None]
+    expected[:, 0, 0] = 0
+    np.testing.assert_allclose(memory.to_host(image), expected, rtol=1e-6)
+
+
 def _residual_inputs():
     """Observed and model data, errors, masks and weights for a residual."""
     n = 1000
