@@ -1,4 +1,5 @@
 
+import logging
 import os
 import re
 
@@ -8,6 +9,10 @@ import astropy.wcs
 import numpy as np
 import skimage.measure
 
+from gbkfit.utils import fitsutils
+
+
+_log = logging.getLogger(__name__)
 
 # The keywords of the world coordinates of each axis, or pair of axes
 _WCS_KEYWORDS = re.compile(
@@ -55,6 +60,39 @@ def _shift_axes(header, offset):
     return _with_wcs(header, wcs)
 
 
+def _reverse_decreasing_velocity(data, header):
+    """
+    The data and its header with the spectral axis reversed if it is a
+    velocity that decreases along the axis (the model needs increasing
+    velocities). Each channel keeps its velocity.
+    """
+    if not _has_wcs(header):
+        return data, header
+    wcs = astropy.wcs.WCS(header)
+    s = wcs.wcs.spec
+    if s < 0 or wcs.wcs.ctype[s][:4] not in fitsutils.VELOCITY_TYPES:
+        return data, header
+    if wcs.wcs.get_cdelt()[s] * wcs.wcs.get_pc()[s, s] >= 0:
+        return data, header
+    _log.info("reversing the spectral axis: the velocity decreases along it")
+    # Reversing pixel axis s negates column s of the linear transformation
+    # (CD, or CDELT times the rows of PC). For PC, negating CDELT[s] and
+    # row s of PC cancel out, leaving a positive CDELT[s].
+    if wcs.wcs.has_cd():
+        cd = wcs.wcs.cd.copy()
+        cd[:, s] *= -1
+        wcs.wcs.cd = cd
+    else:
+        pc = wcs.wcs.get_pc().copy()
+        pc[s, :] *= -1
+        pc[:, s] *= -1
+        wcs.wcs.pc = pc
+        wcs.wcs.cdelt[s] *= -1
+    wcs.wcs.crpix[s] = data.shape[data.ndim - 1 - s] + 1 - wcs.wcs.crpix[s]
+    data = np.flip(data, data.ndim - 1 - s)
+    return data, _with_wcs(header, wcs)
+
+
 def _read_fits(filename):
     """The data and the header of a file, without the axes of length 1."""
     data = fits.getdata(filename)
@@ -90,15 +128,19 @@ def _save_data(
         offset, dtype):
     """
     Save the data, whose first pixel is the pixel at the given offset (on
-    each numpy axis) of the data read.
+    each numpy axis) of the data read, with a decreasing velocity axis
+    reversed.
     """
     basename = os.path.basename
     splitext = os.path.splitext
     header_d = _shift_axes(header_d, offset)
+    data_d, header_d = _reverse_decreasing_velocity(data_d, header_d)
     if header_e is not None:
         header_e = _shift_axes(header_e, offset)
+        data_e, header_e = _reverse_decreasing_velocity(data_e, header_e)
     if header_m is not None:
         header_m = _shift_axes(header_m, offset)
+        data_m, header_m = _reverse_decreasing_velocity(data_m, header_m)
     data_d = data_d.astype(dtype)
     file_d = splitext(basename(file_d))[0]
     fits.writeto(f'prep_{file_d}.fits', data_d, header_d, overwrite=True)

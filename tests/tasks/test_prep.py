@@ -9,6 +9,7 @@ import numpy as np
 import pytest
 
 from gbkfit.tasks import prep
+from gbkfit.utils import fitsutils
 
 
 # A spectral cube with a degenerate Stokes axis, as radio cubes often have:
@@ -200,3 +201,36 @@ def test_mmaps_use_the_sigma_clipping_of_each_map():
         assert np.isnan(prepared[5, 5])
         assert np.isfinite(prepared).sum() > 1000
 
+
+def with_cd(header):
+    """The header with CDi_j (CDELTi times PCi_j) instead of PC and CDELT."""
+    out = {
+        k: v for k, v in header.items() if not k.startswith(('PC', 'CDELT'))}
+    for i in range(1, 5):
+        for j in range(1, 5):
+            pc = header.get(f'PC{i}_{j}', float(i == j))
+            if pc:
+                out[f'CD{i}_{j}'] = header[f'CDELT{i}'] * pc
+    return out
+
+
+@pytest.mark.parametrize('header', [
+    dict(HEADER, CDELT3=-10.0), with_cd(dict(HEADER, CDELT3=-10.0))],
+    ids=['pc', 'cd'])
+def test_decreasing_velocity_is_reversed(header):
+    # The model needs increasing velocities; each channel keeps its
+    # velocity (and each pixel its position on the sky)
+    write_cube('cube.fits', header)
+    data, header_out = prep_scube('cube.fits')
+    np.testing.assert_array_equal(data, fits.getdata('cube.fits')[0, ::-1])
+    nz = SHAPE[1]
+    pixel = np.array([[0, 0, 0], [3, 2, 4], [7, 5, nz - 1]], float).T
+    flipped = pixel.copy()
+    flipped[2] = nz - 1 - pixel[2]
+    world_out = astropy.wcs.WCS(header_out).pixel_to_world_values(*pixel)
+    world_in = astropy.wcs.WCS(fits.Header(header)).dropaxis(3) \
+        .pixel_to_world_values(*flipped)
+    np.testing.assert_allclose(world_out, world_in, rtol=0, atol=1e-9)
+    # The model reads the prepared cube
+    _, coords = fitsutils.read_data('prep_cube.fits')
+    assert coords.step[2] == pytest.approx(10)
