@@ -316,7 +316,7 @@ def test_wide_wings_are_drawn_until_they_hold_the_wing_flux(
     # Profiles with wide wings extend beyond the minimum extent, until
     # their wings hold WING_FLUX of their flux (each wing_flux above is
     # the fraction of the flux beyond a radius, for scale lengths of 1)
-    from gbkfit.psflsf.core import MIN_EXTENT, WING_FLUX
+    from gbkfit.psflsf.base import MIN_EXTENT, WING_FLUX
     extent = profile._extent()
     assert extent > MIN_EXTENT
     np.testing.assert_allclose(wing_flux(extent), WING_FLUX, rtol=1e-6)

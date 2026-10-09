@@ -19,7 +19,7 @@ from .spectral_smdisk_3d import SpectralSMDisk3D
 
 
 def _register_gmodels():
-    from gbkfit.model.core import gmodel_parser as parser
+    from gbkfit.model.base import gmodel_parser as parser
     parser.register(GModelIntensity2D)
     parser.register(GModelIntensity3D)
     parser.register(GModelKinematics2D)

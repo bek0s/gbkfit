@@ -3,7 +3,7 @@ from typing import Any
 
 import optuna
 
-from gbkfit.fitting.core import Fitter
+from gbkfit.fitting.base import Fitter
 from gbkfit.utils import funcutils, iterutils
 
 

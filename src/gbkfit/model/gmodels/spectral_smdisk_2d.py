@@ -4,7 +4,7 @@ from collections.abc import Sequence
 from gbkfit.utils import parseutils
 from . import _component, _smdisk, common, traits
 from ._component import BPT, VPT, DPT, SPT, WPT, SPECTRAL_NWMODES
-from .core import SpectralComponent2D
+from .base import SpectralComponent2D
 from .lines import Line, line_parser
 
 

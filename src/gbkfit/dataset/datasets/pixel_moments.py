@@ -1,7 +1,7 @@
 from collections.abc import Sequence
 from numbers import Real
 
-from gbkfit.dataset.core import Dataset
+from gbkfit.dataset.base import Dataset
 from gbkfit.dataset.data import Data
 from gbkfit.utils import gridutils
 from . import _detail

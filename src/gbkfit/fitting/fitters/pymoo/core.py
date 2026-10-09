@@ -9,7 +9,7 @@ import numpy as np
 
 from pymoo.optimize import minimize
 from gbkfit.fitting import fitutils
-from gbkfit.fitting.core import FitParam, FitParams, Fitter
+from gbkfit.fitting.base import FitParam, FitParams, Fitter
 from gbkfit.params import paramutils
 from gbkfit.utils import iterutils, parseutils
 from .problem import PymooProblem

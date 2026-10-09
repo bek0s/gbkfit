@@ -1,9 +1,9 @@
 from collections.abc import Sequence
 
-from gbkfit.model.core import GModelSCube, Selection
+from gbkfit.model.base import GModelSCube, Selection
 from gbkfit.utils import parseutils
 from ._component_set import ComponentSet3D, ComponentSetGModelPlan
-from .core import OpacityComponent3D, SpectralComponent3D
+from .base import OpacityComponent3D, SpectralComponent3D
 from .mass import MassModel, mass_model_parser
 from .opacity_mcdisk_3d import OpacityMCDisk3D
 from .opacity_smdisk_3d import OpacitySMDisk3D

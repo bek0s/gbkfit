@@ -7,7 +7,8 @@ from gbkfit.utils import gridutils, parseutils
 
 __all__ = [
     'Observable',
-    'ObservablePlan'
+    'ObservablePlan',
+    'observable_parser'
 ]
 
 
@@ -156,3 +157,6 @@ class ObservablePlan(abc.ABC):
         or None. The extra outputs of the gmodel are prefixed 'gmodel_'.
         """
         pass
+
+
+observable_parser = parseutils.TypedParser(Observable)

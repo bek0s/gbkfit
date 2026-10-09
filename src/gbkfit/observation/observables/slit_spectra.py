@@ -3,10 +3,10 @@ from collections.abc import Sequence
 import astropy.units
 
 from gbkfit.dataset.datasets import DatasetSlitSpectra
-from gbkfit.model.core import GModelSCube
+from gbkfit.model.base import GModelSCube
 from gbkfit.utils import gridutils
 from . import _dcube, _detail
-from .core import Observable
+from .base import Observable
 
 
 __all__ = [

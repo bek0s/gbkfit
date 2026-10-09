@@ -3,7 +3,7 @@ import cupy as cp
 import cupyx as cpx
 
 import gbkfit.driver.native._cuda as native_module
-from gbkfit.driver.core import Driver
+from gbkfit.driver.base import Driver
 
 
 __all__ = [

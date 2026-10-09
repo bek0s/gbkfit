@@ -3,7 +3,7 @@ from collections.abc import Sequence
 
 from . import _component, _smdisk, common, traits
 from ._component import OPT, OHT, ZPT, SPT, WPT, SPATIAL_NWMODES
-from .core import OpacityComponent3D
+from .base import OpacityComponent3D
 
 
 __all__ = ['OpacitySMDisk3D']

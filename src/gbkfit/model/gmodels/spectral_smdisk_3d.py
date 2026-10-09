@@ -5,7 +5,7 @@ from gbkfit.utils import parseutils
 from . import _component, _smdisk, common, traits
 from ._component import (
     BPT, BHT, VPT, VHT, DPT, DHT, ZPT, SPT, WPT, SPECTRAL_NWMODES)
-from .core import SpectralComponent3D
+from .base import SpectralComponent3D
 from .lines import Line, line_parser
 
 

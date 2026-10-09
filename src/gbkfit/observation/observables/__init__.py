@@ -1,5 +1,4 @@
-from gbkfit.utils import parseutils
-from .core import *
+from .base import *
 from .pixel_brightness import *
 from .pixel_moments import *
 from .pixel_spectra import *
@@ -8,10 +7,17 @@ from .region_spectra import *
 from .slit_spectra import *
 
 
-observable_parser = parseutils.TypedParser(Observable, [
-    PixelBrightness,
-    PixelMoments,
-    PixelSpectra,
-    RegionMoments,
-    RegionSpectra,
-    SlitSpectra])
+def _register_observables():
+    from gbkfit.observation.observables.base import (
+        observable_parser as abstract_parser)
+    abstract_parser.register([
+        PixelBrightness,
+        PixelMoments,
+        PixelSpectra,
+        RegionMoments,
+        RegionSpectra,
+        SlitSpectra
+    ])
+
+
+_register_observables()

@@ -1,4 +1,4 @@
-from gbkfit.model.core import GModelPlan
+from gbkfit.model.base import GModelPlan
 from gbkfit.utils import gridutils, iterutils, miscutils
 from gbkfit.utils.parseutils import ConfigError
 from . import _detail

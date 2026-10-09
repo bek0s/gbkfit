@@ -2,7 +2,7 @@ from collections.abc import Sequence
 
 from gbkfit.utils import parseutils
 from . import _component, _point
-from .core import SpectralComponent2D
+from .base import SpectralComponent2D
 from .lines import Line, Lines, line_parser
 
 

@@ -4,7 +4,7 @@ import inspect
 
 from gbkfit.utils import iterutils, parseutils
 from . import _detail, _disk, common, lines, traits
-from .core import ComponentPlan
+from .base import ComponentPlan
 
 
 __all__ = [

@@ -1,10 +1,10 @@
 from collections.abc import Sequence
 
 from gbkfit.dataset.datasets import DatasetPixelBrightness
-from gbkfit.model.core import GModelImage
+from gbkfit.model.base import GModelImage
 from gbkfit.utils import gridutils
 from . import _dcube, _detail
-from .core import Observable
+from .base import Observable
 
 
 __all__ = [

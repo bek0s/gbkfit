@@ -8,7 +8,7 @@ import scipy.ndimage
 import scipy.special
 
 import gbkfit.math
-from gbkfit.psflsf.core import (
+from gbkfit.psflsf.base import (
     LSF, MIN_EXTENT, WING_FLUX, check_scale, embed, lsf_parser)
 from gbkfit.utils import fitsutils, gridutils, parseutils
 
