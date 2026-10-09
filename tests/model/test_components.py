@@ -172,6 +172,14 @@ def test_at_most_4_traits_of_a_kind():
     assert "at most 4 bptraits" in message
 
 
+@pytest.mark.parametrize('trait, message', [
+    (dict(type='nw_harmonic', order=-1), "order must be at least 0"),
+    (dict(type='mixture_gauss', nblobs=0), "nblobs must be at least 1")])
+def test_orders_and_blobs_are_checked(trait, message):
+    # The kernels read the phases of the orders above 0, and the
+    # parameters of each blob
+    assert message in component_error('brightness_smdisk_2d', bptraits=trait)
+
 def test_trunc_cannot_be_negative():
     message = component_error(
         'brightness_smdisk_3d', bhtraits=dict(type='sech2', trunc=-1))

@@ -464,7 +464,10 @@ class TraitFeatureNBlobs:
         return super().dump() | info  # noqa
 
     def __init__(self, **kwargs):
-        self._nblobs = kwargs.pop('nblobs')
+        nblobs = kwargs.pop('nblobs')
+        if not nblobs >= 1:
+            raise RuntimeError(f"nblobs must be at least 1; it is {nblobs}")
+        self._nblobs = nblobs
         super().__init__(**kwargs)
 
     def nblobs(self):
@@ -481,7 +484,10 @@ class TraitFeatureOrder:
         return super().dump() | info  # noqa
 
     def __init__(self, **kwargs):
-        self._order = kwargs.pop('order')
+        order = kwargs.pop('order')
+        if not order >= 0:
+            raise RuntimeError(f"order must be at least 0; it is {order}")
+        self._order = order
         super().__init__(**kwargs)
 
     def order(self):
