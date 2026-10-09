@@ -1046,20 +1046,29 @@ vp_trait_tan_brandt(T& out, T r, T theta, T incl, const T* params)
     vp_trait_make_tan(out, theta, incl);
 }
 
-// A pseudo-isothermal sphere: vt sqrt(1 - (rt / r) atan(r / rt)), with the
-// core radius rt and the asymptotic velocity vt (0 at the centre)
+// A pseudo-isothermal sphere: vt sqrt(1 - atan(u) / u), with u = r / rt,
+// the core radius rt and the asymptotic velocity vt (0 at the centre).
+// Near the centre, where 1 - atan(u) / u loses its precision (and can
+// round below 0), by its series u^2 / 3 - u^4 / 5 + u^6 / 7.
 template<typename T> constexpr void
 vp_trait_tan_iso(T& out, T r, T theta, T incl, const T* params)
 {
     T rt = params[0];
     T vt = params[1];
-    out = r > 0 ? vt * std::sqrt(1 - rt / r * std::atan(r / rt)) : 0;
+    const T u = r / rt;
+    const T u2 = u * u;
+    const T g = std::abs(u) < T{0.1}
+            ? u2 * (T{1} / 3 - u2 * (T{1} / 5 - u2 / 7))
+            : 1 - std::atan(u) / u;
+    out = vt * std::sqrt(g);
     vp_trait_make_tan(out, theta, incl);
 }
 
 // The shape of the rotation curve of an NFW halo of scale radius rt, with
 // its maximum vt (at 2.1626 rt): vt sqrt(f(r / rt) / f_max), with
-// f(u) = (ln(1 + u) - u / (1 + u)) / u (0 at the centre)
+// f(u) = (ln(1 + u) - u / (1 + u)) / u (0 at the centre). Near the
+// centre, where the difference loses its precision, by its series
+// u / 2 - 2 u^2 / 3 + 3 u^3 / 4 - 4 u^4 / 5.
 template<typename T> constexpr void
 vp_trait_tan_nfw(T& out, T r, T theta, T incl, const T* params)
 {
@@ -1067,9 +1076,10 @@ vp_trait_tan_nfw(T& out, T r, T theta, T incl, const T* params)
     T rt = params[0];
     T vt = params[1];
     const T u = r / rt;
-    out = u > 0
-            ? vt * std::sqrt((std::log1p(u) - u / (1 + u)) / u / F_MAX)
-            : 0;
+    const T f = u < T{0.01}
+            ? u * (T{1} / 2 - u * (T{2} / 3 - u * (T{3} / 4 - u * T{4} / 5)))
+            : (std::log1p(u) - u / (1 + u)) / u;
+    out = u > 0 ? vt * std::sqrt(f / F_MAX) : 0;
     vp_trait_make_tan(out, theta, incl);
 }
 

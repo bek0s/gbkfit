@@ -57,13 +57,31 @@ gmodel_scube_line(
         T spec_step,
         T spec_zero)
 {
-    // Calculate a spectral range that encloses most of the flux.
+    // A line of a velocity or dispersion that is not a number (e.g. of
+    // parameters out of their range) makes the spectrum NaN, as a flux
+    // that is not a number does, so that it is seen
+    if (std::isnan(vvalue) || std::isnan(dvalue))
+    {
+        for (int z = 0; z < spec_size_z; ++z)
+        {
+            int idx = index_3d_to_1d(x, y, z, spat_size_x, spat_size_y);
+            AddFunT(&scube[idx], T(NAN));
+        }
+        return;
+    }
+
+    // Calculate a spectral range that encloses most of the flux, within
+    // the spectral axis. The channels are clamped before they become
+    // ints: converting a float out of the range of int is undefined.
     T zmin = vvalue - dvalue * LINE_WIDTH_MULTIPLIER<T>;
     T zmax = vvalue + dvalue * LINE_WIDTH_MULTIPLIER<T>;
-    int zmin_idx = std::max<T>(std::rint(
-            (zmin - spec_zero)/spec_step), 0);
-    int zmax_idx = std::min<T>(std::rint(
-            (zmax - spec_zero)/spec_step), spec_size_z - 1);
+    T zmin_pos = std::max<T>(std::rint((zmin - spec_zero) / spec_step), 0);
+    T zmax_pos = std::min<T>(
+            std::rint((zmax - spec_zero) / spec_step), spec_size_z - 1);
+    if (zmin_pos > zmax_pos)
+        return;
+    int zmin_idx = zmin_pos;
+    int zmax_idx = zmax_pos;
 
     // Evaluate the spectral line within the range specified above
     // Evaluating only within the range can result in huge speed increase.

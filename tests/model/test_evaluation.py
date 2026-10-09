@@ -166,3 +166,27 @@ def test_incompatible_observations_are_rejected_before_evaluation(
         gmodel=dict(type=gmodel, components=[component]))
     with pytest.raises(Exception, match="is not compatible with"):
         observation_group([model])
+
+
+def test_a_velocity_that_is_not_a_number_makes_spectra_nan(driver):
+    # A NaN velocity (here of a rotation curve whose parameters are out of
+    # their range: a negative power of a negative number within -rt) makes
+    # the spectra NaN, so that it is seen, instead of picking channels
+    # out of the cube
+    model_group = observation_group([dict(
+        driver=dict(type=driver.type()),
+        dmodel=dict(type='scube', size=[16, 16, 21], step=[1, 1, 10]),
+        gmodel=dict(type='kinematics_2d', components=[dict(
+            type='smdisk', loose=False, tilted=False,
+            rnodes=list(range(0, 8)),
+            bptraits=dict(type='exponential'),
+            vptraits=dict(type='tan_courteau'),
+            dptraits=dict(type='uniform'))]))])
+    params = gbkfit.params.EvaluationParams(model_group.pdescs(), dict(
+        vsys=0, xpos=0, ypos=0, posa=30, incl=45, bpt_a=1, bpt_s=4,
+        vpt_rt=-3, vpt_vt=100, vpt_b=0.4, vpt_g=2, dpt_a=10))
+    cube = model_group.model_h(params.evaluate())[0]['scube']['d']
+    nan = np.isnan(cube)
+    assert nan.any() and np.isfinite(cube[~nan]).all()
+    # The spectra of the spaxels within -rt are NaN
+    assert (nan.all(axis=0) == nan.any(axis=0)).all()

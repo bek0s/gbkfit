@@ -58,3 +58,33 @@ def test_rotation_curves(driver, trait, evaluate_models):
         # The maximum is vt, at 2.163 rt
         r = np.linspace(0.1, 30, 30000)
         assert nfw(r, 3.0, 200.0).max() == pytest.approx(200, rel=1e-6)
+
+
+@pytest.mark.parametrize('trait', ['tan_iso', 'tan_nfw'])
+def test_rotation_curves_near_the_centre(driver, trait, evaluate_models):
+    # Near the centre, 1 - atan(u) / u (pseudo-isothermal) and ln(1 + u) -
+    # u / (1 + u) (NFW) lose their precision in float32, and the first
+    # could fall below 0 (a NaN velocity). A pixel 1e-4 core radii from
+    # the centre, on the major axis, has the velocity of the curve there.
+    values, curve = CURVES[trait]
+    values = values | dict(rt=3.0)
+    incl = 60
+    radius = 1e-4 * values['rt']
+    model = dict(
+        driver=dict(type=driver.type()),
+        dmodel=dict(type='scube', size=[9, 9, 41], step=[1, 1, 10]),
+        gmodel=dict(type='kinematics_2d', components=[dict(
+            type='smdisk', loose=False, tilted=False,
+            rnodes=list(range(0, 6)),
+            bptraits=dict(type='exponential'),
+            vptraits=dict(type=trait),
+            dptraits=dict(type='uniform'))]))
+    # The centre of the disk is radius south of pixel (4, 4)
+    properties = dict(
+        vsys=0, xpos=0, ypos=-radius, posa=0, incl=incl, bpt_a=1,
+        bpt_s=4, dpt_a=20) | {f'vpt_{k}': v for k, v in values.items()}
+    data, extra = evaluate_models([model], properties)
+    assert np.isfinite(data[0]['scube']['d']).all()
+    velocity = extra['observation0_gmodel_component0_vdata'].data
+    expected = curve(radius, **values) * np.sin(np.radians(incl))
+    assert abs(velocity[4, 4]) == pytest.approx(expected, rel=1e-3)
