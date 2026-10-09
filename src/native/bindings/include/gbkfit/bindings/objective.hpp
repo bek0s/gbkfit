@@ -12,7 +12,8 @@ struct Objective
 {
     using Data = Array<Device, T>;
     using ConstData = Array<Device, const T>;
-    using Scalar = Array<Device, T, nb::shape<1>>;
+    // A sum, in double precision: a cube can have millions of terms
+    using Sum = Array<Device, double, nb::shape<1>>;
 
     // (mdl_d - obs_d) / obs_e * mdl_w * obs_m * mdl_m * weight, where
     // all arrays but obs_d and mdl_d are optional
@@ -36,7 +37,7 @@ struct Objective
 
     // The sum of the squared or absolute residuals
     static void
-    residual_sum(ConstData residual, bool squared, Scalar sum)
+    residual_sum(ConstData residual, bool squared, Sum sum)
     {
         Kernels::objective_residual_sum(
                 residual.data(), int(residual.size()), squared, sum.data());

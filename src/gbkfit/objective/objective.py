@@ -89,8 +89,9 @@ class Objective:
             self._d_dataset_e_vector[i] = driver.mem_alloc_d(nelem, dtype)
             (self._h_residual_vector[i],
              self._d_residual_vector[i]) = driver.mem_alloc_s(nelem, dtype)
+            # (the sums are in double precision, of millions of terms)
             (self._h_residual_scalar[i],
-             self._d_residual_scalar[i]) = driver.mem_alloc_s(1, dtype)
+             self._d_residual_scalar[i]) = driver.mem_alloc_s(1, np.float64)
             # Populate allocated arrays and create views
             for j, key in enumerate(keys):
                 data = dataset[key]

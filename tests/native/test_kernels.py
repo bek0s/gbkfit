@@ -286,10 +286,11 @@ def test_residual_of_masked_pixels_is_zero(driver):
     np.testing.assert_array_equal(result[masked], 0)
     assert np.isfinite(result).all() and result[~masked].any()
 
+
 def residual_sum(driver, values, squared):
     memory = Memory(driver)
     objective = driver.native_class('Objective', DTYPE)()
-    total = memory.to_device(np.zeros(1, DTYPE))
+    total = memory.to_device(np.zeros(1, np.float64))
     objective.residual_sum(
         memory.to_device(values.astype(DTYPE)), squared, total)
     return memory.to_host(total)[0]
@@ -304,11 +305,11 @@ def test_residual_sum(driver):
 
 
 def test_residual_sum_precision(driver):
-    # Accumulated in float32, the small terms would be lost next to the
-    # large one (float32 numbers near 1e8 are 8 apart)
+    # Accumulated or returned in float32, the small terms would be lost
+    # next to the large one (float32 numbers near 1e8 are 8 apart)
     values = np.ones(1000)
     values[0] = 1e8
-    assert residual_sum(driver, values, False) == np.float32(1e8 + 999)
+    assert residual_sum(driver, values, False) == 1e8 + 999
 
 
 def _trait_set(driver, memory, trait, params=()):
