@@ -404,7 +404,7 @@ def _pad_data(data_d, data_e, data_m, size, value_d, value_e, value_m):
     return data_d, data_e, data_m
 
 
-def prep_image(
+def prep_pixel_brightness(
         file_d, file_e, file_m,
         roi_spat, clip_min, clip_max, ccl_lcount, ccl_pcount, ccl_lratio,
         sclip_sigma, sclip_iters, minify, nanpad, dtype,
@@ -457,7 +457,7 @@ def prep_image(
         offset, dtype, output_dir=output_dir)
 
 
-def prep_lslit(
+def prep_slit_spectra(
         file_d, file_e, file_m,
         roi_spat, roi_spec, clip_min, clip_max,
         ccl_lcount, ccl_pcount, ccl_lratio,
@@ -514,7 +514,7 @@ def prep_lslit(
         offset, dtype, velocity_rest, output_dir)
 
 
-def prep_mmaps(
+def prep_pixel_moments(
         file_d, file_e, file_m,
         roi_spat, clip_min, clip_max, ccl_lcount, ccl_pcount, ccl_lratio,
         sclip_sigma, sclip_iters, minify, nanpad, dtype,
@@ -525,13 +525,13 @@ def prep_mmaps(
     one value for all maps.
     """
 
-    nmmaps = len(file_d)
+    nmoments = len(file_d)
     if file_e is None:
-        file_e = [None] * nmmaps
+        file_e = [None] * nmoments
     if file_m is None:
-        file_m = [None] * nmmaps
+        file_m = [None] * nmoments
     if np.ndim(sclip_iters) == 0:
-        sclip_iters = [sclip_iters] * nmmaps
+        sclip_iters = [sclip_iters] * nmoments
 
     data_d = []
     data_e = []
@@ -543,7 +543,7 @@ def prep_mmaps(
     offset = np.zeros(2, int)
     if roi_spat is not None:
         offset += [roi_spat[2], roi_spat[0]]
-    for i in range(nmmaps):
+    for i in range(nmoments):
         (data_d_, header_d_,
          data_e_, header_e_,
          data_m_, header_m_) = _read_data(file_d[i], file_e[i], file_m[i])
@@ -563,7 +563,7 @@ def prep_mmaps(
 
     mask = np.ones_like(data_d[0])
 
-    for i in range(nmmaps):
+    for i in range(nmoments):
         mask *= _make_mask(data_d[i], data_e[i], data_m[i])
         if clip_min is not None:
             mask *= _make_mask_clip_min(data_d[i], clip_min[i])
@@ -581,7 +581,7 @@ def prep_mmaps(
     if nanpad:
         offset -= nanpad
 
-    for i in range(nmmaps):
+    for i in range(nmoments):
 
         _apply_mask(data_d[i], data_e[i], data_m[i], mask)
 
@@ -600,7 +600,7 @@ def prep_mmaps(
             offset, dtype, output_dir=output_dir)
 
 
-def prep_scube(
+def prep_pixel_spectra(
         file_d, file_e, file_m,
         roi_spat, roi_spec, clip_min, clip_max,
         ccl_lcount, ccl_pcount, ccl_lratio,
@@ -678,10 +678,10 @@ def _bin_values(bins, nbins, data, name):
     return values
 
 
-def prep_bmaps(
+def prep_region_moments(
         file_bins, file_d, file_e, file_m, dtype, output_dir='.'):
     """
-    Prepare binned moment maps (e.g. of MaNGA DAP or GIST) for bmaps: a
+    Prepare binned moment maps (e.g. of MaNGA DAP or GIST) for region_moments: a
     map of the bin of each pixel (file_bins; negative or NaN for no bin),
     and moment maps (file_d, with optional errors file_e and masks file_m)
     whose pixels hold the value of their bin. Write the bins, numbered
@@ -689,9 +689,9 @@ def prep_bmaps(
     (prep_<bins>.fits), and for each map a vector of the value of each
     bin (prep_<map>.fits), whose masked or empty bins are NaN.
     """
-    nmmaps = len(file_d)
-    file_e = file_e or [None] * nmmaps
-    file_m = file_m or [None] * nmmaps
+    nmoments = len(file_d)
+    file_e = file_e or [None] * nmoments
+    file_m = file_m or [None] * nmoments
     bins, header_bins = _read_fits(file_bins)
     if bins.ndim != 2:
         raise ConfigError(
@@ -712,7 +712,7 @@ def prep_bmaps(
             overwrite=True)
 
     save(file_bins, index, header_bins)
-    for i in range(nmmaps):
+    for i in range(nmoments):
         data_d, _, data_e, _, data_m, _ = _read_data(
             file_d[i], file_e[i], file_m[i])
         for data in (data_d, data_e, data_m):

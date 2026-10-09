@@ -83,7 +83,7 @@ class Observable(parseutils.TypedSerializable, abc.ABC):
 
     @abc.abstractmethod
     def keys(self):
-        """The names of the data items (e.g. 'scube')."""
+        """The names of the data items (e.g. 'spectra')."""
         pass
 
     def require_compatible(self, gmodel):

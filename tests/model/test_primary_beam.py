@@ -29,7 +29,7 @@ def evaluate(driver, dmodel):
         driver=dict(type=driver.type()), dmodel=copy.deepcopy(dmodel),
         gmodel=GMODEL)])
     params = gbkfit.params.EvaluationParams(group.pdescs(), PROPERTIES)
-    return group.model_h(params.evaluate())[0]['image']['d'].copy()
+    return group.model_h(params.evaluate())[0]['brightness']['d'].copy()
 
 
 @pytest.mark.parametrize('beam_class', [PrimaryBeamGauss, PrimaryBeamAiry])
@@ -52,7 +52,7 @@ def test_airy_primary_beam_has_its_first_null_where_expected():
 def test_primary_beam_attenuates_the_model(driver, rota):
     # Without a psf and oversampling, the model is that without the beam
     # times the beam at the centres of the pixels
-    image = dict(type='image', size=[32, 41], step=[0.5, 0.5], rota=rota)
+    image = dict(type='pixel_brightness', size=[32, 41], step=[0.5, 0.5], rota=rota)
     beam = dict(type='gauss', fwhm=6, x=2, y=-1)
     plain = evaluate(driver, image)
     attenuated = evaluate(driver, image | dict(primary_beam=beam))
@@ -64,7 +64,7 @@ def test_primary_beam_attenuates_the_model(driver, rota):
 
 def test_primary_beam_comes_before_the_psf(driver):
     # The model is the psf convolved with the attenuated light
-    image = dict(type='image', size=[64, 64], step=[0.5, 0.5])
+    image = dict(type='pixel_brightness', size=[64, 64], step=[0.5, 0.5])
     beam = dict(type='gauss', fwhm=5, x=1, y=0)
     psf = dict(type='gauss', sigma=1.0)
     attenuated = evaluate(driver, image | dict(primary_beam=beam))
@@ -140,10 +140,10 @@ def test_observation_dumps_the_image_of_its_primary_beam(tmp_path):
     from gbkfit.driver.drivers.host import DriverHost
     from gbkfit.observation import (
         Observation, PrimaryBeamImage, observation_parser)
-    from gbkfit.observation.observables import Image
+    from gbkfit.observation.observables import PixelBrightness
     beam = PrimaryBeamImage(np.ones((8, 8)))
     observation = Observation(
-        DriverHost(), Image(size=(8, 8)),
+        DriverHost(), PixelBrightness(size=(8, 8)),
         instrument=Instrument(primary_beam=beam))
     prefix = str(tmp_path / 'out_')
     for _ in range(2):

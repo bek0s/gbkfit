@@ -24,7 +24,7 @@ PROPERTIES = dict(
     vsys=0, xpos=0.3, ypos=-0.6, posa=50, incl=75,
     bpt_a=1, bpt_s=4, bht_s=1, vpt_rt=2, vpt_vt=150, dpt_a=20)
 
-SCUBE = dict(type='scube', size=[32, 41, 51], step=[1, 1, 20])
+SCUBE = dict(type='pixel_spectra', size=[32, 41, 51], step=[1, 1, 20])
 
 
 def evaluate(driver, component, properties):
@@ -32,7 +32,7 @@ def evaluate(driver, component, properties):
         driver=dict(type=driver.type()), dmodel=copy.deepcopy(SCUBE),
         gmodel=dict(type='kinematics_3d', components=[component]))])
     params = gbkfit.params.EvaluationParams(group.pdescs(), properties)
-    return group.model_h(params.evaluate())[0]['scube']['d'].copy()
+    return group.model_h(params.evaluate())[0]['spectra']['d'].copy()
 
 
 def with_second(key, polar, height, polar_values, height_values):

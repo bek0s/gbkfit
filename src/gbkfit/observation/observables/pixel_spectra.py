@@ -2,28 +2,28 @@ from collections.abc import Sequence
 
 import astropy.units
 
-from gbkfit.dataset.datasets import DatasetSCube
+from gbkfit.dataset.datasets import DatasetPixelSpectra
 from gbkfit.model.core import GModelSCube
 from . import _dcube, _detail
 from .core import Observable
 
 
 __all__ = [
-    'SCube'
+    'PixelSpectra'
 ]
 
 
-class SCube(Observable):
+class PixelSpectra(Observable):
 
     # The form of the data this observable measures
-    dataset_class = DatasetSCube
+    dataset_class = DatasetPixelSpectra
 
     # The axes of a spectral cube: x, y and the spectral axis
     _spectral_axis = 2
 
     @staticmethod
     def type():
-        return 'scube'
+        return 'pixel_spectra'
 
     @staticmethod
     def is_compatible(gmodel):
@@ -32,7 +32,7 @@ class SCube(Observable):
     @classmethod
     def load(cls, info, dataset=None):
         return cls(**_detail.load_observable_common(
-            cls, info, 3, dataset, DatasetSCube))
+            cls, info, 3, dataset, DatasetPixelSpectra))
 
     def dump(self, data=None, prefix='', dump_path=True, overwrite=False):
         return _detail.without_options_from_data(self, dict(
@@ -69,7 +69,7 @@ class SCube(Observable):
         self._mask_apply = mask_apply
 
     def keys(self):
-        return ['scube']
+        return ['spectra']
 
     def plan(
             self, driver, gmodel, foreground, instrument, scale, dtype,
@@ -79,15 +79,15 @@ class SCube(Observable):
             self.rest(), tuple(scale), instrument.primary_beam(),
             instrument.psf(), instrument.lsf(),
             self._smooth_weights, self._mask_cutoff, self._mask_apply, dtype)
-        return SCubePlan(dcube, driver, gmodel, foreground, dtype,
+        return PixelSpectraPlan(dcube, driver, gmodel, foreground, dtype,
             selection)
 
 
-class SCubePlan(_detail.DCubePlanBase):
+class PixelSpectraPlan(_detail.DCubePlanBase):
 
     def evaluate(self, params, out_extra):
         self._evaluate_cube(
             params, out_extra, _dcube.cube_extra, _dcube.cube_extra)
         plan = self._dcube_plan
-        return dict(scube=dict(
+        return dict(spectra=dict(
             d=plan.dcube(), m=plan.mcube(), w=plan.wcube()))

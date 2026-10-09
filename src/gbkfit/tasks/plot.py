@@ -107,7 +107,7 @@ def make_best_fit_dmr_gs(nrows, wspace, hspace, hscale, wscale):
         height_ratios=[hscale], width_ratios=[1, wscale, wscale, 1, wscale, 1])
 
 
-def plot_best_fit_image(dataset, solution, dpi):
+def plot_best_fit_pixel_brightness(dataset, solution, dpi):
     nrows = 1
     fig = plt.figure()
     gs = make_best_fit_dmr_gs(nrows, 0.04, 0.04, 15, 15)
@@ -115,11 +115,11 @@ def plot_best_fit_image(dataset, solution, dpi):
     return dict(dmr=fig)
 
 
-def plot_best_fit_lslit(dataset, solution):
+def plot_best_fit_slit_spectra(dataset, solution):
     return 1
 
 
-def plot_best_fit_mmaps(dataset, solution):
+def plot_best_fit_pixel_moments(dataset, solution):
     nrows = len(dataset)
     fig = plt.figure()
     gs = make_best_fit_dmr_gs(nrows, 0.04, 0.04, 15, 15)
@@ -141,16 +141,16 @@ def plot_best_fit_mmaps(dataset, solution):
     return dict(dmr=fig)
 
 
-def plot_best_fit_scube(dataset, solution):
+def plot_best_fit_pixel_spectra(dataset, solution):
     return 1
 
 
 def plot_best_fit(result, solution):
     plot_fun_selector = dict(
-        image=plot_best_fit_image,
-        lslit=plot_best_fit_lslit,
-        mmaps=plot_best_fit_mmaps,
-        scube=plot_best_fit_scube)
+        pixel_brightness=plot_best_fit_pixel_brightness,
+        slit_spectra=plot_best_fit_slit_spectra,
+        pixel_moments=plot_best_fit_pixel_moments,
+        pixel_spectra=plot_best_fit_pixel_spectra)
     figures = dict()
     for i, dataset in enumerate(result.datasets):
         figs = plot_fun_selector[dataset.type()](dataset, solution)

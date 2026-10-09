@@ -83,7 +83,7 @@ def gmodel(name=None):
 
 def observation(gmodel_=None, name=None):
     return dict(
-        driver=dict(type='host'), observable=dict(type='image', size=[8, 8])) \
+        driver=dict(type='host'), observable=dict(type='pixel_brightness', size=[8, 8])) \
         | (dict(gmodel=gmodel_) if gmodel_ is not None else {}) \
         | (dict(name=name) if name is not None else {})
 

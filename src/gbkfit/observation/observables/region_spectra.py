@@ -3,7 +3,7 @@ from numbers import Real
 
 import astropy.units
 
-from gbkfit.dataset.datasets import DatasetASpec
+from gbkfit.dataset.datasets import DatasetRegionSpectra
 from gbkfit.dataset.regions import Regions, regions_parser
 from gbkfit.model.core import GModelSCube
 from gbkfit.utils import fitsutils, parseutils
@@ -13,11 +13,11 @@ from .core import Observable
 
 
 __all__ = [
-    'ASpec'
+    'RegionSpectra'
 ]
 
 
-class ASpec(Observable):
+class RegionSpectra(Observable):
     """
     Spectra in regions of the sky (see Regions; e.g. fibres, apertures,
     bins, or the whole field for an integrated spectrum): the sum of the
@@ -28,14 +28,14 @@ class ASpec(Observable):
     """
 
     # The form of the data this observable measures
-    dataset_class = DatasetASpec
+    dataset_class = DatasetRegionSpectra
 
     # The axes of the cube of the model: x, y and the spectral axis
     _spectral_axis = 2
 
     @staticmethod
     def type():
-        return 'aspec'
+        return 'region_spectra'
 
     @staticmethod
     def is_compatible(gmodel):
@@ -54,7 +54,7 @@ class ASpec(Observable):
     def load(cls, info, dataset=None):
         desc = parseutils.make_typed_desc(cls, 'observable')
         if dataset is not None:
-            if not isinstance(dataset, DatasetASpec):
+            if not isinstance(dataset, DatasetRegionSpectra):
                 dataset_desc = parseutils.make_typed_desc(
                     dataset.__class__, 'dataset')
                 raise RuntimeError(
@@ -109,9 +109,10 @@ class ASpec(Observable):
         The spectral axis has spec_size channels of spec_step (km/s), with
         the velocity spec_rval (km/s) at the channel spec_rpix (by default
         the centre), and velocities of the rest wavelength or frequency
-        spec_rest (see fitsutils.Coords), if known. The spatial grid (size, step, rpix, rval, rota; see
-        fitsutils.make_grid) is that of the regions if they have one
-        (bins), and must not be given; else size is required.
+        spec_rest (see fitsutils.Coords), if known. The spatial grid
+        (size, step, rpix, rval, rota; see fitsutils.make_grid) is that
+        of the regions if they have one (bins), and must not be given;
+        else size is required.
         """
         spatial = _detail.spatial_grid_of_regions(
             regions, size, step, rpix, rval, rota)
@@ -137,7 +138,7 @@ class ASpec(Observable):
         return self._grid.spectral()
 
     def keys(self):
-        return ['aspec']
+        return ['spectra']
 
     def _require_matching_coordinates(self, dataset):
         if dataset.regions() != self._regions:
@@ -157,19 +158,20 @@ class ASpec(Observable):
             selection):
         if gmodel.has_weights():
             raise RuntimeError(
-                "aspec does not support gmodels with weights (wtraits) yet")
+                "region_spectra does not support gmodels with weights "
+                "(wtraits) yet")
         # The masking of DCube is disabled: every pixel of a region adds
         # to its spectrum
         dcube = _dcube.DCube(
             self.size(), self.step(), self.rpix(), self.rval(), self.rota(),
             self.rest(), tuple(scale), instrument.primary_beam(),
             instrument.psf(), instrument.lsf(), False, None, False, dtype)
-        return ASpecPlan(
+        return RegionSpectraPlan(
             self._weights, dcube, driver, gmodel, foreground, dtype,
             selection)
 
 
-class ASpecPlan(_detail.DCubePlanBase):
+class RegionSpectraPlan(_detail.DCubePlanBase):
 
     def __init__(
             self, weights, dcube, driver, gmodel, foreground, dtype,
@@ -184,4 +186,4 @@ class ASpecPlan(_detail.DCubePlanBase):
         self._evaluate_cube(
             params, out_extra, _dcube.cube_extra, _dcube.cube_extra)
         self._sums.evaluate(self._dcube_plan.dcube(), self._spectra)
-        return dict(aspec=dict(d=self._spectra, m=None, w=None))
+        return dict(spectra=dict(d=self._spectra, m=None, w=None))

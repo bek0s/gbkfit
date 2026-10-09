@@ -8,14 +8,14 @@ from . import _detail
 
 
 __all__ = [
-    'DatasetBMaps'
+    'DatasetRegionMoments'
 ]
 
 
-class DatasetBMaps(Dataset):
+class DatasetRegionMoments(Dataset):
     """
     Moments of the spectra in regions of the sky (see Regions; e.g.
-    Voronoi bins, fibres): the data items mmap0 to mmap7, each a vector of
+    Voronoi bins, fibres): the data items moment0 to moment7, each a vector of
     one value for each region.
     """
 
@@ -23,7 +23,7 @@ class DatasetBMaps(Dataset):
 
     @staticmethod
     def type():
-        return 'bmaps'
+        return 'region_moments'
 
     @classmethod
     def load(cls, info, prefix=''):
@@ -31,7 +31,7 @@ class DatasetBMaps(Dataset):
         desc = parseutils.make_typed_desc(cls, 'dataset')
         parseutils.load_option_and_update_info(
             regions_parser, info, 'regions', True, False, prefix=prefix)
-        for name in [f'mmap{i}' for i in range(8)]:
+        for name in [f'moment{i}' for i in range(8)]:
             # (an item that is null is absent)
             if info.get(name) is not None:
                 with parseutils.config_path(name):
@@ -55,20 +55,22 @@ class DatasetBMaps(Dataset):
     def __init__(
             self,
             regions: Regions,
-            mmap0: Data | None = None,
-            mmap1: Data | None = None,
-            mmap2: Data | None = None,
-            mmap3: Data | None = None,
-            mmap4: Data | None = None,
-            mmap5: Data | None = None,
-            mmap6: Data | None = None,
-            mmap7: Data | None = None
+            moment0: Data | None = None,
+            moment1: Data | None = None,
+            moment2: Data | None = None,
+            moment3: Data | None = None,
+            moment4: Data | None = None,
+            moment5: Data | None = None,
+            moment6: Data | None = None,
+            moment7: Data | None = None
     ):
         """The moments of the given orders, in the given regions."""
-        mmaps = (mmap0, mmap1, mmap2, mmap3, mmap4, mmap5, mmap6, mmap7)
+        moments = (
+            moment0, moment1, moment2, moment3, moment4, moment5, moment6,
+            moment7)
         super().__init__({
-            f'mmap{order}': mmap for order, mmap in enumerate(mmaps)
-            if mmap is not None})
+            f'moment{order}': moment for order, moment in enumerate(moments)
+            if moment is not None})
         if self.shape() != (regions.nregions(),):
             raise RuntimeError(
                 f"the moments have {self.shape()[0]} values, but there are "

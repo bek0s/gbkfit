@@ -1,17 +1,17 @@
 from gbkfit.utils import parseutils
-from .aspec import *
-from .bmaps import *
 from .core import *
-from .image import *
-from .lslit import *
-from .mmaps import *
-from .scube import *
+from .pixel_brightness import *
+from .pixel_moments import *
+from .pixel_spectra import *
+from .region_moments import *
+from .region_spectra import *
+from .slit_spectra import *
 
 
 observable_parser = parseutils.TypedParser(Observable, [
-    ASpec,
-    BMaps,
-    Image,
-    LSlit,
-    MMaps,
-    SCube])
+    PixelBrightness,
+    PixelMoments,
+    PixelSpectra,
+    RegionMoments,
+    RegionSpectra,
+    SlitSpectra])

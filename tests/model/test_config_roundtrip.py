@@ -129,19 +129,19 @@ GAUSS = dict(type='gauss', sigma=1)
 # Each type of observable, in an observation with every option set to a
 # value other than its default
 OBSERVABLES = dict(
-    image=(dict(
+    pixel_brightness=(dict(
         size=[20, 16], step=[2, 1], rpix=[3, 4], rval=[1, 2], rota=10,
         mask_cutoff=0.1, mask_apply=True),
         dict(psf=GAUSS, lsf=None), [2, 1]),
-    scube=(dict(
+    pixel_spectra=(dict(
         size=[20, 16, 11], step=[2, 1, 10], rpix=[3, 4, 5], rval=[1, 2, 3],
         rota=10, smooth_weights=True, mask_cutoff=0.1, mask_apply=True),
         dict(psf=GAUSS, lsf=GAUSS), [2, 1, 1]),
-    lslit=(dict(
+    slit_spectra=(dict(
         size=[20, 11], step=[2, 10], rpix=[3, 5], rval=[1, 3], rota=10,
         slit_width=3, smooth_weights=True, mask_cutoff=0.1, mask_apply=True),
         dict(psf=GAUSS, lsf=GAUSS), [2, 1]),
-    mmaps=(dict(
+    pixel_moments=(dict(
         size=[20, 16], step=[2, 1], rpix=[3, 4], rval=[1, 2], rota=10,
         mask_cutoff=0.1, orders=[0, 1], spec_size=201, spec_step=2,
         spec_rval=1500),

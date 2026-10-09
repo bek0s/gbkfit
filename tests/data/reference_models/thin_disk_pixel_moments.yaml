@@ -13,9 +13,10 @@ gmodels:
 observations:
 - driver: {type: host}
   observable:
-    type: scube
-    size: [48, 48, 50]
-    step: [1, 1, 10]
+    type: pixel_moments
+    size: [48, 48]
+    step: [1, 1]
+    orders: [0, 1, 2]
   instrument:
     psf: {type: gauss, sigma: 1.5}
     lsf: {type: gauss, sigma: 15.0}

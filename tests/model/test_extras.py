@@ -22,18 +22,18 @@ PROPERTIES = dict(
 # the dmodel, its gmodel, and the shape and spectral axis of its low-res
 # extra outputs
 MODELS = dict(
-    image=(
-        dict(type='image', size=[16, 12], rval=[150, 2], scale=[2, 2],
-             psf=dict(type='gauss', sigma=1)),
+    pixel_brightness=(
+        dict(type='pixel_brightness', size=[16, 12], rval=[150, 2],
+             scale=[2, 2], psf=dict(type='gauss', sigma=1)),
         dict(type='intensity_2d', components=[DISK]),
         (12, 16), None),
-    scube=(
-        dict(type='scube', size=[16, 12, 20], step=[1, 1, 10],
+    pixel_spectra=(
+        dict(type='pixel_spectra', size=[16, 12, 20], step=[1, 1, 10],
              rval=[150, 2, 0], psf=dict(type='gauss', sigma=1)),
         dict(type='kinematics_2d', components=[DISK | KINEMATICS]),
         (20, 12, 16), 2),
-    lslit=(
-        dict(type='lslit', size=[16, 20], step=[1, 10],
+    slit_spectra=(
+        dict(type='slit_spectra', size=[16, 20], step=[1, 10],
              psf=dict(type='gauss', sigma=1)),
         dict(type='kinematics_2d', components=[DISK | KINEMATICS]),
         (20, 16), 1))
@@ -45,7 +45,7 @@ def test_dcube_extras_have_the_layout_of_the_data(evaluate_models, name):
     model = dict(driver=dict(type='host'), dmodel=dmodel, gmodel=gmodel)
     properties = {
         k: v for k, v in PROPERTIES.items()
-        if name != 'image' or not k.startswith(('v', 'd'))}
+        if name != 'pixel_brightness' or not k.startswith(('v', 'd'))}
     _, extra = evaluate_models([model], properties)
     dcube_lo = extra['observation0_dcube_lo']
     assert isinstance(dcube_lo, fitsutils.GridData)
@@ -54,7 +54,7 @@ def test_dcube_extras_have_the_layout_of_the_data(evaluate_models, name):
     assert len(dcube_lo.coords.step) == len(shape)
     # The high-res grid is on the sky, except across the slit
     dcube_hi = extra['observation0_dcube_hi']
-    if name == 'lslit':
+    if name == 'slit_spectra':
         assert isinstance(dcube_hi, np.ndarray)
     else:
         assert isinstance(dcube_hi, fitsutils.GridData)
@@ -64,7 +64,7 @@ def test_dcube_extras_have_the_layout_of_the_data(evaluate_models, name):
 
 
 def test_dcube_extras_have_the_coordinates_of_the_dmodel(evaluate_models):
-    dmodel, gmodel, _, _ = MODELS['scube']
+    dmodel, gmodel, _, _ = MODELS['pixel_spectra']
     model = dict(driver=dict(type='host'), dmodel=dmodel, gmodel=gmodel)
     _, extra = evaluate_models([model], PROPERTIES)
     coords = extra['observation0_dcube_lo'].coords
@@ -81,10 +81,10 @@ def test_gmodel_extras_are_on_the_sky(evaluate_models, name):
     model = dict(driver=dict(type='host'), dmodel=dmodel, gmodel=gmodel)
     properties = {
         k: v for k, v in PROPERTIES.items()
-        if name != 'image' or not k.startswith(('v', 'd'))}
+        if name != 'pixel_brightness' or not k.startswith(('v', 'd'))}
     _, extra = evaluate_models([model], properties)
     bdata = extra['observation0_gmodel_component0_bdata']
-    if name == 'lslit':
+    if name == 'slit_spectra':
         assert isinstance(bdata, np.ndarray)
         return
     dcube_hi = extra['observation0_dcube_hi']
@@ -95,7 +95,7 @@ def test_gmodel_extras_are_on_the_sky(evaluate_models, name):
 
 def test_3d_gmodel_extras_have_a_line_of_sight_axis(evaluate_models):
     # The z axis of a 3d gmodel is along the line of sight, centred on 0
-    dmodel, _, _, _ = MODELS['scube']
+    dmodel, _, _, _ = MODELS['pixel_spectra']
     gmodel = dict(
         type='kinematics_3d', size_z=10, step_z=0.5, components=[
             DISK | KINEMATICS | dict(bhtraits=dict(type='sech2'))])

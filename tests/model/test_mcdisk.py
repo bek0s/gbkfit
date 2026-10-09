@@ -37,7 +37,7 @@ def evaluate_disk(
         model_group.pdescs(),
         config['params']['properties'] | (properties or {}))
     data = model_group.model_h(params.evaluate(), out_extra)
-    return data[0]['scube']['d'].copy()
+    return data[0]['spectra']['d'].copy()
 
 
 def velocity_field(scube):
@@ -292,12 +292,12 @@ def test_mcdisk_velocity_is_the_mean_of_the_clouds(driver):
     observation['driver']['type'] = driver.type()
     observation['instrument'] = {}
     observation['observable'] = dict(
-        type='scube', size=[48, 48, 120], step=[1, 1, 5])
+        type='pixel_spectra', size=[48, 48, 120], step=[1, 1, 5])
     model_group = config_group(config)
     params = gbkfit.params.EvaluationParams(
         model_group.pdescs(), config['params']['properties'])
     extra = {}
-    scube = model_group.model_h(params.evaluate(), extra)[0]['scube']['d']
+    scube = model_group.model_h(params.evaluate(), extra)[0]['spectra']['d']
     velocities = (np.arange(120) - 59.5) * 5
     intensity = scube.sum(axis=0)
     bright = intensity > 0.01 * intensity.max()

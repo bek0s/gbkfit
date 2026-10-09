@@ -113,12 +113,12 @@ def kinematics(gmodel_type, disk_type, vptraits, mass_model=None):
 
 
 def evaluate(driver, gmodel, properties):
-    from gbkfit.observation import Observation, ObservationGroup, SCube
+    from gbkfit.observation import Observation, ObservationGroup, PixelSpectra
     from gbkfit.params import EvaluationParams
     group = ObservationGroup([gmodel], [Observation(
-        driver, SCube(size=(32, 32, 51), step=(1, 1, 10)))])
+        driver, PixelSpectra(size=(32, 32, 51), step=(1, 1, 10)))])
     params = EvaluationParams(group.pdescs(), properties)
-    return group.model_h(params.evaluate())[0]['scube']['d'].copy()
+    return group.model_h(params.evaluate())[0]['spectra']['d'].copy()
 
 
 @pytest.mark.parametrize('gmodel_type, disk_type', [

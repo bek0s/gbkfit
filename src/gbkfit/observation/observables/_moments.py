@@ -39,17 +39,17 @@ def spectral_axis_from_data(
     """
     The size and the centre of a spectral axis with the given channel
     width that covers the velocities of a moment map dataset: the range
-    of mmap1, and three times the largest dispersion on each side. That
-    is the largest value of mmap2, but at least _MIN_DISPERSION (also
-    without mmap2), so that the lines of a model with a larger
+    of moment1, and three times the largest dispersion on each side. That
+    is the largest value of moment2, but at least _MIN_DISPERSION (also
+    without moment2), so that the lines of a model with a larger
     dispersion than the data's are not cut. A given size or centre is
     kept: the centre is that of the range, and the size covers the range
     around the centre.
     """
-    velocity = dataset['mmap1'].data()
+    velocity = dataset['moment1'].data()
     dispersion = _MIN_DISPERSION
-    if 'mmap2' in dataset:
-        dispersion = max(dispersion, np.nanmax(dataset['mmap2'].data()))
+    if 'moment2' in dataset:
+        dispersion = max(dispersion, np.nanmax(dataset['moment2'].data()))
     margin = 3 * dispersion
     vmin = np.nanmin(velocity) - margin
     vmax = np.nanmax(velocity) + margin
@@ -126,6 +126,6 @@ class MomentsPlan:
                 step, zero, cube, wcube, self._mask_cutoff, self._mmaps_o,
                 self._mmaps_d, self._mmaps_m, self._mmaps_w)
         return {
-            f'mmap{order}': dict(
+            f'moment{order}': dict(
                 d=self._mmaps_d[i], m=self._mmaps_m, w=self._mmaps_w)
             for i, order in enumerate(self._orders)}

@@ -7,10 +7,10 @@ import pytest
 
 
 def kinematics_2d_model(driver, **component):
-    """An scube model with one thin smooth disk component."""
+    """A pixel_spectra model with one thin smooth disk component."""
     return dict(
         driver=dict(type=driver.type()),
-        dmodel=dict(type='scube', size=[32, 32, 41], step=[1, 1, 10]),
+        dmodel=dict(type='pixel_spectra', size=[32, 32, 41], step=[1, 1, 10]),
         gmodel=dict(type='kinematics_2d', components=[dict(
             type='smdisk',
             rnodes=list(range(0, 12)),
@@ -52,7 +52,7 @@ def kinematics_3d_model(driver, disk, rota, psf=None):
     return dict(
         driver=dict(type=driver.type()),
         dmodel=dict(
-            type='scube', size=[33, 33, 41], step=[1, 1, 10], rota=rota,
+            type='pixel_spectra', size=[33, 33, 41], step=[1, 1, 10], rota=rota,
             psf=psf),
         gmodel=dict(type='kinematics_3d', components=[component]))
 
@@ -70,7 +70,7 @@ def test_grid_rotation(driver, evaluate_models, disk):
         data, _ = evaluate_models(
             [kinematics_3d_model(driver, disk, rota)],
             properties | dict(posa=posa))
-        return data[0]['scube']['d'].copy()
+        return data[0]['spectra']['d'].copy()
 
     rotated = evaluate(posa=70, rota=40)
     expected = evaluate(posa=30, rota=0)
@@ -94,7 +94,7 @@ def test_grid_rotation_with_an_elongated_beam(driver, evaluate_models):
         data, _ = evaluate_models(
             [kinematics_3d_model(driver, 'smdisk', rota, beam)],
             properties | dict(posa=posa))
-        return data[0]['scube']['d'].copy()
+        return data[0]['spectra']['d'].copy()
 
     rotated = evaluate(posa=70, beam_posa=50, rota=40)
     expected = evaluate(posa=30, beam_posa=10, rota=0)
@@ -120,7 +120,7 @@ def test_image_psf_matches_the_analytic_psf(driver, evaluate_models):
         # The convolution pads the grid to 128 x 64
         model['dmodel']['size'] = [61, 17, 41]
         data, _ = evaluate_models([model], properties)
-        return data[0]['scube']['d'].copy()
+        return data[0]['spectra']['d'].copy()
 
     expected = evaluate(gauss)
     actual = evaluate(dict(type='image', data='psf.fits'))
@@ -133,14 +133,14 @@ def uniform_disk_flux(driver, evaluate_models, rnodes, loose):
     nodes = len(rnodes)
     model = dict(
         driver=dict(type=driver.type()),
-        dmodel=dict(type='image', size=[80, 80], step=[0.2, 0.2]),
+        dmodel=dict(type='pixel_brightness', size=[80, 80], step=[0.2, 0.2]),
         gmodel=dict(type='intensity_2d', components=[dict(
             type='smdisk', loose=loose, tilted=False, rnodes=rnodes, rstep=1,
             bptraits=dict(type='uniform'))]))
     centre = [0] * nodes if loose else 0
     properties = dict(xpos=centre, ypos=centre, posa=0, incl=0, bpt_a=1)
     data, _ = evaluate_models([model], properties)
-    return data[0]['image']['d'].sum() * 0.2 * 0.2
+    return data[0]['brightness']['d'].sum() * 0.2 * 0.2
 
 
 @pytest.mark.parametrize('loose', [False, True])
@@ -163,7 +163,7 @@ def test_thin_disk_seen_from_below(driver, evaluate_models, incl):
     # is between pixels, which the rounding of the cosines would move.
     model = dict(
         driver=dict(type=driver.type()),
-        dmodel=dict(type='image', size=[33, 33]),
+        dmodel=dict(type='pixel_brightness', size=[33, 33]),
         gmodel=dict(type='intensity_2d', components=[dict(
             type='smdisk', loose=False, tilted=False,
             rnodes=[1.05 * i for i in range(14)],
@@ -173,7 +173,7 @@ def test_thin_disk_seen_from_below(driver, evaluate_models, incl):
         properties = dict(
             xpos=0, ypos=0, posa=0, incl=incl, bpt_a=1, bpt_s=4)
         data, _ = evaluate_models([model], properties)
-        return data[0]['image']['d']
+        return data[0]['brightness']['d']
     below = image(incl)
     assert (below >= 0).all()
     if incl != 90:
@@ -189,7 +189,7 @@ def test_loose_disk_centres_its_rings(driver, evaluate_models):
     rnodes = list(range(0, 13))
     model = dict(
         driver=dict(type=driver.type()),
-        dmodel=dict(type='image', size=[41, 41], step=[0.5, 0.5]),
+        dmodel=dict(type='pixel_brightness', size=[41, 41], step=[0.5, 0.5]),
         gmodel=dict(type='intensity_2d', components=[dict(
             type='smdisk', loose=True, tilted=False, rnodes=rnodes,
             bptraits=dict(type='exponential'))]))
@@ -197,7 +197,7 @@ def test_loose_disk_centres_its_rings(driver, evaluate_models):
         xpos=[0.2 * r for r in rnodes], ypos=[0] * len(rnodes),
         posa=0, incl=0, bpt_a=1, bpt_s=4)
     data, _ = evaluate_models([model], properties)
-    row = data[0]['image']['d'][20]
+    row = data[0]['brightness']['d'][20]
     x = (np.arange(41) - 20) * 0.5
     radius = np.where(x > 0, x / 1.2, -x / 0.8)
     inside = radius < 11

@@ -1,6 +1,6 @@
 from collections.abc import Sequence
 
-from gbkfit.dataset.datasets import DatasetImage
+from gbkfit.dataset.datasets import DatasetPixelBrightness
 from gbkfit.model.core import GModelImage
 from gbkfit.utils import fitsutils
 from . import _dcube, _detail
@@ -8,7 +8,7 @@ from .core import Observable
 
 
 __all__ = [
-    'Image'
+    'PixelBrightness'
 ]
 
 
@@ -17,17 +17,17 @@ def _image_extra(data, grid):
     return fitsutils.GridData(data[0], grid.spatial().coords, None)
 
 
-class Image(Observable):
+class PixelBrightness(Observable):
 
     # The form of the data this observable measures
-    dataset_class = DatasetImage
+    dataset_class = DatasetPixelBrightness
 
     # An image has no spectral axis
     _spectral_axis = None
 
     @staticmethod
     def type():
-        return 'image'
+        return 'pixel_brightness'
 
     @staticmethod
     def is_compatible(gmodel):
@@ -36,7 +36,7 @@ class Image(Observable):
     @classmethod
     def load(cls, info, dataset=None):
         return cls(**_detail.load_observable_common(
-            cls, info, 2, dataset, DatasetImage))
+            cls, info, 2, dataset, DatasetPixelBrightness))
 
     def dump(self, data=None, prefix='', dump_path=True, overwrite=False):
         return _detail.without_options_from_data(self, dict(
@@ -64,7 +64,7 @@ class Image(Observable):
         self._mask_apply = mask_apply
 
     def keys(self):
-        return ['image']
+        return ['brightness']
 
     def plan(
             self, driver, gmodel, foreground, instrument, scale, dtype,
@@ -77,11 +77,11 @@ class Image(Observable):
             self.rval() + (0,), self.rota(), None, tuple(scale) + (1,),
             instrument.primary_beam(), instrument.psf(), None, False,
             self._mask_cutoff, self._mask_apply, dtype)
-        return ImagePlan(dcube, driver, gmodel, foreground, dtype,
+        return PixelBrightnessPlan(dcube, driver, gmodel, foreground, dtype,
             selection)
 
 
-class ImagePlan(_detail.DCubePlanBase):
+class PixelBrightnessPlan(_detail.DCubePlanBase):
 
     def _gmodel_grid(self):
         # Image gmodels are evaluated on the x and y axes
@@ -90,7 +90,7 @@ class ImagePlan(_detail.DCubePlanBase):
     def evaluate(self, params, out_extra):
         self._evaluate_cube(params, out_extra, _image_extra, _image_extra)
         plan = self._dcube_plan
-        return dict(image=dict(
+        return dict(brightness=dict(
             d=plan.dcube()[0, :, :],
             m=plan.mcube()[0, :, :] if plan.mcube() is not None else None,
             w=plan.wcube()[0, :, :] if plan.wcube() is not None else None))

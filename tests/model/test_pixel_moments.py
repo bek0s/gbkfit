@@ -27,22 +27,22 @@ def moments_from_scube(scube, spec_step):
     return moment1, moment2, intensity
 
 
-def test_mmaps_matches_moments_of_scube(evaluate_model):
-    # thin_disk_mmaps and thin_disk_scube describe the same galaxy with
+def test_pixel_moments_matches_moments_of_pixel_spectra(evaluate_model):
+    # thin_disk_pixel_moments and thin_disk_pixel_spectra describe the same galaxy with
     # the same PSF and LSF, so the moment maps must match the moments of
     # the spectral cube. The channels hold the mean of the lines over each
     # channel, which adds the variance of a channel (step^2 / 12) to the
     # lines: the spectral cube has channels of 10, and the cube of the
     # moment maps of 1 (the default).
-    mmaps = evaluate_model(REFERENCE_DIR / 'thin_disk_mmaps.yaml')
-    scube = np.load(REFERENCE_DIR / 'thin_disk_scube.npz')['model_0_scube_d']
+    mmaps = evaluate_model(REFERENCE_DIR / 'thin_disk_pixel_moments.yaml')
+    scube = np.load(REFERENCE_DIR / 'thin_disk_pixel_spectra.npz')['model_0_spectra_d']
     moment1, moment2, intensity = moments_from_scube(
         scube.astype(np.float64), spec_step=10)
     moment2 = np.sqrt(moment2 ** 2 - 10 ** 2 / 12 + 1 ** 2 / 12)
     bright = intensity > 0.05 * intensity.max()
     for order, expected in ((1, moment1), (2, moment2)):
         np.testing.assert_allclose(
-            mmaps[f'model_0_mmap{order}_d'][bright], expected[bright],
+            mmaps[f'model_0_moment{order}_d'][bright], expected[bright],
             atol=0.01, err_msg=f"moment {order}")
 
 
@@ -76,25 +76,25 @@ def test_higher_moments_of_a_gaussian_line(driver):
     # other than 1 checks that the moments are scaled correctly. The
     # channels hold the mean of the line over each channel, which adds
     # the variance of a channel (step^2 / 12) to that of the line.
-    from gbkfit.observation import MMaps
-    observable = MMaps(
+    from gbkfit.observation import PixelMoments
+    observable = PixelMoments(
         size=(32, 32), spec_size=81, spec_step=5, orders=(1, 2, 3, 4))
     mmaps = evaluate_mmaps(driver, observable)
     # One mask for all moments: where the moments are defined.
     # Without weight traits, all weights are 1.
-    for key in ('mmap1', 'mmap2', 'mmap3', 'mmap4'):
+    for key in ('moment1', 'moment2', 'moment3', 'moment4'):
         defined = np.isfinite(mmaps[key]['d'])
         np.testing.assert_array_equal(mmaps[key]['m'], defined)
         np.testing.assert_array_equal(mmaps[key]['w'], 1)
-    sigma = mmaps['mmap2']['d']
+    sigma = mmaps['moment2']['d']
     disk = np.isfinite(sigma)
     assert disk.sum() > 100
     np.testing.assert_allclose(
         sigma[disk], np.sqrt(20 ** 2 + 5 ** 2 / 12), rtol=1e-3)
     np.testing.assert_allclose(
-        mmaps['mmap3']['d'][disk], 0, atol=1e-3 * 20 ** 3)
+        mmaps['moment3']['d'][disk], 0, atol=1e-3 * 20 ** 3)
     np.testing.assert_allclose(
-        mmaps['mmap4']['d'][disk], 3 * sigma[disk] ** 4, rtol=1e-2)
+        mmaps['moment4']['d'][disk], 3 * sigma[disk] ** 4, rtol=1e-2)
 
 
 def test_moment_maps_have_the_weights_of_the_gmodel(driver):
@@ -103,7 +103,7 @@ def test_moment_maps_have_the_weights_of_the_gmodel(driver):
     # first row of pixels, and 1 elsewhere
     from gbkfit.model.gmodels import (
         GModelKinematics2D, SpectralSMDisk2D, traits)
-    from gbkfit.observation import MMaps, Observation, ObservationGroup
+    from gbkfit.observation import PixelMoments, Observation, ObservationGroup
     from gbkfit.params import EvaluationParams
     from modelutils import WeightComponent
     disk = SpectralSMDisk2D(
@@ -111,13 +111,13 @@ def test_moment_maps_have_the_weights_of_the_gmodel(driver):
         bptraits=traits.BPTraitExponential(),
         vptraits=traits.VPTraitTanArctan(), dptraits=traits.DPTraitUniform())
     gmodel = GModelKinematics2D([disk, WeightComponent()])
-    observable = MMaps(size=(32, 32), spec_size=81, spec_step=5)
+    observable = PixelMoments(size=(32, 32), spec_size=81, spec_step=5)
     model_group = ObservationGroup([gmodel], [Observation(driver, observable)])
     params = EvaluationParams(model_group.pdescs(), dict(
         vsys=0, xpos=0, ypos=0, posa=30, incl=0,
         bpt_a=1, bpt_s=4, vpt_rt=2, vpt_vt=40, dpt_a=20))
     mmaps = model_group.model_h(params.evaluate())[0]
-    for key in ('mmap0', 'mmap1', 'mmap2'):
+    for key in ('moment0', 'moment1', 'moment2'):
         defined = np.isfinite(mmaps[key]['d'])
         assert defined.all()
         weights = mmaps[key]['w']
@@ -128,35 +128,35 @@ def test_moment_maps_have_the_weights_of_the_gmodel(driver):
 def test_moment_maps_of_a_galaxy_at_a_high_velocity(driver):
     # B24: the spectral axis was fixed at +-500 around 0. With one around
     # the systemic velocity, the velocity at the centre is vsys.
-    from gbkfit.observation import MMaps
-    observable = MMaps(
+    from gbkfit.observation import PixelMoments
+    observable = PixelMoments(
         size=(32, 32), spec_size=201, spec_step=2, spec_rval=1500)
     mmaps = evaluate_mmaps(driver, observable, vsys=1500)
-    centre = mmaps['mmap1']['d'][15:17, 15:17]
+    centre = mmaps['moment1']['d'][15:17, 15:17]
     np.testing.assert_allclose(centre, 1500, atol=15)
 
 
 @pytest.mark.parametrize('dispersion, spec_size', [
     (None, 401), (20.0, 401), (150.0, 551)])
 def test_spectral_axis_from_the_data(dispersion, spec_size):
-    # The spectral axis covers the range of mmap1 (1400 to 1600), and
-    # three times the largest dispersion on each side: that of mmap2,
-    # but at least 100 km/s (also without mmap2), so that the lines of
+    # The spectral axis covers the range of moment1 (1400 to 1600), and
+    # three times the largest dispersion on each side: that of moment2,
+    # but at least 100 km/s (also without moment2), so that the lines of
     # the model are not cut when its dispersion differs from the data's
     from gbkfit.dataset import Data
-    from gbkfit.dataset.datasets import DatasetMMaps
+    from gbkfit.dataset.datasets import DatasetPixelMoments
     from gbkfit.observation import observable_parser
     velocity = np.linspace(1400, 1600, 32 * 32).reshape(32, 32)
-    maps = dict(mmap0=Data(np.ones((32, 32))), mmap1=Data(velocity))
+    maps = dict(moment0=Data(np.ones((32, 32))), moment1=Data(velocity))
     if dispersion is not None:
-        maps['mmap2'] = Data(np.full((32, 32), dispersion))
-    info = dict(type='mmaps', spec_step=2)
-    observable = observable_parser.load(info, dataset=DatasetMMaps(**maps))
+        maps['moment2'] = Data(np.full((32, 32), dispersion))
+    info = dict(type='pixel_moments', spec_step=2)
+    observable = observable_parser.load(info, dataset=DatasetPixelMoments(**maps))
     assert observable.spec_rval() == 1500
     assert observable.spec_step() == 2
     assert observable.spec_size() == spec_size
     # The configuration is left as it was
-    assert info == dict(type='mmaps', spec_step=2)
+    assert info == dict(type='pixel_moments', spec_step=2)
 
 
 @pytest.mark.parametrize('given, spec_size, spec_rval', [
@@ -166,18 +166,18 @@ def test_spectral_axis_from_the_data(dispersion, spec_size):
     (dict(spec_rval=1450), 451, 1450)])
 def test_spectral_axis_partly_from_the_data(given, spec_size, spec_rval):
     from gbkfit.dataset import Data
-    from gbkfit.dataset.datasets import DatasetMMaps
+    from gbkfit.dataset.datasets import DatasetPixelMoments
     from gbkfit.observation import observable_parser
     velocity = np.linspace(1400, 1600, 32 * 32).reshape(32, 32)
-    dataset = DatasetMMaps(
-        mmap0=Data(np.ones((32, 32))), mmap1=Data(velocity))
+    dataset = DatasetPixelMoments(
+        moment0=Data(np.ones((32, 32))), moment1=Data(velocity))
     observable = observable_parser.load(
-        dict(type='mmaps', spec_step=2) | given, dataset=dataset)
+        dict(type='pixel_moments', spec_step=2) | given, dataset=dataset)
     assert observable.spec_size() == spec_size
     assert observable.spec_rval() == spec_rval
 
 def test_at_least_one_moment_order():
     # The moments kernel reads past an empty list of orders
-    from gbkfit.observation import MMaps
+    from gbkfit.observation import PixelMoments
     with pytest.raises(RuntimeError, match="at least one moment order"):
-        MMaps(size=(8, 8), orders=[])
+        PixelMoments(size=(8, 8), orders=[])

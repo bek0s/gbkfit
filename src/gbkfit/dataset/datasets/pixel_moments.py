@@ -8,11 +8,11 @@ from . import _detail
 
 
 __all__ = [
-    'DatasetMMaps'
+    'DatasetPixelMoments'
 ]
 
 
-class DatasetMMaps(Dataset):
+class DatasetPixelMoments(Dataset):
 
     # Moment maps have no spectral axis
     _ndim = 2
@@ -20,11 +20,11 @@ class DatasetMMaps(Dataset):
 
     @staticmethod
     def type():
-        return 'mmaps'
+        return 'pixel_moments'
 
     @classmethod
     def load(cls, info, **kwargs):
-        names = [f'mmap{i}' for i in range(8)]
+        names = [f'moment{i}' for i in range(8)]
         return cls(**_detail.load_grid_dataset(cls, info, names, **kwargs))
 
     def dump(self, **kwargs):
@@ -32,14 +32,14 @@ class DatasetMMaps(Dataset):
 
     def __init__(
             self,
-            mmap0: Data | None = None,
-            mmap1: Data | None = None,
-            mmap2: Data | None = None,
-            mmap3: Data | None = None,
-            mmap4: Data | None = None,
-            mmap5: Data | None = None,
-            mmap6: Data | None = None,
-            mmap7: Data | None = None,
+            moment0: Data | None = None,
+            moment1: Data | None = None,
+            moment2: Data | None = None,
+            moment3: Data | None = None,
+            moment4: Data | None = None,
+            moment5: Data | None = None,
+            moment6: Data | None = None,
+            moment7: Data | None = None,
             step: Real | Sequence[Real] | None = None,
             rpix: Real | Sequence[Real] | None = None,
             rval: Real | Sequence[Real] | None = None,
@@ -50,10 +50,12 @@ class DatasetMMaps(Dataset):
         coordinates of the grid (see fitsutils.Coords) have defaults (see
         _detail.make_grid).
         """
-        mmaps = (mmap0, mmap1, mmap2, mmap3, mmap4, mmap5, mmap6, mmap7)
+        moments = (
+            moment0, moment1, moment2, moment3, moment4, moment5, moment6,
+            moment7)
         super().__init__({
-            f'mmap{order}': mmap for order, mmap in enumerate(mmaps)
-            if mmap is not None})
+            f'moment{order}': moment for order, moment in enumerate(moments)
+            if moment is not None})
         self._grid = _detail.make_grid(self, step, rpix, rval, rota)
 
     def grid(self) -> fitsutils.Grid:
