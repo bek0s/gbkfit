@@ -3,7 +3,7 @@ from typing import Any
 import numpy as np
 
 from gbkfit.params import ParamDesc
-from gbkfit.utils import iterutils, miscutils, parseutils, timeutils
+from gbkfit.utils import iterutils, parseutils, timeutils
 from gbkfit.utils.parseutils import ConfigError
 
 
@@ -42,9 +42,9 @@ class ObservationGroup:
                 f"names; repeated: {repeated}")
         self._gmodel_index = [
             self._resolve(i, obs) for i, obs in enumerate(self._observations)]
-        self._pdescs, self._mappings = miscutils.merge_with_prefixes(
+        self._pdescs, self._mappings = iterutils.merge_with_prefixes(
             [gmodel.pdescs() for gmodel in self._gmodels], self._prefixes)
-        self._constants, _ = miscutils.merge_with_prefixes(
+        self._constants, _ = iterutils.merge_with_prefixes(
             [gmodel.constants() for gmodel in self._gmodels], self._prefixes)
         # The extra outputs of the observations are named after their names,
         # or their index if they have none (e.g. 'observation0_')

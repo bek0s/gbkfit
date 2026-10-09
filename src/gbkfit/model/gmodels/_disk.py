@@ -7,7 +7,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from gbkfit.params.pdescs import ParamScalarDesc, ParamVectorDesc
-from gbkfit.utils import miscutils, parseutils
+from gbkfit.utils import iterutils, parseutils
 
 
 _log = logging.getLogger(__name__)
@@ -68,7 +68,7 @@ def _trait_params(traits_, prefix, nrnodes, nsubrnodes):
             for pdesc, nwmode in trait.params_rnw(nnodes)]
         params_list.append(
             {tuple_[0].name(): tuple_ for tuple_ in params_sm + params_nw})
-    params, mappings = miscutils.merge_with_prefixes(
+    params, mappings = iterutils.merge_with_prefixes(
         params_list,
         parseutils.item_prefixes(
             [None] * len(params_list), 'traits', prefix, True))

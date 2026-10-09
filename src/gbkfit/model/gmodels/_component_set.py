@@ -1,5 +1,5 @@
 from gbkfit.model.base import GModelPlan
-from gbkfit.utils import gridutils, iterutils, miscutils
+from gbkfit.utils import gridutils, iterutils
 from gbkfit.utils.parseutils import ConfigError
 from . import _detail
 
@@ -75,7 +75,7 @@ class ComponentSet2D:
         self._components = iterutils.tuplify(components, False)
         self._prefixes = _detail.component_prefixes(
             self._components, *_CMP_PREFIX)
-        params, self._mappings = miscutils.merge_with_prefixes(
+        params, self._mappings = iterutils.merge_with_prefixes(
             [cmp.pdescs() for cmp in self._components], self._prefixes)
         self._params = _with_mass_model_params(
             params, self._components, mass_model)
@@ -98,7 +98,7 @@ class ComponentSet2D:
         return any(cmp.has_weights() for cmp in self._components)
 
     def constants(self):
-        constants, _ = miscutils.merge_with_prefixes(
+        constants, _ = iterutils.merge_with_prefixes(
             [cmp.constants() for cmp in self._components], self._prefixes)
         return constants
 
@@ -222,7 +222,7 @@ class ComponentSet3D:
             self._components, *_CMP_PREFIX)
         self._oprefixes = _detail.component_prefixes(
             self._ocomponents, *_OCMP_PREFIX)
-        params, mappings = miscutils.merge_with_prefixes(
+        params, mappings = iterutils.merge_with_prefixes(
             [cmp.pdescs() for cmp in self._all_components()],
             self._prefixes + self._oprefixes)
         self._mappings = mappings[:len(self._components)]
@@ -260,7 +260,7 @@ class ComponentSet3D:
         return any(cmp.has_weights() for cmp in self._components)
 
     def constants(self):
-        constants, _ = miscutils.merge_with_prefixes(
+        constants, _ = iterutils.merge_with_prefixes(
             [cmp.constants() for cmp in self._all_components()],
             self._prefixes + self._oprefixes)
         return constants
