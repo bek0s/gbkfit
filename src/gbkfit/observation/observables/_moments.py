@@ -92,7 +92,7 @@ class MomentsPlan:
     on a driver, measured with the given method (see METHODS): a map
     (ny, nx) for each order, one mask shared by them (the spectra whose
     moment 0 is not above mask_cutoff, and those whose fit fails), and
-    the weights of each (with the method moments).
+    one weight map shared by them (with the method moments).
     """
 
     def __init__(self, driver, size, orders, mask_cutoff, method, dtype):
@@ -104,7 +104,7 @@ class MomentsPlan:
         self._mmaps_o = driver.mem_alloc_d(len(orders), np.int32)
         self._mmaps_d = driver.mem_alloc_d(size_all[::-1], dtype)
         self._mmaps_m = driver.mem_alloc_d(tuple(size)[::-1], dtype)
-        self._mmaps_w = driver.mem_alloc_d(size_all[::-1], dtype)
+        self._mmaps_w = driver.mem_alloc_d(tuple(size)[::-1], dtype)
         driver.mem_copy_h2d(np.array(orders, dtype=np.int32), self._mmaps_o)
         driver.mem_fill(self._mmaps_d, np.nan)
         driver.mem_fill(self._mmaps_m, 0)
@@ -127,5 +127,5 @@ class MomentsPlan:
                 self._mmaps_d, self._mmaps_m, self._mmaps_w)
         return {
             f'mmap{order}': dict(
-                d=self._mmaps_d[i], m=self._mmaps_m, w=self._mmaps_w[i])
+                d=self._mmaps_d[i], m=self._mmaps_m, w=self._mmaps_w)
             for i, order in enumerate(self._orders)}

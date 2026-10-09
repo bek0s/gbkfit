@@ -176,7 +176,7 @@ def test_mmaps_moments(driver, zero):
     maps_shape = (len(orders),) + SPECTRA_SHAPE[1:]
     mmaps_d = memory.to_device(np.zeros(maps_shape, DTYPE))
     mmaps_m = memory.to_device(np.zeros(SPECTRA_SHAPE[1:], DTYPE))
-    mmaps_w = memory.to_device(np.zeros(maps_shape, DTYPE))
+    mmaps_w = memory.to_device(np.zeros(SPECTRA_SHAPE[1:], DTYPE))
     step = 5
     dmodel.mmaps_moments(
         (1, 1, step), (0, 0, zero),
@@ -208,7 +208,7 @@ def test_mmaps_moments(driver, zero):
                 rtol=1e-4, atol=1e-4 * np.abs(expected_map[valid]).max())
         np.testing.assert_allclose(
             result[order][valid], expected_map[valid], **tolerance)
-    result_w = memory.to_host(mmaps_w)[0]
+    result_w = memory.to_host(mmaps_w)
     assert np.isnan(result_w[~valid]).all()
     np.testing.assert_allclose(result_w[valid], expected_w[valid], rtol=1e-5)
 
@@ -230,6 +230,20 @@ def test_mmaps_moments_mask_negative_variances(driver, orders, masked):
     result = memory.to_host(mmaps_d)
     assert np.isfinite(result[:, 0, 0]).all()
     assert np.isnan(result[:, 0, 1]).all() == masked
+
+
+def test_mmaps_moments_need_weight_maps_with_weights(driver):
+    # (else the weights of the moments would be written to no array)
+    memory = Memory(driver)
+    dmodel = driver.native_class('DModel', DTYPE)()
+    cube = memory.to_device(smooth_cube(SPECTRA_SHAPE))
+    with pytest.raises(ValueError, match="mmaps_w is required"):
+        dmodel.mmaps_moments(
+            (1, 1, 1), (0, 0, 0), cube, cube, 0.1,
+            memory.to_device(np.array([0], np.int32)),
+            memory.to_device(np.zeros((1,) + SPECTRA_SHAPE[1:], DTYPE)),
+            memory.to_device(np.zeros(SPECTRA_SHAPE[1:], DTYPE)), None)
+
 
 def test_mmaps_gaussian(driver):
     # Gaussian lines are fitted exactly: their flux, velocity and
