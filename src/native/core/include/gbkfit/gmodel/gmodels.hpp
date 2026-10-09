@@ -126,16 +126,17 @@ gmodel_scube_evaluate(
 }
 
 // The fraction of the light of the voxel (x, y, z) that reaches the
-// viewer, who is beyond the last voxel along z. The opacity cube holds the
-// optical depth of each voxel. The light crosses the voxels in front of its
-// own, and the absorbers of its own voxel, which are mixed uniformly with
-// the emitters: on average, (1 - exp(-tau)) / tau of the light of a voxel
-// of optical depth tau leaves it.
+// viewer, who is before the first voxel along z (the velocities along +z
+// recede from the viewer). The opacity cube holds the optical depth of
+// each voxel. The light crosses the voxels in front of its own, and the
+// absorbers of its own voxel, which are mixed uniformly with the
+// emitters: on average, (1 - exp(-tau)) / tau of the light of a voxel of
+// optical depth tau leaves it.
 template<typename T> constexpr T
 gmodel_attenuation(int x, int y, int z, const T* opacity, const int* size)
 {
     T tau_front = 0;
-    for (int oz = z + 1; oz < size[2]; ++oz)
+    for (int oz = 0; oz < z; ++oz)
         tau_front += opacity[index_3d_to_1d(x, y, oz, size[0], size[1])];
     T tau_own = opacity[index_3d_to_1d(x, y, z, size[0], size[1])];
     T own = tau_own != 0 ? -std::expm1(-tau_own) / tau_own : T{1};

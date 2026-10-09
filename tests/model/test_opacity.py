@@ -147,6 +147,48 @@ def test_monte_carlo_opacity_mixtures(driver, evaluate_models):
     np.testing.assert_allclose(mcdisk.sum(), smdisk.sum(), rtol=1e-2)
 
 
+def test_the_near_side_is_where_outflows_approach(driver, evaluate_models):
+    # A thick disk with an outflow and a thin layer of absorbers at its
+    # midplane. Along the lines of sight of the near half of the disk, its
+    # light behind the absorbers comes from closer to the centre (it is
+    # brighter) than in the far half: the near half is the more absorbed.
+    # Its outflow approaches the viewer (negative velocities).
+    nodes = list(range(0, 16, 2))
+    disk = dict(DISK, rnodes=nodes)
+    gmodel = dict(type='kinematics_3d', components=[dict(
+        disk, bptraits=dict(type='exponential'),
+        bhtraits=dict(type='sech2'),
+        vptraits=dict(type='nw_rad_uniform'),
+        dptraits=dict(type='uniform'))])
+    properties = dict(
+        vsys=0, xpos=0, ypos=0, posa=0, incl=60, bpt_a=1, bpt_s=4,
+        bht_s=1, vpt_vr=[50.0] * len(nodes), dpt_a=20)
+
+    def evaluate(gmodel, properties):
+        model = dict(
+            driver=dict(type=driver.type()),
+            dmodel=dict(type='scube', size=[32, 32, 41], step=[1, 1, 10]),
+            gmodel=gmodel)
+        data, _ = evaluate_models([model], properties)
+        return data[0]['scube']['d']
+    clear = evaluate(gmodel, properties)
+    dusty = evaluate(
+        gmodel | dict(opacity_components=[dict(
+            disk, optraits=dict(type='exponential'),
+            ohtraits=dict(type='sech2'))]),
+        properties | dict(
+            ocmp_xpos=0, ocmp_ypos=0, ocmp_posa=0, ocmp_incl=60,
+            ocmp_opt_a=2.0, ocmp_opt_s=4, ocmp_oht_s=0.2))
+    # The halves of the disk on either side of its major axis (x = 0)
+    halves = (slice(4, 14), slice(18, 28))
+    velocity = np.arange(-20, 21) * 10.0
+    transmitted = [dusty[:, :, h].sum() / clear[:, :, h].sum() for h in halves]
+    mean_velocity = [
+        np.sum(velocity[:, None, None] * clear[:, :, h]) / clear[:, :, h].sum()
+        for h in halves]
+    near, far = np.argsort(transmitted)
+    assert mean_velocity[near] < 0 < mean_velocity[far]
+
 def image_and_optical_depth(driver, evaluate_models, opacity, step_z):
     """
     The image of an inclined thick disk whose absorbers have the same
