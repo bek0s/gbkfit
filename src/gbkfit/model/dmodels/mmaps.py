@@ -142,14 +142,10 @@ class DModelMMaps(DModel):
                 f"set the mask_cutoff to a value greater or equal to 0")
         if (psf or lsf) and mask_cutoff == 0:
             _log.warning(
-                "mask_cutoff is set to 0 either by default or by choice; "
-                "fft-based convolution will be performed on the model "
-                "because psf and/or lsf were provided; "
-                "fft-based convolution can result in noise in the model; "
-                "extracting moments from noisy low-SNR spectra can be "
-                "erroneous and generate artefacts on the resulting maps; "
-                "because of this it is highly recommended to enable masking "
-                "by providing a value for mask_cutoff greater than 0")
+                "mask_cutoff is 0, but a psf or lsf is given: the fft-based "
+                "convolution leaves noise in the faint parts of the model, "
+                "whose moments can give artefacts in the maps; a "
+                "mask_cutoff greater than 0 is highly recommended")
         self._orders = orders
         self._dcube = _dcube.DCube(
             size, step, rpix, rval, rota, scale, psf, lsf,
@@ -233,8 +229,7 @@ class DModelMMaps(DModel):
         gmodel = self._gmodel
         dcube = self._dcube
         backend = self._backend
-        # Clear DCube arrays
-        # todo: investigate if this step can be skipped
+        # The gmodel adds to the data cube, so clear it
         driver.mem_fill(dcube.scratch_dcube(), 0)
         # Evaluate gmodel on DModel's arrays
         gmodel.evaluate_scube(

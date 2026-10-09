@@ -36,5 +36,4 @@ class DatasetMMaps(Dataset):
         mmaps = copy.deepcopy(locals())
         mmaps.pop('self')
         mmaps.pop('__class__')
-        # TODO: validate wcs
         super().__init__({k: v for k, v in mmaps.items() if v is not None})

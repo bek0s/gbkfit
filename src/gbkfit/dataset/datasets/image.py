@@ -28,5 +28,4 @@ class DatasetImage(Dataset):
         return _detail.dump_dataset_common(self, **kwargs)
 
     def __init__(self, image):
-        # TODO: validate wcs
         super().__init__(dict(image=image))

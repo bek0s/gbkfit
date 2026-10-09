@@ -136,8 +136,7 @@ class DModelLSlit(DModel):
         dcube = self._dcube
         has_mcube = dcube.mcube() is not None
         has_wcube = dcube.wcube() is not None
-        # Clear DCube arrays
-        # todo: investigate if this step can be skipped
+        # The gmodel adds to the data cube, so clear it
         driver.mem_fill(dcube.scratch_dcube(), 0)
         # Evaluate gmodel on DCube's arrays
         gmodel.evaluate_scube(
