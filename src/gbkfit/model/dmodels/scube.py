@@ -76,6 +76,8 @@ class DModelSCube(DModel):
         self._dcube = _dcube.DCube(
             size, step, rpix, rval, rota, scale, psf, lsf,
             smooth_weights, mask_cutoff, mask_apply, dtype)
+        # The plan of the cube, made by _prepare_impl()
+        self._dcube_plan = None
 
     def keys(self):
         return ['scube']
@@ -111,15 +113,15 @@ class DModelSCube(DModel):
         return self._dcube.dtype()
 
     def _prepare_impl(self, gmodel):
-        self._dcube.prepare(self._driver, gmodel.has_weights())
-        dcube = self._dcube
+        self._dcube_plan = self._dcube.plan(
+            self._driver, gmodel.has_weights())
         self._gmodel_plan = gmodel.plan(
-            self._driver, dcube.scratch_grid(), gmodel.has_weights(),
-            dcube.dtype())
+            self._driver, self._dcube_plan.scratch_grid(),
+            gmodel.has_weights(), self._dcube.dtype())
 
     def _evaluate_impl(self, params, out_dmodel_extra, out_gmodel_extra):
         driver = self._driver
-        dcube = self._dcube
+        dcube = self._dcube_plan
         has_mcube = dcube.mcube() is not None
         has_wcube = dcube.wcube() is not None
         # The gmodel adds to the data cube, so clear it

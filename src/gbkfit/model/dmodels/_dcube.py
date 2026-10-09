@@ -58,25 +58,13 @@ class DCube:
         # high-res one, with their spectral axis last
         self._grid_lo = fitsutils.Grid(
             size, fitsutils.Coords(step, rpix, rval, rota), 2)
-        self._grid_hi = None
-        self._edge_hi = None
         self._scale = scale
-        self._dcube_lo = None
-        self._dcube_hi = None
-        self._wcube_lo = None
-        self._wcube_hi = None
-        self._mcube_lo = None
-        self._pcube_hi = None
         self._psf = psf
         self._lsf = lsf
-        self._has_weights = None
         self._smooth_weights = smooth_weights
         self._mask_cutoff = mask_cutoff
         self._mask_apply = mask_apply
         self._dtype = dtype
-        self._driver = None
-        self._backend_fft = None
-        self._backend_dmodel = None
 
     def grid(self) -> fitsutils.Grid:
         return self._grid_lo
@@ -102,27 +90,6 @@ class DCube:
     def scale(self) -> tuple[int, int, int]:
         return self._scale
 
-    def dcube(self) -> Any:
-        return self._dcube_lo
-
-    def wcube(self) -> Any:
-        return self._wcube_lo
-
-    def mcube(self) -> Any:
-        return self._mcube_lo
-
-    def scratch_grid(self) -> fitsutils.Grid:
-        return self._grid_hi
-
-    def scratch_edge(self) -> tuple[int, int, int]:
-        return self._edge_hi
-
-    def scratch_dcube(self) -> Any:
-        return self._dcube_hi
-
-    def scratch_wcube(self) -> Any:
-        return self._wcube_hi
-
     def psf(self) -> PSF | None:
         return self._psf
 
@@ -141,16 +108,33 @@ class DCube:
     def dtype(self) -> np.dtype:
         return self._dtype
 
-    def prepare(self, driver: Driver, has_weights: bool) -> None:
+    def plan(self, driver: Driver, has_weights: bool) -> 'DCubePlan':
+        """
+        The evaluation of the cube on the given driver, with weights if
+        has_weights: its high-res grid, which depends on the FFT of the
+        driver, and its memory.
+        """
+        return DCubePlan(self, driver, has_weights)
+
+
+class DCubePlan:
+    """
+    The evaluation of a DCube on a driver: the high-res (scratch) cube the
+    gmodel adds to, the low-res cube of the data, and their weights, mask
+    and PSF/LSF cube.
+    """
+
+    def __init__(
+            self, dcube: 'DCube', driver: Driver, has_weights: bool):
 
         # Convenience variables
-        size_lo = self.size()
-        step_lo = self.step()
-        rpix_lo = self.rpix()
-        scale = self.scale()
-        psf = self.psf()
-        lsf = self.lsf()
-        dtype = self.dtype()
+        size_lo = dcube.size()
+        step_lo = dcube.step()
+        rpix_lo = dcube.rpix()
+        scale = dcube.scale()
+        psf = dcube.psf()
+        lsf = dcube.lsf()
+        dtype = dcube.dtype()
 
         # Use the native fft library
         backend_fft = driver.fft(dtype)
@@ -192,7 +176,7 @@ class DCube:
         rpix_hi = tuple(
             (rpix_lo[i] + 0.5) * scale[i] - 0.5 + edge_hi[i] for i in range(3))
         grid_hi = fitsutils.Grid(
-            tuple(size_hi), self._grid_lo.coords._replace(
+            tuple(size_hi), dcube.grid().coords._replace(
                 step=step_hi, rpix=rpix_hi), 2)
 
         # The shape of the arrays created below are the reversed size
@@ -204,6 +188,7 @@ class DCube:
         spec_size_hi = size_hi[2]
 
         # Create high-res psf/lsf cube, if psf/lsf was provided
+        self._pcube_hi = None
         # The psf cube will be used for the fft-based convolution
         if psf or lsf:
             # Create separate high-res psf/lsf images
@@ -212,7 +197,7 @@ class DCube:
             offset_hi = gbkfit.math.is_odd(size_hi) - 1
             psf_offset_hi = offset_hi[:2]
             lsf_offset_hi = offset_hi[2]
-            psf_args = (spat_step_hi, spat_size_hi, psf_offset_hi, self.rota())
+            psf_args = (spat_step_hi, spat_size_hi, psf_offset_hi, dcube.rota())
             lsf_args = (spec_step_hi, spec_size_hi, lsf_offset_hi)
             psf_hi = psf.asarray(*psf_args) if psf \
                 else PSFPoint().asarray(*psf_args)
@@ -248,16 +233,39 @@ class DCube:
         # Create low-res mask cube if requested.
         # There is no high-res mask cube because masking is always done
         # on the low-res cubes.
-        if self._mask_cutoff is not None:
+        self._mcube_lo = None
+        if dcube.mask_cutoff() is not None:
             self._mcube_lo = driver.mem_alloc_d(shape_lo, dtype)
             driver.mem_fill(self._mcube_lo, 1)
 
+        self._dcube = dcube
         self._grid_hi = grid_hi
         self._edge_hi = edge_hi
         self._has_weights = has_weights
         self._driver = driver
         self._backend_fft = backend_fft
         self._backend_dmodel = driver.native_class('DModel', dtype)()
+
+    def scratch_grid(self) -> fitsutils.Grid:
+        return self._grid_hi
+
+    def scratch_edge(self) -> tuple[int, int, int]:
+        return self._edge_hi
+
+    def scratch_dcube(self) -> Any:
+        return self._dcube_hi
+
+    def scratch_wcube(self) -> Any:
+        return self._wcube_hi
+
+    def dcube(self) -> Any:
+        return self._dcube_lo
+
+    def wcube(self) -> Any:
+        return self._wcube_lo
+
+    def mcube(self) -> Any:
+        return self._mcube_lo
 
     def evaluate(
             self,
@@ -273,16 +281,17 @@ class DCube:
         """
 
         # Convenience variables
-        step_lo = self.step()
+        dcube = self._dcube
+        step_lo = dcube.step()
         step_hi = self.scratch_grid().coords.step
         spat_step_lo = (step_lo[0], step_lo[1])
         spec_step_lo = step_lo[2]
         spat_step_hi = (step_hi[0], step_hi[1])
         spec_step_hi = step_hi[2]
         edge_hi = self._edge_hi
-        scale = self._scale
-        psf = self._psf
-        lsf = self._lsf
+        scale = dcube.scale()
+        psf = dcube.psf()
+        lsf = dcube.lsf()
         dcube_lo = self._dcube_lo
         dcube_hi = self._dcube_hi
         wcube_lo = self._wcube_lo
@@ -290,8 +299,8 @@ class DCube:
         mcube_lo = self._mcube_lo
         pcube_hi = self._pcube_hi
         has_weights = self._has_weights
-        mask_cutoff = self._mask_cutoff
-        mask_apply = self._mask_apply
+        mask_cutoff = dcube.mask_cutoff()
+        mask_apply = dcube.mask_apply()
         driver = self._driver
         backend_fft = self._backend_fft
         backend_dmodel = self._backend_dmodel
@@ -300,7 +309,7 @@ class DCube:
         # The weights are only smoothed if requested.
         if psf or lsf:
             backend_fft.fft_convolve_cached(dcube_hi, pcube_hi)
-            if has_weights and self._smooth_weights:
+            if has_weights and dcube.smooth_weights():
                 backend_fft.fft_convolve_cached(wcube_hi, pcube_hi)
 
         # Perform downscaling, which also removes the padding.
@@ -321,7 +330,7 @@ class DCube:
         # Output extra information
         if out_extra is not None:
             def lo(data):
-                return extra_lo(driver.mem_copy_d2h(data), self.grid())
+                return extra_lo(driver.mem_copy_d2h(data), dcube.grid())
 
             def hi(data):
                 return extra_hi(driver.mem_copy_d2h(data), self.scratch_grid())
@@ -333,8 +342,8 @@ class DCube:
                 out_extra.update(wcube_lo=lo(wcube_lo), wcube_hi=hi(wcube_hi))
             if psf:
                 out_extra.update(
-                    psf_lo=psf.asarray(spat_step_lo, rota=self.rota()),
-                    psf_hi=psf.asarray(spat_step_hi, rota=self.rota()))
+                    psf_lo=psf.asarray(spat_step_lo, rota=dcube.rota()),
+                    psf_hi=psf.asarray(spat_step_hi, rota=dcube.rota()))
             if lsf:
                 out_extra.update(
                     lsf_lo=lsf.asarray(spec_step_lo),
