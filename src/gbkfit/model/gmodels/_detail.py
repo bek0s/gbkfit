@@ -4,7 +4,7 @@ import logging
 import numpy as np
 
 from gbkfit.math import interpolation
-from gbkfit.utils import iterutils, parseutils
+from gbkfit.utils import iterutils, numutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
 from . import _disk, traits
 
@@ -49,8 +49,8 @@ def _parse_component_node_args(
         raise RuntimeError(f"at least two {prefix}nodes must be provided")
     if not iterutils.is_ascending(nodes):
         raise RuntimeError(f"{prefix}nodes must be ascending")
-    if not iterutils.all_positive(nodes):
-        raise RuntimeError(f"{prefix}nodes must be positive")
+    if not numutils.all_positive(nodes, include_zero=True):
+        raise RuntimeError(f"{prefix}nodes must not be negative")
     if not iterutils.all_unique(nodes):
         raise RuntimeError(f"{prefix}nodes must be unique")
     if step is None:

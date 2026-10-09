@@ -181,7 +181,7 @@ move_parser = parseutils.TypedParser(FitterEmceeMove, [
 def load_moves_with_weights(
         info: Mapping[str, Any] | Sequence[Mapping[str, Any]]
 ) -> tuple[tuple[FitterEmceeMove, float], ...]:
-    info = iterutils.tuplify(info, False)
+    info = iterutils.tuplify(info)
     weights = [m.pop('weight', 1.0) for m in info]
     moves = move_parser.load_many(info)
     return tuple(zip(moves, weights))

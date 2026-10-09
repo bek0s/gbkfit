@@ -17,7 +17,7 @@ from astropy.io import fits
 
 import gbkfit.dataset
 import gbkfit.model
-from gbkfit.utils import iterutils
+from gbkfit.utils import iterutils, numutils
 
 _log = logging.getLogger(__name__)
 
@@ -109,7 +109,7 @@ def dump_result(output_dir, result):
     # Dump parameter names
 
     # Dump parameter configuration
-    # parameters = iterutils.nativify(parameters)
+    # parameters = numutils.nativify(parameters)
     # filename_root = os.path.join(output_dir, 'parameters')
     # with open(f'{filename_root}.json', 'w+') as f:
     #     json.dump(parameters, f, indent=2)
@@ -128,7 +128,7 @@ def dump_result(output_dir, result):
         root_info['datasets'].append(gbkfit.dataset.dataset_parser.dump(
             dataset, prefix=prefix, dump_path=False))
 
-    root_info = iterutils.nativify(root_info)
+    root_info = numutils.nativify(root_info)
     filename_root = os.path.join(output_dir, 'result')
     with open(f'{filename_root}.json', 'w+') as f:
         json.dump(root_info, f, indent=2)
@@ -303,7 +303,7 @@ def make_fitter_result(
         posterior = None
 
     # Ensure solutions are iterable for convenience
-    solutions = iterutils.tuplify(solutions, False)
+    solutions = iterutils.tuplify(solutions)
 
     # Process the global posterior
     if posterior:

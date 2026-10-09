@@ -14,7 +14,7 @@ import gbkfit.driver
 import gbkfit.model
 import gbkfit.objective
 import gbkfit.params
-from gbkfit.utils import fitsutils, gridutils, iterutils
+from gbkfit.utils import fitsutils, gridutils, numutils
 from gbkfit.utils.parseutils import config_path
 from . import _detail
 
@@ -107,7 +107,7 @@ def eval_(
 
     exploded_param_values = {}
     param_values = params.evaluate(out_exploded_params=exploded_param_values)
-    params_info = iterutils.nativify(dict(
+    params_info = numutils.nativify(dict(
         params=param_values,
         eparams=exploded_param_values))
     filename = os.path.join(output_dir, 'gbkfit_eval_params')
@@ -195,7 +195,7 @@ def eval_(
     #             median=median)})
     #
     # filename = os.path.join(output_dir, 'gbkfit_eval_outputs')
-    # outputs_stats = iterutils.nativify(outputs_stats)
+    # outputs_stats = numutils.nativify(outputs_stats)
     # _detail.dump_dict(json, yaml, outputs_stats, filename)
 
     #
@@ -222,7 +222,7 @@ def eval_(
                 objective.log_likelihood(param_values)
                 objective.residual_scalar(param_values, squared=True)
         _log.info("calculating timing statistics...")
-        time_stats = iterutils.nativify({
+        time_stats = numutils.nativify({
             name: stats.to_dict()
             for name, stats in group.timers().stats().items()})
         _log.info(pd.DataFrame.from_dict(time_stats, orient='index'))
@@ -252,7 +252,7 @@ def _write_outputs(output_dir, outputs):
             fits.writeto(filename, value, overwrite=True)
         elif isinstance(value, (bool, int, float, str, list, tuple, dict,
                                 np.generic)):
-            values[name] = iterutils.nativify(value)
+            values[name] = numutils.nativify(value)
         else:
             raise TypeError(
                 f"output {name} has an unsupported type: "

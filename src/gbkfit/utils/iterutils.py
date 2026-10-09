@@ -1,119 +1,194 @@
+"""
+Helpers for sequences, mappings and other iterables.
 
-import collections.abc
+A sequence here is a list, a tuple or a one-dimensional numpy array (not
+a string), and a mapping is a dict, as in configurations.
+"""
+
+import collections
 import copy
+import itertools
 from collections.abc import (
-    Callable, Iterable, Mapping, MutableMapping, MutableSequence, Sequence
-)
+    Callable, Iterable, Mapping, MutableMapping, MutableSequence, Sequence)
 from typing import Any, Literal
 
 import numpy as np
 
 
-def is_mapping(x: Any, strict: bool = True) -> bool:
-    """
-    Check if the given object is a mapping type.
+__all__ = [
+    'all_unique',
+    'duplicates',
+    'extract_subdict',
+    'extract_sublist',
+    'is_ascending',
+    'is_descending',
+    'is_mapping',
+    'is_sequence',
+    'is_sequence_of_type',
+    'is_sequence_or_mapping',
+    'is_sorted',
+    'listify',
+    'make_list',
+    'make_tuple',
+    'merge_with_prefixes',
+    'normalize_index',
+    'normalize_indices',
+    'remove_from_list',
+    'remove_from_list_if',
+    'remove_from_mapping_by_key',
+    'remove_from_mapping_by_value',
+    'remove_from_mapping_if',
+    'rename_key',
+    'replace_in_sequence',
+    'setify',
+    'sorted_by_order',
+    'split_valid_indices',
+    'traverse_and_replace',
+    'tuplify'
+]
 
-    In strict mode, the function returns True only for `dict` and
-    `collections.OrderedDict`. In relaxed mode, it returns True for any
-    object that is an instance of `collections.abc.Mapping`.
+
+def is_mapping(x: Any) -> bool:
     """
-    mapping_types = (dict, collections.OrderedDict) if strict \
-        else collections.abc.Mapping
-    return isinstance(x, mapping_types)
+    Check whether an object is a mapping (a dict).
+
+    Parameters
+    ----------
+    x : Any
+        An object.
+
+    Returns
+    -------
+    bool
+        Whether it is a dict.
+    """
+    return isinstance(x, dict)
 
 
-def is_sequence(x: Any, strict: bool = True) -> bool:
+def is_sequence(x: Any) -> bool:
     """
-    Check if the given object is a sequence.
+    Check whether an object is a sequence.
 
-    In strict mode, the function returns True only for `list`, `tuple`,
-    and 1-dimensional `numpy.ndarray`. In relaxed mode, it returns True
-    for any object that is an instance of `collections.abc.Sequence`
-    or a 1-dimensional `numpy.ndarray`.
+    Parameters
+    ----------
+    x : Any
+        An object.
+
+    Returns
+    -------
+    bool
+        Whether it is a list, a tuple or a one-dimensional numpy array.
     """
-    is_list = isinstance(x, list)
-    is_tuple = isinstance(x, tuple)
     is_array = isinstance(x, np.ndarray) and x.ndim == 1
-    is_abc_sequence = isinstance(x, collections.abc.Sequence)
-    return (is_list or is_tuple or is_array) \
-        if strict else (is_abc_sequence or is_array)
+    return isinstance(x, (list, tuple)) or is_array
 
 
-def is_sequence_or_mapping(x: Any, strict: bool = True) -> bool:
+def is_sequence_or_mapping(x: Any) -> bool:
     """
-    Check if the given object is either a sequence or a mapping.
+    Check whether an object is a sequence or a mapping.
 
-    See Also
-    --------
-    is_sequence : Check if an object is a sequence.
-    is_mapping : Check if an object is a mapping.
+    Parameters
+    ----------
+    x : Any
+        An object.
+
+    Returns
+    -------
+    bool
+        Whether it is a sequence or a mapping (see is_sequence and
+        is_mapping).
     """
-    return is_sequence(x, strict) or is_mapping(x, strict)
+    return is_sequence(x) or is_mapping(x)
 
 
-def listify(
-        x: Any,
-        none_is_val: bool = True,
-        strict_sequence: bool = True
-) -> list[Any]:
+def is_sequence_of_type(x: Any, type_: type) -> bool:
     """
-    Convert an object to a list.
+    Check whether an object is a sequence of items of a type.
 
-    If the object is already a sequence, it is converted to a list
-    of its elements. If the object is not a sequence, it is wrapped
-    into a single-item list.
+    Parameters
+    ----------
+    x : Any
+        An object.
+    type_ : type
+        The type of the items.
+
+    Returns
+    -------
+    bool
+        Whether it is a sequence (see is_sequence) whose items are all
+        instances of the type.
     """
-    if x is None and not none_is_val:
+    return is_sequence(x) and all(isinstance(item, type_) for item in x)
+
+
+def listify(x: Any) -> list[Any]:
+    """
+    Return an object as a list.
+
+    Parameters
+    ----------
+    x : Any
+        An object.
+
+    Returns
+    -------
+    list
+        The items of a sequence (see is_sequence), no items for None, or
+        else the object as the only item.
+    """
+    if x is None:
         return []
-    return list([i for i in x] if is_sequence(x, strict_sequence) else [x])
+    return list(x) if is_sequence(x) else [x]
 
 
-def tuplify(
-        x: Any,
-        none_is_val: bool = True,
-        strict_sequence: bool = True
-) -> tuple[Any, ...]:
+def tuplify(x: Any) -> tuple[Any, ...]:
     """
-    Convert an object to a tuple.
+    Return an object as a tuple (see listify).
 
-    If the object is already a sequence, it is converted into a tuple
-    of its elements. If the object is not a sequence, it is wrapped
-    into a single-item tuple.
+    Parameters
+    ----------
+    x : Any
+        An object.
+
+    Returns
+    -------
+    tuple
+        The items of a sequence, no items for None, or else the object
+        as the only item.
     """
-    return tuple(listify(x, none_is_val, strict_sequence))
+    return tuple(listify(x))
 
 
-def setify(
-        x: Any,
-        none_is_val: bool = True,
-        strict_sequence: bool = True
-) -> set[Any]:
+def setify(x: Any) -> set[Any]:
     """
-    Convert an object to a set.
+    Return an object as a set (see listify).
 
-    This function ensures that the input object is returned as a set.
-    If the object is a set, a copy of it is returned. If the object is
-    not a set or sequence, it is wrapped into a single-item set.
+    Parameters
+    ----------
+    x : Any
+        An object.
+
+    Returns
+    -------
+    set
+        The items of a set or of a sequence, no items for None, or else
+        the object as the only item.
     """
-    if isinstance(x, set):
-        return set(x)
-    return set(listify(x, none_is_val, strict_sequence))
+    return set(x) if isinstance(x, set) else set(listify(x))
 
 
-def _make_seq(
-        shape: Sequence[int],
-        value: Any, type_: type[Any],
+def _make_sequence(
+        shape: tuple[int, ...],
+        value: Any,
+        type_: type,
         deepcopy: bool
 ) -> Any:
-    """
-    Recursively creates a nested sequence based on the specified shape.
-    """
-    if shape:
-        return type_([
-            _make_seq(shape[1:], value, type_, deepcopy)
-            for _ in range(shape[0])
-        ])
-    return copy.deepcopy(value) if deepcopy else value
+    """Return a nested sequence of the given shape, type and value."""
+    if not shape:
+        return copy.deepcopy(value) if deepcopy else value
+    return type_(
+        _make_sequence(shape[1:], value, type_, deepcopy)
+        for _ in range(shape[0]))
 
 
 def make_list(
@@ -122,33 +197,73 @@ def make_list(
         deepcopy: bool = True
 ) -> list[Any]:
     """
-    Create a nested list based on the specified shape and filled with
-    the specified value.
+    Return a list, nested for several dimensions, filled with a value.
+
+    Parameters
+    ----------
+    shape : int or Sequence[int]
+        The length of the list, or of each level of the nested lists.
+    value : Any
+        The value of the items.
+    deepcopy : bool
+        Whether each item is a deep copy of the value (e.g. a dict of its
+        own), or the value itself.
+
+    Returns
+    -------
+    list
+        The list.
     """
-    shape = tuplify(shape, none_is_val=False)
-    return _make_seq(shape, value, list, deepcopy)
+    return _make_sequence(tuplify(shape), value, list, deepcopy)
 
 
 def make_tuple(
         shape: int | Sequence[int],
         value: Any,
         deepcopy: bool = True
-) -> tuple[Any]:
+) -> tuple[Any, ...]:
     """
-    Create a nested tuple based on the specified shape and filled with
-    the specified value.
+    Return a tuple, nested for several dimensions, filled with a value.
+
+    Parameters
+    ----------
+    shape : int or Sequence[int]
+        The length of the tuple, or of each level of the nested tuples.
+    value : Any
+        The value of the items.
+    deepcopy : bool
+        Whether each item is a deep copy of the value, or the value
+        itself.
+
+    Returns
+    -------
+    tuple
+        The tuple.
     """
-    shape = tuplify(shape, none_is_val=False)
-    return _make_seq(shape, value, tuple, deepcopy)
+    return _make_sequence(tuplify(shape), value, tuple, deepcopy)
 
 
-def replace_item_in_sequence(
+def replace_in_sequence(
         x: MutableSequence[Any],
         old_value: Any,
         new_value: Any
 ) -> MutableSequence[Any]:
     """
-    Replace all occurrences of old_value with new_value, in-place.
+    Replace every item of a sequence equal to a value, in place.
+
+    Parameters
+    ----------
+    x : MutableSequence
+        A sequence.
+    old_value : Any
+        The value to replace.
+    new_value : Any
+        The value to replace it with.
+
+    Returns
+    -------
+    MutableSequence
+        The sequence.
     """
     for i, value in enumerate(x):
         if value == old_value:
@@ -156,13 +271,27 @@ def replace_item_in_sequence(
     return x
 
 
-def rename_key_in_mapping(
+def rename_key(
         x: MutableMapping[Any, Any],
         old_key: Any,
         new_key: Any
 ) -> MutableMapping[Any, Any]:
     """
-    Rename key old_key with the key new_key in a mapping, in-place.
+    Rename a key of a mapping, in place.
+
+    Parameters
+    ----------
+    x : MutableMapping
+        A mapping.
+    old_key : Any
+        The key to rename (it must exist).
+    new_key : Any
+        Its new name.
+
+    Returns
+    -------
+    MutableMapping
+        The mapping.
     """
     x[new_key] = x.pop(old_key)
     return x
@@ -173,9 +302,21 @@ def remove_from_list_if(
         predicate: Callable[[Any], bool]
 ) -> MutableSequence[Any]:
     """
-    Remove elements from the sequence in-place based on a predicate function.
+    Remove the items of a sequence that meet a condition, in place.
+
+    Parameters
+    ----------
+    x : MutableSequence
+        A sequence.
+    predicate : Callable[[Any], bool]
+        The condition, given an item.
+
+    Returns
+    -------
+    MutableSequence
+        The sequence.
     """
-    x[:] = [i for i in x if not predicate(i)]
+    x[:] = [item for item in x if not predicate(item)]
     return x
 
 
@@ -184,9 +325,21 @@ def remove_from_list(
         value: Any
 ) -> MutableSequence[Any]:
     """
-    Remove all occurrences in-place of a specified value from the sequence.
+    Remove the items of a sequence equal to a value, in place.
+
+    Parameters
+    ----------
+    x : MutableSequence
+        A sequence.
+    value : Any
+        The value to remove.
+
+    Returns
+    -------
+    MutableSequence
+        The sequence.
     """
-    return remove_from_list_if(x, lambda i: i == value)
+    return remove_from_list_if(x, lambda item: item == value)
 
 
 def remove_from_mapping_if(
@@ -194,11 +347,23 @@ def remove_from_mapping_if(
         predicate: Callable[[Any, Any], bool]
 ) -> MutableMapping[Any, Any]:
     """
-    Remove keys from the mapping in-place based on a predicate function.
+    Remove the items of a mapping that meet a condition, in place.
+
+    Parameters
+    ----------
+    x : MutableMapping
+        A mapping.
+    predicate : Callable[[Any, Any], bool]
+        The condition, given a key and its value.
+
+    Returns
+    -------
+    MutableMapping
+        The mapping.
     """
-    for k in list(x.keys()):
-        if predicate(k, x[k]):
-            del x[k]
+    for key in list(x):
+        if predicate(key, x[key]):
+            del x[key]
     return x
 
 
@@ -207,9 +372,22 @@ def remove_from_mapping_by_key(
         key: Any
 ) -> MutableMapping[Any, Any]:
     """
-    Remove a key from the mapping in-place.
+    Remove a key of a mapping, if it has it, in place.
+
+    Parameters
+    ----------
+    x : MutableMapping
+        A mapping.
+    key : Any
+        The key to remove.
+
+    Returns
+    -------
+    MutableMapping
+        The mapping.
     """
-    return remove_from_mapping_if(x, lambda k, v: k == key)
+    x.pop(key, None)
+    return x
 
 
 def remove_from_mapping_by_value(
@@ -217,7 +395,20 @@ def remove_from_mapping_by_value(
         value: Any
 ) -> MutableMapping[Any, Any]:
     """
-    Remove all key-value pairs from the mapping in-place based on a value.
+    Remove the items of a mapping whose value is equal to a value, in
+    place.
+
+    Parameters
+    ----------
+    x : MutableMapping
+        A mapping.
+    value : Any
+        The value to remove.
+
+    Returns
+    -------
+    MutableMapping
+        The mapping.
     """
     return remove_from_mapping_if(x, lambda k, v: v == value)
 
@@ -227,9 +418,26 @@ def merge_with_prefixes(
         prefixes: list[str]
 ) -> tuple[dict[str, Any], tuple[dict[str, str], ...]]:
     """
-    Merge dicts with their keys prefixed by the prefix of each dict. Return
-    the merged dict, and the mapping of the keys of each dict to their
-    prefixed keys. Raise RuntimeError if a prefixed key is repeated.
+    Merge dicts, with the keys of each prefixed by its prefix.
+
+    Parameters
+    ----------
+    dicts : list[dict[str, Any]]
+        The dicts.
+    prefixes : list[str]
+        The prefix of each dict.
+
+    Returns
+    -------
+    dict[str, Any]
+        The merged dict.
+    tuple[dict[str, str], ...]
+        For each dict, its keys and their prefixed keys.
+
+    Raises
+    ------
+    RuntimeError
+        If a prefixed key is repeated.
     """
     merged = {}
     mappings = []
@@ -245,226 +453,300 @@ def merge_with_prefixes(
 
 def is_sorted(x: Sequence[Any], ascending: bool = True) -> bool:
     """
-    Check if the given sequence is sorted in the specified order.
+    Check whether a sequence is sorted (equal neighbours allowed).
+
+    Parameters
+    ----------
+    x : Sequence
+        A sequence.
+    ascending : bool
+        Whether in ascending (else descending) order.
+
+    Returns
+    -------
+    bool
+        Whether no item is after one greater (or, descending, smaller)
+        than it.
     """
-    return not any(x[i-1] > x[i] if ascending else x[i-1] < x[i]
-                   for i in range(1, len(x)))
+    if ascending:
+        return all(a <= b for a, b in itertools.pairwise(x))
+    return all(a >= b for a, b in itertools.pairwise(x))
 
 
 def is_ascending(x: Sequence[Any]) -> bool:
     """
-    Check if the elements in the sequence are in ascending order.
+    Check whether a sequence is in ascending order (see is_sorted).
+
+    Parameters
+    ----------
+    x : Sequence
+        A sequence.
+
+    Returns
+    -------
+    bool
+        Whether it is in ascending order.
     """
     return is_sorted(x, ascending=True)
 
 
 def is_descending(x: Sequence[Any]) -> bool:
     """
-    Check if the elements in the sequence are in descending order.
+    Check whether a sequence is in descending order (see is_sorted).
+
+    Parameters
+    ----------
+    x : Sequence
+        A sequence.
+
+    Returns
+    -------
+    bool
+        Whether it is in descending order.
     """
     return is_sorted(x, ascending=False)
 
 
-def all_positive(x: Iterable[Any], include_zero: bool = True) -> bool:
-    """
-    Check if all elements in the iterable are positive.
-    """
-    return all(i >= 0 if include_zero else i > 0 for i in x)
 
 
-def all_negative(x: Iterable[Any], include_zero: bool = False) -> bool:
+def duplicates(x: Iterable[Any]) -> set[Any]:
     """
-    Check if all elements in the iterable are negative.
+    Return the items that appear more than once in an iterable.
+
+    Parameters
+    ----------
+    x : Iterable
+        An iterable of hashable items.
+
+    Returns
+    -------
+    set
+        The repeated items.
     """
-    return all(i <= 0 if include_zero else i < 0 for i in x)
+    return {item for item, count in collections.Counter(x).items()
+            if count > 1}
 
 
 def all_unique(x: Iterable[Any]) -> bool:
     """
-    Check if all elements in an iterable are unique.
-    """
-    return len(get_duplicates(x)) == 0
+    Check whether no item appears more than once in an iterable.
 
+    Parameters
+    ----------
+    x : Iterable
+        An iterable of hashable items.
 
-def get_duplicates(x: Iterable[Any]) -> set[Any]:
+    Returns
+    -------
+    bool
+        Whether all the items are unique.
     """
-    Identify duplicate elements in an iterable.
-    """
-    seen = set()
-    dupes = {i for i in x if i in seen or seen.add(i)}
-    return dupes
-
-
-def is_sequence_of_type(
-        x: Sequence[Any],
-        type_: type[Any],
-        strict_sequence: bool = True
-) -> bool:
-    """
-    Check if the object is a sequence and all elements are of a type.
-    """
-    is_sequence_ = is_sequence(x, strict_sequence)
-    return is_sequence_ and all(isinstance(i, type_) for i in x)
+    return not duplicates(x)
 
 
 def extract_sublist(
         x: Sequence[Any],
-        items: Sequence[Any],
+        items: Sequence[Any]
 ) -> tuple[list[Any], list[Any]]:
     """
-    Extract a subset of items from a sequence as a dict.
+    Split items into those in a sequence and those not in it.
+
+    Parameters
+    ----------
+    x : Sequence
+        A sequence.
+    items : Sequence
+        The items to look for.
+
+    Returns
+    -------
+    list
+        The items in the sequence, in their order.
+    list
+        The items not in the sequence, in their order.
     """
-    result = []
-    missing = []
-    for item in items:
-        if item in x:
-            result.append(item)
-        else:
-            missing.append(item)
-    return result, missing
+    found = [item for item in items if item in x]
+    missing = [item for item in items if item not in x]
+    return found, missing
 
 
 def extract_subdict(
         x: Mapping[Any, Any],
-        keys: Iterable[Any],
+        keys: Iterable[Any]
 ) -> tuple[dict[Any, Any], list[Any]]:
     """
-    Extract a subset of key-value pairs from a mapping as a dict.
+    Return the items of a mapping with the given keys.
+
+    Parameters
+    ----------
+    x : Mapping
+        A mapping.
+    keys : Iterable
+        The keys to look for.
+
+    Returns
+    -------
+    dict
+        The keys found and their values, in the order of keys.
+    list
+        The keys not found, in their order.
     """
-    result = {}
-    missing = []
-    for key in keys:
-        if key in x:
-            result[key] = x[key]
-        else:
-            missing.append(key)
-    return result, missing
+    keys = list(keys)
+    found = {key: x[key] for key in keys if key in x}
+    missing = [key for key in keys if key not in x]
+    return found, missing
 
 
-def validate_sequence_indices(
+def split_valid_indices(
         indices: Sequence[int],
         length: int
 ) -> tuple[list[int], list[int]]:
     """
-    Validate indices against the bounds of a sequence.
+    Split indices into those valid for a sequence and the others.
+
+    Parameters
+    ----------
+    indices : Sequence[int]
+        The indices (negative indices count from the end).
+    length : int
+        The length of the sequence.
+
+    Returns
+    -------
+    list[int]
+        The valid indices, in their order.
+    list[int]
+        The invalid indices, in their order.
+
+    Raises
+    ------
+    ValueError
+        If the length is negative.
     """
     if length < 0:
-        raise RuntimeError("length must be non-negative")
-    valid_indices = []
-    invalid_indices = []
-    for i in indices:
-        if -length <= i < length:
-            valid_indices.append(i)
-        else:
-            invalid_indices.append(i)
-    return valid_indices, invalid_indices
+        raise ValueError(f"the length must not be negative; it is {length}")
+    valid = [i for i in indices if -length <= i < length]
+    invalid = [i for i in indices if not -length <= i < length]
+    return valid, invalid
 
 
-def unwrap_sequence_index(index: int, length: int) -> int:
+def normalize_index(index: int, length: int) -> int:
     """
-    Adjust an index to be within the bounds of a sequence.
+    Return the non-negative form of an index of a sequence.
 
-    This function takes an index and a sequence length, and adjusts the
-    index to ensure it is non-negative by adding the sequence length if
-    the index is negative. The index is then wrapped within the bounds
-    of the sequence, ensuring the resulting index is valid.
+    Parameters
+    ----------
+    index : int
+        The index (negative indices count from the end).
+    length : int
+        The length of the sequence.
+
+    Returns
+    -------
+    int
+        The index, counted from the start.
+
+    Raises
+    ------
+    ValueError
+        If the length is negative.
+    IndexError
+        If the index is outside the sequence.
     """
     if length < 0:
-        raise RuntimeError("length must be non-negative")
-    index = index if index >= 0 else index + length
-    if index < 0 or index >= length:
-        raise RuntimeError("index is out of bounds")
-    return index
+        raise ValueError(f"the length must not be negative; it is {length}")
+    if not -length <= index < length:
+        raise IndexError(
+            f"the index {index} is outside a sequence of length {length}")
+    return index + length if index < 0 else index
 
 
-def unwrap_sequence_indices(indices: Sequence[int], length: int) -> list[int]:
+def normalize_indices(indices: Sequence[int], length: int) -> list[int]:
     """
-    Adjust a list of indices to be within the bounds of a sequence.
+    Return the non-negative forms of indices of a sequence.
 
-    This function takes a sequence of indices and a sequence length,
-    and adjusts each index to ensure it is non-negative by adding the
-    sequence length if the index is negative. The indices are then
-    wrapped to ensure each one is within the bounds of the sequence.
+    Parameters
+    ----------
+    indices : Sequence[int]
+        The indices (negative indices count from the end).
+    length : int
+        The length of the sequence.
+
+    Returns
+    -------
+    list[int]
+        The indices, counted from the start (see normalize_index).
     """
-    return [unwrap_sequence_index(i, length) for i in indices]
+    return [normalize_index(i, length) for i in indices]
 
 
-def sorted_sequence(
-        x: Sequence[Any],
-        value_order: Sequence[Any],
-        on_missing_item: Literal[
-            'raise', 'start', 'end', 'discard', 'preserve'] = 'raise'
+def sorted_by_order(
+        x: Iterable[Any],
+        order: Sequence[Any],
+        on_missing: Literal['raise', 'start', 'end', 'discard'] = 'raise'
 ) -> list[Any]:
     """
-    Sort a sequence based on a custom value order.
+    Return the items of an iterable sorted in a given order of values.
+
+    Parameters
+    ----------
+    x : Iterable
+        An iterable of hashable items.
+    order : Sequence
+        The values, in their order (each once).
+    on_missing : {'raise', 'start', 'end', 'discard'}
+        What to do with the items not in the order: raise ValueError, put
+        them first or last (in their order), or leave them out.
+
+    Returns
+    -------
+    list
+        The sorted items.
+
+    Raises
+    ------
+    ValueError
+        If on_missing is unknown, if the order repeats values, or with
+        'raise', if items are not in the order.
     """
-
-    # Check for duplicates in value_order
-    if dupes := get_duplicates(value_order):
-        raise RuntimeError(f"duplicate values in value_order: {dupes}")
-
-    # Create position mapping (value => index) for value_order
-    order_map = {value: index for index, value in enumerate(value_order)}
-
-    # Raise exception on missing items in value_order
-    if on_missing_item == 'raise':
-        missing = set(x) - order_map.keys()
-        if missing:
-            raise RuntimeError(f"missing items in value_order: {missing}")
-
-    # Discard items from x if not present in value_order
-    if on_missing_item == 'discard':
-        x = [item for item in x if item in order_map]
-
-    def sort_key(item):
-        if item in order_map:
-            return 0, order_map[item]
-        if on_missing_item == 'start':
-            return -1, 0
-        if on_missing_item == 'end':
-            return 1, 0
-        if on_missing_item == 'preserve':
-            return 0, float('inf')
-        raise RuntimeError("impossible")
-
-    return sorted(x, key=sort_key)
+    choices = ('raise', 'start', 'end', 'discard')
+    if on_missing not in choices:
+        raise ValueError(
+            f"on_missing must be one of {choices}; it is {on_missing!r}")
+    if repeated := duplicates(order):
+        raise ValueError(f"the order repeats values: {list(repeated)}")
+    positions = {value: i for i, value in enumerate(order)}
+    x = list(x)
+    missing = [item for item in x if item not in positions]
+    if missing and on_missing == 'raise':
+        raise ValueError(f"these items are not in the order: {missing}")
+    if on_missing == 'discard':
+        x = [item for item in x if item in positions]
+    # (sorted is stable: the missing items keep their order)
+    missing_key = (-1, 0) if on_missing == 'start' else (1, 0)
+    return sorted(x, key=lambda item: (
+        (0, positions[item]) if item in positions else missing_key))
 
 
-def traverse_and_replace(
-        x: Any,
-        func: Callable[[Any], Any],
-        strict: bool = True
-) -> Any:
+def traverse_and_replace(x: Any, func: Callable[[Any], Any]) -> Any:
     """
-    Recursively traverse a nested structure (sequence or mapping) and
-    apply the given function to each element, but do not apply it to
-    the sequences or mappings themselves.
+    Return a nested structure with a function applied to its leaves.
+
+    Parameters
+    ----------
+    x : Any
+        A sequence or a mapping, possibly nested, or a leaf.
+    func : Callable[[Any], Any]
+        The function to apply to each leaf (an item that is neither a
+        sequence nor a mapping).
+
+    Returns
+    -------
+    Any
+        The structure, of lists and dicts, with the leaves replaced.
     """
-    if is_sequence(x, strict):
-        return [traverse_and_replace(i, func, strict) for i in x]
-    if is_mapping(x, strict):
-        return {k: traverse_and_replace(v, func, strict) for k, v in x.items()}
+    if is_sequence(x):
+        return [traverse_and_replace(item, func) for item in x]
+    if is_mapping(x):
+        return {k: traverse_and_replace(v, func) for k, v in x.items()}
     return func(x)
-
-
-def nativify(x: Any) -> Any:
-    """
-    Recursively convert NumPy data types to native Python types.
-
-    This function handles NumPy scalars (`np.integer`, `np.floating`),
-    arrays (`np.ndarray`), as well as nested sequences and mappings.
-    It ensures that all NumPy-specific types are converted to native
-    Python types like `int`, `float`, and `list`.
-    """
-    if isinstance(x, np.integer):
-        x = int(x)
-    elif isinstance(x, np.floating):
-        x = float(x)
-    # Check first because is_sequence(np.ndarray) will also return true
-    elif isinstance(x, np.ndarray):
-        x = x.tolist()
-    elif is_sequence(x):
-        x = [nativify(item) for item in x]
-    elif is_mapping(x):
-        x = {k: nativify(v) for k, v in x.items()}
-    return x

@@ -2,11 +2,17 @@
 Helpers for numbers and arrays of numbers.
 """
 
+from collections.abc import Iterable
+from typing import Any
+
 import numpy as np
 
 
 __all__ = [
-    'cumsum_from'
+    'all_negative',
+    'all_positive',
+    'cumsum_from',
+    'nativify'
 ]
 
 
@@ -64,3 +70,68 @@ def cumsum_from(
     result[origin:] = right
     result[:origin + 1] = left
     return result
+
+
+def all_positive(x: Iterable[Any], include_zero: bool = False) -> bool:
+    """
+    Check whether all the items of an iterable are positive.
+
+    Parameters
+    ----------
+    x : Iterable
+        An iterable of numbers.
+    include_zero : bool
+        Whether 0 counts as positive (i.e. check that none is negative).
+
+    Returns
+    -------
+    bool
+        Whether all the items are positive.
+    """
+    return all(i >= 0 if include_zero else i > 0 for i in x)
+
+
+def all_negative(x: Iterable[Any], include_zero: bool = False) -> bool:
+    """
+    Check whether all the items of an iterable are negative.
+
+    Parameters
+    ----------
+    x : Iterable
+        An iterable of numbers.
+    include_zero : bool
+        Whether 0 counts as negative (i.e. check that none is positive).
+
+    Returns
+    -------
+    bool
+        Whether all the items are negative.
+    """
+    return all(i <= 0 if include_zero else i < 0 for i in x)
+
+
+def nativify(x: Any) -> Any:
+    """
+    Return a nested structure with numpy values as Python values.
+
+    Parameters
+    ----------
+    x : Any
+        A list, tuple or dict, possibly nested, or a value.
+
+    Returns
+    -------
+    Any
+        The structure, of lists and dicts, with numpy arrays as lists and
+        numpy scalars (e.g. numbers, bools, strings) as their Python
+        values, as JSON and YAML can write them.
+    """
+    if isinstance(x, np.ndarray):
+        return x.tolist()
+    if isinstance(x, np.generic):
+        return x.item()
+    if isinstance(x, (list, tuple)):
+        return [nativify(item) for item in x]
+    if isinstance(x, dict):
+        return {key: nativify(value) for key, value in x.items()}
+    return x
