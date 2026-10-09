@@ -22,8 +22,9 @@ class Observation(parseutils.BasicSerializable):
     A gmodel seen through an instrument as an observable, evaluated on a
     driver, and optionally its data, compared with the model under a
     likelihood. It names its gmodel (required only when there are
-    several), and can have a name, which then prefixes its extra outputs
-    instead of its position (see ObservationGroup).
+    several) and, optionally, the components of the gmodel it sees (e.g.
+    the tracer of its line), and can have a name, which then prefixes its
+    extra outputs instead of its position (see ObservationGroup).
     """
 
     @classmethod
@@ -56,12 +57,14 @@ class Observation(parseutils.BasicSerializable):
     def dump(self, **dump_kwargs) -> dict[str, Any]:
         name = dict(name=self._name) if self._name is not None else {}
         gmodel = dict(gmodel=self._gmodel) if self._gmodel is not None else {}
+        components = {} if self._components is None else dict(
+            components=list(self._components))
         # The form of the data is that of the observable: no type
         data = {} if self._data is None else dict(
             data={k: v for k, v in self._data.dump(**dump_kwargs).items()
                   if k != 'type'},
             likelihood=likelihood_parser.dump(self._likelihood))
-        return name | gmodel | data | dict(
+        return name | gmodel | components | data | dict(
             driver=driver_parser.dump(self._driver),
             instrument=instrument_parser.dump(self._instrument),
             observable=observable_parser.dump(
@@ -75,6 +78,7 @@ class Observation(parseutils.BasicSerializable):
             observable: Observable,
             instrument: Instrument | None = None,
             gmodel: str | None = None,
+            components: Sequence[str] | None = None,
             data: Dataset | None = None,
             likelihood: Likelihood | None = None,
             scale: Sequence[int] | None = None,
@@ -82,13 +86,20 @@ class Observation(parseutils.BasicSerializable):
             name: str | None = None
     ):
         """
-        scale is the oversampling of the model along each axis of the data
-        (an accuracy setting; 1 by default). The likelihood is Gaussian by
-        default when there are data, and there is none without data.
+        components are the names of the components of the gmodel that the
+        observation sees (all if None; its opacity components always
+        absorb). scale is the oversampling of the model along each axis of
+        the data (an accuracy setting; 1 by default). The likelihood is
+        Gaussian by default when there are data, and there is none without
+        data.
         """
         parseutils.check_name(name)
         if gmodel is not None:
             parseutils.check_name(gmodel)
+        if components is not None:
+            components = tuple(components)
+            for component in components:
+                parseutils.check_name(component)
         ndim = len(observable.size())
         scale = tuple(scale) if scale is not None else (1,) * ndim
         if len(scale) != ndim or any(s < 1 for s in scale):
@@ -110,6 +121,7 @@ class Observation(parseutils.BasicSerializable):
         if data is not None and likelihood is None:
             likelihood = LikelihoodGaussian()
         self._gmodel = gmodel
+        self._components = components
         self._data = data
         self._likelihood = likelihood
         self._scale = scale
@@ -122,6 +134,10 @@ class Observation(parseutils.BasicSerializable):
     def gmodel(self) -> str | None:
         """The name of the gmodel it observes, if given."""
         return self._gmodel
+
+    def components(self) -> tuple[str, ...] | None:
+        """The names of the components it sees (all if None)."""
+        return self._components
 
     def driver(self) -> Driver:
         return self._driver
@@ -148,7 +164,8 @@ class Observation(parseutils.BasicSerializable):
         """The evaluation of the gmodel as this observation."""
         self._observable.require_compatible(gmodel)
         return self._observable.plan(
-            self._driver, gmodel, self._instrument, self._scale, self._dtype)
+            self._driver, gmodel, self._instrument, self._scale, self._dtype,
+            self._components)
 
 
 observation_parser = parseutils.BasicParser(Observation)

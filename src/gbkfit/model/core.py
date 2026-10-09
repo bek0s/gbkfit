@@ -43,11 +43,13 @@ class GModel(parseutils.TypedSerializable, abc.ABC):
         return {}
 
     @abc.abstractmethod
-    def plan(self, driver, grid, has_weights, dtype):
+    def plan(self, driver, grid, has_weights, dtype, components=None):
         """
         The evaluation of the gmodel on the given driver, grid of its data
         (fitsutils.Grid: x and y, and the spectral axis of spectral cubes)
-        and dtype, with spatial weights if has_weights (a GModelPlan).
+        and dtype, with spatial weights if has_weights (a GModelPlan), of
+        its components of the given names (all if None; opacity components
+        always absorb).
         """
         pass
 

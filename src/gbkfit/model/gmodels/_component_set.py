@@ -59,14 +59,15 @@ class ComponentSet2D:
             [cmp.constants() for cmp in self._components], self._prefixes)
         return constants
 
-    def plan(self, driver, grid, spectral, has_weights, dtype):
+    def plan(self, driver, grid, spectral, has_weights, dtype, components):
         """
-        The evaluation of the components on the given driver, grid of the
-        x and y axes and spectral axis (fitsutils.Grid, the second of one
-        axis) and dtype, with spatial weights if has_weights.
+        The evaluation of the components of the given names (all if None)
+        on the given driver, grid of the x and y axes and spectral axis
+        (fitsutils.Grid, the second of one axis) and dtype, with spatial
+        weights if has_weights.
         """
         return ComponentSetPlan2D(
-            self, driver, grid, spectral, has_weights, dtype)
+            self, driver, grid, spectral, has_weights, dtype, components)
 
 
 class ComponentSetPlan2D:
@@ -77,7 +78,7 @@ class ComponentSetPlan2D:
 
     def __init__(
             self, component_set, driver, grid, spectral, has_weights,
-            dtype):
+            dtype, components):
         self._component_set = component_set
         self._driver = driver
         self._grid = grid
@@ -94,8 +95,14 @@ class ComponentSetPlan2D:
             spec_size=spec_size,
             spec_step=spec_step,
             spec_zero=spec_zero)
+        # The selected components, their plans and their parameters
+        selected = _detail.select_components(
+            component_set.components(), components)
+        self._components = tuple(
+            component_set.components()[i] for i in selected)
+        self._mappings = tuple(component_set.mappings()[i] for i in selected)
         self._component_plans = tuple(
-            cmp.plan(driver, spectral, dtype) for cmp in component_set.components())
+            cmp.plan(driver, spectral, dtype) for cmp in self._components)
         # The spatial weights, if weighting is requested
         self._wdata = None
         if has_weights:
@@ -125,8 +132,8 @@ class ComponentSetPlan2D:
             return fitsutils.GridData(data, grid.coords, None)
 
         _detail.evaluate_components(
-            self._component_set.components(), self._component_plans,
-            self._component_set.mappings(), params, self._native_grid,
+            self._components, self._component_plans, self._mappings,
+            params, self._native_grid,
             outputs | dict(wdata=wdata, bdata=bdata),
             out_extra, '', lambda data: image(data[0]))
 
@@ -216,14 +223,15 @@ class ComponentSet3D:
     def _all_components(self):
         return self._components + self._ocomponents
 
-    def plan(self, driver, grid, spectral, has_weights, dtype):
+    def plan(self, driver, grid, spectral, has_weights, dtype, components):
         """
-        The evaluation of the components on the given driver, grid of the
-        x and y axes and spectral axis (fitsutils.Grid, the second of one
-        axis) and dtype, with spatial weights if has_weights.
+        The evaluation of the components of the given names (all if None)
+        on the given driver, grid of the x and y axes and spectral axis
+        (fitsutils.Grid, the second of one axis) and dtype, with spatial
+        weights if has_weights.
         """
         return ComponentSetPlan3D(
-            self, driver, grid, spectral, has_weights, dtype)
+            self, driver, grid, spectral, has_weights, dtype, components)
 
 
 class ComponentSetPlan3D:
@@ -235,7 +243,7 @@ class ComponentSetPlan3D:
 
     def __init__(
             self, component_set, driver, grid, spectral, has_weights,
-            dtype):
+            dtype, components):
         self._component_set = component_set
         self._driver = driver
         self._grid = grid
@@ -274,8 +282,14 @@ class ComponentSetPlan3D:
             self._step,
             grid.coords.rpix + (-self._zero[2] / self._step[2],),
             grid.coords.rval + (0.0,), grid.coords.rota)
+        # The selected components, their plans and their parameters
+        selected = _detail.select_components(
+            component_set.components(), components)
+        self._components = tuple(
+            component_set.components()[i] for i in selected)
+        self._mappings = tuple(component_set.mappings()[i] for i in selected)
         self._component_plans = tuple(
-            cmp.plan(driver, spectral, dtype) for cmp in component_set.components())
+            cmp.plan(driver, spectral, dtype) for cmp in self._components)
         self._ocomponent_plans = tuple(
             cmp.plan(driver, spectral, dtype)
             for cmp in component_set.opacity_components())
@@ -323,9 +337,8 @@ class ComponentSetPlan3D:
         outputs = outputs | dict(
             wdata=wdata, bdata=bdata, odata=odata, obdata=obdata)
         _detail.evaluate_components(
-            component_set.components(), self._component_plans,
-            component_set.mappings(), params, self._native_grid, outputs,
-            out_extra, '', cube)
+            self._components, self._component_plans, self._mappings,
+            params, self._native_grid, outputs, out_extra, '', cube)
 
         # Weight the data with the spatial weights evaluated above
         if weights is not None:
