@@ -1,5 +1,4 @@
 from collections.abc import Sequence
-from numbers import Real
 
 import astropy.units
 
@@ -40,10 +39,10 @@ class DatasetSlitSpectra(Dataset):
     def __init__(
             self,
             spectra: Data,
-            step: Real | Sequence[Real] | None = None,
-            rpix: Real | Sequence[Real] | None = None,
-            rval: Real | Sequence[Real] | None = None,
-            rota: Real | None = None,
+            step: float | Sequence[float] | None = None,
+            rpix: float | Sequence[float] | None = None,
+            rval: float | Sequence[float] | None = None,
+            rota: float | None = None,
             rest: str | astropy.units.Quantity | None = None
     ):
         """

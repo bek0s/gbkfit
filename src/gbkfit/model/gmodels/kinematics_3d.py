@@ -69,8 +69,8 @@ class GModelKinematics3D(GModelSCube):
             opacity_components:
             OpacityComponent3D | Sequence[OpacityComponent3D] | None = None,
             size_z: int | None = None,
-            step_z: int | float | None = None,
-            zero_z: int | float | None = None,
+            step_z: float | None = None,
+            zero_z: float | None = None,
             mass_model: MassModel | None = None,
             name: str | None = None
     ):

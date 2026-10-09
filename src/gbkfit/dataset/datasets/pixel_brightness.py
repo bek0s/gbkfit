@@ -1,5 +1,4 @@
 from collections.abc import Sequence
-from numbers import Real
 
 from gbkfit.dataset.base import Dataset
 from gbkfit.dataset.data import Data
@@ -37,10 +36,10 @@ class DatasetPixelBrightness(Dataset):
     def __init__(
             self,
             brightness: Data,
-            step: Real | Sequence[Real] | None = None,
-            rpix: Real | Sequence[Real] | None = None,
-            rval: Real | Sequence[Real] | None = None,
-            rota: Real | None = None
+            step: float | Sequence[float] | None = None,
+            rpix: float | Sequence[float] | None = None,
+            rval: float | Sequence[float] | None = None,
+            rota: float | None = None
     ):
         """
         The world coordinates of the grid of the data (see

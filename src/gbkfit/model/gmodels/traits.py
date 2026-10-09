@@ -954,7 +954,7 @@ class BHTraitP1(BHTrait, abc.ABC):
             rnodes: bool = False,
             nwmode: NWMode | None = None,
             sampling: str = SAMPLING_DEFAULT,
-            trunc: int | float = TRUNC_DEFAULT):
+            trunc: float = TRUNC_DEFAULT):
         super().__init__(
             rnodes=rnodes, nwmode=nwmode, sampling=sampling, trunc=trunc)
 
@@ -974,7 +974,7 @@ class BHTraitP2(BHTrait, abc.ABC):
             rnodes: bool = False,
             nwmode: NWMode | None = None,
             sampling: str = SAMPLING_DEFAULT,
-            trunc: int | float = TRUNC_DEFAULT):
+            trunc: float = TRUNC_DEFAULT):
         super().__init__(
             rnodes=rnodes, nwmode=nwmode, sampling=sampling, trunc=trunc)
 
@@ -1037,7 +1037,7 @@ class BHTraitGGauss(BHTraitP2):
             rnodes: bool = False,
             nwmode: NWMode | None = None,
             sampling: str = SAMPLING_DEFAULT,
-            trunc: int | float = TRUNC_DEFAULT):
+            trunc: float = TRUNC_DEFAULT):
         super().__init__(
             rnodes=rnodes, nwmode=nwmode, sampling=sampling, trunc=trunc)
 
@@ -2025,7 +2025,7 @@ class WPTraitAxisRange(WPTrait):
     def uid():
         return WPT_UID_AXIS_RANGE
 
-    def __init__(self, axis, angle: int | float, weight: int | float):
+    def __init__(self, axis, angle: float, weight: float):
         if axis not in [0, 1]:
             raise RuntimeError(
                 f"invalid axis value; "
@@ -2385,7 +2385,7 @@ class OHTraitP1(OHTrait, abc.ABC):
             rnodes: bool = False,
             nwmode: NWMode | None = None,
             sampling: str = SAMPLING_DEFAULT,
-            trunc: int | float = TRUNC_DEFAULT):
+            trunc: float = TRUNC_DEFAULT):
         super().__init__(
             rnodes=rnodes, nwmode=nwmode, sampling=sampling, trunc=trunc)
 
@@ -2405,7 +2405,7 @@ class OHTraitP2(OHTrait, abc.ABC):
             rnodes: bool = False,
             nwmode: NWMode | None = None,
             sampling: str = SAMPLING_DEFAULT,
-            trunc: int | float = TRUNC_DEFAULT):
+            trunc: float = TRUNC_DEFAULT):
         super().__init__(
             rnodes=rnodes, nwmode=nwmode, sampling=sampling, trunc=trunc)
 
@@ -2468,7 +2468,7 @@ class OHTraitGGauss(OHTraitP2):
             rnodes: bool = False,
             nwmode: NWMode | None = None,
             sampling: str = SAMPLING_DEFAULT,
-            trunc: int | float = TRUNC_DEFAULT):
+            trunc: float = TRUNC_DEFAULT):
         super().__init__(
             rnodes=rnodes, nwmode=nwmode, sampling=sampling, trunc=trunc)
 

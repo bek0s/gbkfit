@@ -1,4 +1,3 @@
-from numbers import Real
 from typing import Any
 
 import numpy as np
@@ -98,7 +97,7 @@ class ObservationGroup:
 
     def model_d(
             self,
-            params: dict[str, Real | np.ndarray],
+            params: dict[str, float | np.ndarray],
             out_extra: dict[str, Any] | None = None
     ) -> list[dict[str, Any]]:
         t = timeutils.SimpleTimer('model_eval').start()
@@ -116,7 +115,7 @@ class ObservationGroup:
 
     def model_h(
             self,
-            params: dict[str, Real | np.ndarray],
+            params: dict[str, float | np.ndarray],
             out_extra: dict[str, Any] | None = None
     ) -> list[dict[str, Any]]:
         self.model_d(params, out_extra)

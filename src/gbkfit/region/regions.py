@@ -1,7 +1,6 @@
 import abc
 import os.path
 from collections.abc import Sequence
-from numbers import Real
 
 import numpy as np
 import scipy.sparse
@@ -102,10 +101,10 @@ class RegionsBins(Regions):
     def __init__(
             self,
             index: np.ndarray,
-            step: Real | Sequence[Real] | None = None,
-            rpix: Real | Sequence[Real] | None = None,
-            rval: Real | Sequence[Real] | None = None,
-            rota: Real | None = None
+            step: float | Sequence[float] | None = None,
+            rpix: float | Sequence[float] | None = None,
+            rval: float | Sequence[float] | None = None,
+            rota: float | None = None
     ):
         """
         The world coordinates of the grid of the bins (see

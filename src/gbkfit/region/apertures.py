@@ -1,6 +1,5 @@
 import abc
 from collections.abc import Sequence
-from numbers import Real
 
 import numpy as np
 
@@ -111,7 +110,7 @@ class ApertureEllipse(Aperture):
             type=self.type(), x=self._x, y=self._y, a=self._a, b=self._b,
             posa=self._posa)
 
-    def __init__(self, x: Real, y: Real, a: Real, b: Real, posa: Real = 0):
+    def __init__(self, x: float, y: float, a: float, b: float, posa: float = 0):
         if not (a > 0 and b > 0):
             raise RuntimeError(
                 f"the semi-axes of an ellipse must be positive; they are "
@@ -137,7 +136,7 @@ class ApertureCircle(Aperture):
     def dump(self):
         return dict(type=self.type(), x=self._x, y=self._y, radius=self._radius)
 
-    def __init__(self, x: Real, y: Real, radius: Real):
+    def __init__(self, x: float, y: float, radius: float):
         if not radius > 0:
             raise RuntimeError(
                 f"the radius of a circle must be positive; it is {radius}")
@@ -183,7 +182,7 @@ class AperturePolygon(Aperture):
     def dump(self):
         return dict(type=self.type(), vertices=self._vertices.tolist())
 
-    def __init__(self, vertices: Sequence[Sequence[Real]]):
+    def __init__(self, vertices: Sequence[Sequence[float]]):
         vertices = np.array(vertices, dtype=float)
         if vertices.ndim != 2 or vertices.shape[1] != 2 \
                 or vertices.shape[0] < 3:
@@ -211,8 +210,8 @@ class ApertureRectangle(Aperture):
             width=self._width, posa=self._posa)
 
     def __init__(
-            self, x: Real, y: Real, length: Real, width: Real,
-            posa: Real = 0):
+            self, x: float, y: float, length: float, width: float,
+            posa: float = 0):
         if not (length > 0 and width > 0):
             raise RuntimeError(
                 f"the length and the width of a rectangle must be positive; "

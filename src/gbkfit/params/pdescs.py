@@ -26,7 +26,7 @@ class ParamDesc(parseutils.TypedSerializable, abc.ABC):
         return cls(**opts)
 
     def dump(self) -> dict[str, Any]:
-        info: dict[str, str | int | float] = dict(
+        info: dict[str, str | float] = dict(
             type=self.type(), name=self.name(), size=self.size())
         if self.desc() is not None:
             info.update(desc=self.desc())
@@ -43,9 +43,9 @@ class ParamDesc(parseutils.TypedSerializable, abc.ABC):
             name: str,
             size: int,
             desc: None | str,
-            default: None | int | float,
-            minimum: None | int | float,
-            maximum: None | int | float
+            default: None | float,
+            minimum: None | float,
+            maximum: None | float
     ):
         if not name.isidentifier():
             raise RuntimeError(
@@ -101,9 +101,9 @@ class ParamScalarDesc(ParamDesc):
             self,
             name: str,
             desc: None | str = None,
-            default: None | int | float = None,
-            minimum: None | int | float = None,
-            maximum: None | int | float = None
+            default: None | float = None,
+            minimum: None | float = None,
+            maximum: None | float = None
     ):
         super().__init__(name, 1, desc, default, minimum, maximum)
 
@@ -119,9 +119,9 @@ class ParamVectorDesc(ParamDesc):
             name: str,
             size: int,
             desc: None | str = None,
-            default: None | int | float = None,
-            minimum: None | int | float = None,
-            maximum: None | int | float = None
+            default: None | float = None,
+            minimum: None | float = None,
+            maximum: None | float = None
     ):
         super().__init__(name, size, desc, default, minimum, maximum)
 

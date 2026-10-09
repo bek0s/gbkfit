@@ -1,6 +1,5 @@
 import logging
 from collections.abc import Sequence
-from numbers import Real
 
 import astropy.units
 import numpy as np
@@ -98,15 +97,15 @@ class RegionMoments(Observable):
             self,
             regions: Regions,
             size: Sequence[int] | None = None,
-            step: Sequence[Real] | None = None,
-            rpix: Sequence[Real] | None = None,
-            rval: Sequence[Real] | None = None,
-            rota: Real | None = None,
-            mask_cutoff: Real = 1e-6,
+            step: Sequence[float] | None = None,
+            rpix: Sequence[float] | None = None,
+            rval: Sequence[float] | None = None,
+            rota: float | None = None,
+            mask_cutoff: float = 1e-6,
             orders: Sequence[int] = (0, 1, 2),
             spec_size: int | None = None,
-            spec_step: Real = _moments.SPEC_STEP,
-            spec_rval: Real = 0,
+            spec_step: float = _moments.SPEC_STEP,
+            spec_rval: float = 0,
             spec_rest: str | astropy.units.Quantity | None = None,
             method: str = 'moments'
     ):
@@ -145,7 +144,7 @@ class RegionMoments(Observable):
     def orders(self) -> tuple[int, ...]:
         return self._orders
 
-    def mask_cutoff(self) -> Real:
+    def mask_cutoff(self) -> float:
         return self._mask_cutoff
 
     def method(self) -> str:
@@ -154,10 +153,10 @@ class RegionMoments(Observable):
     def spec_size(self) -> int:
         return self._spec_size
 
-    def spec_step(self) -> Real:
+    def spec_step(self) -> float:
         return self._spec_step
 
-    def spec_rval(self) -> Real:
+    def spec_rval(self) -> float:
         return self._spec_rval
 
     def keys(self):

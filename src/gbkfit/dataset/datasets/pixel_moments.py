@@ -1,5 +1,4 @@
 from collections.abc import Sequence
-from numbers import Real
 
 from gbkfit.dataset.base import Dataset
 from gbkfit.dataset.data import Data
@@ -40,10 +39,10 @@ class DatasetPixelMoments(Dataset):
             moment5: Data | None = None,
             moment6: Data | None = None,
             moment7: Data | None = None,
-            step: Real | Sequence[Real] | None = None,
-            rpix: Real | Sequence[Real] | None = None,
-            rval: Real | Sequence[Real] | None = None,
-            rota: Real | None = None
+            step: float | Sequence[float] | None = None,
+            rpix: float | Sequence[float] | None = None,
+            rval: float | Sequence[float] | None = None,
+            rota: float | None = None
     ):
         """
         The moment maps of the given orders, on one grid. The world
