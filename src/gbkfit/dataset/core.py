@@ -17,10 +17,10 @@ class Dataset(parseutils.TypedSerializable, abc.ABC):
     """
     Named data items (see Data) of one shape, and where they were
     measured, which each kind of dataset describes (e.g. the grid of their
-    pixels). A subclass declares the number of axes of its items (_ndim).
+    pixels). A subclass declares the number of axes of its items (ndim).
     """
 
-    _ndim: int
+    ndim: int
 
     def __init__(self, items: dict[str, Data]):
         # At least one data item must be defined
@@ -33,10 +33,10 @@ class Dataset(parseutils.TypedSerializable, abc.ABC):
                 f"dataset contains invalid data items: {invalid}")
         # All data items must have the axes of the dataset
         for key, item in items.items():
-            if item.ndim() != self._ndim:
+            if item.ndim() != self.ndim:
                 raise RuntimeError(
                     f"data item {key} has {item.ndim()} axes; expected "
-                    f"{self._ndim} (axes of length 1 can be removed with "
+                    f"{self.ndim} (axes of length 1 can be removed with "
                     f"gbkfit-cli prep)")
         # All data items must have the same shape
         shapes = {k: v.shape() for k, v in items.items()}

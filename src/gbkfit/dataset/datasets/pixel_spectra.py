@@ -17,8 +17,8 @@ __all__ = [
 class DatasetPixelSpectra(Dataset):
 
     # The axes of a spectral cube: x, y and the spectral axis
-    _ndim = 3
-    _spectral_axis = 2
+    ndim = 3
+    spectral_axis = 2
 
     @staticmethod
     def type():

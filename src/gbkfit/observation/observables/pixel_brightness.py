@@ -23,7 +23,7 @@ class PixelBrightness(Observable):
     dataset_class = DatasetPixelBrightness
 
     # An image has no spectral axis
-    _spectral_axis = None
+    spectral_axis = None
 
     @staticmethod
     def type():

@@ -31,7 +31,7 @@ class RegionSpectra(Observable):
     dataset_class = DatasetRegionSpectra
 
     # The axes of the cube of the model: x, y and the spectral axis
-    _spectral_axis = 2
+    spectral_axis = 2
 
     @staticmethod
     def type():

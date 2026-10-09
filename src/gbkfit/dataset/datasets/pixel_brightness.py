@@ -15,8 +15,8 @@ __all__ = [
 class DatasetPixelBrightness(Dataset):
 
     # An image has no spectral axis
-    _ndim = 2
-    _spectral_axis = None
+    ndim = 2
+    spectral_axis = None
 
     @staticmethod
     def type():

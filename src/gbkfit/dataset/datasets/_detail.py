@@ -29,16 +29,16 @@ def load_grid_dataset(cls, info, names, prefix=''):
     """
     desc = parseutils.make_typed_desc(cls, 'dataset')
     parseutils.sanitize_dimensional_options(info, dict(
-        step=int | float, rpix=int | float, rval=int | float), cls._ndim)
+        step=int | float, rpix=int | float, rval=int | float), cls.ndim)
     step, rpix, rval, rota = (info.pop(key, None) for key in _GRID_OPTIONS)
-    rest = info.pop('rest', None) if cls._spectral_axis is not None else None
+    rest = info.pop('rest', None) if cls.spectral_axis is not None else None
     coords = {}
     for name in names:
         # (an item that is null is absent)
         if info.get(name) is not None:
             with parseutils.config_path(name):
                 info[name], coords[name] = load_data(
-                    info[name], prefix, rpix, rval, rest, cls._spectral_axis)
+                    info[name], prefix, rpix, rval, rest, cls.spectral_axis)
     if coords:
         first = next(iter(coords.values()))
         if any(value != first for value in coords.values()):
@@ -50,7 +50,7 @@ def load_grid_dataset(cls, info, names, prefix=''):
             rpix=first.rpix,
             rval=first.rval,
             rota=first.rota if rota is None else rota)
-        if cls._spectral_axis is not None:
+        if cls.spectral_axis is not None:
             info.update(rest=first.rest)
     return parseutils.parse_options_for_callable(info, desc, cls.__init__)
 
@@ -59,11 +59,11 @@ def make_grid(dataset, step, rpix, rval, rota, rest=None):
     """
     The grid of the items of a dataset, with the given world coordinates
     or their defaults (see fitsutils.make_grid). The dataset declares its
-    spectral axis (_spectral_axis).
+    spectral axis (spectral_axis).
     """
     return fitsutils.make_grid(
         dataset.shape()[::-1], step, rpix, rval, rota,
-        dataset._spectral_axis, rest)
+        dataset.spectral_axis, rest)
 
 
 def dump_grid_dataset(dataset, prefix='', dump_path=True, overwrite=False):

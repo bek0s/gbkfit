@@ -36,7 +36,7 @@ class RegionMoments(Observable):
     dataset_class = DatasetRegionMoments
 
     # The moments have no spectral axis
-    _spectral_axis = None
+    spectral_axis = None
 
     @staticmethod
     def type():
