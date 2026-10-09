@@ -11,6 +11,7 @@ __all__ = [
 class DatasetSCube(Dataset):
 
     # The axes of a spectral cube: x, y and the spectral axis
+    _ndim = 3
     _spectral_axis = 2
 
     @staticmethod
@@ -20,7 +21,7 @@ class DatasetSCube(Dataset):
     @classmethod
     def load(cls, info, **kwargs):
         names = ['scube']
-        opts = _detail.load_dataset_common(cls, info, names, 3, **kwargs)
+        opts = _detail.load_dataset_common(cls, info, names, **kwargs)
         return cls(**opts)
 
     def dump(self, **kwargs):

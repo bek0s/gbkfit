@@ -10,16 +10,16 @@ __all__ = [
 ]
 
 
-def load_dataset_common(cls, info, names, ndim, **kwargs):
+def load_dataset_common(cls, info, names, **kwargs):
     """
-    The options of a dataset of class cls: its data items (names), each
-    with ndim axes, loaded.
+    The options of a dataset of class cls: its data items (names)
+    loaded.
     """
     prefix = kwargs.get('prefix', '')
     desc = parseutils.make_typed_desc(cls, 'dataset')
     parseutils.sanitize_dimensional_options(info, dict(
         size=int, step=int | float, rpix=int | float, rval=int | float),
-        ndim)
+        cls._ndim)
     # Read global coordinate system options.
     # These will apply to all data in the dataset that do not define
     # their own options.

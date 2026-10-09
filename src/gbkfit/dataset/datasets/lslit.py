@@ -12,6 +12,7 @@ class DatasetLSlit(Dataset):
 
     # The axes of a long-slit spectrum: the position along the slit
     # and the spectral axis
+    _ndim = 2
     _spectral_axis = 1
 
     @staticmethod
@@ -21,7 +22,7 @@ class DatasetLSlit(Dataset):
     @classmethod
     def load(cls, info, **kwargs):
         names = ['lslit']
-        opts = _detail.load_dataset_common(cls, info, names, 2, **kwargs)
+        opts = _detail.load_dataset_common(cls, info, names, **kwargs)
         return cls(**opts)
 
     def dump(self, **kwargs):

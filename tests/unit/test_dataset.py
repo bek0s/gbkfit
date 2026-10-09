@@ -227,3 +227,17 @@ def test_dmodel_of_a_float64_dataset_is_float32():
 def test_data_steps_must_be_positive():
     with pytest.raises(RuntimeError, match="step must be positive"):
         Data(np.ones((8, 20)), step=(1, -1))
+
+
+@pytest.mark.parametrize('dataset_type, shape', [
+    ('image', (3, 8, 20)), ('mmaps', (3, 8, 20)), ('scube', (8, 20)),
+    ('scube', (1, 3, 8, 20)), ('lslit', (3, 8, 20))])
+def test_datasets_check_the_number_of_axes(tmp_path, dataset_type, shape):
+    # e.g. a cube loaded as an image, or a radio cube with a Stokes axis
+    from astropy.io import fits
+    fits.writeto(tmp_path / 'data.fits', np.ones(shape, np.float32))
+    name = 'mmap0' if dataset_type == 'mmaps' else dataset_type
+    with pytest.raises(Exception, match="axes"):
+        dataset_parser.load({
+            'type': dataset_type,
+            name: dict(data=str(tmp_path / 'data.fits'))})
