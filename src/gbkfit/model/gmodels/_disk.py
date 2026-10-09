@@ -100,6 +100,13 @@ def _fill_param_values(
         start = stop
 
 
+def _weighted_mean(weighted_sum, weight):
+    """The mean of each voxel from its weighted sum; NaN without weight."""
+    return np.divide(
+        weighted_sum, weight, out=np.full_like(weighted_sum, np.nan),
+        where=weight != 0)
+
+
 class Disk(abc.ABC):
 
     # The traits that this type of disk does not support (yet)
@@ -308,6 +315,7 @@ class Disk(abc.ABC):
         rdata_cmp = None
         vdata_cmp = None
         ddata_cmp = None
+        vdweight_cmp = None
         ordata_cmp = None
 
         odata = outputs.get('opacity')
@@ -316,12 +324,18 @@ class Disk(abc.ABC):
             if self._traits['rpt']:
                 rdata_cmp = driver.mem_alloc_d(shape, dtype)
                 driver.mem_fill(rdata_cmp, 0)
+            # The velocity and dispersion of each voxel are means weighted
+            # by the absolute density: the kernels add to their weighted
+            # sums and to the sum of the weights
             if self._traits['vpt']:
                 vdata_cmp = driver.mem_alloc_d(shape, dtype)
-                driver.mem_fill(vdata_cmp, np.nan)
+                driver.mem_fill(vdata_cmp, 0)
             if self._traits['dpt']:
                 ddata_cmp = driver.mem_alloc_d(shape, dtype)
-                driver.mem_fill(ddata_cmp, np.nan)
+                driver.mem_fill(ddata_cmp, 0)
+            if self._traits['vpt'] or self._traits['dpt']:
+                vdweight_cmp = driver.mem_alloc_d(shape, dtype)
+                driver.mem_fill(vdweight_cmp, 0)
             if self._traits['wpt']:
                 wdata_cmp = driver.mem_alloc_d(shape, dtype)
                 driver.mem_fill(wdata_cmp, 1)
@@ -332,7 +346,8 @@ class Disk(abc.ABC):
         # The keyword arguments of the native evaluation functions
         grid_and_outputs = grid | outputs | dict(
             wdata_cmp=wdata_cmp, rdata_cmp=rdata_cmp, ordata_cmp=ordata_cmp,
-            vdata_cmp=vdata_cmp, ddata_cmp=ddata_cmp)
+            vdata_cmp=vdata_cmp, ddata_cmp=ddata_cmp,
+            vdweight_cmp=vdweight_cmp)
 
         self._impl_evaluate(driver, params, grid_and_outputs, out_extra)
 
@@ -342,10 +357,14 @@ class Disk(abc.ABC):
 
             if self._traits['rpt']:
                 out_extra[rdata_key] = driver.mem_copy_d2h(rdata_cmp)
+            if vdweight_cmp is not None:
+                weight = driver.mem_copy_d2h(vdweight_cmp)
             if self._traits['vpt']:
-                out_extra['vdata'] = driver.mem_copy_d2h(vdata_cmp)
+                out_extra['vdata'] = _weighted_mean(
+                    driver.mem_copy_d2h(vdata_cmp), weight)
             if self._traits['dpt']:
-                out_extra['ddata'] = driver.mem_copy_d2h(ddata_cmp)
+                out_extra['ddata'] = _weighted_mean(
+                    driver.mem_copy_d2h(ddata_cmp), weight)
             if self._traits['wpt']:
                 out_extra['wdata'] = driver.mem_copy_d2h(wdata_cmp)
             if odata is not None:

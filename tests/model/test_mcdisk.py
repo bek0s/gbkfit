@@ -231,3 +231,33 @@ def test_mcdisk_harmonic_clouds_take_the_sign_of_the_harmonic(driver):
     assert has_clouds.sum() > 100
     np.testing.assert_array_equal(
         np.sign(mcdisk[has_clouds]), expected[has_clouds])
+
+
+def test_mcdisk_velocity_is_the_mean_of_the_clouds(driver):
+    # The velocity of each voxel is the mean of those of its clouds,
+    # weighted by their flux. Without a PSF and an LSF, the spectrum of a
+    # spaxel is the sum of the lines of its clouds, so its first moment
+    # is the brightness-weighted mean of the velocity along z (the lines
+    # are within the spectral axis).
+    import gbkfit.model
+    import gbkfit.params
+    config = ruamel.yaml.YAML(typ='safe').load(CONFIG_DIR / 'mcdisk.yaml')
+    model = config['models'][0]
+    model['driver']['type'] = driver.type()
+    model['dmodel'] = dict(type='scube', size=[48, 48, 120], step=[1, 1, 5])
+    model_group = gbkfit.model.ModelGroup(
+        gbkfit.model.model_parser.load([model]))
+    params = gbkfit.params.EvaluationParams(
+        model_group.pdescs(), config['params']['properties'])
+    extra = {}
+    scube = model_group.model_h(params.evaluate(), extra)[0]['scube']['d']
+    velocities = (np.arange(120) - 59.5) * 5
+    intensity = scube.sum(axis=0)
+    bright = intensity > 0.01 * intensity.max()
+    moment1 = np.tensordot(velocities, scube, axes=1)[bright] / \
+        intensity[bright]
+    brightness = extra['model0_gmodel_component0_bdata']
+    velocity = np.nan_to_num(extra['model0_gmodel_component0_vdata'])
+    mean = (brightness * velocity).sum(0)[bright] / \
+        brightness.sum(0)[bright]
+    np.testing.assert_allclose(mean, moment1, atol=0.05)
