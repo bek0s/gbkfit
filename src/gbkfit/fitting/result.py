@@ -126,7 +126,7 @@ def dump_result(output_dir, result):
     for i, dataset in enumerate(result.datasets):
         prefix = os.path.join(output_dir, f'dataset_{i}_')
         root_info['datasets'].append(gbkfit.dataset.dataset_parser.dump(
-            dataset, prefix=prefix, dump_full_path=False))
+            dataset, prefix=prefix, dump_path=False))
 
     root_info = iterutils.nativify(root_info)
     filename_root = os.path.join(output_dir, 'result')

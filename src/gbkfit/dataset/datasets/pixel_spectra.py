@@ -25,15 +25,16 @@ class DatasetPixelSpectra(Dataset):
         return 'pixel_spectra'
 
     @classmethod
-    def load(cls, info, **kwargs):
+    def load(cls, info, prefix=''):
         # The options of its one data item are given flat
         return cls(**_detail.load_grid_dataset(
             cls, _detail.nest_single_item(info, 'spectra'), ['spectra'],
-            **kwargs))
+            prefix))
 
-    def dump(self, **kwargs):
+    def dump(self, prefix='', dump_path=True, overwrite=False):
         return _detail.flatten_single_item(
-            _detail.dump_grid_dataset(self, **kwargs), 'spectra')
+            _detail.dump_grid_dataset(self, prefix, dump_path, overwrite),
+            'spectra')
 
     def __init__(
             self,
