@@ -97,3 +97,15 @@ def test_model_names_prefix_the_parameters():
 def test_invalid_model_names_are_rejected(names, message):
     with pytest.raises(Exception, match=message):
         models(*names)
+
+
+def test_names_name_the_extra_outputs(evaluate_models):
+    component = disk(name='disk') | dict(bhtraits=None)
+    model = dict(
+        name='hi', driver=dict(type='host'),
+        dmodel=dict(type='image', size=[8, 8]),
+        gmodel=dict(type='intensity_2d', components=[component]))
+    _, extra = evaluate_models([model], dict(
+        hi_disk_xpos=0, hi_disk_ypos=0, hi_disk_posa=0, hi_disk_incl=45,
+        hi_disk_bpt_a=1, hi_disk_bpt_s=2))
+    assert {'hi_gmodel_disk_bdata', 'hi_dmodel_dcube_lo'} <= set(extra)

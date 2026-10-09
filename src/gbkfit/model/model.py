@@ -103,6 +103,11 @@ class ModelGroup:
             [model.pdescs() for model in self.models()], self._prefixes)
         self._constants, _ = miscutils.merge_with_prefixes(
             [model.constants() for model in self.models()], self._prefixes)
+        # The extra outputs of the models are named after their names, or
+        # their index if they have none (e.g. 'model0_')
+        self._extra_prefixes = [
+            f'{model.name()}_' if model.name() is not None else f'model{i}_'
+            for i, model in enumerate(self._models)]
 
     def pdescs(self) -> dict[str, ParamDesc]:
         return self._pdescs
@@ -135,7 +140,7 @@ class ModelGroup:
                     out_extra_i))
             if out_extra is not None:
                 for key, val in out_extra_i.items():
-                    out_extra[f'model{i}_{key}'] = val
+                    out_extra[f'{self._extra_prefixes[i]}{key}'] = val
         t.stop()
         return self._d_model_data
 
