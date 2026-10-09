@@ -146,8 +146,9 @@ def test_mcdisk_seed(driver):
     assert seed1.sum() == pytest.approx(default.sum(), rel=1e-5)
 
 
+@pytest.mark.parametrize('amplitude', [0.3, -0.3])
 @pytest.mark.parametrize('order', [0, 2])
-def test_mcdisk_harmonic_brightness_matches_smdisk(driver, order):
+def test_mcdisk_harmonic_brightness_matches_smdisk(driver, order, amplitude):
     # An exponential disk plus a harmonic of the given order (a ring for
     # order 0). The clouds of a harmonic carry the sign of cos(k(t - p)).
     component = dict(
@@ -155,7 +156,7 @@ def test_mcdisk_harmonic_brightness_matches_smdisk(driver, order):
         bptraits=[
             dict(type='exponential'), dict(type='nw_harmonic', order=order)],
         bhtraits=[dict(type='sech2'), dict(type='sech2')])
-    properties = dict(bpt1_a=[0.3] * 11, bht1_s=1) | (
+    properties = dict(bpt1_a=[amplitude] * 11, bht1_s=1) | (
         dict(bpt1_p=[40] * 11) if order else {})
     mcdisk = evaluate_disk('mcdisk', driver.type(), component, properties)
     del component['cflux']
@@ -175,3 +176,30 @@ def test_mcdisk_azimuthal_selection_matches_smdisk(driver, p):
     # The smooth disk selects whole pixels at the edges of the range, which
     # differs by about 2.5%; a wrong range gives 50-100%
     assert relative_difference(mcdisk.sum(0), smdisk.sum(0)) < 0.05
+
+
+@pytest.mark.parametrize('outer', [0, -0.3], ids=['negative', 'mixed'])
+def test_mcdisk_negative_brightness_matches_smdisk(driver, outer):
+    # A negative exponential disk, or a positive one whose outer rings
+    # are made negative by a second trait: the clouds of a negative ring
+    # carry negative flux
+    component = dict(
+        cflux=2e-5,
+        bptraits=[dict(type='exponential'), dict(type='nw_uniform')],
+        bhtraits=[dict(type='sech2'), dict(type='sech2')])
+    properties = dict(
+        bpt_a=-1 if not outer else 1,
+        bpt1_a=[0] * 5 + [outer] * 6, bht1_s=1)
+    mcdisk = evaluate_disk('mcdisk', driver.type(), component, properties)
+    del component['cflux']
+    smdisk = evaluate_disk('smdisk', driver.type(), component, properties)
+    assert relative_difference(mcdisk.sum(0), smdisk.sum(0)) < 0.02
+
+
+def test_mcdisk_flux_does_not_depend_on_cloud_flux(driver):
+    # The clouds of each ring share its flux exactly, also when a cloud
+    # (cflux) holds more than the flux of a ring
+    totals = [
+        evaluate_disk('mcdisk', driver.type(), dict(cflux=cflux)).sum()
+        for cflux in (1e-4, 0.3, 5)]
+    np.testing.assert_allclose(totals[1:], totals[0], rtol=1e-4)

@@ -110,7 +110,7 @@ struct GModel
     static void
     mcdisk_evaluate(
             const Disk& disk,
-            T cflux, unsigned int seed,
+            ConstData cloud_flux, unsigned int seed,
             int nclouds, Ints ncloudscsum, Bools has_analytical_integral,
             std::array<int, 3> spat_size,
             std::array<T, 3> spat_step,
@@ -132,8 +132,10 @@ struct GModel
         require(has_analytical_integral.shape(0) == size_t(args.rpt.n),
                 "has_analytical_integral needs one value for each density "
                 "trait");
+        require(cloud_flux.shape(0) == ncloudscsum.shape(0),
+                "cloud_flux needs one value for each pool of clouds");
         MCDiskArgs<T> mc;
-        mc.cflux = cflux;
+        mc.cloud_flux = cloud_flux.data();
         mc.seed = seed;
         mc.nclouds = nclouds;
         mc.ncloudscsum = ncloudscsum.data();
@@ -224,7 +226,7 @@ struct GModel
         std::apply([&](auto&&... args) {
             cls.def_static("mcdisk_evaluate", &mcdisk_evaluate, args...);
         }, evaluate_args(
-                nb::arg("disk"), nb::arg("cflux"), nb::arg("seed"),
+                nb::arg("disk"), nb::arg("cloud_flux").noconvert(), nb::arg("seed"),
                 nb::arg("nclouds"),
                 nb::arg("ncloudscsum").noconvert(),
                 nb::arg("has_analytical_integral").noconvert()));
