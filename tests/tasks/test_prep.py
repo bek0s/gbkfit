@@ -127,7 +127,7 @@ def test_mmaps_crop_and_nanpad_keep_the_world_coordinates():
     for name in ['mmap0', 'mmap1']:
         fits.writeto(f'{name}.fits', np.ones((20, 24), np.float32), header_in)
     prep.prep_mmaps(
-        [0, 1], ['mmap0.fits', 'mmap1.fits'], None, None, [4, 20, 3, 17],
+        ['mmap0.fits', 'mmap1.fits'], None, None, [4, 20, 3, 17],
         None, None, None, None, None, None, None, False, 1, 'float32')
     pixel = np.array([[0, 0], [5, 7]], float).T
     world_in = astropy.wcs.WCS(header_in).pixel_to_world_values(
@@ -139,3 +139,64 @@ def test_mmaps_crop_and_nanpad_keep_the_world_coordinates():
         assert np.isnan(data[0]).all()
         world_out = astropy.wcs.WCS(header).pixel_to_world_values(*pixel)
         np.testing.assert_allclose(world_out, world_in, rtol=0, atol=1e-9)
+
+
+def prep_image(filename, **options):
+    defaults = dict.fromkeys([
+        'roi_spat', 'clip_min', 'clip_max', 'ccl_lcount', 'ccl_pcount',
+        'ccl_lratio', 'sclip_sigma', 'sclip_iters', 'nanpad'])
+    options = defaults | dict(minify=False, dtype='float32') | options
+    file_m = options.pop('file_m', None)
+    prep.prep_image(filename, None, file_m, **options)
+    return fits.getdata('prep_image.fits')
+
+
+def test_sigma_clipping_removes_the_outliers():
+    data = np.random.default_rng(1).normal(size=(32, 32)).astype(np.float32)
+    data[5, 5] = 50
+    fits.writeto('image.fits', data)
+    prepared = prep_image('image.fits', sclip_sigma=3, sclip_iters=5)
+    assert np.isnan(prepared[5, 5])
+    assert np.isfinite(prepared).sum() > 1000
+
+
+def test_the_mask_file_is_applied():
+    fits.writeto('image.fits', np.ones((8, 8), np.float32))
+    mask = np.ones((8, 8), np.float32)
+    mask[:, :4] = 0
+    fits.writeto('mask.fits', mask)
+    prepared = prep_image('image.fits', file_m='mask.fits')
+    assert np.isnan(prepared[:, :4]).all()
+    assert np.isfinite(prepared[:, 4:]).all()
+
+
+def test_connected_components_see_the_clipping():
+    # Two islands above a background that clip_min removes: the largest
+    # island only is kept
+    data = np.full((16, 16), -1, np.float32)
+    data[2:8, 2:8] = 5
+    data[10:13, 10:13] = 5
+    fits.writeto('image.fits', data)
+    prepared = prep_image('image.fits', clip_min=0, ccl_lcount=1)
+    assert np.isfinite(prepared).sum() == 36
+    # No island large enough: everything is masked, without an error
+    prepared = prep_image('image.fits', clip_min=0, ccl_pcount=100,
+                          ccl_lratio=0.5)
+    assert np.isnan(prepared).all()
+
+
+def test_mmaps_use_the_sigma_clipping_of_each_map():
+    rng = np.random.default_rng(1)
+    for name in ['mmap0', 'mmap1']:
+        data = rng.normal(size=(32, 32)).astype(np.float32)
+        data[5, 5] = 50
+        fits.writeto(f'{name}.fits', data)
+    prep.prep_mmaps(
+        ['mmap0.fits', 'mmap1.fits'], None, None, None,
+        None, None, None, None, None, [3, 3], [5, 5], False, None,
+        'float32')
+    for name in ['mmap0', 'mmap1']:
+        prepared = fits.getdata(f'prep_{name}.fits')
+        assert np.isnan(prepared[5, 5])
+        assert np.isfinite(prepared).sum() > 1000
+
