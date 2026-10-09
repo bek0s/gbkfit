@@ -118,18 +118,13 @@ class PrimaryBeamImage(PrimaryBeam):
     @classmethod
     def load(cls, info, prefix=''):
         desc = parseutils.make_typed_desc(cls, 'primary beam')
-        file = info.get('file')
-        if isinstance(file, str):
-            file = dict(file=file)
         with parseutils.config_path('file'):
-            options = parseutils.parse_options(
-                file or {}, 'primary beam file', required={'file'},
-                optional={'hdu'})
+            file, hdu = parseutils.parse_file(
+                info.get('file') or {}, 'primary beam file')
             # (the world coordinates given are those of the image, which
             # the others come from)
             data, coords = fitsutils.read_data(
-                prefix + options['file'], options.get('hdu', 0),
-                info.get('rpix'), info.get('rval'))
+                prefix + file, hdu, info.get('rpix'), info.get('rval'))
         info = dict(info) | dict(
             data=data, rpix=coords.rpix, rval=coords.rval,
             step=coords.step if info.get('step') is None else info['step'],

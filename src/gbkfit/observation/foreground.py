@@ -103,12 +103,8 @@ def _read_map(x, prefix, rpix, rval):
     A map and its world coordinates, from a file (see Data), with the
     given rpix or rval (see fitsutils.read_data).
     """
-    if isinstance(x, str):
-        x = dict(file=x)
-    options = parseutils.parse_options(
-        x, 'map file', required={'file'}, optional={'hdu'})
-    return fitsutils.read_data(
-        prefix + options['file'], options.get('hdu', 0), rpix, rval)
+    file, hdu = parseutils.parse_file(x, 'map file')
+    return fitsutils.read_data(prefix + file, hdu, rpix, rval)
 
 
 class LensDeflectionMap(Lens):

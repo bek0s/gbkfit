@@ -70,17 +70,12 @@ class RegionsBins(Regions):
         desc = parseutils.make_typed_desc(cls, 'regions')
         parseutils.sanitize_dimensional_options(info, dict(
             step=int | float, rpix=int | float, rval=int | float), 2)
-        file = info.get('file')
-        if file is None:
+        if info.get('file') is None:
             raise ConfigError(f"option 'file' of {desc} is required")
-        if isinstance(file, str):
-            file = dict(file=file)
         with parseutils.config_path('file'):
-            options = parseutils.parse_options(
-                file, 'bins file', required={'file'}, optional={'hdu'})
+            file, hdu = parseutils.parse_file(info['file'], 'bins file')
             index, coords = fitsutils.read_data(
-                prefix + options['file'], options.get('hdu', 0),
-                info.get('rpix'), info.get('rval'))
+                prefix + file, hdu, info.get('rpix'), info.get('rval'))
         info = dict(info) | dict(
             index=index,
             step=coords.step if info.get('step') is None else info['step'],

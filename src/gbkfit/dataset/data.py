@@ -23,13 +23,9 @@ def _read_file(
     x is a filename, or a dict with the filename ('file') and the HDU to
     read ('hdu', e.g. 'SCI'; by default the first).
     """
-    if isinstance(x, str):
-        x = dict(file=x)
-    options = parseutils.parse_options(
-        x, 'data file', required={'file'}, optional={'hdu'})
+    file, hdu = parseutils.parse_file(x, 'data file')
     return fitsutils.read_data(
-        prefix + options['file'], options.get('hdu', 0), rpix, rval, rest,
-        spectral_axis)
+        prefix + file, hdu, rpix, rval, rest, spectral_axis)
 
 
 def _as_float32(x):

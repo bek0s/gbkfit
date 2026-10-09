@@ -207,6 +207,18 @@ def parse_options(
     return {k: v for k, v in info.items() if k in required | optional}
 
 
+def parse_file(x: str | dict[str, Any], desc: str) -> tuple[str, int | str]:
+    """
+    The filename and the HDU of a file option: a filename, or a dict with
+    the filename ('file') and the HDU ('hdu', e.g. 'SCI'; by default the
+    first, 0). desc names the file in messages (e.g. 'data file').
+    """
+    if isinstance(x, str):
+        x = dict(file=x)
+    options = parse_options(x, desc, required={'file'}, optional={'hdu'})
+    return options['file'], options.get('hdu', 0)
+
+
 def parse_options_for_callable(
         info: dict[str, Any],
         desc: str,
