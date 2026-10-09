@@ -200,8 +200,8 @@ disk_info(int& index, T radius, int nnodes, const T* nodes)
     if (radius >= nodes[nnodes-1])
         return false;
 
-    // Linear search
-    // TODO: Why 1?
+    // Linear search for the first node beyond the radius: the outer node
+    // of its ring (the radius is not below nodes[0], checked above)
     for(index = 1; index < nnodes; ++index)
         if (radius < nodes[index])
             break;
@@ -544,7 +544,8 @@ gmodel_mcdisk_evaluate_cloud(
     const int idx = index_3d_to_1d(x, y, z, a.spat_size[0], a.spat_size[1]);
 
     if (a.wdata) {
-        // TODO
+        // TODO: the weights are revisited with the likelihood (the Monte
+        // Carlo disk keeps the last cloud's, the smooth disk adds them up)
         AtomicAssignFunT(&a.wdata[idx], wvalue);
     }
     if (a.wdata_cmp) {
@@ -808,7 +809,8 @@ gmodel_smdisk_evaluate_spaxel(int x, int y, int z, const DiskArgs<T>& a)
     const int idx = index_3d_to_1d(x, y, z, a.spat_size[0], a.spat_size[1]);
 
     if (a.wdata) {
-        // TODO
+        // TODO: the weights are revisited with the likelihood (the smooth
+        // disk adds them up, the Monte Carlo disk keeps the last cloud's)
         a.wdata[idx] += wvalue;
     }
     if (a.wdata_cmp) {
