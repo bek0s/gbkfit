@@ -304,6 +304,37 @@ def test_velocity_axis_gets_the_rest():
     assert coords.rval[2] == pytest.approx(HEADER['CRVAL3'])
 
 
+
+def test_velocity_axis_keeps_its_rest():
+    # A velocity axis with a rest refers to it: giving the same one is
+    # fine, another one an error (relabelling would move every line)
+    write_cube('cube.fits', dict(HEADER, RESTFRQ=1.420405752e9))
+    _, header_out = prep_scube('cube.fits', velocity_rest='1420.405752 MHz')
+    assert header_out['RESTFRQ'] == pytest.approx(1.420405752e9, rel=1e-9)
+    with pytest.raises(Exception, match="refer to the rest"):
+        prep_scube('cube.fits', velocity_rest='115.271 GHz')
+
+
+def test_converted_axis_keeps_no_old_rest():
+    # The rest of the converted axis replaces the old rest keywords (also
+    # in their old forms), which would otherwise be read instead
+    header = dict(
+        HEADER, CTYPE3='FREQ', CUNIT3='Hz', CRVAL3=1.15e11, CRPIX3=1.0,
+        CDELT3=-1e6, RESTWAV=2.6e-3, RESTFREQ=1.42e9)
+    write_cube('cube.fits', header)
+    _, header_out = prep_scube('cube.fits', velocity_rest='115.271 GHz')
+    assert 'RESTWAV' not in header_out and 'RESTFREQ' not in header_out
+    _, coords = fitsutils.read_data('prep_cube.fits')
+    np.testing.assert_allclose(coords.rest.to_value('GHz'), 115.271)
+
+
+def test_rest_of_the_convention_of_the_axis_first():
+    # A header with both rests gives that of the convention of its axis
+    write_cube('cube.fits', dict(
+        HEADER, CTYPE3='VRAD', RESTWAV=2.6e-3, RESTFRQ=1.420405752e9))
+    _, coords = fitsutils.read_data('cube.fits')
+    np.testing.assert_allclose(coords.rest.to_value('Hz'), 1.420405752e9)
+
 @pytest.mark.parametrize('header, message', [
     (dict(HEADER, CTYPE3='STOKES'), "no spectral axis"),
     (dict(HEADER, CTYPE3='VOPT-F2W', RESTWAV=6.5628e-7), "not linear")])
