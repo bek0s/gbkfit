@@ -103,6 +103,9 @@ constexpr int VPT_UID_NW_LOS_HARMONIC = 108;
 
 // Velocity height traits
 constexpr int VHT_UID_ONE = 1;
+constexpr int VHT_UID_LINEAR = 2;
+constexpr int VHT_UID_EXP = 3;
+constexpr int VHT_UID_GAUSS = 4;
 
 // Dispersion polar traits
 constexpr int DPT_UID_UNIFORM = 1;
@@ -122,6 +125,9 @@ constexpr int DPT_UID_NW_DISTORTION = 103;
 
 // Dispersion height traits
 constexpr int DHT_UID_ONE = 1;
+constexpr int DHT_UID_LINEAR = 2;
+constexpr int DHT_UID_EXP = 3;
+constexpr int DHT_UID_GAUSS = 4;
 
 // Vertical distortion polar traits
 constexpr int ZPT_UID_NW_UNIFORM = 101;
@@ -129,6 +135,7 @@ constexpr int ZPT_UID_NW_HARMONIC = 102;
 
 // Selection polar traits
 constexpr int SPT_UID_AZRANGE = 1;
+constexpr int SPT_UID_RRANGE = 2;
 constexpr int SPT_UID_NW_AZRANGE = 101;
 
 // Weight polar traits
@@ -1105,6 +1112,14 @@ sp_trait_azrange(T& out, T theta, const T* params)
     azrange(out, theta, p, s);
 }
 
+// 1 for the radii from rmin (inclusive) to rmax (exclusive), 0 for the
+// others (e.g. an inner hole or an outer edge)
+template<typename T> constexpr void
+sp_trait_rrange(T& out, T r, const T* params)
+{
+    out = r >= params[0] && r < params[1] ? 1 : 0;
+}
+
 template<typename T> constexpr void
 sp_trait_nw_azrange(
         T& out,
@@ -1512,6 +1527,37 @@ vp_trait(
     }
 }
 
+// The factors of the velocity and dispersion height traits at the height
+// z, with the parameter p of the trait (node-wise if consts[0] is true):
+// max(0, |z| - p), which grows linearly above the height p (e.g. a lag,
+// with a polar trait of the lag per unit height), and exp(-|z| / p) and
+// exp(-z^2 / (2 p^2)), which fall with the scale height p.
+template<typename T> constexpr T
+h_factor_param(int rnidx, const T* rnodes, T r, const T* consts,
+               const T* params)
+{
+    const bool use_rnodes = consts[0];
+    return use_rnodes ? nodewise(r, rnidx, rnodes, params, 0, 1) : params[0];
+}
+
+template<typename T> constexpr T
+h_factor_linear(T z, T p)
+{
+    return std::max(T{0}, std::abs(z) - p);
+}
+
+template<typename T> constexpr T
+h_factor_exponential(T z, T p)
+{
+    return std::exp(-std::abs(z) / p);
+}
+
+template<typename T> constexpr T
+h_factor_gauss(T z, T p)
+{
+    return std::exp(-z * z / (2 * p * p));
+}
+
 template<typename T> constexpr void
 vh_trait(
         T& out,
@@ -1519,18 +1565,24 @@ vh_trait(
         int rnidx, const T* rnodes, int nrnodes,
         T r, T z)
 {
-    (void)consts;
-    (void)params;
-    (void)rnidx;
-    (void)rnodes;
     (void)nrnodes;
-    (void)r;
-    (void)z;
 
     switch (uid)
     {
     case VHT_UID_ONE:
         out = 1;
+        break;
+    case VHT_UID_LINEAR:
+        out = h_factor_linear(
+                z, h_factor_param(rnidx, rnodes, r, consts, params));
+        break;
+    case VHT_UID_EXP:
+        out = h_factor_exponential(
+                z, h_factor_param(rnidx, rnodes, r, consts, params));
+        break;
+    case VHT_UID_GAUSS:
+        out = h_factor_gauss(
+                z, h_factor_param(rnidx, rnodes, r, consts, params));
         break;
     default:
         out = NAN;
@@ -1621,18 +1673,24 @@ dh_trait(
         int rnidx, const T* rnodes, int nrnodes,
         T r, T z)
 {
-    (void)consts;
-    (void)params;
-    (void)rnidx;
-    (void)rnodes;
     (void)nrnodes;
-    (void)r;
-    (void)z;
 
     switch (uid)
     {
     case DHT_UID_ONE:
         out = 1;
+        break;
+    case DHT_UID_LINEAR:
+        out = h_factor_linear(
+                z, h_factor_param(rnidx, rnodes, r, consts, params));
+        break;
+    case DHT_UID_EXP:
+        out = h_factor_exponential(
+                z, h_factor_param(rnidx, rnodes, r, consts, params));
+        break;
+    case DHT_UID_GAUSS:
+        out = h_factor_gauss(
+                z, h_factor_param(rnidx, rnodes, r, consts, params));
         break;
     default:
         out = NAN;
@@ -1684,6 +1742,10 @@ sp_trait(
     case SPT_UID_AZRANGE:
         sp_trait_azrange(
                 out, theta, params);
+        break;
+    case SPT_UID_RRANGE:
+        sp_trait_rrange(
+                out, r, params);
         break;
     case SPT_UID_NW_AZRANGE:
         sp_trait_nw_azrange(
