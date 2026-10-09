@@ -56,26 +56,12 @@ def trait_configs(parser):
     return configs
 
 
-# Known failures, with the reason
-KNOWN_FAILURES = {
-    ('dptraits', 'mixture_ggauss'):
-        "a dispersion of exactly 0 (where the blob underflows) gives NaN: "
-        "the kernel samples the line's pdf at the channel centres"}
-
-
 def cases():
     kinds = SPECTRAL_KINDS | dict(
         optraits=traits.opt_parser, ohtraits=traits.oht_parser)
     for key, parser in kinds.items():
         for config in trait_configs(parser):
-            known = (key, config['type']) + (
-                (config['rnodes'],) if 'rnodes' in config else ())
-            marks = []
-            if known in KNOWN_FAILURES:
-                marks = [pytest.mark.xfail(
-                    reason=KNOWN_FAILURES[known], strict=True)]
-            yield pytest.param(
-                key, config, id=f"{key}-{config}", marks=marks)
+            yield pytest.param(key, config, id=f"{key}-{config}")
 
 
 def model_and_properties(driver, key, config):

@@ -9,18 +9,20 @@ current format. The references are used by
 tests/model/test_reference_models.py to check that the current code still
 produces the same models.
 
+Since then, the spectral lines are integrated over each channel instead
+of sampled at its centre, so the references were made again with the
+current code. Before that, the outputs were checked to differ from those
+of 6f79336 by that change only: the same flux in each spaxel (to 2e-5),
+and lines whose variance is larger by that of a channel (step^2 / 12).
+
 Usage:
 
     python make_references.py PYTHON
 
-where PYTHON is the interpreter of an environment with the reference
-version of gbkfit installed. Every <case>.yaml in this directory is
+where PYTHON is the interpreter of an environment with the version of
+gbkfit that makes the references (now the current code). Every <case>.yaml in this directory is
 evaluated with `gbkfit-cli eval model`, and its FITS outputs are stored
 in <case>.npz, keyed by file name.
-
-Note: commit 6f79336 only writes the first map of models with multiple
-maps, so the mmaps reference covers the moment 0 map only. The other
-moment maps are tested in tests/model/test_mmaps.py.
 """
 
 import pathlib

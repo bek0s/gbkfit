@@ -64,13 +64,20 @@ gmodel_scube_evaluate(
             (zmax - spec_zero)/spec_step), spec_size_z - 1);
 
     // Evaluate the spectral line within the range specified above
-    // Evaluating only within the range can result in huge speed increase
+    // Evaluating only within the range can result in huge speed increase.
+    // Each channel gets the mean of the line over the channel (the cube
+    // holds flux per unit velocity), which conserves the flux of lines of
+    // any width, including 0. The channels share their edges, so each
+    // channel needs one cdf.
+    T cdf_lo = gauss_1d_cdf(
+            spec_zero + (zmin_idx - T{0.5}) * spec_step, vvalue, dvalue);
     for (int z = zmin_idx; z <= zmax_idx; ++z)
     {
         int idx = index_3d_to_1d(x, y, z, spat_size_x, spat_size_y);
-        T zvel = spec_zero + z * spec_step;
-        T flux = rvalue * gauss_1d_pdf(zvel, vvalue, dvalue); // * spec_step;
-        AtomicAddFunT(&scube[idx], flux);
+        T cdf_hi = gauss_1d_cdf(
+                spec_zero + (z + T{0.5}) * spec_step, vvalue, dvalue);
+        AtomicAddFunT(&scube[idx], rvalue * (cdf_hi - cdf_lo) / spec_step);
+        cdf_lo = cdf_hi;
     }
 }
 

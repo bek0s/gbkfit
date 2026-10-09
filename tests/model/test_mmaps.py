@@ -30,11 +30,15 @@ def moments_from_scube(scube, spec_step):
 def test_mmaps_matches_moments_of_scube(evaluate_model):
     # thin_disk_mmaps and thin_disk_scube describe the same galaxy with
     # the same PSF and LSF, so the moment maps must match the moments of
-    # the spectral cube
+    # the spectral cube. The channels hold the mean of the lines over each
+    # channel, which adds the variance of a channel (step^2 / 12) to the
+    # lines: the spectral cube has channels of 10, and the cube of the
+    # moment maps of 1 (the default).
     mmaps = evaluate_model(REFERENCE_DIR / 'thin_disk_mmaps.yaml')
     scube = np.load(REFERENCE_DIR / 'thin_disk_scube.npz')['model_0_scube_d']
     moment1, moment2, intensity = moments_from_scube(
         scube.astype(np.float64), spec_step=10)
+    moment2 = np.sqrt(moment2 ** 2 - 10 ** 2 / 12 + 1 ** 2 / 12)
     bright = intensity > 0.05 * intensity.max()
     for order, expected in ((1, moment1), (2, moment2)):
         np.testing.assert_allclose(
@@ -67,7 +71,9 @@ def test_higher_moments_of_a_gaussian_line(driver):
     # Without a PSF and an LSF, every spaxel of a thin disk has a single
     # Gaussian line, so its third central moment is zero and its fourth
     # is 3 sigma^4, where sigma is the moment 2 map. A spectral step
-    # other than 1 checks that the moments are scaled correctly.
+    # other than 1 checks that the moments are scaled correctly. The
+    # channels hold the mean of the line over each channel, which adds
+    # the variance of a channel (step^2 / 12) to that of the line.
     from gbkfit.model.dmodels import DModelMMaps
     dmodel = DModelMMaps(
         size=(32, 32), spec_size=81, spec_step=5, orders=(1, 2, 3, 4))
@@ -81,7 +87,8 @@ def test_higher_moments_of_a_gaussian_line(driver):
     sigma = mmaps['mmap2']['d']
     disk = np.isfinite(sigma)
     assert disk.sum() > 100
-    np.testing.assert_allclose(sigma[disk], 20, rtol=1e-3)
+    np.testing.assert_allclose(
+        sigma[disk], np.sqrt(20 ** 2 + 5 ** 2 / 12), rtol=1e-3)
     np.testing.assert_allclose(
         mmaps['mmap3']['d'][disk], 0, atol=1e-3 * 20 ** 3)
     np.testing.assert_allclose(

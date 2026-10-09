@@ -279,6 +279,9 @@ gauss_1d_fun_trunc(T x, T a, T b, T c, T xmin, T xmax)
 template<typename T> constexpr T
 gauss_1d_cdf(T x, T b, T c)
 {
+    // A Gaussian of width 0 is a step at b
+    if (c == 0)
+        return x < b ? T{0} : T{1};
     return T{0.5} * (1 + erf((x - b)/(c * std::sqrt(2))));
 }
 
