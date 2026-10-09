@@ -146,25 +146,17 @@ MODELS = dict(
             ocmp_opt_a=0.05, ocmp_opt_s=4, ocmp_oht_s=1)))
 
 
-# The velocity and dispersion of each voxel of a Monte Carlo disk are
-# those of the last cloud added to it, which depends on the order of the
-# threads, so they are not reproducible
-NOT_REPRODUCIBLE = (
-    'model0_gmodel_component1_vdata',
-    'model0_gmodel_component1_ddata')
-
-
 @pytest.mark.parametrize('name', MODELS)
 def test_gmodel(driver, name, evaluate_models, ndarrays_regression):
     model, properties = MODELS[name]
     model = dict(model, driver=dict(type=driver.type()))
     data, extra = evaluate_models([model], properties)
+    # The extra outputs on a grid are compared by their data
     outputs = {
         f'data_{key}': data_[key]['d']
-        for data_ in data for key in data_} | extra
-    if name == 'kinematics_3d':
-        for key in NOT_REPRODUCIBLE:
-            del outputs[key]
+        for data_ in data for key in data_} | {
+        key: value.data if isinstance(value, fitsutils.GridData) else value
+        for key, value in extra.items()}
     # Thick disks and Monte Carlo disks are not bitwise reproducible,
     # because the threads add to the outputs in a different order
     ndarrays_regression.check(outputs, tolerances={

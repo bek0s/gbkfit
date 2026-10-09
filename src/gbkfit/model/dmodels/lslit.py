@@ -6,12 +6,21 @@ import numpy as np
 from gbkfit.dataset.datasets import DatasetLSlit
 from gbkfit.model.core import DModel, GModelSCube
 from gbkfit.psflsf import LSF, PSF, lsf_parser, psf_parser
+from gbkfit.utils import fitsutils
 from . import _dcube, _detail
 
 
 __all__ = [
     'DModelLSlit'
 ]
+
+
+def _slit_extra(data, grid):
+    """
+    An extra output on the low-res grid of DCube, as a slit (the position
+    along the slit and the velocity; the slit is one pixel wide).
+    """
+    return fitsutils.GridData(data[:, 0, :], grid.coords.axes(0, 2), 1)
 
 
 class DModelLSlit(DModel):
@@ -147,7 +156,7 @@ class DModelLSlit(DModel):
             dcube.dtype(),
             out_gmodel_extra)
         # Evaluate DCube (perform convolution, supersampling, etc)
-        dcube.evaluate(out_dmodel_extra)
+        dcube.evaluate(out_dmodel_extra, _slit_extra, _dcube.plain_extra)
         # Model evaluation complete.
         # Return data, mask, and weight arrays (if available),
         # with shape (spectral, position)

@@ -8,7 +8,7 @@ smoothed if smooth_weights is set.
 import numpy as np
 import pytest
 
-from gbkfit.model.dmodels._dcube import DCube
+from gbkfit.model.dmodels._dcube import DCube, cube_extra
 from gbkfit.psflsf.lsfs import LSFGauss
 from gbkfit.psflsf.psfs import PSFGauss
 
@@ -65,7 +65,7 @@ def test_downscaling_keeps_a_uniform_cube(driver):
         dtype=np.dtype(np.float32))
     dcube.prepare(driver, has_weights=False)
     driver.mem_fill(dcube.scratch_dcube(), 42)
-    dcube.evaluate(None)
+    dcube.evaluate(None, cube_extra, cube_extra)
     np.testing.assert_allclose(driver.mem_copy_d2h(dcube.dcube()), 42)
 
 
@@ -87,7 +87,7 @@ def _evaluate_weights(driver, smooth_weights):
     pattern = pattern.astype(np.float32)
     driver.mem_copy_h2d(pattern, dcube.scratch_wcube())
     driver.mem_fill(dcube.scratch_dcube(), 0)
-    dcube.evaluate(None)
+    dcube.evaluate(None, cube_extra, cube_extra)
 
     edge_z, edge_y, edge_x = dcube.scratch_edge()[::-1]
     size_z, size_y, size_x = dcube.size()[::-1]
@@ -122,7 +122,7 @@ def test_mask(driver):
     z, y, x = np.indices(dcube.size()[::-1])
     pattern = (np.sin(0.7 * x + 0.3 * y + 0.5 * z) + 1).astype(np.float32)
     driver.mem_copy_h2d(pattern, dcube.scratch_dcube())
-    dcube.evaluate(None)
+    dcube.evaluate(None, cube_extra, cube_extra)
     data = np.asarray(driver.mem_copy_d2h(dcube.dcube()))
     mask = np.asarray(driver.mem_copy_d2h(dcube.mcube()))
     keep = pattern > 0.5
@@ -150,6 +150,6 @@ def test_lsf_only_keeps_the_image_on_a_non_square_cube(driver):
         line = np.exp(-0.5 * ((z - 20 - 0.1 * x) / 3) ** 2)
         cube = (line * (1 + np.sin(0.3 * x) * np.cos(0.4 * y)))
         driver.mem_copy_h2d(cube.astype(np.float32), dcube.scratch_dcube())
-        dcube.evaluate(None)
+        dcube.evaluate(None, cube_extra, cube_extra)
         images.append(np.asarray(driver.mem_copy_d2h(dcube.dcube())).sum(0))
     np.testing.assert_allclose(images[1], images[0], rtol=1e-4)
