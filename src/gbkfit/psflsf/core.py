@@ -42,6 +42,18 @@ def check_ratio(ratio: float) -> None:
             f"ratio must be greater than 0 and at most 1; it is {ratio}")
 
 
+def _check_finite_size(kernel, *size: float) -> None:
+    """
+    Raise RuntimeError unless the size of the array of a PSF or LSF is
+    finite: profiles whose wings are too heavy (e.g. a Moffat of beta
+    close to its limit) put WING_FLUX of their flux at no finite distance.
+    """
+    if not np.all(np.isfinite(size)):
+        raise RuntimeError(
+            f"{kernel.__class__.__name__} {kernel.dump()}: its wings are too "
+            f"heavy for an array to hold {1 - WING_FLUX:.0%} of its flux")
+
+
 def embed(kernel: np.ndarray, size: tuple[int, ...],
           offset: tuple[int, ...]) -> np.ndarray:
     """
@@ -79,7 +91,9 @@ class LSF(parseutils.TypedSerializable, abc.ABC):
 
     def size(self, step: float) -> int:
         """The (odd) size of the array that holds the LSF."""
-        return int(gbkfit.math.roundu_odd(self._size_impl(step)))
+        size = self._size_impl(step)
+        _check_finite_size(self, size)
+        return int(gbkfit.math.roundu_odd(size))
 
     def asarray(
             self,
@@ -137,6 +151,7 @@ class PSF(parseutils.TypedSerializable, abc.ABC):
     def size(self, step: tuple[float, float]) -> tuple[int, int]:
         """The (odd) size of the array that holds the PSF."""
         base_size = self._size_impl(step)
+        _check_finite_size(self, *base_size)
         return (int(gbkfit.math.roundu_odd(base_size[0])),
                 int(gbkfit.math.roundu_odd(base_size[1])))
 
