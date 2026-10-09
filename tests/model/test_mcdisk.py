@@ -96,6 +96,38 @@ def test_mcdisk_vertical_profile_matches_smdisk(driver, height, shape, trunc):
     assert relative_difference(mcdisk.sum(0), smdisk.sum(0)) < 0.02
 
 
+# A vertical distortion of the midplane at every node of the configs
+DISTORTION = dict(zptraits=dict(type='nw_uniform'))
+DISTORTED = dict(zpt_a=[2.0] * 11)
+
+
+def test_mcdisk_vertical_distortion_matches_smdisk(driver):
+    # A distortion lifts the midplane of both disks the same way
+    properties = DISTORTED | dict(incl=80)
+    smdisk = evaluate_disk('smdisk', driver.type(), DISTORTION, properties)
+    mcdisk = evaluate_disk(
+        'mcdisk', driver.type(), DISTORTION | dict(cflux=2e-5), properties)
+    flat = evaluate_disk(
+        'smdisk', driver.type(), DISTORTION, properties | dict(
+            zpt_a=[0.0] * 11))
+    assert relative_difference(smdisk.sum(0), flat.sum(0)) > 0.1
+    assert relative_difference(mcdisk.sum(0), smdisk.sum(0)) < 0.02
+
+
+def test_mcdisk_height_traits_of_a_distorted_disk_match_smdisk(driver):
+    # The velocity height traits depend on the height above the
+    # (distorted) midplane, in both disks
+    component = DISTORTION | dict(vhtraits=dict(type='exponential'))
+    properties = DISTORTED | dict(vht_s=1)
+    smdisk = evaluate_disk('smdisk', driver.type(), component, properties)
+    mcdisk = evaluate_disk(
+        'mcdisk', driver.type(), component | dict(cflux=2e-5), properties)
+    smdisk_velocity, smdisk_intensity = velocity_field(smdisk)
+    mcdisk_velocity, _ = velocity_field(mcdisk)
+    bright = smdisk_intensity > 0.05 * smdisk_intensity.max()
+    difference = mcdisk_velocity[bright] - smdisk_velocity[bright]
+    assert np.sqrt(np.mean(difference ** 2)) < 0.1
+
 @pytest.mark.parametrize('height', ['exponential', 'gauss', 'uniform'])
 def test_mcdisk_flux_does_not_depend_on_height_profile(driver, height):
     # All clouds carry the same flux, and with these thin profiles they
