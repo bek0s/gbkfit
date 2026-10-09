@@ -4,8 +4,8 @@ from numbers import Real
 import astropy.units
 
 from gbkfit.dataset.datasets import DatasetRegionSpectra
-from gbkfit.dataset.regions import Regions, regions_parser
 from gbkfit.model.base import GModelSCube
+from gbkfit.region import Regions, regions_parser
 from gbkfit.utils import gridutils, parseutils
 from . import _dcube, _detail
 from ._regions import RegionSumsPlan, flux_weights

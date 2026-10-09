@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from gbkfit.dataset import (
+from gbkfit.region import (
     ApertureCircle, ApertureEllipse, ApertureField, AperturePolygon,
     ApertureRectangle, RegionsApertures, RegionsBins, regions_parser)
 from gbkfit.math import overlap
