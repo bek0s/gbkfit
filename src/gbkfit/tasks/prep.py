@@ -97,6 +97,10 @@ def _read_fits(filename):
     """The data and the header of a file, without the axes of length 1."""
     data = fits.getdata(filename)
     header = fits.getheader(filename)
+    # Astropy writes the FITS default for a missing reference pixel, so
+    # write the one of the model (see fitsutils.read_data)
+    if _has_wcs(header):
+        header = fitsutils.centre_missing_crpix(header, data.shape)
     axes = [axis for axis, length in enumerate(data.shape) if length == 1]
     data = np.squeeze(data)
     # The header of the squeezed data: its NAXISn, and the world
