@@ -32,6 +32,15 @@ class PrimaryBeam(parseutils.TypedSerializable, abc.ABC):
     """
 
     @abc.abstractmethod
+    def dump(self, prefix='', dump_path=True, overwrite=False):
+        """
+        The options of the response. Those with data (an image) write it to
+        a file whose name starts with prefix, and give its path, or only
+        its name without dump_path.
+        """
+        pass
+
+    @abc.abstractmethod
     def response(self, grid: fitsutils.Grid) -> np.ndarray:
         """The response at the pixels of the x and y axes of a grid."""
         pass
@@ -50,7 +59,8 @@ class PrimaryBeamRadial(PrimaryBeam, abc.ABC):
         return cls(**parseutils.parse_options_for_callable(
             info, desc, cls.__init__))
 
-    def dump(self):
+    def dump(self, prefix='', dump_path=True, overwrite=False):
+        # A radial response has no data to write
         return dict(type=self.type(), fwhm=self._fwhm, x=self._x, y=self._y)
 
     def __init__(self, fwhm: Real, x: Real = 0, y: Real = 0):

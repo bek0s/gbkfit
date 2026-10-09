@@ -76,7 +76,8 @@ class Observation(parseutils.BasicSerializable):
             driver=driver_parser.dump(self._driver),
             foreground=foreground_parser.dump(
                 self._foreground, **dump_kwargs),
-            instrument=instrument_parser.dump(self._instrument),
+            instrument=instrument_parser.dump(
+                self._instrument, **dump_kwargs),
             observable=observable_parser.dump(
                 self._observable, data=self._data),
             scale=self._scale,

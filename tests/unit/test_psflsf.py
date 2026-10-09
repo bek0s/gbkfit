@@ -92,6 +92,32 @@ def test_psf_image_round_trip():
     np.testing.assert_array_equal(loaded._data, psf._data)
 
 
+
+def test_images_in_sums_and_convolutions_have_their_own_files():
+    # The images of the terms of a sum or a convolution are written to
+    # files named with the prefix and the index of the term
+    from gbkfit.psflsf.lsfs import LSFConvolution, LSFSum
+    from gbkfit.psflsf.psfs import PSFConvolution, PSFSum
+    psf_a = PSFImage(np.outer([1, 2, 1], [1, 3, 1]))
+    psf_b = PSFImage(np.outer([1, 1, 1], [1, 1, 1]))
+    lsf_a = LSFImage(np.array([1, 2, 1]), step=2)
+    lsf_b = LSFImage(np.array([1, 1, 1]), step=2)
+    psf_sum = psf_parser.dump(
+        PSFSum([psf_a, PSFConvolution([psf_b])], [1, 1]), prefix='out_')
+    assert [psf_sum['psfs'][0]['data'],
+            psf_sum['psfs'][1]['psfs'][0]['data']] == [
+        'out_term0_psf.fits', 'out_term1_term0_psf.fits']
+    lsf_sum = lsf_parser.dump(
+        LSFSum([lsf_a, LSFConvolution([lsf_b])], [1, 1]), prefix='out_')
+    assert [lsf_sum['lsfs'][0]['data'],
+            lsf_sum['lsfs'][1]['lsfs'][0]['data']] == [
+        'out_term0_lsf.fits', 'out_term1_term0_lsf.fits']
+    loaded = psf_parser.load(psf_sum)
+    np.testing.assert_array_equal(loaded._psfs[0]._data, psf_a._data)
+    np.testing.assert_array_equal(
+        loaded._psfs[1]._psfs[0]._data, psf_b._data)
+
+
 def test_psf_image_pixel_scale_is_in_arcsec():
     from astropy.io import fits
     header = fits.Header(dict(

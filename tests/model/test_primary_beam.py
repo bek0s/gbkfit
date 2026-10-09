@@ -119,3 +119,22 @@ def test_primary_beam_from_an_image(tmp_path):
     again = primary_beam_parser.load(dict(dumped))
     np.testing.assert_allclose(
         again.response(grid), image.response(grid), atol=1e-6)
+
+
+def test_observation_dumps_the_image_of_its_primary_beam(tmp_path):
+    # The image of the primary beam of an observation goes to a file named
+    # with the prefix of the dump, which can be dumped again (overwrite)
+    from gbkfit.driver.drivers.host import DriverHost
+    from gbkfit.observation import (
+        Observation, PrimaryBeamImage, observation_parser)
+    from gbkfit.observation.observables import Image
+    beam = PrimaryBeamImage(np.ones((8, 8)))
+    observation = Observation(
+        DriverHost(), Image(size=(8, 8)),
+        instrument=Instrument(primary_beam=beam))
+    prefix = str(tmp_path / 'out_')
+    for _ in range(2):
+        dumped = observation_parser.dump(
+            observation, prefix=prefix, overwrite=True)
+    assert dumped['instrument']['primary_beam']['file'] == (
+        f'{prefix}primary_beam.fits')

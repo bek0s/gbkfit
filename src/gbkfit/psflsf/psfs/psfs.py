@@ -1,4 +1,5 @@
 
+import os
 from collections.abc import Sequence
 from typing import Any
 
@@ -80,7 +81,10 @@ class PSFPoint(PSF):
     def load(cls, info: dict[str, Any], *args, **kwargs) -> 'PSFPoint':
         return cls()
 
-    def dump(self) -> dict[str, Any]:
+    def dump(
+            self, prefix: str = '', dump_path: bool = True,
+            overwrite: bool = False
+    ) -> dict[str, Any]:
         return dict(type=self.type())
 
     def _size_impl(self, step: tuple[float, float]) -> tuple[float, float]:
@@ -114,7 +118,10 @@ class PSFGauss(PSF):
         opts = _load_psf_common(cls, info)
         return cls(**opts)
 
-    def dump(self) -> dict[str, Any]:
+    def dump(
+            self, prefix: str = '', dump_path: bool = True,
+            overwrite: bool = False
+    ) -> dict[str, Any]:
         return dict(
             type=self.type(),
             sigma=self._sigma,
@@ -170,7 +177,10 @@ class PSFGGauss(PSF):
         opts = _load_psf_common(cls, info)
         return cls(**opts)
 
-    def dump(self) -> dict[str, Any]:
+    def dump(
+            self, prefix: str = '', dump_path: bool = True,
+            overwrite: bool = False
+    ) -> dict[str, Any]:
         return dict(
             type=self.type(),
             alpha=self._alpha,
@@ -237,7 +247,10 @@ class PSFMoffat(PSF):
         opts = _load_psf_common(cls, info)
         return cls(**opts)
 
-    def dump(self) -> dict[str, Any]:
+    def dump(
+            self, prefix: str = '', dump_path: bool = True,
+            overwrite: bool = False
+    ) -> dict[str, Any]:
         return dict(
             type=self.type(),
             alpha=self._alpha,
@@ -311,12 +324,18 @@ class PSFImage(PSF):
         info.update(data=data, step=info.get('step', coords.step))
         return cls(**_load_psf_common(cls, info))
 
-    def dump(self, filename='psf.fits', overwrite=False):
-        info = dict(type=self.type(), data=filename, step=self._step)
+    def dump(
+            self, prefix: str = '', dump_path: bool = True,
+            overwrite: bool = False
+    ) -> dict[str, Any]:
+        filename = f'{prefix}psf.fits'
         rpix = tuple(np.array(self._data.shape[::-1]) / 2 - 0.5)
         coords = fitsutils.Coords(tuple(self._step), rpix, (0.0, 0.0), 0.0)
         fitsutils.write_data(filename, self._data, coords, None, overwrite)
-        return info
+        return dict(
+            type=self.type(),
+            data=filename if dump_path else os.path.basename(filename),
+            step=self._step)
 
     def __init__(
             self, data: np.ndarray, step: tuple[float, float] = (1.0, 1.0)
@@ -359,6 +378,20 @@ class PSFImage(PSF):
         return data / np.sum(data)
 
 
+def _dump_terms(
+        psfs: Sequence[PSF], prefix: str, dump_path: bool, overwrite: bool
+) -> list[dict[str, Any]]:
+    """
+    The options of the PSFs of a sum or a convolution, the files of each
+    named with its own prefix (term0_, term1_, ...).
+    """
+    return [
+        psf_parser.dump(
+            psf, prefix=f'{prefix}term{i}_', dump_path=dump_path,
+            overwrite=overwrite)
+        for i, psf in enumerate(psfs)]
+
+
 class PSFSum(PSF):
     """
     A sum of PSFs (e.g. a double Gaussian, or a Gaussian core with Moffat
@@ -376,10 +409,13 @@ class PSFSum(PSF):
             psf_parser, info, 'psfs', required=True)
         return cls(**_load_psf_common(cls, info))
 
-    def dump(self) -> dict[str, Any]:
+    def dump(
+            self, prefix: str = '', dump_path: bool = True,
+            overwrite: bool = False
+    ) -> dict[str, Any]:
         return dict(
             type=self.type(),
-            psfs=psf_parser.dump(list(self._psfs)),
+            psfs=_dump_terms(self._psfs, prefix, dump_path, overwrite),
             weights=self._weights.tolist())
 
     def __init__(self, psfs: Sequence[PSF], weights: Sequence[float]):
@@ -419,8 +455,13 @@ class PSFConvolution(PSF):
             psf_parser, info, 'psfs', required=True)
         return cls(**_load_psf_common(cls, info))
 
-    def dump(self) -> dict[str, Any]:
-        return dict(type=self.type(), psfs=psf_parser.dump(list(self._psfs)))
+    def dump(
+            self, prefix: str = '', dump_path: bool = True,
+            overwrite: bool = False
+    ) -> dict[str, Any]:
+        return dict(
+            type=self.type(),
+            psfs=_dump_terms(self._psfs, prefix, dump_path, overwrite))
 
     def __init__(self, psfs: Sequence[PSF]):
         if not psfs:
@@ -485,7 +526,10 @@ class PSFBeam(PSF):
                 bpa=float(header['BPA']))
         return cls(**_load_psf_common(cls, info))
 
-    def dump(self) -> dict[str, Any]:
+    def dump(
+            self, prefix: str = '', dump_path: bool = True,
+            overwrite: bool = False
+    ) -> dict[str, Any]:
         return dict(
             type=self.type(), bmaj=self._bmaj, bmin=self._bmin, bpa=self._bpa)
 
