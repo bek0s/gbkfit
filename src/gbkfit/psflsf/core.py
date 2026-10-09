@@ -1,5 +1,6 @@
 
 import abc
+from typing import Any
 
 import numpy as np
 
@@ -64,6 +65,18 @@ def embed(kernel: np.ndarray, size: tuple[int, ...],
 
 class LSF(parseutils.TypedSerializable, abc.ABC):
 
+    @abc.abstractmethod
+    def dump(
+            self, prefix: str = '', dump_path: bool = True,
+            overwrite: bool = False
+    ) -> dict[str, Any]:
+        """
+        The options of the LSF. Those with data (an image) write it to a
+        file whose name starts with prefix, and give its path, or only its
+        name without dump_path; the others write nothing.
+        """
+        pass
+
     def size(self, step: float) -> int:
         """The (odd) size of the array that holds the LSF."""
         return int(gbkfit.math.roundu_odd(self._size_impl(step)))
@@ -108,6 +121,18 @@ class LSF(parseutils.TypedSerializable, abc.ABC):
 
 
 class PSF(parseutils.TypedSerializable, abc.ABC):
+
+    @abc.abstractmethod
+    def dump(
+            self, prefix: str = '', dump_path: bool = True,
+            overwrite: bool = False
+    ) -> dict[str, Any]:
+        """
+        The options of the PSF. Those with data (an image) write it to a
+        file whose name starts with prefix, and give its path, or only its
+        name without dump_path; the others write nothing.
+        """
+        pass
 
     def size(self, step: tuple[float, float]) -> tuple[int, int]:
         """The (odd) size of the array that holds the PSF."""

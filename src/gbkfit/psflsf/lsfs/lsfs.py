@@ -1,4 +1,5 @@
 
+import os
 from collections.abc import Sequence
 from typing import Any
 
@@ -67,7 +68,10 @@ class LSFPoint(LSF):
     def load(cls, info: dict[str, Any], *args, **kwargs) -> 'LSFPoint':
         return cls()
 
-    def dump(self) -> dict[str, Any]:
+    def dump(
+            self, prefix: str = '', dump_path: bool = True,
+            overwrite: bool = False
+    ) -> dict[str, Any]:
         return dict(type=self.type())
 
     def _size_impl(self, step: float) -> float:
@@ -96,7 +100,10 @@ class LSFGauss(LSF):
         opts = _load_lsf_common(cls, info)
         return cls(**opts)
 
-    def dump(self) -> dict[str, Any]:
+    def dump(
+            self, prefix: str = '', dump_path: bool = True,
+            overwrite: bool = False
+    ) -> dict[str, Any]:
         return dict(
             type=self.type(),
             sigma=self._sigma)
@@ -141,7 +148,10 @@ class LSFGGauss(LSF):
         opts = _load_lsf_common(cls, info)
         return cls(**opts)
 
-    def dump(self) -> dict[str, Any]:
+    def dump(
+            self, prefix: str = '', dump_path: bool = True,
+            overwrite: bool = False
+    ) -> dict[str, Any]:
         return dict(
             type=self.type(),
             alpha=self._alpha,
@@ -191,7 +201,10 @@ class LSFLorentz(LSF):
         opts = _load_lsf_common(cls, info)
         return cls(**opts)
 
-    def dump(self) -> dict[str, Any]:
+    def dump(
+            self, prefix: str = '', dump_path: bool = True,
+            overwrite: bool = False
+    ) -> dict[str, Any]:
         return dict(
             type=self.type(),
             gamma=self._gamma)
@@ -236,7 +249,10 @@ class LSFMoffat(LSF):
         opts = _load_lsf_common(cls, info)
         return cls(**opts)
 
-    def dump(self) -> dict[str, Any]:
+    def dump(
+            self, prefix: str = '', dump_path: bool = True,
+            overwrite: bool = False
+    ) -> dict[str, Any]:
         return dict(
             type=self.type(),
             alpha=self._alpha,
@@ -294,13 +310,17 @@ class LSFImage(LSF):
         return cls(**_load_lsf_common(cls, info))
 
     def dump(
-            self, filename='lsf.fits', overwrite: bool = False
+            self, prefix: str = '', dump_path: bool = True,
+            overwrite: bool = False
     ) -> dict[str, Any]:
-        info = dict(type=self.type(), data=filename, step=self._step)
+        filename = f'{prefix}lsf.fits'
         rpix = self._data.size / 2 - 0.5
         coords = fitsutils.Coords((self._step,), (rpix,), (0.0,), 0.0)
         fitsutils.write_data(filename, self._data, coords, 0, overwrite)
-        return info
+        return dict(
+            type=self.type(),
+            data=filename if dump_path else os.path.basename(filename),
+            step=self._step)
 
     def __init__(self, data: np.ndarray, step: float = 1.0):
         data = np.squeeze(data)  # Remove singleton dimensions
@@ -335,6 +355,20 @@ class LSFImage(LSF):
         return data / np.sum(data)
 
 
+def _dump_terms(
+        lsfs: Sequence[LSF], prefix: str, dump_path: bool, overwrite: bool
+) -> list[dict[str, Any]]:
+    """
+    The options of the LSFs of a sum or a convolution, the files of each
+    named with its own prefix (term0_, term1_, ...).
+    """
+    return [
+        lsf_parser.dump(
+            lsf, prefix=f'{prefix}term{i}_', dump_path=dump_path,
+            overwrite=overwrite)
+        for i, lsf in enumerate(lsfs)]
+
+
 class LSFSum(LSF):
     """
     A sum of LSFs (e.g. a double Gaussian), each with its fraction of the
@@ -351,10 +385,13 @@ class LSFSum(LSF):
             lsf_parser, info, 'lsfs', required=True)
         return cls(**_load_lsf_common(cls, info))
 
-    def dump(self) -> dict[str, Any]:
+    def dump(
+            self, prefix: str = '', dump_path: bool = True,
+            overwrite: bool = False
+    ) -> dict[str, Any]:
         return dict(
             type=self.type(),
-            lsfs=lsf_parser.dump(list(self._lsfs)),
+            lsfs=_dump_terms(self._lsfs, prefix, dump_path, overwrite),
             weights=self._weights.tolist())
 
     def __init__(self, lsfs: Sequence[LSF], weights: Sequence[float]):
@@ -387,8 +424,13 @@ class LSFConvolution(LSF):
             lsf_parser, info, 'lsfs', required=True)
         return cls(**_load_lsf_common(cls, info))
 
-    def dump(self) -> dict[str, Any]:
-        return dict(type=self.type(), lsfs=lsf_parser.dump(list(self._lsfs)))
+    def dump(
+            self, prefix: str = '', dump_path: bool = True,
+            overwrite: bool = False
+    ) -> dict[str, Any]:
+        return dict(
+            type=self.type(),
+            lsfs=_dump_terms(self._lsfs, prefix, dump_path, overwrite))
 
     def __init__(self, lsfs: Sequence[LSF]):
         if not lsfs:
@@ -425,7 +467,10 @@ class LSFHanning(LSF):
     def load(cls, info: dict[str, Any], *args, **kwargs) -> 'LSFHanning':
         return cls(**_load_lsf_common(cls, info))
 
-    def dump(self) -> dict[str, Any]:
+    def dump(
+            self, prefix: str = '', dump_path: bool = True,
+            overwrite: bool = False
+    ) -> dict[str, Any]:
         return dict(type=self.type(), width=self._width)
 
     def __init__(self, width: float):

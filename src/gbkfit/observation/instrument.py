@@ -26,11 +26,17 @@ class Instrument(parseutils.BasicSerializable):
         return cls(**parseutils.parse_options_for_callable(
             info, desc, cls.__init__))
 
-    def dump(self):
+    def dump(self, prefix='', dump_path=True, overwrite=False):
+        """
+        The options of the instrument; the data of its parts (images) go
+        to files whose names start with prefix (see PSF.dump).
+        """
+        kwargs = dict(prefix=prefix, dump_path=dump_path, overwrite=overwrite)
         return dict(
-            primary_beam=primary_beam_parser.dump(self._primary_beam),
-            psf=psf_parser.dump(self._psf),
-            lsf=lsf_parser.dump(self._lsf))
+            primary_beam=primary_beam_parser.dump(
+                self._primary_beam, **kwargs),
+            psf=psf_parser.dump(self._psf, **kwargs),
+            lsf=lsf_parser.dump(self._lsf, **kwargs))
 
     def __init__(
             self,
