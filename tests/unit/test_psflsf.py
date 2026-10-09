@@ -120,6 +120,21 @@ def test_images_in_sums_and_convolutions_have_their_own_files():
         loaded._psfs[1]._psfs[0]._data, psf_b._data)
 
 
+def test_image_kernels_keep_their_edges():
+    # Resampling an image samples it up to half a pixel beyond the
+    # centres of its edge pixels (always, for an even size): there it
+    # tends to the 0 beyond, instead of being 0 (a 2 x 2 image became a
+    # delta, and the width of a narrow kernel shrank)
+    x = np.arange(6) - 2.5
+    gauss = np.exp(-0.5 * x ** 2)
+    lsf = LSFImage(gauss, 1).asarray(1)
+    centre = np.arange(lsf.size) - lsf.size // 2
+    width = np.sqrt(np.sum(lsf * centre ** 2))
+    assert width == pytest.approx(np.sqrt(np.sum(gauss * x ** 2) / gauss.sum()),
+                                  rel=0.02)
+    psf = PSFImage(np.ones((2, 2))).asarray((1, 1))
+    assert (psf > 0).all()
+
 def test_psf_image_pixel_scale_is_in_arcsec():
     from astropy.io import fits
     header = fits.Header(dict(
