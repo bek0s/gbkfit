@@ -1,7 +1,3 @@
-from numbers import Real
-
-import numpy as np
-
 from gbkfit.dataset.data import dump_data, load_data
 from gbkfit.utils import fitsutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
@@ -55,32 +51,11 @@ def load_grid_dataset(cls, info, names, prefix=''):
 def make_grid(dataset, step, rpix, rval, rota):
     """
     The grid of the items of a dataset, with the given world coordinates
-    (see fitsutils.Coords), a value or one per axis, or their defaults:
-    step 1, the reference pixel at the centre, reference value 0 and no
-    rotation. The dataset declares its spectral axis (_spectral_axis).
+    or their defaults (see fitsutils.make_grid). The dataset declares its
+    spectral axis (_spectral_axis).
     """
-    size = dataset.shape()[::-1]
-    ndim = len(size)
-    if step is None:
-        step = 1
-    if rpix is None:
-        rpix = tuple((np.asarray(size) / 2 - 0.5).tolist())
-    if rval is None:
-        rval = 0
-    if rota is None:
-        rota = 0
-    step, rpix, rval = (
-        (value,) * ndim if isinstance(value, Real) else tuple(value)
-        for value in (step, rpix, rval))
-    for name, value in dict(step=step, rpix=rpix, rval=rval).items():
-        if len(value) != ndim:
-            raise RuntimeError(
-                f"the data have {ndim} axes, but {name} has {len(value)} "
-                f"values")
-    if not all(value > 0 for value in step):
-        raise RuntimeError(f"step must be positive; it is {step}")
-    return fitsutils.Grid(
-        tuple(size), fitsutils.Coords(step, rpix, rval, rota),
+    return fitsutils.make_grid(
+        dataset.shape()[::-1], step, rpix, rval, rota,
         dataset._spectral_axis)
 
 

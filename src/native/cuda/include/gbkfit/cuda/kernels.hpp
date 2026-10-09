@@ -105,6 +105,28 @@ dcube_moments(
 }
 
 template<typename T> __global__ void
+dmodel_regions_sum(
+        int nregions, int npix, int size_z,
+        const int* indptr, const int* indices, const T* weights,
+        const T* cube, T* out)
+{
+    // Parallelization: per region and channel
+    const int nthreads = nregions * size_z;
+    const int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (tid >= nthreads)
+        return;
+
+    int r, z;
+    index_1d_to_2d(r, z, tid, nregions);
+
+    gbkfit::dmodel_regions_sum(
+            r, z,
+            nregions, npix,
+            indptr, indices, weights,
+            cube, out);
+}
+
+template<typename T> __global__ void
 gmodel_wcube_evaluate(
         int spat_size_x, int spat_size_y, int spat_size_z,
         int spec_size_z,

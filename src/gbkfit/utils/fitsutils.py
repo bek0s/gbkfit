@@ -14,6 +14,7 @@ __all__ = [
     'GridData',
     'VELOCITY_TYPES',
     'centre_missing_crpix',
+    'make_grid',
     'read_data',
     'write_data'
 ]
@@ -77,6 +78,42 @@ class Grid(typing.NamedTuple):
     def spatial(self) -> 'Grid':
         """The grid of the x and y axes."""
         return Grid(self.size[:2], self.coords.axes(0, 1), None)
+
+
+def make_grid(
+        size: typing.Sequence[int],
+        step: float | typing.Sequence[float] | None = None,
+        rpix: float | typing.Sequence[float] | None = None,
+        rval: float | typing.Sequence[float] | None = None,
+        rota: float | None = None,
+        spectral_axis: int | None = None
+) -> Grid:
+    """
+    A grid of the given size (FITS order) with the given world
+    coordinates (see Coords), each a value or one per axis, or their
+    defaults: step 1, the reference pixel at the centre, reference value 0
+    and no rotation.
+    """
+    ndim = len(size)
+    if step is None:
+        step = 1
+    if rpix is None:
+        rpix = tuple((np.asarray(size) / 2 - 0.5).tolist())
+    if rval is None:
+        rval = 0
+    if rota is None:
+        rota = 0
+    step, rpix, rval = (
+        (value,) * ndim if np.ndim(value) == 0 else tuple(value)
+        for value in (step, rpix, rval))
+    for name, value in dict(step=step, rpix=rpix, rval=rval).items():
+        if len(value) != ndim:
+            raise RuntimeError(
+                f"the grid has {ndim} axes, but {name} has {len(value)} "
+                f"values")
+    if not all(value > 0 for value in step):
+        raise RuntimeError(f"step must be positive; it is {step}")
+    return Grid(tuple(size), Coords(step, rpix, rval, rota), spectral_axis)
 
 
 class GridData(typing.NamedTuple):

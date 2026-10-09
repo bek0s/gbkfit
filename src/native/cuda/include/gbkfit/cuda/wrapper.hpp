@@ -32,6 +32,12 @@ struct Wrapper
             T* mmaps_d, T* mmaps_m, T* mmaps_w);
 
     static void
+    dmodel_regions_sum(
+            int nregions, int npix, int size_z,
+            const int* indptr, const int* indices, const T* weights,
+            const T* cube, T* out);
+
+    static void
     gmodel_wcube_evaluate(
             int spat_size_x, int spat_size_y, int spat_size_z,
             int spec_size_z,

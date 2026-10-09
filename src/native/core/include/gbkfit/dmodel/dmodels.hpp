@@ -227,4 +227,25 @@ dmodel_mmaps_moments(
     }
 }
 
+// The weighted sum of the pixels of region r in channel z of a cube with
+// npix pixels in each channel, into out[z][r] (out has nregions values
+// in each channel). The region has the pixels indices[k] of the channel,
+// with the weights weights[k], for k from indptr[r] to indptr[r + 1] - 1.
+template<typename T> constexpr void
+dmodel_regions_sum(
+        int r, int z,
+        int nregions, int npix,
+        const int* indptr, const int* indices, const T* weights,
+        const T* cube, T* out)
+{
+    // Accumulate in double precision: a region can have many pixels
+    const T* channel = cube + static_cast<long>(z) * npix;
+    double sum = 0;
+    for (int k = indptr[r]; k < indptr[r + 1]; ++k)
+    {
+        sum += static_cast<double>(weights[k]) * channel[indices[k]];
+    }
+    out[z * nregions + r] = static_cast<T>(sum);
+}
+
 } // namespace gbkfit
