@@ -37,7 +37,11 @@ def _parse_component_node_args(
             f"the following expression must be true: "
             f"2 =< {prefix}nlen")
     if nodes_arange:
-        nodes = np.arange(nmin, nmax + nsep, nsep).tolist()
+        # From nmin every nsep, to the first node at or beyond nmax; the
+        # count tolerates the rounding of (nmax - nmin) / nsep, which made
+        # np.arange to nmax + nsep add a node (e.g. 2.4 for 2.2 in 0.2s)
+        count = int(np.ceil((nmax - nmin) / nsep - 1e-9)) + 1
+        nodes = (nmin + nsep * np.arange(count)).tolist()
     elif nodes_linspace:
         nodes = np.linspace(nmin, nmax, nlen).tolist()
     nodes = tuple(nodes)
@@ -51,7 +55,8 @@ def _parse_component_node_args(
         raise RuntimeError(f"{prefix}nodes must be unique")
     if step is None:
         step = min(1, min(np.diff(nodes)) / 2)
-    if step <= 0 or step > min(np.diff(nodes)) / 2:
+    # (half the difference is allowed, also as it rounds)
+    if step <= 0 or step > min(np.diff(nodes)) / 2 * (1 + 1e-9):
         raise RuntimeError(
             f"{prefix}step must be greater than zero and less than half the "
             f"smallest difference between two consecutive {prefix}nodes")
