@@ -1,5 +1,6 @@
 from gbkfit.psflsf import LSF, PSF, lsf_parser, psf_parser
 from gbkfit.utils import parseutils
+from .primary_beam import PrimaryBeam, primary_beam_parser
 
 
 __all__ = [
@@ -11,13 +12,15 @@ __all__ = [
 class Instrument(parseutils.BasicSerializable):
     """
     What happens to the light of a gmodel in the telescope and the
-    instrument: the point and line spread functions. Each has its own
-    slot, in the order the light meets them.
+    instrument: the primary beam, and the point and line spread functions.
+    Each has its own slot, in the order the light meets them.
     """
 
     @classmethod
     def load(cls, info):
         desc = parseutils.make_basic_desc(cls, 'instrument')
+        parseutils.load_option_and_update_info(
+            primary_beam_parser, info, 'primary_beam')
         parseutils.load_option_and_update_info(psf_parser, info, 'psf')
         parseutils.load_option_and_update_info(lsf_parser, info, 'lsf')
         return cls(**parseutils.parse_options_for_callable(
@@ -25,12 +28,22 @@ class Instrument(parseutils.BasicSerializable):
 
     def dump(self):
         return dict(
+            primary_beam=primary_beam_parser.dump(self._primary_beam),
             psf=psf_parser.dump(self._psf),
             lsf=lsf_parser.dump(self._lsf))
 
-    def __init__(self, psf: PSF | None = None, lsf: LSF | None = None):
+    def __init__(
+            self,
+            primary_beam: PrimaryBeam | None = None,
+            psf: PSF | None = None,
+            lsf: LSF | None = None
+    ):
+        self._primary_beam = primary_beam
         self._psf = psf
         self._lsf = lsf
+
+    def primary_beam(self) -> PrimaryBeam | None:
+        return self._primary_beam
 
     def psf(self) -> PSF | None:
         return self._psf

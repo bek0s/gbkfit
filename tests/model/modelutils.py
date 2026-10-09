@@ -4,8 +4,8 @@
 def split_model(model):
     """
     A gmodel and an observation of it, from a model of the tests: a dict
-    with a driver, a gmodel, a 'dmodel' (the observable, with the psf and
-    lsf of the instrument, and the scale and dtype of the observation),
+    with a driver, a gmodel, a 'dmodel' (the observable, with the primary
+    beam, psf and lsf of the instrument, and the scale and dtype of the observation),
     and an optional name, which names the gmodel.
     """
     model = dict(model)
@@ -13,7 +13,8 @@ def split_model(model):
     observation = dict(
         driver=model.pop('driver'),
         observable=observable,
-        instrument={k: observable.pop(k) for k in ('psf', 'lsf')
+        instrument={k: observable.pop(k)
+                    for k in ('primary_beam', 'psf', 'lsf')
                     if k in observable})
     for key in ('scale', 'dtype'):
         if key in observable:

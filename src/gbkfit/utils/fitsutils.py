@@ -18,6 +18,7 @@ __all__ = [
     'make_grid',
     'make_rest',
     'read_data',
+    'sky_positions',
     'write_data',
     'write_spectra'
 ]
@@ -155,6 +156,24 @@ def make_rest(value: typing.Any) -> astropy.units.Quantity | None:
         if rest.unit.is_equivalent(unit) and rest.isscalar and rest.value > 0:
             return rest.to(unit)
     raise error
+
+
+def sky_positions(grid: Grid) -> tuple[np.ndarray, np.ndarray]:
+    """
+    The positions on the sky of the centres of the pixels of the x and y
+    axes of a grid, in the frame of the model (arcsec from the reference
+    pixel, x and y like xpos and ypos): two arrays of shape (ny, nx). The
+    pixel grid is rotated on the sky by rota (see Coords).
+    """
+    size_x, size_y = grid.size[:2]
+    zero_x, zero_y = grid.zero()[:2]
+    step_x, step_y = grid.coords.step[:2]
+    j, i = np.mgrid[0:size_y, 0:size_x]
+    x = zero_x + i * step_x
+    y = zero_y + j * step_y
+    rota = np.radians(grid.coords.rota)
+    return (x * np.cos(rota) - y * np.sin(rota),
+            x * np.sin(rota) + y * np.cos(rota))
 
 
 class GridData(typing.NamedTuple):

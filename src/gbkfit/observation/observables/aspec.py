@@ -158,8 +158,8 @@ class ASpec(Observable):
         # to its spectrum
         dcube = _dcube.DCube(
             self.size(), self.step(), self.rpix(), self.rval(), self.rota(),
-            self.rest(), tuple(scale), instrument.psf(), instrument.lsf(),
-            False, None, False, dtype)
+            self.rest(), tuple(scale), instrument.primary_beam(),
+            instrument.psf(), instrument.lsf(), False, None, False, dtype)
         return ASpecPlan(self._weights, dcube, driver, gmodel, dtype)
 
 
