@@ -71,3 +71,29 @@ def test_names_are_dumped():
 def test_invalid_names_are_rejected(components, opacity_components, message):
     with pytest.raises(Exception, match=message):
         intensity_3d(components, opacity_components)
+
+
+def models(*names):
+    from gbkfit.model import ModelGroup, model_parser
+    component = disk() | dict(bhtraits=None)
+    return ModelGroup(model_parser.load([
+        dict(driver=dict(type='host'), dmodel=dict(type='image', size=[8, 8]),
+             gmodel=dict(type='intensity_2d', components=[component]))
+        | (dict(name=name) if name is not None else {})
+        for name in names]))
+
+
+def test_model_names_prefix_the_parameters():
+    assert {'xpos', 'model1_xpos'} <= set(models(None, None).pdescs())
+    group = models('hi', 'halpha')
+    assert {'hi_xpos', 'halpha_xpos'} <= set(group.pdescs())
+    assert set(group.constants()) == {'hi_rnodes', 'halpha_rnodes'}
+    assert group.models()[0].dump()['name'] == 'hi'
+
+
+@pytest.mark.parametrize('names, message', [
+    (('hi', None), "either all or none of the models must have a name"),
+    (('hi', 'hi'), r"the names of the models must be unique")])
+def test_invalid_model_names_are_rejected(names, message):
+    with pytest.raises(Exception, match=message):
+        models(*names)

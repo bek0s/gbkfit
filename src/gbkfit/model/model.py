@@ -34,13 +34,26 @@ class Model(parseutils.BasicSerializable, ABC):
         return cls(**opts)
 
     def dump(self) -> dict[str, Any]:
-        return dict(
+        name = dict(name=self.name()) if self.name() is not None else {}
+        return name | dict(
             driver=driver_parser.dump(self.driver()),
             dmodel=dmodel_parser.dump(self.dmodel()),
             gmodel=gmodel_parser.dump(self.gmodel()))
 
-    def __init__(self, driver: Driver, dmodel: DModel, gmodel: GModel):
+    def __init__(
+            self,
+            driver: Driver,
+            dmodel: DModel,
+            gmodel: GModel,
+            name: str | None = None
+    ):
+        """
+        A model can have a name, which then prefixes its parameters in a
+        group of models instead of its position (see ModelGroup).
+        """
+        parseutils.check_name(name)
         dmodel.require_compatible(gmodel)
+        self._name = name
         self._driver = driver
         self._dmodel = dmodel
         self._gmodel = gmodel
@@ -50,6 +63,9 @@ class Model(parseutils.BasicSerializable, ABC):
 
     def constants(self):
         return self.gmodel().constants()
+
+    def name(self) -> str | None:
+        return self._name
 
     def driver(self) -> Driver:
         return self._driver
@@ -78,10 +94,11 @@ class ModelGroup:
                 {key: dict(d=None, m=None, w=None) for key in keys})
             self._d_model_data.append(
                 {key: dict(d=None, m=None, w=None) for key in keys})
-        # The parameters of the models, prefixed by their position (e.g.
-        # 'model1_'), and their constants, named like them
+        # The parameters of the models, prefixed by their names or their
+        # positions (e.g. 'model1_'), and their constants, named like them
         self._prefixes = parseutils.item_prefixes(
-            [None] * len(self._models), 'models', 'model', False)
+            [model.name() for model in self._models], 'models', 'model',
+            False)
         self._pdescs, self._mappings = miscutils.merge_with_prefixes(
             [model.pdescs() for model in self.models()], self._prefixes)
         self._constants, _ = miscutils.merge_with_prefixes(
