@@ -77,11 +77,13 @@ class ASpec(Observable):
         return cls(**parseutils.parse_options_for_callable(
             info, desc, cls.__init__))
 
-    def dump(self, data=None):
+    def dump(self, data=None, prefix='', dump_path=True, overwrite=False):
         info = dict(type=self.type())
         if data is None:
             info.update(
-                regions=regions_parser.dump(self._regions),
+                regions=regions_parser.dump(
+                    self._regions, prefix=prefix, dump_path=dump_path,
+                    overwrite=overwrite),
                 spec_size=self.size()[2],
                 spec_step=self.step()[2],
                 spec_rpix=self.rpix()[2],

@@ -79,10 +79,12 @@ class BMaps(Observable):
         return cls(**parseutils.parse_options_for_callable(
             info, desc, cls.__init__))
 
-    def dump(self, data=None):
+    def dump(self, data=None, prefix='', dump_path=True, overwrite=False):
         info = dict(type=self.type())
         if data is None:
-            info.update(regions=regions_parser.dump(self._regions))
+            info.update(regions=regions_parser.dump(
+                self._regions, prefix=prefix, dump_path=dump_path,
+                overwrite=overwrite))
         return info | _detail.dump_spatial_grid(self, self._regions) | dict(
             mask_cutoff=self._mask_cutoff,
             orders=self._orders,
