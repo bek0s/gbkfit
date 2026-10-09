@@ -2,6 +2,7 @@
 from collections.abc import Sequence
 from typing import Any
 
+import astropy.io.fits
 import numpy as np
 import scipy.ndimage
 import scipy.signal
@@ -20,7 +21,8 @@ __all__ = [
     'PSFMoffat',
     'PSFImage',
     'PSFSum',
-    'PSFConvolution'
+    'PSFConvolution',
+    'PSFBeam'
 ]
 
 
@@ -443,3 +445,70 @@ class PSFConvolution(PSF):
             data = scipy.signal.convolve(
                 data, psf.asarray(step, rota=rota), method='auto')
         return embed(data / data.sum(), size, offset)
+
+
+class PSFBeam(PSF):
+    """
+    A Gaussian beam, as radio data give it: the full widths at half
+    maximum of its major and minor axes (bmaj and bmin, arcsec) and the
+    position angle of its major axis (bpa, degrees, north through east).
+    Its load can read them from the header of a FITS file (BMAJ, BMIN and
+    BPA, in degrees), e.g. of the data: {type: beam, file: cube.fits}.
+    """
+
+    @staticmethod
+    def type() -> str:
+        return 'beam'
+
+    @classmethod
+    def load(cls, info: dict[str, Any], *args, **kwargs) -> 'PSFBeam':
+        desc = parseutils.make_typed_desc(cls, 'PSF')
+        if (file := info.pop('file', None)) is not None:
+            if any(key in info for key in ('bmaj', 'bmin', 'bpa')):
+                raise parseutils.ConfigError(
+                    f"{desc} takes either a file or bmaj, bmin and bpa")
+            if isinstance(file, str):
+                file = dict(file=file)
+            with parseutils.config_path('file'):
+                options = parseutils.parse_options(
+                    file, 'beam file', required={'file'}, optional={'hdu'})
+                header = astropy.io.fits.getheader(
+                    options['file'], options.get('hdu', 0))
+            missing = [key for key in ('BMAJ', 'BMIN', 'BPA')
+                       if key not in header]
+            if missing:
+                raise parseutils.ConfigError(
+                    f"{options['file']}: the header has no {missing}")
+            info.update(
+                bmaj=float(header['BMAJ']) * 3600,
+                bmin=float(header['BMIN']) * 3600,
+                bpa=float(header['BPA']))
+        return cls(**_load_psf_common(cls, info))
+
+    def dump(self) -> dict[str, Any]:
+        return dict(
+            type=self.type(), bmaj=self._bmaj, bmin=self._bmin, bpa=self._bpa)
+
+    def __init__(self, bmaj: float, bmin: float, bpa: float = 0.0):
+        check_scale('bmaj', bmaj)
+        check_scale('bmin', bmin)
+        if bmin > bmaj:
+            raise RuntimeError(
+                f"bmin must be at most bmaj; they are {bmin} and {bmaj}")
+        self._bmaj = bmaj
+        self._bmin = bmin
+        self._bpa = bpa
+        self._gauss = PSFGauss(
+            gbkfit.math.gauss_fwhm_to_sigma(bmaj), bmin / bmaj, bpa)
+
+    def _size_impl(self, step: tuple[float, float]) -> tuple[float, float]:
+        return self._gauss._size_impl(step)
+
+    def _asarray_impl(
+            self,
+            step: tuple[float, float],
+            size: tuple[int, int],
+            offset: tuple[int, int],
+            rota: float
+    ) -> np.ndarray:
+        return self._gauss._asarray_impl(step, size, offset, rota)

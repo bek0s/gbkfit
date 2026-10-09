@@ -37,7 +37,7 @@ SAMPLE_OPTIONS = dict(
     axis=0, angle=10, weight=2,
     psfs=[dict(type='gauss', sigma=1), dict(type='point')],
     lsfs=[dict(type='gauss', sigma=1), dict(type='point')],
-    weights=[1, 2],
+    weights=[1, 2], bmaj=3, bmin=2,
     fwhm=10, x=1, y=2, radius=3, a=2, b=1, length=4, width=1,
     vertices=[[0, 0], [1, 0], [0, 1]])
 

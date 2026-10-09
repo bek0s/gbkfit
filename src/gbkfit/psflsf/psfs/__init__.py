@@ -11,7 +11,8 @@ def _register_psfs():
         PSFMoffat,
         PSFImage,
         PSFSum,
-        PSFConvolution
+        PSFConvolution,
+        PSFBeam
     ])
 
 
