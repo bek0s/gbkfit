@@ -15,6 +15,14 @@ current code. Before that, the outputs were checked to differ from those
 of 6f79336 by that change only: the same flux in each spaxel (to 2e-5),
 and lines whose variance is larger by that of a channel (step^2 / 12).
 
+They were made again when the Gaussian cdf that integrates the lines
+was computed in float instead of double (2026-10-10). The cubes changed
+by at most 2e-7 of their peak, but the moments 1 and 2 of faint spaxels,
+ratios of small sums, by more than the tolerance of the tests: up to
+2e-4 km/s where moment 0 is above 10% of its peak, 1.4e-3 km/s above 1%,
+and more at the noise of the convolutions, where one spaxel at the
+cutoff of moment 0 became masked.
+
 Usage:
 
     python make_references.py PYTHON
