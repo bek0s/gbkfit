@@ -198,6 +198,9 @@ class WeightComponent(Component):
     def dump(self):
         return {}
 
+    def __init__(self):
+        super().__init__(name=None)
+
     def pdescs(self):
         return {}
 

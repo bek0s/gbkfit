@@ -17,8 +17,17 @@ __all__ = [
 class Component(parseutils.TypedSerializable, abc.ABC):
     """
     A component of a gmodel. The kinds of components below differ only in
-    the gmodels that accept them, and in the outputs they get.
+    the gmodels that accept them, and in the outputs they get. A component
+    can have a name, which then prefixes its parameters in its gmodel
+    instead of its position (see parseutils.item_prefixes).
     """
+
+    def __init__(self, name: str | None):
+        parseutils.check_name(name)
+        self._name = name
+
+    def name(self) -> str | None:
+        return self._name
 
     @abc.abstractmethod
     def pdescs(self):

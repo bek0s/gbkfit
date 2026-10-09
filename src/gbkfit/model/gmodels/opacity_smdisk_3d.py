@@ -24,8 +24,10 @@ class OpacitySMDisk3D(OpacityComponent3D):
             cls, info, cls._slots, cls._nwmodes))
 
     def dump(self):
-        return dict(type=self.type()) | _component.dump_disk(
-            self._disk, self._slots, self._nwmodes)
+        return (
+            dict(type=self.type())
+            | _component.dump_name(self)
+            | _component.dump_disk(self._disk, self._slots, self._nwmodes))
 
     def __init__(
             self,
@@ -46,8 +48,10 @@ class OpacitySMDisk3D(OpacityComponent3D):
             xpos_nwmode: common.NWMode | None = None,
             ypos_nwmode: common.NWMode | None = None,
             posa_nwmode: common.NWMode | None = None,
-            incl_nwmode: common.NWMode | None = None
+            incl_nwmode: common.NWMode | None = None,
+            name: str | None = None
     ):
+        super().__init__(name)
         self._disk = _component.make_disk(
             type(self), _smdisk.SMDisk, self._slots,
             rdata_key='odata',

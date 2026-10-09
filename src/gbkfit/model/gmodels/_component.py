@@ -105,6 +105,12 @@ def make_disk(
         rdata_key=rdata_key)
 
 
+def dump_name(component):
+    """The name option of a component: none if it has no name."""
+    name = component.name()
+    return dict(name=name) if name is not None else {}
+
+
 def dump_disk(disk, slots, nwmodes):
     """
     The options of a component made of the given disk, with the traits

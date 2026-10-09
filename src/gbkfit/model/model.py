@@ -81,7 +81,7 @@ class ModelGroup:
         # The parameters of the models, prefixed by their position (e.g.
         # 'model1_'), and their constants, named like them
         self._prefixes = parseutils.item_prefixes(
-            [None] * len(self._models), 'model', False)
+            [None] * len(self._models), 'models', 'model', False)
         self._pdescs, self._mappings = miscutils.merge_with_prefixes(
             [model.pdescs() for model in self.models()], self._prefixes)
         self._constants, _ = miscutils.merge_with_prefixes(
