@@ -157,3 +157,16 @@ def test_aspec_outputs_and_residuals(tmp_path):
         regions=regions, data=str(tmp_path / 'data.fits'), error=2.0)
     outputs = run_eval('objective', config, tmp_path / 'objective')
     np.testing.assert_allclose(outputs['residual_aspec_d'], -0.5, rtol=1e-5)
+
+
+def test_one_gmodel_seen_by_two_observations(tmp_path):
+    # The observations refer to their gmodel, so there can be more
+    # observations than gmodels
+    config = yaml.load(REFERENCE_DIR / 'thin_disk_scube.yaml')
+    scube = config['observations'][0]
+    mmaps = dict(driver=dict(type='host'), name='maps',
+                 observable=dict(type='mmaps', size=[48, 48]))
+    config['observations'] = [scube | dict(name='cube'), mmaps]
+    outputs = run_eval('model', config, tmp_path / 'model')
+    assert outputs['model_0_scube_d'].shape == (50, 48, 48)
+    assert outputs['model_1_mmap1_d'].shape == (48, 48)
