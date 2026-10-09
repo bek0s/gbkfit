@@ -126,6 +126,12 @@ def test_primary_beam_from_an_image(tmp_path):
     again = primary_beam_parser.load(dict(dumped))
     np.testing.assert_allclose(
         again.response(grid), image.response(grid), atol=1e-6)
+    # The world coordinates given replace those of the file
+    stretched = primary_beam_parser.load(dict(
+        type='image', file=str(tmp_path / 'pb.fits'), step=[0.5, 0.5],
+        rota=0))
+    assert stretched._grid.coords.step == (0.5, 0.5)
+    assert stretched._grid.coords.rota == 0
 
 
 def test_observation_dumps_the_image_of_its_primary_beam(tmp_path):
