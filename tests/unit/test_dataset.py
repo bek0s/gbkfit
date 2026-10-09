@@ -282,3 +282,12 @@ def test_image_has_no_rest(tmp_path, caplog):
         type='image', data=str(tmp_path / 'image.fits'),
         rest='6562.8 Angstrom'))
     assert "unknown options" in caplog.text and "'rest'" in caplog.text
+
+
+def test_data_error_is_a_number_or_a_file():
+    # (a bool is an int in Python, but not an error)
+    from gbkfit.dataset.data import load_data
+    fits.writeto('data.fits', np.ones((4, 4), np.float32))
+    assert load_data(dict(data='data.fits', error=2))[0].error()[0, 0] == 2
+    with pytest.raises(Exception, match="a number or a file"):
+        load_data(dict(data='data.fits', error=True))

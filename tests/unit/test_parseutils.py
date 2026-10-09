@@ -2,9 +2,12 @@
 Tests for the parsing of configurations.
 """
 
+from collections.abc import Sequence
+from numbers import Real
+
 import pytest
 
-from gbkfit.utils import parseutils
+from gbkfit.utils import parseutils, typeutils
 
 
 DIMENSIONAL = dict(size=int, step=int | float)
@@ -24,7 +27,10 @@ def test_sanitize_dimensional_options(info, sanitized):
 @pytest.mark.parametrize('info', [
     dict(size=[1, 2]),
     dict(size=1.5),
-    dict(step='a')])
+    dict(step='a'),
+    # A bool is an int in Python, but not a number in a configuration
+    dict(size=True),
+    dict(size=[True, 2, 3])])
 def test_sanitize_dimensional_options_errors(info):
     with pytest.raises(RuntimeError, match=f"option '{next(iter(info))}'"):
         parseutils.sanitize_dimensional_options(info, DIMENSIONAL, 3)
@@ -98,3 +104,13 @@ def test_valid_names(name):
 def test_invalid_names(name):
     with pytest.raises(parseutils.ConfigError, match="invalid name"):
         parseutils.check_name(name)
+
+
+@pytest.mark.parametrize('value, type_, valid', [
+    (True, bool, True), (True, int, False), (True, float, False),
+    (True, Real, False), (True, int | None, False), (2, float, True),
+    (['disk'], Sequence[str], True), ('disk', Sequence[str], False),
+    ('disk', str | Sequence[str], True)])
+def test_validate_type(value, type_, valid):
+    # Bools are not numbers, and strings are not sequences of strings
+    assert typeutils.validate_type(value, type_) == valid

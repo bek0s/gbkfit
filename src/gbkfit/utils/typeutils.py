@@ -16,6 +16,11 @@ def validate_type(value, type_):
     origin = typing.get_origin(type_)
     args = typing.get_args(type_)
 
+    # A bool is an int in Python, but not a number in a configuration
+    if (isinstance(value, bool) and origin is None
+            and type_ not in (bool, Any, object)):
+        return False
+
     # Special case: allow int when float is expected
     if type_ is float and isinstance(value, int):
         return True
@@ -40,9 +45,10 @@ def validate_type(value, type_):
         else:
             result = False
 
-    # Type expected: sequence
+    # Type expected: sequence (a str is one, but not in a configuration:
+    # e.g. 'disk' is not ['d', 'i', 's', 'k'])
     elif issubclass(origin, Sequence):
-        if isinstance(value, Sequence):
+        if isinstance(value, Sequence) and not isinstance(value, str):
             for val in value:
                 result = result and validate_type(val, args[0])
         else:

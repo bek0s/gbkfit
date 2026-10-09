@@ -550,9 +550,13 @@ def _sanitize_dimensional_option(option, value, lengths, type_):
     type_name = " | ".join([t.__name__ for t in types_])
     lengths = iterutils.listify(lengths)
     max_length = max(lengths)
-    if isinstance(value, type_):
+
+    def is_value(x):
+        # (a bool is an int in Python, but not a number in a configuration)
+        return isinstance(x, type_) and not isinstance(x, bool)
+    if is_value(value):
         return iterutils.make_list(max_length, value)
-    if iterutils.is_sequence_of_type(value, type_):
+    if iterutils.is_sequence(value) and all(is_value(x) for x in value):
         if len(value) < max_length:
             raise RuntimeError(
                 f"option '{option}' has a value "

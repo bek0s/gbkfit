@@ -6,6 +6,7 @@ from typing import Any
 import numpy as np
 
 from gbkfit.utils import fitsutils, parseutils
+from gbkfit.utils.parseutils import ConfigError
 
 
 __all__ = [
@@ -135,6 +136,9 @@ def load_data(
         with parseutils.config_path('mask'):
             data_m = _read_file(mask, prefix)[0]
     if (error := info.get('error')) is not None:
+        if isinstance(error, bool):
+            raise ConfigError(
+                "the error must be a number or a file; it is a bool")
         if isinstance(error, (int, float)):
             data_e = np.full(np.shape(data_d), error, dtype=float)
         else:
