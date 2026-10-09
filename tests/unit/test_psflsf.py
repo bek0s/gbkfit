@@ -328,3 +328,34 @@ def test_lsf_and_psf_convolutions_of_gaussians():
     np.testing.assert_allclose(
         lsf.asarray(1.0, lsf_size + 1, -1)[:-1], lsf.asarray(1.0),
         atol=1e-12)
+
+
+def test_psf_beam_from_a_header(tmp_path):
+    # BMAJ and BMIN are full widths at half maximum in degrees, BPA the
+    # position angle of the major axis: a Gaussian of sigma bmaj / 2.355,
+    # ratio bmin / bmaj, at that position angle
+    from astropy.io import fits
+    from gbkfit.psflsf import psf_parser
+    from gbkfit.psflsf.psfs import PSFBeam, PSFGauss
+    header = fits.Header(dict(BMAJ=3 / 3600, BMIN=1.5 / 3600, BPA=30.0))
+    fits.writeto(tmp_path / 'cube.fits', np.zeros((2, 2)), header)
+    beam = psf_parser.load(dict(type='beam', file=str(tmp_path / 'cube.fits')))
+    assert isinstance(beam, PSFBeam)
+    gauss = PSFGauss(3 / np.sqrt(8 * np.log(2)), 0.5, 30)
+    for rota in (0, 20):
+        np.testing.assert_allclose(
+            beam.asarray((0.2, 0.2), rota=rota),
+            gauss.asarray((0.2, 0.2), rota=rota), rtol=1e-12)
+    dumped = psf_parser.dump(beam)
+    assert dumped['type'] == 'beam' and dumped['bpa'] == 30
+    np.testing.assert_allclose([dumped['bmaj'], dumped['bmin']], [3, 1.5])
+    assert psf_parser.dump(psf_parser.load(dict(dumped))) == dumped
+
+
+@pytest.mark.parametrize('info, message', [
+    (dict(bmaj=1, bmin=2), "at most bmaj"),
+    (dict(bmaj=1, bmin=1, file='cube.fits'), "either a file")])
+def test_psf_beam_options_are_checked(info, message):
+    from gbkfit.psflsf import psf_parser
+    with pytest.raises(Exception, match=message):
+        psf_parser.load(dict(type='beam') | info)
