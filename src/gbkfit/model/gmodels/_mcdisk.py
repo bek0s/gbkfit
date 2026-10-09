@@ -82,7 +82,7 @@ class MCDisk(_disk.Disk):
             # Use the original names and not the new/prefixed ones
             trait_params = {}
             for old_name, new_name in pnames.items():
-                if rpt_params.isnw[new_name]:
+                if rpt_params.sampling[new_name] is not None:
                     trait_params[old_name] = params[new_name][1:-1]
                 else:
                     trait_params[old_name] = params[new_name]

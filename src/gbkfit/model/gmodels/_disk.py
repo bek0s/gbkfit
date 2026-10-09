@@ -37,24 +37,32 @@ def _make_param_descs(key, nnodes, nw):
 class _TraitParams:
     """
     The parameters of the traits of one kind, with prefixed names, and for
-    each one its node-wise mode (if any), whether it is node-wise, and its
-    name in its trait. The keys of all dicts are in the same order: the
-    order of the traits, and for each trait, the smooth parameters before
-    the node-wise ones.
+    each one its node-wise mode (if any), where its values are given if it
+    is node-wise (its trait's sampling, see traits.SAMPLINGS) or None, and
+    its name in its trait. The keys of all dicts are in the same order:
+    the order of the traits, and for each trait, the smooth parameters
+    before the node-wise ones.
     """
     pdescs: dict
     nwmodes: dict
-    isnw: dict
+    sampling: dict
     pnames: list
 
 
-def _trait_params(traits_, prefix, nrnodes):
+def _trait_params(traits_, prefix, nrnodes, nsubrnodes):
+    """
+    The parameters of the traits of one kind. A node-wise parameter has a
+    value for each node, or for each subnode if its trait samples it at
+    the subnodes.
+    """
     params_list = []
     for trait in traits_:
-        params_sm = [(pdesc, None, False) for pdesc in trait.params_sm()]
+        sampling = trait.sampling()
+        nnodes = nsubrnodes if sampling == 'subrings' else nrnodes
+        params_sm = [(pdesc, None, None) for pdesc in trait.params_sm()]
         params_nw = [
-            (pdesc, nwmode, True)
-            for pdesc, nwmode in trait.params_rnw(nrnodes)]
+            (pdesc, nwmode, sampling)
+            for pdesc, nwmode in trait.params_rnw(nnodes)]
         params_list.append(
             {tuple_[0].name(): tuple_ for tuple_ in params_sm + params_nw})
     params, mappings = miscutils.merge_with_prefixes(
@@ -64,7 +72,7 @@ def _trait_params(traits_, prefix, nrnodes):
     return _TraitParams(
         pdescs={name: tuple_[0] for name, tuple_ in params.items()},
         nwmodes={name: tuple_[1] for name, tuple_ in params.items()},
-        isnw={name: tuple_[2] for name, tuple_ in params.items()},
+        sampling={name: tuple_[2] for name, tuple_ in params.items()},
         pnames=mappings)
 
 
@@ -87,15 +95,17 @@ def _trait_constants(traits_, nnodes, nsubnodes):
 
 
 def _fill_param_values(
-        values, params, pdescs, isnw, nodes, subnodes, interp):
+        values, params, pdescs, sampling, nodes, subnodes, interp):
     """
     Write the values of the given parameters one after the other into
-    values. The values of the node-wise parameters are replaced in params
-    with their values interpolated to the subnodes.
+    values. The values of the node-wise parameters given at the nodes are
+    replaced in params with their values interpolated to the subnodes
+    (sampling has where the values of each parameter are given, see
+    _TraitParams).
     """
     start = 0
     for name in pdescs:
-        if isnw[name]:
+        if sampling[name] == 'rnodes':
             params[name] = interp(nodes, params[name])(subnodes)
         stop = start + np.size(params[name])
         values[start:stop] = params[name]
@@ -163,7 +173,8 @@ class Disk(abc.ABC):
         # Make descs for the trait parameters (the kinds without traits
         # have no prefix, and no parameters)
         self._trait_params = {
-            kind: _trait_params(traits_, prefixes.get(kind), nrnodes)
+            kind: _trait_params(
+                traits_, prefixes.get(kind), nrnodes, self._nsubrnodes)
             for kind, traits_ in self._traits.items()}
 
         # Merge all parameter descs into the same dictionary
@@ -196,6 +207,9 @@ class Disk(abc.ABC):
 
     def rstep(self):
         return self._rstep
+
+    def subrnodes(self):
+        return self._subrnodes
 
     def interp(self):
         return self._interp
@@ -300,17 +314,17 @@ class Disk(abc.ABC):
                         params[pname], in_place=False)
 
         # Write the parameter values into the host memory, with the
-        # nodewise parameters interpolated to the subnodes, and copy
-        # them to the device
-        def fill(name, pdescs, isnw):
+        # nodewise parameters at the subnodes (interpolated if given at
+        # the nodes), and copy them to the device
+        def fill(name, pdescs, sampling):
             _fill_param_values(
-                self._param_views[name], params, pdescs, isnw,
+                self._param_views[name], params, pdescs, sampling,
                 self._rnodes, self._subrnodes, self._interp)
         for name, pdescs in self._geometry_pdescs.items():
-            isnw = self._geometry_isnw[name]
-            fill(name, pdescs, dict.fromkeys(pdescs, isnw))
+            sampling = 'rnodes' if self._geometry_isnw[name] else None
+            fill(name, pdescs, dict.fromkeys(pdescs, sampling))
         for kind, trait_params in self._trait_params.items():
-            fill(kind, trait_params.pdescs, trait_params.isnw)
+            fill(kind, trait_params.pdescs, trait_params.sampling)
         driver.mem_copy_h2d(*self._param_values)
 
         wdata_cmp = None
@@ -389,8 +403,8 @@ class Disk(abc.ABC):
     def _impl_evaluate(self, driver, params, grid_and_outputs, out_extra):
         """
         Evaluate the disk. params has the values of the node-wise
-        parameters interpolated to the subnodes, and grid_and_outputs
-        the keyword arguments of the grid and the outputs of the native
-        evaluation functions.
+        parameters at the subnodes, and grid_and_outputs the keyword
+        arguments of the grid and the outputs of the native evaluation
+        functions.
         """
         pass
