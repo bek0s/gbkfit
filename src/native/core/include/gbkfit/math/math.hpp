@@ -230,6 +230,39 @@ rejection_sampling(TTarget target, RNG<T>& rng, T trunc, Ts... args)
     return x;
 }
 
+// A standard normal random number (Box-Muller)
+template<typename T> constexpr T
+normal_rnd(RNG<T>& rng)
+{
+    // In this order on every driver (the operands of an expression are
+    // not evaluated in a given order)
+    const T u1 = rng();
+    const T u2 = rng();
+    return std::sqrt(-2 * std::log(u1)) * std::cos(2 * PI<T> * u2);
+}
+
+// A random number of the gamma distribution of shape k and scale 1
+// (Marsaglia and Tsang 2000; for k < 1, through the shape k + 1)
+template<typename T> constexpr T
+gamma_rnd(RNG<T>& rng, T k)
+{
+    const T boost = k < 1 ? std::pow(rng(), 1 / k) : T{1};
+    const T d = (k < 1 ? k + 1 : k) - T{1} / 3;
+    const T c = 1 / std::sqrt(9 * d);
+    while (true)
+    {
+        const T x = normal_rnd(rng);
+        T v = 1 + c * x;
+        if (v <= 0)
+            continue;
+        v = v * v * v;
+        const T u = rng();
+        if (u < 1 - T{0.0331} * x * x * x * x
+                || std::log(u) < T{0.5} * x * x + d * (1 - v + std::log(v)))
+            return boost * d * v;
+    }
+}
+
 template<typename T> constexpr T
 exponential_1d_fun(T x, T a, T b, T c)
 {
@@ -314,9 +347,7 @@ gauss_1d_pdf_trunc(T x, T b, T c, T xmin, T xmax)
 template<typename T> constexpr T
 gauss_1d_rnd(RNG<T>& rng, T b, T c)
 {
-    T u1 = rng();
-    T u2 = rng();
-    return b + c * std::sqrt(-2 * std::log(u1)) * std::cos(2 * PI<T> * u2);
+    return b + c * normal_rnd(rng);
 }
 
 template<typename T> constexpr T
@@ -407,10 +438,13 @@ ggauss_1d_pdf_trunc(T x, T b, T c, T d, T xmin, T xmax)
             xmin, xmax, x, b, c, d);
 }
 
+// A random number of the generalised Gaussian: |x - b| / c is a gamma
+// random number of shape 1 / d to the power 1 / d, on either side of b
 template<typename T> constexpr T
 ggauss_1d_rnd(RNG<T>& rng, T b, T c, T d)
 {
-    return rejection_sampling(ggauss_1d_pdf<T>, rng, 5 * c, b, c, d);
+    const T distance = c * std::pow(gamma_rnd(rng, 1 / d), 1 / d);
+    return rng() < T{0.5} ? b - distance : b + distance;
 }
 
 template<typename T> constexpr T
