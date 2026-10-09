@@ -259,3 +259,66 @@ def test_mcdisk_velocity_is_the_mean_of_the_clouds(driver):
     mean = (brightness * velocity).sum(0)[bright] / \
         brightness.sum(0)[bright]
     np.testing.assert_allclose(mean, moment1, atol=0.05)
+
+
+# Two blobs, the second negative, inside the disk (radius 20)
+BLOBS = dict(
+    bpt_r=[6.0, 11.0], bpt_t=[30.0, 200.0], bpt_a=[1.0, -0.4],
+    bpt_s=[2.0, 3.0], bpt_q=[0.6, 0.8], bpt_p=[20.0, 70.0])
+
+
+@pytest.mark.parametrize('mixture, shape', [
+    ('mixture_exponential', None), ('mixture_gauss', None),
+    ('mixture_ggauss', 0.8), ('mixture_ggauss', 1.5),
+    ('mixture_ggauss', 3.0), ('mixture_moffat', 2.5)])
+def test_mcdisk_mixture_brightness_matches_smdisk(driver, mixture, shape):
+    # Each cloud is drawn from a blob chosen by its flux, and carries the
+    # sign of its amplitude (the shapes of ggauss cover both ways of
+    # drawing its gamma variates: shape 2 / b above and below 1)
+    component = dict(
+        cflux=1e-5, bptraits=dict(type=mixture, nblobs=2),
+        bhtraits=dict(type='sech2'))
+    properties = BLOBS | (dict(bpt_b=[shape, shape]) if shape else {})
+    mcdisk = evaluate_disk('mcdisk', driver.type(), component, properties)
+    del component['cflux']
+    smdisk = evaluate_disk('smdisk', driver.type(), component, properties)
+    assert relative_difference(mcdisk.sum(0), smdisk.sum(0)) < 0.03
+
+
+def test_mcdisk_distortion_brightness_matches_smdisk(driver):
+    # A ring brighter around an azimuth: the clouds of each ring are drawn
+    # around it, within the arc length s
+    component = dict(
+        cflux=1e-5,
+        bptraits=[dict(type='exponential'), dict(type='nw_distortion')],
+        bhtraits=[dict(type='sech2'), dict(type='sech2')])
+    properties = dict(
+        bpt1_a=[0.5] * 11, bpt1_p=[60] * 11, bpt1_s=[3] * 11, bht1_s=1)
+    mcdisk = evaluate_disk('mcdisk', driver.type(), component, properties)
+    del component['cflux']
+    smdisk = evaluate_disk('smdisk', driver.type(), component, properties)
+    assert relative_difference(mcdisk.sum(0), smdisk.sum(0)) < 0.03
+
+
+def test_mcdisk_dispersion_mixture_matches_smdisk(driver):
+    # Dispersion traits are evaluated at the clouds, like at the voxels
+    component = dict(
+        cflux=1e-5,
+        dptraits=[dict(type='uniform'), dict(type='mixture_gauss', nblobs=2)])
+    properties = {
+        'dpt_a': 10, **{k.replace('bpt_', 'dpt1_'): v
+                        for k, v in BLOBS.items()}}
+    properties['dpt1_a'] = [60.0, 30.0]
+    mcdisk = evaluate_disk('mcdisk', driver.type(), component, properties)
+    del component['cflux']
+    smdisk = evaluate_disk('smdisk', driver.type(), component, properties)
+    assert relative_difference(mcdisk, smdisk) < 0.05
+
+
+def test_mcdisk_moffat_blobs_need_a_finite_flux(driver):
+    component = dict(
+        bptraits=dict(type='mixture_moffat', nblobs=2),
+        bhtraits=dict(type='sech2'))
+    with pytest.raises(RuntimeError, match="need b > 1"):
+        evaluate_disk('mcdisk', driver.type(), component,
+                      BLOBS | dict(bpt_b=[2.0, 0.9]))

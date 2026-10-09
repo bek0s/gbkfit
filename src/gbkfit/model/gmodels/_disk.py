@@ -121,9 +121,6 @@ def _weighted_mean(weighted_sum, weight):
 
 class Disk(abc.ABC):
 
-    # The traits that this type of disk does not support (yet)
-    unsupported_traits = ()
-
     def __init__(
             self, loose, tilted, rnodes, rstep, interp, nwmodes, traits_,
             prefixes, rdata_key):
