@@ -10,13 +10,14 @@ from gbkfit.utils.parseutils import ConfigError
 
 __all__ = [
     'Coords',
+    'VELOCITY_TYPES',
     'read_data',
     'write_data'
 ]
 
 
 # The spectral axis types that are velocities (FITS WCS Paper III)
-_VELOCITY_TYPES = ('VRAD', 'VOPT', 'VELO')
+VELOCITY_TYPES = ('VRAD', 'VOPT', 'VELO')
 
 _KM_S = astropy.units.km / astropy.units.s
 
@@ -199,10 +200,10 @@ def _axis_scale(filename, wcs, axis):
     if axis != wcs.wcs.spec:
         return 1.0
     ctype = wcs.wcs.ctype[axis]
-    if ctype[:4] not in _VELOCITY_TYPES:
+    if ctype[:4] not in VELOCITY_TYPES:
         raise ConfigError(
             f"{filename}: the spectral axis is of type '{ctype}'; only "
-            f"velocity axes ({', '.join(_VELOCITY_TYPES)}) are supported")
+            f"velocity axes ({', '.join(VELOCITY_TYPES)}) are supported")
     return astropy.units.Unit(wcs.wcs.cunit[axis]).to(_KM_S)
 
 
