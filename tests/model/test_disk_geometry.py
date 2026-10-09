@@ -179,3 +179,27 @@ def test_thin_disk_seen_from_below(driver, evaluate_models, incl):
     if incl != 90:
         np.testing.assert_allclose(
             below, image(180 - incl), rtol=1e-5, atol=1e-6 * below.max())
+
+
+def test_loose_disk_centres_its_rings(driver, evaluate_models):
+    # A face-on loose thin disk whose centre moves with radius, xpos =
+    # 0.2 r: the ring of radius r is centred at 0.2 r, so the point at x
+    # on the x axis is on the ring x / 1.2 (x > 0) or -x / 0.8 (x < 0),
+    # where the image has the brightness of that radius
+    rnodes = list(range(0, 13))
+    model = dict(
+        driver=dict(type=driver.type()),
+        dmodel=dict(type='image', size=[41, 41], step=[0.5, 0.5]),
+        gmodel=dict(type='intensity_2d', components=[dict(
+            type='smdisk', loose=True, tilted=False, rnodes=rnodes,
+            bptraits=dict(type='exponential'))]))
+    properties = dict(
+        xpos=[0.2 * r for r in rnodes], ypos=[0] * len(rnodes),
+        posa=0, incl=0, bpt_a=1, bpt_s=4)
+    data, _ = evaluate_models([model], properties)
+    row = data[0]['image']['d'][20]
+    x = (np.arange(41) - 20) * 0.5
+    radius = np.where(x > 0, x / 1.2, -x / 0.8)
+    inside = radius < 11
+    np.testing.assert_allclose(
+        row[inside], np.exp(-radius[inside] / 4), rtol=1e-3)

@@ -46,6 +46,16 @@ def test_lslit_matches_the_central_row_of_an_scube(driver, psf, rota):
         lslit, scube[:, 20, :], rtol=1e-4, atol=1e-5 * scube.max())
 
 
+def test_lslit_width_is_the_mean_of_its_rows(driver):
+    # A slit of 3 pixels is the mean of the 3 central rows of an scube
+    scube = evaluate(driver, dict(
+        type='scube', size=[32, 41, 51], step=[1, 1, 10]))
+    lslit = evaluate(driver, dict(
+        type='lslit', size=[32, 51], step=[1, 10], slit_width=3))
+    np.testing.assert_allclose(
+        lslit, scube[:, 19:22, :].mean(axis=1), rtol=1e-4,
+        atol=1e-5 * scube.max())
+
 def test_lslit_objective_residual(driver):
     # Data equal to the model plus 1, with errors of 2: every residual
     # (model - data) / error is -0.5
@@ -68,6 +78,13 @@ def test_lslit_objective_residual(driver):
     params = gbkfit.params.EvaluationParams(model_group.pdescs(), PROPERTIES)
     residual = objective.residual_nddata_h(params.evaluate(), False)
     np.testing.assert_allclose(residual[0]['lslit'], -0.5, rtol=1e-5)
+    # The chi-squared is the sum of their squares, and the log-likelihood
+    # -1/2 of it
+    chi2 = 0.25 * model.size
+    assert objective.residual_scalar(params.evaluate(), squared=True)[0] \
+        == pytest.approx(chi2, rel=1e-5)
+    assert objective.log_likelihood(params.evaluate())[0] == pytest.approx(
+        -0.5 * chi2, rel=1e-5)
 
 
 def test_hanning_smoothing_of_the_channels(driver):
