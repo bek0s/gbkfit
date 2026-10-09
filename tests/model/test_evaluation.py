@@ -190,3 +190,30 @@ def test_a_velocity_that_is_not_a_number_makes_spectra_nan(driver):
     assert nan.any() and np.isfinite(cube[~nan]).all()
     # The spectra of the spaxels within -rt are NaN
     assert (nan.all(axis=0) == nan.any(axis=0)).all()
+
+
+def test_cuda_smooth_disk_of_more_voxels_than_an_int_holds(driver):
+    # The voxels of a smooth disk need not be in memory: a 3d grid can
+    # have more than an int holds (here 64 x 64 x 528384), which must give
+    # the image of the same z range in fewer voxels (it gave zeros)
+    if driver.type() != 'cuda':
+        pytest.skip("the host takes minutes for so many voxels")
+
+    def image(size_z, step_z):
+        model_group = observation_group([dict(
+            driver=dict(type=driver.type()),
+            dmodel=dict(type='image', size=[64, 64]),
+            gmodel=dict(
+                type='intensity_3d', size_z=size_z, step_z=step_z,
+                components=[dict(
+                    type='smdisk', loose=False, tilted=False,
+                    rnodes=list(range(0, 30)),
+                    bptraits=dict(type='exponential'),
+                    bhtraits=dict(type='sech2'))]))])
+        params = gbkfit.params.EvaluationParams(model_group.pdescs(), dict(
+            xpos=0, ypos=0, posa=0, incl=30, bpt_a=1, bpt_s=6, bht_s=1))
+        return model_group.model_h(params.evaluate())[0]['image']['d']
+    many = image(528384, 0.001)
+    few = image(1032, 0.512)
+    assert few.sum() > 0
+    assert many.sum() == pytest.approx(few.sum(), rel=0.01)
