@@ -52,13 +52,15 @@ struct DModel
     }
 
     // The moment maps of the given orders of dcube_d, with the moment
-    // map mask in mmaps_m and the moment map weights in mmaps_w
+    // map mask in mmaps_m and, with the weights dcube_w, the weights of
+    // the moment maps in mmaps_w: one mask and one weight map for all the
+    // orders
     static void
     mmaps_moments(
             std::array<T, 3> step, std::array<T, 3> zero,
             ConstCube dcube_d, ConstCube dcube_w,
             T cutoff, Orders orders,
-            Cube mmaps_d, Image mmaps_m, Cube mmaps_w)
+            Cube mmaps_d, Image mmaps_m, Image mmaps_w)
     {
         const auto size = size_xyz(dcube_d);
         const int norders = int(orders.shape(0));
@@ -70,7 +72,9 @@ struct DModel
         require(int(mmaps_m.shape(0)) == size[1]
                 && int(mmaps_m.shape(1)) == size[0],
                 "mmaps_m must have shape (ny, nx)");
-        require_same_shape(mmaps_w, mmaps_d, "mmaps_w", "mmaps_d");
+        require(!dcube_w.is_valid() || mmaps_w.is_valid(),
+                "mmaps_w is required with dcube_w");
+        require_same_shape(mmaps_w, mmaps_m, "mmaps_w", "mmaps_m");
         Kernels::dmodel_mmaps_moments(
                 size[0], size[1], size[2],
                 step[2], zero[2],

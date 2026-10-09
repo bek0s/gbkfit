@@ -97,6 +97,34 @@ def test_higher_moments_of_a_gaussian_line(driver):
         mmaps['mmap4']['d'][disk], 3 * sigma[disk] ** 4, rtol=1e-2)
 
 
+def test_moment_maps_have_the_weights_of_the_gmodel(driver):
+    # The weight of the moments of a spectrum is the flux-weighted mean of
+    # its weights: those of a gmodel with the spatial weights 0 on the
+    # first row of pixels, and 1 elsewhere
+    from gbkfit.model.gmodels import (
+        GModelKinematics2D, SpectralSMDisk2D, traits)
+    from gbkfit.observation import MMaps, Observation, ObservationGroup
+    from gbkfit.params import EvaluationParams
+    from modelutils import WeightComponent
+    disk = SpectralSMDisk2D(
+        loose=False, tilted=False, rnodes=list(range(0, 25)),
+        bptraits=traits.BPTraitExponential(),
+        vptraits=traits.VPTraitTanArctan(), dptraits=traits.DPTraitUniform())
+    gmodel = GModelKinematics2D([disk, WeightComponent()])
+    observable = MMaps(size=(32, 32), spec_size=81, spec_step=5)
+    model_group = ObservationGroup([gmodel], [Observation(driver, observable)])
+    params = EvaluationParams(model_group.pdescs(), dict(
+        vsys=0, xpos=0, ypos=0, posa=30, incl=0,
+        bpt_a=1, bpt_s=4, vpt_rt=2, vpt_vt=40, dpt_a=20))
+    mmaps = model_group.model_h(params.evaluate())[0]
+    for key in ('mmap0', 'mmap1', 'mmap2'):
+        defined = np.isfinite(mmaps[key]['d'])
+        assert defined.all()
+        weights = mmaps[key]['w']
+        np.testing.assert_array_equal(weights[0], 0)
+        np.testing.assert_array_equal(weights[1:], 1)
+
+
 def test_moment_maps_of_a_galaxy_at_a_high_velocity(driver):
     # B24: the spectral axis was fixed at +-500 around 0. With one around
     # the systemic velocity, the velocity at the centre is vsys.
