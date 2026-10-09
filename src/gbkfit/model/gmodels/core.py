@@ -81,5 +81,7 @@ class SpectralComponent3D(Component, abc.ABC):
 class OpacityComponent3D(Component, abc.ABC):
     """
     An opacity component of intensity_3d and kinematics_3d. Its output:
-    odata.
+    odata, the optical depth of each voxel. Its polar traits give the
+    optical depth of the disk seen face-on, and its height traits (pdfs)
+    distribute it along z.
     """
