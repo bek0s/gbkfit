@@ -19,11 +19,13 @@ CONFIG_DIR = pathlib.Path(__file__).parents[1] / 'data' / 'mcdisk_vs_smdisk'
 SAME_REALISATION = 1e-5
 
 
-def evaluate_disk(disk, driver_type, component=None, properties=None):
+def evaluate_disk(
+        disk, driver_type, component=None, properties=None, out_extra=None):
     """
     Evaluate the 'mcdisk' or 'smdisk' configuration with the given
     driver, and return its model cube. The options of the component and
-    the parameter properties of the configuration can be overridden.
+    the parameter properties of the configuration can be overridden. The
+    extra outputs go to out_extra, if given.
     """
     import gbkfit.model
     import gbkfit.params
@@ -36,7 +38,8 @@ def evaluate_disk(disk, driver_type, component=None, properties=None):
     params = gbkfit.params.EvaluationParams(
         model_group.pdescs(),
         config['params']['properties'] | (properties or {}))
-    return model_group.model_h(params.evaluate())[0]['scube']['d'].copy()
+    data = model_group.model_h(params.evaluate(), out_extra)
+    return data[0]['scube']['d'].copy()
 
 
 def velocity_field(scube):
@@ -203,3 +206,28 @@ def test_mcdisk_flux_does_not_depend_on_cloud_flux(driver):
         evaluate_disk('mcdisk', driver.type(), dict(cflux=cflux)).sum()
         for cflux in (1e-4, 0.3, 5)]
     np.testing.assert_allclose(totals[1:], totals[0], rtol=1e-4)
+
+
+def test_mcdisk_harmonic_clouds_take_the_sign_of_the_harmonic(driver):
+    # A harmonic alone (the exponential has no flux), with a few clouds
+    # per pixel. The clouds are drawn where the harmonic is bright, each
+    # with its sign, so where it is clearly positive or negative, the
+    # brightness before the PSF has its sign in every pixel.
+    component = dict(
+        bptraits=[dict(type='exponential'), dict(type='nw_harmonic', order=2)],
+        bhtraits=[dict(type='sech2'), dict(type='sech2')])
+    properties = dict(bpt_a=0, bpt1_a=[1] * 11, bpt1_p=[40] * 11, bht1_s=1)
+    brightness = {}
+    for disk, options in [('mcdisk', dict(cflux=0.5)), ('smdisk', {})]:
+        extra = {}
+        evaluate_disk(
+            disk, driver.type(), component | options, properties, extra)
+        brightness[disk] = extra['model0_gmodel_component0_bdata'].sum(0)
+    smdisk = brightness['smdisk']
+    clear = np.abs(smdisk) > 0.5 * np.abs(smdisk).max()
+    mcdisk = brightness['mcdisk'][clear]
+    expected = np.sign(smdisk[clear])
+    has_clouds = mcdisk != 0
+    assert has_clouds.sum() > 100
+    np.testing.assert_array_equal(
+        np.sign(mcdisk[has_clouds]), expected[has_clouds])
