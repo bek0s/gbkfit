@@ -13,6 +13,9 @@ __all__ = [
 
 class SCube(Observable):
 
+    # The form of the data this observable measures
+    dataset_class = DatasetSCube
+
     # The axes of a spectral cube: x, y and the spectral axis
     _spectral_axis = 2
 

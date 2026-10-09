@@ -22,6 +22,9 @@ def _slit_extra(data, grid):
 
 class LSlit(Observable):
 
+    # The form of the data this observable measures
+    dataset_class = DatasetLSlit
+
     # The axes of a long-slit spectrum: the position along the slit
     # and the spectral axis
     _spectral_axis = 1

@@ -21,12 +21,15 @@ class DatasetLSlit(Dataset):
 
     @classmethod
     def load(cls, info, **kwargs):
+        # The options of its one data item are given flat
         names = ['lslit']
-        opts = _detail.load_dataset_common(cls, info, names, **kwargs)
+        opts = _detail.load_dataset_common(
+            cls, _detail.nest_single_item(info, 'lslit'), names, **kwargs)
         return cls(**opts)
 
     def dump(self, **kwargs):
-        return _detail.dump_dataset_common(self, **kwargs)
+        return _detail.flatten_single_item(
+            _detail.dump_dataset_common(self, **kwargs), 'lslit')
 
     def __init__(self, lslit):
         super().__init__(dict(lslit=lslit))

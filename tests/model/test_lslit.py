@@ -3,6 +3,7 @@ Tests for the long-slit data model (lslit): a position-velocity image
 along a slit, which must match a row of a spectral cube.
 """
 
+import copy
 import gbkfit.model
 import gbkfit.params
 import numpy as np
@@ -56,10 +57,14 @@ def test_lslit_objective_residual(driver):
     dataset = DatasetLSlit(Data(
         model + 1, error=np.full_like(model, 2), step=(1, 10),
         spectral_axis=1))
-    model_group = observation_group([
-        dict(driver=dict(type=driver.type()), dmodel=dmodel, gmodel=GMODEL)],
-        dataset=[dataset])
-    objective = Objective([dataset], model_group)
+    from gbkfit.model import gmodel_parser
+    from gbkfit.observation import (
+        Observation, ObservationGroup, observable_parser)
+    observation = Observation(
+        driver, observable_parser.load(copy.deepcopy(dmodel)), data=dataset)
+    model_group = ObservationGroup(
+        [gmodel_parser.load(copy.deepcopy(GMODEL))], [observation])
+    objective = Objective(model_group)
     params = gbkfit.params.EvaluationParams(model_group.pdescs(), PROPERTIES)
     residual = objective.residual_nddata_h(params.evaluate(), False)
     np.testing.assert_allclose(residual[0]['lslit'], -0.5, rtol=1e-5)

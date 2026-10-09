@@ -66,10 +66,10 @@ def prepare_config(
     # Ensure the sections have the right type (if they are present)
     wrong_type_dict = []
     wrong_type_dict_or_seq = []
-    for s in ['pdescs', 'params', 'objective', 'fitter']:
+    for s in ['pdescs', 'params', 'fitter']:
         if s in config and not iterutils.is_mapping(config[s]):
             wrong_type_dict.append(s)
-    for s in ['datasets', 'gmodels', 'observations']:
+    for s in ['gmodels', 'observations']:
         if s in config and not iterutils.is_sequence_or_mapping(config[s]):
             wrong_type_dict_or_seq.append(s)
     if wrong_type_dict:
@@ -84,7 +84,7 @@ def prepare_config(
     # Listify some sections to make parsing more streamlined
     # and ensure they have the same length
     lengths = {}
-    for s in ['datasets', 'gmodels', 'observations']:
+    for s in ['gmodels', 'observations']:
         if s in config:
             config[s] = iterutils.listify(config[s])
             lengths[s] = len(config[s])
@@ -165,14 +165,14 @@ def merge_pdescs(
     return pdescs1 | pdescs2
 
 
-def load_observation_group(cfg, datasets):
+def load_observation_group(cfg):
     """
-    The gmodels and observations of a configuration (with the grids of the
-    given datasets, if any), as an ObservationGroup.
+    The gmodels and observations (with their data, if any) of a
+    configuration, as an ObservationGroup.
     """
     with parseutils.config_path('gmodels'):
         gmodels = gbkfit.model.gmodel_parser.load(cfg['gmodels'])
     with parseutils.config_path('observations'):
         observations = gbkfit.observation.observation_parser.load(
-            cfg['observations'], dataset=datasets)
+            cfg['observations'])
     return gbkfit.observation.ObservationGroup(gmodels, observations)

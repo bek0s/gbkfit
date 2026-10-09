@@ -52,6 +52,9 @@ def _spectral_axis_from_data(dataset, spec_step):
 
 class MMaps(Observable):
 
+    # The form of the data this observable measures
+    dataset_class = DatasetMMaps
+
     # Moment maps have no spectral axis
     _spectral_axis = None
 

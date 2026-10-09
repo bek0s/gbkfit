@@ -21,6 +21,10 @@ class Observable(parseutils.TypedSerializable, abc.ABC):
 
     _spectral_axis: int | None
 
+    # The class of the datasets this observable measures (declared by
+    # each subclass)
+    dataset_class: type
+
     @staticmethod
     @abc.abstractmethod
     def is_compatible(gmodel):

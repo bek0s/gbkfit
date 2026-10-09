@@ -90,12 +90,12 @@ def test_dataset_image():
     assert image01.dtype() == data01.dtype()
     # Dump tests
     image01_info_dumped = dataset_parser.dump(image01, overwrite=True)
+    # The options of its one data item are flat
     image01_info = dict(
         type='image',
-        image=dict(
-            data='image_d.fits',
-            mask='image_m.fits',
-            error='image_e.fits'),
+        data='image_d.fits',
+        mask='image_m.fits',
+        error='image_e.fits',
         step=(1.0, 1.0),
         rpix=(2.0, 0.5),
         rval=(0.0, 0.0),
@@ -216,14 +216,15 @@ def test_data_is_float32(tmp_path):
     assert Data(np.ones((8, 20))).dtype() == np.float32
 
 
-def test_observation_of_a_float64_dataset_is_float32():
-    from gbkfit.dataset.datasets import DatasetImage
+def test_observation_of_a_float64_dataset_is_float32(tmp_path):
+    from astropy.io import fits
     from gbkfit.observation import observation_parser
-    dataset = DatasetImage(Data(np.ones((8, 20), np.float64)))
+    fits.writeto(tmp_path / 'image.fits', np.ones((8, 20), np.float64))
     observation = observation_parser.load(dict(
-        driver=dict(type='host'), observable=dict(type='image')),
-        dataset=dataset)
+        driver=dict(type='host'), observable=dict(type='image'),
+        data=dict(data=str(tmp_path / 'image.fits'))))
     assert observation.dtype() == np.float32
+    assert observation.observable().size() == (20, 8)
 
 
 def test_data_steps_must_be_positive():
@@ -238,8 +239,9 @@ def test_datasets_check_the_number_of_axes(tmp_path, dataset_type, shape):
     # e.g. a cube loaded as an image, or a radio cube with a Stokes axis
     from astropy.io import fits
     fits.writeto(tmp_path / 'data.fits', np.ones(shape, np.float32))
-    name = 'mmap0' if dataset_type == 'mmaps' else dataset_type
+    # Datasets of one data item take its options flat
+    data = dict(data=str(tmp_path / 'data.fits'))
+    if dataset_type == 'mmaps':
+        data = dict(mmap0=data)
     with pytest.raises(Exception, match="axes"):
-        dataset_parser.load({
-            'type': dataset_type,
-            name: dict(data=str(tmp_path / 'data.fits'))})
+        dataset_parser.load(dict(type=dataset_type) | data)
