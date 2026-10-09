@@ -36,9 +36,6 @@ class DModel(parseutils.TypedSerializable, abc.ABC):
         self._driver = None
         self._gmodel = None
 
-    def ndim(self):
-        return len(self.size())
-
     def npix(self):
         return int(np.prod(self.size()))
 

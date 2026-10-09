@@ -236,6 +236,8 @@ class DCube:
         if size_lo != size_hi:
             self._dcube_hi = driver.mem_alloc_d(shape_hi, dtype)
             driver.mem_fill(self._dcube_hi, 0)
+        self._wcube_lo = None
+        self._wcube_hi = None
         if has_weights:
             self._wcube_lo = driver.mem_alloc_d(shape_lo, dtype)
             self._wcube_hi = self._wcube_lo
@@ -279,7 +281,7 @@ class DCube:
         wcube_hi = self._wcube_hi
         mcube_lo = self._mcube_lo
         pcube_hi = self._pcube_hi
-        has_weights = self._wcube_lo is not None
+        has_weights = self._has_weights
         mask_cutoff = self._mask_cutoff
         mask_apply = self._mask_apply
         driver = self._driver
@@ -330,4 +332,4 @@ class DCube:
                     lsf_hi=lsf.asarray(spec_step_hi))
             if psf or lsf:
                 out_extra.update(
-                    pcube_hi_fft=driver.mem_copy_d2h(pcube_hi))
+                    pcube_hi=driver.mem_copy_d2h(pcube_hi))
