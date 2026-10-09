@@ -124,6 +124,27 @@ dmodel_mmaps_moments(
 }
 
 template<typename T> void
+dmodel_regions_sum(
+        int nregions, int npix, int size_z,
+        const int* indptr, const int* indices, const T* weights,
+        const T* cube, T* out)
+{
+    // Parallelization: per region and channel
+    #pragma omp parallel for collapse(2)
+    for (int z = 0; z < size_z; ++z) {
+    for (int r = 0; r < nregions; ++r) {
+
+    gbkfit::dmodel_regions_sum(
+            r, z,
+            nregions, npix,
+            indptr, indices, weights,
+            cube, out);
+
+    }
+    }
+}
+
+template<typename T> void
 gmodel_wcube_evaluate(
         int spat_size_x, int spat_size_y, int spat_size_z,
         int spec_size_z,
@@ -231,6 +252,11 @@ struct Wrapper
     static void
     dmodel_mmaps_moments(auto... args) {
         kernels::dmodel_mmaps_moments<T>(args...);
+    }
+
+    static void
+    dmodel_regions_sum(auto... args) {
+        kernels::dmodel_regions_sum<T>(args...);
     }
 
     static void

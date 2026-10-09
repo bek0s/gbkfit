@@ -13,6 +13,8 @@ struct DModel
     using ConstCube = Array<Device, const T, nb::ndim<3>>;
     using Image = Array<Device, T, nb::ndim<2>>;
     using Orders = Array<Device, const int, nb::ndim<1>>;
+    using Indices = Array<Device, const int, nb::ndim<1>>;
+    using Weights = Array<Device, const T, nb::ndim<1>>;
 
     // Average blocks of scale pixels of src, starting at offset, into dst
     static void
@@ -77,6 +79,31 @@ struct DModel
                 mmaps_d.data(), mmaps_m.data(), data(mmaps_w));
     }
 
+    // The weighted sums of the pixels of regions in each channel of cube
+    // (nz, ny, nx), into out (nz, nregions). The regions are a CSR matrix
+    // (indptr, indices, weights) of nregions rows and nx * ny columns:
+    // region r has the pixels indices[k] of a channel (flat indices),
+    // with the weights weights[k], for k from indptr[r] to indptr[r + 1]
+    // - 1. The indices must be smaller than nx * ny.
+    static void
+    regions_sum(
+            Indices indptr, Indices indices, Weights weights,
+            ConstCube cube, Image out)
+    {
+        const auto size = size_xyz(cube);
+        const int nregions = int(out.shape(1));
+        require(int(out.shape(0)) == size[2],
+                "out must have shape (nz, nregions)");
+        require(int(indptr.shape(0)) == nregions + 1,
+                "indptr must have nregions + 1 values");
+        require(indices.shape(0) == weights.shape(0),
+                "indices and weights must have the same length");
+        Kernels::dmodel_regions_sum(
+                nregions, size[0] * size[1], size[2],
+                indptr.data(), indices.data(), weights.data(),
+                cube.data(), out.data());
+    }
+
     static void
     bind(nb::module_& m, const std::string& suffix)
     {
@@ -99,7 +126,13 @@ struct DModel
                         nb::arg("orders").noconvert(),
                         nb::arg("mmaps_d").noconvert(),
                         nb::arg("mmaps_m").noconvert(),
-                        nb::arg("mmaps_w").noconvert().none());
+                        nb::arg("mmaps_w").noconvert().none())
+                .def_static("regions_sum", &regions_sum,
+                        nb::arg("indptr").noconvert(),
+                        nb::arg("indices").noconvert(),
+                        nb::arg("weights").noconvert(),
+                        nb::arg("cube").noconvert(),
+                        nb::arg("out").noconvert());
     }
 };
 

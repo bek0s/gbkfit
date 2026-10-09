@@ -89,6 +89,19 @@ Wrapper<T>::dmodel_mmaps_moments(
 }
 
 template<typename T> void
+Wrapper<T>::dmodel_regions_sum(
+        int nregions, int npix, int size_z,
+        const int* indptr, const int* indices, const T* weights,
+        const T* cube, T* out)
+{
+    const int n = nregions * size_z;
+    launch("regions_sum", n, kernels::dmodel_regions_sum<T>,
+            nregions, npix, size_z,
+            indptr, indices, weights,
+            cube, out);
+}
+
+template<typename T> void
 Wrapper<T>::gmodel_wcube_evaluate(
         int spat_size_x, int spat_size_y, int spat_size_z,
         int spec_size_z,
