@@ -2,10 +2,8 @@
 import dataclasses
 import inspect
 
-import numpy as np
-
 from gbkfit.utils import iterutils, parseutils
-from . import _detail, _disk, common, traits
+from . import _detail, _disk, common, lines, traits
 from .core import ComponentPlan
 
 
@@ -18,7 +16,10 @@ __all__ = [
     'SPATIAL_NWMODES', 'SPECTRAL_NWMODES',
     'load_options',
     'make_disk',
-    'dump_disk'
+    'make_lines',
+    'dump_disk',
+    'dump_lines',
+    'dump_name'
 ]
 
 
@@ -85,17 +86,21 @@ class SpectralDiskComponentPlan(ComponentPlan):
     """
     The evaluation of a spectral component made of one disk: as
     DiskComponentPlan, and its disk adds the emission lines of the
-    component to the spectral cube: one line, at the velocity of the
+    component (Lines) to the spectral cube, at their places on the given
     spectral axis.
     """
 
-    def __init__(self, component, disk_plan):
+    def __init__(self, component, disk_plan, lines_, spectral):
         self._component = component
         self._disk_plan = disk_plan
-        # The offset, scale and flux of the line (see DiskPlan.evaluate)
-        self._lines = np.array([[0, 1, 1]])
+        # The offset, scale and flux of each line; the fluxes of the lines
+        # after the first are their ratios, which are parameters
+        self._lines = lines_.values(spectral)
+        self._ratio_names = lines_.ratio_names()
 
     def evaluate(self, params, grid, outputs, out_extra):
+        for i, name in enumerate(self._ratio_names, start=1):
+            self._lines[i, 2] = params[name]
         self._disk_plan.evaluate(
             params, grid, self._component.disk_outputs(outputs), out_extra,
             self._lines)
@@ -144,6 +149,26 @@ def make_disk(
         traits_={slot.kind: traits_[slot.key] for slot in slots},
         prefixes={slot.kind: slot.prefix for slot in slots},
         rdata_key=rdata_key)
+
+
+def make_lines(disk, lines_):
+    """
+    The emission lines (see Lines) of a spectral component made of the
+    given disk, whose parameters must have other names.
+    """
+    result = lines.Lines(lines_)
+    if repeated := sorted(set(result.pdescs()) & set(disk.pdescs())):
+        raise RuntimeError(
+            f"the parameters of the lines have the names of other "
+            f"parameters: {repeated}; rename the lines")
+    return result
+
+
+def dump_lines(lines_):
+    """The lines option of a spectral component: none if not given."""
+    if lines_.lines() is None:
+        return {}
+    return dict(lines=lines.line_parser.dump(list(lines_.lines())))
 
 
 def dump_name(component):

@@ -95,7 +95,7 @@ class ComponentSetPlan2D:
             spec_step=spec_step,
             spec_zero=spec_zero)
         self._component_plans = tuple(
-            cmp.plan(driver, dtype) for cmp in component_set.components())
+            cmp.plan(driver, spectral, dtype) for cmp in component_set.components())
         # The spatial weights, if weighting is requested
         self._wdata = None
         if has_weights:
@@ -275,9 +275,9 @@ class ComponentSetPlan3D:
             grid.coords.rpix + (-self._zero[2] / self._step[2],),
             grid.coords.rval + (0.0,), grid.coords.rota)
         self._component_plans = tuple(
-            cmp.plan(driver, dtype) for cmp in component_set.components())
+            cmp.plan(driver, spectral, dtype) for cmp in component_set.components())
         self._ocomponent_plans = tuple(
-            cmp.plan(driver, dtype)
+            cmp.plan(driver, spectral, dtype)
             for cmp in component_set.opacity_components())
         # The spatial weights, if weighting is requested, and the opacity,
         # if there are opacity components
