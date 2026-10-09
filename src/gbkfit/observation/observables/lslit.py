@@ -91,13 +91,16 @@ class LSlit(Observable):
     def plan(
             self, driver, gmodel, foreground, instrument, scale, dtype,
             selection):
-        # The cube of a slit is one pixel (the slit width) across the slit
+        # The cube of a slit is one pixel (the slit width) across the slit,
+        # sampled as finely as the pixels along it (the model is the mean
+        # over the slit)
         size, step = self.size(), self.step()
         rpix, rval = self.rpix(), self.rval()
+        across = scale[0] * max(1, round(self._slit_width / step[0]))
         dcube = _dcube.DCube(
             (size[0], 1, size[1]), (step[0], self._slit_width, step[1]),
             (rpix[0], 0, rpix[1]), (rval[0], 0, rval[1]), self.rota(),
-            self.rest(), (scale[0], scale[0], scale[1]),
+            self.rest(), (scale[0], across, scale[1]),
             instrument.primary_beam(), instrument.psf(),
             instrument.lsf(), self._smooth_weights, self._mask_cutoff,
             self._mask_apply, dtype)

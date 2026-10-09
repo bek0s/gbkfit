@@ -74,6 +74,10 @@ def test_point_in_a_cube(driver, gmodel_type):
     velocity = (np.arange(41) - 20) * 10
     mean = np.sum(spectrum * velocity) / spectrum.sum()
     assert mean == pytest.approx(33, abs=0.01)
+    # The channels hold the mean of the line over them, which adds the
+    # variance of a channel (10^2 / 12) to that of the line
+    variance = np.sum(spectrum * (velocity - mean) ** 2) / spectrum.sum()
+    assert variance == pytest.approx(25 ** 2 + 10 ** 2 / 12, rel=1e-3)
     assert cube.sum() == pytest.approx(spectrum.sum(), rel=1e-6)
 
 
@@ -88,6 +92,13 @@ def test_point_with_lines(driver):
         xpos=0, ypos=0, flux=1, vsys=0, disp=30, nii6583_ratio=0.5))
     # Both lines, the second with half the flux of the first
     np.testing.assert_allclose(cube.sum() * 10 * PIXEL_AREA, 1.5, rtol=1e-4)
+    # The second at c (k - 1) + k v, with k the ratio of the rest
+    # wavelengths (v = 0): 943 km/s on the axis of the first
+    spectrum = cube.sum(axis=(1, 2))
+    velocity = 500 + (np.arange(301) - 150) * 10
+    second = velocity > 600
+    mean = np.sum(spectrum[second] * velocity[second]) / spectrum[second].sum()
+    assert mean == pytest.approx(299792.458 * (6583.45 / 6562.8 - 1), abs=0.5)
 
 
 def test_point_round_trip():
