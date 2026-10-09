@@ -4,7 +4,7 @@ import logging
 import numpy as np
 
 from gbkfit.math import interpolation
-from gbkfit.utils import iterutils, miscutils
+from gbkfit.utils import iterutils, parseutils
 from . import _disk, traits
 
 
@@ -122,26 +122,14 @@ def check_traits_common(traits_):
                 f"it may result in density overestimation due to aliasing")
 
 
-def make_component_params(components, prefix, prefix_first):
+def component_prefixes(components, prefix, prefix_first):
     """
-    The parameters of a list of components, and the mapping of the
-    parameters of each component to them. The parameters of each
-    component but the first are prefixed with the given prefix and their
-    index (e.g. 'cmp1_bpt_a'). Those of the first are prefixed with the
-    given prefix only if prefix_first (e.g. 'ocmp_opt_a').
+    The prefix of the parameters, constants and extra outputs of each
+    component of a list: its position (e.g. 'cmp1_'; see
+    parseutils.item_prefixes).
     """
-    return miscutils.merge_dicts_and_make_mappings(
-        [cmp.pdescs() for cmp in components], prefix, prefix_first)
-
-
-def make_component_constants(components, prefix, prefix_first):
-    """
-    The constants of a list of components, named like their parameters
-    (e.g. 'cmp1_rnodes'; see make_component_params).
-    """
-    constants, _ = miscutils.merge_dicts_and_make_mappings(
-        [cmp.constants() for cmp in components], prefix, prefix_first)
-    return constants
+    return parseutils.item_prefixes(
+        [None] * len(components), prefix, prefix_first)
 
 
 def evaluate_components(
