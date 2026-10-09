@@ -311,3 +311,49 @@ def test_spectral_axes_that_cannot_be_converted(header, message):
     write_cube('cube.fits', header)
     with pytest.raises(Exception, match=message):
         prep_scube('cube.fits', velocity_rest='6562.8 Angstrom')
+
+
+def test_binned_maps_to_one_value_per_bin():
+    # Maps whose pixels hold the value of their bin (as DAP and GIST
+    # write them) become a vector of one value per bin; the bins are
+    # numbered from 0 in the order of their numbers
+    bins = np.full((8, 10), -1)
+    bins[1:4, 1:5] = 7
+    bins[4:7, 2:9] = 3
+    bins[0, 9] = 12
+    velocity = np.where(bins == 7, 120.0, np.where(bins == 3, -40.0, 5.0))
+    velocity[bins < 0] = np.nan
+    error = np.where(bins == 7, 2.0, 3.0)
+    mask = np.ones_like(velocity)
+    mask[0, 9] = 0                          # bin 12 is masked
+    header = {k: v for k, v in HEADER.items() if k[-1] in '12' or k == 'BUNIT'}
+    fits.writeto('bins.fits', bins.astype(np.int32), fits.Header(header))
+    fits.writeto('vel.fits', velocity.astype(np.float32))
+    fits.writeto('evel.fits', error.astype(np.float32))
+    fits.writeto('mvel.fits', mask.astype(np.float32))
+    prep.prep_bmaps(
+        'bins.fits', ['vel.fits'], ['evel.fits'], ['mvel.fits'], 'float32')
+    np.testing.assert_array_equal(
+        fits.getdata('prep_bins.fits'),
+        np.searchsorted([3, 7, 12], bins) * (bins >= 0) - (bins < 0))
+    np.testing.assert_array_equal(fits.getdata('prep_vel.fits'), [-40, 120, np.nan])
+    from gbkfit.dataset import dataset_parser
+    dataset = dataset_parser.load(dict(
+        type='bmaps', regions=dict(type='bins', file='prep_bins.fits'),
+        mmap1=dict(data='prep_vel.fits', error='prep_evel.fits')))
+    assert dataset.regions().nregions() == 3
+    np.testing.assert_array_equal(dataset['mmap1'].mask(), [1, 1, 0])
+    np.testing.assert_array_equal(dataset['mmap1'].error()[:2], [3, 2])
+    # The world coordinates of the bins are kept
+    _, coords = fitsutils.read_data('prep_bins.fits')
+    assert coords.rpix == (11.5, 9.5)
+
+
+def test_binned_maps_must_hold_one_value_per_bin():
+    bins = np.zeros((4, 4))
+    values = np.ones((4, 4))
+    values[0, 0] = 2
+    fits.writeto('bins.fits', bins)
+    fits.writeto('vel.fits', values)
+    with pytest.raises(Exception, match="bin 0 hold different values"):
+        prep.prep_bmaps('bins.fits', ['vel.fits'], None, None, 'float32')

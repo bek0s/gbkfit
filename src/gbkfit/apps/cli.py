@@ -395,6 +395,14 @@ def main():
         parser_prep_clip_n, parser_prep_ccl, parser_prep_nanpad,
         parser_prep_common, parser_common_output, parser_common],
         help="moment maps")
+    parser_prep_bmaps = parsers_prep.add_parser('bmaps', parents=[
+        parser_prep_orders, parser_prep_input_n,
+        parser_prep_common, parser_common_output, parser_common],
+        help="binned moment maps: maps whose pixels hold the value of "
+             "their bin, to one value per bin")
+    parser_prep_bmaps.add_argument(
+        '--bins', type=str, required=True, metavar='BINS',
+        help="the map of the bin of each pixel (negative for none)")
     parsers_prep.add_parser('scube', parents=[
         parser_prep_input_1, parser_prep_rest,
         parser_prep_roi_spat_2d, parser_prep_roi_spec_1d,
@@ -495,6 +503,9 @@ def main():
                 args.ccl_lcount, args.ccl_pcount, args.ccl_lratio,
                 args.sclip_sigma, args.sclip_iters,
                 args.minify, args.nanpad, args.dtype)
+        elif args.prep_task == 'bmaps':
+            gbkfit.tasks.prep.prep_bmaps(
+                args.bins, args.data_d, args.data_e, args.data_m, args.dtype)
         elif args.prep_task == 'scube':
             gbkfit.tasks.prep.prep_scube(
                 args.data_d, args.data_e, args.data_m,
