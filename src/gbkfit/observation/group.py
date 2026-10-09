@@ -59,6 +59,9 @@ class ObservationGroup:
              for key in obs.observable().keys()}
             for obs in self._observations]
         self._d_model_data = [dict() for _ in self._observations]
+        # The times of the steps of its evaluations (and of those of the
+        # objectives of its data)
+        self._timers = timeutils.Timers()
 
     def _resolve(self, i, observation):
         """The index of the gmodel of the observation."""
@@ -95,22 +98,25 @@ class ObservationGroup:
     def constants(self) -> dict[str, Any]:
         return self._constants
 
+    def timers(self) -> timeutils.Timers:
+        """The times of the steps of the evaluations of the group."""
+        return self._timers
+
     def model_d(
             self,
             params: dict[str, float | np.ndarray],
             out_extra: dict[str, Any] | None = None
     ) -> list[dict[str, Any]]:
-        t = timeutils.SimpleTimer('model_eval').start()
-        for i, plan in enumerate(self._plans):
-            mapping = self._mappings[self._gmodel_index[i]]
-            out_extra_i = {} if out_extra is not None else None
-            self._d_model_data[i] = plan.evaluate(
-                {param: params[mapping[param]] for param in mapping},
-                out_extra_i)
-            if out_extra is not None:
-                for key, val in out_extra_i.items():
-                    out_extra[f'{self._extra_prefixes[i]}{key}'] = val
-        t.stop()
+        with self._timers.measure('model_eval'):
+            for i, plan in enumerate(self._plans):
+                mapping = self._mappings[self._gmodel_index[i]]
+                out_extra_i = {} if out_extra is not None else None
+                self._d_model_data[i] = plan.evaluate(
+                    {param: params[mapping[param]] for param in mapping},
+                    out_extra_i)
+                if out_extra is not None:
+                    for key, val in out_extra_i.items():
+                        out_extra[f'{self._extra_prefixes[i]}{key}'] = val
         return self._d_model_data
 
     def model_h(
@@ -119,13 +125,13 @@ class ObservationGroup:
             out_extra: dict[str, Any] | None = None
     ) -> list[dict[str, Any]]:
         self.model_d(params, out_extra)
-        t = timeutils.SimpleTimer('model_d2h').start()
-        for i, obs in enumerate(self._observations):
-            driver = obs.driver()
-            for key, d_item in self._d_model_data[i].items():
-                h_item = self._h_model_data[i][key]
-                for k, d_array in d_item.items():
-                    if d_array is not None:
-                        h_item[k] = driver.mem_copy_d2h(d_array, h_item[k])
-        t.stop()
+        with self._timers.measure('model_d2h'):
+            for i, obs in enumerate(self._observations):
+                driver = obs.driver()
+                for key, d_item in self._d_model_data[i].items():
+                    h_item = self._h_model_data[i][key]
+                    for k, d_array in d_item.items():
+                        if d_array is not None:
+                            h_item[k] = driver.mem_copy_d2h(
+                                d_array, h_item[k])
         return self._h_model_data

@@ -14,7 +14,7 @@ import gbkfit.driver
 import gbkfit.model
 import gbkfit.objective
 import gbkfit.params
-from gbkfit.utils import fitsutils, gridutils, iterutils, timeutils
+from gbkfit.utils import fitsutils, gridutils, iterutils
 from gbkfit.utils.parseutils import config_path
 from . import _detail
 
@@ -212,8 +212,9 @@ def eval_(
 
     if profile_iters > 0:
         _log.info("running performance test...")
-        # Time the profiled evaluations only
-        timeutils.clear_time_stats()
+        # Time the profiled evaluations only (the first evaluation, above,
+        # also warmed up the drivers)
+        group.timers().clear()
         for i in range(profile_iters):
             if mode == 'model':
                 group.model_d(param_values)
@@ -223,7 +224,7 @@ def eval_(
         _log.info("calculating timing statistics...")
         time_stats = iterutils.nativify({
             name: stats.to_dict()
-            for name, stats in timeutils.get_time_stats().items()})
+            for name, stats in group.timers().stats().items()})
         _log.info(pd.DataFrame.from_dict(time_stats, orient='index'))
         filename = os.path.join(output_dir, 'gbkfit_eval_timings')
         _detail.dump_dict(json, yaml, time_stats, filename)
