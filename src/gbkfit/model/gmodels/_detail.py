@@ -146,11 +146,12 @@ def make_component_constants(components, prefix, prefix_first):
 
 def evaluate_components(
         components, mappings, driver, params, grid, outputs, dtype,
-        out_extra, out_extra_label):
+        out_extra, out_extra_label, extra):
     """
     Evaluate the components of a gmodel, each with its parameters. Their
     extra outputs are named after their index and the given label (e.g.
-    'opacity_component0_odata').
+    'opacity_component0_odata'), and made from their data by extra (e.g.
+    with the coordinates of the grid).
     """
     for i, (component, mapping) in enumerate(zip(components, mappings)):
         component_params = {p: params[mapping[p]] for p in component.pdescs()}
@@ -160,4 +161,4 @@ def evaluate_components(
             component_out_extra)
         if component_out_extra is not None:
             for k, v in component_out_extra.items():
-                out_extra[f'{out_extra_label}component{i}_{k}'] = v
+                out_extra[f'{out_extra_label}component{i}_{k}'] = extra(v)

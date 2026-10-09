@@ -1,4 +1,4 @@
-from gbkfit.utils import iterutils
+from gbkfit.utils import fitsutils, iterutils
 from . import _detail
 
 
@@ -82,7 +82,7 @@ class ComponentSet2D:
             self._prepare(driver, weights, size, step, zero, dtype)
 
         spec_size, spec_step, spec_zero = spectral_axis
-        grid = dict(
+        native_grid = dict(
             spat_size=self._size + (1,),
             spat_step=self._step + (0,),
             spat_zero=self._zero + (0,),
@@ -97,10 +97,16 @@ class ComponentSet2D:
             bdata = driver.mem_alloc_d(self._size[::-1], dtype)
             driver.mem_fill(bdata, 0)
 
+        # The extra outputs are images on the grid; those of the
+        # components are on a grid one voxel thick
+        def image(data):
+            return fitsutils.GridData(data, grid.coords, None)
+
         _detail.evaluate_components(
             self._components, self._mappings,
-            driver, params, grid, outputs | dict(wdata=wdata, bdata=bdata),
-            dtype, out_extra, '')
+            driver, params, native_grid,
+            outputs | dict(wdata=wdata, bdata=bdata),
+            dtype, out_extra, '', lambda data: image(data[0]))
 
         # Weight the data with the spatial weights evaluated above
         if weights is not None:
@@ -108,8 +114,8 @@ class ComponentSet2D:
 
         if out_extra is not None:
             if wdata is not None:
-                out_extra['total_wdata'] = driver.mem_copy_d2h(wdata)
-            out_extra['total_bdata'] = driver.mem_copy_d2h(bdata)
+                out_extra['total_wdata'] = image(driver.mem_copy_d2h(wdata))
+            out_extra['total_bdata'] = image(driver.mem_copy_d2h(bdata))
 
 
 class ComponentSet3D:
@@ -219,7 +225,7 @@ class ComponentSet3D:
             self._prepare(driver, weights, size, step, zero, dtype)
 
         spec_size, spec_step, spec_zero = spectral_axis
-        grid = dict(
+        native_grid = dict(
             spat_size=self._size,
             spat_step=self._step,
             spat_zero=self._zero,
@@ -227,6 +233,16 @@ class ComponentSet3D:
             spec_size=spec_size,
             spec_step=spec_step,
             spec_zero=spec_zero)
+
+        # The extra outputs are cubes on the grid: the x and y axes of the
+        # data, and the z axis along the line of sight (from z = 0)
+        coords = fitsutils.Coords(
+            self._step,
+            grid.coords.rpix + (-self._zero[2] / self._step[2],),
+            grid.coords.rval + (0.0,), rota)
+
+        def cube(data):
+            return fitsutils.GridData(data, coords, None)
 
         wdata = self._wdata
         odata = self._odata
@@ -243,14 +259,14 @@ class ComponentSet3D:
             driver.mem_fill(odata, 0)
             _detail.evaluate_components(
                 self._ocomponents, self._omappings,
-                driver, params, grid, dict(odata=odata), dtype,
-                out_extra, 'opacity_')
+                driver, params, native_grid, dict(odata=odata), dtype,
+                out_extra, 'opacity_', cube)
 
         outputs = outputs | dict(
             wdata=wdata, bdata=bdata, odata=odata, obdata=obdata)
         _detail.evaluate_components(
             self._components, self._mappings,
-            driver, params, grid, outputs, dtype, out_extra, '')
+            driver, params, native_grid, outputs, dtype, out_extra, '', cube)
 
         # Weight the data with the spatial weights evaluated above
         if weights is not None:
@@ -260,4 +276,5 @@ class ComponentSet3D:
             totals = dict(wdata=wdata, odata=odata, bdata=bdata, obdata=obdata)
             for name, total in totals.items():
                 if total is not None:
-                    out_extra[f'total_{name}'] = driver.mem_copy_d2h(total)
+                    out_extra[f'total_{name}'] = cube(
+                        driver.mem_copy_d2h(total))
