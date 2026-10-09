@@ -71,7 +71,7 @@ struct Wrapper
 
     static void
     objective_residual_sum(
-            const T* residual, int size, bool squared, T* sum);
+            const T* residual, int size, bool squared, double* sum);
 };
 
 }} // namespace gbkfit::cuda

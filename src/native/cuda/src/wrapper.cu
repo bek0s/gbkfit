@@ -198,13 +198,13 @@ struct ResidualSumTerm
 
 template<typename T> void
 Wrapper<T>::objective_residual_sum(
-        const T* residual, int size, bool squared, T* sum)
+        const T* residual, int size, bool squared, double* sum)
 {
     // Accumulate in double precision: a cube can have millions of terms
-    const T result = thrust::transform_reduce(
+    const double result = thrust::transform_reduce(
             thrust::device, residual, residual + size,
             ResidualSumTerm<T>{squared}, 0.0, thrust::plus<double>());
-    check(cudaMemcpy(sum, &result, sizeof(T), cudaMemcpyHostToDevice),
+    check(cudaMemcpy(sum, &result, sizeof(double), cudaMemcpyHostToDevice),
           "objective_residual_sum");
 }
 

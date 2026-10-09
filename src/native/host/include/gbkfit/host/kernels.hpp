@@ -317,7 +317,8 @@ objective_residual(
 }
 
 template<typename T> void
-objective_residual_sum(const T* residual, int size, bool squared, T* sum)
+objective_residual_sum(
+        const T* residual, int size, bool squared, double* sum)
 {
     // Accumulate in double precision: a cube can have millions of terms
     double sum_ = 0;
