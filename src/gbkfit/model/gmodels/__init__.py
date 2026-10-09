@@ -5,11 +5,15 @@ from .kinematics_2d import GModelKinematics2D
 from .kinematics_3d import GModelKinematics3D
 
 from .brightness_mcdisk_3d import BrightnessMCDisk3D
+from .brightness_point_2d import BrightnessPoint2D
+from .brightness_point_3d import BrightnessPoint3D
 from .brightness_smdisk_2d import BrightnessSMDisk2D
 from .brightness_smdisk_3d import BrightnessSMDisk3D
 from .opacity_mcdisk_3d import OpacityMCDisk3D
 from .opacity_smdisk_3d import OpacitySMDisk3D
 from .spectral_mcdisk_3d import SpectralMCDisk3D
+from .spectral_point_2d import SpectralPoint2D
+from .spectral_point_3d import SpectralPoint3D
 from .spectral_smdisk_2d import SpectralSMDisk2D
 from .spectral_smdisk_3d import SpectralSMDisk3D
 

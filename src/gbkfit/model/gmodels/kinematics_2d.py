@@ -4,6 +4,7 @@ from gbkfit.model.core import GModelSCube, Selection
 from gbkfit.utils import parseutils
 from ._component_set import ComponentSet2D, ComponentSetGModelPlan
 from .core import SpectralComponent2D
+from .spectral_point_2d import SpectralPoint2D
 from .spectral_smdisk_2d import SpectralSMDisk2D
 
 
@@ -13,6 +14,7 @@ __all__ = [
 
 
 _scmp_parser = parseutils.TypedParser(SpectralComponent2D, [
+    SpectralPoint2D,
     SpectralSMDisk2D])
 
 
