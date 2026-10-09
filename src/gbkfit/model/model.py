@@ -40,6 +40,7 @@ class Model(parseutils.BasicSerializable, ABC):
             gmodel=gmodel_parser.dump(self.gmodel()))
 
     def __init__(self, driver: Driver, dmodel: DModel, gmodel: GModel):
+        dmodel.require_compatible(gmodel)
         self._driver = driver
         self._dmodel = dmodel
         self._gmodel = gmodel
