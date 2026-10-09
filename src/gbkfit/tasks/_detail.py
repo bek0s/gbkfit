@@ -96,35 +96,32 @@ def make_output_dir(
         mode: Literal['terminate', 'overwrite', 'unique']
 ) -> str:
     """
-    Handle directory path based on specified mode and create the
-    directory.
-
-    Notes
-    -----
-    TODO:
-        The code is susceptible to race conditions.
-        As a temporary measure, all calls to `pathlib.Path.mkdir()`
-        have the argument `exists_ok` set to `False`.
-        Update the code to handle race conditions gracefully.
+    Create the output directory at the given path and return its absolute
+    path. If it exists: an error (terminate), use it (overwrite), or create
+    the first free path with a numeric suffix (unique, e.g. 'out_2').
+    Creating a directory is atomic, so two runs cannot both create the
+    same one.
     """
     path_obj = Path(path).absolute()
-    # Handle non-existent path case
-    if not path_obj.exists():
-        # exists_ok=False: a crude way to protect from race conditions
-        path_obj.mkdir(parents=True, exist_ok=False)
+    try:
+        path_obj.mkdir(parents=True)
         return str(path_obj)
-    # Handle file exists case
-    if path_obj.is_file():
+    except FileExistsError:
+        pass
+    if not path_obj.is_dir():
         raise RuntimeError(f"path '{str(path_obj)}' exists as a file")
-    # Handle directory exists case
     if mode == 'terminate':
         raise RuntimeError(f"path '{str(path_obj)}' already exists")
-    if mode == 'unique':
-        path_obj = miscutils.make_unique_path(path_obj)
-        # exists_ok=False: a crude way to protect from race conditions
-        path_obj.mkdir(parents=True, exist_ok=False)
-    # Handle directory exists but mode == 'overwrite' case
-    return str(path_obj)
+    if mode == 'overwrite':
+        return str(path_obj)
+    while True:
+        candidate = miscutils.make_unique_path(path_obj)
+        try:
+            candidate.mkdir(parents=True)
+            return str(candidate)
+        except FileExistsError:
+            # Another run created it first: try the next one
+            continue
 
 
 def dump_dict(json_, yaml_, info: Any, filename: str) -> None:
