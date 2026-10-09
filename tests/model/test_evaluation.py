@@ -100,3 +100,22 @@ def test_failed_preparation_is_not_kept(driver):
     for _ in range(2):
         with pytest.raises(RuntimeError, match="does not support dtype"):
             dmodel.evaluate(driver, gmodel, params)
+
+
+@pytest.mark.parametrize('dmodel, gmodel', [
+    (dict(type='image', size=[8, 8]), 'kinematics_2d'),
+    (dict(type='scube', size=[8, 8, 8]), 'intensity_2d')])
+def test_incompatible_models_are_rejected_at_load(dmodel, gmodel):
+    # An image dmodel needs an image gmodel, and the others a spectral
+    # cube gmodel; the configuration is rejected before any evaluation
+    component = dict(
+        type='smdisk', loose=False, tilted=False, rnodes=[0, 1, 2],
+        bptraits=dict(type='exponential'))
+    if gmodel.startswith('kinematics'):
+        component |= dict(
+            vptraits=dict(type='tan_arctan'), dptraits=dict(type='uniform'))
+    model = dict(
+        driver=dict(type='host'), dmodel=dmodel,
+        gmodel=dict(type=gmodel, components=[component]))
+    with pytest.raises(Exception, match="is not compatible with"):
+        gbkfit.model.model_parser.load(model)

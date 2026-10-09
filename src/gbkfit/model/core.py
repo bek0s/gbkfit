@@ -55,12 +55,16 @@ class DModel(parseutils.TypedSerializable, abc.ABC):
     def zero(self):
         pass
 
-    def _prepare(self, driver, gmodel):
+    def require_compatible(self, gmodel):
+        """Raise RuntimeError unless the dmodel can evaluate the gmodel."""
         if not self.is_compatible(gmodel):
             dmodel_desc = parseutils.make_typed_desc(self.__class__, 'dmodel')
             gmodel_desc = parseutils.make_typed_desc(gmodel.__class__, 'gmodel')
             raise RuntimeError(
                 f"{dmodel_desc} is not compatible with {gmodel_desc}")
+
+    def _prepare(self, driver, gmodel):
+        self.require_compatible(gmodel)
         self._driver = driver
         self._gmodel = gmodel
         try:
