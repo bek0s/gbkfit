@@ -31,7 +31,10 @@ To generate a mock model, run:
 
 .. code-block:: console
 
-   gbkfit-cli eval path/to/configuration/file
+   gbkfit-cli eval model path/to/configuration/file
+
+(``eval objective`` also compares the model with the data of the
+observations.)
 
 After ..., a series of output files created ...
 
@@ -78,43 +81,44 @@ Example
 
 .. code-block:: yaml
 
-   # data model
-   dmodels:
-     type: scube
-     size: [101, 101, 101]
-     step: [1, 1, 5]
-     cval: [0, 0, 0]
-     scale: [1, 1, 1]
-     psf: {type: gauss, sigma: 2}
-     lsf: {type: gauss, sigma: 20}
-
    # galaxy model
    gmodels:
-     type: kinematics_2d
+   - type: kinematics_2d
      components:
-       type: smdisk
-       rnodes: [0, 50]
-       nrnodes: 10
-       rnodes_min: 0
-       rnodes_max: 50
-       rnodes_sep: 10
-       rptraits: {type: gauss}
+     - type: smdisk
+       loose: false
+       tilted: false
+       rnmin: 0
+       rnmax: 50
+       rnsep: 10
+       bptraits: {type: gauss}
        vptraits: {type: tan_arctan}
        dptraits: {type: uniform}
 
+   # observations of the galaxy model
+   observations:
+   - driver: {type: host}
+     observable:
+       type: scube
+       size: [101, 101, 101]
+       step: [1, 1, 5]
+     instrument:
+       psf: {type: gauss, sigma: 2}
+       lsf: {type: gauss, sigma: 20}
+
    # parameters
    params:
-     vsys: 0
-     xpos: 0
-     ypos: 0
-     posa: 45
-     incl: 45
-     rpt_a: 1
-     rpt_s: 30
-     rpt_b: 10
-     vpt_rt: 10
-     vpt_vt: 200
-     dpt_a: 10
+     properties:
+       vsys: 0
+       xpos: 0
+       ypos: 0
+       posa: 45
+       incl: 45
+       bpt_a: 1
+       bpt_s: 30
+       vpt_rt: 10
+       vpt_vt: 200
+       dpt_a: 10
 
 Cookbook
 --------
