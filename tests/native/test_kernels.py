@@ -161,9 +161,11 @@ def line_shapes():
     return 1 + 0.01 * x, 15 + 5 * np.sin(0.1 * x + y), 2 + 0.02 * x + y / 2
 
 
-def test_mmaps_moments(driver):
+@pytest.mark.parametrize('zero', [-100, 15000])
+def test_mmaps_moments(driver, zero):
     # The moments of skewed lines, with weights, against those computed
-    # here in double precision
+    # here in double precision, as precise near velocity 0 as far from it
+    # (15000 km/s: the cz of a galaxy at z = 0.05)
     memory = Memory(driver)
     dmodel = driver.native_class('DModel', DTYPE)()
     amplitude, centre, sigma = line_shapes()
@@ -175,9 +177,7 @@ def test_mmaps_moments(driver):
     mmaps_d = memory.to_device(np.zeros(maps_shape, DTYPE))
     mmaps_m = memory.to_device(np.zeros(SPECTRA_SHAPE[1:], DTYPE))
     mmaps_w = memory.to_device(np.zeros(maps_shape, DTYPE))
-    # Velocities near 0: far from 0, the float32 sums lose the precision
-    # of moment 1, and the central moments with it
-    step, zero = 5, -100
+    step = 5
     dmodel.mmaps_moments(
         (1, 1, step), (0, 0, zero),
         memory.to_device(cube.astype(DTYPE)), memory.to_device(weights),
@@ -199,9 +199,15 @@ def test_mmaps_moments(driver):
     result = memory.to_host(mmaps_d)
     for order, expected_map in zip(orders, expected):
         assert np.isnan(result[order][~valid]).all()
+        # Moment 1 to a thousandth of a channel, the others relative to
+        # their largest value
+        if order == 1:
+            tolerance = dict(rtol=0, atol=1e-3 * step)
+        else:
+            tolerance = dict(
+                rtol=1e-4, atol=1e-4 * np.abs(expected_map[valid]).max())
         np.testing.assert_allclose(
-            result[order][valid], expected_map[valid], rtol=1e-4,
-            atol=1e-4 * np.abs(expected_map[valid]).max())
+            result[order][valid], expected_map[valid], **tolerance)
     result_w = memory.to_host(mmaps_w)[0]
     assert np.isnan(result_w[~valid]).all()
     np.testing.assert_allclose(result_w[valid], expected_w[valid], rtol=1e-5)
