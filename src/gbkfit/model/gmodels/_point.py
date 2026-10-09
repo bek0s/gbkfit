@@ -49,10 +49,11 @@ class PointPlan(ComponentPlan):
     """
     The evaluation of a point component (e.g. an unresolved nucleus): its
     flux at its position on the sky, shared by the four pixels around it
-    (bilinearly), in the image, or in the spectral cube as its emission
-    lines (see Lines; offset, scale and flux of each in lines), each a
-    Gaussian of its dispersion, of which each channel gets its mean over
-    the channel (as the disks do).
+    (bilinearly), as surface brightness (per unit area, as the disks), in
+    the image, or in the spectral cube as its emission lines (see Lines;
+    offset, scale and flux of each in lines), each a Gaussian of its
+    dispersion, of which each channel gets its mean over the channel (as
+    the disks do).
     """
 
     def __init__(self, driver, dtype, lines=None, ratios=()):
@@ -91,14 +92,17 @@ class PointPlan(ComponentPlan):
         driver = self._driver
         image = outputs.get('image')
         scube = outputs.get('scube')
+        # The surface brightness of all the flux in one pixel
+        brightness = params['flux'] / (
+            grid['spat_step'][0] * grid['spat_step'][1])
         values = None
         if scube is not None:
-            values = params['flux'] * self._spectrum(params, grid)
+            values = brightness * self._spectrum(params, grid)
         for x, y, weight in _pixels(params, grid):
             if image is not None:
                 pixel = image.reshape(-1, *image.shape[-2:])[0, y, x:x + 1]
                 driver.math_add(pixel, self._dtype.type(
-                    params['flux'] * weight), out=pixel)
+                    brightness * weight), out=pixel)
             if scube is not None:
                 spectrum = scube[:, y, x]
                 driver.math_add(spectrum, driver.mem_copy_h2d(

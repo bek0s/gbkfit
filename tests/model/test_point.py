@@ -1,6 +1,7 @@
 """
 Tests for point (unresolved) components: their flux at a point, shared
-by the pixels around it, before the PSF.
+by the pixels around it, before the PSF, as surface brightness (the flux
+of a pixel is its value times its area).
 """
 
 import copy
@@ -20,6 +21,10 @@ def evaluate(driver, gmodel, dmodel, properties):
     return next(iter(data.values()))['d'].copy()
 
 
+# The area of a pixel of the test images and cubes
+PIXEL_AREA = 0.25
+
+
 @pytest.mark.parametrize('gmodel_type', ['intensity_2d', 'intensity_3d'])
 def test_point_in_an_image(driver, gmodel_type):
     # At the centre of a pixel (pixel (5, 6) is at (0.25, 1.25)), all its
@@ -27,9 +32,10 @@ def test_point_in_an_image(driver, gmodel_type):
     gmodel = dict(type=gmodel_type, components=[dict(type='point')])
     image = dict(type='image', size=[10, 8], step=[0.5, 0.5])
     centred = evaluate(driver, gmodel, image, dict(xpos=0.25, ypos=1.25, flux=3))
-    assert centred[6, 5] == pytest.approx(3) and centred.sum() == pytest.approx(3)
+    assert centred[6, 5] * PIXEL_AREA == pytest.approx(3)
+    assert centred.sum() * PIXEL_AREA == pytest.approx(3)
     shared = evaluate(driver, gmodel, image, dict(xpos=0.5, ypos=1.25, flux=4))
-    np.testing.assert_allclose(shared[6, 5:7], [2, 2], rtol=1e-6)
+    np.testing.assert_allclose(shared[6, 5:7] * PIXEL_AREA, [2, 2], rtol=1e-6)
     # With a psf, the image of a point is the psf
     psf = dict(type='gauss', sigma=1.0)
     smeared = evaluate(driver, gmodel, image | dict(psf=psf),
@@ -39,7 +45,20 @@ def test_point_in_an_image(driver, gmodel_type):
     kernel = psf_parser.load(dict(psf)).asarray((0.5, 0.5))
     cy, cx = kernel.shape[0] // 2, kernel.shape[1] // 2
     np.testing.assert_allclose(
-        smeared, kernel[cy - 6:cy + 2, cx - 5:cx + 5], rtol=1e-4, atol=1e-6)
+        smeared * PIXEL_AREA, kernel[cy - 6:cy + 2, cx - 5:cx + 5],
+        rtol=1e-4, atol=1e-6)
+
+
+@pytest.mark.parametrize('scale', [1, 2, 3])
+def test_point_flux_does_not_depend_on_oversampling(driver, scale):
+    # The model is drawn on a grid of pixels scale times smaller, and
+    # averaged back to the pixels of the image: as for the disks, which
+    # are surface brightness, the flux of the point does not change
+    gmodel = dict(type='intensity_2d', components=[dict(type='point')])
+    image = dict(type='image', size=[10, 8], step=[0.5, 0.5],
+                 scale=[scale, scale])
+    result = evaluate(driver, gmodel, image, dict(xpos=0.25, ypos=1.25, flux=3))
+    assert result.sum() * PIXEL_AREA == pytest.approx(3, rel=1e-6)
 
 
 @pytest.mark.parametrize('gmodel_type', ['kinematics_2d', 'kinematics_3d'])
@@ -51,7 +70,7 @@ def test_point_in_a_cube(driver, gmodel_type):
     cube = evaluate(driver, gmodel, scube, dict(
         xpos=0.25, ypos=1.25, flux=2, vsys=33, disp=25))
     spectrum = cube[:, 6, 5]
-    np.testing.assert_allclose(spectrum.sum() * 10, 2, rtol=1e-5)
+    np.testing.assert_allclose(spectrum.sum() * 10 * PIXEL_AREA, 2, rtol=1e-5)
     velocity = (np.arange(41) - 20) * 10
     mean = np.sum(spectrum * velocity) / spectrum.sum()
     assert mean == pytest.approx(33, abs=0.01)
@@ -68,7 +87,7 @@ def test_point_with_lines(driver):
     cube = evaluate(driver, gmodel, scube, dict(
         xpos=0, ypos=0, flux=1, vsys=0, disp=30, nii6583_ratio=0.5))
     # Both lines, the second with half the flux of the first
-    np.testing.assert_allclose(cube.sum() * 10, 1.5, rtol=1e-4)
+    np.testing.assert_allclose(cube.sum() * 10 * PIXEL_AREA, 1.5, rtol=1e-4)
 
 
 def test_point_round_trip():
