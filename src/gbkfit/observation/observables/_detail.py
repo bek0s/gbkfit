@@ -137,16 +137,18 @@ def load_observable_common(cls, info, ndim, dataset, expected_dataset_cls):
 class DCubePlanBase(ObservablePlan):
     """
     The evaluation of an observable made from a DCube: the plan of the cube,
-    and the plan of the gmodel on its high-res grid (see _gmodel_grid).
+    and the plan of the gmodel (of the given components) on its high-res
+    grid (see _gmodel_grid).
     """
 
-    def __init__(self, dcube, driver, gmodel, dtype):
+    def __init__(self, dcube, driver, gmodel, dtype, components):
         self._driver = driver
         self._dtype = dtype
         self._dcube = dcube
         self._dcube_plan = dcube.plan(driver, gmodel.has_weights())
         self._gmodel_plan = gmodel.plan(
-            driver, self._gmodel_grid(), gmodel.has_weights(), dtype)
+            driver, self._gmodel_grid(), gmodel.has_weights(), dtype,
+            components)
 
     def _gmodel_grid(self):
         """The grid the gmodel is evaluated on: the high-res grid."""

@@ -5,6 +5,7 @@ import numpy as np
 
 from gbkfit.math import interpolation
 from gbkfit.utils import iterutils, parseutils
+from gbkfit.utils.parseutils import ConfigError
 from . import _disk, traits
 
 
@@ -130,6 +131,25 @@ def component_prefixes(components, label, prefix, prefix_first):
     """
     return parseutils.item_prefixes(
         [cmp.name() for cmp in components], label, prefix, prefix_first)
+
+
+def select_components(components, names):
+    """
+    The indices of the components of the given names, in their order (all
+    of them if names is None). Raise ConfigError for unknown names.
+    """
+    if names is None:
+        return tuple(range(len(components)))
+    known = [component.name() for component in components]
+    if not names:
+        raise ConfigError("at least one component must be selected")
+    if len(set(names)) != len(names):
+        raise ConfigError(f"the selected components repeat names: {names}")
+    if unknown := [name for name in names if name not in known]:
+        raise ConfigError(
+            f"there are no components named {unknown}; the named components "
+            f"are {[name for name in known if name is not None]}")
+    return tuple(sorted(known.index(name) for name in names))
 
 
 def evaluate_components(

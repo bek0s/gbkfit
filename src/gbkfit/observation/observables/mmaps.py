@@ -122,7 +122,7 @@ class MMaps(Observable):
     def spec_rval(self):
         return self._spec_rval
 
-    def plan(self, driver, gmodel, instrument, scale, dtype):
+    def plan(self, driver, gmodel, instrument, scale, dtype, components):
         if self._method == 'gaussian_fit' and gmodel.has_weights():
             raise RuntimeError(
                 "the method gaussian_fit does not support gmodels with "
@@ -146,13 +146,13 @@ class MMaps(Observable):
             self.rota(), self._spec_rest, tuple(scale) + (1,),
             instrument.primary_beam(), psf, lsf,
             False, None, False, dtype)
-        return MMapsPlan(self, dcube, driver, gmodel, dtype)
+        return MMapsPlan(self, dcube, driver, gmodel, dtype, components)
 
 
 class MMapsPlan(_detail.DCubePlanBase):
 
-    def __init__(self, mmaps, dcube, driver, gmodel, dtype):
-        super().__init__(dcube, driver, gmodel, dtype)
+    def __init__(self, mmaps, dcube, driver, gmodel, dtype, components):
+        super().__init__(dcube, driver, gmodel, dtype, components)
         self._moments = _moments.MomentsPlan(
             driver, mmaps.size(), mmaps.orders(), mmaps.mask_cutoff(),
             mmaps.method(), dtype)
