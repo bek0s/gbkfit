@@ -7,6 +7,7 @@ import gbkfit.model
 import gbkfit.params
 import numpy as np
 import pytest
+from modelutils import observation_group
 
 
 GMODEL = dict(type='kinematics_2d', components=[dict(
@@ -22,8 +23,8 @@ PROPERTIES = dict(
 
 
 def evaluate(driver, dmodel):
-    model_group = gbkfit.model.ModelGroup(gbkfit.model.model_parser.load([
-        dict(driver=dict(type=driver.type()), dmodel=dmodel, gmodel=GMODEL)]))
+    model_group = observation_group([
+        dict(driver=dict(type=driver.type()), dmodel=dmodel, gmodel=GMODEL)])
     params = gbkfit.params.EvaluationParams(model_group.pdescs(), PROPERTIES)
     data = model_group.model_h(params.evaluate())[0]
     return next(iter(data.values()))['d'].copy()
@@ -55,9 +56,9 @@ def test_lslit_objective_residual(driver):
     dataset = DatasetLSlit(Data(
         model + 1, error=np.full_like(model, 2), step=(1, 10),
         spectral_axis=1))
-    model_group = gbkfit.model.ModelGroup(gbkfit.model.model_parser.load([
+    model_group = observation_group([
         dict(driver=dict(type=driver.type()), dmodel=dmodel, gmodel=GMODEL)],
-        dataset=[dataset]))
+        dataset=[dataset])
     objective = Objective([dataset], model_group)
     params = gbkfit.params.EvaluationParams(model_group.pdescs(), PROPERTIES)
     residual = objective.residual_nddata_h(params.evaluate(), False)

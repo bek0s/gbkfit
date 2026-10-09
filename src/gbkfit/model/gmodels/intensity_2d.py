@@ -31,14 +31,18 @@ class GModelIntensity2D(GModelImage):
         return cls(**opts)
 
     def dump(self):
+        name = dict(name=self.name()) if self.name() is not None else {}
         return dict(
             type=self.type(),
+            **name,
             components=_bcmp_parser.dump(self._component_set.components()))
 
     def __init__(
             self,
-            components: BrightnessComponent2D | Sequence[BrightnessComponent2D]
+            components: BrightnessComponent2D | Sequence[BrightnessComponent2D],
+            name: str | None = None
     ):
+        super().__init__(name)
         self._component_set = ComponentSet2D(components)
 
     def pdescs(self):

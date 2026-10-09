@@ -75,40 +75,66 @@ def test_invalid_names_are_rejected(components, opacity_components, message):
         intensity_3d(components, opacity_components)
 
 
-def models(*names):
-    from gbkfit.model import ModelGroup, model_parser
+def gmodel(name=None):
     component = disk() | dict(bhtraits=None)
-    return ModelGroup(model_parser.load([
-        dict(driver=dict(type='host'), dmodel=dict(type='image', size=[8, 8]),
-             gmodel=dict(type='intensity_2d', components=[component]))
+    return dict(type='intensity_2d', components=[component]) \
         | (dict(name=name) if name is not None else {})
-        for name in names]))
 
 
-def test_model_names_prefix_the_parameters():
-    assert {'xpos', 'model1_xpos'} <= set(models(None, None).pdescs())
-    group = models('hi', 'halpha')
-    assert {'hi_xpos', 'halpha_xpos'} <= set(group.pdescs())
-    assert set(group.constants()) == {
+def observation(gmodel_=None, name=None):
+    return dict(
+        driver=dict(type='host'), observable=dict(type='image', size=[8, 8])) \
+        | (dict(gmodel=gmodel_) if gmodel_ is not None else {}) \
+        | (dict(name=name) if name is not None else {})
+
+
+def group(gmodels, observations):
+    from gbkfit.observation import ObservationGroup, observation_parser
+    return ObservationGroup(
+        gmodel_parser.load(gmodels), observation_parser.load(observations))
+
+
+def test_gmodel_names_prefix_the_parameters():
+    group_ = group(
+        [gmodel('hi'), gmodel('halpha')],
+        [observation('hi'), observation('halpha')])
+    assert {'hi_xpos', 'halpha_xpos'} <= set(group_.pdescs())
+    assert set(group_.constants()) == {
         'hi_rnodes', 'hi_subrnodes', 'halpha_rnodes', 'halpha_subrnodes'}
-    assert group.models()[0].dump()['name'] == 'hi'
+    assert gmodel_parser.dump(group_.gmodels()[0])['name'] == 'hi'
 
 
-@pytest.mark.parametrize('names, message', [
-    (('hi', None), "either all or none of the models must have a name"),
-    (('hi', 'hi'), r"the names of the models must be unique")])
-def test_invalid_model_names_are_rejected(names, message):
+def test_observations_of_one_gmodel_share_its_parameters():
+    group_ = group([gmodel()], [observation(), observation()])
+    assert 'xpos' in group_.pdescs()
+    assert not any(name.startswith('gmodel') for name in group_.pdescs())
+
+
+@pytest.mark.parametrize('gmodels, observations, message', [
+    ([gmodel('hi'), gmodel()], [observation('hi')],
+     "either all or none of the gmodels must have a name"),
+    ([gmodel('hi'), gmodel('hi')], [observation('hi')],
+     "the names of the gmodels must be unique"),
+    ([gmodel('hi'), gmodel('ha')], [observation()],
+     "observation 0 must name its gmodel"),
+    ([gmodel('hi')], [observation('ha')], "unknown gmodel 'ha'"),
+    ([gmodel('hi')], [observation('hi', name='hi')],
+     "the gmodels and the observations must have different names")])
+def test_invalid_gmodel_and_observation_names_are_rejected(
+        gmodels, observations, message):
     with pytest.raises(Exception, match=message):
-        models(*names)
+        group(gmodels, observations)
 
 
-def test_names_name_the_extra_outputs(evaluate_models):
+def test_names_name_the_extra_outputs():
+    import gbkfit.params
     component = disk(name='disk') | dict(bhtraits=None)
-    model = dict(
-        name='hi', driver=dict(type='host'),
-        dmodel=dict(type='image', size=[8, 8]),
-        gmodel=dict(type='intensity_2d', components=[component]))
-    _, extra = evaluate_models([model], dict(
-        hi_disk_xpos=0, hi_disk_ypos=0, hi_disk_posa=0, hi_disk_incl=45,
-        hi_disk_bpt_a=1, hi_disk_bpt_s=2))
-    assert {'hi_gmodel_disk_bdata', 'hi_dmodel_dcube_lo'} <= set(extra)
+    group_ = group(
+        [dict(type='intensity_2d', components=[component])],
+        [observation(name='hi')])
+    params = gbkfit.params.EvaluationParams(group_.pdescs(), dict(
+        disk_xpos=0, disk_ypos=0, disk_posa=0, disk_incl=45,
+        disk_bpt_a=1, disk_bpt_s=2), constants=group_.constants())
+    extra = {}
+    group_.model_h(params.evaluate(), extra)
+    assert {'hi_gmodel_disk_bdata', 'hi_dcube_lo'} <= set(extra)

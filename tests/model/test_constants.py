@@ -4,8 +4,8 @@ use: the radial nodes and subnodes of each disk.
 """
 
 import numpy as np
+from modelutils import observation_group
 
-import gbkfit.model
 
 
 RNODES = list(range(0, 21, 2))
@@ -43,9 +43,10 @@ def test_rotation_curve_from_radial_nodes(evaluate_models):
 
 def test_names_of_constants():
     # The constants are named like the parameters of their components,
-    # opacity components and models
+    # opacity components and gmodels (by name, when there are several)
     vptraits = dict(type='tan_arctan')
     model0 = dict(
+        name='g0',
         driver=dict(type='host'),
         dmodel=dict(type='scube', size=[32, 32, 41], step=[1, 1, 10]),
         gmodel=dict(
@@ -58,13 +59,13 @@ def test_names_of_constants():
                 type='smdisk', loose=False, tilted=False, rnodes=[0, 1],
                 optraits=dict(type='exponential'),
                 ohtraits=dict(type='sech2'))]))
-    model1 = kinematics_2d([disk(vptraits=vptraits, rnodes=[0, 3, 6])])
-    models = gbkfit.model.model_parser.load([model0, model1])
-    constants = gbkfit.model.ModelGroup(models).constants()
+    model1 = kinematics_2d([disk(vptraits=vptraits, rnodes=[0, 3, 6])]) \
+        | dict(name='g1')
+    constants = observation_group([model0, model1]).constants()
     assert list(constants) == [
-        'rnodes', 'subrnodes', 'cmp1_rnodes', 'cmp1_subrnodes',
-        'ocmp_rnodes', 'ocmp_subrnodes', 'model1_rnodes', 'model1_subrnodes']
-    assert constants['rnodes'] == tuple(RNODES)
-    assert constants['cmp1_rnodes'] == (0, 5, 10)
-    assert constants['ocmp_rnodes'] == (0, 1)
-    assert constants['model1_rnodes'] == (0, 3, 6)
+        'g0_rnodes', 'g0_subrnodes', 'g0_cmp1_rnodes', 'g0_cmp1_subrnodes',
+        'g0_ocmp_rnodes', 'g0_ocmp_subrnodes', 'g1_rnodes', 'g1_subrnodes']
+    assert constants['g0_rnodes'] == tuple(RNODES)
+    assert constants['g0_cmp1_rnodes'] == (0, 5, 10)
+    assert constants['g0_ocmp_rnodes'] == (0, 1)
+    assert constants['g1_rnodes'] == (0, 3, 6)

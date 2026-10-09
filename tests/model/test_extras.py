@@ -47,27 +47,27 @@ def test_dcube_extras_have_the_layout_of_the_data(evaluate_models, name):
         k: v for k, v in PROPERTIES.items()
         if name != 'image' or not k.startswith(('v', 'd'))}
     _, extra = evaluate_models([model], properties)
-    dcube_lo = extra['model0_dmodel_dcube_lo']
+    dcube_lo = extra['observation0_dcube_lo']
     assert isinstance(dcube_lo, fitsutils.GridData)
     assert dcube_lo.data.shape == shape
     assert dcube_lo.spectral_axis == spectral_axis
     assert len(dcube_lo.coords.step) == len(shape)
     # The high-res grid is on the sky, except across the slit
-    dcube_hi = extra['model0_dmodel_dcube_hi']
+    dcube_hi = extra['observation0_dcube_hi']
     if name == 'lslit':
         assert isinstance(dcube_hi, np.ndarray)
     else:
         assert isinstance(dcube_hi, fitsutils.GridData)
         assert dcube_hi.spectral_axis == spectral_axis
     # The PSF is an array of offsets, not on the grid
-    assert isinstance(extra['model0_dmodel_psf_hi'], np.ndarray)
+    assert isinstance(extra['observation0_psf_hi'], np.ndarray)
 
 
 def test_dcube_extras_have_the_coordinates_of_the_dmodel(evaluate_models):
     dmodel, gmodel, _, _ = MODELS['scube']
     model = dict(driver=dict(type='host'), dmodel=dmodel, gmodel=gmodel)
     _, extra = evaluate_models([model], PROPERTIES)
-    coords = extra['model0_dmodel_dcube_lo'].coords
+    coords = extra['observation0_dcube_lo'].coords
     assert coords.step == (1, 1, 10)
     assert coords.rpix == (7.5, 5.5, 9.5)
     assert coords.rval == (150, 2, 0)
@@ -83,11 +83,11 @@ def test_gmodel_extras_are_on_the_sky(evaluate_models, name):
         k: v for k, v in PROPERTIES.items()
         if name != 'image' or not k.startswith(('v', 'd'))}
     _, extra = evaluate_models([model], properties)
-    bdata = extra['model0_gmodel_component0_bdata']
+    bdata = extra['observation0_gmodel_component0_bdata']
     if name == 'lslit':
         assert isinstance(bdata, np.ndarray)
         return
-    dcube_hi = extra['model0_dmodel_dcube_hi']
+    dcube_hi = extra['observation0_dcube_hi']
     assert isinstance(bdata, fitsutils.GridData)
     assert bdata.data.ndim == 2 and bdata.spectral_axis is None
     assert bdata.coords == dcube_hi.coords.axes(0, 1)
@@ -101,8 +101,8 @@ def test_3d_gmodel_extras_have_a_line_of_sight_axis(evaluate_models):
             DISK | KINEMATICS | dict(bhtraits=dict(type='sech2'))])
     model = dict(driver=dict(type='host'), dmodel=dmodel, gmodel=gmodel)
     _, extra = evaluate_models([model], PROPERTIES | dict(bht_s=1))
-    bdata = extra['model0_gmodel_component0_bdata']
+    bdata = extra['observation0_gmodel_component0_bdata']
     assert bdata.data.shape[0] == 10 and bdata.spectral_axis is None
-    sky = extra['model0_dmodel_dcube_hi'].coords.axes(0, 1)
+    sky = extra['observation0_dcube_hi'].coords.axes(0, 1)
     assert bdata.coords.axes(0, 1) == sky
     assert bdata.coords.axes(2) == fitsutils.Coords((0.5,), (4.5,), (0.0,), 0)

@@ -31,14 +31,18 @@ class GModelKinematics2D(GModelSCube):
         return cls(**opts)
 
     def dump(self):
+        name = dict(name=self.name()) if self.name() is not None else {}
         return dict(
             type=self.type(),
+            **name,
             components=_scmp_parser.dump(self._component_set.components()))
 
     def __init__(
             self,
-            components: SpectralComponent2D | Sequence[SpectralComponent2D]
+            components: SpectralComponent2D | Sequence[SpectralComponent2D],
+            name: str | None = None
     ):
+        super().__init__(name)
         self._component_set = ComponentSet2D(components)
 
     def pdescs(self):

@@ -55,7 +55,7 @@ def eval_(
     _log.info("preparing configuration...")
     # This is not a full-fledged validation. It just tries to catch
     # and inform the user about the really obvious mistakes.
-    required_sections = ('models', 'params')
+    required_sections = ('gmodels', 'observations', 'params')
     optional_sections = ('pdescs',)
     if mode == 'model':
         optional_sections += ('datasets',)
@@ -77,7 +77,7 @@ def eval_(
     #
     # Setup all the components described in the configuration.
     # After running the configuration through _detail.prepare_config():
-    # - datasets and models configurations are lists
+    # - datasets, gmodels and observations configurations are lists
     # - objective, pdescs, and params configurations are dicts
     #
 
@@ -87,11 +87,8 @@ def eval_(
         with config_path('datasets'):
             datasets = gbkfit.dataset.dataset_parser.load(cfg['datasets'])
 
-    _log.info("setting up models...")
-    with config_path('models'):
-        models = gbkfit.model.model_parser.load(
-            cfg['models'], dataset=datasets)
-    model_group = gbkfit.model.ModelGroup(models)
+    _log.info("setting up gmodels and observations...")
+    group = _detail.load_observation_group(cfg, datasets)
 
     objective = None
     if mode == 'objective':
@@ -99,11 +96,11 @@ def eval_(
         with config_path('objective'):
             objective = gbkfit.objective.objective_parser.load(
                 cfg.get('objective', {}),
-                datasets=datasets, models=model_group)
+                datasets=datasets, group=group)
 
     _log.info("setting up pdescs...")
     pdescs = objective.pdescs() \
-        if objective is not None else model_group.pdescs()
+        if objective is not None else group.pdescs()
     if 'pdescs' in cfg:
         with config_path('pdescs'):
             user_pdescs = gbkfit.params.load_pdescs_dict(cfg['pdescs'])
@@ -111,7 +108,7 @@ def eval_(
 
     _log.info("setting up params...")
     constants = objective.constants() \
-        if objective is not None else model_group.constants()
+        if objective is not None else group.constants()
     with config_path('params'):
         params = gbkfit.params.evaluation_params_parser.load(
             cfg['params'], pdescs=pdescs, constants=constants)
@@ -138,7 +135,7 @@ def eval_(
     model_extra = {}
     model_data = []
     if mode == 'model':
-        model_data = model_group.model_h(param_values, model_extra)
+        model_data = group.model_h(param_values, model_extra)
 
     resid_u_extra = {}
     resid_u_data = []
@@ -160,7 +157,7 @@ def eval_(
 
     _log.info("gathering outputs...")
 
-    # The outputs by name: data on the grid of its dmodel or dataset
+    # The outputs by name: data on the grid of its observable or dataset
     outputs = {}
     model_prefix = 'model'
     resid_u_prefix = 'residual'
@@ -170,12 +167,12 @@ def eval_(
     for i, data_i in enumerate(model_data):
         # prefix_i = model_prefix + f'_{i}' * bool(model.nitems() > 0)
         prefix_i = model_prefix + f'_{i}'
-        dmodel = model_group.models()[i].dmodel()
+        observable = group.observations()[i].observable()
         for key, value in data_i.items():
             for kind in ('d', 'm', 'w'):
                 if value.get(kind) is not None:
                     outputs[f'{prefix_i}_{key}_{kind}'] = _grid_data(
-                        value[kind], dmodel)
+                        value[kind], observable)
     # Store residual (if available)
     for resid_data, prefix in [
             (resid_u_data, resid_u_prefix), (resid_w_data, resid_w_prefix)]:
@@ -231,7 +228,7 @@ def eval_(
         _log.info("running performance test...")
         for i in range(profile_iters):
             if mode == 'model':
-                model_group.model_d(param_values)
+                group.model_d(param_values)
             if mode == 'objective':
                 objective.log_likelihood(param_values)
                 objective.residual_scalar(param_values, squared=True)
@@ -243,7 +240,7 @@ def eval_(
 
 
 def _grid_data(data, grid):
-    """The data on the grid of a dmodel or a dataset."""
+    """The data on the grid of an observable or a dataset."""
     coords = fitsutils.Coords(
         grid.step(), grid.rpix(), grid.rval(), grid.rota())
     return fitsutils.GridData(data, coords, grid.spectral_axis())

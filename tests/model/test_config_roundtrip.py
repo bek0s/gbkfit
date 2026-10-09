@@ -19,6 +19,7 @@ import gbkfit.params
 import gbkfit.psflsf
 from gbkfit.model.gmodels import common, traits
 from gbkfit.utils import funcutils
+from modelutils import config_group
 
 
 DATA_DIR = pathlib.Path(__file__).parents[1] / 'data'
@@ -89,14 +90,24 @@ def test_pdescs_roundtrip():
 
 @pytest.mark.parametrize(
     'config', CONFIGS, ids=[f'{c.parent.name}/{c.stem}' for c in CONFIGS])
-def test_model_roundtrip(config, evaluate_models):
+def test_config_roundtrip(config):
+    from gbkfit.model import gmodel_parser
+    from gbkfit.observation import observation_parser
     info = ruamel.yaml.YAML(typ='safe').load(config)
-    models = info['models']
-    dumped = roundtrip(gbkfit.model.model_parser, models)
+    dumped = dict(
+        gmodels=roundtrip(gmodel_parser, info['gmodels']),
+        observations=roundtrip(observation_parser, info['observations']))
     # Both the configuration and its dump give the same model
     properties = info['params']['properties']
-    data, _ = evaluate_models(models, properties)
-    data_dumped, _ = evaluate_models(dumped, properties)
+
+    def evaluate(config_):
+        group = config_group(config_)
+        params = gbkfit.params.EvaluationParams(
+            group.pdescs(), properties, constants=group.constants())
+        return group.model_h(params.evaluate())
+
+    data = [{k: dict(v) for k, v in item.items()} for item in evaluate(info)]
+    data_dumped = evaluate(dumped)
     for model, model_dumped in zip(data, data_dumped):
         for key, value in model.items():
             np.testing.assert_allclose(
@@ -106,35 +117,44 @@ def test_model_roundtrip(config, evaluate_models):
 
 GAUSS = dict(type='gauss', sigma=1)
 
-# Each type of dmodel, with every option set to a value other than its
-# default
-DMODELS = dict(
-    image=dict(
+# Each type of observable, in an observation with every option set to a
+# value other than its default
+OBSERVABLES = dict(
+    image=(dict(
         size=[20, 16], step=[2, 1], rpix=[3, 4], rval=[1, 2], rota=10,
-        scale=[2, 1], psf=GAUSS, mask_cutoff=0.1, mask_apply=True,
-        dtype='float64'),
-    scube=dict(
+        mask_cutoff=0.1, mask_apply=True),
+        dict(psf=GAUSS, lsf=None), [2, 1]),
+    scube=(dict(
         size=[20, 16, 11], step=[2, 1, 10], rpix=[3, 4, 5], rval=[1, 2, 3],
-        rota=10, scale=[2, 1, 1], psf=GAUSS, lsf=GAUSS, smooth_weights=True,
-        mask_cutoff=0.1, mask_apply=True, dtype='float64'),
-    lslit=dict(
+        rota=10, smooth_weights=True, mask_cutoff=0.1, mask_apply=True),
+        dict(psf=GAUSS, lsf=GAUSS), [2, 1, 1]),
+    lslit=(dict(
         size=[20, 11], step=[2, 10], rpix=[3, 5], rval=[1, 3], rota=10,
-        scale=[2, 1], slit_width=3, psf=GAUSS, lsf=GAUSS,
-        smooth_weights=True, mask_cutoff=0.1, mask_apply=True,
-        dtype='float64'),
-    mmaps=dict(
+        slit_width=3, smooth_weights=True, mask_cutoff=0.1, mask_apply=True),
+        dict(psf=GAUSS, lsf=GAUSS), [2, 1]),
+    mmaps=(dict(
         size=[20, 16], step=[2, 1], rpix=[3, 4], rval=[1, 2], rota=10,
-        scale=[2, 1], psf=GAUSS, lsf=GAUSS, mask_cutoff=0.1, orders=[0, 1],
-        spec_size=201, spec_step=2, spec_rval=1500, dtype='float64'))
+        mask_cutoff=0.1, orders=[0, 1], spec_size=201, spec_step=2,
+        spec_rval=1500),
+        dict(psf=GAUSS, lsf=GAUSS), [2, 1]))
 
 
-@pytest.mark.parametrize('dmodel_type', DMODELS)
-def test_dmodel_dump_has_every_option(dmodel_type):
-    info = dict(type=dmodel_type) | DMODELS[dmodel_type]
-    dumped = json.loads(json.dumps(
-        roundtrip(gbkfit.model.dmodel_parser, info)))
-    for key, value in info.items():
-        if key in ('psf', 'lsf'):
-            assert dumped[key]['sigma'] == value['sigma']
+@pytest.mark.parametrize('observable_type', OBSERVABLES)
+def test_observation_dump_has_every_option(observable_type):
+    from gbkfit.observation import observation_parser
+    observable, instrument, scale = OBSERVABLES[observable_type]
+    info = dict(
+        name='obs', gmodel='galaxy', driver=dict(type='host'),
+        instrument=instrument,
+        observable=dict(type=observable_type) | observable,
+        scale=scale, dtype='float64')
+    dumped = json.loads(json.dumps(roundtrip(observation_parser, info)))
+    for key in ('name', 'gmodel', 'scale', 'dtype'):
+        assert dumped[key] == info[key], key
+    for key, value in info['observable'].items():
+        assert dumped['observable'][key] == value, key
+    for key, value in instrument.items():
+        if value is None:
+            assert dumped['instrument'][key] is None
         else:
-            assert dumped[key] == value, key
+            assert dumped['instrument'][key]['sigma'] == value['sigma']

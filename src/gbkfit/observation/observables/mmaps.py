@@ -1,4 +1,3 @@
-
 import logging
 from collections.abc import Sequence
 
@@ -6,14 +5,14 @@ import numpy as np
 
 import gbkfit.math
 from gbkfit.dataset.datasets import DatasetMMaps
-from gbkfit.model.core import DModel, GModelSCube
-from gbkfit.psflsf import LSF, PSF, lsf_parser, psf_parser
+from gbkfit.model.core import GModelSCube
 from gbkfit.utils import parseutils
 from . import _dcube, _detail
+from .core import Observable
 
 
 __all__ = [
-    'DModelMMaps'
+    'MMaps'
 ]
 
 
@@ -51,7 +50,7 @@ def _spectral_axis_from_data(dataset, spec_step):
         spec_rval=float((vmin + vmax) / 2))
 
 
-class DModelMMaps(DModel):
+class MMaps(Observable):
 
     # Moment maps have no spectral axis
     _spectral_axis = None
@@ -72,9 +71,8 @@ class DModelMMaps(DModel):
                 and all(info.get(key) is None for key in spectral_options)):
             info = info | _spectral_axis_from_data(
                 dataset, info.get('spec_step', _SPEC_STEP))
-        opts = _detail.load_dmodel_common(
-            cls, info, 2, True, True, dataset, DatasetMMaps)
-        return cls(**opts)
+        return cls(**_detail.load_observable_common(
+            cls, info, 2, dataset, DatasetMMaps))
 
     def dump(self):
         return dict(
@@ -84,15 +82,11 @@ class DModelMMaps(DModel):
             rpix=self.rpix(),
             rval=self.rval(),
             rota=self.rota(),
-            scale=self.scale(),
-            psf=psf_parser.dump(self.psf()),
-            lsf=lsf_parser.dump(self.lsf()),
             mask_cutoff=self._mask_cutoff,
             orders=self.orders(),
             spec_size=self.spec_size(),
             spec_step=self.spec_step(),
-            spec_rval=self.spec_rval(),
-            dtype=self.dtype().name)
+            spec_rval=self.spec_rval())
 
     def __init__(
             self,
@@ -101,15 +95,11 @@ class DModelMMaps(DModel):
             rpix: Sequence[int | float] | None = None,
             rval: Sequence[int | float] = (0, 0),
             rota: int | float = 0,
-            scale: Sequence[int] = (1, 1),
-            psf: PSF | None = None,
-            lsf: LSF | None = None,
             mask_cutoff: int | float = 1e-6,
             orders: Sequence[int] = (0, 1, 2),
             spec_size: int | None = None,
             spec_step: int | float = _SPEC_STEP,
-            spec_rval: int | float = 0,
-            dtype: str = 'float32'
+            spec_rval: int | float = 0
     ):
         """
         The moments are computed from a spectral cube with the spatial
@@ -118,151 +108,102 @@ class DModelMMaps(DModel):
         1000 km/s. load() derives it from the moment maps of a dataset,
         unless it is given.
         """
-        super().__init__()
-        if rpix is None:
-            rpix = tuple((np.array(size) / 2 - 0.5).tolist())
+        super().__init__(size, step, rpix, rval, rota)
         if spec_size is None:
             spec_size = int(gbkfit.math.roundu_odd(_SPEC_RANGE / spec_step))
-        size = tuple(size) + (spec_size,)
-        step = tuple(step) + (spec_step,)
-        rpix = tuple(rpix) + (spec_size / 2 - 0.5,)
-        rval = tuple(rval) + (spec_rval,)
-        scale = tuple(scale) + (1,)
         orders = tuple(sorted(set(orders)))
-        dtype = np.dtype(dtype)
         if not orders:
             raise RuntimeError("at least one moment order is required")
         if any(order < 0 or order > 7 for order in orders):
             raise RuntimeError("moment orders must be between 0 and 7")
         if mask_cutoff is None:
-            desc = parseutils.make_typed_desc(self.__class__, 'dmodel')
+            desc = parseutils.make_typed_desc(self.__class__, 'observable')
             raise RuntimeError(
                 f"masking cannot be disabled for {desc}; "
                 f"set the mask_cutoff to a value greater or equal to 0")
-        if (psf or lsf) and mask_cutoff == 0:
+        self._mask_cutoff = mask_cutoff
+        self._orders = orders
+        self._spec_size = spec_size
+        self._spec_step = spec_step
+        self._spec_rval = spec_rval
+
+    def keys(self):
+        return tuple([f'mmap{i}' for i in self._orders])
+
+    def orders(self):
+        return self._orders
+
+    def mask_cutoff(self):
+        return self._mask_cutoff
+
+    def spec_size(self):
+        return self._spec_size
+
+    def spec_step(self):
+        return self._spec_step
+
+    def spec_rval(self):
+        return self._spec_rval
+
+    def plan(self, driver, gmodel, instrument, scale, dtype):
+        psf, lsf = instrument.psf(), instrument.lsf()
+        if (psf or lsf) and self._mask_cutoff == 0:
             _log.warning(
                 "mask_cutoff is 0, but a psf or lsf is given: the fft-based "
                 "convolution leaves noise in the faint parts of the model, "
                 "whose moments can give artefacts in the maps; a "
                 "mask_cutoff greater than 0 is highly recommended")
-        self._orders = orders
-        self._dcube = _dcube.DCube(
-            size, step, rpix, rval, rota, scale, psf, lsf,
-            # Disable DCube masking. We deal with it in this class.
+        # The moments are computed from a cube with the spatial axes of
+        # the maps; the masking of DCube is disabled, the maps are masked
+        # by the moments
+        spec_size = self._spec_size
+        dcube = _dcube.DCube(
+            self.size() + (spec_size,),
+            self.step() + (self._spec_step,),
+            self.rpix() + (spec_size / 2 - 0.5,),
+            self.rval() + (self._spec_rval,),
+            self.rota(), tuple(scale) + (1,), psf, lsf,
             False, None, False, dtype)
-        # The plan of the cube, made by _prepare_impl()
-        self._dcube_plan = None
-        self._mmaps_o = None
-        self._mmaps_d = None
-        self._mmaps_m = None
-        self._mmaps_w = None
-        self._mask_cutoff = mask_cutoff
+        return MMapsPlan(self, dcube, driver, gmodel, dtype)
 
-    def keys(self):
-        return tuple([f'mmap{i}' for i in self._orders])
 
-    def size(self):
-        return self._dcube.size()[:2]
+class MMapsPlan(_detail.DCubePlanBase):
 
-    def step(self):
-        return self._dcube.step()[:2]
-
-    def zero(self):
-        return self._dcube.zero()[:2]
-
-    def rpix(self):
-        return self._dcube.rpix()[:2]
-
-    def rval(self):
-        return self._dcube.rval()[:2]
-
-    def rota(self):
-        return self._dcube.rota()
-
-    def scale(self):
-        return self._dcube.scale()[:2]
-
-    def orders(self):
-        return self._orders
-
-    def spec_size(self):
-        return self._dcube.size()[2]
-
-    def spec_step(self):
-        return self._dcube.step()[2]
-
-    def spec_rval(self):
-        return self._dcube.rval()[2]
-
-    def psf(self):
-        return self._dcube.psf()
-
-    def lsf(self):
-        return self._dcube.lsf()
-
-    def dtype(self):
-        return self._dcube.dtype()
-
-    def _prepare_impl(self, gmodel):
-        driver = self._driver
-        dtype = self.dtype()
-        orders = self.orders()
-        # Calculate data sizes
-        mmaps_size_all = self.size() + (len(orders),)
-        mmaps_size_one = self.size()
-        # Allocate memory
+    def __init__(self, mmaps, dcube, driver, gmodel, dtype):
+        super().__init__(dcube, driver, gmodel, dtype)
+        self._mmaps = mmaps
+        orders = mmaps.orders()
+        size_all = mmaps.size() + (len(orders),)
+        size_one = mmaps.size()
         self._mmaps_o = driver.mem_alloc_d(len(orders), np.int32)
-        self._mmaps_d = driver.mem_alloc_d(mmaps_size_all[::-1], dtype)
-        self._mmaps_m = driver.mem_alloc_d(mmaps_size_one[::-1], dtype)
-        self._mmaps_w = driver.mem_alloc_d(mmaps_size_all[::-1], dtype)
-        # Initialize memory
+        self._mmaps_d = driver.mem_alloc_d(size_all[::-1], dtype)
+        self._mmaps_m = driver.mem_alloc_d(size_one[::-1], dtype)
+        self._mmaps_w = driver.mem_alloc_d(size_all[::-1], dtype)
         driver.mem_copy_h2d(np.array(orders, dtype=np.int32), self._mmaps_o)
         driver.mem_fill(self._mmaps_d, np.nan)
         driver.mem_fill(self._mmaps_m, 0)
         driver.mem_fill(self._mmaps_w, 1)
-        # Prepare dcube
-        self._dcube_plan = self._dcube.plan(
-            self._driver, gmodel.has_weights())
-        # Create backend
         self._backend = driver.native_class('DModel', dtype)()
-        # Plan the gmodel on the high-res grid of DCube
-        self._gmodel_plan = gmodel.plan(
-            self._driver, self._dcube_plan.scratch_grid(),
-            gmodel.has_weights(), self._dcube.dtype())
 
-    def _evaluate_impl(self, params, out_dmodel_extra, out_gmodel_extra):
-        driver = self._driver
-        dcube = self._dcube_plan
-        backend = self._backend
-        # The gmodel adds to the data cube, so clear it
-        driver.mem_fill(dcube.scratch_dcube(), 0)
-        # Evaluate gmodel on DCube's arrays
-        self._gmodel_plan.evaluate(
-            params, dcube.scratch_dcube(), dcube.scratch_wcube(),
-            out_gmodel_extra)
-        # Evaluate DCube (perform convolution, supersampling, etc)
-        dcube.evaluate(
-            out_dmodel_extra, _dcube.cube_extra, _dcube.cube_extra)
-        # Extract moment maps from DCube's arrays
-        # Also evaluate one mask map and one weight map
-        backend.mmaps_moments(
+    def evaluate(self, params, out_extra):
+        self._evaluate_cube(
+            params, out_extra, _dcube.cube_extra, _dcube.cube_extra)
+        # The moment maps, one mask shared by all of them, and the weight
+        # map of each moment
+        plan = self._dcube_plan
+        self._backend.mmaps_moments(
             self._dcube.step(),
             self._dcube.zero(),
-            dcube.dcube(),
-            dcube.wcube(),
-            self._mask_cutoff,
+            plan.dcube(),
+            plan.wcube(),
+            self._mmaps.mask_cutoff(),
             self._mmaps_o,
             self._mmaps_d,
             self._mmaps_m,
             self._mmaps_w)
-        # Model evaluation complete
-        # Return data, mask, and weight arrays
-        # The data and weight maps are different for each moment
-        # The same mask map is shared across all moments
-        out = dict()
-        for i, key in enumerate(self.keys()):
-            out[key] = dict(
+        return {
+            key: dict(
                 d=self._mmaps_d[i, :, :],
                 m=self._mmaps_m,
                 w=self._mmaps_w[i, :, :])
-        return out
+            for i, key in enumerate(self._mmaps.keys())}

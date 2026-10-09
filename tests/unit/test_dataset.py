@@ -216,12 +216,14 @@ def test_data_is_float32(tmp_path):
     assert Data(np.ones((8, 20))).dtype() == np.float32
 
 
-def test_dmodel_of_a_float64_dataset_is_float32():
+def test_observation_of_a_float64_dataset_is_float32():
     from gbkfit.dataset.datasets import DatasetImage
-    from gbkfit.model import dmodel_parser
+    from gbkfit.observation import observation_parser
     dataset = DatasetImage(Data(np.ones((8, 20), np.float64)))
-    dmodel = dmodel_parser.load(dict(type='image'), dataset=dataset)
-    assert dmodel.dtype() == np.float32
+    observation = observation_parser.load(dict(
+        driver=dict(type='host'), observable=dict(type='image')),
+        dataset=dataset)
+    assert observation.dtype() == np.float32
 
 
 def test_data_steps_must_be_positive():

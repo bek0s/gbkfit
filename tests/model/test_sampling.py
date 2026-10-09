@@ -8,11 +8,11 @@ expression of the subnodes ('subrnodes') is not limited by the nodes.
 import numpy as np
 import pytest
 
-import gbkfit.model
 from gbkfit.math import interpolation
 from gbkfit.model import gmodel_parser
 from gbkfit.params.pdescs import ParamScalarDesc
 from gbkfit.params.space import ParamSpace
+from modelutils import observation_group
 
 
 PROPERTIES = dict(
@@ -38,8 +38,7 @@ def model(component):
 
 
 def group(component):
-    return gbkfit.model.ModelGroup(
-        gbkfit.model.model_parser.load([model(component)]))
+    return observation_group([model(component)])
 
 
 @pytest.mark.parametrize('type_', ['smdisk', 'mcdisk'])
@@ -98,7 +97,7 @@ def evaluate_curve(component, free):
         constants=model_group.constants())
     extra = {}
     model_group.model_h(space.evaluate(free), extra)
-    return extra['model0_gmodel_component0_vdata'].data
+    return extra['observation0_gmodel_component0_vdata'].data
 
 
 @pytest.mark.parametrize('vmax, rt', [(150, 2), (220, 4)])
@@ -114,7 +113,7 @@ def test_an_expression_of_the_subnodes_follows_the_curve(
         rstep=0.1)
     _, extra = evaluate_models(
         [model(analytical)], PROPERTIES | dict(vpt_vt=vmax, vpt_rt=rt))
-    expected = extra['model0_gmodel_component0_vdata'].data
+    expected = extra['observation0_gmodel_component0_vdata'].data
     actual = evaluate_curve(at_subnodes, dict(vmax=vmax, rt=rt))
     np.testing.assert_allclose(actual, expected, atol=0.1, equal_nan=True)
 

@@ -51,7 +51,7 @@ def fit(config: str,
     # This is not a full-fledged validation. It just tries to catch
     # and inform the user about the really obvious mistakes.
     required_sections = (
-        'datasets', 'models', 'params', 'fitter')
+        'datasets', 'gmodels', 'observations', 'params', 'fitter')
     optional_sections = ('pdescs', 'objective')
     cfg = _detail.prepare_config(cfg, required_sections, optional_sections)
 
@@ -66,7 +66,7 @@ def fit(config: str,
     #
     # Setup all the components described in the configuration.
     # After running the configuration through _detail.prepare_config():
-    # - datasets and models configurations are lists
+    # - datasets, gmodels and observations configurations are lists
     # - objective, pdescs, params, and fitter configurations are dicts
     #
 
@@ -74,16 +74,13 @@ def fit(config: str,
     with config_path('datasets'):
         datasets = gbkfit.dataset.dataset_parser.load(cfg['datasets'])
 
-    _log.info("setting up model...")
-    with config_path('models'):
-        models = gbkfit.model.model_parser.load(
-            cfg['models'], dataset=datasets)
-    model_group = gbkfit.model.ModelGroup(models)
+    _log.info("setting up gmodels and observations...")
+    group = _detail.load_observation_group(cfg, datasets)
 
     _log.info("setting up objective...")
     with config_path('objective'):
         objective = gbkfit.objective.objective_parser.load(
-            cfg.get('objective', {}), datasets=datasets, models=model_group)
+            cfg.get('objective', {}), datasets=datasets, group=group)
 
     _log.info("setting up fitter...")
     with config_path('fitter'):
