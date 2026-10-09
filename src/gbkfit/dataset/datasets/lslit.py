@@ -29,5 +29,4 @@ class DatasetLSlit(Dataset):
         return _detail.dump_dataset_common(self, **kwargs)
 
     def __init__(self, lslit):
-        # TODO: validate wcs
         super().__init__(dict(lslit=lslit))

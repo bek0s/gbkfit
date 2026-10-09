@@ -29,7 +29,7 @@ class DCube:
             smooth_weights: bool,
             mask_cutoff: float | None,
             mask_apply: bool,
-            dtype: type[np.float16] | type[np.float32] | type[np.float64]
+            dtype: np.dtype
     ):
         if mask_apply and mask_cutoff is None:
             _log.warning(
@@ -141,7 +141,7 @@ class DCube:
     def mask_apply(self) -> bool:
         return self._mask_apply
 
-    def dtype(self) -> type[np.float16] | type[np.float32] | type[np.float64]:
+    def dtype(self) -> np.dtype:
         return self._dtype
 
     def prepare(self, driver: Driver, has_weights: bool) -> None:

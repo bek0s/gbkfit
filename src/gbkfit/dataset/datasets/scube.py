@@ -28,5 +28,4 @@ class DatasetSCube(Dataset):
         return _detail.dump_dataset_common(self, **kwargs)
 
     def __init__(self, scube):
-        # TODO: validate wcs
         super().__init__(dict(scube=scube))
