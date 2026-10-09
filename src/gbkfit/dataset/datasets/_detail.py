@@ -34,7 +34,8 @@ def load_grid_dataset(cls, info, names, prefix=''):
     rest = info.pop('rest', None) if cls._spectral_axis is not None else None
     coords = {}
     for name in names:
-        if name in info:
+        # (an item that is null is absent)
+        if info.get(name) is not None:
             with parseutils.config_path(name):
                 info[name], coords[name] = load_data(
                     info[name], prefix, rpix, rval, rest, cls._spectral_axis)

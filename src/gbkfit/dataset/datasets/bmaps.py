@@ -32,7 +32,8 @@ class DatasetBMaps(Dataset):
         parseutils.load_option_and_update_info(
             regions_parser, info, 'regions', True, False, prefix=prefix)
         for name in [f'mmap{i}' for i in range(8)]:
-            if name in info:
+            # (an item that is null is absent)
+            if info.get(name) is not None:
                 with parseutils.config_path(name):
                     info[name] = load_data(info[name], prefix)[0]
         return cls(**parseutils.parse_options_for_callable(

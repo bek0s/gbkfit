@@ -125,6 +125,10 @@ def load_data(
     scalar error. A file is a filename, or a dict with the filename
     ('file') and the HDU ('hdu'). prefix is prepended to the filenames.
     """
+    if not isinstance(info, Mapping):
+        raise ConfigError(
+            f"a data item has the file of its data ('data'), and optionally "
+            f"those of its mask ('mask') and error ('error'); it is {info!r}")
     parseutils.parse_options(
         info, 'data', required={'data'}, optional={'mask', 'error'})
     data_d, coords = parseutils.load_option(
