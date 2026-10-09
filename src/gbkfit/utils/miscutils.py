@@ -67,32 +67,25 @@ def merge_lists_and_make_mappings(
     return list_merged, list_mappings
 
 
-def merge_dicts_and_make_mappings(
-        dict_list: list[dict[str, Any]],
-        prefix: str,
-        zero_prefix: bool = False,
-        zero_index: bool = False
+def merge_with_prefixes(
+        dicts: list[dict[str, Any]],
+        prefixes: list[str]
 ) -> tuple[dict[str, Any], tuple[dict[str, str], ...]]:
     """
-    Merges multiple dictionaries while ensuring unique keys by
-    prefixing them with a specified identifier and index.
+    Merge dicts with their keys prefixed by the prefix of each dict. Return
+    the merged dict, and the mapping of the keys of each dict to their
+    prefixed keys. Raise RuntimeError if a prefixed key is repeated.
     """
-    dict_merged = dict()
-    dict_mappings = list()
-    for i, item in enumerate(dict_list):
-        dict_mappings.append(dict())
-        for old_name, value in item.items():
-            full_prefix = ''
-            if i or zero_prefix:
-                full_prefix += prefix
-            if i or zero_index:
-                full_prefix += str(i)
-            if full_prefix:
-                full_prefix += '_'
-            new_name = f'{full_prefix}{old_name}'
-            dict_mappings[i][old_name] = new_name
-            dict_merged[new_name] = value
-    return dict_merged, tuple(dict_mappings)
+    merged = {}
+    mappings = []
+    for item, prefix in zip(dicts, prefixes, strict=True):
+        mapping = {key: f'{prefix}{key}' for key in item}
+        repeated = sorted(set(mapping.values()) & merged.keys())
+        if repeated:
+            raise RuntimeError(f"names are repeated: {repeated}")
+        merged |= {mapping[key]: value for key, value in item.items()}
+        mappings.append(mapping)
+    return merged, tuple(mappings)
 
 
 def to_native_byteorder(arr: np.ndarray) -> np.ndarray:

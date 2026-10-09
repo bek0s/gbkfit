@@ -6,6 +6,7 @@ import difflib
 import importlib
 import inspect
 import logging
+import re
 import typing
 from collections.abc import Callable
 from typing import Any, TypeAlias
@@ -129,6 +130,48 @@ def config_path(*segments: str | int, context: str | None = None):
         raise
     except Exception as e:
         raise ConfigError(str(e), segments, context) from e
+
+
+# The names of items of lists (e.g. components): letters, digits and
+# underscores
+_NAME = re.compile(r'[A-Za-z0-9_]+')
+
+
+def check_name(name: str | None) -> None:
+    """Raise ConfigError unless the name is None or a valid name."""
+    if name is not None and not (
+            isinstance(name, str) and _NAME.fullmatch(name)):
+        raise ConfigError(
+            f"invalid name {name!r}: use only letters, digits and "
+            f"underscores")
+
+
+def item_prefixes(
+        names: typing.Sequence[str | None],
+        prefix: str,
+        prefix_first: bool
+) -> list[str]:
+    """
+    The prefix of the names of the parameters (and the constants and the
+    extra outputs) of each item of a list, from the names of the items:
+    their name, if every item has one, or else their position (prefix and
+    index, e.g. 'cmp1_'; the first item has no index, and has the prefix
+    only if prefix_first). Raise ConfigError if only some of the items have
+    a name, or if the names are not unique.
+    """
+    named = [name is not None for name in names]
+    if not any(named):
+        return [
+            f'{prefix}{i or ""}_' if i or prefix_first else ''
+            for i in range(len(names))]
+    if not all(named):
+        raise ConfigError(
+            f"either all or none of the items must have a name; only "
+            f"{sum(named)} of {len(names)} have one")
+    repeated = sorted({name for name in names if names.count(name) > 1})
+    if repeated:
+        raise ConfigError(f"names must be unique; repeated: {repeated}")
+    return [f'{name}_' for name in names]
 
 
 def parse_options(

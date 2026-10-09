@@ -78,13 +78,14 @@ class ModelGroup:
                 {key: dict(d=None, m=None, w=None) for key in keys})
             self._d_model_data.append(
                 {key: dict(d=None, m=None, w=None) for key in keys})
-        # Merge all pdescs into a dict and ensure they have unique keys
-        self._pdescs, self._mappings = miscutils.merge_dicts_and_make_mappings(
-            [model.gmodel().pdescs() for model in self.models()],
-            'model')
-        # The constants of the models, named like their parameters
-        self._constants, _ = miscutils.merge_dicts_and_make_mappings(
-            [model.constants() for model in self.models()], 'model')
+        # The parameters of the models, prefixed by their position (e.g.
+        # 'model1_'), and their constants, named like them
+        self._prefixes = parseutils.item_prefixes(
+            [None] * len(self._models), 'model', False)
+        self._pdescs, self._mappings = miscutils.merge_with_prefixes(
+            [model.pdescs() for model in self.models()], self._prefixes)
+        self._constants, _ = miscutils.merge_with_prefixes(
+            [model.constants() for model in self.models()], self._prefixes)
 
     def pdescs(self) -> dict[str, ParamDesc]:
         return self._pdescs

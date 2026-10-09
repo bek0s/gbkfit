@@ -1,4 +1,4 @@
-from gbkfit.utils import fitsutils, iterutils
+from gbkfit.utils import fitsutils, iterutils, miscutils
 from . import _detail
 
 
@@ -10,7 +10,7 @@ __all__ = [
 
 # The prefix of the parameters of the components and the opacity
 # components, and whether the parameters of the first one have it (see
-# _detail.make_component_params)
+# _detail.component_prefixes)
 _CMP_PREFIX = ('cmp', False)
 _OCMP_PREFIX = ('ocmp', True)
 
@@ -26,8 +26,10 @@ class ComponentSet2D:
         if not components:
             raise RuntimeError("at least one component must be configured")
         self._components = iterutils.tuplify(components, False)
-        self._params, self._mappings = _detail.make_component_params(
+        self._prefixes = _detail.component_prefixes(
             self._components, *_CMP_PREFIX)
+        self._params, self._mappings = miscutils.merge_with_prefixes(
+            [cmp.pdescs() for cmp in self._components], self._prefixes)
         # The spatial grid: the x and y axes of the data
         self._size = None
         self._step = None
@@ -47,8 +49,9 @@ class ComponentSet2D:
         return any(cmp.has_weights() for cmp in self._components)
 
     def constants(self):
-        return _detail.make_component_constants(
-            self._components, *_CMP_PREFIX)
+        constants, _ = miscutils.merge_with_prefixes(
+            [cmp.constants() for cmp in self._components], self._prefixes)
+        return constants
 
     def _prepare(self, driver, weights, size, step, zero, dtype):
         self._driver = driver
@@ -134,11 +137,16 @@ class ComponentSet3D:
             raise RuntimeError("at least one component must be configured")
         self._components = iterutils.tuplify(components, False)
         self._ocomponents = iterutils.tuplify(opacity_components, False)
-        self._params, self._mappings = _detail.make_component_params(
+        # The components and the opacity components share their names
+        self._prefixes = _detail.component_prefixes(
             self._components, *_CMP_PREFIX)
-        oparams, self._omappings = _detail.make_component_params(
+        self._oprefixes = _detail.component_prefixes(
             self._ocomponents, *_OCMP_PREFIX)
-        self._params |= oparams
+        self._params, mappings = miscutils.merge_with_prefixes(
+            [cmp.pdescs() for cmp in self._all_components()],
+            self._prefixes + self._oprefixes)
+        self._mappings = mappings[:len(self._components)]
+        self._omappings = mappings[len(self._components):]
         # The spatial grid. The x and y axes are those of the data, and
         # the z axis is either configured or picked by _prepare().
         self._size_z = size_z
@@ -175,11 +183,13 @@ class ComponentSet3D:
         return any(cmp.has_weights() for cmp in self._components)
 
     def constants(self):
-        return (
-            _detail.make_component_constants(
-                self._components, *_CMP_PREFIX)
-            | _detail.make_component_constants(
-                self._ocomponents, *_OCMP_PREFIX))
+        constants, _ = miscutils.merge_with_prefixes(
+            [cmp.constants() for cmp in self._all_components()],
+            self._prefixes + self._oprefixes)
+        return constants
+
+    def _all_components(self):
+        return self._components + self._ocomponents
 
     def _prepare(self, driver, weights, size, step, zero, dtype):
         self._driver = driver
