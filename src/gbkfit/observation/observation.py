@@ -100,6 +100,12 @@ class Observation(parseutils.BasicSerializable):
             else Instrument()
         if data is None and likelihood is not None:
             raise RuntimeError("a likelihood needs data")
+        if data is not None:
+            observable.require_matching(data)
+            if data.dtype() != np.dtype(dtype):
+                raise RuntimeError(
+                    f"the data are of type {data.dtype()}, but the "
+                    f"observation is of type {np.dtype(dtype)}")
         if data is not None and likelihood is None:
             likelihood = LikelihoodGaussian()
         self._gmodel = gmodel

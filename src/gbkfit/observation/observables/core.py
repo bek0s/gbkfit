@@ -60,12 +60,6 @@ class Observable(parseutils.TypedSerializable, abc.ABC):
     def rota(self):
         return self._grid.coords.rota
 
-    def zero(self):
-        return self._grid.zero()
-
-    def npix(self):
-        return int(np.prod(self.size()))
-
     @abc.abstractmethod
     def keys(self):
         """The names of the data items (e.g. 'scube')."""
@@ -79,6 +73,45 @@ class Observable(parseutils.TypedSerializable, abc.ABC):
             gmodel_desc = parseutils.make_typed_desc(gmodel.__class__, 'gmodel')
             raise RuntimeError(
                 f"{observable_desc} is not compatible with {gmodel_desc}")
+
+    def require_matching(self, dataset):
+        """
+        Raise RuntimeError unless the dataset holds the data of this
+        observable: it is of its dataset class, has its data items, and
+        was measured where the observable is modelled.
+        """
+        desc = parseutils.make_typed_desc(self.__class__, 'observable')
+        if not isinstance(dataset, self.dataset_class):
+            dataset_desc = parseutils.make_typed_desc(
+                dataset.__class__, 'dataset')
+            raise RuntimeError(
+                f"{desc} cannot be compared with {dataset_desc}")
+        if set(dataset.keys()) != set(self.keys()):
+            raise RuntimeError(
+                f"{desc} has the data items {sorted(self.keys())}, but the "
+                f"data have {sorted(dataset.keys())}")
+        self._require_matching_coordinates(dataset)
+
+    def _require_matching_coordinates(self, dataset):
+        """
+        Raise RuntimeError unless the data were measured on the grid of
+        this observable. Observables of other data override this.
+        """
+        if dataset.grid() != self._grid:
+            desc = parseutils.make_typed_desc(self.__class__, 'observable')
+            raise RuntimeError(
+                f"the data are on the grid {dataset.grid()}, but {desc} "
+                f"is on the grid {self._grid}")
+
+    def output(self, data):
+        """
+        An array of the form of the data of this observable (the model,
+        its mask or weights, or a residual) as an output: here, on the
+        grid of the observable with its world coordinates (a GridData).
+        Observables of other data override this.
+        """
+        return fitsutils.GridData(
+            data, self._grid.coords, self._grid.spectral_axis)
 
     @abc.abstractmethod
     def plan(self, driver, gmodel, instrument, scale, dtype):
