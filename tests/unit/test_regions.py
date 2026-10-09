@@ -179,3 +179,14 @@ def test_region_sums(driver):
     expected = (weights @ cube.reshape(7, -1).T).T
     np.testing.assert_allclose(
         driver.mem_copy_d2h(d_out), expected, rtol=1e-5)
+
+
+def test_aperture_position_angle_is_north_through_east():
+    # A thin rectangle at the position angle 45 lies to the north-east
+    # (+y, and -x: east is to the left) and the south-west of its centre
+    grid = _grid((9, 9), (1, 1))
+    weights = RegionsApertures([ApertureRectangle(0, 0, 6, 0.2, 45)]).weights(
+        grid).toarray().reshape(9, 9)
+    # (rows are y, columns x, the centre is pixel 4)
+    assert weights[4 + 2, 4 - 2] > 0 and weights[4 - 2, 4 + 2] > 0
+    assert weights[4 + 2, 4 + 2] == 0 and weights[4 - 2, 4 - 2] == 0

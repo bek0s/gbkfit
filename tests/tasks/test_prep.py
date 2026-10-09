@@ -276,6 +276,15 @@ def test_missing_reference_pixel_stays_at_the_centre(roi_spat, offset):
 C = 299792.458
 
 
+def test_crops_keep_the_pixels_of_the_ranges():
+    # (the world coordinates of the crops are tested above)
+    data = np.arange(np.prod(SHAPE), dtype=np.float32).reshape(SHAPE)
+    fits.writeto('cube.fits', data, fits.Header(HEADER))
+    prepared, _ = prep_scube(
+        'cube.fits', roi_spat=[4, 20, 3, 17], roi_spec=[2, 10])
+    np.testing.assert_array_equal(prepared, data[0, 2:10, 3:17, 4:20])
+
+
 @pytest.mark.parametrize('cd', [False, True], ids=['pc', 'cd'])
 def test_wavelength_axis_to_optical_velocities(cd):
     # Each channel of a linear wavelength axis gets the optical velocity

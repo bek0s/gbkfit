@@ -96,6 +96,13 @@ def test_primary_beam_needs_a_positive_fwhm():
         PrimaryBeamGauss(fwhm=0)
 
 
+def test_primary_beam_points_at_its_position():
+    # Its peak is at x = 3, y = -2 (pixels 10 + 3 and 10 - 2)
+    grid = fitsutils.make_grid((21, 21), 1)
+    response = PrimaryBeamGauss(6, x=3, y=-2).response(grid)
+    j, i = np.unravel_index(np.argmax(response), response.shape)
+    assert (i, j) == (13, 8)
+
 def test_primary_beam_from_an_image(tmp_path):
     # An image of a Gaussian beam, on a grid rotated on the sky, gives the
     # response of the Gaussian beam, and 0 beyond the image
