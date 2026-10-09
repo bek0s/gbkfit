@@ -138,10 +138,10 @@ class FitterDynestySNS(FitterDynesty):
             save_bounds: bool = True
     ):
         locals_ = copy.deepcopy(locals())
-        constructor_args = funcutils.extract_args(
-            dynesty.NestedSampler)[0]
-        run_nested_args = funcutils.extract_args(
-            dynesty.sampler.Sampler.run_nested)[0]
+        constructor_args = funcutils.parameter_names(
+            dynesty.NestedSampler).all
+        run_nested_args = funcutils.parameter_names(
+            dynesty.sampler.Sampler.run_nested).all
         constructor_args_found = (
             iterutils.extract_sublist(constructor_args, locals_))[0]
         run_nested_args_found = (

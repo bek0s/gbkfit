@@ -239,7 +239,7 @@ def parse_options_for_callable(
     add_required_keys = set(add_required)
     add_optional_keys = set(add_optional)
     # Extract required and optional options/arguments from callable
-    fun_required, fun_optional = funcutils.extract_args(fun)[1:]
+    fun_required, fun_optional = funcutils.parameter_names(fun)
     fun_required = set(fun_required)
     fun_optional = set(fun_optional)
     fun_all = fun_required | fun_optional

@@ -55,7 +55,7 @@ def roundtrip(parser, info):
 
 def sample_info(cls):
     """A configuration of a type, with its required options."""
-    required = funcutils.extract_args(cls.__init__)[1]
+    required = funcutils.parameter_names(cls.__init__).required
     return dict(type=cls.type()) | {
         name: SAMPLE_OPTIONS[name] for name in required}
 

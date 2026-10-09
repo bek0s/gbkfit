@@ -89,10 +89,10 @@ class FitterDynestyDNS(FitterDynesty):
 
 
         args_factory = iterutils.extract_subdict(
-            locals(), funcutils.extract_args(
-                dynesty.DynamicNestedSampler)[0])
+            locals(), funcutils.parameter_names(
+                dynesty.DynamicNestedSampler).all)
         # Extract dynesty.dynamicsampler.DynamicSampler.run_nested() arguments
         args_run_nested = iterutils.extract_subdict(
-            locals(), funcutils.extract_args(
-                dynesty.dynamicsampler.DynamicSampler.run_nested)[0])
+            locals(), funcutils.parameter_names(
+                dynesty.dynamicsampler.DynamicSampler.run_nested).all)
         super().__init__(args_factory, args_run_nested)
