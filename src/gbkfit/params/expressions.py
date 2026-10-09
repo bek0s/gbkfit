@@ -1,9 +1,12 @@
 """
 The expressions of parameter properties (e.g. 'vpt_vt': 'a * 2'). They
 can use numbers, parameters and their elements, constants, arithmetic,
-comparisons, conditional expressions, tuples and lists, numpy (np.*),
-and a few builtins. Nothing else, so a configuration cannot run
-arbitrary code.
+comparisons, conditional expressions, tuples and lists, a few builtins,
+and of numpy (np, np.linalg): its ufuncs (e.g. np.sin), numbers (e.g.
+np.pi), scalar types (e.g. np.int64) and the functions on numbers and
+arrays of _NUMPY_FUNCTIONS. Nothing else, so a configuration cannot run
+arbitrary code (numpy also holds modules such as os, and functions that
+read and write files).
 """
 
 import ast
@@ -43,11 +46,55 @@ _NODES = (
     ast.Call, ast.keyword, ast.Attribute)
 
 
-def _is_numpy(node):
-    """Whether a node is np or an attribute of it (e.g. np.linalg.norm)."""
+# The numpy modules whose members expressions can use
+_NUMPY_MODULES = {'np': np, 'np.linalg': np.linalg}
+
+# The numpy functions that expressions can call, besides the ufuncs: they
+# compute on numbers and arrays only
+_NUMPY_FUNCTIONS = {
+    'np': frozenset((
+        'all', 'allclose', 'amax', 'amin', 'any', 'append', 'arange',
+        'argmax', 'argmin', 'argsort', 'around', 'array', 'asarray',
+        'atleast_1d', 'average', 'clip', 'concatenate', 'convolve', 'cross',
+        'cumprod', 'cumsum', 'diff', 'dot', 'flip', 'full', 'full_like',
+        'geomspace', 'gradient', 'hstack', 'inner', 'interp', 'isclose',
+        'linspace', 'logspace', 'max', 'mean', 'median', 'min', 'nanmax',
+        'nanmean', 'nanmin', 'nansum', 'ones', 'ones_like', 'outer',
+        'percentile', 'polyval', 'prod', 'ptp', 'quantile', 'ravel',
+        'repeat', 'reshape', 'roll', 'round', 'select', 'sort', 'squeeze',
+        'stack', 'std', 'sum', 'take', 'tile', 'trapezoid', 'unique', 'var',
+        'vstack', 'where', 'zeros', 'zeros_like')),
+    'np.linalg': frozenset(('det', 'inv', 'norm', 'solve'))}
+
+
+def _dotted_name(node):
+    """The dotted name of a node (e.g. 'np.linalg.norm'), or None."""
+    names = []
     while isinstance(node, ast.Attribute):
+        names.append(node.attr)
         node = node.value
-    return isinstance(node, ast.Name) and node.id == 'np'
+    if not isinstance(node, ast.Name):
+        return None
+    return '.'.join([node.id] + names[::-1])
+
+
+def _is_numpy(node):
+    """
+    Whether a node names one of _NUMPY_MODULES, or a member of one that
+    expressions can use: a ufunc, a number, a scalar type, or one of
+    _NUMPY_FUNCTIONS.
+    """
+    name = _dotted_name(node)
+    if name in _NUMPY_MODULES:
+        return True
+    module, _, member = (name or '').rpartition('.')
+    if module not in _NUMPY_MODULES or member.startswith('_'):
+        return False
+    value = getattr(_NUMPY_MODULES[module], member, None)
+    return value is not None and (
+        isinstance(value, (np.ufunc, int, float))
+        or (isinstance(value, type) and issubclass(value, np.generic))
+        or member in _NUMPY_FUNCTIONS[module])
 
 
 class Expression:
@@ -93,15 +140,17 @@ class Expression:
             if isinstance(node, ast.Attribute) and not _is_numpy(node):
                 raise InvalidExpressionError(
                     f"'{ast.unparse(node)}' is not allowed in expressions; "
-                    f"only numpy attributes are (e.g. np.pi)")
+                    f"of the attributes, only numpy ufuncs, numbers, "
+                    f"scalar types and functions on arrays are (e.g. "
+                    f"np.sin, np.pi, np.sum)")
             if isinstance(node, ast.Call) and not (
                     _is_numpy(node.func) or (
                         isinstance(node.func, ast.Name)
                         and node.func.id in BUILTINS)):
                 raise InvalidExpressionError(
                     f"'{ast.unparse(node.func)}' cannot be called in "
-                    f"expressions; only numpy functions and "
-                    f"{', '.join(BUILTINS)} can")
+                    f"expressions; only numpy ufuncs, scalar types and "
+                    f"functions on arrays, and {', '.join(BUILTINS)} can")
             if isinstance(node, ast.Name) and not (
                     node.id in pdescs or node.id in constants
                     or node.id in BUILTINS or node.id == 'np'):

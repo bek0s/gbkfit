@@ -113,6 +113,13 @@ def test_expressions(source, value):
     ("__import__('os')", "__import__"),
     ("open('file')", "open"),
     ("a.__class__", "not allowed"),
+    # numpy holds modules (e.g. os) and functions with files and state
+    ("np.f2py.os.getcwd()", "cannot be called"),
+    ("np.ndarray.__subclasses__()", "cannot be called"),
+    ("np.sin.__class__", "not allowed"),
+    ("np.add.reduce(v)", "cannot be called"),
+    ("np.loadtxt", "not allowed"),
+    ("np.vectorize(np.sin)", "cannot be called"),
     ("v.sum()", "cannot be called"),
     ("'text'", "numbers"),
     ("True", "numbers"),
