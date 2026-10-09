@@ -48,6 +48,14 @@ def deflection_lens(alpha_x, alpha_y, source_size, source_step, **coords):
         alpha_x, alpha_y, source_size, source_step, **coords))
 
 
+# A smooth disk, whose bilinear interpolation on a source grid of half
+# the pixels of the image is within 1% of its peak
+SMOOTH_GMODEL = dict(type='intensity_2d', components=[
+    GMODEL['components'][0] | dict(bptraits=dict(type='gauss'))])
+
+SMOOTH_PROPERTIES = PROPERTIES | dict(bpt_s=4)
+
+
 def test_no_deflection_is_no_lens(driver):
     # On a source grid equal to the grid of the image, the light of each
     # pixel is that of its source pixel
@@ -55,6 +63,38 @@ def test_no_deflection_is_no_lens(driver):
     zero = np.zeros((41, 32))
     lensed = evaluate(driver, deflection_lens(zero, zero, (32, 41), (1, 1)))
     np.testing.assert_allclose(lensed, plain, rtol=1e-6, atol=1e-7)
+
+
+def test_no_deflection_is_no_lens_on_a_rotated_image(driver):
+    # The source grid is aligned with the sky, and each pixel of a rotated
+    # image takes the light of the source at its position on the sky
+    image = IMAGE | dict(rota=30)
+    plain = evaluate(driver, None, SMOOTH_PROPERTIES, image, SMOOTH_GMODEL)
+    zero = np.zeros((4, 4))
+    lens = deflection_lens(zero, zero, (120, 120), (0.5, 0.5), step=100)
+    lensed = evaluate(driver, lens, SMOOTH_PROPERTIES, image, SMOOTH_GMODEL)
+    np.testing.assert_allclose(lensed, plain, atol=0.01 * plain.max())
+
+
+def test_deflection_of_a_rotated_map():
+    # At the centres of the pixels of a map, the deflection is that of the
+    # pixel; between them, interpolated bilinearly; beyond them, that of
+    # the nearest edge
+    j, i = np.mgrid[0:4, 0:5]
+    alpha_x = 1.0 * i
+    alpha_y = 10.0 * j
+    lens = LensDeflectionMap(alpha_x, alpha_y, (8, 8), (1, 1), rota=90)
+    grid = fitsutils.make_grid((5, 4), rota=90)
+    x, y = fitsutils.sky_positions(grid)
+    np.testing.assert_allclose(lens.deflection(x, y), [alpha_x, alpha_y])
+    middle_x = (x[1:2, 1] + x[2:3, 2]) / 2
+    middle_y = (y[1:2, 1] + y[2:3, 2]) / 2
+    np.testing.assert_allclose(
+        lens.deflection(middle_x, middle_y), [[1.5], [15]])
+    beyond_x = x[3:4, 4] + 10 * (x[3:4, 4] - x[2:3, 3])
+    beyond_y = y[3:4, 4] + 10 * (y[3:4, 4] - y[2:3, 3])
+    np.testing.assert_allclose(
+        lens.deflection(beyond_x, beyond_y), [[4], [30]])
 
 
 @pytest.mark.parametrize('dmodel', [
@@ -78,6 +118,19 @@ def test_constant_deflection_moves_the_source(driver, dmodel):
         driver, None, properties | dict(xpos=2.0, ypos=-3.0), dmodel, gmodel)
     np.testing.assert_allclose(
         lensed, moved, rtol=1e-5, atol=1e-6 * moved.max())
+
+
+def test_deflection_between_source_pixels(driver):
+    # A deflection of fractions of the pixels of the source: the light
+    # comes from between them, interpolated bilinearly
+    lens = deflection_lens(
+        np.full((41, 32), 2.5), np.full((41, 32), -3.25), (120, 122),
+        (0.5, 0.5))
+    lensed = evaluate(driver, lens, SMOOTH_PROPERTIES, IMAGE, SMOOTH_GMODEL)
+    moved = evaluate(
+        driver, None, SMOOTH_PROPERTIES | dict(xpos=2.5, ypos=-3.25), IMAGE,
+        SMOOTH_GMODEL)
+    np.testing.assert_allclose(lensed, moved, atol=0.01 * moved.max())
 
 
 def test_point_mass_makes_an_einstein_ring(driver):
