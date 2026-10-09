@@ -106,6 +106,9 @@ def test_apertures_must_be_inside_the_grid():
     with pytest.raises(RuntimeError, match="aperture 1: .*not inside"):
         RegionsApertures([
             ApertureCircle(0, 0, 1), ApertureCircle(9, 0, 1.5)]).weights(grid)
+    # Also when it is far outside (it failed with "negative dimensions")
+    with pytest.raises(RuntimeError, match="not inside the grid"):
+        ApertureCircle(50, 0, 1.5).overlaps(grid)
 
 
 def test_regions_of_apertures():
