@@ -251,6 +251,23 @@ def test_residual(driver, ndarrays_regression):
         dict(result=memory.to_host(residual)))
 
 
+def test_residual_of_masked_pixels_is_zero(driver):
+    # Masked pixels have no residual, also where their data or model are
+    # NaN (masked data, and the moments of masked spectra)
+    memory = Memory(driver)
+    objective = driver.native_class('Objective', DTYPE)()
+    inputs = _residual_inputs()
+    masked = (inputs['obs_m'] == 0) | (inputs['mdl_m'] == 0)
+    inputs['obs_d'][inputs['obs_m'] == 0] = np.nan
+    inputs['mdl_d'][inputs['mdl_m'] == 0] = np.nan
+    residual = memory.to_device(np.zeros(1000, DTYPE))
+    objective.residual(
+        **{k: memory.to_device(v) for k, v in inputs.items()},
+        weight=0.7, res=residual)
+    result = memory.to_host(residual)
+    np.testing.assert_array_equal(result[masked], 0)
+    assert np.isfinite(result).all() and result[~masked].any()
+
 def residual_sum(driver, values, squared):
     memory = Memory(driver)
     objective = driver.native_class('Objective', DTYPE)()
