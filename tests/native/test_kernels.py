@@ -129,6 +129,104 @@ def _array_on_other_device(driver, shape):
     return cupy.zeros(shape, DTYPE)
 
 
+# Wider than the tiles of spectra that the host kernels copy (128 pixels),
+# so that each row also has a partial tile
+SPECTRA_SHAPE = (40, 3, 130)
+
+
+def gaussian_lines(amplitude, centre, sigma):
+    """
+    A cube of the shape SPECTRA_SHAPE of Gaussian lines of the given
+    amplitude, centre and dispersion (in channels; arrays of the shape of
+    a channel), sampled at the centres of the channels. The lines of the
+    first column are faint, to be masked.
+    """
+    z = np.arange(SPECTRA_SHAPE[0])[:, None, None]
+    amplitude = np.where(np.arange(SPECTRA_SHAPE[2]) == 0, 1e-3, amplitude)
+    return amplitude * np.exp(-0.5 * ((z - centre) / sigma) ** 2)
+
+
+def line_shapes():
+    """The amplitudes, centres and dispersions (channels) of test lines."""
+    y, x = np.indices(SPECTRA_SHAPE[1:])
+    return 1 + 0.01 * x, 15 + 5 * np.sin(0.1 * x + y), 2 + 0.02 * x + y / 2
+
+
+def test_mmaps_moments(driver):
+    # The moments of skewed lines, with weights, against those computed
+    # here in double precision
+    memory = Memory(driver)
+    dmodel = driver.native_class('DModel', DTYPE)()
+    amplitude, centre, sigma = line_shapes()
+    cube = gaussian_lines(amplitude, centre, sigma) \
+        + gaussian_lines(0.3 * amplitude, centre + 6, sigma)
+    weights = smooth_cube(SPECTRA_SHAPE)
+    orders = (0, 1, 2, 3, 4)
+    maps_shape = (len(orders),) + SPECTRA_SHAPE[1:]
+    mmaps_d = memory.to_device(np.zeros(maps_shape, DTYPE))
+    mmaps_m = memory.to_device(np.zeros(SPECTRA_SHAPE[1:], DTYPE))
+    mmaps_w = memory.to_device(np.zeros(maps_shape, DTYPE))
+    # Velocities near 0: far from 0, the float32 sums lose the precision
+    # of moment 1, and the central moments with it
+    step, zero = 5, -100
+    dmodel.mmaps_moments(
+        (1, 1, step), (0, 0, zero),
+        memory.to_device(cube.astype(DTYPE)), memory.to_device(weights),
+        0.1, memory.to_device(np.array(orders, np.int32)),
+        mmaps_d, mmaps_m, mmaps_w)
+
+    v = zero + step * np.arange(SPECTRA_SHAPE[0])[:, None, None]
+    m0 = np.sum(cube, axis=0) * step
+    m1 = np.sum(cube * v, axis=0) * step / m0
+    central = {
+        k: np.sum(cube * (v - m1) ** k, axis=0) * step / m0
+        for k in (2, 3, 4)}
+    expected = [m0, m1, np.sqrt(central[2]), central[3], central[4]]
+    expected_w = np.sum(weights * cube, axis=0) * step / m0
+    # The faint lines are masked: NaN and 0 in the mask
+    valid = m0 > 0.1
+    assert valid.sum() == valid.size - SPECTRA_SHAPE[1]
+    np.testing.assert_array_equal(memory.to_host(mmaps_m), valid)
+    result = memory.to_host(mmaps_d)
+    for order, expected_map in zip(orders, expected):
+        assert np.isnan(result[order][~valid]).all()
+        np.testing.assert_allclose(
+            result[order][valid], expected_map[valid], rtol=1e-4,
+            atol=1e-4 * np.abs(expected_map[valid]).max())
+    result_w = memory.to_host(mmaps_w)[0]
+    assert np.isnan(result_w[~valid]).all()
+    np.testing.assert_allclose(result_w[valid], expected_w[valid], rtol=1e-5)
+
+
+def test_mmaps_gaussian(driver):
+    # Gaussian lines are fitted exactly: their flux, velocity and
+    # dispersion, in the units of the spectral axis
+    memory = Memory(driver)
+    dmodel = driver.native_class('DModel', DTYPE)()
+    amplitude, centre, sigma = line_shapes()
+    cube = gaussian_lines(amplitude, centre, sigma)
+    mmaps_d = memory.to_device(np.zeros((3,) + SPECTRA_SHAPE[1:], DTYPE))
+    mmaps_m = memory.to_device(np.zeros(SPECTRA_SHAPE[1:], DTYPE))
+    step, zero = 5, 1000
+    dmodel.mmaps_gaussian(
+        (1, 1, step), (0, 0, zero), memory.to_device(cube.astype(DTYPE)),
+        0.1, memory.to_device(np.array([0, 1, 2], np.int32)),
+        mmaps_d, mmaps_m)
+
+    expected = [
+        amplitude * sigma * np.sqrt(2 * np.pi) * step,
+        zero + step * centre,
+        step * sigma]
+    valid = memory.to_host(mmaps_m).astype(bool)
+    assert valid.sum() == valid.size - SPECTRA_SHAPE[1]
+    assert not valid[:, 0].any()
+    result = memory.to_host(mmaps_d)
+    for result_map, expected_map in zip(result, expected):
+        assert np.isnan(result_map[~valid]).all()
+        np.testing.assert_allclose(
+            result_map[valid], expected_map[valid], rtol=1e-3)
+
+
 def _residual_inputs():
     """Observed and model data, errors, masks and weights for a residual."""
     n = 1000

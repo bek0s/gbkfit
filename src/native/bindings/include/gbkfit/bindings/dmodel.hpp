@@ -73,8 +73,7 @@ struct DModel
         require_same_shape(mmaps_w, mmaps_d, "mmaps_w", "mmaps_d");
         Kernels::dmodel_mmaps_moments(
                 size[0], size[1], size[2],
-                step[0], step[1], step[2],
-                zero[0], zero[1], zero[2],
+                step[2], zero[2],
                 dcube_d.data(), data(dcube_w),
                 cutoff, norders, orders.data(),
                 mmaps_d.data(), mmaps_m.data(), data(mmaps_w));

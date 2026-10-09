@@ -24,8 +24,7 @@ struct Wrapper
     static void
     dmodel_mmaps_moments(
             int size_x, int size_y, int size_z,
-            T step_x, T step_y, T step_z,
-            T zero_x, T zero_y, T zero_z,
+            T step_z, T zero_z,
             const T* dcube_d,
             const T* dcube_w,
             T cutoff, int norders, const int* orders,

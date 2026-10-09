@@ -70,8 +70,7 @@ Wrapper<T>::dmodel_dcube_mask(
 template<typename T> void
 Wrapper<T>::dmodel_mmaps_moments(
         int size_x, int size_y, int size_z,
-        T step_x, T step_y, T step_z,
-        T zero_x, T zero_y, T zero_z,
+        T step_z, T zero_z,
         const T* dcube_d,
         const T* dcube_w,
         T cutoff, int norders, const int* orders,
@@ -80,8 +79,7 @@ Wrapper<T>::dmodel_mmaps_moments(
     const int n = size_x * size_y;
     launch("dcube_moments", n, kernels::dcube_moments<T>,
             size_x, size_y, size_z,
-            step_x, step_y, step_z,
-            zero_x, zero_y, zero_z,
+            step_z, zero_z,
             dcube_d,
             dcube_w,
             cutoff, norders, orders,
