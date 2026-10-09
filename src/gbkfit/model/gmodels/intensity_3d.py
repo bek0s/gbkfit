@@ -6,6 +6,7 @@ from ._component_set import (
     IMAGE_SPECTRAL_AXIS, ComponentSet3D, ComponentSetGModelPlan)
 from .core import BrightnessComponent3D, OpacityComponent3D
 from .brightness_mcdisk_3d import BrightnessMCDisk3D
+from .brightness_point_3d import BrightnessPoint3D
 from .brightness_smdisk_3d import BrightnessSMDisk3D
 from .opacity_mcdisk_3d import OpacityMCDisk3D
 from .opacity_smdisk_3d import OpacitySMDisk3D
@@ -17,6 +18,7 @@ __all__ = [
 
 
 _bcmp_parser = parseutils.TypedParser(BrightnessComponent3D, [
+    BrightnessPoint3D,
     BrightnessMCDisk3D,
     BrightnessSMDisk3D])
 

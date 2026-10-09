@@ -5,6 +5,7 @@ from gbkfit.utils import parseutils
 from ._component_set import (
     IMAGE_SPECTRAL_AXIS, ComponentSet2D, ComponentSetGModelPlan)
 from .core import BrightnessComponent2D
+from .brightness_point_2d import BrightnessPoint2D
 from .brightness_smdisk_2d import BrightnessSMDisk2D
 
 
@@ -14,6 +15,7 @@ __all__ = [
 
 
 _bcmp_parser = parseutils.TypedParser(BrightnessComponent2D, [
+    BrightnessPoint2D,
     BrightnessSMDisk2D])
 
 

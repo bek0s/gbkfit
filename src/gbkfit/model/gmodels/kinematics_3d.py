@@ -7,6 +7,7 @@ from .core import OpacityComponent3D, SpectralComponent3D
 from .opacity_mcdisk_3d import OpacityMCDisk3D
 from .opacity_smdisk_3d import OpacitySMDisk3D
 from .spectral_mcdisk_3d import SpectralMCDisk3D
+from .spectral_point_3d import SpectralPoint3D
 from .spectral_smdisk_3d import SpectralSMDisk3D
 
 
@@ -16,6 +17,7 @@ __all__ = [
 
 
 _scmp_parser = parseutils.TypedParser(SpectralComponent3D, [
+    SpectralPoint3D,
     SpectralMCDisk3D,
     SpectralSMDisk3D])
 
