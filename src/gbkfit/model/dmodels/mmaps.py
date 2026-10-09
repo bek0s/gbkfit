@@ -65,14 +65,13 @@ class DModelMMaps(DModel):
         return isinstance(gmodel, GModelSCube)
 
     @classmethod
-    def load(cls, info, *args, **kwargs):
-        dataset = kwargs.get('dataset')
+    def load(cls, info, dataset=None):
         # Without a spectral axis, cover the velocities of the data
         spectral_options = ('spec_size', 'spec_rval')
         if (dataset is not None and 'mmap1' in dataset
                 and all(info.get(key) is None for key in spectral_options)):
-            info.update(_spectral_axis_from_data(
-                dataset, info.get('spec_step', _SPEC_STEP)))
+            info = info | _spectral_axis_from_data(
+                dataset, info.get('spec_step', _SPEC_STEP))
         opts = _detail.load_dmodel_common(
             cls, info, 2, True, True, dataset, DatasetMMaps)
         return cls(**opts)
