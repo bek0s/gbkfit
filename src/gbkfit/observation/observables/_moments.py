@@ -34,14 +34,17 @@ def default_spec_size(spec_step):
     return int(gbkfit.math.roundu_odd(SPEC_RANGE / spec_step))
 
 
-def spectral_axis_from_data(dataset, spec_step):
+def spectral_axis_from_data(
+        dataset, spec_step, spec_size=None, spec_rval=None):
     """
     The size and the centre of a spectral axis with the given channel
     width that covers the velocities of a moment map dataset: the range
     of mmap1, and three times the largest dispersion on each side. That
     is the largest value of mmap2, but at least _MIN_DISPERSION (also
     without mmap2), so that the lines of a model with a larger
-    dispersion than the data's are not cut.
+    dispersion than the data's are not cut. A given size or centre is
+    kept: the centre is that of the range, and the size covers the range
+    around the centre.
     """
     velocity = dataset['mmap1'].data()
     dispersion = _MIN_DISPERSION
@@ -50,9 +53,12 @@ def spectral_axis_from_data(dataset, spec_step):
     margin = 3 * dispersion
     vmin = np.nanmin(velocity) - margin
     vmax = np.nanmax(velocity) + margin
-    return dict(
-        spec_size=int(gbkfit.math.roundu_odd((vmax - vmin) / spec_step)),
-        spec_rval=float((vmin + vmax) / 2))
+    if spec_rval is None:
+        spec_rval = float((vmin + vmax) / 2)
+    if spec_size is None:
+        half = max(vmax - spec_rval, spec_rval - vmin)
+        spec_size = int(gbkfit.math.roundu_odd(2 * half / spec_step))
+    return dict(spec_size=spec_size, spec_rval=spec_rval)
 
 
 def check_moment_options(desc, orders, mask_cutoff, method):

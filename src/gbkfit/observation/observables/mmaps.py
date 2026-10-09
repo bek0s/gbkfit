@@ -36,12 +36,12 @@ class MMaps(Observable):
 
     @classmethod
     def load(cls, info, dataset=None):
-        # Without a spectral axis, cover the velocities of the data
-        spectral_options = ('spec_size', 'spec_rval')
-        if (dataset is not None and 'mmap1' in dataset
-                and all(info.get(key) is None for key in spectral_options)):
+        # The size or centre of the spectral axis not given covers the
+        # velocities of the data
+        if dataset is not None and 'mmap1' in dataset:
             info = info | _moments.spectral_axis_from_data(
-                dataset, info.get('spec_step', _moments.SPEC_STEP))
+                dataset, info.get('spec_step', _moments.SPEC_STEP),
+                info.get('spec_size'), info.get('spec_rval'))
         return cls(**_detail.load_observable_common(
             cls, info, 2, dataset, DatasetMMaps))
 

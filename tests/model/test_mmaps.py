@@ -131,6 +131,23 @@ def test_spectral_axis_from_the_data(dispersion, spec_size):
     assert info == dict(type='mmaps', spec_step=2)
 
 
+@pytest.mark.parametrize('given, spec_size, spec_rval', [
+    # The centre of the data's range (1100 to 1900) with a given size
+    (dict(spec_size=401), 401, 1500),
+    # A size that covers the range around a given centre
+    (dict(spec_rval=1450), 451, 1450)])
+def test_spectral_axis_partly_from_the_data(given, spec_size, spec_rval):
+    from gbkfit.dataset import Data
+    from gbkfit.dataset.datasets import DatasetMMaps
+    from gbkfit.observation import observable_parser
+    velocity = np.linspace(1400, 1600, 32 * 32).reshape(32, 32)
+    dataset = DatasetMMaps(
+        mmap0=Data(np.ones((32, 32))), mmap1=Data(velocity))
+    observable = observable_parser.load(
+        dict(type='mmaps', spec_step=2) | given, dataset=dataset)
+    assert observable.spec_size() == spec_size
+    assert observable.spec_rval() == spec_rval
+
 def test_at_least_one_moment_order():
     # The moments kernel reads past an empty list of orders
     from gbkfit.observation import MMaps
