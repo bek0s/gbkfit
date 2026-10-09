@@ -509,18 +509,14 @@ class PSFBeam(PSF):
             if any(key in info for key in ('bmaj', 'bmin', 'bpa')):
                 raise parseutils.ConfigError(
                     f"{desc} takes either a file or bmaj, bmin and bpa")
-            if isinstance(file, str):
-                file = dict(file=file)
             with parseutils.config_path('file'):
-                options = parseutils.parse_options(
-                    file, 'beam file', required={'file'}, optional={'hdu'})
-                header = astropy.io.fits.getheader(
-                    options['file'], options.get('hdu', 0))
+                file, hdu = parseutils.parse_file(file, 'beam file')
+                header = astropy.io.fits.getheader(file, hdu)
             missing = [key for key in ('BMAJ', 'BMIN', 'BPA')
                        if key not in header]
             if missing:
                 raise parseutils.ConfigError(
-                    f"{options['file']}: the header has no {missing}")
+                    f"{file}: the header has no {missing}")
             info.update(
                 bmaj=float(header['BMAJ']) * 3600,
                 bmin=float(header['BMIN']) * 3600,
