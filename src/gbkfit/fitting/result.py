@@ -13,6 +13,7 @@ from operator import attrgetter
 
 import numpy as np
 import pandas as pd
+from astropy.io import fits
 
 import gbkfit.dataset
 import gbkfit.model
@@ -171,10 +172,10 @@ def dump_result(output_dir, result):
             for key in dataset:
                 filename_mdl = f'bestfit_{j}_mdl_{key}_d.fits'
                 filename_res = f'bestfit_{j}_res_{key}_d.fits'
-                gbkfit.dataset.Data(model[key]['d']).dump(
-                    os.path.join(solution_dir, filename_mdl))
-                gbkfit.dataset.Data(resid[key]).dump(
-                    os.path.join(solution_dir, filename_res))
+                fits.writeto(
+                    os.path.join(solution_dir, filename_mdl), model[key]['d'])
+                fits.writeto(
+                    os.path.join(solution_dir, filename_res), resid[key])
         # Dump posterior
         if sol.posterior:
             prefix = os.path.join(solution_dir, '')

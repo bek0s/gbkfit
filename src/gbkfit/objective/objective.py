@@ -14,7 +14,8 @@ class Objective:
     """
     The comparison of the models of a group of observations with their
     data, each under its likelihood (which is Gaussian, with weights for
-    its data items).
+    its data items). Each observation checks that its data are of the
+    form of its model (see Observation).
     """
 
     def __init__(self, group: ObservationGroup):
@@ -26,7 +27,7 @@ class Objective:
                 f"every observation of an objective needs data; these have "
                 f"none: {missing}")
         self._group = group
-        self._datasets = datasets = tuple(obs.data() for obs in observations)
+        self._datasets = tuple(obs.data() for obs in observations)
         # These lists hold n x dataset data in 1d arrays
         self._d_dataset_d_vector = iterutils.make_list(n, None)
         self._d_dataset_m_vector = iterutils.make_list(n, None)
@@ -51,26 +52,6 @@ class Objective:
             {key: obs.likelihood().weight(key)
              for key in obs.observable().keys()}
             for obs in observations)
-        for i, (dataset, obs) in enumerate(zip(datasets, observations)):
-            observable = obs.observable()
-            keys_dat = tuple(dataset.keys())
-            keys_mdl = tuple(observable.keys())
-            if set(keys_dat) != set(keys_mdl):
-                raise RuntimeError(
-                    f"dataset and observable are incompatible "
-                    f"for observation #{i} ({keys_dat} != {keys_mdl})")
-            if dataset.dtype() != obs.dtype():
-                raise RuntimeError(
-                    f"dataset and observation have incompatible dtypes "
-                    f"for observation #{i} "
-                    f"({dataset.dtype()} != {obs.dtype()})")
-            for attr in ('size', 'step', 'zero'):
-                if getattr(dataset, attr)() != getattr(observable, attr)():
-                    raise RuntimeError(
-                        f"dataset and observable have incompatible {attr}s "
-                        f"for observation #{i} "
-                        f"({getattr(dataset, attr)()} != "
-                        f"{getattr(observable, attr)()})")
         # One backend for each driver
         self._backends = iterutils.make_list(n, None)
         # This class is lazily initialized
@@ -96,11 +77,11 @@ class Objective:
             dataset = self.datasets()[i]
             observation = self._group.observations()[i]
             driver = observation.driver()
-            observable = observation.observable()
-            keys = observable.keys()
-            shape = observable.size()[::-1]
+            keys = observation.observable().keys()
             dtype = observation.dtype()
-            npix = observable.npix()
+            # The data items, one after the other (they have one shape)
+            shape = dataset.shape()
+            npix = int(np.prod(shape))
             nelem = npix * len(keys)
             # Allocate memory as 1d arrays
             self._d_dataset_d_vector[i] = driver.mem_alloc_d(nelem, dtype)

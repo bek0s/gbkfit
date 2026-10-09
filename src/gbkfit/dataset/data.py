@@ -1,9 +1,9 @@
 
 import os.path
-from collections.abc import Sequence
-from numbers import Real
+from collections.abc import Mapping
 from typing import Any
 
+import astropy.io.fits
 import numpy as np
 
 from gbkfit.utils import fitsutils, parseutils
@@ -11,12 +11,9 @@ from gbkfit.utils import fitsutils, parseutils
 
 __all__ = [
     'Data',
-    'data_parser'
+    'dump_data',
+    'load_data'
 ]
-
-
-def _make_filename(filename, dump_path):
-    return filename if dump_path else os.path.basename(filename)
 
 
 def _read_file(x, prefix, rpix=None, rval=None):
@@ -41,128 +38,26 @@ def _as_float32(x):
     return np.array(x, dtype=np.float32)
 
 
-class Data(parseutils.BasicSerializable):
+class Data:
     """
-    An array of data, with its mask and error, and the world coordinates
-    of its pixels in the units of the model (see fitsutils.Coords). The
-    spatial axes are measured from the reference pixel; the spectral
-    axis (spectral_axis, if any) from its world value there.
+    Measured values with their mask and error: arrays of one shape, as
+    float32. Where the values were measured (e.g. on the pixels of a grid)
+    is described by their dataset.
     """
-
-    @classmethod
-    def load(
-            cls,
-            info: dict[str, Any],
-            step: Real = None,
-            rpix: Real = None,
-            rval: Real = None,
-            rota: Real = None,
-            prefix: str = '',
-            spectral_axis: int | None = None
-    ):
-        """
-        Load data from files. step, rpix, rval and rota are the defaults
-        of the options of the same name (e.g. those of the dataset), and
-        spectral_axis the index of the spectral axis of the dataset.
-        """
-        desc = parseutils.make_basic_desc(cls, 'data')
-        # Local information has higher priority than global. Without
-        # either, the header has it.
-        step = info.get('step', step)
-        rpix = info.get('rpix', rpix)
-        rval = info.get('rval', rval)
-        rota = info.get('rota', rota)
-        data_d, coords = parseutils.load_option(
-            lambda x: _read_file(x, prefix, rpix, rval),
-            info, 'data', True, False)
-        data_m = None
-        data_e = None
-        if (mask := info.get('mask')) is not None:
-            data_m = _read_file(mask, prefix)[0]
-        if (error := info.get('error')) is not None:
-            if isinstance(error, (int, float)):
-                data_e = np.full(np.shape(data_d), error, dtype=float)
-            else:
-                data_e = _read_file(error, prefix)[0]
-        info.update(dict(
-            data=data_d,
-            mask=data_m,
-            error=data_e,
-            step=coords.step if step is None else step,
-            rpix=coords.rpix,
-            rval=coords.rval,
-            rota=coords.rota if rota is None else rota))
-        opts = parseutils.parse_options_for_callable(
-            info, desc, cls.__init__, fun_ignore_args=['spectral_axis'])
-        return cls(**opts, spectral_axis=spectral_axis)
-
-    def dump(
-            self,
-            filename_d: str,
-            filename_m: str | None = None,
-            filename_e: str | None = None,
-            dump_wcs: bool = True,
-            dump_path: bool = True,
-            overwrite: bool = False
-    ) -> dict[str, Any]:
-        info = dict()
-        coords = fitsutils.Coords(
-            self.step(), self.rpix(), self.rval(), self.rota())
-        # Dump the world coordinates as options too (if requested)
-        if dump_wcs:
-            info.update(coords._asdict())
-        files = dict(
-            data=(filename_d, self.data()),
-            mask=(filename_m, self.mask()),
-            error=(filename_e, self.error()))
-        for key, (filename, data) in files.items():
-            if filename and data is not None:
-                info[key] = filename = _make_filename(filename, dump_path)
-                fitsutils.write_data(
-                    filename, data, coords, self._spectral_axis, overwrite)
-        return info
 
     def __init__(
             self,
             data: np.ndarray,
             mask: np.ndarray | None = None,
-            error: np.ndarray | None = None,
-            step: Real | Sequence[Real] | None = None,
-            rpix: Real | Sequence[Real] | None = None,
-            rval: Real | Sequence[Real] | None = None,
-            rota: Real | None = None,
-            spectral_axis: int | None = None
+            error: np.ndarray | None = None
     ):
         """
-        spectral_axis is the index of the spectral axis (in FITS order,
-        e.g. 2 for a spectral cube), or None if there is none.
+        The values that are masked (mask 0), not finite, or have an error
+        that is not finite and positive are NaN, with mask 0. Without a
+        mask, every value is measured.
         """
-        if spectral_axis is not None and not 0 <= spectral_axis < data.ndim:
-            raise RuntimeError(
-                f"spectral axis {spectral_axis} of data with {data.ndim} "
-                f"axes")
-        # If mask was not provided, use a default mask.
-        if mask is None:
-            mask = np.ones_like(data)
-        if step is None:
-            step = (1,) * data.ndim
-        # By default, origin is at the center of the dataset.
-        if rpix is None:
-            rpix = tuple((np.asarray(data.shape[::-1]) / 2 - 0.5).tolist())
-        if rval is None:
-            rval = (0,) * data.ndim
-        if rota is None:
-            rota = 0
-        if isinstance(step, Real):
-            step = (step,) * data.ndim
-        if isinstance(rpix, Real):
-            rpix = (rpix,) * data.ndim
-        if isinstance(rval, Real):
-            rval = (rval,) * data.ndim
-        if not all(value > 0 for value in step):
-            raise RuntimeError(f"step must be positive; it is {step}")
         data = _as_float32(data)
-        mask = _as_float32(mask)
+        mask = np.ones_like(data) if mask is None else _as_float32(mask)
         if error is not None:
             error = _as_float32(error)
         # Ensure mask contains only finite values
@@ -177,19 +72,7 @@ class Data(parseutils.BasicSerializable):
             raise RuntimeError(
                 f"data and error have incompatible shapes "
                 f"({data.shape} != {error.shape})")
-        if data.ndim != len(step):
-            raise RuntimeError(
-                f"data dimensionality and step length are incompatible "
-                f"({data.ndim} != {len(step)})")
-        if data.ndim != len(rpix):
-            raise RuntimeError(
-                f"data dimensionality and rpix length are incompatible "
-                f"({data.ndim} != {len(rpix)})")
-        if data.ndim != len(rval):
-            raise RuntimeError(
-                f"data dimensionality and rval length are incompatible "
-                f"({data.ndim} != {len(rval)})")
-        # The total mask: the pixels with a finite value, not masked, and
+        # The total mask: the values that are finite, not masked, and
         # with a finite, positive error
         total_mask = np.isfinite(data) & (mask != 0)
         if error is not None:
@@ -197,58 +80,90 @@ class Data(parseutils.BasicSerializable):
         data[~total_mask] = np.nan
         if error is not None:
             error[~total_mask] = np.nan
-        mask = total_mask.astype(np.float32)
-        # The world coordinates of the first pixel
-        coords = fitsutils.Coords(tuple(step), tuple(rpix), tuple(rval), rota)
-        zero = fitsutils.Grid(data.shape[::-1], coords, spectral_axis).zero()
         self._data = data
-        self._mask = mask
+        self._mask = total_mask.astype(np.float32)
         self._error = error
-        self._step = tuple(step)
-        self._zero = tuple(zero)
-        self._rpix = tuple(rpix)
-        self._rval = tuple(rval)
-        self._rota = rota
-        self._spectral_axis = spectral_axis
 
-    def ndim(self):
+    def ndim(self) -> int:
         return self._data.ndim
 
-    def npix(self):
+    def npix(self) -> int:
         return self._data.size
 
-    def size(self):
-        return self._data.shape[::-1]
+    def shape(self) -> tuple[int, ...]:
+        """The shape of the arrays (numpy order)."""
+        return self._data.shape
 
-    def step(self):
-        return self._step
-
-    def zero(self):
-        return self._zero
-
-    def rpix(self):
-        return self._rpix
-
-    def rval(self):
-        return self._rval
-
-    def rota(self):
-        return self._rota
-
-    def spectral_axis(self):
-        return self._spectral_axis
-
-    def data(self):
+    def data(self) -> np.ndarray:
         return self._data
 
-    def mask(self):
+    def mask(self) -> np.ndarray:
         return self._mask
 
-    def error(self):
+    def error(self) -> np.ndarray | None:
         return self._error
 
-    def dtype(self):
+    def dtype(self) -> np.dtype:
         return self._data.dtype
 
 
-data_parser = parseutils.BasicParser(Data)
+def load_data(
+        info: dict[str, Any],
+        prefix: str = '',
+        rpix: Any = None,
+        rval: Any = None
+) -> tuple[Data, fitsutils.Coords]:
+    """
+    A data item from files, and the world coordinates of its data file
+    (see fitsutils.read_data, which also explains rpix and rval). info has
+    the data file and, optionally, the mask file and the error file or a
+    scalar error. A file is a filename, or a dict with the filename
+    ('file') and the HDU ('hdu'). prefix is prepended to the filenames.
+    """
+    parseutils.parse_options(
+        info, 'data', required={'data'}, optional={'mask', 'error'})
+    data_d, coords = parseutils.load_option(
+        lambda x: _read_file(x, prefix, rpix, rval), info, 'data', True,
+        False)
+    data_m = None
+    data_e = None
+    if (mask := info.get('mask')) is not None:
+        with parseutils.config_path('mask'):
+            data_m = _read_file(mask, prefix)[0]
+    if (error := info.get('error')) is not None:
+        if isinstance(error, (int, float)):
+            data_e = np.full(np.shape(data_d), error, dtype=float)
+        else:
+            with parseutils.config_path('error'):
+                data_e = _read_file(error, prefix)[0]
+    return Data(data_d, data_m, data_e), coords
+
+
+def dump_data(
+        data: Data,
+        filenames: Mapping[str, str],
+        coords: fitsutils.Coords | None,
+        spectral_axis: int | None = None,
+        dump_path: bool = True,
+        overwrite: bool = False
+) -> dict[str, Any]:
+    """
+    Write the arrays of a data item to FITS files, and return its info
+    (see load_data). filenames has a filename for each array to write
+    ('data', 'mask', 'error'). The files have the given world coordinates
+    (see fitsutils.write_data), or none if coords is None. Without
+    dump_path, the info has the filenames without their directories.
+    """
+    arrays = dict(data=data.data(), mask=data.mask(), error=data.error())
+    info = {}
+    for key, filename in filenames.items():
+        array = arrays[key]
+        if array is None:
+            continue
+        if coords is None:
+            astropy.io.fits.writeto(filename, array, overwrite=overwrite)
+        else:
+            fitsutils.write_data(
+                filename, array, coords, spectral_axis, overwrite)
+        info[key] = filename if dump_path else os.path.basename(filename)
+    return info

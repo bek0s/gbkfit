@@ -1,4 +1,7 @@
+import numpy as np
+
 from gbkfit.utils import parseutils
+from gbkfit.utils.parseutils import ConfigError
 from .core import ObservablePlan
 
 
@@ -11,10 +14,15 @@ __all__ = [
 def load_observable_common(cls, info, ndim, dataset, expected_dataset_cls):
     """
     The options of an observable of class cls, with the grid of the given
-    dataset (if any), which must be of the expected class.
+    dataset (if any), which must be of the expected class. The grid
+    options of the observable may repeat those of the data, but must not
+    differ (the world coordinates of data are set in the data options).
     """
     desc = parseutils.make_typed_desc(cls, 'observable')
-    if dataset:
+    parseutils.sanitize_dimensional_options(info, dict(
+        size=int, step=int | float, rpix=int | float, rval=int | float),
+        ndim)
+    if dataset is not None:
         if not isinstance(dataset, expected_dataset_cls):
             expected_desc = parseutils.make_typed_desc(
                 expected_dataset_cls, 'dataset')
@@ -25,15 +33,21 @@ def load_observable_common(cls, info, ndim, dataset, expected_dataset_cls):
                 f"and cannot be used to describe its properties; "
                 f"expected dataset type: {expected_desc}; "
                 f"provided dataset type: {provided_desc}")
-        info.update(dict(
-            size=dataset.size(),
-            step=info.get('step', dataset.step()),
-            rpix=info.get('rpix', dataset.rpix()),
-            rval=info.get('rval', dataset.rval()),
-            rota=info.get('rota', dataset.rota())))
-    parseutils.sanitize_dimensional_options(info, dict(
-        size=int, step=int | float, rpix=int | float, rval=int | float),
-        ndim)
+        grid = dataset.grid()
+        data_options = dict(
+            size=grid.size,
+            step=grid.coords.step,
+            rpix=grid.coords.rpix,
+            rval=grid.coords.rval,
+            rota=grid.coords.rota)
+        for key, value in data_options.items():
+            given = info.get(key)
+            if given is not None and not np.array_equal(given, value):
+                raise ConfigError(
+                    f"option '{key}' of {desc} is {given}, but the data "
+                    f"have {value}; the grid comes from the data (their "
+                    f"world coordinates can be set in the data options)")
+        info.update(data_options)
     return parseutils.parse_options_for_callable(info, desc, cls.__init__)
 
 

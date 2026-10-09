@@ -1,6 +1,7 @@
 
 import abc
-import copy
+
+import numpy as np
 
 from gbkfit.dataset.data import Data
 from gbkfit.utils import iterutils, parseutils
@@ -12,103 +13,68 @@ __all__ = [
 ]
 
 
-def _ensure_same_attrib_value(data, method):
-    attr = {k: getattr(v, method)() for k, v in data.items()}
-    if len(set(attr.values())) > 1:
-        raise RuntimeError(
-            f"dataset contains data items of different {method}: {str(attr)}")
-
-
 class Dataset(parseutils.TypedSerializable, abc.ABC):
     """
-    A set of data items on the same grid. A subclass declares the number
-    of axes of its data (_ndim), and the index of its spectral axis
-    (_spectral_axis, None if none).
+    Named data items (see Data) of one shape, and where they were
+    measured, which each kind of dataset describes (e.g. the grid of their
+    pixels). A subclass declares the number of axes of its items (_ndim).
     """
 
     _ndim: int
-    _spectral_axis: int | None
 
-    def __init__(self, data):
+    def __init__(self, items: dict[str, Data]):
         # At least one data item must be defined
-        if not data:
+        if not items:
             raise RuntimeError("dataset contains no data items")
         # All data items must be of the right type
-        invalid_data = [k for k, v in data.items() if not isinstance(v, Data)]
-        if invalid_data:
+        invalid = [k for k, v in items.items() if not isinstance(v, Data)]
+        if invalid:
             raise RuntimeError(
-                f"dataset contains invalid data items: {invalid_data}")
+                f"dataset contains invalid data items: {invalid}")
         # All data items must have the axes of the dataset
-        for key, item in data.items():
+        for key, item in items.items():
             if item.ndim() != self._ndim:
                 raise RuntimeError(
                     f"data item {key} has {item.ndim()} axes; expected "
                     f"{self._ndim} (axes of length 1 can be removed with "
                     f"gbkfit-cli prep)")
-            if item.spectral_axis() != self._spectral_axis:
-                raise RuntimeError(
-                    f"data item {key} has the spectral axis "
-                    f"{item.spectral_axis()}; expected {self._spectral_axis}")
-        # All data items must have the same properties
-        _ensure_same_attrib_value(data, 'size')
-        _ensure_same_attrib_value(data, 'step')
-        _ensure_same_attrib_value(data, 'rpix')
-        _ensure_same_attrib_value(data, 'rval')
-        _ensure_same_attrib_value(data, 'rota')
-        _ensure_same_attrib_value(data, 'dtype')
-        # We need to copy the data to ensure they are kept intact
-        self._data = copy.deepcopy(data)
+        # All data items must have the same shape
+        shapes = {k: v.shape() for k, v in items.items()}
+        if len(set(shapes.values())) > 1:
+            raise RuntimeError(
+                f"dataset contains data items of different shapes: {shapes}")
+        self._items = dict(items)
 
     def __contains__(self, item):
-        return item in self._data
+        return item in self._items
 
     def __getitem__(self, item):
-        return self._data[item]
+        return self._items[item]
 
     def __iter__(self):
-        return iter(self._data)
+        return iter(self._items)
 
     def items(self):
-        return self._data.items()
+        return self._items.items()
 
     def keys(self):
-        return self._data.keys()
+        return self._items.keys()
 
     def values(self):
-        return self._data.values()
+        return self._items.values()
 
     def get(self, item, default=None):
-        return self._data.get(item, default)
+        return self._items.get(item, default)
 
-    # All data items have the same properties (see __init__())
-    def _first(self):
+    # All data items have the same shape and dtype (see __init__())
+    def _first(self) -> Data:
         return next(iter(self.values()))
 
-    def npix(self):
-        return self._first().npix()
+    def shape(self) -> tuple[int, ...]:
+        """The shape of the arrays of the data items (numpy order)."""
+        return self._first().shape()
 
-    def size(self):
-        return self._first().size()
-
-    def step(self):
-        return self._first().step()
-
-    def zero(self):
-        return self._first().zero()
-
-    def rpix(self):
-        return self._first().rpix()
-
-    def rval(self):
-        return self._first().rval()
-
-    def rota(self):
-        return self._first().rota()
-
-    def spectral_axis(self):
-        return self._spectral_axis
-
-    def dtype(self):
+    def dtype(self) -> np.dtype:
         return self._first().dtype()
 
 

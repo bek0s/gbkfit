@@ -54,9 +54,9 @@ def test_lslit_objective_residual(driver):
     from gbkfit.objective import Objective
     dmodel = dict(type='lslit', size=[32, 51], step=[1, 10], rota=30)
     model = evaluate(driver, dmodel)
-    dataset = DatasetLSlit(Data(
-        model + 1, error=np.full_like(model, 2), step=(1, 10),
-        spectral_axis=1))
+    dataset = DatasetLSlit(
+        Data(model + 1, error=np.full_like(model, 2)), step=(1, 10),
+        rota=30)
     from gbkfit.model import gmodel_parser
     from gbkfit.observation import (
         Observation, ObservationGroup, observable_parser)

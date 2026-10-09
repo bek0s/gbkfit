@@ -143,7 +143,7 @@ def eval_(
 
     _log.info("gathering outputs...")
 
-    # The outputs by name: data on the grid of its observable or dataset
+    # The outputs by name, in the form their observables give them
     outputs = {}
     model_prefix = 'model'
     resid_u_prefix = 'residual'
@@ -157,16 +157,16 @@ def eval_(
         for key, value in data_i.items():
             for kind in ('d', 'm', 'w'):
                 if value.get(kind) is not None:
-                    outputs[f'{prefix_i}_{key}_{kind}'] = _grid_data(
-                        value[kind], observable)
+                    outputs[f'{prefix_i}_{key}_{kind}'] = observable.output(
+                        value[kind])
     # Store residual (if available)
     for resid_data, prefix in [
             (resid_u_data, resid_u_prefix), (resid_w_data, resid_w_prefix)]:
         for i, data_i in enumerate(resid_data):
             prefix_i = prefix + f'_{i}' * bool(objective.nitems() > 1)
-            dataset = objective.datasets()[i]
+            observable = group.observations()[i].observable()
             for key, value in data_i.items():
-                outputs[f'{prefix_i}_{key}_d'] = _grid_data(value, dataset)
+                outputs[f'{prefix_i}_{key}_d'] = observable.output(value)
     # Store model and residual extra (if available)
     for extra, prefix in [
             (model_extra, model_prefix),
@@ -223,13 +223,6 @@ def eval_(
         _log.info(pd.DataFrame.from_dict(time_stats, orient='index'))
         filename = os.path.join(output_dir, 'gbkfit_eval_timings')
         _detail.dump_dict(json, yaml, time_stats, filename)
-
-
-def _grid_data(data, grid):
-    """The data on the grid of an observable or a dataset."""
-    coords = fitsutils.Coords(
-        grid.step(), grid.rpix(), grid.rval(), grid.rota())
-    return fitsutils.GridData(data, coords, grid.spectral_axis())
 
 
 def _write_outputs(output_dir, outputs):
