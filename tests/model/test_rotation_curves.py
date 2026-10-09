@@ -14,6 +14,29 @@ def nfw(r, rt, vt):
 
 
 CURVES = dict(
+    tan_arctan=(
+        dict(rt=3.0, vt=180.0),
+        lambda r, rt, vt: vt * 2 / np.pi * np.arctan(r / rt)),
+    tan_boissier=(
+        dict(rt=3.0, vt=180.0),
+        lambda r, rt, vt: vt * (1 - np.exp(-r / rt))),
+    tan_epinat=(
+        dict(rt=3.0, vt=180.0, a=1.5, g=0.8),
+        lambda r, rt, vt, a, g: vt * (r / rt) ** g / (1 + (r / rt) ** a)),
+    tan_lramp=(
+        dict(rt=3.0, vt=180.0),
+        lambda r, rt, vt: vt * np.minimum(r / rt, 1)),
+    tan_tanh=(
+        dict(rt=3.0, vt=180.0),
+        lambda r, rt, vt: vt * np.tanh(r / rt)),
+    tan_polyex=(
+        dict(rt=3.0, vt=180.0, a=0.05),
+        lambda r, rt, vt, a: vt * (1 - np.exp(-r / rt)) * (1 + a * r / rt)),
+    # (as the kernel has it: Courteau's form, of r / rt in the first factor)
+    tan_rix=(
+        dict(rt=3.0, vt=180.0, b=0.2, g=2.0),
+        lambda r, rt, vt, b, g:
+            vt * (1 + r / rt) ** b * (1 + (r / rt) ** -g) ** (-1 / g)),
     tan_courteau=(
         dict(rt=3.0, vt=180.0, b=0.4, g=2.0),
         lambda r, rt, vt, b, g:
@@ -47,13 +70,15 @@ def test_rotation_curves(driver, trait, evaluate_models):
     _, extra = evaluate_models([model], properties)
     velocity = extra['observation0_gmodel_component0_vdata'].data
     # The major axis (posa 0) is the y axis, through x = 0 (column 16);
-    # the receding side is north
+    # the receding side (positive velocities) is north
     j = np.arange(41)
     y = (j - 20) * 0.5
     north = y > 0
     expected = curve(y[north], **values) * np.sin(np.radians(incl))
     np.testing.assert_allclose(
-        np.abs(velocity[north, 16]), expected, rtol=1e-4, atol=1e-3)
+        velocity[north, 16], expected, rtol=1e-4, atol=1e-3)
+    np.testing.assert_allclose(
+        velocity[::-1][north, 16], -expected, rtol=1e-4, atol=1e-3)
     if trait == 'tan_nfw':
         # The maximum is vt, at 2.163 rt
         r = np.linspace(0.1, 30, 30000)
@@ -87,4 +112,4 @@ def test_rotation_curves_near_the_centre(driver, trait, evaluate_models):
     assert np.isfinite(data[0]['scube']['d']).all()
     velocity = extra['observation0_gmodel_component0_vdata'].data
     expected = curve(radius, **values) * np.sin(np.radians(incl))
-    assert abs(velocity[4, 4]) == pytest.approx(expected, rel=1e-3)
+    assert velocity[4, 4] == pytest.approx(expected, rel=1e-3)
