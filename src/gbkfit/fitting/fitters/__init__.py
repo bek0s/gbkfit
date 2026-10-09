@@ -3,7 +3,7 @@ from gbkfit.utils import parseutils
 
 
 def _register_fitters():
-    from gbkfit.fitting.core import fitter_parser as abstract_parser
+    from gbkfit.fitting.base import fitter_parser as abstract_parser
     parsers = [
         # dynesty
         'gbkfit.fitting.fitters.dynesty.FitterDynestyDNS',

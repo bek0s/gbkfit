@@ -1,9 +1,9 @@
 from collections.abc import Sequence
 
-from gbkfit.model.core import GModelSCube, Selection
+from gbkfit.model.base import GModelSCube, Selection
 from gbkfit.utils import parseutils
 from ._component_set import ComponentSet2D, ComponentSetGModelPlan
-from .core import SpectralComponent2D
+from .base import SpectralComponent2D
 from .mass import MassModel, mass_model_parser
 from .spectral_point_2d import SpectralPoint2D
 from .spectral_smdisk_2d import SpectralSMDisk2D

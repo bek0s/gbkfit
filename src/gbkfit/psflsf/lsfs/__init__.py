@@ -3,7 +3,7 @@ from .lsfs import *
 
 
 def _register_lsfs():
-    from gbkfit.psflsf.core import lsf_parser as parser
+    from gbkfit.psflsf.base import lsf_parser as parser
     parser.register([
         LSFPoint,
         LSFGauss,

@@ -1,4 +1,4 @@
 
-from .core import *
+from .base import *
 
 from . import gmodels

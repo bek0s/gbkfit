@@ -3,7 +3,7 @@ from gbkfit.utils import parseutils
 
 
 def _register_drivers():
-    from gbkfit.driver.core import driver_parser as abstract_parser
+    from gbkfit.driver.base import driver_parser as abstract_parser
     parsers = [
         'gbkfit.driver.drivers.cuda.DriverCuda',
         'gbkfit.driver.drivers.host.DriverHost'

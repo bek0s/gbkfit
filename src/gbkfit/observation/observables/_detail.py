@@ -1,6 +1,6 @@
 from gbkfit.utils import gridutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
-from .core import ObservablePlan
+from .base import ObservablePlan
 
 
 __all__ = [

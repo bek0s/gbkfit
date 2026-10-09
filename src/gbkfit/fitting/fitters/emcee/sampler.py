@@ -12,7 +12,7 @@ import numpy as np
 import numpy.random as random
 
 from gbkfit.fitting import fitutils
-from gbkfit.fitting.core import FittingParamProperty, FittingParams, Fitter
+from gbkfit.fitting.base import FittingParamProperty, FittingParams, Fitter
 from gbkfit.fitting.prior import prior_parser, Prior, PriorDict, PriorUniform
 from gbkfit.fitting.result import make_fitter_result
 from gbkfit.params import parsers as param_parsers, utils as paramutils, ParamDesc

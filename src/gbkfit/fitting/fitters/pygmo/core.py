@@ -7,7 +7,7 @@ import numpy as np
 import pygmo as pg
 
 from gbkfit.fitting import fitutils
-from gbkfit.fitting.core import FitParam, FitParams, Fitter
+from gbkfit.fitting.base import FitParam, FitParams, Fitter
 from gbkfit.params import parsers as param_parsers
 from gbkfit.utils import iterutils, parseutils
 

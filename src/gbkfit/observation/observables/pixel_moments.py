@@ -4,10 +4,10 @@ from collections.abc import Sequence
 import astropy.units
 
 from gbkfit.dataset.datasets import DatasetPixelMoments
-from gbkfit.model.core import GModelSCube
+from gbkfit.model.base import GModelSCube
 from gbkfit.utils import gridutils, parseutils
 from . import _dcube, _detail, _moments
-from .core import Observable
+from .base import Observable
 
 
 __all__ = [

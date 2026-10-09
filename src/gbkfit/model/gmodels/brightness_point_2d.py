@@ -1,6 +1,6 @@
 from gbkfit.utils import parseutils
 from . import _component, _point
-from .core import BrightnessComponent2D
+from .base import BrightnessComponent2D
 
 
 __all__ = [

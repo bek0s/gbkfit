@@ -1,6 +1,6 @@
 import astropy.io.fits
 
-from gbkfit.dataset.core import Dataset
+from gbkfit.dataset.base import Dataset
 from gbkfit.dataset.data import Data, dump_data, load_data
 from gbkfit.dataset.regions import Regions, regions_parser
 from gbkfit.utils import parseutils

@@ -1,10 +1,10 @@
 from collections.abc import Sequence
 
-from gbkfit.model.core import GModelImage, Selection
+from gbkfit.model.base import GModelImage, Selection
 from gbkfit.utils import parseutils
 from ._component_set import (
     IMAGE_SPECTRAL_AXIS, ComponentSet2D, ComponentSetGModelPlan)
-from .core import BrightnessComponent2D
+from .base import BrightnessComponent2D
 from .brightness_point_2d import BrightnessPoint2D
 from .brightness_smdisk_2d import BrightnessSMDisk2D
 

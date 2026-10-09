@@ -5,7 +5,7 @@ import numpy as np
 
 from gbkfit.dataset import Dataset
 from gbkfit.driver import Driver, driver_parser
-from gbkfit.model.core import Selection
+from gbkfit.model.base import Selection
 from gbkfit.utils import parseutils
 from .foreground import Foreground, foreground_parser
 from .instrument import Instrument, instrument_parser

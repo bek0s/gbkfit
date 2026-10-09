@@ -3,7 +3,7 @@ from collections.abc import Sequence
 
 from . import _component, _smdisk, common, traits
 from ._component import BPT, SPT, WPT, SPATIAL_NWMODES
-from .core import BrightnessComponent2D
+from .base import BrightnessComponent2D
 
 
 __all__ = [

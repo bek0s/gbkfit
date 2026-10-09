@@ -2,7 +2,7 @@ import numpy as np
 import scipy.special
 
 from gbkfit.params.pdescs import ParamScalarDesc
-from .core import ComponentPlan
+from .base import ComponentPlan
 
 
 __all__ = [

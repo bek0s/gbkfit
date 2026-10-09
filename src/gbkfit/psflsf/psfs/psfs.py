@@ -10,7 +10,7 @@ import scipy.signal
 import scipy.special
 
 import gbkfit.math
-from gbkfit.psflsf.core import (
+from gbkfit.psflsf.base import (
     MIN_EXTENT, PSF, WING_FLUX, check_ratio, check_scale, embed, psf_parser)
 from gbkfit.utils import fitsutils, gridutils, parseutils
 

@@ -8,7 +8,7 @@ import dynesty.dynamicsampler
 import numpy as np
 
 from gbkfit.fitting import fitutils
-from gbkfit.fitting.core import FitParam, FitParams, Fitter
+from gbkfit.fitting.base import FitParam, FitParams, Fitter
 from gbkfit.fitting.prior import prior_parser
 from gbkfit.fitting.result import make_fitter_result
 from gbkfit.params import paramutils

@@ -1,7 +1,7 @@
 
 
 from gbkfit.fitting import fitutils
-from gbkfit.fitting.core import FitParam, FitParams, Fitter
+from gbkfit.fitting.base import FitParam, FitParams, Fitter
 
 
 def _make_eparams(theta, parameters):

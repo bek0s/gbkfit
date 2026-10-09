@@ -2,7 +2,7 @@
 import numpy as np
 
 import gbkfit.driver.native._host as native_module
-from gbkfit.driver.core import Driver
+from gbkfit.driver.base import Driver
 
 
 __all__ = [
