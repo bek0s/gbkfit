@@ -25,6 +25,43 @@ _CMP_PREFIX = ('components', 'cmp', False)
 _OCMP_PREFIX = ('opacity components', 'ocmp', True)
 
 
+def _with_mass_model_params(params, components, mass_model):
+    """
+    The parameters of the components of a gmodel, and those of its mass
+    model (if any). Raise ConfigError if components take the circular
+    velocity of a mass model (see Component.circular_velocity_params) and
+    there is none, if there is one and none does, or if the names of the
+    parameters repeat.
+    """
+    moved = any(cmp.circular_velocity_params() for cmp in components)
+    if moved and mass_model is None:
+        raise ConfigError(
+            "the 'mass' velocity traits need the mass_model of their gmodel")
+    if mass_model is None:
+        return params
+    if not moved:
+        raise ConfigError(
+            "no component uses the mass_model of the gmodel; give the "
+            "components that it moves 'mass' velocity traits")
+    if repeated := sorted(params.keys() & mass_model.pdescs().keys()):
+        raise ConfigError(
+            f"the parameters of the mass model have the names of parameters "
+            f"of the components: {repeated}; rename the components")
+    return params | mass_model.pdescs()
+
+
+def _circular_velocities(components, mass_model, params):
+    """
+    The values of the parameters of each component that are the circular
+    velocity of the mass model (see Component.circular_velocity_params),
+    from the parameters of the mass model in params.
+    """
+    return [
+        {name: mass_model.vcirc(radii, params)
+         for name, radii in cmp.circular_velocity_params().items()}
+        for cmp in components]
+
+
 class ComponentSet2D:
     """
     The components of a 2d gmodel: their parameters, and their evaluation
@@ -32,17 +69,23 @@ class ComponentSet2D:
     a 3d grid with a z axis of size 1.
     """
 
-    def __init__(self, components):
+    def __init__(self, components, mass_model=None):
         if not components:
             raise RuntimeError("at least one component must be configured")
         self._components = iterutils.tuplify(components, False)
         self._prefixes = _detail.component_prefixes(
             self._components, *_CMP_PREFIX)
-        self._params, self._mappings = miscutils.merge_with_prefixes(
+        params, self._mappings = miscutils.merge_with_prefixes(
             [cmp.pdescs() for cmp in self._components], self._prefixes)
+        self._params = _with_mass_model_params(
+            params, self._components, mass_model)
+        self._mass_model = mass_model
 
     def components(self):
         return self._components
+
+    def mass_model(self):
+        return self._mass_model
 
     def mappings(self):
         """The parameter names of each component, by its own names."""
@@ -137,7 +180,9 @@ class ComponentSetPlan2D:
             self._components, self._component_plans, self._mappings,
             params, self._native_grid,
             outputs | dict(wdata=wdata, bdata=bdata),
-            out_extra, '', lambda data: image(data[0]))
+            out_extra, '', lambda data: image(data[0]),
+            _circular_velocities(
+                self._components, self._component_set.mass_model(), params))
 
         # Weight the data with the spatial weights evaluated above
         if weights is not None:
@@ -160,7 +205,7 @@ class ComponentSet3D:
 
     def __init__(
             self, components, opacity_components=None,
-            size_z=None, step_z=None, zero_z=None):
+            size_z=None, step_z=None, zero_z=None, mass_model=None):
         if not components:
             raise RuntimeError("at least one component must be configured")
         self._components = iterutils.tuplify(components, False)
@@ -177,11 +222,14 @@ class ComponentSet3D:
             self._components, *_CMP_PREFIX)
         self._oprefixes = _detail.component_prefixes(
             self._ocomponents, *_OCMP_PREFIX)
-        self._params, mappings = miscutils.merge_with_prefixes(
+        params, mappings = miscutils.merge_with_prefixes(
             [cmp.pdescs() for cmp in self._all_components()],
             self._prefixes + self._oprefixes)
         self._mappings = mappings[:len(self._components)]
         self._omappings = mappings[len(self._components):]
+        self._params = _with_mass_model_params(
+            params, self._components, mass_model)
+        self._mass_model = mass_model
         # The z axis, as configured (or None to pick it per grid)
         self._size_z = size_z
         self._step_z = step_z
@@ -192,6 +240,9 @@ class ComponentSet3D:
 
     def opacity_components(self):
         return self._ocomponents
+
+    def mass_model(self):
+        return self._mass_model
 
     def size_z(self):
         return self._size_z
@@ -342,7 +393,9 @@ class ComponentSetPlan3D:
             wdata=wdata, bdata=bdata, odata=odata, obdata=obdata)
         _detail.evaluate_components(
             self._components, self._component_plans, self._mappings,
-            params, self._native_grid, outputs, out_extra, '', cube)
+            params, self._native_grid, outputs, out_extra, '', cube,
+            _circular_velocities(
+                self._components, component_set.mass_model(), params))
 
         # Weight the data with the spatial weights evaluated above
         if weights is not None:

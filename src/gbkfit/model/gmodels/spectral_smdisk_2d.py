@@ -82,6 +82,9 @@ class SpectralSMDisk2D(SpectralComponent2D):
     def pdescs(self):
         return self._disk.pdescs() | self._lines.pdescs()
 
+    def circular_velocity_params(self):
+        return self._disk.circular_velocity_params()
+
     def has_weights(self):
         return bool(self._disk.traits('wpt'))
 

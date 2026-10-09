@@ -48,6 +48,16 @@ class Component(parseutils.TypedSerializable, abc.ABC):
         """The names of the emission lines of the component (none here)."""
         return ()
 
+    def circular_velocity_params(self) -> dict[str, tuple[float, ...]]:
+        """
+        The parameters of the component that are not in pdescs, because
+        its gmodel gives them: the circular velocity of the mass model of
+        the gmodel at the given radii (arcsec), by name (see
+        traits.VPTraitMass). Its plans need them with the others. None
+        here.
+        """
+        return {}
+
     @abc.abstractmethod
     def plan(self, driver, spectral, dtype, lines):
         """

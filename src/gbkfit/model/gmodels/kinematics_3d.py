@@ -4,6 +4,7 @@ from gbkfit.model.core import GModelSCube, Selection
 from gbkfit.utils import parseutils
 from ._component_set import ComponentSet3D, ComponentSetGModelPlan
 from .core import OpacityComponent3D, SpectralComponent3D
+from .mass import MassModel, mass_model_parser
 from .opacity_mcdisk_3d import OpacityMCDisk3D
 from .opacity_smdisk_3d import OpacitySMDisk3D
 from .spectral_mcdisk_3d import SpectralMCDisk3D
@@ -39,12 +40,17 @@ class GModelKinematics3D(GModelSCube):
             _scmp_parser, info, 'components', required=True, allow_none=False)
         parseutils.load_option_and_update_info(
             _ocmp_parser, info, 'opacity_components')
+        parseutils.load_option_and_update_info(
+            mass_model_parser, info, 'mass_model')
         opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
         return cls(**opts)
 
     def dump(self):
         component_set = self._component_set
         name = dict(name=self.name()) if self.name() is not None else {}
+        mass_model = component_set.mass_model()
+        mass = dict(mass_model=mass_model_parser.dump(mass_model)) \
+            if mass_model is not None else {}
         return dict(
             type=self.type(),
             **name,
@@ -53,7 +59,8 @@ class GModelKinematics3D(GModelSCube):
             zero_z=component_set.zero_z(),
             components=_scmp_parser.dump(component_set.components()),
             opacity_components=_ocmp_parser.dump(
-                component_set.opacity_components()))
+                component_set.opacity_components()),
+            **mass)
 
     def __init__(
             self,
@@ -64,11 +71,17 @@ class GModelKinematics3D(GModelSCube):
             size_z: int | None = None,
             step_z: int | float | None = None,
             zero_z: int | float | None = None,
+            mass_model: MassModel | None = None,
             name: str | None = None
     ):
+        """
+        mass_model is the mass of the galaxy, whose circular velocity the
+        'mass' velocity traits of the components take (see MassModel).
+        """
         super().__init__(name)
         self._component_set = ComponentSet3D(
-            components, opacity_components, size_z, step_z, zero_z)
+            components, opacity_components, size_z, step_z, zero_z,
+            mass_model)
 
     def pdescs(self):
         return self._component_set.pdescs()
