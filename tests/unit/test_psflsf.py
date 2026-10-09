@@ -298,3 +298,33 @@ def test_sum_weights_are_checked(weights):
     from gbkfit.psflsf.psfs import PSFGauss, PSFSum
     with pytest.raises(RuntimeError, match="positive weight"):
         PSFSum([PSFGauss(1.0), PSFGauss(2.0)], weights)
+
+
+def test_lsf_hanning():
+    from gbkfit.psflsf.lsfs import LSFHanning
+    # 1/4, 1/2 and 1/4 of the light, a channel width apart
+    np.testing.assert_allclose(
+        LSFHanning(10).asarray(5.0), [0.25, 0, 0.5, 0, 0.25])
+    np.testing.assert_allclose(
+        LSFHanning(10).asarray(10.0, 5), [0, 0.25, 0.5, 0.25, 0])
+    with pytest.raises(RuntimeError, match="multiple of the step"):
+        LSFHanning(10).asarray(3.0)
+
+
+def test_lsf_and_psf_convolutions_of_gaussians():
+    from gbkfit.psflsf.lsfs import LSFConvolution, LSFGauss
+    from gbkfit.psflsf.psfs import PSFConvolution, PSFGauss
+    # The convolution of Gaussians is a Gaussian of the summed variances
+    lsf = LSFConvolution([LSFGauss(6.0), LSFGauss(8.0)])
+    lsf_size = lsf.size(1.0)
+    np.testing.assert_allclose(
+        lsf.asarray(1.0), LSFGauss(10.0).asarray(1.0, lsf_size), atol=1e-6)
+    psf = PSFConvolution([PSFGauss(0.6), PSFGauss(0.8)])
+    psf_size = psf.size((0.1, 0.1))
+    np.testing.assert_allclose(
+        psf.asarray((0.1, 0.1)), PSFGauss(1.0).asarray((0.1, 0.1), psf_size),
+        atol=1e-6)
+    # An even array has its centre offset like the analytic ones
+    np.testing.assert_allclose(
+        lsf.asarray(1.0, lsf_size + 1, -1)[:-1], lsf.asarray(1.0),
+        atol=1e-12)

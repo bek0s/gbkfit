@@ -4,11 +4,12 @@ from typing import Any
 
 import numpy as np
 import scipy.ndimage
+import scipy.signal
 import scipy.special
 
 import gbkfit.math
 from gbkfit.psflsf.core import (
-    MIN_EXTENT, PSF, WING_FLUX, check_ratio, check_scale, psf_parser)
+    MIN_EXTENT, PSF, WING_FLUX, check_ratio, check_scale, embed, psf_parser)
 from gbkfit.utils import fitsutils, parseutils
 
 
@@ -18,7 +19,8 @@ __all__ = [
     'PSFGGauss',
     'PSFMoffat',
     'PSFImage',
-    'PSFSum'
+    'PSFSum',
+    'PSFConvolution'
 ]
 
 
@@ -397,3 +399,47 @@ class PSFSum(PSF):
         return sum(
             weight * psf.asarray(step, size, offset, rota)
             for weight, psf in zip(self._weights, self._psfs))
+
+
+class PSFConvolution(PSF):
+    """
+    The convolution of PSFs: e.g. the PSF of an adaptive optics system
+    and the seeing, or a PSF and the response of the pixels.
+    """
+
+    @staticmethod
+    def type() -> str:
+        return 'convolution'
+
+    @classmethod
+    def load(cls, info: dict[str, Any], *args, **kwargs) -> 'PSFConvolution':
+        parseutils.load_option_and_update_info(
+            psf_parser, info, 'psfs', required=True)
+        return cls(**_load_psf_common(cls, info))
+
+    def dump(self) -> dict[str, Any]:
+        return dict(type=self.type(), psfs=psf_parser.dump(list(self._psfs)))
+
+    def __init__(self, psfs: Sequence[PSF]):
+        if not psfs:
+            raise RuntimeError("a convolution of PSFs needs at least one PSF")
+        self._psfs = tuple(psfs)
+
+    def _size_impl(self, step: tuple[float, float]) -> tuple[float, float]:
+        # The sum of the (odd) sizes of the terms, less one for each
+        # convolution
+        sizes = np.array([psf.size(step) for psf in self._psfs])
+        return tuple((sizes.sum(axis=0) - len(sizes) + 1).tolist())
+
+    def _asarray_impl(
+            self,
+            step: tuple[float, float],
+            size: tuple[int, int],
+            offset: tuple[int, int],
+            rota: float
+    ) -> np.ndarray:
+        data = np.ones((1, 1))
+        for psf in self._psfs:
+            data = scipy.signal.convolve(
+                data, psf.asarray(step, rota=rota), method='auto')
+        return embed(data / data.sum(), size, offset)
