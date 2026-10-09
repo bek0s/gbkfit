@@ -434,6 +434,143 @@ rp_trait_sech2_rnd(
     rp_trait_sample_polar_coords_nw(out_r, out_t, rng, rnidx, rnodes);
 }
 
+// A standard normal random number (Box-Muller)
+template<typename T> constexpr T
+normal_rnd(RNG<T>& rng)
+{
+    return std::sqrt(-2 * std::log(rng())) * std::cos(2 * PI<T> * rng());
+}
+
+// A random number of the gamma distribution of shape k and scale 1
+// (Marsaglia and Tsang 2000; for k < 1, through the shape k + 1)
+template<typename T> constexpr T
+gamma_rnd(RNG<T>& rng, T k)
+{
+    const T boost = k < 1 ? std::pow(rng(), 1 / k) : T{1};
+    const T d = (k < 1 ? k + 1 : k) - T{1} / 3;
+    const T c = 1 / std::sqrt(9 * d);
+    while (true)
+    {
+        const T x = normal_rnd(rng);
+        T v = 1 + c * x;
+        if (v <= 0)
+            continue;
+        v = v * v * v;
+        const T u = rng();
+        if (u < 1 - T{0.0331} * x * x * x * x
+                || std::log(u) < T{0.5} * x * x + d * (1 - v + std::log(v)))
+            return boost * d * v;
+    }
+}
+
+// The integral over the plane of the radial profile f of a round blob of
+// amplitude 1, size s and shape b, and a random radius of a point of the
+// blob (of density f(rho) rho): exponential exp(-rho / s), Gaussian
+// exp(-rho^2 / (2 s^2)), generalised Gaussian exp(-(rho / s)^b) and Moffat
+// (1 + (rho / s)^2)^(-b) (for b > 1)
+template<typename T> constexpr T
+mixture_blob_norm_exponential(T s, T b)
+{
+    (void)b;
+    return 2 * PI<T> * s * s;
+}
+
+template<typename T> constexpr T
+mixture_blob_radius_exponential(RNG<T>& rng, T s, T b)
+{
+    (void)b;
+    return -s * std::log(rng() * rng());
+}
+
+template<typename T> constexpr T
+mixture_blob_norm_gauss(T s, T b)
+{
+    (void)b;
+    return 2 * PI<T> * s * s;
+}
+
+template<typename T> constexpr T
+mixture_blob_radius_gauss(RNG<T>& rng, T s, T b)
+{
+    (void)b;
+    return s * std::sqrt(-2 * std::log(rng()));
+}
+
+template<typename T> constexpr T
+mixture_blob_norm_ggauss(T s, T b)
+{
+    return 2 * PI<T> * s * s * std::tgamma(2 / b) / b;
+}
+
+template<typename T> constexpr T
+mixture_blob_radius_ggauss(RNG<T>& rng, T s, T b)
+{
+    return s * std::pow(gamma_rnd(rng, 2 / b), 1 / b);
+}
+
+template<typename T> constexpr T
+mixture_blob_norm_moffat(T s, T b)
+{
+    return PI<T> * s * s / (b - 1);
+}
+
+template<typename T> constexpr T
+mixture_blob_radius_moffat(RNG<T>& rng, T s, T b)
+{
+    return s * std::sqrt(std::pow(rng(), 1 / (1 - b)) - 1);
+}
+
+// A random point of a mixture of nblobs blobs (see p_trait_mixture_1p and
+// p_trait_mixture_2p, of NP parameters each): a blob, drawn by its flux
+// (|amplitude| times its integral times its axis ratio), a point of it,
+// and the sign of its amplitude
+template<auto Norm, auto Radius, int NP, typename T> constexpr void
+rp_trait_mixture_rnd(
+        T& out_s, T& out_r, T& out_t, RNG<T>& rng,
+        const T* consts, const T* params)
+{
+    const int nblobs = std::rint(consts[0]);
+    // The parameters of the blobs: r, t, a, s, (b,) q, p
+    const T* blob_r = params;
+    const T* blob_t = params + nblobs;
+    const T* blob_a = params + 2 * nblobs;
+    const T* blob_s = params + 3 * nblobs;
+    const T* blob_b = NP == 7 ? params + 4 * nblobs : nullptr;
+    const T* blob_q = params + (NP - 2) * nblobs;
+    const T* blob_p = params + (NP - 1) * nblobs;
+    T total = 0;
+    for (int i = 0; i < nblobs; ++i)
+        total += std::abs(blob_a[i] * blob_q[i])
+                * Norm(blob_s[i], blob_b ? blob_b[i] : T{0});
+    // Draw a blob by its flux
+    const T u = rng() * total;
+    int i = 0;
+    T sum = 0;
+    for (; i < nblobs - 1; ++i)
+    {
+        sum += std::abs(blob_a[i] * blob_q[i])
+                * Norm(blob_s[i], blob_b ? blob_b[i] : T{0});
+        if (u < sum)
+            break;
+    }
+    // A point of the blob, in its frame (elongated along its x axis)
+    const T rho = Radius(rng, blob_s[i], blob_b ? blob_b[i] : T{0});
+    const T psi = 2 * PI<T> * rng();
+    const T xb = rho * std::cos(psi);
+    const T yb = blob_q[i] * rho * std::sin(psi);
+    // Back to the disk plane: the inverse of transform_lh_rotate_z by the
+    // angle of the blob, from its centre
+    const T t = blob_t[i] * DEG_TO_RAD<T>;
+    const T phi = t + blob_p[i] * DEG_TO_RAD<T>;
+    const T x = blob_r[i] * std::cos(t)
+            - std::sin(phi) * xb - std::cos(phi) * yb;
+    const T y = blob_r[i] * std::sin(t)
+            + std::cos(phi) * xb - std::sin(phi) * yb;
+    out_r = std::sqrt(x * x + y * y);
+    out_t = std::atan2(y, x);
+    out_s = blob_a[i] < 0 ? -1 : 1;
+}
+
 template<typename T> constexpr void
 rp_trait_mixture_exponential(
         T& out, T r, T theta, const T* consts, const T* params)
@@ -443,14 +580,12 @@ rp_trait_mixture_exponential(
 
 template<typename T> constexpr void
 rp_trait_mixture_exponential_rnd(
-        T& out_r, T& out_t, RNG<T>& rng, const T* consts, const T* params)
+        T& out_s, T& out_r, T& out_t, RNG<T>& rng,
+        const T* consts, const T* params)
 {
-    (void)out_r;
-    (void)out_t;
-    (void)rng;
-    (void)consts;
-    (void)params;
-    // TODO: implement
+    rp_trait_mixture_rnd<
+            mixture_blob_norm_exponential<T>, mixture_blob_radius_exponential<T>,
+            6>(out_s, out_r, out_t, rng, consts, params);
 }
 
 template<typename T> constexpr void
@@ -461,14 +596,12 @@ rp_trait_mixture_gauss(T& out, T r, T theta, const T* consts, const T* params)
 
 template<typename T> constexpr void
 rp_trait_mixture_gauss_rnd(
-        T& out_r, T& out_t, RNG<T>& rng, const T* consts, const T* params)
+        T& out_s, T& out_r, T& out_t, RNG<T>& rng,
+        const T* consts, const T* params)
 {
-    (void)out_r;
-    (void)out_t;
-    (void)rng;
-    (void)consts;
-    (void)params;
-    // TODO: implement
+    rp_trait_mixture_rnd<
+            mixture_blob_norm_gauss<T>, mixture_blob_radius_gauss<T>,
+            6>(out_s, out_r, out_t, rng, consts, params);
 }
 
 template<typename T> constexpr void
@@ -479,14 +612,12 @@ rp_trait_mixture_ggauss(T& out, T r, T theta, const T* consts, const T* params)
 
 template<typename T> constexpr void
 rp_trait_mixture_ggauss_rnd(
-        T& out_r, T& out_t, RNG<T>& rng, const T* consts, const T* params)
+        T& out_s, T& out_r, T& out_t, RNG<T>& rng,
+        const T* consts, const T* params)
 {
-    (void)out_r;
-    (void)out_t;
-    (void)rng;
-    (void)consts;
-    (void)params;
-    // TODO: implement
+    rp_trait_mixture_rnd<
+            mixture_blob_norm_ggauss<T>, mixture_blob_radius_ggauss<T>,
+            7>(out_s, out_r, out_t, rng, consts, params);
 }
 
 template<typename T> constexpr void
@@ -497,14 +628,12 @@ rp_trait_mixture_moffat(T& out, T r, T theta, const T* consts, const T* params)
 
 template<typename T> constexpr void
 rp_trait_mixture_moffat_rnd(
-        T& out_r, T& out_t, RNG<T>& rng, const T* consts, const T* params)
+        T& out_s, T& out_r, T& out_t, RNG<T>& rng,
+        const T* consts, const T* params)
 {
-    (void)out_r;
-    (void)out_t;
-    (void)rng;
-    (void)consts;
-    (void)params;
-    // TODO: implement
+    rp_trait_mixture_rnd<
+            mixture_blob_norm_moffat<T>, mixture_blob_radius_moffat<T>,
+            7>(out_s, out_r, out_t, rng, consts, params);
 }
 
 template<typename T> constexpr void
@@ -571,11 +700,25 @@ rp_trait_nw_distortion_rnd(
         int rnidx, const T* rnodes, int nrnodes,
         const T* params)
 {
-    T p = params[1 * nrnodes + rnidx] * DEG_TO_RAD<T>;
-    T s = params[2 * nrnodes + rnidx];
-    (void)p;
-    (void)s;
-    // TODO: implement
+    // A point of the ring, at the azimuth p + d, where d is drawn from a
+    // Gaussian of the arc length s at the radius, truncated to a turn: by
+    // rejection, of Gaussian draws for narrow ones, and of uniform draws
+    // for wide ones (both accept most draws)
+    rp_trait_sample_polar_coords_nw(out_r, out_t, rng, rnidx, rnodes);
+    const T p = params[1 * nrnodes + rnidx] * DEG_TO_RAD<T>;
+    const T s = params[2 * nrnodes + rnidx];
+    const T width = std::abs(s / out_r);
+    T d = 0;
+    if (width < PI<T>) {
+        do {
+            d = width * normal_rnd(rng);
+        } while (std::abs(d) > PI<T>);
+    } else {
+        do {
+            d = PI<T> * (2 * rng() - 1);
+        } while (rng() > std::exp(-d * d / (2 * width * width)));
+    }
+    out_t = wrap_angle(p + d);
 }
 
 template<auto Fun, auto FunTrunc, typename T> constexpr void
@@ -1351,25 +1494,25 @@ rp_trait_rnd(
     case BPT_UID_MIXTURE_EXP:
     case OPT_UID_MIXTURE_EXP:
         rp_trait_mixture_exponential_rnd(
-                out_r, out_t,
+                out_s, out_r, out_t,
                 rng, consts, params);
         break;
     case BPT_UID_MIXTURE_GAUSS:
     case OPT_UID_MIXTURE_GAUSS:
         rp_trait_mixture_gauss_rnd(
-                out_r, out_t,
+                out_s, out_r, out_t,
                 rng, consts, params);
         break;
     case BPT_UID_MIXTURE_GGAUSS:
     case OPT_UID_MIXTURE_GGAUSS:
         rp_trait_mixture_ggauss_rnd(
-                out_r, out_t,
+                out_s, out_r, out_t,
                 rng, consts, params);
         break;
     case BPT_UID_MIXTURE_MOFFAT:
     case OPT_UID_MIXTURE_MOFFAT:
         rp_trait_mixture_moffat_rnd(
-                out_r, out_t,
+                out_s, out_r, out_t,
                 rng, consts, params);
         break;
     case BPT_UID_NW_UNIFORM:

@@ -130,13 +130,6 @@ def test_weight_traits_are_parsed(name):
     assert re.search("weight polar trait .* is not implemented yet", message)
 
 
-@pytest.mark.parametrize('name', [
-    'brightness_mcdisk_3d', 'spectral_mcdisk_3d'])
-def test_mcdisk_rejects_unsupported_traits(name):
-    message = load_error(name, bptraits=dict(type='mixture_gauss', nblobs=2))
-    assert re.search("does not support .* mixture_gauss", message)
-
-
 @pytest.mark.parametrize('name', ['spectral_smdisk_3d', 'spectral_mcdisk_3d'])
 def test_spectral_3d_with_several_velocity_traits(name):
     # Rotation and radial motions, each with the default height trait.

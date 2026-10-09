@@ -3,7 +3,7 @@ import logging
 
 import numpy as np
 
-from . import _disk, traits
+from . import _disk
 
 
 __all__ = ['MCDisk', 'MCDiskPlan']
@@ -13,24 +13,6 @@ _log = logging.getLogger(__name__)
 
 
 class MCDisk(_disk.Disk):
-
-    # The traits that the Monte Carlo disk does not support yet
-    unsupported_traits = (
-        traits.BPTraitMixtureExponential,
-        traits.BPTraitMixtureGauss,
-        traits.BPTraitMixtureGGauss,
-        traits.BPTraitMixtureMoffat,
-        traits.BPTraitNWDistortion,
-        traits.DPTraitMixtureExponential,
-        traits.DPTraitMixtureGauss,
-        traits.DPTraitMixtureGGauss,
-        traits.DPTraitMixtureMoffat,
-        traits.DPTraitNWDistortion,
-        traits.OPTraitMixtureExponential,
-        traits.OPTraitMixtureGauss,
-        traits.OPTraitMixtureGGauss,
-        traits.OPTraitMixtureMoffat,
-        traits.OPTraitNWDistortion)
 
     def __init__(
             self, cflux, seed,

@@ -144,7 +144,7 @@ def make_disk(
         rnmin, rnmax, rnsep, rnlen, rnodes, rstep, interp)
     nwmodes = _detail.validate_component_nwmodes(loose, tilted, nwmodes)
     traits_ = _parse_traits(cls, slots, traits_)
-    _check_traits(cls, disk_class, sum(traits_.values(), ()))
+    _detail.check_traits_common(sum(traits_.values(), ()))
     return disk_class(
         **disk_options,
         loose=loose, tilted=tilted, **node_args,
@@ -237,12 +237,3 @@ def _parse_traits(cls, slots, values):
         result[slot.key] = value
     return result
 
-
-def _check_traits(cls, disk_class, traits_):
-    _detail.check_traits_common(traits_)
-    for trait in traits_:
-        if isinstance(trait, disk_class.unsupported_traits):
-            cmp_desc = parseutils.make_typed_desc(cls, 'gmodel component')
-            trait_desc = traits.trait_desc(trait.__class__)
-            raise NotImplementedError(
-                f"{cmp_desc} does not support {trait_desc} yet")

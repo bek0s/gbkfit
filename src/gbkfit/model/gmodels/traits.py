@@ -3,6 +3,7 @@ import abc
 import logging
 
 import numpy as np
+import scipy.special
 
 import gbkfit.math
 from gbkfit.params.pdescs import ParamScalarDesc, ParamVectorDesc
@@ -259,20 +260,42 @@ def _ptrait_integrate_sech2(params, rings):
     return _integrate_rings(rings, gbkfit.math.sech2_1d_fun, a, 0, s)
 
 
+def _ptrait_cloud_flux_mixture(params, norm):
+    """
+    The flux of the clouds of a mixture of blobs (see the native
+    rp_trait_mixture_rnd): the sum of the |amplitude| times the integral
+    (norm, of a blob of amplitude 1) times the axis ratio of each blob.
+    The kernel gives each cloud the sign of the amplitude of its blob.
+    """
+    a = np.abs(np.asarray(params['a']) * np.asarray(params['q']))
+    return np.sum(a * norm)
+
+
 def _ptrait_integrate_mixture_exponential(params, rings):  # noqa
-    raise NotImplementedError()
+    s = np.asarray(params['s'])
+    return _ptrait_cloud_flux_mixture(params, 2 * np.pi * s * s)
 
 
 def _ptrait_integrate_mixture_gauss(params, rings):  # noqa
-    raise NotImplementedError()
+    s = np.asarray(params['s'])
+    return _ptrait_cloud_flux_mixture(params, 2 * np.pi * s * s)
 
 
 def _ptrait_integrate_mixture_ggauss(params, rings):  # noqa
-    raise NotImplementedError()
+    s = np.asarray(params['s'])
+    b = np.asarray(params['b'])
+    return _ptrait_cloud_flux_mixture(
+        params, 2 * np.pi * s * s * scipy.special.gamma(2 / b) / b)
 
 
 def _ptrait_integrate_mixture_moffat(params, rings):  # noqa
-    raise NotImplementedError()
+    s = np.asarray(params['s'])
+    b = np.asarray(params['b'])
+    if np.any(b <= 1):
+        raise RuntimeError(
+            "the blobs of mixture_moffat of the Monte Carlo disk need b > 1 "
+            "(their flux is infinite otherwise)")
+    return _ptrait_cloud_flux_mixture(params, np.pi * s * s / (b - 1))
 
 
 def _ptrait_integrate_nw_uniform(params, rings):
@@ -289,8 +312,23 @@ def _ptrait_cloud_flux_nw_harmonic(params, rings, order):
     return _integrate_rings(rings, gbkfit.math.uniform_1d_fun, a, 0, c)
 
 
-def _ptrait_integrate_nw_distortion(params, rings):  # noqa
-    raise NotImplementedError()
+def _ptrait_integrate_nw_distortion(params, rings):
+    """
+    The flux of each ring of a distortion: its area times the mean around
+    it of a exp(-(t r)^2 / (2 s^2)), for the azimuths t within half a turn
+    of the centre of the distortion.
+    """
+    a = params['a']
+    s = np.abs(params['s'])
+
+    def mean(r):
+        width = s / r
+        return np.where(
+            width > 0,
+            np.sqrt(2 * np.pi) * width * scipy.special.erf(
+                np.pi / (np.sqrt(2) * np.maximum(width, 1e-300))) / (2 * np.pi),
+            0) * a
+    return _integrate_rings(rings, mean)
 
 
 def trait_desc(cls):
