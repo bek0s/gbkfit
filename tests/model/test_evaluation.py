@@ -9,6 +9,7 @@ import gbkfit.model
 import gbkfit.params
 import numpy as np
 import pytest
+from modelutils import observation_group
 
 
 def nodewise_relative_model(driver):
@@ -27,8 +28,7 @@ def nodewise_relative_model(driver):
 
 
 def test_evaluation_does_not_modify_params(driver):
-    model_group = gbkfit.model.ModelGroup(gbkfit.model.model_parser.load(
-        [nodewise_relative_model(driver)]))
+    model_group = observation_group([nodewise_relative_model(driver)])
     params = gbkfit.params.EvaluationParams(model_group.pdescs(), dict(
         vsys=0, xpos=0, ypos=0, posa=30, incl=45,
         bpt_a=1, bpt_s=4, dpt_a=10,
@@ -51,7 +51,7 @@ GMODELS_2D = dict(
             bptraits=dict(type='exponential'),
             vptraits=dict(type='tan_arctan'),
             dptraits=dict(type='uniform'))]),
-        'DModelSCube', (32, 32, 41), 'scube',
+        'scube', (32, 32, 41), 'scube',
         dict(vsys=0, xpos=0, ypos=0, posa=30, incl=45,
              bpt_a=1, bpt_s=4, vpt_rt=2, vpt_vt=100, dpt_a=10)),
     intensity_2d=(
@@ -59,55 +59,61 @@ GMODELS_2D = dict(
             type='smdisk', loose=False, tilted=False,
             rnodes=list(range(0, 12)),
             bptraits=dict(type='exponential'))]),
-        'DModelImage', (32, 32), 'image',
+        'image', (32, 32), 'image',
         dict(xpos=0, ypos=0, posa=30, incl=45, bpt_a=1, bpt_s=4)))
 
 
 @pytest.mark.parametrize('gmodel_type', GMODELS_2D)
-def test_gmodel_shared_by_grids_with_different_steps(driver, gmodel_type):
-    # A gmodel evaluated on a grid must not keep using the step of the
-    # grid it was evaluated on before
-    from gbkfit.model import Model, dmodels, gmodel_parser
-    gmodel_info, dmodel_name, size, key, properties = GMODELS_2D[gmodel_type]
+def test_one_gmodel_observed_on_grids_with_different_steps(
+        driver, gmodel_type):
+    # Observations of one gmodel on grids with different steps each get
+    # the model on their own grid
+    from gbkfit.model import gmodel_parser
+    from gbkfit.observation import (
+        Observation, ObservationGroup, observable_parser)
+    gmodel_info, observable_type, size, key, properties = \
+        GMODELS_2D[gmodel_type]
 
-    def evaluate(gmodel, step):
+    def observation(step):
         steps = (step, step, 10)[:len(size)]
-        dmodel = getattr(dmodels, dmodel_name)(size=size, step=steps)
-        model_group = gbkfit.model.ModelGroup(
-            [Model(driver, dmodel, gmodel)])
-        params = gbkfit.params.EvaluationParams(
-            model_group.pdescs(), properties)
-        return model_group.model_h(params.evaluate())[0][key]['d'].copy()
+        return Observation(driver, observable_parser.load(dict(
+            type=observable_type, size=list(size), step=list(steps))))
 
-    shared = gmodel_parser.load(gmodel_info)
-    evaluate(shared, step=1)
-    np.testing.assert_array_equal(
-        evaluate(shared, step=0.5),
-        evaluate(gmodel_parser.load(gmodel_info), step=0.5))
+    def evaluate(group, i):
+        params = gbkfit.params.EvaluationParams(group.pdescs(), properties)
+        return group.model_h(params.evaluate())[i][key]['d'].copy()
+
+    shared = ObservationGroup(
+        [gmodel_parser.load(gmodel_info)], [observation(1), observation(0.5)])
+    alone = ObservationGroup(
+        [gmodel_parser.load(gmodel_info)], [observation(0.5)])
+    np.testing.assert_array_equal(evaluate(shared, 1), evaluate(alone, 0))
 
 
-def test_failed_preparation_is_not_kept(driver):
-    # A dmodel that fails to prepare (here, a dtype the drivers do not
-    # support) must fail the same way on the next evaluation, not run
-    # half prepared
-    dmodel = gbkfit.model.dmodel_parser.load(
-        dict(type='image', size=[8, 8], dtype='float64'))
+def test_unsupported_dtype_fails_when_planning(driver):
+    # An observation in a dtype the drivers do not support fails when its
+    # plan is made, before any evaluation, every time
+    from gbkfit.observation import (
+        Observation, ObservationGroup, observable_parser)
+    observation = Observation(
+        driver, observable_parser.load(dict(type='image', size=[8, 8])),
+        dtype='float64')
     gmodel = gbkfit.model.gmodel_parser.load(dict(
         type='intensity_2d', components=dict(
             type='smdisk', loose=False, tilted=False, rnodes=[0, 2, 4],
             bptraits=dict(type='uniform'))))
-    params = dict(xpos=0, ypos=0, posa=0, incl=0, bpt_a=1)
     for _ in range(2):
         with pytest.raises(RuntimeError, match="does not support dtype"):
-            dmodel.evaluate(driver, gmodel, params)
+            ObservationGroup([gmodel], [observation])
 
 
 @pytest.mark.parametrize('dmodel, gmodel', [
     (dict(type='image', size=[8, 8]), 'kinematics_2d'),
     (dict(type='scube', size=[8, 8, 8]), 'intensity_2d')])
-def test_incompatible_models_are_rejected_at_load(dmodel, gmodel):
-    # An image dmodel needs an image gmodel, and the others a spectral
-    # cube gmodel; the configuration is rejected before any evaluation
+def test_incompatible_observations_are_rejected_before_evaluation(
+        dmodel, gmodel):
+    # An image observable needs an image gmodel, and the others a spectral
+    # cube gmodel; the group is rejected before any evaluation
     component = dict(
         type='smdisk', loose=False, tilted=False, rnodes=[0, 1, 2],
         bptraits=dict(type='exponential'))
@@ -118,4 +124,4 @@ def test_incompatible_models_are_rejected_at_load(dmodel, gmodel):
         driver=dict(type='host'), dmodel=dmodel,
         gmodel=dict(type=gmodel, components=[component]))
     with pytest.raises(Exception, match="is not compatible with"):
-        gbkfit.model.model_parser.load(model)
+        observation_group([model])

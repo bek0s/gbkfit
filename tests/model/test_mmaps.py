@@ -46,12 +46,14 @@ def test_mmaps_matches_moments_of_scube(evaluate_model):
             atol=0.01, err_msg=f"moment {order}")
 
 
-def evaluate_mmaps(driver, dmodel, **properties):
+def evaluate_mmaps(driver, observable, **properties):
     """
     The moment maps of a thin disk with a constant velocity dispersion
-    of 20, evaluated with the given dmodel and parameter properties.
+    of 20, observed as the given observable with the given parameter
+    properties.
     """
-    from gbkfit.model import Model, ModelGroup, gmodel_parser
+    from gbkfit.model import gmodel_parser
+    from gbkfit.observation import Observation, ObservationGroup
     from gbkfit.params import EvaluationParams
     gmodel = gmodel_parser.load(dict(
         type='kinematics_2d', components=[dict(
@@ -60,7 +62,7 @@ def evaluate_mmaps(driver, dmodel, **properties):
             bptraits=dict(type='exponential'),
             vptraits=dict(type='tan_arctan'),
             dptraits=dict(type='uniform'))]))
-    model_group = ModelGroup([Model(driver, dmodel, gmodel)])
+    model_group = ObservationGroup([gmodel], [Observation(driver, observable)])
     params = EvaluationParams(model_group.pdescs(), dict(
         vsys=0, xpos=0, ypos=0, posa=30, incl=60,
         bpt_a=1, bpt_s=4, vpt_rt=2, vpt_vt=40, dpt_a=20) | properties)
@@ -74,10 +76,10 @@ def test_higher_moments_of_a_gaussian_line(driver):
     # other than 1 checks that the moments are scaled correctly. The
     # channels hold the mean of the line over each channel, which adds
     # the variance of a channel (step^2 / 12) to that of the line.
-    from gbkfit.model.dmodels import DModelMMaps
-    dmodel = DModelMMaps(
+    from gbkfit.observation import MMaps
+    observable = MMaps(
         size=(32, 32), spec_size=81, spec_step=5, orders=(1, 2, 3, 4))
-    mmaps = evaluate_mmaps(driver, dmodel)
+    mmaps = evaluate_mmaps(driver, observable)
     # One mask for all moments: where the moments are defined.
     # Without weight traits, all weights are 1.
     for key in ('mmap1', 'mmap2', 'mmap3', 'mmap4'):
@@ -98,10 +100,10 @@ def test_higher_moments_of_a_gaussian_line(driver):
 def test_moment_maps_of_a_galaxy_at_a_high_velocity(driver):
     # B24: the spectral axis was fixed at +-500 around 0. With one around
     # the systemic velocity, the velocity at the centre is vsys.
-    from gbkfit.model.dmodels import DModelMMaps
-    dmodel = DModelMMaps(
+    from gbkfit.observation import MMaps
+    observable = MMaps(
         size=(32, 32), spec_size=201, spec_step=2, spec_rval=1500)
-    mmaps = evaluate_mmaps(driver, dmodel, vsys=1500)
+    mmaps = evaluate_mmaps(driver, observable, vsys=1500)
     centre = mmaps['mmap1']['d'][15:17, 15:17]
     np.testing.assert_allclose(centre, 1500, atol=15)
 
@@ -115,22 +117,22 @@ def test_spectral_axis_from_the_data(dispersion, spec_size):
     # the model are not cut when its dispersion differs from the data's
     from gbkfit.dataset import Data
     from gbkfit.dataset.datasets import DatasetMMaps
-    from gbkfit.model import dmodel_parser
+    from gbkfit.observation import observable_parser
     velocity = np.linspace(1400, 1600, 32 * 32).reshape(32, 32)
     maps = dict(mmap0=Data(np.ones((32, 32))), mmap1=Data(velocity))
     if dispersion is not None:
         maps['mmap2'] = Data(np.full((32, 32), dispersion))
     info = dict(type='mmaps', spec_step=2)
-    dmodel = dmodel_parser.load(info, dataset=DatasetMMaps(**maps))
-    assert dmodel.spec_rval() == 1500
-    assert dmodel.spec_step() == 2
-    assert dmodel.spec_size() == spec_size
+    observable = observable_parser.load(info, dataset=DatasetMMaps(**maps))
+    assert observable.spec_rval() == 1500
+    assert observable.spec_step() == 2
+    assert observable.spec_size() == spec_size
     # The configuration is left as it was
     assert info == dict(type='mmaps', spec_step=2)
 
 
 def test_at_least_one_moment_order():
     # The moments kernel reads past an empty list of orders
-    from gbkfit.model.dmodels import DModelMMaps
+    from gbkfit.observation import MMaps
     with pytest.raises(RuntimeError, match="at least one moment order"):
-        DModelMMaps(size=(8, 8), orders=[])
+        MMaps(size=(8, 8), orders=[])

@@ -10,6 +10,7 @@ import numpy as np
 import pytest
 
 from gbkfit.model.gmodels import traits
+from modelutils import observation_group
 
 
 RNODES = list(range(0, 14, 2))
@@ -108,9 +109,8 @@ def model_and_properties(driver, key, config):
 @pytest.mark.parametrize('key, config', list(cases()))
 def test_every_trait_parameter_changes_the_model(
         driver, evaluate_models, key, config):
-    import gbkfit.model
     model, properties, prefix = model_and_properties(driver, key, config)
-    pdescs = gbkfit.model.model_parser.load(dict(model)).pdescs()
+    pdescs = observation_group([model]).pdescs()
     names = [name for name in pdescs if name.startswith(prefix)]
     for name in names:
         size = pdescs[name].size()

@@ -10,6 +10,7 @@ import sys
 import numpy as np
 import pytest
 import ruamel.yaml
+from modelutils import config_group
 
 
 CONFIG_DIR = pathlib.Path(__file__).parents[1] / 'data' / 'mcdisk_vs_smdisk'
@@ -27,14 +28,11 @@ def evaluate_disk(
     the parameter properties of the configuration can be overridden. The
     extra outputs go to out_extra, if given.
     """
-    import gbkfit.model
     import gbkfit.params
     config = ruamel.yaml.YAML(typ='safe').load(CONFIG_DIR / f'{disk}.yaml')
-    model = config['models'][0]
-    model['driver']['type'] = driver_type
-    model['gmodel']['components'][0].update(component or {})
-    model_group = gbkfit.model.ModelGroup(
-        gbkfit.model.model_parser.load([model]))
+    config['observations'][0]['driver']['type'] = driver_type
+    config['gmodels'][0]['components'][0].update(component or {})
+    model_group = config_group(config)
     params = gbkfit.params.EvaluationParams(
         model_group.pdescs(),
         config['params']['properties'] | (properties or {}))
@@ -222,7 +220,7 @@ def test_mcdisk_harmonic_clouds_take_the_sign_of_the_harmonic(driver):
         extra = {}
         evaluate_disk(
             disk, driver.type(), component | options, properties, extra)
-        brightness[disk] = extra['model0_gmodel_component0_bdata'].data.sum(0)
+        brightness[disk] = extra['observation0_gmodel_component0_bdata'].data.sum(0)
     smdisk = brightness['smdisk']
     clear = np.abs(smdisk) > 0.5 * np.abs(smdisk).max()
     mcdisk = brightness['mcdisk'][clear]
@@ -239,14 +237,14 @@ def test_mcdisk_velocity_is_the_mean_of_the_clouds(driver):
     # spaxel is the sum of the lines of its clouds, so its first moment
     # is the brightness-weighted mean of the velocity along z (the lines
     # are within the spectral axis).
-    import gbkfit.model
     import gbkfit.params
     config = ruamel.yaml.YAML(typ='safe').load(CONFIG_DIR / 'mcdisk.yaml')
-    model = config['models'][0]
-    model['driver']['type'] = driver.type()
-    model['dmodel'] = dict(type='scube', size=[48, 48, 120], step=[1, 1, 5])
-    model_group = gbkfit.model.ModelGroup(
-        gbkfit.model.model_parser.load([model]))
+    observation = config['observations'][0]
+    observation['driver']['type'] = driver.type()
+    observation['instrument'] = {}
+    observation['observable'] = dict(
+        type='scube', size=[48, 48, 120], step=[1, 1, 5])
+    model_group = config_group(config)
     params = gbkfit.params.EvaluationParams(
         model_group.pdescs(), config['params']['properties'])
     extra = {}
@@ -256,8 +254,8 @@ def test_mcdisk_velocity_is_the_mean_of_the_clouds(driver):
     bright = intensity > 0.01 * intensity.max()
     moment1 = np.tensordot(velocities, scube, axes=1)[bright] / \
         intensity[bright]
-    brightness = extra['model0_gmodel_component0_bdata'].data
-    velocity = np.nan_to_num(extra['model0_gmodel_component0_vdata'].data)
+    brightness = extra['observation0_gmodel_component0_bdata'].data
+    velocity = np.nan_to_num(extra['observation0_gmodel_component0_vdata'].data)
     mean = (brightness * velocity).sum(0)[bright] / \
         brightness.sum(0)[bright]
     np.testing.assert_allclose(mean, moment1, atol=0.05)

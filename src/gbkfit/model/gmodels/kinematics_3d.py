@@ -42,8 +42,10 @@ class GModelKinematics3D(GModelSCube):
 
     def dump(self):
         component_set = self._component_set
+        name = dict(name=self.name()) if self.name() is not None else {}
         return dict(
             type=self.type(),
+            **name,
             size_z=component_set.size_z(),
             step_z=component_set.step_z(),
             zero_z=component_set.zero_z(),
@@ -59,8 +61,10 @@ class GModelKinematics3D(GModelSCube):
             OpacityComponent3D | Sequence[OpacityComponent3D] | None = None,
             size_z: int | None = None,
             step_z: int | float | None = None,
-            zero_z: int | float | None = None
+            zero_z: int | float | None = None,
+            name: str | None = None
     ):
+        super().__init__(name)
         self._component_set = ComponentSet3D(
             components, opacity_components, size_z, step_z, zero_z)
 

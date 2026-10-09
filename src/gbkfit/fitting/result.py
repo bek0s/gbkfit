@@ -365,7 +365,7 @@ def make_fitter_result(
         print(eparams_free)
         params = parameters.evaluate(eparams_free)
         dof = 100
-        sol.model = objective.model().model_h(params)
+        sol.model = objective.group().model_h(params)
         sol.residual = objective.residual_nddata_h(params, weighted=False)
         sol.wresidual = objective.residual_nddata_h(params, weighted=True)
         sol.chisqr = 1.0

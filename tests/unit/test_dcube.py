@@ -8,7 +8,7 @@ smoothed if smooth_weights is set.
 import numpy as np
 import pytest
 
-from gbkfit.model.dmodels._dcube import DCube, cube_extra
+from gbkfit.observation.observables._dcube import DCube, cube_extra
 from gbkfit.psflsf.lsfs import LSFGauss
 from gbkfit.psflsf.psfs import PSFGauss
 

@@ -7,7 +7,7 @@ from typing import Any
 import numpy as np
 
 from gbkfit.dataset import Dataset
-from gbkfit.model import ModelGroup
+from gbkfit.observation import ObservationGroup
 from gbkfit.params import ParamDesc
 from gbkfit.utils import iterutils, parseutils, timeutils
 
@@ -17,11 +17,11 @@ class Objective(parseutils.BasicSerializable, ABC):
     @classmethod
     def load(cls, info: dict[str, Any], *args, **kwargs) -> 'Objective':
         datasets = kwargs.get('datasets')
-        models = kwargs.get('models')
+        group = kwargs.get('group')
         desc = parseutils.make_basic_desc(cls, 'objective')
         opts = parseutils.parse_options_for_callable(
-            info, desc, cls.__init__, fun_ignore_args=['datasets', 'models'])
-        return cls(datasets, models, **opts)
+            info, desc, cls.__init__, fun_ignore_args=['datasets', 'group'])
+        return cls(datasets, group, **opts)
 
     def dump(self) -> dict[str, Any]:
         return dict(
@@ -30,7 +30,7 @@ class Objective(parseutils.BasicSerializable, ABC):
     def __init__(
             self,
             datasets: Dataset | Sequence[Dataset],
-            models: ModelGroup,
+            group: ObservationGroup,
             wu:
             Real |
             Mapping[str, Real] |
@@ -38,11 +38,11 @@ class Objective(parseutils.BasicSerializable, ABC):
             Sequence[Mapping[str, Real]] = 1.0
     ):
         self._datasets = datasets = iterutils.tuplify(datasets)
-        self._models = models
-        n = models.nmodels()
+        self._group = group
+        n = group.nobservations()
         if len(datasets) != n:
             raise RuntimeError(
-                f"the number of datasets and models are not equal "
+                f"the number of datasets and observations are not equal "
                 f"({len(datasets)} != {n})")
         # These lists hold n x dataset data in 1d arrays
         self._d_dataset_d_vector = iterutils.make_list(n, None)
@@ -79,34 +79,35 @@ class Objective(parseutils.BasicSerializable, ABC):
         self._weights_u = iterutils.make_tuple(n, {})
         for i in range(n):
             dataset = datasets[i]
-            dmodel = self.models().models()[i].dmodel()
+            observation = group.observations()[i]
+            observable = observation.observable()
             keys_dat = tuple(dataset.keys())
-            keys_mdl = tuple(dmodel.keys())
+            keys_mdl = tuple(observable.keys())
             if set(keys_dat) != set(keys_mdl):
                 raise RuntimeError(
-                    f"dataset and dmodel are incompatible "
+                    f"dataset and observable are incompatible "
                     f"for item #{i} "
                     f"({keys_dat} != {keys_mdl})")
-            if dataset.dtype() != dmodel.dtype():
+            if dataset.dtype() != observation.dtype():
                 raise RuntimeError(
-                    f"dataset and dmodel have incompatible dtypes "
+                    f"dataset and observable have incompatible dtypes "
                     f"for item #{i} "
-                    f"({dataset.dtype()} != {dmodel.dtype()})")
-            if dataset.size() != dmodel.size():
+                    f"({dataset.dtype()} != {observation.dtype()})")
+            if dataset.size() != observable.size():
                 raise RuntimeError(
-                    f"dataset and dmodel have incompatible sizes "
+                    f"dataset and observable have incompatible sizes "
                     f"for item #{i} "
-                    f"({dataset.size()} != {dmodel.size()})")
-            if dataset.step() != dmodel.step():
+                    f"({dataset.size()} != {observable.size()})")
+            if dataset.step() != observable.step():
                 raise RuntimeError(
-                    f"dataset and dmodel have incompatible steps "
+                    f"dataset and observable have incompatible steps "
                     f"for item #{i} "
-                    f"({dataset.step()} != {dmodel.step()})")
-            if dataset.zero() != dmodel.zero():
+                    f"({dataset.step()} != {observable.step()})")
+            if dataset.zero() != observable.zero():
                 raise RuntimeError(
-                    f"dataset and dmodel have incompatible zeros "
+                    f"dataset and observable have incompatible zeros "
                     f"for item #{i} "
-                    f"({dataset.zero()} != {dmodel.zero()})")
+                    f"({dataset.zero()} != {observable.zero()})")
             # Expand weights fully
             for key in keys_mdl:
                 if isinstance(wu[i], Real):
@@ -119,29 +120,30 @@ class Objective(parseutils.BasicSerializable, ABC):
         self._prepared = False
 
     def nitems(self) -> int:
-        return self._models.nmodels()
+        return self._group.nobservations()
 
     def datasets(self) -> tuple[Dataset, ...]:
         return self._datasets
 
-    def models(self) -> ModelGroup:
-        return self._models
+    def group(self) -> ObservationGroup:
+        return self._group
 
     def pdescs(self) -> dict[str, ParamDesc]:
-        return self.models().pdescs()
+        return self._group.pdescs()
 
     def constants(self) -> dict[str, Any]:
-        return self.models().constants()
+        return self._group.constants()
 
     def prepare(self) -> None:
         for i in range(self.nitems()):
             dataset = self.datasets()[i]
-            driver = self.models().models()[i].driver()
-            dmodel = self.models().models()[i].dmodel()
-            keys = dmodel.keys()
-            shape = dmodel.size()[::-1]
-            dtype = dmodel.dtype()
-            npix = dmodel.npix()
+            observation = self._group.observations()[i]
+            driver = observation.driver()
+            observable = observation.observable()
+            keys = observable.keys()
+            shape = observable.size()[::-1]
+            dtype = observation.dtype()
+            npix = observable.npix()
             nelem = npix * len(keys)
             # Allocate memory as 1d arrays
             self._d_dataset_d_vector[i] = driver.mem_alloc_d(nelem, dtype)
@@ -185,7 +187,7 @@ class Objective(parseutils.BasicSerializable, ABC):
                     self._d_residual_vector[i][slice_].reshape(shape)
             # One backend for each driver
             self._backends[i] = driver.native_class(
-                'Objective', dmodel.dtype())()
+                'Objective', dtype)()
         self._prepared = True
 
     def residual_scalar(
@@ -198,7 +200,7 @@ class Objective(parseutils.BasicSerializable, ABC):
         t = timeutils.SimpleTimer('objective_residual_sum_eval').start()
         residuals = []
         for i in range(self.nitems()):
-            driver = self.models().models()[i].driver()
+            driver = self._group.observations()[i].driver()
             backend = self._backends[i]
             d_residual_vector = self._d_residual_vector[i]
             h_residual_scalar = self._h_residual_scalar[i]
@@ -218,7 +220,7 @@ class Objective(parseutils.BasicSerializable, ABC):
         t = timeutils.SimpleTimer('objective_log_likelihood_eval').start()
         log_likelihoods = []
         for i in range(self.nitems()):
-            driver = self.models().models()[i].driver()
+            driver = self._group.observations()[i].driver()
             backend = self._backends[i]
             d_residual_vector = self._d_residual_vector[i]
             h_residual_scalar = self._h_residual_scalar[i]
@@ -274,7 +276,7 @@ class Objective(parseutils.BasicSerializable, ABC):
         self._update_residual_d(params, weighted, out_extra)
         t = timeutils.SimpleTimer('objective_residual_d2h').start()
         for i in range(self.nitems()):
-            driver = self.models().models()[i].driver()
+            driver = self._group.observations()[i].driver()
             d_data = self._d_residual_vector[i]
             h_data = self._h_residual_vector[i]
             driver.mem_copy_d2h(d_data, h_data)
@@ -290,13 +292,13 @@ class Objective(parseutils.BasicSerializable, ABC):
             self.prepare()
         # Evaluate model
         out_extra_model = {} if out_extra is not None else None
-        model_data = self.models().model_d(params, out_extra_model)
+        model_data = self._group.model_d(params, out_extra_model)
         # Evaluate residuals
         t = timeutils.SimpleTimer('objective_residual_eval').start()
         for i in range(self.nitems()):
-            dmodel = self.models().models()[i].dmodel()
+            observable = self._group.observations()[i].observable()
             backend = self._backends[i]
-            for j, key in enumerate(dmodel.keys()):
+            for j, key in enumerate(observable.keys()):
                 weights = self._weights_u[i][key] if weighted else 1.0
                 residual = self._d_residual_nddata[i][key]
                 observed_d = self._d_dataset_d_nddata[i][key]

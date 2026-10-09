@@ -1,33 +1,25 @@
-models:
+gmodels:
+- type: kinematics_2d
+  components:
+  - type: smdisk
+    loose: false
+    tilted: false
+    rnmin: 0
+    rnmax: 20
+    rnsep: 2
+    bptraits: {type: exponential}
+    vptraits: {type: tan_arctan}
+    dptraits: {type: uniform}
+observations:
 - driver: {type: host}
-  dmodel:
+  observable:
     type: mmaps
     size: [48, 48]
     step: [1, 1]
+    orders: [0, 1, 2]
+  instrument:
     psf: {type: gauss, sigma: 1.5}
     lsf: {type: gauss, sigma: 15.0}
-    orders: [0, 1, 2]
-  gmodel:
-    type: kinematics_2d
-    components:
-    - type: smdisk
-      loose: false
-      tilted: false
-      rnmin: 0
-      rnmax: 20
-      rnsep: 2
-      bptraits: {type: exponential}
-      vptraits: {type: tan_arctan}
-      dptraits: {type: uniform}
 params:
-  properties:
-    vsys: 0
-    xpos: 0.5
-    ypos: -1.0
-    posa: 30
-    incl: 60
-    bpt_a: 1
-    bpt_s: 5
-    vpt_rt: 3
-    vpt_vt: 180
-    dpt_a: 20
+  properties: {vsys: 0, xpos: 0.5, ypos: -1.0, posa: 30, incl: 60, bpt_a: 1, bpt_s: 5,
+    vpt_rt: 3, vpt_vt: 180, dpt_a: 20}

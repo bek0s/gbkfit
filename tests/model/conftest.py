@@ -6,6 +6,8 @@ import numpy as np
 import pytest
 from astropy.io import fits
 
+from modelutils import observation_group
+
 
 @pytest.fixture
 def evaluate_model(tmp_path):
@@ -32,21 +34,19 @@ def evaluate_model(tmp_path):
 @pytest.fixture
 def evaluate_models():
     """
-    Return a function that evaluates in-memory model configurations
-    through the Python API. It returns the model data of every model
-    (on the host) and the extra outputs (e.g. the velocity field of
-    each component), keyed as in `ModelGroup.model_h`.
+    Return a function that evaluates models of the tests (see
+    split_model) through the Python API. It returns the model data of
+    every observation (on the host) and the extra outputs (e.g. the
+    velocity field of each component), keyed as in
+    `ObservationGroup.model_h`.
     """
-    import gbkfit.model
     import gbkfit.params
 
     def evaluate(models, properties):
-        model_group = gbkfit.model.ModelGroup(
-            gbkfit.model.model_parser.load(models))
+        group = observation_group(models)
         params = gbkfit.params.EvaluationParams(
-            model_group.pdescs(), properties,
-            constants=model_group.constants())
+            group.pdescs(), properties, constants=group.constants())
         extra = {}
-        data = model_group.model_h(params.evaluate(), extra)
+        data = group.model_h(params.evaluate(), extra)
         return data, extra
     return evaluate

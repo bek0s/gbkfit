@@ -42,7 +42,7 @@ def test_objective_residuals(tmp_path):
     config['datasets'] = [dict(
         type='scube',
         scube=dict(data=str(tmp_path / 'data.fits'), error=2.0),
-        step=config['models'][0]['dmodel']['step'])]
+        step=config['observations'][0]['observable']['step'])]
     config['objective'] = dict(wu=0.5)
     outputs = run_eval('objective', config, tmp_path / 'objective')
     np.testing.assert_allclose(outputs['residual_scube_d'], -0.5, rtol=1e-5)
@@ -54,7 +54,7 @@ def test_rotation_curve_from_radial_nodes(tmp_path):
     # disk and of user-defined parameters is the same as the one given by
     # its values
     config = yaml.load(REFERENCE_DIR / 'thin_disk_scube.yaml')
-    component = config['models'][0]['gmodel']['components'][0]
+    component = config['gmodels'][0]['components'][0]
     for option in ('rnmin', 'rnmax', 'rnsep'):
         component.pop(option, None)
     rnodes = list(range(0, 21, 2))
@@ -75,7 +75,7 @@ def test_unknown_options(tmp_path):
     # A misspelt option is a warning that suggests the right one, or an
     # error with --strict
     config = yaml.load(REFERENCE_DIR / 'thin_disk_scube.yaml')
-    component = config['models'][0]['gmodel']['components'][0]
+    component = config['gmodels'][0]['components'][0]
     component['rnmx'] = component['rnmax']
     yaml.dump(config, tmp_path / 'config.yaml')
 
@@ -89,7 +89,7 @@ def test_unknown_options(tmp_path):
     assert "'rnmx' (did you mean 'rnmax'?)" in result.stderr
     result = run('--strict')
     assert result.returncode != 0
-    assert "models[0].gmodel.components[0]" in result.stderr
+    assert "gmodels[0].components[0]" in result.stderr
     assert "'rnmx' (did you mean 'rnmax'?)" in result.stderr
 
 
@@ -98,7 +98,7 @@ def test_outputs_have_the_world_coordinates_of_the_model(tmp_path):
     # be read back with them
     from gbkfit.utils import fitsutils
     config = yaml.load(REFERENCE_DIR / 'thin_disk_scube.yaml')
-    config['models'][0]['dmodel'].update(rval=[150, 2, 1500], rota=30)
+    config['observations'][0]['observable'].update(rval=[150, 2, 1500], rota=30)
     run_eval('model', config, tmp_path / 'model')
     _, coords = fitsutils.read_data(
         tmp_path / 'model' / 'output' / 'model_0_scube_d.fits')
