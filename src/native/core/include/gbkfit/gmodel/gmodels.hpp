@@ -40,16 +40,16 @@ gmodel_wcube_pixel(
     }
 }
 
-template<auto AtomicAddFunT, typename T> void constexpr
+template<auto AddFunT, typename T> void constexpr
 gmodel_image_evaluate(T* image, int x, int y, T rvalue, int spat_size_x)
 {
     const int idx = index_2d_to_1d(x, y, spat_size_x);
-    AtomicAddFunT(&image[idx], rvalue);
+    AddFunT(&image[idx], rvalue);
 }
 
 // Add a line of the given flux, centre and dispersion (in the units of
 // the spectral axis) to the spectrum (x, y) of a spectral cube
-template<auto AtomicAddFunT, typename T> void constexpr
+template<auto AddFunT, typename T> void constexpr
 gmodel_scube_line(
         T* scube, int x, int y, T rvalue, T vvalue, T dvalue,
         int spat_size_x, int spat_size_y,
@@ -78,14 +78,14 @@ gmodel_scube_line(
         int idx = index_3d_to_1d(x, y, z, spat_size_x, spat_size_y);
         T cdf_hi = gauss_1d_cdf(
                 spec_zero + (z + T{0.5}) * spec_step, vvalue, dvalue);
-        AtomicAddFunT(&scube[idx], rvalue * (cdf_hi - cdf_lo) / spec_step);
+        AddFunT(&scube[idx], rvalue * (cdf_hi - cdf_lo) / spec_step);
         cdf_lo = cdf_hi;
     }
 }
 
 // Add the emission lines (see DiskArgs::lines) of light of the given flux,
 // velocity and dispersion to the spectrum (x, y) of a spectral cube
-template<auto AtomicAddFunT, typename T> void constexpr
+template<auto AddFunT, typename T> void constexpr
 gmodel_scube_evaluate(
         T* scube, int x, int y, T rvalue, T vvalue, T dvalue,
         int nlines, const T* lines,
@@ -99,7 +99,7 @@ gmodel_scube_evaluate(
         const T offset = lines[3 * l];
         const T scale = lines[3 * l + 1];
         const T flux = lines[3 * l + 2];
-        gmodel_scube_line<AtomicAddFunT>(
+        gmodel_scube_line<AddFunT>(
                 scube, x, y,
                 rvalue * flux, offset + scale * vvalue, scale * dvalue,
                 spat_size_x, spat_size_y,
@@ -604,7 +604,11 @@ gmodel_mcdisk_evaluate_cloud(
     }
 }
 
-template<auto AtomicAddFunT, typename T> constexpr void
+// Evaluate the voxel (x, y, z) of a smooth disk. AddFunT adds the light of
+// the voxel to the pixel and the spectrum of its spaxel, which the other
+// voxels of the spaxel add to too: it must be atomic if they are
+// evaluated in parallel. Only this voxel writes to its other outputs.
+template<auto AddFunT, typename T> constexpr void
 gmodel_smdisk_evaluate_spaxel(int x, int y, int z, const DiskArgs<T>& a)
 {
     bool is_thin = a.rht.uids == nullptr;
@@ -650,7 +654,6 @@ gmodel_smdisk_evaluate_spaxel(int x, int y, int z, const DiskArgs<T>& a)
     } else {
         transform_cpos_posa_incl(xn, yn, zn, xposi, yposi, posai, incli);
     }
-    theta = std::atan2(yn, xn);
 
     // If the disk is not loose or tilted, we need to calculate the pixel's
     // radial node index and radius now.
@@ -661,6 +664,7 @@ gmodel_smdisk_evaluate_spaxel(int x, int y, int z, const DiskArgs<T>& a)
             return;
         }
     }
+    theta = std::atan2(yn, xn);
 
     // These are needed for trait evaluation
     T ptvalues[TRAIT_NUM_MAX] = {0};
@@ -819,13 +823,13 @@ gmodel_smdisk_evaluate_spaxel(int x, int y, int z, const DiskArgs<T>& a)
             : rvalue;
 
     if (a.image) {
-        gbkfit::gmodel_image_evaluate<AtomicAddFunT>(
+        gbkfit::gmodel_image_evaluate<AddFunT>(
                 a.image, x, y, orvalue,
                 a.spat_size[0]);
     }
 
     if (a.scube) {
-        gbkfit::gmodel_scube_evaluate<AtomicAddFunT>(
+        gbkfit::gmodel_scube_evaluate<AddFunT>(
                 a.scube, x, y, orvalue, vvalue, dvalue,
                 a.nlines, a.lines,
                 a.spat_size[0], a.spat_size[1],
