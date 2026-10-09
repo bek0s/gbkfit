@@ -50,6 +50,9 @@ def _pixels_in_box(grid, lower, upper):
     i_max = min(size_x - 1, int(np.ceil(upper[0] - 0.5)))
     j_min = max(0, int(np.floor(lower[1] + 0.5)))
     j_max = min(size_y - 1, int(np.ceil(upper[1] - 0.5)))
+    # (none, for a box outside the grid)
+    i_max = max(i_max, i_min - 1)
+    j_max = max(j_max, j_min - 1)
     j, i = np.mgrid[j_min:j_max + 1, i_min:i_max + 1]
     return i.ravel(), j.ravel(), (j * size_x + i).ravel()
 
