@@ -8,6 +8,7 @@ import copy
 import gbkfit.model
 import gbkfit.params
 import numpy as np
+import pytest
 
 
 DISK = dict(
@@ -125,3 +126,46 @@ def test_opacity_traits_give_the_face_on_optical_depth(
     mcdisk = face_on_optical_depth(driver, evaluate_models, 'mcdisk')
     np.testing.assert_allclose(
         mcdisk[inside].sum(), smdisk[inside].sum(), rtol=1e-2)
+
+
+def image_and_optical_depth(driver, evaluate_models, opacity, step_z):
+    """
+    The image of an inclined thick disk whose absorbers have the same
+    distribution as its light, with the given face-on optical depth at
+    the centre, on a z axis of the given step. Also return the optical
+    depth of each line of sight (the sum of the opacity cube along z).
+    """
+    traits = dict(
+        bptraits=dict(type='exponential'), bhtraits=dict(type='sech2'))
+    opacity_traits = dict(
+        optraits=dict(type='exponential'), ohtraits=dict(type='sech2'))
+    model = dict(
+        driver=dict(type=driver.type()),
+        dmodel=dict(type='image', size=[32, 32]),
+        gmodel=dict(
+            type='intensity_3d', size_z=round(24 / step_z), step_z=step_z,
+            components=[dict(DISK, **traits)],
+            opacity_components=[dict(DISK, **opacity_traits)]))
+    properties = dict(
+        xpos=0, ypos=0, posa=30, incl=60, bpt_a=1, bpt_s=4, bht_s=1,
+        ocmp_xpos=0, ocmp_ypos=0, ocmp_posa=30, ocmp_incl=60,
+        ocmp_opt_a=opacity, ocmp_opt_s=4, ocmp_oht_s=1)
+    data, extra = evaluate_models([model], properties)
+    tau = extra['model0_gmodel_total_odata'].sum(axis=0)
+    return data[0]['image']['d'], tau
+
+
+@pytest.mark.parametrize('step_z', [0.25, 1, 2])
+def test_mixed_absorbers_let_through_the_exact_fraction(
+        driver, evaluate_models, step_z):
+    # When the absorbers have the same distribution as the emitters, a
+    # line of sight of optical depth tau lets through (1 - exp(-tau)) / tau
+    # of its light, whatever the size of the voxels
+    clear, _ = image_and_optical_depth(driver, evaluate_models, 0, step_z)
+    dimmed, tau = image_and_optical_depth(
+        driver, evaluate_models, 2, step_z)
+    assert tau.max() > 2
+    visible = clear > 1e-3 * clear.max()
+    np.testing.assert_allclose(
+        dimmed[visible] / clear[visible],
+        -np.expm1(-tau[visible]) / tau[visible], rtol=1e-4)
