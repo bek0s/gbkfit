@@ -55,19 +55,21 @@ class MCDisk(_disk.Disk):
         # evaluation.
         self._s_ncloudsptor = [None, None]
         # Has-analytical-integral flag per trait
-        self._s_hasaintegral = [None, None]
+        self._s_has_analytical_integral = [None, None]
 
     def options(self):
         return dict(cflux=self._cflux, seed=self._seed)
 
     def _impl_prepare(self, driver, dtype):
         rptraits = self._traits['rpt']
-        self._s_hasaintegral = driver.mem_alloc_s(len(rptraits), bool)
-        hasaintegral = [t.has_analytical_integral() for t in rptraits]
-        self._s_hasaintegral[0][:] = hasaintegral
-        driver.mem_copy_h2d(self._s_hasaintegral[0], self._s_hasaintegral[1])
+        analytical = [t.has_analytical_integral() for t in rptraits]
+        self._s_has_analytical_integral = driver.mem_alloc_s(
+            len(rptraits), bool)
+        host, device = self._s_has_analytical_integral
+        host[:] = analytical
+        driver.mem_copy_h2d(host, device)
         nrings = self._nsubrnodes - 2
-        size = sum([1 if h else nrings for h in hasaintegral])
+        size = sum([1 if h else nrings for h in analytical])
         self._s_ncloudsptor = driver.mem_alloc_s(size, np.int32)
 
     def _impl_evaluate(self, driver, params, grid_and_outputs, out_extra):
@@ -113,5 +115,5 @@ class MCDisk(_disk.Disk):
             seed=self._seed,
             nclouds=nclouds,
             ncloudscsum=self._s_ncloudsptor[1],
-            hasordint=self._s_hasaintegral[1],
+            has_analytical_integral=self._s_has_analytical_integral[1],
             **grid_and_outputs)
