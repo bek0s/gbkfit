@@ -23,12 +23,12 @@ class DatasetPixelMoments(Dataset):
         return 'pixel_moments'
 
     @classmethod
-    def load(cls, info, **kwargs):
+    def load(cls, info, prefix=''):
         names = [f'moment{i}' for i in range(8)]
-        return cls(**_detail.load_grid_dataset(cls, info, names, **kwargs))
+        return cls(**_detail.load_grid_dataset(cls, info, names, prefix))
 
-    def dump(self, **kwargs):
-        return _detail.dump_grid_dataset(self, **kwargs)
+    def dump(self, prefix='', dump_path=True, overwrite=False):
+        return _detail.dump_grid_dataset(self, prefix, dump_path, overwrite)
 
     def __init__(
             self,
