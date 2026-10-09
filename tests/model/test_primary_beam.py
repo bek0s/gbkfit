@@ -94,3 +94,28 @@ def test_instrument_round_trip():
 def test_primary_beam_needs_a_positive_fwhm():
     with pytest.raises(RuntimeError, match="fwhm"):
         PrimaryBeamGauss(fwhm=0)
+
+
+def test_primary_beam_from_an_image(tmp_path):
+    # An image of a Gaussian beam, on a grid rotated on the sky, gives the
+    # response of the Gaussian beam, and 0 beyond the image
+    from gbkfit.observation import PrimaryBeamImage, primary_beam_parser
+    beam_grid = fitsutils.make_grid((81, 81), 0.25, rota=25)
+    gauss = PrimaryBeamGauss(6, 1, -0.5)
+    fitsutils.write_data(
+        str(tmp_path / 'pb.fits'), gauss.response(beam_grid),
+        beam_grid.coords)
+    image = primary_beam_parser.load(dict(
+        type='image', file=str(tmp_path / 'pb.fits')))
+    assert isinstance(image, PrimaryBeamImage)
+    grid = fitsutils.make_grid((20, 20), 0.5)
+    # (bilinear interpolation of pixels of 0.25 arcsec)
+    np.testing.assert_allclose(
+        image.response(grid), gauss.response(grid), atol=5e-3)
+    far = fitsutils.make_grid((2, 2), 1, rpix=(-30, -30))
+    np.testing.assert_array_equal(image.response(far), 0)
+    # Round trip through the configuration
+    dumped = primary_beam_parser.dump(image, prefix=str(tmp_path / 'd_'))
+    again = primary_beam_parser.load(dict(dumped))
+    np.testing.assert_allclose(
+        again.response(grid), image.response(grid), atol=1e-6)
