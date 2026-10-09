@@ -13,8 +13,10 @@ import numpy as np
 import pytest
 import ruamel.yaml
 
+import gbkfit.dataset
 import gbkfit.driver
 import gbkfit.model
+import gbkfit.observation
 import gbkfit.params
 import gbkfit.psflsf
 from gbkfit.model.gmodels import common, traits
@@ -32,7 +34,12 @@ FILE_TYPES = ('image', 'array')
 # Values for the required options of the types tested below
 SAMPLE_OPTIONS = dict(
     nblobs=2, order=1, origin=0, alpha=1.5, beta=2, sigma=1, gamma=1,
-    axis=0, angle=10, weight=2)
+    axis=0, angle=10, weight=2,
+    psfs=[dict(type='gauss', sigma=1), dict(type='point')],
+    lsfs=[dict(type='gauss', sigma=1), dict(type='point')],
+    weights=[1, 2],
+    fwhm=10, x=1, y=2, radius=3, a=2, b=1, length=4, width=1,
+    vertices=[[0, 0], [1, 0], [0, 1]])
 
 
 def roundtrip(parser, info):
@@ -67,6 +74,8 @@ TRAIT_PARSERS = {
 OTHER_PARSERS = dict(
     psf=gbkfit.psflsf.psf_parser,
     lsf=gbkfit.psflsf.lsf_parser,
+    aperture=gbkfit.dataset.aperture_parser,
+    primary_beam=gbkfit.observation.primary_beam_parser,
     nwmode=common.nwmode_parser,
     driver=gbkfit.driver.driver_parser)
 

@@ -10,6 +10,7 @@ def _register_psfs():
         PSFGGauss,
         PSFMoffat,
         PSFImage,
+        PSFSum
     ])
 
 

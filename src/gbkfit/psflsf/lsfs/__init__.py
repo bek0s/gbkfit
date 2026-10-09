@@ -10,7 +10,8 @@ def _register_lsfs():
         LSFGGauss,
         LSFLorentz,
         LSFMoffat,
-        LSFImage
+        LSFImage,
+        LSFSum
     ])
 
 

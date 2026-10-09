@@ -248,3 +248,53 @@ def test_arrays_of_the_default_size_take_no_odd_offset():
         PSFGauss(2).asarray((1, 1), None, (-1, 0))
     with pytest.raises(RuntimeError, match="must be odd"):
         LSFGauss(2).asarray(1, None, -1)
+
+
+def test_psf_sum():
+    from gbkfit.psflsf import psf_parser
+    from gbkfit.psflsf.psfs import PSFGauss, PSFMoffat, PSFSum
+    step = (0.5, 0.5)
+    # A sum of one PSF is that PSF
+    gauss = PSFGauss(1.0)
+    single = PSFSum([gauss], [3])
+    np.testing.assert_allclose(
+        single.asarray(step), gauss.asarray(step), rtol=1e-12)
+    # The terms have their fractions of the light, on the grid of the
+    # widest term
+    moffat = PSFMoffat(2.0, 2.5)
+    double = PSFSum([gauss, moffat], [0.7, 0.3])
+    assert double.size(step) == moffat.size(step)
+    size = double.size(step)
+    expected = 0.7 * gauss.asarray(step, size) + 0.3 * moffat.asarray(
+        step, size)
+    data = double.asarray(step)
+    np.testing.assert_allclose(data, expected, rtol=1e-12)
+    np.testing.assert_allclose(data.sum(), 1, rtol=1e-12)
+    # Round trip through the configuration
+    info = psf_parser.dump(double)
+    assert info['weights'] == [0.7, 0.3]
+    np.testing.assert_allclose(
+        psf_parser.load(info).asarray(step), data, rtol=1e-12)
+
+
+def test_lsf_sum():
+    from gbkfit.psflsf import lsf_parser
+    from gbkfit.psflsf.lsfs import LSFGauss, LSFSum
+    narrow, wide = LSFGauss(10.0), LSFGauss(30.0)
+    double = LSFSum([narrow, wide], [2, 2])
+    size = double.size(5.0)
+    assert size == wide.size(5.0)
+    np.testing.assert_allclose(
+        double.asarray(5.0),
+        0.5 * narrow.asarray(5.0, size) + 0.5 * wide.asarray(5.0, size),
+        rtol=1e-12)
+    info = lsf_parser.dump(double)
+    np.testing.assert_allclose(
+        lsf_parser.load(info).asarray(5.0), double.asarray(5.0), rtol=1e-12)
+
+
+@pytest.mark.parametrize('weights', [[1], [1, 0], [1, -1]])
+def test_sum_weights_are_checked(weights):
+    from gbkfit.psflsf.psfs import PSFGauss, PSFSum
+    with pytest.raises(RuntimeError, match="positive weight"):
+        PSFSum([PSFGauss(1.0), PSFGauss(2.0)], weights)
