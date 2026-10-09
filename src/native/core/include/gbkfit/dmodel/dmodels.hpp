@@ -74,23 +74,22 @@ dmodel_dcube_mask(
     }
 }
 
+// The moments of the given orders (sorted) of the spectrum of the pixel
+// (x, y) of a cube: its flux (order 0), mean velocity (1), dispersion
+// (2), and central moments (above 2); with the weights of the spectrum,
+// their flux-weighted mean (mmaps_w). The spectra whose moment 0 is not
+// above the cutoff are masked (NaN, and 0 in mmaps_m). The channels of
+// the spectrum (and of its weights) are stride values apart: the
+// spectrum can be in the cube or in a contiguous copy.
 template<typename T> constexpr void
 dmodel_mmaps_moments(
         int x, int y,
         int size_x, int size_y, int size_z,
-        T step_x, T step_y, T step_z,
-        T zero_x, T zero_y, T zero_z,
-        const T* dcube_d, const T* dcube_w,
+        T step_z, T zero_z,
+        const T* spectrum_d, const T* spectrum_w, int stride,
         T cutoff, int norders, const int* orders,
         T* mmaps_d, T* mmaps_m, T* mmaps_w)
 {
-    // Spatial step is not needed for now,
-    // but who knows? Maybe will use them in the future.
-    (void)step_x;
-    (void)step_y;
-    (void)zero_x;
-    (void)zero_y;
-
     // Index of the current spatial position
     const int idx_2d = index_2d_to_1d(x, y, size_x);
 
@@ -101,15 +100,16 @@ dmodel_mmaps_moments(
     int m = 0;
 
     //
-    // Moment 0
+    // Moments 0 and 1 (their sums)
     //
 
-    T m0=0, m0_sum=0;
+    T m0=0, m0_sum=0, m1_sum=0;
     for (int z = 0; z < size_z; ++z)
     {
-        const int idx = index_3d_to_1d(x, y, z, size_x, size_y);
-        T i = dcube_d[idx];
+        T i = spectrum_d[z * stride];
+        T v = zero_z + z * step_z;
         m0_sum += i * step_z;
+        m1_sum += i * v * step_z;
     }
 
     // Check if we need to mask this spatial position
@@ -131,18 +131,17 @@ dmodel_mmaps_moments(
     //
 
     T w_sum = 0;
-    for (int z = 0; dcube_w && valid && z < size_z; ++z)
+    for (int z = 0; spectrum_w && valid && z < size_z; ++z)
     {
-        const int idx = index_3d_to_1d(x, y, z, size_x, size_y);
-        T i = dcube_d[idx];
-        T w = dcube_w[idx];
+        T i = spectrum_d[z * stride];
+        T w = spectrum_w[z * stride];
         w_sum += w * i * step_z / m0;
     }
 
     // Weight is valid only if not masked
     w_sum = valid ? w_sum : NAN;
 
-    if (dcube_w)
+    if (spectrum_w)
     {
         mmaps_w[idx_2d] = w_sum;
     }
@@ -156,17 +155,8 @@ dmodel_mmaps_moments(
     // Moment 1
     //
 
-    T m1=0, m1_sum=0;
-    for (int z = 0; valid && z < size_z; ++z)
-    {
-        const int idx = index_3d_to_1d(x, y, z, size_x, size_y);
-        T i = dcube_d[idx];
-        T v = zero_z + z * step_z;
-        m1_sum += i * v * step_z;
-    }
-
     // Moment is valid only if not masked
-    m1 = valid ? m1_sum / m0 : NAN;
+    T m1 = valid ? m1_sum / m0 : NAN;
 
     // Only output requested moments
     if (orders[m] == 1)
@@ -188,10 +178,9 @@ dmodel_mmaps_moments(
     T m2=0, m2_sum=0;
     for (int z = 0; valid && z < size_z; ++z)
     {
-        const int idx = index_3d_to_1d(x, y, z, size_x, size_y);
-        T i = dcube_d[idx];
+        T i = spectrum_d[z * stride];
         T v = zero_z + z * step_z;
-        m2_sum += i * std::pow(v - m1, 2) * step_z;
+        m2_sum += i * (v - m1) * (v - m1) * step_z;
     }
 
     // Moment is valid only if not masked
@@ -214,10 +203,9 @@ dmodel_mmaps_moments(
         T mn=0, mn_sum=0;
         for (int z = 0; valid && z < size_z; ++z)
         {
-            const int idx = index_3d_to_1d(x, y, z, size_x, size_y);
-            T flx = dcube_d[idx];
+            T flx = spectrum_d[z * stride];
             T vel = zero_z + z * step_z;
-            mn_sum += flx * std::pow(vel - m1, orders[m]) * step_z;
+            mn_sum += flx * ipow(vel - m1, orders[m]) * step_z;
         }
 
         // Moment is valid only if not masked
@@ -229,36 +217,36 @@ dmodel_mmaps_moments(
 }
 
 // The sum of the squared residuals of the Gaussian a exp(-(k - c)^2 / (2
-// s^2)) (channel units) and the spectrum (x, y) of a cube
+// s^2)) (channel units) and a spectrum of size_z channels, stride values
+// apart
 template<typename T> constexpr T
 dmodel_gaussian_sse(
-        int x, int y, int size_x, int size_y, int size_z,
-        const T* dcube_d, T a, T c, T s)
+        int size_z, const T* spectrum, int stride, T a, T c, T s)
 {
     T sse = 0;
     for (int z = 0; z < size_z; ++z)
     {
         const T u = (z - c) / s;
-        const T r = a * std::exp(T{-0.5} * u * u)
-                - dcube_d[index_3d_to_1d(x, y, z, size_x, size_y)];
+        const T r = a * std::exp(T{-0.5} * u * u) - spectrum[z * stride];
         sse += r * r;
     }
     return sse;
 }
 
-// The moment maps of a Gaussian fitted to the spectrum (x, y) of a cube
-// by least squares (Levenberg-Marquardt), as moments: its flux (order 0),
-// centre (1) and dispersion (2), the only orders. The spectra whose
-// moment 0 is not above the cutoff, and those whose fit fails, are
-// masked (NaN, and 0 in mmaps_m), as with the moments. The fit is of a
-// Gaussian sampled at the centres of the channels, in channel units,
-// and starts from the moments.
+// The moment maps of a Gaussian fitted to the spectrum of the pixel (x,
+// y) of a cube by least squares (Levenberg-Marquardt), as moments: its
+// flux (order 0), centre (1) and dispersion (2), the only orders. The
+// spectra whose moment 0 is not above the cutoff, and those whose fit
+// fails, are masked (NaN, and 0 in mmaps_m), as with the moments. The fit
+// is of a Gaussian sampled at the centres of the channels, in channel
+// units, and starts from the moments. The channels of the spectrum are
+// stride values apart, as in dmodel_mmaps_moments.
 template<typename T> constexpr void
 dmodel_mmaps_gaussian(
         int x, int y,
         int size_x, int size_y, int size_z,
         T step_z, T zero_z,
-        const T* dcube_d,
+        const T* spectrum, int stride,
         T cutoff, int norders, const int* orders,
         T* mmaps_d, T* mmaps_m)
 {
@@ -270,14 +258,14 @@ dmodel_mmaps_gaussian(
     T m0 = 0, m1 = 0, m2 = 0;
     for (int z = 0; z < size_z; ++z)
     {
-        const T i = dcube_d[index_3d_to_1d(x, y, z, size_x, size_y)];
+        const T i = spectrum[z * stride];
         m0 += i;
         m1 += i * z;
     }
     m1 /= m0;
     for (int z = 0; z < size_z; ++z)
     {
-        const T i = dcube_d[index_3d_to_1d(x, y, z, size_x, size_y)];
+        const T i = spectrum[z * stride];
         m2 += i * (z - m1) * (z - m1);
     }
     m2 = std::sqrt(std::max(m2 / m0, T{0.25}));
@@ -288,8 +276,7 @@ dmodel_mmaps_gaussian(
     T s = m2;
     bool valid = std::abs(m0 * step_z) > cutoff && std::isfinite(a);
     T sse = valid
-            ? dmodel_gaussian_sse(x, y, size_x, size_y, size_z, dcube_d,
-                                  a, c, s)
+            ? dmodel_gaussian_sse(size_z, spectrum, stride, a, c, s)
             : T{0};
     T lambda = T{1e-3};
     for (int iteration = 0; valid && iteration < MAX_ITERATIONS; ++iteration)
@@ -300,8 +287,7 @@ dmodel_mmaps_gaussian(
         {
             const T u = (z - c) / s;
             const T g = std::exp(T{-0.5} * u * u);
-            const T r = a * g
-                    - dcube_d[index_3d_to_1d(x, y, z, size_x, size_y)];
+            const T r = a * g - spectrum[z * stride];
             const T j[3] = {g, a * g * u / s, a * g * u * u / s};
             for (int p = 0; p < 3; ++p) {
                 jr[p] += j[p] * r;
@@ -336,7 +322,7 @@ dmodel_mmaps_gaussian(
         const T c_new = c + delta[1];
         const T s_new = s + delta[2];
         const T sse_new = s_new > 0
-                ? dmodel_gaussian_sse(x, y, size_x, size_y, size_z, dcube_d,
+                ? dmodel_gaussian_sse(size_z, spectrum, stride,
                                       a_new, c_new, s_new)
                 : NAN;
         if (sse_new < sse) {

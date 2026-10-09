@@ -41,6 +41,17 @@ sign(T x)
     return (T{0} < x) - (x < T{0});
 }
 
+// x to the power n >= 0, by multiplication: std::pow computes an
+// integer power of a float in double precision, which is slow on gpus
+template<typename T> constexpr T
+ipow(T x, int n)
+{
+    T result = 1;
+    for (int i = 0; i < n; ++i)
+        result *= x;
+    return result;
+}
+
 template<typename T> constexpr void
 transform_lh_rotate_x(T& out_y, T& out_z, T y, T z, T theta)
 {

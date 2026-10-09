@@ -1,8 +1,10 @@
 #pragma once
 
+#include <algorithm>
 #include <cassert>
 #include <cmath>
 #include <complex>
+#include <vector>
 // #include <iostream>
 
 #include <omp.h>
@@ -91,11 +93,63 @@ dmodel_dcube_mask(
     }
 }
 
+// The number of pixels of a row whose spectra are copied together by
+// for_each_spectrum
+constexpr int SPECTRA_TILE = 128;
+
+// Call f(x, y, spectrum_d, spectrum_w) for each pixel (x, y) of a cube
+// (and of its weights, if any) in parallel, with the spectra of the pixel
+// in contiguous copies. Reading the spectra from the cube, a whole channel
+// apart, misses the cache on every value when the size of a channel is a
+// power of two (all values then map to the same cache set). So the
+// spectra of a tile of pixels of a row are copied first, reading each
+// channel of the tile contiguously, and one value more than the spectrum
+// apart, for the same reason.
+template<typename T, typename F> void
+for_each_spectrum(
+        int size_x, int size_y, int size_z,
+        const T* cube_d, const T* cube_w, F f)
+{
+    const int ntiles = (size_x + SPECTRA_TILE - 1) / SPECTRA_TILE;
+    const int pitch = size_z + 1;
+
+    // Parallelization: per tile of a row
+    #pragma omp parallel
+    {
+    std::vector<T> spectra_d(SPECTRA_TILE * pitch);
+    std::vector<T> spectra_w(cube_w ? SPECTRA_TILE * pitch : 0);
+
+    #pragma omp for collapse(2) schedule(dynamic)
+    for (int y = 0; y < size_y; ++y) {
+    for (int tile = 0; tile < ntiles; ++tile) {
+
+    const int x0 = tile * SPECTRA_TILE;
+    const int n = std::min(SPECTRA_TILE, size_x - x0);
+    for (int z = 0; z < size_z; ++z)
+    {
+        const int idx = index_3d_to_1d(x0, y, z, size_x, size_y);
+        for (int i = 0; i < n; ++i)
+        {
+            spectra_d[i * pitch + z] = cube_d[idx + i];
+            if (cube_w)
+                spectra_w[i * pitch + z] = cube_w[idx + i];
+        }
+    }
+    for (int i = 0; i < n; ++i)
+    {
+        f(x0 + i, y,
+          &spectra_d[i * pitch], cube_w ? &spectra_w[i * pitch] : nullptr);
+    }
+
+    }
+    }
+    }
+}
+
 template<typename T> void
 dmodel_mmaps_moments(
         int size_x, int size_y, int size_z,
-        T step_x, T step_y, T step_z,
-        T zero_x, T zero_y, T zero_z,
+        T step_z, T zero_z,
         const T* dcube_d,
         const T* dcube_w,
         T cutoff,
@@ -105,22 +159,17 @@ dmodel_mmaps_moments(
         T* mmaps_m,
         T* mmaps_w)
 {
-    // Parallelization: per 2d spatial position
-    #pragma omp parallel for collapse(2)
-    for (int y = 0; y < size_y; ++y) {
-    for (int x = 0; x < size_x; ++x) {
-
-    gbkfit::dmodel_mmaps_moments(
-            x, y,
-            size_x, size_y, size_z,
-            step_x, step_y, step_z,
-            zero_x, zero_y, zero_z,
-            dcube_d, dcube_w,
-            cutoff, norders, orders,
-            mmaps_d, mmaps_m, mmaps_w);
-
-    }
-    }
+    for_each_spectrum(
+            size_x, size_y, size_z, dcube_d, dcube_w,
+            [&](int x, int y, const T* spectrum_d, const T* spectrum_w) {
+        gbkfit::dmodel_mmaps_moments(
+                x, y,
+                size_x, size_y, size_z,
+                step_z, zero_z,
+                spectrum_d, spectrum_w, 1,
+                cutoff, norders, orders,
+                mmaps_d, mmaps_m, mmaps_w);
+    });
 }
 
 template<typename T> void
@@ -131,21 +180,17 @@ dmodel_mmaps_gaussian(
         T cutoff, int norders, const int* orders,
         T* mmaps_d, T* mmaps_m)
 {
-    // Parallelization: per 2d spatial position
-    #pragma omp parallel for collapse(2)
-    for (int y = 0; y < size_y; ++y) {
-    for (int x = 0; x < size_x; ++x) {
-
-    gbkfit::dmodel_mmaps_gaussian(
-            x, y,
-            size_x, size_y, size_z,
-            step_z, zero_z,
-            dcube_d,
-            cutoff, norders, orders,
-            mmaps_d, mmaps_m);
-
-    }
-    }
+    for_each_spectrum(
+            size_x, size_y, size_z, dcube_d, static_cast<const T*>(nullptr),
+            [&](int x, int y, const T* spectrum, const T*) {
+        gbkfit::dmodel_mmaps_gaussian(
+                x, y,
+                size_x, size_y, size_z,
+                step_z, zero_z,
+                spectrum, 1,
+                cutoff, norders, orders,
+                mmaps_d, mmaps_m);
+    });
 }
 
 template<typename T> void

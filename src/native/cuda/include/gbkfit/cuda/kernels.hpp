@@ -74,8 +74,7 @@ dmodel_dcube_mask(
 template<typename T> __global__ void
 dcube_moments(
         int size_x, int size_y, int size_z,
-        T step_x, T step_y, T step_z,
-        T zero_x, T zero_y, T zero_z,
+        T step_z, T zero_z,
         const T* dcube_d,
         const T* dcube_w,
         T cutoff,
@@ -94,12 +93,13 @@ dcube_moments(
     int x, y;
     index_1d_to_2d(x, y, tid, size_x);
 
+    // The spectrum of the pixel is read from the cube (pixel tid of each
+    // channel): the threads of a warp read adjacent values
     gbkfit::dmodel_mmaps_moments(
             x, y,
             size_x, size_y, size_z,
-            step_x, step_y, step_z,
-            zero_x, zero_y, zero_z,
-            dcube_d, dcube_w,
+            step_z, zero_z,
+            dcube_d + tid, dcube_w ? dcube_w + tid : nullptr, nthreads,
             cutoff, norders, orders,
             mmaps_d, mmaps_m, mmaps_w);
 }
@@ -121,11 +121,12 @@ dmodel_mmaps_gaussian(
     int x, y;
     index_1d_to_2d(x, y, tid, size_x);
 
+    // The spectrum of the pixel is read from the cube, as in dcube_moments
     gbkfit::dmodel_mmaps_gaussian(
             x, y,
             size_x, size_y, size_z,
             step_z, zero_z,
-            dcube_d,
+            dcube_d + tid, nthreads,
             cutoff, norders, orders,
             mmaps_d, mmaps_m);
 }
