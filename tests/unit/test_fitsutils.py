@@ -291,3 +291,11 @@ def test_rest_round_trip(rest, ctype, keyword):
 def test_invalid_rest(value):
     with pytest.raises(ConfigError, match="positive wavelength or frequency"):
         fitsutils.make_rest(value)
+
+
+def test_nonlinear_velocity_axes_are_rejected():
+    # e.g. velocities derived from a linear frequency axis (F2W) are not
+    # linear in the pixels
+    header = _spectral_header('VOPT-F2W', RESTWAV=6.5628e-7)
+    with pytest.raises(ConfigError, match="not linear in velocity"):
+        write(header, shape=(6, 20, 24))

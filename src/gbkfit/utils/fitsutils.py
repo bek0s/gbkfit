@@ -461,6 +461,10 @@ def _axis_scale(filename, wcs, axis):
         raise ConfigError(
             f"{filename}: the spectral axis is of type '{ctype}'; only "
             f"velocity axes ({', '.join(VELOCITY_TYPES)}) are supported")
+    if ctype[4:].strip('-').strip():
+        raise ConfigError(
+            f"{filename}: the spectral axis ({ctype}) is not linear in "
+            f"velocity; only linear velocity axes are supported")
     return astropy.units.Unit(wcs.wcs.cunit[axis]).to(_KM_S)
 
 
