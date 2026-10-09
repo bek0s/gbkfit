@@ -35,7 +35,7 @@ def face_on_disk(driver, evaluate_models, key, trait):
         dptraits=dict(type=trait if key == 'd' else 'uniform'))
     model = dict(
         driver=dict(type=driver.type()),
-        dmodel=dict(type='scube', size=[33, 33, 61], step=[0.5, 0.5, 5]),
+        dmodel=dict(type='pixel_spectra', size=[33, 33, 61], step=[0.5, 0.5, 5]),
         gmodel=dict(type='kinematics_2d', components=[dict(
             type='smdisk', loose=False, tilted=False,
             rnodes=list(range(0, 10)), **traits_)]))

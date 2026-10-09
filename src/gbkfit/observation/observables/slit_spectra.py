@@ -2,7 +2,7 @@ from collections.abc import Sequence
 
 import astropy.units
 
-from gbkfit.dataset.datasets import DatasetLSlit
+from gbkfit.dataset.datasets import DatasetSlitSpectra
 from gbkfit.model.core import GModelSCube
 from gbkfit.utils import fitsutils
 from . import _dcube, _detail
@@ -10,7 +10,7 @@ from .core import Observable
 
 
 __all__ = [
-    'LSlit'
+    'SlitSpectra'
 ]
 
 
@@ -22,10 +22,10 @@ def _slit_extra(data, grid):
     return fitsutils.GridData(data[:, 0, :], grid.coords.axes(0, 2), 1)
 
 
-class LSlit(Observable):
+class SlitSpectra(Observable):
 
     # The form of the data this observable measures
-    dataset_class = DatasetLSlit
+    dataset_class = DatasetSlitSpectra
 
     # The axes of a long-slit spectrum: the position along the slit
     # and the spectral axis
@@ -33,7 +33,7 @@ class LSlit(Observable):
 
     @staticmethod
     def type():
-        return 'lslit'
+        return 'slit_spectra'
 
     @staticmethod
     def is_compatible(gmodel):
@@ -42,7 +42,7 @@ class LSlit(Observable):
     @classmethod
     def load(cls, info, dataset=None):
         return cls(**_detail.load_observable_common(
-            cls, info, 2, dataset, DatasetLSlit))
+            cls, info, 2, dataset, DatasetSlitSpectra))
 
     def dump(self, data=None, prefix='', dump_path=True, overwrite=False):
         return _detail.without_options_from_data(self, dict(
@@ -86,7 +86,7 @@ class LSlit(Observable):
         return self._slit_width
 
     def keys(self):
-        return ['lslit']
+        return ['spectra']
 
     def plan(
             self, driver, gmodel, foreground, instrument, scale, dtype,
@@ -104,11 +104,11 @@ class LSlit(Observable):
             instrument.primary_beam(), instrument.psf(),
             instrument.lsf(), self._smooth_weights, self._mask_cutoff,
             self._mask_apply, dtype)
-        return LSlitPlan(dcube, driver, gmodel, foreground, dtype,
+        return SlitSpectraPlan(dcube, driver, gmodel, foreground, dtype,
             selection)
 
 
-class LSlitPlan(_detail.DCubePlanBase):
+class SlitSpectraPlan(_detail.DCubePlanBase):
 
     def _gmodel_extra(self, value):
         # The slit has no position on the sky, so the extra outputs of the
@@ -121,7 +121,7 @@ class LSlitPlan(_detail.DCubePlanBase):
         self._evaluate_cube(
             params, out_extra, _slit_extra, _dcube.plain_extra)
         plan = self._dcube_plan
-        return dict(lslit=dict(
+        return dict(spectra=dict(
             d=plan.dcube()[:, 0, :],
             m=plan.mcube()[:, 0, :] if plan.mcube() is not None else None,
             w=plan.wcube()[:, 0, :] if plan.wcube() is not None else None))

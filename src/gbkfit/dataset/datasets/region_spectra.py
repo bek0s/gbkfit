@@ -10,14 +10,14 @@ from . import _detail
 
 
 __all__ = [
-    'DatasetASpec'
+    'DatasetRegionSpectra'
 ]
 
 
-class DatasetASpec(Dataset):
+class DatasetRegionSpectra(Dataset):
     """
     Spectra in regions of the sky (see Regions; e.g. fibres, apertures,
-    bins): one data item, 'aspec', of shape (nchannels, nregions) (FITS:
+    bins): one data item, 'spectra', of shape (nchannels, nregions) (FITS:
     the regions along x, the velocity along y), with the world coordinates
     of the spectral axis.
     """
@@ -26,7 +26,7 @@ class DatasetASpec(Dataset):
 
     @staticmethod
     def type():
-        return 'aspec'
+        return 'region_spectra'
 
     @classmethod
     def load(cls, info, prefix=''):
@@ -42,9 +42,9 @@ class DatasetASpec(Dataset):
             'step', 'rpix', 'rval', 'rest'))
         item = {k: info.pop(k) for k in ('data', 'mask', 'error') if k in info}
         # (the velocity is along FITS y, the axis 1)
-        aspec, coords = load_data(item, prefix, rpix, rval, rest, 1)
+        spectra, coords = load_data(item, prefix, rpix, rval, rest, 1)
         info.update(
-            aspec=aspec,
+            spectra=spectra,
             step=coords.step[1] if step is None else step,
             rpix=coords.rpix[1],
             rval=coords.rval[1],
@@ -58,7 +58,7 @@ class DatasetASpec(Dataset):
         def write(filename, array):
             fitsutils.write_spectra(filename, array, spectral, overwrite)
         item = dump_data(
-            self['aspec'], _detail.item_filenames(prefix, 'aspec'), write,
+            self['spectra'], _detail.item_filenames(prefix, 'spectra'), write,
             dump_path)
         return dict(
             type=self.type(),
@@ -72,7 +72,7 @@ class DatasetASpec(Dataset):
 
     def __init__(
             self,
-            aspec: Data,
+            spectra: Data,
             regions: Regions,
             step: Real = 1,
             rpix: Real | None = None,
@@ -85,8 +85,8 @@ class DatasetASpec(Dataset):
         reference channel (by default the centre), its velocity (km/s), and
         the rest wavelength or frequency of the velocities.
         """
-        super().__init__(dict(aspec=aspec))
-        nchannels, nregions = aspec.shape()
+        super().__init__(dict(spectra=spectra))
+        nchannels, nregions = spectra.shape()
         if nregions != regions.nregions():
             raise RuntimeError(
                 f"the spectra are of {nregions} regions, but there are "

@@ -10,35 +10,34 @@ from . import _detail
 
 
 __all__ = [
-    'DatasetLSlit'
+    'DatasetPixelSpectra'
 ]
 
 
-class DatasetLSlit(Dataset):
+class DatasetPixelSpectra(Dataset):
 
-    # The axes of a long-slit spectrum: the position along the slit
-    # and the spectral axis
-    _ndim = 2
-    _spectral_axis = 1
+    # The axes of a spectral cube: x, y and the spectral axis
+    _ndim = 3
+    _spectral_axis = 2
 
     @staticmethod
     def type():
-        return 'lslit'
+        return 'pixel_spectra'
 
     @classmethod
     def load(cls, info, **kwargs):
         # The options of its one data item are given flat
         return cls(**_detail.load_grid_dataset(
-            cls, _detail.nest_single_item(info, 'lslit'), ['lslit'],
+            cls, _detail.nest_single_item(info, 'spectra'), ['spectra'],
             **kwargs))
 
     def dump(self, **kwargs):
         return _detail.flatten_single_item(
-            _detail.dump_grid_dataset(self, **kwargs), 'lslit')
+            _detail.dump_grid_dataset(self, **kwargs), 'spectra')
 
     def __init__(
             self,
-            lslit: Data,
+            spectra: Data,
             step: Real | Sequence[Real] | None = None,
             rpix: Real | Sequence[Real] | None = None,
             rval: Real | Sequence[Real] | None = None,
@@ -50,7 +49,7 @@ class DatasetLSlit(Dataset):
         fitsutils.Coords; rest is that of the spectral axis) have defaults
         (see _detail.make_grid).
         """
-        super().__init__(dict(lslit=lslit))
+        super().__init__(dict(spectra=spectra))
         self._grid = _detail.make_grid(self, step, rpix, rval, rota, rest)
 
     def grid(self) -> fitsutils.Grid:

@@ -31,7 +31,7 @@ PROPERTIES = dict(
     co_vsys=0, co_xpos=0.3, co_ypos=-0.6, co_posa=50, co_incl=60,
     co_bpt_a=2, co_bpt_s=2, co_vpt_rt=2, co_vpt_vt=150, co_dpt_a=8)
 
-SCUBE = dict(type='scube', size=[32, 41, 51], step=[1, 1, 10])
+SCUBE = dict(type='pixel_spectra', size=[32, 41, 51], step=[1, 1, 10])
 
 
 def observation(driver, components=None, **options):
@@ -45,7 +45,7 @@ def evaluate(gmodel, observations, properties):
     group = ObservationGroup(
         [gmodel_parser.load(copy.deepcopy(gmodel))], observations)
     params = gbkfit.params.EvaluationParams(group.pdescs(), properties)
-    return [data['scube']['d'].copy()
+    return [data['spectra']['d'].copy()
             for data in group.model_h(params.evaluate())]
 
 

@@ -20,7 +20,7 @@ def nodewise_relative_model(driver):
     """A model with a node-wise rotation curve in relative mode."""
     return dict(
         driver=dict(type=driver.type()),
-        dmodel=dict(type='scube', size=[32, 32, 41], step=[1, 1, 10]),
+        dmodel=dict(type='pixel_spectra', size=[32, 32, 41], step=[1, 1, 10]),
         gmodel=dict(type='kinematics_2d', components=[dict(
             type='smdisk', loose=False, tilted=False,
             rnodes=list(range(0, 12)),
@@ -39,8 +39,8 @@ def test_evaluation_does_not_modify_params(driver):
         vpt_vt=[100] + [10] * 11))
     values = params.evaluate()
     values_before = copy.deepcopy(values)
-    first = copy.deepcopy(model_group.model_h(values)[0]['scube']['d'])
-    second = model_group.model_h(values)[0]['scube']['d']
+    first = copy.deepcopy(model_group.model_h(values)[0]['spectra']['d'])
+    second = model_group.model_h(values)[0]['spectra']['d']
     np.testing.assert_array_equal(values['vpt_vt'], values_before['vpt_vt'])
     np.testing.assert_array_equal(first, second)
 
@@ -55,7 +55,7 @@ import numpy as np
 from modelutils import observation_group
 group = observation_group([dict(
     driver=dict(type='host'),
-    dmodel=dict(type='scube', size=[24, 24, 31], step=[1, 1, 10]),
+    dmodel=dict(type='pixel_spectra', size=[24, 24, 31], step=[1, 1, 10]),
     gmodel=dict(type='kinematics_3d', components=[dict(
         type='smdisk', loose=False, tilted=False,
         rnodes=list(range(0, 12)),
@@ -64,7 +64,7 @@ group = observation_group([dict(
 params = gbkfit.params.EvaluationParams(group.pdescs(), dict(
     vsys=0, xpos=0, ypos=0, posa=30, incl=60, bpt_a=1, bpt_s=4, bht_s=1,
     vpt_rt=2, vpt_vt=150, dpt_a=20))
-np.save(sys.argv[1], group.model_h(params.evaluate())[0]['scube']['d'])
+np.save(sys.argv[1], group.model_h(params.evaluate())[0]['spectra']['d'])
 """
 
 
@@ -92,7 +92,7 @@ GMODELS_2D = dict(
             bptraits=dict(type='exponential'),
             vptraits=dict(type='tan_arctan'),
             dptraits=dict(type='uniform'))]),
-        'scube', (32, 32, 41), 'scube',
+        'pixel_spectra', (32, 32, 41), 'spectra',
         dict(vsys=0, xpos=0, ypos=0, posa=30, incl=45,
              bpt_a=1, bpt_s=4, vpt_rt=2, vpt_vt=100, dpt_a=10)),
     intensity_2d=(
@@ -100,7 +100,7 @@ GMODELS_2D = dict(
             type='smdisk', loose=False, tilted=False,
             rnodes=list(range(0, 12)),
             bptraits=dict(type='exponential'))]),
-        'image', (32, 32), 'image',
+        'pixel_brightness', (32, 32), 'brightness',
         dict(xpos=0, ypos=0, posa=30, incl=45, bpt_a=1, bpt_s=4)))
 
 
@@ -137,7 +137,7 @@ def test_unsupported_dtype_fails_when_planning(driver):
     from gbkfit.observation import (
         Observation, ObservationGroup, observable_parser)
     observation = Observation(
-        driver, observable_parser.load(dict(type='image', size=[8, 8])),
+        driver, observable_parser.load(dict(type='pixel_brightness', size=[8, 8])),
         dtype='float64')
     gmodel = gbkfit.model.gmodel_parser.load(dict(
         type='intensity_2d', components=dict(
@@ -149,8 +149,8 @@ def test_unsupported_dtype_fails_when_planning(driver):
 
 
 @pytest.mark.parametrize('dmodel, gmodel', [
-    (dict(type='image', size=[8, 8]), 'kinematics_2d'),
-    (dict(type='scube', size=[8, 8, 8]), 'intensity_2d')])
+    (dict(type='pixel_brightness', size=[8, 8]), 'kinematics_2d'),
+    (dict(type='pixel_spectra', size=[8, 8, 8]), 'intensity_2d')])
 def test_incompatible_observations_are_rejected_before_evaluation(
         dmodel, gmodel):
     # An image observable needs an image gmodel, and the others a spectral
@@ -175,7 +175,7 @@ def test_a_velocity_that_is_not_a_number_makes_spectra_nan(driver):
     # out of the cube
     model_group = observation_group([dict(
         driver=dict(type=driver.type()),
-        dmodel=dict(type='scube', size=[16, 16, 21], step=[1, 1, 10]),
+        dmodel=dict(type='pixel_spectra', size=[16, 16, 21], step=[1, 1, 10]),
         gmodel=dict(type='kinematics_2d', components=[dict(
             type='smdisk', loose=False, tilted=False,
             rnodes=list(range(0, 8)),
@@ -185,7 +185,7 @@ def test_a_velocity_that_is_not_a_number_makes_spectra_nan(driver):
     params = gbkfit.params.EvaluationParams(model_group.pdescs(), dict(
         vsys=0, xpos=0, ypos=0, posa=30, incl=45, bpt_a=1, bpt_s=4,
         vpt_rt=-3, vpt_vt=100, vpt_b=0.4, vpt_g=2, dpt_a=10))
-    cube = model_group.model_h(params.evaluate())[0]['scube']['d']
+    cube = model_group.model_h(params.evaluate())[0]['spectra']['d']
     nan = np.isnan(cube)
     assert nan.any() and np.isfinite(cube[~nan]).all()
     # The spectra of the spaxels within -rt are NaN
@@ -202,7 +202,7 @@ def test_cuda_smooth_disk_of_more_voxels_than_an_int_holds(driver):
     def image(size_z, step_z):
         model_group = observation_group([dict(
             driver=dict(type=driver.type()),
-            dmodel=dict(type='image', size=[64, 64]),
+            dmodel=dict(type='pixel_brightness', size=[64, 64]),
             gmodel=dict(
                 type='intensity_3d', size_z=size_z, step_z=step_z,
                 components=[dict(
@@ -212,7 +212,7 @@ def test_cuda_smooth_disk_of_more_voxels_than_an_int_holds(driver):
                     bhtraits=dict(type='sech2'))]))])
         params = gbkfit.params.EvaluationParams(model_group.pdescs(), dict(
             xpos=0, ypos=0, posa=0, incl=30, bpt_a=1, bpt_s=6, bht_s=1))
-        return model_group.model_h(params.evaluate())[0]['image']['d']
+        return model_group.model_h(params.evaluate())[0]['brightness']['d']
     many = image(528384, 0.001)
     few = image(1032, 0.512)
     assert few.sum() > 0

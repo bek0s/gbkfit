@@ -107,7 +107,7 @@ def model_and_properties(driver, key, config):
         gmodel = dict(type='kinematics_3d', components=[component])
     model = dict(
         driver=dict(type=driver.type()),
-        dmodel=dict(type='scube', size=[32, 32, 40], step=[1, 1, 10]),
+        dmodel=dict(type='pixel_spectra', size=[32, 32, 40], step=[1, 1, 10]),
         gmodel=gmodel)
     return model, properties, prefix
 
@@ -126,7 +126,7 @@ def test_every_trait_parameter_changes_the_model(
 
     def evaluate(props):
         data, _ = evaluate_models([model], props)
-        return data[0]['scube']['d'].copy()
+        return data[0]['spectra']['d'].copy()
 
     base = evaluate(properties)
     assert np.isfinite(base).all()

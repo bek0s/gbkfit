@@ -54,43 +54,43 @@ def test_gaussian_fit_recovers_gaussians(driver):
         (1, 1, step), (0, 0, zero),
         driver.mem_copy_h2d(cube.astype(np.float32)), None)
     maps = {key: driver.mem_copy_d2h(value['d']) for key, value in
-            maps.items()} | dict(mask=driver.mem_copy_d2h(maps['mmap0']['m']))
-    assert maps['mask'][0, 0] == 0 and np.isnan(maps['mmap1'][0, 0])
+            maps.items()} | dict(mask=driver.mem_copy_d2h(maps['moment0']['m']))
+    assert maps['mask'][0, 0] == 0 and np.isnan(maps['moment1'][0, 0])
     good = maps['mask'] == 1
     assert good.sum() == nx * ny - 1
-    np.testing.assert_allclose(maps['mmap0'][good], flux[good], rtol=1e-3)
-    np.testing.assert_allclose(maps['mmap1'][good], centre[good], atol=0.05)
-    np.testing.assert_allclose(maps['mmap2'][good], sigma[good], rtol=1e-3)
+    np.testing.assert_allclose(maps['moment0'][good], flux[good], rtol=1e-3)
+    np.testing.assert_allclose(maps['moment1'][good], centre[good], atol=0.05)
+    np.testing.assert_allclose(maps['moment2'][good], sigma[good], rtol=1e-3)
 
 
 def test_gaussian_fit_without_beam_smearing_is_the_moments(driver):
     # Without a psf, each spectrum of a thin disk is one line, whose fit
     # is its moments (up to the channel integration of the model)
-    mmaps = dict(type='mmaps', size=[32, 41], spec_size=161, spec_step=5,
+    mmaps = dict(type='pixel_moments', size=[32, 41], spec_size=161, spec_step=5,
                  orders=[0, 1, 2], mask_cutoff=1e-3)
     moments = evaluate(driver, mmaps)
     fitted = evaluate(driver, mmaps | dict(method='gaussian_fit'))
-    good = np.isfinite(moments['mmap1']) & np.isfinite(fitted['mmap1'])
+    good = np.isfinite(moments['moment1']) & np.isfinite(fitted['moment1'])
     # Both mask the same spectra (none of the fits fails)
-    assert good.sum() == np.isfinite(moments['mmap1']).sum() > 200
+    assert good.sum() == np.isfinite(moments['moment1']).sum() > 200
     np.testing.assert_allclose(
-        fitted['mmap1'][good], moments['mmap1'][good], atol=0.1)
+        fitted['moment1'][good], moments['moment1'][good], atol=0.1)
     np.testing.assert_allclose(
-        fitted['mmap2'][good], moments['mmap2'][good], rtol=1e-2)
+        fitted['moment2'][good], moments['moment2'][good], rtol=1e-2)
     np.testing.assert_allclose(
-        fitted['mmap0'][good], moments['mmap0'][good], rtol=1e-2)
+        fitted['moment0'][good], moments['moment0'][good], rtol=1e-2)
 
 
 def test_gaussian_fit_differs_from_the_moments_with_beam_smearing(driver):
     # A psf mixes the lines of a rotating disk into skewed spectra, whose
     # Gaussian fits and moments differ (e.g. near the centre)
-    mmaps = dict(type='mmaps', size=[32, 41], spec_size=161, spec_step=5,
+    mmaps = dict(type='pixel_moments', size=[32, 41], spec_size=161, spec_step=5,
                  orders=[0, 1, 2], mask_cutoff=1e-3,
                  psf=dict(type='gauss', sigma=2))
     moments = evaluate(driver, mmaps)
     fitted = evaluate(driver, mmaps | dict(method='gaussian_fit'))
-    good = np.isfinite(moments['mmap2']) & np.isfinite(fitted['mmap2'])
-    assert np.nanmax(np.abs(fitted['mmap2'] - moments['mmap2'])[good]) > 2
+    good = np.isfinite(moments['moment2']) & np.isfinite(fitted['moment2'])
+    assert np.nanmax(np.abs(fitted['moment2'] - moments['moment2'])[good]) > 2
 
 
 def test_gaussian_fit_of_bins(driver):
@@ -101,10 +101,10 @@ def test_gaussian_fit_of_bins(driver):
         fitsutils.Coords((1, 1), (15.5, 20), (0, 0), 0))
     options = dict(spec_size=161, spec_step=5, orders=[1, 2],
                    mask_cutoff=1e-3, method='gaussian_fit')
-    mmaps = evaluate(driver, dict(type='mmaps', size=[32, 41]) | options)
+    mmaps = evaluate(driver, dict(type='pixel_moments', size=[32, 41]) | options)
     bmaps = evaluate(driver, dict(
-        type='bmaps', regions=dict(type='bins', file='bins.fits')) | options)
-    for key in ('mmap1', 'mmap2'):
+        type='region_moments', regions=dict(type='bins', file='bins.fits')) | options)
+    for key in ('moment1', 'moment2'):
         np.testing.assert_allclose(
             bmaps[key], mmaps[key].ravel(), rtol=1e-4, atol=1e-3)
 
@@ -113,13 +113,13 @@ def test_gaussian_fit_of_bins(driver):
     (dict(method='gauss'), "method of"),
     (dict(method='gaussian_fit', orders=[1, 3]), "between 0 and 2")])
 def test_method_options_are_checked(options, message):
-    from gbkfit.observation import MMaps
+    from gbkfit.observation import PixelMoments
     with pytest.raises(RuntimeError, match=message):
-        MMaps(size=(8, 8), **options)
+        PixelMoments(size=(8, 8), **options)
 
 
 def test_method_round_trip():
     from gbkfit.observation import observable_parser
-    info = dict(type='mmaps', size=[8, 8], method='gaussian_fit')
+    info = dict(type='pixel_moments', size=[8, 8], method='gaussian_fit')
     dumped = observable_parser.dump(observable_parser.load(dict(info)))
     assert dumped['method'] == 'gaussian_fit'

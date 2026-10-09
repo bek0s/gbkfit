@@ -39,12 +39,12 @@ def write_cube(filename, header=HEADER):
     fits.writeto(filename, data, fits.Header(header))
 
 
-def prep_scube(filename, **options):
+def prep_pixel_spectra(filename, **options):
     defaults = dict.fromkeys([
         'roi_spat', 'roi_spec', 'clip_min', 'clip_max', 'ccl_lcount',
         'ccl_pcount', 'ccl_lratio', 'sclip_sigma', 'sclip_iters', 'nanpad'])
     options = defaults | dict(minify=False, dtype='float32') | options
-    prep.prep_scube(filename, None, None, **options)
+    prep.prep_pixel_spectra(filename, None, None, **options)
     return fits.getdata('prep_cube.fits'), fits.getheader('prep_cube.fits')
 
 
@@ -64,7 +64,7 @@ def assert_same_world(header_in, header_out, offset):
 
 def test_crop_keeps_the_world_coordinates():
     write_cube('cube.fits')
-    data, header = prep_scube(
+    data, header = prep_pixel_spectra(
         'cube.fits', roi_spat=[4, 20, 3, 17], roi_spec=[2, 10])
     assert data.shape == (8, 14, 16)
     assert_same_world(HEADER, header, offset=[4, 3, 2])
@@ -72,7 +72,7 @@ def test_crop_keeps_the_world_coordinates():
 
 def test_minify_keeps_the_world_coordinates():
     write_cube('cube.fits')
-    data, header = prep_scube('cube.fits', clip_min=0.5, minify=True)
+    data, header = prep_pixel_spectra('cube.fits', clip_min=0.5, minify=True)
     # The pixels above 0.5 are within 2 pixels of the blob centre
     assert data.shape == (5, 5, 5)
     assert_same_world(HEADER, header, offset=[13, 6, 3])
@@ -80,7 +80,7 @@ def test_minify_keeps_the_world_coordinates():
 
 def test_nanpad_pads_and_keeps_the_world_coordinates():
     write_cube('cube.fits')
-    data, header = prep_scube('cube.fits', nanpad=2)
+    data, header = prep_pixel_spectra('cube.fits', nanpad=2)
     assert data.shape == (16, 24, 28)
     assert np.isnan(data[:2]).all() and np.isnan(data[:, :, -2:]).all()
     np.testing.assert_allclose(data[2:-2, 2:-2, 2:-2].max(), 1.01, rtol=1e-6)
@@ -89,7 +89,7 @@ def test_nanpad_pads_and_keeps_the_world_coordinates():
 
 def test_squeezed_axes_are_dropped_from_the_header():
     write_cube('cube.fits')
-    data, header = prep_scube('cube.fits')
+    data, header = prep_pixel_spectra('cube.fits')
     assert data.ndim == 3
     assert header['NAXIS'] == 3
     assert astropy.wcs.WCS(header).naxis == 3
@@ -101,7 +101,7 @@ def test_squeezed_axes_are_dropped_from_the_header():
 
 def test_headers_without_coordinates_get_none():
     write_cube('cube.fits', header={'BUNIT': 'Jy/beam'})
-    _, header = prep_scube('cube.fits', roi_spat=[4, 20, 3, 17])
+    _, header = prep_pixel_spectra('cube.fits', roi_spat=[4, 20, 3, 17])
     assert 'CRPIX1' not in header and 'CTYPE1' not in header
     assert header['BUNIT'] == 'Jy/beam'
 
@@ -113,7 +113,7 @@ def test_image_crop_keeps_the_world_coordinates(nanpad):
         if k[-1] in '12' or k == 'BUNIT'}
     image = np.ones((20, 24), np.float32)
     fits.writeto('image.fits', image, fits.Header(header_in))
-    prep.prep_image(
+    prep.prep_pixel_brightness(
         'image.fits', None, None, [4, 20, 3, 17], None, None,
         None, None, None, None, None, False, nanpad, 'float32')
     header = fits.getheader('prep_image.fits')
@@ -125,18 +125,18 @@ def test_image_crop_keeps_the_world_coordinates(nanpad):
     np.testing.assert_allclose(world_out, world_in, rtol=0, atol=1e-9)
 
 
-def test_mmaps_crop_and_nanpad_keep_the_world_coordinates():
+def test_pixel_moments_crop_and_nanpad_keep_the_world_coordinates():
     header_in = fits.Header({
         k: v for k, v in HEADER.items() if k[-1] in '12'})
-    for name in ['mmap0', 'mmap1']:
+    for name in ['moment0', 'moment1']:
         fits.writeto(f'{name}.fits', np.ones((20, 24), np.float32), header_in)
-    prep.prep_mmaps(
-        ['mmap0.fits', 'mmap1.fits'], None, None, [4, 20, 3, 17],
+    prep.prep_pixel_moments(
+        ['moment0.fits', 'moment1.fits'], None, None, [4, 20, 3, 17],
         None, None, None, None, None, None, None, False, 1, 'float32')
     pixel = np.array([[0, 0], [5, 7]], float).T
     world_in = astropy.wcs.WCS(header_in).pixel_to_world_values(
         *(pixel + np.c_[[3, 2]]))
-    for name in ['mmap0', 'mmap1']:
+    for name in ['moment0', 'moment1']:
         data = fits.getdata(f'prep_{name}.fits')
         header = fits.getheader(f'prep_{name}.fits')
         assert data.shape == (16, 18)
@@ -145,13 +145,13 @@ def test_mmaps_crop_and_nanpad_keep_the_world_coordinates():
         np.testing.assert_allclose(world_out, world_in, rtol=0, atol=1e-9)
 
 
-def prep_image(filename, **options):
+def prep_pixel_brightness(filename, **options):
     defaults = dict.fromkeys([
         'roi_spat', 'clip_min', 'clip_max', 'ccl_lcount', 'ccl_pcount',
         'ccl_lratio', 'sclip_sigma', 'sclip_iters', 'nanpad'])
     options = defaults | dict(minify=False, dtype='float32') | options
     file_m = options.pop('file_m', None)
-    prep.prep_image(filename, None, file_m, **options)
+    prep.prep_pixel_brightness(filename, None, file_m, **options)
     return fits.getdata('prep_image.fits')
 
 
@@ -159,7 +159,7 @@ def test_sigma_clipping_removes_the_outliers():
     data = np.random.default_rng(1).normal(size=(32, 32)).astype(np.float32)
     data[5, 5] = 50
     fits.writeto('image.fits', data)
-    prepared = prep_image('image.fits', sclip_sigma=3, sclip_iters=5)
+    prepared = prep_pixel_brightness('image.fits', sclip_sigma=3, sclip_iters=5)
     assert np.isnan(prepared[5, 5])
     assert np.isfinite(prepared).sum() > 1000
 
@@ -169,7 +169,7 @@ def test_the_mask_file_is_applied():
     mask = np.ones((8, 8), np.float32)
     mask[:, :4] = 0
     fits.writeto('mask.fits', mask)
-    prepared = prep_image('image.fits', file_m='mask.fits')
+    prepared = prep_pixel_brightness('image.fits', file_m='mask.fits')
     assert np.isnan(prepared[:, :4]).all()
     assert np.isfinite(prepared[:, 4:]).all()
 
@@ -181,10 +181,10 @@ def test_connected_components_see_the_clipping():
     data[2:8, 2:8] = 5
     data[10:13, 10:13] = 5
     fits.writeto('image.fits', data)
-    prepared = prep_image('image.fits', clip_min=0, ccl_lcount=1)
+    prepared = prep_pixel_brightness('image.fits', clip_min=0, ccl_lcount=1)
     assert np.isfinite(prepared).sum() == 36
     # No island large enough: everything is masked, without an error
-    prepared = prep_image('image.fits', clip_min=0, ccl_pcount=100,
+    prepared = prep_pixel_brightness('image.fits', clip_min=0, ccl_pcount=100,
                           ccl_lratio=0.5)
     assert np.isnan(prepared).all()
 
@@ -196,26 +196,26 @@ def test_sigma_clipping_sees_the_kept_pixels_only():
     data = np.full((30, 30), -1, np.float32)
     data[10:20, 10:20] = np.linspace(9.9, 10.1, 100).reshape(10, 10)
     fits.writeto('image.fits', data)
-    prepared = prep_image('image.fits', clip_min=0, sclip_sigma=3)
+    prepared = prep_pixel_brightness('image.fits', clip_min=0, sclip_sigma=3)
     assert np.isfinite(prepared).sum() == 100
 
 
 def test_minify_without_valid_pixels_is_an_error():
     fits.writeto('image.fits', np.full((8, 8), -1, np.float32))
     with pytest.raises(Exception, match="no valid pixels"):
-        prep_image('image.fits', clip_min=0, minify=True)
+        prep_pixel_brightness('image.fits', clip_min=0, minify=True)
 
-def test_mmaps_use_the_sigma_clipping_of_each_map():
+def test_pixel_moments_use_the_sigma_clipping_of_each_map():
     rng = np.random.default_rng(1)
-    for name in ['mmap0', 'mmap1']:
+    for name in ['moment0', 'moment1']:
         data = rng.normal(size=(32, 32)).astype(np.float32)
         data[5, 5] = 50
         fits.writeto(f'{name}.fits', data)
-    prep.prep_mmaps(
-        ['mmap0.fits', 'mmap1.fits'], None, None, None,
+    prep.prep_pixel_moments(
+        ['moment0.fits', 'moment1.fits'], None, None, None,
         None, None, None, None, None, [3, 3], [5, 5], False, None,
         'float32')
-    for name in ['mmap0', 'mmap1']:
+    for name in ['moment0', 'moment1']:
         prepared = fits.getdata(f'prep_{name}.fits')
         assert np.isnan(prepared[5, 5])
         assert np.isfinite(prepared).sum() > 1000
@@ -240,7 +240,7 @@ def test_decreasing_velocity_is_reversed(header):
     # The model needs increasing velocities; each channel keeps its
     # velocity (and each pixel its position on the sky)
     write_cube('cube.fits', header)
-    data, header_out = prep_scube('cube.fits')
+    data, header_out = prep_pixel_spectra('cube.fits')
     np.testing.assert_array_equal(data, fits.getdata('cube.fits')[0, ::-1])
     nz = SHAPE[1]
     pixel = np.array([[0, 0, 0], [3, 2, 4], [7, 5, nz - 1]], float).T
@@ -265,7 +265,7 @@ def test_missing_reference_pixel_stays_at_the_centre(roi_spat, offset):
         if k[-1] in '12' and not k.startswith('CRPIX')}
     fits.writeto('image.fits', np.ones((20, 24), np.float32),
                  fits.Header(header))
-    prep_image('image.fits', roi_spat=roi_spat)
+    prep_pixel_brightness('image.fits', roi_spat=roi_spat)
     _, coords_in = fitsutils.read_data('image.fits')
     _, coords_out = fitsutils.read_data('prep_image.fits')
     np.testing.assert_allclose(
@@ -280,7 +280,7 @@ def test_crops_keep_the_pixels_of_the_ranges():
     # (the world coordinates of the crops are tested above)
     data = np.arange(np.prod(SHAPE), dtype=np.float32).reshape(SHAPE)
     fits.writeto('cube.fits', data, fits.Header(HEADER))
-    prepared, _ = prep_scube(
+    prepared, _ = prep_pixel_spectra(
         'cube.fits', roi_spat=[4, 20, 3, 17], roi_spec=[2, 10])
     np.testing.assert_array_equal(prepared, data[0, 2:10, 3:17, 4:20])
 
@@ -293,7 +293,7 @@ def test_wavelength_axis_to_optical_velocities(cd):
         HEADER, CTYPE3='WAVE', CUNIT3='Angstrom', CRVAL3=6500.0,
         CRPIX3=1.0, CDELT3=1.25)
     write_cube('cube.fits', with_cd(header) if cd else header)
-    _, header_out = prep_scube('cube.fits', velocity_rest='6562.8 Angstrom')
+    _, header_out = prep_pixel_spectra('cube.fits', velocity_rest='6562.8 Angstrom')
     assert header_out['CTYPE3'] == 'VOPT'
     data, coords = fitsutils.read_data('prep_cube.fits')
     np.testing.assert_allclose(coords.rest.to_value('Angstrom'), 6562.8)
@@ -311,7 +311,7 @@ def test_frequency_axis_to_radio_velocities():
         HEADER, CTYPE3='FREQ', CUNIT3='Hz', CRVAL3=1.419e9, CRPIX3=1.0,
         CDELT3=2e4)
     write_cube('cube.fits', header)
-    data, _ = prep_scube('cube.fits', velocity_rest='1420.405752 MHz')
+    data, _ = prep_pixel_spectra('cube.fits', velocity_rest='1420.405752 MHz')
     np.testing.assert_array_equal(data, fits.getdata('cube.fits')[0, ::-1])
     _, coords = fitsutils.read_data('prep_cube.fits')
     np.testing.assert_allclose(coords.rest.to_value('Hz'), 1.420405752e9)
@@ -337,7 +337,7 @@ def test_error_and_mask_are_reversed_with_the_data():
     defaults = dict.fromkeys([
         'roi_spat', 'roi_spec', 'clip_min', 'clip_max', 'ccl_lcount',
         'ccl_pcount', 'ccl_lratio', 'sclip_sigma', 'sclip_iters', 'nanpad'])
-    prep.prep_scube(
+    prep.prep_pixel_spectra(
         'cube.fits', 'error.fits', 'mask.fits', **defaults, minify=False,
         dtype='float32', velocity_rest='1420.405752 MHz')
     data_out = fits.getdata('prep_cube.fits')
@@ -356,13 +356,13 @@ def test_data_in_an_extension_keep_their_world_coordinates():
         fits.PrimaryHDU(),
         fits.ImageHDU(data, fits.Header(header), name='DATA')]).writeto(
             'cube.fits')
-    prep_scube('cube.fits', roi_spat=[2, 22, 2, 18])
+    prep_pixel_spectra('cube.fits', roi_spat=[2, 22, 2, 18])
     _, coords = fitsutils.read_data('prep_cube.fits')
     np.testing.assert_allclose(coords.step, (1, 1, 10))
 
 def test_velocity_axis_gets_the_rest():
     write_cube('cube.fits')
-    _, header_out = prep_scube('cube.fits', velocity_rest='21.106 cm')
+    _, header_out = prep_pixel_spectra('cube.fits', velocity_rest='21.106 cm')
     assert header_out['CTYPE3'] == 'VRAD'
     assert header_out['RESTFRQ'] == pytest.approx(
         C * 1e3 / 0.21106, rel=1e-9)
@@ -375,10 +375,10 @@ def test_velocity_axis_keeps_its_rest():
     # A velocity axis with a rest refers to it: giving the same one is
     # fine, another one an error (relabelling would move every line)
     write_cube('cube.fits', dict(HEADER, RESTFRQ=1.420405752e9))
-    _, header_out = prep_scube('cube.fits', velocity_rest='1420.405752 MHz')
+    _, header_out = prep_pixel_spectra('cube.fits', velocity_rest='1420.405752 MHz')
     assert header_out['RESTFRQ'] == pytest.approx(1.420405752e9, rel=1e-9)
     with pytest.raises(Exception, match="refer to the rest"):
-        prep_scube('cube.fits', velocity_rest='115.271 GHz')
+        prep_pixel_spectra('cube.fits', velocity_rest='115.271 GHz')
 
 
 def test_converted_axis_keeps_no_old_rest():
@@ -388,7 +388,7 @@ def test_converted_axis_keeps_no_old_rest():
         HEADER, CTYPE3='FREQ', CUNIT3='Hz', CRVAL3=1.15e11, CRPIX3=1.0,
         CDELT3=-1e6, RESTWAV=2.6e-3, RESTFREQ=1.42e9)
     write_cube('cube.fits', header)
-    _, header_out = prep_scube('cube.fits', velocity_rest='115.271 GHz')
+    _, header_out = prep_pixel_spectra('cube.fits', velocity_rest='115.271 GHz')
     assert 'RESTWAV' not in header_out and 'RESTFREQ' not in header_out
     _, coords = fitsutils.read_data('prep_cube.fits')
     np.testing.assert_allclose(coords.rest.to_value('GHz'), 115.271)
@@ -407,7 +407,7 @@ def test_rest_of_the_convention_of_the_axis_first():
 def test_spectral_axes_that_cannot_be_converted(header, message):
     write_cube('cube.fits', header)
     with pytest.raises(Exception, match=message):
-        prep_scube('cube.fits', velocity_rest='6562.8 Angstrom')
+        prep_pixel_spectra('cube.fits', velocity_rest='6562.8 Angstrom')
 
 
 def run_cli(*args):
@@ -425,7 +425,8 @@ def write_image(filename):
 def test_cli_writes_to_the_output_directory():
     write_image('image.fits')
     result = run_cli(
-        'prep', 'image', '--data-d', 'image.fits', '--output-dir', 'prepared')
+        'prep', 'pixel_brightness', '--data-d', 'image.fits',
+        '--output-dir', 'prepared')
     assert result.returncode == 0
     assert fits.getdata('prepared/prep_image.fits').shape == (20, 24)
     # (its log, also under python -m)
@@ -434,11 +435,11 @@ def test_cli_writes_to_the_output_directory():
 
 @pytest.mark.parametrize('args, message', [
     # One value for each moment order, also when the orders come last
-    (['mmaps', '--data-d', 'image.fits', '--nanpad', '1', '0', '1'],
+    (['pixel_moments', '--data-d', 'image.fits', '--nanpad', '1', '0', '1'],
      "invalid length"),
-    (['image', '--data-d', 'image.fits', '--ccl-lratio', 'nan'],
+    (['pixel_brightness', '--data-d', 'image.fits', '--ccl-lratio', 'nan'],
      "must be a number"),
-    (['bmaps', '--bins', 'image.fits', '--data-d', 'image.fits', '--minify',
+    (['region_moments', '--bins', 'image.fits', '--data-d', 'image.fits', '--minify',
       '0'], "unrecognized arguments: --minify")])
 def test_cli_rejects_invalid_arguments(args, message):
     write_image('image.fits')
@@ -457,13 +458,13 @@ def test_integer_data_are_prepared():
     defaults = dict.fromkeys([
         'roi_spat', 'clip_min', 'clip_max', 'ccl_lcount', 'ccl_pcount',
         'ccl_lratio', 'sclip_sigma', 'sclip_iters', 'nanpad'])
-    prep.prep_image(
+    prep.prep_pixel_brightness(
         'image.fits', 'error.fits', None, **defaults, minify=False,
         dtype='float32')
     data = fits.getdata('prep_image.fits')
     assert np.isnan(data[0, 0]) and data[0, 1] == 1
 
-def test_lslit_crops_positions_and_channels():
+def test_slit_spectra_crops_positions_and_channels():
     # A slit of 40 positions (FITS x) and 8 channels (FITS y): roi_spat
     # crops the positions and roi_spec the channels, and the prepared
     # slit keeps the world coordinates of the pixels it was cut from
@@ -475,7 +476,7 @@ def test_lslit_crops_positions_and_channels():
     defaults = dict.fromkeys([
         'clip_min', 'clip_max', 'ccl_lcount', 'ccl_pcount', 'ccl_lratio',
         'sclip_sigma', 'sclip_iters', 'nanpad'])
-    prep.prep_lslit(
+    prep.prep_slit_spectra(
         'slit.fits', None, None, roi_spat=[10, 30], roi_spec=[2, 6],
         **defaults, minify=False, dtype='float32')
     assert fits.getdata('prep_slit.fits').shape == (4, 20)
@@ -502,7 +503,7 @@ def test_binned_maps_to_one_value_per_bin():
     fits.writeto('vel.fits', velocity.astype(np.float32))
     fits.writeto('evel.fits', error.astype(np.float32))
     fits.writeto('mvel.fits', mask.astype(np.float32))
-    prep.prep_bmaps(
+    prep.prep_region_moments(
         'bins.fits', ['vel.fits'], ['evel.fits'], ['mvel.fits'], 'float32')
     np.testing.assert_array_equal(
         fits.getdata('prep_bins.fits'),
@@ -510,11 +511,11 @@ def test_binned_maps_to_one_value_per_bin():
     np.testing.assert_array_equal(fits.getdata('prep_vel.fits'), [-40, 120, np.nan])
     from gbkfit.dataset import dataset_parser
     dataset = dataset_parser.load(dict(
-        type='bmaps', regions=dict(type='bins', file='prep_bins.fits'),
-        mmap1=dict(data='prep_vel.fits', error='prep_evel.fits')))
+        type='region_moments', regions=dict(type='bins', file='prep_bins.fits'),
+        moment1=dict(data='prep_vel.fits', error='prep_evel.fits')))
     assert dataset.regions().nregions() == 3
-    np.testing.assert_array_equal(dataset['mmap1'].mask(), [1, 1, 0])
-    np.testing.assert_array_equal(dataset['mmap1'].error()[:2], [3, 2])
+    np.testing.assert_array_equal(dataset['moment1'].mask(), [1, 1, 0])
+    np.testing.assert_array_equal(dataset['moment1'].error()[:2], [3, 2])
     # The world coordinates of the bins are kept
     _, coords = fitsutils.read_data('prep_bins.fits')
     assert coords.rpix == (11.5, 9.5)
@@ -527,4 +528,4 @@ def test_binned_maps_must_hold_one_value_per_bin():
     fits.writeto('bins.fits', bins)
     fits.writeto('vel.fits', values)
     with pytest.raises(Exception, match="bin 0 hold different values"):
-        prep.prep_bmaps('bins.fits', ['vel.fits'], None, None, 'float32')
+        prep.prep_region_moments('bins.fits', ['vel.fits'], None, None, 'float32')

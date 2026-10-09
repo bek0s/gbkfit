@@ -32,7 +32,7 @@ def mcdisk(**options):
 MODELS = dict(
     intensity_2d=(
         dict(
-            dmodel=dict(type='image', size=[20, 16], rota=10),
+            dmodel=dict(type='pixel_brightness', size=[20, 16], rota=10),
             gmodel=dict(type='intensity_2d', components=[
                 smdisk(
                     loose=True, tilted=True, xpos_nwmode=NWMODE,
@@ -47,7 +47,7 @@ MODELS = dict(
             spt_p=45, spt_s=270)),
     kinematics_2d=(
         dict(
-            dmodel=dict(type='scube', size=[20, 16, 11], step=[1, 1, 30]),
+            dmodel=dict(type='pixel_spectra', size=[20, 16, 11], step=[1, 1, 30]),
             gmodel=dict(type='kinematics_2d', components=[
                 smdisk(
                     loose=True, tilted=False, vsys_nwmode=NWMODE,
@@ -75,7 +75,7 @@ MODELS = dict(
             cmp1_spt_p=[0, 10, 20, 30, 40], cmp1_spt_s=[300] * 5)),
     intensity_3d=(
         dict(
-            dmodel=dict(type='image', size=[20, 16]),
+            dmodel=dict(type='pixel_brightness', size=[20, 16]),
             gmodel=dict(
                 type='intensity_3d',
                 components=[
@@ -108,7 +108,7 @@ MODELS = dict(
             ocmp1_opt_a=0.1, ocmp1_opt_s=2, ocmp1_oht_s=0.5)),
     kinematics_3d=(
         dict(
-            dmodel=dict(type='scube', size=[20, 16, 11], step=[1, 1, 30]),
+            dmodel=dict(type='pixel_spectra', size=[20, 16, 11], step=[1, 1, 30]),
             gmodel=dict(
                 type='kinematics_3d', size_z=14, step_z=1.5, zero_z=-9,
                 components=[

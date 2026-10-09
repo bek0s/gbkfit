@@ -53,7 +53,8 @@ def configure_logging(
     })
 
 
-# The options of prep mmaps and bmaps with one value for each moment order
+# The options of prep pixel_moments and region_moments with one value for
+# each moment order
 _MOMENT_OPTIONS = (
     'data_d', 'data_e', 'data_m',
     'clip_min', 'clip_max', 'sclip_sigma', 'sclip_iters')
@@ -382,43 +383,44 @@ def main():
     parsers_prep = parser_prep.add_subparsers(
         dest='prep_task', help="the type of data to prepare")
     parsers_prep.required = True
-    parsers_prep.add_parser('image', parents=[
+    parsers_prep.add_parser('pixel_brightness', parents=[
         parser_prep_input_1,
         parser_prep_roi_spat_2d,
         parser_prep_clip_1, parser_prep_ccl, parser_prep_nanpad,
         parser_prep_dtype, parser_prep_minify, parser_common_output,
         parser_common],
-        help="image")
-    parsers_prep.add_parser('lslit', parents=[
+        help="brightness on a grid of pixels (an image)")
+    parsers_prep.add_parser('slit_spectra', parents=[
         parser_prep_input_1, parser_prep_rest,
         parser_prep_roi_spat_1d, parser_prep_roi_spec_1d,
         parser_prep_clip_1, parser_prep_ccl, parser_prep_nanpad,
         parser_prep_dtype, parser_prep_minify, parser_common_output,
         parser_common],
-        help="long slit")
-    parsers_prep.add_parser('mmaps', parents=[
+        help="spectra along a long slit")
+    parsers_prep.add_parser('pixel_moments', parents=[
         parser_prep_orders,
         parser_prep_input_n,
         parser_prep_roi_spat_2d,
         parser_prep_clip_n, parser_prep_ccl, parser_prep_nanpad,
         parser_prep_dtype, parser_prep_minify, parser_common_output,
         parser_common],
-        help="moment maps")
-    parser_prep_bmaps = parsers_prep.add_parser('bmaps', parents=[
-        parser_prep_orders, parser_prep_input_n,
-        parser_prep_dtype, parser_common_output, parser_common],
-        help="binned moment maps: maps whose pixels hold the value of "
-             "their bin, to one value per bin")
-    parser_prep_bmaps.add_argument(
+        help="moments on a grid of pixels (moment maps)")
+    parser_prep_region_moments = parsers_prep.add_parser(
+        'region_moments', parents=[
+            parser_prep_orders, parser_prep_input_n,
+            parser_prep_dtype, parser_common_output, parser_common],
+        help="moments in regions: binned moment maps, whose pixels hold "
+             "the value of their bin, to one value per bin")
+    parser_prep_region_moments.add_argument(
         '--bins', type=str, required=True, metavar='BINS',
         help="the map of the bin of each pixel (negative for none)")
-    parsers_prep.add_parser('scube', parents=[
+    parsers_prep.add_parser('pixel_spectra', parents=[
         parser_prep_input_1, parser_prep_rest,
         parser_prep_roi_spat_2d, parser_prep_roi_spec_1d,
         parser_prep_clip_1, parser_prep_ccl, parser_prep_nanpad,
         parser_prep_dtype, parser_prep_minify, parser_common_output,
         parser_common],
-        help="spectral cube")
+        help="spectra on a grid of pixels (a spectral cube)")
 
     #
     # Create parser for fit task
@@ -475,7 +477,8 @@ def main():
     #
 
     args = parser.parse_args()
-    if args.task == 'prep' and args.prep_task in ('mmaps', 'bmaps'):
+    if args.task == 'prep' and args.prep_task in (
+            'pixel_moments', 'region_moments'):
         _check_moment_counts(parser, args)
 
     # Configure log level before doing anything else
@@ -497,36 +500,36 @@ def main():
         output_dir = gbkfit.tasks._detail.make_output_dir(
             args.output_dir, args.output_dir_mode)
         _log.info(f"output will be stored under directory: {output_dir}")
-        if args.prep_task == 'image':
-            gbkfit.tasks.prep.prep_image(
+        if args.prep_task == 'pixel_brightness':
+            gbkfit.tasks.prep.prep_pixel_brightness(
                 args.data_d, args.data_e, args.data_m,
                 args.roi_spat, args.clip_min, args.clip_max,
                 args.ccl_lcount, args.ccl_pcount, args.ccl_lratio,
                 args.sclip_sigma, args.sclip_iters,
                 args.minify, args.nanpad, args.dtype,
                 output_dir=output_dir)
-        elif args.prep_task == 'lslit':
-            gbkfit.tasks.prep.prep_lslit(
+        elif args.prep_task == 'slit_spectra':
+            gbkfit.tasks.prep.prep_slit_spectra(
                 args.data_d, args.data_e, args.data_m,
                 args.roi_spat, args.roi_spec, args.clip_min, args.clip_max,
                 args.ccl_lcount, args.ccl_pcount, args.ccl_lratio,
                 args.sclip_sigma, args.sclip_iters,
                 args.minify, args.nanpad, args.dtype,
                 args.velocity_rest, output_dir=output_dir)
-        elif args.prep_task == 'mmaps':
-            gbkfit.tasks.prep.prep_mmaps(
+        elif args.prep_task == 'pixel_moments':
+            gbkfit.tasks.prep.prep_pixel_moments(
                 args.data_d, args.data_e, args.data_m,
                 args.roi_spat, args.clip_min, args.clip_max,
                 args.ccl_lcount, args.ccl_pcount, args.ccl_lratio,
                 args.sclip_sigma, args.sclip_iters,
                 args.minify, args.nanpad, args.dtype,
                 output_dir=output_dir)
-        elif args.prep_task == 'bmaps':
-            gbkfit.tasks.prep.prep_bmaps(
+        elif args.prep_task == 'region_moments':
+            gbkfit.tasks.prep.prep_region_moments(
                 args.bins, args.data_d, args.data_e, args.data_m, args.dtype,
                 output_dir=output_dir)
-        elif args.prep_task == 'scube':
-            gbkfit.tasks.prep.prep_scube(
+        elif args.prep_task == 'pixel_spectra':
+            gbkfit.tasks.prep.prep_pixel_spectra(
                 args.data_d, args.data_e, args.data_m,
                 args.roi_spat, args.roi_spec, args.clip_min, args.clip_max,
                 args.ccl_lcount, args.ccl_pcount, args.ccl_lratio,

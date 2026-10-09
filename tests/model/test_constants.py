@@ -24,7 +24,7 @@ def disk(**options):
 def kinematics_2d(components):
     return dict(
         driver=dict(type='host'),
-        dmodel=dict(type='scube', size=[32, 32, 41], step=[1, 1, 10]),
+        dmodel=dict(type='pixel_spectra', size=[32, 32, 41], step=[1, 1, 10]),
         gmodel=dict(type='kinematics_2d', components=components))
 
 
@@ -38,7 +38,7 @@ def test_rotation_curve_from_radial_nodes(evaluate_models):
     values, _ = evaluate_models(
         [model], PROPERTIES | dict(vpt_vt=curve.tolist()))
     np.testing.assert_array_equal(
-        expression[0]['scube']['d'], values[0]['scube']['d'])
+        expression[0]['spectra']['d'], values[0]['spectra']['d'])
 
 
 def test_names_of_constants():
@@ -48,7 +48,7 @@ def test_names_of_constants():
     model0 = dict(
         name='g0',
         driver=dict(type='host'),
-        dmodel=dict(type='scube', size=[32, 32, 41], step=[1, 1, 10]),
+        dmodel=dict(type='pixel_spectra', size=[32, 32, 41], step=[1, 1, 10]),
         gmodel=dict(
             type='kinematics_3d',
             components=[

@@ -33,7 +33,7 @@ def model(component):
         else 'kinematics_2d'
     return dict(
         driver=dict(type='host'),
-        dmodel=dict(type='scube', size=[32, 32, 41], step=[1, 1, 10]),
+        dmodel=dict(type='pixel_spectra', size=[32, 32, 41], step=[1, 1, 10]),
         gmodel=dict(type=gmodel_type, components=[component]))
 
 
@@ -60,7 +60,7 @@ def test_values_at_the_subnodes_are_used_as_they_are(evaluate_models, type_):
     # The host adds the clouds of a thick disk in any order (float32)
     rtol = 1e-4 if type_ == 'mcdisk' else 0
     np.testing.assert_allclose(
-        actual[0]['scube']['d'], expected[0]['scube']['d'], rtol=rtol)
+        actual[0]['spectra']['d'], expected[0]['spectra']['d'], rtol=rtol)
 
 
 def test_node_wise_parameters_have_a_value_for_each_subnode():

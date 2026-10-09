@@ -57,7 +57,7 @@ def test_rotation_curves(driver, trait, evaluate_models):
     incl = 60
     model = dict(
         driver=dict(type=driver.type()),
-        dmodel=dict(type='scube', size=[33, 41, 81], step=[0.5, 0.5, 10]),
+        dmodel=dict(type='pixel_spectra', size=[33, 41, 81], step=[0.5, 0.5, 10]),
         gmodel=dict(type='kinematics_2d', components=[dict(
             type='smdisk', loose=False, tilted=False,
             rnodes=list(range(0, 14)),
@@ -97,7 +97,7 @@ def test_rotation_curves_near_the_centre(driver, trait, evaluate_models):
     radius = 1e-4 * values['rt']
     model = dict(
         driver=dict(type=driver.type()),
-        dmodel=dict(type='scube', size=[9, 9, 41], step=[1, 1, 10]),
+        dmodel=dict(type='pixel_spectra', size=[9, 9, 41], step=[1, 1, 10]),
         gmodel=dict(type='kinematics_2d', components=[dict(
             type='smdisk', loose=False, tilted=False,
             rnodes=list(range(0, 6)),
@@ -109,7 +109,7 @@ def test_rotation_curves_near_the_centre(driver, trait, evaluate_models):
         vsys=0, xpos=0, ypos=-radius, posa=0, incl=incl, bpt_a=1,
         bpt_s=4, dpt_a=20) | {f'vpt_{k}': v for k, v in values.items()}
     data, extra = evaluate_models([model], properties)
-    assert np.isfinite(data[0]['scube']['d']).all()
+    assert np.isfinite(data[0]['spectra']['d']).all()
     velocity = extra['observation0_gmodel_component0_vdata'].data
     expected = curve(radius, **values) * np.sin(np.radians(incl))
     assert velocity[4, 4] == pytest.approx(expected, rel=1e-3)

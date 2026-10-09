@@ -23,7 +23,7 @@ GMODEL = dict(type='intensity_2d', components=[dict(
 
 PROPERTIES = dict(xpos=0.0, ypos=0.0, posa=50, incl=60, bpt_a=1, bpt_s=2)
 
-IMAGE = dict(type='image', size=[32, 41], step=[1, 1])
+IMAGE = dict(type='pixel_brightness', size=[32, 41], step=[1, 1])
 
 
 def evaluate(driver, foreground=None, properties=PROPERTIES, dmodel=IMAGE,
@@ -98,13 +98,13 @@ def test_deflection_of_a_rotated_map():
 
 
 @pytest.mark.parametrize('dmodel', [
-    IMAGE, dict(type='scube', size=[32, 41, 31], step=[1, 1, 20])])
+    IMAGE, dict(type='pixel_spectra', size=[32, 41, 31], step=[1, 1, 20])])
 def test_constant_deflection_moves_the_source(driver, dmodel):
     # With a constant deflection alpha, the image is the source moved by
     # alpha: the model with its centre moved by alpha
     gmodel = GMODEL
     properties = PROPERTIES
-    if dmodel['type'] == 'scube':
+    if dmodel['type'] == 'pixel_spectra':
         gmodel = dict(type='kinematics_2d', components=[
             GMODEL['components'][0] | dict(
                 vptraits=dict(type='tan_arctan'),
@@ -146,7 +146,7 @@ def test_point_mass_makes_an_einstein_ring(driver):
         einstein ** 2 * x / radius2, einstein ** 2 * y / radius2,
         (80, 80), (0.25, 0.25), step=0.25)
     properties = PROPERTIES | dict(incl=0, bpt_s=0.8)
-    image = dict(type='image', size=[64, 64], step=[0.5, 0.5])
+    image = dict(type='pixel_brightness', size=[64, 64], step=[0.5, 0.5])
     source = evaluate(driver, None, properties, image)
     lensed = evaluate(driver, lens, properties, image)
     grid = fitsutils.make_grid((64, 64), 0.5)

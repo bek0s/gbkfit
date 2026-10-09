@@ -30,7 +30,7 @@ def test_point_in_an_image(driver, gmodel_type):
     # At the centre of a pixel (pixel (5, 6) is at (0.25, 1.25)), all its
     # flux is in that pixel; between pixels, it is shared bilinearly
     gmodel = dict(type=gmodel_type, components=[dict(type='point')])
-    image = dict(type='image', size=[10, 8], step=[0.5, 0.5])
+    image = dict(type='pixel_brightness', size=[10, 8], step=[0.5, 0.5])
     centred = evaluate(driver, gmodel, image, dict(xpos=0.25, ypos=1.25, flux=3))
     assert centred[6, 5] * PIXEL_AREA == pytest.approx(3)
     assert centred.sum() * PIXEL_AREA == pytest.approx(3)
@@ -55,7 +55,7 @@ def test_point_flux_does_not_depend_on_oversampling(driver, scale):
     # averaged back to the pixels of the image: as for the disks, which
     # are surface brightness, the flux of the point does not change
     gmodel = dict(type='intensity_2d', components=[dict(type='point')])
-    image = dict(type='image', size=[10, 8], step=[0.5, 0.5],
+    image = dict(type='pixel_brightness', size=[10, 8], step=[0.5, 0.5],
                  scale=[scale, scale])
     result = evaluate(driver, gmodel, image, dict(xpos=0.25, ypos=1.25, flux=3))
     assert result.sum() * PIXEL_AREA == pytest.approx(3, rel=1e-6)
@@ -72,7 +72,7 @@ def test_point_with_a_psf_does_not_depend_on_oversampling(driver, scale):
     # The psf is drawn on the oversampled grid at its pixel size: the
     # image of a point is the psf (variance sigma^2), at any oversampling
     gmodel = dict(type='intensity_2d', components=[dict(type='point')])
-    image = dict(type='image', size=[32, 32], step=[0.5, 0.5],
+    image = dict(type='pixel_brightness', size=[32, 32], step=[0.5, 0.5],
                  scale=[scale, scale], psf=dict(type='gauss', sigma=2.0))
     result = evaluate(driver, gmodel, image, dict(xpos=0.25, ypos=0.25, flux=1))
     position = (np.arange(32) - 15.5) * 0.5
@@ -88,7 +88,7 @@ def test_point_with_an_lsf_does_not_depend_on_oversampling(driver, scale):
     # spectrum of a point has the variance of the line, the lsf and a
     # channel (10^2 / 12), at any oversampling
     gmodel = dict(type='kinematics_2d', components=[dict(type='point')])
-    scube = dict(type='scube', size=[4, 4, 101], step=[0.5, 0.5, 10],
+    scube = dict(type='pixel_spectra', size=[4, 4, 101], step=[0.5, 0.5, 10],
                  scale=[1, 1, scale], lsf=dict(type='gauss', sigma=30))
     cube = evaluate(driver, gmodel, scube, dict(
         xpos=0.25, ypos=0.25, flux=1, vsys=0, disp=10))
@@ -103,7 +103,7 @@ def test_point_in_a_cube(driver, gmodel_type):
     # The spectrum of the point is a Gaussian of its flux, velocity and
     # dispersion (the mean of the line over each channel)
     gmodel = dict(type=gmodel_type, components=[dict(type='point')])
-    scube = dict(type='scube', size=[10, 8, 41], step=[0.5, 0.5, 10])
+    scube = dict(type='pixel_spectra', size=[10, 8, 41], step=[0.5, 0.5, 10])
     cube = evaluate(driver, gmodel, scube, dict(
         xpos=0.25, ypos=1.25, flux=2, vsys=33, disp=25))
     spectrum = cube[:, 6, 5]
@@ -123,7 +123,7 @@ def test_point_with_lines(driver):
              dict(name='nii6583', rest='6583.45 Angstrom')]
     gmodel = dict(type='kinematics_2d', components=[
         dict(type='point', lines=lines)])
-    scube = dict(type='scube', size=[10, 8, 301], step=[0.5, 0.5, 10],
+    scube = dict(type='pixel_spectra', size=[10, 8, 301], step=[0.5, 0.5, 10],
                  rval=[0, 0, 500], rest='6562.8 Angstrom')
     cube = evaluate(driver, gmodel, scube, dict(
         xpos=0, ypos=0, flux=1, vsys=0, disp=30, nii6583_ratio=0.5))

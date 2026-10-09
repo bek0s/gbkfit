@@ -43,23 +43,31 @@ APERTURES = dict(type='apertures', apertures=[
     dict(type='circle', x=1, y=0, radius=2), dict(type='field')])
 
 OBSERVABLES = dict(
-    scube=dict(type='scube', size=[24, 25, 61], step=[1, 1, 20],
-               rest='6562.8 Angstrom'),
-    lslit=dict(type='lslit', size=[24, 61], step=[1, 20], rota=40,
-               rest='6562.8 Angstrom'),
-    mmaps=dict(type='mmaps', size=[24, 25], spec_size=81, spec_step=10,
-               spec_rest='6562.8 Angstrom', mask_cutoff=1e-4),
-    mmaps_fit=dict(type='mmaps', size=[24, 25], spec_size=81, spec_step=10,
-                   spec_rest='6562.8 Angstrom', mask_cutoff=1e-4,
-                   method='gaussian_fit'),
-    bmaps=dict(type='bmaps', regions=APERTURES, size=[24, 25],
-               spec_size=81, spec_step=10, spec_rest='6562.8 Angstrom',
-               mask_cutoff=1e-4),
-    aspec=dict(type='aspec', regions=APERTURES, size=[24, 25],
-               spec_size=61, spec_step=20, spec_rest='6562.8 Angstrom'))
+    pixel_spectra=dict(
+        type='pixel_spectra', size=[24, 25, 61], step=[1, 1, 20],
+        rest='6562.8 Angstrom'),
+    slit_spectra=dict(
+        type='slit_spectra', size=[24, 61], step=[1, 20], rota=40,
+        rest='6562.8 Angstrom'),
+    pixel_moments=dict(
+        type='pixel_moments', size=[24, 25], spec_size=81, spec_step=10,
+        spec_rest='6562.8 Angstrom', mask_cutoff=1e-4),
+    pixel_moments_fit=dict(
+        type='pixel_moments', size=[24, 25], spec_size=81, spec_step=10,
+        spec_rest='6562.8 Angstrom', mask_cutoff=1e-4,
+        method='gaussian_fit'),
+    region_moments=dict(
+        type='region_moments', regions=APERTURES, size=[24, 25],
+        spec_size=81, spec_step=10, spec_rest='6562.8 Angstrom',
+        mask_cutoff=1e-4),
+    region_spectra=dict(
+        type='region_spectra', regions=APERTURES, size=[24, 25],
+        spec_size=61, spec_step=20, spec_rest='6562.8 Angstrom'))
 
-SCALES = dict(scube=[2, 2, 1], lslit=[2, 1], mmaps=[2, 2], mmaps_fit=[2, 2],
-              bmaps=[2, 2], aspec=[2, 2, 1])
+SCALES = dict(
+    pixel_spectra=[2, 2, 1], slit_spectra=[2, 1], pixel_moments=[2, 2],
+    pixel_moments_fit=[2, 2], region_moments=[2, 2],
+    region_spectra=[2, 2, 1])
 
 INSTRUMENT = dict(
     primary_beam=dict(type='gauss', fwhm=30),
@@ -75,7 +83,7 @@ INSTRUMENT = dict(
 def test_feature_combinations(driver, name, lens):
     info = copy.deepcopy(OBSERVABLES[name])
     instrument = dict(INSTRUMENT)
-    if name in ('mmaps', 'mmaps_fit', 'bmaps'):
+    if name in ('pixel_moments', 'pixel_moments_fit', 'region_moments'):
         # Moments of a narrow spectral axis do not need the Hanning LSF
         instrument['lsf'] = dict(type='gauss', sigma=15)
     foreground = None

@@ -33,7 +33,7 @@ INSTRUMENT = dict(
 
 def scube(rest, **options):
     return dict(
-        type='scube', size=[32, 41, 301], step=[1, 1, 10],
+        type='pixel_spectra', size=[32, 41, 301], step=[1, 1, 10],
         rval=[0, 0, 500], rest=rest, **INSTRUMENT) | options
 
 
@@ -42,7 +42,7 @@ def evaluate(driver, gmodel, dmodel, properties):
         driver=dict(type=driver.type()), dmodel=copy.deepcopy(dmodel),
         gmodel=copy.deepcopy(gmodel))])
     params = gbkfit.params.EvaluationParams(group.pdescs(), properties)
-    return group.model_h(params.evaluate())[0]['scube']['d'].copy()
+    return group.model_h(params.evaluate())[0]['spectra']['d'].copy()
 
 
 def kinematics(component, gmodel_type='kinematics_2d'):
@@ -186,16 +186,16 @@ def test_observations_see_their_lines(driver):
     # The first line alone is the model of one line; the second alone has
     # its flux ratio; together they are the model of both
     gmodel = kinematics(COMPONENT | dict(lines=LINES))
-    dmodel = dict(type='scube', size=[32, 41, 301], step=[1, 1, 10],
+    dmodel = dict(type='pixel_spectra', size=[32, 41, 301], step=[1, 1, 10],
                   rval=[0, 0, 500], rest='6562.8 Angstrom')
     properties = PROPERTIES | dict(nii6583_ratio=0.4)
-    both = evaluate_observation(driver, gmodel, dmodel, properties)['scube']
+    both = evaluate_observation(driver, gmodel, dmodel, properties)['spectra']
     ha = evaluate_observation(
-        driver, gmodel, dmodel, properties, lines=['ha'])['scube']
+        driver, gmodel, dmodel, properties, lines=['ha'])['spectra']
     nii = evaluate_observation(
-        driver, gmodel, dmodel, properties, lines=['nii6583'])['scube']
+        driver, gmodel, dmodel, properties, lines=['nii6583'])['spectra']
     single = evaluate_observation(
-        driver, kinematics(COMPONENT), dmodel, PROPERTIES)['scube']
+        driver, kinematics(COMPONENT), dmodel, PROPERTIES)['spectra']
     np.testing.assert_allclose(ha, single, rtol=1e-6, atol=1e-9)
     np.testing.assert_allclose(
         ha + nii, both, rtol=1e-5, atol=1e-6 * both.max())
@@ -205,7 +205,7 @@ def test_moment_maps_of_one_line(driver):
     # On a spectral axis wide enough for both lines, the moment maps of
     # the first line are those of a model of that line alone
     gmodel = kinematics(COMPONENT | dict(lines=LINES))
-    dmodel = dict(type='mmaps', size=[32, 41], spec_size=301, spec_step=10,
+    dmodel = dict(type='pixel_moments', size=[32, 41], spec_size=301, spec_step=10,
                   spec_rval=500, spec_rest='6562.8 Angstrom',
                   mask_cutoff=1e-3)
     properties = PROPERTIES | dict(nii6583_ratio=0.4)
@@ -215,9 +215,9 @@ def test_moment_maps_of_one_line(driver):
     single = evaluate_observation(
         driver, kinematics(COMPONENT), dmodel, PROPERTIES)
     np.testing.assert_allclose(
-        ha['mmap1'], single['mmap1'], rtol=1e-5, atol=1e-3)
-    good = np.isfinite(both['mmap1'])
-    assert np.abs(both['mmap1'] - single['mmap1'])[good].max() > 100
+        ha['moment1'], single['moment1'], rtol=1e-5, atol=1e-3)
+    good = np.isfinite(both['moment1'])
+    assert np.abs(both['moment1'] - single['moment1'])[good].max() > 100
 
 
 @pytest.mark.parametrize('lines, message', [

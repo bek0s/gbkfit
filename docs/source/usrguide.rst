@@ -99,7 +99,7 @@ Example
    observations:
    - driver: {type: host}
      observable:
-       type: scube
+       type: pixel_spectra
        size: [101, 101, 101]
        step: [1, 1, 5]
      instrument:

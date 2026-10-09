@@ -36,7 +36,7 @@ def kinematics_3d_model(driver, with_opacity):
             ohtraits=dict(type='sech2'))]
     return dict(
         driver=dict(type=driver.type()),
-        dmodel=dict(type='scube', size=[32, 32, 41], step=[1, 1, 10]),
+        dmodel=dict(type='pixel_spectra', size=[32, 32, 41], step=[1, 1, 10]),
         gmodel=gmodel)
 
 
@@ -50,7 +50,7 @@ def evaluate(driver, with_opacity, opacity, times=1):
     params = gbkfit.params.EvaluationParams(model_group.pdescs(), properties)
     values = params.evaluate()
     return [
-        copy.deepcopy(model_group.model_h(values)[0]['scube']['d'])
+        copy.deepcopy(model_group.model_h(values)[0]['spectra']['d'])
         for _ in range(times)]
 
 
@@ -105,7 +105,7 @@ def face_on_optical_depth(
         gmodel['opacity_components'][0]['cflux'] = 1e-4
     model = dict(
         driver=dict(type=driver.type()),
-        dmodel=dict(type='image', size=[24, 24]),
+        dmodel=dict(type='pixel_brightness', size=[24, 24]),
         gmodel=gmodel)
     properties = dict(
         xpos=0, ypos=0, posa=0, incl=0, bpt_a=1, bpt_s=4, bht_s=1,
@@ -167,10 +167,10 @@ def test_the_near_side_is_where_outflows_approach(driver, evaluate_models):
     def evaluate(gmodel, properties):
         model = dict(
             driver=dict(type=driver.type()),
-            dmodel=dict(type='scube', size=[32, 32, 41], step=[1, 1, 10]),
+            dmodel=dict(type='pixel_spectra', size=[32, 32, 41], step=[1, 1, 10]),
             gmodel=gmodel)
         data, _ = evaluate_models([model], properties)
-        return data[0]['scube']['d']
+        return data[0]['spectra']['d']
     clear = evaluate(gmodel, properties)
     dusty = evaluate(
         gmodel | dict(opacity_components=[dict(
@@ -202,7 +202,7 @@ def image_and_optical_depth(driver, evaluate_models, opacity, step_z):
         optraits=dict(type='exponential'), ohtraits=dict(type='sech2'))
     model = dict(
         driver=dict(type=driver.type()),
-        dmodel=dict(type='image', size=[32, 32]),
+        dmodel=dict(type='pixel_brightness', size=[32, 32]),
         gmodel=dict(
             type='intensity_3d', size_z=round(24 / step_z), step_z=step_z,
             components=[dict(DISK, **traits)],
@@ -213,7 +213,7 @@ def image_and_optical_depth(driver, evaluate_models, opacity, step_z):
         ocmp_opt_a=opacity, ocmp_opt_s=4, ocmp_oht_s=1)
     data, extra = evaluate_models([model], properties)
     tau = extra['observation0_gmodel_total_odata'].data.sum(axis=0)
-    return data[0]['image']['d'], tau
+    return data[0]['brightness']['d'], tau
 
 
 @pytest.mark.parametrize('step_z', [0.25, 1, 2])

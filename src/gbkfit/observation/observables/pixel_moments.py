@@ -3,7 +3,7 @@ from collections.abc import Sequence
 
 import astropy.units
 
-from gbkfit.dataset.datasets import DatasetMMaps
+from gbkfit.dataset.datasets import DatasetPixelMoments
 from gbkfit.model.core import GModelSCube
 from gbkfit.utils import fitsutils, parseutils
 from . import _dcube, _detail, _moments
@@ -11,24 +11,24 @@ from .core import Observable
 
 
 __all__ = [
-    'MMaps'
+    'PixelMoments'
 ]
 
 
 _log = logging.getLogger(__name__)
 
 
-class MMaps(Observable):
+class PixelMoments(Observable):
 
     # The form of the data this observable measures
-    dataset_class = DatasetMMaps
+    dataset_class = DatasetPixelMoments
 
     # Moment maps have no spectral axis
     _spectral_axis = None
 
     @staticmethod
     def type():
-        return 'mmaps'
+        return 'pixel_moments'
 
     @staticmethod
     def is_compatible(gmodel):
@@ -38,12 +38,12 @@ class MMaps(Observable):
     def load(cls, info, dataset=None):
         # The size or centre of the spectral axis not given covers the
         # velocities of the data
-        if dataset is not None and 'mmap1' in dataset:
+        if dataset is not None and 'moment1' in dataset:
             info = info | _moments.spectral_axis_from_data(
                 dataset, info.get('spec_step', _moments.SPEC_STEP),
                 info.get('spec_size'), info.get('spec_rval'))
         return cls(**_detail.load_observable_common(
-            cls, info, 2, dataset, DatasetMMaps))
+            cls, info, 2, dataset, DatasetPixelMoments))
 
     def dump(self, data=None, prefix='', dump_path=True, overwrite=False):
         return _detail.without_options_from_data(self, dict(
@@ -102,7 +102,7 @@ class MMaps(Observable):
         self._spec_rest = fitsutils.make_rest(spec_rest)
 
     def keys(self):
-        return tuple([f'mmap{i}' for i in self._orders])
+        return tuple([f'moment{i}' for i in self._orders])
 
     def orders(self):
         return self._orders
@@ -148,20 +148,20 @@ class MMaps(Observable):
             self.rota(), self._spec_rest, tuple(scale) + (1,),
             instrument.primary_beam(), psf, lsf,
             False, None, False, dtype)
-        return MMapsPlan(self, dcube, driver, gmodel, foreground, dtype,
+        return PixelMomentsPlan(self, dcube, driver, gmodel, foreground, dtype,
             selection)
 
 
-class MMapsPlan(_detail.DCubePlanBase):
+class PixelMomentsPlan(_detail.DCubePlanBase):
 
     def __init__(
-            self, mmaps, dcube, driver, gmodel, foreground, dtype,
+            self, moments, dcube, driver, gmodel, foreground, dtype,
             selection):
         super().__init__(
             dcube, driver, gmodel, foreground, dtype, selection)
         self._moments = _moments.MomentsPlan(
-            driver, mmaps.size(), mmaps.orders(), mmaps.mask_cutoff(),
-            mmaps.method(), dtype)
+            driver, moments.size(), moments.orders(), moments.mask_cutoff(),
+            moments.method(), dtype)
 
     def evaluate(self, params, out_extra):
         self._evaluate_cube(

@@ -5,7 +5,7 @@ from numbers import Real
 import astropy.units
 import numpy as np
 
-from gbkfit.dataset.datasets import DatasetBMaps
+from gbkfit.dataset.datasets import DatasetRegionMoments
 from gbkfit.dataset.regions import Regions, regions_parser
 from gbkfit.model.core import GModelSCube
 from gbkfit.utils import fitsutils, parseutils
@@ -15,32 +15,32 @@ from .core import Observable
 
 
 __all__ = [
-    'BMaps'
+    'RegionMoments'
 ]
 
 
 _log = logging.getLogger(__name__)
 
 
-class BMaps(Observable):
+class RegionMoments(Observable):
     """
     Moments of the spectra in regions of the sky (see Regions; e.g.
     Voronoi bins, fibres): the moments of the sum of the cube of the
     model, seen through the instrument, in each region, as the moments of
     binned data are those of their summed spectra. The spatial axes of the
     cube are those of the regions if they are on a grid (bins), or given
-    (apertures); its spectral axis is as that of mmaps.
+    (apertures); its spectral axis is as that of pixel_moments.
     """
 
     # The form of the data this observable measures
-    dataset_class = DatasetBMaps
+    dataset_class = DatasetRegionMoments
 
     # The moments have no spectral axis
     _spectral_axis = None
 
     @staticmethod
     def type():
-        return 'bmaps'
+        return 'region_moments'
 
     @staticmethod
     def is_compatible(gmodel):
@@ -57,7 +57,7 @@ class BMaps(Observable):
     def load(cls, info, dataset=None):
         desc = parseutils.make_typed_desc(cls, 'observable')
         if dataset is not None:
-            if not isinstance(dataset, DatasetBMaps):
+            if not isinstance(dataset, DatasetRegionMoments):
                 dataset_desc = parseutils.make_typed_desc(
                     dataset.__class__, 'dataset')
                 raise RuntimeError(
@@ -66,7 +66,7 @@ class BMaps(Observable):
             info = info | dict(regions=dataset.regions())
             # The size or centre of the spectral axis not given covers the
             # velocities of the data
-            if 'mmap1' in dataset:
+            if 'moment1' in dataset:
                 info = info | _moments.spectral_axis_from_data(
                     dataset, info.get('spec_step', _moments.SPEC_STEP),
                     info.get('spec_size'), info.get('spec_rval'))
@@ -114,9 +114,9 @@ class BMaps(Observable):
         The spatial grid (size, step, rpix, rval, rota; see
         fitsutils.make_grid) is that of the regions if they have one
         (bins), and must not be given; else size is required. The
-        spectral axis and the moments are as those of mmaps (see MMaps,
-        also for method): the regions whose moment 0 is not above
-        mask_cutoff are masked.
+        spectral axis and the moments are as those of pixel_moments (see
+        PixelMoments, also for method): the regions whose moment 0 is not
+        above mask_cutoff are masked.
         """
         spatial = _detail.spatial_grid_of_regions(
             regions, size, step, rpix, rval, rota)
@@ -161,7 +161,7 @@ class BMaps(Observable):
         return self._spec_rval
 
     def keys(self):
-        return tuple(f'mmap{i}' for i in self._orders)
+        return tuple(f'moment{i}' for i in self._orders)
 
     def _require_matching_coordinates(self, dataset):
         if dataset.regions() != self._regions:
@@ -187,7 +187,8 @@ class BMaps(Observable):
             selection):
         if gmodel.has_weights():
             raise RuntimeError(
-                "bmaps does not support gmodels with weights (wtraits) yet")
+                "region_moments does not support gmodels with weights "
+                "(wtraits) yet")
         psf, lsf = instrument.psf(), instrument.lsf()
         if (psf or lsf) and self._mask_cutoff == 0:
             _log.warning(
@@ -206,13 +207,13 @@ class BMaps(Observable):
             self.rota(), self._spec_rest, tuple(scale) + (1,),
             instrument.primary_beam(), psf, lsf,
             False, None, False, dtype)
-        return BMapsPlan(
+        return RegionMomentsPlan(
             self._weights, self._orders, self._mask_cutoff, self._method,
             dcube, driver, gmodel, foreground, dtype,
             selection)
 
 
-class BMapsPlan(_detail.DCubePlanBase):
+class RegionMomentsPlan(_detail.DCubePlanBase):
 
     def __init__(
             self, weights, orders, mask_cutoff, method, dcube, driver,
