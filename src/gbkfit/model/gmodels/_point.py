@@ -62,7 +62,7 @@ class PointPlan(ComponentPlan):
         lines after the first.
         """
         self._driver = driver
-        self._dtype = dtype
+        self._dtype = np.dtype(dtype)
         self._lines = None if lines is None else np.array(lines, dtype=float)
         self._ratios = tuple(ratios)
 
