@@ -82,7 +82,7 @@ class BrightnessMCDisk3D(BrightnessComponent3D):
 
     def plan(self, driver, dtype):
         return _component.DiskComponentPlan(
-            self, self._disk.plan(driver, dtype))
+            self, self._disk.plan(driver, 0, dtype))
 
     def disk_outputs(self, outputs):
         """The outputs of the disk, from those of the component."""

@@ -54,6 +54,13 @@ struct DiskArgs
     T spec_step = 0;
     T spec_zero = 0;
 
+    // The emission lines that the spectral cube gets: line l is at the
+    // spectral coordinate lines[3l] + lines[3l + 1] * velocity, with the
+    // dispersion lines[3l + 1] * dispersion and the flux lines[3l + 2] *
+    // flux (its offset, scale and flux). Required with a spectral cube.
+    int nlines = 0;
+    const T* lines = nullptr;
+
     // The outputs (all optional)
     T* image = nullptr;
     T* scube = nullptr;

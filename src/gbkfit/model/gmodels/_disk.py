@@ -220,10 +220,11 @@ class Disk(abc.ABC):
         return self._pdescs
 
     @abc.abstractmethod
-    def plan(self, driver, dtype):
+    def plan(self, driver, nlines, dtype):
         """
         The evaluation of the disk on the given driver and dtype (a
-        DiskPlan), which owns the memory it needs.
+        DiskPlan), which owns the memory it needs. nlines is the number of
+        emission lines it adds to spectral cubes (0 without them).
         """
         pass
 
@@ -232,11 +233,11 @@ class DiskPlan(abc.ABC):
     """
     The evaluation of a disk on a driver and dtype: the native description
     of the disk, and the host and device memory with its parameter values
-    (geometry and traits, packed in one buffer), and the host view of each
-    group of parameter values in it.
+    (geometry and traits, packed in one buffer, and the values of its
+    emission lines), and the host view of each group of values in it.
     """
 
-    def __init__(self, disk, driver, dtype):
+    def __init__(self, disk, driver, nlines, dtype):
 
         # The number of values of each group of parameters: one value for
         # each subnode for node-wise geometric parameters, and the values
@@ -249,6 +250,8 @@ class DiskPlan(abc.ABC):
             constants[kind] = _trait_constants(
                 traits_, disk._nrnodes, disk._nsubrnodes)
             sizes[kind] = sum(constants[kind][3])
+        # The offset, scale and flux of each emission line
+        sizes['lines'] = 3 * nlines
 
         # Pack all parameter values in one buffer, so that they can be
         # copied to the device with one copy per evaluation
@@ -287,16 +290,20 @@ class DiskPlan(abc.ABC):
         self._dtype = dtype
         self._param_values = (values_h, values_d)
         self._param_views = views_h
+        self._lines_h = views_h['lines'].reshape(nlines, 3)
+        self._lines_d = views_d['lines'].reshape(nlines, 3) if nlines else None
         self._backend = driver.native_class('GModel', dtype)()
 
-    def evaluate(self, params, grid, outputs, out_extra):
+    def evaluate(self, params, grid, outputs, out_extra, lines=None):
         """
         Add the disk to the outputs. grid has the grid of the native
         evaluation functions (see ComponentPlan.evaluate), and outputs the
         arrays they add to (all optional): the opacity cube they read
         ('opacity'), the 'image' or 'scube', and the 3d spatial weights
         ('wdata'), density ('rdata') and density after the opacity
-        ('ordata').
+        ('ordata'). lines has the offset, scale and flux of each emission
+        line (an array of shape (nlines, 3); see the native DiskArgs), if
+        the plan has lines.
         """
 
         disk = self._disk
@@ -333,6 +340,8 @@ class DiskPlan(abc.ABC):
             fill(name, pdescs, dict.fromkeys(pdescs, sampling))
         for kind, trait_params in disk._trait_params.items():
             fill(kind, trait_params.pdescs, trait_params.sampling)
+        if lines is not None:
+            self._lines_h[:] = lines
         driver.mem_copy_h2d(*self._param_values)
 
         wdata_cmp = None
@@ -369,6 +378,7 @@ class DiskPlan(abc.ABC):
 
         # The keyword arguments of the native evaluation functions
         grid_and_outputs = grid | outputs | dict(
+            lines=self._lines_d,
             wdata_cmp=wdata_cmp, rdata_cmp=rdata_cmp, ordata_cmp=ordata_cmp,
             vdata_cmp=vdata_cmp, ddata_cmp=ddata_cmp,
             vdweight_cmp=vdweight_cmp)

@@ -7,8 +7,8 @@ __all__ = ['SMDisk', 'SMDiskPlan']
 
 class SMDisk(_disk.Disk):
 
-    def plan(self, driver, dtype):
-        return SMDiskPlan(self, driver, dtype)
+    def plan(self, driver, nlines, dtype):
+        return SMDiskPlan(self, driver, nlines, dtype)
 
 
 class SMDiskPlan(_disk.DiskPlan):

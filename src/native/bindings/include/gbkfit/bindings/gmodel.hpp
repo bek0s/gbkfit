@@ -70,6 +70,7 @@ struct GModel
     using ConstData = Array<Device, const T>;
     using Cube = Array<Device, T, nb::ndim<3>>;
     using ConstCube = Array<Device, const T, nb::ndim<3>>;
+    using Lines = Array<Device, const T, nb::ndim<2>>;
 
     // Assign the same (mean over z) weight of the 3d spatial weight cube
     // to the whole spectrum of each spatial position
@@ -93,6 +94,7 @@ struct GModel
             std::array<T, 3> spat_zero,
             T spat_rota,
             int spec_size, T spec_step, T spec_zero,
+            Lines lines,
             ConstData opacity,
             Data image, Data scube,
             Data wdata, Data wdata_cmp,
@@ -102,7 +104,7 @@ struct GModel
     {
         Kernels::gmodel_smdisk_evaluate(make_args(
                 disk, spat_size, spat_step, spat_zero, spat_rota,
-                spec_size, spec_step, spec_zero, opacity,
+                spec_size, spec_step, spec_zero, lines, opacity,
                 image, scube, wdata, wdata_cmp, rdata, rdata_cmp,
                 ordata, ordata_cmp, vdata_cmp, ddata_cmp, vdweight_cmp));
     }
@@ -117,6 +119,7 @@ struct GModel
             std::array<T, 3> spat_zero,
             T spat_rota,
             int spec_size, T spec_step, T spec_zero,
+            Lines lines,
             ConstData opacity,
             Data image, Data scube,
             Data wdata, Data wdata_cmp,
@@ -126,7 +129,7 @@ struct GModel
     {
         const auto args = make_args(
                 disk, spat_size, spat_step, spat_zero, spat_rota,
-                spec_size, spec_step, spec_zero, opacity,
+                spec_size, spec_step, spec_zero, lines, opacity,
                 image, scube, wdata, wdata_cmp, rdata, rdata_cmp,
                 ordata, ordata_cmp, vdata_cmp, ddata_cmp, vdweight_cmp);
         require(has_analytical_integral.shape(0) == size_t(args.rpt.n),
@@ -202,6 +205,7 @@ struct GModel
                     nb::arg("spat_zero"), nb::arg("spat_rota"),
                     nb::arg("spec_size"),
                     nb::arg("spec_step"), nb::arg("spec_zero"),
+                    nb::arg("lines").noconvert().none() = nb::none(),
                     nb::arg("opacity").noconvert().none() = nb::none(),
                     nb::arg("image").noconvert().none() = nb::none(),
                     nb::arg("scube").noconvert().none() = nb::none(),
@@ -243,6 +247,7 @@ private:
             std::array<T, 3> spat_zero,
             T spat_rota,
             int spec_size, T spec_step, T spec_zero,
+            const Lines& lines,
             const ConstData& opacity,
             const Data& image, const Data& scube,
             const Data& wdata, const Data& wdata_cmp,
@@ -298,6 +303,12 @@ private:
         a.spec_size = spec_size;
         a.spec_step = spec_step;
         a.spec_zero = spec_zero;
+        require(!lines.is_valid() || lines.shape(1) == 3,
+                "lines must have shape (nlines, 3)");
+        require(!scube.is_valid() || (lines.is_valid() && lines.shape(0) > 0),
+                "a spectral cube needs at least one line");
+        a.nlines = lines.is_valid() ? int(lines.shape(0)) : 0;
+        a.lines = data(lines);
 
         const size_t nimage = size_t(spat_size[0]) * spat_size[1];
         const size_t nspat = nimage * spat_size[2];
