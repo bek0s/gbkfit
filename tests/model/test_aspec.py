@@ -96,6 +96,23 @@ def test_aspec_of_bins_are_the_sums_of_an_scube(driver):
     np.testing.assert_allclose(aspec, expected, rtol=1e-5, atol=1e-6)
 
 
+@pytest.mark.parametrize('step', [1.0, 0.5])
+def test_aspec_of_a_point_is_its_flux(driver, step):
+    # The spectra of regions are fluxes: around a point, its flux,
+    # whatever the size of the pixels of the model
+    gmodel = dict(type='kinematics_2d', components=[dict(type='point')])
+    dmodel = dict(
+        type='aspec', size=[int(16 / step)] * 2, step=[step, step],
+        spec_size=51, spec_step=10, regions=dict(type='apertures', apertures=[
+            dict(type='circle', x=0, y=0, radius=3)]))
+    model_group = observation_group([dict(
+        driver=dict(type=driver.type()), dmodel=dmodel, gmodel=gmodel)])
+    params = gbkfit.params.EvaluationParams(
+        model_group.pdescs(), dict(xpos=0, ypos=0, flux=2, vsys=0, disp=30))
+    spectrum = model_group.model_h(params.evaluate())[0]['aspec']['d'][:, 0]
+    assert spectrum.sum() * 10 == pytest.approx(2, rel=1e-4)
+
+
 def test_aspec_objective_residual(driver):
     # Data equal to the model plus 1, with errors of 2: every residual
     # (model - data) / error is -0.5
