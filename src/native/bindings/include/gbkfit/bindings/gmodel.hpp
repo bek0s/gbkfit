@@ -111,7 +111,7 @@ struct GModel
     mcdisk_evaluate(
             const Disk& disk,
             T cflux, unsigned int seed,
-            int nclouds, Ints ncloudscsum, Bools hasordint,
+            int nclouds, Ints ncloudscsum, Bools has_analytical_integral,
             std::array<int, 3> spat_size,
             std::array<T, 3> spat_step,
             std::array<T, 3> spat_zero,
@@ -129,15 +129,16 @@ struct GModel
                 spec_size, spec_step, spec_zero, opacity,
                 image, scube, wdata, wdata_cmp, rdata, rdata_cmp,
                 ordata, ordata_cmp, vdata_cmp, ddata_cmp);
-        require(hasordint.shape(0) == size_t(args.rpt.n),
-                "hasordint needs one value for each density trait");
+        require(has_analytical_integral.shape(0) == size_t(args.rpt.n),
+                "has_analytical_integral needs one value for each density "
+                "trait");
         MCDiskArgs<T> mc;
         mc.cflux = cflux;
         mc.seed = seed;
         mc.nclouds = nclouds;
         mc.ncloudscsum = ncloudscsum.data();
         mc.ncloudscsum_len = int(ncloudscsum.shape(0));
-        mc.hasordint = hasordint.data();
+        mc.has_analytical_integral = has_analytical_integral.data();
         Kernels::gmodel_mcdisk_evaluate(args, mc);
     }
 
@@ -226,7 +227,7 @@ struct GModel
                 nb::arg("disk"), nb::arg("cflux"), nb::arg("seed"),
                 nb::arg("nclouds"),
                 nb::arg("ncloudscsum").noconvert(),
-                nb::arg("hasordint").noconvert()));
+                nb::arg("has_analytical_integral").noconvert()));
     }
 
 private:

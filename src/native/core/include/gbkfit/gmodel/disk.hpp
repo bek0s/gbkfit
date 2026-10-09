@@ -80,7 +80,7 @@ struct MCDiskArgs
     int nclouds = 0;
     const int* ncloudscsum = nullptr;
     int ncloudscsum_len = 0;
-    const bool* hasordint = nullptr;
+    const bool* has_analytical_integral = nullptr;
 };
 
 } // namespace gbkfit

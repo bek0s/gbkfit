@@ -347,7 +347,9 @@ gmodel_mcdisk_evaluate_cloud(
     // Find which trait and subring the cloud belongs to.
     for(tidx = 0; tidx < a.rpt.n; ++tidx)
     {
-        int size = mc.hasordint[tidx] ? 1 : a.nrnodes - 2; // -2 ?
+        // One pool of clouds for the whole disk, or one for each ring (the
+        // nodes are the ring centres between the edges of the disk)
+        int size = mc.has_analytical_integral[tidx] ? 1 : a.nrnodes - 2;
         if (rnidx < size)
             break;
         rnidx -= size;
@@ -380,7 +382,7 @@ gmodel_mcdisk_evaluate_cloud(
 
     // Recalculate radial node index.
     // This is done in order to account for:
-    //  - rptraits with ordinary integral (no subrings).
+    //  - rptraits with an analytical integral (no subrings).
     //  - pixels in the first and last half subrings.
     if (!disk_info(rnidx, rd, a.nrnodes, a.rnodes)) {
         return;
