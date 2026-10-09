@@ -8,7 +8,7 @@ import scipy.special
 
 import gbkfit.math
 from gbkfit.psflsf.core import (
-    LSF, MIN_EXTENT, WING_FLUX, check_scale, lsf_parser)
+    LSF, MIN_EXTENT, WING_FLUX, check_scale, embed, lsf_parser)
 from gbkfit.utils import fitsutils, parseutils
 
 
@@ -19,7 +19,9 @@ __all__ = [
     'LSFLorentz',
     'LSFMoffat',
     'LSFImage',
-    'LSFSum'
+    'LSFSum',
+    'LSFConvolution',
+    'LSFHanning'
 ]
 
 
@@ -367,3 +369,83 @@ class LSFSum(LSF):
         return sum(
             weight * lsf.asarray(step, size, offset)
             for weight, lsf in zip(self._weights, self._lsfs))
+
+
+class LSFConvolution(LSF):
+    """
+    The convolution of LSFs: e.g. the LSF of an instrument and the
+    Hanning smoothing of the channels of the data (see LSFHanning).
+    """
+
+    @staticmethod
+    def type() -> str:
+        return 'convolution'
+
+    @classmethod
+    def load(cls, info: dict[str, Any], *args, **kwargs) -> 'LSFConvolution':
+        parseutils.load_option_and_update_info(
+            lsf_parser, info, 'lsfs', required=True)
+        return cls(**_load_lsf_common(cls, info))
+
+    def dump(self) -> dict[str, Any]:
+        return dict(type=self.type(), lsfs=lsf_parser.dump(list(self._lsfs)))
+
+    def __init__(self, lsfs: Sequence[LSF]):
+        if not lsfs:
+            raise RuntimeError("a convolution of LSFs needs at least one LSF")
+        self._lsfs = tuple(lsfs)
+
+    def _size_impl(self, step: float) -> float:
+        # The sum of the (odd) sizes of the terms, less one for each
+        # convolution
+        sizes = [lsf.size(step) for lsf in self._lsfs]
+        return sum(sizes) - len(sizes) + 1
+
+    def _asarray_impl(self, step: float, size: int, offset: int) -> np.ndarray:
+        data = np.ones(1)
+        for lsf in self._lsfs:
+            data = np.convolve(data, lsf.asarray(step))
+        return embed(data / data.sum(), (size,), (offset,))
+
+
+class LSFHanning(LSF):
+    """
+    The response of the Hanning smoothing of channels of the given width
+    (km/s): 1/4, 1/2 and 1/4 of the light of each channel goes to the
+    channel before, the channel itself and the channel after. The width
+    must be a multiple of the step it is drawn with (e.g. the channels of
+    the data, with any oversampling).
+    """
+
+    @staticmethod
+    def type() -> str:
+        return 'hanning'
+
+    @classmethod
+    def load(cls, info: dict[str, Any], *args, **kwargs) -> 'LSFHanning':
+        return cls(**_load_lsf_common(cls, info))
+
+    def dump(self) -> dict[str, Any]:
+        return dict(type=self.type(), width=self._width)
+
+    def __init__(self, width: float):
+        check_scale('width', width)
+        self._width = width
+
+    def _steps(self, step: float) -> int:
+        """The number of steps in a channel width."""
+        steps = self._width / step
+        if abs(steps - round(steps)) > 1e-6 * steps:
+            raise RuntimeError(
+                f"the channel width of the Hanning smoothing ({self._width}) "
+                f"must be a multiple of the step it is drawn with ({step})")
+        return round(steps)
+
+    def _size_impl(self, step: float) -> float:
+        return 2 * self._steps(step) + 1
+
+    def _asarray_impl(self, step: float, size: int, offset: int) -> np.ndarray:
+        steps = self._steps(step)
+        data = np.zeros(2 * steps + 1)
+        data[[0, steps, 2 * steps]] = 0.25, 0.5, 0.25
+        return embed(data, (size,), (offset,))

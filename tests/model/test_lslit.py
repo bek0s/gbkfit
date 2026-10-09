@@ -68,3 +68,19 @@ def test_lslit_objective_residual(driver):
     params = gbkfit.params.EvaluationParams(model_group.pdescs(), PROPERTIES)
     residual = objective.residual_nddata_h(params.evaluate(), False)
     np.testing.assert_allclose(residual[0]['lslit'], -0.5, rtol=1e-5)
+
+
+def test_hanning_smoothing_of_the_channels(driver):
+    # A Gaussian LSF convolved with the Hanning smoothing of the channels
+    # is the Gaussian LSF and then 1/4, 1/2 and 1/4 of each channel in
+    # the channel before, itself and the one after
+    dmodel = dict(type='lslit', size=[32, 61], step=[1, 10])
+    gauss = dict(type='gauss', sigma=15)
+    plain = evaluate(driver, dmodel | dict(lsf=gauss))
+    smoothed = evaluate(driver, dmodel | dict(lsf=dict(
+        type='convolution', lsfs=[gauss, dict(type='hanning', width=10)])))
+    expected = 0.5 * plain
+    expected[1:] += 0.25 * plain[:-1]
+    expected[:-1] += 0.25 * plain[1:]
+    np.testing.assert_allclose(
+        smoothed, expected, rtol=1e-4, atol=1e-6 * plain.max())

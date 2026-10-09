@@ -11,7 +11,9 @@ def _register_lsfs():
         LSFLorentz,
         LSFMoffat,
         LSFImage,
-        LSFSum
+        LSFSum,
+        LSFConvolution,
+        LSFHanning
     ])
 
 

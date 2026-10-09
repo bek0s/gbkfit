@@ -15,7 +15,8 @@ __all__ = [
     'MIN_EXTENT',
     'WING_FLUX',
     'check_scale',
-    'check_ratio'
+    'check_ratio',
+    'embed'
 ]
 
 
@@ -38,6 +39,27 @@ def check_ratio(ratio: float) -> None:
     if not 0 < ratio <= 1:
         raise RuntimeError(
             f"ratio must be greater than 0 and at most 1; it is {ratio}")
+
+
+def embed(kernel: np.ndarray, size: tuple[int, ...],
+          offset: tuple[int, ...]) -> np.ndarray:
+    """
+    A kernel of odd shape (numpy order) in an array of the given size
+    (FITS order), with its centre at size // 2 + offset on each axis, as
+    the analytic PSFs and LSFs put theirs. It must fit.
+    """
+    shape = tuple(size)[::-1]
+    offset = tuple(offset)[::-1]
+    data = np.zeros(shape)
+    slices = []
+    for n, k, o in zip(shape, kernel.shape, offset):
+        start = n // 2 + o - k // 2
+        if start < 0 or start + k > n:
+            raise RuntimeError(
+                f"a kernel of size {k} does not fit in an array of size {n}")
+        slices.append(slice(start, start + k))
+    data[tuple(slices)] = kernel
+    return data
 
 
 class LSF(parseutils.TypedSerializable, abc.ABC):
