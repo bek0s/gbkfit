@@ -54,6 +54,9 @@ class Dataset(parseutils.TypedSerializable, abc.ABC):
     def __iter__(self):
         return iter(self._items)
 
+    def __len__(self):
+        return len(self._items)
+
     def items(self):
         return self._items.items()
 
@@ -89,7 +92,7 @@ class DatasetTypedParser(parseutils.TypedParser):
         prefix = iterutils.listify(kwargs.get('prefix'), False)
         if len(x) != len(set(prefix)):
             raise RuntimeError(
-                "when dumping multiple datasets,"
+                "when dumping multiple datasets, "
                 "a unique prefix for each dataset must be provided")
         return super().dump_many(x, *args, **kwargs)
 
