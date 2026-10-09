@@ -1,4 +1,5 @@
 
+import json
 import math
 
 import numpy as np
@@ -87,7 +88,8 @@ def test_lsf_analytic(lsf_type, lsf_class, lsf_params):
 def test_psf_image_round_trip():
     image = np.exp(-np.add.outer(np.arange(-4, 5) ** 2, np.arange(-3, 4) ** 2))
     psf = PSFImage(image, step=(0.2, 0.3))
-    loaded = psf_parser.load(psf_parser.dump(psf))
+    # (through json, as configurations are: the step becomes a list)
+    loaded = psf_parser.load(json.loads(json.dumps(psf_parser.dump(psf))))
     np.testing.assert_allclose(loaded._step, (0.2, 0.3), rtol=1e-12)
     np.testing.assert_array_equal(loaded._data, psf._data)
 
