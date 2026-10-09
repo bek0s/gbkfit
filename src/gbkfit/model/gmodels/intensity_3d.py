@@ -74,9 +74,8 @@ class GModelIntensity3D(GModelImage):
         return self._component_set.constants()
 
     def evaluate_image(
-            self, driver, params, image, weights, size, step, zero, rota,
-            dtype, out_extra):
+            self, driver, params, image, weights, grid, dtype, out_extra):
         # An image has a spectral axis of size 1
         self._component_set.evaluate(
-            driver, params, dict(image=image), (1, 0, 0), weights,
-            size, step, zero, rota, dtype, out_extra)
+            driver, params, dict(image=image), grid, (1, 0, 0), weights,
+            dtype, out_extra)

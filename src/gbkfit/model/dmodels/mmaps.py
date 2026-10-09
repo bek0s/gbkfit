@@ -235,10 +235,7 @@ class DModelMMaps(DModel):
             driver, params,
             dcube.scratch_dcube(),
             dcube.scratch_wcube(),
-            dcube.scratch_size(),
-            dcube.scratch_step(),
-            dcube.scratch_zero(),
-            dcube.rota(),
+            dcube.scratch_grid(),
             dcube.dtype(),
             out_gmodel_extra)
         # Evaluate DCube (perform convolution, supersampling, etc)
