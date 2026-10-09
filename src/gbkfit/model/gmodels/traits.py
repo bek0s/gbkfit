@@ -115,6 +115,9 @@ VPT_UID_NW_LOS_HARMONIC = 108
 
 # Velocity height traits
 VHT_UID_ONE = 1
+VHT_UID_LINEAR = 2
+VHT_UID_EXP = 3
+VHT_UID_GAUSS = 4
 
 # Dispersion polar traits
 DPT_UID_UNIFORM = 1
@@ -134,6 +137,9 @@ DPT_UID_NW_DISTORTION = 103
 
 # Dispersion height traits
 DHT_UID_ONE = 1
+DHT_UID_LINEAR = 2
+DHT_UID_EXP = 3
+DHT_UID_GAUSS = 4
 
 # Vertical distortion polar traits
 ZPT_UID_NW_UNIFORM = 101
@@ -141,6 +147,7 @@ ZPT_UID_NW_HARMONIC = 102
 
 # Selection polar traits
 SPT_UID_AZRANGE = 1
+SPT_UID_RRANGE = 2
 SPT_UID_NW_AZRANGE = 101
 
 # Weight polar traits
@@ -1326,6 +1333,84 @@ class VHTraitOne(VHTrait):
             rnodes=False, nwmode=None, sampling=SAMPLING_DEFAULT)
 
 
+class VHTraitP1(VHTrait, abc.ABC):
+    """
+    A velocity height trait: a factor of the height, of one parameter
+    (param_name), node-wise if rnodes.
+    """
+
+    def __init__(
+            self,
+            rnodes: bool = False,
+            nwmode: NWMode | None = None,
+            sampling: str = SAMPLING_DEFAULT):
+        super().__init__(rnodes=rnodes, nwmode=nwmode, sampling=sampling)
+
+    @staticmethod
+    @abc.abstractmethod
+    def param_name() -> str:
+        pass
+
+    def params_sm(self):
+        return () if self.rnodes() else (
+            ParamScalarDesc(self.param_name()),)
+
+    def params_rnw(self, nrnodes):
+        return () if not self.rnodes() else (
+            (ParamVectorDesc(self.param_name(), nrnodes), self.nwmode()),)
+
+
+class VHTraitLinear(VHTraitP1):
+    """
+    The factor max(0, |z| - z0), which grows linearly above the height
+    z0: with a polar trait of the change per unit height, e.g. a lag.
+    """
+
+    @staticmethod
+    def type():
+        return 'linear'
+
+    @staticmethod
+    def uid():
+        return VHT_UID_LINEAR
+
+    @staticmethod
+    def param_name():
+        return 'z0'
+
+
+class VHTraitExponential(VHTraitP1):
+    """The factor exp(-|z| / s), which falls with the scale height s."""
+
+    @staticmethod
+    def type():
+        return 'exponential'
+
+    @staticmethod
+    def uid():
+        return VHT_UID_EXP
+
+    @staticmethod
+    def param_name():
+        return 's'
+
+
+class VHTraitGauss(VHTraitP1):
+    """The factor exp(-z^2 / (2 s^2)), which falls with the scale height s."""
+
+    @staticmethod
+    def type():
+        return 'gauss'
+
+    @staticmethod
+    def uid():
+        return VHT_UID_GAUSS
+
+    @staticmethod
+    def param_name():
+        return 's'
+
+
 class DPTraitUniform(DPTrait):
 
     @staticmethod
@@ -1585,6 +1670,84 @@ class DHTraitOne(DHTrait):
             rnodes=False, nwmode=None, sampling=SAMPLING_DEFAULT)
 
 
+class DHTraitP1(DHTrait, abc.ABC):
+    """
+    A dispersion height trait: a factor of the height, of one parameter
+    (param_name), node-wise if rnodes.
+    """
+
+    def __init__(
+            self,
+            rnodes: bool = False,
+            nwmode: NWMode | None = None,
+            sampling: str = SAMPLING_DEFAULT):
+        super().__init__(rnodes=rnodes, nwmode=nwmode, sampling=sampling)
+
+    @staticmethod
+    @abc.abstractmethod
+    def param_name() -> str:
+        pass
+
+    def params_sm(self):
+        return () if self.rnodes() else (
+            ParamScalarDesc(self.param_name()),)
+
+    def params_rnw(self, nrnodes):
+        return () if not self.rnodes() else (
+            (ParamVectorDesc(self.param_name(), nrnodes), self.nwmode()),)
+
+
+class DHTraitLinear(DHTraitP1):
+    """
+    The factor max(0, |z| - z0), which grows linearly above the height
+    z0: with a polar trait of the change per unit height, e.g. a lag.
+    """
+
+    @staticmethod
+    def type():
+        return 'linear'
+
+    @staticmethod
+    def uid():
+        return DHT_UID_LINEAR
+
+    @staticmethod
+    def param_name():
+        return 'z0'
+
+
+class DHTraitExponential(DHTraitP1):
+    """The factor exp(-|z| / s), which falls with the scale height s."""
+
+    @staticmethod
+    def type():
+        return 'exponential'
+
+    @staticmethod
+    def uid():
+        return DHT_UID_EXP
+
+    @staticmethod
+    def param_name():
+        return 's'
+
+
+class DHTraitGauss(DHTraitP1):
+    """The factor exp(-z^2 / (2 s^2)), which falls with the scale height s."""
+
+    @staticmethod
+    def type():
+        return 'gauss'
+
+    @staticmethod
+    def uid():
+        return DHT_UID_GAUSS
+
+    @staticmethod
+    def param_name():
+        return 's'
+
+
 class ZPTraitNWUniform(TraitFeatureNWMode, TraitFeatureSampling, ZPTrait):
 
     @staticmethod
@@ -1642,6 +1805,23 @@ class SPTraitAzimuthalRange(SPTrait):
         return (
             ParamScalarDesc('p'),
             ParamScalarDesc('s'))
+
+
+class SPTraitRadialRange(SPTrait):
+    """The radii from rmin (inclusive) to rmax (exclusive)."""
+
+    @staticmethod
+    def type():
+        return 'rrange'
+
+    @staticmethod
+    def uid():
+        return SPT_UID_RRANGE
+
+    def params_sm(self):
+        return (
+            ParamScalarDesc('rmin'),
+            ParamScalarDesc('rmax'))
 
 
 class SPTraitNWAzimuthalRange(
@@ -2223,7 +2403,10 @@ vpt_parser = parseutils.TypedParser(VPTrait, [
 
 # Velocity height traits parser
 vht_parser = parseutils.TypedParser(VHTrait, [
-    VHTraitOne])
+    VHTraitOne,
+    VHTraitLinear,
+    VHTraitExponential,
+    VHTraitGauss])
 
 # Dispersion polar traits parser
 dpt_parser = parseutils.TypedParser(DPTrait, [
@@ -2244,7 +2427,10 @@ dpt_parser = parseutils.TypedParser(DPTrait, [
 
 # Dispersion height traits parser
 dht_parser = parseutils.TypedParser(DHTrait, [
-    DHTraitOne])
+    DHTraitOne,
+    DHTraitLinear,
+    DHTraitExponential,
+    DHTraitGauss])
 
 # Vertical polar distortion traits parser
 zpt_parser = parseutils.TypedParser(ZPTrait, [
@@ -2254,6 +2440,7 @@ zpt_parser = parseutils.TypedParser(ZPTrait, [
 # Selection polar traits parser
 spt_parser = parseutils.TypedParser(SPTrait, [
     SPTraitAzimuthalRange,
+    SPTraitRadialRange,
     SPTraitNWAzimuthalRange])
 
 # Weight polar traits parser

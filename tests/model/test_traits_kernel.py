@@ -19,7 +19,8 @@ RNODES = list(range(0, 14, 2))
 # the model unchanged (e.g. an elongated blob at an angle)
 VALUES = dict(
     a=1.0, s=3.0, b=2.0, r=4.0, t=40.0, q=0.6, p=30.0, g=1.5,
-    rt=2.0, vt=150.0, vr=20.0, vv=10.0, vl=15.0)
+    rt=2.0, vt=150.0, vr=20.0, vv=10.0, vl=15.0, z0=0.5, rmin=1.0,
+    rmax=8.0)
 
 # The traits of the disk that are not being tested, with their values
 DEFAULT_TRAITS = dict(
@@ -31,7 +32,8 @@ DEFAULT_TRAITS = dict(
 # The trait kinds tested in the spectral disk, and their parsers
 SPECTRAL_KINDS = dict(
     bptraits=traits.bpt_parser, bhtraits=traits.bht_parser,
-    vptraits=traits.vpt_parser, dptraits=traits.dpt_parser,
+    vptraits=traits.vpt_parser, vhtraits=traits.vht_parser,
+    dptraits=traits.dpt_parser, dhtraits=traits.dht_parser,
     zptraits=traits.zpt_parser, sptraits=traits.spt_parser)
 
 
