@@ -434,35 +434,6 @@ rp_trait_sech2_rnd(
     rp_trait_sample_polar_coords_nw(out_r, out_t, rng, rnidx, rnodes);
 }
 
-// A standard normal random number (Box-Muller)
-template<typename T> constexpr T
-normal_rnd(RNG<T>& rng)
-{
-    return std::sqrt(-2 * std::log(rng())) * std::cos(2 * PI<T> * rng());
-}
-
-// A random number of the gamma distribution of shape k and scale 1
-// (Marsaglia and Tsang 2000; for k < 1, through the shape k + 1)
-template<typename T> constexpr T
-gamma_rnd(RNG<T>& rng, T k)
-{
-    const T boost = k < 1 ? std::pow(rng(), 1 / k) : T{1};
-    const T d = (k < 1 ? k + 1 : k) - T{1} / 3;
-    const T c = 1 / std::sqrt(9 * d);
-    while (true)
-    {
-        const T x = normal_rnd(rng);
-        T v = 1 + c * x;
-        if (v <= 0)
-            continue;
-        v = v * v * v;
-        const T u = rng();
-        if (u < 1 - T{0.0331} * x * x * x * x
-                || std::log(u) < T{0.5} * x * x + d * (1 - v + std::log(v)))
-            return boost * d * v;
-    }
-}
-
 // The integral over the plane of the radial profile f of a round blob of
 // amplitude 1, size s and shape b, and a random radius of a point of the
 // blob (of density f(rho) rho): exponential exp(-rho / s), Gaussian
