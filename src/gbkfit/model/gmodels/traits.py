@@ -434,10 +434,7 @@ class BPTrait(PTrait, abc.ABC):
 
 
 class BHTrait(TraitFeatureTrunc, HTrait, abc.ABC):
-
-    def integrate(self, params):  # noqa
-        # All surface brightness height traits are pdfs
-        return 1
+    pass
 
 
 class VPTrait(PTrait, abc.ABC):
@@ -904,17 +901,6 @@ class BHTraitLorentz(BHTraitP1):
     @staticmethod
     def uid():
         return BHT_UID_LORENTZ
-
-
-class BHTraitMoffat(BHTraitP2):
-
-    @staticmethod
-    def type():
-        return 'moffat'
-
-    @staticmethod
-    def uid():
-        return BHT_UID_MOFFAT
 
 
 class BHTraitSech2(BHTraitP1):
