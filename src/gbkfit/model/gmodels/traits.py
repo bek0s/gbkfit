@@ -2181,7 +2181,7 @@ class OPTraitMixtureExponential(TraitFeatureNBlobs, OPTrait):
         return _ptrait_params_mixture_6p(self.nblobs())
 
     def has_analytical_integral(self):
-        return False
+        return True
 
     def cloud_flux(self, params, rings):
         return _ptrait_integrate_mixture_exponential(params, rings)
@@ -2204,7 +2204,7 @@ class OPTraitMixtureGauss(TraitFeatureNBlobs, OPTrait):
         return _ptrait_params_mixture_6p(self.nblobs())
 
     def has_analytical_integral(self):
-        return False
+        return True
 
     def cloud_flux(self, params, rings):
         return _ptrait_integrate_mixture_gauss(params, rings)
@@ -2227,7 +2227,7 @@ class OPTraitMixtureGGauss(TraitFeatureNBlobs, OPTrait):
         return _ptrait_params_mixture_7p(self.nblobs())
 
     def has_analytical_integral(self):
-        return False
+        return True
 
     def cloud_flux(self, params, rings):
         return _ptrait_integrate_mixture_ggauss(params, rings)
@@ -2250,7 +2250,7 @@ class OPTraitMixtureMoffat(TraitFeatureNBlobs, OPTrait):
         return _ptrait_params_mixture_7p(self.nblobs())
 
     def has_analytical_integral(self):
-        return False
+        return True
 
     def cloud_flux(self, params, rings):
         return _ptrait_integrate_mixture_moffat(params, rings)
