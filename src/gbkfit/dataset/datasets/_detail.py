@@ -37,7 +37,7 @@ def load_grid_dataset(cls, info, names, prefix=''):
         if name in info:
             with parseutils.config_path(name):
                 info[name], coords[name] = load_data(
-                    info[name], prefix, rpix, rval, rest)
+                    info[name], prefix, rpix, rval, rest, cls._spectral_axis)
     if coords:
         first = next(iter(coords.values()))
         if any(value != first for value in coords.values()):

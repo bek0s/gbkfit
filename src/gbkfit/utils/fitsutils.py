@@ -218,11 +218,15 @@ def read_data(
         hdu: int | str = 0,
         rpix: typing.Sequence[float] | None = None,
         rval: typing.Sequence[float] | None = None,
-        rest: typing.Any = None
+        rest: typing.Any = None,
+        spectral_axis: int | None = None
 ) -> tuple[np.ndarray, Coords]:
     """
     The data of a FITS file (from the given HDU) and its world
-    coordinates in the units of the model (see Coords).
+    coordinates in the units of the model (see Coords). Its celestial
+    axes (if any) must be the first two (x, y), longitude (e.g. RA)
+    first, and its spectral axis (if any) the axis spectral_axis (FITS
+    order, from 0), if given.
 
     rpix is CRPIX - 1 (the centre of the axes without CRPIX), and rval is
     CRVAL, the world position at rpix. Either can be given instead (in
@@ -252,6 +256,16 @@ def read_data(
         raise ConfigError(
             f"{filename}: the header has world coordinates for {wcs.naxis} "
             f"axes, but the data has {data.ndim}")
+    lng, lat, spec = wcs.wcs.lng, wcs.wcs.lat, wcs.wcs.spec
+    if lng >= 0 and (lng, lat) != (0, 1):
+        raise ConfigError(
+            f"{filename}: the celestial axes must be the first two, "
+            f"longitude (e.g. RA) first; they are the axes {lng + 1} "
+            f"(longitude) and {lat + 1}")
+    if spectral_axis is not None and spec >= 0 and spec != spectral_axis:
+        raise ConfigError(
+            f"{filename}: the spectral axis must be the axis "
+            f"{spectral_axis + 1}; it is the axis {spec + 1}")
     # The linear transformation from pixels to intermediate world
     # coordinates: one row for each world axis, one column for each
     # pixel axis

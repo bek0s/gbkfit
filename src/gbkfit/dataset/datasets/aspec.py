@@ -41,7 +41,8 @@ class DatasetASpec(Dataset):
         step, rpix, rval, rest = (info.pop(key, None) for key in (
             'step', 'rpix', 'rval', 'rest'))
         item = {k: info.pop(k) for k in ('data', 'mask', 'error') if k in info}
-        aspec, coords = load_data(item, prefix, rpix, rval, rest)
+        # (the velocity is along FITS y, the axis 1)
+        aspec, coords = load_data(item, prefix, rpix, rval, rest, 1)
         info.update(
             aspec=aspec,
             step=coords.step[1] if step is None else step,

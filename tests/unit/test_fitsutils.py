@@ -188,6 +188,31 @@ def test_coordinates_the_model_cannot_represent(header, shape, message):
         write(header, shape)
 
 
+@pytest.mark.parametrize('header', [
+    # Dec before RA
+    dict(CELESTIAL, CTYPE1='DEC--TAN', CRVAL1=2.0,
+         CTYPE2='RA---TAN', CRVAL2=150.0),
+    # The velocity before RA and Dec
+    dict(CTYPE1='VRAD', CUNIT1='km/s', CDELT1=10.0,
+         CTYPE2='RA---TAN', CDELT2=-1 / 3600, CUNIT2='deg',
+         CTYPE3='DEC--TAN', CDELT3=1 / 3600, CUNIT3='deg')])
+def test_celestial_axes_must_be_first(header):
+    # The model takes the first two axes as x and y on the sky
+    with pytest.raises(ConfigError, match="celestial axes must be the first"):
+        write(header, (6, 20, 24) if 'CTYPE3' in header else (20, 24))
+
+
+def test_spectral_axis_must_be_where_the_dataset_has_it():
+    # e.g. a long slit (position, velocity) given as (velocity, position)
+    header = dict(
+        CTYPE1='VRAD', CUNIT1='km/s', CDELT1=10.0, CTYPE2='LINEAR',
+        CDELT2=1.0)
+    fits.writeto('data.fits', np.zeros((8, 40), np.float32),
+                 fits.Header(header))
+    assert fitsutils.read_data('data.fits')[1].step == (10.0, 1.0)
+    with pytest.raises(ConfigError, match="spectral axis must be the axis 2"):
+        fitsutils.read_data('data.fits', spectral_axis=1)
+
 def test_hdu_without_data():
     # e.g. the empty primary HDU of JWST data: a clear error, not a crash
     fits.HDUList([
