@@ -20,7 +20,7 @@ RNODES = list(range(0, 14, 2))
 VALUES = dict(
     a=1.0, s=3.0, b=2.0, r=4.0, t=40.0, q=0.6, p=30.0, g=1.5,
     rt=2.0, vt=150.0, vr=20.0, vv=10.0, vl=15.0, z0=0.5, rmin=1.0,
-    rmax=8.0)
+    rmax=8.0, n=1.5)
 
 # The traits of the disk that are not being tested, with their values
 DEFAULT_TRAITS = dict(

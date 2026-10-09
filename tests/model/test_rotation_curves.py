@@ -1,0 +1,60 @@
+"""
+The parametric rotation curves (velocity polar traits): the velocity of
+the model on the major axis of a thin disk is the curve times sin(incl).
+"""
+
+import numpy as np
+import pytest
+
+
+def nfw(r, rt, vt):
+    u = r / rt
+    f = (np.log1p(u) - u / (1 + u)) / u
+    return vt * np.sqrt(f / 0.21621659550187317)
+
+
+CURVES = dict(
+    tan_courteau=(
+        dict(rt=3.0, vt=180.0, b=0.4, g=2.0),
+        lambda r, rt, vt, b, g:
+            vt * (1 + rt / r) ** b / (1 + (rt / r) ** g) ** (1 / g)),
+    tan_brandt=(
+        dict(rt=4.0, vt=150.0, n=1.5),
+        lambda r, rt, vt, n:
+            vt * (r / rt) / (1 / 3 + 2 / 3 * (r / rt) ** n) ** (3 / (2 * n))),
+    tan_iso=(
+        dict(rt=2.0, vt=160.0),
+        lambda r, rt, vt: vt * np.sqrt(1 - rt / r * np.arctan(r / rt))),
+    tan_nfw=(dict(rt=3.0, vt=200.0), nfw))
+
+
+@pytest.mark.parametrize('trait', list(CURVES))
+def test_rotation_curves(driver, trait, evaluate_models):
+    values, curve = CURVES[trait]
+    incl = 60
+    model = dict(
+        driver=dict(type=driver.type()),
+        dmodel=dict(type='scube', size=[33, 41, 81], step=[0.5, 0.5, 10]),
+        gmodel=dict(type='kinematics_2d', components=[dict(
+            type='smdisk', loose=False, tilted=False,
+            rnodes=list(range(0, 14)),
+            bptraits=dict(type='exponential'),
+            vptraits=dict(type=trait),
+            dptraits=dict(type='uniform'))]))
+    properties = dict(
+        vsys=0, xpos=0, ypos=0, posa=0, incl=incl, bpt_a=1, bpt_s=4,
+        dpt_a=20) | {f'vpt_{k}': v for k, v in values.items()}
+    _, extra = evaluate_models([model], properties)
+    velocity = extra['observation0_gmodel_component0_vdata'].data
+    # The major axis (posa 0) is the y axis, through x = 0 (column 16);
+    # the receding side is north
+    j = np.arange(41)
+    y = (j - 20) * 0.5
+    north = y > 0
+    expected = curve(y[north], **values) * np.sin(np.radians(incl))
+    np.testing.assert_allclose(
+        np.abs(velocity[north, 16]), expected, rtol=1e-4, atol=1e-3)
+    if trait == 'tan_nfw':
+        # The maximum is vt, at 2.163 rt
+        r = np.linspace(0.1, 30, 30000)
+        assert nfw(r, 3.0, 200.0).max() == pytest.approx(200, rel=1e-6)
