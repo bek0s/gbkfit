@@ -529,12 +529,20 @@ rp_trait_nw_harmonic_rnd(
 {
     rp_trait_sample_polar_coords_nw(out_r, out_t, rng, rnidx, rnodes);
     int k = std::rint(consts[0]);
-    // A harmonic of order 0 has no phase parameter
-    T p = k ? params[nrnodes + rnidx] * DEG_TO_RAD<T> : 0;
-    // The sign of a cloud is +1 with probability (1 + cos(k (t - p))) / 2,
-    // so that the mean sign is cos(k (t - p)); the sign of the amplitude
-    // is in the flux of the clouds
-    out_s = rng() * 2 - T{1} < std::cos(k * (out_t - p)) ? 1 : -1;
+    // A harmonic of order 0 is uniform (and has no phase parameter)
+    out_s = 1;
+    if (k == 0)
+        return;
+    // Draw the azimuth from |cos(k (t - p))|: one of its 2k lobes, centred
+    // on p + j pi / k, then the offset d from the centre of the lobe, whose
+    // density cos(k d) on (-pi / 2k, pi / 2k) has the cdf (1 + sin(k d)) / 2.
+    // The cosine is positive in the even lobes. The sign of the amplitude
+    // is in the flux of the clouds.
+    T p = params[nrnodes + rnidx] * DEG_TO_RAD<T>;
+    int j = std::min(int(rng() * 2 * k), 2 * k - 1);
+    T d = std::asin(2 * rng() - 1) / k;
+    out_t = wrap_angle(p + j * PI<T> / k + d);
+    out_s = j % 2 ? -1 : 1;
 }
 
 template<typename T> constexpr void

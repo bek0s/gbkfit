@@ -89,7 +89,7 @@ class MCDisk(_disk.Disk):
             # The flux of the trait (one value if it has an analytical
             # integral), or of each of its rings
             pool_flux.extend(np.atleast_1d(
-                trait.integrate(trait_params, ring_centers)))
+                trait.cloud_flux(trait_params, ring_centers)))
         pool_flux = np.asarray(pool_flux, np.float64)
 
         # Each pool has as many clouds as its flux needs at cflux each

@@ -264,8 +264,10 @@ def _ptrait_integrate_nw_uniform(params, rings):
     return _integrate_rings(rings, gbkfit.math.uniform_1d_fun, a, 0, c)
 
 
-def _ptrait_integrate_nw_harmonic(params, rings):
-    a = params['a']
+def _ptrait_cloud_flux_nw_harmonic(params, rings, order):
+    # The integral of |a cos(k (t - p))| around a ring is 2 / pi of that of
+    # |a| for k > 0
+    a = params['a'] * (2 / np.pi if order else 1)
     c = np.inf
     return _integrate_rings(rings, gbkfit.math.uniform_1d_fun, a, 0, c)
 
@@ -429,10 +431,23 @@ class BPTrait(PTrait, abc.ABC):
 
     @abc.abstractmethod
     def has_analytical_integral(self):
+        """
+        Whether the Monte Carlo disk makes the clouds of the trait for the
+        whole disk at once (True), or for each ring.
+        """
         pass
 
     @abc.abstractmethod
-    def integrate(self, params, rings):
+    def cloud_flux(self, params, rings):
+        """
+        The flux the Monte Carlo disk shares among the clouds of the trait:
+        for the whole disk (one value, with an analytical integral) or for
+        each of the given rings. It is the integral of |B| (B is the trait)
+        with the sign of the amplitude of the trait. Where B changes sign
+        along a ring, the kernel draws the clouds from |B| and gives each
+        the sign of B relative to the amplitude (e.g. the sign of the
+        cosine of a harmonic).
+        """
         pass
 
 
@@ -478,10 +493,23 @@ class OPTrait(PTrait, abc.ABC):
 
     @abc.abstractmethod
     def has_analytical_integral(self):
+        """
+        Whether the Monte Carlo disk makes the clouds of the trait for the
+        whole disk at once (True), or for each ring.
+        """
         pass
 
     @abc.abstractmethod
-    def integrate(self, params, rings):
+    def cloud_flux(self, params, rings):
+        """
+        The flux the Monte Carlo disk shares among the clouds of the trait:
+        for the whole disk (one value, with an analytical integral) or for
+        each of the given rings. It is the integral of |B| (B is the trait)
+        with the sign of the amplitude of the trait. Where B changes sign
+        along a ring, the kernel draws the clouds from |B| and gives each
+        the sign of B relative to the amplitude (e.g. the sign of the
+        cosine of a harmonic).
+        """
         pass
 
 
@@ -508,7 +536,7 @@ class BPTraitUniform(BPTrait):
     def has_analytical_integral(self):
         return True
 
-    def integrate(self, params, rings):
+    def cloud_flux(self, params, rings):
         return _ptrait_integrate_uniform(params, rings)
 
 
@@ -530,7 +558,7 @@ class BPTraitExponential(BPTrait):
     def has_analytical_integral(self):
         return False
 
-    def integrate(self, params, rings):
+    def cloud_flux(self, params, rings):
         return _ptrait_integrate_exponential(params, rings)
 
 
@@ -552,7 +580,7 @@ class BPTraitGauss(BPTrait):
     def has_analytical_integral(self):
         return False
 
-    def integrate(self, params, rings):
+    def cloud_flux(self, params, rings):
         return _ptrait_integrate_gauss(params, rings)
 
 
@@ -575,7 +603,7 @@ class BPTraitGGauss(BPTrait):
     def has_analytical_integral(self):
         return False
 
-    def integrate(self, params, rings):
+    def cloud_flux(self, params, rings):
         return _ptrait_integrate_ggauss(params, rings)
 
 
@@ -597,7 +625,7 @@ class BPTraitLorentz(BPTrait):
     def has_analytical_integral(self):
         return False
 
-    def integrate(self, params, rings):
+    def cloud_flux(self, params, rings):
         return _ptrait_integrate_lorentz(params, rings)
 
 
@@ -620,7 +648,7 @@ class BPTraitMoffat(BPTrait):
     def has_analytical_integral(self):
         return False
 
-    def integrate(self, params, rings):
+    def cloud_flux(self, params, rings):
         return _ptrait_integrate_moffat(params, rings)
 
 
@@ -642,7 +670,7 @@ class BPTraitSech2(BPTrait):
     def has_analytical_integral(self):
         return False
 
-    def integrate(self, params, rings):
+    def cloud_flux(self, params, rings):
         return _ptrait_integrate_sech2(params, rings)
 
 
@@ -665,7 +693,7 @@ class BPTraitMixtureExponential(TraitFeatureNBlobs, BPTrait):
     def has_analytical_integral(self):
         return True
 
-    def integrate(self, params, rings):
+    def cloud_flux(self, params, rings):
         return _ptrait_integrate_mixture_exponential(params, rings)
 
 
@@ -688,7 +716,7 @@ class BPTraitMixtureGauss(TraitFeatureNBlobs, BPTrait):
     def has_analytical_integral(self):
         return True
 
-    def integrate(self, params, rings):
+    def cloud_flux(self, params, rings):
         return _ptrait_integrate_mixture_gauss(params, rings)
 
 
@@ -711,7 +739,7 @@ class BPTraitMixtureGGauss(TraitFeatureNBlobs, BPTrait):
     def has_analytical_integral(self):
         return True
 
-    def integrate(self, params, rings):
+    def cloud_flux(self, params, rings):
         return _ptrait_integrate_mixture_ggauss(params, rings)
 
 
@@ -734,7 +762,7 @@ class BPTraitMixtureMoffat(TraitFeatureNBlobs, BPTrait):
     def has_analytical_integral(self):
         return True
 
-    def integrate(self, params, rings):
+    def cloud_flux(self, params, rings):
         return _ptrait_integrate_mixture_moffat(params, rings)
 
 
@@ -758,7 +786,7 @@ class BPTraitNWUniform(TraitFeatureNWMode, BPTrait):
     def has_analytical_integral(self):
         return False
 
-    def integrate(self, params, rings):
+    def cloud_flux(self, params, rings):
         return _ptrait_integrate_nw_uniform(params, rings)
 
 
@@ -781,8 +809,9 @@ class BPTraitNWHarmonic(TraitFeatureOrder, TraitFeatureNWMode, BPTrait):
     def has_analytical_integral(self):
         return False
 
-    def integrate(self, params, rings):
-        return _ptrait_integrate_nw_harmonic(params, rings)
+    def cloud_flux(self, params, rings):
+        return _ptrait_cloud_flux_nw_harmonic(
+            params, rings, self.order())
 
 
 class BPTraitNWDistortion(TraitFeatureNWMode, BPTrait):
@@ -804,7 +833,7 @@ class BPTraitNWDistortion(TraitFeatureNWMode, BPTrait):
     def has_analytical_integral(self):
         return False
 
-    def integrate(self, params, rings):
+    def cloud_flux(self, params, rings):
         return _ptrait_integrate_nw_distortion(params, rings)
 
 
@@ -1579,7 +1608,7 @@ class OPTraitUniform(OPTrait):
     def has_analytical_integral(self):
         return True
 
-    def integrate(self, params, rings):
+    def cloud_flux(self, params, rings):
         return _ptrait_integrate_uniform(params, rings)
 
 
@@ -1601,7 +1630,7 @@ class OPTraitExponential(OPTrait):
     def has_analytical_integral(self):
         return False
 
-    def integrate(self, params, rings):
+    def cloud_flux(self, params, rings):
         return _ptrait_integrate_exponential(params, rings)
 
 
@@ -1623,7 +1652,7 @@ class OPTraitGauss(OPTrait):
     def has_analytical_integral(self):
         return False
 
-    def integrate(self, params, rings):
+    def cloud_flux(self, params, rings):
         return _ptrait_integrate_gauss(params, rings)
 
 
@@ -1646,7 +1675,7 @@ class OPTraitGGauss(OPTrait):
     def has_analytical_integral(self):
         return False
 
-    def integrate(self, params, rings):
+    def cloud_flux(self, params, rings):
         return _ptrait_integrate_ggauss(params, rings)
 
 
@@ -1668,7 +1697,7 @@ class OPTraitLorentz(OPTrait):
     def has_analytical_integral(self):
         return False
 
-    def integrate(self, params, rings):
+    def cloud_flux(self, params, rings):
         return _ptrait_integrate_lorentz(params, rings)
 
 
@@ -1691,7 +1720,7 @@ class OPTraitMoffat(OPTrait):
     def has_analytical_integral(self):
         return False
 
-    def integrate(self, params, rings):
+    def cloud_flux(self, params, rings):
         return _ptrait_integrate_moffat(params, rings)
 
 
@@ -1713,7 +1742,7 @@ class OPTraitSech2(OPTrait):
     def has_analytical_integral(self):
         return False
 
-    def integrate(self, params, rings):
+    def cloud_flux(self, params, rings):
         return _ptrait_integrate_sech2(params, rings)
 
 
@@ -1736,7 +1765,7 @@ class OPTraitMixtureExponential(TraitFeatureNBlobs, OPTrait):
     def has_analytical_integral(self):
         return False
 
-    def integrate(self, params, rings):
+    def cloud_flux(self, params, rings):
         return _ptrait_integrate_mixture_exponential(params, rings)
 
 
@@ -1759,7 +1788,7 @@ class OPTraitMixtureGauss(TraitFeatureNBlobs, OPTrait):
     def has_analytical_integral(self):
         return False
 
-    def integrate(self, params, rings):
+    def cloud_flux(self, params, rings):
         return _ptrait_integrate_mixture_gauss(params, rings)
 
 
@@ -1782,7 +1811,7 @@ class OPTraitMixtureGGauss(TraitFeatureNBlobs, OPTrait):
     def has_analytical_integral(self):
         return False
 
-    def integrate(self, params, rings):
+    def cloud_flux(self, params, rings):
         return _ptrait_integrate_mixture_ggauss(params, rings)
 
 
@@ -1805,7 +1834,7 @@ class OPTraitMixtureMoffat(TraitFeatureNBlobs, OPTrait):
     def has_analytical_integral(self):
         return False
 
-    def integrate(self, params, rings):
+    def cloud_flux(self, params, rings):
         return _ptrait_integrate_mixture_moffat(params, rings)
 
 
@@ -1829,7 +1858,7 @@ class OPTraitNWUniform(TraitFeatureNWMode, OPTrait):
     def has_analytical_integral(self):
         return False
 
-    def integrate(self, params, rings):
+    def cloud_flux(self, params, rings):
         return _ptrait_integrate_nw_uniform(params, rings)
 
 
@@ -1852,8 +1881,9 @@ class OPTraitNWHarmonic(TraitFeatureOrder, TraitFeatureNWMode, OPTrait):
     def has_analytical_integral(self):
         return False
 
-    def integrate(self, params, rings):
-        return _ptrait_integrate_nw_harmonic(params, rings)
+    def cloud_flux(self, params, rings):
+        return _ptrait_cloud_flux_nw_harmonic(
+            params, rings, self.order())
 
 
 class OPTraitNWDistortion(TraitFeatureNWMode, OPTrait):
@@ -1875,7 +1905,7 @@ class OPTraitNWDistortion(TraitFeatureNWMode, OPTrait):
     def has_analytical_integral(self):
         return False
 
-    def integrate(self, params, rings):
+    def cloud_flux(self, params, rings):
         return _ptrait_integrate_nw_distortion(params, rings)
 
 
