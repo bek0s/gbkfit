@@ -198,6 +198,24 @@ def test_mmaps_moments(driver):
     np.testing.assert_allclose(result_w[valid], expected_w[valid], rtol=1e-5)
 
 
+@pytest.mark.parametrize('orders, masked', [((0, 1), False), ((0, 1, 2), True)])
+def test_mmaps_moments_mask_negative_variances(driver, orders, masked):
+    # A spectrum whose variance is negative (e.g. the faint ringing of a
+    # convolution) has no dispersion: it is masked, for all the orders,
+    # if they need it
+    memory = Memory(driver)
+    dmodel = driver.native_class('DModel', DTYPE)()
+    cube = np.array([[[1, -1]], [[2, 3]], [[1, -1]]], DTYPE)
+    mmaps_d = memory.to_device(np.zeros((len(orders), 1, 2), DTYPE))
+    mmaps_m = memory.to_device(np.zeros((1, 2), DTYPE))
+    dmodel.mmaps_moments(
+        (1, 1, 1), (0, 0, -1), memory.to_device(cube), None, 0.1,
+        memory.to_device(np.array(orders, np.int32)), mmaps_d, mmaps_m, None)
+    np.testing.assert_array_equal(memory.to_host(mmaps_m), [[1, not masked]])
+    result = memory.to_host(mmaps_d)
+    assert np.isfinite(result[:, 0, 0]).all()
+    assert np.isnan(result[:, 0, 1]).all() == masked
+
 def test_mmaps_gaussian(driver):
     # Gaussian lines are fitted exactly: their flux, velocity and
     # dispersion, in the units of the spectral axis
