@@ -62,7 +62,6 @@ class DModelImage(DModel):
             dtype: str = 'float32'
     ):
         super().__init__()
-        self._counter = 0
         if rpix is None:
             rpix = tuple((np.array(size) / 2 - 0.5).tolist())
         size = tuple(size) + (1,)
