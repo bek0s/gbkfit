@@ -382,6 +382,27 @@ def test_spectral_axes_that_cannot_be_converted(header, message):
         prep_scube('cube.fits', velocity_rest='6562.8 Angstrom')
 
 
+def test_lslit_crops_positions_and_channels():
+    # A slit of 40 positions (FITS x) and 8 channels (FITS y): roi_spat
+    # crops the positions and roi_spec the channels, and the prepared
+    # slit keeps the world coordinates of the pixels it was cut from
+    header = fits.Header(dict(
+        CTYPE1='LINEAR', CRVAL1=0.0, CRPIX1=20.5, CDELT1=0.5,
+        CTYPE2='VRAD', CUNIT2='km/s', CRVAL2=1500.0, CRPIX2=4.5,
+        CDELT2=10.0))
+    fits.writeto('slit.fits', np.ones((8, 40), np.float32), header)
+    defaults = dict.fromkeys([
+        'clip_min', 'clip_max', 'ccl_lcount', 'ccl_pcount', 'ccl_lratio',
+        'sclip_sigma', 'sclip_iters', 'nanpad'])
+    prep.prep_lslit(
+        'slit.fits', None, None, roi_spat=[10, 30], roi_spec=[2, 6],
+        **defaults, minify=False, dtype='float32')
+    assert fits.getdata('prep_slit.fits').shape == (4, 20)
+    _, coords_in = fitsutils.read_data('slit.fits')
+    _, coords_out = fitsutils.read_data('prep_slit.fits')
+    np.testing.assert_allclose(
+        coords_out.rpix, np.subtract(coords_in.rpix, (10, 2)))
+
 def test_binned_maps_to_one_value_per_bin():
     # Maps whose pixels hold the value of their bin (as DAP and GIST
     # write them) become a vector of one value per bin; the bins are
