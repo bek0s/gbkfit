@@ -2,7 +2,7 @@ from collections.abc import Sequence
 
 from gbkfit.dataset.datasets import DatasetPixelBrightness
 from gbkfit.model.core import GModelImage
-from gbkfit.utils import fitsutils
+from gbkfit.utils import gridutils
 from . import _dcube, _detail
 from .core import Observable
 
@@ -14,7 +14,7 @@ __all__ = [
 
 def _image_extra(data, grid):
     """An extra output on a grid of DCube, as an image (its one channel)."""
-    return fitsutils.GridData(data[0], grid.spatial().coords, None)
+    return gridutils.GridData(data[0], grid.spatial().coords, None)
 
 
 class PixelBrightness(Observable):

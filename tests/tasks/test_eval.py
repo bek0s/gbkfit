@@ -141,10 +141,10 @@ def test_outputs_are_written_by_type(tmp_path):
     # other values go together to gbkfit_eval_extra.json and .yaml
     import json
     from gbkfit.tasks import eval as eval_task
-    from gbkfit.utils import fitsutils
-    coords = fitsutils.Coords((1.0, 1.0), (3.5, 3.5), (150.0, 2.0), 0.0)
+    from gbkfit.utils import gridutils
+    coords = gridutils.Coords((1.0, 1.0), (3.5, 3.5), (150.0, 2.0), 0.0)
     eval_task._write_outputs(tmp_path, dict(
-        grid=fitsutils.GridData(np.ones((8, 8)), coords, None),
+        grid=gridutils.GridData(np.ones((8, 8)), coords, None),
         array=np.ones((4, 4)),
         number=np.int64(12345),
         info=dict(name='disk', sizes=[1, 2])))

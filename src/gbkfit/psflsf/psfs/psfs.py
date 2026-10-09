@@ -12,7 +12,7 @@ import scipy.special
 import gbkfit.math
 from gbkfit.psflsf.core import (
     MIN_EXTENT, PSF, WING_FLUX, check_ratio, check_scale, embed, psf_parser)
-from gbkfit.utils import fitsutils, parseutils
+from gbkfit.utils import fitsutils, gridutils, parseutils
 
 
 __all__ = [
@@ -330,7 +330,7 @@ class PSFImage(PSF):
     ) -> dict[str, Any]:
         filename = f'{prefix}psf.fits'
         rpix = tuple(np.array(self._data.shape[::-1]) / 2 - 0.5)
-        coords = fitsutils.Coords(tuple(self._step), rpix, (0.0, 0.0), 0.0)
+        coords = gridutils.Coords(tuple(self._step), rpix, (0.0, 0.0), 0.0)
         fitsutils.write_data(filename, self._data, coords, None, overwrite)
         return dict(
             type=self.type(),

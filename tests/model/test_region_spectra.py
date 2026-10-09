@@ -13,7 +13,7 @@ from modelutils import observation_group
 
 from gbkfit.dataset import Data, RegionsApertures, RegionsBins
 from gbkfit.dataset.datasets import DatasetRegionSpectra
-from gbkfit.utils import fitsutils
+from gbkfit.utils import fitsutils, gridutils
 
 
 GMODEL = dict(type='kinematics_2d', components=[dict(
@@ -69,7 +69,7 @@ def test_region_spectra_of_apertures_are_the_sums_of_pixel_spectra(driver):
     scube = evaluate(driver, SCUBE)
     aspec = evaluate(driver, aspec_of_apertures(APERTURES))
     assert aspec.shape == (51, 3)
-    grid = fitsutils.make_grid((32, 41))
+    grid = gridutils.make_grid((32, 41))
     weights = gbkfit.dataset.regions_parser.load(
         dict(type='apertures', apertures=APERTURES)).weights(grid)
     expected = (weights @ scube.reshape(51, -1).T).T
@@ -90,7 +90,7 @@ def test_region_spectra_of_bins_are_the_sums_of_pixel_spectra(driver):
     dmodel = dict(
         type='region_spectra', spec_size=51, spec_step=10, **INSTRUMENT,
         regions=dict(type='bins', file='bins.fits'))
-    fitsutils.write_data('bins.fits', index, fitsutils.Coords(
+    fitsutils.write_data('bins.fits', index, gridutils.Coords(
         (1, 1), (15.5, 20), (0, 0), 0))
     aspec = evaluate(driver, dmodel)
     expected = np.stack(

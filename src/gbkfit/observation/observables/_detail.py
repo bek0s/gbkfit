@@ -1,4 +1,4 @@
-from gbkfit.utils import fitsutils, parseutils
+from gbkfit.utils import gridutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
 from .core import ObservablePlan
 
@@ -26,7 +26,7 @@ def spatial_grid_of_regions(regions, size, step, rpix, rval, rota):
     The spatial grid of the cube of an observable of data in regions:
     that of the regions if they have one (bins), when the grid options
     must not be given; else (apertures) the grid of the options (see
-    fitsutils.make_grid), of which size is required.
+    gridutils.make_grid), of which size is required.
     """
     grid = regions.grid()
     given = [
@@ -42,7 +42,7 @@ def spatial_grid_of_regions(regions, size, step, rpix, rval, rota):
             raise RuntimeError(
                 "the regions are on the sky; the size of the grid of the "
                 "model is required")
-        grid = fitsutils.make_grid(size, step, rpix, rval, rota)
+        grid = gridutils.make_grid(size, step, rpix, rval, rota)
     return grid
 
 
@@ -55,7 +55,7 @@ def spatial_options_from_regions(regions):
 
 
 def dump_rest(rest):
-    """The option of the rest of a spectral axis (see fitsutils.Coords)."""
+    """The option of the rest of a spectral axis (see gridutils.Coords)."""
     return None if rest is None else str(rest)
 
 

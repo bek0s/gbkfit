@@ -13,7 +13,7 @@ from modelutils import observation_group
 
 from gbkfit.observation import (
     Foreground, LensDeflectionMap, foreground_parser)
-from gbkfit.utils import fitsutils
+from gbkfit.utils import fitsutils, gridutils
 
 
 GMODEL = dict(type='intensity_2d', components=[dict(
@@ -84,8 +84,8 @@ def test_deflection_of_a_rotated_map():
     alpha_x = 1.0 * i
     alpha_y = 10.0 * j
     lens = LensDeflectionMap(alpha_x, alpha_y, (8, 8), (1, 1), rota=90)
-    grid = fitsutils.make_grid((5, 4), rota=90)
-    x, y = fitsutils.sky_positions(grid)
+    grid = gridutils.make_grid((5, 4), rota=90)
+    x, y = gridutils.sky_positions(grid)
     np.testing.assert_allclose(lens.deflection(x, y), [alpha_x, alpha_y])
     middle_x = (x[1:2, 1] + x[2:3, 2]) / 2
     middle_y = (y[1:2, 1] + y[2:3, 2]) / 2
@@ -149,8 +149,8 @@ def test_point_mass_makes_an_einstein_ring(driver):
     image = dict(type='pixel_brightness', size=[64, 64], step=[0.5, 0.5])
     source = evaluate(driver, None, properties, image)
     lensed = evaluate(driver, lens, properties, image)
-    grid = fitsutils.make_grid((64, 64), 0.5)
-    sky_x, sky_y = fitsutils.sky_positions(grid)
+    grid = gridutils.make_grid((64, 64), 0.5)
+    sky_x, sky_y = gridutils.sky_positions(grid)
     radius = np.hypot(sky_x, sky_y)
     ring = np.abs(radius - einstein) < 0.5
     assert lensed[ring].mean() > 20 * lensed[radius < 3].mean()
@@ -158,7 +158,7 @@ def test_point_mass_makes_an_einstein_ring(driver):
 
 
 def test_deflection_maps_from_files(tmp_path):
-    coords = fitsutils.Coords((0.5, 0.5), (9.5, 7.5), (150.0, 2.0), 0)
+    coords = gridutils.Coords((0.5, 0.5), (9.5, 7.5), (150.0, 2.0), 0)
     fitsutils.write_data(str(tmp_path / 'ax.fits'), np.ones((16, 20)), coords)
     fitsutils.write_data(
         str(tmp_path / 'ay.fits'), np.full((16, 20), 2.0), coords)

@@ -59,7 +59,7 @@ class GModel(parseutils.TypedSerializable, abc.ABC):
     def plan(self, driver, grid, has_weights, dtype, selection=Selection()):
         """
         The evaluation of the gmodel on the given driver, grid of its data
-        (fitsutils.Grid: x and y, and the spectral axis of spectral cubes)
+        (gridutils.Grid: x and y, and the spectral axis of spectral cubes)
         and dtype, with spatial weights if has_weights (a GModelPlan), of
         what the selection has (see Selection).
         """

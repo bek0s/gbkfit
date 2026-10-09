@@ -155,10 +155,10 @@ def test_point_plan_takes_a_dtype_or_its_type(driver):
     # The plans of the components take the dtype as np.dtype or its type
     import numpy as np
     from gbkfit.model import gmodel_parser
-    from gbkfit.utils import fitsutils
+    from gbkfit.utils import gridutils
     gmodel = gmodel_parser.load(dict(
         type='intensity_2d', components=[dict(type='point')]))
-    grid = fitsutils.make_grid((6, 4))
+    grid = gridutils.make_grid((6, 4))
     data = driver.mem_alloc_d((1, 4, 6), np.float32)
     driver.mem_fill(data, 0)
     gmodel.plan(driver, grid, False, np.float32).evaluate(

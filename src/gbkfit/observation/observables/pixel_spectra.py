@@ -61,7 +61,7 @@ class PixelSpectra(Observable):
     ):
         """
         rest is the rest wavelength or frequency of the velocities of the
-        spectral axis (see fitsutils.Coords), if known.
+        spectral axis (see gridutils.Coords), if known.
         """
         super().__init__(size, step, rpix, rval, rota, rest)
         self._smooth_weights = smooth_weights

@@ -5,7 +5,7 @@ from gbkfit.dataset import (
     ApertureCircle, ApertureEllipse, ApertureField, AperturePolygon,
     ApertureRectangle, RegionsApertures, RegionsBins, regions_parser)
 from gbkfit.math import overlap
-from gbkfit.utils import fitsutils
+from gbkfit.utils import gridutils
 
 
 def _pixels(size):
@@ -69,7 +69,7 @@ def test_polygon_and_ellipse_overlaps_agree():
 
 
 def _grid(size=(40, 30), step=(0.5, 0.25), rota=0):
-    return fitsutils.make_grid(size, step, rota=rota)
+    return gridutils.make_grid(size, step, rota=rota)
 
 
 @pytest.mark.parametrize('aperture, area', [
@@ -94,7 +94,7 @@ def test_apertures_are_on_the_sky(rota, pixel):
     # A small circle 2 arcsec north of the reference pixel (20, 15) of a
     # grid of 0.5 arcsec pixels: with rota 0 the +y axis points north,
     # with rota 90 the +x axis does, and with rota -90 the -x axis
-    grid = fitsutils.make_grid((40, 30), 0.5, rpix=(20, 15), rota=rota)
+    grid = gridutils.make_grid((40, 30), 0.5, rpix=(20, 15), rota=rota)
     pixels, fractions = ApertureCircle(0, 2, 0.1).overlaps(grid)
     assert pixels.tolist() == [pixel[1] * 40 + pixel[0]]
 
@@ -143,7 +143,7 @@ def test_regions_of_bins(tmp_path):
         weights[1].reshape(6, 8), index == 1)
     # The bins are on their own grid only
     with pytest.raises(RuntimeError, match="defined on the grid"):
-        regions.weights(fitsutils.make_grid((8, 6)))
+        regions.weights(gridutils.make_grid((8, 6)))
     # Round trip through a file
     info = regions_parser.dump(regions, prefix=str(tmp_path / ''))
     loaded = regions_parser.load(dict(type='bins', file=info['file']))

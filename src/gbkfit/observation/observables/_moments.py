@@ -114,7 +114,7 @@ class MomentsPlan:
     def evaluate(self, step, zero, cube, wcube):
         """
         The moments of cube (and its weights, wcube, if any), whose world
-        coordinates are step and zero (see fitsutils.Grid): for each
+        coordinates are step and zero (see gridutils.Grid): for each
         order, its map (d), the mask (m) and its weights (w).
         """
         if self._method == 'gaussian_fit':

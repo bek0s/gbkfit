@@ -10,7 +10,7 @@ import astropy.wcs
 import numpy as np
 import pytest
 
-from gbkfit.utils import fitsutils
+from gbkfit.utils import fitsutils, gridutils
 from gbkfit.utils.parseutils import ConfigError
 
 
@@ -42,7 +42,7 @@ def test_write_and_read_back(rota, shape):
     step = (2.0, 3.0, 10.0)[:len(shape)]
     rpix = (11.5, 9.5, 5.0)[:len(shape)]
     rval = (150.0, 2.0, 1500.0)[:len(shape)]
-    coords = fitsutils.Coords(step, rpix, rval, rota)
+    coords = gridutils.Coords(step, rpix, rval, rota)
     spectral_axis = 2 if len(shape) == 3 else None
     fitsutils.write_data(
         'data.fits', np.ones(shape, np.float32), coords, spectral_axis)
@@ -59,7 +59,7 @@ def test_rota_is_the_position_angle_of_the_y_axis(rota):
     # Independently of fitsutils: astropy's position angle from a pixel
     # to the next one along y is rota, and along x it is rota - 90 (east
     # is to the left of north)
-    coords = fitsutils.Coords((2.0, 2.0), (10, 10), (150.0, 2.0), rota)
+    coords = gridutils.Coords((2.0, 2.0), (10, 10), (150.0, 2.0), rota)
     fitsutils.write_data('data.fits', np.ones((20, 20), np.float32), coords)
     header = fits.getheader('data.fits')
     assert same_angle(position_angle(header, (10, 10), (10, 11)), rota)
@@ -68,7 +68,7 @@ def test_rota_is_the_position_angle_of_the_y_axis(rota):
 
 def test_write_and_read_back_long_slit():
     # The position along the slit is an offset from its reference pixel
-    coords = fitsutils.Coords((2.0, 10.0), (15.5, 5.0), (0.0, 1500.0), 0.0)
+    coords = gridutils.Coords((2.0, 10.0), (15.5, 5.0), (0.0, 1500.0), 0.0)
     fitsutils.write_data(
         'data.fits', np.ones((11, 32), np.float32), coords, spectral_axis=1)
     _, coords_read = fitsutils.read_data('data.fits')
@@ -78,7 +78,7 @@ def test_write_and_read_back_long_slit():
 def test_write_and_read_back_line_of_sight_axis():
     # A cube without a spectral axis has a third spatial axis, along the
     # line of sight: an offset in arcsec from its reference pixel
-    coords = fitsutils.Coords((2.0, 3.0, 0.5), (11.5, 9.5, 7.5),
+    coords = gridutils.Coords((2.0, 3.0, 0.5), (11.5, 9.5, 7.5),
                               (150.0, 2.0, 0.0), 30.0)
     fitsutils.write_data('data.fits', np.ones((16, 20, 24), np.float32),
                          coords, spectral_axis=None)
@@ -139,7 +139,7 @@ def test_velocity_axes_are_in_km_s(cunit, cdelt, step):
 
 def test_axes_without_a_type_are_as_given():
     coords = write(dict(CDELT1=2.0, CDELT2=3.0, CRPIX1=4.0, CRVAL2=7.0))
-    assert coords == fitsutils.Coords((2.0, 3.0), (3.0, 9.5), (0.0, 7.0), 0.0)
+    assert coords == gridutils.Coords((2.0, 3.0), (3.0, 9.5), (0.0, 7.0), 0.0)
 
 
 def test_rpix_or_rval_can_be_given():
@@ -235,13 +235,13 @@ def test_decreasing_velocity_is_rejected():
 def test_grid_zero_and_spatial_axes():
     # The spatial axes are measured from the reference pixel, and the
     # spectral axis from its world value there
-    coords = fitsutils.Coords((2.0, 3.0, 10.0), (4.0, 5.0, 6.0),
+    coords = gridutils.Coords((2.0, 3.0, 10.0), (4.0, 5.0, 6.0),
                               (150.0, 2.0, 1500.0), 30.0)
-    grid = fitsutils.Grid((8, 10, 12), coords, 2)
+    grid = gridutils.Grid((8, 10, 12), coords, 2)
     assert grid.zero() == (-8.0, -15.0, 1440.0)
     spatial = grid.spatial()
     assert spatial.size == (8, 10) and spatial.spectral_axis is None
-    assert spatial.coords == fitsutils.Coords(
+    assert spatial.coords == gridutils.Coords(
         (2.0, 3.0), (4.0, 5.0), (150.0, 2.0), 30.0)
 
 
@@ -294,7 +294,7 @@ def test_rest_can_be_given():
     ('1420.405752 MHz', 'VRAD', 'RESTFRQ'),
     (None, 'VRAD', None)])
 def test_rest_round_trip(rest, ctype, keyword):
-    grid = fitsutils.make_grid(
+    grid = gridutils.make_grid(
         (24, 20, 6), (1, 1, 10), spectral_axis=2, rest=rest)
     fitsutils.write_data(
         'data.fits', np.zeros((6, 20, 24)), grid.coords, 2)
@@ -315,7 +315,7 @@ def test_rest_round_trip(rest, ctype, keyword):
     '6562.8', '3 km/s', '-1 Angstrom', 'Halpha', [1, 2] * u.m])
 def test_invalid_rest(value):
     with pytest.raises(ConfigError, match="positive wavelength or frequency"):
-        fitsutils.make_rest(value)
+        gridutils.make_rest(value)
 
 
 def test_nonlinear_velocity_axes_are_rejected():

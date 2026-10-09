@@ -6,7 +6,7 @@ coordinates, in the layout of the data of their dmodel.
 import numpy as np
 import pytest
 
-from gbkfit.utils import fitsutils
+from gbkfit.utils import gridutils
 
 
 DISK = dict(
@@ -48,7 +48,7 @@ def test_dcube_extras_have_the_layout_of_the_data(evaluate_models, name):
         if name != 'pixel_brightness' or not k.startswith(('v', 'd'))}
     _, extra = evaluate_models([model], properties)
     dcube_lo = extra['observation0_dcube_lo']
-    assert isinstance(dcube_lo, fitsutils.GridData)
+    assert isinstance(dcube_lo, gridutils.GridData)
     assert dcube_lo.data.shape == shape
     assert dcube_lo.spectral_axis == spectral_axis
     assert len(dcube_lo.coords.step) == len(shape)
@@ -57,7 +57,7 @@ def test_dcube_extras_have_the_layout_of_the_data(evaluate_models, name):
     if name == 'slit_spectra':
         assert isinstance(dcube_hi, np.ndarray)
     else:
-        assert isinstance(dcube_hi, fitsutils.GridData)
+        assert isinstance(dcube_hi, gridutils.GridData)
         assert dcube_hi.spectral_axis == spectral_axis
     # The PSF is an array of offsets, not on the grid
     assert isinstance(extra['observation0_psf_hi'], np.ndarray)
@@ -88,7 +88,7 @@ def test_gmodel_extras_are_on_the_sky(evaluate_models, name):
         assert isinstance(bdata, np.ndarray)
         return
     dcube_hi = extra['observation0_dcube_hi']
-    assert isinstance(bdata, fitsutils.GridData)
+    assert isinstance(bdata, gridutils.GridData)
     assert bdata.data.ndim == 2 and bdata.spectral_axis is None
     assert bdata.coords == dcube_hi.coords.axes(0, 1)
 
@@ -105,4 +105,4 @@ def test_3d_gmodel_extras_have_a_line_of_sight_axis(evaluate_models):
     assert bdata.data.shape[0] == 10 and bdata.spectral_axis is None
     sky = extra['observation0_dcube_hi'].coords.axes(0, 1)
     assert bdata.coords.axes(0, 1) == sky
-    assert bdata.coords.axes(2) == fitsutils.Coords((0.5,), (4.5,), (0.0,), 0)
+    assert bdata.coords.axes(2) == gridutils.Coords((0.5,), (4.5,), (0.0,), 0)

@@ -11,7 +11,7 @@ change of the models.
 import numpy as np
 import pytest
 from gbkfit.model import gmodel_parser, gmodels
-from gbkfit.utils import fitsutils
+from gbkfit.utils import gridutils
 from modelutils import WeightComponent
 
 
@@ -155,7 +155,7 @@ def test_gmodel(driver, name, evaluate_models, ndarrays_regression):
     outputs = {
         f'data_{key}': data_[key]['d']
         for data_ in data for key in data_} | {
-        key: value.data if isinstance(value, fitsutils.GridData) else value
+        key: value.data if isinstance(value, gridutils.GridData) else value
         for key, value in extra.items()}
     # Thick disks on cuda and Monte Carlo disks are not bitwise
     # reproducible, because the threads add to the outputs in a different
@@ -202,7 +202,7 @@ def test_2d_gmodel_weights_the_data(
     driver.mem_fill(data, 0)
     driver.mem_fill(weights, 1)
     ndim = len(size)
-    grid = fitsutils.Grid(size, fitsutils.Coords(
+    grid = gridutils.Grid(size, gridutils.Coords(
         (1,) * ndim, (0,) * ndim, (0,) * ndim, 0), spectral_axis)
     gmodel.plan(driver, grid, True, np.float32).evaluate(
         {}, data, weights, None)
@@ -226,8 +226,8 @@ def test_3d_gmodel_picks_the_z_axis_of_each_grid(driver):
         image = driver.mem_alloc_d(size[::-1], np.float32)
         driver.mem_fill(image, 0)
         rpix = tuple(n / 2 - 0.5 for n in size)
-        grid = fitsutils.Grid(
-            size, fitsutils.Coords((1, 1), rpix, (0, 0), 0), None)
+        grid = gridutils.Grid(
+            size, gridutils.Coords((1, 1), rpix, (0, 0), 0), None)
         gmodel.plan(driver, grid, False, np.float32).evaluate(
             params, image, None, None)
         return driver.mem_copy_d2h(image)
@@ -252,8 +252,8 @@ def test_one_gmodel_serves_several_grids(driver):
 
     def plan(gmodel, size):
         rpix = tuple(n / 2 - 0.5 for n in size)
-        grid = fitsutils.Grid(
-            size, fitsutils.Coords((1, 1), rpix, (0, 0), 0), None)
+        grid = gridutils.Grid(
+            size, gridutils.Coords((1, 1), rpix, (0, 0), 0), None)
         return gmodel.plan(driver, grid, False, np.float32)
 
     def evaluate(plan_, size):

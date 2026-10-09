@@ -5,7 +5,7 @@ from typing import Any
 
 import numpy as np
 
-from gbkfit.utils import fitsutils, parseutils
+from gbkfit.utils import fitsutils, gridutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
 
 
@@ -19,7 +19,7 @@ __all__ = [
 def _read_file(
         x, prefix, rpix=None, rval=None, rest=None, spectral_axis=None):
     """
-    The data of a file and its world coordinates (see fitsutils.Coords).
+    The data of a file and its world coordinates (see gridutils.Coords).
     x is a filename, or a dict with the filename ('file') and the HDU to
     read ('hdu', e.g. 'SCI'; by default the first).
     """
@@ -112,7 +112,7 @@ def load_data(
         rval: Any = None,
         rest: Any = None,
         spectral_axis: int | None = None
-) -> tuple[Data, fitsutils.Coords]:
+) -> tuple[Data, gridutils.Coords]:
     """
     A data item from files, and the world coordinates of its data file
     (see fitsutils.read_data, which also explains rpix, rval, rest and

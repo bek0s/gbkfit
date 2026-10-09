@@ -5,7 +5,7 @@ import astropy.units
 import numpy as np
 
 from gbkfit.params.pdescs import ParamScalarDesc
-from gbkfit.utils import fitsutils, parseutils
+from gbkfit.utils import gridutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
 
 
@@ -23,7 +23,7 @@ _C = astropy.constants.c.to_value('km/s')
 class Line(parseutils.BasicSerializable):
     """
     An emission line of a spectral component: its name, and its rest
-    wavelength or frequency (see fitsutils.make_rest).
+    wavelength or frequency (see gridutils.make_rest).
     """
 
     @classmethod
@@ -38,7 +38,7 @@ class Line(parseutils.BasicSerializable):
     def __init__(self, name: str, rest: str | astropy.units.Quantity):
         parseutils.check_name(name)
         self._name = name
-        self._rest = fitsutils.make_rest(rest)
+        self._rest = gridutils.make_rest(rest)
 
     def name(self) -> str:
         return self._name
@@ -55,7 +55,7 @@ class Lines:
     The emission lines of a spectral component. Without lines, it has one
     line at the velocity of the spectral axis, whatever the line is. With
     lines, each is at its place on the spectral axis, whose velocities
-    refer to a rest (see fitsutils.Coords), and the flux of each line
+    refer to a rest (see gridutils.Coords), and the flux of each line
     after the first, relative to the first, is a parameter
     ('{name}_ratio').
     """
@@ -115,7 +115,7 @@ class Lines:
         """
         return None if index == 0 else f'{self.names()[index]}_ratio'
 
-    def values(self, spectral: fitsutils.Grid) -> np.ndarray:
+    def values(self, spectral: gridutils.Grid) -> np.ndarray:
         """
         The offset, scale and flux of each line on a spectral axis (a grid
         of one axis; an array of shape (nlines, 3); see DiskPlan.evaluate),

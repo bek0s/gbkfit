@@ -5,7 +5,7 @@ import astropy.units
 
 from gbkfit.dataset.core import Dataset
 from gbkfit.dataset.data import Data
-from gbkfit.utils import fitsutils
+from gbkfit.utils import gridutils
 from . import _detail
 
 
@@ -47,11 +47,11 @@ class DatasetSlitSpectra(Dataset):
     ):
         """
         The world coordinates of the grid of the data (see
-        fitsutils.Coords; rest is that of the spectral axis) have defaults
+        gridutils.Coords; rest is that of the spectral axis) have defaults
         (see _detail.make_grid).
         """
         super().__init__(dict(spectra=spectra))
         self._grid = _detail.make_grid(self, step, rpix, rval, rota, rest)
 
-    def grid(self) -> fitsutils.Grid:
+    def grid(self) -> gridutils.Grid:
         return self._grid

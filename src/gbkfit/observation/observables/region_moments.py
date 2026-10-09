@@ -8,7 +8,7 @@ import numpy as np
 from gbkfit.dataset.datasets import DatasetRegionMoments
 from gbkfit.dataset.regions import Regions, regions_parser
 from gbkfit.model.core import GModelSCube
-from gbkfit.utils import fitsutils, parseutils
+from gbkfit.utils import gridutils, parseutils
 from . import _dcube, _detail, _moments
 from ._regions import RegionSumsPlan, flux_weights
 from .core import Observable
@@ -112,7 +112,7 @@ class RegionMoments(Observable):
     ):
         """
         The spatial grid (size, step, rpix, rval, rota; see
-        fitsutils.make_grid) is that of the regions if they have one
+        gridutils.make_grid) is that of the regions if they have one
         (bins), and must not be given; else size is required. The
         spectral axis and the moments are as those of pixel_moments (see
         PixelMoments, also for method): the regions whose moment 0 is not
@@ -134,7 +134,7 @@ class RegionMoments(Observable):
         self._spec_size = spec_size
         self._spec_step = spec_step
         self._spec_rval = spec_rval
-        self._spec_rest = fitsutils.make_rest(spec_rest)
+        self._spec_rest = gridutils.make_rest(spec_rest)
         # The area of each pixel in the regions, so that their sums are
         # fluxes (an error if apertures are not inside the grid)
         self._weights = flux_weights(regions, spatial)
@@ -180,7 +180,7 @@ class RegionMoments(Observable):
         index = self._regions.index()
         image = np.full(index.shape, np.nan, dtype=data.dtype)
         image[index >= 0] = data[index[index >= 0]]
-        return fitsutils.GridData(image, grid.coords, None)
+        return gridutils.GridData(image, grid.coords, None)
 
     def plan(
             self, driver, gmodel, foreground, instrument, scale, dtype,

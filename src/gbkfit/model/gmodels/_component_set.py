@@ -1,5 +1,5 @@
 from gbkfit.model.core import GModelPlan
-from gbkfit.utils import fitsutils, iterutils, miscutils
+from gbkfit.utils import gridutils, iterutils, miscutils
 from gbkfit.utils.parseutils import ConfigError
 from . import _detail
 
@@ -15,8 +15,8 @@ __all__ = [
 
 
 # The spectral axis of an image: one channel, without a width
-IMAGE_SPECTRAL_AXIS = fitsutils.Grid(
-    (1,), fitsutils.Coords((0,), (0,), (0,), 0), 0)
+IMAGE_SPECTRAL_AXIS = gridutils.Grid(
+    (1,), gridutils.Coords((0,), (0,), (0,), 0), 0)
 
 # The components and the opacity components: their label in messages, the
 # prefix of their parameters, and whether the parameters of the first one
@@ -106,7 +106,7 @@ class ComponentSet2D:
         """
         The evaluation of the components and lines of the selection (see
         Selection) on the given driver, grid of the x and y axes and
-        spectral axis (fitsutils.Grid, the second of one axis) and dtype,
+        spectral axis (gridutils.Grid, the second of one axis) and dtype,
         with spatial weights if has_weights.
         """
         return ComponentSetPlan2D(
@@ -174,7 +174,7 @@ class ComponentSetPlan2D:
         # The extra outputs are images on the grid; those of the
         # components are on a grid one voxel thick
         def image(data):
-            return fitsutils.GridData(data, grid.coords, None)
+            return gridutils.GridData(data, grid.coords, None)
 
         _detail.evaluate_components(
             self._components, self._component_plans, self._mappings,
@@ -280,7 +280,7 @@ class ComponentSet3D:
         """
         The evaluation of the components and lines of the selection (see
         Selection) on the given driver, grid of the x and y axes and
-        spectral axis (fitsutils.Grid, the second of one axis) and dtype,
+        spectral axis (gridutils.Grid, the second of one axis) and dtype,
         with spatial weights if has_weights.
         """
         return ComponentSetPlan3D(
@@ -331,7 +331,7 @@ class ComponentSetPlan3D:
             spec_zero=spec_zero)
         # The extra outputs are cubes on the grid: the x and y axes of the
         # data, and the z axis along the line of sight (from z = 0)
-        self._coords = fitsutils.Coords(
+        self._coords = gridutils.Coords(
             self._step,
             grid.coords.rpix + (-self._zero[2] / self._step[2],),
             grid.coords.rval + (0.0,), grid.coords.rota)
@@ -369,7 +369,7 @@ class ComponentSetPlan3D:
         component_set = self._component_set
 
         def cube(data):
-            return fitsutils.GridData(data, self._coords, None)
+            return gridutils.GridData(data, self._coords, None)
 
         wdata = self._wdata
         odata = self._odata

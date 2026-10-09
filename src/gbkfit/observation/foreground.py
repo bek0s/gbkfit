@@ -7,7 +7,7 @@ from typing import Any
 import numpy as np
 import scipy.ndimage
 
-from gbkfit.utils import fitsutils, parseutils
+from gbkfit.utils import fitsutils, gridutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
 
 
@@ -29,15 +29,15 @@ class Lens(parseutils.TypedSerializable, abc.ABC):
     brightness is conserved). The gmodel is evaluated on a grid of the
     source plane: source_size pixels of source_step arcsec, centred on the
     origin of the frame of the model, aligned with the sky (see
-    fitsutils.sky_positions); each pixel of the image takes the bilinear
+    gridutils.sky_positions); each pixel of the image takes the bilinear
     interpolation of the source at its position on the source plane.
     """
 
     def __init__(self, source_size: Sequence[int], source_step: Sequence[Real]):
-        self._source_grid = fitsutils.make_grid(
+        self._source_grid = gridutils.make_grid(
             tuple(source_size), tuple(source_step))
 
-    def source_grid(self) -> fitsutils.Grid:
+    def source_grid(self) -> gridutils.Grid:
         """The grid of the source plane (x and y)."""
         return self._source_grid
 
@@ -64,9 +64,9 @@ class LensPlan:
     """
 
     def __init__(self, lens, driver, grid, dtype):
-        x, y = fitsutils.sky_positions(grid)
+        x, y = gridutils.sky_positions(grid)
         deflection_x, deflection_y = lens.deflection(x, y)
-        matrix, offset = fitsutils.sky_to_pixel(lens.source_grid())
+        matrix, offset = gridutils.sky_to_pixel(lens.source_grid())
         source_x = x - deflection_x
         source_y = y - deflection_y
         pixel_x = matrix[0, 0] * source_x + matrix[0, 1] * source_y + offset[0]
@@ -76,16 +76,16 @@ class LensPlan:
         self._source_y = driver.mem_copy_h2d(pixel_y.astype(dtype))
         self._backend = driver.native_class('DModel', dtype)()
 
-    def source_grid(self, grid: fitsutils.Grid) -> fitsutils.Grid:
+    def source_grid(self, grid: gridutils.Grid) -> gridutils.Grid:
         """
         The grid of the source plane for a gmodel evaluated on the given
         grid of the image plane: the x and y of the source plane, and its
         other axes (e.g. the spectral axis).
         """
         source = self._lens.source_grid()
-        return fitsutils.Grid(
+        return gridutils.Grid(
             source.size + grid.size[2:],
-            fitsutils.Coords(
+            gridutils.Coords(
                 source.coords.step + grid.coords.step[2:],
                 source.coords.rpix + grid.coords.rpix[2:],
                 source.coords.rval + grid.coords.rval[2:],
@@ -168,7 +168,7 @@ class LensDeflectionMap(Lens):
     ):
         """
         The maps are on the grid of the given world coordinates (see
-        fitsutils.make_grid).
+        gridutils.make_grid).
         """
         super().__init__(source_size, source_step)
         alpha_x = np.asarray(alpha_x, dtype=float)
@@ -181,11 +181,11 @@ class LensDeflectionMap(Lens):
             raise RuntimeError("the deflection maps must be finite")
         self._alpha_x = alpha_x
         self._alpha_y = alpha_y
-        self._grid = fitsutils.make_grid(
+        self._grid = gridutils.make_grid(
             alpha_x.shape[::-1], step, rpix, rval, rota)
 
     def deflection(self, x, y):
-        matrix, offset = fitsutils.sky_to_pixel(self._grid)
+        matrix, offset = gridutils.sky_to_pixel(self._grid)
         pixel_x = matrix[0, 0] * x + matrix[0, 1] * y + offset[0]
         pixel_y = matrix[1, 0] * x + matrix[1, 1] * y + offset[1]
 

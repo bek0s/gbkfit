@@ -3,7 +3,7 @@ from numbers import Real
 
 from gbkfit.dataset.core import Dataset
 from gbkfit.dataset.data import Data
-from gbkfit.utils import fitsutils
+from gbkfit.utils import gridutils
 from . import _detail
 
 
@@ -43,10 +43,10 @@ class DatasetPixelBrightness(Dataset):
     ):
         """
         The world coordinates of the grid of the data (see
-        fitsutils.Coords) have defaults (see _detail.make_grid).
+        gridutils.Coords) have defaults (see _detail.make_grid).
         """
         super().__init__(dict(brightness=brightness))
         self._grid = _detail.make_grid(self, step, rpix, rval, rota)
 
-    def grid(self) -> fitsutils.Grid:
+    def grid(self) -> gridutils.Grid:
         return self._grid
