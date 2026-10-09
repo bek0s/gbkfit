@@ -23,15 +23,23 @@ _WCS_KEYWORDS = re.compile(
     r'|(CRPIX|CRVAL|CDELT|CUNIT|CTYPE|CROTA)\d+'
     r'|(PC|CD|PV|PS)\d+_\d+)$')
 
+# The keywords of the rest of the spectral axis, also in their old forms
+_REST_KEYWORDS = ('RESTWAV', 'RESTFRQ', 'RESTWAVE', 'RESTFREQ')
+
 
 def _has_wcs(header):
     return any(_WCS_KEYWORDS.match(key) for key in header)
 
 
 def _with_wcs(header, wcs):
-    """A copy of the header with the world coordinates of wcs."""
+    """
+    A copy of the header with the world coordinates of wcs, and its rest
+    (if any).
+    """
     header = header.copy()
-    for key in [key for key in header if _WCS_KEYWORDS.match(key)]:
+    for key in [
+            key for key in header
+            if _WCS_KEYWORDS.match(key) or key in _REST_KEYWORDS]:
         del header[key]
     header.update(wcs.to_header())
     return header
@@ -71,7 +79,8 @@ def _spectral_to_velocity(header, rest):
     optical velocities c (w / rest - 1), a linear frequency axis (FREQ) to
     the radio velocities c (1 - f / rest). Both are linear in the pixels,
     so the conversion is exact; the header gets the rest (RESTWAV or
-    RESTFRQ). A velocity axis (VOPT, VRAD) gets the rest only.
+    RESTFRQ). A velocity axis (VOPT, VRAD) gets the rest only, and if it
+    has one, it must be the same: its velocities refer to it.
     """
     if rest is None:
         return header
@@ -101,6 +110,7 @@ def _spectral_to_velocity(header, rest):
         velocity = 'VRAD'
     elif kind in ('VOPT', 'VRAD'):
         crval, factor, velocity = None, None, kind
+        _check_same_rest(wcs, rest)
     else:
         raise ConfigError(
             f"the spectral axis ({ctype}) is not a wavelength, frequency, "
@@ -123,6 +133,26 @@ def _spectral_to_velocity(header, rest):
         f"converting the spectral axis ({ctype}) to {velocity} velocities "
         f"of the rest {rest}")
     return _with_wcs(header, wcs)
+
+
+def _check_same_rest(wcs, rest):
+    """
+    Raise ConfigError unless the velocity axis of wcs has no rest, or the
+    given one (they are compared as frequencies).
+    """
+    hz, spectral = astropy.units.Hz, astropy.units.spectral()
+    current = (
+        wcs.wcs.restfrq * hz if wcs.wcs.restfrq > 0
+        else wcs.wcs.restwav * astropy.units.m if wcs.wcs.restwav > 0
+        else None)
+    if current is None:
+        return
+    current = current.to_value(hz, spectral)
+    if not np.isclose(rest.to_value(hz, spectral), current, rtol=1e-9):
+        raise ConfigError(
+            f"the velocities of the spectral axis refer to the rest "
+            f"{current * hz}, not {rest}; give that rest, or convert the "
+            f"velocities to the new rest first")
 
 
 def _reverse_decreasing_velocity(data, header):

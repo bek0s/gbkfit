@@ -439,10 +439,13 @@ def _spectral_rest(filename, wcs, rest):
                 f"(VELO), which have no rest; convert it to optical (VOPT) "
                 f"or radio (VRAD) velocities")
         return None
-    if rest is None and wcs.wcs.restwav > 0:
-        rest = wcs.wcs.restwav * astropy.units.m
-    if rest is None and wcs.wcs.restfrq > 0:
-        rest = wcs.wcs.restfrq * astropy.units.Hz
+    # A header can have both: that of the convention of the axis first
+    wavelength = wcs.wcs.restwav * astropy.units.m
+    frequency = wcs.wcs.restfrq * astropy.units.Hz
+    headers = (
+        (frequency, wavelength) if kind == 'VRAD' else (wavelength, frequency))
+    if rest is None:
+        rest = next((value for value in headers if value.value > 0), None)
     if rest is None:
         return None
     unit = astropy.units.m if kind == 'VOPT' else astropy.units.Hz
