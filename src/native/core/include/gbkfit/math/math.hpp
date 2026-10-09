@@ -294,7 +294,7 @@ gauss_1d_cdf(T x, T b, T c)
     // A Gaussian of width 0 is a step at b
     if (c == 0)
         return x < b ? T{0} : T{1};
-    return T{0.5} * (1 + erf((x - b)/(c * std::sqrt(2))));
+    return T{0.5} * (1 + std::erf((x - b) / (c * std::sqrt(T{2}))));
 }
 
 template<typename T> constexpr T
@@ -520,7 +520,8 @@ moffat_1d_rnd_trunc(RNG<T>& rng, T b, T c, T d, T xmin, T xmax)
 template<typename T> constexpr T
 sech2_1d_fun(T x, T a, T b, T c)
 {
-    return a * std::pow(1 / std::cosh((x - b) / c), 2);
+    const T sech = 1 / std::cosh((x - b) / c);
+    return a * sech * sech;
 }
 
 template<typename T> constexpr T
