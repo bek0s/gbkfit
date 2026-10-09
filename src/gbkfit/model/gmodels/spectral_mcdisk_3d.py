@@ -88,8 +88,8 @@ class SpectralMCDisk3D(SpectralComponent3D):
             rnodes=self._disk.rnodes(), subrnodes=self._disk.subrnodes())
 
     def plan(self, driver, dtype):
-        return _component.DiskComponentPlan(
-            self, self._disk.plan(driver, dtype))
+        return _component.SpectralDiskComponentPlan(
+            self, self._disk.plan(driver, 1, dtype))
 
     def disk_outputs(self, outputs):
         """The outputs of the disk, from those of the component."""

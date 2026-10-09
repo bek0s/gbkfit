@@ -54,14 +54,14 @@ class MCDisk(_disk.Disk):
     def options(self):
         return dict(cflux=self._cflux, seed=self._seed)
 
-    def plan(self, driver, dtype):
-        return MCDiskPlan(self, driver, dtype)
+    def plan(self, driver, nlines, dtype):
+        return MCDiskPlan(self, driver, nlines, dtype)
 
 
 class MCDiskPlan(_disk.DiskPlan):
 
-    def __init__(self, disk, driver, dtype):
-        super().__init__(disk, driver, dtype)
+    def __init__(self, disk, driver, nlines, dtype):
+        super().__init__(disk, driver, nlines, dtype)
         # The clouds are made in pools: one for each density trait with
         # an analytical integral, and one for each ring of the others
         # (the rings are centred on the subnodes between the first and

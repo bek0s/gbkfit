@@ -47,8 +47,10 @@ gmodel_image_evaluate(T* image, int x, int y, T rvalue, int spat_size_x)
     AtomicAddFunT(&image[idx], rvalue);
 }
 
+// Add a line of the given flux, centre and dispersion (in the units of
+// the spectral axis) to the spectrum (x, y) of a spectral cube
 template<auto AtomicAddFunT, typename T> void constexpr
-gmodel_scube_evaluate(
+gmodel_scube_line(
         T* scube, int x, int y, T rvalue, T vvalue, T dvalue,
         int spat_size_x, int spat_size_y,
         int spec_size_z,
@@ -78,6 +80,30 @@ gmodel_scube_evaluate(
                 spec_zero + (z + T{0.5}) * spec_step, vvalue, dvalue);
         AtomicAddFunT(&scube[idx], rvalue * (cdf_hi - cdf_lo) / spec_step);
         cdf_lo = cdf_hi;
+    }
+}
+
+// Add the emission lines (see DiskArgs::lines) of light of the given flux,
+// velocity and dispersion to the spectrum (x, y) of a spectral cube
+template<auto AtomicAddFunT, typename T> void constexpr
+gmodel_scube_evaluate(
+        T* scube, int x, int y, T rvalue, T vvalue, T dvalue,
+        int nlines, const T* lines,
+        int spat_size_x, int spat_size_y,
+        int spec_size_z,
+        T spec_step,
+        T spec_zero)
+{
+    for (int l = 0; l < nlines; ++l)
+    {
+        const T offset = lines[3 * l];
+        const T scale = lines[3 * l + 1];
+        const T flux = lines[3 * l + 2];
+        gmodel_scube_line<AtomicAddFunT>(
+                scube, x, y,
+                rvalue * flux, offset + scale * vvalue, scale * dvalue,
+                spat_size_x, spat_size_y,
+                spec_size_z, spec_step, spec_zero);
     }
 }
 
@@ -535,6 +561,7 @@ gmodel_mcdisk_evaluate_cloud(
     if (a.scube) {
         gbkfit::gmodel_scube_evaluate<AtomicAddFunT>(
                 a.scube, x, y, orvalue, vvalue, dvalue,
+                a.nlines, a.lines,
                 a.spat_size[0], a.spat_size[1],
                 a.spec_size,
                 a.spec_step,
@@ -800,6 +827,7 @@ gmodel_smdisk_evaluate_spaxel(int x, int y, int z, const DiskArgs<T>& a)
     if (a.scube) {
         gbkfit::gmodel_scube_evaluate<AtomicAddFunT>(
                 a.scube, x, y, orvalue, vvalue, dvalue,
+                a.nlines, a.lines,
                 a.spat_size[0], a.spat_size[1],
                 a.spec_size,
                 a.spec_step,

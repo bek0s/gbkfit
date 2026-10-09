@@ -235,6 +235,7 @@ def evaluate_smdisk(driver, thick):
         spat_zero=(-24.0, -24.0, -(spat_size[2] // 2)),
         spat_rota=0,
         spec_size=spec_size, spec_step=10.0, spec_zero=-300.0,
+        lines=memory.to_device(np.array([[0, 1, 1]], DTYPE)),
         image=outputs['image'], scube=outputs['scube'],
         vdata_cmp=outputs['velocity'], ddata_cmp=outputs['dispersion'],
         vdweight_cmp=outputs['weight'])

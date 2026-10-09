@@ -2,6 +2,8 @@
 import dataclasses
 import inspect
 
+import numpy as np
+
 from gbkfit.utils import iterutils, parseutils
 from . import _detail, _disk, common, traits
 from .core import ComponentPlan
@@ -10,6 +12,7 @@ from .core import ComponentPlan
 __all__ = [
     'Slot',
     'DiskComponentPlan',
+    'SpectralDiskComponentPlan',
     'BPT', 'BHT', 'OPT', 'OHT', 'VPT', 'VHT',
     'DPT', 'DHT', 'ZPT', 'SPT', 'WPT',
     'SPATIAL_NWMODES', 'SPECTRAL_NWMODES',
@@ -76,6 +79,26 @@ class DiskComponentPlan(ComponentPlan):
     def evaluate(self, params, grid, outputs, out_extra):
         self._disk_plan.evaluate(
             params, grid, self._component.disk_outputs(outputs), out_extra)
+
+
+class SpectralDiskComponentPlan(ComponentPlan):
+    """
+    The evaluation of a spectral component made of one disk: as
+    DiskComponentPlan, and its disk adds the emission lines of the
+    component to the spectral cube: one line, at the velocity of the
+    spectral axis.
+    """
+
+    def __init__(self, component, disk_plan):
+        self._component = component
+        self._disk_plan = disk_plan
+        # The offset, scale and flux of the line (see DiskPlan.evaluate)
+        self._lines = np.array([[0, 1, 1]])
+
+    def evaluate(self, params, grid, outputs, out_extra):
+        self._disk_plan.evaluate(
+            params, grid, self._component.disk_outputs(outputs), out_extra,
+            self._lines)
 
 
 def load_options(cls, info, slots, nwmodes):
