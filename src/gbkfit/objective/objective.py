@@ -6,7 +6,7 @@ import numpy as np
 from gbkfit.dataset import Dataset
 from gbkfit.observation import ObservationGroup
 from gbkfit.params import ParamDesc
-from gbkfit.utils import iterutils, timeutils
+from gbkfit.utils import iterutils
 
 
 class Objective:
@@ -135,18 +135,18 @@ class Objective:
             out_extra: dict[str, Any] | None = None
     ) -> list[float]:
         self._update_residual_d(params, True, out_extra)
-        t = timeutils.SimpleTimer('objective_residual_sum_eval').start()
         residuals = []
-        for i in range(self.nitems()):
-            driver = self._group.observations()[i].driver()
-            backend = self._backends[i]
-            d_residual_vector = self._d_residual_vector[i]
-            h_residual_scalar = self._h_residual_scalar[i]
-            d_residual_scalar = self._d_residual_scalar[i]
-            backend.residual_sum(d_residual_vector, squared, d_residual_scalar)
-            driver.mem_copy_d2h(d_residual_scalar, h_residual_scalar)
-            residuals.append(h_residual_scalar[0])
-        t.stop()
+        with self._group.timers().measure('objective_residual_sum_eval'):
+            for i in range(self.nitems()):
+                driver = self._group.observations()[i].driver()
+                backend = self._backends[i]
+                d_residual_vector = self._d_residual_vector[i]
+                h_residual_scalar = self._h_residual_scalar[i]
+                d_residual_scalar = self._d_residual_scalar[i]
+                backend.residual_sum(
+                    d_residual_vector, squared, d_residual_scalar)
+                driver.mem_copy_d2h(d_residual_scalar, h_residual_scalar)
+                residuals.append(h_residual_scalar[0])
         return residuals
 
     def log_likelihood(
@@ -155,18 +155,18 @@ class Objective:
             out_extra: dict[str, Any] | None = None
     ) -> list[float]:
         self._update_residual_d(params, True, out_extra)
-        t = timeutils.SimpleTimer('objective_log_likelihood_eval').start()
         log_likelihoods = []
-        for i in range(self.nitems()):
-            driver = self._group.observations()[i].driver()
-            backend = self._backends[i]
-            d_residual_vector = self._d_residual_vector[i]
-            h_residual_scalar = self._h_residual_scalar[i]
-            d_residual_scalar = self._d_residual_scalar[i]
-            backend.residual_sum(d_residual_vector, True, d_residual_scalar)
-            driver.mem_copy_d2h(d_residual_scalar, h_residual_scalar)
-            log_likelihoods.append(-0.5 * h_residual_scalar[0])
-        t.stop()
+        with self._group.timers().measure('objective_log_likelihood_eval'):
+            for i in range(self.nitems()):
+                driver = self._group.observations()[i].driver()
+                backend = self._backends[i]
+                d_residual_vector = self._d_residual_vector[i]
+                h_residual_scalar = self._h_residual_scalar[i]
+                d_residual_scalar = self._d_residual_scalar[i]
+                backend.residual_sum(
+                    d_residual_vector, True, d_residual_scalar)
+                driver.mem_copy_d2h(d_residual_scalar, h_residual_scalar)
+                log_likelihoods.append(-0.5 * h_residual_scalar[0])
         return log_likelihoods
 
     def residual_vector_h(
@@ -212,13 +212,12 @@ class Objective:
             out_extra: dict[str, Any] | None = None
     ):
         self._update_residual_d(params, weighted, out_extra)
-        t = timeutils.SimpleTimer('objective_residual_d2h').start()
-        for i in range(self.nitems()):
-            driver = self._group.observations()[i].driver()
-            d_data = self._d_residual_vector[i]
-            h_data = self._h_residual_vector[i]
-            driver.mem_copy_d2h(d_data, h_data)
-        t.stop()
+        with self._group.timers().measure('objective_residual_d2h'):
+            for i in range(self.nitems()):
+                driver = self._group.observations()[i].driver()
+                d_data = self._d_residual_vector[i]
+                h_data = self._h_residual_vector[i]
+                driver.mem_copy_d2h(d_data, h_data)
 
     def _update_residual_d(
             self,
@@ -231,22 +230,21 @@ class Objective:
         # Evaluate model
         model_data = self._group.model_d(params, out_extra)
         # Evaluate residuals
-        t = timeutils.SimpleTimer('objective_residual_eval').start()
-        for i in range(self.nitems()):
-            observable = self._group.observations()[i].observable()
-            backend = self._backends[i]
-            for j, key in enumerate(observable.keys()):
-                weights = self._weights_u[i][key] if weighted else 1.0
-                residual = self._d_residual_nddata[i][key]
-                observed_d = self._d_dataset_d_nddata[i][key]
-                observed_m = self._d_dataset_m_nddata[i].get(key, None)
-                observed_e = self._d_dataset_e_nddata[i].get(key, None)
-                expected_d = model_data[i][key]['d']
-                expected_m = model_data[i][key]['m']
-                expected_w = model_data[i][key]['w']
-                backend.residual(
-                    observed_d, observed_e, observed_m,
-                    expected_d, expected_w, expected_m,
-                    weights, residual)
-        t.stop()
+        with self._group.timers().measure('objective_residual_eval'):
+            for i in range(self.nitems()):
+                observable = self._group.observations()[i].observable()
+                backend = self._backends[i]
+                for j, key in enumerate(observable.keys()):
+                    weights = self._weights_u[i][key] if weighted else 1.0
+                    residual = self._d_residual_nddata[i][key]
+                    observed_d = self._d_dataset_d_nddata[i][key]
+                    observed_m = self._d_dataset_m_nddata[i].get(key, None)
+                    observed_e = self._d_dataset_e_nddata[i].get(key, None)
+                    expected_d = model_data[i][key]['d']
+                    expected_m = model_data[i][key]['m']
+                    expected_w = model_data[i][key]['w']
+                    backend.residual(
+                        observed_d, observed_e, observed_m,
+                        expected_d, expected_w, expected_m,
+                        weights, residual)
 

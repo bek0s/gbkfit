@@ -1,113 +1,117 @@
+"""
+Timers of the steps of evaluations (e.g. of a model), whose statistics
+tell users how long the steps take.
+"""
 
-import collections
-import logging
+import contextlib
+import dataclasses
+import math
 import time
-from dataclasses import asdict, dataclass
+from collections.abc import Generator
 from typing import Any
-
-import numpy as np
-import scipy.stats as stats
 
 
 __all__ = [
-    'SimpleTimer',
     'TimerStats',
-    'clear_time_stats',
-    'get_time_stats',
+    'Timers'
 ]
 
 
-_log = logging.getLogger(__name__)
-
-
-@dataclass
+@dataclasses.dataclass(frozen=True)
 class TimerStats:
-    """Statistics for timing measurements."""
+    """
+    The statistics of the times of a step, in milliseconds, to four
+    significant digits.
+
+    Attributes
+    ----------
+    unit : str
+        The unit of the times ('millisecond').
+    count : int
+        The number of times.
+    mean, stddev : float
+        The mean of the times and their (sample) standard deviation.
+    min, max : float
+        The shortest and the longest time.
+    """
     unit: str
+    count: int
+    mean: float
+    stddev: float
     min: float
     max: float
-    mean: float
-    median: float
-    stddev: float
-    mad: float
-    sample_count: int
 
     def to_dict(self) -> dict[str, Any]:
-        """Convert the TimerStats to a dictionary."""
-        return asdict(self)  # type: ignore  # Silence PyCharm bug
+        """Return the statistics as a dict."""
+        return dataclasses.asdict(self)
 
 
-_times: dict[str, list[int]] = collections.defaultdict(list)
-
-
-class SimpleTimer:
+class _RunningStats:
     """
-    A simple timer class for measuring execution time.
+    The count, mean, sum of squared deviations (Welford's algorithm),
+    minimum and maximum of values, updated with each value.
     """
 
-    def __init__(self, name: str):
-        self._name = name
-        self._start_time = None
+    def __init__(self):
+        self.count = 0
+        self.mean = 0.0
+        self.m2 = 0.0
+        self.min = math.inf
+        self.max = -math.inf
 
-    def start(self):
-        """Start the timer."""
-        if self._start_time is not None:
-            raise RuntimeError(
-                "SimpleTimer is running; use .stop() to stop it")
-        self._start_time = time.perf_counter_ns()
-        return self
-
-    def stop(self):
-        """Stop the timer and record the elapsed time."""
-        if self._start_time is None:
-            raise RuntimeError(
-                "SimpleTimer is not running; use .start() to start it")
-        elapsed = time.perf_counter_ns() - self._start_time
-        _times[self._name].append(elapsed)
-        self._start_time = None
-        return elapsed / 1_000_000
-
-    def __enter__(self) -> 'SimpleTimer':
-        """Context manager entry."""
-        return self.start()
-
-    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
-        """Context manager exit."""
-        self.stop()
+    def add(self, value: float) -> None:
+        """Update the statistics with a value."""
+        self.count += 1
+        delta = value - self.mean
+        self.mean += delta / self.count
+        self.m2 += delta * (value - self.mean)
+        self.min = min(self.min, value)
+        self.max = max(self.max, value)
 
 
-def clear_time_stats() -> None:
+class Timers:
     """
-    Clear all accumulated timing statistics.
+    The times of named steps (e.g. 'model_eval'). Each step keeps running
+    statistics of its times, so the memory they take does not grow with
+    the number of times.
     """
-    _times.clear()
+
+    def __init__(self):
+        self._steps: dict[str, _RunningStats] = {}
+
+    @contextlib.contextmanager
+    def measure(self, name: str) -> Generator[None, None, None]:
+        """
+        Measure the time of the block, as a time of the step of the given
+        name. A block that raises an exception is not measured.
+        """
+        start = time.perf_counter_ns()
+        yield
+        self.record(name, (time.perf_counter_ns() - start) / 1e6)
+
+    def record(self, name: str, milliseconds: float) -> None:
+        """Add a time to the step of the given name."""
+        self._steps.setdefault(name, _RunningStats()).add(milliseconds)
+
+    def clear(self) -> None:
+        """Forget the times of all the steps."""
+        self._steps.clear()
+
+    def stats(self) -> dict[str, TimerStats]:
+        """Return the statistics of the times of each step, by name."""
+        result = {}
+        for name, steps in self._steps.items():
+            variance = steps.m2 / (steps.count - 1) if steps.count > 1 else 0.0
+            result[name] = TimerStats(
+                unit='millisecond',
+                count=steps.count,
+                mean=_round(steps.mean),
+                stddev=_round(math.sqrt(variance)),
+                min=_round(steps.min),
+                max=_round(steps.max))
+        return result
 
 
-def get_time_stats(
-        discard: int = 1,
-        num_samples_recommended: int = 20
-) -> dict[str, TimerStats]:
-    """
-    Get statistics for all recorded timings.
-    """
-    stats_ = dict()
-    for key, values in _times.items():
-        if not values:
-            continue
-        samples = values[discard:] if len(values) > discard else values
-        if len(samples) < num_samples_recommended:
-            _log.warning(
-                f"after discarding the first {discard} samples, "
-                f"only {len(samples)} samples are available for '{key}'; "
-                f"recommended:{num_samples_recommended}+ measurements")
-        values_ms = np.array(samples) / 1_000_000
-        stats_[key] = TimerStats(
-            unit='millisecond',
-            min=float(np.round(np.min(values_ms), 2)),
-            max=float(np.round(np.max(values_ms), 2)),
-            mean=float(np.round(np.mean(values_ms), 2)),
-            median=float(np.round(np.median(values_ms), 2)),
-            stddev=float(np.round(np.std(values_ms), 2)),
-            mad=float(np.round(stats.median_abs_deviation(values_ms), 2)),
-            sample_count=len(samples))
-    return stats_
+def _round(value: float) -> float:
+    """Return a value rounded to four significant digits."""
+    return float(f'{value:.4g}')
