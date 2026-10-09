@@ -74,7 +74,8 @@ class SCube(Observable):
     def plan(self, driver, gmodel, instrument, scale, dtype):
         dcube = _dcube.DCube(
             self.size(), self.step(), self.rpix(), self.rval(), self.rota(),
-            self.rest(), tuple(scale), instrument.psf(), instrument.lsf(),
+            self.rest(), tuple(scale), instrument.primary_beam(),
+            instrument.psf(), instrument.lsf(),
             self._smooth_weights, self._mask_cutoff, self._mask_apply, dtype)
         return SCubePlan(dcube, driver, gmodel, dtype)
 

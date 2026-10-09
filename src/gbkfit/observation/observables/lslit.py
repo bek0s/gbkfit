@@ -95,7 +95,8 @@ class LSlit(Observable):
         dcube = _dcube.DCube(
             (size[0], 1, size[1]), (step[0], self._slit_width, step[1]),
             (rpix[0], 0, rpix[1]), (rval[0], 0, rval[1]), self.rota(),
-            self.rest(), (scale[0], scale[0], scale[1]), instrument.psf(),
+            self.rest(), (scale[0], scale[0], scale[1]),
+            instrument.primary_beam(), instrument.psf(),
             instrument.lsf(), self._smooth_weights, self._mask_cutoff,
             self._mask_apply, dtype)
         return LSlitPlan(dcube, driver, gmodel, dtype)

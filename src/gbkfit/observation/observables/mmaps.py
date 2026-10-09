@@ -130,7 +130,8 @@ class MMaps(Observable):
             self.step() + (self._spec_step,),
             self.rpix() + (spec_size / 2 - 0.5,),
             self.rval() + (self._spec_rval,),
-            self.rota(), self._spec_rest, tuple(scale) + (1,), psf, lsf,
+            self.rota(), self._spec_rest, tuple(scale) + (1,),
+            instrument.primary_beam(), psf, lsf,
             False, None, False, dtype)
         return MMapsPlan(self, dcube, driver, gmodel, dtype)
 

@@ -27,7 +27,7 @@ def test_grids(driver, psf, lsf):
     scale = (1, 2, 3)
     dcube = DCube(
         size=size, step=step, rpix=rpix, rval=rval, rota=0, rest=None, scale=scale,
-        psf=psf, lsf=lsf, smooth_weights=False, mask_cutoff=1.0,
+        primary_beam=None, psf=psf, lsf=lsf, smooth_weights=False, mask_cutoff=1.0,
         mask_apply=True, dtype=np.dtype(np.float32))
     plan = dcube.plan(driver, has_weights=True)
     # The spatial axes are measured from the reference pixel, and the
@@ -60,7 +60,7 @@ def test_grids(driver, psf, lsf):
 def test_downscaling_keeps_a_uniform_cube(driver):
     dcube = DCube(
         size=(21, 30, 41), step=(0.5, 1.5, 2.0), rpix=(5.0, 6.5, 7.5),
-        rval=(1.0, 1.5, 2.0), rota=0, rest=None, scale=(2, 3, 4), psf=None, lsf=None,
+        rval=(1.0, 1.5, 2.0), rota=0, rest=None, scale=(2, 3, 4), primary_beam=None, psf=None, lsf=None,
         smooth_weights=False, mask_cutoff=None, mask_apply=False,
         dtype=np.dtype(np.float32))
     plan = dcube.plan(driver, has_weights=False)
@@ -78,7 +78,7 @@ def _evaluate_weights(driver, smooth_weights):
     dcube = DCube(
         size=(24, 20, 1), step=(1, 1, 1), rpix=(11.5, 9.5, 0),
         rval=(0, 0, 0), rota=0, rest=None, scale=(1, 1, 1),
-        psf=PSFGauss(1.5), lsf=None, smooth_weights=smooth_weights,
+        primary_beam=None, psf=PSFGauss(1.5), lsf=None, smooth_weights=smooth_weights,
         mask_cutoff=None, mask_apply=False, dtype=np.float32)
     plan = dcube.plan(driver, has_weights=True)
 
@@ -116,7 +116,7 @@ def test_mask(driver):
     dcube = DCube(
         size=(12, 10, 8), step=(1, 1, 1), rpix=(5.5, 4.5, 3.5),
         rval=(0, 0, 0), rota=0, rest=None, scale=(1, 1, 1),
-        psf=None, lsf=None, smooth_weights=False,
+        primary_beam=None, psf=None, lsf=None, smooth_weights=False,
         mask_cutoff=0.5, mask_apply=True, dtype=np.float32)
     plan = dcube.plan(driver, has_weights=False)
     z, y, x = np.indices(dcube.size()[::-1])
@@ -140,7 +140,7 @@ def test_lsf_only_keeps_the_image_on_a_non_square_cube(driver):
         dcube = DCube(
             size=(24, 16, 40), step=(1, 1, 1), rpix=(11.5, 7.5, 19.5),
             rval=(0, 0, 0), rota=0, rest=None, scale=(1, 1, 1),
-            psf=None, lsf=lsf, smooth_weights=False,
+            primary_beam=None, psf=None, lsf=lsf, smooth_weights=False,
             mask_cutoff=None, mask_apply=False, dtype=np.float32)
         plan = dcube.plan(driver, has_weights=False)
         # The same line in every case, in the pixels of the output cube

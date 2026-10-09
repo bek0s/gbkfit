@@ -192,7 +192,8 @@ class BMaps(Observable):
             self.step() + (self._spec_step,),
             self.rpix() + (spec_size / 2 - 0.5,),
             self.rval() + (self._spec_rval,),
-            self.rota(), self._spec_rest, tuple(scale) + (1,), psf, lsf,
+            self.rota(), self._spec_rest, tuple(scale) + (1,),
+            instrument.primary_beam(), psf, lsf,
             False, None, False, dtype)
         return BMapsPlan(
             self._weights, self._orders, self._mask_cutoff, dcube, driver,

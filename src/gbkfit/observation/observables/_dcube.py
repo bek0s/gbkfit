@@ -37,6 +37,7 @@ class DCube:
             rota: float,
             rest: Any,
             scale: tuple[int, int, int],
+            primary_beam: Any,
             psf: PSF | None,
             lsf: LSF | None,
             smooth_weights: bool,
@@ -62,6 +63,7 @@ class DCube:
             fitsutils.Coords(step, rpix, rval, rota, fitsutils.make_rest(rest)),
             2)
         self._scale = scale
+        self._primary_beam = primary_beam
         self._psf = psf
         self._lsf = lsf
         self._smooth_weights = smooth_weights
@@ -93,6 +95,10 @@ class DCube:
     def scale(self) -> tuple[int, int, int]:
         return self._scale
 
+    def primary_beam(self) -> Any:
+        """The primary beam (see PrimaryBeam), or None."""
+        return self._primary_beam
+
     def psf(self) -> PSF | None:
         return self._psf
 
@@ -123,8 +129,8 @@ class DCube:
 class DCubePlan:
     """
     The evaluation of a DCube on a driver: the high-res (scratch) cube the
-    gmodel adds to, the low-res cube of the data, and their weights, mask
-    and PSF/LSF cube.
+    gmodel adds to, the low-res cube of the data, and their weights, mask,
+    primary beam and PSF/LSF cube.
     """
 
     def __init__(
@@ -213,6 +219,14 @@ class DCubePlan:
             # Transfer the psf cube to device memory
             self._pcube_hi = driver.mem_copy_h2d(self._pcube_hi)
 
+        # The response of the primary beam on the high-res grid (one image
+        # for all channels), if there is one
+        self._pbeam_hi = None
+        if dcube.primary_beam() is not None:
+            pbeam_hi = dcube.primary_beam().response(grid_hi)
+            self._pbeam_hi = driver.mem_copy_h2d(
+                pbeam_hi[None].astype(dtype))
+
         # Create low- and high-res data and weight cubes.
         # If the low- and high-res versions have the same size,
         # just create one and have the latter point to the former.
@@ -277,8 +291,8 @@ class DCubePlan:
             extra_hi: Callable[[np.ndarray, fitsutils.Grid], Any]
     ) -> None:
         """
-        Convolve, downscale and mask the high-res cube into the low-res
-        one. The extra outputs on the low- and high-res grids go to
+        Attenuate by the primary beam, convolve, downscale and mask the
+        high-res cube into the low-res one. The extra outputs on the low- and high-res grids go to
         out_extra as extra_lo and extra_hi make them from their data and
         grid (e.g. cube_extra or plain_extra).
         """
@@ -301,12 +315,17 @@ class DCubePlan:
         wcube_hi = self._wcube_hi
         mcube_lo = self._mcube_lo
         pcube_hi = self._pcube_hi
+        pbeam_hi = self._pbeam_hi
         has_weights = self._has_weights
         mask_cutoff = dcube.mask_cutoff()
         mask_apply = dcube.mask_apply()
         driver = self._driver
         backend_fft = self._backend_fft
         backend_dmodel = self._backend_dmodel
+
+        # The primary beam attenuates the light before the psf
+        if pbeam_hi is not None:
+            driver.math_mul(dcube_hi, pbeam_hi, out=dcube_hi)
 
         # Perform fft-based convolution.
         # The weights are only smoothed if requested.
@@ -354,3 +373,6 @@ class DCubePlan:
             if psf or lsf:
                 out_extra.update(
                     pcube_hi=driver.mem_copy_d2h(pcube_hi))
+            if pbeam_hi is not None:
+                out_extra.update(
+                    pbeam_hi=driver.mem_copy_d2h(pbeam_hi)[0])

@@ -73,8 +73,8 @@ class Image(Observable):
         dcube = _dcube.DCube(
             self.size() + (1,), self.step() + (0,), self.rpix() + (0,),
             self.rval() + (0,), self.rota(), None, tuple(scale) + (1,),
-            instrument.psf(), None, False, self._mask_cutoff,
-            self._mask_apply, dtype)
+            instrument.primary_beam(), instrument.psf(), None, False,
+            self._mask_cutoff, self._mask_apply, dtype)
         return ImagePlan(dcube, driver, gmodel, dtype)
 
 
