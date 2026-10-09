@@ -203,7 +203,8 @@ def _read_fits(filename):
     """
     The data and the header of a file, without the axes of length 1: those
     of its first HDU with data (e.g. the extension after an empty primary
-    HDU, as in MUSE and JWST cubes).
+    HDU, as in MUSE and JWST cubes). Integer data become floats, which
+    can hold the NaN of invalid pixels.
     """
     with fits.open(filename) as hdus:
         hdu = next((hdu for hdu in hdus if hdu.data is not None), None)
@@ -211,6 +212,8 @@ def _read_fits(filename):
             raise ConfigError(f"{filename}: the file has no data")
         data = np.array(hdu.data)
         header = hdu.header.copy()
+    if not np.issubdtype(data.dtype, np.floating):
+        data = data.astype(float)
     # Astropy writes the FITS default for a missing reference pixel, so
     # write the one of the model (see fitsutils.read_data)
     if _has_wcs(header):
