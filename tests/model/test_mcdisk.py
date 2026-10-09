@@ -77,14 +77,16 @@ def test_mcdisk_velocity_field_matches_smdisk(driver, posa):
 @pytest.mark.parametrize('trunc', [0, 1], ids=['full', 'truncated'])
 @pytest.mark.parametrize('height, shape', [
     ('exponential', {}), ('gauss', {}), ('sech2', {}),
-    ('ggauss', dict(bht_b=1.5)), ('ggauss', dict(bht_b=0.6))],
-    ids=['exponential', 'gauss', 'sech2', 'ggauss', 'ggauss_heavy_tails'])
+    ('ggauss', dict(bht_b=1.5)), ('ggauss', dict(bht_b=0.6)),
+    ('moffat', dict(bht_b=2.5)), ('moffat', dict(bht_b=0.8))],
+    ids=['exponential', 'gauss', 'sech2', 'ggauss', 'ggauss_heavy_tails',
+         'moffat', 'moffat_heavy_tails'])
 def test_mcdisk_vertical_profile_matches_smdisk(driver, height, shape, trunc):
     # An almost edge-on thick disk, with more clouds to reduce the noise.
     # Its image does not depend on the velocity field, so it is not
     # affected by the position angle bug. A truncated profile is cut at
     # trunc times its scale height. The heavy tails of a ggauss of shape
-    # 0.6 reach far beyond 5 scale heights.
+    # 0.6 and of a Moffat of shape 0.8 reach far beyond 5 scale heights.
     component = dict(bhtraits=dict(type=height, trunc=trunc))
     properties = dict(incl=85, bht_s=2) | shape
     mcdisk = evaluate_disk(

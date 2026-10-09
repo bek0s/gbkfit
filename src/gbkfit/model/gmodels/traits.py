@@ -1039,6 +1039,18 @@ class BHTraitLorentz(BHTraitP1):
         return BHT_UID_LORENTZ
 
 
+class BHTraitMoffat(BHTraitP2):
+    """The Moffat profile (1 + (z / s)^2)^-b, for b > 1/2."""
+
+    @staticmethod
+    def type():
+        return 'moffat'
+
+    @staticmethod
+    def uid():
+        return BHT_UID_MOFFAT
+
+
 class BHTraitSech2(BHTraitP1):
 
     @staticmethod
@@ -2432,6 +2444,18 @@ class OHTraitLorentz(OHTraitP1):
         return OHT_UID_LORENTZ
 
 
+class OHTraitMoffat(OHTraitP2):
+    """The Moffat profile (1 + (z / s)^2)^-b, for b > 1/2."""
+
+    @staticmethod
+    def type():
+        return 'moffat'
+
+    @staticmethod
+    def uid():
+        return OHT_UID_MOFFAT
+
+
 class OHTraitSech2(OHTraitP1):
 
     @staticmethod
@@ -2467,6 +2491,7 @@ bht_parser = parseutils.TypedParser(BHTrait, [
     BHTraitGauss,
     BHTraitGGauss,
     BHTraitLorentz,
+    BHTraitMoffat,
     BHTraitSech2])
 
 # Opacity polar traits parser
@@ -2493,6 +2518,7 @@ oht_parser = parseutils.TypedParser(OHTrait, [
     OHTraitGauss,
     OHTraitGGauss,
     OHTraitLorentz,
+    OHTraitMoffat,
     OHTraitSech2])
 
 # Velocity polar traits parser
