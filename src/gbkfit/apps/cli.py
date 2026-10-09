@@ -482,7 +482,7 @@ def main():
                 args.minify, args.nanpad, args.dtype)
         elif args.prep_task == 'mmaps':
             gbkfit.tasks.prep.prep_mmaps(
-                args.orders, args.data_d, args.data_e, args.data_m,
+                args.data_d, args.data_e, args.data_m,
                 args.roi_spat, args.clip_min, args.clip_max,
                 args.ccl_lcount, args.ccl_pcount, args.ccl_lratio,
                 args.sclip_sigma, args.sclip_iters,
