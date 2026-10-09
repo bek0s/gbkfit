@@ -22,8 +22,8 @@ class ObservationGroup:
     """
 
     def __init__(self, gmodels, observations):
-        self._gmodels = iterutils.tuplify(gmodels, False)
-        self._observations = iterutils.tuplify(observations, False)
+        self._gmodels = iterutils.tuplify(gmodels)
+        self._observations = iterutils.tuplify(observations)
         if not self._gmodels:
             raise ConfigError("at least one gmodel is required")
         if not self._observations:

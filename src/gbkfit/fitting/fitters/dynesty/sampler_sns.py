@@ -12,7 +12,7 @@ from gbkfit.fitting import fitutils
 from gbkfit.fitting.prior import prior_parser, PriorDict
 from gbkfit.fitting.result import make_fitter_result
 from gbkfit.params import parsers as param_parsers
-from gbkfit.utils import funcutils, iterutils, parseutils
+from gbkfit.utils import funcutils, iterutils, numutils, parseutils
 
 from .core import FitParamDynesty, FitParamsDynesty, FitterDynesty, \
     log_likelihood, prior_transform
@@ -183,7 +183,7 @@ class FitterDynestySNS(FitterDynesty):
         # ...
         posterior = dict(samples=samples_unweighted, loglikes=loglikes)
         # Extract additional information
-        extra = iterutils.nativify(dict(
+        extra = numutils.nativify(dict(
             nlive=res.nlive,
             niter=res.niter,
             efficiency=res.eff,

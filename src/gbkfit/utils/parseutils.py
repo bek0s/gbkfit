@@ -187,8 +187,8 @@ def parse_options(
     Validates and filters a dictionary of options.
     Returns a filtered dictionary containing only recognized options.
     """
-    required = iterutils.setify(required, False)
-    optional = iterutils.setify(optional, False)
+    required = iterutils.setify(required)
+    optional = iterutils.setify(optional)
     # Required options must not clash with optional options
     if conflicting := required & optional:
         raise RuntimeError(
@@ -232,7 +232,7 @@ def parse_options_for_callable(
     Parses options for a callable function, handling required/optional
     arguments, renaming, ignoring arguments, and type validation.
     """
-    fun_ignore_args = iterutils.setify(fun_ignore_args, False)
+    fun_ignore_args = iterutils.setify(fun_ignore_args)
     fun_rename_args = fun_rename_args or {}
     add_required = add_required or {}
     add_optional = add_optional or {}
@@ -494,7 +494,7 @@ class TypedParser(Parser):
             self,
             parsers: type[TypedSerializable] | list[type[TypedSerializable]] | None
     ) -> None:
-        parsers = iterutils.listify(parsers, False)
+        parsers = iterutils.listify(parsers)
         for parser in parsers:
             parser_desc = make_typed_desc(parser)
             if not issubclass(parser, self.cls()):

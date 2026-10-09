@@ -150,7 +150,7 @@ class MassModel(parseutils.BasicSerializable):
             list(self._components)))
 
     def __init__(self, components: MassComponent | Sequence[MassComponent]):
-        components = iterutils.tuplify(components, False)
+        components = iterutils.tuplify(components)
         if not components:
             raise ConfigError("a mass model needs at least one component")
         names = [component.name() for component in components]

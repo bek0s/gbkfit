@@ -72,7 +72,7 @@ class ComponentSet2D:
     def __init__(self, components, mass_model=None):
         if not components:
             raise RuntimeError("at least one component must be configured")
-        self._components = iterutils.tuplify(components, False)
+        self._components = iterutils.tuplify(components)
         self._prefixes = _detail.component_prefixes(
             self._components, *_CMP_PREFIX)
         params, self._mappings = iterutils.merge_with_prefixes(
@@ -208,8 +208,8 @@ class ComponentSet3D:
             size_z=None, step_z=None, zero_z=None, mass_model=None):
         if not components:
             raise RuntimeError("at least one component must be configured")
-        self._components = iterutils.tuplify(components, False)
-        self._ocomponents = iterutils.tuplify(opacity_components, False)
+        self._components = iterutils.tuplify(components)
+        self._ocomponents = iterutils.tuplify(opacity_components)
         # The components and the opacity components share their names
         repeated = sorted(
             {cmp.name() for cmp in self._components}

@@ -24,3 +24,14 @@ def test_cumsum_from_errors():
         numutils.cumsum_from(np.ones(4), 4)
     with pytest.raises(ValueError, match="non-empty"):
         numutils.cumsum_from(np.ones(0), 0)
+
+
+def test_nativify_makes_numpy_values_writable_as_json():
+    import json
+    x = dict(
+        array=np.arange(3), flag=np.bool_(True), number=np.float32(1.5),
+        nested=[(np.int64(2), np.str_('a'))])
+    native = numutils.nativify(x)
+    assert native == dict(array=[0, 1, 2], flag=True, number=1.5,
+                          nested=[[2, 'a']])
+    json.dumps(native)

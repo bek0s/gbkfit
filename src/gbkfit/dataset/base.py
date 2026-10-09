@@ -89,7 +89,7 @@ class DatasetTypedParser(parseutils.TypedParser):
     def dump_many(self, x, *args, **kwargs):
         # Ensure that a unique prefix for each dataset is provided
         # in order to avoid datasets overwriting each other
-        prefix = iterutils.listify(kwargs.get('prefix'), False)
+        prefix = iterutils.listify(kwargs.get('prefix'))
         if len(x) != len(set(prefix)):
             raise RuntimeError(
                 "when dumping multiple datasets, "
