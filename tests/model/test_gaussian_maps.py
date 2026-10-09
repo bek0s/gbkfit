@@ -95,10 +95,10 @@ def test_gaussian_fit_differs_from_the_moments_with_beam_smearing(driver):
 
 def test_gaussian_fit_of_bins(driver):
     # The fits of single-pixel bins are those of the maps
-    from gbkfit.utils import fitsutils
+    from gbkfit.utils import fitsutils, gridutils
     fitsutils.write_data(
         'bins.fits', np.arange(32 * 41).reshape(41, 32),
-        fitsutils.Coords((1, 1), (15.5, 20), (0, 0), 0))
+        gridutils.Coords((1, 1), (15.5, 20), (0, 0), 0))
     options = dict(spec_size=161, spec_step=5, orders=[1, 2],
                    mask_cutoff=1e-3, method='gaussian_fit')
     mmaps = evaluate(driver, dict(type='pixel_moments', size=[32, 41]) | options)

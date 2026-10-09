@@ -10,7 +10,7 @@ import scipy.special
 import gbkfit.math
 from gbkfit.psflsf.core import (
     LSF, MIN_EXTENT, WING_FLUX, check_scale, embed, lsf_parser)
-from gbkfit.utils import fitsutils, parseutils
+from gbkfit.utils import fitsutils, gridutils, parseutils
 
 
 __all__ = [
@@ -315,7 +315,7 @@ class LSFImage(LSF):
     ) -> dict[str, Any]:
         filename = f'{prefix}lsf.fits'
         rpix = self._data.size / 2 - 0.5
-        coords = fitsutils.Coords((self._step,), (rpix,), (0.0,), 0.0)
+        coords = gridutils.Coords((self._step,), (rpix,), (0.0,), 0.0)
         fitsutils.write_data(filename, self._data, coords, 0, overwrite)
         return dict(
             type=self.type(),

@@ -5,7 +5,7 @@ from astropy.io import fits
 
 from gbkfit.dataset import *
 from gbkfit.dataset.datasets import *
-from gbkfit.utils.fitsutils import Coords
+from gbkfit.utils.gridutils import Coords
 
 
 def test_data():

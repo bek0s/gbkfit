@@ -2,7 +2,7 @@ import abc
 
 import numpy as np
 
-from gbkfit.utils import fitsutils, parseutils
+from gbkfit.utils import gridutils, parseutils
 
 
 __all__ = [
@@ -36,11 +36,11 @@ class Observable(parseutils.TypedSerializable, abc.ABC):
     def __init__(self, size, step, rpix, rval, rota, rest=None):
         """
         The grid of the data: its size and world coordinates (see
-        fitsutils.Coords; rest is that of the spectral axis, if any).
+        gridutils.Coords; rest is that of the spectral axis, if any).
         """
         if rpix is None:
             rpix = tuple((np.array(size) / 2 - 0.5).tolist())
-        self._grid = fitsutils.make_grid(
+        self._grid = gridutils.make_grid(
             tuple(size), tuple(step), tuple(rpix), tuple(rval), rota,
             self.spectral_axis, rest)
 
@@ -55,7 +55,7 @@ class Observable(parseutils.TypedSerializable, abc.ABC):
         grid = ('size', 'step', 'rpix', 'rval', 'rota')
         return grid + (('rest',) if cls.spectral_axis is not None else ())
 
-    def grid(self) -> fitsutils.Grid:
+    def grid(self) -> gridutils.Grid:
         """The grid of the data."""
         return self._grid
 
@@ -75,7 +75,7 @@ class Observable(parseutils.TypedSerializable, abc.ABC):
         return self._grid.coords.rota
 
     def rest(self):
-        """The rest of the spectral axis (see fitsutils.Coords), or None."""
+        """The rest of the spectral axis (see gridutils.Coords), or None."""
         return self._grid.coords.rest
 
     @abc.abstractmethod
@@ -128,7 +128,7 @@ class Observable(parseutils.TypedSerializable, abc.ABC):
         grid of the observable with its world coordinates (a GridData).
         Observables of other data override this.
         """
-        return fitsutils.GridData(
+        return gridutils.GridData(
             data, self._grid.coords, self._grid.spectral_axis)
 
     @abc.abstractmethod

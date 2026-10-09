@@ -1,5 +1,5 @@
 from gbkfit.dataset.data import dump_data, load_data
-from gbkfit.utils import fitsutils, parseutils
+from gbkfit.utils import fitsutils, gridutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
 
 
@@ -58,10 +58,10 @@ def load_grid_dataset(cls, info, names, prefix=''):
 def make_grid(dataset, step, rpix, rval, rota, rest=None):
     """
     The grid of the items of a dataset, with the given world coordinates
-    or their defaults (see fitsutils.make_grid). The dataset declares its
+    or their defaults (see gridutils.make_grid). The dataset declares its
     spectral axis (spectral_axis).
     """
-    return fitsutils.make_grid(
+    return gridutils.make_grid(
         dataset.shape()[::-1], step, rpix, rval, rota,
         dataset.spectral_axis, rest)
 

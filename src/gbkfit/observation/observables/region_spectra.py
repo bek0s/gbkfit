@@ -6,7 +6,7 @@ import astropy.units
 from gbkfit.dataset.datasets import DatasetRegionSpectra
 from gbkfit.dataset.regions import Regions, regions_parser
 from gbkfit.model.core import GModelSCube
-from gbkfit.utils import fitsutils, parseutils
+from gbkfit.utils import gridutils, parseutils
 from . import _dcube, _detail
 from ._regions import RegionSumsPlan, flux_weights
 from .core import Observable
@@ -109,8 +109,8 @@ class RegionSpectra(Observable):
         The spectral axis has spec_size channels of spec_step (km/s), with
         the velocity spec_rval (km/s) at the channel spec_rpix (by default
         the centre), and velocities of the rest wavelength or frequency
-        spec_rest (see fitsutils.Coords), if known. The spatial grid
-        (size, step, rpix, rval, rota; see fitsutils.make_grid) is that
+        spec_rest (see gridutils.Coords), if known. The spatial grid
+        (size, step, rpix, rval, rota; see gridutils.make_grid) is that
         of the regions if they have one (bins), and must not be given;
         else size is required.
         """
@@ -133,7 +133,7 @@ class RegionSpectra(Observable):
     def regions(self) -> Regions:
         return self._regions
 
-    def spectral_grid(self) -> fitsutils.Grid:
+    def spectral_grid(self) -> gridutils.Grid:
         """The grid of the spectral axis (one axis)."""
         return self._grid.spectral()
 
@@ -151,7 +151,7 @@ class RegionSpectra(Observable):
                 f"{self.spectral_grid()}")
 
     def output(self, data):
-        return fitsutils.SpectraData(data, self.spectral_grid().coords)
+        return gridutils.SpectraData(data, self.spectral_grid().coords)
 
     def plan(
             self, driver, gmodel, foreground, instrument, scale, dtype,

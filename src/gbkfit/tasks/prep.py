@@ -11,7 +11,7 @@ import astropy.wcs
 import numpy as np
 import skimage.measure
 
-from gbkfit.utils import fitsutils
+from gbkfit.utils import fitsutils, gridutils
 from gbkfit.utils.parseutils import ConfigError
 
 
@@ -74,7 +74,7 @@ def _shift_axes(header, offset):
 def _spectral_to_velocity(header, rest):
     """
     The header with its spectral axis converted to the velocities of the
-    given rest (see fitsutils.make_rest; None leaves it unchanged): a
+    given rest (see gridutils.make_rest; None leaves it unchanged): a
     linear wavelength axis (WAVE, or AWAV with a rest in air too) to the
     optical velocities c (w / rest - 1), a linear frequency axis (FREQ) to
     the radio velocities c (1 - f / rest). Both are linear in the pixels,
@@ -84,7 +84,7 @@ def _spectral_to_velocity(header, rest):
     """
     if rest is None:
         return header
-    rest = fitsutils.make_rest(rest)
+    rest = gridutils.make_rest(rest)
     wcs = astropy.wcs.WCS(header)
     s = wcs.wcs.spec
     if s < 0:

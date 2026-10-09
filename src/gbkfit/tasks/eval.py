@@ -14,7 +14,7 @@ import gbkfit.driver
 import gbkfit.model
 import gbkfit.objective
 import gbkfit.params
-from gbkfit.utils import fitsutils, iterutils, timeutils
+from gbkfit.utils import fitsutils, gridutils, iterutils, timeutils
 from gbkfit.utils.parseutils import config_path
 from . import _detail
 
@@ -240,11 +240,11 @@ def _write_outputs(output_dir, outputs):
     values = {}
     for name, value in outputs.items():
         filename = os.path.join(output_dir, f'{name}.fits')
-        if isinstance(value, fitsutils.GridData):
+        if isinstance(value, gridutils.GridData):
             fitsutils.write_data(
                 filename, value.data, value.coords, value.spectral_axis,
                 overwrite=True)
-        elif isinstance(value, fitsutils.SpectraData):
+        elif isinstance(value, gridutils.SpectraData):
             fitsutils.write_spectra(
                 filename, value.data, value.coords, overwrite=True)
         elif isinstance(value, np.ndarray):

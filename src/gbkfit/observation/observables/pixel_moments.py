@@ -5,7 +5,7 @@ import astropy.units
 
 from gbkfit.dataset.datasets import DatasetPixelMoments
 from gbkfit.model.core import GModelSCube
-from gbkfit.utils import fitsutils, parseutils
+from gbkfit.utils import gridutils, parseutils
 from . import _dcube, _detail, _moments
 from .core import Observable
 
@@ -82,7 +82,7 @@ class PixelMoments(Observable):
         spec_step (km/s) centred on spec_rval (km/s). By default it spans
         1000 km/s. load() derives it from the moment maps of a dataset,
         unless it is given. spec_rest is the rest wavelength or frequency of
-        its velocities (see fitsutils.Coords), if known. method is how the
+        its velocities (see gridutils.Coords), if known. method is how the
         maps are measured from the spectra (see _moments.METHODS): their
         moments, or a Gaussian fitted to each, as the maps of the data
         were.
@@ -99,7 +99,7 @@ class PixelMoments(Observable):
         self._spec_size = spec_size
         self._spec_step = spec_step
         self._spec_rval = spec_rval
-        self._spec_rest = fitsutils.make_rest(spec_rest)
+        self._spec_rest = gridutils.make_rest(spec_rest)
 
     def keys(self):
         return tuple([f'moment{i}' for i in self._orders])

@@ -4,7 +4,7 @@ import astropy.units
 
 from gbkfit.dataset.datasets import DatasetSlitSpectra
 from gbkfit.model.core import GModelSCube
-from gbkfit.utils import fitsutils
+from gbkfit.utils import gridutils
 from . import _dcube, _detail
 from .core import Observable
 
@@ -19,7 +19,7 @@ def _slit_extra(data, grid):
     An extra output on the low-res grid of DCube, as a slit (the position
     along the slit and the velocity; the slit is one pixel wide).
     """
-    return fitsutils.GridData(data[:, 0, :], grid.coords.axes(0, 2), 1)
+    return gridutils.GridData(data[:, 0, :], grid.coords.axes(0, 2), 1)
 
 
 class SlitSpectra(Observable):
@@ -73,7 +73,7 @@ class SlitSpectra(Observable):
     ):
         """
         rest is the rest wavelength or frequency of the velocities of the
-        spectral axis (see fitsutils.Coords), if known.
+        spectral axis (see gridutils.Coords), if known.
         """
         super().__init__(size, step, rpix, rval, rota, rest)
         self._slit_width = slit_width if slit_width is not None \

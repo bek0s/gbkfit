@@ -8,7 +8,7 @@ import scipy.ndimage
 import scipy.special
 
 from gbkfit.psflsf import check_scale
-from gbkfit.utils import fitsutils, parseutils
+from gbkfit.utils import fitsutils, gridutils, parseutils
 
 
 __all__ = [
@@ -41,7 +41,7 @@ class PrimaryBeam(parseutils.TypedSerializable, abc.ABC):
         pass
 
     @abc.abstractmethod
-    def response(self, grid: fitsutils.Grid) -> np.ndarray:
+    def response(self, grid: gridutils.Grid) -> np.ndarray:
         """The response at the pixels of the x and y axes of a grid."""
         pass
 
@@ -70,7 +70,7 @@ class PrimaryBeamRadial(PrimaryBeam, abc.ABC):
         self._y = y
 
     def response(self, grid):
-        x, y = fitsutils.sky_positions(grid)
+        x, y = gridutils.sky_positions(grid)
         radius = np.hypot(x - self._x, y - self._y)
         return self._response_impl(radius / self._fwhm)
 
@@ -151,18 +151,18 @@ class PrimaryBeamImage(PrimaryBeam):
     ):
         """
         The image is on the grid of the given world coordinates (see
-        fitsutils.make_grid); its pixels that are not finite are 0.
+        gridutils.make_grid); its pixels that are not finite are 0.
         """
         data = np.asarray(data, dtype=float)
         if data.ndim != 2:
             raise RuntimeError(
                 f"the primary beam must be an image; it has {data.ndim} axes")
         self._data = np.where(np.isfinite(data), data, 0)
-        self._grid = fitsutils.make_grid(data.shape[::-1], step, rpix, rval, rota)
+        self._grid = gridutils.make_grid(data.shape[::-1], step, rpix, rval, rota)
 
     def response(self, grid):
-        x, y = fitsutils.sky_positions(grid)
-        matrix, offset = fitsutils.sky_to_pixel(self._grid)
+        x, y = gridutils.sky_positions(grid)
+        matrix, offset = gridutils.sky_to_pixel(self._grid)
         pixel_x = matrix[0, 0] * x + matrix[0, 1] * y + offset[0]
         pixel_y = matrix[1, 0] * x + matrix[1, 1] * y + offset[1]
         return scipy.ndimage.map_coordinates(

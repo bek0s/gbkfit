@@ -6,7 +6,7 @@ from numbers import Real
 import numpy as np
 import scipy.sparse
 
-from gbkfit.utils import fitsutils, parseutils
+from gbkfit.utils import fitsutils, gridutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
 from .apertures import Aperture, aperture_parser
 
@@ -31,7 +31,7 @@ class Regions(parseutils.TypedSerializable, abc.ABC):
         pass
 
     @abc.abstractmethod
-    def grid(self) -> fitsutils.Grid | None:
+    def grid(self) -> gridutils.Grid | None:
         """
         The spatial grid on which the regions are defined, or None if they
         are defined on the sky (and can be put on any grid that covers
@@ -40,7 +40,7 @@ class Regions(parseutils.TypedSerializable, abc.ABC):
         pass
 
     @abc.abstractmethod
-    def weights(self, grid: fitsutils.Grid) -> scipy.sparse.csr_array:
+    def weights(self, grid: gridutils.Grid) -> scipy.sparse.csr_array:
         """
         The weights of the pixels of a spatial grid in the regions: a
         matrix of one row for each region and one column for each pixel
@@ -109,7 +109,7 @@ class RegionsBins(Regions):
     ):
         """
         The world coordinates of the grid of the bins (see
-        fitsutils.Coords) have defaults (see fitsutils.make_grid).
+        gridutils.Coords) have defaults (see gridutils.make_grid).
         """
         index = np.asarray(index)
         if index.ndim != 2:
@@ -129,7 +129,7 @@ class RegionsBins(Regions):
                 f"have no pixels: {empty}")
         self._index = index
         self._nbins = nbins
-        self._grid = fitsutils.make_grid(
+        self._grid = gridutils.make_grid(
             index.shape[::-1], step, rpix, rval, rota)
 
     def __eq__(self, other):

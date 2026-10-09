@@ -3,7 +3,7 @@ from numbers import Real
 
 from gbkfit.dataset.core import Dataset
 from gbkfit.dataset.data import Data
-from gbkfit.utils import fitsutils
+from gbkfit.utils import gridutils
 from . import _detail
 
 
@@ -47,7 +47,7 @@ class DatasetPixelMoments(Dataset):
     ):
         """
         The moment maps of the given orders, on one grid. The world
-        coordinates of the grid (see fitsutils.Coords) have defaults (see
+        coordinates of the grid (see gridutils.Coords) have defaults (see
         _detail.make_grid).
         """
         moments = (
@@ -58,5 +58,5 @@ class DatasetPixelMoments(Dataset):
             if moment is not None})
         self._grid = _detail.make_grid(self, step, rpix, rval, rota)
 
-    def grid(self) -> fitsutils.Grid:
+    def grid(self) -> gridutils.Grid:
         return self._grid

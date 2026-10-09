@@ -5,7 +5,7 @@ import astropy.units
 from gbkfit.dataset.core import Dataset
 from gbkfit.dataset.data import Data, dump_data, load_data
 from gbkfit.dataset.regions import Regions, regions_parser
-from gbkfit.utils import fitsutils, parseutils
+from gbkfit.utils import fitsutils, gridutils, parseutils
 from . import _detail
 
 
@@ -81,7 +81,7 @@ class DatasetRegionSpectra(Dataset):
     ):
         """
         step, rpix, rval and rest are the world coordinates of the
-        spectral axis (see fitsutils.Coords): the channel width (km/s), the
+        spectral axis (see gridutils.Coords): the channel width (km/s), the
         reference channel (by default the centre), its velocity (km/s), and
         the rest wavelength or frequency of the velocities.
         """
@@ -92,12 +92,12 @@ class DatasetRegionSpectra(Dataset):
                 f"the spectra are of {nregions} regions, but there are "
                 f"{regions.nregions()} regions")
         self._regions = regions
-        self._spectral_grid = fitsutils.make_grid(
+        self._spectral_grid = gridutils.make_grid(
             (nchannels,), step, rpix, rval, 0, spectral_axis=0, rest=rest)
 
     def regions(self) -> Regions:
         return self._regions
 
-    def spectral_grid(self) -> fitsutils.Grid:
+    def spectral_grid(self) -> gridutils.Grid:
         """The grid of the spectral axis (one axis)."""
         return self._spectral_grid

@@ -13,7 +13,7 @@ from modelutils import observation_group
 
 from gbkfit.dataset import Data, RegionsBins
 from gbkfit.dataset.datasets import DatasetRegionMoments
-from gbkfit.utils import fitsutils
+from gbkfit.utils import fitsutils, gridutils
 
 
 GMODEL = dict(type='kinematics_2d', components=[dict(
@@ -45,7 +45,7 @@ def evaluate(driver, dmodel):
 
 def write_bins(index):
     """A file of bins on the grid of the tests' cubes (32 x 41 pixels)."""
-    fitsutils.write_data('bins.fits', index, fitsutils.Coords(
+    fitsutils.write_data('bins.fits', index, gridutils.Coords(
         (1, 1), (15.5, 20), (0, 0), 0))
     return dict(type='bins', file='bins.fits')
 

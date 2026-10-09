@@ -5,7 +5,7 @@ from numbers import Real
 import numpy as np
 
 from gbkfit.math import overlap
-from gbkfit.utils import fitsutils, parseutils
+from gbkfit.utils import gridutils, parseutils
 
 
 __all__ = [
@@ -90,7 +90,7 @@ class Aperture(parseutils.TypedSerializable, abc.ABC):
             info, desc, cls.__init__))
 
     @abc.abstractmethod
-    def overlaps(self, grid: fitsutils.Grid) -> tuple[np.ndarray, np.ndarray]:
+    def overlaps(self, grid: gridutils.Grid) -> tuple[np.ndarray, np.ndarray]:
         """
         The pixels of a spatial grid (flat indices, x fastest) that overlap
         the aperture, and the fraction of the area of each inside it.
@@ -159,7 +159,7 @@ def _ellipse_overlaps(aperture, grid, centre, a, b, posa):
     """
     along, across = _axes(posa)
     ellipse = np.array([along / a, across / b])
-    matrix, offset = fitsutils.sky_to_pixel(grid)
+    matrix, offset = gridutils.sky_to_pixel(grid)
     inverse = np.linalg.inv(matrix)
     disk_matrix = ellipse @ inverse
     disk_offset = -ellipse @ (inverse @ offset + np.asarray(centre, float))
@@ -241,7 +241,7 @@ def _polygon_overlaps(aperture, grid, vertices):
     The overlaps of a polygon aperture (vertices on the sky) with the
     pixels of a grid (see Aperture.overlaps).
     """
-    matrix, offset = fitsutils.sky_to_pixel(grid)
+    matrix, offset = gridutils.sky_to_pixel(grid)
     pixel_vertices = vertices @ matrix.T + offset
     i, j, indices = _pixels_in_box(
         grid, pixel_vertices.min(axis=0), pixel_vertices.max(axis=0))

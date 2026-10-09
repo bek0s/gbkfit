@@ -63,7 +63,7 @@ class Component(parseutils.TypedSerializable, abc.ABC):
         """
         The evaluation of the component on the given driver and dtype (a
         ComponentPlan), which owns the memory it needs. spectral is the
-        spectral axis of the outputs (a fitsutils.Grid of one axis), and
+        spectral axis of the outputs (a gridutils.Grid of one axis), and
         lines the names of the emission lines to evaluate (all if None).
         """
         pass

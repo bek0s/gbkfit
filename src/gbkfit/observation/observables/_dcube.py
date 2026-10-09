@@ -10,7 +10,7 @@ from gbkfit.driver import Driver
 from gbkfit.psflsf import LSF, PSF
 from gbkfit.psflsf.lsfs import LSFPoint
 from gbkfit.psflsf.psfs import PSFPoint
-from gbkfit.utils import fitsutils
+from gbkfit.utils import gridutils
 
 
 _log = logging.getLogger(__name__)
@@ -18,7 +18,7 @@ _log = logging.getLogger(__name__)
 
 def cube_extra(data, grid):
     """An extra output on a grid of DCube, as a sky and velocity cube."""
-    return fitsutils.GridData(data, grid.coords, grid.spectral_axis)
+    return gridutils.GridData(data, grid.coords, grid.spectral_axis)
 
 
 def plain_extra(data, grid):  # noqa
@@ -58,9 +58,9 @@ class DCube:
 
         # The low-res grid (the grid of the data) and, once prepared, the
         # high-res one, with their spectral axis last
-        self._grid_lo = fitsutils.Grid(
+        self._grid_lo = gridutils.Grid(
             size,
-            fitsutils.Coords(step, rpix, rval, rota, fitsutils.make_rest(rest)),
+            gridutils.Coords(step, rpix, rval, rota, gridutils.make_rest(rest)),
             2)
         self._scale = scale
         self._primary_beam = primary_beam
@@ -71,7 +71,7 @@ class DCube:
         self._mask_apply = mask_apply
         self._dtype = dtype
 
-    def grid(self) -> fitsutils.Grid:
+    def grid(self) -> gridutils.Grid:
         return self._grid_lo
 
     def size(self) -> tuple[int, int, int]:
@@ -184,7 +184,7 @@ class DCubePlan:
         # it, after edge_hi pixels of padding
         rpix_hi = tuple(
             (rpix_lo[i] + 0.5) * scale[i] - 0.5 + edge_hi[i] for i in range(3))
-        grid_hi = fitsutils.Grid(
+        grid_hi = gridutils.Grid(
             tuple(size_hi), dcube.grid().coords._replace(
                 step=step_hi, rpix=rpix_hi), 2)
 
@@ -263,7 +263,7 @@ class DCubePlan:
         self._backend_fft = backend_fft
         self._backend_dmodel = driver.native_class('DModel', dtype)()
 
-    def scratch_grid(self) -> fitsutils.Grid:
+    def scratch_grid(self) -> gridutils.Grid:
         return self._grid_hi
 
     def scratch_edge(self) -> tuple[int, int, int]:
@@ -287,8 +287,8 @@ class DCubePlan:
     def evaluate(
             self,
             out_extra: dict[str, Any] | None,
-            extra_lo: Callable[[np.ndarray, fitsutils.Grid], Any],
-            extra_hi: Callable[[np.ndarray, fitsutils.Grid], Any]
+            extra_lo: Callable[[np.ndarray, gridutils.Grid], Any],
+            extra_hi: Callable[[np.ndarray, gridutils.Grid], Any]
     ) -> None:
         """
         Attenuate by the primary beam, convolve, downscale and mask the
