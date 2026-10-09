@@ -1,20 +1,20 @@
 Installation
 ============
 
-GBFKIT supports the idea that all software should be trivially installable and
+GBKFIT supports the idea that all software should be trivially installable and
 require minimal technical expertise from the end user.
 
 Operating system requirements
 -----------------------------
 
-The following operating systems are supported:
+The packages on PyPI support the following operating systems:
 
-- **Linux:** All Linux distributions released after year 2010
-- **macOS:** 10.14 (Mojave) - 10.15 (Catalina)
+- **Linux:** x86_64 and aarch64 distributions with glibc 2.28 or later
+  (e.g. RHEL 8, Ubuntu 20.04, Debian 10, and later)
+- **macOS:** 14 (Sonoma) or later, on Apple silicon (arm64)
+- **Windows:** x86_64
 
-.. note:: While the software should, in principle, work on Microsoft Windows,
-   there is no official support for this operating system yet. If you are a
-   Windows user and you want to use GBKFIT, please give us a shout.
+On other platforms, GBKFIT can be installed from source (see below).
 
 Python environment requirements
 -------------------------------
@@ -42,9 +42,9 @@ On macOS:
 .. code-block:: console
 
    mkdir gbkfit && cd gbkfit
-   curl -O -L https://repo.anaconda.com/miniconda/Miniconda3-latest-MacOSX-x86_64.sh
-   chmod +x Miniconda3-latest-MacOSX-x86_64.sh
-   ./Miniconda3-latest-MacOSX-x86_64.sh -b -s -p ./miniconda
+   curl -O -L https://repo.anaconda.com/miniconda/Miniconda3-latest-MacOSX-arm64.sh
+   chmod +x Miniconda3-latest-MacOSX-arm64.sh
+   ./Miniconda3-latest-MacOSX-arm64.sh -b -s -p ./miniconda
    ./miniconda/bin/python -m venv venv
 
 The above lines will create an isolated Python environment (*venv*) which will
@@ -114,7 +114,13 @@ also installs CuPy (for CUDA 12):
 
    pip install "gbkfit[cuda]"
 
-Only the NVIDIA driver is needed; the CUDA Toolkit is not.
+The GBKFIT packages need only the NVIDIA driver, but CuPy also needs CUDA
+libraries (cuFFT and NVRTC): those of a CUDA Toolkit 12, or of pip
+packages, installed with:
+
+.. code-block:: console
+
+   pip install "cupy-cuda12x[ctk]"
 
 .. attention::
    Support for CUDA GPUs is not fully functional yet.
@@ -137,7 +143,8 @@ To install GBKFIT from source you will need:
   This usually comes with your compiler and you do not have to install
   anything. However, this is not always the case. For example, when compiling
   with Apple Clang compiler, you may have to install the libomp library
-  (available through Homebrew and MacPorts).
+  (available through Homebrew and MacPorts). Homebrew does not put libomp
+  where CMake looks for it: set ``OpenMP_ROOT=$(brew --prefix libomp)``.
 
 CMake, Ninja, and all other build-time dependencies are downloaded
 automatically by pip.
