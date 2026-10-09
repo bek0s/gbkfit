@@ -63,7 +63,14 @@ def scaled(properties, ratio, offset):
       dict(name='nii6583', rest='6583.45 Angstrom')], 'optical'),
     ('330.587965 GHz',
      [dict(name='co13', rest='330.587965 GHz'),
-      dict(name='c18o', rest='329.330553 GHz')], 'radio')])
+      dict(name='c18o', rest='329.330553 GHz')], 'radio'),
+    # (rests given as frequencies on a wavelength axis, and the reverse)
+    ('6562.8 Angstrom',
+     [dict(name='ha', rest='6562.8 Angstrom'),
+      dict(name='nii6583', rest='455.37287896 THz')], 'optical'),
+    ('330.587965 GHz',
+     [dict(name='co13', rest='330.587965 GHz'),
+      dict(name='c18o', rest='0.91030867 mm')], 'radio')])
 def test_lines_are_at_their_places(driver, rest, lines, convention):
     # The second line is the first at the velocities offset + k v, with
     # the flux ratio, where k is the ratio of the rests: of the
