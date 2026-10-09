@@ -230,7 +230,7 @@ class DModelMMaps(DModel):
         backend = self._backend
         # The gmodel adds to the data cube, so clear it
         driver.mem_fill(dcube.scratch_dcube(), 0)
-        # Evaluate gmodel on DModel's arrays
+        # Evaluate gmodel on DCube's arrays
         gmodel.evaluate_scube(
             driver, params,
             dcube.scratch_dcube(),
@@ -241,7 +241,7 @@ class DModelMMaps(DModel):
             dcube.rota(),
             dcube.dtype(),
             out_gmodel_extra)
-        # Evaluate gmodel on DCube's arrays
+        # Evaluate DCube (perform convolution, supersampling, etc)
         dcube.evaluate(out_dmodel_extra)
         # Extract moment maps from DCube's arrays
         # Also evaluate one mask map and one weight map
