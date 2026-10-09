@@ -222,6 +222,27 @@ def remove_from_mapping_by_value(
     return remove_from_mapping_if(x, lambda k, v: v == value)
 
 
+def merge_with_prefixes(
+        dicts: list[dict[str, Any]],
+        prefixes: list[str]
+) -> tuple[dict[str, Any], tuple[dict[str, str], ...]]:
+    """
+    Merge dicts with their keys prefixed by the prefix of each dict. Return
+    the merged dict, and the mapping of the keys of each dict to their
+    prefixed keys. Raise RuntimeError if a prefixed key is repeated.
+    """
+    merged = {}
+    mappings = []
+    for item, prefix in zip(dicts, prefixes, strict=True):
+        mapping = {key: f'{prefix}{key}' for key in item}
+        repeated = sorted(set(mapping.values()) & merged.keys())
+        if repeated:
+            raise RuntimeError(f"names are repeated: {repeated}")
+        merged |= {mapping[key]: value for key, value in item.items()}
+        mappings.append(mapping)
+    return merged, tuple(mappings)
+
+
 def is_sorted(x: Sequence[Any], ascending: bool = True) -> bool:
     """
     Check if the given sequence is sorted in the specified order.

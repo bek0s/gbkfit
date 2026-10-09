@@ -1,6 +1,4 @@
 
-import inspect
-import textwrap
 from collections.abc import Callable
 from typing import Any
 
@@ -8,7 +6,7 @@ import numpy as np
 
 from gbkfit.params.pdescs import ParamDesc
 from gbkfit.params.space import ParamSpace
-from gbkfit.utils import miscutils, parseutils
+from gbkfit.utils import funcutils, parseutils
 
 
 __all__ = [
@@ -22,14 +20,14 @@ __all__ = [
 def load_function(info, desc):
     """Load a function from a file: info is {file: ..., func: ...}."""
     opts = parseutils.parse_options(info, desc, {'file', 'func'})
-    return miscutils.get_attr_from_file(opts['file'], opts['func'])
+    return funcutils.load_function_from_file(opts['file'], opts['func'])
 
 
 def dump_function(func, file):
     """Append the source of a function to a file, and return its info."""
     with open(file, 'a') as f:
         f.write('\n')
-        f.write(textwrap.dedent(inspect.getsource(func)))
+        f.write(funcutils.function_source(func))
         f.write('\n')
     return dict(file=file, func=func.__name__)
 

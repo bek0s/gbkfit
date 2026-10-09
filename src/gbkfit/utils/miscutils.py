@@ -1,41 +1,6 @@
+import pathlib
 
 import numpy as np
-
-import importlib.abc
-import importlib.util
-import inspect
-import pathlib
-import sys
-import textwrap
-
-from typing import Any
-
-
-def get_attr_from_file(file_path: str, attr: str, cache: bool = False) -> Any:
-    """
-    Loads a Python module from a file and retrieves an attribute.
-    """
-    module_name = pathlib.Path(file_path).stem
-    if cache and module_name in sys.modules:
-        module = sys.modules[module_name]
-    else:
-        module_spec = importlib.util.spec_from_file_location(
-            module_name, file_path)
-        if not module_spec or not module_spec.loader:
-            raise RuntimeError(
-                f"could not load module from file '{file_path}'")
-        module = importlib.util.module_from_spec(module_spec)
-        try:
-            module_spec.loader.exec_module(module)
-        except Exception as e:
-            raise RuntimeError(f"error executing module '{file_path}': {e}")
-        if cache:
-            sys.modules[module_name] = module
-    if not hasattr(module, attr):
-        raise RuntimeError(
-            f"module '{module_name}' from '{file_path}' "
-            f"does not have attribute '{attr}'")
-    return getattr(module, attr)
 
 
 def merge_lists_and_make_mappings(
@@ -67,27 +32,6 @@ def merge_lists_and_make_mappings(
     return list_merged, list_mappings
 
 
-def merge_with_prefixes(
-        dicts: list[dict[str, Any]],
-        prefixes: list[str]
-) -> tuple[dict[str, Any], tuple[dict[str, str], ...]]:
-    """
-    Merge dicts with their keys prefixed by the prefix of each dict. Return
-    the merged dict, and the mapping of the keys of each dict to their
-    prefixed keys. Raise RuntimeError if a prefixed key is repeated.
-    """
-    merged = {}
-    mappings = []
-    for item, prefix in zip(dicts, prefixes, strict=True):
-        mapping = {key: f'{prefix}{key}' for key in item}
-        repeated = sorted(set(mapping.values()) & merged.keys())
-        if repeated:
-            raise RuntimeError(f"names are repeated: {repeated}")
-        merged |= {mapping[key]: value for key, value in item.items()}
-        mappings.append(mapping)
-    return merged, tuple(mappings)
-
-
 def to_native_byteorder(arr: np.ndarray) -> np.ndarray:
     """
     Ensure the given NumPy array has the native byte order.
@@ -110,22 +54,3 @@ def make_unique_path(path: pathlib.Path) -> pathlib.Path:
     while (new_path := path.with_name(f"{base}_{i}{ext}")).exists():
         i += 1
     return new_path
-
-
-def get_source(
-        obj: Any,
-        dedent: bool = True,
-        silent: bool = False
-) -> str | None:
-    """
-    Retrieve the source code of a given object.
-    """
-    try:
-        src = inspect.getsource(obj)
-        src = textwrap.dedent(src) if dedent else src
-    except Exception as e:
-        src = None
-        if not silent:
-            raise RuntimeError(
-                f"error retrieving source code from object: {e}")
-    return src

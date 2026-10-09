@@ -7,7 +7,7 @@ import numpy as np
 import scipy.special
 
 from gbkfit.params.pdescs import ParamScalarDesc
-from gbkfit.utils import iterutils, miscutils, parseutils
+from gbkfit.utils import iterutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
 
 
@@ -158,7 +158,7 @@ class MassModel(parseutils.BasicSerializable):
             raise ConfigError(
                 f"the components of a mass model must have different "
                 f"names; repeated: {repeated}")
-        params, self._mappings = miscutils.merge_with_prefixes(
+        params, self._mappings = iterutils.merge_with_prefixes(
             [component.pdescs() for component in components],
             [f'mass_{name}_' for name in names])
         self._components = components
