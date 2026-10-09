@@ -63,8 +63,12 @@ struct DiskArgs
     T* rdata_cmp = nullptr;
     T* ordata = nullptr;
     T* ordata_cmp = nullptr;
+    // The velocity and dispersion of each voxel are means weighted by the
+    // absolute density: vdata_cmp and ddata_cmp get the weighted sums, and
+    // vdweight_cmp the sum of the weights
     T* vdata_cmp = nullptr;
     T* ddata_cmp = nullptr;
+    T* vdweight_cmp = nullptr;
 };
 
 // The extra arguments of the Monte Carlo disk kernel. The clouds are made

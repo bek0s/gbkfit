@@ -204,7 +204,8 @@ def evaluate_smdisk(driver, thick):
         image=memory.to_device(np.zeros(image_shape, DTYPE)),
         scube=memory.to_device(np.zeros((spec_size,) + image_shape, DTYPE)),
         velocity=memory.to_device(np.zeros(cube_shape, DTYPE)),
-        dispersion=memory.to_device(np.zeros(cube_shape, DTYPE)))
+        dispersion=memory.to_device(np.zeros(cube_shape, DTYPE)),
+        weight=memory.to_device(np.zeros(cube_shape, DTYPE)))
 
     def scalar(value):
         return memory.to_device(np.array([value], DTYPE))
@@ -235,8 +236,17 @@ def evaluate_smdisk(driver, thick):
         spat_rota=0,
         spec_size=spec_size, spec_step=10.0, spec_zero=-300.0,
         image=outputs['image'], scube=outputs['scube'],
-        vdata_cmp=outputs['velocity'], ddata_cmp=outputs['dispersion'])
-    return {name: memory.to_host(array) for name, array in outputs.items()}
+        vdata_cmp=outputs['velocity'], ddata_cmp=outputs['dispersion'],
+        vdweight_cmp=outputs['weight'])
+    # The velocity and dispersion are weighted sums; their means are 0
+    # where the disk is not
+    result = {name: memory.to_host(array) for name, array in outputs.items()}
+    weight = result.pop('weight')
+    for name in ('velocity', 'dispersion'):
+        result[name] = np.divide(
+            result[name], weight, out=np.zeros_like(weight),
+            where=weight != 0)
+    return result
 
 
 def test_smdisk_thin(driver, ndarrays_regression):

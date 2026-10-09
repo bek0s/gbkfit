@@ -564,15 +564,15 @@ gmodel_mcdisk_evaluate_cloud(
     if (a.ordata_cmp) {
         AtomicAddFunT(&a.ordata_cmp[idx], orvalue);
     }
+    // The clouds of a voxel add to the means of its velocity and dispersion
     if (a.vdata_cmp) {
-        // For overlapping clouds, keep the last velocity
-        // Storing the mean would be too much effort with little reward
-        AtomicAssignFunT(&a.vdata_cmp[idx], vvalue);
+        AtomicAddFunT(&a.vdata_cmp[idx], std::abs(rvalue) * vvalue);
     }
     if (a.ddata_cmp) {
-        // For overlapping clouds, keep the last dispersion
-        // Storing the mean would be too much effort with little reward
-        AtomicAssignFunT(&a.ddata_cmp[idx], dvalue);
+        AtomicAddFunT(&a.ddata_cmp[idx], std::abs(rvalue) * dvalue);
+    }
+    if (a.vdweight_cmp) {
+        AtomicAddFunT(&a.vdweight_cmp[idx], std::abs(rvalue));
     }
 }
 
@@ -826,11 +826,15 @@ gmodel_smdisk_evaluate_spaxel(int x, int y, int z, const DiskArgs<T>& a)
     if (a.ordata_cmp) {
         a.ordata_cmp[idx] = orvalue;
     }
+    // The means of the velocity and dispersion of the voxel (of one value)
     if (a.vdata_cmp) {
-        a.vdata_cmp[idx] = vvalue;
+        a.vdata_cmp[idx] = std::abs(rvalue) * vvalue;
     }
     if (a.ddata_cmp) {
-        a.ddata_cmp[idx] = dvalue;
+        a.ddata_cmp[idx] = std::abs(rvalue) * dvalue;
+    }
+    if (a.vdweight_cmp) {
+        a.vdweight_cmp[idx] = std::abs(rvalue);
     }
 }
 
