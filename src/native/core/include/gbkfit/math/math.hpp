@@ -204,7 +204,9 @@ uniform_wm_1d_rnd_trunc(RNG<T>& rng, T b, T c, T xmin, T xmax)
 {
     return _trunc_1d_rnd<uniform_1d_rnd<T>>(xmin, xmax, rng, b - c, b + c);
 }
-// todo: verify this is correct
+// A random number from the distribution of the function target (given its
+// args), truncated to (-trunc, trunc). target must be at its maximum at 0
+// (e.g. a symmetric profile with a single peak centred on 0).
 template<typename T, typename TTarget, typename ...Ts> constexpr T
 rejection_sampling(TTarget target, RNG<T>& rng, T trunc, Ts... args)
 {
@@ -228,7 +230,6 @@ exponential_1d_fun_trunc(T x, T a, T b, T c, T xmin, T xmax)
 {
     return _trunc_1d_fun<exponential_1d_fun<T>>(xmin, xmax, x, a, b, c);
 }
-// todo: implement this
 template<typename T> constexpr T
 exponential_1d_cdf(T x, T b, T c)
 {
@@ -324,7 +325,8 @@ ggauss_1d_fun_trunc(T x, T a, T b, T c, T d, T xmin, T xmax)
 {
     return _trunc_1d_fun<ggauss_1d_fun<T>>(xmin, xmax, x, a, b, c, d);
 }
-// todo: implement this
+// Not implemented yet (it needs the incomplete gamma function); the traits
+// that would use it are rejected at load
 template<typename T> constexpr T
 ggauss_1d_cdf(T x, T b, T c, T d)
 {
@@ -418,7 +420,8 @@ moffat_1d_fun_trunc(T x, T a, T b, T c, T d, T xmin, T xmax)
     return _trunc_1d_fun<moffat_1d_fun<T>>(xmin, xmax, x, a, b, c, d);
 }
 
-// todo: implement this
+// Not implemented yet (it needs the hypergeometric function 2F1); the
+// traits that would use it are rejected at load
 template<typename T> constexpr T
 moffat_1d_cdf(T x, T b, T c, T d)
 {
@@ -428,7 +431,7 @@ moffat_1d_cdf(T x, T b, T c, T d)
     (void)d;
     return 0;
 }
-// todo: implement this
+// Not implemented yet; the traits that would use it are rejected at load
 template<typename T> constexpr T
 moffat_1d_pdf(T x, T b, T c, T d)
 {
