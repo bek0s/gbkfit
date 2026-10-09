@@ -327,9 +327,13 @@ def _make_mask_clip_max(data, max_value):
     return ~_compare_nan_array(np.greater, data, max_value)
 
 
-def _make_mask_clip_sig(data, sigma, maxiters):
-    """The pixels that sigma clipping keeps (its mask marks the others)."""
-    return ~stats.sigma_clip(data, sigma=sigma, maxiters=maxiters).mask
+def _make_mask_clip_sig(data, mask, sigma, maxiters):
+    """
+    The pixels that sigma clipping keeps (its mask marks the others), of
+    those that the mask keeps (the others do not count in its statistics).
+    """
+    kept = np.where(mask != 0, data, np.nan)
+    return ~stats.sigma_clip(kept, sigma=sigma, maxiters=maxiters).mask
 
 
 def _make_mask_clip_ccl(data, lcount, pcount, lratio):
@@ -361,12 +365,25 @@ def _apply_mask(data_d, data_e, data_m, mask):
         data_m[mask == 0] = 0
 
 
+def _valid_pixels(mask):
+    """
+    The indices of the pixels the mask keeps (see numpy.nonzero); raise
+    ConfigError if there are none (there is nothing to minify to).
+    """
+    nonzero = mask.nonzero()
+    if not nonzero[0].size:
+        raise ConfigError(
+            "no valid pixels are left to minify the data to; relax the "
+            "clipping, or do not minify")
+    return nonzero
+
+
 def _minify_data(data_d, data_e, data_m, mask):
     """
     Crop the data to the masked pixels. Return it, and the index of its
     first pixel on each axis.
     """
-    nonzero = mask.nonzero()
+    nonzero = _valid_pixels(mask)
     start = np.array([indices.min() for indices in nonzero])
     slices = tuple(
         slice(indices.min(), indices.max() + 1) for indices in nonzero)
@@ -415,7 +432,8 @@ def prep_image(
     if clip_max is not None:
         mask *= _make_mask_clip_max(data_d, clip_max)
     if sclip_sigma is not None:
-        mask *= _make_mask_clip_sig(data_d, sclip_sigma, sclip_iters)
+        mask *= _make_mask_clip_sig(
+            data_d, mask, sclip_sigma, sclip_iters)
     if ccl_lcount is not None or ccl_pcount is not None or ccl_lratio:
         mask *= _make_mask_clip_ccl(
             mask != 0, ccl_lcount, ccl_pcount, ccl_lratio)
@@ -471,7 +489,8 @@ def prep_lslit(
     if clip_max is not None:
         mask *= _make_mask_clip_max(data_d, clip_max)
     if sclip_sigma is not None:
-        mask *= _make_mask_clip_sig(data_d, sclip_sigma, sclip_iters)
+        mask *= _make_mask_clip_sig(
+            data_d, mask, sclip_sigma, sclip_iters)
     if ccl_lcount is not None or ccl_pcount is not None or ccl_lratio:
         mask *= _make_mask_clip_ccl(
             mask != 0, ccl_lcount, ccl_pcount, ccl_lratio)
@@ -552,13 +571,13 @@ def prep_mmaps(
             mask *= _make_mask_clip_max(data_d[i], clip_max[i])
         if sclip_sigma is not None:
             mask *= _make_mask_clip_sig(
-                data_d[i], sclip_sigma[i], sclip_iters[i])
+                data_d[i], mask, sclip_sigma[i], sclip_iters[i])
     if ccl_lcount is not None or ccl_pcount is not None or ccl_lratio:
         mask *= _make_mask_clip_ccl(
             mask != 0, ccl_lcount, ccl_pcount, ccl_lratio)
 
     if minify:
-        offset += [indices.min() for indices in mask.nonzero()]
+        offset += [indices.min() for indices in _valid_pixels(mask)]
     if nanpad:
         offset -= nanpad
 
@@ -615,7 +634,8 @@ def prep_scube(
     if clip_max is not None:
         mask *= _make_mask_clip_max(data_d, clip_max)
     if sclip_sigma is not None:
-        mask *= _make_mask_clip_sig(data_d, sclip_sigma, sclip_iters)
+        mask *= _make_mask_clip_sig(
+            data_d, mask, sclip_sigma, sclip_iters)
     if ccl_lcount is not None or ccl_pcount is not None or ccl_lratio:
         mask *= _make_mask_clip_ccl(
             mask != 0, ccl_lcount, ccl_pcount, ccl_lratio)
