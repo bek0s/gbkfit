@@ -1,6 +1,7 @@
 """
-Tests for the velocity and dispersion height traits (e.g. lags) and the
-radial range selection trait (e.g. truncations).
+Tests for the height traits: of velocity and dispersion (e.g. lags), and
+the Moffat profile of brightness; and for the radial range selection
+trait (e.g. truncations).
 """
 
 import copy
@@ -90,6 +91,20 @@ def test_falling_height_traits_of_a_large_scale_are_one(driver, trait):
     np.testing.assert_allclose(
         evaluate(driver, component, properties), plain, rtol=1e-5,
         atol=1e-7 * plain.max())
+
+
+@pytest.mark.parametrize('trunc', [0, 2], ids=['full', 'truncated'])
+def test_moffat_height_of_shape_1_is_lorentz(driver, trunc):
+    # (1 + (z / s)^2)^-1 is the Lorentz profile: the same pdf, and the
+    # same cdf, which normalises a truncated profile
+    lorentz = evaluate(
+        driver, DISK | dict(bhtraits=dict(type='lorentz', trunc=trunc)),
+        PROPERTIES)
+    moffat = evaluate(
+        driver, DISK | dict(bhtraits=dict(type='moffat', trunc=trunc)),
+        PROPERTIES | dict(bht_b=1))
+    np.testing.assert_allclose(
+        moffat, lorentz, rtol=1e-5, atol=1e-6 * lorentz.max())
 
 
 def test_radial_range_truncates_the_disk(driver):

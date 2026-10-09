@@ -176,12 +176,3 @@ def test_trunc_cannot_be_negative():
     message = component_error(
         'brightness_smdisk_3d', bhtraits=dict(type='sech2', trunc=-1))
     assert "trunc must be at least 0" in message
-
-
-@pytest.mark.parametrize('name, key', [
-    ('brightness_smdisk_3d', 'bhtraits'), ('opacity_smdisk_3d', 'ohtraits')])
-def test_moffat_heights_are_not_supported(name, key):
-    # Height traits are pdfs, and the Moffat pdf is not implemented
-    # (moffat_1d_pdf, math.hpp)
-    message = component_error(name, **{key: dict(type='moffat')})
-    assert re.search("unknown .*type 'moffat'", message)

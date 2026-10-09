@@ -215,20 +215,6 @@ uniform_wm_1d_rnd_trunc(RNG<T>& rng, T b, T c, T xmin, T xmax)
 {
     return _trunc_1d_rnd<uniform_1d_rnd<T>>(xmin, xmax, rng, b - c, b + c);
 }
-// A random number from the distribution of the function target (given its
-// args), truncated to (-trunc, trunc). target must be at its maximum at 0
-// (e.g. a symmetric profile with a single peak centred on 0).
-template<typename T, typename TTarget, typename ...Ts> constexpr T
-rejection_sampling(TTarget target, RNG<T>& rng, T trunc, Ts... args)
-{
-    T x=0, y=0, z=0;
-    do {
-        x = uniform_wm_1d_rnd<T>(rng, 0, trunc);
-        y = target(0, args...) * rng();
-        z = target(x, args...);
-    } while (y > z);
-    return x;
-}
 
 // A standard normal random number (Box-Muller)
 template<typename T> constexpr T
@@ -415,6 +401,60 @@ gamma_p(T a, T x)
     return 1 - scale * h;
 }
 
+// The regularised incomplete beta function I_x(a, b), for a, b > 0 and
+// 0 <= x <= 1: by its continued fraction (modified Lentz), for
+// x < (a + 1) / (a + b + 2), and otherwise by 1 - I_{1 - x}(b, a)
+template<typename T> constexpr T
+beta_inc(T a, T b, T x)
+{
+    constexpr int MAX_TERMS = 500;
+    constexpr T EPS = sizeof(T) == sizeof(float) ? T{1.2e-7} : T{2.3e-16};
+    constexpr T TINY = T{1e-30};
+    if (x <= 0)
+        return 0;
+    if (x >= 1)
+        return 1;
+    const bool swap = x > (a + 1) / (a + b + 2);
+    if (swap)
+    {
+        const T a_ = a;
+        a = b;
+        b = a_;
+        x = 1 - x;
+    }
+    const T scale = std::exp(
+            std::lgamma(a + b) - std::lgamma(a) - std::lgamma(b)
+            + a * std::log(x) + b * std::log1p(-x)) / a;
+    T c = 1;
+    T d = 1 - (a + b) * x / (a + 1);
+    d = std::abs(d) < TINY ? TINY : d;
+    d = 1 / d;
+    T h = d;
+    for (int m = 1; m < MAX_TERMS; ++m)
+    {
+        // The even and the odd step of the fraction
+        const T even = m * (b - m) * x / ((a + 2 * m - 1) * (a + 2 * m));
+        d = 1 + even * d;
+        d = std::abs(d) < TINY ? TINY : d;
+        c = 1 + even / c;
+        c = std::abs(c) < TINY ? TINY : c;
+        d = 1 / d;
+        h *= d * c;
+        const T odd =
+                -(a + m) * (a + b + m) * x / ((a + 2 * m) * (a + 2 * m + 1));
+        d = 1 + odd * d;
+        d = std::abs(d) < TINY ? TINY : d;
+        c = 1 + odd / c;
+        c = std::abs(c) < TINY ? TINY : c;
+        d = 1 / d;
+        const T delta = d * c;
+        h *= delta;
+        if (std::abs(delta - 1) < EPS)
+            break;
+    }
+    return swap ? 1 - scale * h : scale * h;
+}
+
 // The cdf of the generalised Gaussian exp(-(|x - b| / c)^d) (normalised):
 // 1/2 + sign(x - b) P(1 / d, (|x - b| / c)^d) / 2
 template<typename T> constexpr T
@@ -510,26 +550,28 @@ moffat_1d_fun_trunc(T x, T a, T b, T c, T d, T xmin, T xmax)
     return _trunc_1d_fun<moffat_1d_fun<T>>(xmin, xmax, x, a, b, c, d);
 }
 
-// Not implemented yet (it needs the hypergeometric function 2F1); the
-// traits that would use it are rejected at load
+// The cdf of the Moffat profile (1 + ((x - b) / c)^2)^-d (normalised, for
+// d > 1/2), a Student's t distribution of 2d - 1 degrees of freedom: with
+// u = (x - b) / c, the mass beyond |u| on either side is half of
+// I_{1 / (1 + u^2)}(d - 1/2, 1/2) = 1 - I_{u^2 / (1 + u^2)}(1/2, d - 1/2),
+// whichever has an argument of at most 1/2 (1 - x loses the precision of
+// an x near 1)
 template<typename T> constexpr T
 moffat_1d_cdf(T x, T b, T c, T d)
 {
-    (void)x;
-    (void)b;
-    (void)c;
-    (void)d;
-    return 0;
+    const T u2 = ((x - b) / c) * ((x - b) / c);
+    const T beyond = u2 > 1
+            ? beta_inc(d - T{0.5}, T{0.5}, 1 / (1 + u2))
+            : 1 - beta_inc(T{0.5}, d - T{0.5}, u2 / (1 + u2));
+    return x < b ? beyond / 2 : 1 - beyond / 2;
 }
-// Not implemented yet; the traits that would use it are rejected at load
+
 template<typename T> constexpr T
 moffat_1d_pdf(T x, T b, T c, T d)
 {
-    (void)x;
-    (void)b;
-    (void)c;
-    (void)d;
-    return 0;
+    T a = std::exp(std::lgamma(d) - std::lgamma(d - T{0.5}))
+            / (c * std::sqrt(PI<T>));
+    return moffat_1d_fun(x, a, b, c, d);
 }
 
 template<typename T> constexpr T
@@ -539,10 +581,14 @@ moffat_1d_pdf_trunc(T x, T b, T c, T d, T xmin, T xmax)
             xmin, xmax, x, b, c, d);
 }
 
+// A random number of the Moffat profile: (x - b) / c is a normal random
+// number over the square root of twice a gamma random number of shape
+// d - 1/2 (a Student's t random number over the square root of 2d - 1)
 template<typename T> constexpr T
 moffat_1d_rnd(RNG<T>& rng, T b, T c, T d)
 {
-    return rejection_sampling(moffat_1d_pdf<T>, rng, 5 * c, b, c, d);
+    const T z = normal_rnd(rng);
+    return b + c * z / std::sqrt(2 * gamma_rnd(rng, d - T{0.5}));
 }
 
 template<typename T> constexpr T
