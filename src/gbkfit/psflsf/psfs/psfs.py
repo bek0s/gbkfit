@@ -1,4 +1,5 @@
 
+from collections.abc import Sequence
 from typing import Any
 
 import numpy as np
@@ -7,7 +8,7 @@ import scipy.special
 
 import gbkfit.math
 from gbkfit.psflsf.core import (
-    MIN_EXTENT, PSF, WING_FLUX, check_ratio, check_scale)
+    MIN_EXTENT, PSF, WING_FLUX, check_ratio, check_scale, psf_parser)
 from gbkfit.utils import fitsutils, parseutils
 
 
@@ -16,7 +17,8 @@ __all__ = [
     'PSFGauss',
     'PSFGGauss',
     'PSFMoffat',
-    'PSFImage'
+    'PSFImage',
+    'PSFSum'
 ]
 
 
@@ -35,6 +37,21 @@ def _create_grid_2d(
     y = y[:, None]
     x, y = gbkfit.math.transform_lh_rotate_z(x, y, np.radians(posa))
     return np.sqrt(x * x + y * y / (ratio * ratio))
+
+
+def _sum_weights(weights, n, desc):
+    """
+    The weights of the terms of a sum (one for each of n terms), each
+    positive, normalised to sum to 1.
+    """
+    weights = np.asarray(weights, dtype=float)
+    if n < 1:
+        raise RuntimeError(f"{desc} needs at least one term")
+    if weights.shape != (n,) or not np.all(weights > 0):
+        raise RuntimeError(
+            f"{desc} needs a positive weight for each of its {n} terms; "
+            f"its weights are {weights.tolist()}")
+    return weights / weights.sum()
 
 
 def _load_psf_common(cls, info: dict[str, Any]):
@@ -336,3 +353,47 @@ class PSFImage(PSF):
         ny = (y - new_center_y) * scale_y + old_center_y
         data = scipy.ndimage.map_coordinates(self._data, [ny, nx], order=5)  # noqa
         return data / np.sum(data)
+
+
+class PSFSum(PSF):
+    """
+    A sum of PSFs (e.g. a double Gaussian, or a Gaussian core with Moffat
+    wings), each with its fraction of the light: the weights, normalised
+    to sum to 1.
+    """
+
+    @staticmethod
+    def type() -> str:
+        return 'sum'
+
+    @classmethod
+    def load(cls, info: dict[str, Any], *args, **kwargs) -> 'PSFSum':
+        parseutils.load_option_and_update_info(
+            psf_parser, info, 'psfs', required=True)
+        return cls(**_load_psf_common(cls, info))
+
+    def dump(self) -> dict[str, Any]:
+        return dict(
+            type=self.type(),
+            psfs=psf_parser.dump(list(self._psfs)),
+            weights=self._weights.tolist())
+
+    def __init__(self, psfs: Sequence[PSF], weights: Sequence[float]):
+        self._psfs = tuple(psfs)
+        self._weights = _sum_weights(weights, len(self._psfs), "a sum of PSFs")
+
+    def _size_impl(self, step: tuple[float, float]) -> tuple[float, float]:
+        sizes = np.array([psf._size_impl(step) for psf in self._psfs])
+        return tuple(sizes.max(axis=0).tolist())
+
+    def _asarray_impl(
+            self,
+            step: tuple[float, float],
+            size: tuple[int, int],
+            offset: tuple[int, int],
+            rota: float
+    ) -> np.ndarray:
+        # Each term holds its fraction of the light on the same grid
+        return sum(
+            weight * psf.asarray(step, size, offset, rota)
+            for weight, psf in zip(self._weights, self._psfs))

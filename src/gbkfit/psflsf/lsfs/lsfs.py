@@ -1,4 +1,5 @@
 
+from collections.abc import Sequence
 from typing import Any
 
 import numpy as np
@@ -7,7 +8,7 @@ import scipy.special
 
 import gbkfit.math
 from gbkfit.psflsf.core import (
-    LSF, MIN_EXTENT, WING_FLUX, check_scale)
+    LSF, MIN_EXTENT, WING_FLUX, check_scale, lsf_parser)
 from gbkfit.utils import fitsutils, parseutils
 
 
@@ -17,13 +18,29 @@ __all__ = [
     'LSFGGauss',
     'LSFLorentz',
     'LSFMoffat',
-    'LSFImage'
+    'LSFImage',
+    'LSFSum'
 ]
 
 
 def _create_grid_1d(size: int, step: float, offset: int) -> np.ndarray:
     center = size // 2 + offset
     return (np.array(range(size)) - center) * step
+
+
+def _sum_weights(weights, n, desc):
+    """
+    The weights of the terms of a sum (one for each of n terms), each
+    positive, normalised to sum to 1.
+    """
+    weights = np.asarray(weights, dtype=float)
+    if n < 1:
+        raise RuntimeError(f"{desc} needs at least one term")
+    if weights.shape != (n,) or not np.all(weights > 0):
+        raise RuntimeError(
+            f"{desc} needs a positive weight for each of its {n} terms; "
+            f"its weights are {weights.tolist()}")
+    return weights / weights.sum()
 
 
 def _load_lsf_common(cls, info: dict[str, Any]):
@@ -314,3 +331,39 @@ class LSFImage(LSF):
         nx = (x - new_center) * scale + old_center
         data = scipy.ndimage.map_coordinates(self._data, [nx], order=5)  # noqa
         return data / np.sum(data)
+
+
+class LSFSum(LSF):
+    """
+    A sum of LSFs (e.g. a double Gaussian), each with its fraction of the
+    light: the weights, normalised to sum to 1.
+    """
+
+    @staticmethod
+    def type() -> str:
+        return 'sum'
+
+    @classmethod
+    def load(cls, info: dict[str, Any], *args, **kwargs) -> 'LSFSum':
+        parseutils.load_option_and_update_info(
+            lsf_parser, info, 'lsfs', required=True)
+        return cls(**_load_lsf_common(cls, info))
+
+    def dump(self) -> dict[str, Any]:
+        return dict(
+            type=self.type(),
+            lsfs=lsf_parser.dump(list(self._lsfs)),
+            weights=self._weights.tolist())
+
+    def __init__(self, lsfs: Sequence[LSF], weights: Sequence[float]):
+        self._lsfs = tuple(lsfs)
+        self._weights = _sum_weights(weights, len(self._lsfs), "a sum of LSFs")
+
+    def _size_impl(self, step: float) -> float:
+        return max(lsf._size_impl(step) for lsf in self._lsfs)
+
+    def _asarray_impl(self, step: float, size: int, offset: int) -> np.ndarray:
+        # Each term holds its fraction of the light on the same grid
+        return sum(
+            weight * lsf.asarray(step, size, offset)
+            for weight, lsf in zip(self._weights, self._lsfs))
