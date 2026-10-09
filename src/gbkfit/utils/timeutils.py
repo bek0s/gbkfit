@@ -53,7 +53,7 @@ class SimpleTimer:
         """Start the timer."""
         if self._start_time is not None:
             raise RuntimeError(
-                f"SimpleTimer is running; use .stop() to stop it")
+                "SimpleTimer is running; use .stop() to stop it")
         self._start_time = time.perf_counter_ns()
         return self
 
