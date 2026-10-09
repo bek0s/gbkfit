@@ -394,3 +394,70 @@ def test_smdisk_thick(driver, ndarrays_regression):
     check_against_reference(
         ndarrays_regression, 'smdisk_thick',
         evaluate_smdisk(driver, thick=True))
+
+
+def disk_image(driver, rnodes=21, ntraits=1, heights=False, vpt=False,
+               vht=False, monte_carlo=False):
+    """
+    Evaluate into an image a native disk of rnodes radial nodes and
+    ntraits uniform density traits (with uniform height traits, with
+    heights), and optionally a velocity trait (with its height trait, with
+    vht), as a Monte Carlo disk with monte_carlo.
+    """
+    memory = Memory(driver)
+
+    def scalar(value):
+        return memory.to_device(np.array([value], DTYPE))
+
+    def trait_set(trait, params, n):
+        consts = [float(c) for c in trait.consts()]
+        return driver.native_class('TraitSet', DTYPE)(
+            uids=memory.to_device(np.full(n, trait.uid(), np.int32)),
+            cvalues=memory.to_device(np.array(consts * n, DTYPE)),
+            ccounts=memory.to_device(np.full(n, len(consts), np.int32)),
+            pvalues=memory.to_device(np.array(params * n, DTYPE)),
+            pcounts=memory.to_device(np.full(n, len(params), np.int32)))
+    options = dict(
+        loose=False, tilted=False,
+        rnodes=memory.to_device(np.linspace(0, 20, rnodes, dtype=DTYPE)),
+        vsys=scalar(0), xpos=scalar(0), ypos=scalar(0),
+        posa=scalar(0), incl=scalar(0),
+        rpt=trait_set(traits.BPTraitUniform(), [1.0], ntraits))
+    if heights:
+        options['rht'] = trait_set(traits.BHTraitUniform(), [1.0], ntraits)
+    if vpt:
+        options['vpt'] = trait_set(traits.VPTraitTanUniform(), [100.0], 1)
+    if vht:
+        options['vht'] = trait_set(traits.VHTraitOne(), [], 1)
+    disk = driver.native_class('Disk', DTYPE)(**options)
+    image = memory.to_device(np.zeros((8, 8), DTYPE))
+    grid = dict(
+        spat_size=(8, 8, 4 if heights else 1), spat_step=(1.0, 1.0, 1.0),
+        spat_zero=(-4.0, -4.0, -2.0), spat_rota=0,
+        spec_size=1, spec_step=1.0, spec_zero=0.0, image=image)
+    gmodel = driver.native_class('GModel', DTYPE)
+    if monte_carlo:
+        gmodel.mcdisk_evaluate(
+            disk, cloud_flux=memory.to_device(np.ones(1, DTYPE)), seed=0,
+            nclouds=10, ncloudscsum=memory.to_device(np.array([10], np.int32)),
+            has_analytical_integral=memory.to_device(
+                np.ones(ntraits, bool)),
+            **grid)
+    else:
+        gmodel.smdisk_evaluate(disk, **grid)
+    return memory.to_host(image)
+
+
+@pytest.mark.parametrize('options, message', [
+    # The kernels keep the values of the traits of a set in arrays of 4
+    (dict(ntraits=5), "at most 4 traits"),
+    (dict(rnodes=1), "at least two radial nodes"),
+    # A thick disk multiplies each polar trait by its height trait
+    (dict(heights=True, vpt=True), "needs the height traits"),
+    (dict(monte_carlo=True), "Monte Carlo disk needs density height")])
+def test_disks_are_checked(driver, options, message):
+    # The kernels trust the arrays of a disk: what they cannot handle is
+    # an error, not a read out of bounds
+    assert disk_image(driver).any()
+    with pytest.raises(ValueError, match=message):
+        disk_image(driver, **options)

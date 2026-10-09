@@ -5,6 +5,7 @@
 
 #include <nanobind/stl/array.h>
 
+#include <gbkfit/constants.hpp>
 #include <gbkfit/gmodel/disk.hpp>
 
 #include "gbkfit/bindings/arrays.hpp"
@@ -31,6 +32,11 @@ struct TraitSetArrays
         require(ccounts.shape(0) == n && pcounts.shape(0) == n,
                 "a trait set needs a constant and a parameter count "
                 "for each trait");
+        // (the kernels keep the values of the traits of a set on the
+        // stack, in arrays of TRAIT_NUM_MAX)
+        require(n <= size_t(TRAIT_NUM_MAX),
+                "a trait set has at most " + std::to_string(TRAIT_NUM_MAX)
+                + " traits");
         return {int(n), uids.data(), cvalues.data(), ccounts.data(),
                 pvalues.data(), pcounts.data()};
     }
@@ -132,6 +138,8 @@ struct GModel
                 spec_size, spec_step, spec_zero, lines, opacity,
                 image, scube, wdata, wdata_cmp, rdata, rdata_cmp,
                 ordata, ordata_cmp, vdata_cmp, ddata_cmp, vdweight_cmp);
+        require(disk.rht.has_value(),
+                "a Monte Carlo disk needs density height traits");
         require(has_analytical_integral.shape(0) == size_t(args.rpt.n),
                 "has_analytical_integral needs one value for each density "
                 "trait");
@@ -261,6 +269,7 @@ private:
         a.tilted = disk.tilted;
         a.nrnodes = int(disk.rnodes.shape(0));
         a.rnodes = disk.rnodes.data();
+        require(a.nrnodes >= 2, "a disk needs at least two radial nodes");
         a.vsys = data(disk.vsys);
         a.xpos = disk.xpos.data();
         a.ypos = disk.ypos.data();
@@ -293,6 +302,11 @@ private:
                 && (!disk.vht || a.vht.n == a.vpt.n)
                 && (!disk.dht || a.dht.n == a.dpt.n),
                 "height traits must have as many traits as polar traits");
+        // (a thick disk multiplies each polar trait by its height trait)
+        require(!disk.rht || ((!disk.vpt || disk.vht)
+                              && (!disk.dpt || disk.dht)),
+                "a thick disk (with density height traits) needs the height "
+                "traits of its velocity and dispersion traits");
 
         for (int i = 0; i < 3; ++i) {
             a.spat_size[i] = spat_size[i];
