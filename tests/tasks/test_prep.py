@@ -382,6 +382,24 @@ def test_spectral_axes_that_cannot_be_converted(header, message):
         prep_scube('cube.fits', velocity_rest='6562.8 Angstrom')
 
 
+def test_integer_data_are_prepared():
+    # Integer data (here with an invalid error of 0) become floats, which
+    # hold the NaN of invalid pixels
+    header = {k: v for k, v in HEADER.items() if k[-1] in '12'}
+    fits.writeto('image.fits', np.arange(480, dtype=np.int32).reshape(
+        20, 24), fits.Header(header))
+    error = np.ones((20, 24), np.int16)
+    error[0, 0] = 0
+    fits.writeto('error.fits', error)
+    defaults = dict.fromkeys([
+        'roi_spat', 'clip_min', 'clip_max', 'ccl_lcount', 'ccl_pcount',
+        'ccl_lratio', 'sclip_sigma', 'sclip_iters', 'nanpad'])
+    prep.prep_image(
+        'image.fits', 'error.fits', None, **defaults, minify=False,
+        dtype='float32')
+    data = fits.getdata('prep_image.fits')
+    assert np.isnan(data[0, 0]) and data[0, 1] == 1
+
 def test_lslit_crops_positions_and_channels():
     # A slit of 40 positions (FITS x) and 8 channels (FITS y): roi_spat
     # crops the positions and roi_spec the channels, and the prepared
