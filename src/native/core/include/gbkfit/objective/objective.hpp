@@ -11,6 +11,13 @@ objective_residual(
         const T* mdl_d, const T* mdl_w, const T* mdl_m,
         int size, T weight, T* res)
 {
+    // Masked pixels have no residual: their data or model can be NaN
+    // (masked data, the moments of masked spectra), and NaN times 0 is NaN
+    if ((obs_m && obs_m[i] == 0) || (mdl_m && mdl_m[i] == 0)) {
+        res[i] = 0;
+        return;
+    }
+
     T residual = mdl_d[i] - obs_d[i];
 
     if (obs_e) {
