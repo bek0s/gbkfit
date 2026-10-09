@@ -186,6 +186,23 @@ def test_aspec_of_spectra_with_another_spectral_axis_is_an_error(driver):
         Observation(driver, observable, data=dataset)
 
 
+
+@pytest.mark.parametrize('kind', ['apertures', 'bins'])
+def test_aspec_observation_of_data_on_a_rotated_grid(driver, kind):
+    # The spectral axis of a rotated spatial grid is not rotated: it
+    # matches that of the spectra
+    from gbkfit.dataset import aperture_parser
+    from gbkfit.observation import ASpec, Observation
+    if kind == 'apertures':
+        regions = RegionsApertures([aperture_parser.load(dict(type='field'))])
+        observable = ASpec(
+            regions, spec_size=5, spec_step=10, size=[8, 8], rota=30)
+    else:
+        regions = RegionsBins(np.zeros((4, 4)), rota=20)
+        observable = ASpec(regions, spec_size=5, spec_step=10)
+    dataset = DatasetASpec(Data(np.ones((5, 1))), regions, step=10)
+    Observation(driver, observable, data=dataset)
+
 def test_aspec_spatial_grid_options():
     from gbkfit.observation import ASpec
     bins = RegionsBins(np.zeros((4, 4)))
