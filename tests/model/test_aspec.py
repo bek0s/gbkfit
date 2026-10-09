@@ -149,6 +149,23 @@ def test_aspec_data_round_trip(tmp_path):
         loaded['aspec'].data(), dataset['aspec'].data())
 
 
+def test_aspec_options_replace_the_spectral_axis_of_files(tmp_path):
+    from gbkfit.dataset import dataset_parser
+    regions = RegionsApertures([
+        gbkfit.dataset.aperture_parser.load(info) for info in APERTURES])
+    dataset = DatasetASpec(
+        Data(np.ones((51, 3))), regions, step=10, rpix=4, rval=1500)
+    info = dataset_parser.dump(dataset, prefix=str(tmp_path / ''))
+    for key in ('step', 'rpix', 'rval'):
+        info.pop(key)
+    coords = dataset_parser.load(
+        info | dict(step=5, rpix=6)).spectral_grid().coords
+    np.testing.assert_allclose(coords.step, [5])
+    np.testing.assert_allclose(coords.rpix, [6])
+    # (the velocity of the header at the channel rpix)
+    np.testing.assert_allclose(coords.rval, [1520])
+
+
 def test_aspec_observation_from_data(tmp_path):
     # The regions and the spectral axis come from the data; the spatial
     # grid of apertures is given
