@@ -82,3 +82,18 @@ def test_point_round_trip():
         'agn_xpos', 'agn_ypos', 'agn_flux', 'agn_vsys', 'agn_disp'}
     dumped = gmodel_parser.dump(gmodel)
     assert gmodel_parser.dump(gmodel_parser.load(dumped)) == dumped
+
+
+def test_point_plan_takes_a_dtype_or_its_type(driver):
+    # The plans of the components take the dtype as np.dtype or its type
+    import numpy as np
+    from gbkfit.model import gmodel_parser
+    from gbkfit.utils import fitsutils
+    gmodel = gmodel_parser.load(dict(
+        type='intensity_2d', components=[dict(type='point')]))
+    grid = fitsutils.make_grid((6, 4))
+    data = driver.mem_alloc_d((1, 4, 6), np.float32)
+    driver.mem_fill(data, 0)
+    gmodel.plan(driver, grid, False, np.float32).evaluate(
+        dict(xpos=0.5, ypos=0.5, flux=2), data, None, None)
+    assert driver.mem_copy_d2h(data).sum() == 2
