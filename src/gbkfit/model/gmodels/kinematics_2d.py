@@ -2,7 +2,7 @@ from collections.abc import Sequence
 
 from gbkfit.model.core import GModelSCube
 from gbkfit.utils import parseutils
-from ._component_set import ComponentSet2D
+from ._component_set import ComponentSet2D, ComponentSetGModelPlan
 from .core import SpectralComponent2D
 from .spectral_smdisk_2d import SpectralSMDisk2D
 
@@ -50,9 +50,9 @@ class GModelKinematics2D(GModelSCube):
     def constants(self):
         return self._component_set.constants()
 
-    def evaluate_scube(
-            self, driver, params, scube, weights, grid, dtype, out_extra):
+    def plan(self, driver, grid, has_weights, dtype):
         spectral_axis = (grid.size[2], grid.coords.step[2], grid.zero()[2])
-        self._component_set.evaluate(
-            driver, params, dict(scube=scube), grid.spatial(), spectral_axis,
-            weights, dtype, out_extra)
+        return ComponentSetGModelPlan(
+            self._component_set.plan(
+                driver, grid.spatial(), spectral_axis, has_weights, dtype),
+            'scube')

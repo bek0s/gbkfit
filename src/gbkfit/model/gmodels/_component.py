@@ -4,10 +4,12 @@ import inspect
 
 from gbkfit.utils import iterutils, parseutils
 from . import _detail, _disk, common, traits
+from .core import ComponentPlan
 
 
 __all__ = [
     'Slot',
+    'DiskComponentPlan',
     'BPT', 'BHT', 'OPT', 'OHT', 'VPT', 'VHT',
     'DPT', 'DHT', 'ZPT', 'SPT', 'WPT',
     'SPATIAL_NWMODES', 'SPECTRAL_NWMODES',
@@ -58,6 +60,22 @@ WPT = Slot('wptraits', 'wpt', 'wpt', traits.wpt_parser)
 # systemic velocity
 SPATIAL_NWMODES = ('xpos', 'ypos', 'posa', 'incl')
 SPECTRAL_NWMODES = ('vsys',) + SPATIAL_NWMODES
+
+
+class DiskComponentPlan(ComponentPlan):
+    """
+    The evaluation of a component made of one disk: the plan of its disk,
+    which adds to the outputs of the component that the component maps
+    to those of the disk (Component.disk_outputs).
+    """
+
+    def __init__(self, component, disk_plan):
+        self._component = component
+        self._disk_plan = disk_plan
+
+    def evaluate(self, params, grid, outputs, out_extra):
+        self._disk_plan.evaluate(
+            params, grid, self._component.disk_outputs(outputs), out_extra)
 
 
 def load_options(cls, info, slots, nwmodes):

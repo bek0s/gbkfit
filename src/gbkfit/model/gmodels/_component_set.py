@@ -1,3 +1,4 @@
+from gbkfit.model.core import GModelPlan
 from gbkfit.utils import fitsutils, iterutils, miscutils
 from gbkfit.utils.parseutils import ConfigError
 from . import _detail
@@ -5,7 +6,10 @@ from . import _detail
 
 __all__ = [
     'ComponentSet2D',
-    'ComponentSet3D'
+    'ComponentSet3D',
+    'ComponentSetPlan2D',
+    'ComponentSetPlan3D',
+    'ComponentSetGModelPlan'
 ]
 
 
@@ -31,17 +35,13 @@ class ComponentSet2D:
             self._components, *_CMP_PREFIX)
         self._params, self._mappings = miscutils.merge_with_prefixes(
             [cmp.pdescs() for cmp in self._components], self._prefixes)
-        # The spatial grid: the x and y axes of the data
-        self._size = None
-        self._step = None
-        self._zero = None
-        self._wdata = None
-        self._dtype = None
-        self._driver = None
-        self._backend = None
 
     def components(self):
         return self._components
+
+    def mappings(self):
+        """The parameter names of each component, by its own names."""
+        return self._mappings
 
     def pdescs(self):
         return self._params
@@ -54,51 +54,62 @@ class ComponentSet2D:
             [cmp.constants() for cmp in self._components], self._prefixes)
         return constants
 
-    def _prepare(self, driver, weights, size, step, zero, dtype):
+    def plan(self, driver, grid, spectral_axis, has_weights, dtype):
+        """
+        The evaluation of the components on the given driver, grid of the
+        x and y axes (fitsutils.Grid), spectral axis (size, step and zero)
+        and dtype, with spatial weights if has_weights.
+        """
+        return ComponentSetPlan2D(
+            self, driver, grid, spectral_axis, has_weights, dtype)
+
+
+class ComponentSetPlan2D:
+    """
+    The evaluation of a ComponentSet2D: the plans of its components and
+    the spatial weights, on a grid.
+    """
+
+    def __init__(
+            self, component_set, driver, grid, spectral_axis, has_weights,
+            dtype):
+        self._component_set = component_set
         self._driver = driver
-        self._size = tuple(size[:2])
-        self._step = tuple(step[:2])
-        self._zero = tuple(zero[:2])
+        self._grid = grid
         self._dtype = dtype
-        # The spatial weights, if weighting is requested
-        self._wdata = None
-        if weights is not None:
-            self._wdata = driver.mem_alloc_d(self._size[::-1], dtype)
-        self._backend = driver.native_class('GModel', dtype)()
-
-    def evaluate(
-            self, driver, params, outputs, grid, spectral_axis, weights,
-            dtype, out_extra):
-        """
-        Add the components to the output array, the 'image' or the
-        'scube' in outputs, on the given grid of the x and y axes
-        (fitsutils.Grid) and spectral axis (size, step and zero).
-        """
-        size = grid.size
-        step = grid.coords.step
-        zero = grid.zero()
-        rota = grid.coords.rota
-        if (self._driver is not driver
-                or self._size != tuple(size[:2])
-                or self._step != tuple(step[:2])
-                or self._zero != tuple(zero[:2])
-                or self._dtype != dtype):
-            self._prepare(driver, weights, size, step, zero, dtype)
-
+        size = tuple(grid.size[:2])
         spec_size, spec_step, spec_zero = spectral_axis
-        native_grid = dict(
-            spat_size=self._size + (1,),
-            spat_step=self._step + (0,),
-            spat_zero=self._zero + (0,),
-            spat_rota=rota,
+        self._native_grid = dict(
+            spat_size=size + (1,),
+            spat_step=tuple(grid.coords.step[:2]) + (0,),
+            spat_zero=tuple(grid.zero()[:2]) + (0,),
+            spat_rota=grid.coords.rota,
             spec_size=spec_size,
             spec_step=spec_step,
             spec_zero=spec_zero)
+        self._component_plans = tuple(
+            cmp.plan(driver, dtype) for cmp in component_set.components())
+        # The spatial weights, if weighting is requested
+        self._wdata = None
+        if has_weights:
+            self._wdata = driver.mem_alloc_d(size[::-1], dtype)
+        self._backend = driver.native_class('GModel', dtype)()
+
+    def evaluate(self, params, outputs, weights, out_extra):
+        """
+        Add the components to the output array, the 'image' or the
+        'scube' in outputs, and weight the data weights (if any) with the
+        spatial weights.
+        """
+        driver = self._driver
+        grid = self._grid
+        dtype = self._dtype
+        size = tuple(grid.size[:2])
 
         wdata = self._wdata
         bdata = None
         if out_extra is not None:
-            bdata = driver.mem_alloc_d(self._size[::-1], dtype)
+            bdata = driver.mem_alloc_d(size[::-1], dtype)
             driver.mem_fill(bdata, 0)
 
         # The extra outputs are images on the grid; those of the
@@ -107,10 +118,10 @@ class ComponentSet2D:
             return fitsutils.GridData(data, grid.coords, None)
 
         _detail.evaluate_components(
-            self._components, self._mappings,
-            driver, params, native_grid,
+            self._component_set.components(), self._component_plans,
+            self._component_set.mappings(), params, self._native_grid,
             outputs | dict(wdata=wdata, bdata=bdata),
-            dtype, out_extra, '', lambda data: image(data[0]))
+            out_extra, '', lambda data: image(data[0]))
 
         # Weight the data with the spatial weights evaluated above
         if weights is not None:
@@ -155,19 +166,10 @@ class ComponentSet3D:
             self._prefixes + self._oprefixes)
         self._mappings = mappings[:len(self._components)]
         self._omappings = mappings[len(self._components):]
-        # The spatial grid. The x and y axes are those of the data, and
-        # the z axis is either configured or picked by _prepare().
+        # The z axis, as configured (or None to pick it per grid)
         self._size_z = size_z
         self._step_z = step_z
         self._zero_z = zero_z
-        self._size = None
-        self._step = None
-        self._zero = None
-        self._wdata = None
-        self._odata = None
-        self._dtype = None
-        self._driver = None
-        self._backend = None
 
     def components(self):
         return self._components
@@ -196,71 +198,100 @@ class ComponentSet3D:
             self._prefixes + self._oprefixes)
         return constants
 
+    def mappings(self):
+        """The parameter names of each component, by its own names."""
+        return self._mappings
+
+    def omappings(self):
+        """The parameter names of each opacity component."""
+        return self._omappings
+
     def _all_components(self):
         return self._components + self._ocomponents
 
-    def _prepare(self, driver, weights, size, step, zero, dtype):
+    def plan(self, driver, grid, spectral_axis, has_weights, dtype):
+        """
+        The evaluation of the components on the given driver, grid of the
+        x and y axes (fitsutils.Grid), spectral axis (size, step and zero)
+        and dtype, with spatial weights if has_weights.
+        """
+        return ComponentSetPlan3D(
+            self, driver, grid, spectral_axis, has_weights, dtype)
+
+
+class ComponentSetPlan3D:
+    """
+    The evaluation of a ComponentSet3D: the plans of its components and
+    opacity components, the z axis, the spatial weights and the opacity
+    cube, on a grid.
+    """
+
+    def __init__(
+            self, component_set, driver, grid, spectral_axis, has_weights,
+            dtype):
+        self._component_set = component_set
         self._driver = driver
+        self._grid = grid
         self._dtype = dtype
         # A z axis that encloses the whole galaxy is hard to calculate.
         # Instead, if it is not configured, we pick the size and step of
         # the longest of the x and y axes, and place zero in the middle.
+        size = grid.size
+        step = grid.coords.step
+        zero = grid.zero()
         longest = int(size[0] < size[1])
-        size_z = self._size_z if self._size_z is not None else size[longest]
-        step_z = self._step_z if self._step_z is not None else step[longest]
-        zero_z = self._zero_z if self._zero_z is not None \
+        size_z = component_set.size_z()
+        step_z = component_set.step_z()
+        zero_z = component_set.zero_z()
+        size_z = size_z if size_z is not None else size[longest]
+        step_z = step_z if step_z is not None else step[longest]
+        zero_z = zero_z if zero_z is not None \
             else -(size_z / 2 - 0.5) * step_z
         self._size = tuple(size[:2]) + (size_z,)
         self._step = tuple(step[:2]) + (step_z,)
         self._zero = tuple(zero[:2]) + (zero_z,)
+        spec_size, spec_step, spec_zero = spectral_axis
+        self._native_grid = dict(
+            spat_size=self._size,
+            spat_step=self._step,
+            spat_zero=self._zero,
+            spat_rota=grid.coords.rota,
+            spec_size=spec_size,
+            spec_step=spec_step,
+            spec_zero=spec_zero)
+        # The extra outputs are cubes on the grid: the x and y axes of the
+        # data, and the z axis along the line of sight (from z = 0)
+        self._coords = fitsutils.Coords(
+            self._step,
+            grid.coords.rpix + (-self._zero[2] / self._step[2],),
+            grid.coords.rval + (0.0,), grid.coords.rota)
+        self._component_plans = tuple(
+            cmp.plan(driver, dtype) for cmp in component_set.components())
+        self._ocomponent_plans = tuple(
+            cmp.plan(driver, dtype)
+            for cmp in component_set.opacity_components())
         # The spatial weights, if weighting is requested, and the opacity,
         # if there are opacity components
         self._wdata = None
         self._odata = None
-        if weights is not None:
+        if has_weights:
             self._wdata = driver.mem_alloc_d(self._size[::-1], dtype)
-        if self._ocomponents:
+        if component_set.opacity_components():
             self._odata = driver.mem_alloc_d(self._size[::-1], dtype)
         self._backend = driver.native_class('GModel', dtype)()
 
-    def evaluate(
-            self, driver, params, outputs, grid, spectral_axis, weights,
-            dtype, out_extra):
+    def evaluate(self, params, outputs, weights, out_extra):
         """
         Add the components to the output array, the 'image' or the
-        'scube' in outputs, on the given grid of the x and y axes
-        (fitsutils.Grid) and spectral axis (size, step and zero).
+        'scube' in outputs, and weight the data weights (if any) with the
+        spatial weights.
         """
-        size = grid.size
-        step = grid.coords.step
-        zero = grid.zero()
-        rota = grid.coords.rota
-        if (self._driver is not driver
-                or self._size[:2] != tuple(size[:2])
-                or self._step[:2] != tuple(step[:2])
-                or self._zero[:2] != tuple(zero[:2])
-                or self._dtype != dtype):
-            self._prepare(driver, weights, size, step, zero, dtype)
-
-        spec_size, spec_step, spec_zero = spectral_axis
-        native_grid = dict(
-            spat_size=self._size,
-            spat_step=self._step,
-            spat_zero=self._zero,
-            spat_rota=rota,
-            spec_size=spec_size,
-            spec_step=spec_step,
-            spec_zero=spec_zero)
-
-        # The extra outputs are cubes on the grid: the x and y axes of the
-        # data, and the z axis along the line of sight (from z = 0)
-        coords = fitsutils.Coords(
-            self._step,
-            grid.coords.rpix + (-self._zero[2] / self._step[2],),
-            grid.coords.rval + (0.0,), rota)
+        driver = self._driver
+        dtype = self._dtype
+        component_set = self._component_set
 
         def cube(data):
-            return fitsutils.GridData(data, coords, None)
+            return fitsutils.GridData(data, self._coords, None)
 
         wdata = self._wdata
         odata = self._odata
@@ -276,15 +307,16 @@ class ComponentSet3D:
         if odata is not None:
             driver.mem_fill(odata, 0)
             _detail.evaluate_components(
-                self._ocomponents, self._omappings,
-                driver, params, native_grid, dict(odata=odata), dtype,
-                out_extra, 'opacity_', cube)
+                component_set.opacity_components(), self._ocomponent_plans,
+                component_set.omappings(), params, self._native_grid,
+                dict(odata=odata), out_extra, 'opacity_', cube)
 
         outputs = outputs | dict(
             wdata=wdata, bdata=bdata, odata=odata, obdata=obdata)
         _detail.evaluate_components(
-            self._components, self._mappings,
-            driver, params, native_grid, outputs, dtype, out_extra, '', cube)
+            component_set.components(), self._component_plans,
+            component_set.mappings(), params, self._native_grid, outputs,
+            out_extra, '', cube)
 
         # Weight the data with the spatial weights evaluated above
         if weights is not None:
@@ -296,3 +328,18 @@ class ComponentSet3D:
                 if total is not None:
                     out_extra[f'total_{name}'] = cube(
                         driver.mem_copy_d2h(total))
+
+
+class ComponentSetGModelPlan(GModelPlan):
+    """
+    The evaluation of a gmodel made of a component set: the plan of the
+    set, which adds to the output of the given key ('image' or 'scube').
+    """
+
+    def __init__(self, component_set_plan, key):
+        self._component_set_plan = component_set_plan
+        self._key = key
+
+    def evaluate(self, params, data, weights, out_extra):
+        self._component_set_plan.evaluate(
+            params, {self._key: data}, weights, out_extra)

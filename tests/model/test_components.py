@@ -151,8 +151,8 @@ def test_spectral_3d_with_several_velocity_traits(name):
     scube = np.zeros((11, 16, 16), np.float32)
     grid = fitsutils.Grid((16, 16, 11), fitsutils.Coords(
         (1, 1, 10), (7.5, 7.5, 5), (0, 0, 0), 0), 2)
-    gmodel.evaluate_scube(
-        DriverHost(), params, scube, None, grid, np.float32, None)
+    gmodel.plan(DriverHost(), grid, False, np.float32).evaluate(
+        params, scube, None, None)
     assert scube.sum() > 0
 
 

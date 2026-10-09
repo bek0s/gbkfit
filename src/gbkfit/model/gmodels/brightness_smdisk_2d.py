@@ -74,11 +74,14 @@ class BrightnessSMDisk2D(BrightnessComponent2D):
         return dict(
             rnodes=self._disk.rnodes(), subrnodes=self._disk.subrnodes())
 
-    def evaluate(self, driver, params, grid, outputs, dtype, out_extra):
+    def plan(self, driver, dtype):
+        return _component.DiskComponentPlan(
+            self, self._disk.plan(driver, dtype))
+
+    def disk_outputs(self, outputs):
+        """The outputs of the disk, from those of the component."""
         # The density of the disk is its brightness
-        disk_outputs = dict(
+        return dict(
             image=outputs['image'],
             wdata=outputs['wdata'],
             rdata=outputs['bdata'])
-        self._disk.evaluate(
-            driver, params, grid, disk_outputs, dtype, out_extra)

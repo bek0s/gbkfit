@@ -11,7 +11,7 @@ change of the models.
 import numpy as np
 import pytest
 from gbkfit.model import gmodel_parser, gmodels
-from gbkfit.model.gmodels.core import Component
+from gbkfit.model.gmodels.core import Component, ComponentPlan
 from gbkfit.utils import fitsutils
 
 
@@ -208,26 +208,33 @@ class WeightComponent(Component):
     def has_weights(self):
         return True
 
-    def evaluate(self, driver, params, grid, outputs, dtype, out_extra):
-        wdata = np.full(outputs['wdata'].shape, 2, dtype)
+    def plan(self, driver, dtype):
+        return WeightComponentPlan(driver, dtype)
+
+
+class WeightComponentPlan(ComponentPlan):
+
+    def __init__(self, driver, dtype):
+        self._driver = driver
+        self._dtype = dtype
+
+    def evaluate(self, params, grid, outputs, out_extra):
+        wdata = np.full(outputs['wdata'].shape, 2, self._dtype)
         wdata[..., 0, :] = 0
-        driver.mem_copy_h2d(wdata, outputs['wdata'])
+        self._driver.mem_copy_h2d(wdata, outputs['wdata'])
 
 
-# The 2d gmodels, the method that evaluates them, the size of their data
-# and its spectral axis, and its shape (an image is a cube with one
-# channel)
+# The 2d gmodels, the size of their data and its spectral axis, and its
+# shape (an image is a cube with one channel)
 GMODELS_2D = [
-    (gmodels.GModelIntensity2D, 'evaluate_image', (20, 16), None,
-     (1, 16, 20)),
-    (gmodels.GModelKinematics2D, 'evaluate_scube', (20, 16, 11), 2,
-     (11, 16, 20))]
+    (gmodels.GModelIntensity2D, (20, 16), None, (1, 16, 20)),
+    (gmodels.GModelKinematics2D, (20, 16, 11), 2, (11, 16, 20))]
 
 
 @pytest.mark.parametrize(
-    'gmodel_type, method, size, spectral_axis, shape', GMODELS_2D)
+    'gmodel_type, size, spectral_axis, shape', GMODELS_2D)
 def test_2d_gmodel_weights_the_data(
-        driver, gmodel_type, method, size, spectral_axis, shape):
+        driver, gmodel_type, size, spectral_axis, shape):
     # The components of a 2d gmodel write their weights to its spatial
     # weights, which then become the weights of the data: 0 where they
     # are 0, and 1 elsewhere (normalised to their maximum along z)
@@ -239,7 +246,8 @@ def test_2d_gmodel_weights_the_data(
     ndim = len(size)
     grid = fitsutils.Grid(size, fitsutils.Coords(
         (1,) * ndim, (0,) * ndim, (0,) * ndim, 0), spectral_axis)
-    getattr(gmodel, method)(driver, {}, data, weights, grid, np.float32, None)
+    gmodel.plan(driver, grid, True, np.float32).evaluate(
+        {}, data, weights, None)
     desired = np.ones(shape)
     desired[:, 0, :] = 0
     np.testing.assert_array_equal(driver.mem_copy_d2h(weights), desired)
@@ -262,8 +270,8 @@ def test_3d_gmodel_picks_the_z_axis_of_each_grid(driver):
         rpix = tuple(n / 2 - 0.5 for n in size)
         grid = fitsutils.Grid(
             size, fitsutils.Coords((1, 1), rpix, (0, 0), 0), None)
-        gmodel.evaluate_image(driver, params, image, None, grid,
-                              np.float32, None)
+        gmodel.plan(driver, grid, False, np.float32).evaluate(
+            params, image, None, None)
         return driver.mem_copy_d2h(image)
 
     gmodel = gmodel_parser.load(info)
@@ -272,3 +280,38 @@ def test_3d_gmodel_picks_the_z_axis_of_each_grid(driver):
         evaluate(gmodel, (32, 32)),
         evaluate(gmodel_parser.load(info), (32, 32)), rtol=1e-5)
 
+
+
+def test_one_gmodel_serves_several_grids(driver):
+    # A gmodel is a description: each plan owns the memory of its own
+    # grid, so plans of one gmodel on different grids, evaluated in turn,
+    # give what separate gmodels give
+    info = dict(type='intensity_3d', components=smdisk(
+        loose=False, tilted=False,
+        bptraits=dict(type='exponential'), bhtraits=dict(type='sech2')))
+    params = dict(
+        xpos=0, ypos=0, posa=30, incl=60, bpt_a=1, bpt_s=4, bht_s=1)
+
+    def plan(gmodel, size):
+        rpix = tuple(n / 2 - 0.5 for n in size)
+        grid = fitsutils.Grid(
+            size, fitsutils.Coords((1, 1), rpix, (0, 0), 0), None)
+        return gmodel.plan(driver, grid, False, np.float32)
+
+    def evaluate(plan_, size):
+        image = driver.mem_alloc_d(size[::-1], np.float32)
+        driver.mem_fill(image, 0)
+        plan_.evaluate(params, image, None, None)
+        return driver.mem_copy_d2h(image)
+
+    shared = gmodel_parser.load(info)
+    small, large = plan(shared, (12, 12)), plan(shared, (32, 32))
+    results = [evaluate(small, (12, 12)), evaluate(large, (32, 32)),
+               evaluate(small, (12, 12))]
+    np.testing.assert_allclose(
+        results[0], evaluate(plan(gmodel_parser.load(info), (12, 12)),
+                             (12, 12)), rtol=1e-5)
+    np.testing.assert_allclose(
+        results[1], evaluate(plan(gmodel_parser.load(info), (32, 32)),
+                             (32, 32)), rtol=1e-5)
+    np.testing.assert_allclose(results[2], results[0], rtol=1e-5)
