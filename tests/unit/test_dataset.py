@@ -301,3 +301,9 @@ def test_data_items_are_mappings_or_null():
     assert set(dataset.keys()) == {'mmap1'}
     with pytest.raises(Exception, match="has the file of its data"):
         DatasetMMaps.load(dict(mmap1='m1.fits'))
+
+
+def test_data_mask_values_that_are_not_finite():
+    # (their residual would be NaN, or infinite)
+    data = Data(np.array([[np.nan, 1.0], [np.inf, 2.0]]))
+    np.testing.assert_array_equal(data.mask(), [[0, 1], [0, 1]])

@@ -114,11 +114,20 @@ def test_arrays_are_checked(driver):
     with pytest.raises(TypeError, match="incompatible"):
         downscale_into(memory.to_device(
             np.zeros((20, 20, 40), DTYPE))[:, :, ::2])
-    with pytest.raises(TypeError, match="incompatible"):
-        downscale_into(_array_on_other_device(driver, (20, 20, 20)))
     with pytest.raises(ValueError, match="does not fit"):
         downscale_into(memory.to_device(np.zeros((20, 20, 20), DTYPE)),
                        scale=(4, 4, 4))
+
+
+def test_arrays_on_another_device_are_rejected(driver):
+    # (apart from the other checks, which do not need cupy on the host)
+    memory = Memory(driver)
+    dmodel = driver.native_class('DModel', DTYPE)()
+    cube_hi = memory.to_device(smooth_cube((40, 60, 80)))
+    with pytest.raises(TypeError, match="incompatible"):
+        dmodel.dcube_downscale(
+            (4, 3, 2), (0, 0, 0), cube_hi,
+            _array_on_other_device(driver, (20, 20, 20)))
 
 
 def _array_on_other_device(driver, shape):

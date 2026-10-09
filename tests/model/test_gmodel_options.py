@@ -5,6 +5,7 @@ gmodel accepts, and which it rejects.
 
 import logging
 
+import numpy as np
 import pytest
 from gbkfit.model import gmodel_parser
 from gbkfit.utils import parseutils
@@ -216,3 +217,15 @@ def test_radial_step_can_be_half_the_node_separation():
     args = parse_component_rnode_args(
         None, None, None, None, [0, 0.2, 0.4, 0.6, 0.8, 1.0], 0.1, 'linear')
     assert args['rstep'] == 0.1
+
+
+@pytest.mark.parametrize('nwmode, values, expected', [
+    # Each node relative to the origin
+    (dict(type='relative1', origin=1), [1, 2, 3, 4], [3, 2, 5, 6]),
+    # Each node relative to its neighbour towards the origin
+    (dict(type='relative2', origin=1), [1, 2, 3, 4], [3, 2, 5, 9])])
+def test_relative_nwmodes(nwmode, values, expected):
+    from gbkfit.model.gmodels.common import nwmode_parser
+    result = nwmode_parser.load(nwmode).transform(
+        np.array(values, float), in_place=False)
+    np.testing.assert_array_equal(result, expected)
