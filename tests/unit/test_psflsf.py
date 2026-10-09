@@ -120,6 +120,13 @@ def test_images_in_sums_and_convolutions_have_their_own_files():
         loaded._psfs[1]._psfs[0]._data, psf_b._data)
 
 
+def test_kernels_of_too_heavy_wings_are_an_error():
+    # No finite array holds 99% of the flux of a Moffat LSF of beta 0.6
+    # (its extent divides by 0)
+    with (pytest.raises(RuntimeError, match="wings are too heavy"),
+          np.errstate(divide='ignore')):
+        LSFMoffat(1, 0.6).size(1)
+
 def test_image_kernels_keep_their_edges():
     # Resampling an image samples it up to half a pixel beyond the
     # centres of its edge pixels (always, for an even size): there it
