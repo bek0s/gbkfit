@@ -1,6 +1,5 @@
 
 import abc
-import copy
 import logging
 
 import numpy as np
@@ -312,11 +311,9 @@ class Trait(parseutils.TypedSerializable, abc.ABC):
     def dump(self):
         return dict(type=self.type())
 
-    def __init__(self, **kwargs):
-        self._kwargs = copy.deepcopy(kwargs)
-
     def consts(self):
-        return tuple(self._kwargs.values())
+        """The constants of the trait, in the order the kernels read them."""
+        return ()
 
     def params_sm(self):
         return tuple()
@@ -333,10 +330,10 @@ class TraitFeatureTrunc:
         return super().dump() | info  # noqa
 
     def __init__(self, **kwargs):
-        if not kwargs['trunc'] >= 0:
-            raise RuntimeError(
-                f"trunc must be at least 0; it is {kwargs['trunc']}")
-        self._trunc = kwargs['trunc']
+        trunc = kwargs.pop('trunc')
+        if not trunc >= 0:
+            raise RuntimeError(f"trunc must be at least 0; it is {trunc}")
+        self._trunc = trunc
         super().__init__(**kwargs)
 
     def trunc(self):
@@ -372,7 +369,7 @@ class TraitFeatureRNodes:
         return super().dump() | info  # noqa
 
     def __init__(self, **kwargs):
-        self._rnodes = kwargs['rnodes']
+        self._rnodes = kwargs.pop('rnodes')
         super().__init__(**kwargs)
 
     def rnodes(self):
@@ -386,11 +383,14 @@ class TraitFeatureNBlobs:
         return super().dump() | info  # noqa
 
     def __init__(self, **kwargs):
-        self._nblobs = kwargs['nblobs']
+        self._nblobs = kwargs.pop('nblobs')
         super().__init__(**kwargs)
 
     def nblobs(self):
         return self._nblobs
+
+    def consts(self):
+        return (self.nblobs(),)
 
 
 class TraitFeatureOrder:
@@ -400,11 +400,14 @@ class TraitFeatureOrder:
         return super().dump() | info  # noqa
 
     def __init__(self, **kwargs):
-        self._order = kwargs['order']
+        self._order = kwargs.pop('order')
         super().__init__(**kwargs)
 
     def order(self):
         return self._order
+
+    def consts(self):
+        return (self.order(),)
 
 
 class PTrait(Trait, abc.ABC):
@@ -434,7 +437,9 @@ class BPTrait(PTrait, abc.ABC):
 
 
 class BHTrait(TraitFeatureTrunc, HTrait, abc.ABC):
-    pass
+
+    def consts(self):
+        return (self.trunc(), self.rnodes())
 
 
 class VPTrait(PTrait, abc.ABC):
@@ -442,7 +447,9 @@ class VPTrait(PTrait, abc.ABC):
 
 
 class VHTrait(HTrait, abc.ABC):
-    pass
+
+    def consts(self):
+        return (self.rnodes(),)
 
 
 class DPTrait(PTrait, abc.ABC):
@@ -450,7 +457,9 @@ class DPTrait(PTrait, abc.ABC):
 
 
 class DHTrait(HTrait, abc.ABC):
-    pass
+
+    def consts(self):
+        return (self.rnodes(),)
 
 
 class ZPTrait(PTrait, abc.ABC):
@@ -477,7 +486,9 @@ class OPTrait(PTrait, abc.ABC):
 
 
 class OHTrait(TraitFeatureTrunc, HTrait, abc.ABC):
-    pass
+
+    def consts(self):
+        return (self.trunc(), self.rnodes())
 
 
 class BPTraitUniform(BPTrait):
@@ -1538,13 +1549,17 @@ class WPTraitAxisRange(WPTrait):
                 f"invalid angle value; "
                 f"angle must be between 0 and 180; "
                 f"supplied value: {angle}")
-        super().__init__(axis=axis, angle=angle, weight=weight)
+        super().__init__()
+        self._axis = axis
+        self._angle = angle
+        self._weight = weight
 
     def dump(self):
         return super().dump() | dict(
-            axis=self._kwargs['axis'],
-            angle=self._kwargs['angle'],
-            weight=self._kwargs['weight'])
+            axis=self._axis, angle=self._angle, weight=self._weight)
+
+    def consts(self):
+        return (self._axis, self._angle, self._weight)
 
 
 class OPTraitUniform(OPTrait):
