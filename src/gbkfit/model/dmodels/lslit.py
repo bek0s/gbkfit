@@ -156,6 +156,11 @@ class DModelLSlit(DModel):
             dcube.dtype(),
             out_gmodel_extra)
         # Evaluate DCube (perform convolution, supersampling, etc)
+        # The slit has no position on the sky, so the extra outputs of the
+        # gmodel, which are on the sky, are plain arrays
+        if out_gmodel_extra is not None:
+            for key, value in out_gmodel_extra.items():
+                out_gmodel_extra[key] = value.data
         dcube.evaluate(out_dmodel_extra, _slit_extra, _dcube.plain_extra)
         # Model evaluation complete.
         # Return data, mask, and weight arrays (if available),

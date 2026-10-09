@@ -108,7 +108,7 @@ def face_on_optical_depth(driver, evaluate_models, disk_type):
         ocmp_xpos=0, ocmp_ypos=0, ocmp_posa=0, ocmp_incl=0,
         ocmp_opt_a=0.5, ocmp_opt_s=4, ocmp_oht_s=1)
     _, extra = evaluate_models([model], properties)
-    return extra['model0_gmodel_total_odata'].sum(axis=0)
+    return extra['model0_gmodel_total_odata'].data.sum(axis=0)
 
 
 def test_opacity_traits_give_the_face_on_optical_depth(
@@ -151,7 +151,7 @@ def image_and_optical_depth(driver, evaluate_models, opacity, step_z):
         ocmp_xpos=0, ocmp_ypos=0, ocmp_posa=30, ocmp_incl=60,
         ocmp_opt_a=opacity, ocmp_opt_s=4, ocmp_oht_s=1)
     data, extra = evaluate_models([model], properties)
-    tau = extra['model0_gmodel_total_odata'].sum(axis=0)
+    tau = extra['model0_gmodel_total_odata'].data.sum(axis=0)
     return data[0]['image']['d'], tau
 
 

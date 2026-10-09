@@ -222,7 +222,7 @@ def test_mcdisk_harmonic_clouds_take_the_sign_of_the_harmonic(driver):
         extra = {}
         evaluate_disk(
             disk, driver.type(), component | options, properties, extra)
-        brightness[disk] = extra['model0_gmodel_component0_bdata'].sum(0)
+        brightness[disk] = extra['model0_gmodel_component0_bdata'].data.sum(0)
     smdisk = brightness['smdisk']
     clear = np.abs(smdisk) > 0.5 * np.abs(smdisk).max()
     mcdisk = brightness['mcdisk'][clear]
@@ -256,8 +256,8 @@ def test_mcdisk_velocity_is_the_mean_of_the_clouds(driver):
     bright = intensity > 0.01 * intensity.max()
     moment1 = np.tensordot(velocities, scube, axes=1)[bright] / \
         intensity[bright]
-    brightness = extra['model0_gmodel_component0_bdata']
-    velocity = np.nan_to_num(extra['model0_gmodel_component0_vdata'])
+    brightness = extra['model0_gmodel_component0_bdata'].data
+    velocity = np.nan_to_num(extra['model0_gmodel_component0_vdata'].data)
     mean = (brightness * velocity).sum(0)[bright] / \
         brightness.sum(0)[bright]
     np.testing.assert_allclose(mean, moment1, atol=0.05)
