@@ -195,3 +195,24 @@ def test_unknown_options_are_warnings(gmodel_type, caplog):
     with caplog.at_level(logging.WARNING):
         gmodel_parser.load(dict(type=gmodel_type, components=component))
     assert "'foo'" in caplog.text
+
+
+@pytest.mark.parametrize('rnmin, rnmax, rnsep, nodes', [
+    # (0.2 * 11 rounds above 2.2: np.arange to 2.4 added a node)
+    (0, 2.2, 0.2, 12), (0, 9.0, 0.3, 31), (1, 2, 0.25, 5),
+    # Not a multiple: to the first node beyond rnmax
+    (0, 10, 3, 5)])
+def test_radial_nodes_from_a_range(rnmin, rnmax, rnsep, nodes):
+    from gbkfit.model.gmodels._detail import parse_component_rnode_args
+    args = parse_component_rnode_args(
+        rnmin, rnmax, rnsep, None, None, None, 'linear')
+    assert len(args['rnodes']) == nodes
+    assert args['rnodes'][-1] == pytest.approx(rnmin + (nodes - 1) * rnsep)
+
+
+def test_radial_step_can_be_half_the_node_separation():
+    # (half of 0.19999999999999996, the separation as it rounds)
+    from gbkfit.model.gmodels._detail import parse_component_rnode_args
+    args = parse_component_rnode_args(
+        None, None, None, None, [0, 0.2, 0.4, 0.6, 0.8, 1.0], 0.1, 'linear')
+    assert args['rstep'] == 0.1
