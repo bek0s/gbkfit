@@ -17,7 +17,7 @@ PROPERTIES = dict(
     vsys=0, xpos=0, ypos=0, posa=30, incl=60,
     bpt_a=1, bpt_s=4, bht_s=1, vpt_rt=2, vpt_vt=150, dpt_a=20,
     ocmp_xpos=0, ocmp_ypos=0, ocmp_posa=30, ocmp_incl=60,
-    ocmp_opt_s=4, ocmp_oht_a=1, ocmp_oht_s=1)
+    ocmp_opt_s=4, ocmp_oht_s=1)
 
 
 def kinematics_3d_model(driver, with_opacity):
@@ -79,3 +79,49 @@ def test_opacity_does_not_accumulate(driver):
     first, second = evaluate(
         driver, with_opacity=True, opacity=0.05, times=2)
     assert_same_model(second, first)
+
+
+def face_on_optical_depth(driver, evaluate_models, disk_type):
+    """
+    The optical depth of each line of sight through a face-on opacity disk
+    of the given type: the sum of the opacity cube along the z axis.
+    """
+    gmodel = dict(
+        type='intensity_3d', size_z=40, step_z=0.25,
+        components=[dict(
+            **DISK,
+            bptraits=dict(type='exponential'),
+            bhtraits=dict(type='sech2'))],
+        opacity_components=[dict(
+            DISK, type=disk_type,
+            optraits=dict(type='exponential'),
+            ohtraits=dict(type='sech2'))])
+    if disk_type == 'mcdisk':
+        gmodel['opacity_components'][0]['cflux'] = 1e-4
+    model = dict(
+        driver=dict(type=driver.type()),
+        dmodel=dict(type='image', size=[24, 24]),
+        gmodel=gmodel)
+    properties = dict(
+        xpos=0, ypos=0, posa=0, incl=0, bpt_a=1, bpt_s=4, bht_s=1,
+        ocmp_xpos=0, ocmp_ypos=0, ocmp_posa=0, ocmp_incl=0,
+        ocmp_opt_a=0.5, ocmp_opt_s=4, ocmp_oht_s=1)
+    _, extra = evaluate_models([model], properties)
+    return extra['model0_gmodel_total_odata'].sum(axis=0)
+
+
+def test_opacity_traits_give_the_face_on_optical_depth(
+        driver, evaluate_models):
+    # The polar trait is the optical depth of the disk seen face-on, and
+    # the height trait distributes it along z (it integrates to 1), in
+    # both types of disk
+    y, x = np.indices((24, 24)) - 11.5
+    radius = np.hypot(x, y)
+    expected = 0.5 * np.exp(-radius / 4)
+    inside = radius < 10
+    smdisk = face_on_optical_depth(driver, evaluate_models, 'smdisk')
+    np.testing.assert_allclose(smdisk[inside], expected[inside], rtol=1e-2)
+    # The clouds of the Monte Carlo disk add up to the same optical depth
+    mcdisk = face_on_optical_depth(driver, evaluate_models, 'mcdisk')
+    np.testing.assert_allclose(
+        mcdisk[inside].sum(), smdisk[inside].sum(), rtol=1e-2)

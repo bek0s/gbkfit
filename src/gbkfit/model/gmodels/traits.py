@@ -480,10 +480,7 @@ class OPTrait(PTrait, abc.ABC):
 
 
 class OHTrait(TraitFeatureTrunc, HTrait, abc.ABC):
-
-    @abc.abstractmethod
-    def integrate(self, params):
-        pass
+    pass
 
 
 class BPTraitUniform(BPTrait):
@@ -1881,6 +1878,24 @@ class OPTraitNWDistortion(TraitFeatureNWMode, OPTrait):
         return _ptrait_integrate_nw_distortion(params, rings)
 
 
+class OHTraitP1(OHTrait, abc.ABC):
+
+    def __init__(
+            self,
+            rnodes: bool = False,
+            nwmode: NWMode | None = None,
+            trunc: int | float = TRUNC_DEFAULT):
+        super().__init__(rnodes=rnodes, nwmode=nwmode, trunc=trunc)
+
+    def params_sm(self):
+        return () if self.rnodes() else (
+            ParamScalarDesc('s'),)
+
+    def params_rnw(self, nrnodes):
+        return () if not self.rnodes() else (
+            (ParamVectorDesc('s', nrnodes), self.nwmode()),)
+
+
 class OHTraitP2(OHTrait, abc.ABC):
 
     def __init__(
@@ -1892,38 +1907,16 @@ class OHTraitP2(OHTrait, abc.ABC):
 
     def params_sm(self):
         return () if self.rnodes() else (
-            ParamScalarDesc('a'),
-            ParamScalarDesc('s'))
-
-    def params_rnw(self, nrnodes):
-        return () if not self.rnodes() else (
-            (ParamVectorDesc('a', nrnodes), self.nwmode()),
-            (ParamVectorDesc('s', nrnodes), self.nwmode()))
-
-
-class OHTraitP3(OHTrait, abc.ABC):
-
-    def __init__(
-            self,
-            rnodes: bool = False,
-            nwmode: NWMode | None = None,
-            trunc: int | float = TRUNC_DEFAULT):
-        super().__init__(rnodes=rnodes, nwmode=nwmode, trunc=trunc)
-
-    def params_sm(self):
-        return () if self.rnodes() else (
-            ParamScalarDesc('a'),
             ParamScalarDesc('s'),
             ParamScalarDesc('b'))
 
     def params_rnw(self, nrnodes):
         return () if not self.rnodes() else (
-            (ParamVectorDesc('a', nrnodes), self.nwmode()),
             (ParamVectorDesc('s', nrnodes), self.nwmode()),
             (ParamVectorDesc('b', nrnodes), self.nwmode()))
 
 
-class OHTraitUniform(OHTraitP2):
+class OHTraitUniform(OHTraitP1):
 
     @staticmethod
     def type():
@@ -1933,14 +1926,8 @@ class OHTraitUniform(OHTraitP2):
     def uid():
         return OHT_UID_UNIFORM
 
-    def integrate(self, params):
-        a = params['a']
-        s = params['s']
-        trunc = self.trunc() * s if self.trunc() else s
-        return gbkfit.math.uniform_1d_int(a, -trunc, +trunc)
 
-
-class OHTraitExponential(OHTraitP2):
+class OHTraitExponential(OHTraitP1):
 
     @staticmethod
     def type():
@@ -1950,11 +1937,8 @@ class OHTraitExponential(OHTraitP2):
     def uid():
         return OHT_UID_EXP
 
-    def integrate(self, params):
-        raise NotImplementedError()
 
-
-class OHTraitGauss(OHTraitP2):
+class OHTraitGauss(OHTraitP1):
 
     @staticmethod
     def type():
@@ -1964,16 +1948,8 @@ class OHTraitGauss(OHTraitP2):
     def uid():
         return OHT_UID_GAUSS
 
-    def integrate(self, params):
-        a = params['a']
-        s = params['s']
-        trunc = self.trunc() * s
-        fun_f = gbkfit.math.gauss_1d_int
-        fun_t = gbkfit.math.gauss_trunc_1d_int
-        return fun_f(a, s) if not trunc else fun_t(a, s, -trunc, +trunc)
 
-
-class OHTraitGGauss(OHTraitP3):
+class OHTraitGGauss(OHTraitP2):
 
     @staticmethod
     def type():
@@ -1983,11 +1959,21 @@ class OHTraitGGauss(OHTraitP3):
     def uid():
         return OHT_UID_GGAUSS
 
-    def integrate(self, params):
-        raise NotImplementedError()
+    def __init__(
+            self,
+            rnodes: bool = False,
+            nwmode: NWMode | None = None,
+            trunc: int | float = TRUNC_DEFAULT):
+        # Normalising a truncated profile needs its cumulative distribution,
+        # which is not implemented for ggauss (ggauss_1d_cdf, math.hpp)
+        if trunc > 0:
+            raise NotImplementedError(
+                "a truncated ggauss opacity height trait is not "
+                "supported yet")
+        super().__init__(rnodes=rnodes, nwmode=nwmode, trunc=trunc)
 
 
-class OHTraitLorentz(OHTraitP2):
+class OHTraitLorentz(OHTraitP1):
 
     @staticmethod
     def type():
@@ -1997,25 +1983,8 @@ class OHTraitLorentz(OHTraitP2):
     def uid():
         return OHT_UID_LORENTZ
 
-    def integrate(self, params):
-        raise NotImplementedError()
 
-
-class OHTraitMoffat(OHTraitP3):
-
-    @staticmethod
-    def type():
-        return 'moffat'
-
-    @staticmethod
-    def uid():
-        return OHT_UID_MOFFAT
-
-    def integrate(self, params):
-        raise NotImplementedError()
-
-
-class OHTraitSech2(OHTraitP2):
+class OHTraitSech2(OHTraitP1):
 
     @staticmethod
     def type():
@@ -2024,9 +1993,6 @@ class OHTraitSech2(OHTraitP2):
     @staticmethod
     def uid():
         return OHT_UID_SECH2
-
-    def integrate(self, params):
-        raise NotImplementedError()
 
 
 # Surface Brightness polar traits parser
@@ -2079,7 +2045,6 @@ oht_parser = parseutils.TypedParser(OHTrait, [
     OHTraitGauss,
     OHTraitGGauss,
     OHTraitLorentz,
-    OHTraitMoffat,
     OHTraitSech2])
 
 # Velocity polar traits parser

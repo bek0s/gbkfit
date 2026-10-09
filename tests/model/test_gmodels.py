@@ -102,9 +102,9 @@ MODELS = dict(
             cmp1_xpos=1, cmp1_ypos=1, cmp1_posa=100, cmp1_incl=30,
             cmp1_bpt_a=2, cmp1_bpt_s=2, cmp1_bht_s=0.5,
             ocmp_xpos=0, ocmp_ypos=0, ocmp_posa=30, ocmp_incl=60,
-            ocmp_opt_a=0.05, ocmp_opt_s=4, ocmp_oht_a=1, ocmp_oht_s=1,
+            ocmp_opt_a=0.05, ocmp_opt_s=4, ocmp_oht_s=1,
             ocmp1_xpos=1, ocmp1_ypos=1, ocmp1_posa=100, ocmp1_incl=30,
-            ocmp1_opt_a=0.1, ocmp1_opt_s=2, ocmp1_oht_a=1, ocmp1_oht_s=0.5)),
+            ocmp1_opt_a=0.1, ocmp1_opt_s=2, ocmp1_oht_s=0.5)),
     kinematics_3d=(
         dict(
             dmodel=dict(type='scube', size=[20, 16, 11], step=[1, 1, 30]),
@@ -142,7 +142,7 @@ MODELS = dict(
             cmp1_vpt_rt=3, cmp1_vpt_vt=100, cmp1_dpt_a=30, cmp1_dpt_s=5,
             cmp1_spt_p=90, cmp1_spt_s=270,
             ocmp_xpos=0, ocmp_ypos=0, ocmp_posa=30, ocmp_incl=60,
-            ocmp_opt_a=0.05, ocmp_opt_s=4, ocmp_oht_a=1, ocmp_oht_s=1)))
+            ocmp_opt_a=0.05, ocmp_opt_s=4, ocmp_oht_s=1)))
 
 
 # The velocity and dispersion of each voxel of a Monte Carlo disk are

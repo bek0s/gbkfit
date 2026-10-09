@@ -84,7 +84,7 @@ def model_and_properties(driver, key, config):
         opacity[key] = config
         properties |= dict(
             ocmp_xpos=0, ocmp_ypos=0, ocmp_posa=20, ocmp_incl=60,
-            ocmp_opt_a=0.05, ocmp_opt_s=4, ocmp_oht_a=1, ocmp_oht_s=1)
+            ocmp_opt_a=0.05, ocmp_opt_s=4, ocmp_oht_s=1)
         prefix = 'ocmp_' + key[:3] + '_'
         gmodel = dict(
             type='kinematics_3d', components=[component],
