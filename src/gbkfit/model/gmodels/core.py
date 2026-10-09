@@ -44,12 +44,17 @@ class Component(parseutils.TypedSerializable, abc.ABC):
         """
         return {}
 
+    def line_names(self) -> tuple[str, ...]:
+        """The names of the emission lines of the component (none here)."""
+        return ()
+
     @abc.abstractmethod
-    def plan(self, driver, spectral, dtype):
+    def plan(self, driver, spectral, dtype, lines):
         """
         The evaluation of the component on the given driver and dtype (a
         ComponentPlan), which owns the memory it needs. spectral is the
-        spectral axis of the outputs (a fitsutils.Grid of one axis).
+        spectral axis of the outputs (a fitsutils.Grid of one axis), and
+        lines the names of the emission lines to evaluate (all if None).
         """
         pass
 

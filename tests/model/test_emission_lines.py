@@ -156,3 +156,95 @@ def test_invalid_lines(lines, message):
         return
     with pytest.raises(Exception, match=message):
         gmodel_parser.load(info)
+
+
+def evaluate_observation(driver, gmodel, dmodel, properties, **options):
+    """The model of an observation with options (e.g. its lines)."""
+    from gbkfit.model import gmodel_parser
+    from gbkfit.observation import ObservationGroup, observation_parser
+    observation = observation_parser.load(copy.deepcopy(dict(
+        driver=dict(type=driver.type()), observable=dmodel) | options))
+    group = ObservationGroup(
+        [gmodel_parser.load(copy.deepcopy(gmodel))], [observation])
+    params = gbkfit.params.EvaluationParams(group.pdescs(), properties)
+    data = group.model_h(params.evaluate())[0]
+    return {key: value['d'].copy() for key, value in data.items()}
+
+
+LINES = [dict(name='ha', rest='6562.8 Angstrom'),
+         dict(name='nii6583', rest='6583.45 Angstrom')]
+
+
+def test_observations_see_their_lines(driver):
+    # The first line alone is the model of one line; the second alone has
+    # its flux ratio; together they are the model of both
+    gmodel = kinematics(COMPONENT | dict(lines=LINES))
+    dmodel = dict(type='scube', size=[32, 41, 301], step=[1, 1, 10],
+                  rval=[0, 0, 500], rest='6562.8 Angstrom')
+    properties = PROPERTIES | dict(nii6583_ratio=0.4)
+    both = evaluate_observation(driver, gmodel, dmodel, properties)['scube']
+    ha = evaluate_observation(
+        driver, gmodel, dmodel, properties, lines=['ha'])['scube']
+    nii = evaluate_observation(
+        driver, gmodel, dmodel, properties, lines=['nii6583'])['scube']
+    single = evaluate_observation(
+        driver, kinematics(COMPONENT), dmodel, PROPERTIES)['scube']
+    np.testing.assert_allclose(ha, single, rtol=1e-6, atol=1e-9)
+    np.testing.assert_allclose(
+        ha + nii, both, rtol=1e-5, atol=1e-6 * both.max())
+
+
+def test_moment_maps_of_one_line(driver):
+    # On a spectral axis wide enough for both lines, the moment maps of
+    # the first line are those of a model of that line alone
+    gmodel = kinematics(COMPONENT | dict(lines=LINES))
+    dmodel = dict(type='mmaps', size=[32, 41], spec_size=301, spec_step=10,
+                  spec_rval=500, spec_rest='6562.8 Angstrom',
+                  mask_cutoff=1e-3)
+    properties = PROPERTIES | dict(nii6583_ratio=0.4)
+    ha = evaluate_observation(
+        driver, gmodel, dmodel, properties, lines=['ha'])
+    both = evaluate_observation(driver, gmodel, dmodel, properties)
+    single = evaluate_observation(
+        driver, kinematics(COMPONENT), dmodel, PROPERTIES)
+    np.testing.assert_allclose(
+        ha['mmap1'], single['mmap1'], rtol=1e-5, atol=1e-3)
+    good = np.isfinite(both['mmap1'])
+    assert np.abs(both['mmap1'] - single['mmap1'])[good].max() > 100
+
+
+@pytest.mark.parametrize('lines, message', [
+    (['hb'], "no component has the lines \\['hb'\\]"),
+    (['ha', 'hb'], "no component has the lines \\['hb'\\]")])
+def test_unknown_lines_are_errors(driver, lines, message):
+    gmodel = kinematics(COMPONENT | dict(lines=LINES))
+    with pytest.raises(Exception, match=message):
+        evaluate_observation(
+            driver, gmodel, scube('6562.8 Angstrom'), PROPERTIES,
+            lines=lines)
+
+
+def test_a_component_must_have_a_selected_line(driver):
+    gmodel = dict(type='kinematics_2d', components=[
+        COMPONENT | dict(name='gas', lines=LINES),
+        COMPONENT | dict(name='co', lines=[
+            dict(name='co32', rest='345.79599 GHz')])])
+    properties = {f'{name}_{key}': value for name in ('gas', 'co')
+                  for key, value in PROPERTIES.items()}
+    with pytest.raises(Exception, match="has none of the selected lines"):
+        evaluate_observation(
+            driver, gmodel, scube('6562.8 Angstrom'), properties,
+            lines=['ha'])
+    # Leaving the component out works
+    evaluate_observation(
+        driver, gmodel, scube('6562.8 Angstrom'),
+        properties | dict(gas_nii6583_ratio=0.3),
+        lines=['ha'], components=['gas'])
+
+
+def test_line_selection_round_trip(driver):
+    from gbkfit.observation import observation_parser
+    info = dict(driver=dict(type=driver.type()),
+                observable=scube('6562.8 Angstrom'), lines=['ha'])
+    dumped = observation_parser.dump(observation_parser.load(dict(info)))
+    assert dumped['lines'] == ['ha']

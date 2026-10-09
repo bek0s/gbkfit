@@ -124,7 +124,7 @@ class MMaps(Observable):
 
     def plan(
             self, driver, gmodel, foreground, instrument, scale, dtype,
-            components):
+            selection):
         if self._method == 'gaussian_fit' and gmodel.has_weights():
             raise RuntimeError(
                 "the method gaussian_fit does not support gmodels with "
@@ -149,16 +149,16 @@ class MMaps(Observable):
             instrument.primary_beam(), psf, lsf,
             False, None, False, dtype)
         return MMapsPlan(self, dcube, driver, gmodel, foreground, dtype,
-            components)
+            selection)
 
 
 class MMapsPlan(_detail.DCubePlanBase):
 
     def __init__(
             self, mmaps, dcube, driver, gmodel, foreground, dtype,
-            components):
+            selection):
         super().__init__(
-            dcube, driver, gmodel, foreground, dtype, components)
+            dcube, driver, gmodel, foreground, dtype, selection)
         self._moments = _moments.MomentsPlan(
             driver, mmaps.size(), mmaps.orders(), mmaps.mask_cutoff(),
             mmaps.method(), dtype)

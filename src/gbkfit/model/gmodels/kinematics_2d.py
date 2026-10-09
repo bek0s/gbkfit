@@ -1,6 +1,6 @@
 from collections.abc import Sequence
 
-from gbkfit.model.core import GModelSCube
+from gbkfit.model.core import GModelSCube, Selection
 from gbkfit.utils import parseutils
 from ._component_set import ComponentSet2D, ComponentSetGModelPlan
 from .core import SpectralComponent2D
@@ -54,9 +54,9 @@ class GModelKinematics2D(GModelSCube):
     def constants(self):
         return self._component_set.constants()
 
-    def plan(self, driver, grid, has_weights, dtype, components=None):
+    def plan(self, driver, grid, has_weights, dtype, selection=Selection()):
         return ComponentSetGModelPlan(
             self._component_set.plan(
                 driver, grid.spatial(), grid.spectral(), has_weights, dtype,
-                components),
+                selection),
             'scube')

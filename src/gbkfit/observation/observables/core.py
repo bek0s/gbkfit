@@ -136,13 +136,13 @@ class Observable(parseutils.TypedSerializable, abc.ABC):
     @abc.abstractmethod
     def plan(
             self, driver, gmodel, foreground, instrument, scale, dtype,
-            components):
+            selection):
         """
         The evaluation of the gmodel as this observable, through the
         foreground and the instrument, on the given driver and dtype, with
         the model oversampled scale times along each axis of the data (an
-        ObservablePlan): of its components of the given names (all if
-        None).
+        ObservablePlan): of what the selection of the gmodel has (see
+        Selection).
         """
         pass
 
