@@ -110,7 +110,7 @@ def test_aspec_objective_residual(driver):
         Data(model + 1, error=np.full_like(model, 2)),
         observable.regions(), step=10)
     observation = Observation(
-        driver, observable, Instrument(), data=dataset)
+        driver, observable, instrument=Instrument(), data=dataset)
     group = ObservationGroup(
         [gmodel_parser.load(copy.deepcopy(GMODEL))], [observation])
     params = gbkfit.params.EvaluationParams(group.pdescs(), PROPERTIES)
@@ -118,7 +118,8 @@ def test_aspec_objective_residual(driver):
     # Without the instrument, the model differs from the data
     assert not np.allclose(residual[0]['aspec'], -0.5)
     observation = Observation(
-        driver, observable, instrument_parser.load(copy.deepcopy(INSTRUMENT)),
+        driver, observable,
+        instrument=instrument_parser.load(copy.deepcopy(INSTRUMENT)),
         data=dataset)
     group = ObservationGroup(
         [gmodel_parser.load(copy.deepcopy(GMODEL))], [observation])

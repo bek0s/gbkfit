@@ -12,6 +12,7 @@ struct DModel
     using Cube = Array<Device, T, nb::ndim<3>>;
     using ConstCube = Array<Device, const T, nb::ndim<3>>;
     using Image = Array<Device, T, nb::ndim<2>>;
+    using ConstImage = Array<Device, const T, nb::ndim<2>>;
     using Orders = Array<Device, const int, nb::ndim<1>>;
     using Indices = Array<Device, const int, nb::ndim<1>>;
     using Weights = Array<Device, const T, nb::ndim<1>>;
@@ -104,6 +105,29 @@ struct DModel
                 mmaps_d.data(), mmaps_m.data());
     }
 
+    // The image-plane cube image (nz, ny, nx) lensed from the source-plane
+    // cube source (nz, sy, sx): each pixel is the bilinear interpolation
+    // of the source at its position on the source plane, in the pixel
+    // coordinates of the source (source_x and source_y, of shape (ny, nx))
+    static void
+    lens_resample(
+            ConstImage source_x, ConstImage source_y,
+            ConstCube source, Cube image)
+    {
+        const auto src = size_xyz(source);
+        const auto dst = size_xyz(image);
+        require(src[2] == dst[2],
+                "source and image must have the same number of channels");
+        require(int(source_x.shape(0)) == dst[1]
+                && int(source_x.shape(1)) == dst[0],
+                "source_x must have shape (ny, nx) of the image");
+        require_same_shape(source_y, source_x, "source_y", "source_x");
+        Kernels::dmodel_lens_resample(
+                dst[0], dst[1], dst[2], src[0], src[1],
+                source_x.data(), source_y.data(),
+                source.data(), image.data());
+    }
+
     // The weighted sums of the pixels of regions in each channel of cube
     // (nz, ny, nx), into out (nz, nregions). The regions are a CSR matrix
     // (indptr, indices, weights) of nregions rows and nx * ny columns:
@@ -159,6 +183,11 @@ struct DModel
                         nb::arg("orders").noconvert(),
                         nb::arg("mmaps_d").noconvert(),
                         nb::arg("mmaps_m").noconvert())
+                .def_static("lens_resample", &lens_resample,
+                        nb::arg("source_x").noconvert(),
+                        nb::arg("source_y").noconvert(),
+                        nb::arg("source").noconvert(),
+                        nb::arg("image").noconvert())
                 .def_static("regions_sum", &regions_sum,
                         nb::arg("indptr").noconvert(),
                         nb::arg("indices").noconvert(),

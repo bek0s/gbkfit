@@ -134,11 +134,13 @@ class Observable(parseutils.TypedSerializable, abc.ABC):
             data, self._grid.coords, self._grid.spectral_axis)
 
     @abc.abstractmethod
-    def plan(self, driver, gmodel, instrument, scale, dtype, components):
+    def plan(
+            self, driver, gmodel, foreground, instrument, scale, dtype,
+            components):
         """
-        The evaluation of the gmodel as this observable, seen through the
-        instrument, on the given driver and dtype, with the model
-        oversampled scale times along each axis of the data (an
+        The evaluation of the gmodel as this observable, through the
+        foreground and the instrument, on the given driver and dtype, with
+        the model oversampled scale times along each axis of the data (an
         ObservablePlan): of its components of the given names (all if
         None).
         """

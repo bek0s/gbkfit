@@ -19,6 +19,7 @@ __all__ = [
     'make_rest',
     'read_data',
     'sky_positions',
+    'sky_to_pixel',
     'write_data',
     'write_spectra'
 ]
@@ -174,6 +175,20 @@ def sky_positions(grid: Grid) -> tuple[np.ndarray, np.ndarray]:
     rota = np.radians(grid.coords.rota)
     return (x * np.cos(rota) - y * np.sin(rota),
             x * np.sin(rota) + y * np.cos(rota))
+
+
+def sky_to_pixel(grid: Grid) -> tuple[np.ndarray, np.ndarray]:
+    """
+    The affine map from the sky (the frame of the model, see
+    sky_positions) to the pixel coordinates of the x and y axes of a grid:
+    pixel = matrix @ sky + offset (the inverse of sky_positions).
+    """
+    rota = np.radians(grid.coords.rota)
+    rotation = np.array([
+        [np.cos(rota), np.sin(rota)],
+        [-np.sin(rota), np.cos(rota)]])
+    matrix = rotation / np.asarray(grid.coords.step[:2], float)[:, None]
+    return matrix, np.asarray(grid.coords.rpix[:2], float)
 
 
 class GridData(typing.NamedTuple):

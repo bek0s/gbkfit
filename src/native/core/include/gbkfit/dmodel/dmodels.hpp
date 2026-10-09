@@ -373,6 +373,41 @@ dmodel_mmaps_gaussian(
     }
 }
 
+// The pixel (x, y) of channel z of an image-plane cube (nx by ny pixels),
+// lensed from a source-plane cube (sx by sy pixels): the bilinear
+// interpolation of the source at the position of the pixel on the source
+// plane, in the pixel coordinates of the source (source_x and source_y,
+// at index y * nx + x), and 0 outside the source.
+template<typename T> constexpr void
+dmodel_lens_resample(
+        int x, int y, int z,
+        int nx, int ny, int sx, int sy,
+        const T* source_x, const T* source_y,
+        const T* source, T* image)
+{
+    const int i = index_2d_to_1d(x, y, nx);
+    const T px = source_x[i];
+    const T py = source_y[i];
+    const int x0 = static_cast<int>(std::floor(px));
+    const int y0 = static_cast<int>(std::floor(py));
+    const T fx = px - x0;
+    const T fy = py - y0;
+    T value = 0;
+    for (int dy = 0; dy < 2; ++dy)
+    {
+        for (int dx = 0; dx < 2; ++dx)
+        {
+            const int xs = x0 + dx;
+            const int ys = y0 + dy;
+            if (xs < 0 || ys < 0 || xs >= sx || ys >= sy)
+                continue;
+            const T w = (dx ? fx : 1 - fx) * (dy ? fy : 1 - fy);
+            value += w * source[index_3d_to_1d(xs, ys, z, sx, sy)];
+        }
+    }
+    image[index_3d_to_1d(x, y, z, nx, ny)] = value;
+}
+
 // The weighted sum of the pixels of region r in channel z of a cube with
 // npix pixels in each channel, into out[z][r] (out has nregions values
 // in each channel). The region has the pixels indices[k] of the channel,

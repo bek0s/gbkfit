@@ -180,7 +180,9 @@ class BMaps(Observable):
         image[index >= 0] = data[index[index >= 0]]
         return fitsutils.GridData(image, grid.coords, None)
 
-    def plan(self, driver, gmodel, instrument, scale, dtype, components):
+    def plan(
+            self, driver, gmodel, foreground, instrument, scale, dtype,
+            components):
         if gmodel.has_weights():
             raise RuntimeError(
                 "bmaps does not support gmodels with weights (wtraits) yet")
@@ -204,15 +206,17 @@ class BMaps(Observable):
             False, None, False, dtype)
         return BMapsPlan(
             self._weights, self._orders, self._mask_cutoff, self._method,
-            dcube, driver, gmodel, dtype, components)
+            dcube, driver, gmodel, foreground, dtype,
+            components)
 
 
 class BMapsPlan(_detail.DCubePlanBase):
 
     def __init__(
             self, weights, orders, mask_cutoff, method, dcube, driver,
-            gmodel, dtype, components):
-        super().__init__(dcube, driver, gmodel, dtype, components)
+            gmodel, foreground, dtype, components):
+        super().__init__(
+            dcube, driver, gmodel, foreground, dtype, components)
         self._sums = RegionSumsPlan(weights, driver, dtype)
         nregions = self._sums.nregions()
         # The spectra of the regions, as a cube of one row of regions

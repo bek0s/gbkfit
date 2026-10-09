@@ -106,6 +106,17 @@ Wrapper<T>::dmodel_mmaps_gaussian(
 }
 
 template<typename T> void
+Wrapper<T>::dmodel_lens_resample(
+        int nx, int ny, int nz, int sx, int sy,
+        const T* source_x, const T* source_y,
+        const T* source, T* image)
+{
+    const int n = nx * ny * nz;
+    launch("lens_resample", n, kernels::dmodel_lens_resample<T>,
+            nx, ny, nz, sx, sy, source_x, source_y, source, image);
+}
+
+template<typename T> void
 Wrapper<T>::dmodel_regions_sum(
         int nregions, int npix, int size_z,
         const int* indptr, const int* indices, const T* weights,
