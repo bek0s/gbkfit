@@ -444,10 +444,11 @@ gmodel_mcdisk_evaluate_cloud(
             return;
     }
 
-    // Density height trait
+    // Density height trait: the height of the cloud above the midplane
     rh_trait_rnd<T>(
                 zd, rng, a.rht.uids[tidx], rht_cptr, rht_pptr,
                 rnidx, a.rnodes, a.nrnodes, rd);
+    const T height = zd;
 
     // Vertical distortion traits
     if (a.zpt.uids)
@@ -463,6 +464,7 @@ gmodel_mcdisk_evaluate_cloud(
         for (int i = 0; i < a.zpt.n; ++i)
             zvalue += ptvalues[i];
 
+        // The distortion displaces the midplane
         zd += zvalue;
     }
 
@@ -515,7 +517,7 @@ gmodel_mcdisk_evaluate_cloud(
                 a.vht.cvalues, a.vht.ccounts,
                 a.vht.pvalues, a.vht.pcounts,
                 rnidx, a.rnodes, a.nrnodes,
-                rd, std::abs(zd));
+                rd, std::abs(height));
     }
     for (int i = 0; i < a.vpt.n; ++i)
         vvalue += ptvalues[i] * (is_thin ? 1 : htvalues[i]);
@@ -542,7 +544,7 @@ gmodel_mcdisk_evaluate_cloud(
                 a.dht.cvalues, a.dht.ccounts,
                 a.dht.pvalues, a.dht.pcounts,
                 rnidx, a.rnodes, a.nrnodes,
-                rd, std::abs(zd));
+                rd, std::abs(height));
     }
     for (int i = 0; i < a.dpt.n; ++i)
         dvalue += ptvalues[i] * (is_thin ? 1 : htvalues[i]);
@@ -724,7 +726,9 @@ gmodel_smdisk_evaluate_spaxel(int x, int y, int z, const DiskArgs<T>& a)
         for (int i = 0; i < a.zpt.n; ++i)
             zvalue += ptvalues[i];
 
-        zn += zvalue;
+        // The distortion displaces the midplane: the height of the voxel
+        // above it (as the Monte Carlo disk places its clouds)
+        zn -= zvalue;
     }
 
     // Density traits
