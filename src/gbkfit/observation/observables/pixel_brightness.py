@@ -52,11 +52,11 @@ class PixelBrightness(Observable):
     def __init__(
             self,
             size: Sequence[int],
-            step: Sequence[int | float] = (1, 1),
-            rpix: Sequence[int | float] | None = None,
-            rval: Sequence[int | float] = (0, 0),
+            step: Sequence[float] = (1, 1),
+            rpix: Sequence[float] | None = None,
+            rval: Sequence[float] = (0, 0),
             rota: float = 0,
-            mask_cutoff: int | float | None = None,
+            mask_cutoff: float | None = None,
             mask_apply: bool = False
     ):
         super().__init__(size, step, rpix, rval, rota)

@@ -1,5 +1,4 @@
 
-from numbers import Real
 from typing import Any
 
 import numpy as np
@@ -131,10 +130,10 @@ class Objective:
 
     def residual_scalar(
             self,
-            params: dict[str, Real | np.ndarray],
+            params: dict[str, float | np.ndarray],
             squared: bool,
             out_extra: dict[str, Any] | None = None
-    ) -> list[Real]:
+    ) -> list[float]:
         self._update_residual_d(params, True, out_extra)
         t = timeutils.SimpleTimer('objective_residual_sum_eval').start()
         residuals = []
@@ -152,7 +151,7 @@ class Objective:
 
     def log_likelihood(
             self,
-            params: dict[str, Real | np.ndarray],
+            params: dict[str, float | np.ndarray],
             out_extra: dict[str, Any] | None = None
     ) -> list[float]:
         self._update_residual_d(params, True, out_extra)
@@ -172,7 +171,7 @@ class Objective:
 
     def residual_vector_h(
             self,
-            params: dict[str, Real | np.ndarray],
+            params: dict[str, float | np.ndarray],
             weighted: bool,
             out_extra: dict[str, Any] | None = None
     ) -> list[np.ndarray]:
@@ -181,7 +180,7 @@ class Objective:
 
     def residual_vector_d(
             self,
-            params: dict[str, Real | np.ndarray],
+            params: dict[str, float | np.ndarray],
             weighted: bool,
             out_extra: dict[str, Any] | None = None
     ) -> list[np.ndarray]:
@@ -190,7 +189,7 @@ class Objective:
 
     def residual_nddata_h(
             self,
-            params: dict[str, Real | np.ndarray],
+            params: dict[str, float | np.ndarray],
             weighted: bool,
             out_extra: dict[str, Any] | None = None
     ) -> list[dict[str, np.ndarray]]:
@@ -199,7 +198,7 @@ class Objective:
 
     def residual_nddata_d(
             self,
-            params: dict[str, Real | np.ndarray],
+            params: dict[str, float | np.ndarray],
             weighted: bool,
             out_extra: dict[str, Any] | None = None
     ) -> list[dict[str, np.ndarray]]:
@@ -208,7 +207,7 @@ class Objective:
 
     def _update_residual_h(
             self,
-            params: dict[str, Real | np.ndarray],
+            params: dict[str, float | np.ndarray],
             weighted: bool,
             out_extra: dict[str, Any] | None = None
     ):
@@ -223,7 +222,7 @@ class Objective:
 
     def _update_residual_d(
             self,
-            params: dict[str, Real | np.ndarray],
+            params: dict[str, float | np.ndarray],
             weighted: bool,
             out_extra: dict[str, Any] | None = None
     ) -> None:

@@ -1,6 +1,5 @@
 import abc
 import os.path
-from numbers import Real
 from typing import Any
 
 import numpy as np
@@ -63,7 +62,7 @@ class PrimaryBeamRadial(PrimaryBeam, abc.ABC):
         # A radial response has no data to write
         return dict(type=self.type(), fwhm=self._fwhm, x=self._x, y=self._y)
 
-    def __init__(self, fwhm: Real, x: Real = 0, y: Real = 0):
+    def __init__(self, fwhm: float, x: float = 0, y: float = 0):
         check_scale('fwhm', fwhm)
         self._fwhm = fwhm
         self._x = x
@@ -147,7 +146,7 @@ class PrimaryBeamImage(PrimaryBeam):
             step: Any = None,
             rpix: Any = None,
             rval: Any = None,
-            rota: Real | None = None
+            rota: float | None = None
     ):
         """
         The image is on the grid of the given world coordinates (see

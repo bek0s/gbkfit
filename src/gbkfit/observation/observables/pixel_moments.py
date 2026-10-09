@@ -64,15 +64,15 @@ class PixelMoments(Observable):
     def __init__(
             self,
             size: Sequence[int],
-            step: Sequence[int | float] = (1, 1),
-            rpix: Sequence[int | float] | None = None,
-            rval: Sequence[int | float] = (0, 0),
-            rota: int | float = 0,
-            mask_cutoff: int | float = 1e-6,
+            step: Sequence[float] = (1, 1),
+            rpix: Sequence[float] | None = None,
+            rval: Sequence[float] = (0, 0),
+            rota: float = 0,
+            mask_cutoff: float = 1e-6,
             orders: Sequence[int] = (0, 1, 2),
             spec_size: int | None = None,
-            spec_step: int | float = _moments.SPEC_STEP,
-            spec_rval: int | float = 0,
+            spec_step: float = _moments.SPEC_STEP,
+            spec_rval: float = 0,
             spec_rest: str | astropy.units.Quantity | None = None,
             method: str = 'moments'
     ):

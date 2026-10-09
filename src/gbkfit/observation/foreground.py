@@ -1,7 +1,6 @@
 import abc
 import os.path
 from collections.abc import Sequence
-from numbers import Real
 from typing import Any
 
 import numpy as np
@@ -33,7 +32,7 @@ class Lens(parseutils.TypedSerializable, abc.ABC):
     interpolation of the source at its position on the source plane.
     """
 
-    def __init__(self, source_size: Sequence[int], source_step: Sequence[Real]):
+    def __init__(self, source_size: Sequence[int], source_step: Sequence[float]):
         self._source_grid = gridutils.make_grid(
             tuple(source_size), tuple(source_step))
 
@@ -160,11 +159,11 @@ class LensDeflectionMap(Lens):
             alpha_x: np.ndarray,
             alpha_y: np.ndarray,
             source_size: Sequence[int],
-            source_step: Sequence[Real],
+            source_step: Sequence[float],
             step: Any = None,
             rpix: Any = None,
             rval: Any = None,
-            rota: Real | None = None
+            rota: float | None = None
     ):
         """
         The maps are on the grid of the given world coordinates (see

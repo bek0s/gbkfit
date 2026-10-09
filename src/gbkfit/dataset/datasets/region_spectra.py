@@ -1,4 +1,3 @@
-from numbers import Real
 
 import astropy.units
 
@@ -74,9 +73,9 @@ class DatasetRegionSpectra(Dataset):
             self,
             spectra: Data,
             regions: Regions,
-            step: Real = 1,
-            rpix: Real | None = None,
-            rval: Real = 0,
+            step: float = 1,
+            rpix: float | None = None,
+            rval: float = 0,
             rest: str | astropy.units.Quantity | None = None
     ):
         """

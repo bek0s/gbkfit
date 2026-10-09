@@ -42,7 +42,7 @@ class LikelihoodGaussian(Likelihood):
     def dump(self):
         return dict(type=self.type(), weights=self._weights)
 
-    def __init__(self, weights: Real | Mapping[str, Real] = 1.0):
+    def __init__(self, weights: float | Mapping[str, float] = 1.0):
         self._weights = weights if isinstance(weights, Real) \
             else dict(weights)
 

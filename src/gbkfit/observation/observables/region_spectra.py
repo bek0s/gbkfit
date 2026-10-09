@@ -1,5 +1,4 @@
 from collections.abc import Sequence
-from numbers import Real
 
 import astropy.units
 
@@ -95,15 +94,15 @@ class RegionSpectra(Observable):
             self,
             regions: Regions,
             spec_size: int,
-            spec_step: Real = 1,
-            spec_rpix: Real | None = None,
-            spec_rval: Real = 0,
+            spec_step: float = 1,
+            spec_rpix: float | None = None,
+            spec_rval: float = 0,
             spec_rest: str | astropy.units.Quantity | None = None,
             size: Sequence[int] | None = None,
-            step: Sequence[Real] | None = None,
-            rpix: Sequence[Real] | None = None,
-            rval: Sequence[Real] | None = None,
-            rota: Real | None = None
+            step: Sequence[float] | None = None,
+            rpix: Sequence[float] | None = None,
+            rval: Sequence[float] | None = None,
+            rota: float | None = None
     ):
         """
         The spectral axis has spec_size channels of spec_step (km/s), with
