@@ -17,12 +17,16 @@ REFERENCE_DIR = pathlib.Path(__file__).parents[1] / 'data' / 'reference_models'
 yaml = ruamel.yaml.YAML(typ='safe')
 
 
-def run_eval(mode, config, workdir):
-    """Run `gbkfit-cli eval` and return its FITS outputs by file name."""
+def run_eval(mode, config, workdir, *options):
+    """
+    Run `gbkfit-cli eval` (with the given command line options) and return
+    its FITS outputs by file name.
+    """
     workdir.mkdir()
     yaml.dump(config, workdir / 'config.yaml')
     result = subprocess.run(
-        [sys.executable, '-m', 'gbkfit.apps.cli', 'eval', mode, 'config.yaml'],
+        [sys.executable, '-m', 'gbkfit.apps.cli', 'eval', mode, 'config.yaml',
+         *options],
         cwd=workdir, capture_output=True, text=True)
     if result.returncode != 0:
         pytest.fail(f"gbkfit-cli failed:\n{result.stderr[-3000:]}")
@@ -48,6 +52,29 @@ def test_objective_residuals(tmp_path):
     outputs = run_eval('objective', config, tmp_path / 'objective')
     np.testing.assert_allclose(outputs['residual_scube_d'], -0.5, rtol=1e-5)
     np.testing.assert_allclose(outputs['wresidual_scube_d'], -0.25, rtol=1e-5)
+    # The extra outputs of the model (e.g. the high-resolution cube)
+    assert 'residual_extra_observation0_dcube_hi' in outputs
+
+
+@pytest.mark.parametrize('mode', ['model', 'objective'])
+def test_profiling_writes_the_timings(tmp_path, mode):
+    # The timings of the profiled evaluations only: model_eval once for
+    # each of the 3 in model mode, and twice in objective mode (the
+    # likelihood and the residual sum)
+    config = yaml.load(REFERENCE_DIR / 'thin_disk_scube.yaml')
+    if mode == 'objective':
+        model = run_eval('model', config, tmp_path / 'model')
+        fits.writeto(tmp_path / 'data.fits', model['model_0_scube_d'])
+        observation = config['observations'][0]
+        observation['data'] = dict(
+            data=str(tmp_path / 'data.fits'), error=1.0,
+            step=observation['observable'].pop('step'))
+        observation['observable'].pop('size')
+    run_eval(mode, config, tmp_path / mode, '--profile', '3')
+    timings = yaml.load(tmp_path / mode / 'output' / 'gbkfit_eval_timings.yaml')
+    # (the first time is discarded)
+    expected = dict(model=2, objective=5)[mode]
+    assert timings['model_eval']['sample_count'] == expected
 
 
 def test_rotation_curve_from_radial_nodes(tmp_path):

@@ -229,8 +229,7 @@ class Objective:
         if not self._prepared:
             self.prepare()
         # Evaluate model
-        out_extra_model = {} if out_extra is not None else None
-        model_data = self._group.model_d(params, out_extra_model)
+        model_data = self._group.model_d(params, out_extra)
         # Evaluate residuals
         t = timeutils.SimpleTimer('objective_residual_eval').start()
         for i in range(self.nitems()):
