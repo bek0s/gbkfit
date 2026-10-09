@@ -15,10 +15,6 @@ __all__ = [
 ]
 
 
-# The options of the spatial grid of the cube of aspec
-_SPATIAL_OPTIONS = ('size', 'step', 'rpix', 'rval', 'rota')
-
-
 class ASpec(Observable):
     """
     Spectra in regions of the sky (see Regions; e.g. fibres, apertures,
@@ -47,10 +43,9 @@ class ASpec(Observable):
     def options_from_data(cls, dataset):
         # The regions and the spectral axis, and the spatial grid of
         # regions on a grid
-        has_grid = dataset.regions().grid() is not None
-        spatial = _SPATIAL_OPTIONS if has_grid else ()
-        return ('regions', 'spec_size', 'spec_step', 'spec_rpix',
-                'spec_rval') + spatial
+        return (
+            ('regions', 'spec_size', 'spec_step', 'spec_rpix', 'spec_rval')
+            + _detail.spatial_options_from_regions(dataset.regions()))
 
     @classmethod
     def load(cls, info, dataset=None):
@@ -87,14 +82,7 @@ class ASpec(Observable):
                 spec_step=self.step()[2],
                 spec_rpix=self.rpix()[2],
                 spec_rval=self.rval()[2])
-        if self._regions.grid() is None:
-            info.update(
-                size=self.size()[:2],
-                step=self.step()[:2],
-                rpix=self.rpix()[:2],
-                rval=self.rval()[:2],
-                rota=self.rota())
-        return info
+        return info | _detail.dump_spatial_grid(self, self._regions)
 
     def __init__(
             self,
@@ -116,21 +104,8 @@ class ASpec(Observable):
         fitsutils.make_grid) is that of the regions if they have one
         (bins), and must not be given; else size is required.
         """
-        spatial = regions.grid()
-        given = [
-            key for key, value in zip(
-                _SPATIAL_OPTIONS, (size, step, rpix, rval, rota))
-            if value is not None]
-        if spatial is not None and given:
-            raise RuntimeError(
-                f"the regions are on a grid, which is that of the model; "
-                f"remove the options {given}")
-        if spatial is None:
-            if size is None:
-                raise RuntimeError(
-                    "the regions are on the sky; the size of the grid of "
-                    "the model is required")
-            spatial = fitsutils.make_grid(size, step, rpix, rval, rota)
+        spatial = _detail.spatial_grid_of_regions(
+            regions, size, step, rpix, rval, rota)
         if spec_rpix is None:
             spec_rpix = spec_size / 2 - 0.5
         coords = spatial.coords

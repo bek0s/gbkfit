@@ -1,14 +1,71 @@
-from gbkfit.utils import parseutils
+from gbkfit.utils import fitsutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
 from .core import ObservablePlan
 
 
 __all__ = [
+    'SPATIAL_OPTIONS',
+    'dump_spatial_grid',
     'load_observable_common',
+    'spatial_grid_of_regions',
+    'spatial_options_from_regions',
     'require_no_options_from_data',
     'without_options_from_data',
     'DCubePlanBase'
 ]
+
+
+# The options of the spatial grid of the cube of an observable of data
+# in regions (see spatial_grid_of_regions)
+SPATIAL_OPTIONS = ('size', 'step', 'rpix', 'rval', 'rota')
+
+
+def spatial_grid_of_regions(regions, size, step, rpix, rval, rota):
+    """
+    The spatial grid of the cube of an observable of data in regions:
+    that of the regions if they have one (bins), when the grid options
+    must not be given; else (apertures) the grid of the options (see
+    fitsutils.make_grid), of which size is required.
+    """
+    grid = regions.grid()
+    given = [
+        key for key, value in zip(
+            SPATIAL_OPTIONS, (size, step, rpix, rval, rota))
+        if value is not None]
+    if grid is not None and given:
+        raise RuntimeError(
+            f"the regions are on a grid, which is that of the model; "
+            f"remove the options {given}")
+    if grid is None:
+        if size is None:
+            raise RuntimeError(
+                "the regions are on the sky; the size of the grid of the "
+                "model is required")
+        grid = fitsutils.make_grid(size, step, rpix, rval, rota)
+    return grid
+
+
+def spatial_options_from_regions(regions):
+    """
+    The options of the spatial grid of an observable of data in regions
+    that the regions give (see spatial_grid_of_regions).
+    """
+    return SPATIAL_OPTIONS if regions.grid() is not None else ()
+
+
+def dump_spatial_grid(observable, regions):
+    """
+    The options of the spatial grid of an observable of data in regions,
+    unless the regions give it.
+    """
+    if regions.grid() is not None:
+        return {}
+    return dict(
+        size=observable.size()[:2],
+        step=observable.step()[:2],
+        rpix=observable.rpix()[:2],
+        rval=observable.rval()[:2],
+        rota=observable.rota())
 
 
 def require_no_options_from_data(cls, info, dataset):
