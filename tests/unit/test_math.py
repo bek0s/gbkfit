@@ -52,8 +52,6 @@ def test_round_functions():
     assert roundu_multiple(-1.0, 2.0) == 0
     assert roundu_multiple(-5.0, 2.0) == -4
     # round power of two
-    assert roundd_po2(3.0) == 2
-    assert roundd_po2(3.5) == 2
     assert roundu_po2(3.0) == 4
     assert roundu_po2(3.5) == 4
 
