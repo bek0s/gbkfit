@@ -184,7 +184,7 @@ class DCube:
         # If psf/lsf is provided, we convolve the model cube with it.
         # We always perform fft-based convolution because it is faster.
         # Fft-based convolution requires padding on the model cube.
-        edge_hi = [0, 0, 0]
+        edge_hi = (0, 0, 0)
         if psf or lsf:
             # Get convolution shape and left offset due to padding
             size_hi, edge_hi = backend_fft.fft_convolution_shape(

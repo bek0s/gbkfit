@@ -1,13 +1,71 @@
 """
-Tests for the weight handling of DCube: when the cube is padded for the
-PSF convolution, the high-res weights must always be cropped/downscaled
-to the low-res weight cube, and only smoothed if smooth_weights is set.
+Tests for DCube: its low- and high-res grids, and its weight handling:
+when the cube is padded for the PSF convolution, the high-res weights
+must always be cropped/downscaled to the low-res weight cube, and only
+smoothed if smooth_weights is set.
 """
 
 import numpy as np
+import pytest
 
 from gbkfit.model.dmodels._dcube import DCube
+from gbkfit.psflsf.lsfs import LSFGauss
 from gbkfit.psflsf.psfs import PSFGauss
+
+
+@pytest.mark.parametrize('psf, lsf', [
+    (None, None), (PSFGauss(2), LSFGauss(5))])
+def test_grids(driver, psf, lsf):
+    # The high-res cube has scale times the pixels of the low-res cube,
+    # and the padding (edge) of the convolution on both sides. Its
+    # first pixel is the first high-res pixel of the first low-res
+    # pixel, minus the padding.
+    size = (21, 30, 41)
+    step = (0.5, 1.5, 2.0)
+    rpix = (5.0, 6.5, 7.5)
+    rval = (1.0, 1.5, 2.0)
+    scale = (1, 2, 3)
+    dcube = DCube(
+        size=size, step=step, rpix=rpix, rval=rval, rota=0, scale=scale,
+        psf=psf, lsf=lsf, smooth_weights=False, mask_cutoff=1.0,
+        mask_apply=True, dtype=np.dtype(np.float32))
+    dcube.prepare(driver, has_weights=True)
+    # The spatial axes are measured from the reference pixel, and the
+    # spectral axis from its world value there
+    zero = np.array([0, 0, rval[2]]) - np.multiply(rpix, step)
+    step_hi = np.divide(step, scale)
+    size_hi = np.multiply(size, scale)
+    edge_hi = np.zeros(3, int)
+    if psf:
+        kernel_size = psf.size(tuple(step_hi[:2])) + (lsf.size(step_hi[2]),)
+        size_hi, edge_hi = driver.fft(np.float32).fft_convolution_shape(
+            tuple(size_hi), kernel_size)
+    zero_hi = zero - np.divide(step, 2) - (np.array(edge_hi) - 0.5) * step_hi
+    assert dcube.size() == size
+    assert dcube.step() == step
+    np.testing.assert_allclose(dcube.zero(), zero)
+    assert dcube.scratch_size() == tuple(size_hi)
+    assert dcube.scratch_edge() == tuple(edge_hi)
+    np.testing.assert_allclose(dcube.scratch_step(), step_hi)
+    np.testing.assert_allclose(dcube.scratch_zero(), zero_hi)
+    for cube in (dcube.dcube(), dcube.mcube(), dcube.wcube()):
+        assert cube.shape == size[::-1]
+    for cube in (dcube.scratch_dcube(), dcube.scratch_wcube()):
+        assert cube.shape == tuple(size_hi)[::-1]
+    assert dcube.scratch_dcube() is not dcube.dcube()
+    assert dcube.scratch_wcube() is not dcube.wcube()
+
+
+def test_downscaling_keeps_a_uniform_cube(driver):
+    dcube = DCube(
+        size=(21, 30, 41), step=(0.5, 1.5, 2.0), rpix=(5.0, 6.5, 7.5),
+        rval=(1.0, 1.5, 2.0), rota=0, scale=(2, 3, 4), psf=None, lsf=None,
+        smooth_weights=False, mask_cutoff=None, mask_apply=False,
+        dtype=np.dtype(np.float32))
+    dcube.prepare(driver, has_weights=False)
+    driver.mem_fill(dcube.scratch_dcube(), 42)
+    dcube.evaluate(None)
+    np.testing.assert_allclose(driver.mem_copy_d2h(dcube.dcube()), 42)
 
 
 def _evaluate_weights(driver, smooth_weights):
