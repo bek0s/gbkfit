@@ -295,6 +295,33 @@ def test_lens_resample(driver):
     np.testing.assert_allclose(memory.to_host(image), expected, rtol=1e-6)
 
 
+@pytest.mark.parametrize('method', ['moments', 'gaussian'])
+def test_mmaps_mask_by_the_flux_in_the_units_of_the_axis(driver, method):
+    # The spectra whose moment 0 (their flux, in the units of the spectral
+    # axis: channels of 5 here) is not above the cutoff are masked, with
+    # either method
+    memory = Memory(driver)
+    dmodel = driver.native_class('DModel', DTYPE)()
+    step, cutoff = 5, 1.0
+    flux = np.array([0.5, 2.0, 0.9, 1.1]) * cutoff
+    sigma = 3
+    z = np.arange(40)[:, None, None]
+    amplitude = flux / (sigma * np.sqrt(2 * np.pi) * step)
+    cube = amplitude * np.exp(-0.5 * ((z - 20) / sigma) ** 2)
+    mmaps_d = memory.to_device(np.zeros((1, 1, 4), DTYPE))
+    mmaps_m = memory.to_device(np.zeros((1, 4), DTYPE))
+    orders = memory.to_device(np.array([0], np.int32))
+    args = ((1, 1, step), (0, 0, 0), memory.to_device(cube.astype(DTYPE)))
+    if method == 'moments':
+        dmodel.mmaps_moments(
+            *args, None, cutoff, orders, mmaps_d, mmaps_m, None)
+    else:
+        dmodel.mmaps_gaussian(*args, cutoff, orders, mmaps_d, mmaps_m)
+    np.testing.assert_array_equal(memory.to_host(mmaps_m), [[0, 1, 0, 1]])
+    np.testing.assert_allclose(
+        memory.to_host(mmaps_d)[0, 0, [1, 3]], flux[[1, 3]], rtol=1e-4)
+
+
 def _residual_inputs():
     """Observed and model data, errors, masks and weights for a residual."""
     n = 1000
