@@ -210,16 +210,16 @@ def uniform_1d_int(a, b, c):
 
 
 def expon_1d_fun(x, a, b, c):
-    return (x >= 0) * (a * np.exp(-np.abs(x - b) / c))
+    return (x >= b) * (a * np.exp(-np.abs(x - b) / c))
 
 
 def expon_1d_pdf(x, b, c):
-    a = 1 / (2 * c)
+    a = 1 / c
     return expon_1d_fun(x, a, b, c)
 
 
 def expon_1d_cdf(x, b, c):
-    return (x >= 0) * (1 - np.exp(-np.abs(x - b) / c))
+    return (x >= b) * (1 - np.exp(-np.abs(x - b) / c))
 
 
 def expon_1d_ppf(x, b, c):
@@ -257,7 +257,7 @@ def laplace_1d_fun(x, a, b, c):
 
 def laplace_1d_pdf(x, b, c):
     a = 1 / (2 * c)
-    return a * laplace_1d_fun(x, a, b, c)
+    return laplace_1d_fun(x, a, b, c)
 
 
 def laplace_1d_cdf(x, b, c):
@@ -441,7 +441,10 @@ def moffat_1d_fun(x, a, b, c, d):
 
 
 def moffat_1d_pdf(x, b, c, d):
-    a = (d - 1) / (c * c) * np.pi
+    # A Student's t distribution with 2d - 1 degrees of freedom; it has
+    # finite flux only for d > 0.5
+    a = scipy.special.gamma(d) / (
+        c * np.sqrt(np.pi) * scipy.special.gamma(d - 0.5))
     return moffat_1d_fun(x, a, b, c, d)
 
 
