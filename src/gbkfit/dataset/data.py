@@ -140,6 +140,9 @@ def load_data(
             raise ConfigError(
                 "the error must be a number or a file; it is a bool")
         if isinstance(error, (int, float)):
+            # (an error that is not positive would mask every value)
+            if not error > 0:
+                raise ConfigError(f"the error must be positive; it is {error}")
             data_e = np.full(np.shape(data_d), error, dtype=float)
         else:
             with parseutils.config_path('error'):
