@@ -4,8 +4,8 @@ Compare full model evaluations against reference outputs.
 Each case in tests/data/reference_models is a model configuration
 (<case>.yaml) together with the outputs `gbkfit-cli eval model` produced
 for it (<case>.npz). The references come from commit 6f79336, the last
-version before the 2025 refactor; see make_references.py
-in that directory for how they were made.
+version before the 2025 refactor, and were made again after one
+deliberate change; see make_references.py in that directory.
 """
 
 import pathlib
