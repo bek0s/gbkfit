@@ -332,7 +332,7 @@ def _make_mask_clip_sig(data, mask, sigma, maxiters):
     The pixels that sigma clipping keeps (its mask marks the others), of
     those that the mask keeps (the others do not count in its statistics).
     """
-    kept = np.where(mask != 0, data, np.nan)
+    kept = np.ma.masked_array(data, mask=(mask == 0))
     return ~stats.sigma_clip(kept, sigma=sigma, maxiters=maxiters).mask
 
 
