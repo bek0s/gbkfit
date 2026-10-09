@@ -28,21 +28,6 @@ _MIN_OVERLAP = 1e-12
 _AREA_TOLERANCE = 1e-9
 
 
-def _sky_to_pixel(grid):
-    """
-    The affine map from the sky (the frame of the model: x and y in arcsec
-    from the reference pixel of the grid, like xpos and ypos) to the pixel
-    coordinates of a spatial grid: pixel = matrix @ sky + offset. The grid
-    is rotated on the sky by its rota (see fitsutils.Coords).
-    """
-    rota = np.radians(grid.coords.rota)
-    rotation = np.array([
-        [np.cos(rota), np.sin(rota)],
-        [-np.sin(rota), np.cos(rota)]])
-    matrix = rotation / np.asarray(grid.coords.step[:2], float)[:, None]
-    return matrix, np.asarray(grid.coords.rpix[:2], float)
-
-
 def _axes(posa):
     """
     The unit vectors on the sky along a position angle (degrees, north
@@ -171,7 +156,7 @@ def _ellipse_overlaps(aperture, grid, centre, a, b, posa):
     """
     along, across = _axes(posa)
     ellipse = np.array([along / a, across / b])
-    matrix, offset = _sky_to_pixel(grid)
+    matrix, offset = fitsutils.sky_to_pixel(grid)
     inverse = np.linalg.inv(matrix)
     disk_matrix = ellipse @ inverse
     disk_offset = -ellipse @ (inverse @ offset + np.asarray(centre, float))
@@ -253,7 +238,7 @@ def _polygon_overlaps(aperture, grid, vertices):
     The overlaps of a polygon aperture (vertices on the sky) with the
     pixels of a grid (see Aperture.overlaps).
     """
-    matrix, offset = _sky_to_pixel(grid)
+    matrix, offset = fitsutils.sky_to_pixel(grid)
     pixel_vertices = vertices @ matrix.T + offset
     i, j, indices = _pixels_in_box(
         grid, pixel_vertices.min(axis=0), pixel_vertices.max(axis=0))

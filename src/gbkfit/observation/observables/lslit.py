@@ -88,7 +88,9 @@ class LSlit(Observable):
     def keys(self):
         return ['lslit']
 
-    def plan(self, driver, gmodel, instrument, scale, dtype, components):
+    def plan(
+            self, driver, gmodel, foreground, instrument, scale, dtype,
+            components):
         # The cube of a slit is one pixel (the slit width) across the slit
         size, step = self.size(), self.step()
         rpix, rval = self.rpix(), self.rval()
@@ -99,7 +101,8 @@ class LSlit(Observable):
             instrument.primary_beam(), instrument.psf(),
             instrument.lsf(), self._smooth_weights, self._mask_cutoff,
             self._mask_apply, dtype)
-        return LSlitPlan(dcube, driver, gmodel, dtype, components)
+        return LSlitPlan(dcube, driver, gmodel, foreground, dtype,
+            components)
 
 
 class LSlitPlan(_detail.DCubePlanBase):

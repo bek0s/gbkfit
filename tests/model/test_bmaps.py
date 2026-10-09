@@ -154,7 +154,7 @@ def test_bmaps_objective_residual(driver):
     instrument = instrument_parser.load(copy.deepcopy(INSTRUMENT))
     group = ObservationGroup(
         [gmodel_parser.load(copy.deepcopy(GMODEL))],
-        [Observation(driver, observable, instrument)])
+        [Observation(driver, observable, instrument=instrument)])
     params = gbkfit.params.EvaluationParams(group.pdescs(), PROPERTIES)
     model = {
         key: value['d'].copy()
@@ -164,7 +164,8 @@ def test_bmaps_objective_residual(driver):
         for key, value in model.items()})
     group = ObservationGroup(
         [gmodel_parser.load(copy.deepcopy(GMODEL))],
-        [Observation(driver, observable, instrument, data=dataset)])
+        [Observation(
+            driver, observable, instrument=instrument, data=dataset)])
     residual = Objective(group).residual_nddata_h(params.evaluate(), False)
     for key in ('mmap1', 'mmap2'):
         np.testing.assert_allclose(residual[0][key], -0.5, rtol=1e-4)

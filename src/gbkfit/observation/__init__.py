@@ -1,3 +1,4 @@
+from .foreground import *
 from .group import *
 from .instrument import *
 from .likelihood import *

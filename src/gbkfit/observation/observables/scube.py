@@ -71,13 +71,16 @@ class SCube(Observable):
     def keys(self):
         return ['scube']
 
-    def plan(self, driver, gmodel, instrument, scale, dtype, components):
+    def plan(
+            self, driver, gmodel, foreground, instrument, scale, dtype,
+            components):
         dcube = _dcube.DCube(
             self.size(), self.step(), self.rpix(), self.rval(), self.rota(),
             self.rest(), tuple(scale), instrument.primary_beam(),
             instrument.psf(), instrument.lsf(),
             self._smooth_weights, self._mask_cutoff, self._mask_apply, dtype)
-        return SCubePlan(dcube, driver, gmodel, dtype, components)
+        return SCubePlan(dcube, driver, gmodel, foreground, dtype,
+            components)
 
 
 class SCubePlan(_detail.DCubePlanBase):

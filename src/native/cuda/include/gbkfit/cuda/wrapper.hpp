@@ -40,6 +40,12 @@ struct Wrapper
             T* mmaps_d, T* mmaps_m);
 
     static void
+    dmodel_lens_resample(
+            int nx, int ny, int nz, int sx, int sy,
+            const T* source_x, const T* source_y,
+            const T* source, T* image);
+
+    static void
     dmodel_regions_sum(
             int nregions, int npix, int size_z,
             const int* indptr, const int* indices, const T* weights,

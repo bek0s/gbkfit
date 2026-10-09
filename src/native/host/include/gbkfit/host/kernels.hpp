@@ -149,6 +149,26 @@ dmodel_mmaps_gaussian(
 }
 
 template<typename T> void
+dmodel_lens_resample(
+        int nx, int ny, int nz, int sx, int sy,
+        const T* source_x, const T* source_y,
+        const T* source, T* image)
+{
+    // Parallelization: per 3d position in the image cube
+    #pragma omp parallel for collapse(3)
+    for (int z = 0; z < nz; ++z) {
+    for (int y = 0; y < ny; ++y) {
+    for (int x = 0; x < nx; ++x) {
+
+    gbkfit::dmodel_lens_resample(
+            x, y, z, nx, ny, sx, sy, source_x, source_y, source, image);
+
+    }
+    }
+    }
+}
+
+template<typename T> void
 dmodel_regions_sum(
         int nregions, int npix, int size_z,
         const int* indptr, const int* indices, const T* weights,
@@ -282,6 +302,11 @@ struct Wrapper
     static void
     dmodel_mmaps_gaussian(auto... args) {
         kernels::dmodel_mmaps_gaussian<T>(args...);
+    }
+
+    static void
+    dmodel_lens_resample(auto... args) {
+        kernels::dmodel_lens_resample<T>(args...);
     }
 
     static void

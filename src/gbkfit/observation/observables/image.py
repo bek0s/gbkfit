@@ -66,7 +66,9 @@ class Image(Observable):
     def keys(self):
         return ['image']
 
-    def plan(self, driver, gmodel, instrument, scale, dtype, components):
+    def plan(
+            self, driver, gmodel, foreground, instrument, scale, dtype,
+            components):
         if instrument.lsf() is not None:
             raise RuntimeError("an image has no spectral axis for an lsf")
         # The cube of an image has one channel
@@ -75,7 +77,8 @@ class Image(Observable):
             self.rval() + (0,), self.rota(), None, tuple(scale) + (1,),
             instrument.primary_beam(), instrument.psf(), None, False,
             self._mask_cutoff, self._mask_apply, dtype)
-        return ImagePlan(dcube, driver, gmodel, dtype, components)
+        return ImagePlan(dcube, driver, gmodel, foreground, dtype,
+            components)
 
 
 class ImagePlan(_detail.DCubePlanBase):

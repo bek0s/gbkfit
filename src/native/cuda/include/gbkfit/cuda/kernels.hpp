@@ -131,6 +131,25 @@ dmodel_mmaps_gaussian(
 }
 
 template<typename T> __global__ void
+dmodel_lens_resample(
+        int nx, int ny, int nz, int sx, int sy,
+        const T* source_x, const T* source_y,
+        const T* source, T* image)
+{
+    // Parallelization: per 3d position in the image cube
+    const int nthreads = nx * ny * nz;
+    const int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (tid >= nthreads)
+        return;
+
+    int x, y, z;
+    index_1d_to_3d(x, y, z, tid, nx, ny);
+
+    gbkfit::dmodel_lens_resample(
+            x, y, z, nx, ny, sx, sy, source_x, source_y, source, image);
+}
+
+template<typename T> __global__ void
 dmodel_regions_sum(
         int nregions, int npix, int size_z,
         const int* indptr, const int* indices, const T* weights,

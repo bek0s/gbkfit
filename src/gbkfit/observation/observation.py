@@ -6,6 +6,7 @@ import numpy as np
 from gbkfit.dataset import Dataset
 from gbkfit.driver import Driver, driver_parser
 from gbkfit.utils import parseutils
+from .foreground import Foreground, foreground_parser
 from .instrument import Instrument, instrument_parser
 from .likelihood import Likelihood, LikelihoodGaussian, likelihood_parser
 from .observables import Observable, observable_parser
@@ -19,9 +20,9 @@ __all__ = [
 
 class Observation(parseutils.BasicSerializable):
     """
-    A gmodel seen through an instrument as an observable, evaluated on a
-    driver, and optionally its data, compared with the model under a
-    likelihood. It names its gmodel (required only when there are
+    A gmodel seen through a foreground (e.g. a gravitational lens) and an
+    instrument as an observable, evaluated on a driver, and optionally its
+    data, compared with the model under a likelihood. It names its gmodel (required only when there are
     several) and, optionally, the components of the gmodel it sees (e.g.
     the tracer of its line), and can have a name, which then prefixes its
     extra outputs instead of its position (see ObservationGroup).
@@ -46,6 +47,8 @@ class Observation(parseutils.BasicSerializable):
         parseutils.load_option_and_update_info(
             driver_parser, info, 'driver')
         parseutils.load_option_and_update_info(
+            foreground_parser, info, 'foreground')
+        parseutils.load_option_and_update_info(
             instrument_parser, info, 'instrument')
         parseutils.load_option_and_update_info(
             observable_parser, info, 'observable', dataset=dataset)
@@ -66,6 +69,8 @@ class Observation(parseutils.BasicSerializable):
             likelihood=likelihood_parser.dump(self._likelihood))
         return name | gmodel | components | data | dict(
             driver=driver_parser.dump(self._driver),
+            foreground=foreground_parser.dump(
+                self._foreground, **dump_kwargs),
             instrument=instrument_parser.dump(self._instrument),
             observable=observable_parser.dump(
                 self._observable, data=self._data),
@@ -76,6 +81,7 @@ class Observation(parseutils.BasicSerializable):
             self,
             driver: Driver,
             observable: Observable,
+            foreground: Foreground | None = None,
             instrument: Instrument | None = None,
             gmodel: str | None = None,
             components: Sequence[str] | None = None,
@@ -108,6 +114,8 @@ class Observation(parseutils.BasicSerializable):
                 f"{scale}")
         self._driver = driver
         self._observable = observable
+        self._foreground = foreground if foreground is not None \
+            else Foreground()
         self._instrument = instrument if instrument is not None \
             else Instrument()
         if data is None and likelihood is not None:
@@ -145,6 +153,9 @@ class Observation(parseutils.BasicSerializable):
     def observable(self) -> Observable:
         return self._observable
 
+    def foreground(self) -> Foreground:
+        return self._foreground
+
     def instrument(self) -> Instrument:
         return self._instrument
 
@@ -164,8 +175,8 @@ class Observation(parseutils.BasicSerializable):
         """The evaluation of the gmodel as this observation."""
         self._observable.require_compatible(gmodel)
         return self._observable.plan(
-            self._driver, gmodel, self._instrument, self._scale, self._dtype,
-            self._components)
+            self._driver, gmodel, self._foreground, self._instrument,
+            self._scale, self._dtype, self._components)
 
 
 observation_parser = parseutils.BasicParser(Observation)
