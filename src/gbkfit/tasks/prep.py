@@ -449,16 +449,17 @@ def prep_lslit(
     # The index of the first pixel of the prepared data in the data read
     offset = np.zeros(data_d.ndim, int)
 
+    # The data are (channels, positions) in numpy order
     if roi_spat is not None:
         xrange = roi_spat
         data_d, data_e, data_m = _crop_data(
-            data_d, data_e, data_m, 0, xrange)
-        offset[0] += xrange[0]
+            data_d, data_e, data_m, 1, xrange)
+        offset[1] += xrange[0]
     if roi_spec is not None:
         srange = roi_spec
         data_d, data_e, data_m = _crop_data(
-            data_d, data_e, data_m, 1, srange)
-        offset[1] += srange[0]
+            data_d, data_e, data_m, 0, srange)
+        offset[0] += srange[0]
 
     mask = _make_mask(data_d, data_e, data_m)
 
