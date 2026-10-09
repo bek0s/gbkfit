@@ -92,9 +92,10 @@ class Grid(typing.NamedTuple):
             self.size[:2], self.coords.axes(0, 1)._replace(rest=None), None)
 
     def spectral(self) -> 'Grid':
-        """The grid of the spectral axis (one axis)."""
+        """The grid of the spectral axis (one axis, not rotated)."""
         axis = self.spectral_axis
-        return Grid((self.size[axis],), self.coords.axes(axis), 0)
+        return Grid(
+            (self.size[axis],), self.coords.axes(axis)._replace(rota=0), 0)
 
 
 def make_grid(
