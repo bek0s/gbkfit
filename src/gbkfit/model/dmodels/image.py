@@ -28,8 +28,7 @@ class DModelImage(DModel):
         return isinstance(gmodel, GModelImage)
 
     @classmethod
-    def load(cls, info, *args, **kwargs):
-        dataset = kwargs.get('dataset')
+    def load(cls, info, dataset=None):
         opts = _detail.load_dmodel_common(
             cls, info, 2, True, False, dataset, DatasetImage)
         return cls(**opts)

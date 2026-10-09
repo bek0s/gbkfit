@@ -120,11 +120,13 @@ def test_spectral_axis_from_the_data(dispersion, spec_size):
     maps = dict(mmap0=Data(np.ones((32, 32))), mmap1=Data(velocity))
     if dispersion is not None:
         maps['mmap2'] = Data(np.full((32, 32), dispersion))
-    dmodel = dmodel_parser.load(
-        dict(type='mmaps', spec_step=2), dataset=DatasetMMaps(**maps))
+    info = dict(type='mmaps', spec_step=2)
+    dmodel = dmodel_parser.load(info, dataset=DatasetMMaps(**maps))
     assert dmodel.spec_rval() == 1500
     assert dmodel.spec_step() == 2
     assert dmodel.spec_size() == spec_size
+    # The configuration is left as it was
+    assert info == dict(type='mmaps', spec_step=2)
 
 
 def test_at_least_one_moment_order():
