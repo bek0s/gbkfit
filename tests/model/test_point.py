@@ -61,6 +61,43 @@ def test_point_flux_does_not_depend_on_oversampling(driver, scale):
     assert result.sum() * PIXEL_AREA == pytest.approx(3, rel=1e-6)
 
 
+def mean_and_variance(values, positions):
+    """The mean and variance of the positions, weighted by the values."""
+    mean = np.sum(values * positions) / np.sum(values)
+    return mean, np.sum(values * (positions - mean) ** 2) / np.sum(values)
+
+
+@pytest.mark.parametrize('scale', [1, 2, 3])
+def test_point_with_a_psf_does_not_depend_on_oversampling(driver, scale):
+    # The psf is drawn on the oversampled grid at its pixel size: the
+    # image of a point is the psf (variance sigma^2), at any oversampling
+    gmodel = dict(type='intensity_2d', components=[dict(type='point')])
+    image = dict(type='image', size=[32, 32], step=[0.5, 0.5],
+                 scale=[scale, scale], psf=dict(type='gauss', sigma=2.0))
+    result = evaluate(driver, gmodel, image, dict(xpos=0.25, ypos=0.25, flux=1))
+    position = (np.arange(32) - 15.5) * 0.5
+    for profile in (result.sum(axis=0), result.sum(axis=1)):
+        mean, variance = mean_and_variance(profile, position)
+        assert mean == pytest.approx(0.25, abs=1e-3)
+        assert variance == pytest.approx(2.0 ** 2, rel=0.01)
+
+
+@pytest.mark.parametrize('scale', [1, 2, 3])
+def test_point_with_an_lsf_does_not_depend_on_oversampling(driver, scale):
+    # The lsf is drawn on the oversampled channels at their width: the
+    # spectrum of a point has the variance of the line, the lsf and a
+    # channel (10^2 / 12), at any oversampling
+    gmodel = dict(type='kinematics_2d', components=[dict(type='point')])
+    scube = dict(type='scube', size=[4, 4, 101], step=[0.5, 0.5, 10],
+                 scale=[1, 1, scale], lsf=dict(type='gauss', sigma=30))
+    cube = evaluate(driver, gmodel, scube, dict(
+        xpos=0.25, ypos=0.25, flux=1, vsys=0, disp=10))
+    velocity = (np.arange(101) - 50) * 10
+    mean, variance = mean_and_variance(cube.sum(axis=(1, 2)), velocity)
+    assert mean == pytest.approx(0, abs=1e-3)
+    assert variance == pytest.approx(10 ** 2 + 30 ** 2 + 10 ** 2 / 12, rel=1e-4)
+
+
 @pytest.mark.parametrize('gmodel_type', ['kinematics_2d', 'kinematics_3d'])
 def test_point_in_a_cube(driver, gmodel_type):
     # The spectrum of the point is a Gaussian of its flux, velocity and
