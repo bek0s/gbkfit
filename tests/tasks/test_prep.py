@@ -385,15 +385,40 @@ def test_spectral_axes_that_cannot_be_converted(header, message):
         prep_scube('cube.fits', velocity_rest='6562.8 Angstrom')
 
 
-def test_cli_writes_to_the_output_directory():
+def run_cli(*args):
+    """Run gbkfit-cli with the given arguments."""
+    return subprocess.run(
+        [sys.executable, '-m', 'gbkfit.apps.cli', *args],
+        capture_output=True, text=True)
+
+
+def write_image(filename):
     header = {k: v for k, v in HEADER.items() if k[-1] in '12'}
-    fits.writeto('image.fits', np.ones((20, 24), np.float32),
-                 fits.Header(header))
-    subprocess.run(
-        [sys.executable, '-m', 'gbkfit.apps.cli', 'prep', 'image',
-         '--data-d', 'image.fits', '--output-dir', 'prepared'],
-        check=True, capture_output=True)
+    fits.writeto(filename, np.ones((20, 24), np.float32), fits.Header(header))
+
+
+def test_cli_writes_to_the_output_directory():
+    write_image('image.fits')
+    result = run_cli(
+        'prep', 'image', '--data-d', 'image.fits', '--output-dir', 'prepared')
+    assert result.returncode == 0
     assert fits.getdata('prepared/prep_image.fits').shape == (20, 24)
+    # (its log, also under python -m)
+    assert "output will be stored" in result.stderr + result.stdout
+
+
+@pytest.mark.parametrize('args, message', [
+    # One value for each moment order, also when the orders come last
+    (['mmaps', '--data-d', 'image.fits', '--nanpad', '1', '0', '1'],
+     "invalid length"),
+    (['image', '--data-d', 'image.fits', '--ccl-lratio', 'nan'],
+     "must be a number"),
+    (['bmaps', '--bins', 'image.fits', '--data-d', 'image.fits', '--minify',
+      '0'], "unrecognized arguments: --minify")])
+def test_cli_rejects_invalid_arguments(args, message):
+    write_image('image.fits')
+    result = run_cli('prep', *args)
+    assert result.returncode != 0 and message in result.stderr
 
 def test_integer_data_are_prepared():
     # Integer data (here with an invalid error of 0) become floats, which

@@ -6,7 +6,9 @@ from typing import Any, Literal
 
 from gbkfit.utils import parseutils
 
-_log = logging.getLogger(__name__)
+# (not __name__, which is __main__ under python -m, outside the loggers of
+# gbkfit that configure_logging configures)
+_log = logging.getLogger('gbkfit.apps.cli')
 
 
 def configure_logging(
@@ -51,23 +53,30 @@ def configure_logging(
     })
 
 
-def _validate_moment_count(
+# The options of prep mmaps and bmaps with one value for each moment order
+_MOMENT_OPTIONS = (
+    'data_d', 'data_e', 'data_m',
+    'clip_min', 'clip_max', 'sclip_sigma', 'sclip_iters')
+
+
+def _check_moment_counts(
         parser: argparse.ArgumentParser,
-        namespace: argparse.Namespace,
-        values: Sequence[str],
-        option_string: str
+        args: argparse.Namespace
 ) -> None:
     """
-    Validate that the number of provided values matches the number of
-    specified moment orders in the namespace.
-
-    Raises an error if the lengths do not match.
+    Exit with an error unless each option of _MOMENT_OPTIONS given as a
+    list has as many values as moment orders. This is checked after the
+    parsing: argparse reads the options in the order they come, possibly
+    before the orders.
     """
-    if namespace.orders and len(namespace.orders) != len(values):
-        parser.error(
-            f"argument {option_string}: invalid length; the number of values "
-            f"must match the number of specified moment orders; expected "
-            f"{len(namespace.orders)}, but got {len(values)}")
+    for dest in _MOMENT_OPTIONS:
+        values = getattr(args, dest, None)
+        if isinstance(values, list) and len(values) != len(args.orders):
+            option = '--' + dest.replace('_', '-')
+            parser.error(
+                f"argument {option}: invalid length; the number of values "
+                f"must match the number of moment orders; expected "
+                f"{len(args.orders)}, but got {len(values)}")
 
 
 def _validate_range_1d(
@@ -151,6 +160,9 @@ def _number_range(
         except ValueError:
             raise argparse.ArgumentTypeError(
                 f"must be of type {type_.__name__}")
+        # (NaN fails both comparisons below)
+        if num != num:
+            raise argparse.ArgumentTypeError("must be a number")
         if min_ is not None and num < min_:
             raise argparse.ArgumentTypeError(f"must be >= {min_}")
         if max_ is not None and num > max_:
@@ -237,11 +249,12 @@ def main():
             the maximum number of sigma-clipping iterations to perform
             """
     # ...
-    parser_prep_common = argparse.ArgumentParser(add_help=False)
-    parser_prep_common.add_argument(
+    parser_prep_dtype = argparse.ArgumentParser(add_help=False)
+    parser_prep_dtype.add_argument(
         '--dtype', type=str, default='float32', choices=['float32', 'float64'],
         help="data type of the output")
-    parser_prep_common.add_argument(
+    parser_prep_minify = argparse.ArgumentParser(add_help=False)
+    parser_prep_minify.add_argument(
         '--minify', action='store_true',
         help="crop the edges of the input data until valid pixels are found")
     # ...
@@ -273,17 +286,14 @@ def main():
     parser_prep_input_n = argparse.ArgumentParser(add_help=False)
     parser_prep_input_n.add_argument(
         '--data-d', type=str, nargs='+', required=True,
-        action=_create_validator([_validate_moment_count]),
         metavar='DATA',
         help=_DATA_D_HELP)
     parser_prep_input_n.add_argument(
         '--data-e', type=str, nargs='+',
-        action=_create_validator([_validate_moment_count]),
         metavar='ERRORS',
         help=_DATA_E_HELP)
     parser_prep_input_n.add_argument(
         '--data-m', type=str, nargs='+',
-        action=_create_validator([_validate_moment_count]),
         metavar='MASK',
         help=_DATA_M_HELP)
     # ...
@@ -337,22 +347,18 @@ def main():
     parser_prep_clip_n = argparse.ArgumentParser(add_help=False)
     parser_prep_clip_n.add_argument(
         '--clip-min', type=float, nargs='+',
-        action=_create_validator([_validate_moment_count]),
         metavar='MIN',
         help=_CLIP_MIN_HELP)
     parser_prep_clip_n.add_argument(
         '--clip-max', type=float, nargs='+',
-        action=_create_validator([_validate_moment_count]),
         metavar='MAX',
         help=_CLIP_MAX_HELP)
     parser_prep_clip_n.add_argument(
         '--sclip-sigma', type=_number_range(float, 0.0, None), nargs='+',
-        action=_create_validator([_validate_moment_count]),
         metavar='SIGMA',
         help=_SCLIP_SIGMA_HELP)
     parser_prep_clip_n.add_argument(
         '--sclip-iters', type=_number_range(int, 1, None), nargs='+', default=5,
-        action=_create_validator([_validate_moment_count]),
         metavar='ITERS',
         help=_SCLIP_ITERS_HELP)
     # ...
@@ -372,7 +378,7 @@ def main():
              "RATIO = (label area) / (largest label area)")
     # ...
     parser_prep = parsers_task.add_parser(
-        'prep', parents=[parser_common], help="prepare data for fitting")
+        'prep', help="prepare data for fitting")
     parsers_prep = parser_prep.add_subparsers(
         dest='prep_task', help="the type of data to prepare")
     parsers_prep.required = True
@@ -380,24 +386,27 @@ def main():
         parser_prep_input_1,
         parser_prep_roi_spat_2d,
         parser_prep_clip_1, parser_prep_ccl, parser_prep_nanpad,
-        parser_prep_common, parser_common_output, parser_common],
+        parser_prep_dtype, parser_prep_minify, parser_common_output,
+        parser_common],
         help="image")
     parsers_prep.add_parser('lslit', parents=[
         parser_prep_input_1, parser_prep_rest,
         parser_prep_roi_spat_1d, parser_prep_roi_spec_1d,
         parser_prep_clip_1, parser_prep_ccl, parser_prep_nanpad,
-        parser_prep_common, parser_common_output, parser_common],
+        parser_prep_dtype, parser_prep_minify, parser_common_output,
+        parser_common],
         help="long slit")
     parsers_prep.add_parser('mmaps', parents=[
         parser_prep_orders,
         parser_prep_input_n,
         parser_prep_roi_spat_2d,
         parser_prep_clip_n, parser_prep_ccl, parser_prep_nanpad,
-        parser_prep_common, parser_common_output, parser_common],
+        parser_prep_dtype, parser_prep_minify, parser_common_output,
+        parser_common],
         help="moment maps")
     parser_prep_bmaps = parsers_prep.add_parser('bmaps', parents=[
         parser_prep_orders, parser_prep_input_n,
-        parser_prep_common, parser_common_output, parser_common],
+        parser_prep_dtype, parser_common_output, parser_common],
         help="binned moment maps: maps whose pixels hold the value of "
              "their bin, to one value per bin")
     parser_prep_bmaps.add_argument(
@@ -407,7 +416,8 @@ def main():
         parser_prep_input_1, parser_prep_rest,
         parser_prep_roi_spat_2d, parser_prep_roi_spec_1d,
         parser_prep_clip_1, parser_prep_ccl, parser_prep_nanpad,
-        parser_prep_common, parser_common_output, parser_common],
+        parser_prep_dtype, parser_prep_minify, parser_common_output,
+        parser_common],
         help="spectral cube")
 
     #
@@ -465,6 +475,8 @@ def main():
     #
 
     args = parser.parse_args()
+    if args.task == 'prep' and args.prep_task in ('mmaps', 'bmaps'):
+        _check_moment_counts(parser, args)
 
     # Configure log level before doing anything else
     configure_logging('DEBUG' if args.verbose else 'INFO')
