@@ -71,7 +71,7 @@ def test_lsf_analytic(lsf_type, lsf_class, lsf_params):
     arr_max_index = tuple(i.item() for i in arr_max_index)
     arr_max_index = arr_max_index[::-1][0]
     assert lsf_arr.shape[0] == lsf_size
-    assert gbkfit.math.is_odd(np.all(lsf_size))
+    assert gbkfit.math.is_odd(lsf_size)
     assert math.isclose(np.sum(lsf_arr), 1.0, abs_tol=1e-9)
     assert arr_max_index == lsf_size // 2
     # Dump tests
@@ -83,6 +83,50 @@ def test_lsf_analytic(lsf_type, lsf_class, lsf_params):
     # Load tests
     loaded_lsf = lsf_parser.load(dumped_lsf_info)
     assert vars(loaded_lsf) == vars(lsf)
+
+
+
+def assert_profile(array, profile):
+    """
+    The array is the profile (unnormalised) at the centres of its pixels,
+    normalised over those it keeps (it is 0 beyond its extent).
+    """
+    kept = array > 0
+    expected = np.where(kept, profile, 0)
+    np.testing.assert_allclose(
+        array, expected / expected.sum(), rtol=1e-6, atol=1e-12)
+
+
+@pytest.mark.parametrize('lsf, profile', [
+    (LSFGauss(3.0), lambda x: np.exp(-0.5 * (x / 3) ** 2)),
+    (LSFGGauss(3.0, 1.5), lambda x: np.exp(-(np.abs(x) / 3) ** 1.5)),
+    (LSFLorentz(3.0), lambda x: 1 / (1 + (x / 3) ** 2)),
+    (LSFMoffat(3.0, 2.5), lambda x: (1 + (x / 3) ** 2) ** -2.5)])
+def test_lsf_profiles(lsf, profile):
+    step = 0.7
+    array = lsf.asarray(step)
+    x = (np.arange(array.size) - array.size // 2) * step
+    assert_profile(array, profile(x))
+
+
+@pytest.mark.parametrize('psf, profile', [
+    # Of the distance r along the major axis (at the position angle posa,
+    # north through east) and the minor axis (shorter by the ratio)
+    (PSFGauss(2.0, 0.5, 30), lambda r: np.exp(-0.5 * (r / 2) ** 2)),
+    (PSFGGauss(2.0, 1.5, 0.6, 120), lambda r: np.exp(-(r / 2) ** 1.5)),
+    (PSFMoffat(2.0, 2.5, 0.7, -40), lambda r: (1 + (r / 2) ** 2) ** -2.5)])
+def test_psf_profiles(psf, profile):
+    step = (0.5, 0.4)
+    array = psf.asarray(step)
+    posa = np.radians(psf.dump()['posa'])
+    ratio = psf.dump()['ratio']
+    ny, nx = array.shape
+    y, x = np.indices(array.shape)
+    x = (x - nx // 2) * step[0]
+    y = (y - ny // 2) * step[1]
+    major = -x * np.sin(posa) + y * np.cos(posa)
+    minor = x * np.cos(posa) + y * np.sin(posa)
+    assert_profile(array, profile(np.hypot(major, minor / ratio)))
 
 
 def test_psf_image_round_trip():
