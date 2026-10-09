@@ -155,47 +155,30 @@ def _check_same_rest(wcs, rest):
             f"velocities to the new rest first")
 
 
-def _decreasing_velocity_axis(header):
+def _reorder(data, header, order):
     """
-    The index (FITS order, from 0) of the spectral axis of a header if it
-    is a velocity that decreases along the axis (the model needs
-    increasing velocities), or None.
+    Return the data and its header with their axes in the given order
+    (FITS order, from 0; see fitsutils.model_axis_order). A header without
+    world coordinates stays as it is.
     """
-    if not _has_wcs(header):
-        return None
-    wcs = astropy.wcs.WCS(header)
-    s = wcs.wcs.spec
-    if s < 0 or wcs.wcs.ctype[s][:4] not in fitsutils.VELOCITY_TYPES:
-        return None
-    if wcs.wcs.get_cdelt()[s] * wcs.wcs.get_pc()[s, s] >= 0:
-        return None
-    return s
-
-
-def _reverse_axis(data, header, s):
-    """
-    The data and its header with the axis s (FITS order, from 0) reversed:
-    each pixel keeps its world coordinates. A header without world
-    coordinates stays as it is.
-    """
-    data = np.flip(data, data.ndim - 1 - s)
+    data = fitsutils.reorder_data(data, order)
     if not _has_wcs(header):
         return data, header
-    wcs = astropy.wcs.WCS(header)
-    # Reversing pixel axis s negates column s of the linear transformation
-    # (CD, or CDELT times the rows of PC). For PC, negating CDELT[s] and
-    # row s of PC cancel out, leaving a positive CDELT[s].
-    if wcs.wcs.has_cd():
-        cd = wcs.wcs.cd.copy()
-        cd[:, s] *= -1
-        wcs.wcs.cd = cd
-    else:
-        pc = wcs.wcs.get_pc().copy()
-        pc[s, :] *= -1
-        pc[:, s] *= -1
-        wcs.wcs.pc = pc
-        wcs.wcs.cdelt[s] *= -1
-    wcs.wcs.crpix[s] = data.shape[data.ndim - 1 - s] + 1 - wcs.wcs.crpix[s]
+    wcs = fitsutils.reorder_wcs(astropy.wcs.WCS(header), order)
+    return data, _with_wcs(header, wcs)
+
+
+def _flip(data, header, axis):
+    """
+    Return the data and its header reversed along an axis (FITS order,
+    from 0): each pixel keeps its world coordinates. A header without
+    world coordinates stays as it is.
+    """
+    size = data.shape[data.ndim - 1 - axis]
+    data = fitsutils.flip_data(data, axis)
+    if not _has_wcs(header):
+        return data, header
+    wcs = fitsutils.flip_wcs(astropy.wcs.WCS(header), axis, size)
     return data, _with_wcs(header, wcs)
 
 
@@ -231,6 +214,22 @@ def _read_data(file_d, file_e, file_m):
     data_d, header_d = _read_fits(file_d)
     data_e, header_e = _read_fits(file_e) if file_e else (None, None)
     data_m, header_m = _read_fits(file_m) if file_m else (None, None)
+    # The axes in the order of the model (e.g. RA before Dec), as those of
+    # the data, also for an error and a mask without world coordinates.
+    # (Reversed axes are reversed when saved, so that the regions given
+    # are in the pixels of the files.)
+    if _has_wcs(header_d):
+        order = fitsutils.model_axis_order(astropy.wcs.WCS(header_d))
+        if order != tuple(range(data_d.ndim)):
+            _log.info("reordering the axes in the order of the model")
+            data_d, header_d = _reorder(data_d, header_d, order)
+            if data_e is not None:
+                data_e, header_e = _reorder(data_e, header_e, order)
+            if data_m is not None:
+                data_m, header_m = _reorder(data_m, header_m, order)
+    data_d = np.ascontiguousarray(data_d)
+    data_e = np.ascontiguousarray(data_e) if data_e is not None else None
+    data_m = np.ascontiguousarray(data_m) if data_m is not None else None
     # Deal with invalid or non-sensible pixel values
     data_d[~np.isfinite(data_d)] = np.nan
     if data_e is not None:
@@ -248,12 +247,15 @@ def _save_data(
         file_m, data_m, header_m,
         offset, dtype, velocity_rest=None, output_dir='.'):
     """
-    Save the data to output_dir, whose first pixel is the pixel at the given offset (on
-    each numpy axis) of the data read, with its spectral axis converted to
-    the velocities of velocity_rest (see _spectral_to_velocity; the
-    error and mask files are converted if they have world coordinates).
-    If the velocity of the data decreases along the axis, the axis of the
-    data, error and mask is reversed (with or without world coordinates).
+    Save the data to output_dir, whose first pixel is the pixel at the
+    given offset (on each numpy axis) of the data read, with its spectral
+    axis converted to the velocities of velocity_rest (see
+    _spectral_to_velocity; the error and mask files are converted if they
+    have world coordinates).
+    The axes that the model needs reversed (see fitsutils.model_axis_flips:
+    that of a mirrored image, and a spectral axis of decreasing
+    velocities) are reversed in the data, error and mask (with or without
+    world coordinates).
     """
     basename = os.path.basename
     splitext = os.path.splitext
@@ -268,14 +270,18 @@ def _save_data(
         header_e = prepare(header_e, _has_wcs(header_e))
     if header_m is not None:
         header_m = prepare(header_m, _has_wcs(header_m))
-    if (axis := _decreasing_velocity_axis(header_d)) is not None:
+    flips = ()
+    if _has_wcs(header_d):
+        flips = fitsutils.model_axis_flips(astropy.wcs.WCS(header_d))
+    for axis in flips:
         _log.info(
-            "reversing the spectral axis: the velocity decreases along it")
-        data_d, header_d = _reverse_axis(data_d, header_d, axis)
+            f"reversing the axis {axis + 1}: the image is mirrored, or the "
+            f"velocity decreases along it")
+        data_d, header_d = _flip(data_d, header_d, axis)
         if data_e is not None:
-            data_e, header_e = _reverse_axis(data_e, header_e, axis)
+            data_e, header_e = _flip(data_e, header_e, axis)
         if data_m is not None:
-            data_m, header_m = _reverse_axis(data_m, header_m, axis)
+            data_m, header_m = _flip(data_m, header_m, axis)
     def write(name, data, header):
         filename = os.path.join(output_dir, f'prep_{name}.fits')
         fits.writeto(filename, data.astype(dtype), header, overwrite=True)
@@ -681,8 +687,9 @@ def _bin_values(bins, nbins, data, name):
 def prep_region_moments(
         file_bins, file_d, file_e, file_m, dtype, output_dir='.'):
     """
-    Prepare binned moment maps (e.g. of MaNGA DAP or GIST) for region_moments: a
-    map of the bin of each pixel (file_bins; negative or NaN for no bin),
+    Prepare binned moment maps (e.g. of MaNGA DAP or GIST) for
+    region_moments: a map of the bin of each pixel (file_bins; negative or
+    NaN for no bin),
     and moment maps (file_d, with optional errors file_e and masks file_m)
     whose pixels hold the value of their bin. Write the bins, numbered
     from 0 in the order of their numbers in the map
