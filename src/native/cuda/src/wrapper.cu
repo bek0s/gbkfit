@@ -1,4 +1,5 @@
 
+#include <limits>
 #include <stdexcept>
 #include <string>
 
@@ -23,15 +24,22 @@ check(cudaError_t error, const char* what)
     }
 }
 
-// Launch a kernel with one thread per item, wait for it to finish, and
-// raise any error of its launch or execution
+// Launch a kernel with one thread per item (n items, which can be more
+// than an int holds), wait for it to finish, and raise any error of its
+// launch or execution
 template<typename Kernel, typename... Args> void
-launch(const char* name, int n, Kernel kernel, Args... args)
+launch(const char* name, long long n, Kernel kernel, Args... args)
 {
     if (n <= 0)
         return;
+    const long long nblocks = (n + BLOCK_SIZE - 1) / BLOCK_SIZE;
+    if (nblocks > std::numeric_limits<int>::max()) {
+        throw std::runtime_error(
+                std::string(name) + " failed: too many items ("
+                + std::to_string(n) + ")");
+    }
     const dim3 bsize(BLOCK_SIZE);
-    const dim3 gsize((n + bsize.x - 1) / bsize.x);
+    const dim3 gsize(nblocks);
     kernel<<<gsize, bsize>>>(args...);
     check(cudaGetLastError(), name);
     check(cudaDeviceSynchronize(), name);
@@ -153,7 +161,10 @@ Wrapper<T>::gmodel_mcdisk_evaluate(
 template<typename T> void
 Wrapper<T>::gmodel_smdisk_evaluate(const DiskArgs<T>& a)
 {
-    const int n = a.spat_size[0] * a.spat_size[1] * a.spat_size[2];
+    // (the voxels need not be in memory, so there can be more than an int
+    // holds, e.g. 1300 x 1300 x 1300)
+    const long long n =
+            1LL * a.spat_size[0] * a.spat_size[1] * a.spat_size[2];
     launch("gmodel_smdisk_evaluate", n,
             kernels::gmodel_smdisk_evaluate<T>, a);
 }

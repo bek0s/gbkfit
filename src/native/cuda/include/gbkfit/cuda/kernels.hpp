@@ -213,15 +213,18 @@ gmodel_mcdisk_evaluate(DiskArgs<T> a, MCDiskArgs<T> mc)
 template<typename T> __global__ void
 gmodel_smdisk_evaluate(DiskArgs<T> a)
 {
-    // Parallelization: per 3d spatial position
-    const int nthreads = a.spat_size[0] * a.spat_size[1] * a.spat_size[2];
-    const int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    // Parallelization: per 3d spatial position (64-bit indices: there can
+    // be more voxels than an int holds)
+    const long long nthreads =
+            1LL * a.spat_size[0] * a.spat_size[1] * a.spat_size[2];
+    const long long tid = 1LL * blockIdx.x * blockDim.x + threadIdx.x;
     if (tid >= nthreads) {
         return;
     }
 
-    int x, y, z;
-    index_1d_to_3d(x, y, z, tid, a.spat_size[0], a.spat_size[1]);
+    const int x = tid % a.spat_size[0];
+    const int y = tid / a.spat_size[0] % a.spat_size[1];
+    const int z = tid / (1LL * a.spat_size[0] * a.spat_size[1]);
 
     gbkfit::gmodel_smdisk_evaluate_spaxel<atomic_add<T>>(x, y, z, a);
 }
