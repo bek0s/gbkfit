@@ -252,3 +252,62 @@ def test_missing_reference_pixel_stays_at_the_centre(roi_spat, offset):
     np.testing.assert_allclose(
         coords_out.rpix, np.subtract(coords_in.rpix, offset))
     np.testing.assert_allclose(coords_out.rval, coords_in.rval)
+
+
+C = 299792.458
+
+
+@pytest.mark.parametrize('cd', [False, True], ids=['pc', 'cd'])
+def test_wavelength_axis_to_optical_velocities(cd):
+    # Each channel of a linear wavelength axis gets the optical velocity
+    # c (w / rest - 1) of its wavelength, exactly
+    header = dict(
+        HEADER, CTYPE3='WAVE', CUNIT3='Angstrom', CRVAL3=6500.0,
+        CRPIX3=1.0, CDELT3=1.25)
+    write_cube('cube.fits', with_cd(header) if cd else header)
+    _, header_out = prep_scube('cube.fits', velocity_rest='6562.8 Angstrom')
+    assert header_out['CTYPE3'] == 'VOPT'
+    data, coords = fitsutils.read_data('prep_cube.fits')
+    np.testing.assert_allclose(coords.rest.to_value('Angstrom'), 6562.8)
+    wavelength = 6500 + 1.25 * np.arange(SHAPE[1])
+    velocity = coords.rval[2] + (np.arange(SHAPE[1]) - coords.rpix[2]) \
+        * coords.step[2]
+    np.testing.assert_allclose(
+        velocity, C * (wavelength / 6562.8 - 1), rtol=0, atol=1e-6)
+
+
+def test_frequency_axis_to_radio_velocities():
+    # A frequency that increases along the axis gives decreasing radio
+    # velocities c (1 - f / rest), so the axis is reversed too
+    header = dict(
+        HEADER, CTYPE3='FREQ', CUNIT3='Hz', CRVAL3=1.419e9, CRPIX3=1.0,
+        CDELT3=2e4)
+    write_cube('cube.fits', header)
+    data, _ = prep_scube('cube.fits', velocity_rest='1420.405752 MHz')
+    np.testing.assert_array_equal(data, fits.getdata('cube.fits')[0, ::-1])
+    _, coords = fitsutils.read_data('prep_cube.fits')
+    np.testing.assert_allclose(coords.rest.to_value('Hz'), 1.420405752e9)
+    frequency = (1.419e9 + 2e4 * np.arange(SHAPE[1]))[::-1]
+    velocity = coords.rval[2] + (np.arange(SHAPE[1]) - coords.rpix[2]) \
+        * coords.step[2]
+    np.testing.assert_allclose(
+        velocity, C * (1 - frequency / 1.420405752e9), rtol=0, atol=1e-6)
+
+
+def test_velocity_axis_gets_the_rest():
+    write_cube('cube.fits')
+    _, header_out = prep_scube('cube.fits', velocity_rest='21.106 cm')
+    assert header_out['CTYPE3'] == 'VRAD'
+    assert header_out['RESTFRQ'] == pytest.approx(
+        C * 1e3 / 0.21106, rel=1e-9)
+    _, coords = fitsutils.read_data('prep_cube.fits')
+    assert coords.rval[2] == pytest.approx(HEADER['CRVAL3'])
+
+
+@pytest.mark.parametrize('header, message', [
+    (dict(HEADER, CTYPE3='STOKES'), "no spectral axis"),
+    (dict(HEADER, CTYPE3='VOPT-F2W', RESTWAV=6.5628e-7), "not linear")])
+def test_spectral_axes_that_cannot_be_converted(header, message):
+    write_cube('cube.fits', header)
+    with pytest.raises(Exception, match=message):
+        prep_scube('cube.fits', velocity_rest='6562.8 Angstrom')

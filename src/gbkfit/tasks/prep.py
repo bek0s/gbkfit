@@ -3,13 +3,16 @@ import logging
 import os
 import re
 
+import astropy.constants
 import astropy.io.fits as fits
 import astropy.stats as stats
+import astropy.units
 import astropy.wcs
 import numpy as np
 import skimage.measure
 
 from gbkfit.utils import fitsutils
+from gbkfit.utils.parseutils import ConfigError
 
 
 _log = logging.getLogger(__name__)
@@ -57,6 +60,68 @@ def _shift_axes(header, offset):
         return header
     wcs = astropy.wcs.WCS(header)
     wcs.wcs.crpix -= offset[::-1]
+    return _with_wcs(header, wcs)
+
+
+def _spectral_to_velocity(header, rest):
+    """
+    The header with its spectral axis converted to the velocities of the
+    given rest (see fitsutils.make_rest; None leaves it unchanged): a
+    linear wavelength axis (WAVE, or AWAV with a rest in air too) to the
+    optical velocities c (w / rest - 1), a linear frequency axis (FREQ) to
+    the radio velocities c (1 - f / rest). Both are linear in the pixels,
+    so the conversion is exact; the header gets the rest (RESTWAV or
+    RESTFRQ). A velocity axis (VOPT, VRAD) gets the rest only.
+    """
+    if rest is None:
+        return header
+    rest = fitsutils.make_rest(rest)
+    wcs = astropy.wcs.WCS(header)
+    s = wcs.wcs.spec
+    if s < 0:
+        raise ConfigError("the data have no spectral axis to convert")
+    ctype = wcs.wcs.ctype[s]
+    kind = ctype[:4]
+    if ctype[4:].strip('-').strip():
+        raise ConfigError(
+            f"the spectral axis ({ctype}) is not linear in its coordinate")
+    c = astropy.constants.c.to_value('km/s')
+    m, hz = astropy.units.m, astropy.units.Hz
+    rest_wavelength = rest.to_value(m, astropy.units.spectral())
+    rest_frequency = rest.to_value(hz, astropy.units.spectral())
+    unit = astropy.units.Unit(str(wcs.wcs.cunit[s]) or '1')
+    if kind in ('WAVE', 'AWAV'):
+        # The wavelength in units of the rest, and the optical velocity
+        ratio = unit.to(m) / rest_wavelength
+        crval, factor = c * (wcs.wcs.crval[s] * ratio - 1), c * ratio
+        velocity = 'VOPT'
+    elif kind == 'FREQ':
+        ratio = unit.to(hz) / rest_frequency
+        crval, factor = c * (1 - wcs.wcs.crval[s] * ratio), -c * ratio
+        velocity = 'VRAD'
+    elif kind in ('VOPT', 'VRAD'):
+        crval, factor, velocity = None, None, kind
+    else:
+        raise ConfigError(
+            f"the spectral axis ({ctype}) is not a wavelength, frequency, "
+            f"or optical or radio velocity")
+    if crval is not None:
+        wcs.wcs.ctype[s] = velocity
+        wcs.wcs.cunit[s] = 'km/s'
+        wcs.wcs.crval[s] = crval
+        if wcs.wcs.has_cd():
+            cd = wcs.wcs.cd.copy()
+            cd[s, :] *= factor
+            wcs.wcs.cd = cd
+        else:
+            wcs.wcs.cdelt[s] *= factor
+    if velocity == 'VOPT':
+        wcs.wcs.restwav, wcs.wcs.restfrq = rest_wavelength, 0
+    else:
+        wcs.wcs.restfrq, wcs.wcs.restwav = rest_frequency, 0
+    _log.info(
+        f"converting the spectral axis ({ctype}) to {velocity} velocities "
+        f"of the rest {rest}")
     return _with_wcs(header, wcs)
 
 
@@ -129,22 +194,27 @@ def _save_data(
         file_d, data_d, header_d,
         file_e, data_e, header_e,
         file_m, data_m, header_m,
-        offset, dtype):
+        offset, dtype, velocity_rest=None):
     """
     Save the data, whose first pixel is the pixel at the given offset (on
-    each numpy axis) of the data read, with a decreasing velocity axis
-    reversed.
+    each numpy axis) of the data read, with its spectral axis converted to
+    the velocities of velocity_rest (see _spectral_to_velocity; the
+    error and mask files are converted if they have world coordinates),
+    and a decreasing velocity axis reversed.
     """
     basename = os.path.basename
     splitext = os.path.splitext
-    header_d = _shift_axes(header_d, offset)
-    data_d, header_d = _reverse_decreasing_velocity(data_d, header_d)
+
+    def prepare(data, header, has_wcs):
+        header = _shift_axes(header, offset)
+        if has_wcs:
+            header = _spectral_to_velocity(header, velocity_rest)
+        return _reverse_decreasing_velocity(data, header)
+    data_d, header_d = prepare(data_d, header_d, True)
     if header_e is not None:
-        header_e = _shift_axes(header_e, offset)
-        data_e, header_e = _reverse_decreasing_velocity(data_e, header_e)
+        data_e, header_e = prepare(data_e, header_e, _has_wcs(header_e))
     if header_m is not None:
-        header_m = _shift_axes(header_m, offset)
-        data_m, header_m = _reverse_decreasing_velocity(data_m, header_m)
+        data_m, header_m = prepare(data_m, header_m, _has_wcs(header_m))
     data_d = data_d.astype(dtype)
     file_d = splitext(basename(file_d))[0]
     fits.writeto(f'prep_{file_d}.fits', data_d, header_d, overwrite=True)
@@ -312,7 +382,8 @@ def prep_lslit(
         file_d, file_e, file_m,
         roi_spat, roi_spec, clip_min, clip_max,
         ccl_lcount, ccl_pcount, ccl_lratio,
-        sclip_sigma, sclip_iters, minify, nanpad, dtype):
+        sclip_sigma, sclip_iters, minify, nanpad, dtype,
+        velocity_rest=None):
 
     (data_d, header_d,
      data_e, header_e,
@@ -359,7 +430,7 @@ def prep_lslit(
         file_d, data_d, header_d,
         file_e, data_e, header_e,
         file_m, data_m, header_m,
-        offset, dtype)
+        offset, dtype, velocity_rest)
 
 
 def prep_mmaps(
@@ -451,7 +522,8 @@ def prep_scube(
         file_d, file_e, file_m,
         roi_spat, roi_spec, clip_min, clip_max,
         ccl_lcount, ccl_pcount, ccl_lratio,
-        sclip_sigma, sclip_iters, minify, nanpad, dtype):
+        sclip_sigma, sclip_iters, minify, nanpad, dtype,
+        velocity_rest=None):
 
     (data_d, header_d,
      data_e, header_e,
@@ -501,4 +573,4 @@ def prep_scube(
         file_d, data_d, header_d,
         file_e, data_e, header_e,
         file_m, data_m, header_m,
-        offset, dtype)
+        offset, dtype, velocity_rest)

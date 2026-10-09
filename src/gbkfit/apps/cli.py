@@ -287,6 +287,13 @@ def main():
         metavar='MASK',
         help=_DATA_M_HELP)
     # ...
+    parser_prep_rest = argparse.ArgumentParser(add_help=False)
+    parser_prep_rest.add_argument(
+        '--velocity-rest', type=str, metavar='REST',
+        help="convert the spectral axis (a linear wavelength or frequency) "
+             "to the optical or radio velocities of this rest wavelength or "
+             "frequency, e.g. '6562.8 Angstrom' (in air for an AWAV axis)")
+
     parser_prep_roi_spat_1d = argparse.ArgumentParser(add_help=False)
     parser_prep_roi_spat_1d.add_argument(
         '--roi-spat', type=_number_range(int, 0, None), nargs=2,
@@ -376,7 +383,7 @@ def main():
         parser_prep_common, parser_common_output, parser_common],
         help="image")
     parsers_prep.add_parser('lslit', parents=[
-        parser_prep_input_1,
+        parser_prep_input_1, parser_prep_rest,
         parser_prep_roi_spat_1d, parser_prep_roi_spec_1d,
         parser_prep_clip_1, parser_prep_ccl, parser_prep_nanpad,
         parser_prep_common, parser_common_output, parser_common],
@@ -389,7 +396,7 @@ def main():
         parser_prep_common, parser_common_output, parser_common],
         help="moment maps")
     parsers_prep.add_parser('scube', parents=[
-        parser_prep_input_1,
+        parser_prep_input_1, parser_prep_rest,
         parser_prep_roi_spat_2d, parser_prep_roi_spec_1d,
         parser_prep_clip_1, parser_prep_ccl, parser_prep_nanpad,
         parser_prep_common, parser_common_output, parser_common],
@@ -479,7 +486,8 @@ def main():
                 args.roi_spat, args.roi_spec, args.clip_min, args.clip_max,
                 args.ccl_lcount, args.ccl_pcount, args.ccl_lratio,
                 args.sclip_sigma, args.sclip_iters,
-                args.minify, args.nanpad, args.dtype)
+                args.minify, args.nanpad, args.dtype,
+                args.velocity_rest)
         elif args.prep_task == 'mmaps':
             gbkfit.tasks.prep.prep_mmaps(
                 args.data_d, args.data_e, args.data_m,
@@ -493,7 +501,8 @@ def main():
                 args.roi_spat, args.roi_spec, args.clip_min, args.clip_max,
                 args.ccl_lcount, args.ccl_pcount, args.ccl_lratio,
                 args.sclip_sigma, args.sclip_iters,
-                args.minify, args.nanpad, args.dtype)
+                args.minify, args.nanpad, args.dtype,
+                args.velocity_rest)
 
     elif args.task == 'fit':
         import gbkfit.tasks.fit
