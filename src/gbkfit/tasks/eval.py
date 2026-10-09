@@ -160,9 +160,7 @@ def eval_(
 
     _log.info("gathering outputs...")
 
-    # The outputs by file name: the data, and the grid of the dmodel or
-    # dataset it is on (None for the extra outputs, which are not on
-    # the grid of the data)
+    # The outputs by name: data on the grid of its dmodel or dataset
     outputs = {}
     model_prefix = 'model'
     resid_u_prefix = 'residual'
@@ -174,10 +172,10 @@ def eval_(
         prefix_i = model_prefix + f'_{i}'
         dmodel = model_group.models()[i].dmodel()
         for key, value in data_i.items():
-            outputs |= {
-                f'{prefix_i}_{key}_d.fits': (value.get('d'), dmodel),
-                f'{prefix_i}_{key}_m.fits': (value.get('m'), dmodel),
-                f'{prefix_i}_{key}_w.fits': (value.get('w'), dmodel)}
+            for kind in ('d', 'm', 'w'):
+                if value.get(kind) is not None:
+                    outputs[f'{prefix_i}_{key}_{kind}'] = _grid_data(
+                        value[kind], dmodel)
     # Store residual (if available)
     for resid_data, prefix in [
             (resid_u_data, resid_u_prefix), (resid_w_data, resid_w_prefix)]:
@@ -185,14 +183,14 @@ def eval_(
             prefix_i = prefix + f'_{i}' * bool(objective.nitems() > 1)
             dataset = objective.datasets()[i]
             for key, value in data_i.items():
-                outputs |= {f'{prefix_i}_{key}_d.fits': (value, dataset)}
+                outputs[f'{prefix_i}_{key}_d'] = _grid_data(value, dataset)
     # Store model and residual extra (if available)
     for extra, prefix in [
             (model_extra, model_prefix),
             (resid_u_extra, resid_u_prefix),
             (resid_w_extra, resid_w_prefix)]:
         for key, value in extra.items():
-            outputs |= {f'{prefix}_extra_{key}.fits': (value, None)}
+            outputs[f'{prefix}_extra_{key}'] = value
 
     # #
     # # Calculate outputs statistics
@@ -223,17 +221,7 @@ def eval_(
 
     _log.info("storing outputs to the filesystem...")
 
-    for filename, (data, grid) in outputs.items():
-        if not isinstance(data, np.ndarray):
-            continue
-        filename = os.path.join(output_dir, filename)
-        if grid is None:
-            fits.writeto(filename, data, overwrite=True)
-        else:
-            coords = fitsutils.Coords(
-                grid.step(), grid.rpix(), grid.rval(), grid.rota())
-            fitsutils.write_data(
-                filename, data, coords, grid.spectral_axis(), overwrite=True)
+    _write_outputs(output_dir, outputs)
 
     #
     # Run performance tests
@@ -252,3 +240,38 @@ def eval_(
         _log.info(pd.DataFrame.from_dict(time_stats, orient='index'))
         filename = os.path.join(output_dir, 'gbkfit_eval_timings')
         _detail.dump_dict(json, yaml, time_stats, filename)
+
+
+def _grid_data(data, grid):
+    """The data on the grid of a dmodel or a dataset."""
+    coords = fitsutils.Coords(
+        grid.step(), grid.rpix(), grid.rval(), grid.rota())
+    return fitsutils.GridData(data, coords, grid.spectral_axis())
+
+
+def _write_outputs(output_dir, outputs):
+    """
+    Write each output by its type: data on a grid (GridData) to a FITS
+    file with world coordinates, other arrays to a FITS file without, and
+    the other values (numbers, strings, lists and dicts) together to
+    gbkfit_eval_extra.json and .yaml.
+    """
+    values = {}
+    for name, value in outputs.items():
+        filename = os.path.join(output_dir, f'{name}.fits')
+        if isinstance(value, fitsutils.GridData):
+            fitsutils.write_data(
+                filename, value.data, value.coords, value.spectral_axis,
+                overwrite=True)
+        elif isinstance(value, np.ndarray):
+            fits.writeto(filename, value, overwrite=True)
+        elif isinstance(value, (bool, int, float, str, list, tuple, dict,
+                                np.generic)):
+            values[name] = iterutils.nativify(value)
+        else:
+            raise TypeError(
+                f"output {name} has an unsupported type: "
+                f"{type(value).__name__}")
+    if values:
+        _detail.dump_dict(
+            json, yaml, values, os.path.join(output_dir, 'gbkfit_eval_extra'))
