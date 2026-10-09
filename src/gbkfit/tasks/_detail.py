@@ -81,17 +81,11 @@ def prepare_config(
             f"the following sections must be dictionaries or sequences: "
             f"{wrong_type_dict_or_seq}")
 
-    # Listify some sections to make parsing more streamlined
-    # and ensure they have the same length
-    lengths = {}
+    # Listify some sections to make parsing more streamlined (the
+    # observations refer to the gmodels by name, so their numbers differ)
     for s in ['gmodels', 'observations']:
         if s in config:
             config[s] = iterutils.listify(config[s])
-            lengths[s] = len(config[s])
-    if len(set(lengths.values())) > 1:
-        raise RuntimeError(
-            f"the following sections must have the same length: "
-            f"{lengths}")
 
     # Make sure the return value is pure json
     return json.loads(json.dumps(config))
