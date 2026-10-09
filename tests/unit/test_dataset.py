@@ -291,3 +291,13 @@ def test_data_error_is_a_number_or_a_file():
     assert load_data(dict(data='data.fits', error=2))[0].error()[0, 0] == 2
     with pytest.raises(Exception, match="a number or a file"):
         load_data(dict(data='data.fits', error=True))
+
+
+def test_data_items_are_mappings_or_null():
+    # A null item is absent; an item that is not a mapping (e.g. a file
+    # name) is an error that says what an item has
+    fits.writeto('m1.fits', np.ones((4, 4), np.float32))
+    dataset = DatasetMMaps.load(dict(mmap1=dict(data='m1.fits'), mmap2=None))
+    assert set(dataset.keys()) == {'mmap1'}
+    with pytest.raises(Exception, match="has the file of its data"):
+        DatasetMMaps.load(dict(mmap1='m1.fits'))
