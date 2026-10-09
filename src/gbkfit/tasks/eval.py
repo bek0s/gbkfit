@@ -212,6 +212,8 @@ def eval_(
 
     if profile_iters > 0:
         _log.info("running performance test...")
+        # Time the profiled evaluations only
+        timeutils.clear_time_stats()
         for i in range(profile_iters):
             if mode == 'model':
                 group.model_d(param_values)
@@ -219,7 +221,9 @@ def eval_(
                 objective.log_likelihood(param_values)
                 objective.residual_scalar(param_values, squared=True)
         _log.info("calculating timing statistics...")
-        time_stats = iterutils.nativify(timeutils.get_time_stats())
+        time_stats = iterutils.nativify({
+            name: stats.to_dict()
+            for name, stats in timeutils.get_time_stats().items()})
         _log.info(pd.DataFrame.from_dict(time_stats, orient='index'))
         filename = os.path.join(output_dir, 'gbkfit_eval_timings')
         _detail.dump_dict(json, yaml, time_stats, filename)
