@@ -33,8 +33,11 @@ class DModel(parseutils.TypedSerializable, abc.ABC):
         return self._spectral_axis
 
     def __init__(self):
+        # The driver and gmodel the dmodel was prepared for, and the plan
+        # of the gmodel on the high-res grid of the dmodel
         self._driver = None
         self._gmodel = None
+        self._gmodel_plan = None
 
     def npix(self):
         return int(np.prod(self.size()))
@@ -73,6 +76,7 @@ class DModel(parseutils.TypedSerializable, abc.ABC):
             # Prepare again on the next evaluation
             self._driver = None
             self._gmodel = None
+            self._gmodel_plan = None
             raise
 
     def evaluate(self, driver, gmodel, params, out_extra=None):
@@ -115,29 +119,35 @@ class GModel(parseutils.TypedSerializable, abc.ABC):
         """
         return {}
 
-
-class GModelImage(GModel, abc.ABC):
-
     @abc.abstractmethod
-    def evaluate_image(
-            self, driver, params, image, weights, grid, dtype, out_extra):
+    def plan(self, driver, grid, has_weights, dtype):
         """
-        Add the gmodel to the image, on the given grid (fitsutils.Grid of
-        the x and y axes).
+        The evaluation of the gmodel on the given driver, grid of its data
+        (fitsutils.Grid: x and y, and the spectral axis of spectral cubes)
+        and dtype, with spatial weights if has_weights (a GModelPlan).
         """
         pass
+
+
+class GModelPlan(abc.ABC):
+    """The evaluation of a gmodel on a driver, grid and dtype."""
+
+    @abc.abstractmethod
+    def evaluate(self, params, data, weights, out_extra):
+        """
+        Add the gmodel to data (the image or spectral cube on the grid of
+        the plan), and weight the data weights (or None) with its spatial
+        weights.
+        """
+        pass
+
+
+class GModelImage(GModel, abc.ABC):
+    """A gmodel evaluated into images."""
 
 
 class GModelSCube(GModel, abc.ABC):
-
-    @abc.abstractmethod
-    def evaluate_scube(
-            self, driver, params, scube, weights, grid, dtype, out_extra):
-        """
-        Add the gmodel to the spectral cube, on the given grid
-        (fitsutils.Grid of the x, y and spectral axes).
-        """
-        pass
+    """A gmodel evaluated into spectral cubes."""
 
 
 dmodel_parser = parseutils.TypedParser(DModel)

@@ -222,21 +222,21 @@ class DModelMMaps(DModel):
         self._dcube.prepare(driver, gmodel.has_weights())
         # Create backend
         self._backend = driver.native_class('DModel', dtype)()
+        # Plan the gmodel on the high-res grid of DCube
+        dcube = self._dcube
+        self._gmodel_plan = gmodel.plan(
+            self._driver, dcube.scratch_grid(), gmodel.has_weights(),
+            dcube.dtype())
 
     def _evaluate_impl(self, params, out_dmodel_extra, out_gmodel_extra):
         driver = self._driver
-        gmodel = self._gmodel
         dcube = self._dcube
         backend = self._backend
         # The gmodel adds to the data cube, so clear it
         driver.mem_fill(dcube.scratch_dcube(), 0)
         # Evaluate gmodel on DCube's arrays
-        gmodel.evaluate_scube(
-            driver, params,
-            dcube.scratch_dcube(),
-            dcube.scratch_wcube(),
-            dcube.scratch_grid(),
-            dcube.dtype(),
+        self._gmodel_plan.evaluate(
+            params, dcube.scratch_dcube(), dcube.scratch_wcube(),
             out_gmodel_extra)
         # Evaluate DCube (perform convolution, supersampling, etc)
         dcube.evaluate(

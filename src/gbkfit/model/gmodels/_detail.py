@@ -133,24 +133,23 @@ def component_prefixes(components, label, prefix, prefix_first):
 
 
 def evaluate_components(
-        components, mappings, driver, params, grid, outputs, dtype,
-        out_extra, out_extra_label, extra):
+        components, plans, mappings, params, grid, outputs, out_extra,
+        out_extra_label, extra):
     """
-    Evaluate the components of a gmodel, each with its parameters. Their
-    extra outputs are named after the given label and their name, or
-    their index if they have none (e.g. 'opacity_dust_odata' or
-    'opacity_component0_odata'), and made from their data by extra (e.g.
-    with the coordinates of the grid).
+    Evaluate the components of a gmodel through their plans, each with its
+    parameters. Their extra outputs are named after the given label and
+    their name, or their index if they have none (e.g. 'opacity_dust_odata'
+    or 'opacity_component0_odata'), and made from their data by extra
+    (e.g. with the coordinates of the grid).
     """
-    for i, (component, mapping) in enumerate(zip(components, mappings)):
+    for i, (component, plan, mapping) in enumerate(
+            zip(components, plans, mappings)):
         name = component.name()
         label = name if name is not None else f'component{i}'
         prefix = f'{out_extra_label}{label}_'
         component_params = {p: params[mapping[p]] for p in component.pdescs()}
         component_out_extra = {} if out_extra is not None else None
-        component.evaluate(
-            driver, component_params, grid, outputs, dtype,
-            component_out_extra)
+        plan.evaluate(component_params, grid, outputs, component_out_extra)
         if component_out_extra is not None:
             for k, v in component_out_extra.items():
                 out_extra[f'{prefix}{k}'] = extra(v)

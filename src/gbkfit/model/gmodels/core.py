@@ -6,6 +6,7 @@ from gbkfit.utils import parseutils
 
 __all__ = [
     'Component',
+    'ComponentPlan',
     'BrightnessComponent2D',
     'BrightnessComponent3D',
     'SpectralComponent2D',
@@ -44,7 +45,19 @@ class Component(parseutils.TypedSerializable, abc.ABC):
         return {}
 
     @abc.abstractmethod
-    def evaluate(self, driver, params, grid, outputs, dtype, out_extra):
+    def plan(self, driver, dtype):
+        """
+        The evaluation of the component on the given driver and dtype (a
+        ComponentPlan), which owns the memory it needs.
+        """
+        pass
+
+
+class ComponentPlan(abc.ABC):
+    """The evaluation of a component on a driver and dtype."""
+
+    @abc.abstractmethod
+    def evaluate(self, params, grid, outputs, out_extra):
         """
         Add the component to the outputs.
 

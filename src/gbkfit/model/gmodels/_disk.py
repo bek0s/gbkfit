@@ -34,7 +34,7 @@ def _make_param_descs(key, nnodes, nw):
 
 
 @dataclass
-class _TraitParams:
+class TraitParams:
     """
     The parameters of the traits of one kind, with prefixed names, and for
     each one its node-wise mode (if any), where its values are given if it
@@ -69,7 +69,7 @@ def _trait_params(traits_, prefix, nrnodes, nsubrnodes):
         params_list,
         parseutils.item_prefixes(
             [None] * len(params_list), 'traits', prefix, True))
-    return _TraitParams(
+    return TraitParams(
         pdescs={name: tuple_[0] for name, tuple_ in params.items()},
         nwmodes={name: tuple_[1] for name, tuple_ in params.items()},
         sampling={name: tuple_[2] for name, tuple_ in params.items()},
@@ -101,7 +101,7 @@ def _fill_param_values(
     values. The values of the node-wise parameters given at the nodes are
     replaced in params with their values interpolated to the subnodes
     (sampling has where the values of each parameter are given, see
-    _TraitParams).
+    TraitParams).
     """
     start = 0
     for name in pdescs:
@@ -184,18 +184,6 @@ class Disk(abc.ABC):
         for params in self._trait_params.values():
             self._pdescs.update(params.pdescs)
 
-        # These are created by _prepare(): the native description of the
-        # disk, the host and device memory with its parameter values
-        # (geometry and traits, packed in one buffer), and the host view
-        # of each group of parameter values in it
-        self._native_disk = None
-        self._param_values = None
-        self._param_views = None
-
-        self._dtype = None
-        self._driver = None
-        self._backend = None
-
     def loose(self):
         return self._loose
 
@@ -220,6 +208,10 @@ class Disk(abc.ABC):
     def traits(self, kind):
         return self._traits[kind]
 
+    def trait_params(self, kind):
+        """The parameters of the traits of one kind (TraitParams)."""
+        return self._trait_params[kind]
+
     def options(self):
         """The options of this type of disk, besides those of all disks."""
         return {}
@@ -227,18 +219,35 @@ class Disk(abc.ABC):
     def pdescs(self):
         return self._pdescs
 
-    def _prepare(self, driver, dtype):
+    @abc.abstractmethod
+    def plan(self, driver, dtype):
+        """
+        The evaluation of the disk on the given driver and dtype (a
+        DiskPlan), which owns the memory it needs.
+        """
+        pass
+
+
+class DiskPlan(abc.ABC):
+    """
+    The evaluation of a disk on a driver and dtype: the native description
+    of the disk, and the host and device memory with its parameter values
+    (geometry and traits, packed in one buffer), and the host view of each
+    group of parameter values in it.
+    """
+
+    def __init__(self, disk, driver, dtype):
 
         # The number of values of each group of parameters: one value for
         # each subnode for node-wise geometric parameters, and the values
         # of all the traits of each kind
         sizes = {
-            name: self._nsubrnodes if self._geometry_isnw[name] else 1
-            for name in self._geometry_pdescs}
+            name: disk._nsubrnodes if disk._geometry_isnw[name] else 1
+            for name in disk._geometry_pdescs}
         constants = {}
-        for kind, traits_ in self._traits.items():
+        for kind, traits_ in disk._traits.items():
             constants[kind] = _trait_constants(
-                traits_, self._nrnodes, self._nsubrnodes)
+                traits_, disk._nrnodes, disk._nsubrnodes)
             sizes[kind] = sum(constants[kind][3])
 
         # Pack all parameter values in one buffer, so that they can be
@@ -259,7 +268,7 @@ class Disk(abc.ABC):
         trait_set_class = driver.native_class('TraitSet', dtype)
         trait_sets = {}
         for kind, (uids, cvalues, ccounts, pcounts) in constants.items():
-            if self._traits[kind]:
+            if disk._traits[kind]:
                 trait_sets[kind] = trait_set_class(
                     uids=to_device(uids, np.int32),
                     cvalues=to_device(cvalues, dtype),
@@ -267,33 +276,32 @@ class Disk(abc.ABC):
                     pvalues=views_d[kind],
                     pcounts=to_device(pcounts, np.int32))
         self._native_disk = driver.native_class('Disk', dtype)(
-            loose=self._loose,
-            tilted=self._tilted,
-            rnodes=to_device(self._subrnodes, dtype),
+            loose=disk._loose,
+            tilted=disk._tilted,
+            rnodes=to_device(disk._subrnodes, dtype),
             **{name: views_d.get(name) for name in GEOMETRY_PARAMS},
             **trait_sets)
 
+        self._disk = disk
+        self._driver = driver
+        self._dtype = dtype
         self._param_values = (values_h, values_d)
         self._param_views = views_h
-        self._dtype = dtype
-        self._driver = driver
         self._backend = driver.native_class('GModel', dtype)()
 
-        # Perform preparation specific to the derived class
-        self._impl_prepare(driver, dtype)
-
-    def evaluate(self, driver, params, grid, outputs, dtype, out_extra):
+    def evaluate(self, params, grid, outputs, out_extra):
         """
         Add the disk to the outputs. grid has the grid of the native
-        evaluation functions (see Component.evaluate), and outputs the
+        evaluation functions (see ComponentPlan.evaluate), and outputs the
         arrays they add to (all optional): the opacity cube they read
         ('opacity'), the 'image' or 'scube', and the 3d spatial weights
         ('wdata'), density ('rdata') and density after the opacity
         ('ordata').
         """
 
-        if self._driver is not driver or self._dtype is not dtype:
-            self._prepare(driver, dtype)
+        disk = self._disk
+        driver = self._driver
+        dtype = self._dtype
 
         # The parameter values are replaced below (nodewise mode
         # transforms, interpolation). Work on a copy of the dict, and
@@ -301,13 +309,13 @@ class Disk(abc.ABC):
         params = dict(params)
 
         # Apply the nodewise mode transforms to the parameters
-        for name, pdescs in self._geometry_pdescs.items():
-            nwmode = self._nwmodes[name]
+        for name, pdescs in disk._geometry_pdescs.items():
+            nwmode = disk._nwmodes[name]
             if nwmode is not None:
                 for pname in pdescs:
                     params[pname] = nwmode.transform(
                         params[pname], in_place=False)
-        for trait_params in self._trait_params.values():
+        for trait_params in disk._trait_params.values():
             for pname, nwmode in trait_params.nwmodes.items():
                 if nwmode is not None:
                     params[pname] = nwmode.transform(
@@ -319,11 +327,11 @@ class Disk(abc.ABC):
         def fill(name, pdescs, sampling):
             _fill_param_values(
                 self._param_views[name], params, pdescs, sampling,
-                self._rnodes, self._subrnodes, self._interp)
-        for name, pdescs in self._geometry_pdescs.items():
-            sampling = 'rnodes' if self._geometry_isnw[name] else None
+                disk._rnodes, disk._subrnodes, disk._interp)
+        for name, pdescs in disk._geometry_pdescs.items():
+            sampling = 'rnodes' if disk._geometry_isnw[name] else None
             fill(name, pdescs, dict.fromkeys(pdescs, sampling))
-        for kind, trait_params in self._trait_params.items():
+        for kind, trait_params in disk._trait_params.items():
             fill(kind, trait_params.pdescs, trait_params.sampling)
         driver.mem_copy_h2d(*self._param_values)
 
@@ -337,22 +345,22 @@ class Disk(abc.ABC):
         odata = outputs.get('opacity')
         if out_extra is not None:
             shape = tuple(grid['spat_size'][::-1])
-            if self._traits['rpt']:
+            if disk._traits['rpt']:
                 rdata_cmp = driver.mem_alloc_d(shape, dtype)
                 driver.mem_fill(rdata_cmp, 0)
             # The velocity and dispersion of each voxel are means weighted
             # by the absolute density: the kernels add to their weighted
             # sums and to the sum of the weights
-            if self._traits['vpt']:
+            if disk._traits['vpt']:
                 vdata_cmp = driver.mem_alloc_d(shape, dtype)
                 driver.mem_fill(vdata_cmp, 0)
-            if self._traits['dpt']:
+            if disk._traits['dpt']:
                 ddata_cmp = driver.mem_alloc_d(shape, dtype)
                 driver.mem_fill(ddata_cmp, 0)
-            if self._traits['vpt'] or self._traits['dpt']:
+            if disk._traits['vpt'] or disk._traits['dpt']:
                 vdweight_cmp = driver.mem_alloc_d(shape, dtype)
                 driver.mem_fill(vdweight_cmp, 0)
-            if self._traits['wpt']:
+            if disk._traits['wpt']:
                 wdata_cmp = driver.mem_alloc_d(shape, dtype)
                 driver.mem_fill(wdata_cmp, 1)
             if odata is not None:
@@ -365,42 +373,38 @@ class Disk(abc.ABC):
             vdata_cmp=vdata_cmp, ddata_cmp=ddata_cmp,
             vdweight_cmp=vdweight_cmp)
 
-        self._impl_evaluate(driver, params, grid_and_outputs, out_extra)
+        self._impl_evaluate(params, grid_and_outputs, out_extra)
 
         if out_extra is not None:
 
-            rdata_key = self._rdata_key
+            rdata_key = disk._rdata_key
 
-            if self._traits['rpt']:
+            if disk._traits['rpt']:
                 out_extra[rdata_key] = driver.mem_copy_d2h(rdata_cmp)
             if vdweight_cmp is not None:
                 weight = driver.mem_copy_d2h(vdweight_cmp)
-            if self._traits['vpt']:
+            if disk._traits['vpt']:
                 out_extra['vdata'] = _weighted_mean(
                     driver.mem_copy_d2h(vdata_cmp), weight)
-            if self._traits['dpt']:
+            if disk._traits['dpt']:
                 out_extra['ddata'] = _weighted_mean(
                     driver.mem_copy_d2h(ddata_cmp), weight)
-            if self._traits['wpt']:
+            if disk._traits['wpt']:
                 out_extra['wdata'] = driver.mem_copy_d2h(wdata_cmp)
             if odata is not None:
                 out_extra['obdata'] = driver.mem_copy_d2h(ordata_cmp)
-            if self._traits['rpt']:
+            if disk._traits['rpt']:
                 sumabs = np.nansum(np.abs(out_extra[rdata_key]))
                 _log.debug(f"sum(abs({rdata_key})): {sumabs}")
-            if self._traits['vpt']:
+            if disk._traits['vpt']:
                 sumabs = np.nansum(np.abs(out_extra['vdata']))
                 _log.debug(f"sum(abs(vdata)): {sumabs}")
-            if self._traits['dpt']:
+            if disk._traits['dpt']:
                 sumabs = np.nansum(np.abs(out_extra['ddata']))
                 _log.debug(f"sum(abs(ddata)): {sumabs}")
 
     @abc.abstractmethod
-    def _impl_prepare(self, driver, dtype):
-        pass
-
-    @abc.abstractmethod
-    def _impl_evaluate(self, driver, params, grid_and_outputs, out_extra):
+    def _impl_evaluate(self, params, grid_and_outputs, out_extra):
         """
         Evaluate the disk. params has the values of the node-wise
         parameters at the subnodes, and grid_and_outputs the keyword

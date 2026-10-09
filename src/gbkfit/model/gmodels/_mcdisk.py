@@ -6,7 +6,7 @@ import numpy as np
 from . import _disk, traits
 
 
-__all__ = ['MCDisk']
+__all__ = ['MCDisk', 'MCDiskPlan']
 
 
 _log = logging.getLogger(__name__)
@@ -44,40 +44,53 @@ class MCDisk(_disk.Disk):
         self._cflux = cflux
         # The seed of the random numbers of the clouds
         self._seed = seed
+
+    def cflux(self):
+        return self._cflux
+
+    def seed(self):
+        return self._seed
+
+    def options(self):
+        return dict(cflux=self._cflux, seed=self._seed)
+
+    def plan(self, driver, dtype):
+        return MCDiskPlan(self, driver, dtype)
+
+
+class MCDiskPlan(_disk.DiskPlan):
+
+    def __init__(self, disk, driver, dtype):
+        super().__init__(disk, driver, dtype)
         # The clouds are made in pools: one for each density trait with
         # an analytical integral, and one for each ring of the others
         # (the rings are centred on the subnodes between the first and
         # the last, which are the edges of the disk). For each pool: the
         # cumulative number of clouds, and the (signed) flux of each of
-        # its clouds.
-        self._s_ncloudscsum = [None, None]
-        self._s_cloud_flux = [None, None]
-        # Has-analytical-integral flag per trait
-        self._s_has_analytical_integral = [None, None]
-
-    def options(self):
-        return dict(cflux=self._cflux, seed=self._seed)
-
-    def _impl_prepare(self, driver, dtype):
-        rptraits = self._traits['rpt']
+        # its clouds. Also, for each density trait, whether it has an
+        # analytical integral.
+        rptraits = disk.traits('rpt')
         analytical = [t.has_analytical_integral() for t in rptraits]
         self._s_has_analytical_integral = driver.mem_alloc_s(
             len(rptraits), bool)
         host, device = self._s_has_analytical_integral
         host[:] = analytical
         driver.mem_copy_h2d(host, device)
-        nrings = self._nsubrnodes - 2
+        nrings = len(disk.subrnodes()) - 2
         npools = sum([1 if h else nrings for h in analytical])
         self._s_ncloudscsum = driver.mem_alloc_s(npools, np.int32)
         self._s_cloud_flux = driver.mem_alloc_s(npools, dtype)
 
-    def _impl_evaluate(self, driver, params, grid_and_outputs, out_extra):
+    def _impl_evaluate(self, params, grid_and_outputs, out_extra):
+
+        disk = self._disk
+        driver = self._driver
 
         # The flux of each pool
         pool_flux = []
-        rpt_params = self._trait_params['rpt']
-        ring_centers = np.array(self._subrnodes[1:-1], self._dtype)
-        for trait, pnames in zip(self._traits['rpt'], rpt_params.pnames):
+        rpt_params = disk.trait_params('rpt')
+        ring_centers = np.array(disk.subrnodes()[1:-1], self._dtype)
+        for trait, pnames in zip(disk.traits('rpt'), rpt_params.pnames):
             # Make a parameter dict for the current trait
             # Use the original names and not the new/prefixed ones
             trait_params = {}
@@ -97,7 +110,7 @@ class MCDisk(_disk.Disk):
         # flux gives negative clouds
         nclouds = np.where(
             pool_flux != 0,
-            np.maximum(np.rint(np.abs(pool_flux) / self._cflux), 1),
+            np.maximum(np.rint(np.abs(pool_flux) / disk.cflux()), 1),
             0).astype(np.int32)
         cloud_flux = np.divide(
             pool_flux, nclouds, out=np.zeros_like(pool_flux),
@@ -111,7 +124,7 @@ class MCDisk(_disk.Disk):
         self._backend.mcdisk_evaluate(
             self._native_disk,
             cloud_flux=self._s_cloud_flux[1],
-            seed=self._seed,
+            seed=disk.seed(),
             nclouds=int(nclouds.sum()),
             ncloudscsum=self._s_ncloudscsum[1],
             has_analytical_integral=self._s_has_analytical_integral[1],
