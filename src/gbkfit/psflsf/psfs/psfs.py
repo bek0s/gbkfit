@@ -338,7 +338,7 @@ class PSFImage(PSF):
             step=self._step)
 
     def __init__(
-            self, data: np.ndarray, step: tuple[float, float] = (1.0, 1.0)
+            self, data: np.ndarray, step: Sequence[float] = (1.0, 1.0)
     ):
         data = np.squeeze(data)  # Remove singleton dimensions
         if data.ndim != 2:
@@ -348,7 +348,7 @@ class PSFImage(PSF):
             raise RuntimeError(
                 "non-finite pixels found in the supplied PSF image")
         self._data = data
-        self._step = step
+        self._step = tuple(step)
 
     def _size_impl(self, step: tuple[float, float]) -> tuple[float, float]:
         return (
