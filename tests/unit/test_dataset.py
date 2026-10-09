@@ -317,6 +317,9 @@ def test_data_error_is_a_number_or_a_file():
     assert load_data(dict(data='data.fits', error=2))[0].error()[0, 0] == 2
     with pytest.raises(Exception, match="a number or a file"):
         load_data(dict(data='data.fits', error=True))
+    for error in (0, -1, float('nan')):
+        with pytest.raises(Exception, match="must be positive"):
+            load_data(dict(data='data.fits', error=error))
 
 
 def test_data_items_are_mappings_or_null():
