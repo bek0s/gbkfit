@@ -105,6 +105,32 @@ dcube_moments(
 }
 
 template<typename T> __global__ void
+dmodel_mmaps_gaussian(
+        int size_x, int size_y, int size_z,
+        T step_z, T zero_z,
+        const T* dcube_d,
+        T cutoff, int norders, const int* orders,
+        T* mmaps_d, T* mmaps_m)
+{
+    // Parallelization: per 2d spatial position
+    const int nthreads = size_x * size_y;
+    const int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (tid >= nthreads)
+        return;
+
+    int x, y;
+    index_1d_to_2d(x, y, tid, size_x);
+
+    gbkfit::dmodel_mmaps_gaussian(
+            x, y,
+            size_x, size_y, size_z,
+            step_z, zero_z,
+            dcube_d,
+            cutoff, norders, orders,
+            mmaps_d, mmaps_m);
+}
+
+template<typename T> __global__ void
 dmodel_regions_sum(
         int nregions, int npix, int size_z,
         const int* indptr, const int* indices, const T* weights,

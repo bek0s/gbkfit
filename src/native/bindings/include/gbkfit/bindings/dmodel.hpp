@@ -79,6 +79,31 @@ struct DModel
                 mmaps_d.data(), mmaps_m.data(), data(mmaps_w));
     }
 
+    // The moment maps of the given orders (0, 1 or 2) of a Gaussian fitted
+    // to each spectrum of dcube_d, with the moment map mask in mmaps_m
+    static void
+    mmaps_gaussian(
+            std::array<T, 3> step, std::array<T, 3> zero,
+            ConstCube dcube_d, T cutoff, Orders orders,
+            Cube mmaps_d, Image mmaps_m)
+    {
+        const auto size = size_xyz(dcube_d);
+        const int norders = int(orders.shape(0));
+        require(mmaps_d.shape(0) == size_t(norders)
+                && int(mmaps_d.shape(1)) == size[1]
+                && int(mmaps_d.shape(2)) == size[0],
+                "mmaps_d must have shape (norders, ny, nx)");
+        require(int(mmaps_m.shape(0)) == size[1]
+                && int(mmaps_m.shape(1)) == size[0],
+                "mmaps_m must have shape (ny, nx)");
+        Kernels::dmodel_mmaps_gaussian(
+                size[0], size[1], size[2],
+                step[2], zero[2],
+                dcube_d.data(),
+                cutoff, norders, orders.data(),
+                mmaps_d.data(), mmaps_m.data());
+    }
+
     // The weighted sums of the pixels of regions in each channel of cube
     // (nz, ny, nx), into out (nz, nregions). The regions are a CSR matrix
     // (indptr, indices, weights) of nregions rows and nx * ny columns:
@@ -127,6 +152,13 @@ struct DModel
                         nb::arg("mmaps_d").noconvert(),
                         nb::arg("mmaps_m").noconvert(),
                         nb::arg("mmaps_w").noconvert().none())
+                .def_static("mmaps_gaussian", &mmaps_gaussian,
+                        nb::arg("step"), nb::arg("zero"),
+                        nb::arg("dcube_d").noconvert(),
+                        nb::arg("cutoff"),
+                        nb::arg("orders").noconvert(),
+                        nb::arg("mmaps_d").noconvert(),
+                        nb::arg("mmaps_m").noconvert())
                 .def_static("regions_sum", &regions_sum,
                         nb::arg("indptr").noconvert(),
                         nb::arg("indices").noconvert(),

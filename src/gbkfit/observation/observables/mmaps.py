@@ -58,7 +58,8 @@ class MMaps(Observable):
             spec_size=self.spec_size(),
             spec_step=self.spec_step(),
             spec_rval=self.spec_rval(),
-            spec_rest=_detail.dump_rest(self._spec_rest)), data)
+            spec_rest=_detail.dump_rest(self._spec_rest),
+            method=self._method), data)
 
     def __init__(
             self,
@@ -72,7 +73,8 @@ class MMaps(Observable):
             spec_size: int | None = None,
             spec_step: int | float = _moments.SPEC_STEP,
             spec_rval: int | float = 0,
-            spec_rest: str | astropy.units.Quantity | None = None
+            spec_rest: str | astropy.units.Quantity | None = None,
+            method: str = 'moments'
     ):
         """
         The moments are computed from a spectral cube with the spatial
@@ -80,15 +82,19 @@ class MMaps(Observable):
         spec_step (km/s) centred on spec_rval (km/s). By default it spans
         1000 km/s. load() derives it from the moment maps of a dataset,
         unless it is given. spec_rest is the rest wavelength or frequency of
-        its velocities (see fitsutils.Coords), if known.
+        its velocities (see fitsutils.Coords), if known. method is how the
+        maps are measured from the spectra (see _moments.METHODS): their
+        moments, or a Gaussian fitted to each, as the maps of the data
+        were.
         """
         super().__init__(size, step, rpix, rval, rota)
         if spec_size is None:
             spec_size = _moments.default_spec_size(spec_step)
         orders = _moments.check_moment_options(
             parseutils.make_typed_desc(self.__class__, 'observable'),
-            orders, mask_cutoff)
+            orders, mask_cutoff, method)
         self._mask_cutoff = mask_cutoff
+        self._method = method
         self._orders = orders
         self._spec_size = spec_size
         self._spec_step = spec_step
@@ -104,6 +110,9 @@ class MMaps(Observable):
     def mask_cutoff(self):
         return self._mask_cutoff
 
+    def method(self):
+        return self._method
+
     def spec_size(self):
         return self._spec_size
 
@@ -114,6 +123,10 @@ class MMaps(Observable):
         return self._spec_rval
 
     def plan(self, driver, gmodel, instrument, scale, dtype):
+        if self._method == 'gaussian_fit' and gmodel.has_weights():
+            raise RuntimeError(
+                "the method gaussian_fit does not support gmodels with "
+                "weights (wtraits) yet")
         psf, lsf = instrument.psf(), instrument.lsf()
         if (psf or lsf) and self._mask_cutoff == 0:
             _log.warning(
@@ -141,7 +154,8 @@ class MMapsPlan(_detail.DCubePlanBase):
     def __init__(self, mmaps, dcube, driver, gmodel, dtype):
         super().__init__(dcube, driver, gmodel, dtype)
         self._moments = _moments.MomentsPlan(
-            driver, mmaps.size(), mmaps.orders(), mmaps.mask_cutoff(), dtype)
+            driver, mmaps.size(), mmaps.orders(), mmaps.mask_cutoff(),
+            mmaps.method(), dtype)
 
     def evaluate(self, params, out_extra):
         self._evaluate_cube(
