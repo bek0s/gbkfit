@@ -319,6 +319,19 @@ def test_error_and_mask_are_reversed_with_the_data():
     np.testing.assert_array_equal(mask_out[-1], 0)
     np.testing.assert_array_equal(mask_out[:-1], 1)
 
+def test_data_in_an_extension_keep_their_world_coordinates():
+    # The data and the world coordinates come from the same HDU: here the
+    # extension after an empty primary HDU (as in MUSE and JWST cubes)
+    header = {k: v for k, v in HEADER.items() if not k.endswith('4')}
+    data = np.ones(SHAPE[1:], np.float32)
+    fits.HDUList([
+        fits.PrimaryHDU(),
+        fits.ImageHDU(data, fits.Header(header), name='DATA')]).writeto(
+            'cube.fits')
+    prep_scube('cube.fits', roi_spat=[2, 22, 2, 18])
+    _, coords = fitsutils.read_data('prep_cube.fits')
+    np.testing.assert_allclose(coords.step, (1, 1, 10))
+
 def test_velocity_axis_gets_the_rest():
     write_cube('cube.fits')
     _, header_out = prep_scube('cube.fits', velocity_rest='21.106 cm')
