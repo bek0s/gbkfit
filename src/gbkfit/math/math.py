@@ -46,11 +46,6 @@ def roundu_multiple(x, multiple):
     return x - np.mod(x, multiple) + multiple if np.mod(x, multiple) != 0 else x
 
 
-def roundd_po2(x):
-    assert x > 1, x
-    return roundu_po2(x) // 2
-
-
 def roundu_po2(x):
     power = 1
     while power < x:
@@ -58,7 +53,6 @@ def roundu_po2(x):
     return power
 
 
-roundd_po2 = np.vectorize(roundd_po2)
 roundu_po2 = np.vectorize(roundu_po2)
 
 
