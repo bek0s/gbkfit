@@ -38,8 +38,8 @@ class Image(Observable):
         return cls(**_detail.load_observable_common(
             cls, info, 2, dataset, DatasetImage))
 
-    def dump(self):
-        return dict(
+    def dump(self, data=None):
+        return _detail.without_options_from_data(self, dict(
             type=self.type(),
             size=self.size(),
             step=self.step(),
@@ -47,7 +47,7 @@ class Image(Observable):
             rval=self.rval(),
             rota=self.rota(),
             mask_cutoff=self._mask_cutoff,
-            mask_apply=self._mask_apply)
+            mask_apply=self._mask_apply), data)
 
     def __init__(
             self,

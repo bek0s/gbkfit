@@ -1,5 +1,3 @@
-import numpy as np
-
 from gbkfit.utils import parseutils
 from gbkfit.utils.parseutils import ConfigError
 from .core import ObservablePlan
@@ -7,21 +5,45 @@ from .core import ObservablePlan
 
 __all__ = [
     'load_observable_common',
+    'require_no_options_from_data',
+    'without_options_from_data',
     'DCubePlanBase'
 ]
+
+
+def require_no_options_from_data(cls, info, dataset):
+    """
+    Raise ConfigError if the options of an observable of class cls (info)
+    have one that its data give (see Observable.options_from_data).
+    """
+    given = [
+        key for key in cls.options_from_data(dataset)
+        if info.get(key) is not None]
+    if given:
+        desc = parseutils.make_typed_desc(cls, 'observable')
+        raise ConfigError(
+            f"the data of {desc} give its options {given}; remove them (the "
+            f"world coordinates of data can be set in the data options)")
+
+
+def without_options_from_data(observable, info, dataset):
+    """
+    The options of an observable (info, as dumped) without those its data
+    give (see Observable.options_from_data), if it has data.
+    """
+    if dataset is None:
+        return info
+    options = observable.options_from_data(dataset)
+    return {k: v for k, v in info.items() if k not in options}
 
 
 def load_observable_common(cls, info, ndim, dataset, expected_dataset_cls):
     """
     The options of an observable of class cls, with the grid of the given
-    dataset (if any), which must be of the expected class. The grid
-    options of the observable may repeat those of the data, but must not
-    differ (the world coordinates of data are set in the data options).
+    dataset (if any), which must be of the expected class. The observable
+    must not be given the grid too.
     """
     desc = parseutils.make_typed_desc(cls, 'observable')
-    parseutils.sanitize_dimensional_options(info, dict(
-        size=int, step=int | float, rpix=int | float, rval=int | float),
-        ndim)
     if dataset is not None:
         if not isinstance(dataset, expected_dataset_cls):
             expected_desc = parseutils.make_typed_desc(
@@ -33,21 +55,17 @@ def load_observable_common(cls, info, ndim, dataset, expected_dataset_cls):
                 f"and cannot be used to describe its properties; "
                 f"expected dataset type: {expected_desc}; "
                 f"provided dataset type: {provided_desc}")
+        require_no_options_from_data(cls, info, dataset)
         grid = dataset.grid()
-        data_options = dict(
+        info.update(
             size=grid.size,
             step=grid.coords.step,
             rpix=grid.coords.rpix,
             rval=grid.coords.rval,
             rota=grid.coords.rota)
-        for key, value in data_options.items():
-            given = info.get(key)
-            if given is not None and not np.array_equal(given, value):
-                raise ConfigError(
-                    f"option '{key}' of {desc} is {given}, but the data "
-                    f"have {value}; the grid comes from the data (their "
-                    f"world coordinates can be set in the data options)")
-        info.update(data_options)
+    parseutils.sanitize_dimensional_options(info, dict(
+        size=int, step=int | float, rpix=int | float, rval=int | float),
+        ndim)
     return parseutils.parse_options_for_callable(info, desc, cls.__init__)
 
 

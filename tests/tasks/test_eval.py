@@ -128,3 +128,32 @@ def test_outputs_are_written_by_type(tmp_path):
     assert (tmp_path / 'gbkfit_eval_extra.yaml').exists()
     with pytest.raises(TypeError, match="unsupported type: object"):
         eval_task._write_outputs(tmp_path, dict(thing=object()))
+
+
+def test_aspec_outputs_and_residuals(tmp_path):
+    # Spectra in apertures are written with the regions along x and the
+    # velocity along y. As data plus 1, with errors of 2, every residual
+    # is -0.5.
+    config = yaml.load(REFERENCE_DIR / 'thin_disk_scube.yaml')
+    observation = config['observations'][0]
+    scube = observation['observable']
+    regions = dict(type='apertures', apertures=[
+        dict(type='field'), dict(type='circle', x=0, y=0, radius=3)])
+    observation['observable'] = dict(
+        type='aspec', regions=regions,
+        size=scube['size'][:2], step=scube['step'][:2],
+        spec_size=scube['size'][2], spec_step=scube['step'][2])
+    model = run_eval('model', config, tmp_path / 'model')['model_0_aspec_d']
+    assert model.shape == (50, 2)
+    header = fits.getheader(
+        tmp_path / 'model' / 'output' / 'model_0_aspec_d.fits')
+    assert header['CTYPE2'] == 'VRAD'
+    assert header['CDELT2'] == 10
+    fits.writeto(tmp_path / 'data.fits', model + 1, header)
+    observable = observation['observable']
+    for key in ('regions', 'spec_size', 'spec_step'):
+        observable.pop(key)
+    observation['data'] = dict(
+        regions=regions, data=str(tmp_path / 'data.fits'), error=2.0)
+    outputs = run_eval('objective', config, tmp_path / 'objective')
+    np.testing.assert_allclose(outputs['residual_aspec_d'], -0.5, rtol=1e-5)

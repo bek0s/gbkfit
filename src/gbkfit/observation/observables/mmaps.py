@@ -77,8 +77,8 @@ class MMaps(Observable):
         return cls(**_detail.load_observable_common(
             cls, info, 2, dataset, DatasetMMaps))
 
-    def dump(self):
-        return dict(
+    def dump(self, data=None):
+        return _detail.without_options_from_data(self, dict(
             type=self.type(),
             size=self.size(),
             step=self.step(),
@@ -89,7 +89,7 @@ class MMaps(Observable):
             orders=self.orders(),
             spec_size=self.spec_size(),
             spec_step=self.spec_step(),
-            spec_rval=self.spec_rval())
+            spec_rval=self.spec_rval()), data)
 
     def __init__(
             self,

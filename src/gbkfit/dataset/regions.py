@@ -137,6 +137,11 @@ class RegionsBins(Regions):
         self._grid = fitsutils.make_grid(
             index.shape[::-1], step, rpix, rval, rota)
 
+    def __eq__(self, other):
+        return (isinstance(other, RegionsBins)
+                and self._grid == other._grid
+                and np.array_equal(self._index, other._index))
+
     def index(self) -> np.ndarray:
         """The bin of each pixel (negative for none)."""
         return self._index
@@ -183,6 +188,11 @@ class RegionsApertures(Regions):
         if not apertures:
             raise RuntimeError("at least one aperture is required")
         self._apertures = tuple(apertures)
+
+    def __eq__(self, other):
+        return (isinstance(other, RegionsApertures)
+                and aperture_parser.dump(list(self._apertures))
+                == aperture_parser.dump(list(other._apertures)))
 
     def apertures(self) -> tuple[Aperture, ...]:
         return self._apertures
