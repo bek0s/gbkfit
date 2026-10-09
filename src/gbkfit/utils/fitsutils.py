@@ -11,6 +11,7 @@ from gbkfit.utils.parseutils import ConfigError
 __all__ = [
     'Coords',
     'VELOCITY_TYPES',
+    'centre_missing_crpix',
     'read_data',
     'write_data'
 ]
@@ -69,6 +70,7 @@ def read_data(
         raise ConfigError(
             f"{filename}: HDU {hdu} has no data; choose the HDU with the "
             f"data (e.g. hdu: SCI)")
+    header = centre_missing_crpix(header, data.shape)
     try:
         wcs = astropy.wcs.WCS(header)
     except Exception as e:
@@ -101,10 +103,6 @@ def read_data(
         rpix = np.broadcast_to(np.asarray(rpix, float), wcs.naxis)
     if rval is not None:
         rval = np.broadcast_to(np.asarray(rval, float), wcs.naxis)
-    # The axes without a reference pixel have it at their centre
-    for n, size in enumerate(data.shape[::-1], start=1):
-        if f'CRPIX{n}' not in header:
-            wcs.wcs.crpix[n - 1] = size / 2 + 0.5
     if rpix is None and rval is None:
         rpix = (wcs.wcs.crpix - 1).tolist()
         rval = np.multiply(wcs.wcs.crval, scale).tolist()
@@ -120,6 +118,22 @@ def read_data(
         tuple(float(x) for x in rval),
         float(rota))
     return data, coords
+
+
+def centre_missing_crpix(
+        header: astropy.io.fits.Header,
+        shape: tuple[int, ...]
+) -> astropy.io.fits.Header:
+    """
+    A copy of the header of data of the given shape (numpy order) in which
+    the axes without a reference pixel (CRPIXn) have it at their centre.
+    This is the convention of the model; FITS would put it at 0.
+    """
+    header = header.copy()
+    for n, size in enumerate(shape[::-1], start=1):
+        if f'CRPIX{n}' not in header:
+            header[f'CRPIX{n}'] = size / 2 + 0.5
+    return header
 
 
 def write_data(

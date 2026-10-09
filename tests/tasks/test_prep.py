@@ -234,3 +234,21 @@ def test_decreasing_velocity_is_reversed(header):
     # The model reads the prepared cube
     _, coords = fitsutils.read_data('prep_cube.fits')
     assert coords.step[2] == pytest.approx(10)
+
+
+@pytest.mark.parametrize('roi_spat, offset', [
+    (None, (0, 0)), ([4, 20, 3, 17], (4, 3))])
+def test_missing_reference_pixel_stays_at_the_centre(roi_spat, offset):
+    # The model puts a missing CRPIX at the centre of the axis; the
+    # prepared file keeps that pixel at the same world coordinates
+    header = {
+        k: v for k, v in HEADER.items()
+        if k[-1] in '12' and not k.startswith('CRPIX')}
+    fits.writeto('image.fits', np.ones((20, 24), np.float32),
+                 fits.Header(header))
+    prep_image('image.fits', roi_spat=roi_spat)
+    _, coords_in = fitsutils.read_data('image.fits')
+    _, coords_out = fitsutils.read_data('prep_image.fits')
+    np.testing.assert_allclose(
+        coords_out.rpix, np.subtract(coords_in.rpix, offset))
+    np.testing.assert_allclose(coords_out.rval, coords_in.rval)
