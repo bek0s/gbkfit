@@ -1,5 +1,6 @@
 
 import numpy as np
+import pytest
 
 from gbkfit.dataset import *
 from gbkfit.dataset.datasets import *
@@ -221,3 +222,8 @@ def test_dmodel_of_a_float64_dataset_is_float32():
     dataset = DatasetImage(Data(np.ones((8, 20), np.float64)))
     dmodel = dmodel_parser.load(dict(type='image'), dataset=dataset)
     assert dmodel.dtype() == np.float32
+
+
+def test_data_steps_must_be_positive():
+    with pytest.raises(RuntimeError, match="step must be positive"):
+        Data(np.ones((8, 20)), step=(1, -1))

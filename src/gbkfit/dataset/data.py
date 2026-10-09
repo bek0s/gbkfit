@@ -159,6 +159,8 @@ class Data(parseutils.BasicSerializable):
             rpix = (rpix,) * data.ndim
         if isinstance(rval, Real):
             rval = (rval,) * data.ndim
+        if not all(value > 0 for value in step):
+            raise RuntimeError(f"step must be positive; it is {step}")
         data = _as_float32(data)
         mask = _as_float32(mask)
         if error is not None:
