@@ -198,13 +198,9 @@ class Data(parseutils.BasicSerializable):
         if error is not None:
             error[~total_mask] = np.nan
         mask = total_mask.astype(np.float32)
-        # The world coordinates of the first pixel: the spatial axes are
-        # measured from the reference pixel, and the spectral axis from
-        # its world value there
-        zero = [
-            (rval[axis] if axis == spectral_axis else 0)
-            - rpix[axis] * step[axis]
-            for axis in range(data.ndim)]
+        # The world coordinates of the first pixel
+        coords = fitsutils.Coords(tuple(step), tuple(rpix), tuple(rval), rota)
+        zero = fitsutils.Grid(data.shape[::-1], coords, spectral_axis).zero()
         self._data = data
         self._mask = mask
         self._error = error
