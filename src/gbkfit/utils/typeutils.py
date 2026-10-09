@@ -1,79 +1,97 @@
+"""
+Helpers for the type annotations of configuration options.
 
+The options of a configuration are checked against the type annotations
+of the callables they are passed to (see
+`gbkfit.utils.parseutils.parse_options_for_callable`).
+"""
+
+import functools
 import typing
-from collections.abc import Mapping, Sequence, Set
-from types import UnionType
-from typing import Any, Literal, Tuple, Union
+import warnings
+
+import pydantic
+import pydantic.warnings
 
 
 __all__ = [
-    'validate_type'
+    'describe_type',
+    'matches_type'
 ]
 
 
-def validate_type(value, type_):
+@functools.cache
+def _adapter(type_: typing.Any) -> pydantic.TypeAdapter:
+    """
+    Return the strict pydantic validator of a type annotation.
 
-    result = True
-    origin = typing.get_origin(type_)
-    args = typing.get_args(type_)
+    Raise TypeError if pydantic cannot validate values of the annotation.
+    For an annotation that is not a type (e.g. 5), pydantic would instead
+    warn and accept any value.
+    """
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter(
+                'error', pydantic.warnings.ArbitraryTypeWarning)
+            return pydantic.TypeAdapter(type_, config=pydantic.ConfigDict(
+                strict=True, arbitrary_types_allowed=True))
+    except (pydantic.PydanticUserError,
+            pydantic.warnings.ArbitraryTypeWarning) as e:
+        raise TypeError(
+            f"the following type is not recognized: "
+            f"{describe_type(type_)}") from e
 
-    # A bool is an int in Python, but not a number in a configuration
-    if (isinstance(value, bool) and origin is None
-            and type_ not in (bool, Any, object)):
+
+def matches_type(value: typing.Any, type_: typing.Any) -> bool:
+    """
+    Check whether a configuration value matches a type annotation.
+
+    A bool is not a number, an int is a float, and a str is not a
+    sequence of strings.
+
+    Parameters
+    ----------
+    value : Any
+        The value of a configuration option.
+    type_ : Any
+        A type annotation (e.g. ``Sequence[float] | None``).
+
+    Returns
+    -------
+    bool
+        Whether the value matches the annotation.
+
+    Raises
+    ------
+    TypeError
+        If pydantic cannot validate values of the annotation.
+    """
+    try:
+        _adapter(type_).validate_python(value)
+    except pydantic.ValidationError:
         return False
+    return True
 
-    # Special case: allow int when float is expected
-    if type_ is float and isinstance(value, int):
-        return True
 
-    # Type expected: leaf
-    if origin is None:
-        result = result and (type_ == Any or isinstance(value, type_))
+def describe_type(type_: typing.Any) -> str:
+    """
+    Return the label of a type annotation, for messages.
 
-    # Type expected: literal leaf
-    elif origin is Literal:
-        result = value in args
+    Parameters
+    ----------
+    type_ : Any
+        A type annotation.
 
-    # Type expected: union
-    elif origin is Union or issubclass(origin, UnionType):
-        result = any(validate_type(value, arg) for arg in args)
-
-    # Type expected: tuple
-    elif issubclass(origin, Tuple):
-        if isinstance(value, tuple) and (len(args) == len(value)):
-            for val, arg in zip(value, args):
-                result = result and validate_type(val, arg)
-        else:
-            result = False
-
-    # Type expected: sequence (a str is one, but not in a configuration:
-    # e.g. 'disk' is not ['d', 'i', 's', 'k'])
-    elif issubclass(origin, Sequence):
-        if isinstance(value, Sequence) and not isinstance(value, str):
-            for val in value:
-                result = result and validate_type(val, args[0])
-        else:
-            result = False
-
-    # Type expected: set
-    elif issubclass(origin, Set):
-        if isinstance(value, Set):
-            for val in value:
-                result = result and validate_type(val, args[0])
-        else:
-            result = False
-
-    # Type expected: mapping
-    elif issubclass(origin, Mapping):
-        if isinstance(value, Mapping):
-            for key, val in value.items():
-                result = result and validate_type(key, args[0])
-                result = result and validate_type(val, args[1])
-        else:
-            result = False
-
-    # Type unsupported
-    else:
-        raise RuntimeError(
-            f"the following type is not recognized: {origin.__qualname__}")
-
-    return result
+    Returns
+    -------
+    str
+        The label: the name of a type, or the annotation without the
+        names of its modules.
+    """
+    name = getattr(type_, '__name__', None)
+    label = str(type_) if typing.get_args(type_) or name is None else name
+    return (
+        label
+        .replace('collections.abc.', '')
+        .replace('types.', '')
+        .replace('typing.', ''))

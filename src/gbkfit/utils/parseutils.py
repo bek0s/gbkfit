@@ -314,18 +314,11 @@ def parse_options_for_callable(
                 f"parsing option name: '{option_name}', "
                 f"value: '{option_value}', "
                 f"type: '{option_type}'")
-            if not typeutils.validate_type(option_value, option_type):
-                option_type_has_name = not bool(typing.get_args(option_type))
-                option_type_label = option_type.__name__ \
-                    if option_type_has_name else str(option_type)
-                option_type_label = (
-                    option_type_label
-                    .replace('collections.abc.', '')
-                    .replace('types.', '')
-                    .replace('typing.', ''))
+            if not typeutils.matches_type(option_value, option_type):
                 raise RuntimeError(
                     f"option '{option_name}' is set to '{option_value}', "
-                    f"however, the expected type is: {option_type_label}")
+                    f"however, the expected type is: "
+                    f"{typeutils.describe_type(option_type)}")
     # Rename options back to their argument name if needed
     if fun_rename_args:
         for arg_name, opt_name in fun_rename_args.items():
