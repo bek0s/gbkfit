@@ -11,8 +11,9 @@ import numpy as np
 import pytest
 from modelutils import observation_group
 
-from gbkfit.dataset import Data, RegionsBins
+from gbkfit.dataset import Data
 from gbkfit.dataset.datasets import DatasetRegionMoments
+from gbkfit.region import RegionsBins
 from gbkfit.utils import fitsutils, gridutils
 
 

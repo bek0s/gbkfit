@@ -14,6 +14,7 @@ import pytest
 import ruamel.yaml
 
 import gbkfit.dataset
+import gbkfit.region
 import gbkfit.driver
 import gbkfit.model
 import gbkfit.observation
@@ -74,7 +75,7 @@ TRAIT_PARSERS = {
 OTHER_PARSERS = dict(
     psf=gbkfit.psflsf.psf_parser,
     lsf=gbkfit.psflsf.lsf_parser,
-    aperture=gbkfit.dataset.aperture_parser,
+    aperture=gbkfit.region.aperture_parser,
     primary_beam=gbkfit.observation.primary_beam_parser,
     nwmode=common.nwmode_parser,
     driver=gbkfit.driver.driver_parser)

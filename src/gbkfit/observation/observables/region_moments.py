@@ -6,8 +6,8 @@ import astropy.units
 import numpy as np
 
 from gbkfit.dataset.datasets import DatasetRegionMoments
-from gbkfit.dataset.regions import Regions, regions_parser
 from gbkfit.model.base import GModelSCube
+from gbkfit.region import Regions, regions_parser
 from gbkfit.utils import gridutils, parseutils
 from . import _dcube, _detail, _moments
 from ._regions import RegionSumsPlan, flux_weights

@@ -6,13 +6,15 @@ cube in regions (apertures or bins), which must match those of an scube.
 import copy
 
 import gbkfit.dataset
+import gbkfit.region
 import gbkfit.params
 import numpy as np
 import pytest
 from modelutils import observation_group
 
-from gbkfit.dataset import Data, RegionsApertures, RegionsBins
+from gbkfit.dataset import Data
 from gbkfit.dataset.datasets import DatasetRegionSpectra
+from gbkfit.region import RegionsApertures, RegionsBins
 from gbkfit.utils import fitsutils, gridutils
 
 
@@ -70,7 +72,7 @@ def test_region_spectra_of_apertures_are_the_sums_of_pixel_spectra(driver):
     aspec = evaluate(driver, aspec_of_apertures(APERTURES))
     assert aspec.shape == (51, 3)
     grid = gridutils.make_grid((32, 41))
-    weights = gbkfit.dataset.regions_parser.load(
+    weights = gbkfit.region.regions_parser.load(
         dict(type='apertures', apertures=APERTURES)).weights(grid)
     expected = (weights @ scube.reshape(51, -1).T).T
     np.testing.assert_allclose(aspec, expected, rtol=1e-5, atol=1e-6)
@@ -151,7 +153,7 @@ def test_region_spectra_data_round_trip(tmp_path):
     # along y, and read back with the world coordinates of the velocity
     from gbkfit.dataset import dataset_parser
     regions = RegionsApertures([
-        gbkfit.dataset.aperture_parser.load(info) for info in APERTURES])
+        gbkfit.region.aperture_parser.load(info) for info in APERTURES])
     dataset = DatasetRegionSpectra(
         Data(np.arange(51 * 3.0).reshape(51, 3)), regions, step=10,
         rpix=4, rval=1500)
@@ -171,7 +173,7 @@ def test_region_spectra_data_round_trip(tmp_path):
 def test_region_spectra_options_replace_the_spectral_axis_of_files(tmp_path):
     from gbkfit.dataset import dataset_parser
     regions = RegionsApertures([
-        gbkfit.dataset.aperture_parser.load(info) for info in APERTURES])
+        gbkfit.region.aperture_parser.load(info) for info in APERTURES])
     dataset = DatasetRegionSpectra(
         Data(np.ones((51, 3))), regions, step=10, rpix=4, rval=1500)
     info = dataset_parser.dump(dataset, prefix=str(tmp_path / ''))
@@ -190,7 +192,7 @@ def test_region_spectra_observation_from_data(tmp_path):
     # grid of apertures is given
     from gbkfit.observation import observation_parser
     regions = RegionsApertures([
-        gbkfit.dataset.aperture_parser.load(info) for info in APERTURES])
+        gbkfit.region.aperture_parser.load(info) for info in APERTURES])
     dataset = DatasetRegionSpectra(
         Data(np.ones((51, 3))), regions, step=10, rval=1500)
     data_info = dataset.dump(prefix=str(tmp_path / ''))
@@ -227,7 +229,7 @@ def test_region_spectra_of_spectra_with_another_spectral_axis_is_an_error(driver
 def test_region_spectra_observation_of_data_on_a_rotated_grid(driver, kind):
     # The spectral axis of a rotated spatial grid is not rotated: it
     # matches that of the spectra
-    from gbkfit.dataset import aperture_parser
+    from gbkfit.region import aperture_parser
     from gbkfit.observation import RegionSpectra, Observation
     if kind == 'apertures':
         regions = RegionsApertures([aperture_parser.load(dict(type='field'))])
@@ -245,10 +247,10 @@ def test_region_spectra_spatial_grid_options():
     with pytest.raises(RuntimeError, match="remove the options \\['step'\\]"):
         RegionSpectra(bins, spec_size=5, step=[1, 1])
     apertures = RegionsApertures([
-        gbkfit.dataset.aperture_parser.load(dict(type='field'))])
+        gbkfit.region.aperture_parser.load(dict(type='field'))])
     with pytest.raises(RuntimeError, match="size of the grid"):
         RegionSpectra(apertures, spec_size=5)
-    circle = RegionsApertures([gbkfit.dataset.aperture_parser.load(
+    circle = RegionsApertures([gbkfit.region.aperture_parser.load(
         dict(type='circle', x=0, y=0, radius=5))])
     with pytest.raises(RuntimeError, match="not inside the grid"):
         RegionSpectra(circle, spec_size=5, size=[8, 8])

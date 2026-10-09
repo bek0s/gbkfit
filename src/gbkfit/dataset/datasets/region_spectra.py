@@ -4,7 +4,7 @@ import astropy.units
 
 from gbkfit.dataset.base import Dataset
 from gbkfit.dataset.data import Data, dump_data, load_data
-from gbkfit.dataset.regions import Regions, regions_parser
+from gbkfit.region import Regions, regions_parser
 from gbkfit.utils import fitsutils, gridutils, parseutils
 from . import _detail
 
