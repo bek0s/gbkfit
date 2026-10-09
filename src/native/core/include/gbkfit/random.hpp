@@ -68,14 +68,15 @@ struct RNG
     constexpr T
     operator()(void)
     {
+        // Random bits, centred in their interval: never 0 or 1. One bit
+        // less than the mantissa holds, so that the centres are exact (with
+        // 24 bits in a float, the last, 1 - 2^-25, rounds to 1).
         if constexpr (sizeof(T) <= 4) {
-            // 24 random bits, centred in their interval: never 0 or 1
-            return (T(next() >> 8) + T{0.5}) * T{0x1p-24};
+            return (T(next() >> 9) + T{0.5}) * T{0x1p-23};
         } else {
-            // 53 random bits, centred in their interval: never 0 or 1
-            const std::uint64_t hi = next() >> 5;
+            const std::uint64_t hi = next() >> 6;
             const std::uint64_t lo = next() >> 6;
-            return (T((hi << 26) | lo) + T{0.5}) * T{0x1p-53};
+            return (T((hi << 26) | lo) + T{0.5}) * T{0x1p-52};
         }
     }
 
