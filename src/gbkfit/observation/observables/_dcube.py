@@ -35,6 +35,7 @@ class DCube:
             rpix: tuple[float, float, float],
             rval: tuple[float, float, float],
             rota: float,
+            rest: Any,
             scale: tuple[int, int, int],
             psf: PSF | None,
             lsf: LSF | None,
@@ -57,7 +58,9 @@ class DCube:
         # The low-res grid (the grid of the data) and, once prepared, the
         # high-res one, with their spectral axis last
         self._grid_lo = fitsutils.Grid(
-            size, fitsutils.Coords(step, rpix, rval, rota), 2)
+            size,
+            fitsutils.Coords(step, rpix, rval, rota, fitsutils.make_rest(rest)),
+            2)
         self._scale = scale
         self._psf = psf
         self._lsf = lsf

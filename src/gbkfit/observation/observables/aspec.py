@@ -1,6 +1,8 @@
 from collections.abc import Sequence
 from numbers import Real
 
+import astropy.units
+
 from gbkfit.dataset.datasets import DatasetASpec
 from gbkfit.dataset.regions import Regions, regions_parser
 from gbkfit.model.core import GModelSCube
@@ -44,7 +46,8 @@ class ASpec(Observable):
         # The regions and the spectral axis, and the spatial grid of
         # regions on a grid
         return (
-            ('regions', 'spec_size', 'spec_step', 'spec_rpix', 'spec_rval')
+            ('regions', 'spec_size', 'spec_step', 'spec_rpix', 'spec_rval',
+             'spec_rest')
             + _detail.spatial_options_from_regions(dataset.regions()))
 
     @classmethod
@@ -63,7 +66,8 @@ class ASpec(Observable):
                 spec_size=spectral.size[0],
                 spec_step=spectral.coords.step[0],
                 spec_rpix=spectral.coords.rpix[0],
-                spec_rval=spectral.coords.rval[0])
+                spec_rval=spectral.coords.rval[0],
+                spec_rest=spectral.coords.rest)
         else:
             parseutils.load_option_and_update_info(
                 regions_parser, info, 'regions', True, False)
@@ -81,7 +85,8 @@ class ASpec(Observable):
                 spec_size=self.size()[2],
                 spec_step=self.step()[2],
                 spec_rpix=self.rpix()[2],
-                spec_rval=self.rval()[2])
+                spec_rval=self.rval()[2],
+                spec_rest=_detail.dump_rest(self.rest()))
         return info | _detail.dump_spatial_grid(self, self._regions)
 
     def __init__(
@@ -91,6 +96,7 @@ class ASpec(Observable):
             spec_step: Real = 1,
             spec_rpix: Real | None = None,
             spec_rval: Real = 0,
+            spec_rest: str | astropy.units.Quantity | None = None,
             size: Sequence[int] | None = None,
             step: Sequence[Real] | None = None,
             rpix: Sequence[Real] | None = None,
@@ -100,7 +106,8 @@ class ASpec(Observable):
         """
         The spectral axis has spec_size channels of spec_step (km/s), with
         the velocity spec_rval (km/s) at the channel spec_rpix (by default
-        the centre). The spatial grid (size, step, rpix, rval, rota; see
+        the centre), and velocities of the rest wavelength or frequency
+        spec_rest (see fitsutils.Coords), if known. The spatial grid (size, step, rpix, rval, rota; see
         fitsutils.make_grid) is that of the regions if they have one
         (bins), and must not be given; else size is required.
         """
@@ -114,7 +121,7 @@ class ASpec(Observable):
             coords.step + (spec_step,),
             coords.rpix + (spec_rpix,),
             coords.rval + (spec_rval,),
-            coords.rota)
+            coords.rota, spec_rest)
         self._regions = regions
         # The weights of the pixels in the regions (an error if apertures
         # are not inside the grid)
@@ -125,8 +132,7 @@ class ASpec(Observable):
 
     def spectral_grid(self) -> fitsutils.Grid:
         """The grid of the spectral axis (one axis)."""
-        return fitsutils.Grid(
-            self.size()[2:], self._grid.coords.axes(2), 0)
+        return self._grid.spectral()
 
     def keys(self):
         return ['aspec']
@@ -152,8 +158,8 @@ class ASpec(Observable):
         # to its spectrum
         dcube = _dcube.DCube(
             self.size(), self.step(), self.rpix(), self.rval(), self.rota(),
-            tuple(scale), instrument.psf(), instrument.lsf(), False, None,
-            False, dtype)
+            self.rest(), tuple(scale), instrument.psf(), instrument.lsf(),
+            False, None, False, dtype)
         return ASpecPlan(self._weights, dcube, driver, gmodel, dtype)
 
 

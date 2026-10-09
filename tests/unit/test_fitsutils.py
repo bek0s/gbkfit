@@ -218,3 +218,76 @@ def test_grid_zero_and_spatial_axes():
     assert spatial.size == (8, 10) and spatial.spectral_axis is None
     assert spatial.coords == fitsutils.Coords(
         (2.0, 3.0), (4.0, 5.0), (150.0, 2.0), 30.0)
+
+
+def _spectral_header(ctype, **rest):
+    return CELESTIAL | dict(
+        CDELT1=-1 / 3600, CDELT2=1 / 3600,
+        CTYPE3=ctype, CUNIT3='km/s', CRVAL3=0.0, CRPIX3=1.0, CDELT3=10.0,
+        **rest)
+
+
+@pytest.mark.parametrize('ctype, keywords, rest', [
+    # The velocities of a rest wavelength are optical, those of a rest
+    # frequency radio; the rest follows the convention of the axis
+    ('VOPT', dict(RESTWAV=6.5628e-7), 6.5628e-7 * u.m),
+    ('VRAD', dict(RESTFRQ=1.420405752e9), 1.420405752e9 * u.Hz),
+    ('VOPT', dict(RESTFRQ=1.420405752e9), (1.420405752e9 * u.Hz).to(
+        u.m, u.spectral())),
+    ('VRAD', dict(RESTWAV=0.21), (0.21 * u.m).to(u.Hz, u.spectral())),
+    ('VRAD', {}, None),
+    ('VELO', dict(RESTFRQ=1.420405752e9), None)])
+def test_rest_of_the_spectral_axis(ctype, keywords, rest):
+    coords = write(_spectral_header(ctype, **keywords), shape=(6, 20, 24))
+    if rest is None:
+        assert coords.rest is None
+    else:
+        assert coords.rest.unit == rest.unit
+        np.testing.assert_allclose(coords.rest.value, rest.value, rtol=1e-12)
+
+
+def test_rest_can_be_given():
+    # A given rest replaces that of the header, in the convention of the
+    # axis; without a spectral axis type it keeps its kind
+    fits.writeto('data.fits', np.zeros((6, 20, 24), np.float32),
+                 fits.Header(_spectral_header('VOPT', RESTWAV=1e-7)))
+    coords = fitsutils.read_data('data.fits', rest='1420.405752 MHz')[1]
+    np.testing.assert_allclose(
+        coords.rest.to_value(u.m), (1420.405752 * u.MHz).to_value(
+            u.m, u.spectral()), rtol=1e-12)
+    fits.writeto('plain.fits', np.zeros((6, 20, 24), np.float32))
+    coords = fitsutils.read_data('plain.fits', rest='6562.8 Angstrom')[1]
+    assert coords.rest == 6562.8 * u.Angstrom
+    with pytest.raises(ConfigError, match="relativistic velocities"):
+        fits.writeto('velo.fits', np.zeros((6, 20, 24), np.float32),
+                     fits.Header(_spectral_header('VELO')))
+        fitsutils.read_data('velo.fits', rest='6562.8 Angstrom')
+
+
+@pytest.mark.parametrize('rest, ctype, keyword', [
+    ('6562.8 Angstrom', 'VOPT', 'RESTWAV'),
+    ('1420.405752 MHz', 'VRAD', 'RESTFRQ'),
+    (None, 'VRAD', None)])
+def test_rest_round_trip(rest, ctype, keyword):
+    grid = fitsutils.make_grid(
+        (24, 20, 6), (1, 1, 10), spectral_axis=2, rest=rest)
+    fitsutils.write_data(
+        'data.fits', np.zeros((6, 20, 24)), grid.coords, 2)
+    header = fits.getheader('data.fits')
+    assert header['CTYPE3'] == ctype
+    assert keyword is None or keyword in header
+    coords = fitsutils.read_data('data.fits')[1]
+    if rest is None:
+        assert coords.rest is None
+    else:
+        # FITS keeps about 16 significant digits
+        assert coords.rest.unit == grid.coords.rest.unit
+        np.testing.assert_allclose(
+            coords.rest.value, grid.coords.rest.value, rtol=1e-14)
+
+
+@pytest.mark.parametrize('value', [
+    '6562.8', '3 km/s', '-1 Angstrom', 'Halpha', [1, 2] * u.m])
+def test_invalid_rest(value):
+    with pytest.raises(ConfigError, match="positive wavelength or frequency"):
+        fitsutils.make_rest(value)

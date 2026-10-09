@@ -5,6 +5,7 @@ from . import _detail
 
 
 __all__ = [
+    'IMAGE_SPECTRAL_AXIS',
     'ComponentSet2D',
     'ComponentSet3D',
     'ComponentSetPlan2D',
@@ -12,6 +13,10 @@ __all__ = [
     'ComponentSetGModelPlan'
 ]
 
+
+# The spectral axis of an image: one channel, without a width
+IMAGE_SPECTRAL_AXIS = fitsutils.Grid(
+    (1,), fitsutils.Coords((0,), (0,), (0,), 0), 0)
 
 # The components and the opacity components: their label in messages, the
 # prefix of their parameters, and whether the parameters of the first one
@@ -54,14 +59,14 @@ class ComponentSet2D:
             [cmp.constants() for cmp in self._components], self._prefixes)
         return constants
 
-    def plan(self, driver, grid, spectral_axis, has_weights, dtype):
+    def plan(self, driver, grid, spectral, has_weights, dtype):
         """
         The evaluation of the components on the given driver, grid of the
-        x and y axes (fitsutils.Grid), spectral axis (size, step and zero)
-        and dtype, with spatial weights if has_weights.
+        x and y axes and spectral axis (fitsutils.Grid, the second of one
+        axis) and dtype, with spatial weights if has_weights.
         """
         return ComponentSetPlan2D(
-            self, driver, grid, spectral_axis, has_weights, dtype)
+            self, driver, grid, spectral, has_weights, dtype)
 
 
 class ComponentSetPlan2D:
@@ -71,14 +76,16 @@ class ComponentSetPlan2D:
     """
 
     def __init__(
-            self, component_set, driver, grid, spectral_axis, has_weights,
+            self, component_set, driver, grid, spectral, has_weights,
             dtype):
         self._component_set = component_set
         self._driver = driver
         self._grid = grid
         self._dtype = dtype
         size = tuple(grid.size[:2])
-        spec_size, spec_step, spec_zero = spectral_axis
+        spec_size = spectral.size[0]
+        spec_step = spectral.coords.step[0]
+        spec_zero = spectral.zero()[0]
         self._native_grid = dict(
             spat_size=size + (1,),
             spat_step=tuple(grid.coords.step[:2]) + (0,),
@@ -209,14 +216,14 @@ class ComponentSet3D:
     def _all_components(self):
         return self._components + self._ocomponents
 
-    def plan(self, driver, grid, spectral_axis, has_weights, dtype):
+    def plan(self, driver, grid, spectral, has_weights, dtype):
         """
         The evaluation of the components on the given driver, grid of the
-        x and y axes (fitsutils.Grid), spectral axis (size, step and zero)
-        and dtype, with spatial weights if has_weights.
+        x and y axes and spectral axis (fitsutils.Grid, the second of one
+        axis) and dtype, with spatial weights if has_weights.
         """
         return ComponentSetPlan3D(
-            self, driver, grid, spectral_axis, has_weights, dtype)
+            self, driver, grid, spectral, has_weights, dtype)
 
 
 class ComponentSetPlan3D:
@@ -227,7 +234,7 @@ class ComponentSetPlan3D:
     """
 
     def __init__(
-            self, component_set, driver, grid, spectral_axis, has_weights,
+            self, component_set, driver, grid, spectral, has_weights,
             dtype):
         self._component_set = component_set
         self._driver = driver
@@ -250,7 +257,9 @@ class ComponentSetPlan3D:
         self._size = tuple(size[:2]) + (size_z,)
         self._step = tuple(step[:2]) + (step_z,)
         self._zero = tuple(zero[:2]) + (zero_z,)
-        spec_size, spec_step, spec_zero = spectral_axis
+        spec_size = spectral.size[0]
+        spec_step = spectral.coords.step[0]
+        spec_zero = spectral.zero()[0]
         self._native_grid = dict(
             spat_size=self._size,
             spat_step=self._step,

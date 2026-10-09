@@ -32,22 +32,27 @@ class Observable(parseutils.TypedSerializable, abc.ABC):
     def is_compatible(gmodel):
         pass
 
-    def __init__(self, size, step, rpix, rval, rota):
+    def __init__(self, size, step, rpix, rval, rota, rest=None):
+        """
+        The grid of the data: its size and world coordinates (see
+        fitsutils.Coords; rest is that of the spectral axis, if any).
+        """
         if rpix is None:
             rpix = tuple((np.array(size) / 2 - 0.5).tolist())
-        self._grid = fitsutils.Grid(
-            tuple(size),
-            fitsutils.Coords(tuple(step), tuple(rpix), tuple(rval), rota),
-            self._spectral_axis)
+        self._grid = fitsutils.make_grid(
+            tuple(size), tuple(step), tuple(rpix), tuple(rval), rota,
+            self._spectral_axis, rest)
 
     @classmethod
     def options_from_data(cls, dataset) -> tuple[str, ...]:
         """
         The options of the observable that its data (the given dataset)
-        give, and that it must not be given too: here, its grid.
-        Observables of other data override this.
+        give, and that it must not be given too: here, its grid (and the
+        rest of its spectral axis). Observables of other data override
+        this.
         """
-        return 'size', 'step', 'rpix', 'rval', 'rota'
+        grid = ('size', 'step', 'rpix', 'rval', 'rota')
+        return grid + (('rest',) if cls._spectral_axis is not None else ())
 
     def spectral_axis(self):
         return self._spectral_axis
@@ -70,6 +75,10 @@ class Observable(parseutils.TypedSerializable, abc.ABC):
 
     def rota(self):
         return self._grid.coords.rota
+
+    def rest(self):
+        """The rest of the spectral axis (see fitsutils.Coords), or None."""
+        return self._grid.coords.rest
 
     @abc.abstractmethod
     def keys(self):

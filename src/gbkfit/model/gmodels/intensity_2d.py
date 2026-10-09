@@ -2,7 +2,8 @@ from collections.abc import Sequence
 
 from gbkfit.model.core import GModelImage
 from gbkfit.utils import parseutils
-from ._component_set import ComponentSet2D, ComponentSetGModelPlan
+from ._component_set import (
+    IMAGE_SPECTRAL_AXIS, ComponentSet2D, ComponentSetGModelPlan)
 from .core import BrightnessComponent2D
 from .brightness_smdisk_2d import BrightnessSMDisk2D
 
@@ -55,8 +56,7 @@ class GModelIntensity2D(GModelImage):
         return self._component_set.constants()
 
     def plan(self, driver, grid, has_weights, dtype):
-        # An image has a spectral axis of size 1
         return ComponentSetGModelPlan(
             self._component_set.plan(
-                driver, grid, (1, 0, 0), has_weights, dtype),
+                driver, grid, IMAGE_SPECTRAL_AXIS, has_weights, dtype),
             'image')

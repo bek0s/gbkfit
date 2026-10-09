@@ -15,7 +15,7 @@ __all__ = [
 ]
 
 
-def _read_file(x, prefix, rpix=None, rval=None):
+def _read_file(x, prefix, rpix=None, rval=None, rest=None):
     """
     The data of a file and its world coordinates (see fitsutils.Coords).
     x is a filename, or a dict with the filename ('file') and the HDU to
@@ -26,7 +26,7 @@ def _read_file(x, prefix, rpix=None, rval=None):
     options = parseutils.parse_options(
         x, 'data file', required={'file'}, optional={'hdu'})
     return fitsutils.read_data(
-        prefix + options['file'], options.get('hdu', 0), rpix, rval)
+        prefix + options['file'], options.get('hdu', 0), rpix, rval, rest)
 
 
 def _as_float32(x):
@@ -110,11 +110,13 @@ def load_data(
         info: dict[str, Any],
         prefix: str = '',
         rpix: Any = None,
-        rval: Any = None
+        rval: Any = None,
+        rest: Any = None
 ) -> tuple[Data, fitsutils.Coords]:
     """
     A data item from files, and the world coordinates of its data file
-    (see fitsutils.read_data, which also explains rpix and rval). info has
+    (see fitsutils.read_data, which also explains rpix, rval and rest).
+    info has
     the data file and, optionally, the mask file and the error file or a
     scalar error. A file is a filename, or a dict with the filename
     ('file') and the HDU ('hdu'). prefix is prepended to the filenames.
@@ -122,8 +124,8 @@ def load_data(
     parseutils.parse_options(
         info, 'data', required={'data'}, optional={'mask', 'error'})
     data_d, coords = parseutils.load_option(
-        lambda x: _read_file(x, prefix, rpix, rval), info, 'data', True,
-        False)
+        lambda x: _read_file(x, prefix, rpix, rval, rest), info, 'data',
+        True, False)
     data_m = None
     data_e = None
     if (mask := info.get('mask')) is not None:

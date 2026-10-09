@@ -1,5 +1,7 @@
 from numbers import Real
 
+import astropy.units
+
 from gbkfit.dataset.core import Dataset
 from gbkfit.dataset.data import Data, dump_data, load_data
 from gbkfit.dataset.regions import Regions, regions_parser
@@ -31,20 +33,21 @@ class DatasetASpec(Dataset):
         """
         The options of its one data item are given flat. The world
         coordinates of the spectral axis are those of the header of the
-        data file, or of the options step, rpix and rval.
+        data file, or of the options step, rpix, rval and rest.
         """
         desc = parseutils.make_typed_desc(cls, 'dataset')
         parseutils.load_option_and_update_info(
             regions_parser, info, 'regions', True, False, prefix=prefix)
-        step, rpix, rval = (info.pop(key, None) for key in (
-            'step', 'rpix', 'rval'))
+        step, rpix, rval, rest = (info.pop(key, None) for key in (
+            'step', 'rpix', 'rval', 'rest'))
         item = {k: info.pop(k) for k in ('data', 'mask', 'error') if k in info}
-        aspec, coords = load_data(item, prefix, rpix, rval)
+        aspec, coords = load_data(item, prefix, rpix, rval, rest)
         info.update(
             aspec=aspec,
             step=coords.step[1] if step is None else step,
             rpix=coords.rpix[1],
-            rval=coords.rval[1])
+            rval=coords.rval[1],
+            rest=coords.rest)
         return cls(**parseutils.parse_options_for_callable(
             info, desc, cls.__init__))
 
@@ -63,7 +66,8 @@ class DatasetASpec(Dataset):
                 overwrite=overwrite),
             step=spectral.step[0],
             rpix=spectral.rpix[0],
-            rval=spectral.rval[0]) | item
+            rval=spectral.rval[0],
+            rest=None if spectral.rest is None else str(spectral.rest)) | item
 
     def __init__(
             self,
@@ -71,12 +75,14 @@ class DatasetASpec(Dataset):
             regions: Regions,
             step: Real = 1,
             rpix: Real | None = None,
-            rval: Real = 0
+            rval: Real = 0,
+            rest: str | astropy.units.Quantity | None = None
     ):
         """
-        step, rpix and rval are the world coordinates of the spectral axis
-        (see fitsutils.Coords): the channel width (km/s), the reference
-        channel (by default the centre) and its velocity (km/s).
+        step, rpix, rval and rest are the world coordinates of the
+        spectral axis (see fitsutils.Coords): the channel width (km/s), the
+        reference channel (by default the centre), its velocity (km/s), and
+        the rest wavelength or frequency of the velocities.
         """
         super().__init__(dict(aspec=aspec))
         nchannels, nregions = aspec.shape()
@@ -86,7 +92,7 @@ class DatasetASpec(Dataset):
                 f"{regions.nregions()} regions")
         self._regions = regions
         self._spectral_grid = fitsutils.make_grid(
-            (nchannels,), step, rpix, rval, 0, spectral_axis=0)
+            (nchannels,), step, rpix, rval, 0, spectral_axis=0, rest=rest)
 
     def regions(self) -> Regions:
         return self._regions

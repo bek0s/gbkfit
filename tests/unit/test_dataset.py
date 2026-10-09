@@ -5,6 +5,7 @@ from astropy.io import fits
 
 from gbkfit.dataset import *
 from gbkfit.dataset.datasets import *
+from gbkfit.utils.fitsutils import Coords
 
 
 def test_data():
@@ -37,15 +38,15 @@ def test_dataset_grid():
     # Default value tests
     grid = DatasetImage(data).grid()
     assert grid.size == (5, 2)
-    assert grid.coords == ((1, 1), (2.0, 0.5), (0, 0), 0)
+    assert grid.coords == Coords((1, 1), (2.0, 0.5), (0, 0), 0)
     assert grid.zero() == (-2.0, -0.5)
     # Scalar value tests
     grid = DatasetImage(data, step=2, rpix=3, rval=4, rota=5).grid()
-    assert grid.coords == ((2, 2), (3, 3), (4, 4), 5)
+    assert grid.coords == Coords((2, 2), (3, 3), (4, 4), 5)
     # Vector value tests
     grid = DatasetImage(
         data, step=(1, 2), rpix=(3, 4), rval=(5, 6), rota=7).grid()
-    assert grid.coords == ((1, 2), (3, 4), (5, 6), 7)
+    assert grid.coords == Coords((1, 2), (3, 4), (5, 6), 7)
 
 
 def test_dataset_image(tmp_path):
@@ -253,3 +254,31 @@ def test_observation_data_must_be_on_the_grid_of_the_observable():
         Observation(DriverHost(), Image(size=(20, 8)), data=DatasetMMaps(
             Data(np.ones((8, 20)))))
     Observation(DriverHost(), Image(size=(20, 8), rota=30), data=data)
+
+
+def test_scube_rest_comes_from_the_data(tmp_path):
+    # The rest of the spectral axis of the data is that of the observable,
+    # which must not be given it too
+    from gbkfit.observation import observation_parser
+    dataset = DatasetSCube(
+        Data(np.ones((6, 8, 20))), step=(1, 1, 10), rest='6562.8 Angstrom')
+    data_info = dataset.dump(prefix=str(tmp_path / ''))
+    data_info.pop('type')
+    loaded = dataset_parser.load(dict(type='scube') | dict(data_info))
+    assert loaded.grid().coords.rest == dataset.grid().coords.rest
+    info = dict(driver=dict(type='host'), data=data_info)
+    observation = observation_parser.load(
+        info | dict(observable=dict(type='scube')))
+    assert observation.observable().rest() == dataset.grid().coords.rest
+    with pytest.raises(Exception, match="give its options \\['rest'\\]"):
+        observation_parser.load(info | dict(observable=dict(
+            type='scube', rest='6562.8 Angstrom')))
+
+
+def test_image_has_no_rest(tmp_path, caplog):
+    # An image has no spectral axis: rest is an unknown option
+    fits.writeto(tmp_path / 'image.fits', np.ones((8, 20)))
+    dataset_parser.load(dict(
+        type='image', data=str(tmp_path / 'image.fits'),
+        rest='6562.8 Angstrom'))
+    assert "unknown options" in caplog.text and "'rest'" in caplog.text

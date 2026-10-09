@@ -1,5 +1,7 @@
 from collections.abc import Sequence
 
+import astropy.units
+
 from gbkfit.dataset.datasets import DatasetLSlit
 from gbkfit.model.core import GModelSCube
 from gbkfit.utils import fitsutils
@@ -50,6 +52,7 @@ class LSlit(Observable):
             rpix=self.rpix(),
             rval=self.rval(),
             rota=self.rota(),
+            rest=_detail.dump_rest(self.rest()),
             slit_width=self._slit_width,
             smooth_weights=self._smooth_weights,
             mask_cutoff=self._mask_cutoff,
@@ -62,12 +65,17 @@ class LSlit(Observable):
             rpix: Sequence[int | float] | None = None,
             rval: Sequence[int | float] = (0, 0),
             rota: int | float = 0,
+            rest: str | astropy.units.Quantity | None = None,
             slit_width: int | float | None = None,
             smooth_weights: bool = False,
             mask_cutoff: int | float | None = None,
             mask_apply: bool = False
     ):
-        super().__init__(size, step, rpix, rval, rota)
+        """
+        rest is the rest wavelength or frequency of the velocities of the
+        spectral axis (see fitsutils.Coords), if known.
+        """
+        super().__init__(size, step, rpix, rval, rota, rest)
         self._slit_width = slit_width if slit_width is not None \
             else self.step()[0]
         self._smooth_weights = smooth_weights
@@ -87,7 +95,7 @@ class LSlit(Observable):
         dcube = _dcube.DCube(
             (size[0], 1, size[1]), (step[0], self._slit_width, step[1]),
             (rpix[0], 0, rpix[1]), (rval[0], 0, rval[1]), self.rota(),
-            (scale[0], scale[0], scale[1]), instrument.psf(),
+            self.rest(), (scale[0], scale[0], scale[1]), instrument.psf(),
             instrument.lsf(), self._smooth_weights, self._mask_cutoff,
             self._mask_apply, dtype)
         return LSlitPlan(dcube, driver, gmodel, dtype)
