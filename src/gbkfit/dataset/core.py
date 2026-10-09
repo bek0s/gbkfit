@@ -21,10 +21,12 @@ def _ensure_same_attrib_value(data, method):
 
 class Dataset(parseutils.TypedSerializable, abc.ABC):
     """
-    A set of data items on the same grid. A subclass declares the index
-    of the spectral axis of its data (_spectral_axis, None if none).
+    A set of data items on the same grid. A subclass declares the number
+    of axes of its data (_ndim), and the index of its spectral axis
+    (_spectral_axis, None if none).
     """
 
+    _ndim: int
     _spectral_axis: int | None
 
     def __init__(self, data):
@@ -36,8 +38,13 @@ class Dataset(parseutils.TypedSerializable, abc.ABC):
         if invalid_data:
             raise RuntimeError(
                 f"dataset contains invalid data items: {invalid_data}")
-        # All data items must have the spectral axis of the dataset
+        # All data items must have the axes of the dataset
         for key, item in data.items():
+            if item.ndim() != self._ndim:
+                raise RuntimeError(
+                    f"data item {key} has {item.ndim()} axes; expected "
+                    f"{self._ndim} (axes of length 1 can be removed with "
+                    f"gbkfit-cli prep)")
             if item.spectral_axis() != self._spectral_axis:
                 raise RuntimeError(
                     f"data item {key} has the spectral axis "

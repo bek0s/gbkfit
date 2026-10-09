@@ -11,6 +11,7 @@ __all__ = [
 class DatasetImage(Dataset):
 
     # An image has no spectral axis
+    _ndim = 2
     _spectral_axis = None
 
     @staticmethod
@@ -20,7 +21,7 @@ class DatasetImage(Dataset):
     @classmethod
     def load(cls, info, **kwargs):
         names = ['image']
-        opts = _detail.load_dataset_common(cls, info, names, 2, **kwargs)
+        opts = _detail.load_dataset_common(cls, info, names, **kwargs)
         return cls(**opts)
 
     def dump(self, **kwargs):
