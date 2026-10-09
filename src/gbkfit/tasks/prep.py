@@ -246,9 +246,9 @@ def _save_data(
         file_d, data_d, header_d,
         file_e, data_e, header_e,
         file_m, data_m, header_m,
-        offset, dtype, velocity_rest=None):
+        offset, dtype, velocity_rest=None, output_dir='.'):
     """
-    Save the data, whose first pixel is the pixel at the given offset (on
+    Save the data to output_dir, whose first pixel is the pixel at the given offset (on
     each numpy axis) of the data read, with its spectral axis converted to
     the velocities of velocity_rest (see _spectral_to_velocity; the
     error and mask files are converted if they have world coordinates).
@@ -276,17 +276,16 @@ def _save_data(
             data_e, header_e = _reverse_axis(data_e, header_e, axis)
         if data_m is not None:
             data_m, header_m = _reverse_axis(data_m, header_m, axis)
-    data_d = data_d.astype(dtype)
+    def write(name, data, header):
+        filename = os.path.join(output_dir, f'prep_{name}.fits')
+        fits.writeto(filename, data.astype(dtype), header, overwrite=True)
     file_d = splitext(basename(file_d))[0]
-    fits.writeto(f'prep_{file_d}.fits', data_d, header_d, overwrite=True)
+    write(file_d, data_d, header_d)
     if data_e is not None:
-        data_e = data_e.astype(dtype)
-        file_e = splitext(basename(file_e))[0]
-        fits.writeto(f'prep_{file_e}.fits', data_e, header_e, overwrite=True)
+        write(splitext(basename(file_e))[0], data_e, header_e)
     if data_m is not None:
-        data_m = data_m.astype(dtype)
         file_m = splitext(basename(file_m))[0] if file_m else file_d + '_mask'
-        fits.writeto(f'prep_{file_m}.fits', data_m, header_m, overwrite=True)
+        write(file_m, data_m, header_m)
 
 
 def _crop_data(data_d, data_e, data_m, axis, range_):
@@ -391,7 +390,8 @@ def _pad_data(data_d, data_e, data_m, size, value_d, value_e, value_m):
 def prep_image(
         file_d, file_e, file_m,
         roi_spat, clip_min, clip_max, ccl_lcount, ccl_pcount, ccl_lratio,
-        sclip_sigma, sclip_iters, minify, nanpad, dtype):
+        sclip_sigma, sclip_iters, minify, nanpad, dtype,
+        output_dir='.'):
 
     (data_d, header_d,
      data_e, header_e,
@@ -436,7 +436,7 @@ def prep_image(
         file_d, data_d, header_d,
         file_e, data_e, header_e,
         file_m, data_m, header_m,
-        offset, dtype)
+        offset, dtype, output_dir=output_dir)
 
 
 def prep_lslit(
@@ -444,7 +444,7 @@ def prep_lslit(
         roi_spat, roi_spec, clip_min, clip_max,
         ccl_lcount, ccl_pcount, ccl_lratio,
         sclip_sigma, sclip_iters, minify, nanpad, dtype,
-        velocity_rest=None):
+        velocity_rest=None, output_dir='.'):
 
     (data_d, header_d,
      data_e, header_e,
@@ -492,13 +492,14 @@ def prep_lslit(
         file_d, data_d, header_d,
         file_e, data_e, header_e,
         file_m, data_m, header_m,
-        offset, dtype, velocity_rest)
+        offset, dtype, velocity_rest, output_dir)
 
 
 def prep_mmaps(
         file_d, file_e, file_m,
         roi_spat, clip_min, clip_max, ccl_lcount, ccl_pcount, ccl_lratio,
-        sclip_sigma, sclip_iters, minify, nanpad, dtype):
+        sclip_sigma, sclip_iters, minify, nanpad, dtype,
+        output_dir='.'):
     """
     The options of the clipping (clip_min, clip_max, sclip_sigma and
     sclip_iters) have one value for each map; sclip_iters can also be
@@ -577,7 +578,7 @@ def prep_mmaps(
             file_d[i], data_d[i], header_d[i],
             file_e[i], data_e[i], header_e[i],
             file_m[i], data_m[i], header_m[i],
-            offset, dtype)
+            offset, dtype, output_dir=output_dir)
 
 
 def prep_scube(
@@ -585,7 +586,7 @@ def prep_scube(
         roi_spat, roi_spec, clip_min, clip_max,
         ccl_lcount, ccl_pcount, ccl_lratio,
         sclip_sigma, sclip_iters, minify, nanpad, dtype,
-        velocity_rest=None):
+        velocity_rest=None, output_dir='.'):
 
     (data_d, header_d,
      data_e, header_e,
@@ -635,7 +636,7 @@ def prep_scube(
         file_d, data_d, header_d,
         file_e, data_e, header_e,
         file_m, data_m, header_m,
-        offset, dtype, velocity_rest)
+        offset, dtype, velocity_rest, output_dir)
 
 
 def _bin_values(bins, nbins, data, name):
@@ -657,7 +658,8 @@ def _bin_values(bins, nbins, data, name):
     return values
 
 
-def prep_bmaps(file_bins, file_d, file_e, file_m, dtype):
+def prep_bmaps(
+        file_bins, file_d, file_e, file_m, dtype, output_dir='.'):
     """
     Prepare binned moment maps (e.g. of MaNGA DAP or GIST) for bmaps: a
     map of the bin of each pixel (file_bins; negative or NaN for no bin),
@@ -685,7 +687,9 @@ def prep_bmaps(file_bins, file_d, file_e, file_m, dtype):
 
     def save(filename, data, header=None):
         name = os.path.splitext(os.path.basename(filename))[0]
-        fits.writeto(f'prep_{name}.fits', data, header, overwrite=True)
+        fits.writeto(
+            os.path.join(output_dir, f'prep_{name}.fits'), data, header,
+            overwrite=True)
 
     save(file_bins, index, header_bins)
     for i in range(nmmaps):

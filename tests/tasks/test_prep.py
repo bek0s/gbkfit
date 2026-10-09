@@ -3,6 +3,9 @@ Tests for the data preparation tasks (gbkfit-cli prep): the prepared
 files keep the world coordinates of the data they were cut from.
 """
 
+import subprocess
+import sys
+
 import astropy.io.fits as fits
 import astropy.wcs
 import numpy as np
@@ -381,6 +384,16 @@ def test_spectral_axes_that_cannot_be_converted(header, message):
     with pytest.raises(Exception, match=message):
         prep_scube('cube.fits', velocity_rest='6562.8 Angstrom')
 
+
+def test_cli_writes_to_the_output_directory():
+    header = {k: v for k, v in HEADER.items() if k[-1] in '12'}
+    fits.writeto('image.fits', np.ones((20, 24), np.float32),
+                 fits.Header(header))
+    subprocess.run(
+        [sys.executable, '-m', 'gbkfit.apps.cli', 'prep', 'image',
+         '--data-d', 'image.fits', '--output-dir', 'prepared'],
+        check=True, capture_output=True)
+    assert fits.getdata('prepared/prep_image.fits').shape == (20, 24)
 
 def test_integer_data_are_prepared():
     # Integer data (here with an invalid error of 0) become floats, which

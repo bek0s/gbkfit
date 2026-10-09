@@ -480,14 +480,19 @@ def main():
                 args.output_dir, args.output_dir_mode)
 
     elif args.task == 'prep':
+        import gbkfit.tasks._detail
         import gbkfit.tasks.prep
+        output_dir = gbkfit.tasks._detail.make_output_dir(
+            args.output_dir, args.output_dir_mode)
+        _log.info(f"output will be stored under directory: {output_dir}")
         if args.prep_task == 'image':
             gbkfit.tasks.prep.prep_image(
                 args.data_d, args.data_e, args.data_m,
                 args.roi_spat, args.clip_min, args.clip_max,
                 args.ccl_lcount, args.ccl_pcount, args.ccl_lratio,
                 args.sclip_sigma, args.sclip_iters,
-                args.minify, args.nanpad, args.dtype)
+                args.minify, args.nanpad, args.dtype,
+                output_dir=output_dir)
         elif args.prep_task == 'lslit':
             gbkfit.tasks.prep.prep_lslit(
                 args.data_d, args.data_e, args.data_m,
@@ -495,17 +500,19 @@ def main():
                 args.ccl_lcount, args.ccl_pcount, args.ccl_lratio,
                 args.sclip_sigma, args.sclip_iters,
                 args.minify, args.nanpad, args.dtype,
-                args.velocity_rest)
+                args.velocity_rest, output_dir=output_dir)
         elif args.prep_task == 'mmaps':
             gbkfit.tasks.prep.prep_mmaps(
                 args.data_d, args.data_e, args.data_m,
                 args.roi_spat, args.clip_min, args.clip_max,
                 args.ccl_lcount, args.ccl_pcount, args.ccl_lratio,
                 args.sclip_sigma, args.sclip_iters,
-                args.minify, args.nanpad, args.dtype)
+                args.minify, args.nanpad, args.dtype,
+                output_dir=output_dir)
         elif args.prep_task == 'bmaps':
             gbkfit.tasks.prep.prep_bmaps(
-                args.bins, args.data_d, args.data_e, args.data_m, args.dtype)
+                args.bins, args.data_d, args.data_e, args.data_m, args.dtype,
+                output_dir=output_dir)
         elif args.prep_task == 'scube':
             gbkfit.tasks.prep.prep_scube(
                 args.data_d, args.data_e, args.data_m,
@@ -513,7 +520,7 @@ def main():
                 args.ccl_lcount, args.ccl_pcount, args.ccl_lratio,
                 args.sclip_sigma, args.sclip_iters,
                 args.minify, args.nanpad, args.dtype,
-                args.velocity_rest)
+                args.velocity_rest, output_dir=output_dir)
 
     elif args.task == 'fit':
         import gbkfit.tasks.fit
