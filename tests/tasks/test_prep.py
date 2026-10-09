@@ -189,6 +189,22 @@ def test_connected_components_see_the_clipping():
     assert np.isnan(prepared).all()
 
 
+def test_sigma_clipping_sees_the_kept_pixels_only():
+    # A source of values from 9.9 to 10.1 (no outliers) above a background
+    # of -1 that clip_min removes: the sigma clipping of the source alone
+    # keeps it all (with the background in its statistics, it clipped it)
+    data = np.full((30, 30), -1, np.float32)
+    data[10:20, 10:20] = np.linspace(9.9, 10.1, 100).reshape(10, 10)
+    fits.writeto('image.fits', data)
+    prepared = prep_image('image.fits', clip_min=0, sclip_sigma=3)
+    assert np.isfinite(prepared).sum() == 100
+
+
+def test_minify_without_valid_pixels_is_an_error():
+    fits.writeto('image.fits', np.full((8, 8), -1, np.float32))
+    with pytest.raises(Exception, match="no valid pixels"):
+        prep_image('image.fits', clip_min=0, minify=True)
+
 def test_mmaps_use_the_sigma_clipping_of_each_map():
     rng = np.random.default_rng(1)
     for name in ['mmap0', 'mmap1']:
