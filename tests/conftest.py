@@ -6,6 +6,8 @@ A driver that is not available is skipped, unless it is listed in the
 GBKFIT_REQUIRE_DRIVERS environment variable (e.g. "host" or "host,cuda"),
 in which case its tests fail. This lets CI make sure the native modules
 were actually built and are being tested.
+
+Tests marked slow (e.g. full fits by samplers) run only with --runslow.
 """
 
 import os
@@ -20,6 +22,21 @@ REQUIRED_DRIVERS = {
     name.strip()
     for name in os.environ.get('GBKFIT_REQUIRE_DRIVERS', '').split(',')
     if name.strip()}
+
+
+def pytest_addoption(parser):
+    parser.addoption(
+        '--runslow', action='store_true',
+        help="also run the tests marked slow (e.g. full fits by samplers)")
+
+
+def pytest_collection_modifyitems(config, items):
+    if config.getoption('--runslow'):
+        return
+    skip = pytest.mark.skip(reason="slow: run with --runslow")
+    for item in items:
+        if 'slow' in item.keywords:
+            item.add_marker(skip)
 
 
 def _create_driver(name):
