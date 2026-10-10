@@ -77,6 +77,23 @@ class ParamMode(parseutils.TypedSerializable, abc.ABC):
         """
         pass
 
+    @abc.abstractmethod
+    def encode(self, values: np.ndarray) -> np.ndarray:
+        """
+        Code the values of a parameter (the inverse of decode).
+
+        Parameters
+        ----------
+        values : np.ndarray
+            The values.
+
+        Returns
+        -------
+        np.ndarray
+            The coded values (a new array).
+        """
+        pass
+
 
 class ParamModeOffsets(ParamMode):
     """
@@ -121,6 +138,12 @@ class ParamModeOffsets(ParamMode):
         decoded[self._origin] = values[self._origin]
         return decoded
 
+    def encode(self, values: np.ndarray) -> np.ndarray:
+        values = np.asarray(values, dtype=float)
+        coded = values - values[self._origin]
+        coded[self._origin] = values[self._origin]
+        return coded
+
 
 class ParamModeIncrements(ParamMode):
     """
@@ -162,6 +185,15 @@ class ParamModeIncrements(ParamMode):
     def decode(self, values: np.ndarray) -> np.ndarray:
         return numutils.cumsum_from(
             np.asarray(values, dtype=float), self._origin)
+
+    def encode(self, values: np.ndarray) -> np.ndarray:
+        # Each value less its neighbour towards the origin
+        values = np.asarray(values, dtype=float)
+        origin = self._origin % len(values)
+        coded = values.copy()
+        coded[origin + 1:] = values[origin + 1:] - values[origin:-1]
+        coded[:origin] = values[:origin] - values[1:origin + 1]
+        return coded
 
 
 param_mode_parser = parseutils.TypedParser(ParamMode, [

@@ -12,8 +12,8 @@ import numpy as np
 import pytest
 
 from gbkfit.params import (
-    ParamEvaluationError, ParamKind, ParamModeOffsets, ParamScalarDesc,
-    ParamSpace, ParamVectorDesc, param_space_parser)
+    ParamEvaluationError, ParamKind, ParamModeIncrements, ParamModeOffsets,
+    ParamScalarDesc, ParamSpace, ParamVectorDesc, param_space_parser)
 from gbkfit.utils.parseutils import ConfigError
 
 
@@ -413,3 +413,41 @@ def test_valid_ranges():
         modes=dict(v=ParamModeOffsets()))
     with pytest.raises(ParamEvaluationError, match=r"'v\[2\]' is 1.2"):
         space.evaluate()
+
+
+def test_with_values_starts_the_free_elements_there():
+    # (e.g. at the solution of a fit, to start another one): through
+    # every form of key, leaving the fixed and tied elements alone
+    pdescs = make_pdescs(a=None, b=None, v=4, w=3)
+    params = ParamSpace(pdescs, {
+        'a': dict(value=1, min=0, max=5),
+        'b': 'a * 2',
+        'v[0]': dict(value=2),
+        'v[1:]': {'value': 0, '*min': [-1, -2, -3]},
+        'w': [dict(value=1), 7.0, 'w[0] + 1']})
+    start = params.with_values(
+        {'a': 3, 'b': 99, 'v[0]': 5, 'v[1]': 6, 'v[2]': 7, 'v[3]': 8,
+         'w[0]': 4, 'w[1]': 99})
+    values = start.evaluate()
+    assert (values['a'], values['b']) == (3, 6)
+    np.testing.assert_array_equal(values['v'], [5, 6, 7, 8])
+    np.testing.assert_array_equal(values['w'], [4, 7, 5])
+    # The other properties stay (the bounds, and those of the elements)
+    assert start.properties()['a'] == dict(value=3, min=0, max=5)
+    assert start.properties()['v[1:]'] == {
+        '*min': [-1, -2, -3], '*value': [6, 7, 8]}
+    assert start.free_properties()['v[3]'] == dict(value=8, min=-3)
+
+
+@pytest.mark.parametrize('mode', [
+    ParamModeOffsets(origin=1), ParamModeIncrements(origin=2)])
+def test_with_values_codes_the_values_of_parameters_with_a_mode(mode):
+    pdescs = make_pdescs(v=4)
+    params = ParamSpace(pdescs, {'v': {'*value': [1, 2, 3, 4]}},
+                        modes=dict(v=mode))
+    decoded = [10, 12, 15, 11]
+    start = params.with_values(
+        {f'v[{i}]': value for i, value in enumerate(decoded)})
+    np.testing.assert_allclose(start.evaluate()['v'], decoded)
+    with pytest.raises(ValueError, match="give all its values"):
+        params.with_values({'v[0]': 10})

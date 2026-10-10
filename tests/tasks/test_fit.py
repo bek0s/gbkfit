@@ -59,3 +59,17 @@ def test_fit_recovers_the_parameters_of_noiseless_data(tmp_path):
         assert (tmp_path / 'fit' / name).exists()
     # (the extra outputs of the models once, not again for the residuals)
     assert not list((tmp_path / 'fit').glob('*residual_extra_*'))
+    # A configuration that starts another fit at the best fit
+    restart = yaml.load(tmp_path / 'fit' / 'restart.yaml')
+    for name in ('xpos', 'posa', 'vpt_vt'):
+        assert restart['params']['properties'][name]['value'] == \
+            pytest.approx(best[name])
+    assert restart['fitter'] == config['fitter']
+    # which runs, with another fitter
+    restart['fitter'] = dict(type='scipy.least_squares')
+    yaml.dump(restart, tmp_path / 'restart.yaml')
+    run_cli(tmp_path, 'fit', 'restart.yaml', '--output-dir', 'refit')
+    refit = json.loads((tmp_path / 'refit' / 'result.json').read_text())
+    for name in ('xpos', 'posa', 'vpt_vt'):
+        assert refit['solutions'][0]['free'][name] == pytest.approx(
+            best[name], abs=1e-3)
