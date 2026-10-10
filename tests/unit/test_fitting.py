@@ -64,6 +64,19 @@ def bounded_properties():
         for name, (value, lo, hi) in START.items()}
 
 
+
+def test_fitter_configs_round_trip():
+    # (the fitters whose libraries are installed)
+    from gbkfit.fitting import fitter_parser
+    from gbkfit.utils import parseutils
+    for type_ in fitter_parser.registered_classes():
+        info = dict(type=type_)
+        if type_ == 'multistart':
+            info['local'] = dict(type='scipy.least_squares')
+        dumped = fitter_parser.dump(fitter_parser.load(info))
+        with parseutils.strict_mode():
+            assert fitter_parser.dump(fitter_parser.load(dumped)) == dumped
+
 @pytest.mark.parametrize('prior', [
     PriorUniform(-1, 3), PriorLogUniform(0.1, 10), PriorGauss(1, 2),
     PriorGaussTrunc(1, 2, 0, 2)])
