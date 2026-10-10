@@ -119,8 +119,13 @@ def test_primary_beam_from_an_image(tmp_path):
     # (bilinear interpolation of pixels of 0.25 arcsec)
     np.testing.assert_allclose(
         image.response(grid), gauss.response(grid), atol=5e-3)
+    # (pixels at the centre, and beyond the image)
+    beyond = gridutils.make_grid((2, 1), 30, rpix=(0, 0))
+    response = image.response(beyond)
+    assert response[0, 0] > 0 and response[0, 1] == 0
     far = gridutils.make_grid((2, 2), 1, rpix=(-30, -30))
-    np.testing.assert_array_equal(image.response(far), 0)
+    with pytest.raises(RuntimeError, match="does not cover"):
+        image.response(far)
     # Round trip through the configuration
     dumped = primary_beam_parser.dump(image, prefix=str(tmp_path / 'd_'))
     again = primary_beam_parser.load(dict(dumped))
@@ -132,6 +137,21 @@ def test_primary_beam_from_an_image(tmp_path):
         rota=0))
     assert stretched._grid.coords.step == (0.5, 0.5)
     assert stretched._grid.coords.rota == 0
+
+
+def test_primary_beam_image_is_placed_by_its_ra_and_dec():
+    # An image of a beam that peaks at its reference pixel, which is
+    # 3 arcsec east and 2 arcsec north of that of the grid (with 1 arcsec
+    # pixels; east is to the left)
+    from gbkfit.observation import PrimaryBeamImage
+    beam_grid = gridutils.make_grid((41, 41), 0.5)
+    beam = PrimaryBeamImage(
+        PrimaryBeamGauss(4).response(beam_grid), 0.5,
+        rval=(10 + 3 / 3600, 2 / 3600))
+    grid = gridutils.make_grid((21, 21), 1, rval=(10, 0))
+    response = beam.response(grid)
+    j, i = np.unravel_index(np.argmax(response), response.shape)
+    assert (i, j) == (10 - 3, 10 + 2)
 
 
 def test_observation_dumps_the_image_of_its_primary_beam(tmp_path):
