@@ -190,7 +190,8 @@ def evaluation_outputs(
     unweighted and weighted residuals (residual_<item>_d and
     wresidual_<item>_d, with _<i> after the prefix if there are several
     observations; these need the objective), and the extra outputs
-    (<prefix>_extra_<name>).
+    (<prefix>_extra_<name>; those of the models once, under the first
+    prefix: each residual evaluation evaluates the models again).
     """
     outputs = {}
     model_extra: dict[str, Any] = {}
@@ -209,8 +210,8 @@ def evaluation_outputs(
         for prefix, weighted in (('residual', False), ('wresidual', True)):
             extra: dict[str, Any] = {}
             # (the objective reuses its residual arrays, so copy them)
-            data = copy.deepcopy(
-                objective.residual_nddata_h(values, weighted, extra))
+            data = copy.deepcopy(objective.residual_nddata_h(
+                values, weighted, None if model or weighted else extra))
             for i, data_i in enumerate(data):
                 prefix_i = prefix + f'_{i}' * (objective.nobservations() > 1)
                 observable = group.observations()[i].observable()
