@@ -1,6 +1,6 @@
 """
-Tests for the options of the gmodels: which components and options each
-gmodel accepts, and which it rejects.
+Tests for the options of the models: which components and options each
+model accepts, and which it rejects.
 """
 
 import logging
@@ -26,60 +26,60 @@ SPECTRAL_2D = BRIGHTNESS_2D | dict(vptraits=ARCTAN, dptraits=UNIFORM)
 SPECTRAL_3D = SPECTRAL_2D | dict(bhtraits=SECH2)
 OPACITY_3D = dict(DISK, type='smdisk', optraits=EXPONENTIAL, ohtraits=SECH2)
 
-# Each type of gmodel, with a component of the kind it accepts
-GMODELS = dict(
+# Each type of model, with a component of the kind it accepts
+MODELS = dict(
     intensity_2d=BRIGHTNESS_2D,
     intensity_3d=BRIGHTNESS_3D,
     kinematics_2d=SPECTRAL_2D,
     kinematics_3d=SPECTRAL_3D)
 
-GMODELS_2D = ['intensity_2d', 'kinematics_2d']
-GMODELS_3D = ['intensity_3d', 'kinematics_3d']
+MODELS_2D = ['intensity_2d', 'kinematics_2d']
+MODELS_3D = ['intensity_3d', 'kinematics_3d']
 
-# The options of the 3d gmodels only
+# The options of the 3d models only
 OPTIONS_3D = dict(
     opacity_components=[OPACITY_3D], size_z=10, step_z=1, zero_z=-4.5)
 
 
 def strict_load(info):
-    """Load a gmodel, with unknown options as errors."""
+    """Load a model, with unknown options as errors."""
     with parseutils.strict_mode():
         return model_parser.load(info)
 
 
 def load_error(info):
-    """The error message of loading a bad gmodel."""
+    """The error message of loading a bad model."""
     with pytest.raises(parseutils.ConfigError) as error:
         strict_load(info)
     return str(error.value)
 
 
-@pytest.mark.parametrize('model_type', GMODELS)
+@pytest.mark.parametrize('model_type', MODELS)
 def test_model_loads(model_type):
-    strict_load(dict(type=model_type, components=GMODELS[model_type]))
+    strict_load(dict(type=model_type, components=MODELS[model_type]))
 
 
-@pytest.mark.parametrize('model_type', GMODELS)
+@pytest.mark.parametrize('model_type', MODELS)
 def test_components_cannot_be_missing(model_type):
     message = load_error(dict(type=model_type))
     assert "option 'components' is required but not provided" in message
 
 
-@pytest.mark.parametrize('model_type', GMODELS)
+@pytest.mark.parametrize('model_type', MODELS)
 def test_components_cannot_be_null(model_type):
     message = load_error(dict(type=model_type, components=None))
     assert "option 'components' cannot be null" in message
 
 
-@pytest.mark.parametrize('model_type', GMODELS)
+@pytest.mark.parametrize('model_type', MODELS)
 def test_components_cannot_be_empty(model_type):
     message = load_error(dict(type=model_type, components=[]))
     assert "at least one component must be configured" in message
 
 
-@pytest.mark.parametrize('model_type', GMODELS_2D)
-def test_2d_gmodels_have_no_mcdisk_components(model_type):
-    component = GMODELS[model_type] | dict(type='mcdisk', cflux=1e-3)
+@pytest.mark.parametrize('model_type', MODELS_2D)
+def test_2d_models_have_no_mcdisk_components(model_type):
+    component = MODELS[model_type] | dict(type='mcdisk', cflux=1e-3)
     message = load_error(dict(type=model_type, components=component))
     assert "unknown" in message and "type 'mcdisk'" in message
 
@@ -93,39 +93,39 @@ def test_2d_gmodels_have_no_mcdisk_components(model_type):
     ('kinematics_3d', OPACITY_3D, "option 'bptraits' is required"),
     ('kinematics_2d', SPECTRAL_3D, "unknown options"),
     ('intensity_2d', BRIGHTNESS_3D, "unknown options")])
-def test_gmodels_reject_components_of_other_kinds(
+def test_models_reject_components_of_other_kinds(
         model_type, component, message):
     assert message in load_error(dict(type=model_type, components=component))
 
 
-@pytest.mark.parametrize('model_type', GMODELS_3D)
+@pytest.mark.parametrize('model_type', MODELS_3D)
 def test_opacity_components_are_not_components(model_type):
     info = dict(
-        type=model_type, components=GMODELS[model_type],
+        type=model_type, components=MODELS[model_type],
         opacity_components=BRIGHTNESS_3D)
     assert "option 'optraits' is required" in load_error(info)
 
 
-@pytest.mark.parametrize('model_type', GMODELS_3D)
-def test_3d_gmodels_have_3d_options(model_type):
+@pytest.mark.parametrize('model_type', MODELS_3D)
+def test_3d_models_have_3d_options(model_type):
     strict_load(
-        dict(type=model_type, components=GMODELS[model_type]) | OPTIONS_3D)
+        dict(type=model_type, components=MODELS[model_type]) | OPTIONS_3D)
 
 
-@pytest.mark.parametrize('model_type', GMODELS_2D)
+@pytest.mark.parametrize('model_type', MODELS_2D)
 @pytest.mark.parametrize('option', OPTIONS_3D)
-def test_2d_gmodels_have_no_3d_options(model_type, option):
+def test_2d_models_have_no_3d_options(model_type, option):
     info = dict(
-        type=model_type, components=GMODELS[model_type],
+        type=model_type, components=MODELS[model_type],
         **{option: OPTIONS_3D[option]})
     message = load_error(info)
     assert message.startswith(f"{model_type}: unknown options")
     assert f"'{option}'" in message
 
 
-@pytest.mark.parametrize('model_type', GMODELS)
+@pytest.mark.parametrize('model_type', MODELS)
 def test_spatial_nwmodes(model_type):
-    component = GMODELS[model_type] | dict(
+    component = MODELS[model_type] | dict(
         loose=True, tilted=True,
         xpos_nwmode=RELATIVE, ypos_nwmode=RELATIVE,
         posa_nwmode=RELATIVE, incl_nwmode=RELATIVE)
@@ -134,33 +134,33 @@ def test_spatial_nwmodes(model_type):
 
 @pytest.mark.parametrize('model_type', ['kinematics_2d', 'kinematics_3d'])
 def test_spectral_components_have_a_vsys_nwmode(model_type):
-    component = GMODELS[model_type] | dict(
+    component = MODELS[model_type] | dict(
         loose=True, vsys_nwmode=RELATIVE)
     strict_load(dict(type=model_type, components=component))
 
 
 @pytest.mark.parametrize('model_type', ['intensity_2d', 'intensity_3d'])
 def test_brightness_components_have_no_vsys_nwmode(model_type):
-    component = GMODELS[model_type] | dict(
+    component = MODELS[model_type] | dict(
         loose=True, vsys_nwmode=RELATIVE)
     message = load_error(dict(type=model_type, components=component))
     assert "'vsys_nwmode'" in message
 
 
-@pytest.mark.parametrize('model_type', GMODELS_3D)
+@pytest.mark.parametrize('model_type', MODELS_3D)
 def test_opacity_components_have_no_vsys_nwmode(model_type):
     ocomponent = OPACITY_3D | dict(loose=True, vsys_nwmode=RELATIVE)
     info = dict(
-        type=model_type, components=GMODELS[model_type],
+        type=model_type, components=MODELS[model_type],
         opacity_components=ocomponent)
     assert "'vsys_nwmode'" in load_error(info)
 
 
-# Each node-wise mode of each type of gmodel, and the option it needs:
+# Each node-wise mode of each type of model, and the option it needs:
 # the spectral components also have a vsys node-wise mode
 NWMODE_SWITCHES = [
     (model_type, nwmode, switch)
-    for model_type in GMODELS
+    for model_type in MODELS
     for nwmode, switch in [
         ('xpos_nwmode', 'loose'), ('ypos_nwmode', 'loose'),
         ('posa_nwmode', 'tilted'), ('incl_nwmode', 'tilted')]
@@ -172,27 +172,27 @@ NWMODE_SWITCHES = [
 @pytest.mark.parametrize('model_type, nwmode, switch', NWMODE_SWITCHES)
 def test_nwmodes_are_ignored_without_their_switch(
         model_type, nwmode, switch, caplog):
-    component = GMODELS[model_type] | {nwmode: RELATIVE}
-    gmodel = strict_load(dict(type=model_type, components=component))
+    component = MODELS[model_type] | {nwmode: RELATIVE}
+    model = strict_load(dict(type=model_type, components=component))
     assert (
         f"{nwmode} is set to 'relative1', but it will be ignored "
         f"because {switch} is not set to True") in caplog.text
     # Without the switch the parameter is not node-wise
-    assert gmodel.pdescs()[nwmode[:4]].type() == 'scalar'
+    assert model.pdescs()[nwmode[:4]].type() == 'scalar'
 
 
-@pytest.mark.parametrize('model_type', GMODELS)
+@pytest.mark.parametrize('model_type', MODELS)
 def test_unknown_trait_options_are_errors_in_strict_mode(model_type):
-    component = GMODELS[model_type] | dict(
+    component = MODELS[model_type] | dict(
         bptraits=dict(EXPONENTIAL, foo=1))
     message = load_error(dict(type=model_type, components=[component]))
     assert message.startswith("components[0].bptraits")
     assert "'foo'" in message
 
 
-@pytest.mark.parametrize('model_type', GMODELS)
+@pytest.mark.parametrize('model_type', MODELS)
 def test_unknown_options_are_warnings(model_type, caplog):
-    component = GMODELS[model_type] | dict(foo=1)
+    component = MODELS[model_type] | dict(foo=1)
     with caplog.at_level(logging.WARNING):
         model_parser.load(dict(type=model_type, components=component))
     assert "'foo'" in caplog.text

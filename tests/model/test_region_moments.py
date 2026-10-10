@@ -17,7 +17,7 @@ from gbkfit.region import RegionsBins
 from gbkfit.utils import fitsutils, gridutils
 
 
-GMODEL = dict(type='kinematics_2d', components=[dict(
+MODEL = dict(type='kinematics_2d', components=[dict(
     type='smdisk', loose=False, tilted=False,
     rnodes=list(range(0, 14)),
     bptraits=dict(type='exponential'),
@@ -34,11 +34,11 @@ INSTRUMENT = dict(
 SPECTRAL = dict(spec_size=101, spec_step=5)
 
 
-def evaluate(driver, dmodel):
-    """The model data of a dmodel of the tests, by data item."""
+def evaluate(driver, observable):
+    """The model data of an observable of the tests, by data item."""
     model_group = observation_group([
-        dict(driver=dict(type=driver.type()), dmodel=copy.deepcopy(dmodel),
-             gmodel=GMODEL)])
+        dict(driver=dict(type=driver.type()),
+             observable=copy.deepcopy(observable), model=MODEL)])
     params = gbkfit.params.EvaluationParams(model_group.pdescs(), PROPERTIES)
     data = model_group.model_h(params.evaluate())[0]
     return {key: value['d'].copy() for key, value in data.items()}
@@ -169,7 +169,7 @@ def test_region_moments_objective_residual(driver):
     observable = RegionMoments(regions, orders=[1, 2], **SPECTRAL)
     instrument = instrument_parser.load(copy.deepcopy(INSTRUMENT))
     group = ObservationGroup(
-        [model_parser.load(copy.deepcopy(GMODEL))],
+        [model_parser.load(copy.deepcopy(MODEL))],
         [Observation(observable, driver, instrument=instrument)])
     params = gbkfit.params.EvaluationParams(group.pdescs(), PROPERTIES)
     model = {
@@ -180,7 +180,7 @@ def test_region_moments_objective_residual(driver):
             Data(value + 1, error=np.full_like(value, 2))
         for key, value in model.items()}, regions)
     group = ObservationGroup(
-        [model_parser.load(copy.deepcopy(GMODEL))],
+        [model_parser.load(copy.deepcopy(MODEL))],
         [Observation(
             observable, driver, instrument=instrument, data=dataset)])
     residual = Objective(group).residual_nddata_h(params.evaluate(), False)

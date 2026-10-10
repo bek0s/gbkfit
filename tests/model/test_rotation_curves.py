@@ -52,13 +52,14 @@ CURVES = dict(
 
 
 @pytest.mark.parametrize('trait', list(CURVES))
-def test_rotation_curves(driver, trait, evaluate_models):
+def test_rotation_curves(driver, trait, evaluate_cases):
     values, curve = CURVES[trait]
     incl = 60
-    model = dict(
+    case = dict(
         driver=dict(type=driver.type()),
-        dmodel=dict(type='pixel_spectra', size=[33, 41, 81], step=[0.5, 0.5, 10]),
-        gmodel=dict(type='kinematics_2d', components=[dict(
+        observable=dict(
+            type='pixel_spectra', size=[33, 41, 81], step=[0.5, 0.5, 10]),
+        model=dict(type='kinematics_2d', components=[dict(
             type='smdisk', loose=False, tilted=False,
             rnodes=list(range(0, 14)),
             bptraits=dict(type='exponential'),
@@ -67,7 +68,7 @@ def test_rotation_curves(driver, trait, evaluate_models):
     properties = dict(
         vsys=0, xpos=0, ypos=0, posa=0, incl=incl, bpt_a=1, bpt_s=4,
         dpt_a=20) | {f'vpt_{k}': v for k, v in values.items()}
-    _, extra = evaluate_models([model], properties)
+    _, extra = evaluate_cases([case], properties)
     velocity = extra['observation0_model_component0_vdata'].data
     # The major axis (posa 0) is the y axis, through x = 0 (column 16);
     # the receding side (positive velocities) is north
@@ -86,7 +87,7 @@ def test_rotation_curves(driver, trait, evaluate_models):
 
 
 @pytest.mark.parametrize('trait', ['tan_iso', 'tan_nfw'])
-def test_rotation_curves_near_the_centre(driver, trait, evaluate_models):
+def test_rotation_curves_near_the_centre(driver, trait, evaluate_cases):
     # Near the centre, 1 - atan(u) / u (pseudo-isothermal) and ln(1 + u) -
     # u / (1 + u) (NFW) lose their precision in float32, and the first
     # could fall below 0 (a NaN velocity). A pixel 1e-4 core radii from
@@ -95,10 +96,11 @@ def test_rotation_curves_near_the_centre(driver, trait, evaluate_models):
     values = values | dict(rt=3.0)
     incl = 60
     radius = 1e-4 * values['rt']
-    model = dict(
+    case = dict(
         driver=dict(type=driver.type()),
-        dmodel=dict(type='pixel_spectra', size=[9, 9, 41], step=[1, 1, 10]),
-        gmodel=dict(type='kinematics_2d', components=[dict(
+        observable=dict(
+            type='pixel_spectra', size=[9, 9, 41], step=[1, 1, 10]),
+        model=dict(type='kinematics_2d', components=[dict(
             type='smdisk', loose=False, tilted=False,
             rnodes=list(range(0, 6)),
             bptraits=dict(type='exponential'),
@@ -108,7 +110,7 @@ def test_rotation_curves_near_the_centre(driver, trait, evaluate_models):
     properties = dict(
         vsys=0, xpos=0, ypos=-radius, posa=0, incl=incl, bpt_a=1,
         bpt_s=4, dpt_a=20) | {f'vpt_{k}': v for k, v in values.items()}
-    data, extra = evaluate_models([model], properties)
+    data, extra = evaluate_cases([case], properties)
     assert np.isfinite(data[0]['spectra']['d']).all()
     velocity = extra['observation0_model_component0_vdata'].data
     expected = curve(radius, **values) * np.sin(np.radians(incl))

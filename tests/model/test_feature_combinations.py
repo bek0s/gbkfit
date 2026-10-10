@@ -1,6 +1,6 @@
 """
 Every observable with the options of the instrument, the foreground and
-the gmodel together (oversampling, psf, lsf, primary beam, lens, a
+the model together (oversampling, psf, lsf, primary beam, lens, a
 selection of components, emission lines): the model is finite, of the
 shape of its data, and not empty.
 """
@@ -30,7 +30,7 @@ def component(name, **options):
 LINES = [dict(name='ha', rest='6562.8 Angstrom'),
          dict(name='nii', rest='6583.45 Angstrom')]
 
-GMODEL = dict(type='kinematics_2d', components=[
+MODEL = dict(type='kinematics_2d', components=[
     component('gas', lines=LINES), component('stars')])
 
 PROPERTIES = {
@@ -98,7 +98,7 @@ def test_feature_combinations(driver, name, lens):
         instrument=instrument_parser.load(copy.deepcopy(instrument)),
         components=['gas'], scale=SCALES[name])
     group = ObservationGroup(
-        [model_parser.load(copy.deepcopy(GMODEL))], [observation])
+        [model_parser.load(copy.deepcopy(MODEL))], [observation])
     params = gbkfit.params.EvaluationParams(group.pdescs(), PROPERTIES)
     extra = {}
     data = group.model_h(params.evaluate(), extra)[0]

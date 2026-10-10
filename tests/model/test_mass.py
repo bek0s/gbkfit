@@ -112,10 +112,10 @@ def kinematics(model_type, disk_type, vptraits, mass_model=None):
     return model_parser.load(info)
 
 
-def evaluate(driver, gmodel, properties):
+def evaluate(driver, model, properties):
     from gbkfit.observation import Observation, ObservationGroup, PixelSpectra
     from gbkfit.params import EvaluationParams
-    group = ObservationGroup([gmodel], [Observation(
+    group = ObservationGroup([model], [Observation(
         PixelSpectra(size=(32, 32, 51), step=(1, 1, 10)), driver)])
     params = EvaluationParams(group.pdescs(), properties)
     return group.model_h(params.evaluate())[0]['spectra']['d'].copy()
@@ -148,12 +148,12 @@ def test_mass_trait_is_the_circular_velocity_at_the_subnodes(
 
 
 def test_mass_trait_parameters_and_round_trip():
-    gmodel = kinematics('kinematics_3d', 'smdisk', dict(type='mass'), MASS_MODEL)
+    model = kinematics('kinematics_3d', 'smdisk', dict(type='mass'), MASS_MODEL)
     # The trait has no parameters: those of the mass model are the
-    # gmodel's
-    assert not any(name.startswith('vpt') for name in gmodel.pdescs())
-    assert set(MASS_PROPERTIES) <= set(gmodel.pdescs())
-    dumped = model_parser.dump(gmodel)
+    # model's
+    assert not any(name.startswith('vpt') for name in model.pdescs())
+    assert set(MASS_PROPERTIES) <= set(model.pdescs())
+    dumped = model_parser.dump(model)
     assert dumped['mass_model'] == MASS_MODEL
     assert model_parser.dump(model_parser.load(copy.deepcopy(dumped))) \
         == dumped

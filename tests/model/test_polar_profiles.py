@@ -20,7 +20,7 @@ PROFILES = dict(
 VALUES = dict(a=2.0, s=3.0, b=1.5)
 
 
-def face_on_disk(driver, evaluate_models, key, trait):
+def face_on_disk(driver, evaluate_cases, key, trait):
     """
     The image (key 'b') or the dispersion map (key 'd') of a face-on thin
     disk with a polar trait of the given type, and the radius of each
@@ -33,16 +33,17 @@ def face_on_disk(driver, evaluate_models, key, trait):
         bptraits=dict(type=trait if key == 'b' else 'uniform'),
         vptraits=dict(type='tan_uniform'),
         dptraits=dict(type=trait if key == 'd' else 'uniform'))
-    model = dict(
+    case = dict(
         driver=dict(type=driver.type()),
-        dmodel=dict(type='pixel_spectra', size=[33, 33, 61], step=[0.5, 0.5, 5]),
-        gmodel=dict(type='kinematics_2d', components=[dict(
+        observable=dict(
+            type='pixel_spectra', size=[33, 33, 61], step=[0.5, 0.5, 5]),
+        model=dict(type='kinematics_2d', components=[dict(
             type='smdisk', loose=False, tilted=False,
             rnodes=list(range(0, 10)), **traits_)]))
     properties = dict(
         vsys=0, xpos=0, ypos=0, posa=0, incl=0, vpt_vt=0,
         bpt_a=1, dpt_a=10) | {f'{key}pt_{n}': VALUES[n] for n in names}
-    _, extra = evaluate_models([model], properties)
+    _, extra = evaluate_cases([case], properties)
     output = dict(b='bdata', d='ddata')[key]
     data = extra[f'observation0_model_component0_{output}'].data
     y, x = (np.indices((33, 33)) - 16) * 0.5
@@ -51,8 +52,8 @@ def face_on_disk(driver, evaluate_models, key, trait):
 
 @pytest.mark.parametrize('key', ['b', 'd'])
 @pytest.mark.parametrize('trait', list(PROFILES))
-def test_polar_profiles(driver, evaluate_models, key, trait):
-    data, radius = face_on_disk(driver, evaluate_models, key, trait)
+def test_polar_profiles(driver, evaluate_cases, key, trait):
+    data, radius = face_on_disk(driver, evaluate_cases, key, trait)
     # (inside the last node, away from its edge)
     inside = radius < 8.5
     np.testing.assert_allclose(

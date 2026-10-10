@@ -18,7 +18,7 @@ from gbkfit.region import RegionsApertures, RegionsBins
 from gbkfit.utils import fitsutils, gridutils
 
 
-GMODEL = dict(type='kinematics_2d', components=[dict(
+MODEL = dict(type='kinematics_2d', components=[dict(
     type='smdisk', loose=False, tilted=False,
     rnodes=list(range(0, 14)),
     bptraits=dict(type='exponential'),
@@ -40,10 +40,10 @@ APERTURES = [
     dict(type='field')]
 
 
-def evaluate(driver, dmodel):
+def evaluate(driver, observable):
     model_group = observation_group([
-        dict(driver=dict(type=driver.type()), dmodel=copy.deepcopy(dmodel),
-             gmodel=GMODEL)])
+        dict(driver=dict(type=driver.type()),
+             observable=copy.deepcopy(observable), model=MODEL)])
     params = gbkfit.params.EvaluationParams(model_group.pdescs(), PROPERTIES)
     data = model_group.model_h(params.evaluate())[0]
     return next(iter(data.values()))['d'].copy()
@@ -56,11 +56,11 @@ def aspec_of_apertures(apertures):
         **INSTRUMENT)
 
 
-def observable_of(dmodel):
-    """The observable of a dmodel of the tests, without the instrument."""
+def observable_of(observable):
+    """The observable of a case of the tests, without the instrument."""
     from gbkfit.observation import observable_parser
     return observable_parser.load(
-        {k: v for k, v in copy.deepcopy(dmodel).items()
+        {k: v for k, v in copy.deepcopy(observable).items()
          if k not in INSTRUMENT})
 
 
@@ -89,12 +89,12 @@ def test_region_spectra_of_bins_are_the_sums_of_pixel_spectra(driver):
     index[20:30, 10:25] = 1
     index[5, 5] = 2
     scube = evaluate(driver, SCUBE)
-    dmodel = dict(
+    observable = dict(
         type='region_spectra', spec_size=51, spec_step=10, **INSTRUMENT,
         regions=dict(type='bins', file='bins.fits'))
     fitsutils.write_data('bins.fits', index, gridutils.Coords(
         (1, 1), (15.5, 20), (0, 0), 0))
-    aspec = evaluate(driver, dmodel)
+    aspec = evaluate(driver, observable)
     expected = np.stack(
         [scube[:, index == i].sum(axis=1) for i in range(3)], axis=1)
     np.testing.assert_allclose(aspec, expected, rtol=1e-5, atol=1e-6)
@@ -104,13 +104,13 @@ def test_region_spectra_of_bins_are_the_sums_of_pixel_spectra(driver):
 def test_region_spectra_of_a_point_is_its_flux(driver, step):
     # The spectra of regions are fluxes: around a point, its flux,
     # whatever the size of the pixels of the model
-    gmodel = dict(type='kinematics_2d', components=[dict(type='point')])
-    dmodel = dict(
+    model = dict(type='kinematics_2d', components=[dict(type='point')])
+    observable = dict(
         type='region_spectra', size=[int(16 / step)] * 2, step=[step, step],
         spec_size=51, spec_step=10, regions=dict(type='apertures', apertures=[
             dict(type='circle', x=0, y=0, radius=3)]))
     model_group = observation_group([dict(
-        driver=dict(type=driver.type()), dmodel=dmodel, gmodel=gmodel)])
+        driver=dict(type=driver.type()), observable=observable, model=model)])
     params = gbkfit.params.EvaluationParams(
         model_group.pdescs(), dict(xpos=0, ypos=0, flux=2, vsys=0, disp=30))
     spectrum = model_group.model_h(params.evaluate())[0]['spectra']['d'][:, 0]
@@ -124,16 +124,16 @@ def test_region_spectra_objective_residual(driver):
     from gbkfit.objective import Objective
     from gbkfit.instrument import Instrument, instrument_parser
     from gbkfit.observation import Observation, ObservationGroup
-    dmodel = aspec_of_apertures(APERTURES[:2])
-    model = evaluate(driver, dmodel)
-    observable = observable_of(dmodel)
+    observable = aspec_of_apertures(APERTURES[:2])
+    model = evaluate(driver, observable)
+    observable = observable_of(observable)
     dataset = DatasetRegionSpectra(
         Data(model + 1, error=np.full_like(model, 2)),
         observable.regions(), step=10)
     observation = Observation(
         observable, driver, instrument=Instrument(), data=dataset)
     group = ObservationGroup(
-        [model_parser.load(copy.deepcopy(GMODEL))], [observation])
+        [model_parser.load(copy.deepcopy(MODEL))], [observation])
     params = gbkfit.params.EvaluationParams(group.pdescs(), PROPERTIES)
     residual = Objective(group).residual_nddata_h(params.evaluate(), False)
     # Without the instrument, the model differs from the data
@@ -143,7 +143,7 @@ def test_region_spectra_objective_residual(driver):
         instrument=instrument_parser.load(copy.deepcopy(INSTRUMENT)),
         data=dataset)
     group = ObservationGroup(
-        [model_parser.load(copy.deepcopy(GMODEL))], [observation])
+        [model_parser.load(copy.deepcopy(MODEL))], [observation])
     residual = Objective(group).residual_nddata_h(params.evaluate(), False)
     np.testing.assert_allclose(residual[0]['spectra'], -0.5, rtol=1e-5)
 

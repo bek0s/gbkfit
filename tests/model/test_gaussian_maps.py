@@ -13,7 +13,7 @@ from modelutils import observation_group
 from gbkfit.observation.observables._moments import MomentsPlan
 
 
-GMODEL = dict(type='kinematics_2d', components=[dict(
+MODEL = dict(type='kinematics_2d', components=[dict(
     type='smdisk', loose=False, tilted=False,
     rnodes=list(range(0, 14)),
     bptraits=dict(type='exponential'),
@@ -25,10 +25,10 @@ PROPERTIES = dict(
     bpt_a=1, bpt_s=4, vpt_rt=2, vpt_vt=150, dpt_a=20)
 
 
-def evaluate(driver, dmodel):
+def evaluate(driver, observable):
     group = observation_group([dict(
-        driver=dict(type=driver.type()), dmodel=copy.deepcopy(dmodel),
-        gmodel=GMODEL)])
+        driver=dict(type=driver.type()), observable=copy.deepcopy(observable),
+        model=MODEL)])
     params = gbkfit.params.EvaluationParams(group.pdescs(), PROPERTIES)
     data = group.model_h(params.evaluate())[0]
     return {key: value['d'].copy() for key, value in data.items()}

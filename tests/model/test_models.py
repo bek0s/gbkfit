@@ -1,6 +1,6 @@
 """
-Regression tests for the gmodels and their components: every type of
-gmodel, with every type of component, evaluated together with all its
+Regression tests for the models and their components: every type of
+model, with every type of component, evaluated together with all its
 extra outputs (e.g. the velocity field of each component).
 
 The references were made by the code itself, so these tests only catch
@@ -29,12 +29,12 @@ def mcdisk(**options):
     return dict(type='mcdisk', rnodes=RNODES, cflux=1e-3, **options)
 
 
-# A model of each type of gmodel, and its parameter properties
-MODELS = dict(
+# A model of each type of model, and its parameter properties
+CASES = dict(
     intensity_2d=(
         dict(
-            dmodel=dict(type='pixel_brightness', size=[20, 16], rota=10),
-            gmodel=dict(type='intensity_2d', components=[
+            observable=dict(type='pixel_brightness', size=[20, 16], rota=10),
+            model=dict(type='intensity_2d', components=[
                 smdisk(
                     loose=True, tilted=True, xpos_nwmode=NWMODE,
                     bptraits=[
@@ -48,8 +48,9 @@ MODELS = dict(
             spt_p=45, spt_s=270)),
     kinematics_2d=(
         dict(
-            dmodel=dict(type='pixel_spectra', size=[20, 16, 11], step=[1, 1, 30]),
-            gmodel=dict(type='kinematics_2d', components=[
+            observable=dict(
+                type='pixel_spectra', size=[20, 16, 11], step=[1, 1, 30]),
+            model=dict(type='kinematics_2d', components=[
                 smdisk(
                     loose=True, tilted=False, vsys_nwmode=NWMODE,
                     bptraits=dict(type='gauss'),
@@ -76,8 +77,8 @@ MODELS = dict(
             cmp1_spt_p=[0, 10, 20, 30, 40], cmp1_spt_s=[300] * 5)),
     intensity_3d=(
         dict(
-            dmodel=dict(type='pixel_brightness', size=[20, 16]),
-            gmodel=dict(
+            observable=dict(type='pixel_brightness', size=[20, 16]),
+            model=dict(
                 type='intensity_3d',
                 components=[
                     smdisk(
@@ -109,8 +110,9 @@ MODELS = dict(
             ocmp1_opt_a=0.1, ocmp1_opt_s=2, ocmp1_oht_s=0.5)),
     kinematics_3d=(
         dict(
-            dmodel=dict(type='pixel_spectra', size=[20, 16, 11], step=[1, 1, 30]),
-            gmodel=dict(
+            observable=dict(
+                type='pixel_spectra', size=[20, 16, 11], step=[1, 1, 30]),
+            model=dict(
                 type='kinematics_3d', size_z=14, step_z=1.5, zero_z=-9,
                 components=[
                     smdisk(
@@ -147,11 +149,11 @@ MODELS = dict(
             ocmp_opt_a=0.05, ocmp_opt_s=4, ocmp_oht_s=1)))
 
 
-@pytest.mark.parametrize('name', MODELS)
-def test_model(driver, name, evaluate_models, ndarrays_regression):
-    model, properties = MODELS[name]
-    model = dict(model, driver=dict(type=driver.type()))
-    data, extra = evaluate_models([model], properties)
+@pytest.mark.parametrize('name', CASES)
+def test_model(driver, name, evaluate_cases, ndarrays_regression):
+    case, properties = CASES[name]
+    case = dict(case, driver=dict(type=driver.type()))
+    data, extra = evaluate_cases([case], properties)
     # The extra outputs on a grid are compared by their data
     outputs = {
         f'data_{key}': data_[key]['d']
@@ -166,16 +168,16 @@ def test_model(driver, name, evaluate_models, ndarrays_regression):
         for key, value in outputs.items()})
 
 
-@pytest.mark.parametrize('name', MODELS)
-def test_model_dump_and_load(driver, name, evaluate_models):
-    # A dumped gmodel loads back to the same gmodel
+@pytest.mark.parametrize('name', CASES)
+def test_model_dump_and_load(driver, name, evaluate_cases):
+    # A dumped model loads back to the same model
     from gbkfit.model import model_parser
-    model, properties = MODELS[name]
-    model = dict(model, driver=dict(type=driver.type()))
-    info = model_parser.dump(model_parser.load(model['gmodel']))
+    case, properties = CASES[name]
+    case = dict(case, driver=dict(type=driver.type()))
+    info = model_parser.dump(model_parser.load(case['model']))
     assert model_parser.dump(model_parser.load(info)) == info
-    data, _ = evaluate_models([model], properties)
-    data_loaded, _ = evaluate_models([dict(model, gmodel=info)], properties)
+    data, _ = evaluate_cases([case], properties)
+    data_loaded, _ = evaluate_cases([dict(case, model=info)], properties)
     # Thick disks on cuda differ by float32 rounding between runs
     for key, value in data[0].items():
         np.testing.assert_allclose(
@@ -183,21 +185,21 @@ def test_model_dump_and_load(driver, name, evaluate_models):
             rtol=1e-4, atol=1e-6 * np.abs(value['d']).max())
 
 
-# The 2d gmodels, the size of their data and its spectral axis, and its
+# The 2d models, the size of their data and its spectral axis, and its
 # shape (an image is a cube with one channel)
-GMODELS_2D = [
+MODELS_2D = [
     (gbkfit.model.ModelIntensity2D, (20, 16), None, (1, 16, 20)),
     (gbkfit.model.ModelKinematics2D, (20, 16, 11), 2, (11, 16, 20))]
 
 
 @pytest.mark.parametrize(
-    'model_type, size, spectral_axis, shape', GMODELS_2D)
+    'model_type, size, spectral_axis, shape', MODELS_2D)
 def test_2d_model_weights_the_data(
         driver, model_type, size, spectral_axis, shape):
-    # The components of a 2d gmodel write their weights to its spatial
+    # The components of a 2d model write their weights to its spatial
     # weights, which then become the weights of the data: 0 where they
     # are 0, and 1 elsewhere (normalised to their maximum along z)
-    gmodel = model_type([WeightComponent()])
+    model = model_type([WeightComponent()])
     data = driver.mem_alloc_d(shape, np.float32)
     weights = driver.mem_alloc_d(shape, np.float32)
     driver.mem_fill(data, 0)
@@ -205,7 +207,7 @@ def test_2d_model_weights_the_data(
     ndim = len(size)
     grid = gridutils.Grid(size, gridutils.Coords(
         (1,) * ndim, (0,) * ndim, (0,) * ndim, 0), spectral_axis)
-    gmodel.plan(driver, grid, True, np.float32).evaluate(
+    model.plan(driver, grid, True, np.float32).evaluate(
         {}, data, weights, None)
     desired = np.ones(shape)
     desired[:, 0, :] = 0
@@ -213,9 +215,9 @@ def test_2d_model_weights_the_data(
 
 
 def test_3d_model_picks_the_z_axis_of_each_grid(driver):
-    # Without a configured z axis, a 3d gmodel picks one from the x and y
+    # Without a configured z axis, a 3d model picks one from the x and y
     # axes of the data. An edge-on thick disk is cut off by a z axis that
-    # is too short, so a gmodel evaluated on a small grid and then on a
+    # is too short, so a model evaluated on a small grid and then on a
     # large one must give the same as one evaluated on the large one only.
     info = dict(type='intensity_3d', components=smdisk(
         loose=False, tilted=False,
@@ -223,39 +225,39 @@ def test_3d_model_picks_the_z_axis_of_each_grid(driver):
     params = dict(
         xpos=0, ypos=0, posa=0, incl=90, bpt_a=1, bpt_s=4, bht_s=3)
 
-    def evaluate(gmodel, size):
+    def evaluate(model, size):
         image = driver.mem_alloc_d(size[::-1], np.float32)
         driver.mem_fill(image, 0)
         rpix = tuple(n / 2 - 0.5 for n in size)
         grid = gridutils.Grid(
             size, gridutils.Coords((1, 1), rpix, (0, 0), 0), None)
-        gmodel.plan(driver, grid, False, np.float32).evaluate(
+        model.plan(driver, grid, False, np.float32).evaluate(
             params, image, None, None)
         return driver.mem_copy_d2h(image)
 
-    gmodel = model_parser.load(info)
-    evaluate(gmodel, (6, 6))
+    model = model_parser.load(info)
+    evaluate(model, (6, 6))
     np.testing.assert_allclose(
-        evaluate(gmodel, (32, 32)),
+        evaluate(model, (32, 32)),
         evaluate(model_parser.load(info), (32, 32)), rtol=1e-5)
 
 
 
 def test_one_model_serves_several_grids(driver):
-    # A gmodel is a description: each plan owns the memory of its own
-    # grid, so plans of one gmodel on different grids, evaluated in turn,
-    # give what separate gmodels give
+    # A model is a description: each plan owns the memory of its own
+    # grid, so plans of one model on different grids, evaluated in turn,
+    # give what separate models give
     info = dict(type='intensity_3d', components=smdisk(
         loose=False, tilted=False,
         bptraits=dict(type='exponential'), bhtraits=dict(type='sech2')))
     params = dict(
         xpos=0, ypos=0, posa=30, incl=60, bpt_a=1, bpt_s=4, bht_s=1)
 
-    def plan(gmodel, size):
+    def plan(model, size):
         rpix = tuple(n / 2 - 0.5 for n in size)
         grid = gridutils.Grid(
             size, gridutils.Coords((1, 1), rpix, (0, 0), 0), None)
-        return gmodel.plan(driver, grid, False, np.float32)
+        return model.plan(driver, grid, False, np.float32)
 
     def evaluate(plan_, size):
         image = driver.mem_alloc_d(size[::-1], np.float32)

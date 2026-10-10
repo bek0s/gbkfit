@@ -1,5 +1,5 @@
 """
-Tests for the options of the gmodel components, and their errors.
+Tests for the options of the model components, and their errors.
 """
 
 import re
@@ -18,8 +18,8 @@ UNIFORM = dict(type='uniform')
 
 DISK = dict(loose=False, tilted=False, rnodes=[0, 2, 4, 6, 8])
 
-# Each type of component: its class, the gmodel and the option of the
-# gmodel it is in, and the component with its required options
+# Each type of component: its class, the model and the option of the
+# model it is in, and the component with its required options
 COMPONENTS = dict(
     brightness_smdisk_2d=(
         disks.BrightnessSMDisk2D, 'intensity_2d', 'components',
@@ -60,9 +60,9 @@ HEIGHT_TRAITS = [
     (name, key) for name, key in REQUIRED_TRAITS if key[1] == 'h']
 
 
-def gmodel_info(name, **options):
+def model_info(name, **options):
     """
-    The configuration of a gmodel with a component of the given type, with
+    The configuration of a model with a component of the given type, with
     its options updated. An option set to ... is left out.
     """
     _, model_type, key, component = COMPONENTS[name]
@@ -75,9 +75,9 @@ def gmodel_info(name, **options):
 
 
 def load_error(name, **options):
-    """The error message of loading a gmodel with a bad component."""
+    """The error message of loading a model with a bad component."""
     with pytest.raises(Exception) as error:
-        model_parser.load(gmodel_info(name, **options))
+        model_parser.load(model_info(name, **options))
     message = str(error.value)
     # The message names the type of component
     cls = COMPONENTS[name][0]
@@ -87,7 +87,7 @@ def load_error(name, **options):
 
 @pytest.mark.parametrize('name', COMPONENTS)
 def test_component_loads(name):
-    model_parser.load(gmodel_info(name))
+    model_parser.load(model_info(name))
 
 
 @pytest.mark.parametrize('name, key', REQUIRED_TRAITS)
@@ -119,7 +119,7 @@ def test_height_traits_must_match_polar_traits(name, key):
 
 @pytest.mark.parametrize('name', COMPONENTS)
 def test_optional_traits_can_be_null(name):
-    model_parser.load(gmodel_info(name, sptraits=None, wptraits=None))
+    model_parser.load(model_info(name, sptraits=None, wptraits=None))
 
 
 @pytest.mark.parametrize('name', COMPONENTS)
@@ -136,22 +136,22 @@ def test_spectral_3d_with_several_velocity_traits(name):
     # Rotation and radial motions, each with the default height trait.
     # The disk needs a height trait for each velocity trait to evaluate.
     from gbkfit.driver.drivers.host import DriverHost
-    gmodel = model_parser.load(gmodel_info(name, vptraits=[
+    model = model_parser.load(model_info(name, vptraits=[
         ARCTAN, dict(type='nw_rad_uniform')]))
-    assert {'vpt_vt', 'vpt1_vr'} <= set(gmodel.pdescs())
+    assert {'vpt_vt', 'vpt1_vr'} <= set(model.pdescs())
     params = {
         name: np.ones(pdesc.size()) if pdesc.type() == 'vector' else 1.0
-        for name, pdesc in gmodel.pdescs().items()}
+        for name, pdesc in model.pdescs().items()}
     scube = np.zeros((11, 16, 16), np.float32)
     grid = gridutils.Grid((16, 16, 11), gridutils.Coords(
         (1, 1, 10), (7.5, 7.5, 5), (0, 0, 0), 0), 2)
-    gmodel.plan(DriverHost(), grid, False, np.float32).evaluate(
+    model.plan(DriverHost(), grid, False, np.float32).evaluate(
         params, scube, None, None)
     assert scube.sum() > 0
 
 
 def test_errors_have_paths():
-    info = gmodel_info('spectral_smdisk_3d', vptraits=[
+    info = model_info('spectral_smdisk_3d', vptraits=[
         ARCTAN, dict(type='nw_rad_uniform', nwmode=dict(type='relative9'))])
     with pytest.raises(Exception) as error:
         model_parser.load(info)
@@ -160,9 +160,9 @@ def test_errors_have_paths():
 
 
 def component_error(name, **options):
-    """The error message of loading a gmodel with a bad component."""
+    """The error message of loading a model with a bad component."""
     with pytest.raises(Exception) as error:
-        model_parser.load(gmodel_info(name, **options))
+        model_parser.load(model_info(name, **options))
     return str(error.value)
 
 

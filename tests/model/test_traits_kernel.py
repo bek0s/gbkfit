@@ -46,7 +46,7 @@ def trait_configs(parser):
     configs = []
     for type_, cls in parser.registered_classes().items():
         # (the trait mass has no parameters: its values come from the
-        # mass model of the gmodel; see test_mass)
+        # mass model of its model; see test_mass)
         if cls is traits.VPTraitMass:
             continue
         options = inspect.signature(cls.__init__).parameters
@@ -71,7 +71,7 @@ def cases():
             yield pytest.param(key, config, id=f"{key}-{config}")
 
 
-def model_and_properties(driver, key, config):
+def case_and_properties(driver, key, config):
     """
     A kinematics_3d model with one smooth disk whose traits of the given
     kind (key) are the given trait, and the parameter properties of the
@@ -93,7 +93,7 @@ def model_and_properties(driver, key, config):
             ocmp_xpos=0, ocmp_ypos=0, ocmp_posa=20, ocmp_incl=60,
             ocmp_opt_a=0.05, ocmp_opt_s=4, ocmp_oht_s=1)
         prefix = 'ocmp_' + key[:3] + '_'
-        gmodel = dict(
+        model = dict(
             type='kinematics_3d', components=[component],
             opacity_components=[opacity])
     else:
@@ -104,19 +104,20 @@ def model_and_properties(driver, key, config):
                 properties |= values
         component[key] = config
         prefix = key[:3] + '_'
-        gmodel = dict(type='kinematics_3d', components=[component])
-    model = dict(
+        model = dict(type='kinematics_3d', components=[component])
+    case = dict(
         driver=dict(type=driver.type()),
-        dmodel=dict(type='pixel_spectra', size=[32, 32, 40], step=[1, 1, 10]),
-        gmodel=gmodel)
-    return model, properties, prefix
+        observable=dict(
+            type='pixel_spectra', size=[32, 32, 40], step=[1, 1, 10]),
+        model=model)
+    return case, properties, prefix
 
 
 @pytest.mark.parametrize('key, config', list(cases()))
 def test_every_trait_parameter_changes_the_model(
-        driver, evaluate_models, key, config):
-    model, properties, prefix = model_and_properties(driver, key, config)
-    pdescs = observation_group([model]).pdescs()
+        driver, evaluate_cases, key, config):
+    case, properties, prefix = case_and_properties(driver, key, config)
+    pdescs = observation_group([case]).pdescs()
     names = [name for name in pdescs if name.startswith(prefix)]
     for name in names:
         size = pdescs[name].size()
@@ -125,7 +126,7 @@ def test_every_trait_parameter_changes_the_model(
             else [value] * size
 
     def evaluate(props):
-        data, _ = evaluate_models([model], props)
+        data, _ = evaluate_cases([case], props)
         return data[0]['spectra']['d'].copy()
 
     base = evaluate(properties)
