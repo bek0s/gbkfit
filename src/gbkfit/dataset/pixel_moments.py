@@ -1,9 +1,10 @@
 from collections.abc import Sequence
+from typing import Any
 
-from .base import Dataset
-from .data import Data
 from gbkfit.utils import gridutils
 from . import _detail
+from .base import Dataset
+from .data import Data
 
 
 __all__ = [
@@ -12,21 +13,40 @@ __all__ = [
 
 
 class DatasetPixelMoments(Dataset):
+    """
+    Moments of the spectra on a grid of pixels: moment maps of some of the
+    orders 0 to 7, as the data items moment0 to moment7.
+
+    Parameters
+    ----------
+    moment0, ..., moment7 : Data, optional
+        The moment maps, each of shape (ny, nx); at least one.
+    step, rpix, rval : float or Sequence of float, optional
+        The world coordinates of the grid (see gridutils.Coords); their
+        defaults are those of gridutils.make_grid.
+    rota : float, optional
+        The rotation of the grid on the sky (see gridutils.Coords).
+    """
 
     # Moment maps have no spectral axis
     ndim = 2
     spectral_axis = None
 
     @staticmethod
-    def type():
+    def type() -> str:
         return 'pixel_moments'
 
     @classmethod
-    def load(cls, info, prefix=''):
+    def load(
+            cls, info: dict[str, Any], prefix: str = ''
+    ) -> 'DatasetPixelMoments':
         names = [f'moment{i}' for i in range(8)]
         return cls(**_detail.load_grid_dataset(cls, info, names, prefix))
 
-    def dump(self, prefix='', dump_path=True, overwrite=False):
+    def dump(
+            self, prefix: str = '', dump_path: bool = True,
+            overwrite: bool = False
+    ) -> dict[str, Any]:
         return _detail.dump_grid_dataset(self, prefix, dump_path, overwrite)
 
     def __init__(
@@ -44,11 +64,6 @@ class DatasetPixelMoments(Dataset):
             rval: float | Sequence[float] | None = None,
             rota: float | None = None
     ):
-        """
-        The moment maps of the given orders, on one grid. The world
-        coordinates of the grid (see gridutils.Coords) have defaults (see
-        _detail.make_grid).
-        """
         moments = (
             moment0, moment1, moment2, moment3, moment4, moment5, moment6,
             moment7)
@@ -58,4 +73,5 @@ class DatasetPixelMoments(Dataset):
         self._grid = _detail.make_grid(self, step, rpix, rval, rota)
 
     def grid(self) -> gridutils.Grid:
+        """Return the grid of the pixels."""
         return self._grid

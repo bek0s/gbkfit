@@ -5,6 +5,7 @@ from astropy.io import fits
 
 from gbkfit.dataset import *
 from gbkfit.utils.gridutils import Coords
+from gbkfit.utils.parseutils import ConfigError
 
 
 def test_data():
@@ -19,7 +20,7 @@ def test_data():
     assert np.array_equal(data01.data(), data_d)
     assert np.array_equal(data01.mask(), np.ones(shape))
     assert data01.error() is None
-    assert data01.npix() == data_d.size
+    assert data01.size() == data_d.size
     assert data01.ndim() == 2
     assert data01.shape() == shape
     # Data tests
@@ -103,7 +104,7 @@ def test_dataset_items_must_have_the_same_world_coordinates(tmp_path):
 
 
 def test_dataset_items_must_have_the_same_shape():
-    with pytest.raises(RuntimeError, match="different shapes"):
+    with pytest.raises(ConfigError, match="must have one shape"):
         DatasetPixelMoments(Data(np.ones((8, 20))), Data(np.ones((8, 21))))
 
 

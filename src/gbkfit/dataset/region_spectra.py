@@ -1,11 +1,14 @@
+from typing import Any
 
 import astropy.units
+import numpy as np
 
-from .base import Dataset
-from .data import Data, dump_data, load_data
 from gbkfit.region import Regions, regions_parser
 from gbkfit.utils import fitsutils, gridutils, parseutils
+from gbkfit.utils.parseutils import ConfigError
 from . import _detail
+from .base import Dataset
+from .data import Data, dump_data, load_data
 
 
 __all__ = [
@@ -16,24 +19,44 @@ __all__ = [
 class DatasetRegionSpectra(Dataset):
     """
     Spectra in regions of the sky (see Regions; e.g. fibres, apertures,
-    bins): one data item, 'spectra', of shape (nchannels, nregions) (FITS:
-    the regions along x, the velocity along y), with the world coordinates
-    of the spectral axis.
+    bins), with the world coordinates of their spectral axis.
+
+    Its configuration has the options of its one data item beside its own
+    (e.g. data, error and step). The world coordinates of the spectral
+    axis come from the header of the data file unless given.
+
+    Parameters
+    ----------
+    spectra : Data
+        The spectra, of shape (nchannels, nregions) (in FITS, the regions
+        along x and the velocity along y).
+    regions : Regions
+        The regions.
+    step : float, optional
+        The width of the channels (km/s).
+    rpix : float, optional
+        The reference channel; by default, the centre.
+    rval : float, optional
+        The velocity of the reference channel (km/s).
+    rest : str or Quantity, optional
+        The rest of the spectral axis (see gridutils.make_rest).
+
+    Raises
+    ------
+    ConfigError
+        If the spectra are not of one region each.
     """
 
     ndim = 2
 
     @staticmethod
-    def type():
+    def type() -> str:
         return 'region_spectra'
 
     @classmethod
-    def load(cls, info, prefix=''):
-        """
-        The options of its one data item are given flat. The world
-        coordinates of the spectral axis are those of the header of the
-        data file, or of the options step, rpix, rval and rest.
-        """
+    def load(
+            cls, info: dict[str, Any], prefix: str = ''
+    ) -> 'DatasetRegionSpectra':
         parseutils.load_option_and_update_info(
             regions_parser, info, 'regions', required=True, prefix=prefix)
         step, rpix, rval, rest = (info.pop(key, None) for key in (
@@ -50,10 +73,13 @@ class DatasetRegionSpectra(Dataset):
         return cls(**parseutils.parse_options_for_callable(
             info, cls.__init__))
 
-    def dump(self, prefix='', dump_path=True, overwrite=False):
+    def dump(
+            self, prefix: str = '', dump_path: bool = True,
+            overwrite: bool = False
+    ) -> dict[str, Any]:
         spectral = self._spectral_grid.coords
 
-        def write(filename, array):
+        def write(filename: str, array: np.ndarray) -> None:
             fitsutils.write_spectra(filename, array, spectral, overwrite)
         item = dump_data(
             self['spectra'], _detail.item_filenames(prefix, 'spectra'), write,
@@ -77,16 +103,10 @@ class DatasetRegionSpectra(Dataset):
             rval: float = 0,
             rest: str | astropy.units.Quantity | None = None
     ):
-        """
-        step, rpix, rval and rest are the world coordinates of the
-        spectral axis (see gridutils.Coords): the channel width (km/s), the
-        reference channel (by default the centre), its velocity (km/s), and
-        the rest wavelength or frequency of the velocities.
-        """
         super().__init__(dict(spectra=spectra))
         nchannels, nregions = spectra.shape()
         if nregions != regions.nregions():
-            raise RuntimeError(
+            raise ConfigError(
                 f"the spectra are of {nregions} regions, but there are "
                 f"{regions.nregions()} regions")
         self._regions = regions
@@ -94,8 +114,9 @@ class DatasetRegionSpectra(Dataset):
             (nchannels,), step, rpix, rval, 0, spectral_axis=0, rest=rest)
 
     def regions(self) -> Regions:
+        """Return the regions."""
         return self._regions
 
     def spectral_grid(self) -> gridutils.Grid:
-        """The grid of the spectral axis (one axis)."""
+        """Return the grid of the spectral axis (one axis)."""
         return self._spectral_grid

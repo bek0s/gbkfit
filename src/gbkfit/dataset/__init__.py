@@ -8,7 +8,7 @@ from .region_spectra import *
 from .slit_spectra import *
 
 
-def _register_datasets():
+def _register_datasets() -> None:
     from .base import dataset_parser as abstract_parser
     abstract_parser.register([
         DatasetPixelBrightness,
