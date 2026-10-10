@@ -135,24 +135,6 @@ def test_one_model_observed_on_grids_with_different_steps(
     np.testing.assert_array_equal(evaluate(shared, 1), evaluate(alone, 0))
 
 
-def test_unsupported_dtype_fails_when_planning(driver):
-    # An observation in a dtype the drivers do not support fails when its
-    # plan is made, before any evaluation, every time
-    from gbkfit.observation import (
-        Observation, ObservationGroup, observable_parser)
-    observation = Observation(
-        observable_parser.load(dict(type='pixel_brightness', size=[8, 8])),
-        driver,
-        dtype='float16')
-    model = gbkfit.model.model_parser.load(dict(
-        type='intensity_2d', components=dict(
-            type='smdisk', loose=False, tilted=False, rnodes=[0, 2, 4],
-            bptraits=dict(type='uniform'))))
-    for _ in range(2):
-        with pytest.raises(RuntimeError, match="does not support dtype"):
-            ObservationGroup([model], [observation])
-
-
 @pytest.mark.parametrize('observable, model', [
     (dict(type='pixel_brightness', size=[8, 8]), 'kinematics_2d'),
     (dict(type='pixel_spectra', size=[8, 8, 8]), 'intensity_2d')])

@@ -45,3 +45,13 @@ def test_instrument_warnings_have_the_path_of_the_configuration(caplog):
         observation_parser.load([dict(observable=dict(
             type='pixel_spectra', size=[4, 4, 4], smooth_weights=True))])
     assert "observations[0]: smooth_weights is true" in caplog.text
+
+
+@pytest.mark.parametrize('dtype', ['float16', 'int32', 'complex'])
+def test_dtypes_without_kernels_are_errors(dtype):
+    # (they failed later, in the native code)
+    dataset = Data(np.ones((8, 8)))
+    from gbkfit.dataset import DatasetPixelBrightness
+    observable = PixelBrightness.from_data(DatasetPixelBrightness(dataset))
+    with pytest.raises(ConfigError, match="dtype must be one of"):
+        Observation(observable, dtype=dtype)

@@ -1,5 +1,6 @@
 
 import numpy as np
+import pytest
 
 
 def test_driver_memory(driver):
@@ -19,3 +20,12 @@ def test_driver_memory(driver):
     driver.mem_fill(arr_d, 2 * value)
     driver.mem_copy_d2h(arr_d, arr_h_1)
     assert np.all(arr_h_1 == 2 * value)
+
+
+def test_unknown_driver_options_are_reported():
+    # (they were dropped: e.g. a device, which the drivers do not take)
+    from gbkfit.driver import driver_parser
+    from gbkfit.utils import parseutils
+    with parseutils.strict_mode(), pytest.raises(
+            parseutils.ConfigError, match="device"):
+        driver_parser.load(dict(type='host', device=1))
