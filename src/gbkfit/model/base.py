@@ -1,8 +1,12 @@
-
 import abc
 import typing
+from typing import Any
 
-from gbkfit.utils import parseutils
+import numpy as np
+
+from gbkfit.driver import DeviceArray, Driver
+from gbkfit.params import ParamDesc
+from gbkfit.utils import gridutils, parseutils
 
 
 __all__ = [
@@ -31,6 +35,16 @@ class Model(parseutils.TypedSerializable, abc.ABC):
     A model of a galaxy: what is on the sky. It can have a name, which
     then prefixes its parameters instead of its position when there are
     several models (see ObservationGroup).
+
+    Parameters
+    ----------
+    name : str, optional
+        Its name.
+
+    Raises
+    ------
+    ConfigError
+        If the name is not valid (see parseutils.check_name).
     """
 
     def __init__(self, name: str | None):
@@ -38,30 +52,56 @@ class Model(parseutils.TypedSerializable, abc.ABC):
         self._name = name
 
     def name(self) -> str | None:
+        """Return its name, if any."""
         return self._name
 
     @abc.abstractmethod
-    def pdescs(self):
+    def pdescs(self) -> dict[str, ParamDesc]:
+        """Return its parameters, by name."""
         pass
 
     @abc.abstractmethod
-    def has_weights(self):
+    def has_weights(self) -> bool:
+        """Check whether it has spatial weights (weight traits)."""
         pass
 
-    def constants(self):
+    def constants(self) -> dict[str, Any]:
         """
-        Values that parameter expressions can use (e.g. the radial nodes
-        of a disk), by name.
+        Return the values that parameter expressions can use (e.g. the
+        radial nodes of a disk), by name; none here.
         """
         return {}
 
     @abc.abstractmethod
-    def plan(self, driver, grid, has_weights, dtype, selection=Selection()):
+    def plan(
+            self,
+            driver: Driver,
+            grid: gridutils.Grid,
+            has_weights: bool,
+            dtype: np.dtype,
+            selection: Selection = Selection()
+    ) -> 'ModelPlan':
         """
-        The evaluation of the model on the given driver, grid of its data
-        (gridutils.Grid: x and y, and the spectral axis of spectral cubes)
-        and dtype, with spatial weights if has_weights (a ModelPlan), of
-        what the selection has (see Selection).
+        Plan the evaluation of the model.
+
+        Parameters
+        ----------
+        driver : Driver
+            The driver it is evaluated on.
+        grid : Grid
+            The grid of its data: x and y, and the spectral axis of
+            spectral cubes.
+        has_weights : bool
+            Whether to evaluate its spatial weights.
+        dtype : np.dtype
+            The floating type of the evaluation.
+        selection : Selection, optional
+            What of the model is evaluated.
+
+        Returns
+        -------
+        ModelPlan
+            The plan.
         """
         pass
 
@@ -70,11 +110,27 @@ class ModelPlan(abc.ABC):
     """The evaluation of a model on a driver, grid and dtype."""
 
     @abc.abstractmethod
-    def evaluate(self, params, data, weights, out_extra):
+    def evaluate(
+            self,
+            params: dict[str, float | np.ndarray],
+            data: DeviceArray,
+            weights: DeviceArray | None,
+            out_extra: dict[str, Any] | None
+    ) -> None:
         """
-        Add the model to data (the image or spectral cube on the grid of
-        the plan), and weight the data weights (or None) with its spatial
-        weights.
+        Evaluate the model.
+
+        Parameters
+        ----------
+        params : dict
+            The values of its parameters, by name.
+        data : DeviceArray
+            The image or spectral cube on the grid of the plan, which the
+            model is added to.
+        weights : DeviceArray, optional
+            The weights of the data, which its spatial weights multiply.
+        out_extra : dict, optional
+            Where its extra outputs go, if wanted.
         """
         pass
 

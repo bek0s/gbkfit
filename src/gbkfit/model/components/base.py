@@ -1,13 +1,18 @@
-
 import abc
+from typing import Any, TypedDict
 
-from gbkfit.utils import parseutils
+import numpy as np
+
+from gbkfit.driver import DeviceArray, Driver
+from gbkfit.params import ParamDesc
+from gbkfit.utils import gridutils, parseutils
 from .geometries import Geometry
 
 
 __all__ = [
     'Component',
     'ComponentPlan',
+    'NativeGrid',
     'BrightnessComponent2D',
     'BrightnessComponent3D',
     'SpectralComponent2D',
@@ -16,13 +21,39 @@ __all__ = [
 ]
 
 
+class NativeGrid(TypedDict):
+    """
+    The grid that component plans evaluate on, as the native evaluation
+    functions take it: the 3d spatial grid (each in x, y, z order; the
+    rotation in degrees) and the spectral axis. The z axis of 2d models
+    and the spectral axis of image models have size 1 (and step 0).
+    """
+    spat_size: tuple[int, int, int]
+    spat_step: tuple[float, float, float]
+    spat_zero: tuple[float, float, float]
+    spat_rota: float
+    spec_size: int
+    spec_step: float
+    spec_zero: float
+
+
 class Component(parseutils.TypedSerializable, abc.ABC):
     """
     A component of a model. The kinds of components below differ only in
-    the models that accept them, and in the outputs they get. A component
-    can have a name, which then prefixes its parameters in its model
-    instead of its position (see parseutils.item_prefixes), and a
-    geometry that it shares with other components (see Geometry).
+    the models that accept them, and in the outputs they get.
+
+    Parameters
+    ----------
+    name : str, optional
+        Its name, which prefixes its parameters in its model instead of
+        its position (see parseutils.item_prefixes).
+    geometry : Geometry, optional
+        A geometry that it shares with other components.
+
+    Raises
+    ------
+    ConfigError
+        If the name is not valid (see parseutils.check_name).
     """
 
     def __init__(self, name: str | None, geometry: Geometry | None = None):
@@ -31,6 +62,7 @@ class Component(parseutils.TypedSerializable, abc.ABC):
         self._geometry = geometry
 
     def name(self) -> str | None:
+        """Return its name, if any."""
         return self._name
 
     def geometry(self) -> Geometry | None:
@@ -38,40 +70,61 @@ class Component(parseutils.TypedSerializable, abc.ABC):
         return self._geometry
 
     @abc.abstractmethod
-    def pdescs(self):
+    def pdescs(self) -> dict[str, ParamDesc]:
+        """Return its parameters, by name."""
         pass
 
-    def has_weights(self):
+    def has_weights(self) -> bool:
+        """Check whether it has spatial weights; not here."""
         return False
 
-    def constants(self):
+    def constants(self) -> dict[str, Any]:
         """
-        Values that parameter expressions can use (e.g. the radial nodes
-        of a disk), by name.
+        Return the values that parameter expressions can use (e.g. the
+        radial nodes of a disk), by name; none here.
         """
         return {}
 
     def line_names(self) -> tuple[str, ...]:
-        """The names of the emission lines of the component (none here)."""
+        """Return the names of its emission lines; none here."""
         return ()
 
     def circular_velocity_params(self) -> dict[str, tuple[float, ...]]:
         """
-        The parameters of the component that are not in pdescs, because
-        its model gives them: the circular velocity of the mass model of
-        the model at the given radii (arcsec), by name (see
-        traits.VPTraitMass). Its plans need them with the others. None
-        here.
+        Return the parameters that its model gives it: the circular
+        velocity of the mass model of its model at the given radii
+        (arcsec), by name (see traits.VPTraitMass). They are not in
+        pdescs, but its plans need them with the others. None here.
         """
         return {}
 
     @abc.abstractmethod
-    def plan(self, driver, spectral, dtype, lines):
+    def plan(
+            self,
+            driver: Driver,
+            spectral: gridutils.Grid,
+            dtype: np.dtype,
+            lines: tuple[str, ...] | None
+    ) -> 'ComponentPlan':
         """
-        The evaluation of the component on the given driver and dtype (a
-        ComponentPlan), which owns the memory it needs. spectral is the
-        spectral axis of the outputs (a gridutils.Grid of one axis), and
-        lines the names of the emission lines to evaluate (all if None).
+        Plan the evaluation of the component; the plan owns the memory
+        it needs.
+
+        Parameters
+        ----------
+        driver : Driver
+            The driver it is evaluated on.
+        spectral : Grid
+            The spectral axis of the outputs (one axis).
+        dtype : np.dtype
+            The floating type of the evaluation.
+        lines : tuple of str, optional
+            The names of the emission lines to evaluate; all if None.
+
+        Returns
+        -------
+        ComponentPlan
+            The plan.
         """
         pass
 
@@ -80,23 +133,30 @@ class ComponentPlan(abc.ABC):
     """The evaluation of a component on a driver and dtype."""
 
     @abc.abstractmethod
-    def evaluate(self, params, grid, outputs, out_extra):
+    def evaluate(
+            self,
+            params: dict[str, float | np.ndarray],
+            grid: NativeGrid,
+            outputs: dict[str, DeviceArray | None],
+            out_extra: dict[str, Any] | None
+    ) -> None:
         """
         Add the component to the outputs.
 
-        grid has the 3d spatial grid and the spectral axis: spat_size,
-        spat_step, spat_zero (each in x, y, z order), spat_rota (degrees)
-        and spec_size, spec_step, spec_zero. The z axis of 2d models and
-        the spectral axis of image models have size 1 (and step 0).
-
-        outputs has the (device) arrays the component adds to, which a
-        model may leave out: the 'image' or 'scube', the 3d spatial
-        weights ('wdata'), brightness ('bdata'), opacity ('odata') and
-        brightness after the opacity ('obdata'). Opacity components add
-        to odata, and the other components read it.
-
-        out_extra is a dict for the extra outputs (on the host) of the
-        component, or None.
+        Parameters
+        ----------
+        params : dict
+            The values of its parameters, by name.
+        grid : NativeGrid
+            The grid of the evaluation.
+        outputs : dict
+            The arrays the component adds to, which a model may leave out
+            (None): the 'image' or 'scube', the 3d spatial weights
+            ('wdata'), brightness ('bdata'), opacity ('odata') and
+            brightness after the opacity ('obdata'). Opacity components
+            add to odata, and the other components read it.
+        out_extra : dict, optional
+            Where its extra outputs (on the host) go, if wanted.
         """
         pass
 

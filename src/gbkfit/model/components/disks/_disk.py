@@ -2,12 +2,19 @@
 import abc
 import logging
 import typing
+from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
 
-from gbkfit.params.pdescs import ParamScalarDesc, ParamVectorDesc
+from gbkfit.driver import DeviceArray, Driver
+from gbkfit.math.interpolation import Interpolator
+from gbkfit.params.pdescs import ParamDesc, ParamScalarDesc, ParamVectorDesc
 from gbkfit.utils import iterutils, parseutils
+from ..base import NativeGrid
+from ..geometries import GEOMETRY_PARAMS
+from .traits import Trait
 
 
 _log = logging.getLogger(__name__)
@@ -22,14 +29,9 @@ TRAIT_KINDS = ('rpt', 'rht', 'vpt', 'vht', 'dpt', 'dht', 'zpt', 'spt', 'wpt')
 # in constants.hpp)
 MAX_TRAITS = 4
 
-# The geometric parameters of a disk, and the option that makes each of
-# them node-wise: loose (vsys, xpos, ypos) or tilted (posa, incl)
-NODEWISE_SWITCH = dict(
-    vsys='loose', xpos='loose', ypos='loose', posa='tilted', incl='tilted')
-GEOMETRY_PARAMS = tuple(NODEWISE_SWITCH)
 
-
-def _make_param_descs(key, nnodes, nw):
+def _make_param_descs(key: str, nnodes: int, nw: bool) -> dict[str, ParamDesc]:
+    """Return the parameter of the given name, node-wise if nw."""
     return {key: ParamVectorDesc(key, nnodes) if nw else ParamScalarDesc(key)}
 
 
@@ -45,17 +47,22 @@ class TraitParams:
     circular velocity of the mass model of the model (see
     traits.Trait.circular_velocity_params).
     """
-    pdescs: dict
-    sampling: dict
-    pnames: list
-    circular_velocity: tuple
+    pdescs: dict[str, ParamDesc]
+    sampling: dict[str, str | None]
+    pnames: tuple[dict[str, str], ...]
+    circular_velocity: tuple[str, ...]
 
 
-def _trait_params(traits_, prefix, nrnodes, nsubrnodes):
+def _trait_params(
+        traits_: Sequence[Trait],
+        prefix: str | None,
+        nrnodes: int,
+        nsubrnodes: int
+) -> 'TraitParams':
     """
-    The parameters of the traits of one kind. A node-wise parameter has a
-    value for each node, or for each subnode if its trait samples it at
-    the subnodes.
+    Return the parameters of the traits of one kind. A node-wise parameter
+    has a value for each node, or for each subnode if its trait samples it
+    at the subnodes.
     """
     params_list = []
     for trait in traits_:
@@ -79,11 +86,13 @@ def _trait_params(traits_, prefix, nrnodes, nsubrnodes):
             for name in trait.circular_velocity_params()))
 
 
-def _trait_constants(traits_, nnodes, nsubnodes):
+def _trait_constants(
+        traits_: Sequence[Trait], nnodes: int, nsubnodes: int
+) -> tuple[list[int], list[float], list[int], list[int]]:
     """
-    The uids, constant values and their counts, and the parameter value
-    counts of a set of traits. Each node-wise parameter has one value for
-    each subnode, because the node values are interpolated.
+    Return the uids, constant values and their counts, and the parameter
+    value counts of a set of traits. Each node-wise parameter has one
+    value for each subnode, because the node values are interpolated.
     """
     uids, cvalues, ccounts, pcounts = [], [], [], []
     for trait in traits_:
@@ -98,7 +107,14 @@ def _trait_constants(traits_, nnodes, nsubnodes):
 
 
 def _fill_param_values(
-        values, params, pdescs, sampling, nodes, subnodes, interp):
+        values: np.ndarray,
+        params: dict[str, float | np.ndarray],
+        pdescs: dict[str, ParamDesc],
+        sampling: dict[str, str | None],
+        nodes: Sequence[float],
+        subnodes: Sequence[float],
+        interp: type[Interpolator]
+) -> None:
     """
     Write the values of the given parameters one after the other into
     values. The values of the node-wise parameters given at the nodes are
@@ -115,8 +131,11 @@ def _fill_param_values(
         start = stop
 
 
-def _weighted_mean(weighted_sum, weight):
-    """The mean of each voxel from its weighted sum; NaN without weight."""
+def _weighted_mean(weighted_sum: np.ndarray, weight: np.ndarray) -> np.ndarray:
+    """
+    Return the mean of each voxel from its weighted sum; NaN without
+    weight.
+    """
     return np.divide(
         weighted_sum, weight, out=np.full_like(weighted_sum, np.nan),
         where=weight != 0)
@@ -125,8 +144,16 @@ def _weighted_mean(weighted_sum, weight):
 class Disk(abc.ABC):
 
     def __init__(
-            self, loose, tilted, rnodes, rstep, interp, traits_, prefixes,
-            rdata_key):
+            self,
+            loose: bool,
+            tilted: bool,
+            rnodes: Sequence[float],
+            rstep: float,
+            interp: type[Interpolator],
+            traits_: dict[str, Sequence[Trait]],
+            prefixes: dict[str, str],
+            rdata_key: str
+    ):
         """
         traits_ has the traits of each kind, keyed as in TRAIT_KINDS, and
         can leave kinds out (no traits). prefixes has the prefix of the
@@ -161,7 +188,7 @@ class Disk(abc.ABC):
         # velocity without velocity traits.
         switches = dict(loose=loose, tilted=tilted)
         self._geometry_isnw = {
-            name: switches[switch] for name, switch in NODEWISE_SWITCH.items()}
+            name: switches[switch] for name, switch in GEOMETRY_PARAMS.items()}
         self._geometry_pdescs = {
             name: _make_param_descs(name, nrnodes, self._geometry_isnw[name])
             for name in GEOMETRY_PARAMS
@@ -191,50 +218,54 @@ class Disk(abc.ABC):
         for name in self._circular_velocity_params:
             del self._pdescs[name]
 
-    def loose(self):
+    def loose(self) -> bool:
         return self._loose
 
-    def tilted(self):
+    def tilted(self) -> bool:
         return self._tilted
 
-    def rnodes(self):
+    def rnodes(self) -> tuple[float, ...]:
         return self._rnodes
 
-    def rstep(self):
+    def rstep(self) -> float:
         return self._rstep
 
-    def subrnodes(self):
+    def subrnodes(self) -> tuple[float, ...]:
         return self._subrnodes
 
-    def interp(self):
+    def interp(self) -> type[Interpolator]:
         return self._interp
 
-    def traits(self, kind):
+    def traits(self, kind: str) -> tuple[Trait, ...]:
         return self._traits[kind]
 
-    def trait_params(self, kind):
-        """The parameters of the traits of one kind (TraitParams)."""
+    def trait_params(self, kind: str) -> 'TraitParams':
+        """Return the parameters of the traits of one kind (TraitParams)."""
         return self._trait_params[kind]
 
-    def options(self):
-        """The options of this type of disk, besides those of all disks."""
+    def options(self) -> dict[str, Any]:
+        """
+        Return the options of this type of disk, besides those of all
+        disks.
+        """
         return {}
 
-    def pdescs(self):
+    def pdescs(self) -> dict[str, ParamDesc]:
         return self._pdescs
 
-    def circular_velocity_params(self):
+    def circular_velocity_params(self) -> dict[str, tuple[float, ...]]:
         """
-        The parameters that are not in pdescs, but whose values are the
-        circular velocity of the mass model of their model at the given
-        radii (arcsec), by name. The disk plans need them with the others.
+        Return the parameters that are not in pdescs, but whose values are
+        the circular velocity of the mass model of their model at the
+        given radii (arcsec), by name. The disk plans need them with the
+        others.
         """
         return self._circular_velocity_params
 
     @abc.abstractmethod
-    def plan(self, driver, nlines, dtype):
+    def plan(self, driver: Driver, nlines: int, dtype: np.dtype) -> 'DiskPlan':
         """
-        The evaluation of the disk on the given driver and dtype (a
+        Plan the evaluation of the disk on the given driver and dtype (a
         DiskPlan), which owns the memory it needs. nlines is the number of
         emission lines it adds to spectral cubes (0 without them).
         """
@@ -249,7 +280,8 @@ class DiskPlan(abc.ABC):
     emission lines), and the host view of each group of values in it.
     """
 
-    def __init__(self, disk, driver, nlines, dtype):
+    def __init__(
+            self, disk: Disk, driver: Driver, nlines: int, dtype: np.dtype):
 
         # The number of values of each group of parameters: one value for
         # each subnode for node-wise geometric parameters, and the values
@@ -306,7 +338,14 @@ class DiskPlan(abc.ABC):
         self._lines_d = views_d['lines'].reshape(nlines, 3) if nlines else None
         self._backend = driver.native_class('GModel', dtype)()
 
-    def evaluate(self, params, grid, outputs, out_extra, lines=None):
+    def evaluate(
+            self,
+            params: dict[str, float | np.ndarray],
+            grid: NativeGrid,
+            outputs: dict[str, DeviceArray | None],
+            out_extra: dict[str, Any] | None,
+            lines: np.ndarray | None = None
+    ) -> None:
         """
         Add the disk to the outputs. grid has the grid of the native
         evaluation functions (see ComponentPlan.evaluate), and outputs the
@@ -413,7 +452,12 @@ class DiskPlan(abc.ABC):
                 _log.debug(f"sum(abs(ddata)): {sumabs}")
 
     @abc.abstractmethod
-    def _impl_evaluate(self, params, grid_and_outputs, out_extra):
+    def _impl_evaluate(
+            self,
+            params: dict[str, float | np.ndarray],
+            grid_and_outputs: dict[str, Any],
+            out_extra: dict[str, Any] | None
+    ) -> None:
         """
         Evaluate the disk. params has the values of the node-wise
         parameters at the subnodes, and grid_and_outputs the keyword

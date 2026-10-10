@@ -7,6 +7,7 @@ import scipy.special
 import gbkfit.math
 from gbkfit.params.pdescs import ParamScalarDesc, ParamVectorDesc
 from gbkfit.utils import parseutils
+from gbkfit.utils.parseutils import ConfigError
 
 
 # Density polar traits
@@ -391,7 +392,7 @@ class TraitFeatureTrunc:
     def __init__(self, **kwargs):
         trunc = kwargs.pop('trunc')
         if not trunc >= 0:
-            raise RuntimeError(f"trunc must be at least 0; it is {trunc}")
+            raise ConfigError(f"trunc must be at least 0; it is {trunc}")
         self._trunc = trunc
         super().__init__(**kwargs)
 
@@ -409,7 +410,7 @@ class TraitFeatureSampling:
     def __init__(self, **kwargs):
         sampling = kwargs.pop('sampling')
         if sampling not in SAMPLINGS:
-            raise RuntimeError(
+            raise ConfigError(
                 f"sampling must be one of {list(SAMPLINGS)}; "
                 f"it is '{sampling}'")
         self._sampling = sampling
@@ -443,7 +444,7 @@ class TraitFeatureNBlobs:
     def __init__(self, **kwargs):
         nblobs = kwargs.pop('nblobs')
         if not nblobs >= 1:
-            raise RuntimeError(f"nblobs must be at least 1; it is {nblobs}")
+            raise ConfigError(f"nblobs must be at least 1; it is {nblobs}")
         self._nblobs = nblobs
         super().__init__(**kwargs)
 
@@ -463,7 +464,7 @@ class TraitFeatureOrder:
     def __init__(self, **kwargs):
         order = kwargs.pop('order')
         if not order >= 0:
-            raise RuntimeError(f"order must be at least 0; it is {order}")
+            raise ConfigError(f"order must be at least 0; it is {order}")
         self._order = order
         super().__init__(**kwargs)
 
@@ -486,7 +487,7 @@ class HTrait(
         kwargs.update(rnodes=rnodes, sampling=sampling)
         super().__init__(**kwargs)
         if not self.rnodes() and self.sampling() != SAMPLING_DEFAULT:
-            raise RuntimeError(
+            raise ConfigError(
                 f"sampling is '{self.sampling()}', but rnodes is False: "
                 f"the trait has no node-wise parameters")
 
@@ -1971,12 +1972,12 @@ class WPTraitAxisRange(WPTrait):
 
     def __init__(self, axis, angle: float, weight: float):
         if axis not in [0, 1]:
-            raise RuntimeError(
+            raise ConfigError(
                 f"invalid axis value; "
                 f"choose between 0 (minor axis) and 1 (major axis); "
                 f"supplied value: {axis}")
         if not 0 <= angle <= 180:
-            raise RuntimeError(
+            raise ConfigError(
                 f"invalid angle value; "
                 f"angle must be between 0 and 180; "
                 f"supplied value: {angle}")

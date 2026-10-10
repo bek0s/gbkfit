@@ -1,7 +1,17 @@
+from collections.abc import Callable, Sequence
+from typing import Any
+
+import numpy as np
+
+from gbkfit.driver import DeviceArray, Driver
+from gbkfit.params import ParamDesc
 from gbkfit.utils import gridutils, iterutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
-from ..base import ModelPlan
+from ..base import ModelPlan, Selection
+from ..mass import MassModel
 from ._detail import shared_params
+from .base import Component, ComponentPlan, NativeGrid
+from .geometries import Geometry
 
 
 __all__ = [
@@ -25,10 +35,14 @@ _CMP_PREFIX = ('components', 'cmp', False)
 _OCMP_PREFIX = ('opacity components', 'ocmp', True)
 
 
-def _with_mass_model_params(params, components, mass_model):
+def _with_mass_model_params(
+        params: dict[str, ParamDesc],
+        components: Sequence[Component],
+        mass_model: MassModel | None
+) -> dict[str, ParamDesc]:
     """
-    The parameters of the components of a model, and those of its mass
-    model (if any). Raise ConfigError if components take the circular
+    Return the parameters of the components of a model, and those of its
+    mass model (if any). Raise ConfigError if components take the circular
     velocity of a mass model (see Component.circular_velocity_params) and
     there is none, if there is one and none does, or if the names of the
     parameters repeat.
@@ -50,11 +64,16 @@ def _with_mass_model_params(params, components, mass_model):
     return params | mass_model.pdescs()
 
 
-def _circular_velocities(components, mass_model, params):
+def _circular_velocities(
+        components: Sequence[Component],
+        mass_model: MassModel | None,
+        params: dict[str, float | np.ndarray]
+) -> list[dict[str, np.ndarray]]:
     """
-    The values of the parameters of each component that are the circular
-    velocity of the mass model (see Component.circular_velocity_params),
-    from the parameters of the mass model in params.
+    Return the values of the parameters of each component that are the
+    circular velocity of the mass model (see
+    Component.circular_velocity_params), from the parameters of the mass
+    model in params.
     """
     return [
         {name: mass_model.vcirc(radii, params)
@@ -62,20 +81,28 @@ def _circular_velocities(components, mass_model, params):
         for cmp in components]
 
 
-def component_prefixes(components, label, prefix, prefix_first):
+def component_prefixes(
+        components: Sequence[Component],
+        label: str,
+        prefix: str,
+        prefix_first: bool
+) -> list[str]:
     """
-    The prefix of the parameters, constants and extra outputs of each
-    component of a list: its name, or its position if the components have
-    no names (e.g. 'cmp1_'; see parseutils.item_prefixes).
+    Return the prefix of the parameters, constants and extra outputs of
+    each component of a list: its name, or its position if the components
+    have no names (e.g. 'cmp1_'; see parseutils.item_prefixes).
     """
     return parseutils.item_prefixes(
         [cmp.name() for cmp in components], label, prefix, prefix_first)
 
 
-def select_components(components, names):
+def select_components(
+        components: Sequence[Component], names: Sequence[str] | None
+) -> tuple[int, ...]:
     """
-    The indices of the components of the given names, in their order (all
-    of them if names is None). Raise ConfigError for unknown names.
+    Return the indices of the components of the given names, in their
+    order (all of them if names is None). Raise ConfigError for unknown
+    names.
     """
     if names is None:
         return tuple(range(len(components)))
@@ -91,7 +118,9 @@ def select_components(components, names):
     return tuple(sorted(known.index(name) for name in names))
 
 
-def check_selected_lines(components, names):
+def check_selected_lines(
+        components: Sequence[Component], names: Sequence[str] | None
+) -> None:
     """
     Raise ConfigError unless each of the names of lines (None for all) is
     a line of one of the components.
@@ -108,8 +137,17 @@ def check_selected_lines(components, names):
 
 
 def evaluate_components(
-        components, plans, mappings, params, grid, outputs, out_extra,
-        out_extra_label, extra, given=None):
+        components: Sequence[Component],
+        plans: Sequence[ComponentPlan],
+        mappings: Sequence[dict[str, str]],
+        params: dict[str, float | np.ndarray],
+        grid: NativeGrid,
+        outputs: dict[str, DeviceArray | None],
+        out_extra: dict[str, Any] | None,
+        out_extra_label: str,
+        extra: Callable[[np.ndarray], Any],
+        given: Sequence[dict[str, np.ndarray]] | None = None
+) -> None:
     """
     Evaluate the components of a model through their plans, each with its
     parameters, and those its model gives it (given, a dict for each
@@ -136,11 +174,11 @@ def evaluate_components(
                 out_extra[f'{prefix}{k}'] = extra(v)
 
 
-def _geometries(components):
+def _geometries(components: Sequence[Component]) -> list[Geometry]:
     """
-    The geometries of the components, each once, in the order of the
-    components. Raise ConfigError if two differ but have one name, or one
-    has the name of a component.
+    Return the geometries of the components, each once, in the order of
+    the components. Raise ConfigError if two differ but have one name, or
+    one has the name of a component.
     """
     geometries = list(dict.fromkeys(
         cmp.geometry() for cmp in components
@@ -157,13 +195,15 @@ def _geometries(components):
     return geometries
 
 
-def _merge_params(components, prefixes):
+def _merge_params(
+        components: Sequence[Component], prefixes: Sequence[str]
+) -> tuple[dict[str, ParamDesc], tuple[dict[str, str], ...]]:
     """
-    The parameters of the components, and for each component the names of
-    its parameters in them (see iterutils.merge_with_prefixes): prefixed
-    (see component_prefixes), except those they share through their
-    geometries (see Geometry), which are named after their geometry (e.g.
-    disk_posa), and come first. Raise ConfigError if those names are
+    Return the parameters of the components, and for each component the
+    names of its parameters in them (see iterutils.merge_with_prefixes):
+    prefixed (see component_prefixes), except those they share through
+    their geometries (see Geometry), which are named after their geometry
+    (e.g. disk_posa), and come first. Raise ConfigError if those names are
     taken, or the components have a shared parameter of different sizes.
     """
     shared = {
@@ -199,10 +239,13 @@ def _merge_params(components, prefixes):
     return geometry_params | params, tuple(mappings)
 
 
-def _constants(components, prefixes):
+def _constants(
+        components: Sequence[Component], prefixes: Sequence[str]
+) -> dict[str, Any]:
     """
-    The constants of the components (see Component.constants), prefixed,
-    and the radial nodes of the warped geometries (e.g. disk_rnodes).
+    Return the constants of the components (see Component.constants),
+    prefixed, and the radial nodes of the warped geometries (e.g.
+    disk_rnodes).
     """
     constants, _ = iterutils.merge_with_prefixes(
         [cmp.constants() for cmp in components], prefixes)
@@ -219,9 +262,13 @@ class ComponentSet2D:
     a 3d grid with a z axis of size 1.
     """
 
-    def __init__(self, components, mass_model=None):
+    def __init__(
+            self,
+            components: Component | Sequence[Component],
+            mass_model: MassModel | None = None
+    ):
         if not components:
-            raise RuntimeError("at least one component must be configured")
+            raise ConfigError("at least one component must be configured")
         self._components = iterutils.tuplify(components)
         self._prefixes = component_prefixes(
             self._components, *_CMP_PREFIX)
@@ -231,33 +278,41 @@ class ComponentSet2D:
             params, self._components, mass_model)
         self._mass_model = mass_model
 
-    def components(self):
+    def components(self) -> tuple[Component, ...]:
         return self._components
 
-    def geometries(self):
-        """The geometries of the components, each once."""
+    def geometries(self) -> list[Geometry]:
+        """Return the geometries of the components, each once."""
         return _geometries(self._components)
 
-    def mass_model(self):
+    def mass_model(self) -> MassModel | None:
         return self._mass_model
 
-    def mappings(self):
-        """The parameter names of each component, by its own names."""
+    def mappings(self) -> tuple[dict[str, str], ...]:
+        """Return the parameter names of each component, by its own names."""
         return self._mappings
 
-    def pdescs(self):
+    def pdescs(self) -> dict[str, ParamDesc]:
         return self._params
 
-    def has_weights(self):
+    def has_weights(self) -> bool:
         return any(cmp.has_weights() for cmp in self._components)
 
-    def constants(self):
+    def constants(self) -> dict[str, Any]:
         return _constants(self._components, self._prefixes)
 
-    def plan(self, driver, grid, spectral, has_weights, dtype, selection):
+    def plan(
+            self,
+            driver: Driver,
+            grid: gridutils.Grid,
+            spectral: gridutils.Grid,
+            has_weights: bool,
+            dtype: np.dtype,
+            selection: Selection
+    ) -> 'ComponentSetPlan2D':
         """
-        The evaluation of the components and lines of the selection (see
-        Selection) on the given driver, grid of the x and y axes and
+        Plan the evaluation of the components and lines of the selection
+        (see Selection) on the given driver, grid of the x and y axes and
         spectral axis (gridutils.Grid, the second of one axis) and dtype,
         with spatial weights if has_weights.
         """
@@ -272,8 +327,15 @@ class ComponentSetPlan2D:
     """
 
     def __init__(
-            self, component_set, driver, grid, spectral, has_weights,
-            dtype, selection):
+            self,
+            component_set: 'ComponentSet2D',
+            driver: Driver,
+            grid: gridutils.Grid,
+            spectral: gridutils.Grid,
+            has_weights: bool,
+            dtype: np.dtype,
+            selection: Selection
+    ):
         self._component_set = component_set
         self._driver = driver
         self._grid = grid
@@ -306,7 +368,13 @@ class ComponentSetPlan2D:
             self._wdata = driver.mem_alloc_d(size[::-1], dtype)
         self._backend = driver.native_class('GModel', dtype)()
 
-    def evaluate(self, params, outputs, weights, out_extra):
+    def evaluate(
+            self,
+            params: dict[str, float | np.ndarray],
+            outputs: dict[str, DeviceArray | None],
+            weights: DeviceArray | None,
+            out_extra: dict[str, Any] | None
+    ) -> None:
         """
         Add the components to the output array, the 'image' or the
         'scube' in outputs, and weight the data weights (if any) with the
@@ -356,10 +424,16 @@ class ComponentSet3D:
     """
 
     def __init__(
-            self, components, opacity_components=None,
-            size_z=None, step_z=None, zero_z=None, mass_model=None):
+            self,
+            components: Component | Sequence[Component],
+            opacity_components: Component | Sequence[Component] | None = None,
+            size_z: int | None = None,
+            step_z: float | None = None,
+            zero_z: float | None = None,
+            mass_model: MassModel | None = None
+    ):
         if not components:
-            raise RuntimeError("at least one component must be configured")
+            raise ConfigError("at least one component must be configured")
         self._components = iterutils.tuplify(components)
         self._ocomponents = iterutils.tuplify(opacity_components)
         # The components and the opacity components share their names
@@ -386,53 +460,61 @@ class ComponentSet3D:
         self._step_z = step_z
         self._zero_z = zero_z
 
-    def components(self):
+    def components(self) -> tuple[Component, ...]:
         return self._components
 
-    def opacity_components(self):
+    def opacity_components(self) -> tuple[Component, ...]:
         return self._ocomponents
 
-    def geometries(self):
-        """The geometries of the components, each once."""
+    def geometries(self) -> list[Geometry]:
+        """Return the geometries of the components, each once."""
         return _geometries(self._all_components())
 
-    def mass_model(self):
+    def mass_model(self) -> MassModel | None:
         return self._mass_model
 
-    def size_z(self):
+    def size_z(self) -> int | None:
         return self._size_z
 
-    def step_z(self):
+    def step_z(self) -> float | None:
         return self._step_z
 
-    def zero_z(self):
+    def zero_z(self) -> float | None:
         return self._zero_z
 
-    def pdescs(self):
+    def pdescs(self) -> dict[str, ParamDesc]:
         return self._params
 
-    def has_weights(self):
+    def has_weights(self) -> bool:
         return any(cmp.has_weights() for cmp in self._components)
 
-    def constants(self):
+    def constants(self) -> dict[str, Any]:
         return _constants(
             self._all_components(), self._prefixes + self._oprefixes)
 
-    def mappings(self):
-        """The parameter names of each component, by its own names."""
+    def mappings(self) -> tuple[dict[str, str], ...]:
+        """Return the parameter names of each component, by its own names."""
         return self._mappings
 
-    def omappings(self):
-        """The parameter names of each opacity component."""
+    def omappings(self) -> tuple[dict[str, str], ...]:
+        """Return the parameter names of each opacity component."""
         return self._omappings
 
-    def _all_components(self):
+    def _all_components(self) -> tuple[Component, ...]:
         return self._components + self._ocomponents
 
-    def plan(self, driver, grid, spectral, has_weights, dtype, selection):
+    def plan(
+            self,
+            driver: Driver,
+            grid: gridutils.Grid,
+            spectral: gridutils.Grid,
+            has_weights: bool,
+            dtype: np.dtype,
+            selection: Selection
+    ) -> 'ComponentSetPlan3D':
         """
-        The evaluation of the components and lines of the selection (see
-        Selection) on the given driver, grid of the x and y axes and
+        Plan the evaluation of the components and lines of the selection
+        (see Selection) on the given driver, grid of the x and y axes and
         spectral axis (gridutils.Grid, the second of one axis) and dtype,
         with spatial weights if has_weights.
         """
@@ -448,8 +530,15 @@ class ComponentSetPlan3D:
     """
 
     def __init__(
-            self, component_set, driver, grid, spectral, has_weights,
-            dtype, selection):
+            self,
+            component_set: 'ComponentSet3D',
+            driver: Driver,
+            grid: gridutils.Grid,
+            spectral: gridutils.Grid,
+            has_weights: bool,
+            dtype: np.dtype,
+            selection: Selection
+    ):
         self._component_set = component_set
         self._driver = driver
         self._grid = grid
@@ -511,7 +600,13 @@ class ComponentSetPlan3D:
             self._odata = driver.mem_alloc_d(self._size[::-1], dtype)
         self._backend = driver.native_class('GModel', dtype)()
 
-    def evaluate(self, params, outputs, weights, out_extra):
+    def evaluate(
+            self,
+            params: dict[str, float | np.ndarray],
+            outputs: dict[str, DeviceArray | None],
+            weights: DeviceArray | None,
+            out_extra: dict[str, Any] | None
+    ) -> None:
         """
         Add the components to the output array, the 'image' or the
         'scube' in outputs, and weight the data weights (if any) with the
@@ -568,10 +663,20 @@ class ComponentSetModelPlan(ModelPlan):
     set, which adds to the output of the given key ('image' or 'scube').
     """
 
-    def __init__(self, component_set_plan, key):
+    def __init__(
+            self,
+            component_set_plan: 'ComponentSetPlan2D | ComponentSetPlan3D',
+            key: str
+    ):
         self._component_set_plan = component_set_plan
         self._key = key
 
-    def evaluate(self, params, data, weights, out_extra):
+    def evaluate(
+            self,
+            params: dict[str, float | np.ndarray],
+            data: DeviceArray,
+            weights: DeviceArray | None,
+            out_extra: dict[str, Any] | None
+    ) -> None:
         self._component_set_plan.evaluate(
             params, {self._key: data}, weights, out_extra)

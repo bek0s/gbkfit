@@ -1,6 +1,11 @@
 from collections.abc import Sequence
+from typing import Any, Self
 
-from gbkfit.utils import parseutils
+import numpy as np
+
+from gbkfit.driver import Driver
+from gbkfit.params import ParamDesc
+from gbkfit.utils import gridutils, parseutils
 from ..base import ModelImage, ModelSCube, Selection
 from ..mass import MassModel, mass_model_parser
 from . import _detail
@@ -27,8 +32,13 @@ __all__ = [
 ]
 
 
-def _dump_geometries(component_set) -> dict:
-    """The geometries option of a model: none if its components have none."""
+def _dump_geometries(
+        component_set: ComponentSet2D | ComponentSet3D
+) -> dict[str, Any]:
+    """
+    Return the geometries option of a model: none if its components have
+    none.
+    """
     geometries = component_set.geometries()
     return dict(geometries=geometry_parser.dump(geometries)) \
         if geometries else {}
@@ -59,20 +69,36 @@ _ocmp_parser = parseutils.TypedParser(OpacityComponent3D, [
 
 
 class ModelIntensity2D(ModelImage):
+    """
+    A thin galaxy of brightness: its components evaluated into images.
+
+    Parameters
+    ----------
+    components : BrightnessComponent2D or Sequence of them
+        Its components: smooth disks (smdisk) and points (point).
+    name : str, optional
+        Its name (see Model).
+
+    Raises
+    ------
+    ConfigError
+        If there are no components, or the names of the components,
+        their geometries and their parameters conflict.
+    """
 
     @staticmethod
-    def type():
+    def type() -> str:
         return 'intensity_2d'
 
     @classmethod
-    def load(cls, info, *args, **kwargs):
+    def load(cls, info: dict[str, Any]) -> Self:
         _detail.load_geometries(info, ('components',))
         parseutils.load_option_and_update_info(
             _bcmp2d_parser, info, 'components', required=True)
         opts = parseutils.parse_options_for_callable(info, cls.__init__)
         return cls(**opts)
 
-    def dump(self):
+    def dump(self) -> dict[str, Any]:
         name = dict(name=self.name()) if self.name() is not None else {}
         return dict(
             type=self.type(),
@@ -82,22 +108,30 @@ class ModelIntensity2D(ModelImage):
 
     def __init__(
             self,
-            components: BrightnessComponent2D | Sequence[BrightnessComponent2D],
+            components:
+            BrightnessComponent2D | Sequence[BrightnessComponent2D],
             name: str | None = None
     ):
         super().__init__(name)
         self._component_set = ComponentSet2D(components)
 
-    def pdescs(self):
+    def pdescs(self) -> dict[str, ParamDesc]:
         return self._component_set.pdescs()
 
-    def has_weights(self):
+    def has_weights(self) -> bool:
         return self._component_set.has_weights()
 
-    def constants(self):
+    def constants(self) -> dict[str, Any]:
         return self._component_set.constants()
 
-    def plan(self, driver, grid, has_weights, dtype, selection=Selection()):
+    def plan(
+            self,
+            driver: Driver,
+            grid: gridutils.Grid,
+            has_weights: bool,
+            dtype: np.dtype,
+            selection: Selection = Selection()
+    ) -> ComponentSetModelPlan:
         return ComponentSetModelPlan(
             self._component_set.plan(
                 driver, grid, IMAGE_SPECTRAL_AXIS, has_weights, dtype,
@@ -106,13 +140,38 @@ class ModelIntensity2D(ModelImage):
 
 
 class ModelIntensity3D(ModelImage):
+    """
+    A thick galaxy of brightness: its components evaluated in 3D and
+    projected into images, through its opacity.
+
+    Parameters
+    ----------
+    components : BrightnessComponent3D or Sequence of them
+        Its components: smooth and cloud disks (smdisk, mcdisk) and
+        points (point).
+    opacity_components : OpacityComponent3D or Sequence of them, optional
+        Its opacity components: smooth and cloud disks of dust, which
+        absorb the light of its disks (not that of its points).
+    size_z, step_z, zero_z : optional
+        The axis along the line of sight (z): its number of voxels, their
+        size and the position of the first; by default, those of the
+        longer of the x and y axes, centred on 0.
+    name : str, optional
+        Its name (see Model).
+
+    Raises
+    ------
+    ConfigError
+        If there are no components, or the names of the components,
+        their geometries and their parameters conflict.
+    """
 
     @staticmethod
-    def type():
+    def type() -> str:
         return 'intensity_3d'
 
     @classmethod
-    def load(cls, info, *args, **kwargs):
+    def load(cls, info: dict[str, Any]) -> Self:
         _detail.load_geometries(
             info, ('components', 'opacity_components'))
         parseutils.load_option_and_update_info(
@@ -122,7 +181,7 @@ class ModelIntensity3D(ModelImage):
         opts = parseutils.parse_options_for_callable(info, cls.__init__)
         return cls(**opts)
 
-    def dump(self):
+    def dump(self) -> dict[str, Any]:
         component_set = self._component_set
         name = dict(name=self.name()) if self.name() is not None else {}
         return dict(
@@ -151,16 +210,23 @@ class ModelIntensity3D(ModelImage):
         self._component_set = ComponentSet3D(
             components, opacity_components, size_z, step_z, zero_z)
 
-    def pdescs(self):
+    def pdescs(self) -> dict[str, ParamDesc]:
         return self._component_set.pdescs()
 
-    def has_weights(self):
+    def has_weights(self) -> bool:
         return self._component_set.has_weights()
 
-    def constants(self):
+    def constants(self) -> dict[str, Any]:
         return self._component_set.constants()
 
-    def plan(self, driver, grid, has_weights, dtype, selection=Selection()):
+    def plan(
+            self,
+            driver: Driver,
+            grid: gridutils.Grid,
+            has_weights: bool,
+            dtype: np.dtype,
+            selection: Selection = Selection()
+    ) -> ComponentSetModelPlan:
         return ComponentSetModelPlan(
             self._component_set.plan(
                 driver, grid, IMAGE_SPECTRAL_AXIS, has_weights, dtype,
@@ -169,13 +235,33 @@ class ModelIntensity3D(ModelImage):
 
 
 class ModelKinematics2D(ModelSCube):
+    """
+    A thin galaxy of emission lines: its components evaluated into
+    spectral cubes.
+
+    Parameters
+    ----------
+    components : SpectralComponent2D or Sequence of them
+        Its components: smooth disks (smdisk) and points (point).
+    mass_model : MassModel, optional
+        The mass of the galaxy, whose circular velocity the 'mass'
+        velocity traits of its components take.
+    name : str, optional
+        Its name (see Model).
+
+    Raises
+    ------
+    ConfigError
+        If there are no components, or the names of the components,
+        their geometries and their parameters conflict.
+    """
 
     @staticmethod
-    def type():
+    def type() -> str:
         return 'kinematics_2d'
 
     @classmethod
-    def load(cls, info, *args, **kwargs):
+    def load(cls, info: dict[str, Any]) -> Self:
         _detail.load_geometries(info, ('components',))
         parseutils.load_option_and_update_info(
             _scmp2d_parser, info, 'components', required=True)
@@ -184,7 +270,7 @@ class ModelKinematics2D(ModelSCube):
         opts = parseutils.parse_options_for_callable(info, cls.__init__)
         return cls(**opts)
 
-    def dump(self):
+    def dump(self) -> dict[str, Any]:
         component_set = self._component_set
         name = dict(name=self.name()) if self.name() is not None else {}
         mass_model = component_set.mass_model()
@@ -203,23 +289,26 @@ class ModelKinematics2D(ModelSCube):
             mass_model: MassModel | None = None,
             name: str | None = None
     ):
-        """
-        mass_model is the mass of the galaxy, whose circular velocity the
-        'mass' velocity traits of the components take (see MassModel).
-        """
         super().__init__(name)
         self._component_set = ComponentSet2D(components, mass_model)
 
-    def pdescs(self):
+    def pdescs(self) -> dict[str, ParamDesc]:
         return self._component_set.pdescs()
 
-    def has_weights(self):
+    def has_weights(self) -> bool:
         return self._component_set.has_weights()
 
-    def constants(self):
+    def constants(self) -> dict[str, Any]:
         return self._component_set.constants()
 
-    def plan(self, driver, grid, has_weights, dtype, selection=Selection()):
+    def plan(
+            self,
+            driver: Driver,
+            grid: gridutils.Grid,
+            has_weights: bool,
+            dtype: np.dtype,
+            selection: Selection = Selection()
+    ) -> ComponentSetModelPlan:
         return ComponentSetModelPlan(
             self._component_set.plan(
                 driver, grid.spatial(), grid.spectral(), has_weights, dtype,
@@ -228,13 +317,41 @@ class ModelKinematics2D(ModelSCube):
 
 
 class ModelKinematics3D(ModelSCube):
+    """
+    A thick galaxy of emission lines: its components evaluated in 3D
+    and projected into spectral cubes, through its opacity.
+
+    Parameters
+    ----------
+    components : SpectralComponent3D or Sequence of them
+        Its components: smooth and cloud disks (smdisk, mcdisk) and
+        points (point).
+    opacity_components : OpacityComponent3D or Sequence of them, optional
+        Its opacity components: smooth and cloud disks of dust, which
+        absorb the light of its disks (not that of its points).
+    size_z, step_z, zero_z : optional
+        The axis along the line of sight (z): its number of voxels, their
+        size and the position of the first; by default, those of the
+        longer of the x and y axes, centred on 0.
+    mass_model : MassModel, optional
+        The mass of the galaxy, whose circular velocity the 'mass'
+        velocity traits of its components take.
+    name : str, optional
+        Its name (see Model).
+
+    Raises
+    ------
+    ConfigError
+        If there are no components, or the names of the components,
+        their geometries and their parameters conflict.
+    """
 
     @staticmethod
-    def type():
+    def type() -> str:
         return 'kinematics_3d'
 
     @classmethod
-    def load(cls, info, *args, **kwargs):
+    def load(cls, info: dict[str, Any]) -> Self:
         _detail.load_geometries(
             info, ('components', 'opacity_components'))
         parseutils.load_option_and_update_info(
@@ -246,7 +363,7 @@ class ModelKinematics3D(ModelSCube):
         opts = parseutils.parse_options_for_callable(info, cls.__init__)
         return cls(**opts)
 
-    def dump(self):
+    def dump(self) -> dict[str, Any]:
         component_set = self._component_set
         name = dict(name=self.name()) if self.name() is not None else {}
         mass_model = component_set.mass_model()
@@ -276,25 +393,28 @@ class ModelKinematics3D(ModelSCube):
             mass_model: MassModel | None = None,
             name: str | None = None
     ):
-        """
-        mass_model is the mass of the galaxy, whose circular velocity the
-        'mass' velocity traits of the components take (see MassModel).
-        """
         super().__init__(name)
         self._component_set = ComponentSet3D(
             components, opacity_components, size_z, step_z, zero_z,
             mass_model)
 
-    def pdescs(self):
+    def pdescs(self) -> dict[str, ParamDesc]:
         return self._component_set.pdescs()
 
-    def has_weights(self):
+    def has_weights(self) -> bool:
         return self._component_set.has_weights()
 
-    def constants(self):
+    def constants(self) -> dict[str, Any]:
         return self._component_set.constants()
 
-    def plan(self, driver, grid, has_weights, dtype, selection=Selection()):
+    def plan(
+            self,
+            driver: Driver,
+            grid: gridutils.Grid,
+            has_weights: bool,
+            dtype: np.dtype,
+            selection: Selection = Selection()
+    ) -> ComponentSetModelPlan:
         return ComponentSetModelPlan(
             self._component_set.plan(
                 driver, grid.spatial(), grid.spectral(), has_weights, dtype,
