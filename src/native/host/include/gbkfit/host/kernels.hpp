@@ -201,6 +201,28 @@ dmodel_mmaps_gaussian(
 }
 
 template<typename T> void
+dmodel_dcube_convolve_z(
+        int size_x, int size_y, int size_z,
+        int nk, const T* kernels, T* cube, T* scratch)
+{
+    // Parallelization: per row of the dcube
+    #pragma omp parallel for collapse(2)
+    for (int z = 0; z < size_z; ++z) {
+    for (int y = 0; y < size_y; ++y) {
+
+    gbkfit::dmodel_dcube_convolve_z_row(
+            y, z, size_x, size_y, size_z, nk, kernels, cube, scratch);
+
+    }
+    }
+
+    const long long n = (long long)size_x * size_y * size_z;
+    #pragma omp parallel for
+    for (long long i = 0; i < n; ++i)
+        cube[i] = scratch[i];
+}
+
+template<typename T> void
 dmodel_lens_resample(
         int nx, int ny, int nz, int sx, int sy,
         const T* source_x, const T* source_y,
@@ -359,6 +381,11 @@ struct Wrapper
     static void
     dmodel_mmaps_gaussian(auto... args) {
         kernels::dmodel_mmaps_gaussian<T>(args...);
+    }
+
+    static void
+    dmodel_dcube_convolve_z(auto... args) {
+        kernels::dmodel_dcube_convolve_z<T>(args...);
     }
 
     static void

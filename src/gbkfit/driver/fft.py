@@ -22,9 +22,15 @@ class DriverFFT(abc.ABC):
         return tuple(shape[:-1]) + (shape[-1] // 2 + 1,)
 
     @staticmethod
-    def fft_convolution_shift(data):
-        axis = tuple(range(data.ndim))
-        return np.roll(data, np.array(data.shape) // 2 + 1, axis=axis)
+    def fft_convolution_shift(data, axes=None):
+        """
+        Roll the centre of a kernel (at shape // 2, or one pixel before for
+        an even shape) to the first pixel, along the given axes (all by
+        default).
+        """
+        axes = tuple(range(data.ndim)) if axes is None else tuple(axes)
+        shift = [data.shape[axis] // 2 + 1 for axis in axes]
+        return np.roll(data, shift, axis=axes)
 
     def __init__(self, fft_shape_threshold):
         self._fft_shape_threshold = fft_shape_threshold
@@ -56,3 +62,10 @@ class DriverFFT(abc.ABC):
     @abc.abstractmethod
     def fft_convolve_cached(self, data1_r, data2_r):
         pass
+
+    @abc.abstractmethod
+    def fft_convolve_xy_cached(self, data1_r, data2_r):
+        """
+        Convolve each channel (the first axis) of data1_r with the image of
+        the same channel of data2_r, or with its only image, in place.
+        """

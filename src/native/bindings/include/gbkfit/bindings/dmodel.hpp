@@ -37,6 +37,24 @@ struct DModel
                 src.data(), dst.data());
     }
 
+    // Convolve the spectra of cube along z, in place, with a kernel for
+    // each channel: kernels has shape (nz, nk), nk odd (see
+    // dmodel_dcube_convolve_z). scratch, of the shape of cube, is working
+    // memory.
+    static void
+    dcube_convolve_z(ConstImage kernels, Cube cube, Cube scratch)
+    {
+        require_same_shape(scratch, cube, "scratch", "cube");
+        const auto size = size_xyz(cube);
+        require(int(kernels.shape(0)) == size[2],
+                "kernels must have a row for each channel of cube");
+        require(kernels.shape(1) % 2 == 1,
+                "the kernels must have an odd size");
+        Kernels::dmodel_dcube_convolve_z(
+                size[0], size[1], size[2], int(kernels.shape(1)),
+                kernels.data(), cube.data(), scratch.data());
+    }
+
     // Mark the pixels of dcube_d above the cutoff in dcube_m (optional),
     // and if apply is true, set the rest to NaN
     static void
@@ -165,6 +183,10 @@ struct DModel
                         nb::arg("scale"), nb::arg("offset"),
                         nb::arg("src").noconvert(),
                         nb::arg("dst").noconvert())
+                .def_static("dcube_convolve_z", &dcube_convolve_z,
+                        nb::arg("kernels").noconvert(),
+                        nb::arg("cube").noconvert(),
+                        nb::arg("scratch").noconvert())
                 .def_static("dcube_mask", &dcube_mask,
                         nb::arg("cutoff"), nb::arg("apply"),
                         nb::arg("dcube_d").noconvert(),
