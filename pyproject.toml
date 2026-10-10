@@ -70,7 +70,10 @@ minversion = '8.0'
 testpaths = ['tests']
 addopts = ['-ra', '--strict-markers', '--strict-config']
 xfail_strict = true
-markers = ['cuda: needs the cuda driver and a CUDA GPU']
+markers = [
+    'cuda: needs the cuda driver and a CUDA GPU',
+    'slow: takes seconds (e.g. full fits by samplers); run with --runslow',
+]
 
 [tool.cibuildwheel]
 # The wheels use the stable ABI (abi3): each one is built on Python 3.12

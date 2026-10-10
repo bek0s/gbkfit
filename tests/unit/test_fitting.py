@@ -293,6 +293,7 @@ def check_posterior(result):
 # The samplers run on the host only: they test the fitters, not the
 # drivers
 
+@pytest.mark.slow
 def test_emcee_posterior_agrees_with_the_covariance():
     pytest.importorskip('emcee')
     from gbkfit.fitting.fitters.emcee import FitterEmcee
@@ -306,6 +307,7 @@ def test_emcee_posterior_agrees_with_the_covariance():
     check_posterior(result)
 
 
+@pytest.mark.slow
 def test_nautilus_posterior_agrees_with_the_covariance():
     pytest.importorskip('nautilus')
     from gbkfit.fitting.fitters.nautilus import FitterNautilus
@@ -316,6 +318,7 @@ def test_nautilus_posterior_agrees_with_the_covariance():
     assert math.isfinite(result.evidence.log_z)
 
 
+@pytest.mark.slow
 def test_dynesty_posterior_agrees_with_the_covariance():
     pytest.importorskip('dynesty')
     from gbkfit.fitting.fitters.dynesty import FitterDynesty
@@ -326,6 +329,7 @@ def test_dynesty_posterior_agrees_with_the_covariance():
     assert result.evidence.log_z_error > 0
 
 
+@pytest.mark.slow
 @pytest.mark.filterwarnings('ignore:invalid value:RuntimeWarning')
 def test_samplers_leave_out_points_the_parameters_reject():
     # bpt_s is nan for xpos < 0.6: there the likelihood is -inf, and the

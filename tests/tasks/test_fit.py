@@ -26,6 +26,7 @@ def run_cli(workdir, *args):
         pytest.fail(f"gbkfit-cli failed:\n{result.stderr[-3000:]}")
 
 
+@pytest.mark.slow
 def test_fit_recovers_the_parameters_of_noiseless_data(tmp_path):
     pytest.importorskip('lmfit')
     # The data are the model of the reference config
