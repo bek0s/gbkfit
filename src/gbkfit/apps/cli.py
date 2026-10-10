@@ -1,10 +1,12 @@
 
 import argparse
 import logging.config
+import sys
 from collections.abc import Callable, Sequence
 from typing import Any, Literal
 
 from gbkfit.utils import parseutils
+from gbkfit.utils.parseutils import ConfigError
 
 # (not __name__, which is __main__ under python -m, outside the loggers of
 # gbkfit that configure_logging configures)
@@ -27,7 +29,8 @@ def configure_logging(
             },
             'file': {
                 'format':
-                    '{asctime}:{processName}({process}):{threadName}({thread}):'
+                    '{asctime}:{processName}({process}):'
+                    '{threadName}({thread}):'
                     '{levelname}:{name}:{funcName}:{lineno}:{message}',
                 'style': '{'
             },
@@ -104,7 +107,7 @@ def _validate_range_2d(
         _namespace: argparse.Namespace,
         values: Sequence[float],
         option_string: str
-):
+) -> None:
     """
     Validate that the given 2D range consists of four values:
     - Left (L) < Right (R)
@@ -134,7 +137,13 @@ def _create_validator(
     validation functions to the argument values.
     """
     class Validator(argparse.Action):
-        def __call__(self, parser, namespace, values, option_string=None):
+        def __call__(
+                self,
+                parser: argparse.ArgumentParser,
+                namespace: argparse.Namespace,
+                values: Any,
+                option_string: str | None = None
+        ) -> None:
             for validator in validators:
                 validator(parser, namespace, values, option_string)
             setattr(namespace, self.dest, values)
@@ -155,7 +164,7 @@ def _number_range(
     if max_ is not None:
         assert isinstance(max_, type_)
 
-    def _number_range_checker(arg):
+    def _number_range_checker(arg: str) -> float:
         try:
             num = type_(arg)
         except ValueError:
@@ -173,8 +182,30 @@ def _number_range(
     return _number_range_checker
 
 
-def main():
+def _output_parser(
+        default_mode: Literal['terminate', 'overwrite', 'unique']
+) -> argparse.ArgumentParser:
+    """
+    Return the parser of the options of the output directory of a task,
+    with a default for what to do if it exists.
+    """
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument(
+        '--output-dir', type=str, default='output',
+        metavar='OUTPUT',
+        help="the path of the directory to store the task's output")
+    parser.add_argument(
+        '--output-dir-mode', choices=['terminate', 'overwrite', 'unique'],
+        default=default_mode,
+        help=f"what to do if the output directory exists: 'terminate' "
+             f"(fail), 'overwrite' (write into it), or 'unique' (write "
+             f"into a new one with a numbered suffix, e.g. output_2); "
+             f"default: {default_mode}")
+    return parser
 
+
+def _make_parser() -> argparse.ArgumentParser:
+    """Return the parser of the command line."""
     from gbkfit import __version__ as version
 
     parser = argparse.ArgumentParser()
@@ -190,18 +221,9 @@ def main():
     parser_common.add_argument(
         '--verbose', action='store_true', help="enable verbose logging")
 
-    parser_common_output = argparse.ArgumentParser(add_help=False)
-    parser_common_output.add_argument(
-        '--output-dir', type=str, default='output',
-        metavar='OUTPUT',
-        help="the path of the directory to store the task's output")
-    parser_common_output.add_argument(
-        '--output-dir-mode', choices=['terminate', 'overwrite', 'unique'],
-        default='overwrite',
-        help="Specifies how to handle existing output directories: "
-             "'terminate' (fail if the directory exists), "
-             "'overwrite' (overwrite existing contents), or "
-             "'unique' (append a number suffix to ensure uniqueness)")
+    # (the results of eval and fit are never overwritten by default)
+    parser_common_output = _output_parser('overwrite')
+    parser_results_output = _output_parser('unique')
 
     parser_common_config = argparse.ArgumentParser(add_help=False)
     parser_common_config.add_argument(
@@ -214,7 +236,7 @@ def main():
     #
 
     parser_eval = parsers_task.add_parser('eval', parents=[
-        parser_common_config, parser_common_output, parser_common],
+        parser_common_config, parser_results_output, parser_common],
         help="evaluate model")
     parser_eval.add_argument(
         'mode', type=str, choices=['model', 'objective'],
@@ -235,20 +257,12 @@ def main():
     _DATA_D_HELP = "input data (measurements)"
     _DATA_E_HELP = "input data (uncertainties)"
     _DATA_M_HELP = "input data (mask)"
-    _CLIP_MIN_HELP = """
-            minimum clip threshold value; 
-            all values below MIN will be set to nan
-            """
-    _CLIP_MAX_HELP = """
-            maximum clip threshold value; 
-            all values above MAX will be set to nan
-            """
-    _SCLIP_SIGMA_HELP = """
-            the number of standard deviations to use for sigma-clipping
-            """
-    _SCLIP_ITERS_HELP = """
-            the maximum number of sigma-clipping iterations to perform
-            """
+    _CLIP_MIN_HELP = "the values below MIN are set to NaN (invalid)"
+    _CLIP_MAX_HELP = "the values above MAX are set to NaN (invalid)"
+    _SCLIP_SIGMA_HELP = (
+        "the number of standard deviations at which sigma clipping rejects "
+        "values")
+    _SCLIP_ITERS_HELP = "the most iterations of sigma clipping"
     # ...
     parser_prep_dtype = argparse.ArgumentParser(add_help=False)
     parser_prep_dtype.add_argument(
@@ -359,7 +373,8 @@ def main():
         metavar='SIGMA',
         help=_SCLIP_SIGMA_HELP)
     parser_prep_clip_n.add_argument(
-        '--sclip-iters', type=_number_range(int, 1, None), nargs='+', default=5,
+        '--sclip-iters', type=_number_range(int, 1, None), nargs='+',
+        default=5,
         metavar='ITERS',
         help=_SCLIP_ITERS_HELP)
     # ...
@@ -448,7 +463,7 @@ def main():
     #
 
     parser_fit = parsers_task.add_parser('fit', parents=[
-        parser_common_config, parser_common_output, parser_common],
+        parser_common_config, parser_results_output, parser_common],
         help="fit model to data")
     parser_fit.add_argument(
         'config', type=str,
@@ -490,13 +505,105 @@ def main():
     parser_plot.add_argument(
         '--posterior-params', type=str, nargs='+',
         metavar='PARAM',
-        help="plot posterior only for the model parameters in the PARAMS list; "
-             "if not defined, all model parameters will be used")
+        help="the elements of the posterior plots (by default, the free "
+             "ones)")
 
     #
     # Parse arguments and run the appropriate task
     #
 
+    return parser
+
+
+def _run_eval(args: argparse.Namespace) -> None:
+    """Run the eval task."""
+    import gbkfit.tasks.eval
+    with parseutils.strict_mode(args.strict):
+        gbkfit.tasks.eval.eval_(
+            args.mode, args.config, args.profile,
+            args.output_dir, args.output_dir_mode)
+
+
+def _run_prep(args: argparse.Namespace) -> None:
+    """Run the prep task."""
+    import gbkfit.tasks._detail
+    import gbkfit.tasks.prep
+    output_dir = gbkfit.tasks._detail.make_output_dir(
+        args.output_dir, args.output_dir_mode)
+    _log.info(f"output will be stored under directory: {output_dir}")
+    if args.prep_task == 'pixel_brightness':
+        gbkfit.tasks.prep.prep_pixel_brightness(
+            args.data_d, args.data_e, args.data_m,
+            args.roi_spat, args.clip_min, args.clip_max,
+            args.ccl_lcount, args.ccl_pcount, args.ccl_lratio,
+            args.sclip_sigma, args.sclip_iters,
+            args.minify, args.nanpad, args.dtype,
+            output_dir=output_dir)
+    elif args.prep_task == 'slit_spectra':
+        gbkfit.tasks.prep.prep_slit_spectra(
+            args.data_d, args.data_e, args.data_m,
+            args.roi_spat, args.roi_spec, args.clip_min, args.clip_max,
+            args.ccl_lcount, args.ccl_pcount, args.ccl_lratio,
+            args.sclip_sigma, args.sclip_iters,
+            args.minify, args.nanpad, args.dtype,
+            args.velocity_rest, output_dir=output_dir)
+    elif args.prep_task == 'pixel_moments':
+        gbkfit.tasks.prep.prep_pixel_moments(
+            args.data_d, args.data_e, args.data_m,
+            args.roi_spat, args.clip_min, args.clip_max,
+            args.ccl_lcount, args.ccl_pcount, args.ccl_lratio,
+            args.sclip_sigma, args.sclip_iters,
+            args.minify, args.nanpad, args.dtype,
+            output_dir=output_dir)
+    elif args.prep_task == 'region_moments':
+        gbkfit.tasks.prep.prep_region_moments(
+            args.bins, args.data_d, args.data_e, args.data_m, args.dtype,
+            output_dir=output_dir)
+    elif args.prep_task == 'region_spectra':
+        gbkfit.tasks.prep.prep_region_spectra(
+            args.bins, args.data_d, args.data_e, args.data_m,
+            args.roi_spec, args.dtype, args.velocity_rest,
+            output_dir=output_dir)
+    elif args.prep_task == 'psf_muse':
+        gbkfit.tasks.prep.prep_psf_muse(args.cube, output_dir)
+    elif args.prep_task == 'lsf_muse':
+        gbkfit.tasks.prep.prep_lsf_muse(output_dir)
+    elif args.prep_task == 'psf_casa_beams':
+        gbkfit.tasks.prep.prep_psf_casa_beams(args.cube, output_dir)
+    elif args.prep_task == 'pixel_spectra':
+        gbkfit.tasks.prep.prep_pixel_spectra(
+            args.data_d, args.data_e, args.data_m,
+            args.roi_spat, args.roi_spec, args.clip_min, args.clip_max,
+            args.ccl_lcount, args.ccl_pcount, args.ccl_lratio,
+            args.sclip_sigma, args.sclip_iters,
+            args.minify, args.nanpad, args.dtype,
+            args.velocity_rest, output_dir=output_dir)
+
+
+def _run_fit(args: argparse.Namespace) -> None:
+    """Run the fit task."""
+    import gbkfit.tasks.fit
+    with parseutils.strict_mode(args.strict):
+        gbkfit.tasks.fit.fit(
+            args.config, args.output_dir, args.output_dir_mode)
+
+
+def _run_plot(args: argparse.Namespace) -> None:
+    """Run the plot task."""
+    import gbkfit.tasks.plot
+    gbkfit.tasks.plot.plot(
+        args.result_dir, args.output_dir, args.output_dir_mode,
+        args.format, args.dpi, args.only_best, args.posterior_mode,
+        args.posterior_params)
+
+
+def main() -> None:
+    """
+    Run gbkfit-cli: parse the command line, and run its task. Errors in
+    configurations are reported without a traceback (with one if
+    --verbose), and exit with status 1.
+    """
+    parser = _make_parser()
     args = parser.parse_args()
     if args.task == 'prep' and args.prep_task in (
             'pixel_moments', 'region_moments'):
@@ -504,83 +611,17 @@ def main():
 
     # Configure log level before doing anything else
     configure_logging('DEBUG' if args.verbose else 'INFO')
-
     _log.debug(
         f"cli has been called with the following arguments: {vars(args)}")
 
-    if args.task == 'eval':
-        import gbkfit.tasks.eval
-        with parseutils.strict_mode(args.strict):
-            gbkfit.tasks.eval.eval_(
-                args.mode, args.config, args.profile,
-                args.output_dir, args.output_dir_mode)
-
-    elif args.task == 'prep':
-        import gbkfit.tasks._detail
-        import gbkfit.tasks.prep
-        output_dir = gbkfit.tasks._detail.make_output_dir(
-            args.output_dir, args.output_dir_mode)
-        _log.info(f"output will be stored under directory: {output_dir}")
-        if args.prep_task == 'pixel_brightness':
-            gbkfit.tasks.prep.prep_pixel_brightness(
-                args.data_d, args.data_e, args.data_m,
-                args.roi_spat, args.clip_min, args.clip_max,
-                args.ccl_lcount, args.ccl_pcount, args.ccl_lratio,
-                args.sclip_sigma, args.sclip_iters,
-                args.minify, args.nanpad, args.dtype,
-                output_dir=output_dir)
-        elif args.prep_task == 'slit_spectra':
-            gbkfit.tasks.prep.prep_slit_spectra(
-                args.data_d, args.data_e, args.data_m,
-                args.roi_spat, args.roi_spec, args.clip_min, args.clip_max,
-                args.ccl_lcount, args.ccl_pcount, args.ccl_lratio,
-                args.sclip_sigma, args.sclip_iters,
-                args.minify, args.nanpad, args.dtype,
-                args.velocity_rest, output_dir=output_dir)
-        elif args.prep_task == 'pixel_moments':
-            gbkfit.tasks.prep.prep_pixel_moments(
-                args.data_d, args.data_e, args.data_m,
-                args.roi_spat, args.clip_min, args.clip_max,
-                args.ccl_lcount, args.ccl_pcount, args.ccl_lratio,
-                args.sclip_sigma, args.sclip_iters,
-                args.minify, args.nanpad, args.dtype,
-                output_dir=output_dir)
-        elif args.prep_task == 'region_moments':
-            gbkfit.tasks.prep.prep_region_moments(
-                args.bins, args.data_d, args.data_e, args.data_m, args.dtype,
-                output_dir=output_dir)
-        elif args.prep_task == 'region_spectra':
-            gbkfit.tasks.prep.prep_region_spectra(
-                args.bins, args.data_d, args.data_e, args.data_m,
-                args.roi_spec, args.dtype, args.velocity_rest,
-                output_dir=output_dir)
-        elif args.prep_task == 'psf_muse':
-            gbkfit.tasks.prep.prep_psf_muse(args.cube, output_dir)
-        elif args.prep_task == 'lsf_muse':
-            gbkfit.tasks.prep.prep_lsf_muse(output_dir)
-        elif args.prep_task == 'psf_casa_beams':
-            gbkfit.tasks.prep.prep_psf_casa_beams(args.cube, output_dir)
-        elif args.prep_task == 'pixel_spectra':
-            gbkfit.tasks.prep.prep_pixel_spectra(
-                args.data_d, args.data_e, args.data_m,
-                args.roi_spat, args.roi_spec, args.clip_min, args.clip_max,
-                args.ccl_lcount, args.ccl_pcount, args.ccl_lratio,
-                args.sclip_sigma, args.sclip_iters,
-                args.minify, args.nanpad, args.dtype,
-                args.velocity_rest, output_dir=output_dir)
-
-    elif args.task == 'fit':
-        import gbkfit.tasks.fit
-        with parseutils.strict_mode(args.strict):
-            gbkfit.tasks.fit.fit(
-                args.config, args.output_dir, args.output_dir_mode)
-
-    elif args.task == 'plot':
-        import gbkfit.tasks.plot
-        gbkfit.tasks.plot.plot(
-            args.result_dir, args.output_dir, args.output_dir_mode,
-            args.format, args.dpi, args.only_best, args.posterior_mode,
-            args.posterior_params)
+    tasks = dict(eval=_run_eval, prep=_run_prep, fit=_run_fit, plot=_run_plot)
+    try:
+        tasks[args.task](args)
+    except ConfigError as e:
+        if args.verbose:
+            raise
+        _log.error(f"error: {e}")
+        sys.exit(1)
 
     _log.info("So long and thanks for all the fish!")
 

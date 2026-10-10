@@ -195,3 +195,15 @@ def test_one_model_seen_by_two_observations(tmp_path):
     outputs = run_eval('model', config, tmp_path / 'model')
     assert outputs['model_0_spectra_d'].shape == (50, 48, 48)
     assert outputs['model_1_moment1_d'].shape == (48, 48)
+
+
+def test_configuration_errors_are_reported_without_a_traceback(tmp_path):
+    config = yaml.load(REFERENCE_DIR / 'thin_disk_pixel_spectra.yaml')
+    config['params']['properties']['incl'] = 'nonsense +'
+    yaml.dump(config, tmp_path / 'config.yaml')
+    result = subprocess.run(
+        [sys.executable, '-m', 'gbkfit.apps.cli', 'eval', 'model',
+         'config.yaml'], cwd=tmp_path, capture_output=True, text=True)
+    assert result.returncode == 1
+    assert "error: params" in result.stderr
+    assert 'Traceback' not in result.stderr
