@@ -126,8 +126,7 @@ class FitterEmcee(Fitter):
     def fit_param_class() -> FitParamClass:
         return FitParamEmcee
 
-    @staticmethod
-    def libraries() -> tuple[str, ...]:
+    def libraries(self) -> tuple[str, ...]:
         return ('emcee',)
 
     def dump(self) -> dict[str, Any]:

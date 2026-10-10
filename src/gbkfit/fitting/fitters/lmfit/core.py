@@ -68,8 +68,7 @@ class FitterLMFitLeastSquares(Fitter):
     def fit_param_class() -> FitParamClass:
         return FitParamBounded
 
-    @staticmethod
-    def libraries() -> tuple[str, ...]:
+    def libraries(self) -> tuple[str, ...]:
         return ('lmfit',)
 
     def dump(self) -> dict[str, Any]:
