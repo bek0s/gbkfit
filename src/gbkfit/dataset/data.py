@@ -65,19 +65,24 @@ def fits_file(x: str | Mapping[str, Any], prefix: str = '') -> FitsFile:
     return prefix + file, hdu
 
 
-def _as_float32(x: np.ndarray) -> np.ndarray:
+def _as_float(x: np.ndarray, dtype: np.dtype | None = None) -> np.ndarray:
     """
-    Return a float32 copy of an array, in native byte order (the drivers
-    support float32 only, and the copy leaves the caller's array
-    unchanged).
+    Return a copy of an array of floats, in native byte order (the copy
+    leaves the caller's array unchanged): of the given dtype, or else
+    floats keep their type and other types become float64.
     """
-    return np.array(x, dtype=np.float32)
+    x = np.asarray(x)
+    if dtype is None:
+        dtype = x.dtype if np.issubdtype(x.dtype, np.floating) \
+            else np.dtype(np.float64)
+    return np.array(x, dtype=np.dtype(dtype).newbyteorder('='))
 
 
 class Data:
     """
     Measured values with their mask and error: arrays of one shape, as
-    float32 copies.
+    copies (float arrays keep their type, and the others become float64;
+    the mask and the error take the type of the values).
 
     Where the values were measured (e.g. on the pixels of a grid) is
     described by their dataset. The values that are masked (mask 0), not
@@ -105,10 +110,11 @@ class Data:
             mask: np.ndarray | None = None,
             error: np.ndarray | None = None
     ):
-        data = _as_float32(data)
-        mask = np.ones_like(data) if mask is None else _as_float32(mask)
+        data = _as_float(data)
+        mask = np.ones_like(data) if mask is None \
+            else _as_float(mask, data.dtype)
         if error is not None:
-            error = _as_float32(error)
+            error = _as_float(error, data.dtype)
         if np.any(~np.isfinite(mask)):
             raise ConfigError("the mask must be finite")
         if data.shape != mask.shape:
@@ -128,7 +134,7 @@ class Data:
         if error is not None:
             error[~total_mask] = np.nan
         self._data = data
-        self._mask = total_mask.astype(np.float32)
+        self._mask = total_mask.astype(data.dtype)
         self._error = error
 
     @classmethod
@@ -209,7 +215,7 @@ class Data:
         return self._error
 
     def dtype(self) -> np.dtype:
-        """Return the dtype of the arrays (float32)."""
+        """Return the dtype of the arrays."""
         return self._data.dtype
 
 
