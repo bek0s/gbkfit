@@ -734,3 +734,118 @@ def prep_region_moments(
         if data_e is not None:
             save(file_e[i], _bin_values(
                 index, len(numbers), data_e, file_e[i]).astype(dtype))
+
+
+# The PSFs and LSFs of instruments, as tables for the options of PSFs and
+# LSFs that vary along the spectral axis (see gbkfit.instrument.varying)
+
+# The wavelengths (Angstrom) of the tables of MUSE (its range, and more)
+_MUSE_WAVELENGTHS = np.arange(4600.0, 9401.0, 50.0)
+
+
+def _write_table(columns, units, name, output_dir):
+    """Write a table (ECSV) of the given columns and units; return its path."""
+    import astropy.table
+    table = astropy.table.QTable({
+        key: np.asarray(values) * astropy.units.Unit(units[key])
+        for key, values in columns.items()})
+    filename = os.path.join(output_dir, f'prep_{name}.ecsv')
+    table.write(filename, overwrite=True)
+    return filename
+
+
+def _muse_fsf(header, wavelengths):
+    """
+    The FWHM (arcsec) and beta of the Moffat PSF of a MUSE cube at the
+    given wavelengths (Angstrom), from the keywords of its header (the
+    MOFFAT1 and MOFFAT2 modes of MPDAF; the first field).
+    """
+    mode = header.get('FSFMODE')
+    fields = [f for f in (*range(10), 99) if f'FSF{f:02d}BET' in header
+              or f'FSF{f:02d}FNC' in header]
+    if mode not in ('MOFFAT1', 'MOFFAT2') or not fields:
+        raise ConfigError(
+            f"the header has no PSF of MUSE (FSFMODE MOFFAT1 or MOFFAT2); "
+            f"FSFMODE is {mode!r}")
+    key = f'FSF{fields[0]:02d}'
+    if mode == 'MOFFAT1':
+        fwhm = header[f'{key}FWA'] + header[f'{key}FWB'] * wavelengths
+        beta = np.full_like(wavelengths, header[f'{key}BET'])
+        return fwhm, beta
+    # (polynomials of the wavelength normalised to [-0.5, 0.5] in the
+    # range FSFLB1 to FSFLB2, the coefficient of the highest power first)
+    lb1, lb2 = header['FSFLB1'], header['FSFLB2']
+    x = (wavelengths - lb1) / (lb2 - lb1) - 0.5
+    fwhm_coeffs = [header[f'{key}F{k:02d}']
+                   for k in range(header[f'{key}FNC'])]
+    beta_coeffs = [header[f'{key}B{k:02d}']
+                   for k in range(header[f'{key}BNC'])]
+    return np.polyval(fwhm_coeffs, x), np.polyval(beta_coeffs, x)
+
+
+def prep_psf_muse(file, output_dir='.'):
+    """
+    Write the PSF of a MUSE cube (from its header) as a table of the
+    options alpha and beta of a Moffat PSF against wavelength.
+    """
+    header = fits.getheader(file, 0)
+    fwhm, beta = _muse_fsf(header, _MUSE_WAVELENGTHS)
+    alpha = fwhm / (2 * np.sqrt(2 ** (1 / beta) - 1))
+    filename = _write_table(
+        dict(wavelength=_MUSE_WAVELENGTHS, alpha=alpha, beta=beta),
+        dict(wavelength='Angstrom', alpha='arcsec', beta=''), 'psf',
+        output_dir)
+    _log.info(
+        f"the PSF is in {filename}; use it as psf: {{type: moffat, "
+        f"alpha: {{table: {filename}, column: alpha}}, "
+        f"beta: {{table: {filename}, column: beta}}}}")
+
+
+def prep_lsf_muse(output_dir='.'):
+    """
+    Write the LSF of MUSE (a Gaussian whose FWHM is that of Bacon et al.
+    2017, eq. 8) as a table of its sigma against wavelength.
+    """
+    w = _MUSE_WAVELENGTHS
+    fwhm = 5.866e-8 * w ** 2 - 9.187e-4 * w + 6.040
+    filename = _write_table(
+        dict(wavelength=w, sigma=fwhm / np.sqrt(8 * np.log(2))),
+        dict(wavelength='Angstrom', sigma='Angstrom'), 'lsf', output_dir)
+    _log.info(
+        f"the LSF is in {filename}; use it as lsf: {{type: gauss, "
+        f"sigma: {{table: {filename}, column: sigma}}}}")
+
+
+def prep_psf_casa_beams(file, output_dir='.'):
+    """
+    Write the beams of the channels of a cube of CASA (its table BEAMS)
+    as a table of the options of a Gaussian beam PSF against the points
+    of its spectral axis (e.g. frequency). Only the first polarisation is
+    used.
+    """
+    import astropy.table
+    beams = astropy.table.Table.read(file, hdu='BEAMS')
+    if 'POL' in beams.colnames:
+        beams = beams[beams['POL'] == 0]
+    wcs = astropy.wcs.WCS(fits.getheader(file, 0))
+    if wcs.wcs.spec < 0:
+        raise ConfigError(f"{file}: the cube has no spectral axis")
+    spectral = wcs.sub([wcs.wcs.spec + 1])
+    unit = astropy.units.Unit(spectral.wcs.cunit[0])
+    points = spectral.pixel_to_world_values(np.asarray(beams['CHAN']))
+    axis = ('frequency' if unit.is_equivalent(astropy.units.Hz) else
+            'wavelength' if unit.is_equivalent(astropy.units.m) else
+            'velocity')
+
+    def column(name, to):
+        return (beams[name].quantity if beams[name].unit else
+                beams[name] * astropy.units.Unit(to)).to_value(to)
+    filename = _write_table(
+        {axis: points, 'bmaj': column('BMAJ', 'arcsec'),
+         'bmin': column('BMIN', 'arcsec'), 'bpa': column('BPA', 'deg')},
+        {axis: str(unit), 'bmaj': 'arcsec', 'bmin': 'arcsec', 'bpa': 'deg'},
+        'psf', output_dir)
+    _log.info(
+        f"the beams are in {filename}; use them as psf: {{type: "
+        f"gauss_beam, bmaj: {{table: {filename}, column: bmaj}}, ...}} "
+        f"(and bmin and bpa)")

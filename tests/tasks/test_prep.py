@@ -529,3 +529,72 @@ def test_binned_maps_must_hold_one_value_per_bin():
     fits.writeto('vel.fits', values)
     with pytest.raises(Exception, match="bin 0 hold different values"):
         prep.prep_region_moments('bins.fits', ['vel.fits'], None, None, 'float32')
+
+
+@pytest.mark.parametrize('keywords', [
+    # FWHM = 0.8 - 2e-5 (w - 7000) arcsec, beta = 2.5 (of MPDAF: the
+    # wavelength normalised to [-0.5, 0.5] from 5000 to 9000 Angstrom)
+    dict(FSFMODE='MOFFAT1', FSF00BET=2.5, FSF00FWA=0.94, FSF00FWB=-2e-5),
+    dict(FSFMODE='MOFFAT2', FSFLB1=5000, FSFLB2=9000, FSF00FNC=2,
+         FSF00F00=-0.08, FSF00F01=0.8, FSF00BNC=1, FSF00B00=2.5)])
+def test_psf_of_muse(tmp_path, keywords):
+    import astropy.units as u
+    from gbkfit.instrument import psf_parser
+    path = tmp_path / 'cube.fits'
+    fits.writeto(path, np.zeros((2, 2, 2)), fits.Header(keywords))
+    prep.prep_psf_muse(str(path), str(tmp_path))
+    table = str(tmp_path / 'prep_psf.ecsv')
+    psf = psf_parser.load(dict(
+        type='moffat', alpha=dict(table=table, column='alpha'),
+        beta=dict(table=table, column='beta')))
+    moffat, = psf.at_velocities([0], 7000 * u.AA)
+    alpha, beta = moffat.dump()['alpha'], moffat.dump()['beta']
+    assert beta == pytest.approx(2.5)
+    assert 2 * alpha * np.sqrt(2 ** (1 / beta) - 1) == pytest.approx(0.8)
+
+
+def test_lsf_of_muse(tmp_path):
+    import astropy.units as u
+    from gbkfit.instrument import lsf_parser
+    prep.prep_lsf_muse(str(tmp_path))
+    table = str(tmp_path / 'prep_lsf.ecsv')
+    lsf = lsf_parser.load(dict(
+        type='gauss', sigma=dict(table=table, column='sigma')))
+    gauss, = lsf.at_velocities([0], 7000 * u.AA)
+    # A FWHM of 2.48 Angstrom at 7000 Angstrom, in km/s
+    fwhm = 5.866e-8 * 7000 ** 2 - 9.187e-4 * 7000 + 6.040
+    assert gauss.dump()['sigma'] == pytest.approx(
+        299792.458 * fwhm / 7000 / np.sqrt(8 * np.log(2)))
+
+
+def test_beams_of_casa(tmp_path):
+    import astropy.units as u
+    from gbkfit.instrument import psf_parser
+    header = fits.Header(dict(
+        CTYPE1='RA---SIN', CDELT1=-1 / 3600, CUNIT1='deg',
+        CTYPE2='DEC--SIN', CDELT2=1 / 3600, CUNIT2='deg',
+        CTYPE3='FREQ', CRVAL3=1.42e9, CDELT3=1e5, CRPIX3=1, CUNIT3='Hz',
+        CASAMBM=True))
+    beams = fits.BinTableHDU.from_columns([
+        fits.Column(name='BMAJ', format='E', unit='arcsec',
+                    array=[10.0, 12.0, 14.0]),
+        fits.Column(name='BMIN', format='E', unit='arcsec',
+                    array=[8.0, 9.0, 10.0]),
+        fits.Column(name='BPA', format='E', unit='deg',
+                    array=[30.0, 31.0, 32.0]),
+        fits.Column(name='CHAN', format='J', array=[0, 1, 2]),
+        fits.Column(name='POL', format='J', array=[0, 0, 0])], name='BEAMS')
+    path = tmp_path / 'cube.fits'
+    fits.HDUList(
+        [fits.PrimaryHDU(np.zeros((3, 2, 2)), header), beams]).writeto(path)
+    prep.prep_psf_casa_beams(str(path), str(tmp_path))
+    table = str(tmp_path / 'prep_psf.ecsv')
+    psf = psf_parser.load(dict(type='gauss_beam', **{
+        name: dict(table=table, column=name)
+        for name in ('bmaj', 'bmin', 'bpa')}))
+    # (the velocity of the second channel, of 1.4201 GHz)
+    rest = 1.42e9 * u.Hz
+    velocity = (1.4201e9 * u.Hz).to_value(u.km / u.s, u.doppler_radio(rest))
+    beam, = psf.at_velocities([velocity], rest)
+    assert beam.dump() == pytest.approx(
+        dict(type='gauss_beam', bmaj=12, bmin=9, bpa=31))
