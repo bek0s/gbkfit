@@ -1,10 +1,13 @@
 
+"""
+Data items: measured values, with their mask and error.
+"""
+
 import os.path
 from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
 import astropy.units
-
 import numpy as np
 
 from gbkfit.utils import fitsutils, gridutils, parseutils
@@ -19,21 +22,28 @@ __all__ = [
 
 
 def _read_file(
-        x, prefix, rpix=None, rval=None, rest=None, spectral_axis=None):
+        x: str | Mapping[str, Any],
+        prefix: str,
+        rpix: float | Sequence[float] | None = None,
+        rval: float | Sequence[float] | None = None,
+        rest: str | astropy.units.Quantity | None = None,
+        spectral_axis: int | None = None
+) -> tuple[np.ndarray, gridutils.Coords]:
     """
-    The data of a file and its world coordinates (see gridutils.Coords).
-    x is a filename, or a dict with the filename ('file') and the HDU to
-    read ('hdu', e.g. 'SCI'; by default the first).
+    Read the data of a file option (a filename, or a dict with the
+    filename and the HDU) and its world coordinates (see
+    fitsutils.read_data).
     """
     file, hdu = parseutils.parse_file(x)
     return fitsutils.read_data(
         prefix + file, hdu, rpix, rval, rest, spectral_axis)
 
 
-def _as_float32(x):
+def _as_float32(x: np.ndarray) -> np.ndarray:
     """
-    A float32 copy of an array, in native byte order. The drivers support
-    float32 only, and the copy leaves the caller's array unchanged.
+    Return a float32 copy of an array, in native byte order (the drivers
+    support float32 only, and the copy leaves the caller's array
+    unchanged).
     """
     return np.array(x, dtype=np.float32)
 
@@ -41,8 +51,26 @@ def _as_float32(x):
 class Data:
     """
     Measured values with their mask and error: arrays of one shape, as
-    float32. Where the values were measured (e.g. on the pixels of a grid)
-    is described by their dataset.
+    float32 copies.
+
+    Where the values were measured (e.g. on the pixels of a grid) is
+    described by their dataset. The values that are masked (mask 0), not
+    finite, or have an error that is not finite and positive are NaN, with
+    mask 0.
+
+    Parameters
+    ----------
+    data : ndarray
+        The values.
+    mask : ndarray, optional
+        The mask: 0 for the values to leave out; by default, none.
+    error : ndarray, optional
+        The error of each value (its standard deviation).
+
+    Raises
+    ------
+    ConfigError
+        If the mask is not finite, or the arrays are not of one shape.
     """
 
     def __init__(
@@ -51,27 +79,20 @@ class Data:
             mask: np.ndarray | None = None,
             error: np.ndarray | None = None
     ):
-        """
-        The values that are masked (mask 0), not finite, or have an error
-        that is not finite and positive are NaN, with mask 0. Without a
-        mask, every value is measured.
-        """
         data = _as_float32(data)
         mask = np.ones_like(data) if mask is None else _as_float32(mask)
         if error is not None:
             error = _as_float32(error)
-        # Ensure mask contains only finite values
         if np.any(~np.isfinite(mask)):
-            raise RuntimeError("mask contains non-finite values")
-        # Validate shapes
+            raise ConfigError("the mask must be finite")
         if data.shape != mask.shape:
-            raise RuntimeError(
-                f"data and mask have incompatible shapes "
-                f"({data.shape} != {mask.shape})")
+            raise ConfigError(
+                f"the data and the mask must have one shape; their shapes "
+                f"are {data.shape} and {mask.shape}")
         if error is not None and data.shape != error.shape:
-            raise RuntimeError(
-                f"data and error have incompatible shapes "
-                f"({data.shape} != {error.shape})")
+            raise ConfigError(
+                f"the data and the error must have one shape; their shapes "
+                f"are {data.shape} and {error.shape}")
         # The total mask: the values that are finite, not masked, and
         # with a finite, positive error
         total_mask = np.isfinite(data) & (mask != 0)
@@ -85,25 +106,31 @@ class Data:
         self._error = error
 
     def ndim(self) -> int:
+        """Return the number of axes of the arrays."""
         return self._data.ndim
 
-    def npix(self) -> int:
+    def size(self) -> int:
+        """Return the number of values."""
         return self._data.size
 
     def shape(self) -> tuple[int, ...]:
-        """The shape of the arrays (numpy order)."""
+        """Return the shape of the arrays (numpy order)."""
         return self._data.shape
 
     def data(self) -> np.ndarray:
+        """Return the values (NaN where left out)."""
         return self._data
 
     def mask(self) -> np.ndarray:
+        """Return the mask: 1 for the values used, 0 for the others."""
         return self._mask
 
     def error(self) -> np.ndarray | None:
+        """Return the errors, if any (NaN where left out)."""
         return self._error
 
     def dtype(self) -> np.dtype:
+        """Return the dtype of the arrays (float32)."""
         return self._data.dtype
 
 
@@ -116,12 +143,29 @@ def load_data(
         spectral_axis: int | None = None
 ) -> tuple[Data, gridutils.Coords]:
     """
-    A data item from files, and the world coordinates of its data file
-    (see fitsutils.read_data, which also explains rpix, rval, rest and
-    spectral_axis). info has
-    the data file and, optionally, the mask file and the error file or a
-    scalar error. A file is a filename, or a dict with the filename
-    ('file') and the HDU ('hdu'). prefix is prepended to the filenames.
+    Load a data item from the configuration of its files.
+
+    Parameters
+    ----------
+    info : dict
+        The file of the data ('data'), and optionally that of the mask
+        ('mask'), and that of the error or one error for all the values
+        ('error'). A file is a filename, or a dict with the filename
+        ('file') and the HDU ('hdu').
+    prefix : str, optional
+        Prepended to the filenames.
+    rpix, rval, rest, spectral_axis : optional
+        Passed to fitsutils.read_data for the data file.
+
+    Returns
+    -------
+    tuple of Data and gridutils.Coords
+        The data item, and the world coordinates of its data file.
+
+    Raises
+    ------
+    ConfigError
+        If the configuration is invalid, or the files cannot be read.
     """
     if not isinstance(info, Mapping):
         raise ConfigError(
@@ -159,11 +203,26 @@ def dump_data(
         dump_path: bool = True
 ) -> dict[str, Any]:
     """
-    Write the arrays of a data item, and return its info (see load_data).
-    filenames has a filename for each array to write ('data', 'mask',
-    'error'), and write(filename, array) writes an array (e.g. with the
-    world coordinates of its dataset). Without dump_path, the info has the
-    filenames without their directories.
+    Write the arrays of a data item to files, and return its
+    configuration (see load_data).
+
+    Parameters
+    ----------
+    data : Data
+        The data item.
+    filenames : Mapping
+        The file of each array to write ('data', 'mask', 'error').
+    write : Callable
+        Writes an array to a file, as write(filename, array) (e.g. with
+        the world coordinates of the dataset).
+    dump_path : bool, optional
+        Whether the configuration has the paths of the files, or only
+        their names.
+
+    Returns
+    -------
+    dict
+        The configuration.
     """
     arrays = dict(data=data.data(), mask=data.mask(), error=data.error())
     info = {}
