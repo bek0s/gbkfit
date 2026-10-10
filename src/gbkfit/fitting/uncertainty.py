@@ -189,7 +189,8 @@ def covariance(
     number of model evaluations it took.
 
     The errors are propagated to all elements through the Jacobian of
-    the parameter space (no models).
+    the parameter space (no models). Elements at a bound are listed: the
+    covariance ignores the bound.
 
     Parameters
     ----------
@@ -256,6 +257,9 @@ def covariance(
             element_names, np.sqrt(np.maximum(element_var, 0)).tolist())),
         rank=int(keep.sum()),
         unconstrained=unconstrained,
+        at_bounds=tuple(
+            name for name, xi, lo, hi, h in zip(names, x, lower, upper, steps)
+            if xi - lo < h or hi - xi < h),
         scaled=options.scale()), nevals
 
 

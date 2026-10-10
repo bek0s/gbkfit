@@ -89,6 +89,9 @@ class Covariance:
     unconstrained : tuple of str
         The free elements in the directions that the data do not
         constrain.
+    at_bounds : tuple of str
+        The free elements at a bound (within a finite-difference step):
+        their errors assume the bound is not there.
     scaled : bool
         Whether the matrix is scaled by the reduced chi-square.
     """
@@ -99,6 +102,7 @@ class Covariance:
     element_std: dict[str, float]
     rank: int
     unconstrained: tuple[str, ...]
+    at_bounds: tuple[str, ...]
     scaled: bool
 
 
@@ -295,6 +299,9 @@ class FitResult:
             lines.append(
                 f"unconstrained directions involve: "
                 f"{list(best.covariance.unconstrained)}")
+        if best.covariance and best.covariance.at_bounds:
+            lines.append(
+                f"at a bound: {list(best.covariance.at_bounds)}")
         return '\n'.join(lines)
 
     def dump(self, output_dir: str) -> None:
@@ -348,7 +355,7 @@ def _solution_summary(solution: FitSolution) -> dict[str, Any]:
         info['covariance'] = dict(
             names=list(cov.names), std=cov.std, element_std=cov.element_std,
             rank=cov.rank, unconstrained=list(cov.unconstrained),
-            scaled=cov.scaled)
+            at_bounds=list(cov.at_bounds), scaled=cov.scaled)
     if solution.laplace is not None:
         info['laplace'] = solution.laplace.summary()
     return info
