@@ -124,6 +124,26 @@ def test_cmaes_finds_the_minimum_of_lmfit(driver):
     assert best.chi2 == pytest.approx(local.chi2, rel=1e-6)
 
 
+
+@pytest.mark.parametrize('fitter', [
+    dict(type='scipy.least_squares', method='trf'),
+    dict(type='scipy.least_squares', method='lm'),
+    dict(type='lmfit.least_squares', method='least_squares')])
+def test_least_squares_methods_find_the_minimum_of_lmfit(driver, fitter):
+    # xpos and ypos start at 0, where scipy's own finite differences take
+    # a step for float64 (1.5e-8), too small for float32 models: they
+    # never moved. ('lm' takes no bounds: the fitter maps them, as lmfit
+    # does.)
+    pytest.importorskip('lmfit')
+    from gbkfit.fitting import fitter_parser
+    from gbkfit.fitting.fitters.lmfit import FitterLMFitLeastSquares
+    objective = mock_objective(driver)
+    params = ParamSpace(objective.pdescs(), bounded_properties())
+    local = FitterLMFitLeastSquares().fit(objective, params).best()
+    result = fitter_parser.load(fitter).fit(objective, params)
+    assert result.success
+    assert result.best().chi2 == pytest.approx(local.chi2, rel=1e-6)
+
 def prior_properties(nsigma):
     # Uniform priors of +-nsigma errors around the truth (see the lmfit
     # test), so that the samplers need few evaluations

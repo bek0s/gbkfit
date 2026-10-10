@@ -2,7 +2,6 @@
 The lmfit least-squares fitter.
 """
 
-import math
 import typing
 from typing import Any, Literal
 
@@ -10,6 +9,8 @@ import lmfit
 import numpy as np
 
 from gbkfit.fitting.base import FitRun, Fitter
+from gbkfit.fitting.fitters._detail import (
+    LeastSquaresFunctions, relative_step)
 from gbkfit.fitting.fitparams import (
     FitParam, FitParamBounded, FitParamClass)
 from gbkfit.fitting.problem import FitProblem
@@ -108,32 +109,37 @@ class FitterLMFitLeastSquares(Fitter):
             fit_params: list[FitParam],
             rng: np.random.Generator
     ) -> FitRun:
+        params = typing.cast(list[FitParamBounded], fit_params)
         # lmfit names its parameters; the names of elements (e.g. 'v[3]')
         # are not valid ones
         lmfit_params = lmfit.Parameters()
-        for i, p in enumerate(typing.cast(list[FitParamBounded], fit_params)):
+        for i, p in enumerate(params):
             lmfit_params.add(
                 f'p{i}', value=p.value(), min=p.minimum(), max=p.maximum())
+        step = self._step or relative_step(problem.precision(), 'forward')
+        functions = LeastSquaresFunctions(
+            problem.residuals,
+            np.array([p.minimum() for p in params]),
+            np.array([p.maximum() for p in params]), 'forward', step)
 
-        def residuals(params: lmfit.Parameters) -> np.ndarray:
-            x = np.array(list(params.valuesdict().values()))
-            return problem.residuals(x)
+        def values(lmfit_values: lmfit.Parameters) -> np.ndarray:
+            return np.array(list(lmfit_values.valuesdict().values()))
 
-        step = self._step or math.sqrt(problem.precision())
         options: dict[str, Any] = dict(
             ftol=self._ftol, xtol=self._xtol, gtol=self._gtol)
         options = {k: v for k, v in options.items() if v is not None}
         if self._method == 'leastsq':
-            # MINPACK's step is sqrt(epsfcn) times the value
+            # MINPACK's own differences: its step, sqrt(epsfcn) times |x|
+            # (or sqrt(epsfcn) at 0), suits GBKFIT's models
             options['epsfcn'] = step ** 2
         else:
-            options['diff_step'] = step
+            # scipy's do not (see LeastSquaresFunctions)
+            options['jac'] = lambda v: functions.jacobian(values(v))
         minimizer = lmfit.Minimizer(
-            residuals, lmfit_params, nan_policy='raise', calc_covar=False,
-            max_nfev=self._max_nfev)
+            lambda v: functions.residuals(values(v)), lmfit_params,
+            nan_policy='raise', calc_covar=False, max_nfev=self._max_nfev)
         result = minimizer.minimize(method=self._method, **options)
-        x = np.array(list(result.params.valuesdict().values()))
         return FitRun(
-            solutions=[x], success=bool(result.success),
+            solutions=[values(result.params)], success=bool(result.success),
             message=str(result.message),
             diagnostics=dict(lmfit_nfev=int(result.nfev)), raw=result)

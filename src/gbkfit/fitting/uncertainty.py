@@ -5,7 +5,7 @@ the posterior from it.
 """
 
 from collections.abc import Callable
-from typing import Any
+from typing import Any, Literal
 
 import numpy as np
 
@@ -91,13 +91,17 @@ def finite_difference_steps(
         x: np.ndarray,
         lower: np.ndarray,
         upper: np.ndarray,
-        precision: float
+        relative: float
 ) -> np.ndarray:
     """
-    Return the steps of central differences for each free element:
-    precision^(1/3) (the best relative step of central differences)
-    times the larger of |x| and 1% of the width of the bounds (or 1, if
-    unbounded), so that values near 0 get a step of their scale.
+    Return the steps of finite differences for each free element: a
+    relative step times the larger of |x| and 1% of the width of the
+    bounds (or 1, if unbounded), so that values at or near 0 get a step
+    of their scale.
+
+    The best relative steps are the square root of the precision of the
+    models for forward differences, and its cube root for central ones
+    (see FitProblem.precision).
 
     Parameters
     ----------
@@ -105,8 +109,8 @@ def finite_difference_steps(
         The free values.
     lower, upper : np.ndarray
         The bounds (may be infinite).
-    precision : float
-        The relative precision of the models (see FitProblem.precision).
+    relative : float
+        The relative step.
 
     Returns
     -------
@@ -115,7 +119,7 @@ def finite_difference_steps(
     """
     width = upper - lower
     scale = np.where(np.isfinite(width), 0.01 * width, 1.0)
-    return precision ** (1 / 3) * np.maximum(np.abs(x), scale)
+    return relative * np.maximum(np.abs(x), scale)
 
 
 def jacobian(
@@ -123,11 +127,13 @@ def jacobian(
         x: np.ndarray,
         steps: np.ndarray,
         lower: np.ndarray,
-        upper: np.ndarray
+        upper: np.ndarray,
+        scheme: Literal['central', 'forward'] = 'central',
+        f0: np.ndarray | None = None
 ) -> np.ndarray:
     """
-    Return the Jacobian of a function by finite differences: central,
-    or one-sided where a central step would cross a bound.
+    Return the Jacobian of a function by finite differences: central or
+    forward, and one-sided where a step would cross a bound.
 
     Parameters
     ----------
@@ -139,25 +145,30 @@ def jacobian(
         The step of each variable.
     lower, upper : np.ndarray
         The bounds of the variables.
+    scheme : {'central', 'forward'}, optional
+        The differences (central: 2 evaluations per variable; forward:
+        1, plus func(x) if f0 is not given).
+    f0 : np.ndarray, optional
+        func(x), if known.
 
     Returns
     -------
     np.ndarray
         The Jacobian: one row per value of the function, one column per
-        variable.
+        variable (a new array).
     """
-    f0 = None
     columns = []
     for i, h in enumerate(steps):
         up, down = x.copy(), x.copy()
         up[i] += h
         down[i] -= h
-        if up[i] <= upper[i] and down[i] >= lower[i]:
+        can_up = up[i] <= upper[i]
+        if scheme == 'central' and can_up and down[i] >= lower[i]:
             columns.append((func(up) - func(down)) / (2 * h))
             continue
         if f0 is None:
             f0 = func(x)
-        if up[i] <= upper[i]:
+        if can_up:
             columns.append((func(up) - f0) / h)
         else:
             columns.append((f0 - func(down)) / h)
@@ -209,7 +220,8 @@ def covariance(
         nevals += 1
         return objective.residuals(params.evaluate(point))
 
-    steps = finite_difference_steps(x, lower, upper, problem.precision())
+    steps = finite_difference_steps(
+        x, lower, upper, problem.precision() ** (1 / 3))
     jac = jacobian(residuals, x, steps, lower, upper)
     _, s, vt = np.linalg.svd(jac, full_matrices=False)
     keep = s > options.rcond() * s[0]
