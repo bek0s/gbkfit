@@ -9,7 +9,7 @@ import astropy.units as u
 import astropy.wcs
 import numpy as np
 
-from gbkfit.utils import fitsutils, gridutils, parseutils
+from gbkfit.utils import parseutils
 from gbkfit.utils.parseutils import ConfigError
 
 if TYPE_CHECKING:
@@ -75,14 +75,23 @@ def embed(
     return data
 
 
-def read_image(
-        x: str | Mapping[str, Any]
-) -> tuple[np.ndarray, gridutils.Coords]:
+def load_from_file(
+        cls: type, info: Mapping[str, Any], prefix: str = '', **given: Any
+) -> Any:
     """
-    Read an image and its world coordinates from a file option (see
-    parseutils.parse_file and fitsutils.read_data).
+    Load an object of a class with a from_file from a configuration: its
+    file (a filename, or a dict with the filename and the HDU; prefix is
+    prepended to the filename), and the other parameters of from_file,
+    which are checked like options, with those given.
     """
-    return fitsutils.read_data(*parseutils.parse_file(x))
+    info = dict(info)
+    file, hdu = parseutils.load_option(
+        parseutils.parse_file, info, 'file', required=True)
+    del info['file']
+    options = parseutils.parse_options_for_callable(
+        info, cls.from_file, ignore_params=['filename', 'hdu', *given])
+    with parseutils.config_path('file'):
+        return cls.from_file(prefix + file, hdu, **options, **given)
 
 
 def spectral_points(wcs: astropy.wcs.WCS, n: int) -> u.Quantity | None:

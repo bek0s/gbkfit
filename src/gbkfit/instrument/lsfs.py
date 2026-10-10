@@ -8,7 +8,7 @@ spectral axis (see varying).
 
 import abc
 import os
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from typing import Any
 
 import astropy.io.fits
@@ -517,12 +517,35 @@ class LSFImage(LSF):
 
     @classmethod
     def load(cls, info: dict[str, Any]) -> 'LSFImage':
-        data, coords = parseutils.load_option(
-            _detail.read_image, info, 'file', required=True)
-        info = dict(info)
-        del info['file']
-        info.update(data=data, step=info.get('step', coords.step[0]))
-        return cls(**parseutils.parse_options_for_callable(info, cls.__init__))
+        return _detail.load_from_file(cls, info)
+
+    @classmethod
+    def from_file(
+            cls,
+            filename: str,
+            hdu: int | str = 0,
+            step: float | None = None
+    ) -> 'LSFImage':
+        """
+        Read an LSF image (a profile) from a FITS file.
+
+        Parameters
+        ----------
+        filename : str
+            The file.
+        hdu : int or str, optional
+            The HDU of the image.
+        step : float, optional
+            The width of the channels of the image (km/s); by default, that
+            of the header.
+
+        Returns
+        -------
+        LSFImage
+            The LSF.
+        """
+        data, coords = fitsutils.read_data(filename, hdu)
+        return cls(data, coords.step[0] if step is None else step)
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,
@@ -744,7 +767,7 @@ class LSFHanning(LSF):
 
 
 def _read_images(
-        x: str | Mapping[str, Any]
+        file: str, hdu: int | str
 ) -> tuple[np.ndarray, u.Quantity | None, float | None]:
     """
     The LSF profiles of a 2D FITS image (one per row: nz, nk), the point
@@ -752,7 +775,6 @@ def _read_images(
     is spectral, or None), and the width of their channels in km/s (from
     the axis of the columns, if it is in a velocity unit, or None).
     """
-    file, hdu = parseutils.parse_file(x)
     with astropy.io.fits.open(file) as hdul:
         data = np.asarray(hdul[hdu].data, dtype=float)
         wcs = astropy.wcs.WCS(hdul[hdu].header)
@@ -801,23 +823,59 @@ class LSFImages(LSF):
     @classmethod
     def load(cls, info: dict[str, Any]) -> 'LSFImages':
         info = dict(info)
-        data, points, step = parseutils.load_option(
-            _read_images, info, 'file', required=True)
-        del info['file']
-        if (given := varying.load_points(info)) is not None:
-            points = given
+        return _detail.load_from_file(
+            cls, info, points=varying.load_points(info))
+
+    @classmethod
+    def from_file(
+            cls,
+            filename: str,
+            hdu: int | str = 0,
+            points: u.Quantity | None = None,
+            step: float | None = None
+    ) -> 'LSFImages':
+        """
+        Read LSF profiles from a FITS image, one per row (nz, nk).
+
+        Parameters
+        ----------
+        filename : str
+            The file.
+        hdu : int or str, optional
+            The HDU of the image.
+        points : Quantity, optional
+            The point of each profile: wavelengths, frequencies or
+            velocities; by default, those of the spectral axis of the rows.
+        step : float, optional
+            The width of the channels of the profiles (km/s); by default,
+            that of the axis of the columns, if it is in a velocity unit.
+
+        Returns
+        -------
+        LSFImages
+            The LSF.
+
+        Raises
+        ------
+        ConfigError
+            If the image is not 2D, or the points or step are neither given
+            nor in its header.
+        """
+        data, file_points, file_step = _read_images(filename, hdu)
         if points is None:
-            raise ConfigError(
-                "the file has no spectral axis along its rows: give the "
-                "point of each profile as wavelength, frequency or velocity")
-        if info.get('step') is None:
-            if step is None:
+            if file_points is None:
                 raise ConfigError(
-                    "the columns of the file are not in a velocity unit: "
-                    "give the width of its channels as step (km/s)")
-            info['step'] = step
-        return cls(**parseutils.parse_options_for_callable(
-            info | dict(data=data, points=points), cls.__init__))
+                    f"{filename}: the rows have no spectral axis; give the "
+                    f"points of the profiles (wavelength, frequency or "
+                    f"velocity)")
+            points = file_points
+        if step is None:
+            if file_step is None:
+                raise ConfigError(
+                    f"{filename}: the columns are not in a velocity unit; "
+                    f"give the width of the channels (step, km/s)")
+            step = file_step
+        return cls(data, points, step)
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,

@@ -13,6 +13,7 @@ import scipy.ndimage
 import scipy.special
 
 from gbkfit.utils import fitsutils, gridutils, parseutils
+from . import _detail
 from ._detail import check_scale
 
 
@@ -168,20 +169,46 @@ class PrimaryBeamImage(PrimaryBeam):
     def load(
             cls, info: dict[str, Any], prefix: str = ''
     ) -> 'PrimaryBeamImage':
-        with parseutils.config_path('file'):
-            file, hdu = parseutils.parse_file(
-                info.get('file') or {})
-            # (the world coordinates given are those of the image, which
-            # the others come from)
-            data, coords = fitsutils.read_data(
-                prefix + file, hdu, info.get('rpix'), info.get('rval'))
-        info = dict(info) | dict(
-            data=data, rpix=coords.rpix, rval=coords.rval,
-            step=coords.step if info.get('step') is None else info['step'],
-            rota=coords.rota if info.get('rota') is None else info['rota'])
-        info.pop('file')
-        return cls(**parseutils.parse_options_for_callable(
-            info, cls.__init__))
+        return _detail.load_from_file(cls, info, prefix)
+
+    @classmethod
+    def from_file(
+            cls,
+            filename: str,
+            hdu: int | str = 0,
+            step: float | Sequence[float] | None = None,
+            rpix: float | Sequence[float] | None = None,
+            rval: float | Sequence[float] | None = None,
+            rota: float | None = None
+    ) -> 'PrimaryBeamImage':
+        """
+        Read a primary beam image, and its world coordinates, from a FITS
+        file.
+
+        Parameters
+        ----------
+        filename : str
+            The file.
+        hdu : int or str, optional
+            The HDU of the image.
+        step, rpix, rval : float or Sequence of float, optional
+            The world coordinates of the image (see gridutils.make_grid);
+            by default, those of the header. Either rpix or rval can be
+            given, and the other comes from the header (see
+            fitsutils.read_data).
+        rota : float, optional
+            The rotation of the image on the sky (see gridutils.Coords); by
+            default, that of the header.
+
+        Returns
+        -------
+        PrimaryBeamImage
+            The primary beam.
+        """
+        data, coords = fitsutils.read_data(filename, hdu, rpix, rval)
+        return cls(
+            data, coords.step if step is None else step, coords.rpix,
+            coords.rval, coords.rota if rota is None else rota)
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,
