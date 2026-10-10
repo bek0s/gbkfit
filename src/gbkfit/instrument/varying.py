@@ -28,7 +28,7 @@ radio for a rest frequency (see gridutils.Coords).
 """
 
 from collections.abc import Callable, Mapping, Sequence
-from typing import Any
+from typing import Any, TypeVar
 
 import astropy.table
 import astropy.units as u
@@ -47,6 +47,9 @@ __all__ = [
 # model
 _AXES = ('wavelength', 'frequency', 'velocity')
 _KMS = u.km / u.s
+
+# The things given at points of the spectral axis (see per_point)
+_Thing = TypeVar('_Thing')
 
 
 def _doppler(rest):
@@ -82,7 +85,7 @@ def _quantity(x, unit):
     return np.asarray(x, dtype=float), unit
 
 
-def as_points(points: Any) -> u.Quantity:
+def as_points(points: u.Quantity) -> u.Quantity:
     """
     Return points of the spectral axis as a Quantity.
 
@@ -110,7 +113,10 @@ def as_points(points: Any) -> u.Quantity:
     return points
 
 
-def per_point(points: Any, make: Callable[[u.Quantity], list]) -> Any:
+def per_point(
+        points: u.Quantity,
+        make: Callable[[u.Quantity], list[_Thing]]
+) -> _Thing | list[_Thing]:
     """
     Return the things that make gives for points of the spectral axis:
     a list, or one thing for one point.
@@ -124,7 +130,7 @@ def per_point(points: Any, make: Callable[[u.Quantity], list]) -> Any:
 
     Returns
     -------
-    Any
+    object or list
         The list, or the only thing for one point.
     """
     points = as_points(points)
@@ -132,7 +138,9 @@ def per_point(points: Any, make: Callable[[u.Quantity], list]) -> Any:
     return things[0] if points.ndim == 0 else things
 
 
-def to_velocities(points: u.Quantity, rest: Any = None) -> np.ndarray:
+def to_velocities(
+        points: u.Quantity, rest: u.Quantity | None = None
+) -> np.ndarray:
     """
     Return points of the spectral axis as velocities.
 
@@ -218,7 +226,7 @@ def dump_points(points: u.Quantity) -> dict[str, Any]:
 
 
 def blend(
-        points: u.Quantity, at: u.Quantity, rest: Any = None
+        points: u.Quantity, at: u.Quantity, rest: u.Quantity | None = None
 ) -> list[tuple[int, int, float]]:
     """
     Return how to blend things given at points of the spectral axis (e.g.
@@ -284,7 +292,7 @@ class SpectralTable:
             self,
             points: u.Quantity,
             values: Sequence[float] | np.ndarray,
-            unit: Any = None
+            unit: str | u.UnitBase | None = None
     ):
         try:
             points = as_points(points)
@@ -454,7 +462,10 @@ class SpectralTable:
         """
         return self._unit
 
-    def at(self, points: Any, unit: Any, rest: Any = None) -> np.ndarray:
+    def at(
+            self, points: u.Quantity, unit: str | u.UnitBase,
+            rest: u.Quantity | None = None
+    ) -> np.ndarray:
         """
         Return the values at points of the spectral axis.
 
@@ -486,7 +497,9 @@ class SpectralTable:
         order = np.argsort(self._points.value)
         return np.interp(x, self._points.value[order], values[order])
 
-    def velocity_range(self, rest: Any = None) -> tuple[float, float]:
+    def velocity_range(
+            self, rest: u.Quantity | None = None
+    ) -> tuple[float, float]:
         """
         Return the range of the points as velocities of a spectral axis.
 
@@ -607,7 +620,9 @@ class _VaryingOptions:
         return dict(type=self._cls.type()) | self._constants | {
             name: table.dump() for name, table in self._tables.items()}
 
-    def at(self, points: u.Quantity, rest: Any = None) -> list[Any]:
+    def at(
+            self, points: u.Quantity, rest: u.Quantity | None = None
+    ) -> list[Any]:
         """Return an object of the class at each of the points (1D)."""
         values = {
             name: table.at(points, self._cls.VARYING_OPTIONS[name], rest)
@@ -617,7 +632,9 @@ class _VaryingOptions:
                 name: float(value[i]) for name, value in values.items()})
             for i in range(len(points))]
 
-    def velocity_range(self, rest: Any = None) -> tuple[float, float]:
+    def velocity_range(
+            self, rest: u.Quantity | None = None
+    ) -> tuple[float, float]:
         """Return the range of velocities that all the tables cover."""
         ranges = [
             table.velocity_range(rest) for table in self._tables.values()]

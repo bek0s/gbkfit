@@ -10,7 +10,7 @@ pixels_on).
 
 import numbers
 from collections.abc import Sequence
-from typing import Any, NamedTuple
+from typing import NamedTuple
 
 import astropy.units
 import numpy as np
@@ -155,7 +155,7 @@ def make_grid(
         rval: float | Sequence[float] | None = None,
         rota: float | None = None,
         spectral_axis: int | None = None,
-        rest: Any = None
+        rest: str | astropy.units.Quantity | None = None
 ) -> Grid:
     """
     Make a grid.
@@ -223,7 +223,9 @@ def make_grid(
         spectral_axis)
 
 
-def make_rest(value: Any) -> astropy.units.Quantity | None:
+def make_rest(
+        value: str | astropy.units.Quantity | None
+) -> astropy.units.Quantity | None:
     """
     Make the rest wavelength or frequency of a spectral axis.
 

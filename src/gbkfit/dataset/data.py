@@ -1,7 +1,9 @@
 
 import os.path
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from typing import Any
+
+import astropy.units
 
 import numpy as np
 
@@ -108,9 +110,9 @@ class Data:
 def load_data(
         info: dict[str, Any],
         prefix: str = '',
-        rpix: Any = None,
-        rval: Any = None,
-        rest: Any = None,
+        rpix: float | Sequence[float] | None = None,
+        rval: float | Sequence[float] | None = None,
+        rest: str | astropy.units.Quantity | None = None,
         spectral_axis: int | None = None
 ) -> tuple[Data, gridutils.Coords]:
     """

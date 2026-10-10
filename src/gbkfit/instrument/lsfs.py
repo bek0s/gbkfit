@@ -192,7 +192,9 @@ class LSF(parseutils.TypedSerializable, abc.ABC):
         """
         return False
 
-    def at(self, points: Any, rest: Any = None) -> 'LSF | list[LSF]':
+    def at(
+            self, points: u.Quantity, rest: u.Quantity | None = None
+    ) -> 'LSF | list[LSF]':
         """
         Return the LSF at points of the spectral axis.
 
@@ -213,7 +215,9 @@ class LSF(parseutils.TypedSerializable, abc.ABC):
         """
         return varying.per_point(points, lambda points_: [self] * len(points_))
 
-    def velocity_range(self, rest: Any = None) -> tuple[float, float]:
+    def velocity_range(
+            self, rest: u.Quantity | None = None
+    ) -> tuple[float, float]:
         """
         Return the range of velocities of the spectral axis that the LSF
         is known at.

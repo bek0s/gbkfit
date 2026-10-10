@@ -5,7 +5,7 @@ where it points (e.g. the primary beam of a radio interferometer).
 
 import abc
 import os.path
-from typing import Any
+from collections.abc import Sequence
 
 import numpy as np
 import scipy.ndimage
@@ -147,7 +147,7 @@ class PrimaryBeamImage(PrimaryBeam):
     ----------
     data : ndarray
         The image; its pixels that are not finite are 0.
-    step, rpix, rval : Any, optional
+    step, rpix, rval : float or Sequence of float, optional
         The world coordinates of the image (see gridutils.make_grid).
     rota : float, optional
         The rotation of the image on the sky (see gridutils.Coords).
@@ -185,9 +185,9 @@ class PrimaryBeamImage(PrimaryBeam):
     def __init__(
             self,
             data: np.ndarray,
-            step: Any = None,
-            rpix: Any = None,
-            rval: Any = None,
+            step: float | Sequence[float] | None = None,
+            rpix: float | Sequence[float] | None = None,
+            rval: float | Sequence[float] | None = None,
             rota: float | None = None
     ):
         data = np.asarray(data, dtype=float)
