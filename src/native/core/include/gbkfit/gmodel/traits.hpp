@@ -935,8 +935,10 @@ vp_trait_make_ver(T& out, T incl)
 }
 
 template<typename T> constexpr void
-vp_trait_tan_uniform(T& out, T theta, T incl, const T* params)
+vp_trait_tan_uniform(T& out, T r, T theta, T incl, const T* params)
 {
+    // The centre does not rotate (its azimuth is undefined)
+    if (r == 0) { out = 0; return; }
     T vt = params[0];
     out = vt;
     vp_trait_make_tan(out, theta, incl);
@@ -1643,7 +1645,7 @@ vp_trait(
     {
     case VPT_UID_TAN_UNIFORM:
         vp_trait_tan_uniform(
-                out, theta, incl, params);
+                out, r, theta, incl, params);
         break;
     case VPT_UID_TAN_ARCTAN:
         vp_trait_tan_arctan(

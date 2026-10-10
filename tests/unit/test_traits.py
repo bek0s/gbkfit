@@ -5,6 +5,7 @@ Tests for the validation of trait options.
 import pytest
 
 from gbkfit.model.components.disks import traits
+from gbkfit.utils.parseutils import ConfigError
 
 
 @pytest.mark.parametrize('angle', [-10, 190])
@@ -53,3 +54,10 @@ def kernel_consts_cases():
 @pytest.mark.parametrize('cls, options, consts', list(kernel_consts_cases()))
 def test_traits_give_the_constants_the_kernels_read(cls, options, consts):
     assert cls(**options).consts() == consts
+
+
+def test_harmonic_orders_are_integers():
+    # (a configuration is checked against the annotation; the Python API
+    # by the trait)
+    with pytest.raises(ConfigError, match="order must be an integer"):
+        traits.BPTraitNWHarmonic(order=1.5)

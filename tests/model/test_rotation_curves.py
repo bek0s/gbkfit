@@ -32,7 +32,7 @@ CURVES = dict(
     tan_polyex=(
         dict(rt=3.0, vt=180.0, a=0.05),
         lambda r, rt, vt, a: vt * (1 - np.exp(-r / rt)) * (1 + a * r / rt)),
-    # (as the kernel has it: Courteau's form, of r / rt in the first factor)
+    # (Rix et al. 1997, eq. 8)
     tan_rix=(
         dict(rt=3.0, vt=180.0, b=0.2, g=2.0),
         lambda r, rt, vt, b, g:
@@ -115,3 +115,24 @@ def test_rotation_curves_near_the_centre(driver, trait, evaluate_cases):
     velocity = extra['observation0_model_component0_vdata'].data
     expected = curve(radius, **values) * np.sin(np.radians(incl))
     assert velocity[4, 4] == pytest.approx(expected, rel=1e-3)
+
+
+def test_the_centre_does_not_rotate(driver, evaluate_cases):
+    # The azimuth of the centre is undefined, so its velocity is the
+    # systemic one, also with a flat rotation curve
+    case = dict(
+        driver=dict(type=driver.type()),
+        observable=dict(
+            type='pixel_spectra', size=[33, 33, 41], step=[1, 1, 10]),
+        model=dict(type='kinematics_2d', components=[dict(
+            type='smdisk', rnodes=list(range(0, 12)),
+            bptraits=dict(type='exponential'),
+            vptraits=dict(type='tan_uniform'),
+            dptraits=dict(type='uniform'))]))
+    _, extra = evaluate_cases([case], dict(
+        vsys=0, xpos=0, ypos=0, posa=0, incl=60, bpt_a=1, bpt_s=4,
+        vpt_vt=150, dpt_a=20))
+    velocity = extra['observation0_model_component0_vdata'].data
+    # (the centre is the pixel 16, 16; the major axis is along y)
+    assert velocity[16, 16] == 0
+    assert velocity[20, 16] == pytest.approx(150 * np.sin(np.radians(60)))
