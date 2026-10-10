@@ -2,9 +2,16 @@
 Options of PSFs and LSFs that vary along the spectral axis.
 
 An option that varies is a table of its values at points of the spectral
-axis: wavelengths, frequencies or velocities. Between the points the
-values are interpolated linearly, and beyond them they are those of the
-nearest point. The table is given in the configuration, e.g.
+axis: wavelengths, frequencies or velocities (SpectralTable). Between the
+points the values are interpolated linearly, and beyond them they are
+those of the nearest point. A PSF or an LSF whose options vary is made by
+the varying of its class, e.g.
+
+    alpha = SpectralTable([4800, 7000, 9300] * u.AA, [0.75, 0.65, 0.58])
+    psf = PSFMoffat.varying(alpha=alpha, beta=2.5)
+    psf.at(6500 * u.AA)  # the PSFMoffat at 6500 Angstrom
+
+In a configuration, a table is given inline, e.g.
 
     alpha:
       wavelength: {values: [4800, 7000, 9300], unit: Angstrom}
@@ -20,7 +27,7 @@ the convention of the spectral axis: optical for a rest wavelength, and
 radio for a rest frequency (see gridutils.Coords).
 """
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
 import astropy.table
@@ -32,15 +39,12 @@ from gbkfit.utils.parseutils import ConfigError
 
 
 __all__ = [
-    'SpectralTable',
-    'Varying',
-    'blend',
-    'load_points',
-    'to_velocities'
+    'SpectralTable'
 ]
 
 
-# The kinds of points of a table, and the velocity unit of the model
+# The kinds of points of the spectral axis, and the velocity unit of the
+# model
 _AXES = ('wavelength', 'frequency', 'velocity')
 _KMS = u.km / u.s
 
@@ -49,22 +53,108 @@ def _doppler(rest):
     """The velocity convention of a spectral axis of the given rest."""
     if rest is None:
         raise ConfigError(
-            "a table in wavelength or frequency needs the rest of the "
-            "spectral axis of the data (rest)")
+            "velocities and wavelengths or frequencies are converted with "
+            "the rest of the spectral axis (rest), which is not given")
     rest = u.Quantity(rest)
     return (u.doppler_optical(rest) if rest.unit.is_equivalent(u.m)
             else u.doppler_radio(rest))
 
 
+def _convert(points, unit, rest):
+    """
+    Points of the spectral axis in the unit of another kind of point (e.g.
+    velocities as wavelengths): only between velocities and the others
+    is the rest needed.
+    """
+    if points.unit.is_equivalent(unit, u.spectral()):
+        return points.to_value(unit, u.spectral())
+    return points.to_value(unit, _doppler(rest))
+
+
 def _quantity(x, unit):
     """
-    A Quantity from an option: a list of values, in the given unit (None
-    for none), or a dict with the values and their unit.
+    The values and the unit of an option: a list of values, in the given
+    unit (None for none), or a dict with the values and their unit.
     """
     if isinstance(x, Mapping):
         x = parseutils.parse_options(x, required={'values', 'unit'})
         return np.asarray(x['values'], dtype=float), u.Unit(x['unit'])
     return np.asarray(x, dtype=float), unit
+
+
+def as_points(points: Any) -> u.Quantity:
+    """
+    Return points of the spectral axis as a Quantity.
+
+    Parameters
+    ----------
+    points : Quantity
+        Wavelengths, frequencies or velocities: one, or a sequence.
+
+    Returns
+    -------
+    Quantity
+        The points.
+
+    Raises
+    ------
+    TypeError
+        If they are not wavelengths, frequencies or velocities.
+    """
+    points = u.Quantity(points, dtype=float)
+    if not any(points.unit.is_equivalent(unit, u.spectral())
+               for unit in (u.m, _KMS)):
+        raise TypeError(
+            f"points of the spectral axis must be wavelengths, frequencies "
+            f"or velocities; their unit is '{points.unit}'")
+    return points
+
+
+def per_point(points: Any, make: Callable[[u.Quantity], list]) -> Any:
+    """
+    Return the things that make gives for points of the spectral axis:
+    a list, or one thing for one point.
+
+    Parameters
+    ----------
+    points : Quantity
+        One point, or a sequence (see as_points).
+    make : Callable
+        Gives a list of things for a 1D Quantity of points.
+
+    Returns
+    -------
+    Any
+        The list, or the only thing for one point.
+    """
+    points = as_points(points)
+    things = make(np.atleast_1d(points))
+    return things[0] if points.ndim == 0 else things
+
+
+def to_velocities(points: u.Quantity, rest: Any = None) -> np.ndarray:
+    """
+    Return points of the spectral axis as velocities.
+
+    Parameters
+    ----------
+    points : Quantity
+        Wavelengths, frequencies or velocities.
+    rest : Quantity, optional
+        The rest of the spectral axis (see gridutils.Coords); needed for
+        wavelengths and frequencies.
+
+    Returns
+    -------
+    ndarray
+        The velocities (km/s), in the convention of the spectral axis.
+
+    Raises
+    ------
+    ConfigError
+        If the rest is needed but not given.
+    """
+    return _convert(as_points(points), _KMS, rest)
 
 
 def load_points(info: dict[str, Any]) -> u.Quantity | None:
@@ -107,62 +197,56 @@ def load_points(info: dict[str, Any]) -> u.Quantity | None:
     return values * unit
 
 
-def to_velocities(points: u.Quantity, rest: Any = None) -> np.ndarray:
+def dump_points(points: u.Quantity) -> dict[str, Any]:
     """
-    Return points of the spectral axis as velocities.
+    Return the configuration of points of the spectral axis.
 
     Parameters
     ----------
     points : Quantity
         Wavelengths, frequencies or velocities.
-    rest : Quantity, optional
-        The rest of the spectral axis (see gridutils.Coords); needed for
-        wavelengths and frequencies.
 
     Returns
     -------
-    ndarray
-        The velocities (km/s), in the convention of the spectral axis.
-
-    Raises
-    ------
-    ConfigError
-        If the rest is needed but not given.
+    dict
+        The configuration (see load_points).
     """
-    if points.unit.is_equivalent(_KMS):
-        return points.to_value(_KMS)
-    return points.to_value(_KMS, _doppler(rest))
+    axis = ('velocity' if points.unit.is_equivalent(_KMS) else
+            'wavelength' if points.unit.is_equivalent(u.m) else
+            'frequency')
+    return {axis: dict(values=points.value.tolist(), unit=str(points.unit))}
 
 
 def blend(
-        points: u.Quantity,
-        velocities: Sequence[float] | np.ndarray,
-        rest: Any = None
+        points: u.Quantity, at: u.Quantity, rest: Any = None
 ) -> list[tuple[int, int, float]]:
     """
     Return how to blend things given at points of the spectral axis (e.g.
-    images) at velocities.
+    images) at other points.
+
+    The things are blended linearly along the axis of their points.
 
     Parameters
     ----------
     points : Quantity
-        The points: wavelengths, frequencies or velocities.
-    velocities : array_like
-        The velocities (km/s).
+        The points of the things: wavelengths, frequencies or velocities.
+    at : Quantity
+        The points to blend them at, of any kind (1D).
     rest : Quantity, optional
-        The rest of the spectral axis (see gridutils.Coords); needed for
-        wavelengths and frequencies.
+        The rest of the spectral axis (see gridutils.Coords); needed
+        between velocities and the other kinds of points.
 
     Returns
     -------
     list of tuple
-        For each velocity, (i, j, t): it takes 1 - t of the thing of the
+        For each point, (i, j, t): it takes 1 - t of the thing of the
         point i and t of that of the point j, the two nearest points;
         beyond the points, all of the nearest (t = 0).
     """
-    points = to_velocities(points, rest)
-    order = np.argsort(points)
-    positions = np.interp(velocities, points[order], np.arange(len(order)))
+    order = np.argsort(points.value)
+    positions = np.interp(
+        _convert(at, points.unit, rest), points.value[order],
+        np.arange(len(order)))
     result = []
     for position in positions:
         k = min(int(position), len(order) - 2) if len(order) > 1 else 0
@@ -172,17 +256,13 @@ def blend(
     return result
 
 
-def dump_points(points: u.Quantity) -> dict[str, Any]:
-    """The configuration of points of the spectral axis (see load_points)."""
-    axis = ('velocity' if points.unit.is_equivalent(_KMS) else
-            'wavelength' if points.unit.is_equivalent(u.m) else
-            'frequency')
-    return {axis: dict(values=points.value.tolist(), unit=str(points.unit))}
-
-
 class SpectralTable:
     """
     The values of an option at points of the spectral axis.
+
+    Between the points the values are interpolated linearly along the axis
+    of the points (e.g. in wavelength), and beyond them they are those of
+    the nearest point.
 
     Parameters
     ----------
@@ -192,6 +272,12 @@ class SpectralTable:
         The value at each point.
     unit : str or Unit, optional
         The unit of the values; by default, the units of the option.
+
+    Raises
+    ------
+    ConfigError
+        If the points are not wavelengths, frequencies or velocities, are
+        repeated, or there is not a value for each.
     """
 
     def __init__(
@@ -200,18 +286,16 @@ class SpectralTable:
             values: Sequence[float] | np.ndarray,
             unit: Any = None
     ):
-        points = u.Quantity(points, dtype=float)
+        try:
+            points = as_points(points)
+        except TypeError as e:
+            raise ConfigError(str(e)) from e
         values = np.asarray(values, dtype=float)
         if (points.ndim != 1 or points.size == 0
                 or values.shape != points.shape):
             raise ConfigError(
                 f"a table needs a value at each of its points; it has "
                 f"{points.size} points and {values.size} values")
-        if not any(points.unit.is_equivalent(unit_, u.spectral())
-                   for unit_ in (u.m, _KMS)):
-            raise ConfigError(
-                f"the points of a table must be wavelengths, frequencies or "
-                f"velocities; their unit is '{points.unit}'")
         if not (np.all(np.isfinite(points)) and np.all(np.isfinite(values))):
             raise ConfigError(
                 "the points and values of a table must be finite")
@@ -220,6 +304,68 @@ class SpectralTable:
         self._points = points
         self._values = values
         self._unit = None if unit is None else u.Unit(unit)
+
+    @classmethod
+    def from_file(
+            cls,
+            filename: str,
+            column: str,
+            hdu: int | str | None = None,
+            units: Mapping[str, Any] | None = None
+    ) -> 'SpectralTable':
+        """
+        Read a table from a column of a table file (FITS, ECSV or CSV).
+
+        The file has a column of the points, named wavelength, frequency
+        or velocity.
+
+        Parameters
+        ----------
+        filename : str
+            The file.
+        column : str
+            The column of the values.
+        hdu : int or str, optional
+            The HDU of a FITS file.
+        units : Mapping, optional
+            The units of the columns without units (e.g. those of a CSV
+            file), by column.
+
+        Returns
+        -------
+        SpectralTable
+            The table.
+
+        Raises
+        ------
+        ConfigError
+            If the file has no column of points or values, or its points
+            have no unit.
+        """
+        options = {} if hdu is None else dict(hdu=hdu)
+        table = astropy.table.Table.read(filename, **options)
+        units = units or {}
+        axes = [axis for axis in _AXES if axis in table.colnames]
+        if len(axes) != 1:
+            raise ConfigError(
+                f"{filename}: a table needs a column of its points, named "
+                f"one of {list(_AXES)}; its columns are {table.colnames}")
+        if column not in table.colnames:
+            raise ConfigError(
+                f"{filename}: there is no column '{column}'; the columns "
+                f"are {table.colnames}")
+
+        def unit(name):
+            return units.get(name, table[name].unit)
+        axis = axes[0]
+        points_unit = unit(axis) or (_KMS if axis == 'velocity' else None)
+        if points_unit is None:
+            raise ConfigError(
+                f"{filename}: the column '{axis}' has no unit; give it in "
+                f"units")
+        return cls(
+            np.asarray(table[axis], dtype=float) * u.Unit(points_unit),
+            np.asarray(table[column], dtype=float), unit(column))
 
     @classmethod
     def load(cls, info: Mapping[str, Any]) -> 'SpectralTable':
@@ -231,8 +377,8 @@ class SpectralTable:
         info : Mapping
             The table: its points (wavelength, frequency or velocity) and
             values, or a file (table), its column, and optionally the HDU
-            of a FITS file and the units of columns without units (units,
-            a dict of units by column).
+            of a FITS file and the units of columns without units (units;
+            see from_file).
 
         Returns
         -------
@@ -245,7 +391,13 @@ class SpectralTable:
             If the configuration or the table is invalid.
         """
         if 'table' in info:
-            return cls._load_file(info)
+            info = parseutils.parse_options(
+                info, required={'table', 'column'},
+                optional={'hdu', 'units'})
+            with parseutils.config_path('table'):
+                return cls.from_file(
+                    info['table'], info['column'], info.get('hdu'),
+                    info.get('units'))
         info = parseutils.parse_options(
             info, required={'values'}, optional=set(_AXES))
         points = load_points(info)
@@ -254,39 +406,6 @@ class SpectralTable:
                 f"a table needs its points as one of {list(_AXES)}")
         values, unit = _quantity(info['values'], None)
         return cls(points, values, unit)
-
-    @classmethod
-    def _load_file(cls, info):
-        """Load a table from a column of a table file."""
-        info = parseutils.parse_options(
-            info, required={'table', 'column'}, optional={'hdu', 'units'})
-        options = {} if info.get('hdu') is None else dict(hdu=info['hdu'])
-        with parseutils.config_path('table'):
-            table = astropy.table.Table.read(info['table'], **options)
-        units = info.get('units') or {}
-        axes = [axis for axis in _AXES if axis in table.colnames]
-        if len(axes) != 1:
-            raise ConfigError(
-                f"{info['table']}: a table needs a column of its points, "
-                f"named one of {list(_AXES)}; its columns are "
-                f"{table.colnames}")
-        column = info['column']
-        if column not in table.colnames:
-            raise ConfigError(
-                f"{info['table']}: there is no column '{column}'; the "
-                f"columns are {table.colnames}")
-
-        def unit(name):
-            return units.get(name, table[name].unit)
-        axis = axes[0]
-        points_unit = unit(axis) or (_KMS if axis == 'velocity' else None)
-        if points_unit is None:
-            raise ConfigError(
-                f"{info['table']}: the column '{axis}' has no unit; give it "
-                f"in units")
-        return cls(
-            np.asarray(table[axis], dtype=float) * u.Unit(points_unit),
-            np.asarray(table[column], dtype=float), unit(column))
 
     def dump(self) -> dict[str, Any]:
         """
@@ -302,6 +421,17 @@ class SpectralTable:
             'values': values if self._unit is None
             else dict(values=values, unit=str(self._unit))}
 
+    def points(self) -> u.Quantity:
+        """
+        Return the points.
+
+        Returns
+        -------
+        Quantity
+            The points.
+        """
+        return self._points.copy()
+
     def values(self) -> np.ndarray:
         """
         Return the values, in their unit.
@@ -313,9 +443,52 @@ class SpectralTable:
         """
         return self._values.copy()
 
-    def velocities(self, rest: Any = None) -> np.ndarray:
+    def unit(self) -> u.Unit | None:
         """
-        Return the points as velocities of a spectral axis.
+        Return the unit of the values.
+
+        Returns
+        -------
+        Unit or None
+            The unit, or None for the units of the option.
+        """
+        return self._unit
+
+    def at(self, points: Any, unit: Any, rest: Any = None) -> np.ndarray:
+        """
+        Return the values at points of the spectral axis.
+
+        Parameters
+        ----------
+        points : Quantity
+            The points, of any kind (see as_points).
+        unit : str or Unit
+            The unit of the option. Values with other units are converted
+            to it; for a velocity, a width in wavelength or frequency is
+            converted at each point of the table.
+        rest : Quantity, optional
+            The rest of the spectral axis (see gridutils.Coords); needed
+            between velocities and the other kinds of points.
+
+        Returns
+        -------
+        ndarray
+            The values at the points, in the unit of the option.
+
+        Raises
+        ------
+        ConfigError
+            If the rest is needed but not given, or the values cannot be
+            converted to the unit of the option.
+        """
+        x = _convert(as_points(points), self._points.unit, rest)
+        values = self._values_in(u.Unit(unit), rest)
+        order = np.argsort(self._points.value)
+        return np.interp(x, self._points.value[order], values[order])
+
+    def velocity_range(self, rest: Any = None) -> tuple[float, float]:
+        """
+        Return the range of the points as velocities of a spectral axis.
 
         Parameters
         ----------
@@ -325,53 +498,14 @@ class SpectralTable:
 
         Returns
         -------
-        ndarray
-            The velocities (km/s).
-
-        Raises
-        ------
-        ConfigError
-            If the rest is needed but not given.
+        tuple of float
+            The lowest and the highest velocity (km/s).
         """
-        return to_velocities(self._points, rest)
+        velocities = to_velocities(self._points, rest)
+        return float(velocities.min()), float(velocities.max())
 
-    def at(
-            self, velocities: Sequence[float] | np.ndarray, unit: Any,
-            rest: Any = None
-    ) -> np.ndarray:
-        """
-        Return the values at velocities of a spectral axis.
-
-        Parameters
-        ----------
-        velocities : array_like
-            The velocities (km/s).
-        unit : str or Unit
-            The unit of the option. Values with other units are converted
-            to it; for a velocity, a width in wavelength or frequency is
-            converted at each point.
-        rest : Quantity, optional
-            The rest of the spectral axis (see gridutils.Coords); needed
-            for points or widths in wavelength or frequency.
-
-        Returns
-        -------
-        ndarray
-            The values at the velocities, in the unit of the option.
-
-        Raises
-        ------
-        ConfigError
-            If the rest is needed but not given, or the values cannot be
-            converted to the unit of the option.
-        """
-        points = self.velocities(rest)
-        values = self._values_in(u.Unit(unit), points, rest)
-        order = np.argsort(points)
-        return np.interp(velocities, points[order], values[order])
-
-    def _values_in(self, unit, points, rest):
-        """The values in a unit, at the points (velocities)."""
+    def _values_in(self, unit, rest):
+        """The values in a unit."""
         if self._unit is None:
             return self._values
         values = self._values * self._unit
@@ -381,7 +515,7 @@ class SpectralTable:
                 u.m, u.spectral()):
             # A width around each point, in wavelength or frequency
             doppler = _doppler(rest)
-            centres = (points * _KMS).to(values.unit, doppler)
+            centres = self._points.to(values.unit, u.spectral() + doppler)
             low = (centres - values / 2).to_value(_KMS, doppler)
             high = (centres + values / 2).to_value(_KMS, doppler)
             return np.abs(high - low)
@@ -390,10 +524,38 @@ class SpectralTable:
             f"to '{unit}'")
 
 
-class Varying:
+def load_tables(info: dict[str, Any]) -> dict[str, Any]:
+    """
+    Return the options of a configuration with those that are tables
+    (dicts) loaded (see SpectralTable.load).
+
+    Parameters
+    ----------
+    info : dict
+        The options.
+
+    Returns
+    -------
+    dict
+        The options.
+
+    Raises
+    ------
+    ConfigError
+        If a table is invalid.
+    """
+    options = dict(info)
+    for name, value in info.items():
+        if isinstance(value, Mapping):
+            with parseutils.config_path(name):
+                options[name] = SpectralTable.load(value)
+    return options
+
+
+class _VaryingOptions:
     """
     The options of an object of a class (e.g. a PSF), some of which are
-    tables of values along the spectral axis.
+    tables of values along the spectral axis (see PSF.varying).
 
     The class lists its options that can vary, with their units, in
     VARYING_OPTIONS (e.g. dict(sigma='arcsec', ratio='')).
@@ -402,137 +564,61 @@ class Varying:
     ----------
     cls : type
         The class.
-    info : dict
-        The options that do not vary.
-    tables : dict
-        The tables of the options that vary (see SpectralTable).
+    options : dict
+        The options; those that vary are tables (SpectralTable).
 
     Raises
     ------
     ConfigError
-        If the options, or the values of the tables, are invalid.
+        If an option that cannot vary is a table, or the options, or the
+        values of the tables, are invalid.
     """
 
-    def __init__(
-            self,
-            cls: type,
-            info: dict[str, Any],
-            tables: dict[str, SpectralTable]
-    ):
+    def __init__(self, cls: type, options: dict[str, Any]):
+        tables = {
+            name: value for name, value in options.items()
+            if isinstance(value, SpectralTable)}
+        for name in tables:
+            if name not in getattr(cls, 'VARYING_OPTIONS', {}):
+                raise ConfigError(
+                    f"option '{name}' of {cls.__qualname__} cannot vary "
+                    f"along the spectral axis")
         # Check the options with the first value of each table, and the
         # values of each table with the first values of the others
         first = {name: table.values()[0] for name, table in tables.items()}
-        options = parseutils.parse_options_for_callable(
-            info | first, cls.__init__)
+        checked = parseutils.parse_options_for_callable(
+            options | first, cls.__init__)
         for name, table in tables.items():
             with parseutils.config_path(name):
                 for value in table.values():
-                    cls(**options | {name: value})
+                    cls(**checked | {name: value})
         self._cls = cls
         self._constants = {
-            name: value for name, value in options.items()
+            name: value for name, value in checked.items()
             if name not in tables}
         self._tables = tables
 
-    @staticmethod
-    def load_tables(
-            cls: type, info: dict[str, Any]
-    ) -> dict[str, SpectralTable]:
-        """
-        Remove the options of a configuration that are tables (dicts) and
-        load them.
-
-        Parameters
-        ----------
-        cls : type
-            The class whose options they are (see VARYING_OPTIONS).
-        info : dict
-            The options; the tables are removed from it.
-
-        Returns
-        -------
-        dict
-            The tables, by option.
-
-        Raises
-        ------
-        ConfigError
-            If an option that cannot vary is a table.
-        """
-        tables = {}
-        for name in [name for name, value in info.items()
-                     if isinstance(value, Mapping)]:
-            with parseutils.config_path(name):
-                if name not in getattr(cls, 'VARYING_OPTIONS', {}):
-                    raise ConfigError(
-                        f"option '{name}' cannot vary along the spectral "
-                        f"axis")
-                tables[name] = SpectralTable.load(info.pop(name))
-        return tables
-
     def cls(self) -> type:
-        """
-        Return the class.
-
-        Returns
-        -------
-        type
-            The class.
-        """
+        """Return the class."""
         return self._cls
 
     def dump(self) -> dict[str, Any]:
-        """
-        Dump the options to their configuration.
-
-        Returns
-        -------
-        dict
-            The options, with the tables (see SpectralTable.dump).
-        """
+        """Return the configuration of the options, with the tables."""
         return dict(type=self._cls.type()) | self._constants | {
             name: table.dump() for name, table in self._tables.items()}
 
-    def at_velocities(
-            self, velocities: Sequence[float] | np.ndarray, rest: Any = None
-    ) -> list[Any]:
-        """
-        Return the objects at velocities of a spectral axis.
-
-        Parameters
-        ----------
-        velocities : array_like
-            The velocities (km/s).
-        rest : Quantity, optional
-            The rest of the spectral axis (see gridutils.Coords).
-
-        Returns
-        -------
-        list
-            An object of the class at each velocity.
-        """
+    def at(self, points: u.Quantity, rest: Any = None) -> list[Any]:
+        """Return an object of the class at each of the points (1D)."""
         values = {
-            name: table.at(velocities, self._cls.VARYING_OPTIONS[name], rest)
+            name: table.at(points, self._cls.VARYING_OPTIONS[name], rest)
             for name, table in self._tables.items()}
         return [
             self._cls(**self._constants | {
                 name: float(value[i]) for name, value in values.items()})
-            for i in range(len(velocities))]
+            for i in range(len(points))]
 
     def velocity_range(self, rest: Any = None) -> tuple[float, float]:
-        """
-        Return the range of velocities that all the tables cover.
-
-        Parameters
-        ----------
-        rest : Quantity, optional
-            The rest of the spectral axis (see gridutils.Coords).
-
-        Returns
-        -------
-        tuple of float
-            The lowest and highest velocity (km/s).
-        """
-        ranges = [table.velocities(rest) for table in self._tables.values()]
-        return (max(float(r.min()) for r in ranges),
-                min(float(r.max()) for r in ranges))
+        """Return the range of velocities that all the tables cover."""
+        ranges = [
+            table.velocity_range(rest) for table in self._tables.values()]
+        return (max(low for low, _ in ranges), min(high for _, high in ranges))

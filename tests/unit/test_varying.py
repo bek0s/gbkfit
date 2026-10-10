@@ -12,6 +12,7 @@ from gbkfit.utils.parseutils import ConfigError
 
 
 C = 299792.458
+KMS = u.km / u.s
 WAVELENGTHS = [4800.0, 7000.0, 9300.0]
 ALPHAS = [0.75, 0.65, 0.58]
 
@@ -44,7 +45,7 @@ def test_psf_options_vary_with_wavelength(tmp_path, source):
     assert psf.varies()
     rest = 6562.8 * u.AA
     velocities = np.array([-100000.0, 0.0, 20000.0, 200000.0])
-    psfs = psf.at_velocities(velocities, rest)
+    psfs = psf.at(velocities * KMS, rest)
     wavelengths = 6562.8 * (1 + velocities / C)
     np.testing.assert_allclose(
         [p.dump()['alpha'] for p in psfs],
@@ -65,7 +66,7 @@ def test_beams_vary_with_frequency():
     velocities = np.array([0.0, 100.0])
     frequencies = 1420.405752 * (1 - velocities / C)
     np.testing.assert_allclose(
-        [b.dump()['bmaj'] for b in beam.at_velocities(velocities, rest)],
+        [b.dump()['bmaj'] for b in beam.at(velocities * KMS, rest)],
         np.interp(frequencies, [1419.0, 1421.0], [3.0, 2.0]), rtol=1e-9)
 
 
@@ -75,7 +76,7 @@ def test_lsf_widths_in_wavelength_are_converted_to_velocities():
         velocity=[-100, 100],
         values=dict(values=[1.0, 2.0], unit='Angstrom'))))
     rest = 6562.8 * u.AA
-    sigmas = [x.dump()['sigma'] for x in lsf.at_velocities([0, 100], rest)]
+    sigmas = [x.dump()['sigma'] for x in lsf.at([0, 100] * KMS, rest)]
     np.testing.assert_allclose(sigmas, C * np.array([1.5, 2.0]) / 6562.8)
 
 
@@ -86,13 +87,13 @@ def test_sums_of_varying_psfs_vary():
         dict(type='gauss', sigma=dict(velocity=[50, 300], values=[1, 1]))]))
     assert psf.varies()
     assert psf.velocity_range() == (50, 200)
-    sums = psf.at_velocities([150])
+    sums = psf.at([150] * KMS)
     assert sums[0].dump()['psfs'][0]['sigma'] == 2.5
     # A sum of constant PSFs does not vary
     constant = psf_parser.load(dict(type='sum', weights=[1], psfs=[
         dict(type='gauss', sigma=1)]))
     assert not constant.varies()
-    assert constant.at_velocities([0, 1]) == [constant, constant]
+    assert constant.at([0, 1] * KMS) == [constant, constant]
 
 
 def test_varying_psfs_round_trip():
@@ -107,13 +108,13 @@ def test_varying_psfs_round_trip():
     assert psf_parser.dump(psf_parser.load(dict(dumped))) == dumped
     # (an angle in radians is converted to the degrees of posa)
     np.testing.assert_allclose(
-        psf.at_velocities([10], 6000 * u.AA)[0].dump()['posa'],
+        psf.at(10 * KMS, 6000 * u.AA).dump()['posa'],
         np.degrees(0.2))
 
 
 @pytest.mark.parametrize('info, message', [
     (dict(type='hanning', width=dict(velocity=[0], values=[1])),
-     "option 'width' cannot vary"),
+     "option 'width' of LSFHanning cannot vary"),
     (dict(type='gauss', sigma=dict(velocity=[0, 1], values=[1, -1])),
      "sigma: sigma must be greater than 0"),
     (dict(type='gauss', sigma=dict(wavelength=[1, 2], values=[1, 1])),
@@ -128,8 +129,8 @@ def test_varying_options_are_checked(info, message):
 def test_tables_in_wavelength_need_the_rest():
     psf = psf_parser.load(
         dict(type='gauss', sigma=alpha_table(None, 'inline')))
-    with pytest.raises(ConfigError, match="needs the rest"):
-        psf.at_velocities([0])
+    with pytest.raises(ConfigError, match="rest of the spectral axis"):
+        psf.at(0 * KMS)
 
 
 def gauss_images(sigmas, size=21):
@@ -145,7 +146,7 @@ def test_psf_images_are_interpolated():
     cube = PSFImages(images, [100, 300] * u.km / u.s, (1, 1))
     assert cube.varies() and cube.velocity_range() == (100, 300)
     expected = [images[0], 0.75 * images[0] + 0.25 * images[1], images[1]]
-    for psf, image in zip(cube.at_velocities([0, 150, 300]), expected):
+    for psf, image in zip(cube.at([0, 150, 300] * KMS), expected):
         np.testing.assert_allclose(
             psf.asarray((1, 1), (21, 21)),
             PSFImage(image).asarray((1, 1), (21, 21)), atol=1e-12)
@@ -172,8 +173,8 @@ def test_psf_images_from_files(tmp_path):
         dumped['wavelength']['values'], [6.5e-7, 6.6e-7])
     again = psf_parser.load(dict(dumped))
     rest = 6.5e-7 * u.m
-    for a, b in zip(psf.at_velocities([0, 1e3, 1e4], rest),
-                    again.at_velocities([0, 1e3, 1e4], rest)):
+    for a, b in zip(psf.at([0, 1e3, 1e4] * KMS, rest),
+                    again.at([0, 1e3, 1e4] * KMS, rest)):
         np.testing.assert_allclose(
             a.asarray((0.05, 0.05)), b.asarray((0.05, 0.05)))
 
@@ -202,10 +203,35 @@ def test_lsf_images_from_files(tmp_path):
     np.testing.assert_allclose(
         u.Quantity(wavelengths['values'], wavelengths['unit']).to_value(u.AA),
         [5000, 7000])
-    # Halfway between the points (6000 Angstrom), half of each profile
-    rest = 6000 * u.AA
-    middle, = lsf_parser.load(dict(dumped)).at_velocities([0], rest)
+    # Halfway between the points, half of each profile
+    middle = lsf_parser.load(dict(dumped)).at(6000 * u.AA)
     np.testing.assert_allclose(
         middle.asarray(5, 41),
         LSFImage((profiles[0] + profiles[1]) / 2, 5).asarray(5, 41),
         atol=1e-12)
+
+
+def test_varying_psfs_in_python(tmp_path):
+    # The same PSF as from its configuration, queried at wavelengths
+    # (with no rest, as the table is in wavelength) or velocities
+    from gbkfit.instrument import PSFImage, PSFMoffat, SpectralTable
+    alpha = SpectralTable(WAVELENGTHS * u.AA, ALPHAS)
+    psf = PSFMoffat.varying(alpha=alpha, beta=2.5)
+    loaded = psf_parser.load(dict(
+        type='moffat', alpha=alpha_table(tmp_path, 'inline'), beta=2.5))
+    assert psf_parser.dump(psf) == psf_parser.dump(loaded)
+    assert psf.at(5900 * u.AA).dump()['alpha'] == pytest.approx(0.7)
+    velocity = (5900 * u.AA).to(KMS, u.doppler_optical(6000 * u.AA))
+    assert psf.at([velocity], 6000 * u.AA)[0].dump()['alpha'] == (
+        pytest.approx(0.7))
+    with pytest.raises(ConfigError, match="of PSFImage cannot vary"):
+        PSFImage.varying(data=np.ones((3, 3)), step=alpha)
+
+
+def test_spectral_tables_from_files(tmp_path):
+    from gbkfit.instrument import SpectralTable
+    table = SpectralTable.from_file(
+        alpha_table(tmp_path, 'ecsv')['table'], 'alpha')
+    np.testing.assert_allclose(table.points().to_value(u.AA), WAVELENGTHS)
+    np.testing.assert_allclose(table.values(), ALPHAS)
+    assert table.unit() == u.arcsec

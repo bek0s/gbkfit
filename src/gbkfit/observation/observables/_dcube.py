@@ -3,6 +3,7 @@ import logging
 from collections.abc import Callable
 from typing import Any
 
+import astropy.units as u
 import numpy as np
 
 import gbkfit.math
@@ -13,6 +14,9 @@ from gbkfit.utils.parseutils import ConfigError
 
 
 _log = logging.getLogger(__name__)
+
+# The unit of the velocities of the spectral axis
+_KMS = u.km / u.s
 
 
 def cube_extra(data, grid):
@@ -61,13 +65,13 @@ def _varying_padding(dcube, size_hi, step_hi, backend_fft):
     if psf is not None:
         psf_size = tuple(np.max([
             p.size(step_hi[:2])
-            for p in _distinct(psf.at_velocities(velocities, rest))],
+            for p in _distinct(psf.at(velocities * _KMS, rest))],
             axis=0).tolist())
     lsf_size = 1
     if lsf is not None:
         lsf_size = max(
             x.size(step_hi[2])
-            for x in _distinct(lsf.at_velocities(velocities, rest)))
+            for x in _distinct(lsf.at(velocities * _KMS, rest)))
     size, edge = backend_fft.fft_convolution_shape(
         size_hi, psf_size + (lsf_size,))
     return ((int(size[0]), int(size[1]), size_hi[2] + lsf_size - 1),
@@ -93,7 +97,7 @@ def _varying_kernels(dcube, grid_hi, lsf_size):
         # (like the PSF/LSF cube of DCubePlan: an even size puts the centre
         # one pixel before the middle)
         offset = gbkfit.math.is_odd(size[:2]) - 1
-        psfs = psf.at_velocities(velocities, rest) if psf.varies() else [psf]
+        psfs = psf.at(velocities * _KMS, rest) if psf.varies() else [psf]
         psf_images = np.stack([
             p.asarray(step[:2], size[:2], offset, dcube.rota())
             for p in psfs])
@@ -102,7 +106,7 @@ def _varying_kernels(dcube, grid_hi, lsf_size):
         if lsf.varies():
             lsf_kernels = np.stack([
                 x.asarray(step[2], lsf_size)
-                for x in lsf.at_velocities(velocities, rest)])
+                for x in lsf.at(velocities * _KMS, rest)])
         else:
             lsf_kernels = np.tile(lsf.asarray(step[2], lsf_size), (size[2], 1))
     return psf_images, lsf_kernels

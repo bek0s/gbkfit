@@ -9,3 +9,4 @@ from .instrument import *
 from .lsfs import *
 from .primary_beams import *
 from .psfs import *
+from .varying import *

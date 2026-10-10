@@ -67,10 +67,34 @@ class PSF(parseutils.TypedSerializable, abc.ABC):
         PSF
             The PSF.
         """
-        tables = varying.Varying.load_tables(cls, info)
-        if tables:
-            return PSFVarying(varying.Varying(cls, info, tables))
+        options = varying.load_tables(info)
+        if options != info:
+            return cls.varying(**options)
         return super().load(info)
+
+    @classmethod
+    def varying(cls, **options) -> 'PSF':
+        """
+        Make a PSF of this class whose options vary along the spectral axis.
+
+        Parameters
+        ----------
+        **options
+            The options of the class; those that vary (see the
+            VARYING_OPTIONS of the class) are tables (SpectralTable).
+
+        Returns
+        -------
+        PSF
+            The PSF (see PSFVarying).
+
+        Raises
+        ------
+        ConfigError
+            If an option that cannot vary is a table, or the options are
+            invalid.
+        """
+        return PSFVarying(varying._VaryingOptions(cls, options))
 
     @abc.abstractmethod
     def dump(
@@ -177,25 +201,26 @@ class PSF(parseutils.TypedSerializable, abc.ABC):
         """
         return False
 
-    def at_velocities(
-            self, velocities: Sequence[float] | np.ndarray, rest: Any = None
-    ) -> list['PSF']:
+    def at(self, points: Any, rest: Any = None) -> 'PSF | list[PSF]':
         """
-        Return the PSF at velocities of the spectral axis.
+        Return the PSF at points of the spectral axis.
 
         Parameters
         ----------
-        velocities : array_like
-            The velocities (km/s).
+        points : Quantity
+            Wavelengths, frequencies or velocities: one, or a sequence.
         rest : Quantity, optional
-            The rest of the spectral axis (see gridutils.Coords).
+            The rest of the spectral axis (see gridutils.Coords); needed
+            between velocities and the points of the tables of a PSF
+            that varies, if they are of another kind.
 
         Returns
         -------
-        list of PSF
-            The PSF at each velocity: itself, unless it varies.
+        PSF or list of PSF
+            The PSF at the point, or at each point: itself, unless it
+            varies.
         """
-        return [self] * len(velocities)
+        return varying.per_point(points, lambda points_: [self] * len(points_))
 
     def velocity_range(self, rest: Any = None) -> tuple[float, float]:
         """
@@ -630,12 +655,12 @@ class PSFSum(PSF):
     def varies(self) -> bool:
         return any(psf.varies() for psf in self._psfs)
 
-    def at_velocities(self, velocities, rest=None):
+    def at(self, points, rest=None):
         if not self.varies():
-            return super().at_velocities(velocities, rest)
-        return [
+            return super().at(points, rest)
+        return varying.per_point(points, lambda points_: [
             PSFSum(psfs, self._weights) for psfs in
-            _detail.terms_at_velocities(self._psfs, velocities, rest)]
+            _detail.terms_at(self._psfs, points_, rest)])
 
     def velocity_range(self, rest=None):
         return _detail.terms_velocity_range(self._psfs, rest)
@@ -695,12 +720,12 @@ class PSFConvolution(PSF):
     def varies(self) -> bool:
         return any(psf.varies() for psf in self._psfs)
 
-    def at_velocities(self, velocities, rest=None):
+    def at(self, points, rest=None):
         if not self.varies():
-            return super().at_velocities(velocities, rest)
-        return [
+            return super().at(points, rest)
+        return varying.per_point(points, lambda points_: [
             PSFConvolution(psfs) for psfs in
-            _detail.terms_at_velocities(self._psfs, velocities, rest)]
+            _detail.terms_at(self._psfs, points_, rest)])
 
     def velocity_range(self, rest=None):
         return _detail.terms_velocity_range(self._psfs, rest)
@@ -910,8 +935,13 @@ class PSFImages(PSF):
     def varies(self) -> bool:
         return True
 
-    def at_velocities(self, velocities, rest=None):
-        blends = varying.blend(self._points, velocities, rest)
+    def at(self, points, rest=None):
+        return varying.per_point(
+            points, lambda points_: self._at(points_, rest))
+
+    def _at(self, points, rest):
+        """The image of each of the points (1D)."""
+        blends = varying.blend(self._points, points, rest)
         psfs = {}
         for i, j, t in set(blends):
             psfs[(i, j, t)] = PSFImage(
@@ -924,22 +954,19 @@ class PSFImages(PSF):
 
     def _size_impl(self, step):
         raise RuntimeError(
-            "PSF images give an image at each channel (see at_velocities)")
+            "PSF images give an image at each channel (see at)")
 
     def _asarray_impl(self, step, size, offset, rota):
         raise RuntimeError(
-            "PSF images give an image at each channel (see at_velocities)")
+            "PSF images give an image at each channel (see at)")
 
 
 class PSFVarying(PSF):
     """
     A PSF of a type whose options vary along the spectral axis: a PSF of
-    the type at each channel (see at_velocities). It is not drawn itself.
-
-    Parameters
-    ----------
-    options : varying.Varying
-        The options of the PSF of the type.
+    the type at each channel (see at). It is not drawn itself.
+    It is made by the varying of the class of the type (e.g.
+    PSFMoffat.varying).
     """
 
     def type(self) -> str:
@@ -951,14 +978,15 @@ class PSFVarying(PSF):
     ) -> dict[str, Any]:
         return self._options.dump()
 
-    def __init__(self, options: varying.Varying):
+    def __init__(self, options: 'varying._VaryingOptions'):
         self._options = options
 
     def varies(self) -> bool:
         return True
 
-    def at_velocities(self, velocities, rest=None):
-        return self._options.at_velocities(velocities, rest)
+    def at(self, points, rest=None):
+        return varying.per_point(
+            points, lambda points_: self._options.at(points_, rest))
 
     def velocity_range(self, rest=None):
         return self._options.velocity_range(rest)
@@ -966,12 +994,12 @@ class PSFVarying(PSF):
     def _size_impl(self, step):
         raise RuntimeError(
             "a PSF that varies along the spectral axis has a size at each "
-            "channel (see at_velocities)")
+            "channel (see at)")
 
     def _asarray_impl(self, step, size, offset, rota):
         raise RuntimeError(
             "a PSF that varies along the spectral axis is drawn at each "
-            "channel (see at_velocities)")
+            "channel (see at)")
 
 
 psf_parser = parseutils.TypedParser(PSF, [

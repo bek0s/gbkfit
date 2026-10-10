@@ -547,7 +547,7 @@ def test_psf_of_muse(tmp_path, keywords):
     psf = psf_parser.load(dict(
         type='moffat', alpha=dict(table=table, column='alpha'),
         beta=dict(table=table, column='beta')))
-    moffat, = psf.at_velocities([0], 7000 * u.AA)
+    moffat = psf.at(7000 * u.AA)
     alpha, beta = moffat.dump()['alpha'], moffat.dump()['beta']
     assert beta == pytest.approx(2.5)
     assert 2 * alpha * np.sqrt(2 ** (1 / beta) - 1) == pytest.approx(0.8)
@@ -560,7 +560,8 @@ def test_lsf_of_muse(tmp_path):
     table = str(tmp_path / 'prep_lsf.ecsv')
     lsf = lsf_parser.load(dict(
         type='gauss', sigma=dict(table=table, column='sigma')))
-    gauss, = lsf.at_velocities([0], 7000 * u.AA)
+    # (a width in wavelength becomes a velocity with the rest)
+    gauss = lsf.at(7000 * u.AA, rest=7000 * u.AA)
     # A FWHM of 2.48 Angstrom at 7000 Angstrom, in km/s
     fwhm = 5.866e-8 * 7000 ** 2 - 9.187e-4 * 7000 + 6.040
     assert gauss.dump()['sigma'] == pytest.approx(
@@ -592,9 +593,7 @@ def test_beams_of_casa(tmp_path):
     psf = psf_parser.load(dict(type='gauss_beam', **{
         name: dict(table=table, column=name)
         for name in ('bmaj', 'bmin', 'bpa')}))
-    # (the velocity of the second channel, of 1.4201 GHz)
-    rest = 1.42e9 * u.Hz
-    velocity = (1.4201e9 * u.Hz).to_value(u.km / u.s, u.doppler_radio(rest))
-    beam, = psf.at_velocities([velocity], rest)
+    # (the frequency of the second channel)
+    beam = psf.at(1.4201e9 * u.Hz)
     assert beam.dump() == pytest.approx(
         dict(type='gauss_beam', bmaj=12, bmin=9, bpa=31))
