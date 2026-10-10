@@ -9,6 +9,7 @@ def _register_fitters():
         'gbkfit.fitting.fitters.nautilus.FitterNautilus',
         'gbkfit.fitting.fitters.cmaes.FitterCMAES',
         'gbkfit.fitting.fitters.emcee.FitterEmcee',
+        'gbkfit.fitting.fitters.scipy.FitterScipyLeastSquares',
     ]
     parseutils.register_optional_parsers(abstract_parser, parsers, 'fitter')
 
