@@ -127,7 +127,7 @@ class MassModel(parseutils.Serializable):
     are the distance of the galaxy (Mpc), which gives the radii of the
     model (arcsec) in kpc, and those of each component, prefixed by
     'mass_' and its name (e.g. mass_halo_rc). The velocity traits 'mass'
-    of the components of its gmodel take its circular velocity.
+    of the components of its model take its circular velocity.
     """
 
     @classmethod

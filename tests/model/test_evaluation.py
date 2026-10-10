@@ -104,16 +104,16 @@ GMODELS_2D = dict(
         dict(xpos=0, ypos=0, posa=30, incl=45, bpt_a=1, bpt_s=4)))
 
 
-@pytest.mark.parametrize('gmodel_type', GMODELS_2D)
-def test_one_gmodel_observed_on_grids_with_different_steps(
-        driver, gmodel_type):
+@pytest.mark.parametrize('model_type', GMODELS_2D)
+def test_one_model_observed_on_grids_with_different_steps(
+        driver, model_type):
     # Observations of one gmodel on grids with different steps each get
     # the model on their own grid
-    from gbkfit.model import gmodel_parser
+    from gbkfit.model import model_parser
     from gbkfit.observation import (
         Observation, ObservationGroup, observable_parser)
     gmodel_info, observable_type, size, key, properties = \
-        GMODELS_2D[gmodel_type]
+        GMODELS_2D[model_type]
 
     def observation(step):
         steps = (step, step, 10)[:len(size)]
@@ -126,9 +126,9 @@ def test_one_gmodel_observed_on_grids_with_different_steps(
         return group.model_h(params.evaluate())[i][key]['d'].copy()
 
     shared = ObservationGroup(
-        [gmodel_parser.load(gmodel_info)], [observation(1), observation(0.5)])
+        [model_parser.load(gmodel_info)], [observation(1), observation(0.5)])
     alone = ObservationGroup(
-        [gmodel_parser.load(gmodel_info)], [observation(0.5)])
+        [model_parser.load(gmodel_info)], [observation(0.5)])
     np.testing.assert_array_equal(evaluate(shared, 1), evaluate(alone, 0))
 
 
@@ -141,7 +141,7 @@ def test_unsupported_dtype_fails_when_planning(driver):
         observable_parser.load(dict(type='pixel_brightness', size=[8, 8])),
         driver,
         dtype='float16')
-    gmodel = gbkfit.model.gmodel_parser.load(dict(
+    gmodel = gbkfit.model.model_parser.load(dict(
         type='intensity_2d', components=dict(
             type='smdisk', loose=False, tilted=False, rnodes=[0, 2, 4],
             bptraits=dict(type='uniform'))))

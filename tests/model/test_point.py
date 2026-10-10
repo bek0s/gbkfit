@@ -25,11 +25,11 @@ def evaluate(driver, gmodel, dmodel, properties):
 PIXEL_AREA = 0.25
 
 
-@pytest.mark.parametrize('gmodel_type', ['intensity_2d', 'intensity_3d'])
-def test_point_in_an_image(driver, gmodel_type):
+@pytest.mark.parametrize('model_type', ['intensity_2d', 'intensity_3d'])
+def test_point_in_an_image(driver, model_type):
     # At the centre of a pixel (pixel (5, 6) is at (0.25, 1.25)), all its
     # flux is in that pixel; between pixels, it is shared bilinearly
-    gmodel = dict(type=gmodel_type, components=[dict(type='point')])
+    gmodel = dict(type=model_type, components=[dict(type='point')])
     image = dict(type='pixel_brightness', size=[10, 8], step=[0.5, 0.5])
     centred = evaluate(driver, gmodel, image, dict(xpos=0.25, ypos=1.25, flux=3))
     assert centred[6, 5] * PIXEL_AREA == pytest.approx(3)
@@ -98,11 +98,11 @@ def test_point_with_an_lsf_does_not_depend_on_oversampling(driver, scale):
     assert variance == pytest.approx(10 ** 2 + 30 ** 2 + 10 ** 2 / 12, rel=1e-4)
 
 
-@pytest.mark.parametrize('gmodel_type', ['kinematics_2d', 'kinematics_3d'])
-def test_point_in_a_cube(driver, gmodel_type):
+@pytest.mark.parametrize('model_type', ['kinematics_2d', 'kinematics_3d'])
+def test_point_in_a_cube(driver, model_type):
     # The spectrum of the point is a Gaussian of its flux, velocity and
     # dispersion (the mean of the line over each channel)
-    gmodel = dict(type=gmodel_type, components=[dict(type='point')])
+    gmodel = dict(type=model_type, components=[dict(type='point')])
     scube = dict(type='pixel_spectra', size=[10, 8, 41], step=[0.5, 0.5, 10])
     cube = evaluate(driver, gmodel, scube, dict(
         xpos=0.25, ypos=1.25, flux=2, vsys=33, disp=25))
@@ -139,24 +139,24 @@ def test_point_with_lines(driver):
 
 
 def test_point_round_trip():
-    from gbkfit.model import gmodel_parser
+    from gbkfit.model import model_parser
     info = dict(type='kinematics_3d', components=[dict(
         type='point', name='agn',
         lines=[dict(name='ha', rest='6562.8 Angstrom')])])
-    gmodel = gmodel_parser.load(copy.deepcopy(info))
+    gmodel = model_parser.load(copy.deepcopy(info))
     # A named component prefixes its parameters with its name
     assert set(gmodel.pdescs()) == {
         'agn_xpos', 'agn_ypos', 'agn_flux', 'agn_vsys', 'agn_disp'}
-    dumped = gmodel_parser.dump(gmodel)
-    assert gmodel_parser.dump(gmodel_parser.load(dumped)) == dumped
+    dumped = model_parser.dump(gmodel)
+    assert model_parser.dump(model_parser.load(dumped)) == dumped
 
 
 def test_point_plan_takes_a_dtype_or_its_type(driver):
     # The plans of the components take the dtype as np.dtype or its type
     import numpy as np
-    from gbkfit.model import gmodel_parser
+    from gbkfit.model import model_parser
     from gbkfit.utils import gridutils
-    gmodel = gmodel_parser.load(dict(
+    gmodel = model_parser.load(dict(
         type='intensity_2d', components=[dict(type='point')]))
     grid = gridutils.make_grid((6, 4))
     data = driver.mem_alloc_d((1, 4, 6), np.float32)

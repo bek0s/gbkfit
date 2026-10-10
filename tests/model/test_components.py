@@ -6,7 +6,7 @@ import re
 
 import numpy as np
 import pytest
-from gbkfit.model import gmodel_parser
+from gbkfit.model import model_parser
 from gbkfit.model.components import disks
 from gbkfit.utils import gridutils
 
@@ -65,10 +65,10 @@ def gmodel_info(name, **options):
     The configuration of a gmodel with a component of the given type, with
     its options updated. An option set to ... is left out.
     """
-    _, gmodel_type, key, component = COMPONENTS[name]
+    _, model_type, key, component = COMPONENTS[name]
     component = dict(DISK, **component) | options
     component = {k: v for k, v in component.items() if v is not ...}
-    info = dict(type=gmodel_type, components=[
+    info = dict(type=model_type, components=[
         dict(DISK, type='smdisk', bptraits=EXPONENTIAL, bhtraits=SECH2)])
     info[key] = [component]
     return info
@@ -77,7 +77,7 @@ def gmodel_info(name, **options):
 def load_error(name, **options):
     """The error message of loading a gmodel with a bad component."""
     with pytest.raises(Exception) as error:
-        gmodel_parser.load(gmodel_info(name, **options))
+        model_parser.load(gmodel_info(name, **options))
     message = str(error.value)
     # The message names the type of component
     cls = COMPONENTS[name][0]
@@ -87,7 +87,7 @@ def load_error(name, **options):
 
 @pytest.mark.parametrize('name', COMPONENTS)
 def test_component_loads(name):
-    gmodel_parser.load(gmodel_info(name))
+    model_parser.load(gmodel_info(name))
 
 
 @pytest.mark.parametrize('name, key', REQUIRED_TRAITS)
@@ -119,7 +119,7 @@ def test_height_traits_must_match_polar_traits(name, key):
 
 @pytest.mark.parametrize('name', COMPONENTS)
 def test_optional_traits_can_be_null(name):
-    gmodel_parser.load(gmodel_info(name, sptraits=None, wptraits=None))
+    model_parser.load(gmodel_info(name, sptraits=None, wptraits=None))
 
 
 @pytest.mark.parametrize('name', COMPONENTS)
@@ -136,7 +136,7 @@ def test_spectral_3d_with_several_velocity_traits(name):
     # Rotation and radial motions, each with the default height trait.
     # The disk needs a height trait for each velocity trait to evaluate.
     from gbkfit.driver.drivers.host import DriverHost
-    gmodel = gmodel_parser.load(gmodel_info(name, vptraits=[
+    gmodel = model_parser.load(gmodel_info(name, vptraits=[
         ARCTAN, dict(type='nw_rad_uniform')]))
     assert {'vpt_vt', 'vpt1_vr'} <= set(gmodel.pdescs())
     params = {
@@ -154,7 +154,7 @@ def test_errors_have_paths():
     info = gmodel_info('spectral_smdisk_3d', vptraits=[
         ARCTAN, dict(type='nw_rad_uniform', nwmode=dict(type='relative9'))])
     with pytest.raises(Exception) as error:
-        gmodel_parser.load(info)
+        model_parser.load(info)
     assert str(error.value).startswith(
         "components[0].vptraits[1].nwmode: unknown type 'relative9'")
 
@@ -162,7 +162,7 @@ def test_errors_have_paths():
 def component_error(name, **options):
     """The error message of loading a gmodel with a bad component."""
     with pytest.raises(Exception) as error:
-        gmodel_parser.load(gmodel_info(name, **options))
+        model_parser.load(gmodel_info(name, **options))
     return str(error.value)
 
 

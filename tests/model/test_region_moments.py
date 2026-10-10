@@ -157,7 +157,7 @@ def test_region_moments_observation_dumps_its_bins_with_the_prefix(driver, tmp_p
 def test_region_moments_objective_residual(driver):
     # Data equal to the model plus 1, with errors of 2: every residual
     # (model - data) / error is -0.5
-    from gbkfit.model import gmodel_parser
+    from gbkfit.model import model_parser
     from gbkfit.objective import Objective
     from gbkfit.instrument import instrument_parser
     from gbkfit.observation import (
@@ -169,7 +169,7 @@ def test_region_moments_objective_residual(driver):
     observable = RegionMoments(regions, orders=[1, 2], **SPECTRAL)
     instrument = instrument_parser.load(copy.deepcopy(INSTRUMENT))
     group = ObservationGroup(
-        [gmodel_parser.load(copy.deepcopy(GMODEL))],
+        [model_parser.load(copy.deepcopy(GMODEL))],
         [Observation(observable, driver, instrument=instrument)])
     params = gbkfit.params.EvaluationParams(group.pdescs(), PROPERTIES)
     model = {
@@ -180,7 +180,7 @@ def test_region_moments_objective_residual(driver):
             Data(value + 1, error=np.full_like(value, 2))
         for key, value in model.items()}, regions)
     group = ObservationGroup(
-        [gmodel_parser.load(copy.deepcopy(GMODEL))],
+        [model_parser.load(copy.deepcopy(GMODEL))],
         [Observation(
             observable, driver, instrument=instrument, data=dataset)])
     residual = Objective(group).residual_nddata_h(params.evaluate(), False)

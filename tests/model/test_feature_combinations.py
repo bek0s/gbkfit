@@ -12,7 +12,7 @@ import numpy as np
 import pytest
 
 from gbkfit.instrument import instrument_parser
-from gbkfit.model import gmodel_parser
+from gbkfit.model import model_parser
 from gbkfit.observation import (
     Foreground, LensDeflectionMap, Observation, ObservationGroup,
     observable_parser)
@@ -98,7 +98,7 @@ def test_feature_combinations(driver, name, lens):
         instrument=instrument_parser.load(copy.deepcopy(instrument)),
         components=['gas'], scale=SCALES[name])
     group = ObservationGroup(
-        [gmodel_parser.load(copy.deepcopy(GMODEL))], [observation])
+        [model_parser.load(copy.deepcopy(GMODEL))], [observation])
     params = gbkfit.params.EvaluationParams(group.pdescs(), PROPERTIES)
     extra = {}
     data = group.model_h(params.evaluate(), extra)[0]
@@ -113,4 +113,4 @@ def test_feature_combinations(driver, name, lens):
     # The extra outputs can be written as their observables give them
     for key, value in data.items():
         observable.output(value['d'])
-    assert any(key.startswith('observation0_gmodel_') for key in extra)
+    assert any(key.startswith('observation0_model_') for key in extra)

@@ -379,7 +379,7 @@ class Trait(parseutils.TypedSerializable, abc.ABC):
     def circular_velocity_params(self):
         """
         The names of the node-wise parameters whose values are not given,
-        but are the circular velocity of the mass model of the gmodel at
+        but are the circular velocity of the mass model of their model at
         the radii where they are sampled (see VPTraitMass); none here.
         """
         return ()
@@ -1308,9 +1308,9 @@ class VPTraitNWTanUniform(TraitFeatureNWMode, TraitFeatureSampling, VPTrait):
 
 class VPTraitMass(VPTrait):
     """
-    The circular velocity of the mass model of the gmodel (see
+    The circular velocity of the mass model of its model (see
     gbkfit.model.mass): a node-wise tangential velocity whose values at the
-    subnodes of the disk the gmodel computes from the parameters of its
+    subnodes of the disk the model computes from the parameters of its
     mass model at each evaluation. It has no parameters of its own.
     """
 

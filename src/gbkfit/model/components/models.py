@@ -1,11 +1,11 @@
 from collections.abc import Sequence
 
 from gbkfit.utils import parseutils
-from ..base import GModelImage, GModelSCube, Selection
+from ..base import ModelImage, ModelSCube, Selection
 from ..mass import MassModel, mass_model_parser
 from ._component_set import (
     IMAGE_SPECTRAL_AXIS, ComponentSet2D, ComponentSet3D,
-    ComponentSetGModelPlan)
+    ComponentSetModelPlan)
 from .base import (
     BrightnessComponent2D, BrightnessComponent3D, OpacityComponent3D,
     SpectralComponent2D, SpectralComponent3D)
@@ -18,14 +18,14 @@ from .points import (
 
 
 __all__ = [
-    'GModelIntensity2D',
-    'GModelIntensity3D',
-    'GModelKinematics2D',
-    'GModelKinematics3D'
+    'ModelIntensity2D',
+    'ModelIntensity3D',
+    'ModelKinematics2D',
+    'ModelKinematics3D'
 ]
 
 
-# The components that each gmodel accepts
+# The components that each model accepts
 _bcmp2d_parser = parseutils.TypedParser(BrightnessComponent2D, [
     BrightnessPoint2D,
     BrightnessSMDisk2D])
@@ -49,7 +49,7 @@ _ocmp_parser = parseutils.TypedParser(OpacityComponent3D, [
     OpacitySMDisk3D])
 
 
-class GModelIntensity2D(GModelImage):
+class ModelIntensity2D(ModelImage):
 
     @staticmethod
     def type():
@@ -87,14 +87,14 @@ class GModelIntensity2D(GModelImage):
         return self._component_set.constants()
 
     def plan(self, driver, grid, has_weights, dtype, selection=Selection()):
-        return ComponentSetGModelPlan(
+        return ComponentSetModelPlan(
             self._component_set.plan(
                 driver, grid, IMAGE_SPECTRAL_AXIS, has_weights, dtype,
                 selection),
             'image')
 
 
-class GModelIntensity3D(GModelImage):
+class ModelIntensity3D(ModelImage):
 
     @staticmethod
     def type():
@@ -147,14 +147,14 @@ class GModelIntensity3D(GModelImage):
         return self._component_set.constants()
 
     def plan(self, driver, grid, has_weights, dtype, selection=Selection()):
-        return ComponentSetGModelPlan(
+        return ComponentSetModelPlan(
             self._component_set.plan(
                 driver, grid, IMAGE_SPECTRAL_AXIS, has_weights, dtype,
                 selection),
             'image')
 
 
-class GModelKinematics2D(GModelSCube):
+class ModelKinematics2D(ModelSCube):
 
     @staticmethod
     def type():
@@ -204,14 +204,14 @@ class GModelKinematics2D(GModelSCube):
         return self._component_set.constants()
 
     def plan(self, driver, grid, has_weights, dtype, selection=Selection()):
-        return ComponentSetGModelPlan(
+        return ComponentSetModelPlan(
             self._component_set.plan(
                 driver, grid.spatial(), grid.spectral(), has_weights, dtype,
                 selection),
             'scube')
 
 
-class GModelKinematics3D(GModelSCube):
+class ModelKinematics3D(ModelSCube):
 
     @staticmethod
     def type():
@@ -276,7 +276,7 @@ class GModelKinematics3D(GModelSCube):
         return self._component_set.constants()
 
     def plan(self, driver, grid, has_weights, dtype, selection=Selection()):
-        return ComponentSetGModelPlan(
+        return ComponentSetModelPlan(
             self._component_set.plan(
                 driver, grid.spatial(), grid.spectral(), has_weights, dtype,
                 selection),

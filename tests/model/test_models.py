@@ -11,7 +11,7 @@ change of the models.
 import numpy as np
 import pytest
 import gbkfit.model
-from gbkfit.model import gmodel_parser
+from gbkfit.model import model_parser
 from gbkfit.utils import gridutils
 from modelutils import WeightComponent
 
@@ -148,7 +148,7 @@ MODELS = dict(
 
 
 @pytest.mark.parametrize('name', MODELS)
-def test_gmodel(driver, name, evaluate_models, ndarrays_regression):
+def test_model(driver, name, evaluate_models, ndarrays_regression):
     model, properties = MODELS[name]
     model = dict(model, driver=dict(type=driver.type()))
     data, extra = evaluate_models([model], properties)
@@ -167,13 +167,13 @@ def test_gmodel(driver, name, evaluate_models, ndarrays_regression):
 
 
 @pytest.mark.parametrize('name', MODELS)
-def test_gmodel_dump_and_load(driver, name, evaluate_models):
+def test_model_dump_and_load(driver, name, evaluate_models):
     # A dumped gmodel loads back to the same gmodel
-    from gbkfit.model import gmodel_parser
+    from gbkfit.model import model_parser
     model, properties = MODELS[name]
     model = dict(model, driver=dict(type=driver.type()))
-    info = gmodel_parser.dump(gmodel_parser.load(model['gmodel']))
-    assert gmodel_parser.dump(gmodel_parser.load(info)) == info
+    info = model_parser.dump(model_parser.load(model['gmodel']))
+    assert model_parser.dump(model_parser.load(info)) == info
     data, _ = evaluate_models([model], properties)
     data_loaded, _ = evaluate_models([dict(model, gmodel=info)], properties)
     # Thick disks on cuda differ by float32 rounding between runs
@@ -186,18 +186,18 @@ def test_gmodel_dump_and_load(driver, name, evaluate_models):
 # The 2d gmodels, the size of their data and its spectral axis, and its
 # shape (an image is a cube with one channel)
 GMODELS_2D = [
-    (gbkfit.model.GModelIntensity2D, (20, 16), None, (1, 16, 20)),
-    (gbkfit.model.GModelKinematics2D, (20, 16, 11), 2, (11, 16, 20))]
+    (gbkfit.model.ModelIntensity2D, (20, 16), None, (1, 16, 20)),
+    (gbkfit.model.ModelKinematics2D, (20, 16, 11), 2, (11, 16, 20))]
 
 
 @pytest.mark.parametrize(
-    'gmodel_type, size, spectral_axis, shape', GMODELS_2D)
-def test_2d_gmodel_weights_the_data(
-        driver, gmodel_type, size, spectral_axis, shape):
+    'model_type, size, spectral_axis, shape', GMODELS_2D)
+def test_2d_model_weights_the_data(
+        driver, model_type, size, spectral_axis, shape):
     # The components of a 2d gmodel write their weights to its spatial
     # weights, which then become the weights of the data: 0 where they
     # are 0, and 1 elsewhere (normalised to their maximum along z)
-    gmodel = gmodel_type([WeightComponent()])
+    gmodel = model_type([WeightComponent()])
     data = driver.mem_alloc_d(shape, np.float32)
     weights = driver.mem_alloc_d(shape, np.float32)
     driver.mem_fill(data, 0)
@@ -212,7 +212,7 @@ def test_2d_gmodel_weights_the_data(
     np.testing.assert_array_equal(driver.mem_copy_d2h(weights), desired)
 
 
-def test_3d_gmodel_picks_the_z_axis_of_each_grid(driver):
+def test_3d_model_picks_the_z_axis_of_each_grid(driver):
     # Without a configured z axis, a 3d gmodel picks one from the x and y
     # axes of the data. An edge-on thick disk is cut off by a z axis that
     # is too short, so a gmodel evaluated on a small grid and then on a
@@ -233,15 +233,15 @@ def test_3d_gmodel_picks_the_z_axis_of_each_grid(driver):
             params, image, None, None)
         return driver.mem_copy_d2h(image)
 
-    gmodel = gmodel_parser.load(info)
+    gmodel = model_parser.load(info)
     evaluate(gmodel, (6, 6))
     np.testing.assert_allclose(
         evaluate(gmodel, (32, 32)),
-        evaluate(gmodel_parser.load(info), (32, 32)), rtol=1e-5)
+        evaluate(model_parser.load(info), (32, 32)), rtol=1e-5)
 
 
 
-def test_one_gmodel_serves_several_grids(driver):
+def test_one_model_serves_several_grids(driver):
     # A gmodel is a description: each plan owns the memory of its own
     # grid, so plans of one gmodel on different grids, evaluated in turn,
     # give what separate gmodels give
@@ -263,14 +263,14 @@ def test_one_gmodel_serves_several_grids(driver):
         plan_.evaluate(params, image, None, None)
         return driver.mem_copy_d2h(image)
 
-    shared = gmodel_parser.load(info)
+    shared = model_parser.load(info)
     small, large = plan(shared, (12, 12)), plan(shared, (32, 32))
     results = [evaluate(small, (12, 12)), evaluate(large, (32, 32)),
                evaluate(small, (12, 12))]
     np.testing.assert_allclose(
-        results[0], evaluate(plan(gmodel_parser.load(info), (12, 12)),
+        results[0], evaluate(plan(model_parser.load(info), (12, 12)),
                              (12, 12)), rtol=1e-5)
     np.testing.assert_allclose(
-        results[1], evaluate(plan(gmodel_parser.load(info), (32, 32)),
+        results[1], evaluate(plan(model_parser.load(info), (32, 32)),
                              (32, 32)), rtol=1e-5)
     np.testing.assert_allclose(results[2], results[0], rtol=1e-5)

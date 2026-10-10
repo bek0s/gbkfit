@@ -30,7 +30,7 @@ def split_model(model):
     name = model.pop('name', None)
     if name is not None:
         gmodel['name'] = name
-        observation['gmodel'] = name
+        observation['model'] = name
     if model:
         raise ValueError(f"unknown model keys: {list(model)}")
     return gmodel, observation
@@ -38,20 +38,20 @@ def split_model(model):
 
 def observation_group(models):
     """An ObservationGroup of models of the tests (see split_model)."""
-    from gbkfit.model import gmodel_parser
+    from gbkfit.model import model_parser
     from gbkfit.observation import ObservationGroup, observation_parser
     gmodels, observations = zip(*[split_model(model) for model in models])
     return ObservationGroup(
-        gmodel_parser.load(list(gmodels)),
+        model_parser.load(list(gmodels)),
         observation_parser.load(list(observations)))
 
 
 def config_group(config):
-    """An ObservationGroup of the gmodels and observations of a config."""
-    from gbkfit.model import gmodel_parser
+    """An ObservationGroup of the models and observations of a config."""
+    from gbkfit.model import model_parser
     from gbkfit.observation import ObservationGroup, observation_parser
     return ObservationGroup(
-        gmodel_parser.load(config['gmodels']),
+        model_parser.load(config['models']),
         observation_parser.load(config['observations']))
 
 

@@ -17,9 +17,9 @@ __all__ = [
 
 class Component(parseutils.TypedSerializable, abc.ABC):
     """
-    A component of a gmodel. The kinds of components below differ only in
-    the gmodels that accept them, and in the outputs they get. A component
-    can have a name, which then prefixes its parameters in its gmodel
+    A component of a model. The kinds of components below differ only in
+    the models that accept them, and in the outputs they get. A component
+    can have a name, which then prefixes its parameters in its model
     instead of its position (see parseutils.item_prefixes).
     """
 
@@ -51,8 +51,8 @@ class Component(parseutils.TypedSerializable, abc.ABC):
     def circular_velocity_params(self) -> dict[str, tuple[float, ...]]:
         """
         The parameters of the component that are not in pdescs, because
-        its gmodel gives them: the circular velocity of the mass model of
-        the gmodel at the given radii (arcsec), by name (see
+        its model gives them: the circular velocity of the mass model of
+        the model at the given radii (arcsec), by name (see
         traits.VPTraitMass). Its plans need them with the others. None
         here.
         """
@@ -79,11 +79,11 @@ class ComponentPlan(abc.ABC):
 
         grid has the 3d spatial grid and the spectral axis: spat_size,
         spat_step, spat_zero (each in x, y, z order), spat_rota (degrees)
-        and spec_size, spec_step, spec_zero. The z axis of 2d gmodels and
-        the spectral axis of image gmodels have size 1 (and step 0).
+        and spec_size, spec_step, spec_zero. The z axis of 2d models and
+        the spectral axis of image models have size 1 (and step 0).
 
         outputs has the (device) arrays the component adds to, which a
-        gmodel may leave out: the 'image' or 'scube', the 3d spatial
+        model may leave out: the 'image' or 'scube', the 3d spatial
         weights ('wdata'), brightness ('bdata'), opacity ('odata') and
         brightness after the opacity ('obdata'). Opacity components add
         to odata, and the other components read it.

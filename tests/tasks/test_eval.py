@@ -81,7 +81,7 @@ def test_rotation_curve_from_radial_nodes(tmp_path):
     # disk and of user-defined parameters is the same as the one given by
     # its values
     config = yaml.load(REFERENCE_DIR / 'thin_disk_pixel_spectra.yaml')
-    component = config['gmodels'][0]['components'][0]
+    component = config['models'][0]['components'][0]
     for option in ('rnmin', 'rnmax', 'rnsep'):
         component.pop(option, None)
     rnodes = list(range(0, 21, 2))
@@ -102,7 +102,7 @@ def test_unknown_options(tmp_path):
     # A misspelt option is a warning that suggests the right one, or an
     # error with --strict
     config = yaml.load(REFERENCE_DIR / 'thin_disk_pixel_spectra.yaml')
-    component = config['gmodels'][0]['components'][0]
+    component = config['models'][0]['components'][0]
     component['rnmx'] = component['rnmax']
     yaml.dump(config, tmp_path / 'config.yaml')
 
@@ -116,7 +116,7 @@ def test_unknown_options(tmp_path):
     assert "'rnmx' (did you mean 'rnmax'?)" in result.stderr
     result = run('--strict')
     assert result.returncode != 0
-    assert "gmodels[0].components[0]" in result.stderr
+    assert "models[0].components[0]" in result.stderr
     assert "'rnmx' (did you mean 'rnmax'?)" in result.stderr
 
 
@@ -185,7 +185,7 @@ def test_region_spectra_outputs_and_residuals(tmp_path):
     np.testing.assert_allclose(outputs['residual_spectra_d'], -0.5, rtol=1e-5)
 
 
-def test_one_gmodel_seen_by_two_observations(tmp_path):
+def test_one_model_seen_by_two_observations(tmp_path):
     # The observations refer to their gmodel, so there can be more
     # observations than gmodels
     config = yaml.load(REFERENCE_DIR / 'thin_disk_pixel_spectra.yaml')

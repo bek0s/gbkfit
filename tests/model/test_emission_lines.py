@@ -45,8 +45,8 @@ def evaluate(driver, gmodel, dmodel, properties):
     return group.model_h(params.evaluate())[0]['spectra']['d'].copy()
 
 
-def kinematics(component, gmodel_type='kinematics_2d'):
-    return dict(type=gmodel_type, components=[component])
+def kinematics(component, model_type='kinematics_2d'):
+    return dict(type=model_type, components=[component])
 
 
 def scaled(properties, ratio, offset):
@@ -130,20 +130,20 @@ def test_lines_need_the_rest_of_the_spectral_axis(driver):
 
 
 def test_line_parameters_and_options():
-    from gbkfit.model import gmodel_parser
+    from gbkfit.model import model_parser
     lines = [dict(name='ha', rest='6562.8 Angstrom'),
              dict(name='nii6583', rest='6583.45 Angstrom'),
              dict(name='nii6548', rest='6548.05 Angstrom')]
-    gmodel = gmodel_parser.load(kinematics(COMPONENT | dict(lines=lines)))
+    gmodel = model_parser.load(kinematics(COMPONENT | dict(lines=lines)))
     assert {'nii6583_ratio', 'nii6548_ratio'} <= set(gmodel.pdescs())
     assert 'ha_ratio' not in gmodel.pdescs()
     # The lines survive a round trip through the configuration
-    info = gmodel_parser.dump(gmodel)
+    info = model_parser.dump(gmodel)
     assert [line['name'] for line in info['components'][0]['lines']] == [
         'ha', 'nii6583', 'nii6548']
-    assert gmodel_parser.dump(gmodel_parser.load(info)) == info
+    assert model_parser.dump(model_parser.load(info)) == info
     # Without lines, there are no lines in the configuration
-    info = gmodel_parser.dump(gmodel_parser.load(kinematics(COMPONENT)))
+    info = model_parser.dump(model_parser.load(kinematics(COMPONENT)))
     assert 'lines' not in info['components'][0]
 
 
@@ -155,24 +155,24 @@ def test_line_parameters_and_options():
       dict(name='vpt', rest='6563 Angstrom')], None),
     ([dict(name='ha', rest='6562.8')], "positive wavelength or frequency")])
 def test_invalid_lines(lines, message):
-    from gbkfit.model import gmodel_parser
+    from gbkfit.model import model_parser
     info = kinematics(COMPONENT | dict(lines=lines))
     if message is None:
         # A line may be named after a prefix of parameters
-        gmodel_parser.load(info)
+        model_parser.load(info)
         return
     with pytest.raises(Exception, match=message):
-        gmodel_parser.load(info)
+        model_parser.load(info)
 
 
 def evaluate_observation(driver, gmodel, dmodel, properties, **options):
     """The model of an observation with options (e.g. its lines)."""
-    from gbkfit.model import gmodel_parser
+    from gbkfit.model import model_parser
     from gbkfit.observation import ObservationGroup, observation_parser
     observation = observation_parser.load(copy.deepcopy(dict(
         driver=dict(type=driver.type()), observable=dmodel) | options))
     group = ObservationGroup(
-        [gmodel_parser.load(copy.deepcopy(gmodel))], [observation])
+        [model_parser.load(copy.deepcopy(gmodel))], [observation])
     params = gbkfit.params.EvaluationParams(group.pdescs(), properties)
     data = group.model_h(params.evaluate())[0]
     return {key: value['d'].copy() for key, value in data.items()}

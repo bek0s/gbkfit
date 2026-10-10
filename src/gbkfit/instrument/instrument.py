@@ -18,7 +18,7 @@ __all__ = [
 
 class Instrument(parseutils.Serializable):
     """
-    What happens to the light of a gmodel in the telescope and the
+    What happens to the light of a model in the telescope and the
     instrument, in the order the light meets them: the primary beam, and
     the point and line spread functions.
 

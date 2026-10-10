@@ -52,10 +52,10 @@ def evaluate_mmaps(driver, observable, **properties):
     of 20, observed as the given observable with the given parameter
     properties.
     """
-    from gbkfit.model import gmodel_parser
+    from gbkfit.model import model_parser
     from gbkfit.observation import Observation, ObservationGroup
     from gbkfit.params import EvaluationParams
-    gmodel = gmodel_parser.load(dict(
+    gmodel = model_parser.load(dict(
         type='kinematics_2d', components=[dict(
             type='smdisk', loose=False, tilted=False,
             rnodes=list(range(0, 12)),
@@ -101,7 +101,7 @@ def test_moment_maps_have_the_weights_of_the_gmodel(driver):
     # The weight of the moments of a spectrum is the flux-weighted mean of
     # its weights: those of a gmodel with the spatial weights 0 on the
     # first row of pixels, and 1 elsewhere
-    from gbkfit.model import GModelKinematics2D
+    from gbkfit.model import ModelKinematics2D
     from gbkfit.model.components.disks import SpectralSMDisk2D, traits
     from gbkfit.observation import PixelMoments, Observation, ObservationGroup
     from gbkfit.params import EvaluationParams
@@ -110,7 +110,7 @@ def test_moment_maps_have_the_weights_of_the_gmodel(driver):
         loose=False, tilted=False, rnodes=list(range(0, 25)),
         bptraits=traits.BPTraitExponential(),
         vptraits=traits.VPTraitTanArctan(), dptraits=traits.DPTraitUniform())
-    gmodel = GModelKinematics2D([disk, WeightComponent()])
+    gmodel = ModelKinematics2D([disk, WeightComponent()])
     observable = PixelMoments(size=(32, 32), spec_size=81, spec_step=5)
     model_group = ObservationGroup([gmodel], [Observation(observable, driver)])
     params = EvaluationParams(model_group.pdescs(), dict(

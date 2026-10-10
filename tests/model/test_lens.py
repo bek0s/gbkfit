@@ -37,7 +37,7 @@ def evaluate(driver, foreground=None, properties=PROPERTIES, dmodel=IMAGE,
         observation = Observation(
             observation.observable(), observation.driver(),
             foreground=foreground, instrument=observation.instrument())
-        group = ObservationGroup(group.gmodels(), [observation])
+        group = ObservationGroup(group.models(), [observation])
     params = gbkfit.params.EvaluationParams(group.pdescs(), properties)
     data = group.model_h(params.evaluate())[0]
     return next(iter(data.values()))['d'].copy()

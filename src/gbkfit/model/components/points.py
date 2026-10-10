@@ -145,7 +145,7 @@ class BrightnessPoint3D(BrightnessComponent3D):
     """
     An unresolved component (e.g. a nucleus): its flux at a point (see
     PointPlan). Its parameters: xpos, ypos and flux.
-    It is not absorbed by the opacity of the gmodel.
+    It is not absorbed by the opacity of the model.
     """
 
     @staticmethod
@@ -225,7 +225,7 @@ class SpectralPoint3D(SpectralComponent3D):
     a point, as its emission lines (see PointPlan). Its parameters:
     xpos, ypos, flux, vsys and disp (the dispersion of its lines), and
     the flux ratios of its lines (see Lines).
-    It is not absorbed by the opacity of the gmodel.
+    It is not absorbed by the opacity of the model.
     """
 
     @staticmethod

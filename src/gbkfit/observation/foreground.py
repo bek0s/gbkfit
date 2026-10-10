@@ -24,11 +24,11 @@ __all__ = [
 
 class Lens(parseutils.TypedSerializable, abc.ABC):
     """
-    A gravitational lens in front of a gmodel.
+    A gravitational lens in front of a model.
 
     The light of each point of the image plane comes from the point of
-    the source plane, where the gmodel is, at its position less the
-    deflection there (surface brightness is conserved). The gmodel is
+    the source plane, where the model is, at its position less the
+    deflection there (surface brightness is conserved). The model is
     evaluated on a grid of the source plane, centred on the origin of the
     frame of the model and aligned with the sky (see
     gridutils.sky_positions); each pixel of the image takes the bilinear
@@ -123,7 +123,7 @@ class LensPlan:
 
     def source_grid(self, grid: gridutils.Grid) -> gridutils.Grid:
         """
-        Return the grid of the source plane for a gmodel evaluated on the
+        Return the grid of the source plane for a model evaluated on the
         given grid of the image plane: the x and y of the source plane, and
         the other axes of the grid (e.g. the spectral axis).
         """
@@ -300,7 +300,7 @@ lens_parser = parseutils.TypedParser(Lens, [LensDeflectionMap])
 
 class Foreground(parseutils.Serializable):
     """
-    What happens to the light of a gmodel before it reaches the telescope:
+    What happens to the light of a model before it reaches the telescope:
     a gravitational lens. Each has its own slot, in the order the light
     meets them.
 

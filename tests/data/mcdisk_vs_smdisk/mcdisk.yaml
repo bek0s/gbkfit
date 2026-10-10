@@ -1,4 +1,4 @@
-gmodels:
+models:
 - type: kinematics_3d
   components:
   - type: mcdisk

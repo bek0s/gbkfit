@@ -7,7 +7,7 @@ import numpy as np
 from gbkfit.dataset import Dataset, DatasetRegionSpectra
 from gbkfit.driver import Driver
 from gbkfit.instrument import Instrument
-from gbkfit.model.base import GModel, GModelSCube, Selection
+from gbkfit.model.base import Model, ModelSCube, Selection
 from gbkfit.region import Regions, regions_parser
 from gbkfit.utils import gridutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
@@ -75,8 +75,8 @@ class RegionSpectra(Observable):
         return 'region_spectra'
 
     @staticmethod
-    def is_compatible(gmodel: GModel) -> bool:
-        return isinstance(gmodel, GModelSCube)
+    def is_compatible(model: Model) -> bool:
+        return isinstance(model, ModelSCube)
 
     @classmethod
     def options_from_data(cls, dataset: Dataset) -> tuple[str, ...]:
@@ -217,16 +217,16 @@ class RegionSpectra(Observable):
     def plan(
             self,
             driver: Driver,
-            gmodel: GModel,
+            model: Model,
             foreground: 'Foreground',
             instrument: Instrument,
             scale: Sequence[int],
             dtype: np.dtype,
             selection: Selection
     ) -> 'RegionSpectraPlan':
-        if gmodel.has_weights():
+        if model.has_weights():
             raise ConfigError(
-                "region_spectra does not support gmodels with weights "
+                "region_spectra does not support models with weights "
                 "(wtraits) yet")
         # The masking of DCube is disabled: every pixel of a region adds
         # to its spectrum
@@ -246,7 +246,7 @@ class RegionSpectra(Observable):
             mask_apply=False,
             dtype=dtype)
         return RegionSpectraPlan(
-            self._weights, dcube, driver, gmodel, foreground, dtype,
+            self._weights, dcube, driver, model, foreground, dtype,
             selection)
 
 
@@ -257,13 +257,13 @@ class RegionSpectraPlan(_detail.DCubePlanBase):
             weights: 'scipy.sparse.csr_array',
             dcube: _dcube.DCube,
             driver: Driver,
-            gmodel: GModel,
+            model: Model,
             foreground: 'Foreground',
             dtype: np.dtype,
             selection: Selection
     ):
         super().__init__(
-            dcube, driver, gmodel, foreground, dtype, selection)
+            dcube, driver, model, foreground, dtype, selection)
         self._sums = RegionSumsPlan(weights, driver, dtype)
         self._spectra = driver.mem_alloc_d(
             (dcube.size()[2], self._sums.nregions()), dtype)

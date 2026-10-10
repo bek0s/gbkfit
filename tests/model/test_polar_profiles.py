@@ -44,7 +44,7 @@ def face_on_disk(driver, evaluate_models, key, trait):
         bpt_a=1, dpt_a=10) | {f'{key}pt_{n}': VALUES[n] for n in names}
     _, extra = evaluate_models([model], properties)
     output = dict(b='bdata', d='ddata')[key]
-    data = extra[f'observation0_gmodel_component0_{output}'].data
+    data = extra[f'observation0_model_component0_{output}'].data
     y, x = (np.indices((33, 33)) - 16) * 0.5
     return data.reshape(33, 33), np.hypot(x, y)
 

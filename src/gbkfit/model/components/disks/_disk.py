@@ -43,7 +43,7 @@ class TraitParams:
     the order of the traits, and for each trait, the smooth parameters
     before the node-wise ones. circular_velocity has the names of those
     whose values are the circular velocity of the mass model of the
-    gmodel (see traits.Trait.circular_velocity_params).
+    model (see traits.Trait.circular_velocity_params).
     """
     pdescs: dict
     nwmodes: dict
@@ -182,14 +182,14 @@ class Disk(abc.ABC):
             for kind, traits_ in self._traits.items()}
 
         # The parameters whose values are the circular velocity of the
-        # mass model of the gmodel, and the radii of their values
+        # mass model of their model, and the radii of their values
         self._circular_velocity_params = {
             name: subrnodes if params.sampling[name] == 'subrings' else rnodes
             for params in self._trait_params.values()
             for name in params.circular_velocity}
 
         # Merge all parameter descs into the same dictionary, without those
-        # that the gmodel gives
+        # that the model gives
         self._pdescs = {}
         for pdescs in self._geometry_pdescs.values():
             self._pdescs.update(pdescs)
@@ -236,7 +236,7 @@ class Disk(abc.ABC):
     def circular_velocity_params(self):
         """
         The parameters that are not in pdescs, but whose values are the
-        circular velocity of the mass model of the gmodel at the given
+        circular velocity of the mass model of their model at the given
         radii (arcsec), by name. The disk plans need them with the others.
         """
         return self._circular_velocity_params

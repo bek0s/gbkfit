@@ -69,7 +69,7 @@ def prepare_config(
     for s in ['pdescs', 'params', 'fitter']:
         if s in config and not iterutils.is_mapping(config[s]):
             wrong_type_dict.append(s)
-    for s in ['gmodels', 'observations']:
+    for s in ['models', 'observations']:
         if s in config and not iterutils.is_sequence_or_mapping(config[s]):
             wrong_type_dict_or_seq.append(s)
     if wrong_type_dict:
@@ -82,8 +82,8 @@ def prepare_config(
             f"{wrong_type_dict_or_seq}")
 
     # Listify some sections to make parsing more streamlined (the
-    # observations refer to the gmodels by name, so their numbers differ)
-    for s in ['gmodels', 'observations']:
+    # observations refer to the models by name, so their numbers differ)
+    for s in ['models', 'observations']:
         if s in config:
             config[s] = iterutils.listify(config[s])
 
@@ -158,12 +158,12 @@ def merge_pdescs(
 
 def load_observation_group(cfg):
     """
-    The gmodels and observations (with their data, if any) of a
+    The models and observations (with their data, if any) of a
     configuration, as an ObservationGroup.
     """
-    with parseutils.config_path('gmodels'):
-        gmodels = gbkfit.model.gmodel_parser.load(cfg['gmodels'])
+    with parseutils.config_path('models'):
+        models = gbkfit.model.model_parser.load(cfg['models'])
     with parseutils.config_path('observations'):
         observations = gbkfit.observation.observation_parser.load(
             cfg['observations'])
-    return gbkfit.observation.ObservationGroup(gmodels, observations)
+    return gbkfit.observation.ObservationGroup(models, observations)

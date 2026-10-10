@@ -6,18 +6,18 @@ from gbkfit.utils import parseutils
 
 
 __all__ = [
-    'GModel',
-    'GModelImage',
-    'GModelPlan',
-    'GModelSCube',
+    'Model',
+    'ModelImage',
+    'ModelPlan',
+    'ModelSCube',
     'Selection',
-    'gmodel_parser'
+    'model_parser'
 ]
 
 
 class Selection(typing.NamedTuple):
     """
-    What of a gmodel an observation sees: its components and the emission
+    What of a model an observation sees: its components and the emission
     lines of its components of the given names (all if None). Opacity
     components always absorb; the components without lines have one,
     which is always seen.
@@ -26,11 +26,11 @@ class Selection(typing.NamedTuple):
     lines: tuple[str, ...] | None = None
 
 
-class GModel(parseutils.TypedSerializable, abc.ABC):
+class Model(parseutils.TypedSerializable, abc.ABC):
     """
     A model of a galaxy: what is on the sky. It can have a name, which
     then prefixes its parameters instead of its position when there are
-    several gmodels (see ObservationGroup).
+    several models (see ObservationGroup).
     """
 
     def __init__(self, name: str | None):
@@ -58,33 +58,33 @@ class GModel(parseutils.TypedSerializable, abc.ABC):
     @abc.abstractmethod
     def plan(self, driver, grid, has_weights, dtype, selection=Selection()):
         """
-        The evaluation of the gmodel on the given driver, grid of its data
+        The evaluation of the model on the given driver, grid of its data
         (gridutils.Grid: x and y, and the spectral axis of spectral cubes)
-        and dtype, with spatial weights if has_weights (a GModelPlan), of
+        and dtype, with spatial weights if has_weights (a ModelPlan), of
         what the selection has (see Selection).
         """
         pass
 
 
-class GModelPlan(abc.ABC):
-    """The evaluation of a gmodel on a driver, grid and dtype."""
+class ModelPlan(abc.ABC):
+    """The evaluation of a model on a driver, grid and dtype."""
 
     @abc.abstractmethod
     def evaluate(self, params, data, weights, out_extra):
         """
-        Add the gmodel to data (the image or spectral cube on the grid of
+        Add the model to data (the image or spectral cube on the grid of
         the plan), and weight the data weights (or None) with its spatial
         weights.
         """
         pass
 
 
-class GModelImage(GModel, abc.ABC):
-    """A gmodel evaluated into images."""
+class ModelImage(Model, abc.ABC):
+    """A model evaluated into images."""
 
 
-class GModelSCube(GModel, abc.ABC):
-    """A gmodel evaluated into spectral cubes."""
+class ModelSCube(Model, abc.ABC):
+    """A model evaluated into spectral cubes."""
 
 
-gmodel_parser = parseutils.TypedParser(GModel)
+model_parser = parseutils.TypedParser(Model)

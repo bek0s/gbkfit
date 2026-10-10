@@ -7,7 +7,7 @@ import numpy as np
 from gbkfit.dataset import DatasetSlitSpectra
 from gbkfit.driver import Driver
 from gbkfit.instrument import Instrument
-from gbkfit.model.base import GModel, GModelSCube, Selection
+from gbkfit.model.base import Model, ModelSCube, Selection
 from gbkfit.utils import gridutils
 from . import _dcube, _detail
 from .base import ModelData, Observable
@@ -53,7 +53,7 @@ class SlitSpectra(Observable):
     slit_width : float, optional
         The width of the slit; by default, the step along it.
     smooth_weights : bool, optional
-        Whether the weights of the gmodel are smoothed by the PSF and the
+        Whether the weights of the model are smoothed by the PSF and the
         LSF, as the model is.
     mask_cutoff : float, optional
         The pixels of the model whose absolute value is not above it are
@@ -79,8 +79,8 @@ class SlitSpectra(Observable):
         return 'slit_spectra'
 
     @staticmethod
-    def is_compatible(gmodel: GModel) -> bool:
-        return isinstance(gmodel, GModelSCube)
+    def is_compatible(model: Model) -> bool:
+        return isinstance(model, ModelSCube)
 
     @classmethod
     def load(
@@ -181,7 +181,7 @@ class SlitSpectra(Observable):
     def plan(
             self,
             driver: Driver,
-            gmodel: GModel,
+            model: Model,
             foreground: 'Foreground',
             instrument: Instrument,
             scale: Sequence[int],
@@ -210,14 +210,14 @@ class SlitSpectra(Observable):
             mask_apply=self._mask_apply,
             dtype=dtype)
         return SlitSpectraPlan(
-            dcube, driver, gmodel, foreground, dtype, selection)
+            dcube, driver, model, foreground, dtype, selection)
 
 
 class SlitSpectraPlan(_detail.DCubePlanBase):
 
-    def _gmodel_extra(self, value: gridutils.GridData) -> np.ndarray:
+    def _model_extra(self, value: gridutils.GridData) -> np.ndarray:
         # The slit has no position on the sky, so the extra outputs of the
-        # gmodel, which are on the sky, are plain arrays
+        # model, which are on the sky, are plain arrays
         return value.data
 
     def evaluate(

@@ -8,7 +8,7 @@ import numpy as np
 from gbkfit.dataset import Dataset
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.instrument import Instrument
-from gbkfit.model.base import GModel, Selection
+from gbkfit.model.base import Model, Selection
 from gbkfit.utils import gridutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
 
@@ -32,7 +32,7 @@ ModelData: TypeAlias = dict[str, dict[str, DeviceArray | None]]
 
 class Observable(parseutils.TypedSerializable, abc.ABC):
     """
-    What a dataset measures, made from a gmodel seen through an
+    What a dataset measures, made from a model seen through an
     instrument: the form of the data (their items, see keys) and their
     grid.
 
@@ -62,8 +62,8 @@ class Observable(parseutils.TypedSerializable, abc.ABC):
 
     @staticmethod
     @abc.abstractmethod
-    def is_compatible(gmodel: GModel) -> bool:
-        """Check whether a gmodel can be observed as this observable."""
+    def is_compatible(model: Model) -> bool:
+        """Check whether a model can be observed as this observable."""
         pass
 
     @classmethod
@@ -178,27 +178,27 @@ class Observable(parseutils.TypedSerializable, abc.ABC):
         """
         pass
 
-    def require_compatible(self, gmodel: GModel) -> None:
+    def require_compatible(self, model: Model) -> None:
         """
-        Check that a gmodel can be observed as this observable.
+        Check that a model can be observed as this observable.
 
         Parameters
         ----------
-        gmodel : GModel
-            The gmodel.
+        model : Model
+            The model.
 
         Raises
         ------
         ConfigError
-            If the gmodel cannot be observed as this observable.
+            If the model cannot be observed as this observable.
         """
-        if not self.is_compatible(gmodel):
+        if not self.is_compatible(model):
             observable_desc = parseutils.make_typed_desc(
                 self.__class__, 'observable')
-            gmodel_desc = parseutils.make_typed_desc(
-                gmodel.__class__, 'gmodel')
+            model_desc = parseutils.make_typed_desc(
+                model.__class__, 'model')
             raise ConfigError(
-                f"{observable_desc} is not compatible with {gmodel_desc}")
+                f"{observable_desc} is not compatible with {model_desc}")
 
     def require_matching(self, dataset: Dataset) -> None:
         """
@@ -272,7 +272,7 @@ class Observable(parseutils.TypedSerializable, abc.ABC):
     def plan(
             self,
             driver: Driver,
-            gmodel: GModel,
+            model: Model,
             foreground: 'Foreground',
             instrument: Instrument,
             scale: Sequence[int],
@@ -280,14 +280,14 @@ class Observable(parseutils.TypedSerializable, abc.ABC):
             selection: Selection
     ) -> 'ObservablePlan':
         """
-        Plan the evaluation of a gmodel as this observable.
+        Plan the evaluation of a model as this observable.
 
         Parameters
         ----------
         driver : Driver
             The driver it is evaluated on.
-        gmodel : GModel
-            The gmodel.
+        model : Model
+            The model.
         foreground : Foreground
             What the light meets before the telescope.
         instrument : Instrument
@@ -298,7 +298,7 @@ class Observable(parseutils.TypedSerializable, abc.ABC):
         dtype : np.dtype
             The floating type of the model.
         selection : Selection
-            What of the gmodel is seen.
+            What of the model is seen.
 
         Returns
         -------
@@ -309,7 +309,7 @@ class Observable(parseutils.TypedSerializable, abc.ABC):
 
 
 class ObservablePlan(abc.ABC):
-    """The evaluation of a gmodel as an observable."""
+    """The evaluation of a model as an observable."""
 
     @abc.abstractmethod
     def evaluate(
@@ -323,10 +323,10 @@ class ObservablePlan(abc.ABC):
         Parameters
         ----------
         params : dict
-            The parameters of the gmodel.
+            The parameters of the model.
         out_extra : dict, optional
-            Where the extra outputs go, if wanted; those of the gmodel are
-            prefixed 'gmodel_'.
+            Where the extra outputs go, if wanted; those of the model are
+            prefixed 'model_'.
 
         Returns
         -------

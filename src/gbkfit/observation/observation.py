@@ -6,7 +6,7 @@ import numpy as np
 from gbkfit.dataset import Dataset
 from gbkfit.driver import Driver, driver_parser
 from gbkfit.instrument import Instrument, instrument_parser
-from gbkfit.model.base import GModel, Selection
+from gbkfit.model.base import Model, Selection
 from gbkfit.utils import parseutils
 from gbkfit.utils.parseutils import ConfigError
 from .foreground import Foreground, foreground_parser
@@ -22,7 +22,7 @@ __all__ = [
 
 class Observation(parseutils.Serializable):
     """
-    A gmodel seen as an observable, through a foreground (e.g. a
+    A model seen as an observable, through a foreground (e.g. a
     gravitational lens) and an instrument, and optionally its data, which
     the model is compared with under a likelihood.
 
@@ -40,11 +40,11 @@ class Observation(parseutils.Serializable):
         What the light meets before the telescope; nothing by default.
     instrument : Instrument, optional
         The telescope and the instrument; a perfect one by default.
-    gmodel : str, optional
-        The name of the gmodel it observes; required only when there are
+    model : str, optional
+        The name of the model it observes; required only when there are
         several (see ObservationGroup).
     components, lines : Sequence of str, optional
-        The names of the components of the gmodel and of their emission
+        The names of the components of the model and of their emission
         lines that it sees (e.g. the tracer and the line of the data); all
         by default (see Selection).
     data : Dataset, optional
@@ -120,7 +120,7 @@ class Observation(parseutils.Serializable):
         """
         kwargs = dict(prefix=prefix, dump_path=dump_path, overwrite=overwrite)
         name = dict(name=self._name) if self._name is not None else {}
-        gmodel = dict(gmodel=self._gmodel) if self._gmodel is not None else {}
+        model = dict(model=self._model) if self._model is not None else {}
         selection = self._selection
         components = {} if selection.components is None else dict(
             components=list(selection.components))
@@ -131,7 +131,7 @@ class Observation(parseutils.Serializable):
             data={k: v for k, v in self._data.dump(**kwargs).items()
                   if k != 'type'},
             likelihood=likelihood_parser.dump(self._likelihood))
-        return name | gmodel | components | lines | data | dict(
+        return name | model | components | lines | data | dict(
             driver=driver_parser.dump(self._driver),
             foreground=foreground_parser.dump(self._foreground, **kwargs),
             instrument=instrument_parser.dump(self._instrument, **kwargs),
@@ -146,7 +146,7 @@ class Observation(parseutils.Serializable):
             driver: Driver | None = None,
             foreground: Foreground | None = None,
             instrument: Instrument | None = None,
-            gmodel: str | None = None,
+            model: str | None = None,
             components: Sequence[str] | None = None,
             lines: Sequence[str] | None = None,
             data: Dataset | None = None,
@@ -156,8 +156,8 @@ class Observation(parseutils.Serializable):
             name: str | None = None
     ):
         parseutils.check_name(name)
-        if gmodel is not None:
-            parseutils.check_name(gmodel)
+        if model is not None:
+            parseutils.check_name(model)
         if components is not None:
             components = tuple(components)
             for component in components:
@@ -191,7 +191,7 @@ class Observation(parseutils.Serializable):
         self._observable = observable
         self._foreground = foreground
         self._instrument = instrument
-        self._gmodel = gmodel
+        self._model = model
         self._selection = Selection(components, lines)
         self._data = data
         self._likelihood = likelihood
@@ -203,12 +203,12 @@ class Observation(parseutils.Serializable):
         """Return its name, if any."""
         return self._name
 
-    def gmodel(self) -> str | None:
-        """Return the name of the gmodel it observes, if given."""
-        return self._gmodel
+    def model(self) -> str | None:
+        """Return the name of the model it observes, if given."""
+        return self._model
 
     def selection(self) -> Selection:
-        """Return what of the gmodel it sees."""
+        """Return what of the model it sees."""
         return self._selection
 
     def driver(self) -> Driver:
@@ -243,14 +243,14 @@ class Observation(parseutils.Serializable):
         """Return the floating type of the model."""
         return self._dtype
 
-    def plan(self, gmodel: GModel) -> ObservablePlan:
+    def plan(self, model: Model) -> ObservablePlan:
         """
-        Plan the evaluation of a gmodel as this observation.
+        Plan the evaluation of a model as this observation.
 
         Parameters
         ----------
-        gmodel : GModel
-            The gmodel.
+        model : Model
+            The model.
 
         Returns
         -------
@@ -260,11 +260,11 @@ class Observation(parseutils.Serializable):
         Raises
         ------
         ConfigError
-            If the gmodel cannot be observed as the observable.
+            If the model cannot be observed as the observable.
         """
-        self._observable.require_compatible(gmodel)
+        self._observable.require_compatible(model)
         return self._observable.plan(
-            self._driver, gmodel, self._foreground, self._instrument,
+            self._driver, model, self._foreground, self._instrument,
             self._scale, self._dtype, self._selection)
 
 

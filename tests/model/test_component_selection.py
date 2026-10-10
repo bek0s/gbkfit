@@ -9,7 +9,7 @@ import gbkfit.params
 import numpy as np
 import pytest
 
-from gbkfit.model import gmodel_parser
+from gbkfit.model import model_parser
 from gbkfit.observation import ObservationGroup, observation_parser
 
 
@@ -43,7 +43,7 @@ def observation(driver, components=None, **options):
 
 def evaluate(gmodel, observations, properties):
     group = ObservationGroup(
-        [gmodel_parser.load(copy.deepcopy(gmodel))], observations)
+        [model_parser.load(copy.deepcopy(gmodel))], observations)
     params = gbkfit.params.EvaluationParams(group.pdescs(), properties)
     return [data['spectra']['d'].copy()
             for data in group.model_h(params.evaluate())]

@@ -10,7 +10,7 @@ import pytest
 import scipy.integrate
 import scipy.special
 
-from gbkfit.model import gmodel_parser
+from gbkfit.model import model_parser
 from gbkfit.model.mass import (
     MassExponentialDisk, MassModel, MassPseudoIsothermal, mass_model_parser)
 from gbkfit.utils.parseutils import ConfigError
@@ -100,16 +100,16 @@ DISK_PROPERTIES = dict(
     xpos=0, ypos=0, posa=30, incl=60, vsys=0, bpt_a=1, bpt_s=4, dpt_a=15)
 
 
-def kinematics(gmodel_type, disk_type, vptraits, mass_model=None):
+def kinematics(model_type, disk_type, vptraits, mass_model=None):
     disk = DISK | dict(type=disk_type, vptraits=vptraits)
-    if gmodel_type == 'kinematics_3d':
+    if model_type == 'kinematics_3d':
         disk |= dict(bhtraits=dict(type='sech2'))
     if disk_type == 'mcdisk':
         disk |= dict(cflux=1e-3)
-    info = dict(type=gmodel_type, components=[disk])
+    info = dict(type=model_type, components=[disk])
     if mass_model is not None:
         info |= dict(mass_model=copy.deepcopy(mass_model))
-    return gmodel_parser.load(info)
+    return model_parser.load(info)
 
 
 def evaluate(driver, gmodel, properties):
@@ -121,25 +121,25 @@ def evaluate(driver, gmodel, properties):
     return group.model_h(params.evaluate())[0]['spectra']['d'].copy()
 
 
-@pytest.mark.parametrize('gmodel_type, disk_type', [
+@pytest.mark.parametrize('model_type, disk_type', [
     ('kinematics_2d', 'smdisk'),
     ('kinematics_3d', 'smdisk'),
     ('kinematics_3d', 'mcdisk')])
 def test_mass_trait_is_the_circular_velocity_at_the_subnodes(
-        driver, gmodel_type, disk_type):
+        driver, model_type, disk_type):
     # A disk with the trait 'mass' is the disk whose node-wise tangential
     # velocity at its subnodes is the circular velocity of the mass model
     massive = kinematics(
-        gmodel_type, disk_type, dict(type='mass'), MASS_MODEL)
+        model_type, disk_type, dict(type='mass'), MASS_MODEL)
     given = kinematics(
-        gmodel_type, disk_type,
+        model_type, disk_type,
         dict(type='nw_tan_uniform', sampling='subrings'))
     subrnodes = np.array(given.constants()['subrnodes'])
     vcirc = mass_model_parser.load(copy.deepcopy(MASS_MODEL)).vcirc(
         subrnodes, MASS_PROPERTIES)
     assert vcirc.max() > 100
     properties = DISK_PROPERTIES
-    if gmodel_type == 'kinematics_3d':
+    if model_type == 'kinematics_3d':
         properties |= dict(bht_s=1)
     np.testing.assert_allclose(
         evaluate(driver, massive, properties | MASS_PROPERTIES),
@@ -153,9 +153,9 @@ def test_mass_trait_parameters_and_round_trip():
     # gmodel's
     assert not any(name.startswith('vpt') for name in gmodel.pdescs())
     assert set(MASS_PROPERTIES) <= set(gmodel.pdescs())
-    dumped = gmodel_parser.dump(gmodel)
+    dumped = model_parser.dump(gmodel)
     assert dumped['mass_model'] == MASS_MODEL
-    assert gmodel_parser.dump(gmodel_parser.load(copy.deepcopy(dumped))) \
+    assert model_parser.dump(model_parser.load(copy.deepcopy(dumped))) \
         == dumped
 
 

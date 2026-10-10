@@ -147,7 +147,7 @@ def test_height_traits_at_each_height(driver, height, values, factor):
         group.pdescs(), properties | dict(incl=0))
     extra = {}
     group.model_h(params.evaluate(), extra)
-    ddata = extra['observation0_gmodel_component0_ddata']
+    ddata = extra['observation0_model_component0_ddata']
     coords = ddata.coords
     nz = ddata.data.shape[0]
     z = coords.rval[2] + (np.arange(nz) - coords.rpix[2]) * coords.step[2]
