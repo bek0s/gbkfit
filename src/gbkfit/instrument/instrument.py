@@ -2,6 +2,8 @@
 The instrument: the primary beam, the PSF and the LSF together.
 """
 
+from typing import Any
+
 from gbkfit.utils import parseutils
 from .lsfs import LSF, lsf_parser
 from .primary_beams import PrimaryBeam, primary_beam_parser
@@ -31,7 +33,7 @@ class Instrument(parseutils.Serializable):
     """
 
     @classmethod
-    def load(cls, info):
+    def load(cls, info: dict[str, Any]) -> 'Instrument':
         parseutils.load_option_and_update_info(
             primary_beam_parser, info, 'primary_beam')
         parseutils.load_option_and_update_info(psf_parser, info, 'psf')
@@ -39,7 +41,10 @@ class Instrument(parseutils.Serializable):
         return cls(**parseutils.parse_options_for_callable(
             info, cls.__init__))
 
-    def dump(self, prefix='', dump_path=True, overwrite=False):
+    def dump(
+            self, prefix: str = '', dump_path: bool = True,
+            overwrite: bool = False
+    ) -> dict[str, Any]:
         """
         Dump the instrument to its configuration.
 

@@ -9,7 +9,7 @@ along the spectral axis (see varying).
 
 import abc
 import os
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 import astropy.io.fits
@@ -349,7 +349,7 @@ class PSFGauss(PSF):
         self._ratio = ratio
         self._posa = posa
 
-    def _extent(self):
+    def _extent(self) -> float:
         """
         The radius out to which it is drawn (see MIN_EXTENT). The
         wings of a 2D Gaussian beyond r hold exp(-r^2 / 2 sigma^2).
@@ -424,7 +424,7 @@ class PSFGGauss(PSF):
         self._ratio = ratio
         self._posa = posa
 
-    def _extent(self):
+    def _extent(self) -> float:
         """
         The radius out to which it is drawn (see MIN_EXTENT). The
         flux of a 2D ggauss within r is P(2 / beta, (r / alpha)^beta),
@@ -472,7 +472,7 @@ class PSFMoffat(PSF):
     VARYING_OPTIONS = dict(alpha='arcsec', beta='', ratio='', posa='deg')
 
     @staticmethod
-    def type():
+    def type() -> str:
         return 'moffat'
 
     def dump(
@@ -504,7 +504,7 @@ class PSFMoffat(PSF):
         self._ratio = ratio
         self._posa = posa
 
-    def _extent(self):
+    def _extent(self) -> float:
         """
         The radius out to which it is drawn (see MIN_EXTENT). The
         wings of a 2D Moffat beyond r hold (1 + (r / alpha)^2)^(1 - beta).
@@ -659,14 +659,18 @@ class PSFSum(PSF):
     def varies(self) -> bool:
         return any(psf.varies() for psf in self._psfs)
 
-    def at(self, points, rest=None):
+    def at(
+            self, points: u.Quantity, rest: u.Quantity | None = None
+    ) -> 'PSF | list[PSF]':
         if not self.varies():
             return super().at(points, rest)
         return varying.per_point(points, lambda points_: [
             PSFSum(psfs, self._weights) for psfs in
             _detail.terms_at(self._psfs, points_, rest)])
 
-    def velocity_range(self, rest=None):
+    def velocity_range(
+            self, rest: u.Quantity | None = None
+    ) -> tuple[float, float]:
         return _detail.terms_velocity_range(self._psfs, rest)
 
     def _size_impl(self, step: tuple[float, float]) -> tuple[float, float]:
@@ -724,14 +728,18 @@ class PSFConvolution(PSF):
     def varies(self) -> bool:
         return any(psf.varies() for psf in self._psfs)
 
-    def at(self, points, rest=None):
+    def at(
+            self, points: u.Quantity, rest: u.Quantity | None = None
+    ) -> 'PSF | list[PSF]':
         if not self.varies():
             return super().at(points, rest)
         return varying.per_point(points, lambda points_: [
             PSFConvolution(psfs) for psfs in
             _detail.terms_at(self._psfs, points_, rest)])
 
-    def velocity_range(self, rest=None):
+    def velocity_range(
+            self, rest: u.Quantity | None = None
+    ) -> tuple[float, float]:
         return _detail.terms_velocity_range(self._psfs, rest)
 
     def _size_impl(self, step: tuple[float, float]) -> tuple[float, float]:
@@ -828,7 +836,9 @@ class PSFGaussBeam(PSF):
         return self._gauss._asarray_impl(step, size, offset, rota)
 
 
-def _read_images(x):
+def _read_images(
+        x: str | Mapping[str, Any]
+) -> tuple[np.ndarray, u.Quantity | None, tuple[float, float] | None]:
     """
     The PSF images of a FITS cube (nz, ny, nx; in the orientation of the
     model), the point of each image on the spectral axis (or None if the
@@ -939,11 +949,15 @@ class PSFImages(PSF):
     def varies(self) -> bool:
         return True
 
-    def at(self, points, rest=None):
+    def at(
+            self, points: u.Quantity, rest: u.Quantity | None = None
+    ) -> 'PSF | list[PSF]':
         return varying.per_point(
             points, lambda points_: self._at(points_, rest))
 
-    def _at(self, points, rest):
+    def _at(
+            self, points: u.Quantity, rest: u.Quantity | None
+    ) -> list[PSFImage]:
         """The image of each of the points (1D)."""
         blends = varying.blend(self._points, points, rest)
         psfs = {}
@@ -952,15 +966,23 @@ class PSFImages(PSF):
                 (1 - t) * self._data[i] + t * self._data[j], self._step)
         return [psfs[blend] for blend in blends]
 
-    def velocity_range(self, rest=None):
+    def velocity_range(
+            self, rest: u.Quantity | None = None
+    ) -> tuple[float, float]:
         points = varying.to_velocities(self._points, rest)
         return float(points.min()), float(points.max())
 
-    def _size_impl(self, step):
+    def _size_impl(self, step: tuple[float, float]) -> tuple[float, float]:
         raise RuntimeError(
             "PSF images give an image at each channel (see at)")
 
-    def _asarray_impl(self, step, size, offset, rota):
+    def _asarray_impl(
+            self,
+            step: tuple[float, float],
+            size: tuple[int, int],
+            offset: tuple[int, int],
+            rota: float
+    ) -> np.ndarray:
         raise RuntimeError(
             "PSF images give an image at each channel (see at)")
 
@@ -988,19 +1010,29 @@ class PSFVarying(PSF):
     def varies(self) -> bool:
         return True
 
-    def at(self, points, rest=None):
+    def at(
+            self, points: u.Quantity, rest: u.Quantity | None = None
+    ) -> 'PSF | list[PSF]':
         return varying.per_point(
             points, lambda points_: self._options.at(points_, rest))
 
-    def velocity_range(self, rest=None):
+    def velocity_range(
+            self, rest: u.Quantity | None = None
+    ) -> tuple[float, float]:
         return self._options.velocity_range(rest)
 
-    def _size_impl(self, step):
+    def _size_impl(self, step: tuple[float, float]) -> tuple[float, float]:
         raise RuntimeError(
             "a PSF that varies along the spectral axis has a size at each "
             "channel (see at)")
 
-    def _asarray_impl(self, step, size, offset, rota):
+    def _asarray_impl(
+            self,
+            step: tuple[float, float],
+            size: tuple[int, int],
+            offset: tuple[int, int],
+            rota: float
+    ) -> np.ndarray:
         raise RuntimeError(
             "a PSF that varies along the spectral axis is drawn at each "
             "channel (see at)")

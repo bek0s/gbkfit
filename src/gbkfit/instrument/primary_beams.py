@@ -6,6 +6,7 @@ where it points (e.g. the primary beam of a radio interferometer).
 import abc
 import os.path
 from collections.abc import Sequence
+from typing import Any
 
 import numpy as np
 import scipy.ndimage
@@ -36,7 +37,10 @@ class PrimaryBeam(parseutils.TypedSerializable, abc.ABC):
     """
 
     @abc.abstractmethod
-    def dump(self, prefix='', dump_path=True, overwrite=False):
+    def dump(
+            self, prefix: str = '', dump_path: bool = True,
+            overwrite: bool = False
+    ) -> dict[str, Any]:
         """
         Dump the response to its configuration.
 
@@ -87,7 +91,10 @@ class PrimaryBeamRadial(PrimaryBeam, abc.ABC):
         The pointing (arcsec, like xpos and ypos).
     """
 
-    def dump(self, prefix='', dump_path=True, overwrite=False):
+    def dump(
+            self, prefix: str = '', dump_path: bool = True,
+            overwrite: bool = False
+    ) -> dict[str, Any]:
         # A radial response has no data to write
         return dict(type=self.type(), fwhm=self._fwhm, x=self._x, y=self._y)
 
@@ -97,7 +104,7 @@ class PrimaryBeamRadial(PrimaryBeam, abc.ABC):
         self._x = x
         self._y = y
 
-    def response(self, grid):
+    def response(self, grid: gridutils.Grid) -> np.ndarray:
         x, y = gridutils.sky_positions(grid)
         radius = np.hypot(x - self._x, y - self._y)
         return self._response_impl(radius / self._fwhm)
@@ -112,10 +119,10 @@ class PrimaryBeamGauss(PrimaryBeamRadial):
     """A Gaussian response."""
 
     @staticmethod
-    def type():
+    def type() -> str:
         return 'gauss'
 
-    def _response_impl(self, radius):
+    def _response_impl(self, radius: np.ndarray) -> np.ndarray:
         return np.exp(-4 * np.log(2) * radius ** 2)
 
 
@@ -123,10 +130,10 @@ class PrimaryBeamAiry(PrimaryBeamRadial):
     """The response of a uniformly illuminated dish: an Airy pattern."""
 
     @staticmethod
-    def type():
+    def type() -> str:
         return 'airy'
 
-    def _response_impl(self, radius):
+    def _response_impl(self, radius: np.ndarray) -> np.ndarray:
         u = 2 * _AIRY_HALF_MAXIMUM * radius
         u_safe = np.where(u > 0, u, 1)
         return np.where(u > 0, (2 * scipy.special.j1(u_safe) / u_safe) ** 2, 1)
@@ -154,11 +161,13 @@ class PrimaryBeamImage(PrimaryBeam):
     """
 
     @staticmethod
-    def type():
+    def type() -> str:
         return 'image'
 
     @classmethod
-    def load(cls, info, prefix=''):
+    def load(
+            cls, info: dict[str, Any], prefix: str = ''
+    ) -> 'PrimaryBeamImage':
         with parseutils.config_path('file'):
             file, hdu = parseutils.parse_file(
                 info.get('file') or {})
@@ -174,7 +183,10 @@ class PrimaryBeamImage(PrimaryBeam):
         return cls(**parseutils.parse_options_for_callable(
             info, cls.__init__))
 
-    def dump(self, prefix='', dump_path=True, overwrite=False):
+    def dump(
+            self, prefix: str = '', dump_path: bool = True,
+            overwrite: bool = False
+    ) -> dict[str, Any]:
         filename = f'{prefix}primary_beam.fits'
         coords = self._grid.coords
         fitsutils.write_data(filename, self._data, coords, None, overwrite)
@@ -198,7 +210,7 @@ class PrimaryBeamImage(PrimaryBeam):
         self._grid = gridutils.make_grid(
             data.shape[::-1], step, rpix, rval, rota)
 
-    def response(self, grid):
+    def response(self, grid: gridutils.Grid) -> np.ndarray:
         gridutils.check_overlap(grid, self._grid, "the primary beam image")
         pixel_x, pixel_y = gridutils.pixels_on(grid, self._grid)
         return scipy.ndimage.map_coordinates(

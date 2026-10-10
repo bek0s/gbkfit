@@ -8,7 +8,7 @@ spectral axis (see varying).
 
 import abc
 import os
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 import astropy.io.fits
@@ -309,7 +309,7 @@ class LSFGauss(LSF):
         check_scale('sigma', sigma)
         self._sigma = sigma
 
-    def _extent(self):
+    def _extent(self) -> float:
         """
         The half-width out to which it is drawn (see MIN_EXTENT). The
         flux of a Gaussian within |z| < w is erf(w / sqrt(2) sigma).
@@ -363,7 +363,7 @@ class LSFGGauss(LSF):
         self._alpha = alpha
         self._beta = beta
 
-    def _extent(self):
+    def _extent(self) -> float:
         """
         The half-width out to which it is drawn (see MIN_EXTENT). The
         flux of a ggauss within |z| < w is P(1 / beta, (w / alpha)^beta),
@@ -414,7 +414,7 @@ class LSFLorentz(LSF):
         check_scale('gamma', gamma)
         self._gamma = gamma
 
-    def _extent(self):
+    def _extent(self) -> float:
         """
         The half-width out to which it is drawn (see MIN_EXTENT). The
         flux of a Lorentzian within |z| < w is 2 / pi arctan(w / gamma).
@@ -471,7 +471,7 @@ class LSFMoffat(LSF):
         self._alpha = alpha
         self._beta = beta
 
-    def _extent(self):
+    def _extent(self) -> float:
         """
         The half-width out to which it is drawn (see MIN_EXTENT). The
         flux of a Moffat within |z| < w is I_u(1/2, beta - 1/2), I the
@@ -607,14 +607,18 @@ class LSFSum(LSF):
     def varies(self) -> bool:
         return any(lsf.varies() for lsf in self._lsfs)
 
-    def at(self, points, rest=None):
+    def at(
+            self, points: u.Quantity, rest: u.Quantity | None = None
+    ) -> 'LSF | list[LSF]':
         if not self.varies():
             return super().at(points, rest)
         return varying.per_point(points, lambda points_: [
             LSFSum(lsfs, self._weights) for lsfs in
             _detail.terms_at(self._lsfs, points_, rest)])
 
-    def velocity_range(self, rest=None):
+    def velocity_range(
+            self, rest: u.Quantity | None = None
+    ) -> tuple[float, float]:
         return _detail.terms_velocity_range(self._lsfs, rest)
 
     def _size_impl(self, step: float) -> float:
@@ -665,14 +669,18 @@ class LSFConvolution(LSF):
     def varies(self) -> bool:
         return any(lsf.varies() for lsf in self._lsfs)
 
-    def at(self, points, rest=None):
+    def at(
+            self, points: u.Quantity, rest: u.Quantity | None = None
+    ) -> 'LSF | list[LSF]':
         if not self.varies():
             return super().at(points, rest)
         return varying.per_point(points, lambda points_: [
             LSFConvolution(lsfs) for lsfs in
             _detail.terms_at(self._lsfs, points_, rest)])
 
-    def velocity_range(self, rest=None):
+    def velocity_range(
+            self, rest: u.Quantity | None = None
+    ) -> tuple[float, float]:
         return _detail.terms_velocity_range(self._lsfs, rest)
 
     def _size_impl(self, step: float) -> float:
@@ -735,7 +743,9 @@ class LSFHanning(LSF):
         return _detail.embed(data, (size,), (offset,))
 
 
-def _read_images(x):
+def _read_images(
+        x: str | Mapping[str, Any]
+) -> tuple[np.ndarray, u.Quantity | None, float | None]:
     """
     The LSF profiles of a 2D FITS image (one per row: nz, nk), the point
     of each profile on the spectral axis (from the axis of the rows, if it
@@ -842,11 +852,15 @@ class LSFImages(LSF):
     def varies(self) -> bool:
         return True
 
-    def at(self, points, rest=None):
+    def at(
+            self, points: u.Quantity, rest: u.Quantity | None = None
+    ) -> 'LSF | list[LSF]':
         return varying.per_point(
             points, lambda points_: self._at(points_, rest))
 
-    def _at(self, points, rest):
+    def _at(
+            self, points: u.Quantity, rest: u.Quantity | None
+    ) -> list[LSFImage]:
         """The image of each of the points (1D)."""
         blends = varying.blend(self._points, points, rest)
         lsfs = {}
@@ -855,15 +869,19 @@ class LSFImages(LSF):
                 (1 - t) * self._data[i] + t * self._data[j], self._step)
         return [lsfs[blend] for blend in blends]
 
-    def velocity_range(self, rest=None):
+    def velocity_range(
+            self, rest: u.Quantity | None = None
+    ) -> tuple[float, float]:
         points = varying.to_velocities(self._points, rest)
         return float(points.min()), float(points.max())
 
-    def _size_impl(self, step):
+    def _size_impl(self, step: float) -> float:
         raise RuntimeError(
             "LSF profiles give a profile at each channel (see at)")
 
-    def _asarray_impl(self, step, size, offset):
+    def _asarray_impl(
+            self, step: float, size: int, offset: int
+    ) -> np.ndarray:
         raise RuntimeError(
             "LSF profiles give a profile at each channel (see at)")
 
@@ -891,19 +909,25 @@ class LSFVarying(LSF):
     def varies(self) -> bool:
         return True
 
-    def at(self, points, rest=None):
+    def at(
+            self, points: u.Quantity, rest: u.Quantity | None = None
+    ) -> 'LSF | list[LSF]':
         return varying.per_point(
             points, lambda points_: self._options.at(points_, rest))
 
-    def velocity_range(self, rest=None):
+    def velocity_range(
+            self, rest: u.Quantity | None = None
+    ) -> tuple[float, float]:
         return self._options.velocity_range(rest)
 
-    def _size_impl(self, step):
+    def _size_impl(self, step: float) -> float:
         raise RuntimeError(
             "an LSF that varies along the spectral axis has a size at each "
             "channel (see at)")
 
-    def _asarray_impl(self, step, size, offset):
+    def _asarray_impl(
+            self, step: float, size: int, offset: int
+    ) -> np.ndarray:
         raise RuntimeError(
             "an LSF that varies along the spectral axis is drawn at each "
             "channel (see at)")
