@@ -2,6 +2,7 @@ from collections.abc import Sequence
 from typing import Any
 
 import numpy as np
+import numpy.typing as npt
 
 from gbkfit.dataset import Dataset
 from gbkfit.driver import Driver, driver_parser
@@ -18,6 +19,23 @@ __all__ = [
     'Observation',
     'observation_parser'
 ]
+
+
+def _check_dtype(dtype: npt.DTypeLike) -> np.dtype:
+    """
+    Return the floating type of a model, or raise ConfigError if the
+    native modules have no kernels for it.
+    """
+    supported = Driver.dtypes()
+    try:
+        result = np.dtype(dtype)
+    except TypeError:
+        result = None
+    if result not in supported:
+        raise ConfigError(
+            f"dtype must be one of {[dt.name for dt in supported]}; it is "
+            f"{dtype!r}")
+    return result
 
 
 class Observation(parseutils.Serializable):
@@ -66,8 +84,9 @@ class Observation(parseutils.Serializable):
     ConfigError
         If a name is invalid, the scale is not one integer of at least 1
         for each axis, there is a likelihood without data, the data are
-        not those of the observable, or the observable cannot be seen
-        through the instrument (see Observable.check_instrument).
+        not those of the observable, the observable cannot be seen
+        through the instrument (see Observable.check_instrument), or the
+        dtype is not one of the native modules (see Driver.dtypes).
     """
 
     @classmethod
@@ -196,7 +215,7 @@ class Observation(parseutils.Serializable):
         self._data = data
         self._likelihood = likelihood
         self._scale = scale
-        self._dtype = np.dtype(dtype)
+        self._dtype = _check_dtype(dtype)
         self._name = name
 
     def name(self) -> str | None:

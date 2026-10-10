@@ -1,10 +1,13 @@
 
+from typing import Any
+
 import cupy as cp
 import numpy as np
+import numpy.typing as npt
 from cupy.cuda import cufft
 from cupyx.scipy import fft as cupyx_fft
 
-from gbkfit.driver.fft import DriverFFT
+from gbkfit.driver.base import DeviceArray, DriverFFT
 
 
 __all__ = [
@@ -22,28 +25,36 @@ class DriverFFTCuda(DriverFFT):
     the first call, no device memory is allocated.
     """
 
-    def __init__(self, dtype):
+    def __init__(self, dtype: npt.DTypeLike):
         super().__init__(32)
         self._dtype = np.dtype(dtype)
         self._complex_dtype = np.result_type(self._dtype, np.complex64)
-        self._plans = {}
-        self._data_spectra = {}
-        self._kernel_spectra = {}
+        self._plans: dict[tuple, Any] = {}
+        self._data_spectra: dict[tuple, DeviceArray] = {}
+        self._kernel_spectra: dict[tuple, DeviceArray] = {}
 
-    def __deepcopy__(self, memodict):
-        return self.__class__(self.dtype())
-
-    def dtype(self):
+    def dtype(self) -> np.dtype:
+        """Return the floating type of the transforms."""
         return self._dtype
 
-    def fft_r2c(self, data_r, data_c, axes=(0, 1, 2)):
+    def fft_r2c(
+            self,
+            data_r: DeviceArray,
+            data_c: DeviceArray,
+            axes: tuple[int, ...] = (0, 1, 2)
+    ) -> None:
         key = (data_r.shape, axes, 'r2c')
         if key not in self._plans:
             self._plans[key] = cupyx_fft.get_fft_plan(
                 data_r, axes=axes, value_type='R2C')
         self._plans[key].fft(data_r, data_c, cufft.CUFFT_FORWARD)
 
-    def fft_c2r(self, data_c, data_r, axes=(0, 1, 2)):
+    def fft_c2r(
+            self,
+            data_c: DeviceArray,
+            data_r: DeviceArray,
+            axes: tuple[int, ...] = (0, 1, 2)
+    ) -> None:
         # Note: cuFFT overwrites the input of a c2r transform
         key = (data_r.shape, axes, 'c2r')
         if key not in self._plans:
@@ -53,7 +64,11 @@ class DriverFFTCuda(DriverFFT):
                 axes=axes, value_type='C2R')
         self._plans[key].fft(data_c, data_r, cufft.CUFFT_INVERSE)
 
-    def fft_convolve_cached(self, data1_r, data2_r):
+    def fft_convolve_cached(
+            self,
+            data1_r: DeviceArray,
+            data2_r: DeviceArray
+    ) -> None:
         shape = data1_r.shape
         data1_key = (shape, data1_r.data.ptr)
         data2_key = (shape, data2_r.data.ptr)
@@ -70,7 +85,11 @@ class DriverFFTCuda(DriverFFT):
         data1_c *= self._kernel_spectra[data2_key]
         self.fft_c2r(data1_c, data1_r)
 
-    def fft_convolve_xy_cached(self, data1_r, data2_r):
+    def fft_convolve_xy_cached(
+            self,
+            data1_r: DeviceArray,
+            data2_r: DeviceArray
+    ) -> None:
         # The spectra of the images (2D transforms along y and x), in their
         # own caches; the kernel is broadcast if it has one image
         shape = data1_r.shape
@@ -89,5 +108,6 @@ class DriverFFTCuda(DriverFFT):
         data1_c *= self._kernel_spectra[data2_key]
         self.fft_c2r(data1_c, data1_r, axes)
 
-    def _alloc_spectrum(self, shape):
+    def _alloc_spectrum(self, shape: tuple[int, ...]) -> DeviceArray:
+        """Allocate the spectrum of a real array of a shape."""
         return cp.empty(self.fft_complex_shape(shape), self._complex_dtype)

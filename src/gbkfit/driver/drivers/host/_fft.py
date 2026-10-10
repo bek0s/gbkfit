@@ -1,7 +1,10 @@
 
-import numpy as np
+from typing import Any
 
-from gbkfit.driver.fft import DriverFFT
+import numpy as np
+import numpy.typing as npt
+
+from gbkfit.driver.base import DeviceArray, DriverFFT
 
 
 __all__ = [
@@ -17,22 +20,31 @@ class DriverFFTHost(DriverFFT):
     (including the one of the second array, e.g., the PSF/LSF).
     """
 
-    def __init__(self, native_fft, dtype):
+    def __init__(self, native_fft: Any, dtype: npt.DTypeLike):
         super().__init__(32)
         self._fft = native_fft
         self._dtype = np.dtype(dtype)
 
-    def dtype(self):
+    def dtype(self) -> np.dtype:
+        """Return the floating type of the transforms."""
         return self._dtype
 
-    def fft_r2c(self, data_r, data_c):
+    def fft_r2c(self, data_r: DeviceArray, data_c: DeviceArray) -> None:
         self._fft.fft_r2c(data_r, data_c)
 
-    def fft_c2r(self, data_c, data_r):
+    def fft_c2r(self, data_c: DeviceArray, data_r: DeviceArray) -> None:
         self._fft.fft_c2r(data_c, data_r)
 
-    def fft_convolve_cached(self, data1_r, data2_r):
+    def fft_convolve_cached(
+            self,
+            data1_r: DeviceArray,
+            data2_r: DeviceArray
+    ) -> None:
         self._fft.fft_convolve_cached(data1_r, data2_r)
 
-    def fft_convolve_xy_cached(self, data1_r, data2_r):
+    def fft_convolve_xy_cached(
+            self,
+            data1_r: DeviceArray,
+            data2_r: DeviceArray
+    ) -> None:
         self._fft.fft_convolve_xy_cached(data1_r, data2_r)

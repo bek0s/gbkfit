@@ -5,8 +5,7 @@ import astropy.units as u
 import numpy as np
 
 import gbkfit.math
-from gbkfit.driver import DeviceArray, Driver
-from gbkfit.driver.fft import DriverFFT
+from gbkfit.driver import DeviceArray, Driver, DriverFFT
 from gbkfit.instrument import LSF, LSFPoint, PSF, PSFPoint, PrimaryBeam
 from gbkfit.utils import gridutils
 from gbkfit.utils.parseutils import ConfigError
