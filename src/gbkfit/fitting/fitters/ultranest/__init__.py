@@ -1,7 +1,8 @@
 try:
     import ultranest
-except ModuleNotFoundError:
+except ModuleNotFoundError as e:
     raise ModuleNotFoundError(
-        "to use the ultranest fitter, please install ultranest")
+        "the ultranest fitter needs the optional package ultranest: "
+        "pip install 'gbkfit[ultranest]'") from e
 
 from .core import *

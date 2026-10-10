@@ -1,21 +1,17 @@
+from gbkfit.fitting.base import fitter_parser
 
-from gbkfit.utils import parseutils
 
-
-def _register_fitters():
-    from gbkfit.fitting.base import fitter_parser as abstract_parser
-    parsers = [
+# The fitters, imported when first asked for: most need optional packages
+fitter_parser.register_optional({
+    'lmfit.least_squares':
         'gbkfit.fitting.fitters.lmfit.FitterLMFitLeastSquares',
-        'gbkfit.fitting.fitters.nautilus.FitterNautilus',
-        'gbkfit.fitting.fitters.dynesty.FitterDynestyStatic',
-        'gbkfit.fitting.fitters.dynesty.FitterDynestyDynamic',
-        'gbkfit.fitting.fitters.ultranest.FitterUltraNest',
-        'gbkfit.fitting.fitters.cmaes.FitterCMAES',
-        'gbkfit.fitting.fitters.emcee.FitterEmcee',
+    'scipy.least_squares':
         'gbkfit.fitting.fitters.scipy.FitterScipyLeastSquares',
-        'gbkfit.fitting.fitters.multistart.FitterMultiStart',
-    ]
-    parseutils.register_optional_parsers(abstract_parser, parsers, 'fitter')
-
-
-_register_fitters()
+    'multistart': 'gbkfit.fitting.fitters.multistart.FitterMultiStart',
+    'cmaes': 'gbkfit.fitting.fitters.cmaes.FitterCMAES',
+    'emcee': 'gbkfit.fitting.fitters.emcee.FitterEmcee',
+    'nautilus': 'gbkfit.fitting.fitters.nautilus.FitterNautilus',
+    'dynesty.static': 'gbkfit.fitting.fitters.dynesty.FitterDynestyStatic',
+    'dynesty.dynamic': 'gbkfit.fitting.fitters.dynesty.FitterDynestyDynamic',
+    'ultranest': 'gbkfit.fitting.fitters.ultranest.FitterUltraNest',
+})

@@ -104,6 +104,26 @@ def test_unknown_types_suggest_similar_ones():
         shape_parser.load(dict(type='circel'))
 
 
+def test_optional_types_are_imported_when_asked_for():
+    # A type whose module needs a missing package is listed, but asking
+    # for it says why it is not available (and nothing is imported, or
+    # warned about, before)
+    parser = parseutils.TypedParser(Shape, Circle)
+    parser.register_optional({'square': 'missing_package.shapes.Square'})
+    assert parser.types() == ['circle', 'square']
+    with pytest.raises(
+            parseutils.ConfigError, match="'square' is not available"):
+        parser.load(dict(type='square'))
+    assert list(parser.registered_classes()) == ['circle']
+
+
+def test_optional_types_must_be_registered_as_their_type():
+    parser = parseutils.TypedParser(Shape)
+    parser.register_optional({'disk': 'test_parseutils.Circle'})
+    with pytest.raises(RuntimeError, match="registered as type 'disk'"):
+        parser.load(dict(type='disk', radius=1))
+
+
 def test_options_must_match_the_annotations():
     with pytest.raises(parseutils.ConfigError) as error:
         shape_parser.load(dict(type='circle', radius='a'))
