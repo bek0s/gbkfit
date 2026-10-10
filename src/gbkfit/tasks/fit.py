@@ -25,9 +25,10 @@ def fit(
 ) -> None:
     """
     Fit the models of a configuration to its data, and write the result
-    (see FitResult.dump), the models and residuals at the best fit (FITS),
-    and restart.yaml: the configuration with the free parameters starting
-    at the best fit, to fit again from there (e.g. with another fitter).
+    (see FitResult.dump), the data and the models and residuals at the
+    best fit (FITS; see the plot task), and restart.yaml: the
+    configuration with the free parameters starting at the best fit, to
+    fit again from there (e.g. with another fitter).
 
     Parameters
     ----------
@@ -71,7 +72,7 @@ def fit(
 
     _log.info(f"saving result under '{output_dir}'...")
     result.dump(output_dir)
-    outputs = _detail.evaluation_outputs(
+    outputs = _detail.data_outputs(group) | _detail.evaluation_outputs(
         group, objective, result.best().values, True, True)
     _detail.write_outputs(output_dir, outputs, 'gbkfit_fit_extra')
     _write_restart(cfg, root, params, result, output_dir)

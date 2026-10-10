@@ -217,6 +217,26 @@ def load_params(
             cfg['params'], pdescs=pdescs, constants=constants)
 
 
+def data_outputs(group: ObservationGroup) -> dict[str, Any]:
+    """
+    Return the data of the observations as outputs, by name, in the form
+    their observables give them: their values (data_<i>_<item>_d, NaN
+    where masked) and errors (data_<i>_<item>_e).
+    """
+    outputs = {}
+    for i, observation in enumerate(group.observations()):
+        if (dataset := observation.data()) is None:
+            continue
+        observable = observation.observable()
+        for key in observable.keys():
+            item = dataset[key]
+            outputs[f'data_{i}_{key}_d'] = observable.output(item.data())
+            if item.error() is not None:
+                outputs[f'data_{i}_{key}_e'] = observable.output(
+                    item.error())
+    return outputs
+
+
 def evaluation_outputs(
         group: ObservationGroup,
         objective: Objective | None,
