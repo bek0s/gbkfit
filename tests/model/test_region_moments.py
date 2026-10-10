@@ -158,8 +158,9 @@ def test_region_moments_objective_residual(driver):
     # (model - data) / error is -0.5
     from gbkfit.model import gmodel_parser
     from gbkfit.objective import Objective
+    from gbkfit.instrument import instrument_parser
     from gbkfit.observation import (
-        RegionMoments, Observation, ObservationGroup, instrument_parser)
+        RegionMoments, Observation, ObservationGroup)
     index = np.full((41, 32), -1)
     index[10:20, 5:15] = 0
     index[20:30, 10:25] = 1

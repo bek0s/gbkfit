@@ -1,4 +1,11 @@
+"""
+Line spread functions (LSFs): how the instrument spreads the light of a
+single velocity along the spectral axis.
 
+Widths are in km/s.
+"""
+
+import abc
 import os
 from collections.abc import Sequence
 from typing import Any
@@ -8,64 +15,146 @@ import scipy.ndimage
 import scipy.special
 
 import gbkfit.math
-from gbkfit.psflsf.base import (
-    LSF, MIN_EXTENT, WING_FLUX, check_scale, embed, lsf_parser)
 from gbkfit.utils import fitsutils, gridutils, parseutils
+from gbkfit.utils.parseutils import ConfigError
+from . import _detail
+from ._detail import MIN_EXTENT, WING_FLUX, check_scale
 
 
 __all__ = [
-    'LSFPoint',
+    'LSF',
+    'LSFConvolution',
     'LSFGauss',
     'LSFGGauss',
+    'LSFHanning',
+    'LSFImage',
     'LSFLorentz',
     'LSFMoffat',
-    'LSFImage',
+    'LSFPoint',
     'LSFSum',
-    'LSFConvolution',
-    'LSFHanning'
+    'lsf_parser'
 ]
 
 
+class LSF(parseutils.TypedSerializable, abc.ABC):
+    """
+    A line spread function, drawn on arrays of channels.
+    """
+
+    @abc.abstractmethod
+    def dump(
+            self, prefix: str = '', dump_path: bool = True,
+            overwrite: bool = False
+    ) -> dict[str, Any]:
+        """
+        Dump the LSF to its configuration.
+
+        Parameters
+        ----------
+        prefix : str, optional
+            The start of the names of the files of its data (e.g. an
+            image), if any.
+        dump_path : bool, optional
+            Whether the configuration has the paths of the files, or only
+            their names.
+        overwrite : bool, optional
+            Whether to overwrite existing files.
+
+        Returns
+        -------
+        dict
+            The options.
+        """
+
+    def size(self, step: float) -> int:
+        """
+        Return the size of the array that holds the LSF.
+
+        Parameters
+        ----------
+        step : float
+            The width of the channels (km/s).
+
+        Returns
+        -------
+        int
+            The number of channels, odd.
+
+        Raises
+        ------
+        RuntimeError
+            If the wings of the LSF are too heavy for a finite array.
+        """
+        size = self._size_impl(step)
+        _detail.check_finite_size(self, size)
+        return int(gbkfit.math.roundu_odd(size))
+
+    def asarray(
+            self,
+            step: float,
+            size: int | None = None,
+            offset: int = 0
+    ) -> np.ndarray:
+        """
+        Return the LSF on an array of channels, normalised to sum to 1.
+
+        Parameters
+        ----------
+        step : float
+            The width of the channels (km/s).
+        size : int, optional
+            The number of channels; by default, that of size.
+        offset : int, optional
+            The offset of the centre of the LSF from the channel
+            size // 2. size + offset must be odd.
+
+        Returns
+        -------
+        ndarray
+            The LSF.
+
+        Raises
+        ------
+        RuntimeError
+            If size + offset is even.
+        """
+        if size is None:
+            size = self.size(step)
+        if gbkfit.math.is_even(size + offset):
+            raise RuntimeError(
+                f"invalid LSF size: (size + offset) = "
+                f"({size} + {offset} = {size + offset}), "
+                f"but it must be odd")
+        return self._asarray_impl(step, size, offset)
+
+    @abc.abstractmethod
+    def _size_impl(self, step: float) -> float:
+        """The size of the array that holds the LSF, before rounding."""
+
+    @abc.abstractmethod
+    def _asarray_impl(
+            self,
+            step: float,
+            size: int,
+            offset: int
+    ) -> np.ndarray:
+        """The LSF on an array (see asarray)."""
+
+
 def _create_grid_1d(size: int, step: float, offset: int) -> np.ndarray:
+    """The velocities of the channels of an array from its centre."""
     center = size // 2 + offset
     return (np.array(range(size)) - center) * step
 
 
-def _sum_weights(weights, n, desc):
-    """
-    The weights of the terms of a sum (one for each of n terms), each
-    positive, normalised to sum to 1.
-    """
-    weights = np.asarray(weights, dtype=float)
-    if n < 1:
-        raise RuntimeError(f"{desc} needs at least one term")
-    if weights.shape != (n,) or not np.all(weights > 0):
-        raise RuntimeError(
-            f"{desc} needs a positive weight for each of its {n} terms; "
-            f"its weights are {weights.tolist()}")
-    return weights / weights.sum()
-
-
-def _load_lsf_common(cls, info: dict[str, Any]):
-    return parseutils.parse_options_for_callable(info, cls.__init__)
-
-
 class LSFPoint(LSF):
     """
-    A point-like Line Spread Function (LSF).
-
-    Represents an LSF where all the energy is concentrated at a single
-    point. The output array contains a single nonzero value (1) at the
-    center.
+    A point: all the light stays in its channel.
     """
 
     @staticmethod
     def type() -> str:
         return 'point'
-
-    @classmethod
-    def load(cls, info: dict[str, Any], *args, **kwargs) -> 'LSFPoint':
-        return cls()
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,
@@ -86,18 +175,17 @@ class LSFPoint(LSF):
 
 class LSFGauss(LSF):
     """
-    A Gaussian Line Spread Function (LSF).
-    """
+    A Gaussian, exp(-v^2 / 2 sigma^2).
 
+    Parameters
+    ----------
+    sigma : float
+        The standard deviation (km/s).
+    """
 
     @staticmethod
     def type() -> str:
         return 'gauss'
-
-    @classmethod
-    def load(cls, info: dict[str, Any], *args, **kwargs) -> 'LSFGauss':
-        opts = _load_lsf_common(cls, info)
-        return cls(**opts)
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,
@@ -134,18 +222,19 @@ class LSFGauss(LSF):
 
 class LSFGGauss(LSF):
     """
-    A Generalized Gaussian Line Spread Function (LSF).
-    """
+    A generalised Gaussian, exp(-(|v| / alpha)^beta).
 
+    Parameters
+    ----------
+    alpha : float
+        The scale (km/s).
+    beta : float
+        The shape, > 0: 2 is a Gaussian, and 1 an exponential.
+    """
 
     @staticmethod
     def type() -> str:
         return 'ggauss'
-
-    @classmethod
-    def load(cls, info: dict[str, Any], *args, **kwargs) -> 'LSFGGauss':
-        opts = _load_lsf_common(cls, info)
-        return cls(**opts)
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,
@@ -187,18 +276,17 @@ class LSFGGauss(LSF):
 
 class LSFLorentz(LSF):
     """
-    A Lorentzian Line Spread Function (LSF).
-    """
+    A Lorentzian, gamma^2 / (v^2 + gamma^2).
 
+    Parameters
+    ----------
+    gamma : float
+        The scale (km/s): the half width at half maximum.
+    """
 
     @staticmethod
     def type() -> str:
         return 'lorentz'
-
-    @classmethod
-    def load(cls, info: dict[str, Any], *args, **kwargs) -> 'LSFLorentz':
-        opts = _load_lsf_common(cls, info)
-        return cls(**opts)
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,
@@ -235,18 +323,19 @@ class LSFLorentz(LSF):
 
 class LSFMoffat(LSF):
     """
-    A Moffat Line Spread Function (LSF).
-    """
+    A Moffat, (1 + (v / alpha)^2)^(-beta).
 
+    Parameters
+    ----------
+    alpha : float
+        The scale of the core (km/s).
+    beta : float
+        The slope of the wings, > 0.5 (for a finite flux).
+    """
 
     @staticmethod
     def type() -> str:
         return 'moffat'
-
-    @classmethod
-    def load(cls, info: dict[str, Any], *args, **kwargs) -> 'LSFMoffat':
-        opts = _load_lsf_common(cls, info)
-        return cls(**opts)
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,
@@ -260,7 +349,7 @@ class LSFMoffat(LSF):
     def __init__(self, alpha: float, beta: float):
         check_scale('alpha', alpha)
         if not beta > 0.5:
-            raise RuntimeError(
+            raise ConfigError(
                 "a Moffat LSF has finite flux only for beta > 0.5; "
                 f"beta is {beta}")
         self._alpha = alpha
@@ -291,9 +380,19 @@ class LSFMoffat(LSF):
 
 class LSFImage(LSF):
     """
-    An LSF defined by an image, loaded from a FITS file.
+    An LSF given as a 1D image, centred on the centre of the image, and
+    resampled to the channels it is drawn on (with splines of order 5).
 
-    The image is resampled based on the provided step size.
+    Its configuration has its file (a filename, or a dict with the
+    filename and the HDU), and the width of its channels comes from the
+    header unless step is given.
+
+    Parameters
+    ----------
+    data : ndarray
+        The image, finite.
+    step : float, optional
+        The width of the channels of the image (km/s).
     """
 
     @staticmethod
@@ -301,12 +400,13 @@ class LSFImage(LSF):
         return 'image'
 
     @classmethod
-    def load(cls, info: dict[str, Any], *args, **kwargs) -> 'LSFImage':
-        # Read the image, and its channel width in km/s
+    def load(cls, info: dict[str, Any]) -> 'LSFImage':
         data, coords = parseutils.load_option(
-            fitsutils.read_data, info, 'data', required=True)
+            _detail.read_image, info, 'file', required=True)
+        info = dict(info)
+        del info['file']
         info.update(data=data, step=info.get('step', coords.step[0]))
-        return cls(**_load_lsf_common(cls, info))
+        return cls(**parseutils.parse_options_for_callable(info, cls.__init__))
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,
@@ -318,31 +418,26 @@ class LSFImage(LSF):
         fitsutils.write_data(filename, self._data, coords, 0, overwrite)
         return dict(
             type=self.type(),
-            data=filename if dump_path else os.path.basename(filename),
+            file=filename if dump_path else os.path.basename(filename),
             step=self._step)
 
     def __init__(self, data: np.ndarray, step: float = 1.0):
         data = np.squeeze(data)  # Remove singleton dimensions
         if data.ndim != 1:
-            raise RuntimeError(
+            raise ConfigError(
                 f"expected a 1D LSF image, but got shape {data.shape}")
         if not np.all(np.isfinite(data)):
-            raise RuntimeError(
+            raise ConfigError(
                 "non-finite pixels found in the supplied LSF image")
         self._data = data
         self._step = step
 
     def _size_impl(self, step: float) -> float:
-        """Computes the LSF size based on the step ratio."""
         return (self._step / step) * self._data.shape[0]
 
     def _asarray_impl(
             self, step: float, size: int, offset: int
     ) -> np.ndarray:
-        """
-        Resamples the stored LSF image to match the desired step and
-        size. Uses spline interpolation (order=5).
-        """
         scale = step / self._step
         # The centre of the image, and the centre of the LSF in the array,
         # where the analytic LSFs put it
@@ -355,24 +450,17 @@ class LSFImage(LSF):
         return data / np.sum(data)
 
 
-def _dump_terms(
-        lsfs: Sequence[LSF], prefix: str, dump_path: bool, overwrite: bool
-) -> list[dict[str, Any]]:
-    """
-    The options of the LSFs of a sum or a convolution, the files of each
-    named with its own prefix (term0_, term1_, ...).
-    """
-    return [
-        lsf_parser.dump(
-            lsf, prefix=f'{prefix}term{i}_', dump_path=dump_path,
-            overwrite=overwrite)
-        for i, lsf in enumerate(lsfs)]
-
-
 class LSFSum(LSF):
     """
     A sum of LSFs (e.g. a double Gaussian), each with its fraction of the
-    light: the weights, normalised to sum to 1.
+    light.
+
+    Parameters
+    ----------
+    lsfs : Sequence of LSF
+        The LSFs.
+    weights : Sequence of float
+        The weight of each LSF, positive; they are normalised to sum to 1.
     """
 
     @staticmethod
@@ -380,10 +468,10 @@ class LSFSum(LSF):
         return 'sum'
 
     @classmethod
-    def load(cls, info: dict[str, Any], *args, **kwargs) -> 'LSFSum':
+    def load(cls, info: dict[str, Any]) -> 'LSFSum':
         parseutils.load_option_and_update_info(
             lsf_parser, info, 'lsfs', required=True)
-        return cls(**_load_lsf_common(cls, info))
+        return cls(**parseutils.parse_options_for_callable(info, cls.__init__))
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,
@@ -391,12 +479,14 @@ class LSFSum(LSF):
     ) -> dict[str, Any]:
         return dict(
             type=self.type(),
-            lsfs=_dump_terms(self._lsfs, prefix, dump_path, overwrite),
+            lsfs=_detail.dump_terms(
+                lsf_parser, self._lsfs, prefix, dump_path, overwrite),
             weights=self._weights.tolist())
 
     def __init__(self, lsfs: Sequence[LSF], weights: Sequence[float]):
         self._lsfs = tuple(lsfs)
-        self._weights = _sum_weights(weights, len(self._lsfs), "a sum of LSFs")
+        self._weights = _detail.sum_weights(
+            weights, len(self._lsfs), "a sum of LSFs")
 
     def _size_impl(self, step: float) -> float:
         return max(lsf._size_impl(step) for lsf in self._lsfs)
@@ -412,6 +502,11 @@ class LSFConvolution(LSF):
     """
     The convolution of LSFs: e.g. the LSF of an instrument and the
     Hanning smoothing of the channels of the data (see LSFHanning).
+
+    Parameters
+    ----------
+    lsfs : Sequence of LSF
+        The LSFs, at least one.
     """
 
     @staticmethod
@@ -419,10 +514,10 @@ class LSFConvolution(LSF):
         return 'convolution'
 
     @classmethod
-    def load(cls, info: dict[str, Any], *args, **kwargs) -> 'LSFConvolution':
+    def load(cls, info: dict[str, Any]) -> 'LSFConvolution':
         parseutils.load_option_and_update_info(
             lsf_parser, info, 'lsfs', required=True)
-        return cls(**_load_lsf_common(cls, info))
+        return cls(**parseutils.parse_options_for_callable(info, cls.__init__))
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,
@@ -430,11 +525,12 @@ class LSFConvolution(LSF):
     ) -> dict[str, Any]:
         return dict(
             type=self.type(),
-            lsfs=_dump_terms(self._lsfs, prefix, dump_path, overwrite))
+            lsfs=_detail.dump_terms(
+                lsf_parser, self._lsfs, prefix, dump_path, overwrite))
 
     def __init__(self, lsfs: Sequence[LSF]):
         if not lsfs:
-            raise RuntimeError("a convolution of LSFs needs at least one LSF")
+            raise ConfigError("a convolution of LSFs needs at least one LSF")
         self._lsfs = tuple(lsfs)
 
     def _size_impl(self, step: float) -> float:
@@ -447,25 +543,26 @@ class LSFConvolution(LSF):
         data = np.ones(1)
         for lsf in self._lsfs:
             data = np.convolve(data, lsf.asarray(step))
-        return embed(data / data.sum(), (size,), (offset,))
+        return _detail.embed(data / data.sum(), (size,), (offset,))
 
 
 class LSFHanning(LSF):
     """
-    The response of the Hanning smoothing of channels of the given width
-    (km/s): 1/4, 1/2 and 1/4 of the light of each channel goes to the
-    channel before, the channel itself and the channel after. The width
-    must be a multiple of the step it is drawn with (e.g. the channels of
-    the data, with any oversampling).
+    The response of the Hanning smoothing of channels: 1/4, 1/2 and 1/4 of
+    the light of each channel go to the channel before, the channel itself
+    and the channel after.
+
+    Parameters
+    ----------
+    width : float
+        The width of the smoothed channels (km/s); a multiple of the
+        width of the channels it is drawn on (e.g. those of the data,
+        with any oversampling).
     """
 
     @staticmethod
     def type() -> str:
         return 'hanning'
-
-    @classmethod
-    def load(cls, info: dict[str, Any], *args, **kwargs) -> 'LSFHanning':
-        return cls(**_load_lsf_common(cls, info))
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,
@@ -493,4 +590,16 @@ class LSFHanning(LSF):
         steps = self._steps(step)
         data = np.zeros(2 * steps + 1)
         data[[0, steps, 2 * steps]] = 0.25, 0.5, 0.25
-        return embed(data, (size,), (offset,))
+        return _detail.embed(data, (size,), (offset,))
+
+
+lsf_parser = parseutils.TypedParser(LSF, [
+    LSFPoint,
+    LSFGauss,
+    LSFGGauss,
+    LSFLorentz,
+    LSFMoffat,
+    LSFImage,
+    LSFSum,
+    LSFConvolution,
+    LSFHanning])

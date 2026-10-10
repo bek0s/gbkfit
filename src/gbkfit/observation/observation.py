@@ -5,10 +5,10 @@ import numpy as np
 
 from gbkfit.dataset import Dataset
 from gbkfit.driver import Driver, driver_parser
+from gbkfit.instrument import Instrument, instrument_parser
 from gbkfit.model.base import Selection
 from gbkfit.utils import parseutils
 from .foreground import Foreground, foreground_parser
-from .instrument import Instrument, instrument_parser
 from .likelihood import Likelihood, LikelihoodGaussian, likelihood_parser
 from .observables import Observable, observable_parser
 

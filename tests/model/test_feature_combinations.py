@@ -11,10 +11,11 @@ import gbkfit.params
 import numpy as np
 import pytest
 
+from gbkfit.instrument import instrument_parser
 from gbkfit.model import gmodel_parser
 from gbkfit.observation import (
     Foreground, LensDeflectionMap, Observation, ObservationGroup,
-    instrument_parser, observable_parser)
+    observable_parser)
 
 
 def component(name, **options):

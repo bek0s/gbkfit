@@ -1,6 +1,11 @@
-from gbkfit.psflsf import LSF, PSF, lsf_parser, psf_parser
+"""
+The instrument: the primary beam, the PSF and the LSF together.
+"""
+
 from gbkfit.utils import parseutils
-from .primary_beam import PrimaryBeam, primary_beam_parser
+from .lsfs import LSF, lsf_parser
+from .primary_beams import PrimaryBeam, primary_beam_parser
+from .psfs import PSF, psf_parser
 
 
 __all__ = [
@@ -12,8 +17,17 @@ __all__ = [
 class Instrument(parseutils.Serializable):
     """
     What happens to the light of a gmodel in the telescope and the
-    instrument: the primary beam, and the point and line spread functions.
-    Each has its own slot, in the order the light meets them.
+    instrument, in the order the light meets them: the primary beam, and
+    the point and line spread functions.
+
+    Parameters
+    ----------
+    primary_beam : PrimaryBeam, optional
+        The primary beam, if any.
+    psf : PSF, optional
+        The point spread function, if any.
+    lsf : LSF, optional
+        The line spread function, if any.
     """
 
     @classmethod
@@ -27,8 +41,23 @@ class Instrument(parseutils.Serializable):
 
     def dump(self, prefix='', dump_path=True, overwrite=False):
         """
-        The options of the instrument; the data of its parts (images) go
-        to files whose names start with prefix (see PSF.dump).
+        Dump the instrument to its configuration.
+
+        Parameters
+        ----------
+        prefix : str, optional
+            The start of the names of the files of the data of its parts
+            (e.g. images; see PSF.dump).
+        dump_path : bool, optional
+            Whether the configuration has the paths of the files, or only
+            their names.
+        overwrite : bool, optional
+            Whether to overwrite existing files.
+
+        Returns
+        -------
+        dict
+            The options.
         """
         kwargs = dict(prefix=prefix, dump_path=dump_path, overwrite=overwrite)
         return dict(

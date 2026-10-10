@@ -8,9 +8,7 @@ import scipy.integrate
 import scipy.special
 
 import gbkfit.math
-from gbkfit.psflsf import *
-from gbkfit.psflsf.lsfs import *
-from gbkfit.psflsf.psfs import *
+from gbkfit.instrument import *
 
 
 @pytest.mark.parametrize(
@@ -142,21 +140,21 @@ def test_psf_image_round_trip():
 def test_images_in_sums_and_convolutions_have_their_own_files():
     # The images of the terms of a sum or a convolution are written to
     # files named with the prefix and the index of the term
-    from gbkfit.psflsf.lsfs import LSFConvolution, LSFSum
-    from gbkfit.psflsf.psfs import PSFConvolution, PSFSum
+    from gbkfit.instrument import LSFConvolution, LSFSum
+    from gbkfit.instrument import PSFConvolution, PSFSum
     psf_a = PSFImage(np.outer([1, 2, 1], [1, 3, 1]))
     psf_b = PSFImage(np.outer([1, 1, 1], [1, 1, 1]))
     lsf_a = LSFImage(np.array([1, 2, 1]), step=2)
     lsf_b = LSFImage(np.array([1, 1, 1]), step=2)
     psf_sum = psf_parser.dump(
         PSFSum([psf_a, PSFConvolution([psf_b])], [1, 1]), prefix='out_')
-    assert [psf_sum['psfs'][0]['data'],
-            psf_sum['psfs'][1]['psfs'][0]['data']] == [
+    assert [psf_sum['psfs'][0]['file'],
+            psf_sum['psfs'][1]['psfs'][0]['file']] == [
         'out_term0_psf.fits', 'out_term1_term0_psf.fits']
     lsf_sum = lsf_parser.dump(
         LSFSum([lsf_a, LSFConvolution([lsf_b])], [1, 1]), prefix='out_')
-    assert [lsf_sum['lsfs'][0]['data'],
-            lsf_sum['lsfs'][1]['lsfs'][0]['data']] == [
+    assert [lsf_sum['lsfs'][0]['file'],
+            lsf_sum['lsfs'][1]['lsfs'][0]['file']] == [
         'out_term0_lsf.fits', 'out_term1_term0_lsf.fits']
     loaded = psf_parser.load(psf_sum)
     np.testing.assert_array_equal(loaded._psfs[0]._data, psf_a._data)
@@ -192,7 +190,7 @@ def test_psf_image_pixel_scale_is_in_arcsec():
         CTYPE1='RA---TAN', CUNIT1='deg', CDELT1=-0.1 / 3600, CRVAL1=150.0,
         CTYPE2='DEC--TAN', CUNIT2='deg', CDELT2=0.1 / 3600, CRVAL2=2.0))
     fits.writeto('psf.fits', np.ones((9, 9)), header)
-    psf = psf_parser.load(dict(type='image', data='psf.fits'))
+    psf = psf_parser.load(dict(type='image', file='psf.fits'))
     np.testing.assert_allclose(psf._step, (0.1, 0.1), rtol=1e-12)
 
 
@@ -204,7 +202,7 @@ def test_lsf_image_round_trip_and_channel_width_in_km_s():
     np.testing.assert_array_equal(loaded._data, lsf._data)
     header = fits.Header(dict(CTYPE1='VRAD', CUNIT1='m/s', CDELT1=2500.0))
     fits.writeto('lsf_m_s.fits', np.ones(11), header)
-    loaded = lsf_parser.load(dict(type='image', data='lsf_m_s.fits'))
+    loaded = lsf_parser.load(dict(type='image', file='lsf_m_s.fits'))
     np.testing.assert_allclose(loaded._step, 2.5, rtol=1e-12)
 
 
@@ -316,7 +314,7 @@ def test_wide_wings_are_drawn_until_they_hold_the_wing_flux(
     # Profiles with wide wings extend beyond the minimum extent, until
     # their wings hold WING_FLUX of their flux (each wing_flux above is
     # the fraction of the flux beyond a radius, for scale lengths of 1)
-    from gbkfit.psflsf.base import MIN_EXTENT, WING_FLUX
+    from gbkfit.instrument._detail import MIN_EXTENT, WING_FLUX
     extent = profile._extent()
     assert extent > MIN_EXTENT
     np.testing.assert_allclose(wing_flux(extent), WING_FLUX, rtol=1e-6)
@@ -345,8 +343,8 @@ def test_arrays_of_the_default_size_take_no_odd_offset():
 
 
 def test_psf_sum():
-    from gbkfit.psflsf import psf_parser
-    from gbkfit.psflsf.psfs import PSFGauss, PSFMoffat, PSFSum
+    from gbkfit.instrument import psf_parser
+    from gbkfit.instrument import PSFGauss, PSFMoffat, PSFSum
     step = (0.5, 0.5)
     # A sum of one PSF is that PSF
     gauss = PSFGauss(1.0)
@@ -372,8 +370,8 @@ def test_psf_sum():
 
 
 def test_lsf_sum():
-    from gbkfit.psflsf import lsf_parser
-    from gbkfit.psflsf.lsfs import LSFGauss, LSFSum
+    from gbkfit.instrument import lsf_parser
+    from gbkfit.instrument import LSFGauss, LSFSum
     narrow, wide = LSFGauss(10.0), LSFGauss(30.0)
     double = LSFSum([narrow, wide], [2, 2])
     size = double.size(5.0)
@@ -389,13 +387,13 @@ def test_lsf_sum():
 
 @pytest.mark.parametrize('weights', [[1], [1, 0], [1, -1]])
 def test_sum_weights_are_checked(weights):
-    from gbkfit.psflsf.psfs import PSFGauss, PSFSum
+    from gbkfit.instrument import PSFGauss, PSFSum
     with pytest.raises(RuntimeError, match="positive weight"):
         PSFSum([PSFGauss(1.0), PSFGauss(2.0)], weights)
 
 
 def test_lsf_hanning():
-    from gbkfit.psflsf.lsfs import LSFHanning
+    from gbkfit.instrument import LSFHanning
     # 1/4, 1/2 and 1/4 of the light, a channel width apart
     np.testing.assert_allclose(
         LSFHanning(10).asarray(5.0), [0.25, 0, 0.5, 0, 0.25])
@@ -406,8 +404,8 @@ def test_lsf_hanning():
 
 
 def test_lsf_and_psf_convolutions_of_gaussians():
-    from gbkfit.psflsf.lsfs import LSFConvolution, LSFGauss
-    from gbkfit.psflsf.psfs import PSFConvolution, PSFGauss
+    from gbkfit.instrument import LSFConvolution, LSFGauss
+    from gbkfit.instrument import PSFConvolution, PSFGauss
     # The convolution of Gaussians is a Gaussian of the summed variances
     lsf = LSFConvolution([LSFGauss(6.0), LSFGauss(8.0)])
     lsf_size = lsf.size(1.0)
@@ -429,19 +427,19 @@ def test_psf_beam_from_a_header(tmp_path):
     # position angle of the major axis: a Gaussian of sigma bmaj / 2.355,
     # ratio bmin / bmaj, at that position angle
     from astropy.io import fits
-    from gbkfit.psflsf import psf_parser
-    from gbkfit.psflsf.psfs import PSFBeam, PSFGauss
+    from gbkfit.instrument import psf_parser
+    from gbkfit.instrument import PSFGaussBeam, PSFGauss
     header = fits.Header(dict(BMAJ=3 / 3600, BMIN=1.5 / 3600, BPA=30.0))
     fits.writeto(tmp_path / 'cube.fits', np.zeros((2, 2)), header)
-    beam = psf_parser.load(dict(type='beam', file=str(tmp_path / 'cube.fits')))
-    assert isinstance(beam, PSFBeam)
+    beam = psf_parser.load(dict(type='gauss_beam', file=str(tmp_path / 'cube.fits')))
+    assert isinstance(beam, PSFGaussBeam)
     gauss = PSFGauss(3 / np.sqrt(8 * np.log(2)), 0.5, 30)
     for rota in (0, 20):
         np.testing.assert_allclose(
             beam.asarray((0.2, 0.2), rota=rota),
             gauss.asarray((0.2, 0.2), rota=rota), rtol=1e-12)
     dumped = psf_parser.dump(beam)
-    assert dumped['type'] == 'beam' and dumped['bpa'] == 30
+    assert dumped['type'] == 'gauss_beam' and dumped['bpa'] == 30
     np.testing.assert_allclose([dumped['bmaj'], dumped['bmin']], [3, 1.5])
     assert psf_parser.dump(psf_parser.load(dict(dumped))) == dumped
 
@@ -450,6 +448,15 @@ def test_psf_beam_from_a_header(tmp_path):
     (dict(bmaj=1, bmin=2), "at most bmaj"),
     (dict(bmaj=1, bmin=1, file='cube.fits'), "either a file")])
 def test_psf_beam_options_are_checked(info, message):
-    from gbkfit.psflsf import psf_parser
+    from gbkfit.instrument import psf_parser
     with pytest.raises(Exception, match=message):
-        psf_parser.load(dict(type='beam') | info)
+        psf_parser.load(dict(type='gauss_beam') | info)
+
+
+@pytest.mark.parametrize('parser', [psf_parser, lsf_parser])
+def test_unknown_options_of_points_are_reported(parser):
+    # (they used to be ignored silently)
+    from gbkfit.utils import parseutils
+    with parseutils.strict_mode():
+        with pytest.raises(parseutils.ConfigError, match="'sigma'"):
+            parser.load(dict(type='point', sigma=2))

@@ -11,7 +11,7 @@ import pytest
 import scipy.signal
 from modelutils import observation_group
 
-from gbkfit.observation import (
+from gbkfit.instrument import (
     Instrument, PrimaryBeamAiry, PrimaryBeamGauss, instrument_parser)
 from gbkfit.utils import fitsutils, gridutils
 
@@ -106,7 +106,7 @@ def test_primary_beam_points_at_its_position():
 def test_primary_beam_from_an_image(tmp_path):
     # An image of a Gaussian beam, on a grid rotated on the sky, gives the
     # response of the Gaussian beam, and 0 beyond the image
-    from gbkfit.observation import PrimaryBeamImage, primary_beam_parser
+    from gbkfit.instrument import PrimaryBeamImage, primary_beam_parser
     beam_grid = gridutils.make_grid((81, 81), 0.25, rota=25)
     gauss = PrimaryBeamGauss(6, 1, -0.5)
     fitsutils.write_data(
@@ -143,7 +143,7 @@ def test_primary_beam_image_is_placed_by_its_ra_and_dec():
     # An image of a beam that peaks at its reference pixel, which is
     # 3 arcsec east and 2 arcsec north of that of the grid (with 1 arcsec
     # pixels; east is to the left)
-    from gbkfit.observation import PrimaryBeamImage
+    from gbkfit.instrument import PrimaryBeamImage
     beam_grid = gridutils.make_grid((41, 41), 0.5)
     beam = PrimaryBeamImage(
         PrimaryBeamGauss(4).response(beam_grid), 0.5,
@@ -158,8 +158,8 @@ def test_observation_dumps_the_image_of_its_primary_beam(tmp_path):
     # The image of the primary beam of an observation goes to a file named
     # with the prefix of the dump, which can be dumped again (overwrite)
     from gbkfit.driver.drivers.host import DriverHost
-    from gbkfit.observation import (
-        Observation, PrimaryBeamImage, observation_parser)
+    from gbkfit.instrument import PrimaryBeamImage
+    from gbkfit.observation import Observation, observation_parser
     from gbkfit.observation.observables import PixelBrightness
     beam = PrimaryBeamImage(np.ones((8, 8)))
     observation = Observation(

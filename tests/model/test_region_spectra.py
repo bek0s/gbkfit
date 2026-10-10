@@ -122,8 +122,8 @@ def test_region_spectra_objective_residual(driver):
     # (model - data) / error is -0.5
     from gbkfit.model import gmodel_parser
     from gbkfit.objective import Objective
-    from gbkfit.observation import (
-        Instrument, Observation, ObservationGroup, instrument_parser)
+    from gbkfit.instrument import Instrument, instrument_parser
+    from gbkfit.observation import Observation, ObservationGroup
     dmodel = aspec_of_apertures(APERTURES[:2])
     model = evaluate(driver, dmodel)
     observable = observable_of(dmodel)

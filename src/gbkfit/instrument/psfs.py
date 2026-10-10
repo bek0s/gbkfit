@@ -1,4 +1,12 @@
+"""
+Point spread functions (PSFs): how the atmosphere, the telescope and the
+instrument spread the light of a point on the sky.
 
+Widths are in arcsec, and position angles in degrees, from north through
+east, like those of the disks.
+"""
+
+import abc
 import os
 from collections.abc import Sequence
 from typing import Any
@@ -10,21 +18,138 @@ import scipy.signal
 import scipy.special
 
 import gbkfit.math
-from gbkfit.psflsf.base import (
-    MIN_EXTENT, PSF, WING_FLUX, check_ratio, check_scale, embed, psf_parser)
 from gbkfit.utils import fitsutils, gridutils, parseutils
+from gbkfit.utils.parseutils import ConfigError
+from . import _detail
+from ._detail import MIN_EXTENT, WING_FLUX, check_ratio, check_scale
 
 
 __all__ = [
-    'PSFPoint',
-    'PSFGauss',
-    'PSFGGauss',
-    'PSFMoffat',
-    'PSFImage',
-    'PSFSum',
+    'PSF',
     'PSFConvolution',
-    'PSFBeam'
+    'PSFGauss',
+    'PSFGaussBeam',
+    'PSFGGauss',
+    'PSFImage',
+    'PSFMoffat',
+    'PSFPoint',
+    'PSFSum',
+    'psf_parser'
 ]
+
+
+class PSF(parseutils.TypedSerializable, abc.ABC):
+    """
+    A point spread function, drawn on arrays of pixels.
+    """
+
+    @abc.abstractmethod
+    def dump(
+            self, prefix: str = '', dump_path: bool = True,
+            overwrite: bool = False
+    ) -> dict[str, Any]:
+        """
+        Dump the PSF to its configuration.
+
+        Parameters
+        ----------
+        prefix : str, optional
+            The start of the names of the files of its data (e.g. an
+            image), if any.
+        dump_path : bool, optional
+            Whether the configuration has the paths of the files, or only
+            their names.
+        overwrite : bool, optional
+            Whether to overwrite existing files.
+
+        Returns
+        -------
+        dict
+            The options.
+        """
+
+    def size(self, step: tuple[float, float]) -> tuple[int, int]:
+        """
+        Return the size of the array that holds the PSF.
+
+        Parameters
+        ----------
+        step : tuple of float
+            The size of the pixels along x and y (arcsec).
+
+        Returns
+        -------
+        tuple of int
+            The number of pixels along x and y, each odd.
+
+        Raises
+        ------
+        RuntimeError
+            If the wings of the PSF are too heavy for a finite array.
+        """
+        base_size = self._size_impl(step)
+        _detail.check_finite_size(self, *base_size)
+        return (int(gbkfit.math.roundu_odd(base_size[0])),
+                int(gbkfit.math.roundu_odd(base_size[1])))
+
+    def asarray(
+            self,
+            step: tuple[float, float],
+            size: tuple[int, int] | None = None,
+            offset: tuple[int, int] = (0, 0),
+            rota: float = 0
+    ) -> np.ndarray:
+        """
+        Return the PSF on an array of pixels, normalised to sum to 1.
+
+        Parameters
+        ----------
+        step : tuple of float
+            The size of the pixels along x and y (arcsec).
+        size : tuple of int, optional
+            The number of pixels along x and y; by default, that of size.
+        offset : tuple of int, optional
+            The offset of the centre of the PSF from the pixel size // 2,
+            along x and y. Each size + offset must be odd.
+        rota : float, optional
+            The rotation of the pixels on the sky (degrees, see
+            gridutils.Coords): a PSF of position angle posa is drawn at
+            posa - rota.
+
+        Returns
+        -------
+        ndarray
+            The PSF, of shape (ny, nx).
+
+        Raises
+        ------
+        RuntimeError
+            If a size + offset is even.
+        """
+        if size is None:
+            size = self.size(step)
+        if (gbkfit.math.is_even(size[0] + offset[0]) or
+              gbkfit.math.is_even(size[1] + offset[1])):
+            raise RuntimeError(
+                f"invalid PSF size: (size + offset) = "
+                f"({size[0]} + {offset[0]} = {size[0] + offset[0]}, "
+                f"{size[1]} + {offset[1]} = {size[1] + offset[1]}), "
+                f"but both values must be odd")
+        return self._asarray_impl(step, size, offset, rota)
+
+    @abc.abstractmethod
+    def _size_impl(self, step: tuple[float, float]) -> tuple[float, float]:
+        """The size of the array that holds the PSF, before rounding."""
+
+    @abc.abstractmethod
+    def _asarray_impl(
+            self,
+            step: tuple[float, float],
+            size: tuple[int, int],
+            offset: tuple[int, int],
+            rota: float
+    ) -> np.ndarray:
+        """The PSF on an array (see asarray)."""
 
 
 def _create_grid_2d(
@@ -34,6 +159,11 @@ def _create_grid_2d(
         ratio: float,
         posa: float
 ) -> np.ndarray:
+    """
+    The elliptical radius of the pixels of an array from its centre (see
+    PSF.asarray), for an axis ratio and the position angle of the major
+    axis.
+    """
     center_x = size[0] // 2 + offset[0]
     center_y = size[1] // 2 + offset[1]
     x = (np.array(range(size[0])) - center_x) * step[0]
@@ -44,41 +174,14 @@ def _create_grid_2d(
     return np.sqrt(x * x + y * y / (ratio * ratio))
 
 
-def _sum_weights(weights, n, desc):
-    """
-    The weights of the terms of a sum (one for each of n terms), each
-    positive, normalised to sum to 1.
-    """
-    weights = np.asarray(weights, dtype=float)
-    if n < 1:
-        raise RuntimeError(f"{desc} needs at least one term")
-    if weights.shape != (n,) or not np.all(weights > 0):
-        raise RuntimeError(
-            f"{desc} needs a positive weight for each of its {n} terms; "
-            f"its weights are {weights.tolist()}")
-    return weights / weights.sum()
-
-
-def _load_psf_common(cls, info: dict[str, Any]):
-    return parseutils.parse_options_for_callable(info, cls.__init__)
-
-
 class PSFPoint(PSF):
     """
-    A point-like Point Spread Function (PSF).
-
-    Represents a PSF where all the energy is concentrated at a single
-    point. The output array contains a single nonzero value (1) at the
-    center.
+    A point: all the light stays in its pixel.
     """
 
     @staticmethod
     def type() -> str:
         return 'point'
-
-    @classmethod
-    def load(cls, info: dict[str, Any], *args, **kwargs) -> 'PSFPoint':
-        return cls()
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,
@@ -104,18 +207,21 @@ class PSFPoint(PSF):
 
 class PSFGauss(PSF):
     """
-    A Gaussian Point Spread Function (PSF).
-    """
+    An elliptical Gaussian, exp(-r^2 / 2 sigma^2).
 
+    Parameters
+    ----------
+    sigma : float
+        The standard deviation along the major axis (arcsec).
+    ratio : float, optional
+        The axis ratio (minor over major), in (0, 1].
+    posa : float, optional
+        The position angle of the major axis.
+    """
 
     @staticmethod
     def type() -> str:
         return 'gauss'
-
-    @classmethod
-    def load(cls, info: dict[str, Any], *args, **kwargs) -> 'PSFGauss':
-        opts = _load_psf_common(cls, info)
-        return cls(**opts)
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,
@@ -163,18 +269,23 @@ class PSFGauss(PSF):
 
 class PSFGGauss(PSF):
     """
-    A Generalized Gaussian Point Spread Function (PSF).
-    """
+    An elliptical generalised Gaussian, exp(-(r / alpha)^beta).
 
+    Parameters
+    ----------
+    alpha : float
+        The scale length along the major axis (arcsec).
+    beta : float
+        The shape, > 0: 2 is a Gaussian, and 1 an exponential.
+    ratio : float, optional
+        The axis ratio (minor over major), in (0, 1].
+    posa : float, optional
+        The position angle of the major axis.
+    """
 
     @staticmethod
     def type() -> str:
         return 'ggauss'
-
-    @classmethod
-    def load(cls, info: dict[str, Any], *args, **kwargs):
-        opts = _load_psf_common(cls, info)
-        return cls(**opts)
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,
@@ -233,18 +344,23 @@ class PSFGGauss(PSF):
 
 class PSFMoffat(PSF):
     """
-   A Moffat Point Spread Function (PSF).
-   """
+    An elliptical Moffat, (1 + (r / alpha)^2)^(-beta).
 
+    Parameters
+    ----------
+    alpha : float
+        The scale length of the core along the major axis (arcsec).
+    beta : float
+        The slope of the wings, > 1 (for a finite flux).
+    ratio : float, optional
+        The axis ratio (minor over major), in (0, 1].
+    posa : float, optional
+        The position angle of the major axis.
+    """
 
     @staticmethod
     def type():
         return 'moffat'
-
-    @classmethod
-    def load(cls, info: dict[str, Any], *args, **kwargs) -> 'PSFMoffat':
-        opts = _load_psf_common(cls, info)
-        return cls(**opts)
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,
@@ -266,7 +382,7 @@ class PSFMoffat(PSF):
     ):
         check_scale('alpha', alpha)
         if not beta > 1:
-            raise RuntimeError(
+            raise ConfigError(
                 "a Moffat PSF has finite flux only for beta > 1; "
                 f"beta is {beta}")
         check_ratio(ratio)
@@ -305,10 +421,20 @@ class PSFMoffat(PSF):
 
 class PSFImage(PSF):
     """
-    An PSF defined by an image, loaded from a FITS file.
+    A PSF given as an image, centred on the centre of the image, and
+    resampled to the pixels it is drawn on (with splines of order 5).
 
-    The image is resampled based on the provided step size. It is in the
-    frame of the pixels of the data, so it is not rotated with the grid.
+    The image is in the frame of the pixels of the data, so it is not
+    rotated with them. Its configuration has its file (a filename, or a
+    dict with the filename and the HDU), and the size of its pixels comes
+    from the header unless step is given.
+
+    Parameters
+    ----------
+    data : ndarray
+        The image, finite.
+    step : Sequence of float, optional
+        The size of the pixels of the image along x and y (arcsec).
     """
 
     @staticmethod
@@ -316,12 +442,13 @@ class PSFImage(PSF):
         return 'image'
 
     @classmethod
-    def load(cls, info: dict[str, Any], *args, **kwargs) -> 'PSFImage':
-        # Read the image, and its pixel scale in arcsec
+    def load(cls, info: dict[str, Any]) -> 'PSFImage':
         data, coords = parseutils.load_option(
-            fitsutils.read_data, info, 'data', required=True)
+            _detail.read_image, info, 'file', required=True)
+        info = dict(info)
+        del info['file']
         info.update(data=data, step=info.get('step', coords.step))
-        return cls(**_load_psf_common(cls, info))
+        return cls(**parseutils.parse_options_for_callable(info, cls.__init__))
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,
@@ -333,7 +460,7 @@ class PSFImage(PSF):
         fitsutils.write_data(filename, self._data, coords, None, overwrite)
         return dict(
             type=self.type(),
-            data=filename if dump_path else os.path.basename(filename),
+            file=filename if dump_path else os.path.basename(filename),
             step=self._step)
 
     def __init__(
@@ -341,10 +468,10 @@ class PSFImage(PSF):
     ):
         data = np.squeeze(data)  # Remove singleton dimensions
         if data.ndim != 2:
-            raise RuntimeError(
+            raise ConfigError(
                 f"expected a 2D PSF image, but got shape {data.shape}")
         if not np.all(np.isfinite(data)):
-            raise RuntimeError(
+            raise ConfigError(
                 "non-finite pixels found in the supplied PSF image")
         self._data = data
         self._step = tuple(step)
@@ -378,25 +505,17 @@ class PSFImage(PSF):
         return data / np.sum(data)
 
 
-def _dump_terms(
-        psfs: Sequence[PSF], prefix: str, dump_path: bool, overwrite: bool
-) -> list[dict[str, Any]]:
-    """
-    The options of the PSFs of a sum or a convolution, the files of each
-    named with its own prefix (term0_, term1_, ...).
-    """
-    return [
-        psf_parser.dump(
-            psf, prefix=f'{prefix}term{i}_', dump_path=dump_path,
-            overwrite=overwrite)
-        for i, psf in enumerate(psfs)]
-
-
 class PSFSum(PSF):
     """
     A sum of PSFs (e.g. a double Gaussian, or a Gaussian core with Moffat
-    wings), each with its fraction of the light: the weights, normalised
-    to sum to 1.
+    wings), each with its fraction of the light.
+
+    Parameters
+    ----------
+    psfs : Sequence of PSF
+        The PSFs.
+    weights : Sequence of float
+        The weight of each PSF, positive; they are normalised to sum to 1.
     """
 
     @staticmethod
@@ -404,10 +523,10 @@ class PSFSum(PSF):
         return 'sum'
 
     @classmethod
-    def load(cls, info: dict[str, Any], *args, **kwargs) -> 'PSFSum':
+    def load(cls, info: dict[str, Any]) -> 'PSFSum':
         parseutils.load_option_and_update_info(
             psf_parser, info, 'psfs', required=True)
-        return cls(**_load_psf_common(cls, info))
+        return cls(**parseutils.parse_options_for_callable(info, cls.__init__))
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,
@@ -415,12 +534,14 @@ class PSFSum(PSF):
     ) -> dict[str, Any]:
         return dict(
             type=self.type(),
-            psfs=_dump_terms(self._psfs, prefix, dump_path, overwrite),
+            psfs=_detail.dump_terms(
+                psf_parser, self._psfs, prefix, dump_path, overwrite),
             weights=self._weights.tolist())
 
     def __init__(self, psfs: Sequence[PSF], weights: Sequence[float]):
         self._psfs = tuple(psfs)
-        self._weights = _sum_weights(weights, len(self._psfs), "a sum of PSFs")
+        self._weights = _detail.sum_weights(
+            weights, len(self._psfs), "a sum of PSFs")
 
     def _size_impl(self, step: tuple[float, float]) -> tuple[float, float]:
         sizes = np.array([psf._size_impl(step) for psf in self._psfs])
@@ -443,6 +564,11 @@ class PSFConvolution(PSF):
     """
     The convolution of PSFs: e.g. the PSF of an adaptive optics system
     and the seeing, or a PSF and the response of the pixels.
+
+    Parameters
+    ----------
+    psfs : Sequence of PSF
+        The PSFs, at least one.
     """
 
     @staticmethod
@@ -450,10 +576,10 @@ class PSFConvolution(PSF):
         return 'convolution'
 
     @classmethod
-    def load(cls, info: dict[str, Any], *args, **kwargs) -> 'PSFConvolution':
+    def load(cls, info: dict[str, Any]) -> 'PSFConvolution':
         parseutils.load_option_and_update_info(
             psf_parser, info, 'psfs', required=True)
-        return cls(**_load_psf_common(cls, info))
+        return cls(**parseutils.parse_options_for_callable(info, cls.__init__))
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,
@@ -461,11 +587,12 @@ class PSFConvolution(PSF):
     ) -> dict[str, Any]:
         return dict(
             type=self.type(),
-            psfs=_dump_terms(self._psfs, prefix, dump_path, overwrite))
+            psfs=_detail.dump_terms(
+                psf_parser, self._psfs, prefix, dump_path, overwrite))
 
     def __init__(self, psfs: Sequence[PSF]):
         if not psfs:
-            raise RuntimeError("a convolution of PSFs needs at least one PSF")
+            raise ConfigError("a convolution of PSFs needs at least one PSF")
         self._psfs = tuple(psfs)
 
     def _size_impl(self, step: tuple[float, float]) -> tuple[float, float]:
@@ -485,42 +612,48 @@ class PSFConvolution(PSF):
         for psf in self._psfs:
             data = scipy.signal.convolve(
                 data, psf.asarray(step, rota=rota), method='auto')
-        return embed(data / data.sum(), size, offset)
+        return _detail.embed(data / data.sum(), size, offset)
 
 
-class PSFBeam(PSF):
+class PSFGaussBeam(PSF):
     """
-    A Gaussian beam, as radio data give it: the full widths at half
-    maximum of its major and minor axes (bmaj and bmin, arcsec) and the
-    position angle of its major axis (bpa, degrees, north through east).
-    Its load can read them from the header of a FITS file (BMAJ, BMIN and
-    BPA, in degrees), e.g. of the data: {type: beam, file: cube.fits}.
+    An elliptical Gaussian given as radio data give their beams.
+
+    Its configuration can instead have a FITS file (a filename, or a dict
+    with the filename and the HDU), e.g. of the data, whose header has
+    BMAJ, BMIN and BPA (degrees): {type: gauss_beam, file: cube.fits}.
+
+    Parameters
+    ----------
+    bmaj, bmin : float
+        The full widths at half maximum of the major and the minor axes
+        (arcsec).
+    bpa : float, optional
+        The position angle of the major axis.
     """
 
     @staticmethod
     def type() -> str:
-        return 'beam'
+        return 'gauss_beam'
 
     @classmethod
-    def load(cls, info: dict[str, Any], *args, **kwargs) -> 'PSFBeam':
-        desc = parseutils.make_typed_desc(cls, 'PSF')
+    def load(cls, info: dict[str, Any]) -> 'PSFGaussBeam':
         if (file := info.pop('file', None)) is not None:
             if any(key in info for key in ('bmaj', 'bmin', 'bpa')):
-                raise parseutils.ConfigError(
-                    f"{desc} takes either a file or bmaj, bmin and bpa")
+                raise ConfigError(
+                    "give either a file, or bmaj, bmin and bpa")
             with parseutils.config_path('file'):
                 file, hdu = parseutils.parse_file(file)
                 header = astropy.io.fits.getheader(file, hdu)
             missing = [key for key in ('BMAJ', 'BMIN', 'BPA')
                        if key not in header]
             if missing:
-                raise parseutils.ConfigError(
-                    f"{file}: the header has no {missing}")
+                raise ConfigError(f"{file}: the header has no {missing}")
             info.update(
                 bmaj=float(header['BMAJ']) * 3600,
                 bmin=float(header['BMIN']) * 3600,
                 bpa=float(header['BPA']))
-        return cls(**_load_psf_common(cls, info))
+        return cls(**parseutils.parse_options_for_callable(info, cls.__init__))
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,
@@ -533,7 +666,7 @@ class PSFBeam(PSF):
         check_scale('bmaj', bmaj)
         check_scale('bmin', bmin)
         if bmin > bmaj:
-            raise RuntimeError(
+            raise ConfigError(
                 f"bmin must be at most bmaj; they are {bmin} and {bmaj}")
         self._bmaj = bmaj
         self._bmin = bmin
@@ -552,3 +685,14 @@ class PSFBeam(PSF):
             rota: float
     ) -> np.ndarray:
         return self._gauss._asarray_impl(step, size, offset, rota)
+
+
+psf_parser = parseutils.TypedParser(PSF, [
+    PSFPoint,
+    PSFGauss,
+    PSFGGauss,
+    PSFMoffat,
+    PSFImage,
+    PSFSum,
+    PSFConvolution,
+    PSFGaussBeam])

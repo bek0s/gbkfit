@@ -107,7 +107,7 @@ def test_image_psf_matches_the_analytic_psf(driver, evaluate_models):
     # that PSF, on a grid that is not square (an image PSF used to be
     # transposed, and off-centre by half a pixel)
     from astropy.io import fits
-    from gbkfit.psflsf.psfs import PSFGauss
+    from gbkfit.instrument import PSFGauss
     gauss = dict(type='gauss', sigma=1.5, ratio=0.6, posa=30)
     image = PSFGauss(1.5, 0.6, 30).asarray((1, 1), (21, 21))
     fits.writeto('psf.fits', image)
@@ -123,7 +123,7 @@ def test_image_psf_matches_the_analytic_psf(driver, evaluate_models):
         return data[0]['spectra']['d'].copy()
 
     expected = evaluate(gauss)
-    actual = evaluate(dict(type='image', data='psf.fits'))
+    actual = evaluate(dict(type='image', file='psf.fits'))
     difference = np.linalg.norm(actual - expected) / np.linalg.norm(expected)
     assert difference < 1e-3
 
