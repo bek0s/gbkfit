@@ -8,7 +8,7 @@ from gbkfit.utils import fitsutils, gridutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
 from . import _detail
 from .base import Dataset
-from .data import Data, dump_data, load_data
+from .data import Data, FitsFile, dump_data
 
 
 __all__ = [
@@ -21,9 +21,9 @@ class DatasetRegionSpectra(Dataset):
     Spectra in regions of the sky (see Regions; e.g. fibres, apertures,
     bins), with the world coordinates of their spectral axis.
 
-    Its configuration has the options of its one data item beside its own
-    (e.g. data, error and step). The world coordinates of the spectral
-    axis come from the header of the data file unless given.
+    Its configuration has the regions, and the options of from_files: the
+    files of its one data item (data, mask, error) and the world
+    coordinates of its spectral axis.
 
     Parameters
     ----------
@@ -57,21 +57,59 @@ class DatasetRegionSpectra(Dataset):
     def load(
             cls, info: dict[str, Any], prefix: str = ''
     ) -> 'DatasetRegionSpectra':
+        info = dict(info)
         parseutils.load_option_and_update_info(
             regions_parser, info, 'regions', required=True, prefix=prefix)
-        step, rpix, rval, rest = (info.pop(key, None) for key in (
-            'step', 'rpix', 'rval', 'rest'))
-        item = {k: info.pop(k) for k in ('data', 'mask', 'error') if k in info}
+        files = _detail.pop_item_files(info, prefix)
+        return _detail.load_with_files(cls, info, **files)
+
+    @classmethod
+    def from_files(
+            cls,
+            data: FitsFile,
+            regions: Regions,
+            mask: FitsFile | None = None,
+            error: FitsFile | float | None = None,
+            step: float | None = None,
+            rpix: float | None = None,
+            rval: float | None = None,
+            rest: str | astropy.units.Quantity | None = None
+    ) -> 'DatasetRegionSpectra':
+        """
+        Read the dataset from FITS files (the regions along x, the velocity
+        along y), with the world coordinates of the spectral axis of the
+        file of its values unless given.
+
+        Parameters
+        ----------
+        data : str or tuple
+            The file of the spectra: a filename, or a filename and the HDU.
+        regions : Regions
+            The regions.
+        mask : str or tuple, optional
+            The file of the mask.
+        error : str or tuple or float, optional
+            The file of the errors, or one error for all the values.
+        step, rpix, rval : float, optional
+            The world coordinates of the spectral axis (see the class); by
+            default, those of the header. Either rpix or rval can be given,
+            and the other comes from the header (see fitsutils.read_data).
+        rest : str or Quantity, optional
+            The rest of the spectral axis (see gridutils.make_rest); by
+            default, that of the header.
+
+        Returns
+        -------
+        DatasetRegionSpectra
+            The dataset.
+        """
         # (the velocity is along FITS y, the axis 1)
-        spectra, coords = load_data(item, prefix, rpix, rval, rest, 1)
-        info.update(
-            spectra=spectra,
+        spectra, coords = Data.from_files(
+            data, mask, error, rpix, rval, rest, 1)
+        return cls(
+            spectra, regions,
             step=coords.step[1] if step is None else step,
-            rpix=coords.rpix[1],
-            rval=coords.rval[1],
-            rest=coords.rest)
-        return cls(**parseutils.parse_options_for_callable(
-            info, cls.__init__))
+            rpix=coords.rpix[1], rval=coords.rval[1], rest=coords.rest)
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,

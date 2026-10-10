@@ -147,11 +147,12 @@ def test_spectral_axis_from_the_data(dispersion, spec_size):
     from gbkfit.dataset import DatasetPixelMoments
     from gbkfit.observation import observable_parser
     velocity = np.linspace(1400, 1600, 32 * 32).reshape(32, 32)
-    maps = dict(moment0=Data(np.ones((32, 32))), moment1=Data(velocity))
+    maps = {0: Data(np.ones((32, 32))), 1: Data(velocity)}
     if dispersion is not None:
-        maps['moment2'] = Data(np.full((32, 32), dispersion))
+        maps[2] = Data(np.full((32, 32), dispersion))
     info = dict(type='pixel_moments', spec_step=2)
-    observable = observable_parser.load(info, dataset=DatasetPixelMoments(**maps))
+    observable = observable_parser.load(
+        info, dataset=DatasetPixelMoments(maps))
     assert observable.spec_rval() == 1500
     assert observable.spec_step() == 2
     assert observable.spec_size() == spec_size
@@ -170,7 +171,7 @@ def test_spectral_axis_partly_from_the_data(given, spec_size, spec_rval):
     from gbkfit.observation import observable_parser
     velocity = np.linspace(1400, 1600, 32 * 32).reshape(32, 32)
     dataset = DatasetPixelMoments(
-        moment0=Data(np.ones((32, 32))), moment1=Data(velocity))
+        {0: Data(np.ones((32, 32))), 1: Data(velocity)})
     observable = observable_parser.load(
         dict(type='pixel_moments', spec_step=2) | given, dataset=dataset)
     assert observable.spec_size() == spec_size
