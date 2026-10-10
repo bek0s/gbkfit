@@ -22,6 +22,24 @@ def relative_step(
     return precision ** (1 / 3 if scheme == 'central' else 1 / 2)
 
 
+def inside_bounds(
+        x: np.ndarray,
+        lower: np.ndarray,
+        upper: np.ndarray,
+        steps: np.ndarray
+) -> np.ndarray:
+    """
+    Return values moved off their bounds by a step (to the middle, if the
+    bounds are narrower than two steps). Methods that map bounded values
+    to unbounded ones (MINPACK in lmfit and scipy) need this: the map is
+    flat at the bounds, so a value that starts on one never moves.
+    """
+    inside = np.clip(x, lower + steps, upper - steps)
+    narrow = upper - lower < 2 * steps
+    inside[narrow] = ((lower + upper) / 2)[narrow]
+    return inside
+
+
 class LeastSquaresFunctions:
     """
     Residuals and their Jacobian by finite differences, for least-squares
@@ -43,6 +61,8 @@ class LeastSquaresFunctions:
         The residuals, of the variables (a new array each call).
     lower, upper : np.ndarray
         The bounds of the variables.
+    scales : np.ndarray
+        The typical scales of the variables (see FitParam.scale).
     scheme : {'forward', 'central'}
         The finite differences.
     relative_step : float
@@ -54,12 +74,14 @@ class LeastSquaresFunctions:
             func: Callable[[np.ndarray], np.ndarray],
             lower: np.ndarray,
             upper: np.ndarray,
+            scales: np.ndarray,
             scheme: Literal['forward', 'central'],
             relative_step: float
     ):
         self._func = func
         self._lower = lower
         self._upper = upper
+        self._scales = scales
         self._scheme: Literal['forward', 'central'] = scheme
         self._relative_step = relative_step
         self._last_x: np.ndarray | None = None
@@ -78,7 +100,7 @@ class LeastSquaresFunctions:
         f0 = self._last_residuals \
             if np.array_equal(x, self._last_x) else None
         steps = finite_difference_steps(
-            x, self._lower, self._upper, self._relative_step)
+            x, self._scales, self._relative_step)
         return jacobian(
             self._func, x, steps, self._lower, self._upper, self._scheme,
             f0)

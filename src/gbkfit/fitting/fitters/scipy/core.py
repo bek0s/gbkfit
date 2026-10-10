@@ -10,11 +10,12 @@ import scipy.optimize
 
 from gbkfit.fitting.base import FitRun, Fitter
 from gbkfit.fitting.fitters._detail import (
-    LeastSquaresFunctions, relative_step)
+    LeastSquaresFunctions, inside_bounds, relative_step)
 from gbkfit.fitting.fitparams import (
     FitParam, FitParamBounded, FitParamClass)
 from gbkfit.fitting.problem import FitProblem
-from gbkfit.fitting.uncertainty import UncertaintyOptions
+from gbkfit.fitting.uncertainty import (
+    UncertaintyOptions, finite_difference_steps)
 from gbkfit.utils.parseutils import ConfigError
 
 
@@ -85,7 +86,8 @@ class FitterScipyLeastSquares(Fitter):
     f_scale : float, optional
         The residual at which robust losses start to differ.
     max_nfev : int, optional
-        The most model evaluations (by default, scipy's).
+        The most evaluations of the residuals by the method, not counting
+        those of the Jacobians (by default, scipy's).
     ftol, xtol, gtol : float, optional
         The tolerances of the relative change of the cost, of the values,
         and of the gradient.
@@ -174,6 +176,7 @@ class FitterScipyLeastSquares(Fitter):
         x0 = np.array([p.value() for p in params])
         lower = np.array([p.minimum() for p in params])
         upper = np.array([p.maximum() for p in params])
+        scales = np.array([p.scale() for p in params])
         scheme: Literal['forward', 'central'] = \
             'central' if self._jac == '3-point' else 'forward'
         step = self._step or relative_step(problem.precision(), scheme)
@@ -184,19 +187,22 @@ class FitterScipyLeastSquares(Fitter):
         # The residuals are new arrays each call, which scipy needs (it
         # keeps those of earlier calls; scipy issue #11493)
         if self._method == 'lm':
-            # 'lm' takes no bounds: it works on unbounded internal values
+            # 'lm' takes no bounds: it works on unbounded internal values,
+            # whose map is flat at the bounds
             transform = _BoundsTransform(lower, upper)
+            x0 = inside_bounds(
+                x0, lower, upper, finite_difference_steps(x0, scales, step))
+            ones = np.ones_like(x0)
             functions = LeastSquaresFunctions(
                 lambda p: problem.residuals(transform.to_bounded(p)),
-                np.full_like(x0, -np.inf), np.full_like(x0, np.inf),
-                scheme, step)
+                -np.inf * ones, np.inf * ones, ones, scheme, step)
             result = scipy.optimize.least_squares(
                 functions.residuals, transform.to_internal(x0),
                 jac=functions.jacobian, **options)
             x = transform.to_bounded(result.x)
         else:
             functions = LeastSquaresFunctions(
-                problem.residuals, lower, upper, scheme, step)
+                problem.residuals, lower, upper, scales, scheme, step)
             result = scipy.optimize.least_squares(
                 functions.residuals, x0, jac=functions.jacobian,
                 bounds=(lower, upper), **options)

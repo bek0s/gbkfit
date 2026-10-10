@@ -10,11 +10,12 @@ import numpy as np
 
 from gbkfit.fitting.base import FitRun, Fitter
 from gbkfit.fitting.fitters._detail import (
-    LeastSquaresFunctions, relative_step)
+    LeastSquaresFunctions, inside_bounds, relative_step)
 from gbkfit.fitting.fitparams import (
     FitParam, FitParamBounded, FitParamClass)
 from gbkfit.fitting.problem import FitProblem
-from gbkfit.fitting.uncertainty import UncertaintyOptions
+from gbkfit.fitting.uncertainty import (
+    UncertaintyOptions, finite_difference_steps)
 from gbkfit.utils.parseutils import ConfigError
 
 
@@ -25,10 +26,10 @@ __all__ = [
 
 class FitterLMFitLeastSquares(Fitter):
     """
-    Least squares with lmfit: Levenberg-Marquardt (MINPACK's lmdif,
-    method 'leastsq'; lmfit maps bounded values to unbounded ones) or
-    scipy's trust region reflective (method 'least_squares'). The
-    Jacobian is by forward differences.
+    Least squares with lmfit: Levenberg-Marquardt (MINPACK, method
+    'leastsq'; lmfit maps bounded values to unbounded ones) or scipy's
+    trust region reflective (method 'least_squares'). GBKFIT computes the
+    Jacobian by forward differences (see LeastSquaresFunctions).
 
     The free elements take a value (where to start), and optional min
     and max (see FitParamBounded).
@@ -38,7 +39,8 @@ class FitterLMFitLeastSquares(Fitter):
     method : {'leastsq', 'least_squares'}, optional
         The method.
     max_nfev : int, optional
-        The most model evaluations (by default, lmfit's: 2000 times the
+        The most evaluations of the residuals by the method, not counting
+        those of the Jacobians (by default, lmfit's: 2000 times the
         number of free elements plus 1).
     ftol, xtol, gtol : float, optional
         The tolerances of the relative change of the chi-square, of the
@@ -47,8 +49,7 @@ class FitterLMFitLeastSquares(Fitter):
     step : float, optional
         The relative step of the finite differences (by default, the
         square root of the precision of the models, e.g. 3.5e-4 for
-        float32; MINPACK's and scipy's default, for float64, is too small
-        for float32 models).
+        float32).
     seed : int, optional
         The seed of the Laplace samples.
     uncertainty : UncertaintyOptions, optional
@@ -109,17 +110,27 @@ class FitterLMFitLeastSquares(Fitter):
             rng: np.random.Generator
     ) -> FitRun:
         params = typing.cast(list[FitParamBounded], fit_params)
+        x0 = np.array([p.value() for p in params])
+        lower = np.array([p.minimum() for p in params])
+        upper = np.array([p.maximum() for p in params])
+        scales = np.array([p.scale() for p in params])
+        step = self._step or relative_step(problem.precision(), 'forward')
+        # MINPACK's own steps (sqrt(epsfcn) times the value) are too small
+        # for float32 models at small values, and scipy's at 0: GBKFIT
+        # computes the Jacobian (see LeastSquaresFunctions)
+        functions = LeastSquaresFunctions(
+            problem.residuals, lower, upper, scales, 'forward', step)
+        if self._method == 'leastsq':
+            # (lmfit maps the bounded values, and the map is flat at the
+            # bounds)
+            x0 = inside_bounds(
+                x0, lower, upper, finite_difference_steps(x0, scales, step))
         # lmfit names its parameters; the names of elements (e.g. 'v[3]')
         # are not valid ones
         lmfit_params = lmfit.Parameters()
-        for i, p in enumerate(params):
+        for i, value in enumerate(x0):
             lmfit_params.add(
-                f'p{i}', value=p.value(), min=p.minimum(), max=p.maximum())
-        step = self._step or relative_step(problem.precision(), 'forward')
-        functions = LeastSquaresFunctions(
-            problem.residuals,
-            np.array([p.minimum() for p in params]),
-            np.array([p.maximum() for p in params]), 'forward', step)
+                f'p{i}', value=value, min=lower[i], max=upper[i])
 
         def values(lmfit_values: lmfit.Parameters) -> np.ndarray:
             return np.array(list(lmfit_values.valuesdict().values()))
@@ -127,18 +138,18 @@ class FitterLMFitLeastSquares(Fitter):
         options: dict[str, Any] = dict(
             ftol=self._ftol, xtol=self._xtol, gtol=self._gtol)
         options = {k: v for k, v in options.items() if v is not None}
-        if self._method == 'leastsq':
-            # MINPACK's own differences: its step, sqrt(epsfcn) times |x|
-            # (or sqrt(epsfcn) at 0), suits GBKFIT's models
-            options['epsfcn'] = step ** 2
-        else:
-            # scipy's do not (see LeastSquaresFunctions)
-            options['jac'] = lambda v: functions.jacobian(values(v))
+        jac_option = 'Dfun' if self._method == 'leastsq' else 'jac'
+        options[jac_option] = lambda v: functions.jacobian(values(v))
         minimizer = lmfit.Minimizer(
             lambda v: functions.residuals(values(v)), lmfit_params,
             nan_policy='raise', calc_covar=False, max_nfev=self._max_nfev)
         result = minimizer.minimize(method=self._method, **options)
+        # A run stopped by max_nfev ends at its last evaluation (e.g. a
+        # step of a Jacobian): take the best one instead
+        best = problem.best()
+        x = best[0] if result.aborted and best is not None \
+            else values(result.params)
         return FitRun(
-            solutions=[values(result.params)], success=bool(result.success),
+            solutions=[x], success=bool(result.success),
             message=str(result.message),
             diagnostics=dict(lmfit_nfev=int(result.nfev)), raw=result)

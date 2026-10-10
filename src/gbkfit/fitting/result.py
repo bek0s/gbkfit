@@ -48,10 +48,13 @@ def weighted_quantiles(
     Returns
     -------
     np.ndarray
-        The quantiles of each column: shape (len(q), ncolumns).
+        The quantiles of each column: shape (len(q), ncolumns); nan if
+        there are no samples.
     """
     q = np.atleast_1d(np.asarray(q, dtype=float))
     samples = np.asarray(samples, dtype=float).reshape(len(samples), -1)
+    if len(samples) == 0:
+        return np.full((len(q), samples.shape[1]), np.nan)
     if weights is None:
         return np.quantile(samples, q, axis=0)
     result = np.empty((len(q), samples.shape[1]))
