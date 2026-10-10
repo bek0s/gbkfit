@@ -9,7 +9,7 @@ import numpy as np
 import pytest
 
 from gbkfit.math import interpolation
-from gbkfit.model import gmodel_parser
+from gbkfit.model import model_parser
 from gbkfit.params.pdescs import ParamScalarDesc
 from gbkfit.params.space import ParamSpace
 from modelutils import observation_group
@@ -29,12 +29,12 @@ def disk(type_, rnodes, vptraits, **options):
 
 
 def model(component):
-    gmodel_type = 'kinematics_3d' if component['type'] == 'mcdisk' \
+    model_type = 'kinematics_3d' if component['type'] == 'mcdisk' \
         else 'kinematics_2d'
     return dict(
         driver=dict(type='host'),
         dmodel=dict(type='pixel_spectra', size=[32, 32, 41], step=[1, 1, 10]),
-        gmodel=dict(type=gmodel_type, components=[component]))
+        gmodel=dict(type=model_type, components=[component]))
 
 
 def group(component):
@@ -77,7 +77,7 @@ def test_node_wise_parameters_have_a_value_for_each_subnode():
 
 
 def test_flaring_at_the_subnodes():
-    gmodel = gmodel_parser.load(dict(
+    gmodel = model_parser.load(dict(
         type='intensity_3d', components=[dict(
             type='smdisk', loose=False, tilted=False, rnodes=[0, 20],
             rstep=0.5, bptraits=dict(type='exponential'),
@@ -97,7 +97,7 @@ def evaluate_curve(component, free):
         constants=model_group.constants())
     extra = {}
     model_group.model_h(space.evaluate(free), extra)
-    return extra['observation0_gmodel_component0_vdata'].data
+    return extra['observation0_model_component0_vdata'].data
 
 
 @pytest.mark.parametrize('vmax, rt', [(150, 2), (220, 4)])
@@ -113,26 +113,26 @@ def test_an_expression_of_the_subnodes_follows_the_curve(
         rstep=0.1)
     _, extra = evaluate_models(
         [model(analytical)], PROPERTIES | dict(vpt_vt=vmax, vpt_rt=rt))
-    expected = extra['observation0_gmodel_component0_vdata'].data
+    expected = extra['observation0_model_component0_vdata'].data
     actual = evaluate_curve(at_subnodes, dict(vmax=vmax, rt=rt))
     np.testing.assert_allclose(actual, expected, atol=0.1, equal_nan=True)
 
 
 def test_sampling_is_dumped():
-    gmodel = gmodel_parser.load(dict(
+    gmodel = model_parser.load(dict(
         type='kinematics_2d', components=[disk(
             'smdisk', [0, 20],
             dict(type='nw_tan_uniform', sampling='subrings'))]))
-    info = gmodel_parser.dump(gmodel)
+    info = model_parser.dump(gmodel)
     assert info['components'][0]['vptraits'] == [dict(
         type='nw_tan_uniform', sampling='subrings')]
-    gmodel = gmodel_parser.load(info)
-    assert gmodel_parser.dump(gmodel) == info
+    gmodel = model_parser.load(info)
+    assert model_parser.dump(gmodel) == info
     # The default is not dumped
-    gmodel = gmodel_parser.load(dict(
+    gmodel = model_parser.load(dict(
         type='kinematics_2d', components=[disk(
             'smdisk', [0, 20], dict(type='nw_tan_uniform'))]))
-    info = gmodel_parser.dump(gmodel)
+    info = model_parser.dump(gmodel)
     assert info['components'][0]['vptraits'] == [dict(type='nw_tan_uniform')]
 
 
@@ -147,4 +147,4 @@ def test_invalid_sampling_is_rejected(traits, message):
         'smdisk', [0, 20], dict(type='tan_arctan'),
         bhtraits=dict(type='sech2')) | traits
     with pytest.raises(Exception, match=message):
-        gmodel_parser.load(dict(type='kinematics_3d', components=[component]))
+        model_parser.load(dict(type='kinematics_3d', components=[component]))

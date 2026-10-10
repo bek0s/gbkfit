@@ -67,13 +67,13 @@ def test_slit_spectra_objective_residual(driver):
     dataset = DatasetSlitSpectra(
         Data(model + 1, error=np.full_like(model, 2)), step=(1, 10),
         rota=30)
-    from gbkfit.model import gmodel_parser
+    from gbkfit.model import model_parser
     from gbkfit.observation import (
         Observation, ObservationGroup, observable_parser)
     observation = Observation(
         observable_parser.load(copy.deepcopy(dmodel)), driver, data=dataset)
     model_group = ObservationGroup(
-        [gmodel_parser.load(copy.deepcopy(GMODEL))], [observation])
+        [model_parser.load(copy.deepcopy(GMODEL))], [observation])
     objective = Objective(model_group)
     params = gbkfit.params.EvaluationParams(model_group.pdescs(), PROPERTIES)
     residual = objective.residual_nddata_h(params.evaluate(), False)

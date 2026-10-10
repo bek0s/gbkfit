@@ -82,7 +82,7 @@ Example
 .. code-block:: yaml
 
    # galaxy model
-   gmodels:
+   models:
    - type: kinematics_2d
      components:
      - type: smdisk

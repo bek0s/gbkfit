@@ -74,7 +74,7 @@ def test_dcube_extras_have_the_coordinates_of_the_dmodel(evaluate_models):
 
 
 @pytest.mark.parametrize('name', MODELS)
-def test_gmodel_extras_are_on_the_sky(evaluate_models, name):
+def test_model_extras_are_on_the_sky(evaluate_models, name):
     # The extra outputs of a 2d gmodel are images on the high-res grid,
     # except for a long slit, which has no position on the sky
     dmodel, gmodel, _, _ = MODELS[name]
@@ -83,7 +83,7 @@ def test_gmodel_extras_are_on_the_sky(evaluate_models, name):
         k: v for k, v in PROPERTIES.items()
         if name != 'pixel_brightness' or not k.startswith(('v', 'd'))}
     _, extra = evaluate_models([model], properties)
-    bdata = extra['observation0_gmodel_component0_bdata']
+    bdata = extra['observation0_model_component0_bdata']
     if name == 'slit_spectra':
         assert isinstance(bdata, np.ndarray)
         return
@@ -93,7 +93,7 @@ def test_gmodel_extras_are_on_the_sky(evaluate_models, name):
     assert bdata.coords == dcube_hi.coords.axes(0, 1)
 
 
-def test_3d_gmodel_extras_have_a_line_of_sight_axis(evaluate_models):
+def test_3d_model_extras_have_a_line_of_sight_axis(evaluate_models):
     # The z axis of a 3d gmodel is along the line of sight, centred on 0
     dmodel, _, _, _ = MODELS['pixel_spectra']
     gmodel = dict(
@@ -101,7 +101,7 @@ def test_3d_gmodel_extras_have_a_line_of_sight_axis(evaluate_models):
             DISK | KINEMATICS | dict(bhtraits=dict(type='sech2'))])
     model = dict(driver=dict(type='host'), dmodel=dmodel, gmodel=gmodel)
     _, extra = evaluate_models([model], PROPERTIES | dict(bht_s=1))
-    bdata = extra['observation0_gmodel_component0_bdata']
+    bdata = extra['observation0_model_component0_bdata']
     assert bdata.data.shape[0] == 10 and bdata.spectral_axis is None
     sky = extra['observation0_dcube_hi'].coords.axes(0, 1)
     assert bdata.coords.axes(0, 1) == sky

@@ -9,7 +9,7 @@ import scipy.signal
 
 import gbkfit.params
 from gbkfit.instrument import LSFGauss, PSFGauss
-from gbkfit.model import gmodel_parser
+from gbkfit.model import model_parser
 from gbkfit.observation import ObservationGroup, observation_parser
 from gbkfit.utils.parseutils import ConfigError
 
@@ -28,7 +28,7 @@ VELOCITIES = (np.arange(SIZE[2]) - 19.5) * STEP[2]
 
 def spectra(driver, psf=None, lsf=None, scale=(1, 1, 1)):
     """The spectra of the gmodel seen with the PSF and the LSF."""
-    group = ObservationGroup([gmodel_parser.load(GMODEL)], [
+    group = ObservationGroup([model_parser.load(GMODEL)], [
         observation_parser.load(dict(
             driver=dict(type=driver.type()), scale=list(scale),
             instrument=dict(psf=psf, lsf=lsf),

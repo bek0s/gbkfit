@@ -101,11 +101,11 @@ def test_pdescs_roundtrip():
 @pytest.mark.parametrize(
     'config', CONFIGS, ids=[f'{c.parent.name}/{c.stem}' for c in CONFIGS])
 def test_config_roundtrip(config):
-    from gbkfit.model import gmodel_parser
+    from gbkfit.model import model_parser
     from gbkfit.observation import observation_parser
     info = ruamel.yaml.YAML(typ='safe').load(config)
     dumped = dict(
-        gmodels=roundtrip(gmodel_parser, info['gmodels']),
+        models=roundtrip(model_parser, info['models']),
         observations=roundtrip(observation_parser, info['observations']))
     # Both the configuration and its dump give the same model
     properties = info['params']['properties']
@@ -154,12 +154,12 @@ def test_observation_dump_has_every_option(observable_type):
     from gbkfit.observation import observation_parser
     observable, instrument, scale = OBSERVABLES[observable_type]
     info = dict(
-        name='obs', gmodel='galaxy', driver=dict(type='host'),
+        name='obs', model='galaxy', driver=dict(type='host'),
         instrument=instrument,
         observable=dict(type=observable_type) | observable,
         scale=scale, dtype='float64')
     dumped = json.loads(json.dumps(roundtrip(observation_parser, info)))
-    for key in ('name', 'gmodel', 'scale', 'dtype'):
+    for key in ('name', 'model', 'scale', 'dtype'):
         assert dumped[key] == info[key], key
     for key, value in info['observable'].items():
         assert dumped['observable'][key] == value, key

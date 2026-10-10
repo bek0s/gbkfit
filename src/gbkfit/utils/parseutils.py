@@ -167,7 +167,7 @@ class ConfigError(RuntimeError):
         The description of the error.
     path : Sequence of str or int, optional
         The path to the part of the configuration with the error: option
-        names and list indices (e.g. models[0].gmodel.components[1]).
+        names and list indices (e.g. models[0].components[1]).
     context : str, optional
         The type of that part (e.g. 'smdisk'), if any.
     """

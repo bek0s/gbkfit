@@ -7,7 +7,7 @@ import numpy as np
 from gbkfit.dataset import DatasetPixelSpectra
 from gbkfit.driver import Driver
 from gbkfit.instrument import Instrument
-from gbkfit.model.base import GModel, GModelSCube, Selection
+from gbkfit.model.base import Model, ModelSCube, Selection
 from . import _dcube, _detail
 from .base import ModelData, Observable
 
@@ -41,7 +41,7 @@ class PixelSpectra(Observable):
         The rest wavelength or frequency of the velocities of the spectral
         axis, if known (see gridutils.make_rest).
     smooth_weights : bool, optional
-        Whether the weights of the gmodel are smoothed by the PSF and the
+        Whether the weights of the model are smoothed by the PSF and the
         LSF, as the model is.
     mask_cutoff : float, optional
         The pixels of the model whose absolute value is not above it are
@@ -65,8 +65,8 @@ class PixelSpectra(Observable):
         return 'pixel_spectra'
 
     @staticmethod
-    def is_compatible(gmodel: GModel) -> bool:
-        return isinstance(gmodel, GModelSCube)
+    def is_compatible(model: Model) -> bool:
+        return isinstance(model, ModelSCube)
 
     @classmethod
     def load(
@@ -156,7 +156,7 @@ class PixelSpectra(Observable):
     def plan(
             self,
             driver: Driver,
-            gmodel: GModel,
+            model: Model,
             foreground: 'Foreground',
             instrument: Instrument,
             scale: Sequence[int],
@@ -179,7 +179,7 @@ class PixelSpectra(Observable):
             mask_apply=self._mask_apply,
             dtype=dtype)
         return PixelSpectraPlan(
-            dcube, driver, gmodel, foreground, dtype, selection)
+            dcube, driver, model, foreground, dtype, selection)
 
 
 class PixelSpectraPlan(_detail.DCubePlanBase):

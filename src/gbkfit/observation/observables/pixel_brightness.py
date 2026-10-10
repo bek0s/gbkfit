@@ -6,7 +6,7 @@ import numpy as np
 from gbkfit.dataset import DatasetPixelBrightness
 from gbkfit.driver import Driver
 from gbkfit.instrument import Instrument
-from gbkfit.model.base import GModel, GModelImage, Selection
+from gbkfit.model.base import Model, ModelImage, Selection
 from gbkfit.utils import gridutils
 from gbkfit.utils.parseutils import ConfigError
 from . import _dcube, _detail
@@ -65,8 +65,8 @@ class PixelBrightness(Observable):
         return 'pixel_brightness'
 
     @staticmethod
-    def is_compatible(gmodel: GModel) -> bool:
-        return isinstance(gmodel, GModelImage)
+    def is_compatible(model: Model) -> bool:
+        return isinstance(model, ModelImage)
 
     @classmethod
     def load(
@@ -152,7 +152,7 @@ class PixelBrightness(Observable):
     def plan(
             self,
             driver: Driver,
-            gmodel: GModel,
+            model: Model,
             foreground: 'Foreground',
             instrument: Instrument,
             scale: Sequence[int],
@@ -176,13 +176,13 @@ class PixelBrightness(Observable):
             mask_apply=self._mask_apply,
             dtype=dtype)
         return PixelBrightnessPlan(
-            dcube, driver, gmodel, foreground, dtype, selection)
+            dcube, driver, model, foreground, dtype, selection)
 
 
 class PixelBrightnessPlan(_detail.DCubePlanBase):
 
-    def _gmodel_grid(self) -> gridutils.Grid:
-        # Image gmodels are evaluated on the x and y axes
+    def _model_grid(self) -> gridutils.Grid:
+        # Image models are evaluated on the x and y axes
         return self._dcube_plan.scratch_grid().spatial()
 
     def evaluate(

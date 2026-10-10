@@ -7,7 +7,7 @@ import numpy as np
 from gbkfit.dataset import Dataset, DatasetPixelMoments
 from gbkfit.driver import Driver
 from gbkfit.instrument import Instrument
-from gbkfit.model.base import GModel, GModelSCube, Selection
+from gbkfit.model.base import Model, ModelSCube, Selection
 from gbkfit.utils import gridutils
 from gbkfit.utils.parseutils import ConfigError
 from . import _dcube, _detail, _moments
@@ -80,8 +80,8 @@ class PixelMoments(Observable):
         return 'pixel_moments'
 
     @staticmethod
-    def is_compatible(gmodel: GModel) -> bool:
-        return isinstance(gmodel, GModelSCube)
+    def is_compatible(model: Model) -> bool:
+        return isinstance(model, ModelSCube)
 
     @classmethod
     def options_from_data(cls, dataset: Dataset) -> tuple[str, ...]:
@@ -220,20 +220,20 @@ class PixelMoments(Observable):
     def plan(
             self,
             driver: Driver,
-            gmodel: GModel,
+            model: Model,
             foreground: 'Foreground',
             instrument: Instrument,
             scale: Sequence[int],
             dtype: np.dtype,
             selection: Selection
     ) -> 'PixelMomentsPlan':
-        if self._method == 'gaussian_fit' and gmodel.has_weights():
+        if self._method == 'gaussian_fit' and model.has_weights():
             raise ConfigError(
-                "the method gaussian_fit does not support gmodels with "
+                "the method gaussian_fit does not support models with "
                 "weights (wtraits) yet")
         dcube = _moments.spectra_dcube(self, scale, instrument, dtype)
         return PixelMomentsPlan(
-            self, dcube, driver, gmodel, foreground, dtype, selection)
+            self, dcube, driver, model, foreground, dtype, selection)
 
 
 class PixelMomentsPlan(_detail.DCubePlanBase):
@@ -243,13 +243,13 @@ class PixelMomentsPlan(_detail.DCubePlanBase):
             moments: PixelMoments,
             dcube: _dcube.DCube,
             driver: Driver,
-            gmodel: GModel,
+            model: Model,
             foreground: 'Foreground',
             dtype: np.dtype,
             selection: Selection
     ):
         super().__init__(
-            dcube, driver, gmodel, foreground, dtype, selection)
+            dcube, driver, model, foreground, dtype, selection)
         self._moments = _moments.MomentsPlan(
             driver, moments.size(), moments.orders(), moments.mask_cutoff(),
             moments.method(), dtype)

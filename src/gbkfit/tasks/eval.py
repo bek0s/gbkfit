@@ -55,7 +55,7 @@ def eval_(
     _log.info("preparing configuration...")
     # This is not a full-fledged validation. It just tries to catch
     # and inform the user about the really obvious mistakes.
-    required_sections = ('gmodels', 'observations', 'params')
+    required_sections = ('models', 'observations', 'params')
     optional_sections = ('pdescs',)
     if mode not in ('model', 'objective'):
         raise RuntimeError("impossible")
@@ -72,11 +72,11 @@ def eval_(
     #
     # Setup all the components described in the configuration.
     # After running the configuration through _detail.prepare_config():
-    # - gmodels and observations configurations are lists
+    # - models and observations configurations are lists
     # - objective, pdescs, and params configurations are dicts
     #
 
-    _log.info("setting up gmodels and observations...")
+    _log.info("setting up models and observations...")
     group = _detail.load_observation_group(cfg)
 
     objective = None

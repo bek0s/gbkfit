@@ -1,6 +1,6 @@
 from gbkfit.utils import gridutils, iterutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
-from ..base import GModelPlan
+from ..base import ModelPlan
 
 
 __all__ = [
@@ -9,7 +9,7 @@ __all__ = [
     'ComponentSet3D',
     'ComponentSetPlan2D',
     'ComponentSetPlan3D',
-    'ComponentSetGModelPlan'
+    'ComponentSetModelPlan'
 ]
 
 
@@ -26,7 +26,7 @@ _OCMP_PREFIX = ('opacity components', 'ocmp', True)
 
 def _with_mass_model_params(params, components, mass_model):
     """
-    The parameters of the components of a gmodel, and those of its mass
+    The parameters of the components of a model, and those of its mass
     model (if any). Raise ConfigError if components take the circular
     velocity of a mass model (see Component.circular_velocity_params) and
     there is none, if there is one and none does, or if the names of the
@@ -35,12 +35,12 @@ def _with_mass_model_params(params, components, mass_model):
     moved = any(cmp.circular_velocity_params() for cmp in components)
     if moved and mass_model is None:
         raise ConfigError(
-            "the 'mass' velocity traits need the mass_model of their gmodel")
+            "the 'mass' velocity traits need the mass_model of their model")
     if mass_model is None:
         return params
     if not moved:
         raise ConfigError(
-            "no component uses the mass_model of the gmodel; give the "
+            "no component uses the mass_model of its model; give the "
             "components that it moves 'mass' velocity traits")
     if repeated := sorted(params.keys() & mass_model.pdescs().keys()):
         raise ConfigError(
@@ -110,8 +110,8 @@ def evaluate_components(
         components, plans, mappings, params, grid, outputs, out_extra,
         out_extra_label, extra, given=None):
     """
-    Evaluate the components of a gmodel through their plans, each with its
-    parameters, and those its gmodel gives it (given, a dict for each
+    Evaluate the components of a model through their plans, each with its
+    parameters, and those its model gives it (given, a dict for each
     component, if any; see Component.circular_velocity_params). Their
     extra outputs are named after the given label and their name, or
     their index if they have none (e.g. 'opacity_dust_odata' or
@@ -137,7 +137,7 @@ def evaluate_components(
 
 class ComponentSet2D:
     """
-    The components of a 2d gmodel: their parameters, and their evaluation
+    The components of a 2d model: their parameters, and their evaluation
     on a 2d spatial grid, the x and y axes of the data. The components get
     a 3d grid with a z axis of size 1.
     """
@@ -269,7 +269,7 @@ class ComponentSetPlan2D:
 
 class ComponentSet3D:
     """
-    The components and opacity components of a 3d gmodel: their
+    The components and opacity components of a 3d model: their
     parameters, and their evaluation on a 3d spatial grid, the x and y
     axes of the data and a z axis that can be configured. The opacity
     components make an opacity cube, which absorbs the brightness of the
@@ -482,9 +482,9 @@ class ComponentSetPlan3D:
                         driver.mem_copy_d2h(total))
 
 
-class ComponentSetGModelPlan(GModelPlan):
+class ComponentSetModelPlan(ModelPlan):
     """
-    The evaluation of a gmodel made of a component set: the plan of the
+    The evaluation of a model made of a component set: the plan of the
     set, which adds to the output of the given key ('image' or 'scube').
     """
 

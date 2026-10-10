@@ -11,7 +11,7 @@ import numpy as np
 from gbkfit.dataset import Dataset
 from gbkfit.driver import Driver
 from gbkfit.instrument import Instrument
-from gbkfit.model.base import GModel, Selection
+from gbkfit.model.base import Model, Selection
 from gbkfit.region import Regions
 from gbkfit.utils import gridutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
@@ -194,15 +194,15 @@ def dump_spatial_grid(
 class DCubePlanBase(ObservablePlan):
     """
     The evaluation of an observable made from a DCube: the plan of the cube,
-    and the plan of the gmodel (of the given selection) on its high-res
-    grid (see _gmodel_grid).
+    and the plan of the model (of the given selection) on its high-res
+    grid (see _model_grid).
     """
 
     def __init__(
             self,
             dcube: DCube,
             driver: Driver,
-            gmodel: GModel,
+            model: Model,
             foreground: 'Foreground',
             dtype: np.dtype,
             selection: Selection
@@ -210,17 +210,17 @@ class DCubePlanBase(ObservablePlan):
         self._driver = driver
         self._dtype = dtype
         self._dcube = dcube
-        self._dcube_plan = dcube.plan(driver, gmodel.has_weights())
-        grid = self._gmodel_grid()
-        # With a lens, the gmodel is evaluated on the source plane, into a
+        self._dcube_plan = dcube.plan(driver, model.has_weights())
+        grid = self._model_grid()
+        # With a lens, the model is evaluated on the source plane, into a
         # cube of its own, which is lensed into the high-res cube
         self._lens_plan = None
         self._source_cube = None
         lens = foreground.lens()
         if lens is not None:
-            if gmodel.has_weights():
+            if model.has_weights():
                 raise ConfigError(
-                    "a lens does not support gmodels with weights (wtraits) "
+                    "a lens does not support models with weights (wtraits) "
                     "yet")
             self._lens_plan = lens.plan(
                 driver, self._dcube_plan.scratch_grid(), dtype)
@@ -228,17 +228,17 @@ class DCubePlanBase(ObservablePlan):
             nz = self._dcube_plan.scratch_dcube().shape[0]
             self._source_cube = driver.mem_alloc_d(
                 (nz,) + grid.size[:2][::-1], dtype)
-        self._gmodel_plan = gmodel.plan(
-            driver, grid, gmodel.has_weights(), dtype, selection)
+        self._model_plan = model.plan(
+            driver, grid, model.has_weights(), dtype, selection)
 
-    def _gmodel_grid(self) -> gridutils.Grid:
-        """Return the grid the gmodel is evaluated on: the high-res grid."""
+    def _model_grid(self) -> gridutils.Grid:
+        """Return the grid the model is evaluated on: the high-res grid."""
         return self._dcube_plan.scratch_grid()
 
-    def _gmodel_extra(
+    def _model_extra(
             self, value: gridutils.GridData
     ) -> gridutils.GridData | np.ndarray:
-        """Return an extra output of the gmodel as this observable gives it."""
+        """Return an extra output of the model as this observable gives it."""
         return value
 
     def _evaluate_cube(
@@ -249,22 +249,22 @@ class DCubePlanBase(ObservablePlan):
             extra_hi: ExtraFunction
     ) -> None:
         """
-        Evaluate the gmodel on the high-res cube (or on the source plane of
+        Evaluate the model on the high-res cube (or on the source plane of
         a lens, lensed into it), then convolve, downscale and mask it into
         the low-res cube (see DCubePlan.evaluate).
         """
         dcube_plan = self._dcube_plan
-        # The gmodel adds to its cube, so clear it
+        # The model adds to its cube, so clear it
         cube = dcube_plan.scratch_dcube() if self._lens_plan is None \
             else self._source_cube
         self._driver.mem_fill(cube, 0)
-        gmodel_extra = None if out_extra is None else {}
-        self._gmodel_plan.evaluate(
-            params, cube, dcube_plan.scratch_wcube(), gmodel_extra)
+        model_extra = None if out_extra is None else {}
+        self._model_plan.evaluate(
+            params, cube, dcube_plan.scratch_wcube(), model_extra)
         if self._lens_plan is not None:
             self._lens_plan.evaluate(cube, dcube_plan.scratch_dcube())
         dcube_plan.evaluate(out_extra, extra_lo, extra_hi)
-        if gmodel_extra:
+        if model_extra:
             out_extra.update(
-                {f'gmodel_{k}': self._gmodel_extra(v)
-                 for k, v in gmodel_extra.items()})
+                {f'model_{k}': self._model_extra(v)
+                 for k, v in model_extra.items()})

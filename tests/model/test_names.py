@@ -6,7 +6,7 @@ position.
 
 import pytest
 
-from gbkfit.model import gmodel_parser
+from gbkfit.model import model_parser
 
 
 def disk(**options):
@@ -24,26 +24,26 @@ def opacity(**options):
 
 
 def intensity_3d(components, opacity_components=None):
-    return gmodel_parser.load(dict(
+    return model_parser.load(dict(
         type='intensity_3d', components=components,
         opacity_components=opacity_components))
 
 
 def test_without_names_the_prefixes_are_positions():
-    gmodel = intensity_3d([disk(), disk()], [opacity()])
-    assert {'xpos', 'cmp1_xpos', 'ocmp_xpos'} <= set(gmodel.pdescs())
-    assert set(gmodel.constants()) == {
+    model = intensity_3d([disk(), disk()], [opacity()])
+    assert {'xpos', 'cmp1_xpos', 'ocmp_xpos'} <= set(model.pdescs())
+    assert set(model.constants()) == {
         'rnodes', 'subrnodes', 'cmp1_rnodes', 'cmp1_subrnodes',
         'ocmp_rnodes', 'ocmp_subrnodes'}
 
 
 def test_names_prefix_the_parameters_and_constants():
-    gmodel = intensity_3d(
+    model = intensity_3d(
         [disk(name='disk'), disk(name='bulge')], [opacity(name='dust')])
-    names = set(gmodel.pdescs())
+    names = set(model.pdescs())
     assert {'disk_xpos', 'bulge_bpt_s', 'dust_opt_a'} <= names
     assert not {'xpos', 'cmp1_xpos', 'ocmp_xpos'} & names
-    assert set(gmodel.constants()) == {
+    assert set(model.constants()) == {
         'disk_rnodes', 'disk_subrnodes', 'bulge_rnodes', 'bulge_subrnodes',
         'dust_rnodes', 'dust_subrnodes'}
 
@@ -55,9 +55,9 @@ def test_names_do_not_depend_on_the_order():
 
 
 def test_names_are_dumped():
-    info = gmodel_parser.dump(intensity_3d([disk(name='disk')]))
+    info = model_parser.dump(intensity_3d([disk(name='disk')]))
     assert info['components'][0]['name'] == 'disk'
-    info = gmodel_parser.dump(intensity_3d([disk()]))
+    info = model_parser.dump(intensity_3d([disk()]))
     assert 'name' not in info['components'][0]
 
 
@@ -75,55 +75,55 @@ def test_invalid_names_are_rejected(components, opacity_components, message):
         intensity_3d(components, opacity_components)
 
 
-def gmodel(name=None):
+def model(name=None):
     component = disk() | dict(bhtraits=None)
     return dict(type='intensity_2d', components=[component]) \
         | (dict(name=name) if name is not None else {})
 
 
-def observation(gmodel_=None, name=None):
+def observation(model_=None, name=None):
     return dict(
         driver=dict(type='host'), observable=dict(type='pixel_brightness', size=[8, 8])) \
-        | (dict(gmodel=gmodel_) if gmodel_ is not None else {}) \
+        | (dict(model=model_) if model_ is not None else {}) \
         | (dict(name=name) if name is not None else {})
 
 
-def group(gmodels, observations):
+def group(models, observations):
     from gbkfit.observation import ObservationGroup, observation_parser
     return ObservationGroup(
-        gmodel_parser.load(gmodels), observation_parser.load(observations))
+        model_parser.load(models), observation_parser.load(observations))
 
 
-def test_gmodel_names_prefix_the_parameters():
+def test_model_names_prefix_the_parameters():
     group_ = group(
-        [gmodel('hi'), gmodel('halpha')],
+        [model('hi'), model('halpha')],
         [observation('hi'), observation('halpha')])
     assert {'hi_xpos', 'halpha_xpos'} <= set(group_.pdescs())
     assert set(group_.constants()) == {
         'hi_rnodes', 'hi_subrnodes', 'halpha_rnodes', 'halpha_subrnodes'}
-    assert gmodel_parser.dump(group_.gmodels()[0])['name'] == 'hi'
+    assert model_parser.dump(group_.models()[0])['name'] == 'hi'
 
 
-def test_observations_of_one_gmodel_share_its_parameters():
-    group_ = group([gmodel()], [observation(), observation()])
+def test_observations_of_one_model_share_its_parameters():
+    group_ = group([model()], [observation(), observation()])
     assert 'xpos' in group_.pdescs()
-    assert not any(name.startswith('gmodel') for name in group_.pdescs())
+    assert not any(name.startswith('model') for name in group_.pdescs())
 
 
-@pytest.mark.parametrize('gmodels, observations, message', [
-    ([gmodel('hi'), gmodel()], [observation('hi')],
-     "either all or none of the gmodels must have a name"),
-    ([gmodel('hi'), gmodel('hi')], [observation('hi')],
-     "the names of the gmodels must be unique"),
-    ([gmodel('hi'), gmodel('ha')], [observation()],
-     "observation 0 must name its gmodel"),
-    ([gmodel('hi')], [observation('ha')], "unknown gmodel 'ha'"),
-    ([gmodel('hi')], [observation('hi', name='hi')],
-     "the gmodels and the observations must have different names")])
-def test_invalid_gmodel_and_observation_names_are_rejected(
-        gmodels, observations, message):
+@pytest.mark.parametrize('models, observations, message', [
+    ([model('hi'), model()], [observation('hi')],
+     "either all or none of the models must have a name"),
+    ([model('hi'), model('hi')], [observation('hi')],
+     "the names of the models must be unique"),
+    ([model('hi'), model('ha')], [observation()],
+     "observation 0 must name its model"),
+    ([model('hi')], [observation('ha')], "unknown model 'ha'"),
+    ([model('hi')], [observation('hi', name='hi')],
+     "the models and the observations must have different names")])
+def test_invalid_model_and_observation_names_are_rejected(
+        models, observations, message):
     with pytest.raises(Exception, match=message):
-        group(gmodels, observations)
+        group(models, observations)
 
 
 def test_names_name_the_extra_outputs():
@@ -137,4 +137,4 @@ def test_names_name_the_extra_outputs():
         disk_bpt_a=1, disk_bpt_s=2), constants=group_.constants())
     extra = {}
     group_.model_h(params.evaluate(), extra)
-    assert {'hi_gmodel_disk_bdata', 'hi_dcube_lo'} <= set(extra)
+    assert {'hi_model_disk_bdata', 'hi_dcube_lo'} <= set(extra)

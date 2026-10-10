@@ -50,7 +50,7 @@ def fit(config: str,
     _log.info("preparing configuration...")
     # This is not a full-fledged validation. It just tries to catch
     # and inform the user about the really obvious mistakes.
-    required_sections = ('gmodels', 'observations', 'params', 'fitter')
+    required_sections = ('models', 'observations', 'params', 'fitter')
     optional_sections = ('pdescs',)
     cfg = _detail.prepare_config(cfg, required_sections, optional_sections)
 
@@ -65,12 +65,12 @@ def fit(config: str,
     #
     # Setup all the components described in the configuration.
     # After running the configuration through _detail.prepare_config():
-    # - gmodels and observations configurations are lists
+    # - models and observations configurations are lists
     # - objective, pdescs, params, and fitter configurations are dicts
     #
 
 
-    _log.info("setting up gmodels and observations...")
+    _log.info("setting up models and observations...")
     group = _detail.load_observation_group(cfg)
 
     _log.info("setting up objective...")

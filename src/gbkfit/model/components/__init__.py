@@ -1,17 +1,17 @@
 from .base import *
-from .gmodels import *
+from .models import *
 from .lines import *
 from .points import *
 
 from . import disks
 
 
-def _register_gmodels():
-    from gbkfit.model.base import gmodel_parser as parser
-    parser.register(GModelIntensity2D)
-    parser.register(GModelIntensity3D)
-    parser.register(GModelKinematics2D)
-    parser.register(GModelKinematics3D)
+def _register_models():
+    from gbkfit.model.base import model_parser as parser
+    parser.register(ModelIntensity2D)
+    parser.register(ModelIntensity3D)
+    parser.register(ModelKinematics2D)
+    parser.register(ModelKinematics3D)
 
 
-_register_gmodels()
+_register_models()

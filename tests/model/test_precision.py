@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 
 import gbkfit.params
-from gbkfit.model import gmodel_parser
+from gbkfit.model import model_parser
 from gbkfit.observation import ObservationGroup, observation_parser
 
 
@@ -43,7 +43,7 @@ CASES = {
 
 def evaluate(driver, case, dtype):
     gmodel, observable, instrument = CASES[case]
-    group = ObservationGroup([gmodel_parser.load(gmodel)], [
+    group = ObservationGroup([model_parser.load(gmodel)], [
         observation_parser.load(dict(
             driver=dict(type=driver.type()), observable=observable,
             instrument=instrument, dtype=dtype))])

@@ -68,7 +68,7 @@ def test_rotation_curves(driver, trait, evaluate_models):
         vsys=0, xpos=0, ypos=0, posa=0, incl=incl, bpt_a=1, bpt_s=4,
         dpt_a=20) | {f'vpt_{k}': v for k, v in values.items()}
     _, extra = evaluate_models([model], properties)
-    velocity = extra['observation0_gmodel_component0_vdata'].data
+    velocity = extra['observation0_model_component0_vdata'].data
     # The major axis (posa 0) is the y axis, through x = 0 (column 16);
     # the receding side (positive velocities) is north
     j = np.arange(41)
@@ -110,6 +110,6 @@ def test_rotation_curves_near_the_centre(driver, trait, evaluate_models):
         bpt_s=4, dpt_a=20) | {f'vpt_{k}': v for k, v in values.items()}
     data, extra = evaluate_models([model], properties)
     assert np.isfinite(data[0]['spectra']['d']).all()
-    velocity = extra['observation0_gmodel_component0_vdata'].data
+    velocity = extra['observation0_model_component0_vdata'].data
     expected = curve(radius, **values) * np.sin(np.radians(incl))
     assert velocity[4, 4] == pytest.approx(expected, rel=1e-3)

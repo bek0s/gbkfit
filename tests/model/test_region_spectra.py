@@ -120,7 +120,7 @@ def test_region_spectra_of_a_point_is_its_flux(driver, step):
 def test_region_spectra_objective_residual(driver):
     # Data equal to the model plus 1, with errors of 2: every residual
     # (model - data) / error is -0.5
-    from gbkfit.model import gmodel_parser
+    from gbkfit.model import model_parser
     from gbkfit.objective import Objective
     from gbkfit.instrument import Instrument, instrument_parser
     from gbkfit.observation import Observation, ObservationGroup
@@ -133,7 +133,7 @@ def test_region_spectra_objective_residual(driver):
     observation = Observation(
         observable, driver, instrument=Instrument(), data=dataset)
     group = ObservationGroup(
-        [gmodel_parser.load(copy.deepcopy(GMODEL))], [observation])
+        [model_parser.load(copy.deepcopy(GMODEL))], [observation])
     params = gbkfit.params.EvaluationParams(group.pdescs(), PROPERTIES)
     residual = Objective(group).residual_nddata_h(params.evaluate(), False)
     # Without the instrument, the model differs from the data
@@ -143,7 +143,7 @@ def test_region_spectra_objective_residual(driver):
         instrument=instrument_parser.load(copy.deepcopy(INSTRUMENT)),
         data=dataset)
     group = ObservationGroup(
-        [gmodel_parser.load(copy.deepcopy(GMODEL))], [observation])
+        [model_parser.load(copy.deepcopy(GMODEL))], [observation])
     residual = Objective(group).residual_nddata_h(params.evaluate(), False)
     np.testing.assert_allclose(residual[0]['spectra'], -0.5, rtol=1e-5)
 

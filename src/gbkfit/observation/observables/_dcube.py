@@ -124,7 +124,7 @@ def _varying_kernels(
 class DCube:
     """
     A cube of the data of an observable (x, y and the spectral axis), of
-    the given grid, made from a gmodel evaluated on a finer grid (scale
+    the given grid, made from a model evaluated on a finer grid (scale
     times finer along each axis): the primary beam attenuates it, the PSF
     and the LSF convolve it, it is downscaled to the grid, and masked
     where its values are not above mask_cutoff (the mask is applied, NaN,
@@ -221,7 +221,7 @@ class DCube:
 class DCubePlan:
     """
     The evaluation of a DCube on a driver: the high-res (scratch) cube the
-    gmodel adds to, the low-res cube of the data, and their weights, mask,
+    model adds to, the low-res cube of the data, and their weights, mask,
     primary beam and PSF/LSF cube.
     """
 
