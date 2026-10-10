@@ -1,11 +1,8 @@
-import copy
 import json
 import logging
 import os
 from typing import Literal
 
-import astropy.io.fits as fits
-import numpy as np
 import pandas as pd
 import ruamel.yaml
 
@@ -14,7 +11,7 @@ import gbkfit.driver
 import gbkfit.model
 import gbkfit.objective
 import gbkfit.params
-from gbkfit.utils import fitsutils, gridutils, numutils
+from gbkfit.utils import numutils
 from gbkfit.utils.parseutils import config_path
 from . import _detail
 
@@ -116,62 +113,11 @@ def eval_(
     # Evaluate objective
     #
 
-    # Always evaluate model
-    model_extra = {}
-    model_data = []
-    if mode == 'model':
-        model_data = group.model_h(param_values, model_extra)
-
-    resid_u_extra = {}
-    resid_u_data = []
-    resid_w_extra = {}
-    resid_w_data = []
-    if mode == 'objective':
-        # The objective reuses its residual buffers on every call,
-        # so keep copies of the unweighted and weighted residuals
-        resid_u_data = copy.deepcopy(objective.residual_nddata_h(
-            param_values, False, resid_u_extra))
-        resid_w_data = copy.deepcopy(objective.residual_nddata_h(
-            param_values, True, resid_w_extra))
+    _log.info("evaluating...")
+    outputs = _detail.evaluation_outputs(
+        group, objective, param_values, mode == 'model', mode == 'objective')
+    if objective is not None:
         _log.info(f"chi-square: {objective.chi2(param_values)}")
-
-    #
-    # Gather objective outputs
-    #
-
-    _log.info("gathering outputs...")
-
-    # The outputs by name, in the form their observables give them
-    outputs = {}
-    model_prefix = 'model'
-    resid_u_prefix = 'residual'
-    resid_w_prefix = 'wresidual'
-
-    # Store model
-    for i, data_i in enumerate(model_data):
-        # prefix_i = model_prefix + f'_{i}' * bool(model.nitems() > 0)
-        prefix_i = model_prefix + f'_{i}'
-        observable = group.observations()[i].observable()
-        for key, value in data_i.items():
-            for kind in ('d', 'm', 'w'):
-                if value.get(kind) is not None:
-                    outputs[f'{prefix_i}_{key}_{kind}'] = observable.output(
-                        value[kind])
-    # Store residual (if available)
-    for resid_data, prefix in [
-            (resid_u_data, resid_u_prefix), (resid_w_data, resid_w_prefix)]:
-        for i, data_i in enumerate(resid_data):
-            prefix_i = prefix + f'_{i}' * bool(objective.nobservations() > 1)
-            observable = group.observations()[i].observable()
-            for key, value in data_i.items():
-                outputs[f'{prefix_i}_{key}_d'] = observable.output(value)
-    # Store model and residual extra (if available)
-    for extra, prefix in [
-            (model_extra, model_prefix),
-            (resid_u_extra, resid_u_prefix),
-            (resid_w_extra, resid_w_prefix)]:
-        for key, value in extra.items():
-            outputs[f'{prefix}_extra_{key}'] = value
 
     # #
     # # Calculate outputs statistics
@@ -202,7 +148,8 @@ def eval_(
 
     _log.info("storing outputs to the filesystem...")
 
-    _write_outputs(output_dir, outputs)
+    _detail.write_outputs(
+        json, yaml, output_dir, outputs, 'gbkfit_eval_extra')
 
     #
     # Run performance tests
@@ -226,34 +173,3 @@ def eval_(
         filename = os.path.join(output_dir, 'gbkfit_eval_timings')
         _detail.dump_dict(json, yaml, time_stats, filename)
 
-
-def _write_outputs(output_dir, outputs):
-    """
-    Write each output by its type: data on a grid (GridData) and spectra
-    (SpectraData) to a FITS file with world coordinates, other arrays to
-    a FITS file without, and
-    the other values (numbers, strings, lists and dicts) together to
-    gbkfit_eval_extra.json and .yaml.
-    """
-    values = {}
-    for name, value in outputs.items():
-        filename = os.path.join(output_dir, f'{name}.fits')
-        if isinstance(value, gridutils.GridData):
-            fitsutils.write_data(
-                filename, value.data, value.coords, value.spectral_axis,
-                overwrite=True)
-        elif isinstance(value, gridutils.SpectraData):
-            fitsutils.write_spectra(
-                filename, value.data, value.coords, overwrite=True)
-        elif isinstance(value, np.ndarray):
-            fits.writeto(filename, value, overwrite=True)
-        elif isinstance(value, (bool, int, float, str, list, tuple, dict,
-                                np.generic)):
-            values[name] = numutils.nativify(value)
-        else:
-            raise TypeError(
-                f"output {name} has an unsupported type: "
-                f"{type(value).__name__}")
-    if values:
-        _detail.dump_dict(
-            json, yaml, values, os.path.join(output_dir, 'gbkfit_eval_extra'))

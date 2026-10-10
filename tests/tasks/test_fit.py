@@ -52,4 +52,7 @@ def test_fit_recovers_the_parameters_of_noiseless_data(tmp_path):
     best = result['solutions'][0]['free']
     for name in ('xpos', 'posa', 'vpt_vt'):
         assert best[name] == pytest.approx(truth[name], abs=1e-3)
-    assert (tmp_path / 'fit' / 'result.npz').exists()
+    # The arrays of the result, and the model and residuals at the best fit
+    for name in ('result.npz', 'model_0_spectra_d.fits',
+                 'residual_spectra_d.fits'):
+        assert (tmp_path / 'fit' / name).exists()

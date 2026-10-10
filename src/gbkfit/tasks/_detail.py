@@ -1,13 +1,21 @@
 
+import copy
 import json
 import logging
+import os
 from pathlib import Path
 from typing import Any, Literal
 
+import astropy.io.fits as fits
+import numpy as np
+
 import gbkfit.model
 import gbkfit.observation
-from gbkfit.params import ParamDesc
-from gbkfit.utils import iterutils, miscutils, parseutils
+from gbkfit.objective import Objective
+from gbkfit.observation import ObservationGroup
+from gbkfit.params import ParamDesc, ParamValues
+from gbkfit.utils import (
+    fitsutils, gridutils, iterutils, miscutils, numutils, parseutils)
 
 
 _log = logging.getLogger(__name__)
@@ -167,3 +175,83 @@ def load_observation_group(cfg):
         observations = gbkfit.observation.observation_parser.load(
             cfg['observations'])
     return gbkfit.observation.ObservationGroup(models, observations)
+
+
+def evaluation_outputs(
+        group: ObservationGroup,
+        objective: Objective | None,
+        values: ParamValues,
+        model: bool,
+        residuals: bool
+) -> dict[str, Any]:
+    """
+    Return the outputs of an evaluation, by name, in the form their
+    observables give them: the models (model_<i>_<item>_<d|m|w>), the
+    unweighted and weighted residuals (residual_<item>_d and
+    wresidual_<item>_d, with _<i> after the prefix if there are several
+    observations; these need the objective), and the extra outputs
+    (<prefix>_extra_<name>).
+    """
+    outputs = {}
+    model_extra: dict[str, Any] = {}
+    if model:
+        for i, data_i in enumerate(group.model_h(values, model_extra)):
+            observable = group.observations()[i].observable()
+            for key, value in data_i.items():
+                for kind in ('d', 'm', 'w'):
+                    if value.get(kind) is not None:
+                        outputs[f'model_{i}_{key}_{kind}'] = \
+                            observable.output(value[kind])
+    extras = [('model', model_extra)]
+    if residuals:
+        if objective is None:
+            raise ValueError("the residuals need an objective")
+        for prefix, weighted in (('residual', False), ('wresidual', True)):
+            extra: dict[str, Any] = {}
+            # (the objective reuses its residual arrays, so copy them)
+            data = copy.deepcopy(
+                objective.residual_nddata_h(values, weighted, extra))
+            for i, data_i in enumerate(data):
+                prefix_i = prefix + f'_{i}' * (objective.nobservations() > 1)
+                observable = group.observations()[i].observable()
+                for key, value in data_i.items():
+                    outputs[f'{prefix_i}_{key}_d'] = observable.output(value)
+            extras.append((prefix, extra))
+    for prefix, extra in extras:
+        for key, value in extra.items():
+            outputs[f'{prefix}_extra_{key}'] = value
+    return outputs
+
+
+def write_outputs(
+        json_: Any, yaml_: Any, output_dir: str, outputs: dict[str, Any],
+        extra_filename: str
+) -> None:
+    """
+    Write each output by its type: data on a grid (GridData) and spectra
+    (SpectraData) to a FITS file with world coordinates, other arrays to
+    a FITS file without, and the other values (numbers, strings, lists
+    and dicts) together to <extra_filename>.json and .yaml.
+    """
+    values = {}
+    for name, value in outputs.items():
+        filename = os.path.join(output_dir, f'{name}.fits')
+        if isinstance(value, gridutils.GridData):
+            fitsutils.write_data(
+                filename, value.data, value.coords, value.spectral_axis,
+                overwrite=True)
+        elif isinstance(value, gridutils.SpectraData):
+            fitsutils.write_spectra(
+                filename, value.data, value.coords, overwrite=True)
+        elif isinstance(value, np.ndarray):
+            fits.writeto(filename, value, overwrite=True)
+        elif isinstance(value, (bool, int, float, str, list, tuple, dict,
+                                np.generic)):
+            values[name] = numutils.nativify(value)
+        else:
+            raise TypeError(
+                f"output {name} has an unsupported type: "
+                f"{type(value).__name__}")
+    if values:
+        dump_dict(
+            json_, yaml_, values, os.path.join(output_dir, extra_filename))
