@@ -65,10 +65,35 @@ class LSF(parseutils.TypedSerializable, abc.ABC):
         LSF
             The LSF.
         """
-        tables = varying.Varying.load_tables(cls, info)
-        if tables:
-            return LSFVarying(varying.Varying(cls, info, tables))
+        options = varying.load_tables(info)
+        if options != info:
+            return cls.varying(**options)
         return super().load(info)
+
+    @classmethod
+    def varying(cls, **options) -> 'LSF':
+        """
+        Make an LSF of this class whose options vary along the spectral
+        axis.
+
+        Parameters
+        ----------
+        **options
+            The options of the class; those that vary (see the
+            VARYING_OPTIONS of the class) are tables (SpectralTable).
+
+        Returns
+        -------
+        LSF
+            The LSF (see LSFVarying).
+
+        Raises
+        ------
+        ConfigError
+            If an option that cannot vary is a table, or the options are
+            invalid.
+        """
+        return LSFVarying(varying._VaryingOptions(cls, options))
 
     @abc.abstractmethod
     def dump(
@@ -167,25 +192,26 @@ class LSF(parseutils.TypedSerializable, abc.ABC):
         """
         return False
 
-    def at_velocities(
-            self, velocities: Sequence[float] | np.ndarray, rest: Any = None
-    ) -> list['LSF']:
+    def at(self, points: Any, rest: Any = None) -> 'LSF | list[LSF]':
         """
-        Return the LSF at velocities of the spectral axis.
+        Return the LSF at points of the spectral axis.
 
         Parameters
         ----------
-        velocities : array_like
-            The velocities (km/s).
+        points : Quantity
+            Wavelengths, frequencies or velocities: one, or a sequence.
         rest : Quantity, optional
-            The rest of the spectral axis (see gridutils.Coords).
+            The rest of the spectral axis (see gridutils.Coords); needed
+            between velocities and the points of the tables of an LSF
+            that varies, if they are of another kind.
 
         Returns
         -------
-        list of LSF
-            The LSF at each velocity: itself, unless it varies.
+        LSF or list of LSF
+            The LSF at the point, or at each point: itself, unless it
+            varies.
         """
-        return [self] * len(velocities)
+        return varying.per_point(points, lambda points_: [self] * len(points_))
 
     def velocity_range(self, rest: Any = None) -> tuple[float, float]:
         """
@@ -577,12 +603,12 @@ class LSFSum(LSF):
     def varies(self) -> bool:
         return any(lsf.varies() for lsf in self._lsfs)
 
-    def at_velocities(self, velocities, rest=None):
+    def at(self, points, rest=None):
         if not self.varies():
-            return super().at_velocities(velocities, rest)
-        return [
+            return super().at(points, rest)
+        return varying.per_point(points, lambda points_: [
             LSFSum(lsfs, self._weights) for lsfs in
-            _detail.terms_at_velocities(self._lsfs, velocities, rest)]
+            _detail.terms_at(self._lsfs, points_, rest)])
 
     def velocity_range(self, rest=None):
         return _detail.terms_velocity_range(self._lsfs, rest)
@@ -635,12 +661,12 @@ class LSFConvolution(LSF):
     def varies(self) -> bool:
         return any(lsf.varies() for lsf in self._lsfs)
 
-    def at_velocities(self, velocities, rest=None):
+    def at(self, points, rest=None):
         if not self.varies():
-            return super().at_velocities(velocities, rest)
-        return [
+            return super().at(points, rest)
+        return varying.per_point(points, lambda points_: [
             LSFConvolution(lsfs) for lsfs in
-            _detail.terms_at_velocities(self._lsfs, velocities, rest)]
+            _detail.terms_at(self._lsfs, points_, rest)])
 
     def velocity_range(self, rest=None):
         return _detail.terms_velocity_range(self._lsfs, rest)
@@ -812,8 +838,13 @@ class LSFImages(LSF):
     def varies(self) -> bool:
         return True
 
-    def at_velocities(self, velocities, rest=None):
-        blends = varying.blend(self._points, velocities, rest)
+    def at(self, points, rest=None):
+        return varying.per_point(
+            points, lambda points_: self._at(points_, rest))
+
+    def _at(self, points, rest):
+        """The image of each of the points (1D)."""
+        blends = varying.blend(self._points, points, rest)
         lsfs = {}
         for i, j, t in set(blends):
             lsfs[(i, j, t)] = LSFImage(
@@ -826,22 +857,19 @@ class LSFImages(LSF):
 
     def _size_impl(self, step):
         raise RuntimeError(
-            "LSF profiles give a profile at each channel (see at_velocities)")
+            "LSF profiles give a profile at each channel (see at)")
 
     def _asarray_impl(self, step, size, offset):
         raise RuntimeError(
-            "LSF profiles give a profile at each channel (see at_velocities)")
+            "LSF profiles give a profile at each channel (see at)")
 
 
 class LSFVarying(LSF):
     """
     An LSF of a type whose options vary along the spectral axis: an LSF of
-    the type at each channel (see at_velocities). It is not drawn itself.
-
-    Parameters
-    ----------
-    options : varying.Varying
-        The options of the LSF of the type.
+    the type at each channel (see at). It is not drawn itself.
+    It is made by the varying of the class of the type (e.g.
+    LSFGauss.varying).
     """
 
     def type(self) -> str:
@@ -853,14 +881,15 @@ class LSFVarying(LSF):
     ) -> dict[str, Any]:
         return self._options.dump()
 
-    def __init__(self, options: varying.Varying):
+    def __init__(self, options: 'varying._VaryingOptions'):
         self._options = options
 
     def varies(self) -> bool:
         return True
 
-    def at_velocities(self, velocities, rest=None):
-        return self._options.at_velocities(velocities, rest)
+    def at(self, points, rest=None):
+        return varying.per_point(
+            points, lambda points_: self._options.at(points_, rest))
 
     def velocity_range(self, rest=None):
         return self._options.velocity_range(rest)
@@ -868,12 +897,12 @@ class LSFVarying(LSF):
     def _size_impl(self, step):
         raise RuntimeError(
             "an LSF that varies along the spectral axis has a size at each "
-            "channel (see at_velocities)")
+            "channel (see at)")
 
     def _asarray_impl(self, step, size, offset):
         raise RuntimeError(
             "an LSF that varies along the spectral axis is drawn at each "
-            "channel (see at_velocities)")
+            "channel (see at)")
 
 
 lsf_parser = parseutils.TypedParser(LSF, [

@@ -97,12 +97,12 @@ def sum_weights(weights, n, desc):
     return weights / weights.sum()
 
 
-def terms_at_velocities(terms, velocities, rest):
+def terms_at(terms, points, rest):
     """
     Return the terms of a sum or a convolution (PSFs or LSFs) at each of
-    the velocities of a spectral axis: a list of terms per velocity.
+    the points of the spectral axis (1D): a list of terms per point.
     """
-    per_term = [term.at_velocities(velocities, rest) for term in terms]
+    per_term = [term.at(points, rest) for term in terms]
     return [list(terms_) for terms_ in zip(*per_term)]
 
 
