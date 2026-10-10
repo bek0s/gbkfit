@@ -64,7 +64,7 @@ def fit(config: str,
     # Setup all the components described in the configuration.
     # After running the configuration through _detail.prepare_config():
     # - models and observations configurations are lists
-    # - objective, pdescs, params, and fitter configurations are dicts
+    # - pdescs, params and fitter configurations are dicts
     #
 
 

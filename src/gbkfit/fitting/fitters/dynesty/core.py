@@ -35,7 +35,8 @@ class FitterDynesty(Fitter):
     dynamic : bool, optional
         Whether to sample dynamically.
     nlive : int, optional
-        The number of live points (of the first run, if dynamic).
+        The number of live points (of the first run and of each added
+        batch, if dynamic).
     bound : {'multi', 'single', 'balls', 'cubes', 'none'}, optional
         The bounds of the live points.
     sample : {'auto', 'unif', 'rwalk', 'slice', 'rslice'}, optional

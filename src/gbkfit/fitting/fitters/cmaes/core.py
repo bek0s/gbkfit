@@ -89,7 +89,8 @@ class FitterCMAES(Fitter):
         The population of the first run (by default, pycma's:
         4 + 3 ln(n)).
     restarts : int, optional
-        The number of restarts (IPOP, or BIPOP if bipop).
+        The number of restarts with larger populations (IPOP; with
+        bipop, runs with small populations come on top).
     bipop : bool, optional
         Whether the restarts alternate large and small populations.
     maxfevals : int, optional

@@ -116,7 +116,8 @@ def test_lmfit_recovers_the_parameters_and_their_errors(driver):
     for name, value in TRUE.items():
         assert abs(best.free[name] - value) < 4 * best.covariance.std[name]
     # The covariance predicts how the chi-square grows away from the best
-    # fit: by (dx)^2 / var along each free element, at fixed others
+    # fit: by (dx)^2 times the diagonal of the inverse covariance, along
+    # each free element at fixed others
     x = np.array(list(best.free.values()))
     hessian = np.linalg.inv(best.covariance.matrix)
     i = list(best.free).index('posa')

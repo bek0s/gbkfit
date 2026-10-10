@@ -166,9 +166,16 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
         Raises
         ------
         ConfigError
-            If the free properties are invalid for the fitter.
+            If the free properties or the options of the fitter do not
+            suit the problem (e.g. too few free elements or walkers).
         ValueError
-            If no parameter is free.
+            If no parameter is free, or the parameter space lacks
+            parameters of the objective.
+        ParamEvaluationError
+            If the parameters cannot be evaluated where a least-squares
+            fitter evaluates them (e.g. at the start).
+        RuntimeError
+            If the fitter finds no point with a finite chi-square.
         """
         fit_params = self.load_fit_params(params)
         if not fit_params:

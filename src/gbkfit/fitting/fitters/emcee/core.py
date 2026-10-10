@@ -117,8 +117,8 @@ class FitterEmcee(Fitter):
     Raises
     ------
     ConfigError
-        If a number is not positive, or the burn-in is not shorter than
-        the chain.
+        If nwalkers, nsteps or thin is not positive, burnin is not in
+        [0, nsteps), or thin keeps no step after the burn-in.
     """
 
     @staticmethod
