@@ -125,6 +125,21 @@ def test_cmaes_finds_the_minimum_of_lmfit(driver):
 
 
 
+
+def test_errors_propagate_to_tied_and_fixed_elements():
+    pytest.importorskip('lmfit')
+    from gbkfit.fitting.fitters.lmfit import FitterLMFitLeastSquares
+    objective = mock_objective(DriverHost())
+    properties = bounded_properties() | dict(ypos='xpos - 1.1', bpt_s=4.0)
+    params = ParamSpace(objective.pdescs(), properties)
+    best = FitterLMFitLeastSquares().fit(objective, params).best()
+    std = best.covariance.element_std
+    assert std['ypos'] == pytest.approx(std['xpos'], rel=1e-6)
+    assert std['bpt_s'] == 0
+    assert best.covariance.at_bounds == ()
+    laplace = best.laplace.summary()
+    assert laplace['ypos'][1] == pytest.approx(laplace['xpos'][1] - 1.1)
+
 @pytest.mark.parametrize('fitter', [
     dict(type='scipy.least_squares', method='trf'),
     dict(type='scipy.least_squares', method='lm'),
