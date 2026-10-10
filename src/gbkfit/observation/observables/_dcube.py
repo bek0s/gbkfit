@@ -444,6 +444,9 @@ class DCubePlan:
 
         # Perform fft-based convolution.
         # The weights are only smoothed if requested.
+        # (in float32, the rounding of the FFT leaves noise of about 1e-7
+        # of the peak in the faint parts of the cube, which spoils their
+        # moments: see dmodel_mmaps_moments)
         cubes = [dcube_hi]
         if has_weights and dcube.smooth_weights():
             cubes.append(wcube_hi)

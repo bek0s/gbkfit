@@ -138,7 +138,7 @@ def test_unsupported_dtype_fails_when_planning(driver):
         Observation, ObservationGroup, observable_parser)
     observation = Observation(
         driver, observable_parser.load(dict(type='pixel_brightness', size=[8, 8])),
-        dtype='float64')
+        dtype='float16')
     gmodel = gbkfit.model.gmodel_parser.load(dict(
         type='intensity_2d', components=dict(
             type='smdisk', loose=False, tilted=False, rnodes=[0, 2, 4],

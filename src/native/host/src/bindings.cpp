@@ -12,13 +12,22 @@ using namespace gbkfit;
 
 namespace nb = nanobind;
 
+template<typename T, typename Device> void
+bind_precision(nb::module_& m, const std::string& suffix)
+{
+    using Kernels = host::Wrapper<T>;
+    bindings::DModel<T, Device, Kernels>::bind(m, suffix);
+    bindings::GModel<T, Device, Kernels>::bind(m, suffix);
+    bindings::Objective<T, Device, Kernels>::bind(m, suffix);
+    host::FFT<T>::bind(m, suffix);
+}
+
 NB_MODULE(EXTENSION_NAME, m)
 {
     using Device = nb::device::cpu;
-    using Kernels = host::Wrapper<float>;
 
-    bindings::DModel<float, Device, Kernels>::bind(m, "f32");
-    bindings::GModel<float, Device, Kernels>::bind(m, "f32");
-    bindings::Objective<float, Device, Kernels>::bind(m, "f32");
-    host::FFT<float>::bind(m, "f32");
+    // The classes of each precision: float32 (suffix f32) and float64
+    // (suffix f64)
+    bind_precision<float, Device>(m, "f32");
+    bind_precision<double, Device>(m, "f64");
 }
