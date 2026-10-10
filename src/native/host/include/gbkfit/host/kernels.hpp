@@ -323,8 +323,8 @@ gmodel_smdisk_evaluate(const DiskArgs<T>& a)
 template<typename T> void
 objective_residual(
         const T* obs_d, const T* obs_e, const T* obs_m,
-        const T* mdl_d, const T* mdl_w, const T* mdl_m,
-        int size, T weight, T* res)
+        const T* mdl_d, const T* mdl_w,
+        int size, T weight, T missing, T* res)
 {
     #pragma omp parallel for
     for(int i = 0; i < size; ++i) {
@@ -332,8 +332,8 @@ objective_residual(
         gbkfit::objective_residual(
                 i,
                 obs_d, obs_e, obs_m,
-                mdl_d, mdl_w, mdl_m,
-                size, weight, res);
+                mdl_d, mdl_w,
+                size, weight, missing, res);
 
     }
 }

@@ -3,7 +3,7 @@ from typing import Any
 import numpy as np
 
 from gbkfit.dataset import Dataset
-from gbkfit.driver import DeviceArray, Driver
+from gbkfit.driver import DeviceArray
 from gbkfit.observation import ObservationGroup
 from gbkfit.params import ParamDesc, ParamValues
 from gbkfit.utils import iterutils
@@ -22,10 +22,13 @@ class Objective:
 
     The likelihood is Gaussian. The residual of each value is
     (model - data) / error, times the weights of the model (if any) and
-    of the data item (from the likelihood of its observation). Masked
-    values (of the data, or of the model, e.g. the moments of masked
-    spectra) have a residual of 0 and do not count. Each observation
-    checks that its data are of the form of its model (see Observation).
+    of the data item (from the likelihood of its observation). Values
+    the data mask have a residual of 0 and do not count. Where the data
+    have a value but the model none (NaN, e.g. the velocity of a spectrum
+    without flux), the residual is the 'missing' residual of the
+    likelihood (times the weight of the item): a model must not lower the
+    chi-square by having no values. Each observation checks that its
+    data are of the form of its model (see Observation).
 
     The methods for fitters return totals over all observations and new
     arrays (chi2, log_likelihood, residuals). The others return a value
@@ -71,11 +74,14 @@ class Objective:
         # The sum of the residuals of each observation (1d, size 1)
         self._h_residual_scalar = iterutils.make_list(n, None)
         self._d_residual_scalar = iterutils.make_list(n, None)
-        # The weight of each data item, from the likelihood
+        # The weight of each data item, and the residual of the values the
+        # model does not have, from the likelihood
         self._weights_u = tuple(
             {key: obs.likelihood().weight(key)
              for key in obs.observable().keys()}
             for obs in observations)
+        self._missing = tuple(
+            obs.likelihood().missing() for obs in observations)
         # The native objective of each observation, for its driver
         self._backends = iterutils.make_list(n, None)
         # The memory is allocated on the first evaluation (see prepare)
@@ -225,33 +231,17 @@ class Objective:
         vectors = self.residual_vector_h(params, True, out_extra)
         return np.concatenate(vectors, dtype=np.float64)
 
-    def nresiduals(self, params: ParamValues) -> int:
+    def nresiduals(self) -> int:
         """
-        Return the number of residuals that count (those of the values
-        that neither the data nor the model masks), at the given
-        parameters: the model masks can depend on them.
-
-        Parameters
-        ----------
-        params : ParamValues
-            The parameters of the models, prefixed (see pdescs).
-
-        Returns
-        -------
-        int
-            The number of residuals.
+        Return the number of residuals that count: those of the values the
+        data do not mask (the values the model does not have count too,
+        with the missing residual).
         """
-        model_data = self._update_residual_d(params, True)
-        count = 0
-        for i in range(self.nobservations()):
-            driver = self._group.observations()[i].driver()
-            for key in self._group.observations()[i].observable().keys():
-                count += self._count_unmasked(
-                    driver,
-                    self._d_dataset_m_nddata[i].get(key),
-                    model_data[i][key]['m'],
-                    self._d_dataset_d_nddata[i][key].size)
-        return count
+        return sum(
+            int(np.count_nonzero(dataset[key].mask()))
+            for dataset, obs in zip(
+                self._datasets, self._group.observations())
+            for key in obs.observable().keys())
 
     def residual_sums(
             self,
@@ -359,22 +349,6 @@ class Objective:
         self._update_residual_d(params, weighted, out_extra)
         return self._d_residual_nddata
 
-    @staticmethod
-    def _count_unmasked(
-            driver: Driver,
-            data_mask: DeviceArray | None,
-            model_mask: DeviceArray | None,
-            size: int
-    ) -> int:
-        """Return the number of values that neither mask masks."""
-        masks = [m for m in (data_mask, model_mask) if m is not None]
-        if not masks:
-            return size
-        unmasked = driver.mem_copy_d2h(masks[0]) != 0
-        for mask in masks[1:]:
-            unmasked &= driver.mem_copy_d2h(mask) != 0
-        return int(np.count_nonzero(unmasked))
-
     def _update_residual_h(
             self,
             params: ParamValues,
@@ -394,8 +368,8 @@ class Objective:
             params: ParamValues,
             weighted: bool,
             out_extra: dict[str, Any] | None = None
-    ) -> list[dict[str, dict[str, DeviceArray | None]]]:
-        """Evaluate the models and the residuals; return the model data."""
+    ) -> None:
+        """Evaluate the models and the residuals."""
         if not self._prepared:
             self.prepare()
         model_data = self._group.model_d(params, out_extra)
@@ -410,7 +384,6 @@ class Objective:
                         self._d_dataset_m_nddata[i].get(key),
                         model_data[i][key]['d'],
                         model_data[i][key]['w'],
-                        model_data[i][key]['m'],
                         weight,
+                        self._missing[i],
                         self._d_residual_nddata[i][key])
-        return model_data

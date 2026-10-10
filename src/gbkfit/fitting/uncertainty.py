@@ -42,8 +42,11 @@ class UncertaintyOptions(parseutils.Serializable):
         the posterior at each solution (0 for none).
     rcond : float, optional
         Singular values of the Jacobian (with normalised columns) below
-        rcond times the largest one count as 0 (unconstrained
-        directions).
+        rcond times the largest one count as 0: the data do not constrain
+        those directions, which are listed instead of given errors of
+        numerical noise. By default, 10 times the precision of the
+        models to the power 2/3, the relative error of the central
+        differences (2.4e-4 for float32 models, 5e-10 for float64).
 
     Raises
     ------
@@ -61,9 +64,9 @@ class UncertaintyOptions(parseutils.Serializable):
             covariance: bool = True,
             scale: bool = False,
             laplace_samples: int = 1000,
-            rcond: float = 1e-10
+            rcond: float | None = None
     ):
-        if laplace_samples < 0 or rcond < 0:
+        if laplace_samples < 0 or (rcond is not None and rcond < 0):
             raise ConfigError(
                 "options 'laplace_samples' and 'rcond' cannot be negative")
         self._covariance = covariance
@@ -83,8 +86,11 @@ class UncertaintyOptions(parseutils.Serializable):
         """Return the number of samples of the Laplace posterior."""
         return self._laplace_samples
 
-    def rcond(self) -> float:
-        """Return the cutoff of the singular values of the Jacobian."""
+    def rcond(self) -> float | None:
+        """
+        Return the cutoff of the singular values of the Jacobian (None
+        for the default, from the precision of the models).
+        """
         return self._rcond
 
 
@@ -244,7 +250,10 @@ def covariance(
     norms = np.linalg.norm(jac, axis=0)
     norms[norms == 0] = 1
     _, s, vt = np.linalg.svd(jac / norms, full_matrices=False)
-    keep = s > options.rcond() * s[0]
+    rcond = options.rcond()
+    if rcond is None:
+        rcond = 10 * problem.precision() ** (2 / 3)
+    keep = s > rcond * s[0]
     vt_kept = vt[keep] / s[keep, None]
     matrix = (vt_kept.T @ vt_kept) / np.outer(norms, norms)
     scaled = options.scale() and np.isfinite(reduced_chi2)

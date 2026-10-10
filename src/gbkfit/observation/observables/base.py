@@ -26,8 +26,9 @@ __all__ = [
 
 
 # The model data of an observable: for each of its data items (e.g.
-# 'spectra'), the arrays of the model ('d'), of its mask ('m') and of its
-# weights ('w') on the driver, or None
+# 'spectra'), the arrays of the model ('d'; NaN where it has no value),
+# of its mask ('m'; an output, which the objective does not use) and of
+# its weights ('w') on the driver, or None
 ModelData: TypeAlias = dict[str, dict[str, DeviceArray | None]]
 
 

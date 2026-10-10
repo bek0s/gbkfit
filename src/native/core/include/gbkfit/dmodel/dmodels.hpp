@@ -130,9 +130,12 @@ dmodel_dcube_mask(
 // (x, y) of a cube: its flux (order 0), mean velocity (1), dispersion
 // (2), and central moments (above 2); with the weights of the spectrum,
 // their flux-weighted mean (mmaps_w). The spectra whose moment 0 is not
-// above the cutoff are masked (NaN, and 0 in mmaps_m), and with orders
-// from 2, those whose variance is negative (e.g. the faint ringing of a
-// convolution), which have no dispersion. The channels of the spectrum
+// above the cutoff are masked (0 in mmaps_m), and with orders from 2,
+// those whose variance is negative (e.g. the faint ringing of a
+// convolution), which have no dispersion: their moments from order 1 are
+// NaN (moment 0, their flux, keeps its value, so that a model without
+// flux where the data have some is compared with them; the objective
+// gives the NaN moments a penalty). The channels of the spectrum
 // (and of its weights) are stride values apart: the spectrum can be in
 // the cube or in a contiguous copy. The sums are in channels from the
 // centre of the axis, so that their precision does not depend on its
@@ -187,26 +190,29 @@ dmodel_mmaps_moments(
     }
     mmaps_m[idx_2d] = valid;
 
-    // Weight
-    T w_sum = 0;
-    for (int z = 0; spectrum_w && valid && z < size_z; ++z)
+    // The weight: its flux-weighted mean (its plain mean in a masked
+    // spectrum, whose moment 0 still counts)
+    T w_sum = 0, w_plain_sum = 0;
+    for (int z = 0; spectrum_w && z < size_z; ++z)
     {
         T i = spectrum_d[z * stride];
         T w = spectrum_w[z * stride];
         w_sum += w * i;
+        w_plain_sum += w;
     }
     if (spectrum_w)
     {
-        mmaps_w[idx_2d] = valid ? w_sum / flux_sum : NAN;
+        mmaps_w[idx_2d] = valid ? w_sum / flux_sum : w_plain_sum / size_z;
     }
 
-    // The moments of the given orders, valid only if not masked, in the
-    // units of the spectral axis
+    // The moments of the given orders, in the units of the spectral axis:
+    // moment 0 (the flux) always, the others only if not masked (NaN: the
+    // model has no velocity where it has no flux)
     for (int m = 0; m < norders; ++m)
     {
         const int order = orders[m];
         T value = NAN;
-        if (valid && order == 0)
+        if (order == 0)
         {
             value = m0;
         }
@@ -253,7 +259,7 @@ dmodel_gaussian_sse(
 // y) of a cube by least squares (Levenberg-Marquardt), as moments: its
 // flux (order 0), centre (1) and dispersion (2), the only orders. The
 // spectra whose moment 0 is not above the cutoff, and those whose fit
-// fails, are masked (NaN, and 0 in mmaps_m), as with the moments. The fit
+// fails, are masked as with the moments (moment 0 is then their flux). The fit
 // is of a Gaussian sampled at the centres of the channels, in channel
 // units, and starts from the moments. The channels of the spectrum are
 // stride values apart, as in dmodel_mmaps_moments.
@@ -361,12 +367,15 @@ dmodel_mmaps_gaussian(
     valid = valid && std::isfinite(a) && std::isfinite(c) && s > 0;
     mmaps_m[idx_2d] = valid;
 
-    // The moments of the Gaussian, in the units of the spectral axis
+    // The moments of the Gaussian, in the units of the spectral axis:
+    // moment 0 always (the flux, if no Gaussian fits), the others only if
+    // not masked
     for (int m = 0; m < norders; ++m)
     {
         T value = NAN;
-        if (valid && orders[m] == 0)
-            value = a * s * std::sqrt(2 * PI<T>) * step_z;
+        if (orders[m] == 0)
+            value = valid ? a * s * std::sqrt(2 * PI<T>) * step_z
+                          : m0 * step_z;
         else if (valid && orders[m] == 1)
             value = zero_z + c * step_z;
         else if (valid && orders[m] == 2)

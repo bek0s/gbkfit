@@ -192,13 +192,16 @@ def test_mmaps_moments(driver, zero):
         for k in (2, 3, 4)}
     expected = [m0, m1, np.sqrt(central[2]), central[3], central[4]]
     expected_w = np.sum(weights * cube, axis=0) * step / m0
-    # The faint lines are masked: NaN and 0 in the mask
+    # The faint lines are masked: 0 in the mask, and NaN from moment 1
+    # (moment 0, their flux, keeps its value)
     valid = m0 > 0.1
     assert valid.sum() == valid.size - SPECTRA_SHAPE[1]
     np.testing.assert_array_equal(memory.to_host(mmaps_m), valid)
     result = memory.to_host(mmaps_d)
+    np.testing.assert_allclose(result[0][~valid], m0[~valid], rtol=1e-5)
     for order, expected_map in zip(orders, expected):
-        assert np.isnan(result[order][~valid]).all()
+        if order > 0:
+            assert np.isnan(result[order][~valid]).all()
         # Moment 1 to a thousandth of a channel, the others relative to
         # their largest value
         if order == 1:
@@ -208,16 +211,18 @@ def test_mmaps_moments(driver, zero):
                 rtol=1e-4, atol=1e-4 * np.abs(expected_map[valid]).max())
         np.testing.assert_allclose(
             result[order][valid], expected_map[valid], **tolerance)
+    # The weights: their flux-weighted mean (their plain mean if masked)
     result_w = memory.to_host(mmaps_w)
-    assert np.isnan(result_w[~valid]).all()
     np.testing.assert_allclose(result_w[valid], expected_w[valid], rtol=1e-5)
+    np.testing.assert_allclose(
+        result_w[~valid], weights.mean(axis=0)[~valid], rtol=1e-5)
 
 
 @pytest.mark.parametrize('orders, masked', [((0, 1), False), ((0, 1, 2), True)])
 def test_mmaps_moments_mask_negative_variances(driver, orders, masked):
     # A spectrum whose variance is negative (e.g. the faint ringing of a
-    # convolution) has no dispersion: it is masked, for all the orders,
-    # if they need it
+    # convolution) has no dispersion: it is masked if the orders need it
+    # (NaN from order 1; moment 0, its flux, keeps its value)
     memory = Memory(driver)
     dmodel = driver.native_class('DModel', DTYPE)()
     cube = np.array([[[1, -1]], [[2, 3]], [[1, -1]]], DTYPE)
@@ -229,7 +234,8 @@ def test_mmaps_moments_mask_negative_variances(driver, orders, masked):
     np.testing.assert_array_equal(memory.to_host(mmaps_m), [[1, not masked]])
     result = memory.to_host(mmaps_d)
     assert np.isfinite(result[:, 0, 0]).all()
-    assert np.isnan(result[:, 0, 1]).all() == masked
+    assert np.isfinite(result[0, 0, 1])
+    assert np.isnan(result[1:, 0, 1]).all() == masked
 
 
 def test_mmaps_moments_need_weight_maps_with_weights(driver):
@@ -268,8 +274,13 @@ def test_mmaps_gaussian(driver):
     assert valid.sum() == valid.size - SPECTRA_SHAPE[1]
     assert not valid[:, 0].any()
     result = memory.to_host(mmaps_d)
-    for result_map, expected_map in zip(result, expected):
-        assert np.isnan(result_map[~valid]).all()
+    # The masked spectra: their flux as moment 0, and NaN from moment 1
+    np.testing.assert_allclose(
+        result[0][~valid], (cube.sum(axis=0) * step)[~valid], rtol=1e-5)
+    for order, expected_map in enumerate(expected):
+        result_map = result[order]
+        if order > 0:
+            assert np.isnan(result_map[~valid]).all()
         np.testing.assert_allclose(
             result_map[valid], expected_map[valid], rtol=1e-3)
 
@@ -323,7 +334,7 @@ def test_mmaps_mask_by_the_flux_in_the_units_of_the_axis(driver, method):
 
 
 def _residual_inputs():
-    """Observed and model data, errors, masks and weights for a residual."""
+    """Observed and model data, errors, mask and weights for a residual."""
     n = 1000
     i = np.arange(n, dtype=DTYPE)
     return dict(
@@ -331,37 +342,44 @@ def _residual_inputs():
         obs_e=np.cos(0.02 * i) + 1.5,
         obs_m=(i % 7 != 0).astype(DTYPE),
         mdl_d=np.sin(0.011 * i) + 1,
-        mdl_w=np.cos(0.005 * i) ** 2,
-        mdl_m=(i % 11 != 0).astype(DTYPE))
+        mdl_w=np.cos(0.005 * i) ** 2)
 
 
-def test_residual(driver, ndarrays_regression):
+def residual(driver, inputs, weight, missing):
+    """The residual of the native objective, on the host."""
     memory = Memory(driver)
     objective = driver.native_class('Objective', DTYPE)()
-    inputs = {k: memory.to_device(v) for k, v in _residual_inputs().items()}
-    residual = memory.to_device(np.zeros(1000, DTYPE))
-    objective.residual(**inputs, weight=0.7, res=residual)
-    check_against_reference(
-        ndarrays_regression, 'residual',
-        dict(result=memory.to_host(residual)))
-
-
-def test_residual_of_masked_pixels_is_zero(driver):
-    # Masked pixels have no residual, also where their data or model are
-    # NaN (masked data, and the moments of masked spectra)
-    memory = Memory(driver)
-    objective = driver.native_class('Objective', DTYPE)()
-    inputs = _residual_inputs()
-    masked = (inputs['obs_m'] == 0) | (inputs['mdl_m'] == 0)
-    inputs['obs_d'][inputs['obs_m'] == 0] = np.nan
-    inputs['mdl_d'][inputs['mdl_m'] == 0] = np.nan
-    residual = memory.to_device(np.zeros(1000, DTYPE))
+    result = memory.to_device(np.zeros(1000, DTYPE))
     objective.residual(
         **{k: memory.to_device(v) for k, v in inputs.items()},
-        weight=0.7, res=residual)
-    result = memory.to_host(residual)
+        weight=weight, missing=missing, res=result)
+    return memory.to_host(result)
+
+
+def test_residual(driver):
+    # (model - data) / error, times the weights of the model and of the
+    # item, and the data mask
+    inputs = _residual_inputs()
+    expected = (inputs['mdl_d'].astype(float) - inputs['obs_d']) \
+        / inputs['obs_e'] * inputs['mdl_w'] * inputs['obs_m'] * 0.7
+    np.testing.assert_allclose(
+        residual(driver, inputs, 0.7, 3.0), expected, rtol=1e-5, atol=1e-6)
+
+
+def test_residual_of_masked_data_and_missing_model_values(driver):
+    # Values the data mask have no residual (their data can be NaN); where
+    # the data have a value but the model none (NaN, e.g. the velocity of
+    # a spectrum without flux), it is the missing residual times the
+    # weight of the item
+    inputs = _residual_inputs()
+    masked = inputs['obs_m'] == 0
+    missing = ~masked & (np.arange(1000) % 11 == 0)
+    inputs['obs_d'][masked] = np.nan
+    inputs['mdl_d'][missing | (np.arange(1000) % 13 == 0) & masked] = np.nan
+    result = residual(driver, inputs, 0.7, 3.0)
     np.testing.assert_array_equal(result[masked], 0)
-    assert np.isfinite(result).all() and result[~masked].any()
+    np.testing.assert_allclose(result[missing], 3.0 * 0.7)
+    assert np.isfinite(result).all()
 
 
 def residual_sum(driver, values, squared):

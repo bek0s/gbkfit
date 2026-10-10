@@ -15,24 +15,25 @@ struct Objective
     // A sum, in double precision: a cube can have millions of terms
     using Sum = Array<Device, double, nb::shape<1>>;
 
-    // (mdl_d - obs_d) / obs_e * mdl_w * obs_m * mdl_m * weight, where
-    // all arrays but obs_d and mdl_d are optional
+    // (mdl_d - obs_d) / obs_e * mdl_w * obs_m * weight, where all arrays
+    // but obs_d and mdl_d are optional; 0 where the data are masked, and
+    // missing * weight where the model has no value (NaN) and the data
+    // have one (see gbkfit::objective_residual)
     static void
     residual(
             ConstData obs_d, ConstData obs_e, ConstData obs_m,
-            ConstData mdl_d, ConstData mdl_w, ConstData mdl_m,
-            T weight, Data res)
+            ConstData mdl_d, ConstData mdl_w,
+            T weight, T missing, Data res)
     {
         require_same_shape(obs_e, obs_d, "obs_e", "obs_d");
         require_same_shape(obs_m, obs_d, "obs_m", "obs_d");
         require_same_shape(mdl_d, obs_d, "mdl_d", "obs_d");
         require_same_shape(mdl_w, obs_d, "mdl_w", "obs_d");
-        require_same_shape(mdl_m, obs_d, "mdl_m", "obs_d");
         require_same_shape(res, obs_d, "res", "obs_d");
         Kernels::objective_residual(
                 obs_d.data(), data(obs_e), data(obs_m),
-                mdl_d.data(), data(mdl_w), data(mdl_m),
-                int(obs_d.size()), weight, res.data());
+                mdl_d.data(), data(mdl_w),
+                int(obs_d.size()), weight, missing, res.data());
     }
 
     // The sum of the squared or absolute residuals
@@ -54,8 +55,8 @@ struct Objective
                         nb::arg("obs_m").noconvert().none(),
                         nb::arg("mdl_d").noconvert(),
                         nb::arg("mdl_w").noconvert().none(),
-                        nb::arg("mdl_m").noconvert().none(),
                         nb::arg("weight"),
+                        nb::arg("missing"),
                         nb::arg("res").noconvert())
                 .def_static("residual_sum", &residual_sum,
                         nb::arg("residual").noconvert(),

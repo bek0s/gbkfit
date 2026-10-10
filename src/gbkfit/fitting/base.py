@@ -267,8 +267,8 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
         x = np.asarray(x, dtype=float)
         values = params.evaluate(x)
         chi2 = objective.chi2(values)
-        nresiduals = objective.nresiduals(values)
-        nevals = 2
+        nresiduals = objective.nresiduals()
+        nevals = 1
         dof = nresiduals - problem.ndim()
         reduced_chi2 = chi2 / dof if dof > 0 else np.nan
         log_prior = None if problem.priors() is None \
