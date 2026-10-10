@@ -22,9 +22,8 @@ class FitParamLMFitNelderMead(FitParamLMFit):
 
     @classmethod
     def load(cls, info):
-        desc = parseutils.make_basic_desc(cls, 'param')
         opts = parseutils.parse_options_for_callable(
-            info, desc, cls.__init__, fun_rename_args=dict(
+            info, cls.__init__, rename_params=dict(
                 initial_value='value',
                 minimum='min',
                 maximum='max'))
@@ -64,9 +63,8 @@ class FitParamsLMFitNelderMead(FitParamsLMFit):
 
     @classmethod
     def load(cls, info, pdescs):
-        desc = parseutils.make_basic_desc(cls, 'params')
         opts = parseutils.parse_options_for_callable(
-            info, desc, cls.__init__, fun_ignore_args=['pdescs'])
+            info, cls.__init__, ignore_params=['pdescs'])
         opts = paramutils.load_params_parameters_conversions(
             opts, pdescs, collections.abc.Mapping, cls.load_param)
         return cls(pdescs, **opts)
@@ -92,8 +90,7 @@ class FitterLMFitNelderMead(FitterLMFit):
 
     @classmethod
     def load(cls, info):
-        desc = parseutils.make_typed_desc(cls, 'fitter')
-        opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
+        opts = parseutils.parse_options_for_callable(info, cls.__init__)
         return cls(**opts)
 
     def dump(self):

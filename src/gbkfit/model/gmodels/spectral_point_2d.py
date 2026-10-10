@@ -25,10 +25,9 @@ class SpectralPoint2D(SpectralComponent2D):
 
     @classmethod
     def load(cls, info):
-        desc = parseutils.make_typed_desc(cls, 'gmodel component')
         parseutils.load_option_and_update_info(line_parser, info, 'lines')
         return cls(**parseutils.parse_options_for_callable(
-            info, desc, cls.__init__))
+            info, cls.__init__))
 
     def dump(self):
         return (

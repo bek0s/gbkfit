@@ -47,8 +47,7 @@ def _sum_weights(weights, n, desc):
 
 
 def _load_lsf_common(cls, info: dict[str, Any]):
-    desc = parseutils.make_typed_desc(cls, 'LSF')
-    return parseutils.parse_options_for_callable(info, desc, cls.__init__)
+    return parseutils.parse_options_for_callable(info, cls.__init__)
 
 
 class LSFPoint(LSF):
@@ -305,7 +304,7 @@ class LSFImage(LSF):
     def load(cls, info: dict[str, Any], *args, **kwargs) -> 'LSFImage':
         # Read the image, and its channel width in km/s
         data, coords = parseutils.load_option(
-            fitsutils.read_data, info, 'data', True, False)
+            fitsutils.read_data, info, 'data', required=True)
         info.update(data=data, step=info.get('step', coords.step[0]))
         return cls(**_load_lsf_common(cls, info))
 

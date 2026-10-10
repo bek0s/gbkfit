@@ -19,7 +19,7 @@ __all__ = [
 ]
 
 
-class Observation(parseutils.BasicSerializable):
+class Observation(parseutils.Serializable):
     """
     A gmodel seen through a foreground (e.g. a gravitational lens) and an
     instrument as an observable, evaluated on a driver, and optionally its
@@ -32,7 +32,6 @@ class Observation(parseutils.BasicSerializable):
 
     @classmethod
     def load(cls, info: dict[str, Any], *args, **kwargs) -> 'Observation':
-        desc = parseutils.make_basic_desc(cls, 'observation')
         # The data are read in the form of the observable (its dataset
         # class), and give the observable its grid
         dataset = None
@@ -56,7 +55,7 @@ class Observation(parseutils.BasicSerializable):
             observable_parser, info, 'observable', dataset=dataset)
         if dataset is not None and 'dtype' not in info:
             info['dtype'] = np.dtype(dataset.dtype()).name
-        opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
+        opts = parseutils.parse_options_for_callable(info, cls.__init__)
         return cls(**opts)
 
     def dump(self, **dump_kwargs) -> dict[str, Any]:

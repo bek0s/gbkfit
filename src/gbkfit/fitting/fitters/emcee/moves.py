@@ -35,8 +35,7 @@ class FitterEmceeMove(parseutils.TypedSerializable, abc.ABC):
 
     @classmethod
     def load(cls, info: dict[str, Any], *args, **kwargs) -> 'FitterEmceeMove':
-        desc = parseutils.make_typed_desc(cls, 'emcee fitter move')
-        opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
+        opts = parseutils.parse_options_for_callable(info, cls.__init__)
         return cls(**opts)
 
     def dump(self) -> dict[str, Any]:

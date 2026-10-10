@@ -30,8 +30,7 @@ class FitterDynestyDNS(FitterDynesty):
 
     @classmethod
     def load(cls, info):
-        desc = parseutils.make_typed_desc(cls, 'fitter')
-        opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
+        opts = parseutils.parse_options_for_callable(info, cls.__init__)
         return cls(**opts)
 
     def __init__(

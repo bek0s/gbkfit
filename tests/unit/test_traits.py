@@ -34,7 +34,7 @@ def kernel_consts_cases():
         wpt=traits.wpt_parser, opt=traits.opt_parser,
         oht=traits.oht_parser)
     for kind, parser in parsers.items():
-        for type_, cls in parser._parsers.items():
+        for type_, cls in parser.registered_classes().items():
             if kind in ('bht', 'oht'):
                 options, consts = dict(trunc=0, rnodes=True), (0, True)
             elif kind in ('vht', 'dht'):

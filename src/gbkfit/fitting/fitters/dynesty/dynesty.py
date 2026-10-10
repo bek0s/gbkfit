@@ -47,9 +47,8 @@ class FitParamDynesty(FitParam):
     def load(cls, info):
         info['prior'] = prepare_param_prior_info(info)
         info['prior'] = prior_parser.load(info['prior'], param_info=info)
-        desc = parseutils.make_basic_desc(cls, 'fit parameter')
         opts = parseutils.parse_options_for_callable(
-            info, desc, cls.__init__)
+            info, cls.__init__)
         return cls(**opts)
 
     def dump(self):
@@ -68,9 +67,8 @@ class FitParamsDynesty(FitParams):
 
     @classmethod
     def load(cls, info, descs):
-        desc = parseutils.make_basic_desc(cls, 'fit params')
         opts = parseutils.parse_options_for_callable(
-            info, desc, cls.__init__, fun_ignore_args=['descs'])
+            info, cls.__init__, ignore_params=['descs'])
         parameters = load_parameters(
             opts.get('parameters'), descs, cls.load_param)
         value_conversions = paramparsers.load_params_value_conversions(
@@ -107,9 +105,8 @@ class FitterDynesty(Fitter, abc.ABC):
 
     @classmethod
     def load(cls, info):
-        desc = parseutils.make_typed_desc(cls, 'fitter')
         opts = parseutils.parse_options_for_callable(
-            info, desc, cls.__init__)
+            info, cls.__init__)
         return cls(**opts)
 
     def dump(self):

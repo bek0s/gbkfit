@@ -17,9 +17,9 @@ __all__ = [
 ]
 
 
-def load_function(info, desc):
+def load_function(info):
     """Load a function from a file: info is {file: ..., func: ...}."""
-    opts = parseutils.parse_options(info, desc, {'file', 'func'})
+    opts = parseutils.parse_options(info, {'file', 'func'})
     return funcutils.load_function_from_file(opts['file'], opts['func'])
 
 
@@ -32,7 +32,7 @@ def dump_function(func, file):
     return dict(file=file, func=func.__name__)
 
 
-class EvaluationParams(parseutils.BasicSerializable):
+class EvaluationParams(parseutils.Serializable):
     """
     The parameters of a model evaluation. The properties of free
     parameters (e.g. those of a fit configuration) are evaluated at their
@@ -44,14 +44,12 @@ class EvaluationParams(parseutils.BasicSerializable):
         pdescs = kwargs.get('pdescs')
         if pdescs is None:
             raise RuntimeError("pdescs were not provided")
-        desc = parseutils.make_basic_desc(cls, 'params')
         info = dict(info)
         if 'transforms' in info:
-            info['transforms'] = load_function(
-                info['transforms'], 'params transforms')
+            info['transforms'] = parseutils.load_option(
+                load_function, info, 'transforms')
         opts = parseutils.parse_options_for_callable(
-            info, desc, cls.__init__,
-            fun_ignore_args=['pdescs', 'constants'])
+            info, cls.__init__, ignore_params=['pdescs', 'constants'])
         return cls(pdescs, **opts, constants=kwargs.get('constants'))
 
     def dump(self):

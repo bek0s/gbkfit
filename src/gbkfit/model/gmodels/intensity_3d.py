@@ -35,12 +35,11 @@ class GModelIntensity3D(GModelImage):
 
     @classmethod
     def load(cls, info, *args, **kwargs):
-        desc = parseutils.make_typed_desc(cls, 'gmodel')
         parseutils.load_option_and_update_info(
-            _bcmp_parser, info, 'components', required=True, allow_none=False)
+            _bcmp_parser, info, 'components', required=True)
         parseutils.load_option_and_update_info(
             _ocmp_parser, info, 'opacity_components')
-        opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
+        opts = parseutils.parse_options_for_callable(info, cls.__init__)
         return cls(**opts)
 
     def dump(self):

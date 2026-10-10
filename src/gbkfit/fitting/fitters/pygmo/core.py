@@ -27,9 +27,8 @@ class FitParamPygmo(FitParam):
 
     @classmethod
     def load(cls, info):
-        desc = parseutils.make_basic_desc(cls, 'fit parameter')
         opts = parseutils.parse_options_for_callable(
-            info, desc, cls.__init__, fun_rename_args=dict(
+            info, cls.__init__, rename_params=dict(
                 initial_value='value',
                 initial_width='width',
                 minimum='min',
@@ -85,9 +84,8 @@ class FitParamsPygmo(FitParams):
 
     @classmethod
     def load(cls, info, pdescs):
-        desc = parseutils.make_basic_desc(cls, 'fit params')
         opts = parseutils.parse_options_for_callable(
-            info, desc, cls.__init__, fun_ignore_args=['pdescs'])
+            info, cls.__init__, ignore_params=['pdescs'])
         opts = param_parsers.load_params_parameters_conversions(
             opts, pdescs, collections.abc.Mapping, cls.load_param)
         return cls(pdescs, **opts)
@@ -107,8 +105,7 @@ class FitterPygmo(Fitter, abc.ABC):
 
     @classmethod
     def load(cls, info, **kwargs):
-        desc = parseutils.make_typed_desc(cls, 'pygmo fitter')
-        opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
+        opts = parseutils.parse_options_for_callable(info, cls.__init__)
         return cls(**opts)
 
     def dump(self):

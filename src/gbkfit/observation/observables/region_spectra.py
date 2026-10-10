@@ -69,12 +69,11 @@ class RegionSpectra(Observable):
                 spec_rest=spectral.coords.rest)
         else:
             parseutils.load_option_and_update_info(
-                regions_parser, info, 'regions', True, False)
+                regions_parser, info, 'regions', required=True)
         parseutils.sanitize_dimensional_options(info, dict(
-            size=int, step=int | float, rpix=int | float,
-            rval=int | float), 2)
+            size=int, step=float, rpix=float, rval=float), 2)
         return cls(**parseutils.parse_options_for_callable(
-            info, desc, cls.__init__))
+            info, cls.__init__))
 
     def dump(self, data=None, prefix='', dump_path=True, overwrite=False):
         info = dict(type=self.type())

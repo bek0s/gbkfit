@@ -80,7 +80,7 @@ def load_error(name, **options):
     message = str(error.value)
     # The message names the type of component
     cls = COMPONENTS[name][0]
-    assert f"(class={cls.__qualname__})" in message
+    assert f"[{cls.type()}]" in message
     return message
 
 
@@ -155,7 +155,7 @@ def test_errors_have_paths():
     with pytest.raises(Exception) as error:
         gmodel_parser.load(info)
     assert str(error.value).startswith(
-        "components[0].vptraits[1].nwmode: unknown NWMode type 'relative9'")
+        "components[0].vptraits[1].nwmode: unknown type 'relative9'")
 
 
 def component_error(name, **options):

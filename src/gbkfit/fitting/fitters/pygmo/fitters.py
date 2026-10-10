@@ -530,8 +530,7 @@ class FitterPygmoMBH(FitterPygmo):
 
     @classmethod
     def load(cls, info, **kwargs):
-        desc = parseutils.make_typed_desc(cls, 'pygmo fitter')
-        opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
+        opts = parseutils.parse_options_for_callable(info, cls.__init__)
         opts['algo'] = fitter_parser.load(opts['algo'])
         return cls(**opts)
 

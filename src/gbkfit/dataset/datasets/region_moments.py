@@ -28,16 +28,15 @@ class DatasetRegionMoments(Dataset):
     @classmethod
     def load(cls, info, prefix=''):
         """The data files of the moments are vectors (one value per region)."""
-        desc = parseutils.make_typed_desc(cls, 'dataset')
         parseutils.load_option_and_update_info(
-            regions_parser, info, 'regions', True, False, prefix=prefix)
+            regions_parser, info, 'regions', required=True, prefix=prefix)
         for name in [f'moment{i}' for i in range(8)]:
             # (an item that is null is absent)
             if info.get(name) is not None:
                 with parseutils.config_path(name):
                     info[name] = load_data(info[name], prefix)[0]
         return cls(**parseutils.parse_options_for_callable(
-            info, desc, cls.__init__))
+            info, cls.__init__))
 
     def dump(self, prefix='', dump_path=True, overwrite=False):
         def write(filename, array):

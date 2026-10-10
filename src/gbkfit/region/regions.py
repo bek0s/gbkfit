@@ -68,11 +68,11 @@ class RegionsBins(Regions):
         """
         desc = parseutils.make_typed_desc(cls, 'regions')
         parseutils.sanitize_dimensional_options(info, dict(
-            step=int | float, rpix=int | float, rval=int | float), 2)
+            step=float, rpix=float, rval=float), 2)
         if info.get('file') is None:
             raise ConfigError(f"option 'file' of {desc} is required")
         with parseutils.config_path('file'):
-            file, hdu = parseutils.parse_file(info['file'], 'bins file')
+            file, hdu = parseutils.parse_file(info['file'])
             index, coords = fitsutils.read_data(
                 prefix + file, hdu, info.get('rpix'), info.get('rval'))
         info = dict(info) | dict(
@@ -83,7 +83,7 @@ class RegionsBins(Regions):
             rota=coords.rota if info.get('rota') is None else info['rota'])
         info.pop('file')
         return cls(**parseutils.parse_options_for_callable(
-            info, desc, cls.__init__))
+            info, cls.__init__))
 
     def dump(self, prefix='', dump_path=True, overwrite=False):
         filename = f'{prefix}bins.fits'
@@ -167,11 +167,10 @@ class RegionsApertures(Regions):
 
     @classmethod
     def load(cls, info, prefix=''):
-        desc = parseutils.make_typed_desc(cls, 'regions')
         parseutils.load_option_and_update_info(
             aperture_parser, info, 'apertures', required=True)
         return cls(**parseutils.parse_options_for_callable(
-            info, desc, cls.__init__))
+            info, cls.__init__))
 
     def dump(self, prefix='', dump_path=True, overwrite=False):
         return dict(

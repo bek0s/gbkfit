@@ -1,4 +1,3 @@
-from gbkfit.utils import parseutils
 from . import _component, _point
 from .base import BrightnessComponent3D
 
@@ -18,12 +17,6 @@ class BrightnessPoint3D(BrightnessComponent3D):
     @staticmethod
     def type():
         return 'point'
-
-    @classmethod
-    def load(cls, info):
-        desc = parseutils.make_typed_desc(cls, 'gmodel component')
-        return cls(**parseutils.parse_options_for_callable(
-            info, desc, cls.__init__))
 
     def dump(self):
         return dict(type=self.type()) | _component.dump_name(self)

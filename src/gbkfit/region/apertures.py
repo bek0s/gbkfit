@@ -82,12 +82,6 @@ class Aperture(parseutils.TypedSerializable, abc.ABC):
     degrees, north through east (like posa).
     """
 
-    @classmethod
-    def load(cls, info):
-        desc = parseutils.make_typed_desc(cls, 'aperture')
-        return cls(**parseutils.parse_options_for_callable(
-            info, desc, cls.__init__))
-
     @abc.abstractmethod
     def overlaps(self, grid: gridutils.Grid) -> tuple[np.ndarray, np.ndarray]:
         """

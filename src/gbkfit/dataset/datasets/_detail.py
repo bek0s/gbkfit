@@ -29,7 +29,7 @@ def load_grid_dataset(cls, info, names, prefix=''):
     """
     desc = parseutils.make_typed_desc(cls, 'dataset')
     parseutils.sanitize_dimensional_options(info, dict(
-        step=int | float, rpix=int | float, rval=int | float), cls.ndim)
+        step=float, rpix=float, rval=float), cls.ndim)
     step, rpix, rval, rota = (info.pop(key, None) for key in _GRID_OPTIONS)
     rest = info.pop('rest', None) if cls.spectral_axis is not None else None
     coords = {}
@@ -52,7 +52,7 @@ def load_grid_dataset(cls, info, names, prefix=''):
             rota=first.rota if rota is None else rota)
         if cls.spectral_axis is not None:
             info.update(rest=first.rest)
-    return parseutils.parse_options_for_callable(info, desc, cls.__init__)
+    return parseutils.parse_options_for_callable(info, cls.__init__)
 
 
 def make_grid(dataset, step, rpix, rval, rota, rest=None):

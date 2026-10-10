@@ -60,8 +60,7 @@ def _sum_weights(weights, n, desc):
 
 
 def _load_psf_common(cls, info: dict[str, Any]):
-    desc = parseutils.make_typed_desc(cls, 'PSF')
-    return parseutils.parse_options_for_callable(info, desc, cls.__init__)
+    return parseutils.parse_options_for_callable(info, cls.__init__)
 
 
 class PSFPoint(PSF):
@@ -320,7 +319,7 @@ class PSFImage(PSF):
     def load(cls, info: dict[str, Any], *args, **kwargs) -> 'PSFImage':
         # Read the image, and its pixel scale in arcsec
         data, coords = parseutils.load_option(
-            fitsutils.read_data, info, 'data', True, False)
+            fitsutils.read_data, info, 'data', required=True)
         info.update(data=data, step=info.get('step', coords.step))
         return cls(**_load_psf_common(cls, info))
 
@@ -510,7 +509,7 @@ class PSFBeam(PSF):
                 raise parseutils.ConfigError(
                     f"{desc} takes either a file or bmaj, bmin and bpa")
             with parseutils.config_path('file'):
-                file, hdu = parseutils.parse_file(file, 'beam file')
+                file, hdu = parseutils.parse_file(file)
                 header = astropy.io.fits.getheader(file, hdu)
             missing = [key for key in ('BMAJ', 'BMIN', 'BPA')
                        if key not in header]

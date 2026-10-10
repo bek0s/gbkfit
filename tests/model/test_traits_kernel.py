@@ -44,7 +44,7 @@ def trait_configs(parser):
     wise parameters (rnodes).
     """
     configs = []
-    for type_, cls in parser._parsers.items():
+    for type_, cls in parser.registered_classes().items():
         # (the trait mass has no parameters: its values come from the
         # mass model of the gmodel; see test_mass)
         if cls is traits.VPTraitMass:

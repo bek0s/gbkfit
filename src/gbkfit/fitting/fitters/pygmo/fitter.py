@@ -28,8 +28,7 @@ class FitterPygmo(Fitter, abc.ABC):
 
     @classmethod
     def load(cls, info, *args, **kwargs):
-        desc = parseutils.make_typed_desc(cls, 'pygmo fitter')
-        opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
+        opts = parseutils.parse_options_for_callable(info, cls.__init__)
         return cls(**opts)
 
     def dump(self):

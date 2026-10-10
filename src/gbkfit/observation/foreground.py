@@ -102,7 +102,7 @@ def _read_map(x, prefix, rpix, rval):
     A map and its world coordinates, from a file (see Data), with the
     given rpix or rval (see fitsutils.read_data).
     """
-    file, hdu = parseutils.parse_file(x, 'map file')
+    file, hdu = parseutils.parse_file(x)
     return fitsutils.read_data(prefix + file, hdu, rpix, rval)
 
 
@@ -141,7 +141,7 @@ class LensDeflectionMap(Lens):
             step=coords.step if info.get('step') is None else info['step'],
             rota=coords.rota if info.get('rota') is None else info['rota'])
         return cls(**parseutils.parse_options_for_callable(
-            info, desc, cls.__init__))
+            info, cls.__init__))
 
     def dump(self, prefix='', dump_path=True, overwrite=False):
         coords = self._grid.coords
@@ -197,7 +197,7 @@ class LensDeflectionMap(Lens):
 lens_parser = parseutils.TypedParser(Lens, [LensDeflectionMap])
 
 
-class Foreground(parseutils.BasicSerializable):
+class Foreground(parseutils.Serializable):
     """
     What happens to the light of a gmodel before it reaches the telescope:
     a gravitational lens. Each has its own slot, in the order the light
@@ -206,11 +206,10 @@ class Foreground(parseutils.BasicSerializable):
 
     @classmethod
     def load(cls, info, prefix=''):
-        desc = parseutils.make_basic_desc(cls, 'foreground')
         parseutils.load_option_and_update_info(
             lens_parser, info, 'lens', prefix=prefix)
         return cls(**parseutils.parse_options_for_callable(
-            info, desc, cls.__init__))
+            info, cls.__init__))
 
     def dump(self, prefix='', dump_path=True, overwrite=False):
         return dict(lens=lens_parser.dump(

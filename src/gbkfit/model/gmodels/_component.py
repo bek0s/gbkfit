@@ -116,16 +116,15 @@ def load_options(cls, info, slots, nwmodes):
     slots and geometric parameters. The __init__ of cls declares the
     options, and those without a default value are required.
     """
-    desc = parseutils.make_typed_desc(cls, 'gmodel component')
     for slot in slots:
         required = _is_required(cls, slot.key)
         parseutils.load_option_and_update_info(
             slot.parser, info, slot.key,
-            required=required, allow_none=not required)
+            required=required)
     for name in nwmodes:
         parseutils.load_option_and_update_info(
             common.nwmode_parser, info, f'{name}_nwmode')
-    return parseutils.parse_options_for_callable(info, desc, cls.__init__)
+    return parseutils.parse_options_for_callable(info, cls.__init__)
 
 
 def make_disk(
