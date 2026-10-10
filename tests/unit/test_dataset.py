@@ -105,7 +105,8 @@ def test_dataset_items_must_have_the_same_world_coordinates(tmp_path):
 
 def test_dataset_items_must_have_the_same_shape():
     with pytest.raises(ConfigError, match="must have one shape"):
-        DatasetPixelMoments(Data(np.ones((8, 20))), Data(np.ones((8, 21))))
+        DatasetPixelMoments(
+            {0: Data(np.ones((8, 20))), 1: Data(np.ones((8, 21)))})
 
 
 def test_dataset_reference_pixel_from_fits_header(tmp_path):
@@ -183,9 +184,7 @@ def test_data_can_be_read_from_extensions(tmp_path):
         fits.ImageHDU(np.full((8, 20), 0.5), name='ERR')
     ]).writeto(tmp_path / 'data.fits')
     filename = str(tmp_path / 'data.fits')
-    data, _ = load_data(dict(
-        data=dict(file=filename, hdu='SCI'),
-        error=dict(file=filename, hdu='ERR')))
+    data, _ = Data.from_files((filename, 'SCI'), error=(filename, 'ERR'))
     assert data.data().mean() == 3.0
     assert data.error().mean() == 0.5
 
@@ -212,7 +211,7 @@ def test_data_is_float32(tmp_path):
     # and integer files become float32. A scalar error is not rounded
     # to the type of the data.
     fits.writeto(tmp_path / 'data.fits', np.ones((8, 20), np.int16))
-    data, _ = load_data(dict(data=str(tmp_path / 'data.fits'), error=0.5))
+    data, _ = Data.from_files(str(tmp_path / 'data.fits'), error=0.5)
     assert data.dtype() == np.float32
     assert data.error()[0, 0] == 0.5
     assert Data(np.ones((8, 20))).dtype() == np.float32
@@ -272,7 +271,7 @@ def test_observation_data_must_be_on_the_grid_of_the_observable():
     from gbkfit.driver.drivers.host import DriverHost
     from gbkfit.observation import Observation, PixelBrightness
     data = DatasetPixelBrightness(Data(np.ones((8, 20))), rota=30)
-    moments = DatasetPixelMoments(Data(np.ones((8, 20))))
+    moments = DatasetPixelMoments({0: Data(np.ones((8, 20)))})
     with pytest.raises(RuntimeError, match="the data are on the grid"):
         Observation(DriverHost(), PixelBrightness(size=(20, 8)), data=data)
     with pytest.raises(RuntimeError, match="cannot be compared"):
@@ -312,14 +311,13 @@ def test_pixel_brightness_has_no_rest(tmp_path, caplog):
 
 def test_data_error_is_a_number_or_a_file():
     # (a bool is an int in Python, but not an error)
-    from gbkfit.dataset.data import load_data
     fits.writeto('data.fits', np.ones((4, 4), np.float32))
-    assert load_data(dict(data='data.fits', error=2))[0].error()[0, 0] == 2
+    assert Data.from_files('data.fits', error=2)[0].error()[0, 0] == 2
     with pytest.raises(Exception, match="a number or a file"):
-        load_data(dict(data='data.fits', error=True))
+        Data.from_files('data.fits', error=True)
     for error in (0, -1, float('nan')):
         with pytest.raises(Exception, match="must be positive"):
-            load_data(dict(data='data.fits', error=error))
+            Data.from_files('data.fits', error=error)
 
 
 def test_data_items_are_mappings_or_null():
@@ -336,3 +334,39 @@ def test_data_mask_values_that_are_not_finite():
     # (their residual would be NaN, or infinite)
     data = Data(np.array([[np.nan, 1.0], [np.inf, 2.0]]))
     np.testing.assert_array_equal(data.mask(), [[0, 1], [0, 1]])
+
+
+def test_datasets_from_files_in_python(tmp_path):
+    # Reading the files from Python gives what the configuration gives
+    from gbkfit.utils import fitsutils, gridutils
+    grid = gridutils.make_grid(
+        (6, 5, 4), (0.5, 0.5, 10), rval=(150, 2, 1000), spectral_axis=2,
+        rest='6562.8 Angstrom')
+    fitsutils.write_data(
+        str(tmp_path / 'cube.fits'), np.ones((4, 5, 6)), grid.coords, 2)
+    spectra = DatasetPixelSpectra.from_files(
+        str(tmp_path / 'cube.fits'), error=0.5)
+    loaded = dataset_parser.load(dict(
+        type='pixel_spectra', data=str(tmp_path / 'cube.fits'), error=0.5))
+    assert spectra.grid() == loaded.grid()
+    np.testing.assert_allclose(spectra.grid().coords.step, grid.coords.step)
+    np.testing.assert_array_equal(
+        spectra['spectra'].error(), loaded['spectra'].error())
+    for order in (0, 1):
+        fits.writeto(tmp_path / f'm{order}.fits', np.ones((5, 6)))
+    moments = DatasetPixelMoments.from_files(
+        {0: str(tmp_path / 'm0.fits'), 1: str(tmp_path / 'm1.fits')},
+        errors={1: 0.5}, step=2)
+    assert list(moments) == ['moment0', 'moment1']
+    assert moments['moment1'].error()[0, 0] == 0.5
+    assert moments.grid().coords.step == (2, 2)
+
+
+@pytest.mark.parametrize('call, message', [
+    (lambda: DatasetPixelMoments({8: Data(np.ones((2, 2)))}),
+     "orders of the moments are 0 to 7"),
+    (lambda: DatasetPixelMoments.from_files({0: 'm0.fits'}, masks={1: 'm'}),
+     r"moments \[1\] have masks or errors but no data")])
+def test_moments_of_datasets_are_checked(call, message):
+    with pytest.raises(ConfigError, match=message):
+        call()

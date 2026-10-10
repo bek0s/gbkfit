@@ -115,8 +115,8 @@ def test_region_moments_observation_from_data(tmp_path):
     from gbkfit.observation import observation_parser
     index = np.array([[0, 0, -1], [1, 2, 2]])
     dataset = DatasetRegionMoments(
-        RegionsBins(index), moment0=Data(np.ones(3)),
-        moment1=Data(np.array([1400.0, 1500, 1600])))
+        {0: Data(np.ones(3)), 1: Data(np.array([1400.0, 1500, 1600]))},
+        RegionsBins(index))
     data_info = dataset.dump(prefix=str(tmp_path / ''))
     data_info.pop('type')
     loaded = gbkfit.dataset.dataset_parser.load(
@@ -174,9 +174,10 @@ def test_region_moments_objective_residual(driver):
     model = {
         key: value['d'].copy()
         for key, value in group.model_h(params.evaluate())[0].items()}
-    dataset = DatasetRegionMoments(regions, **{
-        key: Data(value + 1, error=np.full_like(value, 2))
-        for key, value in model.items()})
+    dataset = DatasetRegionMoments({
+        int(key.removeprefix('moment')):
+            Data(value + 1, error=np.full_like(value, 2))
+        for key, value in model.items()}, regions)
     group = ObservationGroup(
         [gmodel_parser.load(copy.deepcopy(GMODEL))],
         [Observation(

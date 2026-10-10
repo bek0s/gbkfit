@@ -5,7 +5,7 @@ Data items: measured values, with their mask and error.
 
 import os.path
 from collections.abc import Callable, Mapping, Sequence
-from typing import Any
+from typing import Any, TypeAlias
 
 import astropy.units
 import numpy as np
@@ -16,27 +16,53 @@ from gbkfit.utils.parseutils import ConfigError
 
 __all__ = [
     'Data',
+    'FitsFile',
     'dump_data',
-    'load_data'
+    'fits_file'
 ]
 
 
-def _read_file(
-        x: str | Mapping[str, Any],
-        prefix: str,
+# A FITS file: its filename, or its filename and the HDU to read (by
+# default the first)
+FitsFile: TypeAlias = str | tuple[str, int | str]
+
+
+def _read(
+        file: FitsFile,
         rpix: float | Sequence[float] | None = None,
         rval: float | Sequence[float] | None = None,
         rest: str | astropy.units.Quantity | None = None,
         spectral_axis: int | None = None
 ) -> tuple[np.ndarray, gridutils.Coords]:
+    """Read a FITS file and its world coordinates (see fitsutils.read_data)."""
+    filename, hdu = (file, 0) if isinstance(file, str) else file
+    return fitsutils.read_data(filename, hdu, rpix, rval, rest, spectral_axis)
+
+
+def fits_file(x: str | Mapping[str, Any], prefix: str = '') -> FitsFile:
     """
-    Read the data of a file option (a filename, or a dict with the
-    filename and the HDU) and its world coordinates (see
-    fitsutils.read_data).
+    Return the FITS file of a file option.
+
+    Parameters
+    ----------
+    x : str or Mapping
+        A filename, or a dict with the filename ('file') and, optionally,
+        the HDU ('hdu', e.g. 'SCI').
+    prefix : str, optional
+        Prepended to the filename.
+
+    Returns
+    -------
+    tuple of str and (int or str)
+        The filename and the HDU.
+
+    Raises
+    ------
+    ConfigError
+        If the option is invalid.
     """
     file, hdu = parseutils.parse_file(x)
-    return fitsutils.read_data(
-        prefix + file, hdu, rpix, rval, rest, spectral_axis)
+    return prefix + file, hdu
 
 
 def _as_float32(x: np.ndarray) -> np.ndarray:
@@ -105,6 +131,59 @@ class Data:
         self._mask = total_mask.astype(np.float32)
         self._error = error
 
+    @classmethod
+    def from_files(
+            cls,
+            data: FitsFile,
+            mask: FitsFile | None = None,
+            error: FitsFile | float | None = None,
+            rpix: float | Sequence[float] | None = None,
+            rval: float | Sequence[float] | None = None,
+            rest: str | astropy.units.Quantity | None = None,
+            spectral_axis: int | None = None
+    ) -> tuple['Data', gridutils.Coords]:
+        """
+        Read a data item from FITS files.
+
+        Parameters
+        ----------
+        data : str or tuple
+            The file of the values: a filename, or a filename and the HDU.
+        mask : str or tuple, optional
+            The file of the mask.
+        error : str or tuple or float, optional
+            The file of the errors, or one error for all the values.
+        rpix, rval, rest, spectral_axis : optional
+            Passed to fitsutils.read_data for the file of the values.
+
+        Returns
+        -------
+        tuple of Data and gridutils.Coords
+            The data item, and the world coordinates of the file of its
+            values.
+
+        Raises
+        ------
+        ConfigError
+            If the error is not positive, or the arrays are invalid (see
+            Data).
+        """
+        values, coords = _read(data, rpix, rval, rest, spectral_axis)
+        masks = None if mask is None else _read(mask)[0]
+        if error is None:
+            errors = None
+        elif isinstance(error, bool):
+            raise ConfigError(
+                "the error must be a number or a file; it is a bool")
+        elif isinstance(error, (int, float)):
+            # (an error that is not positive would mask every value)
+            if not error > 0:
+                raise ConfigError(f"the error must be positive; it is {error}")
+            errors = np.full(values.shape, error, dtype=float)
+        else:
+            errors = _read(error)[0]
+        return cls(values, masks, errors), coords
+
     def ndim(self) -> int:
         """Return the number of axes of the arrays."""
         return self._data.ndim
@@ -134,68 +213,6 @@ class Data:
         return self._data.dtype
 
 
-def load_data(
-        info: dict[str, Any],
-        prefix: str = '',
-        rpix: float | Sequence[float] | None = None,
-        rval: float | Sequence[float] | None = None,
-        rest: str | astropy.units.Quantity | None = None,
-        spectral_axis: int | None = None
-) -> tuple[Data, gridutils.Coords]:
-    """
-    Load a data item from the configuration of its files.
-
-    Parameters
-    ----------
-    info : dict
-        The file of the data ('data'), and optionally that of the mask
-        ('mask'), and that of the error or one error for all the values
-        ('error'). A file is a filename, or a dict with the filename
-        ('file') and the HDU ('hdu').
-    prefix : str, optional
-        Prepended to the filenames.
-    rpix, rval, rest, spectral_axis : optional
-        Passed to fitsutils.read_data for the data file.
-
-    Returns
-    -------
-    tuple of Data and gridutils.Coords
-        The data item, and the world coordinates of its data file.
-
-    Raises
-    ------
-    ConfigError
-        If the configuration is invalid, or the files cannot be read.
-    """
-    if not isinstance(info, Mapping):
-        raise ConfigError(
-            f"a data item has the file of its data ('data'), and optionally "
-            f"those of its mask ('mask') and error ('error'); it is {info!r}")
-    parseutils.parse_options(
-        info, required={'data'}, optional={'mask', 'error'})
-    data_d, coords = parseutils.load_option(
-        lambda x: _read_file(x, prefix, rpix, rval, rest, spectral_axis),
-        info, 'data', required=True)
-    data_m = None
-    data_e = None
-    if (mask := info.get('mask')) is not None:
-        with parseutils.config_path('mask'):
-            data_m = _read_file(mask, prefix)[0]
-    if (error := info.get('error')) is not None:
-        if isinstance(error, bool):
-            raise ConfigError(
-                "the error must be a number or a file; it is a bool")
-        if isinstance(error, (int, float)):
-            # (an error that is not positive would mask every value)
-            if not error > 0:
-                raise ConfigError(f"the error must be positive; it is {error}")
-            data_e = np.full(np.shape(data_d), error, dtype=float)
-        else:
-            with parseutils.config_path('error'):
-                data_e = _read_file(error, prefix)[0]
-    return Data(data_d, data_m, data_e), coords
-
-
 def dump_data(
         data: Data,
         filenames: Mapping[str, str],
@@ -204,7 +221,7 @@ def dump_data(
 ) -> dict[str, Any]:
     """
     Write the arrays of a data item to files, and return its
-    configuration (see load_data).
+    configuration: the file of each array (see Data.from_files).
 
     Parameters
     ----------

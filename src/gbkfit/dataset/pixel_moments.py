@@ -1,10 +1,10 @@
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 from gbkfit.utils import gridutils
 from . import _detail
 from .base import Dataset
-from .data import Data
+from .data import Data, FitsFile
 
 
 __all__ = [
@@ -17,10 +17,13 @@ class DatasetPixelMoments(Dataset):
     Moments of the spectra on a grid of pixels: moment maps of some of the
     orders 0 to 7, as the data items moment0 to moment7.
 
+    Its configuration has the data items moment0 to moment7 (the files of
+    each: data, mask, error; see from_files) and the world coordinates.
+
     Parameters
     ----------
-    moment0, ..., moment7 : Data, optional
-        The moment maps, each of shape (ny, nx); at least one.
+    moments : Mapping
+        The moment map of each order, of shape (ny, nx); at least one.
     step, rpix, rval : float or Sequence of float, optional
         The world coordinates of the grid (see gridutils.Coords); their
         defaults are those of gridutils.make_grid.
@@ -40,8 +43,52 @@ class DatasetPixelMoments(Dataset):
     def load(
             cls, info: dict[str, Any], prefix: str = ''
     ) -> 'DatasetPixelMoments':
-        names = [f'moment{i}' for i in range(8)]
-        return cls(**_detail.load_grid_dataset(cls, info, names, prefix))
+        info = dict(info)
+        files = _detail.pop_moment_files(info, prefix)
+        return _detail.load_with_files(cls, info, cls.ndim, **files)
+
+    @classmethod
+    def from_files(
+            cls,
+            moments: Mapping[int, FitsFile],
+            masks: Mapping[int, FitsFile] | None = None,
+            errors: Mapping[int, FitsFile | float] | None = None,
+            step: float | Sequence[float] | None = None,
+            rpix: float | Sequence[float] | None = None,
+            rval: float | Sequence[float] | None = None,
+            rota: float | None = None
+    ) -> 'DatasetPixelMoments':
+        """
+        Read the dataset from FITS files, with the world coordinates of the
+        files of the moments unless given; they must agree.
+
+        Parameters
+        ----------
+        moments : Mapping
+            The file of each moment map, by order: a filename, or a
+            filename and the HDU.
+        masks : Mapping, optional
+            The files of the masks of some of the moment maps.
+        errors : Mapping, optional
+            The files of the errors of some of the moment maps, or one
+            error for all the values of each.
+        step, rpix, rval : float or Sequence of float, optional
+            The world coordinates of the grid (see gridutils.Coords); by
+            default, those of the headers. Either rpix or rval can be
+            given, and the other comes from the headers (see
+            fitsutils.read_data).
+        rota : float, optional
+            The rotation of the grid on the sky; by default, that of the
+            headers.
+
+        Returns
+        -------
+        DatasetPixelMoments
+            The dataset.
+        """
+        items, coords = _detail.read_moments(
+            moments, masks, errors, rpix, rval)
+        return cls(items, **_detail.grid_coords(coords, step, rota))
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,
@@ -51,25 +98,13 @@ class DatasetPixelMoments(Dataset):
 
     def __init__(
             self,
-            moment0: Data | None = None,
-            moment1: Data | None = None,
-            moment2: Data | None = None,
-            moment3: Data | None = None,
-            moment4: Data | None = None,
-            moment5: Data | None = None,
-            moment6: Data | None = None,
-            moment7: Data | None = None,
+            moments: Mapping[int, Data],
             step: float | Sequence[float] | None = None,
             rpix: float | Sequence[float] | None = None,
             rval: float | Sequence[float] | None = None,
             rota: float | None = None
     ):
-        moments = (
-            moment0, moment1, moment2, moment3, moment4, moment5, moment6,
-            moment7)
-        super().__init__({
-            f'moment{order}': moment for order, moment in enumerate(moments)
-            if moment is not None})
+        super().__init__(_detail.moment_items(moments))
         self._grid = _detail.make_grid(self, step, rpix, rval, rota)
 
     def grid(self) -> gridutils.Grid:
