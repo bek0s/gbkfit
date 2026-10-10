@@ -174,7 +174,8 @@ def test_at_most_4_traits_of_a_kind():
 
 
 @pytest.mark.parametrize('trait, message', [
-    (dict(type='nw_harmonic', order=-1), "order must be at least 0"),
+    (dict(type='nw_harmonic', order=-1), "order must be an integer"),
+    (dict(type='nw_harmonic', order=1.5), "'order' must be of type int"),
     (dict(type='mixture_gauss', nblobs=0), "nblobs must be at least 1")])
 def test_orders_and_blobs_are_checked(trait, message):
     # The kernels read the phases of the orders above 0, and the

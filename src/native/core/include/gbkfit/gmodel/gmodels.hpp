@@ -379,7 +379,7 @@ gmodel_mcdisk_evaluate_cloud(
     T vsysi=0, xposi=0, yposi=0, posai=0, incli=0;
     T ptvalues[TRAIT_NUM_MAX] = {0};
     T htvalues[TRAIT_NUM_MAX] = {0};
-    T rvalue=0, vvalue=0, dvalue=0, zvalue=0, svalue=0, wvalue=1;
+    T rvalue=0, vvalue=0, dvalue=0, zvalue=0, wvalue=1;
 
     // Find the pool of the cloud; its clouds share its flux
     while(ci >= mc.ncloudscsum[rnidx]) {
@@ -438,11 +438,10 @@ gmodel_mcdisk_evaluate_cloud(
                 rnidx, a.rnodes, a.nrnodes,
                 xd, yd, rd, theta);
 
+        // A point is kept only if every trait selects it
         for (int i = 0; i < a.spt.n; ++i)
-            svalue += ptvalues[i];
-
-        if (!svalue)
-            return;
+            if (!ptvalues[i])
+                return;
     }
 
     // Density height trait: the height of the cloud above the midplane
@@ -693,7 +692,7 @@ gmodel_smdisk_evaluate_spaxel(int x, int y, int z, const DiskArgs<T>& a)
     // These are needed for trait evaluation
     T ptvalues[TRAIT_NUM_MAX] = {0};
     T htvalues[TRAIT_NUM_MAX] = {0};
-    T rvalue=0, vvalue=0, dvalue=0, zvalue=0, svalue=0, wvalue=1;
+    T rvalue=0, vvalue=0, dvalue=0, zvalue=0, wvalue=1;
 
     // Selection traits
     if (a.spt.uids)
@@ -706,11 +705,10 @@ gmodel_smdisk_evaluate_spaxel(int x, int y, int z, const DiskArgs<T>& a)
                 rnidx, a.rnodes, a.nrnodes,
                 xn, yn, rn, theta);
 
+        // A point is kept only if every trait selects it
         for (int i = 0; i < a.spt.n; ++i)
-            svalue += ptvalues[i];
-
-        if (!svalue)
-            return;
+            if (!ptvalues[i])
+                return;
     }
 
     // Vertical distortion traits

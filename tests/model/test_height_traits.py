@@ -127,6 +127,19 @@ def test_radial_range_truncates_the_disk(driver):
         inner + ring + outer, plain, rtol=1e-5, atol=1e-7 * plain.max())
 
 
+
+def test_selections_keep_what_every_trait_selects(driver):
+    # A ring and the receding half of the disk select the half of the
+    # ring: half the light of the ring of a symmetric disk
+    component = DISK | dict(sptraits=[
+        dict(type='rrange'), dict(type='azrange')])
+    ring = dict(spt_rmin=2, spt_rmax=6)
+    half = dict(spt1_p=0, spt1_s=180)
+    half_ring = evaluate(driver, component, PROPERTIES | ring | half)
+    whole_ring = evaluate(
+        driver, component, PROPERTIES | ring | dict(spt1_p=0, spt1_s=360))
+    assert half_ring.sum() == pytest.approx(0.5 * whole_ring.sum(), rel=0.05)
+
 @pytest.mark.parametrize('height, values, factor', [
     (dict(type='linear'), dict(dht1_z0=1),
      lambda z: np.maximum(0, np.abs(z) - 1)),
