@@ -10,7 +10,6 @@ from gbkfit.utils import iterutils, numutils, parseutils
 from ..base import ComponentPlan
 from ..lines import Lines
 from . import _disk, traits
-from .nwmodes import nwmode_parser
 
 
 __all__ = [
@@ -19,7 +18,6 @@ __all__ = [
     'SpectralDiskComponentPlan',
     'BPT', 'BHT', 'OPT', 'OHT', 'VPT', 'VHT',
     'DPT', 'DHT', 'ZPT', 'SPT', 'WPT',
-    'SPATIAL_NWMODES', 'SPECTRAL_NWMODES',
     'load_options',
     'make_disk',
     'make_lines',
@@ -66,12 +64,6 @@ ZPT = Slot('zptraits', 'zpt', 'zpt', traits.zpt_parser)
 SPT = Slot('sptraits', 'spt', 'spt', traits.spt_parser)
 WPT = Slot('wptraits', 'wpt', 'wpt', traits.wpt_parser)
 
-# The geometric parameters that can have a node-wise mode: those of all
-# components, and those of the spectral components, which also have a
-# systemic velocity
-SPATIAL_NWMODES = ('xpos', 'ypos', 'posa', 'incl')
-SPECTRAL_NWMODES = ('vsys',) + SPATIAL_NWMODES
-
 
 class DiskComponentPlan(ComponentPlan):
     """
@@ -116,45 +108,38 @@ class SpectralDiskComponentPlan(ComponentPlan):
             self._lines)
 
 
-def load_options(cls, info, slots, nwmodes):
+def load_options(cls, info, slots):
     """
     The options of a component of class cls that is made of one disk,
-    with its traits and node-wise modes loaded: those of the given trait
-    slots and geometric parameters. The __init__ of cls declares the
-    options, and those without a default value are required.
+    with the traits of the given slots loaded. The __init__ of cls
+    declares the options, and those without a default value are required.
     """
     for slot in slots:
         required = _is_required(cls, slot.key)
         parseutils.load_option_and_update_info(
             slot.parser, info, slot.key,
             required=required)
-    for name in nwmodes:
-        parseutils.load_option_and_update_info(
-            nwmode_parser, info, f'{name}_nwmode')
     return parseutils.parse_options_for_callable(info, cls.__init__)
 
 
 def make_disk(
         cls, disk_class, slots, rdata_key,
         loose, tilted, rnmin, rnmax, rnsep, rnlen, rnodes, rstep, interp,
-        nwmodes, traits_, **disk_options):
+        traits_, **disk_options):
     """
     The disk of a component of class cls, of class disk_class, with the
     traits of the given slots, and its density map named rdata_key in the
-    extra outputs (e.g. 'bdata'). nwmodes has the node-wise modes, keyed by
-    geometric parameter (e.g. 'xpos'), and traits_ the traits, keyed by
-    option (e.g. 'bptraits'). disk_options are the options of the type
-    of disk (e.g. cflux and seed of MCDisk).
+    extra outputs (e.g. 'bdata'). traits_ has the traits, keyed by option
+    (e.g. 'bptraits'). disk_options are the options of the type of disk
+    (e.g. cflux and seed of MCDisk).
     """
     node_args = parse_component_rnode_args(
         rnmin, rnmax, rnsep, rnlen, rnodes, rstep, interp)
-    nwmodes = validate_component_nwmodes(loose, tilted, nwmodes)
     traits_ = _parse_traits(cls, slots, traits_)
     check_traits_common(sum(traits_.values(), ()))
     return disk_class(
         **disk_options,
         loose=loose, tilted=tilted, **node_args,
-        nwmodes=nwmodes,
         traits_={slot.kind: traits_[slot.key] for slot in slots},
         prefixes={slot.kind: slot.prefix for slot in slots},
         rdata_key=rdata_key)
@@ -173,15 +158,11 @@ def make_lines(disk, lines_):
     return result
 
 
-def dump_disk(disk, slots, nwmodes):
+def dump_disk(disk, slots):
     """
     The options of a component made of the given disk, with the traits
-    of the given slots and the node-wise modes of the given geometric
-    parameters.
+    of the given slots.
     """
-    nwmodes = {
-        f'{name}_nwmode': nwmode_parser.dump(disk.nwmode(name))
-        for name in nwmodes}
     traits_ = {
         slot.key: slot.parser.dump(disk.traits(slot.kind))
         for slot in slots}
@@ -192,7 +173,6 @@ def dump_disk(disk, slots, nwmodes):
         rnodes=list(disk.rnodes()),
         rstep=disk.rstep(),
         interp=disk.interp().type(),
-        **nwmodes,
         **traits_)
 
 
@@ -301,32 +281,6 @@ def parse_component_rnode_args(nmin, nmax, nsep, nlen, nodes, step, interp):
 def parse_component_hnode_args(nmin, nmax, nsep, nlen, nodes, step, interp):
     return _parse_component_node_args(
         'h', nmin, nmax, nsep, nlen, nodes, step, interp)
-
-
-def _validate_component_nwmode(enabled, enabled_name, nwmode, nwmode_name):
-    if nwmode is not None and not enabled:
-        _log.warning(
-            f"{nwmode_name} is set to '{nwmode.type()}', "
-            f"but it will be ignored because {enabled_name} is not set to True")
-        # ignore this nwmode
-        nwmode = None
-    return nwmode
-
-
-def validate_component_nwmodes(loose, tilted, nwmodes):
-    """
-    The node-wise modes of the geometric parameters of a component (e.g.
-    'xpos'), without those of the parameters that are not node-wise:
-    vsys, xpos and ypos if the component is not loose, posa and incl if
-    it is not tilted.
-    """
-    switches = dict(loose=loose, tilted=tilted)
-    result = {}
-    for name, nwmode in nwmodes.items():
-        switch = _disk.NODEWISE_SWITCH[name]
-        result[name] = _validate_component_nwmode(
-            switches[switch], switch, nwmode, f'{name}_nwmode')
-    return result
 
 
 def check_traits_common(traits_):

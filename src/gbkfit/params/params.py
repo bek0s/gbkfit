@@ -4,6 +4,7 @@ from typing import Any
 
 import numpy as np
 
+from gbkfit.params.modes import ParamMode, param_mode_parser
 from gbkfit.params.pdescs import ParamDesc
 from gbkfit.params.space import ParamSpace
 from gbkfit.utils import funcutils, parseutils
@@ -48,25 +49,37 @@ class EvaluationParams(parseutils.Serializable):
         if 'transforms' in info:
             info['transforms'] = parseutils.load_option(
                 load_function, info, 'transforms')
+        if info.get('modes') is not None:
+            with parseutils.config_path('modes'):
+                info['modes'] = {
+                    name: parseutils.load_option(
+                        param_mode_parser.load, info['modes'], name)
+                    for name in dict(info['modes'])}
         opts = parseutils.parse_options_for_callable(
             info, cls.__init__, ignore_params=['pdescs', 'constants'])
         return cls(pdescs, **opts, constants=kwargs.get('constants'))
 
     def dump(self):
-        return dict(properties=self._space.properties())
+        modes = self._space.modes()
+        return dict(properties=self._space.properties()) | (dict(modes={
+            name: param_mode_parser.dump(mode)
+            for name, mode in modes.items()}) if modes else {})
 
     def __init__(
             self,
             pdescs: dict[str, ParamDesc],
             properties: dict[str, Any],
             transforms: Callable | None = None,
-            constants: dict[str, Any] | None = None
+            constants: dict[str, Any] | None = None,
+            modes: dict[str, ParamMode] | None = None
     ):
         """
         constants are values that expressions can use (e.g. the radial
-        nodes of the disks, from constants() of the models).
+        nodes of the disks, from constants() of the models), and modes
+        the modes of vector parameters, by name (see ParamMode).
         """
-        self._space = ParamSpace(pdescs, properties, transforms, constants)
+        self._space = ParamSpace(
+            pdescs, properties, transforms, constants, modes)
         free = self._space.free_properties()
         if missing := [n for n, p in free.items() if 'value' not in p]:
             raise RuntimeError(

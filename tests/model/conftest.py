@@ -42,10 +42,11 @@ def evaluate_cases():
     """
     import gbkfit.params
 
-    def evaluate(cases, properties):
+    def evaluate(cases, properties, modes=None):
         group = observation_group(cases)
         params = gbkfit.params.EvaluationParams(
-            group.pdescs(), properties, constants=group.constants())
+            group.pdescs(), properties, constants=group.constants(),
+            modes=modes)
         extra = {}
         data = group.model_h(params.evaluate(), extra)
         return data, extra

@@ -8,6 +8,11 @@ properties of a configuration. Each element of each parameter is:
 - free: its property is a dict (e.g. the initial value and bounds of a
   fit), which is kept for the fitter
 
+A vector parameter can have a mode (see modes.ParamMode): its elements
+are then coded values (e.g. offsets from one of them), which the mode
+decodes into the values of the parameter, which the expressions that
+read it see.
+
 ParamSpace evaluates all parameters, given the values of the free ones.
 """
 
@@ -26,6 +31,7 @@ import numpy as np
 from gbkfit.params.expressions import Expression, InvalidExpressionError
 from gbkfit.params.keys import (
     InvalidKeyError, element_name, parse_key)
+from gbkfit.params.modes import ParamMode
 from gbkfit.params.pdescs import ParamDesc, ParamScalarDesc
 from gbkfit.utils import parseutils
 
@@ -90,16 +96,19 @@ class ParamSpace:
             pdescs: dict[str, ParamDesc],
             properties: dict[str, Any],
             transforms: Callable | None = None,
-            constants: dict[str, Any] | None = None):
+            constants: dict[str, Any] | None = None,
+            modes: Mapping[str, ParamMode] | None = None):
         """
         constants are read-only values that expressions can use (e.g. the
-        radial nodes of a disk). Properties of unknown parameters are
-        reported like unknown options (see parseutils.report_unknown): a
-        warning, and an error in strict mode.
+        radial nodes of a disk), and modes the modes of vector parameters,
+        by name. Properties of unknown parameters are reported like
+        unknown options (see parseutils.report_unknown): a warning, and an
+        error in strict mode.
         """
         self._pdescs = dict(pdescs)
         self._properties = copy.deepcopy(properties)
         self._transforms = transforms
+        self._modes = dict(modes or {})
         self._constants = {}
         for name, value in (constants or {}).items():
             value = np.array(value, dtype=float)
@@ -158,6 +167,7 @@ class ParamSpace:
             except parseutils.ConfigError as e:
                 errors.append(str(e))
         errors += self._check_transforms()
+        errors += self._check_modes()
         if not errors:
             errors += self._order_assignments()
         if errors:
@@ -189,6 +199,10 @@ class ParamSpace:
 
     def transforms(self) -> Callable | None:
         return self._transforms
+
+    def modes(self) -> dict[str, ParamMode]:
+        """Return the modes of the vector parameters that have one."""
+        return self._modes
 
     def names(
             self, free: bool = True, tied: bool = True, fixed: bool = True
@@ -226,12 +240,16 @@ class ParamSpace:
         for name, (start, stop, scalar) in self._layout.items():
             namespace[name] = float(buffer[start]) if scalar \
                 else buffer[start:stop]
-        for assignment in self._assignments:
-            self._assign(buffer, namespace, assignment)
+        for step in self._steps:
+            if isinstance(step, _Assignment):
+                self._assign(buffer, namespace, step)
+            else:
+                namespace[step] = self._modes[step].decode(namespace[step])
         values = {name: namespace[name] for name in self._pdescs}
         if self._transforms:
             self._apply_transforms(buffer, values)
-        if not np.all(np.isfinite(buffer)):
+        if not (np.all(np.isfinite(buffer)) and all(
+                np.all(np.isfinite(values[name])) for name in self._modes)):
             self._raise_not_finite(values)
         return values
 
@@ -314,19 +332,57 @@ class ParamSpace:
                 "set to None (tied to it)")
         return []
 
+    def _check_modes(self):
+        """
+        The problems of the modes: of unknown or scalar parameters, of
+        parameters they do not suit, or of elements that the transforms
+        function sets.
+        """
+        errors = []
+        for name, mode in self._modes.items():
+            pdesc = self._pdescs.get(name)
+            if pdesc is None:
+                errors.append(f"the mode of an unknown parameter: '{name}'")
+            elif isinstance(pdesc, ParamScalarDesc):
+                errors.append(
+                    f"only vector parameters can have a mode; '{name}' is "
+                    f"a scalar")
+            else:
+                try:
+                    mode.check(pdesc.size())
+                except parseutils.ConfigError as e:
+                    errors.append(f"the mode of '{name}': {e.message}")
+                if any(self._kinds.get((name, i)) is _Kind.TRANSFORMED
+                       for i in range(pdesc.size())):
+                    errors.append(
+                        f"the transforms function cannot set elements of "
+                        f"'{name}', which has a mode")
+        return errors
+
     def _order_assignments(self):
         """
-        Order the assignments so that each one comes after those that set
-        the elements it reads.
+        Order the assignments and the decoding of the parameters with a
+        mode (their names), so that each comes after those that set the
+        elements it reads. An expression that reads a parameter with a
+        mode reads its decoded values, so it comes after its decoding,
+        which comes after the assignments of its elements.
         """
         writer = {}
         for i, a in enumerate(self._assignments):
             for index in [None] if a.indices is None else a.indices:
                 writer[(a.name, None if index is None else int(index))] = i
         graph = graphlib.TopologicalSorter()
+        for name in self._modes:
+            graph.add(name)
+            for (written, _), i in writer.items():
+                if written == name:
+                    graph.add(name, i)
         for i, a in enumerate(self._assignments):
             graph.add(i)
             for name, indices in a.expression.reads.items():
+                if name in self._modes:
+                    graph.add(i, name)
+                    continue
                 for index in [None] if indices is None else sorted(indices):
                     if (name, index) in writer:
                         graph.add(i, writer[(name, index)])
@@ -334,10 +390,14 @@ class ParamSpace:
             order = list(graph.static_order())
         except graphlib.CycleError as e:
             cycle = ' -> '.join(
-                f"'{self._assignments[i].key}'" for i in e.args[1])
+                f"the mode of '{step}'" if isinstance(step, str)
+                else f"'{self._assignments[step].key}'"
+                for step in e.args[1])
             return [f"the expressions depend on each other in a cycle: "
                     f"{cycle}"]
-        self._assignments = [self._assignments[i] for i in order]
+        self._steps = [
+            step if isinstance(step, str) else self._assignments[step]
+            for step in order]
         return []
 
     def _free_values(self, free):

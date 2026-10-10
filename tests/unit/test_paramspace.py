@@ -307,3 +307,53 @@ def test_unknown_parameters_are_errors_in_strict_mode():
     with parseutils.strict_mode():
         with pytest.raises(Exception, match=r"unknown parameters: 'old'"):
             gbkfit.params.ParamSpace(make_pdescs(a=S), {'a': 1, 'old': 2})
+
+
+def load_moded_params(properties, modes):
+    """The params of a vector v of 4 elements and scalars s and t."""
+    return gbkfit.params.evaluation_params_parser.load(
+        dict(properties=properties, modes=modes),
+        pdescs=make_pdescs(v=4, s=None, t=None))
+
+
+@pytest.mark.parametrize('mode, expected', [
+    # Each element an offset from the value at the origin
+    (dict(type='offsets', origin=1), [3, 2, 5, 6]),
+    # Each element an increment over its neighbour towards the origin
+    (dict(type='increments', origin=1), [3, 2, 5, 9])])
+def test_modes_decode_the_values(mode, expected):
+    properties = dict(v=[1, 2, 3, 4], s=0, t=0)
+    params = load_moded_params(properties, dict(v=mode))
+    np.testing.assert_array_equal(params.evaluate()['v'], expected)
+    # The dump has the modes, and loads to the same values
+    info = params.dump()
+    assert info['modes'] == dict(v=mode)
+    reloaded = gbkfit.params.evaluation_params_parser.load(
+        info, pdescs=make_pdescs(v=4, s=None, t=None))
+    np.testing.assert_array_equal(reloaded.evaluate()['v'], expected)
+
+
+def test_expressions_read_the_decoded_values():
+    # The elements of v are coded, one of them tied to s, and the
+    # expression of t reads the decoded values of v
+    params = load_moded_params(
+        dict(v=[10, 1, 2, 's * 3'], s=1, t='v[3]'),
+        dict(v=dict(type='offsets')))
+    values = params.evaluate()
+    np.testing.assert_array_equal(values['v'], [10, 11, 12, 13])
+    assert values['t'] == 13
+
+
+@pytest.mark.parametrize('properties, modes, pattern', [
+    (dict(), dict(s=dict(type='offsets')), "only vector parameters"),
+    (dict(), dict(w=dict(type='offsets')), "unknown parameter: 'w'"),
+    (dict(), dict(v=dict(type='offsets', origin=4)),
+     "an index of the 4 elements"),
+    (dict(), dict(v=dict(type='offsets', origin=1.5)),
+     "'origin' must be of type int"),
+    # An element of v cannot read v, whose decoded values need it
+    (dict(v=[1, 2, 3, 'v[0]']), dict(v=dict(type='offsets')),
+     "in a cycle: the mode of 'v'")])
+def test_mode_errors(properties, modes, pattern):
+    with pytest.raises(Exception, match=pattern):
+        load_moded_params(dict(v=[1, 2, 3, 4], s=0, t=0) | properties, modes)

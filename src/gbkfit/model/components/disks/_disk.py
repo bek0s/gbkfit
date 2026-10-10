@@ -37,16 +37,15 @@ def _make_param_descs(key, nnodes, nw):
 class TraitParams:
     """
     The parameters of the traits of one kind, with prefixed names, and for
-    each one its node-wise mode (if any), where its values are given if it
-    is node-wise (its trait's sampling, see traits.SAMPLINGS) or None, and
-    its name in its trait. The keys of all dicts are in the same order:
-    the order of the traits, and for each trait, the smooth parameters
-    before the node-wise ones. circular_velocity has the names of those
-    whose values are the circular velocity of the mass model of the
-    model (see traits.Trait.circular_velocity_params).
+    each one where its values are given if it is node-wise (its trait's
+    sampling, see traits.SAMPLINGS) or None, and its name in its trait.
+    The keys of all dicts are in the same order: the order of the traits,
+    and for each trait, the smooth parameters before the node-wise ones.
+    circular_velocity has the names of those whose values are the
+    circular velocity of the mass model of the model (see
+    traits.Trait.circular_velocity_params).
     """
     pdescs: dict
-    nwmodes: dict
     sampling: dict
     pnames: list
     circular_velocity: tuple
@@ -62,10 +61,8 @@ def _trait_params(traits_, prefix, nrnodes, nsubrnodes):
     for trait in traits_:
         sampling = trait.sampling()
         nnodes = nsubrnodes if sampling == 'subrings' else nrnodes
-        params_sm = [(pdesc, None, None) for pdesc in trait.params_sm()]
-        params_nw = [
-            (pdesc, nwmode, sampling)
-            for pdesc, nwmode in trait.params_rnw(nnodes)]
+        params_sm = [(pdesc, None) for pdesc in trait.params_sm()]
+        params_nw = [(pdesc, sampling) for pdesc in trait.params_rnw(nnodes)]
         params_list.append(
             {tuple_[0].name(): tuple_ for tuple_ in params_sm + params_nw})
     params, mappings = iterutils.merge_with_prefixes(
@@ -74,8 +71,7 @@ def _trait_params(traits_, prefix, nrnodes, nsubrnodes):
             [None] * len(params_list), 'traits', prefix, True))
     return TraitParams(
         pdescs={name: tuple_[0] for name, tuple_ in params.items()},
-        nwmodes={name: tuple_[1] for name, tuple_ in params.items()},
-        sampling={name: tuple_[2] for name, tuple_ in params.items()},
+        sampling={name: tuple_[1] for name, tuple_ in params.items()},
         pnames=mappings,
         circular_velocity=tuple(
             mapping[name]
@@ -129,13 +125,11 @@ def _weighted_mean(weighted_sum, weight):
 class Disk(abc.ABC):
 
     def __init__(
-            self, loose, tilted, rnodes, rstep, interp, nwmodes, traits_,
-            prefixes, rdata_key):
+            self, loose, tilted, rnodes, rstep, interp, traits_, prefixes,
+            rdata_key):
         """
-        nwmodes has the node-wise modes of the geometric parameters, and
-        traits_ the traits of each kind. Both are keyed as in
-        GEOMETRY_PARAMS and TRAIT_KINDS, and can leave keys out (no
-        node-wise mode, no traits). prefixes has the prefix of the
+        traits_ has the traits of each kind, keyed as in TRAIT_KINDS, and
+        can leave kinds out (no traits). prefixes has the prefix of the
         parameters of the traits of each kind in traits_ (e.g. 'opt' for
         the density traits of an opacity disk). rdata_key is the name of
         the density map in the extra outputs (e.g. 'odata').
@@ -160,7 +154,6 @@ class Disk(abc.ABC):
         self._subrnodes = subrnodes
         self._nsubrnodes = len(subrnodes)
         self._interp = interp
-        self._nwmodes = {name: nwmodes.get(name) for name in GEOMETRY_PARAMS}
         self._traits = {kind: traits_.get(kind, ()) for kind in TRAIT_KINDS}
         self._rdata_key = rdata_key
 
@@ -215,9 +208,6 @@ class Disk(abc.ABC):
 
     def interp(self):
         return self._interp
-
-    def nwmode(self, name):
-        return self._nwmodes[name]
 
     def traits(self, kind):
         return self._traits[kind]
@@ -332,23 +322,10 @@ class DiskPlan(abc.ABC):
         driver = self._driver
         dtype = self._dtype
 
-        # The parameter values are replaced below (nodewise mode
-        # transforms, interpolation). Work on a copy of the dict, and
-        # never modify the caller's arrays in place.
+        # The node-wise parameter values are replaced below with their
+        # values at the subnodes: work on a copy of the dict, and never
+        # modify the caller's arrays in place
         params = dict(params)
-
-        # Apply the nodewise mode transforms to the parameters
-        for name, pdescs in disk._geometry_pdescs.items():
-            nwmode = disk._nwmodes[name]
-            if nwmode is not None:
-                for pname in pdescs:
-                    params[pname] = nwmode.transform(
-                        params[pname], in_place=False)
-        for trait_params in disk._trait_params.values():
-            for pname, nwmode in trait_params.nwmodes.items():
-                if nwmode is not None:
-                    params[pname] = nwmode.transform(
-                        params[pname], in_place=False)
 
         # Write the parameter values into the host memory, with the
         # nodewise parameters at the subnodes (interpolated if given at
