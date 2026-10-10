@@ -120,11 +120,10 @@ class FitterLMFitLeastSquares(Fitter):
         # computes the Jacobian (see LeastSquaresFunctions)
         functions = LeastSquaresFunctions(
             problem.residuals, lower, upper, scales, 'forward', step)
-        if self._method == 'leastsq':
-            # (lmfit maps the bounded values, and the map is flat at the
-            # bounds)
-            x0 = inside_bounds(
-                x0, lower, upper, finite_difference_steps(x0, scales, step))
+        # A start on a bound does not move: lmfit's map of bounded values
+        # (leastsq) is flat there, and TRF's first steps are tiny
+        x0 = inside_bounds(
+            x0, lower, upper, finite_difference_steps(x0, scales, step))
         # lmfit names its parameters; the names of elements (e.g. 'v[3]')
         # are not valid ones
         lmfit_params = lmfit.Parameters()
@@ -145,9 +144,9 @@ class FitterLMFitLeastSquares(Fitter):
             nan_policy='raise', calc_covar=False, max_nfev=self._max_nfev)
         result = minimizer.minimize(method=self._method, **options)
         # A run stopped by max_nfev ends at its last evaluation (e.g. a
-        # step of a Jacobian): take the best one instead
-        best = problem.best()
-        x = best[0] if result.aborted and best is not None \
+        # rejected step): take its best one instead
+        best = functions.best()
+        x = best if result.aborted and best is not None \
             else values(result.params)
         return FitRun(
             solutions=[x], success=bool(result.success),

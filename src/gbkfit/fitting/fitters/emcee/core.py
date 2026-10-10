@@ -219,22 +219,22 @@ class FitterEmcee(Fitter):
             params: list[FitParamEmcee],
             nwalkers: int,
             rng: np.random.Generator
-    ) -> np.ndarray:
+    ) -> emcee.State:
         """
-        Return the starting points of the walkers, each with a finite
-        posterior density: in the support of the prior, and where the
+        Return the starting points of the walkers and their posterior
+        densities, all finite: in the support of the prior, and where the
         parameters can be evaluated (redrawn up to 100 times).
         """
-        start = np.stack(
+        coords = np.stack(
             [p.sample_start(rng, nwalkers) for p in params], axis=1)
+        log_prob = problem.log_posterior_batch(coords)
         for _ in range(100):
-            bad = [
-                i for i, x in enumerate(start)
-                if not math.isfinite(problem.log_posterior(x))]
-            if not bad:
-                return start
-            start[bad] = np.stack(
+            bad = np.flatnonzero(~np.isfinite(log_prob))
+            if not len(bad):
+                return emcee.State(coords, log_prob=log_prob)
+            coords[bad] = np.stack(
                 [p.sample_start(rng, len(bad)) for p in params], axis=1)
+            log_prob[bad] = problem.log_posterior_batch(coords[bad])
         raise ConfigError(
             "could not start the walkers where the posterior density is "
             "positive")

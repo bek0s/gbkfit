@@ -14,6 +14,7 @@ from gbkfit.fitting.base import FitRun, Fitter, fitter_parser
 from gbkfit.fitting.fitparams import (
     FitParam, FitParamBounded, FitParamClass)
 from gbkfit.fitting.problem import FitProblem
+from gbkfit.params import ParamEvaluationError
 from gbkfit.fitting.uncertainty import UncertaintyOptions
 from gbkfit.utils import parseutils
 from gbkfit.utils.parseutils import ConfigError
@@ -135,31 +136,43 @@ class FitterMultiStart(Fitter):
             nsobol = 2 ** math.ceil(math.log2(self._nstarts - 1))
             points = sobol.random(nsobol)[:self._nstarts - 1]
             starts += list(lower + points * (upper - lower))
-        runs = []
+        # Each start: its run, or why it failed (e.g. a start where the
+        # parameters cannot be evaluated), and its model evaluations
+        runs: list[FitRun] = []
+        starts_info: list[dict[str, Any]] = []
         for start in starts:
             start_params = [
                 FitParamBounded(v, p.minimum(), p.maximum())
                 for v, p in zip(start, params)]
             nevals = problem.nevals()
-            run = self._local._run(problem, start_params, rng)
-            runs.append((run, problem.nevals() - nevals))
+            try:
+                run = self._local._run(problem, start_params, rng)
+            except (ParamEvaluationError, ValueError) as e:
+                starts_info.append(dict(
+                    error=str(e), nevals=problem.nevals() - nevals))
+                continue
+            chi2 = problem.chi2(run.solutions[0])
+            runs.append(run)
+            starts_info.append(dict(
+                chi2=chi2, success=run.success,
+                nevals=problem.nevals() - nevals))
+        if not runs:
+            raise RuntimeError(
+                f"every start of multistart failed; the first: "
+                f"{starts_info[0]['error']}")
         # The minima, best first, and the distinct ones among them
-        chi2s = [problem.chi2(run.solutions[0]) for run, _ in runs]
-        order = np.argsort(chi2s)
+        chi2s = [info['chi2'] for info in starts_info if 'chi2' in info]
         solutions: list[np.ndarray] = []
-        for i in order:
-            x = runs[i][0].solutions[0]
+        for i in np.argsort(chi2s):
+            x = runs[i].solutions[0]
             if not any(np.all(np.abs(x - s) <= self._tolerance
                               * (upper - lower)) for s in solutions):
                 solutions.append(x)
+        nfailed = len(starts) - len(runs)
         return FitRun(
             solutions=solutions[:self._nsolutions],
-            success=any(run.success for run, _ in runs),
+            success=any(run.success for run in runs),
             message=f"{len(solutions)} distinct minima from "
-                    f"{len(starts)} starts",
-            diagnostics=dict(
-                nminima=len(solutions),
-                starts=[
-                    dict(chi2=chi2, success=run.success, nevals=nevals)
-                    for chi2, (run, nevals) in zip(chi2s, runs)]),
-            raw=[run.raw for run, _ in runs])
+                    f"{len(starts)} starts ({nfailed} failed)",
+            diagnostics=dict(nminima=len(solutions), starts=starts_info),
+            raw=[run.raw for run in runs])
