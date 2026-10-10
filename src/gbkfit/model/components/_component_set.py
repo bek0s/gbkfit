@@ -1,6 +1,7 @@
 from gbkfit.utils import gridutils, iterutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
 from ..base import ModelPlan
+from ._detail import shared_params
 
 
 __all__ = [
@@ -135,6 +136,82 @@ def evaluate_components(
                 out_extra[f'{prefix}{k}'] = extra(v)
 
 
+def _geometries(components):
+    """
+    The geometries of the components, each once, in the order of the
+    components. Raise ConfigError if two differ but have one name, or one
+    has the name of a component.
+    """
+    geometries = list(dict.fromkeys(
+        cmp.geometry() for cmp in components
+        if cmp.geometry() is not None))
+    names = [geometry.name() for geometry in geometries]
+    if repeated := sorted({n for n in names if names.count(n) > 1}):
+        raise ConfigError(
+            f"the components have different geometries of the names "
+            f"{repeated}")
+    if repeated := sorted(set(names) & {cmp.name() for cmp in components}):
+        raise ConfigError(
+            f"the geometries and the components must have different names; "
+            f"repeated: {repeated}")
+    return geometries
+
+
+def _merge_params(components, prefixes):
+    """
+    The parameters of the components, and for each component the names of
+    its parameters in them (see iterutils.merge_with_prefixes): prefixed
+    (see component_prefixes), except those they share through their
+    geometries (see Geometry), which are named after their geometry (e.g.
+    disk_posa), and come first. Raise ConfigError if those names are
+    taken, or the components have a shared parameter of different sizes.
+    """
+    shared = {
+        geometry: shared_params(geometry, [
+            cmp for cmp in components if cmp.geometry() == geometry])
+        for geometry in _geometries(components)}
+    names = [
+        shared[cmp.geometry()] if cmp.geometry() is not None else ()
+        for cmp in components]
+    params, mappings = iterutils.merge_with_prefixes(
+        [{name: pdesc for name, pdesc in cmp.pdescs().items()
+          if name not in cmp_names}
+         for cmp, cmp_names in zip(components, names)], prefixes)
+    mappings = [dict(mapping) for mapping in mappings]
+    geometry_params = {}
+    for cmp, cmp_names, mapping in zip(components, names, mappings):
+        pdescs = cmp.pdescs()
+        for name in cmp_names:
+            if name not in pdescs:
+                continue
+            full_name = f'{cmp.geometry().name()}_{name}'
+            pdesc = geometry_params.setdefault(full_name, pdescs[name])
+            if pdesc.size() != pdescs[name].size():
+                raise ConfigError(
+                    f"the components of the geometry "
+                    f"{cmp.geometry().name()!r} have {name} of different "
+                    f"sizes")
+            mapping[name] = full_name
+    if taken := sorted(geometry_params.keys() & params.keys()):
+        raise ConfigError(
+            f"the parameters of the geometries have the names of "
+            f"parameters of the components: {taken}; rename the geometries")
+    return geometry_params | params, tuple(mappings)
+
+
+def _constants(components, prefixes):
+    """
+    The constants of the components (see Component.constants), prefixed,
+    and the radial nodes of the warped geometries (e.g. disk_rnodes).
+    """
+    constants, _ = iterutils.merge_with_prefixes(
+        [cmp.constants() for cmp in components], prefixes)
+    return constants | {
+        f'{geometry.name()}_rnodes': geometry.rnodes()
+        for geometry in _geometries(components)
+        if geometry.rnodes() is not None}
+
+
 class ComponentSet2D:
     """
     The components of a 2d model: their parameters, and their evaluation
@@ -148,14 +225,18 @@ class ComponentSet2D:
         self._components = iterutils.tuplify(components)
         self._prefixes = component_prefixes(
             self._components, *_CMP_PREFIX)
-        params, self._mappings = iterutils.merge_with_prefixes(
-            [cmp.pdescs() for cmp in self._components], self._prefixes)
+        params, self._mappings = _merge_params(
+            self._components, self._prefixes)
         self._params = _with_mass_model_params(
             params, self._components, mass_model)
         self._mass_model = mass_model
 
     def components(self):
         return self._components
+
+    def geometries(self):
+        """The geometries of the components, each once."""
+        return _geometries(self._components)
 
     def mass_model(self):
         return self._mass_model
@@ -171,9 +252,7 @@ class ComponentSet2D:
         return any(cmp.has_weights() for cmp in self._components)
 
     def constants(self):
-        constants, _ = iterutils.merge_with_prefixes(
-            [cmp.constants() for cmp in self._components], self._prefixes)
-        return constants
+        return _constants(self._components, self._prefixes)
 
     def plan(self, driver, grid, spectral, has_weights, dtype, selection):
         """
@@ -295,9 +374,8 @@ class ComponentSet3D:
             self._components, *_CMP_PREFIX)
         self._oprefixes = component_prefixes(
             self._ocomponents, *_OCMP_PREFIX)
-        params, mappings = iterutils.merge_with_prefixes(
-            [cmp.pdescs() for cmp in self._all_components()],
-            self._prefixes + self._oprefixes)
+        params, mappings = _merge_params(
+            self._all_components(), self._prefixes + self._oprefixes)
         self._mappings = mappings[:len(self._components)]
         self._omappings = mappings[len(self._components):]
         self._params = _with_mass_model_params(
@@ -313,6 +391,10 @@ class ComponentSet3D:
 
     def opacity_components(self):
         return self._ocomponents
+
+    def geometries(self):
+        """The geometries of the components, each once."""
+        return _geometries(self._all_components())
 
     def mass_model(self):
         return self._mass_model
@@ -333,10 +415,8 @@ class ComponentSet3D:
         return any(cmp.has_weights() for cmp in self._components)
 
     def constants(self):
-        constants, _ = iterutils.merge_with_prefixes(
-            [cmp.constants() for cmp in self._all_components()],
-            self._prefixes + self._oprefixes)
-        return constants
+        return _constants(
+            self._all_components(), self._prefixes + self._oprefixes)
 
     def mappings(self):
         """The parameter names of each component, by its own names."""

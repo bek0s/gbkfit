@@ -5,10 +5,12 @@ import scipy.special
 
 from gbkfit.params.pdescs import ParamScalarDesc
 from gbkfit.utils import parseutils
-from ._detail import dump_lines, dump_name
+from gbkfit.utils.parseutils import ConfigError
+from ._detail import dump_geometry, dump_lines, dump_name
 from .base import (
     BrightnessComponent2D, BrightnessComponent3D, ComponentPlan,
     SpectralComponent2D, SpectralComponent3D)
+from .geometries import Geometry
 from .lines import Line, Lines, line_parser
 
 
@@ -18,6 +20,14 @@ __all__ = [
     'SpectralPoint2D',
     'SpectralPoint3D'
 ]
+
+
+def _check_geometry(geometry: Geometry | None) -> None:
+    """Raise ConfigError if the geometry of a point is loose."""
+    if geometry is not None and geometry.loose():
+        raise ConfigError(
+            f"a point has one centre, but its geometry "
+            f"{geometry.name()!r} is loose (a centre for each ring)")
 
 
 def point_pdescs(spectral):
@@ -129,10 +139,12 @@ class BrightnessPoint2D(BrightnessComponent2D):
         return 'point'
 
     def dump(self):
-        return dict(type=self.type()) | dump_name(self)
+        return dict(type=self.type()) | dump_name(self) | dump_geometry(self)
 
-    def __init__(self, name: str | None = None):
-        super().__init__(name)
+    def __init__(
+            self, geometry: Geometry | None = None, name: str | None = None):
+        _check_geometry(geometry)
+        super().__init__(name, geometry)
 
     def pdescs(self):
         return point_pdescs(spectral=False)
@@ -153,10 +165,12 @@ class BrightnessPoint3D(BrightnessComponent3D):
         return 'point'
 
     def dump(self):
-        return dict(type=self.type()) | dump_name(self)
+        return dict(type=self.type()) | dump_name(self) | dump_geometry(self)
 
-    def __init__(self, name: str | None = None):
-        super().__init__(name)
+    def __init__(
+            self, geometry: Geometry | None = None, name: str | None = None):
+        _check_geometry(geometry)
+        super().__init__(name, geometry)
 
     def pdescs(self):
         return point_pdescs(spectral=False)
@@ -187,14 +201,17 @@ class SpectralPoint2D(SpectralComponent2D):
         return (
             dict(type=self.type())
             | dump_name(self)
+            | dump_geometry(self)
             | dump_lines(self._lines))
 
     def __init__(
             self,
             lines: Sequence[Line] | None = None,
+            geometry: Geometry | None = None,
             name: str | None = None
     ):
-        super().__init__(name)
+        _check_geometry(geometry)
+        super().__init__(name, geometry)
         self._lines = Lines(lines)
         pdescs = point_pdescs(spectral=True)
         if repeated := sorted(set(self._lines.pdescs()) & set(pdescs)):
@@ -242,14 +259,17 @@ class SpectralPoint3D(SpectralComponent3D):
         return (
             dict(type=self.type())
             | dump_name(self)
+            | dump_geometry(self)
             | dump_lines(self._lines))
 
     def __init__(
             self,
             lines: Sequence[Line] | None = None,
+            geometry: Geometry | None = None,
             name: str | None = None
     ):
-        super().__init__(name)
+        _check_geometry(geometry)
+        super().__init__(name, geometry)
         self._lines = Lines(lines)
         pdescs = point_pdescs(spectral=True)
         if repeated := sorted(set(self._lines.pdescs()) & set(pdescs)):
