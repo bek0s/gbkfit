@@ -4,7 +4,7 @@ Tests for the validation of trait options.
 
 import pytest
 
-from gbkfit.model.gmodels import traits
+from gbkfit.model.components.disks import traits
 
 
 @pytest.mark.parametrize('angle', [-10, 190])

@@ -10,7 +10,8 @@ change of the models.
 
 import numpy as np
 import pytest
-from gbkfit.model import gmodel_parser, gmodels
+import gbkfit.model
+from gbkfit.model import gmodel_parser
 from gbkfit.utils import gridutils
 from modelutils import WeightComponent
 
@@ -185,8 +186,8 @@ def test_gmodel_dump_and_load(driver, name, evaluate_models):
 # The 2d gmodels, the size of their data and its spectral axis, and its
 # shape (an image is a cube with one channel)
 GMODELS_2D = [
-    (gmodels.GModelIntensity2D, (20, 16), None, (1, 16, 20)),
-    (gmodels.GModelKinematics2D, (20, 16, 11), 2, (11, 16, 20))]
+    (gbkfit.model.GModelIntensity2D, (20, 16), None, (1, 16, 20)),
+    (gbkfit.model.GModelKinematics2D, (20, 16, 11), 2, (11, 16, 20))]
 
 
 @pytest.mark.parametrize(

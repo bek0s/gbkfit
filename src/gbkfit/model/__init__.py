@@ -1,4 +1,5 @@
-
 from .base import *
+from .mass import *
 
-from . import gmodels
+from . import components
+from .components.gmodels import *

@@ -8,7 +8,7 @@ import scipy.special
 import gbkfit.math
 from gbkfit.params.pdescs import ParamScalarDesc, ParamVectorDesc
 from gbkfit.utils import parseutils
-from .common import NWMode, nwmode_parser
+from .nwmodes import NWMode, nwmode_parser
 
 
 _log = logging.getLogger(__name__)
@@ -1309,7 +1309,7 @@ class VPTraitNWTanUniform(TraitFeatureNWMode, TraitFeatureSampling, VPTrait):
 class VPTraitMass(VPTrait):
     """
     The circular velocity of the mass model of the gmodel (see
-    gmodels.mass): a node-wise tangential velocity whose values at the
+    gbkfit.model.mass): a node-wise tangential velocity whose values at the
     subnodes of the disk the gmodel computes from the parameters of its
     mass model at each evaluation. It has no parameters of its own.
     """

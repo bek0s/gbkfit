@@ -20,7 +20,7 @@ import gbkfit.model
 import gbkfit.observation
 import gbkfit.params
 import gbkfit.instrument
-from gbkfit.model.gmodels import common, traits
+from gbkfit.model.components.disks import nwmodes, traits
 from gbkfit.utils import funcutils
 from modelutils import config_group
 
@@ -77,7 +77,7 @@ OTHER_PARSERS = dict(
     lsf=gbkfit.instrument.lsf_parser,
     aperture=gbkfit.region.aperture_parser,
     primary_beam=gbkfit.instrument.primary_beam_parser,
-    nwmode=common.nwmode_parser,
+    nwmode=nwmodes.nwmode_parser,
     driver=gbkfit.driver.driver_parser)
 
 

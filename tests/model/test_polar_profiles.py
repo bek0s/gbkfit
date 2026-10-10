@@ -26,7 +26,7 @@ def face_on_disk(driver, evaluate_models, key, trait):
     disk with a polar trait of the given type, and the radius of each
     pixel (pixels of 0.5, centred on the disk).
     """
-    from gbkfit.model.gmodels import traits
+    from gbkfit.model.components.disks import traits
     parser = dict(b=traits.bpt_parser, d=traits.dpt_parser)[key]
     names = [p.name() for p in parser.load(dict(type=trait)).params_sm()]
     traits_ = dict(

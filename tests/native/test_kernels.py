@@ -14,7 +14,7 @@ import pathlib
 import numpy as np
 import pytest
 
-from gbkfit.model.gmodels import traits
+from gbkfit.model.components.disks import traits
 
 
 DTYPE = np.float32

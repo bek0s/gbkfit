@@ -1,7 +1,6 @@
-from gbkfit.model.base import GModelPlan
-from gbkfit.utils import gridutils, iterutils
+from gbkfit.utils import gridutils, iterutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
-from . import _detail
+from ..base import GModelPlan
 
 
 __all__ = [
@@ -20,7 +19,7 @@ IMAGE_SPECTRAL_AXIS = gridutils.Grid(
 
 # The components and the opacity components: their label in messages, the
 # prefix of their parameters, and whether the parameters of the first one
-# have it (see _detail.component_prefixes)
+# have it (see component_prefixes)
 _CMP_PREFIX = ('components', 'cmp', False)
 _OCMP_PREFIX = ('opacity components', 'ocmp', True)
 
@@ -62,6 +61,80 @@ def _circular_velocities(components, mass_model, params):
         for cmp in components]
 
 
+def component_prefixes(components, label, prefix, prefix_first):
+    """
+    The prefix of the parameters, constants and extra outputs of each
+    component of a list: its name, or its position if the components have
+    no names (e.g. 'cmp1_'; see parseutils.item_prefixes).
+    """
+    return parseutils.item_prefixes(
+        [cmp.name() for cmp in components], label, prefix, prefix_first)
+
+
+def select_components(components, names):
+    """
+    The indices of the components of the given names, in their order (all
+    of them if names is None). Raise ConfigError for unknown names.
+    """
+    if names is None:
+        return tuple(range(len(components)))
+    known = [component.name() for component in components]
+    if not names:
+        raise ConfigError("at least one component must be selected")
+    if len(set(names)) != len(names):
+        raise ConfigError(f"the selected components repeat names: {names}")
+    if unknown := [name for name in names if name not in known]:
+        raise ConfigError(
+            f"there are no components named {unknown}; the named components "
+            f"are {[name for name in known if name is not None]}")
+    return tuple(sorted(known.index(name) for name in names))
+
+
+def check_selected_lines(components, names):
+    """
+    Raise ConfigError unless each of the names of lines (None for all) is
+    a line of one of the components.
+    """
+    if names is None:
+        return
+    known = set()
+    for component in components:
+        known |= set(component.line_names())
+    if unknown := [name for name in names if name not in known]:
+        raise ConfigError(
+            f"no component has the lines {unknown}; the lines of the "
+            f"components are {sorted(known)}")
+
+
+def evaluate_components(
+        components, plans, mappings, params, grid, outputs, out_extra,
+        out_extra_label, extra, given=None):
+    """
+    Evaluate the components of a gmodel through their plans, each with its
+    parameters, and those its gmodel gives it (given, a dict for each
+    component, if any; see Component.circular_velocity_params). Their
+    extra outputs are named after the given label and their name, or
+    their index if they have none (e.g. 'opacity_dust_odata' or
+    'opacity_component0_odata'), and made from their data by extra (e.g.
+    with the coordinates of the grid).
+    """
+    if given is None:
+        given = [{}] * len(components)
+    for i, (component, plan, mapping, component_given) in enumerate(
+            zip(components, plans, mappings, given, strict=True)):
+        name = component.name()
+        label = name if name is not None else f'component{i}'
+        prefix = f'{out_extra_label}{label}_'
+        component_params = {
+            p: params[mapping[p]] for p in component.pdescs()
+        } | component_given
+        component_out_extra = {} if out_extra is not None else None
+        plan.evaluate(component_params, grid, outputs, component_out_extra)
+        if component_out_extra is not None:
+            for k, v in component_out_extra.items():
+                out_extra[f'{prefix}{k}'] = extra(v)
+
+
 class ComponentSet2D:
     """
     The components of a 2d gmodel: their parameters, and their evaluation
@@ -73,7 +146,7 @@ class ComponentSet2D:
         if not components:
             raise RuntimeError("at least one component must be configured")
         self._components = iterutils.tuplify(components)
-        self._prefixes = _detail.component_prefixes(
+        self._prefixes = component_prefixes(
             self._components, *_CMP_PREFIX)
         params, self._mappings = iterutils.merge_with_prefixes(
             [cmp.pdescs() for cmp in self._components], self._prefixes)
@@ -139,12 +212,12 @@ class ComponentSetPlan2D:
             spec_step=spec_step,
             spec_zero=spec_zero)
         # The selected components, their plans and their parameters
-        selected = _detail.select_components(
+        selected = select_components(
             component_set.components(), selection.components)
         self._components = tuple(
             component_set.components()[i] for i in selected)
         self._mappings = tuple(component_set.mappings()[i] for i in selected)
-        _detail.check_selected_lines(self._components, selection.lines)
+        check_selected_lines(self._components, selection.lines)
         self._component_plans = tuple(
             cmp.plan(driver, spectral, dtype, selection.lines)
             for cmp in self._components)
@@ -176,7 +249,7 @@ class ComponentSetPlan2D:
         def image(data):
             return gridutils.GridData(data, grid.coords, None)
 
-        _detail.evaluate_components(
+        evaluate_components(
             self._components, self._component_plans, self._mappings,
             params, self._native_grid,
             outputs | dict(wdata=wdata, bdata=bdata),
@@ -218,9 +291,9 @@ class ComponentSet3D:
             raise ConfigError(
                 f"the components and the opacity components must have "
                 f"different names; repeated: {repeated}")
-        self._prefixes = _detail.component_prefixes(
+        self._prefixes = component_prefixes(
             self._components, *_CMP_PREFIX)
-        self._oprefixes = _detail.component_prefixes(
+        self._oprefixes = component_prefixes(
             self._ocomponents, *_OCMP_PREFIX)
         params, mappings = iterutils.merge_with_prefixes(
             [cmp.pdescs() for cmp in self._all_components()],
@@ -336,12 +409,12 @@ class ComponentSetPlan3D:
             grid.coords.rpix + (-self._zero[2] / self._step[2],),
             grid.coords.rval + (0.0,), grid.coords.rota)
         # The selected components, their plans and their parameters
-        selected = _detail.select_components(
+        selected = select_components(
             component_set.components(), selection.components)
         self._components = tuple(
             component_set.components()[i] for i in selected)
         self._mappings = tuple(component_set.mappings()[i] for i in selected)
-        _detail.check_selected_lines(self._components, selection.lines)
+        check_selected_lines(self._components, selection.lines)
         self._component_plans = tuple(
             cmp.plan(driver, spectral, dtype, selection.lines)
             for cmp in self._components)
@@ -384,14 +457,14 @@ class ComponentSetPlan3D:
         # The opacity components add to the opacity cube, so clear it
         if odata is not None:
             driver.mem_fill(odata, 0)
-            _detail.evaluate_components(
+            evaluate_components(
                 component_set.opacity_components(), self._ocomponent_plans,
                 component_set.omappings(), params, self._native_grid,
                 dict(odata=odata), out_extra, 'opacity_', cube)
 
         outputs = outputs | dict(
             wdata=wdata, bdata=bdata, odata=odata, obdata=obdata)
-        _detail.evaluate_components(
+        evaluate_components(
             self._components, self._component_plans, self._mappings,
             params, self._native_grid, outputs, out_extra, '', cube,
             _circular_velocities(
