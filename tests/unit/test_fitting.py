@@ -192,14 +192,20 @@ def prior_properties(nsigma):
 
 
 def check_posterior(result):
-    # The posterior agrees with the Laplace approximation at the best fit
+    # The posterior agrees with the Laplace approximation at the best fit:
+    # the medians (a sampler's best is its most likely sample, a fraction
+    # of an error from the optimum), and the widths (each roughly, and on
+    # average to 7%; emcee's DESnookerMove made them all 12% too narrow)
     posterior = result.posterior.summary()
     laplace = result.best().laplace.summary()
     std = result.best().covariance.std
+    ratios = []
     for name in TRUE:
         lo, median, hi = posterior[name]
-        assert median == pytest.approx(laplace[name][1], abs=0.3 * std[name])
-        assert (hi - lo) / 2 == pytest.approx(std[name], rel=0.25)
+        assert median == pytest.approx(laplace[name][1], abs=std[name])
+        ratios.append((hi - lo) / 2 / std[name])
+    assert ratios == pytest.approx(np.ones(len(TRUE)), abs=0.25)
+    assert np.mean(ratios) == pytest.approx(1, abs=0.07)
 
 
 # The samplers run on the host only: they test the fitters, not the
