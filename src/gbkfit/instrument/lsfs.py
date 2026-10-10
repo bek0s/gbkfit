@@ -11,6 +11,9 @@ import os
 from collections.abc import Sequence
 from typing import Any
 
+import astropy.io.fits
+import astropy.units as u
+import astropy.wcs
 import numpy as np
 import scipy.ndimage
 import scipy.special
@@ -29,6 +32,7 @@ __all__ = [
     'LSFGGauss',
     'LSFHanning',
     'LSFImage',
+    'LSFImages',
     'LSFLorentz',
     'LSFMoffat',
     'LSFPoint',
@@ -701,6 +705,134 @@ class LSFHanning(LSF):
         return _detail.embed(data, (size,), (offset,))
 
 
+def _read_images(x):
+    """
+    The LSF profiles of a 2D FITS image (one per row: nz, nk), the point
+    of each profile on the spectral axis (from the axis of the rows, if it
+    is spectral, or None), and the width of their channels in km/s (from
+    the axis of the columns, if it is in a velocity unit, or None).
+    """
+    file, hdu = parseutils.parse_file(x)
+    with astropy.io.fits.open(file) as hdul:
+        data = np.asarray(hdul[hdu].data, dtype=float)
+        wcs = astropy.wcs.WCS(hdul[hdu].header)
+    if data.ndim != 2:
+        raise ConfigError(
+            f"{file}: LSF profiles must be an image, with one profile per "
+            f"row; it has {data.ndim} axes")
+    points = None
+    if wcs.wcs.spec == 1:
+        points = _detail.spectral_points(wcs, data.shape[0])
+    step = None
+    unit = u.Unit(wcs.wcs.cunit[0])
+    if unit.is_equivalent(u.km / u.s):
+        step = abs(float(wcs.pixel_scale_matrix[0, 0])) * unit.to(u.km / u.s)
+    return data, points, step
+
+
+class LSFImages(LSF):
+    """
+    An LSF given as profiles at points of the spectral axis (e.g. measured
+    from sky lines or arc lamps). At each channel it is the image LSF (see
+    LSFImage) of the profiles of the two nearest points, interpolated
+    linearly; beyond the points, that of the nearest profile.
+
+    Its configuration has its file (a filename, or a dict with the
+    filename and the HDU): a FITS image with one profile per row (nz, nk).
+    The points come from the spectral axis of the rows unless given as
+    wavelength, frequency or velocity (see varying.load_points), and the
+    width of the channels comes from the axis of the columns (in a
+    velocity unit) unless step is given.
+
+    Parameters
+    ----------
+    data : ndarray
+        The profiles (nz, nk), finite.
+    points : Quantity
+        The point of each profile: wavelengths, frequencies or velocities.
+    step : float
+        The width of the channels of the profiles (km/s).
+    """
+
+    @staticmethod
+    def type() -> str:
+        return 'images'
+
+    @classmethod
+    def load(cls, info: dict[str, Any]) -> 'LSFImages':
+        info = dict(info)
+        data, points, step = parseutils.load_option(
+            _read_images, info, 'file', required=True)
+        del info['file']
+        if (given := varying.load_points(info)) is not None:
+            points = given
+        if points is None:
+            raise ConfigError(
+                "the file has no spectral axis along its rows: give the "
+                "point of each profile as wavelength, frequency or velocity")
+        if info.get('step') is None:
+            if step is None:
+                raise ConfigError(
+                    "the columns of the file are not in a velocity unit: "
+                    "give the width of its channels as step (km/s)")
+            info['step'] = step
+        return cls(**parseutils.parse_options_for_callable(
+            info | dict(data=data, points=points), cls.__init__))
+
+    def dump(
+            self, prefix: str = '', dump_path: bool = True,
+            overwrite: bool = False
+    ) -> dict[str, Any]:
+        filename = f'{prefix}lsf_images.fits'
+        astropy.io.fits.writeto(filename, self._data, overwrite=overwrite)
+        return dict(
+            type=self.type(),
+            file=filename if dump_path else os.path.basename(filename),
+            step=self._step) | varying.dump_points(self._points)
+
+    def __init__(self, data: np.ndarray, points: u.Quantity, step: float):
+        data = np.asarray(data, dtype=float)
+        if data.ndim != 2 or not np.all(np.isfinite(data)):
+            raise ConfigError(
+                f"LSF profiles must be finite, of shape (nz, nk); their "
+                f"shape is {data.shape}")
+        points = u.Quantity(points, dtype=float)
+        if points.shape != data.shape[:1]:
+            raise ConfigError(
+                f"LSF profiles need a point for each of the {len(data)} "
+                f"profiles; they have {points.size}")
+        if np.unique(points).size != points.size:
+            raise ConfigError("the points of the profiles must be distinct")
+        check_scale('step', step)
+        # (each profile holds all the light)
+        self._data = data / data.sum(axis=1, keepdims=True)
+        self._points = points
+        self._step = step
+
+    def varies(self) -> bool:
+        return True
+
+    def at_velocities(self, velocities, rest=None):
+        blends = varying.blend(self._points, velocities, rest)
+        lsfs = {}
+        for i, j, t in set(blends):
+            lsfs[(i, j, t)] = LSFImage(
+                (1 - t) * self._data[i] + t * self._data[j], self._step)
+        return [lsfs[blend] for blend in blends]
+
+    def velocity_range(self, rest=None):
+        points = varying.to_velocities(self._points, rest)
+        return float(points.min()), float(points.max())
+
+    def _size_impl(self, step):
+        raise RuntimeError(
+            "LSF profiles give a profile at each channel (see at_velocities)")
+
+    def _asarray_impl(self, step, size, offset):
+        raise RuntimeError(
+            "LSF profiles give a profile at each channel (see at_velocities)")
+
+
 class LSFVarying(LSF):
     """
     An LSF of a type whose options vary along the spectral axis: an LSF of
@@ -753,4 +885,5 @@ lsf_parser = parseutils.TypedParser(LSF, [
     LSFImage,
     LSFSum,
     LSFConvolution,
-    LSFHanning])
+    LSFHanning,
+    LSFImages])

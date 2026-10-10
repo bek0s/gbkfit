@@ -30,7 +30,7 @@ DATA_DIR = pathlib.Path(__file__).parents[1] / 'data'
 CONFIGS = sorted(DATA_DIR.glob('*/*.yaml'))
 
 # The types with a custom dump, which writes data files
-FILE_TYPES = ('image', 'array')
+FILE_TYPES = ('image', 'images', 'array')
 
 # Values for the required options of the types tested below
 SAMPLE_OPTIONS = dict(
