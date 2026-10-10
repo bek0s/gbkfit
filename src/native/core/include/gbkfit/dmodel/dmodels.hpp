@@ -137,6 +137,14 @@ dmodel_dcube_mask(
 // the cube or in a contiguous copy. The sums are in channels from the
 // centre of the axis, so that their precision does not depend on its
 // velocities.
+//
+// Precision: in float32, the moments of the faint wings of a convolved
+// cube (below about 1e-4 of its peak) are off by up to a few km/s. The
+// error is in the cube, from the rounding of the float32 FFT convolution
+// (about 1e-7 of the peak), not in these sums: float64 sums over the
+// float32 cube give the same moments (tested 2026-10-10). A float64
+// model, or a float64 convolution of float32 models, would fix them;
+// a mask_cutoff masks them.
 template<typename T> constexpr void
 dmodel_mmaps_moments(
         int x, int y,

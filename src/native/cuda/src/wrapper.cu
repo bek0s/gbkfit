@@ -223,6 +223,7 @@ Wrapper<T>::objective_residual_sum(
 #define INSTANTIATE(T)\
     template struct Wrapper<T>;
 INSTANTIATE(float)
+INSTANTIATE(double)
 #undef INSTANTIATE
 
 } // namespace gbkfit::cuda

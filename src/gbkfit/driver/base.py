@@ -7,7 +7,9 @@ from gbkfit.utils import parseutils
 
 
 # The suffix of the native classes for each supported dtype
-_NATIVE_CLASS_SUFFIXES = {np.dtype(np.float32): 'f32'}
+_NATIVE_CLASS_SUFFIXES = {
+    np.dtype(np.float32): 'f32',
+    np.dtype(np.float64): 'f64'}
 
 
 class Driver(parseutils.TypedSerializable, abc.ABC):
