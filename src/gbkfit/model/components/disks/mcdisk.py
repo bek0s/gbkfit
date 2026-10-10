@@ -10,9 +10,7 @@ from ..base import (
 from ..lines import Line, line_parser
 from . import _detail, _disk, traits
 from ._detail import (
-    BHT, BPT, DHT, DPT, OHT, OPT, SPATIAL_NWMODES, SPECTRAL_NWMODES, SPT,
-    VHT, VPT, WPT, ZPT)
-from .nwmodes import NWMode
+    BHT, BPT, DHT, DPT, OHT, OPT, SPT, VHT, VPT, WPT, ZPT)
 
 
 __all__ = [
@@ -32,10 +30,10 @@ class MCDisk(_disk.Disk):
 
     def __init__(
             self, cflux, seed,
-            loose, tilted, rnodes, rstep, interp, nwmodes, traits_,
+            loose, tilted, rnodes, rstep, interp, traits_,
             prefixes, rdata_key):
         super().__init__(
-            loose, tilted, rnodes, rstep, interp, nwmodes, traits_,
+            loose, tilted, rnodes, rstep, interp, traits_,
             prefixes, rdata_key)
         if seed < 0:
             raise RuntimeError(f"seed must be >= 0; supplied value: {seed}")
@@ -140,7 +138,6 @@ class MCDiskPlan(_disk.DiskPlan):
 class BrightnessMCDisk3D(BrightnessComponent3D):
 
     _slots = (BPT, BHT, ZPT, SPT, WPT)
-    _nwmodes = SPATIAL_NWMODES
 
     @staticmethod
     def type():
@@ -148,14 +145,13 @@ class BrightnessMCDisk3D(BrightnessComponent3D):
 
     @classmethod
     def load(cls, info):
-        return cls(**_detail.load_options(
-            cls, info, cls._slots, cls._nwmodes))
+        return cls(**_detail.load_options(cls, info, cls._slots))
 
     def dump(self):
         return (
             dict(type=self.type())
             | dump_name(self)
-            | _detail.dump_disk(self._disk, self._slots, self._nwmodes))
+            | _detail.dump_disk(self._disk, self._slots))
 
     def __init__(
             self,
@@ -174,10 +170,6 @@ class BrightnessMCDisk3D(BrightnessComponent3D):
             rnodes: Sequence[float] | None = None,
             rstep: float | None = None,
             interp: str = 'linear',
-            xpos_nwmode: NWMode | None = None,
-            ypos_nwmode: NWMode | None = None,
-            posa_nwmode: NWMode | None = None,
-            incl_nwmode: NWMode | None = None,
             seed: int = 0,
             name: str | None = None
     ):
@@ -188,9 +180,6 @@ class BrightnessMCDisk3D(BrightnessComponent3D):
             loose=loose, tilted=tilted,
             rnmin=rnmin, rnmax=rnmax, rnsep=rnsep, rnlen=rnlen,
             rnodes=rnodes, rstep=rstep, interp=interp,
-            nwmodes=dict(
-                xpos=xpos_nwmode, ypos=ypos_nwmode,
-                posa=posa_nwmode, incl=incl_nwmode),
             traits_=dict(
                 bptraits=bptraits, bhtraits=bhtraits, zptraits=zptraits,
                 sptraits=sptraits, wptraits=wptraits),
@@ -224,7 +213,6 @@ class BrightnessMCDisk3D(BrightnessComponent3D):
 class SpectralMCDisk3D(SpectralComponent3D):
 
     _slots = (BPT, BHT, VPT, VHT, DPT, DHT, ZPT, SPT, WPT)
-    _nwmodes = SPECTRAL_NWMODES
 
     @staticmethod
     def type():
@@ -234,14 +222,13 @@ class SpectralMCDisk3D(SpectralComponent3D):
     def load(cls, info):
         parseutils.load_option_and_update_info(
             line_parser, info, 'lines')
-        return cls(**_detail.load_options(
-            cls, info, cls._slots, cls._nwmodes))
+        return cls(**_detail.load_options(cls, info, cls._slots))
 
     def dump(self):
         return (
             dict(type=self.type())
             | dump_name(self)
-            | _detail.dump_disk(self._disk, self._slots, self._nwmodes)
+            | _detail.dump_disk(self._disk, self._slots)
             | dump_lines(self._lines))
 
     def __init__(
@@ -265,11 +252,6 @@ class SpectralMCDisk3D(SpectralComponent3D):
             rnodes: Sequence[float] | None = None,
             rstep: float | None = None,
             interp: str = 'linear',
-            vsys_nwmode: NWMode | None = None,
-            xpos_nwmode: NWMode | None = None,
-            ypos_nwmode: NWMode | None = None,
-            posa_nwmode: NWMode | None = None,
-            incl_nwmode: NWMode | None = None,
             seed: int = 0,
             lines: Sequence[Line] | None = None,
             name: str | None = None
@@ -285,9 +267,6 @@ class SpectralMCDisk3D(SpectralComponent3D):
             loose=loose, tilted=tilted,
             rnmin=rnmin, rnmax=rnmax, rnsep=rnsep, rnlen=rnlen,
             rnodes=rnodes, rstep=rstep, interp=interp,
-            nwmodes=dict(
-                vsys=vsys_nwmode, xpos=xpos_nwmode, ypos=ypos_nwmode,
-                posa=posa_nwmode, incl=incl_nwmode),
             traits_=dict(
                 bptraits=bptraits, bhtraits=bhtraits, vptraits=vptraits,
                 vhtraits=vhtraits, dptraits=dptraits, dhtraits=dhtraits,
@@ -331,7 +310,6 @@ class SpectralMCDisk3D(SpectralComponent3D):
 class OpacityMCDisk3D(OpacityComponent3D):
 
     _slots = (OPT, OHT, ZPT, SPT, WPT)
-    _nwmodes = SPATIAL_NWMODES
 
     @staticmethod
     def type():
@@ -339,14 +317,13 @@ class OpacityMCDisk3D(OpacityComponent3D):
 
     @classmethod
     def load(cls, info):
-        return cls(**_detail.load_options(
-            cls, info, cls._slots, cls._nwmodes))
+        return cls(**_detail.load_options(cls, info, cls._slots))
 
     def dump(self):
         return (
             dict(type=self.type())
             | dump_name(self)
-            | _detail.dump_disk(self._disk, self._slots, self._nwmodes))
+            | _detail.dump_disk(self._disk, self._slots))
 
     def __init__(
             self,
@@ -365,10 +342,6 @@ class OpacityMCDisk3D(OpacityComponent3D):
             rnodes: Sequence[float] | None = None,
             rstep: float | None = None,
             interp: str = 'linear',
-            xpos_nwmode: NWMode | None = None,
-            ypos_nwmode: NWMode | None = None,
-            posa_nwmode: NWMode | None = None,
-            incl_nwmode: NWMode | None = None,
             seed: int = 0,
             name: str | None = None
     ):
@@ -379,9 +352,6 @@ class OpacityMCDisk3D(OpacityComponent3D):
             loose=loose, tilted=tilted,
             rnmin=rnmin, rnmax=rnmax, rnsep=rnsep, rnlen=rnlen,
             rnodes=rnodes, rstep=rstep, interp=interp,
-            nwmodes=dict(
-                xpos=xpos_nwmode, ypos=ypos_nwmode,
-                posa=posa_nwmode, incl=incl_nwmode),
             traits_=dict(
                 optraits=optraits, ohtraits=ohtraits, zptraits=zptraits,
                 sptraits=sptraits, wptraits=wptraits),

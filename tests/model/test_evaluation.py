@@ -17,7 +17,10 @@ from modelutils import observation_group
 
 
 def nodewise_relative_case(driver):
-    """A model with a node-wise rotation curve in relative mode."""
+    """
+    A model with a node-wise rotation curve, whose values are given as
+    offsets (see test_evaluation_does_not_modify_params).
+    """
     return dict(
         driver=dict(type=driver.type()),
         observable=dict(
@@ -26,9 +29,7 @@ def nodewise_relative_case(driver):
             type='smdisk', loose=False, tilted=False,
             rnodes=list(range(0, 12)),
             bptraits=dict(type='exponential'),
-            vptraits=dict(
-                type='nw_tan_uniform',
-                nwmode=dict(type='relative1', origin=0)),
+            vptraits=dict(type='nw_tan_uniform'),
             dptraits=dict(type='uniform'))]))
 
 
@@ -37,7 +38,8 @@ def test_evaluation_does_not_modify_params(driver):
     params = gbkfit.params.EvaluationParams(model_group.pdescs(), dict(
         vsys=0, xpos=0, ypos=0, posa=30, incl=45,
         bpt_a=1, bpt_s=4, dpt_a=10,
-        vpt_vt=[100] + [10] * 11))
+        vpt_vt=[100] + [10] * 11),
+        modes=dict(vpt_vt=gbkfit.params.ParamModeOffsets()))
     values = params.evaluate()
     values_before = copy.deepcopy(values)
     first = copy.deepcopy(model_group.model_h(values)[0]['spectra']['d'])

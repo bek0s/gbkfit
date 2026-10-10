@@ -1,4 +1,4 @@
 from .mcdisk import *
 from .smdisk import *
 
-from . import nwmodes, traits
+from . import traits

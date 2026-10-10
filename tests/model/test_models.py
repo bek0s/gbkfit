@@ -12,13 +12,12 @@ import numpy as np
 import pytest
 import gbkfit.model
 from gbkfit.model import model_parser
+from gbkfit.params import ParamModeOffsets
 from gbkfit.utils import gridutils
 from modelutils import WeightComponent
 
 
 RNODES = list(range(0, 10, 2))
-
-NWMODE = dict(type='relative1', origin=0)
 
 
 def smdisk(**options):
@@ -36,7 +35,7 @@ CASES = dict(
             observable=dict(type='pixel_brightness', size=[20, 16], rota=10),
             model=dict(type='intensity_2d', components=[
                 smdisk(
-                    loose=True, tilted=True, xpos_nwmode=NWMODE,
+                    loose=True, tilted=True,
                     bptraits=[
                         dict(type='exponential'),
                         dict(type='nw_uniform')],
@@ -52,7 +51,7 @@ CASES = dict(
                 type='pixel_spectra', size=[20, 16, 11], step=[1, 1, 30]),
             model=dict(type='kinematics_2d', components=[
                 smdisk(
-                    loose=True, tilted=False, vsys_nwmode=NWMODE,
+                    loose=True, tilted=False,
                     bptraits=dict(type='gauss'),
                     vptraits=[
                         dict(type='tan_arctan'),
@@ -82,7 +81,7 @@ CASES = dict(
                 type='intensity_3d',
                 components=[
                     smdisk(
-                        loose=False, tilted=True, posa_nwmode=NWMODE,
+                        loose=False, tilted=True,
                         bptraits=dict(type='exponential'),
                         bhtraits=dict(type='sech2'),
                         zptraits=dict(type='nw_uniform')),
@@ -148,12 +147,18 @@ CASES = dict(
             ocmp_xpos=0, ocmp_ypos=0, ocmp_posa=30, ocmp_incl=60,
             ocmp_opt_a=0.05, ocmp_opt_s=4, ocmp_oht_s=1)))
 
+# The parameters of the cases given as offsets from their first element
+MODES = dict(
+    intensity_2d=dict(xpos=ParamModeOffsets()),
+    kinematics_2d=dict(vsys=ParamModeOffsets()),
+    intensity_3d=dict(posa=ParamModeOffsets()))
+
 
 @pytest.mark.parametrize('name', CASES)
 def test_model(driver, name, evaluate_cases, ndarrays_regression):
     case, properties = CASES[name]
     case = dict(case, driver=dict(type=driver.type()))
-    data, extra = evaluate_cases([case], properties)
+    data, extra = evaluate_cases([case], properties, MODES.get(name))
     # The extra outputs on a grid are compared by their data
     outputs = {
         f'data_{key}': data_[key]['d']
@@ -176,8 +181,10 @@ def test_model_dump_and_load(driver, name, evaluate_cases):
     case = dict(case, driver=dict(type=driver.type()))
     info = model_parser.dump(model_parser.load(case['model']))
     assert model_parser.dump(model_parser.load(info)) == info
-    data, _ = evaluate_cases([case], properties)
-    data_loaded, _ = evaluate_cases([dict(case, model=info)], properties)
+    modes = MODES.get(name)
+    data, _ = evaluate_cases([case], properties, modes)
+    data_loaded, _ = evaluate_cases(
+        [dict(case, model=info)], properties, modes)
     # Thick disks on cuda differ by float32 rounding between runs
     for key, value in data[0].items():
         np.testing.assert_allclose(

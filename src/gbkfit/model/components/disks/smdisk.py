@@ -8,9 +8,7 @@ from ..base import (
 from ..lines import Line, line_parser
 from . import _detail, _disk, traits
 from ._detail import (
-    BHT, BPT, DHT, DPT, OHT, OPT, SPATIAL_NWMODES, SPECTRAL_NWMODES, SPT,
-    VHT, VPT, WPT, ZPT)
-from .nwmodes import NWMode
+    BHT, BPT, DHT, DPT, OHT, OPT, SPT, VHT, VPT, WPT, ZPT)
 
 
 __all__ = [
@@ -37,7 +35,6 @@ class SMDiskPlan(_disk.DiskPlan):
 class BrightnessSMDisk2D(BrightnessComponent2D):
 
     _slots = (BPT, SPT, WPT)
-    _nwmodes = SPATIAL_NWMODES
 
     @staticmethod
     def type():
@@ -45,14 +42,13 @@ class BrightnessSMDisk2D(BrightnessComponent2D):
 
     @classmethod
     def load(cls, info):
-        return cls(**_detail.load_options(
-            cls, info, cls._slots, cls._nwmodes))
+        return cls(**_detail.load_options(cls, info, cls._slots))
 
     def dump(self):
         return (
             dict(type=self.type())
             | dump_name(self)
-            | _detail.dump_disk(self._disk, self._slots, self._nwmodes))
+            | _detail.dump_disk(self._disk, self._slots))
 
     def __init__(
             self,
@@ -68,10 +64,6 @@ class BrightnessSMDisk2D(BrightnessComponent2D):
             rnodes: Sequence[float] | None = None,
             rstep: float | None = None,
             interp: str = 'linear',
-            xpos_nwmode: NWMode | None = None,
-            ypos_nwmode: NWMode | None = None,
-            posa_nwmode: NWMode | None = None,
-            incl_nwmode: NWMode | None = None,
             name: str | None = None
     ):
         super().__init__(name)
@@ -81,9 +73,6 @@ class BrightnessSMDisk2D(BrightnessComponent2D):
             loose=loose, tilted=tilted,
             rnmin=rnmin, rnmax=rnmax, rnsep=rnsep, rnlen=rnlen,
             rnodes=rnodes, rstep=rstep, interp=interp,
-            nwmodes=dict(
-                xpos=xpos_nwmode, ypos=ypos_nwmode,
-                posa=posa_nwmode, incl=incl_nwmode),
             traits_=dict(
                 bptraits=bptraits, sptraits=sptraits, wptraits=wptraits))
 
@@ -113,7 +102,6 @@ class BrightnessSMDisk2D(BrightnessComponent2D):
 class BrightnessSMDisk3D(BrightnessComponent3D):
 
     _slots = (BPT, BHT, ZPT, SPT, WPT)
-    _nwmodes = SPATIAL_NWMODES
 
     @staticmethod
     def type():
@@ -121,14 +109,13 @@ class BrightnessSMDisk3D(BrightnessComponent3D):
 
     @classmethod
     def load(cls, info):
-        return cls(**_detail.load_options(
-            cls, info, cls._slots, cls._nwmodes))
+        return cls(**_detail.load_options(cls, info, cls._slots))
 
     def dump(self):
         return (
             dict(type=self.type())
             | dump_name(self)
-            | _detail.dump_disk(self._disk, self._slots, self._nwmodes))
+            | _detail.dump_disk(self._disk, self._slots))
 
     def __init__(
             self,
@@ -146,10 +133,6 @@ class BrightnessSMDisk3D(BrightnessComponent3D):
             rnodes: Sequence[float] | None = None,
             rstep: float | None = None,
             interp: str = 'linear',
-            xpos_nwmode: NWMode | None = None,
-            ypos_nwmode: NWMode | None = None,
-            posa_nwmode: NWMode | None = None,
-            incl_nwmode: NWMode | None = None,
             name: str | None = None
     ):
         super().__init__(name)
@@ -159,9 +142,6 @@ class BrightnessSMDisk3D(BrightnessComponent3D):
             loose=loose, tilted=tilted,
             rnmin=rnmin, rnmax=rnmax, rnsep=rnsep, rnlen=rnlen,
             rnodes=rnodes, rstep=rstep, interp=interp,
-            nwmodes=dict(
-                xpos=xpos_nwmode, ypos=ypos_nwmode,
-                posa=posa_nwmode, incl=incl_nwmode),
             traits_=dict(
                 bptraits=bptraits, bhtraits=bhtraits, zptraits=zptraits,
                 sptraits=sptraits, wptraits=wptraits))
@@ -194,7 +174,6 @@ class BrightnessSMDisk3D(BrightnessComponent3D):
 class SpectralSMDisk2D(SpectralComponent2D):
 
     _slots = (BPT, VPT, DPT, SPT, WPT)
-    _nwmodes = SPECTRAL_NWMODES
 
     @staticmethod
     def type():
@@ -204,14 +183,13 @@ class SpectralSMDisk2D(SpectralComponent2D):
     def load(cls, info):
         parseutils.load_option_and_update_info(
             line_parser, info, 'lines')
-        return cls(**_detail.load_options(
-            cls, info, cls._slots, cls._nwmodes))
+        return cls(**_detail.load_options(cls, info, cls._slots))
 
     def dump(self):
         return (
             dict(type=self.type())
             | dump_name(self)
-            | _detail.dump_disk(self._disk, self._slots, self._nwmodes)
+            | _detail.dump_disk(self._disk, self._slots)
             | dump_lines(self._lines))
 
     def __init__(
@@ -230,11 +208,6 @@ class SpectralSMDisk2D(SpectralComponent2D):
             rnodes: Sequence[float] | None = None,
             rstep: float | None = None,
             interp: str = 'linear',
-            vsys_nwmode: NWMode | None = None,
-            xpos_nwmode: NWMode | None = None,
-            ypos_nwmode: NWMode | None = None,
-            posa_nwmode: NWMode | None = None,
-            incl_nwmode: NWMode | None = None,
             lines: Sequence[Line] | None = None,
             name: str | None = None
     ):
@@ -249,9 +222,6 @@ class SpectralSMDisk2D(SpectralComponent2D):
             loose=loose, tilted=tilted,
             rnmin=rnmin, rnmax=rnmax, rnsep=rnsep, rnlen=rnlen,
             rnodes=rnodes, rstep=rstep, interp=interp,
-            nwmodes=dict(
-                vsys=vsys_nwmode, xpos=xpos_nwmode, ypos=ypos_nwmode,
-                posa=posa_nwmode, incl=incl_nwmode),
             traits_=dict(
                 bptraits=bptraits, vptraits=vptraits, dptraits=dptraits,
                 sptraits=sptraits, wptraits=wptraits))
@@ -291,7 +261,6 @@ class SpectralSMDisk2D(SpectralComponent2D):
 class SpectralSMDisk3D(SpectralComponent3D):
 
     _slots = (BPT, BHT, VPT, VHT, DPT, DHT, ZPT, SPT, WPT)
-    _nwmodes = SPECTRAL_NWMODES
 
     @staticmethod
     def type():
@@ -301,14 +270,13 @@ class SpectralSMDisk3D(SpectralComponent3D):
     def load(cls, info):
         parseutils.load_option_and_update_info(
             line_parser, info, 'lines')
-        return cls(**_detail.load_options(
-            cls, info, cls._slots, cls._nwmodes))
+        return cls(**_detail.load_options(cls, info, cls._slots))
 
     def dump(self):
         return (
             dict(type=self.type())
             | dump_name(self)
-            | _detail.dump_disk(self._disk, self._slots, self._nwmodes)
+            | _detail.dump_disk(self._disk, self._slots)
             | dump_lines(self._lines))
 
     def __init__(
@@ -331,11 +299,6 @@ class SpectralSMDisk3D(SpectralComponent3D):
             rnodes: Sequence[float] | None = None,
             rstep: float | None = None,
             interp: str = 'linear',
-            vsys_nwmode: NWMode | None = None,
-            xpos_nwmode: NWMode | None = None,
-            ypos_nwmode: NWMode | None = None,
-            posa_nwmode: NWMode | None = None,
-            incl_nwmode: NWMode | None = None,
             lines: Sequence[Line] | None = None,
             name: str | None = None
     ):
@@ -350,9 +313,6 @@ class SpectralSMDisk3D(SpectralComponent3D):
             loose=loose, tilted=tilted,
             rnmin=rnmin, rnmax=rnmax, rnsep=rnsep, rnlen=rnlen,
             rnodes=rnodes, rstep=rstep, interp=interp,
-            nwmodes=dict(
-                vsys=vsys_nwmode, xpos=xpos_nwmode, ypos=ypos_nwmode,
-                posa=posa_nwmode, incl=incl_nwmode),
             traits_=dict(
                 bptraits=bptraits, bhtraits=bhtraits, vptraits=vptraits,
                 vhtraits=vhtraits, dptraits=dptraits, dhtraits=dhtraits,
@@ -395,7 +355,6 @@ class SpectralSMDisk3D(SpectralComponent3D):
 class OpacitySMDisk3D(OpacityComponent3D):
 
     _slots = (OPT, OHT, ZPT, SPT, WPT)
-    _nwmodes = SPATIAL_NWMODES
 
     @staticmethod
     def type():
@@ -403,14 +362,13 @@ class OpacitySMDisk3D(OpacityComponent3D):
 
     @classmethod
     def load(cls, info):
-        return cls(**_detail.load_options(
-            cls, info, cls._slots, cls._nwmodes))
+        return cls(**_detail.load_options(cls, info, cls._slots))
 
     def dump(self):
         return (
             dict(type=self.type())
             | dump_name(self)
-            | _detail.dump_disk(self._disk, self._slots, self._nwmodes))
+            | _detail.dump_disk(self._disk, self._slots))
 
     def __init__(
             self,
@@ -428,10 +386,6 @@ class OpacitySMDisk3D(OpacityComponent3D):
             rnodes: Sequence[float] | None = None,
             rstep: float | None = None,
             interp: str = 'linear',
-            xpos_nwmode: NWMode | None = None,
-            ypos_nwmode: NWMode | None = None,
-            posa_nwmode: NWMode | None = None,
-            incl_nwmode: NWMode | None = None,
             name: str | None = None
     ):
         super().__init__(name)
@@ -441,9 +395,6 @@ class OpacitySMDisk3D(OpacityComponent3D):
             loose=loose, tilted=tilted,
             rnmin=rnmin, rnmax=rnmax, rnsep=rnsep, rnlen=rnlen,
             rnodes=rnodes, rstep=rstep, interp=interp,
-            nwmodes=dict(
-                xpos=xpos_nwmode, ypos=ypos_nwmode,
-                posa=posa_nwmode, incl=incl_nwmode),
             traits_=dict(
                 optraits=optraits, ohtraits=ohtraits, zptraits=zptraits,
                 sptraits=sptraits, wptraits=wptraits))

@@ -5,7 +5,6 @@ model accepts, and which it rejects.
 
 import logging
 
-import numpy as np
 import pytest
 from gbkfit.model import model_parser
 from gbkfit.utils import parseutils
@@ -15,7 +14,6 @@ EXPONENTIAL = dict(type='exponential')
 SECH2 = dict(type='sech2')
 ARCTAN = dict(type='tan_arctan')
 UNIFORM = dict(type='uniform')
-RELATIVE = dict(type='relative1', origin=0)
 
 DISK = dict(loose=False, tilted=False, rnodes=[0, 2, 4, 6, 8])
 
@@ -124,64 +122,6 @@ def test_2d_models_have_no_3d_options(model_type, option):
 
 
 @pytest.mark.parametrize('model_type', MODELS)
-def test_spatial_nwmodes(model_type):
-    component = MODELS[model_type] | dict(
-        loose=True, tilted=True,
-        xpos_nwmode=RELATIVE, ypos_nwmode=RELATIVE,
-        posa_nwmode=RELATIVE, incl_nwmode=RELATIVE)
-    strict_load(dict(type=model_type, components=component))
-
-
-@pytest.mark.parametrize('model_type', ['kinematics_2d', 'kinematics_3d'])
-def test_spectral_components_have_a_vsys_nwmode(model_type):
-    component = MODELS[model_type] | dict(
-        loose=True, vsys_nwmode=RELATIVE)
-    strict_load(dict(type=model_type, components=component))
-
-
-@pytest.mark.parametrize('model_type', ['intensity_2d', 'intensity_3d'])
-def test_brightness_components_have_no_vsys_nwmode(model_type):
-    component = MODELS[model_type] | dict(
-        loose=True, vsys_nwmode=RELATIVE)
-    message = load_error(dict(type=model_type, components=component))
-    assert "'vsys_nwmode'" in message
-
-
-@pytest.mark.parametrize('model_type', MODELS_3D)
-def test_opacity_components_have_no_vsys_nwmode(model_type):
-    ocomponent = OPACITY_3D | dict(loose=True, vsys_nwmode=RELATIVE)
-    info = dict(
-        type=model_type, components=MODELS[model_type],
-        opacity_components=ocomponent)
-    assert "'vsys_nwmode'" in load_error(info)
-
-
-# Each node-wise mode of each type of model, and the option it needs:
-# the spectral components also have a vsys node-wise mode
-NWMODE_SWITCHES = [
-    (model_type, nwmode, switch)
-    for model_type in MODELS
-    for nwmode, switch in [
-        ('xpos_nwmode', 'loose'), ('ypos_nwmode', 'loose'),
-        ('posa_nwmode', 'tilted'), ('incl_nwmode', 'tilted')]
-] + [
-    (model_type, 'vsys_nwmode', 'loose')
-    for model_type in ['kinematics_2d', 'kinematics_3d']]
-
-
-@pytest.mark.parametrize('model_type, nwmode, switch', NWMODE_SWITCHES)
-def test_nwmodes_are_ignored_without_their_switch(
-        model_type, nwmode, switch, caplog):
-    component = MODELS[model_type] | {nwmode: RELATIVE}
-    model = strict_load(dict(type=model_type, components=component))
-    assert (
-        f"{nwmode} is set to 'relative1', but it will be ignored "
-        f"because {switch} is not set to True") in caplog.text
-    # Without the switch the parameter is not node-wise
-    assert model.pdescs()[nwmode[:4]].type() == 'scalar'
-
-
-@pytest.mark.parametrize('model_type', MODELS)
 def test_unknown_trait_options_are_errors_in_strict_mode(model_type):
     component = MODELS[model_type] | dict(
         bptraits=dict(EXPONENTIAL, foo=1))
@@ -217,15 +157,3 @@ def test_radial_step_can_be_half_the_node_separation():
     args = parse_component_rnode_args(
         None, None, None, None, [0, 0.2, 0.4, 0.6, 0.8, 1.0], 0.1, 'linear')
     assert args['rstep'] == 0.1
-
-
-@pytest.mark.parametrize('nwmode, values, expected', [
-    # Each node relative to the origin
-    (dict(type='relative1', origin=1), [1, 2, 3, 4], [3, 2, 5, 6]),
-    # Each node relative to its neighbour towards the origin
-    (dict(type='relative2', origin=1), [1, 2, 3, 4], [3, 2, 5, 9])])
-def test_relative_nwmodes(nwmode, values, expected):
-    from gbkfit.model.components.disks.nwmodes import nwmode_parser
-    result = nwmode_parser.load(nwmode).transform(
-        np.array(values, float), in_place=False)
-    np.testing.assert_array_equal(result, expected)

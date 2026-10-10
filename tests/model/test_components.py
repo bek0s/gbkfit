@@ -152,11 +152,11 @@ def test_spectral_3d_with_several_velocity_traits(name):
 
 def test_errors_have_paths():
     info = model_info('spectral_smdisk_3d', vptraits=[
-        ARCTAN, dict(type='nw_rad_uniform', nwmode=dict(type='relative9'))])
+        ARCTAN, dict(type='nw_rad_uniform', sampling='subringz')])
     with pytest.raises(Exception) as error:
         model_parser.load(info)
     assert str(error.value).startswith(
-        "components[0].vptraits[1].nwmode: unknown type 'relative9'")
+        "components[0].vptraits[1] [nw_rad_uniform]: sampling must be")
 
 
 def component_error(name, **options):
