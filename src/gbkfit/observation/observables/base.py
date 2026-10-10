@@ -1,147 +1,309 @@
 import abc
+from collections.abc import Sequence
+from typing import TYPE_CHECKING, Any, Self, TypeAlias
 
+import astropy.units
 import numpy as np
 
+from gbkfit.dataset import Dataset
+from gbkfit.driver import DeviceArray, Driver
+from gbkfit.instrument import Instrument
+from gbkfit.model.base import GModel, Selection
 from gbkfit.utils import gridutils, parseutils
+from gbkfit.utils.parseutils import ConfigError
+
+if TYPE_CHECKING:
+    from ..foreground import Foreground
 
 
 __all__ = [
+    'ModelData',
     'Observable',
     'ObservablePlan',
     'observable_parser'
 ]
 
 
+# The model data of an observable: for each of its data items (e.g.
+# 'spectra'), the arrays of the model ('d'), of its mask ('m') and of its
+# weights ('w') on the driver, or None
+ModelData: TypeAlias = dict[str, dict[str, DeviceArray | None]]
+
+
 class Observable(parseutils.TypedSerializable, abc.ABC):
     """
     What a dataset measures, made from a gmodel seen through an
-    instrument: the form of the data (their items, see keys()) and their
-    grid. A subclass declares the index of the spectral axis of its data
-    (spectral_axis, None if none), as the datasets do. Its dump(data)
-    leaves out the options that the given data give (see
-    options_from_data); the files of its options (e.g. bins without
-    data) are named with the prefix, as those of the datasets.
+    instrument: the form of the data (their items, see keys) and their
+    grid.
+
+    A subclass declares the index of the spectral axis of its data
+    (spectral_axis, None if none) and the class of its datasets
+    (dataset_class). Its from_data makes it from data, which give some of
+    its options (see options_from_data), and its dump(data) leaves those
+    out. The files of its options (e.g. regions without data) are named
+    with the prefix of the dump, as those of the datasets.
+
+    Parameters
+    ----------
+    size : Sequence of int
+        The number of pixels of each axis of the grid.
+    step, rpix, rval : Sequence of float
+        The world coordinates of the grid (see gridutils.Coords); rpix is
+        the centre if None.
+    rota : float
+        The rotation of the grid on the sky.
+    rest : str or Quantity, optional
+        The rest of the spectral axis, if any (see gridutils.make_rest).
     """
 
     spectral_axis: int | None
 
-    # The class of the datasets this observable measures (declared by
-    # each subclass)
-    dataset_class: type
+    dataset_class: type[Dataset]
 
     @staticmethod
     @abc.abstractmethod
-    def is_compatible(gmodel):
+    def is_compatible(gmodel: GModel) -> bool:
+        """Check whether a gmodel can be observed as this observable."""
         pass
 
-    def __init__(self, size, step, rpix, rval, rota, rest=None):
+    @classmethod
+    @abc.abstractmethod
+    def from_data(cls, dataset: Dataset, **options: Any) -> Self:
         """
-        The grid of the data: its size and world coordinates (see
-        gridutils.Coords; rest is that of the spectral axis, if any).
+        Make the observable of a dataset.
+
+        Parameters
+        ----------
+        dataset : Dataset
+            The data, of the dataset class of the observable. They give its
+            grid and its other options of options_from_data.
+        **options
+            The other options of the observable.
+
+        Returns
+        -------
+        Observable
+            The observable.
+
+        Raises
+        ------
+        ConfigError
+            If the dataset is not of the dataset class of the observable.
         """
-        if rpix is None:
-            rpix = tuple((np.array(size) / 2 - 0.5).tolist())
-        self._grid = gridutils.make_grid(
-            tuple(size), tuple(step), tuple(rpix), tuple(rval), rota,
-            self.spectral_axis, rest)
+        pass
 
     @classmethod
-    def options_from_data(cls, dataset) -> tuple[str, ...]:
+    def options_from_data(cls, dataset: Dataset) -> tuple[str, ...]:
         """
-        The options of the observable that its data (the given dataset)
-        give, and that it must not be given too: here, its grid (and the
-        rest of its spectral axis). Observables of other data override
-        this.
+        Return the options of the observable that a dataset gives.
+
+        Here, the grid (and the rest of its spectral axis); observables of
+        other data override this.
+
+        Parameters
+        ----------
+        dataset : Dataset
+            The data.
+
+        Returns
+        -------
+        tuple of str
+            The names of the options.
         """
         grid = ('size', 'step', 'rpix', 'rval', 'rota')
         return grid + (('rest',) if cls.spectral_axis is not None else ())
 
+    def __init__(
+            self,
+            size: Sequence[int],
+            step: Sequence[float],
+            rpix: Sequence[float] | None,
+            rval: Sequence[float],
+            rota: float,
+            rest: str | astropy.units.Quantity | None = None
+    ):
+        self._grid = gridutils.make_grid(
+            tuple(size), step, rpix, rval, rota, self.spectral_axis, rest)
+
     def grid(self) -> gridutils.Grid:
-        """The grid of the data."""
+        """Return the grid of the data."""
         return self._grid
 
-    def size(self):
+    def size(self) -> tuple[int, ...]:
+        """Return the number of pixels of each axis of the grid."""
         return self._grid.size
 
-    def step(self):
+    def step(self) -> tuple[float, ...]:
+        """Return the step of each axis of the grid."""
         return self._grid.coords.step
 
-    def rpix(self):
+    def rpix(self) -> tuple[float, ...]:
+        """Return the reference pixel of each axis of the grid."""
         return self._grid.coords.rpix
 
-    def rval(self):
+    def rval(self) -> tuple[float, ...]:
+        """Return the reference value of each axis of the grid."""
         return self._grid.coords.rval
 
-    def rota(self):
+    def rota(self) -> float:
+        """Return the rotation of the grid on the sky."""
         return self._grid.coords.rota
 
-    def rest(self):
-        """The rest of the spectral axis (see gridutils.Coords), or None."""
+    def rest(self) -> astropy.units.Quantity | None:
+        """Return the rest of the spectral axis, if any."""
         return self._grid.coords.rest
 
     @abc.abstractmethod
-    def keys(self):
-        """The names of the data items (e.g. 'spectra')."""
+    def keys(self) -> tuple[str, ...]:
+        """Return the names of the data items (e.g. 'spectra')."""
         pass
 
-    def require_compatible(self, gmodel):
-        """Raise RuntimeError unless the gmodel can be observed as this."""
+    def check_instrument(self, instrument: Instrument) -> None:
+        """
+        Check the instrument that the observable is seen through.
+
+        It warns about the options of the observable that the instrument
+        makes useless (see parseutils.warn). Here, any instrument suits;
+        observables override this.
+
+        Parameters
+        ----------
+        instrument : Instrument
+            The instrument.
+
+        Raises
+        ------
+        ConfigError
+            If the observable cannot be seen through the instrument.
+        """
+        pass
+
+    def require_compatible(self, gmodel: GModel) -> None:
+        """
+        Check that a gmodel can be observed as this observable.
+
+        Parameters
+        ----------
+        gmodel : GModel
+            The gmodel.
+
+        Raises
+        ------
+        ConfigError
+            If the gmodel cannot be observed as this observable.
+        """
         if not self.is_compatible(gmodel):
             observable_desc = parseutils.make_typed_desc(
                 self.__class__, 'observable')
-            gmodel_desc = parseutils.make_typed_desc(gmodel.__class__, 'gmodel')
-            raise RuntimeError(
+            gmodel_desc = parseutils.make_typed_desc(
+                gmodel.__class__, 'gmodel')
+            raise ConfigError(
                 f"{observable_desc} is not compatible with {gmodel_desc}")
 
-    def require_matching(self, dataset):
+    def require_matching(self, dataset: Dataset) -> None:
         """
-        Raise RuntimeError unless the dataset holds the data of this
-        observable: it is of its dataset class, has its data items, and
-        was measured where the observable is modelled.
+        Check that a dataset holds the data of this observable.
+
+        The dataset must be of the dataset class of the observable, have
+        its data items, and have been measured where the observable is
+        modelled.
+
+        Parameters
+        ----------
+        dataset : Dataset
+            The data.
+
+        Raises
+        ------
+        ConfigError
+            If the dataset does not hold the data of this observable.
         """
-        desc = parseutils.make_typed_desc(self.__class__, 'observable')
-        if not isinstance(dataset, self.dataset_class):
-            dataset_desc = parseutils.make_typed_desc(
-                dataset.__class__, 'dataset')
-            raise RuntimeError(
-                f"{desc} cannot be compared with {dataset_desc}")
+        self._require_dataset_class(dataset)
         if set(dataset.keys()) != set(self.keys()):
-            raise RuntimeError(
+            desc = parseutils.make_typed_desc(self.__class__, 'observable')
+            raise ConfigError(
                 f"{desc} has the data items {sorted(self.keys())}, but the "
                 f"data have {sorted(dataset.keys())}")
         self._require_matching_coordinates(dataset)
 
-    def _require_matching_coordinates(self, dataset):
+    @classmethod
+    def _require_dataset_class(cls, dataset: Dataset) -> None:
+        """Raise ConfigError unless the dataset is of the dataset class."""
+        if not isinstance(dataset, cls.dataset_class):
+            desc = parseutils.make_typed_desc(cls, 'observable')
+            dataset_desc = parseutils.make_typed_desc(
+                dataset.__class__, 'dataset')
+            raise ConfigError(f"{desc} cannot be compared with {dataset_desc}")
+
+    def _require_matching_coordinates(self, dataset: Dataset) -> None:
         """
-        Raise RuntimeError unless the data were measured on the grid of
-        this observable. Observables of other data override this.
+        Raise ConfigError unless the data were measured on the grid of this
+        observable. Observables of other data override this.
         """
         if dataset.grid() != self._grid:
             desc = parseutils.make_typed_desc(self.__class__, 'observable')
-            raise RuntimeError(
+            raise ConfigError(
                 f"the data are on the grid {dataset.grid()}, but {desc} "
                 f"is on the grid {self._grid}")
 
-    def output(self, data):
+    def output(
+            self, data: np.ndarray
+    ) -> gridutils.GridData | gridutils.SpectraData | np.ndarray:
         """
-        An array of the form of the data of this observable (the model,
-        its mask or weights, or a residual) as an output: here, on the
-        grid of the observable with its world coordinates (a GridData).
-        Observables of other data override this.
+        Return an array of the form of the data as an output.
+
+        Here, on the grid of the observable, with its world coordinates;
+        observables of other data override this.
+
+        Parameters
+        ----------
+        data : np.ndarray
+            The array: the model, its mask or weights, or a residual.
+
+        Returns
+        -------
+        GridData or SpectraData or np.ndarray
+            The output.
         """
         return gridutils.GridData(
             data, self._grid.coords, self._grid.spectral_axis)
 
     @abc.abstractmethod
     def plan(
-            self, driver, gmodel, foreground, instrument, scale, dtype,
-            selection):
+            self,
+            driver: Driver,
+            gmodel: GModel,
+            foreground: 'Foreground',
+            instrument: Instrument,
+            scale: Sequence[int],
+            dtype: np.dtype,
+            selection: Selection
+    ) -> 'ObservablePlan':
         """
-        The evaluation of the gmodel as this observable, through the
-        foreground and the instrument, on the given driver and dtype, with
-        the model oversampled scale times along each axis of the data (an
-        ObservablePlan): of what the selection of the gmodel has (see
-        Selection).
+        Plan the evaluation of a gmodel as this observable.
+
+        Parameters
+        ----------
+        driver : Driver
+            The driver it is evaluated on.
+        gmodel : GModel
+            The gmodel.
+        foreground : Foreground
+            What the light meets before the telescope.
+        instrument : Instrument
+            The instrument.
+        scale : Sequence of int
+            How many times the model is oversampled along each axis of the
+            data.
+        dtype : np.dtype
+            The floating type of the model.
+        selection : Selection
+            What of the gmodel is seen.
+
+        Returns
+        -------
+        ObservablePlan
+            The plan.
         """
         pass
 
@@ -150,11 +312,26 @@ class ObservablePlan(abc.ABC):
     """The evaluation of a gmodel as an observable."""
 
     @abc.abstractmethod
-    def evaluate(self, params, out_extra):
+    def evaluate(
+            self,
+            params: dict[str, float | np.ndarray],
+            out_extra: dict[str, Any] | None
+    ) -> ModelData:
         """
-        The model data: for each data item (see Observable.keys), the
-        (device) arrays of the data ('d'), mask ('m') and weights ('w'),
-        or None. The extra outputs of the gmodel are prefixed 'gmodel_'.
+        Evaluate the model data.
+
+        Parameters
+        ----------
+        params : dict
+            The parameters of the gmodel.
+        out_extra : dict, optional
+            Where the extra outputs go, if wanted; those of the gmodel are
+            prefixed 'gmodel_'.
+
+        Returns
+        -------
+        ModelData
+            The model data.
         """
         pass
 

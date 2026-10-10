@@ -1,10 +1,13 @@
 import abc
 import os.path
 from collections.abc import Sequence
+from typing import Any
 
 import numpy as np
 import scipy.ndimage
 
+from gbkfit.dataset import FitsFile, fits_file
+from gbkfit.driver import DeviceArray, Driver
 from gbkfit.utils import fitsutils, gridutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
 
@@ -21,22 +24,32 @@ __all__ = [
 
 class Lens(parseutils.TypedSerializable, abc.ABC):
     """
-    A gravitational lens in front of a gmodel: the light of each point of
-    the image plane comes from the point of the source plane, where the
-    gmodel is, at its position less the deflection there (surface
-    brightness is conserved). The gmodel is evaluated on a grid of the
-    source plane: source_size pixels of source_step arcsec, centred on the
-    origin of the frame of the model, aligned with the sky (see
+    A gravitational lens in front of a gmodel.
+
+    The light of each point of the image plane comes from the point of
+    the source plane, where the gmodel is, at its position less the
+    deflection there (surface brightness is conserved). The gmodel is
+    evaluated on a grid of the source plane, centred on the origin of the
+    frame of the model and aligned with the sky (see
     gridutils.sky_positions); each pixel of the image takes the bilinear
     interpolation of the source at its position on the source plane.
+
+    Parameters
+    ----------
+    source_size : Sequence of int
+        The number of pixels of the grid of the source plane (nx, ny).
+    source_step : Sequence of float
+        The size of its pixels (arcsec).
     """
 
-    def __init__(self, source_size: Sequence[int], source_step: Sequence[float]):
+    def __init__(
+            self, source_size: Sequence[int], source_step: Sequence[float]
+    ):
         self._source_grid = gridutils.make_grid(
             tuple(source_size), tuple(source_step))
 
     def source_grid(self) -> gridutils.Grid:
-        """The grid of the source plane (x and y)."""
+        """Return the grid of the source plane (x and y)."""
         return self._source_grid
 
     @abc.abstractmethod
@@ -44,14 +57,41 @@ class Lens(parseutils.TypedSerializable, abc.ABC):
             self, grid: gridutils.Grid
     ) -> tuple[np.ndarray, np.ndarray]:
         """
-        The deflection (arcsec, along x and y of the frame of the model) at
-        the pixels of the x and y axes of a grid of the image plane: two
-        arrays of shape (ny, nx).
+        Return the deflection at the pixels of a grid of the image plane.
+
+        Parameters
+        ----------
+        grid : Grid
+            The grid; its x and y axes.
+
+        Returns
+        -------
+        tuple of np.ndarray
+            The deflection (arcsec) along x and y of the frame of the
+            model, each of shape (ny, nx).
         """
         pass
 
-    def plan(self, driver, grid, dtype) -> 'LensPlan':
-        """The lensing of a cube on the given grid of the image plane."""
+    def plan(
+            self, driver: Driver, grid: gridutils.Grid, dtype: np.dtype
+    ) -> 'LensPlan':
+        """
+        Plan the lensing of cubes on a grid of the image plane.
+
+        Parameters
+        ----------
+        driver : Driver
+            The driver the cubes are on.
+        grid : Grid
+            The grid of the image plane.
+        dtype : np.dtype
+            The floating type of the cubes.
+
+        Returns
+        -------
+        LensPlan
+            The plan.
+        """
         return LensPlan(self, driver, grid, dtype)
 
 
@@ -62,7 +102,13 @@ class LensPlan:
     each pixel of the image (in pixels of the source).
     """
 
-    def __init__(self, lens, driver, grid, dtype):
+    def __init__(
+            self,
+            lens: Lens,
+            driver: Driver,
+            grid: gridutils.Grid,
+            dtype: np.dtype
+    ):
         x, y = gridutils.sky_positions(grid)
         deflection_x, deflection_y = lens.deflection(grid)
         matrix, offset = gridutils.sky_to_pixel(lens.source_grid())
@@ -77,9 +123,9 @@ class LensPlan:
 
     def source_grid(self, grid: gridutils.Grid) -> gridutils.Grid:
         """
-        The grid of the source plane for a gmodel evaluated on the given
-        grid of the image plane: the x and y of the source plane, and its
-        other axes (e.g. the spectral axis).
+        Return the grid of the source plane for a gmodel evaluated on the
+        given grid of the image plane: the x and y of the source plane, and
+        the other axes of the grid (e.g. the spectral axis).
         """
         source = self._lens.source_grid()
         return gridutils.Grid(
@@ -91,63 +137,120 @@ class LensPlan:
                 source.coords.rota, grid.coords.rest),
             grid.spectral_axis)
 
-    def evaluate(self, source, image):
+    def evaluate(self, source: DeviceArray, image: DeviceArray) -> None:
         """Lens the source cube (nz, sy, sx) into the image cube."""
         self._backend.lens_resample(
             self._source_x, self._source_y, source, image)
 
 
-def _read_map(x, prefix, rpix, rval):
-    """
-    A map and its world coordinates, from a file (see Data), with the
-    given rpix or rval (see fitsutils.read_data).
-    """
-    file, hdu = parseutils.parse_file(x)
-    return fitsutils.read_data(prefix + file, hdu, rpix, rval)
-
-
 class LensDeflectionMap(Lens):
     """
-    A lens of a given deflection: maps of its x and y (arcsec, along x and
-    y of the frame of the model, like xpos and ypos) on a grid of the image
-    plane (e.g. from a lens model), placed by their RA and Dec. Between the
-    pixels of the maps the deflection is interpolated (bilinearly), and
-    beyond them it is that of their nearest edge (e.g. in the padding of
-    the convolution).
+    A lens of a given deflection: maps of it on a grid of the image plane
+    (e.g. from a lens model), placed by their RA and Dec.
+
+    Between the pixels of the maps the deflection is interpolated
+    (bilinearly), and beyond them it is that of their nearest edge (e.g.
+    in the padding of the convolution).
+
+    Parameters
+    ----------
+    alpha_x, alpha_y : np.ndarray
+        The deflection (arcsec) along x and y of the frame of the model
+        (like xpos and ypos), each of shape (ny, nx).
+    source_size, source_step : Sequence
+        The grid of the source plane (see Lens).
+    step, rpix, rval : float or Sequence of float, optional
+        The world coordinates of the maps (see gridutils.make_grid).
+    rota : float, optional
+        The rotation of the maps on the sky.
+
+    Raises
+    ------
+    ConfigError
+        If the maps are not two finite images of one shape.
     """
 
     @staticmethod
-    def type():
+    def type() -> str:
         return 'deflection_map'
 
     @classmethod
-    def load(cls, info, prefix=''):
-        desc = parseutils.make_typed_desc(cls, 'lens')
+    def load(
+            cls, info: dict[str, Any], prefix: str = ''
+    ) -> 'LensDeflectionMap':
+        info = dict(info)
+        files = {}
         for key in ('alpha_x', 'alpha_y'):
-            if info.get(key) is None:
-                raise ConfigError(f"option '{key}' of {desc} is required")
-        # (the world coordinates given are those of the maps, which the
-        # others come from)
-        rpix, rval = info.get('rpix'), info.get('rval')
-        with parseutils.config_path('alpha_x'):
-            alpha_x, coords = _read_map(info['alpha_x'], prefix, rpix, rval)
-        with parseutils.config_path('alpha_y'):
-            alpha_y, coords_y = _read_map(info['alpha_y'], prefix, rpix, rval)
+            files[key] = parseutils.load_option(
+                fits_file, info, key, required=True, prefix=prefix)
+            del info[key]
+        options = parseutils.parse_options_for_callable(
+            info, cls.from_files, ignore_params=list(files))
+        return cls.from_files(**files, **options)
+
+    @classmethod
+    def from_files(
+            cls,
+            alpha_x: FitsFile,
+            alpha_y: FitsFile,
+            source_size: Sequence[int],
+            source_step: Sequence[float],
+            step: float | Sequence[float] | None = None,
+            rpix: float | Sequence[float] | None = None,
+            rval: float | Sequence[float] | None = None,
+            rota: float | None = None
+    ) -> 'LensDeflectionMap':
+        """
+        Read a lens from FITS files of its deflection maps, with the world
+        coordinates of the files unless given; they must agree.
+
+        Parameters
+        ----------
+        alpha_x, alpha_y : str or tuple
+            The files of the maps: each a filename, or a filename and the
+            HDU.
+        source_size, source_step : Sequence
+            The grid of the source plane (see Lens).
+        step, rpix, rval : float or Sequence of float, optional
+            The world coordinates of the maps (see gridutils.make_grid); by
+            default, those of the headers. Either rpix or rval can be
+            given, and the other comes from the headers (see
+            fitsutils.read_data).
+        rota : float, optional
+            The rotation of the maps on the sky; by default, that of the
+            headers.
+
+        Returns
+        -------
+        LensDeflectionMap
+            The lens.
+
+        Raises
+        ------
+        ConfigError
+            If the maps have different world coordinates.
+        """
+        maps = []
+        for file in (alpha_x, alpha_y):
+            filename, hdu = (file, 0) if isinstance(file, str) else file
+            maps.append(fitsutils.read_data(filename, hdu, rpix, rval))
+        (data_x, coords), (data_y, coords_y) = maps
         if coords_y != coords:
             raise ConfigError(
-                f"the maps of {desc} have different world coordinates")
-        info = dict(info) | dict(
-            alpha_x=alpha_x, alpha_y=alpha_y, rpix=coords.rpix,
-            rval=coords.rval,
-            step=coords.step if info.get('step') is None else info['step'],
-            rota=coords.rota if info.get('rota') is None else info['rota'])
-        return cls(**parseutils.parse_options_for_callable(
-            info, cls.__init__))
+                "the deflection maps have different world coordinates")
+        return cls(
+            data_x, data_y, source_size, source_step,
+            coords.step if step is None else step, coords.rpix, coords.rval,
+            coords.rota if rota is None else rota)
 
-    def dump(self, prefix='', dump_path=True, overwrite=False):
+    def dump(
+            self, prefix: str = '', dump_path: bool = True,
+            overwrite: bool = False
+    ) -> dict[str, Any]:
         coords = self._grid.coords
         info = dict(type=self.type())
-        for key, data in (('alpha_x', self._alpha_x), ('alpha_y', self._alpha_y)):
+        for key, data in (
+                ('alpha_x', self._alpha_x), ('alpha_y', self._alpha_y)):
             filename = f'{prefix}lens_{key}.fits'
             fitsutils.write_data(filename, data, coords, None, overwrite)
             info[key] = filename if dump_path else os.path.basename(filename)
@@ -166,25 +269,23 @@ class LensDeflectionMap(Lens):
             rval: float | Sequence[float] | None = None,
             rota: float | None = None
     ):
-        """
-        The maps are on the grid of the given world coordinates (see
-        gridutils.make_grid).
-        """
         super().__init__(source_size, source_step)
         alpha_x = np.asarray(alpha_x, dtype=float)
         alpha_y = np.asarray(alpha_y, dtype=float)
         if alpha_x.ndim != 2 or alpha_x.shape != alpha_y.shape:
-            raise RuntimeError(
+            raise ConfigError(
                 f"the deflection maps must be two images of one shape; they "
                 f"have the shapes {alpha_x.shape} and {alpha_y.shape}")
         if not (np.all(np.isfinite(alpha_x)) and np.all(np.isfinite(alpha_y))):
-            raise RuntimeError("the deflection maps must be finite")
+            raise ConfigError("the deflection maps must be finite")
         self._alpha_x = alpha_x
         self._alpha_y = alpha_y
         self._grid = gridutils.make_grid(
             alpha_x.shape[::-1], step, rpix, rval, rota)
 
-    def deflection(self, grid):
+    def deflection(
+            self, grid: gridutils.Grid
+    ) -> tuple[np.ndarray, np.ndarray]:
         gridutils.check_overlap(grid, self._grid, "the deflection maps")
         pixel_x, pixel_y = gridutils.pixels_on(grid, self._grid)
 
@@ -202,16 +303,24 @@ class Foreground(parseutils.Serializable):
     What happens to the light of a gmodel before it reaches the telescope:
     a gravitational lens. Each has its own slot, in the order the light
     meets them.
+
+    Parameters
+    ----------
+    lens : Lens, optional
+        The gravitational lens, if any.
     """
 
     @classmethod
-    def load(cls, info, prefix=''):
+    def load(cls, info: dict[str, Any], prefix: str = '') -> 'Foreground':
         parseutils.load_option_and_update_info(
             lens_parser, info, 'lens', prefix=prefix)
         return cls(**parseutils.parse_options_for_callable(
             info, cls.__init__))
 
-    def dump(self, prefix='', dump_path=True, overwrite=False):
+    def dump(
+            self, prefix: str = '', dump_path: bool = True,
+            overwrite: bool = False
+    ) -> dict[str, Any]:
         return dict(lens=lens_parser.dump(
             self._lens, prefix=prefix, dump_path=dump_path,
             overwrite=overwrite))
@@ -220,6 +329,7 @@ class Foreground(parseutils.Serializable):
         self._lens = lens
 
     def lens(self) -> Lens | None:
+        """Return the gravitational lens, if any."""
         return self._lens
 
 

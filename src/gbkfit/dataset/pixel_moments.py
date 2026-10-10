@@ -110,3 +110,7 @@ class DatasetPixelMoments(Dataset):
     def grid(self) -> gridutils.Grid:
         """Return the grid of the pixels."""
         return self._grid
+
+    def orders(self) -> tuple[int, ...]:
+        """Return the orders of the moments."""
+        return _detail.moment_orders(self)

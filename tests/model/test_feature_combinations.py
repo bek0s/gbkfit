@@ -93,7 +93,7 @@ def test_feature_combinations(driver, name, lens):
         foreground = Foreground(LensDeflectionMap(
             np.ones((40, 40)), -np.ones((40, 40)), (40, 40), (0.5, 0.5)))
     observation = Observation(
-        driver, observable_parser.load(info),
+        observable_parser.load(info), driver,
         foreground=foreground,
         instrument=instrument_parser.load(copy.deepcopy(instrument)),
         components=['gas'], scale=SCALES[name])

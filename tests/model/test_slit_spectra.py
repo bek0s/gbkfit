@@ -71,7 +71,7 @@ def test_slit_spectra_objective_residual(driver):
     from gbkfit.observation import (
         Observation, ObservationGroup, observable_parser)
     observation = Observation(
-        driver, observable_parser.load(copy.deepcopy(dmodel)), data=dataset)
+        observable_parser.load(copy.deepcopy(dmodel)), driver, data=dataset)
     model_group = ObservationGroup(
         [gmodel_parser.load(copy.deepcopy(GMODEL))], [observation])
     objective = Objective(model_group)

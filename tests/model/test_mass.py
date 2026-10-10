@@ -116,7 +116,7 @@ def evaluate(driver, gmodel, properties):
     from gbkfit.observation import Observation, ObservationGroup, PixelSpectra
     from gbkfit.params import EvaluationParams
     group = ObservationGroup([gmodel], [Observation(
-        driver, PixelSpectra(size=(32, 32, 51), step=(1, 1, 10)))])
+        PixelSpectra(size=(32, 32, 51), step=(1, 1, 10)), driver)])
     params = EvaluationParams(group.pdescs(), properties)
     return group.model_h(params.evaluate())[0]['spectra']['d'].copy()
 
