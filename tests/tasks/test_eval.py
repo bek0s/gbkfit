@@ -59,8 +59,7 @@ def test_objective_residuals(tmp_path):
 @pytest.mark.parametrize('mode', ['model', 'objective'])
 def test_profiling_writes_the_timings(tmp_path, mode):
     # The timings of the profiled evaluations only: model_eval once for
-    # each of the 3 in model mode, and twice for each in objective mode
-    # (the likelihood and the residual sum)
+    # each of the 3, in both modes (objective mode times the chi-square)
     config = yaml.load(REFERENCE_DIR / 'thin_disk_pixel_spectra.yaml')
     if mode == 'objective':
         model = run_eval('model', config, tmp_path / 'model')
@@ -72,8 +71,7 @@ def test_profiling_writes_the_timings(tmp_path, mode):
         observation['observable'].pop('size')
     run_eval(mode, config, tmp_path / mode, '--profile', '3')
     timings = yaml.load(tmp_path / mode / 'output' / 'gbkfit_eval_timings.yaml')
-    expected = dict(model=3, objective=6)[mode]
-    assert timings['model_eval']['count'] == expected
+    assert timings['model_eval']['count'] == 3
 
 
 def test_rotation_curve_from_radial_nodes(tmp_path):

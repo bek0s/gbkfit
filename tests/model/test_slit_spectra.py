@@ -84,9 +84,8 @@ def test_slit_spectra_objective_residual(driver):
     # The chi-squared is the sum of their squares, and the log-likelihood
     # -1/2 of it
     chi2 = 0.25 * model.size
-    assert objective.residual_scalar(params.evaluate(), squared=True)[0] \
-        == pytest.approx(chi2, rel=1e-5)
-    assert objective.log_likelihood(params.evaluate())[0] == pytest.approx(
+    assert objective.chi2(params.evaluate()) == pytest.approx(chi2, rel=1e-5)
+    assert objective.log_likelihood(params.evaluate()) == pytest.approx(
         -0.5 * chi2, rel=1e-5)
 
 

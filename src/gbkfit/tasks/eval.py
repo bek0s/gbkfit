@@ -133,8 +133,7 @@ def eval_(
             param_values, False, resid_u_extra))
         resid_w_data = copy.deepcopy(objective.residual_nddata_h(
             param_values, True, resid_w_extra))
-        residual_sum = objective.residual_scalar(param_values, True)
-        _log.info(f"sum of squared residuals: {residual_sum}")
+        _log.info(f"chi-square: {objective.chi2(param_values)}")
 
     #
     # Gather objective outputs
@@ -162,7 +161,7 @@ def eval_(
     for resid_data, prefix in [
             (resid_u_data, resid_u_prefix), (resid_w_data, resid_w_prefix)]:
         for i, data_i in enumerate(resid_data):
-            prefix_i = prefix + f'_{i}' * bool(objective.nitems() > 1)
+            prefix_i = prefix + f'_{i}' * bool(objective.nobservations() > 1)
             observable = group.observations()[i].observable()
             for key, value in data_i.items():
                 outputs[f'{prefix_i}_{key}_d'] = observable.output(value)
@@ -218,8 +217,7 @@ def eval_(
             if mode == 'model':
                 group.model_d(param_values)
             if mode == 'objective':
-                objective.log_likelihood(param_values)
-                objective.residual_scalar(param_values, squared=True)
+                objective.chi2(param_values)
         _log.info("calculating timing statistics...")
         time_stats = numutils.nativify({
             name: stats.to_dict()
