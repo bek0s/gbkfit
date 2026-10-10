@@ -9,7 +9,7 @@ along the spectral axis (see varying).
 
 import abc
 import os
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from typing import Any
 
 import astropy.io.fits
@@ -556,12 +556,35 @@ class PSFImage(PSF):
 
     @classmethod
     def load(cls, info: dict[str, Any]) -> 'PSFImage':
-        data, coords = parseutils.load_option(
-            _detail.read_image, info, 'file', required=True)
-        info = dict(info)
-        del info['file']
-        info.update(data=data, step=info.get('step', coords.step))
-        return cls(**parseutils.parse_options_for_callable(info, cls.__init__))
+        return _detail.load_from_file(cls, info)
+
+    @classmethod
+    def from_file(
+            cls,
+            filename: str,
+            hdu: int | str = 0,
+            step: Sequence[float] | None = None
+    ) -> 'PSFImage':
+        """
+        Read a PSF image from a FITS file.
+
+        Parameters
+        ----------
+        filename : str
+            The file.
+        hdu : int or str, optional
+            The HDU of the image.
+        step : Sequence of float, optional
+            The size of the pixels of the image along x and y (arcsec); by
+            default, that of the header.
+
+        Returns
+        -------
+        PSFImage
+            The PSF.
+        """
+        data, coords = fitsutils.read_data(filename, hdu)
+        return cls(data, coords.step if step is None else step)
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,
@@ -787,22 +810,46 @@ class PSFGaussBeam(PSF):
 
     @classmethod
     def load(cls, info: dict[str, Any]) -> 'PSFGaussBeam':
-        if (file := info.pop('file', None)) is not None:
+        if 'file' in info:
             if any(key in info for key in ('bmaj', 'bmin', 'bpa')):
                 raise ConfigError(
                     "give either a file, or bmaj, bmin and bpa")
-            with parseutils.config_path('file'):
-                file, hdu = parseutils.parse_file(file)
-                header = astropy.io.fits.getheader(file, hdu)
-            missing = [key for key in ('BMAJ', 'BMIN', 'BPA')
-                       if key not in header]
-            if missing:
-                raise ConfigError(f"{file}: the header has no {missing}")
-            info.update(
-                bmaj=float(header['BMAJ']) * 3600,
-                bmin=float(header['BMIN']) * 3600,
-                bpa=float(header['BPA']))
+            return _detail.load_from_file(cls, info)
         return super().load(info)
+
+    @classmethod
+    def from_file(
+            cls, filename: str, hdu: int | str = 0
+    ) -> 'PSFGaussBeam':
+        """
+        Read a beam from the header of a FITS file (BMAJ, BMIN and BPA, in
+        degrees), e.g. of the data.
+
+        Parameters
+        ----------
+        filename : str
+            The file.
+        hdu : int or str, optional
+            The HDU of the header.
+
+        Returns
+        -------
+        PSFGaussBeam
+            The PSF.
+
+        Raises
+        ------
+        ConfigError
+            If the header has no beam.
+        """
+        header = astropy.io.fits.getheader(filename, hdu)
+        missing = [
+            key for key in ('BMAJ', 'BMIN', 'BPA') if key not in header]
+        if missing:
+            raise ConfigError(f"{filename}: the header has no {missing}")
+        return cls(
+            float(header['BMAJ']) * 3600, float(header['BMIN']) * 3600,
+            float(header['BPA']))
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,
@@ -837,7 +884,7 @@ class PSFGaussBeam(PSF):
 
 
 def _read_images(
-        x: str | Mapping[str, Any]
+        file: str, hdu: int | str
 ) -> tuple[np.ndarray, u.Quantity | None, tuple[float, float] | None]:
     """
     The PSF images of a FITS cube (nz, ny, nx; in the orientation of the
@@ -845,7 +892,6 @@ def _read_images(
     file has no spectral axis), and the size of their pixels in arcsec
     (or None if the file has no celestial axes).
     """
-    file, hdu = parseutils.parse_file(x)
     with astropy.io.fits.open(file) as hdul:
         data = np.asarray(hdul[hdu].data, dtype=float)
         wcs = astropy.wcs.WCS(hdul[hdu].header)
@@ -894,23 +940,59 @@ class PSFImages(PSF):
     @classmethod
     def load(cls, info: dict[str, Any]) -> 'PSFImages':
         info = dict(info)
-        data, points, step = parseutils.load_option(
-            _read_images, info, 'file', required=True)
-        del info['file']
-        if (given := varying.load_points(info)) is not None:
-            points = given
+        return _detail.load_from_file(
+            cls, info, points=varying.load_points(info))
+
+    @classmethod
+    def from_file(
+            cls,
+            filename: str,
+            hdu: int | str = 0,
+            points: u.Quantity | None = None,
+            step: Sequence[float] | None = None
+    ) -> 'PSFImages':
+        """
+        Read PSF images from a FITS cube (nz, ny, nx).
+
+        Parameters
+        ----------
+        filename : str
+            The file.
+        hdu : int or str, optional
+            The HDU of the cube.
+        points : Quantity, optional
+            The point of each image: wavelengths, frequencies or velocities;
+            by default, those of the spectral axis of the cube.
+        step : Sequence of float, optional
+            The size of the pixels of the images along x and y (arcsec); by
+            default, that of the celestial axes of the cube.
+
+        Returns
+        -------
+        PSFImages
+            The PSF.
+
+        Raises
+        ------
+        ConfigError
+            If the cube is not 3D, or the points or step are neither given
+            nor in its header.
+        """
+        data, file_points, file_step = _read_images(filename, hdu)
         if points is None:
-            raise ConfigError(
-                "the file has no spectral axis: give the point of each "
-                "image as wavelength, frequency or velocity")
-        if info.get('step') is None:
-            if step is None:
+            if file_points is None:
                 raise ConfigError(
-                    "the file has no celestial axes: give the size of its "
-                    "pixels as step")
-            info['step'] = step
-        return cls(**parseutils.parse_options_for_callable(
-            info | dict(data=data, points=points), cls.__init__))
+                    f"{filename}: the cube has no spectral axis; give the "
+                    f"points of its images (wavelength, frequency or "
+                    f"velocity)")
+            points = file_points
+        if step is None:
+            if file_step is None:
+                raise ConfigError(
+                    f"{filename}: the cube has no celestial axes; give the "
+                    f"size of its pixels (step)")
+            step = file_step
+        return cls(data, points, step)
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,
