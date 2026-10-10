@@ -414,6 +414,16 @@ def main():
     parser_prep_region_moments.add_argument(
         '--bins', type=str, required=True, metavar='BINS',
         help="the map of the bin of each pixel (negative for none)")
+    parser_prep_region_spectra = parsers_prep.add_parser(
+        'region_spectra', parents=[
+            parser_prep_input_1, parser_prep_rest, parser_prep_roi_spec_1d,
+            parser_prep_dtype, parser_common_output, parser_common],
+        help="spectra in regions: the sums of the spectra of the bins of a "
+             "cube")
+    parser_prep_region_spectra.add_argument(
+        '--bins', type=str, required=True, metavar='BINS',
+        help="the map of the bin of each pixel of the cube (negative for "
+             "none)")
     parsers_prep.add_parser('pixel_spectra', parents=[
         parser_prep_input_1, parser_prep_rest,
         parser_prep_roi_spat_2d, parser_prep_roi_spec_1d,
@@ -538,6 +548,11 @@ def main():
         elif args.prep_task == 'region_moments':
             gbkfit.tasks.prep.prep_region_moments(
                 args.bins, args.data_d, args.data_e, args.data_m, args.dtype,
+                output_dir=output_dir)
+        elif args.prep_task == 'region_spectra':
+            gbkfit.tasks.prep.prep_region_spectra(
+                args.bins, args.data_d, args.data_e, args.data_m,
+                args.roi_spec, args.dtype, args.velocity_rest,
                 output_dir=output_dir)
         elif args.prep_task == 'psf_muse':
             gbkfit.tasks.prep.prep_psf_muse(args.cube, output_dir)
