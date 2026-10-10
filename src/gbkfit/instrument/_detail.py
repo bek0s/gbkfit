@@ -2,6 +2,7 @@
 Helpers shared by the PSFs, the LSFs and the primary beams.
 """
 
+import astropy.units as u
 import numpy as np
 
 from gbkfit.utils import fitsutils, parseutils
@@ -67,6 +68,18 @@ def read_image(x):
     parseutils.parse_file and fitsutils.read_data).
     """
     return fitsutils.read_data(*parseutils.parse_file(x))
+
+
+def spectral_points(wcs, n):
+    """
+    The points (a Quantity) of the first n pixels of the spectral axis of
+    a WCS, or None if it has no spectral axis.
+    """
+    if wcs.wcs.spec < 0:
+        return None
+    spectral = wcs.sub([wcs.wcs.spec + 1])
+    return u.Quantity(
+        spectral.pixel_to_world_values(np.arange(n)), spectral.wcs.cunit[0])
 
 
 def sum_weights(weights, n, desc):

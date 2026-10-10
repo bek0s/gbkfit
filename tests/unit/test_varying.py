@@ -117,7 +117,7 @@ def test_varying_psfs_round_trip():
     (dict(type='gauss', sigma=dict(velocity=[0, 1], values=[1, -1])),
      "sigma: sigma must be greater than 0"),
     (dict(type='gauss', sigma=dict(wavelength=[1, 2], values=[1, 1])),
-     "the wavelength of a table needs a unit"),
+     "sigma.wavelength: the wavelength needs a unit"),
     (dict(type='gauss', sigma=dict(velocity=[0, 0], values=[1, 1])),
      "must be distinct")])
 def test_varying_options_are_checked(info, message):
@@ -130,3 +130,82 @@ def test_tables_in_wavelength_need_the_rest():
         dict(type='gauss', sigma=alpha_table(None, 'inline')))
     with pytest.raises(ConfigError, match="needs the rest"):
         psf.at_velocities([0])
+
+
+def gauss_images(sigmas, size=21):
+    """Images of Gaussian PSFs of the given sigmas (pixels)."""
+    from gbkfit.instrument import PSFGauss
+    return np.stack([
+        PSFGauss(sigma).asarray((1, 1), (size, size)) for sigma in sigmas])
+
+
+def test_psf_images_are_interpolated():
+    from gbkfit.instrument import PSFImages, PSFImage
+    images = gauss_images([1, 2])
+    cube = PSFImages(images, [100, 300] * u.km / u.s, (1, 1))
+    assert cube.varies() and cube.velocity_range() == (100, 300)
+    expected = [images[0], 0.75 * images[0] + 0.25 * images[1], images[1]]
+    for psf, image in zip(cube.at_velocities([0, 150, 300]), expected):
+        np.testing.assert_allclose(
+            psf.asarray((1, 1), (21, 21)),
+            PSFImage(image).asarray((1, 1), (21, 21)), atol=1e-12)
+
+
+def test_psf_images_from_files(tmp_path):
+    # The points come from the spectral axis of the file, and the size of
+    # its pixels from its celestial axes
+    import astropy.io.fits
+    import astropy.wcs
+    wcs = astropy.wcs.WCS(naxis=3)
+    wcs.wcs.ctype = ['RA---TAN', 'DEC--TAN', 'WAVE']
+    wcs.wcs.cunit = ['deg', 'deg', 'm']
+    wcs.wcs.cdelt = [-0.05 / 3600, 0.05 / 3600, 1e-8]
+    wcs.wcs.crval = [150, 2, 6.5e-7]
+    wcs.wcs.crpix = [11, 11, 1]
+    path = tmp_path / 'psf_images.fits'
+    astropy.io.fits.writeto(path, gauss_images([1, 2]), wcs.to_header())
+    psf = psf_parser.load(dict(type='images', file=str(path)))
+    dumped = psf_parser.dump(psf, prefix=str(tmp_path / 'd_'))
+    np.testing.assert_allclose(dumped['step'], [0.05, 0.05])
+    assert dumped['wavelength']['unit'] == 'm'
+    np.testing.assert_allclose(
+        dumped['wavelength']['values'], [6.5e-7, 6.6e-7])
+    again = psf_parser.load(dict(dumped))
+    rest = 6.5e-7 * u.m
+    for a, b in zip(psf.at_velocities([0, 1e3, 1e4], rest),
+                    again.at_velocities([0, 1e3, 1e4], rest)):
+        np.testing.assert_allclose(
+            a.asarray((0.05, 0.05)), b.asarray((0.05, 0.05)))
+
+
+def test_lsf_images_from_files(tmp_path):
+    # One profile per row: the points come from the spectral axis of the
+    # rows, and the width of the channels from the columns (km/s)
+    import astropy.io.fits
+    import astropy.wcs
+    from gbkfit.instrument import LSFGauss, LSFImage
+    profiles = np.stack([
+        LSFGauss(sigma).asarray(5, 41) for sigma in (20, 40)])
+    wcs = astropy.wcs.WCS(naxis=2)
+    wcs.wcs.ctype = ['', 'WAVE']
+    wcs.wcs.cunit = ['km/s', 'Angstrom']
+    wcs.wcs.cdelt = [5, 2000]
+    wcs.wcs.crval = [0, 5000]
+    wcs.wcs.crpix = [21, 1]
+    path = tmp_path / 'lsf_images.fits'
+    astropy.io.fits.writeto(path, profiles, wcs.to_header())
+    lsf = lsf_parser.load(dict(type='images', file=str(path)))
+    assert lsf.varies()
+    dumped = lsf_parser.dump(lsf, prefix=str(tmp_path / 'd_'))
+    assert dumped['step'] == 5
+    wavelengths = dumped['wavelength']
+    np.testing.assert_allclose(
+        u.Quantity(wavelengths['values'], wavelengths['unit']).to_value(u.AA),
+        [5000, 7000])
+    # Halfway between the points (6000 Angstrom), half of each profile
+    rest = 6000 * u.AA
+    middle, = lsf_parser.load(dict(dumped)).at_velocities([0], rest)
+    np.testing.assert_allclose(
+        middle.asarray(5, 41),
+        LSFImage((profiles[0] + profiles[1]) / 2, 5).asarray(5, 41),
+        atol=1e-12)

@@ -13,6 +13,9 @@ from collections.abc import Sequence
 from typing import Any
 
 import astropy.io.fits
+import astropy.units as u
+import astropy.wcs
+import astropy.wcs.utils
 import numpy as np
 import scipy.ndimage
 import scipy.signal
@@ -28,6 +31,7 @@ from ._detail import MIN_EXTENT, WING_FLUX, check_ratio, check_scale
 __all__ = [
     'PSF',
     'PSFConvolution',
+    'PSFImages',
     'PSFGauss',
     'PSFGaussBeam',
     'PSFGGauss',
@@ -795,6 +799,138 @@ class PSFGaussBeam(PSF):
         return self._gauss._asarray_impl(step, size, offset, rota)
 
 
+def _read_images(x):
+    """
+    The PSF images of a FITS cube (nz, ny, nx; in the orientation of the
+    model), the point of each image on the spectral axis (or None if the
+    file has no spectral axis), and the size of their pixels in arcsec
+    (or None if the file has no celestial axes).
+    """
+    file, hdu = parseutils.parse_file(x)
+    with astropy.io.fits.open(file) as hdul:
+        data = np.asarray(hdul[hdu].data, dtype=float)
+        wcs = astropy.wcs.WCS(hdul[hdu].header)
+    if data.ndim != 3:
+        raise ConfigError(
+            f"{file}: PSF images must be a cube (nz, ny, nx); it has "
+            f"{data.ndim} axes")
+    data, wcs = fitsutils.to_model_axes(data, wcs)
+    points = _detail.spectral_points(wcs, data.shape[0])
+    step = None
+    if wcs.has_celestial:
+        step = tuple(
+            (astropy.wcs.utils.proj_plane_pixel_scales(wcs.celestial)
+             * 3600).tolist())
+    return data, points, step
+
+
+class PSFImages(PSF):
+    """
+    A PSF given as images at points of the spectral axis (e.g. simulated
+    by STPSF, or of a star in the data). At each channel it is the image
+    PSF (see PSFImage) of the images of the two nearest points,
+    interpolated linearly; beyond the points, that of the nearest image.
+
+    Its configuration has its file (a filename, or a dict with the
+    filename and the HDU): a FITS cube of the images (nz, ny, nx), with
+    its spectral axis last. The points come from its spectral axis unless
+    given as wavelength, frequency or velocity (see varying.load_points),
+    and the size of the pixels comes from its celestial axes unless step
+    is given.
+
+    Parameters
+    ----------
+    data : ndarray
+        The images (nz, ny, nx), finite.
+    points : Quantity
+        The point of each image: wavelengths, frequencies or velocities.
+    step : Sequence of float
+        The size of the pixels of the images along x and y (arcsec).
+    """
+
+    @staticmethod
+    def type() -> str:
+        return 'images'
+
+    @classmethod
+    def load(cls, info: dict[str, Any]) -> 'PSFImages':
+        info = dict(info)
+        data, points, step = parseutils.load_option(
+            _read_images, info, 'file', required=True)
+        del info['file']
+        if (given := varying.load_points(info)) is not None:
+            points = given
+        if points is None:
+            raise ConfigError(
+                "the file has no spectral axis: give the point of each "
+                "image as wavelength, frequency or velocity")
+        if info.get('step') is None:
+            if step is None:
+                raise ConfigError(
+                    "the file has no celestial axes: give the size of its "
+                    "pixels as step")
+            info['step'] = step
+        return cls(**parseutils.parse_options_for_callable(
+            info | dict(data=data, points=points), cls.__init__))
+
+    def dump(
+            self, prefix: str = '', dump_path: bool = True,
+            overwrite: bool = False
+    ) -> dict[str, Any]:
+        filename = f'{prefix}psf_images.fits'
+        astropy.io.fits.writeto(filename, self._data, overwrite=overwrite)
+        return dict(
+            type=self.type(),
+            file=filename if dump_path else os.path.basename(filename),
+            step=list(self._step)) | varying.dump_points(self._points)
+
+    def __init__(
+            self,
+            data: np.ndarray,
+            points: u.Quantity,
+            step: Sequence[float]
+    ):
+        data = np.asarray(data, dtype=float)
+        if data.ndim != 3 or not np.all(np.isfinite(data)):
+            raise ConfigError(
+                f"PSF images must be finite, of shape (nz, ny, nx); their "
+                f"shape is {data.shape}")
+        points = u.Quantity(points, dtype=float)
+        if points.shape != data.shape[:1]:
+            raise ConfigError(
+                f"PSF images need a point for each of the {len(data)} "
+                f"images; they have {points.size}")
+        if np.unique(points).size != points.size:
+            raise ConfigError("the points of the images must be distinct")
+        # (each image holds all the light)
+        self._data = data / data.sum(axis=(1, 2), keepdims=True)
+        self._points = points
+        self._step = tuple(step)
+
+    def varies(self) -> bool:
+        return True
+
+    def at_velocities(self, velocities, rest=None):
+        blends = varying.blend(self._points, velocities, rest)
+        psfs = {}
+        for i, j, t in set(blends):
+            psfs[(i, j, t)] = PSFImage(
+                (1 - t) * self._data[i] + t * self._data[j], self._step)
+        return [psfs[blend] for blend in blends]
+
+    def velocity_range(self, rest=None):
+        points = varying.to_velocities(self._points, rest)
+        return float(points.min()), float(points.max())
+
+    def _size_impl(self, step):
+        raise RuntimeError(
+            "PSF images give an image at each channel (see at_velocities)")
+
+    def _asarray_impl(self, step, size, offset, rota):
+        raise RuntimeError(
+            "PSF images give an image at each channel (see at_velocities)")
+
+
 class PSFVarying(PSF):
     """
     A PSF of a type whose options vary along the spectral axis: a PSF of
@@ -846,4 +982,5 @@ psf_parser = parseutils.TypedParser(PSF, [
     PSFImage,
     PSFSum,
     PSFConvolution,
-    PSFGaussBeam])
+    PSFGaussBeam,
+    PSFImages])
