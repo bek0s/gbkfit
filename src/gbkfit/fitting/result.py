@@ -4,11 +4,12 @@ other solutions, the posterior and the evidence (when the fitter gives
 them), and the cost.
 """
 
+import csv
 import dataclasses
 import json
 import math
 import os
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from typing import Any
 
 import numpy as np
@@ -312,10 +313,11 @@ class FitResult:
 
     def dump(self, output_dir: str) -> None:
         """
-        Write the result to a directory: a summary (result.json) and the
-        arrays (result.npz: the covariance matrices and Laplace samples of
-        the solutions, and the names, samples and weights of the
-        posterior).
+        Write the result to a directory: a summary (result.json), and the
+        arrays as CSV files with the names of the elements as headers:
+        the covariance matrix and the Laplace samples of each solution
+        (solution_<i>_covariance.csv, solution_<i>_laplace.csv) and the
+        posterior samples, with their weights if any (posterior.csv).
 
         Parameters
         ----------
@@ -334,20 +336,43 @@ class FitResult:
             solutions=[_solution_summary(s) for s in self.solutions])
         with open(os.path.join(output_dir, 'result.json'), 'w') as f:
             json.dump(numutils.nativify(summary), f, indent=2)
-        arrays: dict[str, np.ndarray] = {}
+
+        def path(name: str) -> str:
+            return os.path.join(output_dir, name)
+
         for i, solution in enumerate(self.solutions):
-            if solution.covariance is not None:
-                arrays[f'solution_{i}_covariance'] = \
-                    solution.covariance.matrix
-            if solution.laplace is not None:
-                arrays[f'solution_{i}_laplace_samples'] = \
-                    solution.laplace.samples
-        if self.posterior is not None:
-            arrays['posterior_names'] = np.array(self.posterior.names)
-            arrays['posterior_samples'] = self.posterior.samples
-            if self.posterior.weights is not None:
-                arrays['posterior_weights'] = self.posterior.weights
-        np.savez(os.path.join(output_dir, 'result.npz'), **arrays)
+            if (cov := solution.covariance) is not None:
+                # (one row per free element, named in its first column)
+                _write_csv(
+                    path(f'solution_{i}_covariance.csv'),
+                    ['name', *cov.names],
+                    [[name, *row] for name, row in zip(cov.names, cov.matrix)])
+            if (laplace := solution.laplace) is not None:
+                _write_csv(
+                    path(f'solution_{i}_laplace.csv'), list(laplace.names),
+                    laplace.samples)
+        if (posterior := self.posterior) is not None:
+            header = list(posterior.names)
+            rows = posterior.samples
+            if posterior.weights is not None:
+                header.append('weight')
+                rows = np.column_stack((rows, posterior.weights))
+            _write_csv(path('posterior.csv'), header, rows)
+
+
+def _write_csv(
+        filename: str,
+        header: Sequence[str],
+        rows: Iterable[Sequence[str | float]]
+) -> None:
+    """Write rows of values to a CSV file, numbers to 12 digits."""
+    with open(filename, 'w', newline='') as f:
+        writer = csv.writer(f)
+        writer.writerow(header)
+        for row in rows:
+            writer.writerow([
+                value if isinstance(value, str) else f'{value:.12g}'
+                for value in row])
 
 
 def _solution_summary(solution: FitSolution) -> dict[str, Any]:

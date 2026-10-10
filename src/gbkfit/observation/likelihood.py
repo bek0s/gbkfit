@@ -33,22 +33,22 @@ class LikelihoodGaussian(Likelihood):
     chi-squared.
 
     Where the data have a value but the model none (e.g. the velocity of
-    a spectrum without flux), the residual is 'missing' (in errors): a
-    model must not lower the chi-square by having no values.
+    a spectrum without flux), the residual is missing_residual (in
+    errors): a model must not lower the chi-square by having no values.
 
     Parameters
     ----------
     weights : float or Mapping, optional
         The weight of all the data items, or of each, by name (1 for the
         others).
-    missing : float, optional
+    missing_residual : float, optional
         The residual of a value the model does not have, in errors (by
         default, a miss of 3 errors).
 
     Raises
     ------
     ConfigError
-        If missing is negative or not finite.
+        If missing_residual is negative or not finite.
     """
 
     @staticmethod
@@ -57,20 +57,21 @@ class LikelihoodGaussian(Likelihood):
 
     def dump(self) -> dict[str, Any]:
         return dict(
-            type=self.type(), weights=self._weights, missing=self._missing)
+            type=self.type(), weights=self._weights,
+            missing_residual=self._missing_residual)
 
     def __init__(
             self,
             weights: float | Mapping[str, float] = 1.0,
-            missing: float = 3.0
+            missing_residual: float = 3.0
     ):
-        if not (math.isfinite(missing) and missing >= 0):
+        if not (math.isfinite(missing_residual) and missing_residual >= 0):
             raise ConfigError(
-                f"option 'missing' must be finite and not negative; it is "
-                f"{missing}")
+                f"option 'missing_residual' must be finite and not "
+                f"negative; it is {missing_residual}")
         self._weights = weights if isinstance(weights, Real) \
             else dict(weights)
-        self._missing = float(missing)
+        self._missing_residual = float(missing_residual)
 
     def weight(self, key: str) -> float:
         """Return the weight of the data item of the given name."""
@@ -78,9 +79,9 @@ class LikelihoodGaussian(Likelihood):
             return self._weights
         return self._weights.get(key, 1.0)
 
-    def missing(self) -> float:
+    def missing_residual(self) -> float:
         """Return the residual of a value the model does not have."""
-        return self._missing
+        return self._missing_residual
 
 
 likelihood_parser = parseutils.TypedParser(Likelihood, [LikelihoodGaussian])

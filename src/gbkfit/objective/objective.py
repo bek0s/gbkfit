@@ -25,7 +25,7 @@ class Objective:
     of the data item (from the likelihood of its observation). Values
     the data mask have a residual of 0 and do not count. Where the data
     have a value but the model none (NaN, e.g. the velocity of a spectrum
-    without flux), the residual is the 'missing' residual of the
+    without flux), the residual is the missing_residual of the
     likelihood (times the weight of the item): a model must not lower the
     chi-square by having no values. Each observation checks that its
     data are of the form of its model (see Observation).
@@ -80,8 +80,8 @@ class Objective:
             {key: obs.likelihood().weight(key)
              for key in obs.observable().keys()}
             for obs in observations)
-        self._missing = tuple(
-            obs.likelihood().missing() for obs in observations)
+        self._missing_residuals = tuple(
+            obs.likelihood().missing_residual() for obs in observations)
         # The native objective of each observation, for its driver
         self._backends = iterutils.make_list(n, None)
         # The memory is allocated on the first evaluation (see prepare)
@@ -235,7 +235,7 @@ class Objective:
         """
         Return the number of residuals that count: those of the values the
         data do not mask (the values the model does not have count too,
-        with the missing residual).
+        with the missing_residual of their likelihood).
         """
         return sum(
             int(np.count_nonzero(dataset[key].mask()))
@@ -385,5 +385,5 @@ class Objective:
                         model_data[i][key]['d'],
                         model_data[i][key]['w'],
                         weight,
-                        self._missing[i],
+                        self._missing_residuals[i],
                         self._d_residual_nddata[i][key])
