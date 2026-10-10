@@ -60,7 +60,7 @@ def test_slit_spectra_objective_residual(driver):
     # Data equal to the model plus 1, with errors of 2: every residual
     # (model - data) / error is -0.5
     from gbkfit.dataset import Data
-    from gbkfit.dataset.datasets import DatasetSlitSpectra
+    from gbkfit.dataset import DatasetSlitSpectra
     from gbkfit.objective import Objective
     dmodel = dict(type='slit_spectra', size=[32, 51], step=[1, 10], rota=30)
     model = evaluate(driver, dmodel)

@@ -144,7 +144,7 @@ def test_spectral_axis_from_the_data(dispersion, spec_size):
     # but at least 100 km/s (also without moment2), so that the lines of
     # the model are not cut when its dispersion differs from the data's
     from gbkfit.dataset import Data
-    from gbkfit.dataset.datasets import DatasetPixelMoments
+    from gbkfit.dataset import DatasetPixelMoments
     from gbkfit.observation import observable_parser
     velocity = np.linspace(1400, 1600, 32 * 32).reshape(32, 32)
     maps = dict(moment0=Data(np.ones((32, 32))), moment1=Data(velocity))
@@ -166,7 +166,7 @@ def test_spectral_axis_from_the_data(dispersion, spec_size):
     (dict(spec_rval=1450), 451, 1450)])
 def test_spectral_axis_partly_from_the_data(given, spec_size, spec_rval):
     from gbkfit.dataset import Data
-    from gbkfit.dataset.datasets import DatasetPixelMoments
+    from gbkfit.dataset import DatasetPixelMoments
     from gbkfit.observation import observable_parser
     velocity = np.linspace(1400, 1600, 32 * 32).reshape(32, 32)
     dataset = DatasetPixelMoments(

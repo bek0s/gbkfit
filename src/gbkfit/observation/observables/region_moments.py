@@ -4,7 +4,7 @@ from collections.abc import Sequence
 import astropy.units
 import numpy as np
 
-from gbkfit.dataset.datasets import DatasetRegionMoments
+from gbkfit.dataset import DatasetRegionMoments
 from gbkfit.model.base import GModelSCube
 from gbkfit.region import Regions, regions_parser
 from gbkfit.utils import gridutils, parseutils

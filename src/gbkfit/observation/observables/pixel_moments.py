@@ -3,7 +3,7 @@ from collections.abc import Sequence
 
 import astropy.units
 
-from gbkfit.dataset.datasets import DatasetPixelMoments
+from gbkfit.dataset import DatasetPixelMoments
 from gbkfit.model.base import GModelSCube
 from gbkfit.utils import gridutils, parseutils
 from . import _dcube, _detail, _moments

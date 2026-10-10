@@ -3,7 +3,7 @@ import abc
 
 import numpy as np
 
-from gbkfit.dataset.data import Data
+from .data import Data
 from gbkfit.utils import iterutils, parseutils
 
 
