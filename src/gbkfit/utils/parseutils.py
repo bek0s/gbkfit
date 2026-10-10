@@ -16,8 +16,9 @@ import difflib
 import importlib
 import inspect
 import logging
+import os
 import re
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from typing import Any, Self
 
 from . import funcutils, iterutils, typeutils
@@ -55,7 +56,7 @@ _strict = contextvars.ContextVar('strict', default=False)
 
 
 @contextlib.contextmanager
-def strict_mode(strict: bool = True):
+def strict_mode(strict: bool = True) -> Iterator[None]:
     """
     Make unknown options errors instead of warnings, in the block.
 
@@ -205,7 +206,10 @@ def _add_location(error: ConfigError, segments, context) -> None:
 
 
 @contextlib.contextmanager
-def config_path(*segments: str | int, context: str | None = None):
+def config_path(
+        *segments: str | int,
+        context: str | None = None
+) -> Iterator[None]:
     """
     Add to the path of the configuration errors raised in the block.
 
@@ -359,9 +363,46 @@ def parse_options(
     return {k: v for k, v in info.items() if k in known}
 
 
+# The directory that relative paths in configurations are relative to,
+# while they are loaded (see paths_relative_to)
+_base_dir: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    'base_dir', default=None)
+
+
+@contextlib.contextmanager
+def paths_relative_to(directory: str) -> Iterator[None]:
+    """
+    Resolve the relative paths of configurations (see resolve_path)
+    against a directory, e.g. that of the configuration file, while
+    loading them.
+
+    Parameters
+    ----------
+    directory : str
+        The directory.
+    """
+    token = _base_dir.set(os.path.abspath(directory))
+    try:
+        yield
+    finally:
+        _base_dir.reset(token)
+
+
+def resolve_path(path: str) -> str:
+    """
+    Return a path of a configuration: a relative path is relative to the
+    directory of paths_relative_to, if any (and to the current directory
+    otherwise).
+    """
+    base = _base_dir.get()
+    if base is None or os.path.isabs(path):
+        return path
+    return os.path.join(base, path)
+
+
 def parse_file(x: str | dict[str, Any]) -> tuple[str, int | str]:
     """
-    Parse a file option.
+    Parse a file option (a relative filename is resolved by resolve_path).
 
     Parameters
     ----------
@@ -382,7 +423,7 @@ def parse_file(x: str | dict[str, Any]) -> tuple[str, int | str]:
     if isinstance(x, str):
         x = dict(file=x)
     options = parse_options(x, required={'file'}, optional={'hdu'})
-    return options['file'], options.get('hdu', 0)
+    return resolve_path(options['file']), options.get('hdu', 0)
 
 
 def parse_options_for_callable(
