@@ -1,20 +1,31 @@
 #pragma once
 
+#include <cmath>
+
 #include "gbkfit/utilities/indexutils.hpp"
 
 namespace gbkfit {
 
+// The weighted residual of value i: (mdl_d - obs_d) / obs_e * mdl_w *
+// obs_m * weight. A value the data mask (obs_m = 0) has none (0). Where
+// the data have a value but the model none (NaN, e.g. the velocity of a
+// spectrum without flux), it is 'missing' times the weight: otherwise a
+// model could lower the chi-square by having no values.
 template<typename T> constexpr void
 objective_residual(
         int i,
         const T* obs_d, const T* obs_e, const T* obs_m,
-        const T* mdl_d, const T* mdl_w, const T* mdl_m,
-        int size, T weight, T* res)
+        const T* mdl_d, const T* mdl_w,
+        int size, T weight, T missing, T* res)
 {
-    // Masked pixels have no residual: their data or model can be NaN
-    // (masked data, the moments of masked spectra), and NaN times 0 is NaN
-    if ((obs_m && obs_m[i] == 0) || (mdl_m && mdl_m[i] == 0)) {
+    // (the data are NaN where masked, and NaN times 0 is NaN)
+    if (obs_m && obs_m[i] == 0) {
         res[i] = 0;
+        return;
+    }
+
+    if (std::isnan(mdl_d[i])) {
+        res[i] = missing * weight;
         return;
     }
 
@@ -30,10 +41,6 @@ objective_residual(
 
     if (obs_m) {
         residual *= obs_m[i];
-    }
-
-    if (mdl_m) {
-        residual *= mdl_m[i];
     }
 
     res[i] = residual * weight;

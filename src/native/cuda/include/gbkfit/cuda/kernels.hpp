@@ -250,8 +250,8 @@ gmodel_smdisk_evaluate(DiskArgs<T> a)
 template<typename T> __global__ void
 objective_residual(
         const T* obs_d, const T* obs_e, const T* obs_m,
-        const T* mdl_d, const T* mdl_w, const T* mdl_m,
-        int size, T weight, T* res)
+        const T* mdl_d, const T* mdl_w,
+        int size, T weight, T missing, T* res)
 {
     const int nthreads = size;
     const int tid = blockIdx.x * blockDim.x + threadIdx.x;
@@ -262,8 +262,8 @@ objective_residual(
     gbkfit::objective_residual(
             tid,
             obs_d, obs_e, obs_m,
-            mdl_d, mdl_w, mdl_m,
-            size, weight, res);
+            mdl_d, mdl_w,
+            size, weight, missing, res);
 }
 
 } // namespace gbkfit::cuda::kernels
