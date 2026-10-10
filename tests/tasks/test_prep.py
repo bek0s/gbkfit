@@ -597,3 +597,35 @@ def test_beams_of_casa(tmp_path):
     beam = psf.at(1.4201e9 * u.Hz)
     assert beam.dump() == pytest.approx(
         dict(type='gauss_beam', bmaj=12, bmin=9, bpa=31))
+
+
+def test_region_spectra_are_the_sums_of_the_spectra_of_their_bins():
+    # Bins 7 (left), 3 (right) and none (the first column): their spectra
+    # are the sums of those of their valid pixels, with the errors added
+    # in quadrature, and the velocities of the cube
+    write_cube('cube.fits')
+    cube = fits.getdata('cube.fits')[0].astype(float)
+    error = np.full(SHAPE, 0.1)
+    error[0, :, 2, 5] = np.nan  # (an invalid pixel, left out)
+    fits.writeto('error.fits', error)
+    bins = np.full(SHAPE[2:], 7.0)
+    bins[:, 12:] = 3
+    bins[:, 0] = -1
+    header = {k: v for k, v in HEADER.items() if k[-1] in '12' or k == 'BUNIT'}
+    fits.writeto('bins.fits', bins, fits.Header(header))
+    prep.prep_region_spectra(
+        'bins.fits', 'cube.fits', 'error.fits', None, None, 'float64')
+    index = fits.getdata('prep_bins.fits')
+    assert set(np.unique(index)) == {-1, 0, 1}
+    spectra = fits.getdata('prep_cube.fits')
+    errors = fits.getdata('prep_error.fits')
+    assert spectra.shape == (SHAPE[1], 2)
+    left = (bins == 7)
+    left[2, 5] = False
+    np.testing.assert_allclose(spectra[:, 1], cube[:, left].sum(axis=1))
+    np.testing.assert_allclose(errors[:, 1], 0.1 * np.sqrt(left.sum()))
+    np.testing.assert_allclose(spectra[:, 0], cube[:, bins == 3].sum(axis=1))
+    _, coords = fitsutils.read_data('prep_cube.fits')
+    np.testing.assert_allclose(
+        coords.rval[1] + coords.step[1] * (np.arange(3) - coords.rpix[1]),
+        1500 + 10 * (np.arange(3) - 5))
