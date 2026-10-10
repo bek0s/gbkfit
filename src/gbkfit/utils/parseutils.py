@@ -554,6 +554,9 @@ def load_option(
     """
     Load an option.
 
+    Use it when the value goes elsewhere (e.g. under another name, or
+    unpacked); load_option_and_update_info replaces the option in place.
+
     Parameters
     ----------
     loader : Callable
@@ -598,7 +601,8 @@ def load_option_and_update_info(
     """
     Load an option with a parser, and replace its value with the result.
 
-    A missing option stays missing.
+    Use it when the loaded value replaces the option; load_option returns
+    it instead. A missing option stays missing.
 
     Parameters
     ----------
