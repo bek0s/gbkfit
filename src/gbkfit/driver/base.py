@@ -1,10 +1,22 @@
 
 import abc
+from typing import Any, TypeAlias
 
 import numpy as np
 
 from gbkfit.utils import parseutils
 
+
+__all__ = [
+    'DeviceArray',
+    'Driver',
+    'driver_parser'
+]
+
+
+# An array in the memory of a driver: a numpy array for the host driver,
+# a CuPy array for the cuda driver
+DeviceArray: TypeAlias = Any
 
 # The suffix of the native classes for each supported dtype
 _NATIVE_CLASS_SUFFIXES = {

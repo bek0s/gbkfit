@@ -112,6 +112,11 @@ def moment_items(moments: Mapping[int, Data]) -> dict[str, Data]:
     return {f'moment{order}': moments[order] for order in sorted(moments)}
 
 
+def moment_orders(dataset: 'Dataset') -> tuple[int, ...]:
+    """Return the orders of the moments of a dataset (see moment_items)."""
+    return tuple(int(key.removeprefix('moment')) for key in dataset)
+
+
 def read_moments(
         moments: Mapping[int, FitsFile],
         masks: Mapping[int, FitsFile] | None = None,

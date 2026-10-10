@@ -163,7 +163,7 @@ def test_observation_dumps_the_image_of_its_primary_beam(tmp_path):
     from gbkfit.observation.observables import PixelBrightness
     beam = PrimaryBeamImage(np.ones((8, 8)))
     observation = Observation(
-        DriverHost(), PixelBrightness(size=(8, 8)),
+        PixelBrightness(size=(8, 8)), DriverHost(),
         instrument=Instrument(primary_beam=beam))
     prefix = str(tmp_path / 'out_')
     for _ in range(2):

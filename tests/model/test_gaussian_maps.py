@@ -110,7 +110,7 @@ def test_gaussian_fit_of_bins(driver):
 
 
 @pytest.mark.parametrize('options, message', [
-    (dict(method='gauss'), "method of"),
+    (dict(method='gauss'), "method must be one of"),
     (dict(method='gaussian_fit', orders=[1, 3]), "between 0 and 2")])
 def test_method_options_are_checked(options, message):
     from gbkfit.observation import PixelMoments

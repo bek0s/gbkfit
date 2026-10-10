@@ -1,10 +1,14 @@
+from collections.abc import Sequence
 from typing import Any
 
 import numpy as np
 
+from gbkfit.model.base import GModel
 from gbkfit.params import ParamDesc
 from gbkfit.utils import iterutils, parseutils, timeutils
 from gbkfit.utils.parseutils import ConfigError
+from .observables import ModelData
+from .observation import Observation
 
 
 __all__ = [
@@ -14,14 +18,33 @@ __all__ = [
 
 class ObservationGroup:
     """
-    Gmodels and the observations of them. Each observation refers to its
-    gmodel by name, which it may leave out when there is one gmodel. The
-    parameters and constants of the gmodels are prefixed by their names, or
-    their positions (e.g. 'gmodel1_'). The plans of the observations are
-    made here, once.
+    Gmodels and the observations of them, evaluated together.
+
+    Each observation refers to its gmodel by name, which it may leave out
+    when there is one gmodel. The parameters and constants of the gmodels
+    are prefixed by their names, or their positions (e.g. 'gmodel1_').
+    The plans of the observations are made here, once.
+
+    Parameters
+    ----------
+    gmodels : GModel or Sequence of GModel
+        The gmodels.
+    observations : Observation or Sequence of Observation
+        The observations.
+
+    Raises
+    ------
+    ConfigError
+        If there are no gmodels or no observations, their names repeat, or
+        an observation does not name a gmodel of the group (when there are
+        several).
     """
 
-    def __init__(self, gmodels, observations):
+    def __init__(
+            self,
+            gmodels: GModel | Sequence[GModel],
+            observations: Observation | Sequence[Observation]
+    ):
         self._gmodels = iterutils.tuplify(gmodels)
         self._observations = iterutils.tuplify(observations)
         if not self._gmodels:
@@ -63,8 +86,8 @@ class ObservationGroup:
         # objectives of its data)
         self._timers = timeutils.Timers()
 
-    def _resolve(self, i, observation):
-        """The index of the gmodel of the observation."""
+    def _resolve(self, i: int, observation: Observation) -> int:
+        """Return the index of the gmodel of observation i."""
         name = observation.gmodel()
         if name is None:
             if len(self._gmodels) > 1:
@@ -79,34 +102,56 @@ class ObservationGroup:
                 f"the gmodels are {names}")
         return names.index(name)
 
-    def gmodels(self):
+    def gmodels(self) -> tuple[GModel, ...]:
+        """Return the gmodels."""
         return self._gmodels
 
-    def observations(self):
+    def observations(self) -> tuple[Observation, ...]:
+        """Return the observations."""
         return self._observations
 
     def nobservations(self) -> int:
+        """Return the number of observations."""
         return len(self._observations)
 
-    def gmodel_of(self, i):
-        """The gmodel of observation i."""
+    def gmodel_of(self, i: int) -> GModel:
+        """Return the gmodel of observation i."""
         return self._gmodels[self._gmodel_index[i]]
 
     def pdescs(self) -> dict[str, ParamDesc]:
+        """Return the parameters of the gmodels, prefixed."""
         return self._pdescs
 
     def constants(self) -> dict[str, Any]:
+        """Return the constants of the gmodels, prefixed."""
         return self._constants
 
     def timers(self) -> timeutils.Timers:
-        """The times of the steps of the evaluations of the group."""
+        """Return the times of the steps of the evaluations of the group."""
         return self._timers
 
     def model_d(
             self,
             params: dict[str, float | np.ndarray],
             out_extra: dict[str, Any] | None = None
-    ) -> list[dict[str, Any]]:
+    ) -> list[ModelData]:
+        """
+        Evaluate the model data of the observations, on their drivers.
+
+        Parameters
+        ----------
+        params : dict
+            The parameters of the gmodels, prefixed (see pdescs).
+        out_extra : dict, optional
+            Where the extra outputs go, if wanted: those of each
+            observation prefixed by its name, or 'observation{i}_'.
+
+        Returns
+        -------
+        list of ModelData
+            The model data of each observation, on its driver; they are
+            overwritten by the next evaluation.
+        """
         with self._timers.measure('model_eval'):
             for i, plan in enumerate(self._plans):
                 mapping = self._mappings[self._gmodel_index[i]]
@@ -123,7 +168,23 @@ class ObservationGroup:
             self,
             params: dict[str, float | np.ndarray],
             out_extra: dict[str, Any] | None = None
-    ) -> list[dict[str, Any]]:
+    ) -> list[dict[str, dict[str, np.ndarray | None]]]:
+        """
+        Evaluate the model data of the observations, on the host.
+
+        Parameters
+        ----------
+        params : dict
+            The parameters of the gmodels, prefixed (see pdescs).
+        out_extra : dict, optional
+            Where the extra outputs go, if wanted (see model_d).
+
+        Returns
+        -------
+        list of dict
+            The model data of each observation (see ModelData), copied to
+            the host; they are overwritten by the next evaluation.
+        """
         self.model_d(params, out_extra)
         with self._timers.measure('model_d2h'):
             for i, obs in enumerate(self._observations):

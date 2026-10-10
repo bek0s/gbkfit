@@ -117,8 +117,9 @@ def test_one_gmodel_observed_on_grids_with_different_steps(
 
     def observation(step):
         steps = (step, step, 10)[:len(size)]
-        return Observation(driver, observable_parser.load(dict(
-            type=observable_type, size=list(size), step=list(steps))))
+        return Observation(observable_parser.load(dict(
+            type=observable_type, size=list(size), step=list(steps))),
+            driver)
 
     def evaluate(group, i):
         params = gbkfit.params.EvaluationParams(group.pdescs(), properties)
@@ -137,7 +138,8 @@ def test_unsupported_dtype_fails_when_planning(driver):
     from gbkfit.observation import (
         Observation, ObservationGroup, observable_parser)
     observation = Observation(
-        driver, observable_parser.load(dict(type='pixel_brightness', size=[8, 8])),
+        observable_parser.load(dict(type='pixel_brightness', size=[8, 8])),
+        driver,
         dtype='float16')
     gmodel = gbkfit.model.gmodel_parser.load(dict(
         type='intensity_2d', components=dict(

@@ -116,3 +116,7 @@ class DatasetRegionMoments(Dataset):
     def regions(self) -> Regions:
         """Return the regions."""
         return self._regions
+
+    def orders(self) -> tuple[int, ...]:
+        """Return the orders of the moments."""
+        return _detail.moment_orders(self)

@@ -165,7 +165,7 @@ def test_bins_are_checked(index, message):
 def test_region_sums(driver):
     # The native sums of the regions of each channel of a cube equal the
     # product of the weights and the cube
-    from gbkfit.observation.observables._regions import RegionSumsPlan
+    from gbkfit.observation.observables._region_sums import RegionSumsPlan
     grid = _grid()
     weights = RegionsApertures([
         ApertureCircle(1, -0.5, 1.5),

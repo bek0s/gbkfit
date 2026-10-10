@@ -1,11 +1,13 @@
+"""
+The sums of the pixels of regions.
+"""
+
 import numpy as np
 import scipy.sparse
 
-
-__all__ = [
-    'RegionSumsPlan',
-    'flux_weights'
-]
+from gbkfit.driver import DeviceArray, Driver
+from gbkfit.region import Regions
+from gbkfit.utils import gridutils
 
 
 # The most pixels a thread sums: larger regions (e.g. the whole field) are
@@ -14,9 +16,11 @@ __all__ = [
 _CHUNK = 256
 
 
-def flux_weights(regions, grid):
+def flux_weights(
+        regions: Regions, grid: gridutils.Grid
+) -> scipy.sparse.csr_array:
     """
-    The weights of the pixels of a spatial grid in regions (see
+    Return the weights of the pixels of a spatial grid in regions (see
     Regions.weights) times the area of a pixel (arcsec^2): the area of
     each pixel inside each region. The sums of the surface brightness of
     the model with them are the fluxes of the regions, whatever the size
@@ -32,7 +36,12 @@ class RegionSumsPlan:
     each channel of cubes, on a driver.
     """
 
-    def __init__(self, weights: scipy.sparse.csr_array, driver, dtype):
+    def __init__(
+            self,
+            weights: scipy.sparse.csr_array,
+            driver: Driver,
+            dtype: np.dtype
+    ):
         weights = scipy.sparse.csr_array(weights)
         weights.sum_duplicates()
         indptr = weights.indptr
@@ -76,9 +85,9 @@ class RegionSumsPlan:
     def nregions(self) -> int:
         return self._nregions
 
-    def evaluate(self, cube, out):
+    def evaluate(self, cube: DeviceArray, out: DeviceArray) -> None:
         """
-        The sums of the regions in each channel of a cube (nz, ny, nx;
+        Sum the regions in each channel of a cube (nz, ny, nx;
         ny * nx pixels of the weights), into out (nz, nregions).
         """
         if cube.shape[1] * cube.shape[2] != self._npix:

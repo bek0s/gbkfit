@@ -125,7 +125,7 @@ def test_region_moments_observation_from_data(tmp_path):
     np.testing.assert_array_equal(loaded['moment1'].data(), [1400, 1500, 1600])
     info = dict(
         driver=dict(type='host'), data=data_info,
-        observable=dict(type='region_moments', orders=[0, 1], spec_step=2))
+        observable=dict(type='region_moments', spec_step=2))
     observation = observation_parser.load(copy.deepcopy(info))
     observable = observation.observable()
     assert observable.size() == (3, 2)
@@ -137,7 +137,7 @@ def test_region_moments_observation_from_data(tmp_path):
     assert 'size' not in dumped['observable']
     with pytest.raises(Exception, match="give its options \\['size'\\]"):
         observation_parser.load(info | dict(observable=dict(
-            type='region_moments', orders=[0, 1], size=[3, 2])))
+            type='region_moments', size=[3, 2])))
 
 
 
@@ -145,8 +145,9 @@ def test_region_moments_observation_dumps_its_bins_with_the_prefix(driver, tmp_p
     # Without data, the bins are options of the observable: their file is
     # named with the prefix of the dump, which can be dumped again
     from gbkfit.observation import RegionMoments, Observation, observation_parser
-    observation = Observation(driver, RegionMoments(
-        RegionsBins(np.arange(16).reshape(4, 4) % 3), spec_size=11))
+    observation = Observation(RegionMoments(
+        RegionsBins(np.arange(16).reshape(4, 4) % 3), spec_size=11),
+        driver)
     prefix = str(tmp_path / 'out_')
     for _ in range(2):
         dumped = observation_parser.dump(
@@ -169,7 +170,7 @@ def test_region_moments_objective_residual(driver):
     instrument = instrument_parser.load(copy.deepcopy(INSTRUMENT))
     group = ObservationGroup(
         [gmodel_parser.load(copy.deepcopy(GMODEL))],
-        [Observation(driver, observable, instrument=instrument)])
+        [Observation(observable, driver, instrument=instrument)])
     params = gbkfit.params.EvaluationParams(group.pdescs(), PROPERTIES)
     model = {
         key: value['d'].copy()
@@ -181,7 +182,7 @@ def test_region_moments_objective_residual(driver):
     group = ObservationGroup(
         [gmodel_parser.load(copy.deepcopy(GMODEL))],
         [Observation(
-            driver, observable, instrument=instrument, data=dataset)])
+            observable, driver, instrument=instrument, data=dataset)])
     residual = Objective(group).residual_nddata_h(params.evaluate(), False)
     for key in ('moment1', 'moment2'):
         np.testing.assert_allclose(residual[0][key], -0.5, rtol=1e-4)

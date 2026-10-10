@@ -1,45 +1,52 @@
-
-import logging
-from collections.abc import Callable
-from typing import Any
+from collections.abc import Callable, Sequence
+from typing import Any, TypeAlias
 
 import astropy.units as u
 import numpy as np
 
 import gbkfit.math
-from gbkfit.driver import Driver
-from gbkfit.instrument import LSF, LSFPoint, PSF, PSFPoint
+from gbkfit.driver import DeviceArray, Driver
+from gbkfit.driver.fft import DriverFFT
+from gbkfit.instrument import LSF, LSFPoint, PSF, PSFPoint, PrimaryBeam
 from gbkfit.utils import gridutils
 from gbkfit.utils.parseutils import ConfigError
 
 
-_log = logging.getLogger(__name__)
-
 # The unit of the velocities of the spectral axis
 _KMS = u.km / u.s
 
+# How an extra output is made from an array of a cube of DCube and the
+# grid of the cube (e.g. cube_extra)
+ExtraFunction: TypeAlias = Callable[
+    [np.ndarray, gridutils.Grid], gridutils.GridData | np.ndarray]
 
-def cube_extra(data, grid):
-    """An extra output on a grid of DCube, as a sky and velocity cube."""
+
+def cube_extra(data: np.ndarray, grid: gridutils.Grid) -> gridutils.GridData:
+    """Make an extra output on a grid of DCube a sky and velocity cube."""
     return gridutils.GridData(data, grid.coords, grid.spectral_axis)
 
 
-def plain_extra(data, grid):  # noqa
-    """An extra output on a grid of DCube, without world coordinates."""
+def plain_extra(data: np.ndarray, grid: gridutils.Grid) -> np.ndarray:  # noqa
+    """Make an extra output on a grid of DCube a plain array."""
     return data
 
 
-def _distinct(items):
-    """The distinct objects of a list (by identity), in order."""
+def _distinct(items: Sequence[Any]) -> list[Any]:
+    """Return the distinct objects of a list (by identity), in order."""
     return list({id(item): item for item in items}.values())
 
 
-def _varying_padding(dcube, size_hi, step_hi, backend_fft):
+def _varying_padding(
+        dcube: 'DCube',
+        size_hi: tuple[int, int, int],
+        step_hi: tuple[float, float, float],
+        backend_fft: DriverFFT
+) -> tuple[tuple[int, int, int], tuple[int, int, int], int]:
     """
-    The size and the padding (edge) of the high-res cube of a DCube whose
-    PSF or LSF varies along the spectral axis, for the largest PSF and LSF
-    of the channels of the data, and the size of the LSF arrays. Along z
-    there is no FFT, so the padding is that of the LSF only. Raise
+    Return the size and the padding (edge) of the high-res cube of a DCube
+    whose PSF or LSF varies along the spectral axis, for the largest PSF
+    and LSF of the channels of the data, and the size of the LSF arrays.
+    Along z there is no FFT, so the padding is that of the LSF only. Raise
     ConfigError if a channel of the data is beyond the velocities where
     the PSF or the LSF is known.
     """
@@ -79,14 +86,16 @@ def _varying_padding(dcube, size_hi, step_hi, backend_fft):
             lsf_size)
 
 
-def _varying_kernels(dcube, grid_hi, lsf_size):
+def _varying_kernels(
+        dcube: 'DCube', grid_hi: gridutils.Grid, lsf_size: int
+) -> tuple[np.ndarray | None, np.ndarray | None]:
     """
-    The images of the PSF of a DCube on its high-res grid: one for each
-    channel (nz, ny, nx), or one for all if the PSF does not vary; and its
-    LSF of each channel, of size lsf_size (nz, lsf_size). None for no PSF
-    or no LSF. The channels of the padding take the PSF and the LSF of the
-    nearest velocity where they are known, with the arrays of the
-    channels of the data.
+    Return the images of the PSF of a DCube on its high-res grid: one for
+    each channel (nz, ny, nx), or one for all if the PSF does not vary;
+    and its LSF of each channel, of size lsf_size (nz, lsf_size). None for
+    no PSF or no LSF. The channels of the padding take the PSF and the
+    LSF of the nearest velocity where they are known, with the arrays of
+    the channels of the data.
     """
     psf, lsf = dcube.psf(), dcube.lsf()
     rest = grid_hi.coords.rest
@@ -113,17 +122,27 @@ def _varying_kernels(dcube, grid_hi, lsf_size):
 
 
 class DCube:
+    """
+    A cube of the data of an observable (x, y and the spectral axis), of
+    the given grid, made from a gmodel evaluated on a finer grid (scale
+    times finer along each axis): the primary beam attenuates it, the PSF
+    and the LSF convolve it, it is downscaled to the grid, and masked
+    where its values are not above mask_cutoff (the mask is applied, NaN,
+    if mask_apply). The weights are smoothed by the PSF and the LSF if
+    smooth_weights.
+    """
 
     def __init__(
             self,
+            *,
             size: tuple[int, int, int],
             step: tuple[float, float, float],
             rpix: tuple[float, float, float],
             rval: tuple[float, float, float],
             rota: float,
-            rest: Any,
+            rest: u.Quantity | None,
             scale: tuple[int, int, int],
-            primary_beam: Any,
+            primary_beam: PrimaryBeam | None,
             psf: PSF | None,
             lsf: LSF | None,
             smooth_weights: bool,
@@ -131,23 +150,11 @@ class DCube:
             mask_apply: bool,
             dtype: np.dtype
     ):
-        if mask_apply and mask_cutoff is None:
-            _log.warning(
-                "mask_apply is set to True, but mask_cutoff is not provided; "
-                "no mask will be generated or applied to the model data")
-            mask_apply = False
-        if smooth_weights and not (psf or lsf):
-            _log.warning(
-                "smooth_weights is set to True, but neither PSF nor LSF is "
-                "provided; if weights exist, they will not be smoothed")
-            smooth_weights = False
-
-        # The low-res grid (the grid of the data) and, once prepared, the
-        # high-res one, with their spectral axis last
-        self._grid_lo = gridutils.Grid(
-            size,
-            gridutils.Coords(step, rpix, rval, rota, gridutils.make_rest(rest)),
-            2)
+        # The low-res grid (the grid of the data); the high-res one is made
+        # by the plan
+        coords = gridutils.Coords(
+            step, rpix, rval, rota, gridutils.make_rest(rest))
+        self._grid_lo = gridutils.Grid(size, coords, 2)
         self._scale = scale
         self._primary_beam = primary_beam
         self._psf = psf
@@ -181,8 +188,7 @@ class DCube:
     def scale(self) -> tuple[int, int, int]:
         return self._scale
 
-    def primary_beam(self) -> Any:
-        """The primary beam (see PrimaryBeam), or None."""
+    def primary_beam(self) -> PrimaryBeam | None:
         return self._primary_beam
 
     def psf(self) -> PSF | None:
@@ -205,7 +211,7 @@ class DCube:
 
     def plan(self, driver: Driver, has_weights: bool) -> 'DCubePlan':
         """
-        The evaluation of the cube on the given driver, with weights if
+        Plan the evaluation of the cube on a driver, with weights if
         has_weights: its high-res grid, which depends on the FFT of the
         driver, and its memory.
         """
@@ -219,10 +225,7 @@ class DCubePlan:
     primary beam and PSF/LSF cube.
     """
 
-    def __init__(
-            self, dcube: 'DCube', driver: Driver, has_weights: bool):
-
-        # Convenience variables
+    def __init__(self, dcube: DCube, driver: Driver, has_weights: bool):
         size_lo = dcube.size()
         step_lo = dcube.step()
         rpix_lo = dcube.rpix()
@@ -230,24 +233,12 @@ class DCubePlan:
         psf = dcube.psf()
         lsf = dcube.lsf()
         dtype = dcube.dtype()
-
-        # Use the native fft library
         backend_fft = driver.fft(dtype)
 
-        # High-res cube size (before taking padding into account)
-        size_hi = (
-            size_lo[0] * scale[0],
-            size_lo[1] * scale[1],
-            size_lo[2] * scale[2])
-
-        # High-res cube step
-        step_hi = (
-            step_lo[0] / scale[0],
-            step_lo[1] / scale[1],
-            step_lo[2] / scale[2])
-
-        # Convenience variables
-        spat_step_hi = (step_hi[0], step_hi[1])
+        # The size and step of the high-res cube, before the padding
+        size_hi = tuple(size_lo[i] * scale[i] for i in range(3))
+        step_hi = tuple(step_lo[i] / scale[i] for i in range(3))
+        spat_step_hi = step_hi[:2]
         spec_step_hi = step_hi[2]
 
         # A PSF or an LSF that varies along the spectral axis has one for
@@ -259,21 +250,14 @@ class DCubePlan:
             size_hi, edge_hi, lsf_size_hi = _varying_padding(
                 dcube, size_hi, step_hi, backend_fft)
         else:
-            # Calculate the minimum size required to store the psf/lsf
-            # In the absense of a psf/lsf we use a size of 1. This is done
-            # to facilitate some calculations when only onn of psf or lsf
-            # is present. When both are absent, no psf/lsf will be created.
-            minimum_psf_size_hi = psf.size(spat_step_hi) if psf else (1, 1)
-            minimum_lsf_size_hi = lsf.size(spec_step_hi) if lsf else 1
-
-            # If psf/lsf is provided, we convolve the model cube with it.
-            # We always perform fft-based convolution because it is faster.
-            # Fft-based convolution requires padding on the model cube.
+            # The convolution is FFT-based, so the cube is padded for the
+            # size of the PSF and the LSF (1 for the one not given)
             edge_hi = (0, 0, 0)
             if psf or lsf:
-                # Get convolution shape and left offset due to padding
+                psf_size_hi = psf.size(spat_step_hi) if psf else (1, 1)
+                lsf_size_hi = lsf.size(spec_step_hi) if lsf else 1
                 size_hi, edge_hi = backend_fft.fft_convolution_shape(
-                    size_hi, minimum_psf_size_hi + (minimum_lsf_size_hi,))
+                    size_hi, psf_size_hi + (lsf_size_hi,))
 
         # The high-res grid: scale pixels for each low-res pixel, centred on
         # it, after edge_hi pixels of padding
@@ -283,13 +267,9 @@ class DCubePlan:
             tuple(size_hi), dcube.grid().coords._replace(
                 step=step_hi, rpix=rpix_hi), 2)
 
-        # The shape of the arrays created below are the reversed size
+        # The shapes of the arrays are the reversed sizes
         shape_lo = size_lo[::-1]
         shape_hi = size_hi[::-1]
-
-        # Convenience variables
-        spat_size_hi = (size_hi[0], size_hi[1])
-        spec_size_hi = size_hi[2]
 
         # The images of the PSF (one for each channel, or one for all) and
         # the LSF of each channel, if one of them varies
@@ -310,28 +290,22 @@ class DCubePlan:
                 self._zscratch_hi = driver.mem_alloc_d(shape_hi, dtype)
             self._lsf_size_hi = lsf_size_hi
 
-        # Create high-res psf/lsf cube, if psf/lsf was provided
+        # Otherwise, the PSF/LSF cube of the FFT-based convolution: the
+        # product of the PSF and the LSF (a point for the one not given),
+        # with its centre rolled to (0, 0, 0). Kernels of an even size are
+        # offset by -1 pixel, since they mostly have a central peak.
         self._pcube_hi = None
-        # The psf cube will be used for the fft-based convolution
         if (psf or lsf) and not varies:
-            # Create separate high-res psf/lsf images
-            # If they have an even size, they must be offset by -1 pixel
-            # This is because in most cases the psf/lsf have a central peak
             offset_hi = gbkfit.math.is_odd(size_hi) - 1
-            psf_offset_hi = offset_hi[:2]
-            lsf_offset_hi = offset_hi[2]
-            psf_args = (spat_step_hi, spat_size_hi, psf_offset_hi, dcube.rota())
-            lsf_args = (spec_step_hi, spec_size_hi, lsf_offset_hi)
+            psf_args = (spat_step_hi, size_hi[:2], offset_hi[:2], dcube.rota())
+            lsf_args = (spec_step_hi, size_hi[2], offset_hi[2])
             psf_hi = psf.asarray(*psf_args) if psf \
                 else PSFPoint().asarray(*psf_args)
             lsf_hi = lsf.asarray(*lsf_args) if lsf \
                 else LSFPoint().asarray(*lsf_args)
-            # Build high-res psf/lsf cube
-            self._pcube_hi = (psf_hi * lsf_hi[:, None, None]).astype(dtype)
-            # Roll the centre of the psf cube to (0, 0, 0)
-            self._pcube_hi = backend_fft.fft_convolution_shift(self._pcube_hi)
-            # Transfer the psf cube to device memory
-            self._pcube_hi = driver.mem_copy_h2d(self._pcube_hi)
+            pcube_hi = (psf_hi * lsf_hi[:, None, None]).astype(dtype)
+            self._pcube_hi = driver.mem_copy_h2d(
+                backend_fft.fft_convolution_shift(pcube_hi))
 
         # The response of the primary beam on the high-res grid (one image
         # for all channels), if there is one
@@ -341,10 +315,8 @@ class DCubePlan:
             self._pbeam_hi = driver.mem_copy_h2d(
                 pbeam_hi[None].astype(dtype))
 
-        # Create low- and high-res data and weight cubes.
-        # If the low- and high-res versions have the same size,
-        # just create one and have the latter point to the former.
-        # This can happen when there is no supersampling or padding.
+        # The low- and high-res data and weight cubes; without oversampling
+        # and padding they are one
         self._dcube_lo = driver.mem_alloc_d(shape_lo, dtype)
         self._dcube_hi = self._dcube_lo
         driver.mem_fill(self._dcube_lo, 0)
@@ -361,9 +333,8 @@ class DCubePlan:
                 self._wcube_hi = driver.mem_alloc_d(shape_hi, dtype)
                 driver.mem_fill(self._wcube_hi, 1)
 
-        # Create low-res mask cube if requested.
-        # There is no high-res mask cube because masking is always done
-        # on the low-res cubes.
+        # The mask cube, if masking is enabled: masking is done on the
+        # low-res cube only
         self._mcube_lo = None
         if dcube.mask_cutoff() is not None:
             self._mcube_lo = driver.mem_alloc_d(shape_lo, dtype)
@@ -384,44 +355,36 @@ class DCubePlan:
     def scratch_edge(self) -> tuple[int, int, int]:
         return self._edge_hi
 
-    def scratch_dcube(self) -> Any:
+    def scratch_dcube(self) -> DeviceArray:
         return self._dcube_hi
 
-    def scratch_wcube(self) -> Any:
+    def scratch_wcube(self) -> DeviceArray | None:
         return self._wcube_hi
 
-    def dcube(self) -> Any:
+    def dcube(self) -> DeviceArray:
         return self._dcube_lo
 
-    def wcube(self) -> Any:
+    def wcube(self) -> DeviceArray | None:
         return self._wcube_lo
 
-    def mcube(self) -> Any:
+    def mcube(self) -> DeviceArray | None:
         return self._mcube_lo
 
     def evaluate(
             self,
             out_extra: dict[str, Any] | None,
-            extra_lo: Callable[[np.ndarray, gridutils.Grid], Any],
-            extra_hi: Callable[[np.ndarray, gridutils.Grid], Any]
+            extra_lo: ExtraFunction,
+            extra_hi: ExtraFunction
     ) -> None:
         """
         Attenuate by the primary beam, convolve, downscale and mask the
-        high-res cube into the low-res one. The extra outputs on the low- and high-res grids go to
-        out_extra as extra_lo and extra_hi make them from their data and
-        grid (e.g. cube_extra or plain_extra).
+        high-res cube into the low-res one. The extra outputs on the low-
+        and high-res grids go to out_extra as extra_lo and extra_hi make
+        them from their data and grid (e.g. cube_extra or plain_extra).
         """
-
-        # Convenience variables
         dcube = self._dcube
         step_lo = dcube.step()
-        step_hi = self.scratch_grid().coords.step
-        spat_step_lo = (step_lo[0], step_lo[1])
-        spec_step_lo = step_lo[2]
-        spat_step_hi = (step_hi[0], step_hi[1])
-        spec_step_hi = step_hi[2]
-        edge_hi = self._edge_hi
-        scale = dcube.scale()
+        step_hi = self._grid_hi.coords.step
         psf = dcube.psf()
         lsf = dcube.lsf()
         dcube_lo = self._dcube_lo
@@ -433,19 +396,17 @@ class DCubePlan:
         pbeam_hi = self._pbeam_hi
         has_weights = self._has_weights
         mask_cutoff = dcube.mask_cutoff()
-        mask_apply = dcube.mask_apply()
         driver = self._driver
         backend_fft = self._backend_fft
         backend_dmodel = self._backend_dmodel
 
-        # The primary beam attenuates the light before the psf
+        # The primary beam attenuates the light before the PSF
         if pbeam_hi is not None:
             driver.math_mul(dcube_hi, pbeam_hi, out=dcube_hi)
 
-        # Perform fft-based convolution.
-        # The weights are only smoothed if requested.
-        # (in float32, the rounding of the FFT leaves noise of about 1e-7
-        # of the peak in the faint parts of the cube, which spoils their
+        # The convolution, of the weights too if they are smoothed (in
+        # float32, the rounding of the FFT leaves noise of about 1e-7 of
+        # the peak in the faint parts of the cube, which spoils their
         # moments: see dmodel_mmaps_moments)
         cubes = [dcube_hi]
         if has_weights and dcube.smooth_weights():
@@ -464,55 +425,53 @@ class DCubePlan:
             for cube in cubes:
                 backend_fft.fft_convolve_cached(cube, pcube_hi)
 
-        # Perform downscaling, which also removes the padding.
-        # The weights always need it, smoothed or not, otherwise
-        # they never reach the low-res weight cube.
+        # The downscaling, which also removes the padding: the weights
+        # always need it, smoothed or not, to reach the low-res cube
         if dcube_lo is not dcube_hi:
             backend_dmodel.dcube_downscale(
-                scale, edge_hi, dcube_hi, dcube_lo)
+                dcube.scale(), self._edge_hi, dcube_hi, dcube_lo)
             if has_weights:
                 backend_dmodel.dcube_downscale(
-                    scale, edge_hi, wcube_hi, wcube_lo)
+                    dcube.scale(), self._edge_hi, wcube_hi, wcube_lo)
 
-        # Create the mask and, if requested, apply it to the data.
+        # The mask, applied to the data if asked
         if mask_cutoff is not None:
             backend_dmodel.dcube_mask(
-                mask_cutoff, mask_apply, dcube_lo, mcube_lo, wcube_lo)
+                mask_cutoff, dcube.mask_apply(), dcube_lo, mcube_lo, wcube_lo)
 
-        # Output extra information
-        if out_extra is not None:
-            def lo(data):
-                return extra_lo(driver.mem_copy_d2h(data), dcube.grid())
+        if out_extra is None:
+            return
 
-            def hi(data):
-                return extra_hi(driver.mem_copy_d2h(data), self.scratch_grid())
+        def lo(data: DeviceArray) -> gridutils.GridData | np.ndarray:
+            return extra_lo(driver.mem_copy_d2h(data), dcube.grid())
 
-            out_extra.update(dcube_lo=lo(dcube_lo), dcube_hi=hi(dcube_hi))
-            if mask_cutoff is not None:
-                out_extra.update(mcube_lo=lo(mcube_lo))
-            if has_weights:
-                out_extra.update(wcube_lo=lo(wcube_lo), wcube_hi=hi(wcube_hi))
-            if self._varies:
-                # The images of the PSF and the LSF of the channels, made
-                # again (they are not kept on the host)
-                psf_images, lsf_kernels = _varying_kernels(
-                    dcube, self.scratch_grid(), self._lsf_size_hi)
-                if psf_images is not None:
-                    out_extra.update(psf_hi=psf_images)
-                if lsf_kernels is not None:
-                    out_extra.update(lsf_hi=lsf_kernels)
-            else:
-                if psf:
-                    out_extra.update(
-                        psf_lo=psf.asarray(spat_step_lo, rota=dcube.rota()),
-                        psf_hi=psf.asarray(spat_step_hi, rota=dcube.rota()))
-                if lsf:
-                    out_extra.update(
-                        lsf_lo=lsf.asarray(spec_step_lo),
-                        lsf_hi=lsf.asarray(spec_step_hi))
-                if psf or lsf:
-                    out_extra.update(
-                        pcube_hi=driver.mem_copy_d2h(pcube_hi))
-            if pbeam_hi is not None:
+        def hi(data: DeviceArray) -> gridutils.GridData | np.ndarray:
+            return extra_hi(driver.mem_copy_d2h(data), self._grid_hi)
+
+        out_extra.update(dcube_lo=lo(dcube_lo), dcube_hi=hi(dcube_hi))
+        if mask_cutoff is not None:
+            out_extra.update(mcube_lo=lo(mcube_lo))
+        if has_weights:
+            out_extra.update(wcube_lo=lo(wcube_lo), wcube_hi=hi(wcube_hi))
+        if self._varies:
+            # The images of the PSF and the LSF of the channels, made again
+            # (they are not kept on the host)
+            psf_images, lsf_kernels = _varying_kernels(
+                dcube, self._grid_hi, self._lsf_size_hi)
+            if psf_images is not None:
+                out_extra.update(psf_hi=psf_images)
+            if lsf_kernels is not None:
+                out_extra.update(lsf_hi=lsf_kernels)
+        else:
+            if psf:
                 out_extra.update(
-                    pbeam_hi=driver.mem_copy_d2h(pbeam_hi)[0])
+                    psf_lo=psf.asarray(step_lo[:2], rota=dcube.rota()),
+                    psf_hi=psf.asarray(step_hi[:2], rota=dcube.rota()))
+            if lsf:
+                out_extra.update(
+                    lsf_lo=lsf.asarray(step_lo[2]),
+                    lsf_hi=lsf.asarray(step_hi[2]))
+            if psf or lsf:
+                out_extra.update(pcube_hi=driver.mem_copy_d2h(pcube_hi))
+        if pbeam_hi is not None:
+            out_extra.update(pbeam_hi=driver.mem_copy_d2h(pbeam_hi)[0])

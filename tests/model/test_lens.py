@@ -35,7 +35,7 @@ def evaluate(driver, foreground=None, properties=PROPERTIES, dmodel=IMAGE,
     if foreground is not None:
         from gbkfit.observation import Observation, ObservationGroup
         observation = Observation(
-            observation.driver(), observation.observable(),
+            observation.observable(), observation.driver(),
             foreground=foreground, instrument=observation.instrument())
         group = ObservationGroup(group.gmodels(), [observation])
     params = gbkfit.params.EvaluationParams(group.pdescs(), properties)

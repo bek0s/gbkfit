@@ -131,7 +131,7 @@ def test_region_spectra_objective_residual(driver):
         Data(model + 1, error=np.full_like(model, 2)),
         observable.regions(), step=10)
     observation = Observation(
-        driver, observable, instrument=Instrument(), data=dataset)
+        observable, driver, instrument=Instrument(), data=dataset)
     group = ObservationGroup(
         [gmodel_parser.load(copy.deepcopy(GMODEL))], [observation])
     params = gbkfit.params.EvaluationParams(group.pdescs(), PROPERTIES)
@@ -139,7 +139,7 @@ def test_region_spectra_objective_residual(driver):
     # Without the instrument, the model differs from the data
     assert not np.allclose(residual[0]['spectra'], -0.5)
     observation = Observation(
-        driver, observable,
+        observable, driver,
         instrument=instrument_parser.load(copy.deepcopy(INSTRUMENT)),
         data=dataset)
     group = ObservationGroup(
@@ -221,7 +221,7 @@ def test_region_spectra_of_spectra_with_another_spectral_axis_is_an_error(driver
     dataset = DatasetRegionSpectra(
         Data(np.ones((51, 3))), observable.regions(), step=5)
     with pytest.raises(RuntimeError, match="spectral axis"):
-        Observation(driver, observable, data=dataset)
+        Observation(observable, driver, data=dataset)
 
 
 
@@ -239,7 +239,7 @@ def test_region_spectra_observation_of_data_on_a_rotated_grid(driver, kind):
         regions = RegionsBins(np.zeros((4, 4)), rota=20)
         observable = RegionSpectra(regions, spec_size=5, spec_step=10)
     dataset = DatasetRegionSpectra(Data(np.ones((5, 1))), regions, step=10)
-    Observation(driver, observable, data=dataset)
+    Observation(observable, driver, data=dataset)
 
 def test_region_spectra_spatial_grid_options():
     from gbkfit.observation import RegionSpectra

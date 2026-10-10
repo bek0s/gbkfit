@@ -278,12 +278,12 @@ def test_observation_data_must_be_on_the_grid_of_the_observable():
     data = DatasetPixelBrightness(Data(np.ones((8, 20))), rota=30)
     moments = DatasetPixelMoments({0: Data(np.ones((8, 20)))})
     with pytest.raises(RuntimeError, match="the data are on the grid"):
-        Observation(DriverHost(), PixelBrightness(size=(20, 8)), data=data)
+        Observation(PixelBrightness(size=(20, 8)), DriverHost(), data=data)
     with pytest.raises(RuntimeError, match="cannot be compared"):
         Observation(
-            DriverHost(), PixelBrightness(size=(20, 8)), data=moments)
+            PixelBrightness(size=(20, 8)), DriverHost(), data=moments)
     Observation(
-        DriverHost(), PixelBrightness(size=(20, 8), rota=30), data=data)
+        PixelBrightness(size=(20, 8), rota=30), DriverHost(), data=data)
 
 
 def test_pixel_spectra_rest_comes_from_the_data(tmp_path):

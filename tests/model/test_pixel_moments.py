@@ -62,7 +62,7 @@ def evaluate_mmaps(driver, observable, **properties):
             bptraits=dict(type='exponential'),
             vptraits=dict(type='tan_arctan'),
             dptraits=dict(type='uniform'))]))
-    model_group = ObservationGroup([gmodel], [Observation(driver, observable)])
+    model_group = ObservationGroup([gmodel], [Observation(observable, driver)])
     params = EvaluationParams(model_group.pdescs(), dict(
         vsys=0, xpos=0, ypos=0, posa=30, incl=60,
         bpt_a=1, bpt_s=4, vpt_rt=2, vpt_vt=40, dpt_a=20) | properties)
@@ -112,7 +112,7 @@ def test_moment_maps_have_the_weights_of_the_gmodel(driver):
         vptraits=traits.VPTraitTanArctan(), dptraits=traits.DPTraitUniform())
     gmodel = GModelKinematics2D([disk, WeightComponent()])
     observable = PixelMoments(size=(32, 32), spec_size=81, spec_step=5)
-    model_group = ObservationGroup([gmodel], [Observation(driver, observable)])
+    model_group = ObservationGroup([gmodel], [Observation(observable, driver)])
     params = EvaluationParams(model_group.pdescs(), dict(
         vsys=0, xpos=0, ypos=0, posa=30, incl=0,
         bpt_a=1, bpt_s=4, vpt_rt=2, vpt_vt=40, dpt_a=20))
