@@ -171,3 +171,15 @@ def test_observation_dumps_the_image_of_its_primary_beam(tmp_path):
             observation, prefix=prefix, overwrite=True)
     assert dumped['instrument']['primary_beam']['file'] == (
         f'{prefix}primary_beam.fits')
+
+
+def test_primary_beam_image_options_are_checked(tmp_path):
+    # (an option of a wrong type is an error with its path when loaded)
+    from gbkfit.instrument import primary_beam_parser
+    from gbkfit.utils.parseutils import ConfigError
+    fitsutils.write_data(
+        str(tmp_path / 'pb.fits'), np.ones((4, 4)),
+        gridutils.make_grid((4, 4)).coords)
+    with pytest.raises(ConfigError, match="image: option 'step' must be"):
+        primary_beam_parser.load(dict(
+            type='image', file=str(tmp_path / 'pb.fits'), step='abc'))

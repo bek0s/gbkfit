@@ -1,7 +1,6 @@
 import abc
 import os.path
 from collections.abc import Sequence
-from typing import Any
 
 import numpy as np
 import scipy.ndimage
@@ -162,9 +161,9 @@ class LensDeflectionMap(Lens):
             alpha_y: np.ndarray,
             source_size: Sequence[int],
             source_step: Sequence[float],
-            step: Any = None,
-            rpix: Any = None,
-            rval: Any = None,
+            step: float | Sequence[float] | None = None,
+            rpix: float | Sequence[float] | None = None,
+            rval: float | Sequence[float] | None = None,
             rota: float | None = None
     ):
         """
