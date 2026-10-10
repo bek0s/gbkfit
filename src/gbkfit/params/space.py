@@ -366,6 +366,43 @@ class ParamSpace(parseutils.Serializable):
         self._check_values(buffer, values)
         return values
 
+    def with_values(self, values: Mapping[str, float]) -> 'ParamSpace':
+        """
+        Return a copy of the parameters whose free elements start at the
+        given values (their 'value' properties): e.g. the elements of the
+        solution of a fit (FitSolution.elements), to start another fit
+        there, with another fitter or with other parameters free or tied.
+
+        Parameters
+        ----------
+        values : Mapping
+            The values of elements, by element name (e.g. 'a', 'v[3]').
+            Those of a parameter with a mode are its decoded values, all of
+            them. Values of elements that are not free here are ignored,
+            and free elements without a value keep theirs.
+
+        Returns
+        -------
+        ParamSpace
+            The parameters, with their other properties unchanged.
+
+        Raises
+        ------
+        ValueError
+            If some but not all the values of a parameter with a mode are
+            given, or a key of several free elements gets values for some
+            of them only, and the others have none.
+        """
+        starts = self._start_values(values)
+        properties = {}
+        for key, prop in self._properties.items():
+            parsed = parse_key(key, self._pdescs)
+            properties[key] = copy.deepcopy(prop) if parsed is None \
+                else self._start_property(key, parsed, prop, starts)
+        return ParamSpace(
+            self._pdescs, properties, self._transforms, self._constants,
+            self._modes)
+
     def element_values(self, values: ParamValues) -> dict[str, float]:
         """
         Return the value of each element of each parameter, by element
@@ -385,6 +422,70 @@ class ParamSpace(parseutils.Serializable):
             element_name(name, index): float(
                 values[name] if index is None else values[name][index])
             for name, index in self._elements}
+
+    def _start_values(
+            self, values: Mapping[str, float]
+    ) -> dict[_Element, float]:
+        """
+        Return the start values of the free elements that the given values
+        (by element name) have, coded for the parameters with a mode.
+        """
+        starts = {}
+        for element in self._free:
+            name, index = element
+            if name not in self._modes \
+                    and (ename := element_name(name, index)) in values:
+                starts[element] = float(values[ename])
+        for name, mode in self._modes.items():
+            free = [e for e in self._free if e[0] == name]
+            names = element_names(name, range(self._pdescs[name].size()))
+            given = [n for n in names if n in values]
+            if not free or not given:
+                continue
+            if len(given) < len(names):
+                raise ValueError(
+                    f"'{name}' has a mode: give all its values, or none; "
+                    f"missing: {[n for n in names if n not in values]}")
+            coded = mode.encode(np.array([values[n] for n in names]))
+            starts.update({e: float(coded[e[1]]) for e in free})
+        return starts
+
+    def _start_property(
+            self,
+            key: str,
+            parsed: Key,
+            prop: Property,
+            starts: dict[_Element, float]
+    ) -> Property:
+        """
+        Return the property of a key with the 'value' of its free elements
+        set from the start values (one list entry, or one '*value' item,
+        per element for a key of several elements).
+        """
+        if _is_list(prop):
+            return [
+                self._start_property(
+                    key, Key(parsed.name, parsed.indices[i:i + 1], True),
+                    item, starts)
+                for i, item in enumerate(prop)]
+        elements = self._elements_of(parsed.name, parsed.indices)
+        if not isinstance(prop, Mapping) \
+                or not any(e in starts for e in elements):
+            return copy.deepcopy(prop)
+        if parsed.indices is None or parsed.element or len(elements) == 1:
+            return copy.deepcopy(dict(prop)) | {'value': starts[elements[0]]}
+        if missing := [
+                element_name(*e) for e in elements
+                if e not in starts and 'value' not in self._free[e]]:
+            raise ValueError(
+                f"'{key}': no start values for {missing}, but for the "
+                f"other elements of the key")
+        result = {
+            k: copy.deepcopy(v) for k, v in prop.items()
+            if k not in ('value', '*value')}
+        result['*value'] = [
+            starts.get(e, self._free[e].get('value')) for e in elements]
+        return result
 
     def _check_names(self) -> list[str]:
         """Return the problems of the names of parameters and constants."""

@@ -1,7 +1,7 @@
 import json
 import logging
 import os
-from typing import Literal
+from typing import Any, Literal
 
 import ruamel.yaml
 
@@ -11,7 +11,8 @@ import gbkfit.fitting
 import gbkfit.model
 import gbkfit.objective
 import gbkfit.params
-from gbkfit.utils.parseutils import config_path
+from gbkfit.utils import numutils
+from gbkfit.utils.parseutils import ConfigError, config_path
 from . import _detail
 
 
@@ -107,4 +108,26 @@ def fit(config: str,
         group, objective, result.best().values, True, True)
     _detail.write_outputs(
         json, yaml, output_dir, outputs, 'gbkfit_fit_extra')
+    _write_restart(cfg, params, result, output_dir)
     _log.info(f"result:\n{result.summary()}")
+
+
+def _write_restart(
+        cfg: dict[str, Any],
+        params: gbkfit.params.ParamSpace,
+        result: gbkfit.fitting.FitResult,
+        output_dir: str
+) -> None:
+    """
+    Write restart.yaml: the configuration with the free parameters
+    starting at the best fit, to fit again from there (e.g. with another
+    fitter). Its paths are those of the configuration (relative to the
+    directory the fit ran in).
+    """
+    try:
+        restart = params.with_values(result.best().elements).dump()
+    except ConfigError as e:
+        _log.warning(f"restart.yaml is not written: {e}")
+        return
+    with open(os.path.join(output_dir, 'restart.yaml'), 'w') as f:
+        yaml.dump(dict(cfg) | dict(params=numutils.nativify(restart)), f)
