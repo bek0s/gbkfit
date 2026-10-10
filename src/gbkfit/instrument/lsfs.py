@@ -2,7 +2,8 @@
 Line spread functions (LSFs): how the instrument spreads the light of a
 single velocity along the spectral axis.
 
-Widths are in km/s.
+Widths are in km/s. The options of the analytic LSFs can vary along the
+spectral axis (see varying).
 """
 
 import abc
@@ -17,7 +18,7 @@ import scipy.special
 import gbkfit.math
 from gbkfit.utils import fitsutils, gridutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
-from . import _detail
+from . import _detail, varying
 from ._detail import MIN_EXTENT, WING_FLUX, check_scale
 
 
@@ -32,6 +33,7 @@ __all__ = [
     'LSFMoffat',
     'LSFPoint',
     'LSFSum',
+    'LSFVarying',
     'lsf_parser'
 ]
 
@@ -40,6 +42,29 @@ class LSF(parseutils.TypedSerializable, abc.ABC):
     """
     A line spread function, drawn on arrays of channels.
     """
+
+    @classmethod
+    def load(cls, info: dict[str, Any]) -> 'LSF':
+        """
+        Load an LSF from its configuration.
+
+        Options that are tables make an LSF that varies along the spectral
+        axis (see varying and LSFVarying).
+
+        Parameters
+        ----------
+        info : dict
+            The options.
+
+        Returns
+        -------
+        LSF
+            The LSF.
+        """
+        tables = varying.Varying.load_tables(cls, info)
+        if tables:
+            return LSFVarying(varying.Varying(cls, info, tables))
+        return super().load(info)
 
     @abc.abstractmethod
     def dump(
@@ -127,6 +152,55 @@ class LSF(parseutils.TypedSerializable, abc.ABC):
                 f"but it must be odd")
         return self._asarray_impl(step, size, offset)
 
+    def varies(self) -> bool:
+        """
+        Check whether the LSF varies along the spectral axis.
+
+        Returns
+        -------
+        bool
+            Whether it varies.
+        """
+        return False
+
+    def at_velocities(
+            self, velocities: Sequence[float] | np.ndarray, rest: Any = None
+    ) -> list['LSF']:
+        """
+        Return the LSF at velocities of the spectral axis.
+
+        Parameters
+        ----------
+        velocities : array_like
+            The velocities (km/s).
+        rest : Quantity, optional
+            The rest of the spectral axis (see gridutils.Coords).
+
+        Returns
+        -------
+        list of LSF
+            The LSF at each velocity: itself, unless it varies.
+        """
+        return [self] * len(velocities)
+
+    def velocity_range(self, rest: Any = None) -> tuple[float, float]:
+        """
+        Return the range of velocities of the spectral axis that the LSF
+        is known at.
+
+        Parameters
+        ----------
+        rest : Quantity, optional
+            The rest of the spectral axis (see gridutils.Coords).
+
+        Returns
+        -------
+        tuple of float
+            The lowest and highest velocity (km/s); infinite unless it
+            varies.
+        """
+        return -np.inf, np.inf
+
     @abc.abstractmethod
     def _size_impl(self, step: float) -> float:
         """The size of the array that holds the LSF, before rounding."""
@@ -183,6 +257,8 @@ class LSFGauss(LSF):
         The standard deviation (km/s).
     """
 
+    VARYING_OPTIONS = dict(sigma='km/s')
+
     @staticmethod
     def type() -> str:
         return 'gauss'
@@ -231,6 +307,8 @@ class LSFGGauss(LSF):
     beta : float
         The shape, > 0: 2 is a Gaussian, and 1 an exponential.
     """
+
+    VARYING_OPTIONS = dict(alpha='km/s', beta='')
 
     @staticmethod
     def type() -> str:
@@ -284,6 +362,8 @@ class LSFLorentz(LSF):
         The scale (km/s): the half width at half maximum.
     """
 
+    VARYING_OPTIONS = dict(gamma='km/s')
+
     @staticmethod
     def type() -> str:
         return 'lorentz'
@@ -332,6 +412,8 @@ class LSFMoffat(LSF):
     beta : float
         The slope of the wings, > 0.5 (for a finite flux).
     """
+
+    VARYING_OPTIONS = dict(alpha='km/s', beta='')
 
     @staticmethod
     def type() -> str:
@@ -488,6 +570,19 @@ class LSFSum(LSF):
         self._weights = _detail.sum_weights(
             weights, len(self._lsfs), "a sum of LSFs")
 
+    def varies(self) -> bool:
+        return any(lsf.varies() for lsf in self._lsfs)
+
+    def at_velocities(self, velocities, rest=None):
+        if not self.varies():
+            return super().at_velocities(velocities, rest)
+        return [
+            LSFSum(lsfs, self._weights) for lsfs in
+            _detail.terms_at_velocities(self._lsfs, velocities, rest)]
+
+    def velocity_range(self, rest=None):
+        return _detail.terms_velocity_range(self._lsfs, rest)
+
     def _size_impl(self, step: float) -> float:
         return max(lsf._size_impl(step) for lsf in self._lsfs)
 
@@ -532,6 +627,19 @@ class LSFConvolution(LSF):
         if not lsfs:
             raise ConfigError("a convolution of LSFs needs at least one LSF")
         self._lsfs = tuple(lsfs)
+
+    def varies(self) -> bool:
+        return any(lsf.varies() for lsf in self._lsfs)
+
+    def at_velocities(self, velocities, rest=None):
+        if not self.varies():
+            return super().at_velocities(velocities, rest)
+        return [
+            LSFConvolution(lsfs) for lsfs in
+            _detail.terms_at_velocities(self._lsfs, velocities, rest)]
+
+    def velocity_range(self, rest=None):
+        return _detail.terms_velocity_range(self._lsfs, rest)
 
     def _size_impl(self, step: float) -> float:
         # The sum of the (odd) sizes of the terms, less one for each
@@ -591,6 +699,49 @@ class LSFHanning(LSF):
         data = np.zeros(2 * steps + 1)
         data[[0, steps, 2 * steps]] = 0.25, 0.5, 0.25
         return _detail.embed(data, (size,), (offset,))
+
+
+class LSFVarying(LSF):
+    """
+    An LSF of a type whose options vary along the spectral axis: an LSF of
+    the type at each channel (see at_velocities). It is not drawn itself.
+
+    Parameters
+    ----------
+    options : varying.Varying
+        The options of the LSF of the type.
+    """
+
+    def type(self) -> str:
+        return self._options.cls().type()
+
+    def dump(
+            self, prefix: str = '', dump_path: bool = True,
+            overwrite: bool = False
+    ) -> dict[str, Any]:
+        return self._options.dump()
+
+    def __init__(self, options: varying.Varying):
+        self._options = options
+
+    def varies(self) -> bool:
+        return True
+
+    def at_velocities(self, velocities, rest=None):
+        return self._options.at_velocities(velocities, rest)
+
+    def velocity_range(self, rest=None):
+        return self._options.velocity_range(rest)
+
+    def _size_impl(self, step):
+        raise RuntimeError(
+            "an LSF that varies along the spectral axis has a size at each "
+            "channel (see at_velocities)")
+
+    def _asarray_impl(self, step, size, offset):
+        raise RuntimeError(
+            "an LSF that varies along the spectral axis is drawn at each "
+            "channel (see at_velocities)")
 
 
 lsf_parser = parseutils.TypedParser(LSF, [

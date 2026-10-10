@@ -84,6 +84,22 @@ def sum_weights(weights, n, desc):
     return weights / weights.sum()
 
 
+def terms_at_velocities(terms, velocities, rest):
+    """
+    Return the terms of a sum or a convolution (PSFs or LSFs) at each of
+    the velocities of a spectral axis: a list of terms per velocity.
+    """
+    per_term = [term.at_velocities(velocities, rest) for term in terms]
+    return [list(terms_) for terms_ in zip(*per_term)]
+
+
+def terms_velocity_range(terms, rest):
+    """The range of velocities that the terms of a sum or a convolution
+    are known at (see PSF.velocity_range)."""
+    ranges = [term.velocity_range(rest) for term in terms]
+    return max(r[0] for r in ranges), min(r[1] for r in ranges)
+
+
 def dump_terms(parser, terms, prefix, dump_path, overwrite):
     """
     Return the options of the terms of a sum or a convolution, with the
