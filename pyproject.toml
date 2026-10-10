@@ -37,6 +37,8 @@ cuda = ['cupy-cuda12x']
 dynesty = ['dynesty']
 emcee = ['emcee']
 lmfit = ['lmfit']
+nautilus = ['nautilus-sampler']
+cmaes = ['cma']
 gui = ['PySide6']
 
 [project.urls]
