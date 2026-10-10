@@ -45,8 +45,8 @@ class FitProblem:
     Raises
     ------
     ValueError
-        If the parameters are not those of the objective, nothing is
-        free, or the number of priors is wrong.
+        If the parameter space lacks parameters of the objective, nothing
+        is free, or the number of priors is wrong.
     """
 
     def __init__(
@@ -192,6 +192,11 @@ class FitProblem:
         -------
         np.ndarray
             The free values, of the shape of u.
+
+        Raises
+        ------
+        RuntimeError
+            If the problem has no priors.
         """
         priors = self._require_priors()
         u = np.asarray(u, dtype=float)

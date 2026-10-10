@@ -197,9 +197,9 @@ def covariance(
 
     The errors are propagated to all elements through the Jacobian of
     the parameter space (no models). Elements at a bound are listed: the
-    covariance ignores the bound. The covariance is scaled by the reduced
-    chi-square only if that is defined (more residuals than free
-    elements).
+    covariance ignores the bound. If options.scale() is set, the
+    covariance is scaled by the reduced chi-square, when that is defined
+    (more residuals than free elements).
 
     Parameters
     ----------

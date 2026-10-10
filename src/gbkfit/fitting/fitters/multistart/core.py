@@ -42,7 +42,8 @@ class FitterMultiStart(Fitter):
     ----------
     local : Fitter
         The local fitter. Its free elements must take FitParamBounded
-        options (e.g. lmfit.least_squares, scipy.least_squares).
+        options (e.g. lmfit.least_squares, scipy.least_squares). Its seed
+        and uncertainty options are not used (those of multistart are).
     nstarts : int, optional
         The number of starts (the first is the given values).
     nsolutions : int, optional

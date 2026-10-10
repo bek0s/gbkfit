@@ -52,9 +52,9 @@ class Prior(parseutils.TypedSerializable, abc.ABC):
     Priors are immutable, and take arrays of values.
 
     The support (minimum, maximum) is where the density is positive; the
-    optimizers use it as bounds. The nested samplers draw from the unit
-    cube through ppf, and the MCMC samplers add log_pdf to the
-    log-likelihood.
+    finite differences of the uncertainty stay inside it. The nested
+    samplers draw from the unit cube through ppf, and the MCMC samplers
+    add log_pdf to the log-likelihood.
     """
 
     @classmethod

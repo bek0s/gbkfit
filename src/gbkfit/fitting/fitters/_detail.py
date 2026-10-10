@@ -30,9 +30,10 @@ def inside_bounds(
 ) -> np.ndarray:
     """
     Return values moved off their bounds by a step (to the middle, if the
-    bounds are narrower than two steps). Methods that map bounded values
-    to unbounded ones (MINPACK in lmfit and scipy) need this: the map is
-    flat at the bounds, so a value that starts on one never moves.
+    bounds are narrower than two steps). Least-squares methods need this:
+    the map of bounded values of MINPACK (lmfit's leastsq, scipy's 'lm')
+    is flat at the bounds, and TRF's first steps from a bound are tiny,
+    so a value that starts on one does not move.
     """
     inside = np.clip(x, lower + steps, upper - steps)
     narrow = upper - lower < 2 * steps

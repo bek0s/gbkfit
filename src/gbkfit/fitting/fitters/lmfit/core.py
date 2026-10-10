@@ -40,8 +40,8 @@ class FitterLMFitLeastSquares(Fitter):
         The method.
     max_nfev : int, optional
         The most evaluations of the residuals by the method, not counting
-        those of the Jacobians (by default, lmfit's: 2000 times the
-        number of free elements plus 1).
+        those of the Jacobians (by default, lmfit's: 2000 times (the
+        number of free elements + 1)).
     ftol, xtol, gtol : float, optional
         The tolerances of the relative change of the chi-square, of the
         relative change of the values, and of the gradient (by default,

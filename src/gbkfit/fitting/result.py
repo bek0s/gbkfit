@@ -197,16 +197,18 @@ class FitSolution:
     dof : int
         The degrees of freedom: nresiduals less the free elements.
     reduced_chi2 : float
-        chi2 / dof.
+        chi2 / dof (nan if dof <= 0).
     log_likelihood : float
         -chi2 / 2.
     log_prior : float or None
         The log of the prior density, if the fit has priors.
     covariance : Covariance or None
-        The covariance, unless disabled.
+        The covariance, or None if disabled or if the parameters cannot
+        be evaluated at a step of its Jacobian (see the diagnostics
+        'uncertainty_errors' of FitResult).
     laplace : Posterior or None
         The Gaussian approximation of the posterior from the covariance
-        (approximate), unless disabled.
+        (approximate), or None if disabled or there is no covariance.
     """
     free: dict[str, float]
     values: ParamValues
@@ -234,7 +236,8 @@ class FitResult:
         The configuration of the parameters (None if it cannot be dumped,
         e.g. a transforms function not defined in a file).
     versions : dict
-        The versions of gbkfit and of the libraries of the fitter.
+        The versions of gbkfit, numpy, scipy and the libraries of the
+        fitter.
     solutions : tuple of FitSolution
         The solutions, best first.
     posterior : Posterior or None
@@ -310,8 +313,9 @@ class FitResult:
     def dump(self, output_dir: str) -> None:
         """
         Write the result to a directory: a summary (result.json) and the
-        arrays (result.npz: the covariance matrices, and the posterior
-        samples).
+        arrays (result.npz: the covariance matrices and Laplace samples of
+        the solutions, and the names, samples and weights of the
+        posterior).
 
         Parameters
         ----------
