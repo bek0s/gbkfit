@@ -56,3 +56,5 @@ def test_fit_recovers_the_parameters_of_noiseless_data(tmp_path):
     for name in ('result.npz', 'model_0_spectra_d.fits',
                  'residual_spectra_d.fits'):
         assert (tmp_path / 'fit' / name).exists()
+    # (the extra outputs of the models once, not again for the residuals)
+    assert not list((tmp_path / 'fit').glob('*residual_extra_*'))
