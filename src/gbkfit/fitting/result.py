@@ -1,392 +1,354 @@
+"""
+The result of a fit: what was run, the best fit and its uncertainty, the
+other solutions, the posterior and the evidence (when the fitter gives
+them), and the cost.
+"""
 
-import copy
-import inspect
+import dataclasses
 import json
-import logging
+import math
 import os
-import pathlib
-import ruamel.yaml
-
-from dataclasses import dataclass, asdict
-from typing import Any, Optional
-from operator import attrgetter
+from collections.abc import Sequence
+from typing import Any
 
 import numpy as np
-import pandas as pd
-from astropy.io import fits
-
-import gbkfit.dataset
-import gbkfit.model
-from gbkfit.utils import iterutils, numutils
-
-_log = logging.getLogger(__name__)
-
-
-# Use this object to load and dump yaml
-yaml = ruamel.yaml.YAML()
-
-
-def _dump_posterior(posterior, prefix='', overwrite=True):
-    file_csv = f'{prefix}posterior.csv'
-    file_txt = f'{prefix}posterior.txt'
-    file_json = f'{prefix}posterior.json'
-    file_yaml = f'{prefix}posterior.yaml'
-    for file in [file_csv, file_txt, file_json, file_yaml]:
-        if not overwrite and os.path.exists(file):
-            raise RuntimeError(
-                f"the following file already exists but overwrite is disabled: "
-                f"'{file}'")
-    float_format = '%.12f'
-    with open(file_csv, 'w') as f:
-        f.write(posterior.df.to_csv(index=False, float_format=float_format))
-    with open(file_txt, 'w') as f:
-        f.write(posterior.df.to_string(index=False, float_format=float_format))
-    with open(file_json, 'w') as f:
-        json.dump(posterior.df.to_dict('list'), f, indent=2)
-    with open(file_yaml, 'w') as f:
-        yaml.dump(posterior.df.to_dict('list'), f)
-
-
-def load_result(result_dir):
-
-    # Work with absolute paths
-    result_dir = os.path.abspath(result_dir)
-
-    #
-    # Result directory contains a 'result.yaml' file with a bunch of
-    # important information.
-    #
-
-    result_file = os.path.join(result_dir, 'result.yaml')
-    try:
-        result = yaml.load(open(result_file))
-    except Exception as e:
-        raise RuntimeError(
-            f"error while reading result file {result_file}; "
-            f"see reason below:\n{e}") from e
-
-    prefix = os.path.join(result_dir, '')
-    datasets = gbkfit.dataset.dataset_parser.load(
-        result['datasets'], prefix=[prefix])
-
-    # Discover solution directories
-    solution_dirs = sorted([str(path) for path in pathlib.Path(
-        os.path.join(result_dir, 'solutions')).glob('*')])
-
-    # Create solutions
-    for solution_dir in solution_dirs:
-        pass
-
-    enames_all = ()
-    enames_free = ()
-    enames_free = ()
-    enames_fixed = {}
-    enames_varying = ()
-    sols = None
-    posterior = None
-    extra = None
-
-    parameters = dict()
-    param_names = dict()
-
-    return FitterResult(
-        datasets, parameters, param_names, sols, posterior, extra)
-
-
-def dump_result(output_dir, result):
-
-    os.makedirs(output_dir)
-
-    # parameters = result.parameters.dump()
-
-    parameters_info = dict(
-        params_names=dict(
-
-        )
-    )
-    parameters_filename = os.path.join(output_dir, 'parameters')
-
-    # Dump parameter names
-
-    # Dump parameter configuration
-    # parameters = numutils.nativify(parameters)
-    # filename_root = os.path.join(output_dir, 'parameters')
-    # with open(f'{filename_root}.json', 'w+') as f:
-    #     json.dump(parameters, f, indent=2)
-    # with open(f'{filename_root}.yaml', 'w+') as f:
-    #     yaml.dump(parameters, f)
-
-    # ...
-    root_info = dict(
-        datasets=[],
-        param_names=result.param_names,
-        extra=result.extra)
-
-    # Dump datasets
-    for i, dataset in enumerate(result.datasets):
-        prefix = os.path.join(output_dir, f'dataset_{i}_')
-        root_info['datasets'].append(gbkfit.dataset.dataset_parser.dump(
-            dataset, prefix=prefix, dump_path=False))
-
-    root_info = numutils.nativify(root_info)
-    filename_root = os.path.join(output_dir, 'result')
-    with open(f'{filename_root}.json', 'w+') as f:
-        json.dump(root_info, f, indent=2)
-    with open(f'{filename_root}.yaml', 'w+') as f:
-        yaml.dump(root_info, f)
-
-    # Dump global posterior
-    if result.posterior:
-        prefix = os.path.join(output_dir, '')
-        _dump_posterior(result.posterior, prefix)
-
-    # Dump solutions
-    for i, sol in enumerate(result.solutions):
-        solution_dir = os.path.join(output_dir, 'solutions', str(i))
-        os.makedirs(solution_dir)
-        # Build parameter data frame
-        sol_dict = asdict(sol)
-        col_names = []
-        for col_name in ['mode', 'mean', 'std']:
-            if sol_dict[col_name] is not None:
-                col_names.append(col_name)
-        df = pd.DataFrame(
-            index=result.param_names['varying'],
-            columns=col_names)
-        for col_name in col_names:
-            df[col_name] = sol_dict[col_name]
-        # Dump the parameter data frame on various formats
-        filename_params = os.path.join(solution_dir, 'parameters')
-        with open(filename_params + '.csv', 'w+') as f:
-            f.write(df.to_csv())
-        with open(filename_params + '.txt', 'w+') as f:
-            f.write(df.to_string())
-        with open(filename_params + '.json', 'w+') as f:
-            json.dump(json.loads(df.to_json(orient='index')), f, indent=2)
-        with open(filename_params + '.yaml', 'w+') as f:
-            yaml.dump(json.loads(df.to_json(orient='index')), f)
-        # Dump model and residual data
-        for j, dataset in enumerate(result.datasets):
-            model = sol.model[j]
-            resid = sol.residual[j]
-            for key in dataset:
-                filename_mdl = f'bestfit_{j}_mdl_{key}_d.fits'
-                filename_res = f'bestfit_{j}_res_{key}_d.fits'
-                fits.writeto(
-                    os.path.join(solution_dir, filename_mdl), model[key]['d'])
-                fits.writeto(
-                    os.path.join(solution_dir, filename_res), resid[key])
-        # Dump posterior
-        if sol.posterior:
-            prefix = os.path.join(solution_dir, '')
-            _dump_posterior(result.posterior, prefix)
-
-        print(df.to_string())
-
-
-@dataclass
-class FitterResultPosterior:
-
-    logprobs: np.ndarray = None
-    loglikes: np.ndarray = None
-    logpriors: np.ndarray = None
-    samples: np.ndarray = None
-    df: pd.DataFrame = None
-
-
-@dataclass
-class FitterResultSolution:
-
-    mode: dict = None
-    mean: dict = None
-    std: dict = None
-    covar: np.ndarray = None
-    posterior: FitterResultPosterior = None
-    model: np.ndarray = None
-    residual: np.ndarray = None
-    chisqr: float = None
-    rchisqr: float = None
-    extra: dict = None
-
-    def summary(self):
-        summary = inspect.cleandoc(
-            f"""
-            """)
-        return summary
-
-
-@dataclass
-class FitterResult:
-
-    datasets: list[gbkfit.dataset.Dataset]
-    parameters: dict
-    param_names: dict
-    solutions: tuple[FitterResultSolution]
-    posterior: None | FitterResultPosterior
-    extra: dict
-
-    @property
-    def champion(self):
-        return max(self.solutions, key=attrgetter('chisqr'))
-
-    def summary(self):
-        summary = inspect.cleandoc(
-            f"""
-            -------
-            summary
-            -------
-            number of all parameters: {len(self.param_names['all'])}
-            number of free parameters: {len(self.param_names['free'])}
-            number of tied parameters: {len(self.param_names['tied'])}
-            number of fixed parameters: {len(self.param_names['fixed'])}
-            number of solutions: {len(self.solutions)}
-            """)
-        return summary
-
-
-def make_fitter_result_posterior(posterior, parameters):
-
-    enames_free = parameters.enames(False, False, True)
-    enames_varying = parameters.enames(False, True, True)
-
-    samples = posterior.get('samples')
-    loglikes = posterior.get('loglikes')
-
-    if samples is None:
-        raise RuntimeError("samples must be provided")
-
-    if loglikes is None:
-        raise RuntimeError("loglikes must be provided")
-
-    # Evaluate log priors
-    logpriors = np.array(
-        [parameters.priors().log_prob(dict(zip(enames_free, sample)))
-         for sample in samples])
-
-    # Evaluate log probabilities
-    logprobs = loglikes + logpriors
-
-    # Evaluate samples for all varying (free+tied) parameters
-    samples_varying = np.full((samples.shape[0], len(enames_varying)), np.nan)
-    for i, sample in enumerate(samples):
-        eparams_free = dict(zip(enames_free, sample))
-        eparams_varying = dict.fromkeys(enames_varying, None)
-        parameters.evaluate(eparams_free, eparams_varying)
-        samples_varying[i, :] = list(eparams_varying.values())
-
-    # Create the final FitterResultPosterior object
-    result_posterior = FitterResultPosterior()
-    result_posterior.logpriors = logpriors
-    result_posterior.loglikes = loglikes
-    result_posterior.logprobs = logprobs
-    result_posterior.samples = samples_varying
-    result_posterior.df = pd.DataFrame(
-        np.column_stack([logprobs, loglikes, logpriors, samples]),
-        columns=['log_probability', 'log_likelihood', 'log_prior',
-                 *enames_varying])
-
-    return result_posterior
-
-
-def make_fitter_result(
-        objective, parameters, posterior=None, extra=None, solutions=None):
-
-    # At least one solution or a global posterior is required
-    if not solutions:
-        if not posterior:
-            raise RuntimeError(
-                "at least one solution or a global posterior "
-                "is required in order to create a Fitter Result")
-        # If we have a global posterior but not solutions,
-        # transform the global posterior to a new solution
-        solutions = dict(posterior=posterior)
-        posterior = None
-
-    # Ensure solutions are iterable for convenience
-    solutions = iterutils.tuplify(solutions)
-
-    # Process the global posterior
-    if posterior:
-        posterior = make_fitter_result_posterior(posterior, parameters)
-
-    # Make some arrays with exploded param names for later use
-    enames_all = parameters.enames(True, True, True)
-    enames_free = parameters.enames(False, False, True)
-    enames_tied = parameters.enames(False, True, False)
-    enames_fixed = parameters.enames(True, False, False)
-    enames_varying = parameters.enames(False, True, True)
-
-    sols = []
-
-    # For each solution, create a FitterResultSolution
-    # and try to populate as many of its fields as possible.
-    for i, s in enumerate(solutions):
-        sol = FitterResultSolution()
-        # ...
-        if 'mode' in s:
-            eparams_free = dict(zip(enames_free, s['mode']))
-            eparams_varying = {p: None for p in enames_varying}
-            parameters.evaluate(eparams_free, eparams_varying, True)
-            sol.mode = np.array(list(eparams_varying.values()))
-        # Calculate statistical quantities from posterior
-        if 'posterior' in s:
-            posterior = make_fitter_result_posterior(s['posterior'], parameters)
-            sol.covar = np.cov(posterior.samples, rowvar=False)
-            sol.mean = np.mean(posterior.samples, axis=0)
-            sol.std = np.std(posterior.samples, axis=0)
-            # If no
-            sol.mode = posterior.samples[np.argmax(posterior.logprobs), :]
-            if sol.mode is None:
-                sol.mode = posterior.samples[np.argmax(posterior.logprobs)]
-
-            sol.posterior = posterior
-
-        # Otherwise, salvage whatever is available
-        else:
-            if 'mean' in s:
-                sol.mean = np.full(len(enames_varying), np.nan)
-                for j, param in enumerate(enames_free):
-                    sol.mean[enames_varying.index(param)] = s['mean'][j]
-            if 'std' in s:
-                sol.std = np.full(len(enames_varying), np.nan)
-                for j, param in enumerate(enames_free):
-                    sol.std[enames_varying.index(param)] = s['std'][j]
-            if 'covar' in s:
-                pass
-
-        # Mode must be provided or recovered somehow
-        if sol.mode is None:
-            raise RuntimeError(
-                f"mode was not provided or could not be recovered "
-                f"for solution {i}")
-
-        # Calculate quantities using the mode
-        eparams_varying = dict(zip(enames_varying, sol.mode))
-        eparams_free = {n: eparams_varying[n] for n in enames_free}
-        print(eparams_free)
-        params = parameters.evaluate(eparams_free)
-        dof = 100
-        sol.model = objective.group().model_h(params)
-        sol.residual = objective.residual_nddata_h(params, weighted=False)
-        sol.wresidual = objective.residual_nddata_h(params, weighted=True)
-        sol.chisqr = 1.0
-        sol.rchisqr = sol.chisqr / (dof - len(enames_free))
-        sol.wchisqr = 1.0
-        sol.rwchisqr = sol.wchisqr / (dof - len(enames_free))
-
-        # ...
-        sols.append(sol)
-
-    # Sort solution by chi-squared
-    sols = sorted(sols, key=lambda x: x.chisqr)
-
-    param_names = dict(
-        all=enames_all,
-        free=enames_free,
-        tied=enames_tied,
-        fixed=enames_fixed,
-        varying=enames_varying)
-
-    return FitterResult(
-        objective.datasets(), parameters, param_names, sols, posterior, extra)
-
+import numpy.typing as npt
+
+from gbkfit.params import ParamValues
+from gbkfit.utils import numutils
+
+
+__all__ = [
+    'Covariance',
+    'Evidence',
+    'FitResult',
+    'FitSolution',
+    'Posterior',
+    'weighted_quantiles'
+]
+
+
+def weighted_quantiles(
+        samples: np.ndarray,
+        q: npt.ArrayLike,
+        weights: np.ndarray | None = None
+) -> np.ndarray:
+    """
+    Return quantiles of weighted samples, along the first axis.
+
+    Parameters
+    ----------
+    samples : np.ndarray
+        The samples, one per row.
+    q : ArrayLike
+        The quantiles, in [0, 1].
+    weights : np.ndarray, optional
+        The weight of each sample (by default, equal).
+
+    Returns
+    -------
+    np.ndarray
+        The quantiles of each column: shape (len(q), ncolumns).
+    """
+    q = np.atleast_1d(np.asarray(q, dtype=float))
+    samples = np.asarray(samples, dtype=float).reshape(len(samples), -1)
+    if weights is None:
+        return np.quantile(samples, q, axis=0)
+    result = np.empty((len(q), samples.shape[1]))
+    for j in range(samples.shape[1]):
+        order = np.argsort(samples[:, j])
+        cdf = np.cumsum(weights[order])
+        cdf /= cdf[-1]
+        result[:, j] = np.interp(q, cdf, samples[order, j])
+    return result
+
+
+@dataclasses.dataclass(frozen=True)
+class Covariance:
+    """
+    The covariance of the free elements at a solution, from the Jacobian
+    of the residuals: (J^T J)^-1, by an SVD pseudo-inverse.
+
+    Attributes
+    ----------
+    names : tuple of str
+        The free elements, in order.
+    matrix : np.ndarray
+        The covariance matrix.
+    std : dict
+        The standard error of each free element.
+    correlation : np.ndarray
+        The correlation matrix.
+    element_std : dict
+        The standard error of every element (propagated to the tied
+        elements; 0 for the fixed ones).
+    rank : int
+        The rank of the Jacobian. Below the number of free elements, some
+        directions are not constrained, and the errors are left out of
+        them: see unconstrained.
+    unconstrained : tuple of str
+        The free elements in the directions that the data do not
+        constrain.
+    scaled : bool
+        Whether the matrix is scaled by the reduced chi-square.
+    """
+    names: tuple[str, ...]
+    matrix: np.ndarray
+    std: dict[str, float]
+    correlation: np.ndarray
+    element_std: dict[str, float]
+    rank: int
+    unconstrained: tuple[str, ...]
+    scaled: bool
+
+
+@dataclasses.dataclass(frozen=True)
+class Posterior:
+    """
+    Samples of the posterior of all the elements of the parameters.
+
+    Attributes
+    ----------
+    names : tuple of str
+        The elements (all of them: free, tied and fixed), in order.
+    samples : np.ndarray
+        The samples, one per row.
+    weights : np.ndarray or None
+        The weight of each sample (nested samplers), or None for equal
+        weights.
+    approximate : bool
+        Whether it is the Gaussian (Laplace) approximation at a solution,
+        from its covariance.
+    """
+    names: tuple[str, ...]
+    samples: np.ndarray
+    weights: np.ndarray | None
+    approximate: bool
+
+    def quantiles(self, q: Sequence[float]) -> dict[str, np.ndarray]:
+        """
+        Return quantiles of each element.
+
+        Parameters
+        ----------
+        q : Sequence of float
+            The quantiles, in [0, 1].
+
+        Returns
+        -------
+        dict
+            The quantiles of each element.
+        """
+        values = weighted_quantiles(self.samples, q, self.weights)
+        return {name: values[:, i] for i, name in enumerate(self.names)}
+
+    def summary(self) -> dict[str, tuple[float, float, float]]:
+        """
+        Return the 16th, 50th and 84th percentiles of each element (the
+        median and a 68% interval).
+        """
+        return {
+            name: (float(v[0]), float(v[1]), float(v[2]))
+            for name, v in self.quantiles([0.16, 0.5, 0.84]).items()}
+
+
+@dataclasses.dataclass(frozen=True)
+class Evidence:
+    """
+    The Bayesian evidence (marginal likelihood) of nested samplers.
+
+    Attributes
+    ----------
+    log_z : float
+        Its logarithm (of the likelihood without its normalisation; see
+        Objective.log_likelihood).
+    log_z_error : float or None
+        The error of log_z, if the sampler gives one.
+    """
+    log_z: float
+    log_z_error: float | None
+
+
+@dataclasses.dataclass(frozen=True)
+class FitSolution:
+    """
+    A solution of a fit: the parameters, the goodness of fit and the
+    uncertainty there.
+
+    Attributes
+    ----------
+    free : dict
+        The value of each free element.
+    values : ParamValues
+        The values of all parameters (to evaluate the models).
+    elements : dict
+        The value of every element.
+    chi2 : float
+        The chi-square.
+    nresiduals : int
+        The number of residuals that count (not masked).
+    dof : int
+        The degrees of freedom: nresiduals less the free elements.
+    reduced_chi2 : float
+        chi2 / dof.
+    log_likelihood : float
+        -chi2 / 2.
+    log_prior : float or None
+        The log of the prior density, if the fit has priors.
+    covariance : Covariance or None
+        The covariance, unless disabled.
+    laplace : Posterior or None
+        The Gaussian approximation of the posterior from the covariance
+        (approximate), unless disabled.
+    """
+    free: dict[str, float]
+    values: ParamValues
+    elements: dict[str, float]
+    chi2: float
+    nresiduals: int
+    dof: int
+    reduced_chi2: float
+    log_likelihood: float
+    log_prior: float | None
+    covariance: Covariance | None
+    laplace: Posterior | None
+
+
+@dataclasses.dataclass(frozen=True)
+class FitResult:
+    """
+    The result of a fit.
+
+    Attributes
+    ----------
+    fitter : dict
+        The configuration of the fitter (with its seed).
+    params : dict or None
+        The configuration of the parameters (None if it cannot be dumped,
+        e.g. a transforms function not defined in a file).
+    versions : dict
+        The versions of gbkfit and of the libraries of the fitter.
+    solutions : tuple of FitSolution
+        The solutions, best first.
+    posterior : Posterior or None
+        The posterior samples of a sampler.
+    evidence : Evidence or None
+        The evidence of a nested sampler.
+    nevals : int
+        The number of model evaluations of the fitter.
+    time : float
+        The time of the fit, in seconds.
+    success : bool
+        Whether the fitter reports success.
+    message : str
+        The message of the fitter.
+    diagnostics : dict
+        Numbers that tell how well the fitter worked (e.g. the acceptance
+        fraction of an MCMC sampler).
+    raw : object
+        The result object of the fitter's library, for experts (not
+        dumped).
+    """
+    fitter: dict[str, Any]
+    params: dict[str, Any] | None
+    versions: dict[str, str]
+    solutions: tuple[FitSolution, ...]
+    posterior: Posterior | None
+    evidence: Evidence | None
+    nevals: int
+    time: float
+    success: bool
+    message: str
+    diagnostics: dict[str, Any]
+    raw: object = dataclasses.field(default=None, repr=False)
+
+    def best(self) -> FitSolution:
+        """Return the best solution."""
+        return self.solutions[0]
+
+    def summary(self) -> str:
+        """Return a summary for humans: the best fit and its errors."""
+        best = self.best()
+        lines = [
+            f"fitter: {self.fitter.get('type')}; success: {self.success} "
+            f"({self.message})",
+            f"model evaluations: {self.nevals}; time: {self.time:.1f} s",
+            f"chi2: {best.chi2:.6g}; dof: {best.dof}; reduced chi2: "
+            f"{best.reduced_chi2:.6g}"]
+        if self.evidence is not None:
+            lines.append(f"log Z: {self.evidence.log_z:.6g}")
+        posterior = self.posterior or best.laplace
+        quantiles = posterior.summary() if posterior else {}
+        std = best.covariance.std if best.covariance else {}
+        label = 'posterior' if self.posterior else 'laplace'
+        lines.append(
+            f"{'name':<16} {'best':>12} {'std':>12} "
+            f"{label + ' 16/50/84':>38}")
+        for name, value in best.free.items():
+            q = quantiles.get(name)
+            q_text = '' if q is None else (
+                f"{q[0]:>12.6g} {q[1]:>12.6g} {q[2]:>12.6g}")
+            lines.append(
+                f"{name:<16} {value:>12.6g} {std.get(name, math.nan):>12.6g} "
+                f"{q_text}")
+        if best.covariance and best.covariance.unconstrained:
+            lines.append(
+                f"unconstrained directions involve: "
+                f"{list(best.covariance.unconstrained)}")
+        return '\n'.join(lines)
+
+    def dump(self, output_dir: str) -> None:
+        """
+        Write the result to a directory: a summary (result.json) and the
+        arrays (result.npz: the covariance matrices, and the posterior
+        samples).
+
+        Parameters
+        ----------
+        output_dir : str
+            The directory (made if missing).
+        """
+        os.makedirs(output_dir, exist_ok=True)
+        summary = dict(
+            fitter=self.fitter, params=self.params, versions=self.versions,
+            nevals=self.nevals, time=self.time, success=self.success,
+            message=self.message, diagnostics=self.diagnostics,
+            evidence=None if self.evidence is None
+            else dataclasses.asdict(self.evidence),
+            posterior=None if self.posterior is None
+            else self.posterior.summary(),
+            solutions=[_solution_summary(s) for s in self.solutions])
+        with open(os.path.join(output_dir, 'result.json'), 'w') as f:
+            json.dump(numutils.nativify(summary), f, indent=2)
+        arrays: dict[str, np.ndarray] = {}
+        for i, solution in enumerate(self.solutions):
+            if solution.covariance is not None:
+                arrays[f'solution_{i}_covariance'] = \
+                    solution.covariance.matrix
+            if solution.laplace is not None:
+                arrays[f'solution_{i}_laplace_samples'] = \
+                    solution.laplace.samples
+        if self.posterior is not None:
+            arrays['posterior_names'] = np.array(self.posterior.names)
+            arrays['posterior_samples'] = self.posterior.samples
+            if self.posterior.weights is not None:
+                arrays['posterior_weights'] = self.posterior.weights
+        np.savez(os.path.join(output_dir, 'result.npz'), **arrays)
+
+
+def _solution_summary(solution: FitSolution) -> dict[str, Any]:
+    """Return the summary of a solution (without its arrays)."""
+    info: dict[str, Any] = dict(
+        free=solution.free, elements=solution.elements, chi2=solution.chi2,
+        nresiduals=solution.nresiduals, dof=solution.dof,
+        reduced_chi2=solution.reduced_chi2,
+        log_likelihood=solution.log_likelihood,
+        log_prior=solution.log_prior)
+    if (cov := solution.covariance) is not None:
+        info['covariance'] = dict(
+            names=list(cov.names), std=cov.std, element_std=cov.element_std,
+            rank=cov.rank, unconstrained=list(cov.unconstrained),
+            scaled=cov.scaled)
+    if solution.laplace is not None:
+        info['laplace'] = solution.laplace.summary()
+    return info

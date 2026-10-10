@@ -1,9 +1,7 @@
 import logging
 import os
-import time
 from typing import Literal
 
-import numpy as np
 import ruamel.yaml
 
 import gbkfit.dataset
@@ -12,7 +10,6 @@ import gbkfit.fitting
 import gbkfit.model
 import gbkfit.objective
 import gbkfit.params
-from gbkfit.utils import miscutils
 from gbkfit.utils.parseutils import config_path
 from . import _detail
 
@@ -80,29 +77,29 @@ def fit(config: str,
     with config_path('fitter'):
         fitter = gbkfit.fitting.fitter_parser.load(cfg['fitter'])
 
-    pdescs = None
+    pdescs = objective.pdescs()
     if 'pdescs' in cfg:
         _log.info("setting up pdescs...")
         with config_path('pdescs'):
-            pdescs = gbkfit.params.pdescs.load_pdescs_dict(cfg['pdescs'])
-    pdescs = _detail.merge_pdescs(objective.pdescs(), pdescs)
+            user_pdescs = gbkfit.params.load_pdescs_dict(cfg['pdescs'])
+        pdescs = _detail.merge_pdescs(pdescs, user_pdescs)
 
     _log.info("setting up params...")
     with config_path('params'):
-        params = fitter.load_params(cfg['params'], pdescs)
+        params = gbkfit.params.param_space_parser.load(
+            cfg['params'], pdescs=pdescs, constants=objective.constants())
+    # Check the free properties for the fitter before the fit starts
+    with config_path('params', 'properties'):
+        fitter.load_fit_params(params)
 
     #
     # Perform fit
     #
 
     _log.info("model-fitting started")
-    t1 = time.time_ns()
     result = fitter.fit(objective, params)
-    t2 = time.time_ns()
-    t_ms = (t2 - t1) // 1_000_000
-    _log.info(f"model-fitting completed (elapsed time: {t_ms} ms)")
+    _log.info(f"model-fitting completed (elapsed time: {result.time:.1f} s)")
 
-    output_dir = os.path.abspath(miscutils.make_unique_path('out'))
     _log.info(f"saving result under '{output_dir}'...")
-    gbkfit.fitting.result.dump_result(output_dir, result)
-    print(result.summary())
+    result.dump(output_dir)
+    _log.info(f"result:\n{result.summary()}")
