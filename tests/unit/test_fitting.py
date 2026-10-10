@@ -10,6 +10,7 @@ import pytest
 import scipy.integrate
 
 from gbkfit.dataset import Data, DatasetPixelBrightness
+from gbkfit.driver.drivers.host import DriverHost
 from gbkfit.fitting import (
     FitParamPrior, PriorGauss, PriorGaussTrunc, PriorLogUniform,
     PriorUniform)
@@ -109,3 +110,63 @@ def test_lmfit_recovers_the_parameters_and_their_errors(driver):
     x[i] += 0.1
     growth = objective.chi2(params.evaluate(x)) - best.chi2
     assert growth == pytest.approx(0.01 * hessian[i, i], rel=0.05)
+
+
+def test_cmaes_finds_the_minimum_of_lmfit(driver):
+    pytest.importorskip('cma')
+    pytest.importorskip('lmfit')
+    from gbkfit.fitting.fitters.cmaes import FitterCMAES
+    from gbkfit.fitting.fitters.lmfit import FitterLMFitLeastSquares
+    objective = mock_objective(driver)
+    params = ParamSpace(objective.pdescs(), bounded_properties())
+    local = FitterLMFitLeastSquares().fit(objective, params).best()
+    best = FitterCMAES().fit(objective, params).best()
+    assert best.chi2 == pytest.approx(local.chi2, rel=1e-6)
+
+
+def prior_properties(nsigma):
+    # Uniform priors of +-nsigma errors around the truth (see the lmfit
+    # test), so that the samplers need few evaluations
+    errors = dict(
+        xpos=0.01, ypos=0.01, posa=0.25, incl=0.25, bpt_a=0.01, bpt_s=0.03)
+    return {
+        name: dict(min=TRUE[name] - nsigma * error,
+                   max=TRUE[name] + nsigma * error)
+        for name, error in errors.items()}
+
+
+def check_posterior(result):
+    # The posterior agrees with the Laplace approximation at the best fit
+    posterior = result.posterior.summary()
+    laplace = result.best().laplace.summary()
+    std = result.best().covariance.std
+    for name in TRUE:
+        lo, median, hi = posterior[name]
+        assert median == pytest.approx(laplace[name][1], abs=0.3 * std[name])
+        assert (hi - lo) / 2 == pytest.approx(std[name], rel=0.25)
+
+
+# The samplers run on the host only: they test the fitters, not the
+# drivers
+
+def test_emcee_posterior_agrees_with_the_covariance():
+    pytest.importorskip('emcee')
+    from gbkfit.fitting.fitters.emcee import FitterEmcee
+    objective = mock_objective(DriverHost())
+    properties = prior_properties(10)
+    for name in properties:
+        properties[name] |= dict(value=TRUE[name], width=1e-3)
+    params = ParamSpace(objective.pdescs(), properties)
+    result = FitterEmcee(nwalkers=24, nsteps=1000, burnin=300).fit(
+        objective, params)
+    check_posterior(result)
+
+
+def test_nautilus_posterior_agrees_with_the_covariance():
+    pytest.importorskip('nautilus')
+    from gbkfit.fitting.fitters.nautilus import FitterNautilus
+    objective = mock_objective(DriverHost())
+    params = ParamSpace(objective.pdescs(), prior_properties(10))
+    result = FitterNautilus(n_live=300, n_eff=2000).fit(objective, params)
+    check_posterior(result)
+    assert math.isfinite(result.evidence.log_z)
