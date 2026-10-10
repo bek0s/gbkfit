@@ -1,103 +1,139 @@
+"""
+The lmfit least-squares fitter.
+"""
 
-import abc
-import copy
+import math
+import typing
+from typing import Any, Literal
 
 import lmfit
 import numpy as np
 
-from gbkfit.fitting import fitutils
-from gbkfit.fitting.base import FitParam, FitParams, Fitter
-from gbkfit.fitting.result import make_fitter_result
+from gbkfit.fitting.base import FitRun, Fitter
+from gbkfit.fitting.fitparams import (
+    FitParam, FitParamBounded, FitParamClass)
+from gbkfit.fitting.problem import FitProblem
+from gbkfit.fitting.uncertainty import UncertaintyOptions
+from gbkfit.utils.parseutils import ConfigError
 
 
 __all__ = [
-    'FitParamLMFit',
-    'FitParamsLMFit',
-    'FitterLMFit',
-    'residual_scalar',
-    'residual_vector'
+    'FitterLMFitLeastSquares'
 ]
 
 
-def _make_eparams_dict(x, parameters):
-    enames = parameters.enames(fixed=False, tied=False, free=True)
-    evalues = x.valuesdict().values()
-    return dict(zip(enames, evalues))
+class FitterLMFitLeastSquares(Fitter):
+    """
+    Least squares with lmfit: Levenberg-Marquardt (MINPACK's lmdif,
+    method 'leastsq'; lmfit maps bounded values to unbounded ones) or
+    scipy's trust region reflective (method 'least_squares'). The
+    Jacobian is by forward differences.
 
+    The free elements take a value (where to start), and optional min
+    and max (see FitParamBounded).
 
-def residual_scalar(x, parameters, objective, callback=None):
-    eparams = _make_eparams_dict(x, parameters)
-    return fitutils.residual_scalar(eparams, parameters, objective, callback)
+    Parameters
+    ----------
+    method : {'leastsq', 'least_squares'}, optional
+        The method.
+    max_nfev : int, optional
+        The most model evaluations (by default, lmfit's: 2000 times the
+        number of free elements plus 1).
+    ftol, xtol, gtol : float, optional
+        The tolerances of the relative change of the chi-square, of the
+        relative change of the values, and of the gradient (by default,
+        the method's).
+    step : float, optional
+        The relative step of the finite differences (by default, the
+        square root of the precision of the models, e.g. 3.5e-4 for
+        float32; MINPACK's and scipy's default, for float64, is too small
+        for float32 models).
+    seed : int, optional
+        The seed of the Laplace samples.
+    uncertainty : UncertaintyOptions, optional
+        How to work out the uncertainty of the solution.
 
+    Raises
+    ------
+    ConfigError
+        If max_nfev or a tolerance or the step is not positive.
+    """
 
-def residual_vector(x, parameters, objective, callback=None):
-    eparams = _make_eparams_dict(x, parameters)
-    return fitutils.residual_vector(eparams, parameters, objective, callback)
+    @staticmethod
+    def type() -> str:
+        return 'lmfit.least_squares'
 
+    @staticmethod
+    def fit_param_class() -> FitParamClass:
+        return FitParamBounded
 
-class FitParamLMFit(FitParam, abc.ABC):
-    pass
+    @staticmethod
+    def libraries() -> tuple[str, ...]:
+        return ('lmfit',)
 
+    def dump(self) -> dict[str, Any]:
+        return dict(
+            type=self.type(), method=self._method, max_nfev=self._max_nfev,
+            ftol=self._ftol, xtol=self._xtol, gtol=self._gtol,
+            step=self._step) | self.dump_common()
 
-class FitParamsLMFit(FitParams, abc.ABC):
-    pass
-
-
-class FitterLMFit(Fitter, abc.ABC):
-
-    def __init__(self, residual_func, method, scale_covar, max_nfev, options):
-        super().__init__()
-        self._residual_func = residual_func
+    def __init__(
+            self,
+            method: Literal['leastsq', 'least_squares'] = 'leastsq',
+            max_nfev: int | None = None,
+            ftol: float | None = None,
+            xtol: float | None = None,
+            gtol: float | None = None,
+            step: float | None = None,
+            seed: int = 0,
+            uncertainty: UncertaintyOptions | None = None
+    ):
+        super().__init__(seed, uncertainty)
+        for name, value in dict(
+                max_nfev=max_nfev, ftol=ftol, xtol=xtol, gtol=gtol,
+                step=step).items():
+            if value is not None and not value > 0:
+                raise ConfigError(
+                    f"option '{name}' must be positive; it is {value}")
         self._method = method
-        self._global_options = dict(
-            scale_covar=scale_covar,
-            nan_policy='raise',
-            calc_covar=True,
-            max_nfev=max_nfev)
-        self._method_options = copy.deepcopy(options)
+        self._max_nfev = max_nfev
+        self._ftol = ftol
+        self._xtol = xtol
+        self._gtol = gtol
+        self._step = step
 
-    def _fit_impl(self, objective, parameters):
-        # Create lmfit parameters for all free parameters.
-        # Replace brackets in parameters names
-        # because lmfit does not support them.
+    def _run(
+            self,
+            problem: FitProblem,
+            fit_params: list[FitParam],
+            rng: np.random.Generator
+    ) -> FitRun:
+        # lmfit names its parameters; the names of elements (e.g. 'v[3]')
+        # are not valid ones
         lmfit_params = lmfit.Parameters()
-        for pname, pinfo in parameters.infos().items():
+        for i, p in enumerate(typing.cast(list[FitParamBounded], fit_params)):
             lmfit_params.add(
-                pname.replace('[', '__obr__').replace(']', '__cbr__'),
-                pinfo.initial_value(), True, pinfo.minimum(), pinfo.maximum())
-        # Setup minimiser-specific options
-        global_options, method_options = self._setup_options(
-            parameters,
-            copy.deepcopy(self._global_options),
-            copy.deepcopy(self._method_options))
-        # Run minimisation
+                f'p{i}', value=p.value(), min=p.minimum(), max=p.maximum())
+
+        def residuals(params: lmfit.Parameters) -> np.ndarray:
+            x = np.array(list(params.valuesdict().values()))
+            return problem.residuals(x)
+
+        step = self._step or math.sqrt(problem.precision())
+        options: dict[str, Any] = dict(
+            ftol=self._ftol, xtol=self._xtol, gtol=self._gtol)
+        options = {k: v for k, v in options.items() if v is not None}
+        if self._method == 'leastsq':
+            # MINPACK's step is sqrt(epsfcn) times the value
+            options['epsfcn'] = step ** 2
+        else:
+            options['diff_step'] = step
         minimizer = lmfit.Minimizer(
-            self._residual_func, params=lmfit_params,
-            fcn_args=(parameters, objective),
-            **global_options, **method_options)
-        lmfit_result = minimizer.minimize(method=self._method)
-        # Extract the best-fit solution
-        solution = dict(mode=list(lmfit_result.params.valuesdict().values()))
-        # Extract covariance and std error
-        if hasattr(lmfit_result, 'covar'):
-            covar = lmfit_result.covar
-            solution.update(covar=covar, std=list(np.sqrt(np.diag(covar))))
-        # Extract trivial information (if available)
-        extra = dict()
-        attrs = [
-            'success', 'status', 'message', 'nfev',
-            'chisqr',  'redchi', 'aic', 'bic']
-        for attr in attrs:
-            if hasattr(lmfit_result, attr):
-                extra[attr] = getattr(lmfit_result, attr)
-        #
-        result = make_fitter_result(
-            objective, parameters, solutions=solution)
-
-        print(extra)
-
-        return result
-
-    @abc.abstractmethod
-    def _setup_options(self, parameters, global_options, method_options):
-        pass
+            residuals, lmfit_params, nan_policy='raise', calc_covar=False,
+            max_nfev=self._max_nfev)
+        result = minimizer.minimize(method=self._method, **options)
+        x = np.array(list(result.params.valuesdict().values()))
+        return FitRun(
+            solutions=[x], success=bool(result.success),
+            message=str(result.message),
+            diagnostics=dict(lmfit_nfev=int(result.nfev)), raw=result)
