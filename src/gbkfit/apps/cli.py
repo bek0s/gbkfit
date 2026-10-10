@@ -563,8 +563,9 @@ def main():
     elif args.task == 'plot':
         import gbkfit.tasks.plot
         gbkfit.tasks.plot.plot(
-            args.result_dir, args.output_dir, args.format, args.dpi,
-            args.only_best, args.posterior_mode, args.posterior_params)
+            args.result_dir, args.output_dir, args.output_dir_mode,
+            args.format, args.dpi, args.only_best, args.posterior_mode,
+            args.posterior_params)
 
     _log.info("So long and thanks for all the fish!")
 

@@ -1,210 +1,349 @@
+"""
+The plot task: figures of the output directory of a fit (or of the eval
+task in objective mode): the data, model and residuals of each data item,
+and corner plots of the posterior.
+"""
 
-import logging.config
-import os.path
+import itertools
+import json
+import logging
+import os
+import re
+from collections.abc import Sequence
+from typing import Literal
 
-import matplotlib.gridspec as gridspec
-import matplotlib.patches as patches
-import matplotlib.patheffects as patheffects
-import matplotlib.pyplot as plt
+import astropy.io.fits as fits
 import numpy as np
+from matplotlib.axes import Axes
+from matplotlib.figure import Figure
+from matplotlib.patches import Ellipse
 
-import gbkfit.fitting.result
+from . import _detail
 
-from gbkfit.utils import miscutils
+
+__all__ = [
+    'plot'
+]
 
 
 _log = logging.getLogger(__name__)
 
-# Enable LaTeX
-plt.rc('font', **{'family': 'serif', 'serif': ['Computer Modern']})
-plt.rc('text', usetex=True)
+# The FITS outputs of the data: data_<observation>_<item>_d.fits
+_DATA_FILE = re.compile(r'data_(\d+)_(.+)_d\.fits')
 
-#
-# Various constants for controlling figure visuals
-#
+# The FITS output of a constant PSF: model_extra_<observation>_psf_lo.fits
+_PSF_FILE = re.compile(r'model_extra_.+_psf_lo\.fits')
 
-FIG_SCALE = 1.0
+# The width of a Gaussian at half its maximum, in standard deviations
+_FWHM = 2 * np.sqrt(2 * np.log(2))
 
-DMR_FIG_SIZE_X = FIG_SCALE * 10
-DMR_FIG_SIZE_Y = FIG_SCALE * 3
-
-FIG_PLOT_TITLE_FONT_SIZE = FIG_SCALE * 16
-
-FIG_PLOT_XLABEL_FONT_SIZE = FIG_SCALE * 16
-FIG_PLOT_YLABEL_FONT_SIZE = FIG_SCALE * 16
-
-FIG_PLOT_ID_FONT_SIZE = FIG_SCALE * 16
-FIG_PLOT_ID_LINEWIDTH = FIG_SCALE * 2
-FIG_PLOT_ID_COLOR = 'white'
-FIG_PLOT_ID_POS_X = 1
-FIG_PLOT_ID_POS_Y = 1
-
-FIG_OBJ_ID_FONT_SIZE = FIG_SCALE * 16
-FIG_OBJ_ID_LINEWIDTH = FIG_SCALE * 2
-FIG_OBJ_ID_COLOR = 'white'
-FIG_OBJ_ID_POS_X = 1
-FIG_OBJ_ID_POS_Y = 1
-
-FIG_PSF_COLOR = 'gray'
-FIG_PSF_ALPHA = 0.8
-FIG_PSF_MARGIN_X = 10
-FIG_PSF_MARGIN_Y = 10
-
-
-MMAP_COLORMAP_NAMES = ['RdBu_r', 'RdBu_r', 'RdBu_r']
-
-
-def setup_plot_text(
-        ax, label, posx, posy, fontsize, linewidth, foreground, halign, valign):
-    patheffect = patheffects.withStroke(
-        linewidth=linewidth, foreground=foreground)
-    ax.text(
-        posx, posy, label, transform=ax.transAxes, fontsize=fontsize,
-        horizontalalignment=halign, verticalalignment=valign,
-        patheffects=[patheffect])
-
-
-def setup_plot_id(ax, label):
-    setup_plot_text(
-        ax, label, FIG_PLOT_ID_POS_X, FIG_PLOT_ID_POS_Y, FIG_PLOT_ID_FONT_SIZE,
-        FIG_PLOT_ID_LINEWIDTH, FIG_PLOT_ID_COLOR, 'right', 'top')
-
-
-def setup_object_id(ax, label):
-    setup_plot_text(
-        ax, label, FIG_OBJ_ID_POS_X, FIG_OBJ_ID_POS_Y, FIG_OBJ_ID_FONT_SIZE,
-        FIG_OBJ_ID_LINEWIDTH, FIG_OBJ_ID_COLOR, 'left', 'top')
-
-
-def setup_psf(ax, size, angle):
-    pos = (FIG_PSF_MARGIN_X + size[0] / 2, FIG_PSF_MARGIN_Y + size[1] / 2)
-    ax.add_artist(patches.Ellipse(
-        pos, size[0], size[1], angle=angle,
-        facecolor=FIG_PSF_COLOR, alpha=FIG_PSF_ALPHA))
-
-
-def setup_title(ax, label):
-    pass
-
-
-def setup_image(ax, data, cmap, vmin=None, vmax=None):
-    return ax.imshow(
-        data, cmap=cmap, vmin=vmin, vmax=vmax,
-        aspect='equal', origin='lower', interpolation='foo')
-
-
-def plot_best_fit_dmr(
-        fig, ax_dat, ax_mdl, ax_res, data_dat, data_msk, data_mdl, data_res):
-
-    setup_image(ax_dat, data_dat, 'foo')
-    setup_image(ax_mdl, data_mdl, 'foo')
-    setup_image(ax_res, data_res, 'foo')
-
-
-def make_best_fit_dmr_gs(nrows, wspace, hspace, hscale, wscale):
-    return gridspec.GridSpec(
-        nrows, 6, wspace=wspace, hspace=hspace,
-        height_ratios=[hscale], width_ratios=[1, wscale, wscale, 1, wscale, 1])
-
-
-def plot_best_fit_pixel_brightness(dataset, solution, dpi):
-    nrows = 1
-    fig = plt.figure()
-    gs = make_best_fit_dmr_gs(nrows, 0.04, 0.04, 15, 15)
-
-    return dict(dmr=fig)
-
-
-def plot_best_fit_slit_spectra(dataset, solution):
-    return 1
-
-
-def plot_best_fit_pixel_moments(dataset, solution):
-    nrows = len(dataset)
-    fig = plt.figure()
-    gs = make_best_fit_dmr_gs(nrows, 0.04, 0.04, 15, 15)
-
-    for i, (name, data) in enumerate(dataset.items()):
-
-        data_dat = data.data()
-        data_msk = data.mask()
-        data_mdl = solution['model']
-        data_res = solution['resid']
-
-        ax0 = fig.add_subplot(gs[i, 0])
-        ax1 = fig.add_subplot(gs[i, 1])
-        ax2 = fig.add_subplot(gs[i, 2])
-        ax3 = fig.add_subplot(gs[i, 4])
-        ax4 = fig.add_subplot(gs[i, 5])
-        plot_best_fit_dmr(fig, ax1, ax2, ax4, None, None, None)
-
-    return dict(dmr=fig)
-
-
-def plot_best_fit_pixel_spectra(dataset, solution):
-    return 1
-
-
-def plot_best_fit(result, solution):
-    plot_fun_selector = dict(
-        pixel_brightness=plot_best_fit_pixel_brightness,
-        slit_spectra=plot_best_fit_slit_spectra,
-        pixel_moments=plot_best_fit_pixel_moments,
-        pixel_spectra=plot_best_fit_pixel_spectra)
-    figures = dict()
-    for i, dataset in enumerate(result.datasets):
-        figs = plot_fun_selector[dataset.type()](dataset, solution)
-        figures |= {f'best_fit_{i}_{k}': v for k, v in figs.items()}
-    return figures
-
-
-def plot_posterior(result, posterior, posterior_params):
-    return dict()
-
-
-def plot_solution(result, solution, posterior_params, skip_posterior):
-
-    # Create best fit figures
-    figures = plot_best_fit(result, solution)
-
-    # Create solution posterior figures
-    if solution.postrerior and not skip_posterior:
-        figures |= plot_posterior(result, solution.posterior, posterior_params)
-
-    return figures
+# An ellipse: its width, height and angle (degrees), in pixels
+_EllipseShape = tuple[float, float, float]
 
 
 def plot(
-        result_dir, output_dir, format_, dpi,
-        only_best, posterior_mode, posterior_params):
+        result_dir: str,
+        output_dir: str,
+        output_dir_mode: Literal['terminate', 'overwrite', 'unique'],
+        format_: Literal['pdf', 'png'],
+        dpi: int,
+        only_best: bool,
+        posterior_mode: Literal['none', 'corner', 'separate'],
+        posterior_params: Sequence[str] | None
+) -> None:
+    """
+    Make the figures of the output directory of a fit: for each data item
+    of each observation, its data, model and residuals (fit_<i>_<item>),
+    and corner plots of the posterior samples (posterior), or of the
+    Laplace samples of the solutions (laplace_<k>).
 
-    result_dir = os.path.abspath(result_dir)
+    Maps are shown as images (with the PSF, if constant, in a corner),
+    cubes as their moment 0 and the position-velocity slice through their
+    central row, and values per region as lines.
 
-    output_dir = os.path.abspath(miscutils.make_unique_path('figures'))
+    Parameters
+    ----------
+    result_dir : str
+        The output directory of the fit.
+    output_dir : str
+        The directory of the figures.
+    output_dir_mode : {'terminate', 'overwrite', 'unique'}
+        What to do if the directory of the figures exists (see
+        make_output_dir).
+    format_ : {'pdf', 'png'}
+        The format of the figures.
+    dpi : int
+        Their resolution.
+    only_best : bool
+        Whether to plot only the Laplace samples of the best solution
+        (when there is no posterior).
+    posterior_mode : {'none', 'corner', 'separate'}
+        No posterior plots, one corner plot of the elements, or one of each
+        pair of them.
+    posterior_params : Sequence of str, optional
+        The elements of the posterior plots (by default, the free ones).
 
-    os.makedirs(output_dir)
+    Raises
+    ------
+    ValueError
+        If a posterior element is not in the samples.
+    """
+    output_dir = _detail.make_output_dir(output_dir, output_dir_mode)
+    figures = _fit_figures(result_dir)
+    if posterior_mode != 'none':
+        figures |= _posterior_figures(
+            result_dir, only_best, posterior_mode == 'separate',
+            posterior_params)
+    if not figures:
+        _log.warning(f"found nothing to plot in '{result_dir}'")
+    for name, figure in figures.items():
+        filename = os.path.join(output_dir, f'{name}.{format_}')
+        figure.savefig(filename, dpi=dpi, bbox_inches='tight')
+    _log.info(f"wrote {len(figures)} figures to '{output_dir}'")
 
-    _log.info(f"reading result directory: '{result_dir}'...")
 
-    result = gbkfit.fitting.result.load_result(result_dir)
+def _read(directory: str, filename: str) -> np.ndarray | None:
+    """Return the data of a FITS file, or None if there is none."""
+    path = os.path.join(directory, filename)
+    if not os.path.exists(path):
+        return None
+    return np.asarray(fits.getdata(path), dtype=float)
 
-    print(result)
-    exit()
 
-    # Decide which solutions to plot
-    solutions = result.solutions
+def _fit_figures(result_dir: str) -> dict[str, Figure]:
+    """Return the figures of the data, model and residuals of each item."""
+    items = sorted(
+        match.groups() for filename in os.listdir(result_dir)
+        if (match := _DATA_FILE.fullmatch(filename)))
+    psf = _psf_shape(result_dir) \
+        if len({index for index, _ in items}) == 1 else None
+    figures = {}
+    for index, key in items:
+        model = _read(result_dir, f'model_{index}_{key}_d.fits')
+        if model is None:
+            continue
+        data = _read(result_dir, f'data_{index}_{key}_d.fits')
+        error = _read(result_dir, f'data_{index}_{key}_e.fits')
+        residual = _read(result_dir, f'residual_{index}_{key}_d.fits')
+        if residual is None:
+            residual = _read(result_dir, f'residual_{key}_d.fits')
+        figures[f'fit_{index}_{key}'] = _fit_figure(
+            key, data, error, model, residual, psf)
+    return figures
 
-    figures = dict()
 
-    # Create solution figures
-    for i, solution in enumerate(solutions):
-        figures |= plot_solution(
-            result, solution, posterior_params, True)
+def _psf_shape(result_dir: str) -> _EllipseShape | None:
+    """
+    Return the ellipse at half the maximum of the PSF (from its second
+    moments), if there is one constant PSF image.
+    """
+    files = [f for f in os.listdir(result_dir) if _PSF_FILE.fullmatch(f)]
+    image = _read(result_dir, files[0]) if len(files) == 1 else None
+    if image is None or image.ndim != 2 or not image.sum() > 0:
+        return None
+    y, x = np.indices(image.shape)
+    weights = image / image.sum()
+    xc, yc = np.sum(weights * x), np.sum(weights * y)
+    dx, dy = x - xc, y - yc
+    cov = np.array([
+        [np.sum(weights * dx * dx), np.sum(weights * dx * dy)],
+        [np.sum(weights * dx * dy), np.sum(weights * dy * dy)]])
+    variances, vectors = np.linalg.eigh(cov)
+    angle = np.degrees(np.arctan2(vectors[1, 1], vectors[0, 1]))
+    major, minor = _FWHM * np.sqrt(np.maximum(variances[::-1], 0))
+    return major, minor, angle
 
-    # Create global posterior figures
-    # if result.posterior and not skip_posterior:
-    #     figures |= plot_posterior(result, result.posterior, posterior_params)
 
-    # Save figures
-    for key, figure in figures.items():
-        figure.savefig(f'figure_{key}.{format_}', bbox_inches='tight', dpi=dpi)
+def _fit_figure(
+        key: str,
+        data: np.ndarray,
+        error: np.ndarray | None,
+        model: np.ndarray,
+        residual: np.ndarray | None,
+        psf: _EllipseShape | None
+) -> Figure:
+    """Return the figure of the data, model and residuals of an item."""
+    if data.ndim == 1:
+        return _profile_figure(key, data, error, model)
+    if data.ndim == 3:
+        # The moment 0 of the cube, and its position-velocity slice
+        # through its central row (velocity along the vertical axis)
+        figure = Figure(figsize=(13, 8.5), layout='constrained')
+        axes = figure.subplots(2, 3, squeeze=False)
+        sums = [np.nansum(a, axis=0) for a in (data, model)]
+        _map_panels(
+            figure, axes[0], 'moment 0', sums[0], sums[1],
+            sums[1] - sums[0], 'model - data', psf, 'equal')
+        row = data.shape[1] // 2
+        pv_residual = (model - data if residual is None else residual)
+        _map_panels(
+            figure, axes[1], f'row {row}', data[:, row, :], model[:, row, :],
+            pv_residual[:, row, :],
+            'model - data' if residual is None else 'residual (errors)',
+            None, 'auto')
+        return figure
+    figure = Figure(figsize=(13, 4.2), layout='constrained')
+    axes = figure.subplots(1, 3, squeeze=False)
+    _map_panels(
+        figure, axes[0], key, data, model,
+        model - data if residual is None else residual,
+        'model - data' if residual is None else 'residual (errors)', psf,
+        'auto' if 'spectra' in key else 'equal')
+    return figure
+
+
+def _map_panels(
+        figure: Figure,
+        axes: Sequence[Axes],
+        label: str,
+        data: np.ndarray,
+        model: np.ndarray,
+        residual: np.ndarray,
+        residual_label: str,
+        psf: _EllipseShape | None,
+        aspect: Literal['equal', 'auto']
+) -> None:
+    """Draw the data, model and residual of a map on three axes."""
+    finite = data[np.isfinite(data)]
+    if not finite.size:
+        finite = model[np.isfinite(model)]
+    low, high = np.percentile(finite, [1, 99]) if finite.size else (0, 1)
+    cmap = 'viridis'
+    if label.startswith('moment1'):
+        # Velocities about their median, on a diverging map
+        median = np.median(finite) if finite.size else 0
+        half = max(abs(low - median), abs(high - median))
+        low, high, cmap = median - half, median + half, 'RdBu_r'
+    finite_residual = np.abs(residual[np.isfinite(residual)])
+    limit = np.percentile(finite_residual, 99) \
+        if finite_residual.size else 1.0
+    limit = limit if limit > 0 else 1.0
+    panels = [
+        (data, f'{label}: data', cmap, low, high),
+        (model, f'{label}: model', cmap, low, high),
+        (residual, f'{label}: {residual_label}', 'RdBu_r', -limit, limit)]
+    for ax, (values, title, panel_cmap, vmin, vmax) in zip(axes, panels):
+        image = ax.imshow(
+            values, origin='lower', cmap=panel_cmap, vmin=vmin, vmax=vmax,
+            interpolation='nearest', aspect=aspect)
+        figure.colorbar(image, ax=ax, shrink=0.85)
+        ax.set_title(title)
+        ax.set_xlabel('x (pixels)')
+        ax.set_ylabel('y (pixels)' if aspect == 'equal' else 'channel')
+    if psf is not None:
+        width, height, angle = psf
+        margin = 0.75 * max(width, height) + 1
+        for ax in axes[:2]:
+            ax.add_patch(Ellipse(
+                (margin, margin), width, height, angle=angle,
+                facecolor='0.6', edgecolor='white', alpha=0.85))
+
+
+def _profile_figure(
+        key: str,
+        data: np.ndarray,
+        error: np.ndarray | None,
+        model: np.ndarray
+) -> Figure:
+    """Return the figure of the data and model of values per region."""
+    figure = Figure(figsize=(8, 6), layout='constrained')
+    top, bottom = figure.subplots(
+        2, 1, sharex=True, gridspec_kw=dict(height_ratios=[3, 1]))
+    regions = np.arange(len(data))
+    top.errorbar(regions, data, yerr=error, fmt='o', label='data')
+    top.plot(regions, model, '-', label='model')
+    top.set_title(key)
+    top.legend()
+    bottom.axhline(0, color='0.5', lw=0.8)
+    if error is None:
+        bottom.plot(regions, model - data, 'o')
+        bottom.set_ylabel('model - data')
+    else:
+        bottom.plot(regions, (model - data) / error, 'o')
+        bottom.set_ylabel('residual (errors)')
+    bottom.set_xlabel('region')
+    return figure
+
+
+def _posterior_figures(
+        result_dir: str,
+        only_best: bool,
+        separate: bool,
+        params: Sequence[str] | None
+) -> dict[str, Figure]:
+    """
+    Return the corner plots of the posterior samples, or (without any) of
+    the Laplace samples of each solution.
+    """
+    with open(os.path.join(result_dir, 'result.json')) as f:
+        solutions = json.load(f)['solutions']
+    names = list(params) if params else list(solutions[0]['free'])
+    sample_sets = []
+    if os.path.exists(os.path.join(result_dir, 'posterior.csv')):
+        sample_sets.append(('posterior', 'posterior.csv', solutions[0]))
+    else:
+        for k, solution in enumerate(solutions[:1] if only_best
+                                     else solutions):
+            filename = f'solution_{k}_laplace.csv'
+            if os.path.exists(os.path.join(result_dir, filename)):
+                sample_sets.append((f'laplace_{k}', filename, solution))
+    figures = {}
+    for label, filename, solution in sample_sets:
+        header, samples, weights = _read_samples(
+            os.path.join(result_dir, filename))
+        if missing := [n for n in names if n not in header]:
+            raise ValueError(
+                f"these elements are not in {filename}: {missing}; it has "
+                f"{header}")
+        columns = samples[:, [header.index(n) for n in names]]
+        truths = [solution['elements'][n] for n in names]
+        title = 'posterior' if label == 'posterior' else \
+            f'solution {label.split("_")[1]}: Laplace approximation'
+        if not separate:
+            figures[label] = _corner(columns, weights, names, truths, title)
+            continue
+        for i, j in itertools.combinations(range(len(names)), 2):
+            figures[f'{label}_{_safe(names[i])}_{_safe(names[j])}'] = \
+                _corner(
+                    columns[:, [i, j]], weights, [names[i], names[j]],
+                    [truths[i], truths[j]], title)
+    return figures
+
+
+def _read_samples(
+        filename: str
+) -> tuple[list[str], np.ndarray, np.ndarray | None]:
+    """
+    Return the names of the elements, the samples and their weights (if
+    any) of a CSV file of samples (see FitResult.dump).
+    """
+    with open(filename) as f:
+        header = f.readline().strip().split(',')
+    samples = np.loadtxt(filename, delimiter=',', skiprows=1, ndmin=2)
+    if header[-1] == 'weight':
+        return header[:-1], samples[:, :-1], samples[:, -1]
+    return header, samples, None
+
+
+def _corner(
+        samples: np.ndarray,
+        weights: np.ndarray | None,
+        names: list[str],
+        truths: list[float],
+        title: str
+) -> Figure:
+    """Return the corner plot of samples, with the solution marked."""
+    import corner
+    n = len(names)
+    figure = Figure(figsize=(2.4 * n + 1, 2.4 * n + 1))
+    figure.subplots(n, n)
+    corner.corner(
+        samples, weights=weights, labels=names, truths=truths, fig=figure,
+        quantiles=[0.16, 0.5, 0.84], show_titles=True, title_fmt='.3g')
+    figure.suptitle(title)
+    return figure
+
+
+def _safe(name: str) -> str:
+    """Return the name of an element in a form fit for filenames."""
+    return re.sub(r'[^\w.-]', '_', name)

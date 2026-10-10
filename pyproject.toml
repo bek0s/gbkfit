@@ -23,6 +23,7 @@ classifiers = [
 ]
 dependencies = [
     'astropy',
+    'corner',
     'matplotlib',
     'numpy',
     'pandas',

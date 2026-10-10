@@ -28,7 +28,8 @@ def eval_(
     Evaluate the models of a configuration at its parameters (their
     fixed values, and the 'value' of the free ones), or its objective,
     and write the outputs: the parameters (gbkfit_eval_params), the
-    models or the residuals (FITS), and their extra outputs.
+    models, or the data and the residuals (FITS), and their extra
+    outputs.
 
     Parameters
     ----------
@@ -77,6 +78,7 @@ def eval_(
     outputs = _detail.evaluation_outputs(
         group, objective, param_values, mode == 'model', mode == 'objective')
     if objective is not None:
+        outputs |= _detail.data_outputs(group)
         _log.info(f"chi-square: {objective.chi2(param_values)}")
     _log.info("storing outputs to the filesystem...")
     _detail.write_outputs(output_dir, outputs, 'gbkfit_eval_extra')
