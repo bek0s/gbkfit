@@ -324,7 +324,7 @@ def laplace_posterior(
                 params.evaluate(point)).values()))
         except ParamEvaluationError:
             pass
-    names = tuple(params.element_values(params.evaluate(x)))
+    names = tuple(params.kinds())
     return Posterior(
         names=names, samples=np.array(rows).reshape(-1, len(names)),
         weights=None, approximate=True)
