@@ -1,3 +1,8 @@
+"""
+Primary beams: how a telescope attenuates the light of the sky away from
+where it points (e.g. the primary beam of a radio interferometer).
+"""
+
 import abc
 import os.path
 from typing import Any
@@ -6,8 +11,8 @@ import numpy as np
 import scipy.ndimage
 import scipy.special
 
-from gbkfit.psflsf import check_scale
 from gbkfit.utils import fitsutils, gridutils, parseutils
+from ._detail import check_scale
 
 
 __all__ = [
@@ -27,29 +32,59 @@ _AIRY_HALF_MAXIMUM = 1.616339948310703
 class PrimaryBeam(parseutils.TypedSerializable, abc.ABC):
     """
     The response of a telescope to the sky, which attenuates its light
-    before the PSF (e.g. the primary beam of a radio interferometer).
+    before the PSF.
     """
 
     @abc.abstractmethod
     def dump(self, prefix='', dump_path=True, overwrite=False):
         """
-        The options of the response. Those with data (an image) write it to
-        a file whose name starts with prefix, and give its path, or only
-        its name without dump_path.
+        Dump the response to its configuration.
+
+        Parameters
+        ----------
+        prefix : str, optional
+            The start of the names of the files of its data (e.g. an
+            image), if any.
+        dump_path : bool, optional
+            Whether the configuration has the paths of the files, or only
+            their names.
+        overwrite : bool, optional
+            Whether to overwrite existing files.
+
+        Returns
+        -------
+        dict
+            The options.
         """
-        pass
 
     @abc.abstractmethod
     def response(self, grid: gridutils.Grid) -> np.ndarray:
-        """The response at the pixels of the x and y axes of a grid."""
-        pass
+        """
+        Return the response at the pixels of a grid.
+
+        Parameters
+        ----------
+        grid : gridutils.Grid
+            The grid; only its x and y axes are used.
+
+        Returns
+        -------
+        ndarray
+            The response, of shape (ny, nx).
+        """
 
 
 class PrimaryBeamRadial(PrimaryBeam, abc.ABC):
     """
-    A response that depends on the distance from its centre, the pointing
-    (x and y in arcsec, like xpos and ypos), where it is 1, in units of
-    its full width at half maximum (fwhm, arcsec).
+    A response that depends on the distance from its centre, the pointing,
+    where it is 1.
+
+    Parameters
+    ----------
+    fwhm : float
+        The full width at half maximum (arcsec), the unit of the distance.
+    x, y : float, optional
+        The pointing (arcsec, like xpos and ypos).
     """
 
     def dump(self, prefix='', dump_path=True, overwrite=False):
@@ -103,6 +138,19 @@ class PrimaryBeamImage(PrimaryBeam):
     primary beam that an imaging package writes with the data), placed by
     its RA and Dec, sampled at the pixels (bilinearly), and 0 beyond the
     image.
+
+    Its configuration has its file (a filename, or a dict with the
+    filename and the HDU); the world coordinates come from the header,
+    unless given.
+
+    Parameters
+    ----------
+    data : ndarray
+        The image; its pixels that are not finite are 0.
+    step, rpix, rval : Any, optional
+        The world coordinates of the image (see gridutils.make_grid).
+    rota : float, optional
+        The rotation of the image on the sky (see gridutils.Coords).
     """
 
     @staticmethod
@@ -142,16 +190,13 @@ class PrimaryBeamImage(PrimaryBeam):
             rval: Any = None,
             rota: float | None = None
     ):
-        """
-        The image is on the grid of the given world coordinates (see
-        gridutils.make_grid); its pixels that are not finite are 0.
-        """
         data = np.asarray(data, dtype=float)
         if data.ndim != 2:
-            raise RuntimeError(
+            raise parseutils.ConfigError(
                 f"the primary beam must be an image; it has {data.ndim} axes")
         self._data = np.where(np.isfinite(data), data, 0)
-        self._grid = gridutils.make_grid(data.shape[::-1], step, rpix, rval, rota)
+        self._grid = gridutils.make_grid(
+            data.shape[::-1], step, rpix, rval, rota)
 
     def response(self, grid):
         gridutils.check_overlap(grid, self._grid, "the primary beam image")

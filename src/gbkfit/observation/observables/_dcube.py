@@ -7,9 +7,7 @@ import numpy as np
 
 import gbkfit.math
 from gbkfit.driver import Driver
-from gbkfit.psflsf import LSF, PSF
-from gbkfit.psflsf.lsfs import LSFPoint
-from gbkfit.psflsf.psfs import PSFPoint
+from gbkfit.instrument import LSF, LSFPoint, PSF, PSFPoint
 from gbkfit.utils import gridutils
 
 

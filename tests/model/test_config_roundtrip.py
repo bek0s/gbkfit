@@ -19,7 +19,7 @@ import gbkfit.driver
 import gbkfit.model
 import gbkfit.observation
 import gbkfit.params
-import gbkfit.psflsf
+import gbkfit.instrument
 from gbkfit.model.gmodels import common, traits
 from gbkfit.utils import funcutils
 from modelutils import config_group
@@ -73,10 +73,10 @@ TRAIT_PARSERS = {
     for name in dir(traits) if name.endswith('_parser')}
 
 OTHER_PARSERS = dict(
-    psf=gbkfit.psflsf.psf_parser,
-    lsf=gbkfit.psflsf.lsf_parser,
+    psf=gbkfit.instrument.psf_parser,
+    lsf=gbkfit.instrument.lsf_parser,
     aperture=gbkfit.region.aperture_parser,
-    primary_beam=gbkfit.observation.primary_beam_parser,
+    primary_beam=gbkfit.instrument.primary_beam_parser,
     nwmode=common.nwmode_parser,
     driver=gbkfit.driver.driver_parser)
 

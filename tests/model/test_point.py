@@ -40,7 +40,7 @@ def test_point_in_an_image(driver, gmodel_type):
     psf = dict(type='gauss', sigma=1.0)
     smeared = evaluate(driver, gmodel, image | dict(psf=psf),
                        dict(xpos=0.25, ypos=1.25, flux=1))
-    from gbkfit.psflsf import psf_parser
+    from gbkfit.instrument import psf_parser
     # (the psf drawn at its own size, around pixel (5, 6))
     kernel = psf_parser.load(dict(psf)).asarray((0.5, 0.5))
     cy, cx = kernel.shape[0] // 2, kernel.shape[1] // 2

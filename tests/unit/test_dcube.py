@@ -9,8 +9,8 @@ import numpy as np
 import pytest
 
 from gbkfit.observation.observables._dcube import DCube, cube_extra
-from gbkfit.psflsf.lsfs import LSFGauss
-from gbkfit.psflsf.psfs import PSFGauss
+from gbkfit.instrument import LSFGauss
+from gbkfit.instrument import PSFGauss
 
 
 @pytest.mark.parametrize('psf, lsf', [
@@ -134,7 +134,7 @@ def test_lsf_only_keeps_the_image_on_a_non_square_cube(driver):
     # An LSF smooths each spectrum only, so the image (the cube summed
     # over its spectral axis) must stay the same. Without a PSF, DCube
     # uses a point PSF, which must have the shape of a non-square image.
-    from gbkfit.psflsf.lsfs import LSFGauss
+    from gbkfit.instrument import LSFGauss
     images = []
     for lsf in (None, LSFGauss(2.0)):
         dcube = DCube(
