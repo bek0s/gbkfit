@@ -100,9 +100,8 @@ class PriorDelta(Prior):
 
     @classmethod
     def load(cls, info, **kwargs):
-        desc = parseutils.make_typed_desc(cls, 'prior')
         opts = parseutils.parse_options_for_callable(
-            info, desc, cls.__init__)
+            info, cls.__init__)
         return cls(**opts)
 
     def dump(self):
@@ -135,9 +134,8 @@ class PriorUniform(Prior):
     @classmethod
     def load(cls, info, **kwargs):
         info = _recover_min_max(info, **kwargs)
-        desc = parseutils.make_typed_desc(cls, 'prior')
         opts = parseutils.parse_options_for_callable(
-            info, desc, cls.__init__, fun_rename_args=dict(
+            info, cls.__init__, rename_params=dict(
                 minimum='min',
                 maximum='max'))
         return cls(**opts)
@@ -170,9 +168,8 @@ class PriorGauss(Prior):
 
     @classmethod
     def load(cls, info, **kwargs):
-        desc = parseutils.make_typed_desc(cls, 'prior')
         opts = parseutils.parse_options_for_callable(
-            info, desc, cls.__init__)
+            info, cls.__init__)
         return cls(**opts)
 
     def dump(self):
@@ -222,9 +219,8 @@ class PriorGaussTrunc(Prior):
     @classmethod
     def load(cls, info, **kwargs):
         info = _recover_min_max(info, **kwargs)
-        desc = parseutils.make_typed_desc(cls, 'prior')
         opts = parseutils.parse_options_for_callable(
-            info, desc, cls.__init__, fun_rename_args=dict(
+            info, cls.__init__, rename_params=dict(
                 minimum='min',
                 maximum='max'))
         return cls(**opts)

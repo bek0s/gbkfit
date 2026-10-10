@@ -12,7 +12,7 @@ import pytest
 from gbkfit.utils import parseutils, typeutils
 
 
-DIMENSIONAL = dict(size=int, step=int | float)
+DIMENSIONAL = dict(size=int, step=float)
 
 
 @pytest.mark.parametrize('info, sanitized', [
@@ -34,7 +34,8 @@ def test_sanitize_dimensional_options(info, sanitized):
     dict(size=True),
     dict(size=[True, 2, 3])])
 def test_sanitize_dimensional_options_errors(info):
-    with pytest.raises(RuntimeError, match=f"option '{next(iter(info))}'"):
+    with pytest.raises(
+            parseutils.ConfigError, match=f"option '{next(iter(info))}'"):
         parseutils.sanitize_dimensional_options(info, DIMENSIONAL, 3)
 
 
@@ -68,13 +69,91 @@ def test_describe_unknown():
 def test_unknown_options_are_warnings_or_errors_in_strict_mode(caplog):
     def parse():
         return parseutils.parse_options(
-            dict(rnmax=1, rnmx=2), 'disk', optional={'rnmin', 'rnmax'})
+            dict(rnmax=1, rnmx=2), optional={'rnmin', 'rnmax'})
     assert parse() == dict(rnmax=1)
     assert "'rnmx' (did you mean 'rnmax'?)" in caplog.text
     with parseutils.strict_mode():
         with pytest.raises(parseutils.ConfigError, match="'rnmx'"):
             parse()
     assert parse() == dict(rnmax=1)
+
+
+class Shape(parseutils.TypedSerializable):
+
+    def dump(self):
+        return {}
+
+
+class Circle(Shape):
+
+    @staticmethod
+    def type():
+        return 'circle'
+
+    def __init__(self, radius: float):
+        self.radius = radius
+
+
+shape_parser = parseutils.TypedParser(Shape, Circle)
+
+
+def test_unknown_types_suggest_similar_ones():
+    with pytest.raises(
+            parseutils.ConfigError,
+            match=r"unknown type 'circel' \(did you mean 'circle'\?\)"):
+        shape_parser.load(dict(type='circel'))
+
+
+def test_options_must_match_the_annotations():
+    with pytest.raises(parseutils.ConfigError) as error:
+        shape_parser.load(dict(type='circle', radius='a'))
+    assert str(error.value) == (
+        "circle: option 'radius' must be of type float; it is 'a'")
+
+
+def ellipse(centre, axes: Sequence[float], angle: float = 0, colour=None):
+    pass
+
+
+def test_options_for_callable():
+    # Parameters ignored (centre), renamed (axes) or not, and options
+    # added (required, typed or not, and optional)
+    def parse(**info):
+        return parseutils.parse_options_for_callable(
+            info, ellipse, ignore_params=['centre'],
+            rename_params=dict(axes='ab'), add_required=dict(shape=str),
+            add_optional=dict(label=None))
+    assert parse(ab=[2, 1], shape='e', label=3) == dict(
+        axes=[2, 1], shape='e', label=3)
+    with pytest.raises(parseutils.ConfigError, match="'shape'"):
+        parse(ab=[2, 1])
+    with pytest.raises(parseutils.ConfigError, match="'shape' must be of"):
+        parse(ab=[2, 1], shape=5)
+    with pytest.raises(parseutils.ConfigError, match="'ab' must be of"):
+        parse(ab=2, shape='e')
+
+
+@pytest.mark.parametrize('options, message', [
+    (dict(ignore_params=['radius']), "has no parameters 'radius'"),
+    (dict(rename_params=dict(radius='r')), "has no parameters 'radius'"),
+    (dict(ignore_params=['axes'], rename_params=dict(axes='ab')),
+     "both ignored and renamed"),
+    (dict(rename_params=dict(axes='a', angle='a')), "to the same name"),
+    (dict(rename_params=dict(axes='angle')), "with the new names 'angle'"),
+    (dict(add_required=dict(x=int), add_optional=dict(x=int)),
+     "both required and optional"),
+    (dict(add_optional=dict(angle=float)), "names of the parameters"),
+    (dict(rename_params=dict(axes='ab'), add_optional=dict(ab=None)),
+     "names of the parameters")])
+def test_options_for_callable_must_fit_its_parameters(options, message):
+    with pytest.raises(RuntimeError, match=message):
+        parseutils.parse_options_for_callable({}, ellipse, **options)
+
+
+def test_warnings_have_the_path_of_the_configuration(caplog):
+    with parseutils.config_path('shapes'):
+        shape_parser.load([dict(type='circle', radius=1, colour='red')])
+    assert "shapes[0] [circle]: unknown options: 'colour'" in caplog.text
 
 
 @pytest.mark.parametrize('names, prefix, prefix_first, prefixes', [

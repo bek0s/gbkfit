@@ -23,7 +23,7 @@ def _read_file(
     x is a filename, or a dict with the filename ('file') and the HDU to
     read ('hdu', e.g. 'SCI'; by default the first).
     """
-    file, hdu = parseutils.parse_file(x, 'data file')
+    file, hdu = parseutils.parse_file(x)
     return fitsutils.read_data(
         prefix + file, hdu, rpix, rval, rest, spectral_axis)
 
@@ -126,10 +126,10 @@ def load_data(
             f"a data item has the file of its data ('data'), and optionally "
             f"those of its mask ('mask') and error ('error'); it is {info!r}")
     parseutils.parse_options(
-        info, 'data', required={'data'}, optional={'mask', 'error'})
+        info, required={'data'}, optional={'mask', 'error'})
     data_d, coords = parseutils.load_option(
         lambda x: _read_file(x, prefix, rpix, rval, rest, spectral_axis),
-        info, 'data', True, False)
+        info, 'data', required=True)
     data_m = None
     data_e = None
     if (mask := info.get('mask')) is not None:

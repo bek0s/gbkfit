@@ -34,9 +34,8 @@ class DatasetRegionSpectra(Dataset):
         coordinates of the spectral axis are those of the header of the
         data file, or of the options step, rpix, rval and rest.
         """
-        desc = parseutils.make_typed_desc(cls, 'dataset')
         parseutils.load_option_and_update_info(
-            regions_parser, info, 'regions', True, False, prefix=prefix)
+            regions_parser, info, 'regions', required=True, prefix=prefix)
         step, rpix, rval, rest = (info.pop(key, None) for key in (
             'step', 'rpix', 'rval', 'rest'))
         item = {k: info.pop(k) for k in ('data', 'mask', 'error') if k in info}
@@ -49,7 +48,7 @@ class DatasetRegionSpectra(Dataset):
             rval=coords.rval[1],
             rest=coords.rest)
         return cls(**parseutils.parse_options_for_callable(
-            info, desc, cls.__init__))
+            info, cls.__init__))
 
     def dump(self, prefix='', dump_path=True, overwrite=False):
         spectral = self._spectral_grid.coords

@@ -33,12 +33,6 @@ class LikelihoodGaussian(Likelihood):
     def type():
         return 'gaussian'
 
-    @classmethod
-    def load(cls, info):
-        desc = parseutils.make_typed_desc(cls, 'likelihood')
-        return cls(**parseutils.parse_options_for_callable(
-            info, desc, cls.__init__))
-
     def dump(self):
         return dict(type=self.type(), weights=self._weights)
 

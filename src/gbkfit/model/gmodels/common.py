@@ -30,12 +30,6 @@ class NWMode(parseutils.TypedSerializable, abc.ABC):
 
 class NWModeRelative(NWMode, abc.ABC):
 
-    @classmethod
-    def load(cls, info):
-        desc = parseutils.make_typed_desc(cls, 'node-wise mode')
-        opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
-        return cls(**opts)
-
     def dump(self):
         return super().dump() | dict(origin=self.origin())
 

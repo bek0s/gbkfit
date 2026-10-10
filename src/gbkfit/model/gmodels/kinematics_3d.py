@@ -35,14 +35,13 @@ class GModelKinematics3D(GModelSCube):
 
     @classmethod
     def load(cls, info, *args, **kwargs):
-        desc = parseutils.make_typed_desc(cls, 'gmodel')
         parseutils.load_option_and_update_info(
-            _scmp_parser, info, 'components', required=True, allow_none=False)
+            _scmp_parser, info, 'components', required=True)
         parseutils.load_option_and_update_info(
             _ocmp_parser, info, 'opacity_components')
         parseutils.load_option_and_update_info(
             mass_model_parser, info, 'mass_model')
-        opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
+        opts = parseutils.parse_options_for_callable(info, cls.__init__)
         return cls(**opts)
 
     def dump(self):

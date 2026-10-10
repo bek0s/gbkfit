@@ -129,9 +129,8 @@ def load_observable_common(cls, info, ndim, dataset, expected_dataset_cls):
         if cls.spectral_axis is not None:
             info.update(rest=grid.coords.rest)
     parseutils.sanitize_dimensional_options(info, dict(
-        size=int, step=int | float, rpix=int | float, rval=int | float),
-        ndim)
-    return parseutils.parse_options_for_callable(info, desc, cls.__init__)
+        size=int, step=float, rpix=float, rval=float), ndim)
+    return parseutils.parse_options_for_callable(info, cls.__init__)
 
 
 class DCubePlanBase(ObservablePlan):

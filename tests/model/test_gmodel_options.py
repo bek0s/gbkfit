@@ -119,7 +119,7 @@ def test_2d_gmodels_have_no_3d_options(gmodel_type, option):
         type=gmodel_type, components=GMODELS[gmodel_type],
         **{option: OPTIONS_3D[option]})
     message = load_error(info)
-    assert "unknown options for gmodel" in message
+    assert message.startswith(f"{gmodel_type}: unknown options")
     assert f"'{option}'" in message
 
 

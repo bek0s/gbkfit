@@ -35,12 +35,6 @@ class MassComponent(parseutils.TypedSerializable, abc.ABC):
     Radii are in kpc, masses in Msun and velocities in km/s.
     """
 
-    @classmethod
-    def load(cls, info):
-        desc = parseutils.make_typed_desc(cls, 'mass component')
-        return cls(**parseutils.parse_options_for_callable(
-            info, desc, cls.__init__))
-
     def dump(self):
         return dict(type=self.type(), name=self._name)
 
@@ -126,7 +120,7 @@ mass_component_parser = parseutils.TypedParser(MassComponent, [
     MassPseudoIsothermal])
 
 
-class MassModel(parseutils.BasicSerializable):
+class MassModel(parseutils.Serializable):
     """
     The mass of a galaxy: its mass components (e.g. stars, gas, dark
     matter), whose circular velocity adds in quadrature. Its parameters
@@ -138,12 +132,10 @@ class MassModel(parseutils.BasicSerializable):
 
     @classmethod
     def load(cls, info):
-        desc = parseutils.make_basic_desc(cls, 'mass model')
         parseutils.load_option_and_update_info(
-            mass_component_parser, info, 'components', required=True,
-            allow_none=False)
+            mass_component_parser, info, 'components', required=True)
         return cls(**parseutils.parse_options_for_callable(
-            info, desc, cls.__init__))
+            info, cls.__init__))
 
     def dump(self):
         return dict(components=mass_component_parser.dump(

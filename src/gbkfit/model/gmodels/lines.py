@@ -20,17 +20,11 @@ __all__ = [
 _C = astropy.constants.c.to_value('km/s')
 
 
-class Line(parseutils.BasicSerializable):
+class Line(parseutils.Serializable):
     """
     An emission line of a spectral component: its name, and its rest
     wavelength or frequency (see gridutils.make_rest).
     """
-
-    @classmethod
-    def load(cls, info):
-        desc = parseutils.make_basic_desc(cls, 'line')
-        return cls(**parseutils.parse_options_for_callable(
-            info, desc, cls.__init__))
 
     def dump(self):
         return dict(name=self._name, rest=str(self._rest))

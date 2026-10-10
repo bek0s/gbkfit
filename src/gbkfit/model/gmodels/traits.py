@@ -359,12 +359,6 @@ class Trait(parseutils.TypedSerializable, abc.ABC):
     def uid():
         pass
 
-    @classmethod
-    def load(cls, info):
-        desc = trait_desc(cls)
-        opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
-        return cls(**opts)
-
     def dump(self):
         return dict(type=self.type())
 
@@ -414,7 +408,7 @@ class TraitFeatureNWMode:
     @classmethod
     def load(cls, info):
         parseutils.load_option_and_update_info(
-            nwmode_parser, info, 'nwmode', required=False)
+            nwmode_parser, info, 'nwmode')
         return super().load(info)  # noqa
 
     def dump(self):

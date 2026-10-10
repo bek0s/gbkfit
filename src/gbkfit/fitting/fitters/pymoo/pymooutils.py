@@ -81,9 +81,7 @@ class _Base(parseutils.TypedSerializable, abc.ABC):
 
     @classmethod
     def load(cls, info, *args, **kwargs):
-        type_name = kwargs.get('type_name')
-        desc = parseutils.make_typed_desc(cls, f'pymoo {type_name}')
-        opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
+        opts = parseutils.parse_options_for_callable(info, cls.__init__)
         return cls(**opts)
 
     def dump(self, *args, **kwargs):

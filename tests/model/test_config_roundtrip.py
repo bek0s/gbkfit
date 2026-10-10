@@ -64,7 +64,7 @@ def registered_types(parsers):
     return [
         pytest.param(parser, cls, id=f'{name}-{cls.type()}')
         for name, parser in parsers.items()
-        for cls in parser._parsers.values()
+        for cls in parser.registered_classes().values()
         if cls.type() not in FILE_TYPES]
 
 

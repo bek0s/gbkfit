@@ -57,15 +57,14 @@ def log_probability(eparams, parameters, objective):
         return foo
 
 
-class FittingParamPropertyEmcee(parseutils.BasicSerializable, FittingParamProperty):
+class FittingParamPropertyEmcee(parseutils.Serializable, FittingParamProperty):
 
     @classmethod
     def load(cls, info: dict[str, Any]) -> 'FittingParamPropertyEmcee':
         info['prior'] = fitutils.prepare_param_property_prior(info)
         info['prior'] = prior_parser.load_one(info['prior'], param_info=info)
-        desc = parseutils.make_basic_desc(cls, 'fitting param property')
         opts = parseutils.parse_options_for_callable(
-            info, desc, cls.__init__, fun_rename_args=dict(
+            info, cls.__init__, rename_params=dict(
                 initial_value='value',
                 initial_width='width'))
         return cls(**opts)
@@ -121,11 +120,10 @@ class FittingParamsEmcee(FittingParams):
 
     @classmethod
     def load(cls, info: dict[str, Any], pdescs):
-        desc = parseutils.make_basic_desc(cls, 'fitting params')
         opts = param_parsers.load_params_properties_transforms(
             info, pdescs, collections.abc.Mapping, cls.load_param_property)
         opts = parseutils.parse_options_for_callable(
-            opts, desc, cls.__init__, fun_ignore_args=['pdescs'])
+            opts, cls.__init__, ignore_params=['pdescs'])
         return cls(pdescs, **opts)
 
     def dump(self, transforms_filename: str) -> dict[str, Any]:
@@ -156,8 +154,7 @@ class FitterEmcee(Fitter, abc.ABC):
     @classmethod
     def load(cls, info, *args, **kwargs):
         info['moves'] = load_moves_with_weights(info.get('moves'))
-        desc = parseutils.make_typed_desc(cls, 'fitter')
-        opts = parseutils.parse_options_for_callable(info, desc, cls.__init__)
+        opts = parseutils.parse_options_for_callable(info, cls.__init__)
         return cls(**opts)
 
     def dump(self):

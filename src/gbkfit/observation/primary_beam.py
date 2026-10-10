@@ -52,12 +52,6 @@ class PrimaryBeamRadial(PrimaryBeam, abc.ABC):
     its full width at half maximum (fwhm, arcsec).
     """
 
-    @classmethod
-    def load(cls, info):
-        desc = parseutils.make_typed_desc(cls, 'primary beam')
-        return cls(**parseutils.parse_options_for_callable(
-            info, desc, cls.__init__))
-
     def dump(self, prefix='', dump_path=True, overwrite=False):
         # A radial response has no data to write
         return dict(type=self.type(), fwhm=self._fwhm, x=self._x, y=self._y)
@@ -116,10 +110,9 @@ class PrimaryBeamImage(PrimaryBeam):
 
     @classmethod
     def load(cls, info, prefix=''):
-        desc = parseutils.make_typed_desc(cls, 'primary beam')
         with parseutils.config_path('file'):
             file, hdu = parseutils.parse_file(
-                info.get('file') or {}, 'primary beam file')
+                info.get('file') or {})
             # (the world coordinates given are those of the image, which
             # the others come from)
             data, coords = fitsutils.read_data(
@@ -130,7 +123,7 @@ class PrimaryBeamImage(PrimaryBeam):
             rota=coords.rota if info.get('rota') is None else info['rota'])
         info.pop('file')
         return cls(**parseutils.parse_options_for_callable(
-            info, desc, cls.__init__))
+            info, cls.__init__))
 
     def dump(self, prefix='', dump_path=True, overwrite=False):
         filename = f'{prefix}primary_beam.fits'

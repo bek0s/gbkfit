@@ -9,7 +9,7 @@ __all__ = [
 ]
 
 
-class Instrument(parseutils.BasicSerializable):
+class Instrument(parseutils.Serializable):
     """
     What happens to the light of a gmodel in the telescope and the
     instrument: the primary beam, and the point and line spread functions.
@@ -18,13 +18,12 @@ class Instrument(parseutils.BasicSerializable):
 
     @classmethod
     def load(cls, info):
-        desc = parseutils.make_basic_desc(cls, 'instrument')
         parseutils.load_option_and_update_info(
             primary_beam_parser, info, 'primary_beam')
         parseutils.load_option_and_update_info(psf_parser, info, 'psf')
         parseutils.load_option_and_update_info(lsf_parser, info, 'lsf')
         return cls(**parseutils.parse_options_for_callable(
-            info, desc, cls.__init__))
+            info, cls.__init__))
 
     def dump(self, prefix='', dump_path=True, overwrite=False):
         """
