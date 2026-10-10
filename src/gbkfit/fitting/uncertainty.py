@@ -41,8 +41,9 @@ class UncertaintyOptions(parseutils.Serializable):
         The number of samples of the Gaussian (Laplace) approximation of
         the posterior at each solution (0 for none).
     rcond : float, optional
-        Singular values of the Jacobian below rcond times the largest
-        one count as 0 (unconstrained directions).
+        Singular values of the Jacobian (with normalised columns) below
+        rcond times the largest one count as 0 (unconstrained
+        directions).
 
     Raises
     ------
@@ -89,14 +90,13 @@ class UncertaintyOptions(parseutils.Serializable):
 
 def finite_difference_steps(
         x: np.ndarray,
-        lower: np.ndarray,
-        upper: np.ndarray,
+        scales: np.ndarray,
         relative: float
 ) -> np.ndarray:
     """
     Return the steps of finite differences for each free element: a
-    relative step times the larger of |x| and 1% of the width of the
-    bounds (or 1, if unbounded), so that values at or near 0 get a step
+    relative step times the larger of |x| and the typical scale of the
+    value (see FitParam.scale), so that values at or near 0 get a step
     of their scale.
 
     The best relative steps are the square root of the precision of the
@@ -107,8 +107,8 @@ def finite_difference_steps(
     ----------
     x : np.ndarray
         The free values.
-    lower, upper : np.ndarray
-        The bounds (may be infinite).
+    scales : np.ndarray
+        The typical scale of each.
     relative : float
         The relative step.
 
@@ -117,9 +117,7 @@ def finite_difference_steps(
     np.ndarray
         The steps.
     """
-    width = upper - lower
-    scale = np.where(np.isfinite(width), 0.01 * width, 1.0)
-    return relative * np.maximum(np.abs(x), scale)
+    return relative * np.maximum(np.abs(x), scales)
 
 
 def jacobian(
@@ -159,11 +157,17 @@ def jacobian(
     """
     columns = []
     for i, h in enumerate(steps):
+        room_up = upper[i] - x[i]
+        room_down = x[i] - lower[i]
+        if h > room_up and h > room_down:
+            # (the bounds are narrower than the step: step to the bound
+            # with more room)
+            h = max(room_up, room_down)
         up, down = x.copy(), x.copy()
         up[i] += h
         down[i] -= h
-        can_up = up[i] <= upper[i]
-        if scheme == 'central' and can_up and down[i] >= lower[i]:
+        can_up = h <= room_up
+        if scheme == 'central' and can_up and h <= room_down:
             columns.append((func(up) - func(down)) / (2 * h))
             continue
         if f0 is None:
@@ -180,17 +184,22 @@ def covariance(
         x: np.ndarray,
         lower: np.ndarray,
         upper: np.ndarray,
+        scales: np.ndarray,
         options: UncertaintyOptions,
         reduced_chi2: float
 ) -> tuple[Covariance, int]:
     """
     Return the covariance of a solution, from the Jacobian of the
-    weighted residuals: (J^T J)^-1, by an SVD pseudo-inverse; and the
-    number of model evaluations it took.
+    weighted residuals: (J^T J)^-1, by an SVD pseudo-inverse of J with
+    its columns normalised (so that the cutoff of the singular values
+    does not depend on the units); and the number of model evaluations
+    it took.
 
     The errors are propagated to all elements through the Jacobian of
     the parameter space (no models). Elements at a bound are listed: the
-    covariance ignores the bound.
+    covariance ignores the bound. The covariance is scaled by the reduced
+    chi-square only if that is defined (more residuals than free
+    elements).
 
     Parameters
     ----------
@@ -200,6 +209,8 @@ def covariance(
         The free values of the solution.
     lower, upper : np.ndarray
         The bounds of the free values.
+    scales : np.ndarray
+        The typical scales of the free values (see FitParam.scale).
     options : UncertaintyOptions
         The options.
     reduced_chi2 : float
@@ -211,6 +222,12 @@ def covariance(
         The covariance.
     int
         The number of model evaluations.
+
+    Raises
+    ------
+    ParamEvaluationError
+        If the parameters cannot be evaluated at a step (e.g. out of
+        their valid range).
     """
     objective = problem.objective()
     params = problem.params()
@@ -222,13 +239,16 @@ def covariance(
         return objective.residuals(params.evaluate(point))
 
     steps = finite_difference_steps(
-        x, lower, upper, problem.precision() ** (1 / 3))
+        x, scales, problem.precision() ** (1 / 3))
     jac = jacobian(residuals, x, steps, lower, upper)
-    _, s, vt = np.linalg.svd(jac, full_matrices=False)
+    norms = np.linalg.norm(jac, axis=0)
+    norms[norms == 0] = 1
+    _, s, vt = np.linalg.svd(jac / norms, full_matrices=False)
     keep = s > options.rcond() * s[0]
     vt_kept = vt[keep] / s[keep, None]
-    matrix = vt_kept.T @ vt_kept
-    if options.scale():
+    matrix = (vt_kept.T @ vt_kept) / np.outer(norms, norms)
+    scaled = options.scale() and np.isfinite(reduced_chi2)
+    if scaled:
         matrix *= reduced_chi2
     std = np.sqrt(np.diag(matrix))
     with np.errstate(divide='ignore', invalid='ignore'):
@@ -260,7 +280,7 @@ def covariance(
         at_bounds=tuple(
             name for name, xi, lo, hi, h in zip(names, x, lower, upper, steps)
             if xi - lo < h or hi - xi < h),
-        scaled=options.scale()), nevals
+        scaled=bool(scaled)), nevals
 
 
 def laplace_posterior(

@@ -17,7 +17,7 @@ from gbkfit.fitting.result import (
 from gbkfit.fitting.uncertainty import (
     UncertaintyOptions, covariance, laplace_posterior)
 from gbkfit.objective import Objective
-from gbkfit.params import ParamSpace
+from gbkfit.params import ParamEvaluationError, ParamSpace
 from gbkfit.utils import parseutils
 from gbkfit.utils.parseutils import ConfigError
 
@@ -167,8 +167,12 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
         ------
         ConfigError
             If the free properties are invalid for the fitter.
+        ValueError
+            If no parameter is free.
         """
         fit_params = self.load_fit_params(params)
+        if not fit_params:
+            raise ValueError("no parameter is free")
         priors = [p.prior() for p in fit_params.values()]
         if len({p is None for p in priors}) > 1:
             raise ConfigError("either all free elements have priors, or none")
@@ -178,16 +182,23 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
         start = time.perf_counter()
         run = self._run(problem, list(fit_params.values()), rng)
         elapsed = time.perf_counter() - start
-        lower = np.array([p.minimum() for p in fit_params.values()])
-        upper = np.array([p.maximum() for p in fit_params.values()])
+        bounds = _Bounds(
+            np.array([p.minimum() for p in fit_params.values()]),
+            np.array([p.maximum() for p in fit_params.values()]),
+            np.array([p.scale() for p in fit_params.values()]))
         diagnostics = dict(run.diagnostics)
         solutions = []
         uncertainty_nevals = 0
+        uncertainty_errors = []
         for x in run.solutions:
-            solution, nevals = self._solution(problem, x, lower, upper, rng)
+            solution, nevals, error = self._solution(problem, x, bounds, rng)
             solutions.append(solution)
             uncertainty_nevals += nevals
+            if error is not None:
+                uncertainty_errors.append(error)
         diagnostics['uncertainty_nevals'] = uncertainty_nevals
+        if uncertainty_errors:
+            diagnostics['uncertainty_errors'] = uncertainty_errors
         posterior = None
         if run.samples is not None:
             posterior = _posterior(problem, run.samples, run.weights)
@@ -236,13 +247,13 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
             self,
             problem: FitProblem,
             x: np.ndarray,
-            lower: np.ndarray,
-            upper: np.ndarray,
+            bounds: '_Bounds',
             rng: np.random.Generator
-    ) -> tuple[FitSolution, int]:
+    ) -> tuple[FitSolution, int, str | None]:
         """
-        Evaluate a solution and its uncertainty; return it and the number
-        of model evaluations it took.
+        Evaluate a solution and its uncertainty; return it, the number of
+        model evaluations it took, and why its uncertainty is missing (if
+        the parameters cannot be evaluated at a step of its Jacobian).
         """
         objective = problem.objective()
         params = problem.params()
@@ -255,15 +266,19 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
         reduced_chi2 = chi2 / dof if dof > 0 else np.nan
         log_prior = None if problem.priors() is None \
             else problem.log_prior(x)
-        cov = laplace = None
+        cov = laplace = error = None
         options = self._uncertainty
         if options.covariance():
-            cov, cov_nevals = covariance(
-                problem, x, lower, upper, options, reduced_chi2)
-            nevals += cov_nevals
-            if options.laplace_samples() > 0:
-                laplace = laplace_posterior(
-                    problem, x, cov, options.laplace_samples(), rng)
+            try:
+                cov, cov_nevals = covariance(
+                    problem, x, bounds.lower, bounds.upper, bounds.scales,
+                    options, reduced_chi2)
+                nevals += cov_nevals
+            except ParamEvaluationError as e:
+                error = f"no covariance: {e}"
+        if cov is not None and options.laplace_samples() > 0:
+            laplace = laplace_posterior(
+                problem, x, cov, options.laplace_samples(), rng)
         return FitSolution(
             free=dict(zip(problem.names(), x.tolist())),
             values=values,
@@ -275,7 +290,15 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
             log_likelihood=-0.5 * chi2,
             log_prior=log_prior,
             covariance=cov,
-            laplace=laplace), nevals
+            laplace=laplace), nevals, error
+
+
+@dataclasses.dataclass(frozen=True)
+class _Bounds:
+    """The bounds and the typical scales of the free values."""
+    lower: np.ndarray
+    upper: np.ndarray
+    scales: np.ndarray
 
 
 def _posterior(
@@ -283,14 +306,27 @@ def _posterior(
         samples: np.ndarray,
         weights: np.ndarray | None
 ) -> Posterior:
-    """Return the posterior of all elements, from samples of the free."""
+    """
+    Return the posterior of all elements, from samples of the free. The
+    samples of no weight and those where the parameters cannot be
+    evaluated (which have no likelihood) are left out.
+    """
     params = problem.params()
-    rows = [
-        list(params.element_values(params.evaluate(x)).values())
-        for x in samples]
-    names = tuple(params.element_values(params.evaluate(samples[0])))
+    names = tuple(params.kinds())
+    rows = []
+    kept = []
+    for i, x in enumerate(samples):
+        if weights is not None and weights[i] == 0:
+            continue
+        try:
+            rows.append(list(params.element_values(
+                params.evaluate(x)).values()))
+            kept.append(i)
+        except ParamEvaluationError:
+            pass
     return Posterior(
-        names=names, samples=np.array(rows), weights=weights,
+        names=names, samples=np.array(rows).reshape(-1, len(names)),
+        weights=None if weights is None else weights[kept],
         approximate=False)
 
 

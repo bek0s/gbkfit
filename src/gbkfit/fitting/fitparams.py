@@ -57,6 +57,15 @@ class FitParam(parseutils.Serializable, abc.ABC):
         """Return the prior, if the fitter uses priors."""
         return None
 
+    def scale(self) -> float:
+        """
+        Return the typical scale of the value, for the steps of finite
+        differences near 0: 1% of the width of the bounds, or 1 if
+        unbounded.
+        """
+        width = self.maximum() - self.minimum()
+        return 0.01 * width if math.isfinite(width) else 1.0
+
 
 # A class of FitParam (an alias, for the classes with a type() method,
 # which hides the builtin in their bodies)
@@ -178,3 +187,11 @@ class FitParamPrior(FitParam):
 
     def prior(self) -> Prior:
         return self._prior
+
+    def scale(self) -> float:
+        """
+        Return the typical scale of the value: 1% of the width of the
+        support of the prior, or of its 16-84% range if unbounded.
+        """
+        width = self.maximum() - self.minimum()
+        return 0.01 * (width if math.isfinite(width) else self._prior.width())

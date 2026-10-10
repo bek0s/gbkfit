@@ -180,6 +180,29 @@ def test_multistart_finds_the_four_minima_of_a_thin_disk():
         for s in result.solutions if s.chi2 < best * (1 + 1e-6)}
     assert minima == {(40, 55), (220, 55), (40, 125), (220, 125)}
 
+
+@pytest.mark.parametrize('fitter', [
+    dict(type='lmfit.least_squares'),
+    dict(type='scipy.least_squares', method='lm'),
+    dict(type='scipy.least_squares', method='trf')])
+def test_least_squares_move_values_from_awkward_starts(fitter):
+    # xpos starts near 0, where MINPACK's own step (sqrt(epsfcn) times
+    # the value) is below the precision of float32 models; bpt_s starts
+    # on its bound, where the map of bounded values of lmfit and 'lm' is
+    # flat. Neither moved.
+    pytest.importorskip('lmfit')
+    from gbkfit.fitting import fitter_parser
+    from gbkfit.fitting.fitters.lmfit import FitterLMFitLeastSquares
+    objective = mock_objective(DriverHost())
+    params = ParamSpace(objective.pdescs(), bounded_properties())
+    local = FitterLMFitLeastSquares().fit(objective, params).best()
+    properties = bounded_properties()
+    properties['xpos']['value'] = 1e-3
+    properties['bpt_s'] |= dict(value=1, min=1)
+    params = ParamSpace(objective.pdescs(), properties)
+    result = fitter_parser.load(fitter).fit(objective, params)
+    assert result.best().chi2 == pytest.approx(local.chi2, rel=1e-6)
+
 def prior_properties(nsigma):
     # Uniform priors of +-nsigma errors around the truth (see the lmfit
     # test), so that the samplers need few evaluations
@@ -242,3 +265,19 @@ def test_dynesty_posterior_agrees_with_the_covariance():
     result = FitterDynesty(nlive=300).fit(objective, params)
     check_posterior(result)
     assert result.evidence.log_z_error > 0
+
+
+def test_samplers_leave_out_points_the_parameters_reject():
+    # bpt_s is nan for xpos < 0.6: there the likelihood is -inf, and the
+    # points nautilus keeps (with no weight) crashed the posterior
+    pytest.importorskip('nautilus')
+    from gbkfit.fitting.fitters.nautilus import FitterNautilus
+    objective = mock_objective(DriverHost())
+    properties = dict(TRUE) | dict(
+        xpos=dict(min=0.5, max=0.9), posa=dict(min=35, max=45),
+        bpt_s='np.sqrt(xpos - 0.6) * 0 + 4')
+    params = ParamSpace(objective.pdescs(), properties)
+    result = FitterNautilus(n_live=200, n_eff=500).fit(objective, params)
+    assert np.all(result.posterior.samples[:, 0] >= 0.6)
+    assert result.posterior.summary()['xpos'][1] == pytest.approx(
+        TRUE['xpos'], abs=0.05)

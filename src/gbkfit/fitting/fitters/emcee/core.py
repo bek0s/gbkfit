@@ -157,6 +157,11 @@ class FitterEmcee(Fitter):
         if burnin is not None and not 0 <= burnin < nsteps:
             raise ConfigError(
                 f"option 'burnin' must be in [0, nsteps); it is {burnin}")
+        kept = nsteps - (nsteps // 2 if burnin is None else burnin)
+        if thin > kept:
+            raise ConfigError(
+                f"option 'thin' ({thin}) keeps no step of the {kept} after "
+                f"the burn-in")
         self._nwalkers = nwalkers
         self._nsteps = nsteps
         self._burnin = burnin
@@ -217,18 +222,19 @@ class FitterEmcee(Fitter):
     ) -> np.ndarray:
         """
         Return the starting points of the walkers, each with a finite
-        prior density (redrawn up to 100 times).
+        posterior density: in the support of the prior, and where the
+        parameters can be evaluated (redrawn up to 100 times).
         """
         start = np.stack(
             [p.sample_start(rng, nwalkers) for p in params], axis=1)
         for _ in range(100):
             bad = [
                 i for i, x in enumerate(start)
-                if not math.isfinite(problem.log_prior(x))]
+                if not math.isfinite(problem.log_posterior(x))]
             if not bad:
                 return start
             start[bad] = np.stack(
                 [p.sample_start(rng, len(bad)) for p in params], axis=1)
         raise ConfigError(
-            "could not start the walkers where the prior density is "
+            "could not start the walkers where the posterior density is "
             "positive")
