@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 from typing import Literal
@@ -102,4 +103,8 @@ def fit(config: str,
 
     _log.info(f"saving result under '{output_dir}'...")
     result.dump(output_dir)
+    outputs = _detail.evaluation_outputs(
+        group, objective, result.best().values, True, True)
+    _detail.write_outputs(
+        json, yaml, output_dir, outputs, 'gbkfit_fit_extra')
     _log.info(f"result:\n{result.summary()}")
