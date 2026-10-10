@@ -95,6 +95,17 @@ def test_priors_are_normalised_and_ppf_inverts_their_cdf(prior):
         prior.minimum() == -np.inf
 
 
+def test_priors_load_from_their_configs_and_round_trip():
+    info = dict(
+        prior=dict(type='gauss_trunc', mean=0, std=1, min=-1, max=2),
+        value=0.5)
+    param = FitParamPrior.load(info)
+    assert isinstance(param.prior(), PriorGaussTrunc)
+    assert (param.minimum(), param.maximum(), param.value()) == (-1, 2, 0.5)
+    assert param.dump() == info
+    assert FitParamPrior.load(param.dump()).dump() == info
+
+
 def test_min_and_max_without_a_prior_are_a_uniform_prior():
     param = FitParamPrior.load(dict(min=-2, max=5, value=1))
     assert isinstance(param.prior(), PriorUniform)
