@@ -7,6 +7,7 @@ from gbkfit.dataset import DatasetPixelBrightness
 from gbkfit.driver import Driver
 from gbkfit.instrument import Instrument
 from gbkfit.model.base import Model, ModelImage, Selection
+from gbkfit.params import ParamValues
 from gbkfit.utils import gridutils
 from gbkfit.utils.parseutils import ConfigError
 from . import _dcube, _detail
@@ -187,7 +188,7 @@ class PixelBrightnessPlan(_detail.DCubePlanBase):
 
     def evaluate(
             self,
-            params: dict[str, float | np.ndarray],
+            params: ParamValues,
             out_extra: dict[str, Any] | None
     ) -> ModelData:
         self._evaluate_cube(params, out_extra, _image_extra, _image_extra)

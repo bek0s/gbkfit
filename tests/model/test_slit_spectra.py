@@ -27,7 +27,7 @@ def evaluate(driver, observable):
     model_group = observation_group([
         dict(driver=dict(type=driver.type()), observable=observable,
              model=MODEL)])
-    params = gbkfit.params.EvaluationParams(model_group.pdescs(), PROPERTIES)
+    params = gbkfit.params.ParamSpace(model_group.pdescs(), PROPERTIES)
     data = model_group.model_h(params.evaluate())[0]
     return next(iter(data.values()))['d'].copy()
 
@@ -78,7 +78,7 @@ def test_slit_spectra_objective_residual(driver):
     model_group = ObservationGroup(
         [model_parser.load(copy.deepcopy(MODEL))], [observation])
     objective = Objective(model_group)
-    params = gbkfit.params.EvaluationParams(model_group.pdescs(), PROPERTIES)
+    params = gbkfit.params.ParamSpace(model_group.pdescs(), PROPERTIES)
     residual = objective.residual_nddata_h(params.evaluate(), False)
     np.testing.assert_allclose(residual[0]['spectra'], -0.5, rtol=1e-5)
     # The chi-squared is the sum of their squares, and the log-likelihood

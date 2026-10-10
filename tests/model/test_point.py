@@ -16,7 +16,7 @@ def evaluate(driver, model, observable, properties):
     group = observation_group([dict(
         driver=dict(type=driver.type()), observable=copy.deepcopy(observable),
         model=copy.deepcopy(model))])
-    params = gbkfit.params.EvaluationParams(group.pdescs(), properties)
+    params = gbkfit.params.ParamSpace(group.pdescs(), properties)
     data = group.model_h(params.evaluate())[0]
     return next(iter(data.values()))['d'].copy()
 

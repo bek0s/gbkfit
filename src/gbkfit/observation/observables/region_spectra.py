@@ -8,6 +8,7 @@ from gbkfit.dataset import Dataset, DatasetRegionSpectra
 from gbkfit.driver import Driver
 from gbkfit.instrument import Instrument
 from gbkfit.model.base import Model, ModelSCube, Selection
+from gbkfit.params import ParamValues
 from gbkfit.region import Regions, regions_parser
 from gbkfit.utils import gridutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
@@ -270,7 +271,7 @@ class RegionSpectraPlan(_detail.DCubePlanBase):
 
     def evaluate(
             self,
-            params: dict[str, float | np.ndarray],
+            params: ParamValues,
             out_extra: dict[str, Any] | None
     ) -> ModelData:
         self._evaluate_cube(

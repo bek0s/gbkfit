@@ -31,7 +31,7 @@ def evaluate(driver, component, properties):
     group = observation_group([dict(
         driver=dict(type=driver.type()), observable=copy.deepcopy(SCUBE),
         model=dict(type='kinematics_3d', components=[component]))])
-    params = gbkfit.params.EvaluationParams(group.pdescs(), properties)
+    params = gbkfit.params.ParamSpace(group.pdescs(), properties)
     return group.model_h(params.evaluate())[0]['spectra']['d'].copy()
 
 
@@ -156,7 +156,7 @@ def test_height_traits_at_each_height(driver, height, values, factor):
     group = observation_group([dict(
         driver=dict(type=driver.type()), observable=copy.deepcopy(SCUBE),
         model=dict(type='kinematics_3d', components=[component]))])
-    params = gbkfit.params.EvaluationParams(
+    params = gbkfit.params.ParamSpace(
         group.pdescs(), properties | dict(incl=0))
     extra = {}
     group.model_h(params.evaluate(), extra)

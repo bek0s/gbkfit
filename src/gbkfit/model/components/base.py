@@ -4,7 +4,7 @@ from typing import Any, TypedDict
 import numpy as np
 
 from gbkfit.driver import DeviceArray, Driver
-from gbkfit.params import ParamDesc
+from gbkfit.params import ParamDesc, ParamValues
 from gbkfit.utils import gridutils, parseutils
 from .geometries import Geometry
 
@@ -135,7 +135,7 @@ class ComponentPlan(abc.ABC):
     @abc.abstractmethod
     def evaluate(
             self,
-            params: dict[str, float | np.ndarray],
+            params: ParamValues,
             grid: NativeGrid,
             outputs: dict[str, DeviceArray | None],
             out_extra: dict[str, Any] | None

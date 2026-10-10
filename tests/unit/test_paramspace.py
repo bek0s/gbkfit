@@ -2,9 +2,8 @@
 The behaviour of the parameters of the configurations: which elements
 are free, tied and fixed, the values they evaluate to, and the errors.
 
-Each case goes through the same path as a configuration file: the
-params of the eval task (EvaluationParams), or those of a fit
-(ParamSpace).
+Each case goes through the same path as a configuration file
+(param_space_parser), or makes a ParamSpace in Python.
 """
 
 import re
@@ -12,31 +11,28 @@ import re
 import numpy as np
 import pytest
 
-import gbkfit.params
-from gbkfit.params import ParamScalarDesc, ParamVectorDesc
+from gbkfit.params import (
+    ParamEvaluationError, ParamKind, ParamModeOffsets, ParamScalarDesc,
+    ParamSpace, ParamVectorDesc, param_space_parser)
+from gbkfit.utils.parseutils import ConfigError
 
 
 def make_pdescs(**sizes):
     """Parameter descriptions: a scalar for None, else a vector."""
     return {
-        name: ParamScalarDesc(name) if size is None
-        else ParamVectorDesc(name, size)
+        name: ParamScalarDesc() if size is None else ParamVectorDesc(size)
         for name, size in sizes.items()}
 
 
-def load_eval_params(pdescs, properties, transforms=None):
+def load_params(pdescs, properties, transforms=None):
     info = dict(properties=properties)
     if transforms:
         info['transforms'] = transforms
-    return gbkfit.params.evaluation_params_parser.load(info, pdescs=pdescs)
+    return param_space_parser.load(info, pdescs=pdescs)
 
 
 def evaluate(pdescs, properties, transforms=None):
-    return load_eval_params(pdescs, properties, transforms).evaluate()
-
-
-def load_fit_params(pdescs, properties):
-    return gbkfit.params.ParamSpace(pdescs, properties)
+    return load_params(pdescs, properties, transforms).evaluate()
 
 
 def write_transforms(path, source):
@@ -145,12 +141,27 @@ def test_transforms(tmp_path):
     np.testing.assert_array_equal(values['v'], [1, 2, 3])
 
 
-def test_exploded_values():
+def test_dump_keeps_the_transforms(tmp_path):
+    transforms = write_transforms(
+        tmp_path / 'transforms.py',
+        "def transforms(params):\n"
+        "    params['b'] = 2 * params['a']\n")
+    pdescs = make_pdescs(a=S, b=S)
+    info = load_params(pdescs, {'a': 3, 'b': None}, transforms).dump()
+    assert info == dict(properties={'a': 3, 'b': None}, transforms=transforms)
+    assert param_space_parser.load(info, pdescs=pdescs).evaluate()['b'] == 6
+    # A function that is not at the top level of a file cannot be dumped
+    params = ParamSpace(
+        pdescs, {'a': 3, 'b': None}, transforms=lambda p: p.update(b=1))
+    with pytest.raises(ConfigError, match="cannot be dumped"):
+        params.dump()
+
+
+def test_element_values():
     pdescs = make_pdescs(a=S, v=2)
-    params = load_eval_params(pdescs, {'a': 1, 'v': 'a + np.arange(2)'})
-    exploded = {}
-    params.evaluate(out_exploded_params=exploded)
-    assert exploded == {'a': 1, 'v[0]': 1, 'v[1]': 2}
+    params = load_params(pdescs, {'a': 1, 'v': 'a + np.arange(2)'})
+    values = params.evaluate()
+    assert params.element_values(values) == {'a': 1, 'v[0]': 1, 'v[1]': 2}
 
 
 # Evaluation errors: the parameters, their properties, and a pattern the
@@ -207,6 +218,22 @@ ERROR_CASES = dict(
     python_beyond_numpy=(
         make_pdescs(a=S), {'a': "__import__('os').getpid() * 0"},
         r"__import__"),
+    expression_writing_into_a_parameter=(
+        make_pdescs(a=S, v=3),
+        {'v': [1, 2, 3], 'a': 'np.add(v, 10, out=v)[0]'},
+        r"keyword 'out'"),
+    subscript_of_a_prefixed_scalar=(
+        make_pdescs(hi_a=S, b=S), {'hi_a': 1, 'b': 'hi_a[0]'},
+        r"'hi_a' is a scalar"),
+    name_of_a_builtin=(
+        make_pdescs(max=S), {'max': 1},
+        r"'max' has an invalid name: expressions use it"),
+    name_of_a_keyword=(
+        make_pdescs(**{'lambda': S}), {'lambda': 1},
+        r"'lambda' has an invalid name: it is a Python keyword"),
+    key_that_is_not_a_string=(
+        make_pdescs(a=S), {'a': 1, 3: 2},
+        r"keys must be strings"),
 )
 
 
@@ -242,13 +269,12 @@ FIT_PROPERTIES = {
 
 
 def test_fit_classification():
-    params = load_fit_params(FIT_PDESCS, FIT_PROPERTIES)
-    assert params.names(free=True, tied=False, fixed=False) == [
-        'c', 'v[0]', 'w[0]', 'w[1]']
-    assert params.names(free=False, tied=True, fixed=False) == [
-        'b', 'v[1]']
-    assert params.names(free=False, tied=False, fixed=True) == [
-        'a', 'v[2]']
+    params = ParamSpace(FIT_PDESCS, FIT_PROPERTIES)
+    assert params.kinds() == {
+        'a': ParamKind.FIXED, 'b': ParamKind.TIED, 'c': ParamKind.FREE,
+        'v[0]': ParamKind.FREE, 'v[1]': ParamKind.TIED,
+        'v[2]': ParamKind.FIXED, 'w[0]': ParamKind.FREE,
+        'w[1]': ParamKind.FREE}
     assert params.free_properties() == {
         'c': {'value': 1, 'min': 0, 'max': 2},
         'v[0]': {'value': 1},
@@ -257,7 +283,7 @@ def test_fit_classification():
 
 
 def test_fit_evaluation():
-    params = load_fit_params(FIT_PDESCS, FIT_PROPERTIES)
+    params = ParamSpace(FIT_PDESCS, FIT_PROPERTIES)
     values = params.evaluate({'c': 1.5, 'v[0]': 2, 'w[0]': 3, 'w[1]': 4})
     assert values['a'] == 1
     assert values['b'] == 2
@@ -271,8 +297,8 @@ def test_fit_evaluation():
     ({'a': 1, 'c': 1.5, 'v[0]': 2, 'w[0]': 3, 'w[1]': 4}, r"'a'")])
 def test_fit_evaluation_needs_the_free_parameters(free, pattern):
     # Every free parameter must be given, and only those
-    params = load_fit_params(FIT_PDESCS, FIT_PROPERTIES)
-    with pytest.raises(Exception) as error:
+    params = ParamSpace(FIT_PDESCS, FIT_PROPERTIES)
+    with pytest.raises(ValueError) as error:
         params.evaluate(free)
     assert re.search(pattern, str(error.value))
 
@@ -280,7 +306,7 @@ def test_fit_evaluation_needs_the_free_parameters(free, pattern):
 def test_evaluation_does_not_keep_state():
     # The values returned are new arrays, and changing them does not
     # change the next evaluation
-    params = load_fit_params(FIT_PDESCS, FIT_PROPERTIES)
+    params = ParamSpace(FIT_PDESCS, FIT_PROPERTIES)
     free = {'c': 1.5, 'v[0]': 2, 'w[0]': 3, 'w[1]': 4}
     first = params.evaluate(free)
     first['v'][:] = -1
@@ -290,15 +316,15 @@ def test_evaluation_does_not_keep_state():
 
 def test_constants():
     # Expressions can use constants (e.g. the radial nodes of a disk)
-    space = gbkfit.params.ParamSpace(
+    space = ParamSpace(
         make_pdescs(v=3), {'v': 'rnodes * 2'},
         constants=dict(rnodes=[0, 1, 2]))
     np.testing.assert_array_equal(space.evaluate()['v'], [0, 2, 4])
 
 
 def test_constants_cannot_have_the_names_of_parameters():
-    with pytest.raises(Exception, match="constants cannot have the names"):
-        gbkfit.params.ParamSpace(
+    with pytest.raises(ConfigError, match="constants cannot have the names"):
+        ParamSpace(
             make_pdescs(a=S), {'a': 1}, constants=dict(a=1))
 
 
@@ -306,12 +332,12 @@ def test_unknown_parameters_are_errors_in_strict_mode():
     from gbkfit.utils import parseutils
     with parseutils.strict_mode():
         with pytest.raises(Exception, match=r"unknown parameters: 'old'"):
-            gbkfit.params.ParamSpace(make_pdescs(a=S), {'a': 1, 'old': 2})
+            ParamSpace(make_pdescs(a=S), {'a': 1, 'old': 2})
 
 
 def load_moded_params(properties, modes):
     """The params of a vector v of 4 elements and scalars s and t."""
-    return gbkfit.params.evaluation_params_parser.load(
+    return param_space_parser.load(
         dict(properties=properties, modes=modes),
         pdescs=make_pdescs(v=4, s=None, t=None))
 
@@ -328,7 +354,7 @@ def test_modes_decode_the_values(mode, expected):
     # The dump has the modes, and loads to the same values
     info = params.dump()
     assert info['modes'] == dict(v=mode)
-    reloaded = gbkfit.params.evaluation_params_parser.load(
+    reloaded = param_space_parser.load(
         info, pdescs=make_pdescs(v=4, s=None, t=None))
     np.testing.assert_array_equal(reloaded.evaluate()['v'], expected)
 
@@ -357,3 +383,33 @@ def test_expressions_read_the_decoded_values():
 def test_mode_errors(properties, modes, pattern):
     with pytest.raises(Exception, match=pattern):
         load_moded_params(dict(v=[1, 2, 3, 4], s=0, t=0) | properties, modes)
+
+
+def test_error_types():
+    # Invalid properties are configuration errors; failed evaluations are
+    # evaluation errors
+    with pytest.raises(ConfigError, match="have no value"):
+        ParamSpace(make_pdescs(a=S), {})
+    space = ParamSpace(make_pdescs(a=S, b=S), {'a': 1, 'b': 'np.inf * a'})
+    with pytest.raises(ParamEvaluationError, match="finite"):
+        space.evaluate()
+
+
+def test_valid_ranges():
+    pdescs = dict(
+        s=ParamScalarDesc(minimum=0),
+        v=ParamVectorDesc(3, minimum=0, maximum=1))
+    # A fixed value outside its range is a configuration error
+    with pytest.raises(ConfigError, match=r"'v\[1\]' is 2.0, outside"):
+        ParamSpace(pdescs, {'s': 1, 'v': [0, 2, 1]})
+    # An evaluated one fails its evaluation
+    space = ParamSpace(pdescs, {'s': {'value': 1}, 'v': 's * 0.5'})
+    space.evaluate()
+    with pytest.raises(ParamEvaluationError, match=r"'s' is -1.0"):
+        space.evaluate({'s': -1})
+    # The values of a parameter with a mode are checked once decoded
+    space = ParamSpace(
+        pdescs, {'s': 1, 'v': [0.5, 0.2, 0.7]},
+        modes=dict(v=ParamModeOffsets()))
+    with pytest.raises(ParamEvaluationError, match=r"'v\[2\]' is 1.2"):
+        space.evaluate()

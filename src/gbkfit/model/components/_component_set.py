@@ -4,7 +4,7 @@ from typing import Any
 import numpy as np
 
 from gbkfit.driver import DeviceArray, Driver
-from gbkfit.params import ParamDesc
+from gbkfit.params import ParamDesc, ParamValues
 from gbkfit.utils import gridutils, iterutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
 from ..base import ModelPlan, Selection
@@ -67,7 +67,7 @@ def _with_mass_model_params(
 def _circular_velocities(
         components: Sequence[Component],
         mass_model: MassModel | None,
-        params: dict[str, float | np.ndarray]
+        params: ParamValues
 ) -> list[dict[str, np.ndarray]]:
     """
     Return the values of the parameters of each component that are the
@@ -140,7 +140,7 @@ def evaluate_components(
         components: Sequence[Component],
         plans: Sequence[ComponentPlan],
         mappings: Sequence[dict[str, str]],
-        params: dict[str, float | np.ndarray],
+        params: ParamValues,
         grid: NativeGrid,
         outputs: dict[str, DeviceArray | None],
         out_extra: dict[str, Any] | None,
@@ -370,7 +370,7 @@ class ComponentSetPlan2D:
 
     def evaluate(
             self,
-            params: dict[str, float | np.ndarray],
+            params: ParamValues,
             outputs: dict[str, DeviceArray | None],
             weights: DeviceArray | None,
             out_extra: dict[str, Any] | None
@@ -602,7 +602,7 @@ class ComponentSetPlan3D:
 
     def evaluate(
             self,
-            params: dict[str, float | np.ndarray],
+            params: ParamValues,
             outputs: dict[str, DeviceArray | None],
             weights: DeviceArray | None,
             out_extra: dict[str, Any] | None
@@ -673,7 +673,7 @@ class ComponentSetModelPlan(ModelPlan):
 
     def evaluate(
             self,
-            params: dict[str, float | np.ndarray],
+            params: ParamValues,
             data: DeviceArray,
             weights: DeviceArray | None,
             out_extra: dict[str, Any] | None

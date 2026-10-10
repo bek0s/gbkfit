@@ -34,7 +34,7 @@ def spectra(driver, psf=None, lsf=None, scale=(1, 1, 1)):
             instrument=dict(psf=psf, lsf=lsf),
             observable=dict(type='pixel_spectra', size=list(SIZE),
                             step=list(STEP))))])
-    params = gbkfit.params.EvaluationParams(
+    params = gbkfit.params.ParamSpace(
         group.pdescs(), PROPERTIES).evaluate()
     return group.model_h(params)[0]['spectra']['d'].copy()
 

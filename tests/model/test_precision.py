@@ -49,7 +49,7 @@ def evaluate(driver, case, dtype):
             instrument=instrument, dtype=dtype))])
     # (the 3D disks have a thickness)
     properties = PROPERTIES | (dict(bht_s=0.5) if '3d' in case else {})
-    params = gbkfit.params.EvaluationParams(
+    params = gbkfit.params.ParamSpace(
         group.pdescs(), properties).evaluate()
     return {key: value['d'].copy()
             for key, value in group.model_h(params)[0].items()}

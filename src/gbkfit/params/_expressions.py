@@ -1,28 +1,27 @@
 """
-The expressions of parameter properties (e.g. 'vpt_vt': 'a * 2'). They
+The expressions of parameter properties (e.g. 'hi_vpt_vt': 'a * 2'). They
 can use numbers, parameters and their elements, constants, arithmetic,
 comparisons, conditional expressions, tuples and lists, a few builtins,
 and of numpy (np, np.linalg): its ufuncs (e.g. np.sin), numbers (e.g.
 np.pi), scalar types (e.g. np.int64) and the functions on numbers and
 arrays of _NUMPY_FUNCTIONS. Nothing else, so a configuration cannot run
 arbitrary code (numpy also holds modules such as os, and functions that
-read and write files).
+read and write files), and an expression cannot change the values it
+reads.
 """
 
 import ast
 import builtins
+import keyword
+from collections.abc import Mapping
+from types import CodeType
+from typing import Any
 
 import numpy as np
 
-from gbkfit.params.keys import (
+from gbkfit.params._keys import (
     InvalidKeyError, parse_subscript, subscript_value)
-from gbkfit.params.pdescs import ParamDesc, ParamScalarDesc
-
-
-__all__ = [
-    'Expression',
-    'InvalidExpressionError'
-]
+from gbkfit.params.pdescs import ParamDesc
 
 
 class InvalidExpressionError(ValueError):
@@ -45,6 +44,9 @@ _NODES = (
     ast.IfExp, ast.Tuple, ast.List, ast.Subscript, ast.Slice,
     ast.Call, ast.keyword, ast.Attribute)
 
+# The keywords that calls cannot have: out writes into an array (e.g. a
+# parameter), and where leaves the values it does not select unset
+_KEYWORDS = frozenset(('out', 'where'))
 
 # The numpy modules whose members expressions can use
 _NUMPY_MODULES = {'np': np, 'np.linalg': np.linalg}
@@ -67,8 +69,23 @@ _NUMPY_FUNCTIONS = {
     'np.linalg': frozenset(('det', 'inv', 'norm', 'solve'))}
 
 
-def _dotted_name(node):
-    """The dotted name of a node (e.g. 'np.linalg.norm'), or None."""
+def check_name(name: str) -> str | None:
+    """
+    Return why a parameter or a constant cannot have a name, or None if
+    it can: it must be a Python identifier that is not a keyword, and not
+    a name of expressions (np, and the builtins they can call).
+    """
+    if not isinstance(name, str) or not name.isidentifier():
+        return "it is not a valid name"
+    if keyword.iskeyword(name):
+        return "it is a Python keyword"
+    if name == 'np' or name in BUILTINS:
+        return "expressions use it"
+    return None
+
+
+def _dotted_name(node: ast.expr) -> str | None:
+    """Return the dotted name of a node (e.g. 'np.linalg.norm'), or None."""
     names = []
     while isinstance(node, ast.Attribute):
         names.append(node.attr)
@@ -78,10 +95,10 @@ def _dotted_name(node):
     return '.'.join([node.id] + names[::-1])
 
 
-def _is_numpy(node):
+def _is_numpy(node: ast.expr) -> bool:
     """
-    Whether a node names one of _NUMPY_MODULES, or a member of one that
-    expressions can use: a ufunc, a number, a scalar type, or one of
+    Check whether a node names one of _NUMPY_MODULES, or a member of one
+    that expressions can use: a ufunc, a number, a scalar type, or one of
     _NUMPY_FUNCTIONS.
     """
     name = _dotted_name(node)
@@ -99,32 +116,40 @@ def _is_numpy(node):
 
 class Expression:
     """
-    An expression, compiled once. It reads the elements of parameters in
-    reads: a dict of parameter name to the set of indices it reads (None
-    for a scalar).
+    An expression, checked and compiled once.
+
+    Its attribute reads has the elements of the parameters it reads: the
+    set of indices of each vector parameter, and None for each scalar.
+    Raises InvalidExpressionError if it is invalid.
     """
 
     def __init__(
             self,
             source: str,
-            pdescs: dict[str, ParamDesc],
-            constants: dict[str, np.ndarray] | None = None):
+            pdescs: Mapping[str, ParamDesc],
+            constants: Mapping[str, np.ndarray] | None = None
+    ):
         constants = constants or {}
         try:
             tree = ast.parse(source.strip(), mode='eval')
         except SyntaxError as e:
             raise InvalidExpressionError(f"invalid syntax: {e.msg}") from None
         self.source = source
-        self.reads = {}
+        self.reads: dict[str, set[int] | None] = {}
         self._check(tree, pdescs, constants)
-        self._code = compile(tree, '<expression>', 'eval')
+        self._code: CodeType = compile(tree, '<expression>', 'eval')
 
-    def evaluate(self, namespace):
+    def evaluate(self, namespace: Mapping[str, Any]) -> Any:
         """Evaluate with the values of the parameters and constants."""
         return eval(self._code, {'__builtins__': BUILTINS, 'np': np},
                     namespace)
 
-    def _check(self, tree, pdescs, constants):
+    def _check(
+            self,
+            tree: ast.Expression,
+            pdescs: Mapping[str, ParamDesc],
+            constants: Mapping[str, np.ndarray]
+    ) -> None:
         """Check the nodes and names, and find the elements it reads."""
         subscripted = set()
         for node in ast.walk(tree):
@@ -151,6 +176,9 @@ class Expression:
                     f"'{ast.unparse(node.func)}' cannot be called in "
                     f"expressions; only numpy ufuncs, scalar types and "
                     f"functions on arrays, and {', '.join(BUILTINS)} can")
+            if isinstance(node, ast.keyword) and node.arg in _KEYWORDS:
+                raise InvalidExpressionError(
+                    f"the keyword '{node.arg}' is not allowed in expressions")
             if isinstance(node, ast.Name) and not (
                     node.id in pdescs or node.id in constants
                     or node.id in BUILTINS or node.id == 'np'):
@@ -158,7 +186,7 @@ class Expression:
             if (isinstance(node, ast.Subscript)
                     and isinstance(node.value, ast.Name)
                     and node.value.id in pdescs):
-                self._read_subscript(node, pdescs[node.value.id])
+                self._read_subscript(node, node.value.id, pdescs)
                 subscripted.add(node.value)
         # A parameter without a subscript reads all its elements
         for node in ast.walk(tree):
@@ -166,12 +194,18 @@ class Expression:
                     and node not in subscripted):
                 self._read(node.id, pdescs[node.id], None)
 
-    def _read_subscript(self, node, pdesc):
+    def _read_subscript(
+            self,
+            node: ast.Subscript,
+            name: str,
+            pdescs: Mapping[str, ParamDesc]
+    ) -> None:
+        """Record the elements that a subscript of a parameter reads."""
         code = ast.unparse(node)
-        if isinstance(pdesc, ParamScalarDesc):
+        pdesc = pdescs[name]
+        if pdesc.is_scalar():
             raise InvalidExpressionError(
-                f"'{code}': '{pdesc.name()}' is a scalar and has no "
-                f"elements")
+                f"'{code}': '{name}' is a scalar and has no elements")
         # A subscript that is not constant (e.g. v[int(a)]) can read any
         # element
         indices = None
@@ -180,12 +214,18 @@ class Expression:
                 indices, _ = parse_subscript(node.slice, pdesc.size())
             except InvalidKeyError as e:
                 raise InvalidExpressionError(f"'{code}': {e}") from None
-        self._read(node.value.id, pdesc, indices)
+        self._read(name, pdesc, indices)
 
-    def _read(self, name, pdesc, indices):
-        if isinstance(pdesc, ParamScalarDesc):
+    def _read(
+            self,
+            name: str,
+            pdesc: ParamDesc,
+            indices: np.ndarray | None
+    ) -> None:
+        """Record the elements of a parameter that it reads (all if None)."""
+        if pdesc.is_scalar():
             self.reads[name] = None
             return
         if indices is None:
-            indices = range(pdesc.size())
+            indices = np.arange(pdesc.size())
         self.reads.setdefault(name, set()).update(int(i) for i in indices)

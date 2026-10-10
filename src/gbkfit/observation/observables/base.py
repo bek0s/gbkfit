@@ -9,6 +9,7 @@ from gbkfit.dataset import Dataset
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.instrument import Instrument
 from gbkfit.model.base import Model, Selection
+from gbkfit.params import ParamValues
 from gbkfit.utils import gridutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
 
@@ -314,7 +315,7 @@ class ObservablePlan(abc.ABC):
     @abc.abstractmethod
     def evaluate(
             self,
-            params: dict[str, float | np.ndarray],
+            params: ParamValues,
             out_extra: dict[str, Any] | None
     ) -> ModelData:
         """

@@ -99,7 +99,7 @@ def test_feature_combinations(driver, name, lens):
         components=['gas'], scale=SCALES[name])
     group = ObservationGroup(
         [model_parser.load(copy.deepcopy(MODEL))], [observation])
-    params = gbkfit.params.EvaluationParams(group.pdescs(), PROPERTIES)
+    params = gbkfit.params.ParamSpace(group.pdescs(), PROPERTIES)
     extra = {}
     data = group.model_h(params.evaluate(), extra)[0]
     observable = observation.observable()

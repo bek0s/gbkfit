@@ -4,7 +4,7 @@ from typing import Any
 import numpy as np
 
 from gbkfit.model.base import Model
-from gbkfit.params import ParamDesc
+from gbkfit.params import ParamDesc, ParamValues
 from gbkfit.utils import iterutils, parseutils, timeutils
 from gbkfit.utils.parseutils import ConfigError
 from .observables import ModelData
@@ -132,7 +132,7 @@ class ObservationGroup:
 
     def model_d(
             self,
-            params: dict[str, float | np.ndarray],
+            params: ParamValues,
             out_extra: dict[str, Any] | None = None
     ) -> list[ModelData]:
         """
@@ -166,7 +166,7 @@ class ObservationGroup:
 
     def model_h(
             self,
-            params: dict[str, float | np.ndarray],
+            params: ParamValues,
             out_extra: dict[str, Any] | None = None
     ) -> list[dict[str, dict[str, np.ndarray | None]]]:
         """

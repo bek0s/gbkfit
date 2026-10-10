@@ -44,7 +44,7 @@ def evaluate(driver, observable):
     model_group = observation_group([
         dict(driver=dict(type=driver.type()),
              observable=copy.deepcopy(observable), model=MODEL)])
-    params = gbkfit.params.EvaluationParams(model_group.pdescs(), PROPERTIES)
+    params = gbkfit.params.ParamSpace(model_group.pdescs(), PROPERTIES)
     data = model_group.model_h(params.evaluate())[0]
     return next(iter(data.values()))['d'].copy()
 
@@ -111,7 +111,7 @@ def test_region_spectra_of_a_point_is_its_flux(driver, step):
             dict(type='circle', x=0, y=0, radius=3)]))
     model_group = observation_group([dict(
         driver=dict(type=driver.type()), observable=observable, model=model)])
-    params = gbkfit.params.EvaluationParams(
+    params = gbkfit.params.ParamSpace(
         model_group.pdescs(), dict(xpos=0, ypos=0, flux=2, vsys=0, disp=30))
     spectrum = model_group.model_h(params.evaluate())[0]['spectra']['d'][:, 0]
     assert spectrum.sum() * 10 == pytest.approx(2, rel=1e-4)
@@ -134,7 +134,7 @@ def test_region_spectra_objective_residual(driver):
         observable, driver, instrument=Instrument(), data=dataset)
     group = ObservationGroup(
         [model_parser.load(copy.deepcopy(MODEL))], [observation])
-    params = gbkfit.params.EvaluationParams(group.pdescs(), PROPERTIES)
+    params = gbkfit.params.ParamSpace(group.pdescs(), PROPERTIES)
     residual = Objective(group).residual_nddata_h(params.evaluate(), False)
     # Without the instrument, the model differs from the data
     assert not np.allclose(residual[0]['spectra'], -0.5)

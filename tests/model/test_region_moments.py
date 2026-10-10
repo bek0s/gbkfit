@@ -39,7 +39,7 @@ def evaluate(driver, observable):
     model_group = observation_group([
         dict(driver=dict(type=driver.type()),
              observable=copy.deepcopy(observable), model=MODEL)])
-    params = gbkfit.params.EvaluationParams(model_group.pdescs(), PROPERTIES)
+    params = gbkfit.params.ParamSpace(model_group.pdescs(), PROPERTIES)
     data = model_group.model_h(params.evaluate())[0]
     return {key: value['d'].copy() for key, value in data.items()}
 
@@ -171,7 +171,7 @@ def test_region_moments_objective_residual(driver):
     group = ObservationGroup(
         [model_parser.load(copy.deepcopy(MODEL))],
         [Observation(observable, driver, instrument=instrument)])
-    params = gbkfit.params.EvaluationParams(group.pdescs(), PROPERTIES)
+    params = gbkfit.params.ParamSpace(group.pdescs(), PROPERTIES)
     model = {
         key: value['d'].copy()
         for key, value in group.model_h(params.evaluate())[0].items()}

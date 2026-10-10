@@ -91,7 +91,7 @@ def evaluate_curve(component, free):
     # as a fitter does
     model_group = group(component)
     pdescs = model_group.pdescs() | dict(
-        vmax=ParamScalarDesc('vmax'), rt=ParamScalarDesc('rt'))
+        vmax=ParamScalarDesc(), rt=ParamScalarDesc())
     space = ParamSpace(pdescs, PROPERTIES | dict(
         vmax=dict(val=100), rt=dict(val=1),
         vpt_vt='vmax * 2 / np.pi * np.arctan(subrnodes / rt)'),

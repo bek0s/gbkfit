@@ -44,7 +44,7 @@ def observation(driver, components=None, **options):
 def evaluate(model, observations, properties):
     group = ObservationGroup(
         [model_parser.load(copy.deepcopy(model))], observations)
-    params = gbkfit.params.EvaluationParams(group.pdescs(), properties)
+    params = gbkfit.params.ParamSpace(group.pdescs(), properties)
     return [data['spectra']['d'].copy()
             for data in group.model_h(params.evaluate())]
 

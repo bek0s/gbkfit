@@ -90,7 +90,7 @@ def test_type_roundtrip(parser, cls):
 def test_pdescs_roundtrip():
     info = dict(
         a=dict(type='scalar', minimum=0, maximum=1, desc='a scalar'),
-        v=dict(type='vector', size=3, default=2))
+        v=dict(type='vector', size=3))
     pdescs = gbkfit.params.load_pdescs_dict(copy.deepcopy(info))
     dumped = gbkfit.params.dump_pdescs_dict(pdescs)
     again = gbkfit.params.dump_pdescs_dict(
@@ -112,7 +112,7 @@ def test_config_roundtrip(config):
 
     def evaluate(config_):
         group = config_group(config_)
-        params = gbkfit.params.EvaluationParams(
+        params = gbkfit.params.ParamSpace(
             group.pdescs(), properties, constants=group.constants())
         return group.model_h(params.evaluate())
 

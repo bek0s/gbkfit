@@ -5,7 +5,7 @@ import numpy as np
 
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.math.interpolation import Interpolator
-from gbkfit.params import ParamDesc
+from gbkfit.params import ParamDesc, ParamValues
 from gbkfit.utils import gridutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
 from .._detail import dump_geometry, dump_lines, dump_name
@@ -105,7 +105,7 @@ class MCDiskPlan(_disk.DiskPlan):
 
     def _impl_evaluate(
             self,
-            params: dict[str, float | np.ndarray],
+            params: ParamValues,
             grid_and_outputs: dict[str, Any],
             out_extra: dict[str, Any] | None
     ) -> None:

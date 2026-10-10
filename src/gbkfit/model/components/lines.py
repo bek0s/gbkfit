@@ -90,7 +90,6 @@ class Lines:
         self._lines = lines
         self._ratios = {} if lines is None else {
             f'{line.name()}_ratio': ParamScalarDesc(
-                f'{line.name()}_ratio',
                 desc=f"the flux of line {line.name()} relative to line "
                      f"{lines[0].name()}")
             for line in lines[1:]}

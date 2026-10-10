@@ -10,7 +10,8 @@ import numpy as np
 
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.math.interpolation import Interpolator
-from gbkfit.params.pdescs import ParamDesc, ParamScalarDesc, ParamVectorDesc
+from gbkfit.params import (
+    ParamDesc, ParamScalarDesc, ParamValues, ParamVectorDesc)
 from gbkfit.utils import iterutils, parseutils
 from ..base import NativeGrid
 from ..geometries import GEOMETRY_PARAMS
@@ -32,7 +33,7 @@ MAX_TRAITS = 4
 
 def _make_param_descs(key: str, nnodes: int, nw: bool) -> dict[str, ParamDesc]:
     """Return the parameter of the given name, node-wise if nw."""
-    return {key: ParamVectorDesc(key, nnodes) if nw else ParamScalarDesc(key)}
+    return {key: ParamVectorDesc(nnodes) if nw else ParamScalarDesc()}
 
 
 @dataclass
@@ -68,10 +69,11 @@ def _trait_params(
     for trait in traits_:
         sampling = trait.sampling()
         nnodes = nsubrnodes if sampling == 'subrings' else nrnodes
-        params_sm = [(pdesc, None) for pdesc in trait.params_sm()]
-        params_nw = [(pdesc, sampling) for pdesc in trait.params_rnw(nnodes)]
         params_list.append(
-            {tuple_[0].name(): tuple_ for tuple_ in params_sm + params_nw})
+            {name: (pdesc, None)
+             for name, pdesc in trait.params_sm().items()}
+            | {name: (pdesc, sampling)
+               for name, pdesc in trait.params_rnw(nnodes).items()})
     params, mappings = iterutils.merge_with_prefixes(
         params_list,
         parseutils.item_prefixes(
@@ -97,7 +99,7 @@ def _trait_constants(
     uids, cvalues, ccounts, pcounts = [], [], [], []
     for trait in traits_:
         consts = trait.consts()
-        npvalues_sm = sum(p.size() for p in trait.params_sm())
+        npvalues_sm = sum(p.size() for p in trait.params_sm().values())
         npvalues_nw = len(trait.params_rnw(nnodes)) * nsubnodes
         uids.append(trait.uid())
         cvalues += consts
@@ -108,7 +110,7 @@ def _trait_constants(
 
 def _fill_param_values(
         values: np.ndarray,
-        params: dict[str, float | np.ndarray],
+        params: ParamValues,
         pdescs: dict[str, ParamDesc],
         sampling: dict[str, str | None],
         nodes: Sequence[float],
@@ -340,7 +342,7 @@ class DiskPlan(abc.ABC):
 
     def evaluate(
             self,
-            params: dict[str, float | np.ndarray],
+            params: ParamValues,
             grid: NativeGrid,
             outputs: dict[str, DeviceArray | None],
             out_extra: dict[str, Any] | None,
@@ -454,7 +456,7 @@ class DiskPlan(abc.ABC):
     @abc.abstractmethod
     def _impl_evaluate(
             self,
-            params: dict[str, float | np.ndarray],
+            params: ParamValues,
             grid_and_outputs: dict[str, Any],
             out_extra: dict[str, Any] | None
     ) -> None:

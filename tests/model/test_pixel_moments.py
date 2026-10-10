@@ -54,7 +54,7 @@ def evaluate_mmaps(driver, observable, **properties):
     """
     from gbkfit.model import model_parser
     from gbkfit.observation import Observation, ObservationGroup
-    from gbkfit.params import EvaluationParams
+    from gbkfit.params import ParamSpace
     model = model_parser.load(dict(
         type='kinematics_2d', components=[dict(
             type='smdisk', loose=False, tilted=False,
@@ -63,7 +63,7 @@ def evaluate_mmaps(driver, observable, **properties):
             vptraits=dict(type='tan_arctan'),
             dptraits=dict(type='uniform'))]))
     model_group = ObservationGroup([model], [Observation(observable, driver)])
-    params = EvaluationParams(model_group.pdescs(), dict(
+    params = ParamSpace(model_group.pdescs(), dict(
         vsys=0, xpos=0, ypos=0, posa=30, incl=60,
         bpt_a=1, bpt_s=4, vpt_rt=2, vpt_vt=40, dpt_a=20) | properties)
     return model_group.model_h(params.evaluate())[0]
@@ -104,7 +104,7 @@ def test_moment_maps_have_the_weights_of_the_model(driver):
     from gbkfit.model import ModelKinematics2D
     from gbkfit.model.components.disks import SpectralSMDisk2D, traits
     from gbkfit.observation import PixelMoments, Observation, ObservationGroup
-    from gbkfit.params import EvaluationParams
+    from gbkfit.params import ParamSpace
     from modelutils import WeightComponent
     disk = SpectralSMDisk2D(
         loose=False, tilted=False, rnodes=list(range(0, 25)),
@@ -113,7 +113,7 @@ def test_moment_maps_have_the_weights_of_the_model(driver):
     model = ModelKinematics2D([disk, WeightComponent()])
     observable = PixelMoments(size=(32, 32), spec_size=81, spec_step=5)
     model_group = ObservationGroup([model], [Observation(observable, driver)])
-    params = EvaluationParams(model_group.pdescs(), dict(
+    params = ParamSpace(model_group.pdescs(), dict(
         vsys=0, xpos=0, ypos=0, posa=30, incl=0,
         bpt_a=1, bpt_s=4, vpt_rt=2, vpt_vt=40, dpt_a=20))
     mmaps = model_group.model_h(params.evaluate())[0]

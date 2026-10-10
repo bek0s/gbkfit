@@ -101,8 +101,8 @@ class MassExponentialDisk(MassComponent):
 
     def pdescs(self) -> dict[str, ParamScalarDesc]:
         return dict(
-            logm=ParamScalarDesc('logm', desc="log10 of the mass (Msun)"),
-            rd=ParamScalarDesc('rd', desc="the scale length (kpc)"))
+            logm=ParamScalarDesc(desc="log10 of the mass (Msun)"),
+            rd=ParamScalarDesc(desc="the scale length (kpc)"))
 
     def vcirc2(
             self, radius: np.ndarray, params: dict[str, float]
@@ -138,8 +138,8 @@ class MassPseudoIsothermal(MassComponent):
     def pdescs(self) -> dict[str, ParamScalarDesc]:
         return dict(
             logrho0=ParamScalarDesc(
-                'logrho0', desc="log10 of the central density (Msun/kpc^3)"),
-            rc=ParamScalarDesc('rc', desc="the core radius (kpc)"))
+                desc="log10 of the central density (Msun/kpc^3)"),
+            rc=ParamScalarDesc(desc="the core radius (kpc)"))
 
     def vcirc2(
             self, radius: np.ndarray, params: dict[str, float]
@@ -205,7 +205,7 @@ class MassModel(parseutils.Serializable):
             [f'mass_{name}_' for name in names])
         self._components = components
         self._pdescs = dict(distance=ParamScalarDesc(
-            'distance', desc="the distance of the galaxy (Mpc)")) | params
+            desc="the distance of the galaxy (Mpc)")) | params
 
     def components(self) -> tuple[MassComponent, ...]:
         """Return its mass components."""

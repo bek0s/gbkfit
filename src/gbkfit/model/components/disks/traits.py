@@ -226,41 +226,41 @@ SAMPLINGS = ('rnodes', 'subrings')
 SAMPLING_DEFAULT = 'rnodes'
 
 
-def _ptrait_params_mixture_6p(nblobs: int) -> tuple[ParamDesc, ...]:
-    return (
-        ParamVectorDesc('r', nblobs),  # polar coord (radius)
-        ParamVectorDesc('t', nblobs),  # polar coord (angle)
-        ParamVectorDesc('a', nblobs),  # amplitude
-        ParamVectorDesc('s', nblobs),  # size
-        ParamVectorDesc('q', nblobs),  # axis ratio (minor/major)
-        ParamVectorDesc('p', nblobs))  # position angle relative to t
+def _ptrait_params_mixture_6p(nblobs: int) -> dict[str, ParamDesc]:
+    return dict(
+        r=ParamVectorDesc(nblobs),  # polar coord (radius)
+        t=ParamVectorDesc(nblobs),  # polar coord (angle)
+        a=ParamVectorDesc(nblobs),  # amplitude
+        s=ParamVectorDesc(nblobs),  # size
+        q=ParamVectorDesc(nblobs),  # axis ratio (minor/major)
+        p=ParamVectorDesc(nblobs))  # position angle relative to t
 
 
-def _ptrait_params_mixture_7p(nblobs: int) -> tuple[ParamDesc, ...]:
-    return (
-        ParamVectorDesc('r', nblobs),  # polar coord (radius)
-        ParamVectorDesc('t', nblobs),  # polar coord (angle)
-        ParamVectorDesc('a', nblobs),  # amplitude
-        ParamVectorDesc('s', nblobs),  # size
-        ParamVectorDesc('b', nblobs),  # shape
-        ParamVectorDesc('q', nblobs),  # axis ratio (minor/major)
-        ParamVectorDesc('p', nblobs))  # position angle relative to t
+def _ptrait_params_mixture_7p(nblobs: int) -> dict[str, ParamDesc]:
+    return dict(
+        r=ParamVectorDesc(nblobs),  # polar coord (radius)
+        t=ParamVectorDesc(nblobs),  # polar coord (angle)
+        a=ParamVectorDesc(nblobs),  # amplitude
+        s=ParamVectorDesc(nblobs),  # size
+        b=ParamVectorDesc(nblobs),  # shape
+        q=ParamVectorDesc(nblobs),  # axis ratio (minor/major)
+        p=ParamVectorDesc(nblobs))  # position angle relative to t
 
 
 def _ptrait_params_nw_harmonic(
         order: int, nnodes: int
-) -> tuple[ParamDesc, ...]:
-    params = []
-    params += [ParamVectorDesc('a', nnodes)]
-    params += [ParamVectorDesc('p', nnodes)] * (order > 0)
-    return tuple(params)
+) -> dict[str, ParamDesc]:
+    params = dict(a=ParamVectorDesc(nnodes))
+    if order > 0:
+        params.update(p=ParamVectorDesc(nnodes))
+    return params
 
 
-def _ptrait_params_nw_distortion(nnodes: int) -> tuple[ParamDesc, ...]:
-    return (
-        ParamVectorDesc('a', nnodes),
-        ParamVectorDesc('p', nnodes),
-        ParamVectorDesc('s', nnodes))
+def _ptrait_params_nw_distortion(nnodes: int) -> dict[str, ParamDesc]:
+    return dict(
+        a=ParamVectorDesc(nnodes),
+        p=ParamVectorDesc(nnodes),
+        s=ParamVectorDesc(nnodes))
 
 
 def _integrate_rings(
@@ -470,16 +470,16 @@ class Trait(parseutils.TypedSerializable, abc.ABC):
         """
         return ()
 
-    def params_sm(self) -> tuple[ParamDesc, ...]:
+    def params_sm(self) -> dict[str, ParamDesc]:
         """Return its parameters that are not node-wise; none here."""
-        return tuple()
+        return {}
 
-    def params_rnw(self, nnodes: int) -> tuple[ParamDesc, ...]:
+    def params_rnw(self, nnodes: int) -> dict[str, ParamDesc]:
         """
         Return its node-wise parameters, of nnodes values each; none
         here.
         """
-        return tuple()
+        return {}
 
     def sampling(self) -> str:
         """Return where the values of the node-wise parameters are given."""
@@ -783,9 +783,8 @@ class BPTraitUniform(BPTrait):
     def uid() -> int:
         return BPT_UID_UNIFORM
 
-    def params_sm(self) -> tuple[ParamDesc, ...]:
-        return (
-            ParamScalarDesc('a'),)
+    def params_sm(self) -> dict[str, ParamDesc]:
+        return dict(a=ParamScalarDesc())
 
     def has_analytical_integral(self) -> bool:
         return True
@@ -810,10 +809,10 @@ class BPTraitExponential(BPTrait):
     def uid() -> int:
         return BPT_UID_EXP
 
-    def params_sm(self) -> tuple[ParamDesc, ...]:
-        return (
-            ParamScalarDesc('a'),
-            ParamScalarDesc('s'))
+    def params_sm(self) -> dict[str, ParamDesc]:
+        return dict(
+            a=ParamScalarDesc(),
+            s=ParamScalarDesc())
 
     def has_analytical_integral(self) -> bool:
         return False
@@ -839,10 +838,10 @@ class BPTraitGauss(BPTrait):
     def uid() -> int:
         return BPT_UID_GAUSS
 
-    def params_sm(self) -> tuple[ParamDesc, ...]:
-        return (
-            ParamScalarDesc('a'),
-            ParamScalarDesc('s'))
+    def params_sm(self) -> dict[str, ParamDesc]:
+        return dict(
+            a=ParamScalarDesc(),
+            s=ParamScalarDesc())
 
     def has_analytical_integral(self) -> bool:
         return False
@@ -869,11 +868,11 @@ class BPTraitGGauss(BPTrait):
     def uid() -> int:
         return BPT_UID_GGAUSS
 
-    def params_sm(self) -> tuple[ParamDesc, ...]:
-        return (
-            ParamScalarDesc('a'),
-            ParamScalarDesc('s'),
-            ParamScalarDesc('b'))
+    def params_sm(self) -> dict[str, ParamDesc]:
+        return dict(
+            a=ParamScalarDesc(),
+            s=ParamScalarDesc(),
+            b=ParamScalarDesc())
 
     def has_analytical_integral(self) -> bool:
         return False
@@ -899,10 +898,10 @@ class BPTraitLorentz(BPTrait):
     def uid() -> int:
         return BPT_UID_LORENTZ
 
-    def params_sm(self) -> tuple[ParamDesc, ...]:
-        return (
-            ParamScalarDesc('a'),
-            ParamScalarDesc('s'))
+    def params_sm(self) -> dict[str, ParamDesc]:
+        return dict(
+            a=ParamScalarDesc(),
+            s=ParamScalarDesc())
 
     def has_analytical_integral(self) -> bool:
         return False
@@ -928,11 +927,11 @@ class BPTraitMoffat(BPTrait):
     def uid() -> int:
         return BPT_UID_MOFFAT
 
-    def params_sm(self) -> tuple[ParamDesc, ...]:
-        return (
-            ParamScalarDesc('a'),
-            ParamScalarDesc('s'),
-            ParamScalarDesc('b'))
+    def params_sm(self) -> dict[str, ParamDesc]:
+        return dict(
+            a=ParamScalarDesc(),
+            s=ParamScalarDesc(),
+            b=ParamScalarDesc())
 
     def has_analytical_integral(self) -> bool:
         return False
@@ -957,10 +956,10 @@ class BPTraitSech2(BPTrait):
     def uid() -> int:
         return BPT_UID_SECH2
 
-    def params_sm(self) -> tuple[ParamDesc, ...]:
-        return (
-            ParamScalarDesc('a'),
-            ParamScalarDesc('s'))
+    def params_sm(self) -> dict[str, ParamDesc]:
+        return dict(
+            a=ParamScalarDesc(),
+            s=ParamScalarDesc())
 
     def has_analytical_integral(self) -> bool:
         return False
@@ -1002,7 +1001,7 @@ class BPTraitMixtureExponential(TraitFeatureNBlobs, BPTrait):
     def __init__(self, nblobs: int):
         super().__init__(nblobs=nblobs)
 
-    def params_sm(self) -> tuple[ParamDesc, ...]:
+    def params_sm(self) -> dict[str, ParamDesc]:
         return _ptrait_params_mixture_6p(self.nblobs())
 
     def has_analytical_integral(self) -> bool:
@@ -1045,7 +1044,7 @@ class BPTraitMixtureGauss(TraitFeatureNBlobs, BPTrait):
     def __init__(self, nblobs: int):
         super().__init__(nblobs=nblobs)
 
-    def params_sm(self) -> tuple[ParamDesc, ...]:
+    def params_sm(self) -> dict[str, ParamDesc]:
         return _ptrait_params_mixture_6p(self.nblobs())
 
     def has_analytical_integral(self) -> bool:
@@ -1089,7 +1088,7 @@ class BPTraitMixtureGGauss(TraitFeatureNBlobs, BPTrait):
     def __init__(self, nblobs: int):
         super().__init__(nblobs=nblobs)
 
-    def params_sm(self) -> tuple[ParamDesc, ...]:
+    def params_sm(self) -> dict[str, ParamDesc]:
         return _ptrait_params_mixture_7p(self.nblobs())
 
     def has_analytical_integral(self) -> bool:
@@ -1133,7 +1132,7 @@ class BPTraitMixtureMoffat(TraitFeatureNBlobs, BPTrait):
     def __init__(self, nblobs: int):
         super().__init__(nblobs=nblobs)
 
-    def params_sm(self) -> tuple[ParamDesc, ...]:
+    def params_sm(self) -> dict[str, ParamDesc]:
         return _ptrait_params_mixture_7p(self.nblobs())
 
     def has_analytical_integral(self) -> bool:
@@ -1176,9 +1175,8 @@ class BPTraitNWUniform(TraitFeatureSampling, BPTrait):
             sampling: str = SAMPLING_DEFAULT):
         super().__init__(sampling=sampling)
 
-    def params_rnw(self, nnodes: int) -> tuple[ParamDesc, ...]:
-        return (
-            ParamVectorDesc('a', nnodes),)
+    def params_rnw(self, nnodes: int) -> dict[str, ParamDesc]:
+        return dict(a=ParamVectorDesc(nnodes))
 
     def has_analytical_integral(self) -> bool:
         return False
@@ -1227,7 +1225,7 @@ class BPTraitNWHarmonic(
             sampling: str = SAMPLING_DEFAULT):
         super().__init__(order=order, sampling=sampling)
 
-    def params_rnw(self, nnodes: int) -> tuple[ParamDesc, ...]:
+    def params_rnw(self, nnodes: int) -> dict[str, ParamDesc]:
         return _ptrait_params_nw_harmonic(self.order(), nnodes)
 
     def has_analytical_integral(self) -> bool:
@@ -1273,7 +1271,7 @@ class BPTraitNWDistortion(TraitFeatureSampling, BPTrait):
             sampling: str = SAMPLING_DEFAULT):
         super().__init__(sampling=sampling)
 
-    def params_rnw(self, nnodes: int) -> tuple[ParamDesc, ...]:
+    def params_rnw(self, nnodes: int) -> dict[str, ParamDesc]:
         return _ptrait_params_nw_distortion(nnodes)
 
     def has_analytical_integral(self) -> bool:
@@ -1298,13 +1296,11 @@ class BHTraitP1(BHTrait, abc.ABC):
         super().__init__(
             rnodes=rnodes, sampling=sampling, trunc=trunc)
 
-    def params_sm(self) -> tuple[ParamDesc, ...]:
-        return () if self.rnodes() else (
-            ParamScalarDesc('s'),)
+    def params_sm(self) -> dict[str, ParamDesc]:
+        return {} if self.rnodes() else dict(s=ParamScalarDesc())
 
-    def params_rnw(self, nrnodes: int) -> tuple[ParamDesc, ...]:
-        return () if not self.rnodes() else (
-            ParamVectorDesc('s', nrnodes),)
+    def params_rnw(self, nrnodes: int) -> dict[str, ParamDesc]:
+        return {} if not self.rnodes() else dict(s=ParamVectorDesc(nrnodes))
 
 
 class BHTraitP2(BHTrait, abc.ABC):
@@ -1320,15 +1316,15 @@ class BHTraitP2(BHTrait, abc.ABC):
         super().__init__(
             rnodes=rnodes, sampling=sampling, trunc=trunc)
 
-    def params_sm(self) -> tuple[ParamDesc, ...]:
-        return () if self.rnodes() else (
-            ParamScalarDesc('s'),
-            ParamScalarDesc('b'))
+    def params_sm(self) -> dict[str, ParamDesc]:
+        return {} if self.rnodes() else dict(
+            s=ParamScalarDesc(),
+            b=ParamScalarDesc())
 
-    def params_rnw(self, nrnodes: int) -> tuple[ParamDesc, ...]:
-        return () if not self.rnodes() else (
-            ParamVectorDesc('s', nrnodes),
-            ParamVectorDesc('b', nrnodes))
+    def params_rnw(self, nrnodes: int) -> dict[str, ParamDesc]:
+        return {} if not self.rnodes() else dict(
+            s=ParamVectorDesc(nrnodes),
+            b=ParamVectorDesc(nrnodes))
 
 
 class BHTraitUniform(BHTraitP1):
@@ -1583,9 +1579,8 @@ class VPTraitTanUniform(VPTrait):
     def uid() -> int:
         return VPT_UID_TAN_UNIFORM
 
-    def params_sm(self) -> tuple[ParamDesc, ...]:
-        return (
-            ParamScalarDesc('vt'),)
+    def params_sm(self) -> dict[str, ParamDesc]:
+        return dict(vt=ParamScalarDesc())
 
 
 class VPTraitTanArctan(VPTrait):
@@ -1603,10 +1598,10 @@ class VPTraitTanArctan(VPTrait):
     def uid() -> int:
         return VPT_UID_TAN_ARCTAN
 
-    def params_sm(self) -> tuple[ParamDesc, ...]:
-        return (
-            ParamScalarDesc('rt'),
-            ParamScalarDesc('vt'))
+    def params_sm(self) -> dict[str, ParamDesc]:
+        return dict(
+            rt=ParamScalarDesc(),
+            vt=ParamScalarDesc())
 
 
 class VPTraitTanBoissier(VPTrait):
@@ -1624,10 +1619,10 @@ class VPTraitTanBoissier(VPTrait):
     def uid() -> int:
         return VPT_UID_TAN_BOISSIER
 
-    def params_sm(self) -> tuple[ParamDesc, ...]:
-        return (
-            ParamScalarDesc('rt'),
-            ParamScalarDesc('vt'))
+    def params_sm(self) -> dict[str, ParamDesc]:
+        return dict(
+            rt=ParamScalarDesc(),
+            vt=ParamScalarDesc())
 
 
 class VPTraitTanEpinat(VPTrait):
@@ -1646,12 +1641,12 @@ class VPTraitTanEpinat(VPTrait):
     def uid() -> int:
         return VPT_UID_TAN_EPINAT
 
-    def params_sm(self) -> tuple[ParamDesc, ...]:
-        return (
-            ParamScalarDesc('rt'),
-            ParamScalarDesc('vt'),
-            ParamScalarDesc('a'),
-            ParamScalarDesc('g'))
+    def params_sm(self) -> dict[str, ParamDesc]:
+        return dict(
+            rt=ParamScalarDesc(),
+            vt=ParamScalarDesc(),
+            a=ParamScalarDesc(),
+            g=ParamScalarDesc())
 
 
 class VPTraitTanLRamp(VPTrait):
@@ -1668,10 +1663,10 @@ class VPTraitTanLRamp(VPTrait):
     def uid() -> int:
         return VPT_UID_TAN_LRAMP
 
-    def params_sm(self) -> tuple[ParamDesc, ...]:
-        return (
-            ParamScalarDesc('rt'),
-            ParamScalarDesc('vt'))
+    def params_sm(self) -> dict[str, ParamDesc]:
+        return dict(
+            rt=ParamScalarDesc(),
+            vt=ParamScalarDesc())
 
 
 class VPTraitTanTanh(VPTrait):
@@ -1689,10 +1684,10 @@ class VPTraitTanTanh(VPTrait):
     def uid() -> int:
         return VPT_UID_TAN_TANH
 
-    def params_sm(self) -> tuple[ParamDesc, ...]:
-        return (
-            ParamScalarDesc('rt'),
-            ParamScalarDesc('vt'))
+    def params_sm(self) -> dict[str, ParamDesc]:
+        return dict(
+            rt=ParamScalarDesc(),
+            vt=ParamScalarDesc())
 
 
 class VPTraitTanPolyex(VPTrait):
@@ -1711,11 +1706,11 @@ class VPTraitTanPolyex(VPTrait):
     def uid() -> int:
         return VPT_UID_TAN_POLYEX
 
-    def params_sm(self) -> tuple[ParamDesc, ...]:
-        return (
-            ParamScalarDesc('rt'),
-            ParamScalarDesc('vt'),
-            ParamScalarDesc('a'))
+    def params_sm(self) -> dict[str, ParamDesc]:
+        return dict(
+            rt=ParamScalarDesc(),
+            vt=ParamScalarDesc(),
+            a=ParamScalarDesc())
 
 
 class VPTraitTanRix(VPTrait):
@@ -1734,12 +1729,12 @@ class VPTraitTanRix(VPTrait):
     def uid() -> int:
         return VPT_UID_TAN_RIX
 
-    def params_sm(self) -> tuple[ParamDesc, ...]:
-        return (
-            ParamScalarDesc('rt'),
-            ParamScalarDesc('vt'),
-            ParamScalarDesc('b'),
-            ParamScalarDesc('g'))
+    def params_sm(self) -> dict[str, ParamDesc]:
+        return dict(
+            rt=ParamScalarDesc(),
+            vt=ParamScalarDesc(),
+            b=ParamScalarDesc(),
+            g=ParamScalarDesc())
 
 
 class VPTraitTanCourteau(VPTrait):
@@ -1757,12 +1752,12 @@ class VPTraitTanCourteau(VPTrait):
     def uid() -> int:
         return VPT_UID_TAN_COURTEAU
 
-    def params_sm(self) -> tuple[ParamDesc, ...]:
-        return (
-            ParamScalarDesc('rt'),
-            ParamScalarDesc('vt'),
-            ParamScalarDesc('b'),
-            ParamScalarDesc('g'))
+    def params_sm(self) -> dict[str, ParamDesc]:
+        return dict(
+            rt=ParamScalarDesc(),
+            vt=ParamScalarDesc(),
+            b=ParamScalarDesc(),
+            g=ParamScalarDesc())
 
 
 class VPTraitTanBrandt(VPTrait):
@@ -1780,11 +1775,11 @@ class VPTraitTanBrandt(VPTrait):
     def uid() -> int:
         return VPT_UID_TAN_BRANDT
 
-    def params_sm(self) -> tuple[ParamDesc, ...]:
-        return (
-            ParamScalarDesc('rt'),
-            ParamScalarDesc('vt'),
-            ParamScalarDesc('n'))
+    def params_sm(self) -> dict[str, ParamDesc]:
+        return dict(
+            rt=ParamScalarDesc(),
+            vt=ParamScalarDesc(),
+            n=ParamScalarDesc())
 
 
 class VPTraitTanIso(VPTrait):
@@ -1802,10 +1797,10 @@ class VPTraitTanIso(VPTrait):
     def uid() -> int:
         return VPT_UID_TAN_ISO
 
-    def params_sm(self) -> tuple[ParamDesc, ...]:
-        return (
-            ParamScalarDesc('rt'),
-            ParamScalarDesc('vt'))
+    def params_sm(self) -> dict[str, ParamDesc]:
+        return dict(
+            rt=ParamScalarDesc(),
+            vt=ParamScalarDesc())
 
 
 class VPTraitTanNFW(VPTrait):
@@ -1823,10 +1818,10 @@ class VPTraitTanNFW(VPTrait):
     def uid() -> int:
         return VPT_UID_TAN_NFW
 
-    def params_sm(self) -> tuple[ParamDesc, ...]:
-        return (
-            ParamScalarDesc('rt'),
-            ParamScalarDesc('vt'))
+    def params_sm(self) -> dict[str, ParamDesc]:
+        return dict(
+            rt=ParamScalarDesc(),
+            vt=ParamScalarDesc())
 
 
 class VPTraitNWTanUniform(TraitFeatureSampling, VPTrait):
@@ -1860,9 +1855,8 @@ class VPTraitNWTanUniform(TraitFeatureSampling, VPTrait):
             sampling: str = SAMPLING_DEFAULT):
         super().__init__(sampling=sampling)
 
-    def params_rnw(self, nnodes: int) -> tuple[ParamDesc, ...]:
-        return (
-            ParamVectorDesc('vt', nnodes),)
+    def params_rnw(self, nnodes: int) -> dict[str, ParamDesc]:
+        return dict(vt=ParamVectorDesc(nnodes))
 
 
 class VPTraitMass(VPTrait):
@@ -1885,8 +1879,8 @@ class VPTraitMass(VPTrait):
     def sampling(self) -> str:
         return 'subrings'
 
-    def params_rnw(self, nnodes: int) -> tuple[ParamDesc, ...]:
-        return (ParamVectorDesc('vt', nnodes),)
+    def params_rnw(self, nnodes: int) -> dict[str, ParamDesc]:
+        return dict(vt=ParamVectorDesc(nnodes))
 
     def circular_velocity_params(self) -> tuple[str, ...]:
         return ('vt',)
@@ -1929,7 +1923,7 @@ class VPTraitNWTanHarmonic(
             sampling: str = SAMPLING_DEFAULT):
         super().__init__(order=order, sampling=sampling)
 
-    def params_rnw(self, nnodes: int) -> tuple[ParamDesc, ...]:
+    def params_rnw(self, nnodes: int) -> dict[str, ParamDesc]:
         return _ptrait_params_nw_harmonic(self.order(), nnodes)
 
 
@@ -1964,9 +1958,8 @@ class VPTraitNWRadUniform(TraitFeatureSampling, VPTrait):
             sampling: str = SAMPLING_DEFAULT):
         super().__init__(sampling=sampling)
 
-    def params_rnw(self, nnodes: int) -> tuple[ParamDesc, ...]:
-        return (
-            ParamVectorDesc('vr', nnodes),)
+    def params_rnw(self, nnodes: int) -> dict[str, ParamDesc]:
+        return dict(vr=ParamVectorDesc(nnodes))
 
 
 class VPTraitNWRadHarmonic(
@@ -2006,7 +1999,7 @@ class VPTraitNWRadHarmonic(
             sampling: str = SAMPLING_DEFAULT):
         super().__init__(order=order, sampling=sampling)
 
-    def params_rnw(self, nnodes: int) -> tuple[ParamDesc, ...]:
+    def params_rnw(self, nnodes: int) -> dict[str, ParamDesc]:
         return _ptrait_params_nw_harmonic(self.order(), nnodes)
 
 
@@ -2041,9 +2034,8 @@ class VPTraitNWVerUniform(TraitFeatureSampling, VPTrait):
             sampling: str = SAMPLING_DEFAULT):
         super().__init__(sampling=sampling)
 
-    def params_rnw(self, nnodes: int) -> tuple[ParamDesc, ...]:
-        return (
-            ParamVectorDesc('vv', nnodes),)
+    def params_rnw(self, nnodes: int) -> dict[str, ParamDesc]:
+        return dict(vv=ParamVectorDesc(nnodes))
 
 
 class VPTraitNWVerHarmonic(
@@ -2083,7 +2075,7 @@ class VPTraitNWVerHarmonic(
             sampling: str = SAMPLING_DEFAULT):
         super().__init__(order=order, sampling=sampling)
 
-    def params_rnw(self, nnodes: int) -> tuple[ParamDesc, ...]:
+    def params_rnw(self, nnodes: int) -> dict[str, ParamDesc]:
         return _ptrait_params_nw_harmonic(self.order(), nnodes)
 
 
@@ -2118,9 +2110,8 @@ class VPTraitNWLOSUniform(TraitFeatureSampling, VPTrait):
             sampling: str = SAMPLING_DEFAULT):
         super().__init__(sampling=sampling)
 
-    def params_rnw(self, nnodes: int) -> tuple[ParamDesc, ...]:
-        return (
-            ParamVectorDesc('vl', nnodes),)
+    def params_rnw(self, nnodes: int) -> dict[str, ParamDesc]:
+        return dict(vl=ParamVectorDesc(nnodes))
 
 
 class VPTraitNWLOSHarmonic(
@@ -2160,7 +2151,7 @@ class VPTraitNWLOSHarmonic(
             sampling: str = SAMPLING_DEFAULT):
         super().__init__(order=order, sampling=sampling)
 
-    def params_rnw(self, nnodes: int) -> tuple[ParamDesc, ...]:
+    def params_rnw(self, nnodes: int) -> dict[str, ParamDesc]:
         return _ptrait_params_nw_harmonic(self.order(), nnodes)
 
 
@@ -2200,13 +2191,13 @@ class VHTraitP1(VHTrait, abc.ABC):
         """Return the name of its parameter."""
         pass
 
-    def params_sm(self) -> tuple[ParamDesc, ...]:
-        return () if self.rnodes() else (
-            ParamScalarDesc(self.param_name()),)
+    def params_sm(self) -> dict[str, ParamDesc]:
+        return {} if self.rnodes() else {
+            self.param_name(): ParamScalarDesc()}
 
-    def params_rnw(self, nrnodes: int) -> tuple[ParamDesc, ...]:
-        return () if not self.rnodes() else (
-            (ParamVectorDesc(self.param_name(), nrnodes)),)
+    def params_rnw(self, nrnodes: int) -> dict[str, ParamDesc]:
+        return {} if not self.rnodes() else {
+            self.param_name(): ParamVectorDesc(nrnodes)}
 
 
 class VHTraitLinear(VHTraitP1):
@@ -2323,9 +2314,8 @@ class DPTraitUniform(DPTrait):
     def uid() -> int:
         return DPT_UID_UNIFORM
 
-    def params_sm(self) -> tuple[ParamDesc, ...]:
-        return (
-            ParamScalarDesc('a'),)
+    def params_sm(self) -> dict[str, ParamDesc]:
+        return dict(a=ParamScalarDesc())
 
 
 class DPTraitExponential(DPTrait):
@@ -2342,10 +2332,10 @@ class DPTraitExponential(DPTrait):
     def uid() -> int:
         return DPT_UID_EXP
 
-    def params_sm(self) -> tuple[ParamDesc, ...]:
-        return (
-            ParamScalarDesc('a'),
-            ParamScalarDesc('s'))
+    def params_sm(self) -> dict[str, ParamDesc]:
+        return dict(
+            a=ParamScalarDesc(),
+            s=ParamScalarDesc())
 
 
 class DPTraitGauss(DPTrait):
@@ -2363,10 +2353,10 @@ class DPTraitGauss(DPTrait):
     def uid() -> int:
         return DPT_UID_GAUSS
 
-    def params_sm(self) -> tuple[ParamDesc, ...]:
-        return (
-            ParamScalarDesc('a'),
-            ParamScalarDesc('s'))
+    def params_sm(self) -> dict[str, ParamDesc]:
+        return dict(
+            a=ParamScalarDesc(),
+            s=ParamScalarDesc())
 
 
 class DPTraitGGauss(DPTrait):
@@ -2385,11 +2375,11 @@ class DPTraitGGauss(DPTrait):
     def uid() -> int:
         return DPT_UID_GGAUSS
 
-    def params_sm(self) -> tuple[ParamDesc, ...]:
-        return (
-            ParamScalarDesc('a'),
-            ParamScalarDesc('s'),
-            ParamScalarDesc('b'))
+    def params_sm(self) -> dict[str, ParamDesc]:
+        return dict(
+            a=ParamScalarDesc(),
+            s=ParamScalarDesc(),
+            b=ParamScalarDesc())
 
 
 class DPTraitLorentz(DPTrait):
@@ -2407,10 +2397,10 @@ class DPTraitLorentz(DPTrait):
     def uid() -> int:
         return DPT_UID_LORENTZ
 
-    def params_sm(self) -> tuple[ParamDesc, ...]:
-        return (
-            ParamScalarDesc('a'),
-            ParamScalarDesc('s'))
+    def params_sm(self) -> dict[str, ParamDesc]:
+        return dict(
+            a=ParamScalarDesc(),
+            s=ParamScalarDesc())
 
 
 class DPTraitMoffat(DPTrait):
@@ -2428,11 +2418,11 @@ class DPTraitMoffat(DPTrait):
     def uid() -> int:
         return DPT_UID_MOFFAT
 
-    def params_sm(self) -> tuple[ParamDesc, ...]:
-        return (
-            ParamScalarDesc('a'),
-            ParamScalarDesc('s'),
-            ParamScalarDesc('b'))
+    def params_sm(self) -> dict[str, ParamDesc]:
+        return dict(
+            a=ParamScalarDesc(),
+            s=ParamScalarDesc(),
+            b=ParamScalarDesc())
 
 
 class DPTraitSech2(DPTrait):
@@ -2449,10 +2439,10 @@ class DPTraitSech2(DPTrait):
     def uid() -> int:
         return DPT_UID_SECH2
 
-    def params_sm(self) -> tuple[ParamDesc, ...]:
-        return (
-            ParamScalarDesc('a'),
-            ParamScalarDesc('s'))
+    def params_sm(self) -> dict[str, ParamDesc]:
+        return dict(
+            a=ParamScalarDesc(),
+            s=ParamScalarDesc())
 
 
 class DPTraitMixtureExponential(TraitFeatureNBlobs, DPTrait):
@@ -2486,7 +2476,7 @@ class DPTraitMixtureExponential(TraitFeatureNBlobs, DPTrait):
     def __init__(self, nblobs: int):
         super().__init__(nblobs=nblobs)
 
-    def params_sm(self) -> tuple[ParamDesc, ...]:
+    def params_sm(self) -> dict[str, ParamDesc]:
         return _ptrait_params_mixture_6p(self.nblobs())
 
 
@@ -2521,7 +2511,7 @@ class DPTraitMixtureGauss(TraitFeatureNBlobs, DPTrait):
     def __init__(self, nblobs: int):
         super().__init__(nblobs=nblobs)
 
-    def params_sm(self) -> tuple[ParamDesc, ...]:
+    def params_sm(self) -> dict[str, ParamDesc]:
         return _ptrait_params_mixture_6p(self.nblobs())
 
 
@@ -2557,7 +2547,7 @@ class DPTraitMixtureGGauss(TraitFeatureNBlobs, DPTrait):
     def __init__(self, nblobs: int):
         super().__init__(nblobs=nblobs)
 
-    def params_sm(self) -> tuple[ParamDesc, ...]:
+    def params_sm(self) -> dict[str, ParamDesc]:
         return _ptrait_params_mixture_7p(self.nblobs())
 
 
@@ -2592,7 +2582,7 @@ class DPTraitMixtureMoffat(TraitFeatureNBlobs, DPTrait):
     def __init__(self, nblobs: int):
         super().__init__(nblobs=nblobs)
 
-    def params_sm(self) -> tuple[ParamDesc, ...]:
+    def params_sm(self) -> dict[str, ParamDesc]:
         return _ptrait_params_mixture_7p(self.nblobs())
 
 
@@ -2627,9 +2617,8 @@ class DPTraitNWUniform(TraitFeatureSampling, DPTrait):
             sampling: str = SAMPLING_DEFAULT):
         super().__init__(sampling=sampling)
 
-    def params_rnw(self, nnodes: int) -> tuple[ParamDesc, ...]:
-        return (
-            ParamVectorDesc('a', nnodes),)
+    def params_rnw(self, nnodes: int) -> dict[str, ParamDesc]:
+        return dict(a=ParamVectorDesc(nnodes))
 
 
 class DPTraitNWHarmonic(
@@ -2670,7 +2659,7 @@ class DPTraitNWHarmonic(
             sampling: str = SAMPLING_DEFAULT):
         super().__init__(order=order, sampling=sampling)
 
-    def params_rnw(self, nnodes: int) -> tuple[ParamDesc, ...]:
+    def params_rnw(self, nnodes: int) -> dict[str, ParamDesc]:
         return _ptrait_params_nw_harmonic(self.order(), nnodes)
 
 
@@ -2707,7 +2696,7 @@ class DPTraitNWDistortion(TraitFeatureSampling, DPTrait):
             sampling: str = SAMPLING_DEFAULT):
         super().__init__(sampling=sampling)
 
-    def params_rnw(self, nnodes: int) -> tuple[ParamDesc, ...]:
+    def params_rnw(self, nnodes: int) -> dict[str, ParamDesc]:
         return _ptrait_params_nw_distortion(nnodes)
 
 
@@ -2748,13 +2737,13 @@ class DHTraitP1(DHTrait, abc.ABC):
         """Return the name of its parameter."""
         pass
 
-    def params_sm(self) -> tuple[ParamDesc, ...]:
-        return () if self.rnodes() else (
-            ParamScalarDesc(self.param_name()),)
+    def params_sm(self) -> dict[str, ParamDesc]:
+        return {} if self.rnodes() else {
+            self.param_name(): ParamScalarDesc()}
 
-    def params_rnw(self, nrnodes: int) -> tuple[ParamDesc, ...]:
-        return () if not self.rnodes() else (
-            (ParamVectorDesc(self.param_name(), nrnodes)),)
+    def params_rnw(self, nrnodes: int) -> dict[str, ParamDesc]:
+        return {} if not self.rnodes() else {
+            self.param_name(): ParamVectorDesc(nrnodes)}
 
 
 class DHTraitLinear(DHTraitP1):
@@ -2888,9 +2877,8 @@ class ZPTraitNWUniform(TraitFeatureSampling, ZPTrait):
             sampling: str = SAMPLING_DEFAULT):
         super().__init__(sampling=sampling)
 
-    def params_rnw(self, nnodes: int) -> tuple[ParamDesc, ...]:
-        return (
-            ParamVectorDesc('a', nnodes),)
+    def params_rnw(self, nnodes: int) -> dict[str, ParamDesc]:
+        return dict(a=ParamVectorDesc(nnodes))
 
 
 class ZPTraitNWHarmonic(
@@ -2931,7 +2919,7 @@ class ZPTraitNWHarmonic(
             sampling: str = SAMPLING_DEFAULT):
         super().__init__(order=order, sampling=sampling)
 
-    def params_rnw(self, nnodes: int) -> tuple[ParamDesc, ...]:
+    def params_rnw(self, nnodes: int) -> dict[str, ParamDesc]:
         return _ptrait_params_nw_harmonic(self.order(), nnodes)
 
 
@@ -2949,10 +2937,10 @@ class SPTraitAzimuthalRange(SPTrait):
     def uid() -> int:
         return SPT_UID_AZRANGE
 
-    def params_sm(self) -> tuple[ParamDesc, ...]:
-        return (
-            ParamScalarDesc('p'),
-            ParamScalarDesc('s'))
+    def params_sm(self) -> dict[str, ParamDesc]:
+        return dict(
+            p=ParamScalarDesc(),
+            s=ParamScalarDesc())
 
 
 class SPTraitRadialRange(SPTrait):
@@ -2969,10 +2957,10 @@ class SPTraitRadialRange(SPTrait):
     def uid() -> int:
         return SPT_UID_RRANGE
 
-    def params_sm(self) -> tuple[ParamDesc, ...]:
-        return (
-            ParamScalarDesc('rmin'),
-            ParamScalarDesc('rmax'))
+    def params_sm(self) -> dict[str, ParamDesc]:
+        return dict(
+            rmin=ParamScalarDesc(),
+            rmax=ParamScalarDesc())
 
 
 class SPTraitNWAzimuthalRange(
@@ -3005,10 +2993,10 @@ class SPTraitNWAzimuthalRange(
     def __init__(self, sampling: str = SAMPLING_DEFAULT):
         super().__init__(sampling=sampling)
 
-    def params_rnw(self, nnodes: int) -> tuple[ParamDesc, ...]:
-        return (
-            ParamVectorDesc('p', nnodes),
-            ParamVectorDesc('s', nnodes))
+    def params_rnw(self, nnodes: int) -> dict[str, ParamDesc]:
+        return dict(
+            p=ParamVectorDesc(nnodes),
+            s=ParamVectorDesc(nnodes))
 
 
 class WPTraitAxisRange(WPTrait):
@@ -3076,9 +3064,8 @@ class OPTraitUniform(OPTrait):
     def uid() -> int:
         return OPT_UID_UNIFORM
 
-    def params_sm(self) -> tuple[ParamDesc, ...]:
-        return (
-            ParamScalarDesc('a'),)
+    def params_sm(self) -> dict[str, ParamDesc]:
+        return dict(a=ParamScalarDesc())
 
     def has_analytical_integral(self) -> bool:
         return True
@@ -3103,10 +3090,10 @@ class OPTraitExponential(OPTrait):
     def uid() -> int:
         return OPT_UID_EXP
 
-    def params_sm(self) -> tuple[ParamDesc, ...]:
-        return (
-            ParamScalarDesc('a'),
-            ParamScalarDesc('s'))
+    def params_sm(self) -> dict[str, ParamDesc]:
+        return dict(
+            a=ParamScalarDesc(),
+            s=ParamScalarDesc())
 
     def has_analytical_integral(self) -> bool:
         return False
@@ -3132,10 +3119,10 @@ class OPTraitGauss(OPTrait):
     def uid() -> int:
         return OPT_UID_GAUSS
 
-    def params_sm(self) -> tuple[ParamDesc, ...]:
-        return (
-            ParamScalarDesc('a'),
-            ParamScalarDesc('s'))
+    def params_sm(self) -> dict[str, ParamDesc]:
+        return dict(
+            a=ParamScalarDesc(),
+            s=ParamScalarDesc())
 
     def has_analytical_integral(self) -> bool:
         return False
@@ -3162,11 +3149,11 @@ class OPTraitGGauss(OPTrait):
     def uid() -> int:
         return OPT_UID_GGAUSS
 
-    def params_sm(self) -> tuple[ParamDesc, ...]:
-        return (
-            ParamScalarDesc('a'),
-            ParamScalarDesc('s'),
-            ParamScalarDesc('b'))
+    def params_sm(self) -> dict[str, ParamDesc]:
+        return dict(
+            a=ParamScalarDesc(),
+            s=ParamScalarDesc(),
+            b=ParamScalarDesc())
 
     def has_analytical_integral(self) -> bool:
         return False
@@ -3192,10 +3179,10 @@ class OPTraitLorentz(OPTrait):
     def uid() -> int:
         return OPT_UID_LORENTZ
 
-    def params_sm(self) -> tuple[ParamDesc, ...]:
-        return (
-            ParamScalarDesc('a'),
-            ParamScalarDesc('s'))
+    def params_sm(self) -> dict[str, ParamDesc]:
+        return dict(
+            a=ParamScalarDesc(),
+            s=ParamScalarDesc())
 
     def has_analytical_integral(self) -> bool:
         return False
@@ -3221,11 +3208,11 @@ class OPTraitMoffat(OPTrait):
     def uid() -> int:
         return OPT_UID_MOFFAT
 
-    def params_sm(self) -> tuple[ParamDesc, ...]:
-        return (
-            ParamScalarDesc('a'),
-            ParamScalarDesc('s'),
-            ParamScalarDesc('b'))
+    def params_sm(self) -> dict[str, ParamDesc]:
+        return dict(
+            a=ParamScalarDesc(),
+            s=ParamScalarDesc(),
+            b=ParamScalarDesc())
 
     def has_analytical_integral(self) -> bool:
         return False
@@ -3250,10 +3237,10 @@ class OPTraitSech2(OPTrait):
     def uid() -> int:
         return OPT_UID_SECH2
 
-    def params_sm(self) -> tuple[ParamDesc, ...]:
-        return (
-            ParamScalarDesc('a'),
-            ParamScalarDesc('s'))
+    def params_sm(self) -> dict[str, ParamDesc]:
+        return dict(
+            a=ParamScalarDesc(),
+            s=ParamScalarDesc())
 
     def has_analytical_integral(self) -> bool:
         return False
@@ -3295,7 +3282,7 @@ class OPTraitMixtureExponential(TraitFeatureNBlobs, OPTrait):
     def __init__(self, nblobs: int):
         super().__init__(nblobs=nblobs)
 
-    def params_sm(self) -> tuple[ParamDesc, ...]:
+    def params_sm(self) -> dict[str, ParamDesc]:
         return _ptrait_params_mixture_6p(self.nblobs())
 
     def has_analytical_integral(self) -> bool:
@@ -3338,7 +3325,7 @@ class OPTraitMixtureGauss(TraitFeatureNBlobs, OPTrait):
     def __init__(self, nblobs: int):
         super().__init__(nblobs=nblobs)
 
-    def params_sm(self) -> tuple[ParamDesc, ...]:
+    def params_sm(self) -> dict[str, ParamDesc]:
         return _ptrait_params_mixture_6p(self.nblobs())
 
     def has_analytical_integral(self) -> bool:
@@ -3382,7 +3369,7 @@ class OPTraitMixtureGGauss(TraitFeatureNBlobs, OPTrait):
     def __init__(self, nblobs: int):
         super().__init__(nblobs=nblobs)
 
-    def params_sm(self) -> tuple[ParamDesc, ...]:
+    def params_sm(self) -> dict[str, ParamDesc]:
         return _ptrait_params_mixture_7p(self.nblobs())
 
     def has_analytical_integral(self) -> bool:
@@ -3426,7 +3413,7 @@ class OPTraitMixtureMoffat(TraitFeatureNBlobs, OPTrait):
     def __init__(self, nblobs: int):
         super().__init__(nblobs=nblobs)
 
-    def params_sm(self) -> tuple[ParamDesc, ...]:
+    def params_sm(self) -> dict[str, ParamDesc]:
         return _ptrait_params_mixture_7p(self.nblobs())
 
     def has_analytical_integral(self) -> bool:
@@ -3468,9 +3455,8 @@ class OPTraitNWUniform(TraitFeatureSampling, OPTrait):
             sampling: str = SAMPLING_DEFAULT):
         super().__init__(sampling=sampling)
 
-    def params_rnw(self, nnodes: int) -> tuple[ParamDesc, ...]:
-        return (
-            ParamVectorDesc('a', nnodes),)
+    def params_rnw(self, nnodes: int) -> dict[str, ParamDesc]:
+        return dict(a=ParamVectorDesc(nnodes))
 
     def has_analytical_integral(self) -> bool:
         return False
@@ -3520,7 +3506,7 @@ class OPTraitNWHarmonic(
             sampling: str = SAMPLING_DEFAULT):
         super().__init__(order=order, sampling=sampling)
 
-    def params_rnw(self, nnodes: int) -> tuple[ParamDesc, ...]:
+    def params_rnw(self, nnodes: int) -> dict[str, ParamDesc]:
         return _ptrait_params_nw_harmonic(self.order(), nnodes)
 
     def has_analytical_integral(self) -> bool:
@@ -3566,7 +3552,7 @@ class OPTraitNWDistortion(TraitFeatureSampling, OPTrait):
             sampling: str = SAMPLING_DEFAULT):
         super().__init__(sampling=sampling)
 
-    def params_rnw(self, nnodes: int) -> tuple[ParamDesc, ...]:
+    def params_rnw(self, nnodes: int) -> dict[str, ParamDesc]:
         return _ptrait_params_nw_distortion(nnodes)
 
     def has_analytical_integral(self) -> bool:
@@ -3591,13 +3577,11 @@ class OHTraitP1(OHTrait, abc.ABC):
         super().__init__(
             rnodes=rnodes, sampling=sampling, trunc=trunc)
 
-    def params_sm(self) -> tuple[ParamDesc, ...]:
-        return () if self.rnodes() else (
-            ParamScalarDesc('s'),)
+    def params_sm(self) -> dict[str, ParamDesc]:
+        return {} if self.rnodes() else dict(s=ParamScalarDesc())
 
-    def params_rnw(self, nrnodes: int) -> tuple[ParamDesc, ...]:
-        return () if not self.rnodes() else (
-            ParamVectorDesc('s', nrnodes),)
+    def params_rnw(self, nrnodes: int) -> dict[str, ParamDesc]:
+        return {} if not self.rnodes() else dict(s=ParamVectorDesc(nrnodes))
 
 
 class OHTraitP2(OHTrait, abc.ABC):
@@ -3613,15 +3597,15 @@ class OHTraitP2(OHTrait, abc.ABC):
         super().__init__(
             rnodes=rnodes, sampling=sampling, trunc=trunc)
 
-    def params_sm(self) -> tuple[ParamDesc, ...]:
-        return () if self.rnodes() else (
-            ParamScalarDesc('s'),
-            ParamScalarDesc('b'))
+    def params_sm(self) -> dict[str, ParamDesc]:
+        return {} if self.rnodes() else dict(
+            s=ParamScalarDesc(),
+            b=ParamScalarDesc())
 
-    def params_rnw(self, nrnodes: int) -> tuple[ParamDesc, ...]:
-        return () if not self.rnodes() else (
-            ParamVectorDesc('s', nrnodes),
-            ParamVectorDesc('b', nrnodes))
+    def params_rnw(self, nrnodes: int) -> dict[str, ParamDesc]:
+        return {} if not self.rnodes() else dict(
+            s=ParamVectorDesc(nrnodes),
+            b=ParamVectorDesc(nrnodes))
 
 
 class OHTraitUniform(OHTraitP1):

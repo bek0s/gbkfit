@@ -5,7 +5,7 @@ from typing import Any
 import numpy as np
 
 from gbkfit.driver import DeviceArray, Driver
-from gbkfit.params import ParamDesc
+from gbkfit.params import ParamDesc, ParamValues
 from gbkfit.utils import gridutils, parseutils
 
 
@@ -112,7 +112,7 @@ class ModelPlan(abc.ABC):
     @abc.abstractmethod
     def evaluate(
             self,
-            params: dict[str, float | np.ndarray],
+            params: ParamValues,
             data: DeviceArray,
             weights: DeviceArray | None,
             out_extra: dict[str, Any] | None

@@ -8,6 +8,7 @@ from gbkfit.dataset import DatasetSlitSpectra
 from gbkfit.driver import Driver
 from gbkfit.instrument import Instrument
 from gbkfit.model.base import Model, ModelSCube, Selection
+from gbkfit.params import ParamValues
 from gbkfit.utils import gridutils
 from . import _dcube, _detail
 from .base import ModelData, Observable
@@ -222,7 +223,7 @@ class SlitSpectraPlan(_detail.DCubePlanBase):
 
     def evaluate(
             self,
-            params: dict[str, float | np.ndarray],
+            params: ParamValues,
             out_extra: dict[str, Any] | None
     ) -> ModelData:
         # The slit has no position on the sky, so the extra outputs of the
