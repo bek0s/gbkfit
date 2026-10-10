@@ -39,6 +39,7 @@ emcee = ['emcee']
 lmfit = ['lmfit']
 nautilus = ['nautilus-sampler']
 cmaes = ['cma']
+ultranest = ['ultranest']
 gui = ['PySide6']
 
 [project.urls]

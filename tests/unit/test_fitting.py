@@ -321,10 +321,10 @@ def test_nautilus_posterior_agrees_with_the_covariance():
 @pytest.mark.slow
 def test_dynesty_posterior_agrees_with_the_covariance():
     pytest.importorskip('dynesty')
-    from gbkfit.fitting.fitters.dynesty import FitterDynesty
+    from gbkfit.fitting.fitters.dynesty import FitterDynestyStatic
     objective = mock_objective(DriverHost())
     params = ParamSpace(objective.pdescs(), prior_properties(10))
-    result = FitterDynesty(nlive=300).fit(objective, params)
+    result = FitterDynestyStatic(nlive=300).fit(objective, params)
     check_posterior(result)
     assert result.evidence.log_z_error > 0
 
@@ -345,3 +345,14 @@ def test_samplers_leave_out_points_the_parameters_reject():
     assert np.all(result.posterior.samples[:, 0] >= 0.6)
     assert result.posterior.summary()['xpos'][1] == pytest.approx(
         TRUE['xpos'], abs=0.05)
+
+
+@pytest.mark.slow
+def test_ultranest_posterior_agrees_with_the_covariance():
+    pytest.importorskip('ultranest')
+    from gbkfit.fitting.fitters.ultranest import FitterUltraNest
+    objective = mock_objective(DriverHost())
+    params = ParamSpace(objective.pdescs(), prior_properties(10))
+    result = FitterUltraNest().fit(objective, params)
+    check_posterior(result)
+    assert result.evidence.log_z_error > 0
