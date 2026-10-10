@@ -53,8 +53,6 @@ class Observation(parseutils.Serializable):
             instrument_parser, info, 'instrument')
         parseutils.load_option_and_update_info(
             observable_parser, info, 'observable', dataset=dataset)
-        if dataset is not None and 'dtype' not in info:
-            info['dtype'] = np.dtype(dataset.dtype()).name
         opts = parseutils.parse_options_for_callable(info, cls.__init__)
         return cls(**opts)
 
@@ -132,10 +130,6 @@ class Observation(parseutils.Serializable):
             raise RuntimeError("a likelihood needs data")
         if data is not None:
             observable.require_matching(data)
-            if data.dtype() != np.dtype(dtype):
-                raise RuntimeError(
-                    f"the data are of type {data.dtype()}, but the "
-                    f"observation is of type {np.dtype(dtype)}")
         if data is not None and likelihood is None:
             likelihood = LikelihoodGaussian()
         self._gmodel = gmodel

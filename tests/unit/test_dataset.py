@@ -16,7 +16,7 @@ def test_data():
     # Default value tests
     data01 = Data(data_d)
     assert data01.data() is not data_d
-    assert data01.dtype() == np.float32
+    assert data01.dtype() == np.float64
     assert np.array_equal(data01.data(), data_d)
     assert np.array_equal(data01.mask(), np.ones(shape))
     assert data01.error() is None
@@ -206,24 +206,29 @@ def test_data_masks_errors_that_are_not_positive():
     assert np.isnan(data.data()[0, :2]).all()
 
 
-def test_data_is_float32(tmp_path):
-    # The drivers support float32 only, so float64 files (BITPIX = -64)
-    # and integer files become float32. A scalar error is not rounded
-    # to the type of the data.
+def test_data_keep_their_precision(tmp_path):
+    # Floats keep their type, and the others become float64, in native
+    # byte order (FITS files are big-endian); the mask and the error take
+    # the type of the values. A scalar error is not rounded.
     fits.writeto(tmp_path / 'data.fits', np.ones((8, 20), np.int16))
     data, _ = Data.from_files(str(tmp_path / 'data.fits'), error=0.5)
-    assert data.dtype() == np.float32
-    assert data.error()[0, 0] == 0.5
-    assert Data(np.ones((8, 20))).dtype() == np.float32
+    assert data.dtype() == np.float64 and data.error()[0, 0] == 0.5
+    assert Data(np.ones(3, np.float32)).dtype() == np.float32
+    data = Data(
+        np.ones(3, '>f8'), mask=np.ones(3, int), error=np.ones(3, np.float32))
+    assert data.data().dtype == data.mask().dtype == data.error().dtype == (
+        np.dtype(np.float64))
 
 
-def test_observation_of_a_float64_dataset_is_float32(tmp_path):
+def test_observations_have_their_own_dtype(tmp_path):
+    # (the data are converted to it when they are sent to the device)
     from gbkfit.observation import observation_parser
     fits.writeto(tmp_path / 'image.fits', np.ones((8, 20), np.float64))
     observation = observation_parser.load(dict(
         driver=dict(type='host'), observable=dict(type='pixel_brightness'),
         data=dict(data=str(tmp_path / 'image.fits'))))
     assert observation.dtype() == np.float32
+    assert observation.data().dtype() == np.float64
     assert observation.observable().size() == (20, 8)
 
 
