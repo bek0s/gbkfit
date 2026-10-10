@@ -11,7 +11,7 @@ import scipy.integrate
 import scipy.special
 
 from gbkfit.model import gmodel_parser
-from gbkfit.model.gmodels.mass import (
+from gbkfit.model.mass import (
     MassExponentialDisk, MassModel, MassPseudoIsothermal, mass_model_parser)
 from gbkfit.utils.parseutils import ConfigError
 

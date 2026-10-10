@@ -6,7 +6,8 @@ import re
 
 import numpy as np
 import pytest
-from gbkfit.model import gmodel_parser, gmodels
+from gbkfit.model import gmodel_parser
+from gbkfit.model.components import disks
 from gbkfit.utils import gridutils
 
 
@@ -21,31 +22,31 @@ DISK = dict(loose=False, tilted=False, rnodes=[0, 2, 4, 6, 8])
 # gmodel it is in, and the component with its required options
 COMPONENTS = dict(
     brightness_smdisk_2d=(
-        gmodels.BrightnessSMDisk2D, 'intensity_2d', 'components',
+        disks.BrightnessSMDisk2D, 'intensity_2d', 'components',
         dict(type='smdisk', bptraits=EXPONENTIAL)),
     brightness_smdisk_3d=(
-        gmodels.BrightnessSMDisk3D, 'intensity_3d', 'components',
+        disks.BrightnessSMDisk3D, 'intensity_3d', 'components',
         dict(type='smdisk', bptraits=EXPONENTIAL, bhtraits=SECH2)),
     brightness_mcdisk_3d=(
-        gmodels.BrightnessMCDisk3D, 'intensity_3d', 'components',
+        disks.BrightnessMCDisk3D, 'intensity_3d', 'components',
         dict(type='mcdisk', cflux=1e-3, bptraits=EXPONENTIAL, bhtraits=SECH2)),
     spectral_smdisk_2d=(
-        gmodels.SpectralSMDisk2D, 'kinematics_2d', 'components',
+        disks.SpectralSMDisk2D, 'kinematics_2d', 'components',
         dict(type='smdisk', bptraits=EXPONENTIAL, vptraits=ARCTAN,
              dptraits=UNIFORM)),
     spectral_smdisk_3d=(
-        gmodels.SpectralSMDisk3D, 'kinematics_3d', 'components',
+        disks.SpectralSMDisk3D, 'kinematics_3d', 'components',
         dict(type='smdisk', bptraits=EXPONENTIAL, bhtraits=SECH2,
              vptraits=ARCTAN, dptraits=UNIFORM)),
     spectral_mcdisk_3d=(
-        gmodels.SpectralMCDisk3D, 'kinematics_3d', 'components',
+        disks.SpectralMCDisk3D, 'kinematics_3d', 'components',
         dict(type='mcdisk', cflux=1e-3, bptraits=EXPONENTIAL, bhtraits=SECH2,
              vptraits=ARCTAN, dptraits=UNIFORM)),
     opacity_smdisk_3d=(
-        gmodels.OpacitySMDisk3D, 'intensity_3d', 'opacity_components',
+        disks.OpacitySMDisk3D, 'intensity_3d', 'opacity_components',
         dict(type='smdisk', optraits=EXPONENTIAL, ohtraits=SECH2)),
     opacity_mcdisk_3d=(
-        gmodels.OpacityMCDisk3D, 'intensity_3d', 'opacity_components',
+        disks.OpacityMCDisk3D, 'intensity_3d', 'opacity_components',
         dict(type='mcdisk', cflux=1e-3, optraits=EXPONENTIAL, ohtraits=SECH2)))
 
 # Each required trait option of each type of component

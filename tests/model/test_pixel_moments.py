@@ -101,8 +101,8 @@ def test_moment_maps_have_the_weights_of_the_gmodel(driver):
     # The weight of the moments of a spectrum is the flux-weighted mean of
     # its weights: those of a gmodel with the spatial weights 0 on the
     # first row of pixels, and 1 elsewhere
-    from gbkfit.model.gmodels import (
-        GModelKinematics2D, SpectralSMDisk2D, traits)
+    from gbkfit.model import GModelKinematics2D
+    from gbkfit.model.components.disks import SpectralSMDisk2D, traits
     from gbkfit.observation import PixelMoments, Observation, ObservationGroup
     from gbkfit.params import EvaluationParams
     from modelutils import WeightComponent

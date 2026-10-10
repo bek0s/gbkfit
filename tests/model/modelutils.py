@@ -5,7 +5,7 @@ components for the tests.
 
 import numpy as np
 
-from gbkfit.model.gmodels.base import Component, ComponentPlan
+from gbkfit.model.components.base import Component, ComponentPlan
 
 
 def split_model(model):

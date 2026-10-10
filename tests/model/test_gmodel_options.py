@@ -204,7 +204,7 @@ def test_unknown_options_are_warnings(gmodel_type, caplog):
     # Not a multiple: to the first node beyond rnmax
     (0, 10, 3, 5)])
 def test_radial_nodes_from_a_range(rnmin, rnmax, rnsep, nodes):
-    from gbkfit.model.gmodels._detail import parse_component_rnode_args
+    from gbkfit.model.components.disks._detail import parse_component_rnode_args
     args = parse_component_rnode_args(
         rnmin, rnmax, rnsep, None, None, None, 'linear')
     assert len(args['rnodes']) == nodes
@@ -213,7 +213,7 @@ def test_radial_nodes_from_a_range(rnmin, rnmax, rnsep, nodes):
 
 def test_radial_step_can_be_half_the_node_separation():
     # (half of 0.19999999999999996, the separation as it rounds)
-    from gbkfit.model.gmodels._detail import parse_component_rnode_args
+    from gbkfit.model.components.disks._detail import parse_component_rnode_args
     args = parse_component_rnode_args(
         None, None, None, None, [0, 0.2, 0.4, 0.6, 0.8, 1.0], 0.1, 'linear')
     assert args['rstep'] == 0.1
@@ -225,7 +225,7 @@ def test_radial_step_can_be_half_the_node_separation():
     # Each node relative to its neighbour towards the origin
     (dict(type='relative2', origin=1), [1, 2, 3, 4], [3, 2, 5, 9])])
 def test_relative_nwmodes(nwmode, values, expected):
-    from gbkfit.model.gmodels.common import nwmode_parser
+    from gbkfit.model.components.disks.nwmodes import nwmode_parser
     result = nwmode_parser.load(nwmode).transform(
         np.array(values, float), in_place=False)
     np.testing.assert_array_equal(result, expected)

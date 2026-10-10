@@ -1,10 +1,16 @@
 
 import dataclasses
 import inspect
+import logging
 
-from gbkfit.utils import iterutils, parseutils
-from . import _detail, _disk, common, lines, traits
-from .base import ComponentPlan
+import numpy as np
+
+from gbkfit.math import interpolation
+from gbkfit.utils import iterutils, numutils, parseutils
+from ..base import ComponentPlan
+from ..lines import Lines
+from . import _disk, traits
+from .nwmodes import nwmode_parser
 
 
 __all__ = [
@@ -17,10 +23,11 @@ __all__ = [
     'load_options',
     'make_disk',
     'make_lines',
-    'dump_disk',
-    'dump_lines',
-    'dump_name'
+    'dump_disk'
 ]
+
+
+_log = logging.getLogger(__name__)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -123,7 +130,7 @@ def load_options(cls, info, slots, nwmodes):
             required=required)
     for name in nwmodes:
         parseutils.load_option_and_update_info(
-            common.nwmode_parser, info, f'{name}_nwmode')
+            nwmode_parser, info, f'{name}_nwmode')
     return parseutils.parse_options_for_callable(info, cls.__init__)
 
 
@@ -139,11 +146,11 @@ def make_disk(
     option (e.g. 'bptraits'). disk_options are the options of the type
     of disk (e.g. cflux and seed of MCDisk).
     """
-    node_args = _detail.parse_component_rnode_args(
+    node_args = parse_component_rnode_args(
         rnmin, rnmax, rnsep, rnlen, rnodes, rstep, interp)
-    nwmodes = _detail.validate_component_nwmodes(loose, tilted, nwmodes)
+    nwmodes = validate_component_nwmodes(loose, tilted, nwmodes)
     traits_ = _parse_traits(cls, slots, traits_)
-    _detail.check_traits_common(sum(traits_.values(), ()))
+    check_traits_common(sum(traits_.values(), ()))
     return disk_class(
         **disk_options,
         loose=loose, tilted=tilted, **node_args,
@@ -158,25 +165,12 @@ def make_lines(disk, lines_):
     The emission lines (see Lines) of a spectral component made of the
     given disk, whose parameters must have other names.
     """
-    result = lines.Lines(lines_)
+    result = Lines(lines_)
     if repeated := sorted(set(result.pdescs()) & set(disk.pdescs())):
         raise RuntimeError(
             f"the parameters of the lines have the names of other "
             f"parameters: {repeated}; rename the lines")
     return result
-
-
-def dump_lines(lines_):
-    """The lines option of a spectral component: none if not given."""
-    if lines_.lines() is None:
-        return {}
-    return dict(lines=lines.line_parser.dump(list(lines_.lines())))
-
-
-def dump_name(component):
-    """The name option of a component: none if it has no name."""
-    name = component.name()
-    return dict(name=name) if name is not None else {}
 
 
 def dump_disk(disk, slots, nwmodes):
@@ -186,7 +180,7 @@ def dump_disk(disk, slots, nwmodes):
     parameters.
     """
     nwmodes = {
-        f'{name}_nwmode': common.nwmode_parser.dump(disk.nwmode(name))
+        f'{name}_nwmode': nwmode_parser.dump(disk.nwmode(name))
         for name in nwmodes}
     traits_ = {
         slot.key: slot.parser.dump(disk.traits(slot.kind))
@@ -236,3 +230,118 @@ def _parse_traits(cls, slots, values):
         result[slot.key] = value
     return result
 
+
+def _parse_component_node_args(
+        prefix, nmin, nmax, nsep, nlen, nodes, step, interp):
+    nodes_list = nodes is not None
+    nodes_arange = [nmin, nmax, nsep].count(None) == 0
+    nodes_linspace = [nmin, nmax, nlen].count(None) == 0
+    if [nodes_list, nodes_arange, nodes_linspace].count(True) != 1:
+        raise RuntimeError(
+            f"only one of the following sets of options "
+            f"must be defined: "
+            f"(1) {prefix}nodes; "
+            f"(2) {prefix}nmin, {prefix}nmax, {prefix}nsep; "
+            f"(3) {prefix}nmin, {prefix}nmax, {prefix}nlen")
+    if (nodes_arange or nodes_linspace) and not (0 <= nmin < nmax):
+        raise RuntimeError(
+            f"the following expression must be true: "
+            f"0 <= {prefix}nmin < {prefix}nmax")
+    if nodes_arange and not (0 < nsep <= nmax - nmin):
+        raise RuntimeError(
+            f"the following expression must be true: "
+            f"0 < {prefix}nsep <= {prefix}nmax - {prefix}nmin")
+    if nlen is not None and not 2 <= nlen:
+        raise RuntimeError(
+            f"the following expression must be true: "
+            f"2 =< {prefix}nlen")
+    if nodes_arange:
+        # From nmin every nsep, to the first node at or beyond nmax; the
+        # count tolerates the rounding of (nmax - nmin) / nsep, which made
+        # np.arange to nmax + nsep add a node (e.g. 2.4 for 2.2 in 0.2s)
+        count = int(np.ceil((nmax - nmin) / nsep - 1e-9)) + 1
+        nodes = (nmin + nsep * np.arange(count)).tolist()
+    elif nodes_linspace:
+        nodes = np.linspace(nmin, nmax, nlen).tolist()
+    nodes = tuple(nodes)
+    if len(nodes) < 2:
+        raise RuntimeError(f"at least two {prefix}nodes must be provided")
+    if not iterutils.is_ascending(nodes):
+        raise RuntimeError(f"{prefix}nodes must be ascending")
+    if not numutils.all_positive(nodes, include_zero=True):
+        raise RuntimeError(f"{prefix}nodes must not be negative")
+    if not iterutils.all_unique(nodes):
+        raise RuntimeError(f"{prefix}nodes must be unique")
+    if step is None:
+        step = min(1, min(np.diff(nodes)) / 2)
+    # (half the difference is allowed, also as it rounds)
+    if step <= 0 or step > min(np.diff(nodes)) / 2 * (1 + 1e-9):
+        raise RuntimeError(
+            f"{prefix}step must be greater than zero and less than half the "
+            f"smallest difference between two consecutive {prefix}nodes")
+    interpolations = dict(
+        linear=interpolation.InterpolatorLinear,
+        akima=interpolation.InterpolatorAkima,
+        pchip=interpolation.InterpolatorPCHIP)
+    if interp not in interpolations:
+        raise RuntimeError(
+            "interp must be one of the following: "
+            f"{list(interpolations.keys())}")
+    return {
+        f'{prefix}nodes': nodes,
+        f'{prefix}step': step,
+        'interp': interpolations[interp]}
+
+
+def parse_component_rnode_args(nmin, nmax, nsep, nlen, nodes, step, interp):
+    return _parse_component_node_args(
+        'r', nmin, nmax, nsep, nlen, nodes, step, interp)
+
+
+def parse_component_hnode_args(nmin, nmax, nsep, nlen, nodes, step, interp):
+    return _parse_component_node_args(
+        'h', nmin, nmax, nsep, nlen, nodes, step, interp)
+
+
+def _validate_component_nwmode(enabled, enabled_name, nwmode, nwmode_name):
+    if nwmode is not None and not enabled:
+        _log.warning(
+            f"{nwmode_name} is set to '{nwmode.type()}', "
+            f"but it will be ignored because {enabled_name} is not set to True")
+        # ignore this nwmode
+        nwmode = None
+    return nwmode
+
+
+def validate_component_nwmodes(loose, tilted, nwmodes):
+    """
+    The node-wise modes of the geometric parameters of a component (e.g.
+    'xpos'), without those of the parameters that are not node-wise:
+    vsys, xpos and ypos if the component is not loose, posa and incl if
+    it is not tilted.
+    """
+    switches = dict(loose=loose, tilted=tilted)
+    result = {}
+    for name, nwmode in nwmodes.items():
+        switch = _disk.NODEWISE_SWITCH[name]
+        result[name] = _validate_component_nwmode(
+            switches[switch], switch, nwmode, f'{name}_nwmode')
+    return result
+
+
+def check_traits_common(traits_):
+    unsupported_traits = (
+        traits.WPTraitAxisRange)
+    for trait in traits_:
+        trait_desc = traits.trait_desc(trait.__class__)
+        if isinstance(trait, unsupported_traits):
+            raise NotImplementedError(
+                f"{trait_desc} is not implemented yet")
+        if isinstance(trait, traits.BPTraitUniform):
+            _log.warning(
+                f"the use of {trait_desc} is discouraged; "
+                f"its main purpose is to facilitate software testing")
+        if isinstance(trait, traits.BHTraitUniform):
+            _log.warning(
+                f"the use of {trait_desc} is discouraged; "
+                f"it may result in density overestimation due to aliasing")
