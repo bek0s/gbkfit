@@ -140,7 +140,7 @@ def test_outputs_are_written_by_type(tmp_path):
     from gbkfit.tasks import _detail
     from gbkfit.utils import gridutils
     coords = gridutils.Coords((1.0, 1.0), (3.5, 3.5), (150.0, 2.0), 0.0)
-    _detail.write_outputs(json, yaml, tmp_path, dict(
+    _detail.write_outputs(tmp_path, dict(
         grid=gridutils.GridData(np.ones((8, 8)), coords, None),
         array=np.ones((4, 4)),
         number=np.int64(12345),
@@ -152,7 +152,7 @@ def test_outputs_are_written_by_type(tmp_path):
     assert (tmp_path / 'gbkfit_eval_extra.yaml').exists()
     with pytest.raises(TypeError, match="unsupported type: object"):
         _detail.write_outputs(
-            json, yaml, tmp_path, dict(thing=object()), 'gbkfit_eval_extra')
+            tmp_path, dict(thing=object()), 'gbkfit_eval_extra')
 
 
 def test_region_spectra_outputs_and_residuals(tmp_path):

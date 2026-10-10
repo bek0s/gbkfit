@@ -1,3 +1,7 @@
+"""
+Helpers shared by the tasks: reading configurations, the output
+directory, loading the parts of a configuration, and writing outputs.
+"""
 
 import copy
 import json
@@ -8,94 +12,109 @@ from typing import Any, Literal
 
 import astropy.io.fits as fits
 import numpy as np
+import ruamel.yaml
 
 import gbkfit.model
 import gbkfit.observation
 from gbkfit.objective import Objective
 from gbkfit.observation import ObservationGroup
-from gbkfit.params import ParamDesc, ParamValues
+from gbkfit.params import (
+    ParamDesc, ParamSpace, ParamValues, load_pdescs_dict, param_space_parser)
 from gbkfit.utils import (
     fitsutils, gridutils, iterutils, miscutils, numutils, parseutils)
+from gbkfit.utils.parseutils import ConfigError
 
 
 _log = logging.getLogger(__name__)
 
+# Reads and writes YAML (round trip: dicts keep their order)
+_yaml = ruamel.yaml.YAML()
+
+
+def read_config(
+        filename: str,
+        required: tuple[str, ...],
+        optional: tuple[str, ...] = ()
+) -> tuple[dict[str, Any], str]:
+    """
+    Read a configuration file (YAML or JSON), and check its sections (see
+    prepare_config).
+
+    Parameters
+    ----------
+    filename : str
+        The file.
+    required, optional : tuple of str
+        The names of the required and the optional sections.
+
+    Returns
+    -------
+    dict
+        The configuration.
+    str
+        The directory its relative paths are relative to: its optional
+        section 'root' (itself relative to the file), or by default the
+        directory of the file.
+
+    Raises
+    ------
+    ConfigError
+        If the file cannot be read, or its sections are invalid.
+    """
+    filename = os.path.abspath(filename)
+    try:
+        with open(filename) as f:
+            cfg = _yaml.load(f)
+    except (OSError, ruamel.yaml.YAMLError) as e:
+        raise ConfigError(
+            f"cannot read the configuration file {filename}: {e}") from e
+    root = cfg.pop('root', None) if isinstance(cfg, dict) else None
+    if root is not None and not isinstance(root, str):
+        raise ConfigError(
+            f"section 'root' must be a directory; it is {root!r}")
+    directory = os.path.dirname(filename)
+    if root is not None:
+        directory = os.path.normpath(os.path.join(directory, root))
+    return prepare_config(cfg, required, optional), directory
+
 
 def prepare_config(
         config: dict[str, Any] | None,
-        req_sections: tuple = (),
-        opt_sections: tuple = ()
+        required: tuple[str, ...] = (),
+        optional: tuple[str, ...] = ()
 ) -> dict[str, Any]:
     """
-    Prepare and validate a configuration dictionary.
+    Check the sections of a configuration, and return it as plain JSON
+    values: unknown sections are reported (see parseutils.report_unknown)
+    and left out, null sections are empty, and the sections 'models' and
+    'observations' are lists.
 
-    This function ensures required sections exist, removes unknown
-    sections, verifies types, and structures the configuration in a
-    consistent format.
-
-    Currently, this validation applies primarily to the root sections
-    of the  configuration. However, future enhancements may extend
-    these checks to nested sections as needed.
+    Raises
+    ------
+    ConfigError
+        If a required section is missing, or a section is of the wrong
+        type.
     """
-
-    # If the configuration file was empty, config will be None
-    # Convert it to an empty dict to keep the validation rolling
-    if config is None:
-        config = {}
-
-    # Get rid of unrecognised sections
-    known_sections = []
-    unknown_sections = []
-    for s in config:
-        if s in req_sections + opt_sections:
-            known_sections.append(s)
-        else:
-            unknown_sections.append(s)
-    if unknown_sections:
+    config = {} if config is None else dict(config)
+    known = required + optional
+    if unknown := [s for s in config if s not in known]:
         parseutils.report_unknown(
-            "unknown configuration sections", unknown_sections,
-            req_sections + opt_sections)
-    config = {s: config[s] for s in known_sections}
-
-    # Ensure that the required sections are present
-    missing_sections = [s for s in req_sections if s not in config]
-    if missing_sections:
-        raise RuntimeError(
-            f"the following sections must be defined: "
-            f"{missing_sections}")
-
-    # Convert sections to empty dicts if they are None/null.
-    # This will later on allow the loader functions to parse the empty
-    # dicts and provide better error messages to the user.
-    for s in config:
-        if config[s] is None:
-            config[s] = {}
-
-    # Ensure the sections have the right type (if they are present)
-    wrong_type_dict = []
-    wrong_type_dict_or_seq = []
-    for s in ['pdescs', 'params', 'fitter']:
+            "unknown configuration sections", unknown, known)
+    config = {s: config[s] for s in config if s in known}
+    if missing := [s for s in required if s not in config]:
+        raise ConfigError(
+            f"the configuration needs the sections {missing}")
+    # (empty sections are loaded as such, for clearer messages)
+    config = {s: {} if v is None else v for s, v in config.items()}
+    for s in ('pdescs', 'params', 'fitter'):
         if s in config and not iterutils.is_mapping(config[s]):
-            wrong_type_dict.append(s)
-    for s in ['models', 'observations']:
-        if s in config and not iterutils.is_sequence_or_mapping(config[s]):
-            wrong_type_dict_or_seq.append(s)
-    if wrong_type_dict:
-        raise RuntimeError(
-            f"the following sections must be dictionaries: "
-            f"{wrong_type_dict}")
-    if wrong_type_dict_or_seq:
-        raise RuntimeError(
-            f"the following sections must be dictionaries or sequences: "
-            f"{wrong_type_dict_or_seq}")
-
-    # Listify some sections to make parsing more streamlined (the
-    # observations refer to the models by name, so their numbers differ)
-    for s in ['models', 'observations']:
+            raise ConfigError(f"section '{s}' must be a dictionary")
+    for s in ('models', 'observations'):
         if s in config:
+            if not iterutils.is_sequence_or_mapping(config[s]):
+                raise ConfigError(
+                    f"section '{s}' must be a dictionary or a list")
             config[s] = iterutils.listify(config[s])
-
-    # Make sure the return value is pure json
     return json.loads(json.dumps(config))
 
 
@@ -132,41 +151,44 @@ def make_output_dir(
             continue
 
 
-def dump_dict(json_, yaml_, info: Any, filename: str) -> None:
-    """Dump a dictionary to JSON and YAML files."""
-    filename = Path(filename)
-    try:
-        with filename.with_suffix(".json").open("w") as f:
-            json_.dump(info, f, indent=2)
-        with filename.with_suffix(".yaml").open("w") as f:
-            yaml_.dump(info, f)
-    except Exception as e:
-        raise RuntimeError(f"failed to write to {filename}: {e}")
+def dump_dict(info: Any, filename: str) -> None:
+    """Write a dict (of JSON values) to <filename>.json and .yaml."""
+    path = Path(filename)
+    with path.with_suffix('.json').open('w') as f:
+        json.dump(info, f, indent=2)
+    with path.with_suffix('.yaml').open('w') as f:
+        _yaml.dump(info, f)
+
+
+def write_yaml(info: Any, filename: str) -> None:
+    """Write a dict (of JSON values) to a YAML file."""
+    with open(filename, 'w') as f:
+        _yaml.dump(info, f)
 
 
 def merge_pdescs(
-        pdescs1: dict[str, ParamDesc] | None,
-        pdescs2: dict[str, ParamDesc] | None
+        pdescs1: dict[str, ParamDesc],
+        pdescs2: dict[str, ParamDesc]
 ) -> dict[str, ParamDesc]:
     """
-    Merge two parameter descriptor dictionaries, ensuring no conflicts.
+    Return the descriptions of the parameters of the models (pdescs1) and
+    those of a configuration (pdescs2), which must have other names.
 
-    While this operation is quite simple, this function is supposed to
-    be used by particular parts of the task code and provide an
-    informative message to the user.
+    Raises
+    ------
+    ConfigError
+        If names are in both.
     """
-    pdescs1 = pdescs1 or {}
-    pdescs2 = pdescs2 or {}
-    if conflicting := set(pdescs1) & set(pdescs2):
-        raise RuntimeError(
-            f"the names of the following user-defined pdescs "
-            f"conflict with the names of the model parameters: {conflicting}")
+    if conflicting := sorted(set(pdescs1) & set(pdescs2)):
+        raise ConfigError(
+            f"these parameters of the configuration are parameters of the "
+            f"models: {conflicting}")
     return pdescs1 | pdescs2
 
 
-def load_observation_group(cfg):
+def load_observation_group(cfg: dict[str, Any]) -> ObservationGroup:
     """
-    The models and observations (with their data, if any) of a
+    Return the models and observations (with their data, if any) of a
     configuration, as an ObservationGroup.
     """
     with parseutils.config_path('models'):
@@ -175,6 +197,24 @@ def load_observation_group(cfg):
         observations = gbkfit.observation.observation_parser.load(
             cfg['observations'])
     return gbkfit.observation.ObservationGroup(models, observations)
+
+
+def load_params(
+        cfg: dict[str, Any],
+        pdescs: dict[str, ParamDesc],
+        constants: dict[str, Any]
+) -> ParamSpace:
+    """
+    Return the parameters of a configuration (its section 'params'), with
+    the descriptions of the parameters of the models and those of its
+    optional section 'pdescs'.
+    """
+    if 'pdescs' in cfg:
+        with parseutils.config_path('pdescs'):
+            pdescs = merge_pdescs(pdescs, load_pdescs_dict(cfg['pdescs']))
+    with parseutils.config_path('params'):
+        return param_space_parser.load(
+            cfg['params'], pdescs=pdescs, constants=constants)
 
 
 def evaluation_outputs(
@@ -225,7 +265,8 @@ def evaluation_outputs(
 
 
 def write_outputs(
-        json_: Any, yaml_: Any, output_dir: str, outputs: dict[str, Any],
+        output_dir: str,
+        outputs: dict[str, Any],
         extra_filename: str
 ) -> None:
     """
@@ -254,5 +295,4 @@ def write_outputs(
                 f"output {name} has an unsupported type: "
                 f"{type(value).__name__}")
     if values:
-        dump_dict(
-            json_, yaml_, values, os.path.join(output_dir, extra_filename))
+        dump_dict(values, os.path.join(output_dir, extra_filename))

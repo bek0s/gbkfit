@@ -108,7 +108,8 @@ def _spread(properties: Mapping[str, Any], size: int) -> list[dict[str, Any]]:
 def _load_transforms(info: dict[str, Any]) -> Transforms:
     """Load a transforms function from its file: info is {file, func}."""
     opts = parseutils.parse_options(info, {'file', 'func'})
-    return funcutils.load_function_from_file(opts['file'], opts['func'])
+    return funcutils.load_function_from_file(
+        parseutils.resolve_path(opts['file']), opts['func'])
 
 
 def _dump_transforms(transforms: Transforms) -> dict[str, str]:

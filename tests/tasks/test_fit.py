@@ -48,7 +48,10 @@ def test_fit_recovers_the_parameters_of_noiseless_data(tmp_path):
         vpt_vt=dict(value=150, min=50, max=300))
     config['fitter'] = dict(type='lmfit.least_squares')
     yaml.dump(config, tmp_path / 'fit.yaml')
-    run_cli(tmp_path, 'fit', 'fit.yaml', '--output-dir', 'fit')
+    # (from another directory: the paths of a configuration are relative
+    # to its own directory)
+    (tmp_path / 'run').mkdir()
+    run_cli(tmp_path / 'run', 'fit', '../fit.yaml', '--output-dir', '../fit')
     result = json.loads((tmp_path / 'fit' / 'result.json').read_text())
     best = result['solutions'][0]['free']
     for name in ('xpos', 'posa', 'vpt_vt'):
@@ -65,10 +68,12 @@ def test_fit_recovers_the_parameters_of_noiseless_data(tmp_path):
         assert restart['params']['properties'][name]['value'] == \
             pytest.approx(best[name])
     assert restart['fitter'] == config['fitter']
-    # which runs, with another fitter
+    # which runs from its directory (its root is that of fit.yaml), with
+    # another fitter
     restart['fitter'] = dict(type='scipy.least_squares')
-    yaml.dump(restart, tmp_path / 'restart.yaml')
-    run_cli(tmp_path, 'fit', 'restart.yaml', '--output-dir', 'refit')
+    yaml.dump(restart, tmp_path / 'fit' / 'restart.yaml')
+    run_cli(
+        tmp_path / 'fit', 'fit', 'restart.yaml', '--output-dir', '../refit')
     refit = json.loads((tmp_path / 'refit' / 'result.json').read_text())
     for name in ('xpos', 'posa', 'vpt_vt'):
         assert refit['solutions'][0]['free'][name] == pytest.approx(
