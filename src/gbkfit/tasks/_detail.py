@@ -247,9 +247,10 @@ def evaluation_outputs(
     """
     Return the outputs of an evaluation, by name, in the form their
     observables give them: the models (model_<i>_<item>_<d|m|w>), the
-    unweighted and weighted residuals (residual_<item>_d and
-    wresidual_<item>_d, with _<i> after the prefix if there are several
-    observations; these need the objective), and the extra outputs
+    residuals ((model - data) / error) without and with the weights of
+    the data items (residual_<item>_d and wresidual_<item>_d, with _<i>
+    after the prefix if there are several observations; these need the
+    objective), and the extra outputs
     (<prefix>_extra_<name>; those of the models once, under the first
     prefix: each residual evaluation evaluates the models again).
     """

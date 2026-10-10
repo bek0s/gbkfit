@@ -150,5 +150,25 @@ class FitterLMFitLeastSquares(Fitter):
             else values(result.params)
         return FitRun(
             solutions=[x], success=bool(result.success),
-            message=str(result.message),
+            message=self._message(result, minimizer.max_nfev),
             diagnostics=dict(lmfit_nfev=int(result.nfev)), raw=result)
+
+    def _message(
+            self,
+            result: lmfit.minimizer.MinimizerResult,
+            max_nfev: int
+    ) -> str:
+        """
+        Return why the method stopped. For 'leastsq', lmfit reports every
+        convergence of MINPACK as 'Fit succeeded.', whichever test stopped
+        it (also the values not changing because no step was accepted),
+        and lmfit 1.3.4 replaces its message for a run stopped by max_nfev
+        with 'Tolerance seems to be too small.': MINPACK's message says
+        which test stopped it. 'least_squares' keeps scipy's message, and
+        lmfit's own when stopped by max_nfev.
+        """
+        if self._method != 'leastsq':
+            return str(result.message)
+        if result.aborted:
+            return f"Fit aborted: number of function evaluations > {max_nfev}"
+        return str(result.lmdif_message)

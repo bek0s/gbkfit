@@ -137,6 +137,11 @@ class FitProblem:
             If the parameters cannot be evaluated there.
         """
         residuals = self._objective.residuals(self.evaluate(x))
+        # TODO: unexplained, not investigated. During least-squares fits
+        # every OpenBLAS thread spins: a fit of NGC 1313 took 293 s of CPU
+        # in 14 s, and 17 s with OPENBLAS_NUM_THREADS=1 (the same result).
+        # A guess: this dot product on every evaluation wakes them (also
+        # the one in LeastSquaresFunctions.residuals).
         self._record(x, float(residuals @ residuals))
         return residuals
 

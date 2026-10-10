@@ -137,6 +137,23 @@ def test_lmfit_recovers_the_parameters_and_their_errors(driver):
     assert growth == pytest.approx(0.01 * hessian[i, i], rel=0.05)
 
 
+def test_lmfit_says_why_leastsq_stopped():
+    # lmfit reported every MINPACK convergence as 'Fit succeeded.' (also
+    # when no step was accepted), and a run stopped by max_nfev as
+    # 'Tolerance seems to be too small.'
+    pytest.importorskip('lmfit')
+    from gbkfit.fitting.fitters.lmfit import FitterLMFitLeastSquares
+    objective = mock_objective(DriverHost())
+    params = ParamSpace(objective.pdescs(), bounded_properties())
+    converged = FitterLMFitLeastSquares().fit(objective, params)
+    assert converged.success
+    assert 'relative' in converged.message or 'cosine' in converged.message
+    stopped = FitterLMFitLeastSquares(max_nfev=3).fit(objective, params)
+    assert not stopped.success
+    assert stopped.message == \
+        'Fit aborted: number of function evaluations > 3'
+
+
 def test_cmaes_finds_the_minimum_of_lmfit(driver):
     pytest.importorskip('cma')
     pytest.importorskip('lmfit')
