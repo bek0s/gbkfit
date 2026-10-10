@@ -1,7 +1,8 @@
 try:
     import emcee
-except ModuleNotFoundError:
+except ModuleNotFoundError as e:
     raise ModuleNotFoundError(
-        "to use the emcee fitter, please install emcee")
+        "the emcee fitter needs the optional package emcee: "
+        "pip install 'gbkfit[emcee]'") from e
 
 from .core import *

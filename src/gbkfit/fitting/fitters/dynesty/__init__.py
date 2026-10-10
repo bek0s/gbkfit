@@ -1,7 +1,8 @@
 try:
     import dynesty
-except ModuleNotFoundError:
+except ModuleNotFoundError as e:
     raise ModuleNotFoundError(
-        "to use the dynesty fitter, please install dynesty")
+        "the dynesty fitter needs the optional package dynesty: "
+        "pip install 'gbkfit[dynesty]'") from e
 
 from .core import *

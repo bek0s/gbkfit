@@ -855,6 +855,12 @@ class TypedParser(Parser):
     The parser of a class whose configurations choose one of its
     subclasses by their type (the option 'type').
 
+    Subclasses whose modules need optional packages are registered by
+    type and path (see register_optional), and imported when a
+    configuration first asks for them: importing gbkfit does not import
+    those packages, and asking for a type whose package is missing says
+    what to install.
+
     Parameters
     ----------
     cls : type
@@ -870,7 +876,9 @@ class TypedParser(Parser):
                       | None) = None
     ):
         super().__init__(cls)
-        self._classes = {}
+        self._classes: dict[str, type[TypedSerializable]] = {}
+        # The optional subclasses not imported yet: their paths, by type
+        self._optional: dict[str, str] = {}
         self.register(classes)
 
     def register(
@@ -897,11 +905,43 @@ class TypedParser(Parser):
                 raise RuntimeError(
                     f"{self.cls_name()} parser could not register {desc}; "
                     f"it is not a subclass of {self.cls_name()}")
-            if cls.type() in self._classes:
+            if cls.type() in self._classes or cls.type() in self._optional:
                 raise RuntimeError(
                     f"{self.cls_name()} parser could not register {desc}; "
                     f"a class of the same type is already registered")
             self._classes[cls.type()] = cls
+
+    def register_optional(self, paths: dict[str, str]) -> None:
+        """
+        Register subclasses whose modules need optional packages, by type
+        and path (module and name, e.g.
+        'gbkfit.fitting.fitters.nautilus.FitterNautilus'). Each is
+        imported when a configuration first asks for its type.
+
+        Parameters
+        ----------
+        paths : dict
+            The path of the subclass of each type.
+
+        Raises
+        ------
+        RuntimeError
+            If a type is registered.
+        """
+        for type_, path in paths.items():
+            if type_ in self._classes or type_ in self._optional:
+                raise RuntimeError(
+                    f"{self.cls_name()} parser could not register {path} "
+                    f"(type '{type_}'); a class of the same type is already "
+                    f"registered")
+            self._optional[type_] = path
+
+    def types(self) -> list[str]:
+        """
+        Return all the registered types, optional ones included (whether
+        their packages are installed or not).
+        """
+        return sorted([*self._classes, *self._optional])
 
     def registered_class(self, type_: str) -> type[TypedSerializable]:
         """
@@ -920,24 +960,56 @@ class TypedParser(Parser):
         Raises
         ------
         ConfigError
-            If no class is registered for the type.
+            If no class is registered for the type, or its module cannot
+            be imported (e.g. an optional package is missing).
         """
+        if isinstance(type_, str) and type_ in self._optional:
+            self._import_optional(type_)
         if not isinstance(type_, str) or type_ not in self._classes:
             raise ConfigError(
-                f"unknown type {describe_unknown([type_], self._classes)}; "
-                f"the available types are: {_quoted(self._classes)}")
+                f"unknown type {describe_unknown([type_], self.types())}; "
+                f"the types are: {_quoted(self.types())}")
         return self._classes[type_]
 
     def registered_classes(self) -> dict[str, type[TypedSerializable]]:
         """
-        Return the registered classes.
+        Return the registered classes that can be imported (those whose
+        optional packages are missing are left out).
 
         Returns
         -------
         dict
             The class registered for each type.
         """
+        for type_ in list(self._optional):
+            try:
+                self._import_optional(type_)
+            except ConfigError:
+                pass
         return dict(self._classes)
+
+    def _import_optional(self, type_: str) -> None:
+        """
+        Import the optional subclass of a type, and register it.
+
+        Raises
+        ------
+        ConfigError
+            If its module cannot be imported.
+        """
+        path = self._optional[type_]
+        module_name, class_name = path.rsplit('.', 1)
+        try:
+            cls = getattr(importlib.import_module(module_name), class_name)
+        except ImportError as e:
+            raise ConfigError(
+                f"type '{type_}' is not available: {e}") from e
+        if cls.type() != type_:
+            raise RuntimeError(
+                f"{path} has type '{cls.type()}', but was registered as "
+                f"type '{type_}'")
+        del self._optional[type_]
+        self.register(cls)
 
     def _load_one_impl(
             self,
@@ -946,8 +1018,8 @@ class TypedParser(Parser):
     ) -> TypedSerializable:
         if 'type' not in x:
             raise ConfigError(
-                f"option 'type' is required but not provided; the available "
-                f"types are: {_quoted(self._classes)}")
+                f"option 'type' is required but not provided; the types "
+                f"are: {_quoted(self.types())}")
         type_ = x.pop('type')
         cls = self.registered_class(type_)
         with config_path(context=type_):
@@ -963,35 +1035,3 @@ class TypedParser(Parser):
             raise RuntimeError(
                 f"unsupported object; value: {x}, type: {type(x)}")
         return dict(type=x.type()) | x.dump(*args, **kwargs)
-
-
-def register_optional_parsers(
-        parser: TypedParser,
-        classes: list[str],
-        desc: str
-) -> None:
-    """
-    Register the classes that can be imported.
-
-    A class that cannot be imported (e.g. because it needs an optional
-    package) is skipped with a warning.
-
-    Parameters
-    ----------
-    parser : TypedParser
-        The parser.
-    classes : list of str
-        The classes, by module and name (e.g.
-        'gbkfit.driver.drivers.cuda.DriverCuda').
-    desc : str
-        What the classes are, for messages (e.g. 'driver').
-    """
-    for path in classes:
-        try:
-            module_name, class_name = path.rsplit('.', 1)
-            module = importlib.import_module(module_name)
-            parser.register(getattr(module, class_name))
-        except Exception as e:
-            _log.warning(
-                f"could not register {desc} {path}; "
-                f"{e.__class__.__name__}: {e}")

@@ -1,7 +1,8 @@
 try:
     import cma
-except ModuleNotFoundError:
+except ModuleNotFoundError as e:
     raise ModuleNotFoundError(
-        "to use the cmaes fitter, please install cma")
+        "the cmaes fitter needs the optional package cma: "
+        "pip install 'gbkfit[cmaes]'") from e
 
 from .core import *

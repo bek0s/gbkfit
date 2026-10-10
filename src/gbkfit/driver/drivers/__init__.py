@@ -1,14 +1,9 @@
-
-from gbkfit.utils import parseutils
-
-
-def _register_drivers():
-    from gbkfit.driver.base import driver_parser as abstract_parser
-    parsers = [
-        'gbkfit.driver.drivers.cuda.DriverCuda',
-        'gbkfit.driver.drivers.host.DriverHost'
-    ]
-    parseutils.register_optional_parsers(abstract_parser, parsers, 'driver')
+from gbkfit.driver.base import driver_parser
 
 
-_register_drivers()
+# The drivers, imported when first asked for: each needs its native module,
+# and cuda needs CuPy
+driver_parser.register_optional({
+    'host': 'gbkfit.driver.drivers.host.DriverHost',
+    'cuda': 'gbkfit.driver.drivers.cuda.DriverCuda',
+})
