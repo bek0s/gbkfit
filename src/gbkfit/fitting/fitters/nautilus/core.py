@@ -73,8 +73,7 @@ class FitterNautilus(Fitter):
     def fit_param_class() -> FitParamClass:
         return FitParamPrior
 
-    @staticmethod
-    def libraries() -> tuple[str, ...]:
+    def libraries(self) -> tuple[str, ...]:
         return ('nautilus-sampler',)
 
     def dump(self) -> dict[str, Any]:

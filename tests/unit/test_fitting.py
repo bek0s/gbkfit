@@ -144,6 +144,27 @@ def test_least_squares_methods_find_the_minimum_of_lmfit(driver, fitter):
     assert result.success
     assert result.best().chi2 == pytest.approx(local.chi2, rel=1e-6)
 
+
+def test_multistart_finds_the_four_minima_of_a_thin_disk():
+    # The image of a thin disk is the same at posa and posa + 180, and at
+    # incl and 180 - incl: in these bounds there are four minima
+    pytest.importorskip('lmfit')
+    from gbkfit.fitting import fitter_parser
+    objective = mock_objective(DriverHost())
+    properties = bounded_properties() | dict(
+        posa=dict(value=100, min=0, max=360),
+        incl=dict(value=90.5, min=10, max=170))
+    params = ParamSpace(objective.pdescs(), properties)
+    fitter = fitter_parser.load(dict(
+        type='multistart', local=dict(type='lmfit.least_squares'),
+        nstarts=16))
+    result = fitter.fit(objective, params)
+    best = result.best().chi2
+    minima = {
+        (round(s.free['posa']), round(s.free['incl']))
+        for s in result.solutions if s.chi2 < best * (1 + 1e-6)}
+    assert minima == {(40, 55), (220, 55), (40, 125), (220, 125)}
+
 def prior_properties(nsigma):
     # Uniform priors of +-nsigma errors around the truth (see the lmfit
     # test), so that the samplers need few evaluations

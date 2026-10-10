@@ -119,8 +119,7 @@ class FitterCMAES(Fitter):
     def fit_param_class() -> FitParamClass:
         return FitParamCMAES
 
-    @staticmethod
-    def libraries() -> tuple[str, ...]:
+    def libraries(self) -> tuple[str, ...]:
         return ('cma',)
 
     def dump(self) -> dict[str, Any]:

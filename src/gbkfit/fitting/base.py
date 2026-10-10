@@ -117,9 +117,8 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
     def fit_param_class() -> FitParamClass:
         """Return the class of the options of the free elements."""
 
-    @staticmethod
     @abc.abstractmethod
-    def libraries() -> tuple[str, ...]:
+    def libraries(self) -> tuple[str, ...]:
         """Return the libraries (distribution names) the fitter uses."""
 
     def load_fit_params(self, params: ParamSpace) -> dict[str, FitParam]:
