@@ -421,6 +421,17 @@ def main():
         parser_prep_dtype, parser_prep_minify, parser_common_output,
         parser_common],
         help="spectra on a grid of pixels (a spectral cube)")
+    parser_prep_psf_muse = parsers_prep.add_parser(
+        'psf_muse', parents=[parser_common_output, parser_common],
+        help="the PSF of a MUSE cube (from its header), as a table")
+    parser_prep_psf_muse.add_argument('cube', type=str, help="the cube")
+    parsers_prep.add_parser(
+        'lsf_muse', parents=[parser_common_output, parser_common],
+        help="the LSF of MUSE (Bacon et al. 2017), as a table")
+    parser_prep_beams = parsers_prep.add_parser(
+        'psf_casa_beams', parents=[parser_common_output, parser_common],
+        help="the beams of the channels of a CASA cube, as a table")
+    parser_prep_beams.add_argument('cube', type=str, help="the cube")
 
     #
     # Create parser for fit task
@@ -528,6 +539,12 @@ def main():
             gbkfit.tasks.prep.prep_region_moments(
                 args.bins, args.data_d, args.data_e, args.data_m, args.dtype,
                 output_dir=output_dir)
+        elif args.prep_task == 'psf_muse':
+            gbkfit.tasks.prep.prep_psf_muse(args.cube, output_dir)
+        elif args.prep_task == 'lsf_muse':
+            gbkfit.tasks.prep.prep_lsf_muse(output_dir)
+        elif args.prep_task == 'psf_casa_beams':
+            gbkfit.tasks.prep.prep_psf_casa_beams(args.cube, output_dir)
         elif args.prep_task == 'pixel_spectra':
             gbkfit.tasks.prep.prep_pixel_spectra(
                 args.data_d, args.data_e, args.data_m,
