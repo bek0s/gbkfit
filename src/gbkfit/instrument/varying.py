@@ -52,7 +52,7 @@ _KMS = u.km / u.s
 _Thing = TypeVar('_Thing')
 
 
-def _doppler(rest):
+def _doppler(rest: u.Quantity | None) -> u.Equivalency:
     """The velocity convention of a spectral axis of the given rest."""
     if rest is None:
         raise ConfigError(
@@ -63,7 +63,9 @@ def _doppler(rest):
             else u.doppler_radio(rest))
 
 
-def _convert(points, unit, rest):
+def _convert(
+        points: u.Quantity, unit: u.UnitBase, rest: u.Quantity | None
+) -> np.ndarray:
     """
     Points of the spectral axis in the unit of another kind of point (e.g.
     velocities as wavelengths): only between velocities and the others
@@ -74,7 +76,9 @@ def _convert(points, unit, rest):
     return points.to_value(unit, _doppler(rest))
 
 
-def _quantity(x, unit):
+def _quantity(
+        x: Sequence[float] | Mapping[str, Any], unit: u.UnitBase | None
+) -> tuple[np.ndarray, u.UnitBase | None]:
     """
     The values and the unit of an option: a list of values, in the given
     unit (None for none), or a dict with the values and their unit.
@@ -517,7 +521,9 @@ class SpectralTable:
         velocities = to_velocities(self._points, rest)
         return float(velocities.min()), float(velocities.max())
 
-    def _values_in(self, unit, rest):
+    def _values_in(
+            self, unit: u.UnitBase, rest: u.Quantity | None
+    ) -> np.ndarray:
         """The values in a unit."""
         if self._unit is None:
             return self._values
