@@ -7,6 +7,7 @@ def _register_fitters():
     parsers = [
         'gbkfit.fitting.fitters.lmfit.FitterLMFitLeastSquares',
         'gbkfit.fitting.fitters.nautilus.FitterNautilus',
+        'gbkfit.fitting.fitters.dynesty.FitterDynesty',
         'gbkfit.fitting.fitters.cmaes.FitterCMAES',
         'gbkfit.fitting.fitters.emcee.FitterEmcee',
         'gbkfit.fitting.fitters.scipy.FitterScipyLeastSquares',
