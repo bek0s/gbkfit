@@ -132,6 +132,24 @@ dmodel_mmaps_gaussian(
 }
 
 template<typename T> __global__ void
+dmodel_dcube_convolve_z(
+        int size_x, int size_y, int size_z,
+        int nk, const T* kernels, const T* src, T* dst)
+{
+    // Parallelization: per 3d position in the dcube
+    const int nthreads = size_x * size_y * size_z;
+    const int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (tid >= nthreads)
+        return;
+
+    int x, y, z;
+    index_1d_to_3d(x, y, z, tid, size_x, size_y);
+
+    gbkfit::dmodel_dcube_convolve_z(
+            x, y, z, size_x, size_y, size_z, nk, kernels, src, dst);
+}
+
+template<typename T> __global__ void
 dmodel_lens_resample(
         int nx, int ny, int nz, int sx, int sy,
         const T* source_x, const T* source_y,

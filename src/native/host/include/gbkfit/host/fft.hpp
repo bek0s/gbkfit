@@ -52,6 +52,7 @@ public:
     clear_cache()
     {
         m_data_cache.clear();
+        m_xy_cache.clear();
     }
 
     void
@@ -101,6 +102,51 @@ public:
                 size, data1_r.data(), data1_c.data(), data2_c.data());
     }
 
+    // Convolve each channel (z) of data1_r with the image of the same
+    // channel of data2_r, or with its only image, in place: 2D transforms
+    // along y and x. The spectra are cached as by fft_convolve_cached.
+    void
+    fft_convolve_xy_cached(Real data1_r, ConstReal data2_r)
+    {
+        const auto size = bindings::size_xyz(data1_r);
+        const auto size2 = bindings::size_xyz(data2_r);
+        bindings::require(
+                size2[0] == size[0] && size2[1] == size[1]
+                && (size2[2] == size[2] || size2[2] == 1),
+                "data2_r must have an image for each channel of data1_r, "
+                "or one for all");
+        const auto data1_key = std::pair{size, (const RealType*)data1_r.data()};
+        const auto data2_key = std::pair{size2, data2_r.data()};
+        const auto [nx, ny, nz] = size;
+        const auto plane = ny * (nx / 2 + 1);
+
+        auto& data1_c = m_xy_cache[data1_key];
+        if (data1_c.empty())
+        {
+            data1_c.resize(std::size_t(nz) * plane);
+        }
+
+        auto& data2_c = m_xy_cache[data2_key];
+        if (data2_c.empty())
+        {
+            data2_c.resize(std::size_t(size2[2]) * plane);
+            fft_r2c_exec(size2, data2_r.data(), data2_c.data(), {1, 2});
+        }
+
+        fft_r2c_exec(size, data1_r.data(), data1_c.data(), {1, 2});
+        const auto nfactor = T{1} / (nx * ny);
+        for (int z = 0; z < nz; ++z)
+        {
+            // (the only image of data2_r is for all the channels)
+            const auto z2 = size2[2] == 1 ? 0 : z;
+            kernels::math_complex_multiply_and_scale<T>(
+                    data1_c.data() + std::size_t(z) * plane,
+                    data2_c.data() + std::size_t(z2) * plane,
+                    plane, nfactor);
+        }
+        fft_c2r_exec(size, data1_c.data(), data1_r.data(), {1, 2});
+    }
+
     static void
     bind(nb::module_& m, const std::string& suffix)
     {
@@ -113,6 +159,9 @@ public:
                         nb::arg("data_c").noconvert(),
                         nb::arg("data_r").noconvert())
                 .def("fft_convolve_cached", &FFT::fft_convolve_cached,
+                        nb::arg("data1_r").noconvert(),
+                        nb::arg("data2_r").noconvert())
+                .def("fft_convolve_xy_cached", &FFT::fft_convolve_xy_cached,
                         nb::arg("data1_r").noconvert(),
                         nb::arg("data2_r").noconvert());
     }
@@ -163,8 +212,12 @@ private:
         return std::thread::hardware_concurrency();
     }
 
+    // The transforms along the given axes (of the shape (z, y, x)); the
+    // last one is the axis of the non-redundant half
     void
-    fft_r2c_exec(SizeType size, const RealType* data_r, ComplexType* data_c)
+    fft_r2c_exec(
+            SizeType size, const RealType* data_r, ComplexType* data_c,
+            const pocketfft::shape_t& axes = {0, 1, 2})
     {
         const auto shape_r = real_shape(size);
         const auto shape_c = complex_shape(shape_r);
@@ -172,12 +225,14 @@ private:
                 shape_r,
                 strides<RealType>(shape_r),
                 strides<ComplexType>(shape_c),
-                {0, 1, 2}, pocketfft::FORWARD,
+                axes, pocketfft::FORWARD,
                 data_r, data_c, T{1}, nthreads());
     }
 
     void
-    fft_c2r_exec(SizeType size, const ComplexType* data_c, RealType* data_r)
+    fft_c2r_exec(
+            SizeType size, const ComplexType* data_c, RealType* data_r,
+            const pocketfft::shape_t& axes = {0, 1, 2})
     {
         const auto shape_r = real_shape(size);
         const auto shape_c = complex_shape(shape_r);
@@ -185,7 +240,7 @@ private:
                 shape_r,
                 strides<ComplexType>(shape_c),
                 strides<RealType>(shape_r),
-                {0, 1, 2}, pocketfft::BACKWARD,
+                axes, pocketfft::BACKWARD,
                 data_c, data_r, T{1}, nthreads());
     }
 
@@ -211,6 +266,8 @@ private:
     }
 
     DataCacheMappingContainer m_data_cache;
+    // The spectra of the 2D transforms (see fft_convolve_xy_cached)
+    DataCacheMappingContainer m_xy_cache;
 };
 
 } // namespace gbkfit::host

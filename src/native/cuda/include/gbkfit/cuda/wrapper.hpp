@@ -39,6 +39,11 @@ struct Wrapper
             T* mmaps_d, T* mmaps_m);
 
     static void
+    dmodel_dcube_convolve_z(
+            int size_x, int size_y, int size_z,
+            int nk, const T* kernels, T* cube, T* scratch);
+
+    static void
     dmodel_lens_resample(
             int nx, int ny, int nz, int sx, int sy,
             const T* source_x, const T* source_y,

@@ -46,6 +46,58 @@ dmodel_dcube_downscale(
     dst_dcube[idx] = sum * nfactor;
 }
 
+// The voxel (x, y, z) of the convolution of the spectra of src along z
+// with a kernel for each channel (e.g. an LSF that varies with
+// wavelength), into dst: the light of the channel zs of src goes to the
+// channels zs + k - nk / 2, with the weights kernels[zs * nk + k] (k <
+// nk). Light from beyond the cube is 0.
+template<typename T> constexpr void
+dmodel_dcube_convolve_z(
+        int x, int y, int z,
+        int size_x, int size_y, int size_z,
+        int nk, const T* kernels, const T* src, T* dst)
+{
+    const int half = nk / 2;
+    T sum = 0;
+    for (int k = 0; k < nk; ++k)
+    {
+        // The channel of src whose light reaches z with the weight k
+        const int zs = z - k + half;
+        if (zs < 0 || zs >= size_z)
+            continue;
+        sum += kernels[zs * nk + k]
+                * src[index_3d_to_1d(x, y, zs, size_x, size_y)];
+    }
+    dst[index_3d_to_1d(x, y, z, size_x, size_y)] = sum;
+}
+
+// The row (y, z) of dmodel_dcube_convolve_z, summed weight by weight over
+// the contiguous pixels of the rows of src (for the host, where this is
+// much faster than voxel by voxel)
+template<typename T> constexpr void
+dmodel_dcube_convolve_z_row(
+        int y, int z,
+        int size_x, int size_y, int size_z,
+        int nk, const T* kernels, const T* src, T* dst)
+{
+    const int half = nk / 2;
+    T* out = dst + index_3d_to_1d(0, y, z, size_x, size_y);
+    for (int x = 0; x < size_x; ++x)
+        out[x] = 0;
+    for (int k = 0; k < nk; ++k)
+    {
+        const int zs = z - k + half;
+        if (zs < 0 || zs >= size_z)
+            continue;
+        const T w = kernels[zs * nk + k];
+        if (w == 0)
+            continue;
+        const T* in = src + index_3d_to_1d(0, y, zs, size_x, size_y);
+        for (int x = 0; x < size_x; ++x)
+            out[x] += w * in[x];
+    }
+}
+
 template<typename T> constexpr void
 dmodel_dcube_mask(
         int x, int y, int z,

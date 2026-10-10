@@ -33,3 +33,6 @@ class DriverFFTHost(DriverFFT):
 
     def fft_convolve_cached(self, data1_r, data2_r):
         self._fft.fft_convolve_cached(data1_r, data2_r)
+
+    def fft_convolve_xy_cached(self, data1_r, data2_r):
+        self._fft.fft_convolve_xy_cached(data1_r, data2_r)
