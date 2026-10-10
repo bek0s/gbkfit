@@ -203,6 +203,40 @@ def test_least_squares_move_values_from_awkward_starts(fitter):
     result = fitter_parser.load(fitter).fit(objective, params)
     assert result.best().chi2 == pytest.approx(local.chi2, rel=1e-6)
 
+
+@pytest.mark.parametrize('fitter', [
+    dict(type='scipy.least_squares', method='trf'),
+    dict(type='lmfit.least_squares', method='least_squares')])
+def test_trf_moves_a_value_that_starts_on_its_bound(fitter):
+    # When every free value starts on a bound, TRF's first steps were
+    # tiny and it stopped there, reporting success
+    pytest.importorskip('lmfit')
+    from gbkfit.fitting import fitter_parser
+    objective = mock_objective(DriverHost())
+    properties = dict(TRUE) | dict(bpt_s=dict(value=1, min=1, max=10))
+    params = ParamSpace(objective.pdescs(), properties)
+    best = fitter_parser.load(fitter).fit(objective, params).best()
+    assert best.free['bpt_s'] == pytest.approx(
+        TRUE['bpt_s'], abs=5 * best.covariance.std['bpt_s'])
+
+
+@pytest.mark.filterwarnings('ignore:invalid value:RuntimeWarning')
+def test_multistart_skips_starts_the_parameters_reject():
+    # bpt_s is nan for xpos < 0.6: the starts there fail, and are skipped
+    pytest.importorskip('lmfit')
+    from gbkfit.fitting import fitter_parser
+    objective = mock_objective(DriverHost())
+    properties = bounded_properties() | dict(
+        xpos=dict(value=0.65, min=-4, max=4),
+        bpt_s='np.sqrt(xpos - 0.6) * 0 + 4')
+    params = ParamSpace(objective.pdescs(), properties)
+    result = fitter_parser.load(dict(
+        type='multistart', local=dict(type='scipy.least_squares'),
+        nstarts=8)).fit(objective, params)
+    starts = result.diagnostics['starts']
+    assert any('error' in start for start in starts)
+    assert result.best().free['xpos'] == pytest.approx(TRUE['xpos'], abs=0.05)
+
 def prior_properties(nsigma):
     # Uniform priors of +-nsigma errors around the truth (see the lmfit
     # test), so that the samplers need few evaluations
@@ -267,6 +301,7 @@ def test_dynesty_posterior_agrees_with_the_covariance():
     assert result.evidence.log_z_error > 0
 
 
+@pytest.mark.filterwarnings('ignore:invalid value:RuntimeWarning')
 def test_samplers_leave_out_points_the_parameters_reject():
     # bpt_s is nan for xpos < 0.6: there the likelihood is -inf, and the
     # points nautilus keeps (with no weight) crashed the posterior

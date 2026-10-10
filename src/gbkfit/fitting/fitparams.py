@@ -32,6 +32,18 @@ def _check_value(value: float, minimum: float, maximum: float) -> None:
             f"{maximum}]")
 
 
+def _scale(minimum: float, maximum: float, width: float) -> float:
+    """
+    Return the typical scale of a value in a range (see FitParam.scale):
+    the smallest magnitude it can take, if the range excludes 0 (so that
+    the steps are relative to the value, even in ranges of decades), or
+    else 1% of a width (1 if infinite).
+    """
+    if minimum > 0 or maximum < 0:
+        return min(abs(minimum), abs(maximum))
+    return 0.01 * width if math.isfinite(width) else 1.0
+
+
 class FitParam(parseutils.Serializable, abc.ABC):
     """
     The options of a free element for a fitter.
@@ -59,12 +71,13 @@ class FitParam(parseutils.Serializable, abc.ABC):
 
     def scale(self) -> float:
         """
-        Return the typical scale of the value, for the steps of finite
-        differences near 0: 1% of the width of the bounds, or 1 if
-        unbounded.
+        Return the typical scale of the value, the floor of the steps of
+        finite differences (see finite_difference_steps): the smallest
+        magnitude the value can take, if its bounds exclude 0, or else 1%
+        of the width of the bounds (1 if unbounded).
         """
-        width = self.maximum() - self.minimum()
-        return 0.01 * width if math.isfinite(width) else 1.0
+        return _scale(
+            self.minimum(), self.maximum(), self.maximum() - self.minimum())
 
 
 # A class of FitParam (an alias, for the classes with a type() method,
@@ -190,8 +203,11 @@ class FitParamPrior(FitParam):
 
     def scale(self) -> float:
         """
-        Return the typical scale of the value: 1% of the width of the
-        support of the prior, or of its 16-84% range if unbounded.
+        Return the typical scale of the value: the smallest magnitude it
+        can take, if the support of the prior excludes 0, or else 1% of
+        the width of the support (of the 16-84% range, if unbounded).
         """
         width = self.maximum() - self.minimum()
-        return 0.01 * (width if math.isfinite(width) else self._prior.width())
+        return _scale(
+            self.minimum(), self.maximum(),
+            width if math.isfinite(width) else self._prior.width())

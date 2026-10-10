@@ -184,14 +184,15 @@ class FitterScipyLeastSquares(Fitter):
             method=self._method, x_scale=self._x_scale, loss=self._loss,
             f_scale=self._f_scale, max_nfev=self._max_nfev, ftol=self._ftol,
             xtol=self._xtol, gtol=self._gtol)
+        # A start on a bound does not move: the map of bounded values of
+        # 'lm' is flat there, and TRF's first steps are tiny
+        x0 = inside_bounds(
+            x0, lower, upper, finite_difference_steps(x0, scales, step))
         # The residuals are new arrays each call, which scipy needs (it
         # keeps those of earlier calls; scipy issue #11493)
         if self._method == 'lm':
-            # 'lm' takes no bounds: it works on unbounded internal values,
-            # whose map is flat at the bounds
+            # 'lm' takes no bounds: it works on unbounded internal values
             transform = _BoundsTransform(lower, upper)
-            x0 = inside_bounds(
-                x0, lower, upper, finite_difference_steps(x0, scales, step))
             ones = np.ones_like(x0)
             functions = LeastSquaresFunctions(
                 lambda p: problem.residuals(transform.to_bounded(p)),

@@ -86,21 +86,42 @@ class LeastSquaresFunctions:
         self._relative_step = relative_step
         self._last_x: np.ndarray | None = None
         self._last_residuals: np.ndarray | None = None
+        self._last_jacobian_x: np.ndarray | None = None
+        self._last_jacobian: np.ndarray | None = None
+        self._best_x: np.ndarray | None = None
+        self._best_cost = np.inf
+
+    def best(self) -> np.ndarray | None:
+        """
+        Return the point of the lowest sum of squared residuals that the
+        library asked for, if any.
+        """
+        return None if self._best_x is None else self._best_x.copy()
 
     def residuals(self, x: np.ndarray) -> np.ndarray:
         """Return the residuals at x (a new array)."""
         residuals = self._func(x)
         self._last_x = np.array(x, dtype=float)
         self._last_residuals = residuals
+        cost = float(residuals @ residuals)
+        if cost < self._best_cost:
+            self._best_cost = cost
+            self._best_x = self._last_x.copy()
         return residuals
 
     def jacobian(self, x: np.ndarray) -> np.ndarray:
-        """Return the Jacobian of the residuals at x (a new array)."""
+        """
+        Return the Jacobian of the residuals at x (a new array; that of
+        the last point is kept, since some libraries ask for it twice).
+        """
         x = np.array(x, dtype=float)
-        f0 = self._last_residuals \
-            if np.array_equal(x, self._last_x) else None
-        steps = finite_difference_steps(
-            x, self._scales, self._relative_step)
-        return jacobian(
-            self._func, x, steps, self._lower, self._upper, self._scheme,
-            f0)
+        if not np.array_equal(x, self._last_jacobian_x):
+            f0 = self._last_residuals \
+                if np.array_equal(x, self._last_x) else None
+            steps = finite_difference_steps(
+                x, self._scales, self._relative_step)
+            self._last_jacobian = jacobian(
+                self._func, x, steps, self._lower, self._upper,
+                self._scheme, f0)
+            self._last_jacobian_x = x
+        return self._last_jacobian.copy()
