@@ -16,7 +16,7 @@ from gbkfit.instrument import (
 from gbkfit.utils import fitsutils, gridutils
 
 
-GMODEL = dict(type='intensity_2d', components=[dict(
+MODEL = dict(type='intensity_2d', components=[dict(
     type='smdisk', loose=False, tilted=False,
     rnodes=list(range(0, 14)),
     bptraits=dict(type='exponential'))])
@@ -24,10 +24,10 @@ GMODEL = dict(type='intensity_2d', components=[dict(
 PROPERTIES = dict(xpos=0.3, ypos=-0.6, posa=50, incl=60, bpt_a=1, bpt_s=4)
 
 
-def evaluate(driver, dmodel):
+def evaluate(driver, observable):
     group = observation_group([dict(
-        driver=dict(type=driver.type()), dmodel=copy.deepcopy(dmodel),
-        gmodel=GMODEL)])
+        driver=dict(type=driver.type()), observable=copy.deepcopy(observable),
+        model=MODEL)])
     params = gbkfit.params.EvaluationParams(group.pdescs(), PROPERTIES)
     return group.model_h(params.evaluate())[0]['brightness']['d'].copy()
 

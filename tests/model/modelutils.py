@@ -1,5 +1,5 @@
 """
-Helpers that build observation groups from the models of the tests, and
+Helpers that build observation groups from the cases of the tests, and
 components for the tests.
 """
 
@@ -8,17 +8,17 @@ import numpy as np
 from gbkfit.model.components.base import Component, ComponentPlan
 
 
-def split_model(model):
+def split_case(case):
     """
-    A gmodel and an observation of it, from a model of the tests: a dict
-    with a driver, a gmodel, a 'dmodel' (the observable, with the primary
-    beam, psf and lsf of the instrument, and the scale and dtype of the observation),
-    and an optional name, which names the gmodel.
+    A model and an observation of it, from a case of the tests: a dict
+    with a driver, a model, an observable (with the primary beam, psf and
+    lsf of the instrument, and the scale and dtype of the observation),
+    and an optional name, which names the model.
     """
-    model = dict(model)
-    observable = dict(model.pop('dmodel'))
+    case = dict(case)
+    observable = dict(case.pop('observable'))
     observation = dict(
-        driver=model.pop('driver'),
+        driver=case.pop('driver'),
         observable=observable,
         instrument={k: observable.pop(k)
                     for k in ('primary_beam', 'psf', 'lsf')
@@ -26,23 +26,23 @@ def split_model(model):
     for key in ('scale', 'dtype'):
         if key in observable:
             observation[key] = observable.pop(key)
-    gmodel = dict(model.pop('gmodel'))
-    name = model.pop('name', None)
+    model = dict(case.pop('model'))
+    name = case.pop('name', None)
     if name is not None:
-        gmodel['name'] = name
+        model['name'] = name
         observation['model'] = name
-    if model:
-        raise ValueError(f"unknown model keys: {list(model)}")
-    return gmodel, observation
+    if case:
+        raise ValueError(f"unknown case keys: {list(case)}")
+    return model, observation
 
 
-def observation_group(models):
-    """An ObservationGroup of models of the tests (see split_model)."""
+def observation_group(cases):
+    """An ObservationGroup of cases of the tests (see split_case)."""
     from gbkfit.model import model_parser
     from gbkfit.observation import ObservationGroup, observation_parser
-    gmodels, observations = zip(*[split_model(model) for model in models])
+    models, observations = zip(*[split_case(case) for case in cases])
     return ObservationGroup(
-        model_parser.load(list(gmodels)),
+        model_parser.load(list(models)),
         observation_parser.load(list(observations)))
 
 

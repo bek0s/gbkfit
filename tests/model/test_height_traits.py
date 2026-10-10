@@ -29,8 +29,8 @@ SCUBE = dict(type='pixel_spectra', size=[32, 41, 51], step=[1, 1, 20])
 
 def evaluate(driver, component, properties):
     group = observation_group([dict(
-        driver=dict(type=driver.type()), dmodel=copy.deepcopy(SCUBE),
-        gmodel=dict(type='kinematics_3d', components=[component]))])
+        driver=dict(type=driver.type()), observable=copy.deepcopy(SCUBE),
+        model=dict(type='kinematics_3d', components=[component]))])
     params = gbkfit.params.EvaluationParams(group.pdescs(), properties)
     return group.model_h(params.evaluate())[0]['spectra']['d'].copy()
 
@@ -141,8 +141,8 @@ def test_height_traits_at_each_height(driver, height, values, factor):
     component, properties = with_second(
         'd', dict(type='uniform'), height, dict(dpt1_a=5), values)
     group = observation_group([dict(
-        driver=dict(type=driver.type()), dmodel=copy.deepcopy(SCUBE),
-        gmodel=dict(type='kinematics_3d', components=[component]))])
+        driver=dict(type=driver.type()), observable=copy.deepcopy(SCUBE),
+        model=dict(type='kinematics_3d', components=[component]))])
     params = gbkfit.params.EvaluationParams(
         group.pdescs(), properties | dict(incl=0))
     extra = {}

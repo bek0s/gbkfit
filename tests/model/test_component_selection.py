@@ -22,7 +22,7 @@ def disk(name, **traits):
         dptraits=dict(type='uniform')) | traits
 
 
-GMODEL = dict(type='kinematics_2d', components=[
+MODEL = dict(type='kinematics_2d', components=[
     disk('ha'), disk('co')])
 
 PROPERTIES = dict(
@@ -41,26 +41,26 @@ def observation(driver, components=None, **options):
     return observation_parser.load(copy.deepcopy(info | options))
 
 
-def evaluate(gmodel, observations, properties):
+def evaluate(model, observations, properties):
     group = ObservationGroup(
-        [model_parser.load(copy.deepcopy(gmodel))], observations)
+        [model_parser.load(copy.deepcopy(model))], observations)
     params = gbkfit.params.EvaluationParams(group.pdescs(), properties)
     return [data['spectra']['d'].copy()
             for data in group.model_h(params.evaluate())]
 
 
 def test_an_observation_sees_its_components(driver):
-    # The model of one component of a gmodel is that of a gmodel of that
+    # The model of one component of a model is that of a model of that
     # component alone
-    [ha] = evaluate(GMODEL, [observation(driver, ['ha'])], PROPERTIES)
-    alone = dict(GMODEL, components=[disk('ha')])
+    [ha] = evaluate(MODEL, [observation(driver, ['ha'])], PROPERTIES)
+    alone = dict(MODEL, components=[disk('ha')])
     [expected] = evaluate(alone, [observation(driver)], {
         k: v for k, v in PROPERTIES.items() if k.startswith('ha_')})
     np.testing.assert_array_equal(ha, expected)
 
 
 def test_observations_of_different_components_add_up(driver):
-    ha, co, both = evaluate(GMODEL, [
+    ha, co, both = evaluate(MODEL, [
         observation(driver, ['ha'], name='muse'),
         observation(driver, ['co'], name='alma'),
         observation(driver, name='all')], PROPERTIES)
@@ -69,8 +69,8 @@ def test_observations_of_different_components_add_up(driver):
 
 
 def test_opacity_components_always_absorb(driver):
-    # The light of each component goes through the opacity of the gmodel
-    gmodel = dict(
+    # The light of each component goes through the opacity of the model
+    model = dict(
         type='kinematics_3d',
         components=[
             disk('ha', bhtraits=dict(type='sech2')),
@@ -84,14 +84,14 @@ def test_opacity_components_always_absorb(driver):
         ha_bht_s=1, co_bht_s=0.5, dust_xpos=0.3, dust_ypos=-0.6,
         dust_posa=50, dust_incl=60, dust_opt_a=0.3, dust_opt_s=4,
         dust_oht_s=0.5)
-    ha, co, both = evaluate(gmodel, [
+    ha, co, both = evaluate(model, [
         observation(driver, ['ha'], name='muse'),
         observation(driver, ['co'], name='alma'),
         observation(driver, name='all')], properties)
     np.testing.assert_allclose(
         ha + co, both, rtol=1e-4, atol=1e-6 * both.max())
     clear = evaluate(
-        dict(gmodel, opacity_components=[]),
+        dict(model, opacity_components=[]),
         [observation(driver, ['ha'])],
         {k: v for k, v in properties.items() if not k.startswith('dust')})
     assert ha.sum() < 0.99 * clear[0].sum()
@@ -103,7 +103,7 @@ def test_opacity_components_always_absorb(driver):
     ([], "at least one")])
 def test_invalid_selections(driver, components, message):
     with pytest.raises(Exception, match=message):
-        evaluate(GMODEL, [observation(driver, components)], PROPERTIES)
+        evaluate(MODEL, [observation(driver, components)], PROPERTIES)
 
 
 def test_selection_round_trip(driver):

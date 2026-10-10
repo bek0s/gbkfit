@@ -16,12 +16,13 @@ import pytest
 from modelutils import observation_group
 
 
-def nodewise_relative_model(driver):
+def nodewise_relative_case(driver):
     """A model with a node-wise rotation curve in relative mode."""
     return dict(
         driver=dict(type=driver.type()),
-        dmodel=dict(type='pixel_spectra', size=[32, 32, 41], step=[1, 1, 10]),
-        gmodel=dict(type='kinematics_2d', components=[dict(
+        observable=dict(
+            type='pixel_spectra', size=[32, 32, 41], step=[1, 1, 10]),
+        model=dict(type='kinematics_2d', components=[dict(
             type='smdisk', loose=False, tilted=False,
             rnodes=list(range(0, 12)),
             bptraits=dict(type='exponential'),
@@ -32,7 +33,7 @@ def nodewise_relative_model(driver):
 
 
 def test_evaluation_does_not_modify_params(driver):
-    model_group = observation_group([nodewise_relative_model(driver)])
+    model_group = observation_group([nodewise_relative_case(driver)])
     params = gbkfit.params.EvaluationParams(model_group.pdescs(), dict(
         vsys=0, xpos=0, ypos=0, posa=30, incl=45,
         bpt_a=1, bpt_s=4, dpt_a=10,
@@ -55,8 +56,8 @@ import numpy as np
 from modelutils import observation_group
 group = observation_group([dict(
     driver=dict(type='host'),
-    dmodel=dict(type='pixel_spectra', size=[24, 24, 31], step=[1, 1, 10]),
-    gmodel=dict(type='kinematics_3d', components=[dict(
+    observable=dict(type='pixel_spectra', size=[24, 24, 31], step=[1, 1, 10]),
+    model=dict(type='kinematics_3d', components=[dict(
         type='smdisk', loose=False, tilted=False,
         rnodes=list(range(0, 12)),
         bptraits=dict(type='exponential'), bhtraits=dict(type='sech2'),
@@ -82,9 +83,9 @@ def test_host_smooth_disk_does_not_depend_on_thread_count(tmp_path):
     assert cubes[0].any()
     np.testing.assert_array_equal(cubes[1], cubes[0])
 
-# A model of each type of two-dimensional gmodel: the gmodel, its data
+# A model of each type of two-dimensional model: the model, its data
 # model, its data key, and its parameter properties
-GMODELS_2D = dict(
+MODELS_2D = dict(
     kinematics_2d=(
         dict(type='kinematics_2d', components=[dict(
             type='smdisk', loose=False, tilted=False,
@@ -104,16 +105,16 @@ GMODELS_2D = dict(
         dict(xpos=0, ypos=0, posa=30, incl=45, bpt_a=1, bpt_s=4)))
 
 
-@pytest.mark.parametrize('model_type', GMODELS_2D)
+@pytest.mark.parametrize('model_type', MODELS_2D)
 def test_one_model_observed_on_grids_with_different_steps(
         driver, model_type):
-    # Observations of one gmodel on grids with different steps each get
+    # Observations of one model on grids with different steps each get
     # the model on their own grid
     from gbkfit.model import model_parser
     from gbkfit.observation import (
         Observation, ObservationGroup, observable_parser)
-    gmodel_info, observable_type, size, key, properties = \
-        GMODELS_2D[model_type]
+    model_info, observable_type, size, key, properties = \
+        MODELS_2D[model_type]
 
     def observation(step):
         steps = (step, step, 10)[:len(size)]
@@ -126,9 +127,9 @@ def test_one_model_observed_on_grids_with_different_steps(
         return group.model_h(params.evaluate())[i][key]['d'].copy()
 
     shared = ObservationGroup(
-        [model_parser.load(gmodel_info)], [observation(1), observation(0.5)])
+        [model_parser.load(model_info)], [observation(1), observation(0.5)])
     alone = ObservationGroup(
-        [model_parser.load(gmodel_info)], [observation(0.5)])
+        [model_parser.load(model_info)], [observation(0.5)])
     np.testing.assert_array_equal(evaluate(shared, 1), evaluate(alone, 0))
 
 
@@ -141,33 +142,33 @@ def test_unsupported_dtype_fails_when_planning(driver):
         observable_parser.load(dict(type='pixel_brightness', size=[8, 8])),
         driver,
         dtype='float16')
-    gmodel = gbkfit.model.model_parser.load(dict(
+    model = gbkfit.model.model_parser.load(dict(
         type='intensity_2d', components=dict(
             type='smdisk', loose=False, tilted=False, rnodes=[0, 2, 4],
             bptraits=dict(type='uniform'))))
     for _ in range(2):
         with pytest.raises(RuntimeError, match="does not support dtype"):
-            ObservationGroup([gmodel], [observation])
+            ObservationGroup([model], [observation])
 
 
-@pytest.mark.parametrize('dmodel, gmodel', [
+@pytest.mark.parametrize('observable, model', [
     (dict(type='pixel_brightness', size=[8, 8]), 'kinematics_2d'),
     (dict(type='pixel_spectra', size=[8, 8, 8]), 'intensity_2d')])
 def test_incompatible_observations_are_rejected_before_evaluation(
-        dmodel, gmodel):
-    # An image observable needs an image gmodel, and the others a spectral
-    # cube gmodel; the group is rejected before any evaluation
+        observable, model):
+    # An image observable needs an image model, and the others a spectral
+    # cube model; the group is rejected before any evaluation
     component = dict(
         type='smdisk', loose=False, tilted=False, rnodes=[0, 1, 2],
         bptraits=dict(type='exponential'))
-    if gmodel.startswith('kinematics'):
+    if model.startswith('kinematics'):
         component |= dict(
             vptraits=dict(type='tan_arctan'), dptraits=dict(type='uniform'))
-    model = dict(
-        driver=dict(type='host'), dmodel=dmodel,
-        gmodel=dict(type=gmodel, components=[component]))
+    case = dict(
+        driver=dict(type='host'), observable=observable,
+        model=dict(type=model, components=[component]))
     with pytest.raises(Exception, match="is not compatible with"):
-        observation_group([model])
+        observation_group([case])
 
 
 def test_a_velocity_that_is_not_a_number_makes_spectra_nan(driver):
@@ -177,8 +178,9 @@ def test_a_velocity_that_is_not_a_number_makes_spectra_nan(driver):
     # out of the cube
     model_group = observation_group([dict(
         driver=dict(type=driver.type()),
-        dmodel=dict(type='pixel_spectra', size=[16, 16, 21], step=[1, 1, 10]),
-        gmodel=dict(type='kinematics_2d', components=[dict(
+        observable=dict(
+            type='pixel_spectra', size=[16, 16, 21], step=[1, 1, 10]),
+        model=dict(type='kinematics_2d', components=[dict(
             type='smdisk', loose=False, tilted=False,
             rnodes=list(range(0, 8)),
             bptraits=dict(type='exponential'),
@@ -204,8 +206,8 @@ def test_cuda_smooth_disk_of_more_voxels_than_an_int_holds(driver):
     def image(size_z, step_z):
         model_group = observation_group([dict(
             driver=dict(type=driver.type()),
-            dmodel=dict(type='pixel_brightness', size=[64, 64]),
-            gmodel=dict(
+            observable=dict(type='pixel_brightness', size=[64, 64]),
+            model=dict(
                 type='intensity_3d', size_z=size_z, step_z=step_z,
                 components=[dict(
                     type='smdisk', loose=False, tilted=False,

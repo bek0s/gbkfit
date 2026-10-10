@@ -27,14 +27,14 @@ def moments_from_scube(scube, spec_step):
     return moment1, moment2, intensity
 
 
-def test_pixel_moments_matches_moments_of_pixel_spectra(evaluate_model):
+def test_pixel_moments_matches_moments_of_pixel_spectra(evaluate_config):
     # thin_disk_pixel_moments and thin_disk_pixel_spectra describe the same galaxy with
     # the same PSF and LSF, so the moment maps must match the moments of
     # the spectral cube. The channels hold the mean of the lines over each
     # channel, which adds the variance of a channel (step^2 / 12) to the
     # lines: the spectral cube has channels of 10, and the cube of the
     # moment maps of 1 (the default).
-    mmaps = evaluate_model(REFERENCE_DIR / 'thin_disk_pixel_moments.yaml')
+    mmaps = evaluate_config(REFERENCE_DIR / 'thin_disk_pixel_moments.yaml')
     scube = np.load(REFERENCE_DIR / 'thin_disk_pixel_spectra.npz')['model_0_spectra_d']
     moment1, moment2, intensity = moments_from_scube(
         scube.astype(np.float64), spec_step=10)
@@ -55,14 +55,14 @@ def evaluate_mmaps(driver, observable, **properties):
     from gbkfit.model import model_parser
     from gbkfit.observation import Observation, ObservationGroup
     from gbkfit.params import EvaluationParams
-    gmodel = model_parser.load(dict(
+    model = model_parser.load(dict(
         type='kinematics_2d', components=[dict(
             type='smdisk', loose=False, tilted=False,
             rnodes=list(range(0, 12)),
             bptraits=dict(type='exponential'),
             vptraits=dict(type='tan_arctan'),
             dptraits=dict(type='uniform'))]))
-    model_group = ObservationGroup([gmodel], [Observation(observable, driver)])
+    model_group = ObservationGroup([model], [Observation(observable, driver)])
     params = EvaluationParams(model_group.pdescs(), dict(
         vsys=0, xpos=0, ypos=0, posa=30, incl=60,
         bpt_a=1, bpt_s=4, vpt_rt=2, vpt_vt=40, dpt_a=20) | properties)
@@ -97,9 +97,9 @@ def test_higher_moments_of_a_gaussian_line(driver):
         mmaps['moment4']['d'][disk], 3 * sigma[disk] ** 4, rtol=1e-2)
 
 
-def test_moment_maps_have_the_weights_of_the_gmodel(driver):
+def test_moment_maps_have_the_weights_of_the_model(driver):
     # The weight of the moments of a spectrum is the flux-weighted mean of
-    # its weights: those of a gmodel with the spatial weights 0 on the
+    # its weights: those of a model with the spatial weights 0 on the
     # first row of pixels, and 1 elsewhere
     from gbkfit.model import ModelKinematics2D
     from gbkfit.model.components.disks import SpectralSMDisk2D, traits
@@ -110,9 +110,9 @@ def test_moment_maps_have_the_weights_of_the_gmodel(driver):
         loose=False, tilted=False, rnodes=list(range(0, 25)),
         bptraits=traits.BPTraitExponential(),
         vptraits=traits.VPTraitTanArctan(), dptraits=traits.DPTraitUniform())
-    gmodel = ModelKinematics2D([disk, WeightComponent()])
+    model = ModelKinematics2D([disk, WeightComponent()])
     observable = PixelMoments(size=(32, 32), spec_size=81, spec_step=5)
-    model_group = ObservationGroup([gmodel], [Observation(observable, driver)])
+    model_group = ObservationGroup([model], [Observation(observable, driver)])
     params = EvaluationParams(model_group.pdescs(), dict(
         vsys=0, xpos=0, ypos=0, posa=30, incl=0,
         bpt_a=1, bpt_s=4, vpt_rt=2, vpt_vt=40, dpt_a=20))

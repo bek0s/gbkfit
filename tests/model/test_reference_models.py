@@ -20,8 +20,8 @@ CASES = sorted(path.stem for path in REFERENCE_DIR.glob('*.yaml'))
 
 
 @pytest.mark.parametrize('case', CASES)
-def test_reference_model(case, evaluate_model):
-    outputs = evaluate_model(REFERENCE_DIR / f'{case}.yaml')
+def test_reference_model(case, evaluate_config):
+    outputs = evaluate_config(REFERENCE_DIR / f'{case}.yaml')
     references = np.load(REFERENCE_DIR / f'{case}.npz')
     # The moments of the faint wings of a convolved model are the noise
     # of the float32 FFT (see test_precision), so the moment maps are

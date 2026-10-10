@@ -42,8 +42,8 @@ CASES = {
 
 
 def evaluate(driver, case, dtype):
-    gmodel, observable, instrument = CASES[case]
-    group = ObservationGroup([model_parser.load(gmodel)], [
+    model, observable, instrument = CASES[case]
+    group = ObservationGroup([model_parser.load(model)], [
         observation_parser.load(dict(
             driver=dict(type=driver.type()), observable=observable,
             instrument=instrument, dtype=dtype))])

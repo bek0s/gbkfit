@@ -121,7 +121,7 @@ def test_unknown_options(tmp_path):
 
 
 def test_outputs_have_the_world_coordinates_of_the_model(tmp_path):
-    # The model is written with the coordinates of its dmodel, so it can
+    # The model is written with the coordinates of its observable, so it can
     # be read back with them
     from gbkfit.utils import fitsutils
     config = yaml.load(REFERENCE_DIR / 'thin_disk_pixel_spectra.yaml')
@@ -186,8 +186,8 @@ def test_region_spectra_outputs_and_residuals(tmp_path):
 
 
 def test_one_model_seen_by_two_observations(tmp_path):
-    # The observations refer to their gmodel, so there can be more
-    # observations than gmodels
+    # The observations refer to their model, so there can be more
+    # observations than models
     config = yaml.load(REFERENCE_DIR / 'thin_disk_pixel_spectra.yaml')
     scube = config['observations'][0]
     mmaps = dict(driver=dict(type='host'), name='maps',

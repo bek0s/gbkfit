@@ -10,9 +10,9 @@ from modelutils import observation_group
 
 
 @pytest.fixture
-def evaluate_model(tmp_path):
+def evaluate_config(tmp_path):
     """
-    Return a function that evaluates a model configuration file with
+    Return a function that evaluates a configuration file with
     `gbkfit-cli eval model` and returns its FITS outputs, keyed by file
     name. Each configuration is evaluated in its own directory.
     """
@@ -32,18 +32,18 @@ def evaluate_model(tmp_path):
 
 
 @pytest.fixture
-def evaluate_models():
+def evaluate_cases():
     """
-    Return a function that evaluates models of the tests (see
-    split_model) through the Python API. It returns the model data of
+    Return a function that evaluates cases of the tests (see
+    split_case) through the Python API. It returns the model data of
     every observation (on the host) and the extra outputs (e.g. the
     velocity field of each component), keyed as in
     `ObservationGroup.model_h`.
     """
     import gbkfit.params
 
-    def evaluate(models, properties):
-        group = observation_group(models)
+    def evaluate(cases, properties):
+        group = observation_group(cases)
         params = gbkfit.params.EvaluationParams(
             group.pdescs(), properties, constants=group.constants())
         extra = {}

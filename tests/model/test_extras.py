@@ -1,6 +1,6 @@
 """
 Tests for the extra outputs of the models: those on a grid have its world
-coordinates, in the layout of the data of their dmodel.
+coordinates, in the layout of the data of their observable.
 """
 
 import numpy as np
@@ -18,10 +18,10 @@ PROPERTIES = dict(
     xpos=0, ypos=0, posa=30, incl=45, bpt_a=1, bpt_s=3, vsys=0,
     vpt_rt=2, vpt_vt=100, dpt_a=20)
 
-# A model of each dmodel with a PSF (so that the high-res grid is padded):
-# the dmodel, its gmodel, and the shape and spectral axis of its low-res
+# A case of each observable with a PSF (so that the high-res grid is padded):
+# the observable, its model, and the shape and spectral axis of its low-res
 # extra outputs
-MODELS = dict(
+CASES = dict(
     pixel_brightness=(
         dict(type='pixel_brightness', size=[16, 12], rval=[150, 2],
              scale=[2, 2], psf=dict(type='gauss', sigma=1)),
@@ -39,14 +39,14 @@ MODELS = dict(
         (20, 16), 1))
 
 
-@pytest.mark.parametrize('name', MODELS)
-def test_dcube_extras_have_the_layout_of_the_data(evaluate_models, name):
-    dmodel, gmodel, shape, spectral_axis = MODELS[name]
-    model = dict(driver=dict(type='host'), dmodel=dmodel, gmodel=gmodel)
+@pytest.mark.parametrize('name', CASES)
+def test_dcube_extras_have_the_layout_of_the_data(evaluate_cases, name):
+    observable, model, shape, spectral_axis = CASES[name]
+    case = dict(driver=dict(type='host'), observable=observable, model=model)
     properties = {
         k: v for k, v in PROPERTIES.items()
         if name != 'pixel_brightness' or not k.startswith(('v', 'd'))}
-    _, extra = evaluate_models([model], properties)
+    _, extra = evaluate_cases([case], properties)
     dcube_lo = extra['observation0_dcube_lo']
     assert isinstance(dcube_lo, gridutils.GridData)
     assert dcube_lo.data.shape == shape
@@ -63,26 +63,26 @@ def test_dcube_extras_have_the_layout_of_the_data(evaluate_models, name):
     assert isinstance(extra['observation0_psf_hi'], np.ndarray)
 
 
-def test_dcube_extras_have_the_coordinates_of_the_dmodel(evaluate_models):
-    dmodel, gmodel, _, _ = MODELS['pixel_spectra']
-    model = dict(driver=dict(type='host'), dmodel=dmodel, gmodel=gmodel)
-    _, extra = evaluate_models([model], PROPERTIES)
+def test_dcube_extras_have_the_coordinates_of_the_observable(evaluate_cases):
+    observable, model, _, _ = CASES['pixel_spectra']
+    case = dict(driver=dict(type='host'), observable=observable, model=model)
+    _, extra = evaluate_cases([case], PROPERTIES)
     coords = extra['observation0_dcube_lo'].coords
     assert coords.step == (1, 1, 10)
     assert coords.rpix == (7.5, 5.5, 9.5)
     assert coords.rval == (150, 2, 0)
 
 
-@pytest.mark.parametrize('name', MODELS)
-def test_model_extras_are_on_the_sky(evaluate_models, name):
-    # The extra outputs of a 2d gmodel are images on the high-res grid,
+@pytest.mark.parametrize('name', CASES)
+def test_model_extras_are_on_the_sky(evaluate_cases, name):
+    # The extra outputs of a 2d model are images on the high-res grid,
     # except for a long slit, which has no position on the sky
-    dmodel, gmodel, _, _ = MODELS[name]
-    model = dict(driver=dict(type='host'), dmodel=dmodel, gmodel=gmodel)
+    observable, model, _, _ = CASES[name]
+    case = dict(driver=dict(type='host'), observable=observable, model=model)
     properties = {
         k: v for k, v in PROPERTIES.items()
         if name != 'pixel_brightness' or not k.startswith(('v', 'd'))}
-    _, extra = evaluate_models([model], properties)
+    _, extra = evaluate_cases([case], properties)
     bdata = extra['observation0_model_component0_bdata']
     if name == 'slit_spectra':
         assert isinstance(bdata, np.ndarray)
@@ -93,14 +93,14 @@ def test_model_extras_are_on_the_sky(evaluate_models, name):
     assert bdata.coords == dcube_hi.coords.axes(0, 1)
 
 
-def test_3d_model_extras_have_a_line_of_sight_axis(evaluate_models):
-    # The z axis of a 3d gmodel is along the line of sight, centred on 0
-    dmodel, _, _, _ = MODELS['pixel_spectra']
-    gmodel = dict(
+def test_3d_model_extras_have_a_line_of_sight_axis(evaluate_cases):
+    # The z axis of a 3d model is along the line of sight, centred on 0
+    observable, _, _, _ = CASES['pixel_spectra']
+    model = dict(
         type='kinematics_3d', size_z=10, step_z=0.5, components=[
             DISK | KINEMATICS | dict(bhtraits=dict(type='sech2'))])
-    model = dict(driver=dict(type='host'), dmodel=dmodel, gmodel=gmodel)
-    _, extra = evaluate_models([model], PROPERTIES | dict(bht_s=1))
+    case = dict(driver=dict(type='host'), observable=observable, model=model)
+    _, extra = evaluate_cases([case], PROPERTIES | dict(bht_s=1))
     bdata = extra['observation0_model_component0_bdata']
     assert bdata.data.shape[0] == 10 and bdata.spectral_axis is None
     sky = extra['observation0_dcube_hi'].coords.axes(0, 1)

@@ -11,7 +11,7 @@ import pytest
 from modelutils import observation_group
 
 
-GMODEL = dict(type='kinematics_2d', components=[dict(
+MODEL = dict(type='kinematics_2d', components=[dict(
     type='smdisk', loose=False, tilted=False,
     rnodes=list(range(0, 14)),
     bptraits=dict(type='exponential'),
@@ -23,9 +23,10 @@ PROPERTIES = dict(
     bpt_a=1, bpt_s=4, vpt_rt=2, vpt_vt=150, dpt_a=20)
 
 
-def evaluate(driver, dmodel):
+def evaluate(driver, observable):
     model_group = observation_group([
-        dict(driver=dict(type=driver.type()), dmodel=dmodel, gmodel=GMODEL)])
+        dict(driver=dict(type=driver.type()), observable=observable,
+             model=MODEL)])
     params = gbkfit.params.EvaluationParams(model_group.pdescs(), PROPERTIES)
     data = model_group.model_h(params.evaluate())[0]
     return next(iter(data.values()))['d'].copy()
@@ -62,8 +63,9 @@ def test_slit_spectra_objective_residual(driver):
     from gbkfit.dataset import Data
     from gbkfit.dataset import DatasetSlitSpectra
     from gbkfit.objective import Objective
-    dmodel = dict(type='slit_spectra', size=[32, 51], step=[1, 10], rota=30)
-    model = evaluate(driver, dmodel)
+    observable = dict(
+        type='slit_spectra', size=[32, 51], step=[1, 10], rota=30)
+    model = evaluate(driver, observable)
     dataset = DatasetSlitSpectra(
         Data(model + 1, error=np.full_like(model, 2)), step=(1, 10),
         rota=30)
@@ -71,9 +73,10 @@ def test_slit_spectra_objective_residual(driver):
     from gbkfit.observation import (
         Observation, ObservationGroup, observable_parser)
     observation = Observation(
-        observable_parser.load(copy.deepcopy(dmodel)), driver, data=dataset)
+        observable_parser.load(copy.deepcopy(observable)), driver,
+        data=dataset)
     model_group = ObservationGroup(
-        [model_parser.load(copy.deepcopy(GMODEL))], [observation])
+        [model_parser.load(copy.deepcopy(MODEL))], [observation])
     objective = Objective(model_group)
     params = gbkfit.params.EvaluationParams(model_group.pdescs(), PROPERTIES)
     residual = objective.residual_nddata_h(params.evaluate(), False)
@@ -91,10 +94,10 @@ def test_hanning_smoothing_of_the_channels(driver):
     # A Gaussian LSF convolved with the Hanning smoothing of the channels
     # is the Gaussian LSF and then 1/4, 1/2 and 1/4 of each channel in
     # the channel before, itself and the one after
-    dmodel = dict(type='slit_spectra', size=[32, 61], step=[1, 10])
+    observable = dict(type='slit_spectra', size=[32, 61], step=[1, 10])
     gauss = dict(type='gauss', sigma=15)
-    plain = evaluate(driver, dmodel | dict(lsf=gauss))
-    smoothed = evaluate(driver, dmodel | dict(lsf=dict(
+    plain = evaluate(driver, observable | dict(lsf=gauss))
+    smoothed = evaluate(driver, observable | dict(lsf=dict(
         type='convolution', lsfs=[gauss, dict(type='hanning', width=10)])))
     expected = 0.5 * plain
     expected[1:] += 0.25 * plain[:-1]

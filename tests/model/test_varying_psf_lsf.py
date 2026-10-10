@@ -14,7 +14,7 @@ from gbkfit.observation import ObservationGroup, observation_parser
 from gbkfit.utils.parseutils import ConfigError
 
 
-GMODEL = dict(type='kinematics_2d', components=[dict(
+MODEL = dict(type='kinematics_2d', components=[dict(
     type='smdisk', loose=False, tilted=False, rnodes=list(range(0, 12)),
     bptraits=dict(type='exponential'), vptraits=dict(type='tan_arctan'),
     dptraits=dict(type='uniform'))])
@@ -27,8 +27,8 @@ VELOCITIES = (np.arange(SIZE[2]) - 19.5) * STEP[2]
 
 
 def spectra(driver, psf=None, lsf=None, scale=(1, 1, 1)):
-    """The spectra of the gmodel seen with the PSF and the LSF."""
-    group = ObservationGroup([model_parser.load(GMODEL)], [
+    """The spectra of the model seen with the PSF and the LSF."""
+    group = ObservationGroup([model_parser.load(MODEL)], [
         observation_parser.load(dict(
             driver=dict(type=driver.type()), scale=list(scale),
             instrument=dict(psf=psf, lsf=lsf),

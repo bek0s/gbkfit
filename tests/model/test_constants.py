@@ -24,32 +24,34 @@ def disk(**options):
 def kinematics_2d(components):
     return dict(
         driver=dict(type='host'),
-        dmodel=dict(type='pixel_spectra', size=[32, 32, 41], step=[1, 1, 10]),
-        gmodel=dict(type='kinematics_2d', components=components))
+        observable=dict(
+            type='pixel_spectra', size=[32, 32, 41], step=[1, 1, 10]),
+        model=dict(type='kinematics_2d', components=components))
 
 
-def test_rotation_curve_from_radial_nodes(evaluate_models):
+def test_rotation_curve_from_radial_nodes(evaluate_cases):
     # A node-wise rotation curve given by an expression of the radial
     # nodes is the same as the one given by its values
-    model = kinematics_2d([disk(vptraits=dict(type='nw_tan_uniform'))])
+    case = kinematics_2d([disk(vptraits=dict(type='nw_tan_uniform'))])
     curve = 200 * np.arctan(np.array(RNODES) / 3)
-    expression, _ = evaluate_models(
-        [model], PROPERTIES | dict(vpt_vt='200 * np.arctan(rnodes / 3)'))
-    values, _ = evaluate_models(
-        [model], PROPERTIES | dict(vpt_vt=curve.tolist()))
+    expression, _ = evaluate_cases(
+        [case], PROPERTIES | dict(vpt_vt='200 * np.arctan(rnodes / 3)'))
+    values, _ = evaluate_cases(
+        [case], PROPERTIES | dict(vpt_vt=curve.tolist()))
     np.testing.assert_array_equal(
         expression[0]['spectra']['d'], values[0]['spectra']['d'])
 
 
 def test_names_of_constants():
     # The constants are named like the parameters of their components,
-    # opacity components and gmodels (by name, when there are several)
+    # opacity components and models (by name, when there are several)
     vptraits = dict(type='tan_arctan')
     model0 = dict(
         name='g0',
         driver=dict(type='host'),
-        dmodel=dict(type='pixel_spectra', size=[32, 32, 41], step=[1, 1, 10]),
-        gmodel=dict(
+        observable=dict(
+            type='pixel_spectra', size=[32, 32, 41], step=[1, 1, 10]),
+        model=dict(
             type='kinematics_3d',
             components=[
                 disk(vptraits=vptraits, bhtraits=dict(type='sech2')),

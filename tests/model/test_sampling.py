@@ -28,21 +28,22 @@ def disk(type_, rnodes, vptraits, **options):
         dptraits=dict(type='uniform'), **disk_options, **options)
 
 
-def model(component):
+def case(component):
     model_type = 'kinematics_3d' if component['type'] == 'mcdisk' \
         else 'kinematics_2d'
     return dict(
         driver=dict(type='host'),
-        dmodel=dict(type='pixel_spectra', size=[32, 32, 41], step=[1, 1, 10]),
-        gmodel=dict(type=model_type, components=[component]))
+        observable=dict(
+            type='pixel_spectra', size=[32, 32, 41], step=[1, 1, 10]),
+        model=dict(type=model_type, components=[component]))
 
 
 def group(component):
-    return observation_group([model(component)])
+    return observation_group([case(component)])
 
 
 @pytest.mark.parametrize('type_', ['smdisk', 'mcdisk'])
-def test_values_at_the_subnodes_are_used_as_they_are(evaluate_models, type_):
+def test_values_at_the_subnodes_are_used_as_they_are(evaluate_cases, type_):
     # A curve given at the nodes gives the same model as its values
     # interpolated to the subnodes, given at the subnodes
     rnodes = [0, 4, 10, 20]
@@ -52,10 +53,10 @@ def test_values_at_the_subnodes_are_used_as_they_are(evaluate_models, type_):
         type_, rnodes, dict(type='nw_tan_uniform', sampling='subrings'))
     subrnodes = group(at_subnodes).constants()['subrnodes']
     interpolated = interpolation.InterpolatorLinear(rnodes, curve)(subrnodes)
-    expected, _ = evaluate_models(
-        [model(at_rnodes)], PROPERTIES | dict(bht_s=1, vpt_vt=curve))
-    actual, _ = evaluate_models(
-        [model(at_subnodes)],
+    expected, _ = evaluate_cases(
+        [case(at_rnodes)], PROPERTIES | dict(bht_s=1, vpt_vt=curve))
+    actual, _ = evaluate_cases(
+        [case(at_subnodes)],
         PROPERTIES | dict(bht_s=1, vpt_vt=interpolated.tolist()))
     # The host adds the clouds of a thick disk in any order (float32)
     rtol = 1e-4 if type_ == 'mcdisk' else 0
@@ -77,12 +78,12 @@ def test_node_wise_parameters_have_a_value_for_each_subnode():
 
 
 def test_flaring_at_the_subnodes():
-    gmodel = model_parser.load(dict(
+    model = model_parser.load(dict(
         type='intensity_3d', components=[dict(
             type='smdisk', loose=False, tilted=False, rnodes=[0, 20],
             rstep=0.5, bptraits=dict(type='exponential'),
             bhtraits=dict(type='sech2', rnodes=True, sampling='subrings'))]))
-    assert gmodel.pdescs()['bht_s'].size() == 42
+    assert model.pdescs()['bht_s'].size() == 42
 
 
 def evaluate_curve(component, free):
@@ -102,7 +103,7 @@ def evaluate_curve(component, free):
 
 @pytest.mark.parametrize('vmax, rt', [(150, 2), (220, 4)])
 def test_an_expression_of_the_subnodes_follows_the_curve(
-        evaluate_models, vmax, rt):
+        evaluate_cases, vmax, rt):
     # With two nodes, a curve given at the subnodes is the analytical one,
     # up to its linear interpolation between the subnodes
     rnodes = [0, 20]
@@ -111,28 +112,28 @@ def test_an_expression_of_the_subnodes_follows_the_curve(
     at_subnodes = disk(
         'smdisk', rnodes, dict(type='nw_tan_uniform', sampling='subrings'),
         rstep=0.1)
-    _, extra = evaluate_models(
-        [model(analytical)], PROPERTIES | dict(vpt_vt=vmax, vpt_rt=rt))
+    _, extra = evaluate_cases(
+        [case(analytical)], PROPERTIES | dict(vpt_vt=vmax, vpt_rt=rt))
     expected = extra['observation0_model_component0_vdata'].data
     actual = evaluate_curve(at_subnodes, dict(vmax=vmax, rt=rt))
     np.testing.assert_allclose(actual, expected, atol=0.1, equal_nan=True)
 
 
 def test_sampling_is_dumped():
-    gmodel = model_parser.load(dict(
+    model = model_parser.load(dict(
         type='kinematics_2d', components=[disk(
             'smdisk', [0, 20],
             dict(type='nw_tan_uniform', sampling='subrings'))]))
-    info = model_parser.dump(gmodel)
+    info = model_parser.dump(model)
     assert info['components'][0]['vptraits'] == [dict(
         type='nw_tan_uniform', sampling='subrings')]
-    gmodel = model_parser.load(info)
-    assert model_parser.dump(gmodel) == info
+    model = model_parser.load(info)
+    assert model_parser.dump(model) == info
     # The default is not dumped
-    gmodel = model_parser.load(dict(
+    model = model_parser.load(dict(
         type='kinematics_2d', components=[disk(
             'smdisk', [0, 20], dict(type='nw_tan_uniform'))]))
-    info = model_parser.dump(gmodel)
+    info = model_parser.dump(model)
     assert info['components'][0]['vptraits'] == [dict(type='nw_tan_uniform')]
 
 

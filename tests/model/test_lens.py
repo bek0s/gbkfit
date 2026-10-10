@@ -16,7 +16,7 @@ from gbkfit.observation import (
 from gbkfit.utils import fitsutils, gridutils
 
 
-GMODEL = dict(type='intensity_2d', components=[dict(
+MODEL = dict(type='intensity_2d', components=[dict(
     type='smdisk', loose=False, tilted=False,
     rnodes=list(range(0, 14)),
     bptraits=dict(type='exponential'))])
@@ -26,11 +26,11 @@ PROPERTIES = dict(xpos=0.0, ypos=0.0, posa=50, incl=60, bpt_a=1, bpt_s=2)
 IMAGE = dict(type='pixel_brightness', size=[32, 41], step=[1, 1])
 
 
-def evaluate(driver, foreground=None, properties=PROPERTIES, dmodel=IMAGE,
-             gmodel=GMODEL):
+def evaluate(driver, foreground=None, properties=PROPERTIES, observable=IMAGE,
+             model=MODEL):
     group = observation_group([dict(
-        driver=dict(type=driver.type()), dmodel=copy.deepcopy(dmodel),
-        gmodel=gmodel)])
+        driver=dict(type=driver.type()), observable=copy.deepcopy(observable),
+        model=model)])
     observation = group.observations()[0]
     if foreground is not None:
         from gbkfit.observation import Observation, ObservationGroup
@@ -50,8 +50,8 @@ def deflection_lens(alpha_x, alpha_y, source_size, source_step, **coords):
 
 # A smooth disk, whose bilinear interpolation on a source grid of half
 # the pixels of the image is within 1% of its peak
-SMOOTH_GMODEL = dict(type='intensity_2d', components=[
-    GMODEL['components'][0] | dict(bptraits=dict(type='gauss'))])
+SMOOTH_MODEL = dict(type='intensity_2d', components=[
+    MODEL['components'][0] | dict(bptraits=dict(type='gauss'))])
 
 SMOOTH_PROPERTIES = PROPERTIES | dict(bpt_s=4)
 
@@ -69,10 +69,10 @@ def test_no_deflection_is_no_lens_on_a_rotated_image(driver):
     # The source grid is aligned with the sky, and each pixel of a rotated
     # image takes the light of the source at its position on the sky
     image = IMAGE | dict(rota=30)
-    plain = evaluate(driver, None, SMOOTH_PROPERTIES, image, SMOOTH_GMODEL)
+    plain = evaluate(driver, None, SMOOTH_PROPERTIES, image, SMOOTH_MODEL)
     zero = np.zeros((4, 4))
     lens = deflection_lens(zero, zero, (120, 120), (0.5, 0.5), step=100)
-    lensed = evaluate(driver, lens, SMOOTH_PROPERTIES, image, SMOOTH_GMODEL)
+    lensed = evaluate(driver, lens, SMOOTH_PROPERTIES, image, SMOOTH_MODEL)
     np.testing.assert_allclose(lensed, plain, atol=0.01 * plain.max())
 
 
@@ -96,25 +96,26 @@ def test_deflection_of_a_rotated_map():
     np.testing.assert_allclose(lens.deflection(middle), [[[1.5]], [[10]]])
 
 
-@pytest.mark.parametrize('dmodel', [
+@pytest.mark.parametrize('observable', [
     IMAGE, dict(type='pixel_spectra', size=[32, 41, 31], step=[1, 1, 20])])
-def test_constant_deflection_moves_the_source(driver, dmodel):
+def test_constant_deflection_moves_the_source(driver, observable):
     # With a constant deflection alpha, the image is the source moved by
     # alpha: the model with its centre moved by alpha
-    gmodel = GMODEL
+    model = MODEL
     properties = PROPERTIES
-    if dmodel['type'] == 'pixel_spectra':
-        gmodel = dict(type='kinematics_2d', components=[
-            GMODEL['components'][0] | dict(
+    if observable['type'] == 'pixel_spectra':
+        model = dict(type='kinematics_2d', components=[
+            MODEL['components'][0] | dict(
                 vptraits=dict(type='tan_arctan'),
                 dptraits=dict(type='uniform'))])
         properties = PROPERTIES | dict(
             vsys=0, vpt_rt=2, vpt_vt=150, dpt_a=20)
     lens = deflection_lens(
         np.full((41, 32), 2.0), np.full((41, 32), -3.0), (60, 61), (1, 1))
-    lensed = evaluate(driver, lens, properties, dmodel, gmodel)
+    lensed = evaluate(driver, lens, properties, observable, model)
     moved = evaluate(
-        driver, None, properties | dict(xpos=2.0, ypos=-3.0), dmodel, gmodel)
+        driver, None, properties | dict(xpos=2.0, ypos=-3.0), observable,
+        model)
     np.testing.assert_allclose(
         lensed, moved, rtol=1e-5, atol=1e-6 * moved.max())
 
@@ -125,10 +126,10 @@ def test_deflection_between_source_pixels(driver):
     lens = deflection_lens(
         np.full((41, 32), 2.5), np.full((41, 32), -3.25), (120, 122),
         (0.5, 0.5))
-    lensed = evaluate(driver, lens, SMOOTH_PROPERTIES, IMAGE, SMOOTH_GMODEL)
+    lensed = evaluate(driver, lens, SMOOTH_PROPERTIES, IMAGE, SMOOTH_MODEL)
     moved = evaluate(
         driver, None, SMOOTH_PROPERTIES | dict(xpos=2.5, ypos=-3.25), IMAGE,
-        SMOOTH_GMODEL)
+        SMOOTH_MODEL)
     np.testing.assert_allclose(lensed, moved, atol=0.01 * moved.max())
 
 
