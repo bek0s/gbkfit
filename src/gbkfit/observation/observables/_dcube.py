@@ -48,6 +48,10 @@ class DCube:
                 "mask_apply is set to True, but mask_cutoff is not provided; "
                 "no mask will be generated or applied to the model data")
             mask_apply = False
+        if (psf and psf.varies()) or (lsf and lsf.varies()):
+            raise NotImplementedError(
+                "PSFs and LSFs that vary along the spectral axis are not "
+                "supported by the observables yet")
         if smooth_weights and not (psf or lsf):
             _log.warning(
                 "smooth_weights is set to True, but neither PSF nor LSF is "

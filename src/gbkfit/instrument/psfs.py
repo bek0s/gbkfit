@@ -3,7 +3,8 @@ Point spread functions (PSFs): how the atmosphere, the telescope and the
 instrument spread the light of a point on the sky.
 
 Widths are in arcsec, and position angles in degrees, from north through
-east, like those of the disks.
+east, like those of the disks. The options of the analytic PSFs can vary
+along the spectral axis (see varying).
 """
 
 import abc
@@ -20,7 +21,7 @@ import scipy.special
 import gbkfit.math
 from gbkfit.utils import fitsutils, gridutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
-from . import _detail
+from . import _detail, varying
 from ._detail import MIN_EXTENT, WING_FLUX, check_ratio, check_scale
 
 
@@ -34,6 +35,7 @@ __all__ = [
     'PSFMoffat',
     'PSFPoint',
     'PSFSum',
+    'PSFVarying',
     'psf_parser'
 ]
 
@@ -42,6 +44,29 @@ class PSF(parseutils.TypedSerializable, abc.ABC):
     """
     A point spread function, drawn on arrays of pixels.
     """
+
+    @classmethod
+    def load(cls, info: dict[str, Any]) -> 'PSF':
+        """
+        Load a PSF from its configuration.
+
+        Options that are tables make a PSF that varies along the spectral
+        axis (see varying and PSFVarying).
+
+        Parameters
+        ----------
+        info : dict
+            The options.
+
+        Returns
+        -------
+        PSF
+            The PSF.
+        """
+        tables = varying.Varying.load_tables(cls, info)
+        if tables:
+            return PSFVarying(varying.Varying(cls, info, tables))
+        return super().load(info)
 
     @abc.abstractmethod
     def dump(
@@ -137,6 +162,55 @@ class PSF(parseutils.TypedSerializable, abc.ABC):
                 f"but both values must be odd")
         return self._asarray_impl(step, size, offset, rota)
 
+    def varies(self) -> bool:
+        """
+        Check whether the PSF varies along the spectral axis.
+
+        Returns
+        -------
+        bool
+            Whether it varies.
+        """
+        return False
+
+    def at_velocities(
+            self, velocities: Sequence[float] | np.ndarray, rest: Any = None
+    ) -> list['PSF']:
+        """
+        Return the PSF at velocities of the spectral axis.
+
+        Parameters
+        ----------
+        velocities : array_like
+            The velocities (km/s).
+        rest : Quantity, optional
+            The rest of the spectral axis (see gridutils.Coords).
+
+        Returns
+        -------
+        list of PSF
+            The PSF at each velocity: itself, unless it varies.
+        """
+        return [self] * len(velocities)
+
+    def velocity_range(self, rest: Any = None) -> tuple[float, float]:
+        """
+        Return the range of velocities of the spectral axis that the PSF
+        is known at.
+
+        Parameters
+        ----------
+        rest : Quantity, optional
+            The rest of the spectral axis (see gridutils.Coords).
+
+        Returns
+        -------
+        tuple of float
+            The lowest and highest velocity (km/s); infinite unless it
+            varies.
+        """
+        return -np.inf, np.inf
+
     @abc.abstractmethod
     def _size_impl(self, step: tuple[float, float]) -> tuple[float, float]:
         """The size of the array that holds the PSF, before rounding."""
@@ -219,6 +293,8 @@ class PSFGauss(PSF):
         The position angle of the major axis.
     """
 
+    VARYING_OPTIONS = dict(sigma='arcsec', ratio='', posa='deg')
+
     @staticmethod
     def type() -> str:
         return 'gauss'
@@ -282,6 +358,8 @@ class PSFGGauss(PSF):
     posa : float, optional
         The position angle of the major axis.
     """
+
+    VARYING_OPTIONS = dict(alpha='arcsec', beta='', ratio='', posa='deg')
 
     @staticmethod
     def type() -> str:
@@ -357,6 +435,8 @@ class PSFMoffat(PSF):
     posa : float, optional
         The position angle of the major axis.
     """
+
+    VARYING_OPTIONS = dict(alpha='arcsec', beta='', ratio='', posa='deg')
 
     @staticmethod
     def type():
@@ -543,6 +623,19 @@ class PSFSum(PSF):
         self._weights = _detail.sum_weights(
             weights, len(self._psfs), "a sum of PSFs")
 
+    def varies(self) -> bool:
+        return any(psf.varies() for psf in self._psfs)
+
+    def at_velocities(self, velocities, rest=None):
+        if not self.varies():
+            return super().at_velocities(velocities, rest)
+        return [
+            PSFSum(psfs, self._weights) for psfs in
+            _detail.terms_at_velocities(self._psfs, velocities, rest)]
+
+    def velocity_range(self, rest=None):
+        return _detail.terms_velocity_range(self._psfs, rest)
+
     def _size_impl(self, step: tuple[float, float]) -> tuple[float, float]:
         sizes = np.array([psf._size_impl(step) for psf in self._psfs])
         return tuple(sizes.max(axis=0).tolist())
@@ -595,6 +688,19 @@ class PSFConvolution(PSF):
             raise ConfigError("a convolution of PSFs needs at least one PSF")
         self._psfs = tuple(psfs)
 
+    def varies(self) -> bool:
+        return any(psf.varies() for psf in self._psfs)
+
+    def at_velocities(self, velocities, rest=None):
+        if not self.varies():
+            return super().at_velocities(velocities, rest)
+        return [
+            PSFConvolution(psfs) for psfs in
+            _detail.terms_at_velocities(self._psfs, velocities, rest)]
+
+    def velocity_range(self, rest=None):
+        return _detail.terms_velocity_range(self._psfs, rest)
+
     def _size_impl(self, step: tuple[float, float]) -> tuple[float, float]:
         # The sum of the (odd) sizes of the terms, less one for each
         # convolution
@@ -632,6 +738,8 @@ class PSFGaussBeam(PSF):
         The position angle of the major axis.
     """
 
+    VARYING_OPTIONS = dict(bmaj='arcsec', bmin='arcsec', bpa='deg')
+
     @staticmethod
     def type() -> str:
         return 'gauss_beam'
@@ -653,7 +761,7 @@ class PSFGaussBeam(PSF):
                 bmaj=float(header['BMAJ']) * 3600,
                 bmin=float(header['BMIN']) * 3600,
                 bpa=float(header['BPA']))
-        return cls(**parseutils.parse_options_for_callable(info, cls.__init__))
+        return super().load(info)
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,
@@ -685,6 +793,49 @@ class PSFGaussBeam(PSF):
             rota: float
     ) -> np.ndarray:
         return self._gauss._asarray_impl(step, size, offset, rota)
+
+
+class PSFVarying(PSF):
+    """
+    A PSF of a type whose options vary along the spectral axis: a PSF of
+    the type at each channel (see at_velocities). It is not drawn itself.
+
+    Parameters
+    ----------
+    options : varying.Varying
+        The options of the PSF of the type.
+    """
+
+    def type(self) -> str:
+        return self._options.cls().type()
+
+    def dump(
+            self, prefix: str = '', dump_path: bool = True,
+            overwrite: bool = False
+    ) -> dict[str, Any]:
+        return self._options.dump()
+
+    def __init__(self, options: varying.Varying):
+        self._options = options
+
+    def varies(self) -> bool:
+        return True
+
+    def at_velocities(self, velocities, rest=None):
+        return self._options.at_velocities(velocities, rest)
+
+    def velocity_range(self, rest=None):
+        return self._options.velocity_range(rest)
+
+    def _size_impl(self, step):
+        raise RuntimeError(
+            "a PSF that varies along the spectral axis has a size at each "
+            "channel (see at_velocities)")
+
+    def _asarray_impl(self, step, size, offset, rota):
+        raise RuntimeError(
+            "a PSF that varies along the spectral axis is drawn at each "
+            "channel (see at_velocities)")
 
 
 psf_parser = parseutils.TypedParser(PSF, [
