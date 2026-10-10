@@ -104,6 +104,7 @@ class LeastSquaresFunctions:
         residuals = self._func(x)
         self._last_x = np.array(x, dtype=float)
         self._last_residuals = residuals
+        # (TODO: see the spinning BLAS threads in FitProblem.residuals)
         cost = float(residuals @ residuals)
         if cost < self._best_cost:
             self._best_cost = cost

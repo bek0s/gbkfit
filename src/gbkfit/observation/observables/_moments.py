@@ -201,6 +201,15 @@ class MomentsPlan:
         world coordinates are step and zero (see gridutils.Grid): for each
         order, its map (d), the mask (m) and its weights (w).
         """
+        # TODO: unexplained, not investigated. Where the model has almost
+        # no flux (moment 0 ~1e-4 of its peak), its moments are noise, and
+        # a step of 3e-4 in any parameter switches pixels between masked
+        # and not (probably moment 0 crossing mask_cutoff): the chi-square
+        # jumps by 1e3-2e4 and least squares rejects every step (M83 of
+        # LVHIS, tilted rings, a brightness falling to 0 at the edge of
+        # the data). A guess: the round-off of the float32 FFT convolution
+        # (moment 0 had pixels of -3.5e-8, though the brightness is >= 0).
+        # Workaround: a disk bright beyond the data.
         if self._method == 'gaussian_fit':
             self._backend.mmaps_gaussian(
                 step, zero, cube, self._mask_cutoff, self._mmaps_o,
