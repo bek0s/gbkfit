@@ -22,11 +22,22 @@ _C = astropy.constants.c.to_value('km/s')
 
 class Line(parseutils.Serializable):
     """
-    An emission line of a spectral component: its name, and its rest
-    wavelength or frequency (see gridutils.make_rest).
+    An emission line of a spectral component.
+
+    Parameters
+    ----------
+    name : str
+        Its name, which names its flux ratio (see Lines).
+    rest : str or Quantity
+        Its rest wavelength or frequency (see gridutils.make_rest).
+
+    Raises
+    ------
+    ConfigError
+        If the name or the rest is not valid.
     """
 
-    def dump(self):
+    def dump(self) -> dict[str, str]:
         return dict(name=self._name, rest=str(self._rest))
 
     def __init__(self, name: str, rest: str | astropy.units.Quantity):
@@ -35,9 +46,11 @@ class Line(parseutils.Serializable):
         self._rest = gridutils.make_rest(rest)
 
     def name(self) -> str:
+        """Return its name."""
         return self._name
 
     def rest(self) -> astropy.units.Quantity:
+        """Return its rest wavelength or frequency."""
         return self._rest
 
 
@@ -52,16 +65,26 @@ class Lines:
     refer to a rest (see gridutils.Coords), and the flux of each line
     after the first, relative to the first, is a parameter
     ('{name}_ratio').
+
+    Parameters
+    ----------
+    lines : Sequence of Line, optional
+        The lines; one line at the velocity of the spectral axis if None.
+
+    Raises
+    ------
+    ConfigError
+        If there are no lines, or their names repeat.
     """
 
     def __init__(self, lines: Sequence[Line] | None):
         if lines is not None:
             lines = tuple(lines)
             if not lines:
-                raise RuntimeError("lines needs at least one line")
+                raise ConfigError("lines needs at least one line")
             names = [line.name() for line in lines]
             if repeated := sorted({n for n in names if names.count(n) > 1}):
-                raise RuntimeError(
+                raise ConfigError(
                     f"the lines must have different names; repeated: "
                     f"{repeated}")
         self._lines = lines
@@ -73,19 +96,21 @@ class Lines:
             for line in lines[1:]}
 
     def lines(self) -> tuple[Line, ...] | None:
+        """Return the lines, if given."""
         return self._lines
 
     def names(self) -> tuple[str, ...]:
-        """The names of the lines (none without lines)."""
+        """Return the names of the lines (none without lines)."""
         return () if self._lines is None else tuple(
             line.name() for line in self._lines)
 
-    def pdescs(self):
+    def pdescs(self) -> dict[str, ParamScalarDesc]:
+        """Return the parameters of the lines: their flux ratios."""
         return self._ratios
 
-    def select(self, names) -> tuple[int, ...]:
+    def select(self, names: Sequence[str] | None) -> tuple[int, ...]:
         """
-        The indices of the lines of the given names (all if None). The
+        Return the indices of the lines of the given names (all if None). The
         one line of a component without lines is always selected. Raise
         ConfigError if none of the lines is selected.
         """
@@ -104,17 +129,18 @@ class Lines:
 
     def ratio_name(self, index: int) -> str | None:
         """
-        The name of the flux ratio of the line of the given index: none for
-        the first line, whose flux is that of the component.
+        Return the name of the flux ratio of the line of the given index:
+        none for the first line, whose flux is that of the component.
         """
         return None if index == 0 else f'{self.names()[index]}_ratio'
 
     def values(self, spectral: gridutils.Grid) -> np.ndarray:
         """
-        The offset, scale and flux of each line on a spectral axis (a grid
-        of one axis; an array of shape (nlines, 3); see DiskPlan.evaluate),
-        such that a line of velocity v is at offset + scale * v on the
-        axis, with a flux of 1 (the ratios are parameters).
+        Return the offset, scale and flux of each line on a spectral axis
+        (a grid of one axis; an array of shape (nlines, 3); see
+        DiskPlan.evaluate), such that a line of velocity v is at offset +
+        scale * v on the axis, with a flux of 1 (the ratios are
+        parameters).
 
         With optical velocities (a rest wavelength), a line of rest
         wavelength w at velocity v is at w (1 + v / c), which is at the
@@ -127,11 +153,12 @@ class Lines:
             return np.array([[0.0, 1.0, 1.0]])
         rest = spectral.coords.rest
         if rest is None:
-            raise RuntimeError(
+            raise ConfigError(
                 "the lines of a component need the rest wavelength or "
                 "frequency that the velocities of the spectral axis refer "
                 "to: RESTWAV or RESTFRQ in the header of the data, or the "
-                "rest (scube, lslit) or spec_rest option of the observable")
+                "rest option of the observable (spec_rest for moments and "
+                "spectra in regions)")
         optical = rest.unit == astropy.units.m
         values = []
         for line in self._lines:

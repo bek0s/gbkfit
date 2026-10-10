@@ -157,3 +157,10 @@ def test_radial_step_can_be_half_the_node_separation():
     args = parse_component_rnode_args(
         None, None, None, None, [0, 0.2, 0.4, 0.6, 0.8, 1.0], 0.1, 'linear')
     assert args['rstep'] == 0.1
+
+
+def test_discouraged_traits_are_warnings_with_the_path(caplog):
+    component = MODELS['intensity_2d'] | dict(bptraits=UNIFORM)
+    with parseutils.config_path('models'):
+        model_parser.load([dict(type='intensity_2d', components=component)])
+    assert "models[0].components [smdisk]: the use of" in caplog.text

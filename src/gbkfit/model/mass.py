@@ -1,5 +1,6 @@
 import abc
 from collections.abc import Sequence
+from typing import Any
 
 import astropy.constants
 import astropy.units
@@ -33,9 +34,19 @@ class MassComponent(parseutils.TypedSerializable, abc.ABC):
     A component of a mass model (e.g. the stars or the dark matter halo of
     a galaxy): its parameters, and the square of its circular velocity.
     Radii are in kpc, masses in Msun and velocities in km/s.
+
+    Parameters
+    ----------
+    name : str
+        Its name, which prefixes its parameters in the mass model.
+
+    Raises
+    ------
+    ConfigError
+        If the name is not valid (see parseutils.check_name).
     """
 
-    def dump(self):
+    def dump(self) -> dict[str, Any]:
         return dict(type=self.type(), name=self._name)
 
     def __init__(self, name: str):
@@ -43,17 +54,32 @@ class MassComponent(parseutils.TypedSerializable, abc.ABC):
         self._name = name
 
     def name(self) -> str:
+        """Return its name."""
         return self._name
 
     @abc.abstractmethod
     def pdescs(self) -> dict[str, ParamScalarDesc]:
+        """Return its parameters, by name."""
         pass
 
     @abc.abstractmethod
-    def vcirc2(self, radius: np.ndarray, params: dict) -> np.ndarray:
+    def vcirc2(
+            self, radius: np.ndarray, params: dict[str, float]
+    ) -> np.ndarray:
         """
-        The square of the circular velocity ((km/s)^2) at the given radii
-        (kpc), for the given parameters (by their names in pdescs).
+        Return the square of its circular velocity.
+
+        Parameters
+        ----------
+        radius : np.ndarray
+            The radii (kpc).
+        params : dict
+            The values of its parameters, by their names in pdescs.
+
+        Returns
+        -------
+        np.ndarray
+            The square of the circular velocity ((km/s)^2) at each radius.
         """
         pass
 
@@ -62,18 +88,25 @@ class MassExponentialDisk(MassComponent):
     """
     A razor-thin exponential disk (Freeman 1970) of total mass 10^logm
     (Msun) and scale length rd (kpc).
+
+    Parameters
+    ----------
+    name : str
+        Its name (see MassComponent).
     """
 
     @staticmethod
-    def type():
+    def type() -> str:
         return 'exponential_disk'
 
-    def pdescs(self):
+    def pdescs(self) -> dict[str, ParamScalarDesc]:
         return dict(
             logm=ParamScalarDesc('logm', desc="log10 of the mass (Msun)"),
             rd=ParamScalarDesc('rd', desc="the scale length (kpc)"))
 
-    def vcirc2(self, radius, params):
+    def vcirc2(
+            self, radius: np.ndarray, params: dict[str, float]
+    ) -> np.ndarray:
         # 2 G M / rd y^2 (I0 K0 - I1 K1), with y = r / (2 rd); the scaled
         # Bessel functions keep the products finite at large y, and the
         # limit at y = 0 is 0
@@ -91,19 +124,26 @@ class MassPseudoIsothermal(MassComponent):
     """
     A pseudo-isothermal sphere of central density 10^logrho0 (Msun/kpc^3)
     and core radius rc (kpc): rho(r) = rho0 / (1 + (r / rc)^2).
+
+    Parameters
+    ----------
+    name : str
+        Its name (see MassComponent).
     """
 
     @staticmethod
-    def type():
+    def type() -> str:
         return 'pseudo_isothermal'
 
-    def pdescs(self):
+    def pdescs(self) -> dict[str, ParamScalarDesc]:
         return dict(
             logrho0=ParamScalarDesc(
                 'logrho0', desc="log10 of the central density (Msun/kpc^3)"),
             rc=ParamScalarDesc('rc', desc="the core radius (kpc)"))
 
-    def vcirc2(self, radius, params):
+    def vcirc2(
+            self, radius: np.ndarray, params: dict[str, float]
+    ) -> np.ndarray:
         # 4 pi G rho0 rc^2 (1 - arctan(x) / x), with x = r / rc; near
         # x = 0, by its series, which does not cancel
         rho0 = 10 ** params['logrho0']
@@ -128,16 +168,26 @@ class MassModel(parseutils.Serializable):
     model (arcsec) in kpc, and those of each component, prefixed by
     'mass_' and its name (e.g. mass_halo_rc). The velocity traits 'mass'
     of the components of its model take its circular velocity.
+
+    Parameters
+    ----------
+    components : MassComponent or Sequence of MassComponent
+        Its mass components.
+
+    Raises
+    ------
+    ConfigError
+        If there are no components, or their names repeat.
     """
 
     @classmethod
-    def load(cls, info):
+    def load(cls, info: dict[str, Any]) -> 'MassModel':
         parseutils.load_option_and_update_info(
             mass_component_parser, info, 'components', required=True)
         return cls(**parseutils.parse_options_for_callable(
             info, cls.__init__))
 
-    def dump(self):
+    def dump(self) -> dict[str, Any]:
         return dict(components=mass_component_parser.dump(
             list(self._components)))
 
@@ -158,15 +208,30 @@ class MassModel(parseutils.Serializable):
             'distance', desc="the distance of the galaxy (Mpc)")) | params
 
     def components(self) -> tuple[MassComponent, ...]:
+        """Return its mass components."""
         return self._components
 
     def pdescs(self) -> dict[str, ParamScalarDesc]:
+        """Return its parameters, by name."""
         return self._pdescs
 
-    def vcirc(self, radius: np.ndarray, params: dict) -> np.ndarray:
+    def vcirc(
+            self, radius: np.ndarray, params: dict[str, float]
+    ) -> np.ndarray:
         """
-        The circular velocity (km/s) at the given radii (arcsec), for the
-        given parameters (by their names in pdescs).
+        Return the circular velocity of the mass model.
+
+        Parameters
+        ----------
+        radius : np.ndarray
+            The radii (arcsec).
+        params : dict
+            The values of its parameters, by their names in pdescs.
+
+        Returns
+        -------
+        np.ndarray
+            The circular velocity (km/s) at each radius.
         """
         radius_kpc = (
             np.asarray(radius, dtype=float)

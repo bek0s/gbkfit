@@ -1,14 +1,16 @@
 from collections.abc import Sequence
+from typing import Any
 
 import numpy as np
 import scipy.special
 
+from gbkfit.driver import DeviceArray, Driver
 from gbkfit.params.pdescs import ParamScalarDesc
-from gbkfit.utils import parseutils
+from gbkfit.utils import gridutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
 from ._detail import dump_geometry, dump_lines, dump_name
 from .base import (
-    BrightnessComponent2D, BrightnessComponent3D, ComponentPlan,
+    BrightnessComponent2D, BrightnessComponent3D, ComponentPlan, NativeGrid,
     SpectralComponent2D, SpectralComponent3D)
 from .geometries import Geometry
 from .lines import Line, Lines, line_parser
@@ -30,20 +32,55 @@ def _check_geometry(geometry: Geometry | None) -> None:
             f"{geometry.name()!r} is loose (a centre for each ring)")
 
 
-def point_pdescs(spectral):
+def point_pdescs(spectral: bool) -> dict[str, ParamScalarDesc]:
     """
-    The parameters of a point component: its position (xpos, ypos) and
-    flux, and for spectral ones its systemic velocity and dispersion.
+    Return the parameters of a point component: its position (xpos, ypos)
+    and flux, and for spectral ones its systemic velocity and dispersion.
     """
     names = ('xpos', 'ypos', 'flux') + (('vsys', 'disp') if spectral else ())
     return {name: ParamScalarDesc(name) for name in names}
 
 
-def _pixels(params, grid):
+def _spectral_pdescs(lines: Lines) -> dict[str, ParamScalarDesc]:
     """
-    The four pixels (x and y indices) around the position of a point on
-    the sky, and the share of its light of each (bilinear); those outside
-    the grid are left out.
+    Return the parameters of a spectral point with the given lines. Raise
+    ConfigError if the lines have the names of its other parameters.
+    """
+    pdescs = point_pdescs(spectral=True)
+    if repeated := sorted(set(lines.pdescs()) & set(pdescs)):
+        raise ConfigError(
+            f"the parameters of the lines have the names of other "
+            f"parameters: {repeated}; rename the lines")
+    return pdescs | lines.pdescs()
+
+
+def _spectral_plan(
+        driver: Driver,
+        spectral: gridutils.Grid,
+        dtype: np.dtype,
+        lines: Lines,
+        names: Sequence[str] | None
+) -> 'PointPlan':
+    """
+    Return the plan of a spectral point with the given lines, of those of
+    the given names (all if None).
+    """
+    selected = lines.select(names)
+    values = lines.values(spectral)[list(selected)]
+    ratios = [
+        (row, lines.ratio_name(index))
+        for row, index in enumerate(selected)
+        if lines.ratio_name(index) is not None]
+    return PointPlan(driver, dtype, values, ratios)
+
+
+def _pixels(
+        params: dict[str, float], grid: NativeGrid
+) -> list[tuple[int, int, float]]:
+    """
+    Return the four pixels (x and y indices) around the position of a
+    point on the sky, and the share of its light of each (bilinear);
+    those outside the grid are left out.
     """
     rota = np.radians(grid['spat_rota'])
     x, y = params['xpos'], params['ypos']
@@ -69,25 +106,29 @@ class PointPlan(ComponentPlan):
     The evaluation of a point component (e.g. an unresolved nucleus): its
     flux at its position on the sky, shared by the four pixels around it
     (bilinearly), as surface brightness (per unit area, as the disks), in
-    the image, or in the spectral cube as its emission lines (see Lines;
-    offset, scale and flux of each in lines), each a Gaussian of its
-    dispersion, of which each channel gets its mean over the channel (as
-    the disks do).
+    the image, or in the spectral cube as its emission lines (see Lines),
+    each a Gaussian of its dispersion, of which each channel gets its
+    mean over the channel (as the disks do). lines has the offset, scale
+    and flux of each line (spectral points), and ratios the row and the
+    name of the flux ratio of the lines after the first.
     """
 
-    def __init__(self, driver, dtype, lines=None, ratios=()):
-        """
-        lines has the offset, scale and flux of each line (spectral
-        points), and ratios the row and the name of the flux ratio of the
-        lines after the first.
-        """
+    def __init__(
+            self,
+            driver: Driver,
+            dtype: np.dtype,
+            lines: np.ndarray | None = None,
+            ratios: Sequence[tuple[int, str]] = ()
+    ):
         self._driver = driver
         self._dtype = np.dtype(dtype)
         self._lines = None if lines is None else np.array(lines, dtype=float)
         self._ratios = tuple(ratios)
 
-    def _spectrum(self, params, grid):
-        """The spectrum of the point, per unit flux."""
+    def _spectrum(
+            self, params: dict[str, float], grid: NativeGrid
+    ) -> np.ndarray:
+        """Return the spectrum of the point, per unit flux."""
         size, step, zero = (
             grid['spec_size'], grid['spec_step'], grid['spec_zero'])
         edges = zero + (np.arange(size + 1) - 0.5) * step
@@ -107,7 +148,13 @@ class PointPlan(ComponentPlan):
                     spectrum[channel] += flux / step
         return spectrum
 
-    def evaluate(self, params, grid, outputs, out_extra):
+    def evaluate(
+            self,
+            params: dict[str, float | np.ndarray],
+            grid: NativeGrid,
+            outputs: dict[str, DeviceArray | None],
+            out_extra: dict[str, Any] | None
+    ) -> None:
         driver = self._driver
         image = outputs.get('image')
         scube = outputs.get('scube')
@@ -132,13 +179,25 @@ class BrightnessPoint2D(BrightnessComponent2D):
     """
     An unresolved component (e.g. a nucleus): its flux at a point (see
     PointPlan). Its parameters: xpos, ypos and flux.
+
+    Parameters
+    ----------
+    geometry : Geometry, optional
+        A geometry whose centre it shares (not a loose one).
+    name : str, optional
+        Its name (see Component).
+
+    Raises
+    ------
+    ConfigError
+        If the geometry is loose.
     """
 
     @staticmethod
-    def type():
+    def type() -> str:
         return 'point'
 
-    def dump(self):
+    def dump(self) -> dict[str, Any]:
         return dict(type=self.type()) | dump_name(self) | dump_geometry(self)
 
     def __init__(
@@ -146,10 +205,16 @@ class BrightnessPoint2D(BrightnessComponent2D):
         _check_geometry(geometry)
         super().__init__(name, geometry)
 
-    def pdescs(self):
+    def pdescs(self) -> dict[str, ParamScalarDesc]:
         return point_pdescs(spectral=False)
 
-    def plan(self, driver, spectral, dtype, lines):
+    def plan(
+            self,
+            driver: Driver,
+            spectral: gridutils.Grid,
+            dtype: np.dtype,
+            lines: tuple[str, ...] | None
+    ) -> PointPlan:
         return PointPlan(driver, dtype)
 
 
@@ -158,13 +223,25 @@ class BrightnessPoint3D(BrightnessComponent3D):
     An unresolved component (e.g. a nucleus): its flux at a point (see
     PointPlan). Its parameters: xpos, ypos and flux.
     It is not absorbed by the opacity of the model.
+
+    Parameters
+    ----------
+    geometry : Geometry, optional
+        A geometry whose centre it shares (not a loose one).
+    name : str, optional
+        Its name (see Component).
+
+    Raises
+    ------
+    ConfigError
+        If the geometry is loose.
     """
 
     @staticmethod
-    def type():
+    def type() -> str:
         return 'point'
 
-    def dump(self):
+    def dump(self) -> dict[str, Any]:
         return dict(type=self.type()) | dump_name(self) | dump_geometry(self)
 
     def __init__(
@@ -172,10 +249,16 @@ class BrightnessPoint3D(BrightnessComponent3D):
         _check_geometry(geometry)
         super().__init__(name, geometry)
 
-    def pdescs(self):
+    def pdescs(self) -> dict[str, ParamScalarDesc]:
         return point_pdescs(spectral=False)
 
-    def plan(self, driver, spectral, dtype, lines):
+    def plan(
+            self,
+            driver: Driver,
+            spectral: gridutils.Grid,
+            dtype: np.dtype,
+            lines: tuple[str, ...] | None
+    ) -> PointPlan:
         return PointPlan(driver, dtype)
 
 
@@ -185,19 +268,34 @@ class SpectralPoint2D(SpectralComponent2D):
     a point, as its emission lines (see PointPlan). Its parameters:
     xpos, ypos, flux, vsys and disp (the dispersion of its lines), and
     the flux ratios of its lines (see Lines).
+
+    Parameters
+    ----------
+    lines : Sequence of Line, optional
+        Its emission lines (see Lines).
+    geometry : Geometry, optional
+        A geometry whose centre and systemic velocity it shares (not a
+        loose one).
+    name : str, optional
+        Its name (see Component).
+
+    Raises
+    ------
+    ConfigError
+        If the geometry is loose, or the lines are not valid.
     """
 
     @staticmethod
-    def type():
+    def type() -> str:
         return 'point'
 
     @classmethod
-    def load(cls, info):
+    def load(cls, info: dict[str, Any]) -> 'SpectralPoint2D':
         parseutils.load_option_and_update_info(line_parser, info, 'lines')
         return cls(**parseutils.parse_options_for_callable(
             info, cls.__init__))
 
-    def dump(self):
+    def dump(self) -> dict[str, Any]:
         return (
             dict(type=self.type())
             | dump_name(self)
@@ -213,27 +311,22 @@ class SpectralPoint2D(SpectralComponent2D):
         _check_geometry(geometry)
         super().__init__(name, geometry)
         self._lines = Lines(lines)
-        pdescs = point_pdescs(spectral=True)
-        if repeated := sorted(set(self._lines.pdescs()) & set(pdescs)):
-            raise RuntimeError(
-                f"the parameters of the lines have the names of other "
-                f"parameters: {repeated}; rename the lines")
-        self._pdescs = pdescs | self._lines.pdescs()
+        self._pdescs = _spectral_pdescs(self._lines)
 
-    def pdescs(self):
+    def pdescs(self) -> dict[str, ParamScalarDesc]:
         return self._pdescs
 
-    def line_names(self):
+    def line_names(self) -> tuple[str, ...]:
         return self._lines.names()
 
-    def plan(self, driver, spectral, dtype, lines):
-        selected = self._lines.select(lines)
-        values = self._lines.values(spectral)[list(selected)]
-        ratios = [
-            (row, self._lines.ratio_name(index))
-            for row, index in enumerate(selected)
-            if self._lines.ratio_name(index) is not None]
-        return PointPlan(driver, dtype, values, ratios)
+    def plan(
+            self,
+            driver: Driver,
+            spectral: gridutils.Grid,
+            dtype: np.dtype,
+            lines: tuple[str, ...] | None
+    ) -> PointPlan:
+        return _spectral_plan(driver, spectral, dtype, self._lines, lines)
 
 
 class SpectralPoint3D(SpectralComponent3D):
@@ -243,19 +336,34 @@ class SpectralPoint3D(SpectralComponent3D):
     xpos, ypos, flux, vsys and disp (the dispersion of its lines), and
     the flux ratios of its lines (see Lines).
     It is not absorbed by the opacity of the model.
+
+    Parameters
+    ----------
+    lines : Sequence of Line, optional
+        Its emission lines (see Lines).
+    geometry : Geometry, optional
+        A geometry whose centre and systemic velocity it shares (not a
+        loose one).
+    name : str, optional
+        Its name (see Component).
+
+    Raises
+    ------
+    ConfigError
+        If the geometry is loose, or the lines are not valid.
     """
 
     @staticmethod
-    def type():
+    def type() -> str:
         return 'point'
 
     @classmethod
-    def load(cls, info):
+    def load(cls, info: dict[str, Any]) -> 'SpectralPoint3D':
         parseutils.load_option_and_update_info(line_parser, info, 'lines')
         return cls(**parseutils.parse_options_for_callable(
             info, cls.__init__))
 
-    def dump(self):
+    def dump(self) -> dict[str, Any]:
         return (
             dict(type=self.type())
             | dump_name(self)
@@ -271,24 +379,19 @@ class SpectralPoint3D(SpectralComponent3D):
         _check_geometry(geometry)
         super().__init__(name, geometry)
         self._lines = Lines(lines)
-        pdescs = point_pdescs(spectral=True)
-        if repeated := sorted(set(self._lines.pdescs()) & set(pdescs)):
-            raise RuntimeError(
-                f"the parameters of the lines have the names of other "
-                f"parameters: {repeated}; rename the lines")
-        self._pdescs = pdescs | self._lines.pdescs()
+        self._pdescs = _spectral_pdescs(self._lines)
 
-    def pdescs(self):
+    def pdescs(self) -> dict[str, ParamScalarDesc]:
         return self._pdescs
 
-    def line_names(self):
+    def line_names(self) -> tuple[str, ...]:
         return self._lines.names()
 
-    def plan(self, driver, spectral, dtype, lines):
-        selected = self._lines.select(lines)
-        values = self._lines.values(spectral)[list(selected)]
-        ratios = [
-            (row, self._lines.ratio_name(index))
-            for row, index in enumerate(selected)
-            if self._lines.ratio_name(index) is not None]
-        return PointPlan(driver, dtype, values, ratios)
+    def plan(
+            self,
+            driver: Driver,
+            spectral: gridutils.Grid,
+            dtype: np.dtype,
+            lines: tuple[str, ...] | None
+    ) -> PointPlan:
+        return _spectral_plan(driver, spectral, dtype, self._lines, lines)
