@@ -4,7 +4,6 @@ import pytest
 from astropy.io import fits
 
 from gbkfit.dataset import *
-from gbkfit.dataset.datasets import *
 from gbkfit.utils.gridutils import Coords
 
 

@@ -13,7 +13,7 @@ import pytest
 from modelutils import observation_group
 
 from gbkfit.dataset import Data
-from gbkfit.dataset.datasets import DatasetRegionSpectra
+from gbkfit.dataset import DatasetRegionSpectra
 from gbkfit.region import RegionsApertures, RegionsBins
 from gbkfit.utils import fitsutils, gridutils
 

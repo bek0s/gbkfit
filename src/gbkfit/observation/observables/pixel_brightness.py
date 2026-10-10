@@ -1,6 +1,6 @@
 from collections.abc import Sequence
 
-from gbkfit.dataset.datasets import DatasetPixelBrightness
+from gbkfit.dataset import DatasetPixelBrightness
 from gbkfit.model.base import GModelImage
 from gbkfit.utils import gridutils
 from . import _dcube, _detail

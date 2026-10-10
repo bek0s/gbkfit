@@ -1,4 +1,4 @@
-from gbkfit.dataset.data import dump_data, load_data
+from .data import dump_data, load_data
 from gbkfit.utils import fitsutils, gridutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
 

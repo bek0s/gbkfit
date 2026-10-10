@@ -1,52 +1,56 @@
 from collections.abc import Sequence
 
-from gbkfit.dataset.base import Dataset
-from gbkfit.dataset.data import Data
+import astropy.units
+
+from .base import Dataset
+from .data import Data
 from gbkfit.utils import gridutils
 from . import _detail
 
 
 __all__ = [
-    'DatasetPixelBrightness'
+    'DatasetPixelSpectra'
 ]
 
 
-class DatasetPixelBrightness(Dataset):
+class DatasetPixelSpectra(Dataset):
 
-    # An image has no spectral axis
-    ndim = 2
-    spectral_axis = None
+    # The axes of a spectral cube: x, y and the spectral axis
+    ndim = 3
+    spectral_axis = 2
 
     @staticmethod
     def type():
-        return 'pixel_brightness'
+        return 'pixel_spectra'
 
     @classmethod
     def load(cls, info, prefix=''):
         # The options of its one data item are given flat
         return cls(**_detail.load_grid_dataset(
-            cls, _detail.nest_single_item(info, 'brightness'), ['brightness'],
+            cls, _detail.nest_single_item(info, 'spectra'), ['spectra'],
             prefix))
 
     def dump(self, prefix='', dump_path=True, overwrite=False):
         return _detail.flatten_single_item(
             _detail.dump_grid_dataset(self, prefix, dump_path, overwrite),
-            'brightness')
+            'spectra')
 
     def __init__(
             self,
-            brightness: Data,
+            spectra: Data,
             step: float | Sequence[float] | None = None,
             rpix: float | Sequence[float] | None = None,
             rval: float | Sequence[float] | None = None,
-            rota: float | None = None
+            rota: float | None = None,
+            rest: str | astropy.units.Quantity | None = None
     ):
         """
         The world coordinates of the grid of the data (see
-        gridutils.Coords) have defaults (see _detail.make_grid).
+        gridutils.Coords; rest is that of the spectral axis) have defaults
+        (see _detail.make_grid).
         """
-        super().__init__(dict(brightness=brightness))
-        self._grid = _detail.make_grid(self, step, rpix, rval, rota)
+        super().__init__(dict(spectra=spectra))
+        self._grid = _detail.make_grid(self, step, rpix, rval, rota, rest)
 
     def grid(self) -> gridutils.Grid:
         return self._grid

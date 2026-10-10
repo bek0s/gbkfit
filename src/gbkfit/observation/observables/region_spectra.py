@@ -2,7 +2,7 @@ from collections.abc import Sequence
 
 import astropy.units
 
-from gbkfit.dataset.datasets import DatasetRegionSpectra
+from gbkfit.dataset import DatasetRegionSpectra
 from gbkfit.model.base import GModelSCube
 from gbkfit.region import Regions, regions_parser
 from gbkfit.utils import gridutils, parseutils
