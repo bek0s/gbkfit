@@ -42,11 +42,12 @@ class Lens(parseutils.TypedSerializable, abc.ABC):
 
     @abc.abstractmethod
     def deflection(
-            self, x: np.ndarray, y: np.ndarray
+            self, grid: gridutils.Grid
     ) -> tuple[np.ndarray, np.ndarray]:
         """
         The deflection (arcsec, along x and y of the frame of the model) at
-        the given positions on the image plane.
+        the pixels of the x and y axes of a grid of the image plane: two
+        arrays of shape (ny, nx).
         """
         pass
 
@@ -64,7 +65,7 @@ class LensPlan:
 
     def __init__(self, lens, driver, grid, dtype):
         x, y = gridutils.sky_positions(grid)
-        deflection_x, deflection_y = lens.deflection(x, y)
+        deflection_x, deflection_y = lens.deflection(grid)
         matrix, offset = gridutils.sky_to_pixel(lens.source_grid())
         source_x = x - deflection_x
         source_y = y - deflection_y
@@ -110,9 +111,10 @@ class LensDeflectionMap(Lens):
     """
     A lens of a given deflection: maps of its x and y (arcsec, along x and
     y of the frame of the model, like xpos and ypos) on a grid of the image
-    plane (e.g. from a lens model). Between the pixels of the maps the
-    deflection is interpolated (bilinearly), and beyond them it is that of
-    their nearest edge (e.g. in the padding of the convolution).
+    plane (e.g. from a lens model), placed by their RA and Dec. Between the
+    pixels of the maps the deflection is interpolated (bilinearly), and
+    beyond them it is that of their nearest edge (e.g. in the padding of
+    the convolution).
     """
 
     @staticmethod
@@ -183,10 +185,9 @@ class LensDeflectionMap(Lens):
         self._grid = gridutils.make_grid(
             alpha_x.shape[::-1], step, rpix, rval, rota)
 
-    def deflection(self, x, y):
-        matrix, offset = gridutils.sky_to_pixel(self._grid)
-        pixel_x = matrix[0, 0] * x + matrix[0, 1] * y + offset[0]
-        pixel_y = matrix[1, 0] * x + matrix[1, 1] * y + offset[1]
+    def deflection(self, grid):
+        gridutils.check_overlap(grid, self._grid, "the deflection maps")
+        pixel_x, pixel_y = gridutils.pixels_on(grid, self._grid)
 
         def sample(data):
             return scipy.ndimage.map_coordinates(

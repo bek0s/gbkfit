@@ -84,17 +84,16 @@ def test_deflection_of_a_rotated_map():
     alpha_x = 1.0 * i
     alpha_y = 10.0 * j
     lens = LensDeflectionMap(alpha_x, alpha_y, (8, 8), (1, 1), rota=90)
-    grid = gridutils.make_grid((5, 4), rota=90)
-    x, y = gridutils.sky_positions(grid)
-    np.testing.assert_allclose(lens.deflection(x, y), [alpha_x, alpha_y])
-    middle_x = (x[1:2, 1] + x[2:3, 2]) / 2
-    middle_y = (y[1:2, 1] + y[2:3, 2]) / 2
+    # (a grid with the pixels of the maps, and more beyond them)
+    grid = gridutils.make_grid((20, 20), rpix=(2, 1.5), rota=90)
+    deflection_x, deflection_y = lens.deflection(grid)
+    np.testing.assert_allclose(deflection_x[:4, :5], alpha_x)
+    np.testing.assert_allclose(deflection_y[:4, :5], alpha_y)
     np.testing.assert_allclose(
-        lens.deflection(middle_x, middle_y), [[1.5], [15]])
-    beyond_x = x[3:4, 4] + 10 * (x[3:4, 4] - x[2:3, 3])
-    beyond_y = y[3:4, 4] + 10 * (y[3:4, 4] - y[2:3, 3])
-    np.testing.assert_allclose(
-        lens.deflection(beyond_x, beyond_y), [[4], [30]])
+        [deflection_x[13, 14], deflection_y[13, 14]], [4, 30])
+    # (a pixel between the pixels 1 and 2 of x, at the pixel 1 of y)
+    middle = gridutils.make_grid((1, 1), rpix=(0.5, 0.5), rota=90)
+    np.testing.assert_allclose(lens.deflection(middle), [[[1.5]], [[10]]])
 
 
 @pytest.mark.parametrize('dmodel', [
@@ -167,8 +166,10 @@ def test_deflection_maps_from_files(tmp_path):
         alpha_y=str(tmp_path / 'ay.fits'), source_size=[10, 10],
         source_step=[0.5, 0.5])))
     lens = foreground.lens()
-    deflection = lens.deflection(np.array([0.0, 3.0]), np.array([0.0, -2.0]))
-    np.testing.assert_allclose(deflection, [[1, 1], [2, 2]])
+    grid = gridutils.make_grid((3, 2), 0.5, rval=(150.0, 2.0))
+    deflection = lens.deflection(grid)
+    np.testing.assert_allclose(
+        deflection, [np.ones((2, 3)), np.full((2, 3), 2)])
     dumped = foreground_parser.dump(foreground, prefix=str(tmp_path / 'd_'))
     again = foreground_parser.load(copy.deepcopy(dumped))
     assert again.lens().source_grid() == lens.source_grid()

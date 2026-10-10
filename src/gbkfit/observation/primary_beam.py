@@ -100,8 +100,9 @@ class PrimaryBeamAiry(PrimaryBeamRadial):
 class PrimaryBeamImage(PrimaryBeam):
     """
     A response given as an image with its world coordinates (e.g. the
-    primary beam that an imaging package writes with the data), sampled
-    at the pixels (bilinearly), and 0 beyond the image.
+    primary beam that an imaging package writes with the data), placed by
+    its RA and Dec, sampled at the pixels (bilinearly), and 0 beyond the
+    image.
     """
 
     @staticmethod
@@ -153,10 +154,8 @@ class PrimaryBeamImage(PrimaryBeam):
         self._grid = gridutils.make_grid(data.shape[::-1], step, rpix, rval, rota)
 
     def response(self, grid):
-        x, y = gridutils.sky_positions(grid)
-        matrix, offset = gridutils.sky_to_pixel(self._grid)
-        pixel_x = matrix[0, 0] * x + matrix[0, 1] * y + offset[0]
-        pixel_y = matrix[1, 0] * x + matrix[1, 1] * y + offset[1]
+        gridutils.check_overlap(grid, self._grid, "the primary beam image")
+        pixel_x, pixel_y = gridutils.pixels_on(grid, self._grid)
         return scipy.ndimage.map_coordinates(
             self._data, [pixel_y, pixel_x], order=1, mode='constant', cval=0)
 

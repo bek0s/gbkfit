@@ -1,4 +1,16 @@
-import typing
+"""
+Grids of pixels with world coordinates, and data on them.
+
+The axes of a grid are in FITS order: x, y and, for spectral cubes, the
+velocity. The model measures the positions on the sky in arcsec from the
+reference pixel of its grid (see sky_positions); other grids (e.g. that of
+the image of a primary beam) are placed by their RA and Dec (see
+pixels_on).
+"""
+
+import numbers
+from collections.abc import Sequence
+from typing import Any, NamedTuple
 
 import astropy.units
 import numpy as np
@@ -11,31 +23,43 @@ __all__ = [
     'Grid',
     'GridData',
     'SpectraData',
+    'check_overlap',
     'make_grid',
     'make_rest',
+    'pixels_on',
     'sky_positions',
     'sky_to_pixel'
 ]
 
 
-class Coords(typing.NamedTuple):
+# Arcsec per radian
+_ARCSEC = np.degrees(1) * 3600
+
+
+class Coords(NamedTuple):
     """
     The world coordinates of the pixels of data, in the units of the
-    model, for each axis in FITS order (x, y and, for spectral cubes, the
-    velocity):
-
-    - step: arcsec per pixel (spatial axes), km/s per channel (velocity)
-    - rpix: the reference pixel (0-based)
-    - rval: the world position at rpix: RA and Dec (degrees), and the
-      velocity (km/s). The model measures the spatial axes from rpix.
-    - rota: the rotation of the pixel grid on the sky: the position angle
-      (degrees, north through east) of the +y axis.
-    - rest: the rest wavelength or frequency that the velocities of the
-      spectral axis refer to (an astropy Quantity in m or Hz; see
-      make_rest), or None. The velocities of a rest wavelength are optical
-      (VOPT), and those of a rest frequency radio (VRAD).
+    model, for each axis in FITS order.
 
     Axes without a known type have the values of their header.
+
+    Attributes
+    ----------
+    step : tuple of float
+        The size of the pixels: arcsec (x and y) and km/s (the velocity).
+    rpix : tuple of float
+        The reference pixel (0-based).
+    rval : tuple of float
+        The world position at rpix: RA and Dec (degrees) and the velocity
+        (km/s). The model measures the x and y axes from rpix.
+    rota : float
+        The rotation of the pixel grid on the sky: the position angle
+        (degrees, north through east) of the +y axis.
+    rest : Quantity or None
+        The rest wavelength or frequency that the velocities of the
+        spectral axis refer to (in m or Hz; see make_rest). The velocities
+        of a rest wavelength are optical (VOPT), and those of a rest
+        frequency radio (VRAD).
     """
     step: tuple[float, ...]
     rpix: tuple[float, ...]
@@ -44,7 +68,19 @@ class Coords(typing.NamedTuple):
     rest: astropy.units.Quantity | None = None
 
     def axes(self, *indices: int) -> 'Coords':
-        """The coordinates of the given axes."""
+        """
+        Return the world coordinates of some of the axes.
+
+        Parameters
+        ----------
+        *indices : int
+            The indices of the axes.
+
+        Returns
+        -------
+        Coords
+            The world coordinates of the axes, with the same rota and rest.
+        """
         def pick(values):
             return tuple(values[i] for i in indices)
         return Coords(
@@ -52,10 +88,18 @@ class Coords(typing.NamedTuple):
             self.rest)
 
 
-class Grid(typing.NamedTuple):
+class Grid(NamedTuple):
     """
-    A grid of pixels: its size and world coordinates (see Coords) for each
-    axis in FITS order, and the index of its spectral axis (or None).
+    A grid of pixels with world coordinates.
+
+    Attributes
+    ----------
+    size : tuple of int
+        The number of pixels of each axis, in FITS order.
+    coords : Coords
+        The world coordinates.
+    spectral_axis : int or None
+        The index of the spectral axis, if any.
     """
     size: tuple[int, ...]
     coords: Coords
@@ -63,9 +107,14 @@ class Grid(typing.NamedTuple):
 
     def zero(self) -> tuple[float, ...]:
         """
-        The world position of the first pixel on each axis, in model units:
-        the spatial axes are measured from the reference pixel, and the
-        spectral axis from its world value there.
+        Return the world position of the first pixel of each axis.
+
+        Returns
+        -------
+        tuple of float
+            The positions, in model units: the x and y axes are measured
+            from the reference pixel, and the spectral axis from its world
+            value there.
         """
         step, rpix, rval = self.coords.step, self.coords.rpix, self.coords.rval
         return tuple(
@@ -74,33 +123,77 @@ class Grid(typing.NamedTuple):
             for axis in range(len(self.size)))
 
     def spatial(self) -> 'Grid':
-        """The grid of the x and y axes."""
+        """
+        Return the grid of the x and y axes.
+
+        Returns
+        -------
+        Grid
+            The grid, without a spectral axis.
+        """
         return Grid(
             self.size[:2], self.coords.axes(0, 1)._replace(rest=None), None)
 
     def spectral(self) -> 'Grid':
-        """The grid of the spectral axis (one axis, not rotated)."""
+        """
+        Return the grid of the spectral axis.
+
+        Returns
+        -------
+        Grid
+            The grid of one axis, not rotated.
+        """
         axis = self.spectral_axis
         return Grid(
             (self.size[axis],), self.coords.axes(axis)._replace(rota=0), 0)
 
 
 def make_grid(
-        size: typing.Sequence[int],
-        step: float | typing.Sequence[float] | None = None,
-        rpix: float | typing.Sequence[float] | None = None,
-        rval: float | typing.Sequence[float] | None = None,
+        size: Sequence[int],
+        step: float | Sequence[float] | None = None,
+        rpix: float | Sequence[float] | None = None,
+        rval: float | Sequence[float] | None = None,
         rota: float | None = None,
         spectral_axis: int | None = None,
-        rest: typing.Any = None
+        rest: Any = None
 ) -> Grid:
     """
-    A grid of the given size (FITS order) with the given world
-    coordinates (see Coords), each a value or one per axis, or their
-    defaults: step 1, the reference pixel at the centre, reference value 0
-    and no rotation. rest (see make_rest) needs a spectral axis.
+    Make a grid.
+
+    Parameters
+    ----------
+    size : Sequence of int
+        The number of pixels of each axis, in FITS order.
+    step, rpix, rval : float or Sequence of float, optional
+        The world coordinates (see Coords): a value for all axes, or one
+        for each. By default, step 1, the reference pixel at the centre and
+        reference value 0.
+    rota : float, optional
+        The rotation of the grid on the sky (see Coords); by default 0.
+    spectral_axis : int, optional
+        The index of the spectral axis, if any.
+    rest : str or Quantity, optional
+        The rest of the spectral axis (see make_rest).
+
+    Returns
+    -------
+    Grid
+        The grid.
+
+    Raises
+    ------
+    ConfigError
+        If the sizes are not positive integers, the world coordinates do
+        not have a value for each axis, a step is not positive, or the
+        spectral axis is not an axis of the grid, or if a grid without a
+        spectral axis has a rest.
     """
     ndim = len(size)
+    if not all(isinstance(n, numbers.Integral) and not isinstance(n, bool)
+               and n > 0 for n in size):
+        raise ConfigError(
+            f"the sizes of a grid must be positive integers; they are "
+            f"{tuple(size)}")
     if step is None:
         step = 1
     if rpix is None:
@@ -114,23 +207,40 @@ def make_grid(
         for value in (step, rpix, rval))
     for name, value in dict(step=step, rpix=rpix, rval=rval).items():
         if len(value) != ndim:
-            raise RuntimeError(
+            raise ConfigError(
                 f"the grid has {ndim} axes, but {name} has {len(value)} "
                 f"values")
     if not all(value > 0 for value in step):
-        raise RuntimeError(f"step must be positive; it is {step}")
+        raise ConfigError(f"step must be positive; it is {step}")
+    if spectral_axis is not None and spectral_axis not in range(ndim):
+        raise ConfigError(
+            f"the grid has {ndim} axes; its spectral axis cannot be "
+            f"{spectral_axis}")
     if rest is not None and spectral_axis is None:
-        raise RuntimeError("a grid without a spectral axis has no rest")
+        raise ConfigError("a grid without a spectral axis has no rest")
     return Grid(
         tuple(size), Coords(step, rpix, rval, rota, make_rest(rest)),
         spectral_axis)
 
 
-def make_rest(value: typing.Any) -> astropy.units.Quantity | None:
+def make_rest(value: Any) -> astropy.units.Quantity | None:
     """
-    The rest wavelength or frequency of a spectral axis (see Coords), in m
-    or Hz, from a Quantity or a string with units (e.g. '6562.8 Angstrom',
-    '1420.405752 MHz'), or None.
+    Make the rest wavelength or frequency of a spectral axis.
+
+    Parameters
+    ----------
+    value : str or Quantity or None
+        The rest, with units (e.g. '6562.8 Angstrom', '1420.405752 MHz').
+
+    Returns
+    -------
+    Quantity or None
+        The rest, in m or Hz, or None for None.
+
+    Raises
+    ------
+    ConfigError
+        If the value is not a positive wavelength or frequency.
     """
     if value is None:
         return None
@@ -149,10 +259,21 @@ def make_rest(value: typing.Any) -> astropy.units.Quantity | None:
 
 def sky_positions(grid: Grid) -> tuple[np.ndarray, np.ndarray]:
     """
-    The positions on the sky of the centres of the pixels of the x and y
-    axes of a grid, in the frame of the model (arcsec from the reference
-    pixel, x and y like xpos and ypos): two arrays of shape (ny, nx). The
-    pixel grid is rotated on the sky by rota (see Coords).
+    Return the positions on the sky of the pixels of a grid.
+
+    The positions are in the frame of the model: arcsec from the reference
+    pixel, with x and y like xpos and ypos (+y to the north, +x to the
+    west), so the pixel grid is rotated in it by rota (see Coords).
+
+    Parameters
+    ----------
+    grid : Grid
+        The grid; only its x and y axes are used.
+
+    Returns
+    -------
+    tuple of ndarray
+        The x and y of the centres of the pixels, each of shape (ny, nx).
     """
     size_x, size_y = grid.size[:2]
     zero_x, zero_y = grid.zero()[:2]
@@ -167,9 +288,20 @@ def sky_positions(grid: Grid) -> tuple[np.ndarray, np.ndarray]:
 
 def sky_to_pixel(grid: Grid) -> tuple[np.ndarray, np.ndarray]:
     """
-    The affine map from the sky (the frame of the model, see
-    sky_positions) to the pixel coordinates of the x and y axes of a grid:
-    pixel = matrix @ sky + offset (the inverse of sky_positions).
+    Return the map from the sky to the pixels of a grid.
+
+    The map is the inverse of sky_positions: pixel = matrix @ sky + offset,
+    with the sky in the frame of the model.
+
+    Parameters
+    ----------
+    grid : Grid
+        The grid; only its x and y axes are used.
+
+    Returns
+    -------
+    tuple of ndarray
+        The matrix (2, 2) and the offset (2,).
     """
     rota = np.radians(grid.coords.rota)
     rotation = np.array([
@@ -179,23 +311,126 @@ def sky_to_pixel(grid: Grid) -> tuple[np.ndarray, np.ndarray]:
     return matrix, np.asarray(grid.coords.rpix[:2], float)
 
 
-class GridData(typing.NamedTuple):
+def _to_sky(x, y, rval):
     """
-    Data on a grid with world coordinates (see Coords and
-    fitsutils.write_data).
-    spectral_axis is the index of its spectral axis (FITS order), or None.
+    Return the RA and Dec (radians) of positions in the frame of a grid
+    (arcsec; see sky_positions) with the reference RA and Dec rval
+    (degrees), as a gnomonic (TAN) projection.
+    """
+    ra0, dec0 = np.radians(rval[:2])
+    east, north = -np.asarray(x) / _ARCSEC, np.asarray(y) / _ARCSEC
+    denominator = np.cos(dec0) - north * np.sin(dec0)
+    ra = ra0 + np.arctan2(east, denominator)
+    dec = np.arctan2(
+        np.sin(dec0) + north * np.cos(dec0), np.hypot(east, denominator))
+    return ra, dec
+
+
+def _from_sky(ra, dec, rval):
+    """The inverse of _to_sky."""
+    ra0, dec0 = np.radians(rval[:2])
+    cos_distance = (
+        np.sin(dec0) * np.sin(dec)
+        + np.cos(dec0) * np.cos(dec) * np.cos(ra - ra0))
+    east = np.cos(dec) * np.sin(ra - ra0) / cos_distance
+    north = (
+        np.cos(dec0) * np.sin(dec)
+        - np.sin(dec0) * np.cos(dec) * np.cos(ra - ra0)) / cos_distance
+    return -east * _ARCSEC, north * _ARCSEC
+
+
+def pixels_on(grid: Grid, other: Grid) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Return the pixel coordinates, on another grid, of the pixels of a grid,
+    by their RA and Dec.
+
+    The positions on the sky of both grids are gnomonic (TAN) projections
+    around their reference pixels.
+
+    Parameters
+    ----------
+    grid : Grid
+        The grid whose pixels are placed; only its x and y axes are used.
+    other : Grid
+        The grid of the pixel coordinates (e.g. that of an image to sample
+        at the pixels of grid); only its x and y axes are used.
+
+    Returns
+    -------
+    tuple of ndarray
+        The x and y pixel coordinates (0-based) on other of the centres of
+        the pixels of grid, each of shape (ny, nx) of grid.
+    """
+    ra, dec = _to_sky(*sky_positions(grid), grid.coords.rval)
+    x, y = _from_sky(ra, dec, other.coords.rval)
+    matrix, rpix = sky_to_pixel(other)
+    return (matrix[0, 0] * x + matrix[0, 1] * y + rpix[0],
+            matrix[1, 0] * x + matrix[1, 1] * y + rpix[1])
+
+
+def check_overlap(grid: Grid, other: Grid, desc: str) -> None:
+    """
+    Check that another grid covers some of the pixels of a grid on the sky.
+
+    Parameters
+    ----------
+    grid : Grid
+        The grid whose pixels must be covered.
+    other : Grid
+        The grid that must cover them.
+    desc : str
+        What other is, for messages (e.g. 'the primary beam image').
+
+    Raises
+    ------
+    RuntimeError
+        If other covers none of the pixels of grid (e.g. because one of
+        them has the wrong RA and Dec).
+    """
+    pixel_x, pixel_y = pixels_on(grid, other)
+    size_x, size_y = other.size[:2]
+    if not np.any(
+            (pixel_x >= -0.5) & (pixel_x <= size_x - 0.5)
+            & (pixel_y >= -0.5) & (pixel_y <= size_y - 0.5)):
+        x, y = _from_sky(
+            *np.radians(other.coords.rval[:2]), grid.coords.rval)
+        raise RuntimeError(
+            f"{desc} does not cover any of the pixels it is used on: by "
+            f"their RA and Dec, its reference pixel is at x = {x:.6g}, "
+            f"y = {y:.6g} arcsec from theirs; check the world coordinates "
+            f"of both, or give its rval")
+
+
+class GridData(NamedTuple):
+    """
+    Data on a grid with world coordinates (see fitsutils.write_data).
+
+    Attributes
+    ----------
+    data : ndarray
+        The data.
+    coords : Coords
+        The world coordinates of its axes, in FITS order.
+    spectral_axis : int or None
+        The index of its spectral axis (FITS order), if any.
     """
     data: np.ndarray
     coords: Coords
     spectral_axis: int | None
 
 
-class SpectraData(typing.NamedTuple):
+class SpectraData(NamedTuple):
     """
-    Spectra of regions of the sky (data of shape (nchannels, nregions);
-    FITS: the regions along x, the velocity along y), with the world
-    coordinates of their spectral axis (a Coords of one axis; see
-    fitsutils.write_spectra).
+    Spectra of regions of the sky, with the world coordinates of their
+    spectral axis (see fitsutils.write_spectra).
+
+    Attributes
+    ----------
+    data : ndarray
+        The spectra, of shape (nchannels, nregions): in FITS, the regions
+        along x and the velocity along y.
+    coords : Coords
+        The world coordinates of the spectral axis (one axis).
     """
     data: np.ndarray
     coords: Coords
