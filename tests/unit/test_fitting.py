@@ -211,3 +211,13 @@ def test_nautilus_posterior_agrees_with_the_covariance():
     result = FitterNautilus(n_live=300, n_eff=2000).fit(objective, params)
     check_posterior(result)
     assert math.isfinite(result.evidence.log_z)
+
+
+def test_dynesty_posterior_agrees_with_the_covariance():
+    pytest.importorskip('dynesty')
+    from gbkfit.fitting.fitters.dynesty import FitterDynesty
+    objective = mock_objective(DriverHost())
+    params = ParamSpace(objective.pdescs(), prior_properties(10))
+    result = FitterDynesty(nlive=300).fit(objective, params)
+    check_posterior(result)
+    assert result.evidence.log_z_error > 0
