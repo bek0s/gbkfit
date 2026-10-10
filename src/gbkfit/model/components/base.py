@@ -2,6 +2,7 @@
 import abc
 
 from gbkfit.utils import parseutils
+from .geometries import Geometry
 
 
 __all__ = [
@@ -20,15 +21,21 @@ class Component(parseutils.TypedSerializable, abc.ABC):
     A component of a model. The kinds of components below differ only in
     the models that accept them, and in the outputs they get. A component
     can have a name, which then prefixes its parameters in its model
-    instead of its position (see parseutils.item_prefixes).
+    instead of its position (see parseutils.item_prefixes), and a
+    geometry that it shares with other components (see Geometry).
     """
 
-    def __init__(self, name: str | None):
+    def __init__(self, name: str | None, geometry: Geometry | None = None):
         parseutils.check_name(name)
         self._name = name
+        self._geometry = geometry
 
     def name(self) -> str | None:
         return self._name
+
+    def geometry(self) -> Geometry | None:
+        """Return the geometry it shares, if any."""
+        return self._geometry
 
     @abc.abstractmethod
     def pdescs(self):

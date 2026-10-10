@@ -1,10 +1,11 @@
 from collections.abc import Sequence
 
 from gbkfit.utils import parseutils
-from .._detail import dump_lines, dump_name
+from .._detail import dump_geometry, dump_lines, dump_name
 from ..base import (
     BrightnessComponent2D, BrightnessComponent3D, OpacityComponent3D,
     SpectralComponent2D, SpectralComponent3D)
+from ..geometries import Geometry
 from ..lines import Line, line_parser
 from . import _detail, _disk, traits
 from ._detail import (
@@ -48,15 +49,16 @@ class BrightnessSMDisk2D(BrightnessComponent2D):
         return (
             dict(type=self.type())
             | dump_name(self)
-            | _detail.dump_disk(self._disk, self._slots))
+            | dump_geometry(self)
+            | _detail.dump_disk(self._disk, self._slots, self.geometry()))
 
     def __init__(
             self,
-            loose: bool,
-            tilted: bool,
             bptraits: traits.BPTrait | Sequence[traits.BPTrait],
             sptraits: traits.SPTrait | Sequence[traits.SPTrait] | None = None,
             wptraits: traits.WPTrait | Sequence[traits.WPTrait] | None = None,
+            loose: bool | None = None,
+            tilted: bool | None = None,
             rnmin: float | None = None,
             rnmax: float | None = None,
             rnsep: float | None = None,
@@ -64,13 +66,14 @@ class BrightnessSMDisk2D(BrightnessComponent2D):
             rnodes: Sequence[float] | None = None,
             rstep: float | None = None,
             interp: str = 'linear',
+            geometry: Geometry | None = None,
             name: str | None = None
     ):
-        super().__init__(name)
+        super().__init__(name, geometry)
         self._disk = _detail.make_disk(
             type(self), SMDisk, self._slots,
             rdata_key='bdata',
-            loose=loose, tilted=tilted,
+            geometry=geometry, loose=loose, tilted=tilted,
             rnmin=rnmin, rnmax=rnmax, rnsep=rnsep, rnlen=rnlen,
             rnodes=rnodes, rstep=rstep, interp=interp,
             traits_=dict(
@@ -115,17 +118,18 @@ class BrightnessSMDisk3D(BrightnessComponent3D):
         return (
             dict(type=self.type())
             | dump_name(self)
-            | _detail.dump_disk(self._disk, self._slots))
+            | dump_geometry(self)
+            | _detail.dump_disk(self._disk, self._slots, self.geometry()))
 
     def __init__(
             self,
-            loose: bool,
-            tilted: bool,
             bptraits: traits.BPTrait | Sequence[traits.BPTrait],
             bhtraits: traits.BHTrait | Sequence[traits.BHTrait],
             zptraits: traits.ZPTrait | Sequence[traits.ZPTrait] | None = None,
             sptraits: traits.SPTrait | Sequence[traits.SPTrait] | None = None,
             wptraits: traits.WPTrait | Sequence[traits.WPTrait] | None = None,
+            loose: bool | None = None,
+            tilted: bool | None = None,
             rnmin: float | None = None,
             rnmax: float | None = None,
             rnsep: float | None = None,
@@ -133,13 +137,14 @@ class BrightnessSMDisk3D(BrightnessComponent3D):
             rnodes: Sequence[float] | None = None,
             rstep: float | None = None,
             interp: str = 'linear',
+            geometry: Geometry | None = None,
             name: str | None = None
     ):
-        super().__init__(name)
+        super().__init__(name, geometry)
         self._disk = _detail.make_disk(
             type(self), SMDisk, self._slots,
             rdata_key='bdata',
-            loose=loose, tilted=tilted,
+            geometry=geometry, loose=loose, tilted=tilted,
             rnmin=rnmin, rnmax=rnmax, rnsep=rnsep, rnlen=rnlen,
             rnodes=rnodes, rstep=rstep, interp=interp,
             traits_=dict(
@@ -189,18 +194,19 @@ class SpectralSMDisk2D(SpectralComponent2D):
         return (
             dict(type=self.type())
             | dump_name(self)
-            | _detail.dump_disk(self._disk, self._slots)
+            | dump_geometry(self)
+            | _detail.dump_disk(self._disk, self._slots, self.geometry())
             | dump_lines(self._lines))
 
     def __init__(
             self,
-            loose: bool,
-            tilted: bool,
             bptraits: traits.BPTrait | Sequence[traits.BPTrait],
             vptraits: traits.VPTrait | Sequence[traits.VPTrait],
             dptraits: traits.DPTrait | Sequence[traits.DPTrait],
             sptraits: traits.SPTrait | Sequence[traits.SPTrait] | None = None,
             wptraits: traits.WPTrait | Sequence[traits.WPTrait] | None = None,
+            loose: bool | None = None,
+            tilted: bool | None = None,
             rnmin: float | None = None,
             rnmax: float | None = None,
             rnsep: float | None = None,
@@ -209,17 +215,18 @@ class SpectralSMDisk2D(SpectralComponent2D):
             rstep: float | None = None,
             interp: str = 'linear',
             lines: Sequence[Line] | None = None,
+            geometry: Geometry | None = None,
             name: str | None = None
     ):
         """
         lines are the emission lines of the component (see Lines; by
         default one line at the velocity of the spectral axis).
         """
-        super().__init__(name)
+        super().__init__(name, geometry)
         self._disk = _detail.make_disk(
             type(self), SMDisk, self._slots,
             rdata_key='bdata',
-            loose=loose, tilted=tilted,
+            geometry=geometry, loose=loose, tilted=tilted,
             rnmin=rnmin, rnmax=rnmax, rnsep=rnsep, rnlen=rnlen,
             rnodes=rnodes, rstep=rstep, interp=interp,
             traits_=dict(
@@ -276,13 +283,12 @@ class SpectralSMDisk3D(SpectralComponent3D):
         return (
             dict(type=self.type())
             | dump_name(self)
-            | _detail.dump_disk(self._disk, self._slots)
+            | dump_geometry(self)
+            | _detail.dump_disk(self._disk, self._slots, self.geometry())
             | dump_lines(self._lines))
 
     def __init__(
             self,
-            loose: bool,
-            tilted: bool,
             bptraits: traits.BPTrait | Sequence[traits.BPTrait],
             vptraits: traits.VPTrait | Sequence[traits.VPTrait],
             dptraits: traits.DPTrait | Sequence[traits.DPTrait],
@@ -292,6 +298,8 @@ class SpectralSMDisk3D(SpectralComponent3D):
             zptraits: traits.ZPTrait | Sequence[traits.ZPTrait] | None = None,
             sptraits: traits.SPTrait | Sequence[traits.SPTrait] | None = None,
             wptraits: traits.WPTrait | Sequence[traits.WPTrait] | None = None,
+            loose: bool | None = None,
+            tilted: bool | None = None,
             rnmin: float | None = None,
             rnmax: float | None = None,
             rnsep: float | None = None,
@@ -300,17 +308,18 @@ class SpectralSMDisk3D(SpectralComponent3D):
             rstep: float | None = None,
             interp: str = 'linear',
             lines: Sequence[Line] | None = None,
+            geometry: Geometry | None = None,
             name: str | None = None
     ):
         """
         lines are the emission lines of the component (see Lines; by
         default one line at the velocity of the spectral axis).
         """
-        super().__init__(name)
+        super().__init__(name, geometry)
         self._disk = _detail.make_disk(
             type(self), SMDisk, self._slots,
             rdata_key='bdata',
-            loose=loose, tilted=tilted,
+            geometry=geometry, loose=loose, tilted=tilted,
             rnmin=rnmin, rnmax=rnmax, rnsep=rnsep, rnlen=rnlen,
             rnodes=rnodes, rstep=rstep, interp=interp,
             traits_=dict(
@@ -368,17 +377,18 @@ class OpacitySMDisk3D(OpacityComponent3D):
         return (
             dict(type=self.type())
             | dump_name(self)
-            | _detail.dump_disk(self._disk, self._slots))
+            | dump_geometry(self)
+            | _detail.dump_disk(self._disk, self._slots, self.geometry()))
 
     def __init__(
             self,
-            loose: bool,
-            tilted: bool,
             optraits: traits.OPTrait | Sequence[traits.OPTrait],
             ohtraits: traits.OHTrait | Sequence[traits.OHTrait],
             zptraits: traits.ZPTrait | Sequence[traits.ZPTrait] | None = None,
             sptraits: traits.SPTrait | Sequence[traits.SPTrait] | None = None,
             wptraits: traits.WPTrait | Sequence[traits.WPTrait] | None = None,
+            loose: bool | None = None,
+            tilted: bool | None = None,
             rnmin: float | None = None,
             rnmax: float | None = None,
             rnsep: float | None = None,
@@ -386,13 +396,14 @@ class OpacitySMDisk3D(OpacityComponent3D):
             rnodes: Sequence[float] | None = None,
             rstep: float | None = None,
             interp: str = 'linear',
+            geometry: Geometry | None = None,
             name: str | None = None
     ):
-        super().__init__(name)
+        super().__init__(name, geometry)
         self._disk = _detail.make_disk(
             type(self), SMDisk, self._slots,
             rdata_key='odata',
-            loose=loose, tilted=tilted,
+            geometry=geometry, loose=loose, tilted=tilted,
             rnmin=rnmin, rnmax=rnmax, rnsep=rnsep, rnlen=rnlen,
             rnodes=rnodes, rstep=rstep, interp=interp,
             traits_=dict(

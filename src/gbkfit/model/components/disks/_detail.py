@@ -2,11 +2,14 @@
 import dataclasses
 import inspect
 import logging
+from typing import Any
 
 import numpy as np
 
 from gbkfit.math import interpolation
-from gbkfit.utils import iterutils, numutils, parseutils
+from gbkfit.utils import iterutils, parseutils
+from gbkfit.utils.parseutils import ConfigError
+from .._detail import parse_nodes
 from ..base import ComponentPlan
 from ..lines import Lines
 from . import _disk, traits
@@ -123,23 +126,39 @@ def load_options(cls, info, slots):
 
 
 def make_disk(
-        cls, disk_class, slots, rdata_key,
+        cls, disk_class, slots, rdata_key, geometry,
         loose, tilted, rnmin, rnmax, rnsep, rnlen, rnodes, rstep, interp,
         traits_, **disk_options):
     """
     The disk of a component of class cls, of class disk_class, with the
     traits of the given slots, and its density map named rdata_key in the
-    extra outputs (e.g. 'bdata'). traits_ has the traits, keyed by option
-    (e.g. 'bptraits'). disk_options are the options of the type of disk
-    (e.g. cflux and seed of MCDisk).
+    extra outputs (e.g. 'bdata'). With a geometry, its warps and, if it
+    is warped, its rings are those of the geometry, which the component
+    must not give. traits_ has the traits, keyed by option (e.g.
+    'bptraits'). disk_options are the options of the type of disk (e.g.
+    cflux and seed of MCDisk).
     """
-    node_args = parse_component_rnode_args(
-        rnmin, rnmax, rnsep, rnlen, rnodes, rstep, interp)
+    rings = dict(rnmin=rnmin, rnmax=rnmax, rnsep=rnsep, rnlen=rnlen,
+                 rnodes=rnodes)
+    if geometry is not None:
+        if given := [k for k, v in dict(
+                loose=loose, tilted=tilted).items() if v is not None]:
+            raise ConfigError(
+                f"the warps of a component are those of its geometry "
+                f"{geometry.name()!r}; remove {given}")
+        loose, tilted = geometry.loose(), geometry.tilted()
+        if geometry.rnodes() is not None:
+            if given := [k for k, v in rings.items() if v is not None]:
+                raise ConfigError(
+                    f"the rings of a component are those of its warped "
+                    f"geometry {geometry.name()!r}; remove {given}")
+            rings = dict(rings, rnodes=geometry.rnodes())
+    node_args = parse_component_rnode_args(**rings, rstep=rstep, interp=interp)
     traits_ = _parse_traits(cls, slots, traits_)
     check_traits_common(sum(traits_.values(), ()))
     return disk_class(
         **disk_options,
-        loose=loose, tilted=tilted, **node_args,
+        loose=bool(loose), tilted=bool(tilted), **node_args,
         traits_={slot.kind: traits_[slot.key] for slot in slots},
         prefixes={slot.kind: slot.prefix for slot in slots},
         rdata_key=rdata_key)
@@ -158,19 +177,20 @@ def make_lines(disk, lines_):
     return result
 
 
-def dump_disk(disk, slots):
+def dump_disk(disk, slots, geometry):
     """
     The options of a component made of the given disk, with the traits
-    of the given slots.
+    of the given slots, without those its geometry (if any) gives.
     """
     traits_ = {
         slot.key: slot.parser.dump(disk.traits(slot.kind))
         for slot in slots}
-    return dict(
-        **disk.options(),
-        loose=disk.loose(),
-        tilted=disk.tilted(),
-        rnodes=list(disk.rnodes()),
+    info = dict(**disk.options())
+    if geometry is None:
+        info.update(loose=disk.loose(), tilted=disk.tilted())
+    if geometry is None or geometry.rnodes() is None:
+        info.update(rnodes=list(disk.rnodes()))
+    return info | dict(
         rstep=disk.rstep(),
         interp=disk.interp().type(),
         **traits_)
@@ -211,76 +231,39 @@ def _parse_traits(cls, slots, values):
     return result
 
 
-def _parse_component_node_args(
-        prefix, nmin, nmax, nsep, nlen, nodes, step, interp):
-    nodes_list = nodes is not None
-    nodes_arange = [nmin, nmax, nsep].count(None) == 0
-    nodes_linspace = [nmin, nmax, nlen].count(None) == 0
-    if [nodes_list, nodes_arange, nodes_linspace].count(True) != 1:
-        raise RuntimeError(
-            f"only one of the following sets of options "
-            f"must be defined: "
-            f"(1) {prefix}nodes; "
-            f"(2) {prefix}nmin, {prefix}nmax, {prefix}nsep; "
-            f"(3) {prefix}nmin, {prefix}nmax, {prefix}nlen")
-    if (nodes_arange or nodes_linspace) and not (0 <= nmin < nmax):
-        raise RuntimeError(
-            f"the following expression must be true: "
-            f"0 <= {prefix}nmin < {prefix}nmax")
-    if nodes_arange and not (0 < nsep <= nmax - nmin):
-        raise RuntimeError(
-            f"the following expression must be true: "
-            f"0 < {prefix}nsep <= {prefix}nmax - {prefix}nmin")
-    if nlen is not None and not 2 <= nlen:
-        raise RuntimeError(
-            f"the following expression must be true: "
-            f"2 =< {prefix}nlen")
-    if nodes_arange:
-        # From nmin every nsep, to the first node at or beyond nmax; the
-        # count tolerates the rounding of (nmax - nmin) / nsep, which made
-        # np.arange to nmax + nsep add a node (e.g. 2.4 for 2.2 in 0.2s)
-        count = int(np.ceil((nmax - nmin) / nsep - 1e-9)) + 1
-        nodes = (nmin + nsep * np.arange(count)).tolist()
-    elif nodes_linspace:
-        nodes = np.linspace(nmin, nmax, nlen).tolist()
-    nodes = tuple(nodes)
-    if len(nodes) < 2:
-        raise RuntimeError(f"at least two {prefix}nodes must be provided")
-    if not iterutils.is_ascending(nodes):
-        raise RuntimeError(f"{prefix}nodes must be ascending")
-    if not numutils.all_positive(nodes, include_zero=True):
-        raise RuntimeError(f"{prefix}nodes must not be negative")
-    if not iterutils.all_unique(nodes):
-        raise RuntimeError(f"{prefix}nodes must be unique")
+def parse_component_rnode_args(
+        rnmin: float | None,
+        rnmax: float | None,
+        rnsep: float | None,
+        rnlen: int | None,
+        rnodes: Any,
+        rstep: float | None,
+        interp: str
+) -> dict[str, Any]:
+    """
+    Return the rings of a disk: its radial nodes (see parse_nodes), the
+    step of its subnodes (by default half the smallest separation of the
+    nodes, at most 1), and the interpolation class of its node-wise
+    parameters. Raise ConfigError for invalid options.
+    """
+    nodes = parse_nodes('r', rnmin, rnmax, rnsep, rnlen, rnodes)
+    step = rstep
     if step is None:
         step = min(1, min(np.diff(nodes)) / 2)
     # (half the difference is allowed, also as it rounds)
     if step <= 0 or step > min(np.diff(nodes)) / 2 * (1 + 1e-9):
-        raise RuntimeError(
-            f"{prefix}step must be greater than zero and less than half the "
-            f"smallest difference between two consecutive {prefix}nodes")
+        raise ConfigError(
+            "rstep must be greater than zero and less than half the "
+            "smallest difference between two consecutive rnodes")
     interpolations = dict(
         linear=interpolation.InterpolatorLinear,
         akima=interpolation.InterpolatorAkima,
         pchip=interpolation.InterpolatorPCHIP)
     if interp not in interpolations:
-        raise RuntimeError(
+        raise ConfigError(
             "interp must be one of the following: "
             f"{list(interpolations.keys())}")
-    return {
-        f'{prefix}nodes': nodes,
-        f'{prefix}step': step,
-        'interp': interpolations[interp]}
-
-
-def parse_component_rnode_args(nmin, nmax, nsep, nlen, nodes, step, interp):
-    return _parse_component_node_args(
-        'r', nmin, nmax, nsep, nlen, nodes, step, interp)
-
-
-def parse_component_hnode_args(nmin, nmax, nsep, nlen, nodes, step, interp):
-    return _parse_component_node_args(
-        'h', nmin, nmax, nsep, nlen, nodes, step, interp)
+    return dict(rnodes=nodes, rstep=step, interp=interpolations[interp])
 
 
 def check_traits_common(traits_):

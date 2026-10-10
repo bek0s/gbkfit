@@ -3,6 +3,7 @@ from collections.abc import Sequence
 from gbkfit.utils import parseutils
 from ..base import ModelImage, ModelSCube, Selection
 from ..mass import MassModel, mass_model_parser
+from . import _detail
 from ._component_set import (
     IMAGE_SPECTRAL_AXIS, ComponentSet2D, ComponentSet3D,
     ComponentSetModelPlan)
@@ -13,6 +14,7 @@ from .disks import (
     BrightnessMCDisk3D, BrightnessSMDisk2D, BrightnessSMDisk3D,
     OpacityMCDisk3D, OpacitySMDisk3D, SpectralMCDisk3D, SpectralSMDisk2D,
     SpectralSMDisk3D)
+from .geometries import geometry_parser
 from .points import (
     BrightnessPoint2D, BrightnessPoint3D, SpectralPoint2D, SpectralPoint3D)
 
@@ -23,6 +25,13 @@ __all__ = [
     'ModelKinematics2D',
     'ModelKinematics3D'
 ]
+
+
+def _dump_geometries(component_set) -> dict:
+    """The geometries option of a model: none if its components have none."""
+    geometries = component_set.geometries()
+    return dict(geometries=geometry_parser.dump(geometries)) \
+        if geometries else {}
 
 
 # The components that each model accepts
@@ -57,6 +66,7 @@ class ModelIntensity2D(ModelImage):
 
     @classmethod
     def load(cls, info, *args, **kwargs):
+        _detail.load_geometries(info, ('components',))
         parseutils.load_option_and_update_info(
             _bcmp2d_parser, info, 'components', required=True)
         opts = parseutils.parse_options_for_callable(info, cls.__init__)
@@ -67,6 +77,7 @@ class ModelIntensity2D(ModelImage):
         return dict(
             type=self.type(),
             **name,
+            **_dump_geometries(self._component_set),
             components=_bcmp2d_parser.dump(self._component_set.components()))
 
     def __init__(
@@ -102,6 +113,8 @@ class ModelIntensity3D(ModelImage):
 
     @classmethod
     def load(cls, info, *args, **kwargs):
+        _detail.load_geometries(
+            info, ('components', 'opacity_components'))
         parseutils.load_option_and_update_info(
             _bcmp3d_parser, info, 'components', required=True)
         parseutils.load_option_and_update_info(
@@ -115,6 +128,7 @@ class ModelIntensity3D(ModelImage):
         return dict(
             type=self.type(),
             **name,
+            **_dump_geometries(self._component_set),
             size_z=component_set.size_z(),
             step_z=component_set.step_z(),
             zero_z=component_set.zero_z(),
@@ -162,6 +176,7 @@ class ModelKinematics2D(ModelSCube):
 
     @classmethod
     def load(cls, info, *args, **kwargs):
+        _detail.load_geometries(info, ('components',))
         parseutils.load_option_and_update_info(
             _scmp2d_parser, info, 'components', required=True)
         parseutils.load_option_and_update_info(
@@ -178,6 +193,7 @@ class ModelKinematics2D(ModelSCube):
         return dict(
             type=self.type(),
             **name,
+            **_dump_geometries(self._component_set),
             components=_scmp2d_parser.dump(component_set.components()),
             **mass)
 
@@ -219,6 +235,8 @@ class ModelKinematics3D(ModelSCube):
 
     @classmethod
     def load(cls, info, *args, **kwargs):
+        _detail.load_geometries(
+            info, ('components', 'opacity_components'))
         parseutils.load_option_and_update_info(
             _scmp3d_parser, info, 'components', required=True)
         parseutils.load_option_and_update_info(
@@ -237,6 +255,7 @@ class ModelKinematics3D(ModelSCube):
         return dict(
             type=self.type(),
             **name,
+            **_dump_geometries(self._component_set),
             size_z=component_set.size_z(),
             step_z=component_set.step_z(),
             zero_z=component_set.zero_z(),
