@@ -1,113 +1,169 @@
+"""
+The descriptions of parameters: their size, meaning and valid range.
+
+A description has no name: the name of a parameter is its key in the
+dict of parameters it belongs to. Models that combine others give the
+parameters of each a prefix (e.g. 'vt' of a trait becomes 'hi_vpt_vt' of
+a model), and their dicts share the descriptions.
+"""
 
 import abc
+import numbers
+from collections.abc import Mapping
 from typing import Any
 
 import numpy as np
 
-from gbkfit.utils import iterutils, parseutils
+from gbkfit.utils import parseutils
+from gbkfit.utils.parseutils import ConfigError
 
 
 __all__ = [
     'ParamDesc',
     'ParamScalarDesc',
     'ParamVectorDesc',
+    'pdesc_parser',
     'load_pdescs_dict',
-    'dump_pdescs_dict',
-    'pdesc_parser'
+    'dump_pdescs_dict'
 ]
 
 
 class ParamDesc(parseutils.TypedSerializable, abc.ABC):
+    """
+    The description of a parameter: a scalar, or a vector of elements.
 
-    @classmethod
-    def load(cls, info: dict[str, Any], *args, **kwargs) -> 'ParamDesc':
-        opts = parseutils.parse_options_for_callable(info, cls.__init__)
-        return cls(**opts)
+    Parameters
+    ----------
+    size : int
+        The number of its values.
+    desc : str, optional
+        What it is, for people (e.g. "the core radius (kpc)").
+    minimum, maximum : float, optional
+        Its valid range: the values for which the models that have it are
+        defined (e.g. 0 for a dispersion), not the values that are likely.
+        Every element of a vector has the same range.
+
+    Raises
+    ------
+    ConfigError
+        If the size is not a positive integer, or the minimum is above
+        the maximum.
+    """
 
     def dump(self) -> dict[str, Any]:
-        info: dict[str, str | float] = dict(
-            type=self.type(), name=self.name(), size=self.size())
-        if self.desc() is not None:
-            info.update(desc=self.desc())
-        if self.default() is not None:
-            info.update(default=self.default())
-        if np.isfinite(self.minimum()):
-            info.update(minimum=self.minimum())
-        if np.isfinite(self.maximum()):
-            info.update(maximum=self.maximum())
+        info: dict[str, Any] = dict(type=self.type())
+        if not self.is_scalar():
+            info.update(size=self._size)
+        if self._desc is not None:
+            info.update(desc=self._desc)
+        if np.isfinite(self._minimum):
+            info.update(minimum=self._minimum)
+        if np.isfinite(self._maximum):
+            info.update(maximum=self._maximum)
         return info
 
     def __init__(
             self,
-            name: str,
             size: int,
-            desc: None | str,
-            default: None | float,
-            minimum: None | float,
-            maximum: None | float
+            desc: str | None,
+            minimum: float | None,
+            maximum: float | None
     ):
-        if not name.isidentifier():
-            raise RuntimeError(
-                f"'{name}' is not a valid parameter description name")
-        minimum = -np.inf if minimum is None else minimum
-        maximum = +np.inf if maximum is None else maximum
-        if minimum > maximum:
-            raise RuntimeError(
-                f"minimum ({minimum}) must be <= maximum ({maximum})")
-        if default is not None and (default < minimum or default > maximum):
-            raise RuntimeError(
-                f"default ({default}) must be within "
-                f"[minimum ({minimum}), maximum ({maximum})]"
-            )
-        self._name = name
-        self._size = size
+        if (isinstance(size, bool) or not isinstance(size, numbers.Integral)
+                or size < 1):
+            raise ConfigError(
+                f"the size of a parameter must be a positive integer; it "
+                f"is {size!r}")
+        minimum = -np.inf if minimum is None else float(minimum)
+        maximum = +np.inf if maximum is None else float(maximum)
+        if not minimum <= maximum:
+            raise ConfigError(
+                f"the minimum of a parameter ({minimum}) cannot be above "
+                f"its maximum ({maximum})")
+        self._size = int(size)
         self._desc = desc
-        self._default = float(default) if default is not None else None
-        self._minimum = float(minimum)
-        self._maximum = float(maximum)
+        self._minimum = minimum
+        self._maximum = maximum
 
-    def name(self) -> str:
-        return self._name
+    @abc.abstractmethod
+    def is_scalar(self) -> bool:
+        """Check whether it is a scalar (a vector has elements)."""
+        pass
 
     def size(self) -> int:
+        """Return the number of its values (1 for a scalar)."""
         return self._size
 
-    def desc(self) -> None | str:
+    def desc(self) -> str | None:
+        """Return what it is, if given."""
         return self._desc
 
-    def default(self) -> None | float:
-        return self._default
-
     def minimum(self) -> float:
+        """Return the lowest valid value (-inf if none)."""
         return self._minimum
 
     def maximum(self) -> float:
+        """Return the highest valid value (+inf if none)."""
         return self._maximum
+
+    def has_range(self) -> bool:
+        """Check whether its valid range is finite on either side."""
+        return bool(np.isfinite(self._minimum) or np.isfinite(self._maximum))
 
 
 class ParamScalarDesc(ParamDesc):
+    """
+    The description of a scalar parameter.
+
+    Parameters
+    ----------
+    desc : str, optional
+        What it is (see ParamDesc).
+    minimum, maximum : float, optional
+        Its valid range (see ParamDesc).
+
+    Raises
+    ------
+    ConfigError
+        If the minimum is above the maximum.
+    """
 
     @staticmethod
     def type() -> str:
         return 'scalar'
 
-    def dump(self) -> dict[str, Any]:
-        info = super().dump()
-        del info['size']
-        return info
-
     def __init__(
             self,
-            name: str,
-            desc: None | str = None,
-            default: None | float = None,
-            minimum: None | float = None,
-            maximum: None | float = None
+            desc: str | None = None,
+            minimum: float | None = None,
+            maximum: float | None = None
     ):
-        super().__init__(name, 1, desc, default, minimum, maximum)
+        super().__init__(1, desc, minimum, maximum)
+
+    def is_scalar(self) -> bool:
+        return True
 
 
 class ParamVectorDesc(ParamDesc):
+    """
+    The description of a vector parameter, whose elements are its values
+    (e.g. one for each radial node of a disk).
+
+    Parameters
+    ----------
+    size : int
+        The number of its elements.
+    desc : str, optional
+        What it is (see ParamDesc).
+    minimum, maximum : float, optional
+        The valid range of each element (see ParamDesc).
+
+    Raises
+    ------
+    ConfigError
+        If the size is not a positive integer, or the minimum is above
+        the maximum.
+    """
 
     @staticmethod
     def type() -> str:
@@ -115,86 +171,60 @@ class ParamVectorDesc(ParamDesc):
 
     def __init__(
             self,
-            name: str,
             size: int,
-            desc: None | str = None,
-            default: None | float = None,
-            minimum: None | float = None,
-            maximum: None | float = None
+            desc: str | None = None,
+            minimum: float | None = None,
+            maximum: float | None = None
     ):
-        super().__init__(name, size, desc, default, minimum, maximum)
+        super().__init__(size, desc, minimum, maximum)
+
+    def is_scalar(self) -> bool:
+        return False
 
 
-def load_pdescs_dict(info: dict[str, Any]) -> dict[str, ParamDesc]:
-    if bad := [k for k, v in info.items() if not iterutils.is_mapping(v)]:
-        raise RuntimeError(
-            f"the value of the following keys must be a dictionary: {bad}")
-    if bad := [k for k, v in info.items() if k != v.get('name', k)]:
-        raise RuntimeError(
-            f"the following keys are not equal to "
-            f"their corresponding pdesc name: {bad}")
-    pdescs = {}
-    for key, val in info.items():
-        pdescs[key] = pdesc_parser.load(dict(name=key) | val)
-    return pdescs
+pdesc_parser = parseutils.TypedParser(ParamDesc, [
+    ParamScalarDesc,
+    ParamVectorDesc])
 
 
-def dump_pdescs_dict(pdescs: dict[str, ParamDesc]) -> dict[str, Any]:
-    if bad := [k for k, v in pdescs.items() if k != v.name()]:
-        raise RuntimeError(
-            f"the following keys are not equal to "
-            f"their corresponding pdesc name: {bad}")
-    info = {key: pdesc_parser.dump(val) for key, val in pdescs.items()}
-    for val in info.values():
-        del val['name']
-    return info
+def load_pdescs_dict(info: Mapping[str, Any]) -> dict[str, ParamDesc]:
+    """
+    Load the descriptions of parameters, by name.
+
+    Parameters
+    ----------
+    info : Mapping
+        The configuration of each description, by the name of its
+        parameter.
+
+    Returns
+    -------
+    dict
+        The descriptions, by name.
+
+    Raises
+    ------
+    ConfigError
+        If a configuration is invalid.
+    """
+    return {
+        name: parseutils.load_option(
+            pdesc_parser.load, info, name, required=True)
+        for name in info}
 
 
-class ParamDescTypedParser(parseutils.TypedParser):
+def dump_pdescs_dict(pdescs: Mapping[str, ParamDesc]) -> dict[str, Any]:
+    """
+    Dump the descriptions of parameters, by name (see load_pdescs_dict).
 
-    def __init__(self):
-        super().__init__(ParamDesc, [ParamScalarDesc, ParamVectorDesc])
+    Parameters
+    ----------
+    pdescs : Mapping
+        The descriptions, by name.
 
-    def load_many(
-            self,
-            x: list[dict[str, Any]],
-            allow_duplicates: bool = False,
-            *args, **kwargs
-    ) -> list[ParamDesc]:
-        pdescs = super().load_many(x, *args, **kwargs)
-        if not allow_duplicates:
-            self._ensure_no_duplicates(pdescs)
-        return pdescs
-
-    def dump_many(
-            self,
-            x: list[ParamDesc],
-            allow_duplicates: bool = False,
-            *args, **kwargs
-    ) -> list[dict[str, Any]]:
-        if not allow_duplicates:
-            self._ensure_no_duplicates(x)
-        return super().dump_many(x, *args, **kwargs)
-
-    @staticmethod
-    def _ensure_no_duplicates(x: list[ParamDesc]):
-        seen = []
-        duplicates = []
-        for pdesc in x:
-            name = pdesc.name()
-            # Already marked as a duplicate. Do nothing.
-            if name in duplicates:
-                continue
-            # Already marked as seen. Mark it as duplicate
-            if name in seen:
-                duplicates.append(name)
-                continue
-            # Not seen before. Mark it as seen
-            seen.append(name)
-        if duplicates:
-            raise RuntimeError(
-                f"the following pdescs names appear multiple times: "
-                f"{duplicates}")
-
-
-pdesc_parser = ParamDescTypedParser()
+    Returns
+    -------
+    dict
+        The configuration of each description, by name.
+    """
+    return {name: pdesc_parser.dump(pdesc) for name, pdesc in pdescs.items()}

@@ -41,7 +41,7 @@ def evaluate(driver, model, observable, properties):
     group = observation_group([dict(
         driver=dict(type=driver.type()), observable=copy.deepcopy(observable),
         model=copy.deepcopy(model))])
-    params = gbkfit.params.EvaluationParams(group.pdescs(), properties)
+    params = gbkfit.params.ParamSpace(group.pdescs(), properties)
     return group.model_h(params.evaluate())[0]['spectra']['d'].copy()
 
 
@@ -173,7 +173,7 @@ def evaluate_observation(driver, model, observable, properties, **options):
         driver=dict(type=driver.type()), observable=observable) | options))
     group = ObservationGroup(
         [model_parser.load(copy.deepcopy(model))], [observation])
-    params = gbkfit.params.EvaluationParams(group.pdescs(), properties)
+    params = gbkfit.params.ParamSpace(group.pdescs(), properties)
     data = group.model_h(params.evaluate())[0]
     return {key: value['d'].copy() for key, value in data.items()}
 

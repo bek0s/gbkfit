@@ -8,6 +8,7 @@ import numpy as np
 
 from gbkfit.driver import DeviceArray
 from gbkfit.math import interpolation
+from gbkfit.params import ParamValues
 from gbkfit.utils import gridutils, iterutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
 from .._detail import parse_nodes
@@ -92,7 +93,7 @@ class DiskComponentPlan(ComponentPlan):
 
     def evaluate(
             self,
-            params: dict[str, float | np.ndarray],
+            params: ParamValues,
             grid: NativeGrid,
             outputs: dict[str, DeviceArray | None],
             out_extra: dict[str, Any] | None
@@ -129,7 +130,7 @@ class SpectralDiskComponentPlan(ComponentPlan):
 
     def evaluate(
             self,
-            params: dict[str, float | np.ndarray],
+            params: ParamValues,
             grid: NativeGrid,
             outputs: dict[str, DeviceArray | None],
             out_extra: dict[str, Any] | None

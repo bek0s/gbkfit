@@ -48,7 +48,7 @@ def evaluate(driver, with_opacity, opacity, times=1):
     if not with_opacity:
         properties = {
             k: v for k, v in properties.items() if not k.startswith('ocmp')}
-    params = gbkfit.params.EvaluationParams(model_group.pdescs(), properties)
+    params = gbkfit.params.ParamSpace(model_group.pdescs(), properties)
     values = params.evaluate()
     return [
         copy.deepcopy(model_group.model_h(values)[0]['spectra']['d'])

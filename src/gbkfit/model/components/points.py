@@ -5,7 +5,7 @@ import numpy as np
 import scipy.special
 
 from gbkfit.driver import DeviceArray, Driver
-from gbkfit.params.pdescs import ParamScalarDesc
+from gbkfit.params import ParamScalarDesc, ParamValues
 from gbkfit.utils import gridutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
 from ._detail import dump_geometry, dump_lines, dump_name
@@ -38,7 +38,7 @@ def point_pdescs(spectral: bool) -> dict[str, ParamScalarDesc]:
     and flux, and for spectral ones its systemic velocity and dispersion.
     """
     names = ('xpos', 'ypos', 'flux') + (('vsys', 'disp') if spectral else ())
-    return {name: ParamScalarDesc(name) for name in names}
+    return {name: ParamScalarDesc() for name in names}
 
 
 def _spectral_pdescs(lines: Lines) -> dict[str, ParamScalarDesc]:
@@ -150,7 +150,7 @@ class PointPlan(ComponentPlan):
 
     def evaluate(
             self,
-            params: dict[str, float | np.ndarray],
+            params: ParamValues,
             grid: NativeGrid,
             outputs: dict[str, DeviceArray | None],
             out_extra: dict[str, Any] | None

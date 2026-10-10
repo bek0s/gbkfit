@@ -132,7 +132,7 @@ def test_names_name_the_extra_outputs():
     group_ = group(
         [dict(type='intensity_2d', components=[component])],
         [observation(name='hi')])
-    params = gbkfit.params.EvaluationParams(group_.pdescs(), dict(
+    params = gbkfit.params.ParamSpace(group_.pdescs(), dict(
         disk_xpos=0, disk_ypos=0, disk_posa=0, disk_incl=45,
         disk_bpt_a=1, disk_bpt_s=2), constants=group_.constants())
     extra = {}

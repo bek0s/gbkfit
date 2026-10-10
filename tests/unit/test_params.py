@@ -7,42 +7,50 @@ in test_paramspace.py.
 import numpy as np
 import pytest
 
-from gbkfit.params.expressions import Expression, InvalidExpressionError
-from gbkfit.params.keys import InvalidKeyError, parse_key
-from gbkfit.params.pdescs import *
+from gbkfit.params._expressions import Expression, InvalidExpressionError
+from gbkfit.params._keys import InvalidKeyError, parse_key
+from gbkfit.params.pdescs import ParamScalarDesc, ParamVectorDesc, pdesc_parser
+from gbkfit.utils.parseutils import ConfigError
 
 
 def describe(pdesc):
     """The properties of a parameter description."""
     return (
-        type(pdesc), pdesc.name(), pdesc.size(), pdesc.desc(),
-        pdesc.default(), pdesc.minimum(), pdesc.maximum())
+        type(pdesc), pdesc.is_scalar(), pdesc.size(), pdesc.desc(),
+        pdesc.minimum(), pdesc.maximum())
 
 
 def test_param_desc_scalar():
-    pdesc = ParamScalarDesc('name', 'description', 10, -10)
+    pdesc = ParamScalarDesc(desc='description', minimum=-10)
     assert describe(pdesc) == (
-        ParamScalarDesc, 'name', 1, 'description', 10, -10, np.inf)
+        ParamScalarDesc, True, 1, 'description', -10, np.inf)
     # The dump leaves out the infinite bounds, and loads to the same desc
-    info = dict(
-        type='scalar', name='name', desc='description',
-        default=10, minimum=-10)
+    info = dict(type='scalar', desc='description', minimum=-10)
     assert pdesc.dump() == info
     assert describe(pdesc_parser.load(info)) == describe(pdesc)
 
 
 def test_param_desc_vector():
-    pdesc = ParamVectorDesc('name', 5, 'description', 10, -10)
+    pdesc = ParamVectorDesc(5, desc='description', maximum=10)
     assert describe(pdesc) == (
-        ParamVectorDesc, 'name', 5, 'description', 10, -10, np.inf)
-    info = dict(
-        type='vector', name='name', size=5, desc='description',
-        default=10, minimum=-10)
+        ParamVectorDesc, False, 5, 'description', -np.inf, 10)
+    info = dict(type='vector', size=5, desc='description', maximum=10)
     assert pdesc.dump() == info
     assert describe(pdesc_parser.load(info)) == describe(pdesc)
 
 
-PDESCS = dict(a=ParamScalarDesc('a'), v=ParamVectorDesc('v', 12))
+@pytest.mark.parametrize('make, message', [
+    (lambda: ParamVectorDesc(0), "positive integer"),
+    (lambda: ParamVectorDesc(-1), "positive integer"),
+    (lambda: ParamVectorDesc(1.5), "positive integer"),
+    (lambda: ParamVectorDesc(True), "positive integer"),
+    (lambda: ParamScalarDesc(minimum=1, maximum=0), "above its maximum")])
+def test_invalid_param_descs(make, message):
+    with pytest.raises(ConfigError, match=message):
+        make()
+
+
+PDESCS = dict(a=ParamScalarDesc(), v=ParamVectorDesc(12))
 
 
 @pytest.mark.parametrize('key, name, indices, element', [
@@ -85,7 +93,8 @@ def test_keys_of_unknown_parameters():
     ('v[1.5]', "integer constants"),
     ('v[a]', "integer constants"),
     ('v[[]]', "integer constants"),
-    ('v[03]', "invalid syntax")])
+    ('v[03]', "invalid syntax"),
+    (3, "must be strings")])
 def test_invalid_keys(key, reason):
     with pytest.raises(InvalidKeyError, match=reason):
         parse_key(key, PDESCS)
@@ -121,12 +130,15 @@ def test_expressions(source, value):
     ("np.loadtxt", "not allowed"),
     ("np.vectorize(np.sin)", "cannot be called"),
     ("v.sum()", "cannot be called"),
+    # out would write into a parameter, and where leaves values unset
+    ("np.add(v, 1, out=v)", "keyword 'out'"),
+    ("np.sin(v, where=v > 0)", "keyword 'where'"),
     ("'text'", "numbers"),
     ("True", "numbers"),
     ("lambda: 1", "not allowed"),
     ("[x for x in v]", "not allowed"),
     ("b + 1", "unknown name 'b'"),
-    ("a[0]", "scalar"),
+    ("a[0]", "'a' is a scalar"),
     ("v[12]", "out of range"),
     ("a +", "syntax")])
 def test_invalid_expressions(source, reason):

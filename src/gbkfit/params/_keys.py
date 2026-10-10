@@ -6,21 +6,11 @@ numpy subscript that selects elements of a vector parameter, e.g. 'a',
 
 import ast
 import dataclasses
+from collections.abc import Iterable, Mapping
 
 import numpy as np
 
-from gbkfit.params.pdescs import ParamDesc, ParamScalarDesc
-
-
-__all__ = [
-    'Key',
-    'InvalidKeyError',
-    'parse_key',
-    'parse_subscript',
-    'subscript_value',
-    'element_name',
-    'element_names'
-]
+from gbkfit.params.pdescs import ParamDesc
 
 
 class InvalidKeyError(ValueError):
@@ -38,27 +28,25 @@ class Key:
     indices: np.ndarray | None
     element: bool = False
 
-    def element_names(self):
-        return element_names(self.name, self.indices)
 
-
-def element_name(name, index=None):
-    """The name of an element of a parameter, e.g. 'a' or 'v[3]'."""
+def element_name(name: str, index: int | None = None) -> str:
+    """Return the name of an element of a parameter, e.g. 'a' or 'v[3]'."""
     return name if index is None else f'{name}[{index}]'
 
 
-def element_names(name, indices=None):
+def element_names(name: str, indices: Iterable[int] | None) -> list[str]:
+    """Return the names of the given elements of a parameter."""
     if indices is None:
         return [name]
-    return [element_name(name, i) for i in indices]
+    return [element_name(name, int(i)) for i in indices]
 
 
-def subscript_value(node):
+def subscript_value(node: ast.expr) -> int | slice | list[int] | None:
     """
-    The value of a subscript of integer constants: an int, a slice, or
-    a list of ints. None if the subscript is anything else.
+    Return the value of a subscript of integer constants: an int, a
+    slice, or a list of ints; None if it is anything else.
     """
-    def integer(n):
+    def integer(n: ast.expr | None) -> int | None:
         if isinstance(n, ast.UnaryOp) and isinstance(n.op, ast.USub):
             value = integer(n.operand)
             return None if value is None else -value
@@ -73,17 +61,21 @@ def subscript_value(node):
             return None
         return slice(*values)
     if isinstance(node, ast.List):
-        values = [integer(n) for n in node.elts]
-        return None if not values or None in values else values
+        items = [integer(n) for n in node.elts]
+        if not items or any(i is None for i in items):
+            return None
+        return [i for i in items if i is not None]
     return integer(node)
 
 
-def parse_subscript(node, size):
+def parse_subscript(node: ast.expr, size: int) -> tuple[np.ndarray, bool]:
     """
-    The indices of the elements of a vector of the given size selected by
-    the subscript (an ast node), and whether it selects a single element
-    with an index. Raise InvalidKeyError if the subscript is not one of
-    integer constants, or if it is out of range.
+    Return the indices of the elements of a vector of the given size that
+    a subscript (an ast node) selects, and whether it selects a single
+    element with an index.
+
+    Raises InvalidKeyError if the subscript is not one of integer
+    constants, or is out of range.
     """
     subscript = subscript_value(node)
     if subscript is None:
@@ -98,11 +90,14 @@ def parse_subscript(node, size):
     return np.atleast_1d(indices), isinstance(subscript, int)
 
 
-def parse_key(key: str, pdescs: dict[str, ParamDesc]) -> Key | None:
+def parse_key(key: str, pdescs: Mapping[str, ParamDesc]) -> Key | None:
     """
-    Parse a key. Return None if its parameter is not in pdescs, and raise
-    InvalidKeyError if it is invalid.
+    Parse a key. Return None if its parameter is not in pdescs.
+
+    Raises InvalidKeyError if it is invalid.
     """
+    if not isinstance(key, str):
+        raise InvalidKeyError(f"keys must be strings; found: {key!r}")
     try:
         node = ast.parse(key.strip(), mode='eval').body
     except SyntaxError:
@@ -117,7 +112,7 @@ def parse_key(key: str, pdescs: dict[str, ParamDesc]) -> Key | None:
     pdesc = pdescs.get(name)
     if pdesc is None:
         return None
-    if isinstance(pdesc, ParamScalarDesc):
+    if pdesc.is_scalar():
         if subscript is not None:
             raise InvalidKeyError(f"'{name}' is a scalar and has no elements")
         return Key(name, None)

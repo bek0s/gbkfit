@@ -96,7 +96,7 @@ def eval_(
     constants = objective.constants() \
         if objective is not None else group.constants()
     with config_path('params'):
-        params = gbkfit.params.evaluation_params_parser.load(
+        params = gbkfit.params.param_space_parser.load(
             cfg['params'], pdescs=pdescs, constants=constants)
 
     #
@@ -105,11 +105,10 @@ def eval_(
 
     _log.info("calculating model parameters...")
 
-    exploded_param_values = {}
-    param_values = params.evaluate(out_exploded_params=exploded_param_values)
+    param_values = params.evaluate()
     params_info = numutils.nativify(dict(
         params=param_values,
-        eparams=exploded_param_values))
+        eparams=params.element_values(param_values)))
     filename = os.path.join(output_dir, 'gbkfit_eval_params')
     _detail.dump_dict(json, yaml, params_info, filename)
 

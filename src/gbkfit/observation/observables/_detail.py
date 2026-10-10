@@ -12,6 +12,7 @@ from gbkfit.dataset import Dataset
 from gbkfit.driver import Driver
 from gbkfit.instrument import Instrument
 from gbkfit.model.base import Model, Selection
+from gbkfit.params import ParamValues
 from gbkfit.region import Regions
 from gbkfit.utils import gridutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
@@ -243,7 +244,7 @@ class DCubePlanBase(ObservablePlan):
 
     def _evaluate_cube(
             self,
-            params: dict[str, float | np.ndarray],
+            params: ParamValues,
             out_extra: dict[str, Any] | None,
             extra_lo: ExtraFunction,
             extra_hi: ExtraFunction

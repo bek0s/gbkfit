@@ -114,10 +114,10 @@ def kinematics(model_type, disk_type, vptraits, mass_model=None):
 
 def evaluate(driver, model, properties):
     from gbkfit.observation import Observation, ObservationGroup, PixelSpectra
-    from gbkfit.params import EvaluationParams
+    from gbkfit.params import ParamSpace
     group = ObservationGroup([model], [Observation(
         PixelSpectra(size=(32, 32, 51), step=(1, 1, 10)), driver)])
-    params = EvaluationParams(group.pdescs(), properties)
+    params = ParamSpace(group.pdescs(), properties)
     return group.model_h(params.evaluate())[0]['spectra']['d'].copy()
 
 

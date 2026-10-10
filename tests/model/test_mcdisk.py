@@ -33,7 +33,7 @@ def evaluate_disk(
     config['observations'][0]['driver']['type'] = driver_type
     config['models'][0]['components'][0].update(component or {})
     model_group = config_group(config)
-    params = gbkfit.params.EvaluationParams(
+    params = gbkfit.params.ParamSpace(
         model_group.pdescs(),
         config['params']['properties'] | (properties or {}))
     data = model_group.model_h(params.evaluate(), out_extra)
@@ -294,7 +294,7 @@ def test_mcdisk_velocity_is_the_mean_of_the_clouds(driver):
     observation['observable'] = dict(
         type='pixel_spectra', size=[48, 48, 120], step=[1, 1, 5])
     model_group = config_group(config)
-    params = gbkfit.params.EvaluationParams(
+    params = gbkfit.params.ParamSpace(
         model_group.pdescs(), config['params']['properties'])
     extra = {}
     scube = model_group.model_h(params.evaluate(), extra)[0]['spectra']['d']

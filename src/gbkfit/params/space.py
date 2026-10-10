@@ -1,19 +1,6 @@
 """
-ParamSpace: the parameters of a model, given their descriptions and the
-properties of a configuration. Each element of each parameter is:
-
-- fixed: its property is a number
-- tied: its property is an expression (a string) of other parameters,
-  or None, in which case a user function (transforms) sets it
-- free: its property is a dict (e.g. the initial value and bounds of a
-  fit), which is kept for the fitter
-
-A vector parameter can have a mode (see modes.ParamMode): its elements
-are then coded values (e.g. offsets from one of them), which the mode
-decodes into the values of the parameter, which the expressions that
-read it see.
-
-ParamSpace evaluates all parameters, given the values of the free ones.
+ParamSpace: the parameters of a model evaluation or a fit, given their
+descriptions and the properties of a configuration.
 """
 
 import collections
@@ -23,38 +10,66 @@ import enum
 import graphlib
 import logging
 import numbers
-from collections.abc import Callable, Mapping
-from typing import Any
+from collections.abc import Callable, Mapping, Sequence
+from typing import Any, TypeAlias
 
 import numpy as np
+import numpy.typing as npt
 
-from gbkfit.params.expressions import Expression, InvalidExpressionError
-from gbkfit.params.keys import (
-    InvalidKeyError, element_name, parse_key)
-from gbkfit.params.modes import ParamMode
-from gbkfit.params.pdescs import ParamDesc, ParamScalarDesc
-from gbkfit.utils import parseutils
+from gbkfit.params._expressions import (
+    Expression, InvalidExpressionError, check_name)
+from gbkfit.params._keys import (
+    InvalidKeyError, Key, element_name, element_names, parse_key)
+from gbkfit.params.modes import ParamMode, param_mode_parser
+from gbkfit.params.pdescs import ParamDesc
+from gbkfit.utils import funcutils, parseutils
+from gbkfit.utils.parseutils import ConfigError
 
 
 __all__ = [
+    'ParamEvaluationError',
+    'ParamKind',
     'ParamSpace',
-    'InvalidParamsError'
+    'ParamValues',
+    'Property',
+    'Transforms',
+    'param_space_parser'
 ]
 
 
 _log = logging.getLogger(__name__)
 
 
-class InvalidParamsError(ValueError):
-    """Invalid parameter properties; the message lists all problems."""
+# The values of parameters, by name: a float for a scalar, an array for a
+# vector
+ParamValues: TypeAlias = dict[str, float | np.ndarray]
+
+# The property of a parameter, or of some of its elements (see ParamSpace)
+Property: TypeAlias = (
+    float | str | Mapping[str, Any] | None
+    | Sequence[float | str | Mapping[str, Any] | None])
+
+# A function that sets the parameters whose property is None, in the
+# values of all parameters (see ParamSpace)
+Transforms: TypeAlias = Callable[[ParamValues], None]
+
+# An element of a parameter: its name, and its index (None for a scalar)
+_Element: TypeAlias = tuple[str, int | None]
 
 
-class _Kind(enum.Enum):
+class ParamEvaluationError(RuntimeError):
+    """
+    An evaluation of the parameters failed: an expression or the
+    transforms function failed, or a value is not finite or not valid.
+    """
+
+
+class ParamKind(enum.Enum):
     """What sets the value of an element of a parameter."""
-    FIXED = enum.auto()        # a number
-    FREE = enum.auto()         # its properties (e.g. its initial value)
-    TIED = enum.auto()         # an expression
-    TRANSFORMED = enum.auto()  # the transforms function (set to None)
+    FIXED = 'fixed'              # a number
+    TIED = 'tied'                # an expression
+    FREE = 'free'                # the caller (e.g. a fitter)
+    TRANSFORMED = 'transformed'  # the transforms function (set to None)
 
 
 @dataclasses.dataclass
@@ -66,16 +81,17 @@ class _Assignment:
     expression: Expression
 
 
-def _is_list(value):
+def _is_list(value: Any) -> bool:
+    """Check whether a property is a list of properties."""
     return isinstance(value, (list, tuple)) or (
         isinstance(value, np.ndarray) and value.ndim == 1)
 
 
-def _spread(properties, size):
+def _spread(properties: Mapping[str, Any], size: int) -> list[dict[str, Any]]:
     """
-    The properties of each of the given number of elements: the same
-    properties for each element, except those of attributes starting
-    with '*', whose values (lists) are spread over the elements.
+    Return the properties of each of the given number of elements: the
+    same for each element, except those of attributes starting with '*',
+    whose values (lists) are spread over the elements.
     """
     spread = {k[1:]: v for k, v in properties.items() if k.startswith('*')}
     common = {k: v for k, v in properties.items() if not k.startswith('*')}
@@ -89,24 +105,159 @@ def _spread(properties, size):
         for i in range(size)]
 
 
-class ParamSpace:
+def _load_transforms(info: dict[str, Any]) -> Transforms:
+    """Load a transforms function from its file: info is {file, func}."""
+    opts = parseutils.parse_options(info, {'file', 'func'})
+    return funcutils.load_function_from_file(opts['file'], opts['func'])
+
+
+def _dump_transforms(transforms: Transforms) -> dict[str, str]:
+    """
+    Return the file and the name of a transforms function. It must be
+    defined at the top level of a file, from which it loads again.
+    """
+    code = getattr(transforms, '__code__', None)
+    name = getattr(transforms, '__name__', None)
+    if (code is None or code.co_filename.startswith('<')
+            or getattr(transforms, '__qualname__', None) != name):
+        raise ConfigError(
+            f"the transforms function {transforms!r} cannot be dumped: it "
+            f"must be a function defined at the top level of a file")
+    return dict(file=code.co_filename, func=name)
+
+
+class ParamSpace(parseutils.Serializable):
+    """
+    The parameters of a model evaluation or a fit: what sets each element
+    of each parameter, and their evaluation.
+
+    Each parameter, or some of its elements, has a property:
+
+    - a number: the elements are fixed to it
+    - a string: an expression of other parameters and constants, which
+      ties the elements to it (e.g. 'hi_vpt_vt': 'vmax * 0.9')
+    - a dict: the elements are free, and the dict holds the options of
+      the fitter (e.g. {'value': 1, 'min': 0, 'max': 2}); the values of
+      the attributes whose names start with '*' are lists, spread over
+      the elements (e.g. {'*value': [1, 2, 3], 'min': 0})
+    - None: the transforms function sets the elements
+    - a list of these: one for each element
+
+    The keys of the properties are the names of the parameters, with a
+    subscript of integer constants to select elements of a vector (e.g.
+    'v[0]', 'v[-1]', 'v[1:4]', 'v[::2]', 'v[[0, 2, 5]]'). Properties of
+    unknown parameters are reported like unknown options (see
+    parseutils.report_unknown).
+
+    Expressions can use numbers, the values of parameters and their
+    elements, constants, arithmetic, comparisons, conditional expressions
+    (a if c else b), a few builtins (abs, min, max, round, sum, len), and
+    of numpy (np, np.linalg) its ufuncs, numbers, scalar types and its
+    functions on arrays (e.g. np.sin, np.pi, np.sum). An expression that
+    reads a parameter with a mode reads its decoded values. Expressions
+    and a transforms function are mutually exclusive.
+
+    Parameters
+    ----------
+    pdescs : Mapping
+        The descriptions of the parameters, by name.
+    properties : Mapping
+        The properties, by key.
+    transforms : Transforms, optional
+        A function that sets the elements whose property is None. It gets
+        the values of all parameters (ParamValues), and sets these.
+    constants : Mapping, optional
+        Values that expressions can use (e.g. the radial nodes of the
+        disks, from the constants() of the models), by name.
+    modes : Mapping, optional
+        The modes of vector parameters, by name: their properties then
+        give coded values (e.g. offsets), which the mode decodes into
+        their values (see ParamMode).
+
+    Raises
+    ------
+    ConfigError
+        If the properties, constants, modes or transforms are invalid
+        (one error lists all the problems).
+    """
+
+    @classmethod
+    def load(
+            cls,
+            info: dict[str, Any],
+            pdescs: Mapping[str, ParamDesc],
+            constants: Mapping[str, npt.ArrayLike] | None = None
+    ) -> 'ParamSpace':
+        """
+        Load the parameters from their configuration: their properties,
+        modes and transforms function ({file, func}).
+
+        Parameters
+        ----------
+        info : dict
+            The configuration.
+        pdescs : Mapping
+            The descriptions of the parameters, by name.
+        constants : Mapping, optional
+            The values that expressions can use, by name.
+
+        Returns
+        -------
+        ParamSpace
+            The parameters.
+
+        Raises
+        ------
+        ConfigError
+            If the configuration is invalid.
+        """
+        info = dict(info)
+        # The properties are not checked against their annotation, whose
+        # message would be unreadable: ParamSpace explains each problem
+        properties = info.pop('properties', None)
+        if not isinstance(properties, Mapping):
+            raise ConfigError(
+                "option 'properties' must be a dict of the properties of "
+                "the parameters, by key")
+        if 'transforms' in info:
+            info['transforms'] = parseutils.load_option(
+                _load_transforms, info, 'transforms')
+        if info.get('modes') is not None:
+            with parseutils.config_path('modes'):
+                info['modes'] = {
+                    name: parseutils.load_option(
+                        param_mode_parser.load, info['modes'], name)
+                    for name in dict(info['modes'])}
+        opts = parseutils.parse_options_for_callable(
+            info, cls.__init__,
+            ignore_params=['pdescs', 'properties', 'constants'])
+        return cls(pdescs, properties, **opts, constants=constants)
+
+    def dump(self) -> dict[str, Any]:
+        info: dict[str, Any] = dict(properties=copy.deepcopy(self._properties))
+        if self._modes:
+            info['modes'] = {
+                name: param_mode_parser.dump(mode)
+                for name, mode in self._modes.items()}
+        if self._transforms is not None:
+            info['transforms'] = _dump_transforms(self._transforms)
+        return info
 
     def __init__(
             self,
-            pdescs: dict[str, ParamDesc],
-            properties: dict[str, Any],
-            transforms: Callable | None = None,
-            constants: dict[str, Any] | None = None,
-            modes: Mapping[str, ParamMode] | None = None):
-        """
-        constants are read-only values that expressions can use (e.g. the
-        radial nodes of a disk), and modes the modes of vector parameters,
-        by name. Properties of unknown parameters are reported like
-        unknown options (see parseutils.report_unknown): a warning, and an
-        error in strict mode.
-        """
+            pdescs: Mapping[str, ParamDesc],
+            properties: Mapping[str, Property],
+            transforms: Transforms | None = None,
+            constants: Mapping[str, npt.ArrayLike] | None = None,
+            modes: Mapping[str, ParamMode] | None = None
+    ):
+        if bad := [n for n, p in pdescs.items()
+                   if not isinstance(p, ParamDesc)]:
+            raise TypeError(
+                f"the descriptions of these parameters are not ParamDesc: "
+                f"{bad}")
         self._pdescs = dict(pdescs)
-        self._properties = copy.deepcopy(properties)
+        self._properties = copy.deepcopy(dict(properties))
         self._transforms = transforms
         self._modes = dict(modes or {})
         self._constants = {}
@@ -115,29 +266,155 @@ class ParamSpace:
             value.flags.writeable = False
             self._constants[name] = value
         # All elements of all parameters, in the order of the pdescs
-        self._elements = [
+        self._elements: list[_Element] = [
             (name, index)
-            for name, pdesc in pdescs.items()
+            for name, pdesc in self._pdescs.items()
             for index in (
-                [None] if isinstance(pdesc, ParamScalarDesc)
-                else range(pdesc.size()))]
-        # What sets each element (see _Kind)
-        self._kinds = {}
-        self._fixed = {}
-        self._free = {}
-        self._assignments = []
+                [None] if pdesc.is_scalar() else range(pdesc.size()))]
+        # What sets each element, and the fixed values, the properties of
+        # the free elements, and the expressions
+        self._kinds: dict[_Element, ParamKind] = {}
+        self._fixed: dict[_Element, float] = {}
+        self._free: dict[_Element, dict[str, Any]] = {}
+        self._assignments: list[_Assignment] = []
+        errors = self._check_names()
+        errors += self._read_properties()
+        errors += self._check_transforms()
+        errors += self._check_modes()
+        errors += self._check_fixed_ranges()
+        if not errors:
+            errors += self._order_steps()
+        if errors:
+            raise ConfigError(
+                "invalid parameter properties:\n- " + "\n- ".join(errors))
+        self._lay_out_buffer()
+
+    def pdescs(self) -> dict[str, ParamDesc]:
+        """Return the descriptions of the parameters, by name."""
+        return self._pdescs
+
+    def properties(self) -> dict[str, Property]:
+        """Return the properties, by key."""
+        return self._properties
+
+    def transforms(self) -> Transforms | None:
+        """Return the transforms function, if any."""
+        return self._transforms
+
+    def modes(self) -> dict[str, ParamMode]:
+        """Return the modes of the vector parameters that have one."""
+        return self._modes
+
+    def kinds(self) -> dict[str, ParamKind]:
+        """
+        Return what sets each element of each parameter, by element name
+        (e.g. 'a', 'v[3]'), in the order of the pdescs.
+        """
+        return {element_name(*e): self._kinds[e] for e in self._elements}
+
+    def free_properties(self) -> dict[str, dict[str, Any]]:
+        """
+        Return the properties of the free elements, by element name, in
+        the order in which evaluate takes their values.
+        """
+        return {
+            element_name(*e): copy.deepcopy(self._free[e])
+            for e in self._free_elements}
+
+    def evaluate(
+            self,
+            free: Mapping[str, float] | Sequence[float] | None = None
+    ) -> ParamValues:
+        """
+        Evaluate the parameters.
+
+        Parameters
+        ----------
+        free : Mapping or Sequence, optional
+            The values of the free elements: by element name, or in the
+            order of free_properties. By default, their 'value' property
+            (e.g. the initial value of a fit).
+
+        Returns
+        -------
+        ParamValues
+            The values of all parameters, by name (new arrays each time).
+            The values of a parameter with a mode are decoded.
+
+        Raises
+        ------
+        ValueError
+            If the values of the free elements are missing or unknown.
+        ParamEvaluationError
+            If an expression or the transforms function fails, or a value
+            is not finite or outside its valid range.
+        """
+        buffer = self._template.copy()
+        buffer[self._free_flat] = self._free_values(free)
+        namespace: dict[str, Any] = dict(self._constants)
+        for name, (start, stop, scalar) in self._layout.items():
+            namespace[name] = (
+                float(buffer[start]) if scalar else buffer[start:stop])
+        for step in self._steps:
+            if isinstance(step, _Assignment):
+                self._assign(buffer, namespace, step)
+            else:
+                namespace[step] = self._modes[step].decode(namespace[step])
+        values = {name: namespace[name] for name in self._pdescs}
+        if self._transforms:
+            self._apply_transforms(buffer, values)
+        self._check_values(buffer, values)
+        return values
+
+    def element_values(self, values: ParamValues) -> dict[str, float]:
+        """
+        Return the value of each element of each parameter, by element
+        name (e.g. 'a', 'v[3]').
+
+        Parameters
+        ----------
+        values : ParamValues
+            The values of the parameters (see evaluate).
+
+        Returns
+        -------
+        dict
+            The value of each element.
+        """
+        return {
+            element_name(name, index): float(
+                values[name] if index is None else values[name][index])
+            for name, index in self._elements}
+
+    def _check_names(self) -> list[str]:
+        """Return the problems of the names of parameters and constants."""
         errors = []
-        if conflicts := sorted(set(self._constants) & set(pdescs)):
+        for what, names in [
+                ('parameter', self._pdescs), ('constant', self._constants)]:
+            for name in names:
+                if reason := check_name(name):
+                    errors.append(f"the {what} {name!r} has an invalid "
+                                  f"name: {reason}")
+        if conflicts := sorted(set(self._constants) & set(self._pdescs)):
             errors.append(
                 f"constants cannot have the names of parameters: "
                 f"{conflicts}")
+        return errors
+
+    def _read_properties(self) -> list[str]:
+        """
+        Record what sets each element from the properties, and return the
+        problems: invalid keys or values, elements set more than once or
+        never, and unknown parameters.
+        """
+        errors = []
         keys_of = collections.defaultdict(list)
         unknown_keys = []
-        for key, value in properties.items():
+        for key, value in self._properties.items():
             try:
-                parsed = parse_key(key, pdescs)
+                parsed = parse_key(key, self._pdescs)
             except InvalidKeyError as e:
-                errors.append(f"'{key}': {e}")
+                errors.append(f"{key!r}: {e}")
                 continue
             if parsed is None:
                 unknown_keys.append(key)
@@ -163,107 +440,18 @@ class ParamSpace:
             # In strict mode, an error among the others
             try:
                 parseutils.report_unknown(
-                    "unknown parameters", unknown_keys, pdescs)
-            except parseutils.ConfigError as e:
-                errors.append(str(e))
-        errors += self._check_transforms()
-        errors += self._check_modes()
-        if not errors:
-            errors += self._order_assignments()
-        if errors:
-            raise InvalidParamsError(
-                "invalid parameter properties:\n- " + "\n- ".join(errors))
-        # The values of all elements are kept in one buffer, in the order
-        # of the elements: the position of each element and parameter in
-        # it, and its values before each evaluation (those of the fixed
-        # elements, and nan for the others)
-        self._flat = {e: i for i, e in enumerate(self._elements)}
-        self._layout = {}
-        start = 0
-        for name, pdesc in pdescs.items():
-            scalar = isinstance(pdesc, ParamScalarDesc)
-            self._layout[name] = (start, start + pdesc.size(), scalar)
-            start += pdesc.size()
-        self._template = np.array(
-            [self._fixed.get(e, np.nan) for e in self._elements])
-        self._free_elements = [e for e in self._elements if e in self._free]
-        self._free_names = [element_name(*e) for e in self._free_elements]
-        self._free_flat = np.array(
-            [self._flat[e] for e in self._free_elements], dtype=int)
+                    "unknown parameters", unknown_keys, self._pdescs)
+            except ConfigError as e:
+                errors.append(e.message)
+        return errors
 
-    def pdescs(self) -> dict[str, ParamDesc]:
-        return self._pdescs
-
-    def properties(self) -> dict[str, Any]:
-        return self._properties
-
-    def transforms(self) -> Callable | None:
-        return self._transforms
-
-    def modes(self) -> dict[str, ParamMode]:
-        """Return the modes of the vector parameters that have one."""
-        return self._modes
-
-    def names(
-            self, free: bool = True, tied: bool = True, fixed: bool = True
-    ) -> list[str]:
+    @staticmethod
+    def _items(
+            key: Key, value: Any
+    ) -> list[tuple[np.ndarray | None, Any]]:
         """
-        The names of the elements of the given kinds (e.g. 'a', 'v[3]'),
-        in the order of the pdescs. The elements set by the transforms
-        are tied.
-        """
-        kinds = set()
-        kinds.update([_Kind.FREE] if free else [])
-        kinds.update([_Kind.TIED, _Kind.TRANSFORMED] if tied else [])
-        kinds.update([_Kind.FIXED] if fixed else [])
-        return [
-            element_name(*e) for e in self._elements
-            if self._kinds[e] in kinds]
-
-    def free_properties(self) -> dict[str, dict[str, Any]]:
-        """The properties of each free element, by name."""
-        return {
-            element_name(*e): copy.deepcopy(self._free[e])
-            for e in self._free_elements}
-
-    def evaluate(
-            self, free: Mapping[str, Any] | Any = None
-    ) -> dict[str, float | np.ndarray]:
-        """
-        The values of all parameters (new arrays every time), given the
-        values of the free elements: a dict by name, or a sequence in the
-        order of names(free=True, tied=False, fixed=False).
-        """
-        buffer = self._template.copy()
-        buffer[self._free_flat] = self._free_values(free)
-        namespace = dict(self._constants)
-        for name, (start, stop, scalar) in self._layout.items():
-            namespace[name] = float(buffer[start]) if scalar \
-                else buffer[start:stop]
-        for step in self._steps:
-            if isinstance(step, _Assignment):
-                self._assign(buffer, namespace, step)
-            else:
-                namespace[step] = self._modes[step].decode(namespace[step])
-        values = {name: namespace[name] for name in self._pdescs}
-        if self._transforms:
-            self._apply_transforms(buffer, values)
-        if not (np.all(np.isfinite(buffer)) and all(
-                np.all(np.isfinite(values[name])) for name in self._modes)):
-            self._raise_not_finite(values)
-        return values
-
-    def exploded_values(self, values) -> dict[str, float]:
-        """The value of each element, by name (e.g. 'v[3]')."""
-        return {
-            element_name(name, index): float(
-                values[name] if index is None else values[name][index])
-            for name, index in self._elements}
-
-    def _items(self, key, value):
-        """
-        Split the value of a key into the values of its elements: pairs of
-        the indices of elements (None for a scalar) and a single value.
+        Split the property of a key into those of its elements: pairs of
+        the indices of elements (None for a scalar) and one property.
         """
         if _is_list(value):
             if key.indices is None or key.element:
@@ -285,39 +473,53 @@ class ParamSpace:
         return [(key.indices, value)]
 
     @staticmethod
-    def _elements_of(name, indices):
+    def _elements_of(
+            name: str, indices: np.ndarray | None
+    ) -> list[_Element]:
+        """Return the given elements of a parameter (all if a scalar)."""
         if indices is None:
             return [(name, None)]
         return [(name, int(i)) for i in indices]
 
-    def _set(self, key, name, indices, value):
+    def _set(
+            self,
+            key: str,
+            name: str,
+            indices: np.ndarray | None,
+            value: Any
+    ) -> None:
         """
-        Record what sets the given elements. Raise ValueError if the value
-        is invalid.
+        Record what sets the given elements. Raise ValueError (or
+        InvalidExpressionError) if the property is invalid.
         """
         elements = self._elements_of(name, indices)
         if isinstance(value, bool):
             raise ValueError(f"{value} is not a number")
         if isinstance(value, numbers.Real):
-            kind = _Kind.FIXED
+            kind = ParamKind.FIXED
             self._fixed.update(dict.fromkeys(elements, float(value)))
         elif isinstance(value, str):
-            kind = _Kind.TIED
+            kind = ParamKind.TIED
             expression = Expression(value, self._pdescs, self._constants)
             self._assignments.append(
                 _Assignment(key, name, indices, expression))
         elif value is None:
-            kind = _Kind.TRANSFORMED
+            kind = ParamKind.TRANSFORMED
         elif isinstance(value, Mapping):
-            kind = _Kind.FREE
-            self._free.update({e: copy.deepcopy(value) for e in elements})
+            kind = ParamKind.FREE
+            self._free.update(
+                {e: copy.deepcopy(dict(value)) for e in elements})
         else:
             raise ValueError(f"invalid value: {value!r}")
         self._kinds.update(dict.fromkeys(elements, kind))
 
-    def _check_transforms(self):
+    def _check_transforms(self) -> list[str]:
+        """
+        Return the problems of the transforms function: expressions too,
+        or elements set to None without one.
+        """
         nones = [element_name(*e) for e, k in self._kinds.items()
-                 if k is _Kind.TRANSFORMED]
+                 if k is ParamKind.TRANSFORMED]
         if self._transforms and self._assignments:
             return [
                 "expressions and a transforms function are mutually "
@@ -332,10 +534,10 @@ class ParamSpace:
                 "set to None (tied to it)")
         return []
 
-    def _check_modes(self):
+    def _check_modes(self) -> list[str]:
         """
-        The problems of the modes: of unknown or scalar parameters, of
-        parameters they do not suit, or of elements that the transforms
+        Return the problems of the modes: of unknown or scalar parameters,
+        of parameters they do not suit, or of elements that the transforms
         function sets.
         """
         errors = []
@@ -343,35 +545,55 @@ class ParamSpace:
             pdesc = self._pdescs.get(name)
             if pdesc is None:
                 errors.append(f"the mode of an unknown parameter: '{name}'")
-            elif isinstance(pdesc, ParamScalarDesc):
+            elif pdesc.is_scalar():
                 errors.append(
                     f"only vector parameters can have a mode; '{name}' is "
                     f"a scalar")
             else:
                 try:
                     mode.check(pdesc.size())
-                except parseutils.ConfigError as e:
+                except ConfigError as e:
                     errors.append(f"the mode of '{name}': {e.message}")
-                if any(self._kinds.get((name, i)) is _Kind.TRANSFORMED
+                if any(self._kinds.get((name, i)) is ParamKind.TRANSFORMED
                        for i in range(pdesc.size())):
                     errors.append(
                         f"the transforms function cannot set elements of "
                         f"'{name}', which has a mode")
         return errors
 
-    def _order_assignments(self):
+    def _check_fixed_ranges(self) -> list[str]:
+        """
+        Return the fixed values outside the valid ranges of their
+        parameters. Those of parameters with a mode are coded, so they are
+        checked when evaluated.
+        """
+        return [
+            f"'{element_name(*e)}' is {value}, outside its valid range "
+            f"{self._range_text(e[0])}"
+            for e, value in self._fixed.items()
+            if e[0] not in self._modes and not (
+                self._pdescs[e[0]].minimum() <= value
+                <= self._pdescs[e[0]].maximum())]
+
+    def _range_text(self, name: str) -> str:
+        """Return the valid range of a parameter, as text."""
+        pdesc = self._pdescs[name]
+        return f"[{pdesc.minimum()}, {pdesc.maximum()}]"
+
+    def _order_steps(self) -> list[str]:
         """
         Order the assignments and the decoding of the parameters with a
         mode (their names), so that each comes after those that set the
-        elements it reads. An expression that reads a parameter with a
-        mode reads its decoded values, so it comes after its decoding,
-        which comes after the assignments of its elements.
+        elements it reads, and return the problems (a cycle). An
+        expression that reads a parameter with a mode reads its decoded
+        values, so it comes after its decoding, which comes after the
+        assignments of its elements.
         """
         writer = {}
         for i, a in enumerate(self._assignments):
             for index in [None] if a.indices is None else a.indices:
                 writer[(a.name, None if index is None else int(index))] = i
-        graph = graphlib.TopologicalSorter()
+        graph: graphlib.TopologicalSorter = graphlib.TopologicalSorter()
         for name in self._modes:
             graph.add(name)
             for (written, _), i in writer.items():
@@ -395,18 +617,52 @@ class ParamSpace:
                 for step in e.args[1])
             return [f"the expressions depend on each other in a cycle: "
                     f"{cycle}"]
-        self._steps = [
+        self._steps: list[_Assignment | str] = [
             step if isinstance(step, str) else self._assignments[step]
             for step in order]
         return []
 
-    def _free_values(self, free):
+    def _lay_out_buffer(self) -> None:
+        """
+        Lay out the values of all elements in one buffer, in the order of
+        the elements: the position of each element and parameter in it,
+        and its values before each evaluation (those of the fixed
+        elements, and nan for the others).
+        """
+        self._flat = {e: i for i, e in enumerate(self._elements)}
+        self._layout: dict[str, tuple[int, int, bool]] = {}
+        start = 0
+        for name, pdesc in self._pdescs.items():
+            self._layout[name] = (
+                start, start + pdesc.size(), pdesc.is_scalar())
+            start += pdesc.size()
+        self._template = np.array(
+            [self._fixed.get(e, np.nan) for e in self._elements])
+        self._free_elements = [e for e in self._elements if e in self._free]
+        self._free_names = [element_name(*e) for e in self._free_elements]
+        self._free_flat = np.array(
+            [self._flat[e] for e in self._free_elements], dtype=int)
+        self._ranged = [
+            name for name, pdesc in self._pdescs.items() if pdesc.has_range()]
+
+    def _free_values(
+            self, free: Mapping[str, float] | Sequence[float] | None
+    ) -> list[float]:
+        """
+        Return the values of the free elements, in order (see evaluate).
+        """
         if free is None:
-            free = {}
+            if missing := [
+                    n for n, e in zip(self._free_names, self._free_elements)
+                    if 'value' not in self._free[e]]:
+                raise ValueError(
+                    f"these free parameters have no 'value' to evaluate "
+                    f"them at: {missing}")
+            return [self._free[e]['value'] for e in self._free_elements]
         if not isinstance(free, Mapping):
             free = list(free)
             if len(free) != len(self._free_names):
-                raise RuntimeError(
+                raise ValueError(
                     f"expected {len(self._free_names)} free values, "
                     f"got {len(free)}")
             return free
@@ -416,20 +672,26 @@ class ParamSpace:
         if extra := [n for n in free if n not in self._free_names]:
             problems.append(f"these parameters are not free: {extra}")
         if problems:
-            raise RuntimeError('; '.join(problems))
+            raise ValueError('; '.join(problems))
         return [free[n] for n in self._free_names]
 
-    def _assign(self, buffer, namespace, assignment):
+    def _assign(
+            self,
+            buffer: np.ndarray,
+            namespace: dict[str, Any],
+            assignment: _Assignment
+    ) -> None:
+        """Evaluate an expression, and set the elements it sets."""
         a = assignment
         try:
             result = np.asarray(a.expression.evaluate(namespace), dtype=float)
         except Exception as e:
-            raise RuntimeError(
+            raise ParamEvaluationError(
                 f"the expression of '{a.key}' ('{a.expression.source}') "
                 f"failed: {e}") from e
         if a.indices is None:
             if result.ndim != 0:
-                raise RuntimeError(
+                raise ParamEvaluationError(
                     f"the expression of '{a.key}' gives a vector of size "
                     f"{result.size}, but '{a.name}' is a scalar")
             namespace[a.name] = buffer[self._flat[(a.name, None)]] = float(
@@ -437,18 +699,27 @@ class ParamSpace:
             return
         if result.ndim > 1 or (
                 result.ndim == 1 and result.size != len(a.indices)):
-            raise RuntimeError(
+            raise ParamEvaluationError(
                 f"the expression of '{a.key}' gives a vector of size "
                 f"{result.size}, for a key of size {len(a.indices)}")
+        # The namespace has a view of the buffer
         namespace[a.name][a.indices] = result
 
-    def _apply_transforms(self, buffer, values):
-        # The function works on a copy, and only sets the elements set to
-        # None
+    def _apply_transforms(
+            self, buffer: np.ndarray, values: ParamValues
+    ) -> None:
+        """
+        Apply the transforms function. It works on a copy of the values,
+        and only the elements set to None are taken from it.
+        """
         result = copy.deepcopy(values)
-        self._transforms(result)
+        try:
+            self._transforms(result)
+        except Exception as e:
+            raise ParamEvaluationError(
+                f"the transforms function failed: {e}") from e
         for element, kind in self._kinds.items():
-            if kind is not _Kind.TRANSFORMED:
+            if kind is not ParamKind.TRANSFORMED:
                 continue
             name, index = element
             try:
@@ -458,15 +729,41 @@ class ParamSpace:
                 else:
                     values[name][index] = result[name][index]
             except Exception as e:
-                raise RuntimeError(
+                raise ParamEvaluationError(
                     f"the transforms function did not set "
                     f"'{element_name(name, index)}' to a number: {e}") from e
 
-    def _raise_not_finite(self, values):
-        bad = [
-            f"'{element_name(name, index)}' is {value}"
-            for name, index in self._elements
-            if not np.isfinite(value := (
-                values[name] if index is None else values[name][index]))]
-        raise RuntimeError(
-            f"the values of parameters must be finite: {', '.join(bad)}")
+    def _check_values(self, buffer: np.ndarray, values: ParamValues) -> None:
+        """
+        Raise ParamEvaluationError if a value is not finite, or outside
+        its valid range. The buffer has the coded values of the
+        parameters with a mode, so those are checked in values.
+        """
+        if not (np.all(np.isfinite(buffer)) and all(
+                np.all(np.isfinite(values[name])) for name in self._modes)):
+            bad = [
+                f"'{element_name(name, index)}' is {value}"
+                for name, index in self._elements
+                if not np.isfinite(value := (
+                    values[name] if index is None else values[name][index]))]
+            raise ParamEvaluationError(
+                f"the values of parameters must be finite: {', '.join(bad)}")
+        bad = []
+        for name in self._ranged:
+            pdesc = self._pdescs[name]
+            value = np.atleast_1d(values[name])
+            outside = (value < pdesc.minimum()) | (value > pdesc.maximum())
+            if np.any(outside):
+                names = element_names(
+                    name, None if pdesc.is_scalar()
+                    else np.flatnonzero(outside))
+                bad += [
+                    f"'{n}' is {v} (valid: {self._range_text(name)})"
+                    for n, v in zip(names, value[outside])]
+        if bad:
+            raise ParamEvaluationError(
+                f"the values of parameters must be in their valid ranges: "
+                f"{', '.join(bad)}")
+
+
+param_space_parser = parseutils.BasicParser(ParamSpace)

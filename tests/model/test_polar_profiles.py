@@ -28,7 +28,7 @@ def face_on_disk(driver, evaluate_cases, key, trait):
     """
     from gbkfit.model.components.disks import traits
     parser = dict(b=traits.bpt_parser, d=traits.dpt_parser)[key]
-    names = [p.name() for p in parser.load(dict(type=trait)).params_sm()]
+    names = list(parser.load(dict(type=trait)).params_sm())
     traits_ = dict(
         bptraits=dict(type=trait if key == 'b' else 'uniform'),
         vptraits=dict(type='tan_uniform'),

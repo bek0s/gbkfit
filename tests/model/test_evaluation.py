@@ -35,7 +35,7 @@ def nodewise_relative_case(driver):
 
 def test_evaluation_does_not_modify_params(driver):
     model_group = observation_group([nodewise_relative_case(driver)])
-    params = gbkfit.params.EvaluationParams(model_group.pdescs(), dict(
+    params = gbkfit.params.ParamSpace(model_group.pdescs(), dict(
         vsys=0, xpos=0, ypos=0, posa=30, incl=45,
         bpt_a=1, bpt_s=4, dpt_a=10,
         vpt_vt=[100] + [10] * 11),
@@ -64,7 +64,7 @@ group = observation_group([dict(
         rnodes=list(range(0, 12)),
         bptraits=dict(type='exponential'), bhtraits=dict(type='sech2'),
         vptraits=dict(type='tan_arctan'), dptraits=dict(type='uniform'))]))])
-params = gbkfit.params.EvaluationParams(group.pdescs(), dict(
+params = gbkfit.params.ParamSpace(group.pdescs(), dict(
     vsys=0, xpos=0, ypos=0, posa=30, incl=60, bpt_a=1, bpt_s=4, bht_s=1,
     vpt_rt=2, vpt_vt=150, dpt_a=20))
 np.save(sys.argv[1], group.model_h(params.evaluate())[0]['spectra']['d'])
@@ -125,7 +125,7 @@ def test_one_model_observed_on_grids_with_different_steps(
             driver)
 
     def evaluate(group, i):
-        params = gbkfit.params.EvaluationParams(group.pdescs(), properties)
+        params = gbkfit.params.ParamSpace(group.pdescs(), properties)
         return group.model_h(params.evaluate())[i][key]['d'].copy()
 
     shared = ObservationGroup(
@@ -188,7 +188,7 @@ def test_a_velocity_that_is_not_a_number_makes_spectra_nan(driver):
             bptraits=dict(type='exponential'),
             vptraits=dict(type='tan_courteau'),
             dptraits=dict(type='uniform'))]))])
-    params = gbkfit.params.EvaluationParams(model_group.pdescs(), dict(
+    params = gbkfit.params.ParamSpace(model_group.pdescs(), dict(
         vsys=0, xpos=0, ypos=0, posa=30, incl=45, bpt_a=1, bpt_s=4,
         vpt_rt=-3, vpt_vt=100, vpt_b=0.4, vpt_g=2, dpt_a=10))
     cube = model_group.model_h(params.evaluate())[0]['spectra']['d']
@@ -216,7 +216,7 @@ def test_cuda_smooth_disk_of_more_voxels_than_an_int_holds(driver):
                     rnodes=list(range(0, 30)),
                     bptraits=dict(type='exponential'),
                     bhtraits=dict(type='sech2'))]))])
-        params = gbkfit.params.EvaluationParams(model_group.pdescs(), dict(
+        params = gbkfit.params.ParamSpace(model_group.pdescs(), dict(
             xpos=0, ypos=0, posa=0, incl=30, bpt_a=1, bpt_s=6, bht_s=1))
         return model_group.model_h(params.evaluate())[0]['brightness']['d']
     many = image(528384, 0.001)
