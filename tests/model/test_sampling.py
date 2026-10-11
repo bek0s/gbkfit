@@ -77,6 +77,31 @@ def test_node_wise_parameters_have_a_value_for_each_subnode():
     assert model_group.pdescs()['vpt_p'].size() == nsubrnodes
 
 
+def test_traits_evaluated_apart_are_sampled_as_by_their_disk(driver):
+    # Node-wise values given at the nodes are interpolated to the subnodes
+    # with the interpolation of the disk, and linearly between them; off
+    # the disk (from its last node), the traits are NaN
+    from gbkfit.model.components.disks import smdisk, traits
+    rnodes, curve = (0.0, 4.0, 10.0, 20.0), [1.0, 3.0, 2.0, 0.5]
+    model_disk = smdisk.SMDisk(
+        loose=False, tilted=False, rnodes=rnodes, rstep=1.0,
+        interp=interpolation.InterpolatorAkima,
+        traits_=dict(rpt=[traits.BPTraitNWUniform()]),
+        prefixes=dict(rpt='bpt'), rdata_key='bdata')
+    plan = model_disk.plan(driver, 0, np.dtype(np.float32))
+    params = dict(xpos=0, ypos=0, posa=0, incl=45, bpt_a=np.array(curve))
+    subrnodes = np.array(model_disk.subrnodes())
+    at = interpolation.InterpolatorAkima(rnodes, curve)(subrnodes)
+    r = np.concatenate(
+        (subrnodes[:-1], (subrnodes[1:] + subrnodes[:-1]) / 2, [rnodes[-1]]))
+    expected = np.concatenate((at[:-1], (at[1:] + at[:-1]) / 2, [np.nan]))
+    # (r and theta broadcast together)
+    values = plan.evaluate_polar_traits(params, 'rpt', r[:, None], [0, 90])
+    assert values.shape == (1, r.size, 2)
+    np.testing.assert_allclose(
+        values[0], np.column_stack((expected, expected)), rtol=1e-6)
+
+
 def test_flaring_at_the_subnodes():
     model = model_parser.load(dict(
         type='intensity_3d', components=[dict(

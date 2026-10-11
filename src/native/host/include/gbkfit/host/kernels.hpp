@@ -321,6 +321,17 @@ gmodel_smdisk_evaluate(const DiskArgs<T>& a)
 }
 
 template<typename T> void
+gmodel_disk_traits_evaluate(const DiskTraitsArgs<T>& a)
+{
+    // Parallelization: per point
+    #pragma omp parallel for
+    for(int j = 0; j < a.npoints; ++j)
+    {
+        gbkfit::gmodel_disk_traits_point(j, a);
+    }
+}
+
+template<typename T> void
 objective_residual(
         const T* obs_d, const T* obs_e, const T* obs_m,
         const T* mdl_d, const T* mdl_w,
@@ -411,6 +422,11 @@ struct Wrapper
     static void
     gmodel_smdisk_evaluate(const DiskArgs<T>& a) {
         kernels::gmodel_smdisk_evaluate<T>(a);
+    }
+
+    static void
+    gmodel_disk_traits_evaluate(const DiskTraitsArgs<T>& a) {
+        kernels::gmodel_disk_traits_evaluate<T>(a);
     }
 
     static void

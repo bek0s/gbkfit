@@ -182,6 +182,13 @@ Wrapper<T>::gmodel_smdisk_evaluate(const DiskArgs<T>& a)
 }
 
 template<typename T> void
+Wrapper<T>::gmodel_disk_traits_evaluate(const DiskTraitsArgs<T>& a)
+{
+    launch("gmodel_disk_traits_evaluate", a.npoints,
+            kernels::gmodel_disk_traits_evaluate<T>, a);
+}
+
+template<typename T> void
 Wrapper<T>::objective_residual(
         const T* obs_d, const T* obs_e, const T* obs_m,
         const T* mdl_d, const T* mdl_w,

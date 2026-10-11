@@ -78,6 +78,34 @@ struct DiskArgs
     T* vdweight_cmp = nullptr;
 };
 
+// The kinds of traits of a disk: the trait sets of DiskArgs
+enum class TraitKind
+{
+    RPT, RHT, VPT, VHT, DPT, DHT, ZPT, SPT, WPT
+};
+
+// The evaluation of the traits of one kind of a disk at points of its
+// plane, each trait apart (see gmodel_disk_traits_point): the (sub)nodes
+// of the disk and its traits of that kind; the radius r of each point,
+// and its azimuth theta (degrees) for polar traits or its height z above
+// the midplane for height traits; and the inclination (degrees) at which
+// the velocity polar traits are projected on the line of sight. out gets
+// the value of trait i at point j at i * npoints + j.
+template<typename T>
+struct DiskTraitsArgs
+{
+    TraitKind kind = TraitKind::RPT;
+    int nrnodes = 0;
+    const T* rnodes = nullptr;
+    TraitSet<T> traits;
+    int npoints = 0;
+    const T* r = nullptr;
+    const T* theta = nullptr;
+    const T* z = nullptr;
+    T incl = 0;
+    T* out = nullptr;
+};
+
 // The extra arguments of the Monte Carlo disk kernel. The clouds are made
 // in pools: one for each density trait with an analytical integral, and
 // one for each ring of the others. The arguments are the seed of the

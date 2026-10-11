@@ -1,9 +1,12 @@
 #pragma once
 
+#include <algorithm>
 #include <optional>
 #include <string>
 
 #include <nanobind/stl/array.h>
+#include <nanobind/stl/optional.h>
+#include <nanobind/stl/string.h>
 
 #include <gbkfit/constants.hpp>
 #include <gbkfit/gmodel/disk.hpp>
@@ -77,6 +80,7 @@ struct GModel
     using Cube = Array<Device, T, nb::ndim<3>>;
     using ConstCube = Array<Device, const T, nb::ndim<3>>;
     using Lines = Array<Device, const T, nb::ndim<2>>;
+    using TraitValues = Array<Device, T, nb::ndim<2>>;
 
     // Assign the same (mean over z) weight of the 3d spatial weight cube
     // to the whole spectrum of each spatial position
@@ -153,6 +157,42 @@ struct GModel
         mc.ncloudscsum_len = int(ncloudscsum.shape(0));
         mc.has_analytical_integral = has_analytical_integral.data();
         Kernels::gmodel_mcdisk_evaluate(args, mc);
+    }
+
+    // Evaluate each polar trait of one kind of a disk ('rpt', 'vpt',
+    // 'dpt', 'zpt', 'spt' or 'wpt') at the points (r, theta) of its plane,
+    // into out (a row for each trait), as the disk kernels evaluate them
+    // (see gbkfit::gmodel_disk_traits_point). incl projects the velocity
+    // traits on the line of sight: required for them, and only for them.
+    static void
+    disk_ptraits_evaluate(
+            const Disk& disk, const std::string& kind,
+            Values r, Values theta, TraitValues out, std::optional<T> incl)
+    {
+        auto a = make_traits_args(disk, kind, true, r, out);
+        require(theta.shape(0) == r.shape(0),
+                "theta needs one value for each point");
+        require(incl.has_value() == (a.kind == TraitKind::VPT),
+                "incl is required for the velocity traits ('vpt'), and only "
+                "for them");
+        a.theta = theta.data();
+        a.incl = incl.value_or(0);
+        Kernels::gmodel_disk_traits_evaluate(a);
+    }
+
+    // Evaluate each height trait of one kind of a disk ('rht', 'vht' or
+    // 'dht') at the points (r, z) of its plane (z: the height above the
+    // midplane), into out (a row for each trait), as the disk kernels
+    // evaluate them (see gbkfit::gmodel_disk_traits_point)
+    static void
+    disk_htraits_evaluate(
+            const Disk& disk, const std::string& kind,
+            Values r, Values z, TraitValues out)
+    {
+        auto a = make_traits_args(disk, kind, false, r, out);
+        require(z.shape(0) == r.shape(0), "z needs one value for each point");
+        a.z = z.data();
+        Kernels::gmodel_disk_traits_evaluate(a);
     }
 
     static void
@@ -243,9 +283,79 @@ struct GModel
                 nb::arg("nclouds"),
                 nb::arg("ncloudscsum").noconvert(),
                 nb::arg("has_analytical_integral").noconvert()));
+        cls.def_static("disk_ptraits_evaluate", &disk_ptraits_evaluate,
+                nb::arg("disk"), nb::arg("kind"),
+                nb::arg("r").noconvert(), nb::arg("theta").noconvert(),
+                nb::arg("out").noconvert(),
+                nb::arg("incl").none() = nb::none());
+        cls.def_static("disk_htraits_evaluate", &disk_htraits_evaluate,
+                nb::arg("disk"), nb::arg("kind"),
+                nb::arg("r").noconvert(), nb::arg("z").noconvert(),
+                nb::arg("out").noconvert());
     }
 
 private:
+
+    // The kinds of traits of a disk: their names (those of the Python
+    // disks), whether they are polar or height traits, and their sets
+    struct Kind
+    {
+        const char* name;
+        TraitKind kind;
+        bool polar;
+        typename Disk::Traits Disk::* set;
+    };
+
+    static constexpr std::array<Kind, 9> KINDS = {{
+            {"rpt", TraitKind::RPT, true, &Disk::rpt},
+            {"rht", TraitKind::RHT, false, &Disk::rht},
+            {"vpt", TraitKind::VPT, true, &Disk::vpt},
+            {"vht", TraitKind::VHT, false, &Disk::vht},
+            {"dpt", TraitKind::DPT, true, &Disk::dpt},
+            {"dht", TraitKind::DHT, false, &Disk::dht},
+            {"zpt", TraitKind::ZPT, true, &Disk::zpt},
+            {"spt", TraitKind::SPT, true, &Disk::spt},
+            {"wpt", TraitKind::WPT, true, &Disk::wpt}}};
+
+    // The arguments of an evaluation of the traits of one kind of a disk,
+    // polar traits (polar) or height traits, at the points of radii r,
+    // into out (see gbkfit::DiskTraitsArgs)
+    static DiskTraitsArgs<T>
+    make_traits_args(
+            const Disk& disk, const std::string& kind, bool polar,
+            const Values& r, const TraitValues& out)
+    {
+        std::string names;
+        for (const Kind& k : KINDS) {
+            if (k.polar == polar) {
+                names += (names.empty() ? "'" : ", '") + std::string(k.name)
+                        + "'";
+            }
+        }
+        const auto it = std::find_if(
+                KINDS.begin(), KINDS.end(), [&](const Kind& k) {
+                    return k.polar == polar && kind == k.name;
+                });
+        require(it != KINDS.end(),
+                "kind must be one of " + names + "; it is '" + kind + "'");
+        const auto& set = disk.*(it->set);
+        require(set.has_value(),
+                "the disk has no traits of kind '" + kind + "'");
+
+        DiskTraitsArgs<T> a;
+        a.kind = it->kind;
+        a.nrnodes = int(disk.rnodes.shape(0));
+        a.rnodes = disk.rnodes.data();
+        require(a.nrnodes >= 2, "a disk needs at least two radial nodes");
+        a.traits = set->raw();
+        a.npoints = int(r.shape(0));
+        a.r = r.data();
+        require(out.shape(0) == size_t(a.traits.n)
+                && out.shape(1) == r.shape(0),
+                "out needs a row for each trait, and a value for each point");
+        a.out = out.data();
+        return a;
+    }
 
     static DiskArgs<T>
     make_args(
