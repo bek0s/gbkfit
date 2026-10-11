@@ -898,4 +898,84 @@ gmodel_smdisk_evaluate_spaxel(int x, int y, int z, const DiskArgs<T>& a)
     }
 }
 
+// The polar traits of the set of a DiskTraitsArgs at its point j, in the
+// ring rnidx, into values. extra has the further arguments of PTraitFunT:
+// the inclination (radians) of the velocity traits.
+template<auto PTraitFunT, typename T, typename... Ts> constexpr void
+gmodel_disk_ptraits_point(
+        T* values, int j, int rnidx, const DiskTraitsArgs<T>& a, Ts... extra)
+{
+    const TraitSet<T>& t = a.traits;
+    const T r = a.r[j];
+    const T theta = a.theta[j] * DEG_TO_RAD<T>;
+    p_traits<PTraitFunT>(
+            values, t.n, t.uids, t.cvalues, t.ccounts, t.pvalues, t.pcounts,
+            rnidx, a.rnodes, a.nrnodes,
+            r * std::cos(theta), r * std::sin(theta), r, theta, extra...);
+}
+
+// The height traits of the set of a DiskTraitsArgs at its point j, in the
+// ring rnidx, into values: at |z|, as the disk kernels evaluate them
+template<auto HTraitFunT, typename T> constexpr void
+gmodel_disk_htraits_point(
+        T* values, int j, int rnidx, const DiskTraitsArgs<T>& a)
+{
+    const TraitSet<T>& t = a.traits;
+    h_traits<HTraitFunT>(
+            values, t.n, t.uids, t.cvalues, t.ccounts, t.pvalues, t.pcounts,
+            rnidx, a.rnodes, a.nrnodes, a.r[j], std::abs(a.z[j]));
+}
+
+// Evaluate each trait of the set of a DiskTraitsArgs at its point j, as
+// the disk kernels do: in the ring of the radius of the point, with the
+// node-wise parameters interpolated linearly between the (sub)nodes. The
+// values are those of the traits before the kernels combine them (e.g.
+// a velocity trait projected, without the systemic velocity). Off the
+// disk (a radius outside [rnodes[0], rnodes[nrnodes - 1])), where the
+// kernels evaluate nothing, the values are NaN.
+template<typename T> constexpr void
+gmodel_disk_traits_point(int j, const DiskTraitsArgs<T>& a)
+{
+    T values[TRAIT_NUM_MAX] = {0};
+    int rnidx = -1;
+    if (!disk_info(rnidx, a.r[j], a.nrnodes, a.rnodes)) {
+        for (int i = 0; i < a.traits.n; ++i)
+            values[i] = NAN;
+    } else {
+        switch (a.kind)
+        {
+        case TraitKind::RPT:
+            gmodel_disk_ptraits_point<rp_trait<T>>(values, j, rnidx, a);
+            break;
+        case TraitKind::VPT:
+            gmodel_disk_ptraits_point<vp_trait<T>>(
+                    values, j, rnidx, a, a.incl * DEG_TO_RAD<T>);
+            break;
+        case TraitKind::DPT:
+            gmodel_disk_ptraits_point<dp_trait<T>>(values, j, rnidx, a);
+            break;
+        case TraitKind::ZPT:
+            gmodel_disk_ptraits_point<zp_trait<T>>(values, j, rnidx, a);
+            break;
+        case TraitKind::SPT:
+            gmodel_disk_ptraits_point<sp_trait<T>>(values, j, rnidx, a);
+            break;
+        case TraitKind::WPT:
+            gmodel_disk_ptraits_point<wp_trait<T>>(values, j, rnidx, a);
+            break;
+        case TraitKind::RHT:
+            gmodel_disk_htraits_point<rh_trait<T>>(values, j, rnidx, a);
+            break;
+        case TraitKind::VHT:
+            gmodel_disk_htraits_point<vh_trait<T>>(values, j, rnidx, a);
+            break;
+        case TraitKind::DHT:
+            gmodel_disk_htraits_point<dh_trait<T>>(values, j, rnidx, a);
+            break;
+        }
+    }
+    for (int i = 0; i < a.traits.n; ++i)
+        a.out[i * a.npoints + j] = values[i];
+}
+
 } // namespace gbkfit

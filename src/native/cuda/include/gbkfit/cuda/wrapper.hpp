@@ -69,6 +69,9 @@ struct Wrapper
     gmodel_smdisk_evaluate(const DiskArgs<T>& a);
 
     static void
+    gmodel_disk_traits_evaluate(const DiskTraitsArgs<T>& a);
+
+    static void
     objective_residual(
             const T* obs_d, const T* obs_e, const T* obs_m,
             const T* mdl_d, const T* mdl_w,

@@ -13,6 +13,7 @@ import pathlib
 
 import numpy as np
 import pytest
+import scipy.integrate
 
 from gbkfit.model.components.disks import traits
 
@@ -407,15 +408,20 @@ def test_residual_sum_precision(driver):
     assert residual_sum(driver, values, False) == 1e8 + 999
 
 
-def _trait_set(driver, memory, trait, params=()):
-    """A native set of one trait, with the given parameter values."""
-    consts = [float(c) for c in trait.consts()]
+def _trait_set(driver, memory, *traits_and_params):
+    """A native set of traits, each given with its parameter values."""
+    traits_ = [trait for trait, _ in traits_and_params]
+    consts = [[float(c) for c in trait.consts()] for trait in traits_]
+    params = [list(params) for _, params in traits_and_params]
     return driver.native_class('TraitSet', DTYPE)(
-        uids=memory.to_device(np.array([trait.uid()], np.int32)),
-        cvalues=memory.to_device(np.array(consts, DTYPE)),
-        ccounts=memory.to_device(np.array([len(consts)], np.int32)),
-        pvalues=memory.to_device(np.array(params, DTYPE)),
-        pcounts=memory.to_device(np.array([len(params)], np.int32)))
+        uids=memory.to_device(
+            np.array([trait.uid() for trait in traits_], np.int32)),
+        cvalues=memory.to_device(np.array(sum(consts, []), DTYPE)),
+        ccounts=memory.to_device(
+            np.array([len(c) for c in consts], np.int32)),
+        pvalues=memory.to_device(np.array(sum(params, []), DTYPE)),
+        pcounts=memory.to_device(
+            np.array([len(p) for p in params], np.int32)))
 
 
 def evaluate_smdisk(driver, thick):
@@ -440,7 +446,7 @@ def evaluate_smdisk(driver, thick):
         return memory.to_device(np.array([value], DTYPE))
 
     def trait_set(trait, params=()):
-        return _trait_set(driver, memory, trait, params)
+        return _trait_set(driver, memory, (trait, params))
 
     # A disk without height traits is evaluated as a thin disk
     heights = dict(
@@ -556,3 +562,120 @@ def test_disks_are_checked(driver, options, message):
     assert disk_image(driver).any()
     with pytest.raises(ValueError, match=message):
         disk_image(driver, **options)
+
+
+def test_disk_traits_are_those_the_disk_kernels_evaluate(driver):
+    # The image of a face-on thin disk is, at each pixel, the sum of its
+    # density traits at the radius and azimuth of the pixel: the traits
+    # evaluated apart are those of the kernels (the rings, the node-wise
+    # values interpolated linearly, the azimuth in degrees)
+    memory = Memory(driver)
+    rnodes = np.linspace(0, 20, 11)
+    nodes = 1 + np.sin(rnodes / 3)
+    disk = driver.native_class('Disk', DTYPE)(
+        loose=False, tilted=False,
+        rnodes=memory.to_device(rnodes.astype(DTYPE)),
+        xpos=memory.to_device(np.array([0.5], DTYPE)),
+        ypos=memory.to_device(np.array([-1.0], DTYPE)),
+        posa=memory.to_device(np.array([0.0], DTYPE)),
+        incl=memory.to_device(np.array([0.0], DTYPE)),
+        rpt=_trait_set(
+            driver, memory,
+            (traits.BPTraitExponential(), (1.0, 6.0)),
+            (traits.BPTraitNWUniform(), nodes),
+            (traits.BPTraitNWHarmonic(2),
+             np.concatenate((0.3 * nodes, np.full(11, 40.0))))))
+    gmodel = driver.native_class('GModel', DTYPE)
+    image = memory.to_device(np.zeros((48, 48), DTYPE))
+    gmodel.smdisk_evaluate(
+        disk, spat_size=(48, 48, 1), spat_step=(1.0, 1.0, 1.0),
+        spat_zero=(-24.0, -24.0, 0.0), spat_rota=0,
+        spec_size=1, spec_step=1.0, spec_zero=0.0, image=image)
+    # (at posa 0 and incl 0, the azimuth is atan2(-dx, dy))
+    y, x = np.indices((48, 48)) - 24.0
+    dx, dy = x - 0.5, y + 1.0
+    r, theta = np.hypot(dx, dy), np.degrees(np.arctan2(-dx, dy))
+    out = memory.to_device(np.zeros((3, r.size), DTYPE))
+    gmodel.disk_ptraits_evaluate(
+        disk, 'rpt', memory.to_device(r.ravel().astype(DTYPE)),
+        memory.to_device(theta.ravel().astype(DTYPE)), out)
+    values = memory.to_host(out).reshape(3, 48, 48)
+    # (away from the last node, which float32 radii can put either side)
+    on, off = r < 19.9, r > 20.1
+    np.testing.assert_allclose(
+        values.sum(axis=0)[on], memory.to_host(image)[on],
+        rtol=1e-5, atol=1e-5)
+    assert np.isnan(values[:, off]).all()
+
+
+def thick_disk(driver, memory):
+    """
+    A thick native disk with an exponential density trait, a sech2 height
+    trait, and an arctan velocity trait.
+    """
+    def scalar(value):
+        return memory.to_device(np.array([value], DTYPE))
+
+    def trait_set(trait, params):
+        return _trait_set(driver, memory, (trait, params))
+
+    return driver.native_class('Disk', DTYPE)(
+        loose=False, tilted=False,
+        rnodes=memory.to_device(np.linspace(0, 20, 11, dtype=DTYPE)),
+        vsys=scalar(0), xpos=scalar(0), ypos=scalar(0),
+        posa=scalar(0), incl=scalar(0),
+        rpt=trait_set(traits.BPTraitExponential(), (1, 5)),
+        rht=trait_set(traits.BHTraitSech2(), (1.5,)),
+        vpt=trait_set(traits.VPTraitTanArctan(), (3, 200)),
+        vht=trait_set(traits.VHTraitOne(), ()))
+
+
+def evaluate_disk_traits(
+        driver, kind, r, other, polar=True, nrows=1, **options):
+    """
+    The values of the traits of one kind of thick_disk at the points of
+    radii r and azimuths (polar traits) or heights (height traits) other,
+    in an output of nrows rows.
+    """
+    memory = Memory(driver)
+    gmodel = driver.native_class('GModel', DTYPE)
+    function = gmodel.disk_ptraits_evaluate if polar \
+        else gmodel.disk_htraits_evaluate
+    out = memory.to_device(np.zeros((nrows, len(r)), DTYPE))
+    function(
+        thick_disk(driver, memory), kind,
+        memory.to_device(np.array(r, DTYPE)),
+        memory.to_device(np.array(other, DTYPE)), out, **options)
+    return memory.to_host(out)
+
+
+def test_disk_traits_of_each_kind(driver):
+    # A velocity trait is projected on the line of sight: v cos(theta)
+    # sin(incl); a density height trait is a probability density of |z|
+    r = np.array([1.0, 5.0, 12.0])
+    velocity = evaluate_disk_traits(driver, 'vpt', r, [60] * 3, incl=30)
+    np.testing.assert_allclose(
+        velocity[0], 200 * 2 / np.pi * np.arctan(r / 3) / 4, rtol=1e-6)
+    z = np.linspace(-20, 20, 4001)
+    pdf = evaluate_disk_traits(
+        driver, 'rht', np.full(z.size, 5.0), z, polar=False)[0]
+    np.testing.assert_allclose(pdf, pdf[::-1])
+    assert scipy.integrate.trapezoid(pdf, z) == pytest.approx(1, rel=1e-4)
+
+
+@pytest.mark.parametrize('options, message', [
+    (dict(kind='rht'), "kind must be one of 'rpt', 'vpt', 'dpt', 'zpt'"),
+    (dict(kind='rpt', polar=False),
+     "kind must be one of 'rht', 'vht', 'dht'"),
+    (dict(kind='dpt'), "the disk has no traits of kind 'dpt'"),
+    (dict(kind='vpt'), "incl is required"),
+    (dict(kind='rpt', incl=30), "incl is required"),
+    (dict(kind='rpt', other=[60, 60]),
+     "theta needs one value for each point"),
+    (dict(kind='rpt', nrows=2), "out needs a row for each trait")])
+def test_disk_traits_are_checked(driver, options, message):
+    # The kernels trust their arguments: what they cannot evaluate is an
+    # error, not a read out of bounds
+    arguments = dict(r=[1, 5, 12], other=[60] * 3) | options
+    with pytest.raises(ValueError, match=message):
+        evaluate_disk_traits(driver, **arguments)

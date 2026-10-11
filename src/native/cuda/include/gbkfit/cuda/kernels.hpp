@@ -248,6 +248,17 @@ gmodel_smdisk_evaluate(DiskArgs<T> a)
 }
 
 template<typename T> __global__ void
+gmodel_disk_traits_evaluate(DiskTraitsArgs<T> a)
+{
+    // Parallelization: per point
+    const int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (tid >= a.npoints)
+        return;
+
+    gbkfit::gmodel_disk_traits_point(tid, a);
+}
+
+template<typename T> __global__ void
 objective_residual(
         const T* obs_d, const T* obs_e, const T* obs_m,
         const T* mdl_d, const T* mdl_w,

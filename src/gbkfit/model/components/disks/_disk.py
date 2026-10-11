@@ -2,11 +2,12 @@
 import abc
 import logging
 import typing
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
+import numpy.typing as npt
 
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.math.interpolation import Interpolator
@@ -363,26 +364,7 @@ class DiskPlan(abc.ABC):
         driver = self._driver
         dtype = self._dtype
 
-        # The node-wise parameter values are replaced below with their
-        # values at the subnodes: work on a copy of the dict, and never
-        # modify the caller's arrays in place
-        params = dict(params)
-
-        # Write the parameter values into the host memory, with the
-        # nodewise parameters at the subnodes (interpolated if given at
-        # the nodes), and copy them to the device
-        def fill(name, pdescs, sampling):
-            _fill_param_values(
-                self._param_views[name], params, pdescs, sampling,
-                disk._rnodes, disk._subrnodes, disk._interp)
-        for name, pdescs in disk._geometry_pdescs.items():
-            sampling = 'rnodes' if disk._geometry_isnw[name] else None
-            fill(name, pdescs, dict.fromkeys(pdescs, sampling))
-        for kind, trait_params in disk._trait_params.items():
-            fill(kind, trait_params.pdescs, trait_params.sampling)
-        if lines is not None:
-            self._lines_h[:] = lines
-        driver.mem_copy_h2d(*self._param_values)
+        params = self._write_params(params, lines)
 
         wdata_cmp = None
         rdata_cmp = None
@@ -452,6 +434,153 @@ class DiskPlan(abc.ABC):
             if disk._traits['dpt']:
                 sumabs = np.nansum(np.abs(out_extra['ddata']))
                 _log.debug(f"sum(abs(ddata)): {sumabs}")
+
+    def evaluate_polar_traits(
+            self,
+            params: ParamValues,
+            kind: str,
+            r: npt.ArrayLike,
+            theta: npt.ArrayLike,
+            incl: float | None = None
+    ) -> np.ndarray:
+        """
+        Evaluate each polar trait of one kind at points of the plane of the
+        disk, as the disk is evaluated: with the node-wise parameters at
+        the subnodes, and NaN off the disk (radii below the first or not
+        below the last node).
+
+        Parameters
+        ----------
+        params : ParamValues
+            The parameters of the disk (see Disk.pdescs).
+        kind : str
+            The kind of the polar traits: 'rpt', 'vpt', 'dpt', 'zpt', 'spt'
+            or 'wpt' (see TRAIT_KINDS).
+        r, theta : array_like
+            The radius (arcsec) and azimuth (degrees) of each point in the
+            plane of the disk (see traits), broadcast together.
+        incl : float, optional
+            The inclination (degrees) at which the velocity traits project
+            their velocities on the line of sight: required for them
+            ('vpt'), and only for them.
+
+        Returns
+        -------
+        np.ndarray
+            The values: one row for each trait, of the shape of the points.
+
+        Raises
+        ------
+        ValueError
+            If kind is not a kind of polar traits, the disk has no traits
+            of the kind, or incl is missing for the velocity traits or
+            given for others.
+        """
+        r, theta = np.broadcast_arrays(r, theta)
+        return self._evaluate_traits(
+            self._backend.disk_ptraits_evaluate, params, kind,
+            dict(r=r, theta=theta), incl=incl)
+
+    def evaluate_height_traits(
+            self,
+            params: ParamValues,
+            kind: str,
+            r: npt.ArrayLike,
+            z: npt.ArrayLike
+    ) -> np.ndarray:
+        """
+        Evaluate each height trait of one kind at points of the plane of
+        the disk, as the disk is evaluated: with the node-wise parameters
+        at the subnodes, and NaN off the disk (radii below the first or
+        not below the last node).
+
+        Parameters
+        ----------
+        params : ParamValues
+            The parameters of the disk (see Disk.pdescs).
+        kind : str
+            The kind of the height traits: 'rht', 'vht' or 'dht' (see
+            TRAIT_KINDS).
+        r, z : array_like
+            The radius (arcsec) of each point, and its height (arcsec)
+            above the midplane (see traits), broadcast together.
+
+        Returns
+        -------
+        np.ndarray
+            The values: one row for each trait, of the shape of the points.
+
+        Raises
+        ------
+        ValueError
+            If kind is not a kind of height traits, or the disk has no
+            traits of the kind.
+        """
+        r, z = np.broadcast_arrays(r, z)
+        return self._evaluate_traits(
+            self._backend.disk_htraits_evaluate, params, kind,
+            dict(r=r, z=z))
+
+    def _write_params(
+            self, params: ParamValues, lines: np.ndarray | None = None
+    ) -> ParamValues:
+        """
+        Write the parameter values into the host memory, with the node-wise
+        parameters at the subnodes (interpolated if given at the nodes),
+        and the values of the lines if given, and copy them to the device
+        at once. Return the parameters with the node-wise values at the
+        subnodes (a new dict: the caller's arrays are not modified).
+        """
+        disk = self._disk
+        params = dict(params)
+
+        def fill(name, pdescs, sampling):
+            _fill_param_values(
+                self._param_views[name], params, pdescs, sampling,
+                disk._rnodes, disk._subrnodes, disk._interp)
+        for name, pdescs in disk._geometry_pdescs.items():
+            sampling = 'rnodes' if disk._geometry_isnw[name] else None
+            fill(name, pdescs, dict.fromkeys(pdescs, sampling))
+        for kind, trait_params in disk._trait_params.items():
+            fill(kind, trait_params.pdescs, trait_params.sampling)
+        if lines is not None:
+            self._lines_h[:] = lines
+        self._driver.mem_copy_h2d(*self._param_values)
+        return params
+
+    def _evaluate_traits(
+            self,
+            function: Callable[..., None],
+            params: ParamValues,
+            kind: str,
+            points: dict[str, np.ndarray],
+            **options: Any
+    ) -> np.ndarray:
+        """
+        Evaluate the traits of one kind with a native function of traits
+        (disk_ptraits_evaluate or disk_htraits_evaluate) at points: the
+        arrays of their coordinates by name (r, and theta or z), of one
+        shape. options are the other arguments of the function. The native
+        function checks the arguments (e.g. that the disk has traits of
+        the kind: with none, the output has no rows).
+        """
+        driver = self._driver
+        dtype = self._dtype
+        shape = points['r'].shape
+        ntraits = len(self._disk._traits.get(kind, ()))
+
+        def to_device(values: np.ndarray) -> DeviceArray:
+            return driver.mem_copy_h2d(
+                np.ascontiguousarray(values.ravel(), dtype))
+
+        self._write_params(params)
+        out = driver.mem_alloc_d((ntraits, points['r'].size), dtype)
+        function(
+            self._native_disk, kind, out=out,
+            **{name: to_device(values) for name, values in points.items()},
+            **options)
+        return np.asarray(driver.mem_copy_d2h(out)).reshape(
+            (ntraits,) + shape)
 
     @abc.abstractmethod
     def _impl_evaluate(
