@@ -588,3 +588,77 @@ def test_trait_disks_follow_disks_of_their_model():
         kinematics(
             'kinematics_2d', 'smdisk', dict(type='mass'), mass_model,
             DISTANCE)
+
+
+def test_pressure_support_is_the_jeans_equation(driver):
+    # An exponential brightness (scale 4) and dispersion (scale 10) of a
+    # thin disk: (R / rho) d(rho sigma^2)/dR = -sigma^2 R (1 / 4 + 2 / 10),
+    # to the precision of the three-point derivative on the subnodes
+    from gbkfit.model.components._component_set import IMAGE_SPECTRAL_AXIS
+    from gbkfit.model.components.disks._profiles import pressure_support
+    from gbkfit.model.components.disks.smdisk import SpectralSMDisk2D
+    component = SpectralSMDisk2D.load(dict(
+        rnodes=list(range(0, 21, 2)), rstep=0.5,
+        bptraits=dict(type='exponential'), vptraits=dict(type='mass'),
+        dptraits=dict(type='exponential')))
+    params = dict(
+        xpos=0, ypos=0, posa=30, incl=60, vsys=0, bpt_a=1, bpt_s=4,
+        dpt_a=30, dpt_s=10)
+    plan = component.plan(
+        driver, IMAGE_SPECTRAL_AXIS, np.dtype(np.float32), None)
+    disk = component.brightness_disk()
+    radius = np.array(disk.subrnodes())
+    np.testing.assert_allclose(
+        pressure_support(disk, plan.disk_plan(), params, radius),
+        -(30 * np.exp(-radius / 10)) ** 2 * radius * (1 / 4 + 2 / 10),
+        rtol=1e-2, atol=1e-3)
+
+
+@pytest.mark.parametrize('model_type', ['kinematics_2d', 'kinematics_3d'])
+def test_mass_trait_with_pressure_support(driver, model_type):
+    # The trait 'mass' with pressure support is the node-wise velocity
+    # sqrt(v_c^2 + (R / rho) d(rho sigma^2)/dR) at the subnodes, with the
+    # derivative by the three-point formula: thin, rho is the brightness;
+    # thick and flaring (sech2, node-wise scale height s), rho is the
+    # brightness / (2 s)
+    from gbkfit.model.components.disks._disk import subring_radii
+    rnodes = list(range(0, 21, 2))
+    flaring = np.linspace(0.5, 2, 11)
+    disk = DISK | dict(
+        type='smdisk', dptraits=dict(type='exponential'),
+        vptraits=dict(type='mass', pressure_support='jeans'))
+    properties = DISK_PROPERTIES | dict(dpt_a=30, dpt_s=10)
+    subrnodes = np.array(subring_radii(rnodes, DISK['rstep']))
+    density = np.exp(-subrnodes / 4)
+    if model_type == 'kinematics_3d':
+        disk |= dict(bhtraits=dict(type='sech2', rnodes=True))
+        properties |= dict(bht_s=flaring)
+        density /= 2 * np.interp(subrnodes, rnodes, flaring)
+    pressure = density * (30 * np.exp(-subrnodes / 10)) ** 2
+    support = subrnodes * np.gradient(pressure, subrnodes, edge_order=2) \
+        / density
+    vcirc2 = mass_model_parser.load(copy.deepcopy(MASS_MODEL)).vcirc2(
+        subrnodes * KPC_PER_ARCSEC, MASS_PROPERTIES, CONTEXT)
+    supported = model_parser.load(dict(
+        type=model_type, components=[disk],
+        mass_model=copy.deepcopy(MASS_MODEL),
+        distance=copy.deepcopy(DISTANCE)))
+    given = model_parser.load(dict(
+        type=model_type, components=[disk | dict(
+            vptraits=dict(type='nw_tan_uniform', sampling='subrings'))]))
+    assert np.all(vcirc2 + support >= 0) and np.max(-support) > 500
+    np.testing.assert_allclose(
+        evaluate(driver, supported, properties | MASS_PROPERTIES),
+        evaluate(driver, given, properties | dict(
+            vpt_vt=np.sqrt(vcirc2 + support))),
+        rtol=1e-5, atol=1e-7)
+
+
+def test_pressure_support_option():
+    from gbkfit.model.components.disks import traits
+    trait = traits.vpt_parser.load(dict(type='mass', pressure_support='jeans'))
+    assert traits.vpt_parser.dump(trait) == dict(
+        type='mass', pressure_support='jeans')
+    assert traits.vpt_parser.dump(traits.VPTraitMass()) == dict(type='mass')
+    with pytest.raises(ConfigError, match="pressure_support must be"):
+        traits.VPTraitMass('asymmetric')

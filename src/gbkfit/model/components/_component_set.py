@@ -12,7 +12,7 @@ from ..distance import Distance
 from ..mass import MassContext, MassModel
 from ._detail import shared_params
 from .base import Component, ComponentPlan, NativeGrid
-from .disks._profiles import DiskDensity
+from .disks._profiles import DiskDensity, pressure_support
 from .geometries import Geometry
 
 
@@ -120,6 +120,8 @@ def _followed_plans(
 
 def _circular_velocities(
         components: Sequence[Component],
+        plans: Sequence[ComponentPlan],
+        mappings: Sequence[dict[str, str]],
         followed: Sequence[tuple[Component, ComponentPlan, dict[str, str]]],
         distance: Distance | None,
         mass_model: MassModel | None,
@@ -130,9 +132,11 @@ def _circular_velocities(
     circular velocity of the mass model (see
     Component.circular_velocity_params), from the parameters of the
     distance and the mass model in params, and the densities of the
-    components it follows (see _followed_plans and DiskDensity): NaN where
-    the squared circular velocity is negative or infinite (there is no
-    circular orbit). The mass model is evaluated once, at all their radii.
+    components it follows (see _followed_plans and DiskDensity), with the
+    pressure support of their component where its traits ask for it (see
+    Disk.pressure_supported_params): NaN where their square is negative or
+    infinite (there is no circular orbit). The mass model is evaluated
+    once, at all their radii.
     """
     radii = [cmp.circular_velocity_params() for cmp in components]
     if mass_model is None or not any(radii):
@@ -149,11 +153,22 @@ def _circular_velocities(
     every = [r for cmp in radii for r in cmp.values()]
     vcirc2 = mass_model.vcirc2(
         np.concatenate(every) * kpc_per_arcsec, params, context)
-    vcirc = np.sqrt(np.where(
-        np.isfinite(vcirc2) & (vcirc2 >= 0), vcirc2, np.nan))
     ends = np.cumsum([len(r) for r in every])
-    pieces = iter(vcirc[end - len(r):end] for r, end in zip(every, ends))
-    return [{name: next(pieces) for name in cmp} for cmp in radii]
+    pieces = iter(vcirc2[end - len(r):end] for r, end in zip(every, ends))
+    values = []
+    for cmp, plan, mapping, cmp_radii in zip(
+            components, plans, mappings, radii, strict=True):
+        values.append({})
+        for name, r in cmp_radii.items():
+            v2 = next(pieces)
+            disk = cmp.brightness_disk()
+            if name in disk.pressure_supported_params():
+                v2 = v2 + pressure_support(
+                    disk, plan.disk_plan(),
+                    {p: params[mapping[p]] for p in cmp.pdescs()}, r)
+            values[-1][name] = np.sqrt(
+                np.where(np.isfinite(v2) & (v2 >= 0), v2, np.nan))
+    return values
 
 
 def component_prefixes(
@@ -485,8 +500,8 @@ class ComponentSetPlan2D:
             outputs | dict(wdata=wdata, bdata=bdata),
             out_extra, '', lambda data: image(data[0]),
             _circular_velocities(
-                self._components, self._followed,
-                self._component_set.distance(),
+                self._components, self._component_plans, self._mappings,
+                self._followed, self._component_set.distance(),
                 self._component_set.mass_model(), params))
 
         # Weight the data with the spatial weights evaluated above
@@ -736,7 +751,8 @@ class ComponentSetPlan3D:
             self._components, self._component_plans, self._mappings,
             params, self._native_grid, outputs, out_extra, '', cube,
             _circular_velocities(
-                self._components, self._followed, component_set.distance(),
+                self._components, self._component_plans, self._mappings,
+                self._followed, component_set.distance(),
                 component_set.mass_model(), params))
 
         # Weight the data with the spatial weights evaluated above

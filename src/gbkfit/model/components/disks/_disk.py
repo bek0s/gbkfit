@@ -47,12 +47,15 @@ class TraitParams:
     and for each trait, the smooth parameters before the node-wise ones.
     circular_velocity has the names of those whose values are the
     circular velocity of the mass model of the model (see
-    traits.Trait.circular_velocity_params).
+    traits.Trait.circular_velocity_params), and pressure_support those of
+    them corrected for the pressure of the disk (see
+    traits.Trait.pressure_support).
     """
     pdescs: dict[str, ParamDesc]
     sampling: dict[str, str | None]
     pnames: tuple[dict[str, str], ...]
     circular_velocity: tuple[str, ...]
+    pressure_support: tuple[str, ...]
 
 
 def _trait_params(
@@ -86,6 +89,11 @@ def _trait_params(
         circular_velocity=tuple(
             mapping[name]
             for trait, mapping in zip(traits_, mappings)
+            for name in trait.circular_velocity_params()),
+        pressure_support=tuple(
+            mapping[name]
+            for trait, mapping in zip(traits_, mappings)
+            if trait.pressure_support() is not None
             for name in trait.circular_velocity_params()))
 
 
@@ -217,6 +225,9 @@ class Disk(abc.ABC):
             name: subrnodes if params.sampling[name] == 'subrings' else rnodes
             for params in self._trait_params.values()
             for name in params.circular_velocity}
+        self._pressure_supported_params = tuple(
+            name for params in self._trait_params.values()
+            for name in params.pressure_support)
 
         # Merge all parameter descs into the same dictionary, without those
         # that the model gives
@@ -271,6 +282,14 @@ class Disk(abc.ABC):
         others.
         """
         return self._circular_velocity_params
+
+    def pressure_supported_params(self) -> tuple[str, ...]:
+        """
+        Return the names of those of its circular velocity parameters (see
+        circular_velocity_params) whose values are corrected for its
+        pressure (see traits.VPTraitMass).
+        """
+        return self._pressure_supported_params
 
     @abc.abstractmethod
     def plan(self, driver: Driver, nlines: int, dtype: np.dtype) -> 'DiskPlan':
