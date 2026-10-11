@@ -20,6 +20,7 @@ from collections.abc import Callable
 
 import numpy as np
 
+from gbkfit.params import ParamValues
 from gbkfit.params.pdescs import ParamScalarDesc
 from gbkfit.utils.parseutils import ConfigError
 from .base import MassContext
@@ -112,7 +113,7 @@ def parameterisation_pdescs(
 
 def halo_scales(
         parameterisation: str,
-        params: dict[str, float],
+        params: ParamValues,
         overdensity_density: float | None,
         mass_shape: Callable[[float], float]
 ) -> tuple[float, float]:

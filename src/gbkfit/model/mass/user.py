@@ -8,6 +8,7 @@ from typing import Any
 import numpy as np
 import numpy.typing as npt
 
+from gbkfit.params import ParamDesc, ParamValues
 from gbkfit.params.pdescs import ParamScalarDesc
 from gbkfit.utils import funcutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
@@ -77,13 +78,13 @@ class MassUser(MassComponent):
         self._func_name = func
         self._params = tuple(params)
 
-    def pdescs(self) -> dict[str, ParamScalarDesc]:
+    def pdescs(self) -> dict[str, ParamDesc]:
         return {name: ParamScalarDesc() for name in self._params}
 
     def vcirc2(
             self,
             R: npt.ArrayLike,
-            params: dict[str, float],
+            params: ParamValues,
             context: MassContext
     ) -> np.ndarray:
         R = np.asarray(R, dtype=float)

@@ -10,7 +10,7 @@ from typing import Any
 import numpy as np
 import numpy.typing as npt
 
-from gbkfit.params.pdescs import ParamScalarDesc
+from gbkfit.params import ParamDesc, ParamValues
 from gbkfit.utils import parseutils
 from . import _numerics
 from .units import G
@@ -69,7 +69,7 @@ class MassComponent(parseutils.TypedSerializable, abc.ABC):
         return self._name
 
     @abc.abstractmethod
-    def pdescs(self) -> dict[str, ParamScalarDesc]:
+    def pdescs(self) -> dict[str, ParamDesc]:
         """Return its parameters, by name."""
         pass
 
@@ -77,7 +77,7 @@ class MassComponent(parseutils.TypedSerializable, abc.ABC):
     def vcirc2(
             self,
             R: npt.ArrayLike,
-            params: dict[str, float],
+            params: ParamValues,
             context: MassContext
     ) -> np.ndarray:
         """
@@ -105,7 +105,7 @@ class MassComponent(parseutils.TypedSerializable, abc.ABC):
             self,
             R: npt.ArrayLike,
             z: npt.ArrayLike,
-            params: dict[str, float],
+            params: ParamValues,
             context: MassContext
     ) -> np.ndarray:
         """
@@ -124,7 +124,7 @@ class MassComponent(parseutils.TypedSerializable, abc.ABC):
             self,
             R: npt.ArrayLike,
             z: npt.ArrayLike,
-            params: dict[str, float],
+            params: ParamValues,
             context: MassContext
     ) -> tuple[np.ndarray, np.ndarray]:
         """
@@ -154,7 +154,7 @@ class MassComponent(parseutils.TypedSerializable, abc.ABC):
             self,
             R: npt.ArrayLike,
             z: npt.ArrayLike,
-            params: dict[str, float],
+            params: ParamValues,
             context: MassContext
     ) -> np.ndarray:
         """
@@ -184,7 +184,7 @@ class MassSpherical(MassComponent, abc.ABC):
     def density_spherical(
             self,
             r: np.ndarray,
-            params: dict[str, float],
+            params: ParamValues,
             context: MassContext
     ) -> np.ndarray:
         """Return its density (Msun/kpc^3) at the spherical radii r."""
@@ -194,7 +194,7 @@ class MassSpherical(MassComponent, abc.ABC):
     def enclosed_mass(
             self,
             r: npt.ArrayLike,
-            params: dict[str, float],
+            params: ParamValues,
             context: MassContext
     ) -> np.ndarray:
         """
@@ -206,7 +206,7 @@ class MassSpherical(MassComponent, abc.ABC):
     def vcirc2(
             self,
             R: npt.ArrayLike,
-            params: dict[str, float],
+            params: ParamValues,
             context: MassContext
     ) -> np.ndarray:
         # G M(<r) / r, 0 at the centre
@@ -219,7 +219,7 @@ class MassSpherical(MassComponent, abc.ABC):
             self,
             R: npt.ArrayLike,
             z: npt.ArrayLike,
-            params: dict[str, float],
+            params: ParamValues,
             context: MassContext
     ) -> np.ndarray:
         return self.density_spherical(np.hypot(R, z), params, context)
@@ -228,7 +228,7 @@ class MassSpherical(MassComponent, abc.ABC):
             self,
             R: npt.ArrayLike,
             z: npt.ArrayLike,
-            params: dict[str, float],
+            params: ParamValues,
             context: MassContext
     ) -> tuple[np.ndarray, np.ndarray]:
         # -G M(<r) / r^3 (R, z), 0 at the centre
@@ -244,7 +244,7 @@ class MassSpherical(MassComponent, abc.ABC):
             self,
             R: npt.ArrayLike,
             z: npt.ArrayLike,
-            params: dict[str, float],
+            params: ParamValues,
             context: MassContext
     ) -> np.ndarray:
         # -G (M(<r) / r + 4 pi int_r^inf rho r' dr'), by quadrature

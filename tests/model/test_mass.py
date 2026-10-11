@@ -16,8 +16,10 @@ from gbkfit.model import model_parser
 from gbkfit.model.distance import DistanceDirect, DistanceRedshift
 from gbkfit.model.mass import (
     MassBurkert, MassContext, MassEinasto, MassExponentialDisk, MassModel,
-    MassNFW, MassPointMass, MassPseudoIsothermal, MassSersic, MassUser,
-    MassZhao, mass_model_parser, vertical_density, vertical_transform)
+    MassNFW, MassNodewiseDisk, MassPointMass, MassPseudoIsothermal,
+    MassSersic, MassUser, MassZhao, mass_model_parser, vertical_density,
+    vertical_transform)
+from gbkfit.model.mass import _disk_gravity
 from gbkfit.utils.parseutils import ConfigError
 
 
@@ -75,6 +77,130 @@ def test_thick_disks_of_vanishing_thickness_are_thin(vertical):
             0, np.inf)
         assert vertical_transform(vertical, np.array(k), 0.7) \
             == pytest.approx(expected, rel=1e-10)
+
+
+@pytest.mark.parametrize('vertical', ['thin', 'sech2', 'gauss'])
+def test_disks_of_any_profile_are_exponential_disks(vertical):
+    # The pull of the rings of an exponential profile (up to 30 rd, where
+    # it is negligible) against the exponential disk (Freeman's closed
+    # form, or the Hankel transform when thick), at hz / rd from 1e-3
+    from gbkfit.model.mass import disks
+    log_m, rd = 10, 2.0
+    knots = np.linspace(0, 30 * rd, 61)
+    radius = knots[1:41]
+    if vertical == 'thin':
+        gravity = _disk_gravity.thin_disk_gravity(knots, radius, degree=5)
+        result = gravity.vcirc2(
+            10 ** log_m / (2 * np.pi * rd ** 2) * np.exp(-gravity.radii / rd))
+        expected = MassExponentialDisk('d').vcirc2(
+            radius, dict(log_m=log_m, rd=rd), CONTEXT)
+        np.testing.assert_allclose(result, expected, rtol=1e-8)
+        return
+    gravity = _disk_gravity.thick_disk_gravity(knots, radius, degree=5)
+    sigma = 10 ** log_m / (2 * np.pi * rd ** 2) * np.exp(-gravity.radii / rd)
+    for eta in (1e-3, 0.03, 0.3):
+        result = gravity.vcirc2(
+            sigma[None], vertical_density(vertical, gravity.heights, eta * rd))
+        expected = G * 10 ** log_m / rd * disks._exponential_shape_direct(
+            radius / rd, vertical, eta)
+        np.testing.assert_allclose(result, expected, rtol=1e-7)
+
+
+NODEWISE_DISK = MassNodewiseDisk('gas', nodes=[0, 1, 2.5, 4, 7, 10])
+NODEWISE_SIGMA = np.log10([50, 80, 40, 30, 10])
+
+
+def test_nodewise_disk_is_the_integral_of_its_rings():
+    # Thin: 2 G int sigma(a) [a K / (a + R) - a E / (a - R)] da, its
+    # principal value by subtraction of sigma(R) (the ln of the two
+    # sides of R add up), on the pieces between the nodes and R
+    params = dict(log_sigma=NODEWISE_SIGMA)
+    nodes = NODEWISE_DISK.nodes()
+
+    def sigma(a):
+        return NODEWISE_DISK.surface_density(a, params)
+
+    def pull(a, R):
+        # (with 1 - m = ((a - R) / (a + R))^2, which keeps K finite)
+        p = ((a - R) / (a + R)) ** 2
+        return a * scipy.special.ellipkm1(p) / (a + R) \
+            - (a * scipy.special.ellipe(1 - p) - R) / (a - R)
+
+    def vcirc2(R):
+        pieces = np.unique(np.append(nodes, R))
+        pieces = pieces[pieces <= nodes[-1]]
+        integral = 0
+        for a0, a1 in zip(pieces[:-1], pieces[1:]):
+            integral += scipy.integrate.quad(
+                lambda a: sigma(a) * pull(a, R)
+                - R * (sigma(a) - sigma(R)) / (a - R), a0, a1,
+                epsabs=0, epsrel=1e-12, limit=200)[0]
+        log = np.log((nodes[-1] - R) / R) if R < nodes[-1] else 0
+        return 2 * G * (integral - R * sigma(R) * log)
+
+    radius = np.array([0.5, 1, 1.7, 2.5, 5.5, 7, 9.9, 10, 12, 30])
+    np.testing.assert_allclose(
+        NODEWISE_DISK.vcirc2(radius, params, CONTEXT),
+        [vcirc2(R) for R in radius], rtol=1e-9)
+
+
+@pytest.mark.parametrize('vertical', ['thin', 'sech2'])
+def test_disks_far_away_are_their_multipoles(vertical):
+    # In the plane, far away: v^2 = G M / R (1 + 3 (<a^2> / 4 - <z^2> / 2)
+    # / R^2 + 15 / 64 <8 z^4 - 24 a^2 z^2 + 3 a^4> / R^4), with the means
+    # over the mass (the multipoles 2 and 4; the rest is of order R^-6),
+    # to the precision of thick disks
+    hz = 0.3
+    disk = MassNodewiseDisk('gas', NODEWISE_DISK.nodes(), vertical)
+    params = dict(log_sigma=NODEWISE_SIGMA, hz=hz)
+    nodes = NODEWISE_DISK.nodes()
+
+    def mean(power):
+        def integral(p):
+            return scipy.integrate.quad(
+                lambda a: 2 * np.pi * a ** (p + 1)
+                * disk.surface_density(a, params), 0, nodes[-1],
+                points=nodes, epsabs=0, epsrel=1e-13)[0]
+        return integral(power) / integral(0)
+
+    mass = 2 * np.pi * scipy.integrate.quad(
+        lambda a: a * disk.surface_density(a, params), 0, nodes[-1],
+        points=nodes, epsabs=0, epsrel=1e-13)[0]
+    # (the moments of sech^2(z / hz) / (2 hz))
+    z2, z4 = (np.pi ** 2 * hz ** 2 / 12, 7 * np.pi ** 4 * hz ** 4 / 240) \
+        if vertical == 'sech2' else (0, 0)
+    radius = np.array([200.0, 1000.0])
+    expected = G * mass / radius * (
+        1 + 3 * (mean(2) / 4 - z2 / 2) / radius ** 2
+        + 15 / 64 * (8 * z4 - 24 * mean(2) * z2 + 3 * mean(4)) / radius ** 4)
+    np.testing.assert_allclose(
+        disk.vcirc2(radius, params, CONTEXT), expected, rtol=1e-8)
+
+
+def test_disks_at_jumps_of_their_density():
+    # A thin disk pulls infinitely at a jump of its surface density (the
+    # edge of a hole), outwards; a thick one does not; one without a
+    # jump does not (the density is 0 at the last node)
+    params = dict(log_sigma=[2, 2], hz=0.1)
+    radius = np.array([0.999, 1, 1.001, 3])
+    thin = MassNodewiseDisk('gas', [1, 2, 3]).vcirc2(radius, params, CONTEXT)
+    thick = MassNodewiseDisk('gas', [1, 2, 3], 'sech2').vcirc2(
+        radius, params, CONTEXT)
+    assert thin[1] == -np.inf
+    assert np.all(np.isfinite(thin[[0, 2, 3]]))
+    assert np.all(np.isfinite(thick))
+
+
+def test_unresolved_heights_are_errors():
+    disk = MassNodewiseDisk('gas', [0, 1, 2], 'sech2')
+    with pytest.raises(ValueError, match="heights are not resolved"):
+        disk.vcirc2([0.5, 1], dict(log_sigma=[2, 2], hz=1e-12), CONTEXT)
+
+
+@pytest.mark.parametrize('nodes', [[1], [0, 2, 1], [-1, 1], [0, np.inf]])
+def test_nodes_of_nodewise_disks_are_checked(nodes):
+    with pytest.raises(ConfigError, match="the nodes of a nodewise disk"):
+        MassNodewiseDisk('gas', nodes)
 
 
 SPHERES = [
@@ -254,6 +380,8 @@ def test_distances_give_the_length_of_an_arcsec():
 
 MASS_MODEL = dict(components=[
     dict(type='exponential_disk', name='stars', vertical='thin'),
+    dict(type='nodewise_disk', name='gas', nodes=[0.0, 0.3, 0.6, 1.2],
+         vertical='thin'),
     dict(type='pseudo_isothermal', name='halo',
          parameters='density_radius')])
 
@@ -261,7 +389,7 @@ DISTANCE = dict(type='direct', cosmology='Planck18', epoch=0.0)
 
 MASS_PROPERTIES = dict(
     distance=10, mass_stars_log_m=10.5, mass_stars_rd=0.5,
-    mass_halo_log_rho=8, mass_halo_rs=1)
+    mass_gas_log_sigma=[8, 7.8, 7.5], mass_halo_log_rho=8, mass_halo_rs=1)
 
 DISK = dict(
     loose=False, tilted=False, rnodes=list(range(0, 21, 2)), rstep=0.5,

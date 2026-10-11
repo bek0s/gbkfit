@@ -8,12 +8,11 @@ from typing import Any
 import numpy as np
 import numpy.typing as npt
 
-from gbkfit.params import ParamValues
-from gbkfit.params.pdescs import ParamScalarDesc
+from gbkfit.params import ParamDesc, ParamValues
 from gbkfit.utils import iterutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
 from .base import MassComponent, MassContext
-from .disks import MassExponentialDisk
+from .disks import MassExponentialDisk, MassNodewiseDisk
 from .halos import (
     MassBurkert, MassEinasto, MassNFW, MassPseudoIsothermal, MassZhao)
 from .points import MassPointMass
@@ -31,6 +30,7 @@ __all__ = [
 mass_component_parser = parseutils.TypedParser(MassComponent, [
     MassPointMass,
     MassExponentialDisk,
+    MassNodewiseDisk,
     MassSersic,
     MassNFW,
     MassBurkert,
@@ -91,7 +91,7 @@ class MassModel(parseutils.Serializable):
         """Return its mass components."""
         return self._components
 
-    def pdescs(self) -> dict[str, ParamScalarDesc]:
+    def pdescs(self) -> dict[str, ParamDesc]:
         """Return its parameters, by name."""
         return self._pdescs
 
@@ -183,7 +183,7 @@ class MassModel(parseutils.Serializable):
 
     def _each(
             self,
-            function: Callable[[MassComponent, dict[str, float]], Any],
+            function: Callable[[MassComponent, ParamValues], Any],
             params: ParamValues
     ) -> dict[str, Any]:
         """

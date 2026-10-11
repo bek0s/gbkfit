@@ -11,6 +11,7 @@ import numpy as np
 import numpy.typing as npt
 import scipy.special
 
+from gbkfit.params import ParamDesc, ParamValues
 from gbkfit.params.pdescs import ParamScalarDesc
 from gbkfit.utils.parseutils import ConfigError
 from .base import MassContext, MassSpherical
@@ -83,11 +84,11 @@ class MassHalo(MassSpherical, abc.ABC):
                 '200c' if overdensity is None else overdensity)
         self._parameters = parameters
 
-    def pdescs(self) -> dict[str, ParamScalarDesc]:
+    def pdescs(self) -> dict[str, ParamDesc]:
         return parameterisation_pdescs(self._parameters) | self._shape_pdescs()
 
     def scales(
-            self, params: dict[str, float], context: MassContext
+            self, params: ParamValues, context: MassContext
     ) -> tuple[float, float]:
         """Return its scale density (Msun/kpc^3) and radius (kpc)."""
         shape = self._shape_values(params)
@@ -100,7 +101,7 @@ class MassHalo(MassSpherical, abc.ABC):
     def density_spherical(
             self,
             r: np.ndarray,
-            params: dict[str, float],
+            params: ParamValues,
             context: MassContext
     ) -> np.ndarray:
         rho_s, r_s = self.scales(params, context)
@@ -110,7 +111,7 @@ class MassHalo(MassSpherical, abc.ABC):
     def enclosed_mass(
             self,
             r: npt.ArrayLike,
-            params: dict[str, float],
+            params: ParamValues,
             context: MassContext
     ) -> np.ndarray:
         rho_s, r_s = self.scales(params, context)
@@ -121,7 +122,7 @@ class MassHalo(MassSpherical, abc.ABC):
             self,
             R: npt.ArrayLike,
             z: npt.ArrayLike,
-            params: dict[str, float],
+            params: ParamValues,
             context: MassContext
     ) -> np.ndarray:
         shape = self._shape_values(params)
@@ -131,7 +132,7 @@ class MassHalo(MassSpherical, abc.ABC):
             return super().potential(R, z, params, context)
         return 4 * np.pi * G * rho_s * r_s ** 2 * phi
 
-    def _shape_values(self, params: dict[str, float]) -> dict[str, float]:
+    def _shape_values(self, params: ParamValues) -> dict[str, float]:
         return {name: params[name] for name in self._shape_pdescs()}
 
     def _shape_pdescs(self) -> dict[str, ParamScalarDesc]:
@@ -259,7 +260,7 @@ class MassPseudoIsothermal(MassHalo):
             self,
             R: npt.ArrayLike,
             z: npt.ArrayLike,
-            params: dict[str, float],
+            params: ParamValues,
             context: MassContext
     ) -> np.ndarray:
         raise ValueError(
