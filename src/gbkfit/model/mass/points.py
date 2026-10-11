@@ -5,6 +5,7 @@ Point masses (e.g. a central black hole).
 import numpy as np
 import numpy.typing as npt
 
+from gbkfit.params import ParamDesc, ParamValues
 from gbkfit.params.pdescs import ParamScalarDesc
 from .base import MassContext, MassSpherical
 from .units import G
@@ -30,13 +31,13 @@ class MassPointMass(MassSpherical):
     def type() -> str:
         return 'point_mass'
 
-    def pdescs(self) -> dict[str, ParamScalarDesc]:
+    def pdescs(self) -> dict[str, ParamDesc]:
         return dict(log_m=ParamScalarDesc(desc="log10 of the mass (Msun)"))
 
     def density_spherical(
             self,
             r: np.ndarray,
-            params: dict[str, float],
+            params: ParamValues,
             context: MassContext
     ) -> np.ndarray:
         return np.zeros_like(np.asarray(r, dtype=float))
@@ -44,7 +45,7 @@ class MassPointMass(MassSpherical):
     def enclosed_mass(
             self,
             r: npt.ArrayLike,
-            params: dict[str, float],
+            params: ParamValues,
             context: MassContext
     ) -> np.ndarray:
         r = np.asarray(r, dtype=float)
@@ -54,7 +55,7 @@ class MassPointMass(MassSpherical):
             self,
             R: npt.ArrayLike,
             z: npt.ArrayLike,
-            params: dict[str, float],
+            params: ParamValues,
             context: MassContext
     ) -> np.ndarray:
         r = np.hypot(R, z)

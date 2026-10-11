@@ -5,6 +5,7 @@ Spherical spheroids (e.g. a bulge), given by their surface density.
 import numpy as np
 import numpy.typing as npt
 
+from gbkfit.params import ParamDesc, ParamValues
 from gbkfit.params.pdescs import ParamScalarDesc
 from . import _numerics
 from .base import MassContext, MassSpherical
@@ -35,7 +36,7 @@ class MassSersic(MassSpherical):
     def type() -> str:
         return 'sersic'
 
-    def pdescs(self) -> dict[str, ParamScalarDesc]:
+    def pdescs(self) -> dict[str, ParamDesc]:
         return dict(
             log_m=ParamScalarDesc(desc="log10 of the mass (Msun)"),
             re=ParamScalarDesc(desc="the effective radius (kpc)", minimum=0),
@@ -45,7 +46,7 @@ class MassSersic(MassSpherical):
     def density_spherical(
             self,
             r: np.ndarray,
-            params: dict[str, float],
+            params: ParamValues,
             context: MassContext
     ) -> np.ndarray:
         mass, re, tables = self._scales(params)
@@ -54,7 +55,7 @@ class MassSersic(MassSpherical):
     def enclosed_mass(
             self,
             r: npt.ArrayLike,
-            params: dict[str, float],
+            params: ParamValues,
             context: MassContext
     ) -> np.ndarray:
         mass, re, tables = self._scales(params)
@@ -64,7 +65,7 @@ class MassSersic(MassSpherical):
             self,
             R: npt.ArrayLike,
             z: npt.ArrayLike,
-            params: dict[str, float],
+            params: ParamValues,
             context: MassContext
     ) -> np.ndarray:
         mass, re, tables = self._scales(params)
@@ -72,7 +73,7 @@ class MassSersic(MassSpherical):
 
     @staticmethod
     def _scales(
-            params: dict[str, float]
+            params: ParamValues
     ) -> tuple[float, float, _numerics.SphericalTables]:
         """Return its mass, its effective radius and its unit tables."""
         return (10 ** params['log_m'], params['re'],
