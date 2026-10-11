@@ -8,7 +8,8 @@ from gbkfit.params import ParamDesc, ParamValues
 from gbkfit.utils import gridutils, iterutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
 from ..base import ModelPlan, Selection
-from ..mass import MassModel
+from ..distance import Distance
+from ..mass import MassContext, MassModel
 from ._detail import shared_params
 from .base import Component, ComponentPlan, NativeGrid
 from .geometries import Geometry
@@ -38,45 +39,69 @@ _OCMP_PREFIX = ('opacity components', 'ocmp', True)
 def _with_mass_model_params(
         params: dict[str, ParamDesc],
         components: Sequence[Component],
+        distance: Distance | None,
         mass_model: MassModel | None
 ) -> dict[str, ParamDesc]:
     """
     Return the parameters of the components of a model, and those of its
-    mass model (if any). Raise ConfigError if components take the circular
-    velocity of a mass model (see Component.circular_velocity_params) and
-    there is none, if there is one and none does, or if the names of the
-    parameters repeat.
+    distance and its mass model (if any). Raise ConfigError if components
+    take the circular velocity of a mass model (see
+    Component.circular_velocity_params) and there is none, if there is
+    one and none does, if a mass model has no distance or a distance no
+    mass model (its only user), or if the names of the parameters repeat.
     """
     moved = any(cmp.circular_velocity_params() for cmp in components)
     if moved and mass_model is None:
         raise ConfigError(
             "the 'mass' velocity traits need the mass_model of their model")
-    if mass_model is None:
-        return params
-    if not moved:
+    if mass_model is not None and not moved:
         raise ConfigError(
             "no component uses the mass_model of its model; give the "
             "components that it moves 'mass' velocity traits")
-    if repeated := sorted(params.keys() & mass_model.pdescs().keys()):
+    if mass_model is not None and distance is None:
         raise ConfigError(
-            f"the parameters of the mass model have the names of parameters "
-            f"of the components: {repeated}; rename the components")
-    return params | mass_model.pdescs()
+            "the mass_model of a model needs its distance (e.g. distance: "
+            "{type: direct})")
+    if distance is not None and mass_model is None:
+        raise ConfigError(
+            "the distance of a model is used by its mass_model only; give "
+            "the model a mass_model, or no distance")
+    if mass_model is None:
+        return params
+    gravity = distance.pdescs() | mass_model.pdescs()
+    if repeated := sorted(params.keys() & gravity.keys()):
+        raise ConfigError(
+            f"the parameters of the distance and the mass model have the "
+            f"names of parameters of the components: {repeated}; rename "
+            f"the components")
+    return params | gravity
 
 
 def _circular_velocities(
         components: Sequence[Component],
+        distance: Distance | None,
         mass_model: MassModel | None,
         params: ParamValues
 ) -> list[dict[str, np.ndarray]]:
     """
     Return the values of the parameters of each component that are the
     circular velocity of the mass model (see
-    Component.circular_velocity_params), from the parameters of the mass
-    model in params.
+    Component.circular_velocity_params), from the parameters of the
+    distance and the mass model in params: NaN where the squared circular
+    velocity is negative (there is no circular orbit).
     """
+    if mass_model is None:
+        return [{} for _ in components]
+    kpc_per_arcsec = distance.kpc_per_arcsec(params)
+    context = MassContext(
+        distance.critical_density(params), distance.omega_m(params))
+
+    def vcirc(radii: Sequence[float]) -> np.ndarray:
+        vcirc2 = mass_model.vcirc2(
+            np.asarray(radii, dtype=float) * kpc_per_arcsec, params, context)
+        return np.sqrt(np.where(vcirc2 >= 0, vcirc2, np.nan))
     return [
-        {name: mass_model.vcirc(radii, params)
+        {name: vcirc(radii)
          for name, radii in cmp.circular_velocity_params().items()}
         for cmp in components]
 
@@ -265,6 +290,7 @@ class ComponentSet2D:
     def __init__(
             self,
             components: Component | Sequence[Component],
+            distance: Distance | None = None,
             mass_model: MassModel | None = None
     ):
         if not components:
@@ -275,7 +301,8 @@ class ComponentSet2D:
         params, self._mappings = _merge_params(
             self._components, self._prefixes)
         self._params = _with_mass_model_params(
-            params, self._components, mass_model)
+            params, self._components, distance, mass_model)
+        self._distance = distance
         self._mass_model = mass_model
 
     def components(self) -> tuple[Component, ...]:
@@ -284,6 +311,9 @@ class ComponentSet2D:
     def geometries(self) -> list[Geometry]:
         """Return the geometries of the components, each once."""
         return _geometries(self._components)
+
+    def distance(self) -> Distance | None:
+        return self._distance
 
     def mass_model(self) -> MassModel | None:
         return self._mass_model
@@ -402,7 +432,8 @@ class ComponentSetPlan2D:
             outputs | dict(wdata=wdata, bdata=bdata),
             out_extra, '', lambda data: image(data[0]),
             _circular_velocities(
-                self._components, self._component_set.mass_model(), params))
+                self._components, self._component_set.distance(),
+                self._component_set.mass_model(), params))
 
         # Weight the data with the spatial weights evaluated above
         if weights is not None:
@@ -430,6 +461,7 @@ class ComponentSet3D:
             size_z: int | None = None,
             step_z: float | None = None,
             zero_z: float | None = None,
+            distance: Distance | None = None,
             mass_model: MassModel | None = None
     ):
         if not components:
@@ -453,7 +485,8 @@ class ComponentSet3D:
         self._mappings = mappings[:len(self._components)]
         self._omappings = mappings[len(self._components):]
         self._params = _with_mass_model_params(
-            params, self._components, mass_model)
+            params, self._components, distance, mass_model)
+        self._distance = distance
         self._mass_model = mass_model
         # The z axis, as configured (or None to pick it per grid)
         self._size_z = size_z
@@ -469,6 +502,9 @@ class ComponentSet3D:
     def geometries(self) -> list[Geometry]:
         """Return the geometries of the components, each once."""
         return _geometries(self._all_components())
+
+    def distance(self) -> Distance | None:
+        return self._distance
 
     def mass_model(self) -> MassModel | None:
         return self._mass_model
@@ -643,7 +679,8 @@ class ComponentSetPlan3D:
             self._components, self._component_plans, self._mappings,
             params, self._native_grid, outputs, out_extra, '', cube,
             _circular_velocities(
-                self._components, component_set.mass_model(), params))
+                self._components, component_set.distance(),
+                component_set.mass_model(), params))
 
         # Weight the data with the spatial weights evaluated above
         if weights is not None:

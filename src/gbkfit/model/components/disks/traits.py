@@ -1863,9 +1863,10 @@ class VPTraitMass(VPTrait):
     """
     The rotation curve of the mass model of its model (see
     gbkfit.model.mass): the circular velocity at the rings it is evaluated
-    on, which its model computes from the parameters of its mass model at
-    each evaluation. It has no parameters of its own, and its model must
-    have a mass model.
+    on, which its model computes from the parameters of its distance and
+    its mass model at each evaluation; NaN where the squared circular
+    velocity is negative (there is no circular orbit). It has no
+    parameters of its own, and its model must have a mass model.
     """
 
     @staticmethod

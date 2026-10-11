@@ -7,6 +7,7 @@ from gbkfit.driver import Driver
 from gbkfit.params import ParamDesc
 from gbkfit.utils import gridutils, parseutils
 from ..base import ModelImage, ModelSCube, Selection
+from ..distance import Distance, distance_parser
 from ..mass import MassModel, mass_model_parser
 from . import _detail
 from ._component_set import (
@@ -66,6 +67,26 @@ _scmp3d_parser = parseutils.TypedParser(SpectralComponent3D, [
 _ocmp_parser = parseutils.TypedParser(OpacityComponent3D, [
     OpacityMCDisk3D,
     OpacitySMDisk3D])
+
+
+def _load_gravity(info: dict[str, Any]) -> None:
+    """Load the distance and the mass model of a model, in info."""
+    parseutils.load_option_and_update_info(
+        distance_parser, info, 'distance')
+    parseutils.load_option_and_update_info(
+        mass_model_parser, info, 'mass_model')
+
+
+def _dump_gravity(
+        component_set: ComponentSet2D | ComponentSet3D) -> dict[str, Any]:
+    """Return the distance and the mass model of a model, if any."""
+    info = {}
+    if component_set.distance() is not None:
+        info.update(distance=distance_parser.dump(component_set.distance()))
+    if component_set.mass_model() is not None:
+        info.update(
+            mass_model=mass_model_parser.dump(component_set.mass_model()))
+    return info
 
 
 class ModelIntensity2D(ModelImage):
@@ -243,6 +264,9 @@ class ModelKinematics2D(ModelSCube):
     ----------
     components : SpectralComponent2D or Sequence of them
         Its components: smooth disks (smdisk) and points (point).
+    distance : Distance, optional
+        The distance of the galaxy, which converts the radii of the mass
+        model to kpc (required with a mass model).
     mass_model : MassModel, optional
         The mass of the galaxy, whose circular velocity the 'mass'
         velocity traits of its components take.
@@ -265,32 +289,30 @@ class ModelKinematics2D(ModelSCube):
         _detail.load_geometries(info, ('components',))
         parseutils.load_option_and_update_info(
             _scmp2d_parser, info, 'components', required=True)
-        parseutils.load_option_and_update_info(
-            mass_model_parser, info, 'mass_model')
+        _load_gravity(info)
         opts = parseutils.parse_options_for_callable(info, cls.__init__)
         return cls(**opts)
 
     def dump(self) -> dict[str, Any]:
         component_set = self._component_set
         name = dict(name=self.name()) if self.name() is not None else {}
-        mass_model = component_set.mass_model()
-        mass = dict(mass_model=mass_model_parser.dump(mass_model)) \
-            if mass_model is not None else {}
         return dict(
             type=self.type(),
             **name,
             **_dump_geometries(self._component_set),
             components=_scmp2d_parser.dump(component_set.components()),
-            **mass)
+            **_dump_gravity(component_set))
 
     def __init__(
             self,
             components: SpectralComponent2D | Sequence[SpectralComponent2D],
+            distance: Distance | None = None,
             mass_model: MassModel | None = None,
             name: str | None = None
     ):
         super().__init__(name)
-        self._component_set = ComponentSet2D(components, mass_model)
+        self._component_set = ComponentSet2D(
+            components, distance=distance, mass_model=mass_model)
 
     def pdescs(self) -> dict[str, ParamDesc]:
         return self._component_set.pdescs()
@@ -333,6 +355,9 @@ class ModelKinematics3D(ModelSCube):
         The axis along the line of sight (z): its number of voxels, their
         size and the position of the first; by default, those of the
         longer of the x and y axes, centred on 0.
+    distance : Distance, optional
+        The distance of the galaxy, which converts the radii of the mass
+        model to kpc (required with a mass model).
     mass_model : MassModel, optional
         The mass of the galaxy, whose circular velocity the 'mass'
         velocity traits of its components take.
@@ -358,17 +383,13 @@ class ModelKinematics3D(ModelSCube):
             _scmp3d_parser, info, 'components', required=True)
         parseutils.load_option_and_update_info(
             _ocmp_parser, info, 'opacity_components')
-        parseutils.load_option_and_update_info(
-            mass_model_parser, info, 'mass_model')
+        _load_gravity(info)
         opts = parseutils.parse_options_for_callable(info, cls.__init__)
         return cls(**opts)
 
     def dump(self) -> dict[str, Any]:
         component_set = self._component_set
         name = dict(name=self.name()) if self.name() is not None else {}
-        mass_model = component_set.mass_model()
-        mass = dict(mass_model=mass_model_parser.dump(mass_model)) \
-            if mass_model is not None else {}
         return dict(
             type=self.type(),
             **name,
@@ -379,7 +400,7 @@ class ModelKinematics3D(ModelSCube):
             components=_scmp3d_parser.dump(component_set.components()),
             opacity_components=_ocmp_parser.dump(
                 component_set.opacity_components()),
-            **mass)
+            **_dump_gravity(component_set))
 
     def __init__(
             self,
@@ -390,13 +411,14 @@ class ModelKinematics3D(ModelSCube):
             size_z: int | None = None,
             step_z: float | None = None,
             zero_z: float | None = None,
+            distance: Distance | None = None,
             mass_model: MassModel | None = None,
             name: str | None = None
     ):
         super().__init__(name)
         self._component_set = ComponentSet3D(
             components, opacity_components, size_z, step_z, zero_z,
-            mass_model)
+            distance=distance, mass_model=mass_model)
 
     def pdescs(self) -> dict[str, ParamDesc]:
         return self._component_set.pdescs()
