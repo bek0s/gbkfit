@@ -134,6 +134,21 @@ def _fill_param_values(
         start = stop
 
 
+def subring_radii(
+        rnodes: Sequence[float], rstep: float) -> tuple[float, ...]:
+    """
+    Return the radii of the rings that a disk of the given radial nodes is
+    evaluated on, its subnodes: the first and the last node, and between
+    them the centres of rings of equal width, at most rstep, that cover
+    the radii between the two exactly.
+    """
+    nrings = max(1, int(np.ceil((rnodes[-1] - rnodes[0]) / rstep - 1e-9)))
+    width = (rnodes[-1] - rnodes[0]) / nrings
+    centres = rnodes[0] + (np.arange(nrings) + 0.5) * width
+    subrnodes = np.concatenate(([rnodes[0]], centres, [rnodes[-1]]))
+    return tuple(typing.cast(list, subrnodes.tolist()))
+
+
 def _weighted_mean(weighted_sum: np.ndarray, weight: np.ndarray) -> np.ndarray:
     """
     Return the mean of each voxel from its weighted sum; NaN without
@@ -166,15 +181,7 @@ class Disk(abc.ABC):
         """
 
         nrnodes = len(rnodes)
-
-        # The radial sub nodes: the first and the last node, and between
-        # them the centres of rings of equal width, at most rstep, that
-        # cover the radii between the two exactly
-        nrings = max(1, int(np.ceil((rnodes[-1] - rnodes[0]) / rstep - 1e-9)))
-        width = (rnodes[-1] - rnodes[0]) / nrings
-        centres = rnodes[0] + (np.arange(nrings) + 0.5) * width
-        subrnodes = np.concatenate(([rnodes[0]], centres, [rnodes[-1]]))
-        subrnodes = tuple(typing.cast(list, subrnodes.tolist()))
+        subrnodes = subring_radii(rnodes, rstep)
 
         self._loose = loose
         self._tilted = tilted
@@ -446,8 +453,9 @@ class DiskPlan(abc.ABC):
         """
         Evaluate each polar trait of one kind at points of the plane of the
         disk, as the disk is evaluated: with the node-wise parameters at
-        the subnodes, and NaN off the disk (radii below the first or not
-        below the last node).
+        the subnodes, and NaN off the disk (radii below the first or above
+        the last node; at the last node, the values that the disk tends to
+        there).
 
         Parameters
         ----------
@@ -492,7 +500,8 @@ class DiskPlan(abc.ABC):
         Evaluate each height trait of one kind at points of the plane of
         the disk, as the disk is evaluated: with the node-wise parameters
         at the subnodes, and NaN off the disk (radii below the first or
-        not below the last node).
+        above the last node; at the last node, the values that the disk
+        tends to there).
 
         Parameters
         ----------

@@ -12,6 +12,7 @@ from ..distance import Distance
 from ..mass import MassContext, MassModel
 from ._detail import shared_params
 from .base import Component, ComponentPlan, NativeGrid
+from .disks._profiles import DiskDensity
 from .geometries import Geometry
 
 
@@ -48,7 +49,9 @@ def _with_mass_model_params(
     take the circular velocity of a mass model (see
     Component.circular_velocity_params) and there is none, if there is
     one and none does, if a mass model has no distance or a distance no
-    mass model (its only user), or if the names of the parameters repeat.
+    mass model (its only user), if a mass component follows a component
+    that is not a disk of the model (see Component.brightness_disk), or
+    if the names of the parameters repeat.
     """
     moved = any(cmp.circular_velocity_params() for cmp in components)
     if moved and mass_model is None:
@@ -68,6 +71,15 @@ def _with_mass_model_params(
             "the model a mass_model, or no distance")
     if mass_model is None:
         return params
+    disks = [cmp.name() for cmp in components
+             if cmp.brightness_disk() is not None]
+    for mass_component in mass_model.components():
+        for name in mass_component.followed_components():
+            if name not in disks:
+                raise ConfigError(
+                    f"the mass component {mass_component.name()!r} follows "
+                    f"the component {name!r}, which is not a disk of its "
+                    f"model; its disks: {disks}")
     gravity = distance.pdescs() | mass_model.pdescs()
     if repeated := sorted(params.keys() & gravity.keys()):
         raise ConfigError(
@@ -77,8 +89,38 @@ def _with_mass_model_params(
     return params | gravity
 
 
+def _followed_plans(
+        component_set: 'ComponentSet2D | ComponentSet3D',
+        components: Sequence[Component],
+        plans: Sequence[ComponentPlan],
+        driver: Driver,
+        spectral: gridutils.Grid,
+        dtype: np.dtype
+) -> tuple[tuple[Component, ComponentPlan, dict[str, str]], ...]:
+    """
+    Return the components of a set that the components of its mass model
+    follow (see MassComponent.followed_components), with plans and the
+    names of their parameters: the plans of the given (selected)
+    components, or new ones for the others (their mass counts, though
+    they are not evaluated).
+    """
+    mass_model = component_set.mass_model()
+    if mass_model is None:
+        return ()
+    followed = {name for mass_component in mass_model.components()
+                for name in mass_component.followed_components()}
+    selected = {cmp.name(): plan for cmp, plan in zip(components, plans)}
+    return tuple(
+        (cmp, selected[cmp.name()] if cmp.name() in selected
+         else cmp.plan(driver, spectral, dtype, None), mapping)
+        for cmp, mapping in zip(
+            component_set.components(), component_set.mappings())
+        if cmp.name() in followed)
+
+
 def _circular_velocities(
         components: Sequence[Component],
+        followed: Sequence[tuple[Component, ComponentPlan, dict[str, str]]],
         distance: Distance | None,
         mass_model: MassModel | None,
         params: ParamValues
@@ -87,23 +129,31 @@ def _circular_velocities(
     Return the values of the parameters of each component that are the
     circular velocity of the mass model (see
     Component.circular_velocity_params), from the parameters of the
-    distance and the mass model in params: NaN where the squared circular
-    velocity is negative (there is no circular orbit).
+    distance and the mass model in params, and the densities of the
+    components it follows (see _followed_plans and DiskDensity): NaN where
+    the squared circular velocity is negative or infinite (there is no
+    circular orbit). The mass model is evaluated once, at all their radii.
     """
-    if mass_model is None:
+    radii = [cmp.circular_velocity_params() for cmp in components]
+    if mass_model is None or not any(radii):
         return [{} for _ in components]
     kpc_per_arcsec = distance.kpc_per_arcsec(params)
+    densities = {
+        cmp.name(): DiskDensity(
+            cmp.brightness_disk(), plan.disk_plan(),
+            {p: params[mapping[p]] for p in cmp.pdescs()}, kpc_per_arcsec)
+        for cmp, plan, mapping in followed}
     context = MassContext(
-        distance.critical_density(params), distance.omega_m(params))
-
-    def vcirc(radii: Sequence[float]) -> np.ndarray:
-        vcirc2 = mass_model.vcirc2(
-            np.asarray(radii, dtype=float) * kpc_per_arcsec, params, context)
-        return np.sqrt(np.where(vcirc2 >= 0, vcirc2, np.nan))
-    return [
-        {name: vcirc(radii)
-         for name, radii in cmp.circular_velocity_params().items()}
-        for cmp in components]
+        distance.critical_density(params), distance.omega_m(params),
+        densities)
+    every = [r for cmp in radii for r in cmp.values()]
+    vcirc2 = mass_model.vcirc2(
+        np.concatenate(every) * kpc_per_arcsec, params, context)
+    vcirc = np.sqrt(np.where(
+        np.isfinite(vcirc2) & (vcirc2 >= 0), vcirc2, np.nan))
+    ends = np.cumsum([len(r) for r in every])
+    pieces = iter(vcirc[end - len(r):end] for r, end in zip(every, ends))
+    return [{name: next(pieces) for name in cmp} for cmp in radii]
 
 
 def component_prefixes(
@@ -392,6 +442,9 @@ class ComponentSetPlan2D:
         self._component_plans = tuple(
             cmp.plan(driver, spectral, dtype, selection.lines)
             for cmp in self._components)
+        self._followed = _followed_plans(
+            component_set, self._components, self._component_plans, driver,
+            spectral, dtype)
         # The spatial weights, if weighting is requested
         self._wdata = None
         if has_weights:
@@ -432,7 +485,8 @@ class ComponentSetPlan2D:
             outputs | dict(wdata=wdata, bdata=bdata),
             out_extra, '', lambda data: image(data[0]),
             _circular_velocities(
-                self._components, self._component_set.distance(),
+                self._components, self._followed,
+                self._component_set.distance(),
                 self._component_set.mass_model(), params))
 
         # Weight the data with the spatial weights evaluated above
@@ -623,6 +677,9 @@ class ComponentSetPlan3D:
         self._component_plans = tuple(
             cmp.plan(driver, spectral, dtype, selection.lines)
             for cmp in self._components)
+        self._followed = _followed_plans(
+            component_set, self._components, self._component_plans, driver,
+            spectral, dtype)
         self._ocomponent_plans = tuple(
             cmp.plan(driver, spectral, dtype, None)
             for cmp in component_set.opacity_components())
@@ -679,7 +736,7 @@ class ComponentSetPlan3D:
             self._components, self._component_plans, self._mappings,
             params, self._native_grid, outputs, out_extra, '', cube,
             _circular_velocities(
-                self._components, component_set.distance(),
+                self._components, self._followed, component_set.distance(),
                 component_set.mass_model(), params))
 
         # Weight the data with the spatial weights evaluated above

@@ -91,6 +91,9 @@ class DiskComponentPlan(ComponentPlan):
         self._component = component
         self._disk_plan = disk_plan
 
+    def disk_plan(self) -> _disk.DiskPlan:
+        return self._disk_plan
+
     def evaluate(
             self,
             params: ParamValues,
@@ -127,6 +130,9 @@ class SpectralDiskComponentPlan(ComponentPlan):
             (row, lines_.ratio_name(index))
             for row, index in enumerate(selected)
             if lines_.ratio_name(index) is not None]
+
+    def disk_plan(self) -> _disk.DiskPlan:
+        return self._disk_plan
 
     def evaluate(
             self,

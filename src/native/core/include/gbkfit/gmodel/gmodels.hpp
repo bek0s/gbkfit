@@ -930,15 +930,18 @@ gmodel_disk_htraits_point(
 // the disk kernels do: in the ring of the radius of the point, with the
 // node-wise parameters interpolated linearly between the (sub)nodes. The
 // values are those of the traits before the kernels combine them (e.g.
-// a velocity trait projected, without the systemic velocity). Off the
-// disk (a radius outside [rnodes[0], rnodes[nrnodes - 1])), where the
-// kernels evaluate nothing, the values are NaN.
+// a velocity trait projected, without the systemic velocity). The disk
+// is closed: at the radius of its last node, the values are those its
+// last ring tends to there. Off the disk (a radius outside [rnodes[0],
+// rnodes[nrnodes - 1]]), where the kernels evaluate nothing, the values
+// are NaN.
 template<typename T> constexpr void
 gmodel_disk_traits_point(int j, const DiskTraitsArgs<T>& a)
 {
     T values[TRAIT_NUM_MAX] = {0};
-    int rnidx = -1;
-    if (!disk_info(rnidx, a.r[j], a.nrnodes, a.rnodes)) {
+    int rnidx = a.nrnodes - 1;
+    if (a.r[j] != a.rnodes[rnidx]
+            && !disk_info(rnidx, a.r[j], a.nrnodes, a.rnodes)) {
         for (int i = 0; i < a.traits.n; ++i)
             values[i] = NAN;
     } else {

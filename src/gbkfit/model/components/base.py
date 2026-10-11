@@ -1,5 +1,5 @@
 import abc
-from typing import Any, TypedDict
+from typing import TYPE_CHECKING, Any, TypedDict
 
 import numpy as np
 
@@ -7,6 +7,9 @@ from gbkfit.driver import DeviceArray, Driver
 from gbkfit.params import ParamDesc, ParamValues
 from gbkfit.utils import gridutils, parseutils
 from .geometries import Geometry
+
+if TYPE_CHECKING:
+    from .disks._disk import Disk, DiskPlan
 
 
 __all__ = [
@@ -98,6 +101,14 @@ class Component(parseutils.TypedSerializable, abc.ABC):
         """
         return {}
 
+    def brightness_disk(self) -> 'Disk | None':
+        """
+        Return its disk, whose density traits are its brightness, if it is
+        made of one: the mass components of its model can follow its
+        brightness (see mass.MassTraitDisk). None here.
+        """
+        return None
+
     @abc.abstractmethod
     def plan(
             self,
@@ -131,6 +142,10 @@ class Component(parseutils.TypedSerializable, abc.ABC):
 
 class ComponentPlan(abc.ABC):
     """The evaluation of a component on a driver and dtype."""
+
+    def disk_plan(self) -> 'DiskPlan | None':
+        """Return the plan of its disk, if it is made of one; none here."""
+        return None
 
     @abc.abstractmethod
     def evaluate(

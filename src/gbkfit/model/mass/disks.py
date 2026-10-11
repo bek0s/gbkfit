@@ -18,16 +18,19 @@ import scipy.special
 
 from gbkfit.params import ParamDesc, ParamValues
 from gbkfit.params.pdescs import ParamScalarDesc, ParamVectorDesc
+from gbkfit.utils import parseutils
 from gbkfit.utils.parseutils import ConfigError
 from . import _disk_gravity, _numerics
 from .base import MassComponent, MassContext
 from .units import G
-from .vertical import check_vertical_law, vertical_density, vertical_transform
+from .vertical import (
+    VERTICAL_LAWS, check_vertical_law, vertical_density, vertical_transform)
 
 
 __all__ = [
     'MassExponentialDisk',
-    'MassNodewiseDisk'
+    'MassNodewiseDisk',
+    'MassTraitDisk'
 ]
 
 
@@ -283,3 +286,123 @@ class MassNodewiseDisk(MassComponent):
                 "a thin disk has a surface density, not a density")
         return self.surface_density(R, params) * vertical_density(
             self._vertical, z, params['hz'])
+
+
+class MassTraitDisk(MassComponent):
+    """
+    A disk whose mass follows the brightness of a component of the model,
+    never the data: upsilon (Msun/kpc^2 per unit of the brightness) times
+    the azimuthal mean of the brightness of the component, as it evaluates
+    it (its brightness traits, where its selection traits keep it), at its
+    subnodes and linear between them (exactly its node-wise traits), or
+    at those of rings of width rstep. Vertically, as the component (its
+    brightness height traits; thin without them), or of a vertical law
+    (of the scale height hz, kpc). A component with warps (tilted or loose
+    rings, vertical distortions) is taken flat: its rings coplanar and
+    concentric, as the rotation of the velocity traits 'mass' takes them.
+    Its circular velocity is the pull of its rings (see _disk_gravity); a
+    thin disk pulls infinitely at a jump of its surface density (e.g. at
+    the edge of the component, unless the brightness is 0 there).
+
+    Parameters
+    ----------
+    name : str
+        Its name (see MassComponent).
+    component : str
+        The name of the component of the model that it follows.
+    vertical : str, optional
+        Its vertical law: 'component' (the default), as the component, or
+        a law of vertical.VERTICAL_LAWS ('thin', 'exponential', 'sech2'
+        or 'gauss').
+    rstep : float, optional
+        The width (in the units of the rings of the component, e.g. arcsec)
+        of the rings at whose subnodes it takes the brightness; by
+        default, the subnodes of the component.
+
+    Raises
+    ------
+    ConfigError
+        If the name of the component, the vertical law or rstep is not
+        valid.
+    """
+
+    @staticmethod
+    def type() -> str:
+        return 'trait_disk'
+
+    def dump(self) -> dict[str, Any]:
+        return super().dump() | dict(
+            component=self._component, vertical=self._vertical,
+            rstep=self._rstep)
+
+    def __init__(
+            self,
+            name: str,
+            component: str,
+            vertical: str = 'component',
+            rstep: float | None = None
+    ):
+        super().__init__(name)
+        parseutils.check_name(component)
+        if vertical != 'component':
+            check_vertical_law(vertical)
+        if rstep is not None and not rstep > 0:
+            raise ConfigError(f"rstep must be positive; it is {rstep}")
+        self._component = component
+        self._vertical = vertical
+        self._rstep = rstep
+
+    def component(self) -> str:
+        """Return the name of the component it follows."""
+        return self._component
+
+    def vertical(self) -> str:
+        """Return its vertical law."""
+        return self._vertical
+
+    def followed_components(self) -> tuple[str, ...]:
+        return (self._component,)
+
+    def pdescs(self) -> dict[str, ParamDesc]:
+        pdescs = dict(upsilon=ParamScalarDesc(
+            desc="the mass per unit of the brightness of the component "
+                 "(Msun/kpc^2)", minimum=0))
+        if self._vertical in VERTICAL_LAWS and self._vertical != 'thin':
+            pdescs['hz'] = ParamScalarDesc(
+                desc="the scale height (kpc)", minimum=0)
+        return pdescs
+
+    def vcirc2(
+            self,
+            R: npt.ArrayLike,
+            params: ParamValues,
+            context: MassContext
+    ) -> np.ndarray:
+        if self._component not in context.densities:
+            raise ValueError(
+                f"the mass component {self.name()!r} follows the component "
+                f"{self._component!r}, whose density its context does not "
+                f"give")
+        density = context.densities[self._component]
+        knots = density.knots(self._rstep)
+        upsilon = params['upsilon']
+        R = np.asarray(R, dtype=float)
+        if self._vertical == 'thin' \
+                or self._vertical == 'component' and not density.thick():
+            gravity = _disk_gravity.thin_disk_gravity(knots, R.ravel())
+            v2 = gravity.vcirc2(upsilon * np.sum(
+                density.surface_densities(gravity.radii), axis=0))
+        elif self._vertical == 'component':
+            gravity = _disk_gravity.thick_disk_gravity(knots, R.ravel())
+            v2 = gravity.vcirc2(
+                upsilon * density.surface_densities(gravity.radii),
+                density.height_pdfs(gravity.radii, gravity.heights))
+        else:
+            gravity = _disk_gravity.thick_disk_gravity(knots, R.ravel())
+            v2 = gravity.vcirc2(
+                upsilon * np.sum(
+                    density.surface_densities(gravity.radii), axis=0,
+                    keepdims=True),
+                vertical_density(
+                    self._vertical, gravity.heights, params['hz']))
+        return v2.reshape(R.shape)

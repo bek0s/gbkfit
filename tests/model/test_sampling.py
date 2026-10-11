@@ -79,8 +79,8 @@ def test_node_wise_parameters_have_a_value_for_each_subnode():
 
 def test_traits_evaluated_apart_are_sampled_as_by_their_disk(driver):
     # Node-wise values given at the nodes are interpolated to the subnodes
-    # with the interpolation of the disk, and linearly between them; off
-    # the disk (from its last node), the traits are NaN
+    # with the interpolation of the disk, and linearly between them, up to
+    # its last node (the disk is closed); off the disk, the traits are NaN
     from gbkfit.model.components.disks import smdisk, traits
     rnodes, curve = (0.0, 4.0, 10.0, 20.0), [1.0, 3.0, 2.0, 0.5]
     model_disk = smdisk.SMDisk(
@@ -93,8 +93,8 @@ def test_traits_evaluated_apart_are_sampled_as_by_their_disk(driver):
     subrnodes = np.array(model_disk.subrnodes())
     at = interpolation.InterpolatorAkima(rnodes, curve)(subrnodes)
     r = np.concatenate(
-        (subrnodes[:-1], (subrnodes[1:] + subrnodes[:-1]) / 2, [rnodes[-1]]))
-    expected = np.concatenate((at[:-1], (at[1:] + at[:-1]) / 2, [np.nan]))
+        (subrnodes, (subrnodes[1:] + subrnodes[:-1]) / 2, [20.5]))
+    expected = np.concatenate((at, (at[1:] + at[:-1]) / 2, [np.nan]))
     # (r and theta broadcast together)
     values = plan.evaluate_polar_traits(params, 'rpt', r[:, None], [0, 90])
     assert values.shape == (1, r.size, 2)

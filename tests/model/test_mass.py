@@ -13,7 +13,8 @@ import scipy.integrate
 import scipy.special
 
 from gbkfit.model import model_parser
-from gbkfit.model.distance import DistanceDirect, DistanceRedshift
+from gbkfit.model.distance import (
+    KPC_PER_ARCSEC_MPC, DistanceDirect, DistanceRedshift)
 from gbkfit.model.mass import (
     MassBurkert, MassContext, MassEinasto, MassExponentialDisk, MassModel,
     MassNFW, MassNodewiseDisk, MassPointMass, MassPseudoIsothermal,
@@ -489,3 +490,101 @@ def test_tables_of_thick_disks_are_their_integrals():
         np.testing.assert_allclose(
             disks._exponential_shape(x, 'sech2', eta),
             disks._exponential_shape_direct(x, 'sech2', eta), rtol=1e-6)
+
+
+# The length of an arcsec at the distance of DISTANCE (10 Mpc)
+KPC_PER_ARCSEC = 10 * KPC_PER_ARCSEC_MPC
+
+
+def test_disk_densities_are_azimuthal_means(driver):
+    # The surface density of each brightness trait at the subnodes: an
+    # exponential; a harmonic (mean 0); a circular blob, whose mean is a
+    # exp(-(R - r)^2 / (2 s^2)) i0e(R r / s^2), narrow enough to need
+    # more azimuths; none outside the ring that the disk selects. The
+    # circular velocity that the disk takes from its model is not needed
+    from gbkfit.model.components._component_set import IMAGE_SPECTRAL_AXIS
+    from gbkfit.model.components.disks._profiles import DiskDensity
+    from gbkfit.model.components.disks.smdisk import SpectralSMDisk2D
+    component = SpectralSMDisk2D.load(dict(
+        rnodes=list(range(0, 21, 2)), rstep=0.5,
+        bptraits=[
+            dict(type='exponential'), dict(type='nw_harmonic', order=2),
+            dict(type='mixture_gauss', nblobs=1)],
+        vptraits=dict(type='mass'), dptraits=dict(type='uniform'),
+        sptraits=dict(type='rrange')))
+    params = dict(
+        xpos=0, ypos=0, posa=30, incl=60, vsys=0, bpt_a=1, bpt_s=4,
+        bpt1_a=np.full(11, 0.5), bpt1_p=np.zeros(11), bpt2_r=15, bpt2_t=40,
+        bpt2_a=0.5, bpt2_s=0.3, bpt2_q=1, bpt2_p=0, dpt_a=10, spt_rmin=0,
+        spt_rmax=18)
+    plan = component.plan(
+        driver, IMAGE_SPECTRAL_AXIS, np.dtype(np.float32), None)
+    density = DiskDensity(
+        component.brightness_disk(), plan.disk_plan(), params, KPC_PER_ARCSEC)
+    radius = np.array(component.brightness_disk().subrnodes())
+    selected = radius < 18
+    blob = 0.5 * np.exp(-(radius - 15) ** 2 / (2 * 0.3 ** 2)) \
+        * scipy.special.i0e(radius * 15 / 0.3 ** 2)
+    np.testing.assert_allclose(
+        density.surface_densities(radius * KPC_PER_ARCSEC),
+        [np.exp(-radius / 4) * selected, 0 * radius, blob * selected],
+        rtol=1e-5, atol=2e-6)
+
+
+@pytest.mark.parametrize('model_type', ['kinematics_2d', 'kinematics_3d'])
+def test_trait_disk_is_the_nodewise_disk_of_its_brightness(
+        driver, model_type):
+    # A disk whose mass follows a node-wise brightness (linear between the
+    # subnodes, and 0 at the last) is the nodewise disk of that surface
+    # density at the subnodes, and of the scale height of the brightness
+    # (in kpc) if thick
+    from gbkfit.model.components.disks._disk import subring_radii
+    rnodes = list(range(0, 21, 2))
+    brightness = np.append(np.linspace(1, 0.2, 10), 0)
+    upsilon = 2e8
+    subrnodes = np.array(subring_radii(rnodes, DISK['rstep']))
+    thick = model_type == 'kinematics_3d'
+    disk = DISK | dict(
+        type='smdisk', name='hi', bptraits=dict(type='nw_uniform'),
+        vptraits=dict(type='mass'))
+    properties = {
+        f'hi_{name}': value for name, value in DISK_PROPERTIES.items()
+        if name != 'bpt_s'} | dict(hi_bpt_a=brightness)
+    if thick:
+        disk |= dict(bhtraits=dict(type='sech2'))
+        properties |= dict(hi_bht_s=1)
+    halo = dict(
+        type='pseudo_isothermal', name='halo', parameters='density_radius')
+    halo_properties = dict(distance=10, mass_halo_log_rho=8, mass_halo_rs=1)
+
+    def model(gas):
+        return model_parser.load(dict(
+            type=model_type, components=[copy.deepcopy(disk)],
+            mass_model=dict(components=[gas, halo]),
+            distance=copy.deepcopy(DISTANCE)))
+
+    following = model(dict(type='trait_disk', name='gas', component='hi'))
+    nodewise = model(dict(
+        type='nodewise_disk', name='gas',
+        nodes=(subrnodes * KPC_PER_ARCSEC).tolist(),
+        vertical='sech2' if thick else 'thin'))
+    sigma = upsilon * np.interp(subrnodes[:-1], rnodes, brightness)
+    np.testing.assert_allclose(
+        evaluate(driver, following, properties | halo_properties | dict(
+            mass_gas_upsilon=upsilon)),
+        evaluate(driver, nodewise, properties | halo_properties | dict(
+            mass_gas_log_sigma=np.log10(sigma),
+            mass_gas_hz=KPC_PER_ARCSEC)),
+        rtol=1e-5, atol=1e-7)
+
+
+def test_trait_disks_follow_disks_of_their_model():
+    mass_model = dict(components=[
+        dict(type='trait_disk', name='gas', component='hi', rstep=1.0,
+             vertical='component')])
+    loaded = mass_model_parser.load(copy.deepcopy(mass_model))
+    assert mass_model_parser.dump(loaded) == mass_model
+    with pytest.raises(ConfigError, match="follows the component 'hi'"):
+        kinematics(
+            'kinematics_2d', 'smdisk', dict(type='mass'), mass_model,
+            DISTANCE)
