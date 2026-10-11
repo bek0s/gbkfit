@@ -302,7 +302,10 @@ class MassTraitDisk(MassComponent):
     concentric, as the rotation of the velocity traits 'mass' takes them.
     Its circular velocity is the pull of its rings (see _disk_gravity); a
     thin disk pulls infinitely at a jump of its surface density (e.g. at
-    the edge of the component, unless the brightness is 0 there).
+    the edge of the component, unless the brightness is 0 there). The
+    azimuthal means take at least 128 azimuths, more until they converge:
+    structure narrower than their spacing (e.g. tiny blobs) can be
+    missed.
 
     Parameters
     ----------

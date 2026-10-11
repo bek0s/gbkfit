@@ -494,6 +494,14 @@ class Trait(parseutils.TypedSerializable, abc.ABC):
         """
         return ()
 
+    def pressure_support(self) -> str | None:
+        """
+        Return how the values of its circular velocity parameters are
+        corrected for the pressure of their disk, if they are (see
+        VPTraitMass); not here.
+        """
+        return None
+
 
 class TraitFeatureTrunc:
     """
@@ -1864,10 +1872,32 @@ class VPTraitMass(VPTrait):
     The rotation curve of the mass model of its model (see
     gbkfit.model.mass): the circular velocity at the rings it is evaluated
     on, which its model computes from the parameters of its distance and
-    its mass model at each evaluation; NaN where the squared circular
-    velocity is negative or infinite (there is no circular orbit, e.g. at
-    a jump of the surface density of a thin disk). It has no parameters
-    of its own, and its model must have a mass model.
+    its mass model at each evaluation, and with pressure support, the
+    rotation of the gas of its disk in that gravity; NaN where its square
+    is negative or infinite (there is no circular orbit, e.g. at a jump of
+    the surface density of a thin disk, or where the pressure exceeds the
+    gravity). It has no parameters of its own, and its model must have a
+    mass model.
+
+    With pressure_support 'jeans', the rotation of an isotropic gas at the
+    midplane of its disk (the radial Jeans equation): v^2 = v_c^2 + (R /
+    rho) d(rho sigma^2)/dR, with the azimuthal means of the density rho of
+    the disk at its midplane (its brightness times its brightness height
+    traits at z = 0, or its brightness if thin: the equation of a thin
+    disk) and of rho sigma^2, sigma its velocity dispersion at the
+    midplane (azimuthal means as those of mass.MassTraitDisk); the
+    derivative by the second-order three-point formula on the rings; NaN
+    without brightness.
+
+    Parameters
+    ----------
+    pressure_support : str, optional
+        The pressure support: none (the default), or 'jeans'.
+
+    Raises
+    ------
+    ConfigError
+        If pressure_support is not valid.
     """
 
     @staticmethod
@@ -1878,6 +1908,18 @@ class VPTraitMass(VPTrait):
     def uid() -> int:
         return VPT_UID_NW_TAN_UNIFORM
 
+    def dump(self) -> dict[str, Any]:
+        info = dict(pressure_support=self._pressure_support) \
+            if self._pressure_support is not None else {}
+        return super().dump() | info
+
+    def __init__(self, pressure_support: str | None = None):
+        if pressure_support not in (None, 'jeans'):
+            raise ConfigError(
+                f"pressure_support must be 'jeans' or none; it is "
+                f"{pressure_support!r}")
+        self._pressure_support = pressure_support
+
     def sampling(self) -> str:
         return 'subrings'
 
@@ -1886,6 +1928,9 @@ class VPTraitMass(VPTrait):
 
     def circular_velocity_params(self) -> tuple[str, ...]:
         return ('vt',)
+
+    def pressure_support(self) -> str | None:
+        return self._pressure_support
 
 
 class VPTraitNWTanHarmonic(
