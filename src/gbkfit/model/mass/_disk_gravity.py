@@ -224,9 +224,9 @@ class _ThinWeights:
 class _ThickWeights:
     """
     The weights of a thick disk of outer radius 1, factorised by singular
-    value decomposition over the heights: v^2 = G sum_q,r left[:, q, r]
-    (right @ rho[q].T)[r] for the density rho at the density points and
-    the heights.
+    value decomposition over the heights: v^2 = G left @ (right @
+    rho.T).T.ravel() for the density rho at the density points and the
+    heights (left has shape (radii, points * rank)).
     """
     left: np.ndarray
     right: np.ndarray
@@ -297,7 +297,7 @@ def _thick_weights(
         weights.reshape(-1, len(_HEIGHTS)), full_matrices=False)
     rank = int(np.sum(s > _THICK_RANK_TOLERANCE * s[0]))
     return _ThickWeights(
-        (u[:, :rank] * s[:rank]).reshape(len(radii), -1, rank), vt[:rank])
+        (u[:, :rank] * s[:rank]).reshape(len(radii), -1), vt[:rank])
 
 
 @dataclasses.dataclass(frozen=True)
@@ -410,9 +410,9 @@ class ThickDiskGravity:
                 f"the heights of its gravity, not 1: its heights are not "
                 f"resolved (e.g. a sharp cut, heavy tails, or a scale "
                 f"height below 1e-8 of the outer radius of the disk)")
-        rho = np.einsum('iq,iqh->qh', sigmas, pdfs)
-        v2 = G * self._scale ** 2 * np.einsum(
-            'jqr,rq->j', weights.left, weights.right @ rho.T)
+        rho = np.sum(sigmas[..., None] * pdfs, axis=0)
+        v2 = G * self._scale ** 2 * (
+            weights.left @ (weights.right @ rho.T).T.ravel())
         return v2[self._inverse]
 
 

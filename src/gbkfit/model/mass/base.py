@@ -5,7 +5,8 @@ spherical components (MassSpherical).
 
 import abc
 import dataclasses
-from typing import Any
+from collections.abc import Mapping
+from typing import Any, Protocol
 
 import numpy as np
 import numpy.typing as npt
@@ -17,10 +18,48 @@ from .units import G
 
 
 __all__ = [
+    'ComponentDensity',
     'MassComponent',
     'MassContext',
     'MassSpherical'
 ]
+
+
+class ComponentDensity(Protocol):
+    """
+    The density of a component of the model, which mass components follow
+    (e.g. its brightness, see disks.MassTraitDisk): its azimuthal mean, a
+    sum of terms (e.g. one for each brightness trait), each a surface
+    density times the pdf of the height, between the inner and the outer
+    edge of the component; in kpc, and in the units of the component.
+    """
+
+    def knots(self, rstep: float | None) -> np.ndarray:
+        """
+        Return the radii (kpc) of the rings of the component, from its
+        inner to its outer edge: those it is evaluated on, or rings of
+        width at most rstep (in the units of its rings, e.g. arcsec).
+        """
+        ...
+
+    def thick(self) -> bool:
+        """Check whether its terms have pdfs of the height (thick)."""
+        ...
+
+    def surface_densities(self, R: np.ndarray) -> np.ndarray:
+        """
+        Return the surface density of each term at the radii R (kpc,
+        between its edges): an array of shape (terms, len(R)).
+        """
+        ...
+
+    def height_pdfs(self, R: np.ndarray, z: np.ndarray) -> np.ndarray:
+        """
+        Return the pdf of the height (1/kpc) of each term at the radii R
+        (kpc, between its edges) and the heights z (kpc): an array of shape
+        (terms, len(R), len(z)).
+        """
+        ...
 
 
 @dataclasses.dataclass(frozen=True)
@@ -29,10 +68,13 @@ class MassContext:
     What mass components need besides their parameters: the critical
     density of the universe (Msun/kpc^3) and its matter density
     parameter, at the epoch of the galaxy (for the overdensities that
-    define the masses of halos).
+    define the masses of halos), and the densities of the components of
+    the model that they follow, by the names of the components.
     """
     critical_density: float
     omega_m: float
+    densities: Mapping[str, ComponentDensity] = dataclasses.field(
+        default_factory=dict)
 
 
 class MassComponent(parseutils.TypedSerializable, abc.ABC):
@@ -68,6 +110,13 @@ class MassComponent(parseutils.TypedSerializable, abc.ABC):
         """Return its name."""
         return self._name
 
+    def followed_components(self) -> tuple[str, ...]:
+        """
+        Return the names of the components of its model whose densities
+        it follows (see ComponentDensity); none here.
+        """
+        return ()
+
     @abc.abstractmethod
     def pdescs(self) -> dict[str, ParamDesc]:
         """Return its parameters, by name."""
@@ -92,7 +141,8 @@ class MassComponent(parseutils.TypedSerializable, abc.ABC):
         params : dict
             The values of its parameters, by their names in pdescs.
         context : MassContext
-            The epoch of the galaxy.
+            The epoch of the galaxy, and the densities it follows (see
+            MassContext).
 
         Returns
         -------

@@ -12,7 +12,7 @@ from gbkfit.params import ParamDesc, ParamValues
 from gbkfit.utils import iterutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
 from .base import MassComponent, MassContext
-from .disks import MassExponentialDisk, MassNodewiseDisk
+from .disks import MassExponentialDisk, MassNodewiseDisk, MassTraitDisk
 from .halos import (
     MassBurkert, MassEinasto, MassNFW, MassPseudoIsothermal, MassZhao)
 from .points import MassPointMass
@@ -31,6 +31,7 @@ mass_component_parser = parseutils.TypedParser(MassComponent, [
     MassPointMass,
     MassExponentialDisk,
     MassNodewiseDisk,
+    MassTraitDisk,
     MassSersic,
     MassNFW,
     MassBurkert,
@@ -112,7 +113,8 @@ class MassModel(parseutils.Serializable):
         params : ParamValues
             The values of its parameters (and possibly others), by name.
         context : MassContext
-            The epoch of the galaxy.
+            The epoch of the galaxy, and the densities it follows (see
+            MassContext).
 
         Returns
         -------

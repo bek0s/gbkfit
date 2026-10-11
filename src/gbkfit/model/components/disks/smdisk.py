@@ -402,6 +402,9 @@ class SpectralSMDisk2D(SpectralComponent2D):
     def circular_velocity_params(self) -> dict[str, tuple[float, ...]]:
         return self._disk.circular_velocity_params()
 
+    def brightness_disk(self) -> _disk.Disk:
+        return self._disk
+
     def has_weights(self) -> bool:
         return bool(self._disk.traits('wpt'))
 
@@ -560,6 +563,9 @@ class SpectralSMDisk3D(SpectralComponent3D):
 
     def circular_velocity_params(self) -> dict[str, tuple[float, ...]]:
         return self._disk.circular_velocity_params()
+
+    def brightness_disk(self) -> _disk.Disk:
+        return self._disk
 
     def has_weights(self) -> bool:
         return bool(self._disk.traits('wpt'))
