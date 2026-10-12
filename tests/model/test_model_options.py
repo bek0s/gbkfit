@@ -193,8 +193,8 @@ def test_flat_lines_of_sight_see_no_opacity(kind):
 
 
 @pytest.mark.parametrize('options, message', [
-    (dict(extent=-1), "extent must be 'legacy' or a positive length"),
-    (dict(extent='half'), "extent must be 'legacy' or a positive length"),
+    (dict(extent=-1), "extent must be 'galaxy', 'legacy' or a positive"),
+    (dict(extent='half'), "extent must be 'galaxy', 'legacy' or a positive"),
     (dict(step=0), "step must be positive")])
 def test_invalid_depths_are_rejected(options, message):
     line_of_sight = GRID | dict(depth=options)
@@ -207,13 +207,16 @@ def test_invalid_depths_are_rejected(options, message):
     # As many voxels as cover the extent, centred on 0
     (Depth(extent=21, step=1.5), (14, 1.5, -9.75)),
     (Depth(extent=20, step=1.5), (14, 1.5, -9.75)),
-    # By default, those of the longer of the x and y axes
-    (Depth(), (12, 0.5, -2.75)),
-    (Depth(step=0.25), (12, 0.25, -1.375))])
+    # By default, the diameter of the disks (radius 5), in voxels of the
+    # step of the longer of the x and y axes
+    (Depth(), (20, 0.5, -4.75)),
+    # Legacy: those of the longer of the x and y axes
+    (Depth(extent='legacy'), (12, 0.5, -2.75)),
+    (Depth(extent='legacy', step=0.25), (12, 0.25, -1.375))])
 def test_depth_axis(depth, axis):
     grid = gridutils.Grid(
         (8, 12), gridutils.Coords((1, 0.5), (3.5, 5.5), (0, 0), 0), None)
-    assert depth.axis(grid) == axis
+    assert depth.axis(grid, 5) == axis
 
 
 @pytest.mark.parametrize('name', COMPONENTS)
