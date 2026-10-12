@@ -112,7 +112,8 @@ Example
 
    # observations of the galaxy: a spectral cube; the galaxy is evaluated
    # on the plane of the sky (a flat line of sight; a thick disk needs a
-   # depth axis: {type: grid})
+   # depth axis: {type: grid}, or radiative transfer along it, for
+   # self-absorbing lines: {type: transfer})
    observations:
    - line_of_sight: {type: flat}
      observable:

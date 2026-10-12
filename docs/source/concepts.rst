@@ -52,6 +52,24 @@ Lines of sight
 - Grid: the galaxies are evaluated on a grid with a depth axis (thick
   disks, thin disks and points at their depth, and dust, which dims the
   light behind it)
+- Transfer: radiative transfer along each line of sight. The galaxies
+  are evaluated on a grid with a depth axis, as by Grid, and a march
+  along each line of sight, front to back, adds the light of each
+  channel that reaches the viewer. Without line opacity it gives what
+  Grid gives (the clouds of a Monte Carlo disk in each voxel become one
+  line of their mean velocity and width). Its components can also absorb
+  their own lines (line opacity: e.g. the self-absorption of HI), and
+  the option slab evaluates the depth axis a few planes at a time, to
+  bound the memory.
+
+A thick disk that emits lines can absorb them (opacity: {type: line,
+coefficients: {type: uniform}}): the light j of each voxel at a line has
+the optical depth j/S at that line, of the source function S (e.g. the
+spin temperature of HI, in the units of the model); the coefficient 1/S
+is a set of density traits (parameters op_*, so it can vary in the
+disk), or for named lines, a mapping of each line to its traits
+(parameters op_{line}_*). The brightness of an optically thick line
+then levels off at S.
 
 Fitters
 -------

@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from gbkfit.driver import Driver
+from gbkfit.driver import DeviceArray, Driver
 from gbkfit.params import ParamValues
 from gbkfit.utils import gridutils
 from gbkfit.utils.parseutils import ConfigError
@@ -90,9 +90,8 @@ class ComponentPlans:
         For each emitter, the ratios of the cubes of opacity at the
         wavelength of each of its lines or its band (an array of shape
         (nrows, ncubes)), or None without absorbers.
-    odata : DeviceArray
-        The cubes of opacity (of shape (ncubes, nz, ny, nx)), or None
-        without absorbers.
+    ncubes : int
+        The number of cubes of opacity (0 without absorbers).
 
     Raises
     ------
@@ -136,7 +135,7 @@ class ComponentPlans:
         # and the factor of its optical depth there, and the ratios of the
         # cubes at the wavelength of each line (or band) of each emitter
         self.ratios = dict.fromkeys(emitters)
-        self.odata = None
+        self.ncubes = 0
         self._deposits = {}
         if absorbers:
             wavelengths = {
@@ -151,9 +150,7 @@ class ComponentPlans:
                 i: np.array([[_ratio(law, w) for law in cube_laws]
                              for w in wavelengths[i]], dtype)
                 for i in emitters}
-            self.odata = driver.mem_alloc_d(
-                (len(cube_laws),) + self.native_grid['spat_size'][::-1],
-                dtype)
+            self.ncubes = len(cube_laws)
         # The plans of the emitters, and of the absorbers that do not emit
         # here
         self.plans = {
@@ -190,47 +187,49 @@ class ComponentPlans:
     def evaluate_opacity(
             self,
             params: dict[int, ParamValues],
-            out_extra: dict[str, Any] | None
-    ) -> np.ndarray | None:
-        """
-        Write the optical depth of each voxel of the absorbers to the cubes
-        of opacity, each with the parameters of its index in params. With
-        out_extra, add the extra outputs of each absorber to it (see
-        add_extra), and return the optical depth at V of each voxel of
-        all of them.
-        """
-        if self.odata is None:
-            return None
-        self.driver.mem_fill(self.odata, 0)
-        total = None
-        for i in self.absorbers:
-            cube, scale = self._deposits[i]
-            extra = {} if out_extra is not None else None
-            self.plans[i].evaluate_opacity(
-                params[i], self.native_grid, self.odata[cube], scale, extra)
-            if extra is not None:
-                tau = extra['odata']
-                total = tau if total is None else total + tau
-            self.add_extra(out_extra, i, extra)
-        return total
-
-    def add_extra(
-            self,
-            out_extra: dict[str, Any] | None,
-            index: int,
-            extra: dict[str, Any] | None
+            grid: NativeGrid,
+            odata: DeviceArray,
+            extras: dict[int, dict[str, Any]] | None
     ) -> None:
         """
-        Add the extra outputs of the component of the given index to
-        out_extra, named after its name, or its position if it has none
-        (e.g. 'disk_bdata' or 'component0_bdata').
+        Write the optical depth of each voxel of the grid of the absorbers
+        to the cubes of opacity odata (of shape (ncubes, nz, ny, nx)), each
+        with the parameters of its index in params. With extras, the extra
+        outputs of each absorber go to extras[index].
         """
-        if out_extra is None:
-            return
-        name = self._component_set.components()[index].name()
-        label = name if name is not None else f'component{index}'
-        for key, value in extra.items():
-            out_extra[f'{label}_{key}'] = self.extra(value)
+        self.driver.mem_fill(odata, 0)
+        for i in self.absorbers:
+            cube, scale = self._deposits[i]
+            extra = {} if extras is not None else None
+            self.plans[i].evaluate_opacity(
+                params[i], grid, odata[cube], scale, extra)
+            if extras is not None:
+                extras.setdefault(i, {}).update(extra)
+
+    def add_extras(
+            self,
+            out_extra: dict[str, Any],
+            extras: dict[int, dict[str, Any]],
+            totals: dict[str, np.ndarray]
+    ) -> None:
+        """
+        Add the extra outputs of each component (extras, by index) to
+        out_extra, named after its name, or its position if it has none
+        (e.g. 'disk_bdata' or 'component0_bdata'), and the totals
+        ('total_*'): the given ones and the optical depth at V of all the
+        absorbers ('total_odata').
+        """
+        components = self._component_set.components()
+        for index, extra in extras.items():
+            name = components[index].name()
+            label = name if name is not None else f'component{index}'
+            for key, value in extra.items():
+                out_extra[f'{label}_{key}'] = self.extra(value)
+        if self.absorbers:
+            totals = dict(odata=sum(
+                extras[i]['odata'] for i in self.absorbers)) | totals
+        for name, total in totals.items():
+            out_extra[f'total_{name}'] = self.extra(total)
 
     def extra(self, data: np.ndarray) -> gridutils.GridData:
         """

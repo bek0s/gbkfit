@@ -250,12 +250,24 @@ class Transfer(LineOfSight):
     viewer, dimmed by the opacity in front of it. It sees every component.
     It gives what Grid gives, but for the clouds of a Monte Carlo disk:
     those of each voxel become one line, of their mean velocity, and as
-    wide as the sum of their lines.
+    wide as the sum of their lines. Its components may have line opacity
+    (see LineOpacity).
 
     Parameters
     ----------
     depth : Depth, optional
         The depth axis; Depth() by default.
+    slab : int, optional
+        The number of planes of the depth axis evaluated at once, which
+        bounds the memory of the evaluation (the fields of the emitters
+        and the cubes of opacity of a slab of planes); all by default
+        (fastest). The clouds of Monte Carlo disks are drawn again for
+        each slab.
+
+    Raises
+    ------
+    ConfigError
+        If slab is not a positive integer.
     """
 
     @staticmethod
@@ -269,14 +281,24 @@ class Transfer(LineOfSight):
             info, cls.__init__))
 
     def dump(self) -> dict[str, Any]:
-        return dict(type=self.type(), depth=self._depth.dump())
+        return dict(type=self.type(), depth=self._depth.dump()) | (
+            dict(slab=self._slab) if self._slab is not None else {})
 
-    def __init__(self, depth: Depth | None = None):
+    def __init__(self, depth: Depth | None = None, slab: int | None = None):
+        if slab is not None and not (
+                isinstance(slab, numbers.Integral) and slab > 0):
+            raise ConfigError(
+                f"slab must be a positive integer; it is {slab!r}")
         self._depth = depth if depth is not None else Depth()
+        self._slab = slab
 
     def depth(self) -> Depth:
         """Return the depth axis."""
         return self._depth
+
+    def slab(self) -> int | None:
+        """Return the number of planes evaluated at once, if given."""
+        return self._slab
 
     def depth_axis(self, grid: gridutils.Grid, radius: float) -> DepthAxis:
         return self._depth.axis(grid, radius)
@@ -297,7 +319,8 @@ class Transfer(LineOfSight):
             band: Band | None
     ) -> TransferPlan:
         return galaxy.plan_transfer(
-            driver, grid, spectral, depth, dtype, emitters, lines, band)
+            driver, grid, spectral, depth, dtype, emitters, lines, band,
+            self._slab)
 
 
 line_of_sight_parser = parseutils.TypedParser(LineOfSight, [
