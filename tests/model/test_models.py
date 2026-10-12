@@ -16,7 +16,7 @@ import numpy as np
 import pytest
 from gbkfit.model import galaxy_parser
 from gbkfit.model.components._component_set import IMAGE_SPECTRAL_AXIS
-from gbkfit.observation import Grid
+from gbkfit.observation import Depth, Grid
 from gbkfit.params import ParamModeOffsets
 from gbkfit.utils import gridutils
 
@@ -231,12 +231,14 @@ THICK_DISK = dict(components=smdisk(
 def image_plan(driver, galaxy, size):
     """
     The plan of an image of a galaxy (its first component) on a grid of
-    the given size, with the depth axis that the grid gives Grid().
+    the given size, with the depth axis of the legacy extent: that of the
+    grid.
     """
     rpix = tuple(n / 2 - 0.5 for n in size)
     grid = gridutils.Grid(size, gridutils.Coords((1, 1), rpix, (0, 0), 0), None)
     return galaxy.plan(
-        driver, grid, IMAGE_SPECTRAL_AXIS, Grid().depth_axis(grid),
+        driver, grid, IMAGE_SPECTRAL_AXIS,
+        Grid(Depth(extent='legacy')).depth_axis(grid, 0),
         np.float32, (0,), None, None)
 
 

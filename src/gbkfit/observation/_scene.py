@@ -54,6 +54,20 @@ class Scene:
         self._band = band
         self._line_of_sight = line_of_sight
 
+    def radius(self) -> float:
+        """
+        Return the outer radius (arcsec) of the largest disk it evaluates:
+        of the components whose light it sees, and those with opacity; 0
+        without disks.
+        """
+        radii = [
+            cmp.density_disk().rnodes()[-1]
+            for galaxy, emitters in zip(self._galaxies, self._emitters)
+            for i, cmp in enumerate(galaxy.components())
+            if (i in emitters or cmp.opacity() is not None)
+            and cmp.density_disk() is not None]
+        return max(radii, default=0.0)
+
     def component_params(self, name: str) -> dict[str, str]:
         """
         Return the names of the parameters of the component of the given
@@ -96,7 +110,7 @@ class ScenePlan:
         image = grid.spectral_axis is None
         spatial = grid if image else grid.spatial()
         spectral = IMAGE_SPECTRAL_AXIS if image else grid.spectral()
-        depth = scene._line_of_sight.depth_axis(spatial)
+        depth = scene._line_of_sight.depth_axis(spatial, scene.radius())
         self._key = 'image' if image else 'scube'
         self._scene = scene
         self._plans: tuple[ComponentSetPlan, ...] = tuple(

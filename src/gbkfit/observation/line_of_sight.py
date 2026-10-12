@@ -34,10 +34,13 @@ class Depth(parseutils.Serializable):
     Parameters
     ----------
     extent : str or float, optional
-        Its length (arcsec), or 'legacy' (the default): that of the
-        longer of the x and y axes of the grid the galaxies are evaluated
-        on (the grid of the data, oversampled and padded for the
-        convolutions), as the 3d models of earlier versions took it.
+        Its length (arcsec); 'galaxy' (the default): the diameter of the
+        largest disk the observation evaluates (twice its outer radius,
+        that of the last of its rings), so that every voxel of the disks
+        is on it; or 'legacy': that of the longer of the x and y axes of
+        the grid the galaxies are evaluated on (the grid of the data,
+        oversampled and padded for the convolutions), as the 3d models of
+        earlier versions took it.
     step : float, optional
         The size of its voxels (arcsec); by default that of the pixels
         along the longer of the x and y axes of that grid.
@@ -51,30 +54,31 @@ class Depth(parseutils.Serializable):
     def dump(self) -> dict[str, Any]:
         return dict(extent=self._extent, step=self._step)
 
-    def __init__(self, extent: str | float = 'legacy',
+    def __init__(self, extent: str | float = 'galaxy',
                  step: float | None = None):
-        if extent != 'legacy' and not (
+        if extent not in ('galaxy', 'legacy') and not (
                 isinstance(extent, numbers.Real) and extent > 0):
             raise ConfigError(
-                f"extent must be 'legacy' or a positive length; it is "
-                f"{extent!r}")
+                f"extent must be 'galaxy', 'legacy' or a positive length; it "
+                f"is {extent!r}")
         if step is not None and not step > 0:
             raise ConfigError(f"step must be positive; it is {step}")
         self._extent = extent
         self._step = step
 
     def extent(self) -> str | float:
-        """Return its extent: a length, or 'legacy'."""
+        """Return its extent: a length, 'galaxy' or 'legacy'."""
         return self._extent
 
     def step(self) -> float | None:
         """Return the size of its voxels, if given."""
         return self._step
 
-    def axis(self, grid: gridutils.Grid) -> DepthAxis:
+    def axis(self, grid: gridutils.Grid, radius: float) -> DepthAxis:
         """
-        Return the axis on the given grid of the x and y axes: as many
-        voxels as cover the extent, centred on 0.
+        Return the axis on the given grid of the x and y axes, for disks
+        of the given outer radius (arcsec): as many voxels as cover the
+        extent, centred on 0.
         """
         longest = int(grid.size[0] < grid.size[1])
         step = self._step if self._step is not None \
@@ -82,7 +86,8 @@ class Depth(parseutils.Serializable):
         if self._extent == 'legacy':
             size = grid.size[longest]
         else:
-            size = max(1, int(np.ceil(self._extent / step - 1e-9)))
+            extent = 2 * radius if self._extent == 'galaxy' else self._extent
+            size = max(1, int(np.ceil(extent / step - 1e-9)))
         return DepthAxis(size, step, -(size / 2 - 0.5) * step)
 
 
@@ -99,10 +104,13 @@ class LineOfSight(parseutils.TypedSerializable, abc.ABC):
         return dict(type=self.type())
 
     @abc.abstractmethod
-    def depth_axis(self, grid: gridutils.Grid) -> DepthAxis | None:
+    def depth_axis(
+            self, grid: gridutils.Grid, radius: float
+    ) -> DepthAxis | None:
         """
         Return the depth axis of the grid of the galaxies, on the given
-        grid of the x and y axes; none on the plane of the sky.
+        grid of the x and y axes, for disks of the given outer radius
+        (arcsec); none on the plane of the sky.
         """
         pass
 
@@ -129,7 +137,7 @@ class Flat(LineOfSight):
     def type() -> str:
         return 'flat'
 
-    def depth_axis(self, grid: gridutils.Grid) -> None:
+    def depth_axis(self, grid: gridutils.Grid, radius: float) -> None:
         return None
 
     def check(self, component: Component) -> None:
@@ -177,8 +185,8 @@ class Grid(LineOfSight):
         """Return the depth axis."""
         return self._depth
 
-    def depth_axis(self, grid: gridutils.Grid) -> DepthAxis:
-        return self._depth.axis(grid)
+    def depth_axis(self, grid: gridutils.Grid, radius: float) -> DepthAxis:
+        return self._depth.axis(grid, radius)
 
     def check(self, component: Component) -> None:
         pass
