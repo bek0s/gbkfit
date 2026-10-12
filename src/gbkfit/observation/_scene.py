@@ -31,10 +31,9 @@ class Scene:
     What an observation sees: galaxies, the indices of the components of
     each whose light it sees (its emitters; the opacity of all components
     applies), its emission lines (all if None) or its band (if known), and
-    its line of sight. The
-    parameters of each galaxy have the names of the mapping of the galaxy
-    among those of the observation group, and its extra outputs the
-    prefix of the galaxy.
+    its line of sight. The parameters of each galaxy have the names of the
+    mapping of the galaxy among those of the observation group, and its
+    extra outputs the prefix of the galaxy.
     """
 
     def __init__(
@@ -54,6 +53,19 @@ class Scene:
         self._lines = lines
         self._band = band
         self._line_of_sight = line_of_sight
+
+    def component_params(self, name: str) -> dict[str, str]:
+        """
+        Return the names of the parameters of the component of the given
+        name ('galaxy.component' when there are several galaxies) among
+        those of the observation group, by its own names. Raise
+        ConfigError if no component has the name.
+        """
+        g, i = _named_components(self._galaxies, [name])[name]
+        mapping = self._mappings[g]
+        return {
+            own: mapping[full]
+            for own, full in self._galaxies[g].component_params(i).items()}
 
     def plan(
             self,
@@ -206,18 +218,7 @@ def _select_emitters(
         raise ConfigError("at least one component must be selected")
     if len(set(names)) != len(names):
         raise ConfigError(f"the selected components repeat names: {names}")
-    known = {}
-    for g, galaxy in enumerate(galaxies):
-        for i, cmp in enumerate(galaxy.components()):
-            if cmp.name() is None:
-                continue
-            key = cmp.name() if len(galaxies) == 1 \
-                else f'{galaxy.name()}.{cmp.name()}'
-            known[key] = (g, i)
-    if unknown := [name for name in names if name not in known]:
-        raise ConfigError(
-            f"there are no components named {unknown}; the named components "
-            f"are {list(known)}")
+    known = _named_components(galaxies, names)
     selected = [[] for _ in galaxies]
     for name in names:
         g, i = known[name]
@@ -231,6 +232,30 @@ def _select_emitters(
                 f"in the band {band.name()!r} of the image")
         selected[g].append(i)
     return [sorted(indices) for indices in selected]
+
+
+def _named_components(
+        galaxies: Sequence[Galaxy], names: Sequence[str]
+) -> dict[str, tuple[int, int]]:
+    """
+    Return the indices of the galaxy and of the component of each named
+    component of the galaxies, by its name ('galaxy.component' when there
+    are several galaxies). Raise ConfigError unless the given names are
+    among them.
+    """
+    known = {}
+    for g, galaxy in enumerate(galaxies):
+        for i, cmp in enumerate(galaxy.components()):
+            if cmp.name() is None:
+                continue
+            key = cmp.name() if len(galaxies) == 1 \
+                else f'{galaxy.name()}.{cmp.name()}'
+            known[key] = (g, i)
+    if unknown := [name for name in names if name not in known]:
+        raise ConfigError(
+            f"there are no components named {unknown}; the named components "
+            f"are {list(known)}")
+    return known
 
 
 def _check_lines(

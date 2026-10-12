@@ -10,12 +10,14 @@ from gbkfit.instrument import Instrument
 from gbkfit.model import LineEmission
 from gbkfit.params import ParamValues
 from gbkfit.utils import gridutils
+from gbkfit.utils.parseutils import ConfigError
 from . import _dcube, _detail, _moments
 from .base import ModelData, Observable
 
 if TYPE_CHECKING:
     from .._scene import Scene
     from ..foreground import Foreground
+    from ..weights import Weights
 
 
 __all__ = [
@@ -235,11 +237,15 @@ class PixelMoments(Observable):
             foreground: 'Foreground',
             instrument: Instrument,
             scale: Sequence[int],
-            dtype: np.dtype
+            dtype: np.dtype,
+            weights: 'Weights | None'
     ) -> 'PixelMomentsPlan':
+        if weights is not None and self._method == 'gaussian_fit':
+            raise ConfigError(
+                "the method gaussian_fit does not support weights yet")
         dcube = _moments.spectra_dcube(self, scale, instrument, dtype)
         return PixelMomentsPlan(
-            self, dcube, driver, scene, foreground, dtype)
+            self, dcube, driver, scene, foreground, dtype, weights)
 
 
 class PixelMomentsPlan(_detail.DCubePlanBase):
@@ -251,10 +257,11 @@ class PixelMomentsPlan(_detail.DCubePlanBase):
             driver: Driver,
             scene: 'Scene',
             foreground: 'Foreground',
-            dtype: np.dtype
+            dtype: np.dtype,
+            weights: 'Weights | None'
     ):
         super().__init__(
-            dcube, driver, scene, foreground, dtype)
+            dcube, driver, scene, foreground, dtype, weights)
         self._moments = _moments.MomentsPlan(
             driver, moments.size(), moments.orders(), moments.mask_cutoff(),
             moments.method(), dtype)

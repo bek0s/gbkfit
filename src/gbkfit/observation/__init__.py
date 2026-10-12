@@ -4,3 +4,4 @@ from .likelihood import *
 from .line_of_sight import *
 from .observables import *
 from .observation import *
+from .weights import *

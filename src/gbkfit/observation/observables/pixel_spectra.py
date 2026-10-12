@@ -15,6 +15,7 @@ from .base import ModelData, Observable
 if TYPE_CHECKING:
     from .._scene import Scene
     from ..foreground import Foreground
+    from ..weights import Weights
 
 
 __all__ = [
@@ -165,7 +166,8 @@ class PixelSpectra(Observable):
             foreground: 'Foreground',
             instrument: Instrument,
             scale: Sequence[int],
-            dtype: np.dtype
+            dtype: np.dtype,
+            weights: 'Weights | None'
     ) -> 'PixelSpectraPlan':
         dcube = _dcube.DCube(
             size=self.size(),
@@ -184,7 +186,7 @@ class PixelSpectra(Observable):
             mask_apply=self._mask_apply,
             dtype=dtype)
         return PixelSpectraPlan(
-            dcube, driver, scene, foreground, dtype)
+            dcube, driver, scene, foreground, dtype, weights)
 
 
 class PixelSpectraPlan(_detail.DCubePlanBase):

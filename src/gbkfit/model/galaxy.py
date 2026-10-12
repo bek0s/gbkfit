@@ -158,6 +158,13 @@ class Galaxy(parseutils.Serializable):
         """Return its components."""
         return self._component_set.components()
 
+    def component_params(self, index: int) -> dict[str, str]:
+        """
+        Return the names of the parameters of its component of the given
+        index among its parameters, by the names of the component.
+        """
+        return self._component_set.mappings()[index]
+
     def geometries(self) -> list[Geometry]:
         """Return the geometries of its components, each once."""
         return self._component_set.geometries()

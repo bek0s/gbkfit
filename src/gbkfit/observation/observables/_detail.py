@@ -15,12 +15,14 @@ from gbkfit.params import ParamValues
 from gbkfit.region import Regions
 from gbkfit.utils import gridutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
+from ..weights import plan_weights
 from ._dcube import DCube, ExtraFunction
 from .base import Observable, ObservablePlan
 
 if TYPE_CHECKING:
     from .._scene import Scene
     from ..foreground import Foreground
+    from ..weights import Weights
 
 
 # The options of the spatial grid of the cube of an observable of data
@@ -196,8 +198,15 @@ def dump_spatial_grid(
 class DCubePlanBase(ObservablePlan):
     """
     The evaluation of an observable made from a DCube: the plan of the cube,
-    and the plan of the scene (what an observation sees) on its high-res
-    grid (see _model_grid).
+    the plan of the scene (what an observation sees) on its high-res grid
+    (see _model_grid), and that of the spatial weights of the data, if
+    any, which fill the weight cube of the DCube.
+
+    Raises
+    ------
+    ConfigError
+        If there are weights and a lens (not supported yet), or the
+        weights are not in the plane of a disk of the scene.
     """
 
     def __init__(
@@ -206,20 +215,27 @@ class DCubePlanBase(ObservablePlan):
             driver: Driver,
             scene: 'Scene',
             foreground: 'Foreground',
-            dtype: np.dtype
+            dtype: np.dtype,
+            weights: 'Weights | None'
     ):
         self._driver = driver
         self._dtype = dtype
         self._dcube = dcube
-        # (DCube can weight the data spatially; nothing gives weights yet)
-        self._dcube_plan = dcube.plan(driver, has_weights=False)
+        self._dcube_plan = dcube.plan(driver, has_weights=weights is not None)
         grid = self._model_grid()
+        self._weights_plan = None
+        if weights is not None:
+            self._weights_plan = plan_weights(
+                weights, scene, self._dcube_plan.scratch_grid().spatial(),
+                driver, dtype)
         # With a lens, the model is evaluated on the source plane, into a
         # cube of its own, which is lensed into the high-res cube
         self._lens_plan = None
         self._source_cube = None
         lens = foreground.lens()
         if lens is not None:
+            if weights is not None:
+                raise ConfigError("a lens does not support weights yet")
             self._lens_plan = lens.plan(
                 driver, self._dcube_plan.scratch_grid(), dtype)
             grid = self._lens_plan.source_grid(grid)
@@ -251,6 +267,8 @@ class DCubePlanBase(ObservablePlan):
         the low-res cube (see DCubePlan.evaluate).
         """
         dcube_plan = self._dcube_plan
+        if self._weights_plan is not None:
+            self._weights_plan.evaluate(params, dcube_plan.scratch_wcube())
         # The model adds to its cube, so clear it
         cube = dcube_plan.scratch_dcube() if self._lens_plan is None \
             else self._source_cube

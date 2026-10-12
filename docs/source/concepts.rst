@@ -34,6 +34,13 @@ sdss_r) sees those that emit in it.
 Traits
 ^^^^^^
 
+Weights
+-------
+An observation can weight its data by the place of each pixel in the
+plane of a disk (with its current parameters): e.g. less weight near the
+minor axis (weights: {component: gas, traits: {type: azimuth_power,
+power: 1}}), or none within an angle of it (type: azimuth_range).
+
 Lines of sight
 --------------
 - Flat: the galaxies are evaluated on the plane of the sky (thin disks
