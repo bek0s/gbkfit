@@ -450,7 +450,7 @@ def evaluate_smdisk(driver, thick):
 
     # A disk without height traits is evaluated as a thin disk
     heights = dict(
-        rht=trait_set(traits.BHTraitSech2(), (1.0,)),
+        rht=trait_set(traits.RHTraitSech2(), (1.0,)),
         vht=trait_set(traits.VHTraitOne()),
         dht=trait_set(traits.DHTraitOne())) if thick else {}
 
@@ -459,7 +459,7 @@ def evaluate_smdisk(driver, thick):
         rnodes=memory.to_device(np.linspace(0, 20, 21, dtype=DTYPE)),
         vsys=scalar(10), xpos=scalar(0.5), ypos=scalar(-1.0),
         posa=scalar(30), incl=scalar(50),
-        rpt=trait_set(traits.BPTraitExponential(), (1.0, 5.0)),
+        rpt=trait_set(traits.RPTraitExponential(), (1.0, 5.0)),
         vpt=trait_set(traits.VPTraitTanArctan(), (3.0, 200.0)),
         dpt=trait_set(traits.DPTraitUniform(), (25.0,)),
         **heights)
@@ -523,9 +523,9 @@ def disk_image(driver, rnodes=21, ntraits=1, heights=False, vpt=False,
         rnodes=memory.to_device(np.linspace(0, 20, rnodes, dtype=DTYPE)),
         vsys=scalar(0), xpos=scalar(0), ypos=scalar(0),
         posa=scalar(0), incl=scalar(0),
-        rpt=trait_set(traits.BPTraitUniform(), [1.0], ntraits))
+        rpt=trait_set(traits.RPTraitUniform(), [1.0], ntraits))
     if heights:
-        options['rht'] = trait_set(traits.BHTraitUniform(), [1.0], ntraits)
+        options['rht'] = trait_set(traits.RHTraitUniform(), [1.0], ntraits)
     if vpt:
         options['vpt'] = trait_set(traits.VPTraitTanUniform(), [100.0], 1)
     if vht:
@@ -581,9 +581,9 @@ def test_disk_traits_are_those_the_disk_kernels_evaluate(driver):
         incl=memory.to_device(np.array([0.0], DTYPE)),
         rpt=_trait_set(
             driver, memory,
-            (traits.BPTraitExponential(), (1.0, 6.0)),
-            (traits.BPTraitNWUniform(), nodes),
-            (traits.BPTraitNWHarmonic(2),
+            (traits.RPTraitExponential(), (1.0, 6.0)),
+            (traits.RPTraitNWUniform(), nodes),
+            (traits.RPTraitNWHarmonic(2),
              np.concatenate((0.3 * nodes, np.full(11, 40.0))))))
     gmodel = driver.native_class('GModel', DTYPE)
     image = memory.to_device(np.zeros((48, 48), DTYPE))
@@ -624,8 +624,8 @@ def thick_disk(driver, memory):
         rnodes=memory.to_device(np.linspace(0, 20, 11, dtype=DTYPE)),
         vsys=scalar(0), xpos=scalar(0), ypos=scalar(0),
         posa=scalar(0), incl=scalar(0),
-        rpt=trait_set(traits.BPTraitExponential(), (1, 5)),
-        rht=trait_set(traits.BHTraitSech2(), (1.5,)),
+        rpt=trait_set(traits.RPTraitExponential(), (1, 5)),
+        rht=trait_set(traits.RHTraitSech2(), (1.5,)),
         vpt=trait_set(traits.VPTraitTanArctan(), (3, 200)),
         vht=trait_set(traits.VHTraitOne(), ()))
 

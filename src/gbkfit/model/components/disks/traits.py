@@ -5,10 +5,10 @@ or of the height z above it (height traits).
 
 The kinds of traits, and how the traits of one kind combine:
 
-- brightness (bpt, bht): the surface brightness seen face-on; the sum of
+- density (rpt, rht): the surface density seen face-on (the brightness
+  of a component that emits, the optical depth of dust); the sum of
   the polar traits, each times its height trait in a thick disk (a
   probability density of z, which integrates to 1).
-- opacity (opt, oht): the optical depth seen face-on, as the brightness.
 - velocity (vpt, vht): the line-of-sight velocity; vsys plus the sum of
   the polar traits, each projected on the line of sight and times its
   height trait (a factor of z, 1 at z = 0 for most).
@@ -53,9 +53,9 @@ axis at the azimuth t_i + p_i + 90 degrees (p_i = 0: tangential, 90:
 radial); rho is the elliptical distance from its centre, sqrt(x^2 + y^2
 / q_i^2) along its axes.
 
-The Monte Carlo disks draw their clouds from the brightness and opacity
-traits: from each subring, where the trait is flat, for most, and
-exactly for the uniform and mixture traits.
+The Monte Carlo disks draw their clouds from the density traits: from
+each subring, where the trait is flat, for most, and exactly for the
+uniform and mixture traits.
 """
 
 import abc
@@ -73,8 +73,6 @@ from gbkfit.utils.parseutils import ConfigError
 
 
 # Density polar traits
-# The density polar trait uids are used to generate uids for
-# the surface brightness and opacity polar traits.
 RPT_UID_UNIFORM = 1
 RPT_UID_EXP = 2
 RPT_UID_GAUSS = 3
@@ -91,8 +89,6 @@ RPT_UID_NW_HARMONIC = 102
 RPT_UID_NW_DISTORTION = 103
 
 # Density height traits
-# The density height trait uids are used to generate uids for
-# the surface brightness and opacity height traits.
 RHT_UID_UNIFORM = 1
 RHT_UID_EXP = 2
 RHT_UID_GAUSS = 3
@@ -100,60 +96,6 @@ RHT_UID_GGAUSS = 4
 RHT_UID_LORENTZ = 5
 RHT_UID_MOFFAT = 6
 RHT_UID_SECH2 = 7
-
-# Surface Brightness polar traits
-BPT_UID_OFFSET = 0
-BPT_UID_UNIFORM = BPT_UID_OFFSET + RPT_UID_UNIFORM
-BPT_UID_EXP = BPT_UID_OFFSET + RPT_UID_EXP
-BPT_UID_GAUSS = BPT_UID_OFFSET + RPT_UID_GAUSS
-BPT_UID_GGAUSS = BPT_UID_OFFSET + RPT_UID_GGAUSS
-BPT_UID_LORENTZ = BPT_UID_OFFSET + RPT_UID_LORENTZ
-BPT_UID_MOFFAT = BPT_UID_OFFSET + RPT_UID_MOFFAT
-BPT_UID_SECH2 = BPT_UID_OFFSET + RPT_UID_SECH2
-BPT_UID_MIXTURE_EXP = BPT_UID_OFFSET + RPT_UID_MIXTURE_EXP
-BPT_UID_MIXTURE_GAUSS = BPT_UID_OFFSET + RPT_UID_MIXTURE_GAUSS
-BPT_UID_MIXTURE_GGAUSS = BPT_UID_OFFSET + RPT_UID_MIXTURE_GGAUSS
-BPT_UID_MIXTURE_MOFFAT = BPT_UID_OFFSET + RPT_UID_MIXTURE_MOFFAT
-BPT_UID_NW_UNIFORM = BPT_UID_OFFSET + RPT_UID_NW_UNIFORM
-BPT_UID_NW_HARMONIC = BPT_UID_OFFSET + RPT_UID_NW_HARMONIC
-BPT_UID_NW_DISTORTION = BPT_UID_OFFSET + RPT_UID_NW_DISTORTION
-
-# Surface Brightness height traits
-BHT_UID_OFFSET = 0
-BHT_UID_UNIFORM = BHT_UID_OFFSET + RHT_UID_UNIFORM
-BHT_UID_EXP = BHT_UID_OFFSET + RHT_UID_EXP
-BHT_UID_GAUSS = BHT_UID_OFFSET + RHT_UID_GAUSS
-BHT_UID_GGAUSS = BHT_UID_OFFSET + RHT_UID_GGAUSS
-BHT_UID_LORENTZ = BHT_UID_OFFSET + RHT_UID_LORENTZ
-BHT_UID_MOFFAT = BHT_UID_OFFSET + RHT_UID_MOFFAT
-BHT_UID_SECH2 = BHT_UID_OFFSET + RHT_UID_SECH2
-
-# Opacity polar traits
-OPT_UID_OFFSET = 1000
-OPT_UID_UNIFORM = OPT_UID_OFFSET + RPT_UID_UNIFORM
-OPT_UID_EXP = OPT_UID_OFFSET + RPT_UID_EXP
-OPT_UID_GAUSS = OPT_UID_OFFSET + RPT_UID_GAUSS
-OPT_UID_GGAUSS = OPT_UID_OFFSET + RPT_UID_GGAUSS
-OPT_UID_LORENTZ = OPT_UID_OFFSET + RPT_UID_LORENTZ
-OPT_UID_MOFFAT = OPT_UID_OFFSET + RPT_UID_MOFFAT
-OPT_UID_SECH2 = OPT_UID_OFFSET + RPT_UID_SECH2
-OPT_UID_MIXTURE_EXP = OPT_UID_OFFSET + RPT_UID_MIXTURE_EXP
-OPT_UID_MIXTURE_GAUSS = OPT_UID_OFFSET + RPT_UID_MIXTURE_GAUSS
-OPT_UID_MIXTURE_GGAUSS = OPT_UID_OFFSET + RPT_UID_MIXTURE_GGAUSS
-OPT_UID_MIXTURE_MOFFAT = OPT_UID_OFFSET + RPT_UID_MIXTURE_MOFFAT
-OPT_UID_NW_UNIFORM = OPT_UID_OFFSET + RPT_UID_NW_UNIFORM
-OPT_UID_NW_HARMONIC = OPT_UID_OFFSET + RPT_UID_NW_HARMONIC
-OPT_UID_NW_DISTORTION = OPT_UID_OFFSET + RPT_UID_NW_DISTORTION
-
-# Opacity height traits
-OHT_UID_OFFSET = 1000
-OHT_UID_UNIFORM = OHT_UID_OFFSET + RHT_UID_UNIFORM
-OHT_UID_EXP = OHT_UID_OFFSET + RHT_UID_EXP
-OHT_UID_GAUSS = OHT_UID_OFFSET + RHT_UID_GAUSS
-OHT_UID_GGAUSS = OHT_UID_OFFSET + RHT_UID_GGAUSS
-OHT_UID_LORENTZ = OHT_UID_OFFSET + RHT_UID_LORENTZ
-OHT_UID_MOFFAT = OHT_UID_OFFSET + RHT_UID_MOFFAT
-OHT_UID_SECH2 = OHT_UID_OFFSET + RHT_UID_SECH2
 
 # Velocity polar traits
 VPT_UID_TAN_UNIFORM = 1
@@ -427,17 +369,15 @@ def _ptrait_integrate_nw_distortion(
 
 def trait_desc(cls: type['Trait']) -> str:
     descs = {
-        BPTrait: 'surface brightness polar trait',
-        BHTrait: 'surface brightness height trait',
+        RPTrait: 'density polar trait',
+        RHTrait: 'density height trait',
         VPTrait: 'velocity polar trait',
         VHTrait: 'velocity height trait',
         DPTrait: 'velocity dispersion polar trait',
         DHTrait: 'velocity dispersion height trait',
         ZPTrait: 'vertical distortion polar trait',
         SPTrait: 'selection polar trait',
-        WPTrait: 'weight polar trait',
-        OPTrait: 'opacity polar trait',
-        OHTrait: 'opacity height trait'}
+        WPTrait: 'weight polar trait'}
     label = None
     for k, v in descs.items():
         if issubclass(cls, k):
@@ -644,9 +584,10 @@ class HTrait(
                 f"the trait has no node-wise parameters")
 
 
-class BPTrait(PTrait, abc.ABC):
+class RPTrait(PTrait, abc.ABC):
     """
-    A surface brightness polar trait. The Monte Carlo disks draw their
+    A density polar trait: the density of the disk seen face-on (light,
+    or the optical depth of dust). The Monte Carlo disks draw their
     clouds from it (see has_analytical_integral and cloud_flux).
     """
 
@@ -674,10 +615,10 @@ class BPTrait(PTrait, abc.ABC):
         pass
 
 
-class BHTrait(TraitFeatureTrunc, HTrait, abc.ABC):
+class RHTrait(TraitFeatureTrunc, HTrait, abc.ABC):
     """
-    A surface brightness height trait: the probability density of the
-    height of the brightness, which integrates to 1.
+    A density height trait: the probability density of the height of
+    the density, which integrates to 1.
     """
 
     def consts(self) -> tuple[float, ...]:
@@ -736,50 +677,9 @@ class WPTrait(PTrait, abc.ABC):
     """
 
 
-class OPTrait(PTrait, abc.ABC):
+class RPTraitUniform(RPTrait):
     """
-    An opacity polar trait: the optical depth of the disk seen face-on.
-    The Monte Carlo disks draw their clouds from it (see
-    has_analytical_integral and cloud_flux).
-    """
-
-    @abc.abstractmethod
-    def has_analytical_integral(self) -> bool:
-        """
-        Check whether the Monte Carlo disk makes the clouds of the trait for
-        the whole disk at once (True), or for each ring.
-        """
-        pass
-
-    @abc.abstractmethod
-    def cloud_flux(
-            self, params: dict[str, np.ndarray], rings: np.ndarray
-    ) -> np.ndarray:
-        """
-        Return the flux the Monte Carlo disk shares among the clouds of
-        the trait: for the whole disk (one value, with an analytical
-        integral) or for each of the given rings. It is the integral of
-        |B| (B is the trait) with the sign of the amplitude of the trait.
-        Where B changes sign along a ring, the kernel draws the clouds
-        from |B| and gives each the sign of B relative to the amplitude
-        (e.g. the sign of the cosine of a harmonic).
-        """
-        pass
-
-
-class OHTrait(TraitFeatureTrunc, HTrait, abc.ABC):
-    """
-    An opacity height trait: the probability density of the height of the
-    absorbers, which integrates to 1.
-    """
-
-    def consts(self) -> tuple[float, ...]:
-        return (self.trunc(), self.rnodes())
-
-
-class BPTraitUniform(BPTrait):
-    """
-    A uniform surface brightness: a. Its parameter: a, the brightness.
+    A uniform surface density: a. Its parameter: a, the density.
     Mainly for tests: its use is discouraged (a warning says so).
     """
 
@@ -789,7 +689,7 @@ class BPTraitUniform(BPTrait):
 
     @staticmethod
     def uid() -> int:
-        return BPT_UID_UNIFORM
+        return RPT_UID_UNIFORM
 
     def params_sm(self) -> dict[str, ParamDesc]:
         return dict(a=ParamScalarDesc())
@@ -803,10 +703,10 @@ class BPTraitUniform(BPTrait):
         return _ptrait_integrate_uniform(params, rings)
 
 
-class BPTraitExponential(BPTrait):
+class RPTraitExponential(RPTrait):
     """
-    An exponential surface brightness: a exp(-r / s). Its parameters: a,
-    the brightness at the centre, and s, the scale length.
+    An exponential surface density: a exp(-r / s). Its parameters: a,
+    the density at the centre, and s, the scale length.
     """
 
     @staticmethod
@@ -815,7 +715,7 @@ class BPTraitExponential(BPTrait):
 
     @staticmethod
     def uid() -> int:
-        return BPT_UID_EXP
+        return RPT_UID_EXP
 
     def params_sm(self) -> dict[str, ParamDesc]:
         return dict(
@@ -831,10 +731,10 @@ class BPTraitExponential(BPTrait):
         return _ptrait_integrate_exponential(params, rings)
 
 
-class BPTraitGauss(BPTrait):
+class RPTraitGauss(RPTrait):
     """
-    A Gaussian surface brightness: a exp(-r^2 / (2 s^2)). Its parameters:
-    a, the brightness at the centre, and s, the dispersion of the
+    A Gaussian surface density: a exp(-r^2 / (2 s^2)). Its parameters:
+    a, the density at the centre, and s, the dispersion of the
     Gaussian.
     """
 
@@ -844,7 +744,7 @@ class BPTraitGauss(BPTrait):
 
     @staticmethod
     def uid() -> int:
-        return BPT_UID_GAUSS
+        return RPT_UID_GAUSS
 
     def params_sm(self) -> dict[str, ParamDesc]:
         return dict(
@@ -860,10 +760,10 @@ class BPTraitGauss(BPTrait):
         return _ptrait_integrate_gauss(params, rings)
 
 
-class BPTraitGGauss(BPTrait):
+class RPTraitGGauss(RPTrait):
     """
-    A generalised Gaussian surface brightness: a exp(-(r / s)^b). Its
-    parameters: a, the brightness at the centre, s, the scale length, and
+    A generalised Gaussian surface density: a exp(-(r / s)^b). Its
+    parameters: a, the density at the centre, s, the scale length, and
     b, the shape (1 is the exponential, and 2 a Gaussian of dispersion s /
     sqrt(2)).
     """
@@ -874,7 +774,7 @@ class BPTraitGGauss(BPTrait):
 
     @staticmethod
     def uid() -> int:
-        return BPT_UID_GGAUSS
+        return RPT_UID_GGAUSS
 
     def params_sm(self) -> dict[str, ParamDesc]:
         return dict(
@@ -891,10 +791,10 @@ class BPTraitGGauss(BPTrait):
         return _ptrait_integrate_ggauss(params, rings)
 
 
-class BPTraitLorentz(BPTrait):
+class RPTraitLorentz(RPTrait):
     """
-    A Lorentzian surface brightness: a s^2 / (r^2 + s^2). Its parameters:
-    a, the brightness at the centre, and s, the half width at half
+    A Lorentzian surface density: a s^2 / (r^2 + s^2). Its parameters:
+    a, the density at the centre, and s, the half width at half
     maximum.
     """
 
@@ -904,7 +804,7 @@ class BPTraitLorentz(BPTrait):
 
     @staticmethod
     def uid() -> int:
-        return BPT_UID_LORENTZ
+        return RPT_UID_LORENTZ
 
     def params_sm(self) -> dict[str, ParamDesc]:
         return dict(
@@ -920,10 +820,10 @@ class BPTraitLorentz(BPTrait):
         return _ptrait_integrate_lorentz(params, rings)
 
 
-class BPTraitMoffat(BPTrait):
+class RPTraitMoffat(RPTrait):
     """
-    A Moffat surface brightness: a (1 + (r / s)^2)^-b. Its parameters: a,
-    the brightness at the centre, s, the core radius, and b, the power of
+    A Moffat surface density: a (1 + (r / s)^2)^-b. Its parameters: a,
+    the density at the centre, s, the core radius, and b, the power of
     the fall.
     """
 
@@ -933,7 +833,7 @@ class BPTraitMoffat(BPTrait):
 
     @staticmethod
     def uid() -> int:
-        return BPT_UID_MOFFAT
+        return RPT_UID_MOFFAT
 
     def params_sm(self) -> dict[str, ParamDesc]:
         return dict(
@@ -950,10 +850,10 @@ class BPTraitMoffat(BPTrait):
         return _ptrait_integrate_moffat(params, rings)
 
 
-class BPTraitSech2(BPTrait):
+class RPTraitSech2(RPTrait):
     """
-    A sech^2 surface brightness: a sech^2(r / s). Its parameters: a, the
-    brightness at the centre, and s, the scale length.
+    A sech^2 surface density: a sech^2(r / s). Its parameters: a, the
+    density at the centre, and s, the scale length.
     """
 
     @staticmethod
@@ -962,7 +862,7 @@ class BPTraitSech2(BPTrait):
 
     @staticmethod
     def uid() -> int:
-        return BPT_UID_SECH2
+        return RPT_UID_SECH2
 
     def params_sm(self) -> dict[str, ParamDesc]:
         return dict(
@@ -978,9 +878,9 @@ class BPTraitSech2(BPTrait):
         return _ptrait_integrate_sech2(params, rings)
 
 
-class BPTraitMixtureExponential(TraitFeatureNBlobs, BPTrait):
+class RPTraitMixtureExponential(TraitFeatureNBlobs, RPTrait):
     """
-    A surface brightness made of nblobs elliptical blobs (see the module
+    A surface density made of nblobs elliptical blobs (see the module
     docstring), each an exponential of the elliptical distance rho from
     its centre: a exp(-rho / s). Its parameters, vectors of a value for
     each blob: r and t, the radius and the azimuth of its centre, a, its
@@ -1004,7 +904,7 @@ class BPTraitMixtureExponential(TraitFeatureNBlobs, BPTrait):
 
     @staticmethod
     def uid() -> int:
-        return BPT_UID_MIXTURE_EXP
+        return RPT_UID_MIXTURE_EXP
 
     def __init__(self, nblobs: int):
         super().__init__(nblobs=nblobs)
@@ -1021,9 +921,9 @@ class BPTraitMixtureExponential(TraitFeatureNBlobs, BPTrait):
         return _ptrait_integrate_mixture_exponential(params, rings)
 
 
-class BPTraitMixtureGauss(TraitFeatureNBlobs, BPTrait):
+class RPTraitMixtureGauss(TraitFeatureNBlobs, RPTrait):
     """
-    A surface brightness made of nblobs elliptical blobs (see the module
+    A surface density made of nblobs elliptical blobs (see the module
     docstring), each a Gaussian of the elliptical distance rho from its
     centre: a exp(-rho^2 / (2 s^2)). Its parameters, vectors of a value
     for each blob: r and t, the radius and the azimuth of its centre, a,
@@ -1047,7 +947,7 @@ class BPTraitMixtureGauss(TraitFeatureNBlobs, BPTrait):
 
     @staticmethod
     def uid() -> int:
-        return BPT_UID_MIXTURE_GAUSS
+        return RPT_UID_MIXTURE_GAUSS
 
     def __init__(self, nblobs: int):
         super().__init__(nblobs=nblobs)
@@ -1064,9 +964,9 @@ class BPTraitMixtureGauss(TraitFeatureNBlobs, BPTrait):
         return _ptrait_integrate_mixture_gauss(params, rings)
 
 
-class BPTraitMixtureGGauss(TraitFeatureNBlobs, BPTrait):
+class RPTraitMixtureGGauss(TraitFeatureNBlobs, RPTrait):
     """
-    A surface brightness made of nblobs elliptical blobs (see the module
+    A surface density made of nblobs elliptical blobs (see the module
     docstring), each a generalised Gaussian of the elliptical distance rho
     from its centre: a exp(-(rho / s)^b). Its parameters, vectors of a
     value for each blob: r and t, the radius and the azimuth of its
@@ -1091,7 +991,7 @@ class BPTraitMixtureGGauss(TraitFeatureNBlobs, BPTrait):
 
     @staticmethod
     def uid() -> int:
-        return BPT_UID_MIXTURE_GGAUSS
+        return RPT_UID_MIXTURE_GGAUSS
 
     def __init__(self, nblobs: int):
         super().__init__(nblobs=nblobs)
@@ -1108,9 +1008,9 @@ class BPTraitMixtureGGauss(TraitFeatureNBlobs, BPTrait):
         return _ptrait_integrate_mixture_ggauss(params, rings)
 
 
-class BPTraitMixtureMoffat(TraitFeatureNBlobs, BPTrait):
+class RPTraitMixtureMoffat(TraitFeatureNBlobs, RPTrait):
     """
-    A surface brightness made of nblobs elliptical blobs (see the module
+    A surface density made of nblobs elliptical blobs (see the module
     docstring), each a Moffat of the elliptical distance rho from its
     centre: a (1 + (rho / s)^2)^-b. Its parameters, vectors of a value for
     each blob: r and t, the radius and the azimuth of its centre, a, its
@@ -1135,7 +1035,7 @@ class BPTraitMixtureMoffat(TraitFeatureNBlobs, BPTrait):
 
     @staticmethod
     def uid() -> int:
-        return BPT_UID_MIXTURE_MOFFAT
+        return RPT_UID_MIXTURE_MOFFAT
 
     def __init__(self, nblobs: int):
         super().__init__(nblobs=nblobs)
@@ -1152,9 +1052,9 @@ class BPTraitMixtureMoffat(TraitFeatureNBlobs, BPTrait):
         return _ptrait_integrate_mixture_moffat(params, rings)
 
 
-class BPTraitNWUniform(TraitFeatureSampling, BPTrait):
+class RPTraitNWUniform(TraitFeatureSampling, RPTrait):
     """
-    A surface brightness given at each ring: a(r). Its parameter: a,
+    A surface density given at each ring: a(r). Its parameter: a,
     node-wise.
 
     Parameters
@@ -1176,7 +1076,7 @@ class BPTraitNWUniform(TraitFeatureSampling, BPTrait):
 
     @staticmethod
     def uid() -> int:
-        return BPT_UID_NW_UNIFORM
+        return RPT_UID_NW_UNIFORM
 
     def __init__(
             self,
@@ -1195,10 +1095,10 @@ class BPTraitNWUniform(TraitFeatureSampling, BPTrait):
         return _ptrait_integrate_nw_uniform(params, rings)
 
 
-class BPTraitNWHarmonic(
-        TraitFeatureOrder, TraitFeatureSampling, BPTrait):
+class RPTraitNWHarmonic(
+        TraitFeatureOrder, TraitFeatureSampling, RPTrait):
     """
-    A harmonic brightness: a(r) cos(m (theta - p(r))), of the order m. Its
+    A harmonic density: a(r) cos(m (theta - p(r))), of the order m. Its
     parameters, node-wise: a, the amplitude, and p (but for order 0), the
     azimuth of a maximum; a p that changes with r winds it into a spiral.
     It is negative in parts: it is meant to perturb an axisymmetric trait.
@@ -1225,7 +1125,7 @@ class BPTraitNWHarmonic(
 
     @staticmethod
     def uid() -> int:
-        return BPT_UID_NW_HARMONIC
+        return RPT_UID_NW_HARMONIC
 
     def __init__(
             self,
@@ -1246,9 +1146,9 @@ class BPTraitNWHarmonic(
             params, rings, self.order())
 
 
-class BPTraitNWDistortion(TraitFeatureSampling, BPTrait):
+class RPTraitNWDistortion(TraitFeatureSampling, RPTrait):
     """
-    A surface brightness around one azimuth at each ring: a(r)
+    A surface density around one azimuth at each ring: a(r)
     exp(-(dtheta r)^2 / (2 s(r)^2)), with dtheta the azimuth from p(r)
     (radians, within half a turn). Its parameters, node-wise: a, the peak,
     p, its azimuth, and s, its width along the ring.
@@ -1272,7 +1172,7 @@ class BPTraitNWDistortion(TraitFeatureSampling, BPTrait):
 
     @staticmethod
     def uid() -> int:
-        return BPT_UID_NW_DISTORTION
+        return RPT_UID_NW_DISTORTION
 
     def __init__(
             self,
@@ -1291,9 +1191,9 @@ class BPTraitNWDistortion(TraitFeatureSampling, BPTrait):
         return _ptrait_integrate_nw_distortion(params, rings)
 
 
-class BHTraitP1(BHTrait, abc.ABC):
+class RHTraitP1(RHTrait, abc.ABC):
     """
-    A brightness height trait of one parameter, s.
+    A density height trait of one parameter, s.
     """
 
     def __init__(
@@ -1311,9 +1211,9 @@ class BHTraitP1(BHTrait, abc.ABC):
         return {} if not self.rnodes() else dict(s=ParamVectorDesc(nrnodes))
 
 
-class BHTraitP2(BHTrait, abc.ABC):
+class RHTraitP2(RHTrait, abc.ABC):
     """
-    A brightness height trait of two parameters, s and b.
+    A density height trait of two parameters, s and b.
     """
 
     def __init__(
@@ -1335,9 +1235,9 @@ class BHTraitP2(BHTrait, abc.ABC):
             b=ParamVectorDesc(nrnodes))
 
 
-class BHTraitUniform(BHTraitP1):
+class RHTraitUniform(RHTraitP1):
     """
-    A uniform vertical distribution of the brightness: 1 / (2 s) for |z|
+    A uniform vertical distribution of the density: 1 / (2 s) for |z|
     <= s, 0 beyond. Its parameter: s, the half thickness. It integrates to
     1. Its use is discouraged: its sharp edges alias on the voxels (a
     warning says so).
@@ -1366,12 +1266,12 @@ class BHTraitUniform(BHTraitP1):
 
     @staticmethod
     def uid() -> int:
-        return BHT_UID_UNIFORM
+        return RHT_UID_UNIFORM
 
 
-class BHTraitExponential(BHTraitP1):
+class RHTraitExponential(RHTraitP1):
     """
-    An exponential vertical distribution of the brightness: exp(-|z| / s)
+    An exponential vertical distribution of the density: exp(-|z| / s)
     / (2 s). Its parameter: s, the scale height. It integrates to 1.
 
     Parameters
@@ -1398,12 +1298,12 @@ class BHTraitExponential(BHTraitP1):
 
     @staticmethod
     def uid() -> int:
-        return BHT_UID_EXP
+        return RHT_UID_EXP
 
 
-class BHTraitGauss(BHTraitP1):
+class RHTraitGauss(RHTraitP1):
     """
-    A Gaussian vertical distribution of the brightness: exp(-z^2 / (2
+    A Gaussian vertical distribution of the density: exp(-z^2 / (2
     s^2)) / (s sqrt(2 pi)). Its parameter: s, the dispersion of the
     Gaussian. It integrates to 1.
 
@@ -1431,12 +1331,12 @@ class BHTraitGauss(BHTraitP1):
 
     @staticmethod
     def uid() -> int:
-        return BHT_UID_GAUSS
+        return RHT_UID_GAUSS
 
 
-class BHTraitGGauss(BHTraitP2):
+class RHTraitGGauss(RHTraitP2):
     """
-    A generalised Gaussian vertical distribution of the brightness: b / (2
+    A generalised Gaussian vertical distribution of the density: b / (2
     s Gamma(1 / b)) exp(-(|z| / s)^b). Its parameters: s, the scale
     height, and b, the shape. It integrates to 1.
 
@@ -1464,7 +1364,7 @@ class BHTraitGGauss(BHTraitP2):
 
     @staticmethod
     def uid() -> int:
-        return BHT_UID_GGAUSS
+        return RHT_UID_GGAUSS
 
     def __init__(
             self,
@@ -1475,9 +1375,9 @@ class BHTraitGGauss(BHTraitP2):
             rnodes=rnodes, sampling=sampling, trunc=trunc)
 
 
-class BHTraitLorentz(BHTraitP1):
+class RHTraitLorentz(RHTraitP1):
     """
-    A Lorentzian vertical distribution of the brightness: s / (pi (z^2 +
+    A Lorentzian vertical distribution of the density: s / (pi (z^2 +
     s^2)). Its parameter: s, the half width at half maximum; its tails are
     heavy (see trunc). It integrates to 1.
 
@@ -1505,12 +1405,12 @@ class BHTraitLorentz(BHTraitP1):
 
     @staticmethod
     def uid() -> int:
-        return BHT_UID_LORENTZ
+        return RHT_UID_LORENTZ
 
 
-class BHTraitMoffat(BHTraitP2):
+class RHTraitMoffat(RHTraitP2):
     """
-    A Moffat vertical distribution of the brightness: Gamma(b) / (Gamma(b
+    A Moffat vertical distribution of the density: Gamma(b) / (Gamma(b
     - 1/2) s sqrt(pi)) (1 + (z / s)^2)^-b, for b > 1/2. Its parameters: s,
     the core height, and b, the power of the fall. It integrates to 1.
 
@@ -1538,12 +1438,12 @@ class BHTraitMoffat(BHTraitP2):
 
     @staticmethod
     def uid() -> int:
-        return BHT_UID_MOFFAT
+        return RHT_UID_MOFFAT
 
 
-class BHTraitSech2(BHTraitP1):
+class RHTraitSech2(RHTraitP1):
     """
-    A sech^2 vertical distribution of the brightness: sech^2(z / s) / (2
+    A sech^2 vertical distribution of the density: sech^2(z / s) / (2
     s). Its parameter: s, the scale height. It integrates to 1.
 
     Parameters
@@ -1570,7 +1470,7 @@ class BHTraitSech2(BHTraitP1):
 
     @staticmethod
     def uid() -> int:
-        return BHT_UID_SECH2
+        return RHT_UID_SECH2
 
 
 class VPTraitTanUniform(VPTrait):
@@ -1882,12 +1782,12 @@ class VPTraitMass(VPTrait):
     With pressure_support 'jeans', the rotation of an isotropic gas at the
     midplane of its disk (the radial Jeans equation): v^2 = v_c^2 + (R /
     rho) d(rho sigma^2)/dR, with the azimuthal means of the density rho of
-    the disk at its midplane (its brightness times its brightness height
-    traits at z = 0, or its brightness if thin: the equation of a thin
-    disk) and of rho sigma^2, sigma its velocity dispersion at the
-    midplane (azimuthal means as those of mass.MassTraitDisk); the
+    the disk at its midplane (its density traits times its density
+    height traits at z = 0, or its density traits if thin: the equation
+    of a thin disk) and of rho sigma^2, sigma its velocity dispersion at
+    the midplane (azimuthal means as those of mass.MassTraitDisk); the
     derivative by the second-order three-point formula on the rings; NaN
-    without brightness.
+    without density.
 
     Parameters
     ----------
@@ -3098,852 +2998,33 @@ class WPTraitAxisRange(WPTrait):
         return (self._axis, self._angle, self._weight)
 
 
-class OPTraitUniform(OPTrait):
-    """
-    A uniform optical depth: a. Its parameter: a, the optical depth.
-    """
+# Density polar traits parser
+rpt_parser = parseutils.TypedParser(RPTrait, [
+    RPTraitUniform,
+    RPTraitExponential,
+    RPTraitGauss,
+    RPTraitGGauss,
+    RPTraitLorentz,
+    RPTraitMoffat,
+    RPTraitSech2,
+    RPTraitMixtureExponential,
+    RPTraitMixtureGauss,
+    RPTraitMixtureGGauss,
+    RPTraitMixtureMoffat,
+    RPTraitNWUniform,
+    RPTraitNWHarmonic,
+    RPTraitNWDistortion])
+
+# Density height traits parser
+rht_parser = parseutils.TypedParser(RHTrait, [
+    RHTraitUniform,
+    RHTraitExponential,
+    RHTraitGauss,
+    RHTraitGGauss,
+    RHTraitLorentz,
+    RHTraitMoffat,
+    RHTraitSech2])
 
-    @staticmethod
-    def type() -> str:
-        return 'uniform'
-
-    @staticmethod
-    def uid() -> int:
-        return OPT_UID_UNIFORM
-
-    def params_sm(self) -> dict[str, ParamDesc]:
-        return dict(a=ParamScalarDesc())
-
-    def has_analytical_integral(self) -> bool:
-        return True
-
-    def cloud_flux(
-            self, params: dict[str, np.ndarray], rings: np.ndarray
-    ) -> np.ndarray:
-        return _ptrait_integrate_uniform(params, rings)
-
-
-class OPTraitExponential(OPTrait):
-    """
-    An exponential optical depth: a exp(-r / s). Its parameters: a, the
-    optical depth at the centre, and s, the scale length.
-    """
-
-    @staticmethod
-    def type() -> str:
-        return 'exponential'
-
-    @staticmethod
-    def uid() -> int:
-        return OPT_UID_EXP
-
-    def params_sm(self) -> dict[str, ParamDesc]:
-        return dict(
-            a=ParamScalarDesc(),
-            s=ParamScalarDesc())
-
-    def has_analytical_integral(self) -> bool:
-        return False
-
-    def cloud_flux(
-            self, params: dict[str, np.ndarray], rings: np.ndarray
-    ) -> np.ndarray:
-        return _ptrait_integrate_exponential(params, rings)
-
-
-class OPTraitGauss(OPTrait):
-    """
-    A Gaussian optical depth: a exp(-r^2 / (2 s^2)). Its parameters: a,
-    the optical depth at the centre, and s, the dispersion of the
-    Gaussian.
-    """
-
-    @staticmethod
-    def type() -> str:
-        return 'gauss'
-
-    @staticmethod
-    def uid() -> int:
-        return OPT_UID_GAUSS
-
-    def params_sm(self) -> dict[str, ParamDesc]:
-        return dict(
-            a=ParamScalarDesc(),
-            s=ParamScalarDesc())
-
-    def has_analytical_integral(self) -> bool:
-        return False
-
-    def cloud_flux(
-            self, params: dict[str, np.ndarray], rings: np.ndarray
-    ) -> np.ndarray:
-        return _ptrait_integrate_gauss(params, rings)
-
-
-class OPTraitGGauss(OPTrait):
-    """
-    A generalised Gaussian optical depth: a exp(-(r / s)^b). Its
-    parameters: a, the optical depth at the centre, s, the scale length,
-    and b, the shape (1 is the exponential, and 2 a Gaussian of dispersion
-    s / sqrt(2)).
-    """
-
-    @staticmethod
-    def type() -> str:
-        return 'ggauss'
-
-    @staticmethod
-    def uid() -> int:
-        return OPT_UID_GGAUSS
-
-    def params_sm(self) -> dict[str, ParamDesc]:
-        return dict(
-            a=ParamScalarDesc(),
-            s=ParamScalarDesc(),
-            b=ParamScalarDesc())
-
-    def has_analytical_integral(self) -> bool:
-        return False
-
-    def cloud_flux(
-            self, params: dict[str, np.ndarray], rings: np.ndarray
-    ) -> np.ndarray:
-        return _ptrait_integrate_ggauss(params, rings)
-
-
-class OPTraitLorentz(OPTrait):
-    """
-    A Lorentzian optical depth: a s^2 / (r^2 + s^2). Its parameters: a,
-    the optical depth at the centre, and s, the half width at half
-    maximum.
-    """
-
-    @staticmethod
-    def type() -> str:
-        return 'lorentz'
-
-    @staticmethod
-    def uid() -> int:
-        return OPT_UID_LORENTZ
-
-    def params_sm(self) -> dict[str, ParamDesc]:
-        return dict(
-            a=ParamScalarDesc(),
-            s=ParamScalarDesc())
-
-    def has_analytical_integral(self) -> bool:
-        return False
-
-    def cloud_flux(
-            self, params: dict[str, np.ndarray], rings: np.ndarray
-    ) -> np.ndarray:
-        return _ptrait_integrate_lorentz(params, rings)
-
-
-class OPTraitMoffat(OPTrait):
-    """
-    A Moffat optical depth: a (1 + (r / s)^2)^-b. Its parameters: a, the
-    optical depth at the centre, s, the core radius, and b, the power of
-    the fall.
-    """
-
-    @staticmethod
-    def type() -> str:
-        return 'moffat'
-
-    @staticmethod
-    def uid() -> int:
-        return OPT_UID_MOFFAT
-
-    def params_sm(self) -> dict[str, ParamDesc]:
-        return dict(
-            a=ParamScalarDesc(),
-            s=ParamScalarDesc(),
-            b=ParamScalarDesc())
-
-    def has_analytical_integral(self) -> bool:
-        return False
-
-    def cloud_flux(
-            self, params: dict[str, np.ndarray], rings: np.ndarray
-    ) -> np.ndarray:
-        return _ptrait_integrate_moffat(params, rings)
-
-
-class OPTraitSech2(OPTrait):
-    """
-    A sech^2 optical depth: a sech^2(r / s). Its parameters: a, the
-    optical depth at the centre, and s, the scale length.
-    """
-
-    @staticmethod
-    def type() -> str:
-        return 'sech2'
-
-    @staticmethod
-    def uid() -> int:
-        return OPT_UID_SECH2
-
-    def params_sm(self) -> dict[str, ParamDesc]:
-        return dict(
-            a=ParamScalarDesc(),
-            s=ParamScalarDesc())
-
-    def has_analytical_integral(self) -> bool:
-        return False
-
-    def cloud_flux(
-            self, params: dict[str, np.ndarray], rings: np.ndarray
-    ) -> np.ndarray:
-        return _ptrait_integrate_sech2(params, rings)
-
-
-class OPTraitMixtureExponential(TraitFeatureNBlobs, OPTrait):
-    """
-    A optical depth made of nblobs elliptical blobs (see the module
-    docstring), each an exponential of the elliptical distance rho from
-    its centre: a exp(-rho / s). Its parameters, vectors of a value for
-    each blob: r and t, the radius and the azimuth of its centre, a, its
-    amplitude, s, its scale along its major axis, q, its axis ratio (minor
-    over major), and p, the angle of its major axis.
-
-    Parameters
-    ----------
-    nblobs : int
-        The number of blobs.
-
-    Raises
-    ------
-    ConfigError
-        If an option is not valid.
-    """
-
-    @staticmethod
-    def type() -> str:
-        return 'mixture_exponential'
-
-    @staticmethod
-    def uid() -> int:
-        return OPT_UID_MIXTURE_EXP
-
-    def __init__(self, nblobs: int):
-        super().__init__(nblobs=nblobs)
-
-    def params_sm(self) -> dict[str, ParamDesc]:
-        return _ptrait_params_mixture_6p(self.nblobs())
-
-    def has_analytical_integral(self) -> bool:
-        return True
-
-    def cloud_flux(
-            self, params: dict[str, np.ndarray], rings: np.ndarray
-    ) -> np.ndarray:
-        return _ptrait_integrate_mixture_exponential(params, rings)
-
-
-class OPTraitMixtureGauss(TraitFeatureNBlobs, OPTrait):
-    """
-    A optical depth made of nblobs elliptical blobs (see the module
-    docstring), each a Gaussian of the elliptical distance rho from its
-    centre: a exp(-rho^2 / (2 s^2)). Its parameters, vectors of a value
-    for each blob: r and t, the radius and the azimuth of its centre, a,
-    its amplitude, s, its scale along its major axis, q, its axis ratio
-    (minor over major), and p, the angle of its major axis.
-
-    Parameters
-    ----------
-    nblobs : int
-        The number of blobs.
-
-    Raises
-    ------
-    ConfigError
-        If an option is not valid.
-    """
-
-    @staticmethod
-    def type() -> str:
-        return 'mixture_gauss'
-
-    @staticmethod
-    def uid() -> int:
-        return OPT_UID_MIXTURE_GAUSS
-
-    def __init__(self, nblobs: int):
-        super().__init__(nblobs=nblobs)
-
-    def params_sm(self) -> dict[str, ParamDesc]:
-        return _ptrait_params_mixture_6p(self.nblobs())
-
-    def has_analytical_integral(self) -> bool:
-        return True
-
-    def cloud_flux(
-            self, params: dict[str, np.ndarray], rings: np.ndarray
-    ) -> np.ndarray:
-        return _ptrait_integrate_mixture_gauss(params, rings)
-
-
-class OPTraitMixtureGGauss(TraitFeatureNBlobs, OPTrait):
-    """
-    A optical depth made of nblobs elliptical blobs (see the module
-    docstring), each a generalised Gaussian of the elliptical distance rho
-    from its centre: a exp(-(rho / s)^b). Its parameters, vectors of a
-    value for each blob: r and t, the radius and the azimuth of its
-    centre, a, its amplitude, s, its scale along its major axis, b, its
-    shape, q, its axis ratio (minor over major), and p, the angle of its
-    major axis.
-
-    Parameters
-    ----------
-    nblobs : int
-        The number of blobs.
-
-    Raises
-    ------
-    ConfigError
-        If an option is not valid.
-    """
-
-    @staticmethod
-    def type() -> str:
-        return 'mixture_ggauss'
-
-    @staticmethod
-    def uid() -> int:
-        return OPT_UID_MIXTURE_GGAUSS
-
-    def __init__(self, nblobs: int):
-        super().__init__(nblobs=nblobs)
-
-    def params_sm(self) -> dict[str, ParamDesc]:
-        return _ptrait_params_mixture_7p(self.nblobs())
-
-    def has_analytical_integral(self) -> bool:
-        return True
-
-    def cloud_flux(
-            self, params: dict[str, np.ndarray], rings: np.ndarray
-    ) -> np.ndarray:
-        return _ptrait_integrate_mixture_ggauss(params, rings)
-
-
-class OPTraitMixtureMoffat(TraitFeatureNBlobs, OPTrait):
-    """
-    A optical depth made of nblobs elliptical blobs (see the module
-    docstring), each a Moffat of the elliptical distance rho from its
-    centre: a (1 + (rho / s)^2)^-b. Its parameters, vectors of a value for
-    each blob: r and t, the radius and the azimuth of its centre, a, its
-    amplitude, s, its scale along its major axis, b, its shape, q, its
-    axis ratio (minor over major), and p, the angle of its major axis. The
-    Monte Carlo disks need b > 1 (a finite flux).
-
-    Parameters
-    ----------
-    nblobs : int
-        The number of blobs.
-
-    Raises
-    ------
-    ConfigError
-        If an option is not valid.
-    """
-
-    @staticmethod
-    def type() -> str:
-        return 'mixture_moffat'
-
-    @staticmethod
-    def uid() -> int:
-        return OPT_UID_MIXTURE_MOFFAT
-
-    def __init__(self, nblobs: int):
-        super().__init__(nblobs=nblobs)
-
-    def params_sm(self) -> dict[str, ParamDesc]:
-        return _ptrait_params_mixture_7p(self.nblobs())
-
-    def has_analytical_integral(self) -> bool:
-        return True
-
-    def cloud_flux(
-            self, params: dict[str, np.ndarray], rings: np.ndarray
-    ) -> np.ndarray:
-        return _ptrait_integrate_mixture_moffat(params, rings)
-
-
-class OPTraitNWUniform(TraitFeatureSampling, OPTrait):
-    """
-    A optical depth given at each ring: a(r). Its parameter: a, node-wise.
-
-    Parameters
-    ----------
-    sampling : str, optional
-        Where the values of its node-wise parameters are given: 'rnodes',
-        at the radii of the rings, or 'subrings', at the rings it is
-        evaluated on (see the module docstring).
-
-    Raises
-    ------
-    ConfigError
-        If an option is not valid.
-    """
-
-    @staticmethod
-    def type() -> str:
-        return 'nw_uniform'
-
-    @staticmethod
-    def uid() -> int:
-        return OPT_UID_NW_UNIFORM
-
-    def __init__(
-            self,
-            sampling: str = SAMPLING_DEFAULT):
-        super().__init__(sampling=sampling)
-
-    def params_rnw(self, nnodes: int) -> dict[str, ParamDesc]:
-        return dict(a=ParamVectorDesc(nnodes))
-
-    def has_analytical_integral(self) -> bool:
-        return False
-
-    def cloud_flux(
-            self, params: dict[str, np.ndarray], rings: np.ndarray
-    ) -> np.ndarray:
-        return _ptrait_integrate_nw_uniform(params, rings)
-
-
-class OPTraitNWHarmonic(
-        TraitFeatureOrder, TraitFeatureSampling, OPTrait):
-    """
-    A harmonic optical depth: a(r) cos(m (theta - p(r))), of the order m.
-    Its parameters, node-wise: a, the amplitude, and p (but for order 0),
-    the azimuth of a maximum; a p that changes with r winds it into a
-    spiral. It is negative in parts: it is meant to perturb an
-    axisymmetric trait.
-
-    Parameters
-    ----------
-    order : int
-        The order m of the harmonic: the pattern repeats every 360 / m
-        degrees, and order 0 is an axisymmetric a(r).
-    sampling : str, optional
-        Where the values of its node-wise parameters are given: 'rnodes',
-        at the radii of the rings, or 'subrings', at the rings it is
-        evaluated on (see the module docstring).
-
-    Raises
-    ------
-    ConfigError
-        If an option is not valid.
-    """
-
-    @staticmethod
-    def type() -> str:
-        return 'nw_harmonic'
-
-    @staticmethod
-    def uid() -> int:
-        return OPT_UID_NW_HARMONIC
-
-    def __init__(
-            self,
-            order: int,
-            sampling: str = SAMPLING_DEFAULT):
-        super().__init__(order=order, sampling=sampling)
-
-    def params_rnw(self, nnodes: int) -> dict[str, ParamDesc]:
-        return _ptrait_params_nw_harmonic(self.order(), nnodes)
-
-    def has_analytical_integral(self) -> bool:
-        return False
-
-    def cloud_flux(
-            self, params: dict[str, np.ndarray], rings: np.ndarray
-    ) -> np.ndarray:
-        return _ptrait_cloud_flux_nw_harmonic(
-            params, rings, self.order())
-
-
-class OPTraitNWDistortion(TraitFeatureSampling, OPTrait):
-    """
-    A optical depth around one azimuth at each ring: a(r) exp(-(dtheta
-    r)^2 / (2 s(r)^2)), with dtheta the azimuth from p(r) (radians, within
-    half a turn). Its parameters, node-wise: a, the peak, p, its azimuth,
-    and s, its width along the ring.
-
-    Parameters
-    ----------
-    sampling : str, optional
-        Where the values of its node-wise parameters are given: 'rnodes',
-        at the radii of the rings, or 'subrings', at the rings it is
-        evaluated on (see the module docstring).
-
-    Raises
-    ------
-    ConfigError
-        If an option is not valid.
-    """
-
-    @staticmethod
-    def type() -> str:
-        return 'nw_distortion'
-
-    @staticmethod
-    def uid() -> int:
-        return OPT_UID_NW_DISTORTION
-
-    def __init__(
-            self,
-            sampling: str = SAMPLING_DEFAULT):
-        super().__init__(sampling=sampling)
-
-    def params_rnw(self, nnodes: int) -> dict[str, ParamDesc]:
-        return _ptrait_params_nw_distortion(nnodes)
-
-    def has_analytical_integral(self) -> bool:
-        return False
-
-    def cloud_flux(
-            self, params: dict[str, np.ndarray], rings: np.ndarray
-    ) -> np.ndarray:
-        return _ptrait_integrate_nw_distortion(params, rings)
-
-
-class OHTraitP1(OHTrait, abc.ABC):
-    """
-    An opacity height trait of one parameter, s.
-    """
-
-    def __init__(
-            self,
-            rnodes: bool = False,
-            sampling: str = SAMPLING_DEFAULT,
-            trunc: float = TRUNC_DEFAULT):
-        super().__init__(
-            rnodes=rnodes, sampling=sampling, trunc=trunc)
-
-    def params_sm(self) -> dict[str, ParamDesc]:
-        return {} if self.rnodes() else dict(s=ParamScalarDesc())
-
-    def params_rnw(self, nrnodes: int) -> dict[str, ParamDesc]:
-        return {} if not self.rnodes() else dict(s=ParamVectorDesc(nrnodes))
-
-
-class OHTraitP2(OHTrait, abc.ABC):
-    """
-    An opacity height trait of two parameters, s and b.
-    """
-
-    def __init__(
-            self,
-            rnodes: bool = False,
-            sampling: str = SAMPLING_DEFAULT,
-            trunc: float = TRUNC_DEFAULT):
-        super().__init__(
-            rnodes=rnodes, sampling=sampling, trunc=trunc)
-
-    def params_sm(self) -> dict[str, ParamDesc]:
-        return {} if self.rnodes() else dict(
-            s=ParamScalarDesc(),
-            b=ParamScalarDesc())
-
-    def params_rnw(self, nrnodes: int) -> dict[str, ParamDesc]:
-        return {} if not self.rnodes() else dict(
-            s=ParamVectorDesc(nrnodes),
-            b=ParamVectorDesc(nrnodes))
-
-
-class OHTraitUniform(OHTraitP1):
-    """
-    A uniform vertical distribution of the absorbers: 1 / (2 s) for |z| <=
-    s, 0 beyond. Its parameter: s, the half thickness. It integrates to 1.
-
-    Parameters
-    ----------
-    rnodes : bool, optional
-        Whether its parameters have a value for each ring (e.g. the scale
-        height of a flaring disk).
-    sampling : str, optional
-        Where the values of its parameters are given, if they have a value
-        for each ring (see the module docstring).
-    trunc : float, optional
-        If positive, the density is zero beyond |z| = trunc s, and
-        renormalised to integrate to 1.
-
-    Raises
-    ------
-    ConfigError
-        If an option is not valid.
-    """
-
-    @staticmethod
-    def type() -> str:
-        return 'uniform'
-
-    @staticmethod
-    def uid() -> int:
-        return OHT_UID_UNIFORM
-
-
-class OHTraitExponential(OHTraitP1):
-    """
-    An exponential vertical distribution of the absorbers: exp(-|z| / s) /
-    (2 s). Its parameter: s, the scale height. It integrates to 1.
-
-    Parameters
-    ----------
-    rnodes : bool, optional
-        Whether its parameters have a value for each ring (e.g. the scale
-        height of a flaring disk).
-    sampling : str, optional
-        Where the values of its parameters are given, if they have a value
-        for each ring (see the module docstring).
-    trunc : float, optional
-        If positive, the density is zero beyond |z| = trunc s, and
-        renormalised to integrate to 1.
-
-    Raises
-    ------
-    ConfigError
-        If an option is not valid.
-    """
-
-    @staticmethod
-    def type() -> str:
-        return 'exponential'
-
-    @staticmethod
-    def uid() -> int:
-        return OHT_UID_EXP
-
-
-class OHTraitGauss(OHTraitP1):
-    """
-    A Gaussian vertical distribution of the absorbers: exp(-z^2 / (2 s^2))
-    / (s sqrt(2 pi)). Its parameter: s, the dispersion of the Gaussian. It
-    integrates to 1.
-
-    Parameters
-    ----------
-    rnodes : bool, optional
-        Whether its parameters have a value for each ring (e.g. the scale
-        height of a flaring disk).
-    sampling : str, optional
-        Where the values of its parameters are given, if they have a value
-        for each ring (see the module docstring).
-    trunc : float, optional
-        If positive, the density is zero beyond |z| = trunc s, and
-        renormalised to integrate to 1.
-
-    Raises
-    ------
-    ConfigError
-        If an option is not valid.
-    """
-
-    @staticmethod
-    def type() -> str:
-        return 'gauss'
-
-    @staticmethod
-    def uid() -> int:
-        return OHT_UID_GAUSS
-
-
-class OHTraitGGauss(OHTraitP2):
-    """
-    A generalised Gaussian vertical distribution of the absorbers: b / (2
-    s Gamma(1 / b)) exp(-(|z| / s)^b). Its parameters: s, the scale
-    height, and b, the shape. It integrates to 1.
-
-    Parameters
-    ----------
-    rnodes : bool, optional
-        Whether its parameters have a value for each ring (e.g. the scale
-        height of a flaring disk).
-    sampling : str, optional
-        Where the values of its parameters are given, if they have a value
-        for each ring (see the module docstring).
-    trunc : float, optional
-        If positive, the density is zero beyond |z| = trunc s, and
-        renormalised to integrate to 1.
-
-    Raises
-    ------
-    ConfigError
-        If an option is not valid.
-    """
-
-    @staticmethod
-    def type() -> str:
-        return 'ggauss'
-
-    @staticmethod
-    def uid() -> int:
-        return OHT_UID_GGAUSS
-
-    def __init__(
-            self,
-            rnodes: bool = False,
-            sampling: str = SAMPLING_DEFAULT,
-            trunc: float = TRUNC_DEFAULT):
-        super().__init__(
-            rnodes=rnodes, sampling=sampling, trunc=trunc)
-
-
-class OHTraitLorentz(OHTraitP1):
-    """
-    A Lorentzian vertical distribution of the absorbers: s / (pi (z^2 +
-    s^2)). Its parameter: s, the half width at half maximum; its tails are
-    heavy (see trunc). It integrates to 1.
-
-    Parameters
-    ----------
-    rnodes : bool, optional
-        Whether its parameters have a value for each ring (e.g. the scale
-        height of a flaring disk).
-    sampling : str, optional
-        Where the values of its parameters are given, if they have a value
-        for each ring (see the module docstring).
-    trunc : float, optional
-        If positive, the density is zero beyond |z| = trunc s, and
-        renormalised to integrate to 1.
-
-    Raises
-    ------
-    ConfigError
-        If an option is not valid.
-    """
-
-    @staticmethod
-    def type() -> str:
-        return 'lorentz'
-
-    @staticmethod
-    def uid() -> int:
-        return OHT_UID_LORENTZ
-
-
-class OHTraitMoffat(OHTraitP2):
-    """
-    A Moffat vertical distribution of the absorbers: Gamma(b) / (Gamma(b -
-    1/2) s sqrt(pi)) (1 + (z / s)^2)^-b, for b > 1/2. Its parameters: s,
-    the core height, and b, the power of the fall. It integrates to 1.
-
-    Parameters
-    ----------
-    rnodes : bool, optional
-        Whether its parameters have a value for each ring (e.g. the scale
-        height of a flaring disk).
-    sampling : str, optional
-        Where the values of its parameters are given, if they have a value
-        for each ring (see the module docstring).
-    trunc : float, optional
-        If positive, the density is zero beyond |z| = trunc s, and
-        renormalised to integrate to 1.
-
-    Raises
-    ------
-    ConfigError
-        If an option is not valid.
-    """
-
-    @staticmethod
-    def type() -> str:
-        return 'moffat'
-
-    @staticmethod
-    def uid() -> int:
-        return OHT_UID_MOFFAT
-
-
-class OHTraitSech2(OHTraitP1):
-    """
-    A sech^2 vertical distribution of the absorbers: sech^2(z / s) / (2
-    s). Its parameter: s, the scale height. It integrates to 1.
-
-    Parameters
-    ----------
-    rnodes : bool, optional
-        Whether its parameters have a value for each ring (e.g. the scale
-        height of a flaring disk).
-    sampling : str, optional
-        Where the values of its parameters are given, if they have a value
-        for each ring (see the module docstring).
-    trunc : float, optional
-        If positive, the density is zero beyond |z| = trunc s, and
-        renormalised to integrate to 1.
-
-    Raises
-    ------
-    ConfigError
-        If an option is not valid.
-    """
-
-    @staticmethod
-    def type() -> str:
-        return 'sech2'
-
-    @staticmethod
-    def uid() -> int:
-        return OHT_UID_SECH2
-
-
-# Surface Brightness polar traits parser
-bpt_parser = parseutils.TypedParser(BPTrait, [
-    BPTraitUniform,
-    BPTraitExponential,
-    BPTraitGauss,
-    BPTraitGGauss,
-    BPTraitLorentz,
-    BPTraitMoffat,
-    BPTraitSech2,
-    BPTraitMixtureExponential,
-    BPTraitMixtureGauss,
-    BPTraitMixtureGGauss,
-    BPTraitMixtureMoffat,
-    BPTraitNWUniform,
-    BPTraitNWHarmonic,
-    BPTraitNWDistortion])
-
-# Surface Brightness height traits parser
-bht_parser = parseutils.TypedParser(BHTrait, [
-    BHTraitUniform,
-    BHTraitExponential,
-    BHTraitGauss,
-    BHTraitGGauss,
-    BHTraitLorentz,
-    BHTraitMoffat,
-    BHTraitSech2])
-
-# Opacity polar traits parser
-opt_parser = parseutils.TypedParser(OPTrait, [
-    OPTraitUniform,
-    OPTraitExponential,
-    OPTraitGauss,
-    OPTraitGGauss,
-    OPTraitLorentz,
-    OPTraitMoffat,
-    OPTraitSech2,
-    OPTraitMixtureExponential,
-    OPTraitMixtureGauss,
-    OPTraitMixtureGGauss,
-    OPTraitMixtureMoffat,
-    OPTraitNWUniform,
-    OPTraitNWHarmonic,
-    OPTraitNWDistortion])
-
-# Opacity height traits parser
-oht_parser = parseutils.TypedParser(OHTrait, [
-    OHTraitUniform,
-    OHTraitExponential,
-    OHTraitGauss,
-    OHTraitGGauss,
-    OHTraitLorentz,
-    OHTraitMoffat,
-    OHTraitSech2])
 
 # Velocity polar traits parser
 vpt_parser = parseutils.TypedParser(VPTrait, [

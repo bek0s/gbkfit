@@ -86,7 +86,7 @@ def test_traits_evaluated_apart_are_sampled_as_by_their_disk(driver):
     model_disk = smdisk.SMDisk(
         loose=False, tilted=False, rnodes=rnodes, rstep=1.0,
         interp=interpolation.InterpolatorAkima,
-        traits_=dict(rpt=[traits.BPTraitNWUniform()]),
+        traits_=dict(rpt=[traits.RPTraitNWUniform()]),
         prefixes=dict(rpt='bpt'), rdata_key='bdata')
     plan = model_disk.plan(driver, 0, np.dtype(np.float32))
     params = dict(xpos=0, ypos=0, posa=0, incl=45, bpt_a=np.array(curve))

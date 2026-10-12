@@ -109,7 +109,7 @@ class BrightnessSMDisk2D(BrightnessComponent2D):
 
     def __init__(
             self,
-            bptraits: traits.BPTrait | Sequence[traits.BPTrait],
+            bptraits: traits.RPTrait | Sequence[traits.RPTrait],
             sptraits: traits.SPTrait | Sequence[traits.SPTrait] | None = None,
             wptraits: traits.WPTrait | Sequence[traits.WPTrait] | None = None,
             loose: bool | None = None,
@@ -233,8 +233,8 @@ class BrightnessSMDisk3D(BrightnessComponent3D):
 
     def __init__(
             self,
-            bptraits: traits.BPTrait | Sequence[traits.BPTrait],
-            bhtraits: traits.BHTrait | Sequence[traits.BHTrait],
+            bptraits: traits.RPTrait | Sequence[traits.RPTrait],
+            bhtraits: traits.RHTrait | Sequence[traits.RHTrait],
             zptraits: traits.ZPTrait | Sequence[traits.ZPTrait] | None = None,
             sptraits: traits.SPTrait | Sequence[traits.SPTrait] | None = None,
             wptraits: traits.WPTrait | Sequence[traits.WPTrait] | None = None,
@@ -366,7 +366,7 @@ class SpectralSMDisk2D(SpectralComponent2D):
 
     def __init__(
             self,
-            bptraits: traits.BPTrait | Sequence[traits.BPTrait],
+            bptraits: traits.RPTrait | Sequence[traits.RPTrait],
             vptraits: traits.VPTrait | Sequence[traits.VPTrait],
             dptraits: traits.DPTrait | Sequence[traits.DPTrait],
             sptraits: traits.SPTrait | Sequence[traits.SPTrait] | None = None,
@@ -523,10 +523,10 @@ class SpectralSMDisk3D(SpectralComponent3D):
 
     def __init__(
             self,
-            bptraits: traits.BPTrait | Sequence[traits.BPTrait],
+            bptraits: traits.RPTrait | Sequence[traits.RPTrait],
             vptraits: traits.VPTrait | Sequence[traits.VPTrait],
             dptraits: traits.DPTrait | Sequence[traits.DPTrait],
-            bhtraits: traits.BHTrait | Sequence[traits.BHTrait],
+            bhtraits: traits.RHTrait | Sequence[traits.RHTrait],
             vhtraits: traits.VHTrait | Sequence[traits.VHTrait] | None = None,
             dhtraits: traits.DHTrait | Sequence[traits.DHTrait] | None = None,
             zptraits: traits.ZPTrait | Sequence[traits.ZPTrait] | None = None,
@@ -670,8 +670,8 @@ class OpacitySMDisk3D(OpacityComponent3D):
 
     def __init__(
             self,
-            optraits: traits.OPTrait | Sequence[traits.OPTrait],
-            ohtraits: traits.OHTrait | Sequence[traits.OHTrait],
+            optraits: traits.RPTrait | Sequence[traits.RPTrait],
+            ohtraits: traits.RHTrait | Sequence[traits.RHTrait],
             zptraits: traits.ZPTrait | Sequence[traits.ZPTrait] | None = None,
             sptraits: traits.SPTrait | Sequence[traits.SPTrait] | None = None,
             wptraits: traits.WPTrait | Sequence[traits.WPTrait] | None = None,
