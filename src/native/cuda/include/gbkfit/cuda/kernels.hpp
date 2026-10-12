@@ -200,10 +200,11 @@ gmodel_mcdisk_evaluate(DiskArgs<T> a, MCDiskArgs<T> mc)
 template<typename T> __global__ void
 gmodel_smdisk_evaluate(DiskArgs<T> a)
 {
-    // Parallelization: per 3d spatial position (64-bit indices: there can
-    // be more voxels than an int holds)
-    const long long nthreads =
-            1LL * a.spat_size[0] * a.spat_size[1] * a.spat_size[2];
+    // Parallelization: per 3d spatial position, or per 2d spatial position
+    // for a thin disk (64-bit indices: there can be more voxels than an int
+    // holds)
+    const long long nthreads = 1LL * a.spat_size[0] * a.spat_size[1]
+            * gbkfit::gmodel_smdisk_size_z(a);
     const long long tid = 1LL * blockIdx.x * blockDim.x + threadIdx.x;
     if (tid >= nthreads) {
         return;

@@ -33,7 +33,8 @@ Lines of sight
 - Flat: the galaxies are evaluated on the plane of the sky (thin disks
   and points)
 - Grid: the galaxies are evaluated on a grid with a depth axis (thick
-  disks, points and dust)
+  disks, thin disks and points at their depth, and dust, which dims the
+  light behind it)
 
 Fitters
 -------

@@ -40,12 +40,15 @@ struct DiskArgs
     // trait set, or none (a thin disk).
     TraitSet<T> rpt, rht, vpt, vht, dpt, dht, zpt, spt;
 
-    // The opacity of the 3d spatial grid (optional)
+    // The opacity of the 3d spatial grid (optional): the optical depth from
+    // the viewer to the far side of each voxel (see
+    // gmodel_opacity_accumulate)
     const T* opacity = nullptr;
 
     // The 3d spatial grid, in (x, y, z) order, and the spectral axis.
     // The x and y axes of the grid are rotated on the sky by spat_rota
-    // degrees (counterclockwise, like a position angle).
+    // degrees (counterclockwise, like a position angle). Without a depth
+    // axis (the plane of the sky), z has size 1 and step 0.
     int spat_size[3] = {0, 0, 0};
     T spat_step[3] = {0, 0, 0};
     T spat_zero[3] = {0, 0, 0};

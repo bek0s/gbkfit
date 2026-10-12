@@ -278,10 +278,11 @@ gmodel_smdisk_evaluate(const DiskArgs<T>& a)
     // spaxel without atomics, and in the same order on every run. The
     // spaxels off the disk take little time: chunks are handed out as
     // threads become free.
+    const int size_z = gbkfit::gmodel_smdisk_size_z(a);
     #pragma omp parallel for collapse(2) schedule(dynamic, 16)
     for(int y = 0; y < a.spat_size[1]; ++y) {
     for(int x = 0; x < a.spat_size[0]; ++x) {
-    for(int z = 0; z < a.spat_size[2]; ++z) {
+    for(int z = 0; z < size_z; ++z) {
 
     gbkfit::gmodel_smdisk_evaluate_spaxel<add<T>>(x, y, z, a);
 

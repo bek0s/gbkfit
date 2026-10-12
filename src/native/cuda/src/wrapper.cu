@@ -160,8 +160,8 @@ Wrapper<T>::gmodel_smdisk_evaluate(const DiskArgs<T>& a)
 {
     // (the voxels need not be in memory, so there can be more than an int
     // holds, e.g. 1300 x 1300 x 1300)
-    const long long n =
-            1LL * a.spat_size[0] * a.spat_size[1] * a.spat_size[2];
+    const long long n = 1LL * a.spat_size[0] * a.spat_size[1]
+            * gbkfit::gmodel_smdisk_size_z(a);
     launch("gmodel_smdisk_evaluate", n,
             kernels::gmodel_smdisk_evaluate<T>, a);
 }
