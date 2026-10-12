@@ -154,7 +154,7 @@ def test_observation_dump_has_every_option(observable_type):
     from gbkfit.observation import observation_parser
     observable, instrument, scale = OBSERVABLES[observable_type]
     info = dict(
-        name='obs', model='galaxy', driver=dict(type='host'),
+        name='obs', model='galaxy',
         instrument=instrument,
         observable=dict(type=observable_type) | observable,
         scale=scale, dtype='float64')

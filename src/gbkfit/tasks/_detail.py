@@ -16,6 +16,7 @@ import ruamel.yaml
 
 import gbkfit.model
 import gbkfit.observation
+from gbkfit.driver import Driver, driver_parser
 from gbkfit.objective import Objective
 from gbkfit.observation import ObservationGroup
 from gbkfit.params import (
@@ -106,7 +107,7 @@ def prepare_config(
             f"the configuration needs the sections {missing}")
     # (empty sections are loaded as such, for clearer messages)
     config = {s: {} if v is None else v for s, v in config.items()}
-    for s in ('pdescs', 'params', 'fitter'):
+    for s in ('driver', 'drivers', 'pdescs', 'params', 'fitter'):
         if s in config and not iterutils.is_mapping(config[s]):
             raise ConfigError(f"section '{s}' must be a dictionary")
     for s in ('models', 'observations'):
@@ -186,16 +187,45 @@ def merge_pdescs(
     return pdescs1 | pdescs2
 
 
+def load_drivers(cfg: dict[str, Any]) -> dict[str | None, Driver]:
+    """
+    Return the drivers of a configuration, by name: the one of its
+    section 'driver' (named None), those of its section 'drivers' (a dict
+    of drivers by name), or none.
+
+    Raises
+    ------
+    ConfigError
+        If it has both sections, a name is invalid, or a driver has an
+        error.
+    """
+    if 'driver' in cfg and 'drivers' in cfg:
+        raise ConfigError(
+            "the configuration must have either a section 'driver' (one "
+            "driver) or a section 'drivers' (several, by name), not both")
+    if 'driver' in cfg:
+        with parseutils.config_path('driver'):
+            return {None: driver_parser.load(cfg['driver'])}
+    drivers = {}
+    for name, info in cfg.get('drivers', {}).items():
+        with parseutils.config_path('drivers', name):
+            parseutils.check_name(name)
+            drivers[name] = driver_parser.load(info)
+    return drivers
+
+
 def load_observation_group(cfg: dict[str, Any]) -> ObservationGroup:
     """
     Return the models and observations (with their data, if any) of a
-    configuration, as an ObservationGroup.
+    configuration, as an ObservationGroup. The observations refer to the
+    drivers of the configuration by name (see load_drivers).
     """
+    drivers = load_drivers(cfg)
     with parseutils.config_path('models'):
         models = gbkfit.model.model_parser.load(cfg['models'])
     with parseutils.config_path('observations'):
         observations = gbkfit.observation.observation_parser.load(
-            cfg['observations'])
+            cfg['observations'], drivers=[drivers] * len(cfg['observations']))
     return gbkfit.observation.ObservationGroup(models, observations)
 
 

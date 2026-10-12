@@ -169,8 +169,9 @@ def evaluate_observation(driver, model, observable, properties, **options):
     """The model of an observation with options (e.g. its lines)."""
     from gbkfit.model import model_parser
     from gbkfit.observation import ObservationGroup, observation_parser
-    observation = observation_parser.load(copy.deepcopy(dict(
-        driver=dict(type=driver.type()), observable=observable) | options))
+    observation = observation_parser.load(
+        copy.deepcopy(dict(observable=observable) | options),
+        drivers={None: driver})
     group = ObservationGroup(
         [model_parser.load(copy.deepcopy(model))], [observation])
     params = gbkfit.params.ParamSpace(group.pdescs(), properties)
@@ -253,7 +254,7 @@ def test_a_component_must_have_a_selected_line(driver):
 
 def test_line_selection_round_trip(driver):
     from gbkfit.observation import observation_parser
-    info = dict(driver=dict(type=driver.type()),
-                observable=scube('6562.8 Angstrom'), lines=['ha'])
-    dumped = observation_parser.dump(observation_parser.load(dict(info)))
+    info = dict(observable=scube('6562.8 Angstrom'), lines=['ha'])
+    dumped = observation_parser.dump(
+        observation_parser.load(dict(info), drivers={None: driver}))
     assert dumped['lines'] == ['ha']

@@ -1,3 +1,4 @@
+driver: {type: host}
 models:
 - type: kinematics_3d
   components:
@@ -13,8 +14,7 @@ models:
     vptraits: {type: tan_arctan}
     dptraits: {type: uniform}
 observations:
-- driver: {type: host}
-  observable:
+- observable:
     type: pixel_spectra
     size: [48, 48, 50]
     step: [1, 1, 10]

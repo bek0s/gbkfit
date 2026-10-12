@@ -45,8 +45,8 @@ def evaluate(driver, case, dtype):
     model, observable, instrument = CASES[case]
     group = ObservationGroup([model_parser.load(model)], [
         observation_parser.load(dict(
-            driver=dict(type=driver.type()), observable=observable,
-            instrument=instrument, dtype=dtype))])
+            observable=observable, instrument=instrument, dtype=dtype),
+            drivers={None: driver})])
     # (the 3D disks have a thickness)
     properties = PROPERTIES | (dict(bht_s=0.5) if '3d' in case else {})
     params = gbkfit.params.ParamSpace(

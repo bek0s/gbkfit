@@ -10,15 +10,16 @@ from gbkfit.model.components.base import Component, ComponentPlan
 
 def split_case(case):
     """
-    A model and an observation of it, from a case of the tests: a dict
-    with a driver, a model, an observable (with the primary beam, psf and
-    lsf of the instrument, and the scale and dtype of the observation),
-    and an optional name, which names the model.
+    A model, an observation of it and the configuration of its driver,
+    from a case of the tests: a dict with a driver, a model, an
+    observable (with the primary beam, psf and lsf of the instrument, and
+    the scale and dtype of the observation), and an optional name, which
+    names the model.
     """
     case = dict(case)
+    driver = case.pop('driver')
     observable = dict(case.pop('observable'))
     observation = dict(
-        driver=case.pop('driver'),
         observable=observable,
         instrument={k: observable.pop(k)
                     for k in ('primary_beam', 'psf', 'lsf')
@@ -33,26 +34,31 @@ def split_case(case):
         observation['model'] = name
     if case:
         raise ValueError(f"unknown case keys: {list(case)}")
-    return model, observation
+    return model, observation, driver
 
 
 def observation_group(cases):
-    """An ObservationGroup of cases of the tests (see split_case)."""
+    """
+    An ObservationGroup of cases of the tests (see split_case); each
+    observation has the driver of its case.
+    """
+    from gbkfit.driver import driver_parser
     from gbkfit.model import model_parser
     from gbkfit.observation import ObservationGroup, observation_parser
-    models, observations = zip(*[split_case(case) for case in cases])
+    models, observations, drivers = zip(*[split_case(case) for case in cases])
     return ObservationGroup(
         model_parser.load(list(models)),
-        observation_parser.load(list(observations)))
+        observation_parser.load(list(observations), drivers=[
+            {None: driver_parser.load(driver)} for driver in drivers]))
 
 
 def config_group(config):
-    """An ObservationGroup of the models and observations of a config."""
-    from gbkfit.model import model_parser
-    from gbkfit.observation import ObservationGroup, observation_parser
-    return ObservationGroup(
-        model_parser.load(config['models']),
-        observation_parser.load(config['observations']))
+    """
+    An ObservationGroup of the drivers, models and observations of a
+    config, loaded as the tasks load them.
+    """
+    from gbkfit.tasks import _detail
+    return _detail.load_observation_group(config)
 
 
 class WeightComponent(Component):

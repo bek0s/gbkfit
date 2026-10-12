@@ -1,11 +1,11 @@
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 import numpy as np
 import numpy.typing as npt
 
 from gbkfit.dataset import Dataset
-from gbkfit.driver import Driver, driver_parser
+from gbkfit.driver import Driver
 from gbkfit.instrument import Instrument, instrument_parser
 from gbkfit.model.base import Model, Selection
 from gbkfit.utils import parseutils
@@ -38,6 +38,39 @@ def _check_dtype(dtype: npt.DTypeLike) -> np.dtype:
     return result
 
 
+def _driver_by_name(
+        name: object,
+        drivers: Mapping[str | None, Driver]
+) -> Driver | None:
+    """
+    Return the driver of the given name (None: the only driver, or None
+    if there are no drivers).
+
+    Raises
+    ------
+    ConfigError
+        If the name is not one of the drivers, or is left out while there
+        are several drivers.
+    """
+    names = [n for n in drivers if n is not None]
+    if name is None:
+        if len(drivers) > 1:
+            raise ConfigError(
+                f"the observation must name its driver; the drivers are "
+                f"{names}")
+        return next(iter(drivers.values()), None)
+    if not isinstance(name, str):
+        raise ConfigError(
+            f"the driver of an observation is the name of a driver that "
+            f"the configuration declares at its top level (section "
+            f"'driver' for one driver, 'drivers' for several by name); it "
+            f"is {name!r}")
+    if name not in names:
+        raise ConfigError(
+            f"unknown driver {name!r}; the named drivers are {names}")
+    return drivers[name]
+
+
 class Observation(parseutils.Serializable):
     """
     A model seen as an observable, through a foreground (e.g. a
@@ -53,7 +86,8 @@ class Observation(parseutils.Serializable):
     observable : Observable
         What the data measure.
     driver : Driver, optional
-        Where the model is evaluated; by default, the host.
+        Where the model is evaluated; by default, the host. (In its
+        configuration, the name of a driver; see load.)
     foreground : Foreground, optional
         What the light meets before the telescope; nothing by default.
     instrument : Instrument, optional
@@ -90,7 +124,40 @@ class Observation(parseutils.Serializable):
     """
 
     @classmethod
-    def load(cls, info: dict[str, Any]) -> 'Observation':
+    def load(
+            cls,
+            info: dict[str, Any],
+            drivers: Mapping[str | None, Driver] | None = None
+    ) -> 'Observation':
+        """
+        Load an observation from its configuration.
+
+        Its option driver is not a driver but the name of one of the
+        drivers of the configuration, which declares them at its top
+        level. It can be left out when there is one driver, and the
+        observation has the host when there are none.
+
+        Parameters
+        ----------
+        info : dict
+            The configuration.
+        drivers : Mapping of str to Driver, optional
+            The drivers of the configuration, by name; the one unnamed
+            driver of a configuration has the name None.
+
+        Returns
+        -------
+        Observation
+            The observation.
+
+        Raises
+        ------
+        ConfigError
+            If the configuration has an error, or the driver is not one
+            of the drivers.
+        """
+        with parseutils.config_path('driver'):
+            info['driver'] = _driver_by_name(info.get('driver'), drivers or {})
         # The data are read in the form of the observable (its dataset
         # class), and give the observable some of its options
         dataset = None
@@ -105,8 +172,6 @@ class Observation(parseutils.Serializable):
         parseutils.load_option_and_update_info(
             likelihood_parser, info, 'likelihood')
         parseutils.load_option_and_update_info(
-            driver_parser, info, 'driver')
-        parseutils.load_option_and_update_info(
             foreground_parser, info, 'foreground')
         parseutils.load_option_and_update_info(
             instrument_parser, info, 'instrument')
@@ -119,7 +184,8 @@ class Observation(parseutils.Serializable):
             overwrite: bool = False
     ) -> dict[str, Any]:
         """
-        Dump the observation to its configuration.
+        Dump the observation to its configuration, without its driver,
+        which configurations declare at their top level (see load).
 
         Parameters
         ----------
@@ -151,7 +217,6 @@ class Observation(parseutils.Serializable):
                   if k != 'type'},
             likelihood=likelihood_parser.dump(self._likelihood))
         return name | model | components | lines | data | dict(
-            driver=driver_parser.dump(self._driver),
             foreground=foreground_parser.dump(self._foreground, **kwargs),
             instrument=instrument_parser.dump(self._instrument, **kwargs),
             observable=observable_parser.dump(
