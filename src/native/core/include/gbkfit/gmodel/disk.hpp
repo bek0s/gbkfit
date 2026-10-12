@@ -38,7 +38,7 @@ struct DiskArgs
     // traits, and vertical distortion (z), selection (s) and weight (w)
     // polar traits. A height trait set has as many traits as its polar
     // trait set, or none (a thin disk).
-    TraitSet<T> rpt, rht, vpt, vht, dpt, dht, zpt, spt, wpt;
+    TraitSet<T> rpt, rht, vpt, vht, dpt, dht, zpt, spt;
 
     // The opacity of the 3d spatial grid (optional)
     const T* opacity = nullptr;
@@ -64,8 +64,6 @@ struct DiskArgs
     // The outputs (all optional)
     T* image = nullptr;
     T* scube = nullptr;
-    T* wdata = nullptr;
-    T* wdata_cmp = nullptr;
     T* rdata = nullptr;
     T* rdata_cmp = nullptr;
     T* ordata = nullptr;
@@ -81,7 +79,7 @@ struct DiskArgs
 // The kinds of traits of a disk: the trait sets of DiskArgs
 enum class TraitKind
 {
-    RPT, RHT, VPT, VHT, DPT, DHT, ZPT, SPT, WPT
+    RPT, RHT, VPT, VHT, DPT, DHT, ZPT, SPT
 };
 
 // The evaluation of the traits of one kind of a disk at points of its

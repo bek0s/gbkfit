@@ -139,9 +139,6 @@ class ModelIntensity2D(ModelImage):
     def pdescs(self) -> dict[str, ParamDesc]:
         return self._component_set.pdescs()
 
-    def has_weights(self) -> bool:
-        return self._component_set.has_weights()
-
     def constants(self) -> dict[str, Any]:
         return self._component_set.constants()
 
@@ -149,14 +146,12 @@ class ModelIntensity2D(ModelImage):
             self,
             driver: Driver,
             grid: gridutils.Grid,
-            has_weights: bool,
             dtype: np.dtype,
             selection: Selection = Selection()
     ) -> ComponentSetModelPlan:
         return ComponentSetModelPlan(
             self._component_set.plan(
-                driver, grid, IMAGE_SPECTRAL_AXIS, has_weights, dtype,
-                selection),
+                driver, grid, IMAGE_SPECTRAL_AXIS, dtype, selection),
             'image')
 
 
@@ -234,9 +229,6 @@ class ModelIntensity3D(ModelImage):
     def pdescs(self) -> dict[str, ParamDesc]:
         return self._component_set.pdescs()
 
-    def has_weights(self) -> bool:
-        return self._component_set.has_weights()
-
     def constants(self) -> dict[str, Any]:
         return self._component_set.constants()
 
@@ -244,14 +236,12 @@ class ModelIntensity3D(ModelImage):
             self,
             driver: Driver,
             grid: gridutils.Grid,
-            has_weights: bool,
             dtype: np.dtype,
             selection: Selection = Selection()
     ) -> ComponentSetModelPlan:
         return ComponentSetModelPlan(
             self._component_set.plan(
-                driver, grid, IMAGE_SPECTRAL_AXIS, has_weights, dtype,
-                selection),
+                driver, grid, IMAGE_SPECTRAL_AXIS, dtype, selection),
             'image')
 
 
@@ -317,9 +307,6 @@ class ModelKinematics2D(ModelSCube):
     def pdescs(self) -> dict[str, ParamDesc]:
         return self._component_set.pdescs()
 
-    def has_weights(self) -> bool:
-        return self._component_set.has_weights()
-
     def constants(self) -> dict[str, Any]:
         return self._component_set.constants()
 
@@ -327,13 +314,12 @@ class ModelKinematics2D(ModelSCube):
             self,
             driver: Driver,
             grid: gridutils.Grid,
-            has_weights: bool,
             dtype: np.dtype,
             selection: Selection = Selection()
     ) -> ComponentSetModelPlan:
         return ComponentSetModelPlan(
             self._component_set.plan(
-                driver, grid.spatial(), grid.spectral(), has_weights, dtype,
+                driver, grid.spatial(), grid.spectral(), dtype,
                 selection),
             'scube')
 
@@ -423,9 +409,6 @@ class ModelKinematics3D(ModelSCube):
     def pdescs(self) -> dict[str, ParamDesc]:
         return self._component_set.pdescs()
 
-    def has_weights(self) -> bool:
-        return self._component_set.has_weights()
-
     def constants(self) -> dict[str, Any]:
         return self._component_set.constants()
 
@@ -433,12 +416,11 @@ class ModelKinematics3D(ModelSCube):
             self,
             driver: Driver,
             grid: gridutils.Grid,
-            has_weights: bool,
             dtype: np.dtype,
             selection: Selection = Selection()
     ) -> ComponentSetModelPlan:
         return ComponentSetModelPlan(
             self._component_set.plan(
-                driver, grid.spatial(), grid.spectral(), has_weights, dtype,
+                driver, grid.spatial(), grid.spectral(), dtype,
                 selection),
             'scube')

@@ -60,11 +60,6 @@ class Model(parseutils.TypedSerializable, abc.ABC):
         """Return its parameters, by name."""
         pass
 
-    @abc.abstractmethod
-    def has_weights(self) -> bool:
-        """Check whether it has spatial weights (weight traits)."""
-        pass
-
     def constants(self) -> dict[str, Any]:
         """
         Return the values that parameter expressions can use (e.g. the
@@ -77,7 +72,6 @@ class Model(parseutils.TypedSerializable, abc.ABC):
             self,
             driver: Driver,
             grid: gridutils.Grid,
-            has_weights: bool,
             dtype: np.dtype,
             selection: Selection = Selection()
     ) -> 'ModelPlan':
@@ -91,8 +85,6 @@ class Model(parseutils.TypedSerializable, abc.ABC):
         grid : Grid
             The grid of its data: x and y, and the spectral axis of
             spectral cubes.
-        has_weights : bool
-            Whether to evaluate its spatial weights.
         dtype : np.dtype
             The floating type of the evaluation.
         selection : Selection, optional
@@ -114,7 +106,6 @@ class ModelPlan(abc.ABC):
             self,
             params: ParamValues,
             data: DeviceArray,
-            weights: DeviceArray | None,
             out_extra: dict[str, Any] | None
     ) -> None:
         """
@@ -127,8 +118,6 @@ class ModelPlan(abc.ABC):
         data : DeviceArray
             The image or spectral cube on the grid of the plan, which the
             model is added to.
-        weights : DeviceArray, optional
-            The weights of the data, which its spatial weights multiply.
         out_extra : dict, optional
             Where its extra outputs go, if wanted.
         """

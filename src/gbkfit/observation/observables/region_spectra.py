@@ -225,10 +225,6 @@ class RegionSpectra(Observable):
             dtype: np.dtype,
             selection: Selection
     ) -> 'RegionSpectraPlan':
-        if model.has_weights():
-            raise ConfigError(
-                "region_spectra does not support models with weights "
-                "(wtraits) yet")
         # The masking of DCube is disabled: every pixel of a region adds
         # to its spectrum
         dcube = _dcube.DCube(

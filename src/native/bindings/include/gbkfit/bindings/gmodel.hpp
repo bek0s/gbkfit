@@ -62,7 +62,7 @@ struct DiskArrays
     Values ypos;
     Values posa;
     Values incl;
-    Traits rpt, rht, vpt, vht, dpt, dht, zpt, spt, wpt;
+    Traits rpt, rht, vpt, vht, dpt, dht, zpt, spt;
 };
 
 // The galaxy model operations of a native module. Kernels launches
@@ -77,24 +77,8 @@ struct GModel
     using Bools = Array<Device, const bool, nb::ndim<1>>;
     using Data = Array<Device, T>;
     using ConstData = Array<Device, const T>;
-    using Cube = Array<Device, T, nb::ndim<3>>;
-    using ConstCube = Array<Device, const T, nb::ndim<3>>;
     using Lines = Array<Device, const T, nb::ndim<2>>;
     using TraitValues = Array<Device, T, nb::ndim<2>>;
-
-    // Assign the same (mean over z) weight of the 3d spatial weight cube
-    // to the whole spectrum of each spatial position
-    static void
-    wcube_evaluate(ConstCube spat_wcube, Cube spec_wcube)
-    {
-        const auto spat = size_xyz(spat_wcube);
-        const auto spec = size_xyz(spec_wcube);
-        require(spat[0] == spec[0] && spat[1] == spec[1],
-                "spat_wcube and spec_wcube must have the same x and y size");
-        Kernels::gmodel_wcube_evaluate(
-                spat[0], spat[1], spat[2], spec[2],
-                spat_wcube.data(), spec_wcube.data());
-    }
 
     static void
     smdisk_evaluate(
@@ -107,7 +91,6 @@ struct GModel
             Lines lines,
             ConstData opacity,
             Data image, Data scube,
-            Data wdata, Data wdata_cmp,
             Data rdata, Data rdata_cmp,
             Data ordata, Data ordata_cmp,
             Data vdata_cmp, Data ddata_cmp, Data vdweight_cmp)
@@ -115,7 +98,7 @@ struct GModel
         Kernels::gmodel_smdisk_evaluate(make_args(
                 disk, spat_size, spat_step, spat_zero, spat_rota,
                 spec_size, spec_step, spec_zero, lines, opacity,
-                image, scube, wdata, wdata_cmp, rdata, rdata_cmp,
+                image, scube, rdata, rdata_cmp,
                 ordata, ordata_cmp, vdata_cmp, ddata_cmp, vdweight_cmp));
     }
 
@@ -132,7 +115,6 @@ struct GModel
             Lines lines,
             ConstData opacity,
             Data image, Data scube,
-            Data wdata, Data wdata_cmp,
             Data rdata, Data rdata_cmp,
             Data ordata, Data ordata_cmp,
             Data vdata_cmp, Data ddata_cmp, Data vdweight_cmp)
@@ -140,7 +122,7 @@ struct GModel
         const auto args = make_args(
                 disk, spat_size, spat_step, spat_zero, spat_rota,
                 spec_size, spec_step, spec_zero, lines, opacity,
-                image, scube, wdata, wdata_cmp, rdata, rdata_cmp,
+                image, scube, rdata, rdata_cmp,
                 ordata, ordata_cmp, vdata_cmp, ddata_cmp, vdweight_cmp);
         require(disk.rht.has_value(),
                 "a Monte Carlo disk needs density height traits");
@@ -160,7 +142,7 @@ struct GModel
     }
 
     // Evaluate each polar trait of one kind of a disk ('rpt', 'vpt',
-    // 'dpt', 'zpt', 'spt' or 'wpt') at the points (r, theta) of its plane,
+    // 'dpt', 'zpt' or 'spt') at the points (r, theta) of its plane,
     // into out (a row for each trait), as the disk kernels evaluate them
     // (see gbkfit::gmodel_disk_traits_point). incl projects the velocity
     // traits on the line of sight: required for them, and only for them.
@@ -219,15 +201,14 @@ struct GModel
                         const Traits* rpt, const Traits* rht,
                         const Traits* vpt, const Traits* vht,
                         const Traits* dpt, const Traits* dht,
-                        const Traits* zpt, const Traits* spt,
-                        const Traits* wpt) {
+                        const Traits* zpt, const Traits* spt) {
                     auto opt = [](const Traits* traits) {
                         return traits ? std::optional(*traits) : std::nullopt;
                     };
                     new (self) Disk{
                             loose, tilted, rnodes, vsys, xpos, ypos, posa,
                             incl, opt(rpt), opt(rht), opt(vpt), opt(vht),
-                            opt(dpt), opt(dht), opt(zpt), opt(spt), opt(wpt)};
+                            opt(dpt), opt(dht), opt(zpt), opt(spt)};
                 },
                 nb::arg("loose"), nb::arg("tilted"),
                 nb::arg("rnodes").noconvert(),
@@ -243,8 +224,7 @@ struct GModel
                 nb::arg("dpt").none() = nb::none(),
                 nb::arg("dht").none() = nb::none(),
                 nb::arg("zpt").none() = nb::none(),
-                nb::arg("spt").none() = nb::none(),
-                nb::arg("wpt").none() = nb::none());
+                nb::arg("spt").none() = nb::none());
 
         auto evaluate_args = [](auto&&... first) {
             return std::make_tuple(
@@ -257,8 +237,6 @@ struct GModel
                     nb::arg("opacity").noconvert().none() = nb::none(),
                     nb::arg("image").noconvert().none() = nb::none(),
                     nb::arg("scube").noconvert().none() = nb::none(),
-                    nb::arg("wdata").noconvert().none() = nb::none(),
-                    nb::arg("wdata_cmp").noconvert().none() = nb::none(),
                     nb::arg("rdata").noconvert().none() = nb::none(),
                     nb::arg("rdata_cmp").noconvert().none() = nb::none(),
                     nb::arg("ordata").noconvert().none() = nb::none(),
@@ -269,10 +247,7 @@ struct GModel
         };
 
         auto cls = nb::class_<GModel>(m, ("GModel" + suffix).c_str())
-                .def(nb::init<>())
-                .def_static("wcube_evaluate", &wcube_evaluate,
-                        nb::arg("spat_wcube").noconvert(),
-                        nb::arg("spec_wcube").noconvert());
+                .def(nb::init<>());
         std::apply([&](auto&&... args) {
             cls.def_static("smdisk_evaluate", &smdisk_evaluate, args...);
         }, evaluate_args(nb::arg("disk")));
@@ -306,7 +281,7 @@ private:
         typename Disk::Traits Disk::* set;
     };
 
-    static constexpr std::array<Kind, 9> KINDS = {{
+    static constexpr std::array<Kind, 8> KINDS = {{
             {"rpt", TraitKind::RPT, true, &Disk::rpt},
             {"rht", TraitKind::RHT, false, &Disk::rht},
             {"vpt", TraitKind::VPT, true, &Disk::vpt},
@@ -314,8 +289,7 @@ private:
             {"dpt", TraitKind::DPT, true, &Disk::dpt},
             {"dht", TraitKind::DHT, false, &Disk::dht},
             {"zpt", TraitKind::ZPT, true, &Disk::zpt},
-            {"spt", TraitKind::SPT, true, &Disk::spt},
-            {"wpt", TraitKind::WPT, true, &Disk::wpt}}};
+            {"spt", TraitKind::SPT, true, &Disk::spt}}};
 
     // The arguments of an evaluation of the traits of one kind of a disk,
     // polar traits (polar) or height traits, at the points of radii r,
@@ -368,7 +342,6 @@ private:
             const Lines& lines,
             const ConstData& opacity,
             const Data& image, const Data& scube,
-            const Data& wdata, const Data& wdata_cmp,
             const Data& rdata, const Data& rdata_cmp,
             const Data& ordata, const Data& ordata_cmp,
             const Data& vdata_cmp, const Data& ddata_cmp,
@@ -407,7 +380,6 @@ private:
         a.dht = traits(disk.dht);
         a.zpt = traits(disk.zpt);
         a.spt = traits(disk.spt);
-        a.wpt = traits(disk.wpt);
         require((!disk.rht || a.rht.n == a.rpt.n)
                 && (!disk.vht || a.vht.n == a.vpt.n)
                 && (!disk.dht || a.dht.n == a.dpt.n),
@@ -445,8 +417,6 @@ private:
         a.opacity = output(opacity, nspat, "opacity");
         a.image = output(image, nimage, "image");
         a.scube = output(scube, nscube, "scube");
-        a.wdata = output(wdata, nspat, "wdata");
-        a.wdata_cmp = output(wdata_cmp, nspat, "wdata_cmp");
         a.rdata = output(rdata, nspat, "rdata");
         a.rdata_cmp = output(rdata_cmp, nspat, "rdata_cmp");
         a.ordata = output(ordata, nspat, "ordata");

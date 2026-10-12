@@ -16,7 +16,7 @@ from ..geometries import Geometry
 from ..lines import Line, line_parser
 from . import _detail, _disk, traits
 from ._detail import (
-    BHT, BPT, DHT, DPT, OHT, OPT, SPT, VHT, VPT, WPT, ZPT)
+    BHT, BPT, DHT, DPT, OHT, OPT, SPT, VHT, VPT, ZPT)
 
 
 __all__ = [
@@ -183,8 +183,6 @@ class BrightnessMCDisk3D(BrightnessComponent3D):
     sptraits : Trait or Sequence of Trait, optional
         Its selection polar traits: the parts of the disk that are seen
         (e.g. a range of azimuths).
-    wptraits : Trait or Sequence of Trait, optional
-        Its weight polar traits: the spatial weights of the data.
     loose : bool, optional
         Whether its centre and systemic velocity are node-wise (a value
         for each ring); by default, not, or those of its geometry.
@@ -217,7 +215,7 @@ class BrightnessMCDisk3D(BrightnessComponent3D):
         traits), or conflict with its geometry.
     """
 
-    _slots = (BPT, BHT, ZPT, SPT, WPT)
+    _slots = (BPT, BHT, ZPT, SPT)
 
     @staticmethod
     def type() -> str:
@@ -241,7 +239,6 @@ class BrightnessMCDisk3D(BrightnessComponent3D):
             bhtraits: traits.RHTrait | Sequence[traits.RHTrait],
             zptraits: traits.ZPTrait | Sequence[traits.ZPTrait] | None = None,
             sptraits: traits.SPTrait | Sequence[traits.SPTrait] | None = None,
-            wptraits: traits.WPTrait | Sequence[traits.WPTrait] | None = None,
             loose: bool | None = None,
             tilted: bool | None = None,
             rnmin: float | None = None,
@@ -264,14 +261,11 @@ class BrightnessMCDisk3D(BrightnessComponent3D):
             rnodes=rnodes, rstep=rstep, interp=interp,
             traits_=dict(
                 bptraits=bptraits, bhtraits=bhtraits, zptraits=zptraits,
-                sptraits=sptraits, wptraits=wptraits),
+                sptraits=sptraits),
             cflux=cflux, seed=seed)
 
     def pdescs(self) -> dict[str, ParamDesc]:
         return self._disk.pdescs()
-
-    def has_weights(self) -> bool:
-        return bool(self._disk.traits('wpt'))
 
     def constants(self) -> dict[str, Any]:
         return dict(
@@ -294,7 +288,6 @@ class BrightnessMCDisk3D(BrightnessComponent3D):
         # The density of the disk is its brightness
         return dict(
             image=outputs['image'],
-            wdata=outputs['wdata'],
             rdata=outputs['bdata'],
             opacity=outputs['odata'],
             ordata=outputs['obdata'])
@@ -330,8 +323,6 @@ class SpectralMCDisk3D(SpectralComponent3D):
     sptraits : Trait or Sequence of Trait, optional
         Its selection polar traits: the parts of the disk that are seen
         (e.g. a range of azimuths).
-    wptraits : Trait or Sequence of Trait, optional
-        Its weight polar traits: the spatial weights of the data.
     loose : bool, optional
         Whether its centre and systemic velocity are node-wise (a value
         for each ring); by default, not, or those of its geometry.
@@ -367,7 +358,7 @@ class SpectralMCDisk3D(SpectralComponent3D):
         traits), or conflict with its geometry.
     """
 
-    _slots = (BPT, BHT, VPT, VHT, DPT, DHT, ZPT, SPT, WPT)
+    _slots = (BPT, BHT, VPT, VHT, DPT, DHT, ZPT, SPT)
 
     @staticmethod
     def type() -> str:
@@ -398,7 +389,6 @@ class SpectralMCDisk3D(SpectralComponent3D):
             dhtraits: traits.DHTrait | Sequence[traits.DHTrait] | None = None,
             zptraits: traits.ZPTrait | Sequence[traits.ZPTrait] | None = None,
             sptraits: traits.SPTrait | Sequence[traits.SPTrait] | None = None,
-            wptraits: traits.WPTrait | Sequence[traits.WPTrait] | None = None,
             loose: bool | None = None,
             tilted: bool | None = None,
             rnmin: float | None = None,
@@ -423,7 +413,7 @@ class SpectralMCDisk3D(SpectralComponent3D):
             traits_=dict(
                 bptraits=bptraits, bhtraits=bhtraits, vptraits=vptraits,
                 vhtraits=vhtraits, dptraits=dptraits, dhtraits=dhtraits,
-                zptraits=zptraits, sptraits=sptraits, wptraits=wptraits),
+                zptraits=zptraits, sptraits=sptraits),
             cflux=cflux, seed=seed)
         self._lines = _detail.make_lines(self._disk, lines)
 
@@ -435,9 +425,6 @@ class SpectralMCDisk3D(SpectralComponent3D):
 
     def brightness_disk(self) -> _disk.Disk:
         return self._disk
-
-    def has_weights(self) -> bool:
-        return bool(self._disk.traits('wpt'))
 
     def constants(self) -> dict[str, Any]:
         return dict(
@@ -465,7 +452,6 @@ class SpectralMCDisk3D(SpectralComponent3D):
         # The density of the disk is its brightness
         return dict(
             scube=outputs['scube'],
-            wdata=outputs['wdata'],
             rdata=outputs['bdata'],
             opacity=outputs['odata'],
             ordata=outputs['obdata'])
@@ -490,8 +476,6 @@ class OpacityMCDisk3D(OpacityComponent3D):
     sptraits : Trait or Sequence of Trait, optional
         Its selection polar traits: the parts of the disk that are seen
         (e.g. a range of azimuths).
-    wptraits : Trait or Sequence of Trait, optional
-        Its weight polar traits: the spatial weights of the data.
     loose : bool, optional
         Whether its centre and systemic velocity are node-wise (a value
         for each ring); by default, not, or those of its geometry.
@@ -524,7 +508,7 @@ class OpacityMCDisk3D(OpacityComponent3D):
         traits), or conflict with its geometry.
     """
 
-    _slots = (OPT, OHT, ZPT, SPT, WPT)
+    _slots = (OPT, OHT, ZPT, SPT)
 
     @staticmethod
     def type() -> str:
@@ -548,7 +532,6 @@ class OpacityMCDisk3D(OpacityComponent3D):
             ohtraits: traits.RHTrait | Sequence[traits.RHTrait],
             zptraits: traits.ZPTrait | Sequence[traits.ZPTrait] | None = None,
             sptraits: traits.SPTrait | Sequence[traits.SPTrait] | None = None,
-            wptraits: traits.WPTrait | Sequence[traits.WPTrait] | None = None,
             loose: bool | None = None,
             tilted: bool | None = None,
             rnmin: float | None = None,
@@ -571,14 +554,11 @@ class OpacityMCDisk3D(OpacityComponent3D):
             rnodes=rnodes, rstep=rstep, interp=interp,
             traits_=dict(
                 optraits=optraits, ohtraits=ohtraits, zptraits=zptraits,
-                sptraits=sptraits, wptraits=wptraits),
+                sptraits=sptraits),
             cflux=cflux, seed=seed)
 
     def pdescs(self) -> dict[str, ParamDesc]:
         return self._disk.pdescs()
-
-    def has_weights(self) -> bool:
-        return bool(self._disk.traits('wpt'))
 
     def constants(self) -> dict[str, Any]:
         return dict(

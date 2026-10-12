@@ -10,11 +10,9 @@ change of the models.
 
 import numpy as np
 import pytest
-import gbkfit.model
 from gbkfit.model import model_parser
 from gbkfit.params import ParamModeOffsets
 from gbkfit.utils import gridutils
-from modelutils import WeightComponent
 
 
 RNODES = list(range(0, 10, 2))
@@ -192,35 +190,6 @@ def test_model_dump_and_load(driver, name, evaluate_cases):
             rtol=1e-4, atol=1e-6 * np.abs(value['d']).max())
 
 
-# The 2d models, the size of their data and its spectral axis, and its
-# shape (an image is a cube with one channel)
-MODELS_2D = [
-    (gbkfit.model.ModelIntensity2D, (20, 16), None, (1, 16, 20)),
-    (gbkfit.model.ModelKinematics2D, (20, 16, 11), 2, (11, 16, 20))]
-
-
-@pytest.mark.parametrize(
-    'model_type, size, spectral_axis, shape', MODELS_2D)
-def test_2d_model_weights_the_data(
-        driver, model_type, size, spectral_axis, shape):
-    # The components of a 2d model write their weights to its spatial
-    # weights, which then become the weights of the data: 0 where they
-    # are 0, and 1 elsewhere (normalised to their maximum along z)
-    model = model_type([WeightComponent()])
-    data = driver.mem_alloc_d(shape, np.float32)
-    weights = driver.mem_alloc_d(shape, np.float32)
-    driver.mem_fill(data, 0)
-    driver.mem_fill(weights, 1)
-    ndim = len(size)
-    grid = gridutils.Grid(size, gridutils.Coords(
-        (1,) * ndim, (0,) * ndim, (0,) * ndim, 0), spectral_axis)
-    model.plan(driver, grid, True, np.float32).evaluate(
-        {}, data, weights, None)
-    desired = np.ones(shape)
-    desired[:, 0, :] = 0
-    np.testing.assert_array_equal(driver.mem_copy_d2h(weights), desired)
-
-
 def test_3d_model_picks_the_z_axis_of_each_grid(driver):
     # Without a configured z axis, a 3d model picks one from the x and y
     # axes of the data. An edge-on thick disk is cut off by a z axis that
@@ -238,8 +207,7 @@ def test_3d_model_picks_the_z_axis_of_each_grid(driver):
         rpix = tuple(n / 2 - 0.5 for n in size)
         grid = gridutils.Grid(
             size, gridutils.Coords((1, 1), rpix, (0, 0), 0), None)
-        model.plan(driver, grid, False, np.float32).evaluate(
-            params, image, None, None)
+        model.plan(driver, grid, np.float32).evaluate(params, image, None)
         return driver.mem_copy_d2h(image)
 
     model = model_parser.load(info)
@@ -264,12 +232,12 @@ def test_one_model_serves_several_grids(driver):
         rpix = tuple(n / 2 - 0.5 for n in size)
         grid = gridutils.Grid(
             size, gridutils.Coords((1, 1), rpix, (0, 0), 0), None)
-        return model.plan(driver, grid, False, np.float32)
+        return model.plan(driver, grid, np.float32)
 
     def evaluate(plan_, size):
         image = driver.mem_alloc_d(size[::-1], np.float32)
         driver.mem_fill(image, 0)
-        plan_.evaluate(params, image, None, None)
+        plan_.evaluate(params, image, None)
         return driver.mem_copy_d2h(image)
 
     shared = model_parser.load(info)

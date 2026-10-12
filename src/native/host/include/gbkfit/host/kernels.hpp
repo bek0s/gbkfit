@@ -29,13 +29,6 @@ add(T* addr, T val)
     addr[0] += val;
 }
 
-template<typename T> inline void
-atomic_set(T* addr, T val)
-{
-    #pragma omp atomic write
-    addr[0] = val;
-}
-
 template<typename T> void
 math_complex_multiply_and_scale(
         std::complex<T>* arr1, const std::complex<T>* arr2, int n, T scale)
@@ -264,29 +257,6 @@ dmodel_regions_sum(
 }
 
 template<typename T> void
-gmodel_wcube_evaluate(
-        int spat_size_x, int spat_size_y, int spat_size_z,
-        int spec_size_z,
-        const T* spat_cube,
-        T* spec_cube)
-{
-    // Parallelization: per 2d spatial position
-    #pragma omp parallel for collapse(2)
-    for(int y = 0; y < spat_size_y; ++y) {
-    for(int x = 0; x < spat_size_x; ++x) {
-
-    gbkfit::gmodel_wcube_pixel(
-            x, y,
-            spat_size_x, spat_size_y, spat_size_z,
-            spec_size_z,
-            spat_cube,
-            spec_cube);
-
-    }
-    }
-}
-
-template<typename T> void
 gmodel_mcdisk_evaluate(const DiskArgs<T>& a, const MCDiskArgs<T>& mc)
 {
     // Parallelization: per cloud
@@ -295,7 +265,7 @@ gmodel_mcdisk_evaluate(const DiskArgs<T>& a, const MCDiskArgs<T>& mc)
     for(int ci = 0; ci < mc.nclouds; ++ci)
     {
         RNG<T> rng(mc.seed, ci);
-        gbkfit::gmodel_mcdisk_evaluate_cloud<atomic_set<T>, atomic_add<T>>(
+        gbkfit::gmodel_mcdisk_evaluate_cloud<atomic_add<T>>(
                 rng, ci, a, mc);
     }
 }
@@ -407,11 +377,6 @@ struct Wrapper
     static void
     dmodel_regions_sum(auto... args) {
         kernels::dmodel_regions_sum<T>(args...);
-    }
-
-    static void
-    gmodel_wcube_evaluate(auto... args) {
-        kernels::gmodel_wcube_evaluate<T>(args...);
     }
 
     static void

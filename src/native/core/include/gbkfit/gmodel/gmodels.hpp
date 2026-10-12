@@ -8,38 +8,6 @@
 
 namespace gbkfit {
 
-template<typename T> constexpr void
-gmodel_wcube_pixel(
-        int x, int y,
-        int spat_size_x, int spat_size_y, int spat_size_z,
-        int spec_size_z,
-        const T* spat_wcube,
-        T* spec_wcube)
-{
-    T sum = 0;
-    T mean = 0;
-    T maximum = 0;
-
-    // Find the maximum value and sum at position (x, y) of the spatial cube
-    for(int z = 0; z < spat_size_z; ++z)
-    {
-        int idx = index_3d_to_1d(x, y, z, spat_size_x, spat_size_y);
-        T value = spat_wcube[idx];
-        sum += value;
-        maximum = std::max(maximum, value);
-    }
-
-    // Calculate mean weight
-    mean = sum / spat_size_z;
-
-    // Assign the same mean weight across the entire spectrum
-    for(int z = 0; z < spec_size_z; ++z)
-    {
-        int idx = index_3d_to_1d(x, y, z, spat_size_x, spat_size_y);
-        spec_wcube[idx] = maximum > 0 ? mean / maximum : 0;
-    }
-}
-
 template<auto AddFunT, typename T> void constexpr
 gmodel_image_evaluate(T* image, int x, int y, T rvalue, int spat_size_x)
 {
@@ -362,7 +330,7 @@ ring_info(
     return true;
 }
 
-template<auto AtomicAssignFunT, auto AtomicAddFunT, typename T> constexpr void
+template<auto AtomicAddFunT, typename T> constexpr void
 gmodel_mcdisk_evaluate_cloud(
         RNG<T>& rng, int ci, const DiskArgs<T>& a, const MCDiskArgs<T>& mc)
 {
@@ -379,7 +347,7 @@ gmodel_mcdisk_evaluate_cloud(
     T vsysi=0, xposi=0, yposi=0, posai=0, incli=0;
     T ptvalues[TRAIT_NUM_MAX] = {0};
     T htvalues[TRAIT_NUM_MAX] = {0};
-    T rvalue=0, vvalue=0, dvalue=0, zvalue=0, wvalue=1;
+    T rvalue=0, vvalue=0, dvalue=0, zvalue=0;
 
     // Find the pool of the cloud; its clouds share its flux
     while(ci >= mc.ncloudscsum[rnidx]) {
@@ -555,20 +523,6 @@ gmodel_mcdisk_evaluate_cloud(
     // Forcing a positive dispersion is a reasonable solution.
     dvalue = std::abs(dvalue);
 
-    // Weight polar traits
-    if (a.wpt.uids && a.wdata)
-    {
-        p_traits<wp_trait<T>>(
-                ptvalues,
-                a.wpt.n, a.wpt.uids,
-                a.wpt.cvalues, a.wpt.ccounts,
-                a.wpt.pvalues, a.wpt.pcounts,
-                rnidx, a.rnodes, a.nrnodes,
-                xd, yd, rd, theta);
-
-        for (int i = 0; i < a.wpt.n; ++i)
-            wvalue *= ptvalues[i];
-    }
 
     // The light that the opacity lets through
     T orvalue = a.opacity
@@ -593,16 +547,6 @@ gmodel_mcdisk_evaluate_cloud(
 
     const int idx = index_3d_to_1d(x, y, z, a.spat_size[0], a.spat_size[1]);
 
-    if (a.wdata) {
-        // TODO: the weights are revisited with the likelihood (the Monte
-        // Carlo disk keeps the last cloud's, the smooth disk adds them up)
-        AtomicAssignFunT(&a.wdata[idx], wvalue);
-    }
-    if (a.wdata_cmp) {
-        // For overlapping clouds, keep the last weight
-        // Storing the mean would be too much effort with little reward
-        AtomicAssignFunT(&a.wdata_cmp[idx], wvalue);
-    }
     if (a.rdata) {
         AtomicAddFunT(&a.rdata[idx], rvalue);
     }
@@ -692,7 +636,7 @@ gmodel_smdisk_evaluate_spaxel(int x, int y, int z, const DiskArgs<T>& a)
     // These are needed for trait evaluation
     T ptvalues[TRAIT_NUM_MAX] = {0};
     T htvalues[TRAIT_NUM_MAX] = {0};
-    T rvalue=0, vvalue=0, dvalue=0, zvalue=0, wvalue=1;
+    T rvalue=0, vvalue=0, dvalue=0, zvalue=0;
 
     // Selection traits
     if (a.spt.uids)
@@ -828,20 +772,6 @@ gmodel_smdisk_evaluate_spaxel(int x, int y, int z, const DiskArgs<T>& a)
     // Forcing a positive dispersion is a reasonable solution.
     dvalue = std::abs(dvalue);
 
-    // Weight polar traits
-    if (a.wpt.uids && a.wdata)
-    {
-        p_traits<wp_trait<T>>(
-                ptvalues,
-                a.wpt.n, a.wpt.uids,
-                a.wpt.cvalues, a.wpt.ccounts,
-                a.wpt.pvalues, a.wpt.pcounts,
-                rnidx, a.rnodes, a.nrnodes,
-                xn, yn, rn, theta);
-
-        for (int i = 0; i < a.wpt.n; ++i)
-            wvalue *= ptvalues[i];
-    }
 
     // The light that the opacity lets through
     T orvalue = a.opacity
@@ -866,14 +796,6 @@ gmodel_smdisk_evaluate_spaxel(int x, int y, int z, const DiskArgs<T>& a)
 
     const int idx = index_3d_to_1d(x, y, z, a.spat_size[0], a.spat_size[1]);
 
-    if (a.wdata) {
-        // TODO: the weights are revisited with the likelihood (the smooth
-        // disk adds them up, the Monte Carlo disk keeps the last cloud's)
-        a.wdata[idx] += wvalue;
-    }
-    if (a.wdata_cmp) {
-        a.wdata_cmp[idx] = wvalue;
-    }
     if (a.rdata) {
         a.rdata[idx] += rvalue;
     }
@@ -962,9 +884,6 @@ gmodel_disk_traits_point(int j, const DiskTraitsArgs<T>& a)
             break;
         case TraitKind::SPT:
             gmodel_disk_ptraits_point<sp_trait<T>>(values, j, rnidx, a);
-            break;
-        case TraitKind::WPT:
-            gmodel_disk_ptraits_point<wp_trait<T>>(values, j, rnidx, a);
             break;
         case TraitKind::RHT:
             gmodel_disk_htraits_point<rh_trait<T>>(values, j, rnidx, a);

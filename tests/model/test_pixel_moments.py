@@ -81,7 +81,7 @@ def test_higher_moments_of_a_gaussian_line(driver):
         size=(32, 32), spec_size=81, spec_step=5, orders=(1, 2, 3, 4))
     mmaps = evaluate_mmaps(driver, observable)
     # One mask for all moments: where the moments are defined.
-    # Without weight traits, all weights are 1.
+    # Without spatial weights, all weights are 1.
     for key in ('moment1', 'moment2', 'moment3', 'moment4'):
         defined = np.isfinite(mmaps[key]['d'])
         np.testing.assert_array_equal(mmaps[key]['m'], defined)
@@ -95,34 +95,6 @@ def test_higher_moments_of_a_gaussian_line(driver):
         mmaps['moment3']['d'][disk], 0, atol=1e-3 * 20 ** 3)
     np.testing.assert_allclose(
         mmaps['moment4']['d'][disk], 3 * sigma[disk] ** 4, rtol=1e-2)
-
-
-def test_moment_maps_have_the_weights_of_the_model(driver):
-    # The weight of the moments of a spectrum is the flux-weighted mean of
-    # its weights: those of a model with the spatial weights 0 on the
-    # first row of pixels, and 1 elsewhere
-    from gbkfit.model import ModelKinematics2D
-    from gbkfit.model.components.disks import SpectralSMDisk2D, traits
-    from gbkfit.observation import PixelMoments, Observation, ObservationGroup
-    from gbkfit.params import ParamSpace
-    from modelutils import WeightComponent
-    disk = SpectralSMDisk2D(
-        loose=False, tilted=False, rnodes=list(range(0, 25)),
-        bptraits=traits.RPTraitExponential(),
-        vptraits=traits.VPTraitTanArctan(), dptraits=traits.DPTraitUniform())
-    model = ModelKinematics2D([disk, WeightComponent()])
-    observable = PixelMoments(size=(32, 32), spec_size=81, spec_step=5)
-    model_group = ObservationGroup([model], [Observation(observable, driver)])
-    params = ParamSpace(model_group.pdescs(), dict(
-        vsys=0, xpos=0, ypos=0, posa=30, incl=0,
-        bpt_a=1, bpt_s=4, vpt_rt=2, vpt_vt=40, dpt_a=20))
-    mmaps = model_group.model_h(params.evaluate())[0]
-    for key in ('moment0', 'moment1', 'moment2'):
-        defined = np.isfinite(mmaps[key]['d'])
-        assert defined.all()
-        weights = mmaps[key]['w']
-        np.testing.assert_array_equal(weights[0], 0)
-        np.testing.assert_array_equal(weights[1:], 1)
 
 
 def test_moment_maps_of_a_galaxy_at_a_high_velocity(driver):

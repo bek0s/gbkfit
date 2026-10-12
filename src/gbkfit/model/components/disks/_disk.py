@@ -23,9 +23,9 @@ _log = logging.getLogger(__name__)
 
 
 # The kinds of traits of a disk: density (r), velocity (v) and dispersion
-# (d) polar (p) and height (h) traits, and vertical distortion (z),
-# selection (s) and weight (w) polar traits
-TRAIT_KINDS = ('rpt', 'rht', 'vpt', 'vht', 'dpt', 'dht', 'zpt', 'spt', 'wpt')
+# (d) polar (p) and height (h) traits, and vertical distortion (z) and
+# selection (s) polar traits
+TRAIT_KINDS = ('rpt', 'rht', 'vpt', 'vht', 'dpt', 'dht', 'zpt', 'spt')
 
 # The most traits of one kind that the native kernels take (TRAIT_NUM_MAX
 # in constants.hpp)
@@ -379,8 +379,8 @@ class DiskPlan(abc.ABC):
         Add the disk to the outputs. grid has the grid of the native
         evaluation functions (see ComponentPlan.evaluate), and outputs the
         arrays they add to (all optional): the opacity cube they read
-        ('opacity'), the 'image' or 'scube', and the 3d spatial weights
-        ('wdata'), density ('rdata') and density after the opacity
+        ('opacity'), the 'image' or 'scube', and the 3d density ('rdata')
+        and density after the opacity
         ('ordata'). lines has the offset, scale and flux of each emission
         line (an array of shape (nlines, 3); see the native DiskArgs), if
         the plan has lines.
@@ -392,7 +392,6 @@ class DiskPlan(abc.ABC):
 
         params = self._write_params(params, lines)
 
-        wdata_cmp = None
         rdata_cmp = None
         vdata_cmp = None
         ddata_cmp = None
@@ -417,9 +416,6 @@ class DiskPlan(abc.ABC):
             if disk._traits['vpt'] or disk._traits['dpt']:
                 vdweight_cmp = driver.mem_alloc_d(shape, dtype)
                 driver.mem_fill(vdweight_cmp, 0)
-            if disk._traits['wpt']:
-                wdata_cmp = driver.mem_alloc_d(shape, dtype)
-                driver.mem_fill(wdata_cmp, 1)
             if odata is not None:
                 ordata_cmp = driver.mem_alloc_d(shape, dtype)
                 driver.mem_fill(ordata_cmp, 0)
@@ -427,7 +423,7 @@ class DiskPlan(abc.ABC):
         # The keyword arguments of the native evaluation functions
         grid_and_outputs = grid | outputs | dict(
             lines=self._lines_d,
-            wdata_cmp=wdata_cmp, rdata_cmp=rdata_cmp, ordata_cmp=ordata_cmp,
+            rdata_cmp=rdata_cmp, ordata_cmp=ordata_cmp,
             vdata_cmp=vdata_cmp, ddata_cmp=ddata_cmp,
             vdweight_cmp=vdweight_cmp)
 
@@ -447,8 +443,6 @@ class DiskPlan(abc.ABC):
             if disk._traits['dpt']:
                 out_extra['ddata'] = _weighted_mean(
                     driver.mem_copy_d2h(ddata_cmp), weight)
-            if disk._traits['wpt']:
-                out_extra['wdata'] = driver.mem_copy_d2h(wdata_cmp)
             if odata is not None:
                 out_extra['obdata'] = driver.mem_copy_d2h(ordata_cmp)
             if disk._traits['rpt']:
@@ -481,8 +475,8 @@ class DiskPlan(abc.ABC):
         params : ParamValues
             The parameters of the disk (see Disk.pdescs).
         kind : str
-            The kind of the polar traits: 'rpt', 'vpt', 'dpt', 'zpt', 'spt'
-            or 'wpt' (see TRAIT_KINDS).
+            The kind of the polar traits: 'rpt', 'vpt', 'dpt', 'zpt' or
+            'spt' (see TRAIT_KINDS).
         r, theta : array_like
             The radius (arcsec) and azimuth (degrees) of each point in the
             plane of the disk (see traits), broadcast together.
