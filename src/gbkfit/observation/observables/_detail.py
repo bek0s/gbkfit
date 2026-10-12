@@ -211,7 +211,8 @@ class DCubePlanBase(ObservablePlan):
         self._driver = driver
         self._dtype = dtype
         self._dcube = dcube
-        self._dcube_plan = dcube.plan(driver, model.has_weights())
+        # (DCube can weight the data spatially; nothing gives weights yet)
+        self._dcube_plan = dcube.plan(driver, has_weights=False)
         grid = self._model_grid()
         # With a lens, the model is evaluated on the source plane, into a
         # cube of its own, which is lensed into the high-res cube
@@ -219,18 +220,13 @@ class DCubePlanBase(ObservablePlan):
         self._source_cube = None
         lens = foreground.lens()
         if lens is not None:
-            if model.has_weights():
-                raise ConfigError(
-                    "a lens does not support models with weights (wtraits) "
-                    "yet")
             self._lens_plan = lens.plan(
                 driver, self._dcube_plan.scratch_grid(), dtype)
             grid = self._lens_plan.source_grid(grid)
             nz = self._dcube_plan.scratch_dcube().shape[0]
             self._source_cube = driver.mem_alloc_d(
                 (nz,) + grid.size[:2][::-1], dtype)
-        self._model_plan = model.plan(
-            driver, grid, model.has_weights(), dtype, selection)
+        self._model_plan = model.plan(driver, grid, dtype, selection)
 
     def _model_grid(self) -> gridutils.Grid:
         """Return the grid the model is evaluated on: the high-res grid."""
@@ -260,8 +256,7 @@ class DCubePlanBase(ObservablePlan):
             else self._source_cube
         self._driver.mem_fill(cube, 0)
         model_extra = None if out_extra is None else {}
-        self._model_plan.evaluate(
-            params, cube, dcube_plan.scratch_wcube(), model_extra)
+        self._model_plan.evaluate(params, cube, model_extra)
         if self._lens_plan is not None:
             self._lens_plan.evaluate(cube, dcube_plan.scratch_dcube())
         dcube_plan.evaluate(out_extra, extra_lo, extra_hi)

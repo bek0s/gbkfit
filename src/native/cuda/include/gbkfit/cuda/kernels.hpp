@@ -16,13 +16,6 @@ atomic_add(T* addr, T val)
     atomicAdd(addr, val);
 }
 
-template<typename T> inline constexpr void
-atomic_set(T* addr, T val)
-{
-    // TODO: revise this
-    *addr = val;
-}
-
 template<typename T> __global__ void
 dmodel_dcube_downscale(
         int scale_x, int scale_y, int scale_z,
@@ -191,30 +184,6 @@ dmodel_regions_sum(
 }
 
 template<typename T> __global__ void
-gmodel_wcube_evaluate(
-        int spat_size_x, int spat_size_y, int spat_size_z,
-        int spec_size_z,
-        const T* spat_cube,
-        T* spec_cube)
-{
-    // Parallelization: per 2d spatial position
-    const int nthreads = spat_size_x * spat_size_y;
-    const int tid = blockIdx.x * blockDim.x + threadIdx.x;
-    if (tid >= nthreads)
-        return;
-
-    int x, y;
-    index_1d_to_2d(x, y, tid, spat_size_x);
-
-    gbkfit::gmodel_wcube_pixel(
-            x, y,
-            spat_size_x, spat_size_y, spat_size_z,
-            spec_size_z,
-            spat_cube,
-            spec_cube);
-}
-
-template<typename T> __global__ void
 gmodel_mcdisk_evaluate(DiskArgs<T> a, MCDiskArgs<T> mc)
 {
     // Parallelization: per cloud
@@ -224,7 +193,7 @@ gmodel_mcdisk_evaluate(DiskArgs<T> a, MCDiskArgs<T> mc)
 
     // Each cloud has its own stream of random numbers
     RNG<T> rng(mc.seed, tid);
-    gbkfit::gmodel_mcdisk_evaluate_cloud<atomic_set<T>, atomic_add<T>>(
+    gbkfit::gmodel_mcdisk_evaluate_cloud<atomic_add<T>>(
             rng, tid, a, mc);
 }
 

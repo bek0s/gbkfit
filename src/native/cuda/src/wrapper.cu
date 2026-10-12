@@ -148,21 +148,6 @@ Wrapper<T>::dmodel_regions_sum(
 }
 
 template<typename T> void
-Wrapper<T>::gmodel_wcube_evaluate(
-        int spat_size_x, int spat_size_y, int spat_size_z,
-        int spec_size_z,
-        const T* spat_cube,
-        T* spec_cube)
-{
-    const int n = spat_size_x * spat_size_y;
-    launch("gmodel_wcube_evaluate", n, kernels::gmodel_wcube_evaluate<T>,
-            spat_size_x, spat_size_y, spat_size_z,
-            spec_size_z,
-            spat_cube,
-            spec_cube);
-}
-
-template<typename T> void
 Wrapper<T>::gmodel_mcdisk_evaluate(
         const DiskArgs<T>& a, const MCDiskArgs<T>& mc)
 {

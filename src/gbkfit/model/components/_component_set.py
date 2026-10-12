@@ -390,9 +390,6 @@ class ComponentSet2D:
     def pdescs(self) -> dict[str, ParamDesc]:
         return self._params
 
-    def has_weights(self) -> bool:
-        return any(cmp.has_weights() for cmp in self._components)
-
     def constants(self) -> dict[str, Any]:
         return _constants(self._components, self._prefixes)
 
@@ -401,24 +398,22 @@ class ComponentSet2D:
             driver: Driver,
             grid: gridutils.Grid,
             spectral: gridutils.Grid,
-            has_weights: bool,
             dtype: np.dtype,
             selection: Selection
     ) -> 'ComponentSetPlan2D':
         """
         Plan the evaluation of the components and lines of the selection
         (see Selection) on the given driver, grid of the x and y axes and
-        spectral axis (gridutils.Grid, the second of one axis) and dtype,
-        with spatial weights if has_weights.
+        spectral axis (gridutils.Grid, the second of one axis) and dtype.
         """
         return ComponentSetPlan2D(
-            self, driver, grid, spectral, has_weights, dtype, selection)
+            self, driver, grid, spectral, dtype, selection)
 
 
 class ComponentSetPlan2D:
     """
-    The evaluation of a ComponentSet2D: the plans of its components and
-    the spatial weights, on a grid.
+    The evaluation of a ComponentSet2D: the plans of its components, on a
+    grid.
     """
 
     def __init__(
@@ -427,7 +422,6 @@ class ComponentSetPlan2D:
             driver: Driver,
             grid: gridutils.Grid,
             spectral: gridutils.Grid,
-            has_weights: bool,
             dtype: np.dtype,
             selection: Selection
     ):
@@ -460,30 +454,22 @@ class ComponentSetPlan2D:
         self._followed = _followed_plans(
             component_set, self._components, self._component_plans, driver,
             spectral, dtype)
-        # The spatial weights, if weighting is requested
-        self._wdata = None
-        if has_weights:
-            self._wdata = driver.mem_alloc_d(size[::-1], dtype)
-        self._backend = driver.native_class('GModel', dtype)()
 
     def evaluate(
             self,
             params: ParamValues,
             outputs: dict[str, DeviceArray | None],
-            weights: DeviceArray | None,
             out_extra: dict[str, Any] | None
     ) -> None:
         """
         Add the components to the output array, the 'image' or the
-        'scube' in outputs, and weight the data weights (if any) with the
-        spatial weights.
+        'scube' in outputs.
         """
         driver = self._driver
         grid = self._grid
         dtype = self._dtype
         size = tuple(grid.size[:2])
 
-        wdata = self._wdata
         bdata = None
         if out_extra is not None:
             bdata = driver.mem_alloc_d(size[::-1], dtype)
@@ -497,20 +483,14 @@ class ComponentSetPlan2D:
         evaluate_components(
             self._components, self._component_plans, self._mappings,
             params, self._native_grid,
-            outputs | dict(wdata=wdata, bdata=bdata),
+            outputs | dict(bdata=bdata),
             out_extra, '', lambda data: image(data[0]),
             _circular_velocities(
                 self._components, self._component_plans, self._mappings,
                 self._followed, self._component_set.distance(),
                 self._component_set.mass_model(), params))
 
-        # Weight the data with the spatial weights evaluated above
-        if weights is not None:
-            self._backend.wcube_evaluate(wdata[None], weights)
-
         if out_extra is not None:
-            if wdata is not None:
-                out_extra['total_wdata'] = image(driver.mem_copy_d2h(wdata))
             out_extra['total_bdata'] = image(driver.mem_copy_d2h(bdata))
 
 
@@ -590,9 +570,6 @@ class ComponentSet3D:
     def pdescs(self) -> dict[str, ParamDesc]:
         return self._params
 
-    def has_weights(self) -> bool:
-        return any(cmp.has_weights() for cmp in self._components)
-
     def constants(self) -> dict[str, Any]:
         return _constants(
             self._all_components(), self._prefixes + self._oprefixes)
@@ -613,25 +590,22 @@ class ComponentSet3D:
             driver: Driver,
             grid: gridutils.Grid,
             spectral: gridutils.Grid,
-            has_weights: bool,
             dtype: np.dtype,
             selection: Selection
     ) -> 'ComponentSetPlan3D':
         """
         Plan the evaluation of the components and lines of the selection
         (see Selection) on the given driver, grid of the x and y axes and
-        spectral axis (gridutils.Grid, the second of one axis) and dtype,
-        with spatial weights if has_weights.
+        spectral axis (gridutils.Grid, the second of one axis) and dtype.
         """
         return ComponentSetPlan3D(
-            self, driver, grid, spectral, has_weights, dtype, selection)
+            self, driver, grid, spectral, dtype, selection)
 
 
 class ComponentSetPlan3D:
     """
     The evaluation of a ComponentSet3D: the plans of its components and
-    opacity components, the z axis, the spatial weights and the opacity
-    cube, on a grid.
+    opacity components, the z axis and the opacity cube, on a grid.
     """
 
     def __init__(
@@ -640,7 +614,6 @@ class ComponentSetPlan3D:
             driver: Driver,
             grid: gridutils.Grid,
             spectral: gridutils.Grid,
-            has_weights: bool,
             dtype: np.dtype,
             selection: Selection
     ):
@@ -698,27 +671,20 @@ class ComponentSetPlan3D:
         self._ocomponent_plans = tuple(
             cmp.plan(driver, spectral, dtype, None)
             for cmp in component_set.opacity_components())
-        # The spatial weights, if weighting is requested, and the opacity,
-        # if there are opacity components
-        self._wdata = None
+        # The opacity, if there are opacity components
         self._odata = None
-        if has_weights:
-            self._wdata = driver.mem_alloc_d(self._size[::-1], dtype)
         if component_set.opacity_components():
             self._odata = driver.mem_alloc_d(self._size[::-1], dtype)
-        self._backend = driver.native_class('GModel', dtype)()
 
     def evaluate(
             self,
             params: ParamValues,
             outputs: dict[str, DeviceArray | None],
-            weights: DeviceArray | None,
             out_extra: dict[str, Any] | None
     ) -> None:
         """
         Add the components to the output array, the 'image' or the
-        'scube' in outputs, and weight the data weights (if any) with the
-        spatial weights.
+        'scube' in outputs.
         """
         driver = self._driver
         dtype = self._dtype
@@ -727,7 +693,6 @@ class ComponentSetPlan3D:
         def cube(data):
             return gridutils.GridData(data, self._coords, None)
 
-        wdata = self._wdata
         odata = self._odata
         bdata = None
         obdata = None
@@ -745,8 +710,7 @@ class ComponentSetPlan3D:
                 component_set.omappings(), params, self._native_grid,
                 dict(odata=odata), out_extra, 'opacity_', cube)
 
-        outputs = outputs | dict(
-            wdata=wdata, bdata=bdata, odata=odata, obdata=obdata)
+        outputs = outputs | dict(bdata=bdata, odata=odata, obdata=obdata)
         evaluate_components(
             self._components, self._component_plans, self._mappings,
             params, self._native_grid, outputs, out_extra, '', cube,
@@ -755,12 +719,8 @@ class ComponentSetPlan3D:
                 self._followed, component_set.distance(),
                 component_set.mass_model(), params))
 
-        # Weight the data with the spatial weights evaluated above
-        if weights is not None:
-            self._backend.wcube_evaluate(wdata, weights)
-
         if out_extra is not None:
-            totals = dict(wdata=wdata, odata=odata, bdata=bdata, obdata=obdata)
+            totals = dict(odata=odata, bdata=bdata, obdata=obdata)
             for name, total in totals.items():
                 if total is not None:
                     out_extra[f'total_{name}'] = cube(
@@ -785,8 +745,7 @@ class ComponentSetModelPlan(ModelPlan):
             self,
             params: ParamValues,
             data: DeviceArray,
-            weights: DeviceArray | None,
             out_extra: dict[str, Any] | None
     ) -> None:
         self._component_set_plan.evaluate(
-            params, {self._key: data}, weights, out_extra)
+            params, {self._key: data}, out_extra)

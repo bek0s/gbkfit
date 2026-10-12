@@ -23,7 +23,7 @@ __all__ = [
     'DiskComponentPlan',
     'SpectralDiskComponentPlan',
     'BPT', 'BHT', 'OPT', 'OHT', 'VPT', 'VHT',
-    'DPT', 'DHT', 'ZPT', 'SPT', 'WPT',
+    'DPT', 'DHT', 'ZPT', 'SPT',
     'load_options',
     'make_disk',
     'make_lines',
@@ -66,7 +66,6 @@ DHT = Slot(
     traits.DHTraitOne)
 ZPT = Slot('zptraits', 'zpt', 'zpt', traits.zpt_parser)
 SPT = Slot('sptraits', 'spt', 'spt', traits.spt_parser)
-WPT = Slot('wptraits', 'wpt', 'wpt', traits.wpt_parser)
 
 
 class _DiskComponent(Protocol):
@@ -329,16 +328,9 @@ def parse_component_rnode_args(
 
 
 def check_traits_common(traits_: Sequence[traits.Trait]) -> None:
-    """
-    Raise ConfigError for traits that are not implemented, and warn about
-    those that are discouraged (see parseutils.warn).
-    """
-    unsupported_traits = (
-        traits.WPTraitAxisRange)
+    """Warn about the traits that are discouraged (see parseutils.warn)."""
     for trait in traits_:
         trait_desc = traits.trait_desc(trait.__class__)
-        if isinstance(trait, unsupported_traits):
-            raise ConfigError(f"{trait_desc} is not implemented yet")
         if isinstance(trait, traits.RPTraitUniform):
             parseutils.warn(
                 f"the use of {trait_desc} is discouraged; "

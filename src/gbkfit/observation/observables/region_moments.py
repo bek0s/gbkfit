@@ -271,10 +271,6 @@ method : optional
             dtype: np.dtype,
             selection: Selection
     ) -> 'RegionMomentsPlan':
-        if model.has_weights():
-            raise ConfigError(
-                "region_moments does not support models with weights "
-                "(wtraits) yet")
         dcube = _moments.spectra_dcube(self, scale, instrument, dtype)
         return RegionMomentsPlan(
             self, self._weights, dcube, driver, model, foreground, dtype,

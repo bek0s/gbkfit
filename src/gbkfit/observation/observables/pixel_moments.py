@@ -10,7 +10,6 @@ from gbkfit.instrument import Instrument
 from gbkfit.model.base import Model, ModelSCube, Selection
 from gbkfit.params import ParamValues
 from gbkfit.utils import gridutils
-from gbkfit.utils.parseutils import ConfigError
 from . import _dcube, _detail, _moments
 from .base import ModelData, Observable
 
@@ -228,10 +227,6 @@ class PixelMoments(Observable):
             dtype: np.dtype,
             selection: Selection
     ) -> 'PixelMomentsPlan':
-        if self._method == 'gaussian_fit' and model.has_weights():
-            raise ConfigError(
-                "the method gaussian_fit does not support models with "
-                "weights (wtraits) yet")
         dcube = _moments.spectra_dcube(self, scale, instrument, dtype)
         return PixelMomentsPlan(
             self, dcube, driver, model, foreground, dtype, selection)

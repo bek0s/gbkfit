@@ -161,6 +161,6 @@ def test_point_plan_takes_a_dtype_or_its_type(driver):
     grid = gridutils.make_grid((6, 4))
     data = driver.mem_alloc_d((1, 4, 6), np.float32)
     driver.mem_fill(data, 0)
-    model.plan(driver, grid, False, np.float32).evaluate(
-        dict(xpos=0.5, ypos=0.5, flux=2), data, None, None)
+    model.plan(driver, grid, np.float32).evaluate(
+        dict(xpos=0.5, ypos=0.5, flux=2), data, None)
     assert driver.mem_copy_d2h(data).sum() == 2

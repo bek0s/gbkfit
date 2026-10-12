@@ -77,10 +77,6 @@ class Component(parseutils.TypedSerializable, abc.ABC):
         """Return its parameters, by name."""
         pass
 
-    def has_weights(self) -> bool:
-        """Check whether it has spatial weights; not here."""
-        return False
-
     def constants(self) -> dict[str, Any]:
         """
         Return the values that parameter expressions can use (e.g. the
@@ -166,8 +162,8 @@ class ComponentPlan(abc.ABC):
             The grid of the evaluation.
         outputs : dict
             The arrays the component adds to, which a model may leave out
-            (None): the 'image' or 'scube', the 3d spatial weights
-            ('wdata'), brightness ('bdata'), opacity ('odata') and
+            (None): the 'image' or 'scube', the 3d brightness ('bdata'),
+            opacity ('odata') and
             brightness after the opacity ('obdata'). Opacity components
             add to odata, and the other components read it.
         out_extra : dict, optional
@@ -177,23 +173,23 @@ class ComponentPlan(abc.ABC):
 
 
 class BrightnessComponent2D(Component, abc.ABC):
-    """A component of intensity_2d. Its outputs: image, wdata, bdata."""
+    """A component of intensity_2d. Its outputs: image, bdata."""
 
 
 class BrightnessComponent3D(Component, abc.ABC):
     """
-    A component of intensity_3d. Its outputs: image, wdata, bdata, odata,
+    A component of intensity_3d. Its outputs: image, bdata, odata,
     obdata.
     """
 
 
 class SpectralComponent2D(Component, abc.ABC):
-    """A component of kinematics_2d. Its outputs: scube, wdata, bdata."""
+    """A component of kinematics_2d. Its outputs: scube, bdata."""
 
 
 class SpectralComponent3D(Component, abc.ABC):
     """
-    A component of kinematics_3d. Its outputs: scube, wdata, bdata, odata,
+    A component of kinematics_3d. Its outputs: scube, bdata, odata,
     obdata.
     """
 

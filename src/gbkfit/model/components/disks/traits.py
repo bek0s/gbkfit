@@ -18,7 +18,6 @@ The kinds of traits, and how the traits of one kind combine:
   along z.
 - selection (spt): 1 where a trait selects the disk, 0 elsewhere; a part
   of the disk is kept if every trait selects it.
-- weight (wpt): the weights of the data multiply.
 
 The height traits pair with the polar traits of their kind by their
 order, and a disk has at most four traits of a kind.
@@ -155,9 +154,6 @@ ZPT_UID_NW_HARMONIC = 102
 SPT_UID_AZRANGE = 1
 SPT_UID_RRANGE = 2
 SPT_UID_NW_AZRANGE = 101
-
-# Weight polar traits
-WPT_UID_AXIS_RANGE = 1
 
 TRUNC_DEFAULT = 0
 
@@ -376,8 +372,7 @@ def trait_desc(cls: type['Trait']) -> str:
         DPTrait: 'velocity dispersion polar trait',
         DHTrait: 'velocity dispersion height trait',
         ZPTrait: 'vertical distortion polar trait',
-        SPTrait: 'selection polar trait',
-        WPTrait: 'weight polar trait'}
+        SPTrait: 'selection polar trait'}
     label = None
     for k, v in descs.items():
         if issubclass(cls, k):
@@ -668,12 +663,6 @@ class ZPTrait(PTrait, abc.ABC):
 class SPTrait(PTrait, abc.ABC):
     """
     A selection polar trait: 1 where it selects the disk, 0 elsewhere.
-    """
-
-
-class WPTrait(PTrait, abc.ABC):
-    """
-    A weight polar trait: the spatial weights of the data.
     """
 
 
@@ -2946,58 +2935,6 @@ class SPTraitNWAzimuthalRange(
             s=ParamVectorDesc(nnodes))
 
 
-class WPTraitAxisRange(WPTrait):
-    """
-    Not implemented: the disks reject it. TODO: meant to weight a slice of
-    the disk, a range of angles around its minor or major axis.
-
-    Parameters
-    ----------
-    axis : int
-        The axis: 0 (minor) or 1 (major).
-    angle : float
-        The angle (0 to 180 degrees).
-    weight : float
-        The weight.
-
-    Raises
-    ------
-    ConfigError
-        If an option is not valid.
-    """
-
-    @staticmethod
-    def type() -> str:
-        return 'axis_range'
-
-    @staticmethod
-    def uid() -> int:
-        return WPT_UID_AXIS_RANGE
-
-    def __init__(self, axis: int, angle: float, weight: float):
-        if axis not in [0, 1]:
-            raise ConfigError(
-                f"invalid axis value; "
-                f"choose between 0 (minor axis) and 1 (major axis); "
-                f"supplied value: {axis}")
-        if not 0 <= angle <= 180:
-            raise ConfigError(
-                f"invalid angle value; "
-                f"angle must be between 0 and 180; "
-                f"supplied value: {angle}")
-        super().__init__()
-        self._axis = axis
-        self._angle = angle
-        self._weight = weight
-
-    def dump(self) -> dict[str, Any]:
-        return super().dump() | dict(
-            axis=self._axis, angle=self._angle, weight=self._weight)
-
-    def consts(self) -> tuple[float, ...]:
-        return (self._axis, self._angle, self._weight)
-
-
 # Density polar traits parser
 rpt_parser = parseutils.TypedParser(RPTrait, [
     RPTraitUniform,
@@ -3091,7 +3028,3 @@ spt_parser = parseutils.TypedParser(SPTrait, [
     SPTraitAzimuthalRange,
     SPTraitRadialRange,
     SPTraitNWAzimuthalRange])
-
-# Weight polar traits parser
-wpt_parser = parseutils.TypedParser(WPTrait, [
-    WPTraitAxisRange])

@@ -56,13 +56,6 @@ struct Wrapper
             const T* cube, T* out);
 
     static void
-    gmodel_wcube_evaluate(
-            int spat_size_x, int spat_size_y, int spat_size_z,
-            int spec_size_z,
-            const T* spat_data,
-            T* spec_data);
-
-    static void
     gmodel_mcdisk_evaluate(const DiskArgs<T>& a, const MCDiskArgs<T>& mc);
 
     static void
