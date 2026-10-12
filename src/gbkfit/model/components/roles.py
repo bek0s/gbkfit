@@ -11,7 +11,8 @@ import astropy.units
 
 from gbkfit.utils import iterutils, parseutils
 from .extinction import ExtinctionLaw, extinction_law_parser
-from .lines import Line, LineCatalogue, Lines, line_parser
+from .lines import (
+    Band, Bands, Line, LineCatalogue, Lines, band_parser, line_parser)
 
 
 __all__ = [
@@ -25,18 +26,24 @@ __all__ = [
 ]
 
 
-def _load_line(
-        info: Any, path: tuple[str, int], catalogue: LineCatalogue
-) -> Line:
+def _load_line(info: Any, catalogue: LineCatalogue) -> Line:
     """
     Return the line of a configuration: the line of the catalogue of the
-    given name, or a line (its name and rest). path is the place of the
-    line in the configuration.
+    given name, or a line (its name and rest).
     """
-    with parseutils.config_path(*path):
-        if isinstance(info, str):
-            return catalogue.line(info)
-        return line_parser.load(info)
+    if isinstance(info, str):
+        return catalogue.line(info)
+    return line_parser.load(info)
+
+
+def load_band(info: Any, catalogue: LineCatalogue) -> Band:
+    """
+    Return the band of a configuration: the band of the catalogue of the
+    given name, or a band (its name and wavelength).
+    """
+    if isinstance(info, str):
+        return catalogue.band(info)
+    return band_parser.load(info)
 
 
 class Emission(parseutils.TypedSerializable, abc.ABC):
@@ -65,14 +72,25 @@ class Emission(parseutils.TypedSerializable, abc.ABC):
     def dump(self) -> dict[str, Any]:
         return dict(type=self.type())
 
+    def emits_in(self, band: Band | None) -> bool:
+        """
+        Check whether it emits in the band of an image (None if not
+        known); here, in every band.
+        """
+        return True
+
     @abc.abstractmethod
     def wavelengths(
-            self, lines: Sequence[str] | None
+            self,
+            lines: Sequence[str] | None,
+            band: Band | None,
+            redshift: float
     ) -> tuple[float | None, ...]:
         """
-        Return the rest wavelength (um, in vacuum) of the light that an
-        observation sees: of each of its lines of the given names (all if
-        None), in their order, or of its band; None where it is not known.
+        Return the rest wavelength (um) of the light of the component that
+        an observation sees: of each of its lines of the given names (all
+        if None), in their order, or in the band of an image (if known)
+        of a component at the given redshift; None where it is not known.
         """
 
 
@@ -130,9 +148,11 @@ class LineEmission(Emission):
         if catalogue is None:
             catalogue = LineCatalogue()
         if info.get('lines') is not None:
-            info['lines'] = [
-                _load_line(line, ('lines', i), catalogue)
-                for i, line in enumerate(iterutils.listify(info['lines']))]
+            lines = iterutils.listify(info['lines'])
+            info['lines'] = []
+            for i, line in enumerate(lines):
+                with parseutils.config_path('lines', i):
+                    info['lines'].append(_load_line(line, catalogue))
         return cls(**parseutils.parse_options_for_callable(
             info, cls.__init__))
 
@@ -149,7 +169,10 @@ class LineEmission(Emission):
         return self._lines
 
     def wavelengths(
-            self, lines: Sequence[str] | None
+            self,
+            lines: Sequence[str] | None,
+            band: Band | None,
+            redshift: float
     ) -> tuple[float | None, ...]:
         # (one line at the velocity of the spectral axis: whatever line)
         if self._lines.lines() is None:
@@ -162,18 +185,88 @@ class LineEmission(Emission):
 
 class BandEmission(Emission):
     """
-    Light in the band of an image: the density, flat across the band (e.g.
-    starlight). Seen by images.
+    Light in the bands of images: the density, flat across a band (e.g.
+    starlight). Seen by images (see Bands): in every band, or with bands,
+    in those, of the flux ratios '{band}_ratio' to the first.
+
+    Parameters
+    ----------
+    bands : Sequence of Band, optional
+        The bands; every band if None.
+
+    Raises
+    ------
+    ConfigError
+        If there are no bands, or their names repeat.
     """
 
     @staticmethod
     def type() -> str:
         return 'band'
 
+    @classmethod
+    def load(
+            cls,
+            info: dict[str, Any],
+            catalogue: LineCatalogue | None = None
+    ) -> Self:
+        """
+        Load it from its configuration, in which each band is the name of
+        a band of the catalogue, or a band (its name and wavelength).
+
+        Parameters
+        ----------
+        info : dict
+            The configuration.
+        catalogue : LineCatalogue, optional
+            The catalogue of the names; that of GBKFIT by default.
+
+        Returns
+        -------
+        BandEmission
+            The emission.
+
+        Raises
+        ------
+        ConfigError
+            If the configuration has an error, or a band is not in the
+            catalogue.
+        """
+        if catalogue is None:
+            catalogue = LineCatalogue()
+        if info.get('bands') is not None:
+            bands = iterutils.listify(info['bands'])
+            info['bands'] = []
+            for i, band in enumerate(bands):
+                with parseutils.config_path('bands', i):
+                    info['bands'].append(load_band(band, catalogue))
+        return cls(**parseutils.parse_options_for_callable(
+            info, cls.__init__))
+
+    def dump(self) -> dict[str, Any]:
+        bands = self._bands.bands()
+        return dict(type=self.type()) | (
+            {} if bands is None else dict(bands=band_parser.dump(list(bands))))
+
+    def __init__(self, bands: Sequence[Band] | None = None):
+        self._bands = Bands(bands)
+
+    def bands(self) -> Bands:
+        """Return the bands."""
+        return self._bands
+
+    def emits_in(self, band: Band | None) -> bool:
+        return self._bands.emits_in(band)
+
     def wavelengths(
-            self, lines: Sequence[str] | None
+            self,
+            lines: Sequence[str] | None,
+            band: Band | None,
+            redshift: float
     ) -> tuple[float | None, ...]:
-        return (None,)
+        if band is None:
+            return (None,)
+        return (band.wavelength().to_value(astropy.units.um) / (1 + redshift),)
 
 
 class Opacity(parseutils.TypedSerializable, abc.ABC):

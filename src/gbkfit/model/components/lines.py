@@ -10,9 +10,12 @@ from gbkfit.utils.parseutils import ConfigError
 
 
 __all__ = [
+    'Band',
+    'Bands',
     'Line',
     'LineCatalogue',
     'Lines',
+    'band_parser',
     'line_parser'
 ]
 
@@ -43,6 +46,21 @@ _CATALOGUE_LINES = {
     'co21': '230.538 GHz',
     'co32': '345.7959899 GHz',
     'cii158': '1900.5369 GHz'}
+
+# The bands of the catalogue (see LineCatalogue): the effective wavelength
+# of the filters of SDSS, 2MASS and of the IRAC channels 1 and 2 of
+# Spitzer
+_CATALOGUE_BANDS = {
+    'sdss_u': '3551 Angstrom',
+    'sdss_g': '4686 Angstrom',
+    'sdss_r': '6166 Angstrom',
+    'sdss_i': '7480 Angstrom',
+    'sdss_z': '8932 Angstrom',
+    'twomass_j': '1.235 um',
+    'twomass_h': '1.662 um',
+    'twomass_ks': '2.159 um',
+    'irac1': '3.550 um',
+    'irac2': '4.493 um'}
 
 
 def _air_refractive_index(wavelength: float) -> float:
@@ -100,20 +118,74 @@ class Line(parseutils.Serializable):
 line_parser = parseutils.BasicParser(Line)
 
 
+class Band(parseutils.Serializable):
+    """
+    A band of images: a filter, of an effective wavelength.
+
+    Parameters
+    ----------
+    name : str
+        Its name, which names the flux ratio of the light of a component
+        in it (see Bands).
+    wavelength : str or Quantity
+        Its effective wavelength (e.g. '6166 Angstrom').
+
+    Raises
+    ------
+    ConfigError
+        If the name or the wavelength is not valid.
+    """
+
+    def dump(self) -> dict[str, str]:
+        return dict(name=self._name, wavelength=str(self._wavelength))
+
+    def __init__(self, name: str, wavelength: str | astropy.units.Quantity):
+        parseutils.check_name(name)
+        error = ConfigError(
+            f"the wavelength of a band must be a positive length with units "
+            f"(e.g. '6166 Angstrom'); it is {wavelength!r}")
+        try:
+            wavelength = astropy.units.Quantity(wavelength)
+        except (TypeError, ValueError) as e:
+            raise error from e
+        if not (wavelength.unit.is_equivalent(astropy.units.m)
+                and wavelength.isscalar and wavelength.value > 0):
+            raise error
+        self._name = name
+        self._wavelength = wavelength.to(astropy.units.m)
+
+    def name(self) -> str:
+        """Return its name."""
+        return self._name
+
+    def wavelength(self) -> astropy.units.Quantity:
+        """Return its effective wavelength (m)."""
+        return self._wavelength
+
+
+band_parser = parseutils.BasicParser(Band)
+
+
 class LineCatalogue:
     """
-    The emission lines that configurations name: those of GBKFIT (the
-    brightest optical lines: oii3726, oii3729, hbeta, oiii4959, oiii5007,
-    nii6548, halpha, nii6583, sii6716, sii6731; the near-infrared hydrogen
-    lines paalpha and brgamma; and the radio and (sub)millimetre lines
-    hi21, co10, co21, co32 and cii158), and those of the user, which add
-    to or replace them. Rest wavelengths are in vacuum.
+    The emission lines and the bands that configurations name: those of
+    GBKFIT, and those of the user, which add to or replace them. The lines
+    of GBKFIT are the brightest optical lines (oii3726, oii3729, hbeta,
+    oiii4959, oiii5007, nii6548, halpha, nii6583, sii6716, sii6731), the
+    near-infrared hydrogen lines paalpha and brgamma, and the radio and
+    (sub)millimetre lines hi21, co10, co21, co32 and cii158; their rest
+    wavelengths are in vacuum. Its bands are those of SDSS (sdss_u, sdss_g,
+    sdss_r, sdss_i, sdss_z), of 2MASS (twomass_j, twomass_h, twomass_ks)
+    and the IRAC channels 1 and 2 of Spitzer (irac1, irac2).
 
     Parameters
     ----------
     lines : Mapping of str to str or Quantity, optional
         The user's lines: the rest wavelength (in vacuum) or frequency of
         each, by name (see Line).
+    bands : Mapping of str to str or Quantity, optional
+        The user's bands: the effective wavelength of each, by name (see
+        Band).
 
     Raises
     ------
@@ -129,15 +201,49 @@ class LineCatalogue:
 
     def __init__(
             self,
-            lines: Mapping[str, str | astropy.units.Quantity] | None = None
+            lines: Mapping[str, str | astropy.units.Quantity] | None = None,
+            bands: Mapping[str, str | astropy.units.Quantity] | None = None
     ):
         self._lines = {
             name: Line(name, rest)
             for name, rest in (_CATALOGUE_LINES | dict(lines or {})).items()}
+        self._bands = {
+            name: Band(name, wavelength)
+            for name, wavelength in (
+                _CATALOGUE_BANDS | dict(bands or {})).items()}
 
     def names(self) -> tuple[str, ...]:
         """Return the names of its lines."""
         return tuple(self._lines)
+
+    def band_names(self) -> tuple[str, ...]:
+        """Return the names of its bands."""
+        return tuple(self._bands)
+
+    def band(self, name: str) -> Band:
+        """
+        Return its band of the given name.
+
+        Parameters
+        ----------
+        name : str
+            The name.
+
+        Returns
+        -------
+        Band
+            The band.
+
+        Raises
+        ------
+        ConfigError
+            If it has no band of the name.
+        """
+        if name not in self._bands:
+            raise ConfigError(
+                f"there is no band {name!r} in the catalogue; its bands: "
+                f"{list(self._bands)}")
+        return self._bands[name]
 
     def line(self, name: str) -> Line:
         """
@@ -287,3 +393,81 @@ class Lines:
             offset = _C * (ratio - 1) if optical else _C * (1 - ratio)
             values.append((offset, ratio, 1.0))
         return np.array(values)
+
+
+class Bands:
+    """
+    The bands of a component that emits in bands. Without bands, its light
+    is the same in every band. With bands, it emits in those only: its
+    light in the first band is its density, and that in each other band,
+    relative to the first, is a parameter ('{name}_ratio').
+
+    Parameters
+    ----------
+    bands : Sequence of Band, optional
+        The bands; every band if None.
+
+    Raises
+    ------
+    ConfigError
+        If there are no bands, or their names repeat.
+    """
+
+    def __init__(self, bands: Sequence[Band] | None):
+        if bands is not None:
+            bands = tuple(bands)
+            if not bands:
+                raise ConfigError("bands needs at least one band")
+            names = [band.name() for band in bands]
+            if repeated := sorted({n for n in names if names.count(n) > 1}):
+                raise ConfigError(
+                    f"the bands must have different names; repeated: "
+                    f"{repeated}")
+        self._bands = bands
+        self._ratios = {} if bands is None else {
+            f'{band.name()}_ratio': ParamScalarDesc(
+                desc=f"the flux in band {band.name()} relative to that in "
+                     f"band {bands[0].name()}")
+            for band in bands[1:]}
+
+    def bands(self) -> tuple[Band, ...] | None:
+        """Return the bands, if given."""
+        return self._bands
+
+    def names(self) -> tuple[str, ...]:
+        """Return the names of the bands (none without bands)."""
+        return () if self._bands is None else tuple(
+            band.name() for band in self._bands)
+
+    def pdescs(self) -> dict[str, ParamScalarDesc]:
+        """Return the parameters of the bands: their flux ratios."""
+        return self._ratios
+
+    def emits_in(self, band: Band | None) -> bool:
+        """
+        Check whether the component emits in a band (that of an image;
+        None if not known).
+
+        Raises
+        ------
+        ConfigError
+            If the band is not known, and the component has bands.
+        """
+        if self._bands is None:
+            return True
+        if band is None:
+            raise ConfigError(
+                f"a component emits in the bands {list(self.names())}; the "
+                f"image that sees it needs a band")
+        return band.name() in self.names()
+
+    def ratio_name(self, band: Band | None) -> str | None:
+        """
+        Return the name of the flux ratio of the light in a band in which
+        the component emits (see emits_in): none in its first band, or
+        without bands.
+        """
+        names = self.names()
+        if not names or band.name() == names[0]:
+            return None
+        return f'{band.name()}_ratio'

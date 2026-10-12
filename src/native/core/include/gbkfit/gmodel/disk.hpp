@@ -85,8 +85,11 @@ struct DiskArgs
     T* vdweight_cmp = nullptr;
 
     // The factor of the density in rdata (e.g. the ratio of the optical
-    // depth of dust at the wavelength of an observation to that at V)
+    // depth of dust at the wavelength of an observation to that at V), and
+    // that of the light in the image (e.g. the flux ratio of the band of
+    // the image to the first band of a component)
     T rdata_scale = 1;
+    T image_scale = 1;
 };
 
 // The kinds of traits of a disk: the trait sets of DiskArgs

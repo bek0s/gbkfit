@@ -222,7 +222,7 @@ def test_thick_disk_with_several_velocity_traits(name):
     spatial = grid.spatial()
     plan = galaxy.plan(
         DriverHost(), spatial, grid.spectral(), Grid().depth_axis(spatial),
-        np.float32, (0,), None)
+        np.float32, (0,), None, None)
     plan.evaluate(params, dict(scube=scube), None)
     assert scube.sum() > 0
 

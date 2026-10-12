@@ -10,12 +10,13 @@ import numpy as np
 from gbkfit.driver import Driver
 from gbkfit.params import ParamDesc
 from gbkfit.utils import gridutils, iterutils, parseutils
+from gbkfit.utils.parseutils import ConfigError
 from .components import _detail
 from .components._component_set import ComponentSet, ComponentSetPlan
 from .components.base import Component, DepthAxis
 from .components.disks import MCDisk, SMDisk
 from .components.geometries import Geometry, geometry_parser
-from .components.lines import LineCatalogue
+from .components.lines import Band, LineCatalogue
 from .components.points import Point
 from .distance import Distance, distance_parser
 from .mass import MassComponent, MassModel, mass_component_parser
@@ -60,6 +61,10 @@ class Galaxy(parseutils.Serializable):
     distance : Distance, optional
         Its distance, which converts arcsec to kpc for its mass (required
         with mass, and used by it only).
+    redshift : float, optional
+        Its redshift, for what it emits and absorbs in its rest frame (the
+        dust of an image absorbs at the effective wavelength of its band
+        over 1 + redshift); 0 by default.
     name : str, optional
         Its name; required when there are several galaxies.
 
@@ -67,9 +72,10 @@ class Galaxy(parseutils.Serializable):
     ------
     ConfigError
         If there are no components, several without names, the names or
-        parameters conflict, or the mass, the distance and the components
-        do not go together (e.g. 'mass' velocity traits without mass, or
-        a trait_disk that follows no disk of the galaxy).
+        parameters conflict, the mass, the distance and the components do
+        not go together (e.g. 'mass' velocity traits without mass, or a
+        trait_disk that follows no disk of the galaxy), or the redshift is
+        not above -1.
     """
 
     @classmethod
@@ -122,6 +128,7 @@ class Galaxy(parseutils.Serializable):
             info.update(mass=mass_component_parser.dump(list(self._mass)))
         if self.distance() is not None:
             info.update(distance=distance_parser.dump(self.distance()))
+        info.update(redshift=self._redshift)
         return info
 
     def __init__(
@@ -129,9 +136,14 @@ class Galaxy(parseutils.Serializable):
             components: Component | Sequence[Component],
             mass: MassComponent | Sequence[MassComponent] | None = None,
             distance: Distance | None = None,
+            redshift: float = 0.0,
             name: str | None = None
     ):
         parseutils.check_name(name)
+        if not redshift > -1:
+            raise ConfigError(
+                f"the redshift must be above -1; it is {redshift}")
+        self._redshift = redshift
         mass = iterutils.tuplify(mass)
         mass_model = MassModel(mass) if mass else None
         self._component_set = ComponentSet(components, distance, mass_model)
@@ -162,6 +174,10 @@ class Galaxy(parseutils.Serializable):
         """Return its distance, if given."""
         return self._component_set.distance()
 
+    def redshift(self) -> float:
+        """Return its redshift."""
+        return self._redshift
+
     def pdescs(self) -> dict[str, ParamDesc]:
         """Return its parameters, by name (see the class)."""
         return self._component_set.pdescs()
@@ -181,7 +197,8 @@ class Galaxy(parseutils.Serializable):
             depth: DepthAxis | None,
             dtype: np.dtype,
             emitters: Sequence[int],
-            lines: tuple[str, ...] | None
+            lines: tuple[str, ...] | None,
+            band: Band | None
     ) -> ComponentSetPlan:
         """
         Plan the evaluation of the galaxy on the grid of an observation.
@@ -204,6 +221,8 @@ class Galaxy(parseutils.Serializable):
             opacity of all those with opacity is).
         lines : tuple of str, optional
             The names of the emission lines evaluated; all if None.
+        band : Band, optional
+            The band of an image, if known.
 
         Returns
         -------
@@ -211,7 +230,8 @@ class Galaxy(parseutils.Serializable):
             The plan.
         """
         return self._component_set.plan(
-            driver, grid, spectral, depth, dtype, emitters, lines)
+            driver, grid, spectral, depth, dtype, emitters, lines, band,
+            self._redshift)
 
 
 galaxy_parser = parseutils.BasicParser(Galaxy)

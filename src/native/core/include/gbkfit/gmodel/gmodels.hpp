@@ -632,7 +632,7 @@ gmodel_mcdisk_evaluate_cloud(
 
     if (a.image) {
         gbkfit::gmodel_image_evaluate<AtomicAddFunT>(
-                a.image, x, y, orvalue,
+                a.image, x, y, orvalue * a.image_scale,
                 a.spat_size[0]);
     }
 
@@ -914,7 +914,7 @@ gmodel_smdisk_evaluate_spaxel(int x, int y, int z, const DiskArgs<T>& a)
 
     if (a.image) {
         gbkfit::gmodel_image_evaluate<AddFunT>(
-                a.image, x, y, orvalue,
+                a.image, x, y, orvalue * a.image_scale,
                 a.spat_size[0]);
     }
 

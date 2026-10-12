@@ -237,7 +237,7 @@ def image_plan(driver, galaxy, size):
     grid = gridutils.Grid(size, gridutils.Coords((1, 1), rpix, (0, 0), 0), None)
     return galaxy.plan(
         driver, grid, IMAGE_SPECTRAL_AXIS, Grid().depth_axis(grid),
-        np.float32, (0,), None)
+        np.float32, (0,), None, None)
 
 
 def evaluate_image(driver, plan, size, params):

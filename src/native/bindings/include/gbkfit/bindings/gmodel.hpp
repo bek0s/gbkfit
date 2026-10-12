@@ -95,7 +95,7 @@ struct GModel
             Data rdata, Data rdata_cmp,
             Data ordata, Data ordata_cmp,
             Data vdata_cmp, Data ddata_cmp, Data vdweight_cmp,
-            T rdata_scale)
+            T rdata_scale, T image_scale)
     {
         Kernels::gmodel_smdisk_evaluate(make_args(
                 disk, spat_size, spat_step, spat_zero, spat_rota,
@@ -103,7 +103,7 @@ struct GModel
                 opacity, opacity_ratios,
                 image, scube, rdata, rdata_cmp,
                 ordata, ordata_cmp, vdata_cmp, ddata_cmp, vdweight_cmp,
-                rdata_scale));
+                rdata_scale, image_scale));
     }
 
     static void
@@ -122,7 +122,7 @@ struct GModel
             Data rdata, Data rdata_cmp,
             Data ordata, Data ordata_cmp,
             Data vdata_cmp, Data ddata_cmp, Data vdweight_cmp,
-            T rdata_scale)
+            T rdata_scale, T image_scale)
     {
         const auto args = make_args(
                 disk, spat_size, spat_step, spat_zero, spat_rota,
@@ -130,7 +130,7 @@ struct GModel
                 opacity, opacity_ratios,
                 image, scube, rdata, rdata_cmp,
                 ordata, ordata_cmp, vdata_cmp, ddata_cmp, vdweight_cmp,
-                rdata_scale);
+                rdata_scale, image_scale);
         require(disk.rht.has_value(),
                 "a Monte Carlo disk needs density height traits");
         require(has_analytical_integral.shape(0) == size_t(args.rpt.n),
@@ -266,7 +266,8 @@ struct GModel
                     nb::arg("vdata_cmp").noconvert().none() = nb::none(),
                     nb::arg("ddata_cmp").noconvert().none() = nb::none(),
                     nb::arg("vdweight_cmp").noconvert().none() = nb::none(),
-                    nb::arg("rdata_scale") = T{1});
+                    nb::arg("rdata_scale") = T{1},
+                    nb::arg("image_scale") = T{1});
         };
 
         auto cls = nb::class_<GModel>(m, ("GModel" + suffix).c_str())
@@ -371,7 +372,7 @@ private:
             const Data& ordata, const Data& ordata_cmp,
             const Data& vdata_cmp, const Data& ddata_cmp,
             const Data& vdweight_cmp,
-            T rdata_scale)
+            T rdata_scale, T image_scale)
     {
         DiskArgs<T> a;
         a.loose = disk.loose;
@@ -471,6 +472,7 @@ private:
         a.ddata_cmp = output(ddata_cmp, nspat, "ddata_cmp");
         a.vdweight_cmp = output(vdweight_cmp, nspat, "vdweight_cmp");
         a.rdata_scale = rdata_scale;
+        a.image_scale = image_scale;
         return a;
     }
 };

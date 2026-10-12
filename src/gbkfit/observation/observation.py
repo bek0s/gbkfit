@@ -7,6 +7,8 @@ import numpy.typing as npt
 from gbkfit.dataset import Dataset
 from gbkfit.driver import Driver
 from gbkfit.instrument import Instrument, instrument_parser
+from gbkfit.model import Band, BandEmission, LineCatalogue, band_parser
+from gbkfit.model.components.roles import load_band
 from gbkfit.utils import parseutils
 from gbkfit.utils.parseutils import ConfigError
 from ._scene import Scene, check_component_names
@@ -108,6 +110,10 @@ class Observation(parseutils.Serializable):
     lines : Sequence of str, optional
         The names of the emission lines it sees (e.g. the line of the
         data); all by default.
+    band : Band, optional
+        The band of an image: it sees the components that emit in every
+        band or in it (see BandEmission), and dust of an extinction law
+        dims them at its rest wavelength (see Galaxy).
     data : Dataset, optional
         The data, of the dataset class of the observable.
     likelihood : Likelihood, optional
@@ -125,8 +131,9 @@ class Observation(parseutils.Serializable):
     Raises
     ------
     ConfigError
-        If a name is invalid, there are no galaxies or they repeat, the
-        scale is not one integer of at least 1
+        If a name is invalid, there are no galaxies or they repeat, a band
+        is given to an observable that is not an image, the scale is not
+        one integer of at least 1
         for each axis, there is a likelihood without data, the data are
         not those of the observable, the observable cannot be seen
         through the instrument (see Observable.check_instrument), or the
@@ -137,7 +144,8 @@ class Observation(parseutils.Serializable):
     def load(
             cls,
             info: dict[str, Any],
-            drivers: Mapping[str | None, Driver] | None = None
+            drivers: Mapping[str | None, Driver] | None = None,
+            catalogue: LineCatalogue | None = None
     ) -> 'Observation':
         """
         Load an observation from its configuration.
@@ -145,7 +153,8 @@ class Observation(parseutils.Serializable):
         Its option driver is not a driver but the name of one of the
         drivers of the configuration, which declares them at its top
         level. It can be left out when there is one driver, and the
-        observation has the host when there are none.
+        observation has the host when there are none. Its band is the name
+        of a band of the catalogue, or a band (its name and wavelength).
 
         Parameters
         ----------
@@ -154,6 +163,9 @@ class Observation(parseutils.Serializable):
         drivers : Mapping of str to Driver, optional
             The drivers of the configuration, by name; the one unnamed
             driver of a configuration has the name None.
+        catalogue : LineCatalogue, optional
+            The catalogue of the names of bands; that of GBKFIT by
+            default.
 
         Returns
         -------
@@ -168,6 +180,11 @@ class Observation(parseutils.Serializable):
         """
         with parseutils.config_path('driver'):
             info['driver'] = _driver_by_name(info.get('driver'), drivers or {})
+        if info.get('band') is not None:
+            with parseutils.config_path('band'):
+                info['band'] = load_band(
+                    info['band'],
+                    catalogue if catalogue is not None else LineCatalogue())
         # The data are read in the form of the observable (its dataset
         # class), and give the observable some of its options
         dataset = None
@@ -222,12 +239,14 @@ class Observation(parseutils.Serializable):
         components = {} if self._components is None else dict(
             components=list(self._components))
         lines = {} if self._lines is None else dict(lines=list(self._lines))
+        band = {} if self._band is None else dict(
+            band=band_parser.dump(self._band))
         # The form of the data is that of the observable: no type
         data = {} if self._data is None else dict(
             data={k: v for k, v in self._data.dump(**kwargs).items()
                   if k != 'type'},
             likelihood=likelihood_parser.dump(self._likelihood))
-        return name | galaxies | components | lines | data | dict(
+        return name | galaxies | components | lines | band | data | dict(
             line_of_sight=line_of_sight_parser.dump(self._line_of_sight),
             foreground=foreground_parser.dump(self._foreground, **kwargs),
             instrument=instrument_parser.dump(self._instrument, **kwargs),
@@ -246,6 +265,7 @@ class Observation(parseutils.Serializable):
             galaxies: Sequence[str] | None = None,
             components: Sequence[str] | None = None,
             lines: Sequence[str] | None = None,
+            band: Band | None = None,
             data: Dataset | None = None,
             likelihood: Likelihood | None = None,
             scale: Sequence[int] | None = None,
@@ -273,6 +293,10 @@ class Observation(parseutils.Serializable):
             lines = tuple(lines)
             for line in lines:
                 parseutils.check_name(line)
+        if band is not None and observable.emission is not BandEmission:
+            raise ConfigError(
+                "only images have a band; the lines of spectral cubes are "
+                "their option lines")
         if driver is None:
             # (imported here: the host driver needs its native module)
             from gbkfit.driver.drivers.host import DriverHost
@@ -302,6 +326,7 @@ class Observation(parseutils.Serializable):
         self._galaxies = galaxies
         self._components = components
         self._lines = lines
+        self._band = band
         self._data = data
         self._likelihood = likelihood
         self._scale = scale
@@ -327,6 +352,10 @@ class Observation(parseutils.Serializable):
     def lines(self) -> tuple[str, ...] | None:
         """Return the names of the emission lines it sees, if given."""
         return self._lines
+
+    def band(self) -> Band | None:
+        """Return its band (of an image), if given."""
+        return self._band
 
     def driver(self) -> Driver:
         """Return the driver the model is evaluated on."""

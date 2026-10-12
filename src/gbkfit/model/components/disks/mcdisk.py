@@ -10,7 +10,7 @@ from gbkfit.utils import gridutils
 from gbkfit.utils.parseutils import ConfigError
 from ..base import Component, ComponentPlan
 from ..geometries import Geometry
-from ..lines import LineCatalogue
+from ..lines import Band, LineCatalogue
 from ..roles import Emission, Opacity
 from . import _detail, _disk, traits
 from .parts import Density, Kinematics
@@ -235,6 +235,7 @@ class MCDisk(Component):
             rnodes=rnodes, rstep=rstep, interp=interp,
             cflux=cflux, seed=seed)
         self._lines = _detail.make_lines(self._disk, emission)
+        self._bands = _detail.make_bands(self._disk, emission)
 
     def density(self) -> Density:
         """Return its density."""
@@ -249,7 +250,8 @@ class MCDisk(Component):
 
     def pdescs(self) -> dict[str, ParamDesc]:
         lines = self._lines.pdescs() if self._lines is not None else {}
-        return self._disk.pdescs() | lines
+        bands = self._bands.pdescs() if self._bands is not None else {}
+        return self._disk.pdescs() | lines | bands
 
     def constants(self) -> dict[str, Any]:
         return dict(
@@ -267,9 +269,10 @@ class MCDisk(Component):
             spectral: gridutils.Grid,
             dtype: np.dtype,
             lines: tuple[str, ...] | None,
+            band: Band | None,
             emits: bool,
             opacity_ratios: np.ndarray | None
     ) -> ComponentPlan:
         return _detail.disk_plan(
-            self._disk, self._lines, driver, spectral, dtype, lines, emits,
-            opacity_ratios)
+            self._disk, self._lines, self._bands, driver, spectral, dtype,
+            lines, band, emits, opacity_ratios)

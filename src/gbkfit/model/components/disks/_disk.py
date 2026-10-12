@@ -372,15 +372,16 @@ class DiskPlan(abc.ABC):
             out_extra: dict[str, Any] | None,
             density_key: str,
             lines: np.ndarray | None = None,
-            rdata_scale: float = 1.0
+            rdata_scale: float = 1.0,
+            image_scale: float = 1.0
     ) -> None:
         """
         Add the disk to the outputs. grid has the grid of the native
         evaluation functions (see NativeGrid), and outputs the arrays they
         add to (all optional): the cubes of opacity they read ('opacity')
-        with their ratios ('opacity_ratios'), the 'image' or 'scube', and
-        the 3d density ('rdata', times rdata_scale) and density after the
-        opacity ('ordata'). density_key names the density map in the extra
+        with their ratios ('opacity_ratios'), the 'image' (whose light is
+        times image_scale) or 'scube', and the 3d density ('rdata', times
+        rdata_scale) and density after the opacity ('ordata'). density_key names the density map in the extra
         outputs (e.g. 'bdata' for light, 'odata' for dust). lines has the
         offset, scale and flux of each emission line (an array of shape
         (nlines, 3); see the native DiskArgs), if the plan has lines.
@@ -425,7 +426,8 @@ class DiskPlan(abc.ABC):
             lines=self._lines_d,
             rdata_cmp=rdata_cmp, ordata_cmp=ordata_cmp,
             vdata_cmp=vdata_cmp, ddata_cmp=ddata_cmp,
-            vdweight_cmp=vdweight_cmp, rdata_scale=rdata_scale)
+            vdweight_cmp=vdweight_cmp, rdata_scale=rdata_scale,
+            image_scale=image_scale)
 
         self._impl_evaluate(params, grid_and_outputs, out_extra)
 
