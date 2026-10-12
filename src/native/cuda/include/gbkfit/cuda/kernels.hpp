@@ -217,6 +217,22 @@ gmodel_smdisk_evaluate(DiskArgs<T> a)
 }
 
 template<typename T> __global__ void
+gmodel_opacity_accumulate(int size_x, int size_y, int size_z, T* opacity)
+{
+    // Parallelization: per 2d spatial position (the threads of a warp read
+    // adjacent values)
+    const int nthreads = size_x * size_y;
+    const int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (tid >= nthreads)
+        return;
+
+    int x, y;
+    index_1d_to_2d(x, y, tid, size_x);
+
+    gbkfit::gmodel_opacity_accumulate(x, y, size_x, size_y, size_z, opacity);
+}
+
+template<typename T> __global__ void
 gmodel_disk_traits_evaluate(DiskTraitsArgs<T> a)
 {
     // Parallelization: per point

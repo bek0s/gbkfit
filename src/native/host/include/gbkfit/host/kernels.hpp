@@ -291,6 +291,20 @@ gmodel_smdisk_evaluate(const DiskArgs<T>& a)
 }
 
 template<typename T> void
+gmodel_opacity_accumulate(int size_x, int size_y, int size_z, T* opacity)
+{
+    // Parallelization: per 2d spatial position
+    #pragma omp parallel for collapse(2)
+    for (int y = 0; y < size_y; ++y) {
+    for (int x = 0; x < size_x; ++x) {
+
+    gbkfit::gmodel_opacity_accumulate(x, y, size_x, size_y, size_z, opacity);
+
+    }
+    }
+}
+
+template<typename T> void
 gmodel_disk_traits_evaluate(const DiskTraitsArgs<T>& a)
 {
     // Parallelization: per point
@@ -387,6 +401,11 @@ struct Wrapper
     static void
     gmodel_smdisk_evaluate(const DiskArgs<T>& a) {
         kernels::gmodel_smdisk_evaluate<T>(a);
+    }
+
+    static void
+    gmodel_opacity_accumulate(auto... args) {
+        kernels::gmodel_opacity_accumulate<T>(args...);
     }
 
     static void

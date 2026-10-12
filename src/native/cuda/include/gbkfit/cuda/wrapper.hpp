@@ -62,6 +62,9 @@ struct Wrapper
     gmodel_smdisk_evaluate(const DiskArgs<T>& a);
 
     static void
+    gmodel_opacity_accumulate(int size_x, int size_y, int size_z, T* opacity);
+
+    static void
     gmodel_disk_traits_evaluate(const DiskTraitsArgs<T>& a);
 
     static void

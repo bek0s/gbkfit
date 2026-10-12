@@ -93,21 +93,40 @@ gmodel_scube_evaluate(
     }
 }
 
+// Turn the optical depth of each voxel of the spaxel (x, y) of an opacity
+// cube, of the given size, into the optical depth from the viewer to the
+// far side of the voxel: a running sum along z, from the voxel nearest
+// the viewer (see gmodel_attenuation)
+template<typename T> constexpr void
+gmodel_opacity_accumulate(
+        int x, int y, int size_x, int size_y, int size_z, T* opacity)
+{
+    T tau = 0;
+    for (int z = 0; z < size_z; ++z)
+    {
+        const int idx = index_3d_to_1d(x, y, z, size_x, size_y);
+        tau += opacity[idx];
+        opacity[idx] = tau;
+    }
+}
+
 // The fraction of the light of the voxel (x, y, z) that reaches the
 // viewer, who is before the first voxel along z (the velocities along +z
-// recede from the viewer). The opacity cube holds the optical depth of
-// each voxel. The light crosses the voxels in front of its own, and the
-// absorbers of its own voxel, which are mixed uniformly with the
-// emitters: on average, (1 - exp(-tau)) / tau of the light of a voxel of
-// optical depth tau leaves it.
+// recede from the viewer). The opacity cube holds the optical depth from
+// the viewer to the far side of each voxel (see
+// gmodel_opacity_accumulate). The light crosses the voxels in front of its
+// own, and the absorbers of its own voxel, which are mixed uniformly with
+// the emitters: on average, (1 - exp(-tau)) / tau of the light of a voxel
+// of optical depth tau leaves it.
 template<typename T> constexpr T
 gmodel_attenuation(int x, int y, int z, const T* opacity, const int* size)
 {
-    T tau_front = 0;
-    for (int oz = 0; oz < z; ++oz)
-        tau_front += opacity[index_3d_to_1d(x, y, oz, size[0], size[1])];
-    T tau_own = opacity[index_3d_to_1d(x, y, z, size[0], size[1])];
-    T own = tau_own != 0 ? -std::expm1(-tau_own) / tau_own : T{1};
+    const T tau_front = z > 0
+            ? opacity[index_3d_to_1d(x, y, z - 1, size[0], size[1])]
+            : T{0};
+    const T tau_own =
+            opacity[index_3d_to_1d(x, y, z, size[0], size[1])] - tau_front;
+    const T own = tau_own != 0 ? -std::expm1(-tau_own) / tau_own : T{1};
     return std::exp(-tau_front) * own;
 }
 

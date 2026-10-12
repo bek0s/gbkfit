@@ -141,6 +141,20 @@ struct GModel
         Kernels::gmodel_mcdisk_evaluate(args, mc);
     }
 
+    // Turn the optical depth of each voxel of an opacity cube (in (x, y, z)
+    // order, of size spat_size) into the optical depth from the viewer to
+    // the far side of the voxel, in place, as the disk kernels read it (see
+    // gbkfit::gmodel_opacity_accumulate)
+    static void
+    opacity_accumulate(std::array<int, 3> spat_size, Data opacity)
+    {
+        require(opacity.size()
+                == size_t(spat_size[0]) * spat_size[1] * spat_size[2],
+                "opacity has the wrong number of elements");
+        Kernels::gmodel_opacity_accumulate(
+                spat_size[0], spat_size[1], spat_size[2], opacity.data());
+    }
+
     // Evaluate each polar trait of one kind of a disk ('rpt', 'vpt',
     // 'dpt', 'zpt' or 'spt') at the points (r, theta) of its plane,
     // into out (a row for each trait), as the disk kernels evaluate them
@@ -258,6 +272,8 @@ struct GModel
                 nb::arg("nclouds"),
                 nb::arg("ncloudscsum").noconvert(),
                 nb::arg("has_analytical_integral").noconvert()));
+        cls.def_static("opacity_accumulate", &opacity_accumulate,
+                nb::arg("spat_size"), nb::arg("opacity").noconvert());
         cls.def_static("disk_ptraits_evaluate", &disk_ptraits_evaluate,
                 nb::arg("disk"), nb::arg("kind"),
                 nb::arg("r").noconvert(), nb::arg("theta").noconvert(),

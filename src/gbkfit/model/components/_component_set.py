@@ -332,6 +332,7 @@ class ComponentSetPlan:
         if absorbers:
             self._odata = driver.mem_alloc_d(
                 self._native_grid['spat_size'][::-1], dtype)
+            self._gmodel = driver.native_class('GModel', dtype)()
 
     def evaluate(
             self,
@@ -377,7 +378,11 @@ class ComponentSetPlan:
         def component_extra() -> dict[str, Any] | None:
             return {} if out_extra is not None else None
 
-        # The absorbers add to the opacity cube, so clear it
+        # The absorbers add to the opacity cube, so clear it. Then it gets
+        # the optical depth from the viewer to the far side of each voxel,
+        # which the emitters read (its extra output keeps that of each
+        # voxel).
+        totals = {}
         if odata is not None:
             driver.mem_fill(odata, 0)
             for i in self._absorbers:
@@ -385,6 +390,10 @@ class ComponentSetPlan:
                 self._plans[i].evaluate_opacity(
                     component_params(i), self._native_grid, odata, extra)
                 self._add_extra(out_extra, i, extra)
+            if out_extra is not None:
+                totals['odata'] = driver.mem_copy_d2h(odata)
+            self._gmodel.opacity_accumulate(
+                spat_size=self._native_grid['spat_size'], opacity=odata)
 
         outputs = outputs | dict(bdata=bdata, odata=odata, obdata=obdata)
         for i in self._emitters:
@@ -394,11 +403,11 @@ class ComponentSetPlan:
             self._add_extra(out_extra, i, extra)
 
         if out_extra is not None:
-            totals = dict(odata=odata, bdata=bdata, obdata=obdata)
-            for name, total in totals.items():
+            for name, total in dict(bdata=bdata, obdata=obdata).items():
                 if total is not None:
-                    out_extra[f'total_{name}'] = self._extra(
-                        driver.mem_copy_d2h(total))
+                    totals[name] = driver.mem_copy_d2h(total)
+            for name, total in totals.items():
+                out_extra[f'total_{name}'] = self._extra(total)
 
     def _add_extra(
             self,
