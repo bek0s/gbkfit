@@ -149,29 +149,30 @@ Wrapper<T>::dmodel_regions_sum(
 
 template<typename T> void
 Wrapper<T>::gmodel_mcdisk_evaluate(
-        const DiskArgs<T>& a, const MCDiskArgs<T>& mc)
+        const DiskArgs<T>& a, const MCDiskArgs<T>& mc, const FieldsArgs<T>& f)
 {
     // (the kernels of the fields of disks with line opacity and without, of
     // disks dimmed by opacity, and of the others: see
     // gmodel_mcdisk_evaluate_cloud)
     namespace k = kernels;
     launch("gmodel_mcdisk_evaluate", mc.nclouds,
-            a.fields && a.opt.uids ? k::gmodel_mcdisk_evaluate<T, 0, 1, 1>
-            : a.fields ? k::gmodel_mcdisk_evaluate<T, 0, 1, 0>
+            f.fields && f.opt.uids ? k::gmodel_mcdisk_evaluate<T, 0, 1, 1>
+            : f.fields ? k::gmodel_mcdisk_evaluate<T, 0, 1, 0>
             : a.opacity ? k::gmodel_mcdisk_evaluate<T, 1, 0, 0>
             : k::gmodel_mcdisk_evaluate<T, 0, 0, 0>,
-            a, mc);
+            a, mc, f);
     // The fields of each voxel, from the moments of its clouds
-    if (a.fields) {
+    if (f.fields) {
         const long long n = 1LL * a.spat_size[0] * a.spat_size[1]
                 * a.spat_size[2];
         launch("gmodel_mcdisk_fields_moments", n,
-                kernels::gmodel_mcdisk_fields_moments<T>, a);
+                kernels::gmodel_mcdisk_fields_moments<T>, a, f);
     }
 }
 
 template<typename T> void
-Wrapper<T>::gmodel_smdisk_evaluate(const DiskArgs<T>& a)
+Wrapper<T>::gmodel_smdisk_evaluate(
+        const DiskArgs<T>& a, const FieldsArgs<T>& f)
 {
     // (the voxels need not be in memory, so there can be more than an int
     // holds, e.g. 1300 x 1300 x 1300)
@@ -180,11 +181,11 @@ Wrapper<T>::gmodel_smdisk_evaluate(const DiskArgs<T>& a)
     // (see gmodel_mcdisk_evaluate)
     namespace k = kernels;
     launch("gmodel_smdisk_evaluate", n,
-            a.fields && a.opt.uids ? k::gmodel_smdisk_evaluate<T, 0, 1, 1>
-            : a.fields ? k::gmodel_smdisk_evaluate<T, 0, 1, 0>
+            f.fields && f.opt.uids ? k::gmodel_smdisk_evaluate<T, 0, 1, 1>
+            : f.fields ? k::gmodel_smdisk_evaluate<T, 0, 1, 0>
             : a.opacity ? k::gmodel_smdisk_evaluate<T, 1, 0, 0>
             : k::gmodel_smdisk_evaluate<T, 0, 0, 0>,
-            a);
+            a, f);
 }
 
 template<typename T> void

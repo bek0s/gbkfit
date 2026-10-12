@@ -478,34 +478,35 @@ ring_info(
 }
 
 // The number of planes of line opacity in the fields of a thick disk (see
-// DiskArgs::fields): one for each line with line opacity, none without
+// FieldsArgs::fields): one for each line with line opacity, none without
 template<typename T> constexpr int
-gmodel_fields_lines(const DiskArgs<T>& a)
+gmodel_fields_lines(const DiskArgs<T>& a, const FieldsArgs<T>& f)
 {
-    return a.opt.uids ? a.nlines : 0;
+    return f.opt.uids ? a.nlines : 0;
 }
 
-// The coefficient of the line opacity of each line (see DiskArgs::opt) at
-// a point of the plane of the disk, in the ring rnidx, into coefficients
-// (one for each line; there are at most TRAIT_NUM_MAX, one for each trait)
+// The coefficient of the line opacity of each line (see FieldsArgs::opt)
+// at a point of the plane of the disk, in the ring rnidx, into
+// coefficients (one for each line; there are at most TRAIT_NUM_MAX, one
+// for each trait)
 template<typename T> constexpr void
 gmodel_line_opacity(
         T* coefficients, int rnidx, T x, T y, T r, T theta,
-        const DiskArgs<T>& a)
+        const DiskArgs<T>& a, const FieldsArgs<T>& f)
 {
     T values[TRAIT_NUM_MAX] = {0};
     p_traits<rp_trait<T>>(
             values,
-            a.opt.n, a.opt.uids,
-            a.opt.cvalues, a.opt.ccounts,
-            a.opt.pvalues, a.opt.pcounts,
+            f.opt.n, f.opt.uids,
+            f.opt.cvalues, f.opt.ccounts,
+            f.opt.pvalues, f.opt.pcounts,
             rnidx, a.rnodes, a.nrnodes,
             x, y, r, theta);
     for (int l = 0; l < a.nlines; ++l)
         coefficients[l] = 0;
-    for (int i = 0; i < a.opt.n; ++i)
-        if (a.opt_rows[i] >= 0)
-            coefficients[a.opt_rows[i]] += values[i];
+    for (int i = 0; i < f.opt.n; ++i)
+        if (f.opt_rows[i] >= 0)
+            coefficients[f.opt_rows[i]] += values[i];
 }
 
 // The velocity that the moments of the clouds of a Monte Carlo disk are
@@ -520,8 +521,8 @@ gmodel_fields_vref(const DiskArgs<T>& a)
 
 // Evaluate the cloud ci of a Monte Carlo disk. HasOpacity is whether
 // opacity dims the disk (a.opacity is not null), HasFields whether it
-// writes the fields of the march instead of its light (a.fields is not
-// null), and HasLineOpacity whether they have its line opacity (a.opt has
+// writes the fields of the march instead of its light (f.fields is not
+// null), and HasLineOpacity whether they have its line opacity (f.opt has
 // traits): template parameters, so that the other kernels have none of
 // their code (nor its registers and local memory, on a GPU).
 template<
@@ -529,7 +530,8 @@ template<
         bool HasLineOpacity, typename T>
 constexpr void
 gmodel_mcdisk_evaluate_cloud(
-        RNG<T>& rng, int ci, const DiskArgs<T>& a, const MCDiskArgs<T>& mc)
+        RNG<T>& rng, int ci, const DiskArgs<T>& a, const MCDiskArgs<T>& mc,
+        const FieldsArgs<T>& f)
 {
     // This is a placeholder in case we decide to explicitly
     // add a Monte Carlo based thin disk in the future.
@@ -782,39 +784,41 @@ gmodel_mcdisk_evaluate_cloud(
         const int nk = HasLineOpacity ? a.nlines : 0;
         const T weight = std::abs(rvalue);
         const T dv = vvalue - gmodel_fields_vref(a);
-        AtomicAddFunT(&a.fields[idx], rvalue);
-        AtomicAddFunT(&a.fields[nspat + idx], weight * dv);
+        AtomicAddFunT(&f.fields[idx], rvalue);
+        AtomicAddFunT(&f.fields[nspat + idx], weight * dv);
         AtomicAddFunT(
-                &a.fields[2 * nspat + idx],
+                &f.fields[2 * nspat + idx],
                 weight * (dv * dv + dvalue * dvalue));
         if (HasLineOpacity) {
             T coefficients[TRAIT_NUM_MAX];
-            gmodel_line_opacity(coefficients, rnidx, xd, yd, rd, theta, a);
+            gmodel_line_opacity(
+                    coefficients, rnidx, xd, yd, rd, theta, a, f);
             for (int l = 0; l < nk; ++l) {
                 AtomicAddFunT(
-                        &a.fields[(3 + l) * nspat + idx],
+                        &f.fields[(3 + l) * nspat + idx],
                         rvalue * coefficients[l]);
             }
         }
-        AtomicAddFunT(&a.fields[(3 + nk) * nspat + idx], weight);
+        AtomicAddFunT(&f.fields[(3 + nk) * nspat + idx], weight);
     }
 }
 
 // Turn the moments of the clouds of a Monte Carlo disk in the voxel idx
-// (see DiskArgs::fields): the sum of their light (j), and of their
+// (see FieldsArgs::fields): the sum of their light (j), and of their
 // absolute light times dv, times dv^2 + s^2 and alone (the last plane),
 // where dv is their velocity relative to gmodel_fields_vref, into the
 // velocity and the dispersion of one line of the same mean and variance
 // as the sum of their lines (weighted by their absolute light). A voxel
 // without clouds gets 0.
 template<typename T> constexpr void
-gmodel_mcdisk_fields_moments(long long idx, const DiskArgs<T>& a)
+gmodel_mcdisk_fields_moments(
+        long long idx, const DiskArgs<T>& a, const FieldsArgs<T>& f)
 {
     const long long nspat = 1LL * a.spat_size[0] * a.spat_size[1]
             * a.spat_size[2];
-    T* v = &a.fields[nspat + idx];
-    T* s = &a.fields[2 * nspat + idx];
-    const T weight = a.fields[(3 + gmodel_fields_lines(a)) * nspat + idx];
+    T* v = &f.fields[nspat + idx];
+    T* s = &f.fields[2 * nspat + idx];
+    const T weight = f.fields[(3 + gmodel_fields_lines(a, f)) * nspat + idx];
     if (weight == 0) {
         *v = *s = 0;
         return;
@@ -848,7 +852,8 @@ template<
         auto AddFunT, bool HasOpacity, bool HasFields, bool HasLineOpacity,
         typename T>
 constexpr void
-gmodel_smdisk_evaluate_spaxel(int x, int y, int z, const DiskArgs<T>& a)
+gmodel_smdisk_evaluate_spaxel(
+        int x, int y, int z, const DiskArgs<T>& a, const FieldsArgs<T>& f)
 {
     bool is_thin = a.rht.uids == nullptr;
     bool has_depth = a.spat_step[2] != 0;
@@ -1086,14 +1091,14 @@ gmodel_smdisk_evaluate_spaxel(int x, int y, int z, const DiskArgs<T>& a)
     }
 
     // The fields of the layer of a thin disk, wherever its plane crosses
-    // the line of sight (see DiskArgs::fields)
+    // the line of sight (see FieldsArgs::fields)
     if (HasFields && is_thin) {
         const long long nimage = 1LL * a.spat_size[0] * a.spat_size[1];
         const int idx = index_2d_to_1d(x, y, a.spat_size[0]);
-        a.fields[idx] = rvalue;
-        a.fields[nimage + idx] = vvalue;
-        a.fields[2 * nimage + idx] = dvalue;
-        a.fields[3 * nimage + idx] = pz;
+        f.fields[idx] = rvalue;
+        f.fields[nimage + idx] = vvalue;
+        f.fields[2 * nimage + idx] = dvalue;
+        f.fields[3 * nimage + idx] = pz;
     }
 
     // The voxel of the 3d outputs (a thin disk outside the grid has none).
@@ -1133,14 +1138,15 @@ gmodel_smdisk_evaluate_spaxel(int x, int y, int z, const DiskArgs<T>& a)
     if (HasFields && !is_thin) {
         const long long nspat = 1LL * a.spat_size[0] * a.spat_size[1]
                 * a.spat_size[2];
-        a.fields[idx] = rvalue;
-        a.fields[nspat + idx] = vvalue;
-        a.fields[2 * nspat + idx] = dvalue;
+        f.fields[idx] = rvalue;
+        f.fields[nspat + idx] = vvalue;
+        f.fields[2 * nspat + idx] = dvalue;
         if (HasLineOpacity) {
             T coefficients[TRAIT_NUM_MAX];
-            gmodel_line_opacity(coefficients, rnidx, xn, yn, rn, theta, a);
+            gmodel_line_opacity(
+                    coefficients, rnidx, xn, yn, rn, theta, a, f);
             for (int l = 0; l < a.nlines; ++l)
-                a.fields[(3 + l) * nspat + idx] = rvalue * coefficients[l];
+                f.fields[(3 + l) * nspat + idx] = rvalue * coefficients[l];
         }
     }
 }

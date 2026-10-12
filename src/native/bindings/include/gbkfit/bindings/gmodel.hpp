@@ -123,14 +123,16 @@ struct GModel
             Data fields,
             T rdata_scale, T image_scale)
     {
-        // (a thick disk writes three fields: j, v and s)
-        Kernels::gmodel_smdisk_evaluate(make_args(
+        const auto args = make_args(
                 disk, spat_size, spat_step, spat_zero, spat_rota,
                 spec_size, spec_step, spec_zero, lines,
                 opacity, opacity_ratios,
                 image, scube, rdata, rdata_cmp,
                 ordata, ordata_cmp, vdata_cmp, ddata_cmp, vdweight_cmp,
-                fields, 3, rdata_scale, image_scale));
+                rdata_scale, image_scale);
+        // (a thick disk writes three fields: j, v and s)
+        Kernels::gmodel_smdisk_evaluate(
+                args, make_fields_args(disk, args, fields, 3));
     }
 
     static void
@@ -152,15 +154,16 @@ struct GModel
             Data fields,
             T rdata_scale, T image_scale)
     {
-        // (with the scratch of the moments of the clouds, a Monte Carlo
-        // disk writes four fields)
         const auto args = make_args(
                 disk, spat_size, spat_step, spat_zero, spat_rota,
                 spec_size, spec_step, spec_zero, lines,
                 opacity, opacity_ratios,
                 image, scube, rdata, rdata_cmp,
                 ordata, ordata_cmp, vdata_cmp, ddata_cmp, vdweight_cmp,
-                fields, 4, rdata_scale, image_scale);
+                rdata_scale, image_scale);
+        // (with the scratch of the moments of the clouds, a Monte Carlo
+        // disk writes four fields)
+        const auto fields_args = make_fields_args(disk, args, fields, 4);
         require(disk.rht.has_value(),
                 "a Monte Carlo disk needs density height traits");
         require(has_analytical_integral.shape(0) == size_t(args.rpt.n),
@@ -175,7 +178,7 @@ struct GModel
         mc.ncloudscsum = ncloudscsum.data();
         mc.ncloudscsum_len = int(ncloudscsum.shape(0));
         mc.has_analytical_integral = has_analytical_integral.data();
-        Kernels::gmodel_mcdisk_evaluate(args, mc);
+        Kernels::gmodel_mcdisk_evaluate(args, mc, fields_args);
     }
 
     // Turn the optical depth of each voxel of an opacity cube (in (x, y, z)
@@ -530,7 +533,6 @@ private:
             const Data& ordata, const Data& ordata_cmp,
             const Data& vdata_cmp, const Data& ddata_cmp,
             const Data& vdweight_cmp,
-            const Data& fields, int volume_fields,
             T rdata_scale, T image_scale)
     {
         DiskArgs<T> a;
@@ -566,12 +568,6 @@ private:
         a.dht = traits(disk.dht);
         a.zpt = traits(disk.zpt);
         a.spt = traits(disk.spt);
-        a.opt = traits(disk.opt);
-        require(!disk.opt || (disk.opt_rows.is_valid()
-                              && disk.opt_rows.shape(0) == size_t(a.opt.n)),
-                "the traits of line opacity (opt) need the row of the line "
-                "of each (opt_rows)");
-        a.opt_rows = data(disk.opt_rows);
         require((!disk.rht || a.rht.n == a.rpt.n)
                 && (!disk.vht || a.vht.n == a.vpt.n)
                 && (!disk.dht || a.dht.n == a.dpt.n),
@@ -636,25 +632,45 @@ private:
         a.vdata_cmp = output(vdata_cmp, nspat, "vdata_cmp");
         a.ddata_cmp = output(ddata_cmp, nspat, "ddata_cmp");
         a.vdweight_cmp = output(vdweight_cmp, nspat, "vdweight_cmp");
-        // The fields replace the light and its opacity: volume_fields
-        // planes of the 3d grid for a thick disk, four of the x and y axes
-        // for a thin one (see DiskArgs::fields)
-        require(!fields.is_valid() || !(image.is_valid() || scube.is_valid()
-                                         || opacity.is_valid()),
+        a.rdata_scale = rdata_scale;
+        a.image_scale = image_scale;
+        return a;
+    }
+
+    // The fields of the march that a disk of the given arguments writes
+    // instead of its light and its opacity (see gbkfit::FieldsArgs):
+    // volume_fields planes of the 3d grid for a thick disk (and with line
+    // opacity, a plane of each line), four of the x and y axes for a thin
+    // one
+    static FieldsArgs<T>
+    make_fields_args(
+            const Disk& disk, const DiskArgs<T>& a, const Data& fields,
+            int volume_fields)
+    {
+        FieldsArgs<T> f;
+        require(!fields.is_valid()
+                || !(a.image || a.scube || a.opacity),
                 "fields replace the image, the spectral cube and the "
                 "opacity");
-        // (with line opacity, a plane of each line, of which there are at
-        // most as many as traits)
+        f.opt = disk.opt ? disk.opt->raw() : TraitSet<T>{};
+        require(!disk.opt || (disk.opt_rows.is_valid()
+                              && disk.opt_rows.shape(0) == size_t(f.opt.n)),
+                "the traits of line opacity (opt) need the row of the line "
+                "of each (opt_rows)");
+        f.opt_rows = data(disk.opt_rows);
+        // (there are at most as many lines with line opacity as traits)
         const int nk = disk.opt ? a.nlines : 0;
         require(!fields.is_valid() || nk <= TRAIT_NUM_MAX,
                 "line opacity takes at most " + std::to_string(TRAIT_NUM_MAX)
                 + " lines");
-        a.fields = output(
-                fields, disk.rht ? (volume_fields + nk) * nspat : 4 * nimage,
-                "fields");
-        a.rdata_scale = rdata_scale;
-        a.image_scale = image_scale;
-        return a;
+        const size_t nimage = size_t(a.spat_size[0]) * a.spat_size[1];
+        const size_t nspat = nimage * a.spat_size[2];
+        const size_t size = disk.rht ? (volume_fields + nk) * nspat
+                                     : 4 * nimage;
+        require(!fields.is_valid() || fields.size() == size,
+                "fields has the wrong number of elements");
+        f.fields = data(fields);
+        return f;
     }
 };
 

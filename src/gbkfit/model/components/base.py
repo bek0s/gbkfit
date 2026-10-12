@@ -54,7 +54,7 @@ class NativeGrid(TypedDict):
 class FieldsLayout(NamedTuple):
     """
     How an emitter holds its fields for the march of radiative transfer
-    (see the native DiskArgs::fields): nslots values in each voxel of the
+    (see the native FieldsArgs::fields): nslots values in each voxel of the
     3d grid (a volume, e.g. a thick disk: j, v, s, and with line opacity,
     the light times the coefficient of each line), or in each spaxel (a
     layer at a depth along each line of sight: j, v, s and the position

@@ -496,7 +496,7 @@ class DiskPlan(abc.ABC):
     def fields_layout(self) -> FieldsLayout:
         """
         Return how the disk holds its fields for the march of radiative
-        transfer (see the native DiskArgs::fields).
+        transfer (see the native FieldsArgs::fields).
         """
         pass
 
