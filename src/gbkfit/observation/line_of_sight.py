@@ -88,6 +88,10 @@ class Depth(parseutils.Serializable):
         if self._extent == 'legacy':
             size = grid.size[longest]
         else:
+            # TO REVISE: 2 * radius holds the plane of every disk, but not
+            # the light of a thick disk farther than radius from the plane
+            # of the sky (inclined, or warped; 0.002% of the flux of the
+            # intensity_3d test): add the height of the disks
             extent = 2 * radius if self._extent == 'galaxy' else self._extent
             size = max(1, int(np.ceil(extent / step - 1e-9)))
         return DepthAxis(size, step, -(size / 2 - 0.5) * step)
