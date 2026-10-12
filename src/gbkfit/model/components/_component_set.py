@@ -18,6 +18,7 @@ from ._detail import shared_params
 from .base import Component, ComponentPlan, DepthAxis, NativeGrid
 from .disks._disk import DiskPlan
 from .disks._profiles import DiskDensity, pressure_support
+from .extinction import ExtinctionLaw
 from .geometries import Geometry
 
 
@@ -266,6 +267,10 @@ class ComponentSetPlan:
     dimmed by it. Each has its parameters, and those its galaxy gives it
     (the circular velocity of its mass, evaluated once for all of them).
 
+    The optical depth is held in cubes of opacity (see _opacity_cubes),
+    whose ratios at the rest wavelength of each line of each emitter (or
+    of its band) are those of their extinction laws.
+
     Parameters
     ----------
     component_set : ComponentSet
@@ -290,6 +295,9 @@ class ComponentSetPlan:
     ValueError
         If there is no depth axis and components have opacity (the
         observations check that first, see LineOfSight).
+    ConfigError
+        If dust of an extinction law dims light of an unknown wavelength,
+        or there are too many laws (see _opacity_cubes).
     """
 
     def __init__(
@@ -315,24 +323,42 @@ class ComponentSetPlan:
         self._dtype = dtype
         self._depth = depth
         self._native_grid = _native_grid(grid, spectral, depth)
+        # The cubes of opacity: the law of each, the cube of each absorber
+        # and the factor of its optical depth there, and the ratios of the
+        # cubes at the wavelength of each line (or band) of each emitter
+        ratios = dict.fromkeys(emitters)
+        self._deposits = {}
+        self._odata = None
+        if absorbers:
+            wavelengths = {
+                i: components[i].emission().wavelengths(lines)
+                for i in emitters}
+            cube_laws, cubes, scales = _opacity_cubes(
+                [components[i].opacity().law() for i in absorbers],
+                [w for i in emitters for w in wavelengths[i]])
+            self._deposits = dict(zip(absorbers, zip(cubes, scales)))
+            ratios = {
+                i: np.array([[_ratio(law, w) for law in cube_laws]
+                             for w in wavelengths[i]], dtype)
+                for i in emitters}
+            self._odata = driver.mem_alloc_d(
+                (len(cube_laws),) + self._native_grid['spat_size'][::-1],
+                dtype)
+            self._gmodel = driver.native_class('GModel', dtype)()
         # The plans of the emitters, and of the absorbers that do not emit
         # here
         plans = {
-            i: components[i].plan(driver, spectral, dtype, lines, True)
+            i: components[i].plan(
+                driver, spectral, dtype, lines, True, ratios[i])
             for i in emitters}
         plans |= {
-            i: components[i].plan(driver, spectral, dtype, lines, False)
+            i: components[i].plan(driver, spectral, dtype, lines, False, None)
             for i in absorbers if i not in plans}
         self._emitters = tuple(emitters)
         self._absorbers = tuple(absorbers)
         self._plans = plans
         self._followed = _followed_densities(
             component_set, plans, driver, dtype)
-        self._odata = None
-        if absorbers:
-            self._odata = driver.mem_alloc_d(
-                self._native_grid['spat_size'][::-1], dtype)
-            self._gmodel = driver.native_class('GModel', dtype)()
 
     def evaluate(
             self,
@@ -378,22 +404,27 @@ class ComponentSetPlan:
         def component_extra() -> dict[str, Any] | None:
             return {} if out_extra is not None else None
 
-        # The absorbers add to the opacity cube, so clear it. Then it gets
-        # the optical depth from the viewer to the far side of each voxel,
-        # which the emitters read (its extra output keeps that of each
-        # voxel).
+        # The absorbers add to the cubes of opacity, so clear them. Then
+        # they get the optical depth from the viewer to the far side of
+        # each voxel, which the emitters read. The extra output has the
+        # optical depth at V of each voxel, of all the absorbers.
         totals = {}
         if odata is not None:
             driver.mem_fill(odata, 0)
             for i in self._absorbers:
+                cube, scale = self._deposits[i]
                 extra = component_extra()
                 self._plans[i].evaluate_opacity(
-                    component_params(i), self._native_grid, odata, extra)
+                    component_params(i), self._native_grid, odata[cube],
+                    scale, extra)
+                if extra is not None:
+                    tau = extra['odata']
+                    totals['odata'] = totals['odata'] + tau \
+                        if 'odata' in totals else tau
                 self._add_extra(out_extra, i, extra)
-            if out_extra is not None:
-                totals['odata'] = driver.mem_copy_d2h(odata)
-            self._gmodel.opacity_accumulate(
-                spat_size=self._native_grid['spat_size'], opacity=odata)
+            for cube in odata:
+                self._gmodel.opacity_accumulate(
+                    spat_size=self._native_grid['spat_size'], opacity=cube)
 
         outputs = outputs | dict(bdata=bdata, odata=odata, obdata=obdata)
         for i in self._emitters:
@@ -463,6 +494,66 @@ def _native_grid(
         spec_size=spectral.size[0],
         spec_step=spectral.coords.step[0],
         spec_zero=spectral.zero()[0])
+
+
+# The most cubes of opacity that the native kernels read (OPACITY_NUM_MAX
+# in constants.hpp)
+_MAX_OPACITY_CUBES = 4
+
+
+def _ratio(law: ExtinctionLaw | None, wavelength: float | None) -> float:
+    """
+    Return the ratio of the optical depth of dust of an extinction law
+    (None: grey dust, 1 everywhere) at a rest wavelength (um) to that at V.
+    Raise ConfigError if the law needs a wavelength that is not known.
+    """
+    if law is None:
+        return 1.0
+    if wavelength is None:
+        raise ConfigError(
+            "dust of an extinction law dims light at the rest wavelength of "
+            "its lines, so the emission of the components it dims must name "
+            "its lines (e.g. lines: [halpha]); images see grey dust only")
+    return law.ratio(wavelength)
+
+
+def _opacity_cubes(
+        laws: Sequence[ExtinctionLaw | None],
+        wavelengths: Sequence[float | None]
+) -> tuple[
+        tuple[ExtinctionLaw | None, ...], tuple[int, ...], tuple[float, ...]]:
+    """
+    Return how the optical depth of absorbers of the given extinction laws
+    (None: grey dust) is held for an observation of light of the given
+    rest wavelengths (um; None where not known): the law of each cube of
+    opacity (None: the ratio is 1 at every wavelength), and the cube of
+    each absorber and the factor of its optical depth at V there. With one
+    law, one cube of the optical depth at V; with several laws and one
+    wavelength, one cube of the optical depth at that wavelength; with
+    several laws and wavelengths, one cube of the optical depth at V of
+    each law.
+
+    Raises
+    ------
+    ConfigError
+        If a law needs a wavelength that is not known, or with several
+        wavelengths, there are more laws than the kernels take.
+    """
+    distinct = tuple(dict.fromkeys(laws))
+    if len(distinct) == 1:
+        return distinct, (0,) * len(laws), (1.0,) * len(laws)
+    if len(set(wavelengths)) == 1:
+        return (
+            (None,), (0,) * len(laws),
+            tuple(_ratio(law, wavelengths[0]) for law in laws))
+    if len(distinct) > _MAX_OPACITY_CUBES:
+        raise ConfigError(
+            f"the dust that an observation of several wavelengths sees can "
+            f"have at most {_MAX_OPACITY_CUBES} extinction laws; it has "
+            f"{len(distinct)}")
+    return (
+        distinct, tuple(distinct.index(law) for law in laws),
+        (1.0,) * len(laws))
 
 
 def _followed_densities(

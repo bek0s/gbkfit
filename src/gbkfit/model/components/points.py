@@ -57,6 +57,7 @@ def _spectral_plan(
         spectral: gridutils.Grid,
         dtype: np.dtype,
         depth: bool,
+        opacity_ratios: np.ndarray | None,
         lines: Lines,
         names: Sequence[str] | None
 ) -> 'PointPlan':
@@ -70,7 +71,7 @@ def _spectral_plan(
         (row, lines.ratio_name(index))
         for row, index in enumerate(selected)
         if lines.ratio_name(index) is not None]
-    return PointPlan(driver, dtype, depth, values, ratios)
+    return PointPlan(driver, dtype, depth, opacity_ratios, values, ratios)
 
 
 def _pixels(
@@ -100,26 +101,27 @@ def _pixels(
     return pixels
 
 
-def _transmission(
-        column: np.ndarray, depth: float, grid: NativeGrid) -> float:
+def _optical_depths(
+        columns: np.ndarray, depth: float, grid: NativeGrid
+) -> np.ndarray:
     """
-    Return the fraction of the light at the given depth on a line of sight
-    (arcsec, away from the viewer) that the opacity in front of it lets
-    through, exp(-tau), from the optical depth from the viewer to the far
-    side of each voxel of the line of sight (column), with the absorbers of
-    each voxel spread uniformly along it (as the native disk kernels do,
-    see gmodel_optical_depth): tau is 0 in front of the grid, and that of
-    the whole line of sight behind it.
+    Return the optical depth in each cube of opacity from the viewer to
+    the given depth on a line of sight (arcsec, away from the viewer), from
+    the optical depth from the viewer to the far side of each voxel of the
+    line of sight in each cube (columns, of shape (ncubes, nz)), with the
+    absorbers of each voxel spread uniformly along it (as the native disk
+    kernels do, see gmodel_optical_depth): 0 in front of the grid, and
+    that of the whole line of sight behind it.
     """
     if np.isnan(depth):
-        return depth
+        return np.full(len(columns), np.nan)
     size, step, zero = (
         grid[key][2] for key in ('spat_size', 'spat_step', 'spat_zero'))
     # The position from the near side of the grid (in voxels), and its voxel
     p = min(max((depth - zero) / step + 0.5, 0), size)
     z = min(int(p), size - 1)
-    tau_front = column[z - 1] if z > 0 else 0
-    return float(np.exp(-(tau_front + (p - z) * (column[z] - tau_front))))
+    tau_front = columns[:, z - 1] if z > 0 else np.zeros(len(columns))
+    return tau_front + (p - z) * (columns[:, z] - tau_front)
 
 
 class PointPlan(ComponentPlan):
@@ -131,10 +133,10 @@ class PointPlan(ComponentPlan):
     each a Gaussian of its dispersion, of which each channel gets its
     mean over the channel (as the disks do). On a grid with a depth axis,
     the opacity in front of its depth (its parameter 'depth' if depth, or
-    0: the plane of the sky through the centre of its galaxy) dims it.
-    lines has the offset, scale and flux of each line (spectral points),
-    and ratios the row and the name of the flux ratio of the lines after
-    the first.
+    0: the plane of the sky through the centre of its galaxy) dims it,
+    with its opacity_ratios (see Component.plan). lines has the offset,
+    scale and flux of each line (spectral points), and ratios the row and
+    the name of the flux ratio of the lines after the first.
     """
 
     def __init__(
@@ -142,26 +144,37 @@ class PointPlan(ComponentPlan):
             driver: Driver,
             dtype: np.dtype,
             depth: bool,
+            opacity_ratios: np.ndarray | None,
             lines: np.ndarray | None = None,
             ratios: Sequence[tuple[int, str]] = ()
     ):
         self._driver = driver
         self._dtype = np.dtype(dtype)
         self._depth = depth
+        self._opacity_ratios = opacity_ratios
         self._lines = None if lines is None else np.array(lines, dtype=float)
         self._ratios = tuple(ratios)
 
     def _spectrum(
-            self, params: dict[str, float], grid: NativeGrid
+            self,
+            params: dict[str, float],
+            grid: NativeGrid,
+            transmission: np.ndarray | None = None
     ) -> np.ndarray:
-        """Return the spectrum of the point, per unit flux."""
+        """
+        Return the spectrum of the point, per unit flux, with the fraction
+        of the light of each line that the opacity lets through
+        (transmission), if any.
+        """
         size, step, zero = (
             grid['spec_size'], grid['spec_step'], grid['spec_zero'])
         edges = zero + (np.arange(size + 1) - 0.5) * step
         spectrum = np.zeros(size)
         for row, name in self._ratios:
             self._lines[row, 2] = params[name]
-        for offset, scale, flux in self._lines:
+        for row, (offset, scale, flux) in enumerate(self._lines):
+            if transmission is not None:
+                flux = flux * transmission[row]
             centre = offset + scale * params['vsys']
             sigma = scale * abs(params['disp'])
             if sigma > 0:
@@ -193,14 +206,23 @@ class PointPlan(ComponentPlan):
         if scube is not None:
             values = brightness * self._spectrum(params, grid)
         for x, y, weight in _pixels(params, grid):
+            # The fraction of the light of each line (or of the image) that
+            # the opacity in front of the point lets through at the pixel
+            transmission = None
             if odata is not None:
-                column = driver.mem_copy_d2h(odata[:, y, x])
-                weight *= _transmission(column, depth, grid)
+                columns = driver.mem_copy_d2h(odata[:, :, y, x])
+                transmission = np.exp(-self._opacity_ratios @ _optical_depths(
+                    columns, depth, grid))
             if image is not None:
+                if transmission is not None:
+                    weight *= transmission[0]
                 pixel = image.reshape(-1, *image.shape[-2:])[0, y, x:x + 1]
                 driver.math_add(pixel, self._dtype.type(
                     brightness * weight), out=pixel)
             if scube is not None:
+                if transmission is not None:
+                    values = brightness * self._spectrum(
+                        params, grid, transmission)
                 spectrum = scube[:, y, x]
                 driver.math_add(spectrum, driver.mem_copy_h2d(
                     (weight * values).astype(self._dtype)), out=spectrum)
@@ -292,9 +314,11 @@ class Point(Component):
             spectral: gridutils.Grid,
             dtype: np.dtype,
             lines: tuple[str, ...] | None,
-            emits: bool
+            emits: bool,
+            opacity_ratios: np.ndarray | None
     ) -> PointPlan:
         if self._lines is None:
-            return PointPlan(driver, dtype, self._depth)
+            return PointPlan(driver, dtype, self._depth, opacity_ratios)
         return _spectral_plan(
-            driver, spectral, dtype, self._depth, self._lines, lines)
+            driver, spectral, dtype, self._depth, opacity_ratios,
+            self._lines, lines)

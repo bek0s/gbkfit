@@ -8,8 +8,9 @@ def split_case(case):
     A galaxy, an observation of it and the configuration of its driver,
     from a case of the tests: a dict with a driver, a galaxy, a line of
     sight, an observable (with the primary beam, psf and lsf of the
-    instrument, and the scale and dtype of the observation), and an
-    optional name, which names the galaxy.
+    instrument, and the scale and dtype of the observation), an optional
+    name, which names the galaxy, and the optional lines that the
+    observation sees.
     """
     case = dict(case)
     driver = case.pop('driver')
@@ -23,6 +24,8 @@ def split_case(case):
     for key in ('scale', 'dtype'):
         if key in observable:
             observation[key] = observable.pop(key)
+    if 'lines' in case:
+        observation['lines'] = case.pop('lines')
     galaxy = dict(case.pop('galaxy'))
     name = case.pop('name', None)
     if name is not None:

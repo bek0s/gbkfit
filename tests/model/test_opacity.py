@@ -341,3 +341,105 @@ def test_dust_dims_a_point_in_front_of_its_depth(
     tau = extra['observation0_model_total_odata'].data.sum(axis=0)[12, 12]
     assert data[0]['brightness']['d'][12, 12] == pytest.approx(
         np.exp(-fraction * tau), rel=1e-5)
+
+
+# Extinction laws whose ratios differ much between halpha (6564.61 A) and
+# nii6583 (6585.27 A): 1.031 and 0.721 (A), 1.469 and 1.779 (B)
+TABLE_A = dict(type='table', wavelengths=[0.65, 0.66], ratios=[2.0, 0.5])
+TABLE_B = dict(type='table', wavelengths=[0.65, 0.66], ratios=[0.5, 2.0])
+RATIOS = {
+    'A': dict(halpha=2 - 1.5 * 0.6461, nii6583=2 - 1.5 * 0.8527),
+    'B': dict(halpha=0.5 + 1.5 * 0.6461, nii6583=0.5 + 1.5 * 0.8527)}
+
+# The channels of each line (km/s; nii6583 is at 943.5 km/s)
+LINE_WINDOWS = dict(halpha=(-300, 300), nii6583=(643, 1243))
+
+
+def lines_in_dust(driver, evaluate_cases, emitter, laws, lines, opacity):
+    """
+    The spectral cube of halpha and nii6583 of a face-on thin disk or a
+    point (emitter) in the middle of face-on disks of dust, one of each of
+    the given laws, of the given face-on optical depth at V at the centre,
+    seen in the given lines. Also return the optical depth at V of each
+    disk of dust along each line of sight.
+    """
+    emission = dict(type='lines', lines=['halpha', 'nii6583'])
+    if emitter == 'disk':
+        gas = dict(
+            DISK, name='gas', density=THIN_DENSITY, emission=emission,
+            kinematics=dict(
+                vptraits=dict(type='tan_arctan'),
+                dptraits=dict(type='uniform')))
+        properties = dict(
+            gas_vsys=0, gas_xpos=0, gas_ypos=0, gas_posa=0, gas_incl=0,
+            gas_pt_a=1, gas_pt_s=4, gas_vpt_rt=2, gas_vpt_vt=150,
+            gas_dpt_a=20)
+    else:
+        gas = dict(type='point', name='gas', emission=emission)
+        properties = dict(
+            gas_xpos=0.5, gas_ypos=0.5, gas_flux=1, gas_vsys=0, gas_disp=20)
+    properties['gas_nii6583_ratio'] = 1
+    dusts = [
+        dict(DISK, name=f'dust{i}', density=THICK_DENSITY,
+             opacity=dict(type='dust', law=law))
+        for i, law in enumerate(laws)]
+    for i in range(len(laws)):
+        properties |= {
+            f'dust{i}_{key.removeprefix("dust_")}': value
+            for key, value in FACE_ON_DUST.items()}
+        properties[f'dust{i}_pt_a'] = opacity
+    case = dict(
+        driver=dict(type=driver.type()),
+        observable=dict(
+            type='pixel_spectra', size=[24, 24, 81], step=[1, 1, 25],
+            rval=[0, 0, 500], rest='6564.61 Angstrom'),
+        line_of_sight=dict(
+            type='grid', depth=dict(extent=40 * 0.25, step=0.25)),
+        galaxy=dict(components=[gas] + dusts),
+        **({} if lines is None else dict(lines=lines)))
+    data, extra = evaluate_cases([case], properties)
+    taus = [
+        extra[f'observation0_model_dust{i}_odata'].data.sum(axis=0)
+        for i in range(len(laws))]
+    return data[0]['spectra']['d'], taus
+
+
+def line_flux(cube, line):
+    """The flux of a line in each spaxel: the sum of its channels."""
+    velocity = 500 + (np.arange(81) - 40) * 25
+    low, high = LINE_WINDOWS[line]
+    return cube[(velocity > low) & (velocity < high)].sum(axis=0)
+
+
+@pytest.mark.parametrize('emitter', ['disk', 'point'])
+@pytest.mark.parametrize('laws, lines', [
+    (('A',), None),
+    # Two laws: a cube of opacity for each, or one for one wavelength
+    (('A', 'B'), None),
+    (('A', 'B'), ['halpha'])])
+def test_dust_dims_each_line_by_its_law(
+        driver, evaluate_cases, emitter, laws, lines):
+    # The light of each line crosses half of the dust, whose optical depth
+    # at the line is that at V times the ratio of its law there
+    tables = dict(A=TABLE_A, B=TABLE_B)
+    args = (
+        driver, evaluate_cases, emitter, [tables[law] for law in laws],
+        lines)
+    clear, _ = lines_in_dust(*args, opacity=0)
+    dimmed, taus = lines_in_dust(*args, opacity=0.5)
+    for line in lines or ['halpha', 'nii6583']:
+        tau = sum(RATIOS[law][line] * tau for law, tau in zip(laws, taus))
+        flux = line_flux(clear, line)
+        visible = flux > 1e-3 * flux.max()
+        np.testing.assert_allclose(
+            line_flux(dimmed, line)[visible] / flux[visible],
+            np.exp(-tau[visible] / 2), rtol=1e-4)
+
+
+def test_dust_of_a_law_needs_named_lines(driver):
+    from gbkfit.utils.parseutils import ConfigError
+    case = spectral_cube_case(driver, with_opacity=True)
+    case['galaxy']['components'][1]['opacity'] = dict(
+        type='dust', law=dict(type='ccm'))
+    with pytest.raises(ConfigError, match="must name its lines"):
+        observation_group([case])

@@ -40,10 +40,16 @@ struct DiskArgs
     // trait set, or none (a thin disk).
     TraitSet<T> rpt, rht, vpt, vht, dpt, dht, zpt, spt;
 
-    // The opacity of the 3d spatial grid (optional): the optical depth from
-    // the viewer to the far side of each voxel (see
-    // gmodel_opacity_accumulate)
+    // The opacity of the 3d spatial grid (optional): nopacity cubes, one
+    // after the other, each with the optical depth from the viewer to the
+    // far side of each voxel (see gmodel_opacity_accumulate) of the dust
+    // of one extinction law. The light of line l of the spectral cube (or
+    // of the image: l = 0) crosses the sum of the optical depths of the
+    // cubes k times opacity_ratios[l * nopacity + k]: the ratio of each at
+    // the wavelength of the line.
+    int nopacity = 0;
     const T* opacity = nullptr;
+    const T* opacity_ratios = nullptr;
 
     // The 3d spatial grid, in (x, y, z) order, and the spectral axis.
     // The x and y axes of the grid are rotated on the sky by spat_rota
@@ -77,6 +83,10 @@ struct DiskArgs
     T* vdata_cmp = nullptr;
     T* ddata_cmp = nullptr;
     T* vdweight_cmp = nullptr;
+
+    // The factor of the density in rdata (e.g. the ratio of the optical
+    // depth of dust at the wavelength of an observation to that at V)
+    T rdata_scale = 1;
 };
 
 // The kinds of traits of a disk: the trait sets of DiskArgs
