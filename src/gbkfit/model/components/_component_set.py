@@ -268,15 +268,17 @@ class ComponentSet:
             emitters: Sequence[int],
             lines: tuple[str, ...] | None,
             band: Band | None,
-            redshift: float
+            redshift: float,
+            slab: int | None
     ) -> TransferPlan:
         """
         Plan the evaluation of the components on a driver and dtype by
-        radiative transfer along each line of sight (see TransferPlan).
+        radiative transfer along each line of sight, in slabs of the given
+        number of planes (see TransferPlan).
         """
         return TransferPlan(
             self, driver, grid, spectral, depth, dtype, emitters, lines,
-            band, redshift)
+            band, redshift, slab)
 
 
 class ComponentSetPlan:
@@ -302,11 +304,17 @@ class ComponentSetPlan:
             band: Band | None,
             redshift: float
     ):
-        self._plans = ComponentPlans(
+        plans = ComponentPlans(
             component_set, driver, grid, spectral, depth, dtype, emitters,
             lines, band, redshift)
+        self._plans = plans
         self._depth = depth
-        if self._plans.odata is not None:
+        # The cubes of opacity
+        self._odata = None
+        if plans.ncubes:
+            self._odata = driver.mem_alloc_d(
+                (plans.ncubes,) + plans.native_grid['spat_size'][::-1],
+                dtype)
             self._gmodel = driver.native_class('GModel', dtype)()
 
     def evaluate(
@@ -326,7 +334,8 @@ class ComponentSetPlan:
         dtype = plans.dtype
         grid = plans.native_grid
         shape = grid['spat_size'][::-1]
-        odata = plans.odata
+        odata = self._odata
+        extras = {} if out_extra is not None else None
         bdata = None
         obdata = None
         if out_extra is not None:
@@ -339,26 +348,22 @@ class ComponentSetPlan:
 
         # The absorbers write the optical depth of each voxel, which then
         # becomes the optical depth from the viewer to the far side of each
-        # voxel, which the emitters read. The extra output has the optical
-        # depth at V of each voxel, of all the absorbers.
-        totals = {}
-        tau = plans.evaluate_opacity(values, out_extra)
-        if tau is not None:
-            totals['odata'] = tau
+        # voxel, which the emitters read
         if odata is not None:
+            plans.evaluate_opacity(values, grid, odata, extras)
             for cube in odata:
                 self._gmodel.opacity_accumulate(
                     spat_size=grid['spat_size'], opacity=cube)
 
         outputs = outputs | dict(bdata=bdata, odata=odata, obdata=obdata)
         for i in plans.emitters:
-            extra = {} if out_extra is not None else None
+            extra = {} if extras is not None else None
             plans.plans[i].evaluate_emission(values[i], grid, outputs, extra)
-            plans.add_extra(out_extra, i, extra)
+            if extras is not None:
+                extras.setdefault(i, {}).update(extra)
 
         if out_extra is not None:
-            for name, total in dict(bdata=bdata, obdata=obdata).items():
-                if total is not None:
-                    totals[name] = driver.mem_copy_d2h(total)
-            for name, total in totals.items():
-                out_extra[f'total_{name}'] = plans.extra(total)
+            plans.add_extras(out_extra, extras, {
+                name: driver.mem_copy_d2h(total)
+                for name, total in dict(bdata=bdata, obdata=obdata).items()
+                if total is not None})

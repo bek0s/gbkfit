@@ -362,3 +362,36 @@ def test_line_opacity_errors(driver, component, line_of_sight, message):
         galaxy=dict(components=[component]))
     with pytest.raises(ConfigError, match=message):
         observation_group([case])
+
+
+@pytest.mark.parametrize('disk_type', ['smdisk', 'mcdisk'])
+def test_slabs_give_the_same_model(driver, evaluate_cases, disk_type):
+    # A thick disk with line opacity, a thin disk, a point and dust, on
+    # the depth axis at once, a plane at a time, and in slabs of 7 planes
+    gas = line_opacity(GAS, dict(type='uniform')) | (
+        dict(type='mcdisk', cflux=1e-3) if disk_type == 'mcdisk' else {})
+    components = [
+        gas, NUCLEUS, DUST, GAS | dict(name='gas2', density=THIN)]
+    properties = PROPERTIES | dict(gas_op_a=0.5) | {
+        key.replace('gas_', 'gas2_'): value
+        for key, value in PROPERTIES.items() if key.startswith('gas_')}
+    models = []
+    for slab in (None, 1, 7):
+        case = dict(
+            driver=dict(type=driver.type()),
+            line_of_sight=dict(type='transfer') | (
+                dict(slab=slab) if slab is not None else {}),
+            observable=dict(
+                type='pixel_spectra', size=[24, 24, 31], step=[1, 1, 10]),
+            galaxy=dict(components=components))
+        data, extra = evaluate_cases([case], properties)
+        models.append((data[0]['spectra']['d'], extra))
+    (cube, extra), *others = models
+    for other_cube, other_extra in others:
+        assert_same_model(other_cube, cube)
+        assert other_extra.keys() == extra.keys()
+        for key in ('total_odata', 'total_bdata', 'gas_vdata'):
+            name = f'observation0_model_{key}'
+            np.testing.assert_allclose(
+                other_extra[name].data, extra[name].data, rtol=1e-5,
+                atol=1e-6 * np.nanmax(np.abs(extra[name].data)))
