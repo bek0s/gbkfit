@@ -167,6 +167,16 @@ Wrapper<T>::gmodel_smdisk_evaluate(const DiskArgs<T>& a)
 }
 
 template<typename T> void
+Wrapper<T>::gmodel_opacity_accumulate(
+        int size_x, int size_y, int size_z, T* opacity)
+{
+    const int n = size_x * size_y;
+    launch("gmodel_opacity_accumulate", n,
+            kernels::gmodel_opacity_accumulate<T>,
+            size_x, size_y, size_z, opacity);
+}
+
+template<typename T> void
 Wrapper<T>::gmodel_disk_traits_evaluate(const DiskTraitsArgs<T>& a)
 {
     launch("gmodel_disk_traits_evaluate", a.npoints,

@@ -679,3 +679,17 @@ def test_disk_traits_are_checked(driver, options, message):
     arguments = dict(r=[1, 5, 12], other=[60] * 3) | options
     with pytest.raises(ValueError, match=message):
         evaluate_disk_traits(driver, **arguments)
+
+
+def test_opacity_accumulate(driver):
+    # The optical depth of each voxel becomes that from the viewer (before
+    # z = 0) to the far side of the voxel: a running sum along z
+    memory = Memory(driver)
+    gmodel = driver.native_class('GModel', DTYPE)()
+    tau = smooth_cube((12, 5, 7))
+    opacity = memory.to_device(tau)
+    gmodel.opacity_accumulate((7, 5, 12), opacity)
+    np.testing.assert_array_equal(
+        memory.to_host(opacity), np.cumsum(tau, axis=0, dtype=DTYPE))
+    with pytest.raises(ValueError, match="wrong number of elements"):
+        gmodel.opacity_accumulate((7, 5, 11), opacity)

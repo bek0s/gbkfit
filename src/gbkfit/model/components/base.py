@@ -216,8 +216,8 @@ class ComponentPlan(abc.ABC):
             The arrays the component adds to, which can be left out
             (None): the 'image' or 'scube', and on the 3d grid its
             brightness ('bdata') and brightness after the opacity
-            ('obdata'); it reads the optical depth of each voxel
-            ('odata').
+            ('obdata'); it reads the optical depth from the viewer to
+            the far side of each voxel ('odata').
         out_extra : dict, optional
             Where its extra outputs (on the host) go, if wanted.
         """
