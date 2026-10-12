@@ -186,7 +186,7 @@ dmodel_regions_sum(
 
 template<typename T, bool HasOpacity, bool HasFields, bool HasLineOpacity>
 __global__ void
-gmodel_mcdisk_evaluate(DiskArgs<T> a, MCDiskArgs<T> mc)
+gmodel_mcdisk_evaluate(DiskArgs<T> a, MCDiskArgs<T> mc, FieldsArgs<T> f)
 {
     // Parallelization: per cloud
     const int tid = blockIdx.x * blockDim.x + threadIdx.x;
@@ -197,11 +197,11 @@ gmodel_mcdisk_evaluate(DiskArgs<T> a, MCDiskArgs<T> mc)
     RNG<T> rng(mc.seed, tid);
     gbkfit::gmodel_mcdisk_evaluate_cloud<
             atomic_add<T>, HasOpacity, HasFields, HasLineOpacity>(
-                    rng, tid, a, mc);
+                    rng, tid, a, mc, f);
 }
 
 template<typename T> __global__ void
-gmodel_mcdisk_fields_moments(DiskArgs<T> a)
+gmodel_mcdisk_fields_moments(DiskArgs<T> a, FieldsArgs<T> f)
 {
     // Parallelization: per voxel
     const long long nthreads = 1LL * a.spat_size[0] * a.spat_size[1]
@@ -210,12 +210,12 @@ gmodel_mcdisk_fields_moments(DiskArgs<T> a)
     if (tid >= nthreads)
         return;
 
-    gbkfit::gmodel_mcdisk_fields_moments(tid, a);
+    gbkfit::gmodel_mcdisk_fields_moments(tid, a, f);
 }
 
 template<typename T, bool HasOpacity, bool HasFields, bool HasLineOpacity>
 __global__ void
-gmodel_smdisk_evaluate(DiskArgs<T> a)
+gmodel_smdisk_evaluate(DiskArgs<T> a, FieldsArgs<T> f)
 {
     // Parallelization: per 3d spatial position, or per 2d spatial position
     // for a thin disk (64-bit indices: there can be more voxels than an int
@@ -233,7 +233,7 @@ gmodel_smdisk_evaluate(DiskArgs<T> a)
 
     gbkfit::gmodel_smdisk_evaluate_spaxel<
             atomic_add<T>, HasOpacity, HasFields, HasLineOpacity>(
-                    x, y, z, a);
+                    x, y, z, a, f);
 }
 
 template<typename T> __global__ void

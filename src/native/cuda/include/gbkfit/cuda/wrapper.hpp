@@ -57,10 +57,12 @@ struct Wrapper
             const T* cube, T* out);
 
     static void
-    gmodel_mcdisk_evaluate(const DiskArgs<T>& a, const MCDiskArgs<T>& mc);
+    gmodel_mcdisk_evaluate(
+            const DiskArgs<T>& a, const MCDiskArgs<T>& mc,
+            const FieldsArgs<T>& f);
 
     static void
-    gmodel_smdisk_evaluate(const DiskArgs<T>& a);
+    gmodel_smdisk_evaluate(const DiskArgs<T>& a, const FieldsArgs<T>& f);
 
     static void
     gmodel_opacity_accumulate(int size_x, int size_y, int size_z, T* opacity);

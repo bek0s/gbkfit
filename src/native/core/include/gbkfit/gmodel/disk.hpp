@@ -35,15 +35,10 @@ struct DiskArgs
     const T* incl = nullptr;
 
     // Density (r), velocity (v) and dispersion (d) polar and height
-    // traits, vertical distortion (z) and selection (s) polar traits, and
-    // the polar traits of the coefficients of its line opacity (o). A
-    // height trait set has as many traits as its polar trait set, or none
-    // (a thin disk).
-    TraitSet<T> rpt, rht, vpt, vht, dpt, dht, zpt, spt, opt;
-
-    // The line of each trait of opt: its row in lines, or -1 if the line
-    // is not evaluated. The coefficient of a line is the sum of its traits.
-    const int* opt_rows = nullptr;
+    // traits, and vertical distortion (z) and selection (s) polar traits.
+    // A height trait set has as many traits as its polar trait set, or
+    // none (a thin disk).
+    TraitSet<T> rpt, rht, vpt, vht, dpt, dht, zpt, spt;
 
     // The opacity of the 3d spatial grid (optional): nopacity cubes, one
     // after the other, each with the optical depth from the viewer to the
@@ -88,20 +83,6 @@ struct DiskArgs
     T* vdata_cmp = nullptr;
     T* ddata_cmp = nullptr;
     T* vdweight_cmp = nullptr;
-    // The fields of the disk that the march of radiative transfer reads,
-    // instead of its light (with neither an image nor a spectral cube):
-    // planes of the size of the 3d grid, one after the other. A thick
-    // smooth disk writes the light of each voxel (its density times the
-    // depth of the voxel: j), its velocity v and dispersion s. A Monte
-    // Carlo disk adds the moments of its clouds in each voxel (see
-    // gmodel_mcdisk_fields_moments), which then become j, v and s of
-    // one line, in four planes (the fourth is scratch). A thin disk
-    // writes j, v, s and the position along the depth axis (in voxels)
-    // where its plane crosses the line of sight of each spaxel, in four
-    // images (planes of the size of the x and y axes). With line opacity
-    // (opt), a thick disk writes after s a plane of each line: j times the
-    // coefficient of the line (before the scratch of a Monte Carlo disk).
-    T* fields = nullptr;
 
     // The factor of the density in rdata (e.g. the ratio of the optical
     // depth of dust at the wavelength of an observation to that at V), and
@@ -111,7 +92,35 @@ struct DiskArgs
     T image_scale = 1;
 };
 
-// The kinds of traits of a disk: the trait sets of DiskArgs
+// The fields of a disk that the march of radiative transfer reads, which
+// it writes instead of its light (with neither an image nor a spectral
+// cube; see DiskArgs), and the coefficients of its line opacity: apart
+// from DiskArgs, so that the kernels of light do not carry them.
+template<typename T>
+struct FieldsArgs
+{
+    // The fields: planes of the size of the 3d grid, one after the other.
+    // A thick smooth disk writes the light of each voxel (its density
+    // times the depth of the voxel: j), its velocity v and dispersion s.
+    // A Monte Carlo disk adds the moments of its clouds in each voxel (see
+    // gmodel_mcdisk_fields_moments), which then become j, v and s of one
+    // line, in four planes (the fourth is scratch). A thin disk writes j,
+    // v, s and the position along the depth axis (in voxels) where its
+    // plane crosses the line of sight of each spaxel, in four images
+    // (planes of the size of the x and y axes). With line opacity (opt), a
+    // thick disk writes after s a plane of each line: j times the
+    // coefficient of the line (before the scratch of a Monte Carlo disk).
+    T* fields = nullptr;
+
+    // The polar traits of the coefficients of its line opacity, and the
+    // line of each: its row in DiskArgs::lines, or -1 if the line is not
+    // evaluated. The coefficient of a line is the sum of its traits.
+    TraitSet<T> opt;
+    const int* opt_rows = nullptr;
+};
+
+// The kinds of traits of a disk: the trait sets of DiskArgs (and the
+// coefficients of line opacity of FieldsArgs)
 enum class TraitKind
 {
     RPT, RHT, VPT, VHT, DPT, DHT, ZPT, SPT, OPT
