@@ -332,6 +332,40 @@ def test_rest_round_trip(rest, ctype, keyword):
             coords.rest.value, grid.coords.rest.value, rtol=1e-14)
 
 
+@pytest.mark.parametrize('ctype, keywords, medium, expected', [
+    # The wavelengths of optical velocities are in vacuum (FITS), or in the
+    # medium of AIRORVAC, or in that given; a rest frequency has none
+    ('VOPT', dict(RESTWAV=6.5628e-7), None, 'vacuum'),
+    ('VOPT', dict(RESTWAV=6.5628e-7, AIRORVAC='air'), None, 'air'),
+    ('VOPT', dict(RESTWAV=6.5628e-7, AIRORVAC='air'), 'vacuum', 'vacuum'),
+    ('VOPT', dict(RESTWAV=6.5628e-7), 'air', 'air'),
+    ('VRAD', dict(RESTFRQ=1.420405752e9, AIRORVAC='air'), None, None)])
+def test_medium_of_the_wavelengths(ctype, keywords, medium, expected):
+    fits.writeto('data.fits', np.zeros((6, 20, 24), np.float32),
+                 fits.Header(_spectral_header(ctype, **keywords)))
+    coords = fitsutils.read_data('data.fits', medium=medium)[1]
+    assert coords.medium == expected
+
+
+def test_medium_round_trip():
+    grid = gridutils.make_grid(
+        (24, 20, 6), (1, 1, 10), spectral_axis=2, rest='6562.8 Angstrom',
+        medium='air')
+    fitsutils.write_data('data.fits', np.zeros((6, 20, 24)), grid.coords, 2)
+    assert fits.getheader('data.fits')['AIRORVAC'] == 'air'
+    assert fitsutils.read_data('data.fits')[1].medium == 'air'
+
+
+@pytest.mark.parametrize('rest, medium, message', [
+    ('6562.8 Angstrom', 'water', "must be 'vacuum' or 'air'"),
+    ('1420.405752 MHz', 'air', "only the wavelengths of a rest wavelength"),
+    (None, 'vacuum', "only the wavelengths of a rest wavelength")])
+def test_invalid_medium(rest, medium, message):
+    with pytest.raises(ConfigError, match=message):
+        gridutils.make_grid(
+            (24, 20, 6), spectral_axis=2, rest=rest, medium=medium)
+
+
 @pytest.mark.parametrize('value', [
     '6562.8', '3 km/s', '-1 Angstrom', 'Halpha', [1, 2] * u.m])
 def test_invalid_rest(value):

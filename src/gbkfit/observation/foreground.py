@@ -134,7 +134,7 @@ class LensPlan:
                 source.coords.step + grid.coords.step[2:],
                 source.coords.rpix + grid.coords.rpix[2:],
                 source.coords.rval + grid.coords.rval[2:],
-                source.coords.rota, grid.coords.rest),
+                source.coords.rota, grid.coords.rest, grid.coords.medium),
             grid.spectral_axis)
 
     def evaluate(self, source: DeviceArray, image: DeviceArray) -> None:

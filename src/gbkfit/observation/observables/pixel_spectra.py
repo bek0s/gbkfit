@@ -42,6 +42,9 @@ class PixelSpectra(Observable):
     rest : str or Quantity, optional
         The rest wavelength or frequency of the velocities of the spectral
         axis, if known (see gridutils.make_rest).
+    medium : str, optional
+        The medium of the wavelengths of a rest wavelength: 'vacuum' (the
+        default) or 'air' (see gridutils.make_medium).
     smooth_weights : bool, optional
         Whether the weights of the model are smoothed by the PSF and the
         LSF, as the model is.
@@ -125,6 +128,7 @@ class PixelSpectra(Observable):
             rval=self.rval(),
             rota=self.rota(),
             rest=_detail.dump_rest(self.rest()),
+            medium=self.medium(),
             smooth_weights=self._smooth_weights,
             mask_cutoff=self._mask_cutoff,
             mask_apply=self._mask_apply), data)
@@ -137,11 +141,12 @@ class PixelSpectra(Observable):
             rval: Sequence[float] = (0, 0, 0),
             rota: float = 0,
             rest: str | astropy.units.Quantity | None = None,
+            medium: str | None = None,
             smooth_weights: bool = False,
             mask_cutoff: float | None = None,
             mask_apply: bool = False
     ):
-        super().__init__(size, step, rpix, rval, rota, rest)
+        super().__init__(size, step, rpix, rval, rota, rest, medium)
         _detail.check_mask_options(mask_cutoff, mask_apply)
         self._smooth_weights = smooth_weights
         self._mask_cutoff = mask_cutoff
@@ -169,6 +174,7 @@ class PixelSpectra(Observable):
             rval=self.rval(),
             rota=self.rota(),
             rest=self.rest(),
+            medium=self.medium(),
             scale=tuple(scale),
             primary_beam=instrument.primary_beam(),
             psf=instrument.psf(),

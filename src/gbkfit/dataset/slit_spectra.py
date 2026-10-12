@@ -33,6 +33,9 @@ class DatasetSlitSpectra(Dataset):
         The rotation of the grid on the sky (see gridutils.Coords).
     rest : str or Quantity, optional
         The rest of the spectral axis (see gridutils.make_rest).
+    medium : str, optional
+        The medium of the wavelengths of a rest wavelength (see
+        gridutils.make_medium).
     """
 
     # The axes of a long-slit spectrum: the position along the slit and
@@ -62,7 +65,8 @@ class DatasetSlitSpectra(Dataset):
             rpix: float | Sequence[float] | None = None,
             rval: float | Sequence[float] | None = None,
             rota: float | None = None,
-            rest: str | astropy.units.Quantity | None = None
+            rest: str | astropy.units.Quantity | None = None,
+            medium: str | None = None
     ) -> 'DatasetSlitSpectra':
         """
         Read the dataset from FITS files, with the world coordinates of the
@@ -86,6 +90,10 @@ class DatasetSlitSpectra(Dataset):
         rest : str or Quantity, optional
             The rest of the spectral axis (see gridutils.make_rest); by
             default, that of the header.
+        medium : str, optional
+            The medium of the wavelengths of a rest wavelength (see
+            gridutils.make_medium); by default, that of the header (see
+            fitsutils.read_data).
 
         Returns
         -------
@@ -93,7 +101,7 @@ class DatasetSlitSpectra(Dataset):
             The dataset.
         """
         item, coords = Data.from_files(
-            data, mask, error, rpix, rval, rest, cls.spectral_axis)
+            data, mask, error, rpix, rval, rest, cls.spectral_axis, medium)
         return cls(item, **_detail.grid_coords(coords, step, rota, True))
 
     def dump(
@@ -111,10 +119,12 @@ class DatasetSlitSpectra(Dataset):
             rpix: float | Sequence[float] | None = None,
             rval: float | Sequence[float] | None = None,
             rota: float | None = None,
-            rest: str | astropy.units.Quantity | None = None
+            rest: str | astropy.units.Quantity | None = None,
+            medium: str | None = None
     ):
         super().__init__(dict(spectra=spectra))
-        self._grid = _detail.make_grid(self, step, rpix, rval, rota, rest)
+        self._grid = _detail.make_grid(
+            self, step, rpix, rval, rota, rest, medium)
 
     def grid(self) -> gridutils.Grid:
         """Return the grid of the positions and channels."""

@@ -59,6 +59,9 @@ class PixelMoments(Observable):
     spec_rest : str or Quantity, optional
         The rest wavelength or frequency of the velocities of the spectral
         axis, if known (see gridutils.make_rest).
+    spec_medium : str, optional
+        The medium of the wavelengths of a rest wavelength: 'vacuum' (the
+        default) or 'air' (see gridutils.make_medium).
     method : str, optional
         How the maps are measured from the spectra, as the maps of the
         data were: 'moments', or 'gaussian_fit' (the flux, centre and
@@ -103,6 +106,7 @@ class PixelMoments(Observable):
             spec_step: float = _moments.SPEC_STEP,
             spec_rval: float | None = None,
             spec_rest: str | astropy.units.Quantity | None = None,
+            spec_medium: str | None = None,
             method: str = 'moments'
     ) -> 'PixelMoments':
         """
@@ -113,7 +117,7 @@ class PixelMoments(Observable):
         ----------
         dataset : DatasetPixelMoments
             The moment maps.
-        mask_cutoff, spec_step, spec_rest, method : optional
+        mask_cutoff, spec_step, spec_rest, spec_medium, method : optional
             As those of PixelMoments.
         spec_size, spec_rval : optional
             As those of PixelMoments. By default, with moment 1, the
@@ -138,7 +142,8 @@ class PixelMoments(Observable):
             **_moments.spectral_axis_from_data(
                 dataset, spec_step, spec_size, spec_rval),
             mask_cutoff=mask_cutoff, orders=dataset.orders(),
-            spec_step=spec_step, spec_rest=spec_rest, method=method)
+            spec_step=spec_step, spec_rest=spec_rest,
+            spec_medium=spec_medium, method=method)
 
     def dump(
             self,
@@ -160,6 +165,7 @@ class PixelMoments(Observable):
             spec_step=self._spec_step,
             spec_rval=self._spec_rval,
             spec_rest=_detail.dump_rest(self._spec_rest),
+            spec_medium=self._spec_medium,
             method=self._method), data)
 
     def __init__(
@@ -175,6 +181,7 @@ class PixelMoments(Observable):
             spec_step: float = _moments.SPEC_STEP,
             spec_rval: float = 0,
             spec_rest: str | astropy.units.Quantity | None = None,
+            spec_medium: str | None = None,
             method: str = 'moments'
     ):
         super().__init__(size, step, rpix, rval, rota)
@@ -188,6 +195,8 @@ class PixelMoments(Observable):
         self._spec_step = spec_step
         self._spec_rval = spec_rval
         self._spec_rest = gridutils.make_rest(spec_rest)
+        self._spec_medium = gridutils.make_medium(
+            spec_medium, self._spec_rest)
 
     def keys(self) -> tuple[str, ...]:
         return tuple(f'moment{i}' for i in self._orders)
@@ -212,6 +221,9 @@ class PixelMoments(Observable):
 
     def spec_rest(self) -> astropy.units.Quantity | None:
         return self._spec_rest
+
+    def spec_medium(self) -> str | None:
+        return self._spec_medium
 
     def check_instrument(self, instrument: Instrument) -> None:
         _moments.warn_unmasked_noise(self._mask_cutoff, instrument)
