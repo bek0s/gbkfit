@@ -189,8 +189,8 @@ def test_one_model_seen_by_two_observations(tmp_path):
     # observations than models
     config = yaml.load(REFERENCE_DIR / 'thin_disk_pixel_spectra.yaml')
     scube = config['observations'][0]
-    mmaps = dict(driver=dict(type='host'), name='maps',
-                 observable=dict(type='pixel_moments', size=[48, 48]))
+    mmaps = dict(
+        name='maps', observable=dict(type='pixel_moments', size=[48, 48]))
     config['observations'] = [scube | dict(name='cube'), mmaps]
     outputs = run_eval('model', config, tmp_path / 'model')
     assert outputs['model_0_spectra_d'].shape == (50, 48, 48)

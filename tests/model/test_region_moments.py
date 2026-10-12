@@ -124,7 +124,7 @@ def test_region_moments_observation_from_data(tmp_path):
     assert loaded.regions() == dataset.regions()
     np.testing.assert_array_equal(loaded['moment1'].data(), [1400, 1500, 1600])
     info = dict(
-        driver=dict(type='host'), data=data_info,
+        data=data_info,
         observable=dict(type='region_moments', spec_step=2))
     observation = observation_parser.load(copy.deepcopy(info))
     observable = observation.observable()

@@ -35,10 +35,11 @@ SCUBE = dict(type='pixel_spectra', size=[32, 41, 51], step=[1, 1, 10])
 
 
 def observation(driver, components=None, **options):
-    info = dict(driver=dict(type=driver.type()), observable=SCUBE)
+    info = dict(observable=SCUBE)
     if components is not None:
         info['components'] = components
-    return observation_parser.load(copy.deepcopy(info | options))
+    return observation_parser.load(
+        copy.deepcopy(info | options), drivers={None: driver})
 
 
 def evaluate(model, observations, properties):

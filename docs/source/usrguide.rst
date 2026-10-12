@@ -81,6 +81,11 @@ Example
 
 .. code-block:: yaml
 
+   # where the models are evaluated: host (the default) or cuda; several
+   # drivers are declared by name in a section 'drivers', and then each
+   # observation names its own (e.g. driver: gpu)
+   driver: {type: host}
+
    # galaxy model
    models:
    - type: kinematics_2d
@@ -97,8 +102,7 @@ Example
 
    # observations of the galaxy model
    observations:
-   - driver: {type: host}
-     observable:
+   - observable:
        type: pixel_spectra
        size: [101, 101, 101]
        step: [1, 1, 5]

@@ -47,7 +47,8 @@ def fit(
     """
     _log.info(f"reading configuration from file: {config}...")
     cfg, root = _detail.read_config(
-        config, ('models', 'observations', 'params', 'fitter'), ('pdescs',))
+        config, ('models', 'observations', 'params', 'fitter'),
+        ('driver', 'drivers', 'pdescs'))
     output_dir = _detail.make_output_dir(output_dir, output_dir_mode)
     _log.info(f"output will be stored under directory: {output_dir}")
 

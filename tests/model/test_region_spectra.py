@@ -198,7 +198,7 @@ def test_region_spectra_observation_from_data(tmp_path):
     data_info = dataset.dump(prefix=str(tmp_path / ''))
     data_info.pop('type')
     info = dict(
-        driver=dict(type='host'), data=data_info,
+        data=data_info,
         observable=dict(type='region_spectra', size=[32, 41]))
     observation = observation_parser.load(copy.deepcopy(info))
     observable = observation.observable()

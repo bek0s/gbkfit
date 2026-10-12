@@ -225,7 +225,7 @@ def test_observations_have_their_own_dtype(tmp_path):
     from gbkfit.observation import observation_parser
     fits.writeto(tmp_path / 'image.fits', np.ones((8, 20), np.float64))
     observation = observation_parser.load(dict(
-        driver=dict(type='host'), observable=dict(type='pixel_brightness'),
+        observable=dict(type='pixel_brightness'),
         data=dict(data=str(tmp_path / 'image.fits'))))
     assert observation.dtype() == np.float32
     assert observation.data().dtype() == np.float64
@@ -257,9 +257,7 @@ def test_observable_grid_comes_from_the_data(tmp_path):
     # too, and a dump of the observation does not repeat it
     from gbkfit.observation import observation_parser
     fits.writeto(tmp_path / 'image.fits', np.ones((8, 20)))
-    info = dict(
-        driver=dict(type='host'),
-        data=dict(data=str(tmp_path / 'image.fits')))
+    info = dict(data=dict(data=str(tmp_path / 'image.fits')))
     observation = observation_parser.load(
         info | dict(observable=dict(type='pixel_brightness')))
     assert observation.observable().size() == (20, 8)
@@ -296,7 +294,7 @@ def test_pixel_spectra_rest_comes_from_the_data(tmp_path):
     data_info.pop('type')
     loaded = dataset_parser.load(dict(type='pixel_spectra') | dict(data_info))
     assert loaded.grid().coords.rest == dataset.grid().coords.rest
-    info = dict(driver=dict(type='host'), data=data_info)
+    info = dict(data=data_info)
     observation = observation_parser.load(
         info | dict(observable=dict(type='pixel_spectra')))
     assert observation.observable().rest() == dataset.grid().coords.rest

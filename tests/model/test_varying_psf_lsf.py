@@ -30,10 +30,10 @@ def spectra(driver, psf=None, lsf=None, scale=(1, 1, 1)):
     """The spectra of the model seen with the PSF and the LSF."""
     group = ObservationGroup([model_parser.load(MODEL)], [
         observation_parser.load(dict(
-            driver=dict(type=driver.type()), scale=list(scale),
+            scale=list(scale),
             instrument=dict(psf=psf, lsf=lsf),
             observable=dict(type='pixel_spectra', size=list(SIZE),
-                            step=list(STEP))))])
+                            step=list(STEP))), drivers={None: driver})])
     params = gbkfit.params.ParamSpace(
         group.pdescs(), PROPERTIES).evaluate()
     return group.model_h(params)[0]['spectra']['d'].copy()

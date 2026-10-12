@@ -83,7 +83,7 @@ def model(name=None):
 
 def observation(model_=None, name=None):
     return dict(
-        driver=dict(type='host'), observable=dict(type='pixel_brightness', size=[8, 8])) \
+        observable=dict(type='pixel_brightness', size=[8, 8])) \
         | (dict(model=model_) if model_ is not None else {}) \
         | (dict(name=name) if name is not None else {})
 

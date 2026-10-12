@@ -30,7 +30,7 @@ def evaluate_disk(
     """
     import gbkfit.params
     config = ruamel.yaml.YAML(typ='safe').load(CONFIG_DIR / f'{disk}.yaml')
-    config['observations'][0]['driver']['type'] = driver_type
+    config['driver'] = dict(type=driver_type)
     config['models'][0]['components'][0].update(component or {})
     model_group = config_group(config)
     params = gbkfit.params.ParamSpace(
@@ -288,8 +288,8 @@ def test_mcdisk_velocity_is_the_mean_of_the_clouds(driver):
     # are within the spectral axis).
     import gbkfit.params
     config = ruamel.yaml.YAML(typ='safe').load(CONFIG_DIR / 'mcdisk.yaml')
+    config['driver'] = dict(type=driver.type())
     observation = config['observations'][0]
-    observation['driver']['type'] = driver.type()
     observation['instrument'] = {}
     observation['observable'] = dict(
         type='pixel_spectra', size=[48, 48, 120], step=[1, 1, 5])
