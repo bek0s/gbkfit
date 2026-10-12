@@ -104,8 +104,10 @@ Example
        # are named, e.g. lines: [halpha, nii6583], from the catalogue of
        # GBKFIT or the section 'lines' of the configuration (e.g.
        # lines: {mgii2796: 2796.35 Angstrom}; rest wavelengths in vacuum;
-       # for data in air wavelengths, e.g. MUSE, the observable takes
-       # medium: air, which gbkfit-prep writes in the files it converts)
+       # the spectral axis of data in air wavelengths, e.g. MUSE, has the
+       # option medium: air, of the data, or of an observable without
+       # data; gbkfit-prep writes it in the files it converts, as the
+       # header keyword AIRORVAC)
        emission: {type: lines}
 
    # observations of the galaxy: a spectral cube; the galaxy is evaluated

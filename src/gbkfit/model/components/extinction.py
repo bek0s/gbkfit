@@ -34,7 +34,9 @@ class ExtinctionLaw(parseutils.TypedSerializable, abc.ABC):
         return isinstance(other, ExtinctionLaw) and self.dump() == other.dump()
 
     def __hash__(self) -> int:
-        return hash(repr(sorted(self.dump().items())))
+        # (equal laws are of the same type; __eq__ tells laws of a type
+        # apart)
+        return hash(self.type())
 
     @abc.abstractmethod
     def range(self) -> tuple[float, float]:
@@ -97,7 +99,7 @@ class ExtinctionCCM(ExtinctionLaw):
     def __init__(self, rv: float = 3.1):
         if not rv > 0:
             raise ConfigError(f"rv must be positive; it is {rv}")
-        self._rv = rv
+        self._rv = float(rv)
 
     def range(self) -> tuple[float, float]:
         return 0.1, 1 / 0.3
@@ -159,7 +161,7 @@ class ExtinctionCalzetti(ExtinctionLaw):
     def __init__(self, rv: float = 4.05):
         if not rv > 0:
             raise ConfigError(f"rv must be positive; it is {rv}")
-        self._rv = rv
+        self._rv = float(rv)
 
     def range(self) -> tuple[float, float]:
         return 0.12, 2.2
