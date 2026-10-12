@@ -8,12 +8,13 @@ import numpy as np
 from gbkfit.dataset import Dataset
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.instrument import Instrument
-from gbkfit.model.base import Model, Selection
+from gbkfit.model import Emission
 from gbkfit.params import ParamValues
 from gbkfit.utils import gridutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
 
 if TYPE_CHECKING:
+    from .._scene import Scene
     from ..foreground import Foreground
 
 
@@ -62,11 +63,9 @@ class Observable(parseutils.TypedSerializable, abc.ABC):
 
     dataset_class: type[Dataset]
 
-    @staticmethod
-    @abc.abstractmethod
-    def is_compatible(model: Model) -> bool:
-        """Check whether a model can be observed as this observable."""
-        pass
+    # The emission it sees: in a band (BandEmission) for an image, lines
+    # (LineEmission) for a spectral cube and what is made of one
+    emission: type[Emission]
 
     @classmethod
     @abc.abstractmethod
@@ -180,28 +179,6 @@ class Observable(parseutils.TypedSerializable, abc.ABC):
         """
         pass
 
-    def require_compatible(self, model: Model) -> None:
-        """
-        Check that a model can be observed as this observable.
-
-        Parameters
-        ----------
-        model : Model
-            The model.
-
-        Raises
-        ------
-        ConfigError
-            If the model cannot be observed as this observable.
-        """
-        if not self.is_compatible(model):
-            observable_desc = parseutils.make_typed_desc(
-                self.__class__, 'observable')
-            model_desc = parseutils.make_typed_desc(
-                model.__class__, 'model')
-            raise ConfigError(
-                f"{observable_desc} is not compatible with {model_desc}")
-
     def require_matching(self, dataset: Dataset) -> None:
         """
         Check that a dataset holds the data of this observable.
@@ -274,22 +251,22 @@ class Observable(parseutils.TypedSerializable, abc.ABC):
     def plan(
             self,
             driver: Driver,
-            model: Model,
+            scene: 'Scene',
             foreground: 'Foreground',
             instrument: Instrument,
             scale: Sequence[int],
-            dtype: np.dtype,
-            selection: Selection
+            dtype: np.dtype
     ) -> 'ObservablePlan':
         """
-        Plan the evaluation of a model as this observable.
+        Plan the evaluation of a scene (what an observation sees) as this
+        observable.
 
         Parameters
         ----------
         driver : Driver
             The driver it is evaluated on.
-        model : Model
-            The model.
+        scene : Scene
+            What is seen: galaxies along a line of sight.
         foreground : Foreground
             What the light meets before the telescope.
         instrument : Instrument
@@ -299,8 +276,6 @@ class Observable(parseutils.TypedSerializable, abc.ABC):
             data.
         dtype : np.dtype
             The floating type of the model.
-        selection : Selection
-            What of the model is seen.
 
         Returns
         -------

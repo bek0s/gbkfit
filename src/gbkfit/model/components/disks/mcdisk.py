@@ -3,26 +3,20 @@ from typing import Any, Self
 
 import numpy as np
 
-from gbkfit.driver import DeviceArray, Driver
+from gbkfit.driver import Driver
 from gbkfit.math.interpolation import Interpolator
 from gbkfit.params import ParamDesc, ParamValues
-from gbkfit.utils import gridutils, parseutils
+from gbkfit.utils import gridutils
 from gbkfit.utils.parseutils import ConfigError
-from .._detail import dump_geometry, dump_lines, dump_name
-from ..base import (
-    BrightnessComponent3D, ComponentPlan, OpacityComponent3D,
-    SpectralComponent3D)
+from ..base import Component, ComponentPlan
 from ..geometries import Geometry
-from ..lines import Line, line_parser
+from ..roles import Emission, Opacity
 from . import _detail, _disk, traits
-from ._detail import (
-    BHT, BPT, DHT, DPT, OHT, OPT, SPT, VHT, VPT, ZPT)
+from .parts import Density, Kinematics
 
 
 __all__ = [
-    'BrightnessMCDisk3D',
-    'SpectralMCDisk3D',
-    'OpacityMCDisk3D'
+    'MCDisk'
 ]
 
 
@@ -30,7 +24,7 @@ __all__ = [
 _MAX_CLOUDS = np.iinfo(np.int32).max
 
 
-class MCDisk(_disk.Disk):
+class CloudDisk(_disk.Disk):
     """
     A disk made of clouds drawn at random from its traits, each of flux
     cflux, with the random numbers of the given seed (see Disk for the
@@ -48,12 +42,10 @@ class MCDisk(_disk.Disk):
             rstep: float,
             interp: type[Interpolator],
             traits_: dict[str, Sequence[traits.Trait]],
-            prefixes: dict[str, str],
-            rdata_key: str
+            prefixes: dict[str, str]
     ):
         super().__init__(
-            loose, tilted, rnodes, rstep, interp, traits_,
-            prefixes, rdata_key)
+            loose, tilted, rnodes, rstep, interp, traits_, prefixes)
         if seed < 0:
             raise ConfigError(f"seed must be >= 0; supplied value: {seed}")
         if not cflux > 0:
@@ -75,14 +67,15 @@ class MCDisk(_disk.Disk):
     def plan(
             self, driver: Driver, nlines: int, dtype: np.dtype
     ) -> _disk.DiskPlan:
-        return MCDiskPlan(self, driver, nlines, dtype)
+        return CloudDiskPlan(self, driver, nlines, dtype)
 
 
-class MCDiskPlan(_disk.DiskPlan):
-    """The evaluation of an MCDisk."""
+class CloudDiskPlan(_disk.DiskPlan):
+    """The evaluation of a CloudDisk."""
 
     def __init__(
-            self, disk: MCDisk, driver: Driver, nlines: int, dtype: np.dtype):
+            self, disk: CloudDisk, driver: Driver, nlines: int,
+            dtype: np.dtype):
         super().__init__(disk, driver, nlines, dtype)
         # The clouds are made in pools: one for each density trait with
         # an analytical integral, and one for each ring of the others
@@ -164,58 +157,30 @@ class MCDiskPlan(_disk.DiskPlan):
             **grid_and_outputs)
 
 
-class BrightnessMCDisk3D(BrightnessComponent3D):
+class MCDisk(Component):
     """
-    A thick disk of brightness, made of clouds drawn at random from
-    its traits (a component of intensity_3d).
+    A disk made of clouds drawn at random from its density, each of flux
+    cflux, with the random numbers of the given seed: a sample of the
+    smooth disk of the same parts, to which it converges. It is thick
+    (density height traits), and evaluated on a grid with a depth axis.
 
     Parameters
     ----------
-    bptraits : Trait or Sequence of Trait
-        Its surface brightness polar traits: the brightness as a function
-        of radius and azimuth (see traits).
-    bhtraits : Trait or Sequence of Trait
-        Its surface brightness height traits: the vertical distribution of
-        the brightness, one for each polar trait.
-    zptraits : Trait or Sequence of Trait, optional
-        Its vertical distortion polar traits (e.g. a warp out of its
-        plane).
-    sptraits : Trait or Sequence of Trait, optional
-        Its selection polar traits: the parts of the disk that are seen
-        (e.g. a range of azimuths).
-    loose : bool, optional
-        Whether its centre and systemic velocity are node-wise (a value
-        for each ring); by default, not, or those of its geometry.
-    tilted : bool, optional
-        Whether its position angle and inclination are node-wise; by
-        default, not, or those of its geometry.
-    rnmin, rnmax, rnsep, rnlen, rnodes : optional
-        The radii of its rings (arcsec): rnodes; or rnmin, rnmax and rnsep
-        (every rnsep); or rnmin, rnmax and rnlen (rnlen rings). Those of
-        its geometry if it is warped.
-    rstep : float, optional
-        The width of the rings it is evaluated on, at most half the
-        smallest separation of its radii; by default that, or 1 if less.
-    interp : str, optional
-        How its node-wise parameters are interpolated between its radii:
-        'linear', 'akima' or 'pchip'.
+    density : Density
+        Its density (with height traits).
     cflux : float
-        The flux of each of its clouds.
+        The flux (density) of each cloud.
     seed : int, optional
         The seed of the random numbers of its clouds.
-    geometry : Geometry, optional
-        A geometry that it shares with other components (see Geometry).
-    name : str, optional
-        Its name (see Component).
+    other parameters
+        As SMDisk.
 
     Raises
     ------
     ConfigError
-        If the options are not valid (e.g. the rings, or the number of
-        traits), or conflict with its geometry.
+        As SMDisk, if it is thin, if the seed is negative, or if cflux is
+        not positive.
     """
-
-    _slots = (BPT, BHT, ZPT, SPT)
 
     @staticmethod
     def type() -> str:
@@ -223,20 +188,19 @@ class BrightnessMCDisk3D(BrightnessComponent3D):
 
     @classmethod
     def load(cls, info: dict[str, Any]) -> Self:
-        return cls(**_detail.load_options(cls, info, cls._slots))
+        return cls(**_detail.load_disk_component(cls, info))
 
     def dump(self) -> dict[str, Any]:
-        return (
-            dict(type=self.type())
-            | dump_name(self)
-            | dump_geometry(self)
-            | _detail.dump_disk(self._disk, self._slots, self.geometry()))
+        return _detail.dump_disk_component(
+            self, self._disk, self._density, self._kinematics)
 
     def __init__(
             self,
+            density: Density,
             cflux: float,
-            bptraits: traits.RPTrait | Sequence[traits.RPTrait],
-            bhtraits: traits.RHTrait | Sequence[traits.RHTrait],
+            kinematics: Kinematics | None = None,
+            emission: Emission | None = None,
+            opacity: Opacity | None = None,
             zptraits: traits.ZPTrait | Sequence[traits.ZPTrait] | None = None,
             sptraits: traits.SPTrait | Sequence[traits.SPTrait] | None = None,
             loose: bool | None = None,
@@ -252,332 +216,53 @@ class BrightnessMCDisk3D(BrightnessComponent3D):
             geometry: Geometry | None = None,
             name: str | None = None
     ):
-        super().__init__(name, geometry)
+        super().__init__(name, geometry, emission, opacity)
+        if not density.thick():
+            raise ConfigError(
+                "a Monte Carlo disk needs density height traits (it is "
+                "thick)")
+        self._density = density
+        self._kinematics = kinematics
         self._disk = _detail.make_disk(
-            type(self), MCDisk, self._slots,
-            rdata_key='bdata',
-            geometry=geometry, loose=loose, tilted=tilted,
+            CloudDisk, density, kinematics, emission, opacity, zptraits,
+            sptraits, geometry=geometry, loose=loose, tilted=tilted,
             rnmin=rnmin, rnmax=rnmax, rnsep=rnsep, rnlen=rnlen,
             rnodes=rnodes, rstep=rstep, interp=interp,
-            traits_=dict(
-                bptraits=bptraits, bhtraits=bhtraits, zptraits=zptraits,
-                sptraits=sptraits),
             cflux=cflux, seed=seed)
+        self._lines = _detail.make_lines(self._disk, emission)
+
+    def density(self) -> Density:
+        """Return its density."""
+        return self._density
+
+    def kinematics(self) -> Kinematics | None:
+        """Return its kinematics, if any."""
+        return self._kinematics
+
+    def thick(self) -> bool:
+        return True
 
     def pdescs(self) -> dict[str, ParamDesc]:
-        return self._disk.pdescs()
+        lines = self._lines.pdescs() if self._lines is not None else {}
+        return self._disk.pdescs() | lines
 
     def constants(self) -> dict[str, Any]:
         return dict(
             rnodes=self._disk.rnodes(), subrnodes=self._disk.subrnodes())
-
-    def plan(
-            self,
-            driver: Driver,
-            spectral: gridutils.Grid,
-            dtype: np.dtype,
-            lines: tuple[str, ...] | None
-    ) -> ComponentPlan:
-        return _detail.DiskComponentPlan(
-            self, self._disk.plan(driver, 0, dtype))
-
-    def disk_outputs(
-            self, outputs: dict[str, DeviceArray | None]
-    ) -> dict[str, DeviceArray | None]:
-        """Return the outputs of the disk, from those of the component."""
-        # The density of the disk is its brightness
-        return dict(
-            image=outputs['image'],
-            rdata=outputs['bdata'],
-            opacity=outputs['odata'],
-            ordata=outputs['obdata'])
-
-
-class SpectralMCDisk3D(SpectralComponent3D):
-    """
-    A thick disk of emission lines, made of clouds drawn at random
-    from its traits (a component of kinematics_3d).
-
-    Parameters
-    ----------
-    bptraits : Trait or Sequence of Trait
-        Its surface brightness polar traits: the brightness as a function
-        of radius and azimuth (see traits).
-    bhtraits : Trait or Sequence of Trait
-        Its surface brightness height traits: the vertical distribution of
-        the brightness, one for each polar trait.
-    vptraits : Trait or Sequence of Trait
-        Its velocity polar traits (e.g. the rotation curve).
-    vhtraits : Trait or Sequence of Trait, optional
-        Its velocity height traits, one for each velocity polar trait; by
-        default, the velocity does not change with height.
-    dptraits : Trait or Sequence of Trait
-        Its velocity dispersion polar traits.
-    dhtraits : Trait or Sequence of Trait, optional
-        Its velocity dispersion height traits, one for each dispersion
-        polar trait; by default, the dispersion does not change with
-        height.
-    zptraits : Trait or Sequence of Trait, optional
-        Its vertical distortion polar traits (e.g. a warp out of its
-        plane).
-    sptraits : Trait or Sequence of Trait, optional
-        Its selection polar traits: the parts of the disk that are seen
-        (e.g. a range of azimuths).
-    loose : bool, optional
-        Whether its centre and systemic velocity are node-wise (a value
-        for each ring); by default, not, or those of its geometry.
-    tilted : bool, optional
-        Whether its position angle and inclination are node-wise; by
-        default, not, or those of its geometry.
-    rnmin, rnmax, rnsep, rnlen, rnodes : optional
-        The radii of its rings (arcsec): rnodes; or rnmin, rnmax and rnsep
-        (every rnsep); or rnmin, rnmax and rnlen (rnlen rings). Those of
-        its geometry if it is warped.
-    rstep : float, optional
-        The width of the rings it is evaluated on, at most half the
-        smallest separation of its radii; by default that, or 1 if less.
-    interp : str, optional
-        How its node-wise parameters are interpolated between its radii:
-        'linear', 'akima' or 'pchip'.
-    cflux : float
-        The flux of each of its clouds.
-    seed : int, optional
-        The seed of the random numbers of its clouds.
-    lines : Sequence of Line, optional
-        Its emission lines (see Lines); by default, one line at the
-        velocity of the spectral axis.
-    geometry : Geometry, optional
-        A geometry that it shares with other components (see Geometry).
-    name : str, optional
-        Its name (see Component).
-
-    Raises
-    ------
-    ConfigError
-        If the options are not valid (e.g. the rings, or the number of
-        traits), or conflict with its geometry.
-    """
-
-    _slots = (BPT, BHT, VPT, VHT, DPT, DHT, ZPT, SPT)
-
-    @staticmethod
-    def type() -> str:
-        return 'mcdisk'
-
-    @classmethod
-    def load(cls, info: dict[str, Any]) -> Self:
-        parseutils.load_option_and_update_info(
-            line_parser, info, 'lines')
-        return cls(**_detail.load_options(cls, info, cls._slots))
-
-    def dump(self) -> dict[str, Any]:
-        return (
-            dict(type=self.type())
-            | dump_name(self)
-            | dump_geometry(self)
-            | _detail.dump_disk(self._disk, self._slots, self.geometry())
-            | dump_lines(self._lines))
-
-    def __init__(
-            self,
-            cflux: float,
-            bptraits: traits.RPTrait | Sequence[traits.RPTrait],
-            vptraits: traits.VPTrait | Sequence[traits.VPTrait],
-            dptraits: traits.DPTrait | Sequence[traits.DPTrait],
-            bhtraits: traits.RHTrait | Sequence[traits.RHTrait],
-            vhtraits: traits.VHTrait | Sequence[traits.VHTrait] | None = None,
-            dhtraits: traits.DHTrait | Sequence[traits.DHTrait] | None = None,
-            zptraits: traits.ZPTrait | Sequence[traits.ZPTrait] | None = None,
-            sptraits: traits.SPTrait | Sequence[traits.SPTrait] | None = None,
-            loose: bool | None = None,
-            tilted: bool | None = None,
-            rnmin: float | None = None,
-            rnmax: float | None = None,
-            rnsep: float | None = None,
-            rnlen: int | None = None,
-            rnodes: Sequence[float] | None = None,
-            rstep: float | None = None,
-            interp: str = 'linear',
-            seed: int = 0,
-            lines: Sequence[Line] | None = None,
-            geometry: Geometry | None = None,
-            name: str | None = None
-    ):
-        super().__init__(name, geometry)
-        self._disk = _detail.make_disk(
-            type(self), MCDisk, self._slots,
-            rdata_key='bdata',
-            geometry=geometry, loose=loose, tilted=tilted,
-            rnmin=rnmin, rnmax=rnmax, rnsep=rnsep, rnlen=rnlen,
-            rnodes=rnodes, rstep=rstep, interp=interp,
-            traits_=dict(
-                bptraits=bptraits, bhtraits=bhtraits, vptraits=vptraits,
-                vhtraits=vhtraits, dptraits=dptraits, dhtraits=dhtraits,
-                zptraits=zptraits, sptraits=sptraits),
-            cflux=cflux, seed=seed)
-        self._lines = _detail.make_lines(self._disk, lines)
-
-    def pdescs(self) -> dict[str, ParamDesc]:
-        return self._disk.pdescs() | self._lines.pdescs()
 
     def circular_velocity_params(self) -> dict[str, tuple[float, ...]]:
         return self._disk.circular_velocity_params()
 
-    def brightness_disk(self) -> _disk.Disk:
+    def density_disk(self) -> _disk.Disk:
         return self._disk
 
-    def constants(self) -> dict[str, Any]:
-        return dict(
-            rnodes=self._disk.rnodes(), subrnodes=self._disk.subrnodes())
-
-    def line_names(self) -> tuple[str, ...]:
-        return self._lines.names()
-
     def plan(
             self,
             driver: Driver,
             spectral: gridutils.Grid,
             dtype: np.dtype,
-            lines: tuple[str, ...] | None
+            lines: tuple[str, ...] | None,
+            emits: bool
     ) -> ComponentPlan:
-        selected = self._lines.select(lines)
-        return _detail.SpectralDiskComponentPlan(
-            self, self._disk.plan(driver, len(selected), dtype),
-            self._lines, selected, spectral)
-
-    def disk_outputs(
-            self, outputs: dict[str, DeviceArray | None]
-    ) -> dict[str, DeviceArray | None]:
-        """Return the outputs of the disk, from those of the component."""
-        # The density of the disk is its brightness
-        return dict(
-            scube=outputs['scube'],
-            rdata=outputs['bdata'],
-            opacity=outputs['odata'],
-            ordata=outputs['obdata'])
-
-
-class OpacityMCDisk3D(OpacityComponent3D):
-    """
-    A thick disk of opacity, made of clouds drawn at random from its
-    traits (an opacity component of intensity_3d and kinematics_3d).
-
-    Parameters
-    ----------
-    optraits : Trait or Sequence of Trait
-        Its opacity polar traits: the optical depth of the disk seen face-
-        on.
-    ohtraits : Trait or Sequence of Trait
-        Its opacity height traits: the vertical distribution of the
-        optical depth, one for each polar trait.
-    zptraits : Trait or Sequence of Trait, optional
-        Its vertical distortion polar traits (e.g. a warp out of its
-        plane).
-    sptraits : Trait or Sequence of Trait, optional
-        Its selection polar traits: the parts of the disk that are seen
-        (e.g. a range of azimuths).
-    loose : bool, optional
-        Whether its centre and systemic velocity are node-wise (a value
-        for each ring); by default, not, or those of its geometry.
-    tilted : bool, optional
-        Whether its position angle and inclination are node-wise; by
-        default, not, or those of its geometry.
-    rnmin, rnmax, rnsep, rnlen, rnodes : optional
-        The radii of its rings (arcsec): rnodes; or rnmin, rnmax and rnsep
-        (every rnsep); or rnmin, rnmax and rnlen (rnlen rings). Those of
-        its geometry if it is warped.
-    rstep : float, optional
-        The width of the rings it is evaluated on, at most half the
-        smallest separation of its radii; by default that, or 1 if less.
-    interp : str, optional
-        How its node-wise parameters are interpolated between its radii:
-        'linear', 'akima' or 'pchip'.
-    cflux : float
-        The flux of each of its clouds.
-    seed : int, optional
-        The seed of the random numbers of its clouds.
-    geometry : Geometry, optional
-        A geometry that it shares with other components (see Geometry).
-    name : str, optional
-        Its name (see Component).
-
-    Raises
-    ------
-    ConfigError
-        If the options are not valid (e.g. the rings, or the number of
-        traits), or conflict with its geometry.
-    """
-
-    _slots = (OPT, OHT, ZPT, SPT)
-
-    @staticmethod
-    def type() -> str:
-        return 'mcdisk'
-
-    @classmethod
-    def load(cls, info: dict[str, Any]) -> Self:
-        return cls(**_detail.load_options(cls, info, cls._slots))
-
-    def dump(self) -> dict[str, Any]:
-        return (
-            dict(type=self.type())
-            | dump_name(self)
-            | dump_geometry(self)
-            | _detail.dump_disk(self._disk, self._slots, self.geometry()))
-
-    def __init__(
-            self,
-            cflux: float,
-            optraits: traits.RPTrait | Sequence[traits.RPTrait],
-            ohtraits: traits.RHTrait | Sequence[traits.RHTrait],
-            zptraits: traits.ZPTrait | Sequence[traits.ZPTrait] | None = None,
-            sptraits: traits.SPTrait | Sequence[traits.SPTrait] | None = None,
-            loose: bool | None = None,
-            tilted: bool | None = None,
-            rnmin: float | None = None,
-            rnmax: float | None = None,
-            rnsep: float | None = None,
-            rnlen: int | None = None,
-            rnodes: Sequence[float] | None = None,
-            rstep: float | None = None,
-            interp: str = 'linear',
-            seed: int = 0,
-            geometry: Geometry | None = None,
-            name: str | None = None
-    ):
-        super().__init__(name, geometry)
-        self._disk = _detail.make_disk(
-            type(self), MCDisk, self._slots,
-            rdata_key='odata',
-            geometry=geometry, loose=loose, tilted=tilted,
-            rnmin=rnmin, rnmax=rnmax, rnsep=rnsep, rnlen=rnlen,
-            rnodes=rnodes, rstep=rstep, interp=interp,
-            traits_=dict(
-                optraits=optraits, ohtraits=ohtraits, zptraits=zptraits,
-                sptraits=sptraits),
-            cflux=cflux, seed=seed)
-
-    def pdescs(self) -> dict[str, ParamDesc]:
-        return self._disk.pdescs()
-
-    def constants(self) -> dict[str, Any]:
-        return dict(
-            rnodes=self._disk.rnodes(), subrnodes=self._disk.subrnodes())
-
-    def plan(
-            self,
-            driver: Driver,
-            spectral: gridutils.Grid,
-            dtype: np.dtype,
-            lines: tuple[str, ...] | None
-    ) -> ComponentPlan:
-        return _detail.DiskComponentPlan(
-            self, self._disk.plan(driver, 0, dtype))
-
-    def disk_outputs(
-            self, outputs: dict[str, DeviceArray | None]
-    ) -> dict[str, DeviceArray | None]:
-        """Return the outputs of the disk, from those of the component."""
-        # The density of the disk is the opacity
-        return dict(
-            rdata=outputs['odata'])
+        return _detail.disk_plan(
+            self._disk, self._lines, driver, spectral, dtype, lines, emits)

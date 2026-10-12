@@ -18,16 +18,20 @@ from gbkfit.region import RegionsApertures, RegionsBins
 from gbkfit.utils import fitsutils, gridutils
 
 
-MODEL = dict(type='kinematics_2d', components=[dict(
+GALAXY = dict(components=[dict(
     type='smdisk', loose=False, tilted=False,
     rnodes=list(range(0, 14)),
-    bptraits=dict(type='exponential'),
-    vptraits=dict(type='tan_arctan'),
-    dptraits=dict(type='uniform'))])
+    density=dict(ptraits=dict(type='exponential')),
+    kinematics=dict(
+        vptraits=dict(type='tan_arctan'),
+        dptraits=dict(type='uniform')),
+    emission=dict(type='lines'))])
 
 PROPERTIES = dict(
     vsys=0, xpos=0.3, ypos=-0.6, posa=50, incl=60,
-    bpt_a=1, bpt_s=4, vpt_rt=2, vpt_vt=150, dpt_a=20)
+    pt_a=1, pt_s=4, vpt_rt=2, vpt_vt=150, dpt_a=20)
+
+FLAT = dict(type='flat')
 
 INSTRUMENT = dict(
     psf=dict(type='gauss', sigma=1.5), lsf=dict(type='gauss', sigma=15))
@@ -41,11 +45,11 @@ APERTURES = [
 
 
 def evaluate(driver, observable):
-    model_group = observation_group([
-        dict(driver=dict(type=driver.type()),
-             observable=copy.deepcopy(observable), model=MODEL)])
-    params = gbkfit.params.ParamSpace(model_group.pdescs(), PROPERTIES)
-    data = model_group.model_h(params.evaluate())[0]
+    group = observation_group([
+        dict(driver=dict(type=driver.type()), galaxy=GALAXY,
+             line_of_sight=FLAT, observable=copy.deepcopy(observable))])
+    params = gbkfit.params.ParamSpace(group.pdescs(), PROPERTIES)
+    data = group.model_h(params.evaluate())[0]
     return next(iter(data.values()))['d'].copy()
 
 
@@ -104,26 +108,28 @@ def test_region_spectra_of_bins_are_the_sums_of_pixel_spectra(driver):
 def test_region_spectra_of_a_point_is_its_flux(driver, step):
     # The spectra of regions are fluxes: around a point, its flux,
     # whatever the size of the pixels of the model
-    model = dict(type='kinematics_2d', components=[dict(type='point')])
+    galaxy = dict(components=[
+        dict(type='point', emission=dict(type='lines'))])
     observable = dict(
         type='region_spectra', size=[int(16 / step)] * 2, step=[step, step],
         spec_size=51, spec_step=10, regions=dict(type='apertures', apertures=[
             dict(type='circle', x=0, y=0, radius=3)]))
-    model_group = observation_group([dict(
-        driver=dict(type=driver.type()), observable=observable, model=model)])
+    group = observation_group([dict(
+        driver=dict(type=driver.type()), galaxy=galaxy, line_of_sight=FLAT,
+        observable=observable)])
     params = gbkfit.params.ParamSpace(
-        model_group.pdescs(), dict(xpos=0, ypos=0, flux=2, vsys=0, disp=30))
-    spectrum = model_group.model_h(params.evaluate())[0]['spectra']['d'][:, 0]
+        group.pdescs(), dict(xpos=0, ypos=0, flux=2, vsys=0, disp=30))
+    spectrum = group.model_h(params.evaluate())[0]['spectra']['d'][:, 0]
     assert spectrum.sum() * 10 == pytest.approx(2, rel=1e-4)
 
 
 def test_region_spectra_objective_residual(driver):
     # Data equal to the model plus 1, with errors of 2: every residual
     # (model - data) / error is -0.5
-    from gbkfit.model import model_parser
+    from gbkfit.model import galaxy_parser
     from gbkfit.objective import Objective
     from gbkfit.instrument import Instrument, instrument_parser
-    from gbkfit.observation import Observation, ObservationGroup
+    from gbkfit.observation import Flat, Observation, ObservationGroup
     observable = aspec_of_apertures(APERTURES[:2])
     model = evaluate(driver, observable)
     observable = observable_of(observable)
@@ -131,19 +137,19 @@ def test_region_spectra_objective_residual(driver):
         Data(model + 1, error=np.full_like(model, 2)),
         observable.regions(), step=10)
     observation = Observation(
-        observable, driver, instrument=Instrument(), data=dataset)
+        observable, Flat(), driver, instrument=Instrument(), data=dataset)
     group = ObservationGroup(
-        [model_parser.load(copy.deepcopy(MODEL))], [observation])
+        [galaxy_parser.load(copy.deepcopy(GALAXY))], [observation])
     params = gbkfit.params.ParamSpace(group.pdescs(), PROPERTIES)
     residual = Objective(group).residual_nddata_h(params.evaluate(), False)
     # Without the instrument, the model differs from the data
     assert not np.allclose(residual[0]['spectra'], -0.5)
     observation = Observation(
-        observable, driver,
+        observable, Flat(), driver,
         instrument=instrument_parser.load(copy.deepcopy(INSTRUMENT)),
         data=dataset)
     group = ObservationGroup(
-        [model_parser.load(copy.deepcopy(MODEL))], [observation])
+        [galaxy_parser.load(copy.deepcopy(GALAXY))], [observation])
     residual = Objective(group).residual_nddata_h(params.evaluate(), False)
     np.testing.assert_allclose(residual[0]['spectra'], -0.5, rtol=1e-5)
 
@@ -198,7 +204,7 @@ def test_region_spectra_observation_from_data(tmp_path):
     data_info = dataset.dump(prefix=str(tmp_path / ''))
     data_info.pop('type')
     info = dict(
-        data=data_info,
+        data=data_info, line_of_sight=FLAT,
         observable=dict(type='region_spectra', size=[32, 41]))
     observation = observation_parser.load(copy.deepcopy(info))
     observable = observation.observable()
@@ -216,12 +222,12 @@ def test_region_spectra_observation_from_data(tmp_path):
 
 
 def test_region_spectra_of_spectra_with_another_spectral_axis_is_an_error(driver):
-    from gbkfit.observation import Observation
+    from gbkfit.observation import Flat, Observation
     observable = observable_of(aspec_of_apertures(APERTURES))
     dataset = DatasetRegionSpectra(
         Data(np.ones((51, 3))), observable.regions(), step=5)
     with pytest.raises(RuntimeError, match="spectral axis"):
-        Observation(observable, driver, data=dataset)
+        Observation(observable, Flat(), driver, data=dataset)
 
 
 
@@ -230,7 +236,7 @@ def test_region_spectra_observation_of_data_on_a_rotated_grid(driver, kind):
     # The spectral axis of a rotated spatial grid is not rotated: it
     # matches that of the spectra
     from gbkfit.region import aperture_parser
-    from gbkfit.observation import RegionSpectra, Observation
+    from gbkfit.observation import Flat, RegionSpectra, Observation
     if kind == 'apertures':
         regions = RegionsApertures([aperture_parser.load(dict(type='field'))])
         observable = RegionSpectra(
@@ -239,7 +245,7 @@ def test_region_spectra_observation_of_data_on_a_rotated_grid(driver, kind):
         regions = RegionsBins(np.zeros((4, 4)), rota=20)
         observable = RegionSpectra(regions, spec_size=5, spec_step=10)
     dataset = DatasetRegionSpectra(Data(np.ones((5, 1))), regions, step=10)
-    Observation(observable, driver, data=dataset)
+    Observation(observable, Flat(), driver, data=dataset)
 
 def test_region_spectra_spatial_grid_options():
     from gbkfit.observation import RegionSpectra

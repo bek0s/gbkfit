@@ -87,7 +87,7 @@ def prepare_config(
     """
     Check the sections of a configuration, and return it as plain JSON
     values: unknown sections are reported (see parseutils.report_unknown)
-    and left out, null sections are empty, and the sections 'models' and
+    and left out, null sections are empty, and the sections 'galaxies' and
     'observations' are lists.
 
     Raises
@@ -110,7 +110,7 @@ def prepare_config(
     for s in ('driver', 'drivers', 'pdescs', 'params', 'fitter'):
         if s in config and not iterutils.is_mapping(config[s]):
             raise ConfigError(f"section '{s}' must be a dictionary")
-    for s in ('models', 'observations'):
+    for s in ('galaxies', 'observations'):
         if s in config:
             if not iterutils.is_sequence_or_mapping(config[s]):
                 raise ConfigError(
@@ -172,7 +172,7 @@ def merge_pdescs(
         pdescs2: dict[str, ParamDesc]
 ) -> dict[str, ParamDesc]:
     """
-    Return the descriptions of the parameters of the models (pdescs1) and
+    Return the descriptions of the parameters of the galaxies (pdescs1) and
     those of a configuration (pdescs2), which must have other names.
 
     Raises
@@ -183,7 +183,7 @@ def merge_pdescs(
     if conflicting := sorted(set(pdescs1) & set(pdescs2)):
         raise ConfigError(
             f"these parameters of the configuration are parameters of the "
-            f"models: {conflicting}")
+            f"galaxies: {conflicting}")
     return pdescs1 | pdescs2
 
 
@@ -216,17 +216,17 @@ def load_drivers(cfg: dict[str, Any]) -> dict[str | None, Driver]:
 
 def load_observation_group(cfg: dict[str, Any]) -> ObservationGroup:
     """
-    Return the models and observations (with their data, if any) of a
+    Return the galaxies and observations (with their data, if any) of a
     configuration, as an ObservationGroup. The observations refer to the
     drivers of the configuration by name (see load_drivers).
     """
     drivers = load_drivers(cfg)
-    with parseutils.config_path('models'):
-        models = gbkfit.model.model_parser.load(cfg['models'])
+    with parseutils.config_path('galaxies'):
+        galaxies = gbkfit.model.galaxy_parser.load(cfg['galaxies'])
     with parseutils.config_path('observations'):
         observations = gbkfit.observation.observation_parser.load(
             cfg['observations'], drivers=[drivers] * len(cfg['observations']))
-    return gbkfit.observation.ObservationGroup(models, observations)
+    return gbkfit.observation.ObservationGroup(galaxies, observations)
 
 
 def load_params(
@@ -236,7 +236,7 @@ def load_params(
 ) -> ParamSpace:
     """
     Return the parameters of a configuration (its section 'params'), with
-    the descriptions of the parameters of the models and those of its
+    the descriptions of the parameters of the galaxies and those of its
     optional section 'pdescs'.
     """
     if 'pdescs' in cfg:

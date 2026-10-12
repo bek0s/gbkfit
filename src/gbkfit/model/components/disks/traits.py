@@ -423,8 +423,8 @@ class Trait(parseutils.TypedSerializable, abc.ABC):
     def circular_velocity_params(self) -> tuple[str, ...]:
         """
         Return the names of the node-wise parameters whose values are not
-        given, but are the circular velocity of the mass model of their
-        model at the radii where they are sampled (see VPTraitMass); none
+        given, but are the circular velocity of the mass of their galaxy
+        at the radii where they are sampled (see VPTraitMass); none
         here.
         """
         return ()
@@ -1758,15 +1758,15 @@ class VPTraitNWTanUniform(TraitFeatureSampling, VPTrait):
 
 class VPTraitMass(VPTrait):
     """
-    The rotation curve of the mass model of its model (see
-    gbkfit.model.mass): the circular velocity at the rings it is evaluated
-    on, which its model computes from the parameters of its distance and
-    its mass model at each evaluation, and with pressure support, the
+    The rotation curve of the mass of its galaxy (see gbkfit.model.mass):
+    the circular velocity at the rings it is evaluated on, which its
+    galaxy computes from the parameters of its distance and its mass at
+    each evaluation, and with pressure support, the
     rotation of the gas of its disk in that gravity; NaN where its square
     is negative or infinite (there is no circular orbit, e.g. at a jump of
     the surface density of a thin disk, or where the pressure exceeds the
-    gravity). It has no parameters of its own, and its model must have a
-    mass model.
+    gravity). It has no parameters of its own, and its galaxy must have
+    mass.
 
     With pressure_support 'jeans', the rotation of an isotropic gas at the
     midplane of its disk (the radial Jeans equation): v^2 = v_c^2 + (R /

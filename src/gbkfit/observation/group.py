@@ -3,10 +3,11 @@ from typing import Any
 
 import numpy as np
 
-from gbkfit.model.base import Model
+from gbkfit.model import Galaxy
 from gbkfit.params import ParamDesc, ParamValues
 from gbkfit.utils import iterutils, parseutils, timeutils
 from gbkfit.utils.parseutils import ConfigError
+from ._scene import Scene, make_scene
 from .observables import ModelData
 from .observation import Observation
 
@@ -18,65 +19,70 @@ __all__ = [
 
 class ObservationGroup:
     """
-    Models and the observations of them, evaluated together.
+    Galaxies and the observations of them, evaluated together.
 
-    Each observation refers to its model by name, which it may leave out
-    when there is one model. The parameters and constants of the models
-    are prefixed by their names, or their positions (e.g. 'model1_').
-    The plans of the observations are made here, once.
+    Each observation names the galaxies it sees, which it may leave out
+    when there is one galaxy; the light of several galaxies adds up. The
+    parameters and constants of the galaxies are prefixed by their names
+    when they have names (which they need when there are several; e.g.
+    'north_'). The plans of the observations are made here, once.
 
     Parameters
     ----------
-    models : Model or Sequence of Model
-        The models.
+    galaxies : Galaxy or Sequence of Galaxy
+        The galaxies.
     observations : Observation or Sequence of Observation
         The observations.
 
     Raises
     ------
     ConfigError
-        If there are no models or no observations, their names repeat, or
-        an observation does not name a model of the group (when there are
-        several).
+        If there are no galaxies or no observations, several galaxies
+        without names, names repeat, an observation does not name the
+        galaxies it sees (when there are several) or names unknown ones,
+        or what an observation sees does not go with it (see make_scene).
     """
 
     def __init__(
             self,
-            models: Model | Sequence[Model],
+            galaxies: Galaxy | Sequence[Galaxy],
             observations: Observation | Sequence[Observation]
     ):
-        self._models = iterutils.tuplify(models)
+        self._galaxies = iterutils.tuplify(galaxies)
         self._observations = iterutils.tuplify(observations)
-        if not self._models:
-            raise ConfigError("at least one model is required")
+        if not self._galaxies:
+            raise ConfigError("at least one galaxy is required")
         if not self._observations:
             raise ConfigError("at least one observation is required")
-        model_names = [model.name() for model in self._models]
+        galaxy_names = [galaxy.name() for galaxy in self._galaxies]
+        if len(galaxy_names) > 1 and None in galaxy_names:
+            raise ConfigError(
+                "the galaxies need names when there are several")
         observation_names = [obs.name() for obs in self._observations]
         self._prefixes = parseutils.item_prefixes(
-            model_names, 'models', 'model', False)
+            galaxy_names, 'galaxies', 'galaxy', False)
         parseutils.item_prefixes(
             observation_names, 'observations', 'observation', False)
         repeated = sorted(
-            set(model_names) & set(observation_names) - {None})
+            set(galaxy_names) & set(observation_names) - {None})
         if repeated:
             raise ConfigError(
-                f"the models and the observations must have different "
+                f"the galaxies and the observations must have different "
                 f"names; repeated: {repeated}")
-        self._model_index = [
-            self._resolve(i, obs) for i, obs in enumerate(self._observations)]
         self._pdescs, self._mappings = iterutils.merge_with_prefixes(
-            [model.pdescs() for model in self._models], self._prefixes)
+            [galaxy.pdescs() for galaxy in self._galaxies], self._prefixes)
         self._constants, _ = iterutils.merge_with_prefixes(
-            [model.constants() for model in self._models], self._prefixes)
+            [galaxy.constants() for galaxy in self._galaxies], self._prefixes)
         # The extra outputs of the observations are named after their names,
         # or their index if they have none (e.g. 'observation0_')
         self._extra_prefixes = [
             f'{name}_' if name is not None else f'observation{i}_'
             for i, name in enumerate(observation_names)]
-        self._plans = tuple(
-            obs.plan(self._models[j])
-            for obs, j in zip(self._observations, self._model_index))
+        plans = []
+        for i, observation in enumerate(self._observations):
+            with parseutils.config_path('observations', i):
+                plans.append(observation.plan(self._scene(i, observation)))
+        self._plans = tuple(plans)
         self._h_model_data = [
             {key: dict(d=None, m=None, w=None)
              for key in obs.observable().keys()}
@@ -86,25 +92,36 @@ class ObservationGroup:
         # objectives of its data)
         self._timers = timeutils.Timers()
 
-    def _resolve(self, i: int, observation: Observation) -> int:
-        """Return the index of the model of observation i."""
-        name = observation.model()
-        if name is None:
-            if len(self._models) > 1:
+    def _seen(self, i: int, observation: Observation) -> list[int]:
+        """Return the indices of the galaxies that observation i sees."""
+        names = observation.galaxies()
+        if names is None:
+            if len(self._galaxies) > 1:
                 raise ConfigError(
-                    f"observation {i} must name its model; there are "
-                    f"{len(self._models)} models")
-            return 0
-        names = [model.name() for model in self._models]
-        if name not in names:
+                    f"observation {i} must name the galaxies it sees; there "
+                    f"are {len(self._galaxies)} galaxies")
+            return [0]
+        known = [galaxy.name() for galaxy in self._galaxies]
+        if unknown := [name for name in names if name not in known]:
             raise ConfigError(
-                f"observation {i} refers to an unknown model '{name}'; "
-                f"the models are {names}")
-        return names.index(name)
+                f"observation {i} refers to unknown galaxies {unknown}; the "
+                f"galaxies are {known}")
+        return sorted(known.index(name) for name in names)
 
-    def models(self) -> tuple[Model, ...]:
-        """Return the models."""
-        return self._models
+    def _scene(self, i: int, observation: Observation) -> Scene:
+        """Return what observation i sees (see make_scene)."""
+        seen = self._seen(i, observation)
+        return make_scene(
+            [self._galaxies[j] for j in seen],
+            [self._mappings[j] for j in seen],
+            [self._prefixes[j] for j in seen],
+            observation.components(), observation.lines(),
+            observation.line_of_sight(),
+            observation.observable().emission)
+
+    def galaxies(self) -> tuple[Galaxy, ...]:
+        """Return the galaxies."""
+        return self._galaxies
 
     def observations(self) -> tuple[Observation, ...]:
         """Return the observations."""
@@ -114,16 +131,12 @@ class ObservationGroup:
         """Return the number of observations."""
         return len(self._observations)
 
-    def model_of(self, i: int) -> Model:
-        """Return the model of observation i."""
-        return self._models[self._model_index[i]]
-
     def pdescs(self) -> dict[str, ParamDesc]:
-        """Return the parameters of the models, prefixed."""
+        """Return the parameters of the galaxies, prefixed."""
         return self._pdescs
 
     def constants(self) -> dict[str, Any]:
-        """Return the constants of the models, prefixed."""
+        """Return the constants of the galaxies, prefixed."""
         return self._constants
 
     def timers(self) -> timeutils.Timers:
@@ -141,7 +154,7 @@ class ObservationGroup:
         Parameters
         ----------
         params : dict
-            The parameters of the models, prefixed (see pdescs).
+            The parameters of the galaxies, prefixed (see pdescs).
         out_extra : dict, optional
             Where the extra outputs go, if wanted: those of each
             observation prefixed by its name, or 'observation{i}_'.
@@ -154,11 +167,8 @@ class ObservationGroup:
         """
         with self._timers.measure('model_eval'):
             for i, plan in enumerate(self._plans):
-                mapping = self._mappings[self._model_index[i]]
                 out_extra_i = {} if out_extra is not None else None
-                self._d_model_data[i] = plan.evaluate(
-                    {param: params[mapping[param]] for param in mapping},
-                    out_extra_i)
+                self._d_model_data[i] = plan.evaluate(params, out_extra_i)
                 if out_extra is not None:
                     for key, val in out_extra_i.items():
                         out_extra[f'{self._extra_prefixes[i]}{key}'] = val
@@ -175,7 +185,7 @@ class ObservationGroup:
         Parameters
         ----------
         params : dict
-            The parameters of the models, prefixed (see pdescs).
+            The parameters of the galaxies, prefixed (see pdescs).
         out_extra : dict, optional
             Where the extra outputs go, if wanted (see model_d).
 

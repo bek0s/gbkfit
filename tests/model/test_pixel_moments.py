@@ -52,21 +52,23 @@ def evaluate_mmaps(driver, observable, **properties):
     of 20, observed as the given observable with the given parameter
     properties.
     """
-    from gbkfit.model import model_parser
-    from gbkfit.observation import Observation, ObservationGroup
+    from gbkfit.model import galaxy_parser
+    from gbkfit.observation import Flat, Observation, ObservationGroup
     from gbkfit.params import ParamSpace
-    model = model_parser.load(dict(
-        type='kinematics_2d', components=[dict(
-            type='smdisk', loose=False, tilted=False,
-            rnodes=list(range(0, 12)),
-            bptraits=dict(type='exponential'),
+    galaxy = galaxy_parser.load(dict(components=[dict(
+        type='smdisk', loose=False, tilted=False,
+        rnodes=list(range(0, 12)),
+        density=dict(ptraits=dict(type='exponential')),
+        kinematics=dict(
             vptraits=dict(type='tan_arctan'),
-            dptraits=dict(type='uniform'))]))
-    model_group = ObservationGroup([model], [Observation(observable, driver)])
-    params = ParamSpace(model_group.pdescs(), dict(
+            dptraits=dict(type='uniform')),
+        emission=dict(type='lines'))]))
+    group = ObservationGroup(
+        [galaxy], [Observation(observable, Flat(), driver)])
+    params = ParamSpace(group.pdescs(), dict(
         vsys=0, xpos=0, ypos=0, posa=30, incl=60,
-        bpt_a=1, bpt_s=4, vpt_rt=2, vpt_vt=40, dpt_a=20) | properties)
-    return model_group.model_h(params.evaluate())[0]
+        pt_a=1, pt_s=4, vpt_rt=2, vpt_vt=40, dpt_a=20) | properties)
+    return group.model_h(params.evaluate())[0]
 
 
 def test_higher_moments_of_a_gaussian_line(driver):

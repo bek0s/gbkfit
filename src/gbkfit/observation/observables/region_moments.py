@@ -7,7 +7,7 @@ import numpy as np
 from gbkfit.dataset import Dataset, DatasetRegionMoments
 from gbkfit.driver import Driver
 from gbkfit.instrument import Instrument
-from gbkfit.model.base import Model, ModelSCube, Selection
+from gbkfit.model import LineEmission
 from gbkfit.params import ParamValues
 from gbkfit.region import Regions, regions_parser
 from gbkfit.utils import gridutils, parseutils
@@ -19,6 +19,7 @@ from .base import ModelData, Observable
 if TYPE_CHECKING:
     import scipy.sparse
 
+    from .._scene import Scene
     from ..foreground import Foreground
 
 
@@ -63,16 +64,14 @@ method : optional
 
     dataset_class = DatasetRegionMoments
 
+    emission = LineEmission
+
     # The moments have no spectral axis
     spectral_axis = None
 
     @staticmethod
     def type() -> str:
         return 'region_moments'
-
-    @staticmethod
-    def is_compatible(model: Model) -> bool:
-        return isinstance(model, ModelSCube)
 
     @classmethod
     def options_from_data(cls, dataset: Dataset) -> tuple[str, ...]:
@@ -264,17 +263,15 @@ method : optional
     def plan(
             self,
             driver: Driver,
-            model: Model,
+            scene: 'Scene',
             foreground: 'Foreground',
             instrument: Instrument,
             scale: Sequence[int],
-            dtype: np.dtype,
-            selection: Selection
+            dtype: np.dtype
     ) -> 'RegionMomentsPlan':
         dcube = _moments.spectra_dcube(self, scale, instrument, dtype)
         return RegionMomentsPlan(
-            self, self._weights, dcube, driver, model, foreground, dtype,
-            selection)
+            self, self._weights, dcube, driver, scene, foreground, dtype)
 
 
 class RegionMomentsPlan(_detail.DCubePlanBase):
@@ -285,13 +282,12 @@ class RegionMomentsPlan(_detail.DCubePlanBase):
             weights: 'scipy.sparse.csr_array',
             dcube: _dcube.DCube,
             driver: Driver,
-            model: Model,
+            scene: 'Scene',
             foreground: 'Foreground',
-            dtype: np.dtype,
-            selection: Selection
+            dtype: np.dtype
     ):
         super().__init__(
-            dcube, driver, model, foreground, dtype, selection)
+            dcube, driver, scene, foreground, dtype)
         self._sums = RegionSumsPlan(weights, driver, dtype)
         nregions = self._sums.nregions()
         # The spectra of the regions, as a cube of one row of regions

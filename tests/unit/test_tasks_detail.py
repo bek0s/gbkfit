@@ -6,9 +6,10 @@ from gbkfit.tasks import _detail
 from gbkfit.utils.parseutils import ConfigError
 
 
-MODEL = dict(type='intensity_2d', components=[dict(
+GALAXY = dict(components=[dict(
     type='smdisk', loose=False, tilted=False, rnmin=0, rnmax=4, rnsep=1,
-    bptraits=dict(type='exponential'))])
+    density=dict(ptraits=dict(type='exponential')),
+    emission=dict(type='band'))])
 
 HOST = dict(type='host')
 
@@ -34,26 +35,27 @@ def test_configs_resolve_relative_paths_against_their_root(tmp_path):
     # (their directory, or their section 'root', relative to it)
     config = tmp_path / 'configs' / 'fit.yaml'
     config.parent.mkdir()
-    config.write_text("models: {}\nroot: ../data\n")
-    cfg, root = _detail.read_config(str(config), ('models',))
-    assert cfg == dict(models=[{}])
+    config.write_text("galaxies: {}\nroot: ../data\n")
+    cfg, root = _detail.read_config(str(config), ('galaxies',))
+    assert cfg == dict(galaxies=[{}])
     assert root == str(tmp_path / 'data')
-    config.write_text("models: {}\n")
-    assert _detail.read_config(str(config), ('models',))[1] == \
+    config.write_text("galaxies: {}\n")
+    assert _detail.read_config(str(config), ('galaxies',))[1] == \
         str(config.parent)
     with pytest.raises(ConfigError, match="needs the sections"):
-        _detail.read_config(str(config), ('models', 'fitter'))
+        _detail.read_config(str(config), ('galaxies', 'fitter'))
 
 
 def observation(**options):
-    """The configuration of an observation of MODEL, with options."""
-    return dict(observable=dict(type='pixel_brightness', size=[8, 8])) \
-        | options
+    """The configuration of an observation of GALAXY, with options."""
+    return dict(
+        line_of_sight=dict(type='flat'),
+        observable=dict(type='pixel_brightness', size=[8, 8])) | options
 
 
 def load_group(**sections):
-    """The ObservationGroup of MODEL and the sections of a configuration."""
-    return _detail.load_observation_group(dict(models=[MODEL]) | sections)
+    """The ObservationGroup of GALAXY and the sections of a configuration."""
+    return _detail.load_observation_group(dict(galaxies=[GALAXY]) | sections)
 
 
 def test_observations_use_the_drivers_of_the_configuration():

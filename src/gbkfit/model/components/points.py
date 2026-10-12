@@ -8,19 +8,15 @@ from gbkfit.driver import DeviceArray, Driver
 from gbkfit.params import ParamScalarDesc, ParamValues
 from gbkfit.utils import gridutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
-from ._detail import dump_geometry, dump_lines, dump_name
-from .base import (
-    BrightnessComponent2D, BrightnessComponent3D, ComponentPlan, NativeGrid,
-    SpectralComponent2D, SpectralComponent3D)
+from ._detail import dump_geometry, dump_name
+from .base import Component, ComponentPlan, NativeGrid
 from .geometries import Geometry
-from .lines import Line, Lines, line_parser
+from .lines import Lines
+from .roles import Emission, LineEmission, emission_parser
 
 
 __all__ = [
-    'BrightnessPoint2D',
-    'BrightnessPoint3D',
-    'SpectralPoint2D',
-    'SpectralPoint3D'
+    'Point'
 ]
 
 
@@ -148,7 +144,7 @@ class PointPlan(ComponentPlan):
                     spectrum[channel] += flux / step
         return spectrum
 
-    def evaluate(
+    def evaluate_emission(
             self,
             params: ParamValues,
             grid: NativeGrid,
@@ -175,106 +171,20 @@ class PointPlan(ComponentPlan):
                     (weight * values).astype(self._dtype)), out=spectrum)
 
 
-class BrightnessPoint2D(BrightnessComponent2D):
+class Point(Component):
     """
     An unresolved component (e.g. a nucleus): its flux at a point (see
-    PointPlan). Its parameters: xpos, ypos and flux.
+    PointPlan). Its parameters: xpos, ypos and flux, and with emission
+    lines vsys and disp (the dispersion of its lines) and the flux ratios
+    of its lines (see Lines). It has no depth: the opacity of its galaxy
+    does not dim it.
 
     Parameters
     ----------
+    emission : Emission
+        The light it emits.
     geometry : Geometry, optional
-        A geometry whose centre it shares (not a loose one).
-    name : str, optional
-        Its name (see Component).
-
-    Raises
-    ------
-    ConfigError
-        If the geometry is loose.
-    """
-
-    @staticmethod
-    def type() -> str:
-        return 'point'
-
-    def dump(self) -> dict[str, Any]:
-        return dict(type=self.type()) | dump_name(self) | dump_geometry(self)
-
-    def __init__(
-            self, geometry: Geometry | None = None, name: str | None = None):
-        _check_geometry(geometry)
-        super().__init__(name, geometry)
-
-    def pdescs(self) -> dict[str, ParamScalarDesc]:
-        return point_pdescs(spectral=False)
-
-    def plan(
-            self,
-            driver: Driver,
-            spectral: gridutils.Grid,
-            dtype: np.dtype,
-            lines: tuple[str, ...] | None
-    ) -> PointPlan:
-        return PointPlan(driver, dtype)
-
-
-class BrightnessPoint3D(BrightnessComponent3D):
-    """
-    An unresolved component (e.g. a nucleus): its flux at a point (see
-    PointPlan). Its parameters: xpos, ypos and flux.
-    It is not absorbed by the opacity of the model.
-
-    Parameters
-    ----------
-    geometry : Geometry, optional
-        A geometry whose centre it shares (not a loose one).
-    name : str, optional
-        Its name (see Component).
-
-    Raises
-    ------
-    ConfigError
-        If the geometry is loose.
-    """
-
-    @staticmethod
-    def type() -> str:
-        return 'point'
-
-    def dump(self) -> dict[str, Any]:
-        return dict(type=self.type()) | dump_name(self) | dump_geometry(self)
-
-    def __init__(
-            self, geometry: Geometry | None = None, name: str | None = None):
-        _check_geometry(geometry)
-        super().__init__(name, geometry)
-
-    def pdescs(self) -> dict[str, ParamScalarDesc]:
-        return point_pdescs(spectral=False)
-
-    def plan(
-            self,
-            driver: Driver,
-            spectral: gridutils.Grid,
-            dtype: np.dtype,
-            lines: tuple[str, ...] | None
-    ) -> PointPlan:
-        return PointPlan(driver, dtype)
-
-
-class SpectralPoint2D(SpectralComponent2D):
-    """
-    An unresolved component (e.g. a broad central component): its flux at
-    a point, as its emission lines (see PointPlan). Its parameters:
-    xpos, ypos, flux, vsys and disp (the dispersion of its lines), and
-    the flux ratios of its lines (see Lines).
-
-    Parameters
-    ----------
-    lines : Sequence of Line, optional
-        Its emission lines (see Lines).
-    geometry : Geometry, optional
-        A geometry whose centre and systemic velocity it shares (not a
+        A geometry whose centre (and systemic velocity) it shares (not a
         loose one).
     name : str, optional
         Its name (see Component).
@@ -290,8 +200,9 @@ class SpectralPoint2D(SpectralComponent2D):
         return 'point'
 
     @classmethod
-    def load(cls, info: dict[str, Any]) -> 'SpectralPoint2D':
-        parseutils.load_option_and_update_info(line_parser, info, 'lines')
+    def load(cls, info: dict[str, Any]) -> 'Point':
+        parseutils.load_option_and_update_info(
+            emission_parser, info, 'emission', required=True)
         return cls(**parseutils.parse_options_for_callable(
             info, cls.__init__))
 
@@ -300,98 +211,36 @@ class SpectralPoint2D(SpectralComponent2D):
             dict(type=self.type())
             | dump_name(self)
             | dump_geometry(self)
-            | dump_lines(self._lines))
+            | dict(emission=emission_parser.dump(self.emission())))
 
     def __init__(
             self,
-            lines: Sequence[Line] | None = None,
+            emission: Emission,
             geometry: Geometry | None = None,
             name: str | None = None
     ):
         _check_geometry(geometry)
-        super().__init__(name, geometry)
-        self._lines = Lines(lines)
-        self._pdescs = _spectral_pdescs(self._lines)
+        super().__init__(name, geometry, emission, None)
+        self._lines = None
+        self._pdescs = point_pdescs(spectral=False)
+        if isinstance(emission, LineEmission):
+            self._lines = emission.lines()
+            self._pdescs = _spectral_pdescs(self._lines)
+
+    def thick(self) -> bool:
+        return False
 
     def pdescs(self) -> dict[str, ParamScalarDesc]:
         return self._pdescs
-
-    def line_names(self) -> tuple[str, ...]:
-        return self._lines.names()
 
     def plan(
             self,
             driver: Driver,
             spectral: gridutils.Grid,
             dtype: np.dtype,
-            lines: tuple[str, ...] | None
+            lines: tuple[str, ...] | None,
+            emits: bool
     ) -> PointPlan:
-        return _spectral_plan(driver, spectral, dtype, self._lines, lines)
-
-
-class SpectralPoint3D(SpectralComponent3D):
-    """
-    An unresolved component (e.g. a broad central component): its flux at
-    a point, as its emission lines (see PointPlan). Its parameters:
-    xpos, ypos, flux, vsys and disp (the dispersion of its lines), and
-    the flux ratios of its lines (see Lines).
-    It is not absorbed by the opacity of the model.
-
-    Parameters
-    ----------
-    lines : Sequence of Line, optional
-        Its emission lines (see Lines).
-    geometry : Geometry, optional
-        A geometry whose centre and systemic velocity it shares (not a
-        loose one).
-    name : str, optional
-        Its name (see Component).
-
-    Raises
-    ------
-    ConfigError
-        If the geometry is loose, or the lines are not valid.
-    """
-
-    @staticmethod
-    def type() -> str:
-        return 'point'
-
-    @classmethod
-    def load(cls, info: dict[str, Any]) -> 'SpectralPoint3D':
-        parseutils.load_option_and_update_info(line_parser, info, 'lines')
-        return cls(**parseutils.parse_options_for_callable(
-            info, cls.__init__))
-
-    def dump(self) -> dict[str, Any]:
-        return (
-            dict(type=self.type())
-            | dump_name(self)
-            | dump_geometry(self)
-            | dump_lines(self._lines))
-
-    def __init__(
-            self,
-            lines: Sequence[Line] | None = None,
-            geometry: Geometry | None = None,
-            name: str | None = None
-    ):
-        _check_geometry(geometry)
-        super().__init__(name, geometry)
-        self._lines = Lines(lines)
-        self._pdescs = _spectral_pdescs(self._lines)
-
-    def pdescs(self) -> dict[str, ParamScalarDesc]:
-        return self._pdescs
-
-    def line_names(self) -> tuple[str, ...]:
-        return self._lines.names()
-
-    def plan(
-            self,
-            driver: Driver,
-            spectral: gridutils.Grid,
-            dtype: np.dtype,
-            lines: tuple[str, ...] | None
-    ) -> PointPlan:
+        if self._lines is None:
+            return PointPlan(driver, dtype)
         return _spectral_plan(driver, spectral, dtype, self._lines, lines)

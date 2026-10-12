@@ -11,20 +11,29 @@ Data models
 - Moment maps
 - Long-slit spectra
 
-Galaxy models
--------------
-- 2D Intensity
-- 3D Intensity
-- 2D Kinematics
-- 3D Kinematics
+Galaxies
+--------
+A galaxy is a set of components, with optional mass and distance.
 
 Components
 ^^^^^^^^^^
 - The smooth disk
 - The Monte Carlo disk
+- The point
+
+Each component emits light (in a band, seen by images, or in lines, seen
+by spectral cubes and the data made from them), removes light (dust), or
+both.
 
 Traits
 ^^^^^^
+
+Lines of sight
+--------------
+- Flat: the galaxies are evaluated on the plane of the sky (thin disks
+  and points)
+- Grid: the galaxies are evaluated on a grid with a depth axis (thick
+  disks, points and dust)
 
 Fitters
 -------

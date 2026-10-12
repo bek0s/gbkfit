@@ -290,19 +290,20 @@ class MassNodewiseDisk(MassComponent):
 
 class MassTraitDisk(MassComponent):
     """
-    A disk whose mass follows the brightness of a component of the model,
-    never the data: upsilon (Msun/kpc^2 per unit of the brightness) times
-    the azimuthal mean of the brightness of the component, as it evaluates
-    it (its brightness traits, where its selection traits keep it), at its
-    subnodes and linear between them (exactly its node-wise traits), or
-    at those of rings of width rstep. Vertically, as the component (its
-    brightness height traits; thin without them), or of a vertical law
+    A disk whose mass follows the density of a disk component of its
+    galaxy (light, the optical depth of dust, ...), never the data:
+    upsilon (Msun/kpc^2 per unit of the density) times the azimuthal mean
+    of the density of the component, as it evaluates it (its density
+    polar traits, where its selection traits keep it), at its subnodes
+    and linear between them (exactly its node-wise traits), or at those
+    of rings of width rstep. Vertically, as the component (its density
+    height traits; thin without them), or of a vertical law
     (of the scale height hz, kpc). A component with warps (tilted or loose
     rings, vertical distortions) is taken flat: its rings coplanar and
     concentric, as the rotation of the velocity traits 'mass' takes them.
     Its circular velocity is the pull of its rings (see _disk_gravity); a
     thin disk pulls infinitely at a jump of its surface density (e.g. at
-    the edge of the component, unless the brightness is 0 there). The
+    the edge of the component, unless the density is 0 there). The
     azimuthal means take at least 128 azimuths, more until they converge:
     structure narrower than their spacing (e.g. tiny blobs) can be
     missed.
@@ -312,14 +313,14 @@ class MassTraitDisk(MassComponent):
     name : str
         Its name (see MassComponent).
     component : str
-        The name of the component of the model that it follows.
+        The name of the component of its galaxy that it follows.
     vertical : str, optional
         Its vertical law: 'component' (the default), as the component, or
         a law of vertical.VERTICAL_LAWS ('thin', 'exponential', 'sech2'
         or 'gauss').
     rstep : float, optional
         The width (in the units of the rings of the component, e.g. arcsec)
-        of the rings at whose subnodes it takes the brightness; by
+        of the rings at whose subnodes it takes the density; by
         default, the subnodes of the component.
 
     Raises
@@ -368,7 +369,7 @@ class MassTraitDisk(MassComponent):
 
     def pdescs(self) -> dict[str, ParamDesc]:
         pdescs = dict(upsilon=ParamScalarDesc(
-            desc="the mass per unit of the brightness of the component "
+            desc="the mass per unit of the density of the component "
                  "(Msun/kpc^2)", minimum=0))
         if self._vertical in VERTICAL_LAWS and self._vertical != 'thin':
             pdescs['hz'] = ParamScalarDesc(

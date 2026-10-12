@@ -15,25 +15,27 @@ from gbkfit.fitting import (
     FitParamPrior, PriorGauss, PriorGaussTrunc, PriorLogUniform,
     PriorUniform)
 from gbkfit.instrument import Instrument, PSFGauss
-from gbkfit.model import model_parser
+from gbkfit.model import galaxy_parser
 from gbkfit.objective import Objective
-from gbkfit.observation import Observation, ObservationGroup, PixelBrightness
+from gbkfit.observation import (
+    Flat, Observation, ObservationGroup, PixelBrightness)
 from gbkfit.params import ParamSpace
 from gbkfit.utils.parseutils import ConfigError
 
 
 # A disk that extends beyond the image: a disk that ends inside the data
 # makes the chi-square jump as its edge crosses pixels
-MODEL = dict(type='intensity_2d', components=[dict(
+GALAXY = dict(components=[dict(
     type='smdisk', loose=False, tilted=False,
     rnodes=list(np.arange(0.5, 30)),
-    bptraits=dict(type='exponential'))])
+    density=dict(ptraits=dict(type='exponential')),
+    emission=dict(type='band'))])
 
-TRUE = dict(xpos=0.7, ypos=-0.4, posa=40.0, incl=55.0, bpt_a=1.0, bpt_s=4.0)
+TRUE = dict(xpos=0.7, ypos=-0.4, posa=40.0, incl=55.0, pt_a=1.0, pt_s=4.0)
 
 START = dict(
     xpos=(0.0, -4, 4), ypos=(0.0, -4, 4), posa=(30.0, 0, 90),
-    incl=(45.0, 20, 80), bpt_a=(0.7, 0.1, 5), bpt_s=(3.0, 1, 10))
+    incl=(45.0, 20, 80), pt_a=(0.7, 0.1, 5), pt_s=(3.0, 1, 10))
 
 
 def mock_objective(driver, seed=1):
@@ -44,9 +46,9 @@ def mock_objective(driver, seed=1):
     """
     def group(dataset):
         observation = Observation(
-            PixelBrightness.from_data(dataset), driver,
+            PixelBrightness.from_data(dataset), Flat(), driver,
             instrument=Instrument(psf=PSFGauss(1.5)), data=dataset)
-        return ObservationGroup(model_parser.load(dict(MODEL)), observation)
+        return ObservationGroup(galaxy_parser.load(GALAXY), observation)
     shape = (32, 32)
     image = group(DatasetPixelBrightness(Data(np.zeros(shape))))
     model = image.model_h(ParamSpace(image.pdescs(), TRUE).evaluate())[0]
@@ -172,12 +174,12 @@ def test_errors_propagate_to_tied_and_fixed_elements():
     pytest.importorskip('lmfit')
     from gbkfit.fitting.fitters.lmfit import FitterLMFitLeastSquares
     objective = mock_objective(DriverHost())
-    properties = bounded_properties() | dict(ypos='xpos - 1.1', bpt_s=4.0)
+    properties = bounded_properties() | dict(ypos='xpos - 1.1', pt_s=4.0)
     params = ParamSpace(objective.pdescs(), properties)
     best = FitterLMFitLeastSquares().fit(objective, params).best()
     std = best.covariance.element_std
     assert std['ypos'] == pytest.approx(std['xpos'], rel=1e-6)
-    assert std['bpt_s'] == 0
+    assert std['pt_s'] == 0
     assert best.covariance.at_bounds == ()
     laplace = best.laplace.summary()
     assert laplace['ypos'][1] == pytest.approx(laplace['xpos'][1] - 1.1)
@@ -229,7 +231,7 @@ def test_multistart_finds_the_four_minima_of_a_thin_disk():
     dict(type='scipy.least_squares', method='trf')])
 def test_least_squares_move_values_from_awkward_starts(fitter):
     # xpos starts near 0, where MINPACK's own step (sqrt(epsfcn) times
-    # the value) is below the precision of float32 models; bpt_s starts
+    # the value) is below the precision of float32 models; pt_s starts
     # on its bound, where the map of bounded values of lmfit and 'lm' is
     # flat. Neither moved.
     pytest.importorskip('lmfit')
@@ -240,7 +242,7 @@ def test_least_squares_move_values_from_awkward_starts(fitter):
     local = FitterLMFitLeastSquares().fit(objective, params).best()
     properties = bounded_properties()
     properties['xpos']['value'] = 1e-3
-    properties['bpt_s'] |= dict(value=1, min=1)
+    properties['pt_s'] |= dict(value=1, min=1)
     params = ParamSpace(objective.pdescs(), properties)
     result = fitter_parser.load(fitter).fit(objective, params)
     assert result.best().chi2 == pytest.approx(local.chi2, rel=1e-6)
@@ -255,22 +257,22 @@ def test_trf_moves_a_value_that_starts_on_its_bound(fitter):
     pytest.importorskip('lmfit')
     from gbkfit.fitting import fitter_parser
     objective = mock_objective(DriverHost())
-    properties = dict(TRUE) | dict(bpt_s=dict(value=1, min=1, max=10))
+    properties = dict(TRUE) | dict(pt_s=dict(value=1, min=1, max=10))
     params = ParamSpace(objective.pdescs(), properties)
     best = fitter_parser.load(fitter).fit(objective, params).best()
-    assert best.free['bpt_s'] == pytest.approx(
-        TRUE['bpt_s'], abs=5 * best.covariance.std['bpt_s'])
+    assert best.free['pt_s'] == pytest.approx(
+        TRUE['pt_s'], abs=5 * best.covariance.std['pt_s'])
 
 
 @pytest.mark.filterwarnings('ignore:invalid value:RuntimeWarning')
 def test_multistart_skips_starts_the_parameters_reject():
-    # bpt_s is nan for xpos < 0.6: the starts there fail, and are skipped
+    # pt_s is nan for xpos < 0.6: the starts there fail, and are skipped
     pytest.importorskip('lmfit')
     from gbkfit.fitting import fitter_parser
     objective = mock_objective(DriverHost())
     properties = bounded_properties() | dict(
         xpos=dict(value=0.65, min=-4, max=4),
-        bpt_s='np.sqrt(xpos - 0.6) * 0 + 4')
+        pt_s='np.sqrt(xpos - 0.6) * 0 + 4')
     params = ParamSpace(objective.pdescs(), properties)
     result = fitter_parser.load(dict(
         type='multistart', local=dict(type='scipy.least_squares'),
@@ -283,7 +285,7 @@ def prior_properties(nsigma):
     # Uniform priors of +-nsigma errors around the truth (see the lmfit
     # test), so that the samplers need few evaluations
     errors = dict(
-        xpos=0.01, ypos=0.01, posa=0.25, incl=0.25, bpt_a=0.01, bpt_s=0.03)
+        xpos=0.01, ypos=0.01, posa=0.25, incl=0.25, pt_a=0.01, pt_s=0.03)
     return {
         name: dict(min=TRUE[name] - nsigma * error,
                    max=TRUE[name] + nsigma * error)
@@ -349,14 +351,14 @@ def test_dynesty_posterior_agrees_with_the_covariance():
 @pytest.mark.slow
 @pytest.mark.filterwarnings('ignore:invalid value:RuntimeWarning')
 def test_samplers_leave_out_points_the_parameters_reject():
-    # bpt_s is nan for xpos < 0.6: there the likelihood is -inf, and the
+    # pt_s is nan for xpos < 0.6: there the likelihood is -inf, and the
     # points nautilus keeps (with no weight) crashed the posterior
     pytest.importorskip('nautilus')
     from gbkfit.fitting.fitters.nautilus import FitterNautilus
     objective = mock_objective(DriverHost())
     properties = dict(TRUE) | dict(
         xpos=dict(min=0.5, max=0.9), posa=dict(min=35, max=45),
-        bpt_s='np.sqrt(xpos - 0.6) * 0 + 4')
+        pt_s='np.sqrt(xpos - 0.6) * 0 + 4')
     params = ParamSpace(objective.pdescs(), properties)
     result = FitterNautilus(n_live=200, n_eff=500).fit(objective, params)
     assert np.all(result.posterior.samples[:, 0] >= 0.6)

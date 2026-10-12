@@ -11,7 +11,6 @@ import numpy as np
 from gbkfit.dataset import Dataset
 from gbkfit.driver import Driver
 from gbkfit.instrument import Instrument
-from gbkfit.model.base import Model, Selection
 from gbkfit.params import ParamValues
 from gbkfit.region import Regions
 from gbkfit.utils import gridutils, parseutils
@@ -20,6 +19,7 @@ from ._dcube import DCube, ExtraFunction
 from .base import Observable, ObservablePlan
 
 if TYPE_CHECKING:
+    from .._scene import Scene
     from ..foreground import Foreground
 
 
@@ -195,7 +195,7 @@ def dump_spatial_grid(
 class DCubePlanBase(ObservablePlan):
     """
     The evaluation of an observable made from a DCube: the plan of the cube,
-    and the plan of the model (of the given selection) on its high-res
+    and the plan of the scene (what an observation sees) on its high-res
     grid (see _model_grid).
     """
 
@@ -203,10 +203,9 @@ class DCubePlanBase(ObservablePlan):
             self,
             dcube: DCube,
             driver: Driver,
-            model: Model,
+            scene: 'Scene',
             foreground: 'Foreground',
-            dtype: np.dtype,
-            selection: Selection
+            dtype: np.dtype
     ):
         self._driver = driver
         self._dtype = dtype
@@ -226,7 +225,7 @@ class DCubePlanBase(ObservablePlan):
             nz = self._dcube_plan.scratch_dcube().shape[0]
             self._source_cube = driver.mem_alloc_d(
                 (nz,) + grid.size[:2][::-1], dtype)
-        self._model_plan = model.plan(driver, grid, dtype, selection)
+        self._model_plan = scene.plan(driver, grid, dtype)
 
     def _model_grid(self) -> gridutils.Grid:
         """Return the grid the model is evaluated on: the high-res grid."""

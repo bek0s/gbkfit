@@ -1,6 +1,6 @@
 """
-Tests for opacity components: they absorb the light of the components
-behind them along the line of sight.
+Tests for the components with opacity (dust): they absorb the light of
+the components behind them along the line of sight.
 """
 
 import copy
@@ -15,43 +15,55 @@ from modelutils import observation_group
 DISK = dict(
     type='smdisk', loose=False, tilted=False, rnodes=list(range(0, 12)))
 
+# The density of a thick exponential disk
+THICK_DENSITY = dict(
+    ptraits=dict(type='exponential'), htraits=dict(type='sech2'))
+
+BAND = dict(type='band')
+LINES = dict(type='lines')
+DUST = dict(type='dust')
+
 PROPERTIES = dict(
-    vsys=0, xpos=0, ypos=0, posa=30, incl=60,
-    bpt_a=1, bpt_s=4, bht_s=1, vpt_rt=2, vpt_vt=150, dpt_a=20,
-    ocmp_xpos=0, ocmp_ypos=0, ocmp_posa=30, ocmp_incl=60,
-    ocmp_opt_s=4, ocmp_oht_s=1)
+    gas_vsys=0, gas_xpos=0, gas_ypos=0, gas_posa=30, gas_incl=60,
+    gas_pt_a=1, gas_pt_s=4, gas_ht_s=1, gas_vpt_rt=2, gas_vpt_vt=150,
+    gas_dpt_a=20,
+    dust_xpos=0, dust_ypos=0, dust_posa=30, dust_incl=60,
+    dust_pt_s=4, dust_ht_s=1)
 
 
-def kinematics_3d_case(driver, with_opacity):
-    model = dict(type='kinematics_3d', components=[dict(
-        **DISK,
-        bptraits=dict(type='exponential'),
-        bhtraits=dict(type='sech2'),
-        vptraits=dict(type='tan_arctan'),
-        dptraits=dict(type='uniform'))])
+def spectral_cube_case(driver, with_opacity):
+    """
+    A spectral cube, on a grid, of a galaxy of a thick disk of gas, and
+    if with_opacity, of a thick disk of dust.
+    """
+    components = [dict(
+        DISK, name='gas', density=THICK_DENSITY,
+        kinematics=dict(
+            vptraits=dict(type='tan_arctan'),
+            dptraits=dict(type='uniform')),
+        emission=LINES)]
     if with_opacity:
-        model['opacity_components'] = [dict(
-            **DISK,
-            optraits=dict(type='exponential'),
-            ohtraits=dict(type='sech2'))]
+        components.append(dict(
+            DISK, name='dust', density=THICK_DENSITY, opacity=DUST))
     return dict(
         driver=dict(type=driver.type()),
         observable=dict(
             type='pixel_spectra', size=[32, 32, 41], step=[1, 1, 10]),
-        model=model)
+        line_of_sight=dict(type='grid'),
+        galaxy=dict(components=components))
 
 
 def evaluate(driver, with_opacity, opacity, times=1):
-    """Evaluate a thick disk (with or without opacity) several times."""
-    model_group = observation_group([kinematics_3d_case(driver, with_opacity)])
-    properties = dict(PROPERTIES, ocmp_opt_a=opacity)
+    """Evaluate a thick disk (with or without dust) several times."""
+    obs_group = observation_group([spectral_cube_case(driver, with_opacity)])
+    properties = dict(PROPERTIES, dust_pt_a=opacity)
     if not with_opacity:
         properties = {
-            k: v for k, v in properties.items() if not k.startswith('ocmp')}
-    params = gbkfit.params.ParamSpace(model_group.pdescs(), properties)
+            k: v for k, v in properties.items() if not k.startswith('dust_')}
+    params = gbkfit.params.ParamSpace(obs_group.pdescs(), properties)
     values = params.evaluate()
     return [
-        copy.deepcopy(model_group.model_h(values)[0]['spectra']['d'])
+        copy.deepcopy(obs_group.model_h(values)[0]['spectra']['d'])
         for _ in range(times)]
 
 
@@ -85,38 +97,39 @@ def test_opacity_does_not_accumulate(driver):
 
 def face_on_optical_depth(
         driver, evaluate_cases, disk_type,
-        optraits=(dict(type='exponential'),),
-        opacity_properties=dict(ocmp_opt_a=0.5, ocmp_opt_s=4, ocmp_oht_s=1)):
+        ptraits=(dict(type='exponential'),),
+        dust_properties=dict(dust_pt_a=0.5, dust_pt_s=4, dust_ht_s=1)):
     """
-    The optical depth of each line of sight through a face-on opacity disk
-    of the given type and opacity traits (each with a sech2 height trait,
-    and their properties): the sum of the opacity cube along the z axis.
+    The optical depth of each line of sight through a face-on disk of
+    dust of the given type and density polar traits (each with a sech2
+    height trait, and their properties): the sum of the opacity cube
+    along the depth axis.
     """
-    model = dict(
-        type='intensity_3d', size_z=40, step_z=0.25,
-        components=[dict(
-            **DISK,
-            bptraits=dict(type='exponential'),
-            bhtraits=dict(type='sech2'))],
-        opacity_components=[dict(
-            DISK, type=disk_type,
-            optraits=list(optraits),
-            ohtraits=[dict(type='sech2')] * len(optraits))])
+    dust = dict(
+        DISK, type=disk_type, name='dust',
+        density=dict(
+            ptraits=list(ptraits),
+            htraits=[dict(type='sech2')] * len(ptraits)),
+        opacity=DUST)
     if disk_type == 'mcdisk':
-        model['opacity_components'][0]['cflux'] = 1e-4
+        dust['cflux'] = 1e-4
+    stars = dict(DISK, name='stars', density=THICK_DENSITY, emission=BAND)
     case = dict(
         driver=dict(type=driver.type()),
         observable=dict(type='pixel_brightness', size=[24, 24]),
-        model=model)
+        line_of_sight=dict(
+            type='grid', depth=dict(extent=40 * 0.25, step=0.25)),
+        galaxy=dict(components=[stars, dust]))
     properties = dict(
-        xpos=0, ypos=0, posa=0, incl=0, bpt_a=1, bpt_s=4, bht_s=1,
-        ocmp_xpos=0, ocmp_ypos=0, ocmp_posa=0, ocmp_incl=0,
-        **opacity_properties)
+        stars_xpos=0, stars_ypos=0, stars_posa=0, stars_incl=0,
+        stars_pt_a=1, stars_pt_s=4, stars_ht_s=1,
+        dust_xpos=0, dust_ypos=0, dust_posa=0, dust_incl=0,
+        **dust_properties)
     _, extra = evaluate_cases([case], properties)
     return extra['observation0_model_total_odata'].data.sum(axis=0)
 
 
-def test_opacity_traits_give_the_face_on_optical_depth(
+def test_dust_density_gives_the_face_on_optical_depth(
         driver, evaluate_cases):
     # The polar trait is the optical depth of the disk seen face-on, and
     # the height trait distributes it along z (it integrates to 1), in
@@ -136,14 +149,14 @@ def test_opacity_traits_give_the_face_on_optical_depth(
 def test_monte_carlo_opacity_mixtures(driver, evaluate_cases):
     # A mixture of blobs and an exponential profile: the clouds of the
     # Monte Carlo disk add up to the optical depth of the smooth disk
-    optraits = (dict(type='mixture_gauss', nblobs=1), dict(type='exponential'))
+    ptraits = (dict(type='mixture_gauss', nblobs=1), dict(type='exponential'))
     properties = dict(
-        ocmp_opt_r=[3.0], ocmp_opt_t=[0.0], ocmp_opt_a=[0.5],
-        ocmp_opt_s=[2.0], ocmp_opt_q=[1.0], ocmp_opt_p=[0.0],
-        ocmp_opt1_a=0.2, ocmp_opt1_s=3.0, ocmp_oht_s=1, ocmp_oht1_s=1)
+        dust_pt_r=[3.0], dust_pt_t=[0.0], dust_pt_a=[0.5],
+        dust_pt_s=[2.0], dust_pt_q=[1.0], dust_pt_p=[0.0],
+        dust_pt1_a=0.2, dust_pt1_s=3.0, dust_ht_s=1, dust_ht1_s=1)
     smdisk, mcdisk = (
         face_on_optical_depth(
-            driver, evaluate_cases, disk_type, optraits, properties)
+            driver, evaluate_cases, disk_type, ptraits, properties)
         for disk_type in ('smdisk', 'mcdisk'))
     np.testing.assert_allclose(mcdisk.sum(), smdisk.sum(), rtol=1e-2)
 
@@ -156,31 +169,32 @@ def test_the_near_side_is_where_outflows_approach(driver, evaluate_cases):
     # Its outflow approaches the viewer (negative velocities).
     nodes = list(range(0, 16, 2))
     disk = dict(DISK, rnodes=nodes)
-    model = dict(type='kinematics_3d', components=[dict(
-        disk, bptraits=dict(type='exponential'),
-        bhtraits=dict(type='sech2'),
-        vptraits=dict(type='nw_rad_uniform'),
-        dptraits=dict(type='uniform'))])
+    gas = dict(
+        disk, name='gas', density=THICK_DENSITY,
+        kinematics=dict(
+            vptraits=dict(type='nw_rad_uniform'),
+            dptraits=dict(type='uniform')),
+        emission=LINES)
     properties = dict(
-        vsys=0, xpos=0, ypos=0, posa=0, incl=60, bpt_a=1, bpt_s=4,
-        bht_s=1, vpt_vr=[50.0] * len(nodes), dpt_a=20)
+        gas_vsys=0, gas_xpos=0, gas_ypos=0, gas_posa=0, gas_incl=60,
+        gas_pt_a=1, gas_pt_s=4, gas_ht_s=1,
+        gas_vpt_vr=[50.0] * len(nodes), gas_dpt_a=20)
 
-    def evaluate(model, properties):
+    def evaluate(components, properties):
         case = dict(
             driver=dict(type=driver.type()),
             observable=dict(
                 type='pixel_spectra', size=[32, 32, 41], step=[1, 1, 10]),
-            model=model)
+            line_of_sight=dict(type='grid'),
+            galaxy=dict(components=components))
         data, _ = evaluate_cases([case], properties)
         return data[0]['spectra']['d']
-    clear = evaluate(model, properties)
+    clear = evaluate([gas], properties)
     dusty = evaluate(
-        model | dict(opacity_components=[dict(
-            disk, optraits=dict(type='exponential'),
-            ohtraits=dict(type='sech2'))]),
+        [gas, dict(disk, name='dust', density=THICK_DENSITY, opacity=DUST)],
         properties | dict(
-            ocmp_xpos=0, ocmp_ypos=0, ocmp_posa=0, ocmp_incl=60,
-            ocmp_opt_a=2.0, ocmp_opt_s=4, ocmp_oht_s=0.2))
+            dust_xpos=0, dust_ypos=0, dust_posa=0, dust_incl=60,
+            dust_pt_a=2.0, dust_pt_s=4, dust_ht_s=0.2))
     # The halves of the disk on either side of its major axis (x = 0)
     halves = (slice(4, 14), slice(18, 28))
     velocity = np.arange(-20, 21) * 10.0
@@ -191,42 +205,42 @@ def test_the_near_side_is_where_outflows_approach(driver, evaluate_cases):
     near, far = np.argsort(transmitted)
     assert mean_velocity[near] < 0 < mean_velocity[far]
 
-def image_and_optical_depth(driver, evaluate_cases, opacity, step_z):
+def image_and_optical_depth(driver, evaluate_cases, opacity, depth_step):
     """
-    The image of an inclined thick disk whose absorbers have the same
+    The image of an inclined thick disk whose dust has the same
     distribution as its light, with the given face-on optical depth at
-    the centre, on a z axis of the given step. Also return the optical
-    depth of each line of sight (the sum of the opacity cube along z).
+    the centre, on a depth axis of the given step. Also return the
+    optical depth of each line of sight (the sum of the opacity cube
+    along the depth axis).
     """
-    traits = dict(
-        bptraits=dict(type='exponential'), bhtraits=dict(type='sech2'))
-    opacity_traits = dict(
-        optraits=dict(type='exponential'), ohtraits=dict(type='sech2'))
     case = dict(
         driver=dict(type=driver.type()),
         observable=dict(type='pixel_brightness', size=[32, 32]),
-        model=dict(
-            type='intensity_3d', size_z=round(24 / step_z), step_z=step_z,
-            components=[dict(DISK, **traits)],
-            opacity_components=[dict(DISK, **opacity_traits)]))
+        line_of_sight=dict(
+            type='grid', depth=dict(extent=24.0, step=depth_step)),
+        galaxy=dict(components=[
+            dict(DISK, name='stars', density=THICK_DENSITY, emission=BAND),
+            dict(DISK, name='dust', density=THICK_DENSITY, opacity=DUST)]))
     properties = dict(
-        xpos=0, ypos=0, posa=30, incl=60, bpt_a=1, bpt_s=4, bht_s=1,
-        ocmp_xpos=0, ocmp_ypos=0, ocmp_posa=30, ocmp_incl=60,
-        ocmp_opt_a=opacity, ocmp_opt_s=4, ocmp_oht_s=1)
+        stars_xpos=0, stars_ypos=0, stars_posa=30, stars_incl=60,
+        stars_pt_a=1, stars_pt_s=4, stars_ht_s=1,
+        dust_xpos=0, dust_ypos=0, dust_posa=30, dust_incl=60,
+        dust_pt_a=opacity, dust_pt_s=4, dust_ht_s=1)
     data, extra = evaluate_cases([case], properties)
     tau = extra['observation0_model_total_odata'].data.sum(axis=0)
     return data[0]['brightness']['d'], tau
 
 
-@pytest.mark.parametrize('step_z', [0.25, 1, 2])
+@pytest.mark.parametrize('depth_step', [0.25, 1, 2])
 def test_mixed_absorbers_let_through_the_exact_fraction(
-        driver, evaluate_cases, step_z):
+        driver, evaluate_cases, depth_step):
     # When the absorbers have the same distribution as the emitters, a
     # line of sight of optical depth tau lets through (1 - exp(-tau)) / tau
     # of its light, whatever the size of the voxels
-    clear, _ = image_and_optical_depth(driver, evaluate_cases, 0, step_z)
+    clear, _ = image_and_optical_depth(
+        driver, evaluate_cases, 0, depth_step)
     dimmed, tau = image_and_optical_depth(
-        driver, evaluate_cases, 2, step_z)
+        driver, evaluate_cases, 2, depth_step)
     assert tau.max() > 2
     visible = clear > 1e-3 * clear.max()
     np.testing.assert_allclose(

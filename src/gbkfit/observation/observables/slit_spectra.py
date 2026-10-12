@@ -7,13 +7,14 @@ import numpy as np
 from gbkfit.dataset import DatasetSlitSpectra
 from gbkfit.driver import Driver
 from gbkfit.instrument import Instrument
-from gbkfit.model.base import Model, ModelSCube, Selection
+from gbkfit.model import LineEmission
 from gbkfit.params import ParamValues
 from gbkfit.utils import gridutils
 from . import _dcube, _detail
 from .base import ModelData, Observable
 
 if TYPE_CHECKING:
+    from .._scene import Scene
     from ..foreground import Foreground
 
 
@@ -71,6 +72,8 @@ class SlitSpectra(Observable):
 
     dataset_class = DatasetSlitSpectra
 
+    emission = LineEmission
+
     # The axes of a long-slit spectrum: the position along the slit
     # and the spectral axis
     spectral_axis = 1
@@ -78,10 +81,6 @@ class SlitSpectra(Observable):
     @staticmethod
     def type() -> str:
         return 'slit_spectra'
-
-    @staticmethod
-    def is_compatible(model: Model) -> bool:
-        return isinstance(model, ModelSCube)
 
     @classmethod
     def load(
@@ -182,12 +181,11 @@ class SlitSpectra(Observable):
     def plan(
             self,
             driver: Driver,
-            model: Model,
+            scene: 'Scene',
             foreground: 'Foreground',
             instrument: Instrument,
             scale: Sequence[int],
-            dtype: np.dtype,
-            selection: Selection
+            dtype: np.dtype
     ) -> 'SlitSpectraPlan':
         # The cube of a slit is one pixel (the slit width) across the slit,
         # sampled as finely as the pixels along it (the model is the mean
@@ -211,7 +209,7 @@ class SlitSpectra(Observable):
             mask_apply=self._mask_apply,
             dtype=dtype)
         return SlitSpectraPlan(
-            dcube, driver, model, foreground, dtype, selection)
+            dcube, driver, scene, foreground, dtype)
 
 
 class SlitSpectraPlan(_detail.DCubePlanBase):

@@ -16,28 +16,32 @@ from gbkfit.observation import (
 from gbkfit.utils import fitsutils, gridutils
 
 
-MODEL = dict(type='intensity_2d', components=[dict(
+DISK = dict(
     type='smdisk', loose=False, tilted=False,
     rnodes=list(range(0, 14)),
-    bptraits=dict(type='exponential'))])
+    density=dict(ptraits=dict(type='exponential')))
 
-PROPERTIES = dict(xpos=0.0, ypos=0.0, posa=50, incl=60, bpt_a=1, bpt_s=2)
+GALAXY = dict(components=[DISK | dict(emission=dict(type='band'))])
+
+PROPERTIES = dict(xpos=0.0, ypos=0.0, posa=50, incl=60, pt_a=1, pt_s=2)
 
 IMAGE = dict(type='pixel_brightness', size=[32, 41], step=[1, 1])
 
 
 def evaluate(driver, foreground=None, properties=PROPERTIES, observable=IMAGE,
-             model=MODEL):
+             galaxy=GALAXY):
     group = observation_group([dict(
-        driver=dict(type=driver.type()), observable=copy.deepcopy(observable),
-        model=model)])
+        driver=dict(type=driver.type()), galaxy=galaxy,
+        line_of_sight=dict(type='flat'),
+        observable=copy.deepcopy(observable))])
     observation = group.observations()[0]
     if foreground is not None:
         from gbkfit.observation import Observation, ObservationGroup
         observation = Observation(
-            observation.observable(), observation.driver(),
-            foreground=foreground, instrument=observation.instrument())
-        group = ObservationGroup(group.models(), [observation])
+            observation.observable(), observation.line_of_sight(),
+            observation.driver(), foreground=foreground,
+            instrument=observation.instrument())
+        group = ObservationGroup(group.galaxies(), [observation])
     params = gbkfit.params.ParamSpace(group.pdescs(), properties)
     data = group.model_h(params.evaluate())[0]
     return next(iter(data.values()))['d'].copy()
@@ -50,10 +54,10 @@ def deflection_lens(alpha_x, alpha_y, source_size, source_step, **coords):
 
 # A smooth disk, whose bilinear interpolation on a source grid of half
 # the pixels of the image is within 1% of its peak
-SMOOTH_MODEL = dict(type='intensity_2d', components=[
-    MODEL['components'][0] | dict(bptraits=dict(type='gauss'))])
+SMOOTH_GALAXY = dict(components=[
+    GALAXY['components'][0] | dict(density=dict(ptraits=dict(type='gauss')))])
 
-SMOOTH_PROPERTIES = PROPERTIES | dict(bpt_s=4)
+SMOOTH_PROPERTIES = PROPERTIES | dict(pt_s=4)
 
 
 def test_no_deflection_is_no_lens(driver):
@@ -69,10 +73,10 @@ def test_no_deflection_is_no_lens_on_a_rotated_image(driver):
     # The source grid is aligned with the sky, and each pixel of a rotated
     # image takes the light of the source at its position on the sky
     image = IMAGE | dict(rota=30)
-    plain = evaluate(driver, None, SMOOTH_PROPERTIES, image, SMOOTH_MODEL)
+    plain = evaluate(driver, None, SMOOTH_PROPERTIES, image, SMOOTH_GALAXY)
     zero = np.zeros((4, 4))
     lens = deflection_lens(zero, zero, (120, 120), (0.5, 0.5), step=100)
-    lensed = evaluate(driver, lens, SMOOTH_PROPERTIES, image, SMOOTH_MODEL)
+    lensed = evaluate(driver, lens, SMOOTH_PROPERTIES, image, SMOOTH_GALAXY)
     np.testing.assert_allclose(lensed, plain, atol=0.01 * plain.max())
 
 
@@ -100,22 +104,23 @@ def test_deflection_of_a_rotated_map():
     IMAGE, dict(type='pixel_spectra', size=[32, 41, 31], step=[1, 1, 20])])
 def test_constant_deflection_moves_the_source(driver, observable):
     # With a constant deflection alpha, the image is the source moved by
-    # alpha: the model with its centre moved by alpha
-    model = MODEL
+    # alpha: the galaxy with its centre moved by alpha
+    galaxy = GALAXY
     properties = PROPERTIES
     if observable['type'] == 'pixel_spectra':
-        model = dict(type='kinematics_2d', components=[
-            MODEL['components'][0] | dict(
+        galaxy = dict(components=[DISK | dict(
+            kinematics=dict(
                 vptraits=dict(type='tan_arctan'),
-                dptraits=dict(type='uniform'))])
+                dptraits=dict(type='uniform')),
+            emission=dict(type='lines'))])
         properties = PROPERTIES | dict(
             vsys=0, vpt_rt=2, vpt_vt=150, dpt_a=20)
     lens = deflection_lens(
         np.full((41, 32), 2.0), np.full((41, 32), -3.0), (60, 61), (1, 1))
-    lensed = evaluate(driver, lens, properties, observable, model)
+    lensed = evaluate(driver, lens, properties, observable, galaxy)
     moved = evaluate(
         driver, None, properties | dict(xpos=2.0, ypos=-3.0), observable,
-        model)
+        galaxy)
     np.testing.assert_allclose(
         lensed, moved, rtol=1e-5, atol=1e-6 * moved.max())
 
@@ -126,10 +131,10 @@ def test_deflection_between_source_pixels(driver):
     lens = deflection_lens(
         np.full((41, 32), 2.5), np.full((41, 32), -3.25), (120, 122),
         (0.5, 0.5))
-    lensed = evaluate(driver, lens, SMOOTH_PROPERTIES, IMAGE, SMOOTH_MODEL)
+    lensed = evaluate(driver, lens, SMOOTH_PROPERTIES, IMAGE, SMOOTH_GALAXY)
     moved = evaluate(
         driver, None, SMOOTH_PROPERTIES | dict(xpos=2.5, ypos=-3.25), IMAGE,
-        SMOOTH_MODEL)
+        SMOOTH_GALAXY)
     np.testing.assert_allclose(lensed, moved, atol=0.01 * moved.max())
 
 
@@ -145,7 +150,7 @@ def test_point_mass_makes_an_einstein_ring(driver):
     lens = deflection_lens(
         einstein ** 2 * x / radius2, einstein ** 2 * y / radius2,
         (80, 80), (0.25, 0.25), step=0.25)
-    properties = PROPERTIES | dict(incl=0, bpt_s=0.8)
+    properties = PROPERTIES | dict(incl=0, pt_s=0.8)
     image = dict(type='pixel_brightness', size=[64, 64], step=[0.5, 0.5])
     source = evaluate(driver, None, properties, image)
     lensed = evaluate(driver, lens, properties, image)

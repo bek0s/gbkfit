@@ -1,13 +1,17 @@
 """
-Tests for the options of the models: which components and options each
-model accepts, and which it rejects.
+Tests for the options of the galaxies and of the lines of sight of their
+observations: which components each kind of observation sees, and which
+options they accept and reject.
 """
 
 import logging
 
 import pytest
-from gbkfit.model import model_parser
-from gbkfit.utils import parseutils
+from gbkfit.model import galaxy_parser
+from gbkfit.model.components.disks._detail import parse_component_rnode_args
+from gbkfit.observation import Depth
+from gbkfit.utils import gridutils, parseutils
+from modelutils import config_group
 
 
 EXPONENTIAL = dict(type='exponential')
@@ -17,124 +21,220 @@ UNIFORM = dict(type='uniform')
 
 DISK = dict(loose=False, tilted=False, rnodes=[0, 2, 4, 6, 8])
 
+THIN = dict(ptraits=EXPONENTIAL)
+THICK = dict(ptraits=EXPONENTIAL, htraits=SECH2)
+KINEMATICS = dict(vptraits=ARCTAN, dptraits=UNIFORM)
+
 # A component of each kind, with its required options
-BRIGHTNESS_2D = dict(DISK, type='smdisk', bptraits=EXPONENTIAL)
-BRIGHTNESS_3D = BRIGHTNESS_2D | dict(bhtraits=SECH2)
-SPECTRAL_2D = BRIGHTNESS_2D | dict(vptraits=ARCTAN, dptraits=UNIFORM)
-SPECTRAL_3D = SPECTRAL_2D | dict(bhtraits=SECH2)
-OPACITY_3D = dict(DISK, type='smdisk', optraits=EXPONENTIAL, ohtraits=SECH2)
+BAND_THIN = dict(DISK, type='smdisk', density=THIN, emission=dict(type='band'))
+BAND_THICK = BAND_THIN | dict(density=THICK)
+LINES_THIN = BAND_THIN | dict(
+    kinematics=KINEMATICS, emission=dict(type='lines'))
+LINES_THICK = LINES_THIN | dict(density=THICK)
+DUST = dict(DISK, type='smdisk', density=THICK, opacity=dict(type='dust'))
 
-# Each type of model, with a component of the kind it accepts
-MODELS = dict(
-    intensity_2d=BRIGHTNESS_2D,
-    intensity_3d=BRIGHTNESS_3D,
-    kinematics_2d=SPECTRAL_2D,
-    kinematics_3d=SPECTRAL_3D)
+COMPONENTS = dict(
+    band_thin=BAND_THIN, band_thick=BAND_THICK, lines_thin=LINES_THIN,
+    lines_thick=LINES_THICK, dust=DUST)
 
-MODELS_2D = ['intensity_2d', 'kinematics_2d']
-MODELS_3D = ['intensity_3d', 'kinematics_3d']
+FLAT = dict(type='flat')
+GRID = dict(type='grid')
 
-# The options of the 3d models only
-OPTIONS_3D = dict(
-    opacity_components=[OPACITY_3D], size_z=10, step_z=1, zero_z=-4.5)
+IMAGE = dict(type='pixel_brightness', size=[8, 8])
+CUBE = dict(type='pixel_spectra', size=[8, 8, 8])
+
+# Each kind of observation (an image or a spectral cube, along a flat or
+# a grid line of sight): its observable and line of sight, and a
+# component it sees
+OBSERVATIONS = dict(
+    image_flat=(IMAGE, FLAT, BAND_THIN),
+    image_grid=(IMAGE, GRID, BAND_THICK),
+    cube_flat=(CUBE, FLAT, LINES_THIN),
+    cube_grid=(CUBE, GRID, LINES_THICK))
+
+FLAT_KINDS = ['image_flat', 'cube_flat']
+GRID_KINDS = ['image_grid', 'cube_grid']
+
+# A depth axis of a grid line of sight, other than the default one
+DEPTH = dict(extent=10, step=1)
+
+
+def config(kind, components=None, line_of_sight=None):
+    """
+    The configuration of an observation of the given kind, of a galaxy
+    of the given components (by default, the one the observation sees),
+    with the given line of sight (by default, that of the kind).
+    """
+    observable, default_line_of_sight, component = OBSERVATIONS[kind]
+    if components is None:
+        components = [component]
+    if line_of_sight is None:
+        line_of_sight = default_line_of_sight
+    return dict(
+        galaxies=[dict(components=components)],
+        observations=[dict(
+            observable=observable, line_of_sight=line_of_sight)])
+
+
+def with_dust(kind):
+    """
+    The components of a galaxy with dust: the one that the given kind of
+    observation sees, and the dust (with names: there are two).
+    """
+    _, _, component = OBSERVATIONS[kind]
+    return [component | dict(name='stars'), DUST | dict(name='dust')]
 
 
 def strict_load(info):
-    """Load a model, with unknown options as errors."""
+    """Load a configuration, with unknown options as errors."""
     with parseutils.strict_mode():
-        return model_parser.load(info)
+        return config_group(info)
 
 
 def load_error(info):
-    """The error message of loading a bad model."""
+    """The error message of loading a bad configuration."""
     with pytest.raises(parseutils.ConfigError) as error:
         strict_load(info)
     return str(error.value)
 
 
-@pytest.mark.parametrize('model_type', MODELS)
-def test_model_loads(model_type):
-    strict_load(dict(type=model_type, components=MODELS[model_type]))
+def galaxy_error(info):
+    """The error message of loading a bad galaxy."""
+    with pytest.raises(parseutils.ConfigError) as error:
+        with parseutils.strict_mode():
+            galaxy_parser.load(info)
+    return str(error.value)
 
 
-@pytest.mark.parametrize('model_type', MODELS)
-def test_components_cannot_be_missing(model_type):
-    message = load_error(dict(type=model_type))
+@pytest.mark.parametrize('kind', OBSERVATIONS)
+def test_observation_loads(kind):
+    strict_load(config(kind))
+
+
+def test_components_cannot_be_missing():
+    message = galaxy_error(dict())
     assert "option 'components' is required but not provided" in message
 
 
-@pytest.mark.parametrize('model_type', MODELS)
-def test_components_cannot_be_null(model_type):
-    message = load_error(dict(type=model_type, components=None))
+def test_components_cannot_be_null():
+    message = galaxy_error(dict(components=None))
     assert "option 'components' cannot be null" in message
 
 
-@pytest.mark.parametrize('model_type', MODELS)
-def test_components_cannot_be_empty(model_type):
-    message = load_error(dict(type=model_type, components=[]))
-    assert "at least one component must be configured" in message
+def test_components_cannot_be_empty():
+    message = galaxy_error(dict(components=[]))
+    assert "a galaxy needs at least one component" in message
 
 
-@pytest.mark.parametrize('model_type', MODELS_2D)
-def test_2d_models_have_no_mcdisk_components(model_type):
-    component = MODELS[model_type] | dict(type='mcdisk', cflux=1e-3)
-    message = load_error(dict(type=model_type, components=component))
-    assert "unknown" in message and "type 'mcdisk'" in message
+@pytest.mark.parametrize('kind', FLAT_KINDS)
+def test_flat_lines_of_sight_do_not_see_mcdisks(kind):
+    # A Monte Carlo disk is thick
+    _, _, component = OBSERVATIONS[kind]
+    mcdisk = component | dict(type='mcdisk', cflux=1e-3, density=THICK)
+    message = load_error(config(kind, [mcdisk]))
+    assert "a thick component needs a line of sight with a depth axis" \
+        in message
 
 
-@pytest.mark.parametrize('model_type, component, message', [
-    ('intensity_2d', SPECTRAL_2D, "unknown options"),
-    ('intensity_3d', SPECTRAL_3D, "unknown options"),
-    ('kinematics_2d', BRIGHTNESS_2D, "option 'vptraits' is required"),
-    ('kinematics_3d', BRIGHTNESS_3D, "option 'vptraits' is required"),
-    ('intensity_3d', OPACITY_3D, "option 'bptraits' is required"),
-    ('kinematics_3d', OPACITY_3D, "option 'bptraits' is required"),
-    ('kinematics_2d', SPECTRAL_3D, "unknown options"),
-    ('intensity_2d', BRIGHTNESS_3D, "unknown options")])
-def test_models_reject_components_of_other_kinds(
-        model_type, component, message):
-    assert message in load_error(dict(type=model_type, components=component))
+IMAGE_SEES_NONE = (
+    "the observation is an image, which sees the components that emit in "
+    "a band; it sees none")
+CUBE_SEES_NONE = (
+    "the observation is a spectral cube, which sees the components that "
+    "emit lines; it sees none")
+FLAT_SEES_NO_THICK = (
+    "a thick component needs a line of sight with a depth axis (grid)")
+GRID_SEES_NO_THIN = (
+    "a thin disk on a grid with a depth axis is not supported yet")
 
 
-@pytest.mark.parametrize('model_type', MODELS_3D)
-def test_opacity_components_are_not_components(model_type):
-    info = dict(
-        type=model_type, components=MODELS[model_type],
-        opacity_components=BRIGHTNESS_3D)
-    assert "option 'optraits' is required" in load_error(info)
+@pytest.mark.parametrize('kind, component, message', [
+    ('image_flat', LINES_THIN, IMAGE_SEES_NONE),
+    ('image_grid', LINES_THICK, IMAGE_SEES_NONE),
+    ('cube_flat', BAND_THIN, CUBE_SEES_NONE),
+    ('cube_grid', BAND_THICK, CUBE_SEES_NONE),
+    ('image_grid', DUST, IMAGE_SEES_NONE),
+    ('cube_grid', DUST, CUBE_SEES_NONE),
+    ('cube_flat', LINES_THICK, FLAT_SEES_NO_THICK),
+    ('image_flat', BAND_THICK, FLAT_SEES_NO_THICK),
+    ('cube_grid', LINES_THIN, GRID_SEES_NO_THIN),
+    ('image_grid', BAND_THIN, GRID_SEES_NO_THIN)])
+def test_observations_reject_components_of_other_kinds(
+        kind, component, message):
+    assert message in load_error(config(kind, [component]))
 
 
-@pytest.mark.parametrize('model_type', MODELS_3D)
-def test_3d_models_have_3d_options(model_type):
-    strict_load(
-        dict(type=model_type, components=MODELS[model_type]) | OPTIONS_3D)
-
-
-@pytest.mark.parametrize('model_type', MODELS_2D)
-@pytest.mark.parametrize('option', OPTIONS_3D)
-def test_2d_models_have_no_3d_options(model_type, option):
-    info = dict(
-        type=model_type, components=MODELS[model_type],
-        **{option: OPTIONS_3D[option]})
+@pytest.mark.parametrize('kind', GRID_KINDS)
+def test_opacity_cannot_be_selected(kind):
+    # The opacity of every component applies: an observation selects the
+    # components whose light it sees
+    info = config(kind, with_dust(kind))
+    info['observations'][0]['components'] = ['dust']
     message = load_error(info)
-    assert message.startswith(f"{model_type}: unknown options")
-    assert f"'{option}'" in message
+    assert "the component 'dust' is selected, but the observation is" \
+        in message
 
 
-@pytest.mark.parametrize('model_type', MODELS)
-def test_unknown_trait_options_are_errors_in_strict_mode(model_type):
-    component = MODELS[model_type] | dict(
-        bptraits=dict(EXPONENTIAL, foo=1))
-    message = load_error(dict(type=model_type, components=[component]))
-    assert message.startswith("components[0].bptraits")
+@pytest.mark.parametrize('kind', GRID_KINDS)
+def test_grids_have_depth_options(kind):
+    strict_load(config(kind, with_dust(kind), GRID | dict(depth=DEPTH)))
+
+
+@pytest.mark.parametrize('kind', FLAT_KINDS)
+def test_flat_lines_of_sight_have_no_depth(kind):
+    line_of_sight = FLAT | dict(depth=DEPTH)
+    message = load_error(config(kind, line_of_sight=line_of_sight))
+    assert message.startswith(
+        "observations[0].line_of_sight [flat]: unknown options")
+    assert "'depth'" in message
+
+
+@pytest.mark.parametrize('kind', FLAT_KINDS)
+def test_flat_lines_of_sight_see_no_opacity(kind):
+    message = load_error(config(kind, with_dust(kind)))
+    assert "component 'dust': " in message
+    assert "needs a line of sight with a depth axis (grid)" in message
+
+
+@pytest.mark.parametrize('options, message', [
+    (dict(extent=-1), "extent must be 'legacy' or a positive length"),
+    (dict(extent='half'), "extent must be 'legacy' or a positive length"),
+    (dict(step=0), "step must be positive")])
+def test_invalid_depths_are_rejected(options, message):
+    line_of_sight = GRID | dict(depth=options)
+    error = load_error(config('image_grid', line_of_sight=line_of_sight))
+    assert error.startswith("observations[0].line_of_sight.depth: ")
+    assert message in error
+
+
+@pytest.mark.parametrize('depth, axis', [
+    # As many voxels as cover the extent, centred on 0
+    (Depth(extent=21, step=1.5), (14, 1.5, -9.75)),
+    (Depth(extent=20, step=1.5), (14, 1.5, -9.75)),
+    # By default, those of the longer of the x and y axes
+    (Depth(), (12, 0.5, -2.75)),
+    (Depth(step=0.25), (12, 0.25, -1.375))])
+def test_depth_axis(depth, axis):
+    grid = gridutils.Grid(
+        (8, 12), gridutils.Coords((1, 0.5), (3.5, 5.5), (0, 0), 0), None)
+    assert depth.axis(grid) == axis
+
+
+@pytest.mark.parametrize('name', COMPONENTS)
+def test_unknown_trait_options_are_errors_in_strict_mode(name):
+    component = COMPONENTS[name]
+    density = component['density'] | dict(ptraits=dict(EXPONENTIAL, foo=1))
+    message = galaxy_error(dict(components=[
+        component | dict(density=density)]))
+    assert message.startswith("components[0].density.ptraits")
     assert "'foo'" in message
 
 
-@pytest.mark.parametrize('model_type', MODELS)
-def test_unknown_options_are_warnings(model_type, caplog):
-    component = MODELS[model_type] | dict(foo=1)
+@pytest.mark.parametrize('name', COMPONENTS)
+def test_unknown_options_are_warnings(name, caplog):
+    info = dict(components=COMPONENTS[name] | dict(foo=1))
     with caplog.at_level(logging.WARNING):
-        model_parser.load(dict(type=model_type, components=component))
+        galaxy_parser.load(info)
     assert "'foo'" in caplog.text
 
 
@@ -144,7 +244,6 @@ def test_unknown_options_are_warnings(model_type, caplog):
     # Not a multiple: to the first node beyond rnmax
     (0, 10, 3, 5)])
 def test_radial_nodes_from_a_range(rnmin, rnmax, rnsep, nodes):
-    from gbkfit.model.components.disks._detail import parse_component_rnode_args
     args = parse_component_rnode_args(
         rnmin, rnmax, rnsep, None, None, None, 'linear')
     assert len(args['rnodes']) == nodes
@@ -153,14 +252,13 @@ def test_radial_nodes_from_a_range(rnmin, rnmax, rnsep, nodes):
 
 def test_radial_step_can_be_half_the_node_separation():
     # (half of 0.19999999999999996, the separation as it rounds)
-    from gbkfit.model.components.disks._detail import parse_component_rnode_args
     args = parse_component_rnode_args(
         None, None, None, None, [0, 0.2, 0.4, 0.6, 0.8, 1.0], 0.1, 'linear')
     assert args['rstep'] == 0.1
 
 
 def test_discouraged_traits_are_warnings_with_the_path(caplog):
-    component = MODELS['intensity_2d'] | dict(bptraits=UNIFORM)
-    with parseutils.config_path('models'):
-        model_parser.load([dict(type='intensity_2d', components=component)])
-    assert "models[0].components [smdisk]: the use of" in caplog.text
+    component = BAND_THIN | dict(density=dict(ptraits=UNIFORM))
+    with parseutils.config_path('galaxies'):
+        galaxy_parser.load([dict(components=component)])
+    assert "galaxies[0].components [smdisk]: the use of" in caplog.text

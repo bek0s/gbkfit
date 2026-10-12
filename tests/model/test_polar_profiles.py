@@ -1,5 +1,5 @@
 """
-The radial profiles of the polar traits of brightness and dispersion: a
+The radial profiles of the polar traits of density and dispersion: a
 face-on thin disk has them at the radii of its pixels.
 """
 
@@ -28,21 +28,24 @@ def face_on_disk(driver, evaluate_cases, key, trait):
     """
     from gbkfit.model.components.disks import traits
     parser = dict(b=traits.rpt_parser, d=traits.dpt_parser)[key]
+    prefix = dict(b='pt', d='dpt')[key]
     names = list(parser.load(dict(type=trait)).params_sm())
-    traits_ = dict(
-        bptraits=dict(type=trait if key == 'b' else 'uniform'),
+    density = dict(ptraits=dict(type=trait if key == 'b' else 'uniform'))
+    kinematics = dict(
         vptraits=dict(type='tan_uniform'),
         dptraits=dict(type=trait if key == 'd' else 'uniform'))
     case = dict(
         driver=dict(type=driver.type()),
         observable=dict(
             type='pixel_spectra', size=[33, 33, 61], step=[0.5, 0.5, 5]),
-        model=dict(type='kinematics_2d', components=[dict(
+        line_of_sight=dict(type='flat'),
+        galaxy=dict(components=[dict(
             type='smdisk', loose=False, tilted=False,
-            rnodes=list(range(0, 10)), **traits_)]))
+            rnodes=list(range(0, 10)), density=density,
+            kinematics=kinematics, emission=dict(type='lines'))]))
     properties = dict(
         vsys=0, xpos=0, ypos=0, posa=0, incl=0, vpt_vt=0,
-        bpt_a=1, dpt_a=10) | {f'{key}pt_{n}': VALUES[n] for n in names}
+        pt_a=1, dpt_a=10) | {f'{prefix}_{n}': VALUES[n] for n in names}
     _, extra = evaluate_cases([case], properties)
     output = dict(b='bdata', d='ddata')[key]
     data = extra[f'observation0_model_component0_{output}'].data

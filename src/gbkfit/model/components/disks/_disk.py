@@ -46,7 +46,7 @@ class TraitParams:
     The keys of all dicts are in the same order: the order of the traits,
     and for each trait, the smooth parameters before the node-wise ones.
     circular_velocity has the names of those whose values are the
-    circular velocity of the mass model of the model (see
+    circular velocity of the mass of the galaxy (see
     traits.Trait.circular_velocity_params), and pressure_support those of
     them corrected for the pressure of the disk (see
     traits.Trait.pressure_support).
@@ -177,15 +177,13 @@ class Disk(abc.ABC):
             rstep: float,
             interp: type[Interpolator],
             traits_: dict[str, Sequence[Trait]],
-            prefixes: dict[str, str],
-            rdata_key: str
+            prefixes: dict[str, str]
     ):
         """
         traits_ has the traits of each kind, keyed as in TRAIT_KINDS, and
         can leave kinds out (no traits). prefixes has the prefix of the
-        parameters of the traits of each kind in traits_ (e.g. 'opt' for
-        the density traits of an opacity disk). rdata_key is the name of
-        the density map in the extra outputs (e.g. 'odata').
+        parameters of the traits of each kind in traits_ (e.g. 'pt' for
+        the density polar traits).
         """
 
         nrnodes = len(rnodes)
@@ -200,7 +198,6 @@ class Disk(abc.ABC):
         self._nsubrnodes = len(subrnodes)
         self._interp = interp
         self._traits = {kind: traits_.get(kind, ()) for kind in TRAIT_KINDS}
-        self._rdata_key = rdata_key
 
         # Make descs for the geometric parameters. There is no systemic
         # velocity without velocity traits.
@@ -220,7 +217,7 @@ class Disk(abc.ABC):
             for kind, traits_ in self._traits.items()}
 
         # The parameters whose values are the circular velocity of the
-        # mass model of their model, and the radii of their values
+        # mass of their galaxy, and the radii of their values
         self._circular_velocity_params = {
             name: subrnodes if params.sampling[name] == 'subrings' else rnodes
             for params in self._trait_params.values()
@@ -277,7 +274,7 @@ class Disk(abc.ABC):
     def circular_velocity_params(self) -> dict[str, tuple[float, ...]]:
         """
         Return the parameters that are not in pdescs, but whose values are
-        the circular velocity of the mass model of their model at the
+        the circular velocity of the mass of their galaxy at the
         given radii (arcsec), by name. The disk plans need them with the
         others.
         """
@@ -373,17 +370,19 @@ class DiskPlan(abc.ABC):
             grid: NativeGrid,
             outputs: dict[str, DeviceArray | None],
             out_extra: dict[str, Any] | None,
+            density_key: str,
             lines: np.ndarray | None = None
     ) -> None:
         """
         Add the disk to the outputs. grid has the grid of the native
-        evaluation functions (see ComponentPlan.evaluate), and outputs the
-        arrays they add to (all optional): the opacity cube they read
-        ('opacity'), the 'image' or 'scube', and the 3d density ('rdata')
-        and density after the opacity
-        ('ordata'). lines has the offset, scale and flux of each emission
-        line (an array of shape (nlines, 3); see the native DiskArgs), if
-        the plan has lines.
+        evaluation functions (see NativeGrid), and outputs the arrays they
+        add to (all optional): the opacity cube they read ('opacity'), the
+        'image' or 'scube', and the 3d density ('rdata') and density after
+        the opacity ('ordata'). density_key names the density map in the
+        extra outputs (e.g. 'bdata' for light, 'odata' for dust). lines
+        has the offset, scale and flux of each emission line (an array of
+        shape (nlines, 3); see the native DiskArgs), if the plan has
+        lines.
         """
 
         disk = self._disk
@@ -431,10 +430,8 @@ class DiskPlan(abc.ABC):
 
         if out_extra is not None:
 
-            rdata_key = disk._rdata_key
-
             if disk._traits['rpt']:
-                out_extra[rdata_key] = driver.mem_copy_d2h(rdata_cmp)
+                out_extra[density_key] = driver.mem_copy_d2h(rdata_cmp)
             if vdweight_cmp is not None:
                 weight = driver.mem_copy_d2h(vdweight_cmp)
             if disk._traits['vpt']:
@@ -446,8 +443,8 @@ class DiskPlan(abc.ABC):
             if odata is not None:
                 out_extra['obdata'] = driver.mem_copy_d2h(ordata_cmp)
             if disk._traits['rpt']:
-                sumabs = np.nansum(np.abs(out_extra[rdata_key]))
-                _log.debug(f"sum(abs({rdata_key})): {sumabs}")
+                sumabs = np.nansum(np.abs(out_extra[density_key]))
+                _log.debug(f"sum(abs({density_key})): {sumabs}")
             if disk._traits['vpt']:
                 sumabs = np.nansum(np.abs(out_extra['vdata']))
                 _log.debug(f"sum(abs(vdata)): {sumabs}")

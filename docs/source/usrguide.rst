@@ -86,23 +86,28 @@ Example
    # observation names its own (e.g. driver: gpu)
    driver: {type: host}
 
-   # galaxy model
-   models:
-   - type: kinematics_2d
-     components:
+   # the galaxy: one thin disk, which emits a line
+   galaxies:
+   - components:
      - type: smdisk
        loose: false
        tilted: false
        rnmin: 0
        rnmax: 50
        rnsep: 10
-       bptraits: {type: gauss}
-       vptraits: {type: tan_arctan}
-       dptraits: {type: uniform}
+       density:
+         ptraits: {type: gauss}
+       kinematics:
+         vptraits: {type: tan_arctan}
+         dptraits: {type: uniform}
+       emission: {type: lines}
 
-   # observations of the galaxy model
+   # observations of the galaxy: a spectral cube; the galaxy is evaluated
+   # on the plane of the sky (a flat line of sight; a thick disk needs a
+   # depth axis: {type: grid})
    observations:
-   - observable:
+   - line_of_sight: {type: flat}
+     observable:
        type: pixel_spectra
        size: [101, 101, 101]
        step: [1, 1, 5]
@@ -118,8 +123,8 @@ Example
        ypos: 0
        posa: 45
        incl: 45
-       bpt_a: 1
-       bpt_s: 30
+       pt_a: 1
+       pt_s: 30
        vpt_rt: 10
        vpt_vt: 200
        dpt_a: 10

@@ -79,11 +79,12 @@ def test_rotation_curve_from_radial_nodes(tmp_path):
     # disk and of user-defined parameters is the same as the one given by
     # its values
     config = yaml.load(REFERENCE_DIR / 'thin_disk_pixel_spectra.yaml')
-    component = config['models'][0]['components'][0]
+    component = config['galaxies'][0]['components'][0]
     for option in ('rnmin', 'rnmax', 'rnsep'):
         component.pop(option, None)
     rnodes = list(range(0, 21, 2))
-    component.update(rnodes=rnodes, vptraits=dict(type='nw_tan_uniform'))
+    component['rnodes'] = rnodes
+    component['kinematics']['vptraits'] = dict(type='nw_tan_uniform')
     properties = config['params']['properties']
     del properties['vpt_rt']
     config['pdescs'] = dict(vmax=dict(type='scalar'), rt=dict(type='scalar'))
@@ -100,7 +101,7 @@ def test_unknown_options(tmp_path):
     # A misspelt option is a warning that suggests the right one, or an
     # error with --strict
     config = yaml.load(REFERENCE_DIR / 'thin_disk_pixel_spectra.yaml')
-    component = config['models'][0]['components'][0]
+    component = config['galaxies'][0]['components'][0]
     component['rnmx'] = component['rnmax']
     yaml.dump(config, tmp_path / 'config.yaml')
 
@@ -114,7 +115,7 @@ def test_unknown_options(tmp_path):
     assert "'rnmx' (did you mean 'rnmax'?)" in result.stderr
     result = run('--strict')
     assert result.returncode != 0
-    assert "models[0].components[0]" in result.stderr
+    assert "galaxies[0].components[0]" in result.stderr
     assert "'rnmx' (did you mean 'rnmax'?)" in result.stderr
 
 
@@ -184,13 +185,14 @@ def test_region_spectra_outputs_and_residuals(tmp_path):
     np.testing.assert_allclose(outputs['residual_spectra_d'], -0.5, rtol=1e-5)
 
 
-def test_one_model_seen_by_two_observations(tmp_path):
-    # The observations refer to their model, so there can be more
-    # observations than models
+def test_one_galaxy_seen_by_two_observations(tmp_path):
+    # The observations refer to their galaxy, so there can be more
+    # observations than galaxies
     config = yaml.load(REFERENCE_DIR / 'thin_disk_pixel_spectra.yaml')
     scube = config['observations'][0]
     mmaps = dict(
-        name='maps', observable=dict(type='pixel_moments', size=[48, 48]))
+        name='maps', line_of_sight=dict(type='flat'),
+        observable=dict(type='pixel_moments', size=[48, 48]))
     config['observations'] = [scube | dict(name='cube'), mmaps]
     outputs = run_eval('model', config, tmp_path / 'model')
     assert outputs['model_0_spectra_d'].shape == (50, 48, 48)

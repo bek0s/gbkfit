@@ -1,12 +1,14 @@
 import abc
-from typing import TYPE_CHECKING, Any, TypedDict
+from typing import TYPE_CHECKING, Any, NamedTuple, TypedDict
 
 import numpy as np
 
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.params import ParamDesc, ParamValues
 from gbkfit.utils import gridutils, parseutils
+from gbkfit.utils.parseutils import ConfigError
 from .geometries import Geometry
+from .roles import Emission, LineEmission, Opacity
 
 if TYPE_CHECKING:
     from .disks._disk import Disk, DiskPlan
@@ -15,21 +17,28 @@ if TYPE_CHECKING:
 __all__ = [
     'Component',
     'ComponentPlan',
-    'NativeGrid',
-    'BrightnessComponent2D',
-    'BrightnessComponent3D',
-    'SpectralComponent2D',
-    'SpectralComponent3D',
-    'OpacityComponent3D'
+    'DepthAxis',
+    'NativeGrid'
 ]
+
+
+class DepthAxis(NamedTuple):
+    """
+    An axis along the line of sight (z): its number of voxels, their size
+    and the position of the first (arcsec).
+    """
+    size: int
+    step: float
+    zero: float
 
 
 class NativeGrid(TypedDict):
     """
     The grid that component plans evaluate on, as the native evaluation
     functions take it: the 3d spatial grid (each in x, y, z order; the
-    rotation in degrees) and the spectral axis. The z axis of 2d models
-    and the spectral axis of image models have size 1 (and step 0).
+    rotation in degrees) and the spectral axis. Without a depth axis, the
+    z axis has size 1 (and step 0), and so does the spectral axis of an
+    image.
     """
     spat_size: tuple[int, int, int]
     spat_step: tuple[float, float, float]
@@ -42,27 +51,44 @@ class NativeGrid(TypedDict):
 
 class Component(parseutils.TypedSerializable, abc.ABC):
     """
-    A component of a model. The kinds of components below differ only in
-    the models that accept them, and in the outputs they get.
+    A component of a galaxy: a shape (the subclass) with roles, the light
+    it emits (emission) and what it removes from the light behind it
+    (opacity). It needs at least one.
 
     Parameters
     ----------
     name : str, optional
-        Its name, which prefixes its parameters in its model instead of
-        its position (see parseutils.item_prefixes).
+        Its name, which prefixes its parameters in its galaxy (required
+        when its galaxy has several components).
     geometry : Geometry, optional
         A geometry that it shares with other components.
+    emission : Emission, optional
+        The light it emits.
+    opacity : Opacity, optional
+        What it removes from the light behind it.
 
     Raises
     ------
     ConfigError
-        If the name is not valid (see parseutils.check_name).
+        If the name is not valid (see parseutils.check_name), or it has
+        neither emission nor opacity.
     """
 
-    def __init__(self, name: str | None, geometry: Geometry | None = None):
+    def __init__(
+            self,
+            name: str | None,
+            geometry: Geometry | None,
+            emission: Emission | None,
+            opacity: Opacity | None
+    ):
         parseutils.check_name(name)
+        if emission is None and opacity is None:
+            raise ConfigError(
+                "a component needs emission, opacity or both")
         self._name = name
         self._geometry = geometry
+        self._emission = emission
+        self._opacity = opacity
 
     def name(self) -> str | None:
         """Return its name, if any."""
@@ -71,6 +97,22 @@ class Component(parseutils.TypedSerializable, abc.ABC):
     def geometry(self) -> Geometry | None:
         """Return the geometry it shares, if any."""
         return self._geometry
+
+    def emission(self) -> Emission | None:
+        """Return the light it emits, if any."""
+        return self._emission
+
+    def opacity(self) -> Opacity | None:
+        """Return what it removes from the light behind it, if anything."""
+        return self._opacity
+
+    @abc.abstractmethod
+    def thick(self) -> bool:
+        """
+        Check whether it is thick: whether it needs a line of sight with a
+        depth axis.
+        """
+        pass
 
     @abc.abstractmethod
     def pdescs(self) -> dict[str, ParamDesc]:
@@ -85,23 +127,25 @@ class Component(parseutils.TypedSerializable, abc.ABC):
         return {}
 
     def line_names(self) -> tuple[str, ...]:
-        """Return the names of its emission lines; none here."""
+        """Return the names of its emission lines, if any."""
+        if isinstance(self._emission, LineEmission):
+            return self._emission.lines().names()
         return ()
 
     def circular_velocity_params(self) -> dict[str, tuple[float, ...]]:
         """
-        Return the parameters that its model gives it: the circular
-        velocity of the mass model of its model at the given radii
-        (arcsec), by name (see traits.VPTraitMass). They are not in
-        pdescs, but its plans need them with the others. None here.
+        Return the parameters that its galaxy gives it: the circular
+        velocity of the mass of the galaxy at the given radii (arcsec), by
+        name (see traits.VPTraitMass). They are not in pdescs, but its
+        plans need them with the others. None here.
         """
         return {}
 
-    def brightness_disk(self) -> 'Disk | None':
+    def density_disk(self) -> 'Disk | None':
         """
-        Return its disk, whose density traits are its brightness, if it is
-        made of one: the mass components of its model can follow its
-        brightness (see mass.MassTraitDisk). None here.
+        Return its disk, if it is made of one: the mass of its galaxy can
+        follow the density of the disk (see mass.MassTraitDisk). None
+        here.
         """
         return None
 
@@ -111,7 +155,8 @@ class Component(parseutils.TypedSerializable, abc.ABC):
             driver: Driver,
             spectral: gridutils.Grid,
             dtype: np.dtype,
-            lines: tuple[str, ...] | None
+            lines: tuple[str, ...] | None,
+            emits: bool
     ) -> 'ComponentPlan':
         """
         Plan the evaluation of the component; the plan owns the memory
@@ -127,6 +172,9 @@ class Component(parseutils.TypedSerializable, abc.ABC):
             The floating type of the evaluation.
         lines : tuple of str, optional
             The names of the emission lines to evaluate; all if None.
+        emits : bool
+            Whether its light is evaluated (an observation sees it), or
+            only its opacity.
 
         Returns
         -------
@@ -137,14 +185,18 @@ class Component(parseutils.TypedSerializable, abc.ABC):
 
 
 class ComponentPlan(abc.ABC):
-    """The evaluation of a component on a driver and dtype."""
+    """
+    The evaluation of a component on a driver and dtype, in two stages:
+    the opacity of all the components of a galaxy, then the light of
+    those an observation sees, dimmed by that opacity.
+    """
 
     def disk_plan(self) -> 'DiskPlan | None':
         """Return the plan of its disk, if it is made of one; none here."""
         return None
 
     @abc.abstractmethod
-    def evaluate(
+    def evaluate_emission(
             self,
             params: ParamValues,
             grid: NativeGrid,
@@ -152,7 +204,7 @@ class ComponentPlan(abc.ABC):
             out_extra: dict[str, Any] | None
     ) -> None:
         """
-        Add the component to the outputs.
+        Add the light of the component to the outputs.
 
         Parameters
         ----------
@@ -161,43 +213,26 @@ class ComponentPlan(abc.ABC):
         grid : NativeGrid
             The grid of the evaluation.
         outputs : dict
-            The arrays the component adds to, which a model may leave out
-            (None): the 'image' or 'scube', the 3d brightness ('bdata'),
-            opacity ('odata') and
-            brightness after the opacity ('obdata'). Opacity components
-            add to odata, and the other components read it.
+            The arrays the component adds to, which can be left out
+            (None): the 'image' or 'scube', and on the 3d grid its
+            brightness ('bdata') and brightness after the opacity
+            ('obdata'); it reads the optical depth of each voxel
+            ('odata').
         out_extra : dict, optional
             Where its extra outputs (on the host) go, if wanted.
         """
         pass
 
-
-class BrightnessComponent2D(Component, abc.ABC):
-    """A component of intensity_2d. Its outputs: image, bdata."""
-
-
-class BrightnessComponent3D(Component, abc.ABC):
-    """
-    A component of intensity_3d. Its outputs: image, bdata, odata,
-    obdata.
-    """
-
-
-class SpectralComponent2D(Component, abc.ABC):
-    """A component of kinematics_2d. Its outputs: scube, bdata."""
-
-
-class SpectralComponent3D(Component, abc.ABC):
-    """
-    A component of kinematics_3d. Its outputs: scube, bdata, odata,
-    obdata.
-    """
-
-
-class OpacityComponent3D(Component, abc.ABC):
-    """
-    An opacity component of intensity_3d and kinematics_3d. Its output:
-    odata, the optical depth of each voxel. Its polar traits give the
-    optical depth of the disk seen face-on, and its height traits (pdfs)
-    distribute it along z.
-    """
+    def evaluate_opacity(
+            self,
+            params: ParamValues,
+            grid: NativeGrid,
+            odata: DeviceArray,
+            out_extra: dict[str, Any] | None
+    ) -> None:
+        """
+        Add the optical depth of the component to that of each voxel
+        (odata). Only components with opacity have it.
+        """
+        raise NotImplementedError(
+            f"{type(self).__name__} has no opacity to evaluate")

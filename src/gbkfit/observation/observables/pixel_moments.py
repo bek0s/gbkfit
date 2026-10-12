@@ -7,13 +7,14 @@ import numpy as np
 from gbkfit.dataset import Dataset, DatasetPixelMoments
 from gbkfit.driver import Driver
 from gbkfit.instrument import Instrument
-from gbkfit.model.base import Model, ModelSCube, Selection
+from gbkfit.model import LineEmission
 from gbkfit.params import ParamValues
 from gbkfit.utils import gridutils
 from . import _dcube, _detail, _moments
 from .base import ModelData, Observable
 
 if TYPE_CHECKING:
+    from .._scene import Scene
     from ..foreground import Foreground
 
 
@@ -72,16 +73,14 @@ class PixelMoments(Observable):
 
     dataset_class = DatasetPixelMoments
 
+    emission = LineEmission
+
     # Moment maps have no spectral axis
     spectral_axis = None
 
     @staticmethod
     def type() -> str:
         return 'pixel_moments'
-
-    @staticmethod
-    def is_compatible(model: Model) -> bool:
-        return isinstance(model, ModelSCube)
 
     @classmethod
     def options_from_data(cls, dataset: Dataset) -> tuple[str, ...]:
@@ -220,16 +219,15 @@ class PixelMoments(Observable):
     def plan(
             self,
             driver: Driver,
-            model: Model,
+            scene: 'Scene',
             foreground: 'Foreground',
             instrument: Instrument,
             scale: Sequence[int],
-            dtype: np.dtype,
-            selection: Selection
+            dtype: np.dtype
     ) -> 'PixelMomentsPlan':
         dcube = _moments.spectra_dcube(self, scale, instrument, dtype)
         return PixelMomentsPlan(
-            self, dcube, driver, model, foreground, dtype, selection)
+            self, dcube, driver, scene, foreground, dtype)
 
 
 class PixelMomentsPlan(_detail.DCubePlanBase):
@@ -239,13 +237,12 @@ class PixelMomentsPlan(_detail.DCubePlanBase):
             moments: PixelMoments,
             dcube: _dcube.DCube,
             driver: Driver,
-            model: Model,
+            scene: 'Scene',
             foreground: 'Foreground',
-            dtype: np.dtype,
-            selection: Selection
+            dtype: np.dtype
     ):
         super().__init__(
-            dcube, driver, model, foreground, dtype, selection)
+            dcube, driver, scene, foreground, dtype)
         self._moments = _moments.MomentsPlan(
             driver, moments.size(), moments.orders(), moments.mask_cutoff(),
             moments.method(), dtype)

@@ -9,7 +9,7 @@ import pytest
 from gbkfit.dataset import Data, DatasetPixelMoments
 from gbkfit.instrument import Instrument, LSFGauss
 from gbkfit.observation import (
-    Observation, PixelBrightness, PixelMoments, observation_parser)
+    Flat, Observation, PixelBrightness, PixelMoments, observation_parser)
 from gbkfit.utils import parseutils
 from gbkfit.utils.parseutils import ConfigError
 
@@ -25,7 +25,7 @@ def test_observable_from_data():
     assert observable.grid() == data.grid()
     assert observable.orders() == (0, 1)
     assert observable.spec_rval() == 1500
-    observation = Observation(observable, data=data)
+    observation = Observation(observable, Flat(), data=data)
     assert observation.driver().type() == 'host'
 
 
@@ -34,7 +34,7 @@ def test_observable_options_are_checked():
         PixelBrightness(size=(8, 8), mask_apply=True)
     with pytest.raises(ConfigError, match="no spectral axis for an LSF"):
         Observation(
-            PixelBrightness(size=(8, 8)),
+            PixelBrightness(size=(8, 8)), Flat(),
             instrument=Instrument(lsf=LSFGauss(10)))
 
 
@@ -42,8 +42,10 @@ def test_instrument_warnings_have_the_path_of_the_configuration(caplog):
     # The instrument is checked when the observation is made, so its
     # warnings have the path of the observation
     with parseutils.config_path('observations'):
-        observation_parser.load([dict(observable=dict(
-            type='pixel_spectra', size=[4, 4, 4], smooth_weights=True))])
+        observation_parser.load([dict(
+            line_of_sight=dict(type='flat'),
+            observable=dict(
+                type='pixel_spectra', size=[4, 4, 4], smooth_weights=True))])
     assert "observations[0]: smooth_weights is true" in caplog.text
 
 
@@ -54,4 +56,4 @@ def test_dtypes_without_kernels_are_errors(dtype):
     from gbkfit.dataset import DatasetPixelBrightness
     observable = PixelBrightness.from_data(DatasetPixelBrightness(dataset))
     with pytest.raises(ConfigError, match="dtype must be one of"):
-        Observation(observable, dtype=dtype)
+        Observation(observable, Flat(), dtype=dtype)

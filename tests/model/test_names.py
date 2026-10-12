@@ -1,140 +1,168 @@
 """
-Tests for the names of components: a name, given to every component of a
-list or to none, prefixes the parameters of the component instead of its
-position.
+Tests for the names of components and galaxies: a component needs a name
+when its galaxy has several, and a galaxy when there are several; the
+name prefixes the parameters, constants and extra outputs.
 """
 
 import pytest
 
-from gbkfit.model import model_parser
+from gbkfit.model import galaxy_parser
 
 
-def disk(**options):
+THIN = dict(ptraits=dict(type='exponential'))
+THICK = THIN | dict(htraits=dict(type='sech2'))
+
+
+def disk(density=THICK, **options):
     return dict(
         type='smdisk', loose=False, tilted=False, rnodes=[0, 1, 2],
-        bptraits=dict(type='exponential'), bhtraits=dict(type='sech2'),
-        **options)
+        density=density, emission=dict(type='band'), **options)
 
 
-def opacity(**options):
+def dust(**options):
     return dict(
         type='smdisk', loose=False, tilted=False, rnodes=[0, 1, 2],
-        optraits=dict(type='exponential'), ohtraits=dict(type='sech2'),
-        **options)
+        density=THICK, opacity=dict(type='dust'), **options)
 
 
-def intensity_3d(components, opacity_components=None):
-    return model_parser.load(dict(
-        type='intensity_3d', components=components,
-        opacity_components=opacity_components))
+def load_galaxy(components):
+    return galaxy_parser.load(dict(components=components))
 
 
-def test_without_names_the_prefixes_are_positions():
-    model = intensity_3d([disk(), disk()], [opacity()])
-    assert {'xpos', 'cmp1_xpos', 'ocmp_xpos'} <= set(model.pdescs())
-    assert set(model.constants()) == {
-        'rnodes', 'subrnodes', 'cmp1_rnodes', 'cmp1_subrnodes',
-        'ocmp_rnodes', 'ocmp_subrnodes'}
+def test_one_component_needs_no_name():
+    galaxy = load_galaxy([disk()])
+    assert {'xpos', 'pt_a', 'ht_s'} <= set(galaxy.pdescs())
+    assert set(galaxy.constants()) == {'rnodes', 'subrnodes'}
 
 
 def test_names_prefix_the_parameters_and_constants():
-    model = intensity_3d(
-        [disk(name='disk'), disk(name='bulge')], [opacity(name='dust')])
-    names = set(model.pdescs())
-    assert {'disk_xpos', 'bulge_bpt_s', 'dust_opt_a'} <= names
-    assert not {'xpos', 'cmp1_xpos', 'ocmp_xpos'} & names
-    assert set(model.constants()) == {
+    galaxy = load_galaxy(
+        [disk(name='disk'), disk(name='bulge'), dust(name='dust')])
+    names = set(galaxy.pdescs())
+    assert {'disk_xpos', 'bulge_pt_s', 'dust_pt_a'} <= names
+    assert not {'xpos', 'pt_a'} & names
+    assert set(galaxy.constants()) == {
         'disk_rnodes', 'disk_subrnodes', 'bulge_rnodes', 'bulge_subrnodes',
         'dust_rnodes', 'dust_subrnodes'}
 
 
 def test_names_do_not_depend_on_the_order():
-    first = intensity_3d([disk(name='disk'), disk(name='bulge')])
-    second = intensity_3d([disk(name='bulge'), disk(name='disk')])
+    first = load_galaxy([disk(name='disk'), disk(name='bulge')])
+    second = load_galaxy([disk(name='bulge'), disk(name='disk')])
     assert set(first.pdescs()) == set(second.pdescs())
 
 
 def test_names_are_dumped():
-    info = model_parser.dump(intensity_3d([disk(name='disk')]))
+    info = galaxy_parser.dump(load_galaxy([disk(name='disk')]))
     assert info['components'][0]['name'] == 'disk'
-    info = model_parser.dump(intensity_3d([disk()]))
+    info = galaxy_parser.dump(load_galaxy([disk()]))
     assert 'name' not in info['components'][0]
 
 
-@pytest.mark.parametrize('components, opacity_components, message', [
-    ([disk(name='disk'), disk()], None,
-     "either all or none of the components must have a name"),
-    ([disk(name='disk'), disk(name='disk')], None,
+@pytest.mark.parametrize('components, message', [
+    ([disk(), disk()],
+     r"the components of a galaxy need names when there are several; the "
+     r"components \[0, 1\] have none"),
+    ([disk(name='disk'), dust()],
+     r"the components of a galaxy need names when there are several; the "
+     r"components \[1\] have none"),
+    ([disk(name='disk'), disk(name='disk')],
      r"the names of the components must be unique; repeated: \['disk'\]"),
-    ([disk(name='disk')], [opacity(name='disk')],
-     "the components and the opacity components must have different "
-     "names"),
-    ([disk(name='my disk')], None, "invalid name 'my disk'")])
-def test_invalid_names_are_rejected(components, opacity_components, message):
+    ([disk(name='disk'), dust(name='disk')],
+     r"the names of the components must be unique; repeated: \['disk'\]"),
+    ([disk(name='my disk')], "invalid name 'my disk'")])
+def test_invalid_names_are_rejected(components, message):
     with pytest.raises(Exception, match=message):
-        intensity_3d(components, opacity_components)
+        load_galaxy(components)
 
 
-def model(name=None):
-    component = disk() | dict(bhtraits=None)
-    return dict(type='intensity_2d', components=[component]) \
+def galaxy(name=None, components=None):
+    if components is None:
+        components = [disk(THIN)]
+    return dict(components=components) \
         | (dict(name=name) if name is not None else {})
 
 
-def observation(model_=None, name=None):
+def observation(galaxies=None, name=None):
     return dict(
-        observable=dict(type='pixel_brightness', size=[8, 8])) \
-        | (dict(model=model_) if model_ is not None else {}) \
+        observable=dict(type='pixel_brightness', size=[8, 8]),
+        line_of_sight=dict(type='flat')) \
+        | (dict(galaxies=galaxies) if galaxies is not None else {}) \
         | (dict(name=name) if name is not None else {})
 
 
-def group(models, observations):
+def group(galaxies, observations):
     from gbkfit.observation import ObservationGroup, observation_parser
     return ObservationGroup(
-        model_parser.load(models), observation_parser.load(observations))
+        galaxy_parser.load(galaxies), observation_parser.load(observations))
 
 
-def test_model_names_prefix_the_parameters():
+def test_galaxy_names_prefix_the_parameters():
     group_ = group(
-        [model('hi'), model('halpha')],
-        [observation('hi'), observation('halpha')])
+        [galaxy('hi'), galaxy('halpha')],
+        [observation(['hi']), observation(['halpha'])])
     assert {'hi_xpos', 'halpha_xpos'} <= set(group_.pdescs())
     assert set(group_.constants()) == {
         'hi_rnodes', 'hi_subrnodes', 'halpha_rnodes', 'halpha_subrnodes'}
-    assert model_parser.dump(group_.models()[0])['name'] == 'hi'
+    assert galaxy_parser.dump(group_.galaxies()[0])['name'] == 'hi'
 
 
-def test_observations_of_one_model_share_its_parameters():
-    group_ = group([model()], [observation(), observation()])
+def test_observations_of_one_galaxy_share_its_parameters():
+    group_ = group([galaxy()], [observation(), observation()])
     assert 'xpos' in group_.pdescs()
-    assert not any(name.startswith('model') for name in group_.pdescs())
+    assert not any(name.startswith('galaxy') for name in group_.pdescs())
 
 
-@pytest.mark.parametrize('models, observations, message', [
-    ([model('hi'), model()], [observation('hi')],
-     "either all or none of the models must have a name"),
-    ([model('hi'), model('hi')], [observation('hi')],
-     "the names of the models must be unique"),
-    ([model('hi'), model('ha')], [observation()],
-     "observation 0 must name its model"),
-    ([model('hi')], [observation('ha')], "unknown model 'ha'"),
-    ([model('hi')], [observation('hi', name='hi')],
-     "the models and the observations must have different names")])
-def test_invalid_model_and_observation_names_are_rejected(
-        models, observations, message):
+@pytest.mark.parametrize('galaxies, observations, message', [
+    ([galaxy('hi'), galaxy()], [observation(['hi'])],
+     "the galaxies need names when there are several"),
+    ([galaxy('hi'), galaxy('hi')], [observation(['hi'])],
+     "the names of the galaxies must be unique"),
+    ([galaxy('hi'), galaxy('ha')], [observation()],
+     "observation 0 must name the galaxies it sees"),
+    ([galaxy('hi')], [observation(['ha'])],
+     r"observation 0 refers to unknown galaxies \['ha'\]"),
+    ([galaxy('hi')], [observation(['hi'], name='hi')],
+     "the galaxies and the observations must have different names")])
+def test_invalid_galaxy_and_observation_names_are_rejected(
+        galaxies, observations, message):
     with pytest.raises(Exception, match=message):
-        group(models, observations)
+        group(galaxies, observations)
+
+
+# The properties of a thin disk
+DISK_PROPERTIES = dict(xpos=0, ypos=0, posa=0, incl=45, pt_a=1, pt_s=2)
+
+
+def extra_outputs(group_, prefixes):
+    """
+    The names of the extra outputs of an evaluation of a group of thin
+    disks, whose parameters have the given prefixes.
+    """
+    import gbkfit.params
+    properties = {
+        prefix + name: value
+        for prefix in prefixes for name, value in DISK_PROPERTIES.items()}
+    params = gbkfit.params.ParamSpace(
+        group_.pdescs(), properties, constants=group_.constants())
+    extra = {}
+    group_.model_h(params.evaluate(), extra)
+    return set(extra)
 
 
 def test_names_name_the_extra_outputs():
-    import gbkfit.params
-    component = disk(name='disk') | dict(bhtraits=None)
     group_ = group(
-        [dict(type='intensity_2d', components=[component])],
+        [galaxy(components=[disk(THIN, name='disk')])],
         [observation(name='hi')])
-    params = gbkfit.params.ParamSpace(group_.pdescs(), dict(
-        disk_xpos=0, disk_ypos=0, disk_posa=0, disk_incl=45,
-        disk_bpt_a=1, disk_bpt_s=2), constants=group_.constants())
-    extra = {}
-    group_.model_h(params.evaluate(), extra)
-    assert {'hi_model_disk_bdata', 'hi_dcube_lo'} <= set(extra)
+    extra = extra_outputs(group_, ['disk_'])
+    assert {'hi_model_disk_bdata', 'hi_dcube_lo'} <= extra
+
+
+def test_galaxy_names_prefix_the_extra_outputs():
+    components = [disk(THIN, name='disk')]
+    group_ = group(
+        [galaxy('north', components), galaxy('south', components)],
+        [observation(['north', 'south'], name='hi')])
+    extra = extra_outputs(group_, ['north_disk_', 'south_disk_'])
+    assert {'hi_model_north_disk_bdata', 'hi_model_south_disk_bdata'} \
+        <= extra

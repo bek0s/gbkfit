@@ -22,19 +22,31 @@ VALUES = dict(
     rt=2.0, vt=150.0, vr=20.0, vv=10.0, vl=15.0, z0=0.5, rmin=1.0,
     rmax=8.0, n=1.5)
 
-# The traits of the disk that are not being tested, with their values
-DEFAULT_TRAITS = dict(
-    bptraits=(dict(type='exponential'), dict(bpt_a=1, bpt_s=4)),
-    bhtraits=(dict(type='sech2'), dict(bht_s=1)),
-    vptraits=(dict(type='tan_arctan'), dict(vpt_rt=2, vpt_vt=150)),
-    dptraits=(dict(type='uniform'), dict(dpt_a=20)))
+# Each kind of trait of a disk, named after the prefix of its parameters:
+# the part of the disk it belongs to (None: the disk itself), its option
+# and its parser
+KINDS = dict(
+    pt=('density', 'ptraits', traits.rpt_parser),
+    ht=('density', 'htraits', traits.rht_parser),
+    vpt=('kinematics', 'vptraits', traits.vpt_parser),
+    vht=('kinematics', 'vhtraits', traits.vht_parser),
+    dpt=('kinematics', 'dptraits', traits.dpt_parser),
+    dht=('kinematics', 'dhtraits', traits.dht_parser),
+    zpt=(None, 'zptraits', traits.zpt_parser),
+    spt=(None, 'sptraits', traits.spt_parser))
 
-# The trait kinds tested in the spectral disk, and their parsers
-SPECTRAL_KINDS = dict(
-    bptraits=traits.rpt_parser, bhtraits=traits.rht_parser,
-    vptraits=traits.vpt_parser, vhtraits=traits.vht_parser,
-    dptraits=traits.dpt_parser, dhtraits=traits.dht_parser,
-    zptraits=traits.zpt_parser, sptraits=traits.spt_parser)
+# The traits of the disks that are not being tested, by kind, with their
+# values: those of the disk that emits lines, and of the dusty disk
+LINE_DISK_TRAITS = dict(
+    pt=(dict(type='exponential'), dict(pt_a=1, pt_s=4)),
+    ht=(dict(type='sech2'), dict(ht_s=1)),
+    vpt=(dict(type='tan_arctan'), dict(vpt_rt=2, vpt_vt=150)),
+    dpt=(dict(type='uniform'), dict(dpt_a=20)))
+DUST_DISK_TRAITS = dict(
+    pt=(dict(type='exponential'), dict(pt_a=0.05, pt_s=4)),
+    ht=(dict(type='sech2'), dict(ht_s=1)))
+
+GEOMETRY = dict(xpos=0, ypos=0, posa=20, incl=60)
 
 
 def trait_configs(parser):
@@ -46,7 +58,7 @@ def trait_configs(parser):
     configs = []
     for type_, cls in parser.registered_classes().items():
         # (the trait mass has no parameters: its values come from the
-        # mass model of its model; see test_mass)
+        # mass of its galaxy; see test_mass)
         if cls is traits.VPTraitMass:
             continue
         options = inspect.signature(cls.__init__).parameters
@@ -64,59 +76,87 @@ def trait_configs(parser):
 
 
 def cases():
-    kinds = SPECTRAL_KINDS | dict(
-        optraits=traits.rpt_parser, ohtraits=traits.rht_parser)
-    for key, parser in kinds.items():
+    for kind, (_, _, parser) in KINDS.items():
         for config in trait_configs(parser):
-            yield pytest.param(key, config, id=f"{key}-{config}")
+            yield pytest.param(kind, False, config, id=f"{kind}-{config}")
+    for kind in DUST_DISK_TRAITS:
+        for config in trait_configs(KINDS[kind][2]):
+            yield pytest.param(
+                kind, True, config, id=f"dust_{kind}-{config}")
 
 
-def case_and_properties(driver, key, config):
+def thick_disk(name, traits_, **roles):
     """
-    A kinematics_3d model with one smooth disk whose traits of the given
-    kind (key) are the given trait, and the parameter properties of the
-    model. Opacity traits go in an opacity component. Return the model,
-    the properties, and the names of the parameters of the trait.
+    The configuration of a smooth thick disk of the given name, traits
+    (by kind) and roles.
     """
-    geometry = dict(xpos=0, ypos=0, posa=20, incl=60, vsys=0)
-    disk = dict(type='smdisk', loose=False, tilted=False, rnodes=RNODES)
-    properties = dict(geometry)
-    if key in ('optraits', 'ohtraits'):
-        component = disk | {
-            name: trait for name, (trait, _) in DEFAULT_TRAITS.items()}
-        for _, values in DEFAULT_TRAITS.values():
-            properties |= values
-        opacity = dict(disk, optraits=dict(type='exponential'),
-                       ohtraits=dict(type='sech2'))
-        opacity[key] = config
-        properties |= dict(
-            ocmp_xpos=0, ocmp_ypos=0, ocmp_posa=20, ocmp_incl=60,
-            ocmp_opt_a=0.05, ocmp_opt_s=4, ocmp_oht_s=1)
-        prefix = 'ocmp_' + key[:3] + '_'
-        model = dict(
-            type='kinematics_3d', components=[component],
-            opacity_components=[opacity])
-    else:
-        component = dict(disk)
-        for name, (trait, values) in DEFAULT_TRAITS.items():
-            if name != key:
-                component[name] = trait
-                properties |= values
-        component[key] = config
-        prefix = key[:3] + '_'
-        model = dict(type='kinematics_3d', components=[component])
+    disk = dict(
+        type='smdisk', name=name, loose=False, tilted=False, rnodes=RNODES,
+        **roles)
+    for kind, trait in traits_.items():
+        part, option, _ = KINDS[kind]
+        if part is None:
+            disk[option] = trait
+        else:
+            disk.setdefault(part, {})[option] = trait
+    return disk
+
+
+def traits_and_values(default_traits, tested_kind, tested_trait):
+    """
+    The traits of a disk, by kind, and the values of their parameters:
+    the default traits, but that of the tested kind (if any), which is the
+    tested trait (without values).
+    """
+    traits_ = {}
+    values = {}
+    for kind, (trait, trait_values) in default_traits.items():
+        if kind != tested_kind:
+            traits_[kind] = trait
+            values |= trait_values
+    if tested_kind is not None:
+        traits_[tested_kind] = tested_trait
+    return traits_, values
+
+
+def prefixed(prefix, values):
+    return {f'{prefix}_{name}': value for name, value in values.items()}
+
+
+def case_and_properties(driver, kind, dust, config):
+    """
+    A galaxy seen as a spectral cube on a grid: a smooth thick disk that
+    emits lines ('disk'), and with dust a dusty one ('dust'). The traits
+    of the given kind of the dusty disk (with dust), or else of the disk
+    that emits lines, are the given trait. Return the case, the parameter
+    properties, and the prefix of the parameters of the trait.
+    """
+    disk_traits, disk_values = traits_and_values(
+        LINE_DISK_TRAITS, None if dust else kind, config)
+    components = [
+        thick_disk('disk', disk_traits, emission=dict(type='lines'))]
+    properties = prefixed('disk', GEOMETRY | dict(vsys=0) | disk_values)
+    if dust:
+        dust_traits, dust_values = traits_and_values(
+            DUST_DISK_TRAITS, kind, config)
+        components.append(
+            thick_disk('dust', dust_traits, opacity=dict(type='dust')))
+        properties |= prefixed('dust', GEOMETRY | dust_values)
     case = dict(
         driver=dict(type=driver.type()),
         observable=dict(
             type='pixel_spectra', size=[32, 32, 40], step=[1, 1, 10]),
-        model=model)
-    return case, properties, prefix
+        line_of_sight=dict(type='grid'),
+        galaxy=dict(components=components))
+    tested = 'dust' if dust else 'disk'
+    return case, properties, f'{tested}_{kind}_'
 
 
-@pytest.mark.parametrize('key, config', list(cases()))
+@pytest.mark.parametrize('kind, dust, config', list(cases()))
 def test_every_trait_parameter_changes_the_model(
-        driver, evaluate_cases, key, config):
-    case, properties, prefix = case_and_properties(driver, key, config)
+        driver, evaluate_cases, kind, dust, config):
+    case, properties, prefix = case_and_properties(
+        driver, kind, dust, config)
     pdescs = observation_group([case]).pdescs()
     names = [name for name in pdescs if name.startswith(prefix)]
     for name in names:
