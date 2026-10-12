@@ -11,4 +11,8 @@ constexpr int TRAIT_NUM_MAX = 4;
 // DiskArgs::opacity) that the disk kernels read
 constexpr int OPACITY_NUM_MAX = 4;
 
+// The most emitters that the march of radiative transfer takes (see
+// TransferArgs)
+constexpr int TRANSFER_EMITTER_NUM_MAX = 16;
+
 } // namespace gbkfit

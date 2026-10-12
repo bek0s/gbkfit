@@ -190,6 +190,20 @@ Wrapper<T>::gmodel_opacity_accumulate(
 }
 
 template<typename T> void
+Wrapper<T>::gmodel_transfer_march(const TransferArgs<T>& a)
+{
+    const long long n = 1LL * a.spat_size[0] * a.spat_size[1]
+            * kernels::transfer_chunks(a);
+    launch("gmodel_transfer_march", n,
+            kernels::gmodel_transfer_march<T>, a);
+    if (a.nopacity) {
+        launch("gmodel_transfer_opacity_front",
+                1LL * a.spat_size[0] * a.spat_size[1],
+                kernels::gmodel_transfer_opacity_front<T>, a);
+    }
+}
+
+template<typename T> void
 Wrapper<T>::gmodel_disk_traits_evaluate(const DiskTraitsArgs<T>& a)
 {
     launch("gmodel_disk_traits_evaluate", a.npoints,

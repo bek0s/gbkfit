@@ -13,14 +13,13 @@ from gbkfit.params import ParamDesc, ParamValues
 from gbkfit.utils import gridutils, iterutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
 from ..distance import Distance
-from ..mass import MassContext, MassModel
+from ..mass import MassModel
+from ._component_plans import ComponentPlans
 from ._detail import shared_params
-from .base import Component, ComponentPlan, DepthAxis, NativeGrid
-from .disks._disk import DiskPlan
-from .disks._profiles import DiskDensity, pressure_support
-from .extinction import ExtinctionLaw
-from .lines import Band
+from ._transfer import TransferPlan
+from .base import Component, DepthAxis
 from .geometries import Geometry
+from .lines import Band
 
 
 __all__ = [
@@ -259,54 +258,35 @@ class ComponentSet:
             self, driver, grid, spectral, depth, dtype, emitters, lines,
             band, redshift)
 
+    def plan_transfer(
+            self,
+            driver: Driver,
+            grid: gridutils.Grid,
+            spectral: gridutils.Grid,
+            depth: DepthAxis,
+            dtype: np.dtype,
+            emitters: Sequence[int],
+            lines: tuple[str, ...] | None,
+            band: Band | None,
+            redshift: float
+    ) -> TransferPlan:
+        """
+        Plan the evaluation of the components on a driver and dtype by
+        radiative transfer along each line of sight (see TransferPlan).
+        """
+        return TransferPlan(
+            self, driver, grid, spectral, depth, dtype, emitters, lines,
+            band, redshift)
+
 
 class ComponentSetPlan:
     """
     The evaluation of the components of a galaxy on the grid of an
-    observation: the x and y axes of its data, and a depth axis along the
-    line of sight (or none: the plane of the sky), with the spectral axis
-    of its data (or that of an image). In two stages: the optical depth of
-    the components with opacity in each voxel (all of them: they absorb
-    whatever the observation sees), then the light of the given emitters,
-    dimmed by it. Each has its parameters, and those its galaxy gives it
-    (the circular velocity of its mass, evaluated once for all of them).
+    observation (see ComponentPlans), in two stages: the optical depth of
+    the absorbers in each voxel, then the light of the emitters, dimmed by
+    the optical depth from the viewer to each voxel.
 
-    The optical depth is held in cubes of opacity (see _opacity_cubes),
-    whose ratios at the rest wavelength of each line of each emitter (or
-    of its band) are those of their extinction laws.
-
-    Parameters
-    ----------
-    component_set : ComponentSet
-        The components.
-    driver : Driver
-        The driver of the evaluation.
-    grid : Grid
-        The grid of the x and y axes.
-    spectral : Grid
-        The spectral axis (one axis).
-    depth : DepthAxis, optional
-        The depth axis, if any.
-    dtype : np.dtype
-        The floating type of the evaluation.
-    emitters : Sequence of int
-        The indices of the components whose light is evaluated.
-    lines : tuple of str, optional
-        The names of the emission lines evaluated; all if None.
-    band : Band, optional
-        The band of an image, if known.
-    redshift : float
-        The redshift of the galaxy, which makes the rest wavelengths of
-        bands.
-
-    Raises
-    ------
-    ValueError
-        If there is no depth axis and components have opacity (the
-        observations check that first, see LineOfSight).
-    ConfigError
-        If dust of an extinction law dims light of an unknown wavelength,
-        or there are too many laws (see _opacity_cubes).
+    The parameters are those of ComponentPlans.
     """
 
     def __init__(
@@ -322,56 +302,12 @@ class ComponentSetPlan:
             band: Band | None,
             redshift: float
     ):
-        components = component_set.components()
-        absorbers = [
-            i for i, cmp in enumerate(components) if cmp.opacity() is not None]
-        if absorbers and depth is None:
-            raise ValueError(
-                "components with opacity need a grid with a depth axis")
-        self._component_set = component_set
-        self._driver = driver
-        self._grid = grid
-        self._dtype = dtype
+        self._plans = ComponentPlans(
+            component_set, driver, grid, spectral, depth, dtype, emitters,
+            lines, band, redshift)
         self._depth = depth
-        self._native_grid = _native_grid(grid, spectral, depth)
-        # The cubes of opacity: the law of each, the cube of each absorber
-        # and the factor of its optical depth there, and the ratios of the
-        # cubes at the wavelength of each line (or band) of each emitter
-        ratios = dict.fromkeys(emitters)
-        self._deposits = {}
-        self._odata = None
-        if absorbers:
-            wavelengths = {
-                i: components[i].emission().wavelengths(
-                    lines, band, redshift)
-                for i in emitters}
-            cube_laws, cubes, scales = _opacity_cubes(
-                [components[i].opacity().law() for i in absorbers],
-                [w for i in emitters for w in wavelengths[i]])
-            self._deposits = dict(zip(absorbers, zip(cubes, scales)))
-            ratios = {
-                i: np.array([[_ratio(law, w) for law in cube_laws]
-                             for w in wavelengths[i]], dtype)
-                for i in emitters}
-            self._odata = driver.mem_alloc_d(
-                (len(cube_laws),) + self._native_grid['spat_size'][::-1],
-                dtype)
+        if self._plans.odata is not None:
             self._gmodel = driver.native_class('GModel', dtype)()
-        # The plans of the emitters, and of the absorbers that do not emit
-        # here
-        plans = {
-            i: components[i].plan(
-                driver, spectral, dtype, lines, band, True, ratios[i])
-            for i in emitters}
-        plans |= {
-            i: components[i].plan(
-                driver, spectral, dtype, lines, band, False, None)
-            for i in absorbers if i not in plans}
-        self._emitters = tuple(emitters)
-        self._absorbers = tuple(absorbers)
-        self._plans = plans
-        self._followed = _followed_densities(
-            component_set, plans, driver, dtype)
 
     def evaluate(
             self,
@@ -385,12 +321,12 @@ class ComponentSetPlan:
         named after its name, or its position (e.g. 'disk_bdata' or
         'component0_bdata'), and the totals 'total_*'.
         """
-        driver = self._driver
-        dtype = self._dtype
-        components = self._component_set.components()
-        mappings = self._component_set.mappings()
-        shape = self._native_grid['spat_size'][::-1]
-        odata = self._odata
+        plans = self._plans
+        driver = plans.driver
+        dtype = plans.dtype
+        grid = plans.native_grid
+        shape = grid['spat_size'][::-1]
+        odata = plans.odata
         bdata = None
         obdata = None
         if out_extra is not None:
@@ -399,253 +335,30 @@ class ComponentSetPlan:
             if self._depth is not None:
                 obdata = driver.mem_alloc_d(shape, dtype)
                 driver.mem_fill(obdata, 0)
+        values = plans.params(params)
 
-        evaluated = sorted(set(self._absorbers) | set(self._emitters))
-        given = _circular_velocities(
-            [components[i] for i in evaluated],
-            [self._plans[i].disk_plan() for i in evaluated],
-            [mappings[i] for i in evaluated], self._followed,
-            self._component_set.distance(), self._component_set.mass_model(),
-            params)
-        given = dict(zip(evaluated, given))
-
-        def component_params(i: int) -> ParamValues:
-            mapping = mappings[i]
-            return {p: params[mapping[p]] for p in components[i].pdescs()} \
-                | given[i]
-
-        def component_extra() -> dict[str, Any] | None:
-            return {} if out_extra is not None else None
-
-        # The absorbers add to the cubes of opacity, so clear them. Then
-        # they get the optical depth from the viewer to the far side of
-        # each voxel, which the emitters read. The extra output has the
-        # optical depth at V of each voxel, of all the absorbers.
+        # The absorbers write the optical depth of each voxel, which then
+        # becomes the optical depth from the viewer to the far side of each
+        # voxel, which the emitters read. The extra output has the optical
+        # depth at V of each voxel, of all the absorbers.
         totals = {}
+        tau = plans.evaluate_opacity(values, out_extra)
+        if tau is not None:
+            totals['odata'] = tau
         if odata is not None:
-            driver.mem_fill(odata, 0)
-            for i in self._absorbers:
-                cube, scale = self._deposits[i]
-                extra = component_extra()
-                self._plans[i].evaluate_opacity(
-                    component_params(i), self._native_grid, odata[cube],
-                    scale, extra)
-                if extra is not None:
-                    tau = extra['odata']
-                    totals['odata'] = totals['odata'] + tau \
-                        if 'odata' in totals else tau
-                self._add_extra(out_extra, i, extra)
             for cube in odata:
                 self._gmodel.opacity_accumulate(
-                    spat_size=self._native_grid['spat_size'], opacity=cube)
+                    spat_size=grid['spat_size'], opacity=cube)
 
         outputs = outputs | dict(bdata=bdata, odata=odata, obdata=obdata)
-        for i in self._emitters:
-            extra = component_extra()
-            self._plans[i].evaluate_emission(
-                component_params(i), self._native_grid, outputs, extra)
-            self._add_extra(out_extra, i, extra)
+        for i in plans.emitters:
+            extra = {} if out_extra is not None else None
+            plans.plans[i].evaluate_emission(values[i], grid, outputs, extra)
+            plans.add_extra(out_extra, i, extra)
 
         if out_extra is not None:
             for name, total in dict(bdata=bdata, obdata=obdata).items():
                 if total is not None:
                     totals[name] = driver.mem_copy_d2h(total)
             for name, total in totals.items():
-                out_extra[f'total_{name}'] = self._extra(total)
-
-    def _add_extra(
-            self,
-            out_extra: dict[str, Any] | None,
-            index: int,
-            extra: dict[str, Any] | None
-    ) -> None:
-        """
-        Add the extra outputs of the component of the given index to
-        out_extra, named after its name, or its position if it has none.
-        """
-        if out_extra is None:
-            return
-        name = self._component_set.components()[index].name()
-        label = name if name is not None else f'component{index}'
-        for key, value in extra.items():
-            out_extra[f'{label}_{key}'] = self._extra(value)
-
-    def _extra(self, data: np.ndarray) -> gridutils.GridData:
-        """
-        Return an extra output on the grid: an image without a depth axis,
-        a cube with one (along the line of sight, from z = 0).
-        """
-        grid = self._grid
-        if self._depth is None:
-            return gridutils.GridData(
-                data.reshape(data.shape[-2:]), grid.coords, None)
-        depth = self._depth
-        coords = gridutils.Coords(
-            tuple(grid.coords.step) + (depth.step,),
-            tuple(grid.coords.rpix) + (-depth.zero / depth.step,),
-            tuple(grid.coords.rval) + (0.0,), grid.coords.rota)
-        return gridutils.GridData(data, coords, None)
-
-
-def _native_grid(
-        grid: gridutils.Grid,
-        spectral: gridutils.Grid,
-        depth: DepthAxis | None
-) -> NativeGrid:
-    """
-    Return the grid of the native evaluation functions: the x and y axes
-    of the grid, the depth axis (size 1 and step 0 without one) and the
-    spectral axis.
-    """
-    if depth is None:
-        depth = DepthAxis(1, 0, 0)
-    return NativeGrid(
-        spat_size=tuple(grid.size[:2]) + (depth.size,),
-        spat_step=tuple(grid.coords.step[:2]) + (depth.step,),
-        spat_zero=tuple(grid.zero()[:2]) + (depth.zero,),
-        spat_rota=grid.coords.rota,
-        spec_size=spectral.size[0],
-        spec_step=spectral.coords.step[0],
-        spec_zero=spectral.zero()[0])
-
-
-# The most cubes of opacity that the native kernels read (OPACITY_NUM_MAX
-# in constants.hpp)
-_MAX_OPACITY_CUBES = 4
-
-
-def _ratio(law: ExtinctionLaw | None, wavelength: float | None) -> float:
-    """
-    Return the ratio of the optical depth of dust of an extinction law
-    (None: grey dust, 1 everywhere) at a rest wavelength (um) to that at V.
-    Raise ConfigError if the law needs a wavelength that is not known.
-    """
-    if law is None:
-        return 1.0
-    if wavelength is None:
-        raise ConfigError(
-            "dust of an extinction law dims light at its rest wavelength: "
-            "the emission of the components it dims must name its lines "
-            "(e.g. lines: [halpha]), and an image needs its band")
-    return law.ratio(wavelength)
-
-
-def _opacity_cubes(
-        laws: Sequence[ExtinctionLaw | None],
-        wavelengths: Sequence[float | None]
-) -> tuple[
-        tuple[ExtinctionLaw | None, ...], tuple[int, ...], tuple[float, ...]]:
-    """
-    Return how the optical depth of absorbers of the given extinction laws
-    (None: grey dust) is held for an observation of light of the given
-    rest wavelengths (um; None where not known): the law of each cube of
-    opacity (None: the ratio is 1 at every wavelength), and the cube of
-    each absorber and the factor of its optical depth at V there. With one
-    law, one cube of the optical depth at V; with several laws and one
-    wavelength, one cube of the optical depth at that wavelength; with
-    several laws and wavelengths, one cube of the optical depth at V of
-    each law.
-
-    Raises
-    ------
-    ConfigError
-        If a law needs a wavelength that is not known, or with several
-        wavelengths, there are more laws than the kernels take.
-    """
-    distinct = tuple(dict.fromkeys(laws))
-    if len(distinct) == 1:
-        return distinct, (0,) * len(laws), (1.0,) * len(laws)
-    if len(set(wavelengths)) == 1:
-        return (
-            (None,), (0,) * len(laws),
-            tuple(_ratio(law, wavelengths[0]) for law in laws))
-    if len(distinct) > _MAX_OPACITY_CUBES:
-        raise ConfigError(
-            f"the dust that an observation of several wavelengths sees can "
-            f"have at most {_MAX_OPACITY_CUBES} extinction laws; it has "
-            f"{len(distinct)}")
-    return (
-        distinct, tuple(distinct.index(law) for law in laws),
-        (1.0,) * len(laws))
-
-
-def _followed_densities(
-        component_set: ComponentSet,
-        plans: dict[int, ComponentPlan],
-        driver: Driver,
-        dtype: np.dtype
-) -> tuple[tuple[Component, DiskPlan, dict[str, str]], ...]:
-    """
-    Return the components of a galaxy that the components of its mass
-    follow (see MassComponent.followed_components), with the plans of
-    their disks and the names of their parameters: those of the given
-    plans, or new ones for the other components (their mass counts,
-    though they are not evaluated).
-    """
-    mass_model = component_set.mass_model()
-    if mass_model is None:
-        return ()
-    followed = {name for mass_component in mass_model.components()
-                for name in mass_component.followed_components()}
-    result = []
-    for i, (cmp, mapping) in enumerate(zip(
-            component_set.components(), component_set.mappings())):
-        if cmp.name() not in followed:
-            continue
-        disk_plan = plans[i].disk_plan() if i in plans \
-            else cmp.density_disk().plan(driver, 0, dtype)
-        result.append((cmp, disk_plan, mapping))
-    return tuple(result)
-
-
-def _circular_velocities(
-        components: Sequence[Component],
-        disk_plans: Sequence[DiskPlan | None],
-        mappings: Sequence[dict[str, str]],
-        followed: Sequence[tuple[Component, DiskPlan, dict[str, str]]],
-        distance: Distance | None,
-        mass_model: MassModel | None,
-        params: ParamValues
-) -> list[dict[str, np.ndarray]]:
-    """
-    Return the values of the parameters of each component that are the
-    circular velocity of the mass of the galaxy (see
-    Component.circular_velocity_params), from the parameters of the
-    distance and the mass in params, and the densities of the components
-    it follows (see _followed_densities and DiskDensity), with the
-    pressure support of their component where its traits ask for it (see
-    Disk.pressure_supported_params): NaN where their square is negative or
-    infinite (there is no circular orbit). The mass is evaluated once, at
-    all their radii.
-    """
-    radii = [cmp.circular_velocity_params() for cmp in components]
-    if mass_model is None or not any(radii):
-        return [{} for _ in components]
-    kpc_per_arcsec = distance.kpc_per_arcsec(params)
-    densities = {
-        cmp.name(): DiskDensity(
-            cmp.density_disk(), disk_plan,
-            {p: params[mapping[p]] for p in cmp.pdescs()}, kpc_per_arcsec)
-        for cmp, disk_plan, mapping in followed}
-    context = MassContext(
-        distance.critical_density(params), distance.omega_m(params),
-        densities)
-    every = [r for cmp in radii for r in cmp.values()]
-    vcirc2 = mass_model.vcirc2(
-        np.concatenate(every) * kpc_per_arcsec, params, context)
-    ends = np.cumsum([len(r) for r in every])
-    pieces = iter(vcirc2[end - len(r):end] for r, end in zip(every, ends))
-    values = []
-    for cmp, disk_plan, mapping, cmp_radii in zip(
-            components, disk_plans, mappings, radii, strict=True):
-        values.append({})
-        for name, r in cmp_radii.items():
-            v2 = next(pieces)
-            disk = cmp.density_disk()
-            if name in disk.pressure_supported_params():
-                v2 = v2 + pressure_support(
-                    disk, disk_plan,
-                    {p: params[mapping[p]] for p in cmp.pdescs()}, r)
-            values[-1][name] = np.sqrt(
-                np.where(np.isfinite(v2) & (v2 >= 0), v2, np.nan))
-    return values
+                out_extra[f'total_{name}'] = plans.extra(total)

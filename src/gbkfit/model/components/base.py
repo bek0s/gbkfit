@@ -296,6 +296,18 @@ class ComponentPlan(abc.ABC):
         """
         pass
 
+    @abc.abstractmethod
+    def line_values(self, params: ParamValues) -> np.ndarray:
+        """
+        Return how the march of radiative transfer spreads the light of its
+        fields (see evaluate_fields) along the spectral axis: the offset,
+        scale and flux of each of its lines that it evaluates (an array of
+        shape (nlines, 3); see the native DiskArgs::lines), with the flux
+        ratios of the given parameters; in an image, one row of the flux
+        of its band (see Bands), whose offset and scale are 0.
+        """
+        pass
+
     def evaluate_opacity(
             self,
             params: ParamValues,

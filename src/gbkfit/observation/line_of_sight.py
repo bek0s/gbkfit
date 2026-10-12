@@ -1,17 +1,23 @@
 """
 How an observation treats the line of sight: it evaluates the galaxies it
-sees on the plane of the sky (Flat), or on a grid with a depth axis along
-the line of sight (Grid). It is explicit, and checked against every
-component it sees: never inferred from them. Along the depth axis, the
-viewer is in front of its first voxel.
+sees on the plane of the sky (Flat), on a grid with a depth axis along
+the line of sight (Grid), or by radiative transfer along it (Transfer).
+It is explicit, and checked against every component it sees: never
+inferred from them. Along the depth axis, the viewer is in front of its
+first voxel.
 """
 
 import abc
 import numbers
+from collections.abc import Sequence
 from typing import Any, Self
 
 import numpy as np
 
+from gbkfit.driver import Driver
+from gbkfit.model import Band, Galaxy
+from gbkfit.model.components._component_set import ComponentSetPlan
+from gbkfit.model.components._transfer import TransferPlan
 from gbkfit.model.components.base import Component, DepthAxis
 from gbkfit.utils import gridutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
@@ -22,6 +28,7 @@ __all__ = [
     'Flat',
     'Grid',
     'LineOfSight',
+    'Transfer',
     'line_of_sight_parser'
 ]
 
@@ -132,6 +139,28 @@ class LineOfSight(parseutils.TypedSerializable, abc.ABC):
         """
         pass
 
+    def plan_galaxy(
+            self,
+            galaxy: Galaxy,
+            driver: Driver,
+            grid: gridutils.Grid,
+            spectral: gridutils.Grid,
+            depth: DepthAxis | None,
+            dtype: np.dtype,
+            emitters: Sequence[int],
+            lines: tuple[str, ...] | None,
+            band: Band | None
+    ) -> ComponentSetPlan | TransferPlan:
+        """
+        Plan the evaluation of a galaxy along this line of sight, on the
+        given depth axis (see depth_axis; for the other arguments, see
+        Galaxy.plan): here, its components add their light to the image
+        or the spectral cube, dimmed by the opacity in front of it (see
+        Galaxy.plan).
+        """
+        return galaxy.plan(
+            driver, grid, spectral, depth, dtype, emitters, lines, band)
+
 
 class Flat(LineOfSight):
     """
@@ -150,11 +179,11 @@ class Flat(LineOfSight):
         if component.opacity() is not None:
             raise ConfigError(
                 "a component with opacity needs a line of sight with a "
-                "depth axis (grid)")
+                "depth axis (grid or transfer)")
         if component.thick():
             raise ConfigError(
                 "a thick component needs a line of sight with a depth axis "
-                "(grid)")
+                "(grid or transfer)")
 
 
 class Grid(LineOfSight):
@@ -198,6 +227,68 @@ class Grid(LineOfSight):
         pass
 
 
+class Transfer(LineOfSight):
+    """
+    A depth axis and radiative transfer along each line of sight: the
+    galaxies are evaluated on the voxels of a grid, as by Grid, but their
+    emitters write the fields of their light (its density, velocity and
+    dispersion in each voxel, or in the layer of a thin disk or a point;
+    see ComponentPlan.evaluate_fields), and a march along each line of
+    sight, front to back, adds the light of each channel that reaches the
+    viewer, dimmed by the opacity in front of it. It sees every component.
+    It gives what Grid gives, but for the clouds of a Monte Carlo disk:
+    those of each voxel become one line, of their mean velocity, and as
+    wide as the sum of their lines.
+
+    Parameters
+    ----------
+    depth : Depth, optional
+        The depth axis; Depth() by default.
+    """
+
+    @staticmethod
+    def type() -> str:
+        return 'transfer'
+
+    @classmethod
+    def load(cls, info: dict[str, Any]) -> Self:
+        parseutils.load_option_and_update_info(depth_parser, info, 'depth')
+        return cls(**parseutils.parse_options_for_callable(
+            info, cls.__init__))
+
+    def dump(self) -> dict[str, Any]:
+        return dict(type=self.type(), depth=self._depth.dump())
+
+    def __init__(self, depth: Depth | None = None):
+        self._depth = depth if depth is not None else Depth()
+
+    def depth(self) -> Depth:
+        """Return the depth axis."""
+        return self._depth
+
+    def depth_axis(self, grid: gridutils.Grid, radius: float) -> DepthAxis:
+        return self._depth.axis(grid, radius)
+
+    def check(self, component: Component) -> None:
+        pass
+
+    def plan_galaxy(
+            self,
+            galaxy: Galaxy,
+            driver: Driver,
+            grid: gridutils.Grid,
+            spectral: gridutils.Grid,
+            depth: DepthAxis | None,
+            dtype: np.dtype,
+            emitters: Sequence[int],
+            lines: tuple[str, ...] | None,
+            band: Band | None
+    ) -> TransferPlan:
+        return galaxy.plan_transfer(
+            driver, grid, spectral, depth, dtype, emitters, lines, band)
+
+
 line_of_sight_parser = parseutils.TypedParser(LineOfSight, [
     Flat,
-    Grid])
+    Grid,
+    Transfer])

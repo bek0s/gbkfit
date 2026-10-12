@@ -123,3 +123,136 @@ def test_a_point_is_a_layer_at_its_depth(driver):
     np.testing.assert_array_equal(s[on], 10)
     np.testing.assert_array_equal(position[on], 2 + 3.5)
     np.testing.assert_array_equal(np.stack((v, s, position))[:, ~on], 0)
+
+
+# A galaxy of gas, stars and dust, seen through a grid and through
+# radiative transfer
+LINES = dict(type='lines')
+KINEMATICS = dict(
+    vptraits=dict(type='tan_arctan'), dptraits=dict(type='uniform'))
+THICK = dict(ptraits=dict(type='exponential'), htraits=dict(type='sech2'))
+THIN = dict(ptraits=dict(type='exponential'))
+GAS = dict(
+    type='smdisk', name='gas', loose=False, tilted=False, rnmin=0, rnmax=10,
+    rnsep=1, density=THICK, kinematics=KINEMATICS, emission=LINES)
+DUST = dict(
+    type='smdisk', name='dust', loose=False, tilted=False, rnmin=0,
+    rnmax=10, rnsep=1, density=THICK, opacity=dict(type='dust'))
+NUCLEUS = dict(type='point', name='nucleus', emission=LINES, depth=True)
+
+PROPERTIES = dict(
+    gas_vsys=0, gas_xpos=0.5, gas_ypos=-1, gas_posa=30, gas_incl=60,
+    gas_pt_a=1, gas_pt_s=3, gas_ht_s=1, gas_vpt_rt=2, gas_vpt_vt=150,
+    gas_dpt_a=20, dust_xpos=0, dust_ypos=0, dust_posa=40, dust_incl=70,
+    dust_pt_a=0.3, dust_pt_s=4, dust_ht_s=0.5, nucleus_xpos=0.3,
+    nucleus_ypos=0.6, nucleus_depth=0.7, nucleus_flux=20, nucleus_vsys=30,
+    nucleus_disp=25)
+
+# Extinction laws whose ratios differ much between halpha and nii6583
+LAWS = [
+    dict(type='table', wavelengths=[0.65, 0.66], ratios=[2.0, 0.5]),
+    dict(type='table', wavelengths=[0.65, 0.66], ratios=[0.5, 2.0])]
+
+
+def cubes_of(evaluate_cases, driver, components, properties, **observation):
+    """
+    The model data of a galaxy of the given components seen through a
+    grid and through radiative transfer (a spectral cube by default).
+    """
+    observation = dict(
+        observable=dict(
+            type='pixel_spectra', size=[24, 24, 31], step=[1, 1, 10])
+    ) | observation
+    names = {component['name'] for component in components}
+    properties = {
+        key: value for key, value in properties.items()
+        if key.split('_')[0] in names}
+    models = []
+    for kind in ('grid', 'transfer'):
+        case = dict(
+            observation, driver=dict(type=driver.type()),
+            line_of_sight=dict(type=kind),
+            galaxy=dict(components=components))
+        data, _ = evaluate_cases([case], properties)
+        models.append(next(iter(data[0].values()))['d'])
+    return models
+
+
+def assert_same_model(actual, desired):
+    # (to 1e-5 of the peak: on a grid, the lines of a point have tails
+    # beyond the 5 dispersions where the march, as the disks, cuts them)
+    np.testing.assert_allclose(
+        actual, desired, rtol=1e-5, atol=1e-5 * np.abs(desired).max())
+
+
+@pytest.mark.parametrize('components', [
+    [GAS],
+    [GAS, DUST],
+    [GAS | dict(density=THIN), DUST],
+    [NUCLEUS, DUST],
+    [GAS, NUCLEUS, DUST, GAS | dict(name='gas2', density=THIN)]],
+    ids=['thick', 'dust', 'thin', 'point', 'all'])
+def test_transfer_gives_what_a_grid_gives(driver, evaluate_cases, components):
+    properties = PROPERTIES | {
+        key.replace('gas_', 'gas2_'): value
+        for key, value in PROPERTIES.items() if key.startswith('gas_')}
+    grid, transfer = cubes_of(evaluate_cases, driver, components, properties)
+    assert grid.max() > 0
+    assert_same_model(transfer, grid)
+
+
+def test_transfer_dims_each_line_by_its_law(driver, evaluate_cases):
+    # Two laws and two lines: a cube of opacity for each law, and the
+    # light of each line dimmed by its ratios
+    gas = GAS | dict(emission=dict(type='lines', lines=['halpha', 'nii6583']))
+    dusts = [
+        DUST | dict(name=f'dust{i}', opacity=dict(type='dust', law=law))
+        for i, law in enumerate(LAWS)]
+    properties = PROPERTIES | dict(gas_nii6583_ratio=0.5) | {
+        f'dust{i}_{key.removeprefix("dust_")}': value
+        for i in range(2) for key, value in PROPERTIES.items()
+        if key.startswith('dust_')}
+    grid, transfer = cubes_of(
+        evaluate_cases, driver, [gas] + dusts, properties,
+        observable=dict(
+            type='pixel_spectra', size=[24, 24, 81], step=[1, 1, 25],
+            rval=[0, 0, 500], rest='6564.61 Angstrom'))
+    assert_same_model(transfer, grid)
+
+
+def test_transfer_gives_what_a_grid_gives_for_an_image(
+        driver, evaluate_cases):
+    stars = GAS | dict(name='stars', emission=dict(type='band'))
+    del stars['kinematics']
+    properties = PROPERTIES | dict(
+        stars_xpos=0.5, stars_ypos=-1, stars_posa=30, stars_incl=60,
+        stars_pt_a=1, stars_pt_s=3, stars_ht_s=1)
+    grid, transfer = cubes_of(
+        evaluate_cases, driver, [stars, DUST], properties,
+        observable=dict(type='pixel_brightness', size=[24, 24]))
+    assert_same_model(transfer, grid)
+
+
+def test_transfer_keeps_the_moments_of_monte_carlo_clouds(
+        driver, evaluate_cases):
+    # The clouds of a voxel become one line of their flux, mean velocity
+    # and width: the moments of each spaxel are kept
+    gas = GAS | dict(type='mcdisk', cflux=1e-3)
+    grid, transfer = cubes_of(
+        evaluate_cases, driver, [gas, DUST], PROPERTIES,
+        observable=dict(
+            type='pixel_spectra', size=[24, 24, 61], step=[1, 1, 10]))
+    velocity = (np.arange(61) - 30) * 10.0
+    flux = grid.sum(axis=0)
+    on = flux > 1e-3 * flux.max()
+
+    def moments(cube):
+        spectra = cube[:, on]
+        flux = spectra.sum(axis=0)
+        mean = velocity @ spectra / flux
+        return flux, mean, np.sqrt(velocity ** 2 @ spectra / flux - mean ** 2)
+
+    for desired, actual, rtol in zip(
+            moments(grid), moments(transfer), (1e-5, 1e-5, 1e-4)):
+        np.testing.assert_allclose(
+            actual, desired, rtol=rtol, atol=rtol * np.abs(desired).max())

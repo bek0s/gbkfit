@@ -13,6 +13,7 @@ from gbkfit.utils import gridutils, iterutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
 from .components import _detail
 from .components._component_set import ComponentSet, ComponentSetPlan
+from .components._transfer import TransferPlan
 from .components.base import Component, DepthAxis
 from .components.disks import MCDisk, SMDisk
 from .components.geometries import Geometry, geometry_parser
@@ -237,6 +238,26 @@ class Galaxy(parseutils.Serializable):
             The plan.
         """
         return self._component_set.plan(
+            driver, grid, spectral, depth, dtype, emitters, lines, band,
+            self._redshift)
+
+    def plan_transfer(
+            self,
+            driver: Driver,
+            grid: gridutils.Grid,
+            spectral: gridutils.Grid,
+            depth: DepthAxis,
+            dtype: np.dtype,
+            emitters: Sequence[int],
+            lines: tuple[str, ...] | None,
+            band: Band | None
+    ) -> TransferPlan:
+        """
+        Plan the evaluation of the galaxy on the grid of an observation by
+        radiative transfer along each line of sight (see TransferPlan); the
+        arguments are those of plan, with a depth axis.
+        """
+        return self._component_set.plan_transfer(
             driver, grid, spectral, depth, dtype, emitters, lines, band,
             self._redshift)
 

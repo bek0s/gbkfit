@@ -15,8 +15,68 @@ gmodel_image_evaluate(T* image, int x, int y, T rvalue, int spat_size_x)
     AddFunT(&image[idx], rvalue);
 }
 
+// The channels [cmin, cmax] of [c0, c1) where a line of the given centre
+// and dispersion (in the units of the spectral axis) has most of its flux
+// (within LINE_WIDTH_MULTIPLIER dispersions); false if there are none. A
+// line of a centre or dispersion that is not a number (e.g. of parameters
+// out of their range) is in every channel: it makes them NaN, as a flux
+// that is not a number does, so that it is seen.
+template<typename T> constexpr bool
+gmodel_line_range(
+        T centre, T sigma, int c0, int c1, T spec_step, T spec_zero,
+        int& cmin, int& cmax)
+{
+    if (std::isnan(centre) || std::isnan(sigma))
+    {
+        cmin = c0;
+        cmax = c1 - 1;
+        return c0 < c1;
+    }
+    // The channels are clamped before they become ints: converting a
+    // float out of the range of int is undefined.
+    const T lo = std::max<T>(std::rint(
+            (centre - sigma * LINE_WIDTH_MULTIPLIER<T> - spec_zero)
+            / spec_step), c0);
+    const T hi = std::min<T>(std::rint(
+            (centre + sigma * LINE_WIDTH_MULTIPLIER<T> - spec_zero)
+            / spec_step), c1 - 1);
+    if (lo > hi)
+        return false;
+    cmin = lo;
+    cmax = hi;
+    return true;
+}
+
+// Give add(c, value) the light of a line of the given flux, centre and
+// dispersion in each channel c of [cmin, cmax] (see gmodel_line_range):
+// the mean of the line over the channel (the cube holds flux per unit
+// velocity), which conserves the flux of lines of any width, including
+// 0. The channels share their edges, so each channel needs one cdf.
+template<typename T, typename AddT> constexpr void
+gmodel_line_channels(
+        T flux, T centre, T sigma, int cmin, int cmax,
+        T spec_step, T spec_zero, AddT add)
+{
+    if (std::isnan(centre) || std::isnan(sigma))
+    {
+        for (int c = cmin; c <= cmax; ++c)
+            add(c, T(NAN));
+        return;
+    }
+    T cdf_lo = gauss_1d_cdf(
+            spec_zero + (cmin - T{0.5}) * spec_step, centre, sigma);
+    for (int c = cmin; c <= cmax; ++c)
+    {
+        const T cdf_hi = gauss_1d_cdf(
+                spec_zero + (c + T{0.5}) * spec_step, centre, sigma);
+        add(c, flux * (cdf_hi - cdf_lo) / spec_step);
+        cdf_lo = cdf_hi;
+    }
+}
+
 // Add a line of the given flux, centre and dispersion (in the units of
-// the spectral axis) to the spectrum (x, y) of a spectral cube
+// the spectral axis) to the spectrum (x, y) of a spectral cube (see
+// gmodel_line_range and gmodel_line_channels)
 template<auto AddFunT, typename T> void constexpr
 gmodel_scube_line(
         T* scube, int x, int y, T rvalue, T vvalue, T dvalue,
@@ -25,48 +85,17 @@ gmodel_scube_line(
         T spec_step,
         T spec_zero)
 {
-    // A line of a velocity or dispersion that is not a number (e.g. of
-    // parameters out of their range) makes the spectrum NaN, as a flux
-    // that is not a number does, so that it is seen
-    if (std::isnan(vvalue) || std::isnan(dvalue))
-    {
-        for (int z = 0; z < spec_size_z; ++z)
-        {
-            int idx = index_3d_to_1d(x, y, z, spat_size_x, spat_size_y);
-            AddFunT(&scube[idx], T(NAN));
-        }
+    int zmin, zmax;
+    if (!gmodel_line_range(
+            vvalue, dvalue, 0, spec_size_z, spec_step, spec_zero,
+            zmin, zmax))
         return;
-    }
-
-    // Calculate a spectral range that encloses most of the flux, within
-    // the spectral axis. The channels are clamped before they become
-    // ints: converting a float out of the range of int is undefined.
-    T zmin = vvalue - dvalue * LINE_WIDTH_MULTIPLIER<T>;
-    T zmax = vvalue + dvalue * LINE_WIDTH_MULTIPLIER<T>;
-    T zmin_pos = std::max<T>(std::rint((zmin - spec_zero) / spec_step), 0);
-    T zmax_pos = std::min<T>(
-            std::rint((zmax - spec_zero) / spec_step), spec_size_z - 1);
-    if (zmin_pos > zmax_pos)
-        return;
-    int zmin_idx = zmin_pos;
-    int zmax_idx = zmax_pos;
-
-    // Evaluate the spectral line within the range specified above
-    // Evaluating only within the range can result in huge speed increase.
-    // Each channel gets the mean of the line over the channel (the cube
-    // holds flux per unit velocity), which conserves the flux of lines of
-    // any width, including 0. The channels share their edges, so each
-    // channel needs one cdf.
-    T cdf_lo = gauss_1d_cdf(
-            spec_zero + (zmin_idx - T{0.5}) * spec_step, vvalue, dvalue);
-    for (int z = zmin_idx; z <= zmax_idx; ++z)
-    {
-        int idx = index_3d_to_1d(x, y, z, spat_size_x, spat_size_y);
-        T cdf_hi = gauss_1d_cdf(
-                spec_zero + (z + T{0.5}) * spec_step, vvalue, dvalue);
-        AddFunT(&scube[idx], rvalue * (cdf_hi - cdf_lo) / spec_step);
-        cdf_lo = cdf_hi;
-    }
+    gmodel_line_channels(
+            rvalue, vvalue, dvalue, zmin, zmax, spec_step, spec_zero,
+            [&](int z, T value) {
+                AddFunT(&scube[index_3d_to_1d(
+                        x, y, z, spat_size_x, spat_size_y)], value);
+            });
 }
 
 // Turn the optical depth of each voxel of the spaxel (x, y) of an opacity

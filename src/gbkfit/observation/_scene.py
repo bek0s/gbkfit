@@ -13,6 +13,7 @@ from gbkfit.driver import DeviceArray, Driver
 from gbkfit.model import Band, BandEmission, Emission, Galaxy
 from gbkfit.model.components._component_set import (
     IMAGE_SPECTRAL_AXIS, ComponentSetPlan)
+from gbkfit.model.components._transfer import TransferPlan
 from gbkfit.params import ParamValues
 from gbkfit.utils import gridutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
@@ -113,9 +114,9 @@ class ScenePlan:
         depth = scene._line_of_sight.depth_axis(spatial, scene.radius())
         self._key = 'image' if image else 'scube'
         self._scene = scene
-        self._plans: tuple[ComponentSetPlan, ...] = tuple(
-            galaxy.plan(
-                driver, spatial, spectral, depth, dtype, emitters,
+        self._plans: tuple[ComponentSetPlan | TransferPlan, ...] = tuple(
+            scene._line_of_sight.plan_galaxy(
+                galaxy, driver, spatial, spectral, depth, dtype, emitters,
                 scene._lines, scene._band)
             for galaxy, emitters in zip(scene._galaxies, scene._emitters))
 

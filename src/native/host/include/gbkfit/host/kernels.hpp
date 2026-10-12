@@ -11,6 +11,7 @@
 
 #include <gbkfit/dmodel/dmodels.hpp>
 #include <gbkfit/gmodel/gmodels.hpp>
+#include <gbkfit/gmodel/transfer.hpp>
 #include <gbkfit/objective/objective.hpp>
 
 namespace gbkfit::host::kernels {
@@ -316,6 +317,46 @@ gmodel_opacity_accumulate(int size_x, int size_y, int size_z, T* opacity)
 }
 
 template<typename T> void
+gmodel_transfer_march(const TransferArgs<T>& a)
+{
+    // Parallelization: per 2d spatial position. Each thread adds the light
+    // of the channels of the line of sight of its spaxel to a spectrum of
+    // its own, then to the output. Then the dust of the slab is added to
+    // that in front of it.
+    #pragma omp parallel
+    {
+    std::vector<T> spectrum(a.spec_size);
+
+    #pragma omp for collapse(2) schedule(dynamic, 16)
+    for (int y = 0; y < a.spat_size[1]; ++y) {
+    for (int x = 0; x < a.spat_size[0]; ++x) {
+
+    std::fill(spectrum.begin(), spectrum.end(), T{0});
+    gbkfit::gmodel_transfer_march(
+            x, y, 0, a.spec_size, a,
+            [&](int c, T value) { spectrum[c] += value; });
+    for (int c = 0; c < a.spec_size; ++c) {
+        if (spectrum[c] != 0) {
+            a.out[index_3d_to_1d(x, y, c, a.spat_size[0], a.spat_size[1])]
+                    += spectrum[c];
+        }
+    }
+
+    }
+    }
+
+    #pragma omp for collapse(2)
+    for (int y = 0; y < a.spat_size[1]; ++y) {
+    for (int x = 0; x < a.spat_size[0]; ++x) {
+
+    gbkfit::gmodel_transfer_opacity_front(x, y, a);
+
+    }
+    }
+    }
+}
+
+template<typename T> void
 gmodel_disk_traits_evaluate(const DiskTraitsArgs<T>& a)
 {
     // Parallelization: per point
@@ -425,6 +466,11 @@ struct Wrapper
     static void
     gmodel_opacity_accumulate(auto... args) {
         kernels::gmodel_opacity_accumulate<T>(args...);
+    }
+
+    static void
+    gmodel_transfer_march(const TransferArgs<T>& a) {
+        kernels::gmodel_transfer_march<T>(a);
     }
 
     static void
