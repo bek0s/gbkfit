@@ -108,7 +108,7 @@ def test_moment_maps_have_the_weights_of_the_model(driver):
     from modelutils import WeightComponent
     disk = SpectralSMDisk2D(
         loose=False, tilted=False, rnodes=list(range(0, 25)),
-        bptraits=traits.BPTraitExponential(),
+        bptraits=traits.RPTraitExponential(),
         vptraits=traits.VPTraitTanArctan(), dptraits=traits.DPTraitUniform())
     model = ModelKinematics2D([disk, WeightComponent()])
     observable = PixelMoments(size=(32, 32), spec_size=81, spec_step=5)

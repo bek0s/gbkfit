@@ -52,10 +52,10 @@ class Slot:
 # The trait slots. The density traits of a disk are surface brightness
 # traits in brightness and spectral components, and opacity traits in
 # opacity components.
-BPT = Slot('bptraits', 'rpt', 'bpt', traits.bpt_parser)
-BHT = Slot('bhtraits', 'rht', 'bht', traits.bht_parser, 'bptraits')
-OPT = Slot('optraits', 'rpt', 'opt', traits.opt_parser)
-OHT = Slot('ohtraits', 'rht', 'oht', traits.oht_parser, 'optraits')
+BPT = Slot('bptraits', 'rpt', 'bpt', traits.rpt_parser)
+BHT = Slot('bhtraits', 'rht', 'bht', traits.rht_parser, 'bptraits')
+OPT = Slot('optraits', 'rpt', 'opt', traits.rpt_parser)
+OHT = Slot('ohtraits', 'rht', 'oht', traits.rht_parser, 'optraits')
 VPT = Slot('vptraits', 'vpt', 'vpt', traits.vpt_parser)
 VHT = Slot(
     'vhtraits', 'vht', 'vht', traits.vht_parser, 'vptraits',
@@ -339,11 +339,11 @@ def check_traits_common(traits_: Sequence[traits.Trait]) -> None:
         trait_desc = traits.trait_desc(trait.__class__)
         if isinstance(trait, unsupported_traits):
             raise ConfigError(f"{trait_desc} is not implemented yet")
-        if isinstance(trait, traits.BPTraitUniform):
+        if isinstance(trait, traits.RPTraitUniform):
             parseutils.warn(
                 f"the use of {trait_desc} is discouraged; "
                 f"its main purpose is to facilitate software testing")
-        if isinstance(trait, traits.BHTraitUniform):
+        if isinstance(trait, traits.RHTraitUniform):
             parseutils.warn(
                 f"the use of {trait_desc} is discouraged; "
                 f"it may result in density overestimation due to aliasing")

@@ -31,7 +31,7 @@ DEFAULT_TRAITS = dict(
 
 # The trait kinds tested in the spectral disk, and their parsers
 SPECTRAL_KINDS = dict(
-    bptraits=traits.bpt_parser, bhtraits=traits.bht_parser,
+    bptraits=traits.rpt_parser, bhtraits=traits.rht_parser,
     vptraits=traits.vpt_parser, vhtraits=traits.vht_parser,
     dptraits=traits.dpt_parser, dhtraits=traits.dht_parser,
     zptraits=traits.zpt_parser, sptraits=traits.spt_parser)
@@ -65,7 +65,7 @@ def trait_configs(parser):
 
 def cases():
     kinds = SPECTRAL_KINDS | dict(
-        optraits=traits.opt_parser, ohtraits=traits.oht_parser)
+        optraits=traits.rpt_parser, ohtraits=traits.rht_parser)
     for key, parser in kinds.items():
         for config in trait_configs(parser):
             yield pytest.param(key, config, id=f"{key}-{config}")

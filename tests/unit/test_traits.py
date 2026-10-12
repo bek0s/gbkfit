@@ -23,20 +23,19 @@ def kernel_consts_cases():
     """
     Each type of trait, options for it, and the constants the kernels
     read from it (traits.hpp): the truncation and the node-wise switch of
-    the brightness and opacity heights, the node-wise switch of the other
+    the density heights, the node-wise switch of the other
     heights, the number of blobs of mixtures, the order of harmonics, and
     the options of axis_range. The other traits have none.
     """
     parsers = dict(
-        bpt=traits.bpt_parser, bht=traits.bht_parser,
+        rpt=traits.rpt_parser, rht=traits.rht_parser,
         vpt=traits.vpt_parser, vht=traits.vht_parser,
         dpt=traits.dpt_parser, dht=traits.dht_parser,
         zpt=traits.zpt_parser, spt=traits.spt_parser,
-        wpt=traits.wpt_parser, opt=traits.opt_parser,
-        oht=traits.oht_parser)
+        wpt=traits.wpt_parser)
     for kind, parser in parsers.items():
         for type_, cls in parser.registered_classes().items():
-            if kind in ('bht', 'oht'):
+            if kind == 'rht':
                 options, consts = dict(trunc=0, rnodes=True), (0, True)
             elif kind in ('vht', 'dht'):
                 options, consts = dict(), (False,)
@@ -60,4 +59,4 @@ def test_harmonic_orders_are_integers():
     # (a configuration is checked against the annotation; the Python API
     # by the trait)
     with pytest.raises(ConfigError, match="order must be an integer"):
-        traits.BPTraitNWHarmonic(order=1.5)
+        traits.RPTraitNWHarmonic(order=1.5)
