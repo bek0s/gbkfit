@@ -199,8 +199,10 @@ class DCubePlanBase(ObservablePlan):
     """
     The evaluation of an observable made from a DCube: the plan of the cube,
     the plan of the scene (what an observation sees) on its high-res grid
-    (see _model_grid), and that of the spatial weights of the data, if
-    any, which fill the weight cube of the DCube.
+    (see _model_grid), that of the spatial weights of the data, if any,
+    which fill the weight cube of the DCube, and the name of the parameter
+    of the calibration of the observation, if any, which scales the flux
+    of the cube.
 
     Raises
     ------
@@ -216,11 +218,13 @@ class DCubePlanBase(ObservablePlan):
             scene: 'Scene',
             foreground: 'Foreground',
             dtype: np.dtype,
-            weights: 'Weights | None'
+            weights: 'Weights | None',
+            calibration: str | None
     ):
         self._driver = driver
         self._dtype = dtype
         self._dcube = dcube
+        self._calibration = calibration
         self._dcube_plan = dcube.plan(driver, has_weights=weights is not None)
         grid = self._model_grid()
         self._weights_plan = None
@@ -277,7 +281,9 @@ class DCubePlanBase(ObservablePlan):
         self._model_plan.evaluate(params, cube, model_extra)
         if self._lens_plan is not None:
             self._lens_plan.evaluate(cube, dcube_plan.scratch_dcube())
-        dcube_plan.evaluate(out_extra, extra_lo, extra_hi)
+        flux_scale = None if self._calibration is None \
+            else params[self._calibration]
+        dcube_plan.evaluate(out_extra, extra_lo, extra_hi, flux_scale)
         if model_extra:
             out_extra.update(
                 {f'model_{k}': self._model_extra(v)

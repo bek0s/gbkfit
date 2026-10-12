@@ -375,13 +375,16 @@ class DCubePlan:
             self,
             out_extra: dict[str, Any] | None,
             extra_lo: ExtraFunction,
-            extra_hi: ExtraFunction
+            extra_hi: ExtraFunction,
+            flux_scale: float | None = None
     ) -> None:
         """
-        Attenuate by the primary beam, convolve, downscale and mask the
-        high-res cube into the low-res one. The extra outputs on the low-
-        and high-res grids go to out_extra as extra_lo and extra_hi make
-        them from their data and grid (e.g. cube_extra or plain_extra).
+        Scale the flux of the high-res cube by flux_scale (if given; e.g.
+        the calibration of an observation), attenuate it by the primary
+        beam, convolve, downscale and mask it into the low-res one. The
+        extra outputs on the low- and high-res grids go to out_extra as
+        extra_lo and extra_hi make them from their data and grid (e.g.
+        cube_extra or plain_extra).
         """
         dcube = self._dcube
         step_lo = dcube.step()
@@ -400,6 +403,9 @@ class DCubePlan:
         driver = self._driver
         backend_fft = self._backend_fft
         backend_dmodel = self._backend_dmodel
+
+        if flux_scale is not None:
+            driver.math_mul(dcube_hi, flux_scale, out=dcube_hi)
 
         # The primary beam attenuates the light before the PSF
         if pbeam_hi is not None:

@@ -167,7 +167,8 @@ class PixelSpectra(Observable):
             instrument: Instrument,
             scale: Sequence[int],
             dtype: np.dtype,
-            weights: 'Weights | None'
+            weights: 'Weights | None',
+            calibration: str | None
     ) -> 'PixelSpectraPlan':
         dcube = _dcube.DCube(
             size=self.size(),
@@ -186,7 +187,7 @@ class PixelSpectra(Observable):
             mask_apply=self._mask_apply,
             dtype=dtype)
         return PixelSpectraPlan(
-            dcube, driver, scene, foreground, dtype, weights)
+            dcube, driver, scene, foreground, dtype, weights, calibration)
 
 
 class PixelSpectraPlan(_detail.DCubePlanBase):

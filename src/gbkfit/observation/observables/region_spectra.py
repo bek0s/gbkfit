@@ -228,7 +228,8 @@ class RegionSpectra(Observable):
             instrument: Instrument,
             scale: Sequence[int],
             dtype: np.dtype,
-            weights: 'Weights | None'
+            weights: 'Weights | None',
+            calibration: str | None
     ) -> 'RegionSpectraPlan':
         if weights is not None:
             raise ConfigError("region_spectra does not support weights yet")
@@ -251,7 +252,8 @@ class RegionSpectra(Observable):
             mask_apply=False,
             dtype=dtype)
         return RegionSpectraPlan(
-            self._weights, dcube, driver, scene, foreground, dtype)
+            self._weights, dcube, driver, scene, foreground, dtype,
+            calibration)
 
 
 class RegionSpectraPlan(_detail.DCubePlanBase):
@@ -263,10 +265,11 @@ class RegionSpectraPlan(_detail.DCubePlanBase):
             driver: Driver,
             scene: 'Scene',
             foreground: 'Foreground',
-            dtype: np.dtype
+            dtype: np.dtype,
+            calibration: str | None
     ):
         super().__init__(
-            dcube, driver, scene, foreground, dtype, None)
+            dcube, driver, scene, foreground, dtype, None, calibration)
         self._sums = RegionSumsPlan(weights, driver, dtype)
         self._spectra = driver.mem_alloc_d(
             (dcube.size()[2], self._sums.nregions()), dtype)

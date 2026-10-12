@@ -41,6 +41,10 @@ plane of a disk (with its current parameters): e.g. less weight near the
 minor axis (weights: {component: gas, traits: {type: azimuth_power,
 power: 1}}), or none within an angle of it (type: azimuth_range).
 
+A named observation can also scale the flux of its model by a parameter
+(calibration: true gives the parameter {name}_calibration), e.g. between
+the instruments of a joint fit.
+
 Lines of sight
 --------------
 - Flat: the galaxies are evaluated on the plane of the sky (thin disks

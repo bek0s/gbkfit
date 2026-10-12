@@ -9,6 +9,7 @@ from gbkfit.driver import Driver
 from gbkfit.instrument import Instrument, instrument_parser
 from gbkfit.model import Band, BandEmission, LineCatalogue, band_parser
 from gbkfit.model.components.roles import load_band
+from gbkfit.params import ParamScalarDesc
 from gbkfit.utils import parseutils
 from gbkfit.utils.parseutils import ConfigError
 from ._scene import Scene, check_component_names
@@ -118,6 +119,10 @@ class Observation(parseutils.Serializable):
     weights : Weights, optional
         The spatial weights of its data (e.g. less weight near the minor
         axis of a disk); none by default.
+    calibration : bool, optional
+        Whether the flux of its model is times a parameter,
+        '{name}_calibration' (e.g. a flux scale between the instruments
+        of a joint fit); its name is then required. False by default.
     data : Dataset, optional
         The data, of the dataset class of the observable.
     likelihood : Likelihood, optional
@@ -136,8 +141,9 @@ class Observation(parseutils.Serializable):
     ------
     ConfigError
         If a name is invalid, there are no galaxies or they repeat, a band
-        is given to an observable that is not an image, the scale is not
-        one integer of at least 1
+        is given to an observable that is not an image, it has a
+        calibration but no name, the scale is not one integer of at least
+        1
         for each axis, there is a likelihood without data, the data are
         not those of the observable, the observable cannot be seen
         through the instrument (see Observable.check_instrument), or the
@@ -249,13 +255,14 @@ class Observation(parseutils.Serializable):
             band=band_parser.dump(self._band))
         weights = {} if self._weights is None else dict(
             weights=self._weights.dump())
+        calibration = dict(calibration=True) if self._calibration else {}
         # The form of the data is that of the observable: no type
         data = {} if self._data is None else dict(
             data={k: v for k, v in self._data.dump(**kwargs).items()
                   if k != 'type'},
             likelihood=likelihood_parser.dump(self._likelihood))
         return name | galaxies | components | lines | band | weights \
-            | data | dict(
+            | calibration | data | dict(
             line_of_sight=line_of_sight_parser.dump(self._line_of_sight),
             foreground=foreground_parser.dump(self._foreground, **kwargs),
             instrument=instrument_parser.dump(self._instrument, **kwargs),
@@ -276,6 +283,7 @@ class Observation(parseutils.Serializable):
             lines: Sequence[str] | None = None,
             band: Band | None = None,
             weights: Weights | None = None,
+            calibration: bool = False,
             data: Dataset | None = None,
             likelihood: Likelihood | None = None,
             scale: Sequence[int] | None = None,
@@ -303,6 +311,10 @@ class Observation(parseutils.Serializable):
             lines = tuple(lines)
             for line in lines:
                 parseutils.check_name(line)
+        if calibration and name is None:
+            raise ConfigError(
+                "an observation with a calibration needs a name, which "
+                "names its parameter ('{name}_calibration')")
         if band is not None and observable.emission is not BandEmission:
             raise ConfigError(
                 "only images have a band; the lines of spectral cubes are "
@@ -338,6 +350,7 @@ class Observation(parseutils.Serializable):
         self._lines = lines
         self._band = band
         self._weights = weights
+        self._calibration = calibration
         self._data = data
         self._likelihood = likelihood
         self._scale = scale
@@ -371,6 +384,19 @@ class Observation(parseutils.Serializable):
     def weights(self) -> Weights | None:
         """Return the spatial weights of its data, if any."""
         return self._weights
+
+    def pdescs(self) -> dict[str, ParamScalarDesc]:
+        """
+        Return its parameters: that of its calibration, if any (see the
+        class).
+        """
+        name = self._calibration_param()
+        return {} if name is None else {name: ParamScalarDesc(
+            desc=f"the flux scale of observation {self._name}")}
+
+    def _calibration_param(self) -> str | None:
+        """Return the name of the parameter of its calibration, if any."""
+        return f'{self._name}_calibration' if self._calibration else None
 
     def driver(self) -> Driver:
         """Return the driver the model is evaluated on."""
@@ -420,7 +446,8 @@ class Observation(parseutils.Serializable):
         """
         return self._observable.plan(
             self._driver, scene, self._foreground, self._instrument,
-            self._scale, self._dtype, self._weights)
+            self._scale, self._dtype, self._weights,
+            self._calibration_param())
 
 
 observation_parser = parseutils.BasicParser(Observation)

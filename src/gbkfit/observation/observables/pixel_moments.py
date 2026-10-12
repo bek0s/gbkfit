@@ -238,14 +238,16 @@ class PixelMoments(Observable):
             instrument: Instrument,
             scale: Sequence[int],
             dtype: np.dtype,
-            weights: 'Weights | None'
+            weights: 'Weights | None',
+            calibration: str | None
     ) -> 'PixelMomentsPlan':
         if weights is not None and self._method == 'gaussian_fit':
             raise ConfigError(
                 "the method gaussian_fit does not support weights yet")
         dcube = _moments.spectra_dcube(self, scale, instrument, dtype)
         return PixelMomentsPlan(
-            self, dcube, driver, scene, foreground, dtype, weights)
+            self, dcube, driver, scene, foreground, dtype, weights,
+            calibration)
 
 
 class PixelMomentsPlan(_detail.DCubePlanBase):
@@ -258,10 +260,11 @@ class PixelMomentsPlan(_detail.DCubePlanBase):
             scene: 'Scene',
             foreground: 'Foreground',
             dtype: np.dtype,
-            weights: 'Weights | None'
+            weights: 'Weights | None',
+            calibration: str | None
     ):
         super().__init__(
-            dcube, driver, scene, foreground, dtype, weights)
+            dcube, driver, scene, foreground, dtype, weights, calibration)
         self._moments = _moments.MomentsPlan(
             driver, moments.size(), moments.orders(), moments.mask_cutoff(),
             moments.method(), dtype)
