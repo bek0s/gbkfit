@@ -427,6 +427,16 @@ ring_info(
     return true;
 }
 
+// The velocity that the moments of the clouds of a Monte Carlo disk are
+// relative to (see gmodel_mcdisk_fields_moments): its systemic velocity
+// at its first node (0 without one), so that the squares of the
+// velocities are small (their differences lose less precision)
+template<typename T> constexpr T
+gmodel_fields_vref(const DiskArgs<T>& a)
+{
+    return a.vsys ? a.vsys[0] : T{0};
+}
+
 // Evaluate the cloud ci of a Monte Carlo disk. HasOpacity is whether
 // opacity dims the disk (a.opacity is not null): a template parameter, so
 // that the kernels without opacity have none of its code (nor its
@@ -677,6 +687,44 @@ gmodel_mcdisk_evaluate_cloud(
     if (a.vdweight_cmp) {
         AtomicAddFunT(&a.vdweight_cmp[idx], std::abs(rvalue));
     }
+    // The moments of the clouds of the voxel (see
+    // gmodel_mcdisk_fields_moments)
+    if (a.fields) {
+        const long long nspat = 1LL * a.spat_size[0] * a.spat_size[1]
+                * a.spat_size[2];
+        const T weight = std::abs(rvalue);
+        const T dv = vvalue - gmodel_fields_vref(a);
+        AtomicAddFunT(&a.fields[idx], rvalue);
+        AtomicAddFunT(&a.fields[nspat + idx], weight * dv);
+        AtomicAddFunT(
+                &a.fields[2 * nspat + idx],
+                weight * (dv * dv + dvalue * dvalue));
+        AtomicAddFunT(&a.fields[3 * nspat + idx], weight);
+    }
+}
+
+// Turn the moments of the clouds of a Monte Carlo disk in the voxel idx
+// (see DiskArgs::fields): the sum of their light (j), and of their
+// absolute light times dv, times dv^2 + s^2 and alone, where dv is their
+// velocity relative to gmodel_fields_vref, into the velocity and the
+// dispersion of one line of the same mean and variance as the sum of
+// their lines (weighted by their absolute light). A voxel without clouds
+// gets 0.
+template<typename T> constexpr void
+gmodel_mcdisk_fields_moments(long long idx, const DiskArgs<T>& a)
+{
+    const long long nspat = 1LL * a.spat_size[0] * a.spat_size[1]
+            * a.spat_size[2];
+    T* v = &a.fields[nspat + idx];
+    T* s = &a.fields[2 * nspat + idx];
+    const T weight = a.fields[3 * nspat + idx];
+    if (weight == 0) {
+        *v = *s = 0;
+        return;
+    }
+    const T dv = *v / weight;
+    *s = std::sqrt(std::max(*s / weight - dv * dv, T{0}));
+    *v = gmodel_fields_vref(a) + dv;
 }
 
 // The number of evaluations of a smooth disk along each spaxel: one for
@@ -936,6 +984,17 @@ gmodel_smdisk_evaluate_spaxel(int x, int y, int z, const DiskArgs<T>& a)
                 a.spec_zero);
     }
 
+    // The fields of the layer of a thin disk, wherever its plane crosses
+    // the line of sight (see DiskArgs::fields)
+    if (a.fields && is_thin) {
+        const long long nimage = 1LL * a.spat_size[0] * a.spat_size[1];
+        const int idx = index_2d_to_1d(x, y, a.spat_size[0]);
+        a.fields[idx] = rvalue;
+        a.fields[nimage + idx] = vvalue;
+        a.fields[2 * nimage + idx] = dvalue;
+        a.fields[3 * nimage + idx] = pz;
+    }
+
     // The voxel of the 3d outputs (a thin disk outside the grid has none).
     // The position is checked while it is a float: converting one out of
     // the range of int, or NaN, is undefined.
@@ -967,6 +1026,14 @@ gmodel_smdisk_evaluate_spaxel(int x, int y, int z, const DiskArgs<T>& a)
     }
     if (a.vdweight_cmp) {
         a.vdweight_cmp[idx] = std::abs(rvalue);
+    }
+    // The fields of the voxel of a thick disk
+    if (a.fields && !is_thin) {
+        const long long nspat = 1LL * a.spat_size[0] * a.spat_size[1]
+                * a.spat_size[2];
+        a.fields[idx] = rvalue;
+        a.fields[nspat + idx] = vvalue;
+        a.fields[2 * nspat + idx] = dvalue;
     }
 }
 

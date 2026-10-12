@@ -9,7 +9,7 @@ from gbkfit.params import ParamScalarDesc, ParamValues
 from gbkfit.utils import gridutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
 from ._detail import dump_geometry, dump_name
-from .base import Component, ComponentPlan, NativeGrid
+from .base import Component, ComponentPlan, FieldsLayout, NativeGrid
 from .geometries import Geometry
 from .lines import Band, Bands, LineCatalogue, Lines
 from .roles import BandEmission, Emission, LineEmission, emission_parser
@@ -194,6 +194,32 @@ class PointPlan(ComponentPlan):
                 if 0 <= channel < size:
                     spectrum[channel] += flux / step
         return spectrum
+
+    def fields_layout(self) -> FieldsLayout:
+        return FieldsLayout(layer=True, nslots=4)
+
+    def evaluate_fields(
+            self,
+            params: ParamValues,
+            grid: NativeGrid,
+            fields: DeviceArray,
+            out_extra: dict[str, Any] | None
+    ) -> None:
+        # A layer at its depth: at the pixels around it, its share of its
+        # light, its velocity and dispersion (none in a band), and its
+        # position along the depth axis (in voxels)
+        layout = self.fields_layout()
+        layer = np.zeros(layout.shape(grid), self._dtype)
+        depth = params['depth'] if self._depth else 0.0
+        brightness = params['flux'] / (
+            grid['spat_step'][0] * grid['spat_step'][1])
+        velocity, dispersion = (params['vsys'], abs(params['disp'])) \
+            if self._lines is not None else (0.0, 0.0)
+        position = (depth - grid['spat_zero'][2]) / grid['spat_step'][2]
+        for x, y, weight in _pixels(params, grid):
+            layer[:, y, x] = (
+                brightness * weight, velocity, dispersion, position)
+        self._driver.mem_copy_h2d(layer, fields)
 
     def evaluate_emission(
             self,

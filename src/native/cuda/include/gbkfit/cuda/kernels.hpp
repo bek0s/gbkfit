@@ -197,6 +197,19 @@ gmodel_mcdisk_evaluate(DiskArgs<T> a, MCDiskArgs<T> mc)
             rng, tid, a, mc);
 }
 
+template<typename T> __global__ void
+gmodel_mcdisk_fields_moments(DiskArgs<T> a)
+{
+    // Parallelization: per voxel
+    const long long nthreads = 1LL * a.spat_size[0] * a.spat_size[1]
+            * a.spat_size[2];
+    const long long tid = 1LL * blockIdx.x * blockDim.x + threadIdx.x;
+    if (tid >= nthreads)
+        return;
+
+    gbkfit::gmodel_mcdisk_fields_moments(tid, a);
+}
+
 template<typename T, bool HasOpacity> __global__ void
 gmodel_smdisk_evaluate(DiskArgs<T> a)
 {

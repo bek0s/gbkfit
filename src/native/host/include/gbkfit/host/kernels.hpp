@@ -268,6 +268,16 @@ gmodel_mcdisk_evaluate(const DiskArgs<T>& a, const MCDiskArgs<T>& mc)
         gbkfit::gmodel_mcdisk_evaluate_cloud<atomic_add<T>, HasOpacity>(
                 rng, ci, a, mc);
     }
+
+    // The fields of each voxel, from the moments of its clouds.
+    // Parallelization: per voxel
+    if (a.fields) {
+        const long long nspat = 1LL * a.spat_size[0] * a.spat_size[1]
+                * a.spat_size[2];
+        #pragma omp parallel for
+        for (long long idx = 0; idx < nspat; ++idx)
+            gbkfit::gmodel_mcdisk_fields_moments(idx, a);
+    }
 }
 
 template<typename T, bool HasOpacity> void

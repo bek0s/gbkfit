@@ -83,6 +83,18 @@ struct DiskArgs
     T* vdata_cmp = nullptr;
     T* ddata_cmp = nullptr;
     T* vdweight_cmp = nullptr;
+    // The fields of the disk that the march of radiative transfer reads,
+    // instead of its light (with neither an image nor a spectral cube):
+    // planes of the size of the 3d grid, one after the other. A thick
+    // smooth disk writes the light of each voxel (its density times the
+    // depth of the voxel: j), its velocity v and dispersion s. A Monte
+    // Carlo disk adds the moments of its clouds in each voxel (see
+    // gmodel_mcdisk_fields_moments), which then become j, v and s of
+    // one line, in four planes (the fourth is scratch). A thin disk
+    // writes j, v, s and the position along the depth axis (in voxels)
+    // where its plane crosses the line of sight of each spaxel, in four
+    // images (planes of the size of the x and y axes).
+    T* fields = nullptr;
 
     // The factor of the density in rdata (e.g. the ratio of the optical
     // depth of dust at the wavelength of an observation to that at V), and

@@ -157,6 +157,13 @@ Wrapper<T>::gmodel_mcdisk_evaluate(
             a.opacity ? kernels::gmodel_mcdisk_evaluate<T, true>
                       : kernels::gmodel_mcdisk_evaluate<T, false>,
             a, mc);
+    // The fields of each voxel, from the moments of its clouds
+    if (a.fields) {
+        const long long n = 1LL * a.spat_size[0] * a.spat_size[1]
+                * a.spat_size[2];
+        launch("gmodel_mcdisk_fields_moments", n,
+                kernels::gmodel_mcdisk_fields_moments<T>, a);
+    }
 }
 
 template<typename T> void

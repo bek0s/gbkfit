@@ -6,7 +6,7 @@ import numpy as np
 from gbkfit.driver import Driver
 from gbkfit.params import ParamDesc, ParamValues
 from gbkfit.utils import gridutils
-from ..base import Component, ComponentPlan
+from ..base import Component, ComponentPlan, FieldsLayout
 from ..geometries import Geometry
 from ..lines import Band, LineCatalogue
 from ..roles import Emission, Opacity
@@ -30,6 +30,13 @@ class SmoothDisk(_disk.Disk):
 
 class SmoothDiskPlan(_disk.DiskPlan):
     """The evaluation of a SmoothDisk."""
+
+    def fields_layout(self) -> FieldsLayout:
+        # (a thin disk is a layer where its plane crosses each line of
+        # sight; a thick one fills the voxels with j, v and s)
+        if self._disk.traits('rht'):
+            return FieldsLayout(layer=False, nslots=3)
+        return FieldsLayout(layer=True, nslots=4)
 
     def _impl_evaluate(
             self,

@@ -14,7 +14,7 @@ from gbkfit.math.interpolation import Interpolator
 from gbkfit.params import (
     ParamDesc, ParamScalarDesc, ParamValues, ParamVectorDesc)
 from gbkfit.utils import iterutils, parseutils
-from ..base import NativeGrid
+from ..base import FieldsLayout, NativeGrid
 from ..geometries import GEOMETRY_PARAMS
 from .traits import Trait
 
@@ -380,8 +380,10 @@ class DiskPlan(abc.ABC):
         evaluation functions (see NativeGrid), and outputs the arrays they
         add to (all optional): the cubes of opacity they read ('opacity')
         with their ratios ('opacity_ratios'), the 'image' (whose light is
-        times image_scale) or 'scube', and the 3d density ('rdata', times
-        rdata_scale) and density after the opacity ('ordata'). density_key names the density map in the extra
+        times image_scale) or 'scube', the 3d density ('rdata', times
+        rdata_scale) and density after the opacity ('ordata'), or instead
+        of the light, the fields of the march, which they write ('fields',
+        see fields_layout). density_key names the density map in the extra
         outputs (e.g. 'bdata' for light, 'odata' for dust). lines has the
         offset, scale and flux of each emission line (an array of shape
         (nlines, 3); see the native DiskArgs), if the plan has lines.
@@ -454,6 +456,14 @@ class DiskPlan(abc.ABC):
             if disk._traits['dpt']:
                 sumabs = np.nansum(np.abs(out_extra['ddata']))
                 _log.debug(f"sum(abs(ddata)): {sumabs}")
+
+    @abc.abstractmethod
+    def fields_layout(self) -> FieldsLayout:
+        """
+        Return how the disk holds its fields for the march of radiative
+        transfer (see the native DiskArgs::fields).
+        """
+        pass
 
     def evaluate_polar_traits(
             self,

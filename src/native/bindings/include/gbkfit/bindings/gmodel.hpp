@@ -95,15 +95,17 @@ struct GModel
             Data rdata, Data rdata_cmp,
             Data ordata, Data ordata_cmp,
             Data vdata_cmp, Data ddata_cmp, Data vdweight_cmp,
+            Data fields,
             T rdata_scale, T image_scale)
     {
+        // (a thick disk writes three fields: j, v and s)
         Kernels::gmodel_smdisk_evaluate(make_args(
                 disk, spat_size, spat_step, spat_zero, spat_rota,
                 spec_size, spec_step, spec_zero, lines,
                 opacity, opacity_ratios,
                 image, scube, rdata, rdata_cmp,
                 ordata, ordata_cmp, vdata_cmp, ddata_cmp, vdweight_cmp,
-                rdata_scale, image_scale));
+                fields, 3, rdata_scale, image_scale));
     }
 
     static void
@@ -122,15 +124,18 @@ struct GModel
             Data rdata, Data rdata_cmp,
             Data ordata, Data ordata_cmp,
             Data vdata_cmp, Data ddata_cmp, Data vdweight_cmp,
+            Data fields,
             T rdata_scale, T image_scale)
     {
+        // (with the scratch of the moments of the clouds, a Monte Carlo
+        // disk writes four fields)
         const auto args = make_args(
                 disk, spat_size, spat_step, spat_zero, spat_rota,
                 spec_size, spec_step, spec_zero, lines,
                 opacity, opacity_ratios,
                 image, scube, rdata, rdata_cmp,
                 ordata, ordata_cmp, vdata_cmp, ddata_cmp, vdweight_cmp,
-                rdata_scale, image_scale);
+                fields, 4, rdata_scale, image_scale);
         require(disk.rht.has_value(),
                 "a Monte Carlo disk needs density height traits");
         require(has_analytical_integral.shape(0) == size_t(args.rpt.n),
@@ -266,6 +271,7 @@ struct GModel
                     nb::arg("vdata_cmp").noconvert().none() = nb::none(),
                     nb::arg("ddata_cmp").noconvert().none() = nb::none(),
                     nb::arg("vdweight_cmp").noconvert().none() = nb::none(),
+                    nb::arg("fields").noconvert().none() = nb::none(),
                     nb::arg("rdata_scale") = T{1},
                     nb::arg("image_scale") = T{1});
         };
@@ -372,6 +378,7 @@ private:
             const Data& ordata, const Data& ordata_cmp,
             const Data& vdata_cmp, const Data& ddata_cmp,
             const Data& vdweight_cmp,
+            const Data& fields, int volume_fields,
             T rdata_scale, T image_scale)
     {
         DiskArgs<T> a;
@@ -471,6 +478,16 @@ private:
         a.vdata_cmp = output(vdata_cmp, nspat, "vdata_cmp");
         a.ddata_cmp = output(ddata_cmp, nspat, "ddata_cmp");
         a.vdweight_cmp = output(vdweight_cmp, nspat, "vdweight_cmp");
+        // The fields replace the light and its opacity: volume_fields
+        // planes of the 3d grid for a thick disk, four of the x and y axes
+        // for a thin one (see DiskArgs::fields)
+        require(!fields.is_valid() || !(image.is_valid() || scube.is_valid()
+                                         || opacity.is_valid()),
+                "fields replace the image, the spectral cube and the "
+                "opacity");
+        a.fields = output(
+                fields, disk.rht ? volume_fields * nspat : 4 * nimage,
+                "fields");
         a.rdata_scale = rdata_scale;
         a.image_scale = image_scale;
         return a;
