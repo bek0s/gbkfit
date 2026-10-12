@@ -116,7 +116,7 @@ class ObservationGroup:
             [self._mappings[j] for j in seen],
             [self._prefixes[j] for j in seen],
             observation.components(), observation.lines(),
-            observation.line_of_sight(),
+            observation.band(), observation.line_of_sight(),
             observation.observable().emission)
 
     def galaxies(self) -> tuple[Galaxy, ...]:

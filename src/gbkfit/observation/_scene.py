@@ -10,7 +10,7 @@ from typing import Any
 import numpy as np
 
 from gbkfit.driver import DeviceArray, Driver
-from gbkfit.model import BandEmission, Emission, Galaxy
+from gbkfit.model import Band, BandEmission, Emission, Galaxy
 from gbkfit.model.components._component_set import (
     IMAGE_SPECTRAL_AXIS, ComponentSetPlan)
 from gbkfit.params import ParamValues
@@ -30,7 +30,8 @@ class Scene:
     """
     What an observation sees: galaxies, the indices of the components of
     each whose light it sees (its emitters; the opacity of all components
-    applies), its emission lines (all if None) and its line of sight. The
+    applies), its emission lines (all if None) or its band (if known), and
+    its line of sight. The
     parameters of each galaxy have the names of the mapping of the galaxy
     among those of the observation group, and its extra outputs the
     prefix of the galaxy.
@@ -43,6 +44,7 @@ class Scene:
             prefixes: Sequence[str],
             emitters: Sequence[tuple[int, ...]],
             lines: tuple[str, ...] | None,
+            band: Band | None,
             line_of_sight: LineOfSight
     ):
         self._galaxies = tuple(galaxies)
@@ -50,6 +52,7 @@ class Scene:
         self._prefixes = tuple(prefixes)
         self._emitters = tuple(emitters)
         self._lines = lines
+        self._band = band
         self._line_of_sight = line_of_sight
 
     def plan(
@@ -87,7 +90,7 @@ class ScenePlan:
         self._plans: tuple[ComponentSetPlan, ...] = tuple(
             galaxy.plan(
                 driver, spatial, spectral, depth, dtype, emitters,
-                scene._lines)
+                scene._lines, scene._band)
             for galaxy, emitters in zip(scene._galaxies, scene._emitters))
 
     def evaluate(
@@ -119,15 +122,17 @@ def make_scene(
         prefixes: Sequence[str],
         components: Sequence[str] | None,
         lines: tuple[str, ...] | None,
+        band: Band | None,
         line_of_sight: LineOfSight,
         emission: type[Emission]
 ) -> Scene:
     """
     Return the scene of an observation of the given galaxies (see Scene),
-    which sees the emission of the given type (see Observable.emission).
-    The names of the components it sees (all those with that emission if
-    None) are qualified by the names of their galaxies ('galaxy.component')
-    when it sees several.
+    which sees the emission of the given type (see Observable.emission),
+    in the given band if known (an image). The names of the components it
+    sees (all those with that emission, in its band, if None) are
+    qualified by the names of their galaxies ('galaxy.component') when it
+    sees several.
 
     Raises
     ------
@@ -142,7 +147,7 @@ def make_scene(
     kind = "an image, which sees the components that emit in a band" \
         if emission is BandEmission else \
         "a spectral cube, which sees the components that emit lines"
-    emitters = _select_emitters(galaxies, components, emission, kind)
+    emitters = _select_emitters(galaxies, components, emission, band, kind)
     if not any(emitters):
         raise ConfigError(f"the observation is {kind}; it sees none")
     _check_lines(galaxies, emitters, lines)
@@ -165,7 +170,7 @@ def make_scene(
                     f"component {_label(galaxy, i)}: {e}") from e
     return Scene(
         galaxies, mappings, prefixes, [tuple(e) for e in emitters], lines,
-        line_of_sight)
+        band, line_of_sight)
 
 
 def _label(galaxy: Galaxy, index: int) -> str:
@@ -180,18 +185,22 @@ def _select_emitters(
         galaxies: Sequence[Galaxy],
         names: Sequence[str] | None,
         emission: type,
+        band: Band | None,
         kind: str
 ) -> list[list[int]]:
     """
     Return the indices of the components of each galaxy whose light is
     seen: those of the given names (qualified when there are several
-    galaxies), or all those whose emission is of the given type, in their
-    order. kind describes the observation in messages.
+    galaxies), or all those whose emission is of the given type, in the
+    given band (see Emission.emits_in), in their order. kind describes the
+    observation in messages.
     """
+    def seen(cmp):
+        return isinstance(cmp.emission(), emission) \
+            and cmp.emission().emits_in(band)
     if names is None:
         return [
-            [i for i, cmp in enumerate(galaxy.components())
-             if isinstance(cmp.emission(), emission)]
+            [i for i, cmp in enumerate(galaxy.components()) if seen(cmp)]
             for galaxy in galaxies]
     if not names:
         raise ConfigError("at least one component must be selected")
@@ -216,6 +225,10 @@ def _select_emitters(
             raise ConfigError(
                 f"the component {name!r} is selected, but the observation "
                 f"is {kind}")
+        if not seen(galaxies[g].components()[i]):
+            raise ConfigError(
+                f"the component {name!r} is selected, but it does not emit "
+                f"in the band {band.name()!r} of the image")
         selected[g].append(i)
     return [sorted(indices) for indices in selected]
 

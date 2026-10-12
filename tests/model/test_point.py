@@ -172,6 +172,7 @@ def test_point_plan_takes_a_dtype_or_its_type(driver):
     image = driver.mem_alloc_d((4, 6), np.float32)
     driver.mem_fill(image, 0)
     plan = galaxy.plan(
-        driver, grid, IMAGE_SPECTRAL_AXIS, None, np.float32, (0,), None)
+        driver, grid, IMAGE_SPECTRAL_AXIS, None, np.float32, (0,), None,
+        None)
     plan.evaluate(dict(xpos=0.5, ypos=0.5, flux=2), dict(image=image), None)
     assert driver.mem_copy_d2h(image).sum() == 2

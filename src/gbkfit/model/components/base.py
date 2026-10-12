@@ -8,6 +8,7 @@ from gbkfit.params import ParamDesc, ParamValues
 from gbkfit.utils import gridutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
 from .geometries import Geometry
+from .lines import Band
 from .roles import Emission, LineEmission, Opacity
 
 if TYPE_CHECKING:
@@ -162,6 +163,7 @@ class Component(parseutils.TypedSerializable, abc.ABC):
             spectral: gridutils.Grid,
             dtype: np.dtype,
             lines: tuple[str, ...] | None,
+            band: Band | None,
             emits: bool,
             opacity_ratios: np.ndarray | None
     ) -> 'ComponentPlan':
@@ -179,6 +181,8 @@ class Component(parseutils.TypedSerializable, abc.ABC):
             The floating type of the evaluation.
         lines : tuple of str, optional
             The names of the emission lines to evaluate; all if None.
+        band : Band, optional
+            The band of the image it is evaluated in, if known.
         emits : bool
             Whether its light is evaluated (an observation sees it), or
             only its opacity.

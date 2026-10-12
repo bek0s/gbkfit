@@ -15,9 +15,10 @@ from gbkfit.utils.parseutils import ConfigError
 from .._detail import dump_geometry, dump_name, parse_nodes
 from ..base import Component, ComponentPlan, NativeGrid
 from ..geometries import Geometry
-from ..lines import LineCatalogue, Lines
+from ..lines import Band, Bands, LineCatalogue, Lines
 from ..roles import (
-    Emission, LineEmission, Opacity, emission_parser, opacity_parser)
+    BandEmission, Emission, LineEmission, Opacity, emission_parser,
+    opacity_parser)
 from . import _disk, traits
 from .parts import Density, Kinematics, density_parser, kinematics_parser
 
@@ -27,6 +28,7 @@ __all__ = [
     'disk_plan',
     'dump_disk_component',
     'load_disk_component',
+    'make_bands',
     'make_disk',
     'make_lines'
 ]
@@ -235,40 +237,60 @@ def make_lines(disk: _disk.Disk, emission: Emission | None) -> Lines | None:
     return lines
 
 
+def make_bands(disk: _disk.Disk, emission: Emission | None) -> Bands | None:
+    """
+    Return the bands of a disk component (see Bands), if it emits in
+    bands, whose parameters must have other names than those of the disk.
+    """
+    if not isinstance(emission, BandEmission):
+        return None
+    bands = emission.bands()
+    if repeated := sorted(set(bands.pdescs()) & set(disk.pdescs())):
+        raise ConfigError(
+            f"the parameters of the bands have the names of other "
+            f"parameters: {repeated}; rename the bands")
+    return bands
+
+
 def disk_plan(
         disk: _disk.Disk,
         lines: Lines | None,
+        bands: Bands | None,
         driver: Driver,
         spectral: gridutils.Grid,
         dtype: np.dtype,
         names: tuple[str, ...] | None,
+        band: Band | None,
         emits: bool,
         opacity_ratios: np.ndarray | None
 ) -> 'DiskComponentPlan':
     """
     Return the plan of a disk component made of the given disk, with the
-    given emission lines (if any), of which those of the given names (all
-    if None) are evaluated if it emits, dimmed by the opacity with the
-    given ratios (see Component.plan).
+    given emission lines or bands (if any), of which it evaluates, if it
+    emits, the lines of the given names (all if None) or the given band
+    (if known), dimmed by the opacity with the given ratios (see
+    Component.plan).
     """
     if not emits:
         return DiskComponentPlan(driver, disk.plan(driver, 0, dtype))
     if lines is None:
         return DiskComponentPlan(
-            driver, disk.plan(driver, 0, dtype), opacity_ratios)
+            driver, disk.plan(driver, 0, dtype), opacity_ratios,
+            band_ratio=bands.ratio_name(band))
     selected = lines.select(names)
     return DiskComponentPlan(
         driver, disk.plan(driver, len(selected), dtype), opacity_ratios,
-        lines, selected, spectral)
+        lines=lines, selected=selected, spectral=spectral)
 
 
 class DiskComponentPlan(ComponentPlan):
     """
     The evaluation of a component made of one disk: the plan of its disk,
     which adds its light (and, with lines, the selected emission lines,
-    at their places on the given spectral axis) to the outputs, dimmed by
-    the opacity with the given ratios (see Component.plan), or its optical
-    depth to a cube of opacity.
+    at their places on the given spectral axis; or in an image, times the
+    flux ratio of the band of the image, the parameter band_ratio, if any)
+    to the outputs, dimmed by the opacity with the given ratios (see
+    Component.plan), or its optical depth to a cube of opacity.
     """
 
     def __init__(
@@ -276,11 +298,14 @@ class DiskComponentPlan(ComponentPlan):
             driver: Driver,
             disk_plan_: _disk.DiskPlan,
             opacity_ratios: np.ndarray | None = None,
+            *,
+            band_ratio: str | None = None,
             lines: Lines | None = None,
             selected: Sequence[int] = (),
             spectral: gridutils.Grid | None = None
     ):
         self._disk_plan = disk_plan_
+        self._band_ratio = band_ratio
         self._opacity_ratios = None
         if opacity_ratios is not None:
             self._opacity_ratios = driver.mem_copy_h2d(opacity_ratios)
@@ -316,8 +341,11 @@ class DiskComponentPlan(ComponentPlan):
             opacity_ratios=self._opacity_ratios if odata is not None
             else None,
             ordata=outputs.get('obdata'))
+        image_scale = 1.0 if self._band_ratio is None \
+            else params[self._band_ratio]
         self._disk_plan.evaluate(
-            params, grid, disk_outputs, out_extra, 'bdata', self._lines)
+            params, grid, disk_outputs, out_extra, 'bdata', self._lines,
+            image_scale=image_scale)
 
     def evaluate_opacity(
             self,

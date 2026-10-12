@@ -19,6 +19,7 @@ from .base import Component, ComponentPlan, DepthAxis, NativeGrid
 from .disks._disk import DiskPlan
 from .disks._profiles import DiskDensity, pressure_support
 from .extinction import ExtinctionLaw
+from .lines import Band
 from .geometries import Geometry
 
 
@@ -246,14 +247,17 @@ class ComponentSet:
             depth: DepthAxis | None,
             dtype: np.dtype,
             emitters: Sequence[int],
-            lines: tuple[str, ...] | None
+            lines: tuple[str, ...] | None,
+            band: Band | None,
+            redshift: float
     ) -> 'ComponentSetPlan':
         """
         Plan the evaluation of the components on a driver and dtype (see
         ComponentSetPlan).
         """
         return ComponentSetPlan(
-            self, driver, grid, spectral, depth, dtype, emitters, lines)
+            self, driver, grid, spectral, depth, dtype, emitters, lines,
+            band, redshift)
 
 
 class ComponentSetPlan:
@@ -289,6 +293,11 @@ class ComponentSetPlan:
         The indices of the components whose light is evaluated.
     lines : tuple of str, optional
         The names of the emission lines evaluated; all if None.
+    band : Band, optional
+        The band of an image, if known.
+    redshift : float
+        The redshift of the galaxy, which makes the rest wavelengths of
+        bands.
 
     Raises
     ------
@@ -309,7 +318,9 @@ class ComponentSetPlan:
             depth: DepthAxis | None,
             dtype: np.dtype,
             emitters: Sequence[int],
-            lines: tuple[str, ...] | None
+            lines: tuple[str, ...] | None,
+            band: Band | None,
+            redshift: float
     ):
         components = component_set.components()
         absorbers = [
@@ -331,7 +342,8 @@ class ComponentSetPlan:
         self._odata = None
         if absorbers:
             wavelengths = {
-                i: components[i].emission().wavelengths(lines)
+                i: components[i].emission().wavelengths(
+                    lines, band, redshift)
                 for i in emitters}
             cube_laws, cubes, scales = _opacity_cubes(
                 [components[i].opacity().law() for i in absorbers],
@@ -349,10 +361,11 @@ class ComponentSetPlan:
         # here
         plans = {
             i: components[i].plan(
-                driver, spectral, dtype, lines, True, ratios[i])
+                driver, spectral, dtype, lines, band, True, ratios[i])
             for i in emitters}
         plans |= {
-            i: components[i].plan(driver, spectral, dtype, lines, False, None)
+            i: components[i].plan(
+                driver, spectral, dtype, lines, band, False, None)
             for i in absorbers if i not in plans}
         self._emitters = tuple(emitters)
         self._absorbers = tuple(absorbers)
@@ -511,9 +524,9 @@ def _ratio(law: ExtinctionLaw | None, wavelength: float | None) -> float:
         return 1.0
     if wavelength is None:
         raise ConfigError(
-            "dust of an extinction law dims light at the rest wavelength of "
-            "its lines, so the emission of the components it dims must name "
-            "its lines (e.g. lines: [halpha]); images see grey dust only")
+            "dust of an extinction law dims light at its rest wavelength: "
+            "the emission of the components it dims must name its lines "
+            "(e.g. lines: [halpha]), and an image needs its band")
     return law.ratio(wavelength)
 
 

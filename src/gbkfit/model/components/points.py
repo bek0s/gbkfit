@@ -11,8 +11,8 @@ from gbkfit.utils.parseutils import ConfigError
 from ._detail import dump_geometry, dump_name
 from .base import Component, ComponentPlan, NativeGrid
 from .geometries import Geometry
-from .lines import LineCatalogue, Lines
-from .roles import Emission, LineEmission, emission_parser
+from .lines import Band, Bands, LineCatalogue, Lines
+from .roles import BandEmission, Emission, LineEmission, emission_parser
 
 
 __all__ = [
@@ -39,17 +39,20 @@ def point_pdescs(spectral: bool, depth: bool) -> dict[str, ParamScalarDesc]:
     return {name: ParamScalarDesc() for name in names}
 
 
-def _spectral_pdescs(lines: Lines, depth: bool) -> dict[str, ParamScalarDesc]:
+def _light_pdescs(
+        light: Lines | Bands, spectral: bool, depth: bool
+) -> dict[str, ParamScalarDesc]:
     """
-    Return the parameters of a spectral point with the given lines. Raise
-    ConfigError if the lines have the names of its other parameters.
+    Return the parameters of a point with the given lines (a spectral
+    point) or bands. Raise ConfigError if their flux ratios have the names
+    of its other parameters.
     """
-    pdescs = point_pdescs(spectral=True, depth=depth)
-    if repeated := sorted(set(lines.pdescs()) & set(pdescs)):
+    pdescs = point_pdescs(spectral=spectral, depth=depth)
+    if repeated := sorted(set(light.pdescs()) & set(pdescs)):
         raise ConfigError(
-            f"the parameters of the lines have the names of other "
-            f"parameters: {repeated}; rename the lines")
-    return pdescs | lines.pdescs()
+            f"the parameters of the flux ratios have the names of other "
+            f"parameters: {repeated}; rename the lines or bands")
+    return pdescs | light.pdescs()
 
 
 def _spectral_plan(
@@ -71,7 +74,8 @@ def _spectral_plan(
         (row, lines.ratio_name(index))
         for row, index in enumerate(selected)
         if lines.ratio_name(index) is not None]
-    return PointPlan(driver, dtype, depth, opacity_ratios, values, ratios)
+    return PointPlan(
+        driver, dtype, depth, opacity_ratios, lines=values, ratios=ratios)
 
 
 def _pixels(
@@ -134,9 +138,11 @@ class PointPlan(ComponentPlan):
     mean over the channel (as the disks do). On a grid with a depth axis,
     the opacity in front of its depth (its parameter 'depth' if depth, or
     0: the plane of the sky through the centre of its galaxy) dims it,
-    with its opacity_ratios (see Component.plan). lines has the offset,
-    scale and flux of each line (spectral points), and ratios the row and
-    the name of the flux ratio of the lines after the first.
+    with its opacity_ratios (see Component.plan). In an image, its flux is
+    times that of the parameter band_ratio, if any (the flux ratio of the
+    band of the image). lines has the offset, scale and flux of each line
+    (spectral points), and ratios the row and the name of the flux ratio
+    of the lines after the first.
     """
 
     def __init__(
@@ -145,6 +151,7 @@ class PointPlan(ComponentPlan):
             dtype: np.dtype,
             depth: bool,
             opacity_ratios: np.ndarray | None,
+            band_ratio: str | None = None,
             lines: np.ndarray | None = None,
             ratios: Sequence[tuple[int, str]] = ()
     ):
@@ -152,6 +159,7 @@ class PointPlan(ComponentPlan):
         self._dtype = np.dtype(dtype)
         self._depth = depth
         self._opacity_ratios = opacity_ratios
+        self._band_ratio = band_ratio
         self._lines = None if lines is None else np.array(lines, dtype=float)
         self._ratios = tuple(ratios)
 
@@ -214,6 +222,8 @@ class PointPlan(ComponentPlan):
                 transmission = np.exp(-self._opacity_ratios @ _optical_depths(
                     columns, depth, grid))
             if image is not None:
+                if self._band_ratio is not None:
+                    weight *= params[self._band_ratio]
                 if transmission is not None:
                     weight *= transmission[0]
                 pixel = image.reshape(-1, *image.shape[-2:])[0, y, x:x + 1]
@@ -293,10 +303,13 @@ class Point(Component):
         super().__init__(name, geometry, emission, None)
         self._depth = depth
         self._lines = None
-        self._pdescs = point_pdescs(spectral=False, depth=depth)
+        self._bands = None
         if isinstance(emission, LineEmission):
             self._lines = emission.lines()
-            self._pdescs = _spectral_pdescs(self._lines, depth)
+            self._pdescs = _light_pdescs(self._lines, True, depth)
+        if isinstance(emission, BandEmission):
+            self._bands = emission.bands()
+            self._pdescs = _light_pdescs(self._bands, False, depth)
 
     def depth(self) -> bool:
         """Check whether its depth along the line of sight is a parameter."""
@@ -314,11 +327,14 @@ class Point(Component):
             spectral: gridutils.Grid,
             dtype: np.dtype,
             lines: tuple[str, ...] | None,
+            band: Band | None,
             emits: bool,
             opacity_ratios: np.ndarray | None
     ) -> PointPlan:
         if self._lines is None:
-            return PointPlan(driver, dtype, self._depth, opacity_ratios)
+            return PointPlan(
+                driver, dtype, self._depth, opacity_ratios,
+                self._bands.ratio_name(band))
         return _spectral_plan(
             driver, spectral, dtype, self._depth, opacity_ratios,
             self._lines, lines)

@@ -554,7 +554,8 @@ def test_disk_densities_are_azimuthal_means(driver):
         pt2_a=0.5, pt2_s=0.3, pt2_q=1, pt2_p=0, dpt_a=10, spt_rmin=0,
         spt_rmax=18)
     plan = component.plan(
-        driver, IMAGE_SPECTRAL_AXIS, np.dtype(np.float32), None, True, None)
+        driver, IMAGE_SPECTRAL_AXIS, np.dtype(np.float32), None, None, True,
+        None)
     density = DiskDensity(
         component.density_disk(), plan.disk_plan(), params, KPC_PER_ARCSEC)
     radius = np.array(component.density_disk().subrnodes())
@@ -643,7 +644,8 @@ def test_pressure_support_is_the_jeans_equation(driver):
         xpos=0, ypos=0, posa=30, incl=60, vsys=0, pt_a=1, pt_s=4,
         dpt_a=30, dpt_s=10)
     plan = component.plan(
-        driver, IMAGE_SPECTRAL_AXIS, np.dtype(np.float32), None, True, None)
+        driver, IMAGE_SPECTRAL_AXIS, np.dtype(np.float32), None, None, True,
+        None)
     disk = component.density_disk()
     radius = np.array(disk.subrnodes())
     np.testing.assert_allclose(
