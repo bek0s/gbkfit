@@ -519,11 +519,14 @@ gmodel_fields_vref(const DiskArgs<T>& a)
 }
 
 // Evaluate the cloud ci of a Monte Carlo disk. HasOpacity is whether
-// opacity dims the disk (a.opacity is not null), and HasFields whether it
+// opacity dims the disk (a.opacity is not null), HasFields whether it
 // writes the fields of the march instead of its light (a.fields is not
-// null): template parameters, so that the other kernels have none of
+// null), and HasLineOpacity whether they have its line opacity (a.opt has
+// traits): template parameters, so that the other kernels have none of
 // their code (nor its registers and local memory, on a GPU).
-template<auto AtomicAddFunT, bool HasOpacity, bool HasFields, typename T>
+template<
+        auto AtomicAddFunT, bool HasOpacity, bool HasFields,
+        bool HasLineOpacity, typename T>
 constexpr void
 gmodel_mcdisk_evaluate_cloud(
         RNG<T>& rng, int ci, const DiskArgs<T>& a, const MCDiskArgs<T>& mc)
@@ -776,7 +779,7 @@ gmodel_mcdisk_evaluate_cloud(
     if (HasFields) {
         const long long nspat = 1LL * a.spat_size[0] * a.spat_size[1]
                 * a.spat_size[2];
-        const int nk = gmodel_fields_lines(a);
+        const int nk = HasLineOpacity ? a.nlines : 0;
         const T weight = std::abs(rvalue);
         const T dv = vvalue - gmodel_fields_vref(a);
         AtomicAddFunT(&a.fields[idx], rvalue);
@@ -784,7 +787,7 @@ gmodel_mcdisk_evaluate_cloud(
         AtomicAddFunT(
                 &a.fields[2 * nspat + idx],
                 weight * (dv * dv + dvalue * dvalue));
-        if (nk) {
+        if (HasLineOpacity) {
             T coefficients[TRAIT_NUM_MAX];
             gmodel_line_opacity(coefficients, rnidx, xd, yd, rd, theta, a);
             for (int l = 0; l < nk; ++l) {
@@ -839,9 +842,11 @@ gmodel_smdisk_size_z(const DiskArgs<T>& a)
 // spectrum of its spaxel, which the other voxels of the spaxel add to too:
 // it must be atomic if they are evaluated in parallel. Only this voxel
 // writes to its other outputs. HasOpacity is whether opacity dims the disk,
-// and HasFields whether it writes the fields of the march (see
-// gmodel_mcdisk_evaluate_cloud).
-template<auto AddFunT, bool HasOpacity, bool HasFields, typename T>
+// HasFields whether it writes the fields of the march, and HasLineOpacity
+// whether they have its line opacity (see gmodel_mcdisk_evaluate_cloud).
+template<
+        auto AddFunT, bool HasOpacity, bool HasFields, bool HasLineOpacity,
+        typename T>
 constexpr void
 gmodel_smdisk_evaluate_spaxel(int x, int y, int z, const DiskArgs<T>& a)
 {
@@ -1131,7 +1136,7 @@ gmodel_smdisk_evaluate_spaxel(int x, int y, int z, const DiskArgs<T>& a)
         a.fields[idx] = rvalue;
         a.fields[nspat + idx] = vvalue;
         a.fields[2 * nspat + idx] = dvalue;
-        if (a.opt.uids) {
+        if (HasLineOpacity) {
             T coefficients[TRAIT_NUM_MAX];
             gmodel_line_opacity(coefficients, rnidx, xn, yn, rn, theta, a);
             for (int l = 0; l < a.nlines; ++l)
