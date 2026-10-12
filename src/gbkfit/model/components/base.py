@@ -19,6 +19,7 @@ __all__ = [
     'Component',
     'ComponentPlan',
     'DepthAxis',
+    'FieldsLayout',
     'NativeGrid'
 ]
 
@@ -48,6 +49,24 @@ class NativeGrid(TypedDict):
     spec_size: int
     spec_step: float
     spec_zero: float
+
+
+class FieldsLayout(NamedTuple):
+    """
+    How an emitter holds its fields for the march of radiative transfer
+    (see the native DiskArgs::fields): nslots values in each voxel of the
+    3d grid (a volume, e.g. a thick disk), or in each spaxel (a layer at
+    a depth along each line of sight: j, v, s and the position along the
+    depth axis, in voxels; e.g. a thin disk or a point).
+    """
+    layer: bool
+    nslots: int
+
+    def shape(self, grid: NativeGrid) -> tuple[int, ...]:
+        """Return the shape of the fields on a grid."""
+        size_x, size_y, size_z = grid['spat_size']
+        planes = (size_y, size_x) if self.layer else (size_z, size_y, size_x)
+        return (self.nslots,) + planes
 
 
 class Component(parseutils.TypedSerializable, abc.ABC):
@@ -205,7 +224,8 @@ class ComponentPlan(abc.ABC):
     """
     The evaluation of a component on a driver and dtype, in two stages:
     the opacity of all the components of a galaxy, then the light of
-    those an observation sees, dimmed by that opacity.
+    those an observation sees, dimmed by that opacity; or, for the march
+    of radiative transfer, the fields of the light instead of the light.
     """
 
     def disk_plan(self) -> 'DiskPlan | None':
@@ -237,6 +257,40 @@ class ComponentPlan(abc.ABC):
             the far side of each voxel of each cube of opacity ('odata',
             of shape (ncubes, nz, ny, nx)), which it scales with its
             opacity_ratios (see Component.plan).
+        out_extra : dict, optional
+            Where its extra outputs (on the host) go, if wanted.
+        """
+        pass
+
+    @abc.abstractmethod
+    def fields_layout(self) -> FieldsLayout:
+        """Return how it holds its fields (see evaluate_fields)."""
+        pass
+
+    @abc.abstractmethod
+    def evaluate_fields(
+            self,
+            params: ParamValues,
+            grid: NativeGrid,
+            fields: DeviceArray,
+            out_extra: dict[str, Any] | None
+    ) -> None:
+        """
+        Write the fields of its light that the march of radiative transfer
+        reads (see FieldsLayout), instead of its light: its light without
+        the flux of its lines (or the flux ratio of its band), its velocity
+        and its dispersion, in each voxel or spaxel of the grid (0 where
+        there is none).
+
+        Parameters
+        ----------
+        params : dict
+            The values of its parameters, by name.
+        grid : NativeGrid
+            The grid of the evaluation.
+        fields : DeviceArray
+            The fields, of the shape of its layout on the grid (see
+            FieldsLayout.shape).
         out_extra : dict, optional
             Where its extra outputs (on the host) go, if wanted.
         """

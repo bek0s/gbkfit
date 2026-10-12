@@ -8,7 +8,7 @@ from gbkfit.math.interpolation import Interpolator
 from gbkfit.params import ParamDesc, ParamValues
 from gbkfit.utils import gridutils
 from gbkfit.utils.parseutils import ConfigError
-from ..base import Component, ComponentPlan
+from ..base import Component, ComponentPlan, FieldsLayout
 from ..geometries import Geometry
 from ..lines import Band, LineCatalogue
 from ..roles import Emission, Opacity
@@ -96,6 +96,10 @@ class CloudDiskPlan(_disk.DiskPlan):
         npools = sum([1 if h else nrings for h in analytical])
         self._s_ncloudscsum = driver.mem_alloc_s(npools, np.int32)
         self._s_cloud_flux = driver.mem_alloc_s(npools, dtype)
+
+    def fields_layout(self) -> FieldsLayout:
+        # (j, v, s and the scratch of the moments of the clouds)
+        return FieldsLayout(layer=False, nslots=4)
 
     def _impl_evaluate(
             self,

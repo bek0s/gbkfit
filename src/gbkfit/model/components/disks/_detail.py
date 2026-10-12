@@ -13,7 +13,7 @@ from gbkfit.params import ParamValues
 from gbkfit.utils import gridutils, iterutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
 from .._detail import dump_geometry, dump_name, parse_nodes
-from ..base import Component, ComponentPlan, NativeGrid
+from ..base import Component, ComponentPlan, FieldsLayout, NativeGrid
 from ..geometries import Geometry
 from ..lines import Band, Bands, LineCatalogue, Lines
 from ..roles import (
@@ -304,6 +304,7 @@ class DiskComponentPlan(ComponentPlan):
             selected: Sequence[int] = (),
             spectral: gridutils.Grid | None = None
     ):
+        self._driver = driver
         self._disk_plan = disk_plan_
         self._band_ratio = band_ratio
         self._opacity_ratios = None
@@ -346,6 +347,20 @@ class DiskComponentPlan(ComponentPlan):
         self._disk_plan.evaluate(
             params, grid, disk_outputs, out_extra, 'bdata', self._lines,
             image_scale=image_scale)
+
+    def fields_layout(self) -> FieldsLayout:
+        return self._disk_plan.fields_layout()
+
+    def evaluate_fields(
+            self,
+            params: ParamValues,
+            grid: NativeGrid,
+            fields: DeviceArray,
+            out_extra: dict[str, Any] | None
+    ) -> None:
+        self._driver.mem_fill(fields, 0)
+        self._disk_plan.evaluate(
+            params, grid, dict(fields=fields), out_extra, 'bdata')
 
     def evaluate_opacity(
             self,
