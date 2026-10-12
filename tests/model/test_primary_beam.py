@@ -16,18 +16,20 @@ from gbkfit.instrument import (
 from gbkfit.utils import fitsutils, gridutils
 
 
-MODEL = dict(type='intensity_2d', components=[dict(
+GALAXY = dict(components=[dict(
     type='smdisk', loose=False, tilted=False,
     rnodes=list(range(0, 14)),
-    bptraits=dict(type='exponential'))])
+    density=dict(ptraits=dict(type='exponential')),
+    emission=dict(type='band'))])
 
-PROPERTIES = dict(xpos=0.3, ypos=-0.6, posa=50, incl=60, bpt_a=1, bpt_s=4)
+PROPERTIES = dict(xpos=0.3, ypos=-0.6, posa=50, incl=60, pt_a=1, pt_s=4)
 
 
 def evaluate(driver, observable):
     group = observation_group([dict(
-        driver=dict(type=driver.type()), observable=copy.deepcopy(observable),
-        model=MODEL)])
+        driver=dict(type=driver.type()), galaxy=GALAXY,
+        line_of_sight=dict(type='flat'),
+        observable=copy.deepcopy(observable))])
     params = gbkfit.params.ParamSpace(group.pdescs(), PROPERTIES)
     return group.model_h(params.evaluate())[0]['brightness']['d'].copy()
 
@@ -159,11 +161,11 @@ def test_observation_dumps_the_image_of_its_primary_beam(tmp_path):
     # with the prefix of the dump, which can be dumped again (overwrite)
     from gbkfit.driver.drivers.host import DriverHost
     from gbkfit.instrument import PrimaryBeamImage
-    from gbkfit.observation import Observation, observation_parser
+    from gbkfit.observation import Flat, Observation, observation_parser
     from gbkfit.observation.observables import PixelBrightness
     beam = PrimaryBeamImage(np.ones((8, 8)))
     observation = Observation(
-        PixelBrightness(size=(8, 8)), DriverHost(),
+        PixelBrightness(size=(8, 8)), Flat(), DriverHost(),
         instrument=Instrument(primary_beam=beam))
     prefix = str(tmp_path / 'out_')
     for _ in range(2):

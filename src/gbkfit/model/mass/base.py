@@ -27,9 +27,9 @@ __all__ = [
 
 class ComponentDensity(Protocol):
     """
-    The density of a component of the model, which mass components follow
-    (e.g. its brightness, see disks.MassTraitDisk): its azimuthal mean, a
-    sum of terms (e.g. one for each brightness trait), each a surface
+    The density of a component of a galaxy, which mass components follow
+    (see disks.MassTraitDisk): its azimuthal mean, a sum of terms (e.g.
+    one for each density polar trait), each a surface
     density times the pdf of the height, between the inner and the outer
     edge of the component; in kpc, and in the units of the component.
     """
@@ -112,7 +112,7 @@ class MassComponent(parseutils.TypedSerializable, abc.ABC):
 
     def followed_components(self) -> tuple[str, ...]:
         """
-        Return the names of the components of its model whose densities
+        Return the names of the components of its galaxy whose densities
         it follows (see ComponentDensity); none here.
         """
         return ()

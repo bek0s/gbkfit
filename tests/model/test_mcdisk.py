@@ -20,23 +20,36 @@ CONFIG_DIR = pathlib.Path(__file__).parents[1] / 'data' / 'mcdisk_vs_smdisk'
 SAME_REALISATION = 1e-5
 
 
+def with_options(component, options):
+    """
+    The configuration of a component with the given options instead of
+    its own; those of its density and kinematics replace only the traits
+    they give.
+    """
+    parts = {
+        key: component[key] | options[key]
+        for key in ('density', 'kinematics') if key in options}
+    return component | options | parts
+
+
 def evaluate_disk(
         disk, driver_type, component=None, properties=None, out_extra=None):
     """
     Evaluate the 'mcdisk' or 'smdisk' configuration with the given
-    driver, and return its model cube. The options of the component and
-    the parameter properties of the configuration can be overridden. The
-    extra outputs go to out_extra, if given.
+    driver, and return its model cube. The options of the component (see
+    with_options) and the parameter properties of the configuration can
+    be overridden. The extra outputs go to out_extra, if given.
     """
     import gbkfit.params
     config = ruamel.yaml.YAML(typ='safe').load(CONFIG_DIR / f'{disk}.yaml')
     config['driver'] = dict(type=driver_type)
-    config['models'][0]['components'][0].update(component or {})
-    model_group = config_group(config)
+    components = config['galaxies'][0]['components']
+    components[0] = with_options(components[0], component or {})
+    obs_group = config_group(config)
     params = gbkfit.params.ParamSpace(
-        model_group.pdescs(),
+        obs_group.pdescs(),
         config['params']['properties'] | (properties or {}))
-    data = model_group.model_h(params.evaluate(), out_extra)
+    data = obs_group.model_h(params.evaluate(), out_extra)
     return data[0]['spectra']['d'].copy()
 
 
@@ -77,8 +90,8 @@ def test_mcdisk_velocity_field_matches_smdisk(driver, posa):
 @pytest.mark.parametrize('trunc', [0, 1], ids=['full', 'truncated'])
 @pytest.mark.parametrize('height, shape', [
     ('exponential', {}), ('gauss', {}), ('sech2', {}),
-    ('ggauss', dict(bht_b=1.5)), ('ggauss', dict(bht_b=0.6)),
-    ('moffat', dict(bht_b=2.5)), ('moffat', dict(bht_b=0.8))],
+    ('ggauss', dict(ht_b=1.5)), ('ggauss', dict(ht_b=0.6)),
+    ('moffat', dict(ht_b=2.5)), ('moffat', dict(ht_b=0.8))],
     ids=['exponential', 'gauss', 'sech2', 'ggauss', 'ggauss_heavy_tails',
          'moffat', 'moffat_heavy_tails'])
 def test_mcdisk_vertical_profile_matches_smdisk(driver, height, shape, trunc):
@@ -87,8 +100,8 @@ def test_mcdisk_vertical_profile_matches_smdisk(driver, height, shape, trunc):
     # affected by the position angle bug. A truncated profile is cut at
     # trunc times its scale height. The heavy tails of a ggauss of shape
     # 0.6 and of a Moffat of shape 0.8 reach far beyond 5 scale heights.
-    component = dict(bhtraits=dict(type=height, trunc=trunc))
-    properties = dict(incl=85, bht_s=2) | shape
+    component = dict(density=dict(htraits=dict(type=height, trunc=trunc)))
+    properties = dict(incl=85, ht_s=2) | shape
     mcdisk = evaluate_disk(
         'mcdisk', driver.type(), component | dict(cflux=2e-5), properties)
     smdisk = evaluate_disk('smdisk', driver.type(), component, properties)
@@ -117,7 +130,8 @@ def test_mcdisk_vertical_distortion_matches_smdisk(driver):
 def test_mcdisk_height_traits_of_a_distorted_disk_match_smdisk(driver):
     # The velocity height traits depend on the height above the
     # (distorted) midplane, in both disks
-    component = DISTORTION | dict(vhtraits=dict(type='exponential'))
+    component = DISTORTION | dict(
+        kinematics=dict(vhtraits=dict(type='exponential')))
     properties = DISTORTED | dict(vht_s=1)
     smdisk = evaluate_disk('smdisk', driver.type(), component, properties)
     mcdisk = evaluate_disk(
@@ -132,10 +146,10 @@ def test_mcdisk_height_traits_of_a_distorted_disk_match_smdisk(driver):
 def test_mcdisk_flux_does_not_depend_on_height_profile(driver, height):
     # All clouds carry the same flux, and with these thin profiles they
     # all land inside the cube, so the total flux must be the same.
-    reference = evaluate_disk(
-        'mcdisk', driver.type(), dict(bhtraits=dict(type='sech2')))
-    total = evaluate_disk(
-        'mcdisk', driver.type(), dict(bhtraits=dict(type=height)))
+    sech2 = dict(density=dict(htraits=dict(type='sech2')))
+    other = dict(density=dict(htraits=dict(type=height)))
+    reference = evaluate_disk('mcdisk', driver.type(), sech2)
+    total = evaluate_disk('mcdisk', driver.type(), other)
     assert total.sum() == pytest.approx(reference.sum(), rel=1e-5)
 
 
@@ -181,7 +195,7 @@ def test_mcdisk_of_too_many_clouds_is_an_error(driver):
 
 def test_mcdisk_without_clouds(driver):
     # A disk with zero flux has no clouds; its model is empty
-    cube = evaluate_disk('mcdisk', driver.type(), properties=dict(bpt_a=0))
+    cube = evaluate_disk('mcdisk', driver.type(), properties=dict(pt_a=0))
     assert not cube.any()
 
 
@@ -201,13 +215,12 @@ def test_mcdisk_seed(driver):
 def test_mcdisk_harmonic_brightness_matches_smdisk(driver, order, amplitude):
     # An exponential disk plus a harmonic of the given order (a ring for
     # order 0). The clouds of a harmonic carry the sign of cos(k(t - p)).
-    component = dict(
-        cflux=2e-5,
-        bptraits=[
+    component = dict(cflux=2e-5, density=dict(
+        ptraits=[
             dict(type='exponential'), dict(type='nw_harmonic', order=order)],
-        bhtraits=[dict(type='sech2'), dict(type='sech2')])
-    properties = dict(bpt1_a=[amplitude] * 11, bht1_s=1) | (
-        dict(bpt1_p=[40] * 11) if order else {})
+        htraits=[dict(type='sech2'), dict(type='sech2')]))
+    properties = dict(pt1_a=[amplitude] * 11, ht1_s=1) | (
+        dict(pt1_p=[40] * 11) if order else {})
     mcdisk = evaluate_disk('mcdisk', driver.type(), component, properties)
     del component['cflux']
     smdisk = evaluate_disk('smdisk', driver.type(), component, properties)
@@ -233,13 +246,12 @@ def test_mcdisk_negative_brightness_matches_smdisk(driver, outer):
     # A negative exponential disk, or a positive one whose outer rings
     # are made negative by a second trait: the clouds of a negative ring
     # carry negative flux
-    component = dict(
-        cflux=2e-5,
-        bptraits=[dict(type='exponential'), dict(type='nw_uniform')],
-        bhtraits=[dict(type='sech2'), dict(type='sech2')])
+    component = dict(cflux=2e-5, density=dict(
+        ptraits=[dict(type='exponential'), dict(type='nw_uniform')],
+        htraits=[dict(type='sech2'), dict(type='sech2')]))
     properties = dict(
-        bpt_a=-1 if not outer else 1,
-        bpt1_a=[0] * 5 + [outer] * 6, bht1_s=1)
+        pt_a=-1 if not outer else 1,
+        pt1_a=[0] * 5 + [outer] * 6, ht1_s=1)
     mcdisk = evaluate_disk('mcdisk', driver.type(), component, properties)
     del component['cflux']
     smdisk = evaluate_disk('smdisk', driver.type(), component, properties)
@@ -260,16 +272,17 @@ def test_mcdisk_harmonic_clouds_take_the_sign_of_the_harmonic(driver):
     # per pixel. The clouds are drawn where the harmonic is bright, each
     # with its sign, so where it is clearly positive or negative, the
     # brightness before the PSF has its sign in every pixel.
-    component = dict(
-        bptraits=[dict(type='exponential'), dict(type='nw_harmonic', order=2)],
-        bhtraits=[dict(type='sech2'), dict(type='sech2')])
-    properties = dict(bpt_a=0, bpt1_a=[1] * 11, bpt1_p=[40] * 11, bht1_s=1)
+    component = dict(density=dict(
+        ptraits=[dict(type='exponential'), dict(type='nw_harmonic', order=2)],
+        htraits=[dict(type='sech2'), dict(type='sech2')]))
+    properties = dict(pt_a=0, pt1_a=[1] * 11, pt1_p=[40] * 11, ht1_s=1)
     brightness = {}
     for disk, options in [('mcdisk', dict(cflux=0.5)), ('smdisk', {})]:
         extra = {}
         evaluate_disk(
             disk, driver.type(), component | options, properties, extra)
-        brightness[disk] = extra['observation0_model_component0_bdata'].data.sum(0)
+        bdata = extra['observation0_model_component0_bdata'].data
+        brightness[disk] = bdata.sum(0)
     smdisk = brightness['smdisk']
     clear = np.abs(smdisk) > 0.5 * np.abs(smdisk).max()
     mcdisk = brightness['mcdisk'][clear]
@@ -293,11 +306,11 @@ def test_mcdisk_velocity_is_the_mean_of_the_clouds(driver):
     observation['instrument'] = {}
     observation['observable'] = dict(
         type='pixel_spectra', size=[48, 48, 120], step=[1, 1, 5])
-    model_group = config_group(config)
+    obs_group = config_group(config)
     params = gbkfit.params.ParamSpace(
-        model_group.pdescs(), config['params']['properties'])
+        obs_group.pdescs(), config['params']['properties'])
     extra = {}
-    scube = model_group.model_h(params.evaluate(), extra)[0]['spectra']['d']
+    scube = obs_group.model_h(params.evaluate(), extra)[0]['spectra']['d']
     velocities = (np.arange(120) - 59.5) * 5
     intensity = scube.sum(axis=0)
     bright = intensity > 0.01 * intensity.max()
@@ -312,8 +325,8 @@ def test_mcdisk_velocity_is_the_mean_of_the_clouds(driver):
 
 # Two blobs, the second negative, inside the disk (radius 20)
 BLOBS = dict(
-    bpt_r=[6.0, 11.0], bpt_t=[30.0, 200.0], bpt_a=[1.0, -0.4],
-    bpt_s=[2.0, 3.0], bpt_q=[0.6, 0.8], bpt_p=[20.0, 70.0])
+    pt_r=[6.0, 11.0], pt_t=[30.0, 200.0], pt_a=[1.0, -0.4],
+    pt_s=[2.0, 3.0], pt_q=[0.6, 0.8], pt_p=[20.0, 70.0])
 
 
 @pytest.mark.parametrize('mixture, shape', [
@@ -324,10 +337,9 @@ def test_mcdisk_mixture_brightness_matches_smdisk(driver, mixture, shape):
     # Each cloud is drawn from a blob chosen by its flux, and carries the
     # sign of its amplitude (the shapes of ggauss cover both ways of
     # drawing its gamma variates: shape 2 / b above and below 1)
-    component = dict(
-        cflux=1e-5, bptraits=dict(type=mixture, nblobs=2),
-        bhtraits=dict(type='sech2'))
-    properties = BLOBS | (dict(bpt_b=[shape, shape]) if shape else {})
+    component = dict(cflux=1e-5, density=dict(
+        ptraits=dict(type=mixture, nblobs=2), htraits=dict(type='sech2')))
+    properties = BLOBS | (dict(pt_b=[shape, shape]) if shape else {})
     mcdisk = evaluate_disk('mcdisk', driver.type(), component, properties)
     del component['cflux']
     smdisk = evaluate_disk('smdisk', driver.type(), component, properties)
@@ -337,12 +349,11 @@ def test_mcdisk_mixture_brightness_matches_smdisk(driver, mixture, shape):
 def test_mcdisk_distortion_brightness_matches_smdisk(driver):
     # A ring brighter around an azimuth: the clouds of each ring are drawn
     # around it, within the arc length s
-    component = dict(
-        cflux=1e-5,
-        bptraits=[dict(type='exponential'), dict(type='nw_distortion')],
-        bhtraits=[dict(type='sech2'), dict(type='sech2')])
+    component = dict(cflux=1e-5, density=dict(
+        ptraits=[dict(type='exponential'), dict(type='nw_distortion')],
+        htraits=[dict(type='sech2'), dict(type='sech2')]))
     properties = dict(
-        bpt1_a=[0.5] * 11, bpt1_p=[60] * 11, bpt1_s=[3] * 11, bht1_s=1)
+        pt1_a=[0.5] * 11, pt1_p=[60] * 11, pt1_s=[3] * 11, ht1_s=1)
     mcdisk = evaluate_disk('mcdisk', driver.type(), component, properties)
     del component['cflux']
     smdisk = evaluate_disk('smdisk', driver.type(), component, properties)
@@ -351,11 +362,10 @@ def test_mcdisk_distortion_brightness_matches_smdisk(driver):
 
 def test_mcdisk_dispersion_mixture_matches_smdisk(driver):
     # Dispersion traits are evaluated at the clouds, like at the voxels
-    component = dict(
-        cflux=1e-5,
-        dptraits=[dict(type='uniform'), dict(type='mixture_gauss', nblobs=2)])
+    component = dict(cflux=1e-5, kinematics=dict(
+        dptraits=[dict(type='uniform'), dict(type='mixture_gauss', nblobs=2)]))
     properties = {
-        'dpt_a': 10, **{k.replace('bpt_', 'dpt1_'): v
+        'dpt_a': 10, **{k.replace('pt_', 'dpt1_'): v
                         for k, v in BLOBS.items()}}
     properties['dpt1_a'] = [60.0, 30.0]
     mcdisk = evaluate_disk('mcdisk', driver.type(), component, properties)
@@ -365,9 +375,9 @@ def test_mcdisk_dispersion_mixture_matches_smdisk(driver):
 
 
 def test_mcdisk_moffat_blobs_need_a_finite_flux(driver):
-    component = dict(
-        bptraits=dict(type='mixture_moffat', nblobs=2),
-        bhtraits=dict(type='sech2'))
+    component = dict(density=dict(
+        ptraits=dict(type='mixture_moffat', nblobs=2),
+        htraits=dict(type='sech2')))
     with pytest.raises(RuntimeError, match="need b > 1"):
         evaluate_disk('mcdisk', driver.type(), component,
-                      BLOBS | dict(bpt_b=[2.0, 0.9]))
+                      BLOBS | dict(pt_b=[2.0, 0.9]))

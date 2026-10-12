@@ -8,19 +8,10 @@ import numpy as np
 
 from gbkfit.utils import iterutils, numutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
-from .lines import line_parser
 
 if TYPE_CHECKING:
     from .base import Component
     from .geometries import Geometry
-    from .lines import Lines
-
-
-def dump_lines(lines_: 'Lines') -> dict[str, Any]:
-    """Return the lines option of a spectral component: none if not given."""
-    if lines_.lines() is None:
-        return {}
-    return dict(lines=line_parser.dump(list(lines_.lines())))
 
 
 def dump_name(component: 'Component') -> dict[str, Any]:
@@ -100,7 +91,7 @@ def load_geometries(
         info: dict[str, Any], keys: tuple[str, ...]
 ) -> None:
     """
-    Load the geometries of the configuration of a model (its option
+    Load the geometries of the configuration of a galaxy (its option
     geometries), in place: the geometry option of each of its components
     (those of the options keys, e.g. 'components') becomes the geometry
     of that name, and the option geometries goes. Raise ConfigError for

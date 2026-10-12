@@ -1,7 +1,6 @@
 driver: {type: host}
-models:
-- type: kinematics_3d
-  components:
+galaxies:
+- components:
   - type: mcdisk
     cflux: 0.0001
     loose: false
@@ -9,12 +8,16 @@ models:
     rnmin: 0
     rnmax: 20
     rnsep: 2
-    bptraits: {type: exponential}
-    bhtraits: {type: sech2}
-    vptraits: {type: tan_arctan}
-    dptraits: {type: uniform}
+    density:
+      ptraits: {type: exponential}
+      htraits: {type: sech2}
+    kinematics:
+      vptraits: {type: tan_arctan}
+      dptraits: {type: uniform}
+    emission: {type: lines}
 observations:
-- observable:
+- line_of_sight: {type: grid}
+  observable:
     type: pixel_spectra
     size: [48, 48, 50]
     step: [1, 1, 10]
@@ -22,5 +25,5 @@ observations:
     psf: {type: gauss, sigma: 1.5}
     lsf: {type: gauss, sigma: 15.0}
 params:
-  properties: {vsys: 0, xpos: 0.5, ypos: -1.0, posa: 30, incl: 60, bpt_a: 1, bpt_s: 5,
-    bht_s: 1, vpt_rt: 3, vpt_vt: 180, dpt_a: 20}
+  properties: {vsys: 0, xpos: 0.5, ypos: -1.0, posa: 30, incl: 60, pt_a: 1, pt_s: 5,
+    ht_s: 1, vpt_rt: 3, vpt_vt: 180, dpt_a: 20}

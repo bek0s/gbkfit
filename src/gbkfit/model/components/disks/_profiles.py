@@ -1,5 +1,5 @@
 """
-The radial profiles of a disk, as its model takes them for gravity: the
+The radial profiles of a disk, as its galaxy takes them for gravity: the
 azimuthal means of its traits, for the mass components that follow it
 (see mass.ComponentDensity) and for its pressure support (see
 traits.VPTraitMass).
@@ -57,7 +57,7 @@ def _azimuthal_mean(values: Callable[[np.ndarray], np.ndarray]) -> np.ndarray:
         if np.all(change <= _AZIMUTHAL_TOLERANCE * largest):
             return mean
     raise ValueError(
-        f"the azimuthal mean of the brightness of a disk does not converge "
+        f"the azimuthal mean of the density of a disk does not converge "
         f"on {_NAZIMUTHS_MAX} azimuths: its azimuthal structure is too fine "
         f"or too sharp (e.g. narrow blobs, or the edges of selection "
         f"traits)")
@@ -99,8 +99,9 @@ def pressure_support(
     Return the pressure support of a disk at its midplane, (R / rho)
     d(rho sigma^2)/dR ((km/s)^2), at radii (arcsec, increasing, on the
     disk): with the azimuthal means of its density rho at the midplane
-    (its brightness traits times its brightness height traits at z = 0,
-    or its brightness traits if thin, where its selection traits keep it)
+    (its density polar traits times its density height traits at z = 0,
+    or its density polar traits if thin, where its selection traits keep
+    it)
     and of rho sigma^2, with sigma its velocity dispersion at the midplane
     (its dispersion polar traits times its dispersion height traits at z =
     0); the derivative by the second-order three-point formula on the
@@ -150,9 +151,9 @@ class DiskDensity:
     """
     The density of a disk for the mass components that follow it (see
     mass.ComponentDensity): the azimuthal means of its density polar
-    traits (its brightness), where its selection traits keep it, and its
-    density height traits, as it evaluates them with the given values of
-    its parameters, in kpc. Its rings are taken flat (coplanar and
+    traits, where its selection traits keep it, and its density height
+    traits, as it evaluates them with the given values of its
+    parameters, in kpc. Its rings are taken flat (coplanar and
     concentric).
 
     Parameters
@@ -197,7 +198,7 @@ class DiskDensity:
     def surface_densities(self, R: np.ndarray) -> np.ndarray:
         """
         Return the azimuthal mean of each density polar trait (in the units
-        of its brightness) where the selection traits keep the disk, at the
+        of the density) where the selection traits keep the disk, at the
         radii R (kpc, on the disk): an array of shape (traits, len(R)).
         """
         r = self._radii(R)[:, None]

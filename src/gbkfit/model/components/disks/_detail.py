@@ -1,173 +1,104 @@
+"""
+Helpers shared by the disk components (SMDisk, MCDisk).
+"""
 
-import dataclasses
-import inspect
 from collections.abc import Sequence
-from typing import Any, Protocol
+from typing import Any
 
 import numpy as np
 
-from gbkfit.driver import DeviceArray
+from gbkfit.driver import DeviceArray, Driver
 from gbkfit.math import interpolation
 from gbkfit.params import ParamValues
 from gbkfit.utils import gridutils, iterutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
-from .._detail import parse_nodes
+from .._detail import dump_geometry, dump_name, parse_nodes
 from ..base import Component, ComponentPlan, NativeGrid
 from ..geometries import Geometry
-from ..lines import Line, Lines
+from ..lines import Lines
+from ..roles import (
+    Emission, LineEmission, Opacity, emission_parser, opacity_parser)
 from . import _disk, traits
+from .parts import Density, Kinematics, density_parser, kinematics_parser
 
 
 __all__ = [
-    'Slot',
     'DiskComponentPlan',
-    'SpectralDiskComponentPlan',
-    'BPT', 'BHT', 'OPT', 'OHT', 'VPT', 'VHT',
-    'DPT', 'DHT', 'ZPT', 'SPT',
-    'load_options',
+    'disk_plan',
+    'dump_disk_component',
+    'load_disk_component',
     'make_disk',
-    'make_lines',
-    'dump_disk'
+    'make_lines'
 ]
 
 
-
-@dataclasses.dataclass(frozen=True)
-class Slot:
-    """
-    The option of a component with its traits of one kind: its name, the
-    kind of the traits in the disk (see _disk.TRAIT_KINDS), the prefix of
-    their parameters, and their parser. A height trait slot must have as
-    many traits as the polar trait slot it pairs with. If it has a default
-    trait, it is used for each polar trait without a height trait.
-    """
-    key: str
-    kind: str
-    prefix: str
-    parser: parseutils.TypedParser
-    pairs_with: str | None = None
-    default: type[traits.Trait] | None = None
+# The prefix of the parameters of the traits of each kind
+TRAIT_PREFIXES = dict(
+    rpt='pt', rht='ht', vpt='vpt', vht='vht', dpt='dpt', dht='dht',
+    zpt='zpt', spt='spt')
 
 
-# The trait slots. The density traits of a disk are surface brightness
-# traits in brightness and spectral components, and opacity traits in
-# opacity components.
-BPT = Slot('bptraits', 'rpt', 'bpt', traits.rpt_parser)
-BHT = Slot('bhtraits', 'rht', 'bht', traits.rht_parser, 'bptraits')
-OPT = Slot('optraits', 'rpt', 'opt', traits.rpt_parser)
-OHT = Slot('ohtraits', 'rht', 'oht', traits.rht_parser, 'optraits')
-VPT = Slot('vptraits', 'vpt', 'vpt', traits.vpt_parser)
-VHT = Slot(
-    'vhtraits', 'vht', 'vht', traits.vht_parser, 'vptraits',
-    traits.VHTraitOne)
-DPT = Slot('dptraits', 'dpt', 'dpt', traits.dpt_parser)
-DHT = Slot(
-    'dhtraits', 'dht', 'dht', traits.dht_parser, 'dptraits',
-    traits.DHTraitOne)
-ZPT = Slot('zptraits', 'zpt', 'zpt', traits.zpt_parser)
-SPT = Slot('sptraits', 'spt', 'spt', traits.spt_parser)
-
-
-class _DiskComponent(Protocol):
-    """A component made of one disk."""
-
-    def disk_outputs(
-            self, outputs: dict[str, DeviceArray | None]
-    ) -> dict[str, DeviceArray | None]:
-        """Return the outputs of its disk, from those of the component."""
-        ...
-
-
-class DiskComponentPlan(ComponentPlan):
-    """
-    The evaluation of a component made of one disk: the plan of its disk,
-    which adds to the outputs of the component that the component maps
-    to those of the disk (Component.disk_outputs).
-    """
-
-    def __init__(
-            self, component: _DiskComponent, disk_plan: _disk.DiskPlan):
-        self._component = component
-        self._disk_plan = disk_plan
-
-    def disk_plan(self) -> _disk.DiskPlan:
-        return self._disk_plan
-
-    def evaluate(
-            self,
-            params: ParamValues,
-            grid: NativeGrid,
-            outputs: dict[str, DeviceArray | None],
-            out_extra: dict[str, Any] | None
-    ) -> None:
-        self._disk_plan.evaluate(
-            params, grid, self._component.disk_outputs(outputs), out_extra)
-
-
-class SpectralDiskComponentPlan(ComponentPlan):
-    """
-    The evaluation of a spectral component made of one disk: as
-    DiskComponentPlan, and its disk adds the selected emission lines of
-    the component (Lines; selected, their indices) to the spectral cube,
-    at their places on the given spectral axis.
-    """
-
-    def __init__(
-            self,
-            component: _DiskComponent,
-            disk_plan: _disk.DiskPlan,
-            lines_: Lines,
-            selected: Sequence[int],
-            spectral: gridutils.Grid
-    ):
-        self._component = component
-        self._disk_plan = disk_plan
-        # The offset, scale and flux of each selected line; the fluxes of
-        # the lines after the first are their ratios, which are parameters
-        self._lines = lines_.values(spectral)[list(selected)]
-        self._ratios = [
-            (row, lines_.ratio_name(index))
-            for row, index in enumerate(selected)
-            if lines_.ratio_name(index) is not None]
-
-    def disk_plan(self) -> _disk.DiskPlan:
-        return self._disk_plan
-
-    def evaluate(
-            self,
-            params: ParamValues,
-            grid: NativeGrid,
-            outputs: dict[str, DeviceArray | None],
-            out_extra: dict[str, Any] | None
-    ) -> None:
-        for row, name in self._ratios:
-            self._lines[row, 2] = params[name]
-        self._disk_plan.evaluate(
-            params, grid, self._component.disk_outputs(outputs), out_extra,
-            self._lines)
-
-
-def load_options(
-        cls: type[Component], info: dict[str, Any], slots: Sequence['Slot']
+def load_disk_component(
+        cls: type[Component], info: dict[str, Any]
 ) -> dict[str, Any]:
     """
-    Return the options of a component of class cls that is made of one
-    disk, with the traits of the given slots loaded. The __init__ of cls
-    declares the options, and those without a default value are required.
+    Return the options of a disk component of class cls, with its parts,
+    roles and traits loaded. The __init__ of cls declares the options.
     """
-    for slot in slots:
-        required = _is_required(cls, slot.key)
+    for parser, key, required in (
+            (density_parser, 'density', True),
+            (kinematics_parser, 'kinematics', False),
+            (emission_parser, 'emission', False),
+            (opacity_parser, 'opacity', False),
+            (traits.zpt_parser, 'zptraits', False),
+            (traits.spt_parser, 'sptraits', False)):
         parseutils.load_option_and_update_info(
-            slot.parser, info, slot.key,
-            required=required)
+            parser, info, key, required=required)
     return parseutils.parse_options_for_callable(info, cls.__init__)
 
 
+def dump_disk_component(
+        component: Component,
+        disk: _disk.Disk,
+        density: Density,
+        kinematics: Kinematics | None
+) -> dict[str, Any]:
+    """
+    Return the configuration of a disk component made of the given disk,
+    without what its geometry (if any) gives.
+    """
+    geometry = component.geometry()
+    info = dict(type=component.type()) | dump_name(component) \
+        | dump_geometry(component) | disk.options()
+    if geometry is None:
+        info.update(loose=disk.loose(), tilted=disk.tilted())
+    if geometry is None or geometry.rnodes() is None:
+        info.update(rnodes=list(disk.rnodes()))
+    info.update(
+        rstep=disk.rstep(), interp=disk.interp().type(),
+        density=density.dump())
+    if kinematics is not None:
+        info.update(kinematics=kinematics.dump())
+    if component.emission() is not None:
+        info.update(emission=emission_parser.dump(component.emission()))
+    if component.opacity() is not None:
+        info.update(opacity=opacity_parser.dump(component.opacity()))
+    for key, kind, parser in (
+            ('zptraits', 'zpt', traits.zpt_parser),
+            ('sptraits', 'spt', traits.spt_parser)):
+        if disk.traits(kind):
+            info[key] = parser.dump(list(disk.traits(kind)))
+    return info
+
+
 def make_disk(
-        cls: type[Component],
         disk_class: type[_disk.Disk],
-        slots: Sequence['Slot'],
-        rdata_key: str,
+        density: Density,
+        kinematics: Kinematics | None,
+        emission: Emission | None,
+        opacity: Opacity | None,
+        zptraits: traits.ZPTrait | Sequence[traits.ZPTrait] | None,
+        sptraits: traits.SPTrait | Sequence[traits.SPTrait] | None,
         geometry: Geometry | None,
         loose: bool | None,
         tilted: bool | None,
@@ -178,17 +109,23 @@ def make_disk(
         rnodes: Sequence[float] | None,
         rstep: float | None,
         interp: str,
-        traits_: dict[str, traits.Trait | Sequence[traits.Trait] | None],
         **disk_options: float
 ) -> _disk.Disk:
     """
-    Return the disk of a component of class cls, of class disk_class, with
-    the traits of the given slots, and its density map named rdata_key in
-    the extra outputs (e.g. 'bdata'). With a geometry, its warps and, if
+    Return the disk of a disk component, of class disk_class, made of its
+    parts (see SMDisk for the options). With a geometry, its warps and, if
     it is warped, its rings are those of the geometry, which the component
-    must not give. traits_ has the traits, keyed by option (e.g.
-    'bptraits'). disk_options are the options of the type of disk (e.g.
-    cflux and seed of MCDisk).
+    must not give. A thick disk (with density height traits) takes the
+    default height traits of its velocity and dispersion traits where it
+    has none. disk_options are the options of the type of disk (e.g. cflux
+    and seed of a CloudDisk).
+
+    Raises
+    ------
+    ConfigError
+        If the options are not valid, conflict with the geometry, or the
+        parts and roles do not go together (e.g. lines without
+        kinematics, or what only a thick disk can have on a thin one).
     """
     rings = dict(rnmin=rnmin, rnmax=rnmax, rnsep=rnsep, rnlen=rnlen,
                  rnodes=rnodes)
@@ -206,90 +143,173 @@ def make_disk(
                     f"geometry {geometry.name()!r}; remove {given}")
             rings = dict(rings, rnodes=geometry.rnodes())
     node_args = parse_component_rnode_args(**rings, rstep=rstep, interp=interp)
-    traits_ = _parse_traits(cls, slots, traits_)
+    traits_ = _disk_traits(
+        density, kinematics, emission, opacity, zptraits, sptraits)
     check_traits_common(sum(traits_.values(), ()))
     return disk_class(
         **disk_options,
         loose=bool(loose), tilted=bool(tilted), **node_args,
-        traits_={slot.kind: traits_[slot.key] for slot in slots},
-        prefixes={slot.kind: slot.prefix for slot in slots},
-        rdata_key=rdata_key)
+        traits_=traits_, prefixes=TRAIT_PREFIXES)
 
 
-def make_lines(disk: _disk.Disk, lines_: Sequence[Line] | None) -> Lines:
+def _disk_traits(
+        density: Density,
+        kinematics: Kinematics | None,
+        emission: Emission | None,
+        opacity: Opacity | None,
+        zptraits: traits.ZPTrait | Sequence[traits.ZPTrait] | None,
+        sptraits: traits.SPTrait | Sequence[traits.SPTrait] | None
+) -> dict[str, tuple[traits.Trait, ...]]:
     """
-    Return the emission lines (see Lines) of a spectral component made of
-    the given disk, whose parameters must have other names.
+    Return the traits of a disk by kind (see _disk.TRAIT_KINDS). Raise
+    ConfigError if the parts and roles do not go together.
     """
-    result = Lines(lines_)
-    if repeated := sorted(set(result.pdescs()) & set(disk.pdescs())):
+    thick = density.thick()
+    if isinstance(emission, LineEmission) and kinematics is None:
+        raise ConfigError("a disk that emits lines needs kinematics")
+    if opacity is not None and not thick:
+        raise ConfigError(
+            "a disk with opacity needs density height traits (a thick "
+            "disk)")
+    zptraits = iterutils.tuplify(zptraits)
+    sptraits = iterutils.tuplify(sptraits)
+    for name, value in (('zptraits', zptraits), ('sptraits', sptraits)):
+        if len(value) > _disk.MAX_TRAITS:
+            raise ConfigError(
+                f"at most {_disk.MAX_TRAITS} {name} are supported; "
+                f"{len(value)} were given")
+    if zptraits and not thick:
+        raise ConfigError(
+            "vertical distortion traits (zptraits) need density height "
+            "traits (a thick disk)")
+    result = dict(
+        rpt=density.ptraits(), rht=density.htraits() or (),
+        zpt=zptraits, spt=sptraits)
+    if kinematics is not None:
+        heights = dict(vht=kinematics.vhtraits(), dht=kinematics.dhtraits())
+        if not thick and any(value is not None for value in heights.values()):
+            raise ConfigError(
+                "the height traits of the kinematics need density height "
+                "traits (a thick disk)")
+        result.update(vpt=kinematics.vptraits(), dpt=kinematics.dptraits())
+        if thick:
+            result.update(
+                vht=_with_defaults(
+                    heights['vht'], len(result['vpt']), traits.VHTraitOne),
+                dht=_with_defaults(
+                    heights['dht'], len(result['dpt']), traits.DHTraitOne))
+    return result
+
+
+def _with_defaults(
+        value: tuple[traits.HTrait | None, ...] | None,
+        npolar: int,
+        default: type[traits.HTrait]
+) -> tuple[traits.HTrait, ...]:
+    """
+    Return height traits, one for each of npolar polar traits, with the
+    missing ones (None, or all if value is None) of the default type.
+    """
+    if value is None:
+        value = (None,) * npolar
+    return tuple(default() if trait is None else trait for trait in value)
+
+
+def make_lines(disk: _disk.Disk, emission: Emission | None) -> Lines | None:
+    """
+    Return the emission lines of a disk component (see Lines), if it emits
+    lines, whose parameters must have other names than those of the disk.
+    """
+    if not isinstance(emission, LineEmission):
+        return None
+    lines = emission.lines()
+    if repeated := sorted(set(lines.pdescs()) & set(disk.pdescs())):
         raise ConfigError(
             f"the parameters of the lines have the names of other "
             f"parameters: {repeated}; rename the lines")
-    return result
+    return lines
 
 
-def dump_disk(
-        disk: _disk.Disk, slots: Sequence['Slot'], geometry: Geometry | None
-) -> dict[str, Any]:
+def disk_plan(
+        disk: _disk.Disk,
+        lines: Lines | None,
+        driver: Driver,
+        spectral: gridutils.Grid,
+        dtype: np.dtype,
+        names: tuple[str, ...] | None,
+        emits: bool
+) -> 'DiskComponentPlan':
     """
-    Return the options of a component made of the given disk, with the
-    traits of the given slots, without those its geometry (if any) gives.
+    Return the plan of a disk component made of the given disk, with the
+    given emission lines (if any), of which those of the given names (all
+    if None) are evaluated if it emits (see Component.plan).
     """
-    traits_ = {
-        slot.key: slot.parser.dump(disk.traits(slot.kind))
-        for slot in slots}
-    info = dict(**disk.options())
-    if geometry is None:
-        info.update(loose=disk.loose(), tilted=disk.tilted())
-    if geometry is None or geometry.rnodes() is None:
-        info.update(rnodes=list(disk.rnodes()))
-    return info | dict(
-        rstep=disk.rstep(),
-        interp=disk.interp().type(),
-        **traits_)
+    if emits and lines is not None:
+        selected = lines.select(names)
+        return DiskComponentPlan(
+            disk.plan(driver, len(selected), dtype), lines, selected,
+            spectral)
+    return DiskComponentPlan(disk.plan(driver, 0, dtype))
 
 
-def _is_required(cls: type[Component], option: str) -> bool:
-    """Check whether an option of a component class has no default."""
-    parameter = inspect.signature(cls.__init__).parameters[option]
-    return parameter.default is inspect.Parameter.empty
-
-
-def _parse_traits(
-        cls: type[Component],
-        slots: Sequence['Slot'],
-        values: dict[str, traits.Trait | Sequence[traits.Trait] | None]
-) -> dict[str, tuple[traits.Trait, ...]]:
+class DiskComponentPlan(ComponentPlan):
     """
-    Return the traits of each slot as a tuple, with the missing height
-    traits replaced by the default ones. Raise ConfigError if there are
-    none of a required slot, too many, or not one height trait for each
-    polar trait.
+    The evaluation of a component made of one disk: the plan of its disk,
+    which adds its light (and, with lines, the selected emission lines,
+    at their places on the given spectral axis) to the outputs, or its
+    optical depth to the opacity cube.
     """
-    result = {}
-    for slot in slots:
-        value = values[slot.key]
-        if not value and _is_required(cls, slot.key):
-            raise ConfigError(f"at least one {slot.key[:-1]} is required")
-        value = iterutils.tuplify(value) if value else ()
-        if len(value) > _disk.MAX_TRAITS:
-            raise ConfigError(
-                f"at most {_disk.MAX_TRAITS} {slot.key} are supported; "
-                f"{len(value)} were given")
-        if slot.pairs_with:
-            npolar = len(result[slot.pairs_with])
-            if slot.default:
-                value = tuple(
-                    slot.default() if trait is None else trait
-                    for trait in value or (None,) * npolar)
-            if len(value) != npolar:
-                raise ConfigError(
-                    f"the number of {slot.key} must be equal to "
-                    f"the number of {slot.pairs_with} "
-                    f"({len(value)} != {npolar})")
-        result[slot.key] = value
-    return result
+
+    def __init__(
+            self,
+            disk_plan_: _disk.DiskPlan,
+            lines: Lines | None = None,
+            selected: Sequence[int] = (),
+            spectral: gridutils.Grid | None = None
+    ):
+        self._disk_plan = disk_plan_
+        # The offset, scale and flux of each selected line; the fluxes of
+        # the lines after the first are their ratios, which are parameters
+        self._lines = None
+        self._ratios = []
+        if lines is not None:
+            self._lines = lines.values(spectral)[list(selected)]
+            self._ratios = [
+                (row, lines.ratio_name(index))
+                for row, index in enumerate(selected)
+                if lines.ratio_name(index) is not None]
+
+    def disk_plan(self) -> _disk.DiskPlan:
+        return self._disk_plan
+
+    def evaluate_emission(
+            self,
+            params: ParamValues,
+            grid: NativeGrid,
+            outputs: dict[str, DeviceArray | None],
+            out_extra: dict[str, Any] | None
+    ) -> None:
+        for row, name in self._ratios:
+            self._lines[row, 2] = params[name]
+        disk_outputs = dict(
+            image=outputs.get('image'),
+            scube=outputs.get('scube'),
+            rdata=outputs.get('bdata'),
+            opacity=outputs.get('odata'),
+            ordata=outputs.get('obdata'))
+        self._disk_plan.evaluate(
+            params, grid, disk_outputs, out_extra, 'bdata', self._lines)
+
+    def evaluate_opacity(
+            self,
+            params: ParamValues,
+            grid: NativeGrid,
+            odata: DeviceArray,
+            out_extra: dict[str, Any] | None
+    ) -> None:
+        # The density of the disk is its optical depth
+        self._disk_plan.evaluate(
+            params, grid, dict(rdata=odata), out_extra, 'odata')
 
 
 def parse_component_rnode_args(

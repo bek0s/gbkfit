@@ -17,16 +17,20 @@ from gbkfit.region import RegionsBins
 from gbkfit.utils import fitsutils, gridutils
 
 
-MODEL = dict(type='kinematics_2d', components=[dict(
+GALAXY = dict(components=[dict(
     type='smdisk', loose=False, tilted=False,
     rnodes=list(range(0, 14)),
-    bptraits=dict(type='exponential'),
-    vptraits=dict(type='tan_arctan'),
-    dptraits=dict(type='uniform'))])
+    density=dict(ptraits=dict(type='exponential')),
+    kinematics=dict(
+        vptraits=dict(type='tan_arctan'),
+        dptraits=dict(type='uniform')),
+    emission=dict(type='lines'))])
 
 PROPERTIES = dict(
     vsys=0, xpos=0.3, ypos=-0.6, posa=50, incl=60,
-    bpt_a=1, bpt_s=4, vpt_rt=2, vpt_vt=150, dpt_a=20)
+    pt_a=1, pt_s=4, vpt_rt=2, vpt_vt=150, dpt_a=20)
+
+FLAT = dict(type='flat')
 
 INSTRUMENT = dict(
     psf=dict(type='gauss', sigma=1.5), lsf=dict(type='gauss', sigma=15))
@@ -36,11 +40,11 @@ SPECTRAL = dict(spec_size=101, spec_step=5)
 
 def evaluate(driver, observable):
     """The model data of an observable of the tests, by data item."""
-    model_group = observation_group([
-        dict(driver=dict(type=driver.type()),
-             observable=copy.deepcopy(observable), model=MODEL)])
-    params = gbkfit.params.ParamSpace(model_group.pdescs(), PROPERTIES)
-    data = model_group.model_h(params.evaluate())[0]
+    group = observation_group([
+        dict(driver=dict(type=driver.type()), galaxy=GALAXY,
+             line_of_sight=FLAT, observable=copy.deepcopy(observable))])
+    params = gbkfit.params.ParamSpace(group.pdescs(), PROPERTIES)
+    data = group.model_h(params.evaluate())[0]
     return {key: value['d'].copy() for key, value in data.items()}
 
 
@@ -124,7 +128,7 @@ def test_region_moments_observation_from_data(tmp_path):
     assert loaded.regions() == dataset.regions()
     np.testing.assert_array_equal(loaded['moment1'].data(), [1400, 1500, 1600])
     info = dict(
-        data=data_info,
+        data=data_info, line_of_sight=FLAT,
         observable=dict(type='region_moments', spec_step=2))
     observation = observation_parser.load(copy.deepcopy(info))
     observable = observation.observable()
@@ -144,10 +148,11 @@ def test_region_moments_observation_from_data(tmp_path):
 def test_region_moments_observation_dumps_its_bins_with_the_prefix(driver, tmp_path):
     # Without data, the bins are options of the observable: their file is
     # named with the prefix of the dump, which can be dumped again
-    from gbkfit.observation import RegionMoments, Observation, observation_parser
+    from gbkfit.observation import (
+        Flat, Observation, RegionMoments, observation_parser)
     observation = Observation(RegionMoments(
         RegionsBins(np.arange(16).reshape(4, 4) % 3), spec_size=11),
-        driver)
+        Flat(), driver)
     prefix = str(tmp_path / 'out_')
     for _ in range(2):
         dumped = observation_parser.dump(
@@ -157,11 +162,11 @@ def test_region_moments_observation_dumps_its_bins_with_the_prefix(driver, tmp_p
 def test_region_moments_objective_residual(driver):
     # Data equal to the model plus 1, with errors of 2: every residual
     # (model - data) / error is -0.5
-    from gbkfit.model import model_parser
+    from gbkfit.model import galaxy_parser
     from gbkfit.objective import Objective
     from gbkfit.instrument import instrument_parser
     from gbkfit.observation import (
-        RegionMoments, Observation, ObservationGroup)
+        Flat, RegionMoments, Observation, ObservationGroup)
     index = np.full((41, 32), -1)
     index[10:20, 5:15] = 0
     index[20:30, 10:25] = 1
@@ -169,8 +174,8 @@ def test_region_moments_objective_residual(driver):
     observable = RegionMoments(regions, orders=[1, 2], **SPECTRAL)
     instrument = instrument_parser.load(copy.deepcopy(INSTRUMENT))
     group = ObservationGroup(
-        [model_parser.load(copy.deepcopy(MODEL))],
-        [Observation(observable, driver, instrument=instrument)])
+        [galaxy_parser.load(copy.deepcopy(GALAXY))],
+        [Observation(observable, Flat(), driver, instrument=instrument)])
     params = gbkfit.params.ParamSpace(group.pdescs(), PROPERTIES)
     model = {
         key: value['d'].copy()
@@ -180,9 +185,10 @@ def test_region_moments_objective_residual(driver):
             Data(value + 1, error=np.full_like(value, 2))
         for key, value in model.items()}, regions)
     group = ObservationGroup(
-        [model_parser.load(copy.deepcopy(MODEL))],
+        [galaxy_parser.load(copy.deepcopy(GALAXY))],
         [Observation(
-            observable, driver, instrument=instrument, data=dataset)])
+            observable, Flat(), driver, instrument=instrument,
+            data=dataset)])
     residual = Objective(group).residual_nddata_h(params.evaluate(), False)
     for key in ('moment1', 'moment2'):
         np.testing.assert_allclose(residual[0][key], -0.5, rtol=1e-4)

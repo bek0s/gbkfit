@@ -1,0 +1,188 @@
+"""
+Galaxies: their components and their mass, at one distance.
+"""
+
+from collections.abc import Sequence
+from typing import Any, Self
+
+import numpy as np
+
+from gbkfit.driver import Driver
+from gbkfit.params import ParamDesc
+from gbkfit.utils import gridutils, iterutils, parseutils
+from .components import _detail
+from .components._component_set import ComponentSet, ComponentSetPlan
+from .components.base import Component, DepthAxis
+from .components.disks import MCDisk, SMDisk
+from .components.geometries import Geometry, geometry_parser
+from .components.points import Point
+from .distance import Distance, distance_parser
+from .mass import MassComponent, MassModel, mass_component_parser
+
+
+__all__ = [
+    'Galaxy',
+    'component_parser',
+    'galaxy_parser'
+]
+
+
+component_parser = parseutils.TypedParser(Component, [
+    SMDisk,
+    MCDisk,
+    Point])
+
+
+class Galaxy(parseutils.Serializable):
+    """
+    A galaxy: its components, and its mass at a distance. Its components
+    are what observations see: each emits light (its emission), removes
+    light (its opacity) or both. Its mass pulls: its components with the
+    velocity trait 'mass' rotate in its gravity (see traits.VPTraitMass).
+
+    Its parameters are those of its components, each prefixed by its name
+    when there are several ('disk_pt_a'), and those of its geometries
+    ('{geometry}_posa'), its distance ('distance') and its mass
+    ('mass_{name}_*'). A name prefixes them all when there are several
+    galaxies (see ObservationGroup).
+
+    In configurations, its option geometries lists the geometries that
+    its components name (see Geometry).
+
+    Parameters
+    ----------
+    components : Component or Sequence of Component
+        Its components; they need names when there are several.
+    mass : MassComponent or Sequence of MassComponent, optional
+        Its mass: the components of its mass (halos, point masses, ...,
+        and trait_disk, which follows the density of one of its disks).
+    distance : Distance, optional
+        Its distance, which converts arcsec to kpc for its mass (required
+        with mass, and used by it only).
+    name : str, optional
+        Its name; required when there are several galaxies.
+
+    Raises
+    ------
+    ConfigError
+        If there are no components, several without names, the names or
+        parameters conflict, or the mass, the distance and the components
+        do not go together (e.g. 'mass' velocity traits without mass, or
+        a trait_disk that follows no disk of the galaxy).
+    """
+
+    @classmethod
+    def load(cls, info: dict[str, Any]) -> Self:
+        _detail.load_geometries(info, ('components',))
+        parseutils.load_option_and_update_info(
+            component_parser, info, 'components', required=True)
+        parseutils.load_option_and_update_info(
+            mass_component_parser, info, 'mass')
+        parseutils.load_option_and_update_info(
+            distance_parser, info, 'distance')
+        return cls(**parseutils.parse_options_for_callable(
+            info, cls.__init__))
+
+    def dump(self) -> dict[str, Any]:
+        info = dict(name=self._name) if self._name is not None else {}
+        geometries = self.geometries()
+        if geometries:
+            info.update(geometries=geometry_parser.dump(geometries))
+        info.update(components=component_parser.dump(list(self.components())))
+        if self._mass:
+            info.update(mass=mass_component_parser.dump(list(self._mass)))
+        if self.distance() is not None:
+            info.update(distance=distance_parser.dump(self.distance()))
+        return info
+
+    def __init__(
+            self,
+            components: Component | Sequence[Component],
+            mass: MassComponent | Sequence[MassComponent] | None = None,
+            distance: Distance | None = None,
+            name: str | None = None
+    ):
+        parseutils.check_name(name)
+        mass = iterutils.tuplify(mass)
+        mass_model = MassModel(mass) if mass else None
+        self._component_set = ComponentSet(components, distance, mass_model)
+        self._mass = mass
+        self._name = name
+
+    def name(self) -> str | None:
+        """Return its name, if any."""
+        return self._name
+
+    def components(self) -> tuple[Component, ...]:
+        """Return its components."""
+        return self._component_set.components()
+
+    def geometries(self) -> list[Geometry]:
+        """Return the geometries of its components, each once."""
+        return self._component_set.geometries()
+
+    def mass(self) -> tuple[MassComponent, ...]:
+        """Return the components of its mass (none without mass)."""
+        return self._mass
+
+    def mass_model(self) -> MassModel | None:
+        """Return its mass, as a mass model, if any."""
+        return self._component_set.mass_model()
+
+    def distance(self) -> Distance | None:
+        """Return its distance, if given."""
+        return self._component_set.distance()
+
+    def pdescs(self) -> dict[str, ParamDesc]:
+        """Return its parameters, by name (see the class)."""
+        return self._component_set.pdescs()
+
+    def constants(self) -> dict[str, Any]:
+        """
+        Return the values that parameter expressions can use (e.g. the
+        radial nodes of its disks, prefixed as their parameters).
+        """
+        return self._component_set.constants()
+
+    def plan(
+            self,
+            driver: Driver,
+            grid: gridutils.Grid,
+            spectral: gridutils.Grid,
+            depth: DepthAxis | None,
+            dtype: np.dtype,
+            emitters: Sequence[int],
+            lines: tuple[str, ...] | None
+    ) -> ComponentSetPlan:
+        """
+        Plan the evaluation of the galaxy on the grid of an observation.
+
+        Parameters
+        ----------
+        driver : Driver
+            The driver it is evaluated on.
+        grid : Grid
+            The grid of the x and y axes.
+        spectral : Grid
+            The spectral axis of the outputs (one axis).
+        depth : DepthAxis, optional
+            The axis along the line of sight; none for a galaxy evaluated
+            on the plane of the sky.
+        dtype : np.dtype
+            The floating type of the evaluation.
+        emitters : Sequence of int
+            The indices of the components whose light is evaluated (the
+            opacity of all those with opacity is).
+        lines : tuple of str, optional
+            The names of the emission lines evaluated; all if None.
+
+        Returns
+        -------
+        ComponentSetPlan
+            The plan.
+        """
+        return self._component_set.plan(
+            driver, grid, spectral, depth, dtype, emitters, lines)
+
+
+galaxy_parser = parseutils.BasicParser(Galaxy)

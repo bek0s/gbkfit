@@ -1,5 +1,5 @@
 """
-The eval task: evaluate the models of a configuration, or its objective
+The eval task: evaluate the galaxies of a configuration, or its objective
 (the residuals against the data), and write the outputs.
 """
 
@@ -25,7 +25,7 @@ def eval_(
         output_dir_mode: Literal['terminate', 'overwrite', 'unique']
 ) -> None:
     """
-    Evaluate the models of a configuration at its parameters (their
+    Evaluate the galaxies of a configuration at its parameters (their
     fixed values, and the 'value' of the free ones), or its objective,
     and write the outputs: the parameters (gbkfit_eval_params), the
     models, or the data and the residuals (FITS), and their extra
@@ -52,13 +52,13 @@ def eval_(
     """
     _log.info(f"reading configuration from file: {config}...")
     cfg, root = _detail.read_config(
-        config, ('models', 'observations', 'params'),
+        config, ('galaxies', 'observations', 'params'),
         ('driver', 'drivers', 'pdescs'))
     output_dir = _detail.make_output_dir(output_dir, output_dir_mode)
     _log.info(f"output will be stored under directory: {output_dir}")
 
     with parseutils.paths_relative_to(root):
-        _log.info("setting up models and observations...")
+        _log.info("setting up galaxies and observations...")
         group = _detail.load_observation_group(cfg)
         objective = None
         if mode == 'objective':

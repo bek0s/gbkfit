@@ -1,6 +1,6 @@
 """
 Every observable with the options of the instrument, the foreground and
-the model together (oversampling, psf, lsf, primary beam, lens, a
+the galaxy together (oversampling, psf, lsf, primary beam, lens, a
 selection of components, emission lines): the model is finite, of the
 shape of its data, and not empty.
 """
@@ -12,32 +12,34 @@ import numpy as np
 import pytest
 
 from gbkfit.instrument import instrument_parser
-from gbkfit.model import model_parser
+from gbkfit.model import galaxy_parser
 from gbkfit.observation import (
-    Foreground, LensDeflectionMap, Observation, ObservationGroup,
+    Flat, Foreground, LensDeflectionMap, Observation, ObservationGroup,
     observable_parser)
 
 
-def component(name, **options):
+def component(name, **emission):
+    """A thin disk that emits lines, with the given emission options."""
     return dict(
         type='smdisk', name=name, loose=False, tilted=False,
         rnodes=list(range(0, 14)),
-        bptraits=dict(type='exponential'),
-        vptraits=dict(type='tan_arctan'),
-        dptraits=dict(type='uniform')) | options
+        density=dict(ptraits=dict(type='exponential')),
+        kinematics=dict(
+            vptraits=dict(type='tan_arctan'), dptraits=dict(type='uniform')),
+        emission=dict(type='lines', **emission))
 
 
 LINES = [dict(name='ha', rest='6562.8 Angstrom'),
          dict(name='nii', rest='6583.45 Angstrom')]
 
-MODEL = dict(type='kinematics_2d', components=[
+GALAXY = dict(components=[
     component('gas', lines=LINES), component('stars')])
 
 PROPERTIES = {
     f'{name}_{key}': value
     for name in ('gas', 'stars')
     for key, value in dict(
-        vsys=0, xpos=0.3, ypos=-0.6, posa=50, incl=60, bpt_a=1, bpt_s=3,
+        vsys=0, xpos=0.3, ypos=-0.6, posa=50, incl=60, pt_a=1, pt_s=3,
         vpt_rt=2, vpt_vt=150, dpt_a=20).items()} | dict(gas_nii_ratio=0.3)
 
 APERTURES = dict(type='apertures', apertures=[
@@ -93,12 +95,12 @@ def test_feature_combinations(driver, name, lens):
         foreground = Foreground(LensDeflectionMap(
             np.ones((40, 40)), -np.ones((40, 40)), (40, 40), (0.5, 0.5)))
     observation = Observation(
-        observable_parser.load(info), driver,
+        observable_parser.load(info), Flat(), driver,
         foreground=foreground,
         instrument=instrument_parser.load(copy.deepcopy(instrument)),
         components=['gas'], scale=SCALES[name])
     group = ObservationGroup(
-        [model_parser.load(copy.deepcopy(MODEL))], [observation])
+        [galaxy_parser.load(copy.deepcopy(GALAXY))], [observation])
     params = gbkfit.params.ParamSpace(group.pdescs(), PROPERTIES)
     extra = {}
     data = group.model_h(params.evaluate(), extra)[0]

@@ -7,7 +7,7 @@ import numpy as np
 from gbkfit.dataset import Dataset, DatasetRegionSpectra
 from gbkfit.driver import Driver
 from gbkfit.instrument import Instrument
-from gbkfit.model.base import Model, ModelSCube, Selection
+from gbkfit.model import LineEmission
 from gbkfit.params import ParamValues
 from gbkfit.region import Regions, regions_parser
 from gbkfit.utils import gridutils, parseutils
@@ -19,6 +19,7 @@ from .base import ModelData, Observable
 if TYPE_CHECKING:
     import scipy.sparse
 
+    from .._scene import Scene
     from ..foreground import Foreground
 
 
@@ -68,16 +69,14 @@ class RegionSpectra(Observable):
 
     dataset_class = DatasetRegionSpectra
 
+    emission = LineEmission
+
     # The axes of the cube of the model: x, y and the spectral axis
     spectral_axis = 2
 
     @staticmethod
     def type() -> str:
         return 'region_spectra'
-
-    @staticmethod
-    def is_compatible(model: Model) -> bool:
-        return isinstance(model, ModelSCube)
 
     @classmethod
     def options_from_data(cls, dataset: Dataset) -> tuple[str, ...]:
@@ -218,12 +217,11 @@ class RegionSpectra(Observable):
     def plan(
             self,
             driver: Driver,
-            model: Model,
+            scene: 'Scene',
             foreground: 'Foreground',
             instrument: Instrument,
             scale: Sequence[int],
-            dtype: np.dtype,
-            selection: Selection
+            dtype: np.dtype
     ) -> 'RegionSpectraPlan':
         # The masking of DCube is disabled: every pixel of a region adds
         # to its spectrum
@@ -243,8 +241,7 @@ class RegionSpectra(Observable):
             mask_apply=False,
             dtype=dtype)
         return RegionSpectraPlan(
-            self._weights, dcube, driver, model, foreground, dtype,
-            selection)
+            self._weights, dcube, driver, scene, foreground, dtype)
 
 
 class RegionSpectraPlan(_detail.DCubePlanBase):
@@ -254,13 +251,12 @@ class RegionSpectraPlan(_detail.DCubePlanBase):
             weights: 'scipy.sparse.csr_array',
             dcube: _dcube.DCube,
             driver: Driver,
-            model: Model,
+            scene: 'Scene',
             foreground: 'Foreground',
-            dtype: np.dtype,
-            selection: Selection
+            dtype: np.dtype
     ):
         super().__init__(
-            dcube, driver, model, foreground, dtype, selection)
+            dcube, driver, scene, foreground, dtype)
         self._sums = RegionSumsPlan(weights, driver, dtype)
         self._spectra = driver.mem_alloc_d(
             (dcube.size()[2], self._sums.nregions()), dtype)

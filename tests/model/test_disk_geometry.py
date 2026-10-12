@@ -1,23 +1,45 @@
 """
-Tests for the geometry and velocity conventions of the disk models.
+Tests for the geometry and velocity conventions of the disks.
 """
 
 import numpy as np
 import pytest
 
 
-def kinematics_2d_case(driver, **component):
-    """A pixel_spectra model with one thin smooth disk component."""
+EXPONENTIAL = dict(type='exponential')
+BAND = dict(type='band')
+LINES = dict(type='lines')
+
+
+def image_case(driver, observable, **component):
+    """
+    An image of a galaxy with a thin smooth disk that emits in a band,
+    with the given options (an exponential density by default).
+    """
+    disk = dict(
+        type='smdisk', density=dict(ptraits=EXPONENTIAL), emission=BAND)
+    return dict(
+        driver=dict(type=driver.type()),
+        observable=observable,
+        line_of_sight=dict(type='flat'),
+        galaxy=dict(components=[disk | component]))
+
+
+def spectral_cube_case(driver, **component):
+    """A pixel_spectra observation of a galaxy with a thin smooth disk."""
     return dict(
         driver=dict(type=driver.type()),
         observable=dict(
             type='pixel_spectra', size=[32, 32, 41], step=[1, 1, 10]),
-        model=dict(type='kinematics_2d', components=[dict(
+        line_of_sight=dict(type='flat'),
+        galaxy=dict(components=[dict(
             type='smdisk',
             rnodes=list(range(0, 12)),
-            bptraits=dict(type='exponential'),
-            vptraits=dict(type='tan_uniform'),
-            dptraits=dict(type='uniform'),
+            density=dict(ptraits=EXPONENTIAL),
+            kinematics=dict(
+                vptraits=dict(type='tan_uniform'),
+                dptraits=dict(type='uniform')),
+            emission=LINES,
             **component)]))
 
 
@@ -25,10 +47,10 @@ def test_loose_disk_systemic_velocity(driver, evaluate_cases):
     # A loose disk without rotation: the line-of-sight velocity of the
     # disk must be the systemic velocity everywhere, regardless of the
     # (also node-wise) centre position.
-    case = kinematics_2d_case(driver, loose=True, tilted=False)
+    case = spectral_cube_case(driver, loose=True, tilted=False)
     properties = dict(
         vsys=50, xpos=3, ypos=-2, posa=0, incl=45,
-        bpt_a=1, bpt_s=4, vpt_vt=0, dpt_a=10)
+        pt_a=1, pt_s=4, vpt_vt=0, dpt_a=10)
     _, extra = evaluate_cases([case], properties)
     velocity = extra['observation0_model_component0_vdata'].data
     on_disk = np.isfinite(velocity)
@@ -36,26 +58,27 @@ def test_loose_disk_systemic_velocity(driver, evaluate_cases):
     np.testing.assert_allclose(velocity[on_disk], 50)
 
 
-def kinematics_3d_case(driver, disk, rota, psf=None):
+def thick_spectral_cube_case(driver, disk, rota, psf=None):
     """
-    An scube model with one thick disk, on a grid rotated by rota, and
-    with the given PSF.
+    A spectral cube of a galaxy with one thick disk, on a grid with a
+    depth axis rotated by rota, and with the given PSF.
     """
     component = dict(
         type=disk, loose=False, tilted=False,
         rnodes=list(range(0, 16, 2)),
-        bptraits=dict(type='exponential'),
-        bhtraits=dict(type='sech2'),
-        vptraits=dict(type='tan_arctan'),
-        dptraits=dict(type='uniform'))
+        density=dict(ptraits=EXPONENTIAL, htraits=dict(type='sech2')),
+        kinematics=dict(
+            vptraits=dict(type='tan_arctan'), dptraits=dict(type='uniform')),
+        emission=LINES)
     if disk == 'mcdisk':
         component['cflux'] = 2e-5
     return dict(
         driver=dict(type=driver.type()),
         observable=dict(
-            type='pixel_spectra', size=[33, 33, 41], step=[1, 1, 10], rota=rota,
-            psf=psf),
-        model=dict(type='kinematics_3d', components=[component]))
+            type='pixel_spectra', size=[33, 33, 41], step=[1, 1, 10],
+            rota=rota, psf=psf),
+        line_of_sight=dict(type='grid'),
+        galaxy=dict(components=[component]))
 
 
 @pytest.mark.parametrize('disk', ['smdisk', 'mcdisk'])
@@ -65,11 +88,11 @@ def test_grid_rotation(driver, evaluate_cases, disk):
     # angle posa like an unrotated grid sees one with posa - rota
     properties = dict(
         vsys=0, xpos=0, ypos=0, incl=60,
-        bpt_a=1, bpt_s=4, bht_s=1, vpt_rt=2, vpt_vt=150, dpt_a=20)
+        pt_a=1, pt_s=4, ht_s=1, vpt_rt=2, vpt_vt=150, dpt_a=20)
 
     def evaluate(posa, rota):
         data, _ = evaluate_cases(
-            [kinematics_3d_case(driver, disk, rota)],
+            [thick_spectral_cube_case(driver, disk, rota)],
             properties | dict(posa=posa))
         return data[0]['spectra']['d'].copy()
 
@@ -88,12 +111,12 @@ def test_grid_rotation_with_an_elongated_beam(driver, evaluate_cases):
     # sees one with posa - rota
     properties = dict(
         vsys=0, xpos=0, ypos=0, incl=60,
-        bpt_a=1, bpt_s=4, bht_s=1, vpt_rt=2, vpt_vt=150, dpt_a=20)
+        pt_a=1, pt_s=4, ht_s=1, vpt_rt=2, vpt_vt=150, dpt_a=20)
 
     def evaluate(posa, beam_posa, rota):
         beam = dict(type='gauss', sigma=1.5, ratio=0.4, posa=beam_posa)
         data, _ = evaluate_cases(
-            [kinematics_3d_case(driver, 'smdisk', rota, beam)],
+            [thick_spectral_cube_case(driver, 'smdisk', rota, beam)],
             properties | dict(posa=posa))
         return data[0]['spectra']['d'].copy()
 
@@ -114,10 +137,10 @@ def test_image_psf_matches_the_analytic_psf(driver, evaluate_cases):
     fits.writeto('psf.fits', image)
     properties = dict(
         vsys=0, xpos=0, ypos=0, posa=60, incl=60,
-        bpt_a=1, bpt_s=4, bht_s=1, vpt_rt=2, vpt_vt=150, dpt_a=20)
+        pt_a=1, pt_s=4, ht_s=1, vpt_rt=2, vpt_vt=150, dpt_a=20)
 
     def evaluate(psf):
-        case = kinematics_3d_case(driver, 'smdisk', 0, psf)
+        case = thick_spectral_cube_case(driver, 'smdisk', 0, psf)
         # The convolution pads the grid to 128 x 64
         case['observable']['size'] = [61, 17, 41]
         data, _ = evaluate_cases([case], properties)
@@ -132,15 +155,13 @@ def test_image_psf_matches_the_analytic_psf(driver, evaluate_cases):
 def uniform_disk_flux(driver, evaluate_cases, rnodes, loose):
     """The flux of a face-on uniform disk of brightness 1 per arcsec^2."""
     nodes = len(rnodes)
-    case = dict(
-        driver=dict(type=driver.type()),
-        observable=dict(
-            type='pixel_brightness', size=[80, 80], step=[0.2, 0.2]),
-        model=dict(type='intensity_2d', components=[dict(
-            type='smdisk', loose=loose, tilted=False, rnodes=rnodes, rstep=1,
-            bptraits=dict(type='uniform'))]))
+    case = image_case(
+        driver,
+        dict(type='pixel_brightness', size=[80, 80], step=[0.2, 0.2]),
+        loose=loose, tilted=False, rnodes=rnodes, rstep=1,
+        density=dict(ptraits=dict(type='uniform')))
     centre = [0] * nodes if loose else 0
-    properties = dict(xpos=centre, ypos=centre, posa=0, incl=0, bpt_a=1)
+    properties = dict(xpos=centre, ypos=centre, posa=0, incl=0, pt_a=1)
     data, _ = evaluate_cases([case], properties)
     return data[0]['brightness']['d'].sum() * 0.2 * 0.2
 
@@ -163,17 +184,13 @@ def test_thin_disk_seen_from_below(driver, evaluate_cases, incl):
     # (edge-on), its light is on its major axis, and not negative (in
     # float32 the cosine of 90 degrees is negative). The edge of the disk
     # is between pixels, which the rounding of the cosines would move.
-    case = dict(
-        driver=dict(type=driver.type()),
-        observable=dict(type='pixel_brightness', size=[33, 33]),
-        model=dict(type='intensity_2d', components=[dict(
-            type='smdisk', loose=False, tilted=False,
-            rnodes=[1.05 * i for i in range(14)],
-            bptraits=dict(type='exponential'))]))
+    case = image_case(
+        driver, dict(type='pixel_brightness', size=[33, 33]),
+        loose=False, tilted=False, rnodes=[1.05 * i for i in range(14)])
 
     def image(incl):
         properties = dict(
-            xpos=0, ypos=0, posa=0, incl=incl, bpt_a=1, bpt_s=4)
+            xpos=0, ypos=0, posa=0, incl=incl, pt_a=1, pt_s=4)
         data, _ = evaluate_cases([case], properties)
         return data[0]['brightness']['d']
     below = image(incl)
@@ -189,16 +206,13 @@ def test_loose_disk_centres_its_rings(driver, evaluate_cases):
     # on the x axis is on the ring x / 1.2 (x > 0) or -x / 0.8 (x < 0),
     # where the image has the brightness of that radius
     rnodes = list(range(0, 13))
-    case = dict(
-        driver=dict(type=driver.type()),
-        observable=dict(
-            type='pixel_brightness', size=[41, 41], step=[0.5, 0.5]),
-        model=dict(type='intensity_2d', components=[dict(
-            type='smdisk', loose=True, tilted=False, rnodes=rnodes,
-            bptraits=dict(type='exponential'))]))
+    case = image_case(
+        driver,
+        dict(type='pixel_brightness', size=[41, 41], step=[0.5, 0.5]),
+        loose=True, tilted=False, rnodes=rnodes)
     properties = dict(
         xpos=[0.2 * r for r in rnodes], ypos=[0] * len(rnodes),
-        posa=0, incl=0, bpt_a=1, bpt_s=4)
+        posa=0, incl=0, pt_a=1, pt_s=4)
     data, _ = evaluate_cases([case], properties)
     row = data[0]['brightness']['d'][20]
     x = (np.arange(41) - 20) * 0.5

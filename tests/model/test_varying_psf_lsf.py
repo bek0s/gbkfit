@@ -9,17 +9,19 @@ import scipy.signal
 
 import gbkfit.params
 from gbkfit.instrument import LSFGauss, PSFGauss
-from gbkfit.model import model_parser
+from gbkfit.model import galaxy_parser
 from gbkfit.observation import ObservationGroup, observation_parser
 from gbkfit.utils.parseutils import ConfigError
 
 
-MODEL = dict(type='kinematics_2d', components=[dict(
+GALAXY = dict(components=[dict(
     type='smdisk', loose=False, tilted=False, rnodes=list(range(0, 12)),
-    bptraits=dict(type='exponential'), vptraits=dict(type='tan_arctan'),
-    dptraits=dict(type='uniform'))])
+    density=dict(ptraits=dict(type='exponential')),
+    kinematics=dict(
+        vptraits=dict(type='tan_arctan'), dptraits=dict(type='uniform')),
+    emission=dict(type='lines'))])
 PROPERTIES = dict(
-    vsys=0, xpos=0.3, ypos=-0.2, posa=30, incl=60, bpt_a=1, bpt_s=2.5,
+    vsys=0, xpos=0.3, ypos=-0.2, posa=30, incl=60, pt_a=1, pt_s=2.5,
     vpt_rt=2, vpt_vt=150, dpt_a=20)
 # 40 channels of 12 km/s, centred on 0
 SIZE, STEP = (33, 32, 40), (1, 1, 12)
@@ -27,10 +29,11 @@ VELOCITIES = (np.arange(SIZE[2]) - 19.5) * STEP[2]
 
 
 def spectra(driver, psf=None, lsf=None, scale=(1, 1, 1)):
-    """The spectra of the model seen with the PSF and the LSF."""
-    group = ObservationGroup([model_parser.load(MODEL)], [
+    """The spectra of the galaxy seen with the PSF and the LSF."""
+    group = ObservationGroup([galaxy_parser.load(GALAXY)], [
         observation_parser.load(dict(
             scale=list(scale),
+            line_of_sight=dict(type='flat'),
             instrument=dict(psf=psf, lsf=lsf),
             observable=dict(type='pixel_spectra', size=list(SIZE),
                             step=list(STEP))), drivers={None: driver})])

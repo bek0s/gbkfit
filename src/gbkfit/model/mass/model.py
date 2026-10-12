@@ -48,8 +48,8 @@ class MassModel(parseutils.Serializable):
     their squared circular velocities. Its parameters are those of its
     components, prefixed by 'mass_' and their names (e.g. mass_halo_c).
     It computes gravity only, in kpc (see units): the distance of its
-    model converts arcsec to kpc, and the velocity traits 'mass' of the
-    components of its model turn its circular velocity into their
+    galaxy converts arcsec to kpc, and the velocity traits 'mass' of the
+    components of its galaxy turn its circular velocity into their
     rotation.
 
     Parameters

@@ -1,54 +1,62 @@
 """
-Tests for the models in double precision (float64).
+Tests for the evaluation of galaxies in double precision (float64).
 """
 
 import numpy as np
 import pytest
 
 import gbkfit.params
-from gbkfit.model import model_parser
+from gbkfit.model import galaxy_parser
 from gbkfit.observation import ObservationGroup, observation_parser
 
 
-DISK = dict(
-    loose=False, tilted=False, rnodes=list(range(0, 12)),
-    bptraits=dict(type='exponential'), vptraits=dict(type='tan_arctan'),
-    dptraits=dict(type='uniform'))
+KINEMATICS = dict(
+    vptraits=dict(type='tan_arctan'), dptraits=dict(type='uniform'))
+THIN_DISK = dict(
+    type='smdisk', loose=False, tilted=False, rnodes=list(range(0, 12)),
+    density=dict(ptraits=dict(type='exponential')), kinematics=KINEMATICS,
+    emission=dict(type='lines'))
+THICK_DISK = THIN_DISK | dict(density=dict(
+    ptraits=dict(type='exponential'), htraits=dict(type='sech2')))
 PROPERTIES = dict(
-    vsys=0, xpos=0.3, ypos=-0.2, posa=30, incl=60, bpt_a=1, bpt_s=2.5,
+    vsys=0, xpos=0.3, ypos=-0.2, posa=30, incl=60, pt_a=1, pt_s=2.5,
     vpt_rt=2, vpt_vt=150, dpt_a=20)
 GAUSS_PSF = dict(type='gauss', sigma=1.3)
 GAUSS_LSF = dict(type='gauss', sigma=17)
 VARYING_PSF = dict(type='gauss', sigma=dict(
     velocity=[-500, 500], values=[1, 2]))
+FLAT = dict(type='flat')
+GRID = dict(type='grid')
+# A galaxy, and an observable seen along a line of sight through an
+# instrument
 CASES = {
     '2d spectra': (
-        dict(type='kinematics_2d', components=[dict(type='smdisk', **DISK)]),
+        dict(components=[THIN_DISK]),
         dict(type='pixel_spectra', size=[33, 32, 40], step=[1, 1, 12]),
-        dict(psf=GAUSS_PSF, lsf=GAUSS_LSF)),
+        FLAT, dict(psf=GAUSS_PSF, lsf=GAUSS_LSF)),
     '3d spectra': (
-        dict(type='kinematics_3d', components=[dict(
-            type='smdisk', bhtraits=dict(type='sech2'), **DISK)]),
+        dict(components=[THICK_DISK]),
         dict(type='pixel_spectra', size=[33, 32, 40], step=[1, 1, 12]),
-        dict(psf=GAUSS_PSF, lsf=GAUSS_LSF)),
+        GRID, dict(psf=GAUSS_PSF, lsf=GAUSS_LSF)),
     'moments': (
-        dict(type='kinematics_2d', components=[dict(type='smdisk', **DISK)]),
+        dict(components=[THIN_DISK]),
         dict(type='pixel_moments', size=[33, 32], step=[1, 1]),
-        dict(psf=GAUSS_PSF, lsf=GAUSS_LSF)),
+        FLAT, dict(psf=GAUSS_PSF, lsf=GAUSS_LSF)),
     'varying psf': (
-        dict(type='kinematics_2d', components=[dict(type='smdisk', **DISK)]),
+        dict(components=[THIN_DISK]),
         dict(type='pixel_spectra', size=[33, 32, 40], step=[1, 1, 12]),
-        dict(psf=VARYING_PSF, lsf=GAUSS_LSF))}
+        FLAT, dict(psf=VARYING_PSF, lsf=GAUSS_LSF))}
 
 
 def evaluate(driver, case, dtype):
-    model, observable, instrument = CASES[case]
-    group = ObservationGroup([model_parser.load(model)], [
+    galaxy, observable, line_of_sight, instrument = CASES[case]
+    group = ObservationGroup([galaxy_parser.load(galaxy)], [
         observation_parser.load(dict(
-            observable=observable, instrument=instrument, dtype=dtype),
+            observable=observable, line_of_sight=line_of_sight,
+            instrument=instrument, dtype=dtype),
             drivers={None: driver})])
-    # (the 3D disks have a thickness)
-    properties = PROPERTIES | (dict(bht_s=0.5) if '3d' in case else {})
+    # (the disk on a grid is thick: it has a scale height)
+    properties = PROPERTIES | (dict(ht_s=0.5) if '3d' in case else {})
     params = gbkfit.params.ParamSpace(
         group.pdescs(), properties).evaluate()
     return {key: value['d'].copy()

@@ -1,7 +1,8 @@
 """
-Tests for mass models: their components against independent formulas
-and integrals, their parameterisations, the distance of their model, and
-the velocity traits 'mass', which take their circular velocity.
+Tests for the mass of galaxies: its components against independent
+formulas and integrals, their parameterisations, the distance of their
+galaxy, and the velocity traits 'mass', which take their circular
+velocity.
 """
 
 import copy
@@ -12,14 +13,14 @@ import pytest
 import scipy.integrate
 import scipy.special
 
-from gbkfit.model import model_parser
+from gbkfit.model import galaxy_parser
 from gbkfit.model.distance import (
     KPC_PER_ARCSEC_MPC, DistanceDirect, DistanceRedshift)
 from gbkfit.model.mass import (
     MassBurkert, MassContext, MassEinasto, MassExponentialDisk, MassModel,
     MassNFW, MassNodewiseDisk, MassPointMass, MassPseudoIsothermal,
-    MassSersic, MassUser, MassZhao, mass_model_parser, vertical_density,
-    vertical_transform)
+    MassSersic, MassUser, MassZhao, mass_component_parser,
+    vertical_density, vertical_transform)
 from gbkfit.model.mass import _disk_gravity
 from gbkfit.utils.parseutils import ConfigError
 
@@ -379,12 +380,12 @@ def test_distances_give_the_length_of_an_arcsec():
         DistanceDirect(epoch=-1)
 
 
-MASS_MODEL = dict(components=[
+MASS = [
     dict(type='exponential_disk', name='stars', vertical='thin'),
     dict(type='nodewise_disk', name='gas', nodes=[0.0, 0.3, 0.6, 1.2],
          vertical='thin'),
     dict(type='pseudo_isothermal', name='halo',
-         parameters='density_radius')])
+         parameters='density_radius')]
 
 DISTANCE = dict(type='direct', cosmology='Planck18', epoch=0.0)
 
@@ -394,90 +395,123 @@ MASS_PROPERTIES = dict(
 
 DISK = dict(
     loose=False, tilted=False, rnodes=list(range(0, 21, 2)), rstep=0.5,
-    bptraits=dict(type='exponential'), dptraits=dict(type='uniform'))
+    density=dict(ptraits=dict(type='exponential')),
+    kinematics=dict(dptraits=dict(type='uniform')),
+    emission=dict(type='lines'))
 
 DISK_PROPERTIES = dict(
-    xpos=0, ypos=0, posa=30, incl=60, vsys=0, bpt_a=1, bpt_s=4, dpt_a=15)
+    xpos=0, ypos=0, posa=30, incl=60, vsys=0, pt_a=1, pt_s=4, dpt_a=15)
 
 
-def kinematics(
-        model_type, disk_type, vptraits, mass_model=None, distance=None):
-    disk = DISK | dict(type=disk_type, vptraits=vptraits)
-    if model_type == 'kinematics_3d':
-        disk |= dict(bhtraits=dict(type='sech2'))
+def with_traits(component, **traits):
+    """
+    The configuration of a disk component with the given traits of its
+    density (ptraits, htraits) and kinematics (vptraits, dptraits)
+    instead of its own.
+    """
+    density = {
+        key: value for key, value in traits.items()
+        if key in ('ptraits', 'htraits')}
+    kinematics = {
+        key: value for key, value in traits.items()
+        if key in ('vptraits', 'dptraits')}
+    return component | dict(
+        density=component['density'] | density,
+        kinematics=component['kinematics'] | kinematics)
+
+
+def disk_galaxy(disk_type, vptraits, mass=None, distance=None, thick=False):
+    """
+    A galaxy of a disk (DISK) of the given type and velocity polar
+    traits, thick (of sech2 height traits) if thick, with the given mass
+    and distance.
+    """
+    disk = with_traits(DISK, vptraits=vptraits) | dict(type=disk_type)
+    if thick:
+        disk = with_traits(disk, htraits=dict(type='sech2'))
     if disk_type == 'mcdisk':
         disk |= dict(cflux=1e-3)
-    info = dict(type=model_type, components=[disk])
-    if mass_model is not None:
-        info |= dict(mass_model=copy.deepcopy(mass_model))
+    info = dict(components=[disk])
+    if mass is not None:
+        info |= dict(mass=copy.deepcopy(mass))
     if distance is not None:
         info |= dict(distance=copy.deepcopy(distance))
-    return model_parser.load(info)
+    return galaxy_parser.load(info)
 
 
-def evaluate(driver, model, properties):
-    from gbkfit.observation import Observation, ObservationGroup, PixelSpectra
+def mass_model(mass):
+    """The mass model of the given mass components."""
+    return MassModel(mass_component_parser.load(copy.deepcopy(mass)))
+
+
+def evaluate(driver, galaxy, line_of_sight, properties):
+    """
+    Evaluate a spectral cube of a galaxy, along the given line of sight
+    ('flat' or 'grid').
+    """
+    from gbkfit.observation import (
+        Observation, ObservationGroup, PixelSpectra, line_of_sight_parser)
     from gbkfit.params import ParamSpace
-    group = ObservationGroup([model], [Observation(
-        PixelSpectra(size=(32, 32, 51), step=(1, 1, 10)), driver)])
+    group = ObservationGroup([galaxy], [Observation(
+        PixelSpectra(size=(32, 32, 51), step=(1, 1, 10)),
+        line_of_sight_parser.load(dict(type=line_of_sight)), driver)])
     params = ParamSpace(group.pdescs(), properties)
     return group.model_h(params.evaluate())[0]['spectra']['d'].copy()
 
 
-@pytest.mark.parametrize('model_type, disk_type', [
-    ('kinematics_2d', 'smdisk'),
-    ('kinematics_3d', 'smdisk'),
-    ('kinematics_3d', 'mcdisk')])
+@pytest.mark.parametrize('line_of_sight, disk_type', [
+    ('flat', 'smdisk'),
+    ('grid', 'smdisk'),
+    ('grid', 'mcdisk')])
 def test_mass_trait_is_the_circular_velocity_at_the_subnodes(
-        driver, model_type, disk_type):
+        driver, line_of_sight, disk_type):
     # A disk with the trait 'mass' is the disk whose node-wise tangential
-    # velocity at its subnodes is the circular velocity of the mass model,
-    # at the radii of the subnodes in kpc
-    massive = kinematics(
-        model_type, disk_type, dict(type='mass'), MASS_MODEL, DISTANCE)
-    given = kinematics(
-        model_type, disk_type,
-        dict(type='nw_tan_uniform', sampling='subrings'))
+    # velocity at its subnodes is the circular velocity of the mass of its
+    # galaxy, at the radii of the subnodes in kpc
+    thick = line_of_sight == 'grid'
+    massive = disk_galaxy(
+        disk_type, dict(type='mass'), MASS, DISTANCE, thick=thick)
+    given = disk_galaxy(
+        disk_type, dict(type='nw_tan_uniform', sampling='subrings'),
+        thick=thick)
     subrnodes = np.array(given.constants()['subrnodes'])
-    vcirc = np.sqrt(mass_model_parser.load(copy.deepcopy(MASS_MODEL)).vcirc2(
+    vcirc = np.sqrt(mass_model(MASS).vcirc2(
         subrnodes * 10 * 0.0048481368, MASS_PROPERTIES, CONTEXT))
     assert vcirc.max() > 100
-    properties = DISK_PROPERTIES
-    if model_type == 'kinematics_3d':
-        properties |= dict(bht_s=1)
+    properties = dict(DISK_PROPERTIES)
+    if thick:
+        properties |= dict(ht_s=1)
     np.testing.assert_allclose(
-        evaluate(driver, massive, properties | MASS_PROPERTIES),
-        evaluate(driver, given, properties | dict(vpt_vt=vcirc)),
+        evaluate(
+            driver, massive, line_of_sight, properties | MASS_PROPERTIES),
+        evaluate(
+            driver, given, line_of_sight, properties | dict(vpt_vt=vcirc)),
         rtol=1e-6, atol=1e-7)
 
 
 def test_mass_trait_parameters_and_round_trip():
-    model = kinematics(
-        'kinematics_3d', 'smdisk', dict(type='mass'), MASS_MODEL, DISTANCE)
-    # The trait has no parameters: those of the distance and the mass
-    # model are the model's
-    assert not any(name.startswith('vpt') for name in model.pdescs())
-    assert set(MASS_PROPERTIES) <= set(model.pdescs())
-    dumped = model_parser.dump(model)
-    assert dumped['mass_model'] == MASS_MODEL
+    galaxy = disk_galaxy(
+        'smdisk', dict(type='mass'), MASS, DISTANCE, thick=True)
+    # The trait has no parameters: those of the distance and the mass are
+    # the galaxy's
+    assert not any(name.startswith('vpt') for name in galaxy.pdescs())
+    assert set(MASS_PROPERTIES) <= set(galaxy.pdescs())
+    dumped = galaxy_parser.dump(galaxy)
+    assert dumped['mass'] == MASS
     assert dumped['distance'] == DISTANCE
-    assert model_parser.dump(model_parser.load(copy.deepcopy(dumped))) \
+    assert galaxy_parser.dump(galaxy_parser.load(copy.deepcopy(dumped))) \
         == dumped
 
 
-def test_mass_trait_mass_model_and_distance_need_each_other():
-    with pytest.raises(ConfigError, match="need the mass_model"):
-        kinematics('kinematics_2d', 'smdisk', dict(type='mass'))
+def test_mass_trait_mass_and_distance_need_each_other():
+    with pytest.raises(ConfigError, match="need the mass of their galaxy"):
+        disk_galaxy('smdisk', dict(type='mass'))
     with pytest.raises(ConfigError, match="no component uses"):
-        kinematics(
-            'kinematics_2d', 'smdisk', dict(type='tan_arctan'), MASS_MODEL,
-            DISTANCE)
+        disk_galaxy('smdisk', dict(type='tan_arctan'), MASS, DISTANCE)
     with pytest.raises(ConfigError, match="needs its distance"):
-        kinematics('kinematics_2d', 'smdisk', dict(type='mass'), MASS_MODEL)
-    with pytest.raises(ConfigError, match="used by its mass_model only"):
-        kinematics(
-            'kinematics_2d', 'smdisk', dict(type='tan_arctan'),
-            distance=DISTANCE)
+        disk_galaxy('smdisk', dict(type='mass'), MASS)
+    with pytest.raises(ConfigError, match="used by its mass only"):
+        disk_galaxy('smdisk', dict(type='tan_arctan'), distance=DISTANCE)
 
 
 def test_tables_of_thick_disks_are_their_integrals():
@@ -497,31 +531,33 @@ KPC_PER_ARCSEC = 10 * KPC_PER_ARCSEC_MPC
 
 
 def test_disk_densities_are_azimuthal_means(driver):
-    # The surface density of each brightness trait at the subnodes: an
+    # The surface density of each density polar trait at the subnodes: an
     # exponential; a harmonic (mean 0); a circular blob, whose mean is a
     # exp(-(R - r)^2 / (2 s^2)) i0e(R r / s^2), narrow enough to need
     # more azimuths; none outside the ring that the disk selects. The
-    # circular velocity that the disk takes from its model is not needed
+    # circular velocity that the disk takes from its galaxy is not needed
+    from gbkfit.model import SMDisk
     from gbkfit.model.components._component_set import IMAGE_SPECTRAL_AXIS
     from gbkfit.model.components.disks._profiles import DiskDensity
-    from gbkfit.model.components.disks.smdisk import SpectralSMDisk2D
-    component = SpectralSMDisk2D.load(dict(
+    component = SMDisk.load(dict(
         rnodes=list(range(0, 21, 2)), rstep=0.5,
-        bptraits=[
+        density=dict(ptraits=[
             dict(type='exponential'), dict(type='nw_harmonic', order=2),
-            dict(type='mixture_gauss', nblobs=1)],
-        vptraits=dict(type='mass'), dptraits=dict(type='uniform'),
-        sptraits=dict(type='rrange')))
+            dict(type='mixture_gauss', nblobs=1)]),
+        kinematics=dict(
+            vptraits=dict(type='mass'), dptraits=dict(type='uniform')),
+        sptraits=dict(type='rrange'),
+        emission=dict(type='lines')))
     params = dict(
-        xpos=0, ypos=0, posa=30, incl=60, vsys=0, bpt_a=1, bpt_s=4,
-        bpt1_a=np.full(11, 0.5), bpt1_p=np.zeros(11), bpt2_r=15, bpt2_t=40,
-        bpt2_a=0.5, bpt2_s=0.3, bpt2_q=1, bpt2_p=0, dpt_a=10, spt_rmin=0,
+        xpos=0, ypos=0, posa=30, incl=60, vsys=0, pt_a=1, pt_s=4,
+        pt1_a=np.full(11, 0.5), pt1_p=np.zeros(11), pt2_r=15, pt2_t=40,
+        pt2_a=0.5, pt2_s=0.3, pt2_q=1, pt2_p=0, dpt_a=10, spt_rmin=0,
         spt_rmax=18)
     plan = component.plan(
-        driver, IMAGE_SPECTRAL_AXIS, np.dtype(np.float32), None)
+        driver, IMAGE_SPECTRAL_AXIS, np.dtype(np.float32), None, True)
     density = DiskDensity(
-        component.brightness_disk(), plan.disk_plan(), params, KPC_PER_ARCSEC)
-    radius = np.array(component.brightness_disk().subrnodes())
+        component.density_disk(), plan.disk_plan(), params, KPC_PER_ARCSEC)
+    radius = np.array(component.density_disk().subrnodes())
     selected = radius < 18
     blob = 0.5 * np.exp(-(radius - 15) ** 2 / (2 * 0.3 ** 2)) \
         * scipy.special.i0e(radius * 15 / 0.3 ** 2)
@@ -531,82 +567,84 @@ def test_disk_densities_are_azimuthal_means(driver):
         rtol=1e-5, atol=2e-6)
 
 
-@pytest.mark.parametrize('model_type', ['kinematics_2d', 'kinematics_3d'])
-def test_trait_disk_is_the_nodewise_disk_of_its_brightness(
-        driver, model_type):
-    # A disk whose mass follows a node-wise brightness (linear between the
+@pytest.mark.parametrize('line_of_sight', ['flat', 'grid'])
+def test_trait_disk_is_the_nodewise_disk_of_its_density(
+        driver, line_of_sight):
+    # A disk whose mass follows a node-wise density (linear between the
     # subnodes, and 0 at the last) is the nodewise disk of that surface
-    # density at the subnodes, and of the scale height of the brightness
+    # density at the subnodes, and of the scale height of the density
     # (in kpc) if thick
     from gbkfit.model.components.disks._disk import subring_radii
     rnodes = list(range(0, 21, 2))
     brightness = np.append(np.linspace(1, 0.2, 10), 0)
     upsilon = 2e8
     subrnodes = np.array(subring_radii(rnodes, DISK['rstep']))
-    thick = model_type == 'kinematics_3d'
-    disk = DISK | dict(
-        type='smdisk', name='hi', bptraits=dict(type='nw_uniform'),
-        vptraits=dict(type='mass'))
+    thick = line_of_sight == 'grid'
+    disk = with_traits(
+        DISK, ptraits=dict(type='nw_uniform'), vptraits=dict(type='mass'))
+    disk |= dict(type='smdisk', name='hi')
     properties = {
         f'hi_{name}': value for name, value in DISK_PROPERTIES.items()
-        if name != 'bpt_s'} | dict(hi_bpt_a=brightness)
+        if name != 'pt_s'} | dict(hi_pt_a=brightness)
     if thick:
-        disk |= dict(bhtraits=dict(type='sech2'))
-        properties |= dict(hi_bht_s=1)
+        disk = with_traits(disk, htraits=dict(type='sech2'))
+        properties |= dict(hi_ht_s=1)
     halo = dict(
         type='pseudo_isothermal', name='halo', parameters='density_radius')
     halo_properties = dict(distance=10, mass_halo_log_rho=8, mass_halo_rs=1)
 
-    def model(gas):
-        return model_parser.load(dict(
-            type=model_type, components=[copy.deepcopy(disk)],
-            mass_model=dict(components=[gas, halo]),
+    def galaxy(gas):
+        return galaxy_parser.load(dict(
+            components=[copy.deepcopy(disk)], mass=[gas, halo],
             distance=copy.deepcopy(DISTANCE)))
 
-    following = model(dict(type='trait_disk', name='gas', component='hi'))
-    nodewise = model(dict(
+    following = galaxy(dict(type='trait_disk', name='gas', component='hi'))
+    nodewise = galaxy(dict(
         type='nodewise_disk', name='gas',
         nodes=(subrnodes * KPC_PER_ARCSEC).tolist(),
         vertical='sech2' if thick else 'thin'))
     sigma = upsilon * np.interp(subrnodes[:-1], rnodes, brightness)
     np.testing.assert_allclose(
-        evaluate(driver, following, properties | halo_properties | dict(
-            mass_gas_upsilon=upsilon)),
-        evaluate(driver, nodewise, properties | halo_properties | dict(
-            mass_gas_log_sigma=np.log10(sigma),
-            mass_gas_hz=KPC_PER_ARCSEC)),
+        evaluate(
+            driver, following, line_of_sight,
+            properties | halo_properties | dict(mass_gas_upsilon=upsilon)),
+        evaluate(
+            driver, nodewise, line_of_sight,
+            properties | halo_properties | dict(
+                mass_gas_log_sigma=np.log10(sigma),
+                mass_gas_hz=KPC_PER_ARCSEC)),
         rtol=1e-5, atol=1e-7)
 
 
-def test_trait_disks_follow_disks_of_their_model():
-    mass_model = dict(components=[
+def test_trait_disks_follow_disks_of_their_galaxy():
+    mass = [
         dict(type='trait_disk', name='gas', component='hi', rstep=1.0,
-             vertical='component')])
-    loaded = mass_model_parser.load(copy.deepcopy(mass_model))
-    assert mass_model_parser.dump(loaded) == mass_model
+             vertical='component')]
+    loaded = mass_component_parser.load(copy.deepcopy(mass))
+    assert mass_component_parser.dump(loaded) == mass
     with pytest.raises(ConfigError, match="follows the component 'hi'"):
-        kinematics(
-            'kinematics_2d', 'smdisk', dict(type='mass'), mass_model,
-            DISTANCE)
+        disk_galaxy('smdisk', dict(type='mass'), mass, DISTANCE)
 
 
 def test_pressure_support_is_the_jeans_equation(driver):
-    # An exponential brightness (scale 4) and dispersion (scale 10) of a
+    # An exponential density (scale 4) and dispersion (scale 10) of a
     # thin disk: (R / rho) d(rho sigma^2)/dR = -sigma^2 R (1 / 4 + 2 / 10),
     # to the precision of the three-point derivative on the subnodes
+    from gbkfit.model import SMDisk
     from gbkfit.model.components._component_set import IMAGE_SPECTRAL_AXIS
     from gbkfit.model.components.disks._profiles import pressure_support
-    from gbkfit.model.components.disks.smdisk import SpectralSMDisk2D
-    component = SpectralSMDisk2D.load(dict(
+    component = SMDisk.load(dict(
         rnodes=list(range(0, 21, 2)), rstep=0.5,
-        bptraits=dict(type='exponential'), vptraits=dict(type='mass'),
-        dptraits=dict(type='exponential')))
+        density=dict(ptraits=dict(type='exponential')),
+        kinematics=dict(
+            vptraits=dict(type='mass'), dptraits=dict(type='exponential')),
+        emission=dict(type='lines')))
     params = dict(
-        xpos=0, ypos=0, posa=30, incl=60, vsys=0, bpt_a=1, bpt_s=4,
+        xpos=0, ypos=0, posa=30, incl=60, vsys=0, pt_a=1, pt_s=4,
         dpt_a=30, dpt_s=10)
     plan = component.plan(
-        driver, IMAGE_SPECTRAL_AXIS, np.dtype(np.float32), None)
-    disk = component.brightness_disk()
+        driver, IMAGE_SPECTRAL_AXIS, np.dtype(np.float32), None, True)
+    disk = component.density_disk()
     radius = np.array(disk.subrnodes())
     np.testing.assert_allclose(
         pressure_support(disk, plan.disk_plan(), params, radius),
@@ -614,42 +652,42 @@ def test_pressure_support_is_the_jeans_equation(driver):
         rtol=1e-2, atol=1e-3)
 
 
-@pytest.mark.parametrize('model_type', ['kinematics_2d', 'kinematics_3d'])
-def test_mass_trait_with_pressure_support(driver, model_type):
+@pytest.mark.parametrize('line_of_sight', ['flat', 'grid'])
+def test_mass_trait_with_pressure_support(driver, line_of_sight):
     # The trait 'mass' with pressure support is the node-wise velocity
     # sqrt(v_c^2 + (R / rho) d(rho sigma^2)/dR) at the subnodes, with the
-    # derivative by the three-point formula: thin, rho is the brightness;
-    # thick and flaring (sech2, node-wise scale height s), rho is the
-    # brightness / (2 s)
+    # derivative by the three-point formula: thin, rho is the surface
+    # density; thick and flaring (sech2, node-wise scale height s), rho is
+    # the surface density / (2 s)
     from gbkfit.model.components.disks._disk import subring_radii
     rnodes = list(range(0, 21, 2))
     flaring = np.linspace(0.5, 2, 11)
-    disk = DISK | dict(
-        type='smdisk', dptraits=dict(type='exponential'),
+    disk = with_traits(
+        DISK, dptraits=dict(type='exponential'),
         vptraits=dict(type='mass', pressure_support='jeans'))
+    disk |= dict(type='smdisk')
     properties = DISK_PROPERTIES | dict(dpt_a=30, dpt_s=10)
     subrnodes = np.array(subring_radii(rnodes, DISK['rstep']))
     density = np.exp(-subrnodes / 4)
-    if model_type == 'kinematics_3d':
-        disk |= dict(bhtraits=dict(type='sech2', rnodes=True))
-        properties |= dict(bht_s=flaring)
+    if line_of_sight == 'grid':
+        disk = with_traits(disk, htraits=dict(type='sech2', rnodes=True))
+        properties |= dict(ht_s=flaring)
         density /= 2 * np.interp(subrnodes, rnodes, flaring)
     pressure = density * (30 * np.exp(-subrnodes / 10)) ** 2
     support = subrnodes * np.gradient(pressure, subrnodes, edge_order=2) \
         / density
-    vcirc2 = mass_model_parser.load(copy.deepcopy(MASS_MODEL)).vcirc2(
+    vcirc2 = mass_model(MASS).vcirc2(
         subrnodes * KPC_PER_ARCSEC, MASS_PROPERTIES, CONTEXT)
-    supported = model_parser.load(dict(
-        type=model_type, components=[disk],
-        mass_model=copy.deepcopy(MASS_MODEL),
+    supported = galaxy_parser.load(dict(
+        components=[disk], mass=copy.deepcopy(MASS),
         distance=copy.deepcopy(DISTANCE)))
-    given = model_parser.load(dict(
-        type=model_type, components=[disk | dict(
-            vptraits=dict(type='nw_tan_uniform', sampling='subrings'))]))
+    given = galaxy_parser.load(dict(components=[with_traits(
+        disk, vptraits=dict(type='nw_tan_uniform', sampling='subrings'))]))
     assert np.all(vcirc2 + support >= 0) and np.max(-support) > 500
     np.testing.assert_allclose(
-        evaluate(driver, supported, properties | MASS_PROPERTIES),
-        evaluate(driver, given, properties | dict(
+        evaluate(
+            driver, supported, line_of_sight, properties | MASS_PROPERTIES),
+        evaluate(driver, given, line_of_sight, properties | dict(
             vpt_vt=np.sqrt(vcirc2 + support))),
         rtol=1e-5, atol=1e-7)
 

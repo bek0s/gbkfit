@@ -13,22 +13,25 @@ from modelutils import observation_group
 from gbkfit.observation.observables._moments import MomentsPlan
 
 
-MODEL = dict(type='kinematics_2d', components=[dict(
+GALAXY = dict(components=[dict(
     type='smdisk', loose=False, tilted=False,
     rnodes=list(range(0, 14)),
-    bptraits=dict(type='exponential'),
-    vptraits=dict(type='tan_arctan'),
-    dptraits=dict(type='uniform'))])
+    density=dict(ptraits=dict(type='exponential')),
+    kinematics=dict(
+        vptraits=dict(type='tan_arctan'),
+        dptraits=dict(type='uniform')),
+    emission=dict(type='lines'))])
 
 PROPERTIES = dict(
     vsys=0, xpos=0.3, ypos=-0.6, posa=50, incl=60,
-    bpt_a=1, bpt_s=4, vpt_rt=2, vpt_vt=150, dpt_a=20)
+    pt_a=1, pt_s=4, vpt_rt=2, vpt_vt=150, dpt_a=20)
 
 
 def evaluate(driver, observable):
     group = observation_group([dict(
-        driver=dict(type=driver.type()), observable=copy.deepcopy(observable),
-        model=MODEL)])
+        driver=dict(type=driver.type()), galaxy=GALAXY,
+        line_of_sight=dict(type='flat'),
+        observable=copy.deepcopy(observable))])
     params = gbkfit.params.ParamSpace(group.pdescs(), PROPERTIES)
     data = group.model_h(params.evaluate())[0]
     return {key: value['d'].copy() for key, value in data.items()}

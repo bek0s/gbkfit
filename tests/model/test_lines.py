@@ -16,16 +16,19 @@ def line_flux(driver, evaluate_cases, dispersion):
         driver=dict(type=driver.type()),
         observable=dict(
             type='pixel_spectra', size=[24, 24, 61], step=[1, 1, 10]),
-        model=dict(type='kinematics_2d', components=[dict(
+        line_of_sight=dict(type='flat'),
+        galaxy=dict(components=[dict(
             type='smdisk', loose=False, tilted=False,
             rnodes=list(range(0, 12)),
-            bptraits=dict(type='exponential'),
-            vptraits=dict(type='tan_arctan'),
-            dptraits=dict(type='uniform'))]))
+            density=dict(ptraits=dict(type='exponential')),
+            kinematics=dict(
+                vptraits=dict(type='tan_arctan'),
+                dptraits=dict(type='uniform')),
+            emission=dict(type='lines'))]))
     # A systemic velocity between two channel centres
     properties = dict(
         vsys=3, xpos=0, ypos=0, posa=30, incl=45,
-        bpt_a=1, bpt_s=4, vpt_rt=2, vpt_vt=150, dpt_a=dispersion)
+        pt_a=1, pt_s=4, vpt_rt=2, vpt_vt=150, dpt_a=dispersion)
     data, _ = evaluate_cases([case], properties)
     scube = data[0]['spectra']['d']
     assert np.isfinite(scube).all()

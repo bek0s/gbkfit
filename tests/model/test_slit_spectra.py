@@ -11,24 +11,26 @@ import pytest
 from modelutils import observation_group
 
 
-MODEL = dict(type='kinematics_2d', components=[dict(
+GALAXY = dict(components=[dict(
     type='smdisk', loose=False, tilted=False,
     rnodes=list(range(0, 14)),
-    bptraits=dict(type='exponential'),
-    vptraits=dict(type='tan_arctan'),
-    dptraits=dict(type='uniform'))])
+    density=dict(ptraits=dict(type='exponential')),
+    kinematics=dict(
+        vptraits=dict(type='tan_arctan'),
+        dptraits=dict(type='uniform')),
+    emission=dict(type='lines'))])
 
 PROPERTIES = dict(
     vsys=0, xpos=0.3, ypos=-0.6, posa=50, incl=60,
-    bpt_a=1, bpt_s=4, vpt_rt=2, vpt_vt=150, dpt_a=20)
+    pt_a=1, pt_s=4, vpt_rt=2, vpt_vt=150, dpt_a=20)
 
 
 def evaluate(driver, observable):
-    model_group = observation_group([
-        dict(driver=dict(type=driver.type()), observable=observable,
-             model=MODEL)])
-    params = gbkfit.params.ParamSpace(model_group.pdescs(), PROPERTIES)
-    data = model_group.model_h(params.evaluate())[0]
+    group = observation_group([
+        dict(driver=dict(type=driver.type()), galaxy=GALAXY,
+             line_of_sight=dict(type='flat'), observable=observable)])
+    params = gbkfit.params.ParamSpace(group.pdescs(), PROPERTIES)
+    data = group.model_h(params.evaluate())[0]
     return next(iter(data.values()))['d'].copy()
 
 
@@ -69,16 +71,16 @@ def test_slit_spectra_objective_residual(driver):
     dataset = DatasetSlitSpectra(
         Data(model + 1, error=np.full_like(model, 2)), step=(1, 10),
         rota=30)
-    from gbkfit.model import model_parser
+    from gbkfit.model import galaxy_parser
     from gbkfit.observation import (
-        Observation, ObservationGroup, observable_parser)
+        Flat, Observation, ObservationGroup, observable_parser)
     observation = Observation(
-        observable_parser.load(copy.deepcopy(observable)), driver,
+        observable_parser.load(copy.deepcopy(observable)), Flat(), driver,
         data=dataset)
-    model_group = ObservationGroup(
-        [model_parser.load(copy.deepcopy(MODEL))], [observation])
-    objective = Objective(model_group)
-    params = gbkfit.params.ParamSpace(model_group.pdescs(), PROPERTIES)
+    group = ObservationGroup(
+        [galaxy_parser.load(copy.deepcopy(GALAXY))], [observation])
+    objective = Objective(group)
+    params = gbkfit.params.ParamSpace(group.pdescs(), PROPERTIES)
     residual = objective.residual_nddata_h(params.evaluate(), False)
     np.testing.assert_allclose(residual[0]['spectra'], -0.5, rtol=1e-5)
     # The chi-squared is the sum of their squares, and the log-likelihood

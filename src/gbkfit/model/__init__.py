@@ -1,6 +1,6 @@
-from .base import *
 from .distance import *
+from .galaxy import *
 from .mass import *
 
 from . import components
-from .components.models import *
+from .components import *

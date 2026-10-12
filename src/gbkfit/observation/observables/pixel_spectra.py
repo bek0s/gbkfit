@@ -7,12 +7,13 @@ import numpy as np
 from gbkfit.dataset import DatasetPixelSpectra
 from gbkfit.driver import Driver
 from gbkfit.instrument import Instrument
-from gbkfit.model.base import Model, ModelSCube, Selection
+from gbkfit.model import LineEmission
 from gbkfit.params import ParamValues
 from . import _dcube, _detail
 from .base import ModelData, Observable
 
 if TYPE_CHECKING:
+    from .._scene import Scene
     from ..foreground import Foreground
 
 
@@ -58,16 +59,14 @@ class PixelSpectra(Observable):
 
     dataset_class = DatasetPixelSpectra
 
+    emission = LineEmission
+
     # The axes of a spectral cube: x, y and the spectral axis
     spectral_axis = 2
 
     @staticmethod
     def type() -> str:
         return 'pixel_spectra'
-
-    @staticmethod
-    def is_compatible(model: Model) -> bool:
-        return isinstance(model, ModelSCube)
 
     @classmethod
     def load(
@@ -157,12 +156,11 @@ class PixelSpectra(Observable):
     def plan(
             self,
             driver: Driver,
-            model: Model,
+            scene: 'Scene',
             foreground: 'Foreground',
             instrument: Instrument,
             scale: Sequence[int],
-            dtype: np.dtype,
-            selection: Selection
+            dtype: np.dtype
     ) -> 'PixelSpectraPlan':
         dcube = _dcube.DCube(
             size=self.size(),
@@ -180,7 +178,7 @@ class PixelSpectra(Observable):
             mask_apply=self._mask_apply,
             dtype=dtype)
         return PixelSpectraPlan(
-            dcube, driver, model, foreground, dtype, selection)
+            dcube, driver, scene, foreground, dtype)
 
 
 class PixelSpectraPlan(_detail.DCubePlanBase):

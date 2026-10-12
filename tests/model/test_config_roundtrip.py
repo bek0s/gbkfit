@@ -1,7 +1,8 @@
 """
 Configurations survive being dumped and loaded again: loading one,
 dumping it, loading the dump and dumping that gives the same dump (which
-is plain data, so it can be written as YAML or JSON), and the same model.
+is plain data, so it can be written as YAML or JSON), and the same
+galaxies and observations.
 """
 
 import copy
@@ -73,6 +74,9 @@ TRAIT_PARSERS = {
     for name in dir(traits) if name.endswith('_parser')}
 
 OTHER_PARSERS = dict(
+    emission=gbkfit.model.emission_parser,
+    opacity=gbkfit.model.opacity_parser,
+    line_of_sight=gbkfit.observation.line_of_sight_parser,
     psf=gbkfit.instrument.psf_parser,
     lsf=gbkfit.instrument.lsf_parser,
     aperture=gbkfit.region.aperture_parser,
@@ -101,13 +105,16 @@ def test_pdescs_roundtrip():
 @pytest.mark.parametrize(
     'config', CONFIGS, ids=[f'{c.parent.name}/{c.stem}' for c in CONFIGS])
 def test_config_roundtrip(config):
-    from gbkfit.model import model_parser
+    from gbkfit.model import galaxy_parser
     from gbkfit.observation import observation_parser
     info = ruamel.yaml.YAML(typ='safe').load(config)
+    # (the dump of an observation has no driver, which configurations
+    # declare at their top level)
     dumped = dict(
-        models=roundtrip(model_parser, info['models']),
+        driver=info['driver'],
+        galaxies=roundtrip(galaxy_parser, info['galaxies']),
         observations=roundtrip(observation_parser, info['observations']))
-    # Both the configuration and its dump give the same model
+    # Both the configuration and its dump give the same model data
     properties = info['params']['properties']
 
     def evaluate(config_):
@@ -149,17 +156,23 @@ OBSERVABLES = dict(
         dict(psf=GAUSS, lsf=GAUSS), [2, 1]))
 
 
+# A line of sight with a depth axis other than the default one
+LINE_OF_SIGHT = dict(type='grid', depth=dict(extent=21.0, step=1.5))
+
+
 @pytest.mark.parametrize('observable_type', OBSERVABLES)
 def test_observation_dump_has_every_option(observable_type):
     from gbkfit.observation import observation_parser
     observable, instrument, scale = OBSERVABLES[observable_type]
     info = dict(
-        name='obs', model='galaxy',
+        name='obs', galaxies=['galaxy'], components=['gas'], lines=['ha'],
+        line_of_sight=LINE_OF_SIGHT,
         instrument=instrument,
         observable=dict(type=observable_type) | observable,
         scale=scale, dtype='float64')
     dumped = json.loads(json.dumps(roundtrip(observation_parser, info)))
-    for key in ('name', 'model', 'scale', 'dtype'):
+    for key in ('name', 'galaxies', 'components', 'lines', 'line_of_sight',
+                'scale', 'dtype'):
         assert dumped[key] == info[key], key
     for key, value in info['observable'].items():
         assert dumped['observable'][key] == value, key

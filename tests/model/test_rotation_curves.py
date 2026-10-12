@@ -1,6 +1,6 @@
 """
 The parametric rotation curves (velocity polar traits): the velocity of
-the model on the major axis of a thin disk is the curve times sin(incl).
+a thin disk on its major axis is the curve times sin(incl).
 """
 
 import numpy as np
@@ -51,6 +51,19 @@ CURVES = dict(
     tan_nfw=(dict(rt=3.0, vt=200.0), nfw))
 
 
+def thin_disk(trait, rnodes, **options):
+    """
+    A thin exponential disk that emits lines, whose velocity polar trait
+    is of the given type.
+    """
+    return dict(
+        type='smdisk', rnodes=rnodes, **options,
+        density=dict(ptraits=dict(type='exponential')),
+        kinematics=dict(
+            vptraits=dict(type=trait), dptraits=dict(type='uniform')),
+        emission=dict(type='lines'))
+
+
 @pytest.mark.parametrize('trait', list(CURVES))
 def test_rotation_curves(driver, trait, evaluate_cases):
     values, curve = CURVES[trait]
@@ -59,14 +72,11 @@ def test_rotation_curves(driver, trait, evaluate_cases):
         driver=dict(type=driver.type()),
         observable=dict(
             type='pixel_spectra', size=[33, 41, 81], step=[0.5, 0.5, 10]),
-        model=dict(type='kinematics_2d', components=[dict(
-            type='smdisk', loose=False, tilted=False,
-            rnodes=list(range(0, 14)),
-            bptraits=dict(type='exponential'),
-            vptraits=dict(type=trait),
-            dptraits=dict(type='uniform'))]))
+        line_of_sight=dict(type='flat'),
+        galaxy=dict(components=[thin_disk(
+            trait, list(range(0, 14)), loose=False, tilted=False)]))
     properties = dict(
-        vsys=0, xpos=0, ypos=0, posa=0, incl=incl, bpt_a=1, bpt_s=4,
+        vsys=0, xpos=0, ypos=0, posa=0, incl=incl, pt_a=1, pt_s=4,
         dpt_a=20) | {f'vpt_{k}': v for k, v in values.items()}
     _, extra = evaluate_cases([case], properties)
     velocity = extra['observation0_model_component0_vdata'].data
@@ -100,16 +110,13 @@ def test_rotation_curves_near_the_centre(driver, trait, evaluate_cases):
         driver=dict(type=driver.type()),
         observable=dict(
             type='pixel_spectra', size=[9, 9, 41], step=[1, 1, 10]),
-        model=dict(type='kinematics_2d', components=[dict(
-            type='smdisk', loose=False, tilted=False,
-            rnodes=list(range(0, 6)),
-            bptraits=dict(type='exponential'),
-            vptraits=dict(type=trait),
-            dptraits=dict(type='uniform'))]))
+        line_of_sight=dict(type='flat'),
+        galaxy=dict(components=[thin_disk(
+            trait, list(range(0, 6)), loose=False, tilted=False)]))
     # The centre of the disk is radius south of pixel (4, 4)
     properties = dict(
-        vsys=0, xpos=0, ypos=-radius, posa=0, incl=incl, bpt_a=1,
-        bpt_s=4, dpt_a=20) | {f'vpt_{k}': v for k, v in values.items()}
+        vsys=0, xpos=0, ypos=-radius, posa=0, incl=incl, pt_a=1,
+        pt_s=4, dpt_a=20) | {f'vpt_{k}': v for k, v in values.items()}
     data, extra = evaluate_cases([case], properties)
     assert np.isfinite(data[0]['spectra']['d']).all()
     velocity = extra['observation0_model_component0_vdata'].data
@@ -124,13 +131,11 @@ def test_the_centre_does_not_rotate(driver, evaluate_cases):
         driver=dict(type=driver.type()),
         observable=dict(
             type='pixel_spectra', size=[33, 33, 41], step=[1, 1, 10]),
-        model=dict(type='kinematics_2d', components=[dict(
-            type='smdisk', rnodes=list(range(0, 12)),
-            bptraits=dict(type='exponential'),
-            vptraits=dict(type='tan_uniform'),
-            dptraits=dict(type='uniform'))]))
+        line_of_sight=dict(type='flat'),
+        galaxy=dict(components=[
+            thin_disk('tan_uniform', list(range(0, 12)))]))
     _, extra = evaluate_cases([case], dict(
-        vsys=0, xpos=0, ypos=0, posa=0, incl=60, bpt_a=1, bpt_s=4,
+        vsys=0, xpos=0, ypos=0, posa=0, incl=60, pt_a=1, pt_s=4,
         vpt_vt=150, dpt_a=20))
     velocity = extra['observation0_model_component0_vdata'].data
     # (the centre is the pixel 16, 16; the major axis is along y)

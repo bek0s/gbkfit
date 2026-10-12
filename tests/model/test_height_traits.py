@@ -1,6 +1,6 @@
 """
 Tests for the height traits: of velocity and dispersion (e.g. lags), and
-the Moffat profile of brightness; and for the radial range selection
+the Moffat profile of density; and for the radial range selection
 trait (e.g. truncations).
 """
 
@@ -15,24 +15,43 @@ from modelutils import observation_group
 DISK = dict(
     type='smdisk', loose=False, tilted=False,
     rnodes=list(range(0, 14)),
-    bptraits=dict(type='exponential'),
-    bhtraits=dict(type='sech2'),
-    vptraits=dict(type='tan_arctan'),
-    dptraits=dict(type='uniform'))
+    density=dict(
+        ptraits=dict(type='exponential'),
+        htraits=dict(type='sech2')),
+    kinematics=dict(
+        vptraits=dict(type='tan_arctan'),
+        dptraits=dict(type='uniform')),
+    emission=dict(type='lines'))
 
 PROPERTIES = dict(
     vsys=0, xpos=0.3, ypos=-0.6, posa=50, incl=75,
-    bpt_a=1, bpt_s=4, bht_s=1, vpt_rt=2, vpt_vt=150, dpt_a=20)
+    pt_a=1, pt_s=4, ht_s=1, vpt_rt=2, vpt_vt=150, dpt_a=20)
 
 SCUBE = dict(type='pixel_spectra', size=[32, 41, 51], step=[1, 1, 20])
 
 
-def evaluate(driver, component, properties):
-    group = observation_group([dict(
+def observe(driver, component):
+    """A spectral cube of a galaxy of the component, on a grid."""
+    return observation_group([dict(
         driver=dict(type=driver.type()), observable=copy.deepcopy(SCUBE),
-        model=dict(type='kinematics_3d', components=[component]))])
+        line_of_sight=dict(type='grid'),
+        galaxy=dict(components=[component]))])
+
+
+def evaluate(driver, component, properties):
+    group = observe(driver, component)
     params = gbkfit.params.ParamSpace(group.pdescs(), properties)
     return group.model_h(params.evaluate())[0]['spectra']['d'].copy()
+
+
+def with_density(**traits):
+    """The disk with the given density traits instead of its own."""
+    return DISK | dict(density=DISK['density'] | traits)
+
+
+def with_kinematics(**traits):
+    """The disk with the given kinematics traits instead of its own."""
+    return DISK | dict(kinematics=DISK['kinematics'] | traits)
 
 
 def with_second(key, polar, height, polar_values, height_values):
@@ -41,9 +60,10 @@ def with_second(key, polar, height, polar_values, height_values):
     and its height trait, and the properties of the parameters (those of
     the second traits are prefixed vpt1_ and vht1_, or dpt1_ and dht1_).
     """
-    component = DISK | {
-        f'{key}ptraits': [DISK[f'{key}ptraits'], polar],
-        f'{key}htraits': [dict(type='one'), height]}
+    first = DISK['kinematics'][f'{key}ptraits']
+    component = with_kinematics(**{
+        f'{key}ptraits': [first, polar],
+        f'{key}htraits': [dict(type='one'), height]})
     return component, PROPERTIES | polar_values | height_values
 
 
@@ -86,7 +106,7 @@ def test_linear_height_trait_changes_the_model(driver, key, polar, values):
 @pytest.mark.parametrize('trait', ['exponential', 'gauss'])
 def test_falling_height_traits_of_a_large_scale_are_one(driver, trait):
     plain = evaluate(driver, DISK, PROPERTIES)
-    component = DISK | dict(vhtraits=dict(type=trait))
+    component = with_kinematics(vhtraits=dict(type=trait))
     properties = PROPERTIES | dict(vht_s=1e8)
     np.testing.assert_allclose(
         evaluate(driver, component, properties), plain, rtol=1e-5,
@@ -98,11 +118,11 @@ def test_moffat_height_of_shape_1_is_lorentz(driver, trunc):
     # (1 + (z / s)^2)^-1 is the Lorentz profile: the same pdf, and the
     # same cdf, which normalises a truncated profile
     lorentz = evaluate(
-        driver, DISK | dict(bhtraits=dict(type='lorentz', trunc=trunc)),
+        driver, with_density(htraits=dict(type='lorentz', trunc=trunc)),
         PROPERTIES)
     moffat = evaluate(
-        driver, DISK | dict(bhtraits=dict(type='moffat', trunc=trunc)),
-        PROPERTIES | dict(bht_b=1))
+        driver, with_density(htraits=dict(type='moffat', trunc=trunc)),
+        PROPERTIES | dict(ht_b=1))
     np.testing.assert_allclose(
         moffat, lorentz, rtol=1e-5, atol=1e-6 * lorentz.max())
 
@@ -153,9 +173,7 @@ def test_height_traits_at_each_height(driver, height, values, factor):
     # (the velocity height traits have the same factors)
     component, properties = with_second(
         'd', dict(type='uniform'), height, dict(dpt1_a=5), values)
-    group = observation_group([dict(
-        driver=dict(type=driver.type()), observable=copy.deepcopy(SCUBE),
-        model=dict(type='kinematics_3d', components=[component]))])
+    group = observe(driver, component)
     params = gbkfit.params.ParamSpace(
         group.pdescs(), properties | dict(incl=0))
     extra = {}

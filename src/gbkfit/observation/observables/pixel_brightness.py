@@ -6,7 +6,7 @@ import numpy as np
 from gbkfit.dataset import DatasetPixelBrightness
 from gbkfit.driver import Driver
 from gbkfit.instrument import Instrument
-from gbkfit.model.base import Model, ModelImage, Selection
+from gbkfit.model import BandEmission
 from gbkfit.params import ParamValues
 from gbkfit.utils import gridutils
 from gbkfit.utils.parseutils import ConfigError
@@ -14,6 +14,7 @@ from . import _dcube, _detail
 from .base import ModelData, Observable
 
 if TYPE_CHECKING:
+    from .._scene import Scene
     from ..foreground import Foreground
 
 
@@ -58,16 +59,14 @@ class PixelBrightness(Observable):
 
     dataset_class = DatasetPixelBrightness
 
+    emission = BandEmission
+
     # An image has no spectral axis
     spectral_axis = None
 
     @staticmethod
     def type() -> str:
         return 'pixel_brightness'
-
-    @staticmethod
-    def is_compatible(model: Model) -> bool:
-        return isinstance(model, ModelImage)
 
     @classmethod
     def load(
@@ -153,12 +152,11 @@ class PixelBrightness(Observable):
     def plan(
             self,
             driver: Driver,
-            model: Model,
+            scene: 'Scene',
             foreground: 'Foreground',
             instrument: Instrument,
             scale: Sequence[int],
-            dtype: np.dtype,
-            selection: Selection
+            dtype: np.dtype
     ) -> 'PixelBrightnessPlan':
         # The cube of an image has one channel
         dcube = _dcube.DCube(
@@ -177,7 +175,7 @@ class PixelBrightness(Observable):
             mask_apply=self._mask_apply,
             dtype=dtype)
         return PixelBrightnessPlan(
-            dcube, driver, model, foreground, dtype, selection)
+            dcube, driver, scene, foreground, dtype)
 
 
 class PixelBrightnessPlan(_detail.DCubePlanBase):
