@@ -161,11 +161,11 @@ struct GModel
                 image, scube, rdata, rdata_cmp,
                 ordata, ordata_cmp, vdata_cmp, ddata_cmp, vdweight_cmp,
                 rdata_scale, image_scale);
+        require(disk.rht.has_value(),
+                "a Monte Carlo disk needs density height traits");
         // (with the scratch of the moments of the clouds, a Monte Carlo
         // disk writes four fields)
         const auto fields_args = make_fields_args(disk, args, fields, 4);
-        require(disk.rht.has_value(),
-                "a Monte Carlo disk needs density height traits");
         require(has_analytical_integral.shape(0) == size_t(args.rpt.n),
                 "has_analytical_integral needs one value for each density "
                 "trait");

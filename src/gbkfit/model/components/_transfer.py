@@ -12,6 +12,7 @@ import numpy as np
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.params import ParamValues
 from gbkfit.utils import gridutils
+from gbkfit.utils.parseutils import ConfigError
 from ._component_plans import ComponentPlans
 from .base import DepthAxis, NativeGrid
 from .lines import Band
@@ -23,6 +24,11 @@ if TYPE_CHECKING:
 __all__ = [
     'TransferPlan'
 ]
+
+
+# The most emitters that the march takes (TRANSFER_EMITTER_NUM_MAX in
+# constants.hpp)
+_MAX_EMITTERS = 16
 
 
 class TransferPlan:
@@ -41,6 +47,12 @@ class TransferPlan:
     again for each, the same ones), the layers (e.g. thin disks, points)
     once. The parameters are those of ComponentPlans, with a depth axis,
     and the number of planes of a slab (slab; all if None).
+
+    Raises
+    ------
+    ConfigError
+        If there are more emitters than the march takes, or for the
+        reasons of ComponentPlans.
     """
 
     def __init__(
@@ -57,6 +69,10 @@ class TransferPlan:
             redshift: float,
             slab: int | None
     ):
+        if len(emitters) > _MAX_EMITTERS:
+            raise ConfigError(
+                f"radiative transfer takes at most {_MAX_EMITTERS} components "
+                f"that emit; there are {len(emitters)}")
         plans = ComponentPlans(
             component_set, driver, grid, spectral, depth, dtype, emitters,
             lines, band, redshift)
