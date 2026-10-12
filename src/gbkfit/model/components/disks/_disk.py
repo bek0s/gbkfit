@@ -23,9 +23,11 @@ _log = logging.getLogger(__name__)
 
 
 # The kinds of traits of a disk: density (r), velocity (v) and dispersion
-# (d) polar (p) and height (h) traits, and vertical distortion (z) and
-# selection (s) polar traits
-TRAIT_KINDS = ('rpt', 'rht', 'vpt', 'vht', 'dpt', 'dht', 'zpt', 'spt')
+# (d) polar (p) and height (h) traits, vertical distortion (z) and
+# selection (s) polar traits, and the polar traits of the coefficients of
+# its line opacity (o)
+TRAIT_KINDS = (
+    'rpt', 'rht', 'vpt', 'vht', 'dpt', 'dht', 'zpt', 'spt', 'opt')
 
 # The most traits of one kind that the native kernels take (TRAIT_NUM_MAX
 # in constants.hpp)
@@ -60,14 +62,15 @@ class TraitParams:
 
 def _trait_params(
         traits_: Sequence[Trait],
-        prefix: str | None,
+        prefix: str | Sequence[str] | None,
         nrnodes: int,
         nsubrnodes: int
 ) -> 'TraitParams':
     """
-    Return the parameters of the traits of one kind. A node-wise parameter
-    has a value for each node, or for each subnode if its trait samples it
-    at the subnodes.
+    Return the parameters of the traits of one kind, of the given prefix
+    (followed by the index of each trait after the first), or of the given
+    prefix of each trait. A node-wise parameter has a value for each node,
+    or for each subnode if its trait samples it at the subnodes.
     """
     params_list = []
     for trait in traits_:
@@ -78,10 +81,10 @@ def _trait_params(
              for name, pdesc in trait.params_sm().items()}
             | {name: (pdesc, sampling)
                for name, pdesc in trait.params_rnw(nnodes).items()})
-    params, mappings = iterutils.merge_with_prefixes(
-        params_list,
-        parseutils.item_prefixes(
-            [None] * len(params_list), 'traits', prefix, True))
+    prefixes = list(prefix) if iterutils.is_sequence(prefix) \
+        else parseutils.item_prefixes(
+            [None] * len(params_list), 'traits', prefix, True)
+    params, mappings = iterutils.merge_with_prefixes(params_list, prefixes)
     return TraitParams(
         pdescs={name: tuple_[0] for name, tuple_ in params.items()},
         sampling={name: tuple_[1] for name, tuple_ in params.items()},
@@ -177,13 +180,16 @@ class Disk(abc.ABC):
             rstep: float,
             interp: type[Interpolator],
             traits_: dict[str, Sequence[Trait]],
-            prefixes: dict[str, str]
+            prefixes: dict[str, str | Sequence[str]],
+            opacity_lines: Sequence[int] = ()
     ):
         """
         traits_ has the traits of each kind, keyed as in TRAIT_KINDS, and
         can leave kinds out (no traits). prefixes has the prefix of the
         parameters of the traits of each kind in traits_ (e.g. 'pt' for
-        the density polar traits).
+        the density polar traits), or of each of its traits (e.g.
+        'op_halpha_'). opacity_lines has the line of each trait of line
+        opacity ('opt'): its index among the lines of the emission.
         """
 
         nrnodes = len(rnodes)
@@ -198,6 +204,7 @@ class Disk(abc.ABC):
         self._nsubrnodes = len(subrnodes)
         self._interp = interp
         self._traits = {kind: traits_.get(kind, ()) for kind in TRAIT_KINDS}
+        self._opacity_lines = tuple(opacity_lines)
 
         # Make descs for the geometric parameters. There is no systemic
         # velocity without velocity traits.
@@ -257,6 +264,13 @@ class Disk(abc.ABC):
     def traits(self, kind: str) -> tuple[Trait, ...]:
         return self._traits[kind]
 
+    def opacity_lines(self) -> tuple[int, ...]:
+        """
+        Return the line of each trait of line opacity ('opt'): its index
+        among the lines of the emission.
+        """
+        return self._opacity_lines
+
     def trait_params(self, kind: str) -> 'TraitParams':
         """Return the parameters of the traits of one kind (TraitParams)."""
         return self._trait_params[kind]
@@ -289,11 +303,20 @@ class Disk(abc.ABC):
         return self._pressure_supported_params
 
     @abc.abstractmethod
-    def plan(self, driver: Driver, nlines: int, dtype: np.dtype) -> 'DiskPlan':
+    def plan(
+            self,
+            driver: Driver,
+            nlines: int,
+            dtype: np.dtype,
+            opacity_rows: Sequence[int] | None = None
+    ) -> 'DiskPlan':
         """
         Plan the evaluation of the disk on the given driver and dtype (a
         DiskPlan), which owns the memory it needs. nlines is the number of
-        emission lines it adds to spectral cubes (0 without them).
+        emission lines it adds to spectral cubes (0 without them), and
+        opacity_rows has the row of the line of each trait of line opacity
+        among them, or -1 for a line that is not evaluated (all -1 if
+        None).
         """
         pass
 
@@ -307,7 +330,13 @@ class DiskPlan(abc.ABC):
     """
 
     def __init__(
-            self, disk: Disk, driver: Driver, nlines: int, dtype: np.dtype):
+            self,
+            disk: Disk,
+            driver: Driver,
+            nlines: int,
+            dtype: np.dtype,
+            opacity_rows: Sequence[int] | None = None
+    ):
 
         # The number of values of each group of parameters: one value for
         # each subnode for node-wise geometric parameters, and the values
@@ -348,16 +377,22 @@ class DiskPlan(abc.ABC):
                     ccounts=to_device(ccounts, np.int32),
                     pvalues=views_d[kind],
                     pcounts=to_device(pcounts, np.int32))
+        # (and the row of the line of each trait of line opacity)
+        if opacity_rows is None:
+            opacity_rows = [-1] * len(disk._traits['opt'])
         self._native_disk = driver.native_class('Disk', dtype)(
             loose=disk._loose,
             tilted=disk._tilted,
             rnodes=to_device(disk._subrnodes, dtype),
             **{name: views_d.get(name) for name in GEOMETRY_PARAMS},
-            **trait_sets)
+            **trait_sets,
+            opt_rows=to_device(opacity_rows, np.int32)
+            if disk._traits['opt'] else None)
 
         self._disk = disk
         self._driver = driver
         self._dtype = dtype
+        self._nlines = nlines
         self._param_values = (values_h, values_d)
         self._param_views = views_h
         self._lines_h = views_h['lines'].reshape(nlines, 3)
@@ -464,6 +499,13 @@ class DiskPlan(abc.ABC):
         transfer (see the native DiskArgs::fields).
         """
         pass
+
+    def _fields_lines(self) -> int:
+        """
+        Return the number of fields of line opacity of the disk: one for
+        each line it evaluates, if it has line opacity.
+        """
+        return self._nlines if self._disk._traits['opt'] else 0
 
     def evaluate_polar_traits(
             self,

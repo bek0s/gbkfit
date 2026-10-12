@@ -11,11 +11,15 @@ namespace gbkfit {
 // position along the depth axis, in voxels: images); its lines (the
 // offset, scale and flux of each, see DiskArgs::lines), or in an image
 // one row whose flux is that of its light; and a row of the ratios of the
-// cubes of opacity for each line (see DiskArgs::opacity_ratios).
+// cubes of opacity for each line (see DiskArgs::opacity_ratios). A volume
+// with line opacity has, after s, a field of each line l: its light times
+// the coefficient of the line (see DiskArgs::opt), whose line, times the
+// flux of the line, is its optical depth.
 template<typename T>
 struct TransferEmitter
 {
     bool layer = false;
+    bool line_opacity = false;
     const T* fields = nullptr;
     int nlines = 0;
     const T* lines = nullptr;
@@ -53,20 +57,30 @@ struct TransferArgs
     const T* opacity = nullptr;
     T* opacity_front = nullptr;
 
+    // With line opacity (an emitter with line_opacity): the optical depth
+    // of the lines in front of the slab, at each channel of each spaxel (a
+    // cube of the shape of out), which the march adds the slab to (zero
+    // before the first slab)
+    T* tau = nullptr;
+
     // The image or spectral cube, which the light adds to
     T* out = nullptr;
 };
 
 // March along the line of sight of the spaxel (x, y) through the planes of
-// the slab, front to back, for the channels [c0, c1): add_light(c, value)
-// gets the light of each voxel that reaches the viewer at the channel c.
-// The light of a volume is mixed uniformly with the absorbers of its
-// voxel, and that of a layer is at its position in its voxel, as the disk
-// kernels dim them (see gmodel_attenuation).
-template<typename T, typename AddLightT> constexpr void
+// the slab, front to back, for the channels [c0, c1), adding the light of
+// each channel that reaches the viewer to light (an array of c1 - c0
+// values, from c0). The light of a volume is mixed uniformly with the
+// absorbers of its voxel, and that of a layer is at its position in its
+// voxel, as the disk kernels dim them (see gmodel_attenuation). With line
+// opacity (HasLineOpacity, a.tau not null), the optical depth of the lines
+// at each channel adds to that of the dust: tau has that in front of the
+// voxel, and dk that of the voxel itself (arrays like light; dk is zero,
+// and stays zero after).
+template<bool HasLineOpacity, typename T> constexpr void
 gmodel_transfer_march(
         int x, int y, int c0, int c1, const TransferArgs<T>& a,
-        AddLightT add_light)
+        T* light, T* tau, T* dk)
 {
     const long long nimage = 1LL * a.spat_size[0] * a.spat_size[1];
     const long long nslab = nimage * a.spat_size[2];
@@ -77,11 +91,51 @@ gmodel_transfer_march(
     for (int k = 0; k < a.nopacity; ++k)
         dust.front[k] = a.opacity_front[k * nimage + idx2];
 
+    if (HasLineOpacity) {
+        for (int c = c0; c < c1; ++c)
+            tau[c - c0] = a.tau[c * nimage + idx2];
+    }
+
     for (int z = 0; z < a.spat_size[2]; ++z)
     {
         const long long idx = idx2 + z * nimage;
         for (int k = 0; k < a.nopacity; ++k)
             dust.own[k] = a.opacity[k * nslab + idx];
+
+        // The optical depth of the lines of the voxel, at the channels
+        // [dmin, dmax]: the light of each line of each volume times its
+        // coefficient there (see TransferEmitter)
+        int dmin = c1;
+        int dmax = c0 - 1;
+        if (HasLineOpacity)
+        {
+            for (int e = 0; e < a.nemitters; ++e)
+            {
+                const TransferEmitter<T>& em = a.emitters[e];
+                if (!em.line_opacity || !em.fields[idx])
+                    continue;
+                const T v = em.fields[nslab + idx];
+                const T s = em.fields[2 * nslab + idx];
+                for (int l = 0; l < em.nlines; ++l)
+                {
+                    const T* line = em.lines + 3 * l;
+                    const T kappa = em.fields[(3 + l) * nslab + idx];
+                    const T centre = line[0] + line[1] * v;
+                    const T sigma = line[1] * s;
+                    int cmin, cmax;
+                    if (!kappa || !gmodel_line_range(
+                            centre, sigma, c0, c1, a.spec_step, a.spec_zero,
+                            cmin, cmax))
+                        continue;
+                    dmin = std::min(dmin, cmin);
+                    dmax = std::max(dmax, cmax);
+                    gmodel_line_channels(
+                            line[2] * kappa, centre, sigma, cmin, cmax,
+                            a.spec_step, a.spec_zero,
+                            [&](int c, T value) { dk[c - c0] += value; });
+                }
+            }
+        }
 
         for (int e = 0; e < a.nemitters; ++e)
         {
@@ -93,11 +147,12 @@ gmodel_transfer_march(
                 continue;
             // The opacity in front of the light. A layer is in its voxel
             // in the depth axis (that at the near or far end, if it is
-            // outside), behind the fraction of the voxel in front of its
-            // position (see gmodel_optical_depth). One at a position that
-            // is not a number is in the first voxel, behind an optical
+            // outside), behind the fraction (part) of the voxel in front of
+            // its position (see gmodel_optical_depth). One at a position
+            // that is not a number is in the first voxel, behind an optical
             // depth that is not a number either.
             VoxelOpacity<T> o = dust;
+            T part = 0;
             if (em.layer)
             {
                 const T pz = em.fields[3 * n + i];
@@ -107,8 +162,9 @@ gmodel_transfer_march(
                         ? 0 : std::min(int(p), a.depth_size - 1);
                 if (zl != a.slab_zero + z)
                     continue;
+                part = p - zl;
                 for (int k = 0; k < a.nopacity; ++k) {
-                    o.front[k] += (p - zl) * o.own[k];
+                    o.front[k] += part * o.own[k];
                     o.own[k] = 0;
                 }
             }
@@ -126,22 +182,55 @@ gmodel_transfer_march(
                         centre, sigma, c0, c1, a.spec_step, a.spec_zero,
                         cmin, cmax))
                     continue;
-                const T flux = line[2] * (a.nopacity
-                        ? j * gmodel_attenuation(
-                                o, a.nopacity,
-                                em.opacity_ratios + l * a.nopacity)
-                        : j);
-                if (a.image)
-                    add_light(0, flux);
-                else
-                    gmodel_line_channels(
-                            flux, centre, sigma, cmin, cmax,
-                            a.spec_step, a.spec_zero, add_light);
+                const T* ratios = em.opacity_ratios + l * a.nopacity;
+                if (!HasLineOpacity)
+                {
+                    const T flux = line[2] * (a.nopacity
+                            ? j * gmodel_attenuation(o, a.nopacity, ratios)
+                            : j);
+                    if (a.image)
+                        light[0] += flux;
+                    else
+                        gmodel_line_channels(
+                                flux, centre, sigma, cmin, cmax,
+                                a.spec_step, a.spec_zero,
+                                [&](int c, T value) {
+                                    light[c - c0] += value; });
+                    continue;
+                }
+                // With line opacity, the light of each channel crosses the
+                // optical depth of the lines at its channel, with that of
+                // the dust (see gmodel_transmission)
+                T dust_front = 0, dust_own = 0;
+                gmodel_optical_depths(
+                        o, a.nopacity, ratios, dust_front, dust_own);
+                gmodel_line_channels(
+                        line[2] * j, centre, sigma, cmin, cmax,
+                        a.spec_step, a.spec_zero, [&](int c, T value) {
+                            const T front = tau[c - c0] + dust_front;
+                            const T own = dk[c - c0];
+                            light[c - c0] += value * (em.layer
+                                    ? gmodel_transmission(
+                                            front + part * own, T{0})
+                                    : gmodel_transmission(
+                                            front, own + dust_own));
+                        });
             }
         }
 
+        if (HasLineOpacity) {
+            for (int c = dmin; c <= dmax; ++c) {
+                tau[c - c0] += dk[c - c0];
+                dk[c - c0] = 0;
+            }
+        }
         for (int k = 0; k < a.nopacity; ++k)
             dust.front[k] += dust.own[k];
+    }
+
+    if (HasLineOpacity) {
+        for (int c = c0; c < c1; ++c)
+            a.tau[c * nimage + idx2] = tau[c - c0];
     }
 }
 

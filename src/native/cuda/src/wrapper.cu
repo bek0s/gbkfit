@@ -151,11 +151,12 @@ template<typename T> void
 Wrapper<T>::gmodel_mcdisk_evaluate(
         const DiskArgs<T>& a, const MCDiskArgs<T>& mc)
 {
-    // (the kernels of disks dimmed by opacity, and of the others: see
-    // gmodel_mcdisk_evaluate_cloud)
+    // (the kernels of the fields of disks, of disks dimmed by opacity, and
+    // of the others: see gmodel_mcdisk_evaluate_cloud)
     launch("gmodel_mcdisk_evaluate", mc.nclouds,
-            a.opacity ? kernels::gmodel_mcdisk_evaluate<T, true>
-                      : kernels::gmodel_mcdisk_evaluate<T, false>,
+            a.fields ? kernels::gmodel_mcdisk_evaluate<T, false, true>
+            : a.opacity ? kernels::gmodel_mcdisk_evaluate<T, true, false>
+            : kernels::gmodel_mcdisk_evaluate<T, false, false>,
             a, mc);
     // The fields of each voxel, from the moments of its clouds
     if (a.fields) {
@@ -174,8 +175,9 @@ Wrapper<T>::gmodel_smdisk_evaluate(const DiskArgs<T>& a)
     const long long n = 1LL * a.spat_size[0] * a.spat_size[1]
             * gbkfit::gmodel_smdisk_size_z(a);
     launch("gmodel_smdisk_evaluate", n,
-            a.opacity ? kernels::gmodel_smdisk_evaluate<T, true>
-                      : kernels::gmodel_smdisk_evaluate<T, false>,
+            a.fields ? kernels::gmodel_smdisk_evaluate<T, false, true>
+            : a.opacity ? kernels::gmodel_smdisk_evaluate<T, true, false>
+            : kernels::gmodel_smdisk_evaluate<T, false, false>,
             a);
 }
 
@@ -195,7 +197,9 @@ Wrapper<T>::gmodel_transfer_march(const TransferArgs<T>& a)
     const long long n = 1LL * a.spat_size[0] * a.spat_size[1]
             * kernels::transfer_chunks(a);
     launch("gmodel_transfer_march", n,
-            kernels::gmodel_transfer_march<T>, a);
+            a.tau ? kernels::gmodel_transfer_march<T, true>
+                  : kernels::gmodel_transfer_march<T, false>,
+            a);
     if (a.nopacity) {
         launch("gmodel_transfer_opacity_front",
                 1LL * a.spat_size[0] * a.spat_size[1],

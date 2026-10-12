@@ -6,4 +6,4 @@ from .points import *
 from .roles import *
 
 from . import disks
-from .disks import MCDisk, SMDisk, Density, Kinematics
+from .disks import MCDisk, SMDisk, Density, Kinematics, LineOpacity

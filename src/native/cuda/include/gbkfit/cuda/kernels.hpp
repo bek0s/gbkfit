@@ -184,7 +184,7 @@ dmodel_regions_sum(
             cube, out);
 }
 
-template<typename T, bool HasOpacity> __global__ void
+template<typename T, bool HasOpacity, bool HasFields> __global__ void
 gmodel_mcdisk_evaluate(DiskArgs<T> a, MCDiskArgs<T> mc)
 {
     // Parallelization: per cloud
@@ -194,8 +194,8 @@ gmodel_mcdisk_evaluate(DiskArgs<T> a, MCDiskArgs<T> mc)
 
     // Each cloud has its own stream of random numbers
     RNG<T> rng(mc.seed, tid);
-    gbkfit::gmodel_mcdisk_evaluate_cloud<atomic_add<T>, HasOpacity>(
-            rng, tid, a, mc);
+    gbkfit::gmodel_mcdisk_evaluate_cloud<
+            atomic_add<T>, HasOpacity, HasFields>(rng, tid, a, mc);
 }
 
 template<typename T> __global__ void
@@ -211,7 +211,7 @@ gmodel_mcdisk_fields_moments(DiskArgs<T> a)
     gbkfit::gmodel_mcdisk_fields_moments(tid, a);
 }
 
-template<typename T, bool HasOpacity> __global__ void
+template<typename T, bool HasOpacity, bool HasFields> __global__ void
 gmodel_smdisk_evaluate(DiskArgs<T> a)
 {
     // Parallelization: per 3d spatial position, or per 2d spatial position
@@ -228,8 +228,8 @@ gmodel_smdisk_evaluate(DiskArgs<T> a)
     const int y = tid / a.spat_size[0] % a.spat_size[1];
     const int z = tid / (1LL * a.spat_size[0] * a.spat_size[1]);
 
-    gbkfit::gmodel_smdisk_evaluate_spaxel<atomic_add<T>, HasOpacity>(
-            x, y, z, a);
+    gbkfit::gmodel_smdisk_evaluate_spaxel<
+            atomic_add<T>, HasOpacity, HasFields>(x, y, z, a);
 }
 
 template<typename T> __global__ void
@@ -259,7 +259,7 @@ transfer_chunks(const TransferArgs<T>& a)
     return (a.spec_size + TRANSFER_CHUNK - 1) / TRANSFER_CHUNK;
 }
 
-template<typename T> __global__ void
+template<typename T, bool HasLineOpacity> __global__ void
 gmodel_transfer_march(TransferArgs<T> a)
 {
     // Parallelization: per 2d spatial position and chunk of channels.
@@ -280,10 +280,14 @@ gmodel_transfer_march(TransferArgs<T> a)
     const int c0 = chunk * TRANSFER_CHUNK;
     const int c1 = std::min(c0 + TRANSFER_CHUNK, a.spec_size);
 
+    // (the optical depth of the lines in front and of the voxel, with
+    // line opacity)
+    constexpr int nline = HasLineOpacity ? TRANSFER_CHUNK : 1;
     T light[TRANSFER_CHUNK] = {};
-    gbkfit::gmodel_transfer_march(
-            x, y, c0, c1, a,
-            [&](int c, T value) { light[c - c0] += value; });
+    T tau[nline];
+    T dk[nline] = {};
+    gbkfit::gmodel_transfer_march<HasLineOpacity>(
+            x, y, c0, c1, a, light, tau, dk);
     for (int c = c0; c < c1; ++c) {
         if (light[c - c0] != 0) {
             a.out[index_3d_to_1d(x, y, c, a.spat_size[0], a.spat_size[1])]

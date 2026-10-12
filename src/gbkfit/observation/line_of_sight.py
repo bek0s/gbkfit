@@ -15,7 +15,7 @@ from typing import Any, Self
 import numpy as np
 
 from gbkfit.driver import Driver
-from gbkfit.model import Band, Galaxy
+from gbkfit.model import Band, Galaxy, LineOpacity
 from gbkfit.model.components._component_set import ComponentSetPlan
 from gbkfit.model.components._transfer import TransferPlan
 from gbkfit.model.components.base import Component, DepthAxis
@@ -162,6 +162,17 @@ class LineOfSight(parseutils.TypedSerializable, abc.ABC):
             driver, grid, spectral, depth, dtype, emitters, lines, band)
 
 
+def _check_no_line_opacity(component: Component) -> None:
+    """
+    Raise ConfigError if the component has line opacity, which only a line
+    of sight of radiative transfer sees.
+    """
+    if isinstance(component.opacity(), LineOpacity):
+        raise ConfigError(
+            "a component with line opacity needs a line of sight of "
+            "radiative transfer (transfer)")
+
+
 class Flat(LineOfSight):
     """
     No depth axis: the galaxies are evaluated on the plane of the sky. It
@@ -176,6 +187,7 @@ class Flat(LineOfSight):
         return None
 
     def check(self, component: Component) -> None:
+        _check_no_line_opacity(component)
         if component.opacity() is not None:
             raise ConfigError(
                 "a component with opacity needs a line of sight with a "
@@ -224,7 +236,7 @@ class Grid(LineOfSight):
         return self._depth.axis(grid, radius)
 
     def check(self, component: Component) -> None:
-        pass
+        _check_no_line_opacity(component)
 
 
 class Transfer(LineOfSight):

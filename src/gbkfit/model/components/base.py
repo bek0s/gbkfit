@@ -55,12 +55,14 @@ class FieldsLayout(NamedTuple):
     """
     How an emitter holds its fields for the march of radiative transfer
     (see the native DiskArgs::fields): nslots values in each voxel of the
-    3d grid (a volume, e.g. a thick disk), or in each spaxel (a layer at
-    a depth along each line of sight: j, v, s and the position along the
-    depth axis, in voxels; e.g. a thin disk or a point).
+    3d grid (a volume, e.g. a thick disk: j, v, s, and with line opacity,
+    the light times the coefficient of each line), or in each spaxel (a
+    layer at a depth along each line of sight: j, v, s and the position
+    along the depth axis, in voxels; e.g. a thin disk or a point).
     """
     layer: bool
     nslots: int
+    line_opacity: bool = False
 
     def shape(self, grid: NativeGrid) -> tuple[int, ...]:
         """Return the shape of the fields on a grid."""

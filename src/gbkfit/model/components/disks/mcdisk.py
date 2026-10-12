@@ -43,10 +43,12 @@ class CloudDisk(_disk.Disk):
             rstep: float,
             interp: type[Interpolator],
             traits_: dict[str, Sequence[traits.Trait]],
-            prefixes: dict[str, str]
+            prefixes: dict[str, str | Sequence[str]],
+            opacity_lines: Sequence[int] = ()
     ):
         super().__init__(
-            loose, tilted, rnodes, rstep, interp, traits_, prefixes)
+            loose, tilted, rnodes, rstep, interp, traits_, prefixes,
+            opacity_lines)
         if seed < 0:
             raise ConfigError(f"seed must be >= 0; supplied value: {seed}")
         if not cflux > 0:
@@ -66,18 +68,27 @@ class CloudDisk(_disk.Disk):
         return dict(cflux=self._cflux, seed=self._seed)
 
     def plan(
-            self, driver: Driver, nlines: int, dtype: np.dtype
+            self,
+            driver: Driver,
+            nlines: int,
+            dtype: np.dtype,
+            opacity_rows: Sequence[int] | None = None
     ) -> _disk.DiskPlan:
-        return CloudDiskPlan(self, driver, nlines, dtype)
+        return CloudDiskPlan(self, driver, nlines, dtype, opacity_rows)
 
 
 class CloudDiskPlan(_disk.DiskPlan):
     """The evaluation of a CloudDisk."""
 
     def __init__(
-            self, disk: CloudDisk, driver: Driver, nlines: int,
-            dtype: np.dtype):
-        super().__init__(disk, driver, nlines, dtype)
+            self,
+            disk: CloudDisk,
+            driver: Driver,
+            nlines: int,
+            dtype: np.dtype,
+            opacity_rows: Sequence[int] | None = None
+    ):
+        super().__init__(disk, driver, nlines, dtype, opacity_rows)
         # The clouds are made in pools: one for each density trait with
         # an analytical integral, and one for each ring of the others
         # (the rings are centred on the subnodes between the first and
@@ -98,8 +109,10 @@ class CloudDiskPlan(_disk.DiskPlan):
         self._s_cloud_flux = driver.mem_alloc_s(npools, dtype)
 
     def fields_layout(self) -> FieldsLayout:
-        # (j, v, s and the scratch of the moments of the clouds)
-        return FieldsLayout(layer=False, nslots=4)
+        # (j, v, s, its line opacity and the scratch of the moments of the
+        # clouds)
+        nk = self._fields_lines()
+        return FieldsLayout(layer=False, nslots=4 + nk, line_opacity=nk > 0)
 
     def _impl_evaluate(
             self,
