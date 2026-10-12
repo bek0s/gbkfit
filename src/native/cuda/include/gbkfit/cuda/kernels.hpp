@@ -183,7 +183,7 @@ dmodel_regions_sum(
             cube, out);
 }
 
-template<typename T> __global__ void
+template<typename T, bool HasOpacity> __global__ void
 gmodel_mcdisk_evaluate(DiskArgs<T> a, MCDiskArgs<T> mc)
 {
     // Parallelization: per cloud
@@ -193,11 +193,11 @@ gmodel_mcdisk_evaluate(DiskArgs<T> a, MCDiskArgs<T> mc)
 
     // Each cloud has its own stream of random numbers
     RNG<T> rng(mc.seed, tid);
-    gbkfit::gmodel_mcdisk_evaluate_cloud<atomic_add<T>>(
+    gbkfit::gmodel_mcdisk_evaluate_cloud<atomic_add<T>, HasOpacity>(
             rng, tid, a, mc);
 }
 
-template<typename T> __global__ void
+template<typename T, bool HasOpacity> __global__ void
 gmodel_smdisk_evaluate(DiskArgs<T> a)
 {
     // Parallelization: per 3d spatial position, or per 2d spatial position
@@ -214,7 +214,8 @@ gmodel_smdisk_evaluate(DiskArgs<T> a)
     const int y = tid / a.spat_size[0] % a.spat_size[1];
     const int z = tid / (1LL * a.spat_size[0] * a.spat_size[1]);
 
-    gbkfit::gmodel_smdisk_evaluate_spaxel<atomic_add<T>>(x, y, z, a);
+    gbkfit::gmodel_smdisk_evaluate_spaxel<atomic_add<T>, HasOpacity>(
+            x, y, z, a);
 }
 
 template<typename T> __global__ void

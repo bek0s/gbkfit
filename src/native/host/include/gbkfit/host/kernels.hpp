@@ -256,7 +256,7 @@ dmodel_regions_sum(
     }
 }
 
-template<typename T> void
+template<typename T, bool HasOpacity> void
 gmodel_mcdisk_evaluate(const DiskArgs<T>& a, const MCDiskArgs<T>& mc)
 {
     // Parallelization: per cloud
@@ -265,12 +265,12 @@ gmodel_mcdisk_evaluate(const DiskArgs<T>& a, const MCDiskArgs<T>& mc)
     for(int ci = 0; ci < mc.nclouds; ++ci)
     {
         RNG<T> rng(mc.seed, ci);
-        gbkfit::gmodel_mcdisk_evaluate_cloud<atomic_add<T>>(
+        gbkfit::gmodel_mcdisk_evaluate_cloud<atomic_add<T>, HasOpacity>(
                 rng, ci, a, mc);
     }
 }
 
-template<typename T> void
+template<typename T, bool HasOpacity> void
 gmodel_smdisk_evaluate(const DiskArgs<T>& a)
 {
     // Parallelization: per 2d spatial position. Each thread evaluates the
@@ -284,7 +284,7 @@ gmodel_smdisk_evaluate(const DiskArgs<T>& a)
     for(int x = 0; x < a.spat_size[0]; ++x) {
     for(int z = 0; z < size_z; ++z) {
 
-    gbkfit::gmodel_smdisk_evaluate_spaxel<add<T>>(x, y, z, a);
+    gbkfit::gmodel_smdisk_evaluate_spaxel<add<T>, HasOpacity>(x, y, z, a);
 
     }
     }
@@ -394,14 +394,22 @@ struct Wrapper
         kernels::dmodel_regions_sum<T>(args...);
     }
 
+    // (the kernels of disks dimmed by opacity, and of the others: see
+    // gmodel_mcdisk_evaluate_cloud)
     static void
     gmodel_mcdisk_evaluate(const DiskArgs<T>& a, const MCDiskArgs<T>& mc) {
-        kernels::gmodel_mcdisk_evaluate<T>(a, mc);
+        if (a.opacity)
+            kernels::gmodel_mcdisk_evaluate<T, true>(a, mc);
+        else
+            kernels::gmodel_mcdisk_evaluate<T, false>(a, mc);
     }
 
     static void
     gmodel_smdisk_evaluate(const DiskArgs<T>& a) {
-        kernels::gmodel_smdisk_evaluate<T>(a);
+        if (a.opacity)
+            kernels::gmodel_smdisk_evaluate<T, true>(a);
+        else
+            kernels::gmodel_smdisk_evaluate<T, false>(a);
     }
 
     static void

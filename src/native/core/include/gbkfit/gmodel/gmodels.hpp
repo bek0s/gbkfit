@@ -111,12 +111,13 @@ gmodel_optical_depth(int x, int y, T pz, const T* opacity, const int* size)
 // The opacity that the light of a voxel crosses, in each cube of opacity
 // (see DiskArgs::opacity): the optical depth of the voxels in front of it
 // (front), and that of the absorbers of the voxel itself (own), which are
-// mixed uniformly with its emitters
+// mixed uniformly with its emitters. Only the values of the cubes are set
+// (not zeroed first: the kernels without opacity would pay for it).
 template<typename T>
 struct VoxelOpacity
 {
-    T front[OPACITY_NUM_MAX] = {0};
-    T own[OPACITY_NUM_MAX] = {0};
+    T front[OPACITY_NUM_MAX];
+    T own[OPACITY_NUM_MAX];
 };
 
 // The opacity of the voxel (x, y, z) (see VoxelOpacity)
@@ -151,6 +152,7 @@ gmodel_layer_opacity(int x, int y, T pz, const DiskArgs<T>& a)
     {
         o.front[k] = gmodel_optical_depth(
                 x, y, pz, a.opacity + k * nspat, a.spat_size);
+        o.own[k] = 0;
     }
     return o;
 }
@@ -425,7 +427,11 @@ ring_info(
     return true;
 }
 
-template<auto AtomicAddFunT, typename T> constexpr void
+// Evaluate the cloud ci of a Monte Carlo disk. HasOpacity is whether
+// opacity dims the disk (a.opacity is not null): a template parameter, so
+// that the kernels without opacity have none of its code (nor its
+// registers and local memory, on a GPU).
+template<auto AtomicAddFunT, bool HasOpacity, typename T> constexpr void
 gmodel_mcdisk_evaluate_cloud(
         RNG<T>& rng, int ci, const DiskArgs<T>& a, const MCDiskArgs<T>& mc)
 {
@@ -622,10 +628,10 @@ gmodel_mcdisk_evaluate_cloud(
     // The opacity in front of the light, and the light that it lets
     // through (that of the image, or of the first line)
     VoxelOpacity<T> opacity;
-    if (a.opacity) {
+    if (HasOpacity) {
         opacity = gmodel_voxel_opacity(x, y, z, a);
     }
-    const T orvalue = a.opacity
+    const T orvalue = HasOpacity
             ? rvalue * gmodel_attenuation(
                     opacity, a.nopacity, a.opacity_ratios)
             : rvalue;
@@ -640,7 +646,7 @@ gmodel_mcdisk_evaluate_cloud(
         gbkfit::gmodel_scube_evaluate<AtomicAddFunT>(
                 a.scube, x, y, rvalue, vvalue, dvalue,
                 a.nlines, a.lines,
-                a.opacity ? &opacity : nullptr, a.nopacity, a.opacity_ratios,
+                HasOpacity ? &opacity : nullptr, a.nopacity, a.opacity_ratios,
                 a.spat_size[0], a.spat_size[1],
                 a.spec_size,
                 a.spec_step,
@@ -690,8 +696,9 @@ gmodel_smdisk_size_z(const DiskArgs<T>& a)
 // crossing. AddFunT adds the light of the voxel to the pixel and the
 // spectrum of its spaxel, which the other voxels of the spaxel add to too:
 // it must be atomic if they are evaluated in parallel. Only this voxel
-// writes to its other outputs.
-template<auto AddFunT, typename T> constexpr void
+// writes to its other outputs. HasOpacity is whether opacity dims the disk
+// (see gmodel_mcdisk_evaluate_cloud).
+template<auto AddFunT, bool HasOpacity, typename T> constexpr void
 gmodel_smdisk_evaluate_spaxel(int x, int y, int z, const DiskArgs<T>& a)
 {
     bool is_thin = a.rht.uids == nullptr;
@@ -902,12 +909,12 @@ gmodel_smdisk_evaluate_spaxel(int x, int y, int z, const DiskArgs<T>& a)
     // which only the opacity in front of it dims), and the light that it
     // lets through (that of the image, or of the first line)
     VoxelOpacity<T> opacity;
-    if (a.opacity) {
+    if (HasOpacity) {
         opacity = is_thin
                 ? gmodel_layer_opacity(x, y, pz, a)
                 : gmodel_voxel_opacity(x, y, z, a);
     }
-    const T orvalue = a.opacity
+    const T orvalue = HasOpacity
             ? rvalue * gmodel_attenuation(
                     opacity, a.nopacity, a.opacity_ratios)
             : rvalue;
@@ -922,7 +929,7 @@ gmodel_smdisk_evaluate_spaxel(int x, int y, int z, const DiskArgs<T>& a)
         gbkfit::gmodel_scube_evaluate<AddFunT>(
                 a.scube, x, y, rvalue, vvalue, dvalue,
                 a.nlines, a.lines,
-                a.opacity ? &opacity : nullptr, a.nopacity, a.opacity_ratios,
+                HasOpacity ? &opacity : nullptr, a.nopacity, a.opacity_ratios,
                 a.spat_size[0], a.spat_size[1],
                 a.spec_size,
                 a.spec_step,

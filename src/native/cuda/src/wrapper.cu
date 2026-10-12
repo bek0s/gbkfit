@@ -151,8 +151,12 @@ template<typename T> void
 Wrapper<T>::gmodel_mcdisk_evaluate(
         const DiskArgs<T>& a, const MCDiskArgs<T>& mc)
 {
+    // (the kernels of disks dimmed by opacity, and of the others: see
+    // gmodel_mcdisk_evaluate_cloud)
     launch("gmodel_mcdisk_evaluate", mc.nclouds,
-            kernels::gmodel_mcdisk_evaluate<T>, a, mc);
+            a.opacity ? kernels::gmodel_mcdisk_evaluate<T, true>
+                      : kernels::gmodel_mcdisk_evaluate<T, false>,
+            a, mc);
 }
 
 template<typename T> void
@@ -163,7 +167,9 @@ Wrapper<T>::gmodel_smdisk_evaluate(const DiskArgs<T>& a)
     const long long n = 1LL * a.spat_size[0] * a.spat_size[1]
             * gbkfit::gmodel_smdisk_size_z(a);
     launch("gmodel_smdisk_evaluate", n,
-            kernels::gmodel_smdisk_evaluate<T>, a);
+            a.opacity ? kernels::gmodel_smdisk_evaluate<T, true>
+                      : kernels::gmodel_smdisk_evaluate<T, false>,
+            a);
 }
 
 template<typename T> void
