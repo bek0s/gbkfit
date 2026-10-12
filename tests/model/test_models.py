@@ -112,7 +112,7 @@ CASES = dict(
             observable=dict(
                 type='pixel_spectra', size=[20, 16, 11], step=[1, 1, 30]),
             model=dict(
-                type='kinematics_3d', size_z=14, step_z=1.5, zero_z=-9,
+                type='kinematics_3d', size_z=14, step_z=1.5,
                 components=[
                     smdisk(
                         loose=True, tilted=True,
