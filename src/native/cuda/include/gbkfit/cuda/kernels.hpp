@@ -9,6 +9,17 @@
 #include <gbkfit/gmodel/transfer.hpp>
 #include <gbkfit/objective/objective.hpp>
 
+// A kernel parameter that the kernel reads where it is, without a copy
+// to local memory: the disk kernels take the address of their arguments,
+// and a copy of DiskArgs costs each thread hundreds of bytes of stack.
+// (__grid_constant__ needs compute capability 7.0; older architectures
+// keep the copy.)
+#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ < 700
+#define GBKFIT_GRID_CONSTANT
+#else
+#define GBKFIT_GRID_CONSTANT __grid_constant__
+#endif
+
 namespace gbkfit::cuda::kernels {
 
 template<typename T> inline constexpr void
@@ -186,7 +197,10 @@ dmodel_regions_sum(
 
 template<typename T, bool HasOpacity, bool HasFields, bool HasLineOpacity>
 __global__ void
-gmodel_mcdisk_evaluate(DiskArgs<T> a, MCDiskArgs<T> mc, FieldsArgs<T> f)
+gmodel_mcdisk_evaluate(
+        GBKFIT_GRID_CONSTANT const DiskArgs<T> a,
+        GBKFIT_GRID_CONSTANT const MCDiskArgs<T> mc,
+        GBKFIT_GRID_CONSTANT const FieldsArgs<T> f)
 {
     // Parallelization: per cloud
     const int tid = blockIdx.x * blockDim.x + threadIdx.x;
@@ -215,7 +229,9 @@ gmodel_mcdisk_fields_moments(DiskArgs<T> a, FieldsArgs<T> f)
 
 template<typename T, bool HasOpacity, bool HasFields, bool HasLineOpacity>
 __global__ void
-gmodel_smdisk_evaluate(DiskArgs<T> a, FieldsArgs<T> f)
+gmodel_smdisk_evaluate(
+        GBKFIT_GRID_CONSTANT const DiskArgs<T> a,
+        GBKFIT_GRID_CONSTANT const FieldsArgs<T> f)
 {
     // Parallelization: per 3d spatial position, or per 2d spatial position
     // for a thin disk (64-bit indices: there can be more voxels than an int
