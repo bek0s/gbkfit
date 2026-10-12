@@ -140,6 +140,7 @@ class DCube:
             rval: tuple[float, float, float],
             rota: float,
             rest: u.Quantity | None,
+            medium: str | None,
             scale: tuple[int, int, int],
             primary_beam: PrimaryBeam | None,
             psf: PSF | None,
@@ -151,8 +152,9 @@ class DCube:
     ):
         # The low-res grid (the grid of the data); the high-res one is made
         # by the plan
+        rest = gridutils.make_rest(rest)
         coords = gridutils.Coords(
-            step, rpix, rval, rota, gridutils.make_rest(rest))
+            step, rpix, rval, rota, rest, gridutils.make_medium(medium, rest))
         self._grid_lo = gridutils.Grid(size, coords, 2)
         self._scale = scale
         self._primary_beam = primary_beam

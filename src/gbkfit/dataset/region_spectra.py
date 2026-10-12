@@ -40,6 +40,9 @@ class DatasetRegionSpectra(Dataset):
         The velocity of the reference channel (km/s).
     rest : str or Quantity, optional
         The rest of the spectral axis (see gridutils.make_rest).
+    medium : str, optional
+        The medium of the wavelengths of a rest wavelength (see
+        gridutils.make_medium).
 
     Raises
     ------
@@ -73,7 +76,8 @@ class DatasetRegionSpectra(Dataset):
             step: float | None = None,
             rpix: float | None = None,
             rval: float | None = None,
-            rest: str | astropy.units.Quantity | None = None
+            rest: str | astropy.units.Quantity | None = None,
+            medium: str | None = None
     ) -> 'DatasetRegionSpectra':
         """
         Read the dataset from FITS files (the regions along x, the velocity
@@ -97,6 +101,10 @@ class DatasetRegionSpectra(Dataset):
         rest : str or Quantity, optional
             The rest of the spectral axis (see gridutils.make_rest); by
             default, that of the header.
+        medium : str, optional
+            The medium of the wavelengths of a rest wavelength (see
+            gridutils.make_medium); by default, that of the header (see
+            fitsutils.read_data).
 
         Returns
         -------
@@ -105,11 +113,12 @@ class DatasetRegionSpectra(Dataset):
         """
         # (the velocity is along FITS y, the axis 1)
         spectra, coords = Data.from_files(
-            data, mask, error, rpix, rval, rest, 1)
+            data, mask, error, rpix, rval, rest, 1, medium)
         return cls(
             spectra, regions,
             step=coords.step[1] if step is None else step,
-            rpix=coords.rpix[1], rval=coords.rval[1], rest=coords.rest)
+            rpix=coords.rpix[1], rval=coords.rval[1], rest=coords.rest,
+            medium=coords.medium)
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,
@@ -130,7 +139,8 @@ class DatasetRegionSpectra(Dataset):
             step=spectral.step[0],
             rpix=spectral.rpix[0],
             rval=spectral.rval[0],
-            rest=None if spectral.rest is None else str(spectral.rest)) | item
+            rest=None if spectral.rest is None else str(spectral.rest),
+            medium=spectral.medium) | item
 
     def __init__(
             self,
@@ -139,7 +149,8 @@ class DatasetRegionSpectra(Dataset):
             step: float = 1,
             rpix: float | None = None,
             rval: float = 0,
-            rest: str | astropy.units.Quantity | None = None
+            rest: str | astropy.units.Quantity | None = None,
+            medium: str | None = None
     ):
         super().__init__(dict(spectra=spectra))
         nchannels, nregions = spectra.shape()
@@ -149,7 +160,8 @@ class DatasetRegionSpectra(Dataset):
                 f"{regions.nregions()} regions")
         self._regions = regions
         self._spectral_grid = gridutils.make_grid(
-            (nchannels,), step, rpix, rval, 0, spectral_axis=0, rest=rest)
+            (nchannels,), step, rpix, rval, 0, spectral_axis=0, rest=rest,
+            medium=medium)
 
     def regions(self) -> Regions:
         """Return the regions."""

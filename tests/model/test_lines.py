@@ -103,3 +103,19 @@ def test_configurations_name_known_lines():
         config_group(lines_config(['halpha', 'oi6300']))
     assert "there is no line 'oi6300' in the catalogue" in str(error.value)
     assert "emission.lines[1]" in str(error.value)
+
+
+@pytest.mark.parametrize('medium, offset', [('air', 0), ('vacuum', 82.7)])
+def test_lines_in_vacuum_on_an_axis_in_air(medium, offset):
+    # The rest wavelengths of the lines are in vacuum: Halpha is at 6562.80
+    # Angstrom in air, so on an axis in air of that rest it is at velocity
+    # 0, and on an axis in vacuum it is 83 km/s above it (at 6564.61)
+    from gbkfit.model import LineCatalogue
+    from gbkfit.model.components.lines import Lines
+    from gbkfit.utils import gridutils
+    spectral = gridutils.make_grid(
+        (41,), 10, spectral_axis=0, rest='6562.80 Angstrom', medium=medium)
+    lines = Lines([LineCatalogue().line('halpha')])
+    (line_offset, scale, _), = lines.values(spectral)
+    assert line_offset == pytest.approx(offset, abs=0.2)
+    assert scale == pytest.approx(1, abs=3e-4)

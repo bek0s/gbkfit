@@ -52,6 +52,9 @@ class SlitSpectra(Observable):
     rest : str or Quantity, optional
         The rest wavelength or frequency of the velocities of the spectral
         axis, if known (see gridutils.make_rest).
+    medium : str, optional
+        The medium of the wavelengths of a rest wavelength: 'vacuum' (the
+        default) or 'air' (see gridutils.make_medium).
     slit_width : float, optional
         The width of the slit; by default, the step along it.
     smooth_weights : bool, optional
@@ -140,6 +143,7 @@ class SlitSpectra(Observable):
             rval=self.rval(),
             rota=self.rota(),
             rest=_detail.dump_rest(self.rest()),
+            medium=self.medium(),
             slit_width=self._slit_width,
             smooth_weights=self._smooth_weights,
             mask_cutoff=self._mask_cutoff,
@@ -153,12 +157,13 @@ class SlitSpectra(Observable):
             rval: Sequence[float] = (0, 0),
             rota: float = 0,
             rest: str | astropy.units.Quantity | None = None,
+            medium: str | None = None,
             slit_width: float | None = None,
             smooth_weights: bool = False,
             mask_cutoff: float | None = None,
             mask_apply: bool = False
     ):
-        super().__init__(size, step, rpix, rval, rota, rest)
+        super().__init__(size, step, rpix, rval, rota, rest, medium)
         if slit_width is None:
             slit_width = self.step()[0]
         _detail.check_positive('slit_width', slit_width)
@@ -200,6 +205,7 @@ class SlitSpectra(Observable):
             rval=(rval[0], 0, rval[1]),
             rota=self.rota(),
             rest=self.rest(),
+            medium=self.medium(),
             scale=(scale[0], across, scale[1]),
             primary_beam=instrument.primary_beam(),
             psf=instrument.psf(),

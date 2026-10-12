@@ -131,7 +131,9 @@ def _spectral_to_velocity(
     AWAV with a rest in air too) to the optical velocities c (w / rest -
     1), a linear frequency axis (FREQ) to the radio velocities c (1 - f /
     rest). Both are linear in the pixels, so the conversion is exact; the
-    header gets the rest (RESTWAV or RESTFRQ). A velocity axis (VOPT,
+    header gets the rest (RESTWAV or RESTFRQ), and for wavelengths their
+    medium, in which the velocities and the rest are (AIRORVAC: 'air' for
+    AWAV, 'vac' for WAVE; see fitsutils.read_data). A velocity axis (VOPT,
     VRAD) gets the rest only, and if it has one, it must be the same: its
     velocities refer to it.
     """
@@ -183,7 +185,10 @@ def _spectral_to_velocity(
     _log.info(
         f"converting the spectral axis ({ctype}) to {velocity} velocities "
         f"of the rest {rest}")
-    return _with_wcs(header, wcs)
+    header = _with_wcs(header, wcs)
+    if kind in ('WAVE', 'AWAV'):
+        header['AIRORVAC'] = 'air' if kind == 'AWAV' else 'vac'
+    return header
 
 
 def _read_fits(filename: str) -> tuple[np.ndarray, fits.Header]:

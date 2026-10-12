@@ -45,6 +45,23 @@ _CATALOGUE_LINES = {
     'cii158': '1900.5369 GHz'}
 
 
+def _air_refractive_index(wavelength: float) -> float:
+    """
+    Return the refractive index of standard air at a wavelength in vacuum
+    (m), as the IAU adopted it (Morton 2000, ApJS 130, 403, eq. 8; from
+    Edlen 1966 and Birch & Downs 1994): air wavelengths are those in
+    vacuum over it. Raise ConfigError below 2000 Angstrom, where air
+    wavelengths are not used.
+    """
+    if not wavelength >= 2e-7:
+        raise ConfigError(
+            f"wavelengths in air are used above 2000 Angstrom only; a line "
+            f"is at {wavelength * 1e10:.1f} Angstrom (in vacuum)")
+    # The wavenumber (1 / um), squared
+    s2 = (1e-6 / wavelength) ** 2
+    return 1 + 8.34254e-5 + 2.406147e-2 / (130 - s2) + 1.5998e-4 / (38.9 - s2)
+
+
 class Line(parseutils.Serializable):
     """
     An emission line of a spectral component.
@@ -54,7 +71,8 @@ class Line(parseutils.Serializable):
     name : str
         Its name, which names its flux ratio (see Lines).
     rest : str or Quantity
-        Its rest wavelength or frequency (see gridutils.make_rest).
+        Its rest wavelength (in vacuum) or frequency (see
+        gridutils.make_rest).
 
     Raises
     ------
@@ -237,6 +255,12 @@ class Lines:
         the axis. With radio velocities (a rest frequency), a line of rest
         frequency f at velocity v is at f (1 - v / c), which is at the
         velocity c (1 - k) + k v, where k is f over the rest.
+
+        The rest wavelengths of the lines are in vacuum. If those of the
+        axis are in air (see gridutils.Coords), w is that of each line in
+        air: divided by the refractive index of air at the wavelength (in
+        vacuum) where the line is at the velocity of the centre of the
+        axis. (The index changes by less than 1e-7 across 2000 km/s.)
         """
         if self._lines is None:
             return np.array([[0.0, 1.0, 1.0]])
@@ -249,10 +273,17 @@ class Lines:
                 "rest option of the observable (spec_rest for moments and "
                 "spectra in regions)")
         optical = rest.unit == astropy.units.m
+        air = spectral.coords.medium == 'air'
+        centre = spectral.zero()[0] \
+            + (spectral.size[0] - 1) / 2 * spectral.coords.step[0]
         values = []
         for line in self._lines:
             ratio = float(line.rest().to_value(
                 rest.unit, astropy.units.spectral()) / rest.value)
+            if air:
+                wavelength = line.rest().to_value(
+                    astropy.units.m, astropy.units.spectral())
+                ratio /= _air_refractive_index(wavelength * (1 + centre / _C))
             offset = _C * (ratio - 1) if optical else _C * (1 - ratio)
             values.append((offset, ratio, 1.0))
         return np.array(values)

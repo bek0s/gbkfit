@@ -15,7 +15,7 @@ import astropy.units
 import astropy.wcs
 import numpy as np
 
-from gbkfit.utils.gridutils import Coords, make_rest
+from gbkfit.utils.gridutils import Coords, make_medium, make_rest
 from gbkfit.utils.parseutils import ConfigError
 
 
@@ -41,6 +41,10 @@ VELOCITY_TYPES = ('VRAD', 'VOPT', 'VELO')
 
 _KM_S = astropy.units.km / astropy.units.s
 
+# The values of the header keyword AIRORVAC of each medium of wavelengths
+# (see gridutils.make_medium)
+_HEADER_MEDIUMS = dict(vacuum='vac', air='air')
+
 
 def read_data(
         filename: str,
@@ -48,13 +52,17 @@ def read_data(
         rpix: typing.Sequence[float] | None = None,
         rval: typing.Sequence[float] | None = None,
         rest: typing.Any = None,
-        spectral_axis: int | None = None
+        spectral_axis: int | None = None,
+        medium: str | None = None
 ) -> tuple[np.ndarray, Coords]:
     """
     Read the data of a FITS file and its world coordinates.
 
     The data are in the orientation of the model (see to_model_axes), and
-    their world coordinates in its units (see coords_from_wcs).
+    their world coordinates in its units (see coords_from_wcs). The
+    wavelengths of a spectral axis of optical velocities are in vacuum
+    (FITS), or in the medium of the keyword AIRORVAC ('air' or 'vac') of
+    the header, or in the given medium.
 
     Parameters
     ----------
@@ -68,6 +76,9 @@ def read_data(
     spectral_axis : int, optional
         The index (FITS order, from 0) that the spectral axis of the data
         (if any) must have in the orientation of the model.
+    medium : str, optional
+        The medium of the wavelengths of the spectral axis, instead of
+        that of the header (see gridutils.make_medium).
 
     Returns
     -------
@@ -80,7 +91,8 @@ def read_data(
     ------
     ConfigError
         If the HDU has no data, the header has invalid world coordinates,
-        or coordinates the model cannot represent (see coords_from_wcs).
+        or coordinates the model cannot represent (see coords_from_wcs),
+        or the medium is not valid.
     """
     with astropy.io.fits.open(filename) as hdulist:
         data = hdulist[hdu].data
@@ -105,7 +117,10 @@ def read_data(
         raise ConfigError(
             f"{filename}: the spectral axis must be the axis "
             f"{spectral_axis + 1}; it is the axis {spec + 1}")
-    coords = coords_from_wcs(filename, wcs, rpix, rval, rest)
+    coords = coords_from_wcs(filename, wcs, rpix, rval, rest, medium)
+    if medium is None and coords.medium is not None:
+        coords = coords._replace(
+            medium=_header_medium(filename, header) or coords.medium)
     return np.ascontiguousarray(data), coords
 
 
@@ -114,7 +129,8 @@ def coords_from_wcs(
         wcs: astropy.wcs.WCS,
         rpix: typing.Sequence[float] | None = None,
         rval: typing.Sequence[float] | None = None,
-        rest: typing.Any = None
+        rest: typing.Any = None,
+        medium: str | None = None
 ) -> Coords:
     """
     Return the world coordinates of the model (see Coords) of a WCS.
@@ -136,6 +152,9 @@ def coords_from_wcs(
         for each axis or one for all.
     rest : str or Quantity, optional
         The rest of the spectral axis (see gridutils.make_rest).
+    medium : str, optional
+        The medium of the wavelengths of a rest wavelength (see
+        gridutils.make_medium).
 
     Returns
     -------
@@ -147,7 +166,8 @@ def coords_from_wcs(
     ConfigError
         For coordinates the model cannot represent: a skewed pixel grid,
         celestial axes coupled to other axes, and spectral axes that are
-        not velocities or are not linear in velocity.
+        not velocities or are not linear in velocity; or if the medium is
+        not valid.
     ValueError
         If the axes are not in the orientation of the model.
     """
@@ -180,12 +200,13 @@ def coords_from_wcs(
     elif rval is None:
         world = np.ravel(wcs.pixel_to_world_values(*rpix))
         rval = np.multiply(world, scale).tolist()
+    rest = _spectral_rest(source, wcs, make_rest(rest))
     return Coords(
         tuple(float(x) for x in step),
         tuple(float(x) for x in rpix),
         tuple(float(x) for x in rval),
         float(rota),
-        _spectral_rest(source, wcs, make_rest(rest)))
+        rest, make_medium(medium, rest))
 
 
 def model_axis_order(wcs: astropy.wcs.WCS) -> tuple[int, ...]:
@@ -555,10 +576,28 @@ def _velocity_header(coords, n, index=None):
         f'CRPIX{n}': coords.rpix[index] + 1,
         f'CRVAL{n}': coords.rval[index]}
     if rest is not None and rest.unit == astropy.units.m:
-        header.update({f'CTYPE{n}': 'VOPT', 'RESTWAV': rest.value})
+        header.update({
+            f'CTYPE{n}': 'VOPT', 'RESTWAV': rest.value,
+            'AIRORVAC': _HEADER_MEDIUMS[coords.medium]})
     elif rest is not None:
         header.update(RESTFRQ=rest.value)
     return header
+
+
+def _header_medium(source, header):
+    """
+    Return the medium of the wavelengths of a header (its keyword
+    AIRORVAC, see gridutils.make_medium), if it has one.
+    """
+    value = header.get('AIRORVAC')
+    if value is None:
+        return None
+    mediums = {v: k for k, v in _HEADER_MEDIUMS.items()}
+    if value not in mediums:
+        raise ConfigError(
+            f"{source}: AIRORVAC must be one of {list(mediums)}; it is "
+            f"{value!r}")
+    return mediums[value]
 
 
 def _spectral_rest(source, wcs, rest):

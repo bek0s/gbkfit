@@ -25,6 +25,7 @@ __all__ = [
     'SpectraData',
     'check_overlap',
     'make_grid',
+    'make_medium',
     'make_rest',
     'pixels_on',
     'sky_positions',
@@ -60,12 +61,17 @@ class Coords(NamedTuple):
         spectral axis refer to (in m or Hz; see make_rest). The velocities
         of a rest wavelength are optical (VOPT), and those of a rest
         frequency radio (VRAD).
+    medium : str or None
+        The medium of the wavelengths of optical velocities and of their
+        rest: 'vacuum' or 'air' (see make_medium); None without a rest
+        wavelength.
     """
     step: tuple[float, ...]
     rpix: tuple[float, ...]
     rval: tuple[float, ...]
     rota: float
     rest: astropy.units.Quantity | None = None
+    medium: str | None = None
 
     def axes(self, *indices: int) -> 'Coords':
         """
@@ -79,13 +85,13 @@ class Coords(NamedTuple):
         Returns
         -------
         Coords
-            The world coordinates of the axes, with the same rota and rest.
+            The world coordinates of the axes, with the same rota, rest and
+            medium.
         """
         def pick(values):
             return tuple(values[i] for i in indices)
-        return Coords(
-            pick(self.step), pick(self.rpix), pick(self.rval), self.rota,
-            self.rest)
+        return self._replace(
+            step=pick(self.step), rpix=pick(self.rpix), rval=pick(self.rval))
 
 
 class Grid(NamedTuple):
@@ -132,7 +138,8 @@ class Grid(NamedTuple):
             The grid, without a spectral axis.
         """
         return Grid(
-            self.size[:2], self.coords.axes(0, 1)._replace(rest=None), None)
+            self.size[:2],
+            self.coords.axes(0, 1)._replace(rest=None, medium=None), None)
 
     def spectral(self) -> 'Grid':
         """
@@ -155,7 +162,8 @@ def make_grid(
         rval: float | Sequence[float] | None = None,
         rota: float | None = None,
         spectral_axis: int | None = None,
-        rest: str | astropy.units.Quantity | None = None
+        rest: str | astropy.units.Quantity | None = None,
+        medium: str | None = None
 ) -> Grid:
     """
     Make a grid.
@@ -174,6 +182,9 @@ def make_grid(
         The index of the spectral axis, if any.
     rest : str or Quantity, optional
         The rest of the spectral axis (see make_rest).
+    medium : str, optional
+        The medium of the wavelengths of a rest wavelength (see
+        make_medium).
 
     Returns
     -------
@@ -185,8 +196,8 @@ def make_grid(
     ConfigError
         If the sizes are not positive integers, the world coordinates do
         not have a value for each axis, a step is not positive, or the
-        spectral axis is not an axis of the grid, or if a grid without a
-        spectral axis has a rest.
+        spectral axis is not an axis of the grid, if a grid without a
+        spectral axis has a rest, or if the medium is not valid.
     """
     ndim = len(size)
     if not all(isinstance(n, numbers.Integral) and not isinstance(n, bool)
@@ -218,8 +229,10 @@ def make_grid(
             f"{spectral_axis}")
     if rest is not None and spectral_axis is None:
         raise ConfigError("a grid without a spectral axis has no rest")
+    rest = make_rest(rest)
     return Grid(
-        tuple(size), Coords(step, rpix, rval, rota, make_rest(rest)),
+        tuple(size),
+        Coords(step, rpix, rval, rota, rest, make_medium(medium, rest)),
         spectral_axis)
 
 
@@ -257,6 +270,46 @@ def make_rest(
         if rest.unit.is_equivalent(unit) and rest.isscalar and rest.value > 0:
             return rest.to(unit)
     raise error
+
+
+def make_medium(
+        medium: str | None, rest: astropy.units.Quantity | None
+) -> str | None:
+    """
+    Make the medium of the wavelengths of a spectral axis of optical
+    velocities, those of the given rest (see make_rest).
+
+    Parameters
+    ----------
+    medium : str or None
+        'vacuum' or 'air'; vacuum by default (the medium of the
+        wavelengths of FITS).
+    rest : Quantity or None
+        The rest of the spectral axis.
+
+    Returns
+    -------
+    str or None
+        The medium, or None without a rest wavelength.
+
+    Raises
+    ------
+    ConfigError
+        If the medium is not one of those, or there is a medium without a
+        rest wavelength.
+    """
+    if rest is None or rest.unit != astropy.units.m:
+        if medium is not None:
+            raise ConfigError(
+                f"only the wavelengths of a rest wavelength have a medium; "
+                f"the rest is {rest}")
+        return None
+    if medium is None:
+        return 'vacuum'
+    if medium not in ('vacuum', 'air'):
+        raise ConfigError(
+            f"the medium must be 'vacuum' or 'air'; it is {medium!r}")
+    return medium
 
 
 def sky_positions(grid: Grid) -> tuple[np.ndarray, np.ndarray]:

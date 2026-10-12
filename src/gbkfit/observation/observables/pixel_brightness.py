@@ -166,6 +166,7 @@ class PixelBrightness(Observable):
             rval=self.rval() + (0,),
             rota=self.rota(),
             rest=None,
+            medium=None,
             scale=tuple(scale) + (1,),
             primary_beam=instrument.primary_beam(),
             psf=instrument.psf(),

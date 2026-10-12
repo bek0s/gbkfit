@@ -32,11 +32,13 @@ def _read(
         rpix: float | Sequence[float] | None = None,
         rval: float | Sequence[float] | None = None,
         rest: str | astropy.units.Quantity | None = None,
-        spectral_axis: int | None = None
+        spectral_axis: int | None = None,
+        medium: str | None = None
 ) -> tuple[np.ndarray, gridutils.Coords]:
     """Read a FITS file and its world coordinates (see fitsutils.read_data)."""
     filename, hdu = (file, 0) if isinstance(file, str) else file
-    return fitsutils.read_data(filename, hdu, rpix, rval, rest, spectral_axis)
+    return fitsutils.read_data(
+        filename, hdu, rpix, rval, rest, spectral_axis, medium)
 
 
 def fits_file(x: str | Mapping[str, Any], prefix: str = '') -> FitsFile:
@@ -146,7 +148,8 @@ class Data:
             rpix: float | Sequence[float] | None = None,
             rval: float | Sequence[float] | None = None,
             rest: str | astropy.units.Quantity | None = None,
-            spectral_axis: int | None = None
+            spectral_axis: int | None = None,
+            medium: str | None = None
     ) -> tuple['Data', gridutils.Coords]:
         """
         Read a data item from FITS files.
@@ -159,7 +162,7 @@ class Data:
             The file of the mask.
         error : str or tuple or float, optional
             The file of the errors, or one error for all the values.
-        rpix, rval, rest, spectral_axis : optional
+        rpix, rval, rest, spectral_axis, medium : optional
             Passed to fitsutils.read_data for the file of the values.
 
         Returns
@@ -174,7 +177,7 @@ class Data:
             If the error is not positive, or the arrays are invalid (see
             Data).
         """
-        values, coords = _read(data, rpix, rval, rest, spectral_axis)
+        values, coords = _read(data, rpix, rval, rest, spectral_axis, medium)
         masks = None if mask is None else _read(mask)[0]
         if error is None:
             errors = None

@@ -55,6 +55,9 @@ class RegionSpectra(Observable):
     spec_rest : str or Quantity, optional
         The rest wavelength or frequency of the velocities of the spectral
         axis, if known (see gridutils.make_rest).
+    spec_medium : str, optional
+        The medium of the wavelengths of a rest wavelength: 'vacuum' (the
+        default) or 'air' (see gridutils.make_medium).
     size, step, rpix, rval, rota : optional
         The spatial grid of the cube (see gridutils.make_grid), for
         regions on the sky (apertures): size is then required. Regions on
@@ -84,7 +87,7 @@ class RegionSpectra(Observable):
         # regions on a grid
         return (
             ('regions', 'spec_size', 'spec_step', 'spec_rpix', 'spec_rval',
-             'spec_rest')
+             'spec_rest', 'spec_medium')
             + _detail.spatial_options_from_regions(dataset.regions()))
 
     @classmethod
@@ -135,7 +138,7 @@ class RegionSpectra(Observable):
         coords = spectral.coords
         return cls(
             dataset.regions(), spectral.size[0], coords.step[0],
-            coords.rpix[0], coords.rval[0], coords.rest,
+            coords.rpix[0], coords.rval[0], coords.rest, coords.medium,
             size, step, rpix, rval, rota)
 
     def dump(
@@ -155,7 +158,8 @@ class RegionSpectra(Observable):
                 spec_step=self.step()[2],
                 spec_rpix=self.rpix()[2],
                 spec_rval=self.rval()[2],
-                spec_rest=_detail.dump_rest(self.rest()))
+                spec_rest=_detail.dump_rest(self.rest()),
+                spec_medium=self.medium())
         return info | _detail.dump_spatial_grid(self, self._regions)
 
     def __init__(
@@ -166,6 +170,7 @@ class RegionSpectra(Observable):
             spec_rpix: float | None = None,
             spec_rval: float = 0,
             spec_rest: str | astropy.units.Quantity | None = None,
+            spec_medium: str | None = None,
             size: Sequence[int] | None = None,
             step: Sequence[float] | None = None,
             rpix: Sequence[float] | None = None,
@@ -182,7 +187,7 @@ class RegionSpectra(Observable):
             coords.step + (spec_step,),
             coords.rpix + (spec_rpix,),
             coords.rval + (spec_rval,),
-            coords.rota, spec_rest)
+            coords.rota, spec_rest, spec_medium)
         self._regions = regions
         # The area of each pixel in the regions, so that their sums are
         # fluxes (an error if apertures are not inside the grid)
@@ -232,6 +237,7 @@ class RegionSpectra(Observable):
             rval=self.rval(),
             rota=self.rota(),
             rest=self.rest(),
+            medium=self.medium(),
             scale=tuple(scale),
             primary_beam=instrument.primary_beam(),
             psf=instrument.psf(),

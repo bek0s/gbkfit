@@ -103,7 +103,9 @@ Example
        # one line, at the velocities of the spectral axis; several lines
        # are named, e.g. lines: [halpha, nii6583], from the catalogue of
        # GBKFIT or the section 'lines' of the configuration (e.g.
-       # lines: {mgii2796: 2796.35 Angstrom}; rest wavelengths in vacuum)
+       # lines: {mgii2796: 2796.35 Angstrom}; rest wavelengths in vacuum;
+       # for data in air wavelengths, e.g. MUSE, the observable takes
+       # medium: air, which gbkfit-prep writes in the files it converts)
        emission: {type: lines}
 
    # observations of the galaxy: a spectral cube; the galaxy is evaluated

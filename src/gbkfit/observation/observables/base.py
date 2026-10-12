@@ -57,6 +57,9 @@ class Observable(parseutils.TypedSerializable, abc.ABC):
         The rotation of the grid on the sky.
     rest : str or Quantity, optional
         The rest of the spectral axis, if any (see gridutils.make_rest).
+    medium : str, optional
+        The medium of the wavelengths of a rest wavelength (see
+        gridutils.make_medium).
     """
 
     spectral_axis: int | None
@@ -98,8 +101,8 @@ class Observable(parseutils.TypedSerializable, abc.ABC):
         """
         Return the options of the observable that a dataset gives.
 
-        Here, the grid (and the rest of its spectral axis); observables of
-        other data override this.
+        Here, the grid (and the rest and the medium of its spectral axis);
+        observables of other data override this.
 
         Parameters
         ----------
@@ -112,7 +115,8 @@ class Observable(parseutils.TypedSerializable, abc.ABC):
             The names of the options.
         """
         grid = ('size', 'step', 'rpix', 'rval', 'rota')
-        return grid + (('rest',) if cls.spectral_axis is not None else ())
+        return grid + (
+            ('rest', 'medium') if cls.spectral_axis is not None else ())
 
     def __init__(
             self,
@@ -121,10 +125,12 @@ class Observable(parseutils.TypedSerializable, abc.ABC):
             rpix: Sequence[float] | None,
             rval: Sequence[float],
             rota: float,
-            rest: str | astropy.units.Quantity | None = None
+            rest: str | astropy.units.Quantity | None = None,
+            medium: str | None = None
     ):
         self._grid = gridutils.make_grid(
-            tuple(size), step, rpix, rval, rota, self.spectral_axis, rest)
+            tuple(size), step, rpix, rval, rota, self.spectral_axis, rest,
+            medium)
 
     def grid(self) -> gridutils.Grid:
         """Return the grid of the data."""
@@ -153,6 +159,13 @@ class Observable(parseutils.TypedSerializable, abc.ABC):
     def rest(self) -> astropy.units.Quantity | None:
         """Return the rest of the spectral axis, if any."""
         return self._grid.coords.rest
+
+    def medium(self) -> str | None:
+        """
+        Return the medium of the wavelengths of the spectral axis, if it
+        has a rest wavelength.
+        """
+        return self._grid.coords.medium
 
     @abc.abstractmethod
     def keys(self) -> tuple[str, ...]:

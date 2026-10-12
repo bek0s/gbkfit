@@ -304,6 +304,19 @@ def test_wavelength_axis_to_optical_velocities(cd):
         velocity, C * (wavelength / 6562.8 - 1), rtol=0, atol=1e-6)
 
 
+@pytest.mark.parametrize('ctype, medium', [
+    ('WAVE', 'vacuum'), ('AWAV', 'air')])
+def test_wavelength_axis_keeps_its_medium(ctype, medium):
+    # The velocities and the rest of air wavelengths are in air
+    header = dict(
+        HEADER, CTYPE3=ctype, CUNIT3='Angstrom', CRVAL3=6500.0,
+        CRPIX3=1.0, CDELT3=1.25)
+    write_cube('cube.fits', header)
+    prep_pixel_spectra('cube.fits', velocity_rest='6562.8 Angstrom')
+    _, coords = fitsutils.read_data('prep_cube.fits')
+    assert coords.medium == medium
+
+
 def test_frequency_axis_to_radio_velocities():
     # A frequency that increases along the axis gives decreasing radio
     # velocities c (1 - f / rest), so the axis is reversed too

@@ -50,7 +50,7 @@ class RegionMoments(Observable):
         regions on the sky (apertures): size is then required. Regions on
         a grid (bins) give it, and it must not be given.
     mask_cutoff, orders, spec_size, spec_step, spec_rval, spec_rest, \
-method : optional
+spec_medium, method : optional
         As those of PixelMoments: the regions whose moment 0 is not above
         mask_cutoff are masked.
 
@@ -105,6 +105,7 @@ method : optional
             spec_step: float = _moments.SPEC_STEP,
             spec_rval: float | None = None,
             spec_rest: str | astropy.units.Quantity | None = None,
+            spec_medium: str | None = None,
             method: str = 'moments'
     ) -> 'RegionMoments':
         """
@@ -118,8 +119,8 @@ method : optional
         size, step, rpix, rval, rota : optional
             As those of RegionMoments: the spatial grid of the cube, for
             regions on the sky.
-        mask_cutoff, spec_size, spec_step, spec_rval, spec_rest, method \
-: optional
+        mask_cutoff, spec_size, spec_step, spec_rval, spec_rest, \
+spec_medium, method : optional
             As those of PixelMoments.from_data.
 
         Returns
@@ -139,7 +140,8 @@ method : optional
             **_moments.spectral_axis_from_data(
                 dataset, spec_step, spec_size, spec_rval),
             mask_cutoff=mask_cutoff, orders=dataset.orders(),
-            spec_step=spec_step, spec_rest=spec_rest, method=method)
+            spec_step=spec_step, spec_rest=spec_rest,
+            spec_medium=spec_medium, method=method)
 
     def dump(
             self,
@@ -161,6 +163,7 @@ method : optional
             spec_step=self._spec_step,
             spec_rval=self._spec_rval,
             spec_rest=_detail.dump_rest(self._spec_rest),
+            spec_medium=self._spec_medium,
             method=self._method)
 
     def __init__(
@@ -177,6 +180,7 @@ method : optional
             spec_step: float = _moments.SPEC_STEP,
             spec_rval: float = 0,
             spec_rest: str | astropy.units.Quantity | None = None,
+            spec_medium: str | None = None,
             method: str = 'moments'
     ):
         spatial = _detail.spatial_grid_of_regions(
@@ -195,6 +199,8 @@ method : optional
         self._spec_step = spec_step
         self._spec_rval = spec_rval
         self._spec_rest = gridutils.make_rest(spec_rest)
+        self._spec_medium = gridutils.make_medium(
+            spec_medium, self._spec_rest)
         # The area of each pixel in the regions, so that their sums are
         # fluxes (an error if apertures are not inside the grid)
         self._weights = flux_weights(regions, spatial)
@@ -223,6 +229,9 @@ method : optional
 
     def spec_rest(self) -> astropy.units.Quantity | None:
         return self._spec_rest
+
+    def spec_medium(self) -> str | None:
+        return self._spec_medium
 
     def keys(self) -> tuple[str, ...]:
         return tuple(f'moment{i}' for i in self._orders)
