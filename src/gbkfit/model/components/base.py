@@ -72,6 +72,12 @@ class Component(parseutils.TypedSerializable, abc.ABC):
     ConfigError
         If the name is not valid (see parseutils.check_name), or it has
         neither emission nor opacity.
+
+    Notes
+    -----
+    In configurations, a component is loaded with the catalogue of the
+    lines its emission can name: load(info, catalogue) (see
+    Emission.load).
     """
 
     def __init__(

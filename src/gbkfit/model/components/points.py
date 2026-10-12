@@ -11,7 +11,7 @@ from gbkfit.utils.parseutils import ConfigError
 from ._detail import dump_geometry, dump_name
 from .base import Component, ComponentPlan, NativeGrid
 from .geometries import Geometry
-from .lines import Lines
+from .lines import LineCatalogue, Lines
 from .roles import Emission, LineEmission, emission_parser
 
 
@@ -241,9 +241,14 @@ class Point(Component):
         return 'point'
 
     @classmethod
-    def load(cls, info: dict[str, Any]) -> 'Point':
+    def load(
+            cls,
+            info: dict[str, Any],
+            catalogue: LineCatalogue | None = None
+    ) -> 'Point':
         parseutils.load_option_and_update_info(
-            emission_parser, info, 'emission', required=True)
+            emission_parser, info, 'emission', required=True,
+            catalogue=catalogue)
         return cls(**parseutils.parse_options_for_callable(
             info, cls.__init__))
 

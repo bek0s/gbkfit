@@ -15,7 +15,7 @@ from gbkfit.utils.parseutils import ConfigError
 from .._detail import dump_geometry, dump_name, parse_nodes
 from ..base import Component, ComponentPlan, NativeGrid
 from ..geometries import Geometry
-from ..lines import Lines
+from ..lines import LineCatalogue, Lines
 from ..roles import (
     Emission, LineEmission, Opacity, emission_parser, opacity_parser)
 from . import _disk, traits
@@ -39,21 +39,26 @@ TRAIT_PREFIXES = dict(
 
 
 def load_disk_component(
-        cls: type[Component], info: dict[str, Any]
+        cls: type[Component],
+        info: dict[str, Any],
+        catalogue: LineCatalogue | None
 ) -> dict[str, Any]:
     """
     Return the options of a disk component of class cls, with its parts,
-    roles and traits loaded. The __init__ of cls declares the options.
+    roles and traits loaded, and the lines its emission names from the
+    catalogue (see Emission.load). The __init__ of cls declares the
+    options.
     """
     for parser, key, required in (
             (density_parser, 'density', True),
             (kinematics_parser, 'kinematics', False),
-            (emission_parser, 'emission', False),
             (opacity_parser, 'opacity', False),
             (traits.zpt_parser, 'zptraits', False),
             (traits.spt_parser, 'sptraits', False)):
         parseutils.load_option_and_update_info(
             parser, info, key, required=required)
+    parseutils.load_option_and_update_info(
+        emission_parser, info, 'emission', catalogue=catalogue)
     return parseutils.parse_options_for_callable(info, cls.__init__)
 
 

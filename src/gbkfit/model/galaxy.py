@@ -15,6 +15,7 @@ from .components._component_set import ComponentSet, ComponentSetPlan
 from .components.base import Component, DepthAxis
 from .components.disks import MCDisk, SMDisk
 from .components.geometries import Geometry, geometry_parser
+from .components.lines import LineCatalogue
 from .components.points import Point
 from .distance import Distance, distance_parser
 from .mass import MassComponent, MassModel, mass_component_parser
@@ -72,10 +73,38 @@ class Galaxy(parseutils.Serializable):
     """
 
     @classmethod
-    def load(cls, info: dict[str, Any]) -> Self:
+    def load(
+            cls,
+            info: dict[str, Any],
+            catalogue: LineCatalogue | None = None
+    ) -> Self:
+        """
+        Load a galaxy from its configuration.
+
+        Parameters
+        ----------
+        info : dict
+            The configuration.
+        catalogue : LineCatalogue, optional
+            The catalogue of the lines that the emission of its components
+            names (see Emission.load); that of GBKFIT by default.
+
+        Returns
+        -------
+        Galaxy
+            The galaxy.
+
+        Raises
+        ------
+        ConfigError
+            If the configuration has an error.
+        """
         _detail.load_geometries(info, ('components',))
+        components = info.get('components')
         parseutils.load_option_and_update_info(
-            component_parser, info, 'components', required=True)
+            component_parser, info, 'components', required=True,
+            catalogue=[catalogue] * len(components)
+            if iterutils.is_sequence(components) else catalogue)
         parseutils.load_option_and_update_info(
             mass_component_parser, info, 'mass')
         parseutils.load_option_and_update_info(

@@ -1,4 +1,4 @@
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 
 import astropy.constants
 import astropy.units
@@ -11,6 +11,7 @@ from gbkfit.utils.parseutils import ConfigError
 
 __all__ = [
     'Line',
+    'LineCatalogue',
     'Lines',
     'line_parser'
 ]
@@ -18,6 +19,30 @@ __all__ = [
 
 # The speed of light (km/s)
 _C = astropy.constants.c.to_value('km/s')
+
+# The lines of the catalogue (see LineCatalogue): the rest wavelength in
+# vacuum of the optical lines (those of the SDSS line list) and of the
+# near-infrared hydrogen lines, and the rest frequency of the radio and
+# (sub)millimetre lines. Optical lines are named after their wavelength in
+# air, as usual.
+_CATALOGUE_LINES = {
+    'oii3726': '3727.092 Angstrom',
+    'oii3729': '3729.875 Angstrom',
+    'hbeta': '4862.683 Angstrom',
+    'oiii4959': '4960.295 Angstrom',
+    'oiii5007': '5008.240 Angstrom',
+    'nii6548': '6549.86 Angstrom',
+    'halpha': '6564.61 Angstrom',
+    'nii6583': '6585.27 Angstrom',
+    'sii6716': '6718.29 Angstrom',
+    'sii6731': '6732.67 Angstrom',
+    'paalpha': '18756.1 Angstrom',
+    'brgamma': '21661.2 Angstrom',
+    'hi21': '1420.405751768 MHz',
+    'co10': '115.2712018 GHz',
+    'co21': '230.538 GHz',
+    'co32': '345.7959899 GHz',
+    'cii158': '1900.5369 GHz'}
 
 
 class Line(parseutils.Serializable):
@@ -55,6 +80,71 @@ class Line(parseutils.Serializable):
 
 
 line_parser = parseutils.BasicParser(Line)
+
+
+class LineCatalogue:
+    """
+    The emission lines that configurations name: those of GBKFIT (the
+    brightest optical lines: oii3726, oii3729, hbeta, oiii4959, oiii5007,
+    nii6548, halpha, nii6583, sii6716, sii6731; the near-infrared hydrogen
+    lines paalpha and brgamma; and the radio and (sub)millimetre lines
+    hi21, co10, co21, co32 and cii158), and those of the user, which add
+    to or replace them. Rest wavelengths are in vacuum.
+
+    Parameters
+    ----------
+    lines : Mapping of str to str or Quantity, optional
+        The user's lines: the rest wavelength (in vacuum) or frequency of
+        each, by name (see Line).
+
+    Raises
+    ------
+    ConfigError
+        If a name or a rest is not valid.
+
+    Examples
+    --------
+    >>> catalogue = LineCatalogue({'mgii2796': '2796.35 Angstrom'})
+    >>> catalogue.line('halpha').rest()
+    <Quantity 6.56461e-07 m>
+    """
+
+    def __init__(
+            self,
+            lines: Mapping[str, str | astropy.units.Quantity] | None = None
+    ):
+        self._lines = {
+            name: Line(name, rest)
+            for name, rest in (_CATALOGUE_LINES | dict(lines or {})).items()}
+
+    def names(self) -> tuple[str, ...]:
+        """Return the names of its lines."""
+        return tuple(self._lines)
+
+    def line(self, name: str) -> Line:
+        """
+        Return its line of the given name.
+
+        Parameters
+        ----------
+        name : str
+            The name.
+
+        Returns
+        -------
+        Line
+            The line.
+
+        Raises
+        ------
+        ConfigError
+            If it has no line of the name.
+        """
+        if name not in self._lines:
+            raise ConfigError(
+                f"there is no line {name!r} in the catalogue; its lines: "
+                f"{list(self._lines)}")
+        return self._lines[name]
 
 
 class Lines:

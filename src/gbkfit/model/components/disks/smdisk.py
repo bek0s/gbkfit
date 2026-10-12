@@ -8,6 +8,7 @@ from gbkfit.params import ParamDesc, ParamValues
 from gbkfit.utils import gridutils
 from ..base import Component, ComponentPlan
 from ..geometries import Geometry
+from ..lines import LineCatalogue
 from ..roles import Emission, Opacity
 from . import _detail, _disk, traits
 from .parts import Density, Kinematics
@@ -96,8 +97,12 @@ class SMDisk(Component):
         return 'smdisk'
 
     @classmethod
-    def load(cls, info: dict[str, Any]) -> Self:
-        return cls(**_detail.load_disk_component(cls, info))
+    def load(
+            cls,
+            info: dict[str, Any],
+            catalogue: LineCatalogue | None = None
+    ) -> Self:
+        return cls(**_detail.load_disk_component(cls, info, catalogue))
 
     def dump(self) -> dict[str, Any]:
         return _detail.dump_disk_component(
