@@ -47,3 +47,8 @@ def test_laws_of_the_same_options_are_equal():
         dict(type='ccm', rv=3.1))
     assert ExtinctionCCM(3.1) != ExtinctionCCM(5)
     assert len({ExtinctionCCM(), ExtinctionCCM(), ExtinctionCalzetti()}) == 2
+
+
+def test_laws_of_equal_options_share_a_cube():
+    # (3 and 3.0 are one option: the laws are one key of a dict)
+    assert len(dict.fromkeys([ExtinctionCCM(3), ExtinctionCCM(3.0)])) == 1

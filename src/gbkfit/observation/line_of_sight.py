@@ -36,11 +36,13 @@ class Depth(parseutils.Serializable):
     extent : str or float, optional
         Its length (arcsec); 'galaxy' (the default): the diameter of the
         largest disk the observation evaluates (twice its outer radius,
-        that of the last of its rings), so that every voxel of the disks
-        is on it; or 'legacy': that of the longer of the x and y axes of
-        the grid the galaxies are evaluated on (the grid of the data,
-        oversampled and padded for the convolutions), as the 3d models of
-        earlier versions took it.
+        that of the last of its rings), so that the plane of each disk
+        crosses each line of sight on it (the light of a thick disk
+        farther from the plane of the sky, at a high inclination or
+        warped, is not on it); or 'legacy': that of the longer of the x
+        and y axes of the grid the galaxies are evaluated on (the grid of
+        the data, oversampled and padded for the convolutions), as the 3d
+        models of earlier versions took it.
     step : float, optional
         The size of its voxels (arcsec); by default that of the pixels
         along the longer of the x and y axes of that grid.
