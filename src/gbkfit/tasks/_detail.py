@@ -107,7 +107,7 @@ def prepare_config(
             f"the configuration needs the sections {missing}")
     # (empty sections are loaded as such, for clearer messages)
     config = {s: {} if v is None else v for s, v in config.items()}
-    for s in ('driver', 'drivers', 'pdescs', 'params', 'fitter'):
+    for s in ('driver', 'drivers', 'lines', 'pdescs', 'params', 'fitter'):
         if s in config and not iterutils.is_mapping(config[s]):
             raise ConfigError(f"section '{s}' must be a dictionary")
     for s in ('galaxies', 'observations'):
@@ -217,12 +217,17 @@ def load_drivers(cfg: dict[str, Any]) -> dict[str | None, Driver]:
 def load_observation_group(cfg: dict[str, Any]) -> ObservationGroup:
     """
     Return the galaxies and observations (with their data, if any) of a
-    configuration, as an ObservationGroup. The observations refer to the
-    drivers of the configuration by name (see load_drivers).
+    configuration, as an ObservationGroup. The galaxies name lines of the
+    catalogue of GBKFIT and of the section 'lines' of the configuration
+    (see LineCatalogue), and the observations refer to the drivers of the
+    configuration by name (see load_drivers).
     """
     drivers = load_drivers(cfg)
+    with parseutils.config_path('lines'):
+        catalogue = gbkfit.model.LineCatalogue(cfg.get('lines'))
     with parseutils.config_path('galaxies'):
-        galaxies = gbkfit.model.galaxy_parser.load(cfg['galaxies'])
+        galaxies = gbkfit.model.galaxy_parser.load(
+            cfg['galaxies'], catalogue=[catalogue] * len(cfg['galaxies']))
     with parseutils.config_path('observations'):
         observations = gbkfit.observation.observation_parser.load(
             cfg['observations'], drivers=[drivers] * len(cfg['observations']))

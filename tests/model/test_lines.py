@@ -42,3 +42,64 @@ def test_narrow_lines_keep_their_flux(driver, evaluate_cases, dispersion):
     expected = line_flux(driver, evaluate_cases, 20)
     actual = line_flux(driver, evaluate_cases, dispersion)
     np.testing.assert_allclose(actual, expected, rtol=1e-4, atol=1e-6)
+
+
+def test_the_catalogue_has_lines_and_those_of_the_user():
+    from gbkfit.model import LineCatalogue
+    from gbkfit.utils.parseutils import ConfigError
+    catalogue = LineCatalogue(
+        {'mgii2796': '2796.35 Angstrom', 'halpha': '6562.80 Angstrom'})
+    # Rest wavelengths in vacuum, or rest frequencies
+    rest = {name: catalogue.line(name).rest() for name in (
+        'nii6583', 'hi21', 'mgii2796', 'halpha')}
+    assert rest['nii6583'].to_value('Angstrom') == pytest.approx(6585.27)
+    assert rest['hi21'].to_value('MHz') == pytest.approx(1420.405751768)
+    assert rest['mgii2796'].to_value('Angstrom') == pytest.approx(2796.35)
+    # The lines of the user replace those of the catalogue
+    assert rest['halpha'].to_value('Angstrom') == pytest.approx(6562.80)
+    with pytest.raises(ConfigError, match="there is no line 'oi6300'"):
+        catalogue.line('oi6300')
+
+
+def lines_config(lines, catalogue=None):
+    """
+    A configuration of a disk that emits the given lines (names of the
+    catalogue, or lines), with the section 'lines' if catalogue.
+    """
+    config = dict(
+        galaxies=[dict(components=[dict(
+            type='smdisk', rnodes=[0, 2, 4],
+            density=dict(ptraits=dict(type='exponential')),
+            kinematics=dict(
+                vptraits=dict(type='tan_arctan'),
+                dptraits=dict(type='uniform')),
+            emission=dict(type='lines', lines=lines))])],
+        observations=[dict(
+            observable=dict(
+                type='pixel_spectra', size=[8, 8, 10],
+                rest='6564.61 Angstrom'),
+            line_of_sight=dict(type='flat'))])
+    if catalogue is not None:
+        config['lines'] = catalogue
+    return config
+
+
+def test_configurations_name_lines_of_the_catalogue():
+    from modelutils import config_group
+    group = config_group(lines_config(
+        ['halpha', 'mine', dict(name='other', rest='5000 Angstrom')],
+        dict(mine='4000 Angstrom')))
+    component, = group.galaxies()[0].components()
+    lines = component.emission().lines().lines()
+    assert [line.name() for line in lines] == ['halpha', 'mine', 'other']
+    assert [line.rest().to_value('Angstrom') for line in lines] \
+        == pytest.approx([6564.61, 4000, 5000])
+
+
+def test_configurations_name_known_lines():
+    from modelutils import config_group
+    from gbkfit.utils.parseutils import ConfigError
+    with pytest.raises(ConfigError) as error:
+        config_group(lines_config(['halpha', 'oi6300']))
+    assert "there is no line 'oi6300' in the catalogue" in str(error.value)
+    assert "emission.lines[1]" in str(error.value)

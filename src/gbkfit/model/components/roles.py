@@ -7,8 +7,8 @@ import abc
 from collections.abc import Sequence
 from typing import Any, Self
 
-from gbkfit.utils import parseutils
-from .lines import Line, Lines, line_parser
+from gbkfit.utils import iterutils, parseutils
+from .lines import Line, LineCatalogue, Lines, line_parser
 
 
 __all__ = [
@@ -22,12 +22,42 @@ __all__ = [
 ]
 
 
+def _load_line(
+        info: Any, path: tuple[str, int], catalogue: LineCatalogue
+) -> Line:
+    """
+    Return the line of a configuration: the line of the catalogue of the
+    given name, or a line (its name and rest). path is the place of the
+    line in the configuration.
+    """
+    with parseutils.config_path(*path):
+        if isinstance(info, str):
+            return catalogue.line(info)
+        return line_parser.load(info)
+
+
 class Emission(parseutils.TypedSerializable, abc.ABC):
     """
     The light that a component emits: its density, with a spectral shape.
     Spectral cubes see the components that emit lines, and images those
     that emit in a band.
+
+    In configurations, emission is loaded with the catalogue of the lines
+    it can name (see load).
     """
+
+    @classmethod
+    def load(
+            cls,
+            info: dict[str, Any],
+            catalogue: LineCatalogue | None = None
+    ) -> Self:
+        """
+        Load it from its configuration, with the catalogue of the names of
+        its lines (that of GBKFIT by default).
+        """
+        return cls(**parseutils.parse_options_for_callable(
+            info, cls.__init__))
 
     def dump(self) -> dict[str, Any]:
         return dict(type=self.type())
@@ -57,8 +87,39 @@ class LineEmission(Emission):
         return 'lines'
 
     @classmethod
-    def load(cls, info: dict[str, Any]) -> Self:
-        parseutils.load_option_and_update_info(line_parser, info, 'lines')
+    def load(
+            cls,
+            info: dict[str, Any],
+            catalogue: LineCatalogue | None = None
+    ) -> Self:
+        """
+        Load it from its configuration, in which each line is the name of
+        a line of the catalogue, or a line (its name and rest).
+
+        Parameters
+        ----------
+        info : dict
+            The configuration.
+        catalogue : LineCatalogue, optional
+            The catalogue of the names; that of GBKFIT by default.
+
+        Returns
+        -------
+        LineEmission
+            The emission.
+
+        Raises
+        ------
+        ConfigError
+            If the configuration has an error, or a line is not in the
+            catalogue.
+        """
+        if catalogue is None:
+            catalogue = LineCatalogue()
+        if info.get('lines') is not None:
+            info['lines'] = [
+                _load_line(line, ('lines', i), catalogue)
+                for i, line in enumerate(iterutils.listify(info['lines']))]
         return cls(**parseutils.parse_options_for_callable(
             info, cls.__init__))
 

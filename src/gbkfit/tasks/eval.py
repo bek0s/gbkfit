@@ -53,7 +53,7 @@ def eval_(
     _log.info(f"reading configuration from file: {config}...")
     cfg, root = _detail.read_config(
         config, ('galaxies', 'observations', 'params'),
-        ('driver', 'drivers', 'pdescs'))
+        ('driver', 'drivers', 'lines', 'pdescs'))
     output_dir = _detail.make_output_dir(output_dir, output_dir_mode)
     _log.info(f"output will be stored under directory: {output_dir}")
 
