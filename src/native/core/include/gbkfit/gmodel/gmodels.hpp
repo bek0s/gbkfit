@@ -130,6 +130,28 @@ gmodel_attenuation(int x, int y, int z, const T* opacity, const int* size)
     return std::exp(-tau_front) * own;
 }
 
+// The optical depth from the viewer to the position pz along the line of
+// sight of the spaxel (x, y), in voxels (the voxel z spans pz from z - 0.5
+// to z + 0.5), with the absorbers of each voxel spread uniformly along it.
+// The opacity cube holds the optical depth from the viewer to the far side
+// of each voxel (see gmodel_opacity_accumulate). It is 0 in front of the
+// grid, and that of the whole line of sight behind it.
+template<typename T> constexpr T
+gmodel_optical_depth(int x, int y, T pz, const T* opacity, const int* size)
+{
+    if (std::isnan(pz))
+        return pz;
+    // The position from the near side of the grid, and its voxel
+    const T p = std::min(std::max(pz + T{0.5}, T{0}), T(size[2]));
+    const int z = std::min(int(p), size[2] - 1);
+    const T tau_front = z > 0
+            ? opacity[index_3d_to_1d(x, y, z - 1, size[0], size[1])]
+            : T{0};
+    const T tau_own =
+            opacity[index_3d_to_1d(x, y, z, size[0], size[1])] - tau_front;
+    return tau_front + (p - z) * tau_own;
+}
+
 template<typename T> constexpr void
 transform_cpos(T& x, T& y, T xpos, T ypos)
 {
@@ -590,14 +612,29 @@ gmodel_mcdisk_evaluate_cloud(
     }
 }
 
-// Evaluate the voxel (x, y, z) of a smooth disk. AddFunT adds the light of
-// the voxel to the pixel and the spectrum of its spaxel, which the other
-// voxels of the spaxel add to too: it must be atomic if they are
-// evaluated in parallel. Only this voxel writes to its other outputs.
+// The number of evaluations of a smooth disk along each spaxel: one for
+// each voxel of a thick disk, and one for a thin disk (see
+// gmodel_smdisk_evaluate_spaxel)
+template<typename T> constexpr int
+gmodel_smdisk_size_z(const DiskArgs<T>& a)
+{
+    return a.rht.uids ? a.spat_size[2] : 1;
+}
+
+// Evaluate the voxel (x, y, z) of a thick smooth disk, or the spaxel (x, y)
+// of a thin one (z = 0). On a grid with a depth axis, the light of a thin
+// disk is in the voxel where its plane crosses the line of sight of the
+// spaxel (none if that is outside the grid, though its light still reaches
+// the image or spectral cube), dimmed by the opacity in front of the
+// crossing. AddFunT adds the light of the voxel to the pixel and the
+// spectrum of its spaxel, which the other voxels of the spaxel add to too:
+// it must be atomic if they are evaluated in parallel. Only this voxel
+// writes to its other outputs.
 template<auto AddFunT, typename T> constexpr void
 gmodel_smdisk_evaluate_spaxel(int x, int y, int z, const DiskArgs<T>& a)
 {
     bool is_thin = a.rht.uids == nullptr;
+    bool has_depth = a.spat_step[2] != 0;
 
     T vsysi=0, xposi=0, yposi=0, posai=0, incli=0;
     T xn=x, yn=y, zn=z, rn=0, theta=0;
@@ -639,6 +676,14 @@ gmodel_smdisk_evaluate_spaxel(int x, int y, int z, const DiskArgs<T>& a)
         transform_cpos_posa_incl(xn, yn, xposi, yposi, posai, incli);
     } else {
         transform_cpos_posa_incl(xn, yn, zn, xposi, yposi, posai, incli);
+    }
+
+    // The position along the depth axis (in voxels) of the light: that of
+    // the voxel, or for a thin disk that of the crossing of its plane, at
+    // the depth yn * sin(incl)
+    T pz = z;
+    if (is_thin && has_depth) {
+        pz = (yn * std::sin(incli) - a.spat_zero[2]) / a.spat_step[2];
     }
 
     // If the disk is not loose or tilted, we need to calculate the pixel's
@@ -792,10 +837,15 @@ gmodel_smdisk_evaluate_spaxel(int x, int y, int z, const DiskArgs<T>& a)
     dvalue = std::abs(dvalue);
 
 
-    // The light that the opacity lets through
-    T orvalue = a.opacity
-            ? rvalue * gmodel_attenuation(x, y, z, a.opacity, a.spat_size)
-            : rvalue;
+    // The light that the opacity lets through: that of a thin disk is a
+    // layer, which only the opacity in front of it dims
+    T orvalue = rvalue;
+    if (a.opacity) {
+        orvalue *= is_thin
+                ? std::exp(-gmodel_optical_depth(
+                        x, y, pz, a.opacity, a.spat_size))
+                : gmodel_attenuation(x, y, z, a.opacity, a.spat_size);
+    }
 
     if (a.image) {
         gbkfit::gmodel_image_evaluate<AddFunT>(
@@ -813,7 +863,15 @@ gmodel_smdisk_evaluate_spaxel(int x, int y, int z, const DiskArgs<T>& a)
                 a.spec_zero);
     }
 
-    const int idx = index_3d_to_1d(x, y, z, a.spat_size[0], a.spat_size[1]);
+    // The voxel of the 3d outputs (a thin disk outside the grid has none).
+    // The position is checked while it is a float: converting one out of
+    // the range of int, or NaN, is undefined.
+    const T vz = std::rint(pz);
+    if (!(vz >= 0 && vz < a.spat_size[2])) {
+        return;
+    }
+    const int idx = index_3d_to_1d(
+            x, y, int(vz), a.spat_size[0], a.spat_size[1]);
 
     if (a.rdata) {
         a.rdata[idx] += rvalue;

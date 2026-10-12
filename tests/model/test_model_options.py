@@ -144,8 +144,6 @@ CUBE_SEES_NONE = (
     "emit lines; it sees none")
 FLAT_SEES_NO_THICK = (
     "a thick component needs a line of sight with a depth axis (grid)")
-GRID_SEES_NO_THIN = (
-    "a thin disk on a grid with a depth axis is not supported yet")
 
 
 @pytest.mark.parametrize('kind, component, message', [
@@ -156,9 +154,7 @@ GRID_SEES_NO_THIN = (
     ('image_grid', DUST, IMAGE_SEES_NONE),
     ('cube_grid', DUST, CUBE_SEES_NONE),
     ('cube_flat', LINES_THICK, FLAT_SEES_NO_THICK),
-    ('image_flat', BAND_THICK, FLAT_SEES_NO_THICK),
-    ('cube_grid', LINES_THIN, GRID_SEES_NO_THIN),
-    ('image_grid', BAND_THIN, GRID_SEES_NO_THIN)])
+    ('image_flat', BAND_THICK, FLAT_SEES_NO_THICK)])
 def test_observations_reject_components_of_other_kinds(
         kind, component, message):
     assert message in load_error(config(kind, [component]))

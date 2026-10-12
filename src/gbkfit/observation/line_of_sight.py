@@ -2,7 +2,8 @@
 How an observation treats the line of sight: it evaluates the galaxies it
 sees on the plane of the sky (Flat), or on a grid with a depth axis along
 the line of sight (Grid). It is explicit, and checked against every
-component it sees: never inferred from them.
+component it sees: never inferred from them. Along the depth axis, the
+viewer is in front of its first voxel.
 """
 
 import abc
@@ -145,9 +146,10 @@ class Flat(LineOfSight):
 class Grid(LineOfSight):
     """
     A depth axis: the galaxies are evaluated on the voxels of a grid,
-    where dust dims the light behind it. It sees thick disks and points
-    (which have no depth: dust does not dim them); thin disks are not
-    supported yet.
+    where dust dims the light behind it. It sees every component: thick
+    disks fill its voxels, and the light of a thin disk or a point is at
+    its depth (where the plane of the disk crosses each line of sight),
+    dimmed by the dust in front of it.
 
     Parameters
     ----------
@@ -179,10 +181,7 @@ class Grid(LineOfSight):
         return self._depth.axis(grid)
 
     def check(self, component: Component) -> None:
-        if component.density_disk() is not None and not component.thick():
-            raise ConfigError(
-                "a thin disk on a grid with a depth axis is not supported "
-                "yet; see it through a flat line of sight")
+        pass
 
 
 line_of_sight_parser = parseutils.TypedParser(LineOfSight, [

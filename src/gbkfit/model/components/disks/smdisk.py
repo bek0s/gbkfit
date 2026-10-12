@@ -41,9 +41,10 @@ class SmoothDiskPlan(_disk.DiskPlan):
 
 class SMDisk(Component):
     """
-    A disk evaluated smoothly: at every pixel of the grid (a thin disk),
-    or at every voxel of a grid with a depth axis (a thick disk, with
-    density height traits).
+    A disk evaluated smoothly: at every pixel of the grid (a thin disk,
+    whose light is where its plane crosses the line of sight of the pixel
+    on a grid with a depth axis), or at every voxel of a grid with a depth
+    axis (a thick disk, with density height traits).
 
     Parameters
     ----------
