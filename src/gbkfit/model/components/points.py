@@ -163,6 +163,15 @@ class PointPlan(ComponentPlan):
         self._lines = None if lines is None else np.array(lines, dtype=float)
         self._ratios = tuple(ratios)
 
+    def line_values(self, params: ParamValues) -> np.ndarray:
+        if self._lines is None:
+            ratio = 1.0 if self._band_ratio is None \
+                else params[self._band_ratio]
+            return np.array([[0.0, 0.0, ratio]])
+        for row, name in self._ratios:
+            self._lines[row, 2] = params[name]
+        return self._lines
+
     def _spectrum(
             self,
             params: dict[str, float],
@@ -178,9 +187,8 @@ class PointPlan(ComponentPlan):
             grid['spec_size'], grid['spec_step'], grid['spec_zero'])
         edges = zero + (np.arange(size + 1) - 0.5) * step
         spectrum = np.zeros(size)
-        for row, name in self._ratios:
-            self._lines[row, 2] = params[name]
-        for row, (offset, scale, flux) in enumerate(self._lines):
+        for row, (offset, scale, flux) in enumerate(
+                self.line_values(params)):
             if transmission is not None:
                 flux = flux * transmission[row]
             centre = offset + scale * params['vsys']

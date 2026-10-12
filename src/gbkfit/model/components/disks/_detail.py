@@ -324,6 +324,13 @@ class DiskComponentPlan(ComponentPlan):
     def disk_plan(self) -> _disk.DiskPlan:
         return self._disk_plan
 
+    def line_values(self, params: ParamValues) -> np.ndarray:
+        if self._lines is None:
+            return np.array([[0.0, 0.0, self._image_scale(params)]])
+        for row, name in self._ratios:
+            self._lines[row, 2] = params[name]
+        return self._lines
+
     def evaluate_emission(
             self,
             params: ParamValues,
@@ -331,8 +338,8 @@ class DiskComponentPlan(ComponentPlan):
             outputs: dict[str, DeviceArray | None],
             out_extra: dict[str, Any] | None
     ) -> None:
-        for row, name in self._ratios:
-            self._lines[row, 2] = params[name]
+        lines = self.line_values(params) if self._lines is not None \
+            else None
         odata = outputs.get('odata')
         disk_outputs = dict(
             image=outputs.get('image'),
@@ -342,11 +349,9 @@ class DiskComponentPlan(ComponentPlan):
             opacity_ratios=self._opacity_ratios if odata is not None
             else None,
             ordata=outputs.get('obdata'))
-        image_scale = 1.0 if self._band_ratio is None \
-            else params[self._band_ratio]
         self._disk_plan.evaluate(
-            params, grid, disk_outputs, out_extra, 'bdata', self._lines,
-            image_scale=image_scale)
+            params, grid, disk_outputs, out_extra, 'bdata', lines,
+            image_scale=self._image_scale(params))
 
     def fields_layout(self) -> FieldsLayout:
         return self._disk_plan.fields_layout()
@@ -374,6 +379,10 @@ class DiskComponentPlan(ComponentPlan):
         self._disk_plan.evaluate(
             params, grid, dict(rdata=odata), out_extra, 'odata',
             rdata_scale=scale)
+
+    def _image_scale(self, params: ParamValues) -> float:
+        """Return the flux ratio of the band of the image, if any, or 1."""
+        return 1.0 if self._band_ratio is None else params[self._band_ratio]
 
 
 def parse_component_rnode_args(

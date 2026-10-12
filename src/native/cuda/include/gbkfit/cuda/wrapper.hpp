@@ -1,6 +1,7 @@
 #pragma once
 
 #include <gbkfit/gmodel/disk.hpp>
+#include <gbkfit/gmodel/transfer.hpp>
 
 namespace gbkfit { namespace cuda {
 
@@ -63,6 +64,9 @@ struct Wrapper
 
     static void
     gmodel_opacity_accumulate(int size_x, int size_y, int size_z, T* opacity);
+
+    static void
+    gmodel_transfer_march(const TransferArgs<T>& a);
 
     static void
     gmodel_disk_traits_evaluate(const DiskTraitsArgs<T>& a);

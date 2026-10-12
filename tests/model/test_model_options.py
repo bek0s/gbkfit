@@ -143,7 +143,8 @@ CUBE_SEES_NONE = (
     "the observation is a spectral cube, which sees the components that "
     "emit lines; it sees none")
 FLAT_SEES_NO_THICK = (
-    "a thick component needs a line of sight with a depth axis (grid)")
+    "a thick component needs a line of sight with a depth axis "
+    "(grid or transfer)")
 
 
 @pytest.mark.parametrize('kind, component, message', [
@@ -189,7 +190,8 @@ def test_flat_lines_of_sight_have_no_depth(kind):
 def test_flat_lines_of_sight_see_no_opacity(kind):
     message = load_error(config(kind, with_dust(kind)))
     assert "component 'dust': " in message
-    assert "needs a line of sight with a depth axis (grid)" in message
+    assert "needs a line of sight with a depth axis (grid or transfer)" \
+        in message
 
 
 @pytest.mark.parametrize('options, message', [

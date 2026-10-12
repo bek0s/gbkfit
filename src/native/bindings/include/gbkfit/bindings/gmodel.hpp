@@ -7,9 +7,11 @@
 #include <nanobind/stl/array.h>
 #include <nanobind/stl/optional.h>
 #include <nanobind/stl/string.h>
+#include <nanobind/stl/vector.h>
 
 #include <gbkfit/constants.hpp>
 #include <gbkfit/gmodel/disk.hpp>
+#include <gbkfit/gmodel/transfer.hpp>
 
 #include "gbkfit/bindings/arrays.hpp"
 
@@ -65,6 +67,25 @@ struct DiskArrays
     Traits rpt, rht, vpt, vht, dpt, dht, zpt, spt;
 };
 
+// The arrays of an emitter of the march of radiative transfer (see
+// gbkfit::TransferEmitter): its fields, those of a volume (of shape
+// (nslots, nz, ny, nx), with j, v and s in the first three slots) or of
+// a layer (of shape (4, ny, nx)); its lines (of shape (nlines, 3)); and
+// with opacity, a row of the ratios of the cubes of opacity for each line
+// (of shape (nlines, nopacity)). They are created once, and their values
+// are updated in place before each march.
+template<typename T, typename Device>
+struct TransferEmitterArrays
+{
+    using Fields = Array<Device, const T>;
+    using Rows = Array<Device, const T, nb::ndim<2>>;
+
+    bool layer;
+    Fields fields;
+    Rows lines;
+    Rows opacity_ratios;
+};
+
 // The galaxy model operations of a native module. Kernels launches
 // the kernels of the module, on the memory of Device.
 template<typename T, typename Device, typename Kernels>
@@ -80,6 +101,7 @@ struct GModel
     using Lines = Array<Device, const T, nb::ndim<2>>;
     using Ratios = Array<Device, const T, nb::ndim<2>>;
     using TraitValues = Array<Device, T, nb::ndim<2>>;
+    using Emitter = TransferEmitterArrays<T, Device>;
 
     static void
     smdisk_evaluate(
@@ -167,6 +189,91 @@ struct GModel
                 spat_size[0], spat_size[1], spat_size[2], opacity.data());
     }
 
+    // March along each line of sight of the grid through the planes of a
+    // slab, adding the light of the emitters that reaches the viewer to
+    // out, the image or the spectral cube (see gbkfit::TransferArgs and
+    // gbkfit::gmodel_transfer_march)
+    static void
+    transfer_march(
+            const std::vector<Emitter>& emitters,
+            std::array<int, 3> spat_size, int slab_zero, int depth_size,
+            bool image, int spec_size, T spec_step, T spec_zero,
+            ConstData opacity, Data opacity_front, Data out)
+    {
+        TransferArgs<T> a;
+        for (int i = 0; i < 3; ++i)
+            a.spat_size[i] = spat_size[i];
+        a.slab_zero = slab_zero;
+        a.depth_size = depth_size;
+        require(slab_zero >= 0 && slab_zero + spat_size[2] <= depth_size,
+                "the slab must be within the depth axis");
+        a.image = image;
+        a.spec_size = spec_size;
+        a.spec_step = spec_step;
+        a.spec_zero = spec_zero;
+        require(!image || spec_size == 1, "an image has one channel");
+        const size_t nimage = size_t(spat_size[0]) * spat_size[1];
+        const size_t nslab = nimage * spat_size[2];
+        require(out.size() == nimage * spec_size,
+                "out has the wrong number of elements");
+        a.out = out.data();
+
+        // The dust: cubes of the slab, and images in front of it
+        require(opacity.is_valid() == opacity_front.is_valid(),
+                "opacity and opacity_front go together");
+        if (opacity.is_valid()) {
+            const size_t nopacity = opacity.size() / nslab;
+            require(nopacity >= 1 && nopacity <= size_t(OPACITY_NUM_MAX)
+                    && opacity.size() == nopacity * nslab,
+                    "opacity needs from 1 to "
+                    + std::to_string(OPACITY_NUM_MAX)
+                    + " cubes of the slab");
+            require(opacity_front.size() == nopacity * nimage,
+                    "opacity_front needs an image for each cube of "
+                    "opacity");
+            a.nopacity = int(nopacity);
+            a.opacity = opacity.data();
+            a.opacity_front = opacity_front.data();
+        }
+
+        require(emitters.size() <= size_t(TRANSFER_EMITTER_NUM_MAX),
+                "the march takes at most "
+                + std::to_string(TRANSFER_EMITTER_NUM_MAX) + " emitters");
+        a.nemitters = int(emitters.size());
+        for (size_t e = 0; e < emitters.size(); ++e)
+        {
+            const Emitter& em = emitters[e];
+            const auto& f = em.fields;
+            require(em.layer
+                    ? f.ndim() == 3 && f.shape(0) == 4
+                      && f.shape(1) == size_t(spat_size[1])
+                      && f.shape(2) == size_t(spat_size[0])
+                    : f.ndim() == 4 && f.shape(0) >= 3
+                      && f.shape(1) == size_t(spat_size[2])
+                      && f.shape(2) == size_t(spat_size[1])
+                      && f.shape(3) == size_t(spat_size[0]),
+                    "the fields of a layer have the shape (4, ny, nx), and "
+                    "those of a volume (nslots >= 3, nz, ny, nx) on the "
+                    "planes of the slab");
+            const size_t nlines = em.lines.shape(0);
+            require(em.lines.shape(1) == 3 && nlines >= 1
+                    && (!image || nlines == 1),
+                    "an emitter needs lines of shape (nlines, 3), and one "
+                    "row in an image");
+            require(em.opacity_ratios.is_valid() == opacity.is_valid()
+                    && (!opacity.is_valid()
+                        || (em.opacity_ratios.shape(0) == nlines
+                            && em.opacity_ratios.shape(1)
+                               == size_t(a.nopacity))),
+                    "with opacity, an emitter needs a row of opacity_ratios "
+                    "for each line, and a column for each cube of opacity");
+            a.emitters[e] = {
+                    em.layer, f.data(), int(nlines), em.lines.data(),
+                    data(em.opacity_ratios)};
+        }
+        Kernels::gmodel_transfer_march(a);
+    }
+
     // Evaluate each polar trait of one kind of a disk ('rpt', 'vpt',
     // 'dpt', 'zpt' or 'spt') at the points (r, theta) of its plane,
     // into out (a row for each trait), as the disk kernels evaluate them
@@ -252,6 +359,19 @@ struct GModel
                 nb::arg("zpt").none() = nb::none(),
                 nb::arg("spt").none() = nb::none());
 
+        nb::class_<Emitter>(m, ("TransferEmitter" + suffix).c_str())
+                .def("__init__", [](
+                        Emitter* self, bool layer,
+                        typename Emitter::Fields fields,
+                        typename Emitter::Rows lines,
+                        typename Emitter::Rows opacity_ratios) {
+                    new (self) Emitter{layer, fields, lines, opacity_ratios};
+                },
+                nb::arg("layer"),
+                nb::arg("fields").noconvert(),
+                nb::arg("lines").noconvert(),
+                nb::arg("opacity_ratios").noconvert().none() = nb::none());
+
         auto evaluate_args = [](auto&&... first) {
             return std::make_tuple(
                     first...,
@@ -290,6 +410,14 @@ struct GModel
                 nb::arg("has_analytical_integral").noconvert()));
         cls.def_static("opacity_accumulate", &opacity_accumulate,
                 nb::arg("spat_size"), nb::arg("opacity").noconvert());
+        cls.def_static("transfer_march", &transfer_march,
+                nb::arg("emitters"), nb::arg("spat_size"),
+                nb::arg("slab_zero"), nb::arg("depth_size"),
+                nb::arg("image"), nb::arg("spec_size"),
+                nb::arg("spec_step"), nb::arg("spec_zero"),
+                nb::arg("opacity").noconvert().none() = nb::none(),
+                nb::arg("opacity_front").noconvert().none() = nb::none(),
+                nb::arg("out").noconvert());
         cls.def_static("disk_ptraits_evaluate", &disk_ptraits_evaluate,
                 nb::arg("disk"), nb::arg("kind"),
                 nb::arg("r").noconvert(), nb::arg("theta").noconvert(),
