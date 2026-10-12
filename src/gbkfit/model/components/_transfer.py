@@ -75,15 +75,23 @@ class TransferPlan:
                 layout.shape(native_grid), dtype)
             ratios = plans.ratios[i]
             self._emitters.append(emitter_class(
-                layer=layout.layer, fields=self._fields[i],
+                layer=layout.layer, line_opacity=layout.line_opacity,
+                fields=self._fields[i],
                 lines=self._lines[1][self._rows[i]],
                 opacity_ratios=None if ratios is None
                 else driver.mem_copy_h2d(ratios)))
-        # The optical depth of the dust in front of the slab
+        # The optical depth of the dust in front of the slab, and with line
+        # opacity, that of the lines at each channel
         self._opacity_front = None
         if plans.odata is not None:
             self._opacity_front = driver.mem_alloc_d(
                 plans.odata.shape[:1] + plans.odata.shape[2:], dtype)
+        self._tau = None
+        if any(plans.plans[i].fields_layout().line_opacity
+               for i in plans.emitters):
+            self._tau = driver.mem_alloc_d(
+                (native_grid['spec_size'],)
+                + native_grid['spat_size'][1::-1], dtype)
         self._plans = plans
         self._gmodel = driver.native_class('GModel', dtype)()
 
@@ -123,14 +131,16 @@ class TransferPlan:
         driver.mem_copy_h2d(lines_h, lines_d)
 
         image = outputs.get('image')
-        if self._opacity_front is not None:
-            driver.mem_fill(self._opacity_front, 0)
+        for state in (self._opacity_front, self._tau):
+            if state is not None:
+                driver.mem_fill(state, 0)
         self._gmodel.transfer_march(
             emitters=self._emitters, spat_size=grid['spat_size'],
             slab_zero=0, depth_size=grid['spat_size'][2],
             image=image is not None, spec_size=grid['spec_size'],
             spec_step=grid['spec_step'], spec_zero=grid['spec_zero'],
             opacity=plans.odata, opacity_front=self._opacity_front,
+            tau=self._tau,
             out=image if image is not None else outputs['scube'])
 
         if out_extra is not None:

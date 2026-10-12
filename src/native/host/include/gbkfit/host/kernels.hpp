@@ -257,7 +257,7 @@ dmodel_regions_sum(
     }
 }
 
-template<typename T, bool HasOpacity> void
+template<typename T, bool HasOpacity, bool HasFields> void
 gmodel_mcdisk_evaluate(const DiskArgs<T>& a, const MCDiskArgs<T>& mc)
 {
     // Parallelization: per cloud
@@ -266,13 +266,13 @@ gmodel_mcdisk_evaluate(const DiskArgs<T>& a, const MCDiskArgs<T>& mc)
     for(int ci = 0; ci < mc.nclouds; ++ci)
     {
         RNG<T> rng(mc.seed, ci);
-        gbkfit::gmodel_mcdisk_evaluate_cloud<atomic_add<T>, HasOpacity>(
-                rng, ci, a, mc);
+        gbkfit::gmodel_mcdisk_evaluate_cloud<
+                atomic_add<T>, HasOpacity, HasFields>(rng, ci, a, mc);
     }
 
     // The fields of each voxel, from the moments of its clouds.
     // Parallelization: per voxel
-    if (a.fields) {
+    if (HasFields) {
         const long long nspat = 1LL * a.spat_size[0] * a.spat_size[1]
                 * a.spat_size[2];
         #pragma omp parallel for
@@ -281,7 +281,7 @@ gmodel_mcdisk_evaluate(const DiskArgs<T>& a, const MCDiskArgs<T>& mc)
     }
 }
 
-template<typename T, bool HasOpacity> void
+template<typename T, bool HasOpacity, bool HasFields> void
 gmodel_smdisk_evaluate(const DiskArgs<T>& a)
 {
     // Parallelization: per 2d spatial position. Each thread evaluates the
@@ -295,7 +295,8 @@ gmodel_smdisk_evaluate(const DiskArgs<T>& a)
     for(int x = 0; x < a.spat_size[0]; ++x) {
     for(int z = 0; z < size_z; ++z) {
 
-    gbkfit::gmodel_smdisk_evaluate_spaxel<add<T>, HasOpacity>(x, y, z, a);
+    gbkfit::gmodel_smdisk_evaluate_spaxel<add<T>, HasOpacity, HasFields>(
+            x, y, z, a);
 
     }
     }
@@ -316,7 +317,7 @@ gmodel_opacity_accumulate(int size_x, int size_y, int size_z, T* opacity)
     }
 }
 
-template<typename T> void
+template<typename T, bool HasLineOpacity> void
 gmodel_transfer_march(const TransferArgs<T>& a)
 {
     // Parallelization: per 2d spatial position. Each thread adds the light
@@ -326,15 +327,16 @@ gmodel_transfer_march(const TransferArgs<T>& a)
     #pragma omp parallel
     {
     std::vector<T> spectrum(a.spec_size);
+    std::vector<T> tau(HasLineOpacity ? a.spec_size : 0);
+    std::vector<T> dk(HasLineOpacity ? a.spec_size : 0);
 
     #pragma omp for collapse(2) schedule(dynamic, 16)
     for (int y = 0; y < a.spat_size[1]; ++y) {
     for (int x = 0; x < a.spat_size[0]; ++x) {
 
     std::fill(spectrum.begin(), spectrum.end(), T{0});
-    gbkfit::gmodel_transfer_march(
-            x, y, 0, a.spec_size, a,
-            [&](int c, T value) { spectrum[c] += value; });
+    gbkfit::gmodel_transfer_march<HasLineOpacity>(
+            x, y, 0, a.spec_size, a, spectrum.data(), tau.data(), dk.data());
     for (int c = 0; c < a.spec_size; ++c) {
         if (spectrum[c] != 0) {
             a.out[index_3d_to_1d(x, y, c, a.spat_size[0], a.spat_size[1])]
@@ -445,22 +447,26 @@ struct Wrapper
         kernels::dmodel_regions_sum<T>(args...);
     }
 
-    // (the kernels of disks dimmed by opacity, and of the others: see
-    // gmodel_mcdisk_evaluate_cloud)
+    // (the kernels of the fields of disks, of disks dimmed by opacity, and
+    // of the others: see gmodel_mcdisk_evaluate_cloud)
     static void
     gmodel_mcdisk_evaluate(const DiskArgs<T>& a, const MCDiskArgs<T>& mc) {
-        if (a.opacity)
-            kernels::gmodel_mcdisk_evaluate<T, true>(a, mc);
+        if (a.fields)
+            kernels::gmodel_mcdisk_evaluate<T, false, true>(a, mc);
+        else if (a.opacity)
+            kernels::gmodel_mcdisk_evaluate<T, true, false>(a, mc);
         else
-            kernels::gmodel_mcdisk_evaluate<T, false>(a, mc);
+            kernels::gmodel_mcdisk_evaluate<T, false, false>(a, mc);
     }
 
     static void
     gmodel_smdisk_evaluate(const DiskArgs<T>& a) {
-        if (a.opacity)
-            kernels::gmodel_smdisk_evaluate<T, true>(a);
+        if (a.fields)
+            kernels::gmodel_smdisk_evaluate<T, false, true>(a);
+        else if (a.opacity)
+            kernels::gmodel_smdisk_evaluate<T, true, false>(a);
         else
-            kernels::gmodel_smdisk_evaluate<T, false>(a);
+            kernels::gmodel_smdisk_evaluate<T, false, false>(a);
     }
 
     static void
@@ -468,9 +474,13 @@ struct Wrapper
         kernels::gmodel_opacity_accumulate<T>(args...);
     }
 
+    // (the march of line opacity, and of dust only)
     static void
     gmodel_transfer_march(const TransferArgs<T>& a) {
-        kernels::gmodel_transfer_march<T>(a);
+        if (a.tau)
+            kernels::gmodel_transfer_march<T, true>(a);
+        else
+            kernels::gmodel_transfer_march<T, false>(a);
     }
 
     static void

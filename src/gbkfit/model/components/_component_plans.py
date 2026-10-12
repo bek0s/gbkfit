@@ -21,6 +21,7 @@ from .disks._disk import DiskPlan
 from .disks._profiles import DiskDensity, pressure_support
 from .extinction import ExtinctionLaw
 from .lines import Band
+from .roles import DustOpacity
 
 if TYPE_CHECKING:
     from ._component_set import ComponentSet
@@ -37,8 +38,9 @@ class ComponentPlans:
     observation: the x and y axes of its data, and a depth axis along the
     line of sight (or none: the plane of the sky), with the spectral axis
     of its data (or that of an image). It plans the given emitters, whose
-    light is evaluated, and the components with opacity (the absorbers:
-    all of them, since they absorb whatever the observation sees). Each
+    light is evaluated, and the components with dust (the absorbers: all
+    of them, since they absorb whatever the observation sees; the line
+    opacity of an emitter is that of its own lines, see LineOpacity). Each
     component has its parameters, and those its galaxy gives it (the
     circular velocity of its mass, evaluated once for all of them).
 
@@ -117,7 +119,8 @@ class ComponentPlans:
     ):
         components = component_set.components()
         absorbers = tuple(
-            i for i, cmp in enumerate(components) if cmp.opacity() is not None)
+            i for i, cmp in enumerate(components)
+            if isinstance(cmp.opacity(), DustOpacity))
         if absorbers and depth is None:
             raise ValueError(
                 "components with opacity need a grid with a depth axis")

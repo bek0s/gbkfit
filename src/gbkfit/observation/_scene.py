@@ -10,7 +10,7 @@ from typing import Any
 import numpy as np
 
 from gbkfit.driver import DeviceArray, Driver
-from gbkfit.model import Band, BandEmission, Emission, Galaxy
+from gbkfit.model import Band, BandEmission, DustOpacity, Emission, Galaxy
 from gbkfit.model.components._component_set import (
     IMAGE_SPECTRAL_AXIS, ComponentSetPlan)
 from gbkfit.model.components._transfer import TransferPlan
@@ -58,14 +58,14 @@ class Scene:
     def radius(self) -> float:
         """
         Return the outer radius (arcsec) of the largest disk it evaluates:
-        of the components whose light it sees, and those with opacity; 0
+        of the components whose light it sees, and those with dust; 0
         without disks.
         """
         radii = [
             cmp.density_disk().rnodes()[-1]
             for galaxy, emitters in zip(self._galaxies, self._emitters)
             for i, cmp in enumerate(galaxy.components())
-            if (i in emitters or cmp.opacity() is not None)
+            if (i in emitters or isinstance(cmp.opacity(), DustOpacity))
             and cmp.density_disk() is not None]
         return max(radii, default=0.0)
 
@@ -180,9 +180,11 @@ def make_scene(
     _check_lines(galaxies, emitters, lines)
     absorbers = [
         [i for i, cmp in enumerate(galaxy.components())
-         if cmp.opacity() is not None]
+         if isinstance(cmp.opacity(), DustOpacity)]
         for galaxy in galaxies]
-    if len(galaxies) > 1 and any(absorbers):
+    if len(galaxies) > 1 and any(
+            cmp.opacity() is not None
+            for galaxy in galaxies for cmp in galaxy.components()):
         raise ConfigError(
             "an observation of several galaxies with opacity is not "
             "supported yet (it needs their order along the line of sight)")

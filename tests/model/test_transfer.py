@@ -256,3 +256,109 @@ def test_transfer_keeps_the_moments_of_monte_carlo_clouds(
             moments(grid), moments(transfer), (1e-5, 1e-5, 1e-4)):
         np.testing.assert_allclose(
             actual, desired, rtol=rtol, atol=rtol * np.abs(desired).max())
+
+
+def line_opacity(gas, coefficients):
+    """A component with line opacity of the given coefficient traits."""
+    return gas | dict(opacity=dict(type='line', coefficients=coefficients))
+
+
+def transfer_cube(evaluate_cases, driver, components, properties):
+    """The spectral cube of components seen through radiative transfer."""
+    case = dict(
+        driver=dict(type=driver.type()), line_of_sight=dict(type='transfer'),
+        observable=dict(
+            type='pixel_spectra', size=[24, 24, 61], step=[1, 1, 10]),
+        galaxy=dict(components=components))
+    names = {component['name'] for component in components}
+    data, _ = evaluate_cases([case], {
+        key: value for key, value in properties.items()
+        if key.split('_')[0] in names})
+    return data[0]['spectra']['d']
+
+
+@pytest.mark.parametrize('disk_type', ['smdisk', 'mcdisk'])
+def test_line_opacity_saturates_at_the_source_function(
+        driver, evaluate_cases, disk_type):
+    # Each voxel's optical depth at each channel is its light there over S
+    # (a uniform coefficient 1/S), so the light of each channel is S (1 -
+    # exp(-I / S)), I that without line opacity, whatever the geometry
+    gas = GAS | (dict(type='mcdisk', cflux=1e-3) if disk_type == 'mcdisk'
+                 else {})
+    thin = transfer_cube(evaluate_cases, driver, [gas], PROPERTIES)
+    source = thin.max() / 3
+    for coefficient, expected in (
+            (0, thin), (1 / source, source * -np.expm1(-thin / source))):
+        cube = transfer_cube(
+            evaluate_cases, driver,
+            [line_opacity(gas, dict(type='uniform'))],
+            PROPERTIES | dict(gas_op_a=coefficient))
+        assert_same_model(cube, expected)
+    assert cube.sum() < 0.8 * thin.sum()
+
+
+@pytest.mark.parametrize('separation, dims', [(300, False), (0, True)])
+def test_lines_absorb_only_at_their_velocities(
+        driver, evaluate_cases, separation, dims):
+    # Two face-on disks (each of one velocity on every line of sight):
+    # far apart in velocity, each is seen as if alone; at one velocity,
+    # the one behind is dimmed
+    disks = [
+        line_opacity(GAS | dict(name=name), dict(type='uniform'))
+        for name in ('gas', 'gas2')]
+    properties = {}
+    for name, vsys in (('gas', -separation / 2), ('gas2', separation / 2)):
+        properties |= {
+            key.replace('gas_', f'{name}_'): value
+            for key, value in PROPERTIES.items() if key.startswith('gas_')}
+        properties |= {
+            f'{name}_vsys': vsys, f'{name}_incl': 0, f'{name}_op_a': 100}
+    both = transfer_cube(evaluate_cases, driver, disks, properties)
+    alone = sum(
+        transfer_cube(evaluate_cases, driver, [disk], properties)
+        for disk in disks)
+    if dims:
+        assert both.sum() < 0.95 * alone.sum()
+    else:
+        assert_same_model(both, alone)
+
+
+def test_named_lines_take_a_coefficient_each(driver, evaluate_cases):
+    from gbkfit.model import galaxy_parser
+    emission = dict(type='lines', lines=['halpha', 'nii6583'])
+    coefficients = dict(
+        halpha=dict(type='uniform'),
+        nii6583=[dict(type='uniform'), dict(type='exponential')])
+    galaxy = galaxy_parser.load(dict(components=[line_opacity(
+        GAS | dict(emission=emission), coefficients)]))
+    assert {'gas_op_halpha_a', 'gas_op_nii6583_a', 'gas_op1_nii6583_a',
+            'gas_op1_nii6583_s'} <= set(galaxy.pdescs())
+    dumped = galaxy_parser.dump(galaxy)
+    assert galaxy_parser.dump(galaxy_parser.load(dumped)) == dumped
+
+
+@pytest.mark.parametrize('component, line_of_sight, message', [
+    (line_opacity(GAS, dict(type='uniform')), 'grid',
+     "needs a line of sight of radiative transfer"),
+    (line_opacity(GAS, dict(halpha=dict(type='uniform'))), 'transfer',
+     "one line without a name"),
+    (line_opacity(
+        GAS | dict(emission=dict(type='lines', lines=['halpha', 'nii6583'])),
+        dict(halpha=dict(type='uniform'))), 'transfer',
+     "needs the coefficients of every line"),
+    (line_opacity(GAS | dict(density=THIN), dict(type='uniform')), 'transfer',
+     "needs density height traits"),
+    (line_opacity(
+        GAS | dict(emission=dict(type='band')), dict(type='uniform')),
+     'transfer', "needs emission lines")])
+def test_line_opacity_errors(driver, component, line_of_sight, message):
+    from gbkfit.utils.parseutils import ConfigError
+    from modelutils import observation_group
+    case = dict(
+        driver=dict(type=driver.type()),
+        line_of_sight=dict(type=line_of_sight),
+        observable=dict(
+            type='pixel_spectra', size=[24, 24, 31], step=[1, 1, 10]),
+        galaxy=dict(components=[component]))
+    with pytest.raises(ConfigError, match=message):
+        observation_group([case])

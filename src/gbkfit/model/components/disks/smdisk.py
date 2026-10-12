@@ -23,9 +23,13 @@ class SmoothDisk(_disk.Disk):
     """A disk evaluated smoothly: on the pixels or voxels of its grid."""
 
     def plan(
-            self, driver: Driver, nlines: int, dtype: np.dtype
+            self,
+            driver: Driver,
+            nlines: int,
+            dtype: np.dtype,
+            opacity_rows: Sequence[int] | None = None
     ) -> _disk.DiskPlan:
-        return SmoothDiskPlan(self, driver, nlines, dtype)
+        return SmoothDiskPlan(self, driver, nlines, dtype, opacity_rows)
 
 
 class SmoothDiskPlan(_disk.DiskPlan):
@@ -33,9 +37,12 @@ class SmoothDiskPlan(_disk.DiskPlan):
 
     def fields_layout(self) -> FieldsLayout:
         # (a thin disk is a layer where its plane crosses each line of
-        # sight; a thick one fills the voxels with j, v and s)
+        # sight; a thick one fills the voxels with j, v, s and its line
+        # opacity)
         if self._disk.traits('rht'):
-            return FieldsLayout(layer=False, nslots=3)
+            nk = self._fields_lines()
+            return FieldsLayout(
+                layer=False, nslots=3 + nk, line_opacity=nk > 0)
         return FieldsLayout(layer=True, nslots=4)
 
     def _impl_evaluate(

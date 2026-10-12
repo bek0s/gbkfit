@@ -322,5 +322,6 @@ emission_parser = parseutils.TypedParser(Emission, [
     LineEmission,
     BandEmission])
 
+# (the disks register their line opacity, LineOpacity)
 opacity_parser = parseutils.TypedParser(Opacity, [
     DustOpacity])

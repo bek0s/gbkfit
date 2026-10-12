@@ -64,16 +64,18 @@ struct DiskArrays
     Values ypos;
     Values posa;
     Values incl;
-    Traits rpt, rht, vpt, vht, dpt, dht, zpt, spt;
+    Traits rpt, rht, vpt, vht, dpt, dht, zpt, spt, opt;
+    Array<Device, const int, nb::ndim<1>> opt_rows;
 };
 
 // The arrays of an emitter of the march of radiative transfer (see
 // gbkfit::TransferEmitter): its fields, those of a volume (of shape
-// (nslots, nz, ny, nx), with j, v and s in the first three slots) or of
-// a layer (of shape (4, ny, nx)); its lines (of shape (nlines, 3)); and
-// with opacity, a row of the ratios of the cubes of opacity for each line
-// (of shape (nlines, nopacity)). They are created once, and their values
-// are updated in place before each march.
+// (nslots, nz, ny, nx), with j, v and s in the first three slots, and
+// with line opacity, a slot for each line after them) or of a layer (of
+// shape (4, ny, nx)); its lines (of shape (nlines, 3)); and with opacity,
+// a row of the ratios of the cubes of opacity for each line (of shape
+// (nlines, nopacity)). They are created once, and their values are
+// updated in place before each march.
 template<typename T, typename Device>
 struct TransferEmitterArrays
 {
@@ -81,6 +83,7 @@ struct TransferEmitterArrays
     using Rows = Array<Device, const T, nb::ndim<2>>;
 
     bool layer;
+    bool line_opacity;
     Fields fields;
     Rows lines;
     Rows opacity_ratios;
@@ -198,7 +201,7 @@ struct GModel
             const std::vector<Emitter>& emitters,
             std::array<int, 3> spat_size, int slab_zero, int depth_size,
             bool image, int spec_size, T spec_step, T spec_zero,
-            ConstData opacity, Data opacity_front, Data out)
+            ConstData opacity, Data opacity_front, Data tau, Data out)
     {
         TransferArgs<T> a;
         for (int i = 0; i < 3; ++i)
@@ -236,6 +239,12 @@ struct GModel
             a.opacity_front = opacity_front.data();
         }
 
+        // The optical depth of the lines in front of the slab, with line
+        // opacity
+        require(!tau.is_valid() || tau.size() == nimage * spec_size,
+                "tau needs a value for each channel of each spaxel");
+        a.tau = data(tau);
+
         require(emitters.size() <= size_t(TRANSFER_EMITTER_NUM_MAX),
                 "the march takes at most "
                 + std::to_string(TRANSFER_EMITTER_NUM_MAX) + " emitters");
@@ -260,6 +269,11 @@ struct GModel
                     && (!image || nlines == 1),
                     "an emitter needs lines of shape (nlines, 3), and one "
                     "row in an image");
+            require(!em.line_opacity
+                    || (!em.layer && tau.is_valid()
+                        && f.shape(0) >= 3 + nlines),
+                    "an emitter with line opacity needs to be a volume with "
+                    "a field of each line, and the march tau");
             require(em.opacity_ratios.is_valid() == opacity.is_valid()
                     && (!opacity.is_valid()
                         || (em.opacity_ratios.shape(0) == nlines
@@ -268,8 +282,8 @@ struct GModel
                     "with opacity, an emitter needs a row of opacity_ratios "
                     "for each line, and a column for each cube of opacity");
             a.emitters[e] = {
-                    em.layer, f.data(), int(nlines), em.lines.data(),
-                    data(em.opacity_ratios)};
+                    em.layer, em.line_opacity, f.data(), int(nlines),
+                    em.lines.data(), data(em.opacity_ratios)};
         }
         Kernels::gmodel_transfer_march(a);
     }
@@ -334,14 +348,18 @@ struct GModel
                         const Traits* rpt, const Traits* rht,
                         const Traits* vpt, const Traits* vht,
                         const Traits* dpt, const Traits* dht,
-                        const Traits* zpt, const Traits* spt) {
-                    auto opt = [](const Traits* traits) {
+                        const Traits* zpt, const Traits* spt,
+                        const Traits* opt,
+                        Array<Device, const int, nb::ndim<1>> opt_rows) {
+                    auto optional = [](const Traits* traits) {
                         return traits ? std::optional(*traits) : std::nullopt;
                     };
                     new (self) Disk{
                             loose, tilted, rnodes, vsys, xpos, ypos, posa,
-                            incl, opt(rpt), opt(rht), opt(vpt), opt(vht),
-                            opt(dpt), opt(dht), opt(zpt), opt(spt)};
+                            incl, optional(rpt), optional(rht),
+                            optional(vpt), optional(vht), optional(dpt),
+                            optional(dht), optional(zpt), optional(spt),
+                            optional(opt), opt_rows};
                 },
                 nb::arg("loose"), nb::arg("tilted"),
                 nb::arg("rnodes").noconvert(),
@@ -357,17 +375,21 @@ struct GModel
                 nb::arg("dpt").none() = nb::none(),
                 nb::arg("dht").none() = nb::none(),
                 nb::arg("zpt").none() = nb::none(),
-                nb::arg("spt").none() = nb::none());
+                nb::arg("spt").none() = nb::none(),
+                nb::arg("opt").none() = nb::none(),
+                nb::arg("opt_rows").noconvert().none() = nb::none());
 
         nb::class_<Emitter>(m, ("TransferEmitter" + suffix).c_str())
                 .def("__init__", [](
-                        Emitter* self, bool layer,
+                        Emitter* self, bool layer, bool line_opacity,
                         typename Emitter::Fields fields,
                         typename Emitter::Rows lines,
                         typename Emitter::Rows opacity_ratios) {
-                    new (self) Emitter{layer, fields, lines, opacity_ratios};
+                    new (self) Emitter{
+                            layer, line_opacity, fields, lines,
+                            opacity_ratios};
                 },
-                nb::arg("layer"),
+                nb::arg("layer"), nb::arg("line_opacity"),
                 nb::arg("fields").noconvert(),
                 nb::arg("lines").noconvert(),
                 nb::arg("opacity_ratios").noconvert().none() = nb::none());
@@ -417,6 +439,7 @@ struct GModel
                 nb::arg("spec_step"), nb::arg("spec_zero"),
                 nb::arg("opacity").noconvert().none() = nb::none(),
                 nb::arg("opacity_front").noconvert().none() = nb::none(),
+                nb::arg("tau").noconvert().none() = nb::none(),
                 nb::arg("out").noconvert());
         cls.def_static("disk_ptraits_evaluate", &disk_ptraits_evaluate,
                 nb::arg("disk"), nb::arg("kind"),
@@ -441,7 +464,7 @@ private:
         typename Disk::Traits Disk::* set;
     };
 
-    static constexpr std::array<Kind, 8> KINDS = {{
+    static constexpr std::array<Kind, 9> KINDS = {{
             {"rpt", TraitKind::RPT, true, &Disk::rpt},
             {"rht", TraitKind::RHT, false, &Disk::rht},
             {"vpt", TraitKind::VPT, true, &Disk::vpt},
@@ -449,7 +472,8 @@ private:
             {"dpt", TraitKind::DPT, true, &Disk::dpt},
             {"dht", TraitKind::DHT, false, &Disk::dht},
             {"zpt", TraitKind::ZPT, true, &Disk::zpt},
-            {"spt", TraitKind::SPT, true, &Disk::spt}}};
+            {"spt", TraitKind::SPT, true, &Disk::spt},
+            {"opt", TraitKind::OPT, true, &Disk::opt}}};
 
     // The arguments of an evaluation of the traits of one kind of a disk,
     // polar traits (polar) or height traits, at the points of radii r,
@@ -542,6 +566,12 @@ private:
         a.dht = traits(disk.dht);
         a.zpt = traits(disk.zpt);
         a.spt = traits(disk.spt);
+        a.opt = traits(disk.opt);
+        require(!disk.opt || (disk.opt_rows.is_valid()
+                              && disk.opt_rows.shape(0) == size_t(a.opt.n)),
+                "the traits of line opacity (opt) need the row of the line "
+                "of each (opt_rows)");
+        a.opt_rows = data(disk.opt_rows);
         require((!disk.rht || a.rht.n == a.rpt.n)
                 && (!disk.vht || a.vht.n == a.vpt.n)
                 && (!disk.dht || a.dht.n == a.dpt.n),
@@ -613,8 +643,14 @@ private:
                                          || opacity.is_valid()),
                 "fields replace the image, the spectral cube and the "
                 "opacity");
+        // (with line opacity, a plane of each line, of which there are at
+        // most as many as traits)
+        const int nk = disk.opt ? a.nlines : 0;
+        require(!fields.is_valid() || nk <= TRAIT_NUM_MAX,
+                "line opacity takes at most " + std::to_string(TRAIT_NUM_MAX)
+                + " lines");
         a.fields = output(
-                fields, disk.rht ? volume_fields * nspat : 4 * nimage,
+                fields, disk.rht ? (volume_fields + nk) * nspat : 4 * nimage,
                 "fields");
         a.rdata_scale = rdata_scale;
         a.image_scale = image_scale;

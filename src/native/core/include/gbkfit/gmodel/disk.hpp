@@ -35,10 +35,15 @@ struct DiskArgs
     const T* incl = nullptr;
 
     // Density (r), velocity (v) and dispersion (d) polar and height
-    // traits, and vertical distortion (z), selection (s) and weight (w)
-    // polar traits. A height trait set has as many traits as its polar
-    // trait set, or none (a thin disk).
-    TraitSet<T> rpt, rht, vpt, vht, dpt, dht, zpt, spt;
+    // traits, vertical distortion (z) and selection (s) polar traits, and
+    // the polar traits of the coefficients of its line opacity (o). A
+    // height trait set has as many traits as its polar trait set, or none
+    // (a thin disk).
+    TraitSet<T> rpt, rht, vpt, vht, dpt, dht, zpt, spt, opt;
+
+    // The line of each trait of opt: its row in lines, or -1 if the line
+    // is not evaluated. The coefficient of a line is the sum of its traits.
+    const int* opt_rows = nullptr;
 
     // The opacity of the 3d spatial grid (optional): nopacity cubes, one
     // after the other, each with the optical depth from the viewer to the
@@ -93,7 +98,9 @@ struct DiskArgs
     // one line, in four planes (the fourth is scratch). A thin disk
     // writes j, v, s and the position along the depth axis (in voxels)
     // where its plane crosses the line of sight of each spaxel, in four
-    // images (planes of the size of the x and y axes).
+    // images (planes of the size of the x and y axes). With line opacity
+    // (opt), a thick disk writes after s a plane of each line: j times the
+    // coefficient of the line (before the scratch of a Monte Carlo disk).
     T* fields = nullptr;
 
     // The factor of the density in rdata (e.g. the ratio of the optical
@@ -107,7 +114,7 @@ struct DiskArgs
 // The kinds of traits of a disk: the trait sets of DiskArgs
 enum class TraitKind
 {
-    RPT, RHT, VPT, VHT, DPT, DHT, ZPT, SPT
+    RPT, RHT, VPT, VHT, DPT, DHT, ZPT, SPT, OPT
 };
 
 // The evaluation of the traits of one kind of a disk at points of its

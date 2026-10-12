@@ -20,6 +20,7 @@ from ..roles import (
     BandEmission, Emission, LineEmission, Opacity, emission_parser,
     opacity_parser)
 from . import _disk, traits
+from .opacity import LineOpacity
 from .parts import Density, Kinematics, density_parser, kinematics_parser
 
 
@@ -152,11 +153,84 @@ def make_disk(
     node_args = parse_component_rnode_args(**rings, rstep=rstep, interp=interp)
     traits_ = _disk_traits(
         density, kinematics, emission, opacity, zptraits, sptraits)
+    opacity_traits, opacity_prefixes, opacity_lines = line_opacity_traits(
+        opacity, emission)
+    if opacity_traits:
+        traits_.update(opt=opacity_traits)
     check_traits_common(sum(traits_.values(), ()))
     return disk_class(
         **disk_options,
         loose=bool(loose), tilted=bool(tilted), **node_args,
-        traits_=traits_, prefixes=TRAIT_PREFIXES)
+        traits_=traits_, prefixes=TRAIT_PREFIXES | dict(opt=opacity_prefixes),
+        opacity_lines=opacity_lines)
+
+
+def line_opacity_traits(
+        opacity: Opacity | None,
+        emission: Emission | None
+) -> tuple[tuple[traits.RPTrait, ...], tuple[str, ...], tuple[int, ...]]:
+    """
+    Return the coefficient traits of the line opacity of a disk component,
+    if any (see LineOpacity), the prefix of the parameters of each (e.g.
+    'op_' for one line without a name, 'op1_halpha_' for the second trait
+    of the line halpha), and its line (its index among the lines of the
+    emission).
+
+    Raises
+    ------
+    ConfigError
+        If the component does not emit lines, or the coefficients do not
+        go with its lines (the traits of one line without a name, or a
+        mapping of each of its named lines to its traits), or there are
+        more traits than the kernels take.
+    """
+    if not isinstance(opacity, LineOpacity):
+        return (), (), ()
+    if not isinstance(emission, LineEmission):
+        raise ConfigError(
+            "line opacity is the opacity of the lines of a component: it "
+            "needs emission lines (emission: {type: lines})")
+    names = emission.lines().names()
+    coefficients = opacity.coefficients()
+    if not names:
+        if isinstance(coefficients, dict):
+            raise ConfigError(
+                "the emission has one line without a name: the coefficients "
+                "of its line opacity are the traits of that line, not a "
+                "mapping of lines")
+        lines = [('', coefficients)]
+    else:
+        if not isinstance(coefficients, dict):
+            raise ConfigError(
+                f"the emission has the lines {list(names)}: the coefficients "
+                f"of its line opacity are a mapping of each line to its "
+                f"traits")
+        if missing := [name for name in names if name not in coefficients]:
+            raise ConfigError(
+                f"the line opacity needs the coefficients of every line "
+                f"(0 for a line that does not absorb); missing: {missing}")
+        if unknown := [name for name in coefficients if name not in names]:
+            raise ConfigError(
+                f"the line opacity has coefficients of lines that the "
+                f"emission does not have: {unknown}; its lines: "
+                f"{list(names)}")
+        lines = [(f'{name}_', coefficients[name]) for name in names]
+    result = ([], [], [])
+    for index, (suffix, line_traits) in enumerate(lines):
+        prefixes = parseutils.item_prefixes(
+            [None] * len(line_traits), 'traits', 'op', True)
+        for trait, prefix in zip(line_traits, prefixes):
+            if not isinstance(trait, traits.RPTrait):
+                raise ConfigError(
+                    f"the coefficients of line opacity are density polar "
+                    f"traits; {traits.trait_desc(trait.__class__)} is not")
+            for values, value in zip(result, (trait, prefix + suffix, index)):
+                values.append(value)
+    if len(result[0]) > _disk.MAX_TRAITS:
+        raise ConfigError(
+            f"line opacity takes at most {_disk.MAX_TRAITS} coefficient "
+            f"traits; {len(result[0])} were given")
+    return tuple(result[0]), tuple(result[1]), tuple(result[2])
 
 
 def _disk_traits(
@@ -277,10 +351,15 @@ def disk_plan(
         return DiskComponentPlan(
             driver, disk.plan(driver, 0, dtype), opacity_ratios,
             band_ratio=bands.ratio_name(band))
+    # (and the row of the line of each trait of line opacity among the
+    # lines it evaluates)
     selected = lines.select(names)
+    opacity_rows = [
+        selected.index(line) if line in selected else -1
+        for line in disk.opacity_lines()]
     return DiskComponentPlan(
-        driver, disk.plan(driver, len(selected), dtype), opacity_ratios,
-        lines=lines, selected=selected, spectral=spectral)
+        driver, disk.plan(driver, len(selected), dtype, opacity_rows),
+        opacity_ratios, lines=lines, selected=selected, spectral=spectral)
 
 
 class DiskComponentPlan(ComponentPlan):
