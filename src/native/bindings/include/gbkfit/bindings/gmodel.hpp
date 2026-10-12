@@ -78,6 +78,7 @@ struct GModel
     using Data = Array<Device, T>;
     using ConstData = Array<Device, const T>;
     using Lines = Array<Device, const T, nb::ndim<2>>;
+    using Ratios = Array<Device, const T, nb::ndim<2>>;
     using TraitValues = Array<Device, T, nb::ndim<2>>;
 
     static void
@@ -89,17 +90,20 @@ struct GModel
             T spat_rota,
             int spec_size, T spec_step, T spec_zero,
             Lines lines,
-            ConstData opacity,
+            ConstData opacity, Ratios opacity_ratios,
             Data image, Data scube,
             Data rdata, Data rdata_cmp,
             Data ordata, Data ordata_cmp,
-            Data vdata_cmp, Data ddata_cmp, Data vdweight_cmp)
+            Data vdata_cmp, Data ddata_cmp, Data vdweight_cmp,
+            T rdata_scale)
     {
         Kernels::gmodel_smdisk_evaluate(make_args(
                 disk, spat_size, spat_step, spat_zero, spat_rota,
-                spec_size, spec_step, spec_zero, lines, opacity,
+                spec_size, spec_step, spec_zero, lines,
+                opacity, opacity_ratios,
                 image, scube, rdata, rdata_cmp,
-                ordata, ordata_cmp, vdata_cmp, ddata_cmp, vdweight_cmp));
+                ordata, ordata_cmp, vdata_cmp, ddata_cmp, vdweight_cmp,
+                rdata_scale));
     }
 
     static void
@@ -113,17 +117,20 @@ struct GModel
             T spat_rota,
             int spec_size, T spec_step, T spec_zero,
             Lines lines,
-            ConstData opacity,
+            ConstData opacity, Ratios opacity_ratios,
             Data image, Data scube,
             Data rdata, Data rdata_cmp,
             Data ordata, Data ordata_cmp,
-            Data vdata_cmp, Data ddata_cmp, Data vdweight_cmp)
+            Data vdata_cmp, Data ddata_cmp, Data vdweight_cmp,
+            T rdata_scale)
     {
         const auto args = make_args(
                 disk, spat_size, spat_step, spat_zero, spat_rota,
-                spec_size, spec_step, spec_zero, lines, opacity,
+                spec_size, spec_step, spec_zero, lines,
+                opacity, opacity_ratios,
                 image, scube, rdata, rdata_cmp,
-                ordata, ordata_cmp, vdata_cmp, ddata_cmp, vdweight_cmp);
+                ordata, ordata_cmp, vdata_cmp, ddata_cmp, vdweight_cmp,
+                rdata_scale);
         require(disk.rht.has_value(),
                 "a Monte Carlo disk needs density height traits");
         require(has_analytical_integral.shape(0) == size_t(args.rpt.n),
@@ -249,6 +256,7 @@ struct GModel
                     nb::arg("spec_step"), nb::arg("spec_zero"),
                     nb::arg("lines").noconvert().none() = nb::none(),
                     nb::arg("opacity").noconvert().none() = nb::none(),
+                    nb::arg("opacity_ratios").noconvert().none() = nb::none(),
                     nb::arg("image").noconvert().none() = nb::none(),
                     nb::arg("scube").noconvert().none() = nb::none(),
                     nb::arg("rdata").noconvert().none() = nb::none(),
@@ -257,7 +265,8 @@ struct GModel
                     nb::arg("ordata_cmp").noconvert().none() = nb::none(),
                     nb::arg("vdata_cmp").noconvert().none() = nb::none(),
                     nb::arg("ddata_cmp").noconvert().none() = nb::none(),
-                    nb::arg("vdweight_cmp").noconvert().none() = nb::none());
+                    nb::arg("vdweight_cmp").noconvert().none() = nb::none(),
+                    nb::arg("rdata_scale") = T{1});
         };
 
         auto cls = nb::class_<GModel>(m, ("GModel" + suffix).c_str())
@@ -356,12 +365,13 @@ private:
             T spat_rota,
             int spec_size, T spec_step, T spec_zero,
             const Lines& lines,
-            const ConstData& opacity,
+            const ConstData& opacity, const Ratios& opacity_ratios,
             const Data& image, const Data& scube,
             const Data& rdata, const Data& rdata_cmp,
             const Data& ordata, const Data& ordata_cmp,
             const Data& vdata_cmp, const Data& ddata_cmp,
-            const Data& vdweight_cmp)
+            const Data& vdweight_cmp,
+            T rdata_scale)
     {
         DiskArgs<T> a;
         a.loose = disk.loose;
@@ -430,7 +440,27 @@ private:
                     std::string(name) + " has the wrong number of elements");
             return data(array);
         };
-        a.opacity = output(opacity, nspat, "opacity");
+        // The cubes of opacity, and a row of their ratios for each line of
+        // the spectral cube, or one for the image
+        require(opacity.is_valid() == opacity_ratios.is_valid(),
+                "opacity and opacity_ratios go together");
+        if (opacity.is_valid()) {
+            const size_t nopacity = opacity_ratios.shape(1);
+            const size_t nrows = scube.is_valid() ? size_t(a.nlines) : 1;
+            require(nopacity >= 1 && nopacity <= size_t(OPACITY_NUM_MAX),
+                    "opacity_ratios needs a column for each cube of "
+                    "opacity, of which there are at most "
+                    + std::to_string(OPACITY_NUM_MAX));
+            require(opacity.size() == nopacity * nspat,
+                    "opacity needs a cube for each column of "
+                    "opacity_ratios");
+            require(opacity_ratios.shape(0) == nrows,
+                    "opacity_ratios needs a row for each line of the "
+                    "spectral cube, or one row for the image");
+            a.nopacity = int(nopacity);
+            a.opacity = opacity.data();
+            a.opacity_ratios = opacity_ratios.data();
+        }
         a.image = output(image, nimage, "image");
         a.scube = output(scube, nscube, "scube");
         a.rdata = output(rdata, nspat, "rdata");
@@ -440,6 +470,7 @@ private:
         a.vdata_cmp = output(vdata_cmp, nspat, "vdata_cmp");
         a.ddata_cmp = output(ddata_cmp, nspat, "ddata_cmp");
         a.vdweight_cmp = output(vdweight_cmp, nspat, "vdweight_cmp");
+        a.rdata_scale = rdata_scale;
         return a;
     }
 };

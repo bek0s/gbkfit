@@ -23,7 +23,9 @@ Components
 
 Each component emits light (in a band, seen by images, or in lines, seen
 by spectral cubes and the data made from them), removes light (dust), or
-both.
+both. The density of dust is its optical depth at V; an extinction law
+(ccm, calzetti or a table) scales it at the rest wavelength of each line,
+and without one the dust is grey.
 
 Traits
 ^^^^^^

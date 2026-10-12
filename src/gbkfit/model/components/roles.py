@@ -7,7 +7,10 @@ import abc
 from collections.abc import Sequence
 from typing import Any, Self
 
+import astropy.units
+
 from gbkfit.utils import iterutils, parseutils
+from .extinction import ExtinctionLaw, extinction_law_parser
 from .lines import Line, LineCatalogue, Lines, line_parser
 
 
@@ -61,6 +64,16 @@ class Emission(parseutils.TypedSerializable, abc.ABC):
 
     def dump(self) -> dict[str, Any]:
         return dict(type=self.type())
+
+    @abc.abstractmethod
+    def wavelengths(
+            self, lines: Sequence[str] | None
+    ) -> tuple[float | None, ...]:
+        """
+        Return the rest wavelength (um, in vacuum) of the light that an
+        observation sees: of each of its lines of the given names (all if
+        None), in their order, or of its band; None where it is not known.
+        """
 
 
 class LineEmission(Emission):
@@ -135,6 +148,17 @@ class LineEmission(Emission):
         """Return the lines."""
         return self._lines
 
+    def wavelengths(
+            self, lines: Sequence[str] | None
+    ) -> tuple[float | None, ...]:
+        # (one line at the velocity of the spectral axis: whatever line)
+        if self._lines.lines() is None:
+            return (None,)
+        return tuple(
+            self._lines.lines()[i].rest().to_value(
+                astropy.units.um, astropy.units.spectral())
+            for i in self._lines.select(lines))
+
 
 class BandEmission(Emission):
     """
@@ -145,6 +169,11 @@ class BandEmission(Emission):
     @staticmethod
     def type() -> str:
         return 'band'
+
+    def wavelengths(
+            self, lines: Sequence[str] | None
+    ) -> tuple[float | None, ...]:
+        return (None,)
 
 
 class Opacity(parseutils.TypedSerializable, abc.ABC):
@@ -159,14 +188,41 @@ class Opacity(parseutils.TypedSerializable, abc.ABC):
 
 class DustOpacity(Opacity):
     """
-    Dust: the density is the optical depth of each voxel, the same at
-    every wavelength, which dims the light of the voxels behind it and
-    that of its own voxels (as a uniform mixture of light and dust).
+    Dust: the density is the optical depth of each voxel at V, which dims
+    the light of the voxels behind it and that of its own voxels (as a
+    uniform mixture of light and dust). At the wavelength of a line or a
+    band, the optical depth is that at V times the ratio of the extinction
+    law there (at the rest wavelength of the line).
+
+    Parameters
+    ----------
+    law : ExtinctionLaw, optional
+        The extinction law; by default, none: the optical depth is the
+        same at every wavelength (grey dust).
     """
 
     @staticmethod
     def type() -> str:
         return 'dust'
+
+    @classmethod
+    def load(cls, info: dict[str, Any]) -> Self:
+        parseutils.load_option_and_update_info(
+            extinction_law_parser, info, 'law')
+        return cls(**parseutils.parse_options_for_callable(
+            info, cls.__init__))
+
+    def dump(self) -> dict[str, Any]:
+        return dict(type=self.type()) | (
+            {} if self._law is None
+            else dict(law=extinction_law_parser.dump(self._law)))
+
+    def __init__(self, law: ExtinctionLaw | None = None):
+        self._law = law
+
+    def law(self) -> ExtinctionLaw | None:
+        """Return the extinction law, if any (none: grey dust)."""
+        return self._law
 
 
 emission_parser = parseutils.TypedParser(Emission, [

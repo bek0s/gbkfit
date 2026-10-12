@@ -169,7 +169,9 @@ class SMDisk(Component):
             spectral: gridutils.Grid,
             dtype: np.dtype,
             lines: tuple[str, ...] | None,
-            emits: bool
+            emits: bool,
+            opacity_ratios: np.ndarray | None
     ) -> ComponentPlan:
         return _detail.disk_plan(
-            self._disk, self._lines, driver, spectral, dtype, lines, emits)
+            self._disk, self._lines, driver, spectral, dtype, lines, emits,
+            opacity_ratios)

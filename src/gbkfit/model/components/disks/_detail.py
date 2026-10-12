@@ -242,37 +242,48 @@ def disk_plan(
         spectral: gridutils.Grid,
         dtype: np.dtype,
         names: tuple[str, ...] | None,
-        emits: bool
+        emits: bool,
+        opacity_ratios: np.ndarray | None
 ) -> 'DiskComponentPlan':
     """
     Return the plan of a disk component made of the given disk, with the
     given emission lines (if any), of which those of the given names (all
-    if None) are evaluated if it emits (see Component.plan).
+    if None) are evaluated if it emits, dimmed by the opacity with the
+    given ratios (see Component.plan).
     """
-    if emits and lines is not None:
-        selected = lines.select(names)
+    if not emits:
+        return DiskComponentPlan(driver, disk.plan(driver, 0, dtype))
+    if lines is None:
         return DiskComponentPlan(
-            disk.plan(driver, len(selected), dtype), lines, selected,
-            spectral)
-    return DiskComponentPlan(disk.plan(driver, 0, dtype))
+            driver, disk.plan(driver, 0, dtype), opacity_ratios)
+    selected = lines.select(names)
+    return DiskComponentPlan(
+        driver, disk.plan(driver, len(selected), dtype), opacity_ratios,
+        lines, selected, spectral)
 
 
 class DiskComponentPlan(ComponentPlan):
     """
     The evaluation of a component made of one disk: the plan of its disk,
     which adds its light (and, with lines, the selected emission lines,
-    at their places on the given spectral axis) to the outputs, or its
-    optical depth to the opacity cube.
+    at their places on the given spectral axis) to the outputs, dimmed by
+    the opacity with the given ratios (see Component.plan), or its optical
+    depth to a cube of opacity.
     """
 
     def __init__(
             self,
+            driver: Driver,
             disk_plan_: _disk.DiskPlan,
+            opacity_ratios: np.ndarray | None = None,
             lines: Lines | None = None,
             selected: Sequence[int] = (),
             spectral: gridutils.Grid | None = None
     ):
         self._disk_plan = disk_plan_
+        self._opacity_ratios = None
+        if opacity_ratios is not None:
+            self._opacity_ratios = driver.mem_copy_h2d(opacity_ratios)
         # The offset, scale and flux of each selected line; the fluxes of
         # the lines after the first are their ratios, which are parameters
         self._lines = None
@@ -296,11 +307,14 @@ class DiskComponentPlan(ComponentPlan):
     ) -> None:
         for row, name in self._ratios:
             self._lines[row, 2] = params[name]
+        odata = outputs.get('odata')
         disk_outputs = dict(
             image=outputs.get('image'),
             scube=outputs.get('scube'),
             rdata=outputs.get('bdata'),
-            opacity=outputs.get('odata'),
+            opacity=odata,
+            opacity_ratios=self._opacity_ratios if odata is not None
+            else None,
             ordata=outputs.get('obdata'))
         self._disk_plan.evaluate(
             params, grid, disk_outputs, out_extra, 'bdata', self._lines)
@@ -310,11 +324,13 @@ class DiskComponentPlan(ComponentPlan):
             params: ParamValues,
             grid: NativeGrid,
             odata: DeviceArray,
+            scale: float,
             out_extra: dict[str, Any] | None
     ) -> None:
         # The density of the disk is its optical depth
         self._disk_plan.evaluate(
-            params, grid, dict(rdata=odata), out_extra, 'odata')
+            params, grid, dict(rdata=odata), out_extra, 'odata',
+            rdata_scale=scale)
 
 
 def parse_component_rnode_args(

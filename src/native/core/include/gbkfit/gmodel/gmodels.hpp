@@ -69,30 +69,6 @@ gmodel_scube_line(
     }
 }
 
-// Add the emission lines (see DiskArgs::lines) of light of the given flux,
-// velocity and dispersion to the spectrum (x, y) of a spectral cube
-template<auto AddFunT, typename T> void constexpr
-gmodel_scube_evaluate(
-        T* scube, int x, int y, T rvalue, T vvalue, T dvalue,
-        int nlines, const T* lines,
-        int spat_size_x, int spat_size_y,
-        int spec_size_z,
-        T spec_step,
-        T spec_zero)
-{
-    for (int l = 0; l < nlines; ++l)
-    {
-        const T offset = lines[3 * l];
-        const T scale = lines[3 * l + 1];
-        const T flux = lines[3 * l + 2];
-        gmodel_scube_line<AddFunT>(
-                scube, x, y,
-                rvalue * flux, offset + scale * vvalue, scale * dvalue,
-                spat_size_x, spat_size_y,
-                spec_size_z, spec_step, spec_zero);
-    }
-}
-
 // Turn the optical depth of each voxel of the spaxel (x, y) of an opacity
 // cube, of the given size, into the optical depth from the viewer to the
 // far side of the voxel: a running sum along z, from the voxel nearest
@@ -108,26 +84,6 @@ gmodel_opacity_accumulate(
         tau += opacity[idx];
         opacity[idx] = tau;
     }
-}
-
-// The fraction of the light of the voxel (x, y, z) that reaches the
-// viewer, who is before the first voxel along z (the velocities along +z
-// recede from the viewer). The opacity cube holds the optical depth from
-// the viewer to the far side of each voxel (see
-// gmodel_opacity_accumulate). The light crosses the voxels in front of its
-// own, and the absorbers of its own voxel, which are mixed uniformly with
-// the emitters: on average, (1 - exp(-tau)) / tau of the light of a voxel
-// of optical depth tau leaves it.
-template<typename T> constexpr T
-gmodel_attenuation(int x, int y, int z, const T* opacity, const int* size)
-{
-    const T tau_front = z > 0
-            ? opacity[index_3d_to_1d(x, y, z - 1, size[0], size[1])]
-            : T{0};
-    const T tau_own =
-            opacity[index_3d_to_1d(x, y, z, size[0], size[1])] - tau_front;
-    const T own = tau_own != 0 ? -std::expm1(-tau_own) / tau_own : T{1};
-    return std::exp(-tau_front) * own;
 }
 
 // The optical depth from the viewer to the position pz along the line of
@@ -150,6 +106,104 @@ gmodel_optical_depth(int x, int y, T pz, const T* opacity, const int* size)
     const T tau_own =
             opacity[index_3d_to_1d(x, y, z, size[0], size[1])] - tau_front;
     return tau_front + (p - z) * tau_own;
+}
+
+// The opacity that the light of a voxel crosses, in each cube of opacity
+// (see DiskArgs::opacity): the optical depth of the voxels in front of it
+// (front), and that of the absorbers of the voxel itself (own), which are
+// mixed uniformly with its emitters
+template<typename T>
+struct VoxelOpacity
+{
+    T front[OPACITY_NUM_MAX] = {0};
+    T own[OPACITY_NUM_MAX] = {0};
+};
+
+// The opacity of the voxel (x, y, z) (see VoxelOpacity)
+template<typename T> constexpr VoxelOpacity<T>
+gmodel_voxel_opacity(int x, int y, int z, const DiskArgs<T>& a)
+{
+    const long long nspat = 1LL * a.spat_size[0] * a.spat_size[1]
+            * a.spat_size[2];
+    VoxelOpacity<T> o;
+    for (int k = 0; k < a.nopacity; ++k)
+    {
+        const T* opacity = a.opacity + k * nspat;
+        o.front[k] = z > 0
+                ? opacity[index_3d_to_1d(
+                        x, y, z - 1, a.spat_size[0], a.spat_size[1])]
+                : T{0};
+        o.own[k] = opacity[index_3d_to_1d(
+                x, y, z, a.spat_size[0], a.spat_size[1])] - o.front[k];
+    }
+    return o;
+}
+
+// The opacity of a thin layer at the position pz along the line of sight
+// of the spaxel (x, y) (see gmodel_optical_depth): all of it in front
+template<typename T> constexpr VoxelOpacity<T>
+gmodel_layer_opacity(int x, int y, T pz, const DiskArgs<T>& a)
+{
+    const long long nspat = 1LL * a.spat_size[0] * a.spat_size[1]
+            * a.spat_size[2];
+    VoxelOpacity<T> o;
+    for (int k = 0; k < a.nopacity; ++k)
+    {
+        o.front[k] = gmodel_optical_depth(
+                x, y, pz, a.opacity + k * nspat, a.spat_size);
+    }
+    return o;
+}
+
+// The fraction of the light that reaches the viewer, who is before the
+// first voxel along z (the velocities along +z recede from the viewer),
+// through the opacity o of n cubes, with ratios their ratios at the
+// wavelength of the light (a row of DiskArgs::opacity_ratios). The light
+// crosses the optical depth in front, and on average (1 - exp(-tau)) /
+// tau of it leaves the absorbers of its own voxel of optical depth tau.
+template<typename T> constexpr T
+gmodel_attenuation(const VoxelOpacity<T>& o, int n, const T* ratios)
+{
+    T tau_front = 0;
+    T tau_own = 0;
+    for (int k = 0; k < n; ++k)
+    {
+        tau_front += ratios[k] * o.front[k];
+        tau_own += ratios[k] * o.own[k];
+    }
+    const T own = tau_own != 0 ? -std::expm1(-tau_own) / tau_own : T{1};
+    return std::exp(-tau_front) * own;
+}
+
+// Add the emission lines (see DiskArgs::lines) of light of the given flux,
+// velocity and dispersion to the spectrum (x, y) of a spectral cube. The
+// opacity o of nopacity cubes (if not null) dims each line with its row of
+// ratios (see DiskArgs::opacity_ratios).
+template<auto AddFunT, typename T> void constexpr
+gmodel_scube_evaluate(
+        T* scube, int x, int y, T rvalue, T vvalue, T dvalue,
+        int nlines, const T* lines,
+        const VoxelOpacity<T>* o, int nopacity, const T* opacity_ratios,
+        int spat_size_x, int spat_size_y,
+        int spec_size_z,
+        T spec_step,
+        T spec_zero)
+{
+    for (int l = 0; l < nlines; ++l)
+    {
+        const T offset = lines[3 * l];
+        const T scale = lines[3 * l + 1];
+        const T flux = lines[3 * l + 2];
+        const T lvalue = o
+                ? rvalue * gmodel_attenuation(
+                        *o, nopacity, opacity_ratios + l * nopacity)
+                : rvalue;
+        gmodel_scube_line<AddFunT>(
+                scube, x, y,
+                lvalue * flux, offset + scale * vvalue, scale * dvalue,
+                spat_size_x, spat_size_y,
+                spec_size_z, spec_step, spec_zero);
+    }
 }
 
 template<typename T> constexpr void
@@ -565,9 +619,15 @@ gmodel_mcdisk_evaluate_cloud(
     dvalue = std::abs(dvalue);
 
 
-    // The light that the opacity lets through
-    T orvalue = a.opacity
-            ? rvalue * gmodel_attenuation(x, y, z, a.opacity, a.spat_size)
+    // The opacity in front of the light, and the light that it lets
+    // through (that of the image, or of the first line)
+    VoxelOpacity<T> opacity;
+    if (a.opacity) {
+        opacity = gmodel_voxel_opacity(x, y, z, a);
+    }
+    const T orvalue = a.opacity
+            ? rvalue * gmodel_attenuation(
+                    opacity, a.nopacity, a.opacity_ratios)
             : rvalue;
 
     if (a.image) {
@@ -578,8 +638,9 @@ gmodel_mcdisk_evaluate_cloud(
 
     if (a.scube) {
         gbkfit::gmodel_scube_evaluate<AtomicAddFunT>(
-                a.scube, x, y, orvalue, vvalue, dvalue,
+                a.scube, x, y, rvalue, vvalue, dvalue,
                 a.nlines, a.lines,
+                a.opacity ? &opacity : nullptr, a.nopacity, a.opacity_ratios,
                 a.spat_size[0], a.spat_size[1],
                 a.spec_size,
                 a.spec_step,
@@ -589,7 +650,7 @@ gmodel_mcdisk_evaluate_cloud(
     const int idx = index_3d_to_1d(x, y, z, a.spat_size[0], a.spat_size[1]);
 
     if (a.rdata) {
-        AtomicAddFunT(&a.rdata[idx], rvalue);
+        AtomicAddFunT(&a.rdata[idx], rvalue * a.rdata_scale);
     }
     if (a.rdata_cmp) {
         AtomicAddFunT(&a.rdata_cmp[idx], rvalue);
@@ -837,15 +898,19 @@ gmodel_smdisk_evaluate_spaxel(int x, int y, int z, const DiskArgs<T>& a)
     dvalue = std::abs(dvalue);
 
 
-    // The light that the opacity lets through: that of a thin disk is a
-    // layer, which only the opacity in front of it dims
-    T orvalue = rvalue;
+    // The opacity in front of the light (that of a thin disk is a layer,
+    // which only the opacity in front of it dims), and the light that it
+    // lets through (that of the image, or of the first line)
+    VoxelOpacity<T> opacity;
     if (a.opacity) {
-        orvalue *= is_thin
-                ? std::exp(-gmodel_optical_depth(
-                        x, y, pz, a.opacity, a.spat_size))
-                : gmodel_attenuation(x, y, z, a.opacity, a.spat_size);
+        opacity = is_thin
+                ? gmodel_layer_opacity(x, y, pz, a)
+                : gmodel_voxel_opacity(x, y, z, a);
     }
+    const T orvalue = a.opacity
+            ? rvalue * gmodel_attenuation(
+                    opacity, a.nopacity, a.opacity_ratios)
+            : rvalue;
 
     if (a.image) {
         gbkfit::gmodel_image_evaluate<AddFunT>(
@@ -855,8 +920,9 @@ gmodel_smdisk_evaluate_spaxel(int x, int y, int z, const DiskArgs<T>& a)
 
     if (a.scube) {
         gbkfit::gmodel_scube_evaluate<AddFunT>(
-                a.scube, x, y, orvalue, vvalue, dvalue,
+                a.scube, x, y, rvalue, vvalue, dvalue,
                 a.nlines, a.lines,
+                a.opacity ? &opacity : nullptr, a.nopacity, a.opacity_ratios,
                 a.spat_size[0], a.spat_size[1],
                 a.spec_size,
                 a.spec_step,
@@ -874,7 +940,7 @@ gmodel_smdisk_evaluate_spaxel(int x, int y, int z, const DiskArgs<T>& a)
             x, y, int(vz), a.spat_size[0], a.spat_size[1]);
 
     if (a.rdata) {
-        a.rdata[idx] += rvalue;
+        a.rdata[idx] += rvalue * a.rdata_scale;
     }
     if (a.rdata_cmp) {
         a.rdata_cmp[idx] = rvalue;

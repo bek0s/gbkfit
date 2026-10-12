@@ -162,7 +162,8 @@ class Component(parseutils.TypedSerializable, abc.ABC):
             spectral: gridutils.Grid,
             dtype: np.dtype,
             lines: tuple[str, ...] | None,
-            emits: bool
+            emits: bool,
+            opacity_ratios: np.ndarray | None
     ) -> 'ComponentPlan':
         """
         Plan the evaluation of the component; the plan owns the memory
@@ -181,6 +182,12 @@ class Component(parseutils.TypedSerializable, abc.ABC):
         emits : bool
             Whether its light is evaluated (an observation sees it), or
             only its opacity.
+        opacity_ratios : np.ndarray, optional
+            If opacity dims its light: the ratio of the optical depth of
+            each cube of opacity to that of the cube at the rest wavelength
+            of each of its lines that it evaluates, in their order, or of
+            its band (an array of shape (nrows, ncubes); see
+            ComponentSetPlan).
 
         Returns
         -------
@@ -223,7 +230,9 @@ class ComponentPlan(abc.ABC):
             (None): the 'image' or 'scube', and on the 3d grid its
             brightness ('bdata') and brightness after the opacity
             ('obdata'); it reads the optical depth from the viewer to
-            the far side of each voxel ('odata').
+            the far side of each voxel of each cube of opacity ('odata',
+            of shape (ncubes, nz, ny, nx)), which it scales with its
+            opacity_ratios (see Component.plan).
         out_extra : dict, optional
             Where its extra outputs (on the host) go, if wanted.
         """
@@ -234,11 +243,14 @@ class ComponentPlan(abc.ABC):
             params: ParamValues,
             grid: NativeGrid,
             odata: DeviceArray,
+            scale: float,
             out_extra: dict[str, Any] | None
     ) -> None:
         """
-        Add the optical depth of the component to that of each voxel
-        (odata). Only components with opacity have it.
+        Add the optical depth of the component times scale to that of
+        each voxel of a cube of opacity (odata); its extra output 'odata'
+        has its optical depth (at V). Only components with opacity have
+        it.
         """
         raise NotImplementedError(
             f"{type(self).__name__} has no opacity to evaluate")
