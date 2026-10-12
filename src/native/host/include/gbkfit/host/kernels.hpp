@@ -257,7 +257,8 @@ dmodel_regions_sum(
     }
 }
 
-template<typename T, bool HasOpacity, bool HasFields> void
+template<typename T, bool HasOpacity, bool HasFields, bool HasLineOpacity>
+void
 gmodel_mcdisk_evaluate(const DiskArgs<T>& a, const MCDiskArgs<T>& mc)
 {
     // Parallelization: per cloud
@@ -267,7 +268,8 @@ gmodel_mcdisk_evaluate(const DiskArgs<T>& a, const MCDiskArgs<T>& mc)
     {
         RNG<T> rng(mc.seed, ci);
         gbkfit::gmodel_mcdisk_evaluate_cloud<
-                atomic_add<T>, HasOpacity, HasFields>(rng, ci, a, mc);
+                atomic_add<T>, HasOpacity, HasFields, HasLineOpacity>(
+                        rng, ci, a, mc);
     }
 
     // The fields of each voxel, from the moments of its clouds.
@@ -281,7 +283,8 @@ gmodel_mcdisk_evaluate(const DiskArgs<T>& a, const MCDiskArgs<T>& mc)
     }
 }
 
-template<typename T, bool HasOpacity, bool HasFields> void
+template<typename T, bool HasOpacity, bool HasFields, bool HasLineOpacity>
+void
 gmodel_smdisk_evaluate(const DiskArgs<T>& a)
 {
     // Parallelization: per 2d spatial position. Each thread evaluates the
@@ -295,8 +298,8 @@ gmodel_smdisk_evaluate(const DiskArgs<T>& a)
     for(int x = 0; x < a.spat_size[0]; ++x) {
     for(int z = 0; z < size_z; ++z) {
 
-    gbkfit::gmodel_smdisk_evaluate_spaxel<add<T>, HasOpacity, HasFields>(
-            x, y, z, a);
+    gbkfit::gmodel_smdisk_evaluate_spaxel<
+            add<T>, HasOpacity, HasFields, HasLineOpacity>(x, y, z, a);
 
     }
     }
@@ -447,26 +450,31 @@ struct Wrapper
         kernels::dmodel_regions_sum<T>(args...);
     }
 
-    // (the kernels of the fields of disks, of disks dimmed by opacity, and
-    // of the others: see gmodel_mcdisk_evaluate_cloud)
+    // (the kernels of the fields of disks with line opacity and without, of
+    // disks dimmed by opacity, and of the others: see
+    // gmodel_mcdisk_evaluate_cloud)
     static void
     gmodel_mcdisk_evaluate(const DiskArgs<T>& a, const MCDiskArgs<T>& mc) {
-        if (a.fields)
-            kernels::gmodel_mcdisk_evaluate<T, false, true>(a, mc);
+        if (a.fields && a.opt.uids)
+            kernels::gmodel_mcdisk_evaluate<T, false, true, true>(a, mc);
+        else if (a.fields)
+            kernels::gmodel_mcdisk_evaluate<T, false, true, false>(a, mc);
         else if (a.opacity)
-            kernels::gmodel_mcdisk_evaluate<T, true, false>(a, mc);
+            kernels::gmodel_mcdisk_evaluate<T, true, false, false>(a, mc);
         else
-            kernels::gmodel_mcdisk_evaluate<T, false, false>(a, mc);
+            kernels::gmodel_mcdisk_evaluate<T, false, false, false>(a, mc);
     }
 
     static void
     gmodel_smdisk_evaluate(const DiskArgs<T>& a) {
-        if (a.fields)
-            kernels::gmodel_smdisk_evaluate<T, false, true>(a);
+        if (a.fields && a.opt.uids)
+            kernels::gmodel_smdisk_evaluate<T, false, true, true>(a);
+        else if (a.fields)
+            kernels::gmodel_smdisk_evaluate<T, false, true, false>(a);
         else if (a.opacity)
-            kernels::gmodel_smdisk_evaluate<T, true, false>(a);
+            kernels::gmodel_smdisk_evaluate<T, true, false, false>(a);
         else
-            kernels::gmodel_smdisk_evaluate<T, false, false>(a);
+            kernels::gmodel_smdisk_evaluate<T, false, false, false>(a);
     }
 
     static void

@@ -151,12 +151,15 @@ template<typename T> void
 Wrapper<T>::gmodel_mcdisk_evaluate(
         const DiskArgs<T>& a, const MCDiskArgs<T>& mc)
 {
-    // (the kernels of the fields of disks, of disks dimmed by opacity, and
-    // of the others: see gmodel_mcdisk_evaluate_cloud)
+    // (the kernels of the fields of disks with line opacity and without, of
+    // disks dimmed by opacity, and of the others: see
+    // gmodel_mcdisk_evaluate_cloud)
+    namespace k = kernels;
     launch("gmodel_mcdisk_evaluate", mc.nclouds,
-            a.fields ? kernels::gmodel_mcdisk_evaluate<T, false, true>
-            : a.opacity ? kernels::gmodel_mcdisk_evaluate<T, true, false>
-            : kernels::gmodel_mcdisk_evaluate<T, false, false>,
+            a.fields && a.opt.uids ? k::gmodel_mcdisk_evaluate<T, 0, 1, 1>
+            : a.fields ? k::gmodel_mcdisk_evaluate<T, 0, 1, 0>
+            : a.opacity ? k::gmodel_mcdisk_evaluate<T, 1, 0, 0>
+            : k::gmodel_mcdisk_evaluate<T, 0, 0, 0>,
             a, mc);
     // The fields of each voxel, from the moments of its clouds
     if (a.fields) {
@@ -174,10 +177,13 @@ Wrapper<T>::gmodel_smdisk_evaluate(const DiskArgs<T>& a)
     // holds, e.g. 1300 x 1300 x 1300)
     const long long n = 1LL * a.spat_size[0] * a.spat_size[1]
             * gbkfit::gmodel_smdisk_size_z(a);
+    // (see gmodel_mcdisk_evaluate)
+    namespace k = kernels;
     launch("gmodel_smdisk_evaluate", n,
-            a.fields ? kernels::gmodel_smdisk_evaluate<T, false, true>
-            : a.opacity ? kernels::gmodel_smdisk_evaluate<T, true, false>
-            : kernels::gmodel_smdisk_evaluate<T, false, false>,
+            a.fields && a.opt.uids ? k::gmodel_smdisk_evaluate<T, 0, 1, 1>
+            : a.fields ? k::gmodel_smdisk_evaluate<T, 0, 1, 0>
+            : a.opacity ? k::gmodel_smdisk_evaluate<T, 1, 0, 0>
+            : k::gmodel_smdisk_evaluate<T, 0, 0, 0>,
             a);
 }
 
