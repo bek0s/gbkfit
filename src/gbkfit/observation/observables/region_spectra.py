@@ -21,6 +21,7 @@ if TYPE_CHECKING:
 
     from .._scene import Scene
     from ..foreground import Foreground
+    from ..weights import Weights
 
 
 __all__ = [
@@ -226,8 +227,11 @@ class RegionSpectra(Observable):
             foreground: 'Foreground',
             instrument: Instrument,
             scale: Sequence[int],
-            dtype: np.dtype
+            dtype: np.dtype,
+            weights: 'Weights | None'
     ) -> 'RegionSpectraPlan':
+        if weights is not None:
+            raise ConfigError("region_spectra does not support weights yet")
         # The masking of DCube is disabled: every pixel of a region adds
         # to its spectrum
         dcube = _dcube.DCube(
@@ -262,7 +266,7 @@ class RegionSpectraPlan(_detail.DCubePlanBase):
             dtype: np.dtype
     ):
         super().__init__(
-            dcube, driver, scene, foreground, dtype)
+            dcube, driver, scene, foreground, dtype, None)
         self._sums = RegionSumsPlan(weights, driver, dtype)
         self._spectra = driver.mem_alloc_d(
             (dcube.size()[2], self._sums.nregions()), dtype)

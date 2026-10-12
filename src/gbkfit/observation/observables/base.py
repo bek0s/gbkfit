@@ -16,6 +16,7 @@ from gbkfit.utils.parseutils import ConfigError
 if TYPE_CHECKING:
     from .._scene import Scene
     from ..foreground import Foreground
+    from ..weights import Weights
 
 
 __all__ = [
@@ -268,7 +269,8 @@ class Observable(parseutils.TypedSerializable, abc.ABC):
             foreground: 'Foreground',
             instrument: Instrument,
             scale: Sequence[int],
-            dtype: np.dtype
+            dtype: np.dtype,
+            weights: 'Weights | None'
     ) -> 'ObservablePlan':
         """
         Plan the evaluation of a scene (what an observation sees) as this
@@ -289,11 +291,19 @@ class Observable(parseutils.TypedSerializable, abc.ABC):
             data.
         dtype : np.dtype
             The floating type of the model.
+        weights : Weights, optional
+            The spatial weights of the data.
 
         Returns
         -------
         ObservablePlan
             The plan.
+
+        Raises
+        ------
+        ConfigError
+            If it does not support weights, or with the foreground (see
+            DCubePlanBase).
         """
         pass
 

@@ -16,6 +16,7 @@ from .foreground import Foreground, foreground_parser
 from .likelihood import Likelihood, LikelihoodGaussian, likelihood_parser
 from .line_of_sight import LineOfSight, line_of_sight_parser
 from .observables import Observable, ObservablePlan, observable_parser
+from .weights import Weights, weights_parser
 
 
 __all__ = [
@@ -114,6 +115,9 @@ class Observation(parseutils.Serializable):
         The band of an image: it sees the components that emit in every
         band or in it (see BandEmission), and dust of an extinction law
         dims them at its rest wavelength (see Galaxy).
+    weights : Weights, optional
+        The spatial weights of its data (e.g. less weight near the minor
+        axis of a disk); none by default.
     data : Dataset, optional
         The data, of the dataset class of the observable.
     likelihood : Likelihood, optional
@@ -203,6 +207,8 @@ class Observation(parseutils.Serializable):
         parseutils.load_option_and_update_info(
             foreground_parser, info, 'foreground')
         parseutils.load_option_and_update_info(
+            weights_parser, info, 'weights')
+        parseutils.load_option_and_update_info(
             instrument_parser, info, 'instrument')
         parseutils.load_option_and_update_info(
             observable_parser, info, 'observable', dataset=dataset)
@@ -241,12 +247,15 @@ class Observation(parseutils.Serializable):
         lines = {} if self._lines is None else dict(lines=list(self._lines))
         band = {} if self._band is None else dict(
             band=band_parser.dump(self._band))
+        weights = {} if self._weights is None else dict(
+            weights=self._weights.dump())
         # The form of the data is that of the observable: no type
         data = {} if self._data is None else dict(
             data={k: v for k, v in self._data.dump(**kwargs).items()
                   if k != 'type'},
             likelihood=likelihood_parser.dump(self._likelihood))
-        return name | galaxies | components | lines | band | data | dict(
+        return name | galaxies | components | lines | band | weights \
+            | data | dict(
             line_of_sight=line_of_sight_parser.dump(self._line_of_sight),
             foreground=foreground_parser.dump(self._foreground, **kwargs),
             instrument=instrument_parser.dump(self._instrument, **kwargs),
@@ -266,6 +275,7 @@ class Observation(parseutils.Serializable):
             components: Sequence[str] | None = None,
             lines: Sequence[str] | None = None,
             band: Band | None = None,
+            weights: Weights | None = None,
             data: Dataset | None = None,
             likelihood: Likelihood | None = None,
             scale: Sequence[int] | None = None,
@@ -327,6 +337,7 @@ class Observation(parseutils.Serializable):
         self._components = components
         self._lines = lines
         self._band = band
+        self._weights = weights
         self._data = data
         self._likelihood = likelihood
         self._scale = scale
@@ -356,6 +367,10 @@ class Observation(parseutils.Serializable):
     def band(self) -> Band | None:
         """Return its band (of an image), if given."""
         return self._band
+
+    def weights(self) -> Weights | None:
+        """Return the spatial weights of its data, if any."""
+        return self._weights
 
     def driver(self) -> Driver:
         """Return the driver the model is evaluated on."""
@@ -405,7 +420,7 @@ class Observation(parseutils.Serializable):
         """
         return self._observable.plan(
             self._driver, scene, self._foreground, self._instrument,
-            self._scale, self._dtype)
+            self._scale, self._dtype, self._weights)
 
 
 observation_parser = parseutils.BasicParser(Observation)

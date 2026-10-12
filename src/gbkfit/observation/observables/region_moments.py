@@ -21,6 +21,7 @@ if TYPE_CHECKING:
 
     from .._scene import Scene
     from ..foreground import Foreground
+    from ..weights import Weights
 
 
 __all__ = [
@@ -276,8 +277,11 @@ spec_medium, method : optional
             foreground: 'Foreground',
             instrument: Instrument,
             scale: Sequence[int],
-            dtype: np.dtype
+            dtype: np.dtype,
+            weights: 'Weights | None'
     ) -> 'RegionMomentsPlan':
+        if weights is not None:
+            raise ConfigError("region_moments does not support weights yet")
         dcube = _moments.spectra_dcube(self, scale, instrument, dtype)
         return RegionMomentsPlan(
             self, self._weights, dcube, driver, scene, foreground, dtype)
@@ -296,7 +300,7 @@ class RegionMomentsPlan(_detail.DCubePlanBase):
             dtype: np.dtype
     ):
         super().__init__(
-            dcube, driver, scene, foreground, dtype)
+            dcube, driver, scene, foreground, dtype, None)
         self._sums = RegionSumsPlan(weights, driver, dtype)
         nregions = self._sums.nregions()
         # The spectra of the regions, as a cube of one row of regions

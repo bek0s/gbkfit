@@ -16,6 +16,7 @@ from .base import ModelData, Observable
 if TYPE_CHECKING:
     from .._scene import Scene
     from ..foreground import Foreground
+    from ..weights import Weights
 
 
 __all__ = [
@@ -156,7 +157,8 @@ class PixelBrightness(Observable):
             foreground: 'Foreground',
             instrument: Instrument,
             scale: Sequence[int],
-            dtype: np.dtype
+            dtype: np.dtype,
+            weights: 'Weights | None'
     ) -> 'PixelBrightnessPlan':
         # The cube of an image has one channel
         dcube = _dcube.DCube(
@@ -176,7 +178,7 @@ class PixelBrightness(Observable):
             mask_apply=self._mask_apply,
             dtype=dtype)
         return PixelBrightnessPlan(
-            dcube, driver, scene, foreground, dtype)
+            dcube, driver, scene, foreground, dtype, weights)
 
 
 class PixelBrightnessPlan(_detail.DCubePlanBase):
