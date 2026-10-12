@@ -71,6 +71,15 @@ class ObservationGroup:
                 f"names; repeated: {repeated}")
         self._pdescs, self._mappings = iterutils.merge_with_prefixes(
             [galaxy.pdescs() for galaxy in self._galaxies], self._prefixes)
+        # The parameters of the observations (their calibrations)
+        for observation in self._observations:
+            pdescs = observation.pdescs()
+            if repeated := sorted(pdescs.keys() & self._pdescs.keys()):
+                raise ConfigError(
+                    f"the parameters of the observations have the names of "
+                    f"parameters of the galaxies: {repeated}; rename the "
+                    f"observations")
+            self._pdescs |= pdescs
         self._constants, _ = iterutils.merge_with_prefixes(
             [galaxy.constants() for galaxy in self._galaxies], self._prefixes)
         # The extra outputs of the observations are named after their names,
@@ -132,7 +141,10 @@ class ObservationGroup:
         return len(self._observations)
 
     def pdescs(self) -> dict[str, ParamDesc]:
-        """Return the parameters of the galaxies, prefixed."""
+        """
+        Return the parameters of the galaxies, prefixed, and those of the
+        observations (see Observation.pdescs).
+        """
         return self._pdescs
 
     def constants(self) -> dict[str, Any]:

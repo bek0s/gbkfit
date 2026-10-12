@@ -192,7 +192,8 @@ class SlitSpectra(Observable):
             instrument: Instrument,
             scale: Sequence[int],
             dtype: np.dtype,
-            weights: 'Weights | None'
+            weights: 'Weights | None',
+            calibration: str | None
     ) -> 'SlitSpectraPlan':
         # The cube of a slit is one pixel (the slit width) across the slit,
         # sampled as finely as the pixels along it (the model is the mean
@@ -217,7 +218,7 @@ class SlitSpectra(Observable):
             mask_apply=self._mask_apply,
             dtype=dtype)
         return SlitSpectraPlan(
-            dcube, driver, scene, foreground, dtype, weights)
+            dcube, driver, scene, foreground, dtype, weights, calibration)
 
 
 class SlitSpectraPlan(_detail.DCubePlanBase):

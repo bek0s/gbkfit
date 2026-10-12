@@ -270,7 +270,8 @@ class Observable(parseutils.TypedSerializable, abc.ABC):
             instrument: Instrument,
             scale: Sequence[int],
             dtype: np.dtype,
-            weights: 'Weights | None'
+            weights: 'Weights | None',
+            calibration: str | None
     ) -> 'ObservablePlan':
         """
         Plan the evaluation of a scene (what an observation sees) as this
@@ -293,6 +294,9 @@ class Observable(parseutils.TypedSerializable, abc.ABC):
             The floating type of the model.
         weights : Weights, optional
             The spatial weights of the data.
+        calibration : str, optional
+            The name of the parameter that scales the flux of the model
+            (the calibration of the observation), if any.
 
         Returns
         -------

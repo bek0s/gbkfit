@@ -158,7 +158,8 @@ class PixelBrightness(Observable):
             instrument: Instrument,
             scale: Sequence[int],
             dtype: np.dtype,
-            weights: 'Weights | None'
+            weights: 'Weights | None',
+            calibration: str | None
     ) -> 'PixelBrightnessPlan':
         # The cube of an image has one channel
         dcube = _dcube.DCube(
@@ -178,7 +179,7 @@ class PixelBrightness(Observable):
             mask_apply=self._mask_apply,
             dtype=dtype)
         return PixelBrightnessPlan(
-            dcube, driver, scene, foreground, dtype, weights)
+            dcube, driver, scene, foreground, dtype, weights, calibration)
 
 
 class PixelBrightnessPlan(_detail.DCubePlanBase):
