@@ -61,7 +61,8 @@ class LineResolution(NamedTuple):
     the dispersion of a line (spectral), and of the change of the velocity
     between adjacent voxels along a line of sight to their dispersion
     (depth). Both are discretisations of the model: the march averages
-    the optical depth of a voxel over a channel, and over a voxel.
+    the optical depth of a voxel over a channel, and over a voxel. Lines
+    of zero dispersion, which no resolution resolves, are left out.
     """
     spectral: float
     depth: float
@@ -416,7 +417,7 @@ class _ResolutionTracker:
         of its lines (see ComponentPlan.line_values).
         """
         j, v, s = fields[:3]
-        on = (j != 0) & (fields[3:3 + len(scales)] != 0).any(axis=0)
+        on = (j != 0) & (s > 0) & (fields[3:3 + len(scales)] != 0).any(axis=0)
         with np.errstate(divide='ignore', invalid='ignore'):
             # The narrowest line of each voxel, in the spectral units
             sigma = np.abs(scales).min() * s

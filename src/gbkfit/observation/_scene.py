@@ -199,8 +199,10 @@ class TransferScenePlan(ScenePlan):
     depths (see Galaxy); the others in their order.
 
     The galaxies whose depth axes, centred on their depths, overlap along
-    the line of sight form a group, which would need one grid; groups of
-    several galaxies are not supported yet: evaluate raises ValueError.
+    the line of sight form a group, which would need one grid where one of
+    them has opacity; such groups are not supported yet: evaluate raises
+    ValueError. (The light of galaxies without opacity just adds up, in
+    any order.)
 
     With extra outputs, it logs a warning if the march resolves line
     opacity too coarsely (see warn_resolution).
@@ -284,14 +286,16 @@ class TransferScenePlan(ScenePlan):
         """
         Return the indices of the galaxies in the order of the march, with
         the parameters of each (see the class). Raise ValueError if the
-        depth axes of galaxies with opacity overlap.
+        depth axes of galaxies overlap where one of them has opacity.
         """
         if not self._ordered:
             return list(range(len(self._plans)))
         depths = [values['depth'] for values in params]
         groups = _depth_groups(depths, self._extents)
         for group in groups:
-            if len(group) > 1:
+            if len(group) > 1 and any(
+                    self._plans[g].has_dust()
+                    or self._plans[g].has_line_opacity() for g in group):
                 names = [self._scene._galaxies[g].name() for g in group]
                 raise ValueError(
                     f"the depth axes of the galaxies {names} overlap along "
@@ -301,7 +305,7 @@ class TransferScenePlan(ScenePlan):
                     f"arcsec); radiative transfer marches galaxies one "
                     f"after the other, so each must be in front of the "
                     f"next")
-        return [group[0] for group in groups]
+        return [g for group in groups for g in group]
 
 
 def _radius(galaxy: Galaxy, emitters: Sequence[int]) -> float:

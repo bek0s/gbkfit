@@ -306,8 +306,8 @@ class Transfer(LineOfSight):
             info, cls.__init__))
 
     def dump(self) -> dict[str, Any]:
-        return dict(type=self.type(), depth=self._depth.dump()) | (
-            dict(slab=self._slab) if self._slab is not None else {}) | dict(
+        return dict(
+            type=self.type(), depth=self._depth.dump(), slab=self._slab,
             subchannels=self._subchannels)
 
     def __init__(
@@ -317,10 +317,12 @@ class Transfer(LineOfSight):
             subchannels: int = 1
     ):
         if slab is not None and not (
-                isinstance(slab, numbers.Integral) and slab > 0):
+                isinstance(slab, numbers.Integral)
+                and not isinstance(slab, bool) and slab > 0):
             raise ConfigError(
                 f"slab must be a positive integer; it is {slab!r}")
         if not (isinstance(subchannels, numbers.Integral)
+                and not isinstance(subchannels, bool)
                 and 1 <= subchannels <= MAX_SUBCHANNELS):
             raise ConfigError(
                 f"subchannels must be an integer from 1 to {MAX_SUBCHANNELS}; "
