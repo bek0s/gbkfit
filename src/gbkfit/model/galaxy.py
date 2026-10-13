@@ -9,12 +9,13 @@ import numpy as np
 
 from gbkfit.driver import Driver
 from gbkfit.params import ParamDesc
+from gbkfit.params.pdescs import ParamScalarDesc
 from gbkfit.utils import gridutils, iterutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
 from .components import _detail
 from .components._component_set import ComponentSet, ComponentSetPlan
 from .components._transfer import TransferPlan
-from .components.base import Component, DepthAxis
+from .components.base import Component, DepthAxis, OpacityCubes
 from .components.disks import MCDisk, SMDisk
 from .components.geometries import Geometry, geometry_parser
 from .components.lines import Band, LineCatalogue
@@ -45,9 +46,9 @@ class Galaxy(parseutils.Serializable):
 
     Its parameters are those of its components, each prefixed by its name
     when there are several ('disk_pt_a'), and those of its geometries
-    ('{geometry}_posa'), its distance ('distance') and its mass
-    ('mass_{name}_*'). A name prefixes them all when there are several
-    galaxies (see ObservationGroup).
+    ('{geometry}_posa'), its distance ('distance'), its mass
+    ('mass_{name}_*') and its depth ('depth'). A name prefixes them all
+    when there are several galaxies (see ObservationGroup).
 
     In configurations, its option geometries lists the geometries that
     its components name (see Geometry).
@@ -66,6 +67,15 @@ class Galaxy(parseutils.Serializable):
         Its redshift, for what it emits and absorbs in its rest frame (the
         dust of an image absorbs at the effective wavelength of its band
         over 1 + redshift); 0 by default.
+    depth : bool, optional
+        Whether it has a position along the line of sight: the parameter
+        'depth' (arcsec, away from the viewer; relative to the other
+        galaxies). An observation of several galaxies through radiative
+        transfer (see Transfer) needs it when they have opacity: it
+        marches them one after the other in the order of their depths,
+        each on its own depth axis, centred on its depth, which must not
+        overlap those of the others (galaxies that interpenetrate along
+        the line of sight are not supported yet). False by default.
     name : str, optional
         Its name; required when there are several galaxies.
 
@@ -130,6 +140,8 @@ class Galaxy(parseutils.Serializable):
         if self.distance() is not None:
             info.update(distance=distance_parser.dump(self.distance()))
         info.update(redshift=self._redshift)
+        if self._depth:
+            info.update(depth=True)
         return info
 
     def __init__(
@@ -138,6 +150,7 @@ class Galaxy(parseutils.Serializable):
             mass: MassComponent | Sequence[MassComponent] | None = None,
             distance: Distance | None = None,
             redshift: float = 0.0,
+            depth: bool = False,
             name: str | None = None
     ):
         parseutils.check_name(name)
@@ -148,6 +161,16 @@ class Galaxy(parseutils.Serializable):
         mass = iterutils.tuplify(mass)
         mass_model = MassModel(mass) if mass else None
         self._component_set = ComponentSet(components, distance, mass_model)
+        self._pdescs = self._component_set.pdescs()
+        if depth:
+            if 'depth' in self._pdescs:
+                raise ConfigError(
+                    "the parameter 'depth' of the galaxy has the name of a "
+                    "parameter of its component; name the component")
+            self._pdescs = self._pdescs | dict(depth=ParamScalarDesc(
+                desc="the position of the galaxy along the line of sight "
+                     "(arcsec, away from the viewer)"))
+        self._depth = depth
         self._mass = mass
         self._name = name
 
@@ -186,9 +209,13 @@ class Galaxy(parseutils.Serializable):
         """Return its redshift."""
         return self._redshift
 
+    def depth(self) -> bool:
+        """Return whether it has a position along the line of sight."""
+        return self._depth
+
     def pdescs(self) -> dict[str, ParamDesc]:
         """Return its parameters, by name (see the class)."""
-        return self._component_set.pdescs()
+        return self._pdescs
 
     def constants(self) -> dict[str, Any]:
         """
@@ -205,6 +232,7 @@ class Galaxy(parseutils.Serializable):
             depth: DepthAxis | None,
             dtype: np.dtype,
             emitters: Sequence[int],
+            cubes: OpacityCubes,
             lines: tuple[str, ...] | None,
             band: Band | None
     ) -> ComponentSetPlan:
@@ -227,6 +255,9 @@ class Galaxy(parseutils.Serializable):
         emitters : Sequence of int
             The indices of the components whose light is evaluated (the
             opacity of all those with opacity is).
+        cubes : OpacityCubes
+            How the cubes of opacity of the observation hold its dust, and
+            the dust that dims its light (see opacity_cubes).
         lines : tuple of str, optional
             The names of the emission lines evaluated; all if None.
         band : Band, optional
@@ -238,8 +269,8 @@ class Galaxy(parseutils.Serializable):
             The plan.
         """
         return self._component_set.plan(
-            driver, grid, spectral, depth, dtype, emitters, lines, band,
-            self._redshift)
+            driver, grid, spectral, depth, dtype, emitters, cubes, lines,
+            band)
 
     def plan_transfer(
             self,
@@ -249,6 +280,7 @@ class Galaxy(parseutils.Serializable):
             depth: DepthAxis,
             dtype: np.dtype,
             emitters: Sequence[int],
+            cubes: OpacityCubes,
             lines: tuple[str, ...] | None,
             band: Band | None,
             slab: int | None
@@ -261,8 +293,8 @@ class Galaxy(parseutils.Serializable):
         axis.
         """
         return self._component_set.plan_transfer(
-            driver, grid, spectral, depth, dtype, emitters, lines, band,
-            self._redshift, slab)
+            driver, grid, spectral, depth, dtype, emitters, cubes, lines,
+            band, self._redshift, slab)
 
 
 galaxy_parser = parseutils.BasicParser(Galaxy)

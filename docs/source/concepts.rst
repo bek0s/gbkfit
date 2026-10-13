@@ -71,6 +71,19 @@ disk), or for named lines, a mapping of each line to its traits
 (parameters op_{line}_*). The brightness of an optically thick line
 then levels off at S.
 
+Through radiative transfer, an observation can see several galaxies
+with opacity, which dim the light of one another (e.g. a galaxy behind
+the dust of another, or HI absorbed by HI in front of it): each galaxy
+needs a position along the line of sight (depth: true gives the
+parameter {galaxy}_depth, in arcsec away from the viewer), and the march
+goes through them one after the other, front to back, in the order of
+their depths. Each has a depth axis of its own, centred on its depth,
+and the axes of the galaxies must not overlap: galaxies that
+interpenetrate along the line of sight are not supported yet. The dust
+of a galaxy dims the light of another at the wavelength of that light in
+its own rest frame. Grid does not order galaxies: it sees several only
+when none has opacity.
+
 Fitters
 -------
 Least-Squares

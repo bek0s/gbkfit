@@ -326,8 +326,8 @@ gmodel_transfer_march(const TransferArgs<T>& a)
 {
     // Parallelization: per 2d spatial position. Each thread adds the light
     // of the channels of the line of sight of its spaxel to a spectrum of
-    // its own, then to the output. Then the dust of the slab is added to
-    // that in front of it.
+    // its own, then to the output. Then the dust of the slab, if any, is
+    // added to that in front of it.
     #pragma omp parallel
     {
     std::vector<T> spectrum(a.spec_size);
@@ -351,12 +351,15 @@ gmodel_transfer_march(const TransferArgs<T>& a)
     }
     }
 
+    if (a.opacity)
+    {
     #pragma omp for collapse(2)
     for (int y = 0; y < a.spat_size[1]; ++y) {
     for (int x = 0; x < a.spat_size[0]; ++x) {
 
     gbkfit::gmodel_transfer_opacity_front(x, y, a);
 
+    }
     }
     }
     }

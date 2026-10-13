@@ -15,12 +15,11 @@ from typing import Any, Self
 import numpy as np
 
 from gbkfit.driver import Driver
-from gbkfit.model import Band, Galaxy, LineOpacity
-from gbkfit.model.components._component_set import ComponentSetPlan
-from gbkfit.model.components._transfer import TransferPlan
+from gbkfit.model import Galaxy, LineOpacity
 from gbkfit.model.components.base import Component, DepthAxis
 from gbkfit.utils import gridutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
+from ._scene import AdditiveScenePlan, Scene, ScenePlan, TransferScenePlan
 
 
 __all__ = [
@@ -43,13 +42,14 @@ class Depth(parseutils.Serializable):
     extent : str or float, optional
         Its length (arcsec); 'galaxy' (the default): the diameter of the
         largest disk the observation evaluates (twice its outer radius,
-        that of the last of its rings), so that the plane of each disk
-        crosses each line of sight on it (the light of a thick disk
-        farther from the plane of the sky, at a high inclination or
-        warped, is not on it); or 'legacy': that of the longer of the x
-        and y axes of the grid the galaxies are evaluated on (the grid of
-        the data, oversampled and padded for the convolutions), as the 3d
-        models of earlier versions took it.
+        that of the last of its rings; through radiative transfer, where
+        each galaxy has a depth axis of its own, that of each galaxy), so
+        that the plane of each disk crosses each line of sight on it (the
+        light of a thick disk farther from the plane of the sky, at a high
+        inclination or warped, is not on it); or 'legacy': that of the
+        longer of the x and y axes of the grid the galaxies are evaluated
+        on (the grid of the data, oversampled and padded for the
+        convolutions), as the 3d models of earlier versions took it.
     step : float, optional
         The size of its voxels (arcsec); by default that of the pixels
         along the longer of the x and y axes of that grid.
@@ -139,27 +139,35 @@ class LineOfSight(parseutils.TypedSerializable, abc.ABC):
         """
         pass
 
-    def plan_galaxy(
+    def check_order(self, galaxies: Sequence[Galaxy]) -> None:
+        """
+        Check that this line of sight can order the given galaxies, which
+        have opacity, along it (the light of one can be dimmed by
+        another): here, it cannot.
+
+        Raises
+        ------
+        ConfigError
+            If it cannot.
+        """
+        raise ConfigError(
+            "an observation of several galaxies with opacity needs a line "
+            "of sight of radiative transfer (transfer), which orders them "
+            "along it")
+
+    def plan_scene(
             self,
-            galaxy: Galaxy,
+            scene: Scene,
             driver: Driver,
             grid: gridutils.Grid,
-            spectral: gridutils.Grid,
-            depth: DepthAxis | None,
-            dtype: np.dtype,
-            emitters: Sequence[int],
-            lines: tuple[str, ...] | None,
-            band: Band | None
-    ) -> ComponentSetPlan | TransferPlan:
+            dtype: np.dtype
+    ) -> ScenePlan:
         """
-        Plan the evaluation of a galaxy along this line of sight, on the
-        given depth axis (see depth_axis; for the other arguments, see
-        Galaxy.plan): here, its components add their light to the image
-        or the spectral cube, dimmed by the opacity in front of it (see
-        Galaxy.plan).
+        Plan the evaluation of a scene along this line of sight (see
+        Scene.plan): here, each galaxy adds its light to the image or the
+        spectral cube, dimmed by its own opacity (see AdditiveScenePlan).
         """
-        return galaxy.plan(
-            driver, grid, spectral, depth, dtype, emitters, lines, band)
+        return AdditiveScenePlan(scene, driver, grid, dtype)
 
 
 def _check_no_line_opacity(component: Component) -> None:
@@ -253,6 +261,14 @@ class Transfer(LineOfSight):
     wide as the sum of their lines. Its components may have line opacity
     (see LineOpacity).
 
+    It sees several galaxies with opacity, which can dim the light of one
+    another: each needs a depth (see Galaxy), and the march goes through
+    one after the other, front to back, in the order of their depths,
+    each on a depth axis of its own, centred on its depth. The depth axes
+    of galaxies must not overlap (an evaluation where they do raises
+    ValueError): galaxies that interpenetrate along the line of sight are
+    not supported yet.
+
     Parameters
     ----------
     depth : Depth, optional
@@ -306,21 +322,22 @@ class Transfer(LineOfSight):
     def check(self, component: Component) -> None:
         pass
 
-    def plan_galaxy(
+    def check_order(self, galaxies: Sequence[Galaxy]) -> None:
+        if missing := [
+                galaxy.name() for galaxy in galaxies if not galaxy.depth()]:
+            raise ConfigError(
+                f"radiative transfer marches several galaxies with opacity "
+                f"in the order of their depths along the line of sight; "
+                f"the galaxies {missing} need depth: true")
+
+    def plan_scene(
             self,
-            galaxy: Galaxy,
+            scene: Scene,
             driver: Driver,
             grid: gridutils.Grid,
-            spectral: gridutils.Grid,
-            depth: DepthAxis | None,
-            dtype: np.dtype,
-            emitters: Sequence[int],
-            lines: tuple[str, ...] | None,
-            band: Band | None
-    ) -> TransferPlan:
-        return galaxy.plan_transfer(
-            driver, grid, spectral, depth, dtype, emitters, lines, band,
-            self._slab)
+            dtype: np.dtype
+    ) -> TransferScenePlan:
+        return TransferScenePlan(scene, driver, grid, dtype, self._slab)
 
 
 line_of_sight_parser = parseutils.TypedParser(LineOfSight, [

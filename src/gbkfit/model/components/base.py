@@ -20,7 +20,8 @@ __all__ = [
     'ComponentPlan',
     'DepthAxis',
     'FieldsLayout',
-    'NativeGrid'
+    'NativeGrid',
+    'OpacityCubes'
 ]
 
 
@@ -32,6 +33,22 @@ class DepthAxis(NamedTuple):
     size: int
     step: float
     zero: float
+
+
+class OpacityCubes(NamedTuple):
+    """
+    How the plan of a galaxy holds the dust that dims its light, in the
+    cubes of opacity of its observation (see opacity_cubes): their number
+    (0 without dust), the cube of each component of the galaxy with dust
+    (an absorber, by index) and the factor of its optical depth at V
+    there, and for each component whose light is evaluated (an emitter, by
+    index), the ratios of the optical depths of the cubes to theirs at the
+    wavelength of each of its lines or its band (an array of shape (nrows,
+    ncubes)), or None without dust.
+    """
+    ncubes: int
+    deposits: dict[int, tuple[int, float]]
+    ratios: dict[int, np.ndarray | None]
 
 
 class NativeGrid(TypedDict):

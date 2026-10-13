@@ -15,6 +15,7 @@ change of the models.
 import numpy as np
 import pytest
 from gbkfit.model import galaxy_parser
+from gbkfit.model.components._component_plans import opacity_cubes
 from gbkfit.model.components._component_set import IMAGE_SPECTRAL_AXIS
 from gbkfit.observation import Depth, Grid
 from gbkfit.params import ParamModeOffsets
@@ -239,7 +240,9 @@ def image_plan(driver, galaxy, size):
     return galaxy.plan(
         driver, grid, IMAGE_SPECTRAL_AXIS,
         Grid(Depth(extent='legacy')).depth_axis(grid, 0),
-        np.float32, (0,), None, None)
+        np.float32, (0,),
+        opacity_cubes([galaxy], [(0,)], None, None, np.float32)[0],
+        None, None)
 
 
 def evaluate_image(driver, plan, size, params):
