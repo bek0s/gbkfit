@@ -108,7 +108,8 @@ def test_lines_of_a_monte_carlo_disk_share_the_clouds(driver):
     # of one line
     component = dict(
         COMPONENT, type='mcdisk', cflux=1e-2, density=dict(
-            ptraits=dict(type='exponential'), htraits=dict(type='sech2')))
+            ptraits=dict(type='exponential'),
+            htraits=dict(type='sech2', zmax=8)))
     properties = PROPERTIES | dict(ht_s=1)
     lines = [dict(name='ha', rest='6562.8 Angstrom'),
              dict(name='nii6583', rest='6583.45 Angstrom')]

@@ -1,10 +1,12 @@
 """
 Tests for the height traits: of velocity and dispersion (e.g. lags), and
-the Moffat profile of density; and for the radial range selection
-trait (e.g. truncations).
+of density (the Moffat profile, and zmax, the height above the plane that
+holds the density); and for the radial range selection trait (e.g.
+truncations).
 """
 
 import copy
+import logging
 
 import gbkfit.params
 import numpy as np
@@ -17,7 +19,7 @@ DISK = dict(
     rnodes=list(range(0, 14)),
     density=dict(
         ptraits=dict(type='exponential'),
-        htraits=dict(type='sech2')),
+        htraits=dict(type='sech2', zmax=8)),
     kinematics=dict(
         vptraits=dict(type='tan_arctan'),
         dptraits=dict(type='uniform')),
@@ -73,7 +75,7 @@ def with_second(key, polar, height, polar_values, height_values):
 def test_linear_height_trait_above_the_disk_changes_nothing(
         driver, key, polar, values):
     # A lag (or a dispersion gradient) that starts above the disk (its
-    # sech2 profile is truncated at a few scale heights) changes nothing
+    # sech2 profile is truncated at zmax) changes nothing
     plain = evaluate(driver, DISK, PROPERTIES)
     component, properties = with_second(
         key, polar, dict(type='linear'), values, {f'{key}ht1_z0': 1e6})
@@ -113,15 +115,15 @@ def test_falling_height_traits_of_a_large_scale_are_one(driver, trait):
         atol=1e-7 * plain.max())
 
 
-@pytest.mark.parametrize('trunc', [0, 2], ids=['full', 'truncated'])
-def test_moffat_height_of_shape_1_is_lorentz(driver, trunc):
+@pytest.mark.parametrize('zmax', [30, 2], ids=['wide', 'truncated'])
+def test_moffat_height_of_shape_1_is_lorentz(driver, zmax):
     # (1 + (z / s)^2)^-1 is the Lorentz profile: the same pdf, and the
-    # same cdf, which normalises a truncated profile
+    # same cdf, which normalises the profile truncated at zmax
     lorentz = evaluate(
-        driver, with_density(htraits=dict(type='lorentz', trunc=trunc)),
+        driver, with_density(htraits=dict(type='lorentz', zmax=zmax)),
         PROPERTIES)
     moffat = evaluate(
-        driver, with_density(htraits=dict(type='moffat', trunc=trunc)),
+        driver, with_density(htraits=dict(type='moffat', zmax=zmax)),
         PROPERTIES | dict(ht_b=1))
     np.testing.assert_allclose(
         moffat, lorentz, rtol=1e-5, atol=1e-6 * lorentz.max())
@@ -182,6 +184,109 @@ def test_height_traits_at_each_height(driver, height, values, factor):
     coords = ddata.coords
     nz = ddata.data.shape[0]
     z = coords.rval[2] + (np.arange(nz) - coords.rpix[2]) * coords.step[2]
-    # (the spaxel nearest the centre of the disk, at pixel (15.8, 19.4))
+    # (the spaxel nearest the centre of the disk, at pixel (15.8, 19.4),
+    # where it has density: within zmax of its plane)
     centre = ddata.data[:, 19, 16]
-    np.testing.assert_allclose(centre, 20 + 5 * factor(z), rtol=1e-5)
+    within = np.abs(z) < DISK['density']['htraits']['zmax']
+    np.testing.assert_allclose(
+        centre[within], 20 + 5 * factor(z[within]), rtol=1e-5)
+
+
+def observe_depth(driver, component, depth):
+    """
+    A spectral cube of a galaxy of the component, on a grid of the given
+    depth axis (the options of Depth).
+    """
+    return observation_group([dict(
+        driver=dict(type=driver.type()), observable=copy.deepcopy(SCUBE),
+        line_of_sight=dict(type='grid', depth=depth),
+        galaxy=dict(components=[component]))])
+
+
+def flux(group, properties, out_extra=None):
+    """The total of the spectral cube of a group of one observation."""
+    params = gbkfit.params.ParamSpace(group.pdescs(), properties)
+    return group.model_h(params.evaluate(), out_extra)[0]['spectra']['d'].sum()
+
+
+def test_the_depth_axis_holds_the_density_up_to_zmax(driver, caplog):
+    # A fat disk at an inclination of 45 degrees: its rim, up to zmax (8)
+    # above its plane, reaches sqrt(R^2 + zmax^2) along the line of sight,
+    # beyond R (13). The default depth axis holds it all: the flux of a
+    # longer one (of voxels at the same depths); a shorter one loses some,
+    # and a warning says so
+    properties = PROPERTIES | dict(incl=45, ht_s=3, pt_s=8)
+    default = flux(observe_depth(driver, DISK, {}), properties)
+    longer = flux(observe_depth(driver, DISK, dict(extent=61)), properties)
+    np.testing.assert_allclose(longer, default, rtol=1e-5)
+    caplog.set_level(logging.WARNING)
+    shorter = flux(observe_depth(driver, DISK, dict(extent=25)), properties)
+    assert shorter < (1 - 1e-4) * default
+    assert 'shorter than the disks need' in caplog.text
+
+
+@pytest.mark.parametrize('scale, warns', [(1, False), (4, True)])
+def test_a_profile_wide_for_its_zmax_warns(driver, caplog, scale, warns):
+    # zmax (8) cuts 2e-7 of a sech2 profile of scale height 1, and 3.6% of
+    # one of 4: zmax then shapes the density (with extra outputs)
+    caplog.set_level(logging.WARNING)
+    flux(observe(driver, DISK), PROPERTIES | dict(ht_s=scale), {})
+    assert ('zmax shapes the density' in caplog.text) == warns
+
+
+@pytest.mark.parametrize('trait, values', [
+    ('uniform', {}), ('exponential', {}), ('gauss', {}),
+    ('ggauss', dict(ht_b=1.5)), ('lorentz', {}), ('moffat', dict(ht_b=2.5)),
+    ('sech2', {})])
+def test_the_cdf_of_each_density_height_trait(driver, trait, values):
+    # The cdf (with which the share of the profile within zmax is checked)
+    # is the integral of the profile the kernels evaluate, which they
+    # renormalise within zmax (here 40)
+    from gbkfit.model import galaxy_parser
+    galaxy = galaxy_parser.load(dict(components=[
+        with_density(htraits=dict(type=trait, zmax=40))]))
+    disk = galaxy.components()[0].density_disk()
+    plan = disk.plan(driver, 0, np.dtype(np.float32))
+    z = np.linspace(-40, 40, 160001)
+    params = PROPERTIES | dict(ht_s=1.5) | values
+    pdf = plan.evaluate_height_traits(params, 'rht', 5.0, z)[0]
+    integral = np.concatenate([[0], np.cumsum((pdf[1:] + pdf[:-1]) / 2)]) \
+        * (z[1] - z[0])
+    trait_ = disk.traits('rht')[0]
+    args = [params['ht_s']] + ([params['ht_b']] if 'ht_b' in values else [])
+    cdf = trait_.cdf(z, *args)
+    expected = (cdf - cdf[0]) / (cdf[-1] - cdf[0])
+    # (the trapezoids are off by about 2e-4 at the steps of uniform)
+    np.testing.assert_allclose(integral, expected, atol=1e-3)
+
+
+@pytest.mark.parametrize('disk_type', ['smdisk', 'mcdisk'])
+def test_a_lifted_midplane_keeps_its_light_within_zmax(driver, disk_type):
+    # A face-on disk whose midplane a vertical distortion lifts: by 5,
+    # within zmax (8) of the plane, each column keeps its light (its
+    # profile is renormalised to the heights within zmax): exactly for the
+    # clouds; the smooth disk samples its profile at the centres of the
+    # voxels, and zmax, where the lifted profile is 1% of its peak, is at
+    # one, which counts whole. By 30, none of its profile is within zmax:
+    # it has no light (and its clouds are not drawn for ever)
+    component = DISK | dict(type=disk_type, zptraits=dict(type='nw_uniform'))
+    if disk_type == 'mcdisk':
+        component |= dict(cflux=1e-3)
+    group = observe(driver, component)
+    properties = PROPERTIES | dict(incl=0)
+    flat, far = (
+        flux(group, properties | dict(zpt_a=[height] * 14))
+        for height in (0, 30))
+    extra = {}
+    lifted = flux(group, properties | dict(zpt_a=[5] * 14), extra)
+    np.testing.assert_allclose(
+        lifted, flat, rtol=1e-5 if disk_type == 'mcdisk' else 5e-3)
+    assert far == 0
+    # (zmax cuts the lifted profile at 8 above the plane, not above the
+    # midplane: its density reaches 8, and no farther)
+    bdata = extra['observation0_model_component0_bdata']
+    coords = bdata.coords
+    z = coords.rval[2] \
+        + (np.arange(bdata.data.shape[0]) - coords.rpix[2]) * coords.step[2]
+    assert bdata.data[z > 8.5].max() == 0
+    assert bdata.data[(z > 7.5) & (z <= 8.5)].max() > 0

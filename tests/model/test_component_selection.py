@@ -17,7 +17,7 @@ FLAT = dict(type='flat')
 GRID = dict(type='grid')
 
 THIN = dict(ptraits=dict(type='exponential'))
-THICK = THIN | dict(htraits=dict(type='sech2'))
+THICK = THIN | dict(htraits=dict(type='sech2', zmax=8))
 
 
 def disk(name, density=THIN):

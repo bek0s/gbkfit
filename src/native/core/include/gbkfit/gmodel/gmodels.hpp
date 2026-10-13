@@ -611,13 +611,7 @@ gmodel_mcdisk_evaluate_cloud(
                 return;
     }
 
-    // Density height trait: the height of the cloud above the midplane
-    rh_trait_rnd<T>(
-                zd, rng, a.rht.uids[tidx], rht_cptr, rht_pptr,
-                rnidx, a.rnodes, a.nrnodes, rd);
-    const T height = zd;
-
-    // Vertical distortion traits
+    // Vertical distortion traits: the displacement of the midplane
     if (a.zpt.uids)
     {
         p_traits<zp_trait<T>>(
@@ -630,10 +624,16 @@ gmodel_mcdisk_evaluate_cloud(
 
         for (int i = 0; i < a.zpt.n; ++i)
             zvalue += ptvalues[i];
-
-        // The distortion displaces the midplane
-        zd += zvalue;
     }
+
+    // Density height trait: the height of the cloud above the midplane,
+    // which the distortion displaces (a cloud of a profile that is none,
+    // at a NaN height, is discarded below)
+    rh_trait_rnd<T>(
+                zd, rng, a.rht.uids[tidx], rht_cptr, rht_pptr,
+                rnidx, a.rnodes, a.nrnodes, rd, zvalue);
+    const T height = zd;
+    zd += zvalue;
 
     vsysi = !a.vsys ? 0
             : a.loose ? lerp(rd, rnidx, a.rnodes, a.vsys) : a.vsys[0];
@@ -980,7 +980,7 @@ gmodel_smdisk_evaluate_spaxel(
                 a.rht.cvalues, a.rht.ccounts,
                 a.rht.pvalues, a.rht.pcounts,
                 rnidx, a.rnodes, a.nrnodes,
-                rn, std::abs(zn));
+                rn, zn, zvalue);
     }
     for (int i = 0; i < a.rpt.n; ++i)
         rvalue += ptvalues[i] * (is_thin ? 1 : htvalues[i]);
@@ -1169,15 +1169,18 @@ gmodel_disk_ptraits_point(
 }
 
 // The height traits of the set of a DiskTraitsArgs at its point j, in the
-// ring rnidx, into values: at |z|, as the disk kernels evaluate them
-template<auto HTraitFunT, typename T> constexpr void
+// ring rnidx, into values: at |z|, as the disk kernels evaluate them, with
+// the extra arguments of the traits (e.g. the displacement of the midplane
+// of the density height traits)
+template<auto HTraitFunT, typename T, typename ...Ts> constexpr void
 gmodel_disk_htraits_point(
-        T* values, int j, int rnidx, const DiskTraitsArgs<T>& a)
+        T* values, int j, int rnidx, const DiskTraitsArgs<T>& a,
+        Ts ...extra)
 {
     const TraitSet<T>& t = a.traits;
     h_traits<HTraitFunT>(
             values, t.n, t.uids, t.cvalues, t.ccounts, t.pvalues, t.pcounts,
-            rnidx, a.rnodes, a.nrnodes, a.r[j], std::abs(a.z[j]));
+            rnidx, a.rnodes, a.nrnodes, a.r[j], std::abs(a.z[j]), extra...);
 }
 
 // Evaluate each trait of the set of a DiskTraitsArgs at its point j, as
@@ -1221,7 +1224,9 @@ gmodel_disk_traits_point(int j, const DiskTraitsArgs<T>& a)
             gmodel_disk_ptraits_point<rp_trait<T>>(values, j, rnidx, a);
             break;
         case TraitKind::RHT:
-            gmodel_disk_htraits_point<rh_trait<T>>(values, j, rnidx, a);
+            // (above a midplane on the plane of the galaxy)
+            gmodel_disk_htraits_point<rh_trait<T>>(
+                    values, j, rnidx, a, T{0});
             break;
         case TraitKind::VHT:
             gmodel_disk_htraits_point<vh_trait<T>>(values, j, rnidx, a);

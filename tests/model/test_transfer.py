@@ -22,7 +22,7 @@ def disk(type_, thick=True, **options):
     """The configuration of a disk of gas, thick or thin."""
     density = dict(ptraits=dict(type='exponential'))
     if thick:
-        density.update(htraits=dict(type='sech2'))
+        density.update(htraits=dict(type='sech2', zmax=8))
     return dict(
         type=type_, loose=False, tilted=False, rnmin=0, rnmax=10, rnsep=1,
         density=density,
@@ -130,7 +130,8 @@ def test_a_point_is_a_layer_at_its_depth(driver):
 LINES = dict(type='lines')
 KINEMATICS = dict(
     vptraits=dict(type='tan_arctan'), dptraits=dict(type='uniform'))
-THICK = dict(ptraits=dict(type='exponential'), htraits=dict(type='sech2'))
+THICK = dict(
+    ptraits=dict(type='exponential'), htraits=dict(type='sech2', zmax=8))
 THIN = dict(ptraits=dict(type='exponential'))
 GAS = dict(
     type='smdisk', name='gas', loose=False, tilted=False, rnmin=0, rnmax=10,

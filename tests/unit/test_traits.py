@@ -24,7 +24,7 @@ def kernel_consts_cases():
     for kind, parser in parsers.items():
         for type_, cls in parser.registered_classes().items():
             if kind == 'rht':
-                options, consts = dict(trunc=0, rnodes=True), (0, True)
+                options, consts = dict(zmax=5.0, rnodes=True), (5.0, True)
             elif kind in ('vht', 'dht'):
                 options, consts = dict(), (False,)
             elif type_.startswith('mixture'):

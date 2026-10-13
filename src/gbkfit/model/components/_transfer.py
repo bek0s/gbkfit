@@ -241,14 +241,18 @@ class TransferPlan:
         optical depth of its lines at each channel (the mean of its
         sub-channels).
 
-        With extras and line opacity, it returns how finely the march
-        resolves it (see LineResolution); None otherwise.
+        With extras, a warning says where zmax shapes the density of a
+        disk (see ComponentPlans.warn_truncation); with line opacity too,
+        it returns how finely the march resolves it (see LineResolution);
+        None otherwise.
         """
         plans = self._plans
         driver = plans.driver
         grid = plans.native_grid
         values = plans.params(params)
         extras = {} if out_extra is not None else None
+        if out_extra is not None:
+            plans.warn_truncation(values)
         # (those of the volumes and the absorbers of each slab)
         slab_extras = []
 

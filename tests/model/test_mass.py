@@ -428,7 +428,7 @@ def disk_galaxy(disk_type, vptraits, mass=None, distance=None, thick=False):
     """
     disk = with_traits(DISK, vptraits=vptraits) | dict(type=disk_type)
     if thick:
-        disk = with_traits(disk, htraits=dict(type='sech2'))
+        disk = with_traits(disk, htraits=dict(type='sech2', zmax=8))
     if disk_type == 'mcdisk':
         disk |= dict(cflux=1e-3)
     info = dict(components=[disk])
@@ -588,7 +588,7 @@ def test_trait_disk_is_the_nodewise_disk_of_its_density(
         f'hi_{name}': value for name, value in DISK_PROPERTIES.items()
         if name != 'pt_s'} | dict(hi_pt_a=brightness)
     if thick:
-        disk = with_traits(disk, htraits=dict(type='sech2'))
+        disk = with_traits(disk, htraits=dict(type='sech2', zmax=8))
         properties |= dict(hi_ht_s=1)
     halo = dict(
         type='pseudo_isothermal', name='halo', parameters='density_radius')
@@ -672,7 +672,8 @@ def test_mass_trait_with_pressure_support(driver, line_of_sight):
     subrnodes = np.array(subring_radii(rnodes, DISK['rstep']))
     density = np.exp(-subrnodes / 4)
     if line_of_sight == 'grid':
-        disk = with_traits(disk, htraits=dict(type='sech2', rnodes=True))
+        disk = with_traits(
+            disk, htraits=dict(type='sech2', zmax=8, rnodes=True))
         properties |= dict(ht_s=flaring)
         density /= 2 * np.interp(subrnodes, rnodes, flaring)
     pressure = density * (30 * np.exp(-subrnodes / 10)) ** 2

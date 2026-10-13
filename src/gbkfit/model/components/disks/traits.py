@@ -155,8 +155,6 @@ SPT_UID_AZRANGE = 1
 SPT_UID_RRANGE = 2
 SPT_UID_NW_AZRANGE = 101
 
-TRUNC_DEFAULT = 0
-
 # Where the values of the node-wise parameters of a trait are given: at
 # the radial nodes of its disk, which interpolates them to the subnodes,
 # or at the subnodes themselves (see _disk.Disk)
@@ -438,26 +436,29 @@ class Trait(parseutils.TypedSerializable, abc.ABC):
         return None
 
 
-class TraitFeatureTrunc:
+class TraitFeatureZmax:
     """
-    The option trunc of a height trait: a mixin.
+    The option zmax of a density height trait: a mixin.
     """
 
     def dump(self) -> dict[str, Any]:
-        dump_trunc = self.trunc() > 0
-        info = dict(trunc=self.trunc()) if dump_trunc else dict()
-        return super().dump() | info  # noqa
+        return super().dump() | dict(zmax=self.zmax())  # noqa
 
     def __init__(self, **kwargs: Any):
-        trunc = kwargs.pop('trunc')
-        if not trunc >= 0:
-            raise ConfigError(f"trunc must be at least 0; it is {trunc}")
-        self._trunc = trunc
+        zmax = kwargs.pop('zmax')
+        if isinstance(zmax, bool) or not (
+                isinstance(zmax, numbers.Real) and 0 < zmax < np.inf):
+            raise ConfigError(
+                f"zmax must be a positive length; it is {zmax!r}")
+        self._zmax = float(zmax)
         super().__init__(**kwargs)
 
-    def trunc(self) -> float:
-        """Return the truncation of the density, in units of s (0 for none)."""
-        return self._trunc
+    def zmax(self) -> float:
+        """
+        Return the height above the plane of the galaxy within which the
+        density lies (arcsec).
+        """
+        return self._zmax
 
 
 class TraitFeatureSampling:
@@ -610,14 +611,30 @@ class RPTrait(PTrait, abc.ABC):
         pass
 
 
-class RHTrait(TraitFeatureTrunc, HTrait, abc.ABC):
+class RHTrait(TraitFeatureZmax, HTrait, abc.ABC):
     """
     A density height trait: the probability density of the height of
-    the density, which integrates to 1.
+    the density above the midplane, which integrates to 1.
+
+    The density lies within zmax of the plane of the galaxy (its option
+    zmax): the profile around the midplane, which vertical distortion
+    traits displace, is truncated there and renormalised, so that each
+    column keeps its density (none where less than 0.001 of the profile
+    is within zmax). So the depth axis of an observation can hold all of
+    it (see Depth).
     """
 
     def consts(self) -> tuple[float, ...]:
-        return (self.trunc(), self.rnodes())
+        return (self.zmax(), self.rnodes())
+
+    @abc.abstractmethod
+    def cdf(self, z: np.ndarray, *params: np.ndarray) -> np.ndarray:
+        """
+        Return the cumulative distribution of the profile, not truncated,
+        at the heights z above the midplane, for the values of its
+        parameters (s, or s and b), broadcast together.
+        """
+        pass
 
 
 class VPTrait(PTrait, abc.ABC):
@@ -1187,11 +1204,10 @@ class RHTraitP1(RHTrait, abc.ABC):
 
     def __init__(
             self,
+            zmax: float,
             rnodes: bool = False,
-            sampling: str = SAMPLING_DEFAULT,
-            trunc: float = TRUNC_DEFAULT):
-        super().__init__(
-            rnodes=rnodes, sampling=sampling, trunc=trunc)
+            sampling: str = SAMPLING_DEFAULT):
+        super().__init__(zmax=zmax, rnodes=rnodes, sampling=sampling)
 
     def params_sm(self) -> dict[str, ParamDesc]:
         return {} if self.rnodes() else dict(s=ParamScalarDesc())
@@ -1207,11 +1223,10 @@ class RHTraitP2(RHTrait, abc.ABC):
 
     def __init__(
             self,
+            zmax: float,
             rnodes: bool = False,
-            sampling: str = SAMPLING_DEFAULT,
-            trunc: float = TRUNC_DEFAULT):
-        super().__init__(
-            rnodes=rnodes, sampling=sampling, trunc=trunc)
+            sampling: str = SAMPLING_DEFAULT):
+        super().__init__(zmax=zmax, rnodes=rnodes, sampling=sampling)
 
     def params_sm(self) -> dict[str, ParamDesc]:
         return {} if self.rnodes() else dict(
@@ -1233,15 +1248,15 @@ class RHTraitUniform(RHTraitP1):
 
     Parameters
     ----------
+    zmax : float
+        The height above the plane of the galaxy (arcsec) within which
+        the density lies (see RHTrait).
     rnodes : bool, optional
         Whether its parameters have a value for each ring (e.g. the scale
         height of a flaring disk).
     sampling : str, optional
         Where the values of its parameters are given, if they have a value
         for each ring (see the module docstring).
-    trunc : float, optional
-        If positive, the density is zero beyond |z| = trunc s, and
-        renormalised to integrate to 1.
 
     Raises
     ------
@@ -1257,6 +1272,10 @@ class RHTraitUniform(RHTraitP1):
     def uid() -> int:
         return RHT_UID_UNIFORM
 
+    def cdf(self, z: np.ndarray, *params: np.ndarray) -> np.ndarray:
+        s, = params
+        return np.clip((z + s) / (2 * s), 0, 1)
+
 
 class RHTraitExponential(RHTraitP1):
     """
@@ -1265,15 +1284,15 @@ class RHTraitExponential(RHTraitP1):
 
     Parameters
     ----------
+    zmax : float
+        The height above the plane of the galaxy (arcsec) within which
+        the density lies (see RHTrait).
     rnodes : bool, optional
         Whether its parameters have a value for each ring (e.g. the scale
         height of a flaring disk).
     sampling : str, optional
         Where the values of its parameters are given, if they have a value
         for each ring (see the module docstring).
-    trunc : float, optional
-        If positive, the density is zero beyond |z| = trunc s, and
-        renormalised to integrate to 1.
 
     Raises
     ------
@@ -1289,6 +1308,10 @@ class RHTraitExponential(RHTraitP1):
     def uid() -> int:
         return RHT_UID_EXP
 
+    def cdf(self, z: np.ndarray, *params: np.ndarray) -> np.ndarray:
+        s, = params
+        return 0.5 + 0.5 * np.sign(z) * -np.expm1(-np.abs(z) / s)
+
 
 class RHTraitGauss(RHTraitP1):
     """
@@ -1298,15 +1321,15 @@ class RHTraitGauss(RHTraitP1):
 
     Parameters
     ----------
+    zmax : float
+        The height above the plane of the galaxy (arcsec) within which
+        the density lies (see RHTrait).
     rnodes : bool, optional
         Whether its parameters have a value for each ring (e.g. the scale
         height of a flaring disk).
     sampling : str, optional
         Where the values of its parameters are given, if they have a value
         for each ring (see the module docstring).
-    trunc : float, optional
-        If positive, the density is zero beyond |z| = trunc s, and
-        renormalised to integrate to 1.
 
     Raises
     ------
@@ -1322,6 +1345,10 @@ class RHTraitGauss(RHTraitP1):
     def uid() -> int:
         return RHT_UID_GAUSS
 
+    def cdf(self, z: np.ndarray, *params: np.ndarray) -> np.ndarray:
+        s, = params
+        return 0.5 * (1 + scipy.special.erf(z / (s * np.sqrt(2))))
+
 
 class RHTraitGGauss(RHTraitP2):
     """
@@ -1331,15 +1358,15 @@ class RHTraitGGauss(RHTraitP2):
 
     Parameters
     ----------
+    zmax : float
+        The height above the plane of the galaxy (arcsec) within which
+        the density lies (see RHTrait).
     rnodes : bool, optional
         Whether its parameters have a value for each ring (e.g. the scale
         height of a flaring disk).
     sampling : str, optional
         Where the values of its parameters are given, if they have a value
         for each ring (see the module docstring).
-    trunc : float, optional
-        If positive, the density is zero beyond |z| = trunc s, and
-        renormalised to integrate to 1.
 
     Raises
     ------
@@ -1355,32 +1382,36 @@ class RHTraitGGauss(RHTraitP2):
     def uid() -> int:
         return RHT_UID_GGAUSS
 
+    def cdf(self, z: np.ndarray, *params: np.ndarray) -> np.ndarray:
+        s, b = params
+        p = scipy.special.gammainc(1 / b, (np.abs(z) / s) ** b)
+        return 0.5 + 0.5 * np.sign(z) * p
+
     def __init__(
             self,
+            zmax: float,
             rnodes: bool = False,
-            sampling: str = SAMPLING_DEFAULT,
-            trunc: float = TRUNC_DEFAULT):
-        super().__init__(
-            rnodes=rnodes, sampling=sampling, trunc=trunc)
+            sampling: str = SAMPLING_DEFAULT):
+        super().__init__(zmax=zmax, rnodes=rnodes, sampling=sampling)
 
 
 class RHTraitLorentz(RHTraitP1):
     """
     A Lorentzian vertical distribution of the density: s / (pi (z^2 +
     s^2)). Its parameter: s, the half width at half maximum; its tails are
-    heavy (see trunc). It integrates to 1.
+    heavy (zmax cuts them). It integrates to 1.
 
     Parameters
     ----------
+    zmax : float
+        The height above the plane of the galaxy (arcsec) within which
+        the density lies (see RHTrait).
     rnodes : bool, optional
         Whether its parameters have a value for each ring (e.g. the scale
         height of a flaring disk).
     sampling : str, optional
         Where the values of its parameters are given, if they have a value
         for each ring (see the module docstring).
-    trunc : float, optional
-        If positive, the density is zero beyond |z| = trunc s, and
-        renormalised to integrate to 1.
 
     Raises
     ------
@@ -1396,6 +1427,10 @@ class RHTraitLorentz(RHTraitP1):
     def uid() -> int:
         return RHT_UID_LORENTZ
 
+    def cdf(self, z: np.ndarray, *params: np.ndarray) -> np.ndarray:
+        s, = params
+        return 0.5 + np.arctan(z / s) / np.pi
+
 
 class RHTraitMoffat(RHTraitP2):
     """
@@ -1405,15 +1440,15 @@ class RHTraitMoffat(RHTraitP2):
 
     Parameters
     ----------
+    zmax : float
+        The height above the plane of the galaxy (arcsec) within which
+        the density lies (see RHTrait).
     rnodes : bool, optional
         Whether its parameters have a value for each ring (e.g. the scale
         height of a flaring disk).
     sampling : str, optional
         Where the values of its parameters are given, if they have a value
         for each ring (see the module docstring).
-    trunc : float, optional
-        If positive, the density is zero beyond |z| = trunc s, and
-        renormalised to integrate to 1.
 
     Raises
     ------
@@ -1429,6 +1464,13 @@ class RHTraitMoffat(RHTraitP2):
     def uid() -> int:
         return RHT_UID_MOFFAT
 
+    def cdf(self, z: np.ndarray, *params: np.ndarray) -> np.ndarray:
+        # (the share beyond |z|, of the incomplete beta function)
+        s, b = params
+        u2 = (z / s) ** 2
+        beyond = scipy.special.betainc(b - 0.5, 0.5, 1 / (1 + u2))
+        return np.where(z < 0, beyond / 2, 1 - beyond / 2)
+
 
 class RHTraitSech2(RHTraitP1):
     """
@@ -1437,15 +1479,15 @@ class RHTraitSech2(RHTraitP1):
 
     Parameters
     ----------
+    zmax : float
+        The height above the plane of the galaxy (arcsec) within which
+        the density lies (see RHTrait).
     rnodes : bool, optional
         Whether its parameters have a value for each ring (e.g. the scale
         height of a flaring disk).
     sampling : str, optional
         Where the values of its parameters are given, if they have a value
         for each ring (see the module docstring).
-    trunc : float, optional
-        If positive, the density is zero beyond |z| = trunc s, and
-        renormalised to integrate to 1.
 
     Raises
     ------
@@ -1460,6 +1502,10 @@ class RHTraitSech2(RHTraitP1):
     @staticmethod
     def uid() -> int:
         return RHT_UID_SECH2
+
+    def cdf(self, z: np.ndarray, *params: np.ndarray) -> np.ndarray:
+        s, = params
+        return 0.5 * (1 + np.tanh(z / s))
 
 
 class VPTraitTanUniform(VPTrait):

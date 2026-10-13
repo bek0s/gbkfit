@@ -5,6 +5,7 @@ TransferPlan): the plans of the components it evaluates, the cubes of
 opacity of its absorbers, and the parameters of each component.
 """
 
+import logging
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any, NamedTuple
 
@@ -18,7 +19,7 @@ from ..distance import Distance
 from ..mass import MassContext, MassModel
 from .base import (
     Component, ComponentPlan, DepthAxis, NativeGrid, OpacityCubes)
-from .disks._disk import DiskPlan
+from .disks._disk import Disk, DiskPlan
 from .disks._profiles import DiskDensity, pressure_support
 from .extinction import ExtinctionLaw
 from .lines import Band
@@ -33,6 +34,15 @@ __all__ = [
     'ComponentPlans',
     'opacity_cubes'
 ]
+
+
+_log = logging.getLogger(__name__)
+
+# The share of the profile of a density height trait beyond its zmax
+# above which a warning says that zmax shapes the density (see
+# ComponentPlans.warn_truncation), and the azimuths where it is checked
+_MAX_CUT = 0.01
+_CUT_AZIMUTHS = 64
 
 
 class ComponentPlans:
@@ -187,6 +197,31 @@ class ComponentPlans:
                 params[i], grid, odata[cube], scale, extra)
             if extras is not None:
                 extras.setdefault(i, {}).update(extra)
+
+    def warn_truncation(self, params: dict[int, ParamValues]) -> None:
+        """
+        Log a warning for each density height trait of the disks it
+        evaluates, with the parameters of each by index (see params),
+        whose zmax cuts more than 1% of its profile somewhere (at a ring,
+        at azimuths around it): zmax then shapes the density, rather than
+        holding it (see RHTrait).
+        """
+        components = self._component_set.components()
+        for i, plan in self.plans.items():
+            disk = components[i].density_disk()
+            if disk is None or not disk.traits('rht'):
+                continue
+            for index, cut, radius in _truncation_cuts(
+                    disk, plan.disk_plan(), params[i]):
+                if cut > _MAX_CUT:
+                    name = components[i].name()
+                    label = name if name is not None else f'component{i}'
+                    trait = disk.traits('rht')[index]
+                    _log.warning(
+                        f"{label}: the zmax ({trait.zmax():g} arcsec) of its "
+                        f"density height trait {index} ({trait.type()}) cuts "
+                        f"{cut:.1%} of its profile at the radius {radius:g}: "
+                        f"zmax shapes the density there; raise it")
 
     def add_extras(
             self,
@@ -427,6 +462,53 @@ def _same_wavelength(a: float | None, b: float | None) -> bool:
     if a is None or b is None:
         return a is b
     return bool(np.isclose(a, b, rtol=1e-9, atol=0))
+
+
+def _truncation_cuts(
+        disk: Disk, plan: DiskPlan, params: ParamValues
+) -> list[tuple[int, float, float]]:
+    """
+    Return, for each density height trait of a disk (with its plan and
+    parameters), the largest share of its profile that its zmax cuts (see
+    RHTrait), over its rings and azimuths around them, and the radius
+    where it does: (the index of the trait, the share, the radius).
+    """
+    radii = np.asarray(disk.rnodes())
+    displacement = np.zeros((len(radii), 1))
+    if disk.traits('zpt'):
+        azimuths = np.linspace(0, 360, _CUT_AZIMUTHS, endpoint=False)
+        displacement = plan.evaluate_polar_traits(
+            params, 'zpt', radii[:, None], azimuths).sum(axis=0)
+    trait_params = disk.trait_params('rht')
+    cuts = []
+    for index, (trait, names) in enumerate(zip(
+            disk.traits('rht'), trait_params.pnames)):
+        values = [
+            _at_radii(disk, params[names[name]], radii)[:, None]
+            for name in ('s', 'b') if name in names]
+        zmax = trait.zmax()
+        kept = trait.cdf(zmax - displacement, *values) \
+            - trait.cdf(-zmax - displacement, *values)
+        cut = 1 - kept.min(axis=1)
+        ring = int(np.argmax(cut))
+        cuts.append((index, float(cut[ring]), float(radii[ring])))
+    return cuts
+
+
+def _at_radii(
+        disk: Disk, values: float | np.ndarray, radii: np.ndarray
+) -> np.ndarray:
+    """
+    Return the values of a parameter of a trait of a disk at the given
+    radii: one value, or the node-wise values at the nodes or the
+    subnodes of the disk, interpolated linearly.
+    """
+    values = np.asarray(values, dtype=float)
+    if values.ndim == 0:
+        return np.full(len(radii), float(values))
+    nodes = disk.rnodes() if len(values) == len(disk.rnodes()) \
+        else disk.subrnodes()
+    return np.interp(radii, nodes, values)
 
 
 def _followed_densities(

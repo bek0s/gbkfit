@@ -14,7 +14,7 @@ from gbkfit.utils.parseutils import ConfigError
 
 
 EXPONENTIAL = dict(type='exponential')
-SECH2 = dict(type='sech2')
+SECH2 = dict(type='sech2', zmax=8)
 ARCTAN = dict(type='tan_arctan')
 UNIFORM = dict(type='uniform')
 
@@ -256,7 +256,8 @@ def test_orders_and_blobs_are_checked(trait, message):
     assert message in part_error('band_smdisk_thin', 'density', ptraits=trait)
 
 
-def test_trunc_cannot_be_negative():
+@pytest.mark.parametrize('zmax', [0, -1])
+def test_zmax_must_be_a_positive_length(zmax):
     message = part_error(
-        'band_smdisk_thick', 'density', htraits=dict(type='sech2', trunc=-1))
-    assert "trunc must be at least 0" in message
+        'band_smdisk_thick', 'density', htraits=dict(type='sech2', zmax=zmax))
+    assert "zmax must be a positive length" in message

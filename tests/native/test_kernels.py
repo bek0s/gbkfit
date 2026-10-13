@@ -450,7 +450,8 @@ def evaluate_smdisk(driver, thick):
 
     # A disk without height traits is evaluated as a thin disk
     heights = dict(
-        rht=trait_set(traits.RHTraitSech2(), (1.0,)),
+        # (zmax far beyond the grid: the profile is not truncated)
+        rht=trait_set(traits.RHTraitSech2(zmax=100), (1.0,)),
         vht=trait_set(traits.VHTraitOne()),
         dht=trait_set(traits.DHTraitOne())) if thick else {}
 
@@ -526,7 +527,8 @@ def disk_image(driver, rnodes=21, ntraits=1, heights=False, vpt=False,
         posa=scalar(0), incl=scalar(0),
         rpt=trait_set(traits.RPTraitUniform(), [1.0], ntraits))
     if heights:
-        options['rht'] = trait_set(traits.RHTraitUniform(), [1.0], ntraits)
+        options['rht'] = trait_set(
+            traits.RHTraitUniform(zmax=10), [1.0], ntraits)
     if vpt:
         options['vpt'] = trait_set(traits.VPTraitTanUniform(), [100.0], 1)
     if vht:
@@ -626,7 +628,7 @@ def thick_disk(driver, memory):
         vsys=scalar(0), xpos=scalar(0), ypos=scalar(0),
         posa=scalar(0), incl=scalar(0),
         rpt=trait_set(traits.RPTraitExponential(), (1, 5)),
-        rht=trait_set(traits.RHTraitSech2(), (1.5,)),
+        rht=trait_set(traits.RHTraitSech2(zmax=100), (1.5,)),
         vpt=trait_set(traits.VPTraitTanArctan(), (3, 200)),
         vht=trait_set(traits.VHTraitOne(), ()))
 

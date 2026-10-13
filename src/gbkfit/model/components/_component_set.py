@@ -330,7 +330,9 @@ class ComponentSetPlan:
         Add the light of the emitters to the output array, the 'image' or
         the 'scube' in outputs. The extra outputs of each component are
         named after its name, or its position (e.g. 'disk_bdata' or
-        'component0_bdata'), and the totals 'total_*'.
+        'component0_bdata'), and the totals 'total_*'. With extra outputs,
+        a warning says where zmax shapes the density of a disk (see
+        ComponentPlans.warn_truncation).
         """
         plans = self._plans
         driver = plans.driver
@@ -348,6 +350,8 @@ class ComponentSetPlan:
                 obdata = driver.mem_alloc_d(shape, dtype)
                 driver.mem_fill(obdata, 0)
         values = plans.params(params)
+        if out_extra is not None:
+            plans.warn_truncation(values)
 
         # The absorbers write the optical depth of each voxel, which then
         # becomes the optical depth from the viewer to the far side of each

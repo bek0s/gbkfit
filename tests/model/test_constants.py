@@ -13,7 +13,7 @@ PROPERTIES = dict(
     vsys=0, xpos=0, ypos=0, posa=30, incl=45, pt_a=1, pt_s=4, dpt_a=10)
 
 EXPONENTIAL = dict(type='exponential')
-SECH2 = dict(type='sech2')
+SECH2 = dict(type='sech2', zmax=8)
 
 
 def disk(vptraits, density=None, **options):
