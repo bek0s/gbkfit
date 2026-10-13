@@ -252,6 +252,17 @@ class Disk(abc.ABC):
     def rnodes(self) -> tuple[float, ...]:
         return self._rnodes
 
+    def bounding_radius(self) -> float:
+        """
+        Return the radius (arcsec) of the sphere around its centre that
+        holds all its density, at any inclination: that of its last ring,
+        R, or with density height traits, sqrt(R^2 + zmax^2) of their
+        largest zmax (see RHTrait).
+        """
+        zmax = max(
+            (trait.zmax() for trait in self._traits['rht']), default=0.0)
+        return float(np.hypot(self._rnodes[-1], zmax))
+
     def rstep(self) -> float:
         return self._rstep
 

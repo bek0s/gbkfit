@@ -17,7 +17,7 @@ DISK = dict(
 
 # The density of a thick exponential disk
 THICK_DENSITY = dict(
-    ptraits=dict(type='exponential'), htraits=dict(type='sech2'))
+    ptraits=dict(type='exponential'), htraits=dict(type='sech2', zmax=8))
 
 BAND = dict(type='band')
 LINES = dict(type='lines')
@@ -109,7 +109,7 @@ def face_on_optical_depth(
         DISK, type=disk_type, name='dust',
         density=dict(
             ptraits=list(ptraits),
-            htraits=[dict(type='sech2')] * len(ptraits)),
+            htraits=[dict(type='sech2', zmax=8)] * len(ptraits)),
         opacity=DUST)
     if disk_type == 'mcdisk':
         dust['cflux'] = 1e-4

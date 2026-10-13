@@ -27,7 +27,7 @@ def disk(type_, rnodes, vptraits, thick=False, **options):
     """
     density = dict(ptraits=dict(type='exponential'))
     if thick or type_ == 'mcdisk':
-        density['htraits'] = dict(type='sech2')
+        density['htraits'] = dict(type='sech2', zmax=8)
     mcdisk_options = dict(cflux=1e-3) if type_ == 'mcdisk' else {}
     return dict(
         type=type_, loose=False, tilted=False, rnodes=rnodes,
@@ -121,7 +121,8 @@ def test_flaring_at_the_subnodes():
         rstep=0.5,
         density=dict(
             ptraits=dict(type='exponential'),
-            htraits=dict(type='sech2', rnodes=True, sampling='subrings')),
+            htraits=dict(
+                type='sech2', zmax=8, rnodes=True, sampling='subrings')),
         emission=dict(type='band'))]))
     assert galaxy.pdescs()['ht_s'].size() == 42
 
@@ -181,7 +182,7 @@ def test_sampling_is_dumped():
      dict(vptraits=dict(type='nw_tan_uniform', sampling='nodes')),
      r"sampling must be one of \['rnodes', 'subrings'\]; it is 'nodes'"),
     ('density',
-     dict(htraits=dict(type='sech2', sampling='subrings')),
+     dict(htraits=dict(type='sech2', zmax=8, sampling='subrings')),
      "sampling is 'subrings', but rnodes is False: the trait has no "
      "node-wise parameters")])
 def test_invalid_sampling_is_rejected(part, traits, message):

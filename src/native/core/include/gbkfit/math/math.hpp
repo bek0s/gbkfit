@@ -116,18 +116,31 @@ _trunc_1d_fun(T xmin, T xmax, T x, Ts ...args)
             : 0;
 }
 
+// The least share of a distribution that a truncation keeps (see
+// _trunc_1d_pdf)
+template<typename T>
+constexpr T TRUNC_MASS_MIN = T{1e-3};
+
+// A distribution truncated to [xmin, xmax] and renormalised there; one
+// whose range holds less than TRUNC_MASS_MIN of it is none (e.g. a
+// vertical profile whose midplane is far from the heights it is truncated
+// to): its density is 0, and its random numbers are NaN
 template<auto PDF, auto CDF, typename T, typename ...Ts> constexpr T
 _trunc_1d_pdf(T xmin, T xmax, T x, Ts ...args)
 {
-    return x >= xmin && x <= xmax
-            ? PDF(x, args...) / (CDF(xmax, args...) - CDF(xmin, args...))
+    const T mass = CDF(xmax, args...) - CDF(xmin, args...);
+    return x >= xmin && x <= xmax && mass >= TRUNC_MASS_MIN<T>
+            ? PDF(x, args...) / mass
             : 0;
 }
 
-template<auto FUN, typename T, typename ...Ts> constexpr T
+template<auto FUN, auto CDF, typename T, typename ...Ts> constexpr T
 _trunc_1d_rnd(T xmin, T xmax, RNG<T>& rng, Ts ...args)
 {
-    // Rejection sampling: draw until the value is within the range
+    if (!(CDF(xmax, args...) - CDF(xmin, args...) >= TRUNC_MASS_MIN<T>))
+        return NAN;
+    // Rejection sampling: draw until the value is within the range (at
+    // most 1 / TRUNC_MASS_MIN draws on average)
     T x = 0;
     do {
         x = FUN(rng, args...);
@@ -170,7 +183,8 @@ uniform_1d_rnd(RNG<T>& rng, T b, T c)
 template<typename T> constexpr T
 uniform_1d_rnd_trunc(RNG<T>& rng, T b, T c, T xmin, T xmax)
 {
-    return _trunc_1d_rnd<uniform_1d_rnd<T>>(xmin, xmax, rng, b, c);
+    return _trunc_1d_rnd<uniform_1d_rnd<T>, uniform_1d_cdf<T>>(
+            xmin, xmax, rng, b, c);
 }
 
 template<typename T> constexpr T
@@ -213,7 +227,8 @@ uniform_wm_1d_rnd(RNG<T>& rng, T b, T c)
 template<typename T> constexpr T
 uniform_wm_1d_rnd_trunc(RNG<T>& rng, T b, T c, T xmin, T xmax)
 {
-    return _trunc_1d_rnd<uniform_1d_rnd<T>>(xmin, xmax, rng, b - c, b + c);
+    return _trunc_1d_rnd<uniform_1d_rnd<T>, uniform_1d_cdf<T>>(
+            xmin, xmax, rng, b - c, b + c);
 }
 
 // A standard normal random number (Box-Muller)
@@ -292,7 +307,8 @@ exponential_1d_rnd(RNG<T>& rng, T b, T c)
 template<typename T> constexpr T
 exponential_1d_rnd_trunc(RNG<T>& rng, T b, T c, T xmin, T xmax)
 {
-    return _trunc_1d_rnd<exponential_1d_rnd<T>>(xmin, xmax, rng, b, c);
+    return _trunc_1d_rnd<exponential_1d_rnd<T>, exponential_1d_cdf<T>>(
+            xmin, xmax, rng, b, c);
 }
 
 template<typename T> constexpr T
@@ -339,7 +355,8 @@ gauss_1d_rnd(RNG<T>& rng, T b, T c)
 template<typename T> constexpr T
 gauss_1d_rnd_trunc(RNG<T>& rng, T b, T c, T xmin, T xmax)
 {
-    return _trunc_1d_rnd<gauss_1d_rnd<T>>(xmin, xmax, rng, b, c);
+    return _trunc_1d_rnd<gauss_1d_rnd<T>, gauss_1d_cdf<T>>(
+            xmin, xmax, rng, b, c);
 }
 
 template<typename T> constexpr T
@@ -490,7 +507,8 @@ ggauss_1d_rnd(RNG<T>& rng, T b, T c, T d)
 template<typename T> constexpr T
 ggauss_1d_rnd_trunc(RNG<T>& rng, T b, T c, T d, T xmin, T xmax)
 {
-    return _trunc_1d_rnd<ggauss_1d_rnd<T>>(xmin, xmax, rng, b, c, d);
+    return _trunc_1d_rnd<ggauss_1d_rnd<T>, ggauss_1d_cdf<T>>(
+            xmin, xmax, rng, b, c, d);
 }
 
 template<typename T> constexpr T
@@ -535,7 +553,8 @@ lorentz_1d_rnd(RNG<T>& rng, T b, T c)
 template<typename T> constexpr T
 lorentz_1d_rnd_trunc(RNG<T>& rng, T b, T c, T xmin, T xmax)
 {
-    return _trunc_1d_rnd<lorentz_1d_rnd<T>>(xmin, xmax, rng, b, c);
+    return _trunc_1d_rnd<lorentz_1d_rnd<T>, lorentz_1d_cdf<T>>(
+            xmin, xmax, rng, b, c);
 }
 
 template<typename T> constexpr T
@@ -594,7 +613,8 @@ moffat_1d_rnd(RNG<T>& rng, T b, T c, T d)
 template<typename T> constexpr T
 moffat_1d_rnd_trunc(RNG<T>& rng, T b, T c, T d, T xmin, T xmax)
 {
-    return _trunc_1d_rnd<moffat_1d_rnd<T>>(xmin, xmax, rng, b, c, d);
+    return _trunc_1d_rnd<moffat_1d_rnd<T>, moffat_1d_cdf<T>>(
+            xmin, xmax, rng, b, c, d);
 }
 
 template<typename T> constexpr T
@@ -640,7 +660,8 @@ sech2_1d_rnd(RNG<T>& rng, T b, T c)
 template<typename T> constexpr T
 sech2_1d_rnd_trunc(RNG<T>& rng, T b, T c, T xmin, T xmax)
 {
-    return _trunc_1d_rnd<sech2_1d_rnd<T>>(xmin, xmax, rng, b, c);
+    return _trunc_1d_rnd<sech2_1d_rnd<T>, sech2_1d_cdf<T>>(
+            xmin, xmax, rng, b, c);
 }
 
 template<typename T> constexpr T

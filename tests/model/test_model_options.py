@@ -15,7 +15,7 @@ from modelutils import config_group
 
 
 EXPONENTIAL = dict(type='exponential')
-SECH2 = dict(type='sech2')
+SECH2 = dict(type='sech2', zmax=8)
 ARCTAN = dict(type='tan_arctan')
 UNIFORM = dict(type='uniform')
 

@@ -66,7 +66,7 @@ def thick_spectral_cube_case(driver, disk, rota, psf=None):
     component = dict(
         type=disk, loose=False, tilted=False,
         rnodes=list(range(0, 16, 2)),
-        density=dict(ptraits=EXPONENTIAL, htraits=dict(type='sech2')),
+        density=dict(ptraits=EXPONENTIAL, htraits=dict(type='sech2', zmax=8)),
         kinematics=dict(
             vptraits=dict(type='tan_arctan'), dptraits=dict(type='uniform')),
         emission=LINES)

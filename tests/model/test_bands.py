@@ -100,7 +100,8 @@ def test_dust_dims_an_image_at_the_rest_wavelength_of_its_band(
     dust = dict(
         DISK, name='dust',
         density=dict(
-            ptraits=dict(type='exponential'), htraits=dict(type='sech2')),
+            ptraits=dict(type='exponential'),
+            htraits=dict(type='sech2', zmax=8)),
         opacity=dict(type='dust', law=dict(
             type='table', wavelengths=[0.2, 1.0], ratios=[3.0, 1.0])))
     line_of_sight = dict(

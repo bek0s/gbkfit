@@ -98,26 +98,26 @@ CASES = dict(
                     name='smooth', loose=False, tilted=True,
                     density=dict(
                         ptraits=dict(type='exponential'),
-                        htraits=dict(type='sech2')),
+                        htraits=dict(type='sech2', zmax=8)),
                     zptraits=dict(type='nw_uniform'),
                     emission=BAND),
                 mcdisk(
                     name='clouds', loose=False, tilted=False, seed=3,
                     density=dict(
                         ptraits=dict(type='gauss'),
-                        htraits=dict(type='exponential')),
+                        htraits=dict(type='exponential', zmax=8)),
                     emission=BAND),
                 smdisk(
                     name='dust', loose=False, tilted=False,
                     density=dict(
                         ptraits=dict(type='exponential'),
-                        htraits=dict(type='sech2')),
+                        htraits=dict(type='sech2', zmax=8)),
                     opacity=DUST),
                 mcdisk(
                     name='dust_clouds', loose=False, tilted=False,
                     density=dict(
                         ptraits=dict(type='gauss'),
-                        htraits=dict(type='gauss')),
+                        htraits=dict(type='gauss', zmax=8)),
                     opacity=DUST)])),
         dict(
             smooth_xpos=0, smooth_ypos=0, smooth_posa=[30, 32, 34, 36, 38],
@@ -141,7 +141,7 @@ CASES = dict(
                     name='smooth', loose=True, tilted=True,
                     density=dict(
                         ptraits=dict(type='exponential'),
-                        htraits=dict(type='sech2')),
+                        htraits=dict(type='sech2', zmax=8)),
                     kinematics=dict(
                         vptraits=dict(type='tan_arctan'),
                         vhtraits=dict(type='one'),
@@ -152,7 +152,7 @@ CASES = dict(
                     name='clouds', loose=False, tilted=False,
                     density=dict(
                         ptraits=dict(type='exponential'),
-                        htraits=dict(type='gauss')),
+                        htraits=dict(type='gauss', zmax=8)),
                     kinematics=dict(
                         vptraits=dict(type='tan_tanh'),
                         dptraits=dict(type='gauss')),
@@ -162,7 +162,7 @@ CASES = dict(
                     name='dust', loose=False, tilted=False,
                     density=dict(
                         ptraits=dict(type='exponential'),
-                        htraits=dict(type='sech2')),
+                        htraits=dict(type='sech2', zmax=8)),
                     opacity=DUST)])),
         dict(
             smooth_vsys=[0, 5, 10, 15, 20],
@@ -225,7 +225,9 @@ def test_galaxy_dump_and_load(driver, name, evaluate_cases):
 
 THICK_DISK = dict(components=smdisk(
     loose=False, tilted=False,
-    density=dict(ptraits=dict(type='exponential'), htraits=dict(type='sech2')),
+    density=dict(
+        ptraits=dict(type='exponential'),
+        htraits=dict(type='sech2', zmax=8)),
     emission=BAND))
 
 

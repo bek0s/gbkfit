@@ -87,20 +87,21 @@ def test_mcdisk_velocity_field_matches_smdisk(driver, posa):
     assert relative_difference(mcdisk_intensity, smdisk_intensity) < 0.02
 
 
-@pytest.mark.parametrize('trunc', [0, 1], ids=['full', 'truncated'])
+@pytest.mark.parametrize('zmax', [16, 4], ids=['wide', 'truncated'])
 @pytest.mark.parametrize('height, shape', [
     ('exponential', {}), ('gauss', {}), ('sech2', {}),
     ('ggauss', dict(ht_b=1.5)), ('ggauss', dict(ht_b=0.6)),
     ('moffat', dict(ht_b=2.5)), ('moffat', dict(ht_b=0.8))],
     ids=['exponential', 'gauss', 'sech2', 'ggauss', 'ggauss_heavy_tails',
          'moffat', 'moffat_heavy_tails'])
-def test_mcdisk_vertical_profile_matches_smdisk(driver, height, shape, trunc):
+def test_mcdisk_vertical_profile_matches_smdisk(driver, height, shape, zmax):
     # An almost edge-on thick disk, with more clouds to reduce the noise.
     # Its image does not depend on the velocity field, so it is not
-    # affected by the position angle bug. A truncated profile is cut at
-    # trunc times its scale height. The heavy tails of a ggauss of shape
-    # 0.6 and of a Moffat of shape 0.8 reach far beyond 5 scale heights.
-    component = dict(density=dict(htraits=dict(type=height, trunc=trunc)))
+    # affected by the position angle bug. Its profile is cut at zmax: far
+    # (8 scale heights), or at 2 scale heights. The heavy tails of a
+    # ggauss of shape 0.6 and of a Moffat of shape 0.8 reach far beyond 5
+    # scale heights.
+    component = dict(density=dict(htraits=dict(type=height, zmax=zmax)))
     properties = dict(incl=85, ht_s=2) | shape
     mcdisk = evaluate_disk(
         'mcdisk', driver.type(), component | dict(cflux=2e-5), properties)
@@ -146,8 +147,8 @@ def test_mcdisk_height_traits_of_a_distorted_disk_match_smdisk(driver):
 def test_mcdisk_flux_does_not_depend_on_height_profile(driver, height):
     # All clouds carry the same flux, and with these thin profiles they
     # all land inside the cube, so the total flux must be the same.
-    sech2 = dict(density=dict(htraits=dict(type='sech2')))
-    other = dict(density=dict(htraits=dict(type=height)))
+    sech2 = dict(density=dict(htraits=dict(type='sech2', zmax=8)))
+    other = dict(density=dict(htraits=dict(type=height, zmax=8)))
     reference = evaluate_disk('mcdisk', driver.type(), sech2)
     total = evaluate_disk('mcdisk', driver.type(), other)
     assert total.sum() == pytest.approx(reference.sum(), rel=1e-5)
@@ -218,7 +219,7 @@ def test_mcdisk_harmonic_brightness_matches_smdisk(driver, order, amplitude):
     component = dict(cflux=2e-5, density=dict(
         ptraits=[
             dict(type='exponential'), dict(type='nw_harmonic', order=order)],
-        htraits=[dict(type='sech2'), dict(type='sech2')]))
+        htraits=[dict(type='sech2', zmax=8), dict(type='sech2', zmax=8)]))
     properties = dict(pt1_a=[amplitude] * 11, ht1_s=1) | (
         dict(pt1_p=[40] * 11) if order else {})
     mcdisk = evaluate_disk('mcdisk', driver.type(), component, properties)
@@ -248,7 +249,7 @@ def test_mcdisk_negative_brightness_matches_smdisk(driver, outer):
     # carry negative flux
     component = dict(cflux=2e-5, density=dict(
         ptraits=[dict(type='exponential'), dict(type='nw_uniform')],
-        htraits=[dict(type='sech2'), dict(type='sech2')]))
+        htraits=[dict(type='sech2', zmax=8), dict(type='sech2', zmax=8)]))
     properties = dict(
         pt_a=-1 if not outer else 1,
         pt1_a=[0] * 5 + [outer] * 6, ht1_s=1)
@@ -274,7 +275,7 @@ def test_mcdisk_harmonic_clouds_take_the_sign_of_the_harmonic(driver):
     # brightness before the PSF has its sign in every pixel.
     component = dict(density=dict(
         ptraits=[dict(type='exponential'), dict(type='nw_harmonic', order=2)],
-        htraits=[dict(type='sech2'), dict(type='sech2')]))
+        htraits=[dict(type='sech2', zmax=8), dict(type='sech2', zmax=8)]))
     properties = dict(pt_a=0, pt1_a=[1] * 11, pt1_p=[40] * 11, ht1_s=1)
     brightness = {}
     for disk, options in [('mcdisk', dict(cflux=0.5)), ('smdisk', {})]:
@@ -338,7 +339,8 @@ def test_mcdisk_mixture_brightness_matches_smdisk(driver, mixture, shape):
     # sign of its amplitude (the shapes of ggauss cover both ways of
     # drawing its gamma variates: shape 2 / b above and below 1)
     component = dict(cflux=1e-5, density=dict(
-        ptraits=dict(type=mixture, nblobs=2), htraits=dict(type='sech2')))
+        ptraits=dict(type=mixture, nblobs=2),
+        htraits=dict(type='sech2', zmax=8)))
     properties = BLOBS | (dict(pt_b=[shape, shape]) if shape else {})
     mcdisk = evaluate_disk('mcdisk', driver.type(), component, properties)
     del component['cflux']
@@ -351,7 +353,7 @@ def test_mcdisk_distortion_brightness_matches_smdisk(driver):
     # around it, within the arc length s
     component = dict(cflux=1e-5, density=dict(
         ptraits=[dict(type='exponential'), dict(type='nw_distortion')],
-        htraits=[dict(type='sech2'), dict(type='sech2')]))
+        htraits=[dict(type='sech2', zmax=8), dict(type='sech2', zmax=8)]))
     properties = dict(
         pt1_a=[0.5] * 11, pt1_p=[60] * 11, pt1_s=[3] * 11, ht1_s=1)
     mcdisk = evaluate_disk('mcdisk', driver.type(), component, properties)
@@ -377,7 +379,7 @@ def test_mcdisk_dispersion_mixture_matches_smdisk(driver):
 def test_mcdisk_moffat_blobs_need_a_finite_flux(driver):
     component = dict(density=dict(
         ptraits=dict(type='mixture_moffat', nblobs=2),
-        htraits=dict(type='sech2')))
+        htraits=dict(type='sech2', zmax=8)))
     with pytest.raises(RuntimeError, match="need b > 1"):
         evaluate_disk('mcdisk', driver.type(), component,
                       BLOBS | dict(pt_b=[2.0, 0.9]))

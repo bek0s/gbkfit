@@ -9,7 +9,7 @@ galaxies:
     rnsep: 2
     density:
       ptraits: {type: exponential}
-      htraits: {type: sech2}
+      htraits: {type: sech2, zmax: 8}
     kinematics:
       vptraits: {type: tan_arctan}
       dptraits: {type: uniform}

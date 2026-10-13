@@ -41,16 +41,18 @@ class Depth(parseutils.Serializable):
     Parameters
     ----------
     extent : str or float, optional
-        Its length (arcsec); 'galaxy' (the default): the diameter of the
-        largest disk the observation evaluates (twice its outer radius,
-        that of the last of its rings; through radiative transfer, where
-        each galaxy has a depth axis of its own, that of each galaxy), so
-        that the plane of each disk crosses each line of sight on it (the
-        light of a thick disk farther from the plane of the sky, at a high
-        inclination or warped, is not on it); or 'legacy': that of the
-        longer of the x and y axes of the grid the galaxies are evaluated
-        on (the grid of the data, oversampled and padded for the
-        convolutions), as the 3d models of earlier versions took it.
+        Its length (arcsec); 'galaxy' (the default): that which holds all
+        the density of the disks the observation evaluates, at any
+        inclination: twice the bounding radius of the largest (that of
+        its last ring, R, or of a thick disk, sqrt(R^2 + zmax^2) of the
+        zmax of its density height traits; see RHTrait); through radiative
+        transfer, where each galaxy has a depth axis of its own, that of
+        each galaxy; or 'legacy': that of the longer of the x and y axes
+        of the grid the galaxies are evaluated on (the grid of the data,
+        oversampled and padded for the convolutions), as the 3d models of
+        earlier versions took it. A shorter axis than that of 'galaxy'
+        (of 'legacy' or a length) loses the density beyond its ends: a
+        warning says so (see parseutils.warn).
     step : float, optional
         The size of its voxels (arcsec); by default that of the pixels
         along the longer of the x and y axes of that grid.
@@ -84,11 +86,13 @@ class Depth(parseutils.Serializable):
         """Return the size of its voxels, if given."""
         return self._step
 
-    def axis(self, grid: gridutils.Grid, radius: float) -> DepthAxis:
+    def axis(
+            self, grid: gridutils.Grid, bounding_radius: float
+    ) -> DepthAxis:
         """
         Return the axis on the given grid of the x and y axes, for disks
-        of the given outer radius (arcsec): as many voxels as cover the
-        extent, centred on 0.
+        of the given bounding radius (arcsec; see Disk.bounding_radius):
+        as many voxels as cover the extent, centred on 0.
         """
         longest = int(grid.size[0] < grid.size[1])
         step = self._step if self._step is not None \
@@ -96,12 +100,15 @@ class Depth(parseutils.Serializable):
         if self._extent == 'legacy':
             size = grid.size[longest]
         else:
-            # TO REVISE: 2 * radius holds the plane of every disk, but not
-            # the light of a thick disk farther than radius from the plane
-            # of the sky (inclined, or warped; 0.002% of the flux of the
-            # intensity_3d test): add the height of the disks
-            extent = 2 * radius if self._extent == 'galaxy' else self._extent
+            extent = 2 * bounding_radius if self._extent == 'galaxy' \
+                else self._extent
             size = max(1, int(np.ceil(extent / step - 1e-9)))
+        if size * step < 2 * bounding_radius * (1 - 1e-9):
+            parseutils.warn(
+                f"the depth axis ({size * step:g} arcsec) is shorter than "
+                f"the disks need ({2 * bounding_radius:g} arcsec, twice "
+                f"their bounding radius): their density beyond its ends is "
+                f"lost; its extent 'galaxy' holds it")
         return DepthAxis(size, step, -(size / 2 - 0.5) * step)
 
 
@@ -119,12 +126,12 @@ class LineOfSight(parseutils.TypedSerializable, abc.ABC):
 
     @abc.abstractmethod
     def depth_axis(
-            self, grid: gridutils.Grid, radius: float
+            self, grid: gridutils.Grid, bounding_radius: float
     ) -> DepthAxis | None:
         """
         Return the depth axis of the grid of the galaxies, on the given
-        grid of the x and y axes, for disks of the given outer radius
-        (arcsec); none on the plane of the sky.
+        grid of the x and y axes, for disks of the given bounding radius
+        (arcsec; see Depth.axis); none on the plane of the sky.
         """
         pass
 
@@ -192,7 +199,9 @@ class Flat(LineOfSight):
     def type() -> str:
         return 'flat'
 
-    def depth_axis(self, grid: gridutils.Grid, radius: float) -> None:
+    def depth_axis(
+            self, grid: gridutils.Grid, bounding_radius: float
+    ) -> None:
         return None
 
     def check(self, component: Component) -> None:
@@ -241,8 +250,10 @@ class Grid(LineOfSight):
         """Return the depth axis."""
         return self._depth
 
-    def depth_axis(self, grid: gridutils.Grid, radius: float) -> DepthAxis:
-        return self._depth.axis(grid, radius)
+    def depth_axis(
+            self, grid: gridutils.Grid, bounding_radius: float
+    ) -> DepthAxis:
+        return self._depth.axis(grid, bounding_radius)
 
     def check(self, component: Component) -> None:
         _check_no_line_opacity(component)
@@ -343,8 +354,10 @@ class Transfer(LineOfSight):
         """Return the number of sub-channels of each channel."""
         return self._subchannels
 
-    def depth_axis(self, grid: gridutils.Grid, radius: float) -> DepthAxis:
-        return self._depth.axis(grid, radius)
+    def depth_axis(
+            self, grid: gridutils.Grid, bounding_radius: float
+    ) -> DepthAxis:
+        return self._depth.axis(grid, bounding_radius)
 
     def check(self, component: Component) -> None:
         pass

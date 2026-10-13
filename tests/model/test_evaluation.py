@@ -71,7 +71,8 @@ group = observation_group([dict(
         type='smdisk', loose=False, tilted=False,
         rnodes=list(range(0, 12)),
         density=dict(
-            ptraits=dict(type='exponential'), htraits=dict(type='sech2')),
+            ptraits=dict(type='exponential'),
+            htraits=dict(type='sech2', zmax=8)),
         kinematics=dict(
             vptraits=dict(type='tan_arctan'), dptraits=dict(type='uniform')),
         emission=dict(type='lines'))]))])
@@ -207,7 +208,7 @@ def test_cuda_smooth_disk_of_more_voxels_than_an_int_holds(driver):
                 rnodes=list(range(0, 30)),
                 density=dict(
                     ptraits=dict(type='exponential'),
-                    htraits=dict(type='sech2')),
+                    htraits=dict(type='sech2', zmax=8)),
                 emission=dict(type='band'))]))])
         params = gbkfit.params.ParamSpace(group.pdescs(), dict(
             xpos=0, ypos=0, posa=0, incl=30, pt_a=1, pt_s=6, ht_s=1))

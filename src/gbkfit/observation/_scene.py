@@ -64,14 +64,13 @@ class Scene:
         self._band = band
         self._line_of_sight = line_of_sight
 
-    def radius(self) -> float:
+    def bounding_radius(self) -> float:
         """
-        Return the outer radius (arcsec) of the largest disk it evaluates:
-        of the components whose light it sees, and those with dust; 0
-        without disks.
+        Return the bounding radius (arcsec) of the largest disk it
+        evaluates (see _bounding_radius); 0 without disks.
         """
         return max(
-            _radius(galaxy, emitters)
+            _bounding_radius(galaxy, emitters)
             for galaxy, emitters in zip(self._galaxies, self._emitters))
 
     def component_params(self, name: str) -> dict[str, str]:
@@ -167,7 +166,8 @@ class AdditiveScenePlan(ScenePlan):
             dtype: np.dtype
     ):
         super().__init__(scene, grid)
-        depth = scene._line_of_sight.depth_axis(self._spatial, scene.radius())
+        depth = scene._line_of_sight.depth_axis(
+            self._spatial, scene.bounding_radius())
         self._plans: tuple[ComponentSetPlan, ...] = tuple(
             galaxy.plan(
                 driver, self._spatial, self._spectral, depth, dtype, emitters,
@@ -223,7 +223,8 @@ class TransferScenePlan(ScenePlan):
             scene._galaxies, scene._emitters, scene._lines, scene._band,
             dtype)
         axes = [
-            scene._line_of_sight.depth_axis(spatial, _radius(*galaxy))
+            scene._line_of_sight.depth_axis(
+                spatial, _bounding_radius(*galaxy))
             for galaxy in zip(scene._galaxies, scene._emitters)]
         self._plans: tuple[TransferPlan, ...] = tuple(
             galaxy.plan_transfer(
@@ -308,14 +309,15 @@ class TransferScenePlan(ScenePlan):
         return [g for group in groups for g in group]
 
 
-def _radius(galaxy: Galaxy, emitters: Sequence[int]) -> float:
+def _bounding_radius(galaxy: Galaxy, emitters: Sequence[int]) -> float:
     """
-    Return the outer radius (arcsec) of the largest disk of a galaxy that
-    an observation evaluates: of the given emitters, and the components
-    with dust; 0 without disks.
+    Return the radius (arcsec) of the sphere around the centre of a galaxy
+    that holds all the density of the disks that an observation evaluates
+    (of the given emitters, and the components with dust), at any
+    inclination (see Disk.bounding_radius); 0 without disks.
     """
     radii = [
-        cmp.density_disk().rnodes()[-1]
+        cmp.density_disk().bounding_radius()
         for i, cmp in enumerate(galaxy.components())
         if (i in emitters or isinstance(cmp.opacity(), DustOpacity))
         and cmp.density_disk() is not None]

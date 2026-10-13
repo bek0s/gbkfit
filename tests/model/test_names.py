@@ -10,7 +10,7 @@ from gbkfit.model import galaxy_parser
 
 
 THIN = dict(ptraits=dict(type='exponential'))
-THICK = THIN | dict(htraits=dict(type='sech2'))
+THICK = THIN | dict(htraits=dict(type='sech2', zmax=8))
 
 
 def disk(density=THICK, **options):
