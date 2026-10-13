@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from gbkfit.driver.drivers.host import DriverHost
+from gbkfit.driver import Driver
 from gbkfit.params import ParamValues
 from ..mass import MassContext
 from .disks._profiles import DiskDensity, pressure_support
@@ -31,19 +31,21 @@ class GravityPlan:
     Disk.pressure_supported_params).
 
     It is evaluated once for all the observations of the galaxy, on the
-    host and in float64, whatever their drivers and dtypes (pressure
-    support differentiates the profiles of a disk, which float32 makes
-    noisy): it plans the disks of the components that its mass follows
-    (see DiskDensity), and of those with pressure support, on the host in
-    float64.
+    given driver and in float64, whatever the drivers and dtypes of the
+    observations (pressure support differentiates the profiles of a disk,
+    which float32 makes noisy): the disks of the components that its mass
+    follows (see DiskDensity), and of those with pressure support, sample
+    their profiles there; the rest is on the host.
 
     Parameters
     ----------
     component_set : ComponentSet
         The components of the galaxy, its distance and its mass.
+    driver : Driver
+        The driver where the disks sample their profiles.
     """
 
-    def __init__(self, component_set: 'ComponentSet'):
+    def __init__(self, component_set: 'ComponentSet', driver: Driver):
         components = component_set.components()
         mass_model = component_set.mass_model()
         followed = set() if mass_model is None else {
@@ -58,7 +60,6 @@ class GravityPlan:
         planned = sorted(set(self._followed) | {
             i for i in self._moved
             if components[i].density_disk().pressure_supported_params()})
-        driver = DriverHost() if planned else None
         self._disk_plans = {
             i: components[i].density_disk().plan(driver, 0, np.float64)
             for i in planned}

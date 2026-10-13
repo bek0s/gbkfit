@@ -1,11 +1,12 @@
 """
 The drivers: the memory and the native (C++/CUDA) modules of a device,
-the host CPU or a CUDA GPU, on which observations evaluate their models;
-and the FFT of a driver.
+the host CPU or a CUDA GPU, on which observations evaluate their models
+(and galaxies their gravity); and the FFT of a driver.
 """
 
 import abc
 import types
+from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any, TypeAlias, Union
 
 import numpy as np
@@ -22,6 +23,7 @@ __all__ = [
     'DeviceArray',
     'Driver',
     'DriverFFT',
+    'driver_by_name',
     'driver_parser'
 ]
 
@@ -250,3 +252,51 @@ class Driver(parseutils.TypedSerializable, abc.ABC):
 
 
 driver_parser = parseutils.TypedParser(Driver)
+
+
+def driver_by_name(
+        name: object,
+        drivers: Mapping[str | None, Driver],
+        owner: str
+) -> Driver | None:
+    """
+    Return the driver of the given name among the drivers of a
+    configuration, which it declares at its top level (the one unnamed
+    driver of a configuration has the name None).
+
+    Parameters
+    ----------
+    name : object
+        The name, from the option driver of the owner; None for the only
+        driver (none if there are none).
+    drivers : Mapping of str to Driver
+        The drivers, by name.
+    owner : str
+        What names the driver, in messages (e.g. 'observation').
+
+    Returns
+    -------
+    Driver or None
+        The driver; None if the name is None and there are no drivers.
+
+    Raises
+    ------
+    ConfigError
+        If the name is not one of the drivers, or is left out while there
+        are several drivers.
+    """
+    names = [n for n in drivers if n is not None]
+    if name is None:
+        if len(drivers) > 1:
+            raise parseutils.ConfigError(
+                f"the {owner} must name its driver; the drivers are {names}")
+        return next(iter(drivers.values()), None)
+    if not isinstance(name, str):
+        raise parseutils.ConfigError(
+            f"the driver of the {owner} is the name of a driver that the "
+            f"configuration declares at its top level (section 'driver' for "
+            f"one driver, 'drivers' for several by name); it is {name!r}")
+    if name not in names:
+        raise parseutils.ConfigError(
+            f"unknown driver {name!r}; the named drivers are {names}")
+    return drivers[name]

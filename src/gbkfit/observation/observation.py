@@ -5,7 +5,7 @@ import numpy as np
 import numpy.typing as npt
 
 from gbkfit.dataset import Dataset
-from gbkfit.driver import Driver
+from gbkfit.driver import Driver, driver_by_name
 from gbkfit.instrument import Instrument, instrument_parser
 from gbkfit.model import Band, BandEmission, LineCatalogue, band_parser
 from gbkfit.model.components.roles import load_band
@@ -41,39 +41,6 @@ def _check_dtype(dtype: npt.DTypeLike) -> np.dtype:
             f"dtype must be one of {[dt.name for dt in supported]}; it is "
             f"{dtype!r}")
     return result
-
-
-def _driver_by_name(
-        name: object,
-        drivers: Mapping[str | None, Driver]
-) -> Driver | None:
-    """
-    Return the driver of the given name (None: the only driver, or None
-    if there are no drivers).
-
-    Raises
-    ------
-    ConfigError
-        If the name is not one of the drivers, or is left out while there
-        are several drivers.
-    """
-    names = [n for n in drivers if n is not None]
-    if name is None:
-        if len(drivers) > 1:
-            raise ConfigError(
-                f"the observation must name its driver; the drivers are "
-                f"{names}")
-        return next(iter(drivers.values()), None)
-    if not isinstance(name, str):
-        raise ConfigError(
-            f"the driver of an observation is the name of a driver that "
-            f"the configuration declares at its top level (section "
-            f"'driver' for one driver, 'drivers' for several by name); it "
-            f"is {name!r}")
-    if name not in names:
-        raise ConfigError(
-            f"unknown driver {name!r}; the named drivers are {names}")
-    return drivers[name]
 
 
 class Observation(parseutils.Serializable):
@@ -189,7 +156,8 @@ class Observation(parseutils.Serializable):
             of the drivers.
         """
         with parseutils.config_path('driver'):
-            info['driver'] = _driver_by_name(info.get('driver'), drivers or {})
+            info['driver'] = driver_by_name(
+                info.get('driver'), drivers or {}, 'observation')
         if info.get('band') is not None:
             with parseutils.config_path('band'):
                 info['band'] = load_band(

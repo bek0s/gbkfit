@@ -239,9 +239,11 @@ class ComponentSet:
     def constants(self) -> dict[str, Any]:
         return _constants(self._components, self._prefixes)
 
-    def plan_gravity(self) -> GravityPlan:
-        """Plan the evaluation of the gravity (see GravityPlan)."""
-        return GravityPlan(self)
+    def plan_gravity(self, driver: Driver) -> GravityPlan:
+        """
+        Plan the evaluation of the gravity on a driver (see GravityPlan).
+        """
+        return GravityPlan(self, driver)
 
     def plan(
             self,
