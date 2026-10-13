@@ -90,14 +90,19 @@ class Scene:
             self,
             driver: Driver,
             grid: gridutils.Grid,
-            dtype: np.dtype
+            dtype: np.dtype,
+            smoothing: float | None
     ) -> 'ScenePlan':
         """
         Plan the evaluation of the scene on a driver and dtype, on the
         grid of an image (no spectral axis) or a spectral cube, along its
-        line of sight (see LineOfSight.plan_scene).
+        line of sight (see LineOfSight.plan_scene), for an instrument that
+        smooths the spectra of the model by the given dispersion (km/s;
+        None for an image), which the check of the resolution of the light
+        takes (see LineResolution).
         """
-        return self._line_of_sight.plan_scene(self, driver, grid, dtype)
+        return self._line_of_sight.plan_scene(
+            self, driver, grid, dtype, smoothing)
 
 
 class ScenePlan(abc.ABC):
@@ -160,7 +165,9 @@ class AdditiveScenePlan(ScenePlan):
     """
     The evaluation of a scene whose galaxies add their light, each dimmed
     by its own opacity only (see Flat and Grid): on the depth axis of its
-    line of sight, if it has one, for the largest disk of the scene.
+    line of sight, if it has one, for the largest disk of the scene. With
+    extra outputs, it logs a warning if the depth axis resolves the
+    velocity of the light too coarsely (see warn_resolution).
     """
 
     def __init__(
@@ -168,7 +175,8 @@ class AdditiveScenePlan(ScenePlan):
             scene: Scene,
             driver: Driver,
             grid: gridutils.Grid,
-            dtype: np.dtype
+            dtype: np.dtype,
+            smoothing: float | None
     ):
         super().__init__(scene, grid)
         depth = scene._line_of_sight.depth_axis(
@@ -179,8 +187,9 @@ class AdditiveScenePlan(ScenePlan):
                 opacity_cubes(
                     [galaxy], [emitters], scene._lines, scene._band,
                     dtype)[0],
-                scene._lines, scene._band)
+                scene._lines, scene._band, smoothing)
             for galaxy, emitters in zip(scene._galaxies, scene._emitters))
+        self._depth = depth
 
     def _evaluate(
             self,
@@ -189,10 +198,15 @@ class AdditiveScenePlan(ScenePlan):
             outputs: dict[str, DeviceArray],
             extras: list[dict[str, Any]] | None
     ) -> None:
-        for g, plan in enumerate(self._plans):
+        resolutions = [
             plan.evaluate(
                 params[g], gravity[g], outputs,
                 extras[g] if extras is not None else None)
+            for g, plan in enumerate(self._plans)]
+        if extras is not None and self._depth is not None:
+            warn_resolution(
+                LineResolution(*np.max(resolutions, axis=0)),
+                self._spectral.coords.step[0], 1, self._depth.step)
 
 
 class TransferScenePlan(ScenePlan):
@@ -212,7 +226,8 @@ class TransferScenePlan(ScenePlan):
     any order.)
 
     With extra outputs, it logs a warning if the march resolves line
-    opacity too coarsely (see warn_resolution).
+    opacity, or the depth axis the velocity of the light, too coarsely
+    (see warn_resolution).
     """
 
     def __init__(
@@ -222,7 +237,8 @@ class TransferScenePlan(ScenePlan):
             grid: gridutils.Grid,
             dtype: np.dtype,
             slab: int | None,
-            subchannels: int
+            subchannels: int,
+            smoothing: float | None
     ):
         super().__init__(scene, grid)
         spatial = self._spatial
@@ -236,7 +252,8 @@ class TransferScenePlan(ScenePlan):
         self._plans: tuple[TransferPlan, ...] = tuple(
             galaxy.plan_transfer(
                 driver, spatial, self._spectral, axis, dtype, emitters,
-                galaxy_cubes, scene._lines, scene._band, slab, subchannels)
+                galaxy_cubes, scene._lines, scene._band, slab, subchannels,
+                smoothing)
             for galaxy, emitters, axis, galaxy_cubes in zip(
                 scene._galaxies, scene._emitters, axes, cubes))
         self._extents = tuple(axis.size * axis.step for axis in axes)
@@ -272,7 +289,7 @@ class TransferScenePlan(ScenePlan):
                 self._driver.mem_fill(state, 0)
         # Each galaxy marches from the dust and the line opacity in front
         # of it, if any; with extras, its march tells how finely it
-        # resolves its line opacity, and the worst gets a warning
+        # resolves its lines, and the worst gets a warning
         dust = line_opacity = False
         resolutions = []
         for g in self._order(params):

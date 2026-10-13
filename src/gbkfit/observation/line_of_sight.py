@@ -168,14 +168,15 @@ class LineOfSight(parseutils.TypedSerializable, abc.ABC):
             scene: Scene,
             driver: Driver,
             grid: gridutils.Grid,
-            dtype: np.dtype
+            dtype: np.dtype,
+            smoothing: float | None
     ) -> ScenePlan:
         """
         Plan the evaluation of a scene along this line of sight (see
         Scene.plan): here, each galaxy adds its light to the image or the
         spectral cube, dimmed by its own opacity (see AdditiveScenePlan).
         """
-        return AdditiveScenePlan(scene, driver, grid, dtype)
+        return AdditiveScenePlan(scene, driver, grid, dtype, smoothing)
 
 
 def _check_no_line_opacity(component: Component) -> None:
@@ -375,10 +376,12 @@ class Transfer(LineOfSight):
             scene: Scene,
             driver: Driver,
             grid: gridutils.Grid,
-            dtype: np.dtype
+            dtype: np.dtype,
+            smoothing: float | None
     ) -> TransferScenePlan:
         return TransferScenePlan(
-            scene, driver, grid, dtype, self._slab, self._subchannels)
+            scene, driver, grid, dtype, self._slab, self._subchannels,
+            smoothing)
 
 
 line_of_sight_parser = parseutils.TypedParser(LineOfSight, [

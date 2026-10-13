@@ -47,7 +47,8 @@ MAX_SUBCHANNELS = 64
 # 83 K with), the error of the model is about 1% of its peak at these
 # ratios or less: it grows as the square of the spectral ratio (1.1% at
 # 0.75, 0.3% at 0.5), and steeply with the depth ratio (0.5% at 2, 3% at
-# 2.7, 10% at 4).
+# 2.7, 10% at 4). The light without opacity takes the depth ratio too
+# (its ratio of the light): 0.3% at 2, 6% at 3.4.
 _THIN_TAU = 0.1
 _MAX_SPECTRAL_RATIO = 0.75
 _MAX_DEPTH_RATIO = 2.0
@@ -55,17 +56,24 @@ _MAX_DEPTH_RATIO = 2.0
 
 class LineResolution(NamedTuple):
     """
-    How finely a march resolves the line opacity of a galaxy, where its
-    lines are not optically thin (see TransferPlan.evaluate): the largest
-    ratio of the width of the channels of the march (the sub-channels) to
-    the dispersion of a line (spectral), and of the change of the velocity
-    between adjacent voxels along a line of sight to their dispersion
-    (depth). Both are discretisations of the model: the march averages
-    the optical depth of a voxel over a channel, and over a voxel. Lines
-    of zero dispersion, which no resolution resolves, are left out.
+    How finely the evaluation of a galaxy on the grid of an observation
+    resolves its lines (see ComponentSetPlan.evaluate and
+    TransferPlan.evaluate). With line opacity, where the lines are not
+    optically thin, the largest ratio of the width of the channels of the
+    march (the sub-channels) to the dispersion of a line (spectral), and
+    of the change of the velocity between adjacent voxels along a line of
+    sight to their dispersion (depth): the march averages the optical
+    depth of a voxel over a channel, and over a voxel (0 without line
+    opacity). And for its light, the ratio of that change of the velocity
+    to the width of the lines with the smoothing of the instrument, where
+    the light is bright (light; see ComponentPlans.light_resolution): the
+    lines of the voxels add up as a comb that the instrument smooths. All
+    are discretisations of the model; lines of zero width, which no
+    resolution resolves, are left out.
     """
     spectral: float
     depth: float
+    light: float
 
 
 def warn_resolution(
@@ -75,10 +83,11 @@ def warn_resolution(
         depth_step: float
 ) -> None:
     """
-    Log a warning for each way in which a march, of channels of the given
-    width and number of sub-channels and voxels of the given depth
-    (arcsec), resolves line opacity too coarsely (see LineResolution),
-    with the setting that resolves it.
+    Log a warning for each way in which an evaluation, of channels of the
+    given width and number of sub-channels and voxels of the given depth
+    (arcsec), resolves the lines too coarsely (see LineResolution), with
+    the setting that resolves it: for the light, unless the depth of line
+    opacity has its warning (which is stricter).
     """
     if resolution.spectral > _MAX_SPECTRAL_RATIO:
         needed = math.ceil(
@@ -100,6 +109,15 @@ def warn_resolution(
             f"axis (the option depth: {{step: ...}} of the line of sight) "
             f"from {depth_step:g} to "
             f"{depth_step * _MAX_DEPTH_RATIO / resolution.depth:.3g} arcsec")
+    elif resolution.light > _MAX_DEPTH_RATIO:
+        _log.warning(
+            f"the depth axis does not resolve the velocity of the light "
+            f"along the line of sight: it changes by up to "
+            f"{resolution.light:.3g} widths of the lines (with the smoothing "
+            f"of the instrument) between adjacent voxels where the light is "
+            f"bright; lower the step of the depth axis (the option depth: "
+            f"{{step: ...}} of the line of sight) from {depth_step:g} to "
+            f"{depth_step * _MAX_DEPTH_RATIO / resolution.light:.3g} arcsec")
 
 
 class TransferPlan:
@@ -122,7 +140,9 @@ class TransferPlan:
     the redshift of the galaxy, the number of planes of a slab (slab; all
     if None), and the number of sub-channels of each channel that the
     march transfers the light of the channel at, if it carries line
-    opacity (subchannels; the light of the channel is their mean).
+    opacity (subchannels; the light of the channel is their mean), and
+    the spectral smoothing of the instrument (km/s; see
+    ComponentPlans.light_resolution; None for an image).
 
     Raises
     ------
@@ -144,7 +164,8 @@ class TransferPlan:
             band: Band | None,
             redshift: float,
             slab: int | None,
-            subchannels: int
+            subchannels: int,
+            smoothing: float | None
     ):
         if len(emitters) > _MAX_EMITTERS:
             raise ConfigError(
@@ -155,6 +176,7 @@ class TransferPlan:
             cubes, lines, band)
         self._plans = plans
         self._subchannels = subchannels
+        self._smoothing = smoothing
         native_grid = plans.native_grid
         components = component_set.components()
         # The slabs: their first plane and their number of planes
@@ -245,9 +267,8 @@ class TransferPlan:
         sub-channels).
 
         With extras, a warning says where zmax shapes the density of a
-        disk (see ComponentPlans.warn_truncation); with line opacity too,
-        it returns how finely the march resolves it (see LineResolution);
-        None otherwise.
+        disk (see ComponentPlans.warn_truncation), and it returns how
+        finely it resolves the lines (see LineResolution); None otherwise.
         """
         plans = self._plans
         driver = plans.driver
@@ -324,13 +345,17 @@ class TransferPlan:
                 out_extra, extras, dict(bdata=sum(bdata)) if bdata else {})
             out_extra['total_unabsorbed'] = plans.output_extra(
                 driver.mem_copy_d2h(unabsorbed))
+            spectral = depth = 0.0
             if tau_front is not None:
                 line_tau = driver.mem_copy_d2h(tau) - tau_front
                 out_extra['total_line_tau'] = plans.output_extra(
                     line_tau.reshape(
                         (-1, subchannels) + line_tau.shape[1:]).mean(axis=1))
-                return resolution.resolution(
+                spectral, depth = resolution.resolution(
                     line_tau.max(axis=0) >= _THIN_TAU)
+            light = 0.0 if self._smoothing is None \
+                else plans.light_resolution(values, extras, self._smoothing)
+            return LineResolution(spectral, depth, light)
         return None
 
     def _march(
@@ -443,14 +468,14 @@ class _ResolutionTracker:
             self._depth, depth.max(axis=0, initial=0))
         self._last[index] = (v[-1], s[-1], on[-1])
 
-    def resolution(self, where: np.ndarray) -> LineResolution:
+    def resolution(self, where: np.ndarray) -> tuple[float, float]:
         """
-        Return the worst resolution of the march at the given spaxels (a
-        mask of shape (ny, nx)).
+        Return the worst spectral and depth ratios of the march at the
+        given spaxels (a mask of shape (ny, nx); see LineResolution).
         """
         def worst(ratio):
             return float(np.max(ratio, where=where, initial=0))
-        return LineResolution(worst(self._spectral), worst(self._depth))
+        return worst(self._spectral), worst(self._depth)
 
 
 def _slab_grid(grid: NativeGrid, z0: int, size: int) -> NativeGrid:
