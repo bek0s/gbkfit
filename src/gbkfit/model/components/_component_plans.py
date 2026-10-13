@@ -40,6 +40,11 @@ _log = logging.getLogger(__name__)
 _MAX_CUT = 0.01
 _CUT_AZIMUTHS = 64
 
+# The voxels whose light the resolution of the light checks: those with at
+# least this share of the light of the brightest voxel of their component
+# (see ComponentPlans.light_resolution)
+_BRIGHT = 0.05
+
 
 class ComponentPlans:
     """
@@ -212,6 +217,42 @@ class ComponentPlans:
                         f"density height trait {index} ({trait.type()}) cuts "
                         f"{cut:.1%} of its profile at the radius {radius:g}: "
                         f"zmax shapes the density there; raise it")
+
+    def light_resolution(
+            self,
+            values: dict[int, ParamValues],
+            extras: dict[int, dict[str, Any]],
+            smoothing: float
+    ) -> float:
+        """
+        Return how finely the depth axis resolves the velocity of the light
+        of the emitters, with the values of their parameters and their
+        extra outputs (extras, by index: the light, velocity and dispersion
+        of each voxel, 'bdata', 'vdata' and 'ddata'): the largest change of
+        the velocity between adjacent voxels along a line of sight, where
+        both are bright (see _BRIGHT), over the width of the lines there,
+        that of their dispersion (the smaller of the two) and the given
+        spectral smoothing of the instrument (km/s) in quadrature, on the
+        spectral axis (see ComponentPlan.line_values; the widest scale of
+        the lines of each emitter). Lines of no width are left out; 0
+        without adjacent bright voxels (e.g. without a depth axis).
+        """
+        worst = 0.0
+        for i in self.emitters:
+            extra = extras.get(i, {})
+            if 'vdata' not in extra or 'ddata' not in extra:
+                continue
+            j = np.abs(extra['bdata'])
+            v, s = extra['vdata'], extra['ddata']
+            scale = np.abs(self.plans[i].line_values(values[i])[:, 1]).max()
+            bright = j >= _BRIGHT * j.max(initial=0)
+            with np.errstate(divide='ignore', invalid='ignore'):
+                width = np.hypot(
+                    scale * np.minimum(s[1:], s[:-1]), smoothing)
+                ratio = scale * np.abs(v[1:] - v[:-1]) / width
+            ratio = ratio[bright[1:] & bright[:-1] & (width > 0)]
+            worst = max(worst, float(ratio.max(initial=0)))
+        return worst
 
     def add_extras(
             self,

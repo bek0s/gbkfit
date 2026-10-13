@@ -246,7 +246,11 @@ class DCubePlanBase(ObservablePlan):
             nz = self._dcube_plan.scratch_dcube().shape[0]
             self._source_cube = driver.mem_alloc_d(
                 (nz,) + grid.size[:2][::-1], dtype)
-        self._model_plan = scene.plan(driver, grid, dtype)
+        # (the smoothing of the spectra checks the resolution of the light;
+        # an image has none)
+        smoothing = None if grid.spectral_axis is None \
+            else dcube.spectral_smoothing()
+        self._model_plan = scene.plan(driver, grid, dtype, smoothing)
 
     def _model_grid(self) -> gridutils.Grid:
         """Return the grid the model is evaluated on: the high-res grid."""

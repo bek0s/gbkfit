@@ -661,6 +661,31 @@ def test_a_coarse_march_of_line_opacity_warns(
         assert warning in message
 
 
+@pytest.mark.parametrize('incl, depth_step, lsf_sigma, warns', [
+    (90, None, None, True),
+    (90, 0.05, None, False),
+    (90, None, 100, False),
+    (0, None, None, False)])
+def test_a_coarse_depth_axis_warns_about_the_light(
+        driver, evaluate_cases, caplog, incl, depth_step, lsf_sigma, warns):
+    # Lines narrower than the change of the velocity between adjacent
+    # voxels add up as a comb (edge-on, of a rotation curve flat almost
+    # from the centre), unless a finer depth axis resolves it or the
+    # instrument smooths it; face-on, each line of sight has one velocity
+    import logging
+    case = transfer_case(driver, [GAS])
+    case['line_of_sight'] = dict(type='grid')
+    if depth_step is not None:
+        case['line_of_sight']['depth'] = dict(step=depth_step)
+    if lsf_sigma is not None:
+        case['observable'] |= dict(lsf=dict(type='gauss', sigma=lsf_sigma))
+    caplog.set_level(logging.WARNING)
+    evaluate_transfer(evaluate_cases, case, PROPERTIES | dict(
+        gas_incl=incl, gas_dpt_a=5, gas_vpt_rt=0.5))
+    assert warns == ('does not resolve the velocity of the light'
+                     in caplog.text)
+
+
 def test_lines_of_zero_dispersion_are_left_out_of_the_checks(
         driver, evaluate_cases):
     # No resolution resolves them: the checks of an evaluation with extras

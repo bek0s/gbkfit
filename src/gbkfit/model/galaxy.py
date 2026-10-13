@@ -249,7 +249,8 @@ class Galaxy(parseutils.Serializable):
             emitters: Sequence[int],
             cubes: OpacityCubes,
             lines: tuple[str, ...] | None,
-            band: Band | None
+            band: Band | None,
+            smoothing: float | None
     ) -> ComponentSetPlan:
         """
         Plan the evaluation of the galaxy on the grid of an observation.
@@ -277,6 +278,10 @@ class Galaxy(parseutils.Serializable):
             The names of the emission lines evaluated; all if None.
         band : Band, optional
             The band of an image, if known.
+        smoothing : float, optional
+            The dispersion (km/s) by which the instrument smooths the
+            spectra of the model, which the check of the resolution of
+            its light takes (see LineResolution); None for an image.
 
         Returns
         -------
@@ -285,7 +290,7 @@ class Galaxy(parseutils.Serializable):
         """
         return self._component_set.plan(
             driver, grid, spectral, depth, dtype, emitters, cubes, lines,
-            band)
+            band, smoothing)
 
     def plan_transfer(
             self,
@@ -299,7 +304,8 @@ class Galaxy(parseutils.Serializable):
             lines: tuple[str, ...] | None,
             band: Band | None,
             slab: int | None,
-            subchannels: int
+            subchannels: int,
+            smoothing: float | None
     ) -> TransferPlan:
         """
         Plan the evaluation of the galaxy on the grid of an observation by
@@ -310,7 +316,7 @@ class Galaxy(parseutils.Serializable):
         """
         return self._component_set.plan_transfer(
             driver, grid, spectral, depth, dtype, emitters, cubes, lines,
-            band, self._redshift, slab, subchannels)
+            band, self._redshift, slab, subchannels, smoothing)
 
 
 galaxy_parser = parseutils.BasicParser(Galaxy)

@@ -17,7 +17,7 @@ from ..mass import MassModel
 from ._component_plans import ComponentPlans
 from ._detail import shared_params
 from ._gravity import GravityPlan
-from ._transfer import TransferPlan
+from ._transfer import LineResolution, TransferPlan
 from .base import Component, DepthAxis, OpacityCubes
 from .geometries import Geometry
 from .lines import Band
@@ -253,7 +253,8 @@ class ComponentSet:
             emitters: Sequence[int],
             cubes: OpacityCubes,
             lines: tuple[str, ...] | None,
-            band: Band | None
+            band: Band | None,
+            smoothing: float | None
     ) -> 'ComponentSetPlan':
         """
         Plan the evaluation of the components on a driver and dtype (see
@@ -261,7 +262,7 @@ class ComponentSet:
         """
         return ComponentSetPlan(
             self, driver, grid, spectral, depth, dtype, emitters, cubes,
-            lines, band)
+            lines, band, smoothing)
 
     def plan_transfer(
             self,
@@ -276,7 +277,8 @@ class ComponentSet:
             band: Band | None,
             redshift: float,
             slab: int | None,
-            subchannels: int
+            subchannels: int,
+            smoothing: float | None
     ) -> TransferPlan:
         """
         Plan the evaluation of the components on a driver and dtype by
@@ -286,7 +288,7 @@ class ComponentSet:
         """
         return TransferPlan(
             self, driver, grid, spectral, depth, dtype, emitters, cubes,
-            lines, band, redshift, slab, subchannels)
+            lines, band, redshift, slab, subchannels, smoothing)
 
 
 class ComponentSetPlan:
@@ -296,7 +298,9 @@ class ComponentSetPlan:
     the absorbers in each voxel, then the light of the emitters, dimmed by
     the optical depth from the viewer to each voxel.
 
-    The parameters are those of ComponentPlans.
+    The parameters are those of ComponentPlans, and the spectral smoothing
+    of the instrument (km/s; see ComponentPlans.light_resolution; None
+    for an image).
     """
 
     def __init__(
@@ -310,13 +314,15 @@ class ComponentSetPlan:
             emitters: Sequence[int],
             cubes: OpacityCubes,
             lines: tuple[str, ...] | None,
-            band: Band | None
+            band: Band | None,
+            smoothing: float | None
     ):
         plans = ComponentPlans(
             component_set, driver, grid, spectral, depth, dtype, emitters,
             cubes, lines, band)
         self._plans = plans
         self._depth = depth
+        self._smoothing = smoothing
         # The cubes of opacity
         self._odata = None
         if plans.ncubes:
@@ -331,7 +337,7 @@ class ComponentSetPlan:
             gravity: dict[int, ParamValues],
             outputs: dict[str, DeviceArray | None],
             out_extra: dict[str, Any] | None
-    ) -> None:
+    ) -> LineResolution | None:
         """
         Add the light of the emitters to the output array, the 'image' or
         the 'scube' in outputs, with the parameters of the galaxy and those
@@ -340,7 +346,9 @@ class ComponentSetPlan:
         named after its name, or its position (e.g. 'disk_bdata' or
         'component0_bdata'), and the totals 'total_*'. With extra outputs,
         a warning says where zmax shapes the density of a disk (see
-        ComponentPlans.warn_truncation).
+        ComponentPlans.warn_truncation), and it returns how finely it
+        resolves the lines (see LineResolution: their light only); None
+        otherwise.
         """
         plans = self._plans
         driver = plans.driver
@@ -377,8 +385,12 @@ class ComponentSetPlan:
             if extras is not None:
                 extras.setdefault(i, {}).update(extra)
 
-        if out_extra is not None:
-            plans.add_extras(out_extra, extras, {
-                name: driver.mem_copy_d2h(total)
-                for name, total in dict(bdata=bdata, obdata=obdata).items()
-                if total is not None})
+        if out_extra is None:
+            return None
+        plans.add_extras(out_extra, extras, {
+            name: driver.mem_copy_d2h(total)
+            for name, total in dict(bdata=bdata, obdata=obdata).items()
+            if total is not None})
+        light = 0.0 if self._smoothing is None \
+            else plans.light_resolution(values, extras, self._smoothing)
+        return LineResolution(0.0, 0.0, light)

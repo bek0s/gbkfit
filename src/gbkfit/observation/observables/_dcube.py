@@ -85,6 +85,31 @@ def _varying_padding(
             lsf_size)
 
 
+def _equivalent_dispersion(lsf: LSF, step: float) -> float:
+    """
+    Return the dispersion of the Gaussian of the FWHM of an LSF (in the
+    units of step), from its kernel sampled 16 times finer than step: 0 for
+    a kernel narrower than that.
+    """
+    fine = step / 16
+    kernel = lsf.asarray(fine, lsf.size(fine))
+    half = kernel.max() / 2
+    above = np.flatnonzero(kernel >= half)
+    lo, hi = above[0], above[-1]
+    if lo == hi:
+        return 0.0
+
+    def crossing(inside: int, outside: int) -> float:
+        # Where the kernel crosses half its peak between two samples (at
+        # the end of the kernel if it does not)
+        if not 0 <= outside < len(kernel):
+            return float(inside)
+        k_in, k_out = kernel[inside], kernel[outside]
+        return inside + (outside - inside) * (k_in - half) / (k_in - k_out)
+    fwhm = (crossing(hi, hi + 1) - crossing(lo, lo - 1)) * fine
+    return fwhm / (2 * np.sqrt(2 * np.log(2)))
+
+
 def _varying_kernels(
         dcube: 'DCube', grid_hi: gridutils.Grid, lsf_size: int
 ) -> tuple[np.ndarray | None, np.ndarray | None]:
@@ -209,6 +234,24 @@ class DCube:
 
     def dtype(self) -> np.dtype:
         return self._dtype
+
+    def spectral_smoothing(self) -> float:
+        """
+        Return the dispersion (km/s) by which the instrument smooths the
+        spectra of the model: its LSF (the Gaussian of its FWHM; the
+        narrowest of the channels if it varies) and its channels (a box of
+        their width), added in quadrature.
+        """
+        channel = self.step()[2]
+        lsf = self._lsf
+        dispersion = 0.0
+        if lsf is not None:
+            lsfs = lsf.at(
+                (self.zero()[2] + channel * np.arange(self.size()[2])) * _KMS,
+                self._grid_lo.coords.rest) if lsf.varies() else [lsf]
+            dispersion = min(
+                _equivalent_dispersion(x, channel) for x in _distinct(lsfs))
+        return float(np.hypot(dispersion, channel / np.sqrt(12)))
 
     def plan(self, driver: Driver, has_weights: bool) -> 'DCubePlan':
         """
