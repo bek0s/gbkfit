@@ -420,11 +420,13 @@ def with_traits(component, **traits):
         kinematics=component['kinematics'] | kinematics)
 
 
-def disk_galaxy(disk_type, vptraits, mass=None, distance=None, thick=False):
+def disk_galaxy(
+        disk_type, vptraits, mass=None, distance=None, thick=False,
+        driver=None):
     """
     A galaxy of a disk (DISK) of the given type and velocity polar
     traits, thick (of sech2 height traits) if thick, with the given mass
-    and distance.
+    and distance, and the given driver of its gravity (the host if None).
     """
     disk = with_traits(DISK, vptraits=vptraits) | dict(type=disk_type)
     if thick:
@@ -436,7 +438,8 @@ def disk_galaxy(disk_type, vptraits, mass=None, distance=None, thick=False):
         info |= dict(mass=copy.deepcopy(mass))
     if distance is not None:
         info |= dict(distance=copy.deepcopy(distance))
-    return galaxy_parser.load(info)
+    return galaxy_parser.load(
+        info, drivers={None: driver} if driver is not None else None)
 
 
 def mass_model(mass):
@@ -750,8 +753,10 @@ def test_pressure_support_option():
 
 
 def test_observations_of_a_galaxy_share_its_gravity(driver, monkeypatch):
-    # The gravity of a galaxy is evaluated once for all the observations
-    # of it, whatever their dtypes
+    # The gravity of a galaxy is evaluated once, on its driver, for all
+    # the observations of it, whatever their drivers and dtypes: here one
+    # on the host and one on the driver of the galaxy
+    from gbkfit.driver.drivers.host import DriverHost
     from gbkfit.model.components._gravity import GravityPlan
     from gbkfit.observation import (
         Observation, ObservationGroup, PixelSpectra, line_of_sight_parser)
@@ -763,17 +768,23 @@ def test_observations_of_a_galaxy_share_its_gravity(driver, monkeypatch):
         calls.append(params)
         return evaluate_gravity(self, params)
     monkeypatch.setattr(GravityPlan, 'evaluate', counted)
-    galaxy = disk_galaxy('smdisk', dict(type='mass'), MASS, DISTANCE)
+    # (pressure support samples the profiles of the disk on that driver)
+    galaxy = disk_galaxy(
+        'smdisk', dict(type='mass', pressure_support='jeans'), MASS,
+        DISTANCE, driver=driver)
+    assert galaxy.driver() is driver
     group = ObservationGroup([galaxy], [
         Observation(
             PixelSpectra(size=(32, 32, 51), step=(1, 1, 10)),
-            line_of_sight_parser.load(dict(type='flat')), driver,
+            line_of_sight_parser.load(dict(type='flat')), obs_driver,
             dtype=dtype)
-        for dtype in ('float32', 'float64')])
+        for obs_driver, dtype in ((DriverHost(), 'float32'),
+                                  (driver, 'float64'))])
     params = ParamSpace(
         group.pdescs(), DISK_PROPERTIES | MASS_PROPERTIES).evaluate()
     single, double = group.model_h(params)
     assert len(calls) == 1
+    assert np.isfinite(single['spectra']['d']).all()
     np.testing.assert_allclose(
         single['spectra']['d'], double['spectra']['d'], rtol=1e-5,
         atol=1e-7)

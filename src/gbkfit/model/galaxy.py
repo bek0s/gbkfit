@@ -2,12 +2,12 @@
 Galaxies: their components and their mass, at one distance.
 """
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Any, Self
 
 import numpy as np
 
-from gbkfit.driver import Driver
+from gbkfit.driver import Driver, driver_by_name
 from gbkfit.params import ParamDesc
 from gbkfit.params.pdescs import ParamScalarDesc
 from gbkfit.utils import gridutils, iterutils, parseutils
@@ -77,6 +77,11 @@ class Galaxy(parseutils.Serializable):
         each on its own depth axis, centred on its depth, which must not
         overlap those of the others (galaxies that interpenetrate along
         the line of sight are not supported yet). False by default.
+    driver : Driver, optional
+        Where its own computations run: its gravity, in float64, once for
+        all the observations of it, whatever their drivers (see
+        plan_gravity); by default, the host. (In its configuration, the
+        name of a driver; see load.)
     name : str, optional
         Its name; required when there are several galaxies.
 
@@ -94,10 +99,17 @@ class Galaxy(parseutils.Serializable):
     def load(
             cls,
             info: dict[str, Any],
-            catalogue: LineCatalogue | None = None
+            catalogue: LineCatalogue | None = None,
+            drivers: Mapping[str | None, Driver] | None = None
     ) -> Self:
         """
         Load a galaxy from its configuration.
+
+        Its option driver is not a driver but the name of one of the
+        drivers of the configuration, which declares them at its top
+        level. A galaxy with mass can leave it out when there is one
+        driver, and has the host when there are none; a galaxy without
+        mass needs no driver.
 
         Parameters
         ----------
@@ -106,6 +118,9 @@ class Galaxy(parseutils.Serializable):
         catalogue : LineCatalogue, optional
             The catalogue of the lines that the emission of its components
             names (see Emission.load); that of GBKFIT by default.
+        drivers : Mapping of str to Driver, optional
+            The drivers of the configuration, by name; the one unnamed
+            driver of a configuration has the name None.
 
         Returns
         -------
@@ -115,8 +130,13 @@ class Galaxy(parseutils.Serializable):
         Raises
         ------
         ConfigError
-            If the configuration has an error.
+            If the configuration has an error, or the driver is not one
+            of the drivers.
         """
+        if 'driver' in info or info.get('mass'):
+            with parseutils.config_path('driver'):
+                info['driver'] = driver_by_name(
+                    info.get('driver'), drivers or {}, 'galaxy')
         _detail.load_geometries(info, ('components',))
         components = info.get('components')
         parseutils.load_option_and_update_info(
@@ -152,6 +172,7 @@ class Galaxy(parseutils.Serializable):
             distance: Distance | None = None,
             redshift: float = 0.0,
             depth: bool = False,
+            driver: Driver | None = None,
             name: str | None = None
     ):
         parseutils.check_name(name)
@@ -171,8 +192,13 @@ class Galaxy(parseutils.Serializable):
             self._pdescs = self._pdescs | dict(depth=ParamScalarDesc(
                 desc="the position of the galaxy along the line of sight "
                      "(arcsec, away from the viewer)"))
+        if driver is None:
+            # (imported here: the host driver needs its native module)
+            from gbkfit.driver.drivers.host import DriverHost
+            driver = DriverHost()
         self._depth = depth
         self._mass = mass
+        self._driver = driver
         self._name = name
 
     def name(self) -> str | None:
@@ -214,6 +240,10 @@ class Galaxy(parseutils.Serializable):
         """Return whether it has a position along the line of sight."""
         return self._depth
 
+    def driver(self) -> Driver:
+        """Return the driver of its own computations (its gravity)."""
+        return self._driver
+
     def pdescs(self) -> dict[str, ParamDesc]:
         """Return its parameters, by name (see the class)."""
         return self._pdescs
@@ -227,17 +257,17 @@ class Galaxy(parseutils.Serializable):
 
     def plan_gravity(self) -> GravityPlan:
         """
-        Plan the evaluation of the gravity of the galaxy, once for all the
-        observations of it: the circular velocity of its mass at the radii
-        of the components it moves (see GravityPlan), which its plans on
-        the grids of observations take.
+        Plan the evaluation of the gravity of the galaxy on its driver, in
+        float64, once for all the observations of it: the circular velocity
+        of its mass at the radii of the components it moves (see
+        GravityPlan), which its plans on the grids of observations take.
 
         Returns
         -------
         GravityPlan
             The plan.
         """
-        return self._component_set.plan_gravity()
+        return self._component_set.plan_gravity(self._driver)
 
     def plan(
             self,

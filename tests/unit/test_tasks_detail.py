@@ -79,6 +79,45 @@ def test_observations_use_the_drivers_of_the_configuration():
     assert group.observations()[0].driver().type() == 'host'
 
 
+# A galaxy with mass, seen as a spectral cube
+MASSIVE = dict(
+    components=[dict(
+        type='smdisk', loose=False, tilted=False, rnmin=0, rnmax=4,
+        rnsep=1, density=dict(ptraits=dict(type='exponential')),
+        kinematics=dict(
+            vptraits=dict(type='mass'), dptraits=dict(type='uniform')),
+        emission=dict(type='lines'))],
+    mass=[dict(type='pseudo_isothermal', name='halo',
+               parameters='density_radius')],
+    distance=dict(type='direct'))
+
+CUBE = dict(
+    line_of_sight=dict(type='flat'),
+    observable=dict(type='pixel_spectra', size=[8, 8, 5]))
+
+
+def test_galaxies_with_mass_use_the_drivers_of_the_configuration():
+    # (for their gravity, as observations do for their models)
+    def drivers(galaxy, **sections):
+        group = _detail.load_observation_group(
+            dict(galaxies=[galaxy]) | sections)
+        return group.galaxies()[0].driver(), group.observations()[0].driver()
+    # One driver: the galaxy has it; several: it names its own
+    galaxy, observation = drivers(MASSIVE, driver=HOST, observations=[CUBE])
+    assert galaxy is observation
+    several = dict(drivers=dict(cpu1=HOST, cpu2=HOST),
+                   observations=[CUBE | dict(driver='cpu1')])
+    galaxy, observation = drivers(MASSIVE | dict(driver='cpu1'), **several)
+    assert galaxy is observation
+    galaxy, observation = drivers(MASSIVE | dict(driver='cpu2'), **several)
+    assert galaxy is not observation
+    with pytest.raises(ConfigError, match="the galaxy must name its driver"):
+        drivers(MASSIVE, **several)
+    # None: the host
+    galaxy, _ = drivers(MASSIVE, observations=[CUBE])
+    assert galaxy.type() == 'host'
+
+
 @pytest.mark.parametrize('sections, message', [
     (dict(drivers=dict(cpu1=HOST, cpu2=HOST), observations=[observation()]),
      "must name its driver"),

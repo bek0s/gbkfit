@@ -221,19 +221,21 @@ def load_observation_group(cfg: dict[str, Any]) -> ObservationGroup:
     configuration, as an ObservationGroup. The galaxies and observations
     name lines and bands of the catalogue of GBKFIT and of the sections
     'lines' and 'bands' of the configuration (see LineCatalogue), and the
-    observations refer to the drivers of the configuration by name (see
-    load_drivers).
+    observations and the galaxies refer to the drivers of the
+    configuration by name (see load_drivers).
     """
     drivers = load_drivers(cfg)
     catalogue = gbkfit.model.LineCatalogue(cfg.get('lines'), cfg.get('bands'))
+    ngalaxies = len(cfg['galaxies'])
     with parseutils.config_path('galaxies'):
         galaxies = gbkfit.model.galaxy_parser.load(
-            cfg['galaxies'], catalogue=[catalogue] * len(cfg['galaxies']))
-    count = len(cfg['observations'])
+            cfg['galaxies'], catalogue=[catalogue] * ngalaxies,
+            drivers=[drivers] * ngalaxies)
+    nobservations = len(cfg['observations'])
     with parseutils.config_path('observations'):
         observations = gbkfit.observation.observation_parser.load(
-            cfg['observations'], drivers=[drivers] * count,
-            catalogue=[catalogue] * count)
+            cfg['observations'], drivers=[drivers] * nobservations,
+            catalogue=[catalogue] * nobservations)
     return gbkfit.observation.ObservationGroup(galaxies, observations)
 
 
