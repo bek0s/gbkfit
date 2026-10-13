@@ -17,7 +17,7 @@ from ..mass import MassModel
 from ._component_plans import ComponentPlans
 from ._detail import shared_params
 from ._transfer import TransferPlan
-from .base import Component, DepthAxis
+from .base import Component, DepthAxis, OpacityCubes
 from .geometries import Geometry
 from .lines import Band
 
@@ -246,17 +246,17 @@ class ComponentSet:
             depth: DepthAxis | None,
             dtype: np.dtype,
             emitters: Sequence[int],
+            cubes: OpacityCubes,
             lines: tuple[str, ...] | None,
-            band: Band | None,
-            redshift: float
+            band: Band | None
     ) -> 'ComponentSetPlan':
         """
         Plan the evaluation of the components on a driver and dtype (see
         ComponentSetPlan).
         """
         return ComponentSetPlan(
-            self, driver, grid, spectral, depth, dtype, emitters, lines,
-            band, redshift)
+            self, driver, grid, spectral, depth, dtype, emitters, cubes,
+            lines, band)
 
     def plan_transfer(
             self,
@@ -266,6 +266,7 @@ class ComponentSet:
             depth: DepthAxis,
             dtype: np.dtype,
             emitters: Sequence[int],
+            cubes: OpacityCubes,
             lines: tuple[str, ...] | None,
             band: Band | None,
             redshift: float,
@@ -277,8 +278,8 @@ class ComponentSet:
         number of planes (see TransferPlan).
         """
         return TransferPlan(
-            self, driver, grid, spectral, depth, dtype, emitters, lines,
-            band, redshift, slab)
+            self, driver, grid, spectral, depth, dtype, emitters, cubes,
+            lines, band, redshift, slab)
 
 
 class ComponentSetPlan:
@@ -300,13 +301,13 @@ class ComponentSetPlan:
             depth: DepthAxis | None,
             dtype: np.dtype,
             emitters: Sequence[int],
+            cubes: OpacityCubes,
             lines: tuple[str, ...] | None,
-            band: Band | None,
-            redshift: float
+            band: Band | None
     ):
         plans = ComponentPlans(
             component_set, driver, grid, spectral, depth, dtype, emitters,
-            lines, band, redshift)
+            cubes, lines, band)
         self._plans = plans
         self._depth = depth
         # The cubes of opacity

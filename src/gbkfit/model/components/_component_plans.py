@@ -6,7 +6,7 @@ opacity of its absorbers, and the parameters of each component.
 """
 
 from collections.abc import Sequence
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 import numpy as np
 
@@ -16,7 +16,8 @@ from gbkfit.utils import gridutils
 from gbkfit.utils.parseutils import ConfigError
 from ..distance import Distance
 from ..mass import MassContext, MassModel
-from .base import Component, ComponentPlan, DepthAxis, NativeGrid
+from .base import (
+    Component, ComponentPlan, DepthAxis, NativeGrid, OpacityCubes)
 from .disks._disk import DiskPlan
 from .disks._profiles import DiskDensity, pressure_support
 from .extinction import ExtinctionLaw
@@ -24,11 +25,13 @@ from .lines import Band
 from .roles import DustOpacity
 
 if TYPE_CHECKING:
+    from ..galaxy import Galaxy
     from ._component_set import ComponentSet
 
 
 __all__ = [
-    'ComponentPlans'
+    'ComponentPlans',
+    'opacity_cubes'
 ]
 
 
@@ -44,9 +47,8 @@ class ComponentPlans:
     component has its parameters, and those its galaxy gives it (the
     circular velocity of its mass, evaluated once for all of them).
 
-    The absorbers add the optical depth of each voxel to cubes of opacity
-    (see _opacity_cubes), whose ratios at the rest wavelength of each line
-    of each emitter (or of its band) are those of their extinction laws.
+    The absorbers add the optical depth of each voxel to the cubes of
+    opacity, as the given OpacityCubes hold the dust (see opacity_cubes).
 
     Parameters
     ----------
@@ -64,13 +66,14 @@ class ComponentPlans:
         The floating type of the evaluation.
     emitters : Sequence of int
         The indices of the components whose light is evaluated.
+    cubes : OpacityCubes
+        How the cubes of opacity hold the dust of the absorbers, and that
+        of other galaxies, which dims the light of the emitters (see
+        opacity_cubes).
     lines : tuple of str, optional
         The names of the emission lines evaluated; all if None.
     band : Band, optional
         The band of an image, if known.
-    redshift : float
-        The redshift of the galaxy, which makes the rest wavelengths of
-        bands.
 
     Attributes
     ----------
@@ -89,18 +92,15 @@ class ComponentPlans:
     ratios : dict of int to np.ndarray
         For each emitter, the ratios of the cubes of opacity at the
         wavelength of each of its lines or its band (an array of shape
-        (nrows, ncubes)), or None without absorbers.
+        (nrows, ncubes)), or None without dust.
     ncubes : int
-        The number of cubes of opacity (0 without absorbers).
+        The number of cubes of opacity (0 without dust).
 
     Raises
     ------
     ValueError
         If there is no depth axis and components have opacity (the
         observations check that first, see LineOfSight).
-    ConfigError
-        If dust of an extinction law dims light of an unknown wavelength,
-        or there are too many laws (see _opacity_cubes).
     """
 
     def __init__(
@@ -112,14 +112,12 @@ class ComponentPlans:
             depth: DepthAxis | None,
             dtype: np.dtype,
             emitters: Sequence[int],
+            cubes: OpacityCubes,
             lines: tuple[str, ...] | None,
-            band: Band | None,
-            redshift: float
+            band: Band | None
     ):
         components = component_set.components()
-        absorbers = tuple(
-            i for i, cmp in enumerate(components)
-            if isinstance(cmp.opacity(), DustOpacity))
+        absorbers = tuple(cubes.deposits)
         if absorbers and depth is None:
             raise ValueError(
                 "components with opacity need a grid with a depth axis")
@@ -131,26 +129,9 @@ class ComponentPlans:
         self.native_grid = _native_grid(grid, spectral, depth)
         self.emitters = tuple(emitters)
         self.absorbers = absorbers
-        # The cubes of opacity: the law of each, the cube of each absorber
-        # and the factor of its optical depth there, and the ratios of the
-        # cubes at the wavelength of each line (or band) of each emitter
-        self.ratios = dict.fromkeys(emitters)
-        self.ncubes = 0
-        self._deposits = {}
-        if absorbers:
-            wavelengths = {
-                i: components[i].emission().wavelengths(
-                    lines, band, redshift)
-                for i in emitters}
-            cube_laws, cubes, scales = _opacity_cubes(
-                [components[i].opacity().law() for i in absorbers],
-                [w for i in emitters for w in wavelengths[i]])
-            self._deposits = dict(zip(absorbers, zip(cubes, scales)))
-            self.ratios = {
-                i: np.array([[_ratio(law, w) for law in cube_laws]
-                             for w in wavelengths[i]], dtype)
-                for i in emitters}
-            self.ncubes = len(cube_laws)
+        self.ratios = cubes.ratios
+        self.ncubes = cubes.ncubes
+        self._deposits = cubes.deposits
         # The plans of the emitters, and of the absorbers that do not emit
         # here
         self.plans = {
@@ -276,59 +257,148 @@ def _native_grid(
 _MAX_OPACITY_CUBES = 4
 
 
-def _ratio(law: ExtinctionLaw | None, wavelength: float | None) -> float:
+class _Light(NamedTuple):
     """
-    Return the ratio of the optical depth of dust of an extinction law
-    (None: grey dust, 1 everywhere) at a rest wavelength (um) to that at V.
-    Raise ConfigError if the law needs a wavelength that is not known.
+    Light of a rest wavelength (um; None if not known) emitted at a
+    redshift.
     """
-    if law is None:
-        return 1.0
-    if wavelength is None:
-        raise ConfigError(
-            "dust of an extinction law dims light at its rest wavelength: "
-            "the emission of the components it dims must name its lines "
-            "(e.g. lines: [halpha]), and an image needs its band")
-    return law.ratio(wavelength)
+    wavelength: float | None
+    redshift: float
+
+    def observed(self) -> float | None:
+        """Return its observed wavelength (um), if known."""
+        return None if self.wavelength is None \
+            else self.wavelength * (1 + self.redshift)
 
 
-def _opacity_cubes(
-        laws: Sequence[ExtinctionLaw | None],
-        wavelengths: Sequence[float | None]
-) -> tuple[
-        tuple[ExtinctionLaw | None, ...], tuple[int, ...], tuple[float, ...]]:
+class _Dust(NamedTuple):
     """
-    Return how the optical depth of absorbers of the given extinction laws
-    (None: grey dust) is held for an observation of light of the given
-    rest wavelengths (um; None where not known): the law of each cube of
-    opacity (None: the ratio is 1 at every wavelength), and the cube of
-    each absorber and the factor of its optical depth at V there. With one
-    law, one cube of the optical depth at V; with several laws and one
-    wavelength, one cube of the optical depth at that wavelength; with
-    several laws and wavelengths, one cube of the optical depth at V of
-    each law.
+    Dust of an extinction law (None: grey dust, whose optical depth is
+    that at V at every wavelength) at a redshift (0 for grey dust).
+    """
+    law: ExtinctionLaw | None
+    redshift: float
+
+    def ratio(self, light: _Light) -> float:
+        """
+        Return the ratio of its optical depth at the wavelength of the
+        light in its rest frame to that at V. Raise ConfigError if it has a
+        law and the wavelength is not known.
+        """
+        if self.law is None:
+            return 1.0
+        if light.wavelength is None:
+            raise ConfigError(
+                "dust of an extinction law dims light at its rest "
+                "wavelength: the emission of the components it dims must "
+                "name its lines (e.g. lines: [halpha]), and an image needs "
+                "its band")
+        # (a factor of 1 for light of the galaxy of the dust)
+        return self.law.ratio(
+            light.wavelength * ((1 + light.redshift) / (1 + self.redshift)))
+
+
+# Dust whose optical depth is the same at every wavelength
+_GREY = _Dust(None, 0.0)
+
+
+def opacity_cubes(
+        galaxies: Sequence['Galaxy'],
+        emitters: Sequence[Sequence[int]],
+        lines: tuple[str, ...] | None,
+        band: Band | None,
+        dtype: np.dtype
+) -> list[OpacityCubes]:
+    """
+    Return how the plan of each of the given galaxies holds, in cubes of
+    opacity, the dust of all of them, which dims the light of the given
+    emitters of each (by index): of each of their lines of the given
+    names (all if None), or in the given band of an image (if known). The
+    components with dust are the absorbers. The dust of each is that of
+    its extinction law at the redshift of its galaxy, which dims light of
+    another galaxy at the wavelength of that light in its rest frame (see
+    _opacity_cubes).
 
     Raises
     ------
     ConfigError
-        If a law needs a wavelength that is not known, or with several
-        wavelengths, there are more laws than the kernels take.
+        If dust of an extinction law dims light of a wavelength that is
+        not known, or there are too many kinds of dust (see
+        _opacity_cubes).
     """
-    distinct = tuple(dict.fromkeys(laws))
+    absorbers = [
+        [i for i, cmp in enumerate(galaxy.components())
+         if isinstance(cmp.opacity(), DustOpacity)]
+        for galaxy in galaxies]
+    if not any(absorbers):
+        return [OpacityCubes(0, {}, dict.fromkeys(indices))
+                for indices in emitters]
+    # The dust of each absorber, and the light of each line (or band) of
+    # each emitter of each galaxy
+    dust = []
+    light = []
+    for galaxy, galaxy_absorbers, galaxy_emitters in zip(
+            galaxies, absorbers, emitters):
+        components = galaxy.components()
+        redshift = galaxy.redshift()
+        for i in galaxy_absorbers:
+            law = components[i].opacity().law()
+            dust.append(_Dust(law, redshift) if law is not None else _GREY)
+        light.append({
+            i: [_Light(wavelength, redshift) for wavelength in
+                components[i].emission().wavelengths(lines, band, redshift)]
+            for i in galaxy_emitters})
+    kinds, cubes, scales = _opacity_cubes(dust, [
+        row for galaxy_light in light for rows in galaxy_light.values()
+        for row in rows])
+    deposits = iter(zip(cubes, scales))
+    result = []
+    for galaxy_absorbers, galaxy_light in zip(absorbers, light):
+        result.append(OpacityCubes(
+            len(kinds),
+            {i: next(deposits) for i in galaxy_absorbers},
+            {i: np.array([[kind.ratio(row) for kind in kinds] for row in rows],
+                         dtype)
+             for i, rows in galaxy_light.items()}))
+    return result
+
+
+def _opacity_cubes(
+        dust: Sequence[_Dust], light: Sequence[_Light]
+) -> tuple[tuple[_Dust, ...], tuple[int, ...], tuple[float, ...]]:
+    """
+    Return how the optical depth of absorbers of the given kinds of dust
+    is held for an observation of light of the given rows (see _Light):
+    the kind of dust of each cube of opacity, and the cube of each
+    absorber and the factor of its optical depth at V there. With one
+    kind, one cube of the optical depth at V; with several kinds and one
+    observed wavelength, one cube of the optical depth at that wavelength
+    (of grey dust); with several kinds and wavelengths, one cube of the
+    optical depth at V of each kind.
+
+    Raises
+    ------
+    ConfigError
+        If dust of a law dims light of a wavelength that is not known, or
+        with several wavelengths, there are more kinds of dust than the
+        kernels take.
+    """
+    distinct = tuple(dict.fromkeys(dust))
     if len(distinct) == 1:
-        return distinct, (0,) * len(laws), (1.0,) * len(laws)
-    if len(set(wavelengths)) == 1:
+        return distinct, (0,) * len(dust), (1.0,) * len(dust)
+    if len({row.observed() for row in light}) == 1:
         return (
-            (None,), (0,) * len(laws),
-            tuple(_ratio(law, wavelengths[0]) for law in laws))
+            (_GREY,), (0,) * len(dust),
+            tuple(kind.ratio(light[0]) for kind in dust))
     if len(distinct) > _MAX_OPACITY_CUBES:
         raise ConfigError(
             f"the dust that an observation of several wavelengths sees can "
-            f"have at most {_MAX_OPACITY_CUBES} extinction laws; it has "
+            f"have at most {_MAX_OPACITY_CUBES} extinction laws (a law of "
+            f"galaxies of different redshifts counts once for each); it has "
             f"{len(distinct)}")
     return (
-        distinct, tuple(distinct.index(law) for law in laws),
-        (1.0,) * len(laws))
+        distinct, tuple(distinct.index(kind) for kind in dust),
+        (1.0,) * len(dust))
 
 
 def _followed_densities(

@@ -51,8 +51,10 @@ struct TransferArgs
 
     // The dust: nopacity cubes of the slab with the optical depth of each
     // voxel (at V, or at the wavelength of the observation: see the ratios
-    // of the emitters), and nopacity images with the optical depth in
-    // front of the slab (see gmodel_transfer_opacity_front)
+    // of the emitters), or none if the slab has no dust of its own (behind
+    // the dust of galaxies marched before), and nopacity images with the
+    // optical depth in front of the slab (see
+    // gmodel_transfer_opacity_front)
     int nopacity = 0;
     const T* opacity = nullptr;
     T* opacity_front = nullptr;
@@ -100,7 +102,7 @@ gmodel_transfer_march(
     {
         const long long idx = idx2 + z * nimage;
         for (int k = 0; k < a.nopacity; ++k)
-            dust.own[k] = a.opacity[k * nslab + idx];
+            dust.own[k] = a.opacity ? a.opacity[k * nslab + idx] : T{0};
 
         // The optical depth of the lines of the voxel, at the channels
         // [dmin, dmax]: the light of each line of each volume times its
@@ -235,7 +237,8 @@ gmodel_transfer_march(
 }
 
 // Add the dust of the slab along the line of sight of the spaxel (x, y)
-// to the optical depth in front of the slab, for the next slab
+// to the optical depth in front of the slab, for the next slab (only for
+// a slab with dust of its own)
 template<typename T> constexpr void
 gmodel_transfer_opacity_front(int x, int y, const TransferArgs<T>& a)
 {

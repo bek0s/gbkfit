@@ -207,7 +207,7 @@ Wrapper<T>::gmodel_transfer_march(const TransferArgs<T>& a)
             a.tau ? kernels::gmodel_transfer_march<T, true>
                   : kernels::gmodel_transfer_march<T, false>,
             a);
-    if (a.nopacity) {
+    if (a.opacity) {
         launch("gmodel_transfer_opacity_front",
                 1LL * a.spat_size[0] * a.spat_size[1],
                 kernels::gmodel_transfer_opacity_front<T>, a);

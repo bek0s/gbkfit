@@ -4,25 +4,33 @@ light it sees, and its line of sight (Scene); and their evaluation on the
 grid of the observation (ScenePlan).
 """
 
+import abc
+import math
 from collections.abc import Sequence
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
 from gbkfit.driver import DeviceArray, Driver
-from gbkfit.model import Band, BandEmission, DustOpacity, Emission, Galaxy
+from gbkfit.model import (
+    Band, BandEmission, DustOpacity, Emission, Galaxy, LineOpacity)
+from gbkfit.model.components._component_plans import opacity_cubes
 from gbkfit.model.components._component_set import (
     IMAGE_SPECTRAL_AXIS, ComponentSetPlan)
 from gbkfit.model.components._transfer import TransferPlan
 from gbkfit.params import ParamValues
 from gbkfit.utils import gridutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
-from .line_of_sight import LineOfSight
+
+if TYPE_CHECKING:
+    from .line_of_sight import LineOfSight
 
 
 __all__ = [
+    'AdditiveScenePlan',
     'Scene',
     'ScenePlan',
+    'TransferScenePlan',
     'make_scene'
 ]
 
@@ -45,7 +53,7 @@ class Scene:
             emitters: Sequence[tuple[int, ...]],
             lines: tuple[str, ...] | None,
             band: Band | None,
-            line_of_sight: LineOfSight
+            line_of_sight: 'LineOfSight'
     ):
         self._galaxies = tuple(galaxies)
         self._mappings = tuple(mappings)
@@ -61,13 +69,9 @@ class Scene:
         of the components whose light it sees, and those with dust; 0
         without disks.
         """
-        radii = [
-            cmp.density_disk().rnodes()[-1]
-            for galaxy, emitters in zip(self._galaxies, self._emitters)
-            for i, cmp in enumerate(galaxy.components())
-            if (i in emitters or isinstance(cmp.opacity(), DustOpacity))
-            and cmp.density_disk() is not None]
-        return max(radii, default=0.0)
+        return max(
+            _radius(galaxy, emitters)
+            for galaxy, emitters in zip(self._galaxies, self._emitters))
 
     def component_params(self, name: str) -> dict[str, str]:
         """
@@ -90,35 +94,25 @@ class Scene:
     ) -> 'ScenePlan':
         """
         Plan the evaluation of the scene on a driver and dtype, on the
-        grid of an image (no spectral axis) or a spectral cube.
+        grid of an image (no spectral axis) or a spectral cube, along its
+        line of sight (see LineOfSight.plan_scene).
         """
-        return ScenePlan(self, driver, grid, dtype)
+        return self._line_of_sight.plan_scene(self, driver, grid, dtype)
 
 
-class ScenePlan:
+class ScenePlan(abc.ABC):
     """
-    The evaluation of a scene on a grid: the plan of each galaxy, whose
-    light adds up in the image or spectral cube.
+    The evaluation of a scene on a grid (see LineOfSight.plan_scene): the
+    plan of each galaxy, whose light adds up in the image or spectral
+    cube.
     """
 
-    def __init__(
-            self,
-            scene: Scene,
-            driver: Driver,
-            grid: gridutils.Grid,
-            dtype: np.dtype
-    ):
+    def __init__(self, scene: Scene, grid: gridutils.Grid):
         image = grid.spectral_axis is None
-        spatial = grid if image else grid.spatial()
-        spectral = IMAGE_SPECTRAL_AXIS if image else grid.spectral()
-        depth = scene._line_of_sight.depth_axis(spatial, scene.radius())
-        self._key = 'image' if image else 'scube'
         self._scene = scene
-        self._plans: tuple[ComponentSetPlan | TransferPlan, ...] = tuple(
-            scene._line_of_sight.plan_galaxy(
-                galaxy, driver, spatial, spectral, depth, dtype, emitters,
-                scene._lines, scene._band)
-            for galaxy, emitters in zip(scene._galaxies, scene._emitters))
+        self._key = 'image' if image else 'scube'
+        self._spatial = grid if image else grid.spatial()
+        self._spectral = IMAGE_SPECTRAL_AXIS if image else grid.spectral()
 
     def evaluate(
             self,
@@ -132,15 +126,199 @@ class ScenePlan:
         extra outputs of each galaxy have its prefix.
         """
         scene = self._scene
-        for plan, mapping, prefix in zip(
-                self._plans, scene._mappings, scene._prefixes):
-            extra = {} if out_extra is not None else None
-            plan.evaluate(
-                {name: params[full] for name, full in mapping.items()},
-                {self._key: data}, extra)
-            if out_extra is not None:
+        values = [
+            {name: params[full] for name, full in mapping.items()}
+            for mapping in scene._mappings]
+        extras = [{} for _ in values] if out_extra is not None else None
+        self._evaluate(values, {self._key: data}, extras)
+        if out_extra is not None:
+            for prefix, extra in zip(scene._prefixes, extras):
                 out_extra.update(
                     {f'{prefix}{key}': value for key, value in extra.items()})
+
+    @abc.abstractmethod
+    def _evaluate(
+            self,
+            params: list[ParamValues],
+            outputs: dict[str, DeviceArray],
+            extras: list[dict[str, Any]] | None
+    ) -> None:
+        """
+        Add the light of the galaxies to the output array (see evaluate),
+        with the parameters of each galaxy (by its own names); with
+        extras, the extra outputs of each galaxy go to its item.
+        """
+        pass
+
+
+class AdditiveScenePlan(ScenePlan):
+    """
+    The evaluation of a scene whose galaxies add their light, each dimmed
+    by its own opacity only (see Flat and Grid): on the depth axis of its
+    line of sight, if it has one, for the largest disk of the scene.
+    """
+
+    def __init__(
+            self,
+            scene: Scene,
+            driver: Driver,
+            grid: gridutils.Grid,
+            dtype: np.dtype
+    ):
+        super().__init__(scene, grid)
+        depth = scene._line_of_sight.depth_axis(self._spatial, scene.radius())
+        self._plans: tuple[ComponentSetPlan, ...] = tuple(
+            galaxy.plan(
+                driver, self._spatial, self._spectral, depth, dtype, emitters,
+                opacity_cubes(
+                    [galaxy], [emitters], scene._lines, scene._band,
+                    dtype)[0],
+                scene._lines, scene._band)
+            for galaxy, emitters in zip(scene._galaxies, scene._emitters))
+
+    def _evaluate(
+            self,
+            params: list[ParamValues],
+            outputs: dict[str, DeviceArray],
+            extras: list[dict[str, Any]] | None
+    ) -> None:
+        for g, plan in enumerate(self._plans):
+            plan.evaluate(
+                params[g], outputs, extras[g] if extras is not None else None)
+
+
+class TransferScenePlan(ScenePlan):
+    """
+    The evaluation of a scene by radiative transfer along each line of
+    sight (see Transfer): each galaxy on a depth axis of its own (for its
+    largest disk), marched one after the other, front to back, from the
+    opacity of the galaxies in front of it (see TransferPlan). One set of
+    cubes of opacity holds the dust of all of them (see opacity_cubes).
+    Several galaxies with opacity are marched in the order of their
+    depths (see Galaxy); the others in their order.
+
+    The galaxies whose depth axes, centred on their depths, overlap along
+    the line of sight form a group, which would need one grid; groups of
+    several galaxies are not supported yet: evaluate raises ValueError.
+    """
+
+    def __init__(
+            self,
+            scene: Scene,
+            driver: Driver,
+            grid: gridutils.Grid,
+            dtype: np.dtype,
+            slab: int | None
+    ):
+        super().__init__(scene, grid)
+        spatial = self._spatial
+        cubes = opacity_cubes(
+            scene._galaxies, scene._emitters, scene._lines, scene._band,
+            dtype)
+        axes = [
+            scene._line_of_sight.depth_axis(spatial, _radius(*galaxy))
+            for galaxy in zip(scene._galaxies, scene._emitters)]
+        self._plans: tuple[TransferPlan, ...] = tuple(
+            galaxy.plan_transfer(
+                driver, spatial, self._spectral, axis, dtype, emitters,
+                galaxy_cubes, scene._lines, scene._band, slab)
+            for galaxy, emitters, axis, galaxy_cubes in zip(
+                scene._galaxies, scene._emitters, axes, cubes))
+        self._extents = tuple(axis.size * axis.step for axis in axes)
+        self._ordered = len(self._plans) > 1 and any(
+            plan.has_dust() or plan.has_line_opacity()
+            for plan in self._plans)
+        # The state of the march from one galaxy to the next: the optical
+        # depth of the dust in front, in each cube of opacity, and with
+        # line opacity, that of the lines at each channel
+        self._driver = driver
+        shape = (spatial.size[1], spatial.size[0])
+        self._opacity_front = None
+        if cubes[0].ncubes:
+            self._opacity_front = driver.mem_alloc_d(
+                (cubes[0].ncubes,) + shape, dtype)
+        self._tau = None
+        if any(plan.has_line_opacity() for plan in self._plans):
+            self._tau = driver.mem_alloc_d(
+                (self._spectral.size[0],) + shape, dtype)
+
+    def _evaluate(
+            self,
+            params: list[ParamValues],
+            outputs: dict[str, DeviceArray],
+            extras: list[dict[str, Any]] | None
+    ) -> None:
+        for state in (self._opacity_front, self._tau):
+            if state is not None:
+                self._driver.mem_fill(state, 0)
+        # Each galaxy marches from the dust and the line opacity in front
+        # of it, if any
+        dust = line_opacity = False
+        for g in self._order(params):
+            plan = self._plans[g]
+            dust = dust or plan.has_dust()
+            line_opacity = line_opacity or plan.has_line_opacity()
+            plan.evaluate(
+                params[g], outputs, extras[g] if extras is not None else None,
+                self._opacity_front if dust else None,
+                self._tau if line_opacity else None)
+
+    def _order(self, params: list[ParamValues]) -> list[int]:
+        """
+        Return the indices of the galaxies in the order of the march, with
+        the parameters of each (see the class). Raise ValueError if the
+        depth axes of galaxies with opacity overlap.
+        """
+        if not self._ordered:
+            return list(range(len(self._plans)))
+        depths = [values['depth'] for values in params]
+        groups = _depth_groups(depths, self._extents)
+        for group in groups:
+            if len(group) > 1:
+                names = [self._scene._galaxies[g].name() for g in group]
+                raise ValueError(
+                    f"the depth axes of the galaxies {names} overlap along "
+                    f"the line of sight (their depths: "
+                    f"{[float(depths[g]) for g in group]}; the lengths of "
+                    f"their axes: {[self._extents[g] for g in group]} "
+                    f"arcsec); radiative transfer marches galaxies one "
+                    f"after the other, so each must be in front of the "
+                    f"next")
+        return [group[0] for group in groups]
+
+
+def _radius(galaxy: Galaxy, emitters: Sequence[int]) -> float:
+    """
+    Return the outer radius (arcsec) of the largest disk of a galaxy that
+    an observation evaluates: of the given emitters, and the components
+    with dust; 0 without disks.
+    """
+    radii = [
+        cmp.density_disk().rnodes()[-1]
+        for i, cmp in enumerate(galaxy.components())
+        if (i in emitters or isinstance(cmp.opacity(), DustOpacity))
+        and cmp.density_disk() is not None]
+    return max(radii, default=0.0)
+
+
+def _depth_groups(
+        depths: Sequence[float], extents: Sequence[float]
+) -> list[list[int]]:
+    """
+    Return the indices of galaxies at the given depths, whose depth axes
+    of the given lengths are centred on them, in groups, front to back:
+    those whose depth axes overlap are in one group, in the order of their
+    depths.
+    """
+    groups = []
+    end = -math.inf
+    for g in sorted(range(len(depths)), key=lambda g: depths[g]):
+        if depths[g] - extents[g] / 2 < end:
+            groups[-1].append(g)
+        else:
+            groups.append([g])
+        end = max(end, depths[g] + extents[g] / 2)
+    return groups
 
 
 def make_scene(
@@ -150,7 +328,7 @@ def make_scene(
         components: Sequence[str] | None,
         lines: tuple[str, ...] | None,
         band: Band | None,
-        line_of_sight: LineOfSight,
+        line_of_sight: 'LineOfSight',
         emission: type[Emission]
 ) -> Scene:
     """
@@ -167,9 +345,8 @@ def make_scene(
         If a name is unknown or repeats, a component does not emit what it
         sees, it sees nothing, a line is not one of the components it
         sees, a component cannot be seen along its line of sight (see
-        LineOfSight.check), or it sees several galaxies and one has
-        opacity (their order along the line of sight is not supported
-        yet).
+        LineOfSight.check), or it sees several galaxies with opacity that
+        its line of sight cannot order (see LineOfSight.check_order).
     """
     kind = "an image, which sees the components that emit in a band" \
         if emission is BandEmission else \
@@ -183,11 +360,9 @@ def make_scene(
          if isinstance(cmp.opacity(), DustOpacity)]
         for galaxy in galaxies]
     if len(galaxies) > 1 and any(
-            cmp.opacity() is not None
-            for galaxy in galaxies for cmp in galaxy.components()):
-        raise ConfigError(
-            "an observation of several galaxies with opacity is not "
-            "supported yet (it needs their order along the line of sight)")
+            _has_opacity(galaxy, galaxy_emitters)
+            for galaxy, galaxy_emitters in zip(galaxies, emitters)):
+        line_of_sight.check_order(galaxies)
     for galaxy, galaxy_emitters, galaxy_absorbers in zip(
             galaxies, emitters, absorbers):
         for i in sorted(set(galaxy_emitters) | set(galaxy_absorbers)):
@@ -200,6 +375,18 @@ def make_scene(
     return Scene(
         galaxies, mappings, prefixes, [tuple(e) for e in emitters], lines,
         band, line_of_sight)
+
+
+def _has_opacity(galaxy: Galaxy, emitters: Sequence[int]) -> bool:
+    """
+    Return whether a galaxy dims light in an observation that sees the
+    given emitters of it: whether it has components with dust, or among
+    those emitters, components with line opacity.
+    """
+    return any(
+        isinstance(cmp.opacity(), DustOpacity)
+        or (i in emitters and isinstance(cmp.opacity(), LineOpacity))
+        for i, cmp in enumerate(galaxy.components()))
 
 
 def _label(galaxy: Galaxy, index: int) -> str:

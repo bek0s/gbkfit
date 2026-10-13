@@ -7,6 +7,7 @@ and traits), and their errors.
 import numpy as np
 import pytest
 from gbkfit.model import galaxy_parser
+from gbkfit.model.components._component_plans import opacity_cubes
 from gbkfit.observation import Depth, Grid
 from gbkfit.utils import gridutils
 from gbkfit.utils.parseutils import ConfigError
@@ -223,7 +224,9 @@ def test_thick_disk_with_several_velocity_traits(name):
     plan = galaxy.plan(
         DriverHost(), spatial, grid.spectral(),
         Grid(Depth(extent='legacy')).depth_axis(spatial, 0),
-        np.float32, (0,), None, None)
+        np.float32, (0,),
+        opacity_cubes([galaxy], [(0,)], None, None, np.float32)[0],
+        None, None)
     plan.evaluate(params, dict(scube=scube), None)
     assert scube.sum() > 0
 

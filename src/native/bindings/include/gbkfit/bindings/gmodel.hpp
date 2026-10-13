@@ -224,21 +224,22 @@ struct GModel
                 "out has the wrong number of elements");
         a.out = out.data();
 
-        // The dust: cubes of the slab, and images in front of it
-        require(opacity.is_valid() == opacity_front.is_valid(),
-                "opacity and opacity_front go together");
-        if (opacity.is_valid()) {
-            const size_t nopacity = opacity.size() / nslab;
+        // The dust: images in front of the slab, and cubes of the slab if
+        // it has dust of its own
+        require(!opacity.is_valid() || opacity_front.is_valid(),
+                "opacity needs opacity_front");
+        if (opacity_front.is_valid()) {
+            const size_t nopacity = opacity_front.size() / nimage;
             require(nopacity >= 1 && nopacity <= size_t(OPACITY_NUM_MAX)
-                    && opacity.size() == nopacity * nslab,
-                    "opacity needs from 1 to "
-                    + std::to_string(OPACITY_NUM_MAX)
-                    + " cubes of the slab");
-            require(opacity_front.size() == nopacity * nimage,
-                    "opacity_front needs an image for each cube of "
-                    "opacity");
+                    && opacity_front.size() == nopacity * nimage,
+                    "opacity_front needs from 1 to "
+                    + std::to_string(OPACITY_NUM_MAX) + " images");
+            require(!opacity.is_valid()
+                    || opacity.size() == nopacity * nslab,
+                    "opacity needs a cube of the slab for each image of "
+                    "opacity_front");
             a.nopacity = int(nopacity);
-            a.opacity = opacity.data();
+            a.opacity = data(opacity);
             a.opacity_front = opacity_front.data();
         }
 
@@ -277,13 +278,14 @@ struct GModel
                         && f.shape(0) >= 3 + nlines),
                     "an emitter with line opacity needs to be a volume with "
                     "a field of each line, and the march tau");
-            require(em.opacity_ratios.is_valid() == opacity.is_valid()
-                    && (!opacity.is_valid()
+            require(em.opacity_ratios.is_valid() == opacity_front.is_valid()
+                    && (!opacity_front.is_valid()
                         || (em.opacity_ratios.shape(0) == nlines
                             && em.opacity_ratios.shape(1)
                                == size_t(a.nopacity))),
-                    "with opacity, an emitter needs a row of opacity_ratios "
-                    "for each line, and a column for each cube of opacity");
+                    "with dust (opacity_front), an emitter needs a row of "
+                    "opacity_ratios for each line, and a column for each "
+                    "image of opacity_front");
             a.emitters[e] = {
                     em.layer, em.line_opacity, f.data(), int(nlines),
                     em.lines.data(), data(em.opacity_ratios)};
@@ -587,8 +589,8 @@ private:
         a.spat_rota = spat_rota;
         a.slab_zero = slab_zero;
         require(slab_zero >= 0 && (disk.rht || slab_zero == 0),
-                "slab_zero must be at least 0, and 0 for a thin disk, which is "
-                "evaluated on the whole depth axis");
+                "slab_zero must be at least 0, and 0 for a thin disk, which "
+                "is evaluated on the whole depth axis");
         a.spec_size = spec_size;
         a.spec_step = spec_step;
         a.spec_zero = spec_zero;

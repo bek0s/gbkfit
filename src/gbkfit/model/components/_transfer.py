@@ -14,7 +14,7 @@ from gbkfit.params import ParamValues
 from gbkfit.utils import gridutils
 from gbkfit.utils.parseutils import ConfigError
 from ._component_plans import ComponentPlans
-from .base import DepthAxis, NativeGrid
+from .base import DepthAxis, NativeGrid, OpacityCubes
 from .lines import Band
 
 if TYPE_CHECKING:
@@ -39,20 +39,22 @@ class TransferPlan:
     opacity, the emitters write the fields of their light (see
     ComponentPlan.evaluate_fields), and a march along each line of sight,
     front to back, adds the light of each channel that reaches the viewer
-    to the image or the spectral cube.
+    to the image or the spectral cube. The march starts from the opacity
+    in front of the galaxy, that of the galaxies in front of it, and adds
+    its own, for the galaxies behind it (see evaluate).
 
     It evaluates the depth axis in slabs of planes, one after the other,
     to bound its memory: the absorbers and the volumes (e.g. thick disks)
     on the planes of each slab (the clouds of a Monte Carlo disk are drawn
     again for each, the same ones), the layers (e.g. thin disks, points)
     once. The parameters are those of ComponentPlans, with a depth axis,
-    and the number of planes of a slab (slab; all if None).
+    the redshift of the galaxy, and the number of planes of a slab (slab;
+    all if None).
 
     Raises
     ------
     ConfigError
-        If there are more emitters than the march takes, or for the
-        reasons of ComponentPlans.
+        If there are more emitters than the march takes.
     """
 
     def __init__(
@@ -64,6 +66,7 @@ class TransferPlan:
             depth: DepthAxis,
             dtype: np.dtype,
             emitters: Sequence[int],
+            cubes: OpacityCubes,
             lines: tuple[str, ...] | None,
             band: Band | None,
             redshift: float,
@@ -75,7 +78,7 @@ class TransferPlan:
                 f"that emit; there are {len(emitters)}")
         plans = ComponentPlans(
             component_set, driver, grid, spectral, depth, dtype, emitters,
-            lines, band, redshift)
+            cubes, lines, band)
         self._plans = plans
         native_grid = plans.native_grid
         components = component_set.components()
@@ -108,39 +111,48 @@ class TransferPlan:
             i: None if plans.ratios[i] is None
             else driver.mem_copy_h2d(plans.ratios[i])
             for i in plans.emitters}
-        # The cubes of opacity of a slab (flat, as the fields), the optical
-        # depth of the dust in front of the slab, and with line opacity,
-        # that of the lines at each channel
+        # The cubes of opacity of a slab, with absorbers (flat, as the
+        # fields)
         self._odata = None
-        self._opacity_front = None
-        if plans.ncubes:
+        if plans.absorbers:
             self._odata = driver.mem_alloc_d(
                 plans.ncubes * math.prod(slab_grid['spat_size']), dtype)
-            self._opacity_front = driver.mem_alloc_d(
-                (plans.ncubes,) + native_grid['spat_size'][1::-1], dtype)
-        self._tau = None
-        if any(layout.line_opacity for layout in self._layouts.values()):
-            self._tau = driver.mem_alloc_d(
-                (native_grid['spec_size'],)
-                + native_grid['spat_size'][1::-1], dtype)
-        # The emitters of the march of slabs of each size
+        # The emitters of the march of slabs of each size, without dust,
+        # and with dust if the observation has dust (see evaluate)
         self._emitters = {
-            slab_size: self._native_emitters(slab_size)
-            for slab_size in {slab_size for _, slab_size in self._slabs}}
+            (slab_size, dust): self._native_emitters(slab_size, dust)
+            for slab_size in {slab_size for _, slab_size in self._slabs}
+            for dust in ((False, True) if plans.ncubes else (False,))}
         self._gmodel = driver.native_class('GModel', dtype)()
+
+    def has_dust(self) -> bool:
+        """Return whether it has components with dust."""
+        return bool(self._plans.absorbers)
+
+    def has_line_opacity(self) -> bool:
+        """Return whether it has emitters with line opacity."""
+        return any(layout.line_opacity for layout in self._layouts.values())
 
     def evaluate(
             self,
             params: ParamValues,
             outputs: dict[str, DeviceArray | None],
-            out_extra: dict[str, Any] | None
+            out_extra: dict[str, Any] | None,
+            opacity_front: DeviceArray | None,
+            tau: DeviceArray | None
     ) -> None:
         """
         Add the light of the emitters that reaches the viewer to the
-        output array, the 'image' or the 'scube' in outputs. The extra
-        outputs of each component are named after its name, or its
-        position (e.g. 'disk_bdata' or 'component0_bdata'), and the totals
-        'total_*'.
+        output array, the 'image' or the 'scube' in outputs, dimmed by the
+        opacity in front of the galaxy and its own, and add its own to that
+        in front: the optical depth of the dust in front at each spaxel,
+        in each cube of opacity (opacity_front, of shape (ncubes, ny, nx);
+        required with dust of its own, None without dust in front or in
+        it), and that of the lines at each channel of each spaxel (tau, of
+        the shape of the output; required with line opacity, None without
+        line opacity in front or in it). The extra outputs of each
+        component are named after its name, or its position (e.g.
+        'disk_bdata' or 'component0_bdata'), and the totals 'total_*'.
         """
         plans = self._plans
         driver = plans.driver
@@ -159,9 +171,7 @@ class TransferPlan:
         driver.mem_copy_h2d(lines_h, lines_d)
 
         image = outputs.get('image')
-        for state in (self._opacity_front, self._tau):
-            if state is not None:
-                driver.mem_fill(state, 0)
+        dust = opacity_front is not None
         for z0, size in self._slabs:
             slab_grid = _slab_grid(grid, z0, size)
             extra = {} if extras is not None else None
@@ -175,13 +185,12 @@ class TransferPlan:
                 if not self._layouts[i].layer:
                     self._evaluate_fields(values, i, slab_grid, extra)
             self._gmodel.transfer_march(
-                emitters=self._emitters[size],
+                emitters=self._emitters[size, dust],
                 spat_size=slab_grid['spat_size'], slab_zero=z0,
                 depth_size=grid['spat_size'][2],
                 image=image is not None, spec_size=grid['spec_size'],
                 spec_step=grid['spec_step'], spec_zero=grid['spec_zero'],
-                opacity=odata, opacity_front=self._opacity_front,
-                tau=self._tau,
+                opacity=odata, opacity_front=opacity_front, tau=tau,
                 out=image if image is not None else outputs['scube'])
             if extra is not None:
                 slab_extras.append(extra)
@@ -219,10 +228,10 @@ class TransferPlan:
         if extras is not None:
             extras.setdefault(index, {}).update(extra)
 
-    def _native_emitters(self, size: int) -> list[Any]:
+    def _native_emitters(self, size: int, dust: bool) -> list[Any]:
         """
         Return the native emitters of the march of a slab of the given
-        number of planes: their fields, lines and ratios.
+        number of planes: their fields, lines and, with dust, ratios.
         """
         plans = self._plans
         slab_grid = _slab_grid(plans.native_grid, 0, size)
@@ -236,7 +245,7 @@ class TransferPlan:
                 fields=_view(self._fields[i], layout.shape(
                     plans.native_grid if layout.layer else slab_grid)),
                 lines=self._lines[1][self._rows[i]],
-                opacity_ratios=self._ratios[i]))
+                opacity_ratios=self._ratios[i] if dust else None))
         return emitters
 
 

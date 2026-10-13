@@ -395,3 +395,129 @@ def test_slabs_give_the_same_model(driver, evaluate_cases, disk_type):
             np.testing.assert_allclose(
                 other_extra[name].data, extra[name].data, rtol=1e-5,
                 atol=1e-6 * np.nanmax(np.abs(extra[name].data)))
+
+
+def galaxies_model(driver, galaxies, properties, **observation):
+    """
+    The model data of an observation of several galaxies through
+    radiative transfer (a spectral cube by default), and its extras.
+    """
+    import gbkfit.params
+    from gbkfit.observation import ObservationGroup, observation_parser
+    observation = dict(
+        observable=dict(
+            type='pixel_spectra', size=[24, 24, 31], step=[1, 1, 10]),
+        line_of_sight=dict(type='transfer'),
+        galaxies=[galaxy['name'] for galaxy in galaxies]) | observation
+    group = ObservationGroup(
+        galaxy_parser.load(galaxies),
+        observation_parser.load([observation], drivers=[{None: driver}]))
+    params = gbkfit.params.ParamSpace(group.pdescs(), properties)
+    extra = {}
+    data = group.model_h(params.evaluate(), extra)
+    return next(iter(data[0].values()))['d'], extra
+
+
+def galaxy_properties(galaxy, properties):
+    """The properties of a galaxy of the given name (prefixed)."""
+    return {f'{galaxy}_{key}': value for key, value in properties.items()}
+
+
+def test_a_galaxy_with_depth_has_its_parameter():
+    galaxy = galaxy_parser.load(dict(components=[GAS], depth=True))
+    assert 'depth' in galaxy.pdescs()
+    dumped = galaxy_parser.dump(galaxy)
+    assert dumped['depth'] is True
+    assert galaxy_parser.dump(galaxy_parser.load(dumped)) == dumped
+
+
+@pytest.mark.parametrize('dust_depth', [-50, 50])
+def test_the_dust_of_a_galaxy_dims_the_galaxies_behind_it(
+        driver, dust_depth):
+    # An image of a face-on disk of stars at z = 1, and a galaxy of face-on
+    # dust at z = 0.5 of a law whose ratio is 3 - 2.5 (wavelength - 0.2):
+    # in front of the stars, the dust dims them at the wavelength of the
+    # band in its own rest frame; behind them, not at all
+    from gbkfit.model import LineCatalogue
+    stars = dict(
+        GAS, name='stars', density=THIN, emission=dict(type='band'),
+        kinematics=None)
+    dust = DUST | dict(opacity=dict(type='dust', law=dict(
+        type='table', wavelengths=[0.2, 1.0], ratios=[3.0, 1.0])))
+    galaxies = [
+        dict(name='back', components=[stars], redshift=1.0, depth=True),
+        dict(name='front', components=[dust], redshift=0.5, depth=True)]
+    properties = galaxy_properties('back', dict(
+        stars_xpos=0, stars_ypos=0, stars_posa=0, stars_incl=0,
+        stars_pt_a=1, stars_pt_s=4, depth=0))
+    properties |= galaxy_properties('front', dict(
+        dust_xpos=0, dust_ypos=0, dust_posa=0, dust_incl=0, dust_pt_a=0.5,
+        dust_pt_s=4, dust_ht_s=1, depth=dust_depth))
+    image = dict(
+        observable=dict(type='pixel_brightness', size=[24, 24]),
+        band='sdss_r')
+    clear, _ = galaxies_model(driver, galaxies[:1], properties, **image)
+    model, extra = galaxies_model(driver, galaxies, properties, **image)
+    tau = extra['observation0_model_front_total_odata'].data.sum(axis=0)
+    wavelength = LineCatalogue().band('sdss_r').wavelength().to_value('um')
+    ratio = 3 - 2.5 * (wavelength / 1.5 - 0.2)
+    expected = clear * np.exp(-ratio * tau) if dust_depth < 0 else clear
+    assert tau.max() > 0.1
+    assert_same_model(model, expected)
+
+
+def test_line_opacity_continues_into_the_galaxies_behind(driver):
+    # Two galaxies of gas at one place on the sky with line opacity of a
+    # uniform coefficient 1/S: the march goes on from one into the other,
+    # so the light of each channel is S (1 - exp(-I / S)), I the light of
+    # both without line opacity (see
+    # test_line_opacity_saturates_at_the_source_function)
+    gas = line_opacity(GAS, dict(type='uniform'))
+    galaxies = [
+        dict(name=name, components=[gas], depth=True)
+        for name in ('near', 'far')]
+    properties = {}
+    for name, depth, posa in (('near', -50, 30), ('far', 50, 120)):
+        properties |= galaxy_properties(name, {
+            key: value for key, value in PROPERTIES.items()
+            if key.startswith('gas_')} | dict(depth=depth, gas_posa=posa))
+    thin, _ = galaxies_model(
+        driver, galaxies, properties | dict(near_gas_op_a=0, far_gas_op_a=0))
+    source = thin.max() / 3
+    model, _ = galaxies_model(
+        driver, galaxies, properties | dict(
+            near_gas_op_a=1 / source, far_gas_op_a=1 / source))
+    assert_same_model(model, source * -np.expm1(-thin / source))
+    assert model.sum() < 0.8 * thin.sum()
+
+
+@pytest.mark.parametrize('line_of_sight, depth, components, message', [
+    ('grid', True, [DUST], "needs a line of sight of radiative transfer"),
+    ('transfer', False, [DUST], r"the galaxies \['b'\] need depth: true"),
+    # (the depth of a point without a name is 'depth')
+    ('transfer', True, [NUCLEUS | dict(name=None)],
+     "the parameter 'depth' of the galaxy has the name of a parameter of "
+     "its component")])
+def test_several_galaxies_errors(
+        driver, line_of_sight, depth, components, message):
+    from gbkfit.utils.parseutils import ConfigError
+    galaxies = [
+        dict(name='a', components=[GAS, DUST], depth=True),
+        dict(name='b', components=components, depth=depth)]
+    with pytest.raises(ConfigError, match=message):
+        galaxies_model(
+            driver, galaxies, {},
+            line_of_sight=dict(type=line_of_sight))
+
+
+def test_galaxies_must_not_overlap_along_the_line_of_sight(driver):
+    # (each galaxy has a depth axis of 20 arcsec, twice its radius)
+    galaxies = [
+        dict(name=name, components=[GAS, DUST], depth=True)
+        for name in ('a', 'b')]
+    properties = {}
+    for name, depth in (('a', 0), ('b', 19)):
+        properties |= galaxy_properties(
+            name, PROPERTIES | dict(depth=depth))
+    with pytest.raises(ValueError, match="overlap along the line of sight"):
+        galaxies_model(driver, galaxies, properties)
