@@ -283,18 +283,19 @@ class Galaxy(parseutils.Serializable):
             cubes: OpacityCubes,
             lines: tuple[str, ...] | None,
             band: Band | None,
-            slab: int | None
+            slab: int | None,
+            subchannels: int
     ) -> TransferPlan:
         """
         Plan the evaluation of the galaxy on the grid of an observation by
         radiative transfer along each line of sight, in slabs of the given
-        number of planes of the depth axis, all if None (see
-        TransferPlan); the other arguments are those of plan, with a depth
-        axis.
+        number of planes of the depth axis, all if None, at the given
+        number of sub-channels of each channel (see TransferPlan); the
+        other arguments are those of plan, with a depth axis.
         """
         return self._component_set.plan_transfer(
             driver, grid, spectral, depth, dtype, emitters, cubes, lines,
-            band, self._redshift, slab)
+            band, self._redshift, slab, subchannels)
 
 
 galaxy_parser = parseutils.BasicParser(Galaxy)

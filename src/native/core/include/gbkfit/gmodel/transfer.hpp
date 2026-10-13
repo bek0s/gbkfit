@@ -39,9 +39,14 @@ struct TransferArgs
     int slab_zero = 0;
     int depth_size = 0;
 
-    // The spectral axis; that of an image has one channel, where the
-    // light of each emitter is flat
+    // The spectral axis of the march: that of out, or with line opacity,
+    // subchannels sub-channels of each of its channels (spec_size,
+    // spec_step and spec_zero are then those of the sub-channels), whose
+    // mean is the light of the channel (see gmodel_transfer_add_light).
+    // That of an image has one channel, where the light of each emitter
+    // is flat.
     bool image = false;
+    int subchannels = 1;
     int spec_size = 0;
     T spec_step = 0;
     T spec_zero = 0;
@@ -60,12 +65,13 @@ struct TransferArgs
     T* opacity_front = nullptr;
 
     // With line opacity (an emitter with line_opacity): the optical depth
-    // of the lines in front of the slab, at each channel of each spaxel (a
-    // cube of the shape of out), which the march adds the slab to (zero
-    // before the first slab)
+    // of the lines in front of the slab, at each channel of the march of
+    // each spaxel (spec_size images), which the march adds the slab to
+    // (zero before the first slab)
     T* tau = nullptr;
 
-    // The image or spectral cube, which the light adds to
+    // The image or spectral cube (spec_size / subchannels channels), which
+    // the light adds to
     T* out = nullptr;
 };
 
@@ -233,6 +239,24 @@ gmodel_transfer_march(
     if (HasLineOpacity) {
         for (int c = c0; c < c1; ++c)
             a.tau[c * nimage + idx2] = tau[c - c0];
+    }
+}
+
+// Add the light of the channels [c0, c1) of the march of the spaxel (x, y)
+// (see gmodel_transfer_march) to out: the mean of the sub-channels of each
+// of its channels. (On the GPU, only one thread may add to a channel of
+// out: [c0, c1) holds whole channels.)
+template<typename T> constexpr void
+gmodel_transfer_add_light(
+        int x, int y, int c0, int c1, const TransferArgs<T>& a,
+        const T* light)
+{
+    for (int c = c0; c < c1; ++c) {
+        if (light[c - c0] != 0) {
+            a.out[index_3d_to_1d(
+                    x, y, c / a.subchannels, a.spat_size[0], a.spat_size[1])]
+                    += light[c - c0] / a.subchannels;
+        }
     }
 }
 

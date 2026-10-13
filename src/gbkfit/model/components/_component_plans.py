@@ -123,6 +123,7 @@ class ComponentPlans:
                 "components with opacity need a grid with a depth axis")
         self._component_set = component_set
         self._grid = grid
+        self._spectral = spectral
         self._depth = depth
         self.driver = driver
         self.dtype = dtype
@@ -227,6 +228,21 @@ class ComponentPlans:
             tuple(grid.coords.rpix) + (-depth.zero / depth.step,),
             tuple(grid.coords.rval) + (0.0,), grid.coords.rota)
         return gridutils.GridData(data, coords, None)
+
+    def output_extra(self, data: np.ndarray) -> gridutils.GridData:
+        """
+        Return an extra output of the shape of the output on the grid: an
+        image (2d data), or a cube along the spectral axis (3d data).
+        """
+        coords = self._grid.coords
+        if data.ndim == 2:
+            return gridutils.GridData(data, coords, None)
+        spectral = self._spectral.coords
+        return gridutils.GridData(data, coords._replace(
+            step=tuple(coords.step) + tuple(spectral.step),
+            rpix=tuple(coords.rpix) + tuple(spectral.rpix),
+            rval=tuple(coords.rval) + tuple(spectral.rval),
+            rest=spectral.rest, medium=spectral.medium), 2)
 
 
 def _native_grid(

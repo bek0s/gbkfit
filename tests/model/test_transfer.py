@@ -36,8 +36,8 @@ def native_grid(size):
     return dict(
         spat_size=size, spat_step=(1.0, 1.0, 1.0),
         spat_zero=tuple(-(n / 2 - 0.5) for n in size), spat_rota=0.0,
-        slab_zero=0, spec_size=SPECTRAL.size[0], spec_step=SPECTRAL.coords.step[0],
-        spec_zero=SPECTRAL.zero()[0])
+        slab_zero=0, spec_size=SPECTRAL.size[0],
+        spec_step=SPECTRAL.coords.step[0], spec_zero=SPECTRAL.zero()[0])
 
 
 def component_plan(driver, component):
@@ -521,3 +521,104 @@ def test_galaxies_must_not_overlap_along_the_line_of_sight(driver):
             name, PROPERTIES | dict(depth=depth))
     with pytest.raises(ValueError, match="overlap along the line of sight"):
         galaxies_model(driver, galaxies, properties)
+
+
+def transfer_case(driver, components, nchannels=31, step=10, **transfer):
+    """A case of a spectral cube of components seen through transfer."""
+    return dict(
+        driver=dict(type=driver.type()),
+        line_of_sight=dict(type='transfer') | transfer,
+        observable=dict(
+            type='pixel_spectra', size=[24, 24, nchannels],
+            step=[1, 1, step]),
+        galaxy=dict(components=components))
+
+
+def evaluate_transfer(evaluate_cases, case, properties):
+    """The spectral cube and the extras of a case of transfer_case."""
+    names = {component['name'] for component in case['galaxy']['components']}
+    data, extra = evaluate_cases([case], {
+        key: value for key, value in properties.items()
+        if key.split('_')[0] in names})
+    return data[0]['spectra']['d'], extra
+
+
+def test_subchannels_march_each_channel_at_finer_channels(
+        driver, evaluate_cases):
+    # A face-on disk of narrow lines with line opacity of a uniform
+    # coefficient 1/S (each channel is S (1 - exp(-I / S)), see
+    # test_line_opacity_saturates_at_the_source_function): with 4
+    # sub-channels, each channel is the mean of 4 channels 4 times
+    # narrower; light without line opacity is the same with any number
+    gas = line_opacity(GAS, dict(type='uniform'))
+    properties = PROPERTIES | dict(gas_incl=0, gas_dpt_a=4)
+
+    def cube(nchannels, step, subchannels, coefficient):
+        return evaluate_transfer(evaluate_cases, transfer_case(
+            driver, [gas], nchannels, step, subchannels=subchannels),
+            properties | dict(gas_op_a=coefficient))[0]
+    fine_thin = cube(31 * 4, 2.5, 1, 0)
+    source = fine_thin.max() / 3
+    expected = (source * -np.expm1(-fine_thin / source)).reshape(
+        (31, 4) + fine_thin.shape[1:]).mean(axis=1)
+    assert_same_model(cube(31, 10, 4, 1 / source), expected)
+    assert np.abs(cube(31, 10, 1, 1 / source) - expected).max() \
+        > 0.01 * expected.max()
+    assert_same_model(cube(31, 10, 4, 0), cube(31, 10, 1, 0))
+
+
+def test_transfer_extras(driver, evaluate_cases):
+    # Gas with line opacity of a uniform coefficient 1/S, and dust: the
+    # light without opacity is that of the gas alone, and the optical
+    # depth of its lines at each channel is that light over S
+    thin, _ = evaluate_transfer(
+        evaluate_cases, transfer_case(driver, [GAS]), PROPERTIES)
+    source = thin.max() / 3
+    _, extra = evaluate_transfer(evaluate_cases, transfer_case(
+        driver, [line_opacity(GAS, dict(type='uniform')), DUST],
+        subchannels=2), PROPERTIES | dict(gas_op_a=1 / source))
+    unabsorbed = extra['observation0_model_total_unabsorbed']
+    line_tau = extra['observation0_model_total_line_tau']
+    assert unabsorbed.spectral_axis == line_tau.spectral_axis == 2
+    assert_same_model(unabsorbed.data, thin)
+    assert_same_model(line_tau.data, thin / source)
+    assert 'observation0_model_total_obdata' not in extra
+
+
+def test_subchannels_option():
+    from gbkfit.observation import Transfer
+    from gbkfit.utils.parseutils import ConfigError
+    assert Transfer(subchannels=4).dump()['subchannels'] == 4
+    for subchannels in (0, 65, 2.5):
+        with pytest.raises(ConfigError, match="from 1 to 64"):
+            Transfer(subchannels=subchannels)
+
+
+@pytest.mark.parametrize('incl, dispersion, subchannels, warnings', [
+    (0, 20, 1, []),
+    (0, 4, 1, ["raise the option subchannels of the line of sight to 4"]),
+    (0, 4, 4, []),
+    (90, 5, 4, ["does not resolve line opacity along the line of sight"])])
+def test_a_coarse_march_of_line_opacity_warns(
+        driver, evaluate_cases, caplog, incl, dispersion, subchannels,
+        warnings):
+    # Optically thick lines in channels of 10 km/s. Face-on (one velocity
+    # on each line of sight), lines narrower than the channels need
+    # sub-channels; edge-on, of a rotation curve flat almost from the
+    # centre, the velocity changes along the line of sight by more than
+    # the dispersion between adjacent voxels
+    import logging
+    properties = PROPERTIES | dict(
+        gas_incl=incl, gas_dpt_a=dispersion, gas_vpt_rt=0.5)
+    thin, _ = evaluate_transfer(
+        evaluate_cases, transfer_case(driver, [GAS]), properties)
+    caplog.set_level(logging.WARNING)
+    evaluate_transfer(evaluate_cases, transfer_case(
+        driver, [line_opacity(GAS, dict(type='uniform'))],
+        subchannels=subchannels), properties | dict(gas_op_a=3 / thin.max()))
+    logged = [
+        record.getMessage() for record in caplog.records
+        if 'radiative transfer does not resolve' in record.getMessage()]
+    assert len(logged) == len(warnings)
+    for warning, message in zip(warnings, logged):
+        assert warning in message
