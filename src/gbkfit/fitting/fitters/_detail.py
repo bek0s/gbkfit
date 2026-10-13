@@ -8,6 +8,7 @@ from typing import Literal
 import numpy as np
 
 from gbkfit.fitting.uncertainty import finite_difference_steps, jacobian
+from gbkfit.utils import threadutils
 
 
 def relative_step(
@@ -104,8 +105,9 @@ class LeastSquaresFunctions:
         residuals = self._func(x)
         self._last_x = np.array(x, dtype=float)
         self._last_residuals = residuals
-        # (TODO: see the spinning BLAS threads in FitProblem.residuals)
-        cost = float(residuals @ residuals)
+        # (see FitProblem.residuals)
+        with threadutils.single_threaded_blas():
+            cost = float(residuals @ residuals)
         if cost < self._best_cost:
             self._best_cost = cost
             self._best_x = self._last_x.copy()
