@@ -610,6 +610,16 @@ class RPTrait(PTrait, abc.ABC):
         """
         pass
 
+    @abc.abstractmethod
+    def axisymmetric(self) -> bool:
+        """
+        Check whether its value is the same at every azimuth (at each
+        radius): then the azimuthal means of it that the gravity of its
+        galaxy takes are its value at one azimuth (see DiskDensity and
+        pressure_support).
+        """
+        pass
+
 
 class RHTrait(TraitFeatureZmax, HTrait, abc.ABC):
     """
@@ -659,6 +669,15 @@ class DPTrait(PTrait, abc.ABC):
     A velocity dispersion polar trait.
     """
 
+    @abc.abstractmethod
+    def axisymmetric(self) -> bool:
+        """
+        Check whether its value is the same at every azimuth (at each
+        radius): then the azimuthal means of it that pressure support
+        takes are its value at one azimuth (see pressure_support).
+        """
+        pass
+
 
 class DHTrait(HTrait, abc.ABC):
     """
@@ -682,6 +701,16 @@ class SPTrait(PTrait, abc.ABC):
     A selection polar trait: 1 where it selects the disk, 0 elsewhere.
     """
 
+    @abc.abstractmethod
+    def axisymmetric(self) -> bool:
+        """
+        Check whether its value is the same at every azimuth (at each
+        radius): then the azimuthal means of the density it selects, which
+        the gravity of its galaxy takes, can be its value at one azimuth
+        (see DiskDensity and pressure_support).
+        """
+        pass
+
 
 class RPTraitUniform(RPTrait):
     """
@@ -696,6 +725,9 @@ class RPTraitUniform(RPTrait):
     @staticmethod
     def uid() -> int:
         return RPT_UID_UNIFORM
+
+    def axisymmetric(self) -> bool:
+        return True
 
     def params_sm(self) -> dict[str, ParamDesc]:
         return dict(a=ParamScalarDesc())
@@ -722,6 +754,9 @@ class RPTraitExponential(RPTrait):
     @staticmethod
     def uid() -> int:
         return RPT_UID_EXP
+
+    def axisymmetric(self) -> bool:
+        return True
 
     def params_sm(self) -> dict[str, ParamDesc]:
         return dict(
@@ -751,6 +786,9 @@ class RPTraitGauss(RPTrait):
     @staticmethod
     def uid() -> int:
         return RPT_UID_GAUSS
+
+    def axisymmetric(self) -> bool:
+        return True
 
     def params_sm(self) -> dict[str, ParamDesc]:
         return dict(
@@ -782,6 +820,9 @@ class RPTraitGGauss(RPTrait):
     def uid() -> int:
         return RPT_UID_GGAUSS
 
+    def axisymmetric(self) -> bool:
+        return True
+
     def params_sm(self) -> dict[str, ParamDesc]:
         return dict(
             a=ParamScalarDesc(),
@@ -812,6 +853,9 @@ class RPTraitLorentz(RPTrait):
     def uid() -> int:
         return RPT_UID_LORENTZ
 
+    def axisymmetric(self) -> bool:
+        return True
+
     def params_sm(self) -> dict[str, ParamDesc]:
         return dict(
             a=ParamScalarDesc(),
@@ -841,6 +885,9 @@ class RPTraitMoffat(RPTrait):
     def uid() -> int:
         return RPT_UID_MOFFAT
 
+    def axisymmetric(self) -> bool:
+        return True
+
     def params_sm(self) -> dict[str, ParamDesc]:
         return dict(
             a=ParamScalarDesc(),
@@ -869,6 +916,9 @@ class RPTraitSech2(RPTrait):
     @staticmethod
     def uid() -> int:
         return RPT_UID_SECH2
+
+    def axisymmetric(self) -> bool:
+        return True
 
     def params_sm(self) -> dict[str, ParamDesc]:
         return dict(
@@ -915,6 +965,9 @@ class RPTraitMixtureExponential(TraitFeatureNBlobs, RPTrait):
     def __init__(self, nblobs: int):
         super().__init__(nblobs=nblobs)
 
+    def axisymmetric(self) -> bool:
+        return False
+
     def params_sm(self) -> dict[str, ParamDesc]:
         return _ptrait_params_mixture_6p(self.nblobs())
 
@@ -957,6 +1010,9 @@ class RPTraitMixtureGauss(TraitFeatureNBlobs, RPTrait):
 
     def __init__(self, nblobs: int):
         super().__init__(nblobs=nblobs)
+
+    def axisymmetric(self) -> bool:
+        return False
 
     def params_sm(self) -> dict[str, ParamDesc]:
         return _ptrait_params_mixture_6p(self.nblobs())
@@ -1002,6 +1058,9 @@ class RPTraitMixtureGGauss(TraitFeatureNBlobs, RPTrait):
     def __init__(self, nblobs: int):
         super().__init__(nblobs=nblobs)
 
+    def axisymmetric(self) -> bool:
+        return False
+
     def params_sm(self) -> dict[str, ParamDesc]:
         return _ptrait_params_mixture_7p(self.nblobs())
 
@@ -1046,6 +1105,9 @@ class RPTraitMixtureMoffat(TraitFeatureNBlobs, RPTrait):
     def __init__(self, nblobs: int):
         super().__init__(nblobs=nblobs)
 
+    def axisymmetric(self) -> bool:
+        return False
+
     def params_sm(self) -> dict[str, ParamDesc]:
         return _ptrait_params_mixture_7p(self.nblobs())
 
@@ -1088,6 +1150,9 @@ class RPTraitNWUniform(TraitFeatureSampling, RPTrait):
             self,
             sampling: str = SAMPLING_DEFAULT):
         super().__init__(sampling=sampling)
+
+    def axisymmetric(self) -> bool:
+        return True
 
     def params_rnw(self, nnodes: int) -> dict[str, ParamDesc]:
         return dict(a=ParamVectorDesc(nnodes))
@@ -1139,6 +1204,10 @@ class RPTraitNWHarmonic(
             sampling: str = SAMPLING_DEFAULT):
         super().__init__(order=order, sampling=sampling)
 
+    def axisymmetric(self) -> bool:
+        # (a harmonic of order 0 is uniform)
+        return self.order() == 0
+
     def params_rnw(self, nnodes: int) -> dict[str, ParamDesc]:
         return _ptrait_params_nw_harmonic(self.order(), nnodes)
 
@@ -1184,6 +1253,9 @@ class RPTraitNWDistortion(TraitFeatureSampling, RPTrait):
             self,
             sampling: str = SAMPLING_DEFAULT):
         super().__init__(sampling=sampling)
+
+    def axisymmetric(self) -> bool:
+        return False
 
     def params_rnw(self, nnodes: int) -> dict[str, ParamDesc]:
         return _ptrait_params_nw_distortion(nnodes)
@@ -2296,6 +2368,9 @@ class DPTraitUniform(DPTrait):
     def uid() -> int:
         return DPT_UID_UNIFORM
 
+    def axisymmetric(self) -> bool:
+        return True
+
     def params_sm(self) -> dict[str, ParamDesc]:
         return dict(a=ParamScalarDesc())
 
@@ -2313,6 +2388,9 @@ class DPTraitExponential(DPTrait):
     @staticmethod
     def uid() -> int:
         return DPT_UID_EXP
+
+    def axisymmetric(self) -> bool:
+        return True
 
     def params_sm(self) -> dict[str, ParamDesc]:
         return dict(
@@ -2334,6 +2412,9 @@ class DPTraitGauss(DPTrait):
     @staticmethod
     def uid() -> int:
         return DPT_UID_GAUSS
+
+    def axisymmetric(self) -> bool:
+        return True
 
     def params_sm(self) -> dict[str, ParamDesc]:
         return dict(
@@ -2357,6 +2438,9 @@ class DPTraitGGauss(DPTrait):
     def uid() -> int:
         return DPT_UID_GGAUSS
 
+    def axisymmetric(self) -> bool:
+        return True
+
     def params_sm(self) -> dict[str, ParamDesc]:
         return dict(
             a=ParamScalarDesc(),
@@ -2379,6 +2463,9 @@ class DPTraitLorentz(DPTrait):
     def uid() -> int:
         return DPT_UID_LORENTZ
 
+    def axisymmetric(self) -> bool:
+        return True
+
     def params_sm(self) -> dict[str, ParamDesc]:
         return dict(
             a=ParamScalarDesc(),
@@ -2400,6 +2487,9 @@ class DPTraitMoffat(DPTrait):
     def uid() -> int:
         return DPT_UID_MOFFAT
 
+    def axisymmetric(self) -> bool:
+        return True
+
     def params_sm(self) -> dict[str, ParamDesc]:
         return dict(
             a=ParamScalarDesc(),
@@ -2420,6 +2510,9 @@ class DPTraitSech2(DPTrait):
     @staticmethod
     def uid() -> int:
         return DPT_UID_SECH2
+
+    def axisymmetric(self) -> bool:
+        return True
 
     def params_sm(self) -> dict[str, ParamDesc]:
         return dict(
@@ -2458,6 +2551,9 @@ class DPTraitMixtureExponential(TraitFeatureNBlobs, DPTrait):
     def __init__(self, nblobs: int):
         super().__init__(nblobs=nblobs)
 
+    def axisymmetric(self) -> bool:
+        return False
+
     def params_sm(self) -> dict[str, ParamDesc]:
         return _ptrait_params_mixture_6p(self.nblobs())
 
@@ -2492,6 +2588,9 @@ class DPTraitMixtureGauss(TraitFeatureNBlobs, DPTrait):
 
     def __init__(self, nblobs: int):
         super().__init__(nblobs=nblobs)
+
+    def axisymmetric(self) -> bool:
+        return False
 
     def params_sm(self) -> dict[str, ParamDesc]:
         return _ptrait_params_mixture_6p(self.nblobs())
@@ -2529,6 +2628,9 @@ class DPTraitMixtureGGauss(TraitFeatureNBlobs, DPTrait):
     def __init__(self, nblobs: int):
         super().__init__(nblobs=nblobs)
 
+    def axisymmetric(self) -> bool:
+        return False
+
     def params_sm(self) -> dict[str, ParamDesc]:
         return _ptrait_params_mixture_7p(self.nblobs())
 
@@ -2564,6 +2666,9 @@ class DPTraitMixtureMoffat(TraitFeatureNBlobs, DPTrait):
     def __init__(self, nblobs: int):
         super().__init__(nblobs=nblobs)
 
+    def axisymmetric(self) -> bool:
+        return False
+
     def params_sm(self) -> dict[str, ParamDesc]:
         return _ptrait_params_mixture_7p(self.nblobs())
 
@@ -2598,6 +2703,9 @@ class DPTraitNWUniform(TraitFeatureSampling, DPTrait):
             self,
             sampling: str = SAMPLING_DEFAULT):
         super().__init__(sampling=sampling)
+
+    def axisymmetric(self) -> bool:
+        return True
 
     def params_rnw(self, nnodes: int) -> dict[str, ParamDesc]:
         return dict(a=ParamVectorDesc(nnodes))
@@ -2641,6 +2749,10 @@ class DPTraitNWHarmonic(
             sampling: str = SAMPLING_DEFAULT):
         super().__init__(order=order, sampling=sampling)
 
+    def axisymmetric(self) -> bool:
+        # (a harmonic of order 0 is uniform)
+        return self.order() == 0
+
     def params_rnw(self, nnodes: int) -> dict[str, ParamDesc]:
         return _ptrait_params_nw_harmonic(self.order(), nnodes)
 
@@ -2677,6 +2789,9 @@ class DPTraitNWDistortion(TraitFeatureSampling, DPTrait):
             self,
             sampling: str = SAMPLING_DEFAULT):
         super().__init__(sampling=sampling)
+
+    def axisymmetric(self) -> bool:
+        return False
 
     def params_rnw(self, nnodes: int) -> dict[str, ParamDesc]:
         return _ptrait_params_nw_distortion(nnodes)
@@ -2919,6 +3034,9 @@ class SPTraitAzimuthalRange(SPTrait):
     def uid() -> int:
         return SPT_UID_AZRANGE
 
+    def axisymmetric(self) -> bool:
+        return False
+
     def params_sm(self) -> dict[str, ParamDesc]:
         return dict(
             p=ParamScalarDesc(),
@@ -2938,6 +3056,9 @@ class SPTraitRadialRange(SPTrait):
     @staticmethod
     def uid() -> int:
         return SPT_UID_RRANGE
+
+    def axisymmetric(self) -> bool:
+        return True
 
     def params_sm(self) -> dict[str, ParamDesc]:
         return dict(
@@ -2974,6 +3095,9 @@ class SPTraitNWAzimuthalRange(
 
     def __init__(self, sampling: str = SAMPLING_DEFAULT):
         super().__init__(sampling=sampling)
+
+    def axisymmetric(self) -> bool:
+        return False
 
     def params_rnw(self, nnodes: int) -> dict[str, ParamDesc]:
         return dict(
