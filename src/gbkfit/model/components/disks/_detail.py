@@ -153,11 +153,13 @@ def make_disk(
     node_args = parse_component_rnode_args(**rings, rstep=rstep, interp=interp)
     traits_ = _disk_traits(
         density, kinematics, emission, opacity, zptraits, sptraits)
+    # (not the coefficients of line opacity: a uniform one is common, e.g.
+    # one spin temperature)
+    check_traits_common(sum(traits_.values(), ()))
     opacity_traits, opacity_prefixes, opacity_lines = line_opacity_traits(
         opacity, emission)
     if opacity_traits:
         traits_.update(opt=opacity_traits)
-    check_traits_common(sum(traits_.values(), ()))
     return disk_class(
         **disk_options,
         loose=bool(loose), tilted=bool(tilted), **node_args,

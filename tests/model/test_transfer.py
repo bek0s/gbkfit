@@ -337,6 +337,15 @@ def test_named_lines_take_a_coefficient_each(driver, evaluate_cases):
     assert galaxy_parser.dump(galaxy_parser.load(dumped)) == dumped
 
 
+def test_a_uniform_coefficient_is_not_discouraged(caplog):
+    # (unlike a uniform density: one source function is common)
+    import logging
+    caplog.set_level(logging.WARNING)
+    galaxy_parser.load(dict(components=[
+        line_opacity(GAS, dict(type='uniform'))]))
+    assert 'discouraged' not in caplog.text
+
+
 @pytest.mark.parametrize('component, line_of_sight, message', [
     (line_opacity(GAS, dict(type='uniform')), 'grid',
      "needs a line of sight of radiative transfer"),
