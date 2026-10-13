@@ -191,9 +191,11 @@ class PixelBrightnessPlan(_detail.DCubePlanBase):
     def evaluate(
             self,
             params: ParamValues,
+            gravity: Sequence[dict[int, ParamValues]],
             out_extra: dict[str, Any] | None
     ) -> ModelData:
-        self._evaluate_cube(params, out_extra, _image_extra, _image_extra)
+        self._evaluate_cube(
+            params, gravity, out_extra, _image_extra, _image_extra)
         plan = self._dcube_plan
         return dict(brightness=dict(
             d=plan.dcube()[0, :, :],

@@ -14,6 +14,7 @@ from gbkfit.utils import gridutils, iterutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
 from .components import _detail
 from .components._component_set import ComponentSet, ComponentSetPlan
+from .components._gravity import GravityPlan
 from .components._transfer import TransferPlan
 from .components.base import Component, DepthAxis, OpacityCubes
 from .components.disks import MCDisk, SMDisk
@@ -223,6 +224,20 @@ class Galaxy(parseutils.Serializable):
         radial nodes of its disks, prefixed as their parameters).
         """
         return self._component_set.constants()
+
+    def plan_gravity(self) -> GravityPlan:
+        """
+        Plan the evaluation of the gravity of the galaxy, once for all the
+        observations of it: the circular velocity of its mass at the radii
+        of the components it moves (see GravityPlan), which its plans on
+        the grids of observations take.
+
+        Returns
+        -------
+        GravityPlan
+            The plan.
+        """
+        return self._component_set.plan_gravity()
 
     def plan(
             self,

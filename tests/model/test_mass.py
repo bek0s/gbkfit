@@ -627,6 +627,50 @@ def test_trait_disks_follow_disks_of_their_galaxy():
         disk_galaxy('smdisk', dict(type='mass'), mass, DISTANCE)
 
 
+def test_trait_disk_follows_a_component_without_light():
+    # The mass of a disk can follow a component whose light no observation
+    # sees, here dust: thin, its gravity is that of the nodewise disk of
+    # the surface density of the dust (as in test_trait_disk_is_the_
+    # nodewise_disk_of_its_density), at the subnodes of the disk it moves
+    from gbkfit.model.components.disks._disk import subring_radii
+    rnodes = list(range(0, 21, 2))
+    opacity = np.append(np.linspace(1, 0.2, 10), 0)
+    upsilon = 2e8
+    stars = with_traits(DISK, vptraits=dict(type='mass')) \
+        | dict(type='smdisk', name='stars')
+    dust = dict(
+        type='smdisk', name='dust', loose=False, tilted=False,
+        rnodes=rnodes, rstep=DISK['rstep'],
+        density=dict(
+            ptraits=dict(type='nw_uniform'),
+            htraits=dict(type='sech2', zmax=8)),
+        opacity=dict(type='dust'))
+    galaxy = galaxy_parser.load(dict(
+        components=[stars, dust],
+        mass=[dict(
+            type='trait_disk', name='gas', component='dust',
+            vertical='thin')],
+        distance=copy.deepcopy(DISTANCE)))
+    params = {
+        f'{name}_{key}': value for name in ('stars', 'dust')
+        for key, value in DISK_PROPERTIES.items()
+        if f'{name}_{key}' in galaxy.pdescs()}
+    params |= dict(
+        dust_pt_a=opacity, dust_ht_s=1, distance=10,
+        mass_gas_upsilon=upsilon)
+    subrnodes = np.array(subring_radii(rnodes, DISK['rstep']))
+    nodewise = mass_model([dict(
+        type='nodewise_disk', name='gas',
+        nodes=(subrnodes * KPC_PER_ARCSEC).tolist(), vertical='thin')])
+    sigma = upsilon * np.interp(subrnodes[:-1], rnodes, opacity)
+    np.testing.assert_allclose(
+        galaxy.plan_gravity().evaluate(params)[0]['vpt_vt'],
+        np.sqrt(nodewise.vcirc2(
+            subrnodes * KPC_PER_ARCSEC,
+            dict(mass_gas_log_sigma=np.log10(sigma)), CONTEXT)),
+        rtol=1e-6)
+
+
 def test_pressure_support_is_the_jeans_equation(driver):
     # An exponential density (scale 4) and dispersion (scale 10) of a
     # thin disk: (R / rho) d(rho sigma^2)/dR = -sigma^2 R (1 / 4 + 2 / 10),
@@ -703,3 +747,33 @@ def test_pressure_support_option():
     assert traits.vpt_parser.dump(traits.VPTraitMass()) == dict(type='mass')
     with pytest.raises(ConfigError, match="pressure_support must be"):
         traits.VPTraitMass('asymmetric')
+
+
+def test_observations_of_a_galaxy_share_its_gravity(driver, monkeypatch):
+    # The gravity of a galaxy is evaluated once for all the observations
+    # of it, whatever their dtypes
+    from gbkfit.model.components._gravity import GravityPlan
+    from gbkfit.observation import (
+        Observation, ObservationGroup, PixelSpectra, line_of_sight_parser)
+    from gbkfit.params import ParamSpace
+    calls = []
+    evaluate_gravity = GravityPlan.evaluate
+
+    def counted(self, params):
+        calls.append(params)
+        return evaluate_gravity(self, params)
+    monkeypatch.setattr(GravityPlan, 'evaluate', counted)
+    galaxy = disk_galaxy('smdisk', dict(type='mass'), MASS, DISTANCE)
+    group = ObservationGroup([galaxy], [
+        Observation(
+            PixelSpectra(size=(32, 32, 51), step=(1, 1, 10)),
+            line_of_sight_parser.load(dict(type='flat')), driver,
+            dtype=dtype)
+        for dtype in ('float32', 'float64')])
+    params = ParamSpace(
+        group.pdescs(), DISK_PROPERTIES | MASS_PROPERTIES).evaluate()
+    single, double = group.model_h(params)
+    assert len(calls) == 1
+    np.testing.assert_allclose(
+        single['spectra']['d'], double['spectra']['d'], rtol=1e-5,
+        atol=1e-7)

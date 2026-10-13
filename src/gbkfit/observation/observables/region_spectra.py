@@ -277,9 +277,10 @@ class RegionSpectraPlan(_detail.DCubePlanBase):
     def evaluate(
             self,
             params: ParamValues,
+            gravity: Sequence[dict[int, ParamValues]],
             out_extra: dict[str, Any] | None
     ) -> ModelData:
         self._evaluate_cube(
-            params, out_extra, _dcube.cube_extra, _dcube.cube_extra)
+            params, gravity, out_extra, _dcube.cube_extra, _dcube.cube_extra)
         self._sums.evaluate(self._dcube_plan.dcube(), self._spectra)
         return dict(spectra=dict(d=self._spectra, m=None, w=None))

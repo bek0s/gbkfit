@@ -261,6 +261,7 @@ class DCubePlanBase(ObservablePlan):
     def _evaluate_cube(
             self,
             params: ParamValues,
+            gravity: Sequence[dict[int, ParamValues]],
             out_extra: dict[str, Any] | None,
             extra_lo: ExtraFunction,
             extra_hi: ExtraFunction
@@ -278,7 +279,7 @@ class DCubePlanBase(ObservablePlan):
             else self._source_cube
         self._driver.mem_fill(cube, 0)
         model_extra = None if out_extra is None else {}
-        self._model_plan.evaluate(params, cube, model_extra)
+        self._model_plan.evaluate(params, gravity, cube, model_extra)
         if self._lens_plan is not None:
             self._lens_plan.evaluate(cube, dcube_plan.scratch_dcube())
         flux_scale = None if self._calibration is None \

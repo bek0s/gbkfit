@@ -250,7 +250,7 @@ def image_plan(driver, galaxy, size):
 def evaluate_image(driver, plan, size, params):
     image = driver.mem_alloc_d(size[::-1], np.float32)
     driver.mem_fill(image, 0)
-    plan.evaluate(params, dict(image=image), None)
+    plan.evaluate(params, {}, dict(image=image), None)
     return driver.mem_copy_d2h(image)
 
 

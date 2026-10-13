@@ -231,12 +231,13 @@ class SlitSpectraPlan(_detail.DCubePlanBase):
     def evaluate(
             self,
             params: ParamValues,
+            gravity: Sequence[dict[int, ParamValues]],
             out_extra: dict[str, Any] | None
     ) -> ModelData:
         # The slit has no position on the sky, so the extra outputs of the
         # high-res grid are plain arrays
         self._evaluate_cube(
-            params, out_extra, _slit_extra, _dcube.plain_extra)
+            params, gravity, out_extra, _slit_extra, _dcube.plain_extra)
         plan = self._dcube_plan
         return dict(spectra=dict(
             d=plan.dcube()[:, 0, :],
