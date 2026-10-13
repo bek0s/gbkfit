@@ -36,7 +36,7 @@ def native_grid(size):
     return dict(
         spat_size=size, spat_step=(1.0, 1.0, 1.0),
         spat_zero=tuple(-(n / 2 - 0.5) for n in size), spat_rota=0.0,
-        spec_size=SPECTRAL.size[0], spec_step=SPECTRAL.coords.step[0],
+        slab_zero=0, spec_size=SPECTRAL.size[0], spec_step=SPECTRAL.coords.step[0],
         spec_zero=SPECTRAL.zero()[0])
 
 

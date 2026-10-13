@@ -40,12 +40,15 @@ class NativeGrid(TypedDict):
     functions take it: the 3d spatial grid (each in x, y, z order; the
     rotation in degrees) and the spectral axis. Without a depth axis, the
     z axis has size 1 (and step 0), and so does the spectral axis of an
-    image.
+    image. The grid can be a slab of planes of the depth axis: its planes
+    from the plane slab_zero (0 for the whole axis) of an axis whose
+    first plane is at spat_zero[2].
     """
     spat_size: tuple[int, int, int]
     spat_step: tuple[float, float, float]
     spat_zero: tuple[float, float, float]
     spat_rota: float
+    slab_zero: int
     spec_size: int
     spec_step: float
     spec_zero: float

@@ -112,7 +112,7 @@ struct GModel
             std::array<int, 3> spat_size,
             std::array<T, 3> spat_step,
             std::array<T, 3> spat_zero,
-            T spat_rota,
+            T spat_rota, int slab_zero,
             int spec_size, T spec_step, T spec_zero,
             Lines lines,
             ConstData opacity, Ratios opacity_ratios,
@@ -124,7 +124,7 @@ struct GModel
             T rdata_scale, T image_scale)
     {
         const auto args = make_args(
-                disk, spat_size, spat_step, spat_zero, spat_rota,
+                disk, spat_size, spat_step, spat_zero, spat_rota, slab_zero,
                 spec_size, spec_step, spec_zero, lines,
                 opacity, opacity_ratios,
                 image, scube, rdata, rdata_cmp,
@@ -143,7 +143,7 @@ struct GModel
             std::array<int, 3> spat_size,
             std::array<T, 3> spat_step,
             std::array<T, 3> spat_zero,
-            T spat_rota,
+            T spat_rota, int slab_zero,
             int spec_size, T spec_step, T spec_zero,
             Lines lines,
             ConstData opacity, Ratios opacity_ratios,
@@ -155,7 +155,7 @@ struct GModel
             T rdata_scale, T image_scale)
     {
         const auto args = make_args(
-                disk, spat_size, spat_step, spat_zero, spat_rota,
+                disk, spat_size, spat_step, spat_zero, spat_rota, slab_zero,
                 spec_size, spec_step, spec_zero, lines,
                 opacity, opacity_ratios,
                 image, scube, rdata, rdata_cmp,
@@ -402,6 +402,7 @@ struct GModel
                     first...,
                     nb::arg("spat_size"), nb::arg("spat_step"),
                     nb::arg("spat_zero"), nb::arg("spat_rota"),
+                    nb::arg("slab_zero") = 0,
                     nb::arg("spec_size"),
                     nb::arg("spec_step"), nb::arg("spec_zero"),
                     nb::arg("lines").noconvert().none() = nb::none(),
@@ -524,7 +525,7 @@ private:
             std::array<int, 3> spat_size,
             std::array<T, 3> spat_step,
             std::array<T, 3> spat_zero,
-            T spat_rota,
+            T spat_rota, int slab_zero,
             int spec_size, T spec_step, T spec_zero,
             const Lines& lines,
             const ConstData& opacity, const Ratios& opacity_ratios,
@@ -584,6 +585,10 @@ private:
             a.spat_zero[i] = spat_zero[i];
         }
         a.spat_rota = spat_rota;
+        a.slab_zero = slab_zero;
+        require(slab_zero >= 0 && (disk.rht || slab_zero == 0),
+                "slab_zero must be at least 0, and 0 for a thin disk, which is "
+                "evaluated on the whole depth axis");
         a.spec_size = spec_size;
         a.spec_step = spec_step;
         a.spec_zero = spec_zero;
