@@ -30,7 +30,8 @@ dependencies = [
     'pydantic>=2',
     'ruamel.yaml',
     'scikit-image',
-    'scipy'
+    'scipy',
+    'threadpoolctl'
 ]
 
 [project.optional-dependencies]

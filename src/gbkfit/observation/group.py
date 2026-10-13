@@ -5,7 +5,7 @@ import numpy as np
 
 from gbkfit.model import Galaxy
 from gbkfit.params import ParamDesc, ParamValues
-from gbkfit.utils import iterutils, parseutils, timeutils
+from gbkfit.utils import iterutils, parseutils, threadutils, timeutils
 from gbkfit.utils.parseutils import ConfigError
 from ._scene import Scene, make_scene
 from .observables import ModelData
@@ -172,7 +172,8 @@ class ObservationGroup:
             out_extra: dict[str, Any] | None = None
     ) -> list[ModelData]:
         """
-        Evaluate the model data of the observations, on their drivers.
+        Evaluate the model data of the observations, on their drivers,
+        with BLAS on one thread (see threadutils.single_threaded_blas).
 
         Parameters
         ----------
@@ -188,7 +189,8 @@ class ObservationGroup:
             The model data of each observation, on its driver; they are
             overwritten by the next evaluation.
         """
-        with self._timers.measure('model_eval'):
+        with (self._timers.measure('model_eval'),
+              threadutils.single_threaded_blas()):
             with self._timers.measure('model_gravity'):
                 gravity = [
                     plan.evaluate(
