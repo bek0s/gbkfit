@@ -402,7 +402,8 @@ def _opacity_cubes(
     distinct = tuple(dict.fromkeys(dust))
     if len(distinct) == 1:
         return distinct, (0,) * len(dust), (1.0,) * len(dust)
-    if len({row.observed() for row in light}) == 1:
+    if all(_same_wavelength(row.observed(), light[0].observed())
+           for row in light):
         return (
             (_GREY,), (0,) * len(dust),
             tuple(kind.ratio(light[0]) for kind in dust))
@@ -415,6 +416,17 @@ def _opacity_cubes(
     return (
         distinct, tuple(distinct.index(kind) for kind in dust),
         (1.0,) * len(dust))
+
+
+def _same_wavelength(a: float | None, b: float | None) -> bool:
+    """
+    Check whether two observed wavelengths (um; None if not known) are
+    one: to the precision of their arithmetic (the rest wavelength of a
+    band, times 1 + the redshift, is its wavelength only to rounding).
+    """
+    if a is None or b is None:
+        return a is b
+    return bool(np.isclose(a, b, rtol=1e-9, atol=0))
 
 
 def _followed_densities(

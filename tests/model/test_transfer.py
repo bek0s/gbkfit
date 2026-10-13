@@ -397,10 +397,12 @@ def test_slabs_give_the_same_model(driver, evaluate_cases, disk_type):
                 atol=1e-6 * np.nanmax(np.abs(extra[name].data)))
 
 
-def galaxies_model(driver, galaxies, properties, **observation):
+def galaxies_model(
+        driver, galaxies, properties, with_extras=True, **observation):
     """
     The model data of an observation of several galaxies through
-    radiative transfer (a spectral cube by default), and its extras.
+    radiative transfer (a spectral cube by default), and its extras (none
+    without with_extras: the evaluation of fits).
     """
     import gbkfit.params
     from gbkfit.observation import ObservationGroup, observation_parser
@@ -413,7 +415,7 @@ def galaxies_model(driver, galaxies, properties, **observation):
         galaxy_parser.load(galaxies),
         observation_parser.load([observation], drivers=[{None: driver}]))
     params = gbkfit.params.ParamSpace(group.pdescs(), properties)
-    extra = {}
+    extra = {} if with_extras else None
     data = group.model_h(params.evaluate(), extra)
     return next(iter(data[0].values()))['d'], extra
 
@@ -467,28 +469,53 @@ def test_the_dust_of_a_galaxy_dims_the_galaxies_behind_it(
 
 
 def test_line_opacity_continues_into_the_galaxies_behind(driver):
-    # Two galaxies of gas at one place on the sky with line opacity of a
-    # uniform coefficient 1/S: the march goes on from one into the other,
-    # so the light of each channel is S (1 - exp(-I / S)), I the light of
-    # both without line opacity (see
-    # test_line_opacity_saturates_at_the_source_function)
+    # Two galaxies of gas at one place on the sky; the one in front has
+    # line opacity of a uniform coefficient 1/S, so its light is S (1 -
+    # e^-t), t = I / S of its light without line opacity, and that of the
+    # one behind is dimmed by e^-t (see
+    # test_line_opacity_saturates_at_the_source_function). Swapping their
+    # depths swaps the roles. (Without extras: the evaluation of fits.)
     gas = line_opacity(GAS, dict(type='uniform'))
     galaxies = [
         dict(name=name, components=[gas], depth=True)
-        for name in ('near', 'far')]
+        for name in ('a', 'b')]
     properties = {}
-    for name, depth, posa in (('near', -50, 30), ('far', 50, 120)):
+    for name, posa in (('a', 30), ('b', 120)):
         properties |= galaxy_properties(name, {
             key: value for key, value in PROPERTIES.items()
-            if key.startswith('gas_')} | dict(depth=depth, gas_posa=posa))
-    thin, _ = galaxies_model(
-        driver, galaxies, properties | dict(near_gas_op_a=0, far_gas_op_a=0))
-    source = thin.max() / 3
-    model, _ = galaxies_model(
-        driver, galaxies, properties | dict(
-            near_gas_op_a=1 / source, far_gas_op_a=1 / source))
-    assert_same_model(model, source * -np.expm1(-thin / source))
-    assert model.sum() < 0.8 * thin.sum()
+            if key.startswith('gas_')} | dict(gas_posa=posa, gas_op_a=0))
+
+    def model(**values):
+        return galaxies_model(
+            driver, galaxies, properties | values, with_extras=False)[0]
+
+    thin_a = model(a_depth=-50, b_depth=50, b_gas_pt_a=0)
+    thin_b = model(a_depth=-50, b_depth=50, a_gas_pt_a=0)
+    source = thin_a.max() / 3
+    dimmed = np.exp(-thin_a / source)
+    in_front = model(a_depth=-50, b_depth=50, a_gas_op_a=1 / source)
+    behind = model(a_depth=50, b_depth=-50, a_gas_op_a=1 / source)
+    assert_same_model(in_front, source * (1 - dimmed) + dimmed * thin_b)
+    assert_same_model(behind, source * (1 - dimmed) + thin_b)
+    assert in_front.sum() < 0.95 * behind.sum()
+
+
+def test_galaxies_without_opacity_may_overlap(driver):
+    # Their light just adds up, in any order, behind a galaxy with dust
+    galaxies = [
+        dict(name='a', components=[GAS, DUST], depth=True),
+        dict(name='b', components=[GAS], depth=True),
+        dict(name='c', components=[GAS], depth=True)]
+    properties = {}
+    for name, depth in (('a', -50), ('b', 0), ('c', 5)):
+        values = PROPERTIES if name == 'a' else {
+            key: value for key, value in PROPERTIES.items()
+            if key.startswith('gas_')}
+        properties |= galaxy_properties(name, values | dict(depth=depth))
+    model, _ = galaxies_model(driver, galaxies, properties)
+    swapped, _ = galaxies_model(
+        driver, galaxies, properties | dict(b_depth=5, c_depth=0))
+    assert_same_model(swapped, model)
 
 
 @pytest.mark.parametrize('line_of_sight, depth, components, message', [
@@ -622,3 +649,15 @@ def test_a_coarse_march_of_line_opacity_warns(
     assert len(logged) == len(warnings)
     for warning, message in zip(warnings, logged):
         assert warning in message
+
+
+def test_lines_of_zero_dispersion_are_left_out_of_the_checks(
+        driver, evaluate_cases):
+    # No resolution resolves them: the checks of an evaluation with extras
+    # (which divide by the dispersion) leave out optically thick lines of
+    # zero dispersion
+    gas = line_opacity(GAS, dict(type='uniform'))
+    _, extra = evaluate_transfer(
+        evaluate_cases, transfer_case(driver, [gas]),
+        PROPERTIES | dict(gas_op_a=50, gas_dpt_a=0))
+    assert extra['observation0_model_total_line_tau'].data.max() > 1
