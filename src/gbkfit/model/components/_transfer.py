@@ -85,10 +85,11 @@ def warn_resolution(
             subchannels * resolution.spectral / _MAX_SPECTRAL_RATIO)
         _log.warning(
             f"radiative transfer does not resolve line opacity in velocity: "
-            f"the channels of the march ({channel:g} in {subchannels} "
-            f"sub-channels) are up to {resolution.spectral:.3g} times as "
-            f"wide as the dispersion of the lines where they are not thin; "
-            f"raise the option subchannels of the line of sight to "
+            f"the channels of the march (of {channel:g} / {subchannels} "
+            f"sub-channel{'s' if subchannels > 1 else ''}) are up to "
+            f"{resolution.spectral:.3g} times as wide as the dispersion of "
+            f"the lines where they are not thin; raise the option "
+            f"subchannels of the line of sight to "
             f"{min(needed, MAX_SUBCHANNELS)}")
     if resolution.depth > _MAX_DEPTH_RATIO:
         _log.warning(
