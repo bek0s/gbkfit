@@ -15,12 +15,8 @@ from gbkfit.driver import DeviceArray, Driver
 from gbkfit.params import ParamValues
 from gbkfit.utils import gridutils
 from gbkfit.utils.parseutils import ConfigError
-from ..distance import Distance
-from ..mass import MassContext, MassModel
-from .base import (
-    Component, ComponentPlan, DepthAxis, NativeGrid, OpacityCubes)
+from .base import DepthAxis, NativeGrid, OpacityCubes
 from .disks._disk import Disk, DiskPlan
-from .disks._profiles import DiskDensity, pressure_support
 from .extinction import ExtinctionLaw
 from .lines import Band
 from .roles import DustOpacity
@@ -54,8 +50,8 @@ class ComponentPlans:
     light is evaluated, and the components with dust (the absorbers: all
     of them, since they absorb whatever the observation sees; the line
     opacity of an emitter is that of its own lines, see LineOpacity). Each
-    component has its parameters, and those its galaxy gives it (the
-    circular velocity of its mass, evaluated once for all of them).
+    component has its parameters, and those that the gravity of its galaxy
+    gives it (see GravityPlan).
 
     The absorbers add the optical depth of each voxel to the cubes of
     opacity, as the given OpacityCubes hold the dust (see opacity_cubes).
@@ -153,28 +149,22 @@ class ComponentPlans:
             i: components[i].plan(
                 driver, spectral, dtype, lines, band, False, None)
             for i in absorbers if i not in self.plans}
-        self._followed = _followed_densities(
-            component_set, self.plans, driver, dtype)
 
-    def params(self, params: ParamValues) -> dict[int, ParamValues]:
+    def params(
+            self, params: ParamValues, gravity: dict[int, ParamValues]
+    ) -> dict[int, ParamValues]:
         """
         Return the values of the parameters of each component it evaluates
         (by its own names), by index, from those of the galaxy, with those
-        its galaxy gives it.
+        that the gravity of the galaxy gives the components it moves
+        (gravity, see GravityPlan.evaluate).
         """
         components = self._component_set.components()
         mappings = self._component_set.mappings()
-        evaluated = sorted(self.plans)
-        given = _circular_velocities(
-            [components[i] for i in evaluated],
-            [self.plans[i].disk_plan() for i in evaluated],
-            [mappings[i] for i in evaluated], self._followed,
-            self._component_set.distance(), self._component_set.mass_model(),
-            params)
         return {
             i: {p: params[mappings[i][p]] for p in components[i].pdescs()}
-            | cmp_given
-            for i, cmp_given in zip(evaluated, given)}
+            | gravity.get(i, {})
+            for i in sorted(self.plans)}
 
     def evaluate_opacity(
             self,
@@ -509,85 +499,3 @@ def _at_radii(
     nodes = disk.rnodes() if len(values) == len(disk.rnodes()) \
         else disk.subrnodes()
     return np.interp(radii, nodes, values)
-
-
-def _followed_densities(
-        component_set: 'ComponentSet',
-        plans: dict[int, ComponentPlan],
-        driver: Driver,
-        dtype: np.dtype
-) -> tuple[tuple[Component, DiskPlan, dict[str, str]], ...]:
-    """
-    Return the components of a galaxy that the components of its mass
-    follow (see MassComponent.followed_components), with the plans of
-    their disks and the names of their parameters: those of the given
-    plans, or new ones for the other components (their mass counts,
-    though they are not evaluated).
-    """
-    mass_model = component_set.mass_model()
-    if mass_model is None:
-        return ()
-    followed = {name for mass_component in mass_model.components()
-                for name in mass_component.followed_components()}
-    result = []
-    for i, (cmp, mapping) in enumerate(zip(
-            component_set.components(), component_set.mappings())):
-        if cmp.name() not in followed:
-            continue
-        disk_plan = plans[i].disk_plan() if i in plans \
-            else cmp.density_disk().plan(driver, 0, dtype)
-        result.append((cmp, disk_plan, mapping))
-    return tuple(result)
-
-
-def _circular_velocities(
-        components: Sequence[Component],
-        disk_plans: Sequence[DiskPlan | None],
-        mappings: Sequence[dict[str, str]],
-        followed: Sequence[tuple[Component, DiskPlan, dict[str, str]]],
-        distance: Distance | None,
-        mass_model: MassModel | None,
-        params: ParamValues
-) -> list[dict[str, np.ndarray]]:
-    """
-    Return the values of the parameters of each component that are the
-    circular velocity of the mass of the galaxy (see
-    Component.circular_velocity_params), from the parameters of the
-    distance and the mass in params, and the densities of the components
-    it follows (see _followed_densities and DiskDensity), with the
-    pressure support of their component where its traits ask for it (see
-    Disk.pressure_supported_params): NaN where their square is negative or
-    infinite (there is no circular orbit). The mass is evaluated once, at
-    all their radii.
-    """
-    radii = [cmp.circular_velocity_params() for cmp in components]
-    if mass_model is None or not any(radii):
-        return [{} for _ in components]
-    kpc_per_arcsec = distance.kpc_per_arcsec(params)
-    densities = {
-        cmp.name(): DiskDensity(
-            cmp.density_disk(), disk_plan,
-            {p: params[mapping[p]] for p in cmp.pdescs()}, kpc_per_arcsec)
-        for cmp, disk_plan, mapping in followed}
-    context = MassContext(
-        distance.critical_density(params), distance.omega_m(params),
-        densities)
-    every = [r for cmp in radii for r in cmp.values()]
-    vcirc2 = mass_model.vcirc2(
-        np.concatenate(every) * kpc_per_arcsec, params, context)
-    ends = np.cumsum([len(r) for r in every])
-    pieces = iter(vcirc2[end - len(r):end] for r, end in zip(every, ends))
-    values = []
-    for cmp, disk_plan, mapping, cmp_radii in zip(
-            components, disk_plans, mappings, radii, strict=True):
-        values.append({})
-        for name, r in cmp_radii.items():
-            v2 = next(pieces)
-            disk = cmp.density_disk()
-            if name in disk.pressure_supported_params():
-                v2 = v2 + pressure_support(
-                    disk, disk_plan,
-                    {p: params[mapping[p]] for p in cmp.pdescs()}, r)
-            values[-1][name] = np.sqrt(
-                np.where(np.isfinite(v2) & (v2 >= 0), v2, np.nan))
-    return values

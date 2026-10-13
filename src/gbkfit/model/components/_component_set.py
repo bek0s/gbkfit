@@ -16,6 +16,7 @@ from ..distance import Distance
 from ..mass import MassModel
 from ._component_plans import ComponentPlans
 from ._detail import shared_params
+from ._gravity import GravityPlan
 from ._transfer import TransferPlan
 from .base import Component, DepthAxis, OpacityCubes
 from .geometries import Geometry
@@ -238,6 +239,10 @@ class ComponentSet:
     def constants(self) -> dict[str, Any]:
         return _constants(self._components, self._prefixes)
 
+    def plan_gravity(self) -> GravityPlan:
+        """Plan the evaluation of the gravity (see GravityPlan)."""
+        return GravityPlan(self)
+
     def plan(
             self,
             driver: Driver,
@@ -323,12 +328,15 @@ class ComponentSetPlan:
     def evaluate(
             self,
             params: ParamValues,
+            gravity: dict[int, ParamValues],
             outputs: dict[str, DeviceArray | None],
             out_extra: dict[str, Any] | None
     ) -> None:
         """
         Add the light of the emitters to the output array, the 'image' or
-        the 'scube' in outputs. The extra outputs of each component are
+        the 'scube' in outputs, with the parameters of the galaxy and those
+        that its gravity gives its components (see
+        GravityPlan.evaluate). The extra outputs of each component are
         named after its name, or its position (e.g. 'disk_bdata' or
         'component0_bdata'), and the totals 'total_*'. With extra outputs,
         a warning says where zmax shapes the density of a disk (see
@@ -349,7 +357,7 @@ class ComponentSetPlan:
             if self._depth is not None:
                 obdata = driver.mem_alloc_d(shape, dtype)
                 driver.mem_fill(obdata, 0)
-        values = plans.params(params)
+        values = plans.params(params, gravity)
         if out_extra is not None:
             plans.warn_truncation(values)
 

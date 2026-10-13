@@ -272,10 +272,11 @@ class PixelMomentsPlan(_detail.DCubePlanBase):
     def evaluate(
             self,
             params: ParamValues,
+            gravity: Sequence[dict[int, ParamValues]],
             out_extra: dict[str, Any] | None
     ) -> ModelData:
         self._evaluate_cube(
-            params, out_extra, _dcube.cube_extra, _dcube.cube_extra)
+            params, gravity, out_extra, _dcube.cube_extra, _dcube.cube_extra)
         # The moment maps, one mask shared by all of them, and the weight
         # map of each moment
         plan = self._dcube_plan

@@ -117,20 +117,23 @@ class ScenePlan(abc.ABC):
     def evaluate(
             self,
             params: ParamValues,
+            gravity: Sequence[dict[int, ParamValues]],
             data: DeviceArray,
             out_extra: dict[str, Any] | None
     ) -> None:
         """
         Add the light of the galaxies to the data (the image or spectral
-        cube), with the parameters of the observation group (params). The
-        extra outputs of each galaxy have its prefix.
+        cube), with the parameters of the observation group (params) and
+        what the gravity of each galaxy gives its components (gravity, see
+        GravityPlan.evaluate). The extra outputs of each galaxy have its
+        prefix.
         """
         scene = self._scene
         values = [
             {name: params[full] for name, full in mapping.items()}
             for mapping in scene._mappings]
         extras = [{} for _ in values] if out_extra is not None else None
-        self._evaluate(values, {self._key: data}, extras)
+        self._evaluate(values, gravity, {self._key: data}, extras)
         if out_extra is not None:
             for prefix, extra in zip(scene._prefixes, extras):
                 out_extra.update(
@@ -140,13 +143,15 @@ class ScenePlan(abc.ABC):
     def _evaluate(
             self,
             params: list[ParamValues],
+            gravity: Sequence[dict[int, ParamValues]],
             outputs: dict[str, DeviceArray],
             extras: list[dict[str, Any]] | None
     ) -> None:
         """
         Add the light of the galaxies to the output array (see evaluate),
-        with the parameters of each galaxy (by its own names); with
-        extras, the extra outputs of each galaxy go to its item.
+        with the parameters of each galaxy (by its own names) and what its
+        gravity gives its components; with extras, the extra outputs of
+        each galaxy go to its item.
         """
         pass
 
@@ -180,12 +185,14 @@ class AdditiveScenePlan(ScenePlan):
     def _evaluate(
             self,
             params: list[ParamValues],
+            gravity: Sequence[dict[int, ParamValues]],
             outputs: dict[str, DeviceArray],
             extras: list[dict[str, Any]] | None
     ) -> None:
         for g, plan in enumerate(self._plans):
             plan.evaluate(
-                params[g], outputs, extras[g] if extras is not None else None)
+                params[g], gravity[g], outputs,
+                extras[g] if extras is not None else None)
 
 
 class TransferScenePlan(ScenePlan):
@@ -256,6 +263,7 @@ class TransferScenePlan(ScenePlan):
     def _evaluate(
             self,
             params: list[ParamValues],
+            gravity: Sequence[dict[int, ParamValues]],
             outputs: dict[str, DeviceArray],
             extras: list[dict[str, Any]] | None
     ) -> None:
@@ -272,7 +280,8 @@ class TransferScenePlan(ScenePlan):
             dust = dust or plan.has_dust()
             line_opacity = line_opacity or plan.has_line_opacity()
             resolution = plan.evaluate(
-                params[g], outputs, extras[g] if extras is not None else None,
+                params[g], gravity[g], outputs,
+                extras[g] if extras is not None else None,
                 self._opacity_front if dust else None,
                 self._tau if line_opacity else None)
             if resolution is not None:

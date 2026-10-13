@@ -319,6 +319,7 @@ class ObservablePlan(abc.ABC):
     def evaluate(
             self,
             params: ParamValues,
+            gravity: Sequence[dict[int, ParamValues]],
             out_extra: dict[str, Any] | None
     ) -> ModelData:
         """
@@ -328,6 +329,10 @@ class ObservablePlan(abc.ABC):
         ----------
         params : dict
             The parameters of the model.
+        gravity : Sequence of dict
+            What the gravity of each galaxy it sees gives its components
+            (see GravityPlan.evaluate), in the order of the galaxies of
+            its scene.
         out_extra : dict, optional
             Where the extra outputs go, if wanted; those of the model are
             prefixed 'model_'.

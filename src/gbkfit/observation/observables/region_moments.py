@@ -316,10 +316,11 @@ class RegionMomentsPlan(_detail.DCubePlanBase):
     def evaluate(
             self,
             params: ParamValues,
+            gravity: Sequence[dict[int, ParamValues]],
             out_extra: dict[str, Any] | None
     ) -> ModelData:
         self._evaluate_cube(
-            params, out_extra, _dcube.cube_extra, _dcube.cube_extra)
+            params, gravity, out_extra, _dcube.cube_extra, _dcube.cube_extra)
         self._sums.evaluate(
             self._dcube_plan.dcube(), self._spectra[:, 0, :])
         moments = self._moments.evaluate(

@@ -25,7 +25,9 @@ class ObservationGroup:
     when there is one galaxy; the light of several galaxies adds up. The
     parameters and constants of the galaxies are prefixed by their names
     when they have names (which they need when there are several; e.g.
-    'north_'). The plans of the observations are made here, once.
+    'north_'). The plans of the observations are made here, once. The
+    gravity of each galaxy is evaluated once for all the observations of
+    it (see Galaxy.plan_gravity).
 
     Parameters
     ----------
@@ -88,10 +90,17 @@ class ObservationGroup:
             f'{name}_' if name is not None else f'observation{i}_'
             for i, name in enumerate(observation_names)]
         plans = []
+        seen = []
         for i, observation in enumerate(self._observations):
             with parseutils.config_path('observations', i):
-                plans.append(observation.plan(self._scene(i, observation)))
+                seen.append(self._seen(i, observation))
+                plans.append(observation.plan(
+                    self._scene(seen[-1], observation)))
         self._plans = tuple(plans)
+        # The indices of the galaxies that each observation sees
+        self._seen_galaxies = tuple(seen)
+        self._gravity_plans = tuple(
+            galaxy.plan_gravity() for galaxy in self._galaxies)
         self._h_model_data = [
             {key: dict(d=None, m=None, w=None)
              for key in obs.observable().keys()}
@@ -117,9 +126,11 @@ class ObservationGroup:
                 f"galaxies are {known}")
         return sorted(known.index(name) for name in names)
 
-    def _scene(self, i: int, observation: Observation) -> Scene:
-        """Return what observation i sees (see make_scene)."""
-        seen = self._seen(i, observation)
+    def _scene(self, seen: list[int], observation: Observation) -> Scene:
+        """
+        Return what an observation sees (see make_scene): the galaxies of
+        the given indices.
+        """
         return make_scene(
             [self._galaxies[j] for j in seen],
             [self._mappings[j] for j in seen],
@@ -178,9 +189,17 @@ class ObservationGroup:
             overwritten by the next evaluation.
         """
         with self._timers.measure('model_eval'):
+            with self._timers.measure('model_gravity'):
+                gravity = [
+                    plan.evaluate(
+                        {name: params[full] for name, full in mapping.items()})
+                    for plan, mapping in zip(
+                        self._gravity_plans, self._mappings)]
             for i, plan in enumerate(self._plans):
                 out_extra_i = {} if out_extra is not None else None
-                self._d_model_data[i] = plan.evaluate(params, out_extra_i)
+                self._d_model_data[i] = plan.evaluate(
+                    params, [gravity[g] for g in self._seen_galaxies[i]],
+                    out_extra_i)
                 if out_extra is not None:
                     for key, val in out_extra_i.items():
                         out_extra[f'{self._extra_prefixes[i]}{key}'] = val

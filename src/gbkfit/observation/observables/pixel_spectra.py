@@ -195,10 +195,11 @@ class PixelSpectraPlan(_detail.DCubePlanBase):
     def evaluate(
             self,
             params: ParamValues,
+            gravity: Sequence[dict[int, ParamValues]],
             out_extra: dict[str, Any] | None
     ) -> ModelData:
         self._evaluate_cube(
-            params, out_extra, _dcube.cube_extra, _dcube.cube_extra)
+            params, gravity, out_extra, _dcube.cube_extra, _dcube.cube_extra)
         plan = self._dcube_plan
         return dict(spectra=dict(
             d=plan.dcube(), m=plan.mcube(), w=plan.wcube()))

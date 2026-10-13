@@ -216,6 +216,7 @@ class TransferPlan:
     def evaluate(
             self,
             params: ParamValues,
+            gravity: dict[int, ParamValues],
             outputs: dict[str, DeviceArray | None],
             out_extra: dict[str, Any] | None,
             opacity_front: DeviceArray | None,
@@ -223,14 +224,16 @@ class TransferPlan:
     ) -> LineResolution | None:
         """
         Add the light of the emitters that reaches the viewer to the
-        output array, the 'image' or the 'scube' in outputs, dimmed by the
-        opacity in front of the galaxy and its own, and add its own to that
-        in front: the optical depth of the dust in front at each spaxel,
-        in each cube of opacity (opacity_front, of shape (ncubes, ny, nx);
-        required with dust of its own, None without dust in front or in
-        it), and that of the lines at each sub-channel of each spaxel (tau,
-        of shape (nchannels * subchannels, ny, nx); required with line
-        opacity, None without line opacity in front or in it).
+        output array, the 'image' or the 'scube' in outputs, with the
+        parameters of the galaxy and those that its gravity gives its
+        components (see GravityPlan.evaluate), dimmed by the opacity in
+        front of the galaxy and its own, and add its own to that in front:
+        the optical depth of the dust in front at each spaxel, in each
+        cube of opacity (opacity_front, of shape (ncubes, ny, nx); required
+        with dust of its own, None without dust in front or in it), and
+        that of the lines at each sub-channel of each spaxel (tau, of shape
+        (nchannels * subchannels, ny, nx); required with line opacity, None
+        without line opacity in front or in it).
 
         The extra outputs of each component are named after its name, or
         its position (e.g. 'disk_bdata' or 'component0_bdata'), and the
@@ -249,7 +252,7 @@ class TransferPlan:
         plans = self._plans
         driver = plans.driver
         grid = plans.native_grid
-        values = plans.params(params)
+        values = plans.params(params, gravity)
         extras = {} if out_extra is not None else None
         if out_extra is not None:
             plans.warn_truncation(values)
