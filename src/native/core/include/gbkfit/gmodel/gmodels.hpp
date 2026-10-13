@@ -655,7 +655,8 @@ gmodel_mcdisk_evaluate_cloud(
     // (e.g. of a heavy-tailed height), or NaN, is undefined.
     const T px = std::rint((xn - a.spat_zero[0]) / a.spat_step[0]);
     const T py = std::rint((yn - a.spat_zero[1]) / a.spat_step[1]);
-    const T pz = std::rint((zn - a.spat_zero[2]) / a.spat_step[2]);
+    const T pz = std::rint((zn - a.spat_zero[2]) / a.spat_step[2])
+            - a.slab_zero;
     if (!(px >= 0 && px < a.spat_size[0] &&
           py >= 0 && py < a.spat_size[1] &&
           pz >= 0 && pz < a.spat_size[2])) {
@@ -865,7 +866,7 @@ gmodel_smdisk_evaluate_spaxel(
     // image-to-world transform
     xn = a.spat_zero[0] + x * a.spat_step[0];
     yn = a.spat_zero[1] + y * a.spat_step[1];
-    zn = a.spat_zero[2] + z * a.spat_step[2];
+    zn = a.spat_zero[2] + (z + a.slab_zero) * a.spat_step[2];
     transform_rh_rotate_z(xn, yn, xn, yn, a.spat_rota * DEG_TO_RAD<T>);
 
     // If the disk is loose or tilted, we need to calculate the pixel's

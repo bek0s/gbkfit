@@ -265,6 +265,7 @@ def _native_grid(
         spat_step=tuple(grid.coords.step[:2]) + (depth.step,),
         spat_zero=tuple(grid.zero()[:2]) + (depth.zero,),
         spat_rota=grid.coords.rota,
+        slab_zero=0,
         spec_size=spectral.size[0],
         spec_step=spectral.coords.step[0],
         spec_zero=spectral.zero()[0])

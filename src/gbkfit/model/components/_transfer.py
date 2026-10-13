@@ -243,12 +243,11 @@ class TransferPlan:
 def _slab_grid(grid: NativeGrid, z0: int, size: int) -> NativeGrid:
     """
     Return the grid of a slab of the given number of planes of a grid,
-    from its plane z0.
+    from its plane z0 (see NativeGrid: every slab places a point, e.g. a
+    cloud of a Monte Carlo disk, in the same plane).
     """
-    step = grid['spat_step'][2]
     return grid | dict(
-        spat_size=grid['spat_size'][:2] + (size,),
-        spat_zero=grid['spat_zero'][:2] + (grid['spat_zero'][2] + z0 * step,))
+        spat_size=grid['spat_size'][:2] + (size,), slab_zero=z0)
 
 
 def _view(data: DeviceArray, shape: tuple[int, ...]) -> DeviceArray:

@@ -54,11 +54,16 @@ struct DiskArgs
     // The 3d spatial grid, in (x, y, z) order, and the spectral axis.
     // The x and y axes of the grid are rotated on the sky by spat_rota
     // degrees (counterclockwise, like a position angle). Without a depth
-    // axis (the plane of the sky), z has size 1 and step 0.
+    // axis (the plane of the sky), z has size 1 and step 0. The grid can
+    // be a slab of planes of a depth axis: its spat_size[2] planes from
+    // the plane slab_zero, of an axis whose first plane is at spat_zero[2]
+    // (so that every slab places a point in the same plane; a thin disk is
+    // evaluated on the whole axis).
     int spat_size[3] = {0, 0, 0};
     T spat_step[3] = {0, 0, 0};
     T spat_zero[3] = {0, 0, 0};
     T spat_rota = 0;
+    int slab_zero = 0;
     int spec_size = 0;
     T spec_step = 0;
     T spec_zero = 0;
