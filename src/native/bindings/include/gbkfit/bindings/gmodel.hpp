@@ -198,12 +198,15 @@ struct GModel
     // March along each line of sight of the grid through the planes of a
     // slab, adding the light of the emitters that reaches the viewer to
     // out, the image or the spectral cube (see gbkfit::TransferArgs and
-    // gbkfit::gmodel_transfer_march)
+    // gbkfit::gmodel_transfer_march), at the given number of sub-channels
+    // of each of its channels (spec_size, spec_step and spec_zero are those
+    // of out)
     static void
     transfer_march(
             const std::vector<Emitter>& emitters,
             std::array<int, 3> spat_size, int slab_zero, int depth_size,
             bool image, int spec_size, T spec_step, T spec_zero,
+            int subchannels,
             ConstData opacity, Data opacity_front, Data tau, Data out)
     {
         TransferArgs<T> a;
@@ -213,11 +216,21 @@ struct GModel
         a.depth_size = depth_size;
         require(slab_zero >= 0 && slab_zero + spat_size[2] <= depth_size,
                 "the slab must be within the depth axis");
-        a.image = image;
-        a.spec_size = spec_size;
-        a.spec_step = spec_step;
-        a.spec_zero = spec_zero;
         require(!image || spec_size == 1, "an image has one channel");
+        require(subchannels >= 1
+                && subchannels <= TRANSFER_SUBCHANNEL_NUM_MAX
+                && (!image || subchannels == 1),
+                "subchannels must be from 1 to "
+                + std::to_string(TRANSFER_SUBCHANNEL_NUM_MAX)
+                + ", and 1 in an image");
+        // (the centre of the first sub-channel is half a sub-channel above
+        // the lower edge of the first channel)
+        a.image = image;
+        a.subchannels = subchannels;
+        a.spec_size = spec_size * subchannels;
+        a.spec_step = spec_step / subchannels;
+        a.spec_zero = spec_zero
+                + (T{1} / (2 * subchannels) - T{0.5}) * spec_step;
         const size_t nimage = size_t(spat_size[0]) * spat_size[1];
         const size_t nslab = nimage * spat_size[2];
         require(out.size() == nimage * spec_size,
@@ -245,8 +258,8 @@ struct GModel
 
         // The optical depth of the lines in front of the slab, with line
         // opacity
-        require(!tau.is_valid() || tau.size() == nimage * spec_size,
-                "tau needs a value for each channel of each spaxel");
+        require(!tau.is_valid() || tau.size() == nimage * a.spec_size,
+                "tau needs a value for each sub-channel of each spaxel");
         a.tau = data(tau);
 
         require(emitters.size() <= size_t(TRANSFER_EMITTER_NUM_MAX),
@@ -443,6 +456,7 @@ struct GModel
                 nb::arg("slab_zero"), nb::arg("depth_size"),
                 nb::arg("image"), nb::arg("spec_size"),
                 nb::arg("spec_step"), nb::arg("spec_zero"),
+                nb::arg("subchannels"),
                 nb::arg("opacity").noconvert().none() = nb::none(),
                 nb::arg("opacity_front").noconvert().none() = nb::none(),
                 nb::arg("tau").noconvert().none() = nb::none(),

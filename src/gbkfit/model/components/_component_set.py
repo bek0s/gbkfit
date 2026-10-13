@@ -270,16 +270,18 @@ class ComponentSet:
             lines: tuple[str, ...] | None,
             band: Band | None,
             redshift: float,
-            slab: int | None
+            slab: int | None,
+            subchannels: int
     ) -> TransferPlan:
         """
         Plan the evaluation of the components on a driver and dtype by
         radiative transfer along each line of sight, in slabs of the given
-        number of planes (see TransferPlan).
+        number of planes, at the given number of sub-channels (see
+        TransferPlan).
         """
         return TransferPlan(
             self, driver, grid, spectral, depth, dtype, emitters, cubes,
-            lines, band, redshift, slab)
+            lines, band, redshift, slab, subchannels)
 
 
 class ComponentSetPlan:

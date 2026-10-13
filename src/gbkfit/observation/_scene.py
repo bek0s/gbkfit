@@ -17,7 +17,8 @@ from gbkfit.model import (
 from gbkfit.model.components._component_plans import opacity_cubes
 from gbkfit.model.components._component_set import (
     IMAGE_SPECTRAL_AXIS, ComponentSetPlan)
-from gbkfit.model.components._transfer import TransferPlan
+from gbkfit.model.components._transfer import (
+    LineResolution, TransferPlan, warn_resolution)
 from gbkfit.params import ParamValues
 from gbkfit.utils import gridutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
@@ -200,6 +201,9 @@ class TransferScenePlan(ScenePlan):
     The galaxies whose depth axes, centred on their depths, overlap along
     the line of sight form a group, which would need one grid; groups of
     several galaxies are not supported yet: evaluate raises ValueError.
+
+    With extra outputs, it logs a warning if the march resolves line
+    opacity too coarsely (see warn_resolution).
     """
 
     def __init__(
@@ -208,7 +212,8 @@ class TransferScenePlan(ScenePlan):
             driver: Driver,
             grid: gridutils.Grid,
             dtype: np.dtype,
-            slab: int | None
+            slab: int | None,
+            subchannels: int
     ):
         super().__init__(scene, grid)
         spatial = self._spatial
@@ -221,16 +226,19 @@ class TransferScenePlan(ScenePlan):
         self._plans: tuple[TransferPlan, ...] = tuple(
             galaxy.plan_transfer(
                 driver, spatial, self._spectral, axis, dtype, emitters,
-                galaxy_cubes, scene._lines, scene._band, slab)
+                galaxy_cubes, scene._lines, scene._band, slab, subchannels)
             for galaxy, emitters, axis, galaxy_cubes in zip(
                 scene._galaxies, scene._emitters, axes, cubes))
         self._extents = tuple(axis.size * axis.step for axis in axes)
+        self._subchannels = subchannels
+        # (that of every galaxy)
+        self._depth_step = axes[0].step
         self._ordered = len(self._plans) > 1 and any(
             plan.has_dust() or plan.has_line_opacity()
             for plan in self._plans)
         # The state of the march from one galaxy to the next: the optical
         # depth of the dust in front, in each cube of opacity, and with
-        # line opacity, that of the lines at each channel
+        # line opacity, that of the lines at each sub-channel
         self._driver = driver
         shape = (spatial.size[1], spatial.size[0])
         self._opacity_front = None
@@ -240,7 +248,7 @@ class TransferScenePlan(ScenePlan):
         self._tau = None
         if any(plan.has_line_opacity() for plan in self._plans):
             self._tau = driver.mem_alloc_d(
-                (self._spectral.size[0],) + shape, dtype)
+                (self._spectral.size[0] * subchannels,) + shape, dtype)
 
     def _evaluate(
             self,
@@ -252,16 +260,25 @@ class TransferScenePlan(ScenePlan):
             if state is not None:
                 self._driver.mem_fill(state, 0)
         # Each galaxy marches from the dust and the line opacity in front
-        # of it, if any
+        # of it, if any; with extras, its march tells how finely it
+        # resolves its line opacity, and the worst gets a warning
         dust = line_opacity = False
+        resolutions = []
         for g in self._order(params):
             plan = self._plans[g]
             dust = dust or plan.has_dust()
             line_opacity = line_opacity or plan.has_line_opacity()
-            plan.evaluate(
+            resolution = plan.evaluate(
                 params[g], outputs, extras[g] if extras is not None else None,
                 self._opacity_front if dust else None,
                 self._tau if line_opacity else None)
+            if resolution is not None:
+                resolutions.append(resolution)
+        if resolutions:
+            warn_resolution(
+                LineResolution(*np.max(resolutions, axis=0)),
+                self._spectral.coords.step[0], self._subchannels,
+                self._depth_step)
 
     def _order(self, params: list[ParamValues]) -> list[int]:
         """

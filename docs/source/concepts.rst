@@ -71,6 +71,19 @@ disk), or for named lines, a mapping of each line to its traits
 (parameters op_{line}_*). The brightness of an optically thick line
 then levels off at S.
 
+The march has two resolutions, both of the model. In velocity, a
+channel wider than the lines averages their optical depth before it
+dims the light, which then dims too little: the option subchannels of
+transfer marches each channel at that many sub-channels, whose mean is
+the light of the channel. Along the line of sight, a voxel has one
+velocity: where the velocity changes by more than the dispersion between
+adjacent voxels (e.g. near the centre of an edge-on disk), the depth
+axis needs a smaller step (depth: {step: ...}). An evaluation with extra
+outputs (e.g. by the task eval) warns when either is too coarse where
+the lines are not optically thin. Its extra outputs also give, for each
+galaxy, its light without any opacity (total_unabsorbed) and the
+optical depth of its lines at each channel (total_line_tau).
+
 Through radiative transfer, an observation can see several galaxies
 with opacity, which dim the light of one another (e.g. a galaxy behind
 the dust of another, or HI absorbed by HI in front of it): each galaxy

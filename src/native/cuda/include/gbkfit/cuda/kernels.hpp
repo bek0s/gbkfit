@@ -268,15 +268,25 @@ gmodel_opacity_accumulate(int size_x, int size_y, int size_z, T* opacity)
     gbkfit::gmodel_opacity_accumulate(x, y, size_x, size_y, size_z, opacity);
 }
 
-// The number of channels that a thread of the march marches (see
-// gmodel_transfer_march)
+// The most channels that a thread of the march marches (see
+// gmodel_transfer_march): whole channels of the output, of all their
+// sub-channels (see TransferArgs::subchannels)
 constexpr int TRANSFER_CHUNK = 64;
+static_assert(TRANSFER_CHUNK >= TRANSFER_SUBCHANNEL_NUM_MAX);
+
+// The number of channels of the march of a thread
+template<typename T> constexpr int
+transfer_chunk_size(const TransferArgs<T>& a)
+{
+    return TRANSFER_CHUNK / a.subchannels * a.subchannels;
+}
 
 // The number of chunks of channels of the march of a spectral axis
 template<typename T> constexpr int
 transfer_chunks(const TransferArgs<T>& a)
 {
-    return (a.spec_size + TRANSFER_CHUNK - 1) / TRANSFER_CHUNK;
+    const int size = transfer_chunk_size(a);
+    return (a.spec_size + size - 1) / size;
 }
 
 template<typename T, bool HasLineOpacity> __global__ void
@@ -297,8 +307,8 @@ gmodel_transfer_march(TransferArgs<T> a)
     const int x = tid % a.spat_size[0];
     const int chunk = tid / a.spat_size[0] % nchunks;
     const int y = tid / (1LL * a.spat_size[0] * nchunks);
-    const int c0 = chunk * TRANSFER_CHUNK;
-    const int c1 = std::min(c0 + TRANSFER_CHUNK, a.spec_size);
+    const int c0 = chunk * transfer_chunk_size(a);
+    const int c1 = std::min(c0 + transfer_chunk_size(a), a.spec_size);
 
     // (the optical depth of the lines in front and of the voxel, with
     // line opacity)
@@ -308,12 +318,7 @@ gmodel_transfer_march(TransferArgs<T> a)
     T dk[nline] = {};
     gbkfit::gmodel_transfer_march<HasLineOpacity>(
             x, y, c0, c1, a, light, tau, dk);
-    for (int c = c0; c < c1; ++c) {
-        if (light[c - c0] != 0) {
-            a.out[index_3d_to_1d(x, y, c, a.spat_size[0], a.spat_size[1])]
-                    += light[c - c0];
-        }
-    }
+    gbkfit::gmodel_transfer_add_light(x, y, c0, c1, a, light);
 }
 
 template<typename T> __global__ void

@@ -341,12 +341,8 @@ gmodel_transfer_march(const TransferArgs<T>& a)
     std::fill(spectrum.begin(), spectrum.end(), T{0});
     gbkfit::gmodel_transfer_march<HasLineOpacity>(
             x, y, 0, a.spec_size, a, spectrum.data(), tau.data(), dk.data());
-    for (int c = 0; c < a.spec_size; ++c) {
-        if (spectrum[c] != 0) {
-            a.out[index_3d_to_1d(x, y, c, a.spat_size[0], a.spat_size[1])]
-                    += spectrum[c];
-        }
-    }
+    gbkfit::gmodel_transfer_add_light(
+            x, y, 0, a.spec_size, a, spectrum.data());
 
     }
     }

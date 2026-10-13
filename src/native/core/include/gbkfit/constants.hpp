@@ -15,4 +15,8 @@ constexpr int OPACITY_NUM_MAX = 4;
 // TransferArgs)
 constexpr int TRANSFER_EMITTER_NUM_MAX = 16;
 
+// The most sub-channels of a channel that the march of radiative transfer
+// takes (see TransferArgs::subchannels)
+constexpr int TRANSFER_SUBCHANNEL_NUM_MAX = 64;
+
 } // namespace gbkfit

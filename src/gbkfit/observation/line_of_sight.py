@@ -16,6 +16,7 @@ import numpy as np
 
 from gbkfit.driver import Driver
 from gbkfit.model import Galaxy, LineOpacity
+from gbkfit.model.components._transfer import MAX_SUBCHANNELS
 from gbkfit.model.components.base import Component, DepthAxis
 from gbkfit.utils import gridutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
@@ -279,11 +280,19 @@ class Transfer(LineOfSight):
         and the cubes of opacity of a slab of planes); all by default
         (fastest). The clouds of Monte Carlo disks are drawn again for
         each slab.
+    subchannels : int, optional
+        With line opacity, the number of sub-channels of each channel
+        that the march transfers the light at: the light of a channel is
+        their mean (from 1, the default, to 64). Line opacity averaged
+        over a channel wider than its lines dims their light too little;
+        sub-channels resolve the lines, at their number times the time of
+        the march (light without line opacity needs none).
 
     Raises
     ------
     ConfigError
-        If slab is not a positive integer.
+        If slab is not a positive integer, or subchannels is not an
+        integer from 1 to 64.
     """
 
     @staticmethod
@@ -298,15 +307,27 @@ class Transfer(LineOfSight):
 
     def dump(self) -> dict[str, Any]:
         return dict(type=self.type(), depth=self._depth.dump()) | (
-            dict(slab=self._slab) if self._slab is not None else {})
+            dict(slab=self._slab) if self._slab is not None else {}) | dict(
+            subchannels=self._subchannels)
 
-    def __init__(self, depth: Depth | None = None, slab: int | None = None):
+    def __init__(
+            self,
+            depth: Depth | None = None,
+            slab: int | None = None,
+            subchannels: int = 1
+    ):
         if slab is not None and not (
                 isinstance(slab, numbers.Integral) and slab > 0):
             raise ConfigError(
                 f"slab must be a positive integer; it is {slab!r}")
+        if not (isinstance(subchannels, numbers.Integral)
+                and 1 <= subchannels <= MAX_SUBCHANNELS):
+            raise ConfigError(
+                f"subchannels must be an integer from 1 to {MAX_SUBCHANNELS}; "
+                f"it is {subchannels!r}")
         self._depth = depth if depth is not None else Depth()
         self._slab = slab
+        self._subchannels = subchannels
 
     def depth(self) -> Depth:
         """Return the depth axis."""
@@ -315,6 +336,10 @@ class Transfer(LineOfSight):
     def slab(self) -> int | None:
         """Return the number of planes evaluated at once, if given."""
         return self._slab
+
+    def subchannels(self) -> int:
+        """Return the number of sub-channels of each channel."""
+        return self._subchannels
 
     def depth_axis(self, grid: gridutils.Grid, radius: float) -> DepthAxis:
         return self._depth.axis(grid, radius)
@@ -337,7 +362,8 @@ class Transfer(LineOfSight):
             grid: gridutils.Grid,
             dtype: np.dtype
     ) -> TransferScenePlan:
-        return TransferScenePlan(scene, driver, grid, dtype, self._slab)
+        return TransferScenePlan(
+            scene, driver, grid, dtype, self._slab, self._subchannels)
 
 
 line_of_sight_parser = parseutils.TypedParser(LineOfSight, [
