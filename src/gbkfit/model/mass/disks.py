@@ -304,7 +304,8 @@ class MassTraitDisk(MassComponent):
     Its circular velocity is the pull of its rings (see _disk_gravity); a
     thin disk pulls infinitely at a jump of its surface density (e.g. at
     the edge of the component, unless the density is 0 there). The
-    azimuthal means take at least 128 azimuths, more until they converge:
+    azimuthal means of axisymmetric traits are exact (one azimuth); those
+    of the others take at least 128 azimuths, more until they converge:
     structure narrower than their spacing (e.g. tiny blobs) can be
     missed.
 

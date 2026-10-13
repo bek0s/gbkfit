@@ -185,3 +185,43 @@ def test_every_trait_parameter_changes_the_model(
             unchanged.append(name)
     assert not unchanged, \
         f"these parameters do not change the model: {unchanged}"
+
+
+def axisymmetry_cases():
+    """
+    Every type of the polar traits whose azimuthal means the gravity of
+    a galaxy takes (density, dispersion and selection; see DiskDensity),
+    and harmonics also of order 0.
+    """
+    for kind in ('pt', 'dpt', 'spt'):
+        for config in trait_configs(KINDS[kind][2]):
+            configs = [config]
+            if 'order' in config:
+                configs.append(config | dict(order=0))
+            for each in configs:
+                yield pytest.param(kind, each, id=f"{kind}-{each}")
+
+
+@pytest.mark.parametrize('kind, config', list(axisymmetry_cases()))
+def test_traits_are_axisymmetric_as_they_declare(kind, config):
+    # The azimuthal means of the gravity take one azimuth of the traits
+    # that declare that they are axisymmetric: they must be, and the
+    # others must not be
+    from gbkfit.driver.drivers.host import DriverHost
+    from gbkfit.model import component_parser
+    disk_traits, params = traits_and_values(LINE_DISK_TRAITS, kind, config)
+    component = component_parser.load(
+        thick_disk('disk', disk_traits, emission=dict(type='lines')))
+    params |= GEOMETRY | dict(vsys=0)
+    for name, pdesc in component.pdescs().items():
+        if name.startswith(f'{kind}_'):
+            value = VALUES[name.removeprefix(f'{kind}_')]
+            params[name] = value if pdesc.type() == 'scalar' \
+                else np.full(pdesc.size(), value)
+    disk = component.density_disk()
+    native_kind = dict(pt='rpt', dpt='dpt', spt='spt')[kind]
+    values = disk.plan(DriverHost(), 0, np.float64).evaluate_polar_traits(
+        params, native_kind, np.array([[1.3], [5.1], [9.7]]),
+        np.linspace(0, 360, 97, endpoint=False))[0]
+    varies = np.ptp(values, axis=1).max() > 1e-12 * np.abs(values).max()
+    assert disk.traits(native_kind)[0].axisymmetric() == (not varies)

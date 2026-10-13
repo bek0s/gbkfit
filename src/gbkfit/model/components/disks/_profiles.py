@@ -5,7 +5,7 @@ azimuthal means of its traits, for the mass components that follow it
 traits.VPTraitMass).
 """
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 
 import numpy as np
 
@@ -19,29 +19,35 @@ __all__ = [
 ]
 
 
-# The azimuthal means: the trapezoid rule on at least and at most these
-# numbers of azimuths, doubled until two means agree to the tolerance,
-# relative to the largest value
+# The azimuthal means of traits that are not axisymmetric: the trapezoid
+# rule on at least and at most these numbers of azimuths, doubled until
+# two means agree to the tolerance, relative to the largest value
 _NAZIMUTHS_MIN = 64
 _NAZIMUTHS_MAX = 4096
 _AZIMUTHAL_TOLERANCE = 1e-6
 
 
-def _azimuthal_mean(values: Callable[[np.ndarray], np.ndarray]) -> np.ndarray:
+def _azimuthal_mean(
+        values: Callable[[np.ndarray], np.ndarray], axisymmetric: bool
+) -> np.ndarray:
     """
     Return the mean over the azimuth of values(theta), an array of shape
     (rows, radii, len(theta)) at the azimuths theta (degrees), as an array
-    of shape (rows, radii): by the trapezoid rule, exact for harmonics of
-    orders below the number of azimuths, to _AZIMUTHAL_TOLERANCE of the
-    largest absolute value of each row. Structure narrower than the
-    spacing of the azimuths (2 pi R / 128 at least) can go unseen by two
-    successive numbers of azimuths, and be missed.
+    of shape (rows, radii). If axisymmetric (the values are the same at
+    every azimuth), their values at one azimuth, exactly. Otherwise by the
+    trapezoid rule, exact for harmonics of orders below the number of
+    azimuths, to _AZIMUTHAL_TOLERANCE of the largest absolute value of
+    each row: structure narrower than the spacing of the azimuths (2 pi R
+    / 128 at least) can go unseen by two successive numbers of azimuths,
+    and be missed.
 
     Raises
     ------
     ValueError
         If the mean does not converge on _NAZIMUTHS_MAX azimuths.
     """
+    if axisymmetric:
+        return values(np.zeros(1))[..., 0]
     count = _NAZIMUTHS_MIN
     sampled = values(np.arange(count) * 360 / count)
     mean = sampled.mean(axis=-1)
@@ -61,6 +67,15 @@ def _azimuthal_mean(values: Callable[[np.ndarray], np.ndarray]) -> np.ndarray:
         f"on {_NAZIMUTHS_MAX} azimuths: its azimuthal structure is too fine "
         f"or too sharp (e.g. narrow blobs, or the edges of selection "
         f"traits)")
+
+
+def _axisymmetric(disk: Disk, kinds: Sequence[str]) -> bool:
+    """
+    Check whether the polar traits of the given kinds of a disk all have
+    the same value at every azimuth (see RPTrait.axisymmetric).
+    """
+    return all(
+        trait.axisymmetric() for kind in kinds for trait in disk.traits(kind))
 
 
 def _with_given(disk: Disk, params: ParamValues) -> ParamValues:
@@ -140,7 +155,8 @@ def pressure_support(
             plan.evaluate_polar_traits(params, 'dpt', r, theta)
             * dispersion_heights, axis=0, dtype=float)
         return np.stack((density, density * dispersion ** 2))
-    density, pressure = _azimuthal_mean(values)
+    density, pressure = _azimuthal_mean(
+        values, _axisymmetric(disk, ('rpt', 'spt', 'dpt')))
     gradient = np.gradient(pressure, r[:, 0], edge_order=2)
     return np.divide(
         r[:, 0] * gradient, density, out=np.full_like(density, np.nan),
@@ -208,7 +224,8 @@ class DiskDensity:
                 self._params, 'rpt', r, theta), dtype=float)
             return out * _selected(
                 self._disk, self._plan, self._params, r, theta)
-        return _azimuthal_mean(values)
+        return _azimuthal_mean(
+            values, _axisymmetric(self._disk, ('rpt', 'spt')))
 
     def height_pdfs(self, R: np.ndarray, z: np.ndarray) -> np.ndarray:
         """
