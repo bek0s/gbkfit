@@ -11,6 +11,7 @@ import logging
 import gbkfit.params
 import numpy as np
 import pytest
+from gbkfit.utils.parseutils import ConfigError
 from modelutils import observation_group
 
 
@@ -294,11 +295,19 @@ def test_a_lifted_midplane_carries_its_light(driver, caplog, disk_type):
     np.testing.assert_allclose(lifted, flat, rtol=1e-5)
     bdata = extra['observation0_model_component0_bdata']
     assert mean_depth(bdata) == pytest.approx(12, abs=0.05)
-    # Lifted by 30, the midplane stops at its zmax: the model of a lift of
-    # 20, and a warning says so
-    caplog.set_level(logging.WARNING)
-    limited = evaluate_with(group, properties | dict(zpt_a=[30] * 14), {})
-    assert 'zmax shapes the disk' in caplog.text
+    # zmax is the valid range of the amplitude: a lift of 30 is not a
+    # valid value. The kernels limit the displacement to zmax all the same
+    # (e.g. where an interpolation of the amplitude overshoots it): given
+    # past the parameters, a lift of 30 stops at 20, and a warning says so
+    with pytest.raises(ConfigError, match="outside its valid range"):
+        gbkfit.params.ParamSpace(
+            group.pdescs(), properties | dict(zpt_a=[30] * 14))
     at_zmax = evaluate_with(group, properties | dict(zpt_a=[20] * 14))
+    values = gbkfit.params.ParamSpace(
+        group.pdescs(), properties | dict(zpt_a=[20] * 14)).evaluate()
+    caplog.set_level(logging.WARNING)
+    limited = group.model_h(
+        values | dict(zpt_a=np.full(14, 30.0)), {})[0]['spectra']['d']
+    assert 'zmax shapes the disk' in caplog.text
     np.testing.assert_allclose(
         limited, at_zmax, rtol=1e-5, atol=1e-7 * at_zmax.max())
