@@ -6,8 +6,9 @@ import numpy.typing as npt
 
 from gbkfit.dataset import Dataset
 from gbkfit.driver import Driver, driver_by_name
-from gbkfit.instrument import Instrument, instrument_parser
+from gbkfit.instrument import Instrument, PSFGaussBeam, instrument_parser
 from gbkfit.model import Band, BandEmission, LineCatalogue, band_parser
+from gbkfit.model.components._units import DataUnit
 from gbkfit.model.components.roles import load_band
 from gbkfit.params import ParamScalarDesc
 from gbkfit.utils import parseutils
@@ -53,6 +54,12 @@ class Observation(parseutils.Serializable):
     In its configuration, the data have the form of the observable (no
     type), and give it the options of options_from_data (see
     Observable.from_data).
+
+    Its model is in the unit of its data (see data_unit): the light of
+    the components whose emission has a unit is turned into it (see
+    Component.plan), and that of the others is in it. Without data, the
+    model is in the unit of the components it sees, which must then have
+    one (or none).
 
     Parameters
     ----------
@@ -318,6 +325,8 @@ class Observation(parseutils.Serializable):
                     "such a value, the option missing_residual (e.g. 3; see "
                     "LikelihoodGaussian)")
         observable.check_instrument(instrument)
+        if data is not None:
+            _check_beams(data, instrument)
         self._driver = driver
         self._observable = observable
         self._foreground = foreground
@@ -400,6 +409,14 @@ class Observation(parseutils.Serializable):
         """Return the likelihood, if there are data."""
         return self._likelihood
 
+    def data_unit(self) -> DataUnit | None:
+        """
+        Return the unit of the light of its data, which its model takes
+        (see Observable.data_unit); None without data (its model is then
+        in the unit of the components it sees), or without data of light.
+        """
+        return self._observable.data_unit(self._data)
+
     def scale(self) -> tuple[int, ...]:
         """Return the oversampling of the model along each axis."""
         return self._scale
@@ -426,6 +443,33 @@ class Observation(parseutils.Serializable):
             self._driver, scene, self._foreground, self._instrument,
             self._scale, self._dtype, self._weights,
             self._calibration_param())
+
+
+def _check_beams(data: Dataset, instrument: Instrument) -> None:
+    """
+    Warn (see parseutils.warn) if an item of the data has one beam, and
+    the PSF of the instrument is another beam: the light of data per beam
+    is per their beam, but the PSF smooths the model otherwise.
+    """
+    psf = instrument.psf()
+    if not isinstance(psf, PSFGaussBeam):
+        return
+    for key in data.keys():
+        beam = data[key].beam()
+        if beam is None or beam.spectral is not None:
+            continue
+        # (the position angle of a circular beam is any)
+        same = np.allclose(
+            (beam.bmaj, beam.bmin), (psf.bmaj(), psf.bmin()), rtol=1e-3,
+            atol=0) and (np.isclose(beam.bmaj, beam.bmin, rtol=1e-3) or abs(
+                (beam.bpa - psf.bpa() + 90) % 180 - 90) < 0.1)
+        if not same:
+            parseutils.warn(
+                f"the data ({key}) have the beam {beam.bmaj:g} x "
+                f"{beam.bmin:g} arcsec at {beam.bpa:g} deg, but the PSF of "
+                f"the instrument is the beam {psf.bmaj():g} x {psf.bmin():g} "
+                f"arcsec at {psf.bpa():g} deg: the model is smoothed by the "
+                f"PSF, and its light per beam is per beam of the data")
 
 
 observation_parser = parseutils.BasicParser(Observation)

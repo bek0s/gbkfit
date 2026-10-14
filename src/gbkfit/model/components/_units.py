@@ -1,28 +1,36 @@
 """
 The physical units of the light of components (see LineEmission and
-BandEmission): which units each kind of emission takes.
+BandEmission): which units each kind of emission takes, and the factors
+that turn them into the units of the data of an observation (see
+DataUnit, LineFactors and band_factor).
 """
 
 from collections.abc import Sequence
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NamedTuple
 
 import astropy.constants as const
 import astropy.units as u
+import numpy as np
 
-from gbkfit.utils import unitutils
+from gbkfit.utils import gridutils, unitutils
 from gbkfit.utils.parseutils import ConfigError
+from .lines import Band, air_refractive_index
 
 if TYPE_CHECKING:
     from .base import Component
 
 
 __all__ = [
+    'DataUnit',
+    'LineFactors',
     'band_factor',
     'check_band_unit',
     'check_line_unit',
     'check_line_units_agree',
+    'flux_per_area',
     'is_hi_unit',
-    'line_factor'
+    'line_factor',
+    'line_factors'
 ]
 
 
@@ -52,6 +60,18 @@ _H_MASS = 1.00794 * u.u
 # solid angle), and its integral over the velocity of a line
 _INTENSITY = u.Jy / u.sr
 _INTEGRATED = u.Jy * u.km / u.s / u.sr
+
+# The speed of light (km/s)
+_C = const.c.to_value(u.km / u.s)
+
+# Two rest frequencies of a spectral axis without a rest, at which the
+# factors of the lines on it must agree: they cannot depend on the
+# frequency of the lines, which is not known (see LineFactors)
+_NOMINAL_RESTS = (1 * u.GHz, 2 * u.GHz)
+
+# Two frequencies at which the factor of a band must agree when the band
+# is not known (see band_factor)
+_NOMINAL_BANDS = (1e14 * u.Hz, 2e14 * u.Hz)
 
 
 def is_hi_unit(unit: u.UnitBase) -> bool:
@@ -127,33 +147,85 @@ def check_line_units_agree(components: Sequence['Component']) -> None:
             seen.setdefault(line, (unit, label))
 
 
+def flux_per_area(unit: u.UnitBase) -> u.UnitBase:
+    """
+    Return the unit of light per arcsec^2 whose sums over the area of
+    regions are data of the given unit, a flux (e.g. Jy, 1e-20
+    erg/s/cm2/Angstrom, Jy km/s). Raise ConfigError if the unit is per
+    beam or per solid angle (the light of a pixel, not of a region).
+    """
+    if _spatial_unit(unit) != u.dimensionless_unscaled:
+        raise ConfigError(
+            f"the data of regions are fluxes, sums over their pixels: their "
+            f"unit is one of flux (e.g. 'Jy', '1e-20 erg/s/cm2/Angstrom', "
+            f"'Jy km/s'); {unitutils.format_unit(unit)!r} is not")
+    return unit / u.arcsec ** 2
+
+
+class DataUnit(NamedTuple):
+    """
+    The unit of the light in the data of an observation, which its model
+    takes (see Observable.data_unit): the unit (None if the data have
+    none); the solid angle of a pixel of the data (arcsec^2), for units
+    per pixel; that of the beam of the data (arcsec^2), for units per
+    beam: one, or one for each of the spectral points beam_spectral
+    (frequencies, wavelengths or velocities; e.g. CASA cubes); and whether
+    the light is integrated over the lines (e.g. moment 0), rather than
+    per km/s of the spectral axis (spectral cubes) or in a band (images).
+    """
+    unit: u.UnitBase | None
+    pixel: float
+    beam: float | np.ndarray | None = None
+    beam_spectral: u.Quantity | None = None
+    integrated: bool = False
+
+
+class LineFrame(NamedTuple):
+    """
+    Where a line is on the spectral axis of an observation (see
+    line_factor): its frequency (in vacuum), how many Hz of it and how
+    many metres of the wavelengths of the axis (in their medium; in vacuum
+    for an axis of frequencies) one km/s of the axis spans (hz_per_kms,
+    m_per_kms), and how many km/s of the axis one km/s of the velocity of
+    its component spans (scale; see Lines.values).
+    """
+    frequency: u.Quantity
+    hz_per_kms: u.Quantity
+    m_per_kms: u.Quantity
+    scale: float
+
+
 def line_factor(
         source: u.UnitBase,
         target: u.UnitBase,
-        frequency: u.Quantity,
-        beam_area: u.Quantity | None,
-        pixel_area: u.Quantity,
+        frame: LineFrame,
+        beam: float | None,
+        pixel: float,
         integrated: bool
 ) -> float:
     """
     Return how many target units one source unit of the light of a line
     is: of the light of a component (source, see check_line_unit) in the
-    units of the data of an observation (target), per km/s (the model of
-    a spectral cube: its light per unit of velocity), or integrated over
-    the line (integrated: e.g. moment 0).
+    units of the data of an observation (target), as the model of a
+    spectral cube holds it, per km/s of its spectral axis, or integrated
+    over the line (integrated: e.g. moment 0, the integral over the axis).
+    frame tells where the line is on the axis.
 
     The data are per solid angle (e.g. MJy/sr, K), per beam (e.g.
-    Jy/beam: beam_area, the solid angle of the beam, is required), or per
-    pixel (e.g. 1e-20 erg/s/cm2/Angstrom per spaxel: of pixel_area), per
-    frequency or per wavelength (or brightness temperature), or for
-    integrated light also its integral (e.g. Jy/beam km/s, K km/s,
-    erg/s/cm2/arcsec2).
+    Jy/beam: beam is its solid angle, arcsec^2), or per pixel (e.g. 1e-20
+    erg/s/cm2/Angstrom per spaxel: pixel is its solid angle, arcsec^2), per
+    frequency or per wavelength (of the axis), or brightness temperature,
+    or for integrated light also its integral (e.g. Jy/beam km/s, K km/s,
+    erg/s/cm2/arcsec2). The light of a component in units of velocity
+    (e.g. K km/s, Jy km/s/arcsec2) is integrated over the velocity of the
+    component, of which each km/s spans scale km/s of the axis.
 
-    The conversions that depend on the frequency (velocity to frequency or
-    wavelength; flux density to brightness temperature) are made at the
-    given frequency: that of the line at the systemic velocity of its
-    component. Across the line they change by about 2 v / c (0.1% for
-    lines of 150 km/s), which one factor per line leaves out: an
+    The conversions that depend on the frequency of the light within the
+    line (brightness temperature ~ nu^2, and on axes of optical velocities
+    the frequency that a km/s spans ~ nu^2) are made at the frequency of
+    the frame: that of the line at the systemic velocity of its component
+    (see LineFactors). Across the line they change by about 2 v / c (0.1%
+    for lines of 150 km/s), which one factor per line leaves out: an
     approximation that the user accepted (2026-10-14); exact factors for
     each channel would need weights for each channel in the kernels.
 
@@ -164,135 +236,399 @@ def line_factor(
         beam and there is no beam.
     """
     try:
-        light = _integrated_intensity(1 * source, frequency)
-        if not integrated:
-            return _from_intensity(
-                light / (u.km / u.s), target, frequency, beam_area,
-                pixel_area)
-        if (target / (u.km / u.s)).is_equivalent(u.K) or _is_intensity(
-                target / (u.km / u.s)):
-            return _from_intensity(
-                light / (u.km / u.s), target / (u.km / u.s), frequency,
-                beam_area, pixel_area)
-        # (integrated light as energy, e.g. erg/s/cm2/arcsec2, or per
-        # pixel or beam)
-        energy = (light * frequency / const.c).to(u.W / u.m ** 2 / u.sr)
-        return _spatial(energy, target, beam_area, pixel_area)
+        light = _axis_integral(1 * source, frame)
+        if integrated and _is_energy(target):
+            return _per_element(
+                (light * frame.hz_per_kms).to(u.W / u.m ** 2 / u.sr), target,
+                beam, pixel)
+        channel = target / (u.km / u.s) if integrated else target
+        return _channel(light / (u.km / u.s), channel, frame, beam, pixel)
     except u.UnitConversionError as e:
         raise ConfigError(
             f"the light of a line in {unitutils.format_unit(source)!r} "
             f"cannot be data in {unitutils.format_unit(target)!r}: {e}") from e
 
 
-def band_factor(
-        source: u.UnitBase,
-        target: u.UnitBase,
-        frequency: u.Quantity,
-        beam_area: u.Quantity | None,
-        pixel_area: u.Quantity
-) -> float:
+def line_factors(
+        source: u.UnitBase | None,
+        target: DataUnit | None,
+        rows: np.ndarray,
+        spectral: gridutils.Grid
+) -> 'LineFactors | None':
     """
-    Return how many target units one source unit of the light in a band
-    is (see check_band_unit and line_factor; at the given frequency, that
-    of the band at the redshift of the component).
+    Return the factors of the lines of a component (see LineFactors), or
+    None if it needs none: without a unit (source), the light of the
+    component is in the unit of the data; without data (target), the
+    model is in the unit of its components.
 
     Raises
     ------
     ConfigError
-        If the target is not a unit of light in bands, or it is per beam
-        and there is no beam.
+        If the component has a unit and the data have none, or a factor
+        cannot be computed (see LineFactors).
     """
+    if source is None or target is None:
+        return None
+    if target.unit is None:
+        raise ConfigError(
+            f"the light of the component is in "
+            f"{unitutils.format_unit(source)!r}, but the data have no unit: "
+            f"give them one (BUNIT in the header, or the option unit of the "
+            f"data)")
+    return LineFactors(source, target, rows, spectral)
+
+
+class LineFactors:
+    """
+    The factors that turn the light of the lines of a component, in the
+    unit of its emission (source), into the unit of the data of an
+    observation (target), as the model holds them (see line_factor): one
+    for each line, of the given rows (the offset and scale of each on the
+    spectral axis, see Lines.values), at the frequency of the line at the
+    systemic velocity of the component (see __call__), which places it on
+    the axis.
+
+    Each factor is a power of that frequency (brightness temperature
+    ~ nu^-2; the frequency or wavelength that a km/s of the axis spans
+    ~ nu^0 or nu^2), which two frequencies give exactly; with a beam for
+    each channel, the factor is also that of the beam at the line,
+    interpolated between the channels. On an axis without a rest, the
+    frequency of the lines is not known: the factors must not depend on
+    it.
+
+    Raises
+    ------
+    ConfigError
+        If a factor cannot be computed (see line_factor), or depends on
+        the frequency of the lines, and the spectral axis has no rest.
+    """
+
+    def __init__(
+            self,
+            source: u.UnitBase,
+            target: DataUnit,
+            rows: np.ndarray,
+            spectral: gridutils.Grid
+    ):
+        coords = spectral.coords
+        self._axis = None if coords.rest is None \
+            else _Axis(coords.rest, coords.medium)
+        self._offsets = np.array(rows[:, 0], dtype=float)
+        self._scales = np.array(rows[:, 1], dtype=float)
+        self._beam = _BeamCurve(target, self._axis)
+        # The factor of each line at its frequency at the systemic velocity
+        # 0 (with a beam of 1 arcsec^2), and its power of the frequency
+        factors = []
+        powers = []
+        for offset, scale in zip(self._offsets, self._scales):
+            factor, power = self._line(source, target, offset, scale)
+            factors.append(factor)
+            powers.append(power)
+        self._factors = np.array(factors)
+        self._powers = np.array(powers)
+        self._frequencies = self._frequency(0.0)
+
+    def _line(
+            self,
+            source: u.UnitBase,
+            target: DataUnit,
+            offset: float,
+            scale: float
+    ) -> tuple[float, float]:
+        """
+        Return the factor of a line of the given offset and scale at its
+        frequency at the velocity 0, and its power of the frequency.
+        """
+        def factor(frame):
+            return line_factor(
+                source, target.unit, frame,
+                None if target.beam is None else 1.0, target.pixel,
+                target.integrated)
+        if self._axis is None:
+            first, second = (
+                factor(_Axis(rest).frame(offset, scale))
+                for rest in _NOMINAL_RESTS)
+            if not np.isclose(first, second, rtol=1e-9, atol=0):
+                raise ConfigError(
+                    f"the light of a line in {unitutils.format_unit(source)!r}"
+                    f" becomes data in {unitutils.format_unit(target.unit)!r}"
+                    f" at the frequency of the line: the spectral axis needs "
+                    f"its rest (RESTFRQ or RESTWAV in the header of the data, "
+                    f"or the option rest)")
+            return first, 0.0
+        frequency = self._axis.frequency(offset)
+        first = factor(self._axis.frame(offset, scale))
+        second = factor(self._axis.frame(
+            self._axis.velocity(2 * frequency), scale))
+        return first, float(np.log2(second / first))
+
+    def _frequency(self, vsys: float) -> np.ndarray | None:
+        """
+        Return the frequency (Hz) of each line at a systemic velocity, if
+        the axis has a rest.
+        """
+        if self._axis is None:
+            return None
+        return self._axis.frequency(self._offsets + self._scales * vsys)
+
+    def __call__(self, vsys: float) -> np.ndarray:
+        """
+        Return the factor of each line, with the component at the given
+        systemic velocity (km/s).
+        """
+        factors = self._factors * self._beam(
+            self._offsets + self._scales * vsys)
+        if self._axis is None:
+            return factors
+        return factors * (self._frequency(vsys) / self._frequencies) \
+            ** self._powers
+
+
+def band_factor(
+        source: u.UnitBase | None,
+        target: DataUnit | None,
+        band: Band | None
+) -> float:
+    """
+    Return how many units of the data of an observation (target) one
+    unit of the light of a component in a band (source, see
+    check_band_unit) is: 1 without a unit (its light is in the unit of
+    the data) or without data (the model is in the unit of its
+    components). The conversions that depend on the frequency are made at
+    that of the band of the image (its effective wavelength); without a
+    band, they must not depend on it.
+
+    Raises
+    ------
+    ConfigError
+        If the component has a unit and the data have none, the target is
+        not a unit of light in bands, it is per beam and there is no beam,
+        or the factor depends on the frequency, and the band is not known.
+    """
+    if source is None or target is None:
+        return 1.0
+    if target.unit is None:
+        raise ConfigError(
+            f"the light of the component is in "
+            f"{unitutils.format_unit(source)!r}, but the data have no unit: "
+            f"give them one (BUNIT in the header, or the option unit of the "
+            f"data)")
+    if band is not None:
+        return _band_factor(
+            source, target, band.wavelength().to(u.Hz, u.spectral()))
+    first, second = (
+        _band_factor(source, target, frequency)
+        for frequency in _NOMINAL_BANDS)
+    if not np.isclose(first, second, rtol=1e-9, atol=0):
+        raise ConfigError(
+            f"light in a band in {unitutils.format_unit(source)!r} becomes "
+            f"data in {unitutils.format_unit(target.unit)!r} at the "
+            f"wavelength of the band: the image needs its band")
+    return first
+
+
+def _band_factor(
+        source: u.UnitBase, target: DataUnit, frequency: u.Quantity
+) -> float:
+    """Return the factor of band_factor at the given frequency."""
     try:
         light = 1 * source
         if source.is_equivalent(u.K):
-            light = light.to(_INTENSITY, u.brightness_temperature(frequency))
+            intensity = light.to(
+                _INTENSITY, u.brightness_temperature(frequency))
         else:
-            light = (light * u.sr).to(
+            intensity = (light * u.sr).to(
                 u.Jy, u.spectral_density(frequency)) / u.sr
-        return _from_intensity(
-            light, target, frequency, beam_area, pixel_area)
+        if target.unit.is_equivalent(u.K):
+            return intensity.to_value(
+                target.unit, u.brightness_temperature(frequency))
+        spatial = _spatial_unit(target.unit)
+        beam = None if target.beam is None else float(target.beam)
+        return _element(intensity, spatial, beam, target.pixel).to_value(
+            target.unit * spatial, u.spectral_density(frequency))
     except u.UnitConversionError as e:
         raise ConfigError(
             f"light in a band in {unitutils.format_unit(source)!r} cannot be "
-            f"data in {unitutils.format_unit(target)!r}: {e}") from e
+            f"data in {unitutils.format_unit(target.unit)!r}: {e}") from e
 
 
-def _integrated_intensity(
-        light: u.Quantity, frequency: u.Quantity
-) -> u.Quantity:
+class _Axis:
     """
-    Return the light of a line (see check_line_unit) as intensity
-    integrated over the velocity of the line (Jy km/s/sr), at the given
-    frequency.
+    A spectral axis of velocities that refer to a rest frequency (radio
+    velocities) or a rest wavelength (optical velocities, in the given
+    medium; see gridutils.Coords): the frequency (in vacuum) at each
+    velocity of the axis, and the reverse. The refractive index of air is taken at the rest
+    wavelength (it changes by about 1e-8 across 1000 km/s).
+    """
+
+    def __init__(self, rest: u.Quantity, medium: str | None = None):
+        self._radio = rest.unit.is_equivalent(u.Hz)
+        if self._radio:
+            self._rest = rest.to_value(u.Hz)
+            self._index = 1.0
+        else:
+            self._rest = rest.to_value(u.m)
+            self._index = 1.0 if medium != 'air' \
+                else air_refractive_index(self._rest)
+
+    def frequency(self, velocity: float | np.ndarray) -> float | np.ndarray:
+        """Return the frequency (Hz) at velocities of the axis (km/s)."""
+        if self._radio:
+            return self._rest * (1 - velocity / _C)
+        return const.c.value / (self._index * self._rest * (1 + velocity / _C))
+
+    def velocity(self, frequency: float) -> float:
+        """Return the velocity of the axis (km/s) at a frequency (Hz)."""
+        if self._radio:
+            return _C * (1 - frequency / self._rest)
+        return _C * (
+            const.c.value / (self._index * self._rest * frequency) - 1)
+
+    def frame(self, velocity: float, scale: float) -> LineFrame:
+        """
+        Return where a line of the given scale is on the axis at a velocity
+        of the axis (see LineFrame).
+        """
+        frequency = self.frequency(velocity)
+        kms = u.km / u.s
+        if self._radio:
+            hz_per_kms = self._rest / _C
+            m_per_kms = const.c.value / frequency ** 2 * hz_per_kms
+        else:
+            m_per_kms = self._rest / _C
+            hz_per_kms = frequency / (_C * (1 + velocity / _C))
+        return LineFrame(
+            frequency * u.Hz, hz_per_kms * u.Hz / kms, m_per_kms * u.m / kms,
+            scale)
+
+
+class _BeamCurve:
+    """
+    The solid angle of the beam of data (arcsec^2) at velocities of the
+    spectral axis, for data per beam: that of one beam, or that of the
+    beam of each channel, interpolated linearly in the velocity of the
+    axis (see DataUnit); 1 for data of other units or without a beam (the
+    factors take none).
+
+    Raises
+    ------
+    ConfigError
+        If the beams of the channels are at frequencies or wavelengths,
+        and the spectral axis has no rest (axis None).
+    """
+
+    def __init__(self, target: DataUnit, axis: _Axis | None):
+        self._velocities = None
+        self._areas = 1.0
+        if target.beam is None or u.beam not in target.unit.bases:
+            return
+        self._areas = target.beam
+        if target.beam_spectral is None:
+            return
+        spectral = target.beam_spectral
+        if spectral.unit.is_equivalent(u.km / u.s):
+            velocities = spectral.to_value(u.km / u.s)
+        elif axis is None:
+            raise ConfigError(
+                "the beams of the channels of the data are at frequencies "
+                "or wavelengths: the spectral axis needs its rest (RESTFRQ "
+                "or RESTWAV in the header of the data, or the option rest)")
+        else:
+            velocities = np.array([
+                axis.velocity(frequency) for frequency in
+                spectral.to_value(u.Hz, u.spectral())])
+        order = np.argsort(velocities)
+        self._velocities = velocities[order]
+        self._areas = np.asarray(target.beam, dtype=float)[order]
+
+    def __call__(self, velocity: np.ndarray) -> float | np.ndarray:
+        """Return the solid angle at the given velocities of the axis."""
+        if self._velocities is None:
+            return self._areas
+        return np.interp(velocity, self._velocities, self._areas)
+
+
+def _axis_integral(light: u.Quantity, frame: LineFrame) -> u.Quantity:
+    """
+    Return the light of a line (see check_line_unit) as its intensity
+    integrated over the velocity of the spectral axis (Jy km/s/sr), at the
+    given frame.
     """
     if light.unit.is_equivalent(u.Msun / u.pc ** 2):
         light = (light / _H_MASS).to(u.cm ** -2)
     if light.unit.is_equivalent(u.cm ** -2):
         light = light / _HI_COLUMN
+    if light.unit.is_equivalent(u.W / u.m ** 2 / u.sr):
+        return (light / frame.hz_per_kms).to(_INTEGRATED)
+    # (light integrated over the velocity of the component, each km/s of
+    # which spans scale km/s of the axis)
     if light.unit.is_equivalent(u.K * u.km / u.s):
         temperature = light.to(u.K * u.km / u.s) / (u.km / u.s)
-        return temperature.to(
-            _INTENSITY, u.brightness_temperature(frequency)) * u.km / u.s
-    if light.unit.is_equivalent(u.W / u.m ** 2 / u.sr):
-        return (light / (frequency / const.c)).to(_INTEGRATED)
-    return light.to(_INTEGRATED)
+        light = temperature.to(
+            _INTENSITY, u.brightness_temperature(frame.frequency)) \
+            * (u.km / u.s)
+    return light.to(_INTEGRATED) * frame.scale
 
 
-def _from_intensity(
+def _channel(
         intensity: u.Quantity,
         target: u.UnitBase,
-        frequency: u.Quantity,
-        beam_area: u.Quantity | None,
-        pixel_area: u.Quantity
+        frame: LineFrame,
+        beam: float | None,
+        pixel: float
 ) -> float:
     """
-    Return an intensity (flux density per solid angle) in the target
-    unit: brightness temperature, or flux density (per frequency or per
-    wavelength) per solid angle, beam or pixel.
+    Return the light of a channel per km/s of the axis, as intensity (flux
+    density per frequency per solid angle), in the target unit:
+    brightness temperature, or flux density per frequency or per
+    wavelength of the axis (that a km/s of it spans, see LineFrame), per
+    solid angle, beam or pixel.
     """
     if target.is_equivalent(u.K):
         return intensity.to_value(
-            target, u.brightness_temperature(frequency))
+            target, u.brightness_temperature(frame.frequency))
     spatial = _spatial_unit(target)
-    return _per_element(intensity, spatial, beam_area, pixel_area).to_value(
-        target * spatial, u.spectral_density(frequency))
+    if (target * spatial).is_equivalent(u.W / u.m ** 3):
+        intensity = (intensity * frame.hz_per_kms / frame.m_per_kms).to(
+            u.W / u.m ** 3 / u.sr)
+    return _element(intensity, spatial, beam, pixel).to_value(
+        target * spatial)
 
 
-def _spatial(
+def _per_element(
         light: u.Quantity,
         target: u.UnitBase,
-        beam_area: u.Quantity | None,
-        pixel_area: u.Quantity
+        beam: float | None,
+        pixel: float
 ) -> float:
     """
     Return light per solid angle (with no other conversion) in the target
     unit, per solid angle, beam or pixel.
     """
     spatial = _spatial_unit(target)
-    return _per_element(light, spatial, beam_area, pixel_area).to_value(
-        target * spatial)
+    return _element(light, spatial, beam, pixel).to_value(target * spatial)
 
 
-def _per_element(
+def _element(
         light: u.Quantity,
         spatial: u.UnitBase,
-        beam_area: u.Quantity | None,
-        pixel_area: u.Quantity
+        beam: float | None,
+        pixel: float
 ) -> u.Quantity:
     """
     Return light per solid angle as the light of one element (see
-    _spatial_unit): of a beam (of the given solid angle), of a solid angle
-    of 1 sr, or of a pixel (of the given solid angle).
+    _spatial_unit): of a beam or a pixel (of the given solid angles,
+    arcsec^2), or of a solid angle of 1 sr.
     """
     if spatial == u.beam:
-        if beam_area is None:
+        if beam is None:
             raise ConfigError(
-                "the data are per beam, but have no beam (give the option "
-                "beam of the data)")
-        return light * beam_area
+                "the data are per beam, but have no beam (BMAJ and BMIN in "
+                "the header, or the option beam of the data)")
+        return light * beam * u.arcsec ** 2
     if spatial == u.sr:
         return light * u.sr
-    return light * pixel_area
+    return light * pixel * u.arcsec ** 2
 
 
 def _spatial_unit(target: u.UnitBase) -> u.UnitBase:
@@ -308,10 +644,9 @@ def _spatial_unit(target: u.UnitBase) -> u.UnitBase:
     return u.dimensionless_unscaled
 
 
-def _is_intensity(unit: u.UnitBase) -> bool:
+def _is_energy(target: u.UnitBase) -> bool:
     """
-    Check whether a unit is of flux density (per frequency or per
-    wavelength) per solid angle, beam or pixel.
+    Check whether a unit is of energy flux (per solid angle, beam or
+    pixel): of light integrated over frequency (e.g. erg/s/cm2/arcsec2).
     """
-    return (unit * _spatial_unit(unit)).is_equivalent(
-        u.Jy, u.spectral_density(1 * u.Hz))
+    return (target * _spatial_unit(target)).is_equivalent(u.W / u.m ** 2)

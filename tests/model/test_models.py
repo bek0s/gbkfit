@@ -244,7 +244,7 @@ def image_plan(driver, galaxy, size):
         Grid(Depth(extent='legacy')).depth_axis(grid, 0),
         np.float32, (0,),
         opacity_cubes([galaxy], [(0,)], None, None, np.float32)[0],
-        None, None, None)
+        None, None, None, None)
 
 
 def evaluate_image(driver, plan, size, params):

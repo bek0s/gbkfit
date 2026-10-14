@@ -15,6 +15,7 @@ from gbkfit.driver import DeviceArray, Driver
 from gbkfit.params import ParamValues
 from gbkfit.utils import gridutils
 from gbkfit.utils.parseutils import ConfigError
+from ._units import DataUnit
 from .base import DepthAxis, NativeGrid, OpacityCubes
 from .disks._disk import Disk, DiskPlan
 from .extinction import ExtinctionLaw
@@ -24,6 +25,7 @@ from .roles import DustOpacity
 if TYPE_CHECKING:
     from ..galaxy import Galaxy
     from ._component_set import ComponentSet
+    from .base import Component
 
 
 __all__ = [
@@ -86,6 +88,9 @@ class ComponentPlans:
         The names of the emission lines evaluated; all if None.
     band : Band, optional
         The band of an image, if known.
+    data_unit : DataUnit, optional
+        The unit of the data of the observation, which the light of the
+        emitters takes (see Component.plan); None without data.
 
     Attributes
     ----------
@@ -110,6 +115,9 @@ class ComponentPlans:
 
     Raises
     ------
+    ConfigError
+        If the light of an emitter has a unit that cannot become that of
+        the data (see Component.plan).
     ValueError
         If there is no depth axis and components have opacity (the
         observations check that first, see LineOfSight).
@@ -126,7 +134,8 @@ class ComponentPlans:
             emitters: Sequence[int],
             cubes: OpacityCubes,
             lines: tuple[str, ...] | None,
-            band: Band | None
+            band: Band | None,
+            data_unit: DataUnit | None
     ):
         components = component_set.components()
         absorbers = tuple(cubes.deposits)
@@ -147,13 +156,17 @@ class ComponentPlans:
         self._deposits = cubes.deposits
         # The plans of the emitters, and of the absorbers that do not emit
         # here
-        self.plans = {
-            i: components[i].plan(
-                driver, spectral, dtype, lines, band, True, self.ratios[i])
-            for i in emitters}
+        self.plans = {}
+        for i in emitters:
+            try:
+                self.plans[i] = components[i].plan(
+                    driver, spectral, dtype, lines, band, True,
+                    self.ratios[i], data_unit)
+            except ConfigError as e:
+                raise ConfigError(f"{_label(components, i)}: {e}") from e
         self.plans |= {
             i: components[i].plan(
-                driver, spectral, dtype, lines, band, False, None)
+                driver, spectral, dtype, lines, band, False, None, None)
             for i in absorbers if i not in self.plans}
 
     def params(
@@ -207,8 +220,7 @@ class ComponentPlans:
             disk = components[i].density_disk()
             if disk is None or not disk.traits('rht'):
                 continue
-            name = components[i].name()
-            label = name if name is not None else f'component{i}'
+            label = _label(components, i)
             for index, cut, radius in _height_cuts(disk, params[i]):
                 if cut > _MAX_CUT:
                     trait = disk.traits('rht')[index]
@@ -279,8 +291,7 @@ class ComponentPlans:
         """
         components = self._component_set.components()
         for index, extra in extras.items():
-            name = components[index].name()
-            label = name if name is not None else f'component{index}'
+            label = _label(components, index)
             for key, value in extra.items():
                 out_extra[f'{label}_{key}'] = self.extra(value, depth_zero)
         if self.absorbers:
@@ -325,6 +336,15 @@ class ComponentPlans:
             rpix=tuple(coords.rpix) + tuple(spectral.rpix),
             rval=tuple(coords.rval) + tuple(spectral.rval),
             rest=spectral.rest, medium=spectral.medium), 2)
+
+
+def _label(components: Sequence['Component'], index: int) -> str:
+    """
+    Return the label of a component of the given index: its name, or its
+    position if it has none (e.g. 'component0').
+    """
+    name = components[index].name()
+    return name if name is not None else f'component{index}'
 
 
 def _native_grid(

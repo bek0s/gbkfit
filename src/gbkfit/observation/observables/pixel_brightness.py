@@ -3,10 +3,11 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from gbkfit.dataset import DatasetPixelBrightness
+from gbkfit.dataset import Dataset, DatasetPixelBrightness
 from gbkfit.driver import Driver
 from gbkfit.instrument import Instrument
 from gbkfit.model import BandEmission
+from gbkfit.model.components._units import DataUnit
 from gbkfit.params import ParamValues
 from gbkfit.utils import gridutils
 from gbkfit.utils.parseutils import ConfigError
@@ -143,6 +144,11 @@ class PixelBrightness(Observable):
 
     def keys(self) -> tuple[str, ...]:
         return ('brightness',)
+
+    def data_unit(self, dataset: Dataset | None) -> DataUnit | None:
+        return _detail.data_unit(
+            dataset, 'brightness', abs(self.step()[0] * self.step()[1]),
+            False)
 
     def model_can_lack_values(self) -> bool:
         return self._mask_apply

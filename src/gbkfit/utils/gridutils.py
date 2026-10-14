@@ -468,10 +468,13 @@ class GridData(NamedTuple):
         The world coordinates of its axes, in FITS order.
     spectral_axis : int or None
         The index of its spectral axis (FITS order), if any.
+    unit : str or None
+        The unit of its values (FITS BUNIT), if known.
     """
     data: np.ndarray
     coords: Coords
     spectral_axis: int | None
+    unit: str | None = None
 
 
 class SpectraData(NamedTuple):
@@ -486,6 +489,9 @@ class SpectraData(NamedTuple):
         along x and the velocity along y.
     coords : Coords
         The world coordinates of the spectral axis (one axis).
+    unit : str or None
+        The unit of the spectra (FITS BUNIT), if known.
     """
     data: np.ndarray
     coords: Coords
+    unit: str | None = None

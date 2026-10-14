@@ -12,6 +12,7 @@ from .lines import Band
 from .roles import Emission, LineEmission, Opacity
 
 if TYPE_CHECKING:
+    from ._units import DataUnit
     from .disks._disk import Disk, DiskPlan
 
 
@@ -206,7 +207,8 @@ class Component(parseutils.TypedSerializable, abc.ABC):
             lines: tuple[str, ...] | None,
             band: Band | None,
             emits: bool,
-            opacity_ratios: np.ndarray | None
+            opacity_ratios: np.ndarray | None,
+            data_unit: 'DataUnit | None'
     ) -> 'ComponentPlan':
         """
         Plan the evaluation of the component; the plan owns the memory
@@ -233,11 +235,22 @@ class Component(parseutils.TypedSerializable, abc.ABC):
             of each of its lines that it evaluates, in their order, or of
             its band (an array of shape (nrows, ncubes); see
             ComponentSetPlan).
+        data_unit : DataUnit, optional
+            The unit of the data of the observation, which its light is
+            turned into from the unit of its emission, if it has one (see
+            _units.LineFactors and band_factor); None without data: its
+            light stays in the unit of its emission.
 
         Returns
         -------
         ComponentPlan
             The plan.
+
+        Raises
+        ------
+        ConfigError
+            If its light has a unit that cannot become that of the data
+            (see _units.LineFactors and band_factor).
         """
         pass
 

@@ -45,7 +45,8 @@ def component_plan(driver, component):
     """The plan of the light of a component (of a galaxy of it alone)."""
     galaxy = galaxy_parser.load(dict(components=[component]))
     return galaxy.components()[0].plan(
-        driver, SPECTRAL, np.dtype(np.float32), None, None, True, None)
+        driver, SPECTRAL, np.dtype(np.float32), None, None, True, None,
+        None)
 
 
 def evaluate_fields(driver, component, params, grid):

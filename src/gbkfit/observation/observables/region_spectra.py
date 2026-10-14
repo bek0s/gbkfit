@@ -8,6 +8,7 @@ from gbkfit.dataset import Dataset, DatasetRegionSpectra
 from gbkfit.driver import Driver
 from gbkfit.instrument import Instrument
 from gbkfit.model import LineEmission
+from gbkfit.model.components._units import DataUnit
 from gbkfit.params import ParamValues
 from gbkfit.region import Regions, regions_parser
 from gbkfit.utils import gridutils, parseutils
@@ -204,6 +205,9 @@ class RegionSpectra(Observable):
 
     def keys(self) -> tuple[str, ...]:
         return ('spectra',)
+
+    def data_unit(self, dataset: Dataset | None) -> DataUnit | None:
+        return _detail.region_data_unit(dataset, 'spectra', False)
 
     def model_can_lack_values(self) -> bool:
         return False

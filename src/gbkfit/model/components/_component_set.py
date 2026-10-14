@@ -19,6 +19,7 @@ from ._component_plans import ComponentPlans
 from ._detail import shared_params
 from ._gravity import GravityPlan
 from ._transfer import LineResolution
+from ._units import DataUnit
 from .base import Component, DepthAxis, OpacityCubes
 from .geometries import Geometry
 from .lines import Band
@@ -260,6 +261,7 @@ class ComponentSet:
             cubes: OpacityCubes,
             lines: tuple[str, ...] | None,
             band: Band | None,
+            data_unit: DataUnit | None,
             smoothing: float | None
     ) -> 'ComponentSetPlan':
         """
@@ -268,7 +270,7 @@ class ComponentSet:
         """
         return ComponentSetPlan(
             self, driver, grid, spectral, depth, dtype, emitters, cubes,
-            lines, band, smoothing)
+            lines, band, data_unit, smoothing)
 
 
 class ComponentSetPlan:
@@ -295,11 +297,12 @@ class ComponentSetPlan:
             cubes: OpacityCubes,
             lines: tuple[str, ...] | None,
             band: Band | None,
+            data_unit: DataUnit | None,
             smoothing: float | None
     ):
         plans = ComponentPlans(
             component_set, driver, grid, spectral, depth, dtype, emitters,
-            cubes, lines, band)
+            cubes, lines, band, data_unit)
         self._plans = plans
         self._depth = depth
         self._smoothing = smoothing

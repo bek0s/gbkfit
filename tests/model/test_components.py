@@ -226,7 +226,7 @@ def test_thick_disk_with_several_velocity_traits(name):
         Grid(Depth(extent='legacy')).depth_axis(spatial, 0),
         np.float32, (0,),
         opacity_cubes([galaxy], [(0,)], None, None, np.float32)[0],
-        None, None, None)
+        None, None, None, None)
     plan.evaluate(params, {}, dict(scube=scube), None)
     assert scube.sum() > 0
 

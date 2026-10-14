@@ -9,6 +9,7 @@ from gbkfit.dataset import Dataset
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.instrument import Instrument
 from gbkfit.model import Emission
+from gbkfit.model.components._units import DataUnit
 from gbkfit.params import ParamValues
 from gbkfit.utils import gridutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
@@ -179,6 +180,26 @@ class Observable(parseutils.TypedSerializable, abc.ABC):
         Check whether its model can lack values (NaN) where the data have
         some (e.g. the velocity of a spectrum below its mask_cutoff): the
         likelihood then needs a residual for them (see LikelihoodGaussian).
+        """
+        pass
+
+    @abc.abstractmethod
+    def data_unit(self, dataset: Dataset | None) -> DataUnit | None:
+        """
+        Return the unit of the light of its data, which its model takes.
+
+        Parameters
+        ----------
+        dataset : Dataset, optional
+            The data.
+
+        Returns
+        -------
+        DataUnit or None
+            The unit of the data item of light (e.g. 'spectra' or
+            'moment0'; see DataUnit), with its beam and the area of its
+            pixels; None without data, or without an item of light (e.g.
+            moments of order 1 and above only: velocities).
         """
         pass
 

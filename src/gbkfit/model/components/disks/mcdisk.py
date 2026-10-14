@@ -8,6 +8,7 @@ from gbkfit.math.interpolation import Interpolator
 from gbkfit.params import ParamDesc, ParamValues
 from gbkfit.utils import gridutils
 from gbkfit.utils.parseutils import ConfigError
+from .._units import DataUnit
 from ..base import Component, ComponentPlan, FieldsLayout
 from ..geometries import Geometry
 from ..lines import Band, LineCatalogue
@@ -288,8 +289,11 @@ class MCDisk(Component):
             lines: tuple[str, ...] | None,
             band: Band | None,
             emits: bool,
-            opacity_ratios: np.ndarray | None
+            opacity_ratios: np.ndarray | None,
+            data_unit: DataUnit | None
     ) -> ComponentPlan:
+        emission = self.emission()
         return _detail.disk_plan(
-            self._disk, self._lines, self._bands, driver, spectral, dtype,
-            lines, band, emits, opacity_ratios)
+            self._disk, self._lines, self._bands,
+            emission.unit() if emission is not None else None, driver,
+            spectral, dtype, lines, band, emits, opacity_ratios, data_unit)

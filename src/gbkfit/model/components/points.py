@@ -1,6 +1,7 @@
 from collections.abc import Sequence
 from typing import Any
 
+import astropy.units
 import numpy as np
 import scipy.special
 
@@ -8,7 +9,8 @@ from gbkfit.driver import DeviceArray, Driver
 from gbkfit.params import ParamScalarDesc, ParamValues
 from gbkfit.utils import gridutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
-from ._detail import dump_geometry, dump_name
+from ._detail import Fluxes, dump_geometry, dump_name
+from ._units import DataUnit, band_factor, line_factors
 from .base import Component, ComponentPlan, FieldsLayout, NativeGrid
 from .geometries import Geometry
 from .lines import Band, Bands, LineCatalogue, Lines
@@ -62,20 +64,25 @@ def _spectral_plan(
         depth: bool,
         opacity_ratios: np.ndarray | None,
         lines: Lines,
-        names: Sequence[str] | None
+        unit: astropy.units.UnitBase | None,
+        names: Sequence[str] | None,
+        data_unit: DataUnit | None
 ) -> 'PointPlan':
     """
-    Return the plan of a spectral point with the given lines, of those of
-    the given names (all if None).
+    Return the plan of a spectral point with the given lines and the unit
+    of its light (if any), of the lines of the given names (all if None),
+    in the unit of the data (see Component.plan).
     """
     selected = lines.select(names)
-    values = lines.values(spectral)[list(selected)]
+    rows = lines.values(spectral)[list(selected)]
     ratios = [
         (row, lines.ratio_name(index))
         for row, index in enumerate(selected)
         if lines.ratio_name(index) is not None]
     return PointPlan(
-        driver, dtype, depth, opacity_ratios, lines=values, ratios=ratios)
+        driver, dtype, depth, opacity_ratios, Fluxes(
+            len(rows), ratios, line_factors(unit, data_unit, rows, spectral)),
+        rows)
 
 
 def _pixels(
@@ -138,11 +145,10 @@ class PointPlan(ComponentPlan):
     mean over the channel (as the disks do). On a grid with a depth axis,
     the opacity in front of its depth (its parameter 'depth' if depth, or
     0: the plane of the sky through the centre of its galaxy) dims it,
-    with its opacity_ratios (see Component.plan). In an image, its flux is
-    times that of the parameter band_ratio, if any (the flux ratio of the
-    band of the image). lines has the offset, scale and flux of each line
-    (spectral points), and ratios the row and the name of the flux ratio
-    of the lines after the first.
+    with its opacity_ratios (see Component.plan). Its light is that of the
+    given lines (the offset and scale of each on the spectral axis, see
+    Lines.values; spectral points), or in an image, that of its band, of
+    the given fluxes (see Fluxes).
     """
 
     def __init__(
@@ -151,25 +157,22 @@ class PointPlan(ComponentPlan):
             dtype: np.dtype,
             depth: bool,
             opacity_ratios: np.ndarray | None,
-            band_ratio: str | None = None,
-            lines: np.ndarray | None = None,
-            ratios: Sequence[tuple[int, str]] = ()
+            fluxes: Fluxes,
+            lines: np.ndarray | None = None
     ):
         self._driver = driver
         self._dtype = np.dtype(dtype)
         self._depth = depth
         self._opacity_ratios = opacity_ratios
-        self._band_ratio = band_ratio
+        self._fluxes = fluxes
+        # The offset, scale and flux of each line (the fluxes are set at
+        # each evaluation)
         self._lines = None if lines is None else np.array(lines, dtype=float)
-        self._ratios = tuple(ratios)
 
     def line_values(self, params: ParamValues) -> np.ndarray:
         if self._lines is None:
-            ratio = 1.0 if self._band_ratio is None \
-                else params[self._band_ratio]
-            return np.array([[0.0, 0.0, ratio]])
-        for row, name in self._ratios:
-            self._lines[row, 2] = params[name]
+            return np.array([[0.0, 0.0, self._fluxes(params)[0]]])
+        self._lines[:, 2] = self._fluxes(params)
         return self._lines
 
     def _spectrum(
@@ -256,8 +259,7 @@ class PointPlan(ComponentPlan):
                 transmission = np.exp(-self._opacity_ratios @ _optical_depths(
                     columns, depth, grid))
             if image is not None:
-                if self._band_ratio is not None:
-                    weight *= params[self._band_ratio]
+                weight *= self._fluxes(params)[0]
                 if transmission is not None:
                     weight *= transmission[0]
                 pixel = image.reshape(-1, *image.shape[-2:])[0, y, x:x + 1]
@@ -363,12 +365,16 @@ class Point(Component):
             lines: tuple[str, ...] | None,
             band: Band | None,
             emits: bool,
-            opacity_ratios: np.ndarray | None
+            opacity_ratios: np.ndarray | None,
+            data_unit: DataUnit | None
     ) -> PointPlan:
+        unit = self.emission().unit()
         if self._lines is None:
+            ratio = self._bands.ratio_name(band)
             return PointPlan(
-                driver, dtype, self._depth, opacity_ratios,
-                self._bands.ratio_name(band))
+                driver, dtype, self._depth, opacity_ratios, Fluxes(
+                    1, [(0, ratio)] if ratio is not None else [],
+                    scale=band_factor(unit, data_unit, band)))
         return _spectral_plan(
             driver, spectral, dtype, self._depth, opacity_ratios,
-            self._lines, lines)
+            self._lines, unit, lines, data_unit)

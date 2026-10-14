@@ -4,10 +4,11 @@ from typing import TYPE_CHECKING, Any
 import astropy.units
 import numpy as np
 
-from gbkfit.dataset import DatasetPixelSpectra
+from gbkfit.dataset import Dataset, DatasetPixelSpectra
 from gbkfit.driver import Driver
 from gbkfit.instrument import Instrument
 from gbkfit.model import LineEmission
+from gbkfit.model.components._units import DataUnit
 from gbkfit.params import ParamValues
 from . import _dcube, _detail
 from .base import ModelData, Observable
@@ -155,6 +156,10 @@ class PixelSpectra(Observable):
 
     def keys(self) -> tuple[str, ...]:
         return ('spectra',)
+
+    def data_unit(self, dataset: Dataset | None) -> DataUnit | None:
+        return _detail.data_unit(
+            dataset, 'spectra', abs(self.step()[0] * self.step()[1]), False)
 
     def model_can_lack_values(self) -> bool:
         return self._mask_apply

@@ -20,11 +20,12 @@ import gbkfit.model
 import gbkfit.observation
 from gbkfit.driver import Driver, driver_parser
 from gbkfit.objective import Objective
-from gbkfit.observation import DepthGroup, ObservationGroup
+from gbkfit.observation import DepthGroup, Observation, ObservationGroup
 from gbkfit.params import (
     ParamDesc, ParamSpace, ParamValues, load_pdescs_dict, param_space_parser)
 from gbkfit.utils import (
-    fitsutils, gridutils, iterutils, miscutils, numutils, parseutils)
+    fitsutils, gridutils, iterutils, miscutils, numutils, parseutils,
+    unitutils)
 from gbkfit.utils.parseutils import ConfigError
 
 
@@ -301,7 +302,7 @@ def data_outputs(group: ObservationGroup) -> dict[str, Any]:
     """
     Return the data of the observations as outputs, by name, in the form
     their observables give them: their values (data_<i>_<item>_d, NaN
-    where masked) and errors (data_<i>_<item>_e).
+    where masked) and errors (data_<i>_<item>_e), in their units.
     """
     outputs = {}
     for i, observation in enumerate(group.observations()):
@@ -310,11 +311,25 @@ def data_outputs(group: ObservationGroup) -> dict[str, Any]:
         observable = observation.observable()
         for key in observable.keys():
             item = dataset[key]
-            outputs[f'data_{i}_{key}_d'] = observable.output(item.data())
+            outputs[f'data_{i}_{key}_d'] = _with_unit(
+                observable.output(item.data()), observation, key)
             if item.error() is not None:
-                outputs[f'data_{i}_{key}_e'] = observable.output(
-                    item.error())
+                outputs[f'data_{i}_{key}_e'] = _with_unit(
+                    observable.output(item.error()), observation, key)
     return outputs
+
+
+def _with_unit(output: Any, observation: Observation, key: str) -> Any:
+    """
+    Return an output of a data item of an observation (or of its model,
+    which is in the unit of its data) with the unit of the item, if it
+    has one and the output takes it (see GridData, SpectraData).
+    """
+    data = observation.data()
+    if data is None or data[key].unit() is None or not isinstance(
+            output, (gridutils.GridData, gridutils.SpectraData)):
+        return output
+    return output._replace(unit=unitutils.format_unit(data[key].unit()))
 
 
 def evaluation_outputs(
@@ -342,8 +357,11 @@ def evaluation_outputs(
             for key, value in data_i.items():
                 for kind in ('d', 'm', 'w'):
                     if value.get(kind) is not None:
-                        outputs[f'model_{i}_{key}_{kind}'] = \
-                            observable.output(value[kind])
+                        output = observable.output(value[kind])
+                        if kind == 'd':
+                            output = _with_unit(
+                                output, group.observations()[i], key)
+                        outputs[f'model_{i}_{key}_{kind}'] = output
     extras = [('model', model_extra)]
     if residuals:
         if objective is None:
@@ -383,10 +401,11 @@ def write_outputs(
         if isinstance(value, gridutils.GridData):
             fitsutils.write_data(
                 filename, value.data, value.coords, value.spectral_axis,
-                overwrite=True)
+                overwrite=True, unit=value.unit)
         elif isinstance(value, gridutils.SpectraData):
             fitsutils.write_spectra(
-                filename, value.data, value.coords, overwrite=True)
+                filename, value.data, value.coords, overwrite=True,
+                unit=value.unit)
         elif isinstance(value, np.ndarray):
             fits.writeto(filename, value, overwrite=True)
         elif isinstance(value, Table):
