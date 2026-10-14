@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any
 import astropy.units
 import numpy as np
 
-from gbkfit.utils import fitsutils, gridutils, parseutils
+from gbkfit.utils import fitsutils, gridutils, parseutils, unitutils
 from gbkfit.utils.parseutils import ConfigError
 from .data import Data, FitsFile, dump_data, fits_file
 
@@ -110,12 +110,43 @@ def load_with_files(
 def moment_items(moments: Mapping[int, Data]) -> dict[str, Data]:
     """
     Return the data items of the moments of the given orders: moment0 to
-    moment7. Raise ConfigError for other orders.
+    moment7, those of the orders of 1 and above in km/s, as the models
+    give them (see _in_kms). Raise ConfigError for other orders.
     """
     if invalid := sorted(set(moments) - set(_ORDERS), key=str):
         raise ConfigError(
             f"the orders of the moments are 0 to 7; they include {invalid}")
-    return {f'moment{order}': moments[order] for order in sorted(moments)}
+    return {
+        f'moment{order}':
+            moments[order] if order == 0 else _in_kms(moments[order], order)
+        for order in sorted(moments)}
+
+
+def _in_kms(data: Data, order: int) -> Data:
+    """
+    Return the data of a moment of an order of 1 and above in km/s: the
+    mean velocity (1) and the dispersion (2) in km/s, the central moments
+    of an order k above 2 in (km/s)^k; converted from their unit (e.g.
+    m/s), if they have one, or taken to be in km/s. Raise ConfigError if
+    their unit is not one of velocity (to the power k).
+    """
+    unit = data.unit()
+    if unit is None:
+        return data
+    power = 1 if order <= 2 else order
+    kms = (astropy.units.km / astropy.units.s) ** power
+    if not unit.is_equivalent(kms):
+        kind = 'velocity' if power == 1 else f'velocity^{power}'
+        raise ConfigError(
+            f"moment {order} is in {unitutils.format_unit(unit)!r}, which is "
+            f"not a unit of {kind} (e.g. {unitutils.format_unit(kms)!r})")
+    factor = unit.to(kms)
+    if factor == 1:
+        return data
+    error = data.error()
+    return Data(
+        data.data() * factor, data.mask(),
+        None if error is None else error * factor, kms, data.beam())
 
 
 def moment_orders(dataset: 'Dataset') -> tuple[int, ...]:
