@@ -148,11 +148,14 @@ class LineOfSight(parseutils.TypedSerializable, abc.ABC):
         """
         pass
 
-    def check_order(self, galaxies: Sequence[Galaxy]) -> None:
+    def check_order(
+            self, galaxies: Sequence[Galaxy], order: Sequence[int] | None
+    ) -> None:
         """
         Check that this line of sight can order the given galaxies, which
         have opacity, along it (the light of one can be dimmed by
-        another): here, it cannot.
+        another), in the given order, front to back (their indices; see
+        ObservationGroup: depth_order): here, it cannot.
 
         Raises
         ------
@@ -276,12 +279,9 @@ class Transfer(LineOfSight):
     (see LineOpacity).
 
     It sees several galaxies with opacity, which can dim the light of one
-    another: each needs a depth (see Galaxy), and the march goes through
-    one after the other, front to back, in the order of their depths,
-    each on a depth axis of its own, centred on its depth. The depth axes
-    of galaxies must not overlap (an evaluation where they do raises
-    ValueError): galaxies that interpenetrate along the line of sight are
-    not supported yet.
+    another: the march goes through one after the other, front to back,
+    in their order along the line of sight (see ObservationGroup:
+    depth_order), each on a depth axis of its own, centred on its plane.
 
     Parameters
     ----------
@@ -364,13 +364,18 @@ class Transfer(LineOfSight):
     def check(self, component: Component) -> None:
         pass
 
-    def check_order(self, galaxies: Sequence[Galaxy]) -> None:
+    def check_order(
+            self, galaxies: Sequence[Galaxy], order: Sequence[int] | None
+    ) -> None:
+        ordered = set(order or ())
         if missing := [
-                galaxy.name() for galaxy in galaxies if not galaxy.depth()]:
+                galaxy.name() for g, galaxy in enumerate(galaxies)
+                if g not in ordered]:
             raise ConfigError(
                 f"radiative transfer marches several galaxies with opacity "
-                f"in the order of their depths along the line of sight; "
-                f"the galaxies {missing} need depth: true")
+                f"one after the other, front to back: the depth_order of the "
+                f"observation group must give the place of the galaxies "
+                f"{missing}")
 
     def plan_scene(
             self,

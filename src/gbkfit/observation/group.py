@@ -22,12 +22,14 @@ class ObservationGroup:
     Galaxies and the observations of them, evaluated together.
 
     Each observation names the galaxies it sees, which it may leave out
-    when there is one galaxy; the light of several galaxies adds up. The
-    parameters and constants of the galaxies are prefixed by their names
-    when they have names (which they need when there are several; e.g.
-    'north_'). The plans of the observations are made here, once. The
-    gravity of each galaxy is evaluated once for all the observations of
-    it (see Galaxy.plan_gravity).
+    when there is one galaxy; the light of several galaxies adds up, or
+    through radiative transfer, is dimmed by the opacity of the galaxies
+    in front (see depth_order). The parameters and constants of the
+    galaxies are prefixed by their names when they have names (which they
+    need when there are several; e.g. 'north_'). The plans of the
+    observations are made here, once. The gravity of each galaxy is
+    evaluated once for all the observations of it (see
+    Galaxy.plan_gravity).
 
     Parameters
     ----------
@@ -35,6 +37,12 @@ class ObservationGroup:
         The galaxies.
     observations : Observation or Sequence of Observation
         The observations.
+    depth_order : Sequence of str, optional
+        The galaxies along the line of sight, front to back, by name: an
+        observation of several galaxies through radiative transfer (see
+        Transfer) marches them in this order, which it needs when one of
+        them has opacity (the light of each is dimmed by the opacity of
+        those in front of it), and then of all of them.
 
     Raises
     ------
@@ -42,13 +50,15 @@ class ObservationGroup:
         If there are no galaxies or no observations, several galaxies
         without names, names repeat, an observation does not name the
         galaxies it sees (when there are several) or names unknown ones,
-        or what an observation sees does not go with it (see make_scene).
+        depth_order names unknown galaxies or repeats them, or what an
+        observation sees does not go with it (see make_scene).
     """
 
     def __init__(
             self,
             galaxies: Galaxy | Sequence[Galaxy],
-            observations: Observation | Sequence[Observation]
+            observations: Observation | Sequence[Observation],
+            depth_order: Sequence[str] | None = None
     ):
         self._galaxies = iterutils.tuplify(galaxies)
         self._observations = iterutils.tuplify(observations)
@@ -71,6 +81,7 @@ class ObservationGroup:
             raise ConfigError(
                 f"the galaxies and the observations must have different "
                 f"names; repeated: {repeated}")
+        self._depth_order = _depth_order(depth_order, galaxy_names)
         self._pdescs, self._mappings = iterutils.merge_with_prefixes(
             [galaxy.pdescs() for galaxy in self._galaxies], self._prefixes)
         # The parameters of the observations (their calibrations)
@@ -129,15 +140,18 @@ class ObservationGroup:
     def _scene(self, seen: list[int], observation: Observation) -> Scene:
         """
         Return what an observation sees (see make_scene): the galaxies of
-        the given indices.
+        the given indices, in the depth order of those of them in it.
         """
+        order = None
+        if self._depth_order is not None:
+            order = [seen.index(j) for j in self._depth_order if j in seen]
         return make_scene(
             [self._galaxies[j] for j in seen],
             [self._mappings[j] for j in seen],
             [self._prefixes[j] for j in seen],
             observation.components(), observation.lines(),
             observation.band(), observation.line_of_sight(),
-            observation.observable().emission)
+            observation.observable().emission, order)
 
     def galaxies(self) -> tuple[Galaxy, ...]:
         """Return the galaxies."""
@@ -247,3 +261,23 @@ class ObservationGroup:
                             h_item[k] = driver.mem_copy_d2h(
                                 d_array, h_item[k])
         return self._h_model_data
+
+
+def _depth_order(
+        names: Sequence[str] | None, galaxies: Sequence[str | None]
+) -> tuple[int, ...] | None:
+    """
+    Return the indices of the galaxies of the given names (see
+    ObservationGroup: depth_order), among the names of the galaxies.
+    Raise ConfigError if a name is unknown or repeats.
+    """
+    if names is None:
+        return None
+    names = list(names)
+    if unknown := [name for name in names if name not in galaxies]:
+        raise ConfigError(
+            f"depth_order names unknown galaxies {unknown}; the galaxies are "
+            f"{list(galaxies)}")
+    if len(set(names)) != len(names):
+        raise ConfigError(f"depth_order repeats galaxies: {names}")
+    return tuple(galaxies.index(name) for name in names)
