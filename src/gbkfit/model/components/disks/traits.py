@@ -694,11 +694,18 @@ class ZPTrait(TraitFeatureZmax, PTrait, abc.ABC):
     """
     A vertical distortion polar trait: a displacement of the plane of the
     disk (its midplane) along z, within zmax of the plane of the galaxy
-    (its option zmax): a larger one is limited to zmax (with extra outputs,
-    a warning says where). With the zmax of the density height traits, it
-    bounds the disk along z, so that the depth axis of an observation can
-    hold all of it (see Depth).
+    (its option zmax), the valid range of its amplitude a. A larger one
+    (e.g. of an interpolation of a between the rings that overshoots) is
+    limited to zmax; with extra outputs, a warning says where. With the
+    zmax of the density height traits, it bounds the disk along z, so that
+    the depth axis of an observation can hold all of it (see Depth).
     """
+
+    def _amplitude_desc(self, nnodes: int) -> ParamVectorDesc:
+        """Return the description of its node-wise amplitude, a."""
+        return ParamVectorDesc(
+            nnodes, desc="the amplitude of the displacement (arcsec)",
+            minimum=-self.zmax(), maximum=self.zmax())
 
 
 class SPTrait(PTrait, abc.ABC):
@@ -2986,7 +2993,7 @@ class ZPTraitNWUniform(TraitFeatureSampling, ZPTrait):
         return (self.zmax(),)
 
     def params_rnw(self, nnodes: int) -> dict[str, ParamDesc]:
-        return dict(a=ParamVectorDesc(nnodes))
+        return dict(a=self._amplitude_desc(nnodes))
 
 
 class ZPTraitNWHarmonic(
@@ -3034,7 +3041,8 @@ class ZPTraitNWHarmonic(
         return (self.zmax(), self.order())
 
     def params_rnw(self, nnodes: int) -> dict[str, ParamDesc]:
-        return _ptrait_params_nw_harmonic(self.order(), nnodes)
+        return _ptrait_params_nw_harmonic(self.order(), nnodes) | dict(
+            a=self._amplitude_desc(nnodes))
 
 
 class SPTraitAzimuthalRange(SPTrait):
