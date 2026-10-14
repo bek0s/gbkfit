@@ -121,9 +121,11 @@ class LineEmission(Emission):
         solid angle (e.g. '1e-17 erg/s/cm2/arcsec2', 'Jy km/s/arcsec2',
         'K km/s'), or for HI (lines: [hi21]) its column density ('cm-2') or
         the surface density of its mass ('Msun/pc2'); that of the flux of
-        a point is this unit times arcsec^2. Without a unit, the density is
+        a point is this unit times arcsec^2. It is the light as the galaxy
+        emits it, in its rest frame: each observation sees it dimmed by the
+        redshift (see _units.line_factor). Without a unit, the density is
         in the units of the data of each observation of it (see
-        Observation).
+        Observation), as observed.
 
     Raises
     ------
@@ -227,8 +229,12 @@ class BandEmission(Emission):
         The physical unit of the density (that of the first band; the
         ratios have none): a flux density per solid angle (e.g.
         'Jy/arcsec2', 'MJy/sr', '1e-20 erg/s/cm2/Angstrom/arcsec2') or a
-        brightness temperature ('K'). Without a unit, the density is in
-        the units of the data of each observation of it.
+        brightness temperature ('K'). It is the light as the galaxy emits
+        it, in its rest frame, at the frequency of each band times 1 + z:
+        each image sees it dimmed by the redshift (see _units.BandFactors),
+        which its galaxy must give unless the component has a systemic
+        velocity (see Galaxy). Without a unit, the density is in the units
+        of the data of each observation of it, as observed.
 
     Raises
     ------

@@ -72,31 +72,37 @@ def per_kelvin(vsys):
 def test_one_hi_disk_in_any_unit_of_data(driver):
     # A disk of HI of 1 Msun/pc^2 at its centre, without a unit (in the
     # unit of the data), and in Msun/pc^2 seen in K and in Jy/beam: N_HI =
-    # 1.823e18 cm^-2 per K km/s of the galaxy, each of which spans 1 -
-    # vsys / c km/s of the radio axis, and K to Jy/beam by Rayleigh-Jeans
+    # 1.823e18 cm^-2 per K km/s of the galaxy, its brightness temperature
+    # dimmed by 1 / (1 + z) = 1 - vsys / c, and each of its km/s spanning
+    # 1 - vsys / c km/s of the radio axis; K to Jy/beam by Rayleigh-Jeans
     # at the frequency of the line at the systemic velocity, in the beam
     plain = model(driver, disk(), 'K')
     kelvin = model(driver, disk('Msun/pc2'), 'K')
     jansky = model(driver, disk('Msun/pc2'), 'Jy/beam')
     column = (1 * u.Msun / u.pc ** 2 / (1.00794 * u.u)).to_value(u.cm ** -2)
-    assert_same(kelvin, plain * column / 1.823e18 * (1 - 470 / 299792.458))
+    assert_same(
+        kelvin, plain * column / 1.823e18 * (1 - 470 / 299792.458) ** 2)
     assert_same(jansky, kelvin * per_kelvin(470))
 
 
 def test_line_opacity_saturates_at_a_temperature(driver):
-    # With a unit, S is a brightness temperature, whatever the unit of the
-    # data: the light of each channel is S (1 - exp(-I / S)) in K, I that
-    # without line opacity, and that times Jy/beam per K in Jy/beam
+    # With a unit, S is a brightness temperature as the galaxy emits it,
+    # whatever the unit of the data: the light of each channel is S (1 -
+    # exp(-I / S)) in K as the galaxy emits it, I that without line
+    # opacity, and the data see it dimmed by 1 / (1 + z) (and in Jy/beam,
+    # that times Jy/beam per K)
     params = PARAMS | dict(ht_s=5)
     gas = disk('K km/s', thick=True)
     thin = model(driver, [gas], 'K', line_of_sight='transfer', params=params)
-    source = thin.max() / 3
+    one_plus_z = 1 / (1 - 470 / 299792.458)
+    source = one_plus_z * thin.max() / 3
     gas |= dict(opacity=dict(
         type='line', coefficients=dict(hi21=dict(type='uniform'))))
     params |= dict(op_hi21_a=1 / source)
     kelvin = model(driver, [gas], 'K', None, 'transfer', params)
     jansky = model(driver, [gas], 'Jy/beam', BEAM, 'transfer', params)
-    assert_same(kelvin, source * -np.expm1(-thin / source))
+    assert_same(
+        kelvin, source / one_plus_z * -np.expm1(-one_plus_z * thin / source))
     assert_same(jansky, kelvin * per_kelvin(470))
     assert kelvin.sum() < 0.8 * thin.sum()
 
@@ -120,3 +126,16 @@ def test_the_units_of_model_and_data_must_go_together(
         components = components[:1]
     with pytest.raises(ConfigError, match=message):
         model(driver, components, data_unit, beam)
+
+
+def test_light_in_bands_with_a_unit_needs_the_redshift():
+    # Images see it dimmed by the redshift: that of the galaxy, which it
+    # must give when the component has no systemic velocity
+    stars = dict(
+        type='smdisk', rnodes=list(range(0, 121, 20)),
+        density=dict(ptraits=dict(type='exponential')),
+        emission=dict(type='band', unit='Jy/arcsec2'))
+    with pytest.raises(ConfigError, match="give the galaxy its redshift"):
+        galaxy_parser.load(dict(components=[stars]))
+    galaxy = galaxy_parser.load(dict(components=[stars], redshift=0))
+    assert galaxy.dump()['redshift'] == 0

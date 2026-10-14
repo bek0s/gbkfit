@@ -2,7 +2,12 @@
 The physical units of the light of components (see LineEmission and
 BandEmission): which units each kind of emission takes, and the factors
 that turn them into the units of the data of an observation (see
-DataUnit, LineFactors and band_factor).
+DataUnit, LineFactors and BandFactors). The light of a component with a
+unit is that of the galaxy as it emits it, in its rest frame; each
+observation sees it dimmed by the redshift (see line_factor), so that
+physical quantities follow from it at any redshift: the mass of its gas
+or stars (see mass_per_unit), and the source function of its line
+opacity (see OpacityScales).
 """
 
 from collections.abc import Sequence
@@ -24,8 +29,9 @@ if TYPE_CHECKING:
 __all__ = [
     'DataUnit',
     'LineFactors',
+    'BandFactors',
     'OpacityScales',
-    'band_factor',
+    'band_factors',
     'check_band_unit',
     'check_line_unit',
     'check_line_units_agree',
@@ -35,6 +41,20 @@ __all__ = [
     'line_factors',
     'mass_per_unit'
 ]
+
+
+# Note (2026-10-15; the user asked for it, to revise later): there is no
+# option for the light of a component as we observe it (e.g. an emission
+# option 'brightness: observed', its parameters the observed brightness).
+# A component without a unit already fits the observed brightness, in
+# the units of the data. Such an option would skip the dimming here (in
+# line_factor and BandFactors), and undo it, times (1 + z)^n with n of
+# each kind of unit, in mass_per_unit and OpacityScales, which take the
+# light as the galaxy emits it. The gravity of a galaxy has no spectral
+# axis, so there the convention of vsys (radio or optical) is not known,
+# which matters at second order (about 0.1% per power of 1 + z at 10000
+# km/s): the option would need the redshift of the galaxy set, leaving
+# vsys small.
 
 
 # The units of the lines: their light integrated over the line, per
@@ -67,13 +87,8 @@ _INTEGRATED = u.Jy * u.km / u.s / u.sr
 # The speed of light (km/s)
 _C = const.c.to_value(u.km / u.s)
 
-# Two rest frequencies of a spectral axis without a rest, at which the
-# factors of the lines on it must agree: they cannot depend on the
-# frequency of the lines, which is not known (see LineFactors)
-_NOMINAL_RESTS = (1 * u.GHz, 2 * u.GHz)
-
 # Two frequencies at which the factor of a band must agree when the band
-# is not known (see band_factor)
+# is not known (see BandFactors)
 _NOMINAL_BANDS = (1e14 * u.Hz, 2e14 * u.Hz)
 
 
@@ -171,11 +186,12 @@ def mass_per_unit(emission: 'Emission | None') -> float | None:
     density of a component (see disks.MassTraitDisk), if its emission has
     a unit: for HI (its first line hi21), that of the HI of one unit, by
     N_HI = 1.823e18 cm^-2 per K km/s (at the rest frequency of the line,
-    for units of flux density or energy; the redshift is not taken), so
-    that upsilon is the mass of gas per mass of HI (1.33 with helium);
-    for other units 1 Msun/pc^2, so that upsilon is in Msun/pc^2 per unit
-    (e.g. alpha_CO per K km/s, or a mass-to-light ratio). None without a
-    unit.
+    for units of flux density or energy), so that upsilon is the mass of
+    gas per mass of HI (1.33 with helium); for other units 1 Msun/pc^2, so
+    that upsilon is in Msun/pc^2 per unit (e.g. alpha_CO per K km/s, or a
+    mass-to-light ratio at the wavelength at which the galaxy emits the
+    light). The light is that of the galaxy as it emits it (see
+    line_factor), so this holds at any redshift. None without a unit.
     """
     # (imported here: roles imports this module)
     from .roles import LineEmission
@@ -187,7 +203,7 @@ def mass_per_unit(emission: 'Emission | None') -> float | None:
             or emission.lines().names()[:1] != (HI_LINE,):
         return (1 * u.Msun / u.pc ** 2).to_value(per_kpc2)
     frequency = emission.lines().lines()[0].rest().to(u.Hz, u.spectral())
-    frame = _Axis(frequency).frame(0.0)
+    frame = _Axis(frequency).frame(0.0, frequency)
     intensity = _axis_integral(1 * unit, frame) / (u.km / u.s)
     temperature = intensity.to(u.K, u.brightness_temperature(frequency))
     column = temperature * (u.km / u.s) * _HI_COLUMN
@@ -215,16 +231,19 @@ class DataUnit(NamedTuple):
 class LineFrame(NamedTuple):
     """
     Where a line is on the spectral axis of an observation (see
-    line_factor): its frequency (in vacuum), how many Hz of it and how
-    many metres of the wavelengths of the axis (in their medium; in vacuum
-    for an axis of frequencies) one km/s of the axis spans (hz_per_kms,
-    m_per_kms), and how many km/s of the axis one km/s of the velocity of
-    its component spans there (scale; see LinePlacement).
+    line_factor): its frequency there (in vacuum), how many Hz of it and
+    how many metres of the wavelengths of the axis (in their medium; in
+    vacuum for an axis of frequencies) one km/s of the axis spans
+    (hz_per_kms, m_per_kms), how many km/s of the axis one km/s of the
+    velocity of its component spans there (scale; see LinePlacement), and
+    the frequency at which the galaxy emits it, in its rest frame
+    (emitted; emitted / frequency is 1 + z, the redshift of the line).
     """
     frequency: u.Quantity
     hz_per_kms: u.Quantity
     m_per_kms: u.Quantity
     scale: float
+    emitted: u.Quantity
 
 
 def line_factor(
@@ -252,14 +271,28 @@ def line_factor(
     (e.g. K km/s, Jy km/s/arcsec2) is integrated over the velocity of the
     component, of which each km/s spans scale km/s of the axis.
 
+    The light of the component is that of the galaxy as it emits it, in
+    its rest frame, at the frequency emitted of the frame (e.g. its
+    brightness temperature there). The observation sees it dimmed by the
+    redshift of the line, 1 + z = emitted / frequency: its intensity by
+    exactly (1 + z)^-3 (I_nu / nu^3 does not change along the path of the
+    light), that is (1 + z)^-4 for light integrated over frequency
+    (energy), (1 + z)^-5 per wavelength and (1 + z)^-1 for brightness
+    temperature; it is as wide in km/s of the galaxy (see LinePlacement).
+
     The conversions that depend on the frequency of the light within the
-    line (brightness temperature ~ nu^2, and on axes of optical velocities
-    the frequency that a km/s spans ~ nu^2) are made at the frequency of
-    the frame: that of the line at the systemic velocity of its component
-    (see LineFactors). Across the line they change by about 2 v / c (0.1%
-    for lines of 150 km/s), which one factor per line leaves out: an
-    approximation that the user accepted (2026-10-14); exact factors for
-    each channel would need weights for each channel in the kernels.
+    line (brightness temperature ~ nu^2, the dimming ~ nu^3, the km/s of
+    the axis that a km/s of the galaxy spans, and on axes of optical
+    velocities the frequency that a km/s spans ~ nu^2) are made at the
+    frequency of the frame: that of the line at the systemic velocity of
+    its component (see LineFactors). Across a line of +-v they change by
+    about +-p v / c, p the power of the frequency of the factor (4 for HI
+    in Jy/beam, or Halpha in erg/s/cm2/Angstrom: +-0.27% at 200 km/s),
+    in opposite ways on the two sides of a rotating disk; one factor per
+    line leaves this out: an approximation that the user accepted
+    (2026-10-14 for brightness temperature, 2026-10-15 for the dimming);
+    exact factors for each channel would need weights for each channel
+    in the kernels.
 
     Raises
     ------
@@ -285,7 +318,8 @@ def line_factors(
         source: u.UnitBase | None,
         target: DataUnit | None,
         rows: np.ndarray,
-        spectral: gridutils.Grid
+        spectral: gridutils.Grid,
+        frequencies: np.ndarray | None
 ) -> 'LineFactors | None':
     """
     Return the factors of the lines of a component (see LineFactors), or
@@ -307,7 +341,7 @@ def line_factors(
             f"{unitutils.format_unit(source)!r}, but the data have no unit: "
             f"give them one (BUNIT in the header, or the option unit of the "
             f"data)")
-    return LineFactors(source, target, rows, spectral)
+    return LineFactors(source, target, rows, spectral, frequencies)
 
 
 class LineFactors:
@@ -316,24 +350,25 @@ class LineFactors:
     unit of its emission (source), into the unit of the data of an
     observation (target), as the model holds them (see line_factor): one
     for each line, of the given rows (where each is on the spectral axis,
-    see Lines.values), at the frequency of the line at the systemic
-    velocity of the component (see __call__), which places it on the axis.
+    see Lines.values), which the galaxy emits at the given frequencies
+    (Hz, see Lines.frequencies), at the frequency of the line at the
+    systemic velocity of the component (see __call__), which places it on
+    the axis.
 
     Each factor is a power of that frequency (brightness temperature
-    ~ nu^-2; the frequency or wavelength that a km/s of the axis spans
-    ~ nu^0 or nu^2; the km/s of the axis that a km/s of the component
-    spans ~ nu or 1/nu, see LinePlacement), which two frequencies give
-    exactly; with a beam for
+    ~ nu^-2; the dimming by the redshift ~ nu^3; the frequency or
+    wavelength that a km/s of the axis spans ~ nu^0 or nu^2; the km/s of
+    the axis that a km/s of the component spans ~ nu or 1/nu, see
+    LinePlacement), which two frequencies give exactly; with a beam for
     each channel, the factor is also that of the beam at the line,
-    interpolated between the channels. On an axis without a rest, the
-    frequency of the lines is not known: the factors must not depend on
-    it.
+    interpolated between the channels.
 
     Raises
     ------
     ConfigError
-        If a factor cannot be computed (see line_factor), or depends on
-        the frequency of the lines, and the spectral axis has no rest.
+        If a factor cannot be computed (see line_factor), or the spectral
+        axis has no rest: the data see the light of the component dimmed
+        by the redshift of each line, which takes where the line is.
     """
 
     def __init__(
@@ -341,20 +376,28 @@ class LineFactors:
             source: u.UnitBase,
             target: DataUnit,
             rows: np.ndarray,
-            spectral: gridutils.Grid
+            spectral: gridutils.Grid,
+            frequencies: np.ndarray
     ):
         coords = spectral.coords
-        self._axis = None if coords.rest is None \
-            else _Axis(coords.rest, coords.medium)
+        if coords.rest is None:
+            raise ConfigError(
+                f"the light of the component in "
+                f"{unitutils.format_unit(source)!r} is that of the galaxy as "
+                f"it emits it, which the data see dimmed by the redshift of "
+                f"each line: the spectral axis needs its rest (RESTFRQ or "
+                f"RESTWAV in the header of the data, or the option rest)")
+        self._axis = _Axis(coords.rest, coords.medium)
         self._offsets = np.array(rows[:, 0], dtype=float)
         self._scales = np.array(rows[:, 1], dtype=float)
+        self._emitted = np.array(frequencies, dtype=float)
         self._beam = _BeamCurve(target, self._axis)
         # The factor of each line at its frequency at the systemic velocity
         # 0 (with a beam of 1 arcsec^2), and its power of the frequency
         factors = []
         powers = []
-        for offset in self._offsets:
-            factor, power = self._line(source, target, offset)
+        for offset, emitted in zip(self._offsets, self._emitted):
+            factor, power = self._line(source, target, offset, emitted)
             factors.append(factor)
             powers.append(power)
         self._factors = np.array(factors)
@@ -365,42 +408,35 @@ class LineFactors:
             self,
             source: u.UnitBase,
             target: DataUnit,
-            offset: float
+            offset: float,
+            emitted: float
     ) -> tuple[float, float]:
         """
-        Return the factor of a line of the given offset at its frequency at
-        the velocity 0, and its power of the frequency.
+        Return the factor of a line of the given offset, emitted at the
+        given frequency (Hz), at its frequency at the velocity 0, and its
+        power of the frequency.
         """
-        def factor(frame):
+        def factor(velocity):
             return line_factor(
-                source, target.unit, frame,
+                source, target.unit, self._axis.frame(velocity, emitted * u.Hz),
                 None if target.beam is None else 1.0, target.pixel,
                 target.integrated)
-        if self._axis is None:
-            first, second = (
-                factor(_Axis(rest).frame(offset))
-                for rest in _NOMINAL_RESTS)
-            if not np.isclose(first, second, rtol=1e-9, atol=0):
-                raise ConfigError(
-                    f"the light of a line in {unitutils.format_unit(source)!r}"
-                    f" becomes data in {unitutils.format_unit(target.unit)!r}"
-                    f" at the frequency of the line: the spectral axis needs "
-                    f"its rest (RESTFRQ or RESTWAV in the header of the data, "
-                    f"or the option rest)")
-            return first, 0.0
         frequency = self._axis.frequency(offset)
-        first = factor(self._axis.frame(offset))
-        second = factor(self._axis.frame(self._axis.velocity(2 * frequency)))
+        first = factor(offset)
+        second = factor(self._axis.velocity(2 * frequency))
         return first, float(np.log2(second / first))
 
-    def _frequency(self, vsys: float) -> np.ndarray | None:
-        """
-        Return the frequency (Hz) of each line at a systemic velocity, if
-        the axis has a rest.
-        """
-        if self._axis is None:
-            return None
+    def _frequency(self, vsys: float) -> np.ndarray:
+        """Return the frequency (Hz) of each line at a systemic velocity."""
         return self._axis.frequency(self._offsets + self._scales * vsys)
+
+    def redshifts(self, vsys: float) -> np.ndarray:
+        """
+        Return 1 + z of each line (the frequency at which the galaxy emits
+        it over that on the axis), with the component at the given
+        systemic velocity (km/s).
+        """
+        return self._emitted / self._frequency(vsys)
 
     def __call__(self, vsys: float) -> np.ndarray:
         """
@@ -409,8 +445,6 @@ class LineFactors:
         """
         factors = self._factors * self._beam(
             self._offsets + self._scales * vsys)
-        if self._axis is None:
-            return factors
         return factors * (self._frequency(vsys) / self._frequencies) \
             ** self._powers
 
@@ -420,12 +454,14 @@ class OpacityScales:
     The factors that turn the light of the lines of a component with a
     unit (source), as the model holds it (in the unit of the data of an
     observation, target; or without data, in its own unit, see
-    line_factors), into brightness temperature (K per km/s of the
-    spectral axis): the coefficients of its line opacity are then 1/S in
-    1/K (see LineOpacity), and the light of a voxel in K over S is its
+    line_factors), into its brightness temperature as the galaxy emits it
+    (K per km/s of the spectral axis; 1 + z times that observed, see
+    line_factor): the coefficients of its line opacity are then 1/S in
+    1/K, S the source function of the gas in its rest frame (e.g.
+    J(T_ex), see LineOpacity), and the light of a voxel in K over S is its
     optical depth. Like the factors of the light, they are taken at the
-    frequency of each line at the systemic velocity of the component
-    (see line_factor; about 0.1% across a line).
+    frequency of each line at the systemic velocity of the component (see
+    line_factor).
 
     Raises
     ------
@@ -438,76 +474,132 @@ class OpacityScales:
             source: u.UnitBase,
             target: DataUnit | None,
             rows: np.ndarray,
-            spectral: gridutils.Grid
+            spectral: gridutils.Grid,
+            frequencies: np.ndarray
     ):
         self._kelvin = LineFactors(
-            source, DataUnit(u.K, 1.0), rows, spectral)
-        self._light = line_factors(source, target, rows, spectral)
+            source, DataUnit(u.K, 1.0), rows, spectral, frequencies)
+        self._light = line_factors(source, target, rows, spectral, frequencies)
 
     def __call__(self, vsys: float) -> np.ndarray:
         """
         Return the factor of each line, with the component at the given
         systemic velocity (km/s).
         """
-        kelvin = self._kelvin(vsys)
+        kelvin = self._kelvin(vsys) * self._kelvin.redshifts(vsys)
         return kelvin if self._light is None else kelvin / self._light(vsys)
 
 
-def band_factor(
+def band_factors(
         source: u.UnitBase | None,
         target: DataUnit | None,
-        band: Band | None
-) -> float:
+        band: Band | None,
+        redshift: float
+) -> 'BandFactors | None':
     """
-    Return how many units of the data of an observation (target) one
-    unit of the light of a component in a band (source, see
-    check_band_unit) is: 1 without a unit (its light is in the unit of
-    the data) or without data (the model is in the unit of its
-    components). The conversions that depend on the frequency are made at
-    that of the band of the image (its effective wavelength); without a
-    band, they must not depend on it.
+    Return the factor of the light of a component in a band (see
+    BandFactors), of a galaxy at the given redshift, or None if it needs
+    none: without a unit (source), the light of the component is in the
+    unit of the data; without data (target), the model is in the unit of
+    its components.
 
     Raises
     ------
     ConfigError
-        If the component has a unit and the data have none, the target is
-        not a unit of light in bands, it is per beam and there is no beam,
-        or the factor depends on the frequency, and the band is not known.
+        If the component has a unit and the data have none, or the factor
+        cannot be computed (see BandFactors).
     """
     if source is None or target is None:
-        return 1.0
+        return None
     if target.unit is None:
         raise ConfigError(
             f"the light of the component is in "
             f"{unitutils.format_unit(source)!r}, but the data have no unit: "
             f"give them one (BUNIT in the header, or the option unit of the "
             f"data)")
-    if band is not None:
-        return _band_factor(
-            source, target, band.wavelength().to(u.Hz, u.spectral()))
-    first, second = (
-        _band_factor(source, target, frequency)
-        for frequency in _NOMINAL_BANDS)
-    if not np.isclose(first, second, rtol=1e-9, atol=0):
-        raise ConfigError(
-            f"light in a band in {unitutils.format_unit(source)!r} becomes "
-            f"data in {unitutils.format_unit(target.unit)!r} at the "
-            f"wavelength of the band: the image needs its band")
-    return first
+    return BandFactors(source, target, band, redshift)
+
+
+class BandFactors:
+    """
+    The factor that turns the light of a component in a band, in the unit
+    of its emission (source, see check_band_unit), into the unit of the
+    data of an image (target), at the band of the image (its effective
+    wavelength; without a band, the factor must not depend on it), with
+    the component at a systemic velocity (see __call__).
+
+    The light of the component is that of the galaxy as it emits it, in
+    its rest frame, at the frequency of the band times 1 + z (which band
+    that is there, e.g. for a mass-to-light ratio, is up to the user): the
+    image sees its intensity dimmed by (1 + z)^-3 (see line_factor). 1 + z
+    is (1 + redshift) (1 + vsys / c): the redshift of the galaxy, and the
+    systemic velocity of the component, if it has one (as an optical
+    velocity: an image has no spectral axis). The factor is a power of
+    1 + z, which two redshifts give exactly.
+
+    Raises
+    ------
+    ConfigError
+        If the target is not a unit of light in bands, it is per beam and
+        there is no beam, or the factor depends on the frequency and the
+        band is not known.
+    """
+
+    def __init__(
+            self,
+            source: u.UnitBase,
+            target: DataUnit,
+            band: Band | None,
+            redshift: float
+    ):
+        one_plus_z = 1 + redshift
+        if band is not None:
+            frequency = band.wavelength().to(u.Hz, u.spectral())
+        else:
+            frequency, other = _NOMINAL_BANDS
+            if not np.isclose(
+                    _band_factor(source, target, frequency, one_plus_z),
+                    _band_factor(source, target, other, one_plus_z),
+                    rtol=1e-9, atol=0):
+                raise ConfigError(
+                    f"light in a band in {unitutils.format_unit(source)!r} "
+                    f"becomes data in {unitutils.format_unit(target.unit)!r} "
+                    f"at the wavelength of the band: the image needs its band")
+        self._factor = _band_factor(source, target, frequency, one_plus_z)
+        self._power = float(np.log2(
+            _band_factor(source, target, frequency, 2 * one_plus_z)
+            / self._factor))
+
+    def __call__(self, vsys: float) -> np.ndarray:
+        """
+        Return the factor (an array of one), with the component at the
+        given systemic velocity (km/s).
+        """
+        return np.array([self._factor * (1 + vsys / _C) ** self._power])
 
 
 def _band_factor(
-        source: u.UnitBase, target: DataUnit, frequency: u.Quantity
+        source: u.UnitBase,
+        target: DataUnit,
+        frequency: u.Quantity,
+        one_plus_z: float
 ) -> float:
-    """Return the factor of band_factor at the given frequency."""
+    """
+    Return the factor of BandFactors at the given frequency of the band,
+    with the galaxy at the given 1 + z.
+    """
     try:
+        # (the intensity of the galaxy where it emits the light, and that
+        # which the image sees)
+        emitted = frequency * one_plus_z
         light = 1 * source
         if source.is_equivalent(u.K):
             intensity = light.to(
-                _INTENSITY, u.brightness_temperature(frequency))
+                _INTENSITY, u.brightness_temperature(emitted))
         else:
             intensity = (light * u.sr).to(
-                u.Jy, u.spectral_density(frequency)) / u.sr
+                u.Jy, u.spectral_density(emitted)) / u.sr
+        intensity = intensity / one_plus_z ** 3
         if target.unit.is_equivalent(u.K):
             return intensity.to_value(
                 target.unit, u.brightness_temperature(frequency))
@@ -526,8 +618,9 @@ class _Axis:
     A spectral axis of velocities that refer to a rest frequency (radio
     velocities) or a rest wavelength (optical velocities, in the given
     medium; see gridutils.Coords): the frequency (in vacuum) at each
-    velocity of the axis, and the reverse. The refractive index of air is taken at the rest
-    wavelength (it changes by about 1e-8 across 1000 km/s).
+    velocity of the axis, and the reverse. The refractive index of air is
+    taken at the rest wavelength (it changes by about 1e-8 across 1000
+    km/s).
     """
 
     def __init__(self, rest: u.Quantity, medium: str | None = None):
@@ -553,10 +646,11 @@ class _Axis:
         return _C * (
             const.c.value / (self._index * self._rest * frequency) - 1)
 
-    def frame(self, velocity: float) -> LineFrame:
+    def frame(self, velocity: float, emitted: u.Quantity) -> LineFrame:
         """
-        Return where a line is on the axis at a velocity of the axis (see
-        LineFrame; its scale as in LinePlacement).
+        Return where a line, which the galaxy emits at the given frequency,
+        is on the axis at a velocity of the axis (see LineFrame; its scale
+        as in LinePlacement).
         """
         frequency = self.frequency(velocity)
         kms = u.km / u.s
@@ -570,7 +664,7 @@ class _Axis:
             scale = 1 + velocity / _C
         return LineFrame(
             frequency * u.Hz, hz_per_kms * u.Hz / kms, m_per_kms * u.m / kms,
-            scale)
+            scale, emitted)
 
 
 class _BeamCurve:
@@ -580,15 +674,9 @@ class _BeamCurve:
     beam of each channel, interpolated linearly in the velocity of the
     axis (see DataUnit); 1 for data of other units or without a beam (the
     factors take none).
-
-    Raises
-    ------
-    ConfigError
-        If the beams of the channels are at frequencies or wavelengths,
-        and the spectral axis has no rest (axis None).
     """
 
-    def __init__(self, target: DataUnit, axis: _Axis | None):
+    def __init__(self, target: DataUnit, axis: _Axis):
         self._velocities = None
         self._areas = 1.0
         if target.beam is None or u.beam not in target.unit.bases:
@@ -599,11 +687,6 @@ class _BeamCurve:
         spectral = target.beam_spectral
         if spectral.unit.is_equivalent(u.km / u.s):
             velocities = spectral.to_value(u.km / u.s)
-        elif axis is None:
-            raise ConfigError(
-                "the beams of the channels of the data are at frequencies "
-                "or wavelengths: the spectral axis needs its rest (RESTFRQ "
-                "or RESTWAV in the header of the data, or the option rest)")
         else:
             velocities = np.array([
                 axis.velocity(frequency) for frequency in
@@ -621,24 +704,28 @@ class _BeamCurve:
 
 def _axis_integral(light: u.Quantity, frame: LineFrame) -> u.Quantity:
     """
-    Return the light of a line (see check_line_unit) as its intensity
-    integrated over the velocity of the spectral axis (Jy km/s/sr), at the
-    given frame.
+    Return the light of a line (see check_line_unit), as the galaxy emits
+    it, as the intensity that the observation sees integrated over the
+    velocity of the spectral axis (Jy km/s/sr), at the given frame (see
+    line_factor).
     """
+    # (as the galaxy emits it: its intensity integrated over the velocity
+    # of the component, at the frequency emitted)
     if light.unit.is_equivalent(u.Msun / u.pc ** 2):
         light = (light / _H_MASS).to(u.cm ** -2)
     if light.unit.is_equivalent(u.cm ** -2):
         light = light / _HI_COLUMN
     if light.unit.is_equivalent(u.W / u.m ** 2 / u.sr):
-        return (light / frame.hz_per_kms).to(_INTEGRATED)
-    # (light integrated over the velocity of the component, each km/s of
-    # which spans scale km/s of the axis)
+        light = (light / (frame.emitted / (_C * u.km / u.s))).to(_INTEGRATED)
     if light.unit.is_equivalent(u.K * u.km / u.s):
         temperature = light.to(u.K * u.km / u.s) / (u.km / u.s)
         light = temperature.to(
-            _INTENSITY, u.brightness_temperature(frame.frequency)) \
+            _INTENSITY, u.brightness_temperature(frame.emitted)) \
             * (u.km / u.s)
-    return light.to(_INTEGRATED) * frame.scale
+    # (as seen: dimmed by the redshift, each km/s of the component spanning
+    # scale km/s of the axis)
+    dimming = float((frame.frequency / frame.emitted).decompose()) ** 3
+    return light.to(_INTEGRATED) * dimming * frame.scale
 
 
 def _channel(
