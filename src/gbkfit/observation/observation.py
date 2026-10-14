@@ -120,8 +120,9 @@ class Observation(parseutils.Serializable):
         1
         for each axis, there is a likelihood without data, the data are
         not those of the observable, its model can lack values but its
-        likelihood has no residual for them (see LikelihoodGaussian), the
-        observable cannot be seen
+        likelihood has no residual for them (see LikelihoodGaussian), its
+        likelihood has free amplitudes and the observable has no spectra
+        or it has a calibration, the observable cannot be seen
         through the instrument (see Observable.check_instrument), or the
         dtype is not one of the native modules (see Driver.dtypes).
     """
@@ -316,6 +317,8 @@ class Observation(parseutils.Serializable):
             observable.require_matching(data)
             if likelihood is None:
                 likelihood = LikelihoodGaussian()
+            if likelihood.amplitudes() is not None:
+                _check_amplitudes(observable, calibration)
             if observable.model_can_lack_values() \
                     and likelihood.missing_residual() is None:
                 raise ConfigError(
@@ -443,6 +446,23 @@ class Observation(parseutils.Serializable):
             self._driver, scene, self._foreground, self._instrument,
             self._scale, self._dtype, self._weights,
             self._calibration_param())
+
+
+def _check_amplitudes(observable: Observable, calibration: bool) -> None:
+    """
+    Raise ConfigError unless the free amplitudes of a likelihood (see
+    LikelihoodGaussian) can scale the model of an observable, which must
+    have spectra, and no calibration (which the amplitudes take).
+    """
+    if observable.spectra_item() is None:
+        desc = parseutils.make_typed_desc(observable.__class__, 'observable')
+        raise ConfigError(
+            f"free amplitudes scale spectra (e.g. those of pixel_spectra, "
+            f"slit_spectra or region_spectra); {desc} has none")
+    if calibration:
+        raise ConfigError(
+            "free amplitudes take the flux scale of the model: an "
+            "observation with them has no calibration")
 
 
 def _check_beams(data: Dataset, instrument: Instrument) -> None:

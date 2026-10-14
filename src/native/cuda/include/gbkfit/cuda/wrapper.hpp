@@ -82,6 +82,12 @@ struct Wrapper
     static void
     objective_residual_sum(
             const T* residual, int size, bool squared, double* sum);
+
+    static void
+    objective_amplitude_sums(
+            const T* obs_d, const T* obs_e, const T* obs_m,
+            const T* mdl_d, const T* mdl_w,
+            int nchannels, int nspectra, double* a, double* b, double* f);
 };
 
 }} // namespace gbkfit::cuda

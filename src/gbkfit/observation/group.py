@@ -211,6 +211,13 @@ class ObservationGroup:
         """Return the number of observations."""
         return len(self._observations)
 
+    def extra_prefix(self, index: int) -> str:
+        """
+        Return the prefix of the extra outputs of the observation of the
+        given index: its name, or 'observation{index}_'.
+        """
+        return self._extra_prefixes[index]
+
     def pdescs(self) -> dict[str, ParamDesc]:
         """
         Return the parameters of the galaxies, prefixed, and those of the
@@ -272,7 +279,7 @@ class ObservationGroup:
                     out_extra_i)
                 if out_extra is not None:
                     for key, val in out_extra_i.items():
-                        out_extra[f'{self._extra_prefixes[i]}{key}'] = val
+                        out_extra[f'{self.extra_prefix(i)}{key}'] = val
         return self._d_model_data
 
     def model_h(

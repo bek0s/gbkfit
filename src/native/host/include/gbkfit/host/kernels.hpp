@@ -406,6 +406,24 @@ objective_residual_sum(
     sum[0] = sum_;
 }
 
+template<typename T> void
+objective_amplitude_sums(
+        const T* obs_d, const T* obs_e, const T* obs_m,
+        const T* mdl_d, const T* mdl_w,
+        int nchannels, int nspectra, double* a, double* b, double* f)
+{
+    #pragma omp parallel for
+    for(int s = 0; s < nspectra; ++s) {
+
+        gbkfit::objective_amplitude_sums(
+                s,
+                obs_d, obs_e, obs_m,
+                mdl_d, mdl_w,
+                nchannels, nspectra, a, b, f);
+
+    }
+}
+
 } // namespace gbkfit::host::kernels
 
 namespace gbkfit::host {
@@ -508,6 +526,11 @@ struct Wrapper
     static void
     objective_residual_sum(auto... args) {
         kernels::objective_residual_sum<T>(args...);
+    }
+
+    static void
+    objective_amplitude_sums(auto... args) {
+        kernels::objective_amplitude_sums<T>(args...);
     }
 };
 

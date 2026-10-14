@@ -187,6 +187,9 @@ class SlitSpectra(Observable):
         return _detail.data_unit(
             dataset, 'spectra', abs(self.step()[0]) * self._slit_width, False)
 
+    def spectra_item(self) -> str | None:
+        return 'spectra'
+
     def model_can_lack_values(self) -> bool:
         return self._mask_apply
 
