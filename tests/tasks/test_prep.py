@@ -414,6 +414,28 @@ def test_rest_of_the_convention_of_the_axis_first():
     _, coords = fitsutils.read_data('cube.fits')
     np.testing.assert_allclose(coords.rest.to_value('Hz'), 1.420405752e9)
 
+@pytest.mark.parametrize('velocity, ctype', [
+    ('radio', 'VRAD'), ('optical', 'VOPT')])
+def test_aips_velocity_axes_need_their_convention(velocity, ctype):
+    # VELO-HEL without VELREF is optical to AIPS (and astropy), radio to
+    # MIRIAD (e.g. LVHIS): reading it is an error, and prep takes it; a
+    # header that states its convention takes none
+    header = dict(
+        HEADER, CTYPE3='VELO-HEL', CUNIT3='m/s', CRVAL3=1.5e6, CDELT3=1e4,
+        RESTFREQ=1.420405752e9)
+    write_cube('cube.fits', header)
+    for read in (fitsutils.read_data, prep_pixel_spectra):
+        with pytest.raises(Exception, match="may be radio or optical"):
+            read('cube.fits')
+    _, header_out = prep_pixel_spectra('cube.fits', velocity=velocity)
+    assert header_out['CTYPE3'] == ctype
+    _, coords = fitsutils.read_data('prep_cube.fits')
+    assert coords.step[2] == pytest.approx(10)
+    write_cube('vrad.fits')
+    with pytest.raises(Exception, match="this header states its own"):
+        prep_pixel_spectra('vrad.fits', velocity=velocity)
+
+
 @pytest.mark.parametrize('header, message', [
     (dict(HEADER, CTYPE3='STOKES'), "no spectral axis"),
     (dict(HEADER, CTYPE3='VOPT-F2W', RESTWAV=6.5628e-7), "not linear")])

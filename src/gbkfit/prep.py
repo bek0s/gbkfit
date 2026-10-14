@@ -192,12 +192,12 @@ def _spectral_to_velocity(
     return header
 
 
-def _read_fits(filename: str) -> tuple[np.ndarray, fits.Header]:
+def _first_hdu(filename: str) -> tuple[np.ndarray, fits.Header]:
     """
-    Return the data and the header of a file, without the axes of length
-    1: those of its first HDU with data (e.g. the extension after an empty
-    primary HDU, as in MUSE and JWST cubes). Integer data become floats,
-    which can hold the NaN of invalid pixels.
+    Return the data and the header of the first HDU of a file with data
+    (e.g. the extension after an empty primary HDU, as in MUSE and JWST
+    cubes). Integer data become floats, which can hold the NaN of invalid
+    pixels.
     """
     with fits.open(filename) as hdus:
         hdu = next((hdu for hdu in hdus if hdu.data is not None), None)
@@ -207,6 +207,29 @@ def _read_fits(filename: str) -> tuple[np.ndarray, fits.Header]:
         header = hdu.header.copy()
     if not np.issubdtype(data.dtype, np.floating):
         data = data.astype(float)
+    return data, header
+
+
+def _read_array(filename: str) -> np.ndarray:
+    """
+    Return the data of a file without the axes of length 1 (see
+    _read_fits), without its header: those of errors and masks, which
+    follow the axes of the data.
+    """
+    return np.squeeze(_first_hdu(filename)[0])
+
+
+def _read_fits(
+        filename: str, velocity: str | None = None
+) -> tuple[np.ndarray, fits.Header]:
+    """
+    Return the data and the header of a file, without the axes of length
+    1 (see _first_hdu), with the convention of the velocities of its
+    spectral axis, if its header does not state it (velocity, see
+    fitsutils.with_velocity_convention).
+    """
+    data, header = _first_hdu(filename)
+    header = fitsutils.with_velocity_convention(header, velocity, filename)
     # Astropy writes the FITS default for a missing reference pixel, so
     # write the one of the model (see fitsutils.read_data)
     if _has_wcs(header):
@@ -252,14 +275,18 @@ class FitsArrays:
             cls,
             data: str,
             error: str | None = None,
-            mask: str | None = None
+            mask: str | None = None,
+            velocity: str | None = None
     ) -> 'FitsArrays':
         """
         Read the data, errors and mask from FITS files (their first HDU
         with data), without their axes of length 1, in the axis order of
         the model. Values that are not finite, errors that are not finite
         or are 0 (e.g. blank pixels of an error map), and pixels the mask
-        file marks with 0 are invalid; negative errors are an error.
+        file marks with 0 are invalid; negative errors are an error. A
+        spectral axis of velocities of the AIPS convention without VELREF
+        (e.g. VELO-HEL) needs the convention of its velocities (see
+        fitsutils.with_velocity_convention).
 
         Parameters
         ----------
@@ -267,6 +294,9 @@ class FitsArrays:
             The file of the data (with the world coordinates).
         error, mask : str, optional
             The files of the errors and the mask, of the shape of the data.
+        velocity : str, optional
+            The convention of the velocities of the spectral axis, 'radio'
+            or 'optical', where the header does not state it.
 
         Returns
         -------
@@ -276,12 +306,13 @@ class FitsArrays:
         Raises
         ------
         ConfigError
-            If a file has no data, the shapes differ, or an error is
-            negative.
+            If a file has no data, the shapes differ, an error is
+            negative, or the convention of the velocities is ambiguous and
+            not given, or given and stated by the header.
         """
-        data_d, header = _read_fits(data)
-        data_e = _read_fits(error)[0] if error else None
-        data_m = _read_fits(mask)[0] if mask else None
+        data_d, header = _read_fits(data, velocity)
+        data_e = _read_array(error) if error else None
+        data_m = _read_array(mask) if mask else None
         for name, array in (('error', data_e), ('mask', data_m)):
             if array is not None and array.shape != data_d.shape:
                 raise ConfigError(
