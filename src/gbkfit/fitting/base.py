@@ -167,7 +167,9 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
         ------
         ConfigError
             If the free properties or the options of the fitter do not
-            suit the problem (e.g. too few free elements or walkers).
+            suit the problem (e.g. too few free elements or walkers), or
+            the fitter may try values of free elements outside the valid
+            ranges of their parameters (see ParamDesc).
         ValueError
             If no parameter is free, or the parameter space lacks
             parameters of the objective.
@@ -180,6 +182,7 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
         fit_params = self.load_fit_params(params)
         if not fit_params:
             raise ValueError("no parameter is free")
+        _check_valid_ranges(fit_params, params.free_valid_ranges())
         priors = [p.prior() for p in fit_params.values()]
         if len({p is None for p in priors}) > 1:
             raise ConfigError("either all free elements have priors, or none")
@@ -298,6 +301,31 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
             log_prior=log_prior,
             covariance=cov,
             laplace=laplace), nevals, error
+
+
+def _check_valid_ranges(
+        fit_params: dict[str, FitParam],
+        ranges: dict[str, tuple[float, float]]
+) -> None:
+    """
+    Raise ConfigError if the fitter may try values of free elements (in
+    their bounds, or the support of their priors) outside the valid
+    ranges of their parameters (by element name), where the models are
+    not defined.
+    """
+    outside = [
+        f"'{name}' [{fit_param.minimum():g}, {fit_param.maximum():g}] "
+        f"(valid: [{ranges[name][0]:g}, {ranges[name][1]:g}])"
+        for name, fit_param in fit_params.items()
+        if name in ranges and not (
+            ranges[name][0] <= fit_param.minimum()
+            and fit_param.maximum() <= ranges[name][1])]
+    if outside:
+        raise ConfigError(
+            f"the fit may try values of free elements outside the valid "
+            f"ranges of their parameters, where the models are not defined: "
+            f"{', '.join(outside)}; give them bounds (or priors) within "
+            f"those ranges")
 
 
 @dataclasses.dataclass(frozen=True)
