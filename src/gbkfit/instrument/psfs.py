@@ -870,6 +870,18 @@ class PSFGaussBeam(PSF):
         self._gauss = PSFGauss(
             gbkfit.math.gauss_fwhm_to_sigma(bmaj), bmin / bmaj, bpa)
 
+    def bmaj(self) -> float:
+        """Return the full width at half maximum of the major axis."""
+        return self._bmaj
+
+    def bmin(self) -> float:
+        """Return the full width at half maximum of the minor axis."""
+        return self._bmin
+
+    def bpa(self) -> float:
+        """Return the position angle of the major axis."""
+        return self._bpa
+
     def _size_impl(self, step: tuple[float, float]) -> tuple[float, float]:
         return self._gauss._size_impl(step)
 

@@ -15,6 +15,7 @@ from .components import _detail
 from .components._component_set import ComponentSet, ComponentSetPlan
 from .components._gravity import GravityPlan
 from .components._transfer import TransferMember
+from .components._units import DataUnit
 from .components.base import Component, DepthAxis, OpacityCubes
 from .components.disks import MCDisk, SMDisk
 from .components.geometries import Geometry, geometry_parser
@@ -259,6 +260,7 @@ class Galaxy(parseutils.Serializable):
             cubes: OpacityCubes,
             lines: tuple[str, ...] | None,
             band: Band | None,
+            data_unit: DataUnit | None,
             smoothing: float | None
     ) -> ComponentSetPlan:
         """
@@ -287,6 +289,9 @@ class Galaxy(parseutils.Serializable):
             The names of the emission lines evaluated; all if None.
         band : Band, optional
             The band of an image, if known.
+        data_unit : DataUnit, optional
+            The unit of the data of the observation, which the light of
+            the components takes (see Component.plan); None without data.
         smoothing : float, optional
             The dispersion (km/s) by which the instrument smooths the
             spectra of the model, which the check of the resolution of
@@ -299,7 +304,7 @@ class Galaxy(parseutils.Serializable):
         """
         return self._component_set.plan(
             driver, grid, spectral, depth, dtype, emitters, cubes, lines,
-            band, smoothing)
+            band, data_unit, smoothing)
 
     def transfer_member(
             self,

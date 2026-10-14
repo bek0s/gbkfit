@@ -5,6 +5,7 @@ Helpers shared by the disk components (SMDisk, MCDisk).
 from collections.abc import Sequence
 from typing import Any
 
+import astropy.units
 import numpy as np
 
 from gbkfit.driver import DeviceArray, Driver
@@ -12,7 +13,8 @@ from gbkfit.math import interpolation
 from gbkfit.params import ParamValues
 from gbkfit.utils import gridutils, iterutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
-from .._detail import dump_geometry, dump_name, parse_nodes
+from .._detail import Fluxes, dump_geometry, dump_name, parse_nodes
+from .._units import DataUnit, band_factor, line_factors
 from ..base import Component, ComponentPlan, FieldsLayout, NativeGrid
 from ..geometries import Geometry
 from ..lines import Band, Bands, LineCatalogue, Lines
@@ -332,46 +334,57 @@ def disk_plan(
         disk: _disk.Disk,
         lines: Lines | None,
         bands: Bands | None,
+        unit: astropy.units.UnitBase | None,
         driver: Driver,
         spectral: gridutils.Grid,
         dtype: np.dtype,
         names: tuple[str, ...] | None,
         band: Band | None,
         emits: bool,
-        opacity_ratios: np.ndarray | None
+        opacity_ratios: np.ndarray | None,
+        data_unit: DataUnit | None
 ) -> 'DiskComponentPlan':
     """
     Return the plan of a disk component made of the given disk, with the
-    given emission lines or bands (if any), of which it evaluates, if it
-    emits, the lines of the given names (all if None) or the given band
-    (if known), dimmed by the opacity with the given ratios (see
-    Component.plan).
+    given emission lines or bands (if any) and the unit of its light (if
+    any), of which it evaluates, if it emits, the lines of the given names
+    (all if None) or the given band (if known), dimmed by the opacity with
+    the given ratios, in the unit of the data (see Component.plan).
     """
     if not emits:
         return DiskComponentPlan(driver, disk.plan(driver, 0, dtype))
     if lines is None:
+        ratio = bands.ratio_name(band)
         return DiskComponentPlan(
             driver, disk.plan(driver, 0, dtype), opacity_ratios,
-            band_ratio=bands.ratio_name(band))
+            Fluxes(1, [(0, ratio)] if ratio is not None else [],
+                   scale=band_factor(unit, data_unit, band)))
     # (and the row of the line of each trait of line opacity among the
     # lines it evaluates)
     selected = lines.select(names)
     opacity_rows = [
         selected.index(line) if line in selected else -1
         for line in disk.opacity_lines()]
+    rows = lines.values(spectral)[list(selected)]
+    ratios = [
+        (row, lines.ratio_name(index)) for row, index in enumerate(selected)
+        if lines.ratio_name(index) is not None]
     return DiskComponentPlan(
         driver, disk.plan(driver, len(selected), dtype, opacity_rows),
-        opacity_ratios, lines=lines, selected=selected, spectral=spectral)
+        opacity_ratios,
+        Fluxes(len(rows), ratios, line_factors(
+            unit, data_unit, rows, spectral)),
+        rows)
 
 
 class DiskComponentPlan(ComponentPlan):
     """
     The evaluation of a component made of one disk: the plan of its disk,
-    which adds its light (and, with lines, the selected emission lines,
-    at their places on the given spectral axis; or in an image, times the
-    flux ratio of the band of the image, the parameter band_ratio, if any)
-    to the outputs, dimmed by the opacity with the given ratios (see
-    Component.plan), or its optical depth to a cube of opacity.
+    which adds its light to the outputs, dimmed by the opacity with the
+    given ratios (see Component.plan), or its optical depth to a cube of
+    opacity. Its light is that of the given lines (the offset and scale of
+    each on the spectral axis, see Lines.values), or in an image, that of
+    its band, of the given fluxes (see Fluxes).
     """
 
     def __init__(
@@ -379,28 +392,18 @@ class DiskComponentPlan(ComponentPlan):
             driver: Driver,
             disk_plan_: _disk.DiskPlan,
             opacity_ratios: np.ndarray | None = None,
-            *,
-            band_ratio: str | None = None,
-            lines: Lines | None = None,
-            selected: Sequence[int] = (),
-            spectral: gridutils.Grid | None = None
+            fluxes: Fluxes | None = None,
+            lines: np.ndarray | None = None
     ):
         self._driver = driver
         self._disk_plan = disk_plan_
-        self._band_ratio = band_ratio
+        self._fluxes = fluxes
         self._opacity_ratios = None
         if opacity_ratios is not None:
             self._opacity_ratios = driver.mem_copy_h2d(opacity_ratios)
-        # The offset, scale and flux of each selected line; the fluxes of
-        # the lines after the first are their ratios, which are parameters
-        self._lines = None
-        self._ratios = []
-        if lines is not None:
-            self._lines = lines.values(spectral)[list(selected)]
-            self._ratios = [
-                (row, lines.ratio_name(index))
-                for row, index in enumerate(selected)
-                if lines.ratio_name(index) is not None]
+        # The offset, scale and flux of each line (the fluxes are set at
+        # each evaluation)
+        self._lines = None if lines is None else np.array(lines, dtype=float)
 
     def disk_plan(self) -> _disk.DiskPlan:
         return self._disk_plan
@@ -408,8 +411,7 @@ class DiskComponentPlan(ComponentPlan):
     def line_values(self, params: ParamValues) -> np.ndarray:
         if self._lines is None:
             return np.array([[0.0, 0.0, self._image_scale(params)]])
-        for row, name in self._ratios:
-            self._lines[row, 2] = params[name]
+        self._lines[:, 2] = self._fluxes(params)
         return self._lines
 
     def evaluate_emission(
@@ -462,8 +464,13 @@ class DiskComponentPlan(ComponentPlan):
             rdata_scale=scale)
 
     def _image_scale(self, params: ParamValues) -> float:
-        """Return the flux ratio of the band of the image, if any, or 1."""
-        return 1.0 if self._band_ratio is None else params[self._band_ratio]
+        """
+        Return the flux of the light in the band of an image (see Fluxes);
+        1 in a spectral cube, whose lines have theirs.
+        """
+        if self._lines is not None:
+            return 1.0
+        return float(self._fluxes(params)[0])
 
 
 def parse_component_rnode_args(

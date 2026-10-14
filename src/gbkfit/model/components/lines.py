@@ -63,7 +63,7 @@ _CATALOGUE_BANDS = {
     'irac2': '4.493 um'}
 
 
-def _air_refractive_index(wavelength: float) -> float:
+def air_refractive_index(wavelength: float) -> float:
     """
     Return the refractive index of standard air at a wavelength in vacuum
     (m), as the IAU adopted it (Morton 2000, ApJS 130, 403, eq. 8; from
@@ -389,7 +389,7 @@ class Lines:
             if air:
                 wavelength = line.rest().to_value(
                     astropy.units.m, astropy.units.spectral())
-                ratio /= _air_refractive_index(wavelength * (1 + centre / _C))
+                ratio /= air_refractive_index(wavelength * (1 + centre / _C))
             offset = _C * (ratio - 1) if optical else _C * (1 - ratio)
             values.append((offset, ratio, 1.0))
         return np.array(values)

@@ -4,10 +4,11 @@ from typing import TYPE_CHECKING, Any
 import astropy.units
 import numpy as np
 
-from gbkfit.dataset import DatasetSlitSpectra
+from gbkfit.dataset import Dataset, DatasetSlitSpectra
 from gbkfit.driver import Driver
 from gbkfit.instrument import Instrument
 from gbkfit.model import LineEmission
+from gbkfit.model.components._units import DataUnit
 from gbkfit.params import ParamValues
 from gbkfit.utils import gridutils
 from . import _dcube, _detail
@@ -180,6 +181,11 @@ class SlitSpectra(Observable):
 
     def keys(self) -> tuple[str, ...]:
         return ('spectra',)
+
+    def data_unit(self, dataset: Dataset | None) -> DataUnit | None:
+        # (a pixel spans the step along the slit and the width of the slit)
+        return _detail.data_unit(
+            dataset, 'spectra', abs(self.step()[0]) * self._slit_width, False)
 
     def model_can_lack_values(self) -> bool:
         return self._mask_apply

@@ -2,16 +2,61 @@
 Helpers shared by the components.
 """
 
+from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
+from gbkfit.params import ParamValues
 from gbkfit.utils import iterutils, numutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
+from ._units import LineFactors
 
 if TYPE_CHECKING:
     from .base import Component
     from .geometries import Geometry
+
+
+class Fluxes:
+    """
+    The fluxes of the rows of the light of a component that an
+    observation sees (see ComponentPlan.line_values): 1 for its first line
+    (or band), and for the others their flux ratio parameters, by row
+    (ratios), times the factors that turn the unit of its light into that
+    of the data (see _units): those of its lines, at its systemic velocity
+    (see systemic_velocity), if any, or that of its band (scale).
+    """
+
+    def __init__(
+            self,
+            nrows: int,
+            ratios: Sequence[tuple[int, str]] = (),
+            factors: LineFactors | None = None,
+            scale: float = 1.0
+    ):
+        self._nrows = nrows
+        self._ratios = tuple(ratios)
+        self._factors = factors
+        self._scale = scale
+
+    def __call__(self, params: ParamValues) -> np.ndarray:
+        """Return the flux of each row, with the given parameters."""
+        fluxes = np.full(self._nrows, self._scale)
+        for row, name in self._ratios:
+            fluxes[row] *= params[name]
+        if self._factors is not None:
+            fluxes *= self._factors(systemic_velocity(params))
+        return fluxes
+
+
+def systemic_velocity(params: ParamValues) -> float:
+    """
+    Return the systemic velocity of a component (km/s) with the given
+    parameters: its parameter vsys (the mean of its values at the nodes,
+    if node-wise), or 0 without one (e.g. a disk without velocity
+    traits).
+    """
+    return float(np.mean(params.get('vsys', 0.0)))
 
 
 def dump_name(component: 'Component') -> dict[str, Any]:

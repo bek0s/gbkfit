@@ -18,8 +18,9 @@ from gbkfit.model.components._component_set import (
     IMAGE_SPECTRAL_AXIS, ComponentSetPlan)
 from gbkfit.model.components._transfer import (
     LineResolution, TransferPlan, warn_resolution)
+from gbkfit.model.components._units import DataUnit
 from gbkfit.params import ParamValues
-from gbkfit.utils import gridutils, parseutils
+from gbkfit.utils import gridutils, parseutils, unitutils
 from gbkfit.utils.parseutils import ConfigError
 
 if TYPE_CHECKING:
@@ -55,11 +56,13 @@ class Scene:
     What an observation sees: galaxies, the indices of the components of
     each whose light it sees (its emitters; the opacity of all components
     applies), its emission lines (all if None) or its band (if known), its
-    line of sight, and the order of the galaxies along it, front to back
-    (in units: galaxies or groups of them; those it leaves out after them,
-    in their order). The parameters of each galaxy have the names of the
-    mapping of the galaxy among those of the observation group, and its
-    extra outputs the prefix of the galaxy (those of a group, its name).
+    line of sight, the order of the galaxies along it, front to back (in
+    units: galaxies or groups of them; those it leaves out after them, in
+    their order), and the unit of its data, which the light of the
+    emitters takes (see Component.plan; None without data). The
+    parameters of each galaxy have the names of the mapping of the galaxy
+    among those of the observation group, and its extra outputs the
+    prefix of the galaxy (those of a group, its name).
     """
 
     def __init__(
@@ -71,7 +74,8 @@ class Scene:
             lines: tuple[str, ...] | None,
             band: Band | None,
             line_of_sight: 'LineOfSight',
-            order: Sequence[DepthUnit] | None = None
+            order: Sequence[DepthUnit] | None = None,
+            data_unit: DataUnit | None = None
     ):
         self._galaxies = tuple(galaxies)
         self._mappings = tuple(mappings)
@@ -80,6 +84,7 @@ class Scene:
         self._lines = lines
         self._band = band
         self._line_of_sight = line_of_sight
+        self._data_unit = data_unit
         order = tuple(order or ())
         ordered = {g for unit in order for g in unit.galaxies}
         self._order = order + tuple(
@@ -219,7 +224,7 @@ class AdditiveScenePlan(ScenePlan):
                 opacity_cubes(
                     [galaxy], [emitters], scene._lines, scene._band,
                     dtype)[0],
-                scene._lines, scene._band, smoothing)
+                scene._lines, scene._band, scene._data_unit, smoothing)
             for galaxy, emitters in zip(scene._galaxies, scene._emitters))
         self._depth = depth
 
@@ -283,8 +288,8 @@ class TransferScenePlan(ScenePlan):
         self._plans: tuple[TransferPlan, ...] = tuple(
             TransferPlan(
                 [members[g] for g in unit.galaxies], driver, spatial,
-                self._spectral, dtype, scene._lines, scene._band, slab,
-                subchannels, smoothing)
+                self._spectral, dtype, scene._lines, scene._band,
+                scene._data_unit, slab, subchannels, smoothing)
             for unit in scene._order)
         self._subchannels = subchannels
         # (that of every galaxy)
@@ -370,17 +375,18 @@ def make_scene(
         band: Band | None,
         line_of_sight: 'LineOfSight',
         emission: type[Emission],
-        order: Sequence[DepthUnit] | None = None
+        order: Sequence[DepthUnit] | None = None,
+        data_unit: DataUnit | None = None
 ) -> Scene:
     """
     Return the scene of an observation of the given galaxies (see Scene),
     which sees the emission of the given type (see Observable.emission),
-    in the given band if known (an image), and of their order along the
-    line of sight, front to back (in units, if given; see DepthUnit and
-    ObservationGroup: depth_order). The names of the components it
-    sees (all those with that emission, in its band, if None) are
-    qualified by the names of their galaxies ('galaxy.component') when it
-    sees several.
+    in the given band if known (an image), of their order along the line
+    of sight, front to back (in units, if given; see DepthUnit and
+    ObservationGroup: depth_order), and of the unit of its data, if any
+    (see Observable.data_unit). The names of the components it sees (all
+    those with that emission, in its band, if None) are qualified by the
+    names of their galaxies ('galaxy.component') when it sees several.
 
     Raises
     ------
@@ -388,9 +394,10 @@ def make_scene(
         If a name is unknown or repeats, a component does not emit what it
         sees, it sees nothing, a line is not one of the components it
         sees, a component cannot be seen along its line of sight (see
-        LineOfSight.check), or it sees several galaxies with opacity that
-        its line of sight cannot order, or not in that order (see
-        LineOfSight.check_order).
+        LineOfSight.check), it sees several galaxies with opacity that its
+        line of sight cannot order, or not in that order (see
+        LineOfSight.check_order), or without data, it sees components of
+        different units (its model is in the unit of its components).
     """
     kind = "an image, which sees the components that emit in a band" \
         if emission is BandEmission else \
@@ -399,6 +406,8 @@ def make_scene(
     if not any(emitters):
         raise ConfigError(f"the observation is {kind}; it sees none")
     _check_lines(galaxies, emitters, lines)
+    if data_unit is None:
+        _check_one_unit(galaxies, emitters)
     absorbers = [
         [i for i, cmp in enumerate(galaxy.components())
          if isinstance(cmp.opacity(), DustOpacity)]
@@ -418,7 +427,7 @@ def make_scene(
                     f"component {_label(galaxy, i)}: {e}") from e
     return Scene(
         galaxies, mappings, prefixes, [tuple(e) for e in emitters], lines,
-        band, line_of_sight, order)
+        band, line_of_sight, order, data_unit)
 
 
 def _has_opacity(galaxy: Galaxy, emitters: Sequence[int]) -> bool:
@@ -525,6 +534,28 @@ def _check_lines(
         raise ConfigError(
             f"no component has the lines {unknown}; the lines of the "
             f"components are {sorted(known)}")
+
+
+def _check_one_unit(
+        galaxies: Sequence[Galaxy], emitters: Sequence[Sequence[int]]
+) -> None:
+    """
+    Raise ConfigError if the emitters of the galaxies (by index) have
+    light of different units: without data, the model of an observation
+    is in the unit of the components it sees (and of none, if they have
+    none).
+    """
+    units = {
+        unitutils.format_unit(unit): _label(galaxy, i)
+        for galaxy, indices in zip(galaxies, emitters) for i in indices
+        if (unit := galaxy.components()[i].emission().unit()) is not None}
+    if len(units) > 1:
+        raise ConfigError(
+            f"without data, the model of an observation is in the unit of "
+            f"the components it sees, which have several: "
+            f"{', '.join(f'{u!r} ({c})' for u, c in units.items())}; give "
+            f"the observation data in a unit, or see these components in "
+            f"separate observations")
 
 
 def check_component_names(names: Sequence[str]) -> None:

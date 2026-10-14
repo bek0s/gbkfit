@@ -516,7 +516,8 @@ def write_data(
         data: np.ndarray,
         coords: Coords,
         spectral_axis: int | None = None,
-        overwrite: bool = False
+        overwrite: bool = False,
+        unit: str | None = None
 ) -> None:
     """
     Write data with the world coordinates of the model to a FITS file.
@@ -540,6 +541,8 @@ def write_data(
         The index of their spectral axis (FITS order, from 0), if any.
     overwrite : bool
         Whether to overwrite an existing file.
+    unit : str, optional
+        The unit of the data (BUNIT), if known.
 
     Raises
     ------
@@ -567,6 +570,8 @@ def write_data(
         raise ValueError(
             f"unsupported data: {data.ndim} axes, of which the spectral "
             f"axis is {spectral_axis}")
+    if unit is not None:
+        header['BUNIT'] = unit
     astropy.io.fits.writeto(
         filename, data, header,
         output_verify='exception', overwrite=overwrite, checksum=True)
@@ -576,7 +581,8 @@ def write_spectra(
         filename: str,
         data: np.ndarray,
         coords: Coords,
-        overwrite: bool = False
+        overwrite: bool = False,
+        unit: str | None = None
 ) -> None:
     """
     Write spectra of regions to a FITS file.
@@ -594,8 +600,12 @@ def write_spectra(
         The world coordinates of their spectral axis (of one axis).
     overwrite : bool
         Whether to overwrite an existing file.
+    unit : str, optional
+        The unit of the spectra (BUNIT), if known.
     """
     header = astropy.io.fits.Header(_velocity_header(coords, 2, 0))
+    if unit is not None:
+        header['BUNIT'] = unit
     astropy.io.fits.writeto(
         filename, data, header,
         output_verify='exception', overwrite=overwrite, checksum=True)

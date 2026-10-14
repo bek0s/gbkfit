@@ -8,6 +8,7 @@ from gbkfit.dataset import Dataset, DatasetRegionMoments
 from gbkfit.driver import Driver
 from gbkfit.instrument import Instrument
 from gbkfit.model import LineEmission
+from gbkfit.model.components._units import DataUnit
 from gbkfit.params import ParamValues
 from gbkfit.region import Regions, regions_parser
 from gbkfit.utils import gridutils, parseutils
@@ -236,6 +237,10 @@ spec_medium, method : optional
 
     def keys(self) -> tuple[str, ...]:
         return tuple(f'moment{i}' for i in self._orders)
+
+    def data_unit(self, dataset: Dataset | None) -> DataUnit | None:
+        return _detail.region_data_unit(
+            dataset, 'moment0' if 0 in self._orders else None, True)
 
     def model_can_lack_values(self) -> bool:
         # (moment 0, the flux, always has a value)

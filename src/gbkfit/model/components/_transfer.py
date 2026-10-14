@@ -15,6 +15,7 @@ from gbkfit.params import ParamValues
 from gbkfit.utils import gridutils
 from gbkfit.utils.parseutils import ConfigError
 from ._component_plans import ComponentPlans
+from ._units import DataUnit
 from .base import DepthAxis, NativeGrid, OpacityCubes
 from .lines import Band
 
@@ -164,7 +165,7 @@ class TransferPlan:
     on the planes of each slab (the clouds of a Monte Carlo disk are drawn
     again for each, the same ones), the layers (e.g. thin disks, points)
     once. The parameters are those of ComponentPlans (but those of each
-    galaxy: members), the number of planes of a slab (slab; all if None),
+    galaxy: members; data_unit is that of all), the number of planes of a slab (slab; all if None),
     and the number of sub-channels of each channel that the march
     transfers the light of the channel at, if it carries line opacity
     (subchannels; the light of the channel is their mean), and the
@@ -186,6 +187,7 @@ class TransferPlan:
             dtype: np.dtype,
             lines: tuple[str, ...] | None,
             band: Band | None,
+            data_unit: DataUnit | None,
             slab: int | None,
             subchannels: int,
             smoothing: float | None
@@ -206,7 +208,7 @@ class TransferPlan:
         self._plans = tuple(
             ComponentPlans(
                 member.component_set, driver, grid, spectral, depth, dtype,
-                member.emitters, member.cubes, lines, band)
+                member.emitters, member.cubes, lines, band, data_unit)
             for member in members)
         self._driver = driver
         self._dtype = dtype

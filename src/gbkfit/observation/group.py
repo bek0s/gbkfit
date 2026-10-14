@@ -196,7 +196,8 @@ class ObservationGroup:
             [self._prefixes[j] for j in seen],
             observation.components(), observation.lines(),
             observation.band(), observation.line_of_sight(),
-            observation.observable().emission, order)
+            observation.observable().emission, order,
+            observation.data_unit())
 
     def galaxies(self) -> tuple[Galaxy, ...]:
         """Return the galaxies."""
