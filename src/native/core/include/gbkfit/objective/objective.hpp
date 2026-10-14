@@ -46,44 +46,36 @@ objective_residual(
     res[i] = residual * weight;
 }
 
-// The sums of spectrum s (of nspectra; its value of channel c at c *
-// nspectra + s) that its free amplitude takes (see
-// Objective.amplitude_sums): a = sum W mdl_d^2, b = sum W mdl_d obs_d and
-// f = sum mdl_d, W = (obs_m * mdl_w / obs_e)^2, over its values that the
-// data do not mask (obs_m = 0) and that the model has (not NaN); in
-// double precision
+// Add value i of a spectrum to the sums that its free amplitude takes
+// (see Objective.amplitude_sums): a = sum W mdl_d^2, b = sum W mdl_d
+// obs_d and f = sum mdl_d, W = (obs_m * mdl_w / obs_e)^2, over its values
+// that the data do not mask (obs_m = 0) and that the model has (not
+// NaN). The terms are in the precision of the data, as the residuals
+// (double precision is slow on many GPUs); the sums in double precision.
 template<typename T> constexpr void
-objective_amplitude_sums(
-        int s,
+objective_amplitude_terms(
+        long long i,
         const T* obs_d, const T* obs_e, const T* obs_m,
         const T* mdl_d, const T* mdl_w,
-        int nchannels, int nspectra, double* a, double* b, double* f)
+        double& a, double& b, double& f)
 {
-    double sum_a = 0, sum_b = 0, sum_f = 0;
-    for (int c = 0; c < nchannels; ++c)
-    {
-        const long long i = (long long)c * nspectra + s;
-        if ((obs_m && obs_m[i] == 0) || std::isnan(mdl_d[i])) {
-            continue;
-        }
-        double w = 1;
-        if (obs_e) {
-            w /= obs_e[i];
-        }
-        if (mdl_w) {
-            w *= mdl_w[i];
-        }
-        if (obs_m) {
-            w *= obs_m[i];
-        }
-        const double m = mdl_d[i];
-        sum_a += w * w * m * m;
-        sum_b += w * w * m * obs_d[i];
-        sum_f += m;
+    if ((obs_m && obs_m[i] == 0) || std::isnan(mdl_d[i])) {
+        return;
     }
-    a[s] = sum_a;
-    b[s] = sum_b;
-    f[s] = sum_f;
+    T w = 1;
+    if (obs_e) {
+        w /= obs_e[i];
+    }
+    if (mdl_w) {
+        w *= mdl_w[i];
+    }
+    if (obs_m) {
+        w *= obs_m[i];
+    }
+    const T wm = w * mdl_d[i];
+    a += wm * wm;
+    b += wm * w * obs_d[i];
+    f += mdl_d[i];
 }
 
 } // namespace gbkfit
