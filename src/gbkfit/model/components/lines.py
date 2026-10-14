@@ -409,6 +409,36 @@ class Lines:
             (_C * (ratio - 1) if optical else _C * (1 - ratio), ratio, 1.0)
             for ratio in ratios])
 
+    def frequencies(
+            self, spectral: gridutils.Grid, redshift: float
+    ) -> np.ndarray:
+        """
+        Return the frequency (Hz, in vacuum) at which a galaxy of the given
+        redshift emits each line, in its rest frame: the rest of each, or
+        for one line without a name, which is at the velocity of the
+        spectral axis (see values), the rest of the axis times 1 +
+        redshift.
+
+        Raises
+        ------
+        ConfigError
+            If the line has no name, and the spectral axis has no rest.
+        """
+        if self._lines is not None:
+            return np.array([
+                line.rest().to_value(astropy.units.Hz, astropy.units.spectral())
+                for line in self._lines])
+        rest = spectral.coords.rest
+        if rest is None:
+            raise ConfigError(
+                "a line without a name is at the rest of the spectral axis, "
+                "which its frequency needs: RESTWAV or RESTFRQ in the header "
+                "of the data, or the rest option of the observable")
+        frequency = rest.to_value(astropy.units.Hz, astropy.units.spectral())
+        if spectral.coords.medium == 'air':
+            frequency /= air_refractive_index(rest.to_value(astropy.units.m))
+        return np.array([frequency * (1 + redshift)])
+
 
 class LinePlacement:
     """

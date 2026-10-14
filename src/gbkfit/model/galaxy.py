@@ -21,6 +21,7 @@ from .components.disks import MCDisk, SMDisk
 from .components.geometries import Geometry, geometry_parser
 from .components.lines import Band, LineCatalogue
 from .components.points import Point
+from .components.roles import BandEmission
 from .distance import Distance, distance_parser
 from .mass import MassComponent, MassModel, mass_component_parser
 
@@ -72,7 +73,12 @@ class Galaxy(parseutils.Serializable):
         see Lines.values; the dust of an image absorbs at the effective
         wavelength of its band over 1 + redshift), and for its distance by
         redshift (see DistanceRedshift); the systemic velocity of its
-        components is the velocity offset from it. 0 by default.
+        components is the velocity offset from it. With physical units, its
+        light is dimmed by it (and by the systemic velocity of each
+        component; see _units.line_factor). 0 by default; required (0 for
+        none) when a component emits in bands with a unit and has no
+        systemic velocity, as nothing else then tells how far its light is
+        dimmed.
     driver : Driver, optional
         Where its own computations run: its gravity, in float64, once for
         all the observations of it, whatever their drivers (see
@@ -88,7 +94,7 @@ class Galaxy(parseutils.Serializable):
         parameters conflict, the mass, the distance and the components do
         not go together (e.g. 'mass' velocity traits without mass, or a
         trait_disk that follows no disk of the galaxy), or the redshift is
-        not above -1.
+        not above -1, or missing where it is required.
     """
 
     @classmethod
@@ -156,7 +162,8 @@ class Galaxy(parseutils.Serializable):
             info.update(mass=mass_component_parser.dump(list(self._mass)))
         if self.distance() is not None:
             info.update(distance=distance_parser.dump(self.distance()))
-        info.update(redshift=self._redshift)
+        if self._redshift is not None:
+            info.update(redshift=self._redshift)
         return info
 
     def __init__(
@@ -164,18 +171,20 @@ class Galaxy(parseutils.Serializable):
             components: Component | Sequence[Component],
             mass: MassComponent | Sequence[MassComponent] | None = None,
             distance: Distance | None = None,
-            redshift: float = 0.0,
+            redshift: float | None = None,
             driver: Driver | None = None,
             name: str | None = None
     ):
         parseutils.check_name(name)
-        if not redshift > -1:
+        if redshift is not None and not redshift > -1:
             raise ConfigError(
                 f"the redshift must be above -1; it is {redshift}")
         self._redshift = redshift
         mass = iterutils.tuplify(mass)
         mass_model = MassModel(mass) if mass else None
         self._component_set = ComponentSet(components, distance, mass_model)
+        if redshift is None:
+            _check_redshift_not_needed(self._component_set.components())
         self._pdescs = self._component_set.pdescs()
         if driver is None:
             # (imported here: the host driver needs its native module)
@@ -217,8 +226,8 @@ class Galaxy(parseutils.Serializable):
         return self._component_set.distance()
 
     def redshift(self) -> float:
-        """Return its redshift."""
-        return self._redshift
+        """Return its redshift (0 if not given)."""
+        return 0.0 if self._redshift is None else self._redshift
 
     def driver(self) -> Driver:
         """Return the driver of its own computations (its gravity)."""
@@ -248,7 +257,7 @@ class Galaxy(parseutils.Serializable):
             The plan.
         """
         return self._component_set.plan_gravity(
-            self._driver, self._redshift)
+            self._driver, self.redshift())
 
     def plan(
             self,
@@ -305,7 +314,7 @@ class Galaxy(parseutils.Serializable):
         """
         return self._component_set.plan(
             driver, grid, spectral, depth, dtype, emitters, cubes, lines,
-            band, data_unit, self._redshift, smoothing)
+            band, data_unit, self.redshift(), smoothing)
 
     def transfer_member(
             self,
@@ -319,8 +328,28 @@ class Galaxy(parseutils.Serializable):
         cubes and its own depth axis are those of plan.
         """
         return TransferMember(
-            self._component_set, tuple(emitters), cubes, self._redshift,
+            self._component_set, tuple(emitters), cubes, self.redshift(),
             depth)
 
 
 galaxy_parser = parseutils.BasicParser(Galaxy)
+
+
+def _check_redshift_not_needed(components: Sequence[Component]) -> None:
+    """
+    Raise ConfigError if a component of a galaxy without a redshift emits
+    in bands with a unit and has no systemic velocity: the redshift by
+    which images see its light dimmed is then not known (see
+    _units.BandFactors).
+    """
+    for i, component in enumerate(components):
+        emission = component.emission()
+        if isinstance(emission, BandEmission) \
+                and emission.unit() is not None \
+                and 'vsys' not in component.pdescs():
+            label = component.name() or f'component{i}'
+            raise ConfigError(
+                f"the light of component {label!r} is in a unit, as the "
+                f"galaxy emits it, which images see dimmed by its redshift: "
+                f"give the galaxy its redshift (the option redshift; 0 for "
+                f"none)")

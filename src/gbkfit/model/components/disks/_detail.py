@@ -15,7 +15,7 @@ from gbkfit.utils import gridutils, iterutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
 from .._detail import (
     Fluxes, dump_geometry, dump_name, parse_nodes, systemic_velocity)
-from .._units import DataUnit, OpacityScales, band_factor, line_factors
+from .._units import DataUnit, OpacityScales, band_factors, line_factors
 from ..base import Component, ComponentPlan, FieldsLayout, NativeGrid
 from ..geometries import Geometry
 from ..lines import Band, Bands, LineCatalogue, LinePlacement, Lines
@@ -361,7 +361,7 @@ def disk_plan(
         return DiskComponentPlan(
             driver, disk.plan(driver, 0, dtype), opacity_ratios,
             Fluxes(1, [(0, ratio)] if ratio is not None else [],
-                   scale=band_factor(unit, data_unit, band)))
+                   band_factors(unit, data_unit, band, redshift)))
     # (and the row of the line of each trait of line opacity among the
     # lines it evaluates)
     selected = lines.select(names)
@@ -369,18 +369,22 @@ def disk_plan(
         selected.index(line) if line in selected else -1
         for line in disk.opacity_lines()]
     rows = lines.values(spectral, redshift)[list(selected)]
+    # (with a unit, the frequency at which the galaxy emits each line)
+    frequencies = None if unit is None \
+        else lines.frequencies(spectral, redshift)[list(selected)]
     ratios = [
         (row, lines.ratio_name(index)) for row, index in enumerate(selected)
         if lines.ratio_name(index) is not None]
     # (with a unit, the coefficients of line opacity are 1/S in 1/K)
     opacity_scales = None
     if disk.opacity_lines() and unit is not None:
-        opacity_scales = OpacityScales(unit, data_unit, rows, spectral)
+        opacity_scales = OpacityScales(
+            unit, data_unit, rows, spectral, frequencies)
     return DiskComponentPlan(
         driver, disk.plan(driver, len(selected), dtype, opacity_rows),
         opacity_ratios,
         Fluxes(len(rows), ratios, line_factors(
-            unit, data_unit, rows, spectral)),
+            unit, data_unit, rows, spectral, frequencies)),
         LinePlacement(rows, spectral), opacity_scales)
 
 

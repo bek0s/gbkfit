@@ -29,10 +29,13 @@ class LineOpacity(Opacity):
     With a unit of its emission (see LineEmission), S is the brightness
     (radiation) temperature of the source function, J(T_ex) =
     (h nu / k) / (exp(h nu / k T_ex) - 1), in K, whatever the unit of the
-    data: the coefficients are 1/S in 1/K (and j is the light of the
-    voxel as brightness temperature, at the frequency of the line at the
-    systemic velocity of the component; see _units.OpacityScales).
-    Without a unit, S is in the units of the model, those of the data.
+    data, in the rest frame of the gas (nu its rest frequency): the
+    coefficients are 1/S in 1/K (and j is the light of the voxel as
+    brightness temperature as the galaxy emits it, at the frequency of
+    the line at the systemic velocity of the component; see
+    _units.OpacityScales), and the data see the light saturate at S / (1
+    + z). Without a unit, S is in the units of the model, those of the
+    data.
 
     S is J(T_ex), not the excitation temperature T_ex: they differ where
     h nu / k is not small next to T_ex. For HI (h nu / k = 0.068 K) J is

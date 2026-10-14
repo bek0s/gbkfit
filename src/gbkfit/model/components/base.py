@@ -239,11 +239,12 @@ class Component(parseutils.TypedSerializable, abc.ABC):
         data_unit : DataUnit, optional
             The unit of the data of the observation, which its light is
             turned into from the unit of its emission, if it has one (see
-            _units.LineFactors and band_factor); None without data: its
+            _units.LineFactors and BandFactors); None without data: its
             light stays in the unit of its emission.
         redshift : float
             The redshift of its galaxy, which places its named lines on
-            the spectral axis (see Lines.values).
+            the spectral axis (see Lines.values) and, with a unit, dims its
+            light (see _units.line_factor).
 
         Returns
         -------
@@ -254,7 +255,7 @@ class Component(parseutils.TypedSerializable, abc.ABC):
         ------
         ConfigError
             If its light has a unit that cannot become that of the data
-            (see _units.LineFactors and band_factor).
+            (see _units.LineFactors and BandFactors).
         """
         pass
 

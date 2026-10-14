@@ -10,7 +10,7 @@ from gbkfit.params import ParamScalarDesc, ParamValues
 from gbkfit.utils import gridutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
 from ._detail import Fluxes, dump_geometry, dump_name, systemic_velocity
-from ._units import DataUnit, band_factor, line_factors
+from ._units import DataUnit, band_factors, line_factors
 from .base import Component, ComponentPlan, FieldsLayout, NativeGrid
 from .geometries import Geometry
 from .lines import Band, Bands, LineCatalogue, LinePlacement, Lines
@@ -77,13 +77,17 @@ def _spectral_plan(
     """
     selected = lines.select(names)
     rows = lines.values(spectral, redshift)[list(selected)]
+    # (with a unit, the frequency at which the galaxy emits each line)
+    frequencies = None if unit is None \
+        else lines.frequencies(spectral, redshift)[list(selected)]
     ratios = [
         (row, lines.ratio_name(index))
         for row, index in enumerate(selected)
         if lines.ratio_name(index) is not None]
     return PointPlan(
         driver, dtype, depth, opacity_ratios, Fluxes(
-            len(rows), ratios, line_factors(unit, data_unit, rows, spectral)),
+            len(rows), ratios, line_factors(
+                unit, data_unit, rows, spectral, frequencies)),
         LinePlacement(rows, spectral))
 
 
@@ -378,7 +382,7 @@ class Point(Component):
             return PointPlan(
                 driver, dtype, self._depth, opacity_ratios, Fluxes(
                     1, [(0, ratio)] if ratio is not None else [],
-                    scale=band_factor(unit, data_unit, band)))
+                    band_factors(unit, data_unit, band, redshift)))
         return _spectral_plan(
             driver, spectral, dtype, self._depth, opacity_ratios,
             self._lines, unit, lines, data_unit, redshift)

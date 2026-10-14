@@ -10,7 +10,7 @@ import numpy as np
 from gbkfit.params import ParamValues
 from gbkfit.utils import iterutils, numutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
-from ._units import LineFactors
+from ._units import BandFactors, LineFactors
 
 if TYPE_CHECKING:
     from .base import Component
@@ -23,25 +23,23 @@ class Fluxes:
     observation sees (see ComponentPlan.line_values): 1 for its first line
     (or band), and for the others their flux ratio parameters, by row
     (ratios), times the factors that turn the unit of its light into that
-    of the data (see _units): those of its lines, at its systemic velocity
-    (see systemic_velocity), if any, or that of its band (scale).
+    of the data (see _units), if any: those of its lines or of its band,
+    at its systemic velocity (see systemic_velocity).
     """
 
     def __init__(
             self,
             nrows: int,
             ratios: Sequence[tuple[int, str]] = (),
-            factors: LineFactors | None = None,
-            scale: float = 1.0
+            factors: LineFactors | BandFactors | None = None
     ):
         self._nrows = nrows
         self._ratios = tuple(ratios)
         self._factors = factors
-        self._scale = scale
 
     def __call__(self, params: ParamValues) -> np.ndarray:
         """Return the flux of each row, with the given parameters."""
-        fluxes = np.full(self._nrows, self._scale)
+        fluxes = np.ones(self._nrows)
         for row, name in self._ratios:
             fluxes[row] *= params[name]
         if self._factors is not None:
