@@ -145,6 +145,7 @@ def prep_slit_spectra(
         nanpad: int | None,
         dtype: npt.DTypeLike,
         velocity_rest: str | None = None,
+        velocity: str | None = None,
         output_dir: str = '.'
 ) -> None:
     """
@@ -152,9 +153,10 @@ def prep_slit_spectra(
     channels along y): crop them to positions (roi_spat) and channels
     (roi_spec), clip them, crop them to their valid pixels (minify), pad
     them (nanpad), and convert their spectral axis to velocities
-    (velocity_rest).
+    (velocity_rest). velocity is the convention of the velocities of an
+    axis that does not state it (see FitsArrays.read).
     """
-    arrays = FitsArrays.read(file_d, file_e, file_m)
+    arrays = FitsArrays.read(file_d, file_e, file_m, velocity)
     rows, columns = slice(None), slice(None)
     if roi_spec is not None:
         rows = slice(*roi_spec)
@@ -184,15 +186,17 @@ def prep_pixel_spectra(
         nanpad: int | None,
         dtype: npt.DTypeLike,
         velocity_rest: str | None = None,
+        velocity: str | None = None,
         output_dir: str = '.'
 ) -> None:
     """
     Prepare a cube (pixel_spectra): crop it to a region (roi_spat: x from,
     x to, y from, y to) and channels (roi_spec), clip it, crop it to its
     valid pixels (minify), pad it (nanpad), and convert its spectral axis
-    to velocities (velocity_rest).
+    to velocities (velocity_rest). velocity is the convention of the
+    velocities of an axis that does not state it (see FitsArrays.read).
     """
-    arrays = FitsArrays.read(file_d, file_e, file_m)
+    arrays = FitsArrays.read(file_d, file_e, file_m, velocity)
     channels, ys, xs = slice(None), slice(None), slice(None)
     if roi_spat is not None:
         xs, ys = slice(*roi_spat[0:2]), slice(*roi_spat[2:4])
@@ -365,6 +369,7 @@ def prep_region_spectra(
         roi_spec: _Range | None,
         dtype: npt.DTypeLike,
         velocity_rest: str | None = None,
+        velocity: str | None = None,
         output_dir: str = '.'
 ) -> None:
     """
@@ -372,7 +377,9 @@ def prep_region_spectra(
     the bin of each pixel (file_bins; negative or NaN for no bin, on the
     pixels of the cube), and a cube (file_d, with optional errors file_e
     and mask file_m), optionally cropped to channels (roi_spec) and with
-    its spectral axis converted to velocities (velocity_rest). Write the
+    its spectral axis converted to velocities (velocity_rest; velocity is
+    the convention of the velocities of an axis that does not state it,
+    see FitsArrays.read). Write the
     bins, numbered from 0 in the order of their numbers in the map
     (prep_<bins>.fits), and the sum of the valid spectra of the pixels of
     each bin (prep_<cube>.fits: the bins along x, the channels along y),
@@ -382,7 +389,7 @@ def prep_region_spectra(
     prep.pixel_fluxes).
     """
     bins, index, nbins = _read_bins(file_bins)
-    cube = FitsArrays.read(file_d, file_e, file_m)
+    cube = FitsArrays.read(file_d, file_e, file_m, velocity)
     fluxes = prep.pixel_fluxes(cube.header, file_d, cube.data.shape[0])
     if roi_spec is not None:
         cube = cube.crop((slice(*roi_spec), slice(None), slice(None)))

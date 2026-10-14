@@ -318,6 +318,12 @@ def _make_parser() -> argparse.ArgumentParser:
         help="convert the spectral axis (a linear wavelength or frequency) "
              "to the optical or radio velocities of this rest wavelength or "
              "frequency, e.g. '6562.8 Angstrom' (in air for an AWAV axis)")
+    parser_prep_rest.add_argument(
+        '--velocity', type=str, choices=['radio', 'optical'],
+        help="the convention of the velocities of a spectral axis of the "
+             "AIPS convention without VELREF (e.g. VELO-HEL), which is "
+             "ambiguous: AIPS reads them as optical, MIRIAD writes radio "
+             "ones")
 
     parser_prep_roi_spat_1d = argparse.ArgumentParser(add_help=False)
     parser_prep_roi_spat_1d.add_argument(
@@ -546,7 +552,7 @@ def _run_prep(args: argparse.Namespace) -> None:
             args.ccl_lcount, args.ccl_pcount, args.ccl_lratio,
             args.sclip_sigma, args.sclip_iters,
             args.minify, args.nanpad, args.dtype,
-            args.velocity_rest, output_dir=output_dir)
+            args.velocity_rest, args.velocity, output_dir=output_dir)
     elif args.prep_task == 'pixel_moments':
         gbkfit.tasks.prep.prep_pixel_moments(
             args.data_d, args.data_e, args.data_m,
@@ -562,7 +568,7 @@ def _run_prep(args: argparse.Namespace) -> None:
     elif args.prep_task == 'region_spectra':
         gbkfit.tasks.prep.prep_region_spectra(
             args.bins, args.data_d, args.data_e, args.data_m,
-            args.roi_spec, args.dtype, args.velocity_rest,
+            args.roi_spec, args.dtype, args.velocity_rest, args.velocity,
             output_dir=output_dir)
     elif args.prep_task == 'psf_muse':
         gbkfit.tasks.prep.prep_psf_muse(args.cube, output_dir)
@@ -577,7 +583,7 @@ def _run_prep(args: argparse.Namespace) -> None:
             args.ccl_lcount, args.ccl_pcount, args.ccl_lratio,
             args.sclip_sigma, args.sclip_iters,
             args.minify, args.nanpad, args.dtype,
-            args.velocity_rest, output_dir=output_dir)
+            args.velocity_rest, args.velocity, output_dir=output_dir)
 
 
 def _run_fit(args: argparse.Namespace) -> None:

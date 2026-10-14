@@ -35,6 +35,7 @@ __all__ = [
     'reorder_data',
     'reorder_wcs',
     'to_model_axes',
+    'with_velocity_convention',
     'write_data',
     'write_spectra'
 ]
@@ -48,6 +49,13 @@ _KM_S = astropy.units.km / astropy.units.s
 # The values of the header keyword AIRORVAC of each medium of wavelengths
 # (see gridutils.make_medium)
 _HEADER_MEDIUMS = dict(vacuum='vac', air='air')
+
+# The frames of the velocity axes of the AIPS convention (VELO-LSR, ...)
+# and their codes in VELREF, which adds 256 for radio velocities
+_AIPS_FRAMES = dict(LSR=1, HEL=2, OBS=3)
+
+# The conventions of velocities (see with_velocity_convention)
+_VELOCITY_CONVENTIONS = ('radio', 'optical')
 
 
 def read_unit(filename: str, hdu: int | str = 0) -> str | None:
@@ -170,7 +178,8 @@ def read_data(
     ConfigError
         If the HDU has no data, the header has invalid world coordinates,
         or coordinates the model cannot represent (see coords_from_wcs),
-        or the medium is not valid.
+        or does not say whether its velocities are radio or optical (see
+        with_velocity_convention), or the medium is not valid.
     """
     with astropy.io.fits.open(filename) as hdulist:
         data = hdulist[hdu].data
@@ -179,6 +188,7 @@ def read_data(
         raise ConfigError(
             f"{filename}: HDU {hdu} has no data; choose the HDU with the "
             f"data (e.g. hdu: SCI)")
+    header = with_velocity_convention(header, None, filename)
     header = centre_missing_crpix(header, data.shape)
     try:
         wcs = astropy.wcs.WCS(header)
@@ -686,6 +696,81 @@ def _header_medium(source, header):
             f"{source}: AIRORVAC must be one of {list(mediums)}; it is "
             f"{value!r}")
     return mediums[value]
+
+
+def with_velocity_convention(
+        header: astropy.io.fits.Header,
+        velocity: str | None,
+        source: str
+) -> astropy.io.fits.Header:
+    """
+    Return the header with the convention of the velocities of its
+    spectral axis stated, if it is one of the AIPS convention (VELO-LSR,
+    VELO-HEL or VELO-OBS) without the keyword VELREF that states it.
+
+    Such an axis is ambiguous: AIPS takes its velocities as optical, and
+    so does astropy (wcslib), but MIRIAD writes them radio ("VELO means
+    radio velocity (VRAD), and FELO is optical velocity", MIRIAD, velsw;
+    e.g. the cubes of LVHIS). Taking the wrong one is off by 2 vsys / c
+    in the widths of the lines (see LinePlacement), and by the frequency
+    of the lines. Its convention ('radio' or 'optical') must be given:
+    the header gets it as VELREF (the code of the frame, plus 256 for
+    radio velocities), as AIPS defines it.
+
+    Parameters
+    ----------
+    header : Header
+        The header.
+    velocity : str, optional
+        The convention of the velocities: 'radio' or 'optical'; only for
+        an axis of the AIPS convention without VELREF.
+    source : str
+        The name of the file of the header, for the errors.
+
+    Returns
+    -------
+    Header
+        The header (a copy, with VELREF, if the convention is given).
+
+    Raises
+    ------
+    ConfigError
+        If the convention is ambiguous and not given, or it is given and
+        the header states it, or it is not 'radio' or 'optical'.
+    """
+    if velocity is not None and velocity not in _VELOCITY_CONVENTIONS:
+        raise ConfigError(
+            f"the convention of velocities must be one of "
+            f"{list(_VELOCITY_CONVENTIONS)}; it is {velocity!r}")
+    # (an axis of one pixel, e.g. that left in a moment map, has no
+    # velocities to read)
+    ctypes = [
+        str(header.get(f'CTYPE{n}', ''))
+        for n in range(1, header.get('NAXIS', 0) + 1)
+        if header.get(f'NAXIS{n}', 1) > 1]
+    frame = next((
+        ctype[5:].strip() for ctype in ctypes
+        if ctype[:5] == 'VELO-' and ctype[5:].strip() in _AIPS_FRAMES), None)
+    ambiguous = frame is not None and 'VELREF' not in header
+    if velocity is None:
+        if ambiguous:
+            raise ConfigError(
+                f"{source}: the velocities of the spectral axis (VELO-{frame}"
+                f", without VELREF) may be radio or optical: AIPS reads them "
+                f"as optical, but MIRIAD writes radio ones (e.g. LVHIS). Say "
+                f"which: prepare the data with gbkfit-cli prep and the option "
+                f"--velocity radio or optical, or add VELREF to the header "
+                f"({_AIPS_FRAMES[frame]} for optical, "
+                f"{_AIPS_FRAMES[frame] + 256} for radio)")
+        return header
+    if not ambiguous:
+        raise ConfigError(
+            f"{source}: the convention of velocities is for a spectral axis "
+            f"of the AIPS convention without VELREF (e.g. VELO-HEL); this "
+            f"header states its own")
+    header = header.copy()
+    header['VELREF'] = _AIPS_FRAMES[frame] + (256 if velocity == 'radio' else 0)
+    return header
 
 
 def _spectral_rest(source, wcs, rest):
