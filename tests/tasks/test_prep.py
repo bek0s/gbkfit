@@ -653,13 +653,20 @@ def test_region_spectra_are_the_sums_of_the_spectra_of_their_bins():
 @pytest.mark.parametrize('unit, factor, flux', [
     # (pixels of 2 arcsec: 4 arcsec^2)
     ('1e-20 erg/s/cm2/Angstrom', 1, '1e-20 erg/s/cm2/Angstrom'),
+    ('JY/PIXEL', 1, 'Jy'),
     ('1e-17 erg/s/cm2/Angstrom/arcsec2', 4, '1e-17 erg/s/cm2/Angstrom'),
     ('MJy/sr', 4 / 206264.806 ** 2, 'MJy')])
 def test_the_flux_of_a_pixel(unit, factor, flux):
-    from gbkfit.prep import pixel_fluxes
+    # (in an extension after an empty primary HDU, as in MUSE and JWST)
+    from gbkfit.prep import FitsArrays, pixel_fluxes
     from gbkfit.utils.unitutils import parse_unit
     header = HEADER | dict(CDELT1=-2 / 3600, CDELT2=2 / 3600, BUNIT=unit)
-    write_cube('cube.fits', header)
-    scale, flux_unit = pixel_fluxes('cube.fits', SHAPE[1])
+    write_cube('one.fits', header)
+    fits.HDUList([fits.PrimaryHDU(), fits.ImageHDU(
+        fits.getdata('one.fits'), fits.getheader('one.fits'))]).writeto(
+        'cube.fits')
+    cube = FitsArrays.read('cube.fits')
+    scale, flux_unit = pixel_fluxes(
+        cube.header, 'cube.fits', cube.data.shape[0])
     assert scale == pytest.approx(factor, rel=1e-9)
     assert (1 * flux_unit).to_value(parse_unit(flux)) == pytest.approx(1)

@@ -687,8 +687,9 @@ def _element(
 ) -> u.Quantity:
     """
     Return light per solid angle as the light of one element (see
-    unitutils.spatial_unit): of a beam or a pixel (of the given solid angles,
-    arcsec^2), or of a solid angle of 1 sr.
+    unitutils.spatial_unit): of a beam or a pixel (of the given solid
+    angles, arcsec^2; a pixel named so, pix, or not), or of a solid angle
+    of 1 sr.
     """
     if spatial == u.beam:
         if beam is None:

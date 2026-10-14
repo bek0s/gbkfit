@@ -206,3 +206,9 @@ def test_the_mass_of_a_unit_of_light(info, expected):
     mass = mass_per_unit(emission(info))
     assert mass == (None if expected is None
                     else pytest.approx(expected, rel=2e-3))
+
+
+def test_data_per_pixel_named_so():
+    # (e.g. BUNIT JY/PIXEL): the light of a pixel, as without the name
+    assert factors('Jy km/s/arcsec2', 'JY/PIXEL')(470) \
+        == pytest.approx(PIXEL, rel=1e-12)

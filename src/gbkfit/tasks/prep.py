@@ -383,7 +383,7 @@ def prep_region_spectra(
     """
     bins, index, nbins = _read_bins(file_bins)
     cube = FitsArrays.read(file_d, file_e, file_m)
-    fluxes = prep.pixel_fluxes(file_d, cube.data.shape[0])
+    fluxes = prep.pixel_fluxes(cube.header, file_d, cube.data.shape[0])
     if roi_spec is not None:
         cube = cube.crop((slice(*roi_spec), slice(None), slice(None)))
         if fluxes is not None and np.ndim(fluxes[0]):

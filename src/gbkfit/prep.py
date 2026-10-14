@@ -545,22 +545,25 @@ def bin_values(index: np.ndarray, nbins: int, data: np.ndarray) -> np.ndarray:
 
 
 def pixel_fluxes(
-        filename: str, nchannels: int
+        header: fits.Header, filename: str, nchannels: int
 ) -> tuple[float | np.ndarray, astropy.units.UnitBase] | None:
     """
-    Return how the values of the pixels of a FITS file (its first HDU, in
-    the unit of its header, BUNIT) become their fluxes: a factor, and the
-    unit of the fluxes. Values per pixel (e.g. of a spaxel) are fluxes
-    (factor 1); per solid angle, they are times that of a pixel; per beam
-    (e.g. Jy/beam), times that of a pixel over that of the Gaussian beam,
-    pi / (4 ln 2) bmaj bmin, of the header (BMAJ and BMIN), or of each
-    channel of a cube of CASA (its table BEAMS; a factor for each of its
-    nchannels channels).
+    Return how the values of the pixels of data of a header (e.g. that of
+    FitsArrays, of the file of the given name; in its unit, BUNIT) become
+    their fluxes: a factor, and the unit of the fluxes. Values per pixel
+    (e.g. of a spaxel, or per pix) are fluxes (factor 1); per solid
+    angle, they are times that of a pixel; per beam (e.g. Jy/beam), times
+    that of a pixel over that of the Gaussian beam, pi / (4 ln 2) bmaj
+    bmin, of the header (BMAJ and BMIN), or of each channel of a cube of
+    CASA (the table BEAMS of the file; a factor for each of its nchannels
+    channels).
 
     Parameters
     ----------
+    header : fits.Header
+        The header of the data.
     filename : str
-        The file.
+        The file of the data (for its table BEAMS, if any).
     nchannels : int
         The number of channels of the data (of a cube).
 
@@ -573,18 +576,24 @@ def pixel_fluxes(
     Raises
     ------
     ConfigError
-        If the unit is not a unit, or is per beam and the file has no
-        beam, or a beam for another number of channels.
+        If the unit is not a unit, is a brightness temperature (whose
+        sums over pixels are not fluxes), or is per beam and the data
+        have no beam, or a beam for another number of channels.
     """
     u = astropy.units
-    text = fitsutils.read_unit(filename)
-    if text is None:
+    text = str(header.get('BUNIT', '')).strip()
+    if not text:
         return None
     unit = unitutils.parse_unit(text)
+    if unit.is_equivalent(u.K):
+        raise ConfigError(
+            f"{filename}: the data are a brightness temperature ({text!r}), "
+            f"whose sums over pixels are not fluxes: convert them to flux "
+            f"density (e.g. Jy/beam) first")
     spatial = unitutils.spatial_unit(unit)
-    if spatial == u.dimensionless_unscaled:
-        return 1.0, unit
-    wcs = astropy.wcs.WCS(fits.getheader(filename)).celestial
+    if spatial in (u.dimensionless_unscaled, u.pix):
+        return 1.0, unit * spatial
+    wcs = astropy.wcs.WCS(header).celestial
     pixel = astropy.wcs.utils.proj_plane_pixel_area(wcs) * u.deg ** 2
     if spatial == u.sr:
         # (the angles of the unit, e.g. 1/arcsec^2)
@@ -593,7 +602,12 @@ def pixel_fluxes(
             if base.physical_type in ('solid angle', 'angle'):
                 angles = angles * base ** power
         return float((pixel * angles).decompose()), unit / angles
-    beam = fitsutils.read_beam(filename)
+    if 'BMAJ' in header and 'BMIN' in header:
+        beam = dict(
+            bmaj=float(header['BMAJ']) * 3600,
+            bmin=float(header['BMIN']) * 3600)
+    else:
+        beam = fitsutils.read_beam(filename)
     if beam is None:
         raise ConfigError(
             f"{filename}: the data are per beam, but have no beam (BMAJ and "

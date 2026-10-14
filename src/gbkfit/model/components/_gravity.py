@@ -88,6 +88,9 @@ class GravityPlan:
             if cmp.circular_velocity_params())
         self._followed = tuple(
             i for i, cmp in enumerate(components) if cmp.name() in followed)
+        # (the mass of a unit of the density of each, if it has a unit)
+        self._mass_per_unit = {
+            i: mass_per_unit(components[i].emission()) for i in self._followed}
         planned = sorted(set(self._followed) | {
             i for i in self._moved
             if components[i].density_disk().pressure_supported_params()})
@@ -149,7 +152,7 @@ class GravityPlan:
                 components[i].name(): DiskDensity(
                     components[i].density_disk(), self._disk_plans[i],
                     own[i], kpc_per_arcsec,
-                    mass_per_unit(components[i].emission()))
+                    self._mass_per_unit[i])
                 for i in self._followed})
         # The mass is evaluated once, at the radii of all the components
         radii = {i: components[i].circular_velocity_params()
