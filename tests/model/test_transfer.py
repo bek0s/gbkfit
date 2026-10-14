@@ -408,10 +408,12 @@ def test_slabs_give_the_same_model(driver, evaluate_cases, disk_type):
 
 
 def galaxies_model(
-        driver, galaxies, properties, with_extras=True, **observation):
+        driver, galaxies, properties, depth_order=None, with_extras=True,
+        **observation):
     """
     The model data of an observation of several galaxies through
-    radiative transfer (a spectral cube by default), and its extras (none
+    radiative transfer (a spectral cube by default), front to back in the
+    given order (that of the galaxies if None), and its extras (none
     without with_extras: the evaluation of fits).
     """
     import gbkfit.params
@@ -421,9 +423,12 @@ def galaxies_model(
             type='pixel_spectra', size=[24, 24, 31], step=[1, 1, 10]),
         line_of_sight=dict(type='transfer'),
         galaxies=[galaxy['name'] for galaxy in galaxies]) | observation
+    if depth_order is None:
+        depth_order = [galaxy['name'] for galaxy in galaxies]
     group = ObservationGroup(
         galaxy_parser.load(galaxies),
-        observation_parser.load([observation], drivers=[{None: driver}]))
+        observation_parser.load([observation], drivers=[{None: driver}]),
+        depth_order)
     params = gbkfit.params.ParamSpace(group.pdescs(), properties)
     extra = {} if with_extras else None
     data = group.model_h(params.evaluate(), extra)
@@ -435,17 +440,9 @@ def galaxy_properties(galaxy, properties):
     return {f'{galaxy}_{key}': value for key, value in properties.items()}
 
 
-def test_a_galaxy_with_depth_has_its_parameter():
-    galaxy = galaxy_parser.load(dict(components=[GAS], depth=True))
-    assert 'depth' in galaxy.pdescs()
-    dumped = galaxy_parser.dump(galaxy)
-    assert dumped['depth'] is True
-    assert galaxy_parser.dump(galaxy_parser.load(dumped)) == dumped
-
-
-@pytest.mark.parametrize('dust_depth', [-50, 50])
+@pytest.mark.parametrize('dust_in_front', [True, False])
 def test_the_dust_of_a_galaxy_dims_the_galaxies_behind_it(
-        driver, dust_depth):
+        driver, dust_in_front):
     # An image of a face-on disk of stars at z = 1, and a galaxy of face-on
     # dust at z = 0.5 of a law whose ratio is 3 - 2.5 (wavelength - 0.2):
     # in front of the stars, the dust dims them at the wavelength of the
@@ -457,23 +454,25 @@ def test_the_dust_of_a_galaxy_dims_the_galaxies_behind_it(
     dust = DUST | dict(opacity=dict(type='dust', law=dict(
         type='table', wavelengths=[0.2, 1.0], ratios=[3.0, 1.0])))
     galaxies = [
-        dict(name='back', components=[stars], redshift=1.0, depth=True),
-        dict(name='front', components=[dust], redshift=0.5, depth=True)]
+        dict(name='back', components=[stars], redshift=1.0),
+        dict(name='front', components=[dust], redshift=0.5)]
     properties = galaxy_properties('back', dict(
         stars_xpos=0, stars_ypos=0, stars_posa=0, stars_incl=0,
-        stars_pt_a=1, stars_pt_s=4, depth=0))
+        stars_pt_a=1, stars_pt_s=4))
     properties |= galaxy_properties('front', dict(
         dust_xpos=0, dust_ypos=0, dust_posa=0, dust_incl=0, dust_pt_a=0.5,
-        dust_pt_s=4, dust_ht_s=1, depth=dust_depth))
+        dust_pt_s=4, dust_ht_s=1))
+    order = ['front', 'back'] if dust_in_front else ['back', 'front']
     image = dict(
         observable=dict(type='pixel_brightness', size=[24, 24]),
         band='sdss_r')
     clear, _ = galaxies_model(driver, galaxies[:1], properties, **image)
-    model, extra = galaxies_model(driver, galaxies, properties, **image)
+    model, extra = galaxies_model(
+        driver, galaxies, properties, order, **image)
     tau = extra['observation0_model_front_total_odata'].data.sum(axis=0)
     wavelength = LineCatalogue().band('sdss_r').wavelength().to_value('um')
     ratio = 3 - 2.5 * (wavelength / 1.5 - 0.2)
-    expected = clear * np.exp(-ratio * tau) if dust_depth < 0 else clear
+    expected = clear * np.exp(-ratio * tau) if dust_in_front else clear
     assert tau.max() > 0.1
     assert_same_model(model, expected)
 
@@ -484,80 +483,64 @@ def test_line_opacity_continues_into_the_galaxies_behind(driver):
     # e^-t), t = I / S of its light without line opacity, and that of the
     # one behind is dimmed by e^-t (see
     # test_line_opacity_saturates_at_the_source_function). Swapping their
-    # depths swaps the roles. (Without extras: the evaluation of fits.)
+    # order swaps the roles. (Without extras: the evaluation of fits.)
     gas = line_opacity(GAS, dict(type='uniform'))
-    galaxies = [
-        dict(name=name, components=[gas], depth=True)
-        for name in ('a', 'b')]
+    galaxies = [dict(name=name, components=[gas]) for name in ('a', 'b')]
     properties = {}
     for name, posa in (('a', 30), ('b', 120)):
         properties |= galaxy_properties(name, {
             key: value for key, value in PROPERTIES.items()
             if key.startswith('gas_')} | dict(gas_posa=posa, gas_op_a=0))
 
-    def model(**values):
+    def model(order, **values):
         return galaxies_model(
-            driver, galaxies, properties | values, with_extras=False)[0]
+            driver, galaxies, properties | values, order,
+            with_extras=False)[0]
 
-    thin_a = model(a_depth=-50, b_depth=50, b_gas_pt_a=0)
-    thin_b = model(a_depth=-50, b_depth=50, a_gas_pt_a=0)
+    thin_a = model(['a', 'b'], b_gas_pt_a=0)
+    thin_b = model(['a', 'b'], a_gas_pt_a=0)
     source = thin_a.max() / 3
     dimmed = np.exp(-thin_a / source)
-    in_front = model(a_depth=-50, b_depth=50, a_gas_op_a=1 / source)
-    behind = model(a_depth=50, b_depth=-50, a_gas_op_a=1 / source)
+    in_front = model(['a', 'b'], a_gas_op_a=1 / source)
+    behind = model(['b', 'a'], a_gas_op_a=1 / source)
     assert_same_model(in_front, source * (1 - dimmed) + dimmed * thin_b)
     assert_same_model(behind, source * (1 - dimmed) + thin_b)
     assert in_front.sum() < 0.95 * behind.sum()
 
 
-def test_galaxies_without_opacity_may_overlap(driver):
+def test_galaxies_without_opacity_add_up_in_any_order(driver):
     # Their light just adds up, in any order, behind a galaxy with dust
     galaxies = [
-        dict(name='a', components=[GAS, DUST], depth=True),
-        dict(name='b', components=[GAS], depth=True),
-        dict(name='c', components=[GAS], depth=True)]
+        dict(name='a', components=[GAS, DUST]),
+        dict(name='b', components=[GAS]),
+        dict(name='c', components=[GAS])]
     properties = {}
-    for name, depth in (('a', -50), ('b', 0), ('c', 5)):
+    for name in ('a', 'b', 'c'):
         values = PROPERTIES if name == 'a' else {
             key: value for key, value in PROPERTIES.items()
             if key.startswith('gas_')}
-        properties |= galaxy_properties(name, values | dict(depth=depth))
-    model, _ = galaxies_model(driver, galaxies, properties)
+        properties |= galaxy_properties(name, values)
+    model, _ = galaxies_model(driver, galaxies, properties, ['a', 'b', 'c'])
     swapped, _ = galaxies_model(
-        driver, galaxies, properties | dict(b_depth=5, c_depth=0))
+        driver, galaxies, properties, ['a', 'c', 'b'])
     assert_same_model(swapped, model)
 
 
-@pytest.mark.parametrize('line_of_sight, depth, components, message', [
-    ('grid', True, [DUST], "needs a line of sight of radiative transfer"),
-    ('transfer', False, [DUST], r"the galaxies \['b'\] need depth: true"),
-    # (the depth of a point without a name is 'depth')
-    ('transfer', True, [NUCLEUS | dict(name=None)],
-     "the parameter 'depth' of the galaxy has the name of a parameter of "
-     "its component")])
+@pytest.mark.parametrize('line_of_sight, depth_order, message', [
+    ('grid', ['a', 'b'], "needs a line of sight of radiative transfer"),
+    ('transfer', ['a'], r"must give the place of the galaxies \['b'\]"),
+    ('transfer', ['a', 'c'], r"names unknown galaxies \['c'\]"),
+    ('transfer', ['a', 'b', 'a'], "repeats galaxies")])
 def test_several_galaxies_errors(
-        driver, line_of_sight, depth, components, message):
+        driver, line_of_sight, depth_order, message):
     from gbkfit.utils.parseutils import ConfigError
     galaxies = [
-        dict(name='a', components=[GAS, DUST], depth=True),
-        dict(name='b', components=components, depth=depth)]
+        dict(name='a', components=[GAS, DUST]),
+        dict(name='b', components=[DUST])]
     with pytest.raises(ConfigError, match=message):
         galaxies_model(
-            driver, galaxies, {},
+            driver, galaxies, {}, depth_order,
             line_of_sight=dict(type=line_of_sight))
-
-
-def test_galaxies_must_not_overlap_along_the_line_of_sight(driver):
-    # (each galaxy has a depth axis of 20 arcsec, twice its radius)
-    galaxies = [
-        dict(name=name, components=[GAS, DUST], depth=True)
-        for name in ('a', 'b')]
-    properties = {}
-    for name, depth in (('a', 0), ('b', 19)):
-        properties |= galaxy_properties(
-            name, PROPERTIES | dict(depth=depth))
-    with pytest.raises(ValueError, match="overlap along the line of sight"):
-        galaxies_model(driver, galaxies, properties)
 
 
 def transfer_case(driver, components, nchannels=31, step=10, **transfer):

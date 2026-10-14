@@ -9,7 +9,6 @@ import numpy as np
 
 from gbkfit.driver import Driver, driver_by_name
 from gbkfit.params import ParamDesc
-from gbkfit.params.pdescs import ParamScalarDesc
 from gbkfit.utils import gridutils, iterutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
 from .components import _detail
@@ -48,9 +47,10 @@ class Galaxy(parseutils.Serializable):
 
     Its parameters are those of its components, each prefixed by its name
     when there are several ('disk_pt_a'), and those of its geometries
-    ('{geometry}_posa'), its distance ('distance'), its mass
-    ('mass_{name}_*') and its depth ('depth'). A name prefixes them all
-    when there are several galaxies (see ObservationGroup).
+    ('{geometry}_posa'), its distance ('distance') and its mass
+    ('mass_{name}_*'). A name prefixes them all when there are several
+    galaxies (see ObservationGroup), whose order along the line of sight
+    the ObservationGroup gives (see its option depth_order).
 
     In configurations, its option geometries lists the geometries that
     its components name (see Geometry).
@@ -71,15 +71,6 @@ class Galaxy(parseutils.Serializable):
         band over 1 + redshift), and for its distance by redshift (see
         DistanceRedshift); the systemic velocity of its components is the
         velocity offset from it. 0 by default.
-    depth : bool, optional
-        Whether it has a position along the line of sight: the parameter
-        'depth' (arcsec, away from the viewer; relative to the other
-        galaxies). An observation of several galaxies through radiative
-        transfer (see Transfer) needs it when they have opacity: it
-        marches them one after the other in the order of their depths,
-        each on its own depth axis, centred on its depth, which must not
-        overlap those of the others (galaxies that interpenetrate along
-        the line of sight are not supported yet). False by default.
     driver : Driver, optional
         Where its own computations run: its gravity, in float64, once for
         all the observations of it, whatever their drivers (see
@@ -164,8 +155,6 @@ class Galaxy(parseutils.Serializable):
         if self.distance() is not None:
             info.update(distance=distance_parser.dump(self.distance()))
         info.update(redshift=self._redshift)
-        if self._depth:
-            info.update(depth=True)
         return info
 
     def __init__(
@@ -174,7 +163,6 @@ class Galaxy(parseutils.Serializable):
             mass: MassComponent | Sequence[MassComponent] | None = None,
             distance: Distance | None = None,
             redshift: float = 0.0,
-            depth: bool = False,
             driver: Driver | None = None,
             name: str | None = None
     ):
@@ -187,19 +175,10 @@ class Galaxy(parseutils.Serializable):
         mass_model = MassModel(mass) if mass else None
         self._component_set = ComponentSet(components, distance, mass_model)
         self._pdescs = self._component_set.pdescs()
-        if depth:
-            if 'depth' in self._pdescs:
-                raise ConfigError(
-                    "the parameter 'depth' of the galaxy has the name of a "
-                    "parameter of its component; name the component")
-            self._pdescs = self._pdescs | dict(depth=ParamScalarDesc(
-                desc="the position of the galaxy along the line of sight "
-                     "(arcsec, away from the viewer)"))
         if driver is None:
             # (imported here: the host driver needs its native module)
             from gbkfit.driver.drivers.host import DriverHost
             driver = DriverHost()
-        self._depth = depth
         self._mass = mass
         self._driver = driver
         self._name = name
@@ -238,10 +217,6 @@ class Galaxy(parseutils.Serializable):
     def redshift(self) -> float:
         """Return its redshift."""
         return self._redshift
-
-    def depth(self) -> bool:
-        """Return whether it has a position along the line of sight."""
-        return self._depth
 
     def driver(self) -> Driver:
         """Return the driver of its own computations (its gravity)."""

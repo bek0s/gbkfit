@@ -5,7 +5,6 @@ grid of the observation (ScenePlan).
 """
 
 import abc
-import math
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any
 
@@ -40,10 +39,12 @@ class Scene:
     """
     What an observation sees: galaxies, the indices of the components of
     each whose light it sees (its emitters; the opacity of all components
-    applies), its emission lines (all if None) or its band (if known), and
-    its line of sight. The parameters of each galaxy have the names of the
-    mapping of the galaxy among those of the observation group, and its
-    extra outputs the prefix of the galaxy.
+    applies), its emission lines (all if None) or its band (if known), its
+    line of sight, and the order of the galaxies along it, front to back
+    (their indices; those it leaves out after them, in their order). The
+    parameters of each galaxy have the names of the mapping of the galaxy
+    among those of the observation group, and its extra outputs the prefix
+    of the galaxy.
     """
 
     def __init__(
@@ -54,7 +55,8 @@ class Scene:
             emitters: Sequence[tuple[int, ...]],
             lines: tuple[str, ...] | None,
             band: Band | None,
-            line_of_sight: 'LineOfSight'
+            line_of_sight: 'LineOfSight',
+            order: Sequence[int] | None = None
     ):
         self._galaxies = tuple(galaxies)
         self._mappings = tuple(mappings)
@@ -63,6 +65,9 @@ class Scene:
         self._lines = lines
         self._band = band
         self._line_of_sight = line_of_sight
+        order = tuple(order or ())
+        self._order = order + tuple(
+            g for g in range(len(self._galaxies)) if g not in order)
 
     def bounding_radius(self) -> float:
         """
@@ -213,17 +218,11 @@ class TransferScenePlan(ScenePlan):
     """
     The evaluation of a scene by radiative transfer along each line of
     sight (see Transfer): each galaxy on a depth axis of its own (for its
-    largest disk), marched one after the other, front to back, from the
-    opacity of the galaxies in front of it (see TransferPlan). One set of
-    cubes of opacity holds the dust of all of them (see opacity_cubes).
-    Several galaxies with opacity are marched in the order of their
-    depths (see Galaxy); the others in their order.
-
-    The galaxies whose depth axes, centred on their depths, overlap along
-    the line of sight form a group, which would need one grid where one of
-    them has opacity; such groups are not supported yet: evaluate raises
-    ValueError. (The light of galaxies without opacity just adds up, in
-    any order.)
+    largest disk), marched one after the other, front to back, in the
+    order of the scene, from the opacity of the galaxies in front of it
+    (see TransferPlan). One set of cubes of opacity holds the dust of all
+    of them (see opacity_cubes). (The light of galaxies without opacity
+    just adds up, in any order.)
 
     With extra outputs, it logs a warning if the march resolves line
     opacity, or the depth axis the velocity of the light, too coarsely
@@ -256,13 +255,9 @@ class TransferScenePlan(ScenePlan):
                 smoothing)
             for galaxy, emitters, axis, galaxy_cubes in zip(
                 scene._galaxies, scene._emitters, axes, cubes))
-        self._extents = tuple(axis.size * axis.step for axis in axes)
         self._subchannels = subchannels
         # (that of every galaxy)
         self._depth_step = axes[0].step
-        self._ordered = len(self._plans) > 1 and any(
-            plan.has_dust() or plan.has_line_opacity()
-            for plan in self._plans)
         # The state of the march from one galaxy to the next: the optical
         # depth of the dust in front, in each cube of opacity, and with
         # line opacity, that of the lines at each sub-channel
@@ -292,7 +287,7 @@ class TransferScenePlan(ScenePlan):
         # resolves its lines, and the worst gets a warning
         dust = line_opacity = False
         resolutions = []
-        for g in self._order(params):
+        for g in self._scene._order:
             plan = self._plans[g]
             dust = dust or plan.has_dust()
             line_opacity = line_opacity or plan.has_line_opacity()
@@ -308,31 +303,6 @@ class TransferScenePlan(ScenePlan):
                 LineResolution(*np.max(resolutions, axis=0)),
                 self._spectral.coords.step[0], self._subchannels,
                 self._depth_step)
-
-    def _order(self, params: list[ParamValues]) -> list[int]:
-        """
-        Return the indices of the galaxies in the order of the march, with
-        the parameters of each (see the class). Raise ValueError if the
-        depth axes of galaxies overlap where one of them has opacity.
-        """
-        if not self._ordered:
-            return list(range(len(self._plans)))
-        depths = [values['depth'] for values in params]
-        groups = _depth_groups(depths, self._extents)
-        for group in groups:
-            if len(group) > 1 and any(
-                    self._plans[g].has_dust()
-                    or self._plans[g].has_line_opacity() for g in group):
-                names = [self._scene._galaxies[g].name() for g in group]
-                raise ValueError(
-                    f"the depth axes of the galaxies {names} overlap along "
-                    f"the line of sight (their depths: "
-                    f"{[float(depths[g]) for g in group]}; the lengths of "
-                    f"their axes: {[self._extents[g] for g in group]} "
-                    f"arcsec); radiative transfer marches galaxies one "
-                    f"after the other, so each must be in front of the "
-                    f"next")
-        return [g for group in groups for g in group]
 
 
 def _bounding_radius(galaxy: Galaxy, emitters: Sequence[int]) -> float:
@@ -350,26 +320,6 @@ def _bounding_radius(galaxy: Galaxy, emitters: Sequence[int]) -> float:
     return max(radii, default=0.0)
 
 
-def _depth_groups(
-        depths: Sequence[float], extents: Sequence[float]
-) -> list[list[int]]:
-    """
-    Return the indices of galaxies at the given depths, whose depth axes
-    of the given lengths are centred on them, in groups, front to back:
-    those whose depth axes overlap are in one group, in the order of their
-    depths.
-    """
-    groups = []
-    end = -math.inf
-    for g in sorted(range(len(depths)), key=lambda g: depths[g]):
-        if depths[g] - extents[g] / 2 < end:
-            groups[-1].append(g)
-        else:
-            groups.append([g])
-        end = max(end, depths[g] + extents[g] / 2)
-    return groups
-
-
 def make_scene(
         galaxies: Sequence[Galaxy],
         mappings: Sequence[dict[str, str]],
@@ -378,12 +328,15 @@ def make_scene(
         lines: tuple[str, ...] | None,
         band: Band | None,
         line_of_sight: 'LineOfSight',
-        emission: type[Emission]
+        emission: type[Emission],
+        order: Sequence[int] | None = None
 ) -> Scene:
     """
     Return the scene of an observation of the given galaxies (see Scene),
     which sees the emission of the given type (see Observable.emission),
-    in the given band if known (an image). The names of the components it
+    in the given band if known (an image), and of their order along the
+    line of sight, front to back (their indices, if given; see
+    ObservationGroup: depth_order). The names of the components it
     sees (all those with that emission, in its band, if None) are
     qualified by the names of their galaxies ('galaxy.component') when it
     sees several.
@@ -395,7 +348,8 @@ def make_scene(
         sees, it sees nothing, a line is not one of the components it
         sees, a component cannot be seen along its line of sight (see
         LineOfSight.check), or it sees several galaxies with opacity that
-        its line of sight cannot order (see LineOfSight.check_order).
+        its line of sight cannot order, or not in that order (see
+        LineOfSight.check_order).
     """
     kind = "an image, which sees the components that emit in a band" \
         if emission is BandEmission else \
@@ -411,7 +365,7 @@ def make_scene(
     if len(galaxies) > 1 and any(
             _has_opacity(galaxy, galaxy_emitters)
             for galaxy, galaxy_emitters in zip(galaxies, emitters)):
-        line_of_sight.check_order(galaxies)
+        line_of_sight.check_order(galaxies, order)
     for galaxy, galaxy_emitters, galaxy_absorbers in zip(
             galaxies, emitters, absorbers):
         for i in sorted(set(galaxy_emitters) | set(galaxy_absorbers)):
@@ -423,7 +377,7 @@ def make_scene(
                     f"component {_label(galaxy, i)}: {e}") from e
     return Scene(
         galaxies, mappings, prefixes, [tuple(e) for e in emitters], lines,
-        band, line_of_sight)
+        band, line_of_sight, order)
 
 
 def _has_opacity(galaxy: Galaxy, emitters: Sequence[int]) -> bool:

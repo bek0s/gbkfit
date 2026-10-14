@@ -48,7 +48,7 @@ def fit(
     _log.info(f"reading configuration from file: {config}...")
     cfg, root = _detail.read_config(
         config, ('galaxies', 'observations', 'params', 'fitter'),
-        ('driver', 'drivers', 'lines', 'bands', 'pdescs'))
+        ('driver', 'drivers', 'lines', 'bands', 'pdescs', 'depth_order'))
     output_dir = _detail.make_output_dir(output_dir, output_dir_mode)
     _log.info(f"output will be stored under directory: {output_dir}")
 

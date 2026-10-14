@@ -219,11 +219,12 @@ def load_drivers(cfg: dict[str, Any]) -> dict[str | None, Driver]:
 def load_observation_group(cfg: dict[str, Any]) -> ObservationGroup:
     """
     Return the galaxies and observations (with their data, if any) of a
-    configuration, as an ObservationGroup. The galaxies and observations
-    name lines and bands of the catalogue of GBKFIT and of the sections
-    'lines' and 'bands' of the configuration (see LineCatalogue), and the
-    observations and the galaxies refer to the drivers of the
-    configuration by name (see load_drivers).
+    configuration, as an ObservationGroup, with the order of the galaxies
+    along the line of sight of its section 'depth_order'. The galaxies
+    and observations name lines and bands of the catalogue of GBKFIT and
+    of the sections 'lines' and 'bands' of the configuration (see
+    LineCatalogue), and the observations and the galaxies refer to the
+    drivers of the configuration by name (see load_drivers).
     """
     drivers = load_drivers(cfg)
     catalogue = gbkfit.model.LineCatalogue(cfg.get('lines'), cfg.get('bands'))
@@ -237,7 +238,8 @@ def load_observation_group(cfg: dict[str, Any]) -> ObservationGroup:
         observations = gbkfit.observation.observation_parser.load(
             cfg['observations'], drivers=[drivers] * nobservations,
             catalogue=[catalogue] * nobservations)
-    return gbkfit.observation.ObservationGroup(galaxies, observations)
+    return gbkfit.observation.ObservationGroup(
+        galaxies, observations, cfg.get('depth_order'))
 
 
 def load_params(
