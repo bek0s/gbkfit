@@ -290,10 +290,12 @@ class MCDisk(Component):
             band: Band | None,
             emits: bool,
             opacity_ratios: np.ndarray | None,
-            data_unit: DataUnit | None
+            data_unit: DataUnit | None,
+            redshift: float
     ) -> ComponentPlan:
         emission = self.emission()
         return _detail.disk_plan(
             self._disk, self._lines, self._bands,
             emission.unit() if emission is not None else None, driver,
-            spectral, dtype, lines, band, emits, opacity_ratios, data_unit)
+            spectral, dtype, lines, band, emits, opacity_ratios, data_unit,
+            redshift)

@@ -46,7 +46,7 @@ def component_plan(driver, component):
     galaxy = galaxy_parser.load(dict(components=[component]))
     return galaxy.components()[0].plan(
         driver, SPECTRAL, np.dtype(np.float32), None, None, True, None,
-        None)
+        None, 0.0)
 
 
 def evaluate_fields(driver, component, params, grid):

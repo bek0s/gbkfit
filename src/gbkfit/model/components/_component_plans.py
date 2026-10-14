@@ -91,6 +91,9 @@ class ComponentPlans:
     data_unit : DataUnit, optional
         The unit of the data of the observation, which the light of the
         emitters takes (see Component.plan); None without data.
+    redshift : float
+        The redshift of the galaxy, which places the lines of the
+        emitters (see Component.plan).
 
     Attributes
     ----------
@@ -135,7 +138,8 @@ class ComponentPlans:
             cubes: OpacityCubes,
             lines: tuple[str, ...] | None,
             band: Band | None,
-            data_unit: DataUnit | None
+            data_unit: DataUnit | None,
+            redshift: float
     ):
         components = component_set.components()
         absorbers = tuple(cubes.deposits)
@@ -161,12 +165,13 @@ class ComponentPlans:
             try:
                 self.plans[i] = components[i].plan(
                     driver, spectral, dtype, lines, band, True,
-                    self.ratios[i], data_unit)
+                    self.ratios[i], data_unit, redshift)
             except ConfigError as e:
                 raise ConfigError(f"{_label(components, i)}: {e}") from e
         self.plans |= {
             i: components[i].plan(
-                driver, spectral, dtype, lines, band, False, None, None)
+                driver, spectral, dtype, lines, band, False, None, None,
+                redshift)
             for i in absorbers if i not in self.plans}
 
     def params(

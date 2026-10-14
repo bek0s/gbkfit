@@ -68,10 +68,11 @@ class Galaxy(parseutils.Serializable):
         with mass, and used by it only).
     redshift : float, optional
         Its one redshift: for what it emits and absorbs in its rest frame
-        (the dust of an image absorbs at the effective wavelength of its
-        band over 1 + redshift), and for its distance by redshift (see
-        DistanceRedshift); the systemic velocity of its components is the
-        velocity offset from it. 0 by default.
+        (its named lines are at their rest wavelengths times 1 + redshift,
+        see Lines.values; the dust of an image absorbs at the effective
+        wavelength of its band over 1 + redshift), and for its distance by
+        redshift (see DistanceRedshift); the systemic velocity of its
+        components is the velocity offset from it. 0 by default.
     driver : Driver, optional
         Where its own computations run: its gravity, in float64, once for
         all the observations of it, whatever their drivers (see
@@ -304,7 +305,7 @@ class Galaxy(parseutils.Serializable):
         """
         return self._component_set.plan(
             driver, grid, spectral, depth, dtype, emitters, cubes, lines,
-            band, data_unit, smoothing)
+            band, data_unit, self._redshift, smoothing)
 
     def transfer_member(
             self,

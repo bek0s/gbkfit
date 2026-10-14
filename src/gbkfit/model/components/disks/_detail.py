@@ -343,14 +343,16 @@ def disk_plan(
         band: Band | None,
         emits: bool,
         opacity_ratios: np.ndarray | None,
-        data_unit: DataUnit | None
+        data_unit: DataUnit | None,
+        redshift: float
 ) -> 'DiskComponentPlan':
     """
     Return the plan of a disk component made of the given disk, with the
     given emission lines or bands (if any) and the unit of its light (if
     any), of which it evaluates, if it emits, the lines of the given names
-    (all if None) or the given band (if known), dimmed by the opacity with
-    the given ratios, in the unit of the data (see Component.plan).
+    (all if None), at the redshift of its galaxy, or the given band (if
+    known), dimmed by the opacity with the given ratios, in the unit of
+    the data (see Component.plan).
     """
     if not emits:
         return DiskComponentPlan(driver, disk.plan(driver, 0, dtype))
@@ -366,7 +368,7 @@ def disk_plan(
     opacity_rows = [
         selected.index(line) if line in selected else -1
         for line in disk.opacity_lines()]
-    rows = lines.values(spectral)[list(selected)]
+    rows = lines.values(spectral, redshift)[list(selected)]
     ratios = [
         (row, lines.ratio_name(index)) for row, index in enumerate(selected)
         if lines.ratio_name(index) is not None]

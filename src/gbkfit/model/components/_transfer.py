@@ -208,7 +208,8 @@ class TransferPlan:
         self._plans = tuple(
             ComponentPlans(
                 member.component_set, driver, grid, spectral, depth, dtype,
-                member.emitters, member.cubes, lines, band, data_unit)
+                member.emitters, member.cubes, lines, band, data_unit,
+                member.redshift)
             for member in members)
         self._driver = driver
         self._dtype = dtype

@@ -66,15 +66,17 @@ def _spectral_plan(
         lines: Lines,
         unit: astropy.units.UnitBase | None,
         names: Sequence[str] | None,
-        data_unit: DataUnit | None
+        data_unit: DataUnit | None,
+        redshift: float
 ) -> 'PointPlan':
     """
     Return the plan of a spectral point with the given lines and the unit
     of its light (if any), of the lines of the given names (all if None),
-    in the unit of the data (see Component.plan).
+    at the redshift of its galaxy, in the unit of the data (see
+    Component.plan).
     """
     selected = lines.select(names)
-    rows = lines.values(spectral)[list(selected)]
+    rows = lines.values(spectral, redshift)[list(selected)]
     ratios = [
         (row, lines.ratio_name(index))
         for row, index in enumerate(selected)
@@ -366,7 +368,8 @@ class Point(Component):
             band: Band | None,
             emits: bool,
             opacity_ratios: np.ndarray | None,
-            data_unit: DataUnit | None
+            data_unit: DataUnit | None,
+            redshift: float
     ) -> PointPlan:
         unit = self.emission().unit()
         if self._lines is None:
@@ -377,4 +380,4 @@ class Point(Component):
                     scale=band_factor(unit, data_unit, band)))
         return _spectral_plan(
             driver, spectral, dtype, self._depth, opacity_ratios,
-            self._lines, unit, lines, data_unit)
+            self._lines, unit, lines, data_unit, redshift)

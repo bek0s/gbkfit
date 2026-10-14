@@ -208,7 +208,8 @@ class Component(parseutils.TypedSerializable, abc.ABC):
             band: Band | None,
             emits: bool,
             opacity_ratios: np.ndarray | None,
-            data_unit: 'DataUnit | None'
+            data_unit: 'DataUnit | None',
+            redshift: float
     ) -> 'ComponentPlan':
         """
         Plan the evaluation of the component; the plan owns the memory
@@ -240,6 +241,9 @@ class Component(parseutils.TypedSerializable, abc.ABC):
             turned into from the unit of its emission, if it has one (see
             _units.LineFactors and band_factor); None without data: its
             light stays in the unit of its emission.
+        redshift : float
+            The redshift of its galaxy, which places its named lines on
+            the spectral axis (see Lines.values).
 
         Returns
         -------
