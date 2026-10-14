@@ -1,3 +1,4 @@
+from collections.abc import Mapping
 from typing import Any
 
 import astropy.units
@@ -63,7 +64,7 @@ class DatasetRegionSpectra(Dataset):
         info = dict(info)
         parseutils.load_option_and_update_info(
             regions_parser, info, 'regions', required=True, prefix=prefix)
-        files = _detail.pop_item_files(info, prefix)
+        files = _detail.pop_item_options(info, prefix)
         return _detail.load_with_files(cls, info, **files)
 
     @classmethod
@@ -73,6 +74,8 @@ class DatasetRegionSpectra(Dataset):
             regions: Regions,
             mask: FitsFile | None = None,
             error: FitsFile | float | None = None,
+            unit: str | None = None,
+            beam: Mapping[str, Any] | None = None,
             step: float | None = None,
             rpix: float | None = None,
             rval: float | None = None,
@@ -94,6 +97,12 @@ class DatasetRegionSpectra(Dataset):
             The file of the mask.
         error : str or tuple or float, optional
             The file of the errors, or one error for all the values.
+        unit : str, optional
+            The unit of the values; by default, that of the header (see
+            Data.from_files).
+        beam : Mapping, optional
+            The options of their beam (see Beam); by default, that of the
+            header.
         step, rpix, rval : float, optional
             The world coordinates of the spectral axis (see the class); by
             default, those of the header. Either rpix or rval can be given,
@@ -113,7 +122,7 @@ class DatasetRegionSpectra(Dataset):
         """
         # (the velocity is along FITS y, the axis 1)
         spectra, coords = Data.from_files(
-            data, mask, error, rpix, rval, rest, 1, medium)
+            data, mask, error, rpix, rval, rest, 1, medium, unit, beam)
         return cls(
             spectra, regions,
             step=coords.step[1] if step is None else step,

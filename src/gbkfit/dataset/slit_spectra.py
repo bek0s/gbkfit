@@ -1,4 +1,4 @@
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 import astropy.units
@@ -52,7 +52,7 @@ class DatasetSlitSpectra(Dataset):
             cls, info: dict[str, Any], prefix: str = ''
     ) -> 'DatasetSlitSpectra':
         info = dict(info)
-        files = _detail.pop_item_files(info, prefix)
+        files = _detail.pop_item_options(info, prefix)
         return _detail.load_with_files(cls, info, cls.ndim, **files)
 
     @classmethod
@@ -61,6 +61,8 @@ class DatasetSlitSpectra(Dataset):
             data: FitsFile,
             mask: FitsFile | None = None,
             error: FitsFile | float | None = None,
+            unit: str | None = None,
+            beam: Mapping[str, Any] | None = None,
             step: float | Sequence[float] | None = None,
             rpix: float | Sequence[float] | None = None,
             rval: float | Sequence[float] | None = None,
@@ -80,6 +82,12 @@ class DatasetSlitSpectra(Dataset):
             The file of the mask.
         error : str or tuple or float, optional
             The file of the errors, or one error for all the values.
+        unit : str, optional
+            The unit of the values; by default, that of the header (see
+            Data.from_files).
+        beam : Mapping, optional
+            The options of their beam (see Beam); by default, that of the
+            header.
         step, rpix, rval : float or Sequence of float, optional
             The world coordinates of the grid (see gridutils.Coords); by
             default, those of the header. Either rpix or rval can be given,
@@ -101,7 +109,8 @@ class DatasetSlitSpectra(Dataset):
             The dataset.
         """
         item, coords = Data.from_files(
-            data, mask, error, rpix, rval, rest, cls.spectral_axis, medium)
+            data, mask, error, rpix, rval, rest, cls.spectral_axis, medium,
+            unit, beam)
         return cls(item, **_detail.grid_coords(coords, step, rota, True))
 
     def dump(
