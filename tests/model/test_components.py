@@ -168,7 +168,7 @@ def test_thick_components_need_height_traits(name, message):
 
 
 @pytest.mark.parametrize('name, options, message', [
-    ('band_smdisk_thin', dict(zptraits=dict(type='nw_uniform')),
+    ('band_smdisk_thin', dict(zptraits=dict(type='nw_uniform', zmax=1)),
      "vertical distortion traits (zptraits) need density height traits"),
     ('lines_smdisk_thin',
      dict(kinematics=KINEMATICS | dict(vhtraits=dict(type='one'))),

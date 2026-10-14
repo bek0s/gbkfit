@@ -13,8 +13,9 @@ def kernel_consts_cases():
     Each type of trait, options for it, and the constants the kernels
     read from it (traits.hpp): the truncation and the node-wise switch of
     the density heights, the node-wise switch of the other
-    heights, the number of blobs of mixtures and the order of harmonics.
-    The other traits have none.
+    heights, the largest displacement of the vertical distortions (and
+    the order of a harmonic one), the number of blobs of mixtures and the
+    order of harmonics. The other traits have none.
     """
     parsers = dict(
         rpt=traits.rpt_parser, rht=traits.rht_parser,
@@ -27,6 +28,10 @@ def kernel_consts_cases():
                 options, consts = dict(zmax=5.0, rnodes=True), (5.0, True)
             elif kind in ('vht', 'dht'):
                 options, consts = dict(), (False,)
+            elif kind == 'zpt' and type_.endswith('harmonic'):
+                options, consts = dict(zmax=5.0, order=2), (5.0, 2)
+            elif kind == 'zpt':
+                options, consts = dict(zmax=5.0), (5.0,)
             elif type_.startswith('mixture'):
                 options, consts = dict(nblobs=3), (3,)
             elif type_.endswith('harmonic'):

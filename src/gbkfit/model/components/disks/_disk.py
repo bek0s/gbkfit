@@ -256,12 +256,15 @@ class Disk(abc.ABC):
         """
         Return the radius (arcsec) of the sphere around its centre that
         holds all its density, at any inclination: that of its last ring,
-        R, or with density height traits, sqrt(R^2 + zmax^2) of their
-        largest zmax (see RHTrait).
+        R, or with density height traits, sqrt(R^2 + Z^2), where Z is the
+        largest zmax of its density height traits (above its midplane) plus
+        those of its vertical distortion traits (the largest displacement
+        of its midplane; see RHTrait and ZPTrait).
         """
-        zmax = max(
+        height = max(
             (trait.zmax() for trait in self._traits['rht']), default=0.0)
-        return float(np.hypot(self._rnodes[-1], zmax))
+        displacement = sum(trait.zmax() for trait in self._traits['zpt'])
+        return float(np.hypot(self._rnodes[-1], height + displacement))
 
     def rstep(self) -> float:
         return self._rstep

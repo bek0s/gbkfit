@@ -123,8 +123,8 @@ constexpr T TRUNC_MASS_MIN = T{1e-3};
 
 // A distribution truncated to [xmin, xmax] and renormalised there; one
 // whose range holds less than TRUNC_MASS_MIN of it is none (e.g. a
-// vertical profile whose midplane is far from the heights it is truncated
-// to): its density is 0, and its random numbers are NaN
+// vertical profile far wider than the heights it is truncated to): its
+// density is 0, and its random numbers are NaN
 template<auto PDF, auto CDF, typename T, typename ...Ts> constexpr T
 _trunc_1d_pdf(T xmin, T xmax, T x, Ts ...args)
 {

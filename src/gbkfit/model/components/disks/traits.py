@@ -15,7 +15,7 @@ The kinds of traits, and how the traits of one kind combine:
 - dispersion (dpt, dht): the velocity dispersion; the absolute value of
   the sum of the polar traits, each times its height trait.
 - vertical distortion (zpt): the sum displaces the plane of the disk
-  along z.
+  (its midplane) along z, each within its zmax.
 - selection (spt): 1 where a trait selects the disk, 0 elsewhere; a part
   of the disk is kept if every trait selects it.
 
@@ -438,7 +438,8 @@ class Trait(parseutils.TypedSerializable, abc.ABC):
 
 class TraitFeatureZmax:
     """
-    The option zmax of a density height trait: a mixin.
+    The option zmax of a density height trait or a vertical distortion
+    trait: a mixin.
     """
 
     def dump(self) -> dict[str, Any]:
@@ -455,8 +456,8 @@ class TraitFeatureZmax:
 
     def zmax(self) -> float:
         """
-        Return the height above the plane of the galaxy within which the
-        density lies (arcsec).
+        Return its zmax (arcsec): a bound along z (see RHTrait and
+        ZPTrait).
         """
         return self._zmax
 
@@ -626,12 +627,12 @@ class RHTrait(TraitFeatureZmax, HTrait, abc.ABC):
     A density height trait: the probability density of the height of
     the density above the midplane, which integrates to 1.
 
-    The density lies within zmax of the plane of the galaxy (its option
-    zmax): the profile around the midplane, which vertical distortion
-    traits displace, is truncated there and renormalised, so that each
-    column keeps its density (none where less than 0.001 of the profile
-    is within zmax). So the depth axis of an observation can hold all of
-    it (see Depth).
+    The density lies within zmax of the midplane (its option zmax), which
+    vertical distortion traits displace: the profile is truncated there
+    and renormalised, so that each column keeps its density (none where
+    less than 0.001 of the profile is within zmax). With the zmax of the
+    vertical distortion traits, it bounds the disk along z, so that the
+    depth axis of an observation can hold all of it (see Depth).
     """
 
     def consts(self) -> tuple[float, ...]:
@@ -689,10 +690,14 @@ class DHTrait(HTrait, abc.ABC):
         return (self.rnodes(),)
 
 
-class ZPTrait(PTrait, abc.ABC):
+class ZPTrait(TraitFeatureZmax, PTrait, abc.ABC):
     """
     A vertical distortion polar trait: a displacement of the plane of the
-    disk along z.
+    disk (its midplane) along z, within zmax of the plane of the galaxy
+    (its option zmax): a larger one is limited to zmax (with extra outputs,
+    a warning says where). With the zmax of the density height traits, it
+    bounds the disk along z, so that the depth axis of an observation can
+    hold all of it (see Depth).
     """
 
 
@@ -1321,8 +1326,8 @@ class RHTraitUniform(RHTraitP1):
     Parameters
     ----------
     zmax : float
-        The height above the plane of the galaxy (arcsec) within which
-        the density lies (see RHTrait).
+        The height above the midplane (arcsec) within which the density
+        lies (see RHTrait).
     rnodes : bool, optional
         Whether its parameters have a value for each ring (e.g. the scale
         height of a flaring disk).
@@ -1357,8 +1362,8 @@ class RHTraitExponential(RHTraitP1):
     Parameters
     ----------
     zmax : float
-        The height above the plane of the galaxy (arcsec) within which
-        the density lies (see RHTrait).
+        The height above the midplane (arcsec) within which the density
+        lies (see RHTrait).
     rnodes : bool, optional
         Whether its parameters have a value for each ring (e.g. the scale
         height of a flaring disk).
@@ -1394,8 +1399,8 @@ class RHTraitGauss(RHTraitP1):
     Parameters
     ----------
     zmax : float
-        The height above the plane of the galaxy (arcsec) within which
-        the density lies (see RHTrait).
+        The height above the midplane (arcsec) within which the density
+        lies (see RHTrait).
     rnodes : bool, optional
         Whether its parameters have a value for each ring (e.g. the scale
         height of a flaring disk).
@@ -1431,8 +1436,8 @@ class RHTraitGGauss(RHTraitP2):
     Parameters
     ----------
     zmax : float
-        The height above the plane of the galaxy (arcsec) within which
-        the density lies (see RHTrait).
+        The height above the midplane (arcsec) within which the density
+        lies (see RHTrait).
     rnodes : bool, optional
         Whether its parameters have a value for each ring (e.g. the scale
         height of a flaring disk).
@@ -1476,8 +1481,8 @@ class RHTraitLorentz(RHTraitP1):
     Parameters
     ----------
     zmax : float
-        The height above the plane of the galaxy (arcsec) within which
-        the density lies (see RHTrait).
+        The height above the midplane (arcsec) within which the density
+        lies (see RHTrait).
     rnodes : bool, optional
         Whether its parameters have a value for each ring (e.g. the scale
         height of a flaring disk).
@@ -1513,8 +1518,8 @@ class RHTraitMoffat(RHTraitP2):
     Parameters
     ----------
     zmax : float
-        The height above the plane of the galaxy (arcsec) within which
-        the density lies (see RHTrait).
+        The height above the midplane (arcsec) within which the density
+        lies (see RHTrait).
     rnodes : bool, optional
         Whether its parameters have a value for each ring (e.g. the scale
         height of a flaring disk).
@@ -1552,8 +1557,8 @@ class RHTraitSech2(RHTraitP1):
     Parameters
     ----------
     zmax : float
-        The height above the plane of the galaxy (arcsec) within which
-        the density lies (see RHTrait).
+        The height above the midplane (arcsec) within which the density
+        lies (see RHTrait).
     rnodes : bool, optional
         Whether its parameters have a value for each ring (e.g. the scale
         height of a flaring disk).
@@ -2950,6 +2955,8 @@ class ZPTraitNWUniform(TraitFeatureSampling, ZPTrait):
 
     Parameters
     ----------
+    zmax : float
+        The largest displacement (arcsec; see ZPTrait).
     sampling : str, optional
         Where the values of its node-wise parameters are given: 'rnodes',
         at the radii of the rings, or 'subrings', at the rings it is
@@ -2971,8 +2978,12 @@ class ZPTraitNWUniform(TraitFeatureSampling, ZPTrait):
 
     def __init__(
             self,
+            zmax: float,
             sampling: str = SAMPLING_DEFAULT):
-        super().__init__(sampling=sampling)
+        super().__init__(zmax=zmax, sampling=sampling)
+
+    def consts(self) -> tuple[float, ...]:
+        return (self.zmax(),)
 
     def params_rnw(self, nnodes: int) -> dict[str, ParamDesc]:
         return dict(a=ParamVectorDesc(nnodes))
@@ -2991,6 +3002,8 @@ class ZPTraitNWHarmonic(
     order : int
         The order m of the harmonic: the pattern repeats every 360 / m
         degrees, and order 0 is an axisymmetric a(r).
+    zmax : float
+        The largest displacement (arcsec; see ZPTrait).
     sampling : str, optional
         Where the values of its node-wise parameters are given: 'rnodes',
         at the radii of the rings, or 'subrings', at the rings it is
@@ -3013,8 +3026,12 @@ class ZPTraitNWHarmonic(
     def __init__(
             self,
             order: int,
+            zmax: float,
             sampling: str = SAMPLING_DEFAULT):
-        super().__init__(order=order, sampling=sampling)
+        super().__init__(order=order, zmax=zmax, sampling=sampling)
+
+    def consts(self) -> tuple[float, ...]:
+        return (self.zmax(), self.order())
 
     def params_rnw(self, nnodes: int) -> dict[str, ParamDesc]:
         return _ptrait_params_nw_harmonic(self.order(), nnodes)
