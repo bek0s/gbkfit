@@ -17,11 +17,12 @@ import astropy.stats
 import astropy.table
 import astropy.units
 import astropy.wcs
+import astropy.wcs.utils
 import numpy as np
 import numpy.typing as npt
 import skimage.measure
 
-from gbkfit.utils import fitsutils, gridutils
+from gbkfit.utils import fitsutils, gridutils, unitutils
 from gbkfit.utils.parseutils import ConfigError
 
 
@@ -34,6 +35,7 @@ __all__ = [
     'largest_regions_mask',
     'muse_lsf_table',
     'muse_psf_table',
+    'pixel_fluxes',
     'range_mask',
     'sigma_clip_mask'
 ]
@@ -540,6 +542,68 @@ def bin_values(index: np.ndarray, nbins: int, data: np.ndarray) -> np.ndarray:
                 f"hold the value of each bin on its pixels")
         values[i] = pixels[0]
     return values
+
+
+def pixel_fluxes(
+        filename: str, nchannels: int
+) -> tuple[float | np.ndarray, astropy.units.UnitBase] | None:
+    """
+    Return how the values of the pixels of a FITS file (its first HDU, in
+    the unit of its header, BUNIT) become their fluxes: a factor, and the
+    unit of the fluxes. Values per pixel (e.g. of a spaxel) are fluxes
+    (factor 1); per solid angle, they are times that of a pixel; per beam
+    (e.g. Jy/beam), times that of a pixel over that of the Gaussian beam,
+    pi / (4 ln 2) bmaj bmin, of the header (BMAJ and BMIN), or of each
+    channel of a cube of CASA (its table BEAMS; a factor for each of its
+    nchannels channels).
+
+    Parameters
+    ----------
+    filename : str
+        The file.
+    nchannels : int
+        The number of channels of the data (of a cube).
+
+    Returns
+    -------
+    tuple of float or np.ndarray and astropy.units.UnitBase, or None
+        The factor (one, or one for each channel) and the unit of the
+        fluxes; None if the header has no unit.
+
+    Raises
+    ------
+    ConfigError
+        If the unit is not a unit, or is per beam and the file has no
+        beam, or a beam for another number of channels.
+    """
+    u = astropy.units
+    text = fitsutils.read_unit(filename)
+    if text is None:
+        return None
+    unit = unitutils.parse_unit(text)
+    spatial = unitutils.spatial_unit(unit)
+    if spatial == u.dimensionless_unscaled:
+        return 1.0, unit
+    wcs = astropy.wcs.WCS(fits.getheader(filename)).celestial
+    pixel = astropy.wcs.utils.proj_plane_pixel_area(wcs) * u.deg ** 2
+    if spatial == u.sr:
+        # (the angles of the unit, e.g. 1/arcsec^2)
+        angles = u.dimensionless_unscaled
+        for base, power in zip(unit.bases, unit.powers):
+            if base.physical_type in ('solid angle', 'angle'):
+                angles = angles * base ** power
+        return float((pixel * angles).decompose()), unit / angles
+    beam = fitsutils.read_beam(filename)
+    if beam is None:
+        raise ConfigError(
+            f"{filename}: the data are per beam, but have no beam (BMAJ and "
+            f"BMIN in the header, or a table BEAMS)")
+    area = np.pi / (4 * np.log(2)) * np.multiply(beam['bmaj'], beam['bmin'])
+    if np.ndim(area) and len(area) != nchannels:
+        raise ConfigError(
+            f"{filename}: the data have {nchannels} channels, but beams for "
+            f"{len(area)}")
+    return pixel.to_value(u.arcsec ** 2) / area, unit * u.beam
 
 
 def bin_spectra(

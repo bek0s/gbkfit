@@ -13,7 +13,8 @@ from gbkfit.utils.parseutils import ConfigError
 
 __all__ = [
     'format_unit',
-    'parse_unit'
+    'parse_unit',
+    'spatial_unit'
 ]
 
 
@@ -76,6 +77,20 @@ def format_unit(unit: astropy.units.UnitBase) -> str:
         name = base.to_string()
         terms.append(name if power == 1 else f'{name}{power:g}')
     return ' '.join(terms)
+
+
+def spatial_unit(unit: astropy.units.UnitBase) -> astropy.units.UnitBase:
+    """
+    Return what light in a unit is per: a beam (e.g. Jy/beam), a solid
+    angle (sr; e.g. MJy/sr, erg/s/cm2/arcsec2), or neither (dimensionless):
+    a pixel, or a region (e.g. 1e-20 erg/s/cm2/Angstrom of a spaxel).
+    """
+    if astropy.units.beam in unit.bases:
+        return astropy.units.beam
+    if any(base.physical_type in ('solid angle', 'angle')
+           for base in unit.bases):
+        return astropy.units.sr
+    return astropy.units.dimensionless_unscaled
 
 
 def _product(text: str) -> astropy.units.UnitBase:
