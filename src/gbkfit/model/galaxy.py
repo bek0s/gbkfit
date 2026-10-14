@@ -65,9 +65,11 @@ class Galaxy(parseutils.Serializable):
         Its distance, which converts arcsec to kpc for its mass (required
         with mass, and used by it only).
     redshift : float, optional
-        Its redshift, for what it emits and absorbs in its rest frame (the
-        dust of an image absorbs at the effective wavelength of its band
-        over 1 + redshift); 0 by default.
+        Its one redshift: for what it emits and absorbs in its rest frame
+        (the dust of an image absorbs at the effective wavelength of its
+        band over 1 + redshift), and for its distance by redshift (see
+        DistanceRedshift); the systemic velocity of its components is the
+        velocity offset from it. 0 by default.
     depth : bool, optional
         Whether it has a position along the line of sight: the parameter
         'depth' (arcsec, away from the viewer; relative to the other
@@ -267,7 +269,8 @@ class Galaxy(parseutils.Serializable):
         GravityPlan
             The plan.
         """
-        return self._component_set.plan_gravity(self._driver)
+        return self._component_set.plan_gravity(
+            self._driver, self._redshift)
 
     def plan(
             self,

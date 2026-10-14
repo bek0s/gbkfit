@@ -4,9 +4,10 @@ epoch of the quantities of the galaxy that depend on the cosmology (e.g.
 the overdensities that define the mass of a halo).
 
 Inside, the distance is always the angular diameter distance. It is
-given directly (as a parameter, in Mpc), or by a redshift (a parameter)
-and a cosmology, which give it. A redshift never follows from a given
-distance: for nearby galaxies, peculiar velocities make it wrong.
+given directly (as a parameter, in Mpc), or by the redshift of the
+galaxy (see Galaxy; or a fixed one of its own) and a cosmology, which
+give it. A redshift never follows from a given distance: for nearby
+galaxies, peculiar velocities make it wrong.
 """
 
 import abc
@@ -109,7 +110,7 @@ class Distance(parseutils.TypedSerializable, abc.ABC):
         pass
 
     @abc.abstractmethod
-    def kpc_per_arcsec(self, params: ParamValues) -> float:
+    def kpc_per_arcsec(self, params: ParamValues, redshift: float) -> float:
         """
         Return the length (kpc) of an arcsec at the galaxy.
 
@@ -117,6 +118,8 @@ class Distance(parseutils.TypedSerializable, abc.ABC):
         ----------
         params : ParamValues
             The values of its parameters (and possibly others), by name.
+        redshift : float
+            The redshift of the galaxy (see Galaxy).
 
         Returns
         -------
@@ -126,7 +129,7 @@ class Distance(parseutils.TypedSerializable, abc.ABC):
         pass
 
     @abc.abstractmethod
-    def epoch(self, params: ParamValues) -> float:
+    def epoch(self, params: ParamValues, redshift: float) -> float:
         """
         Return the redshift of the epoch of the galaxy, at which the
         quantities that depend on the cosmology are evaluated.
@@ -135,6 +138,8 @@ class Distance(parseutils.TypedSerializable, abc.ABC):
         ----------
         params : ParamValues
             The values of its parameters (and possibly others), by name.
+        redshift : float
+            The redshift of the galaxy (see Galaxy).
 
         Returns
         -------
@@ -143,19 +148,20 @@ class Distance(parseutils.TypedSerializable, abc.ABC):
         """
         pass
 
-    def critical_density(self, params: ParamValues) -> float:
+    def critical_density(self, params: ParamValues, redshift: float) -> float:
         """
         Return the critical density of the universe (Msun/kpc^3) at the
         epoch of the galaxy (see epoch for the arguments).
         """
-        return _critical_density(self._cosmology_name, self.epoch(params))
+        return _critical_density(
+            self._cosmology_name, self.epoch(params, redshift))
 
-    def omega_m(self, params: ParamValues) -> float:
+    def omega_m(self, params: ParamValues, redshift: float) -> float:
         """
         Return the matter density parameter at the epoch of the galaxy
         (see epoch for the arguments).
         """
-        return _omega_m(self._cosmology_name, self.epoch(params))
+        return _omega_m(self._cosmology_name, self.epoch(params, redshift))
 
 
 class DistanceDirect(Distance):
@@ -196,45 +202,68 @@ class DistanceDirect(Distance):
             desc="the angular diameter distance of the galaxy (Mpc)",
             minimum=0))
 
-    def kpc_per_arcsec(self, params: ParamValues) -> float:
+    def kpc_per_arcsec(self, params: ParamValues, redshift: float) -> float:
         return float(params['distance']) * KPC_PER_ARCSEC_MPC
 
-    def epoch(self, params: ParamValues) -> float:
+    def epoch(self, params: ParamValues, redshift: float) -> float:
         return self._epoch
 
 
 class DistanceRedshift(Distance):
     """
-    A distance given by a redshift: its parameter is the redshift of the
-    galaxy, which gives the angular diameter distance in the cosmology,
-    and is the epoch.
+    A distance given by a redshift: the angular diameter distance in the
+    cosmology at the redshift of the galaxy (see Galaxy), which is also
+    the epoch; or at the given redshift, for the distance only (e.g. one
+    corrected for the motion of the galaxy, whose lines show its
+    heliocentric redshift). It has no parameters: the galaxy has one
+    redshift, and the velocity offset is the systemic velocity of its
+    components (vsys).
 
     Parameters
     ----------
+    redshift : float, optional
+        The redshift of the distance and the epoch, if not that of the
+        galaxy.
     cosmology : str, optional
         The cosmology (see Distance).
 
     Raises
     ------
     ConfigError
-        If the cosmology is unknown.
+        If the redshift is negative, or the cosmology is unknown.
     """
 
     @staticmethod
     def type() -> str:
         return 'redshift'
 
-    def pdescs(self) -> dict[str, ParamScalarDesc]:
-        return dict(redshift=ParamScalarDesc(
-            desc="the redshift of the galaxy", minimum=0))
+    def dump(self) -> dict[str, Any]:
+        info = super().dump()
+        if self._redshift is not None:
+            info.update(redshift=self._redshift)
+        return info
 
-    def kpc_per_arcsec(self, params: ParamValues) -> float:
+    def __init__(
+            self,
+            redshift: float | None = None,
+            cosmology: str = COSMOLOGY_DEFAULT
+    ):
+        super().__init__(cosmology)
+        if redshift is not None and not redshift >= 0:
+            raise ConfigError(
+                f"redshift cannot be negative; it is {redshift}")
+        self._redshift = None if redshift is None else float(redshift)
+
+    def pdescs(self) -> dict[str, ParamScalarDesc]:
+        return {}
+
+    def kpc_per_arcsec(self, params: ParamValues, redshift: float) -> float:
         distance = _angular_diameter_distance(
-            self.cosmology_name(), float(params['redshift']))
+            self.cosmology_name(), self.epoch(params, redshift))
         return distance * KPC_PER_ARCSEC_MPC
 
-    def epoch(self, params: ParamValues) -> float:
-        return float(params['redshift'])
+    def epoch(self, params: ParamValues, redshift: float) -> float:
+        return self._redshift if self._redshift is not None else redshift
 
 
 distance_parser = parseutils.TypedParser(Distance, [

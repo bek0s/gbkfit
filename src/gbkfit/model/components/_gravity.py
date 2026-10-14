@@ -45,15 +45,23 @@ class GravityPlan:
         The components of the galaxy, its distance and its mass.
     driver : Driver
         The driver where the disks sample their profiles.
+    redshift : float
+        The redshift of the galaxy (for its distance, see Distance).
     """
 
-    def __init__(self, component_set: 'ComponentSet', driver: Driver):
+    def __init__(
+            self,
+            component_set: 'ComponentSet',
+            driver: Driver,
+            redshift: float
+    ):
         components = component_set.components()
         mass_model = component_set.mass_model()
         followed = set() if mass_model is None else {
             name for mass_component in mass_model.components()
             for name in mass_component.followed_components()}
         self._component_set = component_set
+        self._redshift = redshift
         self._moved = tuple(
             i for i, cmp in enumerate(components)
             if cmp.circular_velocity_params())
@@ -106,9 +114,11 @@ class GravityPlan:
         components = component_set.components()
         distance = component_set.distance()
         own = {i: self._component_params(i, params) for i in self._disk_plans}
-        kpc_per_arcsec = distance.kpc_per_arcsec(params)
+        redshift = self._redshift
+        kpc_per_arcsec = distance.kpc_per_arcsec(params, redshift)
         context = MassContext(
-            distance.critical_density(params), distance.omega_m(params), {
+            distance.critical_density(params, redshift),
+            distance.omega_m(params, redshift), {
                 components[i].name(): DiskDensity(
                     components[i].density_disk(), self._disk_plans[i],
                     own[i], kpc_per_arcsec)
