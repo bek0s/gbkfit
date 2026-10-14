@@ -5,7 +5,8 @@ import numpy as np
 import pytest
 
 from gbkfit.model.components._units import (
-    DataUnit, LineFactors, band_factor, flux_per_area, line_factors)
+    DataUnit, LineFactors, band_factor, flux_per_area, line_factors,
+    mass_per_unit)
 from gbkfit.model.components.lines import Band
 from gbkfit.utils import gridutils
 from gbkfit.utils.parseutils import ConfigError
@@ -187,3 +188,21 @@ def test_regions_are_fluxes():
     assert flux_per_area(u.Jy) == u.Jy / u.arcsec ** 2
     with pytest.raises(ConfigError, match="are fluxes"):
         flux_per_area(parse_unit('Jy/beam'))
+
+
+@pytest.mark.parametrize('info, expected', [
+    # (HI: its own mass, 1.249e20 H atoms per cm^2 in 1 Msun/pc^2, so
+    # 1.823e18 / 1.249e20 Msun/pc^2 per K km/s; others: 1 Msun/pc^2)
+    (dict(type='lines', lines=['hi21'], unit='Msun/pc2'), 1e6),
+    (dict(type='lines', lines=['hi21'], unit='K km/s'),
+     1.823e18 / 1.249e20 * 1e6),
+    (dict(type='lines', lines=['co10'], unit='K km/s'), 1e6),
+    (dict(type='band', unit='Jy/arcsec2'), 1e6),
+    (dict(type='lines'), None)])
+def test_the_mass_of_a_unit_of_light(info, expected):
+    # Msun/kpc^2 per unit of the density, for the mass that follows it
+    # (to 0.2%: the textbook's 1.249e20 rounds 1.2477e20, of the masses
+    # of the Sun and of the H atom today)
+    mass = mass_per_unit(emission(info))
+    assert mass == (None if expected is None
+                    else pytest.approx(expected, rel=2e-3))

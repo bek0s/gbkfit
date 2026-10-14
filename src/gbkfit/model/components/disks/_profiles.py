@@ -184,6 +184,9 @@ class DiskDensity:
         left out, since its density does not depend on them.
     kpc_per_arcsec : float
         The length of an arcsec in the disk.
+    mass_per_unit : float, optional
+        The mass surface density (Msun/kpc^2) of one unit of the density,
+        if it has a physical unit (see _units.mass_per_unit).
     """
 
     def __init__(
@@ -191,12 +194,14 @@ class DiskDensity:
             disk: Disk,
             plan: DiskPlan,
             params: ParamValues,
-            kpc_per_arcsec: float
+            kpc_per_arcsec: float,
+            mass_per_unit: float | None = None
     ):
         self._disk = disk
         self._plan = plan
         self._params = _with_given(disk, params)
         self._kpc_per_arcsec = kpc_per_arcsec
+        self._mass_per_unit = mass_per_unit
 
     def knots(self, rstep: float | None) -> np.ndarray:
         """
@@ -210,6 +215,13 @@ class DiskDensity:
     def thick(self) -> bool:
         """Check whether it has density height traits."""
         return bool(self._disk.traits('rht'))
+
+    def mass_per_unit(self) -> float | None:
+        """
+        Return the mass surface density (Msun/kpc^2) of one unit of the
+        density, if it has a physical unit; None without one.
+        """
+        return self._mass_per_unit
 
     def surface_densities(self, R: np.ndarray) -> np.ndarray:
         """

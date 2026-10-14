@@ -292,8 +292,8 @@ class MassTraitDisk(MassComponent):
     """
     A disk whose mass follows the density of a disk component of its
     galaxy (light, the optical depth of dust, ...), never the data:
-    upsilon (Msun/kpc^2 per unit of the density) times the azimuthal mean
-    of the density of the component, as it evaluates it (its density
+    upsilon times the azimuthal mean of the density of the component,
+    as it evaluates it (its density
     polar traits, where its selection traits keep it), at its subnodes
     and linear between them (exactly its node-wise traits), or at those
     of rings of width rstep. Vertically, as the component (its density
@@ -308,6 +308,13 @@ class MassTraitDisk(MassComponent):
     of the others take at least 128 azimuths, more until they converge:
     structure narrower than their spacing (e.g. tiny blobs) can be
     missed.
+
+    upsilon is the mass per unit of the density of the component: without
+    a unit of its emission, in Msun/kpc^2 per unit; with one, of HI (its
+    first line hi21), the mass of gas per mass of HI, of which the density
+    gives the exact mass (1.33 with helium; see _units.mass_per_unit);
+    with another unit, in Msun/pc^2 per unit (e.g. alpha_CO in Msun/pc^2
+    per K km/s, or a mass-to-light ratio).
 
     Parameters
     ----------
@@ -370,8 +377,8 @@ class MassTraitDisk(MassComponent):
 
     def pdescs(self) -> dict[str, ParamDesc]:
         pdescs = dict(upsilon=ParamScalarDesc(
-            desc="the mass per unit of the density of the component "
-                 "(Msun/kpc^2)", minimum=0))
+            desc="the mass per unit of the density of the component (see "
+                 "MassTraitDisk)", minimum=0))
         if self._vertical in VERTICAL_LAWS and self._vertical != 'thin':
             pdescs['hz'] = ParamScalarDesc(
                 desc="the scale height (kpc)", minimum=0)
@@ -391,6 +398,8 @@ class MassTraitDisk(MassComponent):
         density = context.densities[self._component]
         knots = density.knots(self._rstep)
         upsilon = params['upsilon']
+        if (mass := density.mass_per_unit()) is not None:
+            upsilon = upsilon * mass
         R = np.asarray(R, dtype=float)
         if self._vertical == 'thin' \
                 or self._vertical == 'component' and not density.thick():

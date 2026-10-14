@@ -18,6 +18,7 @@ from .lines import Band, air_refractive_index
 
 if TYPE_CHECKING:
     from .base import Component
+    from .roles import Emission
 
 
 __all__ = [
@@ -31,7 +32,8 @@ __all__ = [
     'flux_per_area',
     'is_hi_unit',
     'line_factor',
-    'line_factors'
+    'line_factors',
+    'mass_per_unit'
 ]
 
 
@@ -161,6 +163,35 @@ def flux_per_area(unit: u.UnitBase) -> u.UnitBase:
             f"unit is one of flux (e.g. 'Jy', '1e-20 erg/s/cm2/Angstrom', "
             f"'Jy km/s'); {unitutils.format_unit(unit)!r} is not")
     return unit / u.arcsec ** 2
+
+
+def mass_per_unit(emission: 'Emission | None') -> float | None:
+    """
+    Return the mass surface density (Msun/kpc^2) of one unit of the
+    density of a component (see disks.MassTraitDisk), if its emission has
+    a unit: for HI (its first line hi21), that of the HI of one unit, by
+    N_HI = 1.823e18 cm^-2 per K km/s (at the rest frequency of the line,
+    for units of flux density or energy; the redshift is not taken), so
+    that upsilon is the mass of gas per mass of HI (1.33 with helium);
+    for other units 1 Msun/pc^2, so that upsilon is in Msun/pc^2 per unit
+    (e.g. alpha_CO per K km/s, or a mass-to-light ratio). None without a
+    unit.
+    """
+    # (imported here: roles imports this module)
+    from .roles import LineEmission
+    unit = None if emission is None else emission.unit()
+    if unit is None:
+        return None
+    per_kpc2 = u.Msun / u.kpc ** 2
+    if not isinstance(emission, LineEmission) \
+            or emission.lines().names()[:1] != (HI_LINE,):
+        return (1 * u.Msun / u.pc ** 2).to_value(per_kpc2)
+    frequency = emission.lines().lines()[0].rest().to(u.Hz, u.spectral())
+    frame = _Axis(frequency).frame(0.0, 1.0)
+    intensity = _axis_integral(1 * unit, frame) / (u.km / u.s)
+    temperature = intensity.to(u.K, u.brightness_temperature(frequency))
+    column = temperature * (u.km / u.s) * _HI_COLUMN
+    return (column * _H_MASS).to_value(per_kpc2)
 
 
 class DataUnit(NamedTuple):
