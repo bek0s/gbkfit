@@ -82,11 +82,14 @@ def format_unit(unit: astropy.units.UnitBase) -> str:
 def spatial_unit(unit: astropy.units.UnitBase) -> astropy.units.UnitBase:
     """
     Return what light in a unit is per: a beam (e.g. Jy/beam), a solid
-    angle (sr; e.g. MJy/sr, erg/s/cm2/arcsec2), or neither (dimensionless):
-    a pixel, or a region (e.g. 1e-20 erg/s/cm2/Angstrom of a spaxel).
+    angle (sr; e.g. MJy/sr, erg/s/cm2/arcsec2), a pixel named so (pix;
+    e.g. Jy/pixel), or neither (dimensionless): a pixel, or a region (e.g.
+    1e-20 erg/s/cm2/Angstrom of a spaxel).
     """
     if astropy.units.beam in unit.bases:
         return astropy.units.beam
+    if astropy.units.pix in unit.bases:
+        return astropy.units.pix
     if any(base.physical_type in ('solid angle', 'angle')
            for base in unit.bases):
         return astropy.units.sr
