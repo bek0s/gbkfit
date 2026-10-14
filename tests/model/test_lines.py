@@ -116,6 +116,29 @@ def test_lines_in_vacuum_on_an_axis_in_air(medium, offset):
     spectral = gridutils.make_grid(
         (41,), 10, spectral_axis=0, rest='6562.80 Angstrom', medium=medium)
     lines = Lines([LineCatalogue().line('halpha')])
-    (line_offset, scale, _), = lines.values(spectral)
+    (line_offset, scale, _), = lines.values(spectral, 0.0)
     assert line_offset == pytest.approx(offset, abs=0.2)
     assert scale == pytest.approx(1, abs=3e-4)
+
+
+@pytest.mark.parametrize('rest, k', [(6564.61 * 2.5, 1.0), (6564.61, 2.5)])
+def test_the_redshift_places_the_lines(rest, k):
+    # A galaxy at z = 1.5 on an axis of the rest of Halpha as observed (k =
+    # 1) or in its frame (k = 1 + z): Halpha is at 0 or at c z (optical
+    # velocities), [NII] 6583 is 943.6 km/s of the galaxy above it, and a
+    # km/s of the galaxy spans k km/s of the axis
+    from gbkfit.model import LineCatalogue
+    from gbkfit.model.components.lines import Lines
+    from gbkfit.utils import gridutils
+    catalogue = LineCatalogue()
+    spectral = gridutils.make_grid(
+        (41,), 10, spectral_axis=0, rest=f'{rest} Angstrom')
+    (halpha, halpha_scale, _), (nii, nii_scale, _) = Lines(
+        [catalogue.line('halpha'), catalogue.line('nii6583')]).values(
+        spectral, 1.5)
+    c = 299792.458
+    assert halpha == pytest.approx(c * (k - 1), abs=1e-6)
+    assert halpha_scale == pytest.approx(k, rel=1e-12)
+    assert (nii - halpha) / k == pytest.approx(
+        c * (6585.27 / 6564.61 - 1), rel=1e-9)
+    assert nii_scale == pytest.approx(k * 6585.27 / 6564.61, rel=1e-12)

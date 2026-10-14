@@ -262,15 +262,16 @@ class ComponentSet:
             lines: tuple[str, ...] | None,
             band: Band | None,
             data_unit: DataUnit | None,
+            redshift: float,
             smoothing: float | None
     ) -> 'ComponentSetPlan':
         """
-        Plan the evaluation of the components on a driver and dtype (see
-        ComponentSetPlan).
+        Plan the evaluation of the components, of a galaxy of the given
+        redshift, on a driver and dtype (see ComponentSetPlan).
         """
         return ComponentSetPlan(
             self, driver, grid, spectral, depth, dtype, emitters, cubes,
-            lines, band, data_unit, smoothing)
+            lines, band, data_unit, redshift, smoothing)
 
 
 class ComponentSetPlan:
@@ -298,11 +299,12 @@ class ComponentSetPlan:
             lines: tuple[str, ...] | None,
             band: Band | None,
             data_unit: DataUnit | None,
+            redshift: float,
             smoothing: float | None
     ):
         plans = ComponentPlans(
             component_set, driver, grid, spectral, depth, dtype, emitters,
-            cubes, lines, band, data_unit)
+            cubes, lines, band, data_unit, redshift)
         self._plans = plans
         self._depth = depth
         self._smoothing = smoothing

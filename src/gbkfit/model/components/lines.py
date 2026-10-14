@@ -276,9 +276,9 @@ class Lines:
     The emission lines of a spectral component. Without lines, it has one
     line at the velocity of the spectral axis, whatever the line is. With
     lines, each is at its place on the spectral axis, whose velocities
-    refer to a rest (see gridutils.Coords), and the flux of each line
-    after the first, relative to the first, is a parameter
-    ('{name}_ratio').
+    refer to a rest (see gridutils.Coords), at the redshift of the galaxy
+    of the component, and the flux of each line after the first, relative
+    to the first, is a parameter ('{name}_ratio').
 
     Parameters
     ----------
@@ -347,26 +347,36 @@ class Lines:
         """
         return None if index == 0 else f'{self.names()[index]}_ratio'
 
-    def values(self, spectral: gridutils.Grid) -> np.ndarray:
+    def values(
+            self, spectral: gridutils.Grid, redshift: float
+    ) -> np.ndarray:
         """
         Return the offset, scale and flux of each line on a spectral axis
         (a grid of one axis; an array of shape (nlines, 3); see
-        DiskPlan.evaluate), such that a line of velocity v is at offset +
-        scale * v on the axis, with a flux of 1 (the ratios are
-        parameters).
+        DiskPlan.evaluate), of a component of a galaxy of the given
+        redshift, such that a line of velocity v (in the frame of the
+        galaxy, e.g. the systemic velocity of the component) is at offset
+        + scale * v on the axis, with a flux of 1 (the ratios are
+        parameters). One line without a name is at the velocity of the
+        axis (offset 0, scale 1), whatever the redshift.
 
         With optical velocities (a rest wavelength), a line of rest
-        wavelength w at velocity v is at w (1 + v / c), which is at the
-        velocity c (k - 1) + k v of the axis, where k is w over the rest of
-        the axis. With radio velocities (a rest frequency), a line of rest
-        frequency f at velocity v is at f (1 - v / c), which is at the
-        velocity c (1 - k) + k v, where k is f over the rest.
+        wavelength w at velocity v is at w (1 + z) (1 + v / c), which is
+        at the velocity c (k - 1) + k v of the axis, where k is w (1 + z)
+        over the rest of the axis. With radio velocities (a rest
+        frequency), a line of rest frequency f at velocity v is at f / (1
+        + z) (1 - v / c), which is at the velocity c (1 - k) + k v, where k
+        is f / (1 + z) over the rest. The rest of the axis can be that of
+        a line in the frame of the galaxy (k = 1 + z) or as observed (k
+        = 1): its velocities are then near c z or near 0, and those of the
+        galaxy are the same.
 
         The rest wavelengths of the lines are in vacuum. If those of the
-        axis are in air (see gridutils.Coords), w is that of each line in
-        air: divided by the refractive index of air at the wavelength (in
-        vacuum) where the line is at the velocity of the centre of the
-        axis. (The index changes by less than 1e-7 across 2000 km/s.)
+        axis are in air (see gridutils.Coords), w (1 + z) is that of each
+        line in air: divided by the refractive index of air at its
+        wavelength (in vacuum), with the galaxy at the velocity at which
+        its first line is at the centre of the axis. (The index changes by
+        less than 1e-7 across 2000 km/s.)
         """
         if self._lines is None:
             return np.array([[0.0, 1.0, 1.0]])
@@ -379,20 +389,23 @@ class Lines:
                 "rest option of the observable (spec_rest for moments and "
                 "spectra in regions)")
         optical = rest.unit == astropy.units.m
-        air = spectral.coords.medium == 'air'
-        centre = spectral.zero()[0] \
-            + (spectral.size[0] - 1) / 2 * spectral.coords.step[0]
-        values = []
-        for line in self._lines:
-            ratio = float(line.rest().to_value(
-                rest.unit, astropy.units.spectral()) / rest.value)
-            if air:
-                wavelength = line.rest().to_value(
+        shift = 1 + redshift if optical else 1 / (1 + redshift)
+        ratios = [
+            float(line.rest().to_value(rest.unit, astropy.units.spectral())
+                  / rest.value) * shift
+            for line in self._lines]
+        if spectral.coords.medium == 'air':
+            centre = spectral.zero()[0] \
+                + (spectral.size[0] - 1) / 2 * spectral.coords.step[0]
+            velocity = (centre - _C * (ratios[0] - 1)) / ratios[0]
+            ratios = [
+                ratio / air_refractive_index(line.rest().to_value(
                     astropy.units.m, astropy.units.spectral())
-                ratio /= air_refractive_index(wavelength * (1 + centre / _C))
-            offset = _C * (ratio - 1) if optical else _C * (1 - ratio)
-            values.append((offset, ratio, 1.0))
-        return np.array(values)
+                    * (1 + redshift) * (1 + velocity / _C))
+                for ratio, line in zip(ratios, self._lines)]
+        return np.array([
+            (_C * (ratio - 1) if optical else _C * (1 - ratio), ratio, 1.0)
+            for ratio in ratios])
 
 
 class Bands:
