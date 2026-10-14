@@ -173,6 +173,15 @@ class Observable(parseutils.TypedSerializable, abc.ABC):
         """Return the names of the data items (e.g. 'spectra')."""
         pass
 
+    @abc.abstractmethod
+    def model_can_lack_values(self) -> bool:
+        """
+        Check whether its model can lack values (NaN) where the data have
+        some (e.g. the velocity of a spectrum below its mask_cutoff): the
+        likelihood then needs a residual for them (see LikelihoodGaussian).
+        """
+        pass
+
     def check_instrument(self, instrument: Instrument) -> None:
         """
         Check the instrument that the observable is seen through.

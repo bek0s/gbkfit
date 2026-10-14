@@ -97,7 +97,10 @@ def test_a_model_without_values_where_the_data_have_some_pays(driver):
     # no velocity) where the data have some: its moment 0 there is 0, and
     # its moments 1 and 2 count as misses of 3 errors (they counted 0)
     def group(observable, dataset=None):
-        observation = Observation(observable, Flat(), driver, data=dataset)
+        likelihood = None if dataset is None \
+            else LikelihoodGaussian(missing_residual=3)
+        observation = Observation(
+            observable, Flat(), driver, data=dataset, likelihood=likelihood)
         return ObservationGroup(galaxy_parser.load(KINEMATICS), observation)
     image = group(observable_parser.load(dict(
         type='pixel_moments', size=[24, 24], orders=[0, 1, 2])))
