@@ -364,18 +364,30 @@ def test_mass_model_adds_its_components():
 def test_distances_give_the_length_of_an_arcsec():
     # At 10 Mpc, an arcsec is 48.48 pc; by a redshift, the angular
     # diameter distance of the cosmology; a distance sets no redshift
+    # The redshift of the galaxy (0.5 here) gives the distance of
+    # DistanceRedshift, unless it has its own (for the distance only)
     direct = DistanceDirect()
     assert list(direct.pdescs()) == ['distance']
-    assert direct.kpc_per_arcsec(dict(distance=10)) \
+    assert direct.kpc_per_arcsec(dict(distance=10), 0.5) \
         == pytest.approx(0.0484813681)
-    assert direct.epoch(dict(distance=10)) == 0
-    by_redshift = DistanceRedshift('WMAP9')
-    expected = astropy.cosmology.WMAP9.angular_diameter_distance(0.5)
-    assert by_redshift.kpc_per_arcsec(dict(redshift=0.5)) == pytest.approx(
-        expected.to_value('kpc') * np.pi / (180 * 3600))
-    assert by_redshift.epoch(dict(redshift=0.5)) == 0.5
+    assert direct.epoch(dict(distance=10), 0.5) == 0
+    by_redshift = DistanceRedshift(cosmology='WMAP9')
+    assert by_redshift.pdescs() == {}
+
+    def kpc_per_arcsec(redshift):
+        distance = astropy.cosmology.WMAP9.angular_diameter_distance(redshift)
+        return distance.to_value('kpc') * np.pi / (180 * 3600)
+    assert by_redshift.kpc_per_arcsec({}, 0.5) == pytest.approx(
+        kpc_per_arcsec(0.5))
+    assert by_redshift.epoch({}, 0.5) == 0.5
+    own = DistanceRedshift(redshift=0.4, cosmology='WMAP9')
+    assert own.kpc_per_arcsec({}, 0.5) == pytest.approx(kpc_per_arcsec(0.4))
+    assert own.epoch({}, 0.5) == 0.4
+    assert own.dump()['redshift'] == 0.4
+    with pytest.raises(ConfigError, match="redshift cannot be negative"):
+        DistanceRedshift(redshift=-1)
     with pytest.raises(ConfigError, match="cosmology must be one of"):
-        DistanceRedshift('Planck99')
+        DistanceRedshift(cosmology='Planck99')
     with pytest.raises(ConfigError, match="epoch cannot be negative"):
         DistanceDirect(epoch=-1)
 
