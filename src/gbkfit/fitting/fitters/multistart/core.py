@@ -27,23 +27,25 @@ __all__ = [
 
 class FitterMultiStart(Fitter):
     """
-    A local fitter (e.g. least squares) run from many starting points:
-    the given values, and points spread over the bounds (a scrambled
-    Sobol sequence). The distinct minima it finds are the solutions,
-    best first, each with its own uncertainty.
+    An optimizer (e.g. least squares, CMA-ES) run from many starting
+    points: the given values, and points spread over the bounds (a
+    scrambled Sobol sequence). The distinct minima it finds are the
+    solutions, best first, each with its own uncertainty.
 
     Two minima are the same if they differ by less than 'tolerance'
     times the width of the bounds in every free element.
 
-    The free elements take a value, and min and max (both required: the
-    starts are drawn between them; see FitParamBounded).
+    The free elements take the options of the optimizer (e.g. sigma for
+    CMA-ES), of which min and max are required: the starts are drawn
+    between them. Each start runs the optimizer with these options, at
+    another initial value (see FitParamBounded.with_value).
 
     Parameters
     ----------
     local : Fitter
-        The local fitter. Its free elements must take FitParamBounded
-        options (e.g. lmfit.least_squares, scipy.least_squares). Its seed
-        and uncertainty options are not used (those of multistart are).
+        The optimizer: a fitter whose free elements take an initial value
+        and bounds (see FitParamBounded; samplers do not). Its seed and
+        uncertainty options are not used (those of multistart are).
     nstarts : int, optional
         The number of starts (the first is the given values).
     nsolutions : int, optional
@@ -59,17 +61,17 @@ class FitterMultiStart(Fitter):
     Raises
     ------
     ConfigError
-        If the local fitter does not take FitParamBounded options, or a
-        number is not positive.
+        If the local fitter is not an optimizer, or a number is not
+        positive.
     """
 
     @staticmethod
     def type() -> str:
         return 'multistart'
 
-    @staticmethod
-    def fit_param_class() -> FitParamClass:
-        return FitParamBounded
+    def fit_param_class(self) -> FitParamClass:
+        # (the options of the local fitter)
+        return self._local.fit_param_class()
 
     @classmethod
     def load(cls, info: dict[str, Any]) -> 'FitterMultiStart':
@@ -97,10 +99,11 @@ class FitterMultiStart(Fitter):
             uncertainty: UncertaintyOptions | None = None
     ):
         super().__init__(seed, uncertainty)
-        if local.fit_param_class() is not FitParamBounded:
+        if not issubclass(local.fit_param_class(), FitParamBounded):
             raise ConfigError(
-                f"the local fitter of multistart must take a value, min and "
-                f"max for each free element; '{local.type()}' does not")
+                f"the local fitter of multistart must be an optimizer, which "
+                f"starts from an initial value of each free element; "
+                f"'{local.type()}' is not")
         for name, value in dict(
                 nstarts=nstarts, nsolutions=nsolutions,
                 tolerance=tolerance).items():
@@ -142,9 +145,7 @@ class FitterMultiStart(Fitter):
         runs: list[FitRun] = []
         starts_info: list[dict[str, Any]] = []
         for start in starts:
-            start_params = [
-                FitParamBounded(v, p.minimum(), p.maximum())
-                for v, p in zip(start, params)]
+            start_params = [p.with_value(v) for v, p in zip(start, params)]
             nevals = problem.nevals()
             try:
                 run = self._local._run(problem, start_params, rng)

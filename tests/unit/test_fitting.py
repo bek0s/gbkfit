@@ -388,3 +388,20 @@ def test_ultranest_posterior_agrees_with_the_covariance():
     result = FitterUltraNest().fit(objective, params)
     check_posterior(result)
     assert result.evidence.log_z_error > 0
+
+
+def test_multistart_runs_any_optimizer_with_its_options():
+    # Each start keeps the options of the optimizer (here the sigma of
+    # CMA-ES) at another initial value; samplers have no initial value
+    pytest.importorskip('cma')
+    from gbkfit.fitting import fitter_parser
+    from gbkfit.fitting.fitters.cmaes.core import FitParamCMAES
+    multistart = fitter_parser.load(dict(
+        type='multistart', local=dict(type='cmaes')))
+    assert multistart.fit_param_class() is FitParamCMAES
+    start = FitParamCMAES(1, 0, 4, sigma=0.3).with_value(2.5)
+    assert (start.value(), start.sigma(), start.maximum()) == (2.5, 0.3, 4)
+    pytest.importorskip('dynesty')
+    with pytest.raises(ConfigError, match="must be an optimizer"):
+        fitter_parser.load(dict(
+            type='multistart', local=dict(type='dynesty.static')))

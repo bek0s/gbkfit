@@ -5,9 +5,10 @@ object of its class of them.
 """
 
 import abc
+import copy
 import math
 from collections.abc import Mapping
-from typing import Any, TypeAlias
+from typing import Any, Self, TypeAlias
 
 from gbkfit.fitting.priors import Prior, PriorUniform, prior_parser
 from gbkfit.utils import parseutils
@@ -88,7 +89,10 @@ FitParamClass: TypeAlias = type[FitParam]
 class FitParamBounded(FitParam):
     """
     The options of a free element for an optimizer: its initial value and
-    its bounds.
+    its bounds. The options of each optimizer are of this class, or of a
+    subclass with more options (e.g. FitParamCMAES), so that a fitter of
+    several starts can run any optimizer (see with_value and
+    FitterMultiStart).
 
     Parameters
     ----------
@@ -136,6 +140,21 @@ class FitParamBounded(FitParam):
 
     def maximum(self) -> float:
         return self._maximum
+
+    def with_value(self, value: float) -> Self:
+        """
+        Return these options (of this class, with all its other options)
+        with another initial value.
+
+        Raises
+        ------
+        ConfigError
+            If the value is not finite or not within the bounds.
+        """
+        _check_value(value, self._minimum, self._maximum)
+        result = copy.copy(self)
+        result._value = float(value)
+        return result
 
 
 class FitParamPrior(FitParam):
