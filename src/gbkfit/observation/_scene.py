@@ -396,8 +396,9 @@ def make_scene(
         sees, a component cannot be seen along its line of sight (see
         LineOfSight.check), it sees several galaxies with opacity that its
         line of sight cannot order, or not in that order (see
-        LineOfSight.check_order), or without data, it sees components of
-        different units (its model is in the unit of its components).
+        LineOfSight.check_order), or without data of light, it sees
+        components of different units (its model is then in the unit of
+        its components).
     """
     kind = "an image, which sees the components that emit in a band" \
         if emission is BandEmission else \
@@ -541,9 +542,9 @@ def _check_one_unit(
 ) -> None:
     """
     Raise ConfigError if the emitters of the galaxies (by index) have
-    light of different units: without data, the model of an observation
-    is in the unit of the components it sees (and of none, if they have
-    none).
+    light of different units: without data of light (no data, or e.g.
+    only velocity moments), the model of an observation is in the unit
+    of the components it sees (and of none, if they have none).
     """
     units = {
         unitutils.format_unit(unit): _label(galaxy, i)
@@ -551,11 +552,12 @@ def _check_one_unit(
         if (unit := galaxy.components()[i].emission().unit()) is not None}
     if len(units) > 1:
         raise ConfigError(
-            f"without data, the model of an observation is in the unit of "
-            f"the components it sees, which have several: "
+            f"without data of light (no data, or only velocity moments), "
+            f"the model of an observation is in the unit of the components "
+            f"it sees, which have several: "
             f"{', '.join(f'{u!r} ({c})' for u, c in units.items())}; give "
-            f"the observation data in a unit, or see these components in "
-            f"separate observations")
+            f"the observation data of light in a unit, or see these "
+            f"components in separate observations")
 
 
 def check_component_names(names: Sequence[str]) -> None:
