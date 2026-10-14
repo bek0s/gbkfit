@@ -29,8 +29,11 @@ GALAXY = dict(components=dict(
     emission=dict(type='lines')))
 
 
-def objective(driver, data, error, amplitudes='per_spectrum'):
-    """The objective of a disk seen in data with the given errors."""
+def objective(driver, data, error, amplitudes='per_spectrum', weights=1.0):
+    """
+    The objective of a disk seen in data with the given errors, under a
+    likelihood of the given amplitudes and weights.
+    """
     dataset = DatasetPixelSpectra(
         Data(data, error=np.full_like(data, error)), step=STEP)
     group = ObservationGroup(
@@ -38,7 +41,7 @@ def objective(driver, data, error, amplitudes='per_spectrum'):
             PixelSpectra.from_data(dataset),
             line_of_sight_parser.load(dict(type='flat')), driver,
             data=dataset, likelihood=LikelihoodGaussian(
-                amplitudes=amplitudes))])
+                weights=weights, amplitudes=amplitudes))])
     return Objective(group), ParamSpace(group.pdescs(), PARAMS).evaluate()
 
 
@@ -62,6 +65,8 @@ def test_amplitudes_take_the_brightness_of_each_spectrum(driver):
     lit = spectra.sum(axis=0) > 1e-3 * spectra.sum(axis=0).max()
     np.testing.assert_allclose(
         extra['observation0_amplitudes'][lit], scales[lit], rtol=1e-4)
+    np.testing.assert_array_equal(
+        obj.amplitudes()[0], extra['observation0_amplitudes'])
     plain, _ = objective(driver, spectra * scales, error, None)
     assert plain.chi2(values) > 1e3
     assert obj.nnuisance() == SIZE[0] * SIZE[1]
@@ -112,3 +117,11 @@ def test_amplitudes_scale_spectra_only(observable, calibration, message):
 def test_amplitudes_have_one_kind():
     with pytest.raises(ConfigError, match="must be 'per_spectrum'"):
         LikelihoodGaussian(amplitudes='per_pixel')
+
+
+def test_a_likelihood_of_no_weight_has_no_amplitude_terms(driver):
+    # (an item of weight 0 counts nothing, not NaN)
+    spectra = model(driver)
+    obj, values = objective(
+        driver, spectra, 1e-3 * spectra.max(), weights=0.0)
+    assert obj.chi2_and_log_likelihood(values) == (0.0, 0.0)
