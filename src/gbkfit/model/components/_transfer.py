@@ -266,8 +266,8 @@ class TransferPlan:
         optical depth of its lines at each channel (the mean of its
         sub-channels).
 
-        With extras, a warning says where zmax shapes the density of a
-        disk (see ComponentPlans.warn_truncation), and it returns how
+        With extras, a warning says where zmax shapes a disk (see
+        ComponentPlans.warn_truncation), and it returns how
         finely it resolves the lines (see LineResolution); None otherwise.
         """
         plans = self._plans

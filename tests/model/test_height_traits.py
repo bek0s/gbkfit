@@ -1,8 +1,8 @@
 """
 Tests for the height traits: of velocity and dispersion (e.g. lags), and
-of density (the Moffat profile, and zmax, the height above the plane that
-holds the density); and for the radial range selection trait (e.g.
-truncations).
+of density (the Moffat profile, and zmax, the height above the midplane
+that holds the density); for the vertical distortion that lifts the
+midplane; and for the radial range selection trait (e.g. truncations).
 """
 
 import copy
@@ -203,10 +203,16 @@ def observe_depth(driver, component, depth):
         galaxy=dict(components=[component]))])
 
 
+def evaluate_with(group, properties, out_extra=None):
+    """The spectral cube of a group of one observation."""
+    params = gbkfit.params.ParamSpace(group.pdescs(), properties)
+    return group.model_h(
+        params.evaluate(), out_extra)[0]['spectra']['d'].copy()
+
+
 def flux(group, properties, out_extra=None):
     """The total of the spectral cube of a group of one observation."""
-    params = gbkfit.params.ParamSpace(group.pdescs(), properties)
-    return group.model_h(params.evaluate(), out_extra)[0]['spectra']['d'].sum()
+    return evaluate_with(group, properties, out_extra).sum()
 
 
 def test_the_depth_axis_holds_the_density_up_to_zmax(driver, caplog):
@@ -260,33 +266,39 @@ def test_the_cdf_of_each_density_height_trait(driver, trait, values):
     np.testing.assert_allclose(integral, expected, atol=1e-3)
 
 
+def mean_depth(bdata):
+    """The mean depth of the light of the extra output of a disk."""
+    coords = bdata.coords
+    z = coords.rval[2] \
+        + (np.arange(bdata.data.shape[0]) - coords.rpix[2]) * coords.step[2]
+    light = bdata.data.sum(axis=(1, 2))
+    return (z * light).sum() / light.sum()
+
+
 @pytest.mark.parametrize('disk_type', ['smdisk', 'mcdisk'])
-def test_a_lifted_midplane_keeps_its_light_within_zmax(driver, disk_type):
-    # A face-on disk whose midplane a vertical distortion lifts: by 5,
-    # within zmax (8) of the plane, each column keeps its light (its
-    # profile is renormalised to the heights within zmax): exactly for the
-    # clouds; the smooth disk samples its profile at the centres of the
-    # voxels, and zmax, where the lifted profile is 1% of its peak, is at
-    # one, which counts whole. By 30, none of its profile is within zmax:
-    # it has no light (and its clouds are not drawn for ever)
-    component = DISK | dict(type=disk_type, zptraits=dict(type='nw_uniform'))
+def test_a_lifted_midplane_carries_its_light(driver, caplog, disk_type):
+    # A face-on disk whose midplane a vertical distortion lifts by 12:
+    # beyond the zmax of its density (8, above the midplane) but within
+    # its own (20). The light moves with the midplane, and the depth axis
+    # holds it: each column keeps its light (exactly for the clouds; the
+    # smooth disk samples its profile at the centres of the voxels)
+    component = DISK | dict(
+        type=disk_type, zptraits=dict(type='nw_uniform', zmax=20))
     if disk_type == 'mcdisk':
         component |= dict(cflux=1e-3)
     group = observe(driver, component)
     properties = PROPERTIES | dict(incl=0)
-    flat, far = (
-        flux(group, properties | dict(zpt_a=[height] * 14))
-        for height in (0, 30))
+    flat = flux(group, properties | dict(zpt_a=[0] * 14))
     extra = {}
-    lifted = flux(group, properties | dict(zpt_a=[5] * 14), extra)
-    np.testing.assert_allclose(
-        lifted, flat, rtol=1e-5 if disk_type == 'mcdisk' else 5e-3)
-    assert far == 0
-    # (zmax cuts the lifted profile at 8 above the plane, not above the
-    # midplane: its density reaches 8, and no farther)
+    lifted = flux(group, properties | dict(zpt_a=[12] * 14), extra)
+    np.testing.assert_allclose(lifted, flat, rtol=1e-5)
     bdata = extra['observation0_model_component0_bdata']
-    coords = bdata.coords
-    z = coords.rval[2] \
-        + (np.arange(bdata.data.shape[0]) - coords.rpix[2]) * coords.step[2]
-    assert bdata.data[z > 8.5].max() == 0
-    assert bdata.data[(z > 7.5) & (z <= 8.5)].max() > 0
+    assert mean_depth(bdata) == pytest.approx(12, abs=0.05)
+    # Lifted by 30, the midplane stops at its zmax: the model of a lift of
+    # 20, and a warning says so
+    caplog.set_level(logging.WARNING)
+    limited = evaluate_with(group, properties | dict(zpt_a=[30] * 14), {})
+    assert 'zmax shapes the disk' in caplog.text
+    at_zmax = evaluate_with(group, properties | dict(zpt_a=[20] * 14))
+    np.testing.assert_allclose(
+        limited, at_zmax, rtol=1e-5, atol=1e-7 * at_zmax.max())

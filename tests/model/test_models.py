@@ -99,7 +99,7 @@ CASES = dict(
                     density=dict(
                         ptraits=dict(type='exponential'),
                         htraits=dict(type='sech2', zmax=8)),
-                    zptraits=dict(type='nw_uniform'),
+                    zptraits=dict(type='nw_uniform', zmax=1),
                     emission=BAND),
                 mcdisk(
                     name='clouds', loose=False, tilted=False, seed=3,
@@ -146,7 +146,7 @@ CASES = dict(
                         vptraits=dict(type='tan_arctan'),
                         vhtraits=dict(type='one'),
                         dptraits=dict(type='uniform')),
-                    zptraits=dict(type='nw_harmonic', order=1),
+                    zptraits=dict(type='nw_harmonic', order=1, zmax=1),
                     emission=LINES),
                 mcdisk(
                     name='clouds', loose=False, tilted=False,

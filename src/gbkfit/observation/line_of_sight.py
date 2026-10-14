@@ -44,8 +44,9 @@ class Depth(parseutils.Serializable):
         Its length (arcsec); 'galaxy' (the default): that which holds all
         the density of the disks the observation evaluates, at any
         inclination: twice the bounding radius of the largest (that of
-        its last ring, R, or of a thick disk, sqrt(R^2 + zmax^2) of the
-        zmax of its density height traits; see RHTrait); through radiative
+        its last ring, R, or of a thick disk, sqrt(R^2 + Z^2) of the
+        largest height of its density above the plane of the galaxy, Z;
+        see Disk.bounding_radius); through radiative
         transfer, where each galaxy has a depth axis of its own, that of
         each galaxy; or 'legacy': that of the longer of the x and y axes
         of the grid the galaxies are evaluated on (the grid of the data,

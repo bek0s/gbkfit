@@ -348,7 +348,7 @@ class ComponentSetPlan:
         GravityPlan.evaluate). The extra outputs of each component are
         named after its name, or its position (e.g. 'disk_bdata' or
         'component0_bdata'), and the totals 'total_*'. With extra outputs,
-        a warning says where zmax shapes the density of a disk (see
+        a warning says where zmax shapes a disk (see
         ComponentPlans.warn_truncation), and it returns how finely it
         resolves the lines (see LineResolution: their light only); None
         otherwise.

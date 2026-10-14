@@ -111,7 +111,7 @@ def test_mcdisk_vertical_profile_matches_smdisk(driver, height, shape, zmax):
 
 
 # A vertical distortion of the midplane at every node of the configs
-DISTORTION = dict(zptraits=dict(type='nw_uniform'))
+DISTORTION = dict(zptraits=dict(type='nw_uniform', zmax=4))
 DISTORTED = dict(zpt_a=[2.0] * 11)
 
 
