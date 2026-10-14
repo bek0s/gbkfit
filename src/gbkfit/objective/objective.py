@@ -80,8 +80,10 @@ class Objective:
             {key: obs.likelihood().weight(key)
              for key in obs.observable().keys()}
             for obs in observations)
+        # (none where the model cannot lack values: NaN would show one)
+        missing = [obs.likelihood().missing_residual() for obs in observations]
         self._missing_residuals = tuple(
-            obs.likelihood().missing_residual() for obs in observations)
+            np.nan if residual is None else residual for residual in missing)
         # The native objective of each observation, for its driver
         self._backends = iterutils.make_list(n, None)
         # The memory is allocated on the first evaluation (see prepare)

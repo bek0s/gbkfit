@@ -205,6 +205,9 @@ class RegionSpectra(Observable):
     def keys(self) -> tuple[str, ...]:
         return ('spectra',)
 
+    def model_can_lack_values(self) -> bool:
+        return False
+
     def _require_matching_coordinates(
             self, dataset: DatasetRegionSpectra
     ) -> None:

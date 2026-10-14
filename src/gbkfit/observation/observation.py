@@ -112,7 +112,9 @@ class Observation(parseutils.Serializable):
         calibration but no name, the scale is not one integer of at least
         1
         for each axis, there is a likelihood without data, the data are
-        not those of the observable, the observable cannot be seen
+        not those of the observable, its model can lack values but its
+        likelihood has no residual for them (see LikelihoodGaussian), the
+        observable cannot be seen
         through the instrument (see Observable.check_instrument), or the
         dtype is not one of the native modules (see Driver.dtypes).
     """
@@ -307,6 +309,14 @@ class Observation(parseutils.Serializable):
             observable.require_matching(data)
             if likelihood is None:
                 likelihood = LikelihoodGaussian()
+            if observable.model_can_lack_values() \
+                    and likelihood.missing_residual() is None:
+                raise ConfigError(
+                    "the model of the observable can lack values where the "
+                    "data have some (e.g. the velocity of a spectrum below "
+                    "its mask_cutoff): its likelihood needs the residual of "
+                    "such a value, the option missing_residual (e.g. 3; see "
+                    "LikelihoodGaussian)")
         observable.check_instrument(instrument)
         self._driver = driver
         self._observable = observable

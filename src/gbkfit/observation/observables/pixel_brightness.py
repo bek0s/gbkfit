@@ -144,6 +144,9 @@ class PixelBrightness(Observable):
     def keys(self) -> tuple[str, ...]:
         return ('brightness',)
 
+    def model_can_lack_values(self) -> bool:
+        return self._mask_apply
+
     def check_instrument(self, instrument: Instrument) -> None:
         if instrument.lsf() is not None:
             raise ConfigError(

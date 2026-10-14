@@ -9,7 +9,8 @@ import pytest
 from gbkfit.dataset import Data, DatasetPixelMoments
 from gbkfit.instrument import Instrument, LSFGauss
 from gbkfit.observation import (
-    Flat, Observation, PixelBrightness, PixelMoments, observation_parser)
+    Flat, LikelihoodGaussian, Observation, PixelBrightness, PixelMoments,
+    observation_parser)
 from gbkfit.utils import parseutils
 from gbkfit.utils.parseutils import ConfigError
 
@@ -25,8 +26,20 @@ def test_observable_from_data():
     assert observable.grid() == data.grid()
     assert observable.orders() == (0, 1)
     assert observable.spec_rval() == 1500
-    observation = Observation(observable, Flat(), data=data)
+    observation = Observation(
+        observable, Flat(), data=data,
+        likelihood=LikelihoodGaussian(missing_residual=3))
     assert observation.driver().type() == 'host'
+
+
+def test_a_model_that_can_lack_values_needs_their_residual():
+    # A velocity map: the model has no velocity where its flux is below
+    # the mask cutoff, and the residual there is the user's choice
+    data = DatasetPixelMoments(
+        {0: Data(np.ones((8, 20))), 1: Data(np.full((8, 20), 1500.0))})
+    observable = PixelMoments.from_data(data, spec_step=5)
+    with pytest.raises(ConfigError, match="option missing_residual"):
+        Observation(observable, Flat(), data=data)
 
 
 def test_observable_options_are_checked():

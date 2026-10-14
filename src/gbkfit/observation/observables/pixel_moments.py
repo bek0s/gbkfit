@@ -203,6 +203,10 @@ class PixelMoments(Observable):
     def keys(self) -> tuple[str, ...]:
         return tuple(f'moment{i}' for i in self._orders)
 
+    def model_can_lack_values(self) -> bool:
+        # (moment 0, the flux, always has a value)
+        return any(order >= 1 for order in self._orders)
+
     def orders(self) -> tuple[int, ...]:
         return self._orders
 

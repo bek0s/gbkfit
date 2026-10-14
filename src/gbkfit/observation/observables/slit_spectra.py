@@ -181,6 +181,9 @@ class SlitSpectra(Observable):
     def keys(self) -> tuple[str, ...]:
         return ('spectra',)
 
+    def model_can_lack_values(self) -> bool:
+        return self._mask_apply
+
     def check_instrument(self, instrument: Instrument) -> None:
         _detail.warn_unsmoothed_weights(self._smooth_weights, instrument)
 
