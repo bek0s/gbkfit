@@ -87,7 +87,7 @@ struct Wrapper
     objective_amplitude_sums(
             const T* obs_d, const T* obs_e, const T* obs_m,
             const T* mdl_d, const T* mdl_w,
-            int nchannels, int nspectra, double* a, double* b, double* f);
+            int nchannels, int nspectra, double* a, double* b);
 };
 
 }} // namespace gbkfit::cuda

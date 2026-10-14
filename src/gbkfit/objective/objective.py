@@ -1,4 +1,3 @@
-import math
 from typing import Any
 
 import numpy as np
@@ -32,9 +31,10 @@ class Objective:
     chi-square by having no values. Each observation checks that its
     data are of the form of its model (see Observation).
 
-    A likelihood with free amplitudes (see LikelihoodGaussian) scales
-    each spectrum of the model by its best amplitude before the
-    residuals, and its log-likelihood has them integrated out; they are
+    A likelihood with amplitudes of spectra (see LikelihoodGaussian)
+    scales each spectrum of the model by its best amplitude before the
+    residuals, whose prior adds a residual of each spectrum after those of
+    the data; its log-likelihood has them integrated out. They are
     nuisance parameters (see nnuisance), and an extra output,
     '{prefix}amplitudes' (see ObservationGroup.extra_prefix).
 
@@ -92,18 +92,24 @@ class Objective:
         missing = [obs.likelihood().missing_residual() for obs in observations]
         self._missing_residuals = tuple(
             np.nan if residual is None else residual for residual in missing)
-        # The data item of the spectra of free amplitudes of each
-        # observation, if any; the sums of each spectrum (A, B and F, see
-        # LikelihoodGaussian) on the host (h) and the device (d), and the
-        # amplitudes, which scale the spectra of the model
+        # The data item of the spectra of amplitudes of each observation,
+        # if any, and the standard deviation of their prior; the sums of
+        # each spectrum (A and B, see LikelihoodGaussian) on the host (h)
+        # and the device (d), the amplitudes, which scale the spectra of
+        # the model, and the residuals of their prior (views of the end of
+        # the residuals of the observation)
         self._amplitude_items = tuple(
             obs.observable().spectra_item()
             if obs.likelihood().amplitudes() is not None else None
             for obs in observations)
+        self._amplitude_sigmas = tuple(
+            obs.likelihood().amplitude_sigma() for obs in observations)
         self._h_amplitude_sums = iterutils.make_list(n, None)
         self._d_amplitude_sums = iterutils.make_list(n, None)
         self._h_amplitudes = iterutils.make_list(n, None)
         self._d_amplitudes = iterutils.make_list(n, None)
+        self._h_prior_residuals = iterutils.make_list(n, None)
+        self._d_prior_residuals = iterutils.make_list(n, None)
         # The native objective of each observation, for its driver
         self._backends = iterutils.make_list(n, None)
         # The memory is allocated on the first evaluation (see prepare)
@@ -140,15 +146,19 @@ class Objective:
             driver = observation.driver()
             keys = observation.observable().keys()
             dtype = observation.dtype()
-            # The data items, one after the other (they have one shape)
+            # The data items, one after the other (they have one shape);
+            # the residuals, and after them those of the prior of the
+            # amplitudes of spectra, if any
             shape = dataset.shape()
             npix = int(np.prod(shape))
             nelem = npix * len(keys)
+            nprior = self._nprior(i)
             self._d_dataset_d_vector[i] = driver.mem_alloc_d(nelem, dtype)
             self._d_dataset_m_vector[i] = driver.mem_alloc_d(nelem, dtype)
             self._d_dataset_e_vector[i] = driver.mem_alloc_d(nelem, dtype)
             (self._h_residual_vector[i],
-             self._d_residual_vector[i]) = driver.mem_alloc_s(nelem, dtype)
+             self._d_residual_vector[i]) = driver.mem_alloc_s(
+                nelem + nprior, dtype)
             # (the sums are in double precision, of millions of terms)
             (self._h_residual_scalar[i],
              self._d_residual_scalar[i]) = driver.mem_alloc_s(1, np.float64)
@@ -180,11 +190,13 @@ class Objective:
             if self._amplitude_items[i] is not None:
                 spectra = shape[1:]
                 sums = [driver.mem_alloc_s(spectra, np.float64)
-                        for _ in range(3)]
+                        for _ in range(2)]
                 self._h_amplitude_sums[i] = [h for h, _ in sums]
                 self._d_amplitude_sums[i] = [d for _, d in sums]
                 (self._h_amplitudes[i],
                  self._d_amplitudes[i]) = driver.mem_alloc_s(spectra, dtype)
+                self._h_prior_residuals[i] = self._h_residual_vector[i][nelem:]
+                self._d_prior_residuals[i] = self._d_residual_vector[i][nelem:]
         self._prepared = True
 
     def chi2(
@@ -300,28 +312,33 @@ class Objective:
     def nnuisance(self) -> int:
         """
         Return the number of nuisance parameters that the objective solves
-        itself: the free amplitude of each spectrum with values in the
-        data (see LikelihoodGaussian). The degrees of freedom of a fit
-        exclude them.
+        itself: the amplitude of each spectrum (see LikelihoodGaussian).
+        The degrees of freedom of a fit exclude them.
         """
-        count = 0
-        for dataset, key in zip(self._datasets, self._amplitude_items):
-            if key is not None:
-                mask = dataset[key].mask()
-                count += int(np.count_nonzero(np.any(mask != 0, axis=0)))
-        return count
+        return sum(self._nprior(i) for i in range(self.nobservations()))
 
     def nresiduals(self) -> int:
         """
         Return the number of residuals that count: those of the values the
         data do not mask (the values the model does not have count too,
-        with the missing_residual of their likelihood).
+        with the missing_residual of their likelihood), and that of the
+        prior of each amplitude of a spectrum, if any.
         """
         return sum(
             int(np.count_nonzero(dataset[key].mask()))
             for dataset, obs in zip(
                 self._datasets, self._group.observations())
-            for key in obs.observable().keys())
+            for key in obs.observable().keys()) + self.nnuisance()
+
+    def _nprior(self, i: int) -> int:
+        """
+        Return the number of amplitudes of spectra of observation i, each
+        with the residual of its prior (0 without them).
+        """
+        key = self._amplitude_items[i]
+        if key is None:
+            return 0
+        return int(np.prod(self._datasets[i][key].shape()[1:]))
 
     def residual_sums(
             self,
@@ -477,11 +494,11 @@ class Objective:
             out_extra: dict[str, Any] | None
     ) -> None:
         """
-        Scale each spectrum of the model of observation i by its best free
-        amplitude (see LikelihoodGaussian), and keep its sums for the
-        log-likelihood; with extras, the amplitudes go to them
-        ('{prefix}amplitudes', of the shape of the spectra but their first
-        axis).
+        Scale each spectrum of the model of observation i by its best
+        amplitude (see LikelihoodGaussian), write the residuals of their
+        prior, and keep their sums for the log-likelihood; with extras, the
+        amplitudes go to them ('{prefix}amplitudes', of the shape of the
+        spectra but their first axis).
         """
         key = self._amplitude_items[i]
         driver = self._group.observations()[i].driver()
@@ -493,37 +510,47 @@ class Objective:
             model['d'], model['w'], *self._d_amplitude_sums[i])
         for h, d in zip(self._h_amplitude_sums[i], self._d_amplitude_sums[i]):
             driver.mem_copy_d2h(d, h)
-        a, b, _ = self._h_amplitude_sums[i]
+        # The best amplitude: the minimum of the chi-square of the spectrum
+        # (its sums A and B times the weight of the item, squared) and that
+        # of the prior, (a - 1)^2 / s^2
+        a, b = self._h_amplitude_sums[i]
+        weight = self._weights_u[i][key] ** 2
+        precision = 1 / self._amplitude_sigmas[i] ** 2
         amplitudes = self._h_amplitudes[i]
-        amplitudes[...] = 0
-        np.divide(np.maximum(b, 0), a, out=amplitudes, where=a > 0)
+        amplitudes[...] = np.maximum(weight * b + precision, 0) \
+            / (weight * a + precision)
         driver.mem_copy_h2d(amplitudes, self._d_amplitudes[i])
         driver.math_mul(model['d'], self._d_amplitudes[i], out=model['d'])
+        # (the prior as residuals, (a - 1) / s, after those of the data)
+        self._h_prior_residuals[i][...] = \
+            (amplitudes.ravel() - 1) / self._amplitude_sigmas[i]
+        driver.mem_copy_h2d(
+            self._h_prior_residuals[i], self._d_prior_residuals[i])
         if out_extra is not None:
             out_extra[f'{self._group.extra_prefix(i)}amplitudes'] = \
                 amplitudes.copy()
 
     def _amplitude_terms(self) -> float:
         """
-        Return the sum of the terms of the log-likelihood of the free
-        amplitudes of the last evaluation, beyond -chi2 / 2 (see
-        LikelihoodGaussian): log(F sqrt(2 pi / A) Phi(B / sqrt(A))) + (B^2
-        / 2A if B < 0), of each spectrum where the model has light (F > 0)
-        that counts in the chi-square (A > 0, with the weight of the item
-        of the likelihood).
+        Return the sum of the terms of the log-likelihood of the amplitudes
+        of spectra of the last evaluation, beyond -chi2 / 2 (whose
+        chi-square has the residuals of their prior; see
+        LikelihoodGaussian): for each spectrum, log(Phi(B' / sqrt(A')) /
+        (s sqrt(A') Phi(1 / s))) + (B'^2 / 2A' if B' < 0), with A' = w A +
+        1/s^2 and B' = w B + 1/s^2 (w the weight of the item, squared). A
+        spectrum that does not count in the chi-square (A = 0) has none.
         """
         total = 0.0
         for i, key in enumerate(self._amplitude_items):
             if key is None:
                 continue
-            a, b, f = self._h_amplitude_sums[i]
+            a, b = self._h_amplitude_sums[i]
+            sigma = self._amplitude_sigmas[i]
             weight = self._weights_u[i][key] ** 2
-            a, b = weight * a, weight * b
-            lit = (a > 0) & (f > 0)
-            a, b, f = a[lit], b[lit], f[lit]
+            a, b = weight * a + 1 / sigma ** 2, weight * b + 1 / sigma ** 2
             x = b / np.sqrt(a)
             total += float(np.sum(
-                np.log(f) + 0.5 * np.log(2 * math.pi / a)
-                + scipy.special.log_ndtr(x)
-                + np.where(b < 0, 0.5 * x ** 2, 0.0)))
+                np.where(b < 0, 0.5 * x ** 2, 0.0)
+                + scipy.special.log_ndtr(x) - np.log(sigma * np.sqrt(a))
+                - scipy.special.log_ndtr(1 / sigma)))
         return total

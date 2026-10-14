@@ -369,7 +369,7 @@ template<typename T> __global__ void
 objective_amplitude_sums(
         const T* obs_d, const T* obs_e, const T* obs_m,
         const T* mdl_d, const T* mdl_w,
-        int nchannels, int nspectra, double* a, double* b, double* f)
+        int nchannels, int nspectra, double* a, double* b)
 {
     const int nthreads = nspectra;
     const int tid = blockIdx.x * blockDim.x + threadIdx.x;
@@ -379,17 +379,16 @@ objective_amplitude_sums(
 
     // (one thread for each spectrum: the threads of a warp read adjacent
     // values of each channel)
-    double sum_a = 0, sum_b = 0, sum_f = 0;
+    double sum_a = 0, sum_b = 0;
     for (int c = 0; c < nchannels; ++c) {
         gbkfit::objective_amplitude_terms(
                 (long long)c * nspectra + tid,
                 obs_d, obs_e, obs_m,
                 mdl_d, mdl_w,
-                sum_a, sum_b, sum_f);
+                sum_a, sum_b);
     }
     a[tid] = sum_a;
     b[tid] = sum_b;
-    f[tid] = sum_f;
 }
 
 } // namespace gbkfit::cuda::kernels
