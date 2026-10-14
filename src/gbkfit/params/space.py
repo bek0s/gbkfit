@@ -322,6 +322,18 @@ class ParamSpace(parseutils.Serializable):
             element_name(*e): copy.deepcopy(self._free[e])
             for e in self._free_elements}
 
+    def free_valid_ranges(self) -> dict[str, tuple[float, float]]:
+        """
+        Return the valid range of each free element whose value is that of
+        its parameter (see ParamDesc), by element name: of all but those
+        of the parameters with a mode, whose values are coded.
+        """
+        return {
+            element_name(name, index): (
+                self._pdescs[name].minimum(), self._pdescs[name].maximum())
+            for name, index in self._free_elements
+            if name not in self._modes}
+
     def evaluate(
             self,
             free: Mapping[str, float] | Sequence[float] | None = None

@@ -265,6 +265,19 @@ def test_trf_moves_a_value_that_starts_on_its_bound(fitter):
 
 
 @pytest.mark.filterwarnings('ignore:invalid value:RuntimeWarning')
+def test_a_fit_beyond_the_valid_range_of_a_parameter_fails():
+    # The bounds of pt_s reach below its valid range: the fit fails before
+    # it starts, instead of trying values where the model is not defined
+    from gbkfit.fitting import fitter_parser
+    from gbkfit.params import ParamScalarDesc
+    objective = mock_objective(DriverHost())
+    pdescs = objective.pdescs() | dict(pt_s=ParamScalarDesc(minimum=2))
+    params = ParamSpace(pdescs, bounded_properties())
+    fitter = fitter_parser.load(dict(type='scipy.least_squares'))
+    with pytest.raises(ConfigError, match=r"'pt_s' \[1, 10\] \(valid: "):
+        fitter.fit(objective, params)
+
+
 def test_multistart_skips_starts_the_parameters_reject():
     # pt_s is nan for xpos < 0.6: the starts there fail, and are skipped
     pytest.importorskip('lmfit')
