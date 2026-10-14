@@ -21,11 +21,29 @@ class LineOpacity(Opacity):
     """
     The opacity of a component at its own lines (self-absorption, e.g. of
     HI): at each of its lines, its light there times a coefficient, 1/S
-    (S the source function, e.g. the spin temperature of HI, in the units
-    of the model), so that the light j of a voxel has the optical depth
-    j/S, with the shape of its line. Seen only along a Transfer line of
-    sight, by the observations that see the component, which must be a
-    thick disk that emits lines.
+    (S the source function), so that the light j of a voxel has the
+    optical depth j/S, with the shape of its line. Seen only along a
+    Transfer line of sight, by the observations that see the component,
+    which must be a thick disk that emits lines.
+
+    With a unit of its emission (see LineEmission), S is the brightness
+    (radiation) temperature of the source function, J(T_ex) =
+    (h nu / k) / (exp(h nu / k T_ex) - 1), in K, whatever the unit of the
+    data: the coefficients are 1/S in 1/K (and j is the light of the
+    voxel as brightness temperature, at the frequency of the line at the
+    systemic velocity of the component; see _units.OpacityScales).
+    Without a unit, S is in the units of the model, those of the data.
+
+    S is J(T_ex), not the excitation temperature T_ex: they differ where
+    h nu / k is not small next to T_ex. For HI (h nu / k = 0.068 K) J is
+    T_ex (the spin temperature) to 0.03% at 100 K; for CO 3-2 (h nu / k =
+    16.6 K), J(10 K) = 3.9 K. To fit T_ex, give it a parameter of the
+    user (pdescs) and the coefficient the expression of 1/J, e.g. for CO
+    3-2: '(np.exp(16.6 / tex) - 1) / 16.6'. (The background, e.g. the
+    CMB, is left out: the light here saturates at S, whereas the light
+    above a background of temperature T_bg would saturate at S -
+    J(T_bg).) The original GBKFIT had no line opacity: its lines are all
+    optically thin, as they are here without it.
 
     Parameters
     ----------
