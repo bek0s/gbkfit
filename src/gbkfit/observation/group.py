@@ -181,7 +181,9 @@ class ObservationGroup:
             The parameters of the galaxies, prefixed (see pdescs).
         out_extra : dict, optional
             Where the extra outputs go, if wanted: those of each
-            observation prefixed by its name, or 'observation{i}_'.
+            observation prefixed by its name, or 'observation{i}_', and
+            those of the gravity of each galaxy (its rotation tables, see
+            GravityPlan.evaluate) by the prefix of the galaxy.
 
         Returns
         -------
@@ -192,11 +194,17 @@ class ObservationGroup:
         with (self._timers.measure('model_eval'),
               threadutils.single_threaded_blas()):
             with self._timers.measure('model_gravity'):
-                gravity = [
-                    plan.evaluate(
-                        {name: params[full] for name, full in mapping.items()})
-                    for plan, mapping in zip(
-                        self._gravity_plans, self._mappings)]
+                gravity = []
+                for plan, mapping, prefix in zip(
+                        self._gravity_plans, self._mappings, self._prefixes):
+                    extra = {} if out_extra is not None else None
+                    gravity.append(plan.evaluate(
+                        {name: params[full] for name, full in mapping.items()},
+                        extra))
+                    if out_extra is not None:
+                        out_extra |= {
+                            f'{prefix}{key}': value
+                            for key, value in extra.items()}
             for i, plan in enumerate(self._plans):
                 out_extra_i = {} if out_extra is not None else None
                 self._d_model_data[i] = plan.evaluate(
