@@ -16,7 +16,7 @@ from astropy.io import fits
 
 from gbkfit import prep
 from gbkfit.prep import FitsArrays
-from gbkfit.utils import fitsutils
+from gbkfit.utils import fitsutils, unitutils
 from gbkfit.utils.parseutils import ConfigError
 
 
@@ -375,13 +375,19 @@ def prep_region_spectra(
     its spectral axis converted to velocities (velocity_rest). Write the
     bins, numbered from 0 in the order of their numbers in the map
     (prep_<bins>.fits), and the sum of the valid spectra of the pixels of
-    each bin (a flux; prep_<cube>.fits: the bins along x, the channels
-    along y), with its errors added in quadrature (prep_<errors>.fits).
+    each bin (prep_<cube>.fits: the bins along x, the channels along y),
+    with its errors added in quadrature (prep_<errors>.fits). With a unit
+    (BUNIT), the sums are fluxes, in their unit: the values of pixels per
+    solid angle or per beam become the fluxes of the pixels (see
+    prep.pixel_fluxes).
     """
     bins, index, nbins = _read_bins(file_bins)
     cube = FitsArrays.read(file_d, file_e, file_m)
+    fluxes = prep.pixel_fluxes(file_d, cube.data.shape[0])
     if roi_spec is not None:
         cube = cube.crop((slice(*roi_spec), slice(None), slice(None)))
+        if fluxes is not None and np.ndim(fluxes[0]):
+            fluxes = (fluxes[0][slice(*roi_spec)], fluxes[1])
     if cube.data.shape[1:] != index.shape:
         raise ConfigError(
             f"{file_d}: the cube must have the spatial shape of the bins "
@@ -389,10 +395,18 @@ def prep_region_spectra(
     if velocity_rest is not None:
         cube = cube.with_velocity_axis(velocity_rest)
     spectra, errors = prep.bin_spectra(index, nbins, cube)
+    header = _spectral_header(cube, nbins)
+    # (the sums of the fluxes of the pixels: the values of the pixels per
+    # solid angle or per beam become theirs, see prep.pixel_fluxes)
+    if fluxes is not None:
+        factor = np.reshape(fluxes[0], (-1, 1))
+        spectra = spectra * factor
+        errors = None if errors is None else errors * factor
+        header['BUNIT'] = unitutils.format_unit(fluxes[1])
     _write_bins(bins, index, file_bins, output_dir)
     FitsArrays(
         spectra, errors, np.isfinite(spectra).astype(float),
-        _spectral_header(cube, nbins)).write(
+        header).write(
             _output(output_dir, file_d), _output(output_dir, file_e),
             dtype=dtype)
 

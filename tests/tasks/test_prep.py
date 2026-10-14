@@ -614,10 +614,13 @@ def test_beams_of_casa(tmp_path):
 
 def test_region_spectra_are_the_sums_of_the_spectra_of_their_bins():
     # Bins 7 (left), 3 (right) and none (the first column): their spectra
-    # are the sums of those of their valid pixels, with the errors added
-    # in quadrature, and the velocities of the cube
-    write_cube('cube.fits')
-    cube = fits.getdata('cube.fits')[0].astype(float)
+    # are the sums of the fluxes of their valid pixels, with the errors
+    # added in quadrature, and the velocities of the cube; in Jy/beam, the
+    # flux of a pixel (of 1 arcsec^2) is its value over the beam (in
+    # arcsec^2), whose sums are in Jy
+    write_cube('cube.fits', HEADER | dict(BMAJ=4 / 3600, BMIN=2 / 3600))
+    per_beam = 1 / (np.pi / (4 * np.log(2)) * 4 * 2)
+    cube = fits.getdata('cube.fits')[0].astype(float) * per_beam
     error = np.full(SHAPE, 0.1)
     error[0, :, 2, 5] = np.nan  # (an invalid pixel, left out)
     fits.writeto('error.fits', error)
@@ -636,9 +639,27 @@ def test_region_spectra_are_the_sums_of_the_spectra_of_their_bins():
     left = (bins == 7)
     left[2, 5] = False
     np.testing.assert_allclose(spectra[:, 1], cube[:, left].sum(axis=1))
-    np.testing.assert_allclose(errors[:, 1], 0.1 * np.sqrt(left.sum()))
+    np.testing.assert_allclose(
+        errors[:, 1], 0.1 * per_beam * np.sqrt(left.sum()))
     np.testing.assert_allclose(spectra[:, 0], cube[:, bins == 3].sum(axis=1))
+    assert fits.getheader('prep_cube.fits')['BUNIT'] == 'Jy'
+
     _, coords = fitsutils.read_data('prep_cube.fits')
     np.testing.assert_allclose(
         coords.rval[1] + coords.step[1] * (np.arange(3) - coords.rpix[1]),
         1500 + 10 * (np.arange(3) - 5))
+
+
+@pytest.mark.parametrize('unit, factor, flux', [
+    # (pixels of 2 arcsec: 4 arcsec^2)
+    ('1e-20 erg/s/cm2/Angstrom', 1, '1e-20 erg/s/cm2/Angstrom'),
+    ('1e-17 erg/s/cm2/Angstrom/arcsec2', 4, '1e-17 erg/s/cm2/Angstrom'),
+    ('MJy/sr', 4 / 206264.806 ** 2, 'MJy')])
+def test_the_flux_of_a_pixel(unit, factor, flux):
+    from gbkfit.prep import pixel_fluxes
+    from gbkfit.utils.unitutils import parse_unit
+    header = HEADER | dict(CDELT1=-2 / 3600, CDELT2=2 / 3600, BUNIT=unit)
+    write_cube('cube.fits', header)
+    scale, flux_unit = pixel_fluxes('cube.fits', SHAPE[1])
+    assert scale == pytest.approx(factor, rel=1e-9)
+    assert (1 * flux_unit).to_value(parse_unit(flux)) == pytest.approx(1)

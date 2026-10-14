@@ -157,7 +157,7 @@ def flux_per_area(unit: u.UnitBase) -> u.UnitBase:
     erg/s/cm2/Angstrom, Jy km/s). Raise ConfigError if the unit is per
     beam or per solid angle (the light of a pixel, not of a region).
     """
-    if _spatial_unit(unit) != u.dimensionless_unscaled:
+    if unitutils.spatial_unit(unit) != u.dimensionless_unscaled:
         raise ConfigError(
             f"the data of regions are fluxes, sums over their pixels: their "
             f"unit is one of flux (e.g. 'Jy', '1e-20 erg/s/cm2/Angstrom', "
@@ -512,7 +512,7 @@ def _band_factor(
         if target.unit.is_equivalent(u.K):
             return intensity.to_value(
                 target.unit, u.brightness_temperature(frequency))
-        spatial = _spatial_unit(target.unit)
+        spatial = unitutils.spatial_unit(target.unit)
         beam = None if target.beam is None else float(target.beam)
         return _element(intensity, spatial, beam, target.pixel).to_value(
             target.unit * spatial, u.spectral_density(frequency))
@@ -657,7 +657,7 @@ def _channel(
     if target.is_equivalent(u.K):
         return intensity.to_value(
             target, u.brightness_temperature(frame.frequency))
-    spatial = _spatial_unit(target)
+    spatial = unitutils.spatial_unit(target)
     if (target * spatial).is_equivalent(u.W / u.m ** 3):
         intensity = (intensity * frame.hz_per_kms / frame.m_per_kms).to(
             u.W / u.m ** 3 / u.sr)
@@ -675,7 +675,7 @@ def _per_element(
     Return light per solid angle (with no other conversion) in the target
     unit, per solid angle, beam or pixel.
     """
-    spatial = _spatial_unit(target)
+    spatial = unitutils.spatial_unit(target)
     return _element(light, spatial, beam, pixel).to_value(target * spatial)
 
 
@@ -687,7 +687,7 @@ def _element(
 ) -> u.Quantity:
     """
     Return light per solid angle as the light of one element (see
-    _spatial_unit): of a beam or a pixel (of the given solid angles,
+    unitutils.spatial_unit): of a beam or a pixel (of the given solid angles,
     arcsec^2), or of a solid angle of 1 sr.
     """
     if spatial == u.beam:
@@ -701,22 +701,9 @@ def _element(
     return light * pixel * u.arcsec ** 2
 
 
-def _spatial_unit(target: u.UnitBase) -> u.UnitBase:
-    """
-    Return what a unit of data is per: a beam, a solid angle (sr), or a
-    pixel (neither: dimensionless).
-    """
-    if u.beam in target.bases:
-        return u.beam
-    if any(base.physical_type in ('solid angle', 'angle')
-           for base in target.bases):
-        return u.sr
-    return u.dimensionless_unscaled
-
-
 def _is_energy(target: u.UnitBase) -> bool:
     """
     Check whether a unit is of energy flux (per solid angle, beam or
     pixel): of light integrated over frequency (e.g. erg/s/cm2/arcsec2).
     """
-    return (target * _spatial_unit(target)).is_equivalent(u.W / u.m ** 2)
+    return (target * unitutils.spatial_unit(target)).is_equivalent(u.W / u.m ** 2)
