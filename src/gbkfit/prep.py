@@ -31,7 +31,6 @@ __all__ = [
     'bin_spectra',
     'bin_values',
     'bounding_box',
-    'casa_beam_table',
     'largest_regions_mask',
     'muse_lsf_table',
     'muse_psf_table',
@@ -641,35 +640,3 @@ def muse_lsf_table() -> astropy.table.QTable:
         sigma=fwhm / np.sqrt(8 * np.log(2)) * u.Angstrom))
 
 
-def casa_beam_table(filename: str) -> astropy.table.QTable:
-    """
-    Return the beams of the channels of a cube of CASA (its table BEAMS)
-    as a table of the options of a Gaussian beam PSF (bmaj, bmin, bpa)
-    against the points of its spectral axis (frequency, wavelength or
-    velocity). Only the first polarisation is used.
-
-    Raises
-    ------
-    ConfigError
-        If the cube has no spectral axis.
-    """
-    u = astropy.units
-    beams = astropy.table.Table.read(filename, hdu='BEAMS')
-    if 'POL' in beams.colnames:
-        beams = beams[beams['POL'] == 0]
-    wcs = astropy.wcs.WCS(fits.getheader(filename, 0))
-    if wcs.wcs.spec < 0:
-        raise ConfigError(f"{filename}: the cube has no spectral axis")
-    spectral = wcs.sub([wcs.wcs.spec + 1])
-    unit = u.Unit(spectral.wcs.cunit[0])
-    points = spectral.pixel_to_world_values(np.asarray(beams['CHAN']))
-    axis = ('frequency' if unit.is_equivalent(u.Hz) else
-            'wavelength' if unit.is_equivalent(u.m) else 'velocity')
-
-    def column(name: str, to: str) -> u.Quantity:
-        values = beams[name].quantity if beams[name].unit \
-            else beams[name] * u.Unit(to)
-        return values.to(to)
-    return astropy.table.QTable({
-        axis: np.asarray(points) * unit, 'bmaj': column('BMAJ', 'arcsec'),
-        'bmin': column('BMIN', 'arcsec'), 'bpa': column('BPA', 'deg')})

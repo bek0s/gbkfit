@@ -16,6 +16,7 @@ from astropy.io import fits
 
 from gbkfit import prep
 from gbkfit.prep import FitsArrays
+from gbkfit.utils import fitsutils
 from gbkfit.utils.parseutils import ConfigError
 
 
@@ -433,9 +434,9 @@ def prep_lsf_muse(output_dir: str = '.') -> None:
 def prep_psf_casa_beams(file: str, output_dir: str = '.') -> None:
     """
     Write the beams of the channels of a cube of CASA as a table of the
-    options of a Gaussian beam PSF (see gbkfit.prep.casa_beam_table).
+    options of a Gaussian beam PSF (see fitsutils.casa_beam_table).
     """
-    filename = _write_table(prep.casa_beam_table(file), output_dir, 'psf')
+    filename = _write_table(fitsutils.casa_beam_table(file), output_dir, 'psf')
     _log.info(
         f"the beams are in {filename}; use them as psf: {{type: "
         f"gauss_beam, bmaj: {{table: {filename}, column: bmaj}}, ...}} "

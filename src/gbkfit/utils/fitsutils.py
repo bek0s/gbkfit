@@ -11,6 +11,7 @@ coordinates become those of the model (see coords_from_wcs).
 import typing
 
 import astropy.io.fits
+import astropy.table
 import astropy.units
 import astropy.wcs
 import numpy as np
@@ -21,13 +22,16 @@ from gbkfit.utils.parseutils import ConfigError
 
 __all__ = [
     'VELOCITY_TYPES',
+    'casa_beam_table',
     'centre_missing_crpix',
     'coords_from_wcs',
     'flip_data',
     'flip_wcs',
     'model_axis_flips',
     'model_axis_order',
+    'read_beam',
     'read_data',
+    'read_unit',
     'reorder_data',
     'reorder_wcs',
     'to_model_axes',
@@ -44,6 +48,80 @@ _KM_S = astropy.units.km / astropy.units.s
 # The values of the header keyword AIRORVAC of each medium of wavelengths
 # (see gridutils.make_medium)
 _HEADER_MEDIUMS = dict(vacuum='vac', air='air')
+
+
+def read_unit(filename: str, hdu: int | str = 0) -> str | None:
+    """
+    Return the unit of the data of a FITS file, as its header gives it
+    (BUNIT), if it does.
+    """
+    unit = astropy.io.fits.getheader(filename, hdu).get('BUNIT')
+    if unit is None or not str(unit).strip():
+        return None
+    return str(unit).strip()
+
+
+def read_beam(
+        filename: str, hdu: int | str = 0
+) -> dict[str, typing.Any] | None:
+    """
+    Return the beam of the data of a FITS file, if it has one: the
+    Gaussian restoring beam of a radio image, as the options bmaj, bmin
+    (arcsec) and bpa (degrees): of the header (BMAJ, BMIN and BPA, in
+    degrees), or for each channel of a cube of CASA (its table BEAMS; see
+    casa_beam_table), as arrays with its spectral points ('spectral', a
+    Quantity).
+    """
+    header = astropy.io.fits.getheader(filename, hdu)
+    if 'BMAJ' in header and 'BMIN' in header:
+        return dict(
+            bmaj=float(header['BMAJ']) * 3600,
+            bmin=float(header['BMIN']) * 3600,
+            bpa=float(header.get('BPA', 0.0)))
+    with astropy.io.fits.open(filename) as hdus:
+        has_table = 'BEAMS' in hdus
+    if not has_table:
+        return None
+    table = casa_beam_table(filename)
+    return dict(
+        bmaj=table['bmaj'].to_value('arcsec'),
+        bmin=table['bmin'].to_value('arcsec'),
+        bpa=table['bpa'].to_value('deg'),
+        spectral=table.columns[0].quantity)
+
+
+def casa_beam_table(filename: str) -> astropy.table.QTable:
+    """
+    Return the beams of the channels of a cube of CASA (its table BEAMS)
+    as a table of the options of a Gaussian beam PSF (bmaj, bmin, bpa)
+    against the points of its spectral axis (frequency, wavelength or
+    velocity). Only the first polarisation is used.
+
+    Raises
+    ------
+    ConfigError
+        If the cube has no spectral axis.
+    """
+    u = astropy.units
+    beams = astropy.table.Table.read(filename, hdu='BEAMS')
+    if 'POL' in beams.colnames:
+        beams = beams[beams['POL'] == 0]
+    wcs = astropy.wcs.WCS(astropy.io.fits.getheader(filename, 0))
+    if wcs.wcs.spec < 0:
+        raise ConfigError(f"{filename}: the cube has no spectral axis")
+    spectral = wcs.sub([wcs.wcs.spec + 1])
+    unit = u.Unit(spectral.wcs.cunit[0])
+    points = spectral.pixel_to_world_values(np.asarray(beams['CHAN']))
+    axis = ('frequency' if unit.is_equivalent(u.Hz) else
+            'wavelength' if unit.is_equivalent(u.m) else 'velocity')
+
+    def column(name: str, to: str) -> u.Quantity:
+        values = beams[name].quantity if beams[name].unit \
+            else beams[name] * u.Unit(to)
+        return values.to(to)
+    return astropy.table.QTable({
+        axis: np.asarray(points) * unit, 'bmaj': column('BMAJ', 'arcsec'),
+        'bmin': column('BMIN', 'arcsec'), 'bpa': column('BPA', 'deg')})
 
 
 def read_data(

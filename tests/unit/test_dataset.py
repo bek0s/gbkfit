@@ -379,7 +379,33 @@ def test_datasets_from_files_in_python(tmp_path):
     (lambda: DatasetPixelMoments({8: Data(np.ones((2, 2)))}),
      "orders of the moments are 0 to 7"),
     (lambda: DatasetPixelMoments.from_files({0: 'm0.fits'}, masks={1: 'm'}),
-     r"moments \[1\] have masks or errors but no data")])
+     r"moments \[1\] have masks, errors, units or beams but no data")])
 def test_moments_of_datasets_are_checked(call, message):
     with pytest.raises(ConfigError, match=message):
         call()
+
+
+def test_data_have_the_unit_and_beam_of_their_header(tmp_path):
+    # BUNIT in capitals, as radio headers write it, and the beam in
+    # degrees; the options of the configuration replace them, a BUNIT
+    # that is not a unit is left out, and a dump keeps them
+    import astropy.units as u
+    header = fits.Header(dict(
+        BUNIT='JY/BEAM.KM/S', BMAJ=66 / 3600, BMIN=53.7 / 3600, BPA=-66.5))
+    fits.writeto(tmp_path / 'm0.fits', np.ones((8, 20)), header)
+    data, _ = Data.from_files(str(tmp_path / 'm0.fits'))
+    assert data.unit() == u.Jy * u.km / u.s / u.beam
+    assert data.beam().bmaj == pytest.approx(66)
+    assert data.beam().area() == pytest.approx(1.1331 * 66 * 53.7, rel=1e-4)
+    given, _ = Data.from_files(
+        str(tmp_path / 'm0.fits'), unit='K km/s', beam=dict(bmaj=10, bmin=8))
+    assert given.unit() == u.K * u.km / u.s and given.beam().bmin == 8
+    fits.writeto(tmp_path / 'odd.fits', np.ones((8, 20)),
+                 fits.Header(dict(BUNIT='counts per banana')))
+    assert Data.from_files(str(tmp_path / 'odd.fits'))[0].unit() is None
+    dataset = DatasetPixelMoments({0: data})
+    info = dataset.dump(str(tmp_path / 'dump_'))
+    assert info['moment0']['unit'] == 'Jy km beam-1 s-1'
+    loaded = dataset_parser.load(info)
+    assert loaded['moment0'].unit() == data.unit()
+    assert loaded['moment0'].beam().bpa == pytest.approx(-66.5)

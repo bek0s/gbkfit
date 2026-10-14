@@ -5,21 +5,41 @@ Data items: measured values, with their mask and error.
 
 import os.path
 from collections.abc import Callable, Mapping, Sequence
-from typing import Any, TypeAlias
+from typing import Any, NamedTuple, TypeAlias
 
 import astropy.units
 import numpy as np
 
-from gbkfit.utils import fitsutils, gridutils, parseutils
+from gbkfit.utils import fitsutils, gridutils, parseutils, unitutils
 from gbkfit.utils.parseutils import ConfigError
 
 
 __all__ = [
+    'Beam',
     'Data',
     'FitsFile',
     'dump_data',
     'fits_file'
 ]
+
+
+class Beam(NamedTuple):
+    """
+    The beam of data in units per beam (e.g. Jy/beam): the Gaussian
+    restoring beam of a radio image, of the full widths at half maximum
+    bmaj and bmin (arcsec) and the position angle bpa (degrees). A cube
+    can have one for each channel (e.g. of CASA): its values are then
+    arrays, against the spectral points of the channels (spectral: a
+    Quantity of frequencies, wavelengths or velocities).
+    """
+    bmaj: float | np.ndarray
+    bmin: float | np.ndarray
+    bpa: float | np.ndarray = 0.0
+    spectral: astropy.units.Quantity | None = None
+
+    def area(self) -> float | np.ndarray:
+        """Return its solid angle (arcsec^2): pi / (4 ln 2) bmaj bmin."""
+        return np.pi / (4 * np.log(2)) * np.multiply(self.bmaj, self.bmin)
 
 
 # A FITS file: its filename, or its filename and the HDU to read (by
@@ -84,7 +104,8 @@ class Data:
     """
     Measured values with their mask and error: arrays of one shape, as
     copies (float arrays keep their type, and the others become float64;
-    the mask and the error take the type of the values).
+    the mask and the error take the type of the values), and their unit
+    and beam, if known.
 
     Where the values were measured (e.g. on the pixels of a grid) is
     described by their dataset. The values that are masked (mask 0), not
@@ -99,19 +120,27 @@ class Data:
         The mask: 0 for the values to leave out; by default, none.
     error : ndarray, optional
         The error of each value (its standard deviation).
+    unit : str or astropy.units.UnitBase, optional
+        The unit of the values and the errors (see unitutils.parse_unit).
+    beam : Beam or Mapping, optional
+        Their beam, for units per beam (e.g. Jy/beam): a Beam, or its
+        options bmaj, bmin and bpa.
 
     Raises
     ------
     ConfigError
-        If the mask is not finite, an error is negative, or the arrays
-        are not of one shape.
+        If the mask is not finite, an error is negative, the arrays are
+        not of one shape, the unit is not a unit, or the widths of the
+        beam are not positive.
     """
 
     def __init__(
             self,
             data: np.ndarray,
             mask: np.ndarray | None = None,
-            error: np.ndarray | None = None
+            error: np.ndarray | None = None,
+            unit: str | astropy.units.UnitBase | None = None,
+            beam: Beam | Mapping[str, Any] | None = None
     ):
         data = _as_float(data)
         mask = np.ones_like(data) if mask is None \
@@ -143,6 +172,9 @@ class Data:
         self._data = data
         self._mask = total_mask.astype(data.dtype)
         self._error = error
+        self._unit = unitutils.parse_unit(unit) if isinstance(unit, str) \
+            else unit
+        self._beam = _make_beam(beam)
 
     @classmethod
     def from_files(
@@ -154,10 +186,15 @@ class Data:
             rval: float | Sequence[float] | None = None,
             rest: str | astropy.units.Quantity | None = None,
             spectral_axis: int | None = None,
-            medium: str | None = None
+            medium: str | None = None,
+            unit: str | None = None,
+            beam: Mapping[str, Any] | None = None
     ) -> tuple['Data', gridutils.Coords]:
         """
-        Read a data item from FITS files.
+        Read a data item from FITS files, with the unit and the beam of the
+        header of the file of its values unless given (see
+        fitsutils.read_unit and read_beam; a unit of the header that is
+        not a unit is left out).
 
         Parameters
         ----------
@@ -169,6 +206,10 @@ class Data:
             The file of the errors, or one error for all the values.
         rpix, rval, rest, spectral_axis, medium : optional
             Passed to fitsutils.read_data for the file of the values.
+        unit : str, optional
+            The unit of the values (see Data).
+        beam : Mapping, optional
+            The options of their beam (see Beam).
 
         Returns
         -------
@@ -196,7 +237,12 @@ class Data:
             errors = np.full(values.shape, error, dtype=float)
         else:
             errors = _read(error)[0]
-        return cls(values, masks, errors), coords
+        filename, hdu = (data, 0) if isinstance(data, str) else data
+        if unit is None:
+            unit = _header_unit(filename, hdu)
+        if beam is None:
+            beam = fitsutils.read_beam(filename, hdu)
+        return cls(values, masks, errors, unit, beam), coords
 
     def ndim(self) -> int:
         """Return the number of axes of the arrays."""
@@ -226,6 +272,48 @@ class Data:
         """Return the dtype of the arrays."""
         return self._data.dtype
 
+    def unit(self) -> astropy.units.UnitBase | None:
+        """Return the unit of the values, if known."""
+        return self._unit
+
+    def beam(self) -> Beam | None:
+        """Return the beam of the values, if known."""
+        return self._beam
+
+
+def _header_unit(
+        filename: str, hdu: int | str
+) -> astropy.units.UnitBase | None:
+    """
+    Return the unit of the header of a FITS file (BUNIT), if it has one
+    that is a unit (see unitutils.parse_unit).
+    """
+    text = fitsutils.read_unit(filename, hdu)
+    if text is None:
+        return None
+    try:
+        return unitutils.parse_unit(text)
+    except ConfigError:
+        return None
+
+
+def _make_beam(beam: Beam | Mapping[str, Any] | None) -> Beam | None:
+    """
+    Return a beam from itself or its options. Raise ConfigError if its
+    widths are not positive.
+    """
+    if beam is None:
+        return None
+    if not isinstance(beam, Beam):
+        beam = Beam(**parseutils.parse_options(
+            beam, required={'bmaj', 'bmin'}, optional={'bpa', 'spectral'}))
+    if not (np.all(np.asarray(beam.bmaj) > 0)
+            and np.all(np.asarray(beam.bmin) > 0)):
+        raise ConfigError(
+            f"the widths of a beam must be positive; they are {beam.bmaj} "
+            f"and {beam.bmin}")
+    return beam
+
 
 def dump_data(
         data: Data,
@@ -235,7 +323,8 @@ def dump_data(
 ) -> dict[str, Any]:
     """
     Write the arrays of a data item to files, and return its
-    configuration: the file of each array (see Data.from_files).
+    configuration: the file of each array, and its unit and beam (one
+    beam, not those of the channels of a cube; see Data.from_files).
 
     Parameters
     ----------
@@ -261,4 +350,14 @@ def dump_data(
         if arrays[key] is not None:
             write(filename, arrays[key])
             info[key] = filename if dump_path else os.path.basename(filename)
+    if data.unit() is not None:
+        info['unit'] = unitutils.format_unit(data.unit())
+    beam = data.beam()
+    if beam is not None and beam.spectral is None:
+        info['beam'] = dict(
+            bmaj=float(beam.bmaj), bmin=float(beam.bmin), bpa=float(beam.bpa))
+    elif beam is not None:
+        parseutils.warn(
+            "the beams of the channels of a data item are not dumped; give "
+            "its beam in its configuration (beam: {bmaj, bmin, bpa})")
     return info

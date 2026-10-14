@@ -17,67 +17,73 @@ if TYPE_CHECKING:
 
 
 # The options of the files of a data item
-_ITEM_FILES = ('data', 'mask', 'error')
+_ITEM_OPTIONS = ('data', 'mask', 'error', 'unit', 'beam')
 
 # The orders of the moments that datasets can hold
 _ORDERS = range(8)
 
 
-def item_files(info: Any, prefix: str) -> dict[str, Any]:
+def item_options(info: Any, prefix: str) -> dict[str, Any]:
     """
-    Return the files of a data item from its configuration (the file of
+    Return the options of a data item from its configuration (the file of
     its data, and optionally those of its mask and its error, or one
-    error), as the arguments data, mask and error of Data.from_files, with
-    the prefix prepended to the filenames.
+    error, its unit and its beam), as the arguments data, mask, error,
+    unit and beam of Data.from_files, with the prefix prepended to the
+    filenames.
     """
     if not isinstance(info, Mapping):
         raise ConfigError(
             f"a data item has the file of its data ('data'), and optionally "
-            f"those of its mask ('mask') and error ('error'); it is {info!r}")
+            f"those of its mask ('mask') and error ('error'), its unit "
+            f"('unit') and beam ('beam'); it is {info!r}")
     info = parseutils.parse_options(
-        info, required={'data'}, optional={'mask', 'error'})
-    files = {}
+        info, required={'data'}, optional={'mask', 'error', 'unit', 'beam'})
+    options = {}
     for key, value in info.items():
         if value is None:
             continue
-        if key == 'error' and isinstance(value, (int, float)):
-            files[key] = value
+        if key in ('unit', 'beam') \
+                or (key == 'error' and isinstance(value, (int, float))):
+            options[key] = value
         else:
             with parseutils.config_path(key):
-                files[key] = fits_file(value, prefix)
-    return files
+                options[key] = fits_file(value, prefix)
+    return options
 
 
-def pop_item_files(info: dict[str, Any], prefix: str) -> dict[str, Any]:
+def pop_item_options(info: dict[str, Any], prefix: str) -> dict[str, Any]:
     """
-    Remove the files of the one data item of a dataset from its
+    Remove the options of the one data item of a dataset from its
     configuration, where they are given beside its own options, and
-    return them (see item_files).
+    return them (see item_options).
     """
-    return item_files(
-        {key: info.pop(key) for key in _ITEM_FILES if key in info}, prefix)
+    return item_options(
+        {key: info.pop(key) for key in _ITEM_OPTIONS if key in info}, prefix)
 
 
-def pop_moment_files(info: dict[str, Any], prefix: str) -> dict[str, Any]:
+def pop_moment_options(info: dict[str, Any], prefix: str) -> dict[str, Any]:
     """
     Remove the data items moment0 to moment7 from the configuration of a
-    dataset, and return their files as the arguments moments, masks and
-    errors of its from_files (see item_files).
+    dataset, and return their options as the arguments moments, masks,
+    errors, units and beams of its from_files (see item_options).
     """
-    moments, masks, errors = {}, {}, {}
+    moments, masks, errors, units, beams = {}, {}, {}, {}, {}
     for order in _ORDERS:
         name = f'moment{order}'
         if info.get(name) is None:
             info.pop(name, None)
             continue
         with parseutils.config_path(name):
-            files = item_files(info.pop(name), prefix)
-        moments[order] = files['data']
-        if 'mask' in files:
-            masks[order] = files['mask']
-        if 'error' in files:
-            errors[order] = files['error']
-    return dict(moments=moments, masks=masks, errors=errors)
+            options = item_options(info.pop(name), prefix)
+        moments[order] = options['data']
+        for key, values in (
+                ('mask', masks), ('error', errors), ('unit', units),
+                ('beam', beams)):
+            if key in options:
+                values[order] = options[key]
+    return dict(
+        moments=moments, masks=masks, errors=errors, units=units,
+        beams=beams)
 
 
 def load_with_files(
@@ -121,6 +127,8 @@ def read_moments(
         moments: Mapping[int, FitsFile],
         masks: Mapping[int, FitsFile] | None = None,
         errors: Mapping[int, FitsFile | float] | None = None,
+        units: Mapping[int, str] | None = None,
+        beams: Mapping[int, Mapping[str, Any]] | None = None,
         rpix: float | Sequence[float] | None = None,
         rval: float | Sequence[float] | None = None
 ) -> tuple[dict[int, Data], gridutils.Coords]:
@@ -131,13 +139,19 @@ def read_moments(
     """
     masks = masks or {}
     errors = errors or {}
-    if extra := sorted((set(masks) | set(errors)) - set(moments)):
+    units = units or {}
+    beams = beams or {}
+    if extra := sorted(
+            (set(masks) | set(errors) | set(units) | set(beams))
+            - set(moments)):
         raise ConfigError(
-            f"the moments {extra} have masks or errors but no data")
+            f"the moments {extra} have masks, errors, units or beams but no "
+            f"data")
     items, coords = {}, {}
     for order, data in moments.items():
         items[order], coords[order] = Data.from_files(
-            data, masks.get(order), errors.get(order), rpix, rval)
+            data, masks.get(order), errors.get(order), rpix, rval,
+            unit=units.get(order), beam=beams.get(order))
     if not coords:
         raise ConfigError("a dataset needs at least one moment")
     first = next(iter(coords.values()))

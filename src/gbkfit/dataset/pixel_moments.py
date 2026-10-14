@@ -44,7 +44,7 @@ class DatasetPixelMoments(Dataset):
             cls, info: dict[str, Any], prefix: str = ''
     ) -> 'DatasetPixelMoments':
         info = dict(info)
-        files = _detail.pop_moment_files(info, prefix)
+        files = _detail.pop_moment_options(info, prefix)
         return _detail.load_with_files(cls, info, cls.ndim, **files)
 
     @classmethod
@@ -53,6 +53,8 @@ class DatasetPixelMoments(Dataset):
             moments: Mapping[int, FitsFile],
             masks: Mapping[int, FitsFile] | None = None,
             errors: Mapping[int, FitsFile | float] | None = None,
+            units: Mapping[int, str] | None = None,
+            beams: Mapping[int, Mapping[str, Any]] | None = None,
             step: float | Sequence[float] | None = None,
             rpix: float | Sequence[float] | None = None,
             rval: float | Sequence[float] | None = None,
@@ -72,6 +74,12 @@ class DatasetPixelMoments(Dataset):
         errors : Mapping, optional
             The files of the errors of some of the moment maps, or one
             error for all the values of each.
+        units : Mapping, optional
+            The units of some of the moment maps; by default, those of the
+            headers (see Data.from_files).
+        beams : Mapping, optional
+            The options of the beams of some of the moment maps (see Beam); by
+            default, those of the headers.
         step, rpix, rval : float or Sequence of float, optional
             The world coordinates of the grid (see gridutils.Coords); by
             default, those of the headers. Either rpix or rval can be
@@ -87,7 +95,7 @@ class DatasetPixelMoments(Dataset):
             The dataset.
         """
         items, coords = _detail.read_moments(
-            moments, masks, errors, rpix, rval)
+            moments, masks, errors, units, beams, rpix, rval)
         return cls(items, **_detail.grid_coords(coords, step, rota))
 
     def dump(

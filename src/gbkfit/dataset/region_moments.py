@@ -53,7 +53,7 @@ class DatasetRegionMoments(Dataset):
         info = dict(info)
         parseutils.load_option_and_update_info(
             regions_parser, info, 'regions', required=True, prefix=prefix)
-        files = _detail.pop_moment_files(info, prefix)
+        files = _detail.pop_moment_options(info, prefix)
         return _detail.load_with_files(cls, info, **files)
 
     @classmethod
@@ -62,7 +62,9 @@ class DatasetRegionMoments(Dataset):
             moments: Mapping[int, FitsFile],
             regions: Regions,
             masks: Mapping[int, FitsFile] | None = None,
-            errors: Mapping[int, FitsFile | float] | None = None
+            errors: Mapping[int, FitsFile | float] | None = None,
+            units: Mapping[int, str] | None = None,
+            beams: Mapping[int, Mapping[str, Any]] | None = None
     ) -> 'DatasetRegionMoments':
         """
         Read the dataset from FITS files, each a vector of one value for
@@ -80,13 +82,19 @@ class DatasetRegionMoments(Dataset):
         errors : Mapping, optional
             The files of the errors of some of the moments, or one error
             for all the values of each.
+        units : Mapping, optional
+            The units of some of the moments; by default, those of the
+            headers (see Data.from_files).
+        beams : Mapping, optional
+            The options of the beams of some of the moments (see Beam); by
+            default, those of the headers.
 
         Returns
         -------
         DatasetRegionMoments
             The dataset.
         """
-        items, _ = _detail.read_moments(moments, masks, errors)
+        items, _ = _detail.read_moments(moments, masks, errors, units, beams)
         return cls(items, regions)
 
     def dump(
