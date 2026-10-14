@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 import astropy.io.fits as fits
+from astropy.table import Table
 import numpy as np
 import ruamel.yaml
 
@@ -333,8 +334,9 @@ def write_outputs(
     """
     Write each output by its type: data on a grid (GridData) and spectra
     (SpectraData) to a FITS file with world coordinates, other arrays to
-    a FITS file without, and the other values (numbers, strings, lists
-    and dicts) together to <extra_filename>.json and .yaml.
+    a FITS file without, tables (astropy Table) to an ECSV file, and the
+    other values (numbers, strings, lists and dicts) together to
+    <extra_filename>.json and .yaml.
     """
     values = {}
     for name, value in outputs.items():
@@ -348,6 +350,9 @@ def write_outputs(
                 filename, value.data, value.coords, overwrite=True)
         elif isinstance(value, np.ndarray):
             fits.writeto(filename, value, overwrite=True)
+        elif isinstance(value, Table):
+            value.write(
+                os.path.join(output_dir, f'{name}.ecsv'), overwrite=True)
         elif isinstance(value, (bool, int, float, str, list, tuple, dict,
                                 np.generic)):
             values[name] = numutils.nativify(value)
