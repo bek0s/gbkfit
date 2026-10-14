@@ -108,7 +108,7 @@ def assert_same(actual, desired):
 
 @pytest.mark.parametrize('data_unit, beam, message', [
     ('Jy/beam', None, "have no beam"),
-    (None, None, "without data, the model of an observation is in the unit"),
+    (None, None, "without data of light .* is in the unit of the comp"),
 ])
 def test_the_units_of_model_and_data_must_go_together(
         driver, data_unit, beam, message):
