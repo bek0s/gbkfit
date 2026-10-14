@@ -9,7 +9,8 @@ from typing import Any, Self
 
 import astropy.units
 
-from gbkfit.utils import iterutils, parseutils
+from gbkfit.utils import iterutils, parseutils, unitutils
+from . import _units
 from .extinction import ExtinctionLaw, extinction_law_parser
 from .lines import (
     Band, Bands, Line, LineCatalogue, Lines, band_parser, line_parser)
@@ -80,6 +81,14 @@ class Emission(parseutils.TypedSerializable, abc.ABC):
         return True
 
     @abc.abstractmethod
+    def unit(self) -> astropy.units.UnitBase | None:
+        """
+        Return the physical unit of its density, if it has one: without
+        one, its density is in the units of the data of each observation
+        of it.
+        """
+
+    @abc.abstractmethod
     def wavelengths(
             self,
             lines: Sequence[str] | None,
@@ -106,11 +115,21 @@ class LineEmission(Emission):
         The lines (the flux of each after the first, relative to the
         first, is a parameter '{name}_ratio'); by default one line at the
         velocity of the spectral axis, whatever the line is.
+    unit : str or astropy.units.UnitBase, optional
+        The physical unit of the density (that of the first line; the
+        ratios have none): the light of the line integrated over it, per
+        solid angle (e.g. '1e-17 erg/s/cm2/arcsec2', 'Jy km/s/arcsec2',
+        'K km/s'), or for HI (lines: [hi21]) its column density ('cm-2') or
+        the surface density of its mass ('Msun/pc2'); that of the flux of
+        a point is this unit times arcsec^2. Without a unit, the density is
+        in the units of the data of each observation of it (see
+        Observation).
 
     Raises
     ------
     ConfigError
-        If there are no lines, or their names repeat.
+        If there are no lines, their names repeat, or the unit is not one
+        of lines (see _units.check_line_unit).
     """
 
     @staticmethod
@@ -159,10 +178,21 @@ class LineEmission(Emission):
     def dump(self) -> dict[str, Any]:
         lines = self._lines.lines()
         return dict(type=self.type()) | (
-            {} if lines is None else dict(lines=line_parser.dump(list(lines))))
+            {} if lines is None else dict(lines=line_parser.dump(list(lines)))
+        ) | _dump_unit(self._unit)
 
-    def __init__(self, lines: Sequence[Line] | None = None):
+    def __init__(
+            self,
+            lines: Sequence[Line] | None = None,
+            unit: str | astropy.units.UnitBase | None = None
+    ):
         self._lines = Lines(lines)
+        self._unit = _parse_unit(unit)
+        if self._unit is not None:
+            _units.check_line_unit(self._unit, self._lines.names())
+
+    def unit(self) -> astropy.units.UnitBase | None:
+        return self._unit
 
     def lines(self) -> Lines:
         """Return the lines."""
@@ -193,11 +223,18 @@ class BandEmission(Emission):
     ----------
     bands : Sequence of Band, optional
         The bands; every band if None.
+    unit : str or astropy.units.UnitBase, optional
+        The physical unit of the density (that of the first band; the
+        ratios have none): a flux density per solid angle (e.g.
+        'Jy/arcsec2', 'MJy/sr', '1e-20 erg/s/cm2/Angstrom/arcsec2') or a
+        brightness temperature ('K'). Without a unit, the density is in
+        the units of the data of each observation of it.
 
     Raises
     ------
     ConfigError
-        If there are no bands, or their names repeat.
+        If there are no bands, their names repeat, or the unit is not one
+        of bands (see _units.check_band_unit).
     """
 
     @staticmethod
@@ -246,10 +283,21 @@ class BandEmission(Emission):
     def dump(self) -> dict[str, Any]:
         bands = self._bands.bands()
         return dict(type=self.type()) | (
-            {} if bands is None else dict(bands=band_parser.dump(list(bands))))
+            {} if bands is None else dict(bands=band_parser.dump(list(bands)))
+        ) | _dump_unit(self._unit)
 
-    def __init__(self, bands: Sequence[Band] | None = None):
+    def __init__(
+            self,
+            bands: Sequence[Band] | None = None,
+            unit: str | astropy.units.UnitBase | None = None
+    ):
         self._bands = Bands(bands)
+        self._unit = _parse_unit(unit)
+        if self._unit is not None:
+            _units.check_band_unit(self._unit)
+
+    def unit(self) -> astropy.units.UnitBase | None:
+        return self._unit
 
     def bands(self) -> Bands:
         """Return the bands."""
@@ -267,6 +315,18 @@ class BandEmission(Emission):
         if band is None:
             return (None,)
         return (band.wavelength().to_value(astropy.units.um) / (1 + redshift),)
+
+
+def _parse_unit(
+        unit: str | astropy.units.UnitBase | None
+) -> astropy.units.UnitBase | None:
+    """Return a unit, read from its text if given as text."""
+    return unitutils.parse_unit(unit) if isinstance(unit, str) else unit
+
+
+def _dump_unit(unit: astropy.units.UnitBase | None) -> dict[str, str]:
+    """Return the option unit of a configuration, if there is a unit."""
+    return {} if unit is None else dict(unit=unitutils.format_unit(unit))
 
 
 class Opacity(parseutils.TypedSerializable, abc.ABC):

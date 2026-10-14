@@ -14,6 +14,7 @@ from gbkfit.utils import gridutils, iterutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
 from ..distance import Distance
 from ..mass import MassModel
+from . import _units
 from ._component_plans import ComponentPlans
 from ._detail import shared_params
 from ._gravity import GravityPlan
@@ -195,8 +196,9 @@ class ComponentSet:
     ConfigError
         If there are no components, several without names, or the names
         of the components, their geometries and their parameters
-        conflict, or the mass and the components do not go together (see
-        _with_mass_params).
+        conflict, the mass and the components do not go together (see
+        _with_mass_params), or components give one line different units
+        (see _units.check_line_units_agree).
     """
 
     def __init__(
@@ -208,6 +210,7 @@ class ComponentSet:
         components = iterutils.tuplify(components)
         if not components:
             raise ConfigError("a galaxy needs at least one component")
+        _units.check_line_units_agree(components)
         self._components = components
         self._prefixes = _component_prefixes(components)
         params, self._mappings = _merge_params(components, self._prefixes)
