@@ -1,8 +1,10 @@
 """Tests for the physical units of data and models (unitutils)."""
 
 import astropy.units as u
+import numpy as np
 import pytest
 
+from gbkfit.model.components._units import band_factor, line_factor
 from gbkfit.utils.parseutils import ConfigError
 from gbkfit.utils.unitutils import format_unit, parse_unit
 
@@ -76,3 +78,51 @@ def test_a_line_has_one_unit_in_a_galaxy():
                 type='lines', lines=['hi21'], unit='Msun/pc2')),
             disk | dict(name='ionised', emission=dict(
                 type='lines', lines=['halpha', 'hi21'], unit='K km/s'))]))
+
+
+# The beam of the HI data of NGC 1313 (LVHIS), and pixels of 0.2 arcsec
+BEAM = np.pi / (4 * np.log(2)) * 66 * 53.7 * u.arcsec ** 2
+PIXEL = 0.04 * u.arcsec ** 2
+HI = 1420.405751 * u.MHz
+
+
+def test_hi_mass_is_its_moment_0_by_the_textbook():
+    # N_HI = 1.105e24 S / (bmaj bmin) cm^-2 for S in Jy/beam km/s, and
+    # 1.249e20 H atoms per cm^2 in 1 Msun/pc^2: the factor computed by
+    # hand for NGC 1313 (to 0.1%, the rounding of those constants)
+    factor = line_factor(
+        parse_unit('Msun/pc2'), parse_unit('Jy/beam km/s'), HI, BEAM, PIXEL,
+        True)
+    assert factor == pytest.approx(1.249e20 * 66 * 53.7 / 1.105e24, rel=1e-3)
+
+
+def test_lines_in_cubes_per_velocity():
+    # A cube is the light per km/s: K km/s gives K; and an optical line
+    # per arcsec^2 gives per Angstrom per spaxel (c / lambda km/s per
+    # Angstrom, times the area of the pixel)
+    assert line_factor(
+        parse_unit('K km/s'), u.K, HI, None, PIXEL, False) == pytest.approx(1)
+    halpha = 6564.61 * u.Angstrom
+    factor = line_factor(
+        parse_unit('1e-17 erg/s/cm2/arcsec2'),
+        parse_unit('1e-20 erg/s/cm2/Angstrom'),
+        halpha.to(u.Hz, u.spectral()), None, PIXEL, False)
+    assert factor == pytest.approx(
+        1e-17 * (299792.458 / 6564.61) * 0.04 / 1e-20, rel=1e-12)
+
+
+def test_bands_per_beam_and_per_pixel():
+    one_micron = (1 * u.um).to(u.Hz, u.spectral())
+    assert band_factor(
+        parse_unit('Jy/arcsec2'), parse_unit('Jy/beam'), HI, BEAM,
+        PIXEL) == pytest.approx(BEAM.to_value(u.arcsec ** 2))
+    assert band_factor(
+        parse_unit('Jy/arcsec2'), u.Jy, one_micron, None,
+        PIXEL) == pytest.approx(0.04)
+
+
+def test_data_per_beam_need_a_beam():
+    with pytest.raises(ConfigError, match="have no beam"):
+        line_factor(
+            parse_unit('K km/s'), parse_unit('Jy/beam'), HI, None, PIXEL,
+            False)
