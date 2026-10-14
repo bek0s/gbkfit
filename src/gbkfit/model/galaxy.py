@@ -14,7 +14,7 @@ from gbkfit.utils.parseutils import ConfigError
 from .components import _detail
 from .components._component_set import ComponentSet, ComponentSetPlan
 from .components._gravity import GravityPlan
-from .components._transfer import TransferPlan
+from .components._transfer import TransferMember
 from .components.base import Component, DepthAxis, OpacityCubes
 from .components.disks import MCDisk, SMDisk
 from .components.geometries import Geometry, geometry_parser
@@ -301,31 +301,20 @@ class Galaxy(parseutils.Serializable):
             driver, grid, spectral, depth, dtype, emitters, cubes, lines,
             band, smoothing)
 
-    def plan_transfer(
+    def transfer_member(
             self,
-            driver: Driver,
-            grid: gridutils.Grid,
-            spectral: gridutils.Grid,
-            depth: DepthAxis,
-            dtype: np.dtype,
             emitters: Sequence[int],
             cubes: OpacityCubes,
-            lines: tuple[str, ...] | None,
-            band: Band | None,
-            slab: int | None,
-            subchannels: int,
-            smoothing: float | None
-    ) -> TransferPlan:
+            depth: DepthAxis
+    ) -> TransferMember:
         """
-        Plan the evaluation of the galaxy on the grid of an observation by
-        radiative transfer along each line of sight, in slabs of the given
-        number of planes of the depth axis, all if None, at the given
-        number of sub-channels of each channel (see TransferPlan); the
-        other arguments are those of plan, with a depth axis.
+        Return the galaxy as a march of radiative transfer evaluates it on
+        the grid of an observation (see TransferPlan): the given emitters,
+        cubes and its own depth axis are those of plan.
         """
-        return self._component_set.plan_transfer(
-            driver, grid, spectral, depth, dtype, emitters, cubes, lines,
-            band, self._redshift, slab, subchannels, smoothing)
+        return TransferMember(
+            self._component_set, tuple(emitters), cubes, self._redshift,
+            depth)
 
 
 galaxy_parser = parseutils.BasicParser(Galaxy)

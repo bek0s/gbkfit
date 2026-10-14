@@ -6,7 +6,7 @@ grid of the observation (ScenePlan).
 
 import abc
 from collections.abc import Sequence
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 import numpy as np
 
@@ -28,11 +28,26 @@ if TYPE_CHECKING:
 
 __all__ = [
     'AdditiveScenePlan',
+    'DepthUnit',
     'Scene',
     'ScenePlan',
     'TransferScenePlan',
     'make_scene'
 ]
+
+
+class DepthUnit(NamedTuple):
+    """
+    Galaxies of a scene that radiative transfer marches together (see
+    TransferScenePlan): one galaxy, or a group of galaxies that can pass
+    through each other (see ObservationGroup: depth_order), by index, with
+    the name of the group, and the parameter of the position of each along
+    the line of sight, from the first of its group (its separation; None
+    for the first, at 0).
+    """
+    galaxies: tuple[int, ...]
+    name: str | None = None
+    separations: tuple[str | None, ...] = (None,)
 
 
 class Scene:
@@ -41,10 +56,10 @@ class Scene:
     each whose light it sees (its emitters; the opacity of all components
     applies), its emission lines (all if None) or its band (if known), its
     line of sight, and the order of the galaxies along it, front to back
-    (their indices; those it leaves out after them, in their order). The
-    parameters of each galaxy have the names of the mapping of the galaxy
-    among those of the observation group, and its extra outputs the prefix
-    of the galaxy.
+    (in units: galaxies or groups of them; those it leaves out after them,
+    in their order). The parameters of each galaxy have the names of the
+    mapping of the galaxy among those of the observation group, and its
+    extra outputs the prefix of the galaxy (those of a group, its name).
     """
 
     def __init__(
@@ -56,7 +71,7 @@ class Scene:
             lines: tuple[str, ...] | None,
             band: Band | None,
             line_of_sight: 'LineOfSight',
-            order: Sequence[int] | None = None
+            order: Sequence[DepthUnit] | None = None
     ):
         self._galaxies = tuple(galaxies)
         self._mappings = tuple(mappings)
@@ -66,8 +81,10 @@ class Scene:
         self._band = band
         self._line_of_sight = line_of_sight
         order = tuple(order or ())
+        ordered = {g for unit in order for g in unit.galaxies}
         self._order = order + tuple(
-            g for g in range(len(self._galaxies)) if g not in order)
+            DepthUnit((g,)) for g in range(len(self._galaxies))
+            if g not in ordered)
 
     def bounding_radius(self) -> float:
         """
@@ -143,25 +160,35 @@ class ScenePlan(abc.ABC):
             {name: params[full] for name, full in mapping.items()}
             for mapping in scene._mappings]
         extras = [{} for _ in values] if out_extra is not None else None
-        self._evaluate(values, gravity, {self._key: data}, extras)
+        group_extras = {} if out_extra is not None else None
+        self._evaluate(
+            params, values, gravity, {self._key: data}, extras, group_extras)
         if out_extra is not None:
             for prefix, extra in zip(scene._prefixes, extras):
                 out_extra.update(
                     {f'{prefix}{key}': value for key, value in extra.items()})
+            for name, extra in group_extras.items():
+                out_extra.update(
+                    {f'{name}_{key}': value for key, value in extra.items()})
 
     @abc.abstractmethod
     def _evaluate(
             self,
+            group_params: ParamValues,
             params: list[ParamValues],
             gravity: Sequence[dict[int, ParamValues]],
             outputs: dict[str, DeviceArray],
-            extras: list[dict[str, Any]] | None
+            extras: list[dict[str, Any]] | None,
+            group_extras: dict[str, dict[str, Any]] | None
     ) -> None:
         """
         Add the light of the galaxies to the output array (see evaluate),
-        with the parameters of each galaxy (by its own names) and what its
-        gravity gives its components; with extras, the extra outputs of
-        each galaxy go to its item.
+        with the parameters of the observation group (group_params: e.g.
+        the separations of the galaxies of a group, see DepthUnit), those
+        of each galaxy (by its own names) and what its gravity gives its
+        components; with extras, the extra outputs of each galaxy go to
+        its item, and those of each group of galaxies to group_extras, by
+        its name.
         """
         pass
 
@@ -198,10 +225,12 @@ class AdditiveScenePlan(ScenePlan):
 
     def _evaluate(
             self,
+            group_params: ParamValues,
             params: list[ParamValues],
             gravity: Sequence[dict[int, ParamValues]],
             outputs: dict[str, DeviceArray],
-            extras: list[dict[str, Any]] | None
+            extras: list[dict[str, Any]] | None,
+            group_extras: dict[str, dict[str, Any]] | None
     ) -> None:
         resolutions = [
             plan.evaluate(
@@ -217,12 +246,13 @@ class AdditiveScenePlan(ScenePlan):
 class TransferScenePlan(ScenePlan):
     """
     The evaluation of a scene by radiative transfer along each line of
-    sight (see Transfer): each galaxy on a depth axis of its own (for its
-    largest disk), marched one after the other, front to back, in the
-    order of the scene, from the opacity of the galaxies in front of it
-    (see TransferPlan). One set of cubes of opacity holds the dust of all
-    of them (see opacity_cubes). (The light of galaxies without opacity
-    just adds up, in any order.)
+    sight (see Transfer), unit by unit, front to back, in the order of the
+    scene (see DepthUnit): a galaxy on a depth axis of its own (for its
+    largest disk), or a group of galaxies on one axis, each at its
+    position (see TransferPlan), from the opacity of the units in front of
+    it. One set of cubes of opacity holds the dust of all of them (see
+    opacity_cubes). (The light of galaxies without opacity just adds up,
+    in any order.)
 
     With extra outputs, it logs a warning if the march resolves line
     opacity, or the depth axis the velocity of the light, too coarsely
@@ -244,21 +274,22 @@ class TransferScenePlan(ScenePlan):
         cubes = opacity_cubes(
             scene._galaxies, scene._emitters, scene._lines, scene._band,
             dtype)
-        axes = [
-            scene._line_of_sight.depth_axis(
-                spatial, _bounding_radius(*galaxy))
-            for galaxy in zip(scene._galaxies, scene._emitters)]
+        members = [
+            galaxy.transfer_member(
+                emitters, galaxy_cubes, scene._line_of_sight.depth_axis(
+                    spatial, _bounding_radius(galaxy, emitters)))
+            for galaxy, emitters, galaxy_cubes in zip(
+                scene._galaxies, scene._emitters, cubes)]
         self._plans: tuple[TransferPlan, ...] = tuple(
-            galaxy.plan_transfer(
-                driver, spatial, self._spectral, axis, dtype, emitters,
-                galaxy_cubes, scene._lines, scene._band, slab, subchannels,
-                smoothing)
-            for galaxy, emitters, axis, galaxy_cubes in zip(
-                scene._galaxies, scene._emitters, axes, cubes))
+            TransferPlan(
+                [members[g] for g in unit.galaxies], driver, spatial,
+                self._spectral, dtype, scene._lines, scene._band, slab,
+                subchannels, smoothing)
+            for unit in scene._order)
         self._subchannels = subchannels
         # (that of every galaxy)
-        self._depth_step = axes[0].step
-        # The state of the march from one galaxy to the next: the optical
+        self._depth_step = members[0].depth.step
+        # The state of the march from one unit to the next: the optical
         # depth of the dust in front, in each cube of opacity, and with
         # line opacity, that of the lines at each sub-channel
         self._driver = driver
@@ -274,28 +305,38 @@ class TransferScenePlan(ScenePlan):
 
     def _evaluate(
             self,
+            group_params: ParamValues,
             params: list[ParamValues],
             gravity: Sequence[dict[int, ParamValues]],
             outputs: dict[str, DeviceArray],
-            extras: list[dict[str, Any]] | None
+            extras: list[dict[str, Any]] | None,
+            group_extras: dict[str, dict[str, Any]] | None
     ) -> None:
         for state in (self._opacity_front, self._tau):
             if state is not None:
                 self._driver.mem_fill(state, 0)
-        # Each galaxy marches from the dust and the line opacity in front
-        # of it, if any; with extras, its march tells how finely it
-        # resolves its lines, and the worst gets a warning
+        # Each unit marches from the dust and the line opacity in front of
+        # it, if any; with extras, its march tells how finely it resolves
+        # its lines, and the worst gets a warning. The extras of the march
+        # of a galaxy are its own; those of a group, the group's.
         dust = line_opacity = False
         resolutions = []
-        for g in self._scene._order:
-            plan = self._plans[g]
+        for unit, plan in zip(self._scene._order, self._plans):
             dust = dust or plan.has_dust()
             line_opacity = line_opacity or plan.has_line_opacity()
+            unit_extras = march_extra = None
+            if extras is not None:
+                unit_extras = [extras[g] for g in unit.galaxies]
+                march_extra = unit_extras[0] if unit.name is None \
+                    else group_extras.setdefault(unit.name, {})
+            positions = [
+                0.0 if name is None else float(group_params[name])
+                for name in unit.separations]
             resolution = plan.evaluate(
-                params[g], gravity[g], outputs,
-                extras[g] if extras is not None else None,
-                self._opacity_front if dust else None,
-                self._tau if line_opacity else None)
+                [params[g] for g in unit.galaxies],
+                [gravity[g] for g in unit.galaxies], outputs, unit_extras,
+                march_extra, self._opacity_front if dust else None,
+                self._tau if line_opacity else None, positions)
             if resolution is not None:
                 resolutions.append(resolution)
         if resolutions:
@@ -329,13 +370,13 @@ def make_scene(
         band: Band | None,
         line_of_sight: 'LineOfSight',
         emission: type[Emission],
-        order: Sequence[int] | None = None
+        order: Sequence[DepthUnit] | None = None
 ) -> Scene:
     """
     Return the scene of an observation of the given galaxies (see Scene),
     which sees the emission of the given type (see Observable.emission),
     in the given band if known (an image), and of their order along the
-    line of sight, front to back (their indices, if given; see
+    line of sight, front to back (in units, if given; see DepthUnit and
     ObservationGroup: depth_order). The names of the components it
     sees (all those with that emission, in its band, if None) are
     qualified by the names of their galaxies ('galaxy.component') when it

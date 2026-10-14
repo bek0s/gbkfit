@@ -7,6 +7,7 @@ import numpy as np
 import pytest
 
 from gbkfit.model import galaxy_parser
+from gbkfit.observation import DepthGroup
 from gbkfit.utils import gridutils
 
 
@@ -526,11 +527,57 @@ def test_galaxies_without_opacity_add_up_in_any_order(driver):
     assert_same_model(swapped, model)
 
 
+def test_a_group_at_one_place_is_a_galaxy_of_all(driver):
+    # Two galaxies of a group at separation 0 (gas; and dust with a point
+    # in it) are one galaxy of all their components: the dust dims the
+    # gas and the point voxel by voxel. The march of the group writes its
+    # extras under its name.
+    gas = {k: v for k, v in PROPERTIES.items() if k.startswith('gas_')}
+    rest = {k: v for k, v in PROPERTIES.items() if k not in gas}
+    one, _ = galaxies_model(
+        driver, [dict(name='one', components=[GAS, DUST, NUCLEUS])],
+        galaxy_properties('one', PROPERTIES))
+    galaxies = [
+        dict(name='a', components=[GAS]),
+        dict(name='b', components=[DUST, NUCLEUS])]
+    properties = galaxy_properties('a', gas) \
+        | galaxy_properties('b', rest) | dict(b_separation=0)
+    pair, extra = galaxies_model(
+        driver, galaxies, properties, [DepthGroup('pair', ('a', 'b'))])
+    assert_same_model(pair, one)
+    assert 'observation0_model_pair_total_unabsorbed' in extra
+    assert 'observation0_model_a_gas_bdata' in extra
+
+
+@pytest.mark.parametrize('separation', [100, -100])
+def test_a_group_far_apart_is_its_galaxies_in_order(driver, separation):
+    # Far apart (by whole voxels), the galaxies of a group are the
+    # galaxies in the order of their separation, and leaving out more of
+    # the empty stretch between them changes nothing
+    galaxies = [
+        dict(name='a', components=[GAS, DUST]),
+        dict(name='b', components=[GAS])]
+    properties = galaxy_properties('a', PROPERTIES) | galaxy_properties(
+        'b', {k: v for k, v in PROPERTIES.items() if k.startswith('gas_')})
+
+    def model(order, **values):
+        return galaxies_model(
+            driver, galaxies, properties | values, order,
+            with_extras=False)[0]
+
+    group = [DepthGroup('pair', ('a', 'b'))]
+    ordered = model(['a', 'b'] if separation > 0 else ['b', 'a'])
+    assert_same_model(model(group, b_separation=separation), ordered)
+    assert_same_model(model(group, b_separation=3 * separation), ordered)
+
+
 @pytest.mark.parametrize('line_of_sight, depth_order, message', [
     ('grid', ['a', 'b'], "needs a line of sight of radiative transfer"),
     ('transfer', ['a'], r"must give the place of the galaxies \['b'\]"),
     ('transfer', ['a', 'c'], r"names unknown galaxies \['c'\]"),
-    ('transfer', ['a', 'b', 'a'], "repeats galaxies")])
+    ('transfer', ['a', 'b', 'a'], "repeats galaxies"),
+    ('transfer', [DepthGroup('pair', ('a',)), 'b'], "at least two galaxies"),
+    ('transfer', [DepthGroup('a', ('a', 'b'))], "the name of a galaxy")])
 def test_several_galaxies_errors(
         driver, line_of_sight, depth_order, message):
     from gbkfit.utils.parseutils import ConfigError
