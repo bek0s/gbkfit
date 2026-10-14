@@ -23,6 +23,7 @@ if TYPE_CHECKING:
 __all__ = [
     'DataUnit',
     'LineFactors',
+    'OpacityScales',
     'band_factor',
     'check_band_unit',
     'check_line_unit',
@@ -382,6 +383,44 @@ class LineFactors:
             return factors
         return factors * (self._frequency(vsys) / self._frequencies) \
             ** self._powers
+
+
+class OpacityScales:
+    """
+    The factors that turn the light of the lines of a component with a
+    unit (source), as the model holds it (in the unit of the data of an
+    observation, target; or without data, in its own unit, see
+    line_factors), into brightness temperature (K per km/s of the
+    spectral axis): the coefficients of its line opacity are then 1/S in
+    1/K (see LineOpacity), and the light of a voxel in K over S is its
+    optical depth. Like the factors of the light, they are taken at the
+    frequency of each line at the systemic velocity of the component
+    (see line_factor; about 0.1% across a line).
+
+    Raises
+    ------
+    ConfigError
+        If a factor cannot be computed (see LineFactors).
+    """
+
+    def __init__(
+            self,
+            source: u.UnitBase,
+            target: DataUnit | None,
+            rows: np.ndarray,
+            spectral: gridutils.Grid
+    ):
+        self._kelvin = LineFactors(
+            source, DataUnit(u.K, 1.0), rows, spectral)
+        self._light = line_factors(source, target, rows, spectral)
+
+    def __call__(self, vsys: float) -> np.ndarray:
+        """
+        Return the factor of each line, with the component at the given
+        systemic velocity (km/s).
+        """
+        kelvin = self._kelvin(vsys)
+        return kelvin if self._light is None else kelvin / self._light(vsys)
 
 
 def band_factor(

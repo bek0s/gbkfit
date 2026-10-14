@@ -13,8 +13,9 @@ from gbkfit.math import interpolation
 from gbkfit.params import ParamValues
 from gbkfit.utils import gridutils, iterutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
-from .._detail import Fluxes, dump_geometry, dump_name, parse_nodes
-from .._units import DataUnit, band_factor, line_factors
+from .._detail import (
+    Fluxes, dump_geometry, dump_name, parse_nodes, systemic_velocity)
+from .._units import DataUnit, OpacityScales, band_factor, line_factors
 from ..base import Component, ComponentPlan, FieldsLayout, NativeGrid
 from ..geometries import Geometry
 from ..lines import Band, Bands, LineCatalogue, Lines
@@ -369,12 +370,16 @@ def disk_plan(
     ratios = [
         (row, lines.ratio_name(index)) for row, index in enumerate(selected)
         if lines.ratio_name(index) is not None]
+    # (with a unit, the coefficients of line opacity are 1/S in 1/K)
+    opacity_scales = None
+    if disk.opacity_lines() and unit is not None:
+        opacity_scales = OpacityScales(unit, data_unit, rows, spectral)
     return DiskComponentPlan(
         driver, disk.plan(driver, len(selected), dtype, opacity_rows),
         opacity_ratios,
         Fluxes(len(rows), ratios, line_factors(
             unit, data_unit, rows, spectral)),
-        rows)
+        rows, opacity_scales)
 
 
 class DiskComponentPlan(ComponentPlan):
@@ -384,7 +389,10 @@ class DiskComponentPlan(ComponentPlan):
     given ratios (see Component.plan), or its optical depth to a cube of
     opacity. Its light is that of the given lines (the offset and scale of
     each on the spectral axis, see Lines.values), or in an image, that of
-    its band, of the given fluxes (see Fluxes).
+    its band, of the given fluxes (see Fluxes). With line opacity and a
+    unit, the fields of the opacity of each line are times its scale to
+    brightness temperature (opacity_scales), as its coefficients are 1/S
+    in 1/K.
     """
 
     def __init__(
@@ -393,11 +401,13 @@ class DiskComponentPlan(ComponentPlan):
             disk_plan_: _disk.DiskPlan,
             opacity_ratios: np.ndarray | None = None,
             fluxes: Fluxes | None = None,
-            lines: np.ndarray | None = None
+            lines: np.ndarray | None = None,
+            opacity_scales: OpacityScales | None = None
     ):
         self._driver = driver
         self._disk_plan = disk_plan_
         self._fluxes = fluxes
+        self._opacity_scales = opacity_scales
         self._opacity_ratios = None
         if opacity_ratios is not None:
             self._opacity_ratios = driver.mem_copy_h2d(opacity_ratios)
@@ -449,6 +459,13 @@ class DiskComponentPlan(ComponentPlan):
         self._driver.mem_fill(fields, 0)
         self._disk_plan.evaluate(
             params, grid, dict(fields=fields), out_extra, 'bdata')
+        if self._opacity_scales is not None:
+            # (the fields of line opacity follow those of the light, its
+            # velocity and its dispersion: one for each line)
+            scales = self._opacity_scales(systemic_velocity(params))
+            for row, scale in enumerate(scales):
+                slot = fields[3 + row]
+                self._driver.math_mul(slot, slot.dtype.type(scale), out=slot)
 
     def evaluate_opacity(
             self,
