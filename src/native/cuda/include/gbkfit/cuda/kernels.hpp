@@ -365,4 +365,23 @@ objective_residual(
             size, weight, missing, res);
 }
 
+template<typename T> __global__ void
+objective_amplitude_sums(
+        const T* obs_d, const T* obs_e, const T* obs_m,
+        const T* mdl_d, const T* mdl_w,
+        int nchannels, int nspectra, double* a, double* b, double* f)
+{
+    const int nthreads = nspectra;
+    const int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (tid >= nthreads) {
+        return;
+    }
+
+    gbkfit::objective_amplitude_sums(
+            tid,
+            obs_d, obs_e, obs_m,
+            mdl_d, mdl_w,
+            nchannels, nspectra, a, b, f);
+}
+
 } // namespace gbkfit::cuda::kernels

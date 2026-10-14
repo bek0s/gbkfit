@@ -1,6 +1,8 @@
+import math
 from typing import Any
 
 import numpy as np
+import scipy.special
 
 from gbkfit.dataset import Dataset
 from gbkfit.driver import DeviceArray
@@ -29,6 +31,12 @@ class Objective:
     likelihood (times the weight of the item): a model must not lower the
     chi-square by having no values. Each observation checks that its
     data are of the form of its model (see Observation).
+
+    A likelihood with free amplitudes (see LikelihoodGaussian) scales
+    each spectrum of the model by its best amplitude before the
+    residuals, and its log-likelihood has them integrated out; they are
+    nuisance parameters (see nnuisance), and an extra output,
+    '{prefix}amplitudes' (see ObservationGroup.extra_prefix).
 
     The methods for fitters return totals over all observations and new
     arrays (chi2, log_likelihood, residuals). The others return a value
@@ -84,6 +92,18 @@ class Objective:
         missing = [obs.likelihood().missing_residual() for obs in observations]
         self._missing_residuals = tuple(
             np.nan if residual is None else residual for residual in missing)
+        # The data item of the spectra of free amplitudes of each
+        # observation, if any; the sums of each spectrum (A, B and F, see
+        # LikelihoodGaussian) on the host (h) and the device (d), and the
+        # amplitudes, which scale the spectra of the model
+        self._amplitude_items = tuple(
+            obs.observable().spectra_item()
+            if obs.likelihood().amplitudes() is not None else None
+            for obs in observations)
+        self._h_amplitude_sums = iterutils.make_list(n, None)
+        self._d_amplitude_sums = iterutils.make_list(n, None)
+        self._h_amplitudes = iterutils.make_list(n, None)
+        self._d_amplitudes = iterutils.make_list(n, None)
         # The native objective of each observation, for its driver
         self._backends = iterutils.make_list(n, None)
         # The memory is allocated on the first evaluation (see prepare)
@@ -157,6 +177,14 @@ class Objective:
                 self._d_residual_nddata[i][key] = \
                     self._d_residual_vector[i][slice_].reshape(shape)
             self._backends[i] = driver.native_class('Objective', dtype)()
+            if self._amplitude_items[i] is not None:
+                spectra = shape[1:]
+                sums = [driver.mem_alloc_s(spectra, np.float64)
+                        for _ in range(3)]
+                self._h_amplitude_sums[i] = [h for h, _ in sums]
+                self._d_amplitude_sums[i] = [d for _, d in sums]
+                (self._h_amplitudes[i],
+                 self._d_amplitudes[i]) = driver.mem_alloc_s(spectra, dtype)
         self._prepared = True
 
     def chi2(
@@ -188,7 +216,8 @@ class Objective:
             out_extra: dict[str, Any] | None = None
     ) -> float:
         """
-        Return the log-likelihood of all observations: -chi2 / 2. The
+        Return the log-likelihood of all observations: -chi2 / 2, and
+        with free amplitudes, their integral (see LikelihoodGaussian). The
         constant of the Gaussian normalisation (which depends only on the
         errors of the data) is left out.
 
@@ -204,7 +233,31 @@ class Objective:
         float
             The log-likelihood.
         """
-        return -0.5 * self.chi2(params, out_extra)
+        return self.chi2_and_log_likelihood(params, out_extra)[1]
+
+    def chi2_and_log_likelihood(
+            self,
+            params: ParamValues,
+            out_extra: dict[str, Any] | None = None
+    ) -> tuple[float, float]:
+        """
+        Return the chi-square and the log-likelihood of all observations,
+        of one evaluation (see chi2 and log_likelihood).
+
+        Parameters
+        ----------
+        params : ParamValues
+            The parameters of the models, prefixed (see pdescs).
+        out_extra : dict, optional
+            Where the extra outputs of the models go, if wanted.
+
+        Returns
+        -------
+        tuple of float
+            The chi-square and the log-likelihood.
+        """
+        chi2 = self.chi2(params, out_extra)
+        return chi2, -0.5 * chi2 + self._amplitude_terms()
 
     def residuals(
             self,
@@ -232,6 +285,20 @@ class Objective:
         """
         vectors = self.residual_vector_h(params, True, out_extra)
         return np.concatenate(vectors, dtype=np.float64)
+
+    def nnuisance(self) -> int:
+        """
+        Return the number of nuisance parameters that the objective solves
+        itself: the free amplitude of each spectrum with values in the
+        data (see LikelihoodGaussian). The degrees of freedom of a fit
+        exclude them.
+        """
+        count = 0
+        for dataset, key in zip(self._datasets, self._amplitude_items):
+            if key is not None:
+                mask = dataset[key].mask()
+                count += int(np.count_nonzero(np.any(mask != 0, axis=0)))
+        return count
 
     def nresiduals(self) -> int:
         """
@@ -377,6 +444,8 @@ class Objective:
         model_data = self._group.model_d(params, out_extra)
         with self._group.timers().measure('objective_residual_eval'):
             for i in range(self.nobservations()):
+                if self._amplitude_items[i] is not None:
+                    self._scale_spectra(i, model_data[i], out_extra)
                 observable = self._group.observations()[i].observable()
                 for key in observable.keys():
                     weight = self._weights_u[i][key] if weighted else 1.0
@@ -389,3 +458,59 @@ class Objective:
                         weight,
                         self._missing_residuals[i],
                         self._d_residual_nddata[i][key])
+
+    def _scale_spectra(
+            self,
+            i: int,
+            model_data: dict[str, dict[str, DeviceArray | None]],
+            out_extra: dict[str, Any] | None
+    ) -> None:
+        """
+        Scale each spectrum of the model of observation i by its best free
+        amplitude (see LikelihoodGaussian), and keep its sums for the
+        log-likelihood; with extras, the amplitudes go to them
+        ('{prefix}amplitudes', of the shape of the spectra but their first
+        axis).
+        """
+        key = self._amplitude_items[i]
+        driver = self._group.observations()[i].driver()
+        model = model_data[key]
+        self._backends[i].amplitude_sums(
+            self._d_dataset_d_nddata[i][key],
+            self._d_dataset_e_nddata[i].get(key),
+            self._d_dataset_m_nddata[i].get(key),
+            model['d'], model['w'], *self._d_amplitude_sums[i])
+        for h, d in zip(self._h_amplitude_sums[i], self._d_amplitude_sums[i]):
+            driver.mem_copy_d2h(d, h)
+        a, b, _ = self._h_amplitude_sums[i]
+        amplitudes = self._h_amplitudes[i]
+        amplitudes[...] = 0
+        np.divide(np.maximum(b, 0), a, out=amplitudes, where=a > 0)
+        driver.mem_copy_h2d(amplitudes, self._d_amplitudes[i])
+        driver.math_mul(model['d'], self._d_amplitudes[i], out=model['d'])
+        if out_extra is not None:
+            out_extra[f'{self._group.extra_prefix(i)}amplitudes'] = \
+                amplitudes.copy()
+
+    def _amplitude_terms(self) -> float:
+        """
+        Return the sum of the terms of the log-likelihood of the free
+        amplitudes of the last evaluation, beyond -chi2 / 2 (see
+        LikelihoodGaussian): log(F sqrt(2 pi / A) Phi(B / sqrt(A))) + (B^2
+        / 2A if B < 0), of each spectrum where the model has light (F > 0
+        and A > 0), with the sums of the weights of the likelihood.
+        """
+        total = 0.0
+        for i, key in enumerate(self._amplitude_items):
+            if key is None:
+                continue
+            a, b, f = self._h_amplitude_sums[i]
+            weight = self._weights_u[i][key] ** 2
+            lit = (a > 0) & (f > 0)
+            a, b, f = weight * a[lit], weight * b[lit], f[lit]
+            x = b / np.sqrt(a)
+            total += float(np.sum(
+                np.log(f) + 0.5 * np.log(2 * math.pi / a)
+                + scipy.special.log_ndtr(x)
+                + np.where(b < 0, 0.5 * x ** 2, 0.0)))
+        return total

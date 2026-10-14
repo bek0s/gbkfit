@@ -196,11 +196,14 @@ class FitSolution:
     nresiduals : int
         The number of residuals that count (not masked).
     dof : int
-        The degrees of freedom: nresiduals less the free elements.
+        The degrees of freedom: nresiduals less the free elements and the
+        nuisance parameters that the objective solves (see
+        Objective.nnuisance).
     reduced_chi2 : float
         chi2 / dof (nan if dof <= 0).
     log_likelihood : float
-        -chi2 / 2.
+        The log-likelihood (-chi2 / 2, unless the objective has nuisance
+        parameters; see Objective.log_likelihood).
     log_prior : float or None
         The log of the prior density, if the fit has priors.
     covariance : Covariance or None

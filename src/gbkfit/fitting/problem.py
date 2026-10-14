@@ -156,8 +156,18 @@ class FitProblem:
         return chi2
 
     def log_likelihood(self, x: npt.ArrayLike) -> float:
-        """Return the log-likelihood at the given free values."""
-        return -0.5 * self.chi2(x)
+        """
+        Return the log-likelihood at the given free values (see
+        Objective.log_likelihood).
+        """
+        try:
+            values = self.evaluate(x)
+        except ParamEvaluationError:
+            return -math.inf
+        chi2, log_likelihood = self._objective.chi2_and_log_likelihood(
+            values)
+        self._record(x, chi2)
+        return log_likelihood
 
     def log_prior(self, x: npt.ArrayLike) -> float:
         """
@@ -216,7 +226,8 @@ class FitProblem:
 
     def log_likelihood_batch(self, xs: npt.ArrayLike) -> np.ndarray:
         """Return the log-likelihood of each point (one per row)."""
-        return -0.5 * self.chi2_batch(xs)
+        return np.array(
+            [self.log_likelihood(x) for x in np.atleast_2d(xs)])
 
     def log_posterior_batch(self, xs: npt.ArrayLike) -> np.ndarray:
         """Return the log-posterior of each point (one per row)."""

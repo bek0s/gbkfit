@@ -34,6 +34,14 @@ class Likelihood(parseutils.TypedSerializable, abc.ABC):
         """
         pass
 
+    @abc.abstractmethod
+    def amplitudes(self) -> str | None:
+        """
+        Return the free amplitudes of the model, if any (see
+        LikelihoodGaussian).
+        """
+        pass
+
 
 class LikelihoodGaussian(Likelihood):
     """
@@ -58,6 +66,36 @@ class LikelihoodGaussian(Likelihood):
     (the flux, which the model always has) with the higher moments: where
     the model is too faint, its flux then counts with its own residual.
 
+    With amplitudes 'per_spectrum' (spectra only, e.g. those of
+    pixel_spectra), each spectrum of the model is times a free amplitude
+    of its own, a >= 0: the fit then takes the shape of each spectrum
+    from the model (where its lines are, how wide; with beam smearing,
+    also how the light of the model weighs its velocities), and its
+    brightness from the data, which suits a model whose light misses
+    structure of the data (e.g. the clumps of a clumpy disk). The
+    amplitudes are nuisance parameters, which the objective solves
+    exactly, never the flux of the data put into the model:
+
+    - the residuals and the chi-square (of optimizers) are those of the
+      best amplitude of each spectrum, a = max(0, B / A), with A = sum w
+      m^2 and B = sum w m d over its values (m the model, d the data, w
+      the weight of each value in the chi-square, (weight / error)^2);
+    - the log-likelihood (of samplers) has them integrated out, under a
+      flat prior on the flux of each spectrum, a F >= 0 (F = sum m, the
+      flux of the model there), of unit width: the log of the integral
+      of exp(-chi2(a) / 2) d(a F), which is -chi2(a_best) / 2 + log(F
+      sqrt(2 pi / A) Phi(B / sqrt(A))) + (B^2 / 2A if B < 0), Phi the
+      normal cdf. (A flat prior on a itself would favour models of
+      little light: their amplitudes span more.) Spectra where the
+      model has no light (F <= 0) have no term: their amplitude is 0.
+
+    Each spectrum with values in the data counts as a parameter in the
+    degrees of freedom. The amplitudes take the brightness of the model
+    as a whole: its overall scale (e.g. the amplitude of its density) is
+    then free of the data, and must be fixed. The prior has no natural
+    width: the evidence of a fit with free amplitudes compares only with
+    that of fits with them, of the same data.
+
     Parameters
     ----------
     weights : float or Mapping, optional
@@ -65,11 +103,15 @@ class LikelihoodGaussian(Likelihood):
         others).
     missing_residual : float, optional
         The residual of a value the model does not have (see above).
+    amplitudes : str, optional
+        'per_spectrum' for a free amplitude for each spectrum of the
+        model (see above); none by default.
 
     Raises
     ------
     ConfigError
-        If missing_residual is negative or not finite.
+        If missing_residual is negative or not finite, or amplitudes is
+        not 'per_spectrum'.
     """
 
     @staticmethod
@@ -77,14 +119,17 @@ class LikelihoodGaussian(Likelihood):
         return 'gaussian'
 
     def dump(self) -> dict[str, Any]:
+        amplitudes = {} if self._amplitudes is None \
+            else dict(amplitudes=self._amplitudes)
         return dict(
             type=self.type(), weights=self._weights,
-            missing_residual=self._missing_residual)
+            missing_residual=self._missing_residual) | amplitudes
 
     def __init__(
             self,
             weights: float | Mapping[str, float] = 1.0,
-            missing_residual: float | None = None
+            missing_residual: float | None = None,
+            amplitudes: str | None = None
     ):
         if missing_residual is not None and not (
                 math.isfinite(missing_residual) and missing_residual >= 0):
@@ -95,6 +140,11 @@ class LikelihoodGaussian(Likelihood):
             else dict(weights)
         self._missing_residual = None if missing_residual is None \
             else float(missing_residual)
+        if amplitudes not in (None, 'per_spectrum'):
+            raise ConfigError(
+                f"option 'amplitudes' must be 'per_spectrum' (or none); it "
+                f"is {amplitudes!r}")
+        self._amplitudes = amplitudes
 
     def weight(self, key: str) -> float:
         """Return the weight of the data item of the given name."""
@@ -104,6 +154,9 @@ class LikelihoodGaussian(Likelihood):
 
     def missing_residual(self) -> float | None:
         return self._missing_residual
+
+    def amplitudes(self) -> str | None:
+        return self._amplitudes
 
 
 likelihood_parser = parseutils.TypedParser(Likelihood, [LikelihoodGaussian])

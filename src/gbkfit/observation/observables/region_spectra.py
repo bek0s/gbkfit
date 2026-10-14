@@ -209,6 +209,9 @@ class RegionSpectra(Observable):
     def data_unit(self, dataset: Dataset | None) -> DataUnit | None:
         return _detail.region_data_unit(dataset, 'spectra', False)
 
+    def spectra_item(self) -> str | None:
+        return 'spectra'
+
     def model_can_lack_values(self) -> bool:
         return False
 

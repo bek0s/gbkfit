@@ -269,10 +269,10 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
         params = problem.params()
         x = np.asarray(x, dtype=float)
         values = params.evaluate(x)
-        chi2 = objective.chi2(values)
+        chi2, log_likelihood = objective.chi2_and_log_likelihood(values)
         nresiduals = objective.nresiduals()
         nevals = 1
-        dof = nresiduals - problem.ndim()
+        dof = nresiduals - problem.ndim() - objective.nnuisance()
         reduced_chi2 = chi2 / dof if dof > 0 else np.nan
         log_prior = None if problem.priors() is None \
             else problem.log_prior(x)
@@ -297,7 +297,7 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
             nresiduals=nresiduals,
             dof=dof,
             reduced_chi2=reduced_chi2,
-            log_likelihood=-0.5 * chi2,
+            log_likelihood=log_likelihood,
             log_prior=log_prior,
             covariance=cov,
             laplace=laplace), nevals, error

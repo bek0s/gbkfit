@@ -203,6 +203,16 @@ class Observable(parseutils.TypedSerializable, abc.ABC):
         """
         pass
 
+    def spectra_item(self) -> str | None:
+        """
+        Return the name of its data item of spectra, along the first axis
+        of its arrays (one spectrum at each point of the other axes), if
+        it has one: the spectra that free amplitudes scale (see
+        LikelihoodGaussian). None here; observables of spectra override
+        this.
+        """
+        return None
+
     def check_instrument(self, instrument: Instrument) -> None:
         """
         Check the instrument that the observable is seen through.
