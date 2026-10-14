@@ -9,11 +9,11 @@ from gbkfit.driver import DeviceArray, Driver
 from gbkfit.params import ParamScalarDesc, ParamValues
 from gbkfit.utils import gridutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
-from ._detail import Fluxes, dump_geometry, dump_name
+from ._detail import Fluxes, dump_geometry, dump_name, systemic_velocity
 from ._units import DataUnit, band_factor, line_factors
 from .base import Component, ComponentPlan, FieldsLayout, NativeGrid
 from .geometries import Geometry
-from .lines import Band, Bands, LineCatalogue, Lines
+from .lines import Band, Bands, LineCatalogue, LinePlacement, Lines
 from .roles import BandEmission, Emission, LineEmission, emission_parser
 
 
@@ -84,7 +84,7 @@ def _spectral_plan(
     return PointPlan(
         driver, dtype, depth, opacity_ratios, Fluxes(
             len(rows), ratios, line_factors(unit, data_unit, rows, spectral)),
-        rows)
+        LinePlacement(rows, spectral))
 
 
 def _pixels(
@@ -148,9 +148,9 @@ class PointPlan(ComponentPlan):
     the opacity in front of its depth (its parameter 'depth' if depth, or
     0: the plane of the sky through the centre of its galaxy) dims it,
     with its opacity_ratios (see Component.plan). Its light is that of the
-    given lines (the offset and scale of each on the spectral axis, see
-    Lines.values; spectral points), or in an image, that of its band, of
-    the given fluxes (see Fluxes).
+    given lines (where each is on the spectral axis at its systemic
+    velocity, see LinePlacement; spectral points), or in an image, that of
+    its band, of the given fluxes (see Fluxes).
     """
 
     def __init__(
@@ -160,22 +160,23 @@ class PointPlan(ComponentPlan):
             depth: bool,
             opacity_ratios: np.ndarray | None,
             fluxes: Fluxes,
-            lines: np.ndarray | None = None
+            lines: LinePlacement | None = None
     ):
         self._driver = driver
         self._dtype = np.dtype(dtype)
         self._depth = depth
         self._opacity_ratios = opacity_ratios
         self._fluxes = fluxes
-        # The offset, scale and flux of each line (the fluxes are set at
-        # each evaluation)
-        self._lines = None if lines is None else np.array(lines, dtype=float)
+        # The offset, scale and flux of each line (set at each evaluation)
+        self._lines = lines
+        self._rows = None if lines is None else np.zeros((len(lines), 3))
 
     def line_values(self, params: ParamValues) -> np.ndarray:
         if self._lines is None:
             return np.array([[0.0, 0.0, self._fluxes(params)[0]]])
-        self._lines[:, 2] = self._fluxes(params)
-        return self._lines
+        self._rows[:, :2] = self._lines(systemic_velocity(params))
+        self._rows[:, 2] = self._fluxes(params)
+        return self._rows
 
     def _spectrum(
             self,

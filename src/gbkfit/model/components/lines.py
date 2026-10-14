@@ -14,6 +14,7 @@ __all__ = [
     'Bands',
     'Line',
     'LineCatalogue',
+    'LinePlacement',
     'Lines',
     'band_parser',
     'line_parser'
@@ -357,8 +358,9 @@ class Lines:
         redshift, such that a line of velocity v (in the frame of the
         galaxy, e.g. the systemic velocity of the component) is at offset
         + scale * v on the axis, with a flux of 1 (the ratios are
-        parameters). One line without a name is at the velocity of the
-        axis (offset 0, scale 1), whatever the redshift.
+        parameters): exactly for a component at the systemic velocity 0
+        (see LinePlacement for others). One line without a name is at the
+        velocity of the axis (offset 0, scale 1), whatever the redshift.
 
         With optical velocities (a rest wavelength), a line of rest
         wavelength w at velocity v is at w (1 + z) (1 + v / c), which is
@@ -406,6 +408,64 @@ class Lines:
         return np.array([
             (_C * (ratio - 1) if optical else _C * (1 - ratio), ratio, 1.0)
             for ratio in ratios])
+
+
+class LinePlacement:
+    """
+    Where the lines of a component are on a spectral axis, with the
+    component at a systemic velocity (see __call__): the offset and scale
+    of each, such that a line of velocity v in the frame of the galaxy
+    (the systemic velocity plus the motions within the galaxy, e.g. its
+    rotation) is at offset + scale * v on the axis.
+
+    The rows of Lines.values (rows; the flux of each is left out) place
+    the lines exactly for the systemic velocity 0. At another, a line is
+    at u = offset + scale * vsys on the axis, as with those rows: the
+    redshift of the galaxy and the systemic velocity add up exactly, (1 +
+    z) (1 + vsys / c) with optical velocities and (1 + z) / (1 - vsys / c)
+    with radio ones. But the systemic velocity stretches the motions about
+    it too: one km/s of the galaxy at u spans 1 + u / c km/s of an axis of
+    optical velocities, and 1 - u / c km/s of one of radio velocities
+    (e.g. on an axis of HI at rest, with the galaxy at the redshift 0 and
+    vsys = 10000 km/s, the rotation spans 3.3% fewer km/s of the axis
+    than its own). The scale is that, at each line, and the offset keeps
+    the line at u, so that the rotation and the dispersion are those in
+    the rest frame of the galaxy.
+
+    The motions about the systemic velocity are linear on the axis (the
+    convention of the axis: optical or radio). The Doppler effect has
+    terms of their second order too (v^2 / 2c: 0.15 km/s at 300 km/s, the
+    same on both sides of the galaxy, so that they do not change its
+    rotation), which are left out.
+
+    An axis without a rest has no convention: its velocities are taken as
+    those of the galaxy (exact for a small systemic velocity, e.g. with the
+    redshift of the galaxy set).
+    """
+
+    def __init__(self, rows: np.ndarray, spectral: gridutils.Grid):
+        rest = spectral.coords.rest
+        self._offsets = np.array(rows[:, 0], dtype=float)
+        self._scales = np.array(rows[:, 1], dtype=float)
+        # (the stretch per km/s of the axis: + for optical velocities, -
+        # for radio ones, none without a rest)
+        self._sign = None if rest is None \
+            else 1.0 if rest.unit == astropy.units.m else -1.0
+
+    def __len__(self) -> int:
+        return len(self._offsets)
+
+    def __call__(self, vsys: float) -> np.ndarray:
+        """
+        Return the offset and scale of each line (an array of shape
+        (nlines, 2)), with the component at the given systemic velocity
+        (km/s).
+        """
+        if self._sign is None:
+            return np.column_stack((self._offsets, self._scales))
+        centres = self._offsets + self._scales * vsys
+        scales = 1 + self._sign * centres / _C
+        return np.column_stack((centres - scales * vsys, scales))
 
 
 class Bands:

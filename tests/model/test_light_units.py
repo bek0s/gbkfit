@@ -72,13 +72,14 @@ def per_kelvin(vsys):
 def test_one_hi_disk_in_any_unit_of_data(driver):
     # A disk of HI of 1 Msun/pc^2 at its centre, without a unit (in the
     # unit of the data), and in Msun/pc^2 seen in K and in Jy/beam: N_HI =
-    # 1.823e18 cm^-2 per K km/s, and K to Jy/beam by Rayleigh-Jeans at the
-    # frequency of the line at the systemic velocity, in the beam
+    # 1.823e18 cm^-2 per K km/s of the galaxy, each of which spans 1 -
+    # vsys / c km/s of the radio axis, and K to Jy/beam by Rayleigh-Jeans
+    # at the frequency of the line at the systemic velocity, in the beam
     plain = model(driver, disk(), 'K')
     kelvin = model(driver, disk('Msun/pc2'), 'K')
     jansky = model(driver, disk('Msun/pc2'), 'Jy/beam')
     column = (1 * u.Msun / u.pc ** 2 / (1.00794 * u.u)).to_value(u.cm ** -2)
-    assert_same(kelvin, plain * column / 1.823e18)
+    assert_same(kelvin, plain * column / 1.823e18 * (1 - 470 / 299792.458))
     assert_same(jansky, kelvin * per_kelvin(470))
 
 

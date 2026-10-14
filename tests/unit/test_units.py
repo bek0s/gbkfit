@@ -111,11 +111,12 @@ def test_hi_mass_is_its_moment_0_by_the_textbook():
     # hand for NGC 1313 (to 0.1%, the rounding of those constants) at the
     # rest frequency, which the textbook takes; at a systemic velocity,
     # the brightness temperature is that at the frequency of the line
-    # there (~ nu^2)
+    # there (~ nu^2), and a km/s of the galaxy spans 1 - vsys / c of the
+    # radio axis
     hi = factors('Msun/pc2', 'Jy/beam km/s', beam=BEAM, integrated=True)
     for vsys in (0, 470, 5000):
         assert hi(vsys) == pytest.approx(
-            1.249e20 * 66 * 53.7 / 1.105e24 * (1 - vsys / C) ** 2, rel=1e-3)
+            1.249e20 * 66 * 53.7 / 1.105e24 * (1 - vsys / C) ** 3, rel=1e-3)
 
 
 def test_light_per_frequency_or_wavelength_is_per_km_s_of_the_axis():
@@ -134,18 +135,20 @@ def test_light_per_frequency_or_wavelength_is_per_km_s_of_the_axis():
 
 
 def test_the_temperature_of_a_line_at_its_frequency():
-    # K km/s per channel is K; a line of another rest spans scale km/s of
-    # the axis per km/s of its own; and in Jy/beam, ~ nu^2 at the frequency
-    # of the line at the systemic velocity
-    assert factors('K km/s', 'K')(470) == pytest.approx(1, rel=1e-12)
-    assert factors('K km/s', 'K', rows=[(C * 0.02, 1.02, 1)])(470) \
-        == pytest.approx(1.02, rel=1e-12)
+    # K km/s per channel is K times the km/s of the radio axis that a
+    # km/s of the galaxy spans at the line (1 - u / c), also for a line of
+    # another rest (k = 1.02); and in Jy/beam, ~ nu^2 at the frequency of
+    # the line at the systemic velocity
+    assert factors('K km/s', 'K')(470) == pytest.approx(
+        1 - 470 / C, rel=1e-12)
+    assert factors('K km/s', 'K', rows=[(-C * 0.02, 1.02, 1)])(470) \
+        == pytest.approx(1.02 * (1 - 470 / C), rel=1e-12)
     jansky = factors('K km/s', 'Jy/beam', beam=BEAM)
     for vsys in (0, 3000):
         frequency = HI * (1 - vsys / C)
         expected = (1 * u.K).to(
             u.Jy / u.sr, u.brightness_temperature(frequency)) \
-            * BEAM * u.arcsec ** 2
+            * BEAM * u.arcsec ** 2 * (1 - vsys / C)
         assert jansky(vsys) == pytest.approx(expected.to_value(u.Jy), rel=1e-9)
 
 
@@ -153,7 +156,7 @@ def test_the_beam_of_each_channel_at_the_line():
     channels = factors(
         'Jy km/s/arcsec2', 'Jy/beam', beam=np.array([100.0, 200.0]),
         beam_spectral=[0, 100] * u.km / u.s)
-    assert channels(50) == pytest.approx(150)
+    assert channels(50) == pytest.approx(150 * (1 - 50 / C))
 
 
 def test_an_axis_without_a_rest_takes_what_needs_no_frequency():
@@ -211,4 +214,4 @@ def test_the_mass_of_a_unit_of_light(info, expected):
 def test_data_per_pixel_named_so():
     # (e.g. BUNIT JY/PIXEL): the light of a pixel, as without the name
     assert factors('Jy km/s/arcsec2', 'JY/PIXEL')(470) \
-        == pytest.approx(PIXEL, rel=1e-12)
+        == pytest.approx(PIXEL * (1 - 470 / C), rel=1e-12)
