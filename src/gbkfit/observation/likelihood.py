@@ -87,7 +87,7 @@ class LikelihoodGaussian(Likelihood):
       sqrt(2 pi / A) Phi(B / sqrt(A))) + (B^2 / 2A if B < 0), Phi the
       normal cdf. (A flat prior on a itself would favour models of
       little light: their amplitudes span more.) Spectra where the
-      model has no light (F <= 0) have no term: their amplitude is 0.
+      model has no light (F <= 0) have no such term.
 
     Each spectrum with values in the data counts as a parameter in the
     degrees of freedom. The amplitudes take the brightness of the model

@@ -347,7 +347,10 @@ def evaluation_outputs(
     after the prefix if there are several observations; these need the
     objective), and the extra outputs
     (<prefix>_extra_<name>; those of the models once, under the first
-    prefix: each residual evaluation evaluates the models again).
+    prefix: each residual evaluation evaluates the models again). With
+    the residuals, the free amplitudes of spectra (see
+    LikelihoodGaussian), which the residuals take and the models do not,
+    are residual_extra_<observation prefix>amplitudes.
     """
     outputs = {}
     model_extra: dict[str, Any] = {}
@@ -380,6 +383,13 @@ def evaluation_outputs(
     for prefix, extra in extras:
         for key, value in extra.items():
             outputs[f'{prefix}_extra_{key}'] = value
+    # (the free amplitudes of spectra, which the residuals take; the
+    # models are without them)
+    if residuals:
+        for i, amplitudes in enumerate(objective.amplitudes()):
+            if amplitudes is not None:
+                outputs[f'residual_extra_{group.extra_prefix(i)}amplitudes'] \
+                    = amplitudes
     return outputs
 
 

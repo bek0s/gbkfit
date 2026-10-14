@@ -286,6 +286,17 @@ class Objective:
         vectors = self.residual_vector_h(params, True, out_extra)
         return np.concatenate(vectors, dtype=np.float64)
 
+    def amplitudes(self) -> list[np.ndarray | None]:
+        """
+        Return the free amplitudes of the spectra of each observation (see
+        LikelihoodGaussian), of the last evaluation, as new arrays of the
+        shape of the spectra but their first axis; None for the
+        observations without them, or before an evaluation.
+        """
+        return [
+            None if amplitudes is None else amplitudes.copy()
+            for amplitudes in self._h_amplitudes]
+
     def nnuisance(self) -> int:
         """
         Return the number of nuisance parameters that the objective solves
@@ -497,8 +508,9 @@ class Objective:
         Return the sum of the terms of the log-likelihood of the free
         amplitudes of the last evaluation, beyond -chi2 / 2 (see
         LikelihoodGaussian): log(F sqrt(2 pi / A) Phi(B / sqrt(A))) + (B^2
-        / 2A if B < 0), of each spectrum where the model has light (F > 0
-        and A > 0), with the sums of the weights of the likelihood.
+        / 2A if B < 0), of each spectrum where the model has light (F > 0)
+        that counts in the chi-square (A > 0, with the weight of the item
+        of the likelihood).
         """
         total = 0.0
         for i, key in enumerate(self._amplitude_items):
@@ -506,8 +518,9 @@ class Objective:
                 continue
             a, b, f = self._h_amplitude_sums[i]
             weight = self._weights_u[i][key] ** 2
+            a, b = weight * a, weight * b
             lit = (a > 0) & (f > 0)
-            a, b, f = weight * a[lit], weight * b[lit], f[lit]
+            a, b, f = a[lit], b[lit], f[lit]
             x = b / np.sqrt(a)
             total += float(np.sum(
                 np.log(f) + 0.5 * np.log(2 * math.pi / a)
