@@ -142,3 +142,51 @@ def test_the_redshift_places_the_lines(rest, k):
     assert (nii - halpha) / k == pytest.approx(
         c * (6585.27 / 6564.61 - 1), rel=1e-9)
     assert nii_scale == pytest.approx(k * 6585.27 / 6564.61, rel=1e-12)
+
+
+@pytest.mark.parametrize('rest, sign', [
+    ('1420.405751768 MHz', -1), ('6564.61 Angstrom', 1), (None, 0)])
+def test_the_systemic_velocity_stretches_the_motions(rest, sign):
+    # A galaxy at the redshift 0 and vsys = 10000 km/s, on an axis of the
+    # rest of its line: the line stays where it is, and a km/s of the
+    # galaxy spans 1 - vsys / c km/s of a radio axis, 1 + vsys / c of an
+    # optical one; an axis without a rest has no convention (1)
+    from gbkfit.model.components.lines import LinePlacement, Lines
+    from gbkfit.utils import gridutils
+    spectral = gridutils.make_grid((41,), 10, spectral_axis=0, rest=rest)
+    rows = Lines(None).values(spectral, 0.0)
+    (offset, scale), = LinePlacement(rows, spectral)(10000)
+    assert offset + scale * 10000 == pytest.approx(10000, rel=1e-12)
+    assert scale == pytest.approx(1 + sign * 10000 / 299792.458, rel=1e-12)
+
+
+def test_the_dispersion_is_in_the_frame_of_the_galaxy(driver, evaluate_cases):
+    # A disk of HI of dispersion 30 km/s, without rotation, at vsys 0 and
+    # 10000 km/s on a radio axis of the rest of HI: its line is 1 - vsys / c
+    # as wide on the axis (to 1e-5: the channels add their width^2 / 12)
+    def width(vsys):
+        case = dict(
+            driver=dict(type=driver.type()),
+            observable=dict(
+                type='pixel_spectra', size=[8, 8, 201], step=[1, 1, 2],
+                rval=[0, 0, vsys], rest='1420.405751768 MHz'),
+            line_of_sight=dict(type='flat'),
+            galaxy=dict(components=[dict(
+                type='smdisk', loose=False, tilted=False,
+                rnodes=list(range(0, 5)),
+                density=dict(ptraits=dict(type='uniform')),
+                kinematics=dict(
+                    vptraits=dict(type='tan_arctan'),
+                    dptraits=dict(type='uniform')),
+                emission=dict(type='lines', lines=['hi21']))]))
+        properties = dict(
+            vsys=vsys, xpos=0, ypos=0, posa=0, incl=45,
+            pt_a=1, vpt_rt=2, vpt_vt=0, dpt_a=30)
+        data, _ = evaluate_cases([case], properties)
+        spectrum = data[0]['spectra']['d'].sum(axis=(1, 2))
+        velocity = vsys + 2 * (np.arange(201) - 100)
+        mean = np.sum(spectrum * velocity) / spectrum.sum()
+        return np.sqrt(np.sum(spectrum * (velocity - mean) ** 2)
+                       / spectrum.sum())
+    assert width(10000) / width(0) == pytest.approx(
+        1 - 10000 / 299792.458, rel=1e-4)

@@ -18,7 +18,7 @@ from .._detail import (
 from .._units import DataUnit, OpacityScales, band_factor, line_factors
 from ..base import Component, ComponentPlan, FieldsLayout, NativeGrid
 from ..geometries import Geometry
-from ..lines import Band, Bands, LineCatalogue, Lines
+from ..lines import Band, Bands, LineCatalogue, LinePlacement, Lines
 from ..roles import (
     BandEmission, Emission, LineEmission, Opacity, emission_parser,
     opacity_parser)
@@ -381,7 +381,7 @@ def disk_plan(
         opacity_ratios,
         Fluxes(len(rows), ratios, line_factors(
             unit, data_unit, rows, spectral)),
-        rows, opacity_scales)
+        LinePlacement(rows, spectral), opacity_scales)
 
 
 class DiskComponentPlan(ComponentPlan):
@@ -389,9 +389,9 @@ class DiskComponentPlan(ComponentPlan):
     The evaluation of a component made of one disk: the plan of its disk,
     which adds its light to the outputs, dimmed by the opacity with the
     given ratios (see Component.plan), or its optical depth to a cube of
-    opacity. Its light is that of the given lines (the offset and scale of
-    each on the spectral axis, see Lines.values), or in an image, that of
-    its band, of the given fluxes (see Fluxes). With line opacity and a
+    opacity. Its light is that of the given lines (where each is on the
+    spectral axis at its systemic velocity, see LinePlacement), or in an
+    image, that of its band, of the given fluxes (see Fluxes). With line opacity and a
     unit, the fields of the opacity of each line are times its scale to
     brightness temperature (opacity_scales), as its coefficients are 1/S
     in 1/K.
@@ -403,7 +403,7 @@ class DiskComponentPlan(ComponentPlan):
             disk_plan_: _disk.DiskPlan,
             opacity_ratios: np.ndarray | None = None,
             fluxes: Fluxes | None = None,
-            lines: np.ndarray | None = None,
+            lines: LinePlacement | None = None,
             opacity_scales: OpacityScales | None = None
     ):
         self._driver = driver
@@ -413,9 +413,9 @@ class DiskComponentPlan(ComponentPlan):
         self._opacity_ratios = None
         if opacity_ratios is not None:
             self._opacity_ratios = driver.mem_copy_h2d(opacity_ratios)
-        # The offset, scale and flux of each line (the fluxes are set at
-        # each evaluation)
-        self._lines = None if lines is None else np.array(lines, dtype=float)
+        # The offset, scale and flux of each line (set at each evaluation)
+        self._lines = lines
+        self._rows = None if lines is None else np.zeros((len(lines), 3))
 
     def disk_plan(self) -> _disk.DiskPlan:
         return self._disk_plan
@@ -423,8 +423,9 @@ class DiskComponentPlan(ComponentPlan):
     def line_values(self, params: ParamValues) -> np.ndarray:
         if self._lines is None:
             return np.array([[0.0, 0.0, self._image_scale(params)]])
-        self._lines[:, 2] = self._fluxes(params)
-        return self._lines
+        self._rows[:, :2] = self._lines(systemic_velocity(params))
+        self._rows[:, 2] = self._fluxes(params)
+        return self._rows
 
     def evaluate_emission(
             self,

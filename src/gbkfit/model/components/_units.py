@@ -187,7 +187,7 @@ def mass_per_unit(emission: 'Emission | None') -> float | None:
             or emission.lines().names()[:1] != (HI_LINE,):
         return (1 * u.Msun / u.pc ** 2).to_value(per_kpc2)
     frequency = emission.lines().lines()[0].rest().to(u.Hz, u.spectral())
-    frame = _Axis(frequency).frame(0.0, 1.0)
+    frame = _Axis(frequency).frame(0.0)
     intensity = _axis_integral(1 * unit, frame) / (u.km / u.s)
     temperature = intensity.to(u.K, u.brightness_temperature(frequency))
     column = temperature * (u.km / u.s) * _HI_COLUMN
@@ -219,7 +219,7 @@ class LineFrame(NamedTuple):
     many metres of the wavelengths of the axis (in their medium; in vacuum
     for an axis of frequencies) one km/s of the axis spans (hz_per_kms,
     m_per_kms), and how many km/s of the axis one km/s of the velocity of
-    its component spans (scale; see Lines.values).
+    its component spans there (scale; see LinePlacement).
     """
     frequency: u.Quantity
     hz_per_kms: u.Quantity
@@ -315,14 +315,15 @@ class LineFactors:
     The factors that turn the light of the lines of a component, in the
     unit of its emission (source), into the unit of the data of an
     observation (target), as the model holds them (see line_factor): one
-    for each line, of the given rows (the offset and scale of each on the
-    spectral axis, see Lines.values), at the frequency of the line at the
-    systemic velocity of the component (see __call__), which places it on
-    the axis.
+    for each line, of the given rows (where each is on the spectral axis,
+    see Lines.values), at the frequency of the line at the systemic
+    velocity of the component (see __call__), which places it on the axis.
 
     Each factor is a power of that frequency (brightness temperature
     ~ nu^-2; the frequency or wavelength that a km/s of the axis spans
-    ~ nu^0 or nu^2), which two frequencies give exactly; with a beam for
+    ~ nu^0 or nu^2; the km/s of the axis that a km/s of the component
+    spans ~ nu or 1/nu, see LinePlacement), which two frequencies give
+    exactly; with a beam for
     each channel, the factor is also that of the beam at the line,
     interpolated between the channels. On an axis without a rest, the
     frequency of the lines is not known: the factors must not depend on
@@ -352,8 +353,8 @@ class LineFactors:
         # 0 (with a beam of 1 arcsec^2), and its power of the frequency
         factors = []
         powers = []
-        for offset, scale in zip(self._offsets, self._scales):
-            factor, power = self._line(source, target, offset, scale)
+        for offset in self._offsets:
+            factor, power = self._line(source, target, offset)
             factors.append(factor)
             powers.append(power)
         self._factors = np.array(factors)
@@ -364,12 +365,11 @@ class LineFactors:
             self,
             source: u.UnitBase,
             target: DataUnit,
-            offset: float,
-            scale: float
+            offset: float
     ) -> tuple[float, float]:
         """
-        Return the factor of a line of the given offset and scale at its
-        frequency at the velocity 0, and its power of the frequency.
+        Return the factor of a line of the given offset at its frequency at
+        the velocity 0, and its power of the frequency.
         """
         def factor(frame):
             return line_factor(
@@ -378,7 +378,7 @@ class LineFactors:
                 target.integrated)
         if self._axis is None:
             first, second = (
-                factor(_Axis(rest).frame(offset, scale))
+                factor(_Axis(rest).frame(offset))
                 for rest in _NOMINAL_RESTS)
             if not np.isclose(first, second, rtol=1e-9, atol=0):
                 raise ConfigError(
@@ -389,9 +389,8 @@ class LineFactors:
                     f"or the option rest)")
             return first, 0.0
         frequency = self._axis.frequency(offset)
-        first = factor(self._axis.frame(offset, scale))
-        second = factor(self._axis.frame(
-            self._axis.velocity(2 * frequency), scale))
+        first = factor(self._axis.frame(offset))
+        second = factor(self._axis.frame(self._axis.velocity(2 * frequency)))
         return first, float(np.log2(second / first))
 
     def _frequency(self, vsys: float) -> np.ndarray | None:
@@ -554,19 +553,21 @@ class _Axis:
         return _C * (
             const.c.value / (self._index * self._rest * frequency) - 1)
 
-    def frame(self, velocity: float, scale: float) -> LineFrame:
+    def frame(self, velocity: float) -> LineFrame:
         """
-        Return where a line of the given scale is on the axis at a velocity
-        of the axis (see LineFrame).
+        Return where a line is on the axis at a velocity of the axis (see
+        LineFrame; its scale as in LinePlacement).
         """
         frequency = self.frequency(velocity)
         kms = u.km / u.s
         if self._radio:
             hz_per_kms = self._rest / _C
             m_per_kms = const.c.value / frequency ** 2 * hz_per_kms
+            scale = 1 - velocity / _C
         else:
             m_per_kms = self._rest / _C
             hz_per_kms = frequency / (_C * (1 + velocity / _C))
+            scale = 1 + velocity / _C
         return LineFrame(
             frequency * u.Hz, hz_per_kms * u.Hz / kms, m_per_kms * u.m / kms,
             scale)
