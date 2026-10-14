@@ -20,7 +20,8 @@ from gbkfit.model.components._transfer import MAX_SUBCHANNELS
 from gbkfit.model.components.base import Component, DepthAxis
 from gbkfit.utils import gridutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
-from ._scene import AdditiveScenePlan, Scene, ScenePlan, TransferScenePlan
+from ._scene import (
+    AdditiveScenePlan, DepthUnit, Scene, ScenePlan, TransferScenePlan)
 
 
 __all__ = [
@@ -149,12 +150,14 @@ class LineOfSight(parseutils.TypedSerializable, abc.ABC):
         pass
 
     def check_order(
-            self, galaxies: Sequence[Galaxy], order: Sequence[int] | None
+            self,
+            galaxies: Sequence[Galaxy],
+            order: Sequence[DepthUnit] | None
     ) -> None:
         """
         Check that this line of sight can order the given galaxies, which
         have opacity, along it (the light of one can be dimmed by
-        another), in the given order, front to back (their indices; see
+        another), in the given order, front to back (in units; see
         ObservationGroup: depth_order): here, it cannot.
 
         Raises
@@ -365,9 +368,11 @@ class Transfer(LineOfSight):
         pass
 
     def check_order(
-            self, galaxies: Sequence[Galaxy], order: Sequence[int] | None
+            self,
+            galaxies: Sequence[Galaxy],
+            order: Sequence[DepthUnit] | None
     ) -> None:
-        ordered = set(order or ())
+        ordered = {g for unit in order or () for g in unit.galaxies}
         if missing := [
                 galaxy.name() for g, galaxy in enumerate(galaxies)
                 if g not in ordered]:

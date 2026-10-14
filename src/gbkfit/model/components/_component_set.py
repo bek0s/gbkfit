@@ -17,7 +17,7 @@ from ..mass import MassModel
 from ._component_plans import ComponentPlans
 from ._detail import shared_params
 from ._gravity import GravityPlan
-from ._transfer import LineResolution, TransferPlan
+from ._transfer import LineResolution
 from .base import Component, DepthAxis, OpacityCubes
 from .geometries import Geometry
 from .lines import Band
@@ -267,32 +267,6 @@ class ComponentSet:
             self, driver, grid, spectral, depth, dtype, emitters, cubes,
             lines, band, smoothing)
 
-    def plan_transfer(
-            self,
-            driver: Driver,
-            grid: gridutils.Grid,
-            spectral: gridutils.Grid,
-            depth: DepthAxis,
-            dtype: np.dtype,
-            emitters: Sequence[int],
-            cubes: OpacityCubes,
-            lines: tuple[str, ...] | None,
-            band: Band | None,
-            redshift: float,
-            slab: int | None,
-            subchannels: int,
-            smoothing: float | None
-    ) -> TransferPlan:
-        """
-        Plan the evaluation of the components on a driver and dtype by
-        radiative transfer along each line of sight, in slabs of the given
-        number of planes, at the given number of sub-channels (see
-        TransferPlan).
-        """
-        return TransferPlan(
-            self, driver, grid, spectral, depth, dtype, emitters, cubes,
-            lines, band, redshift, slab, subchannels, smoothing)
-
 
 class ComponentSetPlan:
     """
@@ -376,6 +350,7 @@ class ComponentSetPlan:
         # becomes the optical depth from the viewer to the far side of each
         # voxel, which the emitters read
         if odata is not None:
+            driver.mem_fill(odata, 0)
             plans.evaluate_opacity(values, grid, odata, extras)
             for cube in odata:
                 self._gmodel.opacity_accumulate(

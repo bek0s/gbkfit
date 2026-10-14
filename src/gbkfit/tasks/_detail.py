@@ -7,6 +7,7 @@ import copy
 import json
 import logging
 import os
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, Literal
 
@@ -19,7 +20,7 @@ import gbkfit.model
 import gbkfit.observation
 from gbkfit.driver import Driver, driver_parser
 from gbkfit.objective import Objective
-from gbkfit.observation import ObservationGroup
+from gbkfit.observation import DepthGroup, ObservationGroup
 from gbkfit.params import (
     ParamDesc, ParamSpace, ParamValues, load_pdescs_dict, param_space_parser)
 from gbkfit.utils import (
@@ -238,8 +239,44 @@ def load_observation_group(cfg: dict[str, Any]) -> ObservationGroup:
         observations = gbkfit.observation.observation_parser.load(
             cfg['observations'], drivers=[drivers] * nobservations,
             catalogue=[catalogue] * nobservations)
+    with parseutils.config_path('depth_order'):
+        depth_order = load_depth_order(cfg.get('depth_order'))
     return gbkfit.observation.ObservationGroup(
-        galaxies, observations, cfg.get('depth_order'))
+        galaxies, observations, depth_order)
+
+
+def load_depth_order(
+        info: Sequence[str | dict[str, Sequence[str]]] | None
+) -> list[str | DepthGroup] | None:
+    """
+    Return the depth order of a configuration (see ObservationGroup):
+    names of galaxies, and groups of them as {name: [galaxies]}.
+
+    Raises
+    ------
+    ConfigError
+        If an item is neither a name nor a group of one name.
+    """
+    if info is None:
+        return None
+    if not iterutils.is_sequence(info):
+        raise ConfigError("depth_order must be a list")
+    order = []
+    for item in info:
+        if iterutils.is_mapping(item):
+            if len(item) != 1:
+                raise ConfigError(
+                    f"a group of depth_order is {{name: [galaxies]}}; "
+                    f"{item} is not")
+            (name, galaxies), = item.items()
+            if not iterutils.is_sequence(galaxies):
+                raise ConfigError(
+                    f"the galaxies of the group {name!r} of depth_order "
+                    f"must be a list")
+            order.append(DepthGroup(name, tuple(galaxies)))
+        else:
+            order.append(item)
+    return order
 
 
 def load_params(

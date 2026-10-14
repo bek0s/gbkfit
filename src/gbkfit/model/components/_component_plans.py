@@ -180,12 +180,11 @@ class ComponentPlans:
             extras: dict[int, dict[str, Any]] | None
     ) -> None:
         """
-        Write the optical depth of each voxel of the grid of the absorbers
+        Add the optical depth of each voxel of the grid of the absorbers
         to the cubes of opacity odata (of shape (ncubes, nz, ny, nx)), each
         with the parameters of its index in params. With extras, the extra
         outputs of each absorber go to extras[index].
         """
-        self.driver.mem_fill(odata, 0)
         for i in self.absorbers:
             cube, scale = self._deposits[i]
             extra = {} if extras is not None else None
@@ -267,40 +266,48 @@ class ComponentPlans:
             self,
             out_extra: dict[str, Any],
             extras: dict[int, dict[str, Any]],
-            totals: dict[str, np.ndarray]
+            totals: dict[str, np.ndarray],
+            depth_zero: float | None = None
     ) -> None:
         """
         Add the extra outputs of each component (extras, by index) to
         out_extra, named after its name, or its position if it has none
         (e.g. 'disk_bdata' or 'component0_bdata'), and the totals
         ('total_*'): the given ones and the optical depth at V of all the
-        absorbers ('total_odata').
+        absorbers ('total_odata'); with the given position of the first
+        voxel of the depth axis, if not that of the axis (see extra).
         """
         components = self._component_set.components()
         for index, extra in extras.items():
             name = components[index].name()
             label = name if name is not None else f'component{index}'
             for key, value in extra.items():
-                out_extra[f'{label}_{key}'] = self.extra(value)
+                out_extra[f'{label}_{key}'] = self.extra(value, depth_zero)
         if self.absorbers:
             totals = dict(odata=sum(
                 extras[i]['odata'] for i in self.absorbers)) | totals
         for name, total in totals.items():
-            out_extra[f'total_{name}'] = self.extra(total)
+            out_extra[f'total_{name}'] = self.extra(total, depth_zero)
 
-    def extra(self, data: np.ndarray) -> gridutils.GridData:
+    def extra(
+            self, data: np.ndarray, depth_zero: float | None = None
+    ) -> gridutils.GridData:
         """
         Return an extra output on the grid: an image without a depth axis,
-        a cube with one (along the line of sight, from z = 0).
+        a cube with one (along the line of sight, from z = 0 at the plane
+        of the galaxy), whose first voxel is at the given position (arcsec;
+        by default, that of the depth axis; it differs for the galaxies
+        that a march evaluates together, see TransferPlan).
         """
         grid = self._grid
         if self._depth is None:
             return gridutils.GridData(
                 data.reshape(data.shape[-2:]), grid.coords, None)
         depth = self._depth
+        zero = depth.zero if depth_zero is None else depth_zero
         coords = gridutils.Coords(
             tuple(grid.coords.step) + (depth.step,),
-            tuple(grid.coords.rpix) + (-depth.zero / depth.step,),
+            tuple(grid.coords.rpix) + (-zero / depth.step,),
             tuple(grid.coords.rval) + (0.0,), grid.coords.rota)
         return gridutils.GridData(data, coords, None)
 

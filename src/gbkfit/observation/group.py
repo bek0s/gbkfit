@@ -1,20 +1,34 @@
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, NamedTuple
 
 import numpy as np
 
 from gbkfit.model import Galaxy
-from gbkfit.params import ParamDesc, ParamValues
+from gbkfit.params import ParamDesc, ParamScalarDesc, ParamValues
 from gbkfit.utils import iterutils, parseutils, threadutils, timeutils
 from gbkfit.utils.parseutils import ConfigError
-from ._scene import Scene, make_scene
+from ._scene import DepthUnit, Scene, make_scene
 from .observables import ModelData
 from .observation import Observation
 
 
 __all__ = [
+    'DepthGroup',
     'ObservationGroup'
 ]
+
+
+class DepthGroup(NamedTuple):
+    """
+    Galaxies that can pass through each other along the line of sight
+    (e.g. a merger), by name, which radiative transfer evaluates together
+    (see TransferPlan), and the name of the group (which prefixes its
+    extra outputs). Each galaxy after the first has a parameter of its
+    position along the line of sight from the first, '{galaxy}_separation'
+    (arcsec; positive behind it, away from the viewer).
+    """
+    name: str
+    galaxies: tuple[str, ...]
 
 
 class ObservationGroup:
@@ -37,12 +51,14 @@ class ObservationGroup:
         The galaxies.
     observations : Observation or Sequence of Observation
         The observations.
-    depth_order : Sequence of str, optional
-        The galaxies along the line of sight, front to back, by name: an
-        observation of several galaxies through radiative transfer (see
-        Transfer) marches them in this order, which it needs when one of
-        them has opacity (the light of each is dimmed by the opacity of
-        those in front of it), and then of all of them.
+    depth_order : Sequence of str or DepthGroup, optional
+        The galaxies along the line of sight, front to back, by name, or
+        in groups of galaxies that can pass through each other (see
+        DepthGroup): an observation of several galaxies through radiative
+        transfer (see Transfer) marches them in this order, which it needs
+        when one of them has opacity (the light of each is dimmed by the
+        opacity of those in front of it), and then of all of them. In
+        configurations, a group is {name: [galaxies]}.
 
     Raises
     ------
@@ -50,15 +66,17 @@ class ObservationGroup:
         If there are no galaxies or no observations, several galaxies
         without names, names repeat, an observation does not name the
         galaxies it sees (when there are several) or names unknown ones,
-        depth_order names unknown galaxies or repeats them, or what an
-        observation sees does not go with it (see make_scene).
+        depth_order names unknown galaxies or repeats them, has a group of
+        fewer than two galaxies, or of the name of a galaxy or an
+        observation, or what an observation sees does not go with it (see
+        make_scene).
     """
 
     def __init__(
             self,
             galaxies: Galaxy | Sequence[Galaxy],
             observations: Observation | Sequence[Observation],
-            depth_order: Sequence[str] | None = None
+            depth_order: Sequence[str | DepthGroup] | None = None
     ):
         self._galaxies = iterutils.tuplify(galaxies)
         self._observations = iterutils.tuplify(observations)
@@ -81,9 +99,27 @@ class ObservationGroup:
             raise ConfigError(
                 f"the galaxies and the observations must have different "
                 f"names; repeated: {repeated}")
-        self._depth_order = _depth_order(depth_order, galaxy_names)
+        self._depth_order = _depth_order(
+            depth_order, galaxy_names, observation_names)
         self._pdescs, self._mappings = iterutils.merge_with_prefixes(
             [galaxy.pdescs() for galaxy in self._galaxies], self._prefixes)
+        # The separations of the galaxies of groups, by galaxy
+        self._separations = {
+            g: f'{self._prefixes[g]}separation'
+            for name, members in self._depth_order or ()
+            if name is not None for g in members[1:]}
+        if taken := sorted(
+                set(self._separations.values()) & self._pdescs.keys()):
+            raise ConfigError(
+                f"the parameters of the separations of galaxies have the "
+                f"names of parameters of the galaxies: {taken}; rename their "
+                f"components")
+        self._pdescs |= {
+            separation: ParamScalarDesc(
+                desc="the position of the galaxy along the line of sight "
+                     "from the first of its group (arcsec, away from the "
+                     "viewer)")
+            for separation in self._separations.values()}
         # The parameters of the observations (their calibrations)
         for observation in self._observations:
             pdescs = observation.pdescs()
@@ -140,11 +176,20 @@ class ObservationGroup:
     def _scene(self, seen: list[int], observation: Observation) -> Scene:
         """
         Return what an observation sees (see make_scene): the galaxies of
-        the given indices, in the depth order of those of them in it.
+        the given indices, in the depth order of those of them in it (a
+        group of which it sees one galaxy is that galaxy).
         """
         order = None
         if self._depth_order is not None:
-            order = [seen.index(j) for j in self._depth_order if j in seen]
+            order = []
+            for name, members in self._depth_order:
+                visible = [g for g in members if g in seen]
+                galaxies = tuple(seen.index(g) for g in visible)
+                if len(visible) == 1:
+                    order.append(DepthUnit(galaxies))
+                elif visible:
+                    order.append(DepthUnit(galaxies, name, tuple(
+                        self._separations.get(g) for g in visible)))
         return make_scene(
             [self._galaxies[j] for j in seen],
             [self._mappings[j] for j in seen],
@@ -264,20 +309,41 @@ class ObservationGroup:
 
 
 def _depth_order(
-        names: Sequence[str] | None, galaxies: Sequence[str | None]
-) -> tuple[int, ...] | None:
+        order: Sequence[str | DepthGroup] | None,
+        galaxies: Sequence[str | None],
+        observations: Sequence[str | None]
+) -> tuple[tuple[str | None, tuple[int, ...]], ...] | None:
     """
-    Return the indices of the galaxies of the given names (see
-    ObservationGroup: depth_order), among the names of the galaxies.
-    Raise ConfigError if a name is unknown or repeats.
+    Return the items of a depth order (see ObservationGroup: depth_order)
+    as the name of each group (None for a galaxy) and the indices of its
+    galaxies, among the names of the galaxies. Raise ConfigError if a name
+    is unknown or repeats, or a group has fewer than two galaxies or the
+    name of a galaxy or an observation.
     """
-    if names is None:
+    if order is None:
         return None
-    names = list(names)
+    items = []
+    for item in order:
+        if isinstance(item, DepthGroup):
+            parseutils.check_name(item.name)
+            if len(item.galaxies) < 2:
+                raise ConfigError(
+                    f"the group {item.name!r} of depth_order needs at least "
+                    f"two galaxies; it has {list(item.galaxies)}")
+            if item.name in [*galaxies, *observations]:
+                raise ConfigError(
+                    f"the group {item.name!r} of depth_order has the name of "
+                    f"a galaxy or an observation")
+            items.append((item.name, tuple(item.galaxies)))
+        else:
+            items.append((None, (item,)))
+    names = [name for _, members in items for name in members]
     if unknown := [name for name in names if name not in galaxies]:
         raise ConfigError(
             f"depth_order names unknown galaxies {unknown}; the galaxies are "
             f"{list(galaxies)}")
     if len(set(names)) != len(names):
         raise ConfigError(f"depth_order repeats galaxies: {names}")
-    return tuple(galaxies.index(name) for name in names)
+    return tuple(
+        (name, tuple(galaxies.index(galaxy) for galaxy in members))
+        for name, members in items)

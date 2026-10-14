@@ -134,3 +134,11 @@ def test_galaxies_with_mass_use_the_drivers_of_the_configuration():
 def test_driver_errors(sections, message):
     with pytest.raises(ConfigError, match=message):
         load_group(**sections)
+
+
+def test_depth_order_has_galaxies_and_groups_of_them():
+    from gbkfit.observation import DepthGroup
+    order = _detail.load_depth_order(['fg', {'pair': ['a', 'b']}])
+    assert order == ['fg', DepthGroup('pair', ('a', 'b'))]
+    with pytest.raises(ConfigError, match="a group of depth_order is"):
+        _detail.load_depth_order([{'pair': ['a', 'b'], 'other': ['c']}])

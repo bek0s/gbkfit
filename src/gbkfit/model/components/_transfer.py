@@ -20,10 +20,12 @@ from .lines import Band
 
 if TYPE_CHECKING:
     from ._component_set import ComponentSet
+    from .base import Component, ComponentPlan
 
 
 __all__ = [
     'LineResolution',
+    'TransferMember',
     'TransferPlan',
     'warn_resolution'
 ]
@@ -120,28 +122,53 @@ def warn_resolution(
             f"{depth_step * _MAX_DEPTH_RATIO / resolution.light:.3g} arcsec")
 
 
+class TransferMember(NamedTuple):
+    """
+    A galaxy that a march evaluates (see TransferPlan): its components,
+    the indices of those whose light is evaluated (its emitters), how the
+    cubes of opacity hold its dust (see opacity_cubes), its redshift, and
+    its own depth axis, which holds it, centred on its plane (see
+    Depth.axis).
+    """
+    component_set: 'ComponentSet'
+    emitters: tuple[int, ...]
+    cubes: OpacityCubes
+    redshift: float
+    depth: DepthAxis
+
+
 class TransferPlan:
     """
-    The evaluation of the components of a galaxy on the grid of an
-    observation by radiative transfer along each line of sight: the
+    The evaluation of the components of one galaxy or more on the grid of
+    an observation by radiative transfer along each line of sight: the
     absorbers write the optical depth of each voxel to the cubes of
     opacity, the emitters write the fields of their light (see
     ComponentPlan.evaluate_fields), and a march along each line of sight,
     front to back, adds the light of each channel that reaches the viewer
     to the image or the spectral cube. The march starts from the opacity
-    in front of the galaxy, that of the galaxies in front of it, and adds
-    its own, for the galaxies behind it (see evaluate).
+    in front of the galaxies, that of the galaxies in front of them, and
+    adds their own, for the galaxies behind them (see evaluate).
+
+    One galaxy is evaluated on its own depth axis. Several (that can pass
+    through each other, e.g. a merger) are evaluated together, each at its
+    position along the line of sight (see evaluate), on one depth axis as
+    long as theirs together, so that the opacity of each dims the light of
+    the others voxel by voxel. The stretch between the depth axes of
+    galaxies that do not overlap is left out: it is empty, so the march
+    gives the same light without it. It is left out in whole voxels, and
+    the voxels keep the depths they have on the axis of the first galaxy:
+    they sample each galaxy as they do apart.
 
     It evaluates the depth axis in slabs of planes, one after the other,
     to bound its memory: the absorbers and the volumes (e.g. thick disks)
     on the planes of each slab (the clouds of a Monte Carlo disk are drawn
     again for each, the same ones), the layers (e.g. thin disks, points)
-    once. The parameters are those of ComponentPlans, with a depth axis,
-    the redshift of the galaxy, the number of planes of a slab (slab; all
-    if None), and the number of sub-channels of each channel that the
-    march transfers the light of the channel at, if it carries line
-    opacity (subchannels; the light of the channel is their mean), and
-    the spectral smoothing of the instrument (km/s; see
+    once. The parameters are those of ComponentPlans (but those of each
+    galaxy: members), the number of planes of a slab (slab; all if None),
+    and the number of sub-channels of each channel that the march
+    transfers the light of the channel at, if it carries line opacity
+    (subchannels; the light of the channel is their mean), and the
+    spectral smoothing of the instrument (km/s; see
     ComponentPlans.light_resolution; None for an image).
 
     Raises
@@ -152,74 +179,90 @@ class TransferPlan:
 
     def __init__(
             self,
-            component_set: 'ComponentSet',
+            members: Sequence[TransferMember],
             driver: Driver,
             grid: gridutils.Grid,
             spectral: gridutils.Grid,
-            depth: DepthAxis,
             dtype: np.dtype,
-            emitters: Sequence[int],
-            cubes: OpacityCubes,
             lines: tuple[str, ...] | None,
             band: Band | None,
-            redshift: float,
             slab: int | None,
             subchannels: int,
             smoothing: float | None
     ):
-        if len(emitters) > _MAX_EMITTERS:
+        nemitters = sum(len(member.emitters) for member in members)
+        if nemitters > _MAX_EMITTERS:
             raise ConfigError(
                 f"radiative transfer takes at most {_MAX_EMITTERS} components "
-                f"that emit; there are {len(emitters)}")
-        plans = ComponentPlans(
-            component_set, driver, grid, spectral, depth, dtype, emitters,
-            cubes, lines, band)
-        self._plans = plans
+                f"that emit; there are {nemitters}")
+        # The depth axis: that of the galaxy, or of several, as long as
+        # theirs together and a margin of 2 voxels each (see _placement)
+        depth = members[0].depth
+        if len(members) > 1:
+            depth = depth._replace(size=sum(
+                member.depth.size + 2 for member in members))
+        self._members = tuple(members)
+        self._depth = depth
+        self._plans = tuple(
+            ComponentPlans(
+                member.component_set, driver, grid, spectral, depth, dtype,
+                member.emitters, member.cubes, lines, band)
+            for member in members)
+        self._driver = driver
+        self._dtype = dtype
         self._subchannels = subchannels
         self._smoothing = smoothing
-        native_grid = plans.native_grid
-        components = component_set.components()
+        # (that of every galaxy: the cubes hold the dust of the scene)
+        self._ncubes = self._plans[0].ncubes
+        native_grid = self._plans[0].native_grid
         # The slabs: their first plane and their number of planes
         nz = native_grid['spat_size'][2]
         size = nz if slab is None else min(slab, nz)
         self._slabs = [(z0, min(size, nz - z0)) for z0 in range(0, nz, size)]
         slab_grid = _slab_grid(native_grid, 0, size)
+        # The emitters of the galaxies, by the index of their galaxy and
+        # their own
+        self._keys = tuple(
+            (m, i) for m, plans in enumerate(self._plans)
+            for i in plans.emitters)
         # The lines of each emitter, in one buffer (which is copied to the
         # device once per evaluation): one row for each of its wavelengths
-        # (those of its lines, or its band)
+        # (those of its lines, or its band, at the redshift of its galaxy)
         nrows = [
-            len(components[i].emission().wavelengths(lines, band, redshift))
-            for i in plans.emitters]
+            len(self._component(key).emission().wavelengths(
+                lines, band, members[key[0]].redshift))
+            for key in self._keys]
         ends = np.cumsum(nrows)
         self._rows = {
-            i: slice(end - n, end)
-            for i, n, end in zip(plans.emitters, nrows, ends)}
+            key: slice(end - n, end)
+            for key, n, end in zip(self._keys, nrows, ends)}
         self._lines = driver.mem_alloc_s((sum(nrows), 3), dtype)
         # The fields of each emitter: of the whole grid for a layer, of the
         # planes of a slab for a volume (flat, so that the fields of the
         # last slab, which can have fewer planes, are its first values)
         self._layouts = {
-            i: plans.plans[i].fields_layout() for i in plans.emitters}
+            key: self._plan(key).fields_layout() for key in self._keys}
         self._fields = {
-            i: driver.mem_alloc_d(math.prod(layout.shape(
+            key: driver.mem_alloc_d(math.prod(layout.shape(
                 native_grid if layout.layer else slab_grid)), dtype)
-            for i, layout in self._layouts.items()}
-        self._ratios = {
-            i: None if plans.ratios[i] is None
-            else driver.mem_copy_h2d(plans.ratios[i])
-            for i in plans.emitters}
+            for key, layout in self._layouts.items()}
+        self._ratios = {}
+        for m, i in self._keys:
+            ratios = self._plans[m].ratios[i]
+            self._ratios[m, i] = None if ratios is None \
+                else driver.mem_copy_h2d(ratios)
         # The cubes of opacity of a slab, with absorbers (flat, as the
         # fields)
         self._odata = None
-        if plans.absorbers:
+        if self.has_dust():
             self._odata = driver.mem_alloc_d(
-                plans.ncubes * math.prod(slab_grid['spat_size']), dtype)
+                self._ncubes * math.prod(slab_grid['spat_size']), dtype)
         # The emitters of the march of slabs of each size: with the line
         # opacity of their fields, without dust, and with dust if the
         # observation has dust (see evaluate); and without opacity, for
         # the light that no opacity dims (an extra output)
         kinds = [(False, True), (False, False)] \
-            + ([(True, True)] if plans.ncubes else [])
+            + ([(True, True)] if self._ncubes else [])
         self._emitters = {
             (slab_size, dust, line_opacity):
                 self._native_emitters(slab_size, dust, line_opacity)
@@ -229,7 +272,7 @@ class TransferPlan:
 
     def has_dust(self) -> bool:
         """Return whether it has components with dust."""
-        return bool(self._plans.absorbers)
+        return any(plans.absorbers for plans in self._plans)
 
     def has_line_opacity(self) -> bool:
         """Return whether it has emitters with line opacity."""
@@ -237,55 +280,67 @@ class TransferPlan:
 
     def evaluate(
             self,
-            params: ParamValues,
-            gravity: dict[int, ParamValues],
+            params: Sequence[ParamValues],
+            gravity: Sequence[dict[int, ParamValues]],
             outputs: dict[str, DeviceArray | None],
-            out_extra: dict[str, Any] | None,
+            out_extra: Sequence[dict[str, Any]] | None,
+            march_extra: dict[str, Any] | None,
             opacity_front: DeviceArray | None,
-            tau: DeviceArray | None
+            tau: DeviceArray | None,
+            positions: Sequence[float] | None = None
     ) -> LineResolution | None:
         """
         Add the light of the emitters that reaches the viewer to the
         output array, the 'image' or the 'scube' in outputs, with the
-        parameters of the galaxy and those that its gravity gives its
-        components (see GravityPlan.evaluate), dimmed by the opacity in
-        front of the galaxy and its own, and add its own to that in front:
-        the optical depth of the dust in front at each spaxel, in each
-        cube of opacity (opacity_front, of shape (ncubes, ny, nx); required
-        with dust of its own, None without dust in front or in it), and
-        that of the lines at each sub-channel of each spaxel (tau, of shape
-        (nchannels * subchannels, ny, nx); required with line opacity, None
-        without line opacity in front or in it).
+        parameters of each galaxy (params) and those that its gravity gives
+        its components (gravity, see GravityPlan.evaluate), at the given
+        positions along the line of sight (arcsec, away from the viewer,
+        from any origin; all at one if None), dimmed by the opacity in
+        front of the galaxies and their own, and add their own to that in
+        front: the optical depth of the dust in front at each spaxel, in
+        each cube of opacity (opacity_front, of shape (ncubes, ny, nx);
+        required with dust of their own, None without dust in front or in
+        them), and that of the lines at each sub-channel of each spaxel
+        (tau, of shape (nchannels * subchannels, ny, nx); required with
+        line opacity, None without line opacity in front or in them).
 
-        The extra outputs of each component are named after its name, or
-        its position (e.g. 'disk_bdata' or 'component0_bdata'), and the
-        totals 'total_*': those of ComponentPlans.add_extras (along the
-        depth axis), and of the shape of the output, 'total_unabsorbed',
-        the light of the emitters without opacity (neither its own nor
-        that in front), and with line opacity, 'total_line_tau', the
-        optical depth of its lines at each channel (the mean of its
-        sub-channels).
+        The extra outputs of the components of each galaxy go to its item
+        of out_extra, named after their names, or their positions (e.g.
+        'disk_bdata' or 'component0_bdata'), with the totals of each
+        galaxy, 'total_*' (see ComponentPlans.add_extras; along the depth
+        axis in the frame of the galaxy, centred on its plane). Those of
+        the march go to march_extra (given with out_extra), of the shape
+        of the output: 'total_unabsorbed', the light of the emitters
+        without opacity (neither their own nor that in front), and with
+        line opacity, 'total_line_tau', the optical depth of their lines
+        at each channel (the mean of its sub-channels).
 
         With extras, a warning says where zmax shapes a disk (see
-        ComponentPlans.warn_truncation), and it returns how
-        finely it resolves the lines (see LineResolution); None otherwise.
+        ComponentPlans.warn_truncation), and it returns how finely it
+        resolves the lines (see LineResolution); None otherwise.
         """
-        plans = self._plans
-        driver = plans.driver
-        grid = plans.native_grid
-        values = plans.params(params, gravity)
-        extras = {} if out_extra is not None else None
+        driver = self._driver
+        grids = self._grids(positions)
+        values = [
+            plans.params(galaxy_params, galaxy_gravity)
+            for plans, galaxy_params, galaxy_gravity
+            in zip(self._plans, params, gravity)]
+        extras = None
         if out_extra is not None:
-            plans.warn_truncation(values)
-        # (those of the volumes and the absorbers of each slab)
+            extras = [{} for _ in self._plans]
+            for plans, galaxy_values in zip(self._plans, values):
+                plans.warn_truncation(galaxy_values)
+        # (those of the volumes and the absorbers of each slab, by galaxy)
         slab_extras = []
 
         # The lines of the emitters, and the fields of the layers
         lines_h, lines_d = self._lines
-        for i in plans.emitters:
-            lines_h[self._rows[i]] = plans.plans[i].line_values(values[i])
-            if self._layouts[i].layer:
-                self._evaluate_fields(values, i, grid, extras)
+        for key in self._keys:
+            m, i = key
+            lines_h[self._rows[key]] = self._plan(key).line_values(
+                values[m][i])
+            if self._layouts[key].layer:
+                self._evaluate_fields(values, key, grids[m], extras)
         driver.mem_copy_h2d(lines_h, lines_d)
 
         image = outputs.get('image') is not None
@@ -293,12 +348,13 @@ class TransferPlan:
         dust = opacity_front is not None
         subchannels = self._subchannels if tau is not None else 1
         # With extras, the light without opacity, and the optical depth of
-        # the lines in front of the galaxy
+        # the lines in front of the galaxies
         unabsorbed = None
         tau_front = None
         resolution = None
+        grid = grids[0]
         if out_extra is not None:
-            unabsorbed = driver.mem_alloc_d(out.shape, plans.dtype)
+            unabsorbed = driver.mem_alloc_d(out.shape, self._dtype)
             driver.mem_fill(unabsorbed, 0)
             if self.has_line_opacity():
                 tau_front = driver.mem_copy_d2h(tau)
@@ -306,57 +362,88 @@ class TransferPlan:
                     grid['spec_step'] / subchannels,
                     grid['spat_size'][1::-1])
         for z0, size in self._slabs:
-            slab_grid = _slab_grid(grid, z0, size)
-            extra = {} if extras is not None else None
+            slab_grids = [_slab_grid(g, z0, size) for g in grids]
+            extra = None if extras is None else [{} for _ in self._plans]
             odata = None
             if self._odata is not None:
                 odata = _view(
                     self._odata,
-                    (plans.ncubes,) + slab_grid['spat_size'][::-1])
-                plans.evaluate_opacity(values, slab_grid, odata, extra)
-            for i in plans.emitters:
-                if not self._layouts[i].layer:
-                    self._evaluate_fields(values, i, slab_grid, extra)
-                if resolution is not None and self._layouts[i].line_opacity:
-                    resolution.add(i, driver.mem_copy_d2h(_view(
-                        self._fields[i], self._layouts[i].shape(slab_grid))),
-                        lines_h[self._rows[i], 1])
+                    (self._ncubes,) + slab_grids[0]['spat_size'][::-1])
+                driver.mem_fill(odata, 0)
+                for m, plans in enumerate(self._plans):
+                    plans.evaluate_opacity(
+                        values[m], slab_grids[m], odata,
+                        None if extra is None else extra[m])
+            for key in self._keys:
+                m = key[0]
+                if not self._layouts[key].layer:
+                    self._evaluate_fields(values, key, slab_grids[m], extra)
+                if resolution is not None and self._layouts[key].line_opacity:
+                    resolution.add(key, driver.mem_copy_d2h(_view(
+                        self._fields[key],
+                        self._layouts[key].shape(slab_grids[m]))),
+                        lines_h[self._rows[key], 1])
             self._march(
-                slab_grid, image, self._emitters[size, dust, True],
+                slab_grids[0], image, self._emitters[size, dust, True],
                 subchannels, odata, opacity_front, tau, out)
             if unabsorbed is not None:
                 self._march(
-                    slab_grid, image, self._emitters[size, False, False], 1,
-                    None, None, None, unabsorbed)
+                    slab_grids[0], image, self._emitters[size, False, False],
+                    1, None, None, None, unabsorbed)
             if extra is not None:
                 slab_extras.append(extra)
 
-        if out_extra is not None:
+        if out_extra is None:
+            return None
+        light = 0.0
+        for m, plans in enumerate(self._plans):
             # (the extras of the slabs, along the depth axis)
-            for i in slab_extras[0]:
-                extras.setdefault(i, {}).update({
+            for i in slab_extras[0][m]:
+                extras[m].setdefault(i, {}).update({
                     key: np.concatenate(
-                        [extra[i][key] for extra in slab_extras])
-                    for key in slab_extras[0][i]})
+                        [extra[m][i][key] for extra in slab_extras])
+                    for key in slab_extras[0][m][i]})
             bdata = [
-                extras[i]['bdata'] for i in plans.emitters
-                if 'bdata' in extras.get(i, {})]
+                extras[m][i]['bdata'] for i in plans.emitters
+                if 'bdata' in extras[m].get(i, {})]
             plans.add_extras(
-                out_extra, extras, dict(bdata=sum(bdata)) if bdata else {})
-            out_extra['total_unabsorbed'] = plans.output_extra(
-                driver.mem_copy_d2h(unabsorbed))
-            spectral = depth = 0.0
-            if tau_front is not None:
-                line_tau = driver.mem_copy_d2h(tau) - tau_front
-                out_extra['total_line_tau'] = plans.output_extra(
-                    line_tau.reshape(
-                        (-1, subchannels) + line_tau.shape[1:]).mean(axis=1))
-                spectral, depth = resolution.resolution(
-                    line_tau.max(axis=0) >= _THIN_TAU)
-            light = 0.0 if self._smoothing is None \
-                else plans.light_resolution(values, extras, self._smoothing)
-            return LineResolution(spectral, depth, light)
-        return None
+                out_extra[m], extras[m],
+                dict(bdata=sum(bdata)) if bdata else {},
+                grids[m]['spat_zero'][2])
+            if self._smoothing is not None:
+                light = max(light, plans.light_resolution(
+                    values[m], extras[m], self._smoothing))
+        plans = self._plans[0]
+        march_extra['total_unabsorbed'] = plans.output_extra(
+            driver.mem_copy_d2h(unabsorbed))
+        spectral = depth = 0.0
+        if tau_front is not None:
+            line_tau = driver.mem_copy_d2h(tau) - tau_front
+            march_extra['total_line_tau'] = plans.output_extra(
+                line_tau.reshape(
+                    (-1, subchannels) + line_tau.shape[1:]).mean(axis=1))
+            spectral, depth = resolution.resolution(
+                line_tau.max(axis=0) >= _THIN_TAU)
+        return LineResolution(spectral, depth, light)
+
+    def _grids(self, positions: Sequence[float] | None) -> list[NativeGrid]:
+        """
+        Return the native grid of each galaxy at the given positions (see
+        evaluate): the grid of its depth axis, in the frame of the galaxy
+        (that is, centred on its plane; see _placement).
+        """
+        grid = self._plans[0].native_grid
+        if len(self._members) == 1:
+            return [grid]
+        if positions is None:
+            positions = [0.0] * len(self._members)
+        zero, placed = _placement(
+            positions, [member.depth for member in self._members],
+            self._depth.size)
+        x0, y0, _ = grid['spat_zero']
+        return [
+            grid | dict(spat_zero=(x0, y0, zero - position))
+            for position in placed]
 
     def _march(
             self,
@@ -374,7 +461,7 @@ class TransferPlan:
         native emitters to the image or the spectral cube out (see the
         native GModel.transfer_march).
         """
-        grid = self._plans.native_grid
+        grid = self._plans[0].native_grid
         self._gmodel.transfer_march(
             emitters=emitters, spat_size=slab_grid['spat_size'],
             slab_zero=slab_grid['slab_zero'],
@@ -385,23 +472,24 @@ class TransferPlan:
 
     def _evaluate_fields(
             self,
-            values: dict[int, ParamValues],
-            index: int,
+            values: list[dict[int, ParamValues]],
+            key: tuple[int, int],
             grid: NativeGrid,
-            extras: dict[int, dict[str, Any]] | None
+            extras: list[dict[int, dict[str, Any]]] | None
     ) -> None:
         """
-        Write the fields of the emitter of the given index on the grid (the
-        whole grid of a layer, or a slab of a volume); with extras, its
-        extra outputs go to extras[index].
+        Write the fields of the emitter of the given key (the index of its
+        galaxy and its own) on the grid (the whole grid of a layer, or a
+        slab of a volume); with extras, its extra outputs go to the item
+        of its galaxy, by its index.
         """
+        m, i = key
         extra = {} if extras is not None else None
-        self._plans.plans[index].evaluate_fields(
-            values[index], grid,
-            _view(self._fields[index], self._layouts[index].shape(grid)),
-            extra)
+        self._plan(key).evaluate_fields(
+            values[m][i], grid,
+            _view(self._fields[key], self._layouts[key].shape(grid)), extra)
         if extras is not None:
-            extras.setdefault(index, {}).update(extra)
+            extras[m].setdefault(i, {}).update(extra)
 
     def _native_emitters(
             self, size: int, dust: bool, line_opacity: bool
@@ -411,21 +499,72 @@ class TransferPlan:
         number of planes: their fields, lines and, with dust, ratios; with
         line_opacity, those with line opacity have it.
         """
-        plans = self._plans
-        slab_grid = _slab_grid(plans.native_grid, 0, size)
-        emitter_class = plans.driver.native_class(
-            'TransferEmitter', plans.dtype)
+        native_grid = self._plans[0].native_grid
+        slab_grid = _slab_grid(native_grid, 0, size)
+        emitter_class = self._driver.native_class(
+            'TransferEmitter', self._dtype)
         emitters = []
-        for i in plans.emitters:
-            layout = self._layouts[i]
+        for key in self._keys:
+            layout = self._layouts[key]
             emitters.append(emitter_class(
                 layer=layout.layer,
                 line_opacity=line_opacity and layout.line_opacity,
-                fields=_view(self._fields[i], layout.shape(
-                    plans.native_grid if layout.layer else slab_grid)),
-                lines=self._lines[1][self._rows[i]],
-                opacity_ratios=self._ratios[i] if dust else None))
+                fields=_view(self._fields[key], layout.shape(
+                    native_grid if layout.layer else slab_grid)),
+                lines=self._lines[1][self._rows[key]],
+                opacity_ratios=self._ratios[key] if dust else None))
         return emitters
+
+    def _plan(self, key: tuple[int, int]) -> 'ComponentPlan':
+        """Return the plan of the component of the given key."""
+        m, i = key
+        return self._plans[m].plans[i]
+
+    def _component(self, key: tuple[int, int]) -> 'Component':
+        """Return the component of the given key."""
+        m, i = key
+        return self._members[m].component_set.components()[i]
+
+
+def _placement(
+        positions: Sequence[float], axes: Sequence[DepthAxis], size: int
+) -> tuple[float, list[float]]:
+    """
+    Return where galaxies at the given positions along the line of sight
+    (arcsec), each held by its own depth axis (centred on its plane), go
+    on one depth axis of the given number of voxels (of their step): the
+    position of its first voxel, and that of each galaxy. The stretches
+    between the axes of galaxies that do not overlap are left out, in
+    whole voxels, and the voxels have the depths that they have on the
+    axis of the first galaxy (so they sample each galaxy as they do on its
+    own axis, up to the separations of the galaxies).
+    """
+    step = axes[0].step
+    placed = [float(position) for position in positions]
+    # (the depths of the first and the last voxel of each axis, in the
+    # frame of its galaxy)
+    lows = [axis.zero for axis in axes]
+    highs = [axis.zero + (axis.size - 1) * step for axis in axes]
+    # Front to back, each galaxy moves forward by the stretches left out
+    # in front of it
+    cut = 0.0
+    end = -math.inf
+    for g in sorted(range(len(placed)), key=placed.__getitem__):
+        placed[g] -= cut
+        gap = placed[g] + lows[g] - (end + step)
+        if math.isfinite(gap) and gap >= step:
+            stretch = math.floor(gap / step) * step
+            placed[g] -= stretch
+            cut += stretch
+        end = max(end, placed[g] + highs[g])
+    start = min(p + low for p, low in zip(placed, lows))
+    first = placed[0] + lows[0]
+    zero = first - math.ceil((first - start) / step - 1e-9) * step
+    if zero + (size - 1) * step < end - 1e-9 * step:
+        raise RuntimeError(
+            f"the galaxies take {(end - zero) / step + 1:g} voxels of a "
+            f"depth axis of {size}")
+    return zero, placed
 
 
 class _ResolutionTracker:
