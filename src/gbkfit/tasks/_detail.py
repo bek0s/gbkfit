@@ -349,8 +349,10 @@ def evaluation_outputs(
     (<prefix>_extra_<name>; those of the models once, under the first
     prefix: each residual evaluation evaluates the models again). With
     the residuals, the free amplitudes of spectra (see
-    LikelihoodGaussian), which the residuals take and the models do not,
-    are residual_extra_<observation prefix>amplitudes.
+    LikelihoodGaussian) are residual_extra_<observation prefix>amplitudes,
+    and with the models too, the model of the spectra is that which the
+    residuals compare, times the amplitudes (model_<i>_<item>_d), and the
+    model without them is model_<i>_<item>_unscaled_d.
     """
     outputs = {}
     model_extra: dict[str, Any] = {}
@@ -383,14 +385,28 @@ def evaluation_outputs(
     for prefix, extra in extras:
         for key, value in extra.items():
             outputs[f'{prefix}_extra_{key}'] = value
-    # (the free amplitudes of spectra, which the residuals take; the
-    # models are without them)
     if residuals:
         for i, amplitudes in enumerate(objective.amplitudes()):
-            if amplitudes is not None:
-                outputs[f'residual_extra_{group.extra_prefix(i)}amplitudes'] \
-                    = amplitudes
+            if amplitudes is None:
+                continue
+            outputs[f'residual_extra_{group.extra_prefix(i)}amplitudes'] = \
+                amplitudes
+            if model:
+                key = group.observations()[i].observable().spectra_item()
+                name = f'model_{i}_{key}_d'
+                outputs[f'model_{i}_{key}_unscaled_d'] = outputs[name]
+                outputs[name] = _scaled(outputs[name], amplitudes)
     return outputs
+
+
+def _scaled(output: Any, amplitudes: np.ndarray) -> Any:
+    """
+    Return an output of spectra (along the first axis of its data) with
+    each spectrum times its amplitude.
+    """
+    if isinstance(output, np.ndarray):
+        return output * amplitudes
+    return output._replace(data=output.data * amplitudes)
 
 
 def write_outputs(
