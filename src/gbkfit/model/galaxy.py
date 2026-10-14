@@ -43,7 +43,8 @@ class Galaxy(parseutils.Serializable):
     A galaxy: its components, and its mass at a distance. Its components
     are what observations see: each emits light (its emission), removes
     light (its opacity) or both. Its mass pulls: its components with the
-    velocity trait 'mass' rotate in its gravity (see traits.VPTraitMass).
+    velocity trait 'mass' rotate in its gravity (see traits.VPTraitMass),
+    which takes its disks as concentric and flat (see GravityPlan).
 
     Its parameters are those of its components, each prefixed by its name
     when there are several ('disk_pt_a'), and those of its geometries

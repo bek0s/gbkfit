@@ -6,6 +6,7 @@ velocity.
 """
 
 import copy
+import logging
 
 import astropy.cosmology
 import numpy as np
@@ -800,6 +801,24 @@ def test_observations_of_a_galaxy_share_its_gravity(driver, monkeypatch):
     np.testing.assert_allclose(
         single['spectra']['d'], double['spectra']['d'], rtol=1e-5,
         atol=1e-7)
+
+
+@pytest.mark.parametrize('tilt, warns', [(10, False), (30, True)])
+def test_the_gravity_warns_of_a_disk_far_from_flat(caplog, tilt, warns):
+    # The gravity takes a warped disk flat: a tilt of 10 degrees across its
+    # rings changes its circular velocity by about 0.2%, one of 30 by
+    # about 1.5%, and a warning says so (with extras)
+    disk = with_traits(DISK, vptraits=dict(type='mass')) | dict(
+        type='smdisk', tilted=True)
+    galaxy = galaxy_parser.load(dict(
+        components=[disk], mass=copy.deepcopy(MASS),
+        distance=copy.deepcopy(DISTANCE)))
+    nodes = len(DISK['rnodes'])
+    params = DISK_PROPERTIES | MASS_PROPERTIES | dict(
+        posa=np.full(nodes, 30.0), incl=np.linspace(60, 60 + tilt, nodes))
+    caplog.set_level(logging.WARNING)
+    galaxy.plan_gravity().evaluate(params, {})
+    assert ('tilted by' in caplog.text) == warns
 
 
 def test_the_gravity_writes_the_rotation_it_gives():

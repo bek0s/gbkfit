@@ -4,6 +4,7 @@ at the radii of the components it moves, evaluated once for all the
 observations of the galaxy.
 """
 
+import logging
 from typing import TYPE_CHECKING, Any
 
 import astropy.units as u
@@ -24,6 +25,19 @@ __all__ = [
 ]
 
 
+_log = logging.getLogger(__name__)
+
+# The offset of the centre of a ring from the reference centre, as a
+# share of its radius, and the angle (degrees) between their planes,
+# above which a warning says that the gravity takes the disks too simply
+# (see GravityPlan.evaluate). Measured on an exponential disk whose outer
+# rings drift or tilt: each makes its own circular velocity about 1%
+# wrong (2026-10-14: 1% at a drift of about 15% of the radius, and at a
+# tilt of about 20 degrees).
+_MAX_OFFSET = 0.15
+_MAX_TILT = 20.0
+
+
 class GravityPlan:
     """
     The gravity of a galaxy: the circular velocity of its mass at the
@@ -31,6 +45,12 @@ class GravityPlan:
     'mass', see Component.circular_velocity_params), with the pressure
     support of each where its traits ask for it (see
     Disk.pressure_supported_params).
+
+    It takes the disks it moves and follows as concentric and flat: their
+    rings around one centre, in one plane, whatever their geometries (the
+    rotation of the rings is then projected with their own geometries).
+    With extra outputs, a warning says where their centres or planes
+    depart from those of the first enough to matter (see evaluate).
 
     It is evaluated once for all the observations of the galaxy, on the
     given driver and in float64, whatever the drivers and dtypes of the
@@ -96,7 +116,11 @@ class GravityPlan:
             component pulls outwards) and of all ('vcirc'), and with
             pressure support, its term ('pressure', (km/s)^2), and the
             values given ('vrot', km/s). The components are named after
-            their names, or their positions ('component0').
+            their names, or their positions ('component0'). With them, a
+            warning says where the rings of the disks it moves and follows
+            depart from the centre or the plane of the first ring of the
+            first: by more than 15% of their radius, or 20 degrees (which
+            makes their circular velocities about 1% wrong, or more).
 
         Returns
         -------
@@ -114,6 +138,8 @@ class GravityPlan:
         components = component_set.components()
         distance = component_set.distance()
         own = {i: self._component_params(i, params) for i in self._disk_plans}
+        if out_extra is not None:
+            self._warn_geometry(params)
         redshift = self._redshift
         kpc_per_arcsec = distance.kpc_per_arcsec(params, redshift)
         context = MassContext(
@@ -158,6 +184,46 @@ class GravityPlan:
                         cmp_parts, pressure, values[i][name])
         return values
 
+    def _warn_geometry(self, params: ParamValues) -> None:
+        """
+        Log a warning if the rings of the disks it moves and follows depart
+        from the centre or the plane of the first ring of the first by
+        more than _MAX_OFFSET of their radius (on the sky), or _MAX_TILT.
+        """
+        components = self._component_set.components()
+        rings = []
+        for i in dict.fromkeys(self._moved + self._followed):
+            values = self._component_params(i, params)
+            radii = np.asarray(components[i].density_disk().rnodes())
+            geometry = np.broadcast_arrays(radii, *(
+                np.asarray(values[name], dtype=float)
+                for name in ('xpos', 'ypos', 'posa', 'incl')))
+            label = components[i].name() or f'component{i}'
+            rings += [(label, *ring) for ring in zip(*geometry)]
+        ref, _, x0, y0, posa0, incl0 = rings[0]
+        normal0 = _normal(posa0, incl0)
+        offset = max(
+            (np.hypot(x - x0, y - y0) / r, label, r)
+            for label, r, x, y, _, _ in rings if r > 0)
+        tilt = max(
+            (np.degrees(np.arccos(min(1.0, abs(
+                _normal(posa, incl) @ normal0)))), label, r)
+            for label, r, _, _, posa, incl in rings)
+        if offset[0] > _MAX_OFFSET:
+            _log.warning(
+                f"the gravity takes the disks it moves and follows as "
+                f"concentric, but the centre of the ring of {offset[1]} at "
+                f"the radius {offset[2]:g} is {offset[0]:.0%} of its radius "
+                f"from that of the first ring of {ref} (on the sky): their "
+                f"circular velocities can be off by 1% or more there")
+        if tilt[0] > _MAX_TILT:
+            _log.warning(
+                f"the gravity takes the disks it moves and follows as flat, "
+                f"but the ring of {tilt[1]} at the radius {tilt[2]:g} is "
+                f"tilted by {tilt[0]:.0f} degrees from the plane of the "
+                f"first ring of {ref}: their circular velocities can be off "
+                f"by 1% or more there")
+
     def _component_params(
             self, index: int, params: ParamValues
     ) -> ParamValues:
@@ -168,6 +234,18 @@ class GravityPlan:
         component = self._component_set.components()[index]
         mapping = self._component_set.mappings()[index]
         return {p: params[mapping[p]] for p in component.pdescs()}
+
+
+def _normal(posa: float, incl: float) -> np.ndarray:
+    """
+    Return the normal of the plane of a ring of the given position angle
+    and inclination (degrees): a unit vector, whose angle to that of
+    another ring is the angle between their planes (or its supplement).
+    """
+    posa, incl = np.radians(posa), np.radians(incl)
+    return np.array([
+        np.sin(incl) * np.cos(posa), np.sin(incl) * np.sin(posa),
+        np.cos(incl)])
 
 
 def _rotation_table(
