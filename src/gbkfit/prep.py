@@ -256,8 +256,9 @@ class FitsArrays:
         """
         Read the data, errors and mask from FITS files (their first HDU
         with data), without their axes of length 1, in the axis order of
-        the model. Values that are not finite, errors that are not
-        positive, and pixels the mask file marks with 0 are invalid.
+        the model. Values that are not finite, errors that are not finite
+        or are 0 (e.g. blank pixels of an error map), and pixels the mask
+        file marks with 0 are invalid; negative errors are an error.
 
         Parameters
         ----------
@@ -274,7 +275,8 @@ class FitsArrays:
         Raises
         ------
         ConfigError
-            If a file has no data, or the shapes differ.
+            If a file has no data, the shapes differ, or an error is
+            negative.
         """
         data_d, header = _read_fits(data)
         data_e = _read_fits(error)[0] if error else None
@@ -299,6 +301,11 @@ class FitsArrays:
                     data_m = fitsutils.reorder_data(data_m, order)
         valid = np.isfinite(data_d)
         if data_e is not None:
+            if np.any(data_e < 0):
+                raise ConfigError(
+                    f"errors cannot be negative; "
+                    f"{np.count_nonzero(data_e < 0)} are, down to "
+                    f"{np.nanmin(data_e):g}")
             valid &= np.isfinite(data_e) & (data_e > 0)
         if data_m is not None:
             valid &= np.isfinite(data_m) & (data_m != 0)
