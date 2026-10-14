@@ -14,6 +14,7 @@ from astropy.table import Table
 from gbkfit.driver import Driver
 from gbkfit.params import ParamValues
 from ..mass import MassContext
+from ._units import mass_per_unit
 from .disks._profiles import DiskDensity, pressure_support
 
 if TYPE_CHECKING:
@@ -147,7 +148,8 @@ class GravityPlan:
             distance.omega_m(params, redshift), {
                 components[i].name(): DiskDensity(
                     components[i].density_disk(), self._disk_plans[i],
-                    own[i], kpc_per_arcsec)
+                    own[i], kpc_per_arcsec,
+                    mass_per_unit(components[i].emission()))
                 for i in self._followed})
         # The mass is evaluated once, at the radii of all the components
         radii = {i: components[i].circular_velocity_params()

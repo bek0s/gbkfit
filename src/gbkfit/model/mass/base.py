@@ -61,6 +61,14 @@ class ComponentDensity(Protocol):
         """
         ...
 
+    def mass_per_unit(self) -> float | None:
+        """
+        Return the mass surface density (Msun/kpc^2) of one unit of the
+        density, if the component has a physical unit (e.g. of the HI in
+        it); None without one.
+        """
+        ...
+
 
 @dataclasses.dataclass(frozen=True)
 class MassContext:
