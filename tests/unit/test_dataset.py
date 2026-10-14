@@ -197,13 +197,17 @@ def test_data_does_not_change_the_callers_arrays():
     assert error[0, 0] == 1
 
 
-def test_data_masks_errors_that_are_not_positive():
+def test_data_mask_errors_of_0_and_reject_negative_ones():
+    # (0 is common for blank pixels of error maps; negative is wrong)
     error = np.ones((2, 3))
     error[0, 0] = 0
-    error[0, 1] = -1
+    error[0, 1] = np.nan
     data = Data(np.ones((2, 3)), error=error)
     assert data.mask().sum() == 4
     assert np.isnan(data.data()[0, :2]).all()
+    error[0, 1] = -1
+    with pytest.raises(ConfigError, match="errors cannot be negative"):
+        Data(np.ones((2, 3)), error=error)
 
 
 def test_data_keep_their_precision(tmp_path):

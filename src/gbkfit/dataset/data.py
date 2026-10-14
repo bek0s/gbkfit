@@ -88,8 +88,8 @@ class Data:
 
     Where the values were measured (e.g. on the pixels of a grid) is
     described by their dataset. The values that are masked (mask 0), not
-    finite, or have an error that is not finite and positive are NaN, with
-    mask 0.
+    finite, or have an error that is not finite or is 0 (e.g. blank
+    pixels of an error map) are NaN, with mask 0.
 
     Parameters
     ----------
@@ -103,7 +103,8 @@ class Data:
     Raises
     ------
     ConfigError
-        If the mask is not finite, or the arrays are not of one shape.
+        If the mask is not finite, an error is negative, or the arrays
+        are not of one shape.
     """
 
     def __init__(
@@ -127,6 +128,10 @@ class Data:
             raise ConfigError(
                 f"the data and the error must have one shape; their shapes "
                 f"are {data.shape} and {error.shape}")
+        if error is not None and np.any(error < 0):
+            raise ConfigError(
+                f"errors cannot be negative; {np.count_nonzero(error < 0)} "
+                f"are, down to {np.nanmin(error):g}")
         # The total mask: the values that are finite, not masked, and
         # with a finite, positive error
         total_mask = np.isfinite(data) & (mask != 0)
