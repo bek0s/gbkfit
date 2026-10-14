@@ -125,3 +125,21 @@ def test_a_likelihood_of_no_weight_has_no_amplitude_terms(driver):
     obj, values = objective(
         driver, spectra, 1e-3 * spectra.max(), weights=0.0)
     assert obj.chi2_and_log_likelihood(values) == (0.0, 0.0)
+
+
+def test_the_outputs_of_a_fit_have_the_amplitudes(driver):
+    # The model of the spectra in the outputs is that which the residuals
+    # compare (times the amplitudes), beside the model without them
+    from gbkfit.tasks._detail import evaluation_outputs
+    spectra = model(driver)
+    obj, values = objective(driver, 2 * spectra, 1e-3 * spectra.max())
+    outputs = evaluation_outputs(obj.group(), obj, values, True, True)
+    np.testing.assert_allclose(
+        outputs['model_0_spectra_d'].data, 2 * spectra, rtol=1e-5,
+        atol=1e-6 * spectra.max())
+    np.testing.assert_allclose(
+        outputs['model_0_spectra_unscaled_d'].data, spectra, rtol=1e-6)
+    lit = spectra.sum(axis=0) > 1e-3 * spectra.sum(axis=0).max()
+    np.testing.assert_allclose(
+        outputs['residual_extra_observation0_amplitudes'][lit], 2,
+        rtol=1e-5)
