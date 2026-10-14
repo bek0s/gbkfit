@@ -407,7 +407,7 @@ objective_residual_sum(
 }
 
 // The sums of each spectrum (of nspectra; its value of channel c at c *
-// nspectra + s) that its free amplitude takes (see
+// nspectra + s) that its amplitude takes (see
 // gbkfit::objective_amplitude_terms). Each thread sums a block of
 // spectra channel by channel, reading the values of each channel of the
 // block in order.
@@ -415,14 +415,14 @@ template<typename T> void
 objective_amplitude_sums(
         const T* obs_d, const T* obs_e, const T* obs_m,
         const T* mdl_d, const T* mdl_w,
-        int nchannels, int nspectra, double* a, double* b, double* f)
+        int nchannels, int nspectra, double* a, double* b)
 {
     constexpr int BLOCK = 256;
     #pragma omp parallel for
     for(int s0 = 0; s0 < nspectra; s0 += BLOCK) {
 
         const int n = std::min(BLOCK, nspectra - s0);
-        double sum_a[BLOCK] = {}, sum_b[BLOCK] = {}, sum_f[BLOCK] = {};
+        double sum_a[BLOCK] = {}, sum_b[BLOCK] = {};
         for (int c = 0; c < nchannels; ++c) {
             const long long i0 = (long long)c * nspectra + s0;
             for (int k = 0; k < n; ++k) {
@@ -430,13 +430,12 @@ objective_amplitude_sums(
                         i0 + k,
                         obs_d, obs_e, obs_m,
                         mdl_d, mdl_w,
-                        sum_a[k], sum_b[k], sum_f[k]);
+                        sum_a[k], sum_b[k]);
             }
         }
         for (int k = 0; k < n; ++k) {
             a[s0 + k] = sum_a[k];
             b[s0 + k] = sum_b[k];
-            f[s0 + k] = sum_f[k];
         }
 
     }

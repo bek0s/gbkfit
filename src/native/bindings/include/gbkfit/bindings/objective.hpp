@@ -47,13 +47,13 @@ struct Objective
     }
 
     // The sums of each spectrum (the values along the first axis, at each
-    // point of the others) that its free amplitude takes, into a, b and f
+    // point of the others) that its amplitude takes, into a and b
     // (of the shape of the other axes; see
     // gbkfit::objective_amplitude_sums)
     static void
     amplitude_sums(
             ConstData obs_d, ConstData obs_e, ConstData obs_m,
-            ConstData mdl_d, ConstData mdl_w, Sums a, Sums b, Sums f)
+            ConstData mdl_d, ConstData mdl_w, Sums a, Sums b)
     {
         require_same_shape(obs_e, obs_d, "obs_e", "obs_d");
         require_same_shape(obs_m, obs_d, "obs_m", "obs_d");
@@ -63,13 +63,12 @@ struct Objective
                 "obs_d must have a first axis");
         const int nchannels = int(obs_d.shape(0));
         const int nspectra = int(obs_d.size() / obs_d.shape(0));
-        require(a.size() == size_t(nspectra) && b.size() == size_t(nspectra)
-                && f.size() == size_t(nspectra),
-                "a, b and f must have one value per spectrum");
+        require(a.size() == size_t(nspectra) && b.size() == size_t(nspectra),
+                "a and b must have one value per spectrum");
         Kernels::objective_amplitude_sums(
                 obs_d.data(), data(obs_e), data(obs_m),
                 mdl_d.data(), data(mdl_w),
-                nchannels, nspectra, a.data(), b.data(), f.data());
+                nchannels, nspectra, a.data(), b.data());
     }
 
     static void
@@ -97,8 +96,7 @@ struct Objective
                         nb::arg("mdl_d").noconvert(),
                         nb::arg("mdl_w").noconvert().none(),
                         nb::arg("a").noconvert(),
-                        nb::arg("b").noconvert(),
-                        nb::arg("f").noconvert());
+                        nb::arg("b").noconvert());
     }
 };
 

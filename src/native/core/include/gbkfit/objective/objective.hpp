@@ -46,9 +46,9 @@ objective_residual(
     res[i] = residual * weight;
 }
 
-// Add value i of a spectrum to the sums that its free amplitude takes
-// (see Objective.amplitude_sums): a = sum W mdl_d^2, b = sum W mdl_d
-// obs_d and f = sum mdl_d, W = (obs_m * mdl_w / obs_e)^2, over its values
+// Add value i of a spectrum to the sums that its amplitude takes
+// (see Objective.amplitude_sums): a = sum W mdl_d^2 and b = sum W mdl_d
+// obs_d, W = (obs_m * mdl_w / obs_e)^2, over its values
 // that the data do not mask (obs_m = 0) and that the model has (not
 // NaN). The terms are in the precision of the data, as the residuals
 // (double precision is slow on many GPUs); the sums in double precision.
@@ -57,7 +57,7 @@ objective_amplitude_terms(
         long long i,
         const T* obs_d, const T* obs_e, const T* obs_m,
         const T* mdl_d, const T* mdl_w,
-        double& a, double& b, double& f)
+        double& a, double& b)
 {
     if ((obs_m && obs_m[i] == 0) || std::isnan(mdl_d[i])) {
         return;
@@ -75,7 +75,6 @@ objective_amplitude_terms(
     const T wm = w * mdl_d[i];
     a += wm * wm;
     b += wm * w * obs_d[i];
-    f += mdl_d[i];
 }
 
 } // namespace gbkfit
