@@ -3,6 +3,8 @@ Tests for the objective: the totals that the fitters use agree with the
 residuals, and the residuals are new arrays.
 """
 
+import concurrent.futures
+
 import numpy as np
 import pytest
 import scipy.special
@@ -58,6 +60,25 @@ def test_residuals_are_a_new_array_on_every_call(driver):
     assert first is not second
     assert not np.shares_memory(first, second)
     np.testing.assert_array_equal(first, second)
+
+
+def test_objectives_evaluate_in_several_threads_at_once(driver):
+    # (as copies of an objective on several devices do; here they share
+    # one)
+    data = Data(np.random.default_rng(2).normal(0.1, 1, (24, 32)))
+    (objective1, params), (objective2, _) = \
+        make_objective(driver, data), make_objective(driver, data)
+    points = [params | dict(incl=incl) for incl in (30, 45, 60, 75)]
+    expected = [objective1.residuals(point) for point in points]
+
+    def evaluate(objective):
+        return [objective.residuals(point) for point in points]
+
+    with concurrent.futures.ThreadPoolExecutor(2) as executor:
+        results = list(executor.map(evaluate, [objective1, objective2]))
+    for residuals in results:
+        for got, want in zip(residuals, expected):
+            np.testing.assert_array_equal(got, want)
 
 
 def test_masked_values_do_not_count(driver):
