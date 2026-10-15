@@ -12,8 +12,8 @@ import scipy.integrate
 from gbkfit.dataset import Data, DatasetPixelBrightness
 from gbkfit.driver.drivers.host import DriverHost
 from gbkfit.fitting import (
-    FitParamPrior, PriorGauss, PriorGaussTrunc, PriorLogUniform,
-    PriorUniform)
+    EvaluationLog, FitControl, FitParamPrior, PriorGauss, PriorGaussTrunc,
+    PriorLogUniform, PriorUniform)
 from gbkfit.instrument import Instrument, PSFGauss
 from gbkfit.model import galaxy_parser
 from gbkfit.objective import Objective
@@ -191,6 +191,71 @@ def test_optimizers_with_a_gaussian_prior_find_the_maximum_a_posteriori(
     assert best.covariance.std['incl'] == pytest.approx(
         s / np.sqrt(2), rel=0.05)
     assert best.chi2 > alone.chi2 and best.log_prior is not None
+
+
+class StopAfter(FitControl):
+    """A control that stops a fit after n evaluations."""
+
+    def __init__(self, n):
+        super().__init__()
+        self._n = n
+
+    def stopped(self):
+        self._n -= 1
+        return self._n < 0
+
+
+@pytest.mark.parametrize('fitter', [
+    dict(type='lmfit.least_squares'), dict(type='cmaes')])
+def test_a_stopped_fit_ends_with_its_best_point(fitter):
+    pytest.importorskip('cma')
+    pytest.importorskip('lmfit')
+    from gbkfit.fitting import fitter_parser
+    objective = mock_objective(DriverHost())
+    params = ParamSpace(objective.pdescs(), bounded_properties())
+    result = fitter_parser.load(fitter).fit(
+        objective, params, control=StopAfter(30))
+    assert not result.success and 'stopped' in result.message
+    assert result.nevals == 30
+    assert result.best().covariance is not None
+
+
+def test_a_fit_resumed_from_its_log_is_the_fit_that_did_not_stop(tmp_path):
+    pytest.importorskip('cma')
+    from gbkfit.fitting.fitters.cmaes import FitterCMAES
+    objective = mock_objective(DriverHost())
+    params = ParamSpace(objective.pdescs(), bounded_properties())
+    whole = FitterCMAES().fit(objective, params).best()
+    filename = str(tmp_path / 'evaluations.bin')
+    FitterCMAES().fit(
+        objective, params, control=StopAfter(500),
+        log=EvaluationLog(filename))
+    log = EvaluationLog.resume(filename)
+    resumed = FitterCMAES().fit(objective, params, log=log).best()
+    assert log.nreplayed() == 500
+    assert resumed.free == whole.free
+    assert resumed.chi2 == pytest.approx(whole.chi2, rel=1e-12)
+
+
+def test_a_stopped_emcee_keeps_its_chain_so_far(tmp_path):
+    # The steps go to the log as the chain runs (16 walkers, 6 elements
+    # and the log-probability)
+    pytest.importorskip('emcee')
+    from gbkfit.fitting import fitter_parser
+    objective = mock_objective(DriverHost())
+    params = ParamSpace(objective.pdescs(), prior_properties(10))
+    fitter = fitter_parser.load(dict(type='emcee', nwalkers=16, nsteps=100))
+    result = fitter.fit(
+        objective, params, control=StopAfter(16 * 21),
+        log=EvaluationLog(str(tmp_path / 'evaluations.bin')))
+    nsteps = result.diagnostics['nsteps']
+    assert not result.success and 0 < nsteps < 100
+    assert result.posterior is not None
+    with open(tmp_path / 'evaluations-chain.bin', 'rb') as file:
+        file.readline()
+        file.readline()
+        chain = np.frombuffer(file.read()).reshape(-1, 16, 6 + 1)
+    assert len(chain) == nsteps
 
 
 def test_least_squares_take_priors_with_residuals_only():

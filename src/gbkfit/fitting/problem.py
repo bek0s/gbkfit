@@ -11,6 +11,8 @@ from collections.abc import Sequence
 import numpy as np
 import numpy.typing as npt
 
+from gbkfit.fitting.control import FitControl, FitStopped
+from gbkfit.fitting.evaluation_log import EvaluationLog
 from gbkfit.fitting.priors import Prior
 from gbkfit.fitting.progress import FitProgress, ProgressObserver
 from gbkfit.objective import Objective
@@ -45,6 +47,11 @@ class FitProblem:
     (see FitProgress): at most every interval seconds as it evaluates,
     when the stage changes (see set_stage), and at the end (see finish).
 
+    Every evaluation raises FitStopped once the control (if any) is
+    stopped. The numbers it evaluates (chi-squares, log-likelihoods, not
+    residuals) go to the log (if any), and those of a fit that resumes
+    come from it while it lasts (see EvaluationLog).
+
     Parameters
     ----------
     objective : Objective
@@ -58,12 +65,17 @@ class FitProblem:
         Who receives the progress of the fit.
     interval : float, optional
         The least time between two reports as it evaluates (s).
+    control : FitControl, optional
+        The control of the fit, to stop it.
+    log : EvaluationLog, optional
+        The log of the evaluations (of a fit that resumes, or a new one).
 
     Raises
     ------
     ValueError
         If the parameter space lacks parameters of the objective, nothing
-        is free, or the number of priors is wrong.
+        is free, the number of priors is wrong, or the log is of a fit of
+        other free elements.
     """
 
     def __init__(
@@ -72,7 +84,9 @@ class FitProblem:
             params: ParamSpace,
             priors: Sequence[Prior | None] | None = None,
             observers: Sequence[ProgressObserver] = (),
-            interval: float = 2.0
+            interval: float = 2.0,
+            control: FitControl | None = None,
+            log: EvaluationLog | None = None
     ):
         if missing := set(objective.pdescs()) - set(params.pdescs()):
             raise ValueError(
@@ -103,6 +117,10 @@ class FitProblem:
         self._start = time.perf_counter()
         self._last_chi2 = math.inf
         self._last_report = self._start
+        self._control = control
+        self._log = log
+        if log is not None:
+            log.begin(names)
 
     def objective(self) -> Objective:
         """Return the objective."""
@@ -171,7 +189,10 @@ class FitProblem:
             If the parameters cannot be evaluated there.
         TypeError
             If a prior has no residual (see Prior.has_residual).
+        FitStopped
+            If the fit was asked to stop.
         """
+        self._check_stop()
         residuals = self._objective.residuals(self.evaluate(x))
         if self._priors is not None:
             residuals = np.concatenate(
@@ -185,13 +206,11 @@ class FitProblem:
 
     def chi2(self, x: npt.ArrayLike) -> float:
         """Return the chi-square at the given free values."""
-        try:
-            values = self.evaluate(x)
-        except ParamEvaluationError:
+        evaluated = self._chi2_and_log_likelihood(x)
+        if evaluated is None:
             return math.inf
-        chi2 = self._objective.chi2(values)
-        self._record(x, chi2)
-        return chi2
+        self._record(x, evaluated[0])
+        return evaluated[0]
 
     def cost(self, x: npt.ArrayLike) -> float:
         """
@@ -199,11 +218,10 @@ class FitProblem:
         chi-square plus that of the priors (see Prior.chi2; -2 log of the
         posterior, up to a constant), or the chi-square without priors.
         """
-        try:
-            values = self.evaluate(x)
-        except ParamEvaluationError:
+        evaluated = self._chi2_and_log_likelihood(x)
+        if evaluated is None:
             return math.inf
-        cost = self._objective.chi2(values) + self.prior_chi2(x)
+        cost = evaluated[0] + self.prior_chi2(x)
         self._record(x, cost)
         return cost
 
@@ -235,14 +253,11 @@ class FitProblem:
         Return the log-likelihood at the given free values (see
         Objective.log_likelihood).
         """
-        try:
-            values = self.evaluate(x)
-        except ParamEvaluationError:
+        evaluated = self._chi2_and_log_likelihood(x)
+        if evaluated is None:
             return -math.inf
-        chi2, log_likelihood = self._objective.chi2_and_log_likelihood(
-            values)
-        self._record(x, chi2)
-        return log_likelihood
+        self._record(x, evaluated[0])
+        return evaluated[1]
 
     def log_prior(self, x: npt.ArrayLike) -> float:
         """
@@ -263,7 +278,13 @@ class FitProblem:
         Return the log of the posterior density (up to a constant) at the
         given free values. Points outside the support of the priors are
         not evaluated.
+
+        Raises
+        ------
+        FitStopped
+            If the fit was asked to stop.
         """
+        self._check_stop()
         log_prior = self.log_prior(x)
         if not math.isfinite(log_prior):
             return -math.inf
@@ -333,6 +354,58 @@ class FitProblem:
             (prior, value) for prior, value in zip(
                 self._priors, np.asarray(x, dtype=float).tolist())
             if prior is not None]
+
+    def record_chain(
+            self,
+            positions: np.ndarray,
+            log_probs: np.ndarray
+    ) -> None:
+        """
+        Write a step of the chain of an MCMC sampler to the log, if any
+        (see EvaluationLog.record_chain).
+        """
+        if self._log is not None:
+            self._log.record_chain(positions, log_probs)
+
+    def close(self) -> None:
+        """Close the log, if any."""
+        if self._log is not None:
+            self._log.close()
+
+    def _check_stop(self) -> None:
+        """Raise FitStopped if the fit was asked to stop."""
+        if self._control is not None and self._control.stopped():
+            raise FitStopped("the fit was asked to stop")
+
+    def _chi2_and_log_likelihood(
+            self,
+            x: npt.ArrayLike
+    ) -> tuple[float, float] | None:
+        """
+        Return the chi-square and log-likelihood at the given free values,
+        or None where the parameters cannot be evaluated: from the log
+        while a fit that resumes replays it, else from the objective (and
+        logged, None as inf and -inf).
+
+        Raises
+        ------
+        FitStopped
+            If the fit was asked to stop.
+        """
+        self._check_stop()
+        x = np.asarray(x, dtype=float)
+        logged = None if self._log is None else self._log.replay(x)
+        if logged is None:
+            try:
+                logged = self._objective.chi2_and_log_likelihood(
+                    self.evaluate(x))
+            except ParamEvaluationError:
+                logged = math.inf, -math.inf
+            if self._log is not None:
+                self._log.append(x, *logged)
+        if logged == (math.inf, -math.inf):
+            return None
+        return logged
 
     def set_stage(self, stage: str) -> None:
         """

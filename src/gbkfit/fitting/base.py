@@ -11,6 +11,8 @@ from typing import Any
 
 import numpy as np
 
+from gbkfit.fitting.control import FitControl, FitStopped
+from gbkfit.fitting.evaluation_log import EvaluationLog
 from gbkfit.fitting.fitparams import FitParam, FitParamClass
 from gbkfit.fitting.problem import FitProblem
 from gbkfit.fitting.progress import ProgressObserver
@@ -153,10 +155,17 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
             self,
             objective: Objective,
             params: ParamSpace,
-            observers: Sequence[ProgressObserver] = ()
+            observers: Sequence[ProgressObserver] = (),
+            control: FitControl | None = None,
+            log: EvaluationLog | None = None
     ) -> FitResult:
         """
         Fit the data of an objective.
+
+        A fit asked to stop (see FitControl) ends with what the fitter has:
+        the best point so far (of an MCMC sampler, also its chain so far),
+        with its uncertainty, and success false. A fit with a log of its
+        evaluations can resume from it (see EvaluationLog).
 
         Parameters
         ----------
@@ -167,6 +176,11 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
         observers : Sequence of ProgressObserver, optional
             Who receives the progress of the fit as it runs (see
             FitProgress).
+        control : FitControl, optional
+            The control of the fit, to stop it.
+        log : EvaluationLog, optional
+            The log of the evaluations: a new one, or that of a fit to
+            resume (with the same objective, parameters and fitter).
 
         Returns
         -------
@@ -187,7 +201,8 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
             If the parameters cannot be evaluated where a least-squares
             fitter evaluates them (e.g. at the start).
         RuntimeError
-            If the fitter finds no point with a finite chi-square.
+            If the fitter finds no point with a finite chi-square (or the
+            fit was stopped before).
         """
         fit_params = self.load_fit_params(params)
         if not fit_params:
@@ -195,10 +210,25 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
         _check_valid_ranges(fit_params, params.free_valid_ranges())
         problem = FitProblem(
             objective, params, [p.prior() for p in fit_params.values()],
-            observers)
+            observers, control=control, log=log)
+        try:
+            return self._fit(problem, params, fit_params)
+        finally:
+            problem.close()
+
+    def _fit(
+            self,
+            problem: FitProblem,
+            params: ParamSpace,
+            fit_params: dict[str, FitParam]
+    ) -> FitResult:
+        """Run the fitter on a problem, and make its result (see fit)."""
         rng = np.random.default_rng(self._seed)
         start = time.perf_counter()
-        run = self._run(problem, list(fit_params.values()), rng)
+        try:
+            run = self._run(problem, list(fit_params.values()), rng)
+        except FitStopped:
+            run = _stopped_run(problem)
         elapsed = time.perf_counter() - start
         bounds = _Bounds(
             np.array([p.minimum() for p in fit_params.values()]),
@@ -311,6 +341,25 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
             log_prior=log_prior,
             covariance=cov,
             laplace=laplace), nevals, error
+
+
+def _stopped_run(problem: FitProblem) -> FitRun:
+    """
+    Return the run of a fitter that was asked to stop: the best point so
+    far.
+
+    Raises
+    ------
+    RuntimeError
+        If it had no point with a finite chi-square.
+    """
+    best = problem.best()
+    if best is None:
+        raise RuntimeError(
+            "the fit was stopped before any point with a finite chi-square")
+    return FitRun(
+        solutions=[best[0]], success=False,
+        message='stopped before the fitter finished: the best point so far')
 
 
 def _check_valid_ranges(
