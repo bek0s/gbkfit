@@ -4,12 +4,14 @@ values.
 """
 
 import math
+import time
 from collections.abc import Sequence
 
 import numpy as np
 import numpy.typing as npt
 
 from gbkfit.fitting.priors import Prior
+from gbkfit.fitting.progress import FitProgress, ProgressObserver
 from gbkfit.objective import Objective
 from gbkfit.params import ParamEvaluationError, ParamSpace, ParamValues
 from gbkfit.utils import threadutils
@@ -34,6 +36,10 @@ class FitProblem:
     The batch functions take several points (one per row). They evaluate
     the models one after the other, for now.
 
+    The problem reports the progress of the fit to the given observers
+    (see FitProgress): at most every interval seconds as it evaluates,
+    when the stage changes (see set_stage), and at the end (see finish).
+
     Parameters
     ----------
     objective : Objective
@@ -42,6 +48,10 @@ class FitProblem:
         The parameters of the models of the objective.
     priors : Sequence of Prior, optional
         The prior of each free element, in order.
+    observers : Sequence of ProgressObserver, optional
+        Who receives the progress of the fit.
+    interval : float, optional
+        The least time between two reports as it evaluates (s).
 
     Raises
     ------
@@ -54,7 +64,9 @@ class FitProblem:
             self,
             objective: Objective,
             params: ParamSpace,
-            priors: Sequence[Prior] | None = None
+            priors: Sequence[Prior] | None = None,
+            observers: Sequence[ProgressObserver] = (),
+            interval: float = 2.0
     ):
         if missing := set(objective.pdescs()) - set(params.pdescs()):
             raise ValueError(
@@ -77,6 +89,12 @@ class FitProblem:
         self._nevals = 0
         self._best_x: np.ndarray | None = None
         self._best_chi2 = math.inf
+        self._observers = tuple(observers)
+        self._interval = interval
+        self._stage = 'fit'
+        self._start = time.perf_counter()
+        self._last_chi2 = math.inf
+        self._last_report = self._start
 
     def objective(self) -> Objective:
         """Return the objective."""
@@ -239,9 +257,41 @@ class FitProblem:
             raise RuntimeError("the problem has no priors")
         return self._priors
 
+    def set_stage(self, stage: str) -> None:
+        """
+        Set what the fit is doing (see FitProgress.stage), and report it.
+        """
+        self._stage = stage
+        self._report()
+
+    def finish(self) -> None:
+        """Report the end of the fit."""
+        self._report(final=True)
+
     def _record(self, x: npt.ArrayLike, chi2: float) -> None:
-        """Count an evaluation, and keep the point if it is the best."""
+        """
+        Count an evaluation, keep the point if it is the best, and report
+        the progress if the interval has passed.
+        """
         self._nevals += 1
+        self._last_chi2 = chi2
         if chi2 < self._best_chi2:
             self._best_chi2 = chi2
             self._best_x = np.array(x, dtype=float)
+        if self._observers \
+                and time.perf_counter() - self._last_report >= self._interval:
+            self._report()
+
+    def _report(self, final: bool = False) -> None:
+        """Report the progress to the observers."""
+        now = time.perf_counter()
+        self._last_report = now
+        if not self._observers:
+            return
+        best = None if self._best_x is None \
+            else dict(zip(self._names, self._best_x.tolist()))
+        progress = FitProgress(
+            self._stage, self._nevals, now - self._start, self._last_chi2,
+            self._best_chi2, best, final)
+        for observer in self._observers:
+            observer(progress)

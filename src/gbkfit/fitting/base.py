@@ -6,12 +6,14 @@ import abc
 import dataclasses
 import importlib.metadata
 import time
+from collections.abc import Sequence
 from typing import Any
 
 import numpy as np
 
 from gbkfit.fitting.fitparams import FitParam, FitParamClass
 from gbkfit.fitting.problem import FitProblem
+from gbkfit.fitting.progress import ProgressObserver
 from gbkfit.fitting.result import (
     Evidence, FitResult, FitSolution, Posterior)
 from gbkfit.fitting.uncertainty import (
@@ -147,7 +149,12 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
                 fit_params[name] = cls.load(info)
         return fit_params
 
-    def fit(self, objective: Objective, params: ParamSpace) -> FitResult:
+    def fit(
+            self,
+            objective: Objective,
+            params: ParamSpace,
+            observers: Sequence[ProgressObserver] = ()
+    ) -> FitResult:
         """
         Fit the data of an objective.
 
@@ -157,6 +164,9 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
             The objective.
         params : ParamSpace
             The parameters of its models.
+        observers : Sequence of ProgressObserver, optional
+            Who receives the progress of the fit as it runs (see
+            FitProgress).
 
         Returns
         -------
@@ -187,7 +197,8 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
         if len({p is None for p in priors}) > 1:
             raise ConfigError("either all free elements have priors, or none")
         problem = FitProblem(
-            objective, params, None if priors[0] is None else priors)
+            objective, params, None if priors[0] is None else priors,
+            observers)
         rng = np.random.default_rng(self._seed)
         start = time.perf_counter()
         run = self._run(problem, list(fit_params.values()), rng)
@@ -197,6 +208,7 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
             np.array([p.maximum() for p in fit_params.values()]),
             np.array([p.scale() for p in fit_params.values()]))
         diagnostics = dict(run.diagnostics)
+        problem.set_stage('uncertainty')
         solutions = []
         uncertainty_nevals = 0
         uncertainty_errors = []
@@ -212,6 +224,7 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
         posterior = None
         if run.samples is not None:
             posterior = _posterior(problem, run.samples, run.weights)
+        problem.finish()
         return FitResult(
             fitter=self.dump(),
             params=_dump_params(params),

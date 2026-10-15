@@ -7,6 +7,7 @@ from .base import *
 from .fitparams import *
 from .priors import *
 from .problem import *
+from .progress import *
 from .result import *
 from .uncertainty import *
 

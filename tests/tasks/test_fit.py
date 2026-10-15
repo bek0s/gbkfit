@@ -56,6 +56,14 @@ def test_fit_recovers_the_parameters_of_noiseless_data(tmp_path):
     best = result['solutions'][0]['free']
     for name in ('xpos', 'posa', 'vpt_vt'):
         assert best[name] == pytest.approx(truth[name], abs=1e-3)
+    # Its progress, every report a line of JSON, the last final; and the
+    # configuration at the best fit so far
+    lines = (tmp_path / 'fit' / 'progress.jsonl').read_text().splitlines()
+    assert json.loads(lines[-1])['final']
+    best_config = yaml.load(tmp_path / 'fit' / 'best.yaml')
+    for name in ('xpos', 'posa', 'vpt_vt'):
+        assert best_config['params']['properties'][name]['value'] \
+            == pytest.approx(truth[name], abs=1e-3)
     # The arrays of the result, and the model and residuals at the best fit
     for name in ('solution_0_covariance.csv', 'solution_0_laplace.csv',
                  'model_0_spectra_d.fits', 'residual_spectra_d.fits'):

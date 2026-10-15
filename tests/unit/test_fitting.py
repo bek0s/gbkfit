@@ -405,3 +405,24 @@ def test_multistart_runs_any_optimizer_with_its_options():
     with pytest.raises(ConfigError, match="must be an optimizer"):
         fitter_parser.load(dict(
             type='multistart', local=dict(type='dynesty.static')))
+
+
+def test_fits_report_their_progress():
+    # Every stage (each start of multistart, then the uncertainty), at the
+    # end a final report; the evaluations grow, the best never worsens
+    pytest.importorskip('lmfit')
+    from gbkfit.fitting import fitter_parser
+    objective = mock_objective(DriverHost())
+    params = ParamSpace(objective.pdescs(), bounded_properties())
+    reports = []
+    result = fitter_parser.load(dict(
+        type='multistart', local=dict(type='scipy.least_squares'),
+        nstarts=2)).fit(objective, params, [reports.append])
+    stages = list(dict.fromkeys(report.stage for report in reports))
+    assert stages == ['start 1 of 2', 'start 2 of 2', 'uncertainty']
+    assert reports[-1].final and not any(r.final for r in reports[:-1])
+    assert reports[-1].nevals == result.nevals
+    nevals = [report.nevals for report in reports]
+    best = [report.best_chi2 for report in reports]
+    assert nevals == sorted(nevals) and best == sorted(best, reverse=True)
+    assert set(reports[-1].best) == set(result.best().free)
