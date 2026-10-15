@@ -365,6 +365,9 @@ class DiskPlan(abc.ABC):
             sizes[kind] = sum(constants[kind][3])
         # The offset, scale and flux of each emission line
         sizes['lines'] = 3 * nlines
+        # The sines and cosines of posa and incl, for the search of the
+        # ring of each point of a loose or tilted disk
+        sizes['posa_incl_sincos'] = 4 * sizes['posa']
 
         # Pack all parameter values in one buffer, so that they can be
         # copied to the device with one copy per evaluation
@@ -401,7 +404,8 @@ class DiskPlan(abc.ABC):
             **{name: views_d.get(name) for name in GEOMETRY_PARAMS},
             **trait_sets,
             opt_rows=to_device(opacity_rows, np.int32)
-            if disk._traits['opt'] else None)
+            if disk._traits['opt'] else None,
+            posa_incl_sincos=views_d['posa_incl_sincos'])
 
         self._disk = disk
         self._driver = driver
@@ -633,6 +637,12 @@ class DiskPlan(abc.ABC):
             fill(kind, trait_params.pdescs, trait_params.sampling)
         if lines is not None:
             self._lines_h[:] = lines
+        posa, incl = (
+            np.deg2rad(self._param_views[name].astype(np.float64))
+            for name in ('posa', 'incl'))
+        self._param_views['posa_incl_sincos'].reshape(-1, 4)[...] = \
+            np.column_stack(
+                [np.sin(posa), np.cos(posa), np.sin(incl), np.cos(incl)])
         self._driver.mem_copy_h2d(*self._param_values)
         return params
 

@@ -48,9 +48,10 @@ struct TraitSetArrays
     }
 };
 
-// The arrays that describe a disk: its radial nodes, its geometry and
-// its traits. They are created once, and their values are updated in
-// place before each evaluation.
+// The arrays that describe a disk: its radial nodes, its geometry (with
+// the sines and cosines of posa and incl of a loose or tilted disk, see
+// gbkfit::DiskArgs) and its traits. They are created once, and their
+// values are updated in place before each evaluation.
 template<typename T, typename Device>
 struct DiskArrays
 {
@@ -67,6 +68,7 @@ struct DiskArrays
     Values incl;
     Traits rpt, rht, vpt, vht, dpt, dht, zpt, spt, opt;
     Array<Device, const int, nb::ndim<1>> opt_rows;
+    Values posa_incl_sincos;
 };
 
 // The arrays of an emitter of the march of radiative transfer (see
@@ -377,7 +379,8 @@ struct GModel
                         const Traits* dpt, const Traits* dht,
                         const Traits* zpt, const Traits* spt,
                         const Traits* opt,
-                        Array<Device, const int, nb::ndim<1>> opt_rows) {
+                        Array<Device, const int, nb::ndim<1>> opt_rows,
+                        Values posa_incl_sincos) {
                     auto optional = [](const Traits* traits) {
                         return traits ? std::optional(*traits) : std::nullopt;
                     };
@@ -386,7 +389,7 @@ struct GModel
                             incl, optional(rpt), optional(rht),
                             optional(vpt), optional(vht), optional(dpt),
                             optional(dht), optional(zpt), optional(spt),
-                            optional(opt), opt_rows};
+                            optional(opt), opt_rows, posa_incl_sincos};
                 },
                 nb::arg("loose"), nb::arg("tilted"),
                 nb::arg("rnodes").noconvert(),
@@ -404,7 +407,9 @@ struct GModel
                 nb::arg("zpt").none() = nb::none(),
                 nb::arg("spt").none() = nb::none(),
                 nb::arg("opt").none() = nb::none(),
-                nb::arg("opt_rows").noconvert().none() = nb::none());
+                nb::arg("opt_rows").noconvert().none() = nb::none(),
+                nb::arg("posa_incl_sincos").noconvert().none()
+                        = nb::none());
 
         nb::class_<Emitter>(m, ("TransferEmitter" + suffix).c_str())
                 .def("__init__", [](
@@ -578,6 +583,7 @@ private:
         a.ypos = disk.ypos.data();
         a.posa = disk.posa.data();
         a.incl = disk.incl.data();
+        a.posa_incl_sincos = data(disk.posa_incl_sincos);
         const size_t nloose = disk.loose ? a.nrnodes : 1;
         const size_t ntilted = disk.tilted ? a.nrnodes : 1;
         require((!disk.vsys.is_valid() || disk.vsys.shape(0) == nloose)
@@ -587,6 +593,11 @@ private:
                 && disk.incl.shape(0) == ntilted,
                 "the geometry needs a value for each node of a loose or "
                 "tilted disk, and one value otherwise");
+        require(!(disk.loose || disk.tilted)
+                || (disk.posa_incl_sincos.is_valid()
+                    && disk.posa_incl_sincos.shape(0) == 4 * ntilted),
+                "a loose or tilted disk needs posa_incl_sincos: sin posa, "
+                "cos posa, sin incl and cos incl of each value of posa");
 
         require(disk.rpt.has_value(), "a disk needs density traits");
         auto traits = [](const auto& set) {

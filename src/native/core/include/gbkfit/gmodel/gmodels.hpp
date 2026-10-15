@@ -320,34 +320,38 @@ transform_cpos_posa_incl_inverse(
     transform_cpos(x, y, -xposi, -yposi);
 }
 
+// The radius of a point (x, y) of the sky in the plane of the node of the
+// given index of a disk (transform_cpos_posa_incl), with the sines and
+// cosines of its posa and incl (sin posa, cos posa, sin incl, cos incl of
+// each node, see DiskArgs::posa_incl_sincos)
 template<typename T> constexpr T
 rnode_radius(
         T x, T y, bool loose, bool tilted, int index,
-        const T* xpos, const T* ypos, const T* posa, const T* incl)
+        const T* xpos, const T* ypos, const T* sincos)
 {
-    T xposi = loose ? xpos[index] : xpos[0];
-    T yposi = loose ? ypos[index] : ypos[0];
-    T posai = tilted ? posa[index] : posa[0];
-    T incli = tilted ? incl[index] : incl[0];
-    posai *= DEG_TO_RAD<T>;
-    incli *= DEG_TO_RAD<T>;
-    transform_cpos_posa_incl(x, y, xposi, yposi, posai, incli);
-    return std::sqrt(x * x + y * y);
+    const T* sc = sincos + 4 * (tilted ? index : 0);
+    x -= loose ? xpos[index] : xpos[0];
+    y -= loose ? ypos[index] : ypos[0];
+    // (transform_posa: transform_lh_rotate_z by posa; transform_incl)
+    const T xr = - x * sc[0] + y * sc[1];
+    const T yr = (- x * sc[1] - y * sc[0]) / sc[3];
+    return std::sqrt(xr * xr + yr * yr);
 }
 
+// The radius of a point (x, y, z) in the frame of the node of the given
+// index of a disk: its cylindrical radius (see the 2d rnode_radius)
 template<typename T> constexpr T
 rnode_radius(
         T x, T y, T z, bool loose, bool tilted, int index,
-        const T* xpos, const T* ypos, const T* posa, const T* incl)
+        const T* xpos, const T* ypos, const T* sincos)
 {
-    T xposi = loose ? xpos[index] : xpos[0];
-    T yposi = loose ? ypos[index] : ypos[0];
-    T posai = tilted ? posa[index] : posa[0];
-    T incli = tilted ? incl[index] : incl[0];
-    posai *= DEG_TO_RAD<T>;
-    incli *= DEG_TO_RAD<T>;
-    transform_cpos_posa_incl(x, y, z, xposi, yposi, posai, incli);
-    return std::sqrt(x * x + y * y);
+    const T* sc = sincos + 4 * (tilted ? index : 0);
+    x -= loose ? xpos[index] : xpos[0];
+    y -= loose ? ypos[index] : ypos[0];
+    // (transform_posa, then transform_incl: transform_lh_rotate_x by incl)
+    const T xr = - x * sc[0] + y * sc[1];
+    const T yr = (- x * sc[1] - y * sc[0]) * sc[3] + z * sc[2];
+    return std::sqrt(xr * xr + yr * yr);
 }
 
 template<typename T> constexpr bool
@@ -375,17 +379,17 @@ ring_info(
         int& index, T& radius,
         T x, T y,
         bool loose, bool tilted, int nnodes, const T* nodes,
-        const T* xpos, const T* ypos, const T* posa, const T* incl)
+        const T* xpos, const T* ypos, const T* sincos)
 {
     T radius_min = rnode_radius(
-            x, y, loose, tilted, 0, xpos, ypos, posa, incl);
+            x, y, loose, tilted, 0, xpos, ypos, sincos);
 
     // Ignore anything smaller than the first node
     if (radius_min < nodes[0])
         return false;
 
     T radius_max = rnode_radius(
-            x, y, loose, tilted, nnodes-1, xpos, ypos, posa, incl);
+            x, y, loose, tilted, nnodes-1, xpos, ypos, sincos);
 
     // Ignore anything larger than the last node
     if (radius_max >= nodes[nnodes-1])
@@ -395,7 +399,7 @@ ring_info(
     for(index = 1; index < nnodes; ++index)
     {
         T radius_cur = rnode_radius(
-                x, y, loose, tilted, index, xpos, ypos, posa, incl);
+                x, y, loose, tilted, index, xpos, ypos, sincos);
         if (radius_cur < nodes[index])
             break;
     }
@@ -407,7 +411,7 @@ ring_info(
     {
         index = (ihi + ilo)/2;
         T radius_cur = rnode_radius(
-                x, y, loose, tilted, index, xpos, ypos, posa, incl);
+                x, y, loose, tilted, index, xpos, ypos, sincos);
         if(nodes[index] > radius_cur)
             ihi = index;
         else
@@ -416,9 +420,9 @@ ring_info(
 #endif
     // The radius is calculated using the velfi strategy
     T d1 = nodes[index-1] - rnode_radius(
-            x, y, loose, tilted, index-1, xpos, ypos, posa, incl);
+            x, y, loose, tilted, index-1, xpos, ypos, sincos);
     T d2 = nodes[index] - rnode_radius(
-            x, y, loose, tilted, index, xpos, ypos, posa, incl);
+            x, y, loose, tilted, index, xpos, ypos, sincos);
     radius = (nodes[index] * d1 - nodes[index - 1] * d2) / (d1 - d2);
 
     return true;
@@ -429,17 +433,17 @@ ring_info(
         int& index, T& radius,
         T x, T y, T z,
         bool loose, bool tilted, int nnodes, const T* nodes,
-        const T* xpos, const T* ypos, const T* posa, const T* incl)
+        const T* xpos, const T* ypos, const T* sincos)
 {
     T radius_min = rnode_radius(
-            x, y, z, loose, tilted, 0, xpos, ypos, posa, incl);
+            x, y, z, loose, tilted, 0, xpos, ypos, sincos);
 
     // Ignore anything smaller than the first node
     if (radius_min < nodes[0])
         return false;
 
     T radius_max = rnode_radius(
-            x, y, z, loose, tilted, nnodes-1, xpos, ypos, posa, incl);
+            x, y, z, loose, tilted, nnodes-1, xpos, ypos, sincos);
 
     // Ignore anything larger than the last node
     if (radius_max >= nodes[nnodes-1])
@@ -449,7 +453,7 @@ ring_info(
     for(index = 1; index < nnodes; ++index)
     {
         T radius_cur = rnode_radius(
-                x, y, z, loose, tilted, index, xpos, ypos, posa, incl);
+                x, y, z, loose, tilted, index, xpos, ypos, sincos);
         if (radius_cur < nodes[index])
             break;
     }
@@ -461,7 +465,7 @@ ring_info(
     {
         index = (ihi + ilo)/2;
         T radius_cur = rnode_radius(
-                x, y, z, loose, tilted, index, xpos, ypos, posa, incl);
+                x, y, z, loose, tilted, index, xpos, ypos, sincos);
         if(nodes[index] > radius_cur)
             ihi = index;
         else
@@ -470,9 +474,9 @@ ring_info(
 #endif
     // The radius is calculated using the velfi strategy
     T d1 = nodes[index-1] - rnode_radius(
-            x, y, z, loose, tilted, index-1, xpos, ypos, posa, incl);
+            x, y, z, loose, tilted, index-1, xpos, ypos, sincos);
     T d2 = nodes[index] - rnode_radius(
-            x, y, z, loose, tilted, index, xpos, ypos, posa, incl);
+            x, y, z, loose, tilted, index, xpos, ypos, sincos);
     radius = (nodes[index] * d1 - nodes[index - 1] * d2) / (d1 - d2);
 
     return true;
@@ -878,10 +882,10 @@ gmodel_smdisk_evaluate_spaxel(
         bool is_on_disk = is_thin
                 ? ring_info(
                     rnidx, rn, xn, yn, a.loose, a.tilted,
-                    a.nrnodes, a.rnodes, a.xpos, a.ypos, a.posa, a.incl)
+                    a.nrnodes, a.rnodes, a.xpos, a.ypos, a.posa_incl_sincos)
                 : ring_info(
                     rnidx, rn, xn, yn, zn, a.loose, a.tilted,
-                    a.nrnodes, a.rnodes, a.xpos, a.ypos, a.posa, a.incl);
+                    a.nrnodes, a.rnodes, a.xpos, a.ypos, a.posa_incl_sincos);
         if (!is_on_disk)
             return;
     }
