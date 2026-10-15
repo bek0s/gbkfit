@@ -39,8 +39,11 @@ def fit(
     (see FitResult.dump), the data and the models and residuals at the
     best fit (FITS; see the plot task), and restart.yaml: the
     configuration with the free parameters starting at the best fit, to
-    fit again from there (e.g. with another fitter). As it fits, it shows
-    its progress on the console, writes every report of it to
+    fit again from there (e.g. with another fitter). With a section
+    'parallel' ({drivers: [names]}), the batches of points of the fitter
+    are evaluated at once on copies of the objective on those drivers
+    (see EvaluationPool), e.g. one per GPU. As it fits, it shows its
+    progress on the console, writes every report of it to
     progress.jsonl, and the configuration at the best fit so far to
     best.yaml (see _progress), from which a stopped fit can start again.
 
@@ -117,7 +120,8 @@ def _read_config(config: str) -> tuple[dict[str, Any], str]:
     _log.info(f"reading configuration from file: {config}...")
     return _detail.read_config(
         config, ('galaxies', 'observations', 'params', 'fitter'),
-        ('driver', 'drivers', 'lines', 'bands', 'pdescs', 'depth_order'))
+        ('driver', 'drivers', 'lines', 'bands', 'pdescs', 'depth_order',
+         'parallel'))
 
 
 def _fit(
@@ -129,9 +133,11 @@ def _fit(
     """Fit a configuration, and write the outputs (see fit)."""
     with parseutils.paths_relative_to(root):
         _log.info("setting up galaxies and observations...")
-        group = _detail.load_observation_group(cfg)
+        drivers = _detail.load_drivers(cfg)
+        group = _detail.load_observation_group(cfg, drivers)
         _log.info("setting up objective...")
         objective = gbkfit.objective.Objective(group)
+        pool = _detail.load_pool(cfg, objective, drivers)
         _log.info("setting up fitter...")
         with parseutils.config_path('fitter'):
             fitter = gbkfit.fitting.fitter_parser.load(cfg['fitter'])
@@ -152,10 +158,10 @@ def _fit(
         os.path.join(output_dir, 'progress.jsonl'))
     best = _progress.BestValues(write_best)
     control = gbkfit.fitting.FitControl()
-    with _stop_on_interrupt(control), \
+    with pool or contextlib.nullcontext(), _stop_on_interrupt(control), \
             _progress.console_progress(_log) as console:
         result = fitter.fit(
-            objective, params, (console, progress, best), control, log)
+            objective, params, (console, progress, best), control, log, pool)
     _log.info(f"model-fitting completed (elapsed time: {result.time:.1f} s)")
 
     _log.info(f"saving result under '{output_dir}'...")

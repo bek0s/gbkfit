@@ -7,7 +7,7 @@ import copy
 import json
 import logging
 import os
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any, Literal
 
@@ -16,9 +16,10 @@ from astropy.table import Table
 import numpy as np
 import ruamel.yaml
 
+import gbkfit.fitting
 import gbkfit.model
 import gbkfit.observation
-from gbkfit.driver import Driver, driver_parser
+from gbkfit.driver import Driver, driver_by_name, driver_parser
 from gbkfit.objective import Objective
 from gbkfit.observation import DepthGroup, Observation, ObservationGroup
 from gbkfit.params import (
@@ -111,7 +112,7 @@ def prepare_config(
     # (empty sections are loaded as such, for clearer messages)
     config = {s: {} if v is None else v for s, v in config.items()}
     for s in ('driver', 'drivers', 'lines', 'bands', 'pdescs', 'params',
-              'fitter'):
+              'fitter', 'parallel'):
         if s in config and not iterutils.is_mapping(config[s]):
             raise ConfigError(f"section '{s}' must be a dictionary")
     for s in ('galaxies', 'observations'):
@@ -218,7 +219,10 @@ def load_drivers(cfg: dict[str, Any]) -> dict[str | None, Driver]:
     return drivers
 
 
-def load_observation_group(cfg: dict[str, Any]) -> ObservationGroup:
+def load_observation_group(
+        cfg: dict[str, Any],
+        drivers: Mapping[str | None, Driver] | None = None
+) -> ObservationGroup:
     """
     Return the galaxies and observations (with their data, if any) of a
     configuration, as an ObservationGroup, with the order of the galaxies
@@ -226,9 +230,11 @@ def load_observation_group(cfg: dict[str, Any]) -> ObservationGroup:
     and observations name lines and bands of the catalogue of GBKFIT and
     of the sections 'lines' and 'bands' of the configuration (see
     LineCatalogue), and the observations and the galaxies refer to the
-    drivers of the configuration by name (see load_drivers).
+    drivers of the configuration by name: the given ones, or by default
+    those it declares (see load_drivers).
     """
-    drivers = load_drivers(cfg)
+    if drivers is None:
+        drivers = load_drivers(cfg)
     catalogue = gbkfit.model.LineCatalogue(cfg.get('lines'), cfg.get('bands'))
     ngalaxies = len(cfg['galaxies'])
     with parseutils.config_path('galaxies'):
@@ -244,6 +250,39 @@ def load_observation_group(cfg: dict[str, Any]) -> ObservationGroup:
         depth_order = load_depth_order(cfg.get('depth_order'))
     return gbkfit.observation.ObservationGroup(
         galaxies, observations, depth_order)
+
+
+def load_pool(
+        cfg: dict[str, Any],
+        objective: Objective,
+        drivers: Mapping[str | None, Driver]
+) -> gbkfit.fitting.EvaluationPool | None:
+    """
+    Return the pool of the section 'parallel' of a configuration, if it
+    has one: {drivers: [names]}, copies of the objective on those of the
+    drivers of the configuration (see load_drivers and EvaluationPool).
+
+    Raises
+    ------
+    ConfigError
+        If the section has an error, or a name is not one of the drivers.
+    """
+    if 'parallel' not in cfg:
+        return None
+    with parseutils.config_path('parallel'):
+        info = cfg['parallel']
+        if unknown := [key for key in info if key != 'drivers']:
+            parseutils.report_unknown("unknown options", unknown, ['drivers'])
+        names = info.get('drivers')
+        if not isinstance(names, list) or not names:
+            raise ConfigError(
+                "option 'drivers' must be a list of the names of drivers of "
+                "the configuration (section 'drivers')")
+        with parseutils.config_path('drivers'):
+            pool_drivers = [
+                driver_by_name(name, drivers, 'parallel evaluations')
+                for name in names]
+    return gbkfit.fitting.EvaluationPool(objective, pool_drivers)
 
 
 def load_depth_order(

@@ -1,5 +1,6 @@
 """Tests for the helpers of the tasks."""
 
+import numpy as np
 import pytest
 
 from gbkfit.tasks import _detail
@@ -134,6 +135,30 @@ def test_galaxies_with_mass_use_the_drivers_of_the_configuration():
 def test_driver_errors(sections, message):
     with pytest.raises(ConfigError, match=message):
         load_group(**sections)
+
+
+def test_parallel_evaluations_are_on_drivers_of_the_configuration(tmp_path):
+    from astropy.io import fits
+    from gbkfit.objective import Objective
+    fits.writeto(tmp_path / 'image.fits', np.zeros((8, 8)))
+    cfg = dict(
+        galaxies=[GALAXY], drivers=dict(cpu1=HOST, cpu2=HOST),
+        observations=[dict(
+            line_of_sight=dict(type='flat'),
+            observable=dict(type='pixel_brightness'),
+            data=dict(data=str(tmp_path / 'image.fits')), driver='cpu1')])
+    drivers = _detail.load_drivers(cfg)
+    objective = Objective(_detail.load_observation_group(cfg, drivers))
+    with _detail.load_pool(
+            cfg | dict(parallel=dict(drivers=['cpu1', 'cpu2'])),
+            objective, drivers) as pool:
+        first, second = pool.copies()
+        assert first is objective
+        assert second.group().observations()[0].driver() is drivers['cpu2']
+    assert _detail.load_pool(cfg, objective, drivers) is None
+    with pytest.raises(ConfigError, match="unknown driver 'gpu'"):
+        _detail.load_pool(
+            cfg | dict(parallel=dict(drivers=['gpu'])), objective, drivers)
 
 
 def test_depth_order_has_galaxies_and_groups_of_them():
