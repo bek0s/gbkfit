@@ -332,6 +332,40 @@ gauss_1d_cdf(T x, T b, T c)
     return T{0.5} * (1 + std::erf((x - b) / (c * std::sqrt(T{2}))));
 }
 
+// A point x of a Gaussian, as the mass of its tail beyond x: below x if
+// x is below the mean, else above (upper). erfc gives these masses with
+// the precision of the type even far in the wings, where the cdf is too
+// near 0 or 1 for differences of it to be precise (see gauss_1d_mass).
+template<typename T>
+struct GaussTail
+{
+    T mass;
+    bool upper;
+};
+
+template<typename T> constexpr GaussTail<T>
+gauss_1d_tail(T x, T b, T c)
+{
+    // A Gaussian of width 0 is a step at b (as for gauss_1d_cdf)
+    if (c == 0)
+        return {T{0}, x >= b};
+    const T u = (x - b) / (c * std::sqrt(T{2}));
+    return {T{0.5} * std::erfc(std::abs(u)), u >= 0};
+}
+
+// The mass of a Gaussian between two of its points x1 <= x2, given as
+// their tails (see gauss_1d_tail): a difference of two tails, or one
+// minus both, never a difference of two values near 1.
+template<typename T> constexpr T
+gauss_1d_mass(GaussTail<T> x1, GaussTail<T> x2)
+{
+    if (x1.upper)
+        return x1.mass - x2.mass;
+    if (!x2.upper)
+        return x2.mass - x1.mass;
+    return 1 - x1.mass - x2.mass;
+}
+
 template<typename T> constexpr T
 gauss_1d_pdf(T x, T b, T c)
 {

@@ -87,20 +87,15 @@ def test_float64_ffts_keep_the_faint_values_of_float32_models(
         driver, case):
     # The rounding of a float32 FFT adds about 1e-7 of the peak to every
     # value of the cube; float64 FFTs leave the error of the float32
-    # model alone: about 1e-6 of each moment map, and more in the faint
-    # spectra (far in the wings of a line, its integral over a channel is
-    # a difference of two values near 1)
+    # model alone, about 1e-6 of each value (of each moment map), even
+    # far in the wings of the lines (see gauss_1d_mass)
     double = evaluate(driver, case, 'float64')
     errors = {
         fft_dtype: _largest_errors(
             evaluate(driver, case, 'float32', fft_dtype), double)
         for fft_dtype in ('float32', 'float64')}
-    if case == 'moments':
-        assert errors['float64'] < 1e-5
-        assert errors['float32'] > 1e-3
-    else:
-        assert errors['float64'] < 1e-2
-        assert errors['float32'] > 1
+    assert errors['float64'] < 1e-5
+    assert errors['float32'] > 1e-2
 
 
 def _largest_errors(single, double):

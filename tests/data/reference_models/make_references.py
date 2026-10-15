@@ -23,10 +23,12 @@ ratios of small sums, by more than the tolerance of the tests: up to
 and more at the noise of the convolutions, where one spaxel at the
 cutoff of moment 0 became masked.
 
-The configurations declare float32 FFTs (fft_dtype), with which the
-references were made: since 2026-10-15 they are float64 by default,
-which changes the moments of the faint spaxels by the noise of the
-float32 ones (up to 1e-4 of moment 2 where moment 0 is above 1%).
+They were made again (2026-10-15) with float64 FFTs, the default since,
+and the lines integrated over the channels from the masses of their
+tails (exact far in their wings). The float32 FFTs had left noise in
+the moments where moment 0 is above 1% of its peak: up to 2.6e-3 km/s
+in moment 2 against a float64 model (now 2.2e-5), reshuffled by any
+change of the model's values.
 
 Usage:
 

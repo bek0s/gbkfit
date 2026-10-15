@@ -51,7 +51,8 @@ gmodel_line_range(
 // dispersion in each channel c of [cmin, cmax] (see gmodel_line_range):
 // the mean of the line over the channel (the cube holds flux per unit
 // velocity), which conserves the flux of lines of any width, including
-// 0. The channels share their edges, so each channel needs one cdf.
+// 0. The channels share their edges, so each channel needs one tail of
+// the line (see gauss_1d_mass: precise far in its wings too).
 template<typename T, typename AddT> constexpr void
 gmodel_line_channels(
         T flux, T centre, T sigma, int cmin, int cmax,
@@ -63,14 +64,14 @@ gmodel_line_channels(
             add(c, T(NAN));
         return;
     }
-    T cdf_lo = gauss_1d_cdf(
+    auto edge_lo = gauss_1d_tail(
             spec_zero + (cmin - T{0.5}) * spec_step, centre, sigma);
     for (int c = cmin; c <= cmax; ++c)
     {
-        const T cdf_hi = gauss_1d_cdf(
+        const auto edge_hi = gauss_1d_tail(
                 spec_zero + (c + T{0.5}) * spec_step, centre, sigma);
-        add(c, flux * (cdf_hi - cdf_lo) / spec_step);
-        cdf_lo = cdf_hi;
+        add(c, flux * gauss_1d_mass(edge_lo, edge_hi) / spec_step);
+        edge_lo = edge_hi;
     }
 }
 
