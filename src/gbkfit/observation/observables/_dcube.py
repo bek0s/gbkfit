@@ -14,6 +14,12 @@ from gbkfit.utils.parseutils import ConfigError
 # The unit of the velocities of the spectral axis
 _KMS = u.km / u.s
 
+# Whether a PSF and an LSF that do not vary are convolved as those that
+# do: by 2D FFTs of each channel and sums along z (see DCubePlan), not by
+# a 3D FFT of their product. An internal choice, to compare the two (not
+# an option)
+_SEPARABLE = False
+
 # How an extra output is made from an array of a cube of DCube and the
 # grid of the cube (e.g. cube_extra)
 ExtraFunction: TypeAlias = Callable[
@@ -316,9 +322,10 @@ class DCubePlan:
         # A PSF or an LSF that varies along the spectral axis has one for
         # each channel: then the PSF is convolved along y and x, with an
         # image for each channel, and the LSF along z (see _varying_padding
-        # and _varying_kernels)
+        # and _varying_kernels); so are constant ones if _SEPARABLE
         varies = bool(psf and psf.varies()) or bool(lsf and lsf.varies())
-        if varies:
+        separable = varies or (_SEPARABLE and bool(psf or lsf))
+        if separable:
             size_hi, edge_hi, lsf_size_hi = _varying_padding(
                 dcube, size_hi, step_hi, backend_fft)
         else:
@@ -343,14 +350,14 @@ class DCubePlan:
         shape_lo = size_lo[::-1]
         shape_hi = size_hi[::-1]
 
-        # If the PSF or the LSF varies: the convolution of each channel by
-        # its image of the PSF (or by the only one), and the LSF of each
+        # If they are convolved separately: the convolution of each channel
+        # by its image of the PSF (or by the only one), and the LSF of each
         # channel
         self._psf_convolution = None
         self._lsf_kernels_hi = None
         self._lsf_size_hi = None
         self._zscratch_hi = None
-        if varies:
+        if separable:
             psf_images, lsf_kernels = _varying_kernels(
                 dcube, grid_hi, lsf_size_hi)
             if psf_images is not None:
@@ -366,7 +373,7 @@ class DCubePlan:
 
         # Otherwise, the convolution by the PSF/LSF cube (see _kernel_cube)
         self._convolution = None
-        if (psf or lsf) and not varies:
+        if (psf or lsf) and not separable:
             self._convolution = backend_fft.convolution(
                 _kernel_cube(dcube, grid_hi).astype(fft_dtype, copy=False),
                 shape_hi, dtype=dtype)
@@ -405,7 +412,7 @@ class DCubePlan:
             driver.mem_fill(self._mcube_lo, 1)
 
         self._dcube = dcube
-        self._varies = varies
+        self._separable = separable
         self._grid_hi = grid_hi
         self._edge_hi = edge_hi
         self._has_weights = has_weights
@@ -478,7 +485,7 @@ class DCubePlan:
         cubes = [dcube_hi]
         if has_weights and dcube.smooth_weights():
             cubes.append(wcube_hi)
-        if self._varies:
+        if self._separable:
             # The PSF of each channel, then the LSF of each channel, in the
             # order the light meets them
             for cube in cubes:
@@ -519,7 +526,7 @@ class DCubePlan:
             out_extra.update(mcube_lo=lo(mcube_lo))
         if has_weights:
             out_extra.update(wcube_lo=lo(wcube_lo), wcube_hi=hi(wcube_hi))
-        if self._varies:
+        if self._separable:
             # The images of the PSF and the LSF of the channels, made again
             # (they are not kept on the host)
             psf_images, lsf_kernels = _varying_kernels(

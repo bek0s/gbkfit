@@ -11,6 +11,7 @@ import gbkfit.params
 from gbkfit.instrument import LSFGauss, PSFGauss
 from gbkfit.model import galaxy_parser
 from gbkfit.observation import ObservationGroup, observation_parser
+from gbkfit.observation.observables import _dcube
 from gbkfit.utils.parseutils import ConfigError
 
 
@@ -67,6 +68,17 @@ def test_tables_of_one_value_are_the_constant_psf_and_lsf(
         scale=scale)
     np.testing.assert_allclose(
         varying, constant, atol=2e-6 * np.abs(constant).max())
+
+
+def test_constant_psfs_and_lsfs_can_be_convolved_separately(
+        driver, monkeypatch):
+    # (an internal choice, see _dcube._SEPARABLE)
+    psf, lsf = dict(type='gauss', sigma=1.3), dict(type='gauss', sigma=17)
+    together = spectra(driver, psf, lsf)
+    monkeypatch.setattr(_dcube, '_SEPARABLE', True)
+    np.testing.assert_allclose(
+        spectra(driver, psf, lsf), together,
+        atol=2e-6 * np.abs(together).max())
 
 
 def test_each_channel_has_its_psf(driver):
