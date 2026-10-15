@@ -24,10 +24,9 @@ CASES = sorted(path.stem for path in REFERENCE_DIR.glob('*.yaml'))
 def test_reference_model(case, evaluate_config):
     outputs = evaluate_config(REFERENCE_DIR / f'{case}.yaml')
     references = np.load(REFERENCE_DIR / f'{case}.npz')
-    # The moments of the faint wings of a convolved model are the noise
-    # of the float32 FFTs of the references (see test_precision), so the
-    # moment maps are compared where there is flux (the other outputs
-    # everywhere)
+    # The moment maps are compared where there is flux (the other outputs
+    # everywhere): the moments of the faintest spaxels are ratios of tiny
+    # sums
     compared = ...
     if 'model_0_moment0_d' in references:
         flux = references['model_0_moment0_d']
