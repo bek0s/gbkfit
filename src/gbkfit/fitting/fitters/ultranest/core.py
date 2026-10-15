@@ -4,13 +4,14 @@ The UltraNest nested sampler.
 
 import contextlib
 import logging
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from typing import Any
 
 import numpy as np
 import ultranest
 
 from gbkfit.fitting.base import FitRun, Fitter
+from gbkfit.fitting.fitters._detail import corrected_evidence
 from gbkfit.fitting.fitparams import FitParam, FitParamClass, FitParamPrior
 from gbkfit.fitting.problem import FitProblem
 from gbkfit.fitting.result import Evidence
@@ -141,21 +142,12 @@ class FitterUltraNest(Fitter):
             fit_params: list[FitParam],
             rng: np.random.Generator
     ) -> FitRun:
-        def log_likelihood(xs: np.ndarray) -> np.ndarray:
-            values = problem.log_likelihood_batch(xs)
-            return np.where(np.isfinite(values), values, _REJECTED)
-
-        sampler = ultranest.ReactiveNestedSampler(
-            list(problem.names()), log_likelihood, problem.prior_transform,
-            vectorized=True, log_dir=None)
-        with (_seeded_global_rng(int(rng.integers(2 ** 31))),
-              _log_level('ultranest', logging.INFO if self._verbose
-                         else logging.WARNING)):
-            result = sampler.run(
-                min_num_live_points=self._min_num_live_points,
-                dlogz=self._dlogz, frac_remain=self._frac_remain,
-                min_ess=self._min_ess, max_ncalls=self._max_ncalls,
-                show_status=self._verbose, viz_callback=False)
+        result = self._sample(
+            problem, problem.nested_log_likelihood_batch, rng)
+        evidence = _evidence(result)
+        if problem.has_joint_priors():
+            evidence = corrected_evidence(evidence, _evidence(self._sample(
+                problem, problem.joint_prior_log_density_batch, rng)))
         weighted = result['weighted_samples']
         stopped = self._max_ncalls is not None \
             and result['ncall'] >= self._max_ncalls
@@ -165,10 +157,40 @@ class FitterUltraNest(Fitter):
             message='stopped by max_ncalls' if stopped else 'converged',
             samples=np.asarray(weighted['points']),
             weights=np.asarray(weighted['weights']),
-            evidence=Evidence(
-                log_z=float(result['logz']),
-                log_z_error=float(result['logzerr'])),
+            evidence=evidence,
             diagnostics=dict(
                 ncall=int(result['ncall']), niter=int(result['niter']),
                 ess=float(result['ess'])),
             raw=result)
+
+    def _sample(
+            self,
+            problem: FitProblem,
+            log_likelihood: Callable[[np.ndarray], np.ndarray],
+            rng: np.random.Generator
+    ) -> dict[str, Any]:
+        """
+        Run the sampler on a log-likelihood (of points, one per row) over
+        the priors of the problem; return its result.
+        """
+        def finite(xs: np.ndarray) -> np.ndarray:
+            values = log_likelihood(xs)
+            return np.where(np.isfinite(values), values, _REJECTED)
+
+        sampler = ultranest.ReactiveNestedSampler(
+            list(problem.names()), finite, problem.prior_transform,
+            vectorized=True, log_dir=None)
+        with (_seeded_global_rng(int(rng.integers(2 ** 31))),
+              _log_level('ultranest', logging.INFO if self._verbose
+                         else logging.WARNING)):
+            return sampler.run(
+                min_num_live_points=self._min_num_live_points,
+                dlogz=self._dlogz, frac_remain=self._frac_remain,
+                min_ess=self._min_ess, max_ncalls=self._max_ncalls,
+                show_status=self._verbose, viz_callback=False)
+
+
+def _evidence(result: dict[str, Any]) -> Evidence:
+    """Return the evidence of the result of a run."""
+    return Evidence(
+        log_z=float(result['logz']), log_z_error=float(result['logzerr']))

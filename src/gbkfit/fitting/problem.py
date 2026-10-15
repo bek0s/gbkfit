@@ -352,10 +352,6 @@ class FitProblem:
             If the problem has no priors.
         """
         priors = self._require_priors()
-        if self._joint:
-            raise RuntimeError(
-                "the nested samplers do not take priors on several "
-                "parameters yet")
         u = np.asarray(u, dtype=float)
         x = np.empty_like(u)
         for i, prior in enumerate(priors):
@@ -409,6 +405,72 @@ class FitProblem:
         log_posterior[inside] = \
             log_prior[inside] + self.log_likelihood_batch(xs[inside])
         return log_posterior
+
+    def has_joint_priors(self) -> bool:
+        """
+        Return whether the parameters have priors on several of them (see
+        JointPrior).
+        """
+        return bool(self._joint)
+
+    def nested_log_likelihood(self, x: npt.ArrayLike) -> float:
+        """
+        Return what nested samplers integrate over the priors of the
+        elements at the given free values (see
+        nested_log_likelihood_batch).
+        """
+        return float(self.nested_log_likelihood_batch(np.atleast_2d(x))[0])
+
+    def nested_log_likelihood_batch(self, xs: npt.ArrayLike) -> np.ndarray:
+        """
+        Return what nested samplers integrate over the priors of the
+        elements (see prior_transform) at each point (one per row): the
+        log-likelihood (see log_likelihood_batch), plus the log of the
+        priors on several parameters, -chi2 / 2 (see JointPrior), which a
+        prior transform cannot draw from (it draws each element alone).
+
+        Their evidence is then that of these priors unnormalised, C times
+        the evidence: see joint_prior_log_density_batch and
+        fitters._detail.corrected_evidence.
+        """
+        xs = _points(xs)
+        log_likelihood = self.log_likelihood_batch(xs)
+        if self._joint:
+            for i, x in enumerate(xs):
+                if np.isfinite(log_likelihood[i]):
+                    joint = self._joint_residuals(x)
+                    log_likelihood[i] -= 0.5 * float(joint @ joint)
+        return log_likelihood
+
+    def joint_prior_log_density(self, x: npt.ArrayLike) -> float:
+        """
+        Return the log of the priors on several parameters at the given
+        free values (see joint_prior_log_density_batch).
+        """
+        return float(self.joint_prior_log_density_batch(
+            np.atleast_2d(x))[0])
+
+    def joint_prior_log_density_batch(
+            self,
+            xs: npt.ArrayLike
+    ) -> np.ndarray:
+        """
+        Return the log of the priors on several parameters, -chi2 / 2 (see
+        JointPrior), at each point (one per row; -inf where the parameters
+        cannot be evaluated), without the models: nested samplers integrate
+        it over the priors of the elements, which gives the normalisation
+        that their evidence lacks (see nested_log_likelihood_batch). It
+        does not count, keep or log the points.
+        """
+        log_density = []
+        for x in _points(xs):
+            try:
+                joint = self._joint_residuals(x)
+            except ParamEvaluationError:
+                log_density.append(-math.inf)
+                continue
+            log_density.append(-0.5 * float(joint @ joint))
+        return np.array(log_density)
 
     def map_objective(
             self,
