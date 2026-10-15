@@ -315,6 +315,12 @@ class Observation(parseutils.Serializable):
             driver = DriverHost()
         if foreground is None:
             foreground = Foreground()
+        if name is None and foreground.pdescs():
+            raise ConfigError(
+                "an observation with a lens of parameters needs a name, "
+                "which names them (e.g. '{name}_lens_theta_e')")
+        foreground = foreground.with_prefix(
+            '' if name is None else f'{name}_')
         if instrument is None:
             instrument = Instrument()
         ndim = len(observable.size())
@@ -395,11 +401,13 @@ class Observation(parseutils.Serializable):
     def pdescs(self) -> dict[str, ParamScalarDesc]:
         """
         Return its parameters: that of its calibration, if any (see the
-        class).
+        class), and those of its lens, '{name}_lens_{parameter}' (see
+        Foreground.pdescs).
         """
         name = self._calibration_param()
-        return {} if name is None else {name: ParamScalarDesc(
+        calibration = {} if name is None else {name: ParamScalarDesc(
             desc=f"the flux scale of observation {self._name}")}
+        return calibration | self._foreground.pdescs()
 
     def _calibration_param(self) -> str | None:
         """Return the name of the parameter of its calibration, if any."""
