@@ -18,6 +18,10 @@ __all__ = [
 class DriverFFTCuda(DriverFFT):
     """The FFT of the cuda driver: cuFFT, through CuPy."""
 
+    # (measured 2026-10-15 with float64 FFTs: 6-35% faster than the 3D
+    # FFT, and less memory; on the host, the 3D FFT is faster)
+    separable = True
+
     def __init__(self, dtype: npt.DTypeLike):
         super().__init__(32)
         self._dtype = np.dtype(dtype)
