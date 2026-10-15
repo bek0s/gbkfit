@@ -550,6 +550,28 @@ def test_dynesty_posterior_agrees_with_the_covariance():
 
 
 @pytest.mark.slow
+def test_nested_evidence_with_a_prior_on_an_expression_is_corrected():
+    # A uniform prior on incl times a Gaussian prior on the expression
+    # 'incl' is a truncated Gaussian prior on incl: the same evidence,
+    # once that of the run with the joint prior is normalised
+    pytest.importorskip('dynesty')
+    from gbkfit.fitting.fitters.dynesty import FitterDynestyStatic
+    objective = mock_objective(DriverHost())
+    properties = prior_properties(10)
+    lo, hi = properties['incl']['min'], properties['incl']['max']
+    mean, std = TRUE['incl'] + 0.5, 0.5
+    joint = ParamSpace(
+        objective.pdescs(), properties,
+        priors=[dict(type='gauss', expr='incl', mean=mean, std=std)])
+    properties['incl'] = dict(prior=dict(
+        type='gauss_trunc', mean=mean, std=std, min=lo, max=hi))
+    alone = ParamSpace(objective.pdescs(), properties)
+    z_joint = FitterDynestyStatic(nlive=300).fit(objective, joint).evidence
+    z_alone = FitterDynestyStatic(nlive=300).fit(objective, alone).evidence
+    error = math.hypot(z_joint.log_z_error, z_alone.log_z_error)
+    assert z_joint.log_z == pytest.approx(z_alone.log_z, abs=3 * error)
+
+@pytest.mark.slow
 @pytest.mark.filterwarnings('ignore:invalid value:RuntimeWarning')
 def test_samplers_leave_out_points_the_parameters_reject():
     # pt_s is nan for xpos < 0.6: there the likelihood is -inf, and the

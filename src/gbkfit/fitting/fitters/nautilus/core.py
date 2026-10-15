@@ -3,12 +3,14 @@ The nautilus nested sampler.
 """
 
 import math
+from collections.abc import Callable
 from typing import Any
 
 import nautilus
 import numpy as np
 
 from gbkfit.fitting.base import FitRun, Fitter
+from gbkfit.fitting.fitters._detail import corrected_evidence
 from gbkfit.fitting.fitparams import FitParam, FitParamClass, FitParamPrior
 from gbkfit.fitting.problem import FitProblem
 from gbkfit.fitting.result import Evidence
@@ -126,8 +128,41 @@ class FitterNautilus(Fitter):
     ) -> FitRun:
         if problem.ndim() < 2:
             raise ConfigError("nautilus needs at least 2 free elements")
+        sampler, success = self._sample(
+            problem, problem.nested_log_likelihood_batch, rng)
+        points, log_w, log_l = sampler.posterior()
+        evidence = Evidence(log_z=float(sampler.log_z), log_z_error=None)
+        if problem.has_joint_priors():
+            normalisation, _ = self._sample(
+                problem, problem.joint_prior_log_density_batch, rng)
+            evidence = corrected_evidence(evidence, Evidence(
+                log_z=float(normalisation.log_z), log_z_error=None))
+        message = 'converged' if success else \
+            'stopped by n_like_max or timeout'
+        return FitRun(
+            solutions=[points[np.argmax(log_l)]],
+            success=bool(success),
+            message=message,
+            samples=points,
+            weights=np.exp(log_w),
+            evidence=evidence,
+            diagnostics=dict(
+                n_like=int(sampler.n_like), n_eff=float(sampler.n_eff),
+                eta=float(sampler.eta)),
+            raw=sampler)
+
+    def _sample(
+            self,
+            problem: FitProblem,
+            log_likelihood: Callable[[np.ndarray], np.ndarray],
+            rng: np.random.Generator
+    ) -> tuple[nautilus.Sampler, bool]:
+        """
+        Run the sampler on a log-likelihood (of points, one per row) over
+        the priors of the problem; return it, and whether it converged.
+        """
         sampler = nautilus.Sampler(
-            problem.prior_transform, problem.log_likelihood_batch,
+            problem.prior_transform, log_likelihood,
             n_dim=problem.ndim(), n_live=self._n_live,
             n_networks=self._n_networks, n_batch=self._n_batch,
             vectorized=True, pass_dict=False,
@@ -137,17 +172,4 @@ class FitterNautilus(Fitter):
             n_like_max=self._n_like_max or math.inf,
             discard_exploration=self._discard_exploration,
             timeout=self._timeout or math.inf, verbose=self._verbose)
-        points, log_w, log_l = sampler.posterior()
-        message = 'converged' if success else \
-            'stopped by n_like_max or timeout'
-        return FitRun(
-            solutions=[points[np.argmax(log_l)]],
-            success=bool(success),
-            message=message,
-            samples=points,
-            weights=np.exp(log_w),
-            evidence=Evidence(log_z=float(sampler.log_z), log_z_error=None),
-            diagnostics=dict(
-                n_like=int(sampler.n_like), n_eff=float(sampler.n_eff),
-                eta=float(sampler.eta)),
-            raw=sampler)
+        return sampler, bool(success)

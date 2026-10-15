@@ -2,12 +2,14 @@
 The dynesty nested samplers: static and dynamic.
 """
 
+from collections.abc import Callable
 from typing import Any, Literal
 
 import dynesty
 import numpy as np
 
 from gbkfit.fitting.base import FitRun, Fitter
+from gbkfit.fitting.fitters._detail import corrected_evidence
 from gbkfit.fitting.fitparams import FitParam, FitParamClass, FitParamPrior
 from gbkfit.fitting.problem import FitProblem
 from gbkfit.fitting.result import Evidence
@@ -29,23 +31,41 @@ def _check_positive(**options: float | None) -> None:
                 f"option '{name}' must be positive; it is {value}")
 
 
+_Sampler = dynesty.NestedSampler | dynesty.DynamicNestedSampler
+
+
+def _evidence(sampler: _Sampler) -> Evidence:
+    """Return the evidence of a run of a dynesty sampler."""
+    results = sampler.results
+    return Evidence(
+        log_z=float(results.logz[-1]),
+        log_z_error=float(results.logzerr[-1]))
+
+
 def _fit_run(
-        sampler: dynesty.NestedSampler | dynesty.DynamicNestedSampler,
-        maxcall: int | None
+        sampler: _Sampler,
+        maxcall: int | None,
+        normalisation: _Sampler | None = None
 ) -> FitRun:
-    """Return what a run of a dynesty sampler gives."""
+    """
+    Return what a run of a dynesty sampler gives, with its evidence
+    corrected by a run on the priors on several parameters alone, if any
+    (see corrected_evidence).
+    """
     results = sampler.results
     ncall = int(np.sum(results.ncall))
     stopped = maxcall is not None and ncall >= maxcall
     log_z = float(results.logz[-1])
+    evidence = _evidence(sampler)
+    if normalisation is not None:
+        evidence = corrected_evidence(evidence, _evidence(normalisation))
     return FitRun(
         solutions=[results.samples[np.argmax(results.logl)]],
         success=not stopped,
         message='stopped by maxcall' if stopped else 'converged',
         samples=results.samples,
         weights=np.exp(results.logwt - log_z),
-        evidence=Evidence(
-            log_z=log_z, log_z_error=float(results.logzerr[-1])),
+        evidence=evidence,
         diagnostics=dict(
             ncall=ncall, niter=int(results.niter),
             efficiency=float(results.eff)),
@@ -135,14 +155,30 @@ class FitterDynestyStatic(Fitter):
             fit_params: list[FitParam],
             rng: np.random.Generator
     ) -> FitRun:
+        sampler = self._run_sampler(
+            problem, problem.nested_log_likelihood, rng)
+        normalisation = self._run_sampler(
+            problem, problem.joint_prior_log_density, rng) \
+            if problem.has_joint_priors() else None
+        return _fit_run(sampler, self._maxcall, normalisation)
+
+    def _run_sampler(
+            self,
+            problem: FitProblem,
+            log_likelihood: Callable[[np.ndarray], float],
+            rng: np.random.Generator
+    ) -> dynesty.NestedSampler:
+        """
+        Run the sampler on a log-likelihood over the priors of the problem.
+        """
         sampler = dynesty.NestedSampler(
-            problem.log_likelihood, problem.prior_transform, problem.ndim(),
+            log_likelihood, problem.prior_transform, problem.ndim(),
             nlive=self._nlive, bound=self._bound, sample=self._sample,
             rstate=np.random.default_rng(int(rng.integers(2 ** 31))))
         options = {} if self._dlogz is None else dict(dlogz=self._dlogz)
         sampler.run_nested(
             maxcall=self._maxcall, print_progress=self._verbose, **options)
-        return _fit_run(sampler, self._maxcall)
+        return sampler
 
 
 class FitterDynestyDynamic(Fitter):
@@ -237,8 +273,24 @@ class FitterDynestyDynamic(Fitter):
             fit_params: list[FitParam],
             rng: np.random.Generator
     ) -> FitRun:
+        sampler = self._run_sampler(
+            problem, problem.nested_log_likelihood, rng)
+        normalisation = self._run_sampler(
+            problem, problem.joint_prior_log_density, rng) \
+            if problem.has_joint_priors() else None
+        return _fit_run(sampler, self._maxcall, normalisation)
+
+    def _run_sampler(
+            self,
+            problem: FitProblem,
+            log_likelihood: Callable[[np.ndarray], float],
+            rng: np.random.Generator
+    ) -> dynesty.DynamicNestedSampler:
+        """
+        Run the sampler on a log-likelihood over the priors of the problem.
+        """
         sampler = dynesty.DynamicNestedSampler(
-            problem.log_likelihood, problem.prior_transform, problem.ndim(),
+            log_likelihood, problem.prior_transform, problem.ndim(),
             nlive=self._nlive, bound=self._bound, sample=self._sample,
             rstate=np.random.default_rng(int(rng.integers(2 ** 31))))
         options = dict(
@@ -246,4 +298,4 @@ class FitterDynestyDynamic(Fitter):
         sampler.run_nested(
             maxcall=self._maxcall, print_progress=self._verbose,
             **{k: v for k, v in options.items() if v is not None})
-        return _fit_run(sampler, self._maxcall)
+        return sampler

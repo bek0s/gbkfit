@@ -2,11 +2,13 @@
 Helpers shared by the fitters.
 """
 
+import math
 from collections.abc import Callable, Sequence
 from typing import Literal
 
 import numpy as np
 
+from gbkfit.fitting.result import Evidence
 from gbkfit.fitting.uncertainty import finite_difference_steps, jacobian
 from gbkfit.utils import threadutils
 
@@ -21,6 +23,40 @@ def relative_step(
     differences, and its cube root for central ones.
     """
     return precision ** (1 / 3 if scheme == 'central' else 1 / 2)
+
+
+def corrected_evidence(
+        evidence: Evidence,
+        normalisation: Evidence
+) -> Evidence:
+    """
+    Return the evidence of a nested sampler corrected for the priors on
+    several parameters (see JointPrior).
+
+    A nested sampler draws its points through the priors of the elements
+    one at a time (FitProblem.prior_transform), which cannot hold a prior
+    on several elements; so that goes into its likelihood instead
+    (FitProblem.nested_log_likelihood_batch), as BayesianBBarolo adds its
+    curvature penalty. The posterior is exact, but the evidence is then
+    that of the prior pi(x) e^(-chi2/2) unnormalised: C times the
+    evidence, with C = int pi(x) e^(-chi2/2) dx, which depends on the
+    priors alone, not on the data (a strong smoothness prior over 30
+    rings can make it 1e-20). C is the evidence of a run of the same
+    sampler on the priors alone (FitProblem.joint_prior_log_density_batch;
+    no models, so cheap): log Z = log Z' - log C, with the errors added in
+    quadrature.
+
+    Parameters
+    ----------
+    evidence : Evidence
+        The evidence of the run on the likelihood with these priors.
+    normalisation : Evidence
+        The evidence of the run on these priors alone (C).
+    """
+    errors = (evidence.log_z_error, normalisation.log_z_error)
+    return Evidence(
+        log_z=evidence.log_z - normalisation.log_z,
+        log_z_error=None if None in errors else math.hypot(*errors))
 
 
 def inside_bounds(
