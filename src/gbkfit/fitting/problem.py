@@ -14,6 +14,7 @@ import numpy.typing as npt
 
 from gbkfit.fitting.control import FitControl, FitStopped
 from gbkfit.fitting.evaluation_log import EvaluationLog
+from gbkfit.fitting.joint_priors import joint_prior_residuals
 from gbkfit.fitting.pool import EvaluationPool
 from gbkfit.fitting.priors import Prior
 from gbkfit.fitting.progress import FitProgress, ProgressObserver
@@ -43,7 +44,9 @@ class FitProblem:
 
     Free elements may have priors: samplers need one for each, optimizers
     take any (then they minimise the chi-square plus the priors', see
-    cost, and the residuals include those of the priors).
+    cost, and the residuals include those of the priors). The parameters
+    may also have priors on several of them at once (see ParamSpace and
+    JointPrior), which add to the priors of the elements the same way.
 
     The batch functions take several points (one per row). With a pool
     (see EvaluationPool), they evaluate them at once, on copies of the
@@ -86,6 +89,8 @@ class FitProblem:
         If the parameter space lacks parameters of the objective, nothing
         is free, the number of priors is wrong, the log is of a fit of
         other free elements, or the pool is of another objective.
+    ConfigError
+        If a prior on several parameters is invalid.
     """
 
     def __init__(
@@ -118,6 +123,7 @@ class FitProblem:
         self._priors = None if priors is None else tuple(priors)
         if self._priors is not None and set(self._priors) == {None}:
             self._priors = None
+        self._joint = joint_prior_residuals(params)
         self._precision = max(
             float(np.finfo(obs.dtype()).eps)
             for obs in objective.group().observations())
@@ -218,7 +224,7 @@ class FitProblem:
             self._stoppable(Objective.residuals), values)
         batch = []
         for x, residuals in zip(xs, evaluated):
-            if self._priors is not None:
+            if self._priors is not None or self._joint:
                 residuals = np.concatenate(
                     [residuals, self.prior_residuals(x, strict=True)])
             # (a multithreaded dot product leaves the BLAS threads
@@ -244,10 +250,20 @@ class FitProblem:
     def prior_chi2(self, x: npt.ArrayLike) -> float:
         """
         Return the chi-square of the priors at the given free values (see
-        Prior.chi2; 0 without priors).
+        Prior.chi2), with that of the priors on several parameters (the
+        sum of the squares of their residuals; see JointPrior); 0 without
+        priors.
+
+        Raises
+        ------
+        ParamEvaluationError
+            If there are priors on several parameters, and the parameters
+            cannot be evaluated there.
         """
+        joint = self._joint_residuals(x)
         return float(sum(
-            prior.chi2(value) for prior, value in self._given_priors(x)))
+            prior.chi2(value) for prior, value in self._given_priors(x))
+            + joint @ joint)
 
     def prior_residuals(
             self,
@@ -256,13 +272,21 @@ class FitProblem:
     ) -> np.ndarray:
         """
         Return the residuals of the priors that have them at the given
-        free values (see Prior.residual; empty without priors), in the
-        order of the elements; with strict, raise TypeError for a prior
+        free values (see Prior.residual), in the order of the elements,
+        then those of the priors on several parameters (see JointPrior);
+        empty without priors. With strict, raise TypeError for a prior
         without one.
+
+        Raises
+        ------
+        ParamEvaluationError
+            If there are priors on several parameters, and the parameters
+            cannot be evaluated there.
         """
-        return np.array([
+        return np.concatenate([np.array([
             prior.residual(value) for prior, value in self._given_priors(x)
-            if strict or prior.has_residual()], dtype=float)
+            if strict or prior.has_residual()], dtype=float),
+            self._joint_residuals(x)])
 
     def log_likelihood(self, x: npt.ArrayLike) -> float:
         """
@@ -273,7 +297,9 @@ class FitProblem:
 
     def log_prior(self, x: npt.ArrayLike) -> float:
         """
-        Return the log of the prior density at the given free values.
+        Return the log of the prior density at the given free values: with
+        priors on several parameters, up to a constant (their -chi2 / 2;
+        see JointPrior); -inf where the parameters cannot be evaluated.
 
         Raises
         ------
@@ -282,8 +308,15 @@ class FitProblem:
         """
         if self._priors is None:
             raise RuntimeError("the problem has no priors")
-        return float(sum(
+        log_prior = float(sum(
             prior.log_pdf(value) for prior, value in self._given_priors(x)))
+        if not (self._joint and math.isfinite(log_prior)):
+            return log_prior
+        try:
+            joint = self._joint_residuals(x)
+        except ParamEvaluationError:
+            return -math.inf
+        return log_prior - 0.5 * float(joint @ joint)
 
     def log_posterior(self, x: npt.ArrayLike) -> float:
         """
@@ -319,6 +352,10 @@ class FitProblem:
             If the problem has no priors.
         """
         priors = self._require_priors()
+        if self._joint:
+            raise RuntimeError(
+                "the nested samplers do not take priors on several "
+                "parameters yet")
         u = np.asarray(u, dtype=float)
         x = np.empty_like(u)
         for i, prior in enumerate(priors):
@@ -399,6 +436,16 @@ class FitProblem:
         if self._priors is None or None in self._priors:
             raise RuntimeError("not every free element has a prior")
         return typing.cast(tuple[Prior, ...], self._priors)
+
+    def _joint_residuals(self, x: npt.ArrayLike) -> np.ndarray:
+        """
+        Return the residuals of the priors on several parameters at the
+        given free values (empty without them).
+        """
+        if not self._joint:
+            return np.empty(0)
+        values = self.evaluate(x)
+        return np.concatenate([residuals(values) for residuals in self._joint])
 
     def _given_priors(
             self,

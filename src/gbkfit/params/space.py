@@ -174,12 +174,18 @@ class ParamSpace(parseutils.Serializable):
         The modes of vector parameters, by name: their properties then
         give coded values (e.g. offsets), which the mode decodes into
         their values (see ParamMode).
+    priors : Sequence of dict, optional
+        The priors on several parameters at once, as their configurations
+        (e.g. {'type': 'gauss', 'expr': 'vt * 0.9', ...}), which the
+        fitters read (see gbkfit.fitting.JointPrior), as they read the
+        options of the free elements in the properties.
 
     Raises
     ------
     ConfigError
         If the properties, constants, modes or transforms are invalid
-        (one error lists all the problems).
+        (one error lists all the problems), or the priors are not
+        dicts.
     """
 
     @classmethod
@@ -191,7 +197,7 @@ class ParamSpace(parseutils.Serializable):
     ) -> 'ParamSpace':
         """
         Load the parameters from their configuration: their properties,
-        modes and transforms function ({file, func}).
+        modes, transforms function ({file, func}) and priors.
 
         Parameters
         ----------
@@ -242,6 +248,8 @@ class ParamSpace(parseutils.Serializable):
                 for name, mode in self._modes.items()}
         if self._transforms is not None:
             info['transforms'] = _dump_transforms(self._transforms)
+        if self._priors:
+            info['priors'] = self.priors()
         return info
 
     def __init__(
@@ -250,7 +258,8 @@ class ParamSpace(parseutils.Serializable):
             properties: Mapping[str, Property],
             transforms: Transforms | None = None,
             constants: Mapping[str, npt.ArrayLike] | None = None,
-            modes: Mapping[str, ParamMode] | None = None
+            modes: Mapping[str, ParamMode] | None = None,
+            priors: Sequence[Mapping[str, Any]] | None = None
     ):
         if bad := [n for n, p in pdescs.items()
                    if not isinstance(p, ParamDesc)]:
@@ -261,6 +270,13 @@ class ParamSpace(parseutils.Serializable):
         self._properties = copy.deepcopy(dict(properties))
         self._transforms = transforms
         self._modes = dict(modes or {})
+        priors = list(priors or [])
+        if bad := [i for i, prior in enumerate(priors)
+                   if not isinstance(prior, Mapping)]:
+            raise ConfigError(
+                f"the priors must be dicts (the configurations of priors on "
+                f"several parameters); these are not: {bad}")
+        self._priors = copy.deepcopy([dict(prior) for prior in priors])
         self._constants = {}
         for name, value in (constants or {}).items():
             value = np.array(value, dtype=float)
@@ -305,6 +321,39 @@ class ParamSpace(parseutils.Serializable):
     def modes(self) -> dict[str, ParamMode]:
         """Return the modes of the vector parameters that have one."""
         return self._modes
+
+    def priors(self) -> list[dict[str, Any]]:
+        """
+        Return the priors on several parameters, as their configurations
+        (new dicts).
+        """
+        return copy.deepcopy(self._priors)
+
+    def expression(
+            self,
+            source: str
+    ) -> Callable[[ParamValues], np.ndarray]:
+        """
+        Return a function of the values of the parameters (see evaluate)
+        that evaluates an expression of them and of the constants, as
+        those of the properties (e.g. 'np.diff(posa)', 'vt[4] * 0.9'),
+        into an array of floats.
+
+        Raises
+        ------
+        ConfigError
+            If the expression is invalid.
+        """
+        try:
+            expression = Expression(source, self._pdescs, self._constants)
+        except InvalidExpressionError as e:
+            raise ConfigError(f"invalid expression '{source}': {e}") from None
+        constants = self._constants
+
+        def evaluate(values: ParamValues) -> np.ndarray:
+            return np.atleast_1d(np.asarray(
+                expression.evaluate(constants | dict(values)), dtype=float))
+        return evaluate
 
     def kinds(self) -> dict[str, ParamKind]:
         """
@@ -414,7 +463,7 @@ class ParamSpace(parseutils.Serializable):
                 else self._start_property(key, parsed, prop, starts)
         return ParamSpace(
             self._pdescs, properties, self._transforms, self._constants,
-            self._modes)
+            self._modes, self._priors)
 
     def element_values(self, values: ParamValues) -> dict[str, float]:
         """
