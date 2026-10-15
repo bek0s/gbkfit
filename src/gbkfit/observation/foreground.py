@@ -219,6 +219,10 @@ class LensDeflectionMap(Lens):
         The world coordinates of the maps (see gridutils.make_grid).
     rota : float, optional
         The rotation of the maps on the sky.
+    scaled : bool, optional
+        Whether the deflection is scaled by a parameter, 'scale' (fixed
+        or fitted; see pdescs): e.g. D_LS / D_S of the source over that
+        of the maps, when they are of a source at another redshift.
 
     Raises
     ------
@@ -254,7 +258,8 @@ class LensDeflectionMap(Lens):
             step: float | Sequence[float] | None = None,
             rpix: float | Sequence[float] | None = None,
             rval: float | Sequence[float] | None = None,
-            rota: float | None = None
+            rota: float | None = None,
+            scaled: bool = False
     ) -> 'LensDeflectionMap':
         """
         Read a lens from FITS files of its deflection maps, with the world
@@ -275,6 +280,9 @@ class LensDeflectionMap(Lens):
         rota : float, optional
             The rotation of the maps on the sky; by default, that of the
             headers.
+        scaled : bool, optional
+            Whether the deflection is scaled by a parameter (see the
+            class).
 
         Returns
         -------
@@ -297,7 +305,7 @@ class LensDeflectionMap(Lens):
         return cls(
             data_x, data_y, source_size, source_step,
             coords.step if step is None else step, coords.rpix, coords.rval,
-            coords.rota if rota is None else rota)
+            coords.rota if rota is None else rota, scaled)
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,
@@ -310,9 +318,12 @@ class LensDeflectionMap(Lens):
             filename = f'{prefix}lens_{key}.fits'
             fitsutils.write_data(filename, data, coords, None, overwrite)
             info[key] = filename if dump_path else os.path.basename(filename)
-        return info | dict(
+        info |= dict(
             source_size=self._source_grid.size,
             source_step=self._source_grid.coords.step)
+        if self._scaled:
+            info['scaled'] = True
+        return info
 
     def __init__(
             self,
@@ -323,7 +334,8 @@ class LensDeflectionMap(Lens):
             step: float | Sequence[float] | None = None,
             rpix: float | Sequence[float] | None = None,
             rval: float | Sequence[float] | None = None,
-            rota: float | None = None
+            rota: float | None = None,
+            scaled: bool = False
     ):
         super().__init__(source_size, source_step)
         alpha_x = np.asarray(alpha_x, dtype=float)
@@ -338,15 +350,23 @@ class LensDeflectionMap(Lens):
         self._alpha_y = alpha_y
         self._grid = gridutils.make_grid(
             alpha_x.shape[::-1], step, rpix, rval, rota)
+        self._scaled = scaled
+
+    def pdescs(self) -> dict[str, ParamScalarDesc]:
+        if not self._scaled:
+            return {}
+        return dict(scale=ParamScalarDesc(
+            "the scale of the deflection (e.g. D_LS / D_S)", minimum=0))
 
     def deflection(
             self, grid: gridutils.Grid, params: ParamValues
     ) -> tuple[np.ndarray, np.ndarray]:
         gridutils.check_overlap(grid, self._grid, "the deflection maps")
         pixel_x, pixel_y = gridutils.pixels_on(grid, self._grid)
+        scale = params['scale'] if self._scaled else 1.0
 
         def sample(data):
-            return scipy.ndimage.map_coordinates(
+            return scale * scipy.ndimage.map_coordinates(
                 data, [pixel_y, pixel_x], order=1, mode='nearest')
         return sample(self._alpha_x), sample(self._alpha_y)
 

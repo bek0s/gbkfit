@@ -211,6 +211,17 @@ def test_an_isothermal_sphere_makes_an_einstein_ring(driver):
     ring = np.abs(radius - einstein) < 0.5
     assert lensed[ring].mean() > 20 * lensed[radius < 3].mean()
 
+def test_a_scaled_map_scales_its_deflection():
+    # (e.g. by D_LS / D_S, of a source at another redshift than the map's)
+    lens = LensDeflectionMap(
+        np.full((5, 5), 2.0), np.full((5, 5), -1.0), (8, 8), (1, 1),
+        scaled=True)
+    assert set(lens.pdescs()) == {'scale'}
+    grid = gridutils.make_grid((3, 3), 1)
+    np.testing.assert_allclose(
+        lens.deflection(grid, dict(scale=0.5)),
+        [np.full((3, 3), 1.0), np.full((3, 3), -0.5)])
+
 def test_deflection_maps_from_files(tmp_path):
     coords = gridutils.Coords((0.5, 0.5), (9.5, 7.5), (150.0, 2.0), 0)
     fitsutils.write_data(str(tmp_path / 'ax.fits'), np.ones((16, 20)), coords)
