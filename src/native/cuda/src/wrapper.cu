@@ -24,6 +24,21 @@ check(cudaError_t error, const char* what)
     }
 }
 
+DeviceScope::DeviceScope(int device)
+    : m_device(device)
+{
+    check(cudaGetDevice(&m_previous), "cudaGetDevice");
+    if (m_device != m_previous)
+        check(cudaSetDevice(m_device), "cudaSetDevice");
+}
+
+DeviceScope::~DeviceScope()
+{
+    // (a destructor cannot throw; an error shows at the next call)
+    if (m_device != m_previous)
+        cudaSetDevice(m_previous);
+}
+
 // Launch a kernel with one thread per item (n items, which can be more
 // than an int holds), wait for it to finish, and raise any error of its
 // launch or execution

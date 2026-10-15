@@ -6,8 +6,9 @@
 namespace gbkfit::bindings {
 
 // The objective operations of a native module. Kernels launches the
-// kernels of the module, on the memory of Device. The arrays can have
-// any shape; they are processed element by element.
+// kernels of the module, on the memory of Device: each function on the
+// device of the array it writes (see DeviceScope of the Kernels). The
+// arrays can have any shape; they are processed element by element.
 template<typename T, typename Device, typename Kernels>
 struct Objective
 {
@@ -29,6 +30,7 @@ struct Objective
             ConstData mdl_d, ConstData mdl_w,
             T weight, T missing, T limit, T limit_error, Data res)
     {
+        const typename Kernels::DeviceScope scope(res.device_id());
         require_same_shape(obs_e, obs_d, "obs_e", "obs_d");
         require_same_shape(obs_m, obs_d, "obs_m", "obs_d");
         require_same_shape(mdl_d, obs_d, "mdl_d", "obs_d");
@@ -45,6 +47,7 @@ struct Objective
     static void
     residual_sum(ConstData residual, bool squared, Sum sum)
     {
+        const typename Kernels::DeviceScope scope(sum.device_id());
         Kernels::objective_residual_sum(
                 residual.data(), int(residual.size()), squared, sum.data());
     }
@@ -58,6 +61,7 @@ struct Objective
             ConstData obs_d, ConstData obs_e, ConstData obs_m,
             ConstData mdl_d, ConstData mdl_w, Sums a, Sums b)
     {
+        const typename Kernels::DeviceScope scope(a.device_id());
         require_same_shape(obs_e, obs_d, "obs_e", "obs_d");
         require_same_shape(obs_m, obs_d, "obs_m", "obs_d");
         require_same_shape(mdl_d, obs_d, "mdl_d", "obs_d");

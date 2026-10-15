@@ -206,7 +206,11 @@ class DriverFFT(abc.ABC):
 class Driver(parseutils.TypedSerializable, abc.ABC):
     """
     A device on which models are evaluated: its memory, its native module
-    (the C++ or CUDA kernels, in float32 and float64) and its FFT.
+    (the C++ or CUDA kernels, in float32 and float64) and its FFT. All its
+    work (its memory, transfers and FFTs, and the kernels of its native
+    module on its arrays) runs on its device, whatever the thread that
+    asks for it, so that the drivers of several devices work in one
+    process, and in several threads at once.
 
     Arrays on the device are DeviceArrays; the host side of a transfer is
     a numpy array (in pinned memory for the cuda driver).

@@ -451,6 +451,12 @@ namespace gbkfit::host {
 template<typename T>
 struct Wrapper
 {
+    // (the host is one device)
+    struct DeviceScope
+    {
+        explicit DeviceScope(int) {}
+    };
+
     static void
     dmodel_dcube_downscale(auto... args) {
         kernels::dmodel_dcube_downscale<T>(args...);
