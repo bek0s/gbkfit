@@ -13,7 +13,7 @@ from gbkfit.dataset import Data, DatasetPixelBrightness
 from gbkfit.driver.drivers.host import DriverHost
 from gbkfit.fitting import (
     EvaluationLog, EvaluationPool, FitControl, FitParamPrior, FitProblem,
-    PriorGauss, PriorGaussTrunc, PriorLogUniform, PriorUniform)
+    PriorGauss, PriorGaussTrunc, PriorLogUniform, PriorSine, PriorUniform)
 from gbkfit.instrument import Instrument, PSFGauss
 from gbkfit.model import galaxy_parser
 from gbkfit.objective import Objective
@@ -81,10 +81,10 @@ def test_fitter_configs_round_trip():
 
 @pytest.mark.parametrize('prior', [
     PriorUniform(-1, 3), PriorLogUniform(0.1, 10), PriorGauss(1, 2),
-    PriorGaussTrunc(1, 2, 0, 2)])
+    PriorGaussTrunc(1, 2, 0, 2), PriorSine(20, 85)])
 def test_priors_are_normalised_and_ppf_inverts_their_cdf(prior):
-    lo = max(prior.minimum(), -30)
-    hi = min(prior.maximum(), 30)
+    lo = prior.minimum() if math.isfinite(prior.minimum()) else -30
+    hi = prior.maximum() if math.isfinite(prior.maximum()) else 30
     total, _ = scipy.integrate.quad(
         lambda x: math.exp(prior.log_pdf(x)), lo, hi, points=[1])
     assert total == pytest.approx(1, rel=1e-6)
@@ -96,6 +96,15 @@ def test_priors_are_normalised_and_ppf_inverts_their_cdf(prior):
     assert prior.log_pdf(prior.minimum() - 1) == -np.inf or \
         prior.minimum() == -np.inf
 
+
+def test_the_residual_of_the_sine_prior_is_smooth_through_edge_on():
+    # (its square is the chi-square, and it changes sign at 90 degrees
+    # without a corner, as least squares need)
+    prior = PriorSine(0, 180)
+    x = np.array([30, 89.9, 90, 90.1, 150])
+    np.testing.assert_allclose(prior.residual(x) ** 2, prior.chi2(x))
+    slopes = np.diff(prior.residual([89.8, 89.9, 90, 90.1, 90.2])) / 0.1
+    np.testing.assert_allclose(slopes, np.radians(1), rtol=1e-4)
 
 def test_priors_load_from_their_configs_and_round_trip():
     info = dict(

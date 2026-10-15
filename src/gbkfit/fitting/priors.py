@@ -21,6 +21,7 @@ __all__ = [
     'PriorGauss',
     'PriorGaussTrunc',
     'PriorLogUniform',
+    'PriorSine',
     'PriorUniform',
     'prior_parser'
 ]
@@ -282,6 +283,82 @@ class PriorLogUniform(Prior):
         return self._minimum * np.exp(u * self._log_ratio)
 
 
+class PriorSine(Prior):
+    """
+    A sine prior on an angle in degrees: p(x) proportional to sin x, the
+    distribution of the inclination of a disk oriented at random (seen
+    edge-on more often than face-on).
+
+    Its chi-square is -2 ln sin x, 0 at 90 degrees also when the range
+    ends before (as a truncated Gaussian's is 0 at its mean), so that the
+    residual, sign(x - 90) sqrt(chi2), is smooth everywhere.
+
+    Parameters
+    ----------
+    minimum, maximum : float, optional
+        The range, in degrees, within [0, 180] (config: min, max; by
+        default [0, 90]).
+
+    Raises
+    ------
+    ConfigError
+        If the range is not within [0, 180], or is empty.
+    """
+
+    @staticmethod
+    def type() -> str:
+        return 'sine'
+
+    def dump(self) -> dict[str, Any]:
+        return dict(type=self.type(), min=self._minimum, max=self._maximum)
+
+    def __init__(self, minimum: float = 0.0, maximum: float = 90.0):
+        _check_range(minimum, maximum)
+        if not (0 <= minimum and maximum <= 180):
+            raise ConfigError(
+                f"the range of a sine prior must be within [0, 180] "
+                f"degrees; it is [{minimum}, {maximum}]")
+        self._minimum = float(minimum)
+        self._maximum = float(maximum)
+        # (the cosines of the ends, whose difference normalises it)
+        self._cos_min = math.cos(math.radians(self._minimum))
+        self._cos_max = math.cos(math.radians(self._maximum))
+
+    def minimum(self) -> float:
+        return self._minimum
+
+    def maximum(self) -> float:
+        return self._maximum
+
+    def log_pdf(self, x: npt.ArrayLike) -> np.ndarray:
+        x = np.asarray(x, dtype=float)
+        inside = (x >= self._minimum) & (x <= self._maximum)
+        # (a density per degree)
+        norm = math.log(math.radians(1) / (self._cos_min - self._cos_max))
+        with np.errstate(divide='ignore', invalid='ignore'):
+            return np.where(
+                inside, np.log(np.sin(np.radians(x))) + norm, -np.inf)
+
+    def chi2(self, x: npt.ArrayLike) -> np.ndarray:
+        x = np.asarray(x, dtype=float)
+        inside = (x >= self._minimum) & (x <= self._maximum)
+        with np.errstate(divide='ignore', invalid='ignore'):
+            return np.where(
+                inside, -2 * np.log(np.sin(np.radians(x))), np.inf)
+
+    def has_residual(self) -> bool:
+        return True
+
+    def residual(self, x: npt.ArrayLike) -> np.ndarray:
+        x = np.asarray(x, dtype=float)
+        return np.sign(x - 90) * np.sqrt(self.chi2(x))
+
+    def ppf(self, u: npt.ArrayLike) -> np.ndarray:
+        u = np.asarray(u, dtype=float)
+        return np.degrees(np.arccos(
+            self._cos_min - u * (self._cos_min - self._cos_max)))
+
+
 class PriorGauss(Prior):
     """
     A Gaussian (normal) prior.
@@ -432,5 +509,6 @@ class PriorGaussTrunc(Prior):
 prior_parser = parseutils.TypedParser(Prior)
 prior_parser.register(PriorUniform)
 prior_parser.register(PriorLogUniform)
+prior_parser.register(PriorSine)
 prior_parser.register(PriorGauss)
 prior_parser.register(PriorGaussTrunc)
