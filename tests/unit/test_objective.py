@@ -10,6 +10,7 @@ import pytest
 import scipy.special
 
 from gbkfit.dataset import Data, DatasetPixelBrightness, DatasetPixelMoments
+from gbkfit.driver.drivers.host import DriverHost
 from gbkfit.model import galaxy_parser
 from gbkfit.objective import Objective
 from gbkfit.observation import (
@@ -79,6 +80,16 @@ def test_objectives_evaluate_in_several_threads_at_once(driver):
     for residuals in results:
         for got, want in zip(residuals, expected):
             np.testing.assert_array_equal(got, want)
+
+
+def test_a_copy_on_another_driver_gives_the_same_values(driver):
+    data = Data(np.random.default_rng(3).normal(0.1, 1, (24, 32)))
+    objective, params = make_objective(DriverHost(), data)
+    copy = objective.with_driver(driver)
+    assert copy.group().observations()[0].driver() is driver
+    assert copy.datasets()[0] is objective.datasets()[0]
+    assert copy.chi2(params) == pytest.approx(
+        objective.chi2(params), rel=1e-5)
 
 
 def test_masked_values_do_not_count(driver):

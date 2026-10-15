@@ -1,5 +1,6 @@
+import copy
 from collections.abc import Mapping, Sequence
-from typing import Any
+from typing import Any, Self
 
 import numpy as np
 import numpy.typing as npt
@@ -407,6 +408,16 @@ class Observation(parseutils.Serializable):
     def driver(self) -> Driver:
         """Return the driver the model is evaluated on."""
         return self._driver
+
+    def with_driver(self, driver: Driver) -> Self:
+        """
+        Return a copy of it whose model is evaluated on another driver;
+        the copy shares the rest, its data too (e.g. copies of an
+        objective on several devices; see Objective.with_driver).
+        """
+        observation = copy.copy(self)
+        observation._driver = driver
+        return observation
 
     def observable(self) -> Observable:
         """Return the observable."""

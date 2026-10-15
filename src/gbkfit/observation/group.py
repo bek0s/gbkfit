@@ -1,8 +1,9 @@
 from collections.abc import Sequence
-from typing import Any, NamedTuple
+from typing import Any, NamedTuple, Self
 
 import numpy as np
 
+from gbkfit.driver import Driver
 from gbkfit.model import Galaxy
 from gbkfit.params import ParamDesc, ParamScalarDesc, ParamValues
 from gbkfit.utils import iterutils, parseutils, threadutils, timeutils
@@ -99,6 +100,9 @@ class ObservationGroup:
             raise ConfigError(
                 f"the galaxies and the observations must have different "
                 f"names; repeated: {repeated}")
+        # (as given, for copies; see with_driver)
+        self._given_depth_order = \
+            None if depth_order is None else tuple(depth_order)
         self._depth_order = _depth_order(
             depth_order, galaxy_names, observation_names)
         self._pdescs, self._mappings = iterutils.merge_with_prefixes(
@@ -198,6 +202,17 @@ class ObservationGroup:
             observation.band(), observation.line_of_sight(),
             observation.observable().emission, order,
             observation.data_unit())
+
+    def with_driver(self, driver: Driver) -> Self:
+        """
+        Return a group of the same galaxies and observations, all on
+        another driver (see Galaxy.with_driver and
+        Observation.with_driver), with its own plans on it.
+        """
+        return type(self)(
+            [galaxy.with_driver(driver) for galaxy in self._galaxies],
+            [obs.with_driver(driver) for obs in self._observations],
+            self._given_depth_order)
 
     def galaxies(self) -> tuple[Galaxy, ...]:
         """Return the galaxies."""
