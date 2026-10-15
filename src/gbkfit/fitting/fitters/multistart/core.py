@@ -144,7 +144,8 @@ class FitterMultiStart(Fitter):
         # parameters cannot be evaluated), and its model evaluations
         runs: list[FitRun] = []
         starts_info: list[dict[str, Any]] = []
-        for start in starts:
+        for i, start in enumerate(starts):
+            problem.set_stage(f'start {i + 1} of {len(starts)}')
             start_params = [p.with_value(v) for v, p in zip(start, params)]
             nevals = problem.nevals()
             try:

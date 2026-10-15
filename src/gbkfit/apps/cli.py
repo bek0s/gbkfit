@@ -17,8 +17,28 @@ def configure_logging(
         log_level: Literal['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']
 ) -> None:
     """
-    Configure logging with specified log level.
+    Configure logging with specified log level: to the console (stderr)
+    and gbkfit.log. On a terminal, the console log goes through the
+    console of the tasks, so that it shows above the line of the progress
+    of a fit (see tasks._progress).
     """
+    # (imported here: the console of the command-line tool only)
+    import rich.highlighter
+    from gbkfit.tasks._console import CONSOLE
+    console: dict[str, Any] = {
+        'class': 'logging.StreamHandler',
+        'formatter': 'console'
+    }
+    if CONSOLE.is_terminal:
+        console = {
+            '()': 'rich.logging.RichHandler',
+            'formatter': 'console',
+            'console': CONSOLE,
+            'show_time': False,
+            'show_level': False,
+            'show_path': False,
+            'highlighter': rich.highlighter.NullHighlighter()
+        }
     logging.config.dictConfig({
         'version': 1,
         'disable_existing_loggers': False,
@@ -36,10 +56,7 @@ def configure_logging(
             },
         },
         'handlers': {
-            'console': {
-                'class': 'logging.StreamHandler',
-                'formatter': 'console'
-            },
+            'console': console,
             'file': {
                 'class': 'logging.FileHandler',
                 'formatter': 'file',

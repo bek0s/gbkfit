@@ -12,7 +12,7 @@ import gbkfit.objective
 import gbkfit.params
 from gbkfit.utils import numutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
-from . import _detail
+from . import _detail, _progress
 
 
 _log = logging.getLogger(__name__)
@@ -28,7 +28,10 @@ def fit(
     (see FitResult.dump), the data and the models and residuals at the
     best fit (FITS; see the plot task), and restart.yaml: the
     configuration with the free parameters starting at the best fit, to
-    fit again from there (e.g. with another fitter).
+    fit again from there (e.g. with another fitter). As it fits, it shows
+    its progress on the console, writes every report of it to
+    progress.jsonl, and the configuration at the best fit so far to
+    best.yaml (see _progress), from which a stopped fit can start again.
 
     Parameters
     ----------
@@ -68,7 +71,16 @@ def fit(
             fitter.load_fit_params(params)
 
     _log.info("model-fitting started")
-    result = fitter.fit(objective, params)
+
+    def write_best(values: dict[str, float]) -> None:
+        _write_config(
+            cfg, root, params, values, os.path.join(output_dir, 'best.yaml'))
+
+    progress = _progress.JsonLinesProgress(
+        os.path.join(output_dir, 'progress.jsonl'))
+    best = _progress.BestValues(write_best)
+    with _progress.console_progress(_log) as console:
+        result = fitter.fit(objective, params, (console, progress, best))
     _log.info(f"model-fitting completed (elapsed time: {result.time:.1f} s)")
 
     _log.info(f"saving result under '{output_dir}'...")
@@ -89,14 +101,33 @@ def _write_restart(
 ) -> None:
     """
     Write restart.yaml: the configuration with the free parameters
-    starting at the best fit, and its directory as its root (so that it
-    runs from anywhere).
+    starting at the best fit (see _write_config).
+    """
+    _write_config(
+        cfg, root, params, result.best().elements,
+        os.path.join(output_dir, 'restart.yaml'))
+
+
+def _write_config(
+        cfg: dict[str, Any],
+        root: str,
+        params: gbkfit.params.ParamSpace,
+        values: dict[str, float],
+        filename: str
+) -> None:
+    """
+    Write the configuration with the free parameters starting at the given
+    values (by element name), and its directory as its root (so that it
+    runs from anywhere): to a temporary file first, then renamed, so that
+    the file is never half written.
     """
     try:
-        restart = params.with_values(result.best().elements).dump()
+        config = params.with_values(values).dump()
     except ConfigError as e:
-        _log.warning(f"restart.yaml is not written: {e}")
+        _log.warning(f"{os.path.basename(filename)} is not written: {e}")
         return
+    temporary = filename + '.tmp'
     _detail.write_yaml(
-        dict(root=root) | cfg | dict(params=numutils.nativify(restart)),
-        os.path.join(output_dir, 'restart.yaml'))
+        dict(root=root) | cfg | dict(params=numutils.nativify(config)),
+        temporary)
+    os.replace(temporary, filename)
