@@ -91,7 +91,9 @@ struct TransferEmitterArrays
 };
 
 // The galaxy model operations of a native module. Kernels launches
-// the kernels of the module, on the memory of Device.
+// the kernels of the module, on the memory of Device: each function on
+// the device of the array it writes, or of the disk (see DeviceScope of
+// the Kernels).
 template<typename T, typename Device, typename Kernels>
 struct GModel
 {
@@ -124,6 +126,7 @@ struct GModel
             Data fields,
             T rdata_scale, T image_scale)
     {
+        const typename Kernels::DeviceScope scope(disk.rnodes.device_id());
         const auto args = make_args(
                 disk, spat_size, spat_step, spat_zero, spat_rota, slab_zero,
                 spec_size, spec_step, spec_zero, lines,
@@ -155,6 +158,7 @@ struct GModel
             Data fields,
             T rdata_scale, T image_scale)
     {
+        const typename Kernels::DeviceScope scope(disk.rnodes.device_id());
         const auto args = make_args(
                 disk, spat_size, spat_step, spat_zero, spat_rota, slab_zero,
                 spec_size, spec_step, spec_zero, lines,
@@ -189,6 +193,7 @@ struct GModel
     static void
     opacity_accumulate(std::array<int, 3> spat_size, Data opacity)
     {
+        const typename Kernels::DeviceScope scope(opacity.device_id());
         require(opacity.size()
                 == size_t(spat_size[0]) * spat_size[1] * spat_size[2],
                 "opacity has the wrong number of elements");
@@ -210,6 +215,7 @@ struct GModel
             int subchannels,
             ConstData opacity, Data opacity_front, Data tau, Data out)
     {
+        const typename Kernels::DeviceScope scope(out.device_id());
         TransferArgs<T> a;
         for (int i = 0; i < 3; ++i)
             a.spat_size[i] = spat_size[i];
@@ -317,6 +323,7 @@ struct GModel
             const Disk& disk, const std::string& kind,
             Values r, Values theta, TraitValues out, std::optional<T> incl)
     {
+        const typename Kernels::DeviceScope scope(out.device_id());
         auto a = make_traits_args(disk, kind, true, r, out);
         require(theta.shape(0) == r.shape(0),
                 "theta needs one value for each point");
@@ -337,6 +344,7 @@ struct GModel
             const Disk& disk, const std::string& kind,
             Values r, Values z, TraitValues out)
     {
+        const typename Kernels::DeviceScope scope(out.device_id());
         auto a = make_traits_args(disk, kind, false, r, out);
         require(z.shape(0) == r.shape(0), "z needs one value for each point");
         a.z = z.data();

@@ -5,9 +5,27 @@
 
 namespace gbkfit { namespace cuda {
 
+// While it lives, the calling thread launches its kernels on a device
+// (that of their arrays: there can be several GPUs), and after, on the
+// device it had before
+class DeviceScope
+{
+public:
+    explicit DeviceScope(int device);
+    ~DeviceScope();
+    DeviceScope(const DeviceScope&) = delete;
+    DeviceScope& operator=(const DeviceScope&) = delete;
+
+private:
+    int m_device;
+    int m_previous;
+};
+
 template<typename T>
 struct Wrapper
 {
+    using DeviceScope = cuda::DeviceScope;
+
     static void
     dmodel_dcube_downscale(
             int scale_x, int scale_y, int scale_z,

@@ -23,9 +23,23 @@ def test_driver_memory(driver):
 
 
 def test_unknown_driver_options_are_reported():
-    # (they were dropped: e.g. a device, which the drivers do not take)
+    # (they were dropped: e.g. a device, which the host driver does not
+    # take)
     from gbkfit.driver import driver_parser
     from gbkfit.utils import parseutils
     with parseutils.strict_mode(), pytest.raises(
             parseutils.ConfigError, match="device"):
         driver_parser.load(dict(type='host', device=1))
+
+
+def test_cuda_drivers_are_of_the_gpus_there_are(driver):
+    if driver.type() != 'cuda':
+        pytest.skip("a test of the cuda driver")
+    import cupy
+    from gbkfit.driver import driver_parser
+    from gbkfit.utils import parseutils
+    assert driver_parser.load(dict(type='cuda', device=0)).dump() \
+        == dict(type='cuda', device=0)
+    ndevices = cupy.cuda.runtime.getDeviceCount()
+    with pytest.raises(parseutils.ConfigError, match="device"):
+        driver_parser.load(dict(type='cuda', device=ndevices))

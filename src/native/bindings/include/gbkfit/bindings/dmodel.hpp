@@ -6,7 +6,8 @@
 namespace gbkfit::bindings {
 
 // The data model operations of a native module. Kernels launches the
-// kernels of the module, on the memory of Device.
+// kernels of the module, on the memory of Device: each function on the
+// device of the array it writes (see DeviceScope of the Kernels).
 template<typename T, typename Device, typename Kernels>
 struct DModel
 {
@@ -24,6 +25,7 @@ struct DModel
             std::array<int, 3> scale, std::array<int, 3> offset,
             ConstCube src, Cube dst)
     {
+        const typename Kernels::DeviceScope scope(dst.device_id());
         const auto src_size = size_xyz(src);
         const auto dst_size = size_xyz(dst);
         for (int i = 0; i < 3; ++i) {
@@ -45,6 +47,7 @@ struct DModel
     static void
     dcube_convolve_z(ConstImage kernels, Cube cube, Cube scratch)
     {
+        const typename Kernels::DeviceScope scope(cube.device_id());
         require_same_shape(scratch, cube, "scratch", "cube");
         const auto size = size_xyz(cube);
         require(int(kernels.shape(0)) == size[2],
@@ -61,6 +64,7 @@ struct DModel
     static void
     dcube_mask(T cutoff, bool apply, Cube dcube_d, Cube dcube_m, Cube dcube_w)
     {
+        const typename Kernels::DeviceScope scope(dcube_d.device_id());
         require_same_shape(dcube_m, dcube_d, "dcube_m", "dcube_d");
         require_same_shape(dcube_w, dcube_d, "dcube_w", "dcube_d");
         const auto size = size_xyz(dcube_d);
@@ -81,6 +85,7 @@ struct DModel
             T cutoff, Orders orders,
             Cube mmaps_d, Image mmaps_m, Image mmaps_w)
     {
+        const typename Kernels::DeviceScope scope(mmaps_d.device_id());
         const auto size = size_xyz(dcube_d);
         const int norders = int(orders.shape(0));
         require_same_shape(dcube_w, dcube_d, "dcube_w", "dcube_d");
@@ -110,6 +115,7 @@ struct DModel
             ConstCube dcube_d, T cutoff, Orders orders,
             Cube mmaps_d, Image mmaps_m)
     {
+        const typename Kernels::DeviceScope scope(mmaps_d.device_id());
         const auto size = size_xyz(dcube_d);
         const int norders = int(orders.shape(0));
         require(mmaps_d.shape(0) == size_t(norders)
@@ -136,6 +142,7 @@ struct DModel
             ConstImage source_x, ConstImage source_y,
             ConstCube source, Cube image)
     {
+        const typename Kernels::DeviceScope scope(image.device_id());
         const auto src = size_xyz(source);
         const auto dst = size_xyz(image);
         require(src[2] == dst[2],
@@ -161,6 +168,7 @@ struct DModel
             Indices indptr, Indices indices, Weights weights,
             ConstCube cube, Image out)
     {
+        const typename Kernels::DeviceScope scope(out.device_id());
         const auto size = size_xyz(cube);
         const int nregions = int(out.shape(1));
         require(int(out.shape(0)) == size[2],
