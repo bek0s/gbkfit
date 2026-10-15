@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cmath>
+
 namespace gbkfit {
 
 template<typename T> struct RNG;
@@ -330,6 +332,22 @@ gauss_1d_cdf(T x, T b, T c)
     if (c == 0)
         return x < b ? T{0} : T{1};
     return T{0.5} * (1 + std::erf((x - b) / (c * std::sqrt(T{2}))));
+}
+
+// The log of the normal cdf, log Phi(z), precise over its whole range (in
+// double precision): from its upper tail above 0, and from the
+// asymptotic series of its lower tail where erfc underflows
+constexpr double
+log_ndtr(double z)
+{
+    const double root2 = std::sqrt(2.0);
+    if (z > 0)
+        return std::log1p(-0.5 * std::erfc(z / root2));
+    if (z > -30)
+        return std::log(0.5 * std::erfc(-z / root2));
+    const double z2 = z * z;
+    return -0.5 * z2 - std::log(-z) - 0.5 * std::log(2 * PI<double>)
+            + std::log1p(-1 / z2 + 3 / (z2 * z2));
 }
 
 // A point x of a Gaussian, as the mass of its tail beyond x: below x if

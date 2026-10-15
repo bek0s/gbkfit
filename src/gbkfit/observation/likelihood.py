@@ -35,6 +35,15 @@ class Likelihood(parseutils.TypedSerializable, abc.ABC):
         pass
 
     @abc.abstractmethod
+    def upper_limit(self, key: str) -> tuple[float, float] | None:
+        """
+        Return the detection limit below which the data item of the given
+        name is where it is masked, and the noise there, if given (see
+        LikelihoodGaussian).
+        """
+        pass
+
+    @abc.abstractmethod
     def amplitudes(self) -> str | None:
         """
         Return the amplitudes of the spectra of the model, if any (see
@@ -73,6 +82,19 @@ class LikelihoodGaussian(Likelihood):
     missing_residual errors (e.g. 3). A better guard is to fit moment 0
     (the flux, which the model always has) with the higher moments: where
     the model is too faint, its flux then counts with its own residual.
+
+    The values the data mask count nothing, unless their data item has an
+    upper limit (upper_limits): then every masked value is a non-detection
+    (e.g. pixels clipped below a threshold, or blanked as empty), below
+    the limit L, with noise e (the error of a value there; the data keep
+    no errors where they are masked), both in the units of the data, and
+    the model m pays where it is above it: the chi-square of the value is
+    -2 log Phi((L - m) / e), Phi the normal cdf, the log-likelihood of
+    censored data (about 0 for a model below the limit, about ((m - L) /
+    e)^2 well above it). Without limits a model could put light where the
+    data are blank for free (e.g. a disk too large). The limits are for
+    values of light (brightness, spectra, moment 0), not for velocities,
+    of which a blank says nothing.
 
     With amplitudes 'per_spectrum' (spectra only, e.g. those of
     pixel_spectra), each spectrum of the model is times an amplitude of
@@ -131,6 +153,10 @@ class LikelihoodGaussian(Likelihood):
         others).
     missing_residual : float, optional
         The residual of a value the model does not have (see above).
+    upper_limits : Mapping, optional
+        The upper limit of the masked values of data items, by name (none
+        for the others): a mapping of its 'limit' and its 'error' (the
+        noise of the non-detections); see above. None by default.
     amplitudes : str, optional
         'per_spectrum' for an amplitude for each spectrum of the model
         (see above); none by default.
@@ -141,7 +167,8 @@ class LikelihoodGaussian(Likelihood):
     Raises
     ------
     ConfigError
-        If missing_residual is negative or not finite, amplitudes is not
+        If missing_residual is negative or not finite, an upper limit is
+        not a finite limit and a finite, positive error, amplitudes is not
         'per_spectrum', or amplitude_sigma is missing with it, given
         without it, or not positive.
     """
@@ -154,14 +181,17 @@ class LikelihoodGaussian(Likelihood):
         amplitudes = {} if self._amplitudes is None else dict(
             amplitudes=self._amplitudes,
             amplitude_sigma=self._amplitude_sigma)
+        limits = {} if self._upper_limits is None else dict(
+            upper_limits=self._upper_limits)
         return dict(
             type=self.type(), weights=self._weights,
-            missing_residual=self._missing_residual) | amplitudes
+            missing_residual=self._missing_residual) | limits | amplitudes
 
     def __init__(
             self,
             weights: float | Mapping[str, float] = 1.0,
             missing_residual: float | None = None,
+            upper_limits: Mapping[str, Mapping[str, float]] | None = None,
             amplitudes: str | None = None,
             amplitude_sigma: float | None = None
     ):
@@ -174,6 +204,9 @@ class LikelihoodGaussian(Likelihood):
             else dict(weights)
         self._missing_residual = None if missing_residual is None \
             else float(missing_residual)
+        self._upper_limits = None if upper_limits is None else {
+            key: _check_upper_limit(key, limit)
+            for key, limit in upper_limits.items()}
         if amplitudes not in (None, 'per_spectrum'):
             raise ConfigError(
                 f"option 'amplitudes' must be 'per_spectrum' (or none); it "
@@ -200,11 +233,37 @@ class LikelihoodGaussian(Likelihood):
     def missing_residual(self) -> float | None:
         return self._missing_residual
 
+    def upper_limit(self, key: str) -> tuple[float, float] | None:
+        if self._upper_limits is None or key not in self._upper_limits:
+            return None
+        limit = self._upper_limits[key]
+        return limit['limit'], limit['error']
+
     def amplitudes(self) -> str | None:
         return self._amplitudes
 
     def amplitude_sigma(self) -> float | None:
         return self._amplitude_sigma
+
+
+def _check_upper_limit(
+        key: str,
+        limit: Mapping[str, float]
+) -> dict[str, float]:
+    """
+    Return an upper limit (a mapping of its limit and error), or raise
+    ConfigError unless both are finite and the error is positive.
+    """
+    if not isinstance(limit, Mapping) or set(limit) != {'limit', 'error'}:
+        raise ConfigError(
+            f"upper limit of '{key}': give its 'limit' and its 'error' (the "
+            f"noise of the non-detections); it is {limit!r}")
+    value, error = float(limit['limit']), float(limit['error'])
+    if not (math.isfinite(value) and math.isfinite(error) and error > 0):
+        raise ConfigError(
+            f"upper limit of '{key}': its limit must be finite and its "
+            f"error finite and positive; they are {value} and {error}")
+    return dict(limit=value, error=error)
 
 
 likelihood_parser = parseutils.TypedParser(Likelihood, [LikelihoodGaussian])

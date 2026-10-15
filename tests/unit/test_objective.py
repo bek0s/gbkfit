@@ -5,6 +5,7 @@ residuals, and the residuals are new arrays.
 
 import numpy as np
 import pytest
+import scipy.special
 
 from gbkfit.dataset import Data, DatasetPixelBrightness, DatasetPixelMoments
 from gbkfit.model import galaxy_parser
@@ -67,6 +68,25 @@ def test_masked_values_do_not_count(driver):
     assert objective.nresiduals() == 24 * 32 - 5 * 32
     residuals = objective.residuals(params).reshape(24, 32)
     np.testing.assert_array_equal(residuals[:5], 0)
+
+
+def test_masked_values_with_an_upper_limit_are_non_detections(driver):
+    # Below the limit L, of noise e: -2 log Phi((L - model) / e) each, and
+    # they count as residuals
+    mask = np.ones((24, 32))
+    mask[:, :8] = 0
+    data = Data(
+        np.full((24, 32), 0.1), mask=mask, error=np.full((24, 32), 0.5))
+    objective, params = make_objective(
+        driver, data, LikelihoodGaussian(
+            upper_limits=dict(brightness=dict(limit=0.01, error=0.2))))
+    model = objective.group().model_h(params)[0]['brightness']['d']
+    residuals = objective.residuals(params).reshape(24, 32)
+    z = (0.01 - model[:, :8].astype(float)) / 0.2
+    np.testing.assert_allclose(
+        residuals[:, :8], np.sqrt(-2 * scipy.special.log_ndtr(z)),
+        rtol=1e-5, atol=1e-7)
+    assert objective.nresiduals() == 24 * 32
 
 
 def test_an_observation_without_data_is_an_error(driver):

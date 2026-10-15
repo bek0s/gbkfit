@@ -14,6 +14,7 @@ import pathlib
 import numpy as np
 import pytest
 import scipy.integrate
+import scipy.special
 
 from gbkfit.model.components.disks import traits
 
@@ -347,14 +348,15 @@ def _residual_inputs():
         mdl_w=np.cos(0.005 * i) ** 2)
 
 
-def residual(driver, inputs, weight, missing):
+def residual(driver, inputs, weight, missing, limit=(np.nan, np.nan)):
     """The residual of the native objective, on the host."""
     memory = Memory(driver)
     objective = driver.native_class('Objective', DTYPE)()
     result = memory.to_device(np.zeros(1000, DTYPE))
     objective.residual(
         **{k: memory.to_device(v) for k, v in inputs.items()},
-        weight=weight, missing=missing, res=result)
+        weight=weight, missing=missing, limit=limit[0],
+        limit_error=limit[1], res=result)
     return memory.to_host(result)
 
 
@@ -382,6 +384,24 @@ def test_residual_of_masked_data_and_missing_model_values(driver):
     np.testing.assert_array_equal(result[masked], 0)
     np.testing.assert_allclose(result[missing], 3.0 * 0.7)
     assert np.isfinite(result).all()
+
+
+def test_residual_of_upper_limits(driver):
+    # Masked values with a limit L of noise e are below it: sqrt(-2 log
+    # Phi((L - m) / e)) times the weights of the model and of the item,
+    # for models far below and far above the limit too (0 where the model
+    # has no value)
+    inputs = _residual_inputs()
+    masked = inputs['obs_m'] == 0
+    inputs['obs_d'][masked] = np.nan
+    inputs['mdl_d'] = np.linspace(-40, 60, 1000).astype(DTYPE)
+    inputs['mdl_d'][np.arange(1000) % 13 == 0] = np.nan
+    result = residual(driver, inputs, 0.7, 3.0, limit=(2.0, 0.8))
+    z = (2.0 - inputs['mdl_d'].astype(float)) / 0.8
+    expected = np.nan_to_num(np.sqrt(-2 * scipy.special.log_ndtr(z))) \
+        * inputs['mdl_w'] * 0.7
+    np.testing.assert_allclose(
+        result[masked], expected[masked], rtol=1e-5, atol=1e-6)
 
 
 def residual_sum(driver, values, squared):
