@@ -4,6 +4,8 @@ the problem that fitters solve, and the result of a fit.
 """
 
 from .base import *
+from .control import *
+from .evaluation_log import *
 from .fitparams import *
 from .priors import *
 from .problem import *

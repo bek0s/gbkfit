@@ -489,8 +489,17 @@ def _make_parser() -> argparse.ArgumentParser:
         parser_common_config, parser_results_output, parser_common],
         help="fit model to data")
     parser_fit.add_argument(
-        'config', type=str,
+        'config', type=str, nargs='?',
         help="configuration file path; json and yaml formats are supported")
+    parser_fit.add_argument(
+        '--resume', type=str, metavar='OUTPUT',
+        help="resume the fit in this output directory (stopped or killed), "
+             "from the configuration and the log of evaluations it has; "
+             "instead of a configuration")
+    parser_fit.add_argument(
+        '--no-evaluation-log', action='store_true',
+        help="do not log the evaluations of the fit (evaluations.bin), "
+             "which it resumes from")
 
     #
     # Create parser for plot task
@@ -604,11 +613,19 @@ def _run_prep(args: argparse.Namespace) -> None:
 
 
 def _run_fit(args: argparse.Namespace) -> None:
-    """Run the fit task."""
+    """Run the fit task (or resume a fit)."""
     import gbkfit.tasks.fit
+    if (args.config is None) == (args.resume is None):
+        raise ConfigError(
+            "give a configuration, or the output directory of a fit to "
+            "resume (--resume), not both")
     with parseutils.strict_mode(args.strict):
-        gbkfit.tasks.fit.fit(
-            args.config, args.output_dir, args.output_dir_mode)
+        if args.resume is not None:
+            gbkfit.tasks.fit.resume(args.resume)
+        else:
+            gbkfit.tasks.fit.fit(
+                args.config, args.output_dir, args.output_dir_mode,
+                not args.no_evaluation_log)
 
 
 def _run_plot(args: argparse.Namespace) -> None:

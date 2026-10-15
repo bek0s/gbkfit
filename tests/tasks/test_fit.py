@@ -86,3 +86,30 @@ def test_fit_recovers_the_parameters_of_noiseless_data(tmp_path):
     for name in ('xpos', 'posa', 'vpt_vt'):
         assert refit['solutions'][0]['free'][name] == pytest.approx(
             best[name], abs=1e-3)
+
+
+@pytest.mark.slow
+def test_a_fit_resumes_from_its_output_directory(tmp_path):
+    # Its configuration and the log of its evaluations are there: resumed,
+    # it replays them all, and ends where it ended
+    pytest.importorskip('cma')
+    config = yaml.load(REFERENCE_DIR / 'thin_disk_pixel_spectra.yaml')
+    yaml.dump(config, tmp_path / 'model.yaml')
+    run_cli(tmp_path, 'eval', 'model', 'model.yaml', '--output-dir', 'model')
+    model = fits.getdata(tmp_path / 'model' / 'model_0_spectra_d.fits')
+    fits.writeto(tmp_path / 'data.fits', model)
+    observation = config['observations'][0]
+    observation['data'] = dict(
+        data='data.fits', error=0.01 * float(model.max()),
+        step=observation['observable'].pop('step'))
+    observation['observable'].pop('size')
+    config['params']['properties'] |= dict(
+        xpos=dict(value=0, min=-3, max=3),
+        posa=dict(value=40, min=0, max=90))
+    config['fitter'] = dict(type='cmaes', maxfevals=300)
+    yaml.dump(config, tmp_path / 'fit.yaml')
+    run_cli(tmp_path, 'fit', 'fit.yaml', '--output-dir', 'fit')
+    first = json.loads((tmp_path / 'fit' / 'result.json').read_text())
+    run_cli(tmp_path, 'fit', '--resume', 'fit')
+    resumed = json.loads((tmp_path / 'fit' / 'result.json').read_text())
+    assert resumed['solutions'][0]['free'] == first['solutions'][0]['free']

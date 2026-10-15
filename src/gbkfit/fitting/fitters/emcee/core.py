@@ -10,6 +10,7 @@ import emcee
 import numpy as np
 
 from gbkfit.fitting.base import FitRun, Fitter
+from gbkfit.fitting.control import FitStopped
 from gbkfit.fitting.fitparams import FitParam, FitParamClass, FitParamPrior
 from gbkfit.fitting.priors import Prior
 from gbkfit.fitting.problem import FitProblem
@@ -189,28 +190,46 @@ class FitterEmcee(Fitter):
             vectorize=True)
         sampler.random_state = np.random.RandomState(
             int(rng.integers(2 ** 31))).get_state()
-        sampler.run_mcmc(
-            self._start(problem, params, nwalkers, rng), self._nsteps)
+        # Each step of the chain goes to the log of the fit as it runs; a
+        # fit asked to stop keeps the chain so far (half of it burn-in, if
+        # shorter than the burn-in)
+        stopped = False
+        try:
+            for state in sampler.sample(
+                    self._start(problem, params, nwalkers, rng),
+                    iterations=self._nsteps):
+                problem.record_chain(state.coords, state.log_prob)
+        except FitStopped:
+            stopped = True
+        nsteps = sampler.iteration
+        burnin = min(burnin, nsteps // 2)
+        if nsteps - burnin < 1:
+            raise FitStopped("emcee was stopped before its first steps")
         samples = sampler.get_chain(discard=burnin, thin=self._thin, flat=True)
         tau = sampler.get_autocorr_time(discard=burnin, quiet=True)
-        converged = (self._nsteps - burnin) > 50 * np.max(tau)
+        converged = not stopped and (nsteps - burnin) > 50 * np.max(tau)
         best = problem.best()
         if best is None:
             raise RuntimeError("emcee found no point with a finite chi2")
+        if stopped:
+            message = f'stopped after {nsteps} of {self._nsteps} steps'
+        elif converged:
+            message = 'the chain after the burn-in is longer than 50 ' \
+                'autocorrelation times'
+        else:
+            message = 'the chain after the burn-in is shorter than 50 ' \
+                'autocorrelation times: run longer'
         return FitRun(
             solutions=[best[0]],
             success=bool(converged),
-            message='the chain after the burn-in is longer than 50 '
-                    'autocorrelation times' if converged else
-                    'the chain after the burn-in is shorter than 50 '
-                    'autocorrelation times: run longer',
+            message=message,
             samples=samples,
             diagnostics=dict(
                 acceptance_fraction=float(np.mean(
                     sampler.acceptance_fraction)),
                 autocorr_time=dict(zip(problem.names(), tau.tolist())),
-                n_eff=float(
-                    (self._nsteps - burnin) * nwalkers / np.max(tau))),
+                n_eff=float((nsteps - burnin) * nwalkers / np.max(tau)),
+                nsteps=nsteps),
             raw=sampler)
 
     @staticmethod
