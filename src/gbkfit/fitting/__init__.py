@@ -7,6 +7,7 @@ from .base import *
 from .control import *
 from .evaluation_log import *
 from .fitparams import *
+from .pool import *
 from .priors import *
 from .problem import *
 from .progress import *

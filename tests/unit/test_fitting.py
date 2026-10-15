@@ -12,8 +12,8 @@ import scipy.integrate
 from gbkfit.dataset import Data, DatasetPixelBrightness
 from gbkfit.driver.drivers.host import DriverHost
 from gbkfit.fitting import (
-    EvaluationLog, FitControl, FitParamPrior, PriorGauss, PriorGaussTrunc,
-    PriorLogUniform, PriorUniform)
+    EvaluationLog, EvaluationPool, FitControl, FitParamPrior, FitProblem,
+    PriorGauss, PriorGaussTrunc, PriorLogUniform, PriorUniform)
 from gbkfit.instrument import Instrument, PSFGauss
 from gbkfit.model import galaxy_parser
 from gbkfit.objective import Objective
@@ -235,6 +235,62 @@ def test_a_fit_resumed_from_its_log_is_the_fit_that_did_not_stop(tmp_path):
     assert log.nreplayed() == 500
     assert resumed.free == whole.free
     assert resumed.chi2 == pytest.approx(whole.chi2, rel=1e-12)
+
+
+def test_a_pool_evaluates_batches_as_the_objective_does(driver):
+    # (two copies on one device: the objective itself and a copy; the
+    # chi-squares of the host differ at rounding, its sums being in the
+    # order of the threads of each copy)
+    objective = mock_objective(driver)
+    params = ParamSpace(objective.pdescs(), bounded_properties())
+    xs = np.random.default_rng(2).uniform(
+        [-1, -1, 30, 45, 0.8, 3], [1, 1, 50, 65, 1.2, 5], (5, 6))
+    alone = FitProblem(objective, params)
+    with EvaluationPool(objective, [driver, driver]) as pool:
+        assert pool.copies()[0] is objective
+        assert pool.copies()[1] is not objective
+        pooled = FitProblem(objective, params, pool=pool)
+        np.testing.assert_allclose(
+            pooled.chi2_batch(xs), alone.chi2_batch(xs), rtol=1e-12)
+        for got, want in zip(
+                pooled.residuals_batch(xs), alone.residuals_batch(xs)):
+            np.testing.assert_array_equal(got, want)
+    assert pooled.nevals() == alone.nevals() == 10
+    assert pooled.best()[1] == pytest.approx(alone.best()[1], rel=1e-12)
+
+
+@pytest.mark.parametrize('fitter', [
+    dict(type='lmfit.least_squares'), dict(type='cmaes')])
+def test_a_fit_with_a_pool_is_the_fit_without(driver, fitter):
+    pytest.importorskip('cma')
+    pytest.importorskip('lmfit')
+    from gbkfit.fitting import fitter_parser
+    objective = mock_objective(driver)
+    params = ParamSpace(objective.pdescs(), bounded_properties())
+    alone = fitter_parser.load(fitter).fit(objective, params)
+    with EvaluationPool(objective, [driver, driver]) as pool:
+        pooled = fitter_parser.load(fitter).fit(objective, params, pool=pool)
+    assert pooled.best().free == pytest.approx(alone.best().free, rel=1e-12)
+    assert pooled.best().covariance.std == pytest.approx(
+        alone.best().covariance.std, rel=1e-12)
+    assert pooled.nevals == alone.nevals
+
+
+def test_a_fit_with_a_pool_logs_its_evaluations_in_order(tmp_path):
+    # (a fit that resumes from its log without a pool replays all of it)
+    pytest.importorskip('cma')
+    from gbkfit.fitting.fitters.cmaes import FitterCMAES
+    driver = DriverHost()
+    objective = mock_objective(driver)
+    params = ParamSpace(objective.pdescs(), bounded_properties())
+    filename = str(tmp_path / 'evaluations.bin')
+    with EvaluationPool(objective, [driver, driver]) as pool:
+        pooled = FitterCMAES().fit(
+            objective, params, log=EvaluationLog(filename), pool=pool)
+    log = EvaluationLog.resume(filename)
+    resumed = FitterCMAES().fit(objective, params, log=log)
+    assert log.nreplayed() == pooled.nevals
+    assert resumed.best().free == pooled.best().free
 
 
 def test_a_stopped_emcee_keeps_its_chain_so_far(tmp_path):

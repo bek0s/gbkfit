@@ -195,7 +195,8 @@ class FitterScipyLeastSquares(Fitter):
             transform = _BoundsTransform(lower, upper)
             ones = np.ones_like(x0)
             functions = LeastSquaresFunctions(
-                lambda p: problem.residuals(transform.to_bounded(p)),
+                lambda ps: problem.residuals_batch(
+                    [transform.to_bounded(p) for p in ps]),
                 -np.inf * ones, np.inf * ones, ones, scheme, step)
             result = scipy.optimize.least_squares(
                 functions.residuals, transform.to_internal(x0),
@@ -203,7 +204,7 @@ class FitterScipyLeastSquares(Fitter):
             x = transform.to_bounded(result.x)
         else:
             functions = LeastSquaresFunctions(
-                problem.residuals, lower, upper, scales, scheme, step)
+                problem.residuals_batch, lower, upper, scales, scheme, step)
             result = scipy.optimize.least_squares(
                 functions.residuals, x0, jac=functions.jacobian,
                 bounds=(lower, upper), **options)
