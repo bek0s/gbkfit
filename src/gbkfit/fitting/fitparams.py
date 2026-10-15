@@ -19,6 +19,7 @@ __all__ = [
     'FitParam',
     'FitParamBounded',
     'FitParamClass',
+    'FitParamLeastSquares',
     'FitParamPrior'
 ]
 
@@ -88,44 +89,66 @@ FitParamClass: TypeAlias = type[FitParam]
 
 class FitParamBounded(FitParam):
     """
-    The options of a free element for an optimizer: its initial value and
-    its bounds. The options of each optimizer are of this class, or of a
-    subclass with more options (e.g. FitParamCMAES), so that a fitter of
-    several starts can run any optimizer (see with_value and
-    FitterMultiStart).
+    The options of a free element for an optimizer: its initial value, its
+    bounds, and optionally a prior (then the optimizer finds the maximum a
+    posteriori: see FitProblem.cost). The options of each optimizer are of
+    this class, or of a subclass with more options (e.g. FitParamCMAES),
+    so that a fitter of several starts can run any optimizer (see
+    with_value and FitterMultiStart).
 
     Parameters
     ----------
     value : float
         The initial value.
     minimum, maximum : float, optional
-        The bounds (config: min, max; by default none).
+        The bounds (config: min, max; by default none). With a prior, the
+        optimizer tries values in both the bounds and its support.
+    prior : Prior, optional
+        The prior.
 
     Raises
     ------
     ConfigError
-        If the bounds are empty, or the value is not finite or not in
-        them.
+        If the bounds (with the support of the prior) are empty, or the
+        value is not finite or not in them.
     """
+
+    @classmethod
+    def load(cls, info: dict[str, Any]) -> 'FitParamBounded':
+        info = dict(info)
+        if isinstance(info.get('prior'), Mapping):
+            info['prior'] = parseutils.load_option(
+                prior_parser.load, info, 'prior')
+        return cls(**parseutils.parse_options_for_callable(
+            info, cls.__init__,
+            rename_params=dict(minimum='min', maximum='max')))
 
     def dump(self) -> dict[str, Any]:
         info: dict[str, Any] = dict(value=self._value)
-        if math.isfinite(self._minimum):
-            info['min'] = self._minimum
-        if math.isfinite(self._maximum):
-            info['max'] = self._maximum
+        if math.isfinite(self._bounds[0]):
+            info['min'] = self._bounds[0]
+        if math.isfinite(self._bounds[1]):
+            info['max'] = self._bounds[1]
+        if self._prior is not None:
+            info['prior'] = prior_parser.dump(self._prior)
         return info
 
     def __init__(
             self,
             value: float,
             minimum: float = -math.inf,
-            maximum: float = math.inf
+            maximum: float = math.inf,
+            prior: Prior | None = None
     ):
+        self._bounds = (float(minimum), float(maximum))
+        self._prior = prior
+        if prior is not None:
+            minimum = max(minimum, prior.minimum())
+            maximum = min(maximum, prior.maximum())
         if not minimum < maximum:
             raise ConfigError(
-                f"option 'min' ({minimum}) must be less than option 'max' "
-                f"({maximum})")
+                f"the bounds, with the support of the prior, must not be "
+                f"empty; they are [{minimum}, {maximum}]")
         _check_value(value, minimum, maximum)
         self._value = float(value)
         self._minimum = float(minimum)
@@ -155,6 +178,36 @@ class FitParamBounded(FitParam):
         result = copy.copy(self)
         result._value = float(value)
         return result
+
+    def prior(self) -> Prior | None:
+        return self._prior
+
+
+class FitParamLeastSquares(FitParamBounded):
+    """
+    The options of a free element for a least-squares optimizer (see
+    FitParamBounded): a prior must have a residual (see Prior.residual;
+    e.g. Gaussian or uniform, not log-uniform).
+
+    Raises
+    ------
+    ConfigError
+        As FitParamBounded, or if the prior has no residual.
+    """
+
+    def __init__(
+            self,
+            value: float,
+            minimum: float = -math.inf,
+            maximum: float = math.inf,
+            prior: Prior | None = None
+    ):
+        if prior is not None and not prior.has_residual():
+            raise ConfigError(
+                f"least squares cannot take a prior of type "
+                f"'{prior.type()}' (it has no residual); use a Gaussian or "
+                f"a uniform prior, or another optimizer")
+        super().__init__(value, minimum, maximum, prior)
 
 
 class FitParamPrior(FitParam):

@@ -154,19 +154,19 @@ class FitterMultiStart(Fitter):
                 starts_info.append(dict(
                     error=str(e), nevals=problem.nevals() - nevals))
                 continue
-            chi2 = problem.chi2(run.solutions[0])
+            cost = problem.cost(run.solutions[0])
             runs.append(run)
             starts_info.append(dict(
-                chi2=chi2, success=run.success,
+                cost=cost, success=run.success,
                 nevals=problem.nevals() - nevals))
         if not runs:
             raise RuntimeError(
                 f"every start of multistart failed; the first: "
                 f"{starts_info[0]['error']}")
         # The minima, best first, and the distinct ones among them
-        chi2s = [info['chi2'] for info in starts_info if 'chi2' in info]
+        costs = [info['cost'] for info in starts_info if 'cost' in info]
         solutions: list[np.ndarray] = []
-        for i in np.argsort(chi2s):
+        for i in np.argsort(costs):
             x = runs[i].solutions[0]
             if not any(np.all(np.abs(x - s) <= self._tolerance
                               * (upper - lower)) for s in solutions):

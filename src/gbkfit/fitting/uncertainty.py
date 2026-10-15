@@ -196,10 +196,11 @@ def covariance(
 ) -> tuple[Covariance, int]:
     """
     Return the covariance of a solution, from the Jacobian of the
-    weighted residuals: (J^T J)^-1, by an SVD pseudo-inverse of J with
-    its columns normalised (so that the cutoff of the singular values
-    does not depend on the units); and the number of model evaluations
-    it took.
+    weighted residuals and of those of the priors that have them (see
+    FitProblem.prior_residuals): (J^T J)^-1, by an SVD pseudo-inverse of
+    J with its columns normalised (so that the cutoff of the singular
+    values does not depend on the units); and the number of model
+    evaluations it took.
 
     The errors are propagated to all elements through the Jacobian of
     the parameter space (no models). Elements at a bound are listed: the
@@ -239,10 +240,13 @@ def covariance(
     params = problem.params()
     nevals = 0
 
+    # (with those of the priors: the covariance of the posterior)
     def residuals(point: np.ndarray) -> np.ndarray:
         nonlocal nevals
         nevals += 1
-        return objective.residuals(params.evaluate(point))
+        return np.concatenate([
+            objective.residuals(params.evaluate(point)),
+            problem.prior_residuals(point)])
 
     steps = finite_difference_steps(
         x, scales, problem.precision() ** (1 / 3))

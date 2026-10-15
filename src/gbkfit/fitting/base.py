@@ -193,11 +193,8 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
         if not fit_params:
             raise ValueError("no parameter is free")
         _check_valid_ranges(fit_params, params.free_valid_ranges())
-        priors = [p.prior() for p in fit_params.values()]
-        if len({p is None for p in priors}) > 1:
-            raise ConfigError("either all free elements have priors, or none")
         problem = FitProblem(
-            objective, params, None if priors[0] is None else priors,
+            objective, params, [p.prior() for p in fit_params.values()],
             observers)
         rng = np.random.default_rng(self._seed)
         start = time.perf_counter()

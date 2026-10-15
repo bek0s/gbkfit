@@ -12,7 +12,7 @@ from gbkfit.fitting.base import FitRun, Fitter
 from gbkfit.fitting.fitters._detail import (
     LeastSquaresFunctions, inside_bounds, relative_step)
 from gbkfit.fitting.fitparams import (
-    FitParam, FitParamBounded, FitParamClass)
+    FitParam, FitParamBounded, FitParamClass, FitParamLeastSquares)
 from gbkfit.fitting.problem import FitProblem
 from gbkfit.fitting.uncertainty import (
     UncertaintyOptions, finite_difference_steps)
@@ -31,8 +31,8 @@ class FitterLMFitLeastSquares(Fitter):
     trust region reflective (method 'least_squares'). GBKFIT computes the
     Jacobian by forward differences (see LeastSquaresFunctions).
 
-    The free elements take a value (where to start), and optional min
-    and max (see FitParamBounded).
+    The free elements take a value (where to start), and optional min,
+    max and a Gaussian or uniform prior (see FitParamLeastSquares).
 
     Parameters
     ----------
@@ -67,7 +67,7 @@ class FitterLMFitLeastSquares(Fitter):
 
     @staticmethod
     def fit_param_class() -> FitParamClass:
-        return FitParamBounded
+        return FitParamLeastSquares
 
     def libraries(self) -> tuple[str, ...]:
         return ('lmfit',)

@@ -12,6 +12,7 @@ import numpy as np
 from gbkfit.fitting.base import FitRun, Fitter
 from gbkfit.fitting.fitparams import (
     FitParam, FitParamBounded, FitParamClass)
+from gbkfit.fitting.priors import Prior
 from gbkfit.fitting.problem import FitProblem
 from gbkfit.fitting.uncertainty import UncertaintyOptions
 from gbkfit.utils.parseutils import ConfigError
@@ -34,6 +35,8 @@ class FitParamCMAES(FitParamBounded):
         The initial value (the centre of the first search).
     minimum, maximum : float, optional
         The bounds (config: min, max; by default none).
+    prior : Prior, optional
+        The prior (see FitParamBounded).
     sigma : float, optional
         The standard deviation of the first search (by default, a quarter
         of the width of the bounds; required without both bounds).
@@ -53,9 +56,10 @@ class FitParamCMAES(FitParamBounded):
             value: float,
             minimum: float = -math.inf,
             maximum: float = math.inf,
+            prior: Prior | None = None,
             sigma: float | None = None
     ):
-        super().__init__(value, minimum, maximum)
+        super().__init__(value, minimum, maximum, prior)
         width = self.maximum() - self.minimum()
         if sigma is None and not math.isfinite(width):
             raise ConfigError(
@@ -173,7 +177,7 @@ class FitterCMAES(Fitter):
         upper = [(p.maximum() - p.value()) / p.sigma() for p in params]
 
         def chi2(zs: list[np.ndarray]) -> list[float]:
-            return problem.chi2_batch(x0 + scale * np.array(zs)).tolist()
+            return problem.cost_batch(x0 + scale * np.array(zs)).tolist()
 
         options: dict[str, Any] = dict(
             bounds=[
