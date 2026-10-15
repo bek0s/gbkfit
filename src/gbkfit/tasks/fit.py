@@ -144,9 +144,12 @@ def _fit(
         _log.info("setting up params...")
         params = _detail.load_params(
             cfg, objective.pdescs(), objective.constants())
-        # Check the free properties for the fitter before the fit starts
+        # Check the free properties for the fitter, and the priors on
+        # several parameters, before the fit starts
         with parseutils.config_path('params', 'properties'):
             fitter.load_fit_params(params)
+        with parseutils.config_path('params'):
+            gbkfit.fitting.joint_prior_residuals(params)
 
     _log.info("model-fitting started")
 

@@ -202,6 +202,27 @@ def test_optimizers_with_a_gaussian_prior_find_the_maximum_a_posteriori(
     assert best.chi2 > alone.chi2 and best.log_prior is not None
 
 
+@pytest.mark.parametrize('fitter', [
+    dict(type='lmfit.least_squares'), dict(type='cmaes')])
+def test_a_prior_on_an_expression_acts_as_the_prior_of_an_element(fitter):
+    # (a Gaussian prior on the expression 'incl', as the prior of incl
+    # in the test above: it moves incl halfway, with an error s / sqrt(2))
+    pytest.importorskip('cma')
+    pytest.importorskip('lmfit')
+    from gbkfit.fitting import fitter_parser
+    from gbkfit.fitting.fitters.lmfit import FitterLMFitLeastSquares
+    objective = mock_objective(DriverHost())
+    params = ParamSpace(objective.pdescs(), bounded_properties())
+    alone = FitterLMFitLeastSquares().fit(objective, params).best()
+    x, s = alone.free['incl'], alone.covariance.std['incl']
+    params = ParamSpace(
+        objective.pdescs(), bounded_properties(),
+        priors=[dict(type='gauss', expr='incl', mean=x + 2 * s, std=s)])
+    best = fitter_parser.load(fitter).fit(objective, params).best()
+    assert best.free['incl'] == pytest.approx(x + s, abs=0.1 * s)
+    assert best.covariance.std['incl'] == pytest.approx(
+        s / np.sqrt(2), rel=0.05)
+
 class StopAfter(FitControl):
     """A control that stops a fit after n evaluations."""
 
