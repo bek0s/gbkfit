@@ -67,7 +67,17 @@ class DriverFFT(abc.ABC):
     fft_shape_threshold : int
         The size up to which an axis of a convolution is padded to a power
         of 2; larger axes are padded to a multiple of it.
+
+    Attributes
+    ----------
+    separable : bool
+        Whether a PSF and an LSF that do not vary along the spectral axis
+        are convolved as those that do, by 2D FFTs of each channel and
+        sums along it, rather than by one 3D FFT of their product: the
+        same convolution, faster on some drivers (see DCubePlan).
     """
+
+    separable: bool = False
 
     @staticmethod
     def fft_convolution_shift(

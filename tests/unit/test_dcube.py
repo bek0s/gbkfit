@@ -17,9 +17,10 @@ from gbkfit.instrument import PSFGauss
     (None, None), (PSFGauss(2), LSFGauss(5))])
 def test_grids(driver, psf, lsf):
     # The high-res cube has scale times the pixels of the low-res cube,
-    # and the padding (edge) of the convolution on both sides. Its
-    # first pixel is the first high-res pixel of the first low-res
-    # pixel, minus the padding.
+    # and the padding (edge) of the convolution on both sides (along z,
+    # only that of the LSF if its FFT convolves separately). Its first
+    # pixel is the first high-res pixel of the first low-res pixel, minus
+    # the padding.
     size = (21, 30, 41)
     step = (0.5, 1.5, 2.0)
     rpix = (5.0, 6.5, 7.5)
@@ -38,9 +39,15 @@ def test_grids(driver, psf, lsf):
     size_hi = np.multiply(size, scale)
     edge_hi = np.zeros(3, int)
     if psf:
-        kernel_size = psf.size(tuple(step_hi[:2])) + (lsf.size(step_hi[2]),)
-        size_hi, edge_hi = driver.fft(np.float32).fft_convolution_shape(
+        lsf_size = lsf.size(step_hi[2])
+        kernel_size = psf.size(tuple(step_hi[:2])) + (lsf_size,)
+        fft = driver.fft(np.float64)
+        size_z = size_hi[2] + lsf_size - 1
+        size_hi, edge_hi = fft.fft_convolution_shape(
             tuple(size_hi), kernel_size)
+        if fft.separable:
+            size_hi = tuple(size_hi[:2]) + (size_z,)
+            edge_hi = tuple(edge_hi[:2]) + (lsf_size // 2,)
     zero_hi = zero - np.divide(step, 2) - (np.array(edge_hi) - 0.5) * step_hi
     assert dcube.size() == size
     assert dcube.step() == step
