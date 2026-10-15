@@ -120,12 +120,16 @@ class DriverFFT(abc.ABC):
             self,
             kernel: np.ndarray,
             shape: tuple[int, int, int],
-            axes: tuple[int, ...] = (0, 1, 2)
+            axes: tuple[int, ...] = (0, 1, 2),
+            dtype: npt.DTypeLike | None = None
     ) -> FFTConvolution:
         """
         Return the convolution of the cubes of a shape (z, y, x) by a
         kernel: of the whole cubes, or of each channel (the first axis) by
-        its image.
+        its image. The transforms are of the floating type of the FFT
+        (dtype()), the cubes of that or a less precise one (e.g. float32
+        cubes, with float64 transforms that do not spread the rounding
+        of float32 ones over the cubes).
 
         Parameters
         ----------
@@ -138,12 +142,16 @@ class DriverFFT(abc.ABC):
             The shape of the cubes.
         axes : tuple of int, optional
             The axes of the convolution: (0, 1, 2) (by default), or (1, 2).
+        dtype : dtype, optional
+            The floating type of the cubes: that of the FFT by default.
 
         Raises
         ------
         ValueError
-            If the axes are not one of those, or the kernel does not have
-            the shape or the floating type.
+            If the axes are not one of those, the kernel does not have the
+            shape or the floating type of the FFT, or the cubes are more
+            precise than the FFT or not of a floating type of the native
+            modules.
         """
         shape = tuple(int(n) for n in shape)
         axes = tuple(axes)
@@ -160,7 +168,15 @@ class DriverFFT(abc.ABC):
             raise ValueError(
                 f"the kernel must be of the type of the FFT, "
                 f"{self.dtype().name}; it is {kernel.dtype.name}")
-        return self._convolution(np.ascontiguousarray(kernel), shape, axes)
+        dtype = self.dtype() if dtype is None else np.dtype(dtype)
+        if dtype not in _NATIVE_CLASS_SUFFIXES \
+                or dtype.itemsize > self.dtype().itemsize:
+            raise ValueError(
+                f"the cubes must be of a floating type of the native "
+                f"modules no more precise than the FFT "
+                f"({self.dtype().name}); they are {dtype.name}")
+        return self._convolution(
+            np.ascontiguousarray(kernel), shape, axes, dtype)
 
     @abc.abstractmethod
     def dtype(self) -> np.dtype:
@@ -171,7 +187,8 @@ class DriverFFT(abc.ABC):
             self,
             kernel: np.ndarray,
             shape: tuple[int, int, int],
-            axes: tuple[int, ...]
+            axes: tuple[int, ...],
+            dtype: np.dtype
     ) -> FFTConvolution:
         """Return the convolution (see convolution), of checked arguments."""
 

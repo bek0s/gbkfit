@@ -27,10 +27,10 @@ __all__ = [
 ]
 
 
-def _check_dtype(dtype: npt.DTypeLike) -> np.dtype:
+def _check_dtype(dtype: npt.DTypeLike, name: str = 'dtype') -> np.dtype:
     """
-    Return the floating type of a model, or raise ConfigError if the
-    native modules have no kernels for it.
+    Return a floating type of a model (the option name), or raise
+    ConfigError if the native modules have no kernels for it.
     """
     supported = Driver.dtypes()
     try:
@@ -39,7 +39,7 @@ def _check_dtype(dtype: npt.DTypeLike) -> np.dtype:
         result = None
     if result not in supported:
         raise ConfigError(
-            f"dtype must be one of {[dt.name for dt in supported]}; it is "
+            f"{name} must be one of {[dt.name for dt in supported]}; it is "
             f"{dtype!r}")
     return result
 
@@ -106,7 +106,15 @@ class Observation(parseutils.Serializable):
         How many times the model is oversampled along each axis of the
         data (an accuracy setting); 1 by default.
     dtype : str, optional
-        The floating type of the model: 'float32' or 'float64'.
+        The floating type of the model: 'float32' (by default) or
+        'float64'.
+    fft_dtype : str, optional
+        The floating type of the FFT convolutions of the model by the PSF
+        and the LSF: 'float64' (by default) or 'float32' (faster, for a
+        float32 model only). The rounding of an FFT in float32 adds about
+        1e-7 to 1e-6 of the brightest values of the cube to every value,
+        which spoils the faint ones (e.g. their moments, and the
+        finite-difference derivatives of fits).
     name : str, optional
         Its name, which prefixes its extra outputs instead of its position
         (see ObservationGroup).
@@ -123,8 +131,9 @@ class Observation(parseutils.Serializable):
         likelihood has no residual for them (see LikelihoodGaussian), its
         likelihood has free amplitudes and the observable has no spectra
         or it has a calibration, the observable cannot be seen
-        through the instrument (see Observable.check_instrument), or the
-        dtype is not one of the native modules (see Driver.dtypes).
+        through the instrument (see Observable.check_instrument), the
+        dtype or the fft_dtype is not one of the native modules (see
+        Driver.dtypes), or the fft_dtype is less precise than the dtype.
     """
 
     @classmethod
@@ -247,7 +256,8 @@ class Observation(parseutils.Serializable):
             observable=observable_parser.dump(
                 self._observable, data=self._data, **kwargs),
             scale=self._scale,
-            dtype=self._dtype.name)
+            dtype=self._dtype.name,
+            fft_dtype=self._fft_dtype.name)
 
     def __init__(
             self,
@@ -266,6 +276,7 @@ class Observation(parseutils.Serializable):
             likelihood: Likelihood | None = None,
             scale: Sequence[int] | None = None,
             dtype: str = 'float32',
+            fft_dtype: str = 'float64',
             name: str | None = None
     ):
         parseutils.check_name(name)
@@ -345,6 +356,11 @@ class Observation(parseutils.Serializable):
         self._likelihood = likelihood
         self._scale = scale
         self._dtype = _check_dtype(dtype)
+        self._fft_dtype = _check_dtype(fft_dtype, 'fft_dtype')
+        if self._fft_dtype.itemsize < self._dtype.itemsize:
+            raise ConfigError(
+                f"the fft_dtype ({self._fft_dtype.name}) is less precise "
+                f"than the dtype ({self._dtype.name})")
         self._name = name
 
     def name(self) -> str | None:
@@ -428,6 +444,10 @@ class Observation(parseutils.Serializable):
         """Return the floating type of the model."""
         return self._dtype
 
+    def fft_dtype(self) -> np.dtype:
+        """Return the floating type of the FFT convolutions of the model."""
+        return self._fft_dtype
+
     def plan(self, scene: Scene) -> ObservablePlan:
         """
         Plan the evaluation of what it sees (see ObservationGroup).
@@ -444,7 +464,7 @@ class Observation(parseutils.Serializable):
         """
         return self._observable.plan(
             self._driver, scene, self._foreground, self._instrument,
-            self._scale, self._dtype, self._weights,
+            self._scale, self._dtype, self._fft_dtype, self._weights,
             self._calibration_param())
 
 

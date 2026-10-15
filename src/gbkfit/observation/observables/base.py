@@ -310,6 +310,7 @@ class Observable(parseutils.TypedSerializable, abc.ABC):
             instrument: Instrument,
             scale: Sequence[int],
             dtype: np.dtype,
+            fft_dtype: np.dtype,
             weights: 'Weights | None',
             calibration: str | None
     ) -> 'ObservablePlan':
@@ -332,6 +333,9 @@ class Observable(parseutils.TypedSerializable, abc.ABC):
             data.
         dtype : np.dtype
             The floating type of the model.
+        fft_dtype : np.dtype
+            The floating type of the FFT convolutions of the model (at
+            least as precise as dtype).
         weights : Weights, optional
             The spatial weights of the data.
         calibration : str, optional

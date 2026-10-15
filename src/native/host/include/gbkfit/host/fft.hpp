@@ -4,6 +4,7 @@
 #include <complex>
 #include <string>
 #include <thread>
+#include <type_traits>
 #include <vector>
 
 #include <pocketfft_hdronly.h>
@@ -20,17 +21,20 @@ namespace nb = nanobind;
 // its image (axes {1, 2}; an image for each channel, or one for all).
 // The spectrum of the kernel is made once, and the kernel is not kept;
 // the spectra of the cubes go in one buffer, kept for the next cube.
-template<typename T>
+// The cubes are of type T, and the transforms of type U: T, or a more
+// precise one; then each cube is copied into the buffer, as real rows
+// padded to the length of its complex rows, transformed there in place,
+// and copied back.
+template<typename T, typename U>
 class FFTConvolution
 {
 public:
 
-    using RealType = T;
-    using ComplexType = std::complex<T>;
+    using RealType = U;
+    using ComplexType = std::complex<U>;
 
-    using Cube = bindings::Array<nb::device::cpu, RealType, nb::ndim<3>>;
-    using Kernel = bindings::Array<
-            nb::device::cpu, const RealType, nb::ndim<3>>;
+    using Cube = bindings::Array<nb::device::cpu, T, nb::ndim<3>>;
+    using Kernel = bindings::Array<nb::device::cpu, const U, nb::ndim<3>>;
 
     FFTConvolution(
             Kernel kernel, std::array<int, 3> shape, pocketfft::shape_t axes)
@@ -51,12 +55,13 @@ public:
                         && kernel_shape[2] == m_shape[2]),
                 "the kernel must have the shape of the cubes, or one image "
                 "for all their channels (axes (1, 2))");
-        m_nfactor = T{1} / (whole
+        m_nfactor = U{1} / (whole
                 ? m_shape[0] * m_shape[1] * m_shape[2]
                 : m_shape[1] * m_shape[2]);
         m_kernel_spectrum.resize(size(complex_shape(kernel_shape)));
         m_spectrum.resize(size(complex_shape(m_shape)));
-        r2c(kernel_shape, kernel.data(), m_kernel_spectrum.data());
+        r2c(kernel_shape, real_strides(kernel_shape, kernel_shape[2]),
+            kernel.data(), m_kernel_spectrum.data());
     }
 
     void
@@ -66,32 +71,32 @@ public:
                 pocketfft::shape_t{cube.shape(0), cube.shape(1),
                                    cube.shape(2)} == m_shape,
                 "the cube must have the shape of the convolution");
-        r2c(m_shape, cube.data(), m_spectrum.data());
-        // (one image of the kernel is for all the channels)
-        const auto channels = m_shape[0];
-        const auto plane = m_spectrum.size() / channels;
-        if (m_kernel_spectrum.size() == m_spectrum.size())
+        const auto columns = m_shape[2];
+        if constexpr (std::is_same_v<T, U>)
         {
-            kernels::math_complex_multiply_and_scale<T>(
-                    m_spectrum.data(), m_kernel_spectrum.data(),
-                    int(m_spectrum.size()), m_nfactor);
+            const auto strides = real_strides(m_shape, columns);
+            r2c(m_shape, strides, cube.data(), m_spectrum.data());
+            multiply();
+            c2r(strides, cube.data());
         }
         else
         {
-            for (std::size_t z = 0; z < channels; ++z)
-            {
-                kernels::math_complex_multiply_and_scale<T>(
-                        m_spectrum.data() + z * plane,
-                        m_kernel_spectrum.data(), int(plane), m_nfactor);
-            }
+            const auto padded = 2 * (columns / 2 + 1);
+            const auto strides = real_strides(m_shape, padded);
+            const auto buffer = reinterpret_cast<RealType*>(
+                    m_spectrum.data());
+            copy_rows(cube.data(), columns, buffer, padded);
+            r2c(m_shape, strides, buffer, m_spectrum.data());
+            multiply();
+            c2r(strides, buffer);
+            copy_rows(buffer, padded, cube.data(), columns);
         }
-        c2r(m_spectrum.data(), cube.data());
     }
 
     static void
-    bind(nb::module_& m, const std::string& suffix)
+    bind(nb::module_& m, const std::string& name)
     {
-        nb::class_<FFTConvolution>(m, ("FFTConvolution" + suffix).c_str())
+        nb::class_<FFTConvolution>(m, name.c_str())
                 .def(nb::init<
                                 Kernel, std::array<int, 3>,
                                 pocketfft::shape_t>(),
@@ -117,17 +122,29 @@ private:
         return {shape[0], shape[1], shape[2] / 2 + 1};
     }
 
-    // The strides (in bytes) of a row-major array of a shape
-    template<typename U>
+    // The strides (in bytes) of a row-major array of a shape whose rows
+    // are row values apart
+    template<typename V>
     static pocketfft::stride_t
-    strides(const pocketfft::shape_t& shape)
+    strides(const pocketfft::shape_t& shape, std::size_t row)
     {
-        const auto row = shape[2] * sizeof(U);
-        const auto plane = shape[1] * row;
         return {
-            std::ptrdiff_t(plane),
-            std::ptrdiff_t(row),
-            std::ptrdiff_t(sizeof(U))};
+            std::ptrdiff_t(shape[1] * row * sizeof(V)),
+            std::ptrdiff_t(row * sizeof(V)),
+            std::ptrdiff_t(sizeof(V))};
+    }
+
+    static pocketfft::stride_t
+    real_strides(const pocketfft::shape_t& shape, std::size_t row)
+    {
+        return strides<RealType>(shape, row);
+    }
+
+    static pocketfft::stride_t
+    complex_strides(const pocketfft::shape_t& shape)
+    {
+        const auto shape_c = complex_shape(shape);
+        return strides<ComplexType>(shape_c, shape_c[2]);
     }
 
     static std::size_t
@@ -136,39 +153,83 @@ private:
         return std::thread::hardware_concurrency();
     }
 
-    // The transform of a real array of a shape along the axes (the last
-    // one is the axis of the non-redundant half)
+    // Copy the rows of a cube of the shape between two arrays whose rows
+    // are src_row and dst_row values apart, converting their type
+    template<typename From, typename To>
     void
-    r2c(const pocketfft::shape_t& shape,
+    copy_rows(
+            const From* src, std::size_t src_row,
+            To* dst, std::size_t dst_row) const
+    {
+        const auto rows = m_shape[0] * m_shape[1];
+        const auto columns = m_shape[2];
+        // Parallelization: per row
+        #pragma omp parallel for
+        for (std::size_t i = 0; i < rows; ++i)
+        {
+            for (std::size_t x = 0; x < columns; ++x)
+            {
+                dst[i * dst_row + x] = To(src[i * src_row + x]);
+            }
+        }
+    }
+
+    // The transform of a real array of a shape along the axes (the last
+    // one is the axis of the non-redundant half); in place if data_r is
+    // in the memory of data_c, as rows padded to their length
+    void
+    r2c(const pocketfft::shape_t& shape, const pocketfft::stride_t& strides_r,
         const RealType* data_r, ComplexType* data_c) const
     {
         pocketfft::r2c(
-                shape, strides<RealType>(shape),
-                strides<ComplexType>(complex_shape(shape)),
-                m_axes, pocketfft::FORWARD, data_r, data_c, T{1}, nthreads());
+                shape, strides_r, complex_strides(shape), m_axes,
+                pocketfft::FORWARD, data_r, data_c, U{1}, nthreads());
+    }
+
+    // The product of the spectrum with that of the kernel, scaled by the
+    // normalisation of the inverse transform (one image of the kernel is
+    // for all the channels)
+    void
+    multiply()
+    {
+        if (m_kernel_spectrum.size() == m_spectrum.size())
+        {
+            kernels::math_complex_multiply_and_scale<U>(
+                    m_spectrum.data(), m_kernel_spectrum.data(),
+                    int(m_spectrum.size()), m_nfactor);
+            return;
+        }
+        const auto channels = m_shape[0];
+        const auto plane = m_spectrum.size() / channels;
+        for (std::size_t z = 0; z < channels; ++z)
+        {
+            kernels::math_complex_multiply_and_scale<U>(
+                    m_spectrum.data() + z * plane,
+                    m_kernel_spectrum.data(), int(plane), m_nfactor);
+        }
     }
 
     // The inverse of r2c (unnormalised) for the cubes: along the axes but
-    // the last in place, then along the last one into the real cube
+    // the last in place, then along the last one into the real array
     // (pocketfft's c2r along several axes copies the spectrum first)
     void
-    c2r(ComplexType* data_c, RealType* data_r) const
+    c2r(const pocketfft::stride_t& strides_r, RealType* data_r)
     {
-        const auto shape_c = complex_shape(m_shape);
-        const auto strides_c = strides<ComplexType>(shape_c);
+        const auto strides_c = complex_strides(m_shape);
         const pocketfft::shape_t others(m_axes.begin(), m_axes.end() - 1);
         pocketfft::c2c(
-                shape_c, strides_c, strides_c, others, pocketfft::BACKWARD,
-                data_c, data_c, T{1}, nthreads());
+                complex_shape(m_shape), strides_c, strides_c, others,
+                pocketfft::BACKWARD, m_spectrum.data(), m_spectrum.data(),
+                U{1}, nthreads());
         pocketfft::c2r(
-                m_shape, strides_c, strides<RealType>(m_shape),
-                m_axes.back(), pocketfft::BACKWARD, data_c, data_r, T{1},
+                m_shape, strides_c, strides_r, m_axes.back(),
+                pocketfft::BACKWARD, m_spectrum.data(), data_r, U{1},
                 nthreads());
     }
 
     pocketfft::shape_t m_shape;
     pocketfft::shape_t m_axes;
-    T m_nfactor;
+    U m_nfactor;
     std::vector<ComplexType> m_kernel_spectrum;
     std::vector<ComplexType> m_spectrum;
 };

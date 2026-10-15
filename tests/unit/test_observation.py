@@ -70,3 +70,10 @@ def test_dtypes_without_kernels_are_errors(dtype):
     observable = PixelBrightness.from_data(DatasetPixelBrightness(dataset))
     with pytest.raises(ConfigError, match="dtype must be one of"):
         Observation(observable, Flat(), dtype=dtype)
+
+
+def test_ffts_are_float64_by_default_and_not_less_precise_than_models():
+    observable = PixelBrightness(size=(8, 8))
+    assert Observation(observable, Flat()).fft_dtype() == np.float64
+    with pytest.raises(ConfigError, match=r"fft_dtype \(float32\) is less"):
+        Observation(observable, Flat(), dtype='float64', fft_dtype='float32')

@@ -167,6 +167,7 @@ class PixelBrightness(Observable):
             instrument: Instrument,
             scale: Sequence[int],
             dtype: np.dtype,
+            fft_dtype: np.dtype,
             weights: 'Weights | None',
             calibration: str | None
     ) -> 'PixelBrightnessPlan':
@@ -186,7 +187,8 @@ class PixelBrightness(Observable):
             smooth_weights=False,
             mask_cutoff=self._mask_cutoff,
             mask_apply=self._mask_apply,
-            dtype=dtype)
+            dtype=dtype,
+            fft_dtype=fft_dtype)
         return PixelBrightnessPlan(
             dcube, driver, scene, foreground, dtype, weights, calibration)
 

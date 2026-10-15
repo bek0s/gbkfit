@@ -16,6 +16,7 @@ galaxies:
     emission: {type: lines}
 observations:
 - line_of_sight: {type: grid}
+  fft_dtype: float32
   observable:
     type: pixel_spectra
     size: [48, 48, 50]

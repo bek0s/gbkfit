@@ -238,6 +238,7 @@ class RegionSpectra(Observable):
             instrument: Instrument,
             scale: Sequence[int],
             dtype: np.dtype,
+            fft_dtype: np.dtype,
             weights: 'Weights | None',
             calibration: str | None
     ) -> 'RegionSpectraPlan':
@@ -260,7 +261,8 @@ class RegionSpectra(Observable):
             smooth_weights=False,
             mask_cutoff=None,
             mask_apply=False,
-            dtype=dtype)
+            dtype=dtype,
+            fft_dtype=fft_dtype)
         return RegionSpectraPlan(
             self._weights, dcube, driver, scene, foreground, dtype,
             calibration)

@@ -20,7 +20,7 @@ bind_precision(nb::module_& m, const std::string& suffix)
     bindings::DModel<T, Device, Kernels>::bind(m, suffix);
     bindings::GModel<T, Device, Kernels>::bind(m, suffix);
     bindings::Objective<T, Device, Kernels>::bind(m, suffix);
-    host::FFTConvolution<T>::bind(m, suffix);
+    host::FFTConvolution<T, T>::bind(m, "FFTConvolution" + suffix);
 }
 
 NB_MODULE(EXTENSION_NAME, m)
@@ -31,4 +31,7 @@ NB_MODULE(EXTENSION_NAME, m)
     // (suffix f64)
     bind_precision<float, Device>(m, "f32");
     bind_precision<double, Device>(m, "f64");
+
+    // The convolutions of float32 cubes by float64 transforms
+    host::FFTConvolution<float, double>::bind(m, "FFTConvolutionf32f64");
 }

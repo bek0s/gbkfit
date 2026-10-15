@@ -23,6 +23,11 @@ ratios of small sums, by more than the tolerance of the tests: up to
 and more at the noise of the convolutions, where one spaxel at the
 cutoff of moment 0 became masked.
 
+The configurations declare float32 FFTs (fft_dtype), with which the
+references were made: since 2026-10-15 they are float64 by default,
+which changes the moments of the faint spaxels by the noise of the
+float32 ones (up to 1e-4 of moment 2 where moment 0 is above 1%).
+
 Usage:
 
     python make_references.py PYTHON
