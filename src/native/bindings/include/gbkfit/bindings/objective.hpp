@@ -1,6 +1,7 @@
 #pragma once
 
 #include "gbkfit/bindings/arrays.hpp"
+#include "gbkfit/bindings/gil.hpp"
 
 namespace gbkfit::bindings {
 
@@ -79,6 +80,7 @@ struct Objective
         nb::class_<Objective>(m, ("Objective" + suffix).c_str())
                 .def(nb::init<>())
                 .def_static("residual", &residual,
+                        ReleaseGil(),
                         nb::arg("obs_d").noconvert(),
                         nb::arg("obs_e").noconvert().none(),
                         nb::arg("obs_m").noconvert().none(),
@@ -90,10 +92,12 @@ struct Objective
                         nb::arg("limit_error"),
                         nb::arg("res").noconvert())
                 .def_static("residual_sum", &residual_sum,
+                        ReleaseGil(),
                         nb::arg("residual").noconvert(),
                         nb::arg("squared"),
                         nb::arg("sum").noconvert())
                 .def_static("amplitude_sums", &amplitude_sums,
+                        ReleaseGil(),
                         nb::arg("obs_d").noconvert(),
                         nb::arg("obs_e").noconvert().none(),
                         nb::arg("obs_m").noconvert().none(),

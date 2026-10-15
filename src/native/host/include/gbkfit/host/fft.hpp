@@ -10,6 +10,7 @@
 #include <pocketfft_hdronly.h>
 
 #include "gbkfit/bindings/arrays.hpp"
+#include "gbkfit/bindings/gil.hpp"
 #include "gbkfit/host/kernels.hpp"
 
 namespace gbkfit::host {
@@ -104,6 +105,7 @@ public:
                         nb::arg("shape"),
                         nb::arg("axes"))
                 .def("__call__", &FFTConvolution::convolve,
+                        bindings::ReleaseGil(),
                         nb::arg("cube").noconvert());
     }
 

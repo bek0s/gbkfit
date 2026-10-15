@@ -14,6 +14,7 @@
 #include <gbkfit/gmodel/transfer.hpp>
 
 #include "gbkfit/bindings/arrays.hpp"
+#include "gbkfit/bindings/gil.hpp"
 
 namespace gbkfit::bindings {
 
@@ -440,18 +441,22 @@ struct GModel
         auto cls = nb::class_<GModel>(m, ("GModel" + suffix).c_str())
                 .def(nb::init<>());
         std::apply([&](auto&&... args) {
-            cls.def_static("smdisk_evaluate", &smdisk_evaluate, args...);
+            cls.def_static(
+                    "smdisk_evaluate", &smdisk_evaluate, ReleaseGil(), args...);
         }, evaluate_args(nb::arg("disk")));
         std::apply([&](auto&&... args) {
-            cls.def_static("mcdisk_evaluate", &mcdisk_evaluate, args...);
+            cls.def_static(
+                    "mcdisk_evaluate", &mcdisk_evaluate, ReleaseGil(), args...);
         }, evaluate_args(
                 nb::arg("disk"), nb::arg("cloud_flux").noconvert(), nb::arg("seed"),
                 nb::arg("nclouds"),
                 nb::arg("ncloudscsum").noconvert(),
                 nb::arg("has_analytical_integral").noconvert()));
         cls.def_static("opacity_accumulate", &opacity_accumulate,
+                ReleaseGil(),
                 nb::arg("spat_size"), nb::arg("opacity").noconvert());
         cls.def_static("transfer_march", &transfer_march,
+                ReleaseGil(),
                 nb::arg("emitters"), nb::arg("spat_size"),
                 nb::arg("slab_zero"), nb::arg("depth_size"),
                 nb::arg("image"), nb::arg("spec_size"),
@@ -462,11 +467,13 @@ struct GModel
                 nb::arg("tau").noconvert().none() = nb::none(),
                 nb::arg("out").noconvert());
         cls.def_static("disk_ptraits_evaluate", &disk_ptraits_evaluate,
+                ReleaseGil(),
                 nb::arg("disk"), nb::arg("kind"),
                 nb::arg("r").noconvert(), nb::arg("theta").noconvert(),
                 nb::arg("out").noconvert(),
                 nb::arg("incl").none() = nb::none());
         cls.def_static("disk_htraits_evaluate", &disk_htraits_evaluate,
+                ReleaseGil(),
                 nb::arg("disk"), nb::arg("kind"),
                 nb::arg("r").noconvert(), nb::arg("z").noconvert(),
                 nb::arg("out").noconvert());

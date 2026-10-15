@@ -1,6 +1,7 @@
 #pragma once
 
 #include "gbkfit/bindings/arrays.hpp"
+#include "gbkfit/bindings/gil.hpp"
 
 namespace gbkfit::bindings {
 
@@ -180,19 +181,23 @@ struct DModel
         nb::class_<DModel>(m, ("DModel" + suffix).c_str())
                 .def(nb::init<>())
                 .def_static("dcube_downscale", &dcube_downscale,
+                        ReleaseGil(),
                         nb::arg("scale"), nb::arg("offset"),
                         nb::arg("src").noconvert(),
                         nb::arg("dst").noconvert())
                 .def_static("dcube_convolve_z", &dcube_convolve_z,
+                        ReleaseGil(),
                         nb::arg("kernels").noconvert(),
                         nb::arg("cube").noconvert(),
                         nb::arg("scratch").noconvert())
                 .def_static("dcube_mask", &dcube_mask,
+                        ReleaseGil(),
                         nb::arg("cutoff"), nb::arg("apply"),
                         nb::arg("dcube_d").noconvert(),
                         nb::arg("dcube_m").noconvert().none(),
                         nb::arg("dcube_w").noconvert().none())
                 .def_static("mmaps_moments", &mmaps_moments,
+                        ReleaseGil(),
                         nb::arg("step"), nb::arg("zero"),
                         nb::arg("dcube_d").noconvert(),
                         nb::arg("dcube_w").noconvert().none(),
@@ -202,6 +207,7 @@ struct DModel
                         nb::arg("mmaps_m").noconvert(),
                         nb::arg("mmaps_w").noconvert().none())
                 .def_static("mmaps_gaussian", &mmaps_gaussian,
+                        ReleaseGil(),
                         nb::arg("step"), nb::arg("zero"),
                         nb::arg("dcube_d").noconvert(),
                         nb::arg("cutoff"),
@@ -209,11 +215,13 @@ struct DModel
                         nb::arg("mmaps_d").noconvert(),
                         nb::arg("mmaps_m").noconvert())
                 .def_static("lens_resample", &lens_resample,
+                        ReleaseGil(),
                         nb::arg("source_x").noconvert(),
                         nb::arg("source_y").noconvert(),
                         nb::arg("source").noconvert(),
                         nb::arg("image").noconvert())
                 .def_static("regions_sum", &regions_sum,
+                        ReleaseGil(),
                         nb::arg("indptr").noconvert(),
                         nb::arg("indices").noconvert(),
                         nb::arg("weights").noconvert(),
