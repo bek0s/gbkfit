@@ -59,33 +59,34 @@ def check_against_reference(ndarrays_regression, basename, arrays):
         arrays, basename=basename, tolerances=tolerances)
 
 
-def test_fft_roundtrip(driver):
-    memory = Memory(driver)
-    fft = driver.fft(DTYPE)
-    shape = (16, 24, 32)
-    data = smooth_cube(shape)
-    data_r = memory.to_device(data)
-    data_c = memory.to_device(
-        np.zeros(fft.fft_complex_shape(shape), np.complex64))
-    fft.fft_r2c(data_r, data_c)
-    fft.fft_c2r(data_c, data_r)
-    result = memory.to_host(data_r) / data.size
-    np.testing.assert_allclose(result, data, rtol=1e-5, atol=1e-5)
-
-
 def test_fft_convolve(driver, ndarrays_regression):
     memory = Memory(driver)
-    fft = driver.fft(DTYPE)
     shape = (16, 24, 32)
     kernel = np.zeros(shape, DTYPE)
     kernel[8, 12, 16] = 0.5
     kernel[9, 12, 16] = 0.25
     kernel[8, 13, 17] = 0.25
     data = memory.to_device(smooth_cube(shape))
-    fft.fft_convolve_cached(data, memory.to_device(kernel))
+    driver.fft(DTYPE).convolution(kernel, shape)(data)
     check_against_reference(
         ndarrays_regression, 'fft_convolve',
         dict(result=memory.to_host(data)))
+
+
+def test_fft_convolve_channels(driver):
+    # Each channel by one image is the cube by the image at the first
+    # channel (the centre of a kernel)
+    memory = Memory(driver)
+    fft = driver.fft(DTYPE)
+    shape = (16, 24, 32)
+    kernel = np.zeros(shape, DTYPE)
+    kernel[0, :3, :2] = [[0.4, 0.1], [0.2, 0.1], [0.1, 0.1]]
+    channels = memory.to_device(smooth_cube(shape))
+    cube = memory.to_device(smooth_cube(shape))
+    fft.convolution(kernel[:1], shape, axes=(1, 2))(channels)
+    fft.convolution(kernel, shape)(cube)
+    np.testing.assert_allclose(
+        memory.to_host(channels), memory.to_host(cube), rtol=1e-5)
 
 
 def test_dcube_downscale(driver, ndarrays_regression):
