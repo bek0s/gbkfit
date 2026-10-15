@@ -28,8 +28,10 @@ class Objective:
     have a value but the model none (NaN, e.g. the velocity of a spectrum
     without flux), the residual is the missing_residual of the
     likelihood (times the weight of the item): a model must not lower the
-    chi-square by having no values. Each observation checks that its
-    data are of the form of its model (see Observation).
+    chi-square by having no values. A data item with an upper limit
+    (see LikelihoodGaussian) gives its masked values the residual of a
+    non-detection instead. Each observation checks that its data are of
+    the form of its model (see Observation).
 
     A likelihood with amplitudes of spectra (see LikelihoodGaussian)
     scales each spectrum of the model by its best amplitude before the
@@ -92,6 +94,12 @@ class Objective:
         missing = [obs.likelihood().missing_residual() for obs in observations]
         self._missing_residuals = tuple(
             np.nan if residual is None else residual for residual in missing)
+        # The upper limit of each data item where it is masked, and its
+        # noise (NaN for none; see LikelihoodGaussian)
+        self._upper_limits = tuple(
+            {key: obs.likelihood().upper_limit(key) or (np.nan, np.nan)
+             for key in obs.observable().keys()}
+            for obs in observations)
         # The data item of the spectra of amplitudes of each observation,
         # if any, and the standard deviation of their prior; the sums of
         # each spectrum (A and B, see LikelihoodGaussian) on the host (h)
@@ -321,13 +329,16 @@ class Objective:
         """
         Return the number of residuals that count: those of the values the
         data do not mask (the values the model does not have count too,
-        with the missing_residual of their likelihood), and that of the
-        prior of each amplitude of a spectrum, if any.
+        with the missing_residual of their likelihood), all values of the
+        data items with upper limits, and that of the prior of each
+        amplitude of a spectrum, if any.
         """
         return sum(
-            int(np.count_nonzero(dataset[key].mask()))
-            for dataset, obs in zip(
-                self._datasets, self._group.observations())
+            int(dataset[key].mask().size) if not np.isnan(limits[key][0])
+            else int(np.count_nonzero(dataset[key].mask()))
+            for dataset, obs, limits in zip(
+                self._datasets, self._group.observations(),
+                self._upper_limits)
             for key in obs.observable().keys()) + self.nnuisance()
 
     def _nprior(self, i: int) -> int:
@@ -485,6 +496,7 @@ class Objective:
                         model_data[i][key]['w'],
                         weight,
                         self._missing_residuals[i],
+                        *self._upper_limits[i][key],
                         self._d_residual_nddata[i][key])
 
     def _scale_spectra(

@@ -18,14 +18,15 @@ struct Objective
     using Sums = Array<Device, double>;
 
     // (mdl_d - obs_d) / obs_e * mdl_w * obs_m * weight, where all arrays
-    // but obs_d and mdl_d are optional; 0 where the data are masked, and
-    // missing * weight where the model has no value (NaN) and the data
-    // have one (see gbkfit::objective_residual)
+    // but obs_d and mdl_d are optional; 0 where the data are masked (or,
+    // with a limit, not NaN, that of an upper limit of noise
+    // limit_error), and missing * weight where the model has no value
+    // (NaN) and the data have one (see gbkfit::objective_residual)
     static void
     residual(
             ConstData obs_d, ConstData obs_e, ConstData obs_m,
             ConstData mdl_d, ConstData mdl_w,
-            T weight, T missing, Data res)
+            T weight, T missing, T limit, T limit_error, Data res)
     {
         require_same_shape(obs_e, obs_d, "obs_e", "obs_d");
         require_same_shape(obs_m, obs_d, "obs_m", "obs_d");
@@ -35,7 +36,8 @@ struct Objective
         Kernels::objective_residual(
                 obs_d.data(), data(obs_e), data(obs_m),
                 mdl_d.data(), data(mdl_w),
-                int(obs_d.size()), weight, missing, res.data());
+                int(obs_d.size()), weight, missing, limit, limit_error,
+                res.data());
     }
 
     // The sum of the squared or absolute residuals
@@ -84,6 +86,8 @@ struct Objective
                         nb::arg("mdl_w").noconvert().none(),
                         nb::arg("weight"),
                         nb::arg("missing"),
+                        nb::arg("limit"),
+                        nb::arg("limit_error"),
                         nb::arg("res").noconvert())
                 .def_static("residual_sum", &residual_sum,
                         nb::arg("residual").noconvert(),

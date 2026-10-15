@@ -225,13 +225,14 @@ template<typename T> void
 Wrapper<T>::objective_residual(
         const T* obs_d, const T* obs_e, const T* obs_m,
         const T* mdl_d, const T* mdl_w,
-        int size, T weight, T missing, T* res)
+        int size, T weight, T missing, T limit, T limit_error,
+        T* res)
 {
     const int n = size;
     launch("objective_residual", n, kernels::objective_residual<T>,
             obs_d, obs_e, obs_m,
             mdl_d, mdl_w,
-            size, weight, missing, res);
+            size, weight, missing, limit, limit_error, res);
 }
 
 // The term of a residual sum, in double precision

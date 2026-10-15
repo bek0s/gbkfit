@@ -77,7 +77,8 @@ struct Wrapper
     objective_residual(
             const T* obs_d, const T* obs_e, const T* obs_m,
             const T* mdl_d, const T* mdl_w,
-            int size, T weight, T missing, T* res);
+            int size, T weight, T missing, T limit, T limit_error,
+            T* res);
 
     static void
     objective_residual_sum(
