@@ -4,7 +4,7 @@ import numpy as np
 import scipy.special
 
 from gbkfit.dataset import Dataset
-from gbkfit.driver import DeviceArray
+from gbkfit.driver import DeviceArray, Driver
 from gbkfit.observation import ObservationGroup
 from gbkfit.params import ParamDesc, ParamValues
 from gbkfit.utils import iterutils
@@ -134,6 +134,15 @@ class Objective:
     def group(self) -> ObservationGroup:
         """Return the observations."""
         return self._group
+
+    def with_driver(self, driver: Driver) -> 'Objective':
+        """
+        Return a copy of it with all its work on another driver: its
+        models (see ObservationGroup.with_driver) and its residuals. The
+        copy shares the data; its memory is its own. Copies on several
+        devices evaluate several points at once.
+        """
+        return Objective(self._group.with_driver(driver))
 
     def pdescs(self) -> dict[str, ParamDesc]:
         """Return the parameters of the models, by name (prefixed)."""

@@ -2,6 +2,7 @@
 Galaxies: their components and their mass, at one distance.
 """
 
+import copy
 from collections.abc import Mapping, Sequence
 from typing import Any, Self
 
@@ -232,6 +233,16 @@ class Galaxy(parseutils.Serializable):
     def driver(self) -> Driver:
         """Return the driver of its own computations (its gravity)."""
         return self._driver
+
+    def with_driver(self, driver: Driver) -> Self:
+        """
+        Return a copy of it whose gravity is evaluated on another driver;
+        the copy shares the rest (e.g. copies of an objective on several
+        devices; see Objective.with_driver).
+        """
+        galaxy = copy.copy(self)
+        galaxy._driver = driver
+        return galaxy
 
     def pdescs(self) -> dict[str, ParamDesc]:
         """Return its parameters, by name (see the class)."""
