@@ -12,7 +12,7 @@ import numpy.typing as npt
 import scipy.special
 import scipy.stats
 
-from gbkfit.utils import parseutils
+from gbkfit.utils import funcutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
 
 
@@ -53,15 +53,20 @@ class Prior(parseutils.TypedSerializable, abc.ABC):
 
     The support (minimum, maximum) is where the density is positive; the
     finite differences of the uncertainty stay inside it. The nested
-    samplers draw from the unit cube through ppf, and the MCMC samplers
-    add log_pdf to the log-likelihood.
+    samplers draw from the unit cube through ppf, the MCMC samplers add
+    log_pdf to the log-likelihood, and the optimizers add chi2 to the
+    chi-square (least squares: residual to the residuals; see
+    FitProblem.cost).
     """
 
     @classmethod
     def load(cls, info: dict[str, Any]) -> 'Prior':
+        # (config: min and max, of the priors that have a range)
+        names = funcutils.parameter_names(cls.__init__)
         return cls(**parseutils.parse_options_for_callable(
-            info, cls.__init__,
-            rename_params=dict(minimum='min', maximum='max')))
+            info, cls.__init__, rename_params={
+                name: name[:3] for name in ('minimum', 'maximum')
+                if name in names.required + names.optional}))
 
     @abc.abstractmethod
     def minimum(self) -> float:
@@ -103,6 +108,35 @@ class Prior(parseutils.TypedSerializable, abc.ABC):
         np.ndarray
             The value of each probability.
         """
+
+    @abc.abstractmethod
+    def chi2(self, x: npt.ArrayLike) -> np.ndarray:
+        """
+        Return the chi-square of the prior: -2 log_pdf(x) plus a constant
+        that makes it 0 at the most probable value (or at the mean of a
+        truncated Gaussian); inf outside the support.
+        """
+
+    def has_residual(self) -> bool:
+        """
+        Return whether the prior has a residual for least squares (see
+        residual).
+        """
+        return False
+
+    def residual(self, x: npt.ArrayLike) -> np.ndarray:
+        """
+        Return the residual of the prior for least squares: a smooth
+        function r of the value with r^2 = chi2(x).
+
+        Raises
+        ------
+        TypeError
+            If the prior has none (see has_residual).
+        """
+        raise TypeError(
+            f"a prior of type '{self.type()}' has no residual for least "
+            f"squares")
 
     def sample(
             self,
@@ -174,6 +208,17 @@ class PriorUniform(Prior):
         return np.where(
             inside, -math.log(self._maximum - self._minimum), -np.inf)
 
+    def chi2(self, x: npt.ArrayLike) -> np.ndarray:
+        x = np.asarray(x, dtype=float)
+        inside = (x >= self._minimum) & (x <= self._maximum)
+        return np.where(inside, 0.0, np.inf)
+
+    def has_residual(self) -> bool:
+        return True
+
+    def residual(self, x: npt.ArrayLike) -> np.ndarray:
+        return np.zeros_like(np.asarray(x, dtype=float))
+
     def ppf(self, u: npt.ArrayLike) -> np.ndarray:
         u = np.asarray(u, dtype=float)
         return self._minimum + u * (self._maximum - self._minimum)
@@ -224,6 +269,13 @@ class PriorLogUniform(Prior):
         with np.errstate(divide='ignore', invalid='ignore'):
             return np.where(
                 inside, -np.log(x) - math.log(self._log_ratio), -np.inf)
+
+    def chi2(self, x: npt.ArrayLike) -> np.ndarray:
+        # (no residual: its square root has an infinite slope at minimum)
+        x = np.asarray(x, dtype=float)
+        inside = (x >= self._minimum) & (x <= self._maximum)
+        with np.errstate(divide='ignore', invalid='ignore'):
+            return np.where(inside, 2 * np.log(x / self._minimum), np.inf)
 
     def ppf(self, u: npt.ArrayLike) -> np.ndarray:
         u = np.asarray(u, dtype=float)
@@ -279,6 +331,15 @@ class PriorGauss(Prior):
     def log_pdf(self, x: npt.ArrayLike) -> np.ndarray:
         z = (np.asarray(x, dtype=float) - self._mean) / self._std
         return -0.5 * z * z - math.log(self._std * math.sqrt(2 * math.pi))
+
+    def chi2(self, x: npt.ArrayLike) -> np.ndarray:
+        return self.residual(x) ** 2
+
+    def has_residual(self) -> bool:
+        return True
+
+    def residual(self, x: npt.ArrayLike) -> np.ndarray:
+        return (np.asarray(x, dtype=float) - self._mean) / self._std
 
     def ppf(self, u: npt.ArrayLike) -> np.ndarray:
         return self._mean + self._std * scipy.special.ndtri(
@@ -352,6 +413,17 @@ class PriorGaussTrunc(Prior):
 
     def log_pdf(self, x: npt.ArrayLike) -> np.ndarray:
         return np.asarray(self._dist.logpdf(np.asarray(x, dtype=float)))
+
+    def chi2(self, x: npt.ArrayLike) -> np.ndarray:
+        x = np.asarray(x, dtype=float)
+        inside = (x >= self._minimum) & (x <= self._maximum)
+        return np.where(inside, self.residual(x) ** 2, np.inf)
+
+    def has_residual(self) -> bool:
+        return True
+
+    def residual(self, x: npt.ArrayLike) -> np.ndarray:
+        return (np.asarray(x, dtype=float) - self._mean) / self._std
 
     def ppf(self, u: npt.ArrayLike) -> np.ndarray:
         return np.asarray(self._dist.ppf(np.asarray(u, dtype=float)))

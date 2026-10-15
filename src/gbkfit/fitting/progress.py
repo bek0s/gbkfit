@@ -32,9 +32,10 @@ class FitProgress:
     elapsed : float
         The time since the fit started (s).
     chi2 : float
-        The chi-square of the last evaluation.
+        The chi-square of the last evaluation (of optimizers with priors,
+        plus that of the priors: see FitProblem.cost).
     best_chi2 : float
-        The lowest chi-square so far.
+        The lowest of those so far.
     best : dict of str to float, optional
         The free values at the lowest chi-square, by element name (None
         before a finite chi-square).

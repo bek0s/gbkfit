@@ -5,6 +5,7 @@ values.
 
 import math
 import time
+import typing
 from collections.abc import Sequence
 
 import numpy as np
@@ -33,6 +34,10 @@ class FitProblem:
     their valid range; see ParamEvaluationError) give a chi-square of inf
     and a log-likelihood of -inf; residuals raises the error.
 
+    Free elements may have priors: samplers need one for each, optimizers
+    take any (then they minimise the chi-square plus the priors', see
+    cost, and the residuals include those of the priors).
+
     The batch functions take several points (one per row). They evaluate
     the models one after the other, for now.
 
@@ -46,8 +51,9 @@ class FitProblem:
         The objective.
     params : ParamSpace
         The parameters of the models of the objective.
-    priors : Sequence of Prior, optional
-        The prior of each free element, in order.
+    priors : Sequence of Prior or None, optional
+        The prior of each free element, in order (None for an element
+        without one).
     observers : Sequence of ProgressObserver, optional
         Who receives the progress of the fit.
     interval : float, optional
@@ -64,7 +70,7 @@ class FitProblem:
             self,
             objective: Objective,
             params: ParamSpace,
-            priors: Sequence[Prior] | None = None,
+            priors: Sequence[Prior | None] | None = None,
             observers: Sequence[ProgressObserver] = (),
             interval: float = 2.0
     ):
@@ -83,6 +89,8 @@ class FitProblem:
         self._params = params
         self._names = names
         self._priors = None if priors is None else tuple(priors)
+        if self._priors is not None and set(self._priors) == {None}:
+            self._priors = None
         self._precision = max(
             float(np.finfo(obs.dtype()).eps)
             for obs in objective.group().observations())
@@ -112,8 +120,11 @@ class FitProblem:
         """Return the number of free elements."""
         return len(self._names)
 
-    def priors(self) -> tuple[Prior, ...] | None:
-        """Return the priors of the free elements, if any."""
+    def priors(self) -> tuple[Prior | None, ...] | None:
+        """
+        Return the priors of the free elements (None for one without),
+        if any has one.
+        """
         return self._priors
 
     def precision(self) -> float:
@@ -129,7 +140,10 @@ class FitProblem:
         return self._nevals
 
     def best(self) -> tuple[np.ndarray, float] | None:
-        """Return the point with the lowest chi-square so far, and it."""
+        """
+        Return the point with the lowest chi-square so far, and it (of
+        optimizers: the lowest cost, see cost).
+        """
         if self._best_x is None:
             return None
         return self._best_x.copy(), self._best_chi2
@@ -148,14 +162,20 @@ class FitProblem:
     def residuals(self, x: npt.ArrayLike) -> np.ndarray:
         """
         Return the weighted residuals at the given free values, in a new
-        array (see Objective.residuals).
+        array (see Objective.residuals), followed by those of the priors
+        (see prior_residuals).
 
         Raises
         ------
         ParamEvaluationError
             If the parameters cannot be evaluated there.
+        TypeError
+            If a prior has no residual (see Prior.has_residual).
         """
         residuals = self._objective.residuals(self.evaluate(x))
+        if self._priors is not None:
+            residuals = np.concatenate(
+                [residuals, self.prior_residuals(x, strict=True)])
         # (a multithreaded dot product leaves the BLAS threads spinning
         # into the next evaluation)
         with threadutils.single_threaded_blas():
@@ -172,6 +192,43 @@ class FitProblem:
         chi2 = self._objective.chi2(values)
         self._record(x, chi2)
         return chi2
+
+    def cost(self, x: npt.ArrayLike) -> float:
+        """
+        Return what optimizers minimise at the given free values: the
+        chi-square plus that of the priors (see Prior.chi2; -2 log of the
+        posterior, up to a constant), or the chi-square without priors.
+        """
+        try:
+            values = self.evaluate(x)
+        except ParamEvaluationError:
+            return math.inf
+        cost = self._objective.chi2(values) + self.prior_chi2(x)
+        self._record(x, cost)
+        return cost
+
+    def prior_chi2(self, x: npt.ArrayLike) -> float:
+        """
+        Return the chi-square of the priors at the given free values (see
+        Prior.chi2; 0 without priors).
+        """
+        return float(sum(
+            prior.chi2(value) for prior, value in self._given_priors(x)))
+
+    def prior_residuals(
+            self,
+            x: npt.ArrayLike,
+            strict: bool = False
+    ) -> np.ndarray:
+        """
+        Return the residuals of the priors that have them at the given
+        free values (see Prior.residual; empty without priors), in the
+        order of the elements; with strict, raise TypeError for a prior
+        without one.
+        """
+        return np.array([
+            prior.residual(value) for prior, value in self._given_priors(x)
+            if strict or prior.has_residual()], dtype=float)
 
     def log_likelihood(self, x: npt.ArrayLike) -> float:
         """
@@ -196,9 +253,10 @@ class FitProblem:
         RuntimeError
             If the problem has no priors.
         """
-        priors = self._require_priors()
+        if self._priors is None:
+            raise RuntimeError("the problem has no priors")
         return float(sum(
-            p.log_pdf(v) for p, v in zip(priors, np.asarray(x, dtype=float))))
+            prior.log_pdf(value) for prior, value in self._given_priors(x)))
 
     def log_posterior(self, x: npt.ArrayLike) -> float:
         """
@@ -242,6 +300,10 @@ class FitProblem:
         """Return the chi-square of each point (one per row)."""
         return np.array([self.chi2(x) for x in np.atleast_2d(xs)])
 
+    def cost_batch(self, xs: npt.ArrayLike) -> np.ndarray:
+        """Return the cost of each point (one per row; see cost)."""
+        return np.array([self.cost(x) for x in np.atleast_2d(xs)])
+
     def log_likelihood_batch(self, xs: npt.ArrayLike) -> np.ndarray:
         """Return the log-likelihood of each point (one per row)."""
         return np.array(
@@ -252,10 +314,25 @@ class FitProblem:
         return np.array([self.log_posterior(x) for x in np.atleast_2d(xs)])
 
     def _require_priors(self) -> tuple[Prior, ...]:
-        """Return the priors, or raise RuntimeError if there are none."""
+        """
+        Return the priors, or raise RuntimeError unless every free
+        element has one.
+        """
+        if self._priors is None or None in self._priors:
+            raise RuntimeError("not every free element has a prior")
+        return typing.cast(tuple[Prior, ...], self._priors)
+
+    def _given_priors(
+            self,
+            x: npt.ArrayLike
+    ) -> list[tuple[Prior, float]]:
+        """Return the priors there are, with their free values."""
         if self._priors is None:
-            raise RuntimeError("the problem has no priors")
-        return self._priors
+            return []
+        return [
+            (prior, value) for prior, value in zip(
+                self._priors, np.asarray(x, dtype=float).tolist())
+            if prior is not None]
 
     def set_stage(self, stage: str) -> None:
         """

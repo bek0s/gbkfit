@@ -168,6 +168,41 @@ def test_cmaes_finds_the_minimum_of_lmfit(driver):
     assert best.chi2 == pytest.approx(local.chi2, rel=1e-6)
 
 
+@pytest.mark.parametrize('fitter', [
+    dict(type='lmfit.least_squares'), dict(type='cmaes')])
+def test_optimizers_with_a_gaussian_prior_find_the_maximum_a_posteriori(
+        fitter):
+    # The data give incl = x +- s; a Gaussian prior as wide, two errors
+    # above, moves it halfway, with an error of s / sqrt(2). The chi2 of
+    # the solution is that of the data.
+    pytest.importorskip('cma')
+    pytest.importorskip('lmfit')
+    from gbkfit.fitting import fitter_parser
+    from gbkfit.fitting.fitters.lmfit import FitterLMFitLeastSquares
+    objective = mock_objective(DriverHost())
+    params = ParamSpace(objective.pdescs(), bounded_properties())
+    alone = FitterLMFitLeastSquares().fit(objective, params).best()
+    x, s = alone.free['incl'], alone.covariance.std['incl']
+    properties = bounded_properties()
+    properties['incl']['prior'] = dict(type='gauss', mean=x + 2 * s, std=s)
+    best = fitter_parser.load(fitter).fit(
+        objective, ParamSpace(objective.pdescs(), properties)).best()
+    assert best.free['incl'] == pytest.approx(x + s, abs=0.1 * s)
+    assert best.covariance.std['incl'] == pytest.approx(
+        s / np.sqrt(2), rel=0.05)
+    assert best.chi2 > alone.chi2 and best.log_prior is not None
+
+
+def test_least_squares_take_priors_with_residuals_only():
+    from gbkfit.fitting.fitparams import FitParamLeastSquares
+    info = dict(
+        value=1.0, min=0, max=3, prior=dict(type='gauss', mean=1, std=0.5))
+    assert FitParamLeastSquares.load(info).dump() == info
+    with pytest.raises(ConfigError, match="least squares cannot take"):
+        FitParamLeastSquares.load(dict(
+            value=2, prior=dict(type='log_uniform', min=1, max=10)))
+
+
 
 
 def test_errors_propagate_to_tied_and_fixed_elements():
