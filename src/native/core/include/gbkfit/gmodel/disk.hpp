@@ -33,6 +33,10 @@ struct DiskArgs
     const T* ypos = nullptr;
     const T* posa = nullptr;
     const T* incl = nullptr;
+    // sin(posa), cos(posa), sin(incl) and cos(incl) of each value of posa
+    // and incl, for the search of the ring of a point of a loose or
+    // tilted disk (see ring_info), made once per evaluation
+    const T* posa_incl_sincos = nullptr;
 
     // Density (r), velocity (v) and dispersion (d) polar and height
     // traits, and vertical distortion (z) and selection (s) polar traits.
