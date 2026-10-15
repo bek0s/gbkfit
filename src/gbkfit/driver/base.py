@@ -23,6 +23,7 @@ __all__ = [
     'DeviceArray',
     'Driver',
     'DriverFFT',
+    'FFTConvolution',
     'driver_by_name',
     'driver_parser'
 ]
@@ -42,11 +43,24 @@ _NATIVE_CLASS_SUFFIXES = {
     np.dtype(np.float64): 'f64'}
 
 
+class FFTConvolution(abc.ABC):
+    """
+    The convolution of the cubes of a shape by a kernel, in place, by FFTs
+    on a driver (see DriverFFT.convolution). It keeps the spectrum of the
+    kernel, made once (not the kernel), and a buffer for the spectra of
+    the cubes.
+    """
+
+    @abc.abstractmethod
+    def __call__(self, cube: DeviceArray) -> None:
+        """Convolve a cube of the shape of the convolution, in place."""
+
+
 class DriverFFT(abc.ABC):
     """
-    The FFT of a driver, for the FFT convolutions of the cubes of the
-    models (see DCube): the transforms, and the shapes of the arrays they
-    need. The convolutions keep the spectra of their arrays, by array.
+    The FFT of a driver, for the convolutions of the cubes of the models
+    (see DCube): the shapes of the arrays of the convolutions, and the
+    convolutions.
 
     Parameters
     ----------
@@ -54,11 +68,6 @@ class DriverFFT(abc.ABC):
         The size up to which an axis of a convolution is padded to a power
         of 2; larger axes are padded to a multiple of it.
     """
-
-    @staticmethod
-    def fft_complex_shape(shape: tuple[int, ...]) -> tuple[int, ...]:
-        """Return the shape of the spectrum of a real array."""
-        return tuple(shape[:-1]) + (shape[-1] // 2 + 1,)
 
     @staticmethod
     def fft_convolution_shift(
@@ -107,38 +116,64 @@ class DriverFFT(abc.ABC):
         margin = np.array(data2_shape) // 2
         return tuple(shape), tuple(margin)
 
-    @abc.abstractmethod
-    def fft_r2c(self, data_r: DeviceArray, data_c: DeviceArray) -> None:
-        """Transform a real array into its spectrum (data_c)."""
-
-    @abc.abstractmethod
-    def fft_c2r(self, data_c: DeviceArray, data_r: DeviceArray) -> None:
-        """
-        Transform a spectrum into its real array (data_r), unnormalised;
-        data_c can be overwritten.
-        """
-
-    @abc.abstractmethod
-    def fft_convolve_cached(
+    def convolution(
             self,
-            data1_r: DeviceArray,
-            data2_r: DeviceArray
-    ) -> None:
+            kernel: np.ndarray,
+            shape: tuple[int, int, int],
+            axes: tuple[int, ...] = (0, 1, 2)
+    ) -> FFTConvolution:
         """
-        Convolve data1_r with data2_r (a kernel, its centre at the first
-        pixel), in place. The spectrum of data2_r is computed once.
+        Return the convolution of the cubes of a shape (z, y, x) by a
+        kernel: of the whole cubes, or of each channel (the first axis) by
+        its image.
+
+        Parameters
+        ----------
+        kernel : numpy.ndarray
+            The kernel, on the host, of the floating type of the FFT and
+            with its centre at the first pixel (see fft_convolution_shift):
+            a cube of the shape for axes (0, 1, 2); for axes (1, 2), an
+            image for each channel, or one for all (of shape (1, y, x)).
+        shape : tuple of int
+            The shape of the cubes.
+        axes : tuple of int, optional
+            The axes of the convolution: (0, 1, 2) (by default), or (1, 2).
+
+        Raises
+        ------
+        ValueError
+            If the axes are not one of those, or the kernel does not have
+            the shape or the floating type.
         """
+        shape = tuple(int(n) for n in shape)
+        axes = tuple(axes)
+        if axes not in ((0, 1, 2), (1, 2)):
+            raise ValueError(
+                f"axes must be (0, 1, 2) or (1, 2); they are {axes}")
+        one_image = axes == (1, 2) and kernel.shape == (1,) + shape[1:]
+        if kernel.shape != shape and not one_image:
+            raise ValueError(
+                f"the kernel must have the shape of the cubes {shape}, or "
+                f"one image for all their channels (axes (1, 2)); its shape "
+                f"is {kernel.shape}")
+        if kernel.dtype != self.dtype():
+            raise ValueError(
+                f"the kernel must be of the type of the FFT, "
+                f"{self.dtype().name}; it is {kernel.dtype.name}")
+        return self._convolution(np.ascontiguousarray(kernel), shape, axes)
 
     @abc.abstractmethod
-    def fft_convolve_xy_cached(
+    def dtype(self) -> np.dtype:
+        """Return the floating type of the transforms."""
+
+    @abc.abstractmethod
+    def _convolution(
             self,
-            data1_r: DeviceArray,
-            data2_r: DeviceArray
-    ) -> None:
-        """
-        Convolve each channel (the first axis) of data1_r with the image of
-        the same channel of data2_r, or with its only image, in place.
-        """
+            kernel: np.ndarray,
+            shape: tuple[int, int, int],
+            axes: tuple[int, ...]
+    ) -> FFTConvolution:
+        """Return the convolution (see convolution), of checked arguments."""
 
 
 class Driver(parseutils.TypedSerializable, abc.ABC):

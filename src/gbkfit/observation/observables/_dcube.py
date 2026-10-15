@@ -145,6 +145,25 @@ def _varying_kernels(
     return psf_images, lsf_kernels
 
 
+def _kernel_cube(dcube: 'DCube', grid_hi: gridutils.Grid) -> np.ndarray:
+    """
+    Return the PSF/LSF cube of a DCube whose PSF and LSF do not vary, on
+    its (padded) high-res grid: the product of the PSF and the LSF (a point
+    for the one not given), with its centre rolled to the first pixel, for
+    the FFT convolution. Kernels of an even size are offset by -1 pixel,
+    since they mostly have a central peak.
+    """
+    psf, lsf = dcube.psf(), dcube.lsf()
+    size, step = grid_hi.size, grid_hi.coords.step
+    offset = gbkfit.math.is_odd(size) - 1
+    psf_args = (step[:2], size[:2], offset[:2], dcube.rota())
+    lsf_args = (step[2], size[2], offset[2])
+    psf_image = (psf or PSFPoint()).asarray(*psf_args)
+    lsf_profile = (lsf or LSFPoint()).asarray(*lsf_args)
+    return DriverFFT.fft_convolution_shift(
+        psf_image * lsf_profile[:, None, None])
+
+
 class DCube:
     """
     A cube of the data of an observable (x, y and the spectral axis), of
@@ -266,7 +285,7 @@ class DCubePlan:
     """
     The evaluation of a DCube on a driver: the high-res (scratch) cube the
     model adds to, the low-res cube of the data, and their weights, mask,
-    primary beam and PSF/LSF cube.
+    primary beam and convolutions by the PSF and the LSF.
     """
 
     def __init__(self, dcube: DCube, driver: Driver, has_weights: bool):
@@ -315,9 +334,10 @@ class DCubePlan:
         shape_lo = size_lo[::-1]
         shape_hi = size_hi[::-1]
 
-        # The images of the PSF (one for each channel, or one for all) and
-        # the LSF of each channel, if one of them varies
-        self._psf_images_hi = None
+        # If the PSF or the LSF varies: the convolution of each channel by
+        # its image of the PSF (or by the only one), and the LSF of each
+        # channel
+        self._psf_convolution = None
         self._lsf_kernels_hi = None
         self._lsf_size_hi = None
         self._zscratch_hi = None
@@ -325,31 +345,21 @@ class DCubePlan:
             psf_images, lsf_kernels = _varying_kernels(
                 dcube, grid_hi, lsf_size_hi)
             if psf_images is not None:
-                self._psf_images_hi = driver.mem_copy_h2d(
-                    backend_fft.fft_convolution_shift(
-                        psf_images, axes=(1, 2)).astype(dtype))
+                self._psf_convolution = backend_fft.convolution(
+                    DriverFFT.fft_convolution_shift(
+                        psf_images, axes=(1, 2)).astype(dtype),
+                    shape_hi, axes=(1, 2))
             if lsf_kernels is not None:
                 self._lsf_kernels_hi = driver.mem_copy_h2d(
                     lsf_kernels.astype(dtype))
                 self._zscratch_hi = driver.mem_alloc_d(shape_hi, dtype)
             self._lsf_size_hi = lsf_size_hi
 
-        # Otherwise, the PSF/LSF cube of the FFT-based convolution: the
-        # product of the PSF and the LSF (a point for the one not given),
-        # with its centre rolled to (0, 0, 0). Kernels of an even size are
-        # offset by -1 pixel, since they mostly have a central peak.
-        self._pcube_hi = None
+        # Otherwise, the convolution by the PSF/LSF cube (see _kernel_cube)
+        self._convolution = None
         if (psf or lsf) and not varies:
-            offset_hi = gbkfit.math.is_odd(size_hi) - 1
-            psf_args = (spat_step_hi, size_hi[:2], offset_hi[:2], dcube.rota())
-            lsf_args = (spec_step_hi, size_hi[2], offset_hi[2])
-            psf_hi = psf.asarray(*psf_args) if psf \
-                else PSFPoint().asarray(*psf_args)
-            lsf_hi = lsf.asarray(*lsf_args) if lsf \
-                else LSFPoint().asarray(*lsf_args)
-            pcube_hi = (psf_hi * lsf_hi[:, None, None]).astype(dtype)
-            self._pcube_hi = driver.mem_copy_h2d(
-                backend_fft.fft_convolution_shift(pcube_hi))
+            self._convolution = backend_fft.convolution(
+                _kernel_cube(dcube, grid_hi).astype(dtype), shape_hi)
 
         # The response of the primary beam on the high-res grid (one image
         # for all channels), if there is one
@@ -390,7 +400,6 @@ class DCubePlan:
         self._edge_hi = edge_hi
         self._has_weights = has_weights
         self._driver = driver
-        self._backend_fft = backend_fft
         self._backend_dmodel = driver.native_class('DModel', dtype)()
 
     def scratch_grid(self) -> gridutils.Grid:
@@ -439,12 +448,10 @@ class DCubePlan:
         wcube_lo = self._wcube_lo
         wcube_hi = self._wcube_hi
         mcube_lo = self._mcube_lo
-        pcube_hi = self._pcube_hi
         pbeam_hi = self._pbeam_hi
         has_weights = self._has_weights
         mask_cutoff = dcube.mask_cutoff()
         driver = self._driver
-        backend_fft = self._backend_fft
         backend_dmodel = self._backend_dmodel
 
         if flux_scale is not None:
@@ -465,15 +472,14 @@ class DCubePlan:
             # The PSF of each channel, then the LSF of each channel, in the
             # order the light meets them
             for cube in cubes:
-                if self._psf_images_hi is not None:
-                    backend_fft.fft_convolve_xy_cached(
-                        cube, self._psf_images_hi)
+                if self._psf_convolution is not None:
+                    self._psf_convolution(cube)
                 if self._lsf_kernels_hi is not None:
                     backend_dmodel.dcube_convolve_z(
                         self._lsf_kernels_hi, cube, self._zscratch_hi)
-        elif psf or lsf:
+        elif self._convolution is not None:
             for cube in cubes:
-                backend_fft.fft_convolve_cached(cube, pcube_hi)
+                self._convolution(cube)
 
         # The downscaling, which also removes the padding: the weights
         # always need it, smoothed or not, to reach the low-res cube
@@ -522,6 +528,8 @@ class DCubePlan:
                     lsf_lo=lsf.asarray(step_lo[2]),
                     lsf_hi=lsf.asarray(step_hi[2]))
             if psf or lsf:
-                out_extra.update(pcube_hi=driver.mem_copy_d2h(pcube_hi))
+                # (made again: it is not kept)
+                out_extra.update(pcube_hi=_kernel_cube(
+                    dcube, self._grid_hi).astype(dcube.dtype()))
         if pbeam_hi is not None:
             out_extra.update(pbeam_hi=driver.mem_copy_d2h(pbeam_hi)[0])

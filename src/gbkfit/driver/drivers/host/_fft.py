@@ -4,7 +4,7 @@ from typing import Any
 import numpy as np
 import numpy.typing as npt
 
-from gbkfit.driver.base import DeviceArray, DriverFFT
+from gbkfit.driver.base import DeviceArray, DriverFFT, FFTConvolution
 
 
 __all__ = [
@@ -14,37 +14,33 @@ __all__ = [
 
 class DriverFFTHost(DriverFFT):
     """
-    The FFT of the host driver: pocketfft, in the native module.
-
-    Like the cuda FFT, it caches the spectra used by fft_convolve_cached()
-    (including the one of the second array, e.g., the PSF/LSF).
+    The FFT of the host driver: pocketfft, in the native module (its
+    FFTConvolution classes).
     """
 
-    def __init__(self, native_fft: Any, dtype: npt.DTypeLike):
+    def __init__(self, native_convolution: type, dtype: npt.DTypeLike):
         super().__init__(32)
-        self._fft = native_fft
+        self._native_convolution = native_convolution
         self._dtype = np.dtype(dtype)
 
     def dtype(self) -> np.dtype:
-        """Return the floating type of the transforms."""
         return self._dtype
 
-    def fft_r2c(self, data_r: DeviceArray, data_c: DeviceArray) -> None:
-        self._fft.fft_r2c(data_r, data_c)
-
-    def fft_c2r(self, data_c: DeviceArray, data_r: DeviceArray) -> None:
-        self._fft.fft_c2r(data_c, data_r)
-
-    def fft_convolve_cached(
+    def _convolution(
             self,
-            data1_r: DeviceArray,
-            data2_r: DeviceArray
-    ) -> None:
-        self._fft.fft_convolve_cached(data1_r, data2_r)
+            kernel: np.ndarray,
+            shape: tuple[int, int, int],
+            axes: tuple[int, ...]
+    ) -> FFTConvolution:
+        return _FFTConvolutionHost(
+            self._native_convolution(kernel, shape, axes))
 
-    def fft_convolve_xy_cached(
-            self,
-            data1_r: DeviceArray,
-            data2_r: DeviceArray
-    ) -> None:
-        self._fft.fft_convolve_xy_cached(data1_r, data2_r)
+
+class _FFTConvolutionHost(FFTConvolution):
+    """A convolution of the native module."""
+
+    def __init__(self, native: Any):
+        self._native = native
+
+    def __call__(self, cube: DeviceArray) -> None:
+        self._native(cube)

@@ -1,6 +1,7 @@
 
 #include <nanobind/nanobind.h>
 #include <nanobind/stl/array.h>
+#include <nanobind/stl/vector.h>
 
 #include "gbkfit/bindings/dmodel.hpp"
 #include "gbkfit/bindings/gmodel.hpp"
@@ -19,7 +20,7 @@ bind_precision(nb::module_& m, const std::string& suffix)
     bindings::DModel<T, Device, Kernels>::bind(m, suffix);
     bindings::GModel<T, Device, Kernels>::bind(m, suffix);
     bindings::Objective<T, Device, Kernels>::bind(m, suffix);
-    host::FFT<T>::bind(m, suffix);
+    host::FFTConvolution<T>::bind(m, suffix);
 }
 
 NB_MODULE(EXTENSION_NAME, m)
