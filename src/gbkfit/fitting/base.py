@@ -14,6 +14,7 @@ import numpy as np
 from gbkfit.fitting.control import FitControl, FitStopped
 from gbkfit.fitting.evaluation_log import EvaluationLog
 from gbkfit.fitting.fitparams import FitParam, FitParamClass
+from gbkfit.fitting.pool import EvaluationPool
 from gbkfit.fitting.problem import FitProblem
 from gbkfit.fitting.progress import ProgressObserver
 from gbkfit.fitting.result import (
@@ -157,7 +158,8 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
             params: ParamSpace,
             observers: Sequence[ProgressObserver] = (),
             control: FitControl | None = None,
-            log: EvaluationLog | None = None
+            log: EvaluationLog | None = None,
+            pool: EvaluationPool | None = None
     ) -> FitResult:
         """
         Fit the data of an objective.
@@ -181,6 +183,12 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
         log : EvaluationLog, optional
             The log of the evaluations: a new one, or that of a fit to
             resume (with the same objective, parameters and fitter).
+        pool : EvaluationPool, optional
+            Copies of the objective (e.g. one per GPU) that evaluate the
+            batches of points of the fitter at once (e.g. the members of
+            a generation of CMA-ES, the walkers of emcee, or the steps of
+            a Jacobian); the result is that of the fit without it, to
+            the rounding of the devices.
 
         Returns
         -------
@@ -195,8 +203,8 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
             the fitter may try values of free elements outside the valid
             ranges of their parameters (see ParamDesc).
         ValueError
-            If no parameter is free, or the parameter space lacks
-            parameters of the objective.
+            If no parameter is free, the parameter space lacks parameters
+            of the objective, or the pool is of another objective.
         ParamEvaluationError
             If the parameters cannot be evaluated where a least-squares
             fitter evaluates them (e.g. at the start).
@@ -210,7 +218,7 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
         _check_valid_ranges(fit_params, params.free_valid_ranges())
         problem = FitProblem(
             objective, params, [p.prior() for p in fit_params.values()],
-            observers, control=control, log=log)
+            observers, control=control, log=log, pool=pool)
         try:
             return self._fit(problem, params, fit_params)
         finally:

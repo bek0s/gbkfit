@@ -2,7 +2,7 @@
 Helpers shared by the fitters.
 """
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from typing import Literal
 
 import numpy as np
@@ -55,12 +55,14 @@ class LeastSquaresFunctions:
     finite_difference_steps).
 
     The last residuals are kept, so a forward-difference Jacobian at the
-    point evaluated last costs one evaluation per variable.
+    point evaluated last costs one evaluation per variable. The steps of a
+    Jacobian are evaluated in one batch (see FitProblem.residuals_batch).
 
     Parameters
     ----------
-    func : Callable
-        The residuals, of the variables (a new array each call).
+    func_batch : Callable
+        The residuals at several values of the variables (one per row), a
+        new array for each.
     lower, upper : np.ndarray
         The bounds of the variables.
     scales : np.ndarray
@@ -73,14 +75,14 @@ class LeastSquaresFunctions:
 
     def __init__(
             self,
-            func: Callable[[np.ndarray], np.ndarray],
+            func_batch: Callable[[np.ndarray], Sequence[np.ndarray]],
             lower: np.ndarray,
             upper: np.ndarray,
             scales: np.ndarray,
             scheme: Literal['forward', 'central'],
             relative_step: float
     ):
-        self._func = func
+        self._func_batch = func_batch
         self._lower = lower
         self._upper = upper
         self._scales = scales
@@ -102,7 +104,7 @@ class LeastSquaresFunctions:
 
     def residuals(self, x: np.ndarray) -> np.ndarray:
         """Return the residuals at x (a new array)."""
-        residuals = self._func(x)
+        residuals = self._func_batch(np.atleast_2d(x))[0]
         self._last_x = np.array(x, dtype=float)
         self._last_residuals = residuals
         # (see FitProblem.residuals)
@@ -125,7 +127,7 @@ class LeastSquaresFunctions:
             steps = finite_difference_steps(
                 x, self._scales, self._relative_step)
             self._last_jacobian = jacobian(
-                self._func, x, steps, self._lower, self._upper,
+                self._func_batch, x, steps, self._lower, self._upper,
                 self._scheme, f0)
             self._last_jacobian_x = x
         return self._last_jacobian.copy()

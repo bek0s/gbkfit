@@ -119,7 +119,7 @@ class FitterLMFitLeastSquares(Fitter):
         # for float32 models at small values, and scipy's at 0: GBKFIT
         # computes the Jacobian (see LeastSquaresFunctions)
         functions = LeastSquaresFunctions(
-            problem.residuals, lower, upper, scales, 'forward', step)
+            problem.residuals_batch, lower, upper, scales, 'forward', step)
         # A start on a bound does not move: lmfit's map of bounded values
         # (leastsq) is flat there, and TRF's first steps are tiny
         x0 = inside_bounds(

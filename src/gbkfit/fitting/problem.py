@@ -6,13 +6,15 @@ values.
 import math
 import time
 import typing
-from collections.abc import Sequence
+from collections.abc import Callable, Iterator, Sequence
+from typing import TypeVar
 
 import numpy as np
 import numpy.typing as npt
 
 from gbkfit.fitting.control import FitControl, FitStopped
 from gbkfit.fitting.evaluation_log import EvaluationLog
+from gbkfit.fitting.pool import EvaluationPool
 from gbkfit.fitting.priors import Prior
 from gbkfit.fitting.progress import FitProgress, ProgressObserver
 from gbkfit.objective import Objective
@@ -23,6 +25,9 @@ from gbkfit.utils import threadutils
 __all__ = [
     'FitProblem'
 ]
+
+
+_T = TypeVar('_T')
 
 
 class FitProblem:
@@ -40,17 +45,20 @@ class FitProblem:
     take any (then they minimise the chi-square plus the priors', see
     cost, and the residuals include those of the priors).
 
-    The batch functions take several points (one per row). They evaluate
-    the models one after the other, for now.
+    The batch functions take several points (one per row). With a pool
+    (see EvaluationPool), they evaluate them at once, on copies of the
+    objective; the problem counts, keeps, logs and reports them in their
+    order, as without one.
 
     The problem reports the progress of the fit to the given observers
     (see FitProgress): at most every interval seconds as it evaluates,
     when the stage changes (see set_stage), and at the end (see finish).
 
-    Every evaluation raises FitStopped once the control (if any) is
-    stopped. The numbers it evaluates (chi-squares, log-likelihoods, not
-    residuals) go to the log (if any), and those of a fit that resumes
-    come from it while it lasts (see EvaluationLog).
+    Every model evaluation raises FitStopped once the control (if any) is
+    stopped: those of a batch before it count, without a pool (with one,
+    none of the batch do). The numbers it evaluates (chi-squares,
+    log-likelihoods, not residuals) go to the log (if any), and those of a
+    fit that resumes come from it while it lasts (see EvaluationLog).
 
     Parameters
     ----------
@@ -69,13 +77,15 @@ class FitProblem:
         The control of the fit, to stop it.
     log : EvaluationLog, optional
         The log of the evaluations (of a fit that resumes, or a new one).
+    pool : EvaluationPool, optional
+        Copies of the objective that evaluate the batches at once.
 
     Raises
     ------
     ValueError
         If the parameter space lacks parameters of the objective, nothing
-        is free, the number of priors is wrong, or the log is of a fit of
-        other free elements.
+        is free, the number of priors is wrong, the log is of a fit of
+        other free elements, or the pool is of another objective.
     """
 
     def __init__(
@@ -86,7 +96,8 @@ class FitProblem:
             observers: Sequence[ProgressObserver] = (),
             interval: float = 2.0,
             control: FitControl | None = None,
-            log: EvaluationLog | None = None
+            log: EvaluationLog | None = None,
+            pool: EvaluationPool | None = None
     ):
         if missing := set(objective.pdescs()) - set(params.pdescs()):
             raise ValueError(
@@ -99,6 +110,8 @@ class FitProblem:
             raise ValueError(
                 f"expected {len(names)} priors, one per free element, got "
                 f"{len(priors)}")
+        if pool is not None and pool.objective() is not objective:
+            raise ValueError("the pool is of copies of another objective")
         self._objective = objective
         self._params = params
         self._names = names
@@ -119,6 +132,7 @@ class FitProblem:
         self._last_report = self._start
         self._control = control
         self._log = log
+        self._pool = pool
         if log is not None:
             log.begin(names)
 
@@ -192,25 +206,32 @@ class FitProblem:
         FitStopped
             If the fit was asked to stop.
         """
-        self._check_stop()
-        residuals = self._objective.residuals(self.evaluate(x))
-        if self._priors is not None:
-            residuals = np.concatenate(
-                [residuals, self.prior_residuals(x, strict=True)])
-        # (a multithreaded dot product leaves the BLAS threads spinning
-        # into the next evaluation)
-        with threadutils.single_threaded_blas():
-            cost = float(residuals @ residuals)
-        self._record(x, cost)
-        return residuals
+        return self.residuals_batch(np.atleast_2d(x))[0]
+
+    def residuals_batch(self, xs: npt.ArrayLike) -> list[np.ndarray]:
+        """
+        Return the residuals at each point (one per row; see residuals).
+        """
+        xs = _points(xs)
+        values = [self.evaluate(x) for x in xs]
+        evaluated = self.map_objective(
+            self._stoppable(Objective.residuals), values)
+        batch = []
+        for x, residuals in zip(xs, evaluated):
+            if self._priors is not None:
+                residuals = np.concatenate(
+                    [residuals, self.prior_residuals(x, strict=True)])
+            # (a multithreaded dot product leaves the BLAS threads
+            # spinning into the next evaluation)
+            with threadutils.single_threaded_blas():
+                cost = float(residuals @ residuals)
+            self._record(x, cost)
+            batch.append(residuals)
+        return batch
 
     def chi2(self, x: npt.ArrayLike) -> float:
         """Return the chi-square at the given free values."""
-        evaluated = self._chi2_and_log_likelihood(x)
-        if evaluated is None:
-            return math.inf
-        self._record(x, evaluated[0])
-        return evaluated[0]
+        return float(self.chi2_batch(np.atleast_2d(x))[0])
 
     def cost(self, x: npt.ArrayLike) -> float:
         """
@@ -218,12 +239,7 @@ class FitProblem:
         chi-square plus that of the priors (see Prior.chi2; -2 log of the
         posterior, up to a constant), or the chi-square without priors.
         """
-        evaluated = self._chi2_and_log_likelihood(x)
-        if evaluated is None:
-            return math.inf
-        cost = evaluated[0] + self.prior_chi2(x)
-        self._record(x, cost)
-        return cost
+        return float(self.cost_batch(np.atleast_2d(x))[0])
 
     def prior_chi2(self, x: npt.ArrayLike) -> float:
         """
@@ -253,11 +269,7 @@ class FitProblem:
         Return the log-likelihood at the given free values (see
         Objective.log_likelihood).
         """
-        evaluated = self._chi2_and_log_likelihood(x)
-        if evaluated is None:
-            return -math.inf
-        self._record(x, evaluated[0])
-        return evaluated[1]
+        return float(self.log_likelihood_batch(np.atleast_2d(x))[0])
 
     def log_prior(self, x: npt.ArrayLike) -> float:
         """
@@ -284,11 +296,7 @@ class FitProblem:
         FitStopped
             If the fit was asked to stop.
         """
-        self._check_stop()
-        log_prior = self.log_prior(x)
-        if not math.isfinite(log_prior):
-            return -math.inf
-        return log_prior + self.log_likelihood(x)
+        return float(self.log_posterior_batch(np.atleast_2d(x))[0])
 
     def prior_transform(self, u: npt.ArrayLike) -> np.ndarray:
         """
@@ -319,20 +327,69 @@ class FitProblem:
 
     def chi2_batch(self, xs: npt.ArrayLike) -> np.ndarray:
         """Return the chi-square of each point (one per row)."""
-        return np.array([self.chi2(x) for x in np.atleast_2d(xs)])
+        chi2 = []
+        for x, evaluated in self._chi2s_and_log_likelihoods(_points(xs)):
+            if evaluated is None:
+                chi2.append(math.inf)
+                continue
+            self._record(x, evaluated[0])
+            chi2.append(evaluated[0])
+        return np.array(chi2)
 
     def cost_batch(self, xs: npt.ArrayLike) -> np.ndarray:
         """Return the cost of each point (one per row; see cost)."""
-        return np.array([self.cost(x) for x in np.atleast_2d(xs)])
+        costs = []
+        for x, evaluated in self._chi2s_and_log_likelihoods(_points(xs)):
+            if evaluated is None:
+                costs.append(math.inf)
+                continue
+            cost = evaluated[0] + self.prior_chi2(x)
+            self._record(x, cost)
+            costs.append(cost)
+        return np.array(costs)
 
     def log_likelihood_batch(self, xs: npt.ArrayLike) -> np.ndarray:
         """Return the log-likelihood of each point (one per row)."""
-        return np.array(
-            [self.log_likelihood(x) for x in np.atleast_2d(xs)])
+        log_likelihoods = []
+        for x, evaluated in self._chi2s_and_log_likelihoods(_points(xs)):
+            if evaluated is None:
+                log_likelihoods.append(-math.inf)
+                continue
+            self._record(x, evaluated[0])
+            log_likelihoods.append(evaluated[1])
+        return np.array(log_likelihoods)
 
     def log_posterior_batch(self, xs: npt.ArrayLike) -> np.ndarray:
-        """Return the log-posterior of each point (one per row)."""
-        return np.array([self.log_posterior(x) for x in np.atleast_2d(xs)])
+        """
+        Return the log-posterior of each point (one per row; see
+        log_posterior).
+        """
+        self._check_stop()
+        xs = _points(xs)
+        log_prior = np.array([self.log_prior(x) for x in xs])
+        inside = np.isfinite(log_prior)
+        log_posterior = np.full(len(xs), -math.inf)
+        log_posterior[inside] = \
+            log_prior[inside] + self.log_likelihood_batch(xs[inside])
+        return log_posterior
+
+    def map_objective(
+            self,
+            function: Callable[[Objective, ParamValues], _T],
+            values: Sequence[ParamValues]
+    ) -> Iterator[_T]:
+        """
+        Yield function(objective, v) for each of the given parameter
+        values v (see evaluate), in order: with a pool, on its copies of
+        the objective at once (see EvaluationPool); else on the objective,
+        one after the other as they are taken. It does not count, keep or
+        log the evaluations (the other functions do).
+        """
+        if self._pool is not None:
+            yield from self._pool.map(function, values)
+        else:
+            for v in values:
+                yield function(self._objective, v)
 
     def _require_priors(self) -> tuple[Prior, ...]:
         """
@@ -377,35 +434,55 @@ class FitProblem:
         if self._control is not None and self._control.stopped():
             raise FitStopped("the fit was asked to stop")
 
-    def _chi2_and_log_likelihood(
+    def _stoppable(
             self,
-            x: npt.ArrayLike
-    ) -> tuple[float, float] | None:
+            function: Callable[[Objective, ParamValues], _T]
+    ) -> Callable[[Objective, ParamValues], _T]:
         """
-        Return the chi-square and log-likelihood at the given free values,
-        or None where the parameters cannot be evaluated: from the log
-        while a fit that resumes replays it, else from the objective (and
-        logged, None as inf and -inf).
+        Return the function of an evaluation, which raises FitStopped first
+        if the fit was asked to stop.
+        """
+        def stoppable(objective: Objective, values: ParamValues) -> _T:
+            self._check_stop()
+            return function(objective, values)
+        return stoppable
+
+    def _chi2s_and_log_likelihoods(
+            self,
+            xs: np.ndarray
+    ) -> Iterator[tuple[np.ndarray, tuple[float, float] | None]]:
+        """
+        Yield each point (one per row) with its chi-square and
+        log-likelihood, or None where the parameters cannot be evaluated:
+        from the log while a fit that resumes replays it, else from the
+        objective (see map_objective), and logged (None as inf and -inf).
 
         Raises
         ------
         FitStopped
             If the fit was asked to stop.
         """
-        self._check_stop()
-        x = np.asarray(x, dtype=float)
-        logged = None if self._log is None else self._log.replay(x)
-        if logged is None:
+        # (the log replays the first points of a batch at most: its replay
+        # ends at the first point it does not have)
+        new = []
+        for x in xs:
+            logged = None if self._log is None else self._log.replay(x)
+            if logged is not None:
+                yield x, _evaluated(logged)
+                continue
             try:
-                logged = self._objective.chi2_and_log_likelihood(
-                    self.evaluate(x))
+                new.append((x, self.evaluate(x)))
             except ParamEvaluationError:
-                logged = math.inf, -math.inf
+                new.append((x, None))
+        evaluated = self.map_objective(
+            self._stoppable(Objective.chi2_and_log_likelihood),
+            [values for _, values in new if values is not None])
+        for x, values in new:
+            numbers = (math.inf, -math.inf) if values is None \
+                else next(evaluated)
             if self._log is not None:
-                self._log.append(x, *logged)
-        if logged == (math.inf, -math.inf):
-            return None
-        return logged
+                self._log.append(x, *numbers)
+            yield x, _evaluated(numbers)
 
     def set_stage(self, stage: str) -> None:
         """
@@ -445,3 +522,16 @@ class FitProblem:
             self._best_chi2, best, final)
         for observer in self._observers:
             observer(progress)
+
+
+def _points(xs: npt.ArrayLike) -> np.ndarray:
+    """Return points of free values, one per row."""
+    return np.atleast_2d(np.asarray(xs, dtype=float))
+
+
+def _evaluated(numbers: tuple[float, float]) -> tuple[float, float] | None:
+    """
+    Return the chi-square and log-likelihood of a point, or None for
+    those of a point whose parameters could not be evaluated (inf, -inf).
+    """
+    return None if numbers == (math.inf, -math.inf) else numbers

@@ -4,13 +4,14 @@ Jacobian of the residuals, and the Gaussian (Laplace) approximation of
 the posterior from it.
 """
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from typing import Any, Literal
 
 import numpy as np
 
 from gbkfit.fitting.problem import FitProblem
 from gbkfit.fitting.result import Covariance, Posterior
+from gbkfit.objective import Objective
 from gbkfit.params import ParamEvaluationError
 from gbkfit.utils import parseutils
 from gbkfit.utils.parseutils import ConfigError
@@ -127,7 +128,7 @@ def finite_difference_steps(
 
 
 def jacobian(
-        func: Callable[[np.ndarray], np.ndarray],
+        func_batch: Callable[[np.ndarray], Sequence[np.ndarray]],
         x: np.ndarray,
         steps: np.ndarray,
         lower: np.ndarray,
@@ -137,12 +138,14 @@ def jacobian(
 ) -> np.ndarray:
     """
     Return the Jacobian of a function by finite differences: central or
-    forward, and one-sided where a step would cross a bound.
+    forward, and one-sided where a step would cross a bound. The function
+    is evaluated at all the steps at once (in one batch).
 
     Parameters
     ----------
-    func : Callable
-        The function, of a vector, giving a vector.
+    func_batch : Callable
+        The function at several points (one per row), giving a vector for
+        each.
     x : np.ndarray
         Where.
     steps : np.ndarray
@@ -161,7 +164,9 @@ def jacobian(
         The Jacobian: one row per value of the function, one column per
         variable (a new array).
     """
-    columns = []
+    # Each column is (f(a) - f(b)) / d: the two points a and b of its
+    # difference (None for x itself, whose value is f0), and d
+    differences = []
     for i, h in enumerate(steps):
         room_up = upper[i] - x[i]
         room_down = x[i] - lower[i]
@@ -174,14 +179,22 @@ def jacobian(
         down[i] -= h
         can_up = h <= room_up
         if scheme == 'central' and can_up and h <= room_down:
-            columns.append((func(up) - func(down)) / (2 * h))
-            continue
-        if f0 is None:
-            f0 = func(x)
-        if can_up:
-            columns.append((func(up) - f0) / h)
+            differences.append((up, down, 2 * h))
+        elif can_up:
+            differences.append((up, None, h))
         else:
-            columns.append((f0 - func(down)) / h)
+            differences.append((None, down, h))
+    points = [p for a, b, _ in differences for p in (a, b) if p is not None]
+    needs_f0 = f0 is None \
+        and any(a is None or b is None for a, b, _ in differences)
+    values = iter(func_batch(np.array(([x] if needs_f0 else []) + points)))
+    if needs_f0:
+        f0 = next(values)
+    columns = []
+    for a, b, d in differences:
+        fa = f0 if a is None else next(values)
+        fb = f0 if b is None else next(values)
+        columns.append((fa - fb) / d)
     return np.stack(columns, axis=1)
 
 
@@ -236,17 +249,19 @@ def covariance(
         If the parameters cannot be evaluated at a step (e.g. out of
         their valid range).
     """
-    objective = problem.objective()
     params = problem.params()
     nevals = 0
 
-    # (with those of the priors: the covariance of the posterior)
-    def residuals(point: np.ndarray) -> np.ndarray:
+    # (with those of the priors: the covariance of the posterior; on the
+    # pool of the problem, if any)
+    def residuals(points: np.ndarray) -> list[np.ndarray]:
         nonlocal nevals
-        nevals += 1
-        return np.concatenate([
-            objective.residuals(params.evaluate(point)),
-            problem.prior_residuals(point)])
+        nevals += len(points)
+        evaluated = problem.map_objective(
+            Objective.residuals, [params.evaluate(p) for p in points])
+        return [
+            np.concatenate([r, problem.prior_residuals(p)])
+            for p, r in zip(points, evaluated)]
 
     steps = finite_difference_steps(
         x, scales, problem.precision() ** (1 / 3))
@@ -274,9 +289,11 @@ def covariance(
     # the element values by the free values
     element_names = list(params.element_values(params.evaluate(x)))
 
-    def element_values(point: np.ndarray) -> np.ndarray:
-        return np.array(list(params.element_values(
-            params.evaluate(point)).values()))
+    def element_values(points: np.ndarray) -> list[np.ndarray]:
+        return [
+            np.array(list(params.element_values(
+                params.evaluate(point)).values()))
+            for point in points]
 
     jac_elements = jacobian(element_values, x, steps, lower, upper)
     element_var = np.einsum(
