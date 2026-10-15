@@ -276,11 +276,10 @@ class DCubePlanBase(ObservablePlan):
         # cube of its own, which is lensed into the high-res cube
         self._lens_plan = None
         self._source_cube = None
-        lens = foreground.lens()
-        if lens is not None:
+        if foreground.lens() is not None:
             if weights is not None:
                 raise ConfigError("a lens does not support weights yet")
-            self._lens_plan = lens.plan(
+            self._lens_plan = foreground.plan_lens(
                 driver, self._dcube_plan.scratch_grid(), dtype)
             grid = self._lens_plan.source_grid(grid)
             nz = self._dcube_plan.scratch_dcube().shape[0]
@@ -325,7 +324,8 @@ class DCubePlanBase(ObservablePlan):
         model_extra = None if out_extra is None else {}
         self._model_plan.evaluate(params, gravity, cube, model_extra)
         if self._lens_plan is not None:
-            self._lens_plan.evaluate(cube, dcube_plan.scratch_dcube())
+            self._lens_plan.evaluate(
+                params, cube, dcube_plan.scratch_dcube())
         flux_scale = None if self._calibration is None \
             else params[self._calibration]
         dcube_plan.evaluate(out_extra, extra_lo, extra_hi, flux_scale)
