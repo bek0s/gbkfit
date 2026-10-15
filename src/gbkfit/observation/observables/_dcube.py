@@ -158,10 +158,12 @@ def _kernel_cube(dcube: 'DCube', grid_hi: gridutils.Grid) -> np.ndarray:
     offset = gbkfit.math.is_odd(size) - 1
     psf_args = (step[:2], size[:2], offset[:2], dcube.rota())
     lsf_args = (step[2], size[2], offset[2])
-    psf_image = (psf or PSFPoint()).asarray(*psf_args)
-    lsf_profile = (lsf or LSFPoint()).asarray(*lsf_args)
-    return DriverFFT.fft_convolution_shift(
-        psf_image * lsf_profile[:, None, None])
+    # (rolled before their product, which is then the only cube made)
+    psf_image = DriverFFT.fft_convolution_shift(
+        (psf or PSFPoint()).asarray(*psf_args))
+    lsf_profile = DriverFFT.fft_convolution_shift(
+        (lsf or LSFPoint()).asarray(*lsf_args))
+    return psf_image * lsf_profile[:, None, None]
 
 
 class DCube:
@@ -172,7 +174,8 @@ class DCube:
     and the LSF convolve it, it is downscaled to the grid, and masked
     where its values are not above mask_cutoff (the mask is applied, NaN,
     if mask_apply). The weights are smoothed by the PSF and the LSF if
-    smooth_weights.
+    smooth_weights. Its values are of dtype, and the FFTs of its
+    convolutions of fft_dtype (at least as precise).
     """
 
     def __init__(
@@ -192,7 +195,8 @@ class DCube:
             smooth_weights: bool,
             mask_cutoff: float | None,
             mask_apply: bool,
-            dtype: np.dtype
+            dtype: np.dtype,
+            fft_dtype: np.dtype
     ):
         # The low-res grid (the grid of the data); the high-res one is made
         # by the plan
@@ -208,6 +212,7 @@ class DCube:
         self._mask_cutoff = mask_cutoff
         self._mask_apply = mask_apply
         self._dtype = dtype
+        self._fft_dtype = fft_dtype
 
     def grid(self) -> gridutils.Grid:
         return self._grid_lo
@@ -254,6 +259,9 @@ class DCube:
     def dtype(self) -> np.dtype:
         return self._dtype
 
+    def fft_dtype(self) -> np.dtype:
+        return self._fft_dtype
+
     def spectral_smoothing(self) -> float:
         """
         Return the dispersion (km/s) by which the instrument smooths the
@@ -296,7 +304,8 @@ class DCubePlan:
         psf = dcube.psf()
         lsf = dcube.lsf()
         dtype = dcube.dtype()
-        backend_fft = driver.fft(dtype)
+        fft_dtype = dcube.fft_dtype()
+        backend_fft = driver.fft(fft_dtype)
 
         # The size and step of the high-res cube, before the padding
         size_hi = tuple(size_lo[i] * scale[i] for i in range(3))
@@ -347,8 +356,8 @@ class DCubePlan:
             if psf_images is not None:
                 self._psf_convolution = backend_fft.convolution(
                     DriverFFT.fft_convolution_shift(
-                        psf_images, axes=(1, 2)).astype(dtype),
-                    shape_hi, axes=(1, 2))
+                        psf_images, axes=(1, 2)).astype(fft_dtype),
+                    shape_hi, axes=(1, 2), dtype=dtype)
             if lsf_kernels is not None:
                 self._lsf_kernels_hi = driver.mem_copy_h2d(
                     lsf_kernels.astype(dtype))
@@ -359,7 +368,8 @@ class DCubePlan:
         self._convolution = None
         if (psf or lsf) and not varies:
             self._convolution = backend_fft.convolution(
-                _kernel_cube(dcube, grid_hi).astype(dtype), shape_hi)
+                _kernel_cube(dcube, grid_hi).astype(fft_dtype, copy=False),
+                shape_hi, dtype=dtype)
 
         # The response of the primary beam on the high-res grid (one image
         # for all channels), if there is one
@@ -464,7 +474,7 @@ class DCubePlan:
         # The convolution, of the weights too if they are smoothed (in
         # float32, the rounding of the FFT leaves noise of about 1e-7 of
         # the peak in the faint parts of the cube, which spoils their
-        # moments: see dmodel_mmaps_moments)
+        # moments: see dmodel_mmaps_moments; hence fft_dtype)
         cubes = [dcube_hi]
         if has_weights and dcube.smooth_weights():
             cubes.append(wcube_hi)
@@ -530,6 +540,7 @@ class DCubePlan:
             if psf or lsf:
                 # (made again: it is not kept)
                 out_extra.update(pcube_hi=_kernel_cube(
-                    dcube, self._grid_hi).astype(dcube.dtype()))
+                    dcube, self._grid_hi).astype(
+                        dcube.fft_dtype(), copy=False))
         if pbeam_hi is not None:
             out_extra.update(pbeam_hi=driver.mem_copy_d2h(pbeam_hi)[0])

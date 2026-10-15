@@ -248,13 +248,15 @@ class PixelMoments(Observable):
             instrument: Instrument,
             scale: Sequence[int],
             dtype: np.dtype,
+            fft_dtype: np.dtype,
             weights: 'Weights | None',
             calibration: str | None
     ) -> 'PixelMomentsPlan':
         if weights is not None and self._method == 'gaussian_fit':
             raise ConfigError(
                 "the method gaussian_fit does not support weights yet")
-        dcube = _moments.spectra_dcube(self, scale, instrument, dtype)
+        dcube = _moments.spectra_dcube(
+            self, scale, instrument, dtype, fft_dtype)
         return PixelMomentsPlan(
             self, dcube, driver, scene, foreground, dtype, weights,
             calibration)

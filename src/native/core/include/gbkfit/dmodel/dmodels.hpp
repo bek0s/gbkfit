@@ -146,8 +146,8 @@ dmodel_dcube_mask(
 // error is in the cube, from the rounding of the float32 FFT convolution
 // (about 1e-7 of the peak), not in these sums: float64 sums over the
 // float32 cube give the same moments (tested 2026-10-10). A float64
-// model, or a float64 convolution of float32 models, would fix them;
-// a mask_cutoff masks them.
+// model, or a float64 convolution of float32 models (the observations'
+// fft_dtype, float64 by default), fixes them.
 template<typename T> constexpr void
 dmodel_mmaps_moments(
         int x, int y,

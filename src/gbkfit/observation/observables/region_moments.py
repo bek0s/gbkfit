@@ -287,12 +287,14 @@ spec_medium, method : optional
             instrument: Instrument,
             scale: Sequence[int],
             dtype: np.dtype,
+            fft_dtype: np.dtype,
             weights: 'Weights | None',
             calibration: str | None
     ) -> 'RegionMomentsPlan':
         if weights is not None:
             raise ConfigError("region_moments does not support weights yet")
-        dcube = _moments.spectra_dcube(self, scale, instrument, dtype)
+        dcube = _moments.spectra_dcube(
+            self, scale, instrument, dtype, fft_dtype)
         return RegionMomentsPlan(
             self, self._weights, dcube, driver, scene, foreground, dtype,
             calibration)

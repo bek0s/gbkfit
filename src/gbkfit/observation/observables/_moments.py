@@ -130,7 +130,8 @@ def spectra_dcube(
         observable: 'PixelMoments | RegionMoments',
         scale: Sequence[int],
         instrument: Instrument,
-        dtype: np.dtype
+        dtype: np.dtype,
+        fft_dtype: np.dtype
 ) -> _dcube.DCube:
     """
     Return the DCube of the spectra that the moments of an observable are
@@ -154,7 +155,8 @@ def spectra_dcube(
         smooth_weights=False,
         mask_cutoff=None,
         mask_apply=False,
-        dtype=dtype)
+        dtype=dtype,
+        fft_dtype=fft_dtype)
 
 
 class MomentsPlan:

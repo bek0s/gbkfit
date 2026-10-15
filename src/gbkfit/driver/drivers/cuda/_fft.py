@@ -29,9 +29,10 @@ class DriverFFTCuda(DriverFFT):
             self,
             kernel: np.ndarray,
             shape: tuple[int, int, int],
-            axes: tuple[int, ...]
+            axes: tuple[int, ...],
+            dtype: np.dtype
     ) -> FFTConvolution:
-        return _FFTConvolutionCuda(kernel, shape, axes)
+        return _FFTConvolutionCuda(kernel, shape, axes, dtype)
 
 
 class _FFTConvolutionCuda(FFTConvolution):
@@ -39,40 +40,57 @@ class _FFTConvolutionCuda(FFTConvolution):
     A convolution by cuFFT: one cuFFT plan for each direction, and a
     buffer for the spectra of the cubes, through which the kernel is also
     uploaded (so it never has device memory of its own). After it is made,
-    no device memory is allocated.
+    no device memory is allocated. Cubes less precise than the transforms
+    are copied into the buffer, as real rows padded to the length of its
+    complex rows, transformed there in place, and copied back.
     """
 
     def __init__(
             self,
             kernel: np.ndarray,
             shape: tuple[int, int, int],
-            axes: tuple[int, ...]
+            axes: tuple[int, ...],
+            dtype: np.dtype
     ):
-        complex_dtype = np.result_type(kernel.dtype, np.complex64)
+        fft_dtype = kernel.dtype
+        complex_dtype = np.result_type(fft_dtype, np.complex64)
         self._spectrum = cp.empty(_complex_shape(shape), complex_dtype)
-        cube = _real_view(self._spectrum, shape, kernel.dtype)
-        self._r2c = cupyx_fft.get_fft_plan(cube, axes=axes, value_type='R2C')
-        self._c2r = cupyx_fft.get_fft_plan(
-            self._spectrum, shape=tuple(shape[axis] for axis in axes),
-            axes=axes, value_type='C2R')
         # The spectrum of the kernel, scaled by the normalisation of the
         # inverse transform
-        kernel_d = _real_view(self._spectrum, kernel.shape, kernel.dtype)
+        kernel_d = _real_view(self._spectrum, kernel.shape, fft_dtype)
         kernel_d.set(kernel)
-        plan = self._r2c if kernel.shape == shape else \
-            cupyx_fft.get_fft_plan(kernel_d, axes=axes, value_type='R2C')
         self._kernel_spectrum = cp.empty(
             _complex_shape(kernel.shape), complex_dtype)
-        plan.fft(kernel_d, self._kernel_spectrum, cufft.CUFFT_FORWARD)
+        cupyx_fft.get_fft_plan(kernel_d, axes=axes, value_type='R2C').fft(
+            kernel_d, self._kernel_spectrum, cufft.CUFFT_FORWARD)
         size = np.prod([shape[axis] for axis in axes])
-        self._kernel_spectrum *= kernel.dtype.type(1 / size)
+        self._kernel_spectrum *= fft_dtype.type(1 / size)
+        self._padded = None
+        if dtype == fft_dtype:
+            self._r2c = cupyx_fft.get_fft_plan(
+                _real_view(self._spectrum, shape, fft_dtype), axes=axes,
+                value_type='R2C')
+            self._c2r = cupyx_fft.get_fft_plan(
+                self._spectrum, shape=tuple(shape[axis] for axis in axes),
+                axes=axes, value_type='C2R')
+        else:
+            self._padded = self._spectrum.view(fft_dtype)[..., :shape[2]]
+            self._r2c, self._c2r = _in_place_plans(shape, axes, fft_dtype)
 
     def __call__(self, cube: DeviceArray) -> None:
         # (the kernel is broadcast if it has one image for all channels;
         # cuFFT overwrites the input of a c2r transform)
-        self._r2c.fft(cube, self._spectrum, cufft.CUFFT_FORWARD)
-        self._spectrum *= self._kernel_spectrum
-        self._c2r.fft(self._spectrum, cube, cufft.CUFFT_INVERSE)
+        spectrum = self._spectrum
+        if self._padded is None:
+            self._r2c.fft(cube, spectrum, cufft.CUFFT_FORWARD)
+            spectrum *= self._kernel_spectrum
+            self._c2r.fft(spectrum, cube, cufft.CUFFT_INVERSE)
+        else:
+            self._padded[...] = cube
+            self._r2c.fft(spectrum, spectrum, cufft.CUFFT_FORWARD)
+            spectrum *= self._kernel_spectrum
+            self._c2r.fft(spectrum, spectrum, cufft.CUFFT_INVERSE)
+            cube[...] = self._padded
 
 
 def _complex_shape(shape: tuple[int, ...]) -> tuple[int, ...]:
@@ -91,3 +109,32 @@ def _real_view(
     """
     size = int(np.prod(shape))
     return spectrum.view(dtype).ravel()[:size].reshape(shape)
+
+
+def _in_place_plans(
+        shape: tuple[int, int, int],
+        axes: tuple[int, ...],
+        dtype: np.dtype
+) -> tuple[cufft.PlanNd, cufft.PlanNd]:
+    """
+    Return the cuFFT plans of the transforms (r2c and c2r) along the axes
+    of real arrays of a shape, in place in their spectra: their rows are
+    padded to the length of the complex rows (x // 2 + 1 values).
+    """
+    # The transformed shape, and how many times (each channel, or once)
+    transformed = [shape[axis] for axis in axes]
+    batch = shape[0] if axes == (1, 2) else 1
+    columns = shape[2] // 2 + 1
+    real = transformed[:-1] + [2 * columns]
+    complex_ = transformed[:-1] + [columns]
+    real_size, complex_size = int(np.prod(real)), int(np.prod(complex_))
+    r2c_type, c2r_type = (cufft.CUFFT_D2Z, cufft.CUFFT_Z2D) \
+        if dtype == np.float64 else (cufft.CUFFT_R2C, cufft.CUFFT_C2R)
+    last = len(transformed) - 1
+    r2c = cufft.PlanNd(
+        transformed, real, 1, real_size, complex_, 1, complex_size,
+        r2c_type, batch, 'C', last, columns)
+    c2r = cufft.PlanNd(
+        transformed, complex_, 1, complex_size, real, 1, real_size,
+        c2r_type, batch, 'C', last, shape[2])
+    return r2c, c2r

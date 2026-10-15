@@ -245,7 +245,8 @@ def test_least_squares_move_values_from_awkward_starts(fitter):
     properties['pt_s'] |= dict(value=1, min=1)
     params = ParamSpace(objective.pdescs(), properties)
     result = fitter_parser.load(fitter).fit(objective, params)
-    assert result.best().chi2 == pytest.approx(local.chi2, rel=1e-6)
+    # (scipy's 'lm' stops 1.4e-5 above the others: see FitProblem.precision)
+    assert result.best().chi2 == pytest.approx(local.chi2, rel=1e-4)
 
 
 @pytest.mark.parametrize('fitter', [

@@ -178,6 +178,7 @@ class PixelSpectra(Observable):
             instrument: Instrument,
             scale: Sequence[int],
             dtype: np.dtype,
+            fft_dtype: np.dtype,
             weights: 'Weights | None',
             calibration: str | None
     ) -> 'PixelSpectraPlan':
@@ -196,7 +197,8 @@ class PixelSpectra(Observable):
             smooth_weights=self._smooth_weights,
             mask_cutoff=self._mask_cutoff,
             mask_apply=self._mask_apply,
-            dtype=dtype)
+            dtype=dtype,
+            fft_dtype=fft_dtype)
         return PixelSpectraPlan(
             dcube, driver, scene, foreground, dtype, weights, calibration)
 

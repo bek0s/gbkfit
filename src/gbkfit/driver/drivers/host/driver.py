@@ -82,5 +82,4 @@ class DriverHost(Driver):
 
     def fft(self, dtype: npt.DTypeLike) -> DriverFFT:
         from ._fft import DriverFFTHost
-        return DriverFFTHost(
-            self.native_class('FFTConvolution', dtype), dtype)
+        return DriverFFTHost(native_module, dtype)

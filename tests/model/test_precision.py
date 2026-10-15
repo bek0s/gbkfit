@@ -48,12 +48,12 @@ CASES = {
         FLAT, dict(psf=VARYING_PSF, lsf=GAUSS_LSF))}
 
 
-def evaluate(driver, case, dtype):
+def evaluate(driver, case, dtype, fft_dtype='float64'):
     galaxy, observable, line_of_sight, instrument = CASES[case]
     group = ObservationGroup([galaxy_parser.load(galaxy)], [
         observation_parser.load(dict(
             observable=observable, line_of_sight=line_of_sight,
-            instrument=instrument, dtype=dtype),
+            instrument=instrument, dtype=dtype, fft_dtype=fft_dtype),
             drivers={None: driver})])
     # (the disk on a grid is thick: it has a scale height)
     properties = PROPERTIES | (dict(ht_s=0.5) if '3d' in case else {})
@@ -65,9 +65,8 @@ def evaluate(driver, case, dtype):
 
 @pytest.mark.parametrize('case', CASES)
 def test_float64_models_agree_with_float32_models(driver, case):
-    # The moments of the faint wings of a convolved model (below about
-    # 1e-4 of its peak) are beyond the precision of float32, so they are
-    # compared where there is flux
+    # (compared where there is flux; the faint values are compared by
+    # test_float64_ffts_keep_the_faint_values_of_float32_models)
     single = evaluate(driver, case, 'float32')
     double = evaluate(driver, case, 'float64')
     flux = double.get('moment0')
@@ -81,3 +80,46 @@ def test_float64_models_agree_with_float32_models(driver, case):
         np.testing.assert_allclose(
             value[compared], reference[compared], rtol=1e-4,
             atol=1e-5 * np.abs(reference[compared]).max())
+
+
+@pytest.mark.parametrize('case', ['2d spectra', 'varying psf', 'moments'])
+def test_float64_ffts_keep_the_faint_values_of_float32_models(
+        driver, case):
+    # The rounding of a float32 FFT adds about 1e-7 of the peak to every
+    # value of the cube; float64 FFTs leave the error of the float32
+    # model alone: about 1e-6 of each moment map, and more in the faint
+    # spectra (far in the wings of a line, its integral over a channel is
+    # a difference of two values near 1)
+    double = evaluate(driver, case, 'float64')
+    errors = {
+        fft_dtype: _largest_errors(
+            evaluate(driver, case, 'float32', fft_dtype), double)
+        for fft_dtype in ('float32', 'float64')}
+    if case == 'moments':
+        assert errors['float64'] < 1e-5
+        assert errors['float32'] > 1e-3
+    else:
+        assert errors['float64'] < 1e-2
+        assert errors['float32'] > 1
+
+
+def _largest_errors(single, double):
+    """
+    The largest error of the values of a model, relative to the values
+    (moments: to the largest of each map), where there is flux above 1e-8
+    of the peak (moments: 1e-6); infinite where one of them is NaN.
+    """
+    if 'moment0' not in double:
+        value = double['spectra']
+        compared = value > 1e-8 * value.max()
+        return np.max(np.abs(single['spectra'] - value)[compared]
+                      / value[compared])
+    compared = double['moment0'] > 1e-6 * double['moment0'].max()
+    errors = []
+    for key, value in double.items():
+        error = np.abs(single[key] - value)[compared]
+        flips = np.isnan(single[key][compared]) != np.isnan(value[compared])
+        error[flips] = np.inf
+        errors.append(
+            np.nanmax(error) / np.nanmax(np.abs(value[compared])))
+    return max(errors)

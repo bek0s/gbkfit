@@ -1,10 +1,12 @@
 
+import types
 from typing import Any
 
 import numpy as np
 import numpy.typing as npt
 
-from gbkfit.driver.base import DeviceArray, DriverFFT, FFTConvolution
+from gbkfit.driver.base import (
+    _NATIVE_CLASS_SUFFIXES, DeviceArray, DriverFFT, FFTConvolution)
 
 
 __all__ = [
@@ -18,9 +20,9 @@ class DriverFFTHost(DriverFFT):
     FFTConvolution classes).
     """
 
-    def __init__(self, native_convolution: type, dtype: npt.DTypeLike):
+    def __init__(self, native_module: types.ModuleType, dtype: npt.DTypeLike):
         super().__init__(32)
-        self._native_convolution = native_convolution
+        self._native_module = native_module
         self._dtype = np.dtype(dtype)
 
     def dtype(self) -> np.dtype:
@@ -30,10 +32,16 @@ class DriverFFTHost(DriverFFT):
             self,
             kernel: np.ndarray,
             shape: tuple[int, int, int],
-            axes: tuple[int, ...]
+            axes: tuple[int, ...],
+            dtype: np.dtype
     ) -> FFTConvolution:
-        return _FFTConvolutionHost(
-            self._native_convolution(kernel, shape, axes))
+        # The classes are named by the types of the cubes and, if more
+        # precise, of the transforms (e.g. FFTConvolutionf32f64)
+        name = 'FFTConvolution' + _NATIVE_CLASS_SUFFIXES[dtype]
+        if dtype != self._dtype:
+            name += _NATIVE_CLASS_SUFFIXES[self._dtype]
+        native = getattr(self._native_module, name)
+        return _FFTConvolutionHost(native(kernel, shape, axes))
 
 
 class _FFTConvolutionHost(FFTConvolution):
