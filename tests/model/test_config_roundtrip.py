@@ -150,6 +150,12 @@ OBSERVABLES = dict(
         size=[20, 11], step=[2, 10], rpix=[3, 5], rval=[1, 3], rota=10,
         slit_width=3, smooth_weights=True, mask_cutoff=0.1, mask_apply=True),
         dict(psf=GAUSS, lsf=GAUSS), [2, 1]),
+    slitless_spectra=(dict(
+        size=[20, 16], step=[2, 1], rpix=[3, 4], rval=[1, 2], rota=10,
+        spec_size=11, spec_step=30, spec_rval=5, spec_rest='4e-06 m',
+        spec_medium='air', trace_wave='3.9e-06 m', trace_dx=[1, 2000],
+        trace_dy=[0.5, 10]),
+        dict(psf=GAUSS, lsf=None), [2, 1]),
     pixel_moments=(dict(
         size=[20, 16], step=[2, 1], rpix=[3, 4], rval=[1, 2], rota=10,
         mask_cutoff=0.1, orders=[0, 1], spec_size=201, spec_step=2,

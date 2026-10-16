@@ -245,7 +245,7 @@ def test_dataset_steps_must_be_positive():
 @pytest.mark.parametrize('dataset_type, shape', [
     ('pixel_brightness', (3, 8, 20)), ('pixel_moments', (3, 8, 20)),
     ('pixel_spectra', (8, 20)), ('pixel_spectra', (1, 3, 8, 20)),
-    ('slit_spectra', (3, 8, 20))])
+    ('slit_spectra', (3, 8, 20)), ('slitless_spectra', (3, 8, 20))])
 def test_datasets_check_the_number_of_axes(tmp_path, dataset_type, shape):
     # e.g. a cube loaded as an image, or a radio cube with a Stokes axis
     fits.writeto(tmp_path / 'data.fits', np.ones(shape, np.float32))
