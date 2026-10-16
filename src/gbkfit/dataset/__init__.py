@@ -6,6 +6,7 @@ from .pixel_spectra import *
 from .region_moments import *
 from .region_spectra import *
 from .slit_spectra import *
+from .slitless_spectra import *
 
 
 def _register_datasets() -> None:
@@ -16,7 +17,8 @@ def _register_datasets() -> None:
         DatasetPixelSpectra,
         DatasetRegionMoments,
         DatasetRegionSpectra,
-        DatasetSlitSpectra
+        DatasetSlitSpectra,
+        DatasetSlitlessSpectra
     ])
 
 
