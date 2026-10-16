@@ -56,11 +56,11 @@ def _with_mass_params(
     moved = any(cmp.circular_velocity_params() for cmp in components)
     if moved and mass_model is None:
         raise ConfigError(
-            "the 'mass' velocity traits need the mass of their galaxy")
+            "the 'tan_mass' velocity traits need the mass of their galaxy")
     if mass_model is not None and not moved:
         raise ConfigError(
             "no component uses the mass of its galaxy; give the components "
-            "that it moves 'mass' velocity traits")
+            "that it moves 'tan_mass' velocity traits")
     if mass_model is not None and distance is None:
         raise ConfigError(
             "the mass of a galaxy needs its distance (e.g. distance: "

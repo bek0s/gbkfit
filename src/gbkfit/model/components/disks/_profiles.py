@@ -2,7 +2,7 @@
 The radial profiles of a disk, as its galaxy takes them for gravity: the
 azimuthal means of its traits, for the mass components that follow it
 (see mass.ComponentDensity) and for its pressure support (see
-traits.VPTraitMass).
+traits.VPTraitTanMass).
 """
 
 from collections.abc import Callable, Sequence
@@ -120,7 +120,7 @@ def pressure_support(
     and of rho sigma^2, with sigma its velocity dispersion at the midplane
     (its dispersion polar traits times its dispersion height traits at z =
     0); the derivative by the second-order three-point formula on the
-    radii (see traits.VPTraitMass). NaN where it has no density.
+    radii (see traits.VPTraitTanMass). NaN where it has no density.
 
     Parameters
     ----------

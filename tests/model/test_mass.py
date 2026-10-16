@@ -1,7 +1,7 @@
 """
 Tests for the mass of galaxies: its components against independent
 formulas and integrals, their parameterisations, the distance of their
-galaxy, and the velocity traits 'mass', which take their circular
+galaxy, and the velocity traits 'tan_mass', which take their circular
 velocity.
 """
 
@@ -481,12 +481,12 @@ def evaluate(driver, galaxy, line_of_sight, properties):
     ('grid', 'mcdisk')])
 def test_mass_trait_is_the_circular_velocity_at_the_subnodes(
         driver, line_of_sight, disk_type):
-    # A disk with the trait 'mass' is the disk whose node-wise tangential
+    # A disk with the trait 'tan_mass' is the disk whose node-wise tangential
     # velocity at its subnodes is the circular velocity of the mass of its
     # galaxy, at the radii of the subnodes in kpc
     thick = line_of_sight == 'grid'
     massive = disk_galaxy(
-        disk_type, dict(type='mass'), MASS, DISTANCE, thick=thick)
+        disk_type, dict(type='tan_mass'), MASS, DISTANCE, thick=thick)
     given = disk_galaxy(
         disk_type, dict(type='nw_tan_uniform', sampling='subrings'),
         thick=thick)
@@ -507,7 +507,7 @@ def test_mass_trait_is_the_circular_velocity_at_the_subnodes(
 
 def test_mass_trait_parameters_and_round_trip():
     galaxy = disk_galaxy(
-        'smdisk', dict(type='mass'), MASS, DISTANCE, thick=True)
+        'smdisk', dict(type='tan_mass'), MASS, DISTANCE, thick=True)
     # The trait has no parameters: those of the distance and the mass are
     # the galaxy's
     assert not any(name.startswith('vpt') for name in galaxy.pdescs())
@@ -521,11 +521,11 @@ def test_mass_trait_parameters_and_round_trip():
 
 def test_mass_trait_mass_and_distance_need_each_other():
     with pytest.raises(ConfigError, match="need the mass of their galaxy"):
-        disk_galaxy('smdisk', dict(type='mass'))
+        disk_galaxy('smdisk', dict(type='tan_mass'))
     with pytest.raises(ConfigError, match="no component uses"):
         disk_galaxy('smdisk', dict(type='tan_arctan'), MASS, DISTANCE)
     with pytest.raises(ConfigError, match="needs its distance"):
-        disk_galaxy('smdisk', dict(type='mass'), MASS)
+        disk_galaxy('smdisk', dict(type='tan_mass'), MASS)
     with pytest.raises(ConfigError, match="used by its mass only"):
         disk_galaxy('smdisk', dict(type='tan_arctan'), distance=DISTANCE)
 
@@ -561,7 +561,7 @@ def test_disk_densities_are_azimuthal_means(driver):
             dict(type='exponential'), dict(type='nw_harmonic', order=2),
             dict(type='mixture_gauss', nblobs=1)]),
         kinematics=dict(
-            vptraits=dict(type='mass'), dptraits=dict(type='uniform')),
+            vptraits=dict(type='tan_mass'), dptraits=dict(type='uniform')),
         sptraits=dict(type='rrange'),
         emission=dict(type='lines')))
     params = dict(
@@ -598,7 +598,7 @@ def test_trait_disk_is_the_nodewise_disk_of_its_density(
     subrnodes = np.array(subring_radii(rnodes, DISK['rstep']))
     thick = line_of_sight == 'grid'
     disk = with_traits(
-        DISK, ptraits=dict(type='nw_uniform'), vptraits=dict(type='mass'))
+        DISK, ptraits=dict(type='nw_uniform'), vptraits=dict(type='tan_mass'))
     disk |= dict(type='smdisk', name='hi')
     properties = {
         f'hi_{name}': value for name, value in DISK_PROPERTIES.items()
@@ -640,7 +640,7 @@ def test_trait_disks_follow_disks_of_their_galaxy():
     loaded = mass_component_parser.load(copy.deepcopy(mass))
     assert mass_component_parser.dump(loaded) == mass
     with pytest.raises(ConfigError, match="follows the component 'hi'"):
-        disk_galaxy('smdisk', dict(type='mass'), mass, DISTANCE)
+        disk_galaxy('smdisk', dict(type='tan_mass'), mass, DISTANCE)
 
 
 def test_trait_disk_follows_a_component_without_light():
@@ -652,7 +652,7 @@ def test_trait_disk_follows_a_component_without_light():
     rnodes = list(range(0, 21, 2))
     opacity = np.append(np.linspace(1, 0.2, 10), 0)
     upsilon = 2e8
-    stars = with_traits(DISK, vptraits=dict(type='mass')) \
+    stars = with_traits(DISK, vptraits=dict(type='tan_mass')) \
         | dict(type='smdisk', name='stars')
     dust = dict(
         type='smdisk', name='dust', loose=False, tilted=False,
@@ -698,7 +698,7 @@ def test_pressure_support_is_the_jeans_equation(driver):
         rnodes=list(range(0, 21, 2)), rstep=0.5,
         density=dict(ptraits=dict(type='exponential')),
         kinematics=dict(
-            vptraits=dict(type='mass'), dptraits=dict(type='exponential')),
+            vptraits=dict(type='tan_mass'), dptraits=dict(type='exponential')),
         emission=dict(type='lines')))
     params = dict(
         xpos=0, ypos=0, posa=30, incl=60, vsys=0, pt_a=1, pt_s=4,
@@ -716,7 +716,7 @@ def test_pressure_support_is_the_jeans_equation(driver):
 
 @pytest.mark.parametrize('line_of_sight', ['flat', 'grid'])
 def test_mass_trait_with_pressure_support(driver, line_of_sight):
-    # The trait 'mass' with pressure support is the node-wise velocity
+    # The trait 'tan_mass' with pressure support is the node-wise velocity
     # sqrt(v_c^2 + (R / rho) d(rho sigma^2)/dR) at the subnodes, with the
     # derivative by the three-point formula: thin, rho is the surface
     # density; thick and flaring (sech2, node-wise scale height s), rho is
@@ -726,7 +726,7 @@ def test_mass_trait_with_pressure_support(driver, line_of_sight):
     flaring = np.linspace(0.5, 2, 11)
     disk = with_traits(
         DISK, dptraits=dict(type='exponential'),
-        vptraits=dict(type='mass', pressure_support='jeans'))
+        vptraits=dict(type='tan_mass', pressure_support='jeans'))
     disk |= dict(type='smdisk')
     properties = DISK_PROPERTIES | dict(dpt_a=30, dpt_s=10)
     subrnodes = np.array(subring_radii(rnodes, DISK['rstep']))
@@ -757,12 +757,14 @@ def test_mass_trait_with_pressure_support(driver, line_of_sight):
 
 def test_pressure_support_option():
     from gbkfit.model.components.disks import traits
-    trait = traits.vpt_parser.load(dict(type='mass', pressure_support='jeans'))
+    trait = traits.vpt_parser.load(
+        dict(type='tan_mass', pressure_support='jeans'))
     assert traits.vpt_parser.dump(trait) == dict(
-        type='mass', pressure_support='jeans')
-    assert traits.vpt_parser.dump(traits.VPTraitMass()) == dict(type='mass')
+        type='tan_mass', pressure_support='jeans')
+    assert traits.vpt_parser.dump(traits.VPTraitTanMass()) \
+        == dict(type='tan_mass')
     with pytest.raises(ConfigError, match="pressure_support must be"):
-        traits.VPTraitMass('asymmetric')
+        traits.VPTraitTanMass('asymmetric')
 
 
 def test_observations_of_a_galaxy_share_its_gravity(driver, monkeypatch):
@@ -783,7 +785,7 @@ def test_observations_of_a_galaxy_share_its_gravity(driver, monkeypatch):
     monkeypatch.setattr(GravityPlan, 'evaluate', counted)
     # (pressure support samples the profiles of the disk on that driver)
     galaxy = disk_galaxy(
-        'smdisk', dict(type='mass', pressure_support='jeans'), MASS,
+        'smdisk', dict(type='tan_mass', pressure_support='jeans'), MASS,
         DISTANCE, driver=driver)
     assert galaxy.driver() is driver
     group = ObservationGroup([galaxy], [
@@ -808,7 +810,7 @@ def test_the_gravity_warns_of_a_disk_far_from_flat(caplog, tilt, warns):
     # The gravity takes a warped disk flat: a tilt of 10 degrees across its
     # rings changes its circular velocity by about 0.2%, one of 30 by
     # about 1.5%, and a warning says so (with extras)
-    disk = with_traits(DISK, vptraits=dict(type='mass')) | dict(
+    disk = with_traits(DISK, vptraits=dict(type='tan_mass')) | dict(
         type='smdisk', tilted=True)
     galaxy = galaxy_parser.load(dict(
         components=[disk], mass=copy.deepcopy(MASS),
@@ -826,7 +828,7 @@ def test_the_gravity_writes_the_rotation_it_gives():
     # the circular velocity of each mass component and of all (signed),
     # the pressure support, and the rotation: sqrt(vcirc^2 + pressure)
     galaxy = disk_galaxy(
-        'smdisk', dict(type='mass', pressure_support='jeans'), MASS,
+        'smdisk', dict(type='tan_mass', pressure_support='jeans'), MASS,
         DISTANCE)
     params = DISK_PROPERTIES | MASS_PROPERTIES
     extra = {}

@@ -43,7 +43,7 @@ class GravityPlan:
     """
     The gravity of a galaxy: the circular velocity of its mass at the
     radii of the components it moves (those with the velocity trait
-    'mass', see Component.circular_velocity_params), with the pressure
+    'tan_mass', see Component.circular_velocity_params), with the pressure
     support of each where its traits ask for it (see
     Disk.pressure_supported_params).
 
