@@ -422,7 +422,7 @@ class Trait(parseutils.TypedSerializable, abc.ABC):
         """
         Return the names of the node-wise parameters whose values are not
         given, but are the circular velocity of the mass of their galaxy
-        at the radii where they are sampled (see VPTraitMass); none
+        at the radii where they are sampled (see VPTraitTanMass); none
         here.
         """
         return ()
@@ -431,7 +431,7 @@ class Trait(parseutils.TypedSerializable, abc.ABC):
         """
         Return how the values of its circular velocity parameters are
         corrected for the pressure of their disk, if they are (see
-        VPTraitMass); not here.
+        VPTraitTanMass); not here.
         """
         return None
 
@@ -1886,7 +1886,7 @@ class VPTraitNWTanUniform(TraitFeatureSampling, VPTrait):
         return dict(vt=ParamVectorDesc(nnodes))
 
 
-class VPTraitMass(VPTrait):
+class VPTraitTanMass(VPTrait):
     """
     The rotation curve of the mass of its galaxy (see gbkfit.model.mass):
     the circular velocity at the rings it is evaluated on, which its
@@ -1895,8 +1895,8 @@ class VPTraitMass(VPTrait):
     rotation of the gas of its disk in that gravity; NaN where its square
     is negative or infinite (there is no circular orbit, e.g. at a jump of
     the surface density of a thin disk, or where the pressure exceeds the
-    gravity). It has no parameters of its own, and its galaxy must have
-    mass.
+    gravity). A tangential velocity. It has no parameters of its own, and
+    its galaxy must have mass.
 
     With pressure_support 'jeans', the rotation of an isotropic gas at the
     midplane of its disk (the radial Jeans equation): v^2 = v_c^2 + (R /
@@ -1921,7 +1921,7 @@ class VPTraitMass(VPTrait):
 
     @staticmethod
     def type() -> str:
-        return 'mass'
+        return 'tan_mass'
 
     @staticmethod
     def uid() -> int:
@@ -3173,7 +3173,7 @@ vpt_parser = parseutils.TypedParser(VPTrait, [
     VPTraitTanIso,
     VPTraitTanNFW,
     VPTraitNWTanUniform,
-    VPTraitMass,
+    VPTraitTanMass,
     VPTraitNWTanHarmonic,
     VPTraitNWRadUniform,
     VPTraitNWRadHarmonic,

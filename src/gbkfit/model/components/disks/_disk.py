@@ -312,7 +312,7 @@ class Disk(abc.ABC):
         """
         Return the names of those of its circular velocity parameters (see
         circular_velocity_params) whose values are corrected for its
-        pressure (see traits.VPTraitMass).
+        pressure (see traits.VPTraitTanMass).
         """
         return self._pressure_supported_params
 

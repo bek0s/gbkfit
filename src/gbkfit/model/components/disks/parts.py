@@ -136,7 +136,7 @@ class Kinematics(parseutils.Serializable):
     How a disk moves: the velocity and the velocity dispersion of each of
     its points, given by traits (see traits). The velocity traits add up,
     so motions combine; a rotation in the gravity of the galaxy is the
-    velocity trait 'mass' (see traits.VPTraitMass). A disk that emits
+    velocity trait 'tan_mass' (see traits.VPTraitTanMass). A disk that emits
     lines into a spectral cube needs kinematics.
 
     Parameters
