@@ -24,6 +24,7 @@ from .units import G
 
 __all__ = [
     'ProfileBurkert',
+    'ProfileDekelZhao',
     'ProfileEinasto',
     'ProfileHalo',
     'ProfileNFW',
@@ -349,3 +350,49 @@ class ProfileZhao(ProfileHalo):
         p = (3 - g) / a
         return x ** (3 - g) / (3 - g) * scipy.special.hyp2f1(
             p, (b - g) / a, p + 1, -x ** a)
+
+
+class ProfileDekelZhao(ProfileHalo):
+    """
+    The halo of Dekel et al. (2017) and Freundlich et al. (2020), of the
+    mean density rho_s / (x^a (1 + x^(1/2))^(2 (3 - a))) within r: f(x) =
+    (1 - a / 3) / (x^a (1 + x^(1/2))^(7 - 2 a)), of the inner slope a (its
+    shape parameter, below 3) and the outer slope -3.5, and m(x) =
+    chi^(2 (3 - a)) / 3, with chi = x^(1/2) / (1 + x^(1/2)). Its scale
+    radius r_s is r_c of the papers (its slope is -2 at ((2 - a) / 1.5)^2
+    r_s), and its concentration r_D / r_s. Its potential has a closed form
+    for a < 2: -(2 / 3) ((1 - chi^(4 - 2 a)) / (4 - 2 a) - (1 - chi^(5 -
+    2 a)) / (5 - 2 a)) in units of 4 pi G rho_s r_s^2.
+
+    Parameters
+    ----------
+    parameters, overdensity : optional
+        See ProfileHalo.
+    """
+
+    @staticmethod
+    def type() -> str:
+        return 'dekel_zhao'
+
+    def _shape_pdescs(self) -> dict[str, ParamScalarDesc]:
+        return dict(a=ParamScalarDesc(desc="the inner slope", maximum=3))
+
+    def _density_shape(
+            self, x: np.ndarray, shape: dict[str, float]) -> np.ndarray:
+        a = shape['a']
+        return (1 - a / 3) / (x ** a * (1 + np.sqrt(x)) ** (7 - 2 * a))
+
+    def _mass_shape(
+            self, x: np.ndarray, shape: dict[str, float]) -> np.ndarray:
+        chi = np.sqrt(x) / (1 + np.sqrt(x))
+        return chi ** (2 * (3 - shape['a'])) / 3
+
+    def _potential_shape(
+            self, x: np.ndarray, shape: dict[str, float]
+    ) -> np.ndarray | None:
+        a = shape['a']
+        if not a < 2:
+            return None
+        chi = np.sqrt(x) / (1 + np.sqrt(x))
+        return -2 / 3 * ((1 - chi ** (4 - 2 * a)) / (4 - 2 * a)
+                         - (1 - chi ** (5 - 2 * a)) / (5 - 2 * a))
