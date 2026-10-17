@@ -20,6 +20,8 @@ __all__ = [
     'Prior',
     'PriorGauss',
     'PriorGaussTrunc',
+    'PriorHalfCauchy',
+    'PriorHalfGauss',
     'PriorLogUniform',
     'PriorSine',
     'PriorUniform',
@@ -45,6 +47,13 @@ def _check_std(std: float) -> None:
         raise ConfigError(
             f"the standard deviation must be finite and positive; it is "
             f"{std}")
+
+
+def _check_scale(scale: float) -> None:
+    """Check that a scale is finite and positive."""
+    if not (math.isfinite(scale) and scale > 0):
+        raise ConfigError(
+            f"the scale must be finite and positive; it is {scale}")
 
 
 class Prior(parseutils.TypedSerializable, abc.ABC):
@@ -506,9 +515,136 @@ class PriorGaussTrunc(Prior):
         return np.asarray(self._dist.ppf(np.asarray(u, dtype=float)))
 
 
+class PriorHalfGauss(Prior):
+    """
+    A half-Gaussian prior on a value of at least 0: a Gaussian of mean 0
+    and standard deviation s, folded onto x >= 0 (e.g. for a jitter that
+    is likely below 2 s, as 95% of the prior is). Its chi-square is (x /
+    s)^2, and its residual x / s.
+
+    Parameters
+    ----------
+    std : float
+        The standard deviation s of the Gaussian.
+
+    Raises
+    ------
+    ConfigError
+        If the standard deviation is not finite and positive.
+    """
+
+    @staticmethod
+    def type() -> str:
+        return 'half_gauss'
+
+    def dump(self) -> dict[str, Any]:
+        return dict(type=self.type(), std=self._std)
+
+    def __init__(self, std: float):
+        _check_std(std)
+        self._std = float(std)
+
+    def std(self) -> float:
+        """Return the standard deviation of the Gaussian."""
+        return self._std
+
+    def minimum(self) -> float:
+        return 0.0
+
+    def maximum(self) -> float:
+        return math.inf
+
+    def log_pdf(self, x: npt.ArrayLike) -> np.ndarray:
+        x = np.asarray(x, dtype=float)
+        norm = math.log(math.sqrt(2 / math.pi) / self._std)
+        return np.where(x >= 0, norm - 0.5 * (x / self._std) ** 2, -np.inf)
+
+    def chi2(self, x: npt.ArrayLike) -> np.ndarray:
+        x = np.asarray(x, dtype=float)
+        return np.where(x >= 0, self.residual(x) ** 2, np.inf)
+
+    def has_residual(self) -> bool:
+        return True
+
+    def residual(self, x: npt.ArrayLike) -> np.ndarray:
+        return np.asarray(x, dtype=float) / self._std
+
+    def ppf(self, u: npt.ArrayLike) -> np.ndarray:
+        u = np.asarray(u, dtype=float)
+        return self._std * scipy.special.ndtri((1 + u) / 2)
+
+
+class PriorHalfCauchy(Prior):
+    """
+    A half-Cauchy prior on a value of at least 0: p(x) proportional to 1 /
+    (1 + (x / s)^2), x >= 0, of scale s. About flat below s, with a heavy
+    tail, it lets the data prefer values well above s: a weakly
+    informative prior for scale parameters, e.g. a jitter (Gelman 2006,
+    Bayesian Analysis 1, 515).
+
+    Its chi-square is 2 log(1 + (x / s)^2), and its residual sign(x)
+    sqrt(2 log(1 + (x / s)^2)), which has the slope sqrt(2) / s at 0.
+
+    Parameters
+    ----------
+    scale : float
+        The scale s, the median.
+
+    Raises
+    ------
+    ConfigError
+        If the scale is not finite and positive.
+    """
+
+    @staticmethod
+    def type() -> str:
+        return 'half_cauchy'
+
+    def dump(self) -> dict[str, Any]:
+        return dict(type=self.type(), scale=self._scale)
+
+    def __init__(self, scale: float):
+        _check_scale(scale)
+        self._scale = float(scale)
+
+    def scale(self) -> float:
+        """Return the scale."""
+        return self._scale
+
+    def minimum(self) -> float:
+        return 0.0
+
+    def maximum(self) -> float:
+        return math.inf
+
+    def log_pdf(self, x: npt.ArrayLike) -> np.ndarray:
+        x = np.asarray(x, dtype=float)
+        norm = math.log(2 / (math.pi * self._scale))
+        return np.where(
+            x >= 0, norm - np.log1p((x / self._scale) ** 2), -np.inf)
+
+    def chi2(self, x: npt.ArrayLike) -> np.ndarray:
+        x = np.asarray(x, dtype=float)
+        return np.where(
+            x >= 0, 2 * np.log1p((x / self._scale) ** 2), np.inf)
+
+    def has_residual(self) -> bool:
+        return True
+
+    def residual(self, x: npt.ArrayLike) -> np.ndarray:
+        x = np.asarray(x, dtype=float)
+        return np.sign(x) * np.sqrt(2 * np.log1p((x / self._scale) ** 2))
+
+    def ppf(self, u: npt.ArrayLike) -> np.ndarray:
+        u = np.asarray(u, dtype=float)
+        return self._scale * np.tan(np.pi / 2 * u)
+
+
 prior_parser = parseutils.TypedParser(Prior)
 prior_parser.register(PriorUniform)
 prior_parser.register(PriorLogUniform)
 prior_parser.register(PriorSine)
 prior_parser.register(PriorGauss)
 prior_parser.register(PriorGaussTrunc)
+prior_parser.register(PriorHalfGauss)
+prior_parser.register(PriorHalfCauchy)
