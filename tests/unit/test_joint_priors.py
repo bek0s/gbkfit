@@ -52,6 +52,40 @@ def test_smooth_penalises_jumps_or_bends_however_the_points_are_spaced():
     assert r @ r == pytest.approx(4 * (4 / 2) ** 2)
 
 
+def smooth2d_residuals(cells, **options):
+    """The residuals of a smooth2d prior on a 4 by 3 map of cells."""
+    pdescs = dict(m=ParamVectorDesc(12))
+    params = ParamSpace(pdescs, dict(m=0), priors=[
+        dict(type='smooth2d', expr='m', size=[4, 3]) | options])
+    (function,) = joint_prior_residuals(params)
+    return function(dict(m=np.ravel(cells)))
+
+
+def test_smooth2d_penalises_jumps_or_bends_of_a_map():
+    # c = i^2 + 2 j: along x first differences 2 i + 1 and second ones 2,
+    # along y 2 and 0, across 0
+    j, i = np.indices((3, 4))
+    cells = i ** 2 + 2 * j
+    np.testing.assert_allclose(
+        smooth2d_residuals(cells, order=1, std=2),
+        np.concatenate([np.tile([0.5, 1.5, 2.5], 3), np.ones(8)]))
+    np.testing.assert_allclose(
+        smooth2d_residuals(cells, order=2, std=2),
+        np.concatenate([np.ones(6), np.zeros(4), np.zeros(6)]))
+    # A saddle bends only across: sqrt(2) per square of cells
+    np.testing.assert_allclose(
+        smooth2d_residuals(i * j, order=2, std=1),
+        np.concatenate([np.zeros(10), np.full(6, np.sqrt(2))]))
+
+
+def test_smooth2d_needs_a_value_per_cell():
+    params = ParamSpace(PDESCS, PROPERTIES, priors=[dict(
+        type='smooth2d', expr='v', size=[4, 3], order=1, std=1)])
+    (function,) = joint_prior_residuals(params)
+    with pytest.raises(ValueError, match="needs 12 values; there are 5"):
+        function(VALUES)
+
+
 def test_bound_penalises_only_beyond_its_bounds():
     # (differences 1, 3, 5, 7: one below 2, one above 6, each by 1)
     np.testing.assert_allclose(residuals(dict(
@@ -73,6 +107,8 @@ def test_the_parameter_space_keeps_its_priors():
     (dict(type='gauss', expr='c', mean=0, std=1), "invalid expression"),
     (dict(type='gauss', expr='a', mean=0, std=0), "std"),
     (dict(type='smooth', expr='v', order=3, std=1), "order"),
+    (dict(type='smooth2d', expr='v', size=[4], order=1, std=1), "size"),
+    (dict(type='smooth2d', expr='v', size=[4, 3], order=3, std=1), "order"),
     (dict(type='bound', expr='a', std=1), "lower, upper"),
     (dict(type='mvn', exprs=['a', 'b'], mean=[0, 0], cov=[[1, 2], [2, 1]]),
      "positive definite"),
