@@ -29,13 +29,17 @@ GALAXY = dict(components=[dict(
 PROPERTIES = dict(xpos=0.0, ypos=0.0, posa=50, incl=60, pt_a=1, pt_s=2)
 
 
-def make_objective(driver, data, likelihood=None):
+def make_objective(driver, data, likelihood=None, name=None, **values):
+    """
+    The objective of an observation of the given name, and the values of
+    the parameters (PROPERTIES and the given values).
+    """
     dataset = DatasetPixelBrightness(data)
     observation = Observation(
         PixelBrightness.from_data(dataset), Flat(), driver, data=dataset,
-        likelihood=likelihood)
+        likelihood=likelihood, name=name)
     group = ObservationGroup(galaxy_parser.load(GALAXY), observation)
-    params = ParamSpace(group.pdescs(), PROPERTIES).evaluate()
+    params = ParamSpace(group.pdescs(), PROPERTIES | values).evaluate()
     return Objective(group), params
 
 
@@ -119,6 +123,71 @@ def test_masked_values_with_an_upper_limit_are_non_detections(driver):
         residuals[:, :8], np.sqrt(-2 * scipy.special.log_ndtr(z)),
         rtol=1e-5, atol=1e-7)
     assert objective.nresiduals() == 24 * 32
+
+
+def test_a_fitted_noise_is_exact_to_a_constant(driver):
+    # -2 log L = sum ((m - d) / s)^2 + sum log s^2, s = sqrt((f e)^2 +
+    # j^2): the residuals of the data are over s, and the noise residual,
+    # last, holds the rest, to a constant (the same at every f and j)
+    rng = np.random.default_rng(4)
+    error = rng.uniform(0.2, 0.6, (24, 32))
+    data = Data(rng.normal(0.1, 1, (24, 32)), error=error)
+    noise = dict(brightness=dict(scale=True, scale_minimum=0.1, jitter=True))
+    objective, params = make_objective(
+        driver, data, LikelihoodGaussian(noise=noise), 'obs',
+        obs_noise_scale_brightness=1.0, obs_noise_jitter_brightness=0.0)
+    model = objective.group().model_h(params)[0]['brightness']['d']
+    offsets = []
+    for f, j in [(1.0, 0.0), (1.7, 0.3), (0.6, 1.2)]:
+        point = params | dict(
+            obs_noise_scale_brightness=f, obs_noise_jitter_brightness=j)
+        sigma = np.hypot(f * error, j)
+        residuals = objective.residuals(point)
+        np.testing.assert_allclose(
+            residuals[:-1].reshape(24, 32), (model - data.data()) / sigma,
+            rtol=1e-5, atol=1e-6)
+        chi2 = objective.chi2(point)
+        assert chi2 == pytest.approx(np.sum(residuals ** 2), rel=1e-6)
+        assert objective.noise_chi2() == pytest.approx(residuals[-1] ** 2)
+        offsets.append(chi2 - np.sum(
+            ((model - data.data()) / sigma) ** 2 + np.log(sigma ** 2)))
+    np.testing.assert_allclose(offsets, offsets[0], atol=1e-3)
+
+
+@pytest.mark.parametrize('noise, name, error, message', [
+    (dict(brightness=dict(scale=True, scale_minimum=0.1)), None, None,
+     "needs a name"),
+    (dict(moment1=dict(jitter=True)), 'obs', None, "does not have"),
+    (dict(brightness=dict(scale=True, scale_minimum=0.1, jitter=True)),
+     'obs', 0.5, "cannot both be fitted"),
+    (dict(brightness=dict(scale=True)), 'obs', None, "scale_minimum"),
+    (dict(brightness=dict(jitter=True, scale_minimum=0.1)), 'obs', None,
+     "scale_minimum"),
+    (dict(brightness=dict(scale=False)), 'obs', None, "fit its scale"),
+])
+def test_fitted_noise_options_are_checked(noise, name, error, message):
+    errors = None if error is None else np.full((24, 32), error)
+    data = Data(np.ones((24, 32)), error=errors)
+    with pytest.raises(ConfigError, match=message):
+        make_objective(
+            DriverHost(), data, LikelihoodGaussian(noise=noise), name)
+
+
+def test_a_fitted_noise_has_parameters_of_the_observation():
+    noise = dict(brightness=dict(scale=True, scale_minimum=0.1, jitter=True))
+    likelihood = LikelihoodGaussian(noise=noise)
+    data = Data(np.ones((24, 32)), error=np.linspace(0.1, 1, 768).reshape(
+        24, 32))
+    objective, _ = make_objective(
+        DriverHost(), data, likelihood, 'obs',
+        obs_noise_scale_brightness=1.0, obs_noise_jitter_brightness=0.0)
+    pdescs = objective.pdescs()
+    assert pdescs['obs_noise_scale_brightness'].minimum() == 0.1
+    assert pdescs['obs_noise_jitter_brightness'].minimum() == 0
+    assert likelihood.dump()['noise'] == noise
+    assert LikelihoodGaussian(**{
+        k: v for k, v in likelihood.dump().items() if k != 'type'}).dump() \
+        == likelihood.dump()
 
 
 def test_an_observation_without_data_is_an_error(driver):

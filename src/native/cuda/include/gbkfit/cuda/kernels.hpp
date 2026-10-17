@@ -351,7 +351,7 @@ objective_residual(
         const T* obs_d, const T* obs_e, const T* obs_m,
         const T* mdl_d, const T* mdl_w,
         int size, T weight, T missing, T limit, T limit_error,
-            T* res)
+        T scale, T jitter, T* res)
 {
     const int nthreads = size;
     const int tid = blockIdx.x * blockDim.x + threadIdx.x;
@@ -363,14 +363,15 @@ objective_residual(
             tid,
             obs_d, obs_e, obs_m,
             mdl_d, mdl_w,
-            size, weight, missing, limit, limit_error, res);
+            size, weight, missing, limit, limit_error,
+            scale, jitter, res);
 }
 
 template<typename T> __global__ void
 objective_amplitude_sums(
         const T* obs_d, const T* obs_e, const T* obs_m,
         const T* mdl_d, const T* mdl_w,
-        int nchannels, int nspectra, double* a, double* b)
+        T scale, T jitter, int nchannels, int nspectra, double* a, double* b)
 {
     const int nthreads = nspectra;
     const int tid = blockIdx.x * blockDim.x + threadIdx.x;
@@ -386,7 +387,7 @@ objective_amplitude_sums(
                 (long long)c * nspectra + tid,
                 obs_d, obs_e, obs_m,
                 mdl_d, mdl_w,
-                sum_a, sum_b);
+                scale, jitter, sum_a, sum_b);
     }
     a[tid] = sum_a;
     b[tid] = sum_b;

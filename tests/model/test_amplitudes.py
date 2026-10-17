@@ -34,10 +34,14 @@ GALAXY = dict(components=dict(
 SIGMA = 0.5
 
 
-def objective(driver, data, error, amplitudes='per_spectrum', weights=1.0):
+def objective(
+        driver, data, error, amplitudes='per_spectrum', weights=1.0,
+        noise=None, **values):
     """
     The objective of a disk seen in data with the given errors, under a
-    likelihood of the given amplitudes (of the prior SIGMA) and weights.
+    likelihood of the given amplitudes (of the prior SIGMA), weights and
+    fitted noise (of an observation named 'obs'), and the values of the
+    parameters (PARAMS and the given values).
     """
     dataset = DatasetPixelSpectra(
         Data(data, error=np.full_like(data, error)), step=STEP)
@@ -47,8 +51,11 @@ def objective(driver, data, error, amplitudes='per_spectrum', weights=1.0):
             line_of_sight_parser.load(dict(type='flat')), driver,
             data=dataset, likelihood=LikelihoodGaussian(
                 weights=weights, amplitudes=amplitudes,
-                amplitude_sigma=None if amplitudes is None else SIGMA))])
-    return Objective(group), ParamSpace(group.pdescs(), PARAMS).evaluate()
+                amplitude_sigma=None if amplitudes is None else SIGMA,
+                noise=noise),
+            name=None if noise is None else 'obs')])
+    return Objective(group), ParamSpace(
+        group.pdescs(), PARAMS | values).evaluate()
 
 
 def model(driver):
@@ -94,6 +101,23 @@ def test_amplitudes_take_the_brightness_of_each_spectrum(driver):
     plain, _ = objective(driver, spectra * scales, error, None)
     assert plain.chi2(values) > 1e3
     assert obj.nnuisance() == SIZE[0] * SIZE[1]
+
+
+def test_amplitudes_weigh_the_values_by_their_fitted_noise(driver):
+    # With a fitted jitter j, the noise of each value, sqrt(e^2 + j^2),
+    # weighs it in place of its error e, as in its residual
+    spectra = model(driver)
+    rng = np.random.default_rng(2)
+    error, jitter = 0.01 * spectra.max(), 0.03 * spectra.max()
+    data = spectra * rng.uniform(0.5, 2, SIZE[1::-1]) \
+        + rng.normal(0, jitter, spectra.shape)
+    obj, values = objective(
+        driver, data, error, noise=dict(spectra=dict(jitter=True)),
+        obs_noise_jitter_spectra=jitter)
+    obj.chi2(values)
+    np.testing.assert_allclose(
+        obj.amplitudes()[0],
+        best_amplitudes(spectra, data, np.hypot(error, jitter)), rtol=1e-5)
 
 
 def test_the_log_likelihood_integrates_the_amplitudes(driver):

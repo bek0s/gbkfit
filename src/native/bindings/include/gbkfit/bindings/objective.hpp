@@ -19,16 +19,19 @@ struct Objective
     // Sums of each spectrum, in double precision
     using Sums = Array<Device, double>;
 
-    // (mdl_d - obs_d) / obs_e * mdl_w * obs_m * weight, where all arrays
-    // but obs_d and mdl_d are optional; 0 where the data are masked (or,
-    // with a limit, not NaN, that of an upper limit of noise
-    // limit_error), and missing * weight where the model has no value
-    // (NaN) and the data have one (see gbkfit::objective_residual)
+    // (mdl_d - obs_d) / noise * mdl_w * obs_m * weight, the noise that of
+    // the error obs_e (1 without), sqrt((scale obs_e)^2 + jitter^2), where
+    // all arrays but obs_d and mdl_d are optional; 0 where the data are
+    // masked (or, with a limit, not NaN, that of an upper limit with the
+    // noise of the error limit_error), and missing * weight where the
+    // model has no value (NaN) and the data have one (see
+    // gbkfit::objective_residual)
     static void
     residual(
             ConstData obs_d, ConstData obs_e, ConstData obs_m,
             ConstData mdl_d, ConstData mdl_w,
-            T weight, T missing, T limit, T limit_error, Data res)
+            T weight, T missing, T limit, T limit_error,
+            T scale, T jitter, Data res)
     {
         const typename Kernels::DeviceScope scope(res.device_id());
         require_same_shape(obs_e, obs_d, "obs_e", "obs_d");
@@ -40,7 +43,7 @@ struct Objective
                 obs_d.data(), data(obs_e), data(obs_m),
                 mdl_d.data(), data(mdl_w),
                 int(obs_d.size()), weight, missing, limit, limit_error,
-                res.data());
+                scale, jitter, res.data());
     }
 
     // The sum of the squared or absolute residuals
@@ -55,11 +58,13 @@ struct Objective
     // The sums of each spectrum (the values along the first axis, at each
     // point of the others) that its amplitude takes, into a and b
     // (of the shape of the other axes; see
-    // gbkfit::objective_amplitude_sums)
+    // gbkfit::objective_amplitude_terms), each value with its noise (as
+    // in residual)
     static void
     amplitude_sums(
             ConstData obs_d, ConstData obs_e, ConstData obs_m,
-            ConstData mdl_d, ConstData mdl_w, Sums a, Sums b)
+            ConstData mdl_d, ConstData mdl_w, T scale, T jitter,
+            Sums a, Sums b)
     {
         const typename Kernels::DeviceScope scope(a.device_id());
         require_same_shape(obs_e, obs_d, "obs_e", "obs_d");
@@ -75,7 +80,27 @@ struct Objective
         Kernels::objective_amplitude_sums(
                 obs_d.data(), data(obs_e), data(obs_m),
                 mdl_d.data(), data(mdl_w),
-                nchannels, nspectra, a.data(), b.data());
+                scale, jitter, nchannels, nspectra, a.data(), b.data());
+    }
+
+    // The square of the noise residual of a data item whose noise is
+    // fitted, with the noise and the weight of residual (see
+    // gbkfit::objective_noise_term), into sum
+    static void
+    noise_sum(
+            ConstData obs_e, ConstData obs_m,
+            ConstData mdl_d, ConstData mdl_w,
+            T weight, T scale, T jitter, T scale_minimum, Sum sum)
+    {
+        const typename Kernels::DeviceScope scope(sum.device_id());
+        require_same_shape(obs_e, mdl_d, "obs_e", "mdl_d");
+        require_same_shape(obs_m, mdl_d, "obs_m", "mdl_d");
+        require_same_shape(mdl_w, mdl_d, "mdl_w", "mdl_d");
+        Kernels::objective_noise_sum(
+                data(obs_e), data(obs_m),
+                mdl_d.data(), data(mdl_w),
+                int(mdl_d.size()), weight, scale, jitter, scale_minimum,
+                sum.data());
     }
 
     static void
@@ -94,6 +119,8 @@ struct Objective
                         nb::arg("missing"),
                         nb::arg("limit"),
                         nb::arg("limit_error"),
+                        nb::arg("scale"),
+                        nb::arg("jitter"),
                         nb::arg("res").noconvert())
                 .def_static("residual_sum", &residual_sum,
                         ReleaseGil(),
@@ -107,8 +134,21 @@ struct Objective
                         nb::arg("obs_m").noconvert().none(),
                         nb::arg("mdl_d").noconvert(),
                         nb::arg("mdl_w").noconvert().none(),
+                        nb::arg("scale"),
+                        nb::arg("jitter"),
                         nb::arg("a").noconvert(),
-                        nb::arg("b").noconvert());
+                        nb::arg("b").noconvert())
+                .def_static("noise_sum", &noise_sum,
+                        ReleaseGil(),
+                        nb::arg("obs_e").noconvert().none(),
+                        nb::arg("obs_m").noconvert().none(),
+                        nb::arg("mdl_d").noconvert(),
+                        nb::arg("mdl_w").noconvert().none(),
+                        nb::arg("weight"),
+                        nb::arg("scale"),
+                        nb::arg("jitter"),
+                        nb::arg("scale_minimum"),
+                        nb::arg("sum").noconvert());
     }
 };
 

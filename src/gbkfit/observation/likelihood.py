@@ -1,30 +1,79 @@
 import abc
+import copy
+import dataclasses
 import math
 from collections.abc import Mapping
 from numbers import Real
-from typing import Any
+from typing import Any, Self
 
-from gbkfit.params import ParamDesc
+from gbkfit.params import ParamDesc, ParamScalarDesc
 from gbkfit.utils import parseutils
 from gbkfit.utils.parseutils import ConfigError
 
 
 __all__ = [
+    'FittedNoise',
     'Likelihood',
     'LikelihoodGaussian',
     'likelihood_parser'
 ]
 
 
+@dataclasses.dataclass(frozen=True)
+class FittedNoise:
+    """
+    How the noise of a data item is fitted (see LikelihoodGaussian):
+    whether its errors are times a scale, of at least scale_minimum, and
+    whether a jitter adds to them in quadrature.
+    """
+    scale: bool
+    scale_minimum: float | None
+    jitter: bool
+
+
 class Likelihood(parseutils.TypedSerializable, abc.ABC):
     """
     How the model of an observation is compared with its data: the noise
-    model of the data. It can have parameters of its own.
+    model of the data. It can have parameters of its own, whose names
+    start with its prefix (see with_prefix).
     """
+
+    # (the start of the names of its parameters)
+    _prefix: str = ''
+
+    def with_prefix(self, prefix: str) -> Self:
+        """
+        Return a copy of it whose parameters have names that start with a
+        prefix (e.g. 'muse_', for 'muse_noise_scale_moment1').
+        """
+        likelihood = copy.copy(self)
+        likelihood._prefix = prefix
+        return likelihood
 
     def pdescs(self) -> dict[str, ParamDesc]:
         """Return the parameters of the likelihood, by name."""
         return {}
+
+    @abc.abstractmethod
+    def fitted_noise(self) -> dict[str, FittedNoise]:
+        """
+        Return how the noise of data items is fitted, by name, for those
+        whose noise is fitted (see LikelihoodGaussian).
+        """
+        pass
+
+    def noise_params(self, key: str) -> tuple[str | None, str | None]:
+        """
+        Return the names of the parameters of the scale and of the jitter
+        of the noise of the data item of the given name (see
+        LikelihoodGaussian), None for those that are not fitted.
+        """
+        noise = self.fitted_noise().get(key)
+        if noise is None:
+            return None, None
+        return (
+            f'{self._prefix}noise_scale_{key}' if noise.scale else None,
+            f'{self._prefix}noise_jitter_{key}' if noise.jitter else None)
 
     @abc.abstractmethod
     def missing_residual(self) -> float | None:
@@ -146,6 +195,36 @@ class LikelihoodGaussian(Likelihood):
     with its bias. (s could become a parameter of the likelihood, fitted
     with the others; it is a fixed option for now.)
 
+    With noise, the noise of data items is fitted: the errors e of an item
+    (1 where the data have none) are times a scale f, and a jitter j adds
+    to them in quadrature, so that each value has the noise sigma =
+    sqrt((f e)^2 + j^2) in place of its error. Each is a parameter of the
+    observation, '{name}_noise_scale_{item}' and
+    '{name}_noise_jitter_{item}' (the observation needs a name; see
+    Observation). The scale is
+    for errors that are off by a factor (e.g. too small, from noise
+    correlated within the beam), and without errors it is the noise
+    itself, in the unit of the data; the jitter, in the unit of the data,
+    is for scatter that the model cannot make (e.g. turbulence in a
+    velocity map, or clumps). Both at once need errors that differ between
+    values: with equal errors only (f e)^2 + j^2 counts.
+
+    A fitted noise makes the normalisation of the Gaussian count: each
+    value adds c^2 log sigma^2 to -2 log L, c the factor of its residual
+    (the weight of the item, times those of the model and of the data
+    mask), which the residuals lack. The objective adds it as one more
+    residual for each such item, after those of the data, its noise
+    residual: sqrt(sum c^2 log(sigma^2 / (f_min e)^2)), f_min the minimum
+    of the scale (1 if the scale is not fitted), so that the sum is never
+    negative (the scale is at least f_min, the jitter at least 0); the
+    part it leaves out, c^2 log (f_min e)^2, does not depend on the noise.
+    Least squares then fit the noise too, and exactly, as do the other
+    fitters. Masked values with an upper limit take the fitted noise of
+    their error, but add nothing (a probability has no normalisation);
+    values the model lacks cost missing_residual, and add their part. The
+    chi-square has the noise residuals; the reduced chi-square of a fit
+    does not (see Objective.noise_chi2).
+
     Parameters
     ----------
     weights : float or Mapping, optional
@@ -163,14 +242,21 @@ class LikelihoodGaussian(Likelihood):
     amplitude_sigma : float, optional
         The standard deviation of the prior of the amplitudes around 1
         (see above); required with them.
+    noise : Mapping, optional
+        The fitted noise of data items, by name (none for the others): a
+        mapping of 'scale' (whether the errors are times a fitted scale),
+        'scale_minimum' (the smallest scale, finite and positive; required
+        with the scale, and only with it) and 'jitter' (whether a fitted
+        jitter adds to them), at least one of the two fitted; see above.
+        None by default.
 
     Raises
     ------
     ConfigError
         If missing_residual is negative or not finite, an upper limit is
         not a finite limit and a finite, positive error, amplitudes is not
-        'per_spectrum', or amplitude_sigma is missing with it, given
-        without it, or not positive.
+        'per_spectrum', amplitude_sigma is missing with it, given without
+        it, or not positive, or the noise of an item is not as above.
     """
 
     @staticmethod
@@ -183,9 +269,15 @@ class LikelihoodGaussian(Likelihood):
             amplitude_sigma=self._amplitude_sigma)
         limits = {} if self._upper_limits is None else dict(
             upper_limits=self._upper_limits)
+        noise = {} if not self._noise else dict(noise={
+            key: {name: value
+                  for name, value in dataclasses.asdict(item).items()
+                  if value is not None}
+            for key, item in self._noise.items()})
         return dict(
             type=self.type(), weights=self._weights,
-            missing_residual=self._missing_residual) | limits | amplitudes
+            missing_residual=self._missing_residual) \
+            | limits | amplitudes | noise
 
     def __init__(
             self,
@@ -193,7 +285,8 @@ class LikelihoodGaussian(Likelihood):
             missing_residual: float | None = None,
             upper_limits: Mapping[str, Mapping[str, float]] | None = None,
             amplitudes: str | None = None,
-            amplitude_sigma: float | None = None
+            amplitude_sigma: float | None = None,
+            noise: Mapping[str, Mapping[str, Any]] | None = None
     ):
         if missing_residual is not None and not (
                 math.isfinite(missing_residual) and missing_residual >= 0):
@@ -223,6 +316,28 @@ class LikelihoodGaussian(Likelihood):
         self._amplitudes = amplitudes
         self._amplitude_sigma = None if amplitude_sigma is None \
             else float(amplitude_sigma)
+        self._noise = {
+            key: _check_noise(key, info)
+            for key, info in (noise or {}).items()}
+
+    def pdescs(self) -> dict[str, ParamDesc]:
+        """
+        Return its parameters, by name: the scale and the jitter of the
+        fitted noise of data items (see the class and with_prefix).
+        """
+        pdescs = {}
+        for key, noise in self._noise.items():
+            scale, jitter = self.noise_params(key)
+            if scale is not None:
+                pdescs[scale] = ParamScalarDesc(
+                    desc=f"the scale of the errors of {key}",
+                    minimum=noise.scale_minimum)
+            if jitter is not None:
+                pdescs[jitter] = ParamScalarDesc(
+                    desc=f"the jitter of {key}, which adds to its errors in "
+                         f"quadrature (in its unit)",
+                    minimum=0)
+        return pdescs
 
     def weight(self, key: str) -> float:
         """Return the weight of the data item of the given name."""
@@ -244,6 +359,41 @@ class LikelihoodGaussian(Likelihood):
 
     def amplitude_sigma(self) -> float | None:
         return self._amplitude_sigma
+
+    def fitted_noise(self) -> dict[str, FittedNoise]:
+        return dict(self._noise)
+
+
+def _check_noise(key: str, info: Mapping[str, Any]) -> FittedNoise:
+    """
+    Return the fitted noise of a data item from its options (see
+    LikelihoodGaussian), or raise ConfigError if they are not valid.
+    """
+    if not isinstance(info, Mapping) \
+            or not set(info) <= {'scale', 'scale_minimum', 'jitter'}:
+        raise ConfigError(
+            f"noise of '{key}': give 'scale' and its 'scale_minimum', and "
+            f"'jitter'; it is {info!r}")
+    scale, jitter = info.get('scale', False), info.get('jitter', False)
+    if not isinstance(scale, bool) or not isinstance(jitter, bool):
+        raise ConfigError(
+            f"noise of '{key}': 'scale' and 'jitter' are true or false; "
+            f"they are {scale!r} and {jitter!r}")
+    if not (scale or jitter):
+        raise ConfigError(
+            f"noise of '{key}': fit its scale, its jitter, or both")
+    minimum = info.get('scale_minimum')
+    if scale != (minimum is not None):
+        raise ConfigError(
+            f"noise of '{key}': 'scale_minimum' (the smallest scale of its "
+            f"errors, e.g. 0.01) goes with 'scale', and only with it")
+    if minimum is not None:
+        minimum = float(minimum)
+        if not (math.isfinite(minimum) and minimum > 0):
+            raise ConfigError(
+                f"noise of '{key}': 'scale_minimum' must be finite and "
+                f"positive; it is {minimum}")
+    return FittedNoise(scale=scale, scale_minimum=minimum, jitter=jitter)
 
 
 def _check_upper_limit(

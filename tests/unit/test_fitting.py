@@ -18,7 +18,7 @@ from gbkfit.instrument import Instrument, PSFGauss
 from gbkfit.model import galaxy_parser
 from gbkfit.objective import Objective
 from gbkfit.observation import (
-    Flat, Observation, ObservationGroup, PixelBrightness)
+    Flat, LikelihoodGaussian, Observation, ObservationGroup, PixelBrightness)
 from gbkfit.params import ParamSpace
 from gbkfit.utils.parseutils import ConfigError
 
@@ -38,16 +38,19 @@ START = dict(
     incl=(45.0, 20, 80), pt_a=(0.7, 0.1, 5), pt_s=(3.0, 1, 10))
 
 
-def mock_objective(driver, seed=1):
+def mock_objective(
+        driver, seed=1, error_scale=1.0, likelihood=None, name=None):
     """
     An objective of a mock image, seen through a PSF (without one, the
     cusp of the exponential disk makes the chi-square kink at the centre
-    of a pixel), with noise of 1% of its peak.
+    of a pixel), with noise of 1% of its peak, and errors of error_scale
+    times it, under a likelihood, of an observation of a name.
     """
-    def group(dataset):
+    def group(dataset, likelihood=None):
         observation = Observation(
             PixelBrightness.from_data(dataset), Flat(), driver,
-            instrument=Instrument(psf=PSFGauss(1.5)), data=dataset)
+            instrument=Instrument(psf=PSFGauss(1.5)), data=dataset,
+            likelihood=likelihood, name=name)
         return ObservationGroup(galaxy_parser.load(GALAXY), observation)
     shape = (32, 32)
     image = group(DatasetPixelBrightness(Data(np.zeros(shape))))
@@ -56,8 +59,8 @@ def mock_objective(driver, seed=1):
     sigma = 0.01 * model.max()
     noise = np.random.default_rng(seed).normal(0, sigma, shape)
     dataset = DatasetPixelBrightness(
-        Data(model + noise, error=np.full(shape, sigma)))
-    return Objective(group(dataset))
+        Data(model + noise, error=np.full(shape, error_scale * sigma)))
+    return Objective(group(dataset, likelihood))
 
 
 def bounded_properties():
@@ -146,6 +149,26 @@ def test_lmfit_recovers_the_parameters_and_their_errors(driver):
     x[i] += 0.1
     growth = objective.chi2(params.evaluate(x)) - best.chi2
     assert growth == pytest.approx(0.01 * hessian[i, i], rel=0.05)
+
+
+def test_least_squares_fit_the_scale_of_the_errors(driver):
+    # Errors of half the noise: the fitted scale is about 2 (to 1/sqrt(2N)
+    # of it, of N values), and the reduced chi-square, of the data alone,
+    # N / dof (at the best scale the data have a chi-square of N; to the
+    # tolerance of the fit), not about 7 (with the noise residual, N log
+    # (2 / 0.1)^2)
+    from gbkfit.fitting.fitters.scipy import FitterScipyLeastSquares
+    likelihood = LikelihoodGaussian(
+        noise=dict(brightness=dict(scale=True, scale_minimum=0.1)))
+    objective = mock_objective(
+        driver, error_scale=0.5, likelihood=likelihood, name='mock')
+    params = ParamSpace(objective.pdescs(), bounded_properties() | dict(
+        mock_noise_scale_brightness=dict(value=1.0, min=0.1, max=10)))
+    best = FitterScipyLeastSquares().fit(objective, params).best()
+    n = 32 * 32
+    assert best.free['mock_noise_scale_brightness'] == pytest.approx(
+        2, abs=4 * 2 / np.sqrt(2 * n))
+    assert best.reduced_chi2 == pytest.approx(n / best.dof, rel=1e-2)
 
 
 def test_lmfit_says_why_leastsq_stopped():

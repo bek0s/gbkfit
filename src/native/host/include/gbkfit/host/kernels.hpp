@@ -377,7 +377,7 @@ objective_residual(
         const T* obs_d, const T* obs_e, const T* obs_m,
         const T* mdl_d, const T* mdl_w,
         int size, T weight, T missing, T limit, T limit_error,
-            T* res)
+        T scale, T jitter, T* res)
 {
     #pragma omp parallel for
     for(int i = 0; i < size; ++i) {
@@ -386,9 +386,32 @@ objective_residual(
                 i,
                 obs_d, obs_e, obs_m,
                 mdl_d, mdl_w,
-                size, weight, missing, limit, limit_error, res);
+                size, weight, missing, limit, limit_error,
+                scale, jitter, res);
 
     }
+}
+
+// The square of the noise residual of a data item (see
+// gbkfit::objective_noise_term), accumulated in double precision
+template<typename T> void
+objective_noise_sum(
+        const T* obs_e, const T* obs_m,
+        const T* mdl_d, const T* mdl_w,
+        int size, T weight, T scale, T jitter, T scale_minimum, double* sum)
+{
+    double sum_ = 0;
+    #pragma omp parallel for reduction(+:sum_)
+    for(int i = 0; i < size; ++i) {
+
+        sum_ += gbkfit::objective_noise_term(
+                i,
+                obs_e, obs_m,
+                mdl_d, mdl_w,
+                weight, scale, jitter, scale_minimum);
+
+    }
+    sum[0] = sum_;
 }
 
 template<typename T> void
@@ -416,7 +439,7 @@ template<typename T> void
 objective_amplitude_sums(
         const T* obs_d, const T* obs_e, const T* obs_m,
         const T* mdl_d, const T* mdl_w,
-        int nchannels, int nspectra, double* a, double* b)
+        T scale, T jitter, int nchannels, int nspectra, double* a, double* b)
 {
     constexpr int BLOCK = 256;
     #pragma omp parallel for
@@ -431,7 +454,7 @@ objective_amplitude_sums(
                         i0 + k,
                         obs_d, obs_e, obs_m,
                         mdl_d, mdl_w,
-                        sum_a[k], sum_b[k]);
+                        scale, jitter, sum_a[k], sum_b[k]);
             }
         }
         for (int k = 0; k < n; ++k) {
@@ -555,6 +578,11 @@ struct Wrapper
     static void
     objective_amplitude_sums(auto... args) {
         kernels::objective_amplitude_sums<T>(args...);
+    }
+
+    static void
+    objective_noise_sum(auto... args) {
+        kernels::objective_noise_sum<T>(args...);
     }
 };
 
