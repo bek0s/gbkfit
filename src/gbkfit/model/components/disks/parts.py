@@ -156,8 +156,9 @@ class Kinematics(parseutils.Serializable):
     Raises
     ------
     ConfigError
-        If there are no polar traits or too many, or not one height trait
-        for each polar trait.
+        If there are no polar traits or too many, not one height trait
+        for each polar trait, or several velocity traits 'tan_mass' (the
+        rotation in the gravity would count more than once).
     """
 
     @classmethod
@@ -192,6 +193,11 @@ class Kinematics(parseutils.Serializable):
             traits.DHTrait | Sequence[traits.DHTrait | None] | None = None
     ):
         self._vptraits = _polar_traits('vptraits', vptraits)
+        if sum(isinstance(trait, traits.VPTraitTanMass)
+               for trait in self._vptraits) > 1:
+            raise ConfigError(
+                "a disk takes at most one velocity trait 'tan_mass': each "
+                "adds the whole rotation in the gravity")
         self._dptraits = _polar_traits('dptraits', dptraits)
         self._vhtraits = _height_traits(
             'vhtraits', vhtraits, len(self._vptraits), 'vptraits')
