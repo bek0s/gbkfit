@@ -1046,6 +1046,7 @@ def test_pressure_support_of_self_gravitating_disks(driver, ptrait, surface):
     # -2 sigma^2 1.5 (R / 4)^1.5 (type 2), here of a dispersion of scale 10
     from gbkfit.model import SMDisk
     from gbkfit.model.components._component_set import IMAGE_SPECTRAL_AXIS
+    from gbkfit.model.components.disks import traits
     from gbkfit.model.components.disks._profiles import pressure_support
     component = SMDisk.load(dict(
         rnodes=list(range(0, 21, 2)), rstep=0.5,
@@ -1063,7 +1064,8 @@ def test_pressure_support_of_self_gravitating_disks(driver, ptrait, surface):
         driver, IMAGE_SPECTRAL_AXIS, np.dtype(np.float64), None, None, True,
         None, None, 0.0)
     disk = component.density_disk()
-    assert disk.pressure_supported_params() == {'vpt_vt': 'self_gravitating'}
+    assert disk.pressure_supported_params() == {
+        'vpt_vt': traits.PressureSupport('self_gravitating')}
     radius = np.array(disk.subrnodes())
     squared = surface(radius) ** 2
     np.testing.assert_allclose(
@@ -1124,6 +1126,60 @@ def test_pressure_support_option():
         == dict(type='tan_mass')
     with pytest.raises(ConfigError, match="pressure_support must be"):
         traits.VPTraitTanMass('asymmetric')
+    trait = traits.vpt_parser.load(dict(
+        type='tan_mass', pressure_support='jeans', pressure_density='gas'))
+    assert traits.vpt_parser.dump(trait) == dict(
+        type='tan_mass', pressure_support='jeans', pressure_density='gas')
+    with pytest.raises(ConfigError, match="needs pressure_support"):
+        traits.VPTraitTanMass(pressure_density='gas')
+
+
+@pytest.mark.parametrize('mode', ['jeans', 'self_gravitating'])
+def test_pressure_support_takes_the_density_of_a_mass_component(mode):
+    # The density at its midplane of a thick exponential gas disk
+    # ('jeans', as DysmalPy's type 3), or the surface density of a
+    # flattened Sersic disk of index 1 ('self_gravitating', as its types 1
+    # and 2 with the effective radius of the mass disk), both of the scale
+    # length 1 kpc: (R / rho) d(rho sigma^2)/dR on the subnodes, with rho
+    # ~ exp(-R), or ~ exp(-2 R) / sigma^2, for the dispersion of the disk
+    from gbkfit.model.mass import _numerics
+    mass = [
+        dict(type='disk', name='gas', surface=dict(type='exponential'),
+             vertical=dict(type='sech2')),
+        dict(type='spheroid', name='stars', profile=dict(type='sersic'),
+             shape=dict(type='flattened')),
+        dict(type='spheroid', name='halo', profile=dict(
+            type='pseudo_isothermal', parameters='density_radius'))]
+    density = dict(jeans='gas', self_gravitating='stars')[mode]
+    galaxy = disk_galaxy('smdisk', dict(
+        type='tan_mass', pressure_support=mode, pressure_density=density),
+        mass, DISTANCE)
+    params = DISK_PROPERTIES | dict(
+        distance=10, mass_gas_log_m=9, mass_gas_rd=1, mass_gas_hz=0.1,
+        mass_stars_log_m=10, mass_stars_re=_numerics.sersic_b(1),
+        mass_stars_n=1, mass_stars_q=0.2, mass_halo_log_rho=7,
+        mass_halo_rs=3)
+    extra = {}
+    galaxy.plan_gravity().evaluate(params, extra)
+    table = extra['component0_vpt_vt_rotation']
+    r = np.asarray(table['radius'])
+    profile = np.exp(-np.asarray(table['radius_kpc'])) \
+        ** dict(jeans=1, self_gravitating=2)[mode]
+    np.testing.assert_allclose(
+        table['pressure'], DISK_PROPERTIES['dpt_a'] ** 2 * r
+        * np.gradient(profile, r, edge_order=2) / profile, rtol=1e-5)
+
+
+def test_pressure_density_is_a_mass_component_that_gives_it():
+    vptraits = dict(
+        type='tan_mass', pressure_support='jeans', pressure_density='dust')
+    with pytest.raises(ConfigError, match="which its galaxy does not have"):
+        disk_galaxy('smdisk', vptraits, MASS, DISTANCE)
+    # (a thin disk has no density at its midplane)
+    galaxy = disk_galaxy(
+        'smdisk', vptraits | dict(pressure_density='stars'), MASS, DISTANCE)
+    with pytest.raises(NotImplementedError, match="a thin disk"):
+        galaxy.plan_gravity().evaluate(DISK_PROPERTIES | MASS_PROPERTIES)
 
 
 def test_one_mass_trait_per_disk():

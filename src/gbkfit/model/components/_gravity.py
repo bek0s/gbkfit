@@ -13,9 +13,10 @@ from astropy.table import Table
 
 from gbkfit.driver import Driver
 from gbkfit.params import ParamValues
-from ..mass import MassContext
+from ..mass import MassContext, MassModel
 from ._units import mass_per_unit
 from .disks._profiles import DiskDensity, pressure_support
+from .disks.traits import PressureSupport
 
 if TYPE_CHECKING:
     from ._component_set import ComponentSet
@@ -173,10 +174,15 @@ class GravityPlan:
             for name, r in cmp_radii.items():
                 v2 = next(vcirc2)
                 pressure = None
-                if name in disk.pressure_supported_params():
+                if support := disk.pressure_supported_params().get(name):
+                    density = None if support.density is None \
+                        else _pressure_density(
+                            mass_model, support,
+                            np.asarray(r, dtype=float) * kpc_per_arcsec,
+                            params, context)
                     pressure = pressure_support(
-                        disk, self._disk_plans[i], own[i], r,
-                        disk.pressure_supported_params()[name])
+                        disk, self._disk_plans[i], own[i], r, support.mode,
+                        density)
                     v2 = v2 + pressure
                 values[i][name] = np.sqrt(
                     np.where(np.isfinite(v2) & (v2 >= 0), v2, np.nan))
@@ -240,6 +246,25 @@ class GravityPlan:
         component = self._component_set.components()[index]
         mapping = self._component_set.mappings()[index]
         return {p: params[mapping[p]] for p in component.pdescs()}
+
+
+def _pressure_density(
+        mass_model: MassModel,
+        support: PressureSupport,
+        R: np.ndarray,
+        params: ParamValues,
+        context: MassContext
+) -> np.ndarray:
+    """
+    Return the density of the mass component of a pressure support (see
+    traits.VPTraitTanMass) at the radii R (kpc): at its midplane for
+    'jeans', its surface density for 'self_gravitating'.
+    """
+    component = mass_model.component(support.density)
+    own = mass_model.component_params(support.density, params)
+    if support.mode == 'jeans':
+        return component.density(R, np.zeros_like(R), own, context)
+    return component.surface_density(R, own, context)
 
 
 def _normal(posa: float, incl: float) -> np.ndarray:

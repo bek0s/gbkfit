@@ -114,6 +114,16 @@ class MassSpheroid(MassComponent):
     ) -> np.ndarray:
         return self._shape.density(R, z, self._profile, params, context)
 
+    def surface_density(
+            self,
+            R: npt.ArrayLike,
+            params: ParamValues,
+            context: MassContext
+    ) -> np.ndarray:
+        # (that of its profile, whatever its shape: squashing a sphere
+        # with the mass of each shell kept keeps its face-on projection)
+        return self._profile.surface_density(R, params, context)
+
     def forces(
             self,
             R: npt.ArrayLike,
