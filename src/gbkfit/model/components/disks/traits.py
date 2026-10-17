@@ -280,6 +280,60 @@ def _ptrait_integrate_sech2(
     return _integrate_rings(rings, gbkfit.math.sech2_1d_fun, a, 0, s)
 
 
+# The azimuthal means split the circles around narrow structure at
+# distances along them of at least this fraction of its size, and up to
+# this multiple of the larger of its size and its distance (see
+# _splits_around)
+_SPLIT_FINEST = 2.0 ** -8
+_SPLIT_WIDEST = 8
+
+
+def _splits_around(
+        r: np.ndarray, t: np.ndarray, size: np.ndarray, distance: np.ndarray
+) -> np.ndarray:
+    """
+    Return the azimuths (degrees) at which the azimuthal means split the
+    circles of the radii r around structures at the azimuths t (degrees),
+    of the sizes size (arcsec, along the circles), whose centres are at
+    the distances distance (arcsec) from the circles: at t (where a cusp
+    can be), and on both sides at the distances along the circle (up to
+    half a turn) that double from the larger of the distance and
+    _SPLIT_FINEST times the size up to _SPLIT_WIDEST times the larger of
+    the size and the distance (on a circle, a structure varies on the
+    larger of its size and its distance). Between two, the structure is
+    smooth. t, size and distance are arrays of shape (len(r), n); the
+    result is of shape (len(r), m), NaN where a circle has fewer splits.
+    """
+    size = np.abs(size)
+    finest = np.maximum(distance, _SPLIT_FINEST * size)
+    widest = _SPLIT_WIDEST * np.maximum(size, distance)
+    levels = int(np.ceil(np.log2(_SPLIT_WIDEST / _SPLIT_FINEST))) + 1
+    lengths = finest[..., None] * 2.0 ** np.arange(levels)
+    r = np.asarray(r, dtype=float)[:, None, None]
+    with np.errstate(divide='ignore', invalid='ignore'):
+        w = np.rad2deg(lengths / r)
+    w = np.where((lengths <= 2 * widest[..., None]) & (w < 180), w, np.nan)
+    t = np.asarray(t, dtype=float)[..., None]
+    return np.concatenate((t, t - w, t + w), axis=-1).reshape(len(r), -1)
+
+
+def _splits_nw_distortion(
+        r: np.ndarray,
+        params: dict[str, np.ndarray],
+        subrnodes: Sequence[float]
+) -> np.ndarray:
+    """
+    Return the azimuths (degrees) at which the azimuthal means split the
+    circles of the radii r around a distortion (see RPTraitNWDistortion):
+    around its azimuth p, by its width s, and opposite (where its
+    distance to p turns).
+    """
+    p = np.interp(r, subrnodes, params['p'])[:, None]
+    s = np.interp(r, subrnodes, params['s'])[:, None]
+    return np.concatenate(
+        (_splits_around(r, p, s, np.zeros_like(s)), p + 180), axis=1)
+
+
 def _ptrait_cloud_flux_mixture(
         params: dict[str, np.ndarray], norm: np.ndarray
 ) -> np.ndarray:
@@ -534,6 +588,21 @@ class TraitFeatureNBlobs:
     def consts(self) -> tuple[float, ...]:
         return (self.nblobs(),)
 
+    def azimuthal_edges(
+            self,
+            r: np.ndarray,
+            params: dict[str, np.ndarray],
+            subrnodes: Sequence[float]
+    ) -> np.ndarray | None:
+        # Around each blob, by its smaller scale, at the distance of its
+        # centre from each circle
+        size = np.abs(params['s']) * np.minimum(1, np.abs(params['q']))
+        shape = (len(r), self.nblobs())
+        distance = np.abs(np.asarray(r, dtype=float)[:, None] - params['r'])
+        return _splits_around(
+            r, np.broadcast_to(params['t'], shape),
+            np.broadcast_to(size, shape), distance)
+
 
 class TraitFeatureOrder:
     """
@@ -574,13 +643,15 @@ class PTrait(Trait, abc.ABC):
             subrnodes: Sequence[float]
     ) -> np.ndarray | None:
         """
-        Return the azimuths (degrees) at which the trait jumps on the
-        circles of the radii r (arcsec, an array), for the azimuthal means
-        of the gravity of its galaxy (see _profiles): an array of shape
-        (len(r), n), NaN where a circle has fewer than n; None if it does
-        not jump (here). params has the values of its parameters, the
-        node-wise ones at the subnodes subrnodes, between which the disk
-        interpolates them linearly.
+        Return the azimuths (degrees) at which the azimuthal means of the
+        gravity of its galaxy split the circles of the radii r (arcsec, an
+        array), so that the trait is smooth between two of them (see
+        _profiles): where it jumps, and around its narrow structure (e.g.
+        blobs). An array of shape (len(r), n), NaN where a circle has
+        fewer than n; None if the trait is smooth on every circle (here).
+        params has the values of its parameters, the node-wise ones at the
+        subnodes subrnodes, between which the disk interpolates them
+        linearly.
         """
         return None
 
@@ -1293,6 +1364,14 @@ class RPTraitNWDistortion(TraitFeatureSampling, RPTrait):
 
     def params_rnw(self, nnodes: int) -> dict[str, ParamDesc]:
         return _ptrait_params_nw_distortion(nnodes)
+
+    def azimuthal_edges(
+            self,
+            r: np.ndarray,
+            params: dict[str, np.ndarray],
+            subrnodes: Sequence[float]
+    ) -> np.ndarray | None:
+        return _splits_nw_distortion(r, params, subrnodes)
 
     def has_analytical_integral(self) -> bool:
         return False
@@ -2934,6 +3013,14 @@ class DPTraitNWDistortion(TraitFeatureSampling, DPTrait):
 
     def params_rnw(self, nnodes: int) -> dict[str, ParamDesc]:
         return _ptrait_params_nw_distortion(nnodes)
+
+    def azimuthal_edges(
+            self,
+            r: np.ndarray,
+            params: dict[str, np.ndarray],
+            subrnodes: Sequence[float]
+    ) -> np.ndarray | None:
+        return _splits_nw_distortion(r, params, subrnodes)
 
 
 class DHTraitOne(DHTrait):
