@@ -1,54 +1,72 @@
 """
-The traits of the disks: the profiles of their properties, as functions of
-the radius r and the azimuth theta in the plane of a disk (polar traits),
-or of the height z above it (height traits).
+The traits of the components made of nodes (disks and cones): the
+profiles of their properties, as functions of the radius r and the
+azimuth theta on the surface of a component (polar traits), or of the
+height above it (height traits).
+
+The surface of a disk is its plane, and its nodes are rings: r is the
+radius in the plane, and the height is z, the height above the plane
+(above the displaced plane with vertical distortion traits). The surface
+of a cone is the mid-surface of its walls, at the angle wall from its
+axis, and its nodes are shells, spheres around its apex: r is the
+distance from the apex, and the height is d, the distance from the
+mid-surface across the wall. The axis of a cone is the spin axis of a
+disk of its inclination incl and position angle posa, and theta is the
+azimuth around the axis, as in that disk.
 
 The kinds of traits, and how the traits of one kind combine:
 
-- density (rpt, rht): the surface density seen face-on (the brightness
-  of a component that emits, the optical depth of dust); the sum of
-  the polar traits, each times its height trait in a thick disk (a
-  probability density of z, which integrates to 1).
+- density (rpt, rht): the density per unit area of the surface (of a
+  disk, seen face-on): the brightness of a component that emits, the
+  optical depth of dust; the sum of the polar traits, each times its
+  height trait in a thick component (a probability density of the
+  height, which integrates to 1).
 - velocity (vpt, vht): the line-of-sight velocity; vsys plus the sum of
   the polar traits, each a speed along its direction projected on the
-  line of sight, times its height trait (a factor of z, 1 at z = 0 for
-  most).
+  line of sight, times its height trait (a factor of the height, 1 at 0
+  for most).
 - dispersion (dpt, dht): the velocity dispersion; the absolute value of
   the sum of the polar traits, each times its height trait.
-- vertical distortion (zpt): the sum displaces the plane of the disk
-  (its midplane) along z, each within its zmax.
-- selection (spt): 1 where a trait selects the disk, 0 elsewhere; a part
-  of the disk is kept if every trait selects it.
+- vertical distortion (zpt): the sum displaces the plane of a disk (its
+  midplane) along z, each within its zmax.
+- selection (spt): 1 where a trait selects the component, 0 elsewhere;
+  a part of the component is kept if every trait selects it.
 
 The height traits pair with the polar traits of their kind by their
-order, and a disk has at most four traits of a kind.
+order, and a component has at most four traits of a kind. Each type of
+component takes its own list of traits (see _nodal.TraitTable): the
+cones, e.g., take no vertical distortion, mixture or map traits.
 
-Coordinates and units: r is the radius in the plane of the disk, and
-theta the azimuth in it, from the major axis on the side of the position
-angle posa (the receding side when the rotation is positive), increasing
-towards the far side (theta = 90 degrees, on the sky at the position
-angle posa + 90 degrees). z is the height above the plane (above the
-displaced plane with vertical distortion traits), positive away from the
-viewer for inclinations below 90 degrees, and the height traits depend
-on |z| only. Lengths are in arcsec, angles in degrees and velocities in
-km/s. The traits are evaluated between the first and the last radius of
-the rings of the disk only.
+Coordinates and units: theta is from the major axis on the side of the
+position angle posa (the receding side when the rotation is positive),
+increasing towards the far side (theta = 90 degrees, on the sky at the
+position angle posa + 90 degrees). z is positive away from the viewer
+for inclinations below 90 degrees, as is the positive side of the axis
+of a cone; the height traits depend on |z| or |d| only. Lengths are in
+arcsec, angles in degrees and velocities in km/s. The traits are
+evaluated between the first and the last radius of the nodes of a
+component only.
 
 A velocity polar trait is a speed v along its direction (its option
 direction; the trait mass is tangential), and its speed parameter is
-named after it: tangential ('tan', vt), radial ('rad', vr, positive
-outwards), vertical ('ver', vv, positive along z) or the line of sight
-('los', vl). The speeds are
-projected on the line of sight as v cos(theta) sin(incl), v sin(theta)
-sin(incl), v cos(incl) and v; the tangential and radial ones are 0 at
-the centre, where their directions are undefined.
+named after it: tangential ('tan', vt, around the axis), radial ('rad',
+vr, in the plane of a disk, positive outwards), vertical ('ver', vv,
+along z, positive along it), outward ('out', vo, along r on a cone,
+positive away from the apex) or the line of sight ('los', vl). On a
+disk, the speeds are projected on the line of sight as v cos(theta)
+sin(incl), v sin(theta) sin(incl), v cos(incl) and v; on a cone, the
+tangential and outward ones as v cos(theta) sin(incl) and v (sin(a)
+sin(theta) sin(incl) + cos(a) cos(incl)), a the angle of the point from
+the positive side of the axis. The tangential and radial ones are 0 at
+the centre of a disk, the tangential one on the axis of a cone and the
+outward one at its apex, where their directions are undefined.
 
 Node-wise parameters (those of the nw_ traits, and of the height traits
-with rnodes) have a value for each ring: at its radii (sampling
-'rnodes'), interpolated to the rings the disk is evaluated on (its
-subrings, see rstep) with the interpolation of the disk (interp), or at
-those subrings (sampling 'subrings'); between the subrings, they are
-interpolated linearly.
+with rnodes) have a value for each node: at its radii (sampling
+'rnodes'), interpolated to the nodes the component is evaluated on (its
+subnodes, see rstep) with the interpolation of the component (interp),
+or at those subnodes (sampling 'subrings'); between the subnodes, they
+are interpolated linearly.
 
 The mixture traits are sums of elliptical blobs. Blob i is centred at
 the radius r_i and the azimuth t_i, has the amplitude a_i, the scale s_i
@@ -128,6 +146,7 @@ VPT_DIRECTION_TAN = 1
 VPT_DIRECTION_RAD = 2
 VPT_DIRECTION_VER = 3
 VPT_DIRECTION_LOS = 4
+VPT_DIRECTION_OUT = 5
 
 # Velocity height traits
 VHT_UID_ONE = 1
@@ -190,7 +209,8 @@ VPT_DIRECTIONS = dict(
     tan=VPTDirection(VPT_DIRECTION_TAN, 'vt'),
     rad=VPTDirection(VPT_DIRECTION_RAD, 'vr'),
     ver=VPTDirection(VPT_DIRECTION_VER, 'vv'),
-    los=VPTDirection(VPT_DIRECTION_LOS, 'vl'))
+    los=VPTDirection(VPT_DIRECTION_LOS, 'vl'),
+    out=VPTDirection(VPT_DIRECTION_OUT, 'vo'))
 
 
 def _ptrait_params_mixture_6p(nblobs: int) -> dict[str, ParamDesc]:
@@ -478,8 +498,8 @@ class PressureSupport:
 
 class Trait(parseutils.TypedSerializable, abc.ABC):
     """
-    A trait of a disk: a profile of one of its properties (see the module
-    docstring). A trait declares its type (its name in configurations),
+    A trait of a component made of nodes: a profile of one of its
+    properties (see the module docstring). A trait declares its type (its name in configurations),
     its uid (its identifier in the native kernels), its parameters
     (params_sm, params_rnw) and its constants (consts).
     """
@@ -692,8 +712,8 @@ class TraitFeatureOrder:
 
 class PTrait(Trait, abc.ABC):
     """
-    A polar trait: a function of the radius and the azimuth in the plane
-    of the disk.
+    A polar trait: a function of the radius and the azimuth on the
+    surface of its component.
     """
 
     def azimuthal_edges(
@@ -720,8 +740,8 @@ class HTrait(
         TraitFeatureRNodes, TraitFeatureSampling, Trait,
         abc.ABC):
     """
-    A height trait: a function of the height above the plane of the disk,
-    whose parameters can have a value for each ring (rnodes). Raise
+    A height trait: a function of the height above the surface of its
+    component, whose parameters can have a value for each node (rnodes). Raise
     ConfigError for a sampling without rnodes.
     """
 
@@ -736,8 +756,9 @@ class HTrait(
 
 class RPTrait(PTrait, abc.ABC):
     """
-    A density polar trait: the density of the disk seen face-on (light,
-    or the optical depth of dust). The Monte Carlo disks draw their
+    A density polar trait: the density per unit area of the surface of
+    its component (of a disk, seen face-on): light, or the optical depth
+    of dust. The Monte Carlo disks draw their
     clouds from it (see has_analytical_integral and cloud_flux).
     """
 
@@ -778,13 +799,14 @@ class RPTrait(PTrait, abc.ABC):
 class RHTrait(TraitFeatureZmax, HTrait, abc.ABC):
     """
     A density height trait: the probability density of the height of
-    the density above the midplane, which integrates to 1.
+    the density above the surface (the midplane of a disk), which
+    integrates to 1.
 
-    The density lies within zmax of the midplane (its option zmax), which
+    The density lies within zmax of the surface (its option zmax), which
     vertical distortion traits displace: the profile is truncated there
     and renormalised, so that each column keeps its density (none where
     less than 0.001 of the profile is within zmax). With the zmax of the
-    vertical distortion traits, it bounds the disk along z, so that the
+    vertical distortion traits, it bounds a disk along z, so that the
     depth axis of an observation can hold all of it (see Depth).
     """
 
@@ -876,7 +898,8 @@ class ZPTrait(TraitFeatureZmax, PTrait, abc.ABC):
 
 class SPTrait(PTrait, abc.ABC):
     """
-    A selection polar trait: 1 where it selects the disk, 0 elsewhere.
+    A selection polar trait: 1 where it selects its component, 0
+    elsewhere.
     """
 
     @abc.abstractmethod
@@ -3301,7 +3324,7 @@ class ZPTraitNWHarmonic(
 
 class SPTraitAzimuthalRange(SPTrait):
     """
-    A wedge of the disk: the azimuths within s / 2 of p. Its parameters:
+    A wedge of the component: the azimuths within s / 2 of p. Its parameters:
     p, the azimuth of its centre, and s, its full width.
     """
 
@@ -3333,8 +3356,8 @@ class SPTraitAzimuthalRange(SPTrait):
 
 class SPTraitRadialRange(SPTrait):
     """
-    A ring of the disk: the radii from rmin (inclusive) to rmax
-    (exclusive). Its parameters: rmin and rmax.
+    A range of radii of the component (a ring of a disk): the radii from
+    rmin (inclusive) to rmax (exclusive). Its parameters: rmin and rmax.
     """
 
     @staticmethod
@@ -3357,8 +3380,8 @@ class SPTraitRadialRange(SPTrait):
 class SPTraitNWAzimuthalRange(
         TraitFeatureSampling, SPTrait):
     """
-    A wedge of the disk at each ring: the azimuths within s(r) / 2 of
-    p(r). Its parameters, node-wise: p and s.
+    A wedge of the component at each node: the azimuths within s(r) / 2
+    of p(r). Its parameters, node-wise: p and s.
 
     Parameters
     ----------
