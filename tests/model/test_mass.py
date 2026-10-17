@@ -6,6 +6,7 @@ velocity.
 """
 
 import copy
+import functools
 import logging
 
 import astropy.cosmology
@@ -18,10 +19,11 @@ from gbkfit.model import galaxy_parser
 from gbkfit.model.distance import (
     KPC_PER_ARCSEC_MPC, DistanceDirect, DistanceRedshift)
 from gbkfit.model.mass import (
-    MassBurkert, MassContext, MassEinasto, MassExponentialDisk, MassModel,
-    MassNFW, MassNodewiseDisk, MassPointMass, MassPseudoIsothermal,
-    MassSersic, MassUser, MassZhao, mass_component_parser,
-    vertical_density, vertical_transform)
+    MassContext, MassDisk, MassModel, MassPoint, MassSpheroid, MassUser,
+    ProfileBurkert, ProfileEinasto, ProfileNFW, ProfilePseudoIsothermal,
+    ProfileSersic, ProfileZhao, SurfaceComponent, SurfaceExponential,
+    SurfaceNodewise, VerticalComponent, VerticalExponential, VerticalGauss,
+    VerticalSech2, VerticalThin, mass_component_parser)
 from gbkfit.model.mass import _disk_gravity
 from gbkfit.utils.parseutils import ConfigError
 
@@ -34,6 +36,21 @@ CONTEXT = MassContext(
     critical_density=astropy.cosmology.Planck18.critical_density0.to_value(
         'solMass / kpc3'),
     omega_m=astropy.cosmology.Planck18.Om0)
+
+# The vertical laws, by type
+LAWS = dict(
+    thin=VerticalThin, exponential=VerticalExponential, sech2=VerticalSech2,
+    gauss=VerticalGauss)
+
+
+def exponential_disk(vertical='thin'):
+    """An exponential mass disk of a vertical law."""
+    return MassDisk('d', SurfaceExponential(), LAWS[vertical]())
+
+
+def nodewise_disk(nodes, vertical='thin'):
+    """A nodewise mass disk of a vertical law."""
+    return MassDisk('gas', SurfaceNodewise(nodes), LAWS[vertical]())
 
 
 def test_exponential_disk_is_its_potential():
@@ -58,7 +75,7 @@ def test_exponential_disk_is_its_potential():
         return 2 * np.pi * G * sigma0 * rd ** 2 * r * integral
 
     radius = np.array([0, 0.1, 1, 3, 6.6, 10])
-    result = MassExponentialDisk('stars').vcirc2(
+    result = exponential_disk().vcirc2(
         radius, dict(log_m=log_m, rd=rd), CONTEXT)
     np.testing.assert_allclose(
         result, [vcirc2(r) for r in radius], rtol=1e-4)
@@ -69,16 +86,16 @@ def test_thick_disks_of_vanishing_thickness_are_thin(vertical):
     # (the numerical integral of a thick disk against Freeman's closed
     # form; the transforms of the vertical laws against their densities)
     radius = np.concatenate(([0], np.geomspace(1e-3, 1e3, 61)))
-    thin = MassExponentialDisk('d').vcirc2(
+    thin = exponential_disk().vcirc2(
         radius, dict(log_m=10, rd=3), CONTEXT)
-    thick = MassExponentialDisk('d', vertical).vcirc2(
+    thick = exponential_disk(vertical).vcirc2(
         radius, dict(log_m=10, rd=3, hz=1e-9), CONTEXT)
     np.testing.assert_allclose(thick, thin, rtol=1e-6)
     for k in (0, 0.3, 5):
         expected, _ = scipy.integrate.quad(
-            lambda z: 2 * vertical_density(vertical, z, 0.7) * np.exp(-k * z),
+            lambda z: 2 * LAWS[vertical].pdf(z, 0.7) * np.exp(-k * z),
             0, np.inf)
-        assert vertical_transform(vertical, np.array(k), 0.7) \
+        assert LAWS[vertical].transform(np.array(k), 0.7) \
             == pytest.approx(expected, rel=1e-10)
 
 
@@ -87,7 +104,7 @@ def test_disks_of_any_profile_are_exponential_disks(vertical):
     # The pull of the rings of an exponential profile (up to 30 rd, where
     # it is negligible) against the exponential disk (Freeman's closed
     # form, or the Hankel transform when thick), at hz / rd from 1e-3
-    from gbkfit.model.mass import disks
+    from gbkfit.model.mass import surfaces
     log_m, rd = 10, 2.0
     knots = np.linspace(0, 30 * rd, 61)
     radius = knots[1:41]
@@ -95,7 +112,7 @@ def test_disks_of_any_profile_are_exponential_disks(vertical):
         gravity = _disk_gravity.thin_disk_gravity(knots, radius, degree=5)
         result = gravity.vcirc2(
             10 ** log_m / (2 * np.pi * rd ** 2) * np.exp(-gravity.radii / rd))
-        expected = MassExponentialDisk('d').vcirc2(
+        expected = exponential_disk().vcirc2(
             radius, dict(log_m=log_m, rd=rd), CONTEXT)
         np.testing.assert_allclose(result, expected, rtol=1e-8)
         return
@@ -103,13 +120,13 @@ def test_disks_of_any_profile_are_exponential_disks(vertical):
     sigma = 10 ** log_m / (2 * np.pi * rd ** 2) * np.exp(-gravity.radii / rd)
     for eta in (1e-3, 0.03, 0.3):
         result = gravity.vcirc2(
-            sigma[None], vertical_density(vertical, gravity.heights, eta * rd))
-        expected = G * 10 ** log_m / rd * disks._exponential_shape_direct(
-            radius / rd, vertical, eta)
+            sigma[None], LAWS[vertical].pdf(gravity.heights, eta * rd))
+        expected = G * 10 ** log_m / rd * surfaces._exponential_shape_direct(
+            radius / rd, functools.partial(LAWS[vertical].transform, h=eta))
         np.testing.assert_allclose(result, expected, rtol=1e-7)
 
 
-NODEWISE_DISK = MassNodewiseDisk('gas', nodes=[0, 1, 2.5, 4, 7, 10])
+NODEWISE_DISK = nodewise_disk([0, 1, 2.5, 4, 7, 10])
 NODEWISE_SIGMA = np.log10([50, 80, 40, 30, 10])
 
 
@@ -118,10 +135,10 @@ def test_nodewise_disk_is_the_integral_of_its_rings():
     # principal value by subtraction of sigma(R) (the ln of the two
     # sides of R add up), on the pieces between the nodes and R
     params = dict(log_sigma=NODEWISE_SIGMA)
-    nodes = NODEWISE_DISK.nodes()
+    nodes = NODEWISE_DISK.surface().nodes()
 
     def sigma(a):
-        return NODEWISE_DISK.surface_density(a, params)
+        return NODEWISE_DISK.surface().surface_density(a, params, CONTEXT)
 
     def pull(a, R):
         # (with 1 - m = ((a - R) / (a + R))^2, which keeps K finite)
@@ -154,21 +171,21 @@ def test_disks_far_away_are_their_multipoles(vertical):
     # over the mass (the multipoles 2 and 4; the rest is of order R^-6),
     # to the precision of thick disks
     hz = 0.3
-    disk = MassNodewiseDisk('gas', NODEWISE_DISK.nodes(), vertical)
+    disk = nodewise_disk(NODEWISE_DISK.surface().nodes(), vertical)
     params = dict(log_sigma=NODEWISE_SIGMA, hz=hz)
-    nodes = NODEWISE_DISK.nodes()
+    nodes = NODEWISE_DISK.surface().nodes()
 
     def mean(power):
         def integral(p):
             return scipy.integrate.quad(
                 lambda a: 2 * np.pi * a ** (p + 1)
-                * disk.surface_density(a, params), 0, nodes[-1],
-                points=nodes, epsabs=0, epsrel=1e-13)[0]
+                * disk.surface().surface_density(a, params, CONTEXT),
+                0, nodes[-1], points=nodes, epsabs=0, epsrel=1e-13)[0]
         return integral(power) / integral(0)
 
     mass = 2 * np.pi * scipy.integrate.quad(
-        lambda a: a * disk.surface_density(a, params), 0, nodes[-1],
-        points=nodes, epsabs=0, epsrel=1e-13)[0]
+        lambda a: a * disk.surface().surface_density(a, params, CONTEXT),
+        0, nodes[-1], points=nodes, epsabs=0, epsrel=1e-13)[0]
     # (the moments of sech^2(z / hz) / (2 hz))
     z2, z4 = (np.pi ** 2 * hz ** 2 / 12, 7 * np.pi ** 4 * hz ** 4 / 240) \
         if vertical == 'sech2' else (0, 0)
@@ -186,8 +203,8 @@ def test_disks_at_jumps_of_their_density():
     # jump does not (the density is 0 at the last node)
     params = dict(log_sigma=[2, 2], hz=0.1)
     radius = np.array([0.999, 1, 1.001, 3])
-    thin = MassNodewiseDisk('gas', [1, 2, 3]).vcirc2(radius, params, CONTEXT)
-    thick = MassNodewiseDisk('gas', [1, 2, 3], 'sech2').vcirc2(
+    thin = nodewise_disk([1, 2, 3]).vcirc2(radius, params, CONTEXT)
+    thick = nodewise_disk([1, 2, 3], 'sech2').vcirc2(
         radius, params, CONTEXT)
     assert thin[1] == -np.inf
     assert np.all(np.isfinite(thin[[0, 2, 3]]))
@@ -195,33 +212,130 @@ def test_disks_at_jumps_of_their_density():
 
 
 def test_unresolved_heights_are_errors():
-    disk = MassNodewiseDisk('gas', [0, 1, 2], 'sech2')
+    disk = nodewise_disk([0, 1, 2], 'sech2')
     with pytest.raises(ValueError, match="heights are not resolved"):
         disk.vcirc2([0.5, 1], dict(log_sigma=[2, 2], hz=1e-12), CONTEXT)
 
 
 @pytest.mark.parametrize('nodes', [[1], [0, 2, 1], [-1, 1], [0, np.inf]])
 def test_nodes_of_nodewise_disks_are_checked(nodes):
-    with pytest.raises(ConfigError, match="the nodes of a nodewise disk"):
-        MassNodewiseDisk('gas', nodes)
+    with pytest.raises(
+            ConfigError, match="the nodes of a nodewise surface density"):
+        SurfaceNodewise(nodes)
+
+
+class Layers:
+    """
+    The density of a component (see mass.ComponentDensity) between 0.5
+    and 10 kpc: a sech2 layer of the scale height 0.3 + flare * 0.04 R,
+    and, if flare, a Gaussian one of dispersion 0.5 (kpc).
+    """
+
+    def __init__(self, flare):
+        self._flare = flare
+
+    def knots(self, rstep):
+        return np.linspace(0.5, 10, 20)
+
+    def thick(self):
+        return True
+
+    def surface_densities(self, R):
+        R = np.asarray(R, dtype=float)
+        return np.array([np.exp(-R / 3), self._flare * 0.3 * np.exp(-R / 1.5)])
+
+    def height_pdfs(self, R, z):
+        h = 0.3 + self._flare * 0.04 * np.asarray(R, dtype=float)[:, None]
+        sech2 = VerticalSech2.pdf(z, h)
+        gauss = VerticalGauss.pdf(z, 0.5) * np.ones_like(h)
+        return np.array([sech2, gauss])
+
+    def mass_per_unit(self):
+        return None
+
+
+def test_mass_disks_follow_one_component():
+    disk = MassDisk('d', SurfaceExponential(), VerticalComponent('hi'))
+    assert disk.followed_components() == ('hi',)
+    with pytest.raises(ConfigError, match="follows at most one component"):
+        MassDisk('d', SurfaceComponent('hi'), VerticalComponent('co'))
+
+
+def test_vertical_structure_of_a_component():
+    # The shape of its density at its subnodes; where it has none, that
+    # of the nearest subnodes with density, interpolated between them
+    class Gap(Layers):
+        def surface_densities(self, R):
+            return super().surface_densities(R) * (np.abs(R - 5) > 0.3)
+    context = MassContext(1, 1, dict(hi=Gap(flare=1)))
+    knots = Gap(flare=1).knots(None)
+    z = np.array([0, 0.2, 1])
+    shapes = VerticalComponent('hi').shapes(
+        np.array([0, 4.5, 5.0, 5.5, 20]), z, context)
+    sigmas = Gap(flare=1).surface_densities(knots)
+    pdfs = Gap(flare=1).height_pdfs(knots, z)
+    total = sigmas.sum(axis=0)
+    full = np.einsum('tk,tkz->kz', sigmas, pdfs) \
+        / np.where(total > 0, total, 1)[:, None]
+    # (the subnode 5.0 is empty, between 4.5 and 5.5)
+    np.testing.assert_allclose(
+        knots[[0, 8, 9, 10, 19]], [0.5, 4.5, 5, 5.5, 10])
+    np.testing.assert_allclose(shapes[0], full[0])
+    np.testing.assert_allclose(shapes[1], full[8])
+    np.testing.assert_allclose(shapes[2], (full[8] + full[10]) / 2)
+    np.testing.assert_allclose(shapes[3], full[10])
+    np.testing.assert_allclose(shapes[4], full[19])
+
+
+@pytest.mark.parametrize('surface', ['exponential', 'nodewise'])
+@pytest.mark.parametrize('flare', [0, 1])
+def test_disks_as_thick_as_a_component(surface, flare):
+    # Of one layer of constant thickness, the disk of its vertical law;
+    # flaring, of two layers, the pull of its rings out to 40 rd (where
+    # the exponential is negligible)
+    context = MassContext(1, 1, dict(hi=Layers(flare)))
+    radius = np.geomspace(0.05, 30, 40)
+    vertical = VerticalComponent('hi')
+    if surface == 'exponential':
+        params = dict(log_m=10.3, rd=0.4 if flare else 2.0)
+        disk = MassDisk('d', SurfaceExponential(), vertical)
+        outer = 40 * params['rd']
+    else:
+        params = dict(log_sigma=NODEWISE_SIGMA)
+        disk = MassDisk('d', NODEWISE_DISK.surface(), vertical)
+        outer = NODEWISE_DISK.surface().nodes()[-1]
+    result = disk.vcirc2(radius, params, context)
+    if not flare:
+        law = MassDisk('d', disk.surface(), VerticalSech2())
+        np.testing.assert_allclose(
+            result, law.vcirc2(radius, params | dict(hz=0.3), context),
+            rtol=1e-6)
+        return
+    knots = np.union1d(np.linspace(0, outer, 801), vertical.knots(context))
+    gravity = _disk_gravity.thick_disk_gravity(knots, radius, degree=5)
+    expected = gravity.vcirc2(
+        disk.surface().surface_density(gravity.radii, params, context)[None],
+        vertical.shapes(gravity.radii, gravity.heights, context)[None])
+    np.testing.assert_allclose(result, expected, rtol=1e-6)
 
 
 SPHERES = [
-    (MassNFW('h', 'density_radius'), dict(log_rho=7, rs=10)),
-    (MassBurkert('h', 'density_radius'), dict(log_rho=7.5, rs=4)),
-    (MassPseudoIsothermal('h', 'density_radius'), dict(log_rho=7.5, rs=2)),
-    (MassEinasto('h', 'density_radius'), dict(log_rho=6.5, rs=15, alpha=0.17)),
-    (MassZhao('h', 'density_radius'),
+    (ProfileNFW('density_radius'), dict(log_rho=7, rs=10)),
+    (ProfileBurkert('density_radius'), dict(log_rho=7.5, rs=4)),
+    (ProfilePseudoIsothermal('density_radius'), dict(log_rho=7.5, rs=2)),
+    (ProfileEinasto('density_radius'), dict(log_rho=6.5, rs=15, alpha=0.17)),
+    (ProfileZhao('density_radius'),
      dict(log_rho=6.5, rs=8, alpha=2, beta=4, gamma=0.5)),
-    (MassSersic('b'), dict(log_m=10, re=1.5, n=0.6)),
-    (MassSersic('b'), dict(log_m=10, re=1.5, n=4))]
+    (ProfileSersic(), dict(log_m=10, re=1.5, n=0.6)),
+    (ProfileSersic(), dict(log_m=10, re=1.5, n=4))]
 
 
-@pytest.mark.parametrize('sphere, params', SPHERES)
-def test_spheres_are_their_densities(sphere, params):
+@pytest.mark.parametrize('profile, params', SPHERES)
+def test_spheres_are_their_densities(profile, params):
     # Their enclosed mass is the integral of their density (including
     # radii where the halos use their series), and their circular
     # velocity G M(<r) / r
+    sphere = MassSpheroid('s', profile)
     radius = np.array([1e-4, 5e-4, 2e-3, 0.5, 2, 10, 100])
     expected = [
         scipy.integrate.quad(
@@ -237,8 +351,9 @@ def test_spheres_are_their_densities(sphere, params):
 
 
 @pytest.mark.parametrize('sphere, params', [
-    (MassPointMass('p'), dict(log_m=8))] + [
-        case for case in SPHERES if case[0].type() != 'pseudo_isothermal'])
+    (MassPoint('p'), dict(log_m=8))] + [
+        (MassSpheroid('s', profile), params) for profile, params in SPHERES
+        if profile.type() != 'pseudo_isothermal'])
 def test_spheres_are_their_potentials(sphere, params):
     # The forces are -grad(potential), off the plane too
     R, z, step = np.array([0.7, 3, 12]), np.array([0.4, 2, 5]), 1e-4
@@ -256,7 +371,7 @@ def test_spheres_are_their_potentials(sphere, params):
 
 def test_the_potential_of_a_pseudo_isothermal_sphere_is_infinite():
     with pytest.raises(ValueError, match="infinite"):
-        MassPseudoIsothermal('h').potential(
+        MassSpheroid('h', ProfilePseudoIsothermal()).potential(
             1, 0, dict(log_m=12, c=10), CONTEXT)
 
 
@@ -270,14 +385,17 @@ def test_sersic_of_index_1_is_the_deprojected_exponential():
     sigma0 = mass / (2 * np.pi * rd ** 2)
     radius = np.geomspace(1e-3, 10, 9)
     params = dict(log_m=np.log10(mass), re=re, n=1)
+    sersic = MassSpheroid('b', ProfileSersic())
     np.testing.assert_allclose(
-        MassSersic('b').density_spherical(radius, params, CONTEXT),
+        sersic.density_spherical(radius, params, CONTEXT),
         sigma0 / (np.pi * rd) * scipy.special.k0(radius / rd), rtol=1e-6)
-    assert MassSersic('b').enclosed_mass(1e3, params, CONTEXT) \
+    assert sersic.enclosed_mass(1e3, params, CONTEXT) \
         == pytest.approx(mass, rel=1e-8)
 
 
-HALOS = [MassNFW, MassBurkert, MassPseudoIsothermal, MassEinasto, MassZhao]
+HALOS = [
+    ProfileNFW, ProfileBurkert, ProfilePseudoIsothermal, ProfileEinasto,
+    ProfileZhao]
 SHAPES = dict(einasto=dict(alpha=0.17), zhao=dict(alpha=1, beta=3, gamma=1.3))
 
 
@@ -287,10 +405,11 @@ def test_halos_have_their_mass_and_concentration(halo_class, overdensity):
     # The mean density within r_D is D rho_ref, the mass within it M_D,
     # and its velocity V_D: given by (M_D, c) or (V_D, c), a halo is the
     # same
-    halo = halo_class('h', 'mass_concentration', overdensity)
-    shape = SHAPES.get(halo.type(), {})
+    profile = halo_class('mass_concentration', overdensity)
+    halo = MassSpheroid('h', profile)
+    shape = SHAPES.get(profile.type(), {})
     params = dict(log_m=12, c=9) | shape
-    rho_s, r_s = halo.scales(params, CONTEXT)
+    rho_s, r_s = profile.scales(params, CONTEXT)
     r_d = 9 * r_s
     mass = 1e12
     reference = dict(
@@ -304,7 +423,8 @@ def test_halos_have_their_mass_and_concentration(halo_class, overdensity):
         density = float(overdensity[:-1]) * reference[overdensity[-1]]
     assert mass / (4 / 3 * np.pi * r_d ** 3) == pytest.approx(density)
     assert halo.enclosed_mass(r_d, params, CONTEXT) == pytest.approx(mass)
-    by_velocity = halo_class('h', 'velocity_concentration', overdensity)
+    by_velocity = MassSpheroid(
+        'h', halo_class('velocity_concentration', overdensity))
     radius = np.array([0.5, 5, 50])
     np.testing.assert_allclose(
         by_velocity.vcirc2(
@@ -315,9 +435,10 @@ def test_halos_have_their_mass_and_concentration(halo_class, overdensity):
 def test_zhao_is_nfw_for_its_shape():
     radius = np.array([1e-3, 0.5, 5, 50, 500])
     np.testing.assert_allclose(
-        MassZhao('h').vcirc2(
+        MassSpheroid('h', ProfileZhao()).vcirc2(
             radius, dict(log_m=12, c=9, alpha=1, beta=3, gamma=1), CONTEXT),
-        MassNFW('h').vcirc2(radius, dict(log_m=12, c=9), CONTEXT),
+        MassSpheroid('h', ProfileNFW()).vcirc2(
+            radius, dict(log_m=12, c=9), CONTEXT),
         rtol=1e-10)
 
 
@@ -328,7 +449,7 @@ def test_zhao_is_nfw_for_its_shape():
      "take no overdensity")])
 def test_halo_options_are_checked(options, message):
     with pytest.raises(ConfigError, match=message):
-        MassNFW('h', **options)
+        ProfileNFW(**options)
 
 
 def test_user_component_is_its_function(tmp_path):
@@ -347,7 +468,9 @@ def test_user_component_is_its_function(tmp_path):
 
 
 def test_mass_model_adds_its_components():
-    model = MassModel([MassExponentialDisk('stars'), MassNFW('halo')])
+    model = MassModel([
+        MassDisk('stars', SurfaceExponential(), VerticalThin()),
+        MassSpheroid('halo', ProfileNFW())])
     assert list(model.pdescs()) == [
         'mass_stars_log_m', 'mass_stars_rd', 'mass_halo_log_m', 'mass_halo_c']
     params = dict(
@@ -355,9 +478,9 @@ def test_mass_model_adds_its_components():
         mass_halo_c=8)
     radius = np.array([0, 1, 5, 20])
     expected = (
-        MassExponentialDisk('s').vcirc2(
-            radius, dict(log_m=10.5, rd=3), CONTEXT)
-        + MassNFW('h').vcirc2(radius, dict(log_m=12, c=8), CONTEXT))
+        exponential_disk().vcirc2(radius, dict(log_m=10.5, rd=3), CONTEXT)
+        + MassSpheroid('h', ProfileNFW()).vcirc2(
+            radius, dict(log_m=12, c=8), CONTEXT))
     np.testing.assert_allclose(
         model.vcirc2(radius, params, CONTEXT), expected, rtol=1e-12)
 
@@ -394,11 +517,13 @@ def test_distances_give_the_length_of_an_arcsec():
 
 
 MASS = [
-    dict(type='exponential_disk', name='stars', vertical='thin'),
-    dict(type='nodewise_disk', name='gas', nodes=[0.0, 0.3, 0.6, 1.2],
-         vertical='thin'),
-    dict(type='pseudo_isothermal', name='halo',
-         parameters='density_radius')]
+    dict(type='disk', name='stars', surface=dict(type='exponential'),
+         vertical=dict(type='thin')),
+    dict(type='disk', name='gas',
+         surface=dict(type='nodewise', nodes=[0.0, 0.3, 0.6, 1.2]),
+         vertical=dict(type='thin')),
+    dict(type='spheroid', name='halo', profile=dict(
+        type='pseudo_isothermal', parameters='density_radius'))]
 
 DISTANCE = dict(type='direct', cosmology='Planck18', epoch=0.0)
 
@@ -533,13 +658,15 @@ def test_mass_trait_mass_and_distance_need_each_other():
 def test_tables_of_thick_disks_are_their_integrals():
     # Inside the range of the table of a vertical law (hz / rd from 1e-3
     # to 1), against the integral computed directly (beyond it)
-    from gbkfit.model.mass import disks
+    from gbkfit.model.mass import surfaces
     rng = np.random.default_rng(1)
     x = np.exp(rng.uniform(np.log(1e-3), np.log(1e3), 50))
     for eta in (2e-3, 0.08, 0.9):
         np.testing.assert_allclose(
-            disks._exponential_shape(x, 'sech2', eta),
-            disks._exponential_shape_direct(x, 'sech2', eta), rtol=1e-6)
+            surfaces._exponential_shape(x, VerticalSech2, eta),
+            surfaces._exponential_shape_direct(
+                x, functools.partial(VerticalSech2.transform, h=eta)),
+            rtol=1e-6)
 
 
 # The length of an arcsec at the distance of DISTANCE (10 Mpc)
@@ -585,7 +712,7 @@ def test_disk_densities_are_azimuthal_means(driver):
 
 
 @pytest.mark.parametrize('line_of_sight', ['flat', 'grid'])
-def test_trait_disk_is_the_nodewise_disk_of_its_density(
+def test_disk_of_a_component_is_the_nodewise_disk_of_its_density(
         driver, line_of_sight):
     # A disk whose mass follows a node-wise density (linear between the
     # subnodes, and 0 at the last) is the nodewise disk of that surface
@@ -606,8 +733,8 @@ def test_trait_disk_is_the_nodewise_disk_of_its_density(
     if thick:
         disk = with_traits(disk, htraits=dict(type='sech2', zmax=8))
         properties |= dict(hi_ht_s=1)
-    halo = dict(
-        type='pseudo_isothermal', name='halo', parameters='density_radius')
+    halo = dict(type='spheroid', name='halo', profile=dict(
+        type='pseudo_isothermal', parameters='density_radius'))
     halo_properties = dict(distance=10, mass_halo_log_rho=8, mass_halo_rs=1)
 
     def galaxy(gas):
@@ -615,11 +742,15 @@ def test_trait_disk_is_the_nodewise_disk_of_its_density(
             components=[copy.deepcopy(disk)], mass=[gas, halo],
             distance=copy.deepcopy(DISTANCE)))
 
-    following = galaxy(dict(type='trait_disk', name='gas', component='hi'))
+    following = galaxy(dict(
+        type='disk', name='gas',
+        surface=dict(type='component', component='hi'),
+        vertical=dict(type='component', component='hi')))
     nodewise = galaxy(dict(
-        type='nodewise_disk', name='gas',
-        nodes=(subrnodes * KPC_PER_ARCSEC).tolist(),
-        vertical='sech2' if thick else 'thin'))
+        type='disk', name='gas',
+        surface=dict(
+            type='nodewise', nodes=(subrnodes * KPC_PER_ARCSEC).tolist()),
+        vertical=dict(type='sech2' if thick else 'thin')))
     sigma = upsilon * np.interp(subrnodes[:-1], rnodes, brightness)
     np.testing.assert_allclose(
         evaluate(
@@ -633,21 +764,23 @@ def test_trait_disk_is_the_nodewise_disk_of_its_density(
         rtol=1e-5, atol=1e-7)
 
 
-def test_trait_disks_follow_disks_of_their_galaxy():
+def test_disks_follow_components_of_their_galaxy():
     mass = [
-        dict(type='trait_disk', name='gas', component='hi', rstep=1.0,
-             vertical='component')]
+        dict(type='disk', name='gas',
+             surface=dict(type='component', component='hi', rstep=1.0),
+             vertical=dict(type='component', component='hi', rstep=None))]
     loaded = mass_component_parser.load(copy.deepcopy(mass))
     assert mass_component_parser.dump(loaded) == mass
     with pytest.raises(ConfigError, match="follows the component 'hi'"):
         disk_galaxy('smdisk', dict(type='tan_mass'), mass, DISTANCE)
 
 
-def test_trait_disk_follows_a_component_without_light():
+def test_disk_follows_a_component_without_light():
     # The mass of a disk can follow a component whose light no observation
     # sees, here dust: thin, its gravity is that of the nodewise disk of
-    # the surface density of the dust (as in test_trait_disk_is_the_
-    # nodewise_disk_of_its_density), at the subnodes of the disk it moves
+    # the surface density of the dust (as in test_disk_of_a_component_is_
+    # the_nodewise_disk_of_its_density), at the subnodes of the disk it
+    # moves
     from gbkfit.model.components.disks._disk import subring_radii
     rnodes = list(range(0, 21, 2))
     opacity = np.append(np.linspace(1, 0.2, 10), 0)
@@ -664,8 +797,9 @@ def test_trait_disk_follows_a_component_without_light():
     galaxy = galaxy_parser.load(dict(
         components=[stars, dust],
         mass=[dict(
-            type='trait_disk', name='gas', component='dust',
-            vertical='thin')],
+            type='disk', name='gas',
+            surface=dict(type='component', component='dust'),
+            vertical=dict(type='thin'))],
         distance=copy.deepcopy(DISTANCE)))
     params = {
         f'{name}_{key}': value for name in ('stars', 'dust')
@@ -676,8 +810,10 @@ def test_trait_disk_follows_a_component_without_light():
         mass_gas_upsilon=upsilon)
     subrnodes = np.array(subring_radii(rnodes, DISK['rstep']))
     nodewise = mass_model([dict(
-        type='nodewise_disk', name='gas',
-        nodes=(subrnodes * KPC_PER_ARCSEC).tolist(), vertical='thin')])
+        type='disk', name='gas',
+        surface=dict(
+            type='nodewise', nodes=(subrnodes * KPC_PER_ARCSEC).tolist()),
+        vertical=dict(type='thin'))])
     sigma = upsilon * np.interp(subrnodes[:-1], rnodes, opacity)
     np.testing.assert_allclose(
         galaxy.plan_gravity().evaluate(params)[0]['vpt_vt'],

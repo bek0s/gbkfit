@@ -193,8 +193,8 @@ class Component(parseutils.TypedSerializable, abc.ABC):
     def density_disk(self) -> 'Disk | None':
         """
         Return its disk, if it is made of one: the mass of its galaxy can
-        follow the density of the disk (see mass.MassTraitDisk). None
-        here.
+        follow the density of the disk (see mass.SurfaceComponent and
+        mass.VerticalComponent). None here.
         """
         return None
 

@@ -1904,7 +1904,7 @@ class VPTraitTanMass(VPTrait):
     the disk at its midplane (its density traits times its density
     height traits at z = 0, or its density traits if thin: the equation
     of a thin disk) and of rho sigma^2, sigma its velocity dispersion at
-    the midplane (azimuthal means as those of mass.MassTraitDisk); the
+    the midplane (azimuthal means as those of mass.SurfaceComponent); the
     derivative by the second-order three-point formula on the rings; NaN
     without density.
 

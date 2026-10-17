@@ -13,7 +13,6 @@ import numpy.typing as npt
 
 from gbkfit.params import ParamDesc, ParamValues
 from gbkfit.utils import parseutils
-from . import _numerics
 from .units import G
 
 
@@ -27,8 +26,9 @@ __all__ = [
 
 class ComponentDensity(Protocol):
     """
-    The density of a component of a galaxy, which mass components follow
-    (see disks.MassTraitDisk): its azimuthal mean, a sum of terms (e.g.
+    The density of a component of a galaxy, which mass disks follow (see
+    surfaces.SurfaceComponent and vertical.VerticalComponent): its
+    azimuthal mean, a sum of terms (e.g.
     one for each density polar trait), each a surface
     density times the pdf of the height, between the inner and the outer
     edge of the component; in kpc, and in the units of the component.
@@ -83,6 +83,22 @@ class MassContext:
     omega_m: float
     densities: Mapping[str, ComponentDensity] = dataclasses.field(
         default_factory=dict)
+
+    def density(self, component: str) -> ComponentDensity:
+        """
+        Return the density of a component that mass components follow, by
+        the name of the component.
+
+        Raises
+        ------
+        ValueError
+            If the context does not give the density of the component.
+        """
+        if component not in self.densities:
+            raise ValueError(
+                f"a mass component follows the component {component!r}, "
+                f"whose density its context does not give")
+        return self.densities[component]
 
 
 class MassComponent(parseutils.TypedSerializable, abc.ABC):
@@ -234,8 +250,7 @@ class MassSpherical(MassComponent, abc.ABC):
     """
     A spherical mass component, given by its density and its enclosed
     mass, as functions of the spherical radius r: its circular velocity
-    and its forces follow exactly, and its potential numerically (unless
-    a component gives it exactly).
+    and its forces follow exactly.
     """
 
     @abc.abstractmethod
@@ -297,16 +312,3 @@ class MassSpherical(MassComponent, abc.ABC):
             self.enclosed_mass(r, params, context), r ** 3,
             out=np.zeros_like(r), where=r > 0)
         return scale * R, scale * z
-
-    def potential(
-            self,
-            R: npt.ArrayLike,
-            z: npt.ArrayLike,
-            params: ParamValues,
-            context: MassContext
-    ) -> np.ndarray:
-        # -G (M(<r) / r + 4 pi int_r^inf rho r' dr'), by quadrature
-        r = np.hypot(R, z)
-        return _numerics.spherical_potential(
-            lambda x: self.density_spherical(x, params, context),
-            lambda x: self.enclosed_mass(x, params, context), r)

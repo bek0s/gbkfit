@@ -1,47 +1,80 @@
 """
-Spherical spheroids (e.g. a bulge), given by their surface density.
+Spherical spheroids (e.g. a bulge, or a dark matter halo), of a profile
+(see profiles and halos).
 """
+
+from typing import Any
 
 import numpy as np
 import numpy.typing as npt
 
 from gbkfit.params import ParamDesc, ParamValues
-from gbkfit.params.pdescs import ParamScalarDesc
-from . import _numerics
+from gbkfit.utils import parseutils
 from .base import MassContext, MassSpherical
-from .units import G
+from .halos import (
+    ProfileBurkert, ProfileEinasto, ProfileNFW, ProfilePseudoIsothermal,
+    ProfileZhao)
+from .profiles import ProfileSersic, SpheroidProfile
 
 
 __all__ = [
-    'MassSersic'
+    'MassSpheroid',
+    'spheroid_profile_parser'
 ]
 
 
-class MassSersic(MassSpherical):
+spheroid_profile_parser = parseutils.TypedParser(SpheroidProfile, [
+    ProfileSersic,
+    ProfileNFW,
+    ProfileBurkert,
+    ProfilePseudoIsothermal,
+    ProfileEinasto,
+    ProfileZhao])
+
+
+class MassSpheroid(MassSpherical):
     """
-    The spherical deprojection of a Sersic profile of total mass 10^log_m
-    (Msun), effective radius re (kpc; within which half of the projected
-    mass is) and index n: the surface density S_e exp(-b ((R / re)^(1/n)
-    - 1)), with b(n) exact. The density, enclosed mass and potential are
-    computed numerically (see _numerics.sersic_tables), for n in [0.3,
-    12].
+    A spherical spheroid of a profile: its density, enclosed mass and
+    potential are those of the profile, and its parameters too.
 
     Parameters
     ----------
     name : str
         Its name (see MassComponent).
+    profile : SpheroidProfile
+        Its profile.
+
+    Raises
+    ------
+    ConfigError
+        If the name is not valid.
     """
 
     @staticmethod
     def type() -> str:
-        return 'sersic'
+        return 'spheroid'
+
+    @classmethod
+    def load(cls, info: dict[str, Any]) -> 'MassSpheroid':
+        parseutils.load_option_and_update_info(
+            spheroid_profile_parser, info, 'profile', required=True)
+        return cls(**parseutils.parse_options_for_callable(
+            info, cls.__init__))
+
+    def dump(self) -> dict[str, Any]:
+        return super().dump() | dict(
+            profile=spheroid_profile_parser.dump(self._profile))
+
+    def __init__(self, name: str, profile: SpheroidProfile):
+        super().__init__(name)
+        self._profile = profile
+
+    def profile(self) -> SpheroidProfile:
+        """Return its profile."""
+        return self._profile
 
     def pdescs(self) -> dict[str, ParamDesc]:
-        return dict(
-            log_m=ParamScalarDesc(desc="log10 of the mass (Msun)"),
-            re=ParamScalarDesc(desc="the effective radius (kpc)", minimum=0),
-            n=ParamScalarDesc(
-                desc="the Sersic index", minimum=0.3, maximum=12))
+        return self._profile.pdescs()
 
     def density_spherical(
             self,
@@ -49,8 +82,7 @@ class MassSersic(MassSpherical):
             params: ParamValues,
             context: MassContext
     ) -> np.ndarray:
-        mass, re, tables = self._scales(params)
-        return mass / re ** 3 * tables.density(np.asarray(r) / re)
+        return self._profile.density(r, params, context)
 
     def enclosed_mass(
             self,
@@ -58,8 +90,7 @@ class MassSersic(MassSpherical):
             params: ParamValues,
             context: MassContext
     ) -> np.ndarray:
-        mass, re, tables = self._scales(params)
-        return mass * tables.mass(np.asarray(r, dtype=float) / re)
+        return self._profile.enclosed_mass(r, params, context)
 
     def potential(
             self,
@@ -68,13 +99,4 @@ class MassSersic(MassSpherical):
             params: ParamValues,
             context: MassContext
     ) -> np.ndarray:
-        mass, re, tables = self._scales(params)
-        return G * mass / re * tables.potential(np.hypot(R, z) / re)
-
-    @staticmethod
-    def _scales(
-            params: ParamValues
-    ) -> tuple[float, float, _numerics.SphericalTables]:
-        """Return its mass, its effective radius and its unit tables."""
-        return (10 ** params['log_m'], params['re'],
-                _numerics.sersic_tables(float(params['n'])))
+        return self._profile.potential(np.hypot(R, z), params, context)

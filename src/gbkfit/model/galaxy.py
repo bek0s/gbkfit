@@ -64,8 +64,8 @@ class Galaxy(parseutils.Serializable):
     components : Component or Sequence of Component
         Its components; they need names when there are several.
     mass : MassComponent or Sequence of MassComponent, optional
-        Its mass: the components of its mass (halos, point masses, ...,
-        and trait_disk, which follows the density of one of its disks).
+        Its mass: the components of its mass (disks, spheroids, point
+        masses, ...; a disk can follow the density of one of its disks).
     distance : Distance, optional
         Its distance, which converts arcsec to kpc for its mass (required
         with mass, and used by it only).
@@ -95,7 +95,7 @@ class Galaxy(parseutils.Serializable):
         If there are no components, several without names, the names or
         parameters conflict, the mass, the distance and the components do
         not go together (e.g. 'tan_mass' velocity traits without mass, or a
-        trait_disk that follows no disk of the galaxy), or the redshift is
+        mass disk that follows no disk of the galaxy), or the redshift is
         not above -1, or missing where it is required.
     """
 

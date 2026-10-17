@@ -1,71 +1,338 @@
 """
-The vertical laws of thick disks: the probability density p(z) of the
-height z of their mass, of a scale height h, and its transform T(k) =
-int p(z) exp(-k |z|) dz, which sets the gravity of the disk in its plane
-(see disks).
+The vertical structure of mass disks (see disks.MassDisk): a law, the
+same probability density p(z) of the height z at every radius (of a
+scale height h), whose transform T(k) = int p(z) exp(-k |z|) dz sets the
+gravity of the disk in its plane; or that of a component of the galaxy,
+which may change with radius.
 """
 
+import abc
+from typing import Any
+
 import numpy as np
+import numpy.typing as npt
 import scipy.special
 
+from gbkfit.params import ParamDesc, ParamValues
+from gbkfit.params.pdescs import ParamScalarDesc
+from gbkfit.utils import parseutils
 from gbkfit.utils.parseutils import ConfigError
+from .base import MassContext
 
 
 __all__ = [
-    'VERTICAL_LAWS',
-    'check_vertical_law',
-    'vertical_density',
-    'vertical_transform'
+    'DiskVertical',
+    'VerticalComponent',
+    'VerticalExponential',
+    'VerticalGauss',
+    'VerticalLaw',
+    'VerticalSech2',
+    'VerticalThin',
+    'disk_vertical_parser'
 ]
 
 
-# The laws: 'thin' (no thickness), 'exponential' (exp(-|z| / h) / (2 h)),
-# 'sech2' (sech^2(z / h) / (2 h)) and 'gauss' (a Gaussian of dispersion h)
-VERTICAL_LAWS = ('thin', 'exponential', 'sech2', 'gauss')
-
-
-def check_vertical_law(law: str) -> None:
-    """Raise ConfigError unless the law is one of VERTICAL_LAWS."""
-    if law not in VERTICAL_LAWS:
-        raise ConfigError(
-            f"vertical must be one of {list(VERTICAL_LAWS)}; it is {law!r}")
-
-
-def vertical_density(law: str, z: np.ndarray, h: float) -> np.ndarray:
+class DiskVertical(parseutils.TypedSerializable, abc.ABC):
     """
-    Return the probability density p(z) of a thick law (not 'thin') at the
-    heights z, for the scale height h.
+    The vertical structure of a mass disk: how its mass is spread in
+    height at each radius.
     """
-    z = np.abs(np.asarray(z, dtype=float))
-    if law == 'exponential':
+
+    def dump(self) -> dict[str, Any]:
+        return dict(type=self.type())
+
+    def followed_component(self) -> str | None:
+        """
+        Return the name of the component of the galaxy whose density it
+        follows; None here.
+        """
+        return None
+
+    def pdescs(self) -> dict[str, ParamDesc]:
+        """Return its parameters, by name; none here."""
+        return {}
+
+    @abc.abstractmethod
+    def thin(self, context: MassContext) -> bool:
+        """
+        Check whether the disk is thin (of no thickness), in the context
+        of its galaxy (see MassContext).
+        """
+        pass
+
+    @abc.abstractmethod
+    def height_pdf(
+            self,
+            R: npt.ArrayLike,
+            z: npt.ArrayLike,
+            params: ParamValues,
+            context: MassContext
+    ) -> np.ndarray:
+        """
+        Return the pdf of the height (1/kpc) at the points (R, z) (kpc),
+        broadcast together.
+
+        Raises
+        ------
+        NotImplementedError
+            If the disk is thin, or the pdf is not given at any point.
+        """
+        pass
+
+
+class VerticalLaw(DiskVertical, abc.ABC):
+    """
+    A vertical law: the same pdf of the height at every radius, of the
+    scale height hz (kpc), a parameter (none if thin).
+    """
+
+    def pdescs(self) -> dict[str, ParamDesc]:
+        return dict(hz=ParamScalarDesc(
+            desc="the scale height (kpc)", minimum=0))
+
+    def thin(self, context: MassContext) -> bool:
+        return False
+
+    def height_pdf(
+            self,
+            R: npt.ArrayLike,
+            z: npt.ArrayLike,
+            params: ParamValues,
+            context: MassContext
+    ) -> np.ndarray:
+        return self.pdf(z, params['hz'])
+
+    @staticmethod
+    @abc.abstractmethod
+    def pdf(z: npt.ArrayLike, h: float) -> np.ndarray:
+        """Return the pdf p(z) at the heights z, for the scale height h."""
+        pass
+
+    @staticmethod
+    @abc.abstractmethod
+    def transform(k: npt.ArrayLike, h: float) -> np.ndarray:
+        """
+        Return T(k) = int p(z) exp(-k |z|) dz at the wavenumbers k >= 0,
+        for the scale height h.
+        """
+        pass
+
+
+class VerticalThin(VerticalLaw):
+    """
+    No thickness: all the mass in the plane (a thin disk), T(k) = 1. It
+    has no pdf of the height, and no scale height.
+    """
+
+    @staticmethod
+    def type() -> str:
+        return 'thin'
+
+    def pdescs(self) -> dict[str, ParamDesc]:
+        return {}
+
+    def thin(self, context: MassContext) -> bool:
+        return True
+
+    def height_pdf(
+            self,
+            R: npt.ArrayLike,
+            z: npt.ArrayLike,
+            params: ParamValues,
+            context: MassContext
+    ) -> np.ndarray:
+        raise NotImplementedError(
+            "a thin disk has a surface density, not a density")
+
+    @staticmethod
+    def pdf(z: npt.ArrayLike, h: float) -> np.ndarray:
+        raise NotImplementedError("a thin disk has no pdf of the height")
+
+    @staticmethod
+    def transform(k: npt.ArrayLike, h: float) -> np.ndarray:
+        return np.ones_like(np.asarray(k, dtype=float))
+
+
+class VerticalExponential(VerticalLaw):
+    """
+    The exponential law: p(z) = exp(-|z| / h) / (2 h), T(k) = 1 / (1 + k
+    h).
+    """
+
+    @staticmethod
+    def type() -> str:
+        return 'exponential'
+
+    @staticmethod
+    def pdf(z: npt.ArrayLike, h: float) -> np.ndarray:
+        z = np.abs(np.asarray(z, dtype=float))
         return np.exp(-z / h) / (2 * h)
-    if law == 'sech2':
+
+    @staticmethod
+    def transform(k: npt.ArrayLike, h: float) -> np.ndarray:
+        return 1 / (1 + np.asarray(k, dtype=float) * h)
+
+
+class VerticalSech2(VerticalLaw):
+    """
+    The sech2 law: p(z) = sech^2(z / h) / (2 h), T(k) = (a/2) (psi(a/4 +
+    1/2) - psi(a/4)) - 1 with a = k h (psi: the digamma function).
+    """
+
+    @staticmethod
+    def type() -> str:
+        return 'sech2'
+
+    @staticmethod
+    def pdf(z: npt.ArrayLike, h: float) -> np.ndarray:
+        z = np.abs(np.asarray(z, dtype=float))
         return 1 / (2 * h * np.cosh(np.minimum(z / h, 350)) ** 2)
-    if law == 'gauss':
-        return np.exp(-z ** 2 / (2 * h ** 2)) / (np.sqrt(2 * np.pi) * h)
-    raise ValueError(f"the law {law!r} has no vertical density")
 
-
-def vertical_transform(law: str, k: np.ndarray, h: float) -> np.ndarray:
-    """
-    Return T(k) = int p(z) exp(-k |z|) dz of a law at the wavenumbers
-    k >= 0, for the scale height h: 1 for a thin disk, 1 / (1 + k h) for
-    the exponential law, (a/2) (psi(a/4 + 1/2) - psi(a/4)) - 1 with a =
-    k h for sech2 (psi: the digamma function), and erfcx(k h / sqrt(2))
-    for the Gaussian law.
-    """
-    k = np.asarray(k, dtype=float)
-    if law == 'thin':
-        return np.ones_like(k)
-    if law == 'exponential':
-        return 1 / (1 + k * h)
-    if law == 'sech2':
-        a = k * h
+    @staticmethod
+    def transform(k: npt.ArrayLike, h: float) -> np.ndarray:
+        a = np.asarray(k, dtype=float) * h
         a_safe = np.where(a > 0, a, 1)
         transform = a_safe / 2 * (
             scipy.special.digamma(a_safe / 4 + 0.5)
             - scipy.special.digamma(a_safe / 4)) - 1
         return np.where(a > 0, transform, 1)
-    if law == 'gauss':
-        return scipy.special.erfcx(k * h / np.sqrt(2))
-    raise ValueError(f"unknown vertical law {law!r}")
+
+
+class VerticalGauss(VerticalLaw):
+    """
+    The Gaussian law, of dispersion h: T(k) = erfcx(k h / sqrt(2)).
+    """
+
+    @staticmethod
+    def type() -> str:
+        return 'gauss'
+
+    @staticmethod
+    def pdf(z: npt.ArrayLike, h: float) -> np.ndarray:
+        z = np.abs(np.asarray(z, dtype=float))
+        return np.exp(-z ** 2 / (2 * h ** 2)) / (np.sqrt(2 * np.pi) * h)
+
+    @staticmethod
+    def transform(k: npt.ArrayLike, h: float) -> np.ndarray:
+        return scipy.special.erfcx(np.asarray(k, dtype=float) * h / np.sqrt(2))
+
+
+class VerticalComponent(DiskVertical):
+    """
+    The vertical structure of a component of the galaxy (its density
+    height traits; thin without them): at each radius, the shape of its
+    density, sum_i S_i(R) p_i(z | R) / sum_i S_i(R) (S_i and p_i: the
+    surface density and the pdf of the height of each of its terms, e.g.
+    of each density polar trait), taken at its subnodes (or at those of
+    rings of width rstep) and linear between them. Where the component
+    has no density, the shape is that of the nearest subnodes with
+    density: interpolated linearly between them on either side, and held
+    beyond the first and the last. This is an assumption (e.g. a disk
+    may flare on beyond the last ring of the component), and it only
+    matters where the shape changes with radius (a flaring component, or
+    several terms).
+
+    Parameters
+    ----------
+    component : str
+        The name of the component it follows.
+    rstep : float, optional
+        The width (in the units of the rings of the component, e.g.
+        arcsec) of the rings at whose subnodes it takes the shape; by
+        default, the subnodes of the component.
+
+    Raises
+    ------
+    ConfigError
+        If the name of the component or rstep is not valid.
+    """
+
+    @staticmethod
+    def type() -> str:
+        return 'component'
+
+    def dump(self) -> dict[str, Any]:
+        return super().dump() | dict(
+            component=self._component, rstep=self._rstep)
+
+    def __init__(self, component: str, rstep: float | None = None):
+        parseutils.check_name(component)
+        if rstep is not None and not rstep > 0:
+            raise ConfigError(f"rstep must be positive; it is {rstep}")
+        self._component = component
+        self._rstep = rstep
+
+    def component(self) -> str:
+        """Return the name of the component it follows."""
+        return self._component
+
+    def rstep(self) -> float | None:
+        """Return the width of the rings of its subnodes (see above)."""
+        return self._rstep
+
+    def followed_component(self) -> str | None:
+        return self._component
+
+    def thin(self, context: MassContext) -> bool:
+        return not context.density(self._component).thick()
+
+    def height_pdf(
+            self,
+            R: npt.ArrayLike,
+            z: npt.ArrayLike,
+            params: ParamValues,
+            context: MassContext
+    ) -> np.ndarray:
+        raise NotImplementedError(
+            "the vertical structure of a component is given on rings only "
+            "(see VerticalComponent.shapes)")
+
+    def knots(self, context: MassContext) -> np.ndarray:
+        """
+        Return the radii (kpc) at which it takes the shape (see above),
+        in the context of its galaxy (see MassContext).
+        """
+        return context.density(self._component).knots(self._rstep)
+
+    def shapes(
+            self, R: np.ndarray, z: np.ndarray, context: MassContext
+    ) -> np.ndarray:
+        """
+        Return the shape (1/kpc) at the radii R and the heights z (kpc),
+        in the context of its galaxy (see MassContext): an array of shape
+        (len(R), len(z)).
+
+        Raises
+        ------
+        ValueError
+            If the component has no density at any of its subnodes.
+        """
+        density = context.density(self._component)
+        knots = density.knots(self._rstep)
+        sigmas = density.surface_densities(knots)
+        total = np.sum(sigmas, axis=0)
+        full = total > 0
+        if not full.any():
+            raise ValueError(
+                f"the component {self._component!r} has no density, so no "
+                f"vertical structure")
+        pdfs = density.height_pdfs(knots[full], z)
+        shapes = np.einsum('tk,tkz->kz', sigmas[:, full], pdfs) \
+            / total[full, None]
+        # Linear between the subnodes with density, held beyond them
+        knots = knots[full]
+        if len(knots) == 1:
+            return np.repeat(shapes, len(R), axis=0)
+        R = np.clip(R, knots[0], knots[-1])
+        right = np.clip(np.searchsorted(knots, R), 1, len(knots) - 1)
+        left = right - 1
+        t = ((R - knots[left]) / (knots[right] - knots[left]))[:, None]
+        return (1 - t) * shapes[left] + t * shapes[right]
+
+
+disk_vertical_parser = parseutils.TypedParser(DiskVertical, [
+    VerticalThin,
+    VerticalExponential,
+    VerticalSech2,
+    VerticalGauss,
+    VerticalComponent])
