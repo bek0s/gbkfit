@@ -350,7 +350,7 @@ class ComponentPlan(abc.ABC):
         Return how the march of radiative transfer spreads the light of its
         fields (see evaluate_fields) along the spectral axis: the offset,
         scale and flux of each of its lines that it evaluates (an array of
-        shape (nlines, 3); see the native DiskArgs::lines), with the flux
+        shape (nlines, 3); see the native GridArgs::lines), with the flux
         ratios of the given parameters; in an image, one row of the flux
         of its band (see Bands), whose offset and scale are 0.
         """

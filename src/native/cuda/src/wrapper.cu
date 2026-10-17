@@ -206,6 +206,23 @@ Wrapper<T>::gmodel_smdisk_evaluate(
 }
 
 template<typename T> void
+Wrapper<T>::gmodel_smcone_evaluate(
+        const ConeArgs<T>& a, const GridArgs<T>& g, const FieldsArgs<T>& f)
+{
+    // (see gmodel_smdisk_evaluate)
+    const long long n = 1LL * g.spat_size[0] * g.spat_size[1]
+            * g.spat_size[2];
+    // (the kernels of the fields, of cones dimmed by opacity, and of the
+    // others)
+    namespace k = kernels;
+    launch("gmodel_smcone_evaluate", n,
+            f.fields ? k::gmodel_smcone_evaluate<T, 0, 1>
+            : g.opacity ? k::gmodel_smcone_evaluate<T, 1, 0>
+            : k::gmodel_smcone_evaluate<T, 0, 0>,
+            a, g, f);
+}
+
+template<typename T> void
 Wrapper<T>::gmodel_opacity_accumulate(
         int size_x, int size_y, int size_z, T* opacity)
 {

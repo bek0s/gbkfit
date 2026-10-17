@@ -15,7 +15,7 @@ from .. import traits
 from .._detail import dump_geometry, dump_name
 from .._nodal import (
     MAX_TRAITS, EmissionSetup, NodalComponentPlan, TraitTable,
-    emission_setup, parse_component_rnode_args)
+    emission_setup, parse_component_rnode_args, with_default_height_traits)
 from .._units import DataUnit
 from ..base import Component
 from ..geometries import Geometry
@@ -291,25 +291,11 @@ def _disk_traits(
         result.update(vpt=kinematics.vptraits(), dpt=kinematics.dptraits())
         if thick:
             result.update(
-                vht=_with_defaults(
+                vht=with_default_height_traits(
                     heights['vht'], len(result['vpt']), traits.VHTraitOne),
-                dht=_with_defaults(
+                dht=with_default_height_traits(
                     heights['dht'], len(result['dpt']), traits.DHTraitOne))
     return result
-
-
-def _with_defaults(
-        value: tuple[traits.HTrait | None, ...] | None,
-        npolar: int,
-        default: type[traits.HTrait]
-) -> tuple[traits.HTrait, ...]:
-    """
-    Return height traits, one for each of npolar polar traits, with the
-    missing ones (None, or all if value is None) of the default type.
-    """
-    if value is None:
-        value = (None,) * npolar
-    return tuple(default() if trait is None else trait for trait in value)
 
 
 def disk_plan(

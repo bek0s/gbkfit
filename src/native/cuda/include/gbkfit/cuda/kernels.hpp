@@ -255,6 +255,29 @@ gmodel_smdisk_evaluate(
                     x, y, z, a, g, f);
 }
 
+template<typename T, bool HasOpacity, bool HasFields>
+__global__ void
+gmodel_smcone_evaluate(
+        GBKFIT_GRID_CONSTANT const ConeArgs<T> a,
+        GBKFIT_GRID_CONSTANT const GridArgs<T> g,
+        GBKFIT_GRID_CONSTANT const FieldsArgs<T> f)
+{
+    // Parallelization: per 3d spatial position (see gmodel_smdisk_evaluate)
+    const long long nthreads = 1LL * g.spat_size[0] * g.spat_size[1]
+            * g.spat_size[2];
+    const long long tid = 1LL * blockIdx.x * blockDim.x + threadIdx.x;
+    if (tid >= nthreads) {
+        return;
+    }
+
+    const int x = tid % g.spat_size[0];
+    const int y = tid / g.spat_size[0] % g.spat_size[1];
+    const int z = tid / (1LL * g.spat_size[0] * g.spat_size[1]);
+
+    gbkfit::gmodel_smcone_evaluate_voxel<atomic_add<T>, HasOpacity, HasFields>(
+            x, y, z, a, g, f);
+}
+
 template<typename T> __global__ void
 gmodel_opacity_accumulate(int size_x, int size_y, int size_z, T* opacity)
 {

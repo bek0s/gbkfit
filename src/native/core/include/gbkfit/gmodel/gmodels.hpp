@@ -1,6 +1,7 @@
 #pragma once
 
 #include "gbkfit/constants.hpp"
+#include "gbkfit/gmodel/cone.hpp"
 #include "gbkfit/gmodel/disk.hpp"
 #include "gbkfit/gmodel/traits.hpp"
 #include "gbkfit/random.hpp"
@@ -1123,6 +1124,96 @@ gmodel_smdisk_evaluate_spaxel(
                 f.fields[(3 + l) * nspat + idx] = rvalue * coefficients[l];
         }
     }
+}
+
+// Evaluate the voxel (x, y, z) of a smooth cone. A point of its frame (see
+// ConeArgs) is in the shell of its distance r from the apex, at the
+// azimuth theta around the axis and on the side of the sign of z, and its
+// height traits are at its distance from the mid-surface of the walls, d
+// = R cos(wall) - |z| sin(wall) (R the distance from the axis; on a disk,
+// wall = 90 degrees, |d| = |z|). AddFunT adds the light of the voxel to
+// the pixel and the spectrum of its spaxel, which the other voxels of the
+// spaxel add to too: it must be atomic if they are evaluated in parallel.
+// Only this voxel writes to its other outputs. HasOpacity is whether
+// opacity dims the cone, and HasFields whether it writes the fields of the
+// march.
+template<auto AddFunT, bool HasOpacity, bool HasFields, typename T>
+constexpr void
+gmodel_smcone_evaluate_voxel(
+        int x, int y, int z, const ConeArgs<T>& a, const GridArgs<T>& g,
+        const FieldsArgs<T>& f)
+{
+    // image-to-world transform
+    T xn = g.spat_zero[0] + x * g.spat_step[0];
+    T yn = g.spat_zero[1] + y * g.spat_step[1];
+    T zn = g.spat_zero[2] + (z + g.slab_zero) * g.spat_step[2];
+    transform_rh_rotate_z(xn, yn, xn, yn, g.spat_rota * DEG_TO_RAD<T>);
+
+    // world-to-cone transform
+    const T incli = a.incl[0] * DEG_TO_RAD<T>;
+    transform_cpos_posa_incl(
+            xn, yn, zn, a.xpos[0], a.ypos[0], a.posa[0] * DEG_TO_RAD<T>,
+            incli);
+
+    // The side, the shell, the azimuth and the distance from the
+    // mid-surface of the walls
+    if (!((zn >= 0 && a.positive) || (zn <= 0 && a.negative)))
+        return;
+    const T rn = std::sqrt(xn * xn + yn * yn + zn * zn);
+    int rnidx = -1;
+    if (!disk_info(rnidx, rn, a.nrnodes, a.rnodes))
+        return;
+    const T theta = std::atan2(yn, xn);
+    const T wall = a.wall[0] * DEG_TO_RAD<T>;
+    const T dn = std::sqrt(xn * xn + yn * yn) * std::cos(wall)
+            - std::abs(zn) * std::sin(wall);
+
+    // Selection traits
+    if (!gmodel_selected(a.spt, rnidx, a.rnodes, a.nrnodes, xn, yn, rn, theta))
+        return;
+
+    // Density traits, integrated along the spatial z axis
+    T rvalue = gmodel_traits_sum<rp_trait<T>, rh_trait<T>>(
+            a.rpt, a.rht, rnidx, a.rnodes, a.nrnodes,
+            xn, yn, rn, theta, dn, [](T*) {});
+    if (!rvalue)
+        return;
+    rvalue *= g.spat_step[2];
+
+    // Velocity traits: their speeds, projected on the line of sight, and
+    // the systemic velocity
+    T vvalue = gmodel_traits_sum<vp_trait<T>, vh_trait<T>>(
+            a.vpt, a.vht, rnidx, a.rnodes, a.nrnodes,
+            xn, yn, rn, theta, dn,
+            [&](T* values) {
+                vp_cone_project_traits(
+                        values, a.vpt.n, a.vpt_directions,
+                        xn, yn, zn, rn, incli);
+            });
+    vvalue += a.vsys ? a.vsys[0] : 0;
+
+    // Dispersion traits (positive, as that of a disk)
+    const T dvalue = std::abs(gmodel_traits_sum<dp_trait<T>, dh_trait<T>>(
+            a.dpt, a.dht, rnidx, a.rnodes, a.nrnodes,
+            xn, yn, rn, theta, dn, [](T*) {}));
+
+    // The opacity in front of the light, and the light that it lets
+    // through (that of the image, or of the first line)
+    VoxelOpacity<T> opacity;
+    if (HasOpacity)
+        opacity = gmodel_voxel_opacity(x, y, z, g);
+    const T orvalue = HasOpacity
+            ? rvalue * gmodel_attenuation(
+                    opacity, g.nopacity, g.opacity_ratios)
+            : rvalue;
+    gmodel_light_write<AddFunT>(
+            x, y, rvalue, orvalue, vvalue, dvalue,
+            HasOpacity ? &opacity : nullptr, g);
+
+    const int idx = index_3d_to_1d(x, y, z, g.spat_size[0], g.spat_size[1]);
+    gmodel_maps_write(idx, rvalue, orvalue, vvalue, dvalue, g);
+    if (HasFields)
+        gmodel_volume_fields_write(idx, rvalue, vvalue, dvalue, g, f);
 }
 
 // The polar traits of the set of a DiskTraitsArgs at its point j, in the
