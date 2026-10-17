@@ -20,7 +20,8 @@ from gbkfit.model.distance import (
     KPC_PER_ARCSEC_MPC, DistanceDirect, DistanceRedshift)
 from gbkfit.model.mass import (
     MassContext, MassDisk, MassModel, MassPoint, MassSpheroid, MassUser,
-    ProfileBurkert, ProfileEinasto, ProfileNFW, ProfilePseudoIsothermal,
+    ProfileBurkert, ProfileDekelZhao, ProfileEinasto, ProfileNFW,
+    ProfilePseudoIsothermal,
     ProfileSersic, ProfileZhao, ShapeFlattened, SurfaceComponent,
     SurfaceExponential, SurfaceNodewise, VerticalComponent,
     VerticalExponential, VerticalGauss, VerticalSech2, VerticalThin,
@@ -327,6 +328,8 @@ SPHERES = [
     (ProfileEinasto('density_radius'), dict(log_rho=6.5, rs=15, alpha=0.17)),
     (ProfileZhao('density_radius'),
      dict(log_rho=6.5, rs=8, alpha=2, beta=4, gamma=0.5)),
+    (ProfileDekelZhao('density_radius'), dict(log_rho=7, rs=5, a=0.5)),
+    (ProfileDekelZhao('density_radius'), dict(log_rho=7, rs=5, a=1.5)),
     (ProfileSersic(), dict(log_m=10, re=1.5, n=0.6)),
     (ProfileSersic(), dict(log_m=10, re=1.5, n=4))]
 
@@ -463,8 +466,10 @@ def test_spheroid_shapes_load_and_dump():
 
 HALOS = [
     ProfileNFW, ProfileBurkert, ProfilePseudoIsothermal, ProfileEinasto,
-    ProfileZhao]
-SHAPES = dict(einasto=dict(alpha=0.17), zhao=dict(alpha=1, beta=3, gamma=1.3))
+    ProfileZhao, ProfileDekelZhao]
+SHAPES = dict(
+    einasto=dict(alpha=0.17), zhao=dict(alpha=1, beta=3, gamma=1.3),
+    dekel_zhao=dict(a=1))
 
 
 @pytest.mark.parametrize('halo_class', HALOS)
@@ -498,6 +503,23 @@ def test_halos_have_their_mass_and_concentration(halo_class, overdensity):
         by_velocity.vcirc2(
             radius, dict(v=np.sqrt(G * mass / r_d), c=9) | shape, CONTEXT),
         halo.vcirc2(radius, params, CONTEXT), rtol=1e-10)
+
+
+def test_dekel_zhao_has_the_slopes_of_its_shape():
+    # Its logarithmic slope is (a + 3.5 x^(1/2)) / (1 + x^(1/2)): a at the
+    # centre, -3.5 far out, and -2 at ((2 - a) / 1.5)^2 r_s
+    profile = ProfileDekelZhao('density_radius')
+    params = dict(log_rho=7, rs=5, a=0.7)
+    x = np.array([1e-6, 0.3, ((2 - 0.7) / 1.5) ** 2, 4, 1e6])
+    step = 1e-5
+
+    def log_density(r):
+        return np.log(profile.density(r, params, CONTEXT))
+    slope = (log_density(5 * x * (1 + step))
+             - log_density(5 * x * (1 - step))) \
+        / (np.log1p(step) - np.log1p(-step))
+    np.testing.assert_allclose(
+        -slope, (0.7 + 3.5 * np.sqrt(x)) / (1 + np.sqrt(x)), rtol=1e-6)
 
 
 def test_zhao_is_nfw_for_its_shape():

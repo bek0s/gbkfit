@@ -12,8 +12,8 @@ from gbkfit.params import ParamDesc, ParamValues
 from gbkfit.utils import parseutils
 from .base import MassComponent, MassContext
 from .halos import (
-    ProfileBurkert, ProfileEinasto, ProfileNFW, ProfilePseudoIsothermal,
-    ProfileZhao)
+    ProfileBurkert, ProfileDekelZhao, ProfileEinasto, ProfileNFW,
+    ProfilePseudoIsothermal, ProfileZhao)
 from .profiles import ProfileSersic, SpheroidProfile
 from .shapes import ShapeSphere, SpheroidShape, spheroid_shape_parser
 
@@ -30,7 +30,8 @@ spheroid_profile_parser = parseutils.TypedParser(SpheroidProfile, [
     ProfileBurkert,
     ProfilePseudoIsothermal,
     ProfileEinasto,
-    ProfileZhao])
+    ProfileZhao,
+    ProfileDekelZhao])
 
 
 class MassSpheroid(MassComponent):
