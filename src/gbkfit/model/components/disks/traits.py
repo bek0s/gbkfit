@@ -2112,12 +2112,19 @@ class VPTraitTanMass(VPTrait):
     of a thin disk) and of rho sigma^2, sigma its velocity dispersion at
     the midplane (azimuthal means as those of mass.SurfaceComponent); the
     derivative by the second-order three-point formula on the rings; NaN
-    without density.
+    without density. With 'self_gravitating', the same for a disk whose
+    thickness its own gravity sets, h ~ sigma^2 / S (S its surface
+    density, its density traits): rho ~ S^2 / sigma^2 and rho sigma^2 ~
+    S^2, so that v^2 = v_c^2 + 2 sigma^2 dln S / dln R for an
+    axisymmetric disk (Burkert et al. 2010), whatever its density height
+    traits (DysmalPy's pressure support of types 1 and 2, for an
+    exponential and a Sersic S).
 
     Parameters
     ----------
     pressure_support : str, optional
-        The pressure support: none (the default), or 'jeans'.
+        The pressure support: none (the default), 'jeans' or
+        'self_gravitating'.
 
     Raises
     ------
@@ -2139,10 +2146,10 @@ class VPTraitTanMass(VPTrait):
         return super().dump() | info
 
     def __init__(self, pressure_support: str | None = None):
-        if pressure_support not in (None, 'jeans'):
+        if pressure_support not in (None, 'jeans', 'self_gravitating'):
             raise ConfigError(
-                f"pressure_support must be 'jeans' or none; it is "
-                f"{pressure_support!r}")
+                f"pressure_support must be 'jeans', 'self_gravitating' or "
+                f"none; it is {pressure_support!r}")
         self._pressure_support = pressure_support
 
     def sampling(self) -> str:

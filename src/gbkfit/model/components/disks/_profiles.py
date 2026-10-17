@@ -201,19 +201,23 @@ def pressure_support(
         disk: Disk,
         plan: DiskPlan,
         params: ParamValues,
-        radii: np.ndarray
+        radii: np.ndarray,
+        mode: str
 ) -> np.ndarray:
     """
     Return the pressure support of a disk at its midplane, (R / rho)
     d(rho sigma^2)/dR ((km/s)^2), at radii (arcsec, increasing, on the
-    disk): with the azimuthal means of its density rho at the midplane
-    (its density polar traits times its density height traits at z = 0,
-    or its density polar traits if thin, where its selection traits keep
-    it)
-    and of rho sigma^2, with sigma its velocity dispersion at the midplane
-    (its dispersion polar traits times its dispersion height traits at z =
-    0); the derivative by the second-order three-point formula on the
-    radii (see traits.VPTraitTanMass). NaN where it has no density.
+    disk), with sigma its velocity dispersion at the midplane (its
+    dispersion polar traits times its dispersion height traits at z = 0),
+    by mode (see traits.VPTraitTanMass): 'jeans', with the azimuthal means
+    of its density rho at the midplane (its density polar traits times its
+    density height traits at z = 0, or its density polar traits if thin,
+    where its selection traits keep it) and of rho sigma^2;
+    'self_gravitating', with those of S^2 / sigma^2 and of S^2, which rho
+    and rho sigma^2 are proportional to (S its density polar traits,
+    where its selection traits keep it). The derivative by the
+    second-order three-point formula on the radii. NaN where it has no
+    density.
 
     Parameters
     ----------
@@ -225,6 +229,8 @@ def pressure_support(
         The values of the parameters of the disk (see DiskDensity).
     radii : np.ndarray
         The radii (arcsec).
+    mode : str
+        The pressure support: 'jeans' or 'self_gravitating'.
     """
     params = _with_given(disk, params)
     r = np.asarray(radii, dtype=float)[:, None]
@@ -236,7 +242,8 @@ def pressure_support(
             return np.ones((1, len(r), 1))
         return plan.evaluate_height_traits(params, kind, r, np.zeros(1))
 
-    density_heights = at_midplane('rht')
+    density_heights = at_midplane('rht') if mode == 'jeans' \
+        else np.ones((1, len(r), 1))
     dispersion_heights = at_midplane('dht')
 
     def values(theta: np.ndarray) -> np.ndarray:
@@ -247,7 +254,14 @@ def pressure_support(
         dispersion = np.sum(
             plan.evaluate_polar_traits(params, 'dpt', r, theta)
             * dispersion_heights, axis=0, dtype=float)
-        return np.stack((density, density * dispersion ** 2))
+        if mode == 'jeans':
+            return np.stack((density, density * dispersion ** 2))
+        # (rho ~ S^2 / sigma^2: infinite without dispersion, where the
+        # disk has no thickness and no pressure)
+        squared = density ** 2
+        return np.stack((np.divide(
+            squared, dispersion ** 2, where=dispersion != 0,
+            out=np.where(squared != 0, np.inf, 0.0)), squared))
     kinds = ('rpt', 'spt', 'dpt')
     density, pressure = _azimuthal_mean(
         values, _axisymmetric(disk, kinds),

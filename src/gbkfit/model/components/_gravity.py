@@ -175,7 +175,8 @@ class GravityPlan:
                 pressure = None
                 if name in disk.pressure_supported_params():
                     pressure = pressure_support(
-                        disk, self._disk_plans[i], own[i], r)
+                        disk, self._disk_plans[i], own[i], r,
+                        disk.pressure_supported_params()[name])
                     v2 = v2 + pressure
                 values[i][name] = np.sqrt(
                     np.where(np.isfinite(v2) & (v2 >= 0), v2, np.nan))
