@@ -5,6 +5,7 @@ free element (see Prior).
 """
 
 import abc
+import numbers
 from collections.abc import Callable, Sequence
 from typing import Any
 
@@ -22,6 +23,7 @@ __all__ = [
     'JointPriorGauss',
     'JointPriorMVN',
     'JointPriorSmooth',
+    'JointPriorSmooth2D',
     'joint_prior_parser',
     'joint_prior_residuals'
 ]
@@ -232,6 +234,89 @@ class JointPriorSmooth(JointPrior):
         return np.diff(slope) / width * np.sqrt(width)
 
 
+class JointPriorSmooth2D(JointPrior):
+    """
+    A prior on the smoothness of a map (e.g. the cells of a map trait):
+    a vector of nx ny values, row by row (an image c of shape (ny, nx), x
+    along its columns), on its differences from cell to cell, with
+    standard deviation std. Order 1 (first differences: penalises jumps)
+    gives (c[j, i+1] - c[j, i]) / std along x and (c[j+1, i] - c[j, i]) /
+    std along y. Order 2 (second differences: penalises bends, not steady
+    gradients) gives (c[j, i+1] - 2 c[j, i] + c[j, i-1]) / std along x,
+    the same along y, and sqrt(2) (c[j+1, i+1] - c[j+1, i] - c[j, i+1] +
+    c[j, i]) / std across: the terms of the thin-plate energy f_xx^2 +
+    2 f_xy^2 + f_yy^2, which is the same in every direction (without the
+    term across, a saddle c = x y would cost nothing).
+
+    Parameters
+    ----------
+    expr : str
+        The map (an expression, e.g. 'pt1_a').
+    size : Sequence of int
+        Its numbers of cells along x and y, [nx, ny].
+    order : {1, 2}
+        The order of the differences.
+    std : float
+        The standard deviation of a difference.
+
+    Raises
+    ------
+    ConfigError
+        If the size is not two numbers of at least 1, the order is not 1
+        or 2, or std is not finite and positive.
+    """
+
+    @staticmethod
+    def type() -> str:
+        return 'smooth2d'
+
+    def dump(self) -> dict[str, Any]:
+        return dict(
+            type=self.type(), expr=self._expr, size=list(self._size),
+            order=self._order, std=self._std)
+
+    def __init__(
+            self,
+            expr: str,
+            size: Sequence[int],
+            order: int,
+            std: float
+    ):
+        if not (isinstance(size, Sequence) and len(size) == 2 and all(
+                isinstance(n, numbers.Integral) and not isinstance(n, bool)
+                and n >= 1 for n in size)):
+            raise ConfigError(
+                f"size must be the numbers of cells along x and y, [nx, "
+                f"ny], each at least 1; it is {size!r}")
+        if order not in (1, 2):
+            raise ConfigError(f"order must be 1 or 2; it is {order}")
+        _check_std(std)
+        self._expr = expr
+        self._size = (int(size[0]), int(size[1]))
+        self._order = order
+        self._std = std
+
+    def residuals(self, params: ParamSpace) -> Residuals:
+        expression = params.expression(self._expr)
+        nx, ny = self._size
+
+        def residuals(values: ParamValues) -> np.ndarray:
+            x = np.asarray(expression(values), dtype=float)
+            if x.size != nx * ny:
+                raise ValueError(
+                    f"{self._expr}: a map of {nx} by {ny} cells needs "
+                    f"{nx * ny} values; there are {x.size}")
+            c = x.reshape(ny, nx)
+            if self._order == 1:
+                terms = (np.diff(c, axis=1), np.diff(c, axis=0))
+            else:
+                terms = (
+                    np.diff(c, 2, axis=1), np.diff(c, 2, axis=0),
+                    np.sqrt(2) * np.diff(np.diff(c, axis=0), axis=1))
+            return np.concatenate([t.ravel() for t in terms]) / self._std
+        return residuals
+
+
 class JointPriorBound(JointPrior):
     """
     A soft bound on an expression: no penalty inside the bounds, and
@@ -380,6 +465,7 @@ class JointPriorMVN(JointPrior):
 joint_prior_parser = parseutils.TypedParser(JointPrior)
 joint_prior_parser.register(JointPriorGauss)
 joint_prior_parser.register(JointPriorSmooth)
+joint_prior_parser.register(JointPriorSmooth2D)
 joint_prior_parser.register(JointPriorBound)
 joint_prior_parser.register(JointPriorMVN)
 
