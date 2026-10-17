@@ -52,14 +52,18 @@ axis at the azimuth t_i + p_i + 90 degrees (p_i = 0: tangential, 90:
 radial); rho is the elliptical distance from its centre, sqrt(x^2 + y^2
 / q_i^2) along its axes.
 
+The map trait is a grid of square cells in the plane of the disk,
+centred on its centre, x along the azimuth 0 and y along the azimuth 90
+degrees, with one density for each cell (a free map).
+
 The Monte Carlo disks draw their clouds from the density traits: from
 each subring, where the trait is flat, for most, and exactly for the
-uniform and mixture traits.
+uniform, mixture and map traits.
 """
 
 import abc
 import numbers
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from typing import Any
 
 import numpy as np
@@ -86,6 +90,7 @@ RPT_UID_MIXTURE_MOFFAT = 54
 RPT_UID_NW_UNIFORM = 101
 RPT_UID_NW_HARMONIC = 102
 RPT_UID_NW_DISTORTION = 103
+RPT_UID_MAP = 151
 
 # Density height traits
 RHT_UID_UNIFORM = 1
@@ -561,6 +566,23 @@ class PTrait(Trait, abc.ABC):
     A polar trait: a function of the radius and the azimuth in the plane
     of the disk.
     """
+
+    def azimuthal_edges(
+            self,
+            r: np.ndarray,
+            params: dict[str, np.ndarray],
+            subrnodes: Sequence[float]
+    ) -> np.ndarray | None:
+        """
+        Return the azimuths (degrees) at which the trait jumps on the
+        circles of the radii r (arcsec, an array), for the azimuthal means
+        of the gravity of its galaxy (see _profiles): an array of shape
+        (len(r), n), NaN where a circle has fewer than n; None if it does
+        not jump (here). params has the values of its parameters, the
+        node-wise ones at the subnodes subrnodes, between which the disk
+        interpolates them linearly.
+        """
+        return None
 
 
 class HTrait(
@@ -1279,6 +1301,111 @@ class RPTraitNWDistortion(TraitFeatureSampling, RPTrait):
             self, params: dict[str, np.ndarray], rings: np.ndarray
     ) -> np.ndarray:
         return _ptrait_integrate_nw_distortion(params, rings)
+
+
+class RPTraitMap(RPTrait):
+    """
+    A free map: a surface density of nx by ny square cells of side step
+    (arcsec) in the plane of the disk, centred on its centre, x along the
+    azimuth 0 and y along the azimuth 90 degrees (see the module
+    docstring). The cell (i, j) covers [(i - nx / 2) step, (i + 1 - nx /
+    2) step) along x and likewise along y, and has the density a[j nx +
+    i], of any sign, all over it; 0 outside the grid. Its parameter: a,
+    the nx ny densities, row by row (as a numpy image of shape (ny, nx),
+    x along its columns). A warped disk has the map in the plane of each
+    of its rings, as it has its blobs.
+
+    Parameters
+    ----------
+    size : Sequence of int
+        The number of cells along x and along y, [nx, ny].
+    step : float
+        The side of the cells (arcsec).
+
+    Raises
+    ------
+    ConfigError
+        If an option is not valid.
+    """
+
+    @staticmethod
+    def type() -> str:
+        return 'map'
+
+    @staticmethod
+    def uid() -> int:
+        return RPT_UID_MAP
+
+    def dump(self) -> dict[str, Any]:
+        return super().dump() | dict(size=list(self._size), step=self._step)
+
+    def __init__(self, size: Sequence[int], step: float):
+        if not (isinstance(size, Sequence) and len(size) == 2 and all(
+                isinstance(n, numbers.Integral) and not isinstance(n, bool)
+                and n >= 1 for n in size)):
+            raise ConfigError(
+                f"size must be the numbers of cells along x and y, [nx, "
+                f"ny], each at least 1; it is {size!r}")
+        if isinstance(step, bool) or not (
+                isinstance(step, numbers.Real) and 0 < step < np.inf):
+            raise ConfigError(
+                f"step must be a positive length; it is {step!r}")
+        self._size = (int(size[0]), int(size[1]))
+        self._step = float(step)
+
+    def size(self) -> tuple[int, int]:
+        """Return the numbers of cells along x and y, (nx, ny)."""
+        return self._size
+
+    def step(self) -> float:
+        """Return the side of the cells (arcsec)."""
+        return self._step
+
+    def consts(self) -> tuple[float, ...]:
+        return (*self._size, self._step)
+
+    def axisymmetric(self) -> bool:
+        return False
+
+    def params_sm(self) -> dict[str, ParamDesc]:
+        nx, ny = self._size
+        return dict(a=ParamVectorDesc(
+            nx * ny, desc="the density of each cell, row by row"))
+
+    def has_analytical_integral(self) -> bool:
+        return True
+
+    def cloud_flux(
+            self, params: dict[str, np.ndarray], rings: np.ndarray
+    ) -> np.ndarray:
+        # The kernel draws the cells by |a| and gives each cloud the sign
+        # of the density of its cell
+        return np.sum(np.abs(params['a'])) * self._step ** 2
+
+    def azimuthal_edges(
+            self,
+            r: np.ndarray,
+            params: dict[str, np.ndarray],
+            subrnodes: Sequence[float]
+    ) -> np.ndarray | None:
+        # The circles cross the lines x = xe at the azimuths +-acos(xe /
+        # r), and the lines y = ye at asin(ye / r) and 180 - asin(ye / r);
+        # jumps where they cross them on the grid
+        nx, ny = self._size
+        half_x, half_y = nx * self._step / 2, ny * self._step / 2
+        xe = np.arange(nx + 1) * self._step - half_x
+        ye = np.arange(ny + 1) * self._step - half_y
+        r = np.asarray(r, dtype=float)[:, None]
+        with np.errstate(divide='ignore', invalid='ignore'):
+            ax = np.rad2deg(np.arccos(xe / r))
+            ay = np.rad2deg(np.arcsin(ye / r))
+            cross_x = np.concatenate((ax, -ax), axis=1)
+            cross_y = np.concatenate((ay, 180 - ay), axis=1)
+            on_x = np.abs(r * np.sin(np.deg2rad(cross_x))) <= half_y
+            on_y = np.abs(r * np.cos(np.deg2rad(cross_y))) <= half_x
+        return np.concatenate(
+            (np.where(on_x, cross_x, np.nan), np.where(on_y, cross_y, np.nan)),
+            axis=1)
 
 
 class RHTraitP1(RHTrait, abc.ABC):
@@ -3067,6 +3194,15 @@ class SPTraitAzimuthalRange(SPTrait):
             p=ParamScalarDesc(),
             s=ParamScalarDesc())
 
+    def azimuthal_edges(
+            self,
+            r: np.ndarray,
+            params: dict[str, np.ndarray],
+            subrnodes: Sequence[float]
+    ) -> np.ndarray | None:
+        p, s = params['p'], params['s']
+        return np.tile([p - s / 2, p + s / 2], (len(r), 1))
+
 
 class SPTraitRadialRange(SPTrait):
     """
@@ -3129,6 +3265,16 @@ class SPTraitNWAzimuthalRange(
             p=ParamVectorDesc(nnodes),
             s=ParamVectorDesc(nnodes))
 
+    def azimuthal_edges(
+            self,
+            r: np.ndarray,
+            params: dict[str, np.ndarray],
+            subrnodes: Sequence[float]
+    ) -> np.ndarray | None:
+        p = np.interp(r, subrnodes, params['p'])
+        s = np.interp(r, subrnodes, params['s'])
+        return np.column_stack((p - s / 2, p + s / 2))
+
 
 # Density polar traits parser
 rpt_parser = parseutils.TypedParser(RPTrait, [
@@ -3145,7 +3291,8 @@ rpt_parser = parseutils.TypedParser(RPTrait, [
     RPTraitMixtureMoffat,
     RPTraitNWUniform,
     RPTraitNWHarmonic,
-    RPTraitNWDistortion])
+    RPTraitNWDistortion,
+    RPTraitMap])
 
 # Density height traits parser
 rht_parser = parseutils.TypedParser(RHTrait, [

@@ -52,10 +52,10 @@ GEOMETRY = dict(xpos=0, ypos=0, posa=20, incl=60)
 def trait_configs(parser):
     """
     A configuration of every type of trait of a parser: with order 2 and
-    one blob where they apply, zmax 8 where it applies (density height
-    traits within 8 arcsec of their midplane, vertical distortions of at
-    most 8 arcsec), and height traits with and without node-wise
-    parameters (rnodes).
+    one blob where they apply, a map of 3 by 2 cells of 4 arcsec, zmax 8
+    where it applies (density height traits within 8 arcsec of their
+    midplane, vertical distortions of at most 8 arcsec), and height
+    traits with and without node-wise parameters (rnodes).
     """
     configs = []
     for type_, cls in parser.registered_classes().items():
@@ -69,6 +69,8 @@ def trait_configs(parser):
             config['order'] = 2
         if 'nblobs' in options:
             config['nblobs'] = 1
+        if 'size' in options:
+            config |= dict(size=[3, 2], step=4.0)
         if 'zmax' in options:
             config['zmax'] = 8
         if 'rnodes' in options:

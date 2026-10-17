@@ -19,6 +19,7 @@ constexpr int RPT_UID_MIXTURE_MOFFAT = 54;
 constexpr int RPT_UID_NW_UNIFORM = 101;
 constexpr int RPT_UID_NW_HARMONIC = 102;
 constexpr int RPT_UID_NW_DISTORTION = 103;
+constexpr int RPT_UID_MAP = 151;
 
 // Density height traits
 constexpr int RHT_UID_UNIFORM = 1;
@@ -633,6 +634,53 @@ rp_trait_nw_distortion_rnd(
         } while (rng() > std::exp(-d * d / (2 * width * width)));
     }
     out_t = wrap_angle(p + d);
+}
+
+// A free map: nx by ny square cells of side step (consts) in the plane of
+// the disk, centred on its centre, x along azimuth 0 and y along azimuth
+// 90 degrees. The cell (i, j) covers [(i - nx / 2) step, (i + 1 - nx / 2)
+// step) along x, and likewise along y, and has the density params[j nx +
+// i]; 0 outside the grid.
+template<typename T> constexpr void
+rp_trait_map(T& out, T x, T y, const T* consts, const T* params)
+{
+    const int nx = std::rint(consts[0]);
+    const int ny = std::rint(consts[1]);
+    const T step = consts[2];
+    const T u = std::floor(x / step + T(nx) / 2);
+    const T v = std::floor(y / step + T(ny) / 2);
+    out = u >= 0 && u < nx && v >= 0 && v < ny
+            ? params[int(v) * nx + int(u)] : 0;
+}
+
+// A point of a free map: a cell drawn by its |density|, a uniform point in
+// it, and the sign of its density
+template<typename T> constexpr void
+rp_trait_map_rnd(
+        T& out_s, T& out_r, T& out_t, RNG<T>& rng,
+        const T* consts, const T* params)
+{
+    const int nx = std::rint(consts[0]);
+    const int ny = std::rint(consts[1]);
+    const T step = consts[2];
+    const int ncells = nx * ny;
+    T total = 0;
+    for (int k = 0; k < ncells; ++k)
+        total += std::abs(params[k]);
+    const T u = rng() * total;
+    int k = 0;
+    T sum = 0;
+    for (; k < ncells - 1; ++k)
+    {
+        sum += std::abs(params[k]);
+        if (u < sum)
+            break;
+    }
+    const T x = (k % nx + rng() - T(nx) / 2) * step;
+    const T y = (k / nx + rng() - T(ny) / 2) * step;
+    out_r = std::sqrt(x * x + y * y);
+    out_t = std::atan2(y, x);
+    out_s = params[k] < 0 ? -1 : 1;
 }
 
 // The density height traits: a vertical profile of the density around the
@@ -1253,9 +1301,6 @@ rp_trait(T& out,
          int rnidx, const T* rnodes, int nrnodes,
          T x, T y, T r, T theta)
 {
-    (void)x;
-    (void)y;
-
     switch (uid)
     {
     case RPT_UID_UNIFORM:
@@ -1313,6 +1358,10 @@ rp_trait(T& out,
     case RPT_UID_NW_DISTORTION:
         rp_trait_nw_distortion(
                 out, rnidx, rnodes, nrnodes, r, theta, params);
+        break;
+    case RPT_UID_MAP:
+        rp_trait_map(
+                out, x, y, consts, params);
         break;
     default:
         out = NAN;
@@ -1401,6 +1450,11 @@ rp_trait_rnd(
         rp_trait_nw_distortion_rnd(
                 out_r, out_t,
                 rng, rnidx, rnodes, nrnodes, params);
+        break;
+    case RPT_UID_MAP:
+        rp_trait_map_rnd(
+                out_s, out_r, out_t,
+                rng, consts, params);
         break;
     default:
         out_s = NAN;

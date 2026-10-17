@@ -711,6 +711,49 @@ def test_disk_densities_are_azimuthal_means(driver):
         rtol=1e-5, atol=2e-6)
 
 
+def test_disk_densities_are_exact_at_jumps(driver):
+    # A map, and a selection of 93 degrees of azimuth (which the trapezoid
+    # rule took as 66 / 256 of a turn): the means of the exponential and
+    # of the map where it is selected, against 2^21 azimuths per circle
+    from gbkfit.model import SMDisk
+    from gbkfit.model.components._component_set import IMAGE_SPECTRAL_AXIS
+    from gbkfit.model.components.disks._profiles import DiskDensity
+    component = SMDisk.load(dict(
+        rnodes=list(range(0, 21, 2)), rstep=0.5,
+        density=dict(ptraits=[
+            dict(type='exponential'),
+            dict(type='map', size=[6, 4], step=2.0)]),
+        kinematics=dict(
+            vptraits=dict(type='tan_uniform'), dptraits=dict(type='uniform')),
+        sptraits=dict(type='azrange'),
+        emission=dict(type='lines')))
+    cells = np.random.default_rng(3).normal(size=24)
+    params = dict(
+        xpos=0, ypos=0, posa=30, incl=60, vsys=0, pt_a=1, pt_s=4,
+        pt1_a=cells, vpt_vt=100, dpt_a=10, spt_p=17, spt_s=93)
+    plan = component.plan(
+        driver, IMAGE_SPECTRAL_AXIS, np.dtype(np.float32), None, None, True,
+        None, None, 0.0)
+    density = DiskDensity(
+        component.density_disk(), plan.disk_plan(), params, KPC_PER_ARCSEC)
+    radius = np.array(component.density_disk().subrnodes())
+    theta = (np.arange(2 ** 21) + 0.5) * 360 / 2 ** 21
+    selected = np.abs((theta - 17 + 180) % 360 - 180) < 93 / 2
+    expected = []
+    for r in radius:
+        i = np.floor(r * np.cos(np.deg2rad(theta)) / 2 + 3).astype(int)
+        j = np.floor(r * np.sin(np.deg2rad(theta)) / 2 + 2).astype(int)
+        inside = (i >= 0) & (i < 6) & (j >= 0) & (j < 4)
+        values = np.where(inside, cells[np.clip(j, 0, 3) * 6 + np.clip(
+            i, 0, 5)], 0)
+        expected.append([
+            np.exp(-r / 4) * np.mean(selected),
+            np.mean(values * selected)])
+    np.testing.assert_allclose(
+        density.surface_densities(radius * KPC_PER_ARCSEC),
+        np.transpose(expected), rtol=1e-5, atol=1e-6)
+
+
 @pytest.mark.parametrize('line_of_sight', ['flat', 'grid'])
 def test_disk_of_a_component_is_the_nodewise_disk_of_its_density(
         driver, line_of_sight):

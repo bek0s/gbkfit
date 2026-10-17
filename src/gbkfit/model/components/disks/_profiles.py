@@ -26,15 +26,25 @@ _NAZIMUTHS_MIN = 64
 _NAZIMUTHS_MAX = 4096
 _AZIMUTHAL_TOLERANCE = 1e-6
 
+# The azimuthal means of traits that jump: Gauss-Legendre quadrature on
+# each piece between the jumps, of at least and at most these numbers of
+# points, doubled until two means agree to the tolerance
+_NPOINTS_MIN = 4
+_NPOINTS_MAX = 256
+
 
 def _azimuthal_mean(
-        values: Callable[[np.ndarray], np.ndarray], axisymmetric: bool
+        values: Callable[[np.ndarray], np.ndarray],
+        axisymmetric: bool,
+        edges: np.ndarray | None = None
 ) -> np.ndarray:
     """
     Return the mean over the azimuth of values(theta), an array of shape
-    (rows, radii, len(theta)) at the azimuths theta (degrees), as an array
-    of shape (rows, radii). If axisymmetric (the values are the same at
-    every azimuth), their values at one azimuth, exactly. Otherwise by the
+    (rows, radii, len(theta)) at the azimuths theta (degrees; an array of
+    shape (radii, n) with edges), as an array of shape (rows, radii). If
+    axisymmetric (the values are the same at every azimuth), their values
+    at one azimuth, exactly. With edges, the azimuths (degrees) at which
+    the values jump (see _azimuthal_mean_pieces). Otherwise by the
     trapezoid rule, exact for harmonics of orders below the number of
     azimuths, to _AZIMUTHAL_TOLERANCE of the largest absolute value of
     each row: structure narrower than the spacing of the azimuths (2 pi R
@@ -48,6 +58,8 @@ def _azimuthal_mean(
     """
     if axisymmetric:
         return values(np.zeros(1))[..., 0]
+    if edges is not None:
+        return _azimuthal_mean_pieces(values, edges)
     count = _NAZIMUTHS_MIN
     sampled = values(np.arange(count) * 360 / count)
     mean = sampled.mean(axis=-1)
@@ -67,6 +79,76 @@ def _azimuthal_mean(
         f"on {_NAZIMUTHS_MAX} azimuths: its azimuthal structure is too fine "
         f"or too sharp (e.g. narrow blobs, or the edges of selection "
         f"traits)")
+
+
+def _azimuthal_mean_pieces(
+        values: Callable[[np.ndarray], np.ndarray], edges: np.ndarray
+) -> np.ndarray:
+    """
+    Return the mean over the azimuth of values(theta) (see
+    _azimuthal_mean), which jump at the azimuths edges (degrees, an array
+    of shape (radii, n), NaN where a radius has fewer) and are smooth
+    between them: by Gauss-Legendre quadrature on each piece between two
+    jumps (exact for polynomials of degree below twice its number of
+    points), of _NPOINTS_MIN points, doubled until two means agree to
+    _AZIMUTHAL_TOLERANCE of the largest absolute value of each row.
+
+    Raises
+    ------
+    ValueError
+        If the mean does not converge on _NPOINTS_MAX points per piece.
+    """
+    # The pieces of each circle, from its first jump to the same one a turn
+    # later (from 0 to 360 without jumps), and pieces of no length for the
+    # missing jumps of a radius
+    edges = np.sort(np.mod(edges, 360), axis=-1)
+    first = np.where(np.isnan(edges[:, :1]), 0, edges[:, :1])
+    bounds = np.sort(np.concatenate(
+        (first, np.where(np.isnan(edges), first + 360, edges), first + 360),
+        axis=-1), axis=-1)
+    lo, hi = bounds[:, :-1, None], bounds[:, 1:, None]
+
+    def mean(npoints: int) -> tuple[np.ndarray, np.ndarray]:
+        # The mean, and the largest absolute value of each row
+        x, w = np.polynomial.legendre.leggauss(npoints)
+        theta = ((hi + lo) + (hi - lo) * x) / 2
+        weights = (hi - lo) * w / 2
+        sampled = values(theta.reshape(len(theta), -1))
+        means = np.sum(sampled * weights.reshape(len(weights), -1), axis=-1)
+        return means / 360, np.max(np.abs(sampled), axis=(-2, -1), initial=0)
+    npoints = _NPOINTS_MIN
+    previous, largest = mean(npoints)
+    while npoints < _NPOINTS_MAX:
+        npoints *= 2
+        current, current_largest = mean(npoints)
+        largest = np.maximum(largest, current_largest)
+        change = np.max(np.abs(current - previous), axis=-1, initial=0)
+        if np.all(change <= _AZIMUTHAL_TOLERANCE * largest):
+            return current
+        previous = current
+    raise ValueError(
+        f"the azimuthal mean of the density of a disk does not converge "
+        f"on {_NPOINTS_MAX} points between each two of its jumps: its "
+        f"azimuthal structure is too fine or too sharp (e.g. narrow blobs)")
+
+
+def _edges(
+        disk: Disk, params: ParamValues, kinds: Sequence[str], r: np.ndarray
+) -> np.ndarray | None:
+    """
+    Return the azimuths (degrees) at which the polar traits of the given
+    kinds of a disk jump on the circles of the radii r (arcsec), all
+    together: an array of shape (len(r), n), NaN where a circle has fewer;
+    None if none of them jumps (see traits.PTrait.azimuthal_edges).
+    """
+    edges = [
+        trait_edges
+        for kind in kinds if disk.traits(kind)
+        for trait, values in zip(
+            disk.traits(kind), disk.trait_values(kind, params))
+        if (trait_edges := trait.azimuthal_edges(
+            r, values, disk.subrnodes())) is not None]
+    return np.concatenate(edges, axis=1) if edges else None
 
 
 def _axisymmetric(disk: Disk, kinds: Sequence[str]) -> bool:
@@ -155,8 +237,10 @@ def pressure_support(
             plan.evaluate_polar_traits(params, 'dpt', r, theta)
             * dispersion_heights, axis=0, dtype=float)
         return np.stack((density, density * dispersion ** 2))
+    kinds = ('rpt', 'spt', 'dpt')
     density, pressure = _azimuthal_mean(
-        values, _axisymmetric(disk, ('rpt', 'spt', 'dpt')))
+        values, _axisymmetric(disk, kinds),
+        _edges(disk, params, kinds, r[:, 0]))
     gradient = np.gradient(pressure, r[:, 0], edge_order=2)
     return np.divide(
         r[:, 0] * gradient, density, out=np.full_like(density, np.nan),
@@ -236,8 +320,10 @@ class DiskDensity:
                 self._params, 'rpt', r, theta), dtype=float)
             return out * _selected(
                 self._disk, self._plan, self._params, r, theta)
+        kinds = ('rpt', 'spt')
         return _azimuthal_mean(
-            values, _axisymmetric(self._disk, ('rpt', 'spt')))
+            values, _axisymmetric(self._disk, kinds),
+            _edges(self._disk, self._params, kinds, r[:, 0]))
 
     def height_pdfs(self, R: np.ndarray, z: np.ndarray) -> np.ndarray:
         """
