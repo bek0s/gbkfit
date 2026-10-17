@@ -16,7 +16,7 @@ import pytest
 import scipy.integrate
 import scipy.special
 
-from gbkfit.model.components.disks import traits
+from gbkfit.model.components import traits
 
 
 DTYPE = np.float32

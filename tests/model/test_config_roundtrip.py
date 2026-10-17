@@ -21,7 +21,7 @@ import gbkfit.model
 import gbkfit.observation
 import gbkfit.params
 import gbkfit.instrument
-from gbkfit.model.components.disks import traits
+from gbkfit.model.components import traits
 from gbkfit.utils import funcutils
 from modelutils import config_group
 

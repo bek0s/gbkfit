@@ -8,12 +8,13 @@ from gbkfit.math.interpolation import Interpolator
 from gbkfit.params import ParamDesc, ParamValues
 from gbkfit.utils import gridutils
 from gbkfit.utils.parseutils import ConfigError
+from .. import traits
 from .._units import DataUnit
 from ..base import Component, ComponentPlan, FieldsLayout
 from ..geometries import Geometry
 from ..lines import Band, LineCatalogue
 from ..roles import Emission, Opacity
-from . import _detail, _disk, traits
+from . import _detail, _disk
 from .parts import Density, Kinematics
 
 

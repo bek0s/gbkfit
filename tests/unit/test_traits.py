@@ -4,7 +4,7 @@ Tests for the validation of trait options.
 
 import pytest
 
-from gbkfit.model.components.disks import traits
+from gbkfit.model.components import traits
 from gbkfit.utils.parseutils import ConfigError
 
 

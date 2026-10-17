@@ -9,7 +9,7 @@ from typing import Any, Self
 from gbkfit.utils import iterutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
 from ..roles import Opacity, opacity_parser
-from .traits import RPTrait, rpt_parser
+from ..traits import RPTrait, rpt_parser
 
 
 __all__ = [

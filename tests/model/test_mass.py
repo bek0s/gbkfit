@@ -1155,7 +1155,7 @@ def test_pressure_support_of_self_gravitating_disks(driver, ptrait, surface):
     # -2 sigma^2 1.5 (R / 4)^1.5 (type 2), here of a dispersion of scale 10
     from gbkfit.model import SMDisk
     from gbkfit.model.components._component_set import IMAGE_SPECTRAL_AXIS
-    from gbkfit.model.components.disks import traits
+    from gbkfit.model.components import traits
     from gbkfit.model.components.disks._profiles import pressure_support
     component = SMDisk.load(dict(
         rnodes=list(range(0, 21, 2)), rstep=0.5,
@@ -1226,7 +1226,7 @@ def test_mass_trait_with_pressure_support(driver, line_of_sight):
 
 
 def test_pressure_support_option():
-    from gbkfit.model.components.disks import traits
+    from gbkfit.model.components import traits
     trait = traits.vpt_parser.load(
         dict(type='tan_mass', pressure_support='jeans'))
     assert traits.vpt_parser.dump(trait) == dict(
@@ -1292,7 +1292,7 @@ def test_pressure_density_is_a_mass_component_that_gives_it():
 
 
 def test_one_mass_trait_per_disk():
-    from gbkfit.model.components.disks import traits
+    from gbkfit.model.components import traits
     from gbkfit.model.components.disks.parts import Kinematics
     Kinematics(
         [traits.VPTraitTanMass(), traits.VPTraitNWRadUniform()],

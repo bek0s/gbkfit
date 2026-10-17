@@ -16,7 +16,7 @@ from gbkfit.params import ParamValues
 from ..mass import MassContext, MassModel
 from ._units import mass_per_unit
 from .disks._profiles import DiskDensity, pressure_support
-from .disks.traits import PressureSupport
+from .traits import PressureSupport
 
 if TYPE_CHECKING:
     from ._component_set import ComponentSet
