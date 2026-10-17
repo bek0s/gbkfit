@@ -2,8 +2,9 @@ from .base import *
 from .extinction import *
 from .geometries import *
 from .lines import *
+from .parts import *
 from .points import *
 from .roles import *
 
 from . import disks, traits
-from .disks import MCDisk, SMDisk, Density, Kinematics, LineOpacity
+from .disks import MCDisk, SMDisk, LineOpacity

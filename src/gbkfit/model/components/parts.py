@@ -1,6 +1,6 @@
 """
-The parts that disks are made of, besides their rings: their density and
-their kinematics, each a set of traits (see traits).
+The density and the kinematics of the components made of nodes (rings or
+shells along a radius, e.g. disks), each a set of traits (see traits).
 """
 
 from collections.abc import Sequence
@@ -8,8 +8,8 @@ from typing import Any, Self
 
 from gbkfit.utils import iterutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
-from .. import traits
-from .._nodal import MAX_TRAITS
+from . import traits
+from ._nodal import MAX_TRAITS
 
 
 __all__ = [
@@ -71,10 +71,11 @@ def _dump_traits(
 
 class Density(parseutils.Serializable):
     """
-    The density of a disk: its polar traits, the surface density seen
-    face-on, and for a thick disk its height traits, the probability
-    density of the height of each (see traits). What the density is
-    depends on the roles of its component: light for one that emits, the
+    The density of a component: its polar traits, the density per unit
+    area of its surface (the plane of a disk, seen face-on), and for a
+    thick component its height traits, the probability density of the
+    distance from the surface of each (see traits). What the density is
+    depends on the roles of the component: light for one that emits, the
     optical depth for dust.
 
     Parameters
@@ -83,7 +84,7 @@ class Density(parseutils.Serializable):
         The polar traits (parameters 'pt_*').
     htraits : RHTrait or Sequence of RHTrait, optional
         The height traits, one for each polar trait (parameters 'ht_*');
-        a disk without them is thin.
+        a component without them is thin.
 
     Raises
     ------
@@ -133,11 +134,11 @@ class Density(parseutils.Serializable):
 
 class Kinematics(parseutils.Serializable):
     """
-    How a disk moves: the velocity and the velocity dispersion of each of
-    its points, given by traits (see traits). The velocity traits add up,
-    so motions combine; a rotation in the gravity of the galaxy is the
-    velocity trait 'mass' (see traits.VPTraitMass). A disk that emits
-    lines into a spectral cube needs kinematics.
+    How a component moves: the velocity and the velocity dispersion of
+    each of its points, given by traits (see traits). The velocity traits
+    add up, so motions combine; the rotation of a disk in the gravity of
+    the galaxy is the velocity trait 'mass' (see traits.VPTraitMass). A
+    component that emits lines into a spectral cube needs kinematics.
 
     Parameters
     ----------
@@ -146,11 +147,11 @@ class Kinematics(parseutils.Serializable):
     dptraits : DPTrait or Sequence of DPTrait
         The velocity dispersion polar traits (parameters 'dpt_*').
     vhtraits : VHTrait or Sequence of VHTrait, optional
-        The velocity height traits of a thick disk, one for each velocity
-        polar trait (None items or none at all: the velocity does not
-        change with height).
+        The velocity height traits of a thick component, one for each
+        velocity polar trait (None items or none at all: the velocity does
+        not change with the distance from the surface).
     dhtraits : DHTrait or Sequence of DHTrait, optional
-        The dispersion height traits of a thick disk, one for each
+        The dispersion height traits of a thick component, one for each
         dispersion polar trait (as vhtraits).
 
     Raises
