@@ -754,6 +754,56 @@ def test_disk_densities_are_exact_at_jumps(driver):
         np.transpose(expected), rtol=1e-5, atol=1e-6)
 
 
+def test_disk_densities_see_small_blobs(driver):
+    # Structure far narrower than the spacing of 4096 azimuths, which the
+    # trapezoid rule could miss: a round Gaussian blob of 0.01 arcsec at
+    # r = 15, whose mean is a exp(-(R - r)^2 / (2 s^2)) i0e(R r / s^2); a
+    # round cuspy blob (a generalised Gaussian of shape 0.5) at r = 10,
+    # by quadrature split at its cusp; and a distortion of width 0.01 along
+    # the rings, whose mean is a s erf(pi R / (s sqrt(2))) / (R sqrt(2 pi))
+    from gbkfit.model import SMDisk
+    from gbkfit.model.components._component_set import IMAGE_SPECTRAL_AXIS
+    from gbkfit.model.components.disks._profiles import DiskDensity
+    component = SMDisk.load(dict(
+        rnodes=list(range(0, 21, 2)), rstep=0.5,
+        density=dict(ptraits=[
+            dict(type='mixture_gauss', nblobs=1),
+            dict(type='mixture_ggauss', nblobs=1),
+            dict(type='nw_distortion')]),
+        kinematics=dict(
+            vptraits=dict(type='tan_uniform'), dptraits=dict(type='uniform')),
+        emission=dict(type='lines')))
+    params = dict(
+        xpos=0, ypos=0, posa=30, incl=60, vsys=0, vpt_vt=100, dpt_a=10,
+        pt_r=15, pt_t=40, pt_a=1, pt_s=0.01, pt_q=1, pt_p=0,
+        pt1_r=10, pt1_t=-70, pt1_a=1, pt1_s=0.005, pt1_b=0.5, pt1_q=1,
+        pt1_p=0, pt2_a=np.ones(11), pt2_p=np.full(11, 40.0),
+        pt2_s=np.full(11, 0.01))
+    plan = component.plan(
+        driver, IMAGE_SPECTRAL_AXIS, np.dtype(np.float64), None, None, True,
+        None, None, 0.0)
+    density = DiskDensity(
+        component.density_disk(), plan.disk_plan(), params, KPC_PER_ARCSEC)
+    radius = np.array([10, 10.002, 15, 15.005, 15.02])
+
+    def cusp(R):
+        def blob(dtheta):
+            rho = np.sqrt(max(R ** 2 + 100 - 20 * R * np.cos(dtheta), 0))
+            return np.exp(-np.sqrt(rho / 0.005))
+        return scipy.integrate.quad(
+            blob, -np.pi, np.pi, points=[0], epsabs=1e-16, epsrel=1e-8,
+            limit=400)[0] / (2 * np.pi)
+    expected = [
+        np.exp(-(radius - 15) ** 2 / (2 * 0.01 ** 2))
+        * scipy.special.i0e(radius * 15 / 0.01 ** 2),
+        [cusp(R) for R in radius],
+        0.01 * scipy.special.erf(np.pi * radius / (0.01 * np.sqrt(2)))
+        / (radius * np.sqrt(2 * np.pi))]
+    np.testing.assert_allclose(
+        density.surface_densities(radius * KPC_PER_ARCSEC), expected,
+        rtol=1e-5, atol=1e-12)
+
+
 @pytest.mark.parametrize('line_of_sight', ['flat', 'grid'])
 def test_disk_of_a_component_is_the_nodewise_disk_of_its_density(
         driver, line_of_sight):
