@@ -183,7 +183,7 @@ def flux_per_area(unit: u.UnitBase) -> u.UnitBase:
 def mass_per_unit(emission: 'Emission | None') -> float | None:
     """
     Return the mass surface density (Msun/kpc^2) of one unit of the
-    density of a component (see disks.MassTraitDisk), if its emission has
+    density of a component (see mass.SurfaceComponent), if its emission has
     a unit: for HI (its first line hi21), that of the HI of one unit, by
     N_HI = 1.823e18 cm^-2 per K km/s (at the rest frequency of the line,
     for units of flux density or energy), so that upsilon is the mass of

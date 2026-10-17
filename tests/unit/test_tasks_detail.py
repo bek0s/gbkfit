@@ -88,8 +88,8 @@ MASSIVE = dict(
         kinematics=dict(
             vptraits=dict(type='tan_mass'), dptraits=dict(type='uniform')),
         emission=dict(type='lines'))],
-    mass=[dict(type='pseudo_isothermal', name='halo',
-               parameters='density_radius')],
+    mass=[dict(type='spheroid', name='halo', profile=dict(
+        type='pseudo_isothermal', parameters='density_radius'))],
     distance=dict(type='direct'))
 
 CUBE = dict(

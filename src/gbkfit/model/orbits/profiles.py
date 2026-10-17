@@ -8,7 +8,7 @@ import dataclasses
 import numpy as np
 import numpy.typing as npt
 
-from gbkfit.model.mass import MassModel, MassPointMass, MassZhao
+from gbkfit.model.mass import MassModel, MassPoint, MassSpheroid, ProfileZhao
 from gbkfit.params import ParamValues
 
 
@@ -66,8 +66,8 @@ class Hernquist:
         4, 1), which is Hernquist's) and 'bh' (a point mass).
         """
         model = MassModel([
-            MassZhao('stars', parameters='density_radius'),
-            MassPointMass('bh')])
+            MassSpheroid('stars', ProfileZhao(parameters='density_radius')),
+            MassPoint('bh')])
         with np.errstate(divide='ignore'):
             params = dict(
                 mass_stars_log_rho=np.log10(

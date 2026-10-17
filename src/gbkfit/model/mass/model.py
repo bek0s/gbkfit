@@ -12,11 +12,9 @@ from gbkfit.params import ParamDesc, ParamValues
 from gbkfit.utils import iterutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
 from .base import MassComponent, MassContext
-from .disks import MassExponentialDisk, MassNodewiseDisk, MassTraitDisk
-from .halos import (
-    MassBurkert, MassEinasto, MassNFW, MassPseudoIsothermal, MassZhao)
-from .points import MassPointMass
-from .spheroids import MassSersic
+from .disks import MassDisk
+from .points import MassPoint
+from .spheroids import MassSpheroid
 from .user import MassUser
 
 
@@ -28,16 +26,9 @@ __all__ = [
 
 
 mass_component_parser = parseutils.TypedParser(MassComponent, [
-    MassPointMass,
-    MassExponentialDisk,
-    MassNodewiseDisk,
-    MassTraitDisk,
-    MassSersic,
-    MassNFW,
-    MassBurkert,
-    MassPseudoIsothermal,
-    MassEinasto,
-    MassZhao,
+    MassPoint,
+    MassDisk,
+    MassSpheroid,
     MassUser])
 
 

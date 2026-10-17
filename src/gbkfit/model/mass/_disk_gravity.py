@@ -415,6 +415,17 @@ class ThickDiskGravity:
             weights.left @ (weights.right @ rho.T).T.ravel())
         return v2[self._inverse]
 
+    def height_transform(self, pdf: np.ndarray, k: np.ndarray) -> np.ndarray:
+        """
+        Return T(k) = int p(z) exp(-k |z|) dz of a pdf of the height p
+        (1/kpc) given at the heights, at the wavenumbers k >= 0 (1/kpc):
+        an array of the shape of k, to the precision of the heights (see
+        vcirc2).
+        """
+        weights = 2 * self._scale * _HEIGHT_WEIGHTS * pdf
+        k = np.asarray(k, dtype=float)
+        return np.exp(-k[..., None] * self.heights) @ weights
+
 
 def thin_disk_gravity(
         knots: np.ndarray, radii: np.ndarray, degree: int = 1

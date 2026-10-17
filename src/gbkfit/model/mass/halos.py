@@ -1,7 +1,7 @@
 """
-Spherical dark matter halos (see halo_params for their parameters): a
-density rho_s f(r / r_s) of a given shape f, and its mass shape m(x) =
-int_0^x f(t) t^2 dt.
+The profiles of spherical dark matter halos (see spheroids.MassSpheroid,
+and halo_params for their parameters): a density rho_s f(r / r_s) of a
+given shape f, and its mass shape m(x) = int_0^x f(t) t^2 dt.
 """
 
 import abc
@@ -14,20 +14,21 @@ import scipy.special
 from gbkfit.params import ParamDesc, ParamValues
 from gbkfit.params.pdescs import ParamScalarDesc
 from gbkfit.utils.parseutils import ConfigError
-from .base import MassContext, MassSpherical
+from .base import MassContext
 from .halo_params import (
     Overdensity, check_parameterisation, halo_scales,
     parameterisation_pdescs)
+from .profiles import SpheroidProfile
 from .units import G
 
 
 __all__ = [
-    'MassBurkert',
-    'MassEinasto',
-    'MassHalo',
-    'MassNFW',
-    'MassPseudoIsothermal',
-    'MassZhao'
+    'ProfileBurkert',
+    'ProfileEinasto',
+    'ProfileHalo',
+    'ProfileNFW',
+    'ProfilePseudoIsothermal',
+    'ProfileZhao'
 ]
 
 
@@ -36,15 +37,13 @@ __all__ = [
 _X_SERIES = 1e-3
 
 
-class MassHalo(MassSpherical, abc.ABC):
+class ProfileHalo(SpheroidProfile, abc.ABC):
     """
     A spherical halo of density rho_s f(r / r_s): its parameters are those
     of its parameterisation, and those of the shape of its profile.
 
     Parameters
     ----------
-    name : str
-        Its name (see MassComponent).
     parameters : str, optional
         Its parameterisation: 'mass_concentration' (the default),
         'velocity_concentration' or 'density_radius' (see halo_params).
@@ -68,11 +67,9 @@ class MassHalo(MassSpherical, abc.ABC):
 
     def __init__(
             self,
-            name: str,
             parameters: str = 'mass_concentration',
             overdensity: str | None = None
     ):
-        super().__init__(name)
         check_parameterisation(parameters)
         if parameters == 'density_radius':
             if overdensity is not None:
@@ -98,7 +95,7 @@ class MassHalo(MassSpherical, abc.ABC):
             self._parameters, params, overdensity,
             lambda c: float(self._mass_shape(np.array(c, dtype=float), shape)))
 
-    def density_spherical(
+    def density(
             self,
             r: np.ndarray,
             params: ParamValues,
@@ -120,16 +117,15 @@ class MassHalo(MassSpherical, abc.ABC):
 
     def potential(
             self,
-            R: npt.ArrayLike,
-            z: npt.ArrayLike,
+            r: np.ndarray,
             params: ParamValues,
             context: MassContext
     ) -> np.ndarray:
         shape = self._shape_values(params)
         rho_s, r_s = self.scales(params, context)
-        phi = self._potential_shape(np.hypot(R, z) / r_s, shape)
+        phi = self._potential_shape(r / r_s, shape)
         if phi is None:
-            return super().potential(R, z, params, context)
+            return super().potential(r, params, context)
         return 4 * np.pi * G * rho_s * r_s ** 2 * phi
 
     def _shape_values(self, params: ParamValues) -> dict[str, float]:
@@ -161,7 +157,7 @@ class MassHalo(MassSpherical, abc.ABC):
         return None
 
 
-class MassNFW(MassHalo):
+class ProfileNFW(ProfileHalo):
     """
     The halo of Navarro, Frenk & White (1997): f(x) = 1 / (x (1 + x)^2),
     m(x) = ln(1 + x) - x / (1 + x), and the potential -4 pi G rho_s r_s^2
@@ -169,8 +165,8 @@ class MassNFW(MassHalo):
 
     Parameters
     ----------
-    name, parameters, overdensity : optional
-        See MassHalo.
+    parameters, overdensity : optional
+        See ProfileHalo.
     """
 
     @staticmethod
@@ -197,7 +193,7 @@ class MassNFW(MassHalo):
             np.log1p(x_safe) / x_safe)
 
 
-class MassBurkert(MassHalo):
+class ProfileBurkert(ProfileHalo):
     """
     The halo of Burkert (1995): f(x) = 1 / ((1 + x) (1 + x^2)), m(x) =
     (ln((1 + x)^2 (1 + x^2)) - 2 arctan(x)) / 4. Its scale radius r_s is
@@ -205,8 +201,8 @@ class MassBurkert(MassHalo):
 
     Parameters
     ----------
-    name, parameters, overdensity : optional
-        See MassHalo.
+    parameters, overdensity : optional
+        See ProfileHalo.
     """
 
     @staticmethod
@@ -227,7 +223,7 @@ class MassBurkert(MassHalo):
              - 2 * np.arctan(x_safe)) / 4)
 
 
-class MassPseudoIsothermal(MassHalo):
+class ProfilePseudoIsothermal(ProfileHalo):
     """
     The pseudo-isothermal sphere: f(x) = 1 / (1 + x^2), m(x) = x -
     arctan(x). Its scale radius r_s is the core radius r_c, and its
@@ -236,8 +232,8 @@ class MassPseudoIsothermal(MassHalo):
 
     Parameters
     ----------
-    name, parameters, overdensity : optional
-        See MassHalo.
+    parameters, overdensity : optional
+        See ProfileHalo.
     """
 
     @staticmethod
@@ -258,8 +254,7 @@ class MassPseudoIsothermal(MassHalo):
 
     def potential(
             self,
-            R: npt.ArrayLike,
-            z: npt.ArrayLike,
+            r: np.ndarray,
             params: ParamValues,
             context: MassContext
     ) -> np.ndarray:
@@ -268,7 +263,7 @@ class MassPseudoIsothermal(MassHalo):
             "mass grows without bound")
 
 
-class MassEinasto(MassHalo):
+class ProfileEinasto(ProfileHalo):
     """
     The halo of Einasto (1965): f(x) = exp(-(2 / a) (x^a - 1)), with a its
     shape (parameter alpha), and m(x) = e^(2/a) / a (a / 2)^(3/a)
@@ -279,8 +274,8 @@ class MassEinasto(MassHalo):
 
     Parameters
     ----------
-    name, parameters, overdensity : optional
-        See MassHalo.
+    parameters, overdensity : optional
+        See ProfileHalo.
     """
 
     @staticmethod
@@ -315,7 +310,7 @@ class MassEinasto(MassHalo):
         return -(mass_term + outer)
 
 
-class MassZhao(MassHalo):
+class ProfileZhao(ProfileHalo):
     """
     The halo of Zhao (1996): f(x) = x^-g (1 + x^a)^(-(b - g) / a), of the
     shape parameters alpha (a, the sharpness of the transition), beta
@@ -328,8 +323,8 @@ class MassZhao(MassHalo):
 
     Parameters
     ----------
-    name, parameters, overdensity : optional
-        See MassHalo.
+    parameters, overdensity : optional
+        See ProfileHalo.
     """
 
     @staticmethod

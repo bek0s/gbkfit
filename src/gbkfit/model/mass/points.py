@@ -12,11 +12,11 @@ from .units import G
 
 
 __all__ = [
-    'MassPointMass'
+    'MassPoint'
 ]
 
 
-class MassPointMass(MassSpherical):
+class MassPoint(MassSpherical):
     """
     A point mass of 10^log_m Msun at the centre: v^2 = G M / r and the
     potential -G M / r. Its density is 0 away from the centre.
@@ -29,7 +29,7 @@ class MassPointMass(MassSpherical):
 
     @staticmethod
     def type() -> str:
-        return 'point_mass'
+        return 'point'
 
     def pdescs(self) -> dict[str, ParamDesc]:
         return dict(log_m=ParamScalarDesc(desc="log10 of the mass (Msun)"))
