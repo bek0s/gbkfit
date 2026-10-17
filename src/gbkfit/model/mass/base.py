@@ -5,7 +5,7 @@ spherical components (MassSpherical).
 
 import abc
 import dataclasses
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from typing import Any, Protocol
 
 import numpy as np
@@ -20,8 +20,35 @@ __all__ = [
     'ComponentDensity',
     'MassComponent',
     'MassContext',
-    'MassSpherical'
+    'MassSpherical',
+    'forces_in_plane'
 ]
+
+
+def forces_in_plane(
+        R: npt.ArrayLike,
+        z: npt.ArrayLike,
+        vcirc2: Callable[[np.ndarray], np.ndarray],
+        label: str
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Return the forces per unit mass ((km/s)^2/kpc) in the plane of a mass
+    (labelled label in errors), -vcirc2(R) / R and 0, at the points (R,
+    z), broadcast together.
+
+    Raises
+    ------
+    NotImplementedError
+        For points off its plane.
+    """
+    R, z = np.broadcast_arrays(
+        np.asarray(R, dtype=float), np.asarray(z, dtype=float))
+    if np.any(z != 0):
+        raise NotImplementedError(
+            f"{label} gives its forces in its plane (z = 0) only")
+    force_R = -np.divide(
+        vcirc2(R), R, out=np.zeros_like(R), where=R > 0)
+    return force_R, np.zeros_like(R)
 
 
 class ComponentDensity(Protocol):
@@ -141,6 +168,10 @@ class MassComponent(parseutils.TypedSerializable, abc.ABC):
         """
         return ()
 
+    def spherical(self) -> bool:
+        """Check whether it is spherically symmetric; not here."""
+        return False
+
     @abc.abstractmethod
     def pdescs(self) -> dict[str, ParamDesc]:
         """Return its parameters, by name."""
@@ -213,16 +244,9 @@ class MassComponent(parseutils.TypedSerializable, abc.ABC):
             For points off its plane, if the component does not give its
             forces there.
         """
-        R, z = np.broadcast_arrays(
-            np.asarray(R, dtype=float), np.asarray(z, dtype=float))
-        if np.any(z != 0):
-            raise NotImplementedError(
-                f"the mass component '{self.type()}' gives its forces in "
-                f"its plane (z = 0) only")
-        force_R = -np.divide(
-            self.vcirc2(R, params, context), R,
-            out=np.zeros_like(R), where=R > 0)
-        return force_R, np.zeros_like(R)
+        return forces_in_plane(
+            R, z, lambda radii: self.vcirc2(radii, params, context),
+            f"the mass component '{self.type()}'")
 
     def potential(
             self,
@@ -252,6 +276,9 @@ class MassSpherical(MassComponent, abc.ABC):
     mass, as functions of the spherical radius r: its circular velocity
     and its forces follow exactly.
     """
+
+    def spherical(self) -> bool:
+        return True
 
     @abc.abstractmethod
     def density_spherical(

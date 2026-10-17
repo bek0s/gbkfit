@@ -21,9 +21,10 @@ from gbkfit.model.distance import (
 from gbkfit.model.mass import (
     MassContext, MassDisk, MassModel, MassPoint, MassSpheroid, MassUser,
     ProfileBurkert, ProfileEinasto, ProfileNFW, ProfilePseudoIsothermal,
-    ProfileSersic, ProfileZhao, SurfaceComponent, SurfaceExponential,
-    SurfaceNodewise, VerticalComponent, VerticalExponential, VerticalGauss,
-    VerticalSech2, VerticalThin, mass_component_parser)
+    ProfileSersic, ProfileZhao, ShapeFlattened, SurfaceComponent,
+    SurfaceExponential, SurfaceNodewise, VerticalComponent,
+    VerticalExponential, VerticalGauss, VerticalSech2, VerticalThin,
+    mass_component_parser)
 from gbkfit.model.mass import _disk_gravity
 from gbkfit.utils.parseutils import ConfigError
 
@@ -339,12 +340,12 @@ def test_spheres_are_their_densities(profile, params):
     radius = np.array([1e-4, 5e-4, 2e-3, 0.5, 2, 10, 100])
     expected = [
         scipy.integrate.quad(
-            lambda r: 4 * np.pi * r ** 2 * float(sphere.density_spherical(
+            lambda r: 4 * np.pi * r ** 2 * float(profile.density(
                 np.array(r), params, CONTEXT)),
             0, radius_, points=[1e-5, 1e-3, 0.1], limit=400)[0]
         for radius_ in radius]
     np.testing.assert_allclose(
-        sphere.enclosed_mass(radius, params, CONTEXT), expected, rtol=1e-6)
+        profile.enclosed_mass(radius, params, CONTEXT), expected, rtol=1e-6)
     np.testing.assert_allclose(
         sphere.vcirc2(radius, params, CONTEXT),
         G * np.array(expected) / radius, rtol=1e-6)
@@ -385,12 +386,79 @@ def test_sersic_of_index_1_is_the_deprojected_exponential():
     sigma0 = mass / (2 * np.pi * rd ** 2)
     radius = np.geomspace(1e-3, 10, 9)
     params = dict(log_m=np.log10(mass), re=re, n=1)
-    sersic = MassSpheroid('b', ProfileSersic())
+    sersic = ProfileSersic()
     np.testing.assert_allclose(
-        sersic.density_spherical(radius, params, CONTEXT),
+        sersic.density(radius, params, CONTEXT),
         sigma0 / (np.pi * rd) * scipy.special.k0(radius / rd), rtol=1e-6)
     assert sersic.enclosed_mass(1e3, params, CONTEXT) \
         == pytest.approx(mass, rel=1e-8)
+
+
+def test_flattened_spheroids_of_axis_ratio_1_are_spheres():
+    # (to 1e-11 for the halos; the tables of the Sersic profile, of its
+    # density and of its mass, agree to about 2e-8)
+    radius = np.array([0.01, 0.3, 2, 15, 120])
+    for profile, params in SPHERES:
+        sphere = MassSpheroid('s', profile)
+        flat = MassSpheroid('s', profile, ShapeFlattened())
+        np.testing.assert_allclose(
+            flat.vcirc2(radius, params | dict(q=1), CONTEXT),
+            sphere.vcirc2(radius, params, CONTEXT), rtol=1e-7)
+
+
+def test_flattened_spheroids_are_their_potential_integrals():
+    # The circular velocity of a homoeoid density rho(m) / q (Binney &
+    # Tremaine 2.88): v^2 = 2 pi G R^2 int_0^inf rho(R / sqrt(1 + u)) du /
+    # ((1 + u)^2 sqrt(q^2 + u)), against the integral over m, oblate and
+    # prolate
+    profile, params = SPHERES[1]
+    radius = np.array([0.5, 4, 30])
+    for q in (0.3, 2.0):
+        flat = MassSpheroid('s', profile, ShapeFlattened())
+
+        def vcirc2(R):
+            return 2 * np.pi * G * R ** 2 * scipy.integrate.quad(
+                lambda u: float(profile.density(
+                    np.array(R / np.sqrt(1 + u)), params, CONTEXT))
+                / ((1 + u) ** 2 * np.sqrt(q ** 2 + u)), 0, np.inf,
+                epsabs=0, epsrel=1e-10, limit=400)[0]
+        np.testing.assert_allclose(
+            flat.vcirc2(radius, params | dict(q=q), CONTEXT),
+            [vcirc2(R) for R in radius], rtol=1e-7)
+
+
+def test_flat_sersic_spheroids_are_thin_disks():
+    # Squashed to a sheet, a Sersic spheroid of index 1 is the thin
+    # exponential disk of its mass and of the scale length re / b(1): seen
+    # face-on, it is its profile at any axis ratio
+    from gbkfit.model.mass import _numerics
+    params = dict(log_m=10, re=3, n=1)
+    flat = MassSpheroid('b', ProfileSersic(), ShapeFlattened())
+    radius = np.array([0.5, 2, 5, 12, 30])
+    np.testing.assert_allclose(
+        flat.vcirc2(radius, params | dict(q=1e-6), CONTEXT),
+        exponential_disk().vcirc2(
+            radius, dict(log_m=10, rd=3 / _numerics.sersic_b(1)), CONTEXT),
+        rtol=1e-4)
+    column = scipy.integrate.quad(
+        lambda z: float(flat.density(2.0, z, params | dict(q=0.4), CONTEXT)),
+        -np.inf, np.inf, epsrel=1e-10)[0]
+    sphere = scipy.integrate.quad(
+        lambda z: float(ProfileSersic().density(
+            np.hypot(2.0, z), params, CONTEXT)), -np.inf, np.inf,
+        epsrel=1e-10)[0]
+    assert column == pytest.approx(sphere, rel=1e-6)
+
+
+def test_spheroid_shapes_load_and_dump():
+    info = dict(
+        type='spheroid', name='bulge', profile=dict(type='sersic'),
+        shape=dict(type='flattened'))
+    bulge = mass_component_parser.load(copy.deepcopy(info))
+    assert mass_component_parser.dump(bulge) == info
+    assert list(bulge.pdescs()) == ['log_m', 're', 'n', 'q']
+    assert not bulge.spherical()
+    assert MassSpheroid('halo', ProfileNFW()).spherical()
 
 
 HALOS = [
@@ -422,7 +490,7 @@ def test_halos_have_their_mass_and_concentration(halo_class, overdensity):
     else:
         density = float(overdensity[:-1]) * reference[overdensity[-1]]
     assert mass / (4 / 3 * np.pi * r_d ** 3) == pytest.approx(density)
-    assert halo.enclosed_mass(r_d, params, CONTEXT) == pytest.approx(mass)
+    assert profile.enclosed_mass(r_d, params, CONTEXT) == pytest.approx(mass)
     by_velocity = MassSpheroid(
         'h', halo_class('velocity_concentration', overdensity))
     radius = np.array([0.5, 5, 50])
@@ -523,7 +591,8 @@ MASS = [
          surface=dict(type='nodewise', nodes=[0.0, 0.3, 0.6, 1.2]),
          vertical=dict(type='thin')),
     dict(type='spheroid', name='halo', profile=dict(
-        type='pseudo_isothermal', parameters='density_radius'))]
+        type='pseudo_isothermal', parameters='density_radius'),
+        shape=dict(type='sphere'))]
 
 DISTANCE = dict(type='direct', cosmology='Planck18', epoch=0.0)
 

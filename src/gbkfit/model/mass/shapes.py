@@ -1,0 +1,263 @@
+"""
+The shapes of spheroids (see spheroids.MassSpheroid): how the density
+rho_sph(r) of their profile (see profiles and halos) is laid out in
+space, on spheres or on flattened spheroids.
+"""
+
+import abc
+from typing import Any
+
+import numpy as np
+import numpy.typing as npt
+
+from gbkfit.params import ParamDesc, ParamValues
+from gbkfit.params.pdescs import ParamScalarDesc
+from gbkfit.utils import parseutils
+from .base import MassContext, forces_in_plane
+from .profiles import SpheroidProfile
+from .units import G
+
+
+__all__ = [
+    'ShapeFlattened',
+    'ShapeSphere',
+    'SpheroidShape',
+    'spheroid_shape_parser'
+]
+
+
+def _flattened_nodes() -> tuple[np.ndarray, np.ndarray]:
+    """
+    Return the nodes phi of the integral of ShapeFlattened.vcirc2 over [0,
+    pi / 2] and their weights: Gauss-Legendre points on panels of
+    geometric widths towards both ends (where the profile can have a cusp,
+    and where a flat spheroid changes on the scale q).
+    """
+    x, w = np.polynomial.legendre.leggauss(16)
+    half = np.pi / 4
+    widths = np.concatenate(([0], np.geomspace(1e-10, half, 40)))
+    edges = np.concatenate((widths, np.pi / 2 - widths[::-1][1:]))
+    lo, hi = edges[:-1, None], edges[1:, None]
+    return (((hi - lo) * x + hi + lo) / 2).ravel(), ((hi - lo) * w / 2).ravel()
+
+
+_FLATTENED_PHI, _FLATTENED_WEIGHTS = _flattened_nodes()
+
+
+class SpheroidShape(parseutils.TypedSerializable, abc.ABC):
+    """
+    The shape of a spheroid: how it lays out the density of its profile,
+    and its gravity from it.
+    """
+
+    def dump(self) -> dict[str, Any]:
+        return dict(type=self.type())
+
+    def pdescs(self) -> dict[str, ParamDesc]:
+        """Return its parameters, by name; none here."""
+        return {}
+
+    @abc.abstractmethod
+    def spherical(self) -> bool:
+        """Check whether it is a sphere."""
+        pass
+
+    @abc.abstractmethod
+    def vcirc2(
+            self,
+            R: npt.ArrayLike,
+            profile: SpheroidProfile,
+            params: ParamValues,
+            context: MassContext
+    ) -> np.ndarray:
+        """
+        Return the square of the circular velocity in the plane of the
+        spheroid of this shape and the profile (see MassComponent.vcirc2;
+        params has the values of the parameters of both).
+        """
+        pass
+
+    @abc.abstractmethod
+    def density(
+            self,
+            R: npt.ArrayLike,
+            z: npt.ArrayLike,
+            profile: SpheroidProfile,
+            params: ParamValues,
+            context: MassContext
+    ) -> np.ndarray:
+        """
+        Return the density of the spheroid at the points (R, z) (see
+        MassComponent.density).
+        """
+        pass
+
+    def forces(
+            self,
+            R: npt.ArrayLike,
+            z: npt.ArrayLike,
+            profile: SpheroidProfile,
+            params: ParamValues,
+            context: MassContext
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """
+        Return the forces of the spheroid at the points (R, z) (see
+        MassComponent.forces): in its plane only, here.
+        """
+        return forces_in_plane(
+            R, z, lambda radii: self.vcirc2(radii, profile, params, context),
+            f"a spheroid of the shape '{self.type()}'")
+
+    def potential(
+            self,
+            R: npt.ArrayLike,
+            z: npt.ArrayLike,
+            profile: SpheroidProfile,
+            params: ParamValues,
+            context: MassContext
+    ) -> np.ndarray:
+        """
+        Return the potential of the spheroid at the points (R, z) (see
+        MassComponent.potential).
+
+        Raises
+        ------
+        NotImplementedError
+            If the shape does not give it (here).
+        """
+        raise NotImplementedError(
+            f"a spheroid of the shape '{self.type()}' does not give its "
+            f"potential")
+
+
+class ShapeSphere(SpheroidShape):
+    """
+    A sphere: the density of the profile at the spherical radius r, its
+    circular velocity G M(<r) / r and its forces exactly, and its
+    potential as the profile gives it.
+    """
+
+    @staticmethod
+    def type() -> str:
+        return 'sphere'
+
+    def spherical(self) -> bool:
+        return True
+
+    def vcirc2(
+            self,
+            R: npt.ArrayLike,
+            profile: SpheroidProfile,
+            params: ParamValues,
+            context: MassContext
+    ) -> np.ndarray:
+        # G M(<r) / r, 0 at the centre
+        R = np.asarray(R, dtype=float)
+        return G * np.divide(
+            profile.enclosed_mass(R, params, context), R,
+            out=np.zeros_like(R), where=R > 0)
+
+    def density(
+            self,
+            R: npt.ArrayLike,
+            z: npt.ArrayLike,
+            profile: SpheroidProfile,
+            params: ParamValues,
+            context: MassContext
+    ) -> np.ndarray:
+        return profile.density(np.hypot(R, z), params, context)
+
+    def forces(
+            self,
+            R: npt.ArrayLike,
+            z: npt.ArrayLike,
+            profile: SpheroidProfile,
+            params: ParamValues,
+            context: MassContext
+    ) -> tuple[np.ndarray, np.ndarray]:
+        # -G M(<r) / r^3 (R, z), 0 at the centre
+        R, z = np.broadcast_arrays(
+            np.asarray(R, dtype=float), np.asarray(z, dtype=float))
+        r = np.hypot(R, z)
+        scale = -G * np.divide(
+            profile.enclosed_mass(r, params, context), r ** 3,
+            out=np.zeros_like(r), where=r > 0)
+        return scale * R, scale * z
+
+    def potential(
+            self,
+            R: npt.ArrayLike,
+            z: npt.ArrayLike,
+            profile: SpheroidProfile,
+            params: ParamValues,
+            context: MassContext
+    ) -> np.ndarray:
+        return profile.potential(np.hypot(R, z), params, context)
+
+
+class ShapeFlattened(SpheroidShape):
+    """
+    A flattened (oblate, q < 1) or elongated (prolate, q > 1) spheroid of
+    the axis ratio q (its height over its width), a parameter: the
+    density rho_sph(m) / q at m^2 = R^2 + z^2 / q^2, the sphere of the
+    profile squashed along z with the mass of each shell kept. The
+    parameters of the profile keep their meaning: e.g. the mass, the mass
+    M_D within m < r_D of a halo (the parameters of the sphere before it
+    is squashed), and seen face-on, the projected profile of the sphere
+    (e.g. a Sersic profile of the effective radius re). Its circular
+    velocity in its plane (Binney & Tremaine 2008, 2.132) is v^2(R) = 4
+    pi G int_0^R rho_sph(m) m^2 dm / sqrt(R^2 - e^2 m^2), e^2 = 1 - q^2,
+    computed by quadrature (to about 1e-10 of the integral of the
+    profile). Its forces off its plane and its potential are not given.
+    """
+
+    @staticmethod
+    def type() -> str:
+        return 'flattened'
+
+    def spherical(self) -> bool:
+        return False
+
+    def pdescs(self) -> dict[str, ParamDesc]:
+        return dict(q=ParamScalarDesc(
+            desc="the axis ratio (height over width)", minimum=0))
+
+    def vcirc2(
+            self,
+            R: npt.ArrayLike,
+            profile: SpheroidProfile,
+            params: ParamValues,
+            context: MassContext
+    ) -> np.ndarray:
+        # With m = R sin(phi): 4 pi G R^2 int_0^(pi/2) rho_sph(R sin(phi))
+        # sin^2(phi) cos(phi) / sqrt(cos^2(phi) + q^2 sin^2(phi)) dphi
+        R = np.asarray(R, dtype=float)
+        q = params['q']
+        sin, cos = np.sin(_FLATTENED_PHI), np.cos(_FLATTENED_PHI)
+        weights = _FLATTENED_WEIGHTS * sin ** 2 * cos / np.sqrt(
+            cos ** 2 + q ** 2 * sin ** 2)
+        radii = R.ravel()
+        out = np.zeros_like(radii)
+        positive = radii > 0
+        density = profile.density(
+            radii[positive, None] * sin, params, context)
+        out[positive] = 4 * np.pi * G * radii[positive] ** 2 \
+            * (density @ weights)
+        return out.reshape(R.shape)
+
+    def density(
+            self,
+            R: npt.ArrayLike,
+            z: npt.ArrayLike,
+            profile: SpheroidProfile,
+            params: ParamValues,
+            context: MassContext
+    ) -> np.ndarray:
+        q = params['q']
+        return profile.density(
+            np.hypot(R, np.asarray(z, dtype=float) / q), params, context) / q
+
+
+spheroid_shape_parser = parseutils.TypedParser(SpheroidShape, [
+    ShapeSphere,
+    ShapeFlattened])
