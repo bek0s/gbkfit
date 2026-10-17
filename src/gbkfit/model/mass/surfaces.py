@@ -32,6 +32,7 @@ __all__ = [
     'DiskSurface',
     'SurfaceComponent',
     'SurfaceExponential',
+    'SurfaceGaussianRing',
     'SurfaceNodewise',
     'disk_surface_parser'
 ]
@@ -50,6 +51,55 @@ _TABLE_ETA = np.geomspace(1e-3, 1, 49)
 # density is below exp(-32) of its central value)
 _COMPONENT_DEGREE = 8
 _COMPONENT_PANELS = 64
+
+
+# The gravity of thin Gaussian rings (see SurfaceGaussianRing): of their
+# surface density within this many dispersions of the peak (beyond, below
+# exp(-50) of it), by Gauss-Legendre quadrature on panels of half a
+# dispersion, and of widths that halve towards each radius (where the
+# kernel has a logarithm and a pole) down to 2^-40 of a dispersion
+_RING_REACH = 10
+_RING_X, _RING_W = np.polynomial.legendre.leggauss(8)
+_RING_STEPS = 2.0 ** -np.arange(0, 41)
+
+
+def _ring_vcirc2(
+        R: np.ndarray,
+        surface: Callable[[np.ndarray], np.ndarray],
+        peak: float,
+        sigma: float
+) -> np.ndarray:
+    """
+    Return v^2 at the radii R > 0 of a thin disk of the surface density
+    surface (a function) within _RING_REACH sigma of peak: 2 G PV int S(a)
+    [a K / (a + R) - a E / (a - R)] da (see _disk_gravity), with the
+    principal value of the pole -2 R / (a - R) as S(R) times that of 1 /
+    (a - R), analytic, plus the integral of (S(a) - S(R)) / (a - R).
+    """
+    lo = max(0.0, peak - _RING_REACH * sigma)
+    hi = peak + _RING_REACH * sigma
+    r = R[:, None]
+    ring = peak + sigma * np.arange(-_RING_REACH, _RING_REACH + 0.25, 0.5)
+    steps = sigma * _RING_STEPS
+    cuts = np.concatenate((
+        np.broadcast_to(ring, (len(R), len(ring))), r - steps, r + steps,
+        np.broadcast_to([lo, hi], (len(R), 2))), axis=1)
+    cuts = np.sort(np.clip(cuts, lo, hi), axis=1)
+    a0, a1 = cuts[:, :-1, None], cuts[:, 1:, None]
+    a = (((a1 - a0) * _RING_X + a1 + a0) / 2).reshape(len(R), -1)
+    w = ((a1 - a0) * _RING_W / 2).reshape(len(R), -1)
+    d = a - r
+    # (points that round to R, of no weight, are left out)
+    used = d != 0
+    d_safe = np.where(used, d, 1)
+    density = surface(a)
+    at_r = surface(r)
+    with np.errstate(invalid='ignore', divide='ignore'):
+        kernel = np.where(used, _disk_gravity.thin_kernel(r, a, d_safe), 0)
+        pole = np.sum(np.where(
+            used, w * (density - at_r) / d_safe, 0), axis=1)
+        pole += at_r[:, 0] * np.log(np.abs((hi - R) / (lo - R)))
+    return G * (np.sum(w * density * kernel, axis=1) - 2 * R * pole)
 
 
 def _exponential_shape_direct(
@@ -275,6 +325,70 @@ class SurfaceExponential(DiskSurface):
         return G * mass / rd * out + inner.reshape(R.shape)
 
 
+class SurfaceGaussianRing(DiskSurface):
+    """
+    A Gaussian ring of total mass 10^log_m (Msun), of the peak radius
+    r_peak (kpc) and the full width at half maximum fwhm (kpc): the
+    surface density S_0 exp(-(R - r_peak)^2 / (2 s^2)), s = fwhm / (2
+    (2 ln 2)^(1/2)), with M = 2 pi S_0 (s^2 exp(-r_peak^2 / (2 s^2)) +
+    r_peak s (pi / 2)^(1/2) (1 + erf(r_peak / (s 2^(1/2))))). Thin only
+    (as DysmalPy's GaussianRing): its circular velocity is the pull of its
+    rings, by quadrature (see _ring_vcirc2), to about 1e-10 of its largest
+    value; negative inside it, which it pulls outwards.
+    """
+
+    @staticmethod
+    def type() -> str:
+        return 'gaussian_ring'
+
+    def pdescs(self) -> dict[str, ParamDesc]:
+        return dict(
+            log_m=ParamScalarDesc(desc="log10 of the mass (Msun)"),
+            r_peak=ParamScalarDesc(
+                desc="the radius of the peak (kpc)", minimum=0),
+            fwhm=ParamScalarDesc(
+                desc="the full width at half maximum (kpc)", minimum=0))
+
+    def surface_density(
+            self,
+            R: npt.ArrayLike,
+            params: ParamValues,
+            context: MassContext
+    ) -> np.ndarray:
+        peak, sigma = params['r_peak'], self._sigma(params)
+        mass = 10 ** params['log_m']
+        integral = sigma ** 2 * np.exp(-peak ** 2 / (2 * sigma ** 2)) \
+            + peak * sigma * np.sqrt(np.pi / 2) * (
+                1 + scipy.special.erf(peak / (sigma * np.sqrt(2))))
+        return mass / (2 * np.pi * integral) * np.exp(
+            -(np.asarray(R, dtype=float) - peak) ** 2 / (2 * sigma ** 2))
+
+    def vcirc2(
+            self,
+            R: npt.ArrayLike,
+            vertical: DiskVertical,
+            params: ParamValues,
+            context: MassContext
+    ) -> np.ndarray:
+        if not vertical.thin(context):
+            raise NotImplementedError(
+                "a Gaussian ring is thin only (vertical: thin)")
+        R = np.asarray(R, dtype=float)
+        radii = R.ravel()
+        out = np.zeros_like(radii)
+        positive = radii > 0
+        out[positive] = _ring_vcirc2(
+            radii[positive],
+            lambda a: self.surface_density(a, params, context),
+            params['r_peak'], self._sigma(params))
+        return out.reshape(R.shape)
+
+    @staticmethod
+    def _sigma(params: ParamValues) -> float:
+        """Return its dispersion s (kpc)."""
+        return params['fwhm'] / (2 * np.sqrt(2 * np.log(2)))
+
+
 class SurfaceNodewise(DiskSurface):
     """
     A surface density given at radial nodes (kpc): 10^log_sigma
@@ -486,4 +600,5 @@ class SurfaceComponent(DiskSurface):
 disk_surface_parser = parseutils.TypedParser(DiskSurface, [
     SurfaceExponential,
     SurfaceNodewise,
+    SurfaceGaussianRing,
     SurfaceComponent])
