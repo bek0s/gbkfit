@@ -111,6 +111,11 @@ def _azimuthal_mean_pieces(
         axis=-1), axis=-1)
     lo, hi = bounds[:, :-1, None], bounds[:, 1:, None]
 
+    # TODO: speed. The values at every point are copied from the device
+    # and summed here (most of the time: e.g. 14 ms on CUDA for ten blobs
+    # on 200 circles, against 7 ms with the trapezoid rule); a kernel that
+    # evaluates the traits and sums them with the weights on the device
+    # would return only the means
     def means(npoints: int) -> tuple[np.ndarray, np.ndarray]:
         # The mean, and the largest mean absolute value of each row
         x, w = np.polynomial.legendre.leggauss(npoints)
