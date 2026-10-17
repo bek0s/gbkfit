@@ -55,6 +55,7 @@ def test_traits_give_the_constants_the_kernels_read(cls, options, consts):
 def test_velocity_traits_name_their_speed_after_their_direction():
     assert list(traits.VPTraitArctan('rad').params_sm()) == ['rt', 'vr']
     assert list(traits.VPTraitNWUniform('ver').params_rnw(3)) == ['vv']
+    assert list(traits.VPTraitUniform('out').params_sm()) == ['vo']
     with pytest.raises(ConfigError, match="direction must be one of"):
         traits.VPTraitArctan('up')
 

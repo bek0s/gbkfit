@@ -1,7 +1,8 @@
 """
 What the components on radial nodes share: the disks (on rings) and the
-cones (on shells). The traits on their nodes and the parameters of the
-traits (NodalTraits); the plans of their evaluation (NodalPlan), with
+cones (on shells). The traits that a type of them takes (TraitTable);
+the traits on their nodes and the parameters of the traits
+(NodalTraits); the plans of their evaluation (NodalPlan), with
 their parameter values in one buffer (ParamBuffer), their traits in the
 native kernels (native_traits) and the maps of their extra outputs
 (ExtraMaps); and the plan of a component made of one (NodalComponentPlan).
@@ -28,7 +29,7 @@ from ._units import DataUnit, OpacityScales, band_factors, line_factors
 from .base import ComponentPlan, FieldsLayout, NativeGrid
 from .lines import Band, Bands, LinePlacement, Lines
 from .roles import BandEmission, Emission, LineEmission
-from .traits import PressureSupport, Trait
+from .traits import PressureSupport, Trait, VPTrait, trait_desc
 
 
 _log = logging.getLogger(__name__)
@@ -37,6 +38,38 @@ _log = logging.getLogger(__name__)
 # The most traits of one kind that the native kernels take (TRAIT_NUM_MAX
 # in constants.hpp)
 MAX_TRAITS = 4
+
+
+@dataclass(frozen=True)
+class TraitTable:
+    """
+    The traits that a type of component takes: the classes of the traits
+    of each of its kinds (e.g. 'vpt'), and the directions of its velocity
+    polar traits (see traits.VPT_DIRECTIONS).
+    """
+    component: str
+    classes: dict[str, tuple[type[Trait], ...]]
+    directions: tuple[str, ...]
+
+    def check(self, traits_: dict[str, Sequence[Trait]]) -> None:
+        """
+        Raise ConfigError if the component does not take one of the given
+        traits (by kind).
+        """
+        for kind, values in traits_.items():
+            classes = self.classes[kind]
+            for trait in values:
+                desc = trait_desc(trait.__class__)
+                if trait.__class__ not in classes:
+                    raise ConfigError(
+                        f"a {self.component} does not take {desc}; it takes "
+                        f"the types {[cls.type() for cls in classes]}")
+                if isinstance(trait, VPTrait) \
+                        and trait.direction() not in self.directions:
+                    raise ConfigError(
+                        f"a {self.component} takes velocity traits along "
+                        f"{list(self.directions)}; {desc} is along "
+                        f"{trait.direction()!r}")
 
 
 @dataclass

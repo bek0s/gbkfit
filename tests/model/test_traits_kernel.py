@@ -10,6 +10,7 @@ import numpy as np
 import pytest
 
 from gbkfit.model.components import traits
+from gbkfit.model.components.disks._detail import DISK_TRAITS
 from modelutils import observation_group
 
 
@@ -80,7 +81,7 @@ def trait_configs(parser):
         elif 'direction' in options:
             configs += [
                 config | dict(direction=direction)
-                for direction in traits.VPT_DIRECTIONS]
+                for direction in DISK_TRAITS.directions]
         else:
             configs.append(config)
     return configs

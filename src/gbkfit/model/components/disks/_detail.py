@@ -14,8 +14,8 @@ from gbkfit.utils.parseutils import ConfigError
 from .. import traits
 from .._detail import dump_geometry, dump_name
 from .._nodal import (
-    MAX_TRAITS, EmissionSetup, NodalComponentPlan, emission_setup,
-    parse_component_rnode_args)
+    MAX_TRAITS, EmissionSetup, NodalComponentPlan, TraitTable,
+    emission_setup, parse_component_rnode_args)
 from .._units import DataUnit
 from ..base import Component
 from ..geometries import Geometry
@@ -40,6 +40,17 @@ __all__ = [
 TRAIT_PREFIXES = dict(
     rpt='pt', rht='ht', vpt='vpt', vht='vht', dpt='dpt', dht='dht',
     zpt='zpt', spt='spt')
+
+# The traits that the disks take: every type, along every direction but
+# 'out' (of the cones)
+DISK_TRAITS = TraitTable('disk', {
+    kind: tuple(parser.registered_classes().values())
+    for kind, parser in dict(
+        rpt=traits.rpt_parser, rht=traits.rht_parser,
+        vpt=traits.vpt_parser, vht=traits.vht_parser,
+        dpt=traits.dpt_parser, dht=traits.dht_parser,
+        zpt=traits.zpt_parser, spt=traits.spt_parser).items()},
+    ('tan', 'rad', 'ver', 'los'))
 
 
 def load_disk_component(
@@ -155,6 +166,7 @@ def make_disk(
         **rings, rstep=rstep, interp=interp)
     traits_ = _disk_traits(
         density, kinematics, emission, opacity, zptraits, sptraits)
+    DISK_TRAITS.check(traits_)
     # (not the coefficients of line opacity: a uniform one is common, e.g.
     # one spin temperature)
     check_traits_common(sum(traits_.values(), ()))
