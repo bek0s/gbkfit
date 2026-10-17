@@ -5,6 +5,8 @@ Mass models: the components of the mass of a galaxy, which add up.
 from collections.abc import Callable, Sequence
 from typing import Any
 
+import dataclasses
+
 import numpy as np
 import numpy.typing as npt
 
@@ -51,7 +53,9 @@ class MassModel(parseutils.Serializable):
     Raises
     ------
     ConfigError
-        If there are no components, or their names repeat.
+        If there are no components, their names repeat, or a component
+        responds to one that the model does not have, to itself, or in a
+        loop (see MassComponent.responds_to).
     """
 
     @classmethod
@@ -78,6 +82,33 @@ class MassModel(parseutils.Serializable):
             [component.pdescs() for component in components],
             [f'mass_{name}_' for name in names])
         self._components = components
+        self._check_responses()
+
+    def _check_responses(self) -> None:
+        """
+        Raise ConfigError if a component responds to one that the model
+        does not have, or in a loop (itself included).
+        """
+        names = [component.name() for component in self._components]
+        responses = {
+            component.name(): component.responds_to()
+            for component in self._components}
+        for name, others in responses.items():
+            if unknown := sorted(set(others) - set(names)):
+                raise ConfigError(
+                    f"the mass component {name!r} responds to "
+                    f"{unknown}, which the mass model does not have; its "
+                    f"components: {names}")
+
+        def visit(name: str, path: tuple[str, ...]) -> None:
+            if name in path:
+                raise ConfigError(
+                    f"the mass components respond to each other in a "
+                    f"loop: {' -> '.join(path + (name,))}")
+            for other in responses[name]:
+                visit(other, path + (name,))
+        for name in names:
+            visit(name, ())
 
     def components(self) -> tuple[MassComponent, ...]:
         """Return its mass components."""
@@ -155,7 +186,8 @@ class MassModel(parseutils.Serializable):
         the plane, by the name of the component (see vcirc2).
         """
         return self._each(
-            lambda component, own: component.vcirc2(R, own, context), params)
+            lambda component, own, ctx: component.vcirc2(R, own, ctx),
+            params, context)
 
     def density(
             self,
@@ -169,8 +201,8 @@ class MassModel(parseutils.Serializable):
         MassComponent.density).
         """
         return sum(self._each(
-            lambda component, own: component.density(R, z, own, context),
-            params).values())
+            lambda component, own, ctx: component.density(R, z, own, ctx),
+            params, context).values())
 
     def forces(
             self,
@@ -184,8 +216,8 @@ class MassModel(parseutils.Serializable):
         MassComponent.forces).
         """
         forces = self._each(
-            lambda component, own: component.forces(R, z, own, context),
-            params).values()
+            lambda component, own, ctx: component.forces(R, z, own, ctx),
+            params, context).values()
         return (sum(force_R for force_R, _ in forces),
                 sum(force_z for _, force_z in forces))
 
@@ -201,22 +233,48 @@ class MassModel(parseutils.Serializable):
         MassComponent.potential).
         """
         return sum(self._each(
-            lambda component, own: component.potential(R, z, own, context),
-            params).values())
+            lambda component, own, ctx: component.potential(
+                R, z, own, ctx), params, context).values())
 
     def _each(
             self,
-            function: Callable[[MassComponent, ParamValues], Any],
-            params: ParamValues
+            function: Callable[
+                [MassComponent, ParamValues, MassContext], Any],
+            params: ParamValues,
+            context: MassContext
     ) -> dict[str, Any]:
         """
-        Return the result of a function of each component and the values
-        of its own parameters, by the name of the component.
+        Return the result of a function of each component, the values of
+        its own parameters and its context (that of the model, with the
+        squared circular velocities of the components it responds to), by
+        the name of the component.
         """
         return {
-            component.name(): function(component, {
-                name: params[full] for name, full in mapping.items()})
-            for component, mapping in zip(self._components, self._mappings)}
+            component.name(): function(
+                component, self.component_params(component.name(), params),
+                self._context(component, params, context))
+            for component in self._components}
+
+    def _context(
+            self,
+            component: MassComponent,
+            params: ParamValues,
+            context: MassContext
+    ) -> MassContext:
+        """
+        Return the context of a component: that of the model, with the
+        squared circular velocities of the components it responds to.
+        """
+        if not component.responds_to():
+            return context
+
+        def vcirc2(name: str) -> Callable[[np.ndarray], np.ndarray]:
+            other = self.component(name)
+            own = self.component_params(name, params)
+            other_context = self._context(other, params, context)
+            return lambda R: other.vcirc2(R, own, other_context)
+        return dataclasses.replace(context, vcirc2s={
+            name: vcirc2(name) for name in component.responds_to()})
 
 
 mass_model_parser = parseutils.BasicParser(MassModel)

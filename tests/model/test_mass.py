@@ -19,11 +19,10 @@ from gbkfit.model import galaxy_parser
 from gbkfit.model.distance import (
     KPC_PER_ARCSEC_MPC, DistanceDirect, DistanceRedshift)
 from gbkfit.model.mass import (
-    MassContext, MassDisk, MassModel, MassPoint, MassSpheroid, MassUser,
-    ProfileBurkert, ProfileDekelZhao, ProfileEinasto, ProfileNFW,
-    ProfilePseudoIsothermal,
-    ProfileSersic, ProfileZhao, ShapeFlattened, SurfaceComponent,
-    SurfaceExponential, SurfaceNodewise, VerticalComponent,
+    DarkFraction, MassContext, MassDisk, MassModel, MassPoint, MassSpheroid,
+    MassUser, ProfileBurkert, ProfileDekelZhao, ProfileEinasto, ProfileNFW,
+    ProfilePseudoIsothermal, ProfileSersic, ProfileZhao, ShapeFlattened,
+    SurfaceComponent, SurfaceExponential, SurfaceNodewise, VerticalComponent,
     VerticalExponential, VerticalGauss, VerticalSech2, VerticalThin,
     mass_component_parser)
 from gbkfit.model.mass import _disk_gravity
@@ -462,6 +461,91 @@ def test_spheroid_shapes_load_and_dump():
     assert list(bulge.pdescs()) == ['log_m', 're', 'n', 'q']
     assert not bulge.spherical()
     assert MassSpheroid('halo', ProfileNFW()).spherical()
+
+
+# Baryons that halos respond to: a thin exponential disk and a bulge
+BARYONS = [
+    dict(type='disk', name='stars', surface=dict(type='exponential'),
+         vertical=dict(type='thin')),
+    dict(type='spheroid', name='bulge', profile=dict(type='sersic'))]
+BARYON_VALUES = dict(
+    mass_stars_log_m=10.6, mass_stars_rd=3, mass_bulge_log_m=10,
+    mass_bulge_re=1, mass_bulge_n=4)
+
+
+def responding_halo(**options):
+    """The configuration of an NFW halo that responds to BARYONS."""
+    return dict(
+        type='spheroid', name='halo', profile=dict(type='nfw'),
+        baryons=['stars', 'bulge']) | options
+
+
+def test_contracted_halos_keep_the_dark_matter_of_their_shells():
+    # Within r, the dark matter the halo had within r', with r' M(r') =
+    # r (M(r') + M_b(r)) (M = v^2 r, in units of G), against r' found by
+    # root finding at each radius
+    model = mass_model(BARYONS + [responding_halo(contraction='blumenthal86')])
+    params = BARYON_VALUES | dict(mass_halo_log_m=12, mass_halo_c=5)
+    radius = np.array([0.5, 2, 5, 20, 100])
+    parts = model.vcirc2_components(radius, params, CONTEXT)
+    halo = MassSpheroid('h', ProfileNFW())
+
+    def halo_mass(r):
+        return float(halo.vcirc2(
+            np.array([r]), dict(log_m=12, c=5), CONTEXT)[0]) * r
+    baryons = parts['stars'] + parts['bulge']
+    for r, baryon_v2, v2 in zip(radius, baryons, parts['halo']):
+        initial = scipy.optimize.brentq(
+            lambda x: x * halo_mass(x) - r * (halo_mass(x) + baryon_v2 * r),
+            r, 1e4 * r, xtol=1e-14, rtol=1e-15)
+        assert v2 == pytest.approx(halo_mass(initial) / r, rel=1e-10)
+
+
+@pytest.mark.parametrize('profile, solve, bounds, given', [
+    ('nfw', 'log_m', [9, 15], dict(mass_halo_c=8)),
+    ('burkert', 'c', [1, 100], dict(mass_halo_log_m=11.8))])
+@pytest.mark.parametrize('contraction', [{}, dict(contraction='blumenthal86')])
+def test_dark_fractions_set_a_parameter_of_the_halo(
+        profile, solve, bounds, given, contraction):
+    model = mass_model(BARYONS + [responding_halo(
+        profile=dict(type=profile),
+        dark_fraction=dict(solve=solve, bounds=bounds)) | contraction])
+    assert f'mass_halo_{solve}' not in model.pdescs()
+    params = BARYON_VALUES | given | dict(mass_halo_fdm=0.3, mass_halo_r_fdm=5)
+    parts = model.vcirc2_components(np.array([5.0]), params, CONTEXT)
+    v2, baryon_v2 = parts['halo'][0], parts['stars'][0] + parts['bulge'][0]
+    assert v2 / (v2 + baryon_v2) == pytest.approx(0.3, rel=1e-10)
+    with pytest.raises(ValueError, match="no value of"):
+        model.vcirc2(
+            np.array([5.0]), params | dict(mass_halo_fdm=0.999), CONTEXT)
+
+
+def test_responding_halos_are_checked():
+    with pytest.raises(ConfigError, match="needs the baryons"):
+        MassSpheroid('h', ProfileNFW(), contraction='blumenthal86')
+    with pytest.raises(ConfigError, match="spherical shape"):
+        MassSpheroid(
+            'h', ProfileNFW(), ShapeFlattened(), baryons=['stars'],
+            contraction='blumenthal86')
+    with pytest.raises(ConfigError, match="not a parameter"):
+        MassSpheroid('h', ProfileNFW(), baryons=['stars'],
+                     dark_fraction=DarkFraction('q', [0.1, 1]))
+    with pytest.raises(ConfigError, match="does not have"):
+        mass_model([responding_halo(contraction='blumenthal86')])
+    with pytest.raises(ConfigError, match="in a loop"):
+        mass_model([
+            responding_halo(name='a', baryons=['b']),
+            responding_halo(name='b', baryons=['a'])])
+    info = responding_halo(
+        contraction='blumenthal86',
+        dark_fraction=dict(solve='log_m', bounds=[9.0, 15.0]))
+    dumped = mass_component_parser.dump(
+        mass_component_parser.load(copy.deepcopy(info)))
+    assert {key: dumped[key] for key in (
+        'baryons', 'contraction', 'dark_fraction')} == {
+        key: info[key] for key in ('baryons', 'contraction', 'dark_fraction')}
+    assert mass_component_parser.dump(
+        mass_component_parser.load(copy.deepcopy(dumped))) == dumped
 
 
 HALOS = [

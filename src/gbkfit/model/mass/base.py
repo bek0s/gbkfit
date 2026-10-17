@@ -103,13 +103,18 @@ class MassContext:
     What mass components need besides their parameters: the critical
     density of the universe (Msun/kpc^3) and its matter density
     parameter, at the epoch of the galaxy (for the overdensities that
-    define the masses of halos), and the densities of the components of
-    the model that they follow, by the names of the components.
+    define the masses of halos), the densities of the components of the
+    galaxy that they follow, by the names of the components, and the
+    squared circular velocities of the mass components that they respond
+    to (see MassComponent.responds_to), as functions of the radius (kpc),
+    by their names.
     """
     critical_density: float
     omega_m: float
     densities: Mapping[str, ComponentDensity] = dataclasses.field(
         default_factory=dict)
+    vcirc2s: Mapping[str, Callable[[np.ndarray], np.ndarray]] = \
+        dataclasses.field(default_factory=dict)
 
     def density(self, component: str) -> ComponentDensity:
         """
@@ -171,6 +176,15 @@ class MassComponent(parseutils.TypedSerializable, abc.ABC):
     def spherical(self) -> bool:
         """Check whether it is spherically symmetric; not here."""
         return False
+
+    def responds_to(self) -> tuple[str, ...]:
+        """
+        Return the names of the mass components of its model whose
+        gravity it responds to (e.g. a halo contracted by the baryons),
+        whose squared circular velocities its context gives (see
+        MassContext); none here.
+        """
+        return ()
 
     @abc.abstractmethod
     def pdescs(self) -> dict[str, ParamDesc]:
