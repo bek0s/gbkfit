@@ -16,7 +16,7 @@ from modelutils import config_group
 
 EXPONENTIAL = dict(type='exponential')
 SECH2 = dict(type='sech2', zmax=8)
-ARCTAN = dict(type='tan_arctan')
+ARCTAN = dict(type='arctan', direction='tan')
 UNIFORM = dict(type='uniform')
 
 DISK = dict(loose=False, tilted=False, rnodes=[0, 2, 4, 6, 8])

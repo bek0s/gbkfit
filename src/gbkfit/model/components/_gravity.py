@@ -44,7 +44,7 @@ class GravityPlan:
     """
     The gravity of a galaxy: the circular velocity of its mass at the
     radii of the components it moves (those with the velocity trait
-    'tan_mass', see Component.circular_velocity_params), with the pressure
+    'mass', see Component.circular_velocity_params), with the pressure
     support of each where its traits ask for it (see
     Disk.pressure_supported_params).
 
@@ -257,7 +257,7 @@ def _pressure_density(
 ) -> np.ndarray:
     """
     Return the density of the mass component of a pressure support (see
-    traits.VPTraitTanMass) at the radii R (kpc): at its midplane for
+    traits.VPTraitMass) at the radii R (kpc): at its midplane for
     'jeans', its surface density for 'self_gravitating'.
     """
     component = mass_model.component(support.density)

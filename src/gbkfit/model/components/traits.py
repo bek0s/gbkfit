@@ -10,8 +10,9 @@ The kinds of traits, and how the traits of one kind combine:
   the polar traits, each times its height trait in a thick disk (a
   probability density of z, which integrates to 1).
 - velocity (vpt, vht): the line-of-sight velocity; vsys plus the sum of
-  the polar traits, each projected on the line of sight and times its
-  height trait (a factor of z, 1 at z = 0 for most).
+  the polar traits, each a speed along its direction projected on the
+  line of sight, times its height trait (a factor of z, 1 at z = 0 for
+  most).
 - dispersion (dpt, dht): the velocity dispersion; the absolute value of
   the sum of the polar traits, each times its height trait.
 - vertical distortion (zpt): the sum displaces the plane of the disk
@@ -33,10 +34,14 @@ on |z| only. Lengths are in arcsec, angles in degrees and velocities in
 km/s. The traits are evaluated between the first and the last radius of
 the rings of the disk only.
 
-The tangential velocities are projected on the line of sight as v
-cos(theta) sin(incl), the radial ones (positive outwards) as v
-sin(theta) sin(incl), the vertical ones (positive along z) as v
-cos(incl), and the line-of-sight ones as they are.
+A velocity polar trait is a speed v along its direction (its option
+direction; the trait mass is tangential), and its speed parameter is
+named after it: tangential ('tan', vt), radial ('rad', vr, positive
+outwards), vertical ('ver', vv, positive along z) or the line of sight
+('los', vl). The speeds are
+projected on the line of sight as v cos(theta) sin(incl), v sin(theta)
+sin(incl), v cos(incl) and v; the tangential and radial ones are 0 at
+the centre, where their directions are undefined.
 
 Node-wise parameters (those of the nw_ traits, and of the height traits
 with rnodes) have a value for each ring: at its radii (sampling
@@ -102,27 +107,27 @@ RHT_UID_LORENTZ = 5
 RHT_UID_MOFFAT = 6
 RHT_UID_SECH2 = 7
 
-# Velocity polar traits
-VPT_UID_TAN_UNIFORM = 1
-VPT_UID_TAN_ARCTAN = 2
-VPT_UID_TAN_BOISSIER = 3
-VPT_UID_TAN_EPINAT = 4
-VPT_UID_TAN_LRAMP = 5
-VPT_UID_TAN_TANH = 6
-VPT_UID_TAN_POLYEX = 7
-VPT_UID_TAN_RIX = 8
-VPT_UID_TAN_COURTEAU = 9
-VPT_UID_TAN_BRANDT = 10
-VPT_UID_TAN_ISO = 11
-VPT_UID_TAN_NFW = 12
-VPT_UID_NW_TAN_UNIFORM = 101
-VPT_UID_NW_TAN_HARMONIC = 102
-VPT_UID_NW_RAD_UNIFORM = 103
-VPT_UID_NW_RAD_HARMONIC = 104
-VPT_UID_NW_VER_UNIFORM = 105
-VPT_UID_NW_VER_HARMONIC = 106
-VPT_UID_NW_LOS_UNIFORM = 107
-VPT_UID_NW_LOS_HARMONIC = 108
+# Velocity polar traits: the shapes of their speeds
+VPT_UID_UNIFORM = 1
+VPT_UID_ARCTAN = 2
+VPT_UID_BOISSIER = 3
+VPT_UID_EPINAT = 4
+VPT_UID_LRAMP = 5
+VPT_UID_TANH = 6
+VPT_UID_POLYEX = 7
+VPT_UID_RIX = 8
+VPT_UID_COURTEAU = 9
+VPT_UID_BRANDT = 10
+VPT_UID_ISO = 11
+VPT_UID_NFW = 12
+VPT_UID_NW_UNIFORM = 101
+VPT_UID_NW_HARMONIC = 102
+
+# Velocity polar traits: the directions of their speeds
+VPT_DIRECTION_TAN = 1
+VPT_DIRECTION_RAD = 2
+VPT_DIRECTION_VER = 3
+VPT_DIRECTION_LOS = 4
 
 # Velocity height traits
 VHT_UID_ONE = 1
@@ -166,6 +171,26 @@ SPT_UID_NW_AZRANGE = 101
 # or at the subnodes themselves (see _disk.Disk)
 SAMPLINGS = ('rnodes', 'subrings')
 SAMPLING_DEFAULT = 'rnodes'
+
+
+@dataclasses.dataclass(frozen=True)
+class VPTDirection:
+    """
+    A direction of the speeds of the velocity polar traits: its uid in the
+    native kernels, and the name of the speed parameter of the traits
+    along it.
+    """
+    uid: int
+    speed: str
+
+
+# The directions of the speeds of the velocity polar traits, by name (see
+# the module docstring)
+VPT_DIRECTIONS = dict(
+    tan=VPTDirection(VPT_DIRECTION_TAN, 'vt'),
+    rad=VPTDirection(VPT_DIRECTION_RAD, 'vr'),
+    ver=VPTDirection(VPT_DIRECTION_VER, 'vv'),
+    los=VPTDirection(VPT_DIRECTION_LOS, 'vl'))
 
 
 def _ptrait_params_mixture_6p(nblobs: int) -> dict[str, ParamDesc]:
@@ -443,7 +468,7 @@ def trait_desc(cls: type['Trait']) -> str:
 class PressureSupport:
     """
     How the rotation of a disk in the gravity of its galaxy is corrected
-    for its pressure (see VPTraitTanMass): mode, 'jeans' or
+    for its pressure (see VPTraitMass): mode, 'jeans' or
     'self_gravitating', and density, the name of the mass component of
     the galaxy whose density it takes, or None for that of the disk.
     """
@@ -494,7 +519,7 @@ class Trait(parseutils.TypedSerializable, abc.ABC):
         """
         Return the names of the node-wise parameters whose values are not
         given, but are the circular velocity of the mass of their galaxy
-        at the radii where they are sampled (see VPTraitTanMass); none
+        at the radii where they are sampled (see VPTraitMass); none
         here.
         """
         return ()
@@ -503,7 +528,7 @@ class Trait(parseutils.TypedSerializable, abc.ABC):
         """
         Return how the values of its circular velocity parameters are
         corrected for the pressure of their disk, if they are (see
-        VPTraitTanMass); not here.
+        VPTraitMass); not here.
         """
         return None
 
@@ -532,6 +557,28 @@ class TraitFeatureZmax:
         ZPTrait).
         """
         return self._zmax
+
+
+class TraitFeatureDirection:
+    """
+    The option direction of a velocity polar trait: a mixin.
+    """
+
+    def dump(self) -> dict[str, Any]:
+        return super().dump() | dict(direction=self.direction())  # noqa
+
+    def __init__(self, **kwargs: Any):
+        direction = kwargs.pop('direction')
+        if direction not in VPT_DIRECTIONS:
+            raise ConfigError(
+                f"direction must be one of {list(VPT_DIRECTIONS)}; "
+                f"it is {direction!r}")
+        self._direction = direction
+        super().__init__(**kwargs)
+
+    def direction(self) -> str:
+        """Return the direction of its speed (see VPT_DIRECTIONS)."""
+        return self._direction
 
 
 class TraitFeatureSampling:
@@ -756,9 +803,22 @@ class RHTrait(TraitFeatureZmax, HTrait, abc.ABC):
 
 class VPTrait(PTrait, abc.ABC):
     """
-    A velocity polar trait: a velocity, projected on the line of sight
-    (see the module docstring).
+    A velocity polar trait: a speed along a direction, projected on the
+    line of sight (see the module docstring).
     """
+
+    @abc.abstractmethod
+    def direction(self) -> str:
+        """Return the direction of its speed (see VPT_DIRECTIONS)."""
+        pass
+
+    def direction_uid(self) -> int:
+        """Return the identifier of its direction in the native kernels."""
+        return VPT_DIRECTIONS[self.direction()].uid
+
+    def speed(self) -> str:
+        """Return the name of its speed parameter, by its direction."""
+        return VPT_DIRECTIONS[self.direction()].speed
 
 
 class VHTrait(HTrait, abc.ABC):
@@ -1811,272 +1871,425 @@ class RHTraitSech2(RHTraitP1):
         return 0.5 * (1 + np.tanh(z / s))
 
 
-class VPTraitTanUniform(VPTrait):
+class VPTraitUniform(TraitFeatureDirection, VPTrait):
     """
-    A flat rotation curve: vt. Its parameter: vt, the rotation velocity. A
-    tangential velocity.
-    """
-
-    @staticmethod
-    def type() -> str:
-        return 'tan_uniform'
-
-    @staticmethod
-    def uid() -> int:
-        return VPT_UID_TAN_UNIFORM
-
-    def params_sm(self) -> dict[str, ParamDesc]:
-        return dict(vt=ParamScalarDesc())
-
-
-class VPTraitTanArctan(VPTrait):
-    """
-    An arctan rotation curve: vt (2 / pi) atan(r / rt). Its parameters:
-    rt, the turnover radius, and vt, the asymptotic velocity. A tangential
-    velocity.
-    """
-
-    @staticmethod
-    def type() -> str:
-        return 'tan_arctan'
-
-    @staticmethod
-    def uid() -> int:
-        return VPT_UID_TAN_ARCTAN
-
-    def params_sm(self) -> dict[str, ParamDesc]:
-        return dict(
-            rt=ParamScalarDesc(),
-            vt=ParamScalarDesc())
-
-
-class VPTraitTanBoissier(VPTrait):
-    """
-    An exponential rotation curve: vt (1 - exp(-r / rt)). Its parameters:
-    rt, the scale radius, and vt, the asymptotic velocity. A tangential
-    velocity.
-    """
-
-    @staticmethod
-    def type() -> str:
-        return 'tan_boissier'
-
-    @staticmethod
-    def uid() -> int:
-        return VPT_UID_TAN_BOISSIER
-
-    def params_sm(self) -> dict[str, ParamDesc]:
-        return dict(
-            rt=ParamScalarDesc(),
-            vt=ParamScalarDesc())
-
-
-class VPTraitTanEpinat(VPTrait):
-    """
-    The rotation curve of Epinat et al. (2008): vt (r / rt)^g / (1 + (r /
-    rt)^a). Its parameters: rt, the turnover radius, vt, the velocity
-    scale, a, the outer slope, and g, the inner slope. A tangential
-    velocity.
-    """
-
-    @staticmethod
-    def type() -> str:
-        return 'tan_epinat'
-
-    @staticmethod
-    def uid() -> int:
-        return VPT_UID_TAN_EPINAT
-
-    def params_sm(self) -> dict[str, ParamDesc]:
-        return dict(
-            rt=ParamScalarDesc(),
-            vt=ParamScalarDesc(),
-            a=ParamScalarDesc(),
-            g=ParamScalarDesc())
-
-
-class VPTraitTanLRamp(VPTrait):
-    """
-    A rotation curve that rises linearly to vt at rt and is flat beyond:
-    vt min(r / rt, 1). Its parameters: rt and vt. A tangential velocity.
-    """
-
-    @staticmethod
-    def type() -> str:
-        return 'tan_lramp'
-
-    @staticmethod
-    def uid() -> int:
-        return VPT_UID_TAN_LRAMP
-
-    def params_sm(self) -> dict[str, ParamDesc]:
-        return dict(
-            rt=ParamScalarDesc(),
-            vt=ParamScalarDesc())
-
-
-class VPTraitTanTanh(VPTrait):
-    """
-    A tanh rotation curve: vt tanh(r / rt). Its parameters: rt, the
-    turnover radius, and vt, the asymptotic velocity. A tangential
-    velocity.
-    """
-
-    @staticmethod
-    def type() -> str:
-        return 'tan_tanh'
-
-    @staticmethod
-    def uid() -> int:
-        return VPT_UID_TAN_TANH
-
-    def params_sm(self) -> dict[str, ParamDesc]:
-        return dict(
-            rt=ParamScalarDesc(),
-            vt=ParamScalarDesc())
-
-
-class VPTraitTanPolyex(VPTrait):
-    """
-    The polyex rotation curve of Giovanelli and Haynes (2002): vt (1 -
-    exp(-r / rt)) (1 + a r / rt). Its parameters: rt, the scale radius,
-    vt, the velocity scale, and a, the slope of its outer part. A
-    tangential velocity.
-    """
-
-    @staticmethod
-    def type() -> str:
-        return 'tan_polyex'
-
-    @staticmethod
-    def uid() -> int:
-        return VPT_UID_TAN_POLYEX
-
-    def params_sm(self) -> dict[str, ParamDesc]:
-        return dict(
-            rt=ParamScalarDesc(),
-            vt=ParamScalarDesc(),
-            a=ParamScalarDesc())
-
-
-class VPTraitTanRix(VPTrait):
-    """
-    The rotation curve of Rix et al. (1997): vt (1 + r / rt)^b (1 + (r /
-    rt)^-g)^(-1 / g). Its parameters: rt, the turnover radius, vt, the
-    velocity scale, g, the sharpness of the turnover, and b, the power law
-    of the curve at large radii. A tangential velocity.
-    """
-
-    @staticmethod
-    def type() -> str:
-        return 'tan_rix'
-
-    @staticmethod
-    def uid() -> int:
-        return VPT_UID_TAN_RIX
-
-    def params_sm(self) -> dict[str, ParamDesc]:
-        return dict(
-            rt=ParamScalarDesc(),
-            vt=ParamScalarDesc(),
-            b=ParamScalarDesc(),
-            g=ParamScalarDesc())
-
-
-class VPTraitTanCourteau(VPTrait):
-    """
-    The rotation curve of Courteau (1997): vt (1 + x)^b / (1 + x^g)^(1 /
-    g), with x = rt / r. Its parameters: rt, the turnover radius, vt, the
-    velocity scale, and b and g, its shape. A tangential velocity.
-    """
-
-    @staticmethod
-    def type() -> str:
-        return 'tan_courteau'
-
-    @staticmethod
-    def uid() -> int:
-        return VPT_UID_TAN_COURTEAU
-
-    def params_sm(self) -> dict[str, ParamDesc]:
-        return dict(
-            rt=ParamScalarDesc(),
-            vt=ParamScalarDesc(),
-            b=ParamScalarDesc(),
-            g=ParamScalarDesc())
-
-
-class VPTraitTanBrandt(VPTrait):
-    """
-    The rotation curve of Brandt (1960), of maximum vt at the radius rt:
-    vt (r / rt) / (1/3 + 2/3 (r / rt)^n)^(3 / (2 n)). Its parameters: rt,
-    vt and n, the sharpness of the turnover. A tangential velocity.
-    """
-
-    @staticmethod
-    def type() -> str:
-        return 'tan_brandt'
-
-    @staticmethod
-    def uid() -> int:
-        return VPT_UID_TAN_BRANDT
-
-    def params_sm(self) -> dict[str, ParamDesc]:
-        return dict(
-            rt=ParamScalarDesc(),
-            vt=ParamScalarDesc(),
-            n=ParamScalarDesc())
-
-
-class VPTraitTanIso(VPTrait):
-    """
-    The rotation curve of a pseudo-isothermal sphere of core radius rt and
-    asymptotic velocity vt: vt sqrt(1 - (rt / r) atan(r / rt)). A
-    tangential velocity.
-    """
-
-    @staticmethod
-    def type() -> str:
-        return 'tan_iso'
-
-    @staticmethod
-    def uid() -> int:
-        return VPT_UID_TAN_ISO
-
-    def params_sm(self) -> dict[str, ParamDesc]:
-        return dict(
-            rt=ParamScalarDesc(),
-            vt=ParamScalarDesc())
-
-
-class VPTraitTanNFW(VPTrait):
-    """
-    The rotation curve of an NFW halo of scale radius rt, of maximum vt
-    (at 2.163 rt): vt sqrt(f(r / rt) / f_max), with f(u) = (ln(1 + u) - u
-    / (1 + u)) / u. A tangential velocity.
-    """
-
-    @staticmethod
-    def type() -> str:
-        return 'tan_nfw'
-
-    @staticmethod
-    def uid() -> int:
-        return VPT_UID_TAN_NFW
-
-    def params_sm(self) -> dict[str, ParamDesc]:
-        return dict(
-            rt=ParamScalarDesc(),
-            vt=ParamScalarDesc())
-
-
-class VPTraitNWTanUniform(TraitFeatureSampling, VPTrait):
-    """
-    A rotation curve given at each ring: vt(r). Its parameter: vt,
-    node-wise.
+    A uniform speed: v (e.g. a flat rotation curve). Its parameter: v,
+    the speed.
 
     Parameters
     ----------
+    direction : str
+        The direction of its speed: 'tan', 'rad', 'ver' or 'los' (see the
+        module docstring).
+
+    Raises
+    ------
+    ConfigError
+        If an option is not valid.
+    """
+
+    @staticmethod
+    def type() -> str:
+        return 'uniform'
+
+    @staticmethod
+    def uid() -> int:
+        return VPT_UID_UNIFORM
+
+    def __init__(self, direction: str):
+        super().__init__(direction=direction)
+
+    def params_sm(self) -> dict[str, ParamDesc]:
+        return {self.speed(): ParamScalarDesc()}
+
+
+class VPTraitArctan(TraitFeatureDirection, VPTrait):
+    """
+    An arctan profile of the speed: v (2 / pi) atan(r / rt). Its
+    parameters: rt, the turnover radius, and v, the asymptotic speed.
+
+    Parameters
+    ----------
+    direction : str
+        The direction of its speed: 'tan', 'rad', 'ver' or 'los' (see the
+        module docstring).
+
+    Raises
+    ------
+    ConfigError
+        If an option is not valid.
+    """
+
+    @staticmethod
+    def type() -> str:
+        return 'arctan'
+
+    @staticmethod
+    def uid() -> int:
+        return VPT_UID_ARCTAN
+
+    def __init__(self, direction: str):
+        super().__init__(direction=direction)
+
+    def params_sm(self) -> dict[str, ParamDesc]:
+        return {'rt': ParamScalarDesc(), self.speed(): ParamScalarDesc()}
+
+
+class VPTraitBoissier(TraitFeatureDirection, VPTrait):
+    """
+    An exponential profile of the speed: v (1 - exp(-r / rt)). Its
+    parameters: rt, the scale radius, and v, the asymptotic speed.
+
+    Parameters
+    ----------
+    direction : str
+        The direction of its speed: 'tan', 'rad', 'ver' or 'los' (see the
+        module docstring).
+
+    Raises
+    ------
+    ConfigError
+        If an option is not valid.
+    """
+
+    @staticmethod
+    def type() -> str:
+        return 'boissier'
+
+    @staticmethod
+    def uid() -> int:
+        return VPT_UID_BOISSIER
+
+    def __init__(self, direction: str):
+        super().__init__(direction=direction)
+
+    def params_sm(self) -> dict[str, ParamDesc]:
+        return {'rt': ParamScalarDesc(), self.speed(): ParamScalarDesc()}
+
+
+class VPTraitEpinat(TraitFeatureDirection, VPTrait):
+    """
+    The profile of the rotation curves of Epinat et al. (2008): v (r /
+    rt)^g / (1 + (r / rt)^a). Its parameters: rt, the turnover radius, v,
+    the speed scale, a, the outer slope, and g, the inner slope.
+
+    Parameters
+    ----------
+    direction : str
+        The direction of its speed: 'tan', 'rad', 'ver' or 'los' (see the
+        module docstring).
+
+    Raises
+    ------
+    ConfigError
+        If an option is not valid.
+    """
+
+    @staticmethod
+    def type() -> str:
+        return 'epinat'
+
+    @staticmethod
+    def uid() -> int:
+        return VPT_UID_EPINAT
+
+    def __init__(self, direction: str):
+        super().__init__(direction=direction)
+
+    def params_sm(self) -> dict[str, ParamDesc]:
+        return {
+            'rt': ParamScalarDesc(),
+            self.speed(): ParamScalarDesc(),
+            'a': ParamScalarDesc(),
+            'g': ParamScalarDesc()}
+
+
+class VPTraitLRamp(TraitFeatureDirection, VPTrait):
+    """
+    A speed that rises linearly to v at rt and is flat beyond: v min(r /
+    rt, 1). Its parameters: rt and v.
+
+    Parameters
+    ----------
+    direction : str
+        The direction of its speed: 'tan', 'rad', 'ver' or 'los' (see the
+        module docstring).
+
+    Raises
+    ------
+    ConfigError
+        If an option is not valid.
+    """
+
+    @staticmethod
+    def type() -> str:
+        return 'lramp'
+
+    @staticmethod
+    def uid() -> int:
+        return VPT_UID_LRAMP
+
+    def __init__(self, direction: str):
+        super().__init__(direction=direction)
+
+    def params_sm(self) -> dict[str, ParamDesc]:
+        return {'rt': ParamScalarDesc(), self.speed(): ParamScalarDesc()}
+
+
+class VPTraitTanh(TraitFeatureDirection, VPTrait):
+    """
+    A tanh profile of the speed: v tanh(r / rt). Its parameters: rt, the
+    turnover radius, and v, the asymptotic speed.
+
+    Parameters
+    ----------
+    direction : str
+        The direction of its speed: 'tan', 'rad', 'ver' or 'los' (see the
+        module docstring).
+
+    Raises
+    ------
+    ConfigError
+        If an option is not valid.
+    """
+
+    @staticmethod
+    def type() -> str:
+        return 'tanh'
+
+    @staticmethod
+    def uid() -> int:
+        return VPT_UID_TANH
+
+    def __init__(self, direction: str):
+        super().__init__(direction=direction)
+
+    def params_sm(self) -> dict[str, ParamDesc]:
+        return {'rt': ParamScalarDesc(), self.speed(): ParamScalarDesc()}
+
+
+class VPTraitPolyex(TraitFeatureDirection, VPTrait):
+    """
+    The polyex profile of the rotation curves of Giovanelli and Haynes
+    (2002): v (1 - exp(-r / rt)) (1 + a r / rt). Its parameters: rt, the
+    scale radius, v, the speed scale, and a, the slope of its outer part.
+
+    Parameters
+    ----------
+    direction : str
+        The direction of its speed: 'tan', 'rad', 'ver' or 'los' (see the
+        module docstring).
+
+    Raises
+    ------
+    ConfigError
+        If an option is not valid.
+    """
+
+    @staticmethod
+    def type() -> str:
+        return 'polyex'
+
+    @staticmethod
+    def uid() -> int:
+        return VPT_UID_POLYEX
+
+    def __init__(self, direction: str):
+        super().__init__(direction=direction)
+
+    def params_sm(self) -> dict[str, ParamDesc]:
+        return {
+            'rt': ParamScalarDesc(),
+            self.speed(): ParamScalarDesc(),
+            'a': ParamScalarDesc()}
+
+
+class VPTraitRix(TraitFeatureDirection, VPTrait):
+    """
+    The profile of the rotation curves of Rix et al. (1997): v (1 + r /
+    rt)^b (1 + (r / rt)^-g)^(-1 / g). Its parameters: rt, the turnover
+    radius, v, the speed scale, g, the sharpness of the turnover, and b,
+    the power law of the profile at large radii.
+
+    Parameters
+    ----------
+    direction : str
+        The direction of its speed: 'tan', 'rad', 'ver' or 'los' (see the
+        module docstring).
+
+    Raises
+    ------
+    ConfigError
+        If an option is not valid.
+    """
+
+    @staticmethod
+    def type() -> str:
+        return 'rix'
+
+    @staticmethod
+    def uid() -> int:
+        return VPT_UID_RIX
+
+    def __init__(self, direction: str):
+        super().__init__(direction=direction)
+
+    def params_sm(self) -> dict[str, ParamDesc]:
+        return {
+            'rt': ParamScalarDesc(),
+            self.speed(): ParamScalarDesc(),
+            'b': ParamScalarDesc(),
+            'g': ParamScalarDesc()}
+
+
+class VPTraitCourteau(TraitFeatureDirection, VPTrait):
+    """
+    The profile of the rotation curves of Courteau (1997): v (1 + x)^b /
+    (1 + x^g)^(1 / g), with x = rt / r. Its parameters: rt, the turnover
+    radius, v, the speed scale, and b and g, its shape.
+
+    Parameters
+    ----------
+    direction : str
+        The direction of its speed: 'tan', 'rad', 'ver' or 'los' (see the
+        module docstring).
+
+    Raises
+    ------
+    ConfigError
+        If an option is not valid.
+    """
+
+    @staticmethod
+    def type() -> str:
+        return 'courteau'
+
+    @staticmethod
+    def uid() -> int:
+        return VPT_UID_COURTEAU
+
+    def __init__(self, direction: str):
+        super().__init__(direction=direction)
+
+    def params_sm(self) -> dict[str, ParamDesc]:
+        return {
+            'rt': ParamScalarDesc(),
+            self.speed(): ParamScalarDesc(),
+            'b': ParamScalarDesc(),
+            'g': ParamScalarDesc()}
+
+
+class VPTraitBrandt(TraitFeatureDirection, VPTrait):
+    """
+    The profile of the rotation curves of Brandt (1960), of maximum v at
+    the radius rt: v (r / rt) / (1/3 + 2/3 (r / rt)^n)^(3 / (2 n)). Its
+    parameters: rt, v and n, the sharpness of the turnover.
+
+    Parameters
+    ----------
+    direction : str
+        The direction of its speed: 'tan', 'rad', 'ver' or 'los' (see the
+        module docstring).
+
+    Raises
+    ------
+    ConfigError
+        If an option is not valid.
+    """
+
+    @staticmethod
+    def type() -> str:
+        return 'brandt'
+
+    @staticmethod
+    def uid() -> int:
+        return VPT_UID_BRANDT
+
+    def __init__(self, direction: str):
+        super().__init__(direction=direction)
+
+    def params_sm(self) -> dict[str, ParamDesc]:
+        return {
+            'rt': ParamScalarDesc(),
+            self.speed(): ParamScalarDesc(),
+            'n': ParamScalarDesc()}
+
+
+class VPTraitIso(TraitFeatureDirection, VPTrait):
+    """
+    The profile of the rotation curve of a pseudo-isothermal sphere of
+    core radius rt and asymptotic speed v: v sqrt(1 - (rt / r) atan(r /
+    rt)). Its parameters: rt and v.
+
+    Parameters
+    ----------
+    direction : str
+        The direction of its speed: 'tan', 'rad', 'ver' or 'los' (see the
+        module docstring).
+
+    Raises
+    ------
+    ConfigError
+        If an option is not valid.
+    """
+
+    @staticmethod
+    def type() -> str:
+        return 'iso'
+
+    @staticmethod
+    def uid() -> int:
+        return VPT_UID_ISO
+
+    def __init__(self, direction: str):
+        super().__init__(direction=direction)
+
+    def params_sm(self) -> dict[str, ParamDesc]:
+        return {'rt': ParamScalarDesc(), self.speed(): ParamScalarDesc()}
+
+
+class VPTraitNFW(TraitFeatureDirection, VPTrait):
+    """
+    The profile of the rotation curve of an NFW halo of scale radius rt,
+    of maximum v (at 2.163 rt): v sqrt(f(r / rt) / f_max), with f(u) =
+    (ln(1 + u) - u / (1 + u)) / u. Its parameters: rt and v.
+
+    Parameters
+    ----------
+    direction : str
+        The direction of its speed: 'tan', 'rad', 'ver' or 'los' (see the
+        module docstring).
+
+    Raises
+    ------
+    ConfigError
+        If an option is not valid.
+    """
+
+    @staticmethod
+    def type() -> str:
+        return 'nfw'
+
+    @staticmethod
+    def uid() -> int:
+        return VPT_UID_NFW
+
+    def __init__(self, direction: str):
+        super().__init__(direction=direction)
+
+    def params_sm(self) -> dict[str, ParamDesc]:
+        return {'rt': ParamScalarDesc(), self.speed(): ParamScalarDesc()}
+
+
+class VPTraitNWUniform(TraitFeatureSampling, TraitFeatureDirection, VPTrait):
+    """
+    A speed given at each ring: v(r). Its parameter: v, node-wise.
+
+    Parameters
+    ----------
+    direction : str
+        The direction of its speed: 'tan', 'rad', 'ver' or 'los' (see the
+        module docstring).
     sampling : str, optional
         Where the values of its node-wise parameters are given: 'rnodes',
         at the radii of the rings, or 'subrings', at the rings it is
@@ -2090,22 +2303,69 @@ class VPTraitNWTanUniform(TraitFeatureSampling, VPTrait):
 
     @staticmethod
     def type() -> str:
-        return 'nw_tan_uniform'
+        return 'nw_uniform'
 
     @staticmethod
     def uid() -> int:
-        return VPT_UID_NW_TAN_UNIFORM
+        return VPT_UID_NW_UNIFORM
 
     def __init__(
             self,
+            direction: str,
             sampling: str = SAMPLING_DEFAULT):
-        super().__init__(sampling=sampling)
+        super().__init__(direction=direction, sampling=sampling)
 
     def params_rnw(self, nnodes: int) -> dict[str, ParamDesc]:
-        return dict(vt=ParamVectorDesc(nnodes))
+        return {self.speed(): ParamVectorDesc(nnodes)}
 
 
-class VPTraitTanMass(VPTrait):
+class VPTraitNWHarmonic(
+        TraitFeatureOrder, TraitFeatureSampling, TraitFeatureDirection,
+        VPTrait):
+    """
+    A harmonic speed: a(r) cos(m (theta - p(r))), of the order m. Its
+    parameters, node-wise: a, the amplitude, and p (but for order 0), the
+    azimuth of a maximum.
+
+    Parameters
+    ----------
+    direction : str
+        The direction of its speed: 'tan', 'rad', 'ver' or 'los' (see the
+        module docstring).
+    order : int
+        The order m of the harmonic: the pattern repeats every 360 / m
+        degrees, and order 0 is an axisymmetric a(r).
+    sampling : str, optional
+        Where the values of its node-wise parameters are given: 'rnodes',
+        at the radii of the rings, or 'subrings', at the rings it is
+        evaluated on (see the module docstring).
+
+    Raises
+    ------
+    ConfigError
+        If an option is not valid.
+    """
+
+    @staticmethod
+    def type() -> str:
+        return 'nw_harmonic'
+
+    @staticmethod
+    def uid() -> int:
+        return VPT_UID_NW_HARMONIC
+
+    def __init__(
+            self,
+            direction: str,
+            order: int,
+            sampling: str = SAMPLING_DEFAULT):
+        super().__init__(direction=direction, order=order, sampling=sampling)
+
+    def params_rnw(self, nnodes: int) -> dict[str, ParamDesc]:
+        return _ptrait_params_nw_harmonic(self.order(), nnodes)
+
+
+class VPTraitMass(VPTrait):
     """
     The rotation curve of the mass of its galaxy (see gbkfit.model.mass):
     the circular velocity at the rings it is evaluated on, which its
@@ -2114,8 +2374,8 @@ class VPTraitTanMass(VPTrait):
     rotation of the gas of its disk in that gravity; NaN where its square
     is negative or infinite (there is no circular orbit, e.g. at a jump of
     the surface density of a thin disk, or where the pressure exceeds the
-    gravity). A tangential velocity. It has no parameters of its own, and
-    its galaxy must have mass.
+    gravity). A tangential speed (it has no option direction). It has no
+    parameters of its own, and its galaxy must have mass.
 
     With pressure_support 'jeans', the rotation of an isotropic gas at the
     midplane of its disk (the radial Jeans equation): v^2 = v_c^2 + (R /
@@ -2159,11 +2419,11 @@ class VPTraitTanMass(VPTrait):
 
     @staticmethod
     def type() -> str:
-        return 'tan_mass'
+        return 'mass'
 
     @staticmethod
     def uid() -> int:
-        return VPT_UID_NW_TAN_UNIFORM
+        return VPT_UID_NW_UNIFORM
 
     def dump(self) -> dict[str, Any]:
         info = {}
@@ -2191,6 +2451,9 @@ class VPTraitTanMass(VPTrait):
         self._pressure_support = None if pressure_support is None \
             else PressureSupport(pressure_support, pressure_density)
 
+    def direction(self) -> str:
+        return 'tan'
+
     def sampling(self) -> str:
         return 'subrings'
 
@@ -2202,275 +2465,6 @@ class VPTraitTanMass(VPTrait):
 
     def pressure_support(self) -> PressureSupport | None:
         return self._pressure_support
-
-
-class VPTraitNWTanHarmonic(
-        TraitFeatureOrder, TraitFeatureSampling, VPTrait):
-    """
-    A harmonic tangential velocity: a(r) cos(m (theta - p(r))), of the
-    order m. Its parameters, node-wise: a, the amplitude, and p (but for
-    order 0), the azimuth of a maximum.
-
-    Parameters
-    ----------
-    order : int
-        The order m of the harmonic: the pattern repeats every 360 / m
-        degrees, and order 0 is an axisymmetric a(r).
-    sampling : str, optional
-        Where the values of its node-wise parameters are given: 'rnodes',
-        at the radii of the rings, or 'subrings', at the rings it is
-        evaluated on (see the module docstring).
-
-    Raises
-    ------
-    ConfigError
-        If an option is not valid.
-    """
-
-    @staticmethod
-    def type() -> str:
-        return 'nw_tan_harmonic'
-
-    @staticmethod
-    def uid() -> int:
-        return VPT_UID_NW_TAN_HARMONIC
-
-    def __init__(
-            self,
-            order: int,
-            sampling: str = SAMPLING_DEFAULT):
-        super().__init__(order=order, sampling=sampling)
-
-    def params_rnw(self, nnodes: int) -> dict[str, ParamDesc]:
-        return _ptrait_params_nw_harmonic(self.order(), nnodes)
-
-
-class VPTraitNWRadUniform(TraitFeatureSampling, VPTrait):
-    """
-    A radial velocity given at each ring: vr(r), positive outwards. Its
-    parameter: vr, node-wise.
-
-    Parameters
-    ----------
-    sampling : str, optional
-        Where the values of its node-wise parameters are given: 'rnodes',
-        at the radii of the rings, or 'subrings', at the rings it is
-        evaluated on (see the module docstring).
-
-    Raises
-    ------
-    ConfigError
-        If an option is not valid.
-    """
-
-    @staticmethod
-    def type() -> str:
-        return 'nw_rad_uniform'
-
-    @staticmethod
-    def uid() -> int:
-        return VPT_UID_NW_RAD_UNIFORM
-
-    def __init__(
-            self,
-            sampling: str = SAMPLING_DEFAULT):
-        super().__init__(sampling=sampling)
-
-    def params_rnw(self, nnodes: int) -> dict[str, ParamDesc]:
-        return dict(vr=ParamVectorDesc(nnodes))
-
-
-class VPTraitNWRadHarmonic(
-        TraitFeatureOrder, TraitFeatureSampling, VPTrait):
-    """
-    A harmonic radial velocity: a(r) cos(m (theta - p(r))), of the order
-    m. Its parameters, node-wise: a, the amplitude, and p (but for order
-    0), the azimuth of a maximum.
-
-    Parameters
-    ----------
-    order : int
-        The order m of the harmonic: the pattern repeats every 360 / m
-        degrees, and order 0 is an axisymmetric a(r).
-    sampling : str, optional
-        Where the values of its node-wise parameters are given: 'rnodes',
-        at the radii of the rings, or 'subrings', at the rings it is
-        evaluated on (see the module docstring).
-
-    Raises
-    ------
-    ConfigError
-        If an option is not valid.
-    """
-
-    @staticmethod
-    def type() -> str:
-        return 'nw_rad_harmonic'
-
-    @staticmethod
-    def uid() -> int:
-        return VPT_UID_NW_RAD_HARMONIC
-
-    def __init__(
-            self,
-            order: int,
-            sampling: str = SAMPLING_DEFAULT):
-        super().__init__(order=order, sampling=sampling)
-
-    def params_rnw(self, nnodes: int) -> dict[str, ParamDesc]:
-        return _ptrait_params_nw_harmonic(self.order(), nnodes)
-
-
-class VPTraitNWVerUniform(TraitFeatureSampling, VPTrait):
-    """
-    A vertical velocity given at each ring: vv(r), positive along z on
-    both sides of the plane. Its parameter: vv, node-wise.
-
-    Parameters
-    ----------
-    sampling : str, optional
-        Where the values of its node-wise parameters are given: 'rnodes',
-        at the radii of the rings, or 'subrings', at the rings it is
-        evaluated on (see the module docstring).
-
-    Raises
-    ------
-    ConfigError
-        If an option is not valid.
-    """
-
-    @staticmethod
-    def type() -> str:
-        return 'nw_ver_uniform'
-
-    @staticmethod
-    def uid() -> int:
-        return VPT_UID_NW_VER_UNIFORM
-
-    def __init__(
-            self,
-            sampling: str = SAMPLING_DEFAULT):
-        super().__init__(sampling=sampling)
-
-    def params_rnw(self, nnodes: int) -> dict[str, ParamDesc]:
-        return dict(vv=ParamVectorDesc(nnodes))
-
-
-class VPTraitNWVerHarmonic(
-        TraitFeatureOrder, TraitFeatureSampling, VPTrait):
-    """
-    A harmonic vertical velocity: a(r) cos(m (theta - p(r))), of the order
-    m. Its parameters, node-wise: a, the amplitude, and p (but for order
-    0), the azimuth of a maximum.
-
-    Parameters
-    ----------
-    order : int
-        The order m of the harmonic: the pattern repeats every 360 / m
-        degrees, and order 0 is an axisymmetric a(r).
-    sampling : str, optional
-        Where the values of its node-wise parameters are given: 'rnodes',
-        at the radii of the rings, or 'subrings', at the rings it is
-        evaluated on (see the module docstring).
-
-    Raises
-    ------
-    ConfigError
-        If an option is not valid.
-    """
-
-    @staticmethod
-    def type() -> str:
-        return 'nw_ver_harmonic'
-
-    @staticmethod
-    def uid() -> int:
-        return VPT_UID_NW_VER_HARMONIC
-
-    def __init__(
-            self,
-            order: int,
-            sampling: str = SAMPLING_DEFAULT):
-        super().__init__(order=order, sampling=sampling)
-
-    def params_rnw(self, nnodes: int) -> dict[str, ParamDesc]:
-        return _ptrait_params_nw_harmonic(self.order(), nnodes)
-
-
-class VPTraitNWLOSUniform(TraitFeatureSampling, VPTrait):
-    """
-    A line-of-sight velocity given at each ring: vl(r), not projected. Its
-    parameter: vl, node-wise.
-
-    Parameters
-    ----------
-    sampling : str, optional
-        Where the values of its node-wise parameters are given: 'rnodes',
-        at the radii of the rings, or 'subrings', at the rings it is
-        evaluated on (see the module docstring).
-
-    Raises
-    ------
-    ConfigError
-        If an option is not valid.
-    """
-
-    @staticmethod
-    def type() -> str:
-        return 'nw_los_uniform'
-
-    @staticmethod
-    def uid() -> int:
-        return VPT_UID_NW_LOS_UNIFORM
-
-    def __init__(
-            self,
-            sampling: str = SAMPLING_DEFAULT):
-        super().__init__(sampling=sampling)
-
-    def params_rnw(self, nnodes: int) -> dict[str, ParamDesc]:
-        return dict(vl=ParamVectorDesc(nnodes))
-
-
-class VPTraitNWLOSHarmonic(
-        TraitFeatureOrder, TraitFeatureSampling, VPTrait):
-    """
-    A harmonic line-of-sight velocity: a(r) cos(m (theta - p(r))), of the
-    order m, not projected. Its parameters, node-wise: a, the amplitude,
-    and p (but for order 0), the azimuth of a maximum.
-
-    Parameters
-    ----------
-    order : int
-        The order m of the harmonic: the pattern repeats every 360 / m
-        degrees, and order 0 is an axisymmetric a(r).
-    sampling : str, optional
-        Where the values of its node-wise parameters are given: 'rnodes',
-        at the radii of the rings, or 'subrings', at the rings it is
-        evaluated on (see the module docstring).
-
-    Raises
-    ------
-    ConfigError
-        If an option is not valid.
-    """
-
-    @staticmethod
-    def type() -> str:
-        return 'nw_los_harmonic'
-
-    @staticmethod
-    def uid() -> int:
-        return VPT_UID_NW_LOS_HARMONIC
-
-    def __init__(
-            self,
-            order: int,
-            sampling: str = SAMPLING_DEFAULT):
-        super().__init__(order=order, sampling=sampling)
-
-    def params_rnw(self, nnodes: int) -> dict[str, ParamDesc]:
-        return _ptrait_params_nw_harmonic(self.order(), nnodes)
 
 
 class VHTraitOne(VHTrait):
@@ -3440,27 +3434,21 @@ rht_parser = parseutils.TypedParser(RHTrait, [
 
 # Velocity polar traits parser
 vpt_parser = parseutils.TypedParser(VPTrait, [
-    VPTraitTanUniform,
-    VPTraitTanArctan,
-    VPTraitTanBoissier,
-    VPTraitTanEpinat,
-    VPTraitTanLRamp,
-    VPTraitTanTanh,
-    VPTraitTanPolyex,
-    VPTraitTanRix,
-    VPTraitTanCourteau,
-    VPTraitTanBrandt,
-    VPTraitTanIso,
-    VPTraitTanNFW,
-    VPTraitNWTanUniform,
-    VPTraitTanMass,
-    VPTraitNWTanHarmonic,
-    VPTraitNWRadUniform,
-    VPTraitNWRadHarmonic,
-    VPTraitNWVerUniform,
-    VPTraitNWVerHarmonic,
-    VPTraitNWLOSUniform,
-    VPTraitNWLOSHarmonic])
+    VPTraitUniform,
+    VPTraitArctan,
+    VPTraitBoissier,
+    VPTraitEpinat,
+    VPTraitLRamp,
+    VPTraitTanh,
+    VPTraitPolyex,
+    VPTraitRix,
+    VPTraitCourteau,
+    VPTraitBrandt,
+    VPTraitIso,
+    VPTraitNFW,
+    VPTraitNWUniform,
+    VPTraitNWHarmonic,
+    VPTraitMass])
 
 # Velocity height traits parser
 vht_parser = parseutils.TypedParser(VHTrait, [

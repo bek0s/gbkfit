@@ -16,7 +16,8 @@ def kernel_consts_cases():
     heights, the largest displacement of the vertical distortions (and
     the order of a harmonic one), the number of blobs of mixtures, the
     order of harmonics, and the grid of a map. The other traits have
-    none.
+    none. The velocity traits (but mass) are given a direction, which the
+    kernels read apart from the constants (vpt_directions).
     """
     parsers = dict(
         rpt=traits.rpt_parser, rht=traits.rht_parser,
@@ -41,12 +42,21 @@ def kernel_consts_cases():
                 options, consts = dict(size=[3, 2], step=2.0), (3, 2, 2.0)
             else:
                 options, consts = dict(), ()
+            if kind == 'vpt' and type_ != 'mass':
+                options['direction'] = 'tan'
             yield pytest.param(cls, options, consts, id=f"{kind}-{type_}")
 
 
 @pytest.mark.parametrize('cls, options, consts', list(kernel_consts_cases()))
 def test_traits_give_the_constants_the_kernels_read(cls, options, consts):
     assert cls(**options).consts() == consts
+
+
+def test_velocity_traits_name_their_speed_after_their_direction():
+    assert list(traits.VPTraitArctan('rad').params_sm()) == ['rt', 'vr']
+    assert list(traits.VPTraitNWUniform('ver').params_rnw(3)) == ['vv']
+    with pytest.raises(ConfigError, match="direction must be one of"):
+        traits.VPTraitArctan('up')
 
 
 def test_harmonic_orders_are_integers():

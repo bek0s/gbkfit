@@ -672,7 +672,7 @@ gmodel_mcdisk_evaluate_cloud(
     const int y = py;
     const int z = pz;
 
-    // Velocity traits
+    // Velocity traits: their speeds, projected on the line of sight
     if (a.vpt.uids)
     {
         p_traits<vp_trait<T>>(
@@ -681,7 +681,9 @@ gmodel_mcdisk_evaluate_cloud(
                 a.vpt.cvalues, a.vpt.ccounts,
                 a.vpt.pvalues, a.vpt.pcounts,
                 rnidx, a.rnodes, a.nrnodes,
-                xd, yd, rd, theta, incli);
+                xd, yd, rd, theta);
+        vp_disk_project_traits(
+                ptvalues, a.vpt.n, a.vpt_directions, rd, theta, incli);
     }
     if (a.vht.uids)
     {
@@ -1008,7 +1010,7 @@ gmodel_smdisk_evaluate_spaxel(
         rvalue *= a.spat_step[2];
     }
 
-    // Velocity traits
+    // Velocity traits: their speeds, projected on the line of sight
     if (a.vpt.uids)
     {
         p_traits<vp_trait<T>>(
@@ -1017,7 +1019,9 @@ gmodel_smdisk_evaluate_spaxel(
                 a.vpt.cvalues, a.vpt.ccounts,
                 a.vpt.pvalues, a.vpt.pcounts,
                 rnidx, a.rnodes, a.nrnodes,
-                xn, yn, rn, theta, incli);
+                xn, yn, rn, theta);
+        vp_disk_project_traits(
+                ptvalues, a.vpt.n, a.vpt_directions, rn, theta, incli);
     }
     if (a.vht.uids)
     {
@@ -1159,11 +1163,10 @@ gmodel_smdisk_evaluate_spaxel(
 }
 
 // The polar traits of the set of a DiskTraitsArgs at its point j, in the
-// ring rnidx, into values. extra has the further arguments of PTraitFunT:
-// the inclination (radians) of the velocity traits.
-template<auto PTraitFunT, typename T, typename... Ts> constexpr void
+// ring rnidx, into values
+template<auto PTraitFunT, typename T> constexpr void
 gmodel_disk_ptraits_point(
-        T* values, int j, int rnidx, const DiskTraitsArgs<T>& a, Ts... extra)
+        T* values, int j, int rnidx, const DiskTraitsArgs<T>& a)
 {
     const TraitSet<T>& t = a.traits;
     const T r = a.r[j];
@@ -1171,7 +1174,7 @@ gmodel_disk_ptraits_point(
     p_traits<PTraitFunT>(
             values, t.n, t.uids, t.cvalues, t.ccounts, t.pvalues, t.pcounts,
             rnidx, a.rnodes, a.nrnodes,
-            r * std::cos(theta), r * std::sin(theta), r, theta, extra...);
+            r * std::cos(theta), r * std::sin(theta), r, theta);
 }
 
 // The height traits of the set of a DiskTraitsArgs at its point j, in the
@@ -1211,8 +1214,10 @@ gmodel_disk_traits_point(int j, const DiskTraitsArgs<T>& a)
             gmodel_disk_ptraits_point<rp_trait<T>>(values, j, rnidx, a);
             break;
         case TraitKind::VPT:
-            gmodel_disk_ptraits_point<vp_trait<T>>(
-                    values, j, rnidx, a, a.incl * DEG_TO_RAD<T>);
+            gmodel_disk_ptraits_point<vp_trait<T>>(values, j, rnidx, a);
+            vp_disk_project_traits(
+                    values, a.traits.n, a.directions, a.r[j],
+                    a.theta[j] * DEG_TO_RAD<T>, a.incl * DEG_TO_RAD<T>);
             break;
         case TraitKind::DPT:
             gmodel_disk_ptraits_point<dp_trait<T>>(values, j, rnidx, a);

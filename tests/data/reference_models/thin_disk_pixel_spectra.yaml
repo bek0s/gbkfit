@@ -10,7 +10,7 @@ galaxies:
     density:
       ptraits: {type: exponential}
     kinematics:
-      vptraits: {type: tan_arctan}
+      vptraits: {type: arctan, direction: tan}
       dptraits: {type: uniform}
     emission: {type: lines}
 observations:

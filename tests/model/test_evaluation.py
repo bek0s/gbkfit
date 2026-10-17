@@ -38,7 +38,7 @@ def nodewise_relative_case(driver):
         observable=dict(
             type='pixel_spectra', size=[32, 32, 41], step=[1, 1, 10]),
         line_of_sight=dict(type='flat'),
-        galaxy=line_disk(dict(type='nw_tan_uniform')))
+        galaxy=line_disk(dict(type='nw_uniform', direction='tan')))
 
 
 def test_evaluation_does_not_modify_params(driver):
@@ -74,7 +74,7 @@ group = observation_group([dict(
             ptraits=dict(type='exponential'),
             htraits=dict(type='sech2', zmax=8)),
         kinematics=dict(
-            vptraits=dict(type='tan_arctan'), dptraits=dict(type='uniform')),
+            vptraits=dict(type='arctan', direction='tan'), dptraits=dict(type='uniform')),
         emission=dict(type='lines'))]))])
 params = gbkfit.params.ParamSpace(group.pdescs(), dict(
     vsys=0, xpos=0, ypos=0, posa=30, incl=60, pt_a=1, pt_s=4, ht_s=1,
@@ -103,7 +103,7 @@ def test_host_smooth_disk_does_not_depend_on_thread_count(tmp_path):
 # and the data key of its observable, and its parameter properties
 FLAT_OBSERVATIONS = dict(
     spectral_cube=(
-        line_disk(dict(type='tan_arctan')),
+        line_disk(dict(type='arctan', direction='tan')),
         'pixel_spectra', (32, 32, 41), 'spectra',
         dict(vsys=0, xpos=0, ypos=0, posa=30, incl=45,
              pt_a=1, pt_s=4, vpt_rt=2, vpt_vt=100, dpt_a=10)),
@@ -158,7 +158,7 @@ def test_incompatible_observations_are_rejected_before_evaluation(
         emission=dict(type=emission))
     if emission == 'lines':
         component |= dict(kinematics=dict(
-            vptraits=dict(type='tan_arctan'), dptraits=dict(type='uniform')))
+            vptraits=dict(type='arctan', direction='tan'), dptraits=dict(type='uniform')))
     case = dict(
         driver=dict(type='host'), observable=observable,
         line_of_sight=dict(type='flat'),
@@ -178,7 +178,7 @@ def test_a_velocity_that_is_not_a_number_makes_spectra_nan(driver):
             type='pixel_spectra', size=[16, 16, 21], step=[1, 1, 10]),
         line_of_sight=dict(type='flat'),
         galaxy=line_disk(
-            dict(type='tan_courteau'), rnodes=list(range(0, 8))))])
+            dict(type='courteau', direction='tan'), rnodes=list(range(0, 8))))])
     params = gbkfit.params.ParamSpace(group.pdescs(), dict(
         vsys=0, xpos=0, ypos=0, posa=30, incl=45, pt_a=1, pt_s=4,
         vpt_rt=-3, vpt_vt=100, vpt_b=0.4, vpt_g=2, dpt_a=10))

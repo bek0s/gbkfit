@@ -18,7 +18,7 @@ GALAXY = dict(components=[dict(
     type='smdisk', loose=False, tilted=False, rnodes=list(range(0, 12)),
     density=dict(ptraits=dict(type='exponential')),
     kinematics=dict(
-        vptraits=dict(type='tan_arctan'), dptraits=dict(type='uniform')),
+        vptraits=dict(type='arctan', direction='tan'), dptraits=dict(type='uniform')),
     emission=dict(type='lines'))])
 PROPERTIES = dict(
     vsys=0, xpos=0.3, ypos=-0.2, posa=30, incl=60, pt_a=1, pt_s=2.5,

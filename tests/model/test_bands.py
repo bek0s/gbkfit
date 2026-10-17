@@ -84,7 +84,7 @@ def test_only_images_have_a_band(driver):
         galaxy=dict(components=[dict(
             STARS, emission=dict(type='lines'),
             kinematics=dict(
-                vptraits=dict(type='tan_arctan'),
+                vptraits=dict(type='arctan', direction='tan'),
                 dptraits=dict(type='uniform')))]),
         band='sdss_r')
     with pytest.raises(ConfigError, match="only images have a band"):
