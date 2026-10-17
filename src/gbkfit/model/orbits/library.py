@@ -16,7 +16,7 @@ import numpy as np
 import numpy.typing as npt
 import scipy.integrate
 
-from gbkfit.model.mass import G, MassContext, MassModel, MassSpherical
+from gbkfit.model.mass import G, MassContext, MassModel
 from gbkfit.params import ParamValues
 from .kinematics import BinnedField
 
@@ -79,7 +79,7 @@ class SphericalPotential:
             params: ParamValues,
             context: MassContext
     ):
-        if not all(isinstance(component, MassSpherical)
+        if not all(component.spherical()
                    for component in model.components()):
             raise NotImplementedError(
                 "orbits are integrated in spherical mass models only")
