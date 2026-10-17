@@ -50,14 +50,14 @@ class TraitParams:
     circular_velocity has the names of those whose values are the
     circular velocity of the mass of the galaxy (see
     traits.Trait.circular_velocity_params), and pressure_support those of
-    them corrected for the pressure of the disk (see
+    them corrected for the pressure of the disk, with how (see
     traits.Trait.pressure_support).
     """
     pdescs: dict[str, ParamDesc]
     sampling: dict[str, str | None]
     pnames: tuple[dict[str, str], ...]
     circular_velocity: tuple[str, ...]
-    pressure_support: tuple[str, ...]
+    pressure_support: dict[str, str]
 
 
 def _trait_params(
@@ -93,11 +93,11 @@ def _trait_params(
             mapping[name]
             for trait, mapping in zip(traits_, mappings)
             for name in trait.circular_velocity_params()),
-        pressure_support=tuple(
-            mapping[name]
+        pressure_support={
+            mapping[name]: trait.pressure_support()
             for trait, mapping in zip(traits_, mappings)
             if trait.pressure_support() is not None
-            for name in trait.circular_velocity_params()))
+            for name in trait.circular_velocity_params()})
 
 
 def _trait_constants(
@@ -229,9 +229,9 @@ class Disk(abc.ABC):
             name: subrnodes if params.sampling[name] == 'subrings' else rnodes
             for params in self._trait_params.values()
             for name in params.circular_velocity}
-        self._pressure_supported_params = tuple(
-            name for params in self._trait_params.values()
-            for name in params.pressure_support)
+        self._pressure_supported_params = {
+            name: mode for params in self._trait_params.values()
+            for name, mode in params.pressure_support.items()}
 
         # Merge all parameter descs into the same dictionary, without those
         # that the model gives
@@ -329,11 +329,12 @@ class Disk(abc.ABC):
         """
         return self._circular_velocity_params
 
-    def pressure_supported_params(self) -> tuple[str, ...]:
+    def pressure_supported_params(self) -> dict[str, str]:
         """
-        Return the names of those of its circular velocity parameters (see
+        Return how those of its circular velocity parameters (see
         circular_velocity_params) whose values are corrected for its
-        pressure (see traits.VPTraitTanMass).
+        pressure are corrected, by their names (see
+        traits.VPTraitTanMass).
         """
         return self._pressure_supported_params
 

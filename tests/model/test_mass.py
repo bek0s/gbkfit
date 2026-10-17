@@ -1029,9 +1029,48 @@ def test_pressure_support_is_the_jeans_equation(driver):
     disk = component.density_disk()
     radius = np.array(disk.subrnodes())
     np.testing.assert_allclose(
-        pressure_support(disk, plan.disk_plan(), params, radius),
+        pressure_support(disk, plan.disk_plan(), params, radius, 'jeans'),
         -(30 * np.exp(-radius / 10)) ** 2 * radius * (1 / 4 + 2 / 10),
         rtol=1e-2, atol=1e-3)
+
+
+@pytest.mark.parametrize('ptrait, surface', [
+    (dict(type='exponential'), lambda r: np.exp(-r / 4)),
+    (dict(type='ggauss'), lambda r: np.exp(-(r / 4) ** 1.5))])
+def test_pressure_support_of_self_gravitating_disks(driver, ptrait, surface):
+    # R d(S^2)/dR sigma^2 / S^2, whatever the thickness of the disk, with
+    # the three-point derivative on the subnodes, as the disk takes it: its
+    # limit 2 sigma^2 dln S / dln R is, of an exponential S (scale 4),
+    # -2 sigma^2 R / 4 (DysmalPy's type 1, -3.36 sigma^2 R / R_e with R_e =
+    # 1.678 x 4), and of a Sersic one (a ggauss of shape 1.5 = 1 / n),
+    # -2 sigma^2 1.5 (R / 4)^1.5 (type 2), here of a dispersion of scale 10
+    from gbkfit.model import SMDisk
+    from gbkfit.model.components._component_set import IMAGE_SPECTRAL_AXIS
+    from gbkfit.model.components.disks._profiles import pressure_support
+    component = SMDisk.load(dict(
+        rnodes=list(range(0, 21, 2)), rstep=0.5,
+        density=dict(ptraits=ptrait, htraits=dict(type='sech2', zmax=8)),
+        kinematics=dict(
+            vptraits=dict(
+                type='tan_mass', pressure_support='self_gravitating'),
+            dptraits=dict(type='exponential')),
+        emission=dict(type='lines')))
+    params = dict(
+        xpos=0, ypos=0, posa=30, incl=60, vsys=0, pt_a=1, pt_s=4, ht_s=1,
+        dpt_a=30, dpt_s=10) | (dict(pt_b=1.5) if 'pt_b' in component.pdescs()
+                               else {})
+    plan = component.plan(
+        driver, IMAGE_SPECTRAL_AXIS, np.dtype(np.float64), None, None, True,
+        None, None, 0.0)
+    disk = component.density_disk()
+    assert disk.pressure_supported_params() == {'vpt_vt': 'self_gravitating'}
+    radius = np.array(disk.subrnodes())
+    squared = surface(radius) ** 2
+    np.testing.assert_allclose(
+        pressure_support(
+            disk, plan.disk_plan(), params, radius, 'self_gravitating'),
+        radius * np.gradient(squared, radius, edge_order=2)
+        * (30 * np.exp(-radius / 10)) ** 2 / squared, rtol=1e-10)
 
 
 @pytest.mark.parametrize('line_of_sight', ['flat', 'grid'])
