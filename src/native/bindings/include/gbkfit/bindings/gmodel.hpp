@@ -10,6 +10,7 @@
 #include <nanobind/stl/vector.h>
 
 #include <gbkfit/constants.hpp>
+#include <gbkfit/gmodel/cone.hpp>
 #include <gbkfit/gmodel/disk.hpp>
 #include <gbkfit/gmodel/transfer.hpp>
 
@@ -73,6 +74,29 @@ struct DiskArrays
     Values posa_incl_sincos;
 };
 
+// The arrays that describe a cone: its sides, its radial nodes (shells),
+// its geometry and its traits (with the direction of each velocity polar
+// trait; see gbkfit::ConeArgs). They are created once, and their values
+// are updated in place before each evaluation.
+template<typename T, typename Device>
+struct ConeArrays
+{
+    using Values = Array<Device, const T, nb::ndim<1>>;
+    using Traits = std::optional<TraitSetArrays<T, Device>>;
+
+    bool positive;
+    bool negative;
+    Values rnodes;
+    Values vsys;
+    Values xpos;
+    Values ypos;
+    Values posa;
+    Values incl;
+    Values wall;
+    Traits rpt, rht, vpt, vht, dpt, dht, spt;
+    Array<Device, const int, nb::ndim<1>> vpt_directions;
+};
+
 // The arrays of an emitter of the march of radiative transfer (see
 // gbkfit::TransferEmitter): its fields, those of a volume (of shape
 // (nslots, nz, ny, nx), with j, v and s in the first three slots, and
@@ -96,12 +120,13 @@ struct TransferEmitterArrays
 
 // The galaxy model operations of a native module. Kernels launches
 // the kernels of the module, on the memory of Device: each function on
-// the device of the array it writes, or of the disk (see DeviceScope of
-// the Kernels).
+// the device of the array it writes, or of the disk or cone (see
+// DeviceScope of the Kernels).
 template<typename T, typename Device, typename Kernels>
 struct GModel
 {
     using Disk = DiskArrays<T, Device>;
+    using Cone = ConeArrays<T, Device>;
     using Traits = TraitSetArrays<T, Device>;
     using Values = typename Disk::Values;
     using Ints = typename Traits::Ints;
@@ -132,8 +157,9 @@ struct GModel
     {
         const typename Kernels::DeviceScope scope(disk.rnodes.device_id());
         const auto a = make_disk_args(disk);
+        const bool thick = disk.rht.has_value();
         const auto g = make_grid_args(
-                disk, spat_size, spat_step, spat_zero, spat_rota, slab_zero,
+                thick, spat_size, spat_step, spat_zero, spat_rota, slab_zero,
                 spec_size, spec_step, spec_zero, lines,
                 opacity, opacity_ratios,
                 image, scube, rdata, rdata_cmp,
@@ -141,7 +167,39 @@ struct GModel
                 rdata_scale, image_scale);
         // (a thick disk writes three fields: j, v and s)
         Kernels::gmodel_smdisk_evaluate(
-                a, g, make_fields_args(disk, a, g, fields, 3));
+                a, g, make_fields_args(
+                        thick, fields_lines(a, g), g, fields, 3));
+    }
+
+    static void
+    smcone_evaluate(
+            const Cone& cone,
+            std::array<int, 3> spat_size,
+            std::array<T, 3> spat_step,
+            std::array<T, 3> spat_zero,
+            T spat_rota, int slab_zero,
+            int spec_size, T spec_step, T spec_zero,
+            Lines lines,
+            ConstData opacity, Ratios opacity_ratios,
+            Data image, Data scube,
+            Data rdata, Data rdata_cmp,
+            Data ordata, Data ordata_cmp,
+            Data vdata_cmp, Data ddata_cmp, Data vdweight_cmp,
+            Data fields,
+            T rdata_scale, T image_scale)
+    {
+        const typename Kernels::DeviceScope scope(cone.rnodes.device_id());
+        const auto a = make_cone_args(cone);
+        const auto g = make_grid_args(
+                true, spat_size, spat_step, spat_zero, spat_rota, slab_zero,
+                spec_size, spec_step, spec_zero, lines,
+                opacity, opacity_ratios,
+                image, scube, rdata, rdata_cmp,
+                ordata, ordata_cmp, vdata_cmp, ddata_cmp, vdweight_cmp,
+                rdata_scale, image_scale);
+        // (a cone writes three fields: j, v and s)
+        Kernels::gmodel_smcone_evaluate(
+                a, g, make_fields_args(true, 0, g, fields, 3));
     }
 
     static void
@@ -166,8 +224,8 @@ struct GModel
         const typename Kernels::DeviceScope scope(disk.rnodes.device_id());
         const auto a = make_disk_args(disk);
         const auto g = make_grid_args(
-                disk, spat_size, spat_step, spat_zero, spat_rota, slab_zero,
-                spec_size, spec_step, spec_zero, lines,
+                disk.rht.has_value(), spat_size, spat_step, spat_zero,
+                spat_rota, slab_zero, spec_size, spec_step, spec_zero, lines,
                 opacity, opacity_ratios,
                 image, scube, rdata, rdata_cmp,
                 ordata, ordata_cmp, vdata_cmp, ddata_cmp, vdweight_cmp,
@@ -176,7 +234,8 @@ struct GModel
                 "a Monte Carlo disk needs density height traits");
         // (with the scratch of the moments of the clouds, a Monte Carlo
         // disk writes four fields)
-        const auto f = make_fields_args(disk, a, g, fields, 4);
+        const auto f = make_fields_args(
+                true, fields_lines(a, g), g, fields, 4);
         require(has_analytical_integral.shape(0) == size_t(a.rpt.n),
                 "has_analytical_integral needs one value for each density "
                 "trait");
@@ -418,6 +477,43 @@ struct GModel
                 nb::arg("posa_incl_sincos").noconvert().none()
                         = nb::none());
 
+        nb::class_<Cone>(m, ("Cone" + suffix).c_str())
+                .def("__init__", [](
+                        Cone* self, bool positive, bool negative,
+                        Values rnodes, Values vsys, Values xpos, Values ypos,
+                        Values posa, Values incl, Values wall,
+                        const Traits* rpt, const Traits* rht,
+                        const Traits* vpt, const Traits* vht,
+                        const Traits* dpt, const Traits* dht,
+                        const Traits* spt,
+                        Array<Device, const int, nb::ndim<1>>
+                                vpt_directions) {
+                    auto optional = [](const Traits* traits) {
+                        return traits ? std::optional(*traits) : std::nullopt;
+                    };
+                    new (self) Cone{
+                            positive, negative, rnodes, vsys, xpos, ypos,
+                            posa, incl, wall, optional(rpt), optional(rht),
+                            optional(vpt), optional(vht), optional(dpt),
+                            optional(dht), optional(spt), vpt_directions};
+                },
+                nb::arg("positive"), nb::arg("negative"),
+                nb::arg("rnodes").noconvert(),
+                nb::arg("vsys").noconvert().none() = nb::none(),
+                nb::arg("xpos").noconvert(),
+                nb::arg("ypos").noconvert(),
+                nb::arg("posa").noconvert(),
+                nb::arg("incl").noconvert(),
+                nb::arg("wall").noconvert(),
+                nb::arg("rpt").none() = nb::none(),
+                nb::arg("rht").none() = nb::none(),
+                nb::arg("vpt").none() = nb::none(),
+                nb::arg("vht").none() = nb::none(),
+                nb::arg("dpt").none() = nb::none(),
+                nb::arg("dht").none() = nb::none(),
+                nb::arg("spt").none() = nb::none(),
+                nb::arg("vpt_directions").noconvert().none() = nb::none());
+
         nb::class_<Emitter>(m, ("TransferEmitter" + suffix).c_str())
                 .def("__init__", [](
                         Emitter* self, bool layer, bool line_opacity,
@@ -464,6 +560,10 @@ struct GModel
             cls.def_static(
                     "smdisk_evaluate", &smdisk_evaluate, ReleaseGil(), args...);
         }, evaluate_args(nb::arg("disk")));
+        std::apply([&](auto&&... args) {
+            cls.def_static(
+                    "smcone_evaluate", &smcone_evaluate, ReleaseGil(), args...);
+        }, evaluate_args(nb::arg("cone")));
         std::apply([&](auto&&... args) {
             cls.def_static(
                     "mcdisk_evaluate", &mcdisk_evaluate, ReleaseGil(), args...);
@@ -564,17 +664,26 @@ private:
         return a;
     }
 
-    // The direction of each velocity polar trait of a disk (see
-    // gbkfit::DiskArgs): given with those traits, and only with them
+    // The direction of each velocity polar trait of a disk or a cone (see
+    // gbkfit::DiskArgs and gbkfit::ConeArgs): given with those traits, and
+    // only with them
+    template<typename Arrays>
     static const int*
-    vpt_directions(const Disk& disk)
+    vpt_directions(const Arrays& arrays)
     {
-        require(disk.vpt_directions.is_valid() == disk.vpt.has_value()
-                && (!disk.vpt || disk.vpt_directions.shape(0)
-                                 == disk.vpt->uids.shape(0)),
+        require(arrays.vpt_directions.is_valid() == arrays.vpt.has_value()
+                && (!arrays.vpt || arrays.vpt_directions.shape(0)
+                                   == arrays.vpt->uids.shape(0)),
                 "vpt_directions needs a direction for each velocity polar "
                 "trait, and goes with them only");
-        return data(disk.vpt_directions);
+        return data(arrays.vpt_directions);
+    }
+
+    // The trait set of the arrays of a set, if any (none: no traits)
+    static TraitSet<T>
+    trait_set(const typename Disk::Traits& set)
+    {
+        return set ? set->raw() : TraitSet<T>{};
     }
 
     // The arguments of a disk (see gbkfit::DiskArgs)
@@ -609,18 +718,15 @@ private:
                 "cos posa, sin incl and cos incl of each value of posa");
 
         require(disk.rpt.has_value(), "a disk needs density traits");
-        auto traits = [](const auto& set) {
-            return set ? set->raw() : TraitSet<T>{};
-        };
-        a.rpt = traits(disk.rpt);
-        a.rht = traits(disk.rht);
-        a.vpt = traits(disk.vpt);
+        a.rpt = trait_set(disk.rpt);
+        a.rht = trait_set(disk.rht);
+        a.vpt = trait_set(disk.vpt);
         a.vpt_directions = vpt_directions(disk);
-        a.vht = traits(disk.vht);
-        a.dpt = traits(disk.dpt);
-        a.dht = traits(disk.dht);
-        a.zpt = traits(disk.zpt);
-        a.spt = traits(disk.spt);
+        a.vht = trait_set(disk.vht);
+        a.dpt = trait_set(disk.dpt);
+        a.dht = trait_set(disk.dht);
+        a.zpt = trait_set(disk.zpt);
+        a.spt = trait_set(disk.spt);
         require((!disk.rht || a.rht.n == a.rpt.n)
                 && (!disk.vht || a.vht.n == a.vpt.n)
                 && (!disk.dht || a.dht.n == a.dpt.n),
@@ -630,7 +736,7 @@ private:
                               && (!disk.dpt || disk.dht)),
                 "a thick disk (with density height traits) needs the height "
                 "traits of its velocity and dispersion traits");
-        a.opt = traits(disk.opt);
+        a.opt = trait_set(disk.opt);
         require(!disk.opt || (disk.opt_rows.is_valid()
                               && disk.opt_rows.shape(0) == size_t(a.opt.n)),
                 "the traits of line opacity (opt) need the row of the line "
@@ -639,11 +745,63 @@ private:
         return a;
     }
 
-    // The grid that a disk is evaluated on, its lines, the opacity that
-    // dims it and the outputs (see gbkfit::GridArgs)
+    // The number of planes of line opacity in the fields of a thick disk:
+    // one for each line with line opacity, none without (see
+    // gbkfit::gmodel_fields_lines)
+    static int
+    fields_lines(const DiskArgs<T>& a, const GridArgs<T>& g)
+    {
+        return a.opt.uids ? g.nlines : 0;
+    }
+
+    // The arguments of a cone (see gbkfit::ConeArgs)
+    static ConeArgs<T>
+    make_cone_args(const Cone& cone)
+    {
+        ConeArgs<T> a;
+        a.positive = cone.positive;
+        a.negative = cone.negative;
+        a.nrnodes = int(cone.rnodes.shape(0));
+        a.rnodes = cone.rnodes.data();
+        require(a.nrnodes >= 2, "a cone needs at least two radial nodes");
+        require(!cone.vsys.is_valid() || cone.vsys.shape(0) == 1,
+                "vsys needs one value");
+        require(cone.xpos.shape(0) == 1 && cone.ypos.shape(0) == 1
+                && cone.posa.shape(0) == 1 && cone.incl.shape(0) == 1
+                && cone.wall.shape(0) == 1,
+                "the geometry of a cone needs one value of each parameter");
+        a.vsys = data(cone.vsys);
+        a.xpos = cone.xpos.data();
+        a.ypos = cone.ypos.data();
+        a.posa = cone.posa.data();
+        a.incl = cone.incl.data();
+        a.wall = cone.wall.data();
+
+        require(cone.rpt.has_value() && cone.rht.has_value(),
+                "a cone needs density traits and density height traits");
+        a.rpt = trait_set(cone.rpt);
+        a.rht = trait_set(cone.rht);
+        a.vpt = trait_set(cone.vpt);
+        a.vpt_directions = vpt_directions(cone);
+        a.vht = trait_set(cone.vht);
+        a.dpt = trait_set(cone.dpt);
+        a.dht = trait_set(cone.dht);
+        a.spt = trait_set(cone.spt);
+        require(a.rht.n == a.rpt.n
+                && cone.vpt.has_value() == cone.vht.has_value()
+                && a.vht.n == a.vpt.n
+                && cone.dpt.has_value() == cone.dht.has_value()
+                && a.dht.n == a.dpt.n,
+                "a cone needs a height trait for each polar trait");
+        return a;
+    }
+
+    // The grid that a disk or a cone (thick, or a thin disk) is evaluated
+    // on, its lines, the opacity that dims it and the outputs (see
+    // gbkfit::GridArgs)
     static GridArgs<T>
     make_grid_args(
-            const Disk& disk,
+            bool thick,
             std::array<int, 3> spat_size,
             std::array<T, 3> spat_step,
             std::array<T, 3> spat_zero,
@@ -666,7 +824,7 @@ private:
         }
         g.spat_rota = spat_rota;
         g.slab_zero = slab_zero;
-        require(slab_zero >= 0 && (disk.rht || slab_zero == 0),
+        require(slab_zero >= 0 && (thick || slab_zero == 0),
                 "slab_zero must be at least 0, and 0 for a thin disk, which "
                 "is evaluated on the whole depth axis");
         g.spec_size = spec_size;
@@ -722,15 +880,14 @@ private:
         return g;
     }
 
-    // The fields of the march that a disk of the given arguments writes
+    // The fields of the march that a component on the grid g writes
     // instead of its light and its opacity (see gbkfit::FieldsArgs):
-    // volume_fields planes of the 3d grid for a thick disk (and with line
-    // opacity, a plane of each line), four of the x and y axes for a thin
-    // one
+    // volume_fields planes of the 3d grid for a thick one (and nk planes
+    // of line opacity), four of the x and y axes for a thin one
     static FieldsArgs<T>
     make_fields_args(
-            const Disk& disk, const DiskArgs<T>& a, const GridArgs<T>& g,
-            const Data& fields, int volume_fields)
+            bool thick, int nk, const GridArgs<T>& g, const Data& fields,
+            int volume_fields)
     {
         FieldsArgs<T> f;
         require(!fields.is_valid()
@@ -738,14 +895,13 @@ private:
                 "fields replace the image, the spectral cube and the "
                 "opacity");
         // (there are at most as many lines with line opacity as traits)
-        const int nk = a.opt.uids ? g.nlines : 0;
         require(!fields.is_valid() || nk <= TRAIT_NUM_MAX,
                 "line opacity takes at most " + std::to_string(TRAIT_NUM_MAX)
                 + " lines");
         const size_t nimage = size_t(g.spat_size[0]) * g.spat_size[1];
         const size_t nspat = nimage * g.spat_size[2];
-        const size_t size = disk.rht ? (volume_fields + nk) * nspat
-                                     : 4 * nimage;
+        const size_t size = thick ? (volume_fields + nk) * nspat
+                                  : 4 * nimage;
         require(!fields.is_valid() || fields.size() == size,
                 "fields has the wrong number of elements");
         f.fields = data(fields);

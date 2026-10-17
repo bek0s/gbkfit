@@ -5,13 +5,14 @@ the traits on their nodes and the parameters of the traits
 (NodalTraits); the plans of their evaluation (NodalPlan), with
 their parameter values in one buffer (ParamBuffer), their traits in the
 native kernels (native_traits) and the maps of their extra outputs
-(ExtraMaps); and the plan of a component made of one (NodalComponentPlan).
+(ExtraMaps, evaluate_native); and the plan of a component made of one
+(NodalComponentPlan).
 """
 
 import abc
 import logging
 import typing
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -29,7 +30,7 @@ from ._units import DataUnit, OpacityScales, band_factors, line_factors
 from .base import ComponentPlan, FieldsLayout, NativeGrid
 from .lines import Band, Bands, LinePlacement, Lines
 from .roles import BandEmission, Emission, LineEmission
-from .traits import PressureSupport, Trait, VPTrait, trait_desc
+from .traits import HTrait, PressureSupport, Trait, VPTrait, trait_desc
 
 
 _log = logging.getLogger(__name__)
@@ -70,6 +71,20 @@ class TraitTable:
                         f"a {self.component} takes velocity traits along "
                         f"{list(self.directions)}; {desc} is along "
                         f"{trait.direction()!r}")
+
+
+def with_default_height_traits(
+        value: tuple[HTrait | None, ...] | None,
+        npolar: int,
+        default: type[HTrait]
+) -> tuple[HTrait, ...]:
+    """
+    Return height traits, one for each of npolar polar traits, with the
+    missing ones (None, or all if value is None) of the default type.
+    """
+    if value is None:
+        value = (None,) * npolar
+    return tuple(default() if trait is None else trait for trait in value)
 
 
 @dataclass
@@ -464,6 +479,41 @@ class ExtraMaps:
             if present:
                 sumabs = np.nansum(np.abs(out_extra[key]))
                 _log.debug(f"sum(abs({key})): {sumabs}")
+
+
+def evaluate_native(
+        evaluate: Callable[[dict[str, Any]], None],
+        driver: Driver,
+        dtype: np.dtype,
+        traits: NodalTraits,
+        grid: NativeGrid,
+        outputs: dict[str, DeviceArray | None],
+        out_extra: dict[str, Any] | None,
+        density_key: str,
+        lines: DeviceArray | None,
+        rdata_scale: float,
+        image_scale: float
+) -> None:
+    """
+    Evaluate a component on radial nodes of the given traits (see
+    NodalPlan.evaluate): call evaluate with the keyword arguments of its
+    native evaluation function (the grid, the outputs, the device memory
+    of its lines and the scales), with the maps of its extra outputs if
+    they are wanted (see ExtraMaps), which then go to out_extra.
+    """
+    maps = None
+    if out_extra is not None:
+        maps = ExtraMaps(
+            driver, dtype, grid,
+            density=bool(traits.traits('rpt')),
+            velocity=bool(traits.traits('vpt')),
+            dispersion=bool(traits.traits('dpt')),
+            opacity=outputs.get('opacity') is not None)
+    evaluate(
+        grid | outputs | (maps.native() if maps is not None else {})
+        | dict(lines=lines, rdata_scale=rdata_scale, image_scale=image_scale))
+    if maps is not None:
+        maps.collect(out_extra, density_key)
 
 
 class NodalPlan(abc.ABC):

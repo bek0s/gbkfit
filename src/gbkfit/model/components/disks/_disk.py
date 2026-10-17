@@ -11,7 +11,7 @@ from gbkfit.math.interpolation import Interpolator
 from gbkfit.params import (
     ParamDesc, ParamScalarDesc, ParamValues, ParamVectorDesc)
 from .._nodal import (
-    ExtraMaps, NodalPlan, NodalTraits, ParamBuffer, TraitParams,
+    NodalPlan, NodalTraits, ParamBuffer, TraitParams, evaluate_native,
     fill_param_values, native_traits, subring_radii)
 from ..base import NativeGrid
 from ..geometries import GEOMETRY_PARAMS
@@ -259,27 +259,11 @@ class DiskPlan(NodalPlan):
             rdata_scale: float = 1.0,
             image_scale: float = 1.0
     ) -> None:
-        disk = self._disk
         params = self._write_params(params, lines)
-        maps = None
-        if out_extra is not None:
-            maps = ExtraMaps(
-                self._driver, self._dtype, grid,
-                density=bool(disk.traits('rpt')),
-                velocity=bool(disk.traits('vpt')),
-                dispersion=bool(disk.traits('dpt')),
-                opacity=outputs.get('opacity') is not None)
-
-        # The keyword arguments of the native evaluation functions
-        grid_and_outputs = grid | outputs \
-            | (maps.native() if maps is not None else {}) \
-            | dict(lines=self._lines_d, rdata_scale=rdata_scale,
-                   image_scale=image_scale)
-
-        self._impl_evaluate(params, grid_and_outputs, out_extra)
-
-        if maps is not None:
-            maps.collect(out_extra, density_key)
+        evaluate_native(
+            lambda kwargs: self._impl_evaluate(params, kwargs, out_extra),
+            self._driver, self._dtype, self._disk._traits, grid, outputs,
+            out_extra, density_key, self._lines_d, rdata_scale, image_scale)
 
     def _fields_lines(self) -> int:
         """

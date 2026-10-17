@@ -1,5 +1,6 @@
 #pragma once
 
+#include <gbkfit/gmodel/cone.hpp>
 #include <gbkfit/gmodel/disk.hpp>
 #include <gbkfit/gmodel/transfer.hpp>
 
@@ -82,6 +83,11 @@ struct Wrapper
     static void
     gmodel_smdisk_evaluate(
             const DiskArgs<T>& a, const GridArgs<T>& g,
+            const FieldsArgs<T>& f);
+
+    static void
+    gmodel_smcone_evaluate(
+            const ConeArgs<T>& a, const GridArgs<T>& g,
             const FieldsArgs<T>& f);
 
     static void

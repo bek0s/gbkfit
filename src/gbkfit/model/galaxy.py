@@ -18,6 +18,7 @@ from .components._gravity import GravityPlan
 from .components._transfer import TransferMember
 from .components._units import DataUnit
 from .components.base import Component, DepthAxis, OpacityCubes
+from .components.cones import SMCone
 from .components.disks import MCDisk, SMDisk
 from .components.geometries import Geometry, geometry_parser
 from .components.lines import Band, LineCatalogue
@@ -37,6 +38,7 @@ __all__ = [
 component_parser = parseutils.TypedParser(Component, [
     SMDisk,
     MCDisk,
+    SMCone,
     Point])
 
 

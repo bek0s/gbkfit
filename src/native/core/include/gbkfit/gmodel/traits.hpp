@@ -51,6 +51,7 @@ constexpr int VPT_DIRECTION_TAN = 1;
 constexpr int VPT_DIRECTION_RAD = 2;
 constexpr int VPT_DIRECTION_VER = 3;
 constexpr int VPT_DIRECTION_LOS = 4;
+constexpr int VPT_DIRECTION_OUT = 5;
 
 // Velocity height traits
 constexpr int VHT_UID_ONE = 1;
@@ -1572,6 +1573,44 @@ vp_disk_project_traits(
 {
     for (int i = 0; i < n; ++i)
         values[i] = vp_disk_project(values[i], directions[i], r, theta, incl);
+}
+
+// The line-of-sight velocity of the speed v of a velocity polar trait of
+// a cone of inclination incl, at the point (x, y, z) of its frame (the
+// frame of a thick disk whose spin axis is the axis of the cone) at the
+// distance r from its apex, by the direction of the speed: tangential
+// (around the axis), v x sin(incl) / R, R the distance from the axis
+// (v cos(theta) sin(incl), as on a disk); or outward (from the apex),
+// v (y sin(incl) + z cos(incl)) / r. The tangential direction is
+// undefined on the axis, and the outward one at the apex, where the
+// velocity is 0.
+template<typename T> constexpr T
+vp_cone_project(T v, int direction, T x, T y, T z, T r, T incl)
+{
+    switch (direction)
+    {
+    case VPT_DIRECTION_TAN: {
+        const T radius = std::sqrt(x * x + y * y);
+        return radius == 0 ? 0 : v * (x * std::sin(incl) / radius);
+    }
+    case VPT_DIRECTION_OUT:
+        return r == 0
+                ? 0 : v * ((y * std::sin(incl) + z * std::cos(incl)) / r);
+    default:
+        assert(false);
+        return NAN;
+    }
+}
+
+// Project the speeds of the n velocity polar traits of a cone on the line
+// of sight, in place, each by its direction (see vp_cone_project)
+template<typename T> constexpr void
+vp_cone_project_traits(
+        T* values, int n, const int* directions, T x, T y, T z, T r, T incl)
+{
+    for (int i = 0; i < n; ++i)
+        values[i] = vp_cone_project(
+                values[i], directions[i], x, y, z, r, incl);
 }
 
 // The factors of the velocity and dispersion height traits at the height
