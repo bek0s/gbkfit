@@ -139,7 +139,7 @@ gmodel_optical_depth(int x, int y, T pz, const T* opacity, const int* size)
 }
 
 // The opacity that the light of a voxel crosses, in each cube of opacity
-// (see DiskArgs::opacity): the optical depth of the voxels in front of it
+// (see GridArgs::opacity): the optical depth of the voxels in front of it
 // (front), and that of the absorbers of the voxel itself (own), which are
 // mixed uniformly with its emitters. Only the values of the cubes are set
 // (not zeroed first: the kernels without opacity would pay for it).
@@ -152,20 +152,20 @@ struct VoxelOpacity
 
 // The opacity of the voxel (x, y, z) (see VoxelOpacity)
 template<typename T> constexpr VoxelOpacity<T>
-gmodel_voxel_opacity(int x, int y, int z, const DiskArgs<T>& a)
+gmodel_voxel_opacity(int x, int y, int z, const GridArgs<T>& g)
 {
-    const long long nspat = 1LL * a.spat_size[0] * a.spat_size[1]
-            * a.spat_size[2];
+    const long long nspat = 1LL * g.spat_size[0] * g.spat_size[1]
+            * g.spat_size[2];
     VoxelOpacity<T> o;
-    for (int k = 0; k < a.nopacity; ++k)
+    for (int k = 0; k < g.nopacity; ++k)
     {
-        const T* opacity = a.opacity + k * nspat;
+        const T* opacity = g.opacity + k * nspat;
         o.front[k] = z > 0
                 ? opacity[index_3d_to_1d(
-                        x, y, z - 1, a.spat_size[0], a.spat_size[1])]
+                        x, y, z - 1, g.spat_size[0], g.spat_size[1])]
                 : T{0};
         o.own[k] = opacity[index_3d_to_1d(
-                x, y, z, a.spat_size[0], a.spat_size[1])] - o.front[k];
+                x, y, z, g.spat_size[0], g.spat_size[1])] - o.front[k];
     }
     return o;
 }
@@ -173,15 +173,15 @@ gmodel_voxel_opacity(int x, int y, int z, const DiskArgs<T>& a)
 // The opacity of a thin layer at the position pz along the line of sight
 // of the spaxel (x, y) (see gmodel_optical_depth): all of it in front
 template<typename T> constexpr VoxelOpacity<T>
-gmodel_layer_opacity(int x, int y, T pz, const DiskArgs<T>& a)
+gmodel_layer_opacity(int x, int y, T pz, const GridArgs<T>& g)
 {
-    const long long nspat = 1LL * a.spat_size[0] * a.spat_size[1]
-            * a.spat_size[2];
+    const long long nspat = 1LL * g.spat_size[0] * g.spat_size[1]
+            * g.spat_size[2];
     VoxelOpacity<T> o;
-    for (int k = 0; k < a.nopacity; ++k)
+    for (int k = 0; k < g.nopacity; ++k)
     {
         o.front[k] = gmodel_optical_depth(
-                x, y, pz, a.opacity + k * nspat, a.spat_size);
+                x, y, pz, g.opacity + k * nspat, g.spat_size);
         o.own[k] = 0;
     }
     return o;
@@ -189,7 +189,7 @@ gmodel_layer_opacity(int x, int y, T pz, const DiskArgs<T>& a)
 
 // The optical depth of the opacity o of n cubes in front of the light and
 // of its own voxel, at the wavelength of the light: ratios has the ratio
-// of each cube there (a row of DiskArgs::opacity_ratios)
+// of each cube there (a row of GridArgs::opacity_ratios)
 template<typename T> constexpr void
 gmodel_optical_depths(
         const VoxelOpacity<T>& o, int n, const T* ratios,
@@ -228,10 +228,10 @@ gmodel_attenuation(const VoxelOpacity<T>& o, int n, const T* ratios)
     return gmodel_transmission(tau_front, tau_own);
 }
 
-// Add the emission lines (see DiskArgs::lines) of light of the given flux,
+// Add the emission lines (see GridArgs::lines) of light of the given flux,
 // velocity and dispersion to the spectrum (x, y) of a spectral cube. The
 // opacity o of nopacity cubes (if not null) dims each line with its row of
-// ratios (see DiskArgs::opacity_ratios).
+// ratios (see GridArgs::opacity_ratios).
 template<auto AddFunT, typename T> void constexpr
 gmodel_scube_evaluate(
         T* scube, int x, int y, T rvalue, T vvalue, T dvalue,
@@ -257,6 +257,143 @@ gmodel_scube_evaluate(
                 spat_size_x, spat_size_y,
                 spec_size_z, spec_step, spec_zero);
     }
+}
+
+// Add the light of a point of the given density (rvalue), velocity and
+// dispersion to the pixel (x, y) of the image and to the spectrum (x, y) of
+// the spectral cube of g (those it has): its light after the opacity in
+// front of it (orvalue) to the image, and its lines dimmed by the opacity
+// o (if not null; see gmodel_scube_evaluate) to the spectral cube
+template<auto AddFunT, typename T> constexpr void
+gmodel_light_write(
+        int x, int y, T rvalue, T orvalue, T vvalue, T dvalue,
+        const VoxelOpacity<T>* o, const GridArgs<T>& g)
+{
+    if (g.image) {
+        gbkfit::gmodel_image_evaluate<AddFunT>(
+                g.image, x, y, orvalue * g.image_scale,
+                g.spat_size[0]);
+    }
+
+    if (g.scube) {
+        gbkfit::gmodel_scube_evaluate<AddFunT>(
+                g.scube, x, y, rvalue, vvalue, dvalue,
+                g.nlines, g.lines,
+                o, g.nopacity, g.opacity_ratios,
+                g.spat_size[0], g.spat_size[1],
+                g.spec_size,
+                g.spec_step,
+                g.spec_zero);
+    }
+}
+
+// Write the maps of the voxel idx of a smooth component, which no other
+// point of the component writes to: its density (rvalue) to rdata (times
+// rdata_scale, added to those of the other components) and rdata_cmp, its
+// density after the opacity in front of it (orvalue) to ordata and
+// ordata_cmp, and the means of its velocity and dispersion (of one value)
+// to vdata_cmp, ddata_cmp and vdweight_cmp (see GridArgs)
+template<typename T> constexpr void
+gmodel_maps_write(int idx, T rvalue, T orvalue, T vvalue, T dvalue,
+                  const GridArgs<T>& g)
+{
+    if (g.rdata) {
+        g.rdata[idx] += rvalue * g.rdata_scale;
+    }
+    if (g.rdata_cmp) {
+        g.rdata_cmp[idx] = rvalue;
+    }
+    if (g.ordata) {
+        g.ordata[idx] += orvalue;
+    }
+    if (g.ordata_cmp) {
+        g.ordata_cmp[idx] = orvalue;
+    }
+    if (g.vdata_cmp) {
+        g.vdata_cmp[idx] = std::abs(rvalue) * vvalue;
+    }
+    if (g.ddata_cmp) {
+        g.ddata_cmp[idx] = std::abs(rvalue) * dvalue;
+    }
+    if (g.vdweight_cmp) {
+        g.vdweight_cmp[idx] = std::abs(rvalue);
+    }
+}
+
+// Write the fields of the voxel idx of a smooth volume (see
+// FieldsArgs::fields): its light j (rvalue), velocity v and dispersion s
+template<typename T> constexpr void
+gmodel_volume_fields_write(
+        int idx, T rvalue, T vvalue, T dvalue,
+        const GridArgs<T>& g, const FieldsArgs<T>& f)
+{
+    const long long nspat = 1LL * g.spat_size[0] * g.spat_size[1]
+            * g.spat_size[2];
+    f.fields[idx] = rvalue;
+    f.fields[nspat + idx] = vvalue;
+    f.fields[2 * nspat + idx] = dvalue;
+}
+
+// Whether every selection trait of the set spt keeps the point (x, y, r,
+// theta) of the plane of a component, in the ring rnidx (a point is kept
+// only if every trait selects it)
+template<typename T> constexpr bool
+gmodel_selected(
+        const TraitSet<T>& spt,
+        int rnidx, const T* rnodes, int nrnodes,
+        T x, T y, T r, T theta)
+{
+    T values[TRAIT_NUM_MAX] = {0};
+    p_traits<sp_trait<T>>(
+            values,
+            spt.n, spt.uids,
+            spt.cvalues, spt.ccounts,
+            spt.pvalues, spt.pcounts,
+            rnidx, rnodes, nrnodes,
+            x, y, r, theta);
+    for (int i = 0; i < spt.n; ++i)
+        if (!values[i])
+            return false;
+    return true;
+}
+
+// The sum of the polar traits of the set pt at the point (x, y, r, theta)
+// of the plane of a component, in the ring rnidx, each times its height
+// trait of the set ht at the height |h| (or alone without height traits:
+// a thin component). project(values) transforms the values of the polar
+// traits first (e.g. the speeds of the velocity traits onto the line of
+// sight; see vp_disk_project_traits).
+template<auto PTraitFunT, auto HTraitFunT, typename T, typename ProjectT>
+constexpr T
+gmodel_traits_sum(
+        const TraitSet<T>& pt, const TraitSet<T>& ht,
+        int rnidx, const T* rnodes, int nrnodes,
+        T x, T y, T r, T theta, T h, ProjectT project)
+{
+    T pvalues[TRAIT_NUM_MAX] = {0};
+    T hvalues[TRAIT_NUM_MAX] = {0};
+    p_traits<PTraitFunT>(
+            pvalues,
+            pt.n, pt.uids,
+            pt.cvalues, pt.ccounts,
+            pt.pvalues, pt.pcounts,
+            rnidx, rnodes, nrnodes,
+            x, y, r, theta);
+    project(pvalues);
+    if (ht.uids)
+    {
+        h_traits<HTraitFunT>(
+                hvalues,
+                pt.n, ht.uids,
+                ht.cvalues, ht.ccounts,
+                ht.pvalues, ht.pcounts,
+                rnidx, rnodes, nrnodes,
+                r, std::abs(h));
+    }
+    T sum = 0;
+    for (int i = 0; i < pt.n; ++i)
+        sum += pvalues[i] * (ht.uids ? hvalues[i] : 1);
+    return sum;
 }
 
 template<typename T> constexpr void
@@ -485,33 +622,33 @@ ring_info(
 // The number of planes of line opacity in the fields of a thick disk (see
 // FieldsArgs::fields): one for each line with line opacity, none without
 template<typename T> constexpr int
-gmodel_fields_lines(const DiskArgs<T>& a, const FieldsArgs<T>& f)
+gmodel_fields_lines(const DiskArgs<T>& a, const GridArgs<T>& g)
 {
-    return f.opt.uids ? a.nlines : 0;
+    return a.opt.uids ? g.nlines : 0;
 }
 
-// The coefficient of the line opacity of each line (see FieldsArgs::opt)
+// The coefficient of the line opacity of each line (see DiskArgs::opt)
 // at a point of the plane of the disk, in the ring rnidx, into
 // coefficients (one for each line; there are at most TRAIT_NUM_MAX, one
 // for each trait)
 template<typename T> constexpr void
 gmodel_line_opacity(
         T* coefficients, int rnidx, T x, T y, T r, T theta,
-        const DiskArgs<T>& a, const FieldsArgs<T>& f)
+        const DiskArgs<T>& a, int nlines)
 {
     T values[TRAIT_NUM_MAX] = {0};
     p_traits<rp_trait<T>>(
             values,
-            f.opt.n, f.opt.uids,
-            f.opt.cvalues, f.opt.ccounts,
-            f.opt.pvalues, f.opt.pcounts,
+            a.opt.n, a.opt.uids,
+            a.opt.cvalues, a.opt.ccounts,
+            a.opt.pvalues, a.opt.pcounts,
             rnidx, a.rnodes, a.nrnodes,
             x, y, r, theta);
-    for (int l = 0; l < a.nlines; ++l)
+    for (int l = 0; l < nlines; ++l)
         coefficients[l] = 0;
-    for (int i = 0; i < f.opt.n; ++i)
-        if (f.opt_rows[i] >= 0)
-            coefficients[f.opt_rows[i]] += values[i];
+    for (int i = 0; i < a.opt.n; ++i)
+        if (a.opt_rows[i] >= 0)
+            coefficients[a.opt_rows[i]] += values[i];
 }
 
 // The velocity that the moments of the clouds of a Monte Carlo disk are
@@ -525,9 +662,9 @@ gmodel_fields_vref(const DiskArgs<T>& a)
 }
 
 // Evaluate the cloud ci of a Monte Carlo disk. HasOpacity is whether
-// opacity dims the disk (a.opacity is not null), HasFields whether it
+// opacity dims the disk (g.opacity is not null), HasFields whether it
 // writes the fields of the march instead of its light (f.fields is not
-// null), and HasLineOpacity whether they have its line opacity (f.opt has
+// null), and HasLineOpacity whether they have its line opacity (a.opt has
 // traits): template parameters, so that the other kernels have none of
 // their code (nor its registers and local memory, on a GPU).
 template<
@@ -535,13 +672,9 @@ template<
         bool HasLineOpacity, typename T>
 constexpr void
 gmodel_mcdisk_evaluate_cloud(
-        RNG<T>& rng, int ci, const DiskArgs<T>& a, const MCDiskArgs<T>& mc,
-        const FieldsArgs<T>& f)
+        RNG<T>& rng, int ci, const DiskArgs<T>& a, const GridArgs<T>& g,
+        const MCDiskArgs<T>& mc, const FieldsArgs<T>& f)
 {
-    // This is a placeholder in case we decide to explicitly
-    // add a Monte Carlo based thin disk in the future.
-    const bool is_thin = false;
-
     int rnidx=0, tidx=0;
     const T* rpt_cptr = a.rpt.cvalues;
     const T* rpt_pptr = a.rpt.pvalues;
@@ -550,7 +683,6 @@ gmodel_mcdisk_evaluate_cloud(
     T xd=0, yd=0, zd=0, rd=0, theta=0, sign=1;
     T vsysi=0, xposi=0, yposi=0, posai=0, incli=0;
     T ptvalues[TRAIT_NUM_MAX] = {0};
-    T htvalues[TRAIT_NUM_MAX] = {0};
     T rvalue=0, vvalue=0, dvalue=0, zvalue=0;
 
     // Find the pool of the cloud; its clouds share its flux
@@ -585,7 +717,7 @@ gmodel_mcdisk_evaluate_cloud(
     rvalue *= sign;
 
     // Convert to surface brightness
-    rvalue /= a.spat_step[0] * a.spat_step[1];
+    rvalue /= g.spat_step[0] * g.spat_step[1];
 
     // Calculate cartesian coordinates on disk plane.
     xd = rd * std::cos(theta);
@@ -600,21 +732,8 @@ gmodel_mcdisk_evaluate_cloud(
     }
 
     // Selection traits
-    if (a.spt.uids)
-    {
-        p_traits<sp_trait<T>>(
-                ptvalues,
-                a.spt.n, a.spt.uids,
-                a.spt.cvalues, a.spt.ccounts,
-                a.spt.pvalues, a.spt.pcounts,
-                rnidx, a.rnodes, a.nrnodes,
-                xd, yd, rd, theta);
-
-        // A point is kept only if every trait selects it
-        for (int i = 0; i < a.spt.n; ++i)
-            if (!ptvalues[i])
-                return;
-    }
+    if (!gmodel_selected(a.spt, rnidx, a.rnodes, a.nrnodes, xd, yd, rd, theta))
+        return;
 
     // Density height trait: the height of the cloud above the midplane (a
     // cloud of a profile that is none, at a NaN height, is discarded below)
@@ -654,18 +773,18 @@ gmodel_mcdisk_evaluate_cloud(
     transform_cpos_posa_incl_inverse(xn, yn, zn, xposi, yposi, posai, incli);
 
     // world-to-image transform
-    transform_rh_rotate_z(xn, yn, xn, yn, -a.spat_rota * DEG_TO_RAD<T>);
+    transform_rh_rotate_z(xn, yn, xn, yn, -g.spat_rota * DEG_TO_RAD<T>);
 
     // The voxel of the cloud. Discard the clouds outside the cube, while
     // their positions are floats: converting one out of the range of int
     // (e.g. of a heavy-tailed height), or NaN, is undefined.
-    const T px = std::rint((xn - a.spat_zero[0]) / a.spat_step[0]);
-    const T py = std::rint((yn - a.spat_zero[1]) / a.spat_step[1]);
-    const T pz = std::rint((zn - a.spat_zero[2]) / a.spat_step[2])
-            - a.slab_zero;
-    if (!(px >= 0 && px < a.spat_size[0] &&
-          py >= 0 && py < a.spat_size[1] &&
-          pz >= 0 && pz < a.spat_size[2])) {
+    const T px = std::rint((xn - g.spat_zero[0]) / g.spat_step[0]);
+    const T py = std::rint((yn - g.spat_zero[1]) / g.spat_step[1]);
+    const T pz = std::rint((zn - g.spat_zero[2]) / g.spat_step[2])
+            - g.slab_zero;
+    if (!(px >= 0 && px < g.spat_size[0] &&
+          py >= 0 && py < g.spat_size[1] &&
+          pz >= 0 && pz < g.spat_size[2])) {
         return;
     }
     const int x = px;
@@ -673,124 +792,73 @@ gmodel_mcdisk_evaluate_cloud(
     const int z = pz;
 
     // Velocity traits: their speeds, projected on the line of sight
-    if (a.vpt.uids)
-    {
-        p_traits<vp_trait<T>>(
-                ptvalues,
-                a.vpt.n, a.vpt.uids,
-                a.vpt.cvalues, a.vpt.ccounts,
-                a.vpt.pvalues, a.vpt.pcounts,
-                rnidx, a.rnodes, a.nrnodes,
-                xd, yd, rd, theta);
-        vp_disk_project_traits(
-                ptvalues, a.vpt.n, a.vpt_directions, rd, theta, incli);
-    }
-    if (a.vht.uids)
-    {
-        h_traits<vh_trait<T>>(
-                htvalues,
-                a.vpt.n, a.vht.uids,
-                a.vht.cvalues, a.vht.ccounts,
-                a.vht.pvalues, a.vht.pcounts,
-                rnidx, a.rnodes, a.nrnodes,
-                rd, std::abs(height));
-    }
-    for (int i = 0; i < a.vpt.n; ++i)
-        vvalue += ptvalues[i] * (is_thin ? 1 : htvalues[i]);
+    vvalue = gmodel_traits_sum<vp_trait<T>, vh_trait<T>>(
+            a.vpt, a.vht, rnidx, a.rnodes, a.nrnodes,
+            xd, yd, rd, theta, height,
+            [&](T* values) {
+                vp_disk_project_traits(
+                        values, a.vpt.n, a.vpt_directions, rd, theta, incli);
+            });
 
     // Apply systemic velocity
     vvalue += vsysi;
 
     // Dispersion traits
-    if (a.dpt.uids)
-    {
-        p_traits<dp_trait<T>>(
-                ptvalues,
-                a.dpt.n, a.dpt.uids,
-                a.dpt.cvalues, a.dpt.ccounts,
-                a.dpt.pvalues, a.dpt.pcounts,
-                rnidx, a.rnodes, a.nrnodes,
-                xd, yd, rd, theta);
-    }
-    if (a.dht.uids)
-    {
-        h_traits<dh_trait<T>>(
-                htvalues,
-                a.dpt.n, a.dht.uids,
-                a.dht.cvalues, a.dht.ccounts,
-                a.dht.pvalues, a.dht.pcounts,
-                rnidx, a.rnodes, a.nrnodes,
-                rd, std::abs(height));
-    }
-    for (int i = 0; i < a.dpt.n; ++i)
-        dvalue += ptvalues[i] * (is_thin ? 1 : htvalues[i]);
+    dvalue = gmodel_traits_sum<dp_trait<T>, dh_trait<T>>(
+            a.dpt, a.dht, rnidx, a.rnodes, a.nrnodes,
+            xd, yd, rd, theta, height, [](T*) {});
 
     // Ensure positive dispersion
     // Ideally, we want the caller to never use parameter values that result in
-    // a negative dispersion. Unfortunatelly, this is hard to achieve.
+    // a negative dispersion. Unfortunately, this is hard to achieve.
     // Forcing a positive dispersion is a reasonable solution.
     dvalue = std::abs(dvalue);
-
 
     // The opacity in front of the light, and the light that it lets
     // through (that of the image, or of the first line)
     VoxelOpacity<T> opacity;
     if (HasOpacity) {
-        opacity = gmodel_voxel_opacity(x, y, z, a);
+        opacity = gmodel_voxel_opacity(x, y, z, g);
     }
     const T orvalue = HasOpacity
             ? rvalue * gmodel_attenuation(
-                    opacity, a.nopacity, a.opacity_ratios)
+                    opacity, g.nopacity, g.opacity_ratios)
             : rvalue;
+    gmodel_light_write<AtomicAddFunT>(
+            x, y, rvalue, orvalue, vvalue, dvalue,
+            HasOpacity ? &opacity : nullptr, g);
 
-    if (a.image) {
-        gbkfit::gmodel_image_evaluate<AtomicAddFunT>(
-                a.image, x, y, orvalue * a.image_scale,
-                a.spat_size[0]);
-    }
+    const int idx = index_3d_to_1d(x, y, z, g.spat_size[0], g.spat_size[1]);
 
-    if (a.scube) {
-        gbkfit::gmodel_scube_evaluate<AtomicAddFunT>(
-                a.scube, x, y, rvalue, vvalue, dvalue,
-                a.nlines, a.lines,
-                HasOpacity ? &opacity : nullptr, a.nopacity, a.opacity_ratios,
-                a.spat_size[0], a.spat_size[1],
-                a.spec_size,
-                a.spec_step,
-                a.spec_zero);
+    if (g.rdata) {
+        AtomicAddFunT(&g.rdata[idx], rvalue * g.rdata_scale);
     }
-
-    const int idx = index_3d_to_1d(x, y, z, a.spat_size[0], a.spat_size[1]);
-
-    if (a.rdata) {
-        AtomicAddFunT(&a.rdata[idx], rvalue * a.rdata_scale);
+    if (g.rdata_cmp) {
+        AtomicAddFunT(&g.rdata_cmp[idx], rvalue);
     }
-    if (a.rdata_cmp) {
-        AtomicAddFunT(&a.rdata_cmp[idx], rvalue);
+    if (g.ordata) {
+        AtomicAddFunT(&g.ordata[idx], orvalue);
     }
-    if (a.ordata) {
-        AtomicAddFunT(&a.ordata[idx], orvalue);
-    }
-    if (a.ordata_cmp) {
-        AtomicAddFunT(&a.ordata_cmp[idx], orvalue);
+    if (g.ordata_cmp) {
+        AtomicAddFunT(&g.ordata_cmp[idx], orvalue);
     }
     // The clouds of a voxel add to the means of its velocity and dispersion
-    if (a.vdata_cmp) {
-        AtomicAddFunT(&a.vdata_cmp[idx], std::abs(rvalue) * vvalue);
+    if (g.vdata_cmp) {
+        AtomicAddFunT(&g.vdata_cmp[idx], std::abs(rvalue) * vvalue);
     }
-    if (a.ddata_cmp) {
-        AtomicAddFunT(&a.ddata_cmp[idx], std::abs(rvalue) * dvalue);
+    if (g.ddata_cmp) {
+        AtomicAddFunT(&g.ddata_cmp[idx], std::abs(rvalue) * dvalue);
     }
-    if (a.vdweight_cmp) {
-        AtomicAddFunT(&a.vdweight_cmp[idx], std::abs(rvalue));
+    if (g.vdweight_cmp) {
+        AtomicAddFunT(&g.vdweight_cmp[idx], std::abs(rvalue));
     }
     // The moments of the clouds of the voxel (see
     // gmodel_mcdisk_fields_moments), and their light times the coefficient
     // of each line
     if (HasFields) {
-        const long long nspat = 1LL * a.spat_size[0] * a.spat_size[1]
-                * a.spat_size[2];
-        const int nk = HasLineOpacity ? a.nlines : 0;
+        const long long nspat = 1LL * g.spat_size[0] * g.spat_size[1]
+                * g.spat_size[2];
+        const int nk = HasLineOpacity ? g.nlines : 0;
         const T weight = std::abs(rvalue);
         const T dv = vvalue - gmodel_fields_vref(a);
         AtomicAddFunT(&f.fields[idx], rvalue);
@@ -801,7 +869,7 @@ gmodel_mcdisk_evaluate_cloud(
         if (HasLineOpacity) {
             T coefficients[TRAIT_NUM_MAX];
             gmodel_line_opacity(
-                    coefficients, rnidx, xd, yd, rd, theta, a, f);
+                    coefficients, rnidx, xd, yd, rd, theta, a, g.nlines);
             for (int l = 0; l < nk; ++l) {
                 AtomicAddFunT(
                         &f.fields[(3 + l) * nspat + idx],
@@ -821,13 +889,14 @@ gmodel_mcdisk_evaluate_cloud(
 // without clouds gets 0.
 template<typename T> constexpr void
 gmodel_mcdisk_fields_moments(
-        long long idx, const DiskArgs<T>& a, const FieldsArgs<T>& f)
+        long long idx, const DiskArgs<T>& a, const GridArgs<T>& g,
+        const FieldsArgs<T>& f)
 {
-    const long long nspat = 1LL * a.spat_size[0] * a.spat_size[1]
-            * a.spat_size[2];
+    const long long nspat = 1LL * g.spat_size[0] * g.spat_size[1]
+            * g.spat_size[2];
     T* v = &f.fields[nspat + idx];
     T* s = &f.fields[2 * nspat + idx];
-    const T weight = f.fields[(3 + gmodel_fields_lines(a, f)) * nspat + idx];
+    const T weight = f.fields[(3 + gmodel_fields_lines(a, g)) * nspat + idx];
     if (weight == 0) {
         *v = *s = 0;
         return;
@@ -841,9 +910,9 @@ gmodel_mcdisk_fields_moments(
 // each voxel of a thick disk, and one for a thin disk (see
 // gmodel_smdisk_evaluate_spaxel)
 template<typename T> constexpr int
-gmodel_smdisk_size_z(const DiskArgs<T>& a)
+gmodel_smdisk_size_z(const DiskArgs<T>& a, const GridArgs<T>& g)
 {
-    return a.rht.uids ? a.spat_size[2] : 1;
+    return a.rht.uids ? g.spat_size[2] : 1;
 }
 
 // Evaluate the voxel (x, y, z) of a thick smooth disk, or the spaxel (x, y)
@@ -862,20 +931,21 @@ template<
         typename T>
 constexpr void
 gmodel_smdisk_evaluate_spaxel(
-        int x, int y, int z, const DiskArgs<T>& a, const FieldsArgs<T>& f)
+        int x, int y, int z, const DiskArgs<T>& a, const GridArgs<T>& g,
+        const FieldsArgs<T>& f)
 {
     bool is_thin = a.rht.uids == nullptr;
-    bool has_depth = a.spat_step[2] != 0;
+    bool has_depth = g.spat_step[2] != 0;
 
     T vsysi=0, xposi=0, yposi=0, posai=0, incli=0;
     T xn=x, yn=y, zn=z, rn=0, theta=0;
     int rnidx = -1;
 
     // image-to-world transform
-    xn = a.spat_zero[0] + x * a.spat_step[0];
-    yn = a.spat_zero[1] + y * a.spat_step[1];
-    zn = a.spat_zero[2] + (z + a.slab_zero) * a.spat_step[2];
-    transform_rh_rotate_z(xn, yn, xn, yn, a.spat_rota * DEG_TO_RAD<T>);
+    xn = g.spat_zero[0] + x * g.spat_step[0];
+    yn = g.spat_zero[1] + y * g.spat_step[1];
+    zn = g.spat_zero[2] + (z + g.slab_zero) * g.spat_step[2];
+    transform_rh_rotate_z(xn, yn, xn, yn, g.spat_rota * DEG_TO_RAD<T>);
 
     // If the disk is loose or tilted, we need to calculate the pixel's
     // radial node index and radius now.
@@ -914,7 +984,7 @@ gmodel_smdisk_evaluate_spaxel(
     // the depth yn * sin(incl)
     T pz = z;
     if (is_thin && has_depth) {
-        pz = (yn * std::sin(incli) - a.spat_zero[2]) / a.spat_step[2];
+        pz = (yn * std::sin(incli) - g.spat_zero[2]) / g.spat_step[2];
     }
 
     // If the disk is not loose or tilted, we need to calculate the pixel's
@@ -930,25 +1000,11 @@ gmodel_smdisk_evaluate_spaxel(
 
     // These are needed for trait evaluation
     T ptvalues[TRAIT_NUM_MAX] = {0};
-    T htvalues[TRAIT_NUM_MAX] = {0};
     T rvalue=0, vvalue=0, dvalue=0, zvalue=0;
 
     // Selection traits
-    if (a.spt.uids)
-    {
-        p_traits<sp_trait<T>>(
-                ptvalues,
-                a.spt.n, a.spt.uids,
-                a.spt.cvalues, a.spt.ccounts,
-                a.spt.pvalues, a.spt.pcounts,
-                rnidx, a.rnodes, a.nrnodes,
-                xn, yn, rn, theta);
-
-        // A point is kept only if every trait selects it
-        for (int i = 0; i < a.spt.n; ++i)
-            if (!ptvalues[i])
-                return;
-    }
+    if (!gmodel_selected(a.spt, rnidx, a.rnodes, a.nrnodes, xn, yn, rn, theta))
+        return;
 
     // Vertical distortion traits
     if (a.zpt.uids)
@@ -970,30 +1026,11 @@ gmodel_smdisk_evaluate_spaxel(
     }
 
     // Density traits
-    if (a.rpt.uids)
-    {
-        p_traits<rp_trait<T>>(
-                ptvalues,
-                a.rpt.n, a.rpt.uids,
-                a.rpt.cvalues, a.rpt.ccounts,
-                a.rpt.pvalues, a.rpt.pcounts,
-                rnidx, a.rnodes, a.nrnodes,
-                xn, yn, rn, theta);
-    }
-    if (a.rht.uids)
-    {
-        h_traits<rh_trait<T>>(
-                htvalues,
-                a.rpt.n, a.rht.uids,
-                a.rht.cvalues, a.rht.ccounts,
-                a.rht.pvalues, a.rht.pcounts,
-                rnidx, a.rnodes, a.nrnodes,
-                rn, std::abs(zn));
-    }
-    for (int i = 0; i < a.rpt.n; ++i)
-        rvalue += ptvalues[i] * (is_thin ? 1 : htvalues[i]);
+    rvalue = gmodel_traits_sum<rp_trait<T>, rh_trait<T>>(
+            a.rpt, a.rht, rnidx, a.rnodes, a.nrnodes,
+            xn, yn, rn, theta, zn, [](T*) {});
 
-    // Discart pixels with zero density
+    // Discard pixels with zero density
     if (!rvalue) {
         return;
     }
@@ -1007,68 +1044,31 @@ gmodel_smdisk_evaluate_spaxel(
 
     // Thick disk requires integration along the spatial z axis
     if (!is_thin) {
-        rvalue *= a.spat_step[2];
+        rvalue *= g.spat_step[2];
     }
 
     // Velocity traits: their speeds, projected on the line of sight
-    if (a.vpt.uids)
-    {
-        p_traits<vp_trait<T>>(
-                ptvalues,
-                a.vpt.n, a.vpt.uids,
-                a.vpt.cvalues, a.vpt.ccounts,
-                a.vpt.pvalues, a.vpt.pcounts,
-                rnidx, a.rnodes, a.nrnodes,
-                xn, yn, rn, theta);
-        vp_disk_project_traits(
-                ptvalues, a.vpt.n, a.vpt_directions, rn, theta, incli);
-    }
-    if (a.vht.uids)
-    {
-        h_traits<vh_trait<T>>(
-                htvalues,
-                a.vpt.n, a.vht.uids,
-                a.vht.cvalues, a.vht.ccounts,
-                a.vht.pvalues, a.vht.pcounts,
-                rnidx, a.rnodes, a.nrnodes,
-                rn, std::abs(zn));
-    }
-    for (int i = 0; i < a.vpt.n; ++i)
-        vvalue += ptvalues[i] * (is_thin ? 1 : htvalues[i]);
+    vvalue = gmodel_traits_sum<vp_trait<T>, vh_trait<T>>(
+            a.vpt, a.vht, rnidx, a.rnodes, a.nrnodes,
+            xn, yn, rn, theta, zn,
+            [&](T* values) {
+                vp_disk_project_traits(
+                        values, a.vpt.n, a.vpt_directions, rn, theta, incli);
+            });
 
     // Apply systemic velocity
     vvalue += vsysi;
 
     // Dispersion traits
-    if (a.dpt.uids)
-    {
-        p_traits<dp_trait<T>>(
-                ptvalues,
-                a.dpt.n, a.dpt.uids,
-                a.dpt.cvalues, a.dpt.ccounts,
-                a.dpt.pvalues, a.dpt.pcounts,
-                rnidx, a.rnodes, a.nrnodes,
-                xn, yn, rn, theta);
-    }
-    if (a.dht.uids)
-    {
-        h_traits<dh_trait<T>>(
-                htvalues,
-                a.dpt.n, a.dht.uids,
-                a.dht.cvalues, a.dht.ccounts,
-                a.dht.pvalues, a.dht.pcounts,
-                rnidx, a.rnodes, a.nrnodes,
-                rn, std::abs(zn));
-    }
-    for (int i = 0; i < a.dpt.n; ++i)
-        dvalue += ptvalues[i] * (is_thin ? 1 : htvalues[i]);
+    dvalue = gmodel_traits_sum<dp_trait<T>, dh_trait<T>>(
+            a.dpt, a.dht, rnidx, a.rnodes, a.nrnodes,
+            xn, yn, rn, theta, zn, [](T*) {});
 
     // Ensure positive dispersion
     // Ideally, we want the caller to never use parameter values that result in
-    // a negative dispersion. Unfortunatelly, this is hard to achieve.
+    // a negative dispersion. Unfortunately, this is hard to achieve.
     // Forcing a positive dispersion is a reasonable solution.
     dvalue = std::abs(dvalue);
-
 
     // The opacity in front of the light (that of a thin disk is a layer,
     // which only the opacity in front of it dims), and the light that it
@@ -1076,36 +1076,22 @@ gmodel_smdisk_evaluate_spaxel(
     VoxelOpacity<T> opacity;
     if (HasOpacity) {
         opacity = is_thin
-                ? gmodel_layer_opacity(x, y, pz, a)
-                : gmodel_voxel_opacity(x, y, z, a);
+                ? gmodel_layer_opacity(x, y, pz, g)
+                : gmodel_voxel_opacity(x, y, z, g);
     }
     const T orvalue = HasOpacity
             ? rvalue * gmodel_attenuation(
-                    opacity, a.nopacity, a.opacity_ratios)
+                    opacity, g.nopacity, g.opacity_ratios)
             : rvalue;
-
-    if (a.image) {
-        gbkfit::gmodel_image_evaluate<AddFunT>(
-                a.image, x, y, orvalue * a.image_scale,
-                a.spat_size[0]);
-    }
-
-    if (a.scube) {
-        gbkfit::gmodel_scube_evaluate<AddFunT>(
-                a.scube, x, y, rvalue, vvalue, dvalue,
-                a.nlines, a.lines,
-                HasOpacity ? &opacity : nullptr, a.nopacity, a.opacity_ratios,
-                a.spat_size[0], a.spat_size[1],
-                a.spec_size,
-                a.spec_step,
-                a.spec_zero);
-    }
+    gmodel_light_write<AddFunT>(
+            x, y, rvalue, orvalue, vvalue, dvalue,
+            HasOpacity ? &opacity : nullptr, g);
 
     // The fields of the layer of a thin disk, wherever its plane crosses
     // the line of sight (see FieldsArgs::fields)
     if (HasFields && is_thin) {
-        const long long nimage = 1LL * a.spat_size[0] * a.spat_size[1];
-        const int idx = index_2d_to_1d(x, y, a.spat_size[0]);
+        const long long nimage = 1LL * g.spat_size[0] * g.spat_size[1];
+        const int idx = index_2d_to_1d(x, y, g.spat_size[0]);
         f.fields[idx] = rvalue;
         f.fields[nimage + idx] = vvalue;
         f.fields[2 * nimage + idx] = dvalue;
@@ -1116,47 +1102,24 @@ gmodel_smdisk_evaluate_spaxel(
     // The position is checked while it is a float: converting one out of
     // the range of int, or NaN, is undefined.
     const T vz = std::rint(pz);
-    if (!(vz >= 0 && vz < a.spat_size[2])) {
+    if (!(vz >= 0 && vz < g.spat_size[2])) {
         return;
     }
     const int idx = index_3d_to_1d(
-            x, y, int(vz), a.spat_size[0], a.spat_size[1]);
+            x, y, int(vz), g.spat_size[0], g.spat_size[1]);
+    gmodel_maps_write(idx, rvalue, orvalue, vvalue, dvalue, g);
 
-    if (a.rdata) {
-        a.rdata[idx] += rvalue * a.rdata_scale;
-    }
-    if (a.rdata_cmp) {
-        a.rdata_cmp[idx] = rvalue;
-    }
-    if (a.ordata) {
-        a.ordata[idx] += orvalue;
-    }
-    if (a.ordata_cmp) {
-        a.ordata_cmp[idx] = orvalue;
-    }
-    // The means of the velocity and dispersion of the voxel (of one value)
-    if (a.vdata_cmp) {
-        a.vdata_cmp[idx] = std::abs(rvalue) * vvalue;
-    }
-    if (a.ddata_cmp) {
-        a.ddata_cmp[idx] = std::abs(rvalue) * dvalue;
-    }
-    if (a.vdweight_cmp) {
-        a.vdweight_cmp[idx] = std::abs(rvalue);
-    }
     // The fields of the voxel of a thick disk, and its light times the
     // coefficient of each line
     if (HasFields && !is_thin) {
-        const long long nspat = 1LL * a.spat_size[0] * a.spat_size[1]
-                * a.spat_size[2];
-        f.fields[idx] = rvalue;
-        f.fields[nspat + idx] = vvalue;
-        f.fields[2 * nspat + idx] = dvalue;
+        gmodel_volume_fields_write(idx, rvalue, vvalue, dvalue, g, f);
         if (HasLineOpacity) {
+            const long long nspat = 1LL * g.spat_size[0] * g.spat_size[1]
+                    * g.spat_size[2];
             T coefficients[TRAIT_NUM_MAX];
             gmodel_line_opacity(
-                    coefficients, rnidx, xn, yn, rn, theta, a, f);
-            for (int l = 0; l < a.nlines; ++l)
+                    coefficients, rnidx, xn, yn, rn, theta, a, g.nlines);
+            for (int l = 0; l < g.nlines; ++l)
                 f.fields[(3 + l) * nspat + idx] = rvalue * coefficients[l];
         }
     }

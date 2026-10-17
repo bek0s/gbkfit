@@ -131,7 +131,8 @@ struct GModel
             T rdata_scale, T image_scale)
     {
         const typename Kernels::DeviceScope scope(disk.rnodes.device_id());
-        const auto args = make_args(
+        const auto a = make_disk_args(disk);
+        const auto g = make_grid_args(
                 disk, spat_size, spat_step, spat_zero, spat_rota, slab_zero,
                 spec_size, spec_step, spec_zero, lines,
                 opacity, opacity_ratios,
@@ -140,7 +141,7 @@ struct GModel
                 rdata_scale, image_scale);
         // (a thick disk writes three fields: j, v and s)
         Kernels::gmodel_smdisk_evaluate(
-                args, make_fields_args(disk, args, fields, 3));
+                a, g, make_fields_args(disk, a, g, fields, 3));
     }
 
     static void
@@ -163,7 +164,8 @@ struct GModel
             T rdata_scale, T image_scale)
     {
         const typename Kernels::DeviceScope scope(disk.rnodes.device_id());
-        const auto args = make_args(
+        const auto a = make_disk_args(disk);
+        const auto g = make_grid_args(
                 disk, spat_size, spat_step, spat_zero, spat_rota, slab_zero,
                 spec_size, spec_step, spec_zero, lines,
                 opacity, opacity_ratios,
@@ -174,8 +176,8 @@ struct GModel
                 "a Monte Carlo disk needs density height traits");
         // (with the scratch of the moments of the clouds, a Monte Carlo
         // disk writes four fields)
-        const auto fields_args = make_fields_args(disk, args, fields, 4);
-        require(has_analytical_integral.shape(0) == size_t(args.rpt.n),
+        const auto f = make_fields_args(disk, a, g, fields, 4);
+        require(has_analytical_integral.shape(0) == size_t(a.rpt.n),
                 "has_analytical_integral needs one value for each density "
                 "trait");
         require(cloud_flux.shape(0) == ncloudscsum.shape(0),
@@ -187,7 +189,7 @@ struct GModel
         mc.ncloudscsum = ncloudscsum.data();
         mc.ncloudscsum_len = int(ncloudscsum.shape(0));
         mc.has_analytical_integral = has_analytical_integral.data();
-        Kernels::gmodel_mcdisk_evaluate(args, mc, fields_args);
+        Kernels::gmodel_mcdisk_evaluate(a, g, mc, f);
     }
 
     // Turn the optical depth of each voxel of an opacity cube (in (x, y, z)
@@ -575,22 +577,9 @@ private:
         return data(disk.vpt_directions);
     }
 
+    // The arguments of a disk (see gbkfit::DiskArgs)
     static DiskArgs<T>
-    make_args(
-            const Disk& disk,
-            std::array<int, 3> spat_size,
-            std::array<T, 3> spat_step,
-            std::array<T, 3> spat_zero,
-            T spat_rota, int slab_zero,
-            int spec_size, T spec_step, T spec_zero,
-            const Lines& lines,
-            const ConstData& opacity, const Ratios& opacity_ratios,
-            const Data& image, const Data& scube,
-            const Data& rdata, const Data& rdata_cmp,
-            const Data& ordata, const Data& ordata_cmp,
-            const Data& vdata_cmp, const Data& ddata_cmp,
-            const Data& vdweight_cmp,
-            T rdata_scale, T image_scale)
+    make_disk_args(const Disk& disk)
     {
         DiskArgs<T> a;
         a.loose = disk.loose;
@@ -641,26 +630,54 @@ private:
                               && (!disk.dpt || disk.dht)),
                 "a thick disk (with density height traits) needs the height "
                 "traits of its velocity and dispersion traits");
+        a.opt = traits(disk.opt);
+        require(!disk.opt || (disk.opt_rows.is_valid()
+                              && disk.opt_rows.shape(0) == size_t(a.opt.n)),
+                "the traits of line opacity (opt) need the row of the line "
+                "of each (opt_rows)");
+        a.opt_rows = data(disk.opt_rows);
+        return a;
+    }
 
+    // The grid that a disk is evaluated on, its lines, the opacity that
+    // dims it and the outputs (see gbkfit::GridArgs)
+    static GridArgs<T>
+    make_grid_args(
+            const Disk& disk,
+            std::array<int, 3> spat_size,
+            std::array<T, 3> spat_step,
+            std::array<T, 3> spat_zero,
+            T spat_rota, int slab_zero,
+            int spec_size, T spec_step, T spec_zero,
+            const Lines& lines,
+            const ConstData& opacity, const Ratios& opacity_ratios,
+            const Data& image, const Data& scube,
+            const Data& rdata, const Data& rdata_cmp,
+            const Data& ordata, const Data& ordata_cmp,
+            const Data& vdata_cmp, const Data& ddata_cmp,
+            const Data& vdweight_cmp,
+            T rdata_scale, T image_scale)
+    {
+        GridArgs<T> g;
         for (int i = 0; i < 3; ++i) {
-            a.spat_size[i] = spat_size[i];
-            a.spat_step[i] = spat_step[i];
-            a.spat_zero[i] = spat_zero[i];
+            g.spat_size[i] = spat_size[i];
+            g.spat_step[i] = spat_step[i];
+            g.spat_zero[i] = spat_zero[i];
         }
-        a.spat_rota = spat_rota;
-        a.slab_zero = slab_zero;
+        g.spat_rota = spat_rota;
+        g.slab_zero = slab_zero;
         require(slab_zero >= 0 && (disk.rht || slab_zero == 0),
                 "slab_zero must be at least 0, and 0 for a thin disk, which "
                 "is evaluated on the whole depth axis");
-        a.spec_size = spec_size;
-        a.spec_step = spec_step;
-        a.spec_zero = spec_zero;
+        g.spec_size = spec_size;
+        g.spec_step = spec_step;
+        g.spec_zero = spec_zero;
         require(!lines.is_valid() || lines.shape(1) == 3,
                 "lines must have shape (nlines, 3)");
         require(!scube.is_valid() || (lines.is_valid() && lines.shape(0) > 0),
                 "a spectral cube needs at least one line");
-        a.nlines = lines.is_valid() ? int(lines.shape(0)) : 0;
-        a.lines = data(lines);
+        g.nlines = lines.is_valid() ? int(lines.shape(0)) : 0;
+        g.lines = data(lines);
 
         const size_t nimage = size_t(spat_size[0]) * spat_size[1];
         const size_t nspat = nimage * spat_size[2];
@@ -676,7 +693,7 @@ private:
                 "opacity and opacity_ratios go together");
         if (opacity.is_valid()) {
             const size_t nopacity = opacity_ratios.shape(1);
-            const size_t nrows = scube.is_valid() ? size_t(a.nlines) : 1;
+            const size_t nrows = scube.is_valid() ? size_t(g.nlines) : 1;
             require(nopacity >= 1 && nopacity <= size_t(OPACITY_NUM_MAX),
                     "opacity_ratios needs a column for each cube of "
                     "opacity, of which there are at most "
@@ -687,22 +704,22 @@ private:
             require(opacity_ratios.shape(0) == nrows,
                     "opacity_ratios needs a row for each line of the "
                     "spectral cube, or one row for the image");
-            a.nopacity = int(nopacity);
-            a.opacity = opacity.data();
-            a.opacity_ratios = opacity_ratios.data();
+            g.nopacity = int(nopacity);
+            g.opacity = opacity.data();
+            g.opacity_ratios = opacity_ratios.data();
         }
-        a.image = output(image, nimage, "image");
-        a.scube = output(scube, nscube, "scube");
-        a.rdata = output(rdata, nspat, "rdata");
-        a.rdata_cmp = output(rdata_cmp, nspat, "rdata_cmp");
-        a.ordata = output(ordata, nspat, "ordata");
-        a.ordata_cmp = output(ordata_cmp, nspat, "ordata_cmp");
-        a.vdata_cmp = output(vdata_cmp, nspat, "vdata_cmp");
-        a.ddata_cmp = output(ddata_cmp, nspat, "ddata_cmp");
-        a.vdweight_cmp = output(vdweight_cmp, nspat, "vdweight_cmp");
-        a.rdata_scale = rdata_scale;
-        a.image_scale = image_scale;
-        return a;
+        g.image = output(image, nimage, "image");
+        g.scube = output(scube, nscube, "scube");
+        g.rdata = output(rdata, nspat, "rdata");
+        g.rdata_cmp = output(rdata_cmp, nspat, "rdata_cmp");
+        g.ordata = output(ordata, nspat, "ordata");
+        g.ordata_cmp = output(ordata_cmp, nspat, "ordata_cmp");
+        g.vdata_cmp = output(vdata_cmp, nspat, "vdata_cmp");
+        g.ddata_cmp = output(ddata_cmp, nspat, "ddata_cmp");
+        g.vdweight_cmp = output(vdweight_cmp, nspat, "vdweight_cmp");
+        g.rdata_scale = rdata_scale;
+        g.image_scale = image_scale;
+        return g;
     }
 
     // The fields of the march that a disk of the given arguments writes
@@ -712,27 +729,21 @@ private:
     // one
     static FieldsArgs<T>
     make_fields_args(
-            const Disk& disk, const DiskArgs<T>& a, const Data& fields,
-            int volume_fields)
+            const Disk& disk, const DiskArgs<T>& a, const GridArgs<T>& g,
+            const Data& fields, int volume_fields)
     {
         FieldsArgs<T> f;
         require(!fields.is_valid()
-                || !(a.image || a.scube || a.opacity),
+                || !(g.image || g.scube || g.opacity),
                 "fields replace the image, the spectral cube and the "
                 "opacity");
-        f.opt = disk.opt ? disk.opt->raw() : TraitSet<T>{};
-        require(!disk.opt || (disk.opt_rows.is_valid()
-                              && disk.opt_rows.shape(0) == size_t(f.opt.n)),
-                "the traits of line opacity (opt) need the row of the line "
-                "of each (opt_rows)");
-        f.opt_rows = data(disk.opt_rows);
         // (there are at most as many lines with line opacity as traits)
-        const int nk = disk.opt ? a.nlines : 0;
+        const int nk = a.opt.uids ? g.nlines : 0;
         require(!fields.is_valid() || nk <= TRAIT_NUM_MAX,
                 "line opacity takes at most " + std::to_string(TRAIT_NUM_MAX)
                 + " lines");
-        const size_t nimage = size_t(a.spat_size[0]) * a.spat_size[1];
-        const size_t nspat = nimage * a.spat_size[2];
+        const size_t nimage = size_t(g.spat_size[0]) * g.spat_size[1];
+        const size_t nspat = nimage * g.spat_size[2];
         const size_t size = disk.rht ? (volume_fields + nk) * nspat
                                      : 4 * nimage;
         require(!fields.is_valid() || fields.size() == size,

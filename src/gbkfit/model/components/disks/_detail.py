@@ -8,21 +8,20 @@ from typing import Any
 import astropy.units
 import numpy as np
 
-from gbkfit.driver import DeviceArray, Driver
-from gbkfit.math import interpolation
-from gbkfit.params import ParamValues
+from gbkfit.driver import Driver
 from gbkfit.utils import gridutils, iterutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
 from .. import traits
-from .._detail import (
-    Fluxes, dump_geometry, dump_name, parse_nodes, systemic_velocity)
-from .._units import DataUnit, OpacityScales, band_factors, line_factors
-from ..base import Component, ComponentPlan, FieldsLayout, NativeGrid
+from .._detail import dump_geometry, dump_name
+from .._nodal import (
+    MAX_TRAITS, EmissionSetup, NodalComponentPlan, emission_setup,
+    parse_component_rnode_args)
+from .._units import DataUnit
+from ..base import Component
 from ..geometries import Geometry
-from ..lines import Band, Bands, LineCatalogue, LinePlacement, Lines
+from ..lines import Band, Bands, LineCatalogue, Lines
 from ..roles import (
-    BandEmission, Emission, LineEmission, Opacity, emission_parser,
-    opacity_parser)
+    Emission, LineEmission, Opacity, emission_parser, opacity_parser)
 from . import _disk
 from .opacity import LineOpacity
 from .parts import Density, Kinematics, density_parser, kinematics_parser
@@ -33,9 +32,7 @@ __all__ = [
     'disk_plan',
     'dump_disk_component',
     'load_disk_component',
-    'make_bands',
-    'make_disk',
-    'make_lines'
+    'make_disk'
 ]
 
 
@@ -154,7 +151,8 @@ def make_disk(
                     f"the rings of a component are those of its warped "
                     f"geometry {geometry.name()!r}; remove {given}")
             rings = dict(rings, rnodes=geometry.rnodes())
-    node_args = parse_component_rnode_args(**rings, rstep=rstep, interp=interp)
+    node_args = parse_component_rnode_args(
+        **rings, rstep=rstep, interp=interp)
     traits_ = _disk_traits(
         density, kinematics, emission, opacity, zptraits, sptraits)
     # (not the coefficients of line opacity: a uniform one is common, e.g.
@@ -232,9 +230,9 @@ def line_opacity_traits(
                     f"traits; {traits.trait_desc(trait.__class__)} is not")
             for values, value in zip(result, (trait, prefix + suffix, index)):
                 values.append(value)
-    if len(result[0]) > _disk.MAX_TRAITS:
+    if len(result[0]) > MAX_TRAITS:
         raise ConfigError(
-            f"line opacity takes at most {_disk.MAX_TRAITS} coefficient "
+            f"line opacity takes at most {MAX_TRAITS} coefficient "
             f"traits; {len(result[0])} were given")
     return tuple(result[0]), tuple(result[1]), tuple(result[2])
 
@@ -261,9 +259,9 @@ def _disk_traits(
     zptraits = iterutils.tuplify(zptraits)
     sptraits = iterutils.tuplify(sptraits)
     for name, value in (('zptraits', zptraits), ('sptraits', sptraits)):
-        if len(value) > _disk.MAX_TRAITS:
+        if len(value) > MAX_TRAITS:
             raise ConfigError(
-                f"at most {_disk.MAX_TRAITS} {name} are supported; "
+                f"at most {MAX_TRAITS} {name} are supported; "
                 f"{len(value)} were given")
     if zptraits and not thick:
         raise ConfigError(
@@ -302,36 +300,6 @@ def _with_defaults(
     return tuple(default() if trait is None else trait for trait in value)
 
 
-def make_lines(disk: _disk.Disk, emission: Emission | None) -> Lines | None:
-    """
-    Return the emission lines of a disk component (see Lines), if it emits
-    lines, whose parameters must have other names than those of the disk.
-    """
-    if not isinstance(emission, LineEmission):
-        return None
-    lines = emission.lines()
-    if repeated := sorted(set(lines.pdescs()) & set(disk.pdescs())):
-        raise ConfigError(
-            f"the parameters of the lines have the names of other "
-            f"parameters: {repeated}; rename the lines")
-    return lines
-
-
-def make_bands(disk: _disk.Disk, emission: Emission | None) -> Bands | None:
-    """
-    Return the bands of a disk component (see Bands), if it emits in
-    bands, whose parameters must have other names than those of the disk.
-    """
-    if not isinstance(emission, BandEmission):
-        return None
-    bands = emission.bands()
-    if repeated := sorted(set(bands.pdescs()) & set(disk.pdescs())):
-        raise ConfigError(
-            f"the parameters of the bands have the names of other "
-            f"parameters: {repeated}; rename the bands")
-    return bands
-
-
 def disk_plan(
         disk: _disk.Disk,
         lines: Lines | None,
@@ -353,184 +321,35 @@ def disk_plan(
     any), of which it evaluates, if it emits, the lines of the given names
     (all if None), at the redshift of its galaxy, or the given band (if
     known), dimmed by the opacity with the given ratios, in the unit of
-    the data (see Component.plan).
+    the data (see Component.plan and emission_setup).
     """
-    if not emits:
-        return DiskComponentPlan(driver, disk.plan(driver, 0, dtype))
-    if lines is None:
-        ratio = bands.ratio_name(band)
-        return DiskComponentPlan(
-            driver, disk.plan(driver, 0, dtype), opacity_ratios,
-            Fluxes(1, [(0, ratio)] if ratio is not None else [],
-                   band_factors(unit, data_unit, band, redshift)))
-    # (and the row of the line of each trait of line opacity among the
-    # lines it evaluates)
-    selected = lines.select(names)
-    opacity_rows = [
-        selected.index(line) if line in selected else -1
-        for line in disk.opacity_lines()]
-    rows = lines.values(spectral, redshift)[list(selected)]
-    # (with a unit, the frequency at which the galaxy emits each line)
-    frequencies = None if unit is None \
-        else lines.frequencies(spectral, redshift)[list(selected)]
-    ratios = [
-        (row, lines.ratio_name(index)) for row, index in enumerate(selected)
-        if lines.ratio_name(index) is not None]
-    # (with a unit, the coefficients of line opacity are 1/S in 1/K)
-    opacity_scales = None
-    if disk.opacity_lines() and unit is not None:
-        opacity_scales = OpacityScales(
-            unit, data_unit, rows, spectral, frequencies)
+    emission = emission_setup(
+        lines, bands, unit, spectral, names, band, emits, data_unit,
+        redshift, disk.opacity_lines())
     return DiskComponentPlan(
-        driver, disk.plan(driver, len(selected), dtype, opacity_rows),
-        opacity_ratios,
-        Fluxes(len(rows), ratios, line_factors(
-            unit, data_unit, rows, spectral, frequencies)),
-        LinePlacement(rows, spectral), opacity_scales)
+        driver,
+        disk.plan(driver, emission.nlines, dtype, emission.opacity_rows),
+        emission, opacity_ratios)
 
 
-class DiskComponentPlan(ComponentPlan):
+class DiskComponentPlan(NodalComponentPlan):
     """
-    The evaluation of a component made of one disk: the plan of its disk,
-    which adds its light to the outputs, dimmed by the opacity with the
-    given ratios (see Component.plan), or its optical depth to a cube of
-    opacity. Its light is that of the given lines (where each is on the
-    spectral axis at its systemic velocity, see LinePlacement), or in an
-    image, that of its band, of the given fluxes (see Fluxes). With line opacity and a
-    unit, the fields of the opacity of each line are times its scale to
-    brightness temperature (opacity_scales), as its coefficients are 1/S
-    in 1/K.
+    The evaluation of a component made of one disk (see
+    NodalComponentPlan), whose galaxy can take the plan of its disk.
     """
 
     def __init__(
             self,
             driver: Driver,
             disk_plan_: _disk.DiskPlan,
-            opacity_ratios: np.ndarray | None = None,
-            fluxes: Fluxes | None = None,
-            lines: LinePlacement | None = None,
-            opacity_scales: OpacityScales | None = None
+            emission: EmissionSetup,
+            opacity_ratios: np.ndarray | None = None
     ):
-        self._driver = driver
+        super().__init__(driver, disk_plan_, emission, opacity_ratios)
         self._disk_plan = disk_plan_
-        self._fluxes = fluxes
-        self._opacity_scales = opacity_scales
-        self._opacity_ratios = None
-        if opacity_ratios is not None:
-            self._opacity_ratios = driver.mem_copy_h2d(opacity_ratios)
-        # The offset, scale and flux of each line (set at each evaluation)
-        self._lines = lines
-        self._rows = None if lines is None else np.zeros((len(lines), 3))
 
     def disk_plan(self) -> _disk.DiskPlan:
         return self._disk_plan
-
-    def line_values(self, params: ParamValues) -> np.ndarray:
-        if self._lines is None:
-            return np.array([[0.0, 0.0, self._image_scale(params)]])
-        self._rows[:, :2] = self._lines(systemic_velocity(params))
-        self._rows[:, 2] = self._fluxes(params)
-        return self._rows
-
-    def evaluate_emission(
-            self,
-            params: ParamValues,
-            grid: NativeGrid,
-            outputs: dict[str, DeviceArray | None],
-            out_extra: dict[str, Any] | None
-    ) -> None:
-        lines = self.line_values(params) if self._lines is not None \
-            else None
-        odata = outputs.get('odata')
-        disk_outputs = dict(
-            image=outputs.get('image'),
-            scube=outputs.get('scube'),
-            rdata=outputs.get('bdata'),
-            opacity=odata,
-            opacity_ratios=self._opacity_ratios if odata is not None
-            else None,
-            ordata=outputs.get('obdata'))
-        self._disk_plan.evaluate(
-            params, grid, disk_outputs, out_extra, 'bdata', lines,
-            image_scale=self._image_scale(params))
-
-    def fields_layout(self) -> FieldsLayout:
-        return self._disk_plan.fields_layout()
-
-    def evaluate_fields(
-            self,
-            params: ParamValues,
-            grid: NativeGrid,
-            fields: DeviceArray,
-            out_extra: dict[str, Any] | None
-    ) -> None:
-        self._driver.mem_fill(fields, 0)
-        self._disk_plan.evaluate(
-            params, grid, dict(fields=fields), out_extra, 'bdata')
-        if self._opacity_scales is not None:
-            # (the fields of line opacity follow those of the light, its
-            # velocity and its dispersion: one for each line)
-            scales = self._opacity_scales(systemic_velocity(params))
-            for row, scale in enumerate(scales):
-                slot = fields[3 + row]
-                self._driver.math_mul(slot, slot.dtype.type(scale), out=slot)
-
-    def evaluate_opacity(
-            self,
-            params: ParamValues,
-            grid: NativeGrid,
-            odata: DeviceArray,
-            scale: float,
-            out_extra: dict[str, Any] | None
-    ) -> None:
-        # The density of the disk is its optical depth
-        self._disk_plan.evaluate(
-            params, grid, dict(rdata=odata), out_extra, 'odata',
-            rdata_scale=scale)
-
-    def _image_scale(self, params: ParamValues) -> float:
-        """
-        Return the flux of the light in the band of an image (see Fluxes);
-        1 in a spectral cube, whose lines have theirs.
-        """
-        if self._lines is not None:
-            return 1.0
-        return float(self._fluxes(params)[0])
-
-
-def parse_component_rnode_args(
-        rnmin: float | None,
-        rnmax: float | None,
-        rnsep: float | None,
-        rnlen: int | None,
-        rnodes: Any,
-        rstep: float | None,
-        interp: str
-) -> dict[str, Any]:
-    """
-    Return the rings of a disk: its radial nodes (see parse_nodes), the
-    step of its subnodes (by default half the smallest separation of the
-    nodes, at most 1), and the interpolation class of its node-wise
-    parameters. Raise ConfigError for invalid options.
-    """
-    nodes = parse_nodes('r', rnmin, rnmax, rnsep, rnlen, rnodes)
-    step = rstep
-    if step is None:
-        step = min(1, min(np.diff(nodes)) / 2)
-    # (half the difference is allowed, also as it rounds)
-    if step <= 0 or step > min(np.diff(nodes)) / 2 * (1 + 1e-9):
-        raise ConfigError(
-            "rstep must be greater than zero and less than half the "
-            "smallest difference between two consecutive rnodes")
-    interpolations = dict(
-        linear=interpolation.InterpolatorLinear,
-        akima=interpolation.InterpolatorAkima,
-        pchip=interpolation.InterpolatorPCHIP)
-    if interp not in interpolations:
-        raise ConfigError(
-            "interp must be one of the following: "
-            f"{list(interpolations.keys())}")
-    return dict(rnodes=nodes, rstep=step, interp=interpolations[interp])
 
 
 def check_traits_common(traits_: Sequence[traits.Trait]) -> None:

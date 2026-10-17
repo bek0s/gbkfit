@@ -93,8 +93,8 @@ class Scene:
 
     def bounding_radius(self) -> float:
         """
-        Return the bounding radius (arcsec) of the largest disk it
-        evaluates (see _bounding_radius); 0 without disks.
+        Return the bounding radius (arcsec) of the largest component it
+        evaluates (see _bounding_radius); 0 without extent.
         """
         return max(
             _bounding_radius(galaxy, emitters)
@@ -354,15 +354,14 @@ class TransferScenePlan(ScenePlan):
 def _bounding_radius(galaxy: Galaxy, emitters: Sequence[int]) -> float:
     """
     Return the radius (arcsec) of the sphere around the centre of a galaxy
-    that holds all the density of the disks that an observation evaluates
-    (of the given emitters, and the components with dust), at any
-    inclination (see Disk.bounding_radius); 0 without disks.
+    that holds all the density of the components that an observation
+    evaluates (of the given emitters, and the components with dust), at
+    any inclination (see Component.bounding_radius); 0 without extent.
     """
     radii = [
-        cmp.density_disk().bounding_radius()
+        cmp.bounding_radius()
         for i, cmp in enumerate(galaxy.components())
-        if (i in emitters or isinstance(cmp.opacity(), DustOpacity))
-        and cmp.density_disk() is not None]
+        if i in emitters or isinstance(cmp.opacity(), DustOpacity)]
     return max(radii, default=0.0)
 
 

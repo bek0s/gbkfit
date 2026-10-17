@@ -11,7 +11,8 @@
 
 // A kernel parameter that the kernel reads where it is, without a copy
 // to local memory: the disk kernels take the address of their arguments,
-// and a copy of DiskArgs costs each thread hundreds of bytes of stack.
+// and a copy of DiskArgs and GridArgs costs each thread hundreds of bytes
+// of stack.
 // (__grid_constant__ needs compute capability 7.0; older architectures
 // keep the copy.)
 #if defined(__CUDA_ARCH__) && __CUDA_ARCH__ < 700
@@ -199,6 +200,7 @@ template<typename T, bool HasOpacity, bool HasFields, bool HasLineOpacity>
 __global__ void
 gmodel_mcdisk_evaluate(
         GBKFIT_GRID_CONSTANT const DiskArgs<T> a,
+        GBKFIT_GRID_CONSTANT const GridArgs<T> g,
         GBKFIT_GRID_CONSTANT const MCDiskArgs<T> mc,
         GBKFIT_GRID_CONSTANT const FieldsArgs<T> f)
 {
@@ -211,45 +213,46 @@ gmodel_mcdisk_evaluate(
     RNG<T> rng(mc.seed, tid);
     gbkfit::gmodel_mcdisk_evaluate_cloud<
             atomic_add<T>, HasOpacity, HasFields, HasLineOpacity>(
-                    rng, tid, a, mc, f);
+                    rng, tid, a, g, mc, f);
 }
 
 template<typename T> __global__ void
-gmodel_mcdisk_fields_moments(DiskArgs<T> a, FieldsArgs<T> f)
+gmodel_mcdisk_fields_moments(DiskArgs<T> a, GridArgs<T> g, FieldsArgs<T> f)
 {
     // Parallelization: per voxel
-    const long long nthreads = 1LL * a.spat_size[0] * a.spat_size[1]
-            * a.spat_size[2];
+    const long long nthreads = 1LL * g.spat_size[0] * g.spat_size[1]
+            * g.spat_size[2];
     const long long tid = 1LL * blockIdx.x * blockDim.x + threadIdx.x;
     if (tid >= nthreads)
         return;
 
-    gbkfit::gmodel_mcdisk_fields_moments(tid, a, f);
+    gbkfit::gmodel_mcdisk_fields_moments(tid, a, g, f);
 }
 
 template<typename T, bool HasOpacity, bool HasFields, bool HasLineOpacity>
 __global__ void
 gmodel_smdisk_evaluate(
         GBKFIT_GRID_CONSTANT const DiskArgs<T> a,
+        GBKFIT_GRID_CONSTANT const GridArgs<T> g,
         GBKFIT_GRID_CONSTANT const FieldsArgs<T> f)
 {
     // Parallelization: per 3d spatial position, or per 2d spatial position
     // for a thin disk (64-bit indices: there can be more voxels than an int
     // holds)
-    const long long nthreads = 1LL * a.spat_size[0] * a.spat_size[1]
-            * gbkfit::gmodel_smdisk_size_z(a);
+    const long long nthreads = 1LL * g.spat_size[0] * g.spat_size[1]
+            * gbkfit::gmodel_smdisk_size_z(a, g);
     const long long tid = 1LL * blockIdx.x * blockDim.x + threadIdx.x;
     if (tid >= nthreads) {
         return;
     }
 
-    const int x = tid % a.spat_size[0];
-    const int y = tid / a.spat_size[0] % a.spat_size[1];
-    const int z = tid / (1LL * a.spat_size[0] * a.spat_size[1]);
+    const int x = tid % g.spat_size[0];
+    const int y = tid / g.spat_size[0] % g.spat_size[1];
+    const int z = tid / (1LL * g.spat_size[0] * g.spat_size[1]);
 
     gbkfit::gmodel_smdisk_evaluate_spaxel<
             atomic_add<T>, HasOpacity, HasFields, HasLineOpacity>(
-                    x, y, z, a, f);
+                    x, y, z, a, g, f);
 }
 
 template<typename T> __global__ void

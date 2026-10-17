@@ -8,7 +8,7 @@ import logging
 
 import pytest
 from gbkfit.model import galaxy_parser
-from gbkfit.model.components.disks._detail import parse_component_rnode_args
+from gbkfit.model.components._nodal import parse_component_rnode_args
 from gbkfit.observation import Depth
 from gbkfit.utils import gridutils, parseutils
 from modelutils import config_group

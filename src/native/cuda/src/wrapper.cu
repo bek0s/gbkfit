@@ -165,43 +165,44 @@ Wrapper<T>::dmodel_regions_sum(
 
 template<typename T> void
 Wrapper<T>::gmodel_mcdisk_evaluate(
-        const DiskArgs<T>& a, const MCDiskArgs<T>& mc, const FieldsArgs<T>& f)
+        const DiskArgs<T>& a, const GridArgs<T>& g, const MCDiskArgs<T>& mc,
+        const FieldsArgs<T>& f)
 {
     // (the kernels of the fields of disks with line opacity and without, of
     // disks dimmed by opacity, and of the others: see
     // gmodel_mcdisk_evaluate_cloud)
     namespace k = kernels;
     launch("gmodel_mcdisk_evaluate", mc.nclouds,
-            f.fields && f.opt.uids ? k::gmodel_mcdisk_evaluate<T, 0, 1, 1>
+            f.fields && a.opt.uids ? k::gmodel_mcdisk_evaluate<T, 0, 1, 1>
             : f.fields ? k::gmodel_mcdisk_evaluate<T, 0, 1, 0>
-            : a.opacity ? k::gmodel_mcdisk_evaluate<T, 1, 0, 0>
+            : g.opacity ? k::gmodel_mcdisk_evaluate<T, 1, 0, 0>
             : k::gmodel_mcdisk_evaluate<T, 0, 0, 0>,
-            a, mc, f);
+            a, g, mc, f);
     // The fields of each voxel, from the moments of its clouds
     if (f.fields) {
-        const long long n = 1LL * a.spat_size[0] * a.spat_size[1]
-                * a.spat_size[2];
+        const long long n = 1LL * g.spat_size[0] * g.spat_size[1]
+                * g.spat_size[2];
         launch("gmodel_mcdisk_fields_moments", n,
-                kernels::gmodel_mcdisk_fields_moments<T>, a, f);
+                kernels::gmodel_mcdisk_fields_moments<T>, a, g, f);
     }
 }
 
 template<typename T> void
 Wrapper<T>::gmodel_smdisk_evaluate(
-        const DiskArgs<T>& a, const FieldsArgs<T>& f)
+        const DiskArgs<T>& a, const GridArgs<T>& g, const FieldsArgs<T>& f)
 {
     // (the voxels need not be in memory, so there can be more than an int
     // holds, e.g. 1300 x 1300 x 1300)
-    const long long n = 1LL * a.spat_size[0] * a.spat_size[1]
-            * gbkfit::gmodel_smdisk_size_z(a);
+    const long long n = 1LL * g.spat_size[0] * g.spat_size[1]
+            * gbkfit::gmodel_smdisk_size_z(a, g);
     // (see gmodel_mcdisk_evaluate)
     namespace k = kernels;
     launch("gmodel_smdisk_evaluate", n,
-            f.fields && f.opt.uids ? k::gmodel_smdisk_evaluate<T, 0, 1, 1>
+            f.fields && a.opt.uids ? k::gmodel_smdisk_evaluate<T, 0, 1, 1>
             : f.fields ? k::gmodel_smdisk_evaluate<T, 0, 1, 0>
-            : a.opacity ? k::gmodel_smdisk_evaluate<T, 1, 0, 0>
+            : g.opacity ? k::gmodel_smdisk_evaluate<T, 1, 0, 0>
             : k::gmodel_smdisk_evaluate<T, 0, 0, 0>,
-            a, f);
+            a, g, f);
 }
 
 template<typename T> void

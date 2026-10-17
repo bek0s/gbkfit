@@ -9,7 +9,7 @@ from typing import Any, Self
 from gbkfit.utils import iterutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
 from .. import traits
-from ._disk import MAX_TRAITS
+from .._nodal import MAX_TRAITS
 
 
 __all__ = [

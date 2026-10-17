@@ -10,7 +10,8 @@ from collections.abc import Callable, Sequence
 import numpy as np
 
 from gbkfit.params import ParamValues
-from ._disk import Disk, DiskPlan, subring_radii
+from .._nodal import subring_radii
+from ._disk import Disk, DiskPlan
 
 
 __all__ = [
@@ -325,7 +326,7 @@ class DiskDensity:
     def knots(self, rstep: float | None) -> np.ndarray:
         """
         Return the radii (kpc) of its subnodes, or of the subnodes of rings
-        of width at most rstep (arcsec, see _disk.subring_radii).
+        of width at most rstep (arcsec, see _nodal.subring_radii).
         """
         radii = self._disk.subrnodes() if rstep is None \
             else subring_radii(self._disk.rnodes(), rstep)

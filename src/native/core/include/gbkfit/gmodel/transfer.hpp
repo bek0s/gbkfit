@@ -9,11 +9,11 @@ namespace gbkfit {
 // gmodel_transfer_march): its fields (see FieldsArgs::fields), those of a
 // volume (j, v and s: planes of the slab) or of a layer (j, v, s and the
 // position along the depth axis, in voxels: images); its lines (the
-// offset, scale and flux of each, see DiskArgs::lines), or in an image
+// offset, scale and flux of each, see GridArgs::lines), or in an image
 // one row whose flux is that of its light; and a row of the ratios of the
-// cubes of opacity for each line (see DiskArgs::opacity_ratios). A volume
+// cubes of opacity for each line (see GridArgs::opacity_ratios). A volume
 // with line opacity has, after s, a field of each line l: its light times
-// the coefficient of the line (see FieldsArgs::opt), whose line, times the
+// the coefficient of the line (see DiskArgs::opt), whose line, times the
 // flux of the line, is its optical depth.
 template<typename T>
 struct TransferEmitter
