@@ -14,7 +14,7 @@ from ..geometries import Geometry
 from ..lines import Band, LineCatalogue
 from ..roles import Emission, Opacity
 from . import _detail, _disk
-from .parts import Density, Kinematics
+from ..parts import Density, Kinematics
 
 
 __all__ = [

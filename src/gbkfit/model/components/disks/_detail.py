@@ -24,7 +24,7 @@ from ..roles import (
     Emission, LineEmission, Opacity, emission_parser, opacity_parser)
 from . import _disk
 from .opacity import LineOpacity
-from .parts import Density, Kinematics, density_parser, kinematics_parser
+from ..parts import Density, Kinematics, density_parser, kinematics_parser
 
 
 __all__ = [

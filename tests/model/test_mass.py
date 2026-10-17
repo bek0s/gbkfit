@@ -1293,7 +1293,7 @@ def test_pressure_density_is_a_mass_component_that_gives_it():
 
 def test_one_mass_trait_per_disk():
     from gbkfit.model.components import traits
-    from gbkfit.model.components.disks.parts import Kinematics
+    from gbkfit.model.components.parts import Kinematics
     Kinematics(
         [traits.VPTraitMass(), traits.VPTraitNWUniform('rad')],
         traits.DPTraitUniform())
