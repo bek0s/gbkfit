@@ -22,7 +22,8 @@ from gbkfit.model.mass import (
     DarkFraction, MassContext, MassDisk, MassModel, MassPoint, MassSpheroid,
     MassUser, ProfileBurkert, ProfileDekelZhao, ProfileEinasto, ProfileNFW,
     ProfilePseudoIsothermal, ProfileSersic, ProfileZhao, ShapeFlattened,
-    SurfaceComponent, SurfaceExponential, SurfaceNodewise, VerticalComponent,
+    SurfaceComponent, SurfaceExponential, SurfaceGaussianRing,
+    SurfaceNodewise, VerticalComponent,
     VerticalExponential, VerticalGauss, VerticalSech2, VerticalThin,
     mass_component_parser)
 from gbkfit.model.mass import _disk_gravity
@@ -223,6 +224,30 @@ def test_nodes_of_nodewise_disks_are_checked(nodes):
     with pytest.raises(
             ConfigError, match="the nodes of a nodewise surface density"):
         SurfaceNodewise(nodes)
+
+
+@pytest.mark.parametrize('fwhm', [2.0, 0.1])
+def test_gaussian_rings_are_the_pull_of_their_rings(fwhm):
+    # Against the pull of the rings of a polynomial of degree 5 on fine
+    # panels within 10 dispersions of the peak (thin_disk_gravity); far
+    # away, v^2 = G M / R (1 + 3 <a^2> / (4 R^2)), to its next multipole
+    ring = MassDisk('ring', SurfaceGaussianRing(), VerticalThin())
+    params = dict(log_m=10, r_peak=5, fwhm=fwhm)
+    sigma = fwhm / (2 * np.sqrt(2 * np.log(2)))
+    radius = np.concatenate((np.geomspace(0.05, 30, 60), [5.0]))
+    knots = np.linspace(max(0, 5 - 10 * sigma), 5 + 10 * sigma, 801)
+    gravity = _disk_gravity.thin_disk_gravity(knots, radius, degree=5)
+    expected = gravity.vcirc2(ring.surface_density(
+        gravity.radii, params, CONTEXT))
+    result = ring.vcirc2(radius, params, CONTEXT)
+    np.testing.assert_allclose(
+        result, expected, rtol=0, atol=1e-8 * np.abs(expected).max())
+    assert np.any(result < 0)
+    a = np.linspace(knots[0], knots[-1], 20001)
+    weight = a * ring.surface_density(a, params, CONTEXT)
+    mean_a2 = np.trapezoid(weight * a ** 2, a) / np.trapezoid(weight, a)
+    assert ring.vcirc2(np.array([1e3]), params, CONTEXT)[0] \
+        == pytest.approx(G * 1e10 / 1e3 * (1 + 3 * mean_a2 / 4e6), rel=1e-8)
 
 
 class Layers:

@@ -29,6 +29,7 @@ import dataclasses
 import functools
 
 import numpy as np
+import numpy.typing as npt
 import scipy.special
 
 from .units import G
@@ -38,7 +39,8 @@ __all__ = [
     'ThickDiskGravity',
     'ThinDiskGravity',
     'thick_disk_gravity',
-    'thin_disk_gravity'
+    'thin_disk_gravity',
+    'thin_kernel'
 ]
 
 
@@ -97,7 +99,8 @@ _PDF_TOLERANCE = 1e-6
 _KEY_RESOLUTION = 2.0 ** 40
 
 
-def _thin_kernel(R: float, a: np.ndarray, d: np.ndarray) -> np.ndarray:
+def thin_kernel(
+        R: npt.ArrayLike, a: np.ndarray, d: np.ndarray) -> np.ndarray:
     """
     Return 2 [a K / (a + R) - (a E - R) / d]: the pull of the ring at a
     (per G and surface density) without its pole -2 R / d, with a
@@ -115,7 +118,7 @@ def _thick_kernel(
     """
     Return 4 a / D [K - E (a^2 - R^2 + h^2) / (d^2 + h^2)]: the pull of
     the ring at a and h (per G and density), for h > 0 (d = a - R, see
-    _thin_kernel).
+    thin_kernel).
     """
     d2 = (a + R) ** 2 + h ** 2
     near2 = d ** 2 + h ** 2
@@ -247,7 +250,7 @@ def _thin_weights(
         a, w, basis = panels.far_quadrature(~near)
         np.add.at(
             weights[j], panels.indices[~near],
-            (w * (_thin_kernel(R, a, a - R) - 2 * R / (a - R))) @ basis)
+            (w * (thin_kernel(R, a, a - R) - 2 * R / (a - R))) @ basis)
         for panel in np.flatnonzero(near):
             lo, hi = panels.lo[panel], panels.hi[panel]
             at_R = panels.basis(panel, np.array([R]))[0] \
@@ -258,7 +261,7 @@ def _thin_weights(
                 # L(R)) / (a - R) + L(R) ln|a - R| at the ends; the ln 0
                 # at a knot R cancels with that of the panel on its other
                 # side
-                row += (w * _thin_kernel(R, a, d)) @ basis \
+                row += (w * thin_kernel(R, a, d)) @ basis \
                     - 2 * R * (w / d) @ (basis - at_R)
             if hi > R >= lo:
                 row -= 2 * R * at_R * np.log(hi - R)
