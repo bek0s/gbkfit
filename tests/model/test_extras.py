@@ -16,7 +16,7 @@ DISK = dict(
     emission=dict(type='band'))
 LINE_DISK = DISK | dict(
     kinematics=dict(
-        vptraits=dict(type='tan_arctan'), dptraits=dict(type='uniform')),
+        vptraits=dict(type='arctan', direction='tan'), dptraits=dict(type='uniform')),
     emission=dict(type='lines'))
 PROPERTIES = dict(
     xpos=0, ypos=0, posa=30, incl=45, pt_a=1, pt_s=3, vsys=0,

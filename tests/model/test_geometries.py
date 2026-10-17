@@ -16,7 +16,7 @@ LINES = dict(type='lines')
 PARTS = dict(
     density=dict(ptraits=dict(type='exponential')),
     kinematics=dict(
-        vptraits=dict(type='tan_arctan'), dptraits=dict(type='uniform')),
+        vptraits=dict(type='arctan', direction='tan'), dptraits=dict(type='uniform')),
     emission=LINES)
 
 OBSERVABLE = dict(type='pixel_spectra', size=[24, 24, 31], step=[1, 1, 10])

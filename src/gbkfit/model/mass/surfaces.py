@@ -491,7 +491,7 @@ class SurfaceComponent(DiskSurface):
     or at those of rings of width rstep. A component with warps (tilted
     or loose rings, vertical distortions) is taken flat: its rings
     coplanar and concentric, as the rotation of the velocity traits
-    'tan_mass' takes them. Its circular velocity is the pull of its rings
+    'mass' takes them. Its circular velocity is the pull of its rings
     (see _disk_gravity); a thin disk pulls infinitely at a jump of its
     surface density (e.g. at the edge of the component, unless the
     density is 0 there). The azimuthal means of axisymmetric traits are

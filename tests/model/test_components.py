@@ -15,7 +15,7 @@ from gbkfit.utils.parseutils import ConfigError
 
 EXPONENTIAL = dict(type='exponential')
 SECH2 = dict(type='sech2', zmax=8)
-ARCTAN = dict(type='tan_arctan')
+ARCTAN = dict(type='arctan', direction='tan')
 UNIFORM = dict(type='uniform')
 
 DISK = dict(loose=False, tilted=False, rnodes=[0, 2, 4, 6, 8])
@@ -212,7 +212,7 @@ def test_thick_disk_with_several_velocity_traits(name):
     # The disk needs a height trait for each velocity trait to evaluate.
     from gbkfit.driver.drivers.host import DriverHost
     galaxy = galaxy_parser.load(dict(components=[part_info(
-        name, 'kinematics', vptraits=[ARCTAN, dict(type='nw_rad_uniform')])]))
+        name, 'kinematics', vptraits=[ARCTAN, dict(type='nw_uniform', direction='rad')])]))
     assert {'vpt_vt', 'vpt1_vr'} <= set(galaxy.pdescs())
     params = {
         pname: np.ones(pdesc.size()) if pdesc.type() == 'vector' else 1.0
@@ -233,9 +233,9 @@ def test_thick_disk_with_several_velocity_traits(name):
 
 def test_errors_have_paths():
     component = part_info('lines_smdisk_thick', 'kinematics', vptraits=[
-        ARCTAN, dict(type='nw_rad_uniform', sampling='subringz')])
+        ARCTAN, dict(type='nw_uniform', direction='rad', sampling='subringz')])
     assert load_error(component).startswith(
-        "components[0].kinematics.vptraits[1] [nw_rad_uniform]: "
+        "components[0].kinematics.vptraits[1] [nw_uniform]: "
         "sampling must be")
 
 

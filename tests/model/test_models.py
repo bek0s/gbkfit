@@ -66,15 +66,15 @@ CASES = dict(
                     density=dict(ptraits=dict(type='gauss')),
                     kinematics=dict(
                         vptraits=[
-                            dict(type='tan_arctan'),
-                            dict(type='nw_rad_uniform')],
+                            dict(type='arctan', direction='tan'),
+                            dict(type='nw_uniform', direction='rad')],
                         dptraits=dict(type='uniform')),
                     emission=LINES),
                 smdisk(
                     name='disk2', loose=False, tilted=True,
                     density=dict(ptraits=dict(type='exponential')),
                     kinematics=dict(
-                        vptraits=dict(type='tan_tanh'),
+                        vptraits=dict(type='tanh', direction='tan'),
                         dptraits=dict(type='nw_uniform')),
                     sptraits=dict(type='nw_azrange'),
                     emission=LINES)])),
@@ -143,7 +143,7 @@ CASES = dict(
                         ptraits=dict(type='exponential'),
                         htraits=dict(type='sech2', zmax=8)),
                     kinematics=dict(
-                        vptraits=dict(type='tan_arctan'),
+                        vptraits=dict(type='arctan', direction='tan'),
                         vhtraits=dict(type='one'),
                         dptraits=dict(type='uniform')),
                     zptraits=dict(type='nw_harmonic', order=1, zmax=1),
@@ -154,7 +154,7 @@ CASES = dict(
                         ptraits=dict(type='exponential'),
                         htraits=dict(type='gauss', zmax=8)),
                     kinematics=dict(
-                        vptraits=dict(type='tan_tanh'),
+                        vptraits=dict(type='tanh', direction='tan'),
                         dptraits=dict(type='gauss')),
                     sptraits=dict(type='azrange'),
                     emission=LINES),

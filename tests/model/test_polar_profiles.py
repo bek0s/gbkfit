@@ -32,7 +32,7 @@ def face_on_disk(driver, evaluate_cases, key, trait):
     names = list(parser.load(dict(type=trait)).params_sm())
     density = dict(ptraits=dict(type=trait if key == 'b' else 'uniform'))
     kinematics = dict(
-        vptraits=dict(type='tan_uniform'),
+        vptraits=dict(type='uniform', direction='tan'),
         dptraits=dict(type=trait if key == 'd' else 'uniform'))
     case = dict(
         driver=dict(type=driver.type()),
@@ -70,7 +70,7 @@ def map_component(ptraits):
         type='smdisk', loose=False, tilted=False, rnodes=list(range(0, 10)),
         density=dict(ptraits=ptraits),
         kinematics=dict(
-            vptraits=dict(type='tan_uniform'), dptraits=dict(type='uniform')),
+            vptraits=dict(type='uniform', direction='tan'), dptraits=dict(type='uniform')),
         emission=dict(type='lines')))
 
 

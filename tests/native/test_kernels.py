@@ -493,6 +493,12 @@ def _trait_set(driver, memory, *traits_and_params):
             np.array([len(p) for p in params], np.int32)))
 
 
+def _directions(memory, *traits_):
+    """The native directions of velocity polar traits."""
+    return memory.to_device(
+        np.array([trait.direction_uid() for trait in traits_], np.int32))
+
+
 def evaluate_smdisk(driver, thick):
     """
     Evaluate a smooth disk with an exponential brightness profile, an
@@ -524,13 +530,15 @@ def evaluate_smdisk(driver, thick):
         vht=trait_set(traits.VHTraitOne()),
         dht=trait_set(traits.DHTraitOne())) if thick else {}
 
+    arctan = traits.VPTraitArctan('tan')
     disk = driver.native_class('Disk', DTYPE)(
         loose=False, tilted=False,
         rnodes=memory.to_device(np.linspace(0, 20, 21, dtype=DTYPE)),
         vsys=scalar(10), xpos=scalar(0.5), ypos=scalar(-1.0),
         posa=scalar(30), incl=scalar(50),
         rpt=trait_set(traits.RPTraitExponential(), (1.0, 5.0)),
-        vpt=trait_set(traits.VPTraitTanArctan(), (3.0, 200.0)),
+        vpt=trait_set(arctan, (3.0, 200.0)),
+        vpt_directions=_directions(memory, arctan),
         dpt=trait_set(traits.DPTraitUniform(), (25.0,)),
         **heights)
     # (a thin disk is on the plane of the sky: no depth axis, of step 0)
@@ -569,12 +577,13 @@ def test_smdisk_thick(driver, ndarrays_regression):
 
 
 def disk_image(driver, rnodes=21, ntraits=1, heights=False, vpt=False,
-               vht=False, monte_carlo=False):
+               directions=True, vht=False, monte_carlo=False):
     """
     Evaluate into an image a native disk of rnodes radial nodes and
     ntraits uniform density traits (with uniform height traits, with
-    heights), and optionally a velocity trait (with its height trait, with
-    vht), as a Monte Carlo disk with monte_carlo.
+    heights), and optionally a velocity trait (with its direction, with
+    directions, and its height trait, with vht), as a Monte Carlo disk
+    with monte_carlo.
     """
     memory = Memory(driver)
 
@@ -599,7 +608,10 @@ def disk_image(driver, rnodes=21, ntraits=1, heights=False, vpt=False,
         options['rht'] = trait_set(
             traits.RHTraitUniform(zmax=10), [1.0], ntraits)
     if vpt:
-        options['vpt'] = trait_set(traits.VPTraitTanUniform(), [100.0], 1)
+        uniform = traits.VPTraitUniform('tan')
+        options['vpt'] = trait_set(uniform, [100.0], 1)
+        if directions:
+            options['vpt_directions'] = _directions(memory, uniform)
     if vht:
         options['vht'] = trait_set(traits.VHTraitOne(), [], 1)
     disk = driver.native_class('Disk', DTYPE)(**options)
@@ -627,6 +639,8 @@ def disk_image(driver, rnodes=21, ntraits=1, heights=False, vpt=False,
     (dict(rnodes=1), "at least two radial nodes"),
     # A thick disk multiplies each polar trait by its height trait
     (dict(heights=True, vpt=True), "needs the height traits"),
+    (dict(vpt=True, directions=False),
+     "vpt_directions needs a direction for each velocity polar trait"),
     (dict(monte_carlo=True), "Monte Carlo disk needs density height")])
 def test_disks_are_checked(driver, options, message):
     # The kernels trust the arrays of a disk: what they cannot handle is
@@ -691,6 +705,7 @@ def thick_disk(driver, memory):
     def trait_set(trait, params):
         return _trait_set(driver, memory, (trait, params))
 
+    arctan = traits.VPTraitArctan('tan')
     return driver.native_class('Disk', DTYPE)(
         loose=False, tilted=False,
         rnodes=memory.to_device(np.linspace(0, 20, 11, dtype=DTYPE)),
@@ -698,7 +713,8 @@ def thick_disk(driver, memory):
         posa=scalar(0), incl=scalar(0),
         rpt=trait_set(traits.RPTraitExponential(), (1, 5)),
         rht=trait_set(traits.RHTraitSech2(zmax=100), (1.5,)),
-        vpt=trait_set(traits.VPTraitTanArctan(), (3, 200)),
+        vpt=trait_set(arctan, (3, 200)),
+        vpt_directions=_directions(memory, arctan),
         vht=trait_set(traits.VHTraitOne(), ()))
 
 

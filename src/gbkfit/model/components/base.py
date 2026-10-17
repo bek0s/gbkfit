@@ -185,7 +185,7 @@ class Component(parseutils.TypedSerializable, abc.ABC):
         """
         Return the parameters that its galaxy gives it: the circular
         velocity of the mass of the galaxy at the given radii (arcsec), by
-        name (see traits.VPTraitTanMass). They are not in pdescs, but its
+        name (see traits.VPTraitMass). They are not in pdescs, but its
         plans need them with the others. None here.
         """
         return {}

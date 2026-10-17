@@ -50,8 +50,9 @@ struct TraitSetArrays
 
 // The arrays that describe a disk: its radial nodes, its geometry (with
 // the sines and cosines of posa and incl of a loose or tilted disk, see
-// gbkfit::DiskArgs) and its traits. They are created once, and their
-// values are updated in place before each evaluation.
+// gbkfit::DiskArgs) and its traits (with the direction of each velocity
+// polar trait). They are created once, and their values are updated in
+// place before each evaluation.
 template<typename T, typename Device>
 struct DiskArrays
 {
@@ -67,6 +68,7 @@ struct DiskArrays
     Values posa;
     Values incl;
     Traits rpt, rht, vpt, vht, dpt, dht, zpt, spt, opt;
+    Array<Device, const int, nb::ndim<1>> vpt_directions;
     Array<Device, const int, nb::ndim<1>> opt_rows;
     Values posa_incl_sincos;
 };
@@ -379,6 +381,7 @@ struct GModel
                         const Traits* dpt, const Traits* dht,
                         const Traits* zpt, const Traits* spt,
                         const Traits* opt,
+                        Array<Device, const int, nb::ndim<1>> vpt_directions,
                         Array<Device, const int, nb::ndim<1>> opt_rows,
                         Values posa_incl_sincos) {
                     auto optional = [](const Traits* traits) {
@@ -389,7 +392,8 @@ struct GModel
                             incl, optional(rpt), optional(rht),
                             optional(vpt), optional(vht), optional(dpt),
                             optional(dht), optional(zpt), optional(spt),
-                            optional(opt), opt_rows, posa_incl_sincos};
+                            optional(opt), vpt_directions, opt_rows,
+                            posa_incl_sincos};
                 },
                 nb::arg("loose"), nb::arg("tilted"),
                 nb::arg("rnodes").noconvert(),
@@ -407,6 +411,7 @@ struct GModel
                 nb::arg("zpt").none() = nb::none(),
                 nb::arg("spt").none() = nb::none(),
                 nb::arg("opt").none() = nb::none(),
+                nb::arg("vpt_directions").noconvert().none() = nb::none(),
                 nb::arg("opt_rows").noconvert().none() = nb::none(),
                 nb::arg("posa_incl_sincos").noconvert().none()
                         = nb::none());
@@ -546,6 +551,8 @@ private:
         a.rnodes = disk.rnodes.data();
         require(a.nrnodes >= 2, "a disk needs at least two radial nodes");
         a.traits = set->raw();
+        if (a.kind == TraitKind::VPT)
+            a.directions = vpt_directions(disk);
         a.npoints = int(r.shape(0));
         a.r = r.data();
         require(out.shape(0) == size_t(a.traits.n)
@@ -553,6 +560,19 @@ private:
                 "out needs a row for each trait, and a value for each point");
         a.out = out.data();
         return a;
+    }
+
+    // The direction of each velocity polar trait of a disk (see
+    // gbkfit::DiskArgs): given with those traits, and only with them
+    static const int*
+    vpt_directions(const Disk& disk)
+    {
+        require(disk.vpt_directions.is_valid() == disk.vpt.has_value()
+                && (!disk.vpt || disk.vpt_directions.shape(0)
+                                 == disk.vpt->uids.shape(0)),
+                "vpt_directions needs a direction for each velocity polar "
+                "trait, and goes with them only");
+        return data(disk.vpt_directions);
     }
 
     static DiskArgs<T>
@@ -606,6 +626,7 @@ private:
         a.rpt = traits(disk.rpt);
         a.rht = traits(disk.rht);
         a.vpt = traits(disk.vpt);
+        a.vpt_directions = vpt_directions(disk);
         a.vht = traits(disk.vht);
         a.dpt = traits(disk.dpt);
         a.dht = traits(disk.dht);

@@ -84,7 +84,7 @@ def test_rotation_curve_from_radial_nodes(tmp_path):
         component.pop(option, None)
     rnodes = list(range(0, 21, 2))
     component['rnodes'] = rnodes
-    component['kinematics']['vptraits'] = dict(type='nw_tan_uniform')
+    component['kinematics']['vptraits'] = dict(type='nw_uniform', direction='tan')
     properties = config['params']['properties']
     del properties['vpt_rt']
     config['pdescs'] = dict(vmax=dict(type='scalar'), rt=dict(type='scalar'))

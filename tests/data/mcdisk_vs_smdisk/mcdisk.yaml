@@ -12,7 +12,7 @@ galaxies:
       ptraits: {type: exponential}
       htraits: {type: sech2, zmax: 8}
     kinematics:
-      vptraits: {type: tan_arctan}
+      vptraits: {type: arctan, direction: tan}
       dptraits: {type: uniform}
     emission: {type: lines}
 observations:

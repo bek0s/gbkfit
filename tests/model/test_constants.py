@@ -43,7 +43,7 @@ def test_rotation_curve_from_radial_nodes(evaluate_cases):
     # A node-wise rotation curve given by an expression of the radial
     # nodes is the same as the one given by its values
     case = spectral_cube(
-        [disk(dict(type='nw_tan_uniform'))], dict(type='flat'))
+        [disk(dict(type='nw_uniform', direction='tan'))], dict(type='flat'))
     curve = 200 * np.arctan(np.array(RNODES) / 3)
     expression, _ = evaluate_cases(
         [case], PROPERTIES | dict(vpt_vt='200 * np.arctan(rnodes / 3)'))
@@ -57,7 +57,7 @@ def test_names_of_constants():
     # The constants are named like the parameters: prefixed by the name
     # of their component, when its galaxy has several (dust too), and by
     # that of their galaxy, when there are several
-    vptraits = dict(type='tan_arctan')
+    vptraits = dict(type='arctan', direction='tan')
     thick = dict(ptraits=EXPONENTIAL, htraits=SECH2)
     galaxy0 = spectral_cube(
         [disk(vptraits, thick, name='gas'),

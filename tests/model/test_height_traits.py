@@ -22,7 +22,7 @@ DISK = dict(
         ptraits=dict(type='exponential'),
         htraits=dict(type='sech2', zmax=8)),
     kinematics=dict(
-        vptraits=dict(type='tan_arctan'),
+        vptraits=dict(type='arctan', direction='tan'),
         dptraits=dict(type='uniform')),
     emission=dict(type='lines'))
 
@@ -71,7 +71,7 @@ def with_second(key, polar, height, polar_values, height_values):
 
 
 @pytest.mark.parametrize('key, polar, values', [
-    ('v', dict(type='tan_uniform'), dict(vpt1_vt=-30)),
+    ('v', dict(type='uniform', direction='tan'), dict(vpt1_vt=-30)),
     ('d', dict(type='uniform'), dict(dpt1_a=15))])
 def test_linear_height_trait_above_the_disk_changes_nothing(
         driver, key, polar, values):
@@ -86,7 +86,7 @@ def test_linear_height_trait_above_the_disk_changes_nothing(
 
 
 @pytest.mark.parametrize('key, polar, values', [
-    ('v', dict(type='tan_uniform'), dict(vpt1_vt=-30)),
+    ('v', dict(type='uniform', direction='tan'), dict(vpt1_vt=-30)),
     ('d', dict(type='uniform'), dict(dpt1_a=15))])
 def test_linear_height_trait_changes_the_model(driver, key, polar, values):
     # A lag from the mid-plane changes the model, and is equal to the

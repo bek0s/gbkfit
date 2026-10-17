@@ -74,7 +74,7 @@ def test_a_line_has_one_unit_in_a_galaxy():
     from gbkfit.model import galaxy_parser
     disk = dict(type='smdisk', rnodes=[0, 1, 2],
                 density=dict(ptraits=dict(type='exponential')),
-                kinematics=dict(vptraits=dict(type='tan_arctan'),
+                kinematics=dict(vptraits=dict(type='arctan', direction='tan'),
                                 dptraits=dict(type='uniform')))
     with pytest.raises(ConfigError, match="the line 'hi21' has the unit"):
         galaxy_parser.load(dict(components=[

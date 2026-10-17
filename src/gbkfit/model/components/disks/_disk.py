@@ -334,7 +334,7 @@ class Disk(abc.ABC):
         Return how those of its circular velocity parameters (see
         circular_velocity_params) whose values are corrected for its
         pressure are corrected, by their names (see
-        traits.VPTraitTanMass).
+        traits.VPTraitMass).
         """
         return self._pressure_supported_params
 
@@ -405,7 +405,8 @@ class DiskPlan(abc.ABC):
             return driver.mem_copy_h2d(np.array(values, dtype_))
 
         # Describe the disk to the native module: its (sub)nodes, the
-        # device memory of its geometric parameters, and its traits
+        # device memory of its geometric parameters, and its traits (with
+        # the direction of each velocity polar trait)
         trait_set_class = driver.native_class('TraitSet', dtype)
         trait_sets = {}
         for kind, (uids, cvalues, ccounts, pcounts) in constants.items():
@@ -425,6 +426,9 @@ class DiskPlan(abc.ABC):
             rnodes=to_device(disk._subrnodes, dtype),
             **{name: views_d.get(name) for name in GEOMETRY_PARAMS},
             **trait_sets,
+            vpt_directions=to_device(
+                [trait.direction_uid() for trait in disk._traits['vpt']],
+                np.int32) if disk._traits['vpt'] else None,
             opt_rows=to_device(opacity_rows, np.int32)
             if disk._traits['opt'] else None,
             posa_incl_sincos=views_d['posa_incl_sincos'])

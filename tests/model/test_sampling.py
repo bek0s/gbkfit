@@ -60,9 +60,9 @@ def test_values_at_the_subnodes_are_used_as_they_are(evaluate_cases, type_):
     # interpolated to the subnodes, given at the subnodes
     rnodes = [0, 4, 10, 20]
     curve = [0, 150, 180, 170]
-    at_rnodes = disk(type_, rnodes, dict(type='nw_tan_uniform'))
+    at_rnodes = disk(type_, rnodes, dict(type='nw_uniform', direction='tan'))
     at_subnodes = disk(
-        type_, rnodes, dict(type='nw_tan_uniform', sampling='subrings'))
+        type_, rnodes, dict(type='nw_uniform', direction='tan', sampling='subrings'))
     subrnodes = group(at_subnodes).constants()['subrnodes']
     interpolated = interpolation.InterpolatorLinear(rnodes, curve)(subrnodes)
     expected, _ = evaluate_cases(
@@ -78,7 +78,7 @@ def test_values_at_the_subnodes_are_used_as_they_are(evaluate_cases, type_):
 
 def test_node_wise_parameters_have_a_value_for_each_subnode():
     component = disk(
-        'smdisk', [0, 20], dict(type='nw_tan_harmonic', order=1,
+        'smdisk', [0, 20], dict(type='nw_harmonic', direction='tan', order=1,
                                 sampling='subrings'),
         rstep=0.5)
     obs_group = group(component)
@@ -149,9 +149,9 @@ def test_an_expression_of_the_subnodes_follows_the_curve(
     # up to its linear interpolation between the subnodes
     rnodes = [0, 20]
     analytical = disk(
-        'smdisk', rnodes, dict(type='tan_arctan'), rstep=0.1)
+        'smdisk', rnodes, dict(type='arctan', direction='tan'), rstep=0.1)
     at_subnodes = disk(
-        'smdisk', rnodes, dict(type='nw_tan_uniform', sampling='subrings'),
+        'smdisk', rnodes, dict(type='nw_uniform', direction='tan', sampling='subrings'),
         rstep=0.1)
     _, extra = evaluate_cases(
         [case(analytical)], PROPERTIES | dict(vpt_vt=vmax, vpt_rt=rt))
@@ -163,30 +163,30 @@ def test_an_expression_of_the_subnodes_follows_the_curve(
 def test_sampling_is_dumped():
     galaxy = galaxy_parser.load(dict(components=[disk(
         'smdisk', [0, 20],
-        dict(type='nw_tan_uniform', sampling='subrings'))]))
+        dict(type='nw_uniform', direction='tan', sampling='subrings'))]))
     info = galaxy_parser.dump(galaxy)
     assert info['components'][0]['kinematics']['vptraits'] == [dict(
-        type='nw_tan_uniform', sampling='subrings')]
+        type='nw_uniform', direction='tan', sampling='subrings')]
     galaxy = galaxy_parser.load(info)
     assert galaxy_parser.dump(galaxy) == info
     # The default is not dumped
     galaxy = galaxy_parser.load(dict(components=[disk(
-        'smdisk', [0, 20], dict(type='nw_tan_uniform'))]))
+        'smdisk', [0, 20], dict(type='nw_uniform', direction='tan'))]))
     info = galaxy_parser.dump(galaxy)
     assert info['components'][0]['kinematics']['vptraits'] == [
-        dict(type='nw_tan_uniform')]
+        dict(type='nw_uniform', direction='tan')]
 
 
 @pytest.mark.parametrize('part, traits, message', [
     ('kinematics',
-     dict(vptraits=dict(type='nw_tan_uniform', sampling='nodes')),
+     dict(vptraits=dict(type='nw_uniform', direction='tan', sampling='nodes')),
      r"sampling must be one of \['rnodes', 'subrings'\]; it is 'nodes'"),
     ('density',
      dict(htraits=dict(type='sech2', zmax=8, sampling='subrings')),
      "sampling is 'subrings', but rnodes is False: the trait has no "
      "node-wise parameters")])
 def test_invalid_sampling_is_rejected(part, traits, message):
-    component = disk('smdisk', [0, 20], dict(type='tan_arctan'), thick=True)
+    component = disk('smdisk', [0, 20], dict(type='arctan', direction='tan'), thick=True)
     component[part] |= traits
     with pytest.raises(Exception, match=message):
         galaxy_parser.load(dict(components=[component]))

@@ -30,27 +30,27 @@ constexpr int RHT_UID_LORENTZ = 5;
 constexpr int RHT_UID_MOFFAT = 6;
 constexpr int RHT_UID_SECH2 = 7;
 
-// Velocity polar traits
-constexpr int VPT_UID_TAN_UNIFORM = 1;
-constexpr int VPT_UID_TAN_ARCTAN = 2;
-constexpr int VPT_UID_TAN_BOISSIER = 3;
-constexpr int VPT_UID_TAN_EPINAT = 4;
-constexpr int VPT_UID_TAN_LRAMP = 5;
-constexpr int VPT_UID_TAN_TANH = 6;
-constexpr int VPT_UID_TAN_POLYEX = 7;
-constexpr int VPT_UID_TAN_RIX = 8;
-constexpr int VPT_UID_TAN_COURTEAU = 9;
-constexpr int VPT_UID_TAN_BRANDT = 10;
-constexpr int VPT_UID_TAN_ISO = 11;
-constexpr int VPT_UID_TAN_NFW = 12;
-constexpr int VPT_UID_NW_TAN_UNIFORM = 101;
-constexpr int VPT_UID_NW_TAN_HARMONIC = 102;
-constexpr int VPT_UID_NW_RAD_UNIFORM = 103;
-constexpr int VPT_UID_NW_RAD_HARMONIC = 104;
-constexpr int VPT_UID_NW_VER_UNIFORM = 105;
-constexpr int VPT_UID_NW_VER_HARMONIC = 106;
-constexpr int VPT_UID_NW_LOS_UNIFORM = 107;
-constexpr int VPT_UID_NW_LOS_HARMONIC = 108;
+// Velocity polar traits: the shapes of their speeds
+constexpr int VPT_UID_UNIFORM = 1;
+constexpr int VPT_UID_ARCTAN = 2;
+constexpr int VPT_UID_BOISSIER = 3;
+constexpr int VPT_UID_EPINAT = 4;
+constexpr int VPT_UID_LRAMP = 5;
+constexpr int VPT_UID_TANH = 6;
+constexpr int VPT_UID_POLYEX = 7;
+constexpr int VPT_UID_RIX = 8;
+constexpr int VPT_UID_COURTEAU = 9;
+constexpr int VPT_UID_BRANDT = 10;
+constexpr int VPT_UID_ISO = 11;
+constexpr int VPT_UID_NFW = 12;
+constexpr int VPT_UID_NW_UNIFORM = 101;
+constexpr int VPT_UID_NW_HARMONIC = 102;
+
+// Velocity polar traits: the directions of their speeds
+constexpr int VPT_DIRECTION_TAN = 1;
+constexpr int VPT_DIRECTION_RAD = 2;
+constexpr int VPT_DIRECTION_VER = 3;
+constexpr int VPT_DIRECTION_LOS = 4;
 
 // Velocity height traits
 constexpr int VHT_UID_ONE = 1;
@@ -893,241 +893,148 @@ rh_trait_sech2_rnd(
             out, rng, rnidx, rnodes, nrnodes, r, consts, params);
 }
 
+// The speeds of the velocity polar traits along their directions (see
+// vp_disk_project): v, the speed parameter of each, is its asymptotic or
+// maximum speed
+
 template<typename T> constexpr void
-vp_trait_make_tan(T& out, T theta, T incl)
+vp_trait_uniform(T& out, const T* params)
 {
-    out *= std::cos(theta) * std::sin(incl);
+    p_trait_uniform(out, params);
 }
 
 template<typename T> constexpr void
-vp_trait_make_rad(T& out, T theta, T incl)
-{
-    out *= std::sin(theta) * std::sin(incl);
-}
-
-template<typename T> constexpr void
-vp_trait_make_ver(T& out, T incl)
-{
-    out *= std::cos(incl);
-}
-
-template<typename T> constexpr void
-vp_trait_tan_uniform(T& out, T r, T theta, T incl, const T* params)
-{
-    // The centre does not rotate (its azimuth is undefined)
-    if (r == 0) { out = 0; return; }
-    T vt = params[0];
-    out = vt;
-    vp_trait_make_tan(out, theta, incl);
-}
-
-template<typename T> constexpr void
-vp_trait_tan_arctan(T& out, T r, T theta, T incl, const T* params)
+vp_trait_arctan(T& out, T r, const T* params)
 {
     T rt = params[0];
-    T vt = params[1];
+    T v = params[1];
     // Expect rt > 0
-    out = vt * (2/PI<T>) * std::atan(r/rt);
-    vp_trait_make_tan(out, theta, incl);
+    out = v * (2/PI<T>) * std::atan(r/rt);
 }
 
 template<typename T> constexpr void
-vp_trait_tan_boissier(T& out, T r, T theta, T incl, const T* params)
+vp_trait_boissier(T& out, T r, const T* params)
 {
     T rt = params[0];
-    T vt = params[1];
+    T v = params[1];
     // Expect rt > 0
-    out =  vt * (1 - std::exp(-r/rt));
-    vp_trait_make_tan(out, theta, incl);
+    out =  v * (1 - std::exp(-r/rt));
 }
 
 template<typename T> constexpr void
-vp_trait_tan_epinat(T& out, T r, T theta, T incl, const T* params)
+vp_trait_epinat(T& out, T r, const T* params)
 {
     T rt = params[0];
-    T vt = params[1];
+    T v = params[1];
     T a = params[2];
     T g = params[3];
     // Expect rt > 0
-    out = vt * std::pow(r/rt, g) / (1 + std::pow(r/rt, a));
-    vp_trait_make_tan(out, theta, incl);
+    out = v * std::pow(r/rt, g) / (1 + std::pow(r/rt, a));
 }
 
 template<typename T> constexpr void
-vp_trait_tan_flat(T& out, T r, T theta, T incl, const T* params)
+vp_trait_lramp(T& out, T r, const T* params)
 {
     T rt = params[0];
-    T vt = params[1];
-    out = r < rt ? vt * r/rt : vt;
-    vp_trait_make_tan(out, theta, incl);
+    T v = params[1];
+    out = r < rt ? v * r/rt : v;
 }
 
 template<typename T> constexpr void
-vp_trait_tan_tanh(T& out, T r, T theta, T incl, const T* params)
+vp_trait_tanh(T& out, T r, const T* params)
 {
     T rt = params[0];
-    T vt = params[1];
+    T v = params[1];
     // Expect rt > 0
-    out = vt * std::tanh(r/rt);
-    vp_trait_make_tan(out, theta, incl);
+    out = v * std::tanh(r/rt);
 }
 
 template<typename T> constexpr void
-vp_trait_tan_polyex(T& out, T r, T theta, T incl, const T* params)
+vp_trait_polyex(T& out, T r, const T* params)
 {
     T rt = params[0];
-    T vt = params[1];
+    T v = params[1];
     T a = params[2];
     // Expect rt > 0
-    out = vt * (1 - std::exp(-r/rt)) * (1 + a * r/rt);
-    vp_trait_make_tan(out, theta, incl);
+    out = v * (1 - std::exp(-r/rt)) * (1 + a * r/rt);
 }
 
 template<typename T> constexpr void
-vp_trait_tan_rix(T& out, T r, T theta, T incl, const T* params)
+vp_trait_rix(T& out, T r, const T* params)
 {
     T rt = params[0];
-    T vt = params[1];
+    T v = params[1];
     T b = params[2];
     T g = params[3];
     // Expect rt > 0, g > 0
-    out = vt * std::pow(1 + r/rt, b) * std::pow(1 + std::pow(r/rt, -g), -1/g);
-    vp_trait_make_tan(out, theta, incl);
+    out = v * std::pow(1 + r/rt, b) * std::pow(1 + std::pow(r/rt, -g), -1/g);
 }
 
-// Courteau (1997): vt (1 + x)^b / (1 + x^g)^(1 / g), with x = rt / r (0
+// Courteau (1997): v (1 + x)^b / (1 + x^g)^(1 / g), with x = rt / r (0
 // at the centre)
 template<typename T> constexpr void
-vp_trait_tan_courteau(T& out, T r, T theta, T incl, const T* params)
+vp_trait_courteau(T& out, T r, const T* params)
 {
     T rt = params[0];
-    T vt = params[1];
+    T v = params[1];
     T b = params[2];
     T g = params[3];
     const T x = rt / r;
     out = r > 0
-            ? vt * std::pow(1 + x, b) / std::pow(1 + std::pow(x, g), 1 / g)
+            ? v * std::pow(1 + x, b) / std::pow(1 + std::pow(x, g), 1 / g)
             : 0;
-    vp_trait_make_tan(out, theta, incl);
 }
 
-// Brandt (1960): vt (r / rt) / (1/3 + 2/3 (r / rt)^n)^(3 / (2 n)), with
-// its maximum vt at rt
+// Brandt (1960): v (r / rt) / (1/3 + 2/3 (r / rt)^n)^(3 / (2 n)), with
+// its maximum v at rt
 template<typename T> constexpr void
-vp_trait_tan_brandt(T& out, T r, T theta, T incl, const T* params)
+vp_trait_brandt(T& out, T r, const T* params)
 {
     T rt = params[0];
-    T vt = params[1];
+    T v = params[1];
     T n = params[2];
     const T x = r / rt;
-    out = vt * x
+    out = v * x
             / std::pow(T{1} / 3 + T{2} / 3 * std::pow(x, n), 3 / (2 * n));
-    vp_trait_make_tan(out, theta, incl);
 }
 
-// A pseudo-isothermal sphere: vt sqrt(1 - atan(u) / u), with u = r / rt,
-// the core radius rt and the asymptotic velocity vt (0 at the centre).
-// Near the centre, where 1 - atan(u) / u loses its precision (and can
-// round below 0), by its series u^2 / 3 - u^4 / 5 + u^6 / 7.
+// A pseudo-isothermal sphere: v sqrt(1 - atan(u) / u), with u = r / rt,
+// the core radius rt and the asymptotic speed v (0 at the centre). Near
+// the centre, where 1 - atan(u) / u loses its precision (and can round
+// below 0), by its series u^2 / 3 - u^4 / 5 + u^6 / 7.
 template<typename T> constexpr void
-vp_trait_tan_iso(T& out, T r, T theta, T incl, const T* params)
+vp_trait_iso(T& out, T r, const T* params)
 {
     T rt = params[0];
-    T vt = params[1];
+    T v = params[1];
     const T u = r / rt;
     const T u2 = u * u;
     const T g = std::abs(u) < T{0.1}
             ? u2 * (T{1} / 3 - u2 * (T{1} / 5 - u2 / 7))
             : 1 - std::atan(u) / u;
-    out = vt * std::sqrt(g);
-    vp_trait_make_tan(out, theta, incl);
+    out = v * std::sqrt(g);
 }
 
 // The shape of the rotation curve of an NFW halo of scale radius rt, with
-// its maximum vt (at 2.1626 rt): vt sqrt(f(r / rt) / f_max), with
-// f(u) = (ln(1 + u) - u / (1 + u)) / u (0 at the centre). Near the
-// centre, where the difference loses its precision, by its series
-// u / 2 - 2 u^2 / 3 + 3 u^3 / 4 - 4 u^4 / 5.
+// its maximum v (at 2.1626 rt): v sqrt(f(r / rt) / f_max), with f(u) =
+// (ln(1 + u) - u / (1 + u)) / u (0 at the centre). Near the centre, where
+// the difference loses its precision, by its series u / 2 - 2 u^2 / 3 +
+// 3 u^3 / 4 - 4 u^4 / 5.
 template<typename T> constexpr void
-vp_trait_tan_nfw(T& out, T r, T theta, T incl, const T* params)
+vp_trait_nfw(T& out, T r, const T* params)
 {
     constexpr T F_MAX = T{0.21621659550187317};
     T rt = params[0];
-    T vt = params[1];
+    T v = params[1];
     const T u = r / rt;
     const T f = u < T{0.01}
             ? u * (T{1} / 2 - u * (T{2} / 3 - u * (T{3} / 4 - u * T{4} / 5)))
             : (std::log1p(u) - u / (1 + u)) / u;
-    out = u > 0 ? vt * std::sqrt(f / F_MAX) : 0;
-    vp_trait_make_tan(out, theta, incl);
+    out = u > 0 ? v * std::sqrt(f / F_MAX) : 0;
 }
 
 template<typename T> constexpr void
-vp_trait_nw_tan_uniform(
-        T& out,
-        int rnidx, const T* rnodes, T r, T theta, T incl,
-        const T* params)
-{
-    if (r == 0) { out = 0; return; }
-    p_trait_nw_uniform(out, rnidx, rnodes, r, params);
-    vp_trait_make_tan(out, theta, incl);
-}
-
-template<typename T> constexpr void
-vp_trait_nw_tan_harmonic(
-        T& out,
-        int rnidx, const T* rnodes, int nrnodes, T r, T theta, T incl,
-        const T* consts, const T* params)
-{
-    if (r == 0) { out = 0; return; }
-    p_trait_nw_harmonic(out, rnidx, rnodes, nrnodes, r, theta, consts, params);
-    vp_trait_make_tan(out, theta, incl);
-}
-
-template<typename T> constexpr void
-vp_trait_nw_rad_uniform(
-        T& out,
-        int rnidx, const T* rnodes, T r, T theta, T incl,
-        const T* params)
-{
-    if (r == 0) { out = 0; return; }
-    p_trait_nw_uniform(out, rnidx, rnodes, r, params);
-    vp_trait_make_rad(out, theta, incl);
-}
-
-template<typename T> constexpr void
-vp_trait_nw_rad_harmonic(
-        T& out,
-        int rnidx, const T* rnodes, int nrnodes, T r, T theta, T incl,
-        const T* consts, const T* params)
-{
-    if (r == 0) { out = 0; return; }
-    p_trait_nw_harmonic(out, rnidx, rnodes, nrnodes, r, theta, consts, params);
-    vp_trait_make_rad(out, theta, incl);
-}
-
-template<typename T> constexpr void
-vp_trait_nw_ver_uniform(
-        T& out,
-        int rnidx, const T* rnodes, T r, T incl,
-        const T* params)
-{
-    p_trait_nw_uniform(out, rnidx, rnodes, r, params);
-    vp_trait_make_ver(out, incl);
-}
-
-template<typename T> constexpr void
-vp_trait_nw_ver_harmonic(
-        T& out,
-        int rnidx, const T* rnodes, int nrnodes, T r, T theta, T incl,
-        const T* consts, const T* params)
-{
-    p_trait_nw_harmonic(out, rnidx, rnodes, nrnodes, r, theta, consts, params);
-    vp_trait_make_ver(out, incl);
-}
-
-template<typename T> constexpr void
-vp_trait_nw_los_uniform(
+vp_trait_nw_uniform(
         T& out,
         int rnidx, const T* rnodes, T r,
         const T* params)
@@ -1136,7 +1043,7 @@ vp_trait_nw_los_uniform(
 }
 
 template<typename T> constexpr void
-vp_trait_nw_los_harmonic(
+vp_trait_nw_harmonic(
         T& out,
         int rnidx, const T* rnodes, int nrnodes, T r, T theta,
         const T* consts, const T* params)
@@ -1555,96 +1462,73 @@ rh_trait_rnd(
     }
 }
 
+// The speed of a velocity polar trait along its direction
 template<typename T> constexpr void
 vp_trait(
         T& out,
         int uid, const T* consts, const T* params,
         int rnidx, const T* rnodes, int nrnodes,
-        T x, T y, T r, T theta, T incl)
+        T x, T y, T r, T theta)
 {
     (void)x;
     (void)y;
 
     switch (uid)
     {
-    case VPT_UID_TAN_UNIFORM:
-        vp_trait_tan_uniform(
-                out, r, theta, incl, params);
+    case VPT_UID_UNIFORM:
+        vp_trait_uniform(
+                out, params);
         break;
-    case VPT_UID_TAN_ARCTAN:
-        vp_trait_tan_arctan(
-                out, r, theta, incl, params);
+    case VPT_UID_ARCTAN:
+        vp_trait_arctan(
+                out, r, params);
         break;
-    case VPT_UID_TAN_BOISSIER:
-        vp_trait_tan_boissier(
-                out, r, theta, incl, params);
+    case VPT_UID_BOISSIER:
+        vp_trait_boissier(
+                out, r, params);
         break;
-    case VPT_UID_TAN_EPINAT:
-        vp_trait_tan_epinat(
-                out, r, theta, incl, params);
+    case VPT_UID_EPINAT:
+        vp_trait_epinat(
+                out, r, params);
         break;
-    case VPT_UID_TAN_LRAMP:
-        vp_trait_tan_flat(
-                out, r, theta, incl, params);
+    case VPT_UID_LRAMP:
+        vp_trait_lramp(
+                out, r, params);
         break;
-    case VPT_UID_TAN_TANH:
-        vp_trait_tan_tanh(
-                out, r, theta, incl, params);
+    case VPT_UID_TANH:
+        vp_trait_tanh(
+                out, r, params);
         break;
-    case VPT_UID_TAN_POLYEX:
-        vp_trait_tan_polyex(
-                out, r, theta, incl, params);
+    case VPT_UID_POLYEX:
+        vp_trait_polyex(
+                out, r, params);
         break;
-    case VPT_UID_TAN_RIX:
-        vp_trait_tan_rix(
-                out, r, theta, incl, params);
+    case VPT_UID_RIX:
+        vp_trait_rix(
+                out, r, params);
         break;
-    case VPT_UID_TAN_COURTEAU:
-        vp_trait_tan_courteau(
-                out, r, theta, incl, params);
+    case VPT_UID_COURTEAU:
+        vp_trait_courteau(
+                out, r, params);
         break;
-    case VPT_UID_TAN_BRANDT:
-        vp_trait_tan_brandt(
-                out, r, theta, incl, params);
+    case VPT_UID_BRANDT:
+        vp_trait_brandt(
+                out, r, params);
         break;
-    case VPT_UID_TAN_ISO:
-        vp_trait_tan_iso(
-                out, r, theta, incl, params);
+    case VPT_UID_ISO:
+        vp_trait_iso(
+                out, r, params);
         break;
-    case VPT_UID_TAN_NFW:
-        vp_trait_tan_nfw(
-                out, r, theta, incl, params);
+    case VPT_UID_NFW:
+        vp_trait_nfw(
+                out, r, params);
         break;
-    case VPT_UID_NW_TAN_UNIFORM:
-        vp_trait_nw_tan_uniform(
-                out, rnidx, rnodes, r, theta, incl, params);
-        break;
-    case VPT_UID_NW_TAN_HARMONIC:
-        vp_trait_nw_tan_harmonic(
-                out, rnidx, rnodes, nrnodes, r, theta, incl, consts, params);
-        break;
-    case VPT_UID_NW_RAD_UNIFORM:
-        vp_trait_nw_rad_uniform(
-                out, rnidx, rnodes, r, theta, incl, params);
-        break;
-    case VPT_UID_NW_RAD_HARMONIC:
-        vp_trait_nw_rad_harmonic(
-                out, rnidx, rnodes, nrnodes, r, theta, incl, consts, params);
-        break;
-    case VPT_UID_NW_VER_UNIFORM:
-        vp_trait_nw_ver_uniform(
-                out, rnidx, rnodes, r, incl, params);
-        break;
-    case VPT_UID_NW_VER_HARMONIC:
-        vp_trait_nw_ver_harmonic(
-                out, rnidx, rnodes, nrnodes, r, theta, incl, consts, params);
-        break;
-    case VPT_UID_NW_LOS_UNIFORM:
-        vp_trait_nw_los_uniform(
+    case VPT_UID_NW_UNIFORM:
+        vp_trait_nw_uniform(
                 out, rnidx, rnodes, r, params);
         break;
-    case VPT_UID_NW_LOS_HARMONIC:
-        vp_trait_nw_los_harmonic(
+    case VPT_UID_NW_HARMONIC:
+        vp_trait_nw_harmonic(
                 out, rnidx, rnodes, nrnodes, r, theta, consts, params);
         break;
     default:
@@ -1652,6 +1536,42 @@ vp_trait(
         assert(false);
         break;
     }
+}
+
+// The line-of-sight velocity of the speed v of a velocity polar trait of
+// a disk of inclination incl, at the radius r and the azimuth theta of
+// its plane, by the direction of the speed: tangential, v cos(theta)
+// sin(incl); radial (positive outwards), v sin(theta) sin(incl);
+// vertical (positive along z), v cos(incl); or the line of sight, v. The
+// tangential and radial directions are undefined at the centre, where
+// the velocity is 0.
+template<typename T> constexpr T
+vp_disk_project(T v, int direction, T r, T theta, T incl)
+{
+    switch (direction)
+    {
+    case VPT_DIRECTION_TAN:
+        return r == 0 ? 0 : v * (std::cos(theta) * std::sin(incl));
+    case VPT_DIRECTION_RAD:
+        return r == 0 ? 0 : v * (std::sin(theta) * std::sin(incl));
+    case VPT_DIRECTION_VER:
+        return v * std::cos(incl);
+    case VPT_DIRECTION_LOS:
+        return v;
+    default:
+        assert(false);
+        return NAN;
+    }
+}
+
+// Project the speeds of the n velocity polar traits of a disk on the line
+// of sight, in place, each by its direction (see vp_disk_project)
+template<typename T> constexpr void
+vp_disk_project_traits(
+        T* values, int n, const int* directions, T r, T theta, T incl)
+{
+    for (int i = 0; i < n; ++i)
+        values[i] = vp_disk_project(values[i], directions[i], r, theta, incl);
 }
 
 // The factors of the velocity and dispersion height traits at the height

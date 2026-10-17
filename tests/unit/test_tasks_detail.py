@@ -86,7 +86,7 @@ MASSIVE = dict(
         type='smdisk', loose=False, tilted=False, rnmin=0, rnmax=4,
         rnsep=1, density=dict(ptraits=dict(type='exponential')),
         kinematics=dict(
-            vptraits=dict(type='tan_mass'), dptraits=dict(type='uniform')),
+            vptraits=dict(type='mass'), dptraits=dict(type='uniform')),
         emission=dict(type='lines'))],
     mass=[dict(type='spheroid', name='halo', profile=dict(
         type='pseudo_isothermal', parameters='density_radius'))],

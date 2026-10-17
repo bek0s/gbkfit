@@ -136,7 +136,7 @@ class Kinematics(parseutils.Serializable):
     How a disk moves: the velocity and the velocity dispersion of each of
     its points, given by traits (see traits). The velocity traits add up,
     so motions combine; a rotation in the gravity of the galaxy is the
-    velocity trait 'tan_mass' (see traits.VPTraitTanMass). A disk that emits
+    velocity trait 'mass' (see traits.VPTraitMass). A disk that emits
     lines into a spectral cube needs kinematics.
 
     Parameters
@@ -157,7 +157,7 @@ class Kinematics(parseutils.Serializable):
     ------
     ConfigError
         If there are no polar traits or too many, not one height trait
-        for each polar trait, or several velocity traits 'tan_mass' (the
+        for each polar trait, or several velocity traits 'mass' (the
         rotation in the gravity would count more than once).
     """
 
@@ -193,10 +193,10 @@ class Kinematics(parseutils.Serializable):
             traits.DHTrait | Sequence[traits.DHTrait | None] | None = None
     ):
         self._vptraits = _polar_traits('vptraits', vptraits)
-        if sum(isinstance(trait, traits.VPTraitTanMass)
+        if sum(isinstance(trait, traits.VPTraitMass)
                for trait in self._vptraits) > 1:
             raise ConfigError(
-                "a disk takes at most one velocity trait 'tan_mass': each "
+                "a disk takes at most one velocity trait 'mass': each "
                 "adds the whole rotation in the gravity")
         self._dptraits = _polar_traits('dptraits', dptraits)
         self._vhtraits = _height_traits(

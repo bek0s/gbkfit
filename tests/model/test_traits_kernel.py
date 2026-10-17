@@ -40,7 +40,7 @@ KINDS = dict(
 LINE_DISK_TRAITS = dict(
     pt=(dict(type='exponential'), dict(pt_a=1, pt_s=4)),
     ht=(dict(type='sech2', zmax=8), dict(ht_s=1)),
-    vpt=(dict(type='tan_arctan'), dict(vpt_rt=2, vpt_vt=150)),
+    vpt=(dict(type='arctan', direction='tan'), dict(vpt_rt=2, vpt_vt=150)),
     dpt=(dict(type='uniform'), dict(dpt_a=20)))
 DUST_DISK_TRAITS = dict(
     pt=(dict(type='exponential'), dict(pt_a=0.05, pt_s=4)),
@@ -54,14 +54,15 @@ def trait_configs(parser):
     A configuration of every type of trait of a parser: with order 2 and
     one blob where they apply, a map of 3 by 2 cells of 4 arcsec, zmax 8
     where it applies (density height traits within 8 arcsec of their
-    midplane, vertical distortions of at most 8 arcsec), and height
-    traits with and without node-wise parameters (rnodes).
+    midplane, vertical distortions of at most 8 arcsec), height traits
+    with and without node-wise parameters (rnodes), and velocity traits
+    along each direction.
     """
     configs = []
     for type_, cls in parser.registered_classes().items():
-        # (the trait tan_mass has no parameters: its values come from the
+        # (the trait mass has no parameters: its values come from the
         # mass of its galaxy; see test_mass)
-        if cls is traits.VPTraitTanMass:
+        if cls is traits.VPTraitMass:
             continue
         options = inspect.signature(cls.__init__).parameters
         config = dict(type=type_)
@@ -76,6 +77,10 @@ def trait_configs(parser):
         if 'rnodes' in options:
             configs += [
                 config | dict(rnodes=False), config | dict(rnodes=True)]
+        elif 'direction' in options:
+            configs += [
+                config | dict(direction=direction)
+                for direction in traits.VPT_DIRECTIONS]
         else:
             configs.append(config)
     return configs
