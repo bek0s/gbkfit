@@ -131,7 +131,11 @@ class Observation(parseutils.Serializable):
         not those of the observable, its model can lack values but its
         likelihood has no residual for them (see LikelihoodGaussian), its
         likelihood has free amplitudes and the observable has no spectra
-        or it has a calibration, the observable cannot be seen
+        or it has a calibration, its likelihood fits a noise but it has no
+        name, or fits the noise of items that the observable does not
+        have, or both the scale and the jitter of the noise of an item
+        whose errors are all equal (see _check_noise), the observable
+        cannot be seen
         through the instrument (see Observable.check_instrument), the
         dtype or the fft_dtype is not one of the native modules (see
         Driver.dtypes), or the fft_dtype is less precise than the dtype.
@@ -337,6 +341,14 @@ class Observation(parseutils.Serializable):
                 likelihood = LikelihoodGaussian()
             if likelihood.amplitudes() is not None:
                 _check_amplitudes(observable, calibration)
+            _check_noise(likelihood, observable, data)
+            if name is None and likelihood.pdescs():
+                raise ConfigError(
+                    "an observation with a fitted noise needs a name, which "
+                    "names its parameters (e.g. '{name}_noise_scale_"
+                    "moment1')")
+            likelihood = likelihood.with_prefix(
+                '' if name is None else f'{name}_')
             if observable.model_can_lack_values() \
                     and likelihood.missing_residual() is None:
                 raise ConfigError(
@@ -401,13 +413,17 @@ class Observation(parseutils.Serializable):
     def pdescs(self) -> dict[str, ParamScalarDesc]:
         """
         Return its parameters: that of its calibration, if any (see the
-        class), and those of its lens, '{name}_lens_{parameter}' (see
-        Foreground.pdescs).
+        class), those of its lens, '{name}_lens_{parameter}' (see
+        Foreground.pdescs), and those of the fitted noise of its
+        likelihood, e.g. '{name}_noise_scale_{item}' (see
+        LikelihoodGaussian).
         """
         name = self._calibration_param()
         calibration = {} if name is None else {name: ParamScalarDesc(
             desc=f"the flux scale of observation {self._name}")}
-        return calibration | self._foreground.pdescs()
+        likelihood = {} if self._likelihood is None \
+            else self._likelihood.pdescs()
+        return calibration | self._foreground.pdescs() | likelihood
 
     def _calibration_param(self) -> str | None:
         """Return the name of the parameter of its calibration, if any."""
@@ -502,6 +518,35 @@ def _check_amplitudes(observable: Observable, calibration: bool) -> None:
         raise ConfigError(
             "free amplitudes take the flux scale of the model: an "
             "observation with them has no calibration")
+
+
+def _check_noise(
+        likelihood: Likelihood,
+        observable: Observable,
+        data: Dataset
+) -> None:
+    """
+    Raise ConfigError unless the data items whose noise a likelihood fits
+    (see LikelihoodGaussian) are items of an observable, and those whose
+    scale and jitter are both fitted have errors that differ between their
+    values (with equal errors, or none, the two are one).
+    """
+    fitted = likelihood.fitted_noise()
+    if unknown := sorted(fitted.keys() - set(observable.keys())):
+        raise ConfigError(
+            f"the likelihood fits the noise of data items that the "
+            f"observable does not have: {unknown}; its items are "
+            f"{list(observable.keys())}")
+    for key, noise in fitted.items():
+        if not (noise.scale and noise.jitter):
+            continue
+        error = data[key].error()
+        used = None if error is None else error[data[key].mask() != 0]
+        if used is None or used.size == 0 or np.all(used == used[0]):
+            raise ConfigError(
+                f"the scale and the jitter of the noise of '{key}' cannot "
+                f"both be fitted: its errors are all equal, or it has none, "
+                f"so only (scale error)^2 + jitter^2 counts; fit one of them")
 
 
 def _check_beams(data: Dataset, instrument: Instrument) -> None:

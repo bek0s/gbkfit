@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, NamedTuple
 
 import numpy as np
 import scipy.special
@@ -14,6 +14,17 @@ from gbkfit.utils.parseutils import ConfigError
 __all__ = [
     'Objective'
 ]
+
+
+class _Noise(NamedTuple):
+    """
+    The fitted noise of a data item (see LikelihoodGaussian): the names of
+    the parameters of its scale and of its jitter (None for those not
+    fitted), and the smallest scale (1 if the scale is not fitted).
+    """
+    scale: str | None
+    jitter: str | None
+    scale_minimum: float
 
 
 class Objective:
@@ -39,6 +50,11 @@ class Objective:
     the data; its log-likelihood has them integrated out. They are
     nuisance parameters (see nnuisance), and an extra output,
     '{prefix}amplitudes' (see ObservationGroup.extra_prefix).
+
+    A likelihood with a fitted noise (see LikelihoodGaussian) divides the
+    residuals of its data items by their noise in place of their errors,
+    and adds the noise residual of each of those items after all the
+    other residuals of the observations (see residuals and noise_chi2).
 
     The methods for fitters return totals over all observations and new
     arrays (chi2, log_likelihood, residuals). The others return a value
@@ -118,6 +134,19 @@ class Objective:
         self._d_amplitudes = iterutils.make_list(n, None)
         self._h_prior_residuals = iterutils.make_list(n, None)
         self._d_prior_residuals = iterutils.make_list(n, None)
+        # The data items of each observation whose noise is fitted, by
+        # name; the squares of their noise residuals on the host (h) and
+        # the device (d), and the noise residuals, in float64 (each sums a
+        # term of every value of its item: float32 would round it off)
+        self._noise = tuple(
+            {key: _Noise(*obs.likelihood().noise_params(key),
+                         noise.scale_minimum if noise.scale else 1.0)
+             for key, noise in obs.likelihood().fitted_noise().items()}
+            for obs in observations)
+        self._h_noise_sums = iterutils.make_list(n, None)
+        self._d_noise_sums = iterutils.make_list(n, None)
+        self._noise_residuals = [
+            np.zeros(len(noise)) for noise in self._noise]
         # The native objective of each observation, for its driver
         self._backends = iterutils.make_list(n, None)
         # The memory is allocated on the first evaluation (see prepare)
@@ -214,6 +243,10 @@ class Objective:
                  self._d_amplitudes[i]) = driver.mem_alloc_s(spectra, dtype)
                 self._h_prior_residuals[i] = self._h_residual_vector[i][nelem:]
                 self._d_prior_residuals[i] = self._d_residual_vector[i][nelem:]
+            if self._noise[i]:
+                (self._h_noise_sums[i],
+                 self._d_noise_sums[i]) = driver.mem_alloc_s(
+                    len(self._noise[i]), np.float64)
         self._prepared = True
 
     def chi2(
@@ -223,7 +256,8 @@ class Objective:
     ) -> float:
         """
         Return the chi-square of all observations: the sum of their squared
-        weighted residuals.
+        weighted residuals (with those of the priors of amplitudes and
+        the noise residuals, if any; see residuals).
 
         Parameters
         ----------
@@ -247,8 +281,9 @@ class Objective:
         """
         Return the log-likelihood of all observations: -chi2 / 2, and
         with free amplitudes, their integral (see LikelihoodGaussian). The
-        constant of the Gaussian normalisation (which depends only on the
-        errors of the data) is left out.
+        part of the Gaussian normalisation that depends only on the errors
+        of the data is left out (with a fitted noise, the rest is in the
+        chi-square, as its noise residuals).
 
         Parameters
         ----------
@@ -296,7 +331,8 @@ class Objective:
         """
         Return the weighted residuals of all observations, one after the
         other, in a new array (in float64; see residual_vector_h for each
-        observation).
+        observation), and after them the noise residuals of each
+        observation (see LikelihoodGaussian), if any.
 
         Parameters
         ----------
@@ -313,7 +349,18 @@ class Objective:
             need one).
         """
         vectors = self.residual_vector_h(params, True, out_extra)
-        return np.concatenate(vectors, dtype=np.float64)
+        return np.concatenate(
+            [*vectors, *self._noise_residuals], dtype=np.float64)
+
+    def noise_chi2(self) -> float:
+        """
+        Return the sum of the squared noise residuals of all observations
+        (see LikelihoodGaussian), of the last evaluation: the part of the
+        chi-square that is not of the data (e.g. for a reduced
+        chi-square); 0 without a fitted noise.
+        """
+        return float(sum(
+            np.sum(residuals ** 2) for residuals in self._noise_residuals))
 
     def amplitudes(self) -> list[np.ndarray | None]:
         """
@@ -340,7 +387,8 @@ class Objective:
         data do not mask (the values the model does not have count too,
         with the missing_residual of their likelihood), all values of the
         data items with upper limits, and that of the prior of each
-        amplitude of a spectrum, if any.
+        amplitude of a spectrum, if any; not the noise residuals, which are
+        not of the data (see LikelihoodGaussian).
         """
         return sum(
             int(dataset[key].mask().size) if not np.isnan(limits[key][0])
@@ -367,7 +415,8 @@ class Objective:
             out_extra: dict[str, Any] | None = None
     ) -> list[float]:
         """
-        Return the sum of the weighted residuals of each observation.
+        Return the sum of the weighted residuals of each observation, its
+        noise residuals included (see residuals).
 
         Parameters
         ----------
@@ -394,7 +443,9 @@ class Objective:
                     self._d_residual_scalar[i])
                 driver.mem_copy_d2h(
                     self._d_residual_scalar[i], self._h_residual_scalar[i])
-                sums.append(float(self._h_residual_scalar[i][0]))
+                noise = self._noise_residuals[i]
+                sums.append(float(self._h_residual_scalar[i][0]) + float(
+                    np.sum(noise ** 2) if squared else np.sum(np.abs(noise))))
         return sums
 
     def residual_vector_h(
@@ -406,7 +457,7 @@ class Objective:
         """
         Return the residuals of each observation, on the host: its data
         items one after the other, in one array that the next evaluation
-        overwrites.
+        overwrites (without its noise residuals; see residuals).
 
         Parameters
         ----------
@@ -493,7 +544,7 @@ class Objective:
         with self._group.timers().measure('objective_residual_eval'):
             for i in range(self.nobservations()):
                 if self._amplitude_items[i] is not None:
-                    self._scale_spectra(i, model_data[i], out_extra)
+                    self._scale_spectra(i, model_data[i], params, out_extra)
                 observable = self._group.observations()[i].observable()
                 for key in observable.keys():
                     weight = self._weights_u[i][key] if weighted else 1.0
@@ -506,12 +557,65 @@ class Objective:
                         weight,
                         self._missing_residuals[i],
                         *self._upper_limits[i][key],
+                        *self._noise_values(i, key, params),
                         self._d_residual_nddata[i][key])
+                if self._noise[i]:
+                    self._update_noise_residuals(
+                        i, model_data[i], params, weighted)
+
+    def _noise_values(
+            self,
+            i: int,
+            key: str,
+            params: ParamValues
+    ) -> tuple[float, float]:
+        """
+        Return the scale and the jitter of the noise of data item key of
+        observation i (see LikelihoodGaussian): 1 and 0 for those that are
+        not fitted.
+        """
+        noise = self._noise[i].get(key)
+        if noise is None:
+            return 1.0, 0.0
+        scale = 1.0 if noise.scale is None else float(params[noise.scale])
+        jitter = 0.0 if noise.jitter is None else float(params[noise.jitter])
+        return scale, jitter
+
+    def _update_noise_residuals(
+            self,
+            i: int,
+            model_data: dict[str, dict[str, DeviceArray | None]],
+            params: ParamValues,
+            weighted: bool
+    ) -> None:
+        """
+        Evaluate the noise residuals of observation i (see
+        LikelihoodGaussian), with the weights of its data items if
+        weighted (as its residuals).
+        """
+        driver = self._group.observations()[i].driver()
+        for j, (key, noise) in enumerate(self._noise[i].items()):
+            weight = self._weights_u[i][key] if weighted else 1.0
+            self._backends[i].noise_sum(
+                self._d_dataset_e_nddata[i].get(key),
+                self._d_dataset_m_nddata[i].get(key),
+                model_data[key]['d'],
+                model_data[key]['w'],
+                weight,
+                *self._noise_values(i, key, params),
+                noise.scale_minimum,
+                self._d_noise_sums[i][j:j + 1])
+        driver.mem_copy_d2h(self._d_noise_sums[i], self._h_noise_sums[i])
+        # (each term is at least 0, but rounding can leave a sum of terms
+        # of 0, at the smallest scale and no jitter, a hair below it)
+        self._noise_residuals[i][...] = np.sqrt(
+            np.maximum(self._h_noise_sums[i], 0))
 
     def _scale_spectra(
             self,
             i: int,
             model_data: dict[str, dict[str, DeviceArray | None]],
+            params: ParamValues,
             out_extra: dict[str, Any] | None
     ) -> None:
         """
@@ -528,7 +632,8 @@ class Objective:
             self._d_dataset_d_nddata[i][key],
             self._d_dataset_e_nddata[i].get(key),
             self._d_dataset_m_nddata[i].get(key),
-            model['d'], model['w'], *self._d_amplitude_sums[i])
+            model['d'], model['w'], *self._noise_values(i, key, params),
+            *self._d_amplitude_sums[i])
         for h, d in zip(self._h_amplitude_sums[i], self._d_amplitude_sums[i]):
             driver.mem_copy_d2h(d, h)
         # The best amplitude: the minimum of the chi-square of the spectrum

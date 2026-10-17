@@ -348,15 +348,20 @@ def _residual_inputs():
         mdl_w=np.cos(0.005 * i) ** 2)
 
 
-def residual(driver, inputs, weight, missing, limit=(np.nan, np.nan)):
-    """The residual of the native objective, on the host."""
+def residual(
+        driver, inputs, weight, missing, limit=(np.nan, np.nan),
+        noise=(1.0, 0.0)):
+    """
+    The residual of the native objective, on the host, with the noise of
+    the given scale and jitter.
+    """
     memory = Memory(driver)
     objective = driver.native_class('Objective', DTYPE)()
     result = memory.to_device(np.zeros(1000, DTYPE))
     objective.residual(
         **{k: memory.to_device(v) for k, v in inputs.items()},
         weight=weight, missing=missing, limit=limit[0],
-        limit_error=limit[1], res=result)
+        limit_error=limit[1], scale=noise[0], jitter=noise[1], res=result)
     return memory.to_host(result)
 
 
@@ -386,18 +391,39 @@ def test_residual_of_masked_data_and_missing_model_values(driver):
     assert np.isfinite(result).all()
 
 
-def test_residual_of_upper_limits(driver):
-    # Masked values with a limit L of noise e are below it: sqrt(-2 log
-    # Phi((L - m) / e)) times the weights of the model and of the item,
-    # for models far below and far above the limit too (0 where the model
-    # has no value)
+def test_residual_with_a_fitted_noise(driver):
+    # (model - data) / sqrt((scale error)^2 + jitter^2), also for tiny
+    # errors (e.g. 1e-20 erg/s/cm^2/A), whose squares are below the
+    # smallest float32
+    inputs = _residual_inputs()
+    noise = np.hypot(1.3 * inputs['obs_e'].astype(float), 0.4)
+    expected = (inputs['mdl_d'].astype(float) - inputs['obs_d']) / noise \
+        * inputs['mdl_w'] * inputs['obs_m'] * 0.7
+    np.testing.assert_allclose(
+        residual(driver, inputs, 0.7, 3.0, noise=(1.3, 0.4)), expected,
+        rtol=1e-5, atol=1e-6)
+    tiny = inputs | {
+        key: inputs[key] * DTYPE(1e-20) for key in ('obs_d', 'obs_e', 'mdl_d')}
+    np.testing.assert_allclose(
+        residual(driver, tiny, 0.7, 3.0, noise=(1.3, 0.4e-20)), expected,
+        rtol=1e-5, atol=1e-6)
+
+
+@pytest.mark.parametrize('noise', [(1.0, 0.0), (1.3, 0.4)])
+def test_residual_of_upper_limits(driver, noise):
+    # Masked values with a limit L and the noise s of its error e are below
+    # it: sqrt(-2 log Phi((L - m) / s)) times the weights of the model and
+    # of the item, for models far below and far above the limit too (0
+    # where the model has no value)
     inputs = _residual_inputs()
     masked = inputs['obs_m'] == 0
     inputs['obs_d'][masked] = np.nan
     inputs['mdl_d'] = np.linspace(-40, 60, 1000).astype(DTYPE)
     inputs['mdl_d'][np.arange(1000) % 13 == 0] = np.nan
-    result = residual(driver, inputs, 0.7, 3.0, limit=(2.0, 0.8))
-    z = (2.0 - inputs['mdl_d'].astype(float)) / 0.8
+    result = residual(
+        driver, inputs, 0.7, 3.0, limit=(2.0, 0.8), noise=noise)
+    z = (2.0 - inputs['mdl_d'].astype(float)) / np.hypot(
+        noise[0] * 0.8, noise[1])
     expected = np.nan_to_num(np.sqrt(-2 * scipy.special.log_ndtr(z))) \
         * inputs['mdl_w'] * 0.7
     np.testing.assert_allclose(
@@ -427,6 +453,28 @@ def test_residual_sum_precision(driver):
     values = np.ones(1000)
     values[0] = 1e8
     assert residual_sum(driver, values, False) == 1e8 + 999
+
+
+def test_noise_sum(driver):
+    # sum c^2 log(noise^2 / (scale_minimum error)^2), c the factor of the
+    # residual: the weight of the item times those of the model and of the
+    # data mask, the weight alone where the model has no value; none
+    # where the data are masked
+    memory = Memory(driver)
+    inputs = _residual_inputs()
+    masked = inputs['obs_m'] == 0
+    missing = ~masked & (np.arange(1000) % 11 == 0)
+    inputs['mdl_d'][missing] = np.nan
+    total = memory.to_device(np.zeros(1, np.float64))
+    driver.native_class('Objective', DTYPE)().noise_sum(
+        **{k: memory.to_device(v) for k, v in inputs.items() if k != 'obs_d'},
+        weight=0.7, scale=1.3, jitter=0.4, scale_minimum=0.5, sum=total)
+    error = inputs['obs_e'].astype(float)
+    c = np.where(missing, 0.7, 0.7 * inputs['mdl_w'] * inputs['obs_m'])
+    terms = c ** 2 * np.log(np.hypot(1.3 * error, 0.4) ** 2
+                            / (0.5 * error) ** 2)
+    assert memory.to_host(total)[0] == pytest.approx(
+        np.sum(terms[~masked]), rel=1e-6)
 
 
 def _trait_set(driver, memory, *traits_and_params):

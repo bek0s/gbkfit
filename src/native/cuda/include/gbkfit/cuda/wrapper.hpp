@@ -96,7 +96,7 @@ struct Wrapper
             const T* obs_d, const T* obs_e, const T* obs_m,
             const T* mdl_d, const T* mdl_w,
             int size, T weight, T missing, T limit, T limit_error,
-            T* res);
+            T scale, T jitter, T* res);
 
     static void
     objective_residual_sum(
@@ -106,7 +106,15 @@ struct Wrapper
     objective_amplitude_sums(
             const T* obs_d, const T* obs_e, const T* obs_m,
             const T* mdl_d, const T* mdl_w,
-            int nchannels, int nspectra, double* a, double* b);
+            T scale, T jitter, int nchannels, int nspectra,
+            double* a, double* b);
+
+    static void
+    objective_noise_sum(
+            const T* obs_e, const T* obs_m,
+            const T* mdl_d, const T* mdl_w,
+            int size, T weight, T scale, T jitter, T scale_minimum,
+            double* sum);
 };
 
 }} // namespace gbkfit::cuda

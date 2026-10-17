@@ -321,7 +321,10 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
         nresiduals = objective.nresiduals()
         nevals = 1
         dof = nresiduals - problem.ndim() - objective.nnuisance()
-        reduced_chi2 = chi2 / dof if dof > 0 else np.nan
+        # (the noise residuals of a fitted noise are not of the data: a
+        # reduced chi-square with them would scale the covariance wrongly)
+        reduced_chi2 = (chi2 - objective.noise_chi2()) / dof if dof > 0 \
+            else np.nan
         log_prior = None if problem.priors() is None \
             else problem.log_prior(x)
         cov = laplace = error = None
