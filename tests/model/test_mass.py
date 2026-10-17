@@ -903,6 +903,18 @@ def test_pressure_support_option():
         traits.VPTraitTanMass('asymmetric')
 
 
+def test_one_mass_trait_per_disk():
+    from gbkfit.model.components.disks import traits
+    from gbkfit.model.components.disks.parts import Kinematics
+    Kinematics(
+        [traits.VPTraitTanMass(), traits.VPTraitNWRadUniform()],
+        traits.DPTraitUniform())
+    with pytest.raises(ConfigError, match="at most one velocity trait"):
+        Kinematics(
+            [traits.VPTraitTanMass(), traits.VPTraitTanMass('jeans')],
+            traits.DPTraitUniform())
+
+
 def test_observations_of_a_galaxy_share_its_gravity(driver, monkeypatch):
     # The gravity of a galaxy is evaluated once, on its driver, for all
     # the observations of it, whatever their drivers and dtypes: here one
