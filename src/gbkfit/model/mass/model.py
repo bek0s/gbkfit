@@ -83,6 +83,36 @@ class MassModel(parseutils.Serializable):
         """Return its mass components."""
         return self._components
 
+    def component(self, name: str) -> MassComponent:
+        """
+        Return its mass component of a name.
+
+        Raises
+        ------
+        KeyError
+            If it has none of that name.
+        """
+        return self._components[self._index(name)]
+
+    def component_params(
+            self, name: str, params: ParamValues) -> ParamValues:
+        """
+        Return the values of the parameters of its mass component of a
+        name, by their names in the component, from those of its
+        parameters (and possibly others).
+        """
+        mapping = self._mappings[self._index(name)]
+        return {own: params[full] for own, full in mapping.items()}
+
+    def _index(self, name: str) -> int:
+        """Return the index of its mass component of a name."""
+        names = [component.name() for component in self._components]
+        if name not in names:
+            raise KeyError(
+                f"the mass model has no component {name!r}; its "
+                f"components: {names}")
+        return names.index(name)
+
     def pdescs(self) -> dict[str, ParamDesc]:
         """Return its parameters, by name."""
         return self._pdescs

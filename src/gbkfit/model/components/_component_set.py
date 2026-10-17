@@ -51,7 +51,9 @@ def _with_mass_params(
     mass and no component does, if the mass has no distance or the
     distance no mass (its only user), if a mass component follows a
     component that is not a disk of the galaxy (see
-    Component.density_disk), or if the names of the parameters repeat.
+    Component.density_disk), if the pressure support of a disk takes the
+    density of a mass component that the galaxy does not have, or if the
+    names of the parameters repeat.
     """
     moved = any(cmp.circular_velocity_params() for cmp in components)
     if moved and mass_model is None:
@@ -80,6 +82,18 @@ def _with_mass_params(
                     f"the mass component {mass_component.name()!r} follows "
                     f"the component {name!r}, which is not a disk of its "
                     f"galaxy; its disks: {disks}")
+    mass_names = [component.name() for component in mass_model.components()]
+    for cmp in components:
+        disk = cmp.density_disk()
+        supports = {} if disk is None else disk.pressure_supported_params()
+        for support in supports.values():
+            if support.density is not None \
+                    and support.density not in mass_names:
+                raise ConfigError(
+                    f"the pressure support of the component {cmp.name()!r} "
+                    f"takes the density of the mass component "
+                    f"{support.density!r}, which its galaxy does not have; "
+                    f"its mass components: {mass_names}")
     gravity = distance.pdescs() | mass_model.pdescs()
     if repeated := sorted(params.keys() & gravity.keys()):
         raise ConfigError(

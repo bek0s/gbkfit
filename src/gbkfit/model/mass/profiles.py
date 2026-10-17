@@ -9,6 +9,7 @@ from typing import Any
 
 import numpy as np
 import numpy.typing as npt
+import scipy.special
 
 from gbkfit.params import ParamDesc, ParamValues
 from gbkfit.params.pdescs import ParamScalarDesc
@@ -64,6 +65,25 @@ class SpheroidProfile(parseutils.TypedSerializable, abc.ABC):
         MassComponent.vcirc2 for the other arguments).
         """
         pass
+
+    def surface_density(
+            self,
+            R: npt.ArrayLike,
+            params: ParamValues,
+            context: MassContext
+    ) -> np.ndarray:
+        """
+        Return its projected density (Msun/kpc^2) at the radii R (kpc; see
+        MassComponent.vcirc2 for the other arguments).
+
+        Raises
+        ------
+        NotImplementedError
+            If the profile does not give it (here).
+        """
+        raise NotImplementedError(
+            f"the profile '{self.type()}' does not give its projected "
+            f"density")
 
     def potential(
             self,
@@ -124,6 +144,22 @@ class ProfileSersic(SpheroidProfile):
     ) -> np.ndarray:
         mass, re, tables = self._scales(params)
         return mass * tables.mass(np.asarray(r, dtype=float) / re)
+
+    def surface_density(
+            self,
+            R: npt.ArrayLike,
+            params: ParamValues,
+            context: MassContext
+    ) -> np.ndarray:
+        # S_e exp(-b ((R / re)^(1/n) - 1)), of the total mass 2 pi n re^2
+        # S_e e^b b^(-2n) Gamma(2n)
+        mass, re, _ = self._scales(params)
+        n = float(params['n'])
+        b = _numerics.sersic_b(n)
+        surface_e = mass * b ** (2 * n) / (
+            2 * np.pi * n * re ** 2 * np.exp(b) * scipy.special.gamma(2 * n))
+        return surface_e * np.exp(
+            -b * ((np.asarray(R, dtype=float) / re) ** (1 / n) - 1))
 
     def potential(
             self,

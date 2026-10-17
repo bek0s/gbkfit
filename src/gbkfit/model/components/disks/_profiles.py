@@ -202,7 +202,8 @@ def pressure_support(
         plan: DiskPlan,
         params: ParamValues,
         radii: np.ndarray,
-        mode: str
+        mode: str,
+        density: np.ndarray | None = None
 ) -> np.ndarray:
     """
     Return the pressure support of a disk at its midplane, (R / rho)
@@ -215,9 +216,9 @@ def pressure_support(
     where its selection traits keep it) and of rho sigma^2;
     'self_gravitating', with those of S^2 / sigma^2 and of S^2, which rho
     and rho sigma^2 are proportional to (S its density polar traits,
-    where its selection traits keep it). The derivative by the
-    second-order three-point formula on the radii. NaN where it has no
-    density.
+    where its selection traits keep it), or instead the given density.
+    The derivative by the second-order three-point formula on the radii.
+    NaN where it has no density.
 
     Parameters
     ----------
@@ -231,6 +232,10 @@ def pressure_support(
         The radii (arcsec).
     mode : str
         The pressure support: 'jeans' or 'self_gravitating'.
+    density : np.ndarray, optional
+        The density at the radii (e.g. of a mass component, in any unit)
+        to take instead of that of the disk: at the midplane for 'jeans',
+        the surface density for 'self_gravitating'.
     """
     params = _with_given(disk, params)
     r = np.asarray(radii, dtype=float)[:, None]
@@ -245,24 +250,29 @@ def pressure_support(
     density_heights = at_midplane('rht') if mode == 'jeans' \
         else np.ones((1, len(r), 1))
     dispersion_heights = at_midplane('dht')
+    given = None if density is None \
+        else np.asarray(density, dtype=float)[:, None]
 
     def values(theta: np.ndarray) -> np.ndarray:
-        density = np.sum(
-            plan.evaluate_polar_traits(params, 'rpt', r, theta)
-            * density_heights, axis=0, dtype=float)
-        density *= _selected(disk, plan, params, r, theta)
         dispersion = np.sum(
             plan.evaluate_polar_traits(params, 'dpt', r, theta)
             * dispersion_heights, axis=0, dtype=float)
+        if given is not None:
+            own = np.broadcast_to(given, dispersion.shape)
+        else:
+            own = np.sum(
+                plan.evaluate_polar_traits(params, 'rpt', r, theta)
+                * density_heights, axis=0, dtype=float)
+            own *= _selected(disk, plan, params, r, theta)
         if mode == 'jeans':
-            return np.stack((density, density * dispersion ** 2))
+            return np.stack((own, own * dispersion ** 2))
         # (rho ~ S^2 / sigma^2: infinite without dispersion, where the
         # disk has no thickness and no pressure)
-        squared = density ** 2
+        squared = own ** 2
         return np.stack((np.divide(
             squared, dispersion ** 2, where=dispersion != 0,
             out=np.where(squared != 0, np.inf, 0.0)), squared))
-    kinds = ('rpt', 'spt', 'dpt')
+    kinds = ('rpt', 'spt', 'dpt') if density is None else ('dpt',)
     density, pressure = _azimuthal_mean(
         values, _axisymmetric(disk, kinds),
         _edges(disk, params, kinds, r[:, 0]))

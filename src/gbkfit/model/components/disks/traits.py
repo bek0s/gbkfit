@@ -62,6 +62,7 @@ uniform, mixture and map traits.
 """
 
 import abc
+import dataclasses
 import numbers
 from collections.abc import Callable, Sequence
 from typing import Any
@@ -438,6 +439,18 @@ def trait_desc(cls: type['Trait']) -> str:
     return parseutils.make_typed_desc(cls, label)
 
 
+@dataclasses.dataclass(frozen=True)
+class PressureSupport:
+    """
+    How the rotation of a disk in the gravity of its galaxy is corrected
+    for its pressure (see VPTraitTanMass): mode, 'jeans' or
+    'self_gravitating', and density, the name of the mass component of
+    the galaxy whose density it takes, or None for that of the disk.
+    """
+    mode: str
+    density: str | None = None
+
+
 class Trait(parseutils.TypedSerializable, abc.ABC):
     """
     A trait of a disk: a profile of one of its properties (see the module
@@ -486,7 +499,7 @@ class Trait(parseutils.TypedSerializable, abc.ABC):
         """
         return ()
 
-    def pressure_support(self) -> str | None:
+    def pressure_support(self) -> PressureSupport | None:
         """
         Return how the values of its circular velocity parameters are
         corrected for the pressure of their disk, if they are (see
@@ -2120,16 +2133,28 @@ class VPTraitTanMass(VPTrait):
     traits (DysmalPy's pressure support of types 1 and 2, for an
     exponential and a Sersic S).
 
+    With pressure_density, the name of a mass component of its galaxy,
+    the pressure takes the density of that component instead of that of
+    its disk: its density at its midplane ('jeans'; e.g. the gas of a
+    thick mass disk, as DysmalPy's pressure support of type 3), or its
+    surface density ('self_gravitating'; e.g. that of the mass disk, as
+    DysmalPy's types 1 and 2 take its effective radius), with the
+    dispersion of its disk.
+
     Parameters
     ----------
     pressure_support : str, optional
         The pressure support: none (the default), 'jeans' or
         'self_gravitating'.
+    pressure_density : str, optional
+        The name of the mass component whose density the pressure takes;
+        by default, that of its disk.
 
     Raises
     ------
     ConfigError
-        If pressure_support is not valid.
+        If pressure_support or pressure_density is not valid, or
+        pressure_density is given without pressure_support.
     """
 
     @staticmethod
@@ -2141,16 +2166,30 @@ class VPTraitTanMass(VPTrait):
         return VPT_UID_NW_TAN_UNIFORM
 
     def dump(self) -> dict[str, Any]:
-        info = dict(pressure_support=self._pressure_support) \
-            if self._pressure_support is not None else {}
+        info = {}
+        if (support := self._pressure_support) is not None:
+            info['pressure_support'] = support.mode
+            if support.density is not None:
+                info['pressure_density'] = support.density
         return super().dump() | info
 
-    def __init__(self, pressure_support: str | None = None):
+    def __init__(
+            self,
+            pressure_support: str | None = None,
+            pressure_density: str | None = None
+    ):
         if pressure_support not in (None, 'jeans', 'self_gravitating'):
             raise ConfigError(
                 f"pressure_support must be 'jeans', 'self_gravitating' or "
                 f"none; it is {pressure_support!r}")
-        self._pressure_support = pressure_support
+        if pressure_density is not None:
+            if pressure_support is None:
+                raise ConfigError(
+                    "pressure_density is the density of the pressure "
+                    "support: it needs pressure_support")
+            parseutils.check_name(pressure_density)
+        self._pressure_support = None if pressure_support is None \
+            else PressureSupport(pressure_support, pressure_density)
 
     def sampling(self) -> str:
         return 'subrings'
@@ -2161,7 +2200,7 @@ class VPTraitTanMass(VPTrait):
     def circular_velocity_params(self) -> tuple[str, ...]:
         return ('vt',)
 
-    def pressure_support(self) -> str | None:
+    def pressure_support(self) -> PressureSupport | None:
         return self._pressure_support
 
 

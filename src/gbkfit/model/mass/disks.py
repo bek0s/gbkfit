@@ -111,3 +111,11 @@ class MassDisk(MassComponent):
     ) -> np.ndarray:
         return self._surface.surface_density(R, params, context) \
             * self._vertical.height_pdf(R, z, params, context)
+
+    def surface_density(
+            self,
+            R: npt.ArrayLike,
+            params: ParamValues,
+            context: MassContext
+    ) -> np.ndarray:
+        return self._surface.surface_density(R, params, context)

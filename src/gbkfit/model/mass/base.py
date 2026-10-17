@@ -225,6 +225,25 @@ class MassComponent(parseutils.TypedSerializable, abc.ABC):
         raise NotImplementedError(
             f"the mass component '{self.type()}' does not give its density")
 
+    def surface_density(
+            self,
+            R: npt.ArrayLike,
+            params: ParamValues,
+            context: MassContext
+    ) -> np.ndarray:
+        """
+        Return its surface density (Msun/kpc^2), seen face-on, at the radii
+        R (see vcirc2 for the other arguments).
+
+        Raises
+        ------
+        NotImplementedError
+            If the component does not give its surface density.
+        """
+        raise NotImplementedError(
+            f"the mass component '{self.type()}' does not give its surface "
+            f"density")
+
     def forces(
             self,
             R: npt.ArrayLike,

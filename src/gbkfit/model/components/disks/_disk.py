@@ -16,7 +16,7 @@ from gbkfit.params import (
 from gbkfit.utils import iterutils, parseutils
 from ..base import FieldsLayout, NativeGrid
 from ..geometries import GEOMETRY_PARAMS
-from .traits import Trait
+from .traits import PressureSupport, Trait
 
 
 _log = logging.getLogger(__name__)
@@ -57,7 +57,7 @@ class TraitParams:
     sampling: dict[str, str | None]
     pnames: tuple[dict[str, str], ...]
     circular_velocity: tuple[str, ...]
-    pressure_support: dict[str, str]
+    pressure_support: dict[str, PressureSupport]
 
 
 def _trait_params(
@@ -329,7 +329,7 @@ class Disk(abc.ABC):
         """
         return self._circular_velocity_params
 
-    def pressure_supported_params(self) -> dict[str, str]:
+    def pressure_supported_params(self) -> dict[str, PressureSupport]:
         """
         Return how those of its circular velocity parameters (see
         circular_velocity_params) whose values are corrected for its
