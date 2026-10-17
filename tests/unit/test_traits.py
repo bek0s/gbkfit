@@ -14,8 +14,9 @@ def kernel_consts_cases():
     read from it (traits.hpp): the truncation and the node-wise switch of
     the density heights, the node-wise switch of the other
     heights, the largest displacement of the vertical distortions (and
-    the order of a harmonic one), the number of blobs of mixtures and the
-    order of harmonics. The other traits have none.
+    the order of a harmonic one), the number of blobs of mixtures, the
+    order of harmonics, and the grid of a map. The other traits have
+    none.
     """
     parsers = dict(
         rpt=traits.rpt_parser, rht=traits.rht_parser,
@@ -36,6 +37,8 @@ def kernel_consts_cases():
                 options, consts = dict(nblobs=3), (3,)
             elif type_.endswith('harmonic'):
                 options, consts = dict(order=2), (2,)
+            elif type_ == 'map':
+                options, consts = dict(size=[3, 2], step=2.0), (3, 2, 2.0)
             else:
                 options, consts = dict(), ()
             yield pytest.param(cls, options, consts, id=f"{kind}-{type_}")

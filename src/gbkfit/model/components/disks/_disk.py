@@ -289,6 +289,27 @@ class Disk(abc.ABC):
         """Return the parameters of the traits of one kind (TraitParams)."""
         return self._trait_params[kind]
 
+    def trait_values(
+            self, kind: str, params: ParamValues
+    ) -> tuple[dict[str, np.ndarray], ...]:
+        """
+        Return the values of the parameters of each trait of one kind, by
+        their names in the trait, from the values of the parameters of the
+        disk: the node-wise ones at the subnodes, as the disk evaluates
+        them.
+        """
+        trait_params = self._trait_params[kind]
+        out = []
+        for names in trait_params.pnames:
+            values = {}
+            for name, full in names.items():
+                value = np.asarray(params[full], dtype=float)
+                if trait_params.sampling[full] == 'rnodes':
+                    value = self._interp(self._rnodes, value)(self._subrnodes)
+                values[name] = value
+            out.append(values)
+        return tuple(out)
+
     def options(self) -> dict[str, Any]:
         """
         Return the options of this type of disk, besides those of all

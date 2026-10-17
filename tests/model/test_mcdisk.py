@@ -154,6 +154,29 @@ def test_mcdisk_flux_does_not_depend_on_height_profile(driver, height):
     assert total.sum() == pytest.approx(reference.sum(), rel=1e-5)
 
 
+def test_mcdisk_map_matches_smdisk(driver):
+    # A map of cells of both signs on top of the exponential: its clouds,
+    # drawn by cell and uniform in each, make the image of the smooth disk
+    # (to about 1.3%: the smooth disk takes the density at the centres of
+    # its 1 arcsec pixels, which blurs the edges of the cells; 0.25% with
+    # pixels of 0.5)
+    rng = np.random.default_rng(5)
+    density = dict(
+        ptraits=[
+            dict(type='exponential'),
+            dict(type='map', size=[6, 4], step=3.0)],
+        htraits=[dict(type='sech2', zmax=8), dict(type='sech2', zmax=8)])
+    properties = dict(
+        pt1_a=rng.uniform(0.2, 1, 24) * np.where(np.arange(24) == 7, -1, 1),
+        ht1_s=1)
+    smdisk = evaluate_disk(
+        'smdisk', driver.type(), dict(density=density), properties)
+    mcdisk = evaluate_disk(
+        'mcdisk', driver.type(), dict(density=density, cflux=2e-5),
+        properties)
+    assert relative_difference(mcdisk.sum(axis=0), smdisk.sum(axis=0)) < 0.02
+
+
 def test_mcdisk_same_on_all_drivers(driver):
     # Every driver draws the same random numbers for every cloud
     cube = evaluate_disk('mcdisk', driver.type())
