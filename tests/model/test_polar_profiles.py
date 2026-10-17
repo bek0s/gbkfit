@@ -26,7 +26,7 @@ def face_on_disk(driver, evaluate_cases, key, trait):
     disk with a polar trait of the given type, and the radius of each
     pixel (pixels of 0.5, centred on the disk).
     """
-    from gbkfit.model.components.disks import traits
+    from gbkfit.model.components import traits
     parser = dict(b=traits.rpt_parser, d=traits.dpt_parser)[key]
     prefix = dict(b='pt', d='dpt')[key]
     names = list(parser.load(dict(type=trait)).params_sm())
@@ -131,7 +131,7 @@ def test_map_lies_where_blobs_lie(driver, evaluate_cases):
     (dict(size=[3, 2.5], step=1.0), "size must be"),
     (dict(size=[3, 2], step=0), "step must be")])
 def test_map_options_are_checked(options, message):
-    from gbkfit.model.components.disks import traits
+    from gbkfit.model.components import traits
     from gbkfit.utils.parseutils import ConfigError
     with pytest.raises(ConfigError, match=message):
         traits.RPTraitMap(**options)

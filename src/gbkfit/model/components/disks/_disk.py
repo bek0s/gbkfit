@@ -16,7 +16,7 @@ from gbkfit.params import (
 from gbkfit.utils import iterutils, parseutils
 from ..base import FieldsLayout, NativeGrid
 from ..geometries import GEOMETRY_PARAMS
-from .traits import PressureSupport, Trait
+from ..traits import PressureSupport, Trait
 
 
 _log = logging.getLogger(__name__)

@@ -94,7 +94,7 @@ def test_traits_evaluated_apart_are_sampled_as_by_their_disk(driver):
     # with the interpolation of the disk, and linearly between them, up to
     # its last node (the disk is closed); off the disk, the traits are NaN
     from gbkfit.model import BandEmission, Density, SMDisk
-    from gbkfit.model.components.disks import traits
+    from gbkfit.model.components import traits
     rnodes, curve = (0.0, 4.0, 10.0, 20.0), [1.0, 3.0, 2.0, 0.5]
     component = SMDisk(
         Density(traits.RPTraitNWUniform()), emission=BandEmission(),

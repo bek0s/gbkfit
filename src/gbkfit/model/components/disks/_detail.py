@@ -13,6 +13,7 @@ from gbkfit.math import interpolation
 from gbkfit.params import ParamValues
 from gbkfit.utils import gridutils, iterutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
+from .. import traits
 from .._detail import (
     Fluxes, dump_geometry, dump_name, parse_nodes, systemic_velocity)
 from .._units import DataUnit, OpacityScales, band_factors, line_factors
@@ -22,7 +23,7 @@ from ..lines import Band, Bands, LineCatalogue, LinePlacement, Lines
 from ..roles import (
     BandEmission, Emission, LineEmission, Opacity, emission_parser,
     opacity_parser)
-from . import _disk, traits
+from . import _disk
 from .opacity import LineOpacity
 from .parts import Density, Kinematics, density_parser, kinematics_parser
 

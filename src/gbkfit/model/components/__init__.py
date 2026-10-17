@@ -5,5 +5,5 @@ from .lines import *
 from .points import *
 from .roles import *
 
-from . import disks
+from . import disks, traits
 from .disks import MCDisk, SMDisk, Density, Kinematics, LineOpacity
