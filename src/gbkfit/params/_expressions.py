@@ -2,9 +2,10 @@
 The expressions of parameter properties (e.g. 'hi_vpt_vt': 'a * 2'). They
 can use numbers, parameters and their elements, constants, arithmetic,
 comparisons, conditional expressions, tuples and lists, a few builtins,
-and of numpy (np, np.linalg): its ufuncs (e.g. np.sin), numbers (e.g.
+of numpy (np, np.linalg): its ufuncs (e.g. np.sin), numbers (e.g.
 np.pi), scalar types (e.g. np.int64) and the functions on numbers and
-arrays of _NUMPY_FUNCTIONS. Nothing else, so a configuration cannot run
+arrays of _NUMPY_FUNCTIONS, and the scaling relations of gbkfit.relations
+(e.g. relations.dz_c). Nothing else, so a configuration cannot run
 arbitrary code (numpy also holds modules such as os, and functions that
 read and write files), and an expression cannot change the values it
 reads.
@@ -19,6 +20,7 @@ from typing import Any
 
 import numpy as np
 
+from gbkfit import relations
 from gbkfit.params._keys import (
     InvalidKeyError, parse_subscript, subscript_value)
 from gbkfit.params.pdescs import ParamDesc
@@ -79,7 +81,7 @@ def check_name(name: str) -> str | None:
         return "it is not a valid name"
     if keyword.iskeyword(name):
         return "it is a Python keyword"
-    if name == 'np' or name in BUILTINS:
+    if name in ('np', 'relations') or name in BUILTINS:
         return "expressions use it"
     return None
 
@@ -93,6 +95,12 @@ def _dotted_name(node: ast.expr) -> str | None:
     if not isinstance(node, ast.Name):
         return None
     return '.'.join([node.id] + names[::-1])
+
+
+def _is_relation(node: ast.expr) -> bool:
+    """Check whether a node names a relation of gbkfit.relations."""
+    module, _, member = (_dotted_name(node) or '').rpartition('.')
+    return module == 'relations' and member in relations.__all__
 
 
 def _is_numpy(node: ast.expr) -> bool:
@@ -141,8 +149,9 @@ class Expression:
 
     def evaluate(self, namespace: Mapping[str, Any]) -> Any:
         """Evaluate with the values of the parameters and constants."""
-        return eval(self._code, {'__builtins__': BUILTINS, 'np': np},
-                    namespace)
+        return eval(self._code, {
+            '__builtins__': BUILTINS, 'np': np, 'relations': relations},
+            namespace)
 
     def _check(
             self,
@@ -162,26 +171,29 @@ class Expression:
                 raise InvalidExpressionError(
                     f"{node.value!r} is not allowed in expressions; "
                     f"constants must be numbers")
-            if isinstance(node, ast.Attribute) and not _is_numpy(node):
+            if isinstance(node, ast.Attribute) \
+                    and not (_is_numpy(node) or _is_relation(node)):
                 raise InvalidExpressionError(
                     f"'{ast.unparse(node)}' is not allowed in expressions; "
                     f"of the attributes, only numpy ufuncs, numbers, "
                     f"scalar types and functions on arrays are (e.g. "
-                    f"np.sin, np.pi, np.sum)")
+                    f"np.sin, np.pi, np.sum), and the relations of "
+                    f"gbkfit.relations (e.g. relations.dz_c)")
             if isinstance(node, ast.Call) and not (
-                    _is_numpy(node.func) or (
+                    _is_numpy(node.func) or _is_relation(node.func) or (
                         isinstance(node.func, ast.Name)
                         and node.func.id in BUILTINS)):
                 raise InvalidExpressionError(
                     f"'{ast.unparse(node.func)}' cannot be called in "
                     f"expressions; only numpy ufuncs, scalar types and "
-                    f"functions on arrays, and {', '.join(BUILTINS)} can")
+                    f"functions on arrays, the relations of "
+                    f"gbkfit.relations, and {', '.join(BUILTINS)} can")
             if isinstance(node, ast.keyword) and node.arg in _KEYWORDS:
                 raise InvalidExpressionError(
                     f"the keyword '{node.arg}' is not allowed in expressions")
             if isinstance(node, ast.Name) and not (
                     node.id in pdescs or node.id in constants
-                    or node.id in BUILTINS or node.id == 'np'):
+                    or node.id in BUILTINS or node.id in ('np', 'relations')):
                 raise InvalidExpressionError(f"unknown name '{node.id}'")
             if (isinstance(node, ast.Subscript)
                     and isinstance(node.value, ast.Name)

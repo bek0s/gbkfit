@@ -152,9 +152,11 @@ class ParamSpace(parseutils.Serializable):
 
     Expressions can use numbers, the values of parameters and their
     elements, constants, arithmetic, comparisons, conditional expressions
-    (a if c else b), a few builtins (abs, min, max, round, sum, len), and
-    of numpy (np, np.linalg) its ufuncs, numbers, scalar types and its
-    functions on arrays (e.g. np.sin, np.pi, np.sum). An expression that
+    (a if c else b), a few builtins (abs, min, max, round, sum, len), of
+    numpy (np, np.linalg) its ufuncs, numbers, scalar types and its
+    functions on arrays (e.g. np.sin, np.pi, np.sum), and the scaling
+    relations of gbkfit.relations (e.g. relations.log_mhalo_moster13).
+    An expression that
     reads a parameter with a mode reads its decoded values. Expressions
     and a transforms function are mutually exclusive.
 
