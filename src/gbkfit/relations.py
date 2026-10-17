@@ -5,6 +5,8 @@ expressions of parameters can call (as relations.<name>, e.g.
 arrays only. Masses are log10 of solar masses; each relation states the
 mass of the halos it is of (e.g. M_200c, or the virial mass of Bryan &
 Norman 1998: the overdensities '200c' and 'vir' of gbkfit.model.mass).
+(Moster et al. 2018 is not here: it tabulates its stellar-to-halo mass
+relation at six redshifts only, for the peak halo mass.)
 """
 
 from collections.abc import Callable
