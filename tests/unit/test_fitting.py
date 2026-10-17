@@ -13,7 +13,8 @@ from gbkfit.dataset import Data, DatasetPixelBrightness
 from gbkfit.driver.drivers.host import DriverHost
 from gbkfit.fitting import (
     EvaluationLog, EvaluationPool, FitControl, FitParamPrior, FitProblem,
-    PriorGauss, PriorGaussTrunc, PriorLogUniform, PriorSine, PriorUniform)
+    PriorGauss, PriorGaussTrunc, PriorHalfCauchy, PriorHalfGauss,
+    PriorLogUniform, PriorSine, PriorUniform)
 from gbkfit.instrument import Instrument, PSFGauss
 from gbkfit.model import galaxy_parser
 from gbkfit.objective import Objective
@@ -84,12 +85,14 @@ def test_fitter_configs_round_trip():
 
 @pytest.mark.parametrize('prior', [
     PriorUniform(-1, 3), PriorLogUniform(0.1, 10), PriorGauss(1, 2),
-    PriorGaussTrunc(1, 2, 0, 2), PriorSine(20, 85)])
+    PriorGaussTrunc(1, 2, 0, 2), PriorSine(20, 85), PriorHalfGauss(2),
+    PriorHalfCauchy(0.5)])
 def test_priors_are_normalised_and_ppf_inverts_their_cdf(prior):
-    lo = prior.minimum() if math.isfinite(prior.minimum()) else -30
-    hi = prior.maximum() if math.isfinite(prior.maximum()) else 30
+    # (over the whole support: the half-Cauchy has 1% of its mass beyond
+    # 60 scales)
+    lo, hi = prior.minimum(), prior.maximum()
     total, _ = scipy.integrate.quad(
-        lambda x: math.exp(prior.log_pdf(x)), lo, hi, points=[1])
+        lambda x: math.exp(prior.log_pdf(x)), lo, hi)
     assert total == pytest.approx(1, rel=1e-6)
     # The probability below ppf(u) is u
     for u in (0.1, 0.5, 0.9):
@@ -109,6 +112,18 @@ def test_the_residual_of_the_sine_prior_is_smooth_through_edge_on():
     slopes = np.diff(prior.residual([89.8, 89.9, 90, 90.1, 90.2])) / 0.1
     np.testing.assert_allclose(slopes, np.radians(1), rtol=1e-4)
 
+@pytest.mark.parametrize('prior, slope', [
+    (PriorHalfGauss(2), 0.5), (PriorHalfCauchy(0.5), math.sqrt(2) / 0.5)])
+def test_the_residuals_of_half_priors_have_a_slope_at_0(prior, slope):
+    # (their squares are the chi-square, and they leave 0 with a finite
+    # slope, as least squares need; that of a log-uniform prior would be
+    # infinite)
+    x = np.array([0, 0.3, 1, 5, 50])
+    np.testing.assert_allclose(prior.residual(x) ** 2, prior.chi2(x))
+    assert prior.residual(1e-6) / 1e-6 == pytest.approx(slope, rel=1e-6)
+    assert prior.chi2(-1) == np.inf
+
+
 def test_priors_load_from_their_configs_and_round_trip():
     info = dict(
         prior=dict(type='gauss_trunc', mean=0, std=1, min=-1, max=2),
@@ -118,6 +133,10 @@ def test_priors_load_from_their_configs_and_round_trip():
     assert (param.minimum(), param.maximum(), param.value()) == (-1, 2, 0.5)
     assert param.dump() == info
     assert FitParamPrior.load(param.dump()).dump() == info
+    from gbkfit.fitting import prior_parser
+    for info in (dict(type='half_gauss', std=2.0),
+                 dict(type='half_cauchy', scale=0.5)):
+        assert prior_parser.dump(prior_parser.load(info)) == info
 
 
 def test_min_and_max_without_a_prior_are_a_uniform_prior():
