@@ -142,6 +142,14 @@ DUST = dict(
     type='smdisk', name='dust', loose=False, tilted=False, rnmin=0,
     rnmax=10, rnsep=1, density=THICK, opacity=dict(type='dust'))
 NUCLEUS = dict(type='point', name='nucleus', emission=LINES, depth=True)
+OUTFLOW = dict(
+    type='smcone', name='outflow', rnodes=[1, 3, 6],
+    density=dict(
+        ptraits=dict(type='uniform'), htraits=dict(type='gauss', zmax=1)),
+    kinematics=dict(
+        vptraits=dict(type='uniform', direction='out'),
+        dptraits=dict(type='uniform')),
+    emission=LINES)
 
 PROPERTIES = dict(
     gas_vsys=0, gas_xpos=0.5, gas_ypos=-1, gas_posa=30, gas_incl=60,
@@ -378,15 +386,21 @@ def test_line_opacity_errors(driver, component, line_of_sight, message):
 
 @pytest.mark.parametrize('disk_type', ['smdisk', 'mcdisk'])
 def test_slabs_give_the_same_model(driver, evaluate_cases, disk_type):
-    # A thick disk with line opacity, a thin disk, a point and dust, on
-    # the depth axis at once, a plane at a time, and in slabs of 7 planes
+    # A thick disk with line opacity, a thin disk, a point, a cone and
+    # dust, on the depth axis at once, a plane at a time, and in slabs of
+    # 7 planes
     gas = line_opacity(GAS, dict(type='uniform')) | (
         dict(type='mcdisk', cflux=1e-3) if disk_type == 'mcdisk' else {})
     components = [
-        gas, NUCLEUS, DUST, GAS | dict(name='gas2', density=THIN)]
+        gas, NUCLEUS, DUST, GAS | dict(name='gas2', density=THIN), OUTFLOW]
     properties = PROPERTIES | dict(gas_op_a=0.5) | {
         key.replace('gas_', 'gas2_'): value
-        for key, value in PROPERTIES.items() if key.startswith('gas_')}
+        for key, value in PROPERTIES.items() if key.startswith('gas_')} \
+        | dict(
+            outflow_vsys=0, outflow_xpos=0.5, outflow_ypos=-1,
+            outflow_posa=30, outflow_incl=60, outflow_wall=30,
+            outflow_pt_a=0.2, outflow_ht_s=0.4, outflow_vpt_vo=200,
+            outflow_dpt_a=40)
     models = []
     for slab in (None, 1, 7):
         case = dict(
@@ -402,7 +416,8 @@ def test_slabs_give_the_same_model(driver, evaluate_cases, disk_type):
     for other_cube, other_extra in others:
         assert_same_model(other_cube, cube)
         assert other_extra.keys() == extra.keys()
-        for key in ('total_odata', 'total_bdata', 'gas_vdata'):
+        for key in ('total_odata', 'total_bdata', 'gas_vdata',
+                    'outflow_vdata'):
             name = f'observation0_model_{key}'
             np.testing.assert_allclose(
                 other_extra[name].data, extra[name].data, rtol=1e-5,

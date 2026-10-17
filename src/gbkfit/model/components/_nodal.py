@@ -579,7 +579,8 @@ def parse_component_rnode_args(
     nodes = parse_nodes('r', rnmin, rnmax, rnsep, rnlen, rnodes)
     step = rstep
     if step is None:
-        step = min(1, min(np.diff(nodes)) / 2)
+        # (a float, as configurations take it)
+        step = float(min(1, min(np.diff(nodes)) / 2))
     # (half the difference is allowed, also as it rounds)
     if step <= 0 or step > min(np.diff(nodes)) / 2 * (1 + 1e-9):
         raise ConfigError(
