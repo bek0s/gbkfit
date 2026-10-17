@@ -9,6 +9,7 @@ from gbkfit.params import ParamDesc, ParamValues
 from gbkfit.utils import gridutils
 from gbkfit.utils.parseutils import ConfigError
 from .. import traits
+from .._nodal import make_bands, make_lines
 from .._units import DataUnit
 from ..base import Component, ComponentPlan, FieldsLayout
 from ..geometries import Geometry
@@ -253,8 +254,8 @@ class MCDisk(Component):
             rnmin=rnmin, rnmax=rnmax, rnsep=rnsep, rnlen=rnlen,
             rnodes=rnodes, rstep=rstep, interp=interp,
             cflux=cflux, seed=seed)
-        self._lines = _detail.make_lines(self._disk, emission)
-        self._bands = _detail.make_bands(self._disk, emission)
+        self._lines = make_lines(self._disk.pdescs(), emission)
+        self._bands = make_bands(self._disk.pdescs(), emission)
 
     def density(self) -> Density:
         """Return its density."""
@@ -278,6 +279,9 @@ class MCDisk(Component):
 
     def circular_velocity_params(self) -> dict[str, tuple[float, ...]]:
         return self._disk.circular_velocity_params()
+
+    def bounding_radius(self) -> float:
+        return self._disk.bounding_radius()
 
     def density_disk(self) -> _disk.Disk:
         return self._disk

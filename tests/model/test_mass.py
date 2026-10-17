@@ -1011,7 +1011,7 @@ def test_disk_of_a_component_is_the_nodewise_disk_of_its_density(
     # subnodes, and 0 at the last) is the nodewise disk of that surface
     # density at the subnodes, and of the scale height of the density
     # (in kpc) if thick
-    from gbkfit.model.components.disks._disk import subring_radii
+    from gbkfit.model.components._nodal import subring_radii
     rnodes = list(range(0, 21, 2))
     brightness = np.append(np.linspace(1, 0.2, 10), 0)
     upsilon = 2e8
@@ -1074,7 +1074,7 @@ def test_disk_follows_a_component_without_light():
     # the surface density of the dust (as in test_disk_of_a_component_is_
     # the_nodewise_disk_of_its_density), at the subnodes of the disk it
     # moves
-    from gbkfit.model.components.disks._disk import subring_radii
+    from gbkfit.model.components._nodal import subring_radii
     rnodes = list(range(0, 21, 2))
     opacity = np.append(np.linspace(1, 0.2, 10), 0)
     upsilon = 2e8
@@ -1191,7 +1191,7 @@ def test_mass_trait_with_pressure_support(driver, line_of_sight):
     # derivative by the three-point formula: thin, rho is the surface
     # density; thick and flaring (sech2, node-wise scale height s), rho is
     # the surface density / (2 s)
-    from gbkfit.model.components.disks._disk import subring_radii
+    from gbkfit.model.components._nodal import subring_radii
     rnodes = list(range(0, 21, 2))
     flaring = np.linspace(0.5, 2, 11)
     disk = with_traits(

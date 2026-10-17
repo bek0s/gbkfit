@@ -1,9 +1,6 @@
 
 import abc
-import logging
-import typing
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
@@ -13,13 +10,12 @@ from gbkfit.driver import DeviceArray, Driver
 from gbkfit.math.interpolation import Interpolator
 from gbkfit.params import (
     ParamDesc, ParamScalarDesc, ParamValues, ParamVectorDesc)
-from gbkfit.utils import iterutils, parseutils
-from ..base import FieldsLayout, NativeGrid
+from .._nodal import (
+    ExtraMaps, NodalPlan, NodalTraits, ParamBuffer, TraitParams,
+    fill_param_values, native_traits, subring_radii)
+from ..base import NativeGrid
 from ..geometries import GEOMETRY_PARAMS
 from ..traits import PressureSupport, Trait
-
-
-_log = logging.getLogger(__name__)
 
 
 # The kinds of traits of a disk: density (r), velocity (v) and dispersion
@@ -29,145 +25,10 @@ _log = logging.getLogger(__name__)
 TRAIT_KINDS = (
     'rpt', 'rht', 'vpt', 'vht', 'dpt', 'dht', 'zpt', 'spt', 'opt')
 
-# The most traits of one kind that the native kernels take (TRAIT_NUM_MAX
-# in constants.hpp)
-MAX_TRAITS = 4
-
 
 def _make_param_descs(key: str, nnodes: int, nw: bool) -> dict[str, ParamDesc]:
     """Return the parameter of the given name, node-wise if nw."""
     return {key: ParamVectorDesc(nnodes) if nw else ParamScalarDesc()}
-
-
-@dataclass
-class TraitParams:
-    """
-    The parameters of the traits of one kind, with prefixed names, and for
-    each one where its values are given if it is node-wise (its trait's
-    sampling, see traits.SAMPLINGS) or None, and its name in its trait.
-    The keys of all dicts are in the same order: the order of the traits,
-    and for each trait, the smooth parameters before the node-wise ones.
-    circular_velocity has the names of those whose values are the
-    circular velocity of the mass of the galaxy (see
-    traits.Trait.circular_velocity_params), and pressure_support those of
-    them corrected for the pressure of the disk, with how (see
-    traits.Trait.pressure_support).
-    """
-    pdescs: dict[str, ParamDesc]
-    sampling: dict[str, str | None]
-    pnames: tuple[dict[str, str], ...]
-    circular_velocity: tuple[str, ...]
-    pressure_support: dict[str, PressureSupport]
-
-
-def _trait_params(
-        traits_: Sequence[Trait],
-        prefix: str | Sequence[str] | None,
-        nrnodes: int,
-        nsubrnodes: int
-) -> 'TraitParams':
-    """
-    Return the parameters of the traits of one kind, of the given prefix
-    (followed by the index of each trait after the first), or of the given
-    prefix of each trait. A node-wise parameter has a value for each node,
-    or for each subnode if its trait samples it at the subnodes.
-    """
-    params_list = []
-    for trait in traits_:
-        sampling = trait.sampling()
-        nnodes = nsubrnodes if sampling == 'subrings' else nrnodes
-        params_list.append(
-            {name: (pdesc, None)
-             for name, pdesc in trait.params_sm().items()}
-            | {name: (pdesc, sampling)
-               for name, pdesc in trait.params_rnw(nnodes).items()})
-    prefixes = list(prefix) if iterutils.is_sequence(prefix) \
-        else parseutils.item_prefixes(
-            [None] * len(params_list), 'traits', prefix, True)
-    params, mappings = iterutils.merge_with_prefixes(params_list, prefixes)
-    return TraitParams(
-        pdescs={name: tuple_[0] for name, tuple_ in params.items()},
-        sampling={name: tuple_[1] for name, tuple_ in params.items()},
-        pnames=mappings,
-        circular_velocity=tuple(
-            mapping[name]
-            for trait, mapping in zip(traits_, mappings)
-            for name in trait.circular_velocity_params()),
-        pressure_support={
-            mapping[name]: trait.pressure_support()
-            for trait, mapping in zip(traits_, mappings)
-            if trait.pressure_support() is not None
-            for name in trait.circular_velocity_params()})
-
-
-def _trait_constants(
-        traits_: Sequence[Trait], nnodes: int, nsubnodes: int
-) -> tuple[list[int], list[float], list[int], list[int]]:
-    """
-    Return the uids, constant values and their counts, and the parameter
-    value counts of a set of traits. Each node-wise parameter has one
-    value for each subnode, because the node values are interpolated.
-    """
-    uids, cvalues, ccounts, pcounts = [], [], [], []
-    for trait in traits_:
-        consts = trait.consts()
-        npvalues_sm = sum(p.size() for p in trait.params_sm().values())
-        npvalues_nw = len(trait.params_rnw(nnodes)) * nsubnodes
-        uids.append(trait.uid())
-        cvalues += consts
-        ccounts.append(len(consts))
-        pcounts.append(npvalues_sm + npvalues_nw)
-    return uids, cvalues, ccounts, pcounts
-
-
-def _fill_param_values(
-        values: np.ndarray,
-        params: ParamValues,
-        pdescs: dict[str, ParamDesc],
-        sampling: dict[str, str | None],
-        nodes: Sequence[float],
-        subnodes: Sequence[float],
-        interp: type[Interpolator]
-) -> None:
-    """
-    Write the values of the given parameters one after the other into
-    values. The values of the node-wise parameters given at the nodes are
-    replaced in params with their values interpolated to the subnodes
-    (sampling has where the values of each parameter are given, see
-    TraitParams).
-    """
-    start = 0
-    for name in pdescs:
-        if sampling[name] == 'rnodes':
-            params[name] = interp(nodes, params[name])(subnodes)
-        stop = start + np.size(params[name])
-        values[start:stop] = params[name]
-        start = stop
-
-
-def subring_radii(
-        rnodes: Sequence[float], rstep: float) -> tuple[float, ...]:
-    """
-    Return the radii of the rings that a disk of the given radial nodes is
-    evaluated on, its subnodes: the first and the last node, and between
-    them the centres of rings of equal width, at most rstep, that cover
-    the radii between the two exactly.
-    """
-    nrings = max(1, int(np.ceil((rnodes[-1] - rnodes[0]) / rstep - 1e-9)))
-    width = (rnodes[-1] - rnodes[0]) / nrings
-    centres = rnodes[0] + (np.arange(nrings) + 0.5) * width
-    subrnodes = np.concatenate(([rnodes[0]], centres, [rnodes[-1]]))
-    return tuple(typing.cast(list, subrnodes.tolist()))
-
-
-def _weighted_mean(weighted_sum: np.ndarray, weight: np.ndarray) -> np.ndarray:
-    """
-    Return the mean of each voxel from its weighted sum; NaN without
-    weight.
-    """
-    return np.divide(
-        weighted_sum, weight, out=np.full_like(weighted_sum, np.nan),
-        where=weight != 0)
 
 
 class Disk(abc.ABC):
@@ -192,18 +53,16 @@ class Disk(abc.ABC):
         opacity ('opt'): its index among the lines of the emission.
         """
 
-        nrnodes = len(rnodes)
         subrnodes = subring_radii(rnodes, rstep)
 
         self._loose = loose
         self._tilted = tilted
         self._rnodes = rnodes
-        self._nrnodes = nrnodes
         self._rstep = rstep
         self._subrnodes = subrnodes
-        self._nsubrnodes = len(subrnodes)
         self._interp = interp
-        self._traits = {kind: traits_.get(kind, ()) for kind in TRAIT_KINDS}
+        self._traits = NodalTraits(
+            TRAIT_KINDS, traits_, prefixes, rnodes, subrnodes, interp)
         self._opacity_lines = tuple(opacity_lines)
 
         # Make descs for the geometric parameters. There is no systemic
@@ -212,36 +71,17 @@ class Disk(abc.ABC):
         self._geometry_isnw = {
             name: switches[switch] for name, switch in GEOMETRY_PARAMS.items()}
         self._geometry_pdescs = {
-            name: _make_param_descs(name, nrnodes, self._geometry_isnw[name])
+            name: _make_param_descs(
+                name, len(rnodes), self._geometry_isnw[name])
             for name in GEOMETRY_PARAMS
-            if name != 'vsys' or self._traits['vpt']}
-
-        # Make descs for the trait parameters (the kinds without traits
-        # have no prefix, and no parameters)
-        self._trait_params = {
-            kind: _trait_params(
-                traits_, prefixes.get(kind), nrnodes, self._nsubrnodes)
-            for kind, traits_ in self._traits.items()}
-
-        # The parameters whose values are the circular velocity of the
-        # mass of their galaxy, and the radii of their values
-        self._circular_velocity_params = {
-            name: subrnodes if params.sampling[name] == 'subrings' else rnodes
-            for params in self._trait_params.values()
-            for name in params.circular_velocity}
-        self._pressure_supported_params = {
-            name: mode for params in self._trait_params.values()
-            for name, mode in params.pressure_support.items()}
+            if name != 'vsys' or self.traits('vpt')}
 
         # Merge all parameter descs into the same dictionary, without those
         # that the model gives
         self._pdescs = {}
         for pdescs in self._geometry_pdescs.values():
             self._pdescs.update(pdescs)
-        for params in self._trait_params.values():
-            self._pdescs.update(params.pdescs)
-        for name in self._circular_velocity_params:
-            del self._pdescs[name]
+        self._pdescs.update(self._traits.pdescs())
 
     def loose(self) -> bool:
         return self._loose
@@ -262,8 +102,8 @@ class Disk(abc.ABC):
         of its midplane; see RHTrait and ZPTrait).
         """
         height = max(
-            (trait.zmax() for trait in self._traits['rht']), default=0.0)
-        displacement = sum(trait.zmax() for trait in self._traits['zpt'])
+            (trait.zmax() for trait in self.traits('rht')), default=0.0)
+        displacement = sum(trait.zmax() for trait in self.traits('zpt'))
         return float(np.hypot(self._rnodes[-1], height + displacement))
 
     def rstep(self) -> float:
@@ -276,7 +116,7 @@ class Disk(abc.ABC):
         return self._interp
 
     def traits(self, kind: str) -> tuple[Trait, ...]:
-        return self._traits[kind]
+        return self._traits.traits(kind)
 
     def opacity_lines(self) -> tuple[int, ...]:
         """
@@ -285,9 +125,9 @@ class Disk(abc.ABC):
         """
         return self._opacity_lines
 
-    def trait_params(self, kind: str) -> 'TraitParams':
+    def trait_params(self, kind: str) -> TraitParams:
         """Return the parameters of the traits of one kind (TraitParams)."""
-        return self._trait_params[kind]
+        return self._traits.params(kind)
 
     def trait_values(
             self, kind: str, params: ParamValues
@@ -298,17 +138,7 @@ class Disk(abc.ABC):
         disk: the node-wise ones at the subnodes, as the disk evaluates
         them.
         """
-        trait_params = self._trait_params[kind]
-        out = []
-        for names in trait_params.pnames:
-            values = {}
-            for name, full in names.items():
-                value = np.asarray(params[full], dtype=float)
-                if trait_params.sampling[full] == 'rnodes':
-                    value = self._interp(self._rnodes, value)(self._subrnodes)
-                values[name] = value
-            out.append(values)
-        return tuple(out)
+        return self._traits.values(kind, params)
 
     def options(self) -> dict[str, Any]:
         """
@@ -327,7 +157,7 @@ class Disk(abc.ABC):
         given radii (arcsec), by name. The disk plans need them with the
         others.
         """
-        return self._circular_velocity_params
+        return self._traits.circular_velocity_params()
 
     def pressure_supported_params(self) -> dict[str, PressureSupport]:
         """
@@ -336,7 +166,7 @@ class Disk(abc.ABC):
         pressure are corrected, by their names (see
         traits.VPTraitMass).
         """
-        return self._pressure_supported_params
+        return self._traits.pressure_supported_params()
 
     @abc.abstractmethod
     def plan(
@@ -357,12 +187,11 @@ class Disk(abc.ABC):
         pass
 
 
-class DiskPlan(abc.ABC):
+class DiskPlan(NodalPlan):
     """
     The evaluation of a disk on a driver and dtype: the native description
-    of the disk, and the host and device memory with its parameter values
-    (geometry and traits, packed in one buffer, and the values of its
-    emission lines), and the host view of each group of values in it.
+    of the disk, and its parameter values (geometry and traits, and the
+    values of its emission lines) in one buffer (see ParamBuffer).
     """
 
     def __init__(
@@ -377,70 +206,46 @@ class DiskPlan(abc.ABC):
         # The number of values of each group of parameters: one value for
         # each subnode for node-wise geometric parameters, and the values
         # of all the traits of each kind
+        nsubrnodes = len(disk.subrnodes())
         sizes = {
-            name: disk._nsubrnodes if disk._geometry_isnw[name] else 1
+            name: nsubrnodes if disk._geometry_isnw[name] else 1
             for name in disk._geometry_pdescs}
-        constants = {}
-        for kind, traits_ in disk._traits.items():
-            constants[kind] = _trait_constants(
-                traits_, disk._nrnodes, disk._nsubrnodes)
-            sizes[kind] = sum(constants[kind][3])
+        sizes |= disk._traits.sizes()
         # The offset, scale and flux of each emission line
         sizes['lines'] = 3 * nlines
         # The sines and cosines of posa and incl, for the search of the
         # ring of each point of a loose or tilted disk
         sizes['posa_incl_sincos'] = 4 * sizes['posa']
-
-        # Pack all parameter values in one buffer, so that they can be
-        # copied to the device with one copy per evaluation
-        values_h, values_d = driver.mem_alloc_s(sum(sizes.values()), dtype)
-        views_h, views_d = {}, {}
-        start = 0
-        for name, size in sizes.items():
-            views_h[name] = values_h[start:start + size]
-            views_d[name] = values_d[start:start + size]
-            start += size
+        buffer = ParamBuffer(driver, dtype, sizes)
 
         def to_device(values, dtype_):
             return driver.mem_copy_h2d(np.array(values, dtype_))
 
         # Describe the disk to the native module: its (sub)nodes, the
-        # device memory of its geometric parameters, and its traits (with
-        # the direction of each velocity polar trait)
-        trait_set_class = driver.native_class('TraitSet', dtype)
-        trait_sets = {}
-        for kind, (uids, cvalues, ccounts, pcounts) in constants.items():
-            if disk._traits[kind]:
-                trait_sets[kind] = trait_set_class(
-                    uids=to_device(uids, np.int32),
-                    cvalues=to_device(cvalues, dtype),
-                    ccounts=to_device(ccounts, np.int32),
-                    pvalues=views_d[kind],
-                    pcounts=to_device(pcounts, np.int32))
-        # (and the row of the line of each trait of line opacity)
+        # device memory of its geometric parameters, its traits, and the
+        # row of the line of each trait of line opacity
         if opacity_rows is None:
-            opacity_rows = [-1] * len(disk._traits['opt'])
+            opacity_rows = [-1] * len(disk.traits('opt'))
         self._native_disk = driver.native_class('Disk', dtype)(
-            loose=disk._loose,
-            tilted=disk._tilted,
-            rnodes=to_device(disk._subrnodes, dtype),
-            **{name: views_d.get(name) for name in GEOMETRY_PARAMS},
-            **trait_sets,
-            vpt_directions=to_device(
-                [trait.direction_uid() for trait in disk._traits['vpt']],
-                np.int32) if disk._traits['vpt'] else None,
+            loose=disk.loose(),
+            tilted=disk.tilted(),
+            rnodes=to_device(disk.subrnodes(), dtype),
+            **{name: buffer.device(name)
+               if name in disk._geometry_pdescs else None
+               for name in GEOMETRY_PARAMS},
+            **native_traits(driver, dtype, disk._traits, buffer),
             opt_rows=to_device(opacity_rows, np.int32)
-            if disk._traits['opt'] else None,
-            posa_incl_sincos=views_d['posa_incl_sincos'])
+            if disk.traits('opt') else None,
+            posa_incl_sincos=buffer.device('posa_incl_sincos'))
 
         self._disk = disk
         self._driver = driver
         self._dtype = dtype
         self._nlines = nlines
-        self._param_values = (values_h, values_d)
-        self._param_views = views_h
-        self._lines_h = views_h['lines'].reshape(nlines, 3)
-        self._lines_d = views_d['lines'].reshape(nlines, 3) if nlines else None
+        self._buffer = buffer
+        self._lines_h = buffer.host('lines').reshape(nlines, 3)
+        self._lines_d = buffer.device('lines').reshape(nlines, 3) \
+            if nlines else None
         self._backend = driver.native_class('GModel', dtype)()
 
     def evaluate(
@@ -454,102 +259,34 @@ class DiskPlan(abc.ABC):
             rdata_scale: float = 1.0,
             image_scale: float = 1.0
     ) -> None:
-        """
-        Add the disk to the outputs. grid has the grid of the native
-        evaluation functions (see NativeGrid), and outputs the arrays they
-        add to (all optional): the cubes of opacity they read ('opacity')
-        with their ratios ('opacity_ratios'), the 'image' (whose light is
-        times image_scale) or 'scube', the 3d density ('rdata', times
-        rdata_scale) and density after the opacity ('ordata'), or instead
-        of the light, the fields of the march, which they write ('fields',
-        see fields_layout). density_key names the density map in the extra
-        outputs (e.g. 'bdata' for light, 'odata' for dust). lines has the
-        offset, scale and flux of each emission line (an array of shape
-        (nlines, 3); see the native DiskArgs), if the plan has lines.
-        """
-
         disk = self._disk
-        driver = self._driver
-        dtype = self._dtype
-
         params = self._write_params(params, lines)
-
-        rdata_cmp = None
-        vdata_cmp = None
-        ddata_cmp = None
-        vdweight_cmp = None
-        ordata_cmp = None
-
-        odata = outputs.get('opacity')
+        maps = None
         if out_extra is not None:
-            shape = tuple(grid['spat_size'][::-1])
-            if disk._traits['rpt']:
-                rdata_cmp = driver.mem_alloc_d(shape, dtype)
-                driver.mem_fill(rdata_cmp, 0)
-            # The velocity and dispersion of each voxel are means weighted
-            # by the absolute density: the kernels add to their weighted
-            # sums and to the sum of the weights
-            if disk._traits['vpt']:
-                vdata_cmp = driver.mem_alloc_d(shape, dtype)
-                driver.mem_fill(vdata_cmp, 0)
-            if disk._traits['dpt']:
-                ddata_cmp = driver.mem_alloc_d(shape, dtype)
-                driver.mem_fill(ddata_cmp, 0)
-            if disk._traits['vpt'] or disk._traits['dpt']:
-                vdweight_cmp = driver.mem_alloc_d(shape, dtype)
-                driver.mem_fill(vdweight_cmp, 0)
-            if odata is not None:
-                ordata_cmp = driver.mem_alloc_d(shape, dtype)
-                driver.mem_fill(ordata_cmp, 0)
+            maps = ExtraMaps(
+                self._driver, self._dtype, grid,
+                density=bool(disk.traits('rpt')),
+                velocity=bool(disk.traits('vpt')),
+                dispersion=bool(disk.traits('dpt')),
+                opacity=outputs.get('opacity') is not None)
 
         # The keyword arguments of the native evaluation functions
-        grid_and_outputs = grid | outputs | dict(
-            lines=self._lines_d,
-            rdata_cmp=rdata_cmp, ordata_cmp=ordata_cmp,
-            vdata_cmp=vdata_cmp, ddata_cmp=ddata_cmp,
-            vdweight_cmp=vdweight_cmp, rdata_scale=rdata_scale,
-            image_scale=image_scale)
+        grid_and_outputs = grid | outputs \
+            | (maps.native() if maps is not None else {}) \
+            | dict(lines=self._lines_d, rdata_scale=rdata_scale,
+                   image_scale=image_scale)
 
         self._impl_evaluate(params, grid_and_outputs, out_extra)
 
-        if out_extra is not None:
-
-            if disk._traits['rpt']:
-                out_extra[density_key] = driver.mem_copy_d2h(rdata_cmp)
-            if vdweight_cmp is not None:
-                weight = driver.mem_copy_d2h(vdweight_cmp)
-            if disk._traits['vpt']:
-                out_extra['vdata'] = _weighted_mean(
-                    driver.mem_copy_d2h(vdata_cmp), weight)
-            if disk._traits['dpt']:
-                out_extra['ddata'] = _weighted_mean(
-                    driver.mem_copy_d2h(ddata_cmp), weight)
-            if odata is not None:
-                out_extra['obdata'] = driver.mem_copy_d2h(ordata_cmp)
-            if disk._traits['rpt']:
-                sumabs = np.nansum(np.abs(out_extra[density_key]))
-                _log.debug(f"sum(abs({density_key})): {sumabs}")
-            if disk._traits['vpt']:
-                sumabs = np.nansum(np.abs(out_extra['vdata']))
-                _log.debug(f"sum(abs(vdata)): {sumabs}")
-            if disk._traits['dpt']:
-                sumabs = np.nansum(np.abs(out_extra['ddata']))
-                _log.debug(f"sum(abs(ddata)): {sumabs}")
-
-    @abc.abstractmethod
-    def fields_layout(self) -> FieldsLayout:
-        """
-        Return how the disk holds its fields for the march of radiative
-        transfer (see the native FieldsArgs::fields).
-        """
-        pass
+        if maps is not None:
+            maps.collect(out_extra, density_key)
 
     def _fields_lines(self) -> int:
         """
         Return the number of fields of line opacity of the disk: one for
         each line it evaluates, if it has line opacity.
         """
-        return self._nlines if self._disk._traits['opt'] else 0
+        return self._nlines if self._disk.traits('opt') else 0
 
     def evaluate_polar_traits(
             self,
@@ -650,26 +387,24 @@ class DiskPlan(abc.ABC):
         subnodes (a new dict: the caller's arrays are not modified).
         """
         disk = self._disk
+        buffer = self._buffer
         params = dict(params)
-
-        def fill(name, pdescs, sampling):
-            _fill_param_values(
-                self._param_views[name], params, pdescs, sampling,
-                disk._rnodes, disk._subrnodes, disk._interp)
         for name, pdescs in disk._geometry_pdescs.items():
             sampling = 'rnodes' if disk._geometry_isnw[name] else None
-            fill(name, pdescs, dict.fromkeys(pdescs, sampling))
-        for kind, trait_params in disk._trait_params.items():
-            fill(kind, trait_params.pdescs, trait_params.sampling)
+            fill_param_values(
+                buffer.host(name), params, pdescs,
+                dict.fromkeys(pdescs, sampling), disk.rnodes(),
+                disk.subrnodes(), disk.interp())
+        disk._traits.fill(buffer, params)
         if lines is not None:
             self._lines_h[:] = lines
         posa, incl = (
-            np.deg2rad(self._param_views[name].astype(np.float64))
+            np.deg2rad(buffer.host(name).astype(np.float64))
             for name in ('posa', 'incl'))
-        self._param_views['posa_incl_sincos'].reshape(-1, 4)[...] = \
+        buffer.host('posa_incl_sincos').reshape(-1, 4)[...] = \
             np.column_stack(
                 [np.sin(posa), np.cos(posa), np.sin(incl), np.cos(incl)])
-        self._driver.mem_copy_h2d(*self._param_values)
+        buffer.copy_to_device()
         return params
 
     def _evaluate_traits(
@@ -691,7 +426,8 @@ class DiskPlan(abc.ABC):
         driver = self._driver
         dtype = self._dtype
         shape = points['r'].shape
-        ntraits = len(self._disk._traits.get(kind, ()))
+        # (an unknown kind has no rows: the native function says so)
+        ntraits = len(self._disk.traits(kind)) if kind in TRAIT_KINDS else 0
 
         def to_device(values: np.ndarray) -> DeviceArray:
             return driver.mem_copy_h2d(

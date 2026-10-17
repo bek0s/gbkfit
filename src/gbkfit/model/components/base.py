@@ -190,6 +190,14 @@ class Component(parseutils.TypedSerializable, abc.ABC):
         """
         return {}
 
+    def bounding_radius(self) -> float:
+        """
+        Return the radius (arcsec) of the sphere around its centre that
+        holds all its density, at any inclination: the depth axis of a
+        grid holds it (see Depth.axis); 0 here.
+        """
+        return 0.0
+
     def density_disk(self) -> 'Disk | None':
         """
         Return its disk, if it is made of one: the mass of its galaxy can
