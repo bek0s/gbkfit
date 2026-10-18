@@ -131,23 +131,49 @@ def test_the_pixels_of_visibilities_are_not_oversampled(driver):
             | GRID, DISK_PROPERTIES)
 
 
-def test_the_residuals_are_those_of_both_parts(driver):
-    # Data 0.5 above the model in each part, of error 1: chi2 = 0.25 for
-    # each part of each visibility
+def observation_of_data(driver, offset):
+    """
+    An observation group of visibilities whose data are those of the
+    model plus offset in each part, of error 1, and its parameters.
+    """
     from gbkfit.dataset import Data, DatasetVisibilities
     from gbkfit.model import galaxy_parser
-    from gbkfit.objective import Objective
     from gbkfit.observation import (
         Flat, Observation, ObservationGroup, Visibilities)
     from gbkfit.params import ParamSpace
     model = visibilities(driver, DISK, DISK_PROPERTIES)
     error = np.ones(model.shape)
     dataset = DatasetVisibilities(
-        Data(model.real + 0.5, error=error), Data(model.imag + 0.5, error=error),
-        COVERAGE)
+        Data(model.real + offset, error=error),
+        Data(model.imag + offset, error=error), COVERAGE)
     observation = Observation(
         Visibilities.from_data(dataset, **GRID), Flat(), driver, data=dataset)
     group = ObservationGroup(galaxy_parser.load(DISK), observation)
-    params = ParamSpace(group.pdescs(), DISK_PROPERTIES).evaluate()
+    return group, ParamSpace(group.pdescs(), DISK_PROPERTIES).evaluate()
+
+
+def test_the_residuals_are_those_of_both_parts(driver):
+    # Data 0.5 above the model in each part, of error 1: chi2 = 0.25 for
+    # each part of each visibility
+    from gbkfit.objective import Objective
+    group, params = observation_of_data(driver, 0.5)
+    nvalues = COVERAGE.nchannels() * COVERAGE.nrows()
     assert Objective(group).chi2(params) == pytest.approx(
-        0.25 * 2 * model.size, rel=1e-4)
+        0.25 * 2 * nvalues, rel=1e-4)
+
+
+def test_the_outputs_have_the_dirty_images(driver):
+    # Of the data, the model and the data minus the model (on the grid,
+    # from the highest frequency), and the dirty beam
+    from gbkfit.objective import Objective
+    from gbkfit.tasks import _detail
+    group, params = observation_of_data(driver, 0.5)
+    outputs = _detail.data_outputs(group) | _detail.evaluation_outputs(
+        group, Objective(group), params, True, True)
+    images = {name: outputs[name].data for name in (
+        'data_0_dirty', 'data_0_dirty_beam', 'model_0_dirty',
+        'residual_dirty')}
+    assert all(x.shape == (16, 28, 32) for x in images.values())
+    np.testing.assert_allclose(
+        images['residual_dirty'],
+        images['data_0_dirty'] - images['model_0_dirty'], atol=1e-6)

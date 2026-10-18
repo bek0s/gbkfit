@@ -341,7 +341,10 @@ def data_outputs(group: ObservationGroup) -> dict[str, Any]:
     """
     Return the data of the observations as outputs, by name, in the form
     their observables give them: their values (data_<i>_<item>_d, NaN
-    where masked) and errors (data_<i>_<item>_e), in their units.
+    where masked) and errors (data_<i>_<item>_e), in their units, and the
+    images of their values and of their PSF that their observables make
+    (data_<i>_<name>; e.g. the dirty image and beam of visibilities, see
+    Observable.images and psf_images).
     """
     outputs = {}
     for i, observation in enumerate(group.observations()):
@@ -355,7 +358,26 @@ def data_outputs(group: ObservationGroup) -> dict[str, Any]:
             if item.error() is not None:
                 outputs[f'data_{i}_{key}_e'] = _with_unit(
                     observable.output(item.error()), observation, key)
+        driver = observation.driver()
+        weights = _weights(dataset)
+        images = observable.images(
+            driver, {key: dataset[key].data() for key in observable.keys()},
+            weights) | observable.psf_images(driver, weights)
+        outputs |= {f'data_{i}_{name}': x for name, x in images.items()}
     return outputs
+
+
+def _weights(dataset: Any) -> dict[str, np.ndarray] | None:
+    """
+    Return the weights of the values of the data items of a dataset, 1 /
+    error^2 (0 where they have none); None without data or errors.
+    """
+    if dataset is None or any(x.error() is None for x in dataset.values()):
+        return None
+    with np.errstate(divide='ignore'):
+        return {
+            key: np.where(np.isfinite(x.error()), 1 / x.error() ** 2, 0)
+            for key, x in dataset.items()}
 
 
 def _with_unit(output: Any, observation: Observation, key: str) -> Any:
@@ -391,21 +413,28 @@ def evaluation_outputs(
     LikelihoodGaussian) are residual_extra_<observation prefix>amplitudes,
     and with the models too, the model of the spectra is that which the
     residuals compare, times the amplitudes (model_<i>_<item>_d), and the
-    model without them is model_<i>_<item>_unscaled_d.
+    model without them is model_<i>_<item>_unscaled_d. With the models,
+    the images that their observables make of them (model_<i>_<name>; see
+    Observable.images), and of the data minus them (residual_<name>, with
+    _<i> as the residuals), with the weights of the data.
     """
     outputs = {}
     model_extra: dict[str, Any] = {}
     if model:
+        observations = group.observations()
         for i, data_i in enumerate(group.model_h(values, model_extra)):
-            observable = group.observations()[i].observable()
+            observation = observations[i]
+            observable = observation.observable()
             for key, value in data_i.items():
                 for kind in ('d', 'm', 'w'):
                     if value.get(kind) is not None:
                         output = observable.output(value[kind])
                         if kind == 'd':
-                            output = _with_unit(
-                                output, group.observations()[i], key)
+                            output = _with_unit(output, observation, key)
                         outputs[f'model_{i}_{key}_{kind}'] = output
+            outputs |= _images(
+                observation, {k: v['d'] for k, v in data_i.items()},
+                f'model_{i}', 'residual' + f'_{i}' * (len(observations) > 1))
     extras = [('model', model_extra)]
     if residuals:
         if objective is None:
@@ -436,6 +465,34 @@ def evaluation_outputs(
                 outputs[f'model_{i}_{key}_unscaled_d'] = outputs[name]
                 outputs[name] = _scaled(outputs[name], amplitudes)
     return outputs
+
+
+def _images(
+        observation: Observation,
+        model: Mapping[str, np.ndarray],
+        model_prefix: str,
+        residual_prefix: str
+) -> dict[str, Any]:
+    """
+    Return the images that the observable of an observation makes of its
+    model and of its data minus the model (see Observable.images), by
+    name: <prefix>_<name>, with the prefix of each.
+    """
+    observable = observation.observable()
+    dataset = observation.data()
+    driver = observation.driver()
+    weights = _weights(dataset)
+    images = {
+        f'{model_prefix}_{name}': x
+        for name, x in observable.images(driver, model, weights).items()}
+    # (an observable that makes no images of its model makes none of the
+    # residual either)
+    if images and dataset is not None:
+        residual = {key: dataset[key].data() - model[key] for key in model}
+        images |= {
+            f'{residual_prefix}_{name}': x for name, x in observable.images(
+                driver, residual, weights).items()}
+    return images
 
 
 def _scaled(output: Any, amplitudes: np.ndarray) -> Any:

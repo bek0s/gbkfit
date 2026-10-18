@@ -105,6 +105,20 @@ def test_the_flat_transform_is_the_direct_sum_without_the_w_term(driver):
     assert relative_error(expected, direct_sums(sin_directions())) > 1e-2
 
 
+@pytest.mark.parametrize('name', ['exact', 'sin', 'flat'])
+def test_the_adjoint_is_that_of_the_transform(driver, name):
+    # <A a, V> = <a, A^H V>, for a cube a and visibilities V
+    uv_transform = uv_transforms[name](
+        driver, GRID, UVW, FREQUENCIES, PHASE_CENTRE, EPS)
+    rng = np.random.default_rng(3)
+    v = rng.standard_normal((2, 50)) + 1j * rng.standard_normal((2, 50))
+    forward = transform(driver, name)
+    images = driver.mem_alloc_d(CUBE.shape, np.complex128)
+    uv_transform.adjoint(driver.mem_copy_h2d(v), images)
+    assert np.sum(CUBE * driver.mem_copy_d2h(images)) == pytest.approx(
+        np.vdot(forward, v), rel=1e-10)
+
+
 def test_the_projections_differ_by_the_cube_of_the_angle():
     # SIN pixels are t^3 / 2 nearer to the reference pixel than TAN ones,
     # at an angle t from it: up to 1.6e-9 rad for the corner pixels here

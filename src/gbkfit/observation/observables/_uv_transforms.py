@@ -123,6 +123,41 @@ class UVTransform(abc.ABC):
                     out=self._product)
                 driver.math_add(out[channel], self._product, out=out[channel])
 
+    def adjoint(self, visibilities: DeviceArray, out: DeviceArray) -> None:
+        """
+        Compute the adjoint of the transform: of visibilities V_k at the
+        baselines of each channel, the images
+
+            I_j = sum_k V_k conj(dV_k / da_j)
+
+        (e.g. sum_k V_k exp(2 pi i b_k . (s_j - p)) of the exact transform;
+        of weighted visibilities, a dirty image).
+
+        Parameters
+        ----------
+        visibilities : DeviceArray
+            The visibilities, of shape (nchannels, nrows), complex128.
+        out : DeviceArray
+            The images, of shape (nchannels, ny, nx), complex128.
+        """
+        driver = self._driver
+        terms = driver.mem_alloc_d(self._data.shape, np.complex128)
+        product = driver.mem_alloc_d(self._shape, np.complex128)
+        for channel, coefficients in enumerate(self._coefficients_h):
+            # The data of each term: the visibilities times the conjugates
+            # of its coefficients at each baseline
+            coefficients_d = driver.mem_copy_h2d(
+                np.conj(coefficients), self._coefficients)
+            driver.math_mul(
+                coefficients_d, visibilities[channel], out=self._transforms)
+            self._adjoint_transform(channel, self._transforms, terms)
+            # The image: the sum of the transforms of the terms, times the
+            # factors of their pixels
+            driver.math_mul(self._images[0], terms[0], out=out[channel])
+            for term in range(1, len(coefficients)):
+                driver.math_mul(self._images[term], terms[term], out=product)
+                driver.math_add(out[channel], product, out=out[channel])
+
     def _set_terms(
             self,
             images: np.ndarray,
@@ -156,6 +191,19 @@ class UVTransform(abc.ABC):
         Transform the data of the terms of a channel (of shape (nterms, ny,
         nx)) into out (of shape (nterms, nrows)), in the frame of the
         reference pixel.
+        """
+
+    @abc.abstractmethod
+    def _adjoint_transform(
+            self,
+            channel: int,
+            data: DeviceArray,
+            out: DeviceArray
+    ) -> None:
+        """
+        Transform the data of the terms at the baselines of a channel (of
+        shape (nterms, nrows)) into out (of shape (nterms, ny, nx)) by the
+        adjoint of _transform.
         """
 
 
@@ -198,6 +246,16 @@ class UVTransformExact(UVTransform):
     ) -> None:
         baselines, _ = self._baselines[channel]
         nufft = self._nufft.type3(self._points, baselines, -1, self._eps)
+        nufft(data.reshape(-1), out.reshape(-1))
+
+    def _adjoint_transform(
+            self,
+            channel: int,
+            data: DeviceArray,
+            out: DeviceArray
+    ) -> None:
+        baselines, _ = self._baselines[channel]
+        nufft = self._nufft.type3(baselines, self._points, 1, self._eps)
         nufft(data.reshape(-1), out.reshape(-1))
 
 
@@ -261,6 +319,16 @@ class _UVTransformGrid(UVTransform):
     ) -> None:
         nufft = self._nufft.type2(
             self._points[channel], self._shape, -1, self._eps, len(data))
+        nufft(data, out)
+
+    def _adjoint_transform(
+            self,
+            channel: int,
+            data: DeviceArray,
+            out: DeviceArray
+    ) -> None:
+        nufft = self._nufft.type1(
+            self._points[channel], self._shape, 1, self._eps, len(data))
         nufft(data, out)
 
 

@@ -325,6 +325,63 @@ class Observable(parseutils.TypedSerializable, abc.ABC):
         return gridutils.GridData(
             data, self._grid.coords, self._grid.spectral_axis)
 
+    def images(
+            self,
+            driver: Driver,
+            values: Mapping[str, np.ndarray],
+            weights: Mapping[str, np.ndarray] | None
+    ) -> dict[str, gridutils.GridData]:
+        """
+        Return images of values of its data items, as outputs (e.g. the
+        dirty images of visibilities).
+
+        Here, none: observables whose data are images of the sky give
+        them as they are (see output); others override this.
+
+        Parameters
+        ----------
+        driver : Driver
+            The driver that makes them.
+        values : Mapping
+            The values of each data item (e.g. those of the data, of the
+            model, or of the data minus the model), NaN where they have
+            none.
+        weights : Mapping, optional
+            The weights of the values of each data item (e.g. 1 / error^2);
+            all 1 if None.
+
+        Returns
+        -------
+        dict
+            The images, by name.
+        """
+        return {}
+
+    def psf_images(
+            self,
+            driver: Driver,
+            weights: Mapping[str, np.ndarray] | None
+    ) -> dict[str, gridutils.GridData]:
+        """
+        Return images of the PSF of its data (e.g. the dirty beam of
+        visibilities), which its images (see images) are seen through.
+
+        Here, none; observables with images override this.
+
+        Parameters
+        ----------
+        driver : Driver
+            The driver that makes them.
+        weights : Mapping, optional
+            The weights of the values of each data item (see images).
+
+        Returns
+        -------
+        dict
+            The images, by name.
+        """
+        return {}
+
     @abc.abstractmethod
     def plan(
             self,

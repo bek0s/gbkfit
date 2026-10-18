@@ -9,6 +9,7 @@ from gbkfit.instrument import Instrument
 from gbkfit.model import LineEmission
 from gbkfit.model.components._units import DataUnit
 from gbkfit.params import ParamValues
+from gbkfit.utils import gridutils
 from gbkfit.utils.parseutils import ConfigError
 from . import _dcube, _detail
 from ._uv_transforms import UVTransform, uv_transforms
@@ -250,6 +251,59 @@ class Visibilities(Observable):
 
     def output(self, data: np.ndarray) -> np.ndarray:
         return data
+
+    def images(
+            self,
+            driver: Driver,
+            values: Mapping[str, np.ndarray],
+            weights: Mapping[str, np.ndarray] | None
+    ) -> dict[str, gridutils.GridData]:
+        return dict(dirty=self._dirty_image(
+            driver, values['re'] + 1j * values['im'], weights))
+
+    def psf_images(
+            self,
+            driver: Driver,
+            weights: Mapping[str, np.ndarray] | None
+    ) -> dict[str, gridutils.GridData]:
+        # (the dirty image of a point of 1 at the phase centre)
+        shape = (self._coverage.nchannels(), self._coverage.nrows())
+        return dict(dirty_beam=self._dirty_image(
+            driver, np.ones(shape, complex), weights))
+
+    def _dirty_image(
+            self,
+            driver: Driver,
+            visibilities: np.ndarray,
+            weights: Mapping[str, np.ndarray] | None
+    ) -> gridutils.GridData:
+        """
+        Return the dirty image of visibilities, of natural weights: the
+        adjoint of the transform of the weighted visibilities, over the sum
+        of the weights of each channel (a point of flux S at a pixel peaks
+        at S there), on the grid; without values where the weights are not
+        finite or the visibilities are NaN.
+        """
+        w = np.ones(visibilities.shape) if weights is None \
+            else np.asarray(weights['re'], float)
+        valid = np.isfinite(visibilities) & np.isfinite(w)
+        w = np.where(valid, w, 0)
+        weighted = np.where(valid, visibilities, 0) * w
+        frequencies = self._coverage.frequencies()
+        if frequencies[1] > frequencies[0]:
+            # (the channels of the grid are from the highest frequency)
+            frequencies, weighted, w = frequencies[::-1], weighted[::-1], w[::-1]
+        transform = uv_transforms[self._transform](
+            driver, self.grid().spatial(), self._coverage.uvw(), frequencies,
+            self._coverage.phase_centre(),
+            _EPS[np.dtype(np.float64)] if self._eps is None else self._eps)
+        images = driver.mem_alloc_d(self.size()[::-1], np.complex128)
+        transform.adjoint(
+            driver.mem_copy_h2d(np.ascontiguousarray(weighted)), images)
+        with np.errstate(divide='ignore', invalid='ignore'):
+            image = driver.mem_copy_d2h(images).real \
+                / w.sum(axis=1)[:, None, None]
+        return gridutils.GridData(image, self._grid.coords, 2)
 
     def plan(
             self,

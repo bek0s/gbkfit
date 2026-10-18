@@ -52,3 +52,21 @@ def test_the_errors_of_casa_weights_are_those_of_stokes_i():
     dataset = DatasetVisibilities.from_ms(str(MS), rest=REST)
     np.testing.assert_allclose(dataset['re'].error(), np.sqrt(2) / 2)
     assert dataset.coverage().frame() == 'LSRK'
+
+
+def test_the_dirty_image_of_casa_is_the_point(driver):
+    # Of natural weights, it peaks at the pixel of the point (x = -20, y =
+    # 15 of a grid of 1 arcsec at the phase centre) with its flux, 1 Jy;
+    # the dirty beam peaks at the phase centre with 1
+    from gbkfit.observation import Visibilities
+    dataset = DatasetVisibilities.from_ms(str(MS), rest=REST)
+    observable = Visibilities.from_data(
+        dataset, size=(61, 41), step=1, transform='sin')
+    weights = {key: 1 / dataset[key].error() ** 2 for key in ('re', 'im')}
+    dirty = observable.images(
+        driver, {key: dataset[key].data() for key in ('re', 'im')},
+        weights)['dirty'].data
+    beam = observable.psf_images(driver, weights)['dirty_beam'].data
+    for image, peak in ((dirty, (20 + 15, 30 - 20)), (beam, (20, 30))):
+        assert np.unravel_index(np.argmax(image[0]), image[0].shape) == peak
+        np.testing.assert_allclose(image[:, peak[0], peak[1]], 1, atol=1e-5)
