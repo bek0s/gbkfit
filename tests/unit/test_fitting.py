@@ -20,7 +20,7 @@ from gbkfit.model import galaxy_parser
 from gbkfit.objective import Objective
 from gbkfit.observation import (
     Flat, LikelihoodGaussian, Observation, ObservationGroup, PixelBrightness)
-from gbkfit.params import ParamSpace
+from gbkfit.params import ParamEvaluationError, ParamSpace
 from gbkfit.utils.parseutils import ConfigError
 
 
@@ -244,11 +244,15 @@ def test_optimizers_with_a_gaussian_prior_find_the_maximum_a_posteriori(
     assert best.chi2 > alone.chi2 and best.log_prior is not None
 
 
+@pytest.mark.parametrize('expr, derived', [
+    ('incl', None), ('i', dict(i='incl'))])
 @pytest.mark.parametrize('fitter', [
     dict(type='lmfit.least_squares'), dict(type='cmaes')])
-def test_a_prior_on_an_expression_acts_as_the_prior_of_an_element(fitter):
+def test_a_prior_on_an_expression_acts_as_the_prior_of_an_element(
+        fitter, expr, derived):
     # (a Gaussian prior on the expression 'incl', as the prior of incl
-    # in the test above: it moves incl halfway, with an error s / sqrt(2))
+    # in the test above: it moves incl halfway, with an error s / sqrt(2);
+    # the same on a derived value of it)
     pytest.importorskip('cma')
     pytest.importorskip('lmfit')
     from gbkfit.fitting import fitter_parser
@@ -259,11 +263,37 @@ def test_a_prior_on_an_expression_acts_as_the_prior_of_an_element(fitter):
     x, s = alone.free['incl'], alone.covariance.std['incl']
     params = ParamSpace(
         objective.pdescs(), bounded_properties(),
-        priors=[dict(type='gauss', expr='incl', mean=x + 2 * s, std=s)])
+        priors=[dict(type='gauss', expr=expr, mean=x + 2 * s, std=s)],
+        derived=derived)
     best = fitter_parser.load(fitter).fit(objective, params).best()
     assert best.free['incl'] == pytest.approx(x + s, abs=0.1 * s)
     assert best.covariance.std['incl'] == pytest.approx(
         s / np.sqrt(2), rel=0.05)
+
+def test_points_where_a_prior_cannot_be_evaluated_are_rejected():
+    # Where the derived value that a prior reads is NaN (xpos < 0), the
+    # cost is inf, and the log-prior and what nested samplers integrate
+    # are -inf; least squares get the error
+    objective = mock_objective(DriverHost())
+    params = ParamSpace(
+        objective.pdescs(), bounded_properties(),
+        priors=[dict(type='gauss', expr='w', mean=1, std=0.5)],
+        derived=dict(w='xpos if xpos > 0 else np.nan'))
+    problem = FitProblem(objective, params, [
+        PriorUniform(lo, hi) for _, lo, hi in START.values()])
+    inside = np.array([TRUE[name] for name in START])
+    outside = inside.copy()
+    outside[list(START).index('xpos')] = -0.5
+    assert problem.joint_prior_log_density(inside) == pytest.approx(
+        -0.5 * ((TRUE['xpos'] - 1) / 0.5) ** 2)
+    assert math.isfinite(problem.cost(inside))
+    assert problem.cost(outside) == math.inf
+    assert problem.log_prior(outside) == -math.inf
+    assert problem.nested_log_likelihood(outside) == -math.inf
+    assert problem.joint_prior_log_density(outside) == -math.inf
+    with pytest.raises(ParamEvaluationError, match="'w' is nan"):
+        problem.residuals(outside)
+
 
 class StopAfter(FitControl):
     """A control that stops a fit after n evaluations."""

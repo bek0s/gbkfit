@@ -40,7 +40,11 @@ class FitProblem:
 
     Values for which the parameters cannot be evaluated (e.g. outside
     their valid range; see ParamEvaluationError) give a chi-square of inf
-    and a log-likelihood of -inf; residuals raises the error.
+    and a log-likelihood of -inf; residuals raises the error. So do the
+    values for which the priors on several parameters cannot be (e.g.
+    where a derived value that they read is not finite; see
+    ParamSpace.expression): a cost of inf, a log-prior and what nested
+    samplers integrate of -inf.
 
     Free elements may have priors: samplers need one for each, optimizers
     take any (then they minimise the chi-square plus the priors', see
@@ -376,7 +380,10 @@ class FitProblem:
             if evaluated is None:
                 costs.append(math.inf)
                 continue
-            cost = evaluated[0] + self.prior_chi2(x)
+            try:
+                cost = evaluated[0] + self.prior_chi2(x)
+            except ParamEvaluationError:
+                cost = math.inf
             self._record(x, cost)
             costs.append(cost)
         return np.array(costs)
@@ -438,8 +445,7 @@ class FitProblem:
         if self._joint:
             for i, x in enumerate(xs):
                 if np.isfinite(log_likelihood[i]):
-                    joint = self._joint_residuals(x)
-                    log_likelihood[i] -= 0.5 * float(joint @ joint)
+                    log_likelihood[i] += self.joint_prior_log_density(x)
         return log_likelihood
 
     def joint_prior_log_density(self, x: npt.ArrayLike) -> float:
@@ -457,10 +463,13 @@ class FitProblem:
         """
         Return the log of the priors on several parameters, -chi2 / 2 (see
         JointPrior), at each point (one per row; -inf where the parameters
-        cannot be evaluated), without the models: nested samplers integrate
-        it over the priors of the elements, which gives the normalisation
-        that their evidence lacks (see nested_log_likelihood_batch). It
-        does not count, keep or log the points.
+        or the priors cannot be evaluated), without the models of the
+        observations (with the functions of the models that the derived
+        values they read take, see ParamSpace.derived_values): nested
+        samplers integrate it over the priors of the elements, which gives
+        the normalisation that their evidence lacks (see
+        nested_log_likelihood_batch). It does not count, keep or log the
+        points.
         """
         log_density = []
         for x in _points(xs):
