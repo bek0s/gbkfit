@@ -29,6 +29,7 @@ if TYPE_CHECKING:
 
 
 __all__ = [
+    'GalaxyMass',
     'GravityPlan'
 ]
 
@@ -47,7 +48,7 @@ _MAX_TILT = 20.0
 
 
 @dataclasses.dataclass(frozen=True)
-class _Mass:
+class GalaxyMass:
     """
     The mass of a galaxy in one evaluation: its model, the values of the
     parameters of the galaxy, the context of the mass, and the length of
@@ -183,20 +184,10 @@ class GravityPlan:
                     i, own[i], None, None, out_extra)}
                 for i in self._balanced}
         components = component_set.components()
-        distance = component_set.distance()
         if out_extra is not None:
             self._warn_geometry(params)
-        redshift = self._redshift
-        kpc_per_arcsec = distance.kpc_per_arcsec(params, redshift)
-        context = MassContext(
-            distance.critical_density(params, redshift),
-            distance.omega_m(params, redshift), {
-                components[i].name(): DiskDensity(
-                    components[i].density_disk(), self._disk_plans[i],
-                    own[i], kpc_per_arcsec,
-                    self._mass_per_unit[i])
-                for i in self._followed})
-        mass = _Mass(mass_model, params, context, kpc_per_arcsec)
+        mass = self.mass(params)
+        kpc_per_arcsec, context = mass.kpc_per_arcsec, mass.context
         # The mass is evaluated once, at the radii of all the components:
         # those of the parameters it gives, then the subnodes of the disks
         # it holds up in a central equilibrium
@@ -256,11 +247,36 @@ class GravityPlan:
                         cmp_parts, pressure, values[i][name])
         return values
 
+    def mass(self, params: ParamValues) -> GalaxyMass | None:
+        """
+        Return the mass of the galaxy at the values of its parameters (see
+        Galaxy.pdescs): its mass model, the values, its context (with the
+        density of the disks it follows) and the length of an arcsec in
+        it; None without mass.
+        """
+        component_set = self._component_set
+        mass_model = component_set.mass_model()
+        if mass_model is None:
+            return None
+        components = component_set.components()
+        distance = component_set.distance()
+        redshift = self._redshift
+        kpc_per_arcsec = distance.kpc_per_arcsec(params, redshift)
+        context = MassContext(
+            distance.critical_density(params, redshift),
+            distance.omega_m(params, redshift), {
+                components[i].name(): DiskDensity(
+                    components[i].density_disk(), self._disk_plans[i],
+                    self._component_params(i, params), kpc_per_arcsec,
+                    self._mass_per_unit[i])
+                for i in self._followed})
+        return GalaxyMass(mass_model, params, context, kpc_per_arcsec)
+
     def _equilibrium(
             self,
             index: int,
             params: ParamValues,
-            mass: _Mass | None,
+            mass: GalaxyMass | None,
             vcirc2: np.ndarray | None,
             out_extra: dict[str, Any] | None
     ) -> np.ndarray:
@@ -398,7 +414,7 @@ def _jeans_dispersion(
         plan: 'DiskPlan',
         params: ParamValues,
         radii: np.ndarray,
-        mass: _Mass
+        mass: GalaxyMass
 ) -> np.ndarray:
     """
     Return the dispersion (km/s) of the jeans equilibrium (see Kinematics)

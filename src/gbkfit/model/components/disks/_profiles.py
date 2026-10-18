@@ -3,7 +3,8 @@ The radial profiles of a disk, as its galaxy takes them for gravity: the
 azimuthal means of its traits, for the mass components that follow it
 (see mass.ComponentDensity), for its pressure support (see
 traits.VPTraitMass), and its rms height, rotation and jeans dispersion,
-for its vertical equilibrium (see parts.Kinematics).
+for its vertical equilibrium (see parts.Kinematics); and its rotation
+and dispersion, for the functions of its galaxy (see GalaxyFunctions).
 """
 
 import dataclasses
@@ -18,6 +19,7 @@ from ._disk import Disk, DiskPlan
 
 __all__ = [
     'DiskDensity',
+    'dispersion',
     'jeans_dispersions',
     'pressure_support',
     'rms_heights',
@@ -446,6 +448,53 @@ def rotation(
         return np.sum(
             speeds[tangential], axis=0, keepdims=True, dtype=float)
     kinds = ('vpt',)
+    return _azimuthal_mean(
+        values, _axisymmetric(disk, kinds),
+        _edges(disk, params, kinds, r[:, 0]))[0]
+
+
+def dispersion(
+        disk: Disk,
+        plan: DiskPlan,
+        params: ParamValues,
+        radii: np.ndarray,
+        equilibrium: np.ndarray | None = None
+) -> np.ndarray:
+    """
+    Return the velocity dispersion of a disk at its midplane, at radii
+    (arcsec, on the disk), in km/s: the azimuthal mean of the sum of its
+    dispersion polar traits times its dispersion height traits at z = 0,
+    with the dispersion of its vertical equilibrium in quadrature, if
+    any (as pressure_support takes it).
+
+    Parameters
+    ----------
+    disk : Disk
+        The disk.
+    plan : DiskPlan
+        A plan of the disk, which evaluates its traits.
+    params : ParamValues
+        The values of the parameters of the disk (see DiskDensity).
+    radii : np.ndarray
+        The radii (arcsec).
+    equilibrium : np.ndarray, optional
+        The dispersion of the vertical equilibrium of the disk at its
+        subnodes (km/s, see parts.Kinematics), interpolated linearly
+        between them, as the disk is evaluated.
+    """
+    params = _with_given(disk, params)
+    r = np.asarray(radii, dtype=float)[:, None]
+    balanced = np.zeros(r.shape) if equilibrium is None \
+        else np.interp(r, disk.subrnodes(), equilibrium)
+    if not disk.traits('dpt'):
+        return balanced[:, 0]
+    heights = _at_midplane(disk, plan, params, 'dht', r)
+
+    def values(theta: np.ndarray) -> np.ndarray:
+        return np.hypot(np.sum(
+            plan.evaluate_polar_traits(params, 'dpt', r, theta) * heights,
+            axis=0, keepdims=True, dtype=float), balanced)
+    kinds = ('dpt',)
     return _azimuthal_mean(
         values, _axisymmetric(disk, kinds),
         _edges(disk, params, kinds, r[:, 0]))[0]

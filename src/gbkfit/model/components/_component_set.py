@@ -17,6 +17,7 @@ from ..mass import MassModel
 from . import _units
 from ._component_plans import ComponentPlans
 from ._detail import shared_params
+from ._functions import GalaxyFunctions
 from ._gravity import GravityPlan
 from ._transfer import LineResolution
 from ._units import DataUnit
@@ -303,6 +304,15 @@ class ComponentSet:
         given redshift (see GravityPlan).
         """
         return GravityPlan(self, driver, redshift)
+
+    def plan_functions(
+            self, driver: Driver, redshift: float
+    ) -> GalaxyFunctions:
+        """
+        Plan the functions of a galaxy of the given redshift on a driver,
+        for the derived values of its parameters (see GalaxyFunctions).
+        """
+        return GalaxyFunctions(self, driver, redshift)
 
     def plan(
             self,

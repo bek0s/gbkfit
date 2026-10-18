@@ -14,6 +14,7 @@ from gbkfit.utils import gridutils, iterutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
 from .components import _detail
 from .components._component_set import ComponentSet, ComponentSetPlan
+from .components._functions import GalaxyFunctions
 from .components._gravity import GravityPlan
 from .components._transfer import TransferMember
 from .components._units import DataUnit
@@ -272,6 +273,22 @@ class Galaxy(parseutils.Serializable):
             The plan.
         """
         return self._component_set.plan_gravity(
+            self._driver, self.redshift())
+
+    def plan_functions(self) -> GalaxyFunctions:
+        """
+        Plan the functions of the galaxy on its driver, in float64, for
+        the derived values of its parameters (see ParamSpace): the
+        circular velocity of its mass, and the rotation and dispersion of
+        its disks, at any radius (see GalaxyFunctions). They have their
+        own plans, apart from those of its evaluations.
+
+        Returns
+        -------
+        GalaxyFunctions
+            The functions.
+        """
+        return self._component_set.plan_functions(
             self._driver, self.redshift())
 
     def plan(

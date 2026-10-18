@@ -3,6 +3,7 @@ ParamSpace: the parameters of a model evaluation or a fit, given their
 descriptions and the properties of a configuration.
 """
 
+import abc
 import collections
 import copy
 import dataclasses
@@ -28,6 +29,7 @@ from gbkfit.utils.parseutils import ConfigError
 
 __all__ = [
     'ParamEvaluationError',
+    'ParamFunctions',
     'ParamKind',
     'ParamSpace',
     'ParamValues',
@@ -55,6 +57,27 @@ Transforms: TypeAlias = Callable[[ParamValues], None]
 
 # An element of a parameter: its name, and its index (None for a scalar)
 _Element: TypeAlias = tuple[str, int | None]
+
+
+class ParamFunctions(abc.ABC):
+    """
+    Names that the derived values of parameters can use besides the
+    parameters and the constants (see ParamSpace): functions of the
+    models (e.g. the circular velocity of a galaxy at any radius) and
+    numbers (e.g. the gravitational constant), whose values can depend
+    on those of the parameters.
+    """
+
+    @abc.abstractmethod
+    def names(self) -> tuple[str, ...]:
+        """Return the names."""
+
+    @abc.abstractmethod
+    def bind(self, values: ParamValues) -> dict[str, Any]:
+        """
+        Return the value of each name (a function or a number) at the
+        values of the parameters, by name.
+        """
 
 
 class ParamEvaluationError(RuntimeError):

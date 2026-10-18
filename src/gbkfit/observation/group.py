@@ -6,7 +6,10 @@ import numpy as np
 from gbkfit.dataset import Data, Dataset
 from gbkfit.driver import Driver
 from gbkfit.model import Galaxy
-from gbkfit.params import ParamDesc, ParamScalarDesc, ParamValues
+from gbkfit.model.components._functions import GalaxyFunctions
+from gbkfit.model.mass.units import G
+from gbkfit.params import (
+    ParamDesc, ParamFunctions, ParamScalarDesc, ParamValues)
 from gbkfit.utils import iterutils, parseutils, threadutils, timeutils
 from gbkfit.utils.parseutils import ConfigError
 from ._scene import DepthUnit, Scene, make_scene
@@ -250,6 +253,24 @@ class ObservationGroup:
         """Return the times of the steps of the evaluations of the group."""
         return self._timers
 
+    def plan_functions(self) -> ParamFunctions:
+        """
+        Plan the functions of the galaxies, for the derived values of the
+        parameters (see ParamSpace): those of each galaxy (see
+        Galaxy.plan_functions), prefixed as its parameters (e.g.
+        'north_vcirc'), and the gravitational constant G ((km/s)^2 kpc /
+        Msun). They have their own plans, apart from those of the
+        evaluations of the group.
+
+        Returns
+        -------
+        ParamFunctions
+            The functions.
+        """
+        return _GroupFunctions(
+            [galaxy.plan_functions() for galaxy in self._galaxies],
+            self._mappings, self._prefixes)
+
     def _gravity(
             self,
             params: ParamValues,
@@ -422,6 +443,39 @@ class ObservationGroup:
                             h_item[k] = driver.mem_copy_d2h(
                                 d_array, h_item[k])
         return self._h_model_data
+
+
+class _GroupFunctions(ParamFunctions):
+    """
+    The functions of the galaxies of a group (see
+    ObservationGroup.plan_functions): those of each galaxy, the mapping of
+    its parameters to those of the group, and its prefix.
+    """
+
+    def __init__(
+            self,
+            functions: Sequence[GalaxyFunctions],
+            mappings: Sequence[dict[str, str]],
+            prefixes: Sequence[str]
+    ):
+        self._functions = tuple(functions)
+        self._mappings = tuple(mappings)
+        self._prefixes = tuple(prefixes)
+
+    def names(self) -> tuple[str, ...]:
+        return ('G',) + tuple(
+            f'{prefix}{name}'
+            for functions, prefix in zip(self._functions, self._prefixes)
+            for name in functions.names())
+
+    def bind(self, values: ParamValues) -> dict[str, Any]:
+        bound: dict[str, Any] = dict(G=G)
+        for functions, mapping, prefix in zip(
+                self._functions, self._mappings, self._prefixes):
+            own = functions.bind(
+                {name: values[full] for name, full in mapping.items()})
+            bound |= {f'{prefix}{name}': value for name, value in own.items()}
+        return bound
 
 
 def _scatter(draws: Sequence[HostModelData]) -> dict[str, np.ndarray]:
