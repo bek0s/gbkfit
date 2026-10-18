@@ -26,8 +26,8 @@ class MassUser(MassComponent):
     radii (kpc, an array) and params the values of its parameters (a
     dict, by name), which returns the squared circular velocity
     ((km/s)^2, signed, an array of the shape of R). It gives nothing else:
-    its density, its forces off its plane and its potential raise
-    NotImplementedError.
+    its density, its forces off its plane (and its vertical force there)
+    and its potential raise NotImplementedError.
 
     Parameters
     ----------
@@ -51,6 +51,9 @@ class MassUser(MassComponent):
     @staticmethod
     def type() -> str:
         return 'user'
+
+    def gives_vertical_force(self) -> bool:
+        return False
 
     def dump(self) -> dict[str, Any]:
         return super().dump() | dict(

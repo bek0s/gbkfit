@@ -281,6 +281,33 @@ class MassComponent(parseutils.TypedSerializable, abc.ABC):
             R, z, lambda radii: self.vcirc2(radii, params, context),
             f"the mass component '{self.type()}'")
 
+    def gives_vertical_force(self) -> bool:
+        """
+        Check whether it gives its vertical force off its plane (see
+        vertical_force); here, it does.
+        """
+        return True
+
+    def vertical_force(
+            self,
+            R: npt.ArrayLike,
+            z: npt.ArrayLike,
+            params: ParamValues,
+            context: MassContext
+    ) -> np.ndarray:
+        """
+        Return its vertical force per unit mass ((km/s)^2/kpc), -dPhi/dz,
+        at the points (R, z), broadcast together (see vcirc2 for the other
+        arguments): by default, that of its forces (see forces).
+
+        Raises
+        ------
+        NotImplementedError
+            For points off its plane, if the component does not give its
+            vertical force there (see gives_vertical_force).
+        """
+        return self.forces(R, z, params, context)[1]
+
     def potential(
             self,
             R: npt.ArrayLike,

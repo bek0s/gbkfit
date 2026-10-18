@@ -213,6 +213,71 @@ def test_disks_at_jumps_of_their_density():
     assert np.all(np.isfinite(thick))
 
 
+def ring_vertical_force(sigma, R, z, edges):
+    """
+    The vertical force of a thin disk of the surface density sigma(a),
+    zero outside the edges, at (R, z): its rings by adaptive quadrature,
+    split at its edges and around R.
+    """
+    def pull(a):
+        near2, far2 = (a - R) ** 2 + z ** 2, (a + R) ** 2 + z ** 2
+        return -G * z * float(sigma(np.array(a))) * a * 4 \
+            * scipy.special.ellipe(1 - near2 / far2) / (near2 * np.sqrt(far2))
+    lo, hi = edges[0], edges[-1]
+    points = sorted(
+        p for p in {*edges, R, R - 10 * abs(z), R + 10 * abs(z)}
+        if lo < p < hi)
+    return scipy.integrate.quad(
+        pull, lo, hi, points=points, limit=2000, epsabs=0, epsrel=1e-11)[0]
+
+
+def test_vertical_forces_of_thin_disks_are_the_pull_of_their_rings():
+    # Off the plane, the pull of their rings: a nodewise disk with a hole
+    # (a jump at its first node), and an exponential one (from its
+    # tables); across the plane, the pull of an infinite sheet, 2 pi G
+    # Sigma (of the mean of the two sides at a jump)
+    nodewise = MassDisk('d', SurfaceNodewise([1, 3, 6, 10]), VerticalThin())
+    params = dict(log_sigma=[8, 7.5, 7])
+    sigma = functools.partial(
+        nodewise.surface_density, params=params, context=CONTEXT)
+    R, z = np.meshgrid([0.5, 1, 2, 5, 10], [0.01, 0.3, 2])
+    np.testing.assert_allclose(
+        nodewise.vertical_force(R, z, params, CONTEXT),
+        np.vectorize(lambda r, h: ring_vertical_force(
+            sigma, r, h, [1, 3, 6, 10]))(R, z), rtol=2e-5)
+    np.testing.assert_allclose(
+        nodewise.vertical_force([2, 1], [-1e-9, 1e-9], params, CONTEXT),
+        [2 * np.pi * G * sigma(2), -np.pi * G * 1e8], rtol=1e-6)
+    exponential = MassDisk('d', SurfaceExponential(), VerticalThin())
+    params = dict(log_m=10, rd=3)
+    sigma = functools.partial(
+        exponential.surface_density, params=params, context=CONTEXT)
+    R, z = np.meshgrid([0, 1, 5, 20], [0.005, 0.2, 3])
+    np.testing.assert_allclose(
+        exponential.vertical_force(R, z, params, CONTEXT),
+        np.vectorize(lambda r, h: ring_vertical_force(
+            sigma, r, h, [0, 120]))(R, z), rtol=1e-3)
+
+
+def test_vertical_forces_of_thick_disks_are_their_stacked_sheets():
+    # int p(h) F_thin(R, z - h) dh, of an exponential disk of an
+    # exponential vertical law
+    thick = MassDisk('d', SurfaceExponential(), VerticalExponential())
+    params = dict(log_m=10, rd=3, hz=0.3)
+    sigma = functools.partial(
+        thick.surface_density, params=params, context=CONTEXT)
+
+    def stacked(R, z):
+        return scipy.integrate.quad(
+            lambda h: VerticalExponential.pdf(h, 0.3) * ring_vertical_force(
+                sigma, R, z - h, [0, 120]), -12, 12, points=[0, z],
+            limit=200, epsabs=0, epsrel=1e-9)[0]
+    R, z = np.array([2, 5, 10]), np.array([0.1, 0.5, 0.05])
+    np.testing.assert_allclose(
+        thick.vertical_force(R, z, params, CONTEXT),
+        [stacked(*point) for point in zip(R, z)], rtol=5e-4)
+
+
 def test_unresolved_heights_are_errors():
     disk = nodewise_disk([0, 1, 2], 'sech2')
     with pytest.raises(ValueError, match="heights are not resolved"):

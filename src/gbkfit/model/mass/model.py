@@ -221,6 +221,21 @@ class MassModel(parseutils.Serializable):
         return (sum(force_R for force_R, _ in forces),
                 sum(force_z for _, force_z in forces))
 
+    def vertical_force(
+            self,
+            R: npt.ArrayLike,
+            z: npt.ArrayLike,
+            params: ParamValues,
+            context: MassContext
+    ) -> np.ndarray:
+        """
+        Return its vertical force per unit mass at the points (R, z) (see
+        MassComponent.vertical_force).
+        """
+        return sum(self._each(
+            lambda component, own, ctx: component.vertical_force(
+                R, z, own, ctx), params, context).values())
+
     def potential(
             self,
             R: npt.ArrayLike,

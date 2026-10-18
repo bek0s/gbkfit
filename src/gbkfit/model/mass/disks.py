@@ -29,7 +29,8 @@ class MassDisk(MassComponent):
     each chosen on its own. A disk follows at most one component (by its
     surface density, its vertical structure, or both); following it by
     both, it is the density of the component itself (each of its terms of
-    the pdf of its height).
+    the pdf of its height). Its forces are given in its plane, its
+    vertical force anywhere (see DiskSurface.vertical_force).
 
     Parameters
     ----------
@@ -119,3 +120,14 @@ class MassDisk(MassComponent):
             context: MassContext
     ) -> np.ndarray:
         return self._surface.surface_density(R, params, context)
+
+    def vertical_force(
+            self,
+            R: npt.ArrayLike,
+            z: npt.ArrayLike,
+            params: ParamValues,
+            context: MassContext
+    ) -> np.ndarray:
+        # (anywhere, by the pull of its rings; its forces, in its plane)
+        return self._surface.vertical_force(
+            R, z, self._vertical, params, context)
