@@ -62,9 +62,8 @@ class Visibilities(Observable):
 
     The spatial weights of data do not apply (the data are not pixels);
     a mosaic is one observation for each pointing, fitted jointly. Not
-    supported yet: mock visibilities (noise drawn from their errors; see
-    VisibilitiesPlan.mock); averaging the visibilities in time or
-    frequency (an approximation, to be opt-in).
+    supported yet: averaging the visibilities in time or frequency (an
+    approximation, to be opt-in).
 
     Parameters
     ----------
@@ -381,6 +380,11 @@ class VisibilitiesPlan(_detail.DCubePlanBase):
     real and imaginary parts. With the channels of the data in the order
     of increasing frequency, the transform of the cube (from the highest
     frequency) goes into them in reverse.
+
+    Its mock data are the visibilities of the model plus noise, drawn for
+    each part on their grid: the rows along x and the channels along y
+    (see noise_grid), for a noise correlated along the channels (e.g. by
+    Hanning smoothing; not on the sky, which visibilities are not on).
     """
 
     def __init__(
@@ -401,6 +405,10 @@ class VisibilitiesPlan(_detail.DCubePlanBase):
         self._area = area
         self._reversed = reversed_
         shape = (dcube.size()[2], transform.nrows())
+        spectral = dcube.grid().spectral().coords
+        self._noise_grid = gridutils.make_grid(
+            shape[::-1], (1, spectral.step[0]), (0, 0), (0, spectral.rval[0]),
+            spectral_axis=1, rest=spectral.rest)
         self._visibilities = driver.mem_alloc_d(shape, np.complex128)
         self._re = driver.mem_alloc_d(shape, dtype)
         self._im = driver.mem_alloc_d(shape, dtype)
@@ -413,10 +421,25 @@ class VisibilitiesPlan(_detail.DCubePlanBase):
             rng: np.random.Generator,
             ndraws: int
     ) -> list[HostModelData]:
-        # Not supported yet: the noise of visibilities is that of each of
-        # their values (their errors), not that of a cube (see Noise.draw),
-        # so mocks need a noise of their own
-        raise ConfigError("mock visibilities are not supported yet")
+        self._evaluate_model(params, gravity, None)
+        self._dcube_plan.record(self._flux_scale(params))
+        recorded = self._to_host(self._measure())
+        return [{
+            key: dict(d=(item['d'] + noise.draw(rng, self._noise_grid, None))
+                      .astype(self._dtype), m=None)
+            for key, item in recorded.items()} for _ in range(ndraws)]
+
+    def exact_errors(self, noise: 'Noise') -> dict[str, np.ndarray]:
+        sigma = noise.sigma(self._noise_grid)
+        return dict(re=sigma, im=sigma)
+
+    def noise_grid(self) -> gridutils.Grid:
+        """
+        Return the grid of the noise of the visibilities: the rows along x
+        and the channels along y, of their velocity step (as the arrays of
+        the data items, (nchannels, nrows)).
+        """
+        return self._noise_grid
 
     def _measure(self) -> ModelData:
         visibilities = self._visibilities

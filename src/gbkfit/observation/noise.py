@@ -288,6 +288,11 @@ class NoiseGauss(Noise):
         for all the channels, or one for each if it varies (nz, ny, nx).
         """
         spatial = self._spatial_correlation
+        sky_axes = len(grid.size) - (grid.spectral_axis is not None)
+        if spatial is not None and sky_axes < 2:
+            raise ConfigError(
+                "the noise has a spatial correlation, but the data are not "
+                "on the sky (e.g. visibilities)")
         if spatial == INSTRUMENT:
             if psf is None:
                 raise ConfigError(
@@ -316,7 +321,7 @@ class NoiseGauss(Noise):
             raise ConfigError(
                 "the noise has a spectral correlation, but the data have no "
                 "spectral axis")
-        return spectral.asarray(grid.coords.step[2])
+        return spectral.asarray(abs(grid.coords.step[grid.spectral_axis]))
 
 
 def _velocities(grid: gridutils.Grid) -> np.ndarray:
