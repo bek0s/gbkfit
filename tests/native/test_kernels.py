@@ -739,11 +739,14 @@ def evaluate_disk_traits(
 
 def test_disk_traits_of_each_kind(driver):
     # A velocity trait is projected on the line of sight: v cos(theta)
-    # sin(incl); a density height trait is a probability density of |z|
+    # sin(incl), or without incl, its speed v; a density height trait is a
+    # probability density of |z|
     r = np.array([1.0, 5.0, 12.0])
+    speed = 200 * 2 / np.pi * np.arctan(r / 3)
     velocity = evaluate_disk_traits(driver, 'vpt', r, [60] * 3, incl=30)
-    np.testing.assert_allclose(
-        velocity[0], 200 * 2 / np.pi * np.arctan(r / 3) / 4, rtol=1e-6)
+    np.testing.assert_allclose(velocity[0], speed / 4, rtol=1e-6)
+    velocity = evaluate_disk_traits(driver, 'vpt', r, [60] * 3)
+    np.testing.assert_allclose(velocity[0], speed, rtol=1e-6)
     z = np.linspace(-20, 20, 4001)
     pdf = evaluate_disk_traits(
         driver, 'rht', np.full(z.size, 5.0), z, polar=False)[0]
@@ -756,8 +759,7 @@ def test_disk_traits_of_each_kind(driver):
     (dict(kind='rpt', polar=False),
      "kind must be one of 'rht', 'vht', 'dht'"),
     (dict(kind='dpt'), "the disk has no traits of kind 'dpt'"),
-    (dict(kind='vpt'), "incl is required"),
-    (dict(kind='rpt', incl=30), "incl is required"),
+    (dict(kind='rpt', incl=30), "incl is for the velocity traits"),
     (dict(kind='rpt', other=[60, 60]),
      "theta needs one value for each point"),
     (dict(kind='rpt', nrows=2), "out needs a row for each trait")])

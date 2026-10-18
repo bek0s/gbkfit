@@ -178,7 +178,8 @@ def make_disk(
         **disk_options,
         loose=bool(loose), tilted=bool(tilted), **node_args,
         traits_=traits_, prefixes=TRAIT_PREFIXES | dict(opt=opacity_prefixes),
-        opacity_lines=opacity_lines)
+        opacity_lines=opacity_lines,
+        equilibrium=None if kinematics is None else kinematics.equilibrium())
 
 
 def line_opacity_traits(
@@ -288,6 +289,11 @@ def _disk_traits(
             raise ConfigError(
                 "the height traits of the kinematics need density height "
                 "traits (a thick disk)")
+        if not thick and kinematics.equilibrium() is not None:
+            raise ConfigError(
+                "the vertical equilibrium of the kinematics needs density "
+                "height traits (a thick disk): the height of the disk sets "
+                "its dispersion")
         result.update(vpt=kinematics.vptraits(), dpt=kinematics.dptraits())
         if thick:
             result.update(

@@ -1,8 +1,9 @@
 """
 The radial profiles of a disk, as its galaxy takes them for gravity: the
 azimuthal means of its traits, for the mass components that follow it
-(see mass.ComponentDensity) and for its pressure support (see
-traits.VPTraitMass).
+(see mass.ComponentDensity), for its pressure support (see
+traits.VPTraitMass), and its rms height and rotation, for its vertical
+equilibrium (see parts.Kinematics).
 """
 
 from collections.abc import Callable, Sequence
@@ -16,7 +17,9 @@ from ._disk import Disk, DiskPlan
 
 __all__ = [
     'DiskDensity',
-    'pressure_support'
+    'pressure_support',
+    'rms_heights',
+    'rotation'
 ]
 
 
@@ -33,6 +36,15 @@ _AZIMUTHAL_TOLERANCE = 1e-6
 # points, doubled until two means agree to the tolerance
 _NPOINTS_MIN = 4
 _NPOINTS_MAX = 256
+
+# The heights of the moments of the density height traits of a disk (see
+# rms_heights): Gauss-Legendre points on panels of geometric widths, from
+# 1e-9 of the zmax of each trait to its zmax (in units of it)
+_HEIGHT_EDGES = np.concatenate(([0], np.geomspace(1e-9, 1, 22)))
+_HEIGHT_NPOINTS = 16
+
+# How close to 1 the integral of a height pdf over its heights must be
+_PDF_TOLERANCE = 1e-6
 
 
 def _azimuthal_mean(
@@ -198,6 +210,146 @@ def _selected(
         params, 'spt', r, theta).sum(axis=0) != 0
 
 
+def _at_midplane(
+        disk: Disk, plan: DiskPlan, params: ParamValues, kind: str,
+        r: np.ndarray
+) -> np.ndarray:
+    """
+    Return the height traits of one kind of a disk at z = 0 and the radii
+    r (arcsec, an array of shape (radii, 1)), which multiply the polar
+    traits they pair with: an array of shape (traits, radii, 1), ones
+    without them.
+    """
+    if not disk.traits(kind):
+        return np.ones((1, len(r), 1))
+    return plan.evaluate_height_traits(params, kind, r, np.zeros(1))
+
+
+def _surface_densities(
+        disk: Disk, plan: DiskPlan, params: ParamValues, r: np.ndarray
+) -> np.ndarray:
+    """
+    Return the azimuthal mean of each density polar trait of a disk where
+    its selection traits keep it, at the radii r (arcsec, on the disk):
+    an array of shape (traits, len(r)).
+    """
+    r = r[:, None]
+
+    def values(theta: np.ndarray) -> np.ndarray:
+        out = np.asarray(
+            plan.evaluate_polar_traits(params, 'rpt', r, theta), dtype=float)
+        return out * _selected(disk, plan, params, r, theta)
+    kinds = ('rpt', 'spt')
+    return _azimuthal_mean(
+        values, _axisymmetric(disk, kinds),
+        _edges(disk, params, kinds, r[:, 0]))
+
+
+def rms_heights(
+        disk: Disk,
+        plan: DiskPlan,
+        params: ParamValues,
+        radii: np.ndarray
+) -> np.ndarray:
+    """
+    Return the rms height sqrt(<z^2>) of the density of a thick disk about
+    its midplane, at radii (arcsec, on the disk), in arcsec: <z^2> = sum_i
+    S_i <z^2>_i / sum_i S_i, over its density polar traits (S_i, their
+    azimuthal means where its selection traits keep it) and their density
+    height traits (pdfs, as the disk evaluates them: truncated at their
+    zmax). 0 where it has no density. The moments by Gauss-Legendre
+    quadrature on panels of geometric widths up to the zmax of each
+    height trait.
+
+    Parameters
+    ----------
+    disk : Disk
+        The disk.
+    plan : DiskPlan
+        A plan of the disk, which evaluates its traits.
+    params : ParamValues
+        The values of the parameters of the disk (see DiskDensity).
+    radii : np.ndarray
+        The radii (arcsec).
+
+    Raises
+    ------
+    ValueError
+        If a height pdf does not integrate to 1 (within 1e-6) where its
+        trait has density: its heights are not resolved (e.g. a sharp
+        cut, such as that of a uniform height trait, below its zmax).
+    """
+    params = _with_given(disk, params)
+    r = np.asarray(radii, dtype=float)
+    edges = np.unique(np.concatenate(
+        [_HEIGHT_EDGES * trait.zmax() for trait in disk.traits('rht')]))
+    x, w = np.polynomial.legendre.leggauss(_HEIGHT_NPOINTS)
+    lo, hi = edges[:-1, None], edges[1:, None]
+    z = ((hi - lo) / 2 * x + (hi + lo) / 2).ravel()
+    weights = ((hi - lo) / 2 * w).ravel()
+    pdfs = np.asarray(plan.evaluate_height_traits(
+        params, 'rht', r[:, None], z[None, :]), dtype=float)
+    # (both sides of the midplane)
+    mass = 2 * pdfs @ weights
+    moment = 2 * pdfs @ (weights * z ** 2)
+    surfaces = _surface_densities(disk, plan, params, r)
+    # (a pdf of no mass: less than 0.001 of its profile within zmax)
+    unresolved = (np.abs(mass - 1) > _PDF_TOLERANCE) & (mass != 0) \
+        & (surfaces != 0)
+    if np.any(unresolved):
+        worst = mass[unresolved][np.argmax(np.abs(mass[unresolved] - 1))]
+        raise ValueError(
+            f"a density height trait of a disk integrates to {worst} over "
+            f"the heights of its rms height, not 1: its heights are not "
+            f"resolved (e.g. a sharp cut below its zmax)")
+    total = np.sum(surfaces * mass, axis=0)
+    return np.sqrt(np.divide(
+        np.sum(surfaces * moment, axis=0), total,
+        out=np.zeros_like(total), where=total > 0))
+
+
+def rotation(
+        disk: Disk,
+        plan: DiskPlan,
+        params: ParamValues,
+        radii: np.ndarray
+) -> np.ndarray:
+    """
+    Return the rotation of a disk at its midplane, at radii (arcsec, on
+    the disk), in km/s: the azimuthal mean of the sum of its tangential
+    velocity traits (their speeds), each times its velocity height trait
+    at z = 0; 0 without them.
+
+    Parameters
+    ----------
+    disk : Disk
+        The disk.
+    plan : DiskPlan
+        A plan of the disk, which evaluates its traits.
+    params : ParamValues
+        The values of the parameters of the disk (see DiskDensity).
+    radii : np.ndarray
+        The radii (arcsec).
+    """
+    params = _with_given(disk, params)
+    r = np.asarray(radii, dtype=float)[:, None]
+    tangential = [
+        trait.direction() == 'tan' for trait in disk.traits('vpt')]
+    if not any(tangential):
+        return np.zeros(len(r))
+    heights = _at_midplane(disk, plan, params, 'vht', r)
+
+    def values(theta: np.ndarray) -> np.ndarray:
+        speeds = plan.evaluate_polar_traits(params, 'vpt', r, theta) \
+            * heights
+        return np.sum(
+            speeds[tangential], axis=0, keepdims=True, dtype=float)
+    kinds = ('vpt',)
+    return _azimuthal_mean(
+        values, _axisymmetric(disk, kinds),
+        _edges(disk, params, kinds, r[:, 0]))[0]
+
+
 def pressure_support(
         disk: Disk,
         plan: DiskPlan,
@@ -240,17 +392,9 @@ def pressure_support(
     """
     params = _with_given(disk, params)
     r = np.asarray(radii, dtype=float)[:, None]
-
-    def at_midplane(kind: str) -> np.ndarray:
-        # The height traits of a kind at z = 0, which multiply the polar
-        # traits they pair with (1 without them)
-        if not disk.traits(kind):
-            return np.ones((1, len(r), 1))
-        return plan.evaluate_height_traits(params, kind, r, np.zeros(1))
-
-    density_heights = at_midplane('rht') if mode == 'jeans' \
-        else np.ones((1, len(r), 1))
-    dispersion_heights = at_midplane('dht')
+    density_heights = _at_midplane(disk, plan, params, 'rht', r) \
+        if mode == 'jeans' else np.ones((1, len(r), 1))
+    dispersion_heights = _at_midplane(disk, plan, params, 'dht', r)
     given = None if density is None \
         else np.asarray(density, dtype=float)[:, None]
 
@@ -349,17 +493,8 @@ class DiskDensity:
         of the density) where the selection traits keep the disk, at the
         radii R (kpc, on the disk): an array of shape (traits, len(R)).
         """
-        r = self._radii(R)[:, None]
-
-        def values(theta: np.ndarray) -> np.ndarray:
-            out = np.asarray(self._plan.evaluate_polar_traits(
-                self._params, 'rpt', r, theta), dtype=float)
-            return out * _selected(
-                self._disk, self._plan, self._params, r, theta)
-        kinds = ('rpt', 'spt')
-        return _azimuthal_mean(
-            values, _axisymmetric(self._disk, kinds),
-            _edges(self._disk, self._params, kinds, r[:, 0]))
+        return _surface_densities(
+            self._disk, self._plan, self._params, self._radii(R))
 
     def height_pdfs(self, R: np.ndarray, z: np.ndarray) -> np.ndarray:
         """

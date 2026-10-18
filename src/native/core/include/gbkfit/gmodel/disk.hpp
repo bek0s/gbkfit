@@ -40,6 +40,11 @@ struct DiskArgs
     // evaluated. The coefficient of a line is the sum of its traits.
     TraitSet<T> opt;
     const int* opt_rows = nullptr;
+
+    // The dispersion of the vertical equilibrium of the disk at each node,
+    // if it has one: it adds to that of the dispersion traits in
+    // quadrature
+    const T* deq = nullptr;
 };
 
 // The kinds of traits of a disk: the trait sets of DiskArgs
@@ -52,10 +57,10 @@ enum class TraitKind
 // plane, each trait apart (see gmodel_disk_traits_point): the (sub)nodes
 // of the disk and its traits of that kind; the radius r of each point,
 // and its azimuth theta (degrees) for polar traits or its height z above
-// the midplane for height traits; and the inclination (degrees) at which
-// the velocity polar traits are projected on the line of sight, each by
-// its direction (directions). out gets the value of trait i at point j at
-// i * npoints + j.
+// the midplane for height traits; and if project, the inclination
+// (degrees) at which the velocity polar traits are projected on the line
+// of sight, each by its direction (directions; otherwise their speeds).
+// out gets the value of trait i at point j at i * npoints + j.
 template<typename T>
 struct DiskTraitsArgs
 {
@@ -68,6 +73,7 @@ struct DiskTraitsArgs
     const T* r = nullptr;
     const T* theta = nullptr;
     const T* z = nullptr;
+    bool project = false;
     T incl = 0;
     T* out = nullptr;
 };

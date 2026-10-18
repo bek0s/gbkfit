@@ -842,6 +842,15 @@ class VPTrait(PTrait, abc.ABC):
         """Return the name of its speed parameter, by its direction."""
         return VPT_DIRECTIONS[self.direction()].speed
 
+    def axisymmetric(self) -> bool:
+        """
+        Check whether its speed is the same at every azimuth (at each
+        radius): then the azimuthal means of it that the vertical
+        equilibrium of its disk takes are its value at one azimuth (see
+        parts.Kinematics); here, a speed of the radius only.
+        """
+        return True
+
 
 class VHTrait(HTrait, abc.ABC):
     """
@@ -2386,6 +2395,10 @@ class VPTraitNWHarmonic(
 
     def params_rnw(self, nnodes: int) -> dict[str, ParamDesc]:
         return _ptrait_params_nw_harmonic(self.order(), nnodes)
+
+    def axisymmetric(self) -> bool:
+        # (a harmonic of order 0 is uniform)
+        return self.order() == 0
 
 
 class VPTraitMass(VPTrait):

@@ -51,9 +51,10 @@ struct TraitSetArrays
 
 // The arrays that describe a disk: its radial nodes, its geometry (with
 // the sines and cosines of posa and incl of a loose or tilted disk, see
-// gbkfit::DiskArgs) and its traits (with the direction of each velocity
-// polar trait). They are created once, and their values are updated in
-// place before each evaluation.
+// gbkfit::DiskArgs), its traits (with the direction of each velocity
+// polar trait) and the dispersion of its vertical equilibrium, if any.
+// They are created once, and their values are updated in place before
+// each evaluation.
 template<typename T, typename Device>
 struct DiskArrays
 {
@@ -72,6 +73,7 @@ struct DiskArrays
     Array<Device, const int, nb::ndim<1>> vpt_directions;
     Array<Device, const int, nb::ndim<1>> opt_rows;
     Values posa_incl_sincos;
+    Values deq;
 };
 
 // The arrays that describe a cone: its sides, its radial nodes (shells),
@@ -382,7 +384,8 @@ struct GModel
     // 'dpt', 'zpt' or 'spt') at the points (r, theta) of its plane,
     // into out (a row for each trait), as the disk kernels evaluate them
     // (see gbkfit::gmodel_disk_traits_point). incl projects the velocity
-    // traits on the line of sight: required for them, and only for them.
+    // traits on the line of sight (without it, their speeds), and is for
+    // them only.
     static void
     disk_ptraits_evaluate(
             const Disk& disk, const std::string& kind,
@@ -392,10 +395,10 @@ struct GModel
         auto a = make_traits_args(disk, kind, true, r, out);
         require(theta.shape(0) == r.shape(0),
                 "theta needs one value for each point");
-        require(incl.has_value() == (a.kind == TraitKind::VPT),
-                "incl is required for the velocity traits ('vpt'), and only "
-                "for them");
+        require(!incl.has_value() || a.kind == TraitKind::VPT,
+                "incl is for the velocity traits ('vpt') only");
         a.theta = theta.data();
+        a.project = incl.has_value();
         a.incl = incl.value_or(0);
         Kernels::gmodel_disk_traits_evaluate(a);
     }
@@ -444,7 +447,7 @@ struct GModel
                         const Traits* opt,
                         Array<Device, const int, nb::ndim<1>> vpt_directions,
                         Array<Device, const int, nb::ndim<1>> opt_rows,
-                        Values posa_incl_sincos) {
+                        Values posa_incl_sincos, Values deq) {
                     auto optional = [](const Traits* traits) {
                         return traits ? std::optional(*traits) : std::nullopt;
                     };
@@ -454,7 +457,7 @@ struct GModel
                             optional(vpt), optional(vht), optional(dpt),
                             optional(dht), optional(zpt), optional(spt),
                             optional(opt), vpt_directions, opt_rows,
-                            posa_incl_sincos};
+                            posa_incl_sincos, deq};
                 },
                 nb::arg("loose"), nb::arg("tilted"),
                 nb::arg("rnodes").noconvert(),
@@ -475,7 +478,8 @@ struct GModel
                 nb::arg("vpt_directions").noconvert().none() = nb::none(),
                 nb::arg("opt_rows").noconvert().none() = nb::none(),
                 nb::arg("posa_incl_sincos").noconvert().none()
-                        = nb::none());
+                        = nb::none(),
+                nb::arg("deq").noconvert().none() = nb::none());
 
         nb::class_<Cone>(m, ("Cone" + suffix).c_str())
                 .def("__init__", [](
@@ -742,6 +746,10 @@ private:
                 "the traits of line opacity (opt) need the row of the line "
                 "of each (opt_rows)");
         a.opt_rows = data(disk.opt_rows);
+        require(!disk.deq.is_valid()
+                || disk.deq.shape(0) == size_t(a.nrnodes),
+                "deq needs a value for each node");
+        a.deq = data(disk.deq);
         return a;
     }
 

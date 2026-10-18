@@ -48,21 +48,36 @@ def _with_mass_params(
     distance and its mass (if any). Raise ConfigError if components take
     the circular velocity of the mass (see
     Component.circular_velocity_params) and there is none, if there is
-    mass and no component does, if the mass has no distance or the
-    distance no mass (its only user), if a mass component follows a
+    mass and no component uses it (nor a disk in vertical equilibrium,
+    see Kinematics), if a disk in equilibrium has neither mass nor
+    rotation (tangential velocity traits), if the mass has no distance or
+    the distance no mass (its only user), if a mass component follows a
     component that is not a disk of the galaxy (see
     Component.density_disk), if the pressure support of a disk takes the
     density of a mass component that the galaxy does not have, or if the
     names of the parameters repeat.
     """
     moved = any(cmp.circular_velocity_params() for cmp in components)
+    balanced = [
+        cmp for cmp in components
+        if (disk := cmp.density_disk()) is not None
+        and disk.equilibrium() is not None]
     if moved and mass_model is None:
         raise ConfigError(
             "the 'mass' velocity traits need the mass of their galaxy")
-    if mass_model is not None and not moved:
+    if mass_model is not None and not moved and not balanced:
         raise ConfigError(
             "no component uses the mass of its galaxy; give the components "
-            "that it moves 'mass' velocity traits")
+            "that it moves 'mass' velocity traits, or those it holds up a "
+            "vertical equilibrium")
+    for cmp in balanced if mass_model is None else ():
+        if not any(trait.direction() == 'tan'
+                   for trait in cmp.density_disk().traits('vpt')):
+            raise ConfigError(
+                f"the vertical equilibrium of the component {cmp.name()!r} "
+                f"takes the circular velocity of the mass of its galaxy, or "
+                f"without mass, the rotation of its disk; it has neither: "
+                f"give it tangential velocity traits, or the galaxy mass")
     if mass_model is not None and distance is None:
         raise ConfigError(
             "the mass of a galaxy needs its distance (e.g. distance: "

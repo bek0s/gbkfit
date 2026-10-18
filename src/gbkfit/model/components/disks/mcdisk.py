@@ -16,7 +16,7 @@ from ..geometries import Geometry
 from ..lines import Band, LineCatalogue
 from ..roles import Emission, Opacity
 from . import _detail, _disk
-from ..parts import Density, Kinematics
+from ..parts import Density, Equilibrium, Kinematics
 
 
 __all__ = [
@@ -47,11 +47,12 @@ class CloudDisk(_disk.Disk):
             interp: type[Interpolator],
             traits_: dict[str, Sequence[traits.Trait]],
             prefixes: dict[str, str | Sequence[str]],
-            opacity_lines: Sequence[int] = ()
+            opacity_lines: Sequence[int] = (),
+            equilibrium: Equilibrium | None = None
     ):
         super().__init__(
             loose, tilted, rnodes, rstep, interp, traits_, prefixes,
-            opacity_lines)
+            opacity_lines, equilibrium)
         if seed < 0:
             raise ConfigError(f"seed must be >= 0; supplied value: {seed}")
         if not cflux > 0:

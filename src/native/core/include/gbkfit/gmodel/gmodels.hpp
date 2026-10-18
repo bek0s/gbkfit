@@ -815,6 +815,11 @@ gmodel_mcdisk_evaluate_cloud(
     // Forcing a positive dispersion is a reasonable solution.
     dvalue = std::abs(dvalue);
 
+    // The dispersion of the vertical equilibrium, in quadrature
+    if (a.deq) {
+        dvalue = std::hypot(dvalue, lerp(rd, rnidx, a.rnodes, a.deq));
+    }
+
     // The opacity in front of the light, and the light that it lets
     // through (that of the image, or of the first line)
     VoxelOpacity<T> opacity;
@@ -1071,6 +1076,11 @@ gmodel_smdisk_evaluate_spaxel(
     // Forcing a positive dispersion is a reasonable solution.
     dvalue = std::abs(dvalue);
 
+    // The dispersion of the vertical equilibrium, in quadrature
+    if (a.deq) {
+        dvalue = std::hypot(dvalue, lerp(rn, rnidx, a.rnodes, a.deq));
+    }
+
     // The opacity in front of the light (that of a thin disk is a layer,
     // which only the opacity in front of it dims), and the light that it
     // lets through (that of the image, or of the first line)
@@ -1247,7 +1257,8 @@ gmodel_disk_htraits_point(
 // the disk kernels do: in the ring of the radius of the point, with the
 // node-wise parameters interpolated linearly between the (sub)nodes. The
 // values are those of the traits before the kernels combine them (e.g.
-// a velocity trait projected, without the systemic velocity). The disk
+// a velocity trait projected, if asked, without the systemic velocity;
+// a dispersion trait without the equilibrium of the disk). The disk
 // is closed: at the radius of its last node, the values are those its
 // last ring tends to there. Off the disk (a radius outside [rnodes[0],
 // rnodes[nrnodes - 1]]), where the kernels evaluate nothing, the values
@@ -1269,9 +1280,11 @@ gmodel_disk_traits_point(int j, const DiskTraitsArgs<T>& a)
             break;
         case TraitKind::VPT:
             gmodel_disk_ptraits_point<vp_trait<T>>(values, j, rnidx, a);
-            vp_disk_project_traits(
-                    values, a.traits.n, a.directions, a.r[j],
-                    a.theta[j] * DEG_TO_RAD<T>, a.incl * DEG_TO_RAD<T>);
+            if (a.project) {
+                vp_disk_project_traits(
+                        values, a.traits.n, a.directions, a.r[j],
+                        a.theta[j] * DEG_TO_RAD<T>, a.incl * DEG_TO_RAD<T>);
+            }
             break;
         case TraitKind::DPT:
             gmodel_disk_ptraits_point<dp_trait<T>>(values, j, rnidx, a);

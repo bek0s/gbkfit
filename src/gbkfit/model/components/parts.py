@@ -3,6 +3,7 @@ The density and the kinematics of the components made of nodes (rings or
 shells along a radius, e.g. disks), each a set of traits (see traits).
 """
 
+import dataclasses
 from collections.abc import Sequence
 from typing import Any, Self
 
@@ -14,6 +15,7 @@ from ._nodal import MAX_TRAITS
 
 __all__ = [
     'Density',
+    'Equilibrium',
     'Kinematics',
     'density_parser',
     'kinematics_parser'
@@ -132,6 +134,18 @@ class Density(parseutils.Serializable):
         return self._htraits is not None
 
 
+# The modes of the vertical equilibrium of a disk (see Kinematics)
+EQUILIBRIUM_MODES = ('central',)
+
+
+@dataclasses.dataclass(frozen=True)
+class Equilibrium:
+    """
+    The vertical equilibrium of a disk (see Kinematics): its mode.
+    """
+    mode: str
+
+
 class Kinematics(parseutils.Serializable):
     """
     How a component moves: the velocity and the velocity dispersion of
@@ -139,6 +153,25 @@ class Kinematics(parseutils.Serializable):
     add up, so motions combine; the rotation of a disk in the gravity of
     the galaxy is the velocity trait 'mass' (see traits.VPTraitMass). A
     component that emits lines into a spectral cube needs kinematics.
+
+    With equilibrium, a thick disk is held up against the gravity of its
+    galaxy by its velocity dispersion: the dispersion of its equilibrium,
+    sigma_eq(R), adds to that of its dispersion traits in quadrature,
+    sigma = hypot(sigma_traits, sigma_eq), at every height (the
+    dispersion of the midplane: isothermal in z). It is evaluated at the
+    subnodes of the disk (its rings), from the azimuthal means of its
+    traits, and interpolated linearly between them. With 'central', the
+    pull of a spherical mass: sigma_eq = h V_c / R, with h the rms height
+    of the disk at R (that of its density, from its density height
+    traits) and V_c the circular velocity of the mass of its galaxy, or
+    without mass, the rotation of the disk (the azimuthal mean of its
+    tangential velocity traits at the midplane); exact for a disk thin
+    against its radius (h << R) in a spherical gravity, whatever the shape
+    of its height profile (the vertical virial theorem: sigma^2 = Omega^2
+    <z^2>, Omega = V_c / R). At the centre, where V_c / R is 0 / 0, it
+    takes Omega at the next subnode; NaN where V_c^2 is negative. It is
+    the thick disk of GalPaK3D, there with h a fixed share of the radius
+    of the disk.
 
     Parameters
     ----------
@@ -153,13 +186,17 @@ class Kinematics(parseutils.Serializable):
     dhtraits : DHTrait or Sequence of DHTrait, optional
         The dispersion height traits of a thick component, one for each
         dispersion polar trait (as vhtraits).
+    equilibrium : str, optional
+        The vertical equilibrium of a thick disk: none (the default) or
+        'central'.
 
     Raises
     ------
     ConfigError
         If there are no polar traits or too many, not one height trait
-        for each polar trait, or several velocity traits 'mass' (the
-        rotation in the gravity would count more than once).
+        for each polar trait, several velocity traits 'mass' (the
+        rotation in the gravity would count more than once), or the
+        equilibrium is not valid.
     """
 
     @classmethod
@@ -182,6 +219,8 @@ class Kinematics(parseutils.Serializable):
             info['vhtraits'] = _dump_traits(traits.vht_parser, self._vhtraits)
         if self._dhtraits is not None:
             info['dhtraits'] = _dump_traits(traits.dht_parser, self._dhtraits)
+        if self._equilibrium is not None:
+            info['equilibrium'] = self._equilibrium.mode
         return info
 
     def __init__(
@@ -191,7 +230,8 @@ class Kinematics(parseutils.Serializable):
             vhtraits:
             traits.VHTrait | Sequence[traits.VHTrait | None] | None = None,
             dhtraits:
-            traits.DHTrait | Sequence[traits.DHTrait | None] | None = None
+            traits.DHTrait | Sequence[traits.DHTrait | None] | None = None,
+            equilibrium: str | None = None
     ):
         self._vptraits = _polar_traits('vptraits', vptraits)
         if sum(isinstance(trait, traits.VPTraitMass)
@@ -204,6 +244,12 @@ class Kinematics(parseutils.Serializable):
             'vhtraits', vhtraits, len(self._vptraits), 'vptraits')
         self._dhtraits = _height_traits(
             'dhtraits', dhtraits, len(self._dptraits), 'dptraits')
+        if equilibrium not in (None,) + EQUILIBRIUM_MODES:
+            raise ConfigError(
+                f"equilibrium must be one of {list(EQUILIBRIUM_MODES)} or "
+                f"none; it is {equilibrium!r}")
+        self._equilibrium = None if equilibrium is None \
+            else Equilibrium(equilibrium)
 
     def vptraits(self) -> tuple[traits.VPTrait, ...]:
         """Return the velocity polar traits."""
@@ -220,6 +266,10 @@ class Kinematics(parseutils.Serializable):
     def dhtraits(self) -> tuple[traits.DHTrait | None, ...] | None:
         """Return the velocity dispersion height traits, if given."""
         return self._dhtraits
+
+    def equilibrium(self) -> Equilibrium | None:
+        """Return the vertical equilibrium, if any."""
+        return self._equilibrium
 
 
 density_parser = parseutils.BasicParser(Density)

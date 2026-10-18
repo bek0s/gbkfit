@@ -15,6 +15,7 @@ from .._nodal import (
     fill_param_values, native_traits, subring_radii)
 from ..base import NativeGrid
 from ..geometries import GEOMETRY_PARAMS
+from ..parts import Equilibrium
 from ..traits import PressureSupport, Trait
 
 
@@ -24,6 +25,11 @@ from ..traits import PressureSupport, Trait
 # its line opacity (o)
 TRAIT_KINDS = (
     'rpt', 'rht', 'vpt', 'vht', 'dpt', 'dht', 'zpt', 'spt', 'opt')
+
+# The values that the galaxy of a disk in vertical equilibrium gives its
+# plans with its parameters: the dispersion of the equilibrium at its
+# subnodes (km/s; see Disk.equilibrium)
+EQUILIBRIUM_DISPERSION = 'equilibrium_dispersion'
 
 
 def _make_param_descs(key: str, nnodes: int, nw: bool) -> dict[str, ParamDesc]:
@@ -42,7 +48,8 @@ class Disk(abc.ABC):
             interp: type[Interpolator],
             traits_: dict[str, Sequence[Trait]],
             prefixes: dict[str, str | Sequence[str]],
-            opacity_lines: Sequence[int] = ()
+            opacity_lines: Sequence[int] = (),
+            equilibrium: Equilibrium | None = None
     ):
         """
         traits_ has the traits of each kind, keyed as in TRAIT_KINDS, and
@@ -51,6 +58,7 @@ class Disk(abc.ABC):
         the density polar traits), or of each of its traits (e.g.
         'op_halpha_'). opacity_lines has the line of each trait of line
         opacity ('opt'): its index among the lines of the emission.
+        equilibrium is its vertical equilibrium, if any (see Kinematics).
         """
 
         subrnodes = subring_radii(rnodes, rstep)
@@ -64,6 +72,7 @@ class Disk(abc.ABC):
         self._traits = NodalTraits(
             TRAIT_KINDS, traits_, prefixes, rnodes, subrnodes, interp)
         self._opacity_lines = tuple(opacity_lines)
+        self._equilibrium = equilibrium
 
         # Make descs for the geometric parameters. There is no systemic
         # velocity without velocity traits.
@@ -124,6 +133,14 @@ class Disk(abc.ABC):
         among the lines of the emission.
         """
         return self._opacity_lines
+
+    def equilibrium(self) -> Equilibrium | None:
+        """
+        Return its vertical equilibrium, if any (see Kinematics): its
+        galaxy gives its plans the dispersion of the equilibrium at its
+        subnodes with its parameters, as EQUILIBRIUM_DISPERSION.
+        """
+        return self._equilibrium
 
     def trait_params(self, kind: str) -> TraitParams:
         """Return the parameters of the traits of one kind (TraitParams)."""
@@ -213,6 +230,8 @@ class DiskPlan(NodalPlan):
         sizes |= disk._traits.sizes()
         # The offset, scale and flux of each emission line
         sizes['lines'] = 3 * nlines
+        # The dispersion of the vertical equilibrium at each subnode
+        sizes['deq'] = nsubrnodes if disk.equilibrium() is not None else 0
         # The sines and cosines of posa and incl, for the search of the
         # ring of each point of a loose or tilted disk
         sizes['posa_incl_sincos'] = 4 * sizes['posa']
@@ -236,7 +255,9 @@ class DiskPlan(NodalPlan):
             **native_traits(driver, dtype, disk._traits, buffer),
             opt_rows=to_device(opacity_rows, np.int32)
             if disk.traits('opt') else None,
-            posa_incl_sincos=buffer.device('posa_incl_sincos'))
+            posa_incl_sincos=buffer.device('posa_incl_sincos'),
+            deq=buffer.device('deq')
+            if disk.equilibrium() is not None else None)
 
         self._disk = disk
         self._driver = driver
@@ -259,6 +280,8 @@ class DiskPlan(NodalPlan):
             rdata_scale: float = 1.0,
             image_scale: float = 1.0
     ) -> None:
+        if self._disk.equilibrium() is not None:
+            self._buffer.host('deq')[:] = params[EQUILIBRIUM_DISPERSION]
         params = self._write_params(params, lines)
         evaluate_native(
             lambda kwargs: self._impl_evaluate(params, kwargs, out_extra),
@@ -298,9 +321,9 @@ class DiskPlan(NodalPlan):
             The radius (arcsec) and azimuth (degrees) of each point in the
             plane of the disk (see traits), broadcast together.
         incl : float, optional
-            The inclination (degrees) at which the velocity traits project
-            their velocities on the line of sight: required for them
-            ('vpt'), and only for them.
+            The inclination (degrees) at which the velocity traits ('vpt')
+            project their velocities on the line of sight; without it,
+            their speeds, each along its direction. For them only.
 
         Returns
         -------
@@ -311,8 +334,8 @@ class DiskPlan(NodalPlan):
         ------
         ValueError
             If kind is not a kind of polar traits, the disk has no traits
-            of the kind, or incl is missing for the velocity traits or
-            given for others.
+            of the kind, or incl is given for traits other than the
+            velocity traits.
         """
         r, theta = np.broadcast_arrays(r, theta)
         return self._evaluate_traits(

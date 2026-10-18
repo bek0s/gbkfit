@@ -149,6 +149,9 @@ def make_cone(
             "walls")
     if isinstance(emission, LineEmission) and kinematics is None:
         raise ConfigError("a cone that emits lines needs kinematics")
+    if kinematics is not None and kinematics.equilibrium() is not None:
+        raise ConfigError(
+            "a cone has no vertical equilibrium: that is of disks")
     if opacity is not None and not isinstance(opacity, DustOpacity):
         raise ConfigError("the opacity of a cone is dust (type: dust)")
     sptraits = iterutils.tuplify(sptraits)
