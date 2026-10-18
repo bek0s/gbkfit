@@ -9,13 +9,13 @@ from gbkfit.driver import Driver
 from gbkfit.instrument import Instrument
 from gbkfit.model import LineEmission
 from gbkfit.model.components._units import DataUnit
-from gbkfit.params import ParamValues
 from . import _dcube, _detail
 from .base import ModelData, Observable
 
 if TYPE_CHECKING:
     from .._scene import Scene
     from ..foreground import Foreground
+    from ..noise import Noise
     from ..weights import Weights
 
 
@@ -205,14 +205,10 @@ class PixelSpectra(Observable):
 
 class PixelSpectraPlan(_detail.DCubePlanBase):
 
-    def evaluate(
-            self,
-            params: ParamValues,
-            gravity: Sequence[dict[int, ParamValues]],
-            out_extra: dict[str, Any] | None
-    ) -> ModelData:
-        self._evaluate_cube(
-            params, gravity, out_extra, _dcube.cube_extra, _dcube.cube_extra)
+    def exact_errors(self, noise: 'Noise') -> dict[str, np.ndarray]:
+        return dict(spectra=noise.sigma(self._dcube.grid()))
+
+    def _measure(self) -> ModelData:
         plan = self._dcube_plan
         return dict(spectra=dict(
             d=plan.dcube(), m=plan.mcube(), w=plan.wcube()))

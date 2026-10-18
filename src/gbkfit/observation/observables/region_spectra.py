@@ -9,7 +9,6 @@ from gbkfit.driver import Driver
 from gbkfit.instrument import Instrument
 from gbkfit.model import LineEmission
 from gbkfit.model.components._units import DataUnit
-from gbkfit.params import ParamValues
 from gbkfit.region import Regions, regions_parser
 from gbkfit.utils import gridutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
@@ -286,13 +285,6 @@ class RegionSpectraPlan(_detail.DCubePlanBase):
         self._spectra = driver.mem_alloc_d(
             (dcube.size()[2], self._sums.nregions()), dtype)
 
-    def evaluate(
-            self,
-            params: ParamValues,
-            gravity: Sequence[dict[int, ParamValues]],
-            out_extra: dict[str, Any] | None
-    ) -> ModelData:
-        self._evaluate_cube(
-            params, gravity, out_extra, _dcube.cube_extra, _dcube.cube_extra)
+    def _measure(self) -> ModelData:
         self._sums.evaluate(self._dcube_plan.dcube(), self._spectra)
         return dict(spectra=dict(d=self._spectra, m=None, w=None))

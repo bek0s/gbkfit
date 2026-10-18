@@ -2,6 +2,7 @@
 Helpers shared by the observables.
 """
 
+import abc
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any
 
@@ -17,12 +18,13 @@ from gbkfit.region import Regions
 from gbkfit.utils import gridutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
 from ..weights import plan_weights
-from ._dcube import DCube, ExtraFunction
-from .base import Observable, ObservablePlan
+from ._dcube import DCube, cube_extra
+from .base import HostModelData, ModelData, Observable, ObservablePlan
 
 if TYPE_CHECKING:
     from .._scene import Scene
     from ..foreground import Foreground
+    from ..noise import Noise
     from ..weights import Weights
 
 
@@ -244,6 +246,11 @@ class DCubePlanBase(ObservablePlan):
     of the calibration of the observation, if any, which scales the flux
     of the cube.
 
+    It evaluates the model on the cube, records and masks it (see
+    DCubePlan.evaluate), and measures the data items from its low-res
+    cube (_measure, of each observable). Its mock data are measured from
+    the recorded low-res cube plus noise, masked as the model.
+
     Raises
     ------
     ConfigError
@@ -301,18 +308,89 @@ class DCubePlanBase(ObservablePlan):
         """Return an extra output of the model as this observable gives it."""
         return value
 
-    def _evaluate_cube(
+    def evaluate(
             self,
             params: ParamValues,
             gravity: Sequence[dict[int, ParamValues]],
-            out_extra: dict[str, Any] | None,
-            extra_lo: ExtraFunction,
-            extra_hi: ExtraFunction
+            out_extra: dict[str, Any] | None
+    ) -> ModelData:
+        model_extra = None if out_extra is None else {}
+        self._evaluate_model(params, gravity, model_extra)
+        self._dcube_plan.evaluate(
+            out_extra, self._extra_lo, self._extra_hi,
+            self._flux_scale(params))
+        if model_extra:
+            out_extra.update(
+                {f'model_{k}': self._model_extra(v)
+                 for k, v in model_extra.items()})
+        return self._measure()
+
+    def mock(
+            self,
+            params: ParamValues,
+            gravity: Sequence[dict[int, ParamValues]],
+            noise: 'Noise',
+            rng: np.random.Generator,
+            ndraws: int
+    ) -> list[HostModelData]:
+        # The recorded data, without noise, are kept on the host
+        self._evaluate_model(params, gravity, None)
+        dcube_plan = self._dcube_plan
+        dcube_plan.record(self._flux_scale(params))
+        recorded = self._driver.mem_copy_d2h(dcube_plan.dcube())
+        return [self._mock_once(recorded, noise, rng) for _ in range(ndraws)]
+
+    def exact_errors(self, noise: 'Noise') -> dict[str, np.ndarray] | None:
+        return None
+
+    # How the extra outputs of the low- and high-res cubes are made from
+    # their data and grids (see DCubePlan.evaluate)
+    _extra_lo = staticmethod(cube_extra)
+    _extra_hi = staticmethod(cube_extra)
+
+    @abc.abstractmethod
+    def _measure(self) -> ModelData:
+        """Return the model data measured from the low-res cube."""
+
+    def _mock_once(
+            self, recorded: np.ndarray, noise: 'Noise', rng: np.random.Generator
+    ) -> HostModelData:
+        """
+        Return the model data measured from the recorded low-res cube (on
+        the host) plus a draw of the noise, masked as the model, on the
+        host (see mock). Observables whose noise goes in elsewhere (e.g.
+        slitless spectra, in the image) override this.
+        """
+        dcube = self._dcube
+        noisy = recorded + noise.draw(rng, dcube.grid(), dcube.psf())
+        self._driver.mem_copy_h2d(
+            noisy.astype(self._dtype), self._dcube_plan.dcube())
+        self._dcube_plan.mask()
+        return self._to_host(self._measure())
+
+    def _to_host(self, data: ModelData) -> HostModelData:
+        """Return copies of the data and masks of model data on the host."""
+        return {
+            key: dict(
+                d=self._driver.mem_copy_d2h(item['d']),
+                m=None if item['m'] is None
+                else self._driver.mem_copy_d2h(item['m']))
+            for key, item in data.items()}
+
+    def _flux_scale(self, params: ParamValues) -> float | None:
+        """Return the calibration of the observation, if any."""
+        return None if self._calibration is None \
+            else params[self._calibration]
+
+    def _evaluate_model(
+            self,
+            params: ParamValues,
+            gravity: Sequence[dict[int, ParamValues]],
+            model_extra: dict[str, Any] | None
     ) -> None:
         """
         Evaluate the model on the high-res cube (or on the source plane of
-        a lens, lensed into it), then convolve, downscale and mask it into
-        the low-res cube (see DCubePlan.evaluate).
+        a lens, lensed into it), and the weights of the data, if any.
         """
         dcube_plan = self._dcube_plan
         if self._weights_plan is not None:
@@ -321,15 +399,7 @@ class DCubePlanBase(ObservablePlan):
         cube = dcube_plan.scratch_dcube() if self._lens_plan is None \
             else self._source_cube
         self._driver.mem_fill(cube, 0)
-        model_extra = None if out_extra is None else {}
         self._model_plan.evaluate(params, gravity, cube, model_extra)
         if self._lens_plan is not None:
             self._lens_plan.evaluate(
                 params, cube, dcube_plan.scratch_dcube())
-        flux_scale = None if self._calibration is None \
-            else params[self._calibration]
-        dcube_plan.evaluate(out_extra, extra_lo, extra_hi, flux_scale)
-        if model_extra:
-            out_extra.update(
-                {f'model_{k}': self._model_extra(v)
-                 for k, v in model_extra.items()})

@@ -444,26 +444,30 @@ class DCubePlan:
             flux_scale: float | None = None
     ) -> None:
         """
+        Record the high-res cube into the low-res one (see record) and mask
+        it (see mask). The extra outputs on the low- and high-res grids go
+        to out_extra as extra_lo and extra_hi make them from their data and
+        grid (e.g. cube_extra or plain_extra).
+        """
+        self.record(flux_scale)
+        self.mask()
+        if out_extra is not None:
+            self._extras(out_extra, extra_lo, extra_hi)
+
+    def record(self, flux_scale: float | None = None) -> None:
+        """
         Scale the flux of the high-res cube by flux_scale (if given; e.g.
         the calibration of an observation), attenuate it by the primary
-        beam, convolve, downscale and mask it into the low-res one. The
-        extra outputs on the low- and high-res grids go to out_extra as
-        extra_lo and extra_hi make them from their data and grid (e.g.
-        cube_extra or plain_extra).
+        beam, convolve and downscale it into the low-res one: the data the
+        instrument records.
         """
         dcube = self._dcube
-        step_lo = dcube.step()
-        step_hi = self._grid_hi.coords.step
-        psf = dcube.psf()
-        lsf = dcube.lsf()
         dcube_lo = self._dcube_lo
         dcube_hi = self._dcube_hi
         wcube_lo = self._wcube_lo
         wcube_hi = self._wcube_hi
-        mcube_lo = self._mcube_lo
         pbeam_hi = self._pbeam_hi
         has_weights = self._has_weights
-        mask_cutoff = dcube.mask_cutoff()
         driver = self._driver
         backend_dmodel = self._backend_dmodel
 
@@ -503,13 +507,38 @@ class DCubePlan:
                 backend_dmodel.dcube_downscale(
                     dcube.scale(), self._edge_hi, wcube_hi, wcube_lo)
 
-        # The mask, applied to the data if asked
+    def mask(self) -> None:
+        """
+        Mask the low-res cube where its values are not above mask_cutoff,
+        if masking is enabled (the mask is applied, NaN, if mask_apply).
+        """
+        mask_cutoff = self._dcube.mask_cutoff()
         if mask_cutoff is not None:
-            backend_dmodel.dcube_mask(
-                mask_cutoff, dcube.mask_apply(), dcube_lo, mcube_lo, wcube_lo)
+            self._backend_dmodel.dcube_mask(
+                mask_cutoff, self._dcube.mask_apply(), self._dcube_lo,
+                self._mcube_lo, self._wcube_lo)
 
-        if out_extra is None:
-            return
+    def _extras(
+            self,
+            out_extra: dict[str, Any],
+            extra_lo: ExtraFunction,
+            extra_hi: ExtraFunction
+    ) -> None:
+        """Write the extra outputs (see evaluate)."""
+        dcube = self._dcube
+        step_lo = dcube.step()
+        step_hi = self._grid_hi.coords.step
+        psf = dcube.psf()
+        lsf = dcube.lsf()
+        dcube_lo = self._dcube_lo
+        dcube_hi = self._dcube_hi
+        wcube_lo = self._wcube_lo
+        wcube_hi = self._wcube_hi
+        mcube_lo = self._mcube_lo
+        pbeam_hi = self._pbeam_hi
+        has_weights = self._has_weights
+        mask_cutoff = dcube.mask_cutoff()
+        driver = self._driver
 
         def lo(data: DeviceArray) -> gridutils.GridData | np.ndarray:
             return extra_lo(driver.mem_copy_d2h(data), dcube.grid())

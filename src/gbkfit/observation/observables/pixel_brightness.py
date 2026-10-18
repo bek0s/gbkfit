@@ -8,7 +8,6 @@ from gbkfit.driver import Driver
 from gbkfit.instrument import Instrument
 from gbkfit.model import BandEmission
 from gbkfit.model.components._units import DataUnit
-from gbkfit.params import ParamValues
 from gbkfit.utils import gridutils
 from gbkfit.utils.parseutils import ConfigError
 from . import _dcube, _detail
@@ -17,6 +16,7 @@ from .base import ModelData, Observable
 if TYPE_CHECKING:
     from .._scene import Scene
     from ..foreground import Foreground
+    from ..noise import Noise
     from ..weights import Weights
 
 
@@ -199,14 +199,13 @@ class PixelBrightnessPlan(_detail.DCubePlanBase):
         # Image models are evaluated on the x and y axes
         return self._dcube_plan.scratch_grid().spatial()
 
-    def evaluate(
-            self,
-            params: ParamValues,
-            gravity: Sequence[dict[int, ParamValues]],
-            out_extra: dict[str, Any] | None
-    ) -> ModelData:
-        self._evaluate_cube(
-            params, gravity, out_extra, _image_extra, _image_extra)
+    def exact_errors(self, noise: 'Noise') -> dict[str, np.ndarray]:
+        return dict(brightness=noise.sigma(self._dcube.grid())[0])
+
+    _extra_lo = staticmethod(_image_extra)
+    _extra_hi = staticmethod(_image_extra)
+
+    def _measure(self) -> ModelData:
         plan = self._dcube_plan
         return dict(brightness=dict(
             d=plan.dcube()[0, :, :],

@@ -9,7 +9,6 @@ from gbkfit.driver import Driver
 from gbkfit.instrument import Instrument
 from gbkfit.model import LineEmission
 from gbkfit.model.components._units import DataUnit
-from gbkfit.params import ParamValues
 from gbkfit.utils import gridutils
 from gbkfit.utils.parseutils import ConfigError
 from . import _dcube, _detail, _moments
@@ -281,14 +280,7 @@ class PixelMomentsPlan(_detail.DCubePlanBase):
             driver, moments.size(), moments.orders(), moments.mask_cutoff(),
             moments.method(), dtype)
 
-    def evaluate(
-            self,
-            params: ParamValues,
-            gravity: Sequence[dict[int, ParamValues]],
-            out_extra: dict[str, Any] | None
-    ) -> ModelData:
-        self._evaluate_cube(
-            params, gravity, out_extra, _dcube.cube_extra, _dcube.cube_extra)
+    def _measure(self) -> ModelData:
         # The moment maps, one mask shared by all of them, and the weight
         # map of each moment
         plan = self._dcube_plan

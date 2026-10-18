@@ -17,10 +17,12 @@ from gbkfit.utils.parseutils import ConfigError
 if TYPE_CHECKING:
     from .._scene import Scene
     from ..foreground import Foreground
+    from ..noise import Noise
     from ..weights import Weights
 
 
 __all__ = [
+    'HostModelData',
     'ModelData',
     'Observable',
     'ObservablePlan',
@@ -33,6 +35,9 @@ __all__ = [
 # of its mask ('m'; an output, which the objective does not use) and of
 # its weights ('w') on the driver, or None
 ModelData: TypeAlias = dict[str, dict[str, DeviceArray | None]]
+
+# Model data copied to the host
+HostModelData: TypeAlias = dict[str, dict[str, np.ndarray | None]]
 
 
 class Observable(parseutils.TypedSerializable, abc.ABC):
@@ -385,6 +390,68 @@ class ObservablePlan(abc.ABC):
         -------
         ModelData
             The model data.
+        """
+        pass
+
+    @abc.abstractmethod
+    def mock(
+            self,
+            params: ParamValues,
+            gravity: Sequence[dict[int, ParamValues]],
+            noise: 'Noise',
+            rng: np.random.Generator,
+            ndraws: int
+    ) -> list[HostModelData]:
+        """
+        Draw mock data: the model data measured from the data that the
+        instrument records of the model plus noise, ndraws times, each
+        with its own noise. The model is evaluated once.
+
+        Parameters
+        ----------
+        params, gravity
+            As for evaluate.
+        noise : Noise
+            The noise of the recorded data.
+        rng : Generator
+            The random numbers of the noise.
+        ndraws : int
+            The number of draws.
+
+        Returns
+        -------
+        list of HostModelData
+            The model data of each draw, on the host: of each data item,
+            the data ('d') and their mask ('m') as evaluate gives them;
+            no weights.
+
+        Raises
+        ------
+        ConfigError
+            If the noise does not suit the recorded data (see
+            Noise.draw).
+        """
+        pass
+
+    @abc.abstractmethod
+    def exact_errors(self, noise: 'Noise') -> dict[str, np.ndarray] | None:
+        """
+        Return the errors of the data items of mock data, if they are
+        known exactly.
+
+        Parameters
+        ----------
+        noise : Noise
+            The noise of the recorded data.
+
+        Returns
+        -------
+        dict or None
+            The error of each value of each data item, by name: the
+            dispersion of the noise, if the items are the recorded data
+            plus the noise (e.g. spectra); None if they are measured from
+            them (e.g. moments), when their errors are those of the
+            scatter of draws (see mock).
         """
         pass
 

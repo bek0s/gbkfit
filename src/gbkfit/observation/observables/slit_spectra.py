@@ -9,7 +9,6 @@ from gbkfit.driver import Driver
 from gbkfit.instrument import Instrument
 from gbkfit.model import LineEmission
 from gbkfit.model.components._units import DataUnit
-from gbkfit.params import ParamValues
 from gbkfit.utils import gridutils
 from . import _dcube, _detail
 from .base import ModelData, Observable
@@ -17,6 +16,7 @@ from .base import ModelData, Observable
 if TYPE_CHECKING:
     from .._scene import Scene
     from ..foreground import Foreground
+    from ..noise import Noise
     from ..weights import Weights
 
 
@@ -242,16 +242,15 @@ class SlitSpectraPlan(_detail.DCubePlanBase):
         # model, which are on the sky, are plain arrays
         return value.data
 
-    def evaluate(
-            self,
-            params: ParamValues,
-            gravity: Sequence[dict[int, ParamValues]],
-            out_extra: dict[str, Any] | None
-    ) -> ModelData:
-        # The slit has no position on the sky, so the extra outputs of the
-        # high-res grid are plain arrays
-        self._evaluate_cube(
-            params, gravity, out_extra, _slit_extra, _dcube.plain_extra)
+    def exact_errors(self, noise: 'Noise') -> dict[str, np.ndarray]:
+        return dict(spectra=noise.sigma(self._dcube.grid())[:, 0, :])
+
+    # The slit has no position on the sky, so the extra outputs of the
+    # high-res grid are plain arrays
+    _extra_lo = staticmethod(_slit_extra)
+    _extra_hi = staticmethod(_dcube.plain_extra)
+
+    def _measure(self) -> ModelData:
         plan = self._dcube_plan
         return dict(spectra=dict(
             d=plan.dcube()[:, 0, :],

@@ -12,16 +12,16 @@ from gbkfit.driver import Driver
 from gbkfit.instrument import Instrument
 from gbkfit.model import LineEmission
 from gbkfit.model.components._units import DataUnit
-from gbkfit.params import ParamValues
 from gbkfit.utils import gridutils
 from gbkfit.utils.parseutils import ConfigError
 from . import _dcube, _detail, _moments
 from ._region_sums import RegionSumsPlan
-from .base import ModelData, Observable
+from .base import HostModelData, ModelData, Observable
 
 if TYPE_CHECKING:
     from .._scene import Scene
     from ..foreground import Foreground
+    from ..noise import Noise
     from ..weights import Weights
 
 
@@ -379,7 +379,7 @@ class SlitlessSpectra(Observable):
             fft_dtype=fft_dtype)
         dispersion = self._dispersion(footprints, size, offset)
         return SlitlessSpectraPlan(
-            dcube, dispersion, self.size(), driver, scene, foreground, dtype,
+            dcube, dispersion, self.grid(), driver, scene, foreground, dtype,
             calibration)
 
     def _channel_edges(self) -> list[np.ndarray]:
@@ -429,15 +429,17 @@ class SlitlessSpectra(Observable):
 class SlitlessSpectraPlan(_detail.DCubePlanBase):
     """
     The evaluation of SlitlessSpectra: the cube of the sky (see
-    DCubePlanBase), then its dispersion into the image, the sums of its
-    voxels with the weights of a sparse matrix (see RegionSumsPlan).
+    DCubePlanBase), then its dispersion into the image of the grid of the
+    detector, the sums of its voxels with the weights of a sparse matrix
+    (see RegionSumsPlan). The detector records the image, so the noise of
+    its mock data goes in there.
     """
 
     def __init__(
             self,
             dcube: _dcube.DCube,
             dispersion: scipy.sparse.csr_array,
-            size: tuple[int, ...],
+            grid: gridutils.Grid,
             driver: Driver,
             scene: 'Scene',
             foreground: 'Foreground',
@@ -447,18 +449,24 @@ class SlitlessSpectraPlan(_detail.DCubePlanBase):
         super().__init__(
             dcube, driver, scene, foreground, dtype, None, calibration)
         self._dispersion = RegionSumsPlan(dispersion, driver, dtype)
+        size = grid.size
         self._image = driver.mem_alloc_d((1, size[0] * size[1]), dtype)
         self._shape = size[::-1]
+        self._grid = grid
 
-    def evaluate(
-            self,
-            params: ParamValues,
-            gravity: Sequence[dict[int, ParamValues]],
-            out_extra: dict[str, Any] | None
-    ) -> ModelData:
-        self._evaluate_cube(
-            params, gravity, out_extra, _dcube.cube_extra, _dcube.cube_extra)
+    def exact_errors(self, noise: 'Noise') -> dict[str, np.ndarray]:
+        return dict(spectra=noise.sigma(self._grid))
+
+    def _measure(self) -> ModelData:
         cube = self._dcube_plan.dcube()
         self._dispersion.evaluate(cube.reshape(1, 1, cube.size), self._image)
         return dict(spectra=dict(
             d=self._image.reshape(self._shape), m=None, w=None))
+
+    def _mock_once(
+            self, recorded: np.ndarray, noise: 'Noise', rng: np.random.Generator
+    ) -> HostModelData:
+        self._driver.mem_copy_h2d(recorded, self._dcube_plan.dcube())
+        data = self._to_host(self._measure())
+        data['spectra']['d'] += noise.draw(rng, self._grid, self._dcube.psf())
+        return data
