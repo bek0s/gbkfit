@@ -91,6 +91,8 @@ class UVTransform(abc.ABC):
         self._driver = driver
         self._nufft = driver.nufft()
         self._eps = eps
+        # TODO: a NUFFT for each channel, kept where the memory allows,
+        # which saves the moves too (1 to 20% of the time)
         self._forward: NUFFT | None = None
         self._backward: NUFFT | None = None
         size_x, size_y = grid.size[:2]

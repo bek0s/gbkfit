@@ -95,6 +95,10 @@ class Visibilities(Observable):
         If the transform is not one of those, or eps is not positive.
     """
 
+    # TODO: averaging the visibilities in time or frequency, as an opt-in
+    # approximation (for now, the data are averaged by CASA, e.g. split
+    # with timebin and width)
+
     dataset_class = DatasetVisibilities
 
     emission = LineEmission

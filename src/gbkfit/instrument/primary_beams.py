@@ -232,6 +232,9 @@ class PrimaryBeamImage(PrimaryBeam):
         The rotation of the image on the sky (see gridutils.Coords).
     """
 
+    # TODO: a cube of an image for each channel (e.g. a CASA .pb cube),
+    # which varies (see varies and at), as the beams of PrimaryBeamRadial
+
     @staticmethod
     def type() -> str:
         return 'image'

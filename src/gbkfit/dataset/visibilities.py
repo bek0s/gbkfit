@@ -140,6 +140,8 @@ class UVCoverage:
             raise ConfigError(
                 f"the baselines must be finite, one (u, v, w) for each row; "
                 f"their shape is {uvw.shape}")
+        # TODO: continuum visibilities, of one channel (an observable of
+        # their images, without a spectral axis)
         steps = np.diff(frequencies)
         if frequencies.ndim != 1 or frequencies.size < 2 \
                 or not np.all(frequencies > 0) or steps[0] == 0 \
@@ -151,6 +153,8 @@ class UVCoverage:
             raise ConfigError(
                 f"the phase centre must be an RA and a Dec; it is "
                 f"{phase_centre}")
+        # TODO: TOPO frequencies, with the Doppler shift of the time of
+        # each row (for now, regridded to LSRK by CASA mstransform)
         if frame not in _FRAMES:
             raise ConfigError(
                 f"the frequencies must be in the rest frame "
@@ -383,6 +387,8 @@ class DatasetVisibilities(Dataset):
                 "reading measurement sets needs python-casacore: pip "
                 "install 'gbkfit[casacore]'") from e
 
+        # TODO: several fields or spectral windows in one dataset (for
+        # now, one dataset, and one observation, each)
         def subtable(name: str) -> Any:
             return tables.table(os.path.join(ms, name), ack=False)
         with subtable('FIELD') as fields:

@@ -305,6 +305,9 @@ class DriverNUFFT(abc.ABC):
     upsampfac=2 for type 3 to reach its tolerance).
     """
 
+    # TODO: float32 NUFFTs, as an opt-in approximation (cuFINUFFT 2.5.1
+    # needs upsampfac=2 for its type 3 to reach the tolerance)
+
     def type3(
             self,
             points: np.ndarray,
