@@ -565,6 +565,27 @@ class ParamSpace(parseutils.Serializable):
                 float(result) if result.ndim == 0 else result
         return derived
 
+    def derived_elements(self, values: ParamValues) -> dict[str, float]:
+        """
+        Return the value of each element of each derived value (see
+        derived_values), by element name (e.g. 'v22', 'vs[1]'; the
+        elements of an array in its flat order).
+
+        Raises
+        ------
+        ParamEvaluationError
+            If an expression fails.
+        """
+        elements = {}
+        for name, value in self.derived_values(values).items():
+            if np.ndim(value) == 0:
+                elements[name] = float(value)
+                continue
+            elements |= {
+                element_name(name, i): float(item)
+                for i, item in enumerate(np.ravel(value))}
+        return elements
+
     def _needed_derived(self, names: Collection[str] | None) -> set[str]:
         """
         Return the derived values of the given names (all if None) and

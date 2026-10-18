@@ -41,9 +41,9 @@ def eval_(
     """
     Evaluate the galaxies of a configuration at its parameters (their
     fixed values, and the 'value' of the free ones), or its objective,
-    and write the outputs: the parameters (gbkfit_eval_params), the
-    models, or the data and the residuals (FITS), and their extra
-    outputs.
+    and write the outputs: the parameters and the derived values
+    (gbkfit_eval_params), the models, or the data and the residuals
+    (FITS), and their extra outputs.
 
     The mode 'mock' writes the models (as 'model'), and mock data of the
     observations: their models measured from what their instruments
@@ -116,7 +116,8 @@ def eval_(
     _detail.dump_dict(
         numutils.nativify(dict(
             params=param_values,
-            eparams=params.element_values(param_values))),
+            eparams=params.element_values(param_values),
+            derived=params.derived_values(param_values))),
         os.path.join(output_dir, 'gbkfit_eval_params'))
 
     _log.info("evaluating...")

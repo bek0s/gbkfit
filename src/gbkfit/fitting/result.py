@@ -86,6 +86,10 @@ class Covariance:
     element_std : dict
         The standard error of every element (propagated to the tied
         elements; 0 for the fixed ones).
+    derived_std : dict
+        The standard error of each element of the derived values (see
+        FitSolution.derived), propagated as those of the tied elements
+        (the delta method); NaN where they cannot be evaluated at a step.
     rank : int
         The rank of the Jacobian. Below the number of free elements, some
         directions are not constrained, and the errors are left out of
@@ -104,6 +108,7 @@ class Covariance:
     std: dict[str, float]
     correlation: np.ndarray
     element_std: dict[str, float]
+    derived_std: dict[str, float]
     rank: int
     unconstrained: tuple[str, ...]
     at_bounds: tuple[str, ...]
@@ -113,12 +118,15 @@ class Covariance:
 @dataclasses.dataclass(frozen=True)
 class Posterior:
     """
-    Samples of the posterior of all the elements of the parameters.
+    Samples of the posterior of all the elements of the parameters, and
+    of the derived values.
 
     Attributes
     ----------
     names : tuple of str
-        The elements (all of them: free, tied and fixed), in order.
+        The elements (all of them: free, tied and fixed), in order, then
+        those of the derived values (see FitSolution.derived), which are
+        NaN in the samples where they cannot be evaluated.
     samples : np.ndarray
         The samples, one per row.
     weights : np.ndarray or None
@@ -191,6 +199,10 @@ class FitSolution:
         The values of all parameters (to evaluate the models).
     elements : dict
         The value of every element.
+    derived : dict
+        The value of each element of each derived value (see
+        ParamSpace.derived_elements); none if they cannot be evaluated
+        there (see the diagnostics 'derived_errors' of FitResult).
     chi2 : float
         The chi-square.
     nresiduals : int
@@ -217,6 +229,7 @@ class FitSolution:
     free: dict[str, float]
     values: ParamValues
     elements: dict[str, float]
+    derived: dict[str, float]
     chi2: float
     nresiduals: int
     dof: int
@@ -310,7 +323,10 @@ class FitResult:
         return self.solutions[0]
 
     def summary(self) -> str:
-        """Return a summary for humans: the best fit and its errors."""
+        """
+        Return a summary for humans: the best fit and its errors, of the
+        free elements and the derived values.
+        """
         best = self.best()
         lines = [
             f"fitter: {self.fitter.get('type')}; success: {self.success} "
@@ -322,12 +338,13 @@ class FitResult:
             lines.append(f"log Z: {self.evidence.log_z:.6g}")
         posterior = self.posterior or best.laplace
         quantiles = posterior.summary() if posterior else {}
-        std = best.covariance.std if best.covariance else {}
+        std = best.covariance.std | best.covariance.derived_std \
+            if best.covariance else {}
         label = 'posterior' if self.posterior else 'laplace'
         lines.append(
             f"{'name':<16} {'best':>12} {'std':>12} "
             f"{label + ' 16/50/84':>38}")
-        for name, value in best.free.items():
+        for name, value in (best.free | best.derived).items():
             q = quantiles.get(name)
             q_text = '' if q is None else (
                 f"{q[0]:>12.6g} {q[1]:>12.6g} {q[2]:>12.6g}")
@@ -410,7 +427,8 @@ def _write_csv(
 def _solution_summary(solution: FitSolution) -> dict[str, Any]:
     """Return the summary of a solution (without its arrays)."""
     info: dict[str, Any] = dict(
-        free=solution.free, elements=solution.elements, chi2=solution.chi2,
+        free=solution.free, elements=solution.elements,
+        derived=solution.derived, chi2=solution.chi2,
         nresiduals=solution.nresiduals, dof=solution.dof,
         reduced_chi2=solution.reduced_chi2,
         log_likelihood=solution.log_likelihood,
@@ -418,7 +436,8 @@ def _solution_summary(solution: FitSolution) -> dict[str, Any]:
     if (cov := solution.covariance) is not None:
         info['covariance'] = dict(
             names=list(cov.names), std=cov.std, element_std=cov.element_std,
-            rank=cov.rank, unconstrained=list(cov.unconstrained),
+            derived_std=cov.derived_std, rank=cov.rank,
+            unconstrained=list(cov.unconstrained),
             at_bounds=list(cov.at_bounds), scaled=cov.scaled)
     if solution.laplace is not None:
         info['laplace'] = solution.laplace.summary()

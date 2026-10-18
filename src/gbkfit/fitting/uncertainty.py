@@ -12,7 +12,7 @@ import numpy as np
 from gbkfit.fitting.problem import FitProblem
 from gbkfit.fitting.result import Covariance, Posterior
 from gbkfit.objective import Objective
-from gbkfit.params import ParamEvaluationError
+from gbkfit.params import ParamEvaluationError, ParamSpace
 from gbkfit.utils import parseutils
 from gbkfit.utils.parseutils import ConfigError
 
@@ -22,7 +22,8 @@ __all__ = [
     'covariance',
     'finite_difference_steps',
     'jacobian',
-    'laplace_posterior'
+    'laplace_posterior',
+    'sample_values'
 ]
 
 
@@ -198,6 +199,34 @@ def jacobian(
     return np.stack(columns, axis=1)
 
 
+def sample_values(
+        params: ParamSpace,
+        x: np.ndarray,
+        derived: Sequence[str] = ()
+) -> np.ndarray:
+    """
+    Return the values of a sample of the posterior at the given free
+    values: those of every element (see ParamSpace.element_values), then
+    those of the given elements of the derived values (see
+    ParamSpace.derived_elements), NaN where they cannot be evaluated.
+
+    Raises
+    ------
+    ParamEvaluationError
+        If the parameters cannot be evaluated there.
+    """
+    values = params.evaluate(x)
+    elements = list(params.element_values(values).values())
+    if not derived:
+        return np.array(elements)
+    try:
+        derived_values = params.derived_elements(values)
+    except ParamEvaluationError:
+        derived_values = {}
+    return np.array(
+        elements + [derived_values.get(name, np.nan) for name in derived])
+
+
 def covariance(
         problem: FitProblem,
         x: np.ndarray,
@@ -205,7 +234,8 @@ def covariance(
         upper: np.ndarray,
         scales: np.ndarray,
         options: UncertaintyOptions,
-        reduced_chi2: float
+        reduced_chi2: float,
+        derived: Sequence[str] = ()
 ) -> tuple[Covariance, int]:
     """
     Return the covariance of a solution, from the Jacobian of the
@@ -215,9 +245,10 @@ def covariance(
     values does not depend on the units); and the number of model
     evaluations it took.
 
-    The errors are propagated to all elements through the Jacobian of
-    the parameter space (no models). Elements at a bound are listed: the
-    covariance ignores the bound. If options.scale() is set, the
+    The errors are propagated to all elements, and to the given elements
+    of the derived values, through their Jacobian (the delta method; no
+    models but those of the derived values). Elements at a bound are
+    listed: the covariance ignores the bound. If options.scale() is set, the
     covariance is scaled by the reduced chi-square, when that is defined
     (more residuals than free elements).
 
@@ -235,6 +266,8 @@ def covariance(
         The options.
     reduced_chi2 : float
         The reduced chi-square of the solution (to scale the covariance).
+    derived : Sequence of str, optional
+        The elements of the derived values (see FitSolution.derived).
 
     Returns
     -------
@@ -285,26 +318,22 @@ def covariance(
     unconstrained = tuple(
         name for name, weight in zip(names, np.abs(vt[~keep]).max(
             axis=0, initial=0)) if weight > 0.1)
-    # The errors of all elements: J_e cov J_e^T, with J_e the Jacobian of
-    # the element values by the free values
+    # The errors of all elements and of the derived values: J_e cov J_e^T,
+    # with J_e the Jacobian of their values by the free values
     element_names = list(params.element_values(params.evaluate(x)))
-
-    def element_values(points: np.ndarray) -> list[np.ndarray]:
-        return [
-            np.array(list(params.element_values(
-                params.evaluate(point)).values()))
-            for point in points]
-
-    jac_elements = jacobian(element_values, x, steps, lower, upper)
-    element_var = np.einsum(
-        'ij,jk,ik->i', jac_elements, matrix, jac_elements)
+    jac_elements = jacobian(
+        lambda points: [sample_values(params, p, derived) for p in points],
+        x, steps, lower, upper)
+    element_std = np.sqrt(np.maximum(np.einsum(
+        'ij,jk,ik->i', jac_elements, matrix, jac_elements), 0)).tolist()
+    nelements = len(element_names)
     return Covariance(
         names=names,
         matrix=matrix,
         std=dict(zip(names, std.tolist())),
         correlation=correlation,
-        element_std=dict(zip(
-            element_names, np.sqrt(np.maximum(element_var, 0)).tolist())),
+        element_std=dict(zip(element_names, element_std[:nelements])),
+        derived_std=dict(zip(derived, element_std[nelements:])),
         rank=int(keep.sum()),
         unconstrained=unconstrained,
         at_bounds=tuple(
@@ -318,12 +347,14 @@ def laplace_posterior(
         x: np.ndarray,
         cov: Covariance,
         nsamples: int,
-        rng: np.random.Generator
+        rng: np.random.Generator,
+        derived: Sequence[str] = ()
 ) -> Posterior:
     """
     Return samples of the Gaussian (Laplace) approximation of the
     posterior at a solution: a normal distribution with its covariance,
-    mapped to all elements. Samples where the parameters cannot be
+    mapped to all elements and the given elements of the derived values
+    (see sample_values). Samples where the parameters cannot be
     evaluated (e.g. outside their valid range) are left out.
 
     Parameters
@@ -338,6 +369,8 @@ def laplace_posterior(
         The number of samples to draw.
     rng : np.random.Generator
         The random number generator.
+    derived : Sequence of str, optional
+        The elements of the derived values (see FitSolution.derived).
 
     Returns
     -------
@@ -350,11 +383,10 @@ def laplace_posterior(
     rows = []
     for point in free:
         try:
-            rows.append(list(params.element_values(
-                params.evaluate(point)).values()))
+            rows.append(sample_values(params, point, derived))
         except ParamEvaluationError:
             pass
-    names = tuple(params.kinds())
+    names = tuple(params.kinds()) + tuple(derived)
     return Posterior(
         names=names, samples=np.array(rows).reshape(-1, len(names)),
         weights=None, approximate=True)

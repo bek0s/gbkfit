@@ -412,6 +412,58 @@ def test_errors_propagate_to_tied_and_fixed_elements():
     laplace = best.laplace.summary()
     assert laplace['ypos'][1] == pytest.approx(laplace['xpos'][1] - 1.1)
 
+
+def test_derived_values_get_errors_and_samples(tmp_path):
+    # The error of a derived value is propagated from the covariance, as
+    # that of a tied element (here of xpos + 2 ypos, with their
+    # covariance), and its Laplace samples are its values at theirs
+    import json
+    from gbkfit.fitting import fitter_parser
+    objective = mock_objective(DriverHost())
+    params = ParamSpace(
+        objective.pdescs(), bounded_properties(),
+        derived=dict(d='xpos + 2 * ypos', vs='np.array([pt_a, pt_s])'))
+    result = fitter_parser.load(dict(type='scipy.least_squares')).fit(
+        objective, params)
+    best = result.best()
+    free = best.free
+    assert best.derived == pytest.approx({
+        'd': free['xpos'] + 2 * free['ypos'], 'vs[0]': free['pt_a'],
+        'vs[1]': free['pt_s']})
+    cov = best.covariance
+    i, j = cov.names.index('xpos'), cov.names.index('ypos')
+    m = cov.matrix
+    assert cov.derived_std['d'] == pytest.approx(
+        np.sqrt(m[i, i] + 4 * m[j, j] + 4 * m[i, j]), rel=1e-6)
+    assert cov.derived_std['vs[1]'] == pytest.approx(cov.std['pt_s'], rel=1e-6)
+    names = best.laplace.names
+    samples = best.laplace.samples
+    np.testing.assert_allclose(
+        samples[:, names.index('d')],
+        samples[:, names.index('xpos')] + 2 * samples[:, names.index('ypos')],
+        rtol=1e-12)
+    assert any(line.startswith('vs[1] ') for line in result.summary().split(
+        '\n'))
+    result.dump(str(tmp_path))
+    dumped = json.loads((tmp_path / 'result.json').read_text())['solutions']
+    assert dumped[0]['derived'] == best.derived
+    assert dumped[0]['covariance']['derived_std'] == cov.derived_std
+    header = (tmp_path / 'solution_0_laplace.csv').read_text().split('\n')[0]
+    assert header.endswith(',d,vs[0],vs[1]')
+
+
+def test_derived_values_that_fail_are_reported():
+    from gbkfit.fitting import fitter_parser
+    objective = mock_objective(DriverHost())
+    params = ParamSpace(
+        objective.pdescs(), bounded_properties(),
+        derived=dict(bad='np.take(np.array([xpos]), 5)'))
+    result = fitter_parser.load(dict(type='scipy.least_squares')).fit(
+        objective, params)
+    assert result.best().derived == {}
+    assert result.best().covariance.derived_std == {}
+    assert "derived value 'bad'" in result.diagnostics['derived_errors'][0]
+
 @pytest.mark.parametrize('fitter', [
     dict(type='scipy.least_squares', method='trf'),
     dict(type='scipy.least_squares', method='lm'),
@@ -685,9 +737,9 @@ def test_the_information_criteria_of_a_solution():
     # 100, BIC = 3 ln 100 + 100
     from gbkfit.fitting.result import FitSolution
     solution = FitSolution(
-        free={}, values={}, elements={}, chi2=100.0, nresiduals=100, dof=97,
-        reduced_chi2=100 / 97, log_likelihood=-50.0, log_prior=None,
-        covariance=None, laplace=None)
+        free={}, values={}, elements={}, derived={}, chi2=100.0,
+        nresiduals=100, dof=97, reduced_chi2=100 / 97, log_likelihood=-50.0,
+        log_prior=None, covariance=None, laplace=None)
     assert solution.nfitted == 3
     assert solution.aic == pytest.approx(106)
     assert solution.bic == pytest.approx(3 * np.log(100) + 100)

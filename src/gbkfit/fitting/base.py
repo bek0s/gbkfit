@@ -20,7 +20,7 @@ from gbkfit.fitting.progress import ProgressObserver
 from gbkfit.fitting.result import (
     Evidence, FitResult, FitSolution, Posterior)
 from gbkfit.fitting.uncertainty import (
-    UncertaintyOptions, covariance, laplace_posterior)
+    UncertaintyOptions, covariance, laplace_posterior, sample_values)
 from gbkfit.objective import Objective
 from gbkfit.params import ParamEvaluationError, ParamSpace
 from gbkfit.utils import parseutils
@@ -246,19 +246,20 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
         problem.set_stage('uncertainty')
         solutions = []
         uncertainty_nevals = 0
-        uncertainty_errors = []
+        problems = []
         for x in run.solutions:
-            solution, nevals, error = self._solution(problem, x, bounds, rng)
+            solution, nevals, solution_problems = self._solution(
+                problem, x, bounds, rng)
             solutions.append(solution)
             uncertainty_nevals += nevals
-            if error is not None:
-                uncertainty_errors.append(error)
+            problems += solution_problems
         diagnostics['uncertainty_nevals'] = uncertainty_nevals
-        if uncertainty_errors:
-            diagnostics['uncertainty_errors'] = uncertainty_errors
+        for key, message in problems:
+            diagnostics.setdefault(key, []).append(message)
         posterior = None
         if run.samples is not None:
-            posterior = _posterior(problem, run.samples, run.weights)
+            posterior = _posterior(
+                problem, run.samples, run.weights, tuple(solutions[0].derived))
         problem.finish()
         return FitResult(
             fitter=self.dump(),
@@ -307,16 +308,25 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
             x: np.ndarray,
             bounds: '_Bounds',
             rng: np.random.Generator
-    ) -> tuple[FitSolution, int, str | None]:
+    ) -> tuple[FitSolution, int, list[tuple[str, str]]]:
         """
         Evaluate a solution and its uncertainty; return it, the number of
-        model evaluations it took, and why its uncertainty is missing (if
-        the parameters cannot be evaluated at a step of its Jacobian).
+        model evaluations it took, and its problems, as the keys of the
+        diagnostics of the result and the messages: why its uncertainty
+        is missing ('uncertainty_errors': the parameters cannot be
+        evaluated at a step of its Jacobian), or its derived values
+        ('derived_errors': an expression fails there).
         """
         objective = problem.objective()
         params = problem.params()
         x = np.asarray(x, dtype=float)
         values = params.evaluate(x)
+        problems = []
+        try:
+            derived = params.derived_elements(values)
+        except ParamEvaluationError as e:
+            derived = {}
+            problems.append(('derived_errors', f"no derived values: {e}"))
         chi2, log_likelihood = objective.chi2_and_log_likelihood(values)
         nresiduals = objective.nresiduals()
         nevals = 1
@@ -327,23 +337,25 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
             else np.nan
         log_prior = None if problem.priors() is None \
             else problem.log_prior(x)
-        cov = laplace = error = None
+        cov = laplace = None
         options = self._uncertainty
         if options.covariance():
             try:
                 cov, cov_nevals = covariance(
                     problem, x, bounds.lower, bounds.upper, bounds.scales,
-                    options, reduced_chi2)
+                    options, reduced_chi2, tuple(derived))
                 nevals += cov_nevals
             except ParamEvaluationError as e:
-                error = f"no covariance: {e}"
+                problems.append(('uncertainty_errors', f"no covariance: {e}"))
         if cov is not None and options.laplace_samples() > 0:
             laplace = laplace_posterior(
-                problem, x, cov, options.laplace_samples(), rng)
+                problem, x, cov, options.laplace_samples(), rng,
+                tuple(derived))
         return FitSolution(
             free=dict(zip(problem.names(), x.tolist())),
             values=values,
             elements=params.element_values(values),
+            derived=derived,
             chi2=chi2,
             nresiduals=nresiduals,
             dof=dof,
@@ -351,7 +363,7 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
             log_likelihood=log_likelihood,
             log_prior=log_prior,
             covariance=cov,
-            laplace=laplace), nevals, error
+            laplace=laplace), nevals, problems
 
 
 def _stopped_run(problem: FitProblem) -> FitRun:
@@ -409,23 +421,24 @@ class _Bounds:
 def _posterior(
         problem: FitProblem,
         samples: np.ndarray,
-        weights: np.ndarray | None
+        weights: np.ndarray | None,
+        derived: Sequence[str]
 ) -> Posterior:
     """
-    Return the posterior of all elements, from samples of the free. The
+    Return the posterior of all elements and of the given elements of the
+    derived values (see sample_values), from samples of the free. The
     samples of no weight and those where the parameters cannot be
     evaluated (which have no likelihood) are left out.
     """
     params = problem.params()
-    names = tuple(params.kinds())
+    names = tuple(params.kinds()) + tuple(derived)
     rows = []
     kept = []
     for i, x in enumerate(samples):
         if weights is not None and weights[i] == 0:
             continue
         try:
-            rows.append(list(params.element_values(
-                params.evaluate(x)).values()))
+            rows.append(sample_values(params, x, derived))
             kept.append(i)
         except ParamEvaluationError:
             pass
