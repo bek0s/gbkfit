@@ -5,16 +5,17 @@ comparisons, conditional expressions, tuples and lists, a few builtins,
 of numpy (np, np.linalg): its ufuncs (e.g. np.sin), numbers (e.g.
 np.pi), scalar types (e.g. np.int64) and the functions on numbers and
 arrays of _NUMPY_FUNCTIONS, and the scaling relations of gbkfit.relations
-(e.g. relations.dz_c). Nothing else, so a configuration cannot run
-arbitrary code (numpy also holds modules such as os, and functions that
-read and write files), and an expression cannot change the values it
-reads.
+(e.g. relations.dz_c); and the other names they are given (e.g. derived
+values, and the functions of the models, see ParamSpace). Nothing else,
+so a configuration cannot run arbitrary code (numpy also holds modules
+such as os, and functions that read and write files), and an expression
+cannot change the values it reads.
 """
 
 import ast
 import builtins
 import keyword
-from collections.abc import Mapping
+from collections.abc import Collection, Mapping
 from types import CodeType
 from typing import Any
 
@@ -127,15 +128,32 @@ class Expression:
     An expression, checked and compiled once.
 
     Its attribute reads has the elements of the parameters it reads: the
-    set of indices of each vector parameter, and None for each scalar.
+    set of indices of each vector parameter, and None for each scalar; and
+    its attribute uses, the other names it reads or calls (of names).
     Raises InvalidExpressionError if it is invalid.
+
+    Parameters
+    ----------
+    source : str
+        The expression.
+    pdescs : Mapping
+        The descriptions of the parameters it can read, by name.
+    constants : Mapping, optional
+        The constants it can read, by name.
+    names : Collection of str, optional
+        Other names it can read and call (e.g. derived values, and the
+        functions of the models; see ParamSpace).
+    unavailable : Mapping of str to str, optional
+        Names it cannot read, and why (e.g. derived values, in a tie).
     """
 
     def __init__(
             self,
             source: str,
             pdescs: Mapping[str, ParamDesc],
-            constants: Mapping[str, np.ndarray] | None = None
+            constants: Mapping[str, np.ndarray] | None = None,
+            names: Collection[str] = (),
+            unavailable: Mapping[str, str] | None = None
     ):
         constants = constants or {}
         try:
@@ -144,7 +162,8 @@ class Expression:
             raise InvalidExpressionError(f"invalid syntax: {e.msg}") from None
         self.source = source
         self.reads: dict[str, set[int] | None] = {}
-        self._check(tree, pdescs, constants)
+        self.uses: set[str] = set()
+        self._check(tree, pdescs, constants, names, unavailable or {})
         self._code: CodeType = compile(tree, '<expression>', 'eval')
 
     def evaluate(self, namespace: Mapping[str, Any]) -> Any:
@@ -157,9 +176,14 @@ class Expression:
             self,
             tree: ast.Expression,
             pdescs: Mapping[str, ParamDesc],
-            constants: Mapping[str, np.ndarray]
+            constants: Mapping[str, np.ndarray],
+            names: Collection[str],
+            unavailable: Mapping[str, str]
     ) -> None:
-        """Check the nodes and names, and find the elements it reads."""
+        """
+        Check the nodes and names, and find the elements and the other
+        names it reads.
+        """
         subscripted = set()
         for node in ast.walk(tree):
             if not isinstance(node, _NODES):
@@ -182,16 +206,25 @@ class Expression:
             if isinstance(node, ast.Call) and not (
                     _is_numpy(node.func) or _is_relation(node.func) or (
                         isinstance(node.func, ast.Name)
-                        and node.func.id in BUILTINS)):
+                        and (node.func.id in BUILTINS
+                             or node.func.id in names
+                             or node.func.id in unavailable))):
                 raise InvalidExpressionError(
                     f"'{ast.unparse(node.func)}' cannot be called in "
                     f"expressions; only numpy ufuncs, scalar types and "
                     f"functions on arrays, the relations of "
-                    f"gbkfit.relations, and {', '.join(BUILTINS)} can")
+                    f"gbkfit.relations, {', '.join(BUILTINS)}, and in "
+                    f"derived values, the functions of the models can")
             if isinstance(node, ast.keyword) and node.arg in _KEYWORDS:
                 raise InvalidExpressionError(
                     f"the keyword '{node.arg}' is not allowed in expressions")
-            if isinstance(node, ast.Name) and not (
+            if isinstance(node, ast.Name) and node.id in unavailable:
+                raise InvalidExpressionError(
+                    f"'{node.id}' cannot be read here: "
+                    f"{unavailable[node.id]}")
+            if isinstance(node, ast.Name) and node.id in names:
+                self.uses.add(node.id)
+            elif isinstance(node, ast.Name) and not (
                     node.id in pdescs or node.id in constants
                     or node.id in BUILTINS or node.id in ('np', 'relations')):
                 raise InvalidExpressionError(f"unknown name '{node.id}'")

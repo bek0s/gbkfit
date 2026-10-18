@@ -23,7 +23,8 @@ from gbkfit.driver import Driver, driver_by_name, driver_parser
 from gbkfit.objective import Objective
 from gbkfit.observation import DepthGroup, Observation, ObservationGroup
 from gbkfit.params import (
-    ParamDesc, ParamSpace, ParamValues, load_pdescs_dict, param_space_parser)
+    ParamDesc, ParamFunctions, ParamSpace, ParamValues, load_pdescs_dict,
+    param_space_parser)
 from gbkfit.utils import (
     fitsutils, gridutils, iterutils, miscutils, numutils, parseutils,
     unitutils)
@@ -322,19 +323,22 @@ def load_depth_order(
 def load_params(
         cfg: dict[str, Any],
         pdescs: dict[str, ParamDesc],
-        constants: dict[str, Any]
+        constants: dict[str, Any],
+        functions: ParamFunctions | None = None
 ) -> ParamSpace:
     """
     Return the parameters of a configuration (its section 'params'), with
     the descriptions of the parameters of the galaxies and those of its
-    optional section 'pdescs'.
+    optional section 'pdescs', and the functions of the galaxies that its
+    derived values can use.
     """
     if 'pdescs' in cfg:
         with parseutils.config_path('pdescs'):
             pdescs = merge_pdescs(pdescs, load_pdescs_dict(cfg['pdescs']))
     with parseutils.config_path('params'):
         return param_space_parser.load(
-            cfg['params'], pdescs=pdescs, constants=constants)
+            cfg['params'], pdescs=pdescs, constants=constants,
+            functions=functions)
 
 
 def data_outputs(group: ObservationGroup) -> dict[str, Any]:

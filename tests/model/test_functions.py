@@ -156,3 +156,28 @@ def test_functions_of_a_group_prefixed():
     np.testing.assert_array_equal(bound['north_vcirc'](R), own['vcirc'](R))
     np.testing.assert_array_equal(
         bound['north_rotation_gas'](R), own['rotation_gas'](R))
+
+
+def test_derived_values_of_a_group():
+    # The derived values of a configuration read the functions of its
+    # galaxies (see ParamSpace)
+    from gbkfit.driver.drivers.host import DriverHost
+    from gbkfit.observation import (
+        Observation, ObservationGroup, PixelSpectra, line_of_sight_parser)
+    from gbkfit.params import param_space_parser
+    group = ObservationGroup([gas_galaxy()], [Observation(
+        PixelSpectra(size=(8, 8, 5), step=(1, 1, 10)),
+        line_of_sight_parser.load(dict(type='grid')), DriverHost())])
+    params = param_space_parser.load(
+        dict(properties=PARAMS, derived=dict(
+            v_bh='vcirc_bh(2.0)', m_bh='v_bh ** 2 * 2.0 / G',
+            v_sigma='rotation_gas(10) / dispersion_gas(10)')),
+        pdescs=group.pdescs(), constants=group.constants(),
+        functions=group.plan_functions())
+    derived = params.derived_values(params.evaluate())
+    assert derived['v_bh'] == pytest.approx(np.sqrt(G * 1e10 / 2), rel=1e-9)
+    assert derived['m_bh'] == pytest.approx(1e10, rel=1e-9)
+    bound = gas_galaxy().plan_functions().bind(PARAMS)
+    assert derived['v_sigma'] == pytest.approx(
+        float(bound['rotation_gas'](10) / bound['dispersion_gas'](10)),
+        rel=1e-12)

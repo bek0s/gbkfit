@@ -11,7 +11,7 @@ import enum
 import graphlib
 import logging
 import numbers
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
 from typing import Any, TypeAlias
 
 import numpy as np
@@ -183,6 +183,16 @@ class ParamSpace(parseutils.Serializable):
     reads a parameter with a mode reads its decoded values. Expressions
     and a transforms function are mutually exclusive.
 
+    Derived values are quantities that the models compute from the
+    parameters, which no expression of them can (e.g. the circular
+    velocity of a mass model at 2.2 disk scale lengths): expressions, by
+    name, that can also use the functions of the models (e.g.
+    'vcirc(2.2 * mass_stars_rd)'; see ParamFunctions and
+    ObservationGroup.plan_functions), and the derived values before them.
+    They are evaluated after the parameters (see derived_values), so the
+    properties cannot read them; the priors on several parameters can
+    (see expression), and the fitters report them (see FitSolution).
+
     Parameters
     ----------
     pdescs : Mapping
@@ -204,13 +214,17 @@ class ParamSpace(parseutils.Serializable):
         (e.g. {'type': 'gauss', 'expr': 'vt * 0.9', ...}), which the
         fitters read (see gbkfit.fitting.JointPrior), as they read the
         options of the free elements in the properties.
+    derived : Mapping of str to str, optional
+        The expressions of the derived values, by name, in order.
+    functions : ParamFunctions, optional
+        The functions of the models that the derived values can use.
 
     Raises
     ------
     ConfigError
-        If the properties, constants, modes or transforms are invalid
-        (one error lists all the problems), or the priors are not
-        dicts.
+        If the properties, constants, modes, transforms or derived values
+        are invalid (one error lists all the problems), or the priors are
+        not dicts.
     """
 
     @classmethod
@@ -218,11 +232,13 @@ class ParamSpace(parseutils.Serializable):
             cls,
             info: dict[str, Any],
             pdescs: Mapping[str, ParamDesc],
-            constants: Mapping[str, npt.ArrayLike] | None = None
+            constants: Mapping[str, npt.ArrayLike] | None = None,
+            functions: ParamFunctions | None = None
     ) -> 'ParamSpace':
         """
         Load the parameters from their configuration: their properties,
-        modes, transforms function ({file, func}) and priors.
+        modes, transforms function ({file, func}), priors and derived
+        values.
 
         Parameters
         ----------
@@ -232,6 +248,8 @@ class ParamSpace(parseutils.Serializable):
             The descriptions of the parameters, by name.
         constants : Mapping, optional
             The values that expressions can use, by name.
+        functions : ParamFunctions, optional
+            The functions of the models that derived values can use.
 
         Returns
         -------
@@ -251,6 +269,7 @@ class ParamSpace(parseutils.Serializable):
             raise ConfigError(
                 "option 'properties' must be a dict of the properties of "
                 "the parameters, by key")
+        derived = info.pop('derived', None)
         if 'transforms' in info:
             info['transforms'] = parseutils.load_option(
                 _load_transforms, info, 'transforms')
@@ -262,8 +281,11 @@ class ParamSpace(parseutils.Serializable):
                     for name in dict(info['modes'])}
         opts = parseutils.parse_options_for_callable(
             info, cls.__init__,
-            ignore_params=['pdescs', 'properties', 'constants'])
-        return cls(pdescs, properties, **opts, constants=constants)
+            ignore_params=[
+                'pdescs', 'properties', 'constants', 'derived', 'functions'])
+        return cls(
+            pdescs, properties, **opts, constants=constants, derived=derived,
+            functions=functions)
 
     def dump(self) -> dict[str, Any]:
         info: dict[str, Any] = dict(properties=copy.deepcopy(self._properties))
@@ -275,6 +297,8 @@ class ParamSpace(parseutils.Serializable):
             info['transforms'] = _dump_transforms(self._transforms)
         if self._priors:
             info['priors'] = self.priors()
+        if self._derived:
+            info['derived'] = self.derived()
         return info
 
     def __init__(
@@ -284,7 +308,9 @@ class ParamSpace(parseutils.Serializable):
             transforms: Transforms | None = None,
             constants: Mapping[str, npt.ArrayLike] | None = None,
             modes: Mapping[str, ParamMode] | None = None,
-            priors: Sequence[Mapping[str, Any]] | None = None
+            priors: Sequence[Mapping[str, Any]] | None = None,
+            derived: Mapping[str, str] | None = None,
+            functions: ParamFunctions | None = None
     ):
         if bad := [n for n, p in pdescs.items()
                    if not isinstance(p, ParamDesc)]:
@@ -302,6 +328,21 @@ class ParamSpace(parseutils.Serializable):
                 f"the priors must be dicts (the configurations of priors on "
                 f"several parameters); these are not: {bad}")
         self._priors = copy.deepcopy([dict(prior) for prior in priors])
+        if derived is not None and not isinstance(derived, Mapping):
+            raise ConfigError(
+                "option 'derived' must be a dict of the expressions of the "
+                "derived values, by name")
+        self._derived = dict(derived or {})
+        self._functions = functions
+        self._function_names = () if functions is None \
+            else tuple(functions.names())
+        # The names that the properties cannot read, and why
+        self._unavailable = {
+            name: "it is a derived value, evaluated after the parameters"
+            for name in self._derived} | {
+            name: "it is a function of the models, which only derived "
+                  "values can use"
+            for name in self._function_names}
         self._constants = {}
         for name, value in (constants or {}).items():
             value = np.array(value, dtype=float)
@@ -324,6 +365,7 @@ class ParamSpace(parseutils.Serializable):
         errors += self._check_transforms()
         errors += self._check_modes()
         errors += self._check_fixed_ranges()
+        errors += self._compile_derived()
         if not errors:
             errors += self._order_steps()
         if errors:
@@ -354,30 +396,50 @@ class ParamSpace(parseutils.Serializable):
         """
         return copy.deepcopy(self._priors)
 
+    def derived(self) -> dict[str, str]:
+        """Return the expressions of the derived values, by name."""
+        return dict(self._derived)
+
+    def functions(self) -> ParamFunctions | None:
+        """Return the functions of the models, if given."""
+        return self._functions
+
     def expression(
             self,
             source: str
     ) -> Callable[[ParamValues], np.ndarray]:
         """
         Return a function of the values of the parameters (see evaluate)
-        that evaluates an expression of them and of the constants, as
-        those of the properties (e.g. 'np.diff(posa)', 'vt[4] * 0.9'),
-        into an array of floats.
+        that evaluates an expression of them, of the constants and of the
+        derived values, as those of the properties (e.g. 'np.diff(posa)',
+        'vt[4] * 0.9', 'v22 / 200'), into an array of floats. The derived
+        values it reads are evaluated with it (see derived_values).
 
         Raises
         ------
         ConfigError
             If the expression is invalid.
         """
+        unavailable = {
+            name: "it is a function of the models, which only derived "
+                  "values can use: derive a value with it (see the option "
+                  "derived), and read that"
+            for name in self._function_names}
         try:
-            expression = Expression(source, self._pdescs, self._constants)
+            expression = Expression(
+                source, self._pdescs, self._constants, tuple(self._derived),
+                unavailable)
         except InvalidExpressionError as e:
             raise ConfigError(f"invalid expression '{source}': {e}") from None
         constants = self._constants
 
         def evaluate(values: ParamValues) -> np.ndarray:
+            namespace = constants | dict(values)
+            if expression.uses:
+                namespace |= self._finite_derived_values(
+                    values, expression.uses)
             return np.atleast_1d(np.asarray(
-                expression.evaluate(constants | dict(values)), dtype=float))
+                expression.evaluate(namespace), dtype=float))
         return evaluate
 
     def kinds(self) -> dict[str, ParamKind]:
@@ -453,6 +515,95 @@ class ParamSpace(parseutils.Serializable):
         self._check_values(buffer, values)
         return values
 
+    def derived_values(
+            self,
+            values: ParamValues,
+            names: Collection[str] | None = None
+    ) -> ParamValues:
+        """
+        Evaluate the derived values (see the class), with the functions of
+        the models at the values of the parameters.
+
+        Parameters
+        ----------
+        values : ParamValues
+            The values of the parameters (see evaluate).
+        names : Collection of str, optional
+            The derived values wanted (they are evaluated with those they
+            read); all by default.
+
+        Returns
+        -------
+        ParamValues
+            The derived values, by name, in their order: a float for a
+            number, an array otherwise (NaN where the models give it, e.g.
+            the rotation of a disk where it has no circular orbit).
+
+        Raises
+        ------
+        ParamEvaluationError
+            If an expression fails (e.g. a function of the models at radii
+            outside its disk).
+        """
+        needed = self._needed_derived(names)
+        namespace: dict[str, Any] = self._constants | dict(values)
+        if any(set(self._derived_expressions[name].uses)
+               & set(self._function_names) for name in needed):
+            namespace |= self._functions.bind(values)
+        derived = {}
+        for name, expression in self._derived_expressions.items():
+            if name not in needed:
+                continue
+            try:
+                result = np.asarray(
+                    expression.evaluate(namespace), dtype=float)
+            except Exception as e:
+                raise ParamEvaluationError(
+                    f"the derived value '{name}' ('{expression.source}') "
+                    f"failed: {e}") from e
+            namespace[name] = derived[name] = \
+                float(result) if result.ndim == 0 else result
+        return derived
+
+    def _needed_derived(self, names: Collection[str] | None) -> set[str]:
+        """
+        Return the derived values of the given names (all if None) and
+        those they read, and so on.
+        """
+        if names is None:
+            return set(self._derived_expressions)
+        needed = set()
+        pending = list(names)
+        while pending:
+            name = pending.pop()
+            if name not in needed:
+                needed.add(name)
+                pending += [
+                    used for used in self._derived_expressions[name].uses
+                    if used in self._derived_expressions]
+        return needed
+
+    def _finite_derived_values(
+            self, values: ParamValues, names: Collection[str]
+    ) -> ParamValues:
+        """
+        Return the derived values that an expression reads (see
+        expression), by name.
+
+        Raises
+        ------
+        ParamEvaluationError
+            If one fails or is not finite.
+        """
+        derived = self.derived_values(values, names)
+        if bad := [
+                f"'{name}' is {derived[name]}" for name in sorted(names)
+                if not np.all(np.isfinite(derived[name]))]:
+            raise ParamEvaluationError(
+                f"the derived values that an expression reads must be "
+                f"finite: {', '.join(bad)}")
+        return derived
+
     def with_values(self, values: Mapping[str, float]) -> 'ParamSpace':
         """
         Return a copy of the parameters whose free elements start at the
@@ -488,7 +639,7 @@ class ParamSpace(parseutils.Serializable):
                 else self._start_property(key, parsed, prop, starts)
         return ParamSpace(
             self._pdescs, properties, self._transforms, self._constants,
-            self._modes, self._priors)
+            self._modes, self._priors, self._derived, self._functions)
 
     def element_values(self, values: ParamValues) -> dict[str, float]:
         """
@@ -587,6 +738,12 @@ class ParamSpace(parseutils.Serializable):
             errors.append(
                 f"constants cannot have the names of parameters: "
                 f"{conflicts}")
+        if conflicts := sorted(
+                set(self._function_names)
+                & (set(self._constants) | set(self._pdescs))):
+            errors.append(
+                f"the functions of the models have the names of parameters "
+                f"or constants: {conflicts}")
         return errors
 
     def _read_properties(self) -> list[str]:
@@ -688,7 +845,9 @@ class ParamSpace(parseutils.Serializable):
             self._fixed.update(dict.fromkeys(elements, float(value)))
         elif isinstance(value, str):
             kind = ParamKind.TIED
-            expression = Expression(value, self._pdescs, self._constants)
+            expression = Expression(
+                value, self._pdescs, self._constants,
+                unavailable=self._unavailable)
             self._assignments.append(
                 _Assignment(key, name, indices, expression))
         elif value is None:
@@ -700,6 +859,43 @@ class ParamSpace(parseutils.Serializable):
         else:
             raise ValueError(f"invalid value: {value!r}")
         self._kinds.update(dict.fromkeys(elements, kind))
+
+    def _compile_derived(self) -> list[str]:
+        """
+        Compile the expressions of the derived values, each of which can
+        read the parameters, the constants, the functions of the models
+        and the derived values before it, and return the problems: invalid
+        names or expressions.
+        """
+        errors = []
+        taken = set(self._pdescs) | set(self._constants) \
+            | set(self._function_names)
+        names = list(self._derived)
+        self._derived_expressions: dict[str, Expression] = {}
+        for i, (name, source) in enumerate(self._derived.items()):
+            if reason := check_name(name):
+                errors.append(
+                    f"the derived value {name!r} has an invalid name: "
+                    f"{reason}")
+            elif name in taken:
+                errors.append(
+                    f"the derived value '{name}' has the name of a "
+                    f"parameter, a constant or a function of the models")
+            elif not isinstance(source, str):
+                errors.append(
+                    f"the derived value '{name}' must be an expression (a "
+                    f"string); it is {source!r}")
+            else:
+                later = {
+                    other: "derived values can read only those before them"
+                    for other in names[i:]}
+                try:
+                    self._derived_expressions[name] = Expression(
+                        source, self._pdescs, self._constants,
+                        self._function_names + tuple(names[:i]), later)
+                except InvalidExpressionError as e:
+                    errors.append(f"the derived value '{name}': {e}")
+        return errors
 
     def _check_transforms(self) -> list[str]:
         """

@@ -143,7 +143,8 @@ def _fit(
             fitter = gbkfit.fitting.fitter_parser.load(cfg['fitter'])
         _log.info("setting up params...")
         params = _detail.load_params(
-            cfg, objective.pdescs(), objective.constants())
+            cfg, objective.pdescs(), objective.constants(),
+            group.plan_functions())
         # Check the free properties for the fitter, and the priors on
         # several parameters, before the fit starts
         with parseutils.config_path('params', 'properties'):

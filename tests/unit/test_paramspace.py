@@ -12,8 +12,9 @@ import numpy as np
 import pytest
 
 from gbkfit.params import (
-    ParamEvaluationError, ParamKind, ParamModeIncrements, ParamModeOffsets,
-    ParamScalarDesc, ParamSpace, ParamVectorDesc, param_space_parser)
+    ParamEvaluationError, ParamFunctions, ParamKind, ParamModeIncrements,
+    ParamModeOffsets, ParamScalarDesc, ParamSpace, ParamVectorDesc,
+    param_space_parser)
 from gbkfit.utils.parseutils import ConfigError
 
 
@@ -451,3 +452,86 @@ def test_with_values_codes_the_values_of_parameters_with_a_mode(mode):
     np.testing.assert_allclose(start.evaluate()['v'], decoded)
     with pytest.raises(ValueError, match="give all its values"):
         params.with_values({'v[0]': 10})
+
+
+class Functions(ParamFunctions):
+    """
+    Functions of a model: vcirc(R) = a R, of the parameter a, and the
+    number G = 2; they count their bindings.
+    """
+
+    def __init__(self):
+        self.nbinds = 0
+
+    def names(self):
+        return ('vcirc', 'G')
+
+    def bind(self, values):
+        self.nbinds += 1
+        return dict(vcirc=lambda R: values['a'] * np.asarray(R), G=2.0)
+
+
+def derived_params(derived, properties=None, functions=None):
+    """Parameters a and b, with derived values (see Functions)."""
+    return param_space_parser.load(
+        dict(properties=properties or dict(a=3, b={'value': 2}),
+             derived=derived),
+        pdescs=make_pdescs(a=S, b=S),
+        functions=functions or Functions())
+
+
+def test_derived_values():
+    # Each derived value reads the functions, and those before it; only
+    # those wanted are evaluated, with those they read, and the functions
+    # are bound only for those that use them
+    functions = Functions()
+    params = derived_params(
+        dict(v='vcirc(2 * b)', m='v ** 2 / G', c='a + 1',
+             vs='vcirc(np.array([1, 2]))'),
+        functions=functions)
+    values = params.evaluate()
+    derived = params.derived_values(values)
+    np.testing.assert_array_equal(derived.pop('vs'), [3, 6])
+    assert derived == dict(v=12, m=72, c=4)
+    assert params.derived_values(values, ['m']) == dict(v=12, m=72)
+    assert functions.nbinds == 2
+    assert params.derived_values(values, ['c']) == dict(c=4)
+    assert functions.nbinds == 2
+    dumped = params.dump()
+    assert dumped['derived'] == params.derived()
+    assert params.with_values(dict(b=1)).derived_values(
+        params.evaluate([1]), ['v']) == dict(v=6)
+
+
+@pytest.mark.parametrize('derived, properties, message', [
+    (dict(v='vcirc(b)'), dict(a=3, b='v'),
+     "'v' cannot be read here: it is a derived value"),
+    (dict(v='vcirc(b)'), dict(a=3, b='vcirc(1)'),
+     "'vcirc' cannot be read here: it is a function of the models"),
+    (dict(m='v * 2', v='vcirc(b)'), None,
+     "'v' cannot be read here: derived values can read only those before"),
+    (dict(a='vcirc(b)'), None, "'a' has the name of a parameter"),
+    (dict(v=1), None, "'v' must be an expression"),
+    (dict(v='unknown(b)'), None, "'unknown' cannot be called"),
+])
+def test_derived_values_refused(derived, properties, message):
+    with pytest.raises(ConfigError, match=re.escape(message)):
+        derived_params(derived, properties)
+
+
+def test_expressions_read_derived_values():
+    # (as the priors on several parameters: not the functions, and the
+    # derived values they read must be finite)
+    params = derived_params(dict(v='vcirc(b)', w='v * np.nan'))
+    values = params.evaluate()
+    np.testing.assert_array_equal(params.expression('v / 2')(values), [3])
+    with pytest.raises(ConfigError, match='derive a value with it'):
+        params.expression('vcirc(1)')
+    with pytest.raises(ParamEvaluationError, match="'w' is nan"):
+        params.expression('w')(values)
+
+
+def test_failed_derived_value():
+    params = derived_params(dict(v='vcirc(b)[3]'))
+    with pytest.raises(ParamEvaluationError, match="derived value 'v'"):
+        params.derived_values(params.evaluate())

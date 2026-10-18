@@ -104,7 +104,8 @@ def eval_(
             _log.info("setting up objective...")
             objective = gbkfit.objective.Objective(group)
         _log.info("setting up params...")
-        params = _detail.load_params(cfg, group.pdescs(), group.constants())
+        params = _detail.load_params(
+            cfg, group.pdescs(), group.constants(), group.plan_functions())
         mock = None
         if mode == 'mock':
             with parseutils.config_path('mock'):
