@@ -6,7 +6,8 @@ reading of measurement sets.
 import numpy as np
 import pytest
 
-from gbkfit.dataset import Data, DatasetVisibilities, dataset_parser
+from gbkfit.dataset import (
+    Data, DatasetVisibilities, UVCoverage, dataset_parser)
 from gbkfit.utils.parseutils import ConfigError
 
 
@@ -22,7 +23,9 @@ def visibilities(frequencies=FREQUENCIES, frame='LSRK'):
     return DatasetVisibilities(
         Data(rng.standard_normal(shape), error=error, unit='Jy'),
         Data(rng.standard_normal(shape), error=error, unit='Jy'),
-        rng.uniform(-1e3, 1e3, (4, 3)), frequencies, (150, -30), frame, HI)
+        UVCoverage(
+            rng.uniform(-1e3, 1e3, (4, 3)), frequencies, (150, -30), frame,
+            HI))
 
 
 def test_the_file_of_a_dataset_is_the_dataset():
@@ -34,8 +37,7 @@ def test_the_file_of_a_dataset_is_the_dataset():
             loaded[key].error(), dataset[key].error())
         assert loaded[key].unit() == dataset[key].unit()
     assert np.isnan(loaded['re'].data()[0, 1])
-    for name in ('uvw', 'frequencies', 'phase_centre', 'frame', 'rest'):
-        assert np.all(getattr(loaded, name)() == getattr(dataset, name)())
+    assert loaded.coverage() == dataset.coverage()
 
 
 @pytest.mark.parametrize('options, message', [
@@ -101,9 +103,10 @@ def test_measurement_sets_are_read_as_stokes_i():
         np.testing.assert_allclose(dataset[key].data(), part)
     error = np.sqrt(1 / weights[:, 0] + 1 / weights[:, 1]) / 2
     np.testing.assert_allclose(dataset['re'].error()[0], error)
-    np.testing.assert_allclose(dataset.uvw(), uvw)
-    np.testing.assert_allclose(dataset.phase_centre(), (150, -30))
-    assert dataset.frame() == 'LSRK' and dataset.rest().value == 1.4204e9
+    coverage = dataset.coverage()
+    np.testing.assert_allclose(coverage.uvw(), uvw)
+    np.testing.assert_allclose(coverage.phase_centre(), (150, -30))
+    assert coverage.frame() == 'LSRK' and coverage.rest().value == 1.4204e9
 
 
 def test_measurement_sets_need_a_rest_frequency():
@@ -113,4 +116,5 @@ def test_measurement_sets_need_a_rest_frequency():
         np.zeros((2, 3, 2), bool), np.ones((2, 2)), FREQUENCIES)
     with pytest.raises(ConfigError, match="rest"):
         DatasetVisibilities.from_ms('test.ms')
-    assert DatasetVisibilities.from_ms('test.ms', rest=HI).rest().unit == 'Hz'
+    dataset = DatasetVisibilities.from_ms('test.ms', rest=HI)
+    assert dataset.coverage().rest().unit == 'Hz'

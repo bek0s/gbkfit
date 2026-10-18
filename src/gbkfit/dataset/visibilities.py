@@ -1,5 +1,5 @@
 import os.path
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 import astropy.units
@@ -12,7 +12,8 @@ from .data import Data
 
 
 __all__ = [
-    'DatasetVisibilities'
+    'DatasetVisibilities',
+    'UVCoverage'
 ]
 
 
@@ -32,23 +33,14 @@ _MS_STOKES_I = 1
 _MS_PARALLEL_HANDS = ((5, 8), (9, 12))
 
 
-class DatasetVisibilities(Dataset):
+class UVCoverage:
     """
-    Interferometric visibilities of Stokes I: their real and imaginary
-    parts (the items re and im, of shape (nchannels, nrows), with the error
-    of each part), at the baselines of the rows and the frequencies of the
-    channels, about a phase centre.
-
-    Its configuration is a file of the arrays of the dataset (option file;
-    see from_file and dump), or a measurement set and the options of
-    from_ms (option ms).
+    Where interferometric visibilities are measured: the baselines of
+    their rows, the frequencies of their channels, their phase centre, and
+    the rest frequency of their line.
 
     Parameters
     ----------
-    re, im : Data
-        The real and imaginary parts, of shape (nchannels, nrows), with
-        the error of each part (e.g. 1 / sqrt(weight) of a measurement
-        set).
     uvw : numpy.ndarray
         The baselines (u, v, w) of the rows, in m, in the frame of the
         phase centre (u to the east, v to the north, w to it), of shape
@@ -68,10 +60,175 @@ class DatasetVisibilities(Dataset):
     Raises
     ------
     ConfigError
-        If the items are not re and im with errors, of one row of each
-        baseline, the baselines are not finite, the frequencies are not at least two,
-        positive and uniform, the phase centre is not an RA and a Dec, the
-        frame is not one of those, or the rest is not a frequency.
+        If the baselines are not finite, of shape (nrows, 3), the
+        frequencies are not at least two, positive and uniform, the phase
+        centre is not an RA and a Dec, the frame is not one of those, or
+        the rest is not a frequency.
+    """
+
+    # The names of its arrays in files (see arrays)
+    _ARRAYS = ('uvw', 'frequencies', 'phase_centre', 'frame', 'rest')
+
+    @classmethod
+    def from_arrays(cls, arrays: Mapping[str, np.ndarray]) -> 'UVCoverage':
+        """
+        Make the coverage of its arrays (see arrays; e.g. those of a file
+        of visibilities).
+
+        Raises
+        ------
+        ConfigError
+            If an array is missing, or they are invalid (see the class).
+        """
+        missing = set(cls._ARRAYS) - set(arrays)
+        if missing:
+            raise ConfigError(
+                f"the coverage of visibilities needs the arrays "
+                f"{sorted(missing)}")
+        return cls(
+            arrays['uvw'], arrays['frequencies'], arrays['phase_centre'],
+            str(arrays['frame']), float(arrays['rest']) * astropy.units.Hz)
+
+    @classmethod
+    def from_file(cls, file: str) -> 'UVCoverage':
+        """
+        Read the coverage from a numpy file (npz) of its arrays (see
+        arrays; e.g. a file of visibilities, see
+        DatasetVisibilities.from_file).
+
+        Raises
+        ------
+        ConfigError
+            If an array is missing, or they are invalid (see the class).
+        """
+        with np.load(file) as arrays:
+            return cls.from_arrays(dict(arrays))
+
+    def dump(
+            self, filename: str, dump_path: bool = True,
+            overwrite: bool = False
+    ) -> str:
+        """
+        Write its arrays to a numpy file (npz), and return its filename
+        (the path, or its name only without dump_path).
+
+        Raises
+        ------
+        FileExistsError
+            If the file exists and overwrite is false.
+        """
+        _savez(filename, self.arrays(), overwrite)
+        return filename if dump_path else os.path.basename(filename)
+
+    def __init__(
+            self,
+            uvw: np.ndarray,
+            frequencies: Sequence[float],
+            phase_centre: Sequence[float],
+            frame: str,
+            rest: str | astropy.units.Quantity
+    ):
+        uvw = np.array(uvw, float)
+        frequencies = np.array(frequencies, float)
+        if uvw.ndim != 2 or uvw.shape[1] != 3 or not np.isfinite(uvw).all():
+            raise ConfigError(
+                f"the baselines must be finite, one (u, v, w) for each row; "
+                f"their shape is {uvw.shape}")
+        steps = np.diff(frequencies)
+        if frequencies.ndim != 1 or frequencies.size < 2 \
+                or not np.all(frequencies > 0) or steps[0] == 0 \
+                or not np.allclose(steps, steps[0], rtol=1e-6, atol=0):
+            raise ConfigError(
+                "the frequencies must be at least two, positive and uniform "
+                "(e.g. regridded by CASA mstransform)")
+        if np.shape(phase_centre) != (2,):
+            raise ConfigError(
+                f"the phase centre must be an RA and a Dec; it is "
+                f"{phase_centre}")
+        if frame not in _FRAMES:
+            raise ConfigError(
+                f"the frequencies must be in the rest frame "
+                f"{' or '.join(_FRAMES)}; they are in {frame} (regrid them, "
+                f"e.g. by CASA mstransform with outframe='LSRK')")
+        rest = gridutils.make_rest(rest)
+        if rest is None or rest.unit != astropy.units.Hz:
+            raise ConfigError(
+                f"the rest of visibilities must be a frequency; it is {rest}")
+        self._uvw = uvw
+        self._frequencies = frequencies
+        self._phase_centre = tuple(float(x) for x in phase_centre)
+        self._frame = frame
+        self._rest = rest
+
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, UVCoverage) and all(
+            np.array_equal(a, b) for a, b in zip(
+                self.arrays().values(), other.arrays().values()))
+
+    def arrays(self) -> dict[str, np.ndarray]:
+        """
+        Return its arrays, by name: uvw, frequencies, phase_centre, frame
+        and rest (Hz).
+        """
+        return dict(
+            uvw=self._uvw, frequencies=self._frequencies,
+            phase_centre=np.array(self._phase_centre),
+            frame=np.array(self._frame),
+            rest=np.array(self._rest.to_value(astropy.units.Hz)))
+
+    def nrows(self) -> int:
+        """Return the number of rows."""
+        return len(self._uvw)
+
+    def nchannels(self) -> int:
+        """Return the number of channels."""
+        return len(self._frequencies)
+
+    def uvw(self) -> np.ndarray:
+        """Return the baselines of the rows (m), of shape (nrows, 3)."""
+        return self._uvw
+
+    def frequencies(self) -> np.ndarray:
+        """Return the frequencies of the channels (Hz)."""
+        return self._frequencies
+
+    def phase_centre(self) -> tuple[float, float]:
+        """Return the RA and Dec of the phase centre (degrees)."""
+        return self._phase_centre
+
+    def frame(self) -> str:
+        """Return the rest frame of the frequencies."""
+        return self._frame
+
+    def rest(self) -> astropy.units.Quantity:
+        """Return the rest frequency of the line (Hz)."""
+        return self._rest
+
+
+class DatasetVisibilities(Dataset):
+    """
+    Interferometric visibilities of Stokes I: their real and imaginary
+    parts (the items re and im, of shape (nchannels, nrows), with the error
+    of each part), and where they are measured (see UVCoverage).
+
+    Its configuration is a file of the arrays of the dataset (option file;
+    see from_file and dump), or a measurement set and the options of
+    from_ms (option ms).
+
+    Parameters
+    ----------
+    re, im : Data
+        The real and imaginary parts, of shape (nchannels, nrows), with
+        the error of each part (e.g. 1 / sqrt(weight) of a measurement
+        set).
+    coverage : UVCoverage
+        Where they are measured.
+
+    Raises
+    ------
+    ConfigError
+        If the items have no errors, or are not of the channels and rows
+        of the coverage.
     """
 
     ndim = 2
@@ -107,8 +264,8 @@ class DatasetVisibilities(Dataset):
         Read the dataset from a numpy file (npz) of its arrays: data, the
         complex visibilities (nchannels, nrows); error, the error of each
         of their parts (nchannels, nrows); optionally mask (0 for the
-        visibilities left out) and unit (e.g. 'Jy'); and uvw, frequencies,
-        phase_centre, frame and rest (Hz), as in the class.
+        visibilities left out) and unit (e.g. 'Jy'); and those of its
+        coverage (see UVCoverage.arrays).
 
         Parameters
         ----------
@@ -127,9 +284,7 @@ class DatasetVisibilities(Dataset):
         """
         with np.load(file) as arrays:
             arrays = dict(arrays)
-        missing = {
-            'data', 'error', 'uvw', 'frequencies', 'phase_centre', 'frame',
-            'rest'} - set(arrays)
+        missing = {'data', 'error'} - set(arrays)
         if missing:
             raise ConfigError(
                 f"the file of visibilities {file} has no arrays "
@@ -139,8 +294,7 @@ class DatasetVisibilities(Dataset):
         return cls(
             Data(data.real, mask, arrays['error'], unit),
             Data(data.imag, mask, arrays['error'], unit),
-            arrays['uvw'], arrays['frequencies'], arrays['phase_centre'],
-            str(arrays['frame']), float(arrays['rest']) * astropy.units.Hz)
+            UVCoverage.from_arrays(arrays))
 
     @classmethod
     def from_ms(
@@ -171,7 +325,7 @@ class DatasetVisibilities(Dataset):
         column : str, optional
             The column of the visibilities (e.g. 'CORRECTED_DATA').
         rest : str or Quantity, optional
-            The rest frequency (see the class); by default, that of the
+            The rest frequency (see UVCoverage); by default, that of the
             source of the field (REST_FREQUENCY of the table SOURCE).
 
         Returns
@@ -184,7 +338,7 @@ class DatasetVisibilities(Dataset):
         ConfigError
             If the field, the spectral window or the column are not in the
             measurement set, it has neither Stokes I nor a pair of parallel
-            hands, or no rest frequency (see the class).
+            hands, or no rest frequency (see UVCoverage).
         ModuleNotFoundError
             If python-casacore is not installed.
         """
@@ -238,99 +392,51 @@ class DatasetVisibilities(Dataset):
         return cls(
             Data(stokes.real.T, mask.T, error.T, 'Jy'),
             Data(stokes.imag.T, mask.T, error.T, 'Jy'),
-            uvw, frequencies, phase_centre, frame, rest)
+            UVCoverage(uvw, frequencies, phase_centre, frame, rest))
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,
             overwrite: bool = False
     ) -> dict[str, Any]:
         filename = f'{prefix}visibilities.npz'
-        if os.path.exists(filename) and not overwrite:
-            raise FileExistsError(f"{filename} exists")
         re, im = self['re'], self['im']
         arrays = dict(
             data=re.data() + 1j * im.data(), error=re.error(), mask=re.mask(),
-            uvw=self._uvw, frequencies=self._frequencies,
-            phase_centre=np.array(self._phase_centre), frame=self._frame,
-            rest=self._rest.to_value(astropy.units.Hz))
+            **self._coverage.arrays())
         if re.unit() is not None:
             arrays['unit'] = unitutils.format_unit(re.unit())
-        with open(filename, 'wb') as file:
-            np.savez(file, **arrays)
+        _savez(filename, arrays, overwrite)
         return dict(
             type=self.type(),
             file=filename if dump_path else os.path.basename(filename))
 
-    def __init__(
-            self,
-            re: Data,
-            im: Data,
-            uvw: np.ndarray,
-            frequencies: Sequence[float],
-            phase_centre: Sequence[float],
-            frame: str,
-            rest: str | astropy.units.Quantity
-    ):
+    def __init__(self, re: Data, im: Data, coverage: UVCoverage):
         super().__init__(dict(re=re, im=im))
         if re.error() is None or im.error() is None:
             raise ConfigError(
                 "visibilities need the errors of their parts (e.g. 1 / "
                 "sqrt(weight) of a measurement set)")
-        nchannels, nrows = re.shape()
-        uvw = np.array(uvw, float)
-        frequencies = np.array(frequencies, float)
-        if uvw.shape != (nrows, 3) or not np.isfinite(uvw).all():
+        shape = (coverage.nchannels(), coverage.nrows())
+        if re.shape() != shape:
             raise ConfigError(
-                f"the baselines must be finite, one (u, v, w) for each of "
-                f"the {nrows} rows; their shape is {uvw.shape}")
-        if frequencies.shape != (nchannels,):
-            raise ConfigError(
-                f"there must be a frequency for each of the {nchannels} "
-                f"channels; there are {frequencies.size}")
-        steps = np.diff(frequencies)
-        if nchannels < 2 or not np.all(frequencies > 0) or not np.allclose(
-                steps, steps[0], rtol=1e-6, atol=0) or steps[0] == 0:
-            raise ConfigError(
-                "the frequencies must be at least two, positive and uniform "
-                "(e.g. regridded by CASA mstransform)")
-        if np.shape(phase_centre) != (2,):
-            raise ConfigError(
-                f"the phase centre must be an RA and a Dec; it is "
-                f"{phase_centre}")
-        if frame not in _FRAMES:
-            raise ConfigError(
-                f"the frequencies must be in the rest frame {' or '.join(_FRAMES)}"
-                f"; they are in {frame} (regrid them, e.g. by CASA mstransform "
-                f"with outframe='LSRK')")
-        rest = gridutils.make_rest(rest)
-        if rest is None or rest.unit != astropy.units.Hz:
-            raise ConfigError(
-                f"the rest of visibilities must be a frequency; it is {rest}")
-        self._uvw = uvw
-        self._frequencies = frequencies
-        self._phase_centre = tuple(float(x) for x in phase_centre)
-        self._frame = frame
-        self._rest = rest
+                f"the visibilities must be of the {shape[0]} channels and the "
+                f"{shape[1]} rows of their coverage; their shape is "
+                f"{re.shape()}")
+        self._coverage = coverage
 
-    def uvw(self) -> np.ndarray:
-        """Return the baselines of the rows (m), of shape (nrows, 3)."""
-        return self._uvw
+    def coverage(self) -> UVCoverage:
+        """Return where the visibilities are measured."""
+        return self._coverage
 
-    def frequencies(self) -> np.ndarray:
-        """Return the frequencies of the channels (Hz)."""
-        return self._frequencies
 
-    def phase_centre(self) -> tuple[float, float]:
-        """Return the RA and Dec of the phase centre (degrees)."""
-        return self._phase_centre
-
-    def frame(self) -> str:
-        """Return the rest frame of the frequencies."""
-        return self._frame
-
-    def rest(self) -> astropy.units.Quantity:
-        """Return the rest frequency of the line (Hz)."""
-        return self._rest
+def _savez(
+        filename: str, arrays: Mapping[str, np.ndarray], overwrite: bool
+) -> None:
+    """Write arrays to a numpy file (npz), unless it exists (but overwrite)."""
+    if os.path.exists(filename) and not overwrite:
+        raise FileExistsError(f"{filename} exists")
+    with open(filename, 'wb') as file:
+        np.savez(file, **arrays)
 
 
 def _ms_field(field: int | str | None, names: list[str]) -> int:
