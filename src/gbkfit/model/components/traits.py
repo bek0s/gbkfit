@@ -2419,15 +2419,16 @@ class VPTraitMass(VPTrait):
     the disk at its midplane (its density traits times its density
     height traits at z = 0, or its density traits if thin: the equation
     of a thin disk) and of rho sigma^2, sigma its velocity dispersion at
-    the midplane (azimuthal means as those of mass.SurfaceComponent); the
-    derivative by the second-order three-point formula on the rings; NaN
-    without density. With 'self_gravitating', the same for a disk whose
-    thickness its own gravity sets, h ~ sigma^2 / S (S its surface
-    density, its density traits): rho ~ S^2 / sigma^2 and rho sigma^2 ~
-    S^2, so that v^2 = v_c^2 + 2 sigma^2 dln S / dln R for an
-    axisymmetric disk (Burkert et al. 2010), whatever its density height
-    traits (DysmalPy's pressure support of types 1 and 2, for an
-    exponential and a Sersic S).
+    the midplane (with the dispersion of the vertical equilibrium of its
+    disk in quadrature, if any, see parts.Kinematics; azimuthal means as
+    those of mass.SurfaceComponent); the derivative by the second-order
+    three-point formula on the rings; NaN without density. With
+    'self_gravitating', the same for a disk whose thickness its own
+    gravity sets, h ~ sigma^2 / S (S its surface density, its density
+    traits): rho ~ S^2 / sigma^2 and rho sigma^2 ~ S^2, so that v^2 =
+    v_c^2 + 2 sigma^2 dln S / dln R for an axisymmetric disk (Burkert et
+    al. 2010), whatever its density height traits (DysmalPy's pressure
+    support of types 1 and 2, for an exponential and a Sersic S).
 
     With pressure_density, the name of a mass component of its galaxy,
     the pressure takes the density of that component instead of that of

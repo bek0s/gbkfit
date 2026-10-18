@@ -356,17 +356,19 @@ def pressure_support(
         params: ParamValues,
         radii: np.ndarray,
         mode: str,
-        density: np.ndarray | None = None
+        density: np.ndarray | None = None,
+        equilibrium: np.ndarray | None = None
 ) -> np.ndarray:
     """
     Return the pressure support of a disk at its midplane, (R / rho)
     d(rho sigma^2)/dR ((km/s)^2), at radii (arcsec, increasing, on the
     disk), with sigma its velocity dispersion at the midplane (its
-    dispersion polar traits times its dispersion height traits at z = 0),
-    by mode (see traits.VPTraitMass): 'jeans', with the azimuthal means
-    of its density rho at the midplane (its density polar traits times its
-    density height traits at z = 0, or its density polar traits if thin,
-    where its selection traits keep it) and of rho sigma^2;
+    dispersion polar traits times its dispersion height traits at z = 0,
+    and the dispersion of its vertical equilibrium in quadrature, if
+    any), by mode (see traits.VPTraitMass): 'jeans', with the azimuthal
+    means of its density rho at the midplane (its density polar traits
+    times its density height traits at z = 0, or its density polar traits
+    if thin, where its selection traits keep it) and of rho sigma^2;
     'self_gravitating', with those of S^2 / sigma^2 and of S^2, which rho
     and rho sigma^2 are proportional to (S its density polar traits,
     where its selection traits keep it), or instead the given density.
@@ -389,6 +391,10 @@ def pressure_support(
         The density at the radii (e.g. of a mass component, in any unit)
         to take instead of that of the disk: at the midplane for 'jeans',
         the surface density for 'self_gravitating'.
+    equilibrium : np.ndarray, optional
+        The dispersion of the vertical equilibrium of the disk at its
+        subnodes (km/s, see parts.Kinematics), interpolated linearly
+        between them, as the disk is evaluated.
     """
     params = _with_given(disk, params)
     r = np.asarray(radii, dtype=float)[:, None]
@@ -397,11 +403,13 @@ def pressure_support(
     dispersion_heights = _at_midplane(disk, plan, params, 'dht', r)
     given = None if density is None \
         else np.asarray(density, dtype=float)[:, None]
+    balanced = 0 if equilibrium is None \
+        else np.interp(r, disk.subrnodes(), equilibrium)
 
     def values(theta: np.ndarray) -> np.ndarray:
-        dispersion = np.sum(
+        dispersion = np.hypot(np.sum(
             plan.evaluate_polar_traits(params, 'dpt', r, theta)
-            * dispersion_heights, axis=0, dtype=float)
+            * dispersion_heights, axis=0, dtype=float), balanced)
         if given is not None:
             own = np.broadcast_to(given, dispersion.shape)
         else:

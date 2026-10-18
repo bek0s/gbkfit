@@ -204,25 +204,33 @@ class GravityPlan:
             i for i in self._balanced
             if components[i].density_disk().equilibrium().mode == 'central']
         every = [r for cmp_radii in radii.values() for r in cmp_radii.values()]
+        nmoved = len(every)
         every += [components[i].density_disk().subrnodes() for i in central]
         ends = np.cumsum([len(r) for r in every])[:-1]
         if every:
             parts = mass_model.vcirc2_components(
                 np.concatenate(every) * kpc_per_arcsec, params, context)
             # (the sum of the parts is the vcirc2 of the mass model)
-            vcirc2 = iter(np.split(sum(parts.values()), ends))
+            vcirc2 = np.split(sum(parts.values()), ends)
         else:
             # (only disks in a self-gravitating equilibrium)
-            parts, vcirc2 = {}, iter(())
+            parts, vcirc2 = {}, []
+        # The equilibria first: the pressure support of their disks takes
+        # their dispersion
+        central_vcirc2 = dict(zip(central, vcirc2[nmoved:]))
+        values = {
+            i: {EQUILIBRIUM_DISPERSION: self._equilibrium(
+                i, own[i], mass, central_vcirc2.get(i), out_extra)}
+            for i in self._balanced}
+        moved_vcirc2 = iter(vcirc2[:nmoved])
         part_pieces = {
             mass_name: iter(np.split(part, ends))
             for mass_name, part in parts.items()}
-        values = {}
         for i, cmp_radii in radii.items():
             disk = components[i].density_disk()
-            values[i] = {}
+            values.setdefault(i, {})
             for name, r in cmp_radii.items():
-                v2 = next(vcirc2)
+                v2 = next(moved_vcirc2)
                 pressure = None
                 if support := disk.pressure_supported_params().get(name):
                     density = None if support.density is None \
@@ -232,7 +240,7 @@ class GravityPlan:
                             params, context)
                     pressure = pressure_support(
                         disk, self._disk_plans[i], own[i], r, support.mode,
-                        density)
+                        density, values[i].get(EQUILIBRIUM_DISPERSION))
                     v2 = v2 + pressure
                 values[i][name] = np.sqrt(
                     np.where(np.isfinite(v2) & (v2 >= 0), v2, np.nan))
@@ -244,11 +252,6 @@ class GravityPlan:
                     out_extra[f'{label}_{name}_rotation'] = _rotation_table(
                         np.asarray(r, dtype=float), kpc_per_arcsec,
                         cmp_parts, pressure, values[i][name])
-        for i in self._balanced:
-            values.setdefault(i, {})[EQUILIBRIUM_DISPERSION] = \
-                self._equilibrium(
-                    i, own[i], mass, next(vcirc2) if i in central else None,
-                    out_extra)
         return values
 
     def _equilibrium(

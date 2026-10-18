@@ -137,6 +137,30 @@ def test_self_gravitating_equilibrium_in_a_mass_disk():
     assert kinematics['equilibrium_density'] == 'gas'
 
 
+def test_pressure_support_takes_the_dispersion_of_the_equilibrium():
+    # The rotation with pressure support of a disk in equilibrium is that
+    # of the disk whose node-wise dispersion traits at the subnodes are
+    # hypot(sigma_traits, sigma_eq), where the support takes them
+    info = dict(
+        mass=[dict(type='point', name='bh')],
+        distance=dict(type='direct', cosmology='Planck18'))
+    supported = with_kinematics(
+        DISK, vptraits=dict(type='mass', pressure_support='jeans'))
+    balanced = galaxy(supported, **info)
+    given = galaxy(with_kinematics(
+        supported, dptraits=dict(type='nw_uniform', sampling='subrings'),
+        equilibrium=None), **info)
+    params = PROPERTIES | dict(distance=10, mass_bh_log_m=10, dpt_a=10)
+    extra = {}
+    rotation = balanced.plan_gravity().evaluate(params, extra)[0]['vpt_vt']
+    sigma = np.hypot(10, extra['component0_equilibrium']['sigma'])
+    extra = {}
+    expected = given.plan_gravity().evaluate(
+        params | dict(dpt_a=sigma), extra)[0]['vpt_vt']
+    assert np.max(-extra['component0_vpt_vt_rotation']['pressure']) > 100
+    np.testing.assert_allclose(rotation, expected, rtol=1e-10)
+
+
 @pytest.mark.parametrize('disk, info, message', [
     (with_kinematics(DISK, equilibrium_density='gas'), {},
      "required for it, and only for it"),
