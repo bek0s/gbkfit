@@ -49,13 +49,14 @@ def _with_mass_params(
     the circular velocity of the mass (see
     Component.circular_velocity_params) and there is none, if there is
     mass and no component uses it (nor a disk in vertical equilibrium,
-    see Kinematics), if a disk in equilibrium has neither mass nor
-    rotation (tangential velocity traits), if the mass has no distance or
-    the distance no mass (its only user), if a mass component follows a
+    see Kinematics), if a disk in a central equilibrium has neither mass
+    nor rotation (tangential velocity traits) or one in another
+    equilibrium no mass, if the mass has no distance or the distance no
+    mass (its only user), if a mass component follows a
     component that is not a disk of the galaxy (see
-    Component.density_disk), if the pressure support of a disk takes the
-    density of a mass component that the galaxy does not have, or if the
-    names of the parameters repeat.
+    Component.density_disk), if the pressure support or the equilibrium
+    of a disk takes the density of a mass component that the galaxy does
+    not have, or if the names of the parameters repeat.
     """
     moved = any(cmp.circular_velocity_params() for cmp in components)
     balanced = [
@@ -71,6 +72,11 @@ def _with_mass_params(
             "that it moves 'mass' velocity traits, or those it holds up a "
             "vertical equilibrium")
     for cmp in balanced if mass_model is None else ():
+        mode = cmp.density_disk().equilibrium().mode
+        if mode != 'central':
+            raise ConfigError(
+                f"the vertical equilibrium {mode!r} of the component "
+                f"{cmp.name()!r} needs the mass of its galaxy")
         if not any(trait.direction() == 'tan'
                    for trait in cmp.density_disk().traits('vpt')):
             raise ConfigError(
@@ -109,6 +115,14 @@ def _with_mass_params(
                     f"takes the density of the mass component "
                     f"{support.density!r}, which its galaxy does not have; "
                     f"its mass components: {mass_names}")
+    for cmp in balanced:
+        density = cmp.density_disk().equilibrium().density
+        if density is not None and density not in mass_names:
+            raise ConfigError(
+                f"the vertical equilibrium of the component {cmp.name()!r} "
+                f"takes the surface density of the mass component "
+                f"{density!r}, which its galaxy does not have; its mass "
+                f"components: {mass_names}")
     gravity = distance.pdescs() | mass_model.pdescs()
     if repeated := sorted(params.keys() & gravity.keys()):
         raise ConfigError(

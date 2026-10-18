@@ -5,6 +5,7 @@ it holds up (their vertical equilibrium), evaluated once for all the
 observations of the galaxy.
 """
 
+import dataclasses
 import logging
 from typing import TYPE_CHECKING, Any
 
@@ -15,6 +16,7 @@ from astropy.table import Table
 from gbkfit.driver import Driver
 from gbkfit.params import ParamValues
 from ..mass import MassContext, MassModel
+from ..mass.units import G
 from ._units import mass_per_unit
 from .disks._disk import EQUILIBRIUM_DISPERSION
 from .disks._profiles import (
@@ -43,6 +45,19 @@ _MAX_OFFSET = 0.15
 _MAX_TILT = 20.0
 
 
+@dataclasses.dataclass(frozen=True)
+class _Mass:
+    """
+    The mass of a galaxy in one evaluation: its model, the values of the
+    parameters of the galaxy, the context of the mass, and the length of
+    an arcsec in the galaxy (kpc).
+    """
+    model: MassModel
+    params: ParamValues
+    context: MassContext
+    kpc_per_arcsec: float
+
+
 class GravityPlan:
     """
     The gravity of a galaxy: the circular velocity of its mass at the
@@ -51,8 +66,9 @@ class GravityPlan:
     support of each where its traits ask for it (see
     Disk.pressure_supported_params); and the dispersion of the vertical
     equilibrium of the disks it holds up, at their subnodes (those with
-    an equilibrium, see Kinematics): in the circular velocity of the
-    mass, or without mass, in that of the rotation of each disk.
+    an equilibrium, see Kinematics): in the circular velocity of the mass
+    ('central'; without mass, that of the rotation of each disk), or in
+    the surface density of a mass component ('self_gravitating').
 
     It takes the disks it moves and follows as concentric and flat: their
     rings around one centre, in one plane, whatever their geometries (the
@@ -133,8 +149,10 @@ class GravityPlan:
             pressure support, its term ('pressure', (km/s)^2), and the
             values given ('vrot', km/s); for each disk it holds up,
             '{component}_equilibrium', a table of its subnodes ('radius',
-            arcsec), its rms height there ('height', arcsec), the circular
-            velocity it takes ('vcirc', km/s) and the dispersion of its
+            arcsec), its rms height there ('height', arcsec), what its
+            equilibrium takes there: the circular velocity ('vcirc', km/s;
+            'central') or the surface density ('surface_density',
+            Msun/kpc^2; 'self_gravitating'), and the dispersion of its
             equilibrium ('sigma', km/s). The components are named after
             their names, or their positions ('component0'). With them and
             mass, a warning says where the rings of the disks it moves,
@@ -160,7 +178,7 @@ class GravityPlan:
         if mass_model is None:
             return {
                 i: {EQUILIBRIUM_DISPERSION: self._equilibrium(
-                    i, own[i], None, out_extra)}
+                    i, own[i], None, None, out_extra)}
                 for i in self._balanced}
         components = component_set.components()
         distance = component_set.distance()
@@ -176,19 +194,26 @@ class GravityPlan:
                     own[i], kpc_per_arcsec,
                     self._mass_per_unit[i])
                 for i in self._followed})
+        mass = _Mass(mass_model, params, context, kpc_per_arcsec)
         # The mass is evaluated once, at the radii of all the components:
         # those of the parameters it gives, then the subnodes of the disks
-        # it holds up
+        # it holds up in a central equilibrium
         radii = {i: components[i].circular_velocity_params()
                  for i in self._moved}
+        central = [
+            i for i in self._balanced
+            if components[i].density_disk().equilibrium().mode == 'central']
         every = [r for cmp_radii in radii.values() for r in cmp_radii.values()]
-        every += [components[i].density_disk().subrnodes()
-                  for i in self._balanced]
+        every += [components[i].density_disk().subrnodes() for i in central]
         ends = np.cumsum([len(r) for r in every])[:-1]
-        parts = mass_model.vcirc2_components(
-            np.concatenate(every) * kpc_per_arcsec, params, context)
-        # (the sum of the parts is the vcirc2 of the mass model)
-        vcirc2 = iter(np.split(sum(parts.values()), ends))
+        if every:
+            parts = mass_model.vcirc2_components(
+                np.concatenate(every) * kpc_per_arcsec, params, context)
+            # (the sum of the parts is the vcirc2 of the mass model)
+            vcirc2 = iter(np.split(sum(parts.values()), ends))
+        else:
+            # (only disks in a self-gravitating equilibrium)
+            parts, vcirc2 = {}, iter(())
         part_pieces = {
             mass_name: iter(np.split(part, ends))
             for mass_name, part in parts.items()}
@@ -221,13 +246,16 @@ class GravityPlan:
                         cmp_parts, pressure, values[i][name])
         for i in self._balanced:
             values.setdefault(i, {})[EQUILIBRIUM_DISPERSION] = \
-                self._equilibrium(i, own[i], next(vcirc2), out_extra)
+                self._equilibrium(
+                    i, own[i], mass, next(vcirc2) if i in central else None,
+                    out_extra)
         return values
 
     def _equilibrium(
             self,
             index: int,
             params: ParamValues,
+            mass: _Mass | None,
             vcirc2: np.ndarray | None,
             out_extra: dict[str, Any] | None
     ) -> np.ndarray:
@@ -235,22 +263,35 @@ class GravityPlan:
         Return the dispersion of the vertical equilibrium (km/s) of the
         disk of the component of the given index at its subnodes (see
         Kinematics), from the values of its parameters (by its own names)
-        and the squared circular velocity of the mass there ((km/s)^2), or
-        without mass (None), that of the rotation of the disk; with extra
-        outputs, its table (see evaluate).
+        and the mass of the galaxy (None without mass); for a central
+        equilibrium with mass, from the squared circular velocity of the
+        mass at the subnodes ((km/s)^2), and without, from that of the
+        rotation of the disk. With extra outputs, its table (see
+        evaluate).
         """
         component = self._component_set.components()[index]
         disk = component.density_disk()
+        equilibrium = disk.equilibrium()
         plan = self._disk_plans[index]
         radii = np.asarray(disk.subrnodes())
         heights = rms_heights(disk, plan, params, radii)
-        if vcirc2 is None:
-            vcirc2 = rotation(disk, plan, params, radii) ** 2
-        sigma = _central_dispersion(radii, heights, vcirc2)
+        if equilibrium.mode == 'central':
+            if mass is None:
+                vcirc2 = rotation(disk, plan, params, radii) ** 2
+            sigma = _central_dispersion(radii, heights, vcirc2)
+            taken = dict(vcirc=_signed_sqrt(vcirc2) * u.km / u.s)
+        else:
+            name = equilibrium.density
+            surface = mass.model.component(name).surface_density(
+                radii * mass.kpc_per_arcsec,
+                mass.model.component_params(name, mass.params), mass.context)
+            sigma = _self_gravitating_dispersion(
+                heights * mass.kpc_per_arcsec, surface)
+            taken = dict(surface_density=surface * u.solMass / u.kpc ** 2)
         if out_extra is not None:
             label = component.name() or f'component{index}'
             out_extra[f'{label}_equilibrium'] = _equilibrium_table(
-                radii, heights, vcirc2, sigma)
+                radii, heights, taken, sigma)
         return sigma
 
     def _warn_geometry(self, params: ParamValues) -> None:
@@ -344,20 +385,42 @@ def _central_dispersion(
         np.where(np.isfinite(omega2) & (omega2 >= 0), omega2, np.nan))
 
 
+def _self_gravitating_dispersion(
+        heights: np.ndarray, surface: np.ndarray
+) -> np.ndarray:
+    """
+    Return the dispersion (km/s) of the self-gravitating equilibrium (see
+    Kinematics) of the given rms heights (kpc) and surface densities
+    (Msun/kpc^2): sqrt(2 sqrt(3) G Sigma h); NaN where Sigma is negative.
+    """
+    sigma2 = 2 * np.sqrt(3) * G * surface * heights
+    return np.sqrt(np.where(sigma2 >= 0, sigma2, np.nan))
+
+
+def _signed_sqrt(v2: np.ndarray) -> np.ndarray:
+    """
+    Return the signed square root of squared velocities: negative where
+    they are.
+    """
+    return np.sign(v2) * np.sqrt(np.abs(v2))
+
+
 def _equilibrium_table(
         radii: np.ndarray,
         heights: np.ndarray,
-        vcirc2: np.ndarray,
+        taken: dict[str, u.Quantity],
         sigma: np.ndarray
 ) -> Table:
     """
     Return the table of the vertical equilibrium of a disk at its subnodes
-    (see GravityPlan.evaluate).
+    (radii, arcsec): its rms heights (arcsec), the columns of what it
+    takes, by name, and its dispersion (km/s; see GravityPlan.evaluate).
     """
     table = Table()
     table['radius'] = radii * u.arcsec
     table['height'] = heights * u.arcsec
-    table['vcirc'] = np.sign(vcirc2) * np.sqrt(np.abs(vcirc2)) * u.km / u.s
+    for name, column in taken.items():
+        table[name] = column
     table['sigma'] = sigma * u.km / u.s
     return table
 
@@ -387,15 +450,13 @@ def _rotation_table(
     the mass (parts, by name), its pressure support (if any) and its
     rotation (see GravityPlan.evaluate).
     """
-    def signed(v2: np.ndarray) -> np.ndarray:
-        return np.sign(v2) * np.sqrt(np.abs(v2))
     kms = u.km / u.s
     table = Table()
     table['radius'] = radii * u.arcsec
     table['radius_kpc'] = radii * kpc_per_arcsec * u.kpc
     for name, part in parts.items():
-        table[f'vcirc_{name}'] = signed(part) * kms
-    table['vcirc'] = signed(sum(parts.values())) * kms
+        table[f'vcirc_{name}'] = _signed_sqrt(part) * kms
+    table['vcirc'] = _signed_sqrt(sum(parts.values())) * kms
     if pressure is not None:
         table['pressure'] = pressure * kms ** 2
     table['vrot'] = rotation * kms

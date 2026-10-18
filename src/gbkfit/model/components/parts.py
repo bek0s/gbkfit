@@ -135,15 +135,18 @@ class Density(parseutils.Serializable):
 
 
 # The modes of the vertical equilibrium of a disk (see Kinematics)
-EQUILIBRIUM_MODES = ('central',)
+EQUILIBRIUM_MODES = ('central', 'self_gravitating')
 
 
 @dataclasses.dataclass(frozen=True)
 class Equilibrium:
     """
-    The vertical equilibrium of a disk (see Kinematics): its mode.
+    The vertical equilibrium of a disk (see Kinematics): its mode, and
+    for 'self_gravitating', density, the name of the mass component of its
+    galaxy whose surface density holds the disk up.
     """
     mode: str
+    density: str | None = None
 
 
 class Kinematics(parseutils.Serializable):
@@ -171,7 +174,13 @@ class Kinematics(parseutils.Serializable):
     <z^2>, Omega = V_c / R). At the centre, where V_c / R is 0 / 0, it
     takes Omega at the next subnode; NaN where V_c^2 is negative. It is
     the thick disk of GalPaK3D, there with h a fixed share of the radius
-    of the disk.
+    of the disk. With 'self_gravitating', the pull of the disk itself:
+    sigma_eq^2 = 2 sqrt(3) G Sigma h, with Sigma the surface density of
+    the mass component of its galaxy of the name equilibrium_density
+    (e.g. a mass disk that follows the disk) and h its rms height; exact
+    for an isothermal slab of its own gravity, of the height profile
+    sech^2(z / z0), z0 = sigma^2 / (pi G Sigma) (<z^2> = pi^2 z0^2 / 12);
+    NaN where Sigma is negative.
 
     Parameters
     ----------
@@ -187,8 +196,12 @@ class Kinematics(parseutils.Serializable):
         The dispersion height traits of a thick component, one for each
         dispersion polar trait (as vhtraits).
     equilibrium : str, optional
-        The vertical equilibrium of a thick disk: none (the default) or
-        'central'.
+        The vertical equilibrium of a thick disk: none (the default),
+        'central' or 'self_gravitating'.
+    equilibrium_density : str, optional
+        The name of the mass component whose surface density holds a
+        disk of a self-gravitating equilibrium up: required for it, and
+        only for it.
 
     Raises
     ------
@@ -219,8 +232,10 @@ class Kinematics(parseutils.Serializable):
             info['vhtraits'] = _dump_traits(traits.vht_parser, self._vhtraits)
         if self._dhtraits is not None:
             info['dhtraits'] = _dump_traits(traits.dht_parser, self._dhtraits)
-        if self._equilibrium is not None:
-            info['equilibrium'] = self._equilibrium.mode
+        if (equilibrium := self._equilibrium) is not None:
+            info['equilibrium'] = equilibrium.mode
+            if equilibrium.density is not None:
+                info['equilibrium_density'] = equilibrium.density
         return info
 
     def __init__(
@@ -231,7 +246,8 @@ class Kinematics(parseutils.Serializable):
             traits.VHTrait | Sequence[traits.VHTrait | None] | None = None,
             dhtraits:
             traits.DHTrait | Sequence[traits.DHTrait | None] | None = None,
-            equilibrium: str | None = None
+            equilibrium: str | None = None,
+            equilibrium_density: str | None = None
     ):
         self._vptraits = _polar_traits('vptraits', vptraits)
         if sum(isinstance(trait, traits.VPTraitMass)
@@ -248,8 +264,16 @@ class Kinematics(parseutils.Serializable):
             raise ConfigError(
                 f"equilibrium must be one of {list(EQUILIBRIUM_MODES)} or "
                 f"none; it is {equilibrium!r}")
+        if (equilibrium == 'self_gravitating') \
+                != (equilibrium_density is not None):
+            raise ConfigError(
+                "equilibrium_density is the mass component whose surface "
+                "density holds a disk of a self-gravitating equilibrium up: "
+                "required for it, and only for it")
+        if equilibrium_density is not None:
+            parseutils.check_name(equilibrium_density)
         self._equilibrium = None if equilibrium is None \
-            else Equilibrium(equilibrium)
+            else Equilibrium(equilibrium, equilibrium_density)
 
     def vptraits(self) -> tuple[traits.VPTrait, ...]:
         """Return the velocity polar traits."""

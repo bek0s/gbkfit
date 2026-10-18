@@ -18,7 +18,7 @@ from gbkfit.utils.parseutils import ConfigError
 G = 4.30091727e-6
 
 # The length of an arcsec (kpc) at 10 Mpc
-KPC_PER_ARCSEC = 10 * 4.8481368e-3
+KPC_PER_ARCSEC = 1e4 * np.pi / 648000
 
 # A thick disk of a Gaussian height profile (its rms height is its s, 1
 # arcsec: its cut at zmax is 1e-22 of it), its rotation of arctan traits
@@ -107,6 +107,51 @@ def test_central_equilibrium_in_the_mass_of_the_galaxy():
         given[0][EQUILIBRIUM_DISPERSION], table['sigma'])
     dumped = galaxy_parser.dump(balanced)
     assert dumped['components'][0]['kinematics']['equilibrium'] == 'central'
+
+
+def test_self_gravitating_equilibrium_in_a_mass_disk():
+    # sigma^2 = 2 sqrt(3) G Sigma h, with Sigma the surface density of the
+    # mass component it names (an exponential disk, M / (2 pi rd^2)
+    # exp(-R / rd)) and h its rms height (kpc)
+    mass = [dict(
+        type='disk', name='gas', surface=dict(type='exponential'),
+        vertical=dict(type='thin'))]
+    balanced = galaxy(
+        with_kinematics(
+            DISK, equilibrium='self_gravitating', equilibrium_density='gas'),
+        mass=mass, distance=dict(type='direct', cosmology='Planck18'))
+    params = PROPERTIES | dict(distance=10, mass_gas_log_m=9, mass_gas_rd=0.3)
+    extra = {}
+    given = balanced.plan_gravity().evaluate(params, extra)
+    table = extra['component0_equilibrium']
+    R = np.array(balanced.constants()['subrnodes']) * KPC_PER_ARCSEC
+    surface = 1e9 / (2 * np.pi * 0.3 ** 2) * np.exp(-R / 0.3)
+    np.testing.assert_allclose(table['surface_density'], surface, rtol=1e-12)
+    np.testing.assert_allclose(
+        table['sigma'],
+        np.sqrt(2 * np.sqrt(3) * G * surface * 1 * KPC_PER_ARCSEC),
+        rtol=1e-6)
+    np.testing.assert_array_equal(
+        given[0][EQUILIBRIUM_DISPERSION], table['sigma'])
+    kinematics = galaxy_parser.dump(balanced)['components'][0]['kinematics']
+    assert kinematics['equilibrium_density'] == 'gas'
+
+
+@pytest.mark.parametrize('disk, info, message', [
+    (with_kinematics(DISK, equilibrium_density='gas'), {},
+     "required for it, and only for it"),
+    (with_kinematics(DISK, equilibrium='self_gravitating'), {},
+     "required for it, and only for it"),
+    (with_kinematics(
+        DISK, equilibrium='self_gravitating', equilibrium_density='gas'),
+     {}, "needs the mass of its galaxy"),
+    (with_kinematics(
+        DISK, equilibrium='self_gravitating', equilibrium_density='dust'),
+     dict(mass=[dict(type='point', name='gas')],
+          distance=dict(type='direct')), "which its galaxy does not have")])
+def test_self_gravitating_equilibrium_is_checked(disk, info, message):
+    with pytest.raises(ConfigError, match=message):
+        galaxy(disk, **info)
 
 
 @pytest.mark.parametrize('disk, message', [
