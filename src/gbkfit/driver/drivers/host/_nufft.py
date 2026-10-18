@@ -28,10 +28,12 @@ class DriverNUFFTHost(DriverNUFFT):
             points: tuple[np.ndarray, ...],
             frequencies: tuple[np.ndarray, ...],
             sign: int,
-            eps: float
+            eps: float,
+            ntransforms: int
     ) -> NUFFT:
         plan = finufft.Plan(
-            3, len(points), eps=eps, isign=sign, dtype=np.complex128)
+            3, len(points), n_trans=ntransforms, eps=eps, isign=sign,
+            dtype=np.complex128)
         plan.setpts(**_points(points, frequencies))
         return _NUFFTHost(plan)
 
@@ -40,10 +42,12 @@ class DriverNUFFTHost(DriverNUFFT):
             points: tuple[np.ndarray, ...],
             shape: tuple[int, ...],
             sign: int,
-            eps: float
+            eps: float,
+            ntransforms: int
     ) -> NUFFT:
         plan = finufft.Plan(
-            1, shape, eps=eps, isign=sign, dtype=np.complex128)
+            1, shape, n_trans=ntransforms, eps=eps, isign=sign,
+            dtype=np.complex128)
         plan.setpts(**_points(points))
         return _NUFFTHost(plan)
 

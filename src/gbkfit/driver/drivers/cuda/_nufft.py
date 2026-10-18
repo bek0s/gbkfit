@@ -33,19 +33,22 @@ class DriverNUFFTCuda(DriverNUFFT):
             points: tuple[np.ndarray, ...],
             frequencies: tuple[np.ndarray, ...],
             sign: int,
-            eps: float
+            eps: float,
+            ntransforms: int
     ) -> NUFFT:
         return self._nufft(
-            3, len(points), _points(points, frequencies), sign, eps)
+            3, len(points), _points(points, frequencies), sign, eps,
+            ntransforms)
 
     def _type1(
             self,
             points: tuple[np.ndarray, ...],
             shape: tuple[int, ...],
             sign: int,
-            eps: float
+            eps: float,
+            ntransforms: int
     ) -> NUFFT:
-        return self._nufft(1, shape, _points(points), sign, eps)
+        return self._nufft(1, shape, _points(points), sign, eps, ntransforms)
 
     def _type2(
             self,
@@ -64,7 +67,7 @@ class DriverNUFFTCuda(DriverNUFFT):
             points: dict[str, np.ndarray],
             sign: int,
             eps: float,
-            ntransforms: int = 1
+            ntransforms: int
     ) -> NUFFT:
         """
         Return a NUFFT of a cuFINUFFT plan of a type, of the arguments of

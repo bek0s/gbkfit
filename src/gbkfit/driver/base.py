@@ -248,7 +248,8 @@ class DriverNUFFT(abc.ABC):
             points: np.ndarray,
             frequencies: np.ndarray,
             sign: int,
-            eps: float
+            eps: float,
+            ntransforms: int = 1
     ) -> NUFFT:
         """
         Return the NUFFT from points to frequencies (type 3),
@@ -266,13 +267,16 @@ class DriverNUFFT(abc.ABC):
             The sign of the exponent.
         eps : float
             The relative tolerance.
+        ntransforms : int, optional
+            The number of sets of values of each transform: its input is of
+            shape (ntransforms, n), and its output (ntransforms, m).
 
         Raises
         ------
         ValueError
             If the points or the frequencies are not of 1 to 3 dimensions,
-            or not of the same, the sign is not -1 or 1, or the tolerance
-            not positive.
+            or not of the same, the sign is not -1 or 1, the tolerance not
+            positive, or the number of sets not a positive integer.
         """
         points = _nufft_columns(points, 'points', 2 * np.pi)
         frequencies = _nufft_columns(frequencies, 'frequencies', 1)
@@ -280,15 +284,16 @@ class DriverNUFFT(abc.ABC):
             raise ValueError(
                 f"the frequencies must be of the dimensions of the points "
                 f"({len(points)}); they are of {len(frequencies)}")
-        _check_nufft_options(sign, eps)
-        return self._type3(points, frequencies, sign, eps)
+        _check_nufft_options(sign, eps, ntransforms)
+        return self._type3(points, frequencies, sign, eps, int(ntransforms))
 
     def type1(
             self,
             points: np.ndarray,
             shape: tuple[int, ...],
             sign: int,
-            eps: float
+            eps: float,
+            ntransforms: int = 1
     ) -> NUFFT:
         """
         Return the NUFFT from points to the modes of an array (type 1): of
@@ -310,17 +315,20 @@ class DriverNUFFT(abc.ABC):
             The sign of the exponent.
         eps : float
             The relative tolerance.
+        ntransforms : int, optional
+            The number of sets of values of each transform: its input is of
+            shape (ntransforms, n), and its output (ntransforms, *shape).
 
         Raises
         ------
         ValueError
             If the points are not of 1 to 3 dimensions, or not of those of
-            the array, the sign is not -1 or 1, or the tolerance not
-            positive.
+            the array, the sign is not -1 or 1, the tolerance not positive,
+            or the number of sets not a positive integer.
         """
         points, shape = _array_points(points, shape)
-        _check_nufft_options(sign, eps)
-        return self._type1(points, shape, sign, eps)
+        _check_nufft_options(sign, eps, ntransforms)
+        return self._type1(points, shape, sign, eps, int(ntransforms))
 
     def type2(
             self,
@@ -363,11 +371,7 @@ class DriverNUFFT(abc.ABC):
             positive, or the number of arrays not a positive integer.
         """
         points, shape = _array_points(points, shape)
-        _check_nufft_options(sign, eps)
-        if not isinstance(ntransforms, numbers.Integral) or ntransforms < 1:
-            raise ValueError(
-                f"ntransforms must be a positive integer; it is "
-                f"{ntransforms!r}")
+        _check_nufft_options(sign, eps, ntransforms)
         return self._type2(points, shape, sign, eps, int(ntransforms))
 
     @abc.abstractmethod
@@ -376,7 +380,8 @@ class DriverNUFFT(abc.ABC):
             points: tuple[np.ndarray, ...],
             frequencies: tuple[np.ndarray, ...],
             sign: int,
-            eps: float
+            eps: float,
+            ntransforms: int
     ) -> NUFFT:
         """
         Return the NUFFT of type 3 (see type3) of checked arguments: the
@@ -389,7 +394,8 @@ class DriverNUFFT(abc.ABC):
             points: tuple[np.ndarray, ...],
             shape: tuple[int, ...],
             sign: int,
-            eps: float
+            eps: float,
+            ntransforms: int
     ) -> NUFFT:
         """
         Return the NUFFT of type 1 (see type1) of checked arguments: the
@@ -447,12 +453,18 @@ def _array_points(
     return points, shape
 
 
-def _check_nufft_options(sign: int, eps: float) -> None:
-    """Check the sign of the exponent and the tolerance of a NUFFT."""
+def _check_nufft_options(sign: int, eps: float, ntransforms: int) -> None:
+    """
+    Check the sign of the exponent, the tolerance and the number of sets
+    of values of a NUFFT.
+    """
     if sign not in (-1, 1):
         raise ValueError(f"sign must be -1 or 1; it is {sign}")
     if not eps > 0:
         raise ValueError(f"eps must be positive; it is {eps}")
+    if not isinstance(ntransforms, numbers.Integral) or ntransforms < 1:
+        raise ValueError(
+            f"ntransforms must be a positive integer; it is {ntransforms!r}")
 
 
 class Driver(parseutils.TypedSerializable, abc.ABC):

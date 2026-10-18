@@ -27,30 +27,33 @@ def relative_error(result, expected):
 
 
 def test_type3_is_the_direct_sum(driver):
-    # Phases of up to 60 rad along each axis
+    # Phases of up to 60 rad along each axis; two sets of values at once
     rng = np.random.default_rng(1)
     points = rng.uniform(-1, 1, (300, 3)) * [0.001, 0.001, 0.0005]
     frequencies = rng.uniform(-1, 1, (200, 3)) * 1e4
-    strengths = rng.standard_normal(300) + 1j * rng.standard_normal(300)
-    plan = driver.nufft().type3(points, frequencies, -1, EPS)
-    result = transform(driver, plan, strengths, (200,))
-    expected = np.exp(-2j * np.pi * frequencies @ points.T) @ strengths
+    strengths = rng.standard_normal((2, 300)) \
+        + 1j * rng.standard_normal((2, 300))
+    plan = driver.nufft().type3(points, frequencies, -1, EPS, ntransforms=2)
+    result = transform(driver, plan, strengths, (2, 200))
+    expected = strengths @ np.exp(-2j * np.pi * frequencies @ points.T).T
     assert relative_error(result, expected) < ERROR
 
 
 def test_type1_is_the_direct_sum(driver):
     # An image of 5 x 8 pixels (odd and even axes): f[q] at the modes
-    # k = q - shape // 2, a column of the points for each axis
+    # k = q - shape // 2, a column of the points for each axis; two sets of
+    # values at once
     rng = np.random.default_rng(2)
     shape = (5, 8)
     points = rng.uniform(-0.5, 0.5, (300, 2))
-    strengths = rng.standard_normal(300) + 1j * rng.standard_normal(300)
-    plan = driver.nufft().type1(points, shape, 1, EPS)
-    result = transform(driver, plan, strengths, shape)
+    strengths = rng.standard_normal((2, 300)) \
+        + 1j * rng.standard_normal((2, 300))
+    plan = driver.nufft().type1(points, shape, 1, EPS, ntransforms=2)
+    result = transform(driver, plan, strengths, (2, *shape))
     ky, kx = modes(shape)
-    expected = np.exp(2j * np.pi * (
-        ky[..., None] * points[:, 0] + kx[..., None] * points[:, 1])) \
-        @ strengths
+    phases = np.exp(2j * np.pi * (
+        ky[..., None] * points[:, 0] + kx[..., None] * points[:, 1]))
+    expected = np.einsum('yxj,tj->tyx', phases, strengths)
     assert relative_error(result, expected) < ERROR
 
 
@@ -88,6 +91,6 @@ def test_arrays_need_an_axis_for_each_dimension(driver):
         driver.nufft().type1(np.zeros((4, 2)), (8,), 1, EPS)
 
 
-def test_type2_needs_a_positive_number_of_arrays(driver):
+def test_transforms_need_a_positive_number_of_sets_of_values(driver):
     with pytest.raises(ValueError, match="ntransforms"):
         driver.nufft().type2(np.zeros((4, 2)), (8, 8), -1, EPS, 0)
