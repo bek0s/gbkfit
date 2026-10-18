@@ -1,6 +1,7 @@
 from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, Any
 
+import astropy.units
 import numpy as np
 
 from gbkfit.dataset import Data, Dataset, DatasetVisibilities, UVCoverage
@@ -9,7 +10,7 @@ from gbkfit.instrument import Instrument
 from gbkfit.model import LineEmission
 from gbkfit.model.components._units import DataUnit
 from gbkfit.params import ParamValues
-from gbkfit.utils import gridutils
+from gbkfit.utils import gridutils, unitutils
 from gbkfit.utils.parseutils import ConfigError
 from . import _dcube, _detail
 from ._uv_transforms import UVTransform, uv_transforms
@@ -59,12 +60,11 @@ class Visibilities(Observable):
     data, which give it; without data, the coverage is a file of its
     arrays (see UVCoverage.from_file).
 
-    Not supported yet: mock visibilities (noise drawn from their errors;
-    see VisibilitiesPlan.mock); averaging the visibilities in time or
-    frequency (an approximation, to be opt-in); the spatial weights of
-    data; the unit of the dirty images (Jy/beam for data in Jy); one
-    observable of several pointings (a mosaic is one observation each,
-    fitted jointly).
+    The spatial weights of data do not apply (the data are not pixels);
+    a mosaic is one observation for each pointing, fitted jointly. Not
+    supported yet: mock visibilities (noise drawn from their errors; see
+    VisibilitiesPlan.mock); averaging the visibilities in time or
+    frequency (an approximation, to be opt-in).
 
     Parameters
     ----------
@@ -263,10 +263,17 @@ class Visibilities(Observable):
             self,
             driver: Driver,
             values: Mapping[str, np.ndarray],
-            weights: Mapping[str, np.ndarray] | None
+            weights: Mapping[str, np.ndarray] | None,
+            units: Mapping[str, astropy.units.UnitBase | None] | None
     ) -> dict[str, gridutils.GridData]:
-        return dict(dirty=self._dirty_image(
-            driver, values['re'] + 1j * values['im'], weights))
+        # (of visibilities in Jy, a dirty image is in Jy/beam)
+        image = self._dirty_image(
+            driver, values['re'] + 1j * values['im'], weights)
+        unit = None if units is None else units['re']
+        if unit is not None:
+            image = image._replace(
+                unit=unitutils.format_unit(unit / astropy.units.beam))
+        return dict(dirty=image)
 
     def psf_images(
             self,
@@ -331,7 +338,9 @@ class Visibilities(Observable):
                 f"would damp the long baselines): give a smaller step "
                 f"instead; the spatial scale is {tuple(scale[:2])}")
         if weights is not None:
-            raise ConfigError("visibilities do not support weights")
+            raise ConfigError(
+                "the spatial weights of data do not apply to visibilities, "
+                "which are not on pixels")
         dcube = _dcube.DCube(
             size=self.size(),
             step=self.step(),

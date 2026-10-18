@@ -329,7 +329,8 @@ class Observable(parseutils.TypedSerializable, abc.ABC):
             self,
             driver: Driver,
             values: Mapping[str, np.ndarray],
-            weights: Mapping[str, np.ndarray] | None
+            weights: Mapping[str, np.ndarray] | None,
+            units: Mapping[str, astropy.units.UnitBase | None] | None
     ) -> dict[str, gridutils.GridData]:
         """
         Return images of values of its data items, as outputs (e.g. the
@@ -349,6 +350,9 @@ class Observable(parseutils.TypedSerializable, abc.ABC):
         weights : Mapping, optional
             The weights of the values of each data item (e.g. 1 / error^2);
             all 1 if None.
+        units : Mapping, optional
+            The unit of the values of each data item, if known (e.g. those
+            of the data).
 
         Returns
         -------

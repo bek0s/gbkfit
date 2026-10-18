@@ -362,9 +362,15 @@ def data_outputs(group: ObservationGroup) -> dict[str, Any]:
         weights = _weights(dataset)
         images = observable.images(
             driver, {key: dataset[key].data() for key in observable.keys()},
-            weights) | observable.psf_images(driver, weights)
+            weights, _units(dataset)) | observable.psf_images(driver, weights)
         outputs |= {f'data_{i}_{name}': x for name, x in images.items()}
     return outputs
+
+
+def _units(dataset: Any) -> dict[str, Any] | None:
+    """Return the units of the data items of a dataset; None without data."""
+    return None if dataset is None \
+        else {key: x.unit() for key, x in dataset.items()}
 
 
 def _weights(dataset: Any) -> dict[str, np.ndarray] | None:
@@ -482,16 +488,17 @@ def _images(
     dataset = observation.data()
     driver = observation.driver()
     weights = _weights(dataset)
+    units = _units(dataset)
     images = {
-        f'{model_prefix}_{name}': x
-        for name, x in observable.images(driver, model, weights).items()}
+        f'{model_prefix}_{name}': x for name, x in observable.images(
+            driver, model, weights, units).items()}
     # (an observable that makes no images of its model makes none of the
     # residual either)
     if images and dataset is not None:
         residual = {key: dataset[key].data() - model[key] for key in model}
         images |= {
             f'{residual_prefix}_{name}': x for name, x in observable.images(
-                driver, residual, weights).items()}
+                driver, residual, weights, units).items()}
     return images
 
 

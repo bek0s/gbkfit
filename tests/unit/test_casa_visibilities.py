@@ -65,7 +65,9 @@ def test_the_dirty_image_of_casa_is_the_point(driver):
     weights = {key: 1 / dataset[key].error() ** 2 for key in ('re', 'im')}
     dirty = observable.images(
         driver, {key: dataset[key].data() for key in ('re', 'im')},
-        weights)['dirty'].data
+        weights, {key: dataset[key].unit() for key in ('re', 'im')})['dirty']
+    assert dirty.unit == 'Jy beam-1'
+    dirty = dirty.data
     beam = observable.psf_images(driver, weights)['dirty_beam'].data
     for image, peak in ((dirty, (20 + 15, 30 - 20)), (beam, (20, 30))):
         assert np.unravel_index(np.argmax(image[0]), image[0].shape) == peak
