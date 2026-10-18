@@ -240,7 +240,9 @@ class DriverNUFFT(abc.ABC):
     They are of float64, of complex128 arrays: float32 rounds phases of
     hundreds of radians to more than the tolerance (e.g. errors of 4e-5 in
     the visibilities of 256 x 256 pixels sampling 8 km baselines at 21 cm,
-    measured 2026-10-18).
+    measured 2026-10-18). Not supported yet: float32 NUFFTs, as an opt-in
+    approximation (about twice as fast on a GPU; cuFINUFFT 2.5.1 then needs
+    upsampfac=2 for type 3 to reach its tolerance).
     """
 
     def type3(

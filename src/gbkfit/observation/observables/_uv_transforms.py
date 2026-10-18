@@ -45,7 +45,10 @@ class UVTransform(abc.ABC):
     p)).
 
     Each channel is transformed by a NUFFT made for it in each call, so
-    that the memory of the device holds those of one channel only.
+    that the memory of the device holds those of one channel only. Not
+    done yet: keeping the NUFFTs of the channels that fit in its memory
+    (an exact speed-up: their setup took 1/8 to 1 times as long as their
+    transform, measured 2026-10-19).
 
     Parameters
     ----------

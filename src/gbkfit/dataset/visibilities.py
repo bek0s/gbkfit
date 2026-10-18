@@ -49,13 +49,16 @@ class UVCoverage:
         those of a measurement set are -UVW (see
         DatasetVisibilities.from_ms).
     frequencies : Sequence of float
-        The frequencies of the channels (Hz): uniform, in the rest frame
-        given.
+        The frequencies of the channels (Hz): at least two, uniform, in
+        the rest frame given (not supported yet: the one channel of
+        continuum visibilities).
     phase_centre : Sequence of float
         The RA and Dec of the phase centre (degrees).
     frame : str
         The rest frame of the frequencies: 'LSRK' or 'BARY' (for TOPO
-        ones, regrid them, e.g. by CASA mstransform with outframe='LSRK').
+        ones, regrid them, e.g. by CASA mstransform with outframe='LSRK';
+        not supported yet: TOPO frequencies with the Doppler shift of the
+        time of each row).
     rest : str or Quantity
         The rest frequency of the line, of the radio velocities of the
         channels (see gridutils.make_rest; e.g. '1420.405752 MHz').
@@ -318,6 +321,11 @@ class DatasetVisibilities(Dataset):
         sums of exp(+2 pi i UVW . (s - p)), so their baselines b (see
         UVCoverage) are -UVW (checked against those that CASA predicts;
         see tests/data/visibilities).
+
+        Not supported yet: errors estimated from the scatter of the
+        visibilities (for weights of the wrong scale, fit a noise scale);
+        several fields or spectral windows in one dataset (one dataset
+        each).
 
         Parameters
         ----------

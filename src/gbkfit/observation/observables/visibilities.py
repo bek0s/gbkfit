@@ -59,6 +59,13 @@ class Visibilities(Observable):
     data, which give it; without data, the coverage is a file of its
     arrays (see UVCoverage.from_file).
 
+    Not supported yet: mock visibilities (noise drawn from their errors;
+    see VisibilitiesPlan.mock); averaging the visibilities in time or
+    frequency (an approximation, to be opt-in); the spatial weights of
+    data; the unit of the dirty images (Jy/beam for data in Jy); one
+    observable of several pointings (a mosaic is one observation each,
+    fitted jointly).
+
     Parameters
     ----------
     coverage : UVCoverage
@@ -397,6 +404,9 @@ class VisibilitiesPlan(_detail.DCubePlanBase):
             rng: np.random.Generator,
             ndraws: int
     ) -> list[HostModelData]:
+        # Not supported yet: the noise of visibilities is that of each of
+        # their values (their errors), not that of a cube (see Noise.draw),
+        # so mocks need a noise of their own
         raise ConfigError("mock visibilities are not supported yet")
 
     def _measure(self) -> ModelData:

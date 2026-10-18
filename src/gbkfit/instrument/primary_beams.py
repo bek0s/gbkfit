@@ -215,7 +215,8 @@ class PrimaryBeamImage(PrimaryBeam):
     A response given as an image with its world coordinates (e.g. the
     primary beam that an imaging package writes with the data), placed by
     its RA and Dec, sampled at the pixels (bilinearly), and 0 beyond the
-    image.
+    image: the same at all frequencies (not supported yet: a cube of an
+    image for each channel, e.g. a CASA .pb cube).
 
     Its configuration has its file (a filename, or a dict with the
     filename and the HDU); the world coordinates come from the header,
