@@ -8,6 +8,7 @@ import copy
 
 import numpy as np
 import pytest
+import scipy.integrate
 
 from gbkfit.model import galaxy_parser
 from gbkfit.model.components.disks._disk import EQUILIBRIUM_DISPERSION
@@ -161,6 +162,58 @@ def test_pressure_support_takes_the_dispersion_of_the_equilibrium():
     np.testing.assert_allclose(rotation, expected, rtol=1e-10)
 
 
+def test_jeans_equilibrium_in_a_point_mass():
+    # sigma^2 = int_0^zmax rho(z) G M z / (R^2 + z^2)^(3/2) dz / rho(0)
+    # (kpc), rho the Gaussian of the disk; at the centre, the next subnode
+    balanced = galaxy(
+        with_kinematics(DISK, equilibrium='jeans'),
+        mass=[dict(type='point', name='bh')],
+        distance=dict(type='direct', cosmology='Planck18'))
+    params = PROPERTIES | dict(distance=10, mass_bh_log_m=10)
+    extra = {}
+    balanced.plan_gravity().evaluate(params, extra)
+    sigma = extra['component0_equilibrium']['sigma']
+    radii = np.array(balanced.constants()['subrnodes'])
+
+    def weight(R):
+        R = R * KPC_PER_ARCSEC
+        return scipy.integrate.quad(
+            lambda z: np.exp(-z ** 2 / 2) * G * 1e10 * z * KPC_PER_ARCSEC
+            / (R ** 2 + (z * KPC_PER_ARCSEC) ** 2) ** 1.5 * KPC_PER_ARCSEC,
+            0, 10, epsabs=0, epsrel=1e-12, limit=200)[0]
+    np.testing.assert_allclose(
+        sigma[1:] ** 2, [weight(R) for R in radii[1:]], rtol=1e-8)
+    assert sigma[0] == sigma[1]
+
+
+def test_jeans_equilibrium_of_a_thin_self_gravitating_layer():
+    # In its own gravity alone (a mass disk of its density), a layer thin
+    # against its radius is the isothermal slab of the self-gravitating
+    # equilibrium: sigma^2 = 2 sqrt(3) G Sigma h, to about h / rd
+    disk = with_kinematics(DISK, equilibrium='jeans') | dict(
+        name='gas', density=dict(
+            ptraits=dict(type='exponential'),
+            htraits=dict(type='sech2', zmax=2)))
+    balanced = galaxy(
+        disk, mass=[dict(
+            type='disk', name='gas', surface=dict(type='component',
+                                                  component='gas'),
+            vertical=dict(type='component', component='gas'))],
+        distance=dict(type='direct', cosmology='Planck18'))
+    params = {f'gas_{key}': value for key, value in PROPERTIES.items()} \
+        | dict(gas_ht_s=0.05, distance=10, mass_gas_upsilon=1e9)
+    extra = {}
+    balanced.plan_gravity().evaluate(params, extra)
+    table = extra['gas_equilibrium']
+    radii = np.array(table['radius'])
+    inner = (radii > 2) & (radii < 12)
+    surface = 1e9 * np.exp(-radii / 4)
+    expected = 2 * np.sqrt(3) * G * surface * np.array(table['height']) \
+        * KPC_PER_ARCSEC
+    np.testing.assert_allclose(
+        table['sigma'][inner] ** 2, expected[inner], rtol=2e-2)
+
+
 @pytest.mark.parametrize('disk, info, message', [
     (with_kinematics(DISK, equilibrium_density='gas'), {},
      "required for it, and only for it"),
@@ -169,6 +222,8 @@ def test_pressure_support_takes_the_dispersion_of_the_equilibrium():
     (with_kinematics(
         DISK, equilibrium='self_gravitating', equilibrium_density='gas'),
      {}, "needs the mass of its galaxy"),
+    (with_kinematics(DISK, equilibrium='jeans'), {},
+     "needs the mass of its galaxy"),
     (with_kinematics(
         DISK, equilibrium='self_gravitating', equilibrium_density='dust'),
      dict(mass=[dict(type='point', name='gas')],
@@ -176,6 +231,17 @@ def test_pressure_support_takes_the_dispersion_of_the_equilibrium():
 def test_self_gravitating_equilibrium_is_checked(disk, info, message):
     with pytest.raises(ConfigError, match=message):
         galaxy(disk, **info)
+
+
+def test_jeans_equilibrium_needs_vertical_forces(tmp_path):
+    (tmp_path / 'curve.py').write_text(
+        "def vcirc2(R, params):\n    return 100 * R\n")
+    with pytest.raises(ConfigError, match=r"\['mine'\] do not give"):
+        galaxy(
+            with_kinematics(DISK, equilibrium='jeans'),
+            mass=[dict(type='user', name='mine',
+                       file=str(tmp_path / 'curve.py'), func='vcirc2')],
+            distance=dict(type='direct'))
 
 
 @pytest.mark.parametrize('disk, message', [

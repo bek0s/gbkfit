@@ -48,6 +48,7 @@ import functools
 from collections.abc import Callable
 
 import numpy as np
+import scipy.sparse
 import scipy.special
 
 from ._disk_gravity import (
@@ -183,6 +184,68 @@ def _interpolate(tables: np.ndarray, zeta: np.ndarray) -> np.ndarray:
     return np.sign(zeta) * value
 
 
+def _catmull_rom(zeta: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Return the rows of _ZETAS and their coefficients that interpolate C at
+    the heights zeta (see _interpolate): arrays of the shape of zeta and 4
+    (rows i - 1 to i + 2), the sign of zeta in the coefficients.
+    """
+    size = np.abs(zeta)
+    step = _LN_ZETAS[1] - _LN_ZETAS[0]
+    u = (np.log(np.maximum(size, _ZETAS[0])) - _LN_ZETAS[0]) / step
+    i = np.clip(np.floor(u).astype(int), 1, len(_ZETAS) - 3)
+    t = (u - i)[..., None]
+    coefficients = np.concatenate((
+        t * (-1 + t * (2 - t)), 2 + t * t * (-5 + 3 * t),
+        t * (1 + t * (4 - 3 * t)), t * t * (t - 1)), axis=-1) / 2
+    rows = i[..., None] + np.arange(-1, 3)
+    low = size < _ZETAS[0]
+    rows = np.where(low[..., None], 0, rows)
+    coefficients = np.where(
+        low[..., None], np.array([1.0, 0, 0, 0]) * (size / _ZETAS[0])[
+            ..., None], coefficients)
+    return rows, coefficients * np.sign(zeta)[..., None]
+
+
+@dataclasses.dataclass(frozen=True)
+class _ThickPlan:
+    """
+    How the sheets and the slab of a thick disk are summed at the points
+    of one radius (see _Stack.thick), from its geometry: the sum of C of
+    its sheets at +h and -h, times the weights of the heights, as a
+    sparse map of the table of C at the radius (sheets: of shape
+    (points, len(_ZETAS) * len(_HEIGHTS))); and the quadrature of the
+    slab between the sorted |z| of the points (nodes and weights on each
+    interval from the last, relative to the outer radius of the disk, and
+    the index of each point among the sorted heights).
+    """
+    sheets: scipy.sparse.csr_array
+    nodes: np.ndarray
+    weights: np.ndarray
+    order: np.ndarray
+
+
+@functools.lru_cache(maxsize=64)
+def _thick_plan(heights_key: bytes) -> _ThickPlan:
+    z = np.frombuffer(heights_key) / _KEY_RESOLUTION
+    npoints, nheights = len(z), len(_HEIGHTS)
+    sheets = []
+    for side in (-1, 1):
+        rows, coefficients = _catmull_rom(z[:, None] + side * _HEIGHTS)
+        sheets.append(scipy.sparse.csr_array(
+            ((coefficients * _HEIGHT_WEIGHTS[:, None]).ravel(), (
+                np.repeat(np.arange(npoints), nheights * 4),
+                (rows * nheights + np.arange(nheights)[:, None]).ravel())),
+            shape=(npoints, len(_ZETAS) * nheights)))
+    sizes, order = np.unique(np.abs(z), return_inverse=True)
+    lo = np.concatenate(([0], sizes[:-1]))[:, None]
+    hi = sizes[:, None]
+    x, w = np.polynomial.legendre.leggauss(8)
+    return _ThickPlan(
+        sheets[0] + sheets[1], ((hi - lo) * x + hi + lo) / 2,
+        (hi - lo) * w / 2, order)
+
+
 class _Stack:
     """
     The points (R, z) (kpc, flat arrays) at which the vertical force of a
@@ -240,21 +303,19 @@ class _Stack:
         for index in np.unique(self._inverse):
             points = self._inverse == index
             z = self._z[points]
+            plan = _thick_plan(np.round(
+                z / scale * _KEY_RESOLUTION).tobytes())
             # The sheets at +h and -h, without their jumps, and the pull of
-            # the slab, int_0^|z| rho(R, h) dh (with the mean densities)
-            table = tables(index)[:, None, :]
-            height = _HEIGHTS * scale
-            sheets = _interpolate(table, (z[:, None] - height) / scale) \
-                + _interpolate(table, (z[:, None] + height) / scale)
-            nodes = np.abs(z)[:, None] * _SLAB_X
+            # the slab, int_0^|z| rho(R, h) dh (with the mean densities),
+            # summed between the sorted heights
+            sheets = plan.sheets @ tables(index).ravel()
             pdfs = np.broadcast_to(
-                pdfs_at(self._R[points][:1], nodes.ravel()),
-                (means.shape[1], 1, nodes.size))
-            column = np.abs(z) * (
-                (means[index] @ pdfs[:, 0]).reshape(nodes.shape) @ _SLAB_W)
-            out[points] = G * (
-                scale * (sheets @ _HEIGHT_WEIGHTS)
-                - 4 * np.pi * column * np.sign(z))
+                pdfs_at(self._R[points][:1], scale * plan.nodes.ravel()),
+                (means.shape[1], 1, plan.nodes.size))
+            density = (means[index] @ pdfs[:, 0]).reshape(plan.nodes.shape)
+            column = np.cumsum(np.sum(density * plan.weights, axis=1))
+            out[points] = G * scale * (
+                sheets - 4 * np.pi * column[plan.order] * np.sign(z))
         return out
 
 

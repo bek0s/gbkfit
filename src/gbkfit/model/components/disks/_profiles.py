@@ -2,10 +2,11 @@
 The radial profiles of a disk, as its galaxy takes them for gravity: the
 azimuthal means of its traits, for the mass components that follow it
 (see mass.ComponentDensity), for its pressure support (see
-traits.VPTraitMass), and its rms height and rotation, for its vertical
-equilibrium (see parts.Kinematics).
+traits.VPTraitMass), and its rms height, rotation and jeans dispersion,
+for its vertical equilibrium (see parts.Kinematics).
 """
 
+import dataclasses
 from collections.abc import Callable, Sequence
 
 import numpy as np
@@ -17,6 +18,7 @@ from ._disk import Disk, DiskPlan
 
 __all__ = [
     'DiskDensity',
+    'jeans_dispersions',
     'pressure_support',
     'rms_heights',
     'rotation'
@@ -37,9 +39,9 @@ _AZIMUTHAL_TOLERANCE = 1e-6
 _NPOINTS_MIN = 4
 _NPOINTS_MAX = 256
 
-# The heights of the moments of the density height traits of a disk (see
-# rms_heights): Gauss-Legendre points on panels of geometric widths, from
-# 1e-9 of the zmax of each trait to its zmax (in units of it)
+# The heights of the vertical profile of a disk (see _VerticalProfile):
+# Gauss-Legendre points on panels of geometric widths, from 1e-9 of the
+# zmax of each density height trait to its zmax (in units of it)
 _HEIGHT_EDGES = np.concatenate(([0], np.geomspace(1e-9, 1, 22)))
 _HEIGHT_NPOINTS = 16
 
@@ -245,6 +247,81 @@ def _surface_densities(
         _edges(disk, params, kinds, r[:, 0]))
 
 
+@dataclasses.dataclass(frozen=True)
+class _VerticalProfile:
+    """
+    The vertical profile of a thick disk at given radii (arcsec): the
+    heights above its midplane (z, arcsec) and their weights, and the
+    density at the radii and the heights (density, shape (radii,
+    heights)), sum_i S_i p_i(z), over its density polar traits (S_i,
+    their azimuthal means where its selection traits keep it) and their
+    density height traits (pdfs, as the disk evaluates them: truncated at
+    their zmax), with their integrals over z (mass, of shape (traits,
+    radii); 0 for a pdf of less than 0.001 of its profile within zmax).
+    By Gauss-Legendre quadrature on panels of geometric widths up to the
+    zmax of each height trait.
+    """
+    z: np.ndarray
+    weights: np.ndarray
+    surfaces: np.ndarray
+    pdfs: np.ndarray
+
+    @classmethod
+    def of(
+            cls,
+            disk: Disk,
+            plan: DiskPlan,
+            params: ParamValues,
+            radii: np.ndarray
+    ) -> '_VerticalProfile':
+        """
+        Return the profile of a disk at the radii (see rms_heights for the
+        arguments).
+
+        Raises
+        ------
+        ValueError
+            If a height pdf does not integrate to 1 (within 1e-6) where
+            its trait has density (see rms_heights).
+        """
+        params = _with_given(disk, params)
+        r = np.asarray(radii, dtype=float)
+        edges = np.unique(np.concatenate(
+            [_HEIGHT_EDGES * trait.zmax() for trait in disk.traits('rht')]))
+        x, w = np.polynomial.legendre.leggauss(_HEIGHT_NPOINTS)
+        lo, hi = edges[:-1, None], edges[1:, None]
+        z = ((hi - lo) / 2 * x + (hi + lo) / 2).ravel()
+        weights = ((hi - lo) / 2 * w).ravel()
+        pdfs = np.asarray(plan.evaluate_height_traits(
+            params, 'rht', r[:, None], z[None, :]), dtype=float)
+        surfaces = _surface_densities(disk, plan, params, r)
+        profile = cls(z, weights, surfaces, pdfs)
+        mass = profile.mass()
+        unresolved = (np.abs(mass - 1) > _PDF_TOLERANCE) & (mass != 0) \
+            & (surfaces != 0)
+        if np.any(unresolved):
+            worst = mass[unresolved][np.argmax(np.abs(mass[unresolved] - 1))]
+            raise ValueError(
+                f"a density height trait of a disk integrates to {worst} "
+                f"over the heights of its vertical profile, not 1: its "
+                f"heights are not resolved (e.g. a sharp cut below its "
+                f"zmax)")
+        return profile
+
+    def mass(self) -> np.ndarray:
+        """
+        Return the integral of each pdf over z (both sides of the
+        midplane): an array of shape (traits, radii).
+        """
+        return 2 * self.pdfs @ self.weights
+
+    def density(self) -> np.ndarray:
+        """
+        Return sum_i S_i p_i(z): an array of shape (radii, heights).
+        """
+        return np.einsum('tr,trz->rz', self.surfaces, self.pdfs)
+
+
 def rms_heights(
         disk: Disk,
         plan: DiskPlan,
@@ -279,33 +356,57 @@ def rms_heights(
         trait has density: its heights are not resolved (e.g. a sharp
         cut, such as that of a uniform height trait, below its zmax).
     """
-    params = _with_given(disk, params)
-    r = np.asarray(radii, dtype=float)
-    edges = np.unique(np.concatenate(
-        [_HEIGHT_EDGES * trait.zmax() for trait in disk.traits('rht')]))
-    x, w = np.polynomial.legendre.leggauss(_HEIGHT_NPOINTS)
-    lo, hi = edges[:-1, None], edges[1:, None]
-    z = ((hi - lo) / 2 * x + (hi + lo) / 2).ravel()
-    weights = ((hi - lo) / 2 * w).ravel()
-    pdfs = np.asarray(plan.evaluate_height_traits(
-        params, 'rht', r[:, None], z[None, :]), dtype=float)
+    profile = _VerticalProfile.of(disk, plan, params, radii)
     # (both sides of the midplane)
-    mass = 2 * pdfs @ weights
-    moment = 2 * pdfs @ (weights * z ** 2)
-    surfaces = _surface_densities(disk, plan, params, r)
-    # (a pdf of no mass: less than 0.001 of its profile within zmax)
-    unresolved = (np.abs(mass - 1) > _PDF_TOLERANCE) & (mass != 0) \
-        & (surfaces != 0)
-    if np.any(unresolved):
-        worst = mass[unresolved][np.argmax(np.abs(mass[unresolved] - 1))]
-        raise ValueError(
-            f"a density height trait of a disk integrates to {worst} over "
-            f"the heights of its rms height, not 1: its heights are not "
-            f"resolved (e.g. a sharp cut below its zmax)")
-    total = np.sum(surfaces * mass, axis=0)
+    total = np.sum(profile.surfaces * profile.mass(), axis=0)
+    moment = 2 * profile.density() @ (profile.weights * profile.z ** 2)
     return np.sqrt(np.divide(
-        np.sum(surfaces * moment, axis=0), total,
-        out=np.zeros_like(total), where=total > 0))
+        moment, total, out=np.zeros_like(total), where=total > 0))
+
+
+def jeans_dispersions(
+        disk: Disk,
+        plan: DiskPlan,
+        params: ParamValues,
+        radii: np.ndarray,
+        vertical_force: Callable[[np.ndarray, np.ndarray], np.ndarray]
+) -> np.ndarray:
+    """
+    Return the dispersion (km/s) of the jeans equilibrium of a thick disk
+    (see parts.Kinematics) at radii (arcsec, on the disk): sigma^2 = int_0^inf
+    rho(z) (-F_z(R, z)) dz / rho(0), the weight of the column of the disk
+    above its midplane over its density there, with its density of
+    rms_heights (on its heights) and the vertical force F_z of the mass
+    of its galaxy. 0 where it has no density at its midplane.
+
+    Parameters
+    ----------
+    disk : Disk
+        The disk.
+    plan : DiskPlan
+        A plan of the disk, which evaluates its traits.
+    params : ParamValues
+        The values of the parameters of the disk (see DiskDensity).
+    radii : np.ndarray
+        The radii (arcsec).
+    vertical_force : callable
+        The vertical force ((km/s)^2/arcsec) at the radii R and the
+        heights z (arcsec) of two arrays, broadcast together.
+
+    Raises
+    ------
+    ValueError
+        If a height pdf does not integrate to 1 (see rms_heights).
+    """
+    profile = _VerticalProfile.of(disk, plan, params, radii)
+    r = np.asarray(radii, dtype=float)[:, None]
+    midplane = np.sum(
+        profile.surfaces * _at_midplane(
+            disk, plan, _with_given(disk, params), 'rht', r)[..., 0], axis=0)
+    weight = (profile.density() * -vertical_force(r, profile.z[None, :])) \
+        @ profile.weights
+    return np.sqrt(np.divide(
+        weight, midplane, out=np.zeros_like(midplane), where=midplane > 0))
 
 
 def rotation(

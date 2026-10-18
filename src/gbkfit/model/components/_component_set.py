@@ -56,7 +56,9 @@ def _with_mass_params(
     component that is not a disk of the galaxy (see
     Component.density_disk), if the pressure support or the equilibrium
     of a disk takes the density of a mass component that the galaxy does
-    not have, or if the names of the parameters repeat.
+    not have, if a jeans equilibrium takes the vertical force of a mass
+    component that does not give it, or if the names of the parameters
+    repeat.
     """
     moved = any(cmp.circular_velocity_params() for cmp in components)
     balanced = [
@@ -116,13 +118,22 @@ def _with_mass_params(
                     f"{support.density!r}, which its galaxy does not have; "
                     f"its mass components: {mass_names}")
     for cmp in balanced:
-        density = cmp.density_disk().equilibrium().density
-        if density is not None and density not in mass_names:
+        equilibrium = cmp.density_disk().equilibrium()
+        if equilibrium.density is not None \
+                and equilibrium.density not in mass_names:
             raise ConfigError(
                 f"the vertical equilibrium of the component {cmp.name()!r} "
                 f"takes the surface density of the mass component "
-                f"{density!r}, which its galaxy does not have; its mass "
-                f"components: {mass_names}")
+                f"{equilibrium.density!r}, which its galaxy does not have; "
+                f"its mass components: {mass_names}")
+        if equilibrium.mode == 'jeans' and (forceless := [
+                component.name() for component in mass_model.components()
+                if not component.gives_vertical_force()]):
+            raise ConfigError(
+                f"the jeans equilibrium of the component {cmp.name()!r} "
+                f"takes the vertical force of every mass component of its "
+                f"galaxy, which {forceless} do not give (user components "
+                f"give their circular velocity only)")
     gravity = distance.pdescs() | mass_model.pdescs()
     if repeated := sorted(params.keys() & gravity.keys()):
         raise ConfigError(

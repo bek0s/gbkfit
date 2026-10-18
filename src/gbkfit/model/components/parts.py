@@ -135,7 +135,7 @@ class Density(parseutils.Serializable):
 
 
 # The modes of the vertical equilibrium of a disk (see Kinematics)
-EQUILIBRIUM_MODES = ('central', 'self_gravitating')
+EQUILIBRIUM_MODES = ('central', 'self_gravitating', 'jeans')
 
 
 @dataclasses.dataclass(frozen=True)
@@ -180,7 +180,16 @@ class Kinematics(parseutils.Serializable):
     (e.g. a mass disk that follows the disk) and h its rms height; exact
     for an isothermal slab of its own gravity, of the height profile
     sech^2(z / z0), z0 = sigma^2 / (pi G Sigma) (<z^2> = pi^2 z0^2 / 12);
-    NaN where Sigma is negative.
+    NaN where Sigma is negative. With 'jeans', the pull of all the mass of
+    its galaxy (the vertical Jeans equation, isothermal in z): sigma_eq^2
+    = int_0^inf rho(z) (-F_z(R, z)) dz / rho(0), the weight of the column
+    of the disk above its midplane over its density there (rho of its
+    density traits and density height traits), with F_z the vertical
+    force of every mass component (see mass.MassComponent.vertical_force:
+    not that of user components); exact for any mass and profile of the
+    height, given the isothermal dispersion. At the centre, the value at
+    the next subnode, as for 'central' (a point mass there makes it
+    infinite).
 
     Parameters
     ----------
@@ -197,7 +206,7 @@ class Kinematics(parseutils.Serializable):
         dispersion polar trait (as vhtraits).
     equilibrium : str, optional
         The vertical equilibrium of a thick disk: none (the default),
-        'central' or 'self_gravitating'.
+        'central', 'self_gravitating' or 'jeans'.
     equilibrium_density : str, optional
         The name of the mass component whose surface density holds a
         disk of a self-gravitating equilibrium up: required for it, and

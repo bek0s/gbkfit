@@ -20,11 +20,12 @@ from ..mass.units import G
 from ._units import mass_per_unit
 from .disks._disk import EQUILIBRIUM_DISPERSION
 from .disks._profiles import (
-    DiskDensity, pressure_support, rms_heights, rotation)
+    DiskDensity, jeans_dispersions, pressure_support, rms_heights, rotation)
 from .traits import PressureSupport
 
 if TYPE_CHECKING:
     from ._component_set import ComponentSet
+    from .disks._disk import Disk, DiskPlan
 
 
 __all__ = [
@@ -152,8 +153,9 @@ class GravityPlan:
             arcsec), its rms height there ('height', arcsec), what its
             equilibrium takes there: the circular velocity ('vcirc', km/s;
             'central') or the surface density ('surface_density',
-            Msun/kpc^2; 'self_gravitating'), and the dispersion of its
-            equilibrium ('sigma', km/s). The components are named after
+            Msun/kpc^2; 'self_gravitating'; none for 'jeans'), and the
+            dispersion of its equilibrium ('sigma', km/s). The components
+            are named after
             their names, or their positions ('component0'). With them and
             mass, a warning says where the rings of the disks it moves,
             holds up and follows depart from the centre or the plane of
@@ -283,6 +285,9 @@ class GravityPlan:
                 vcirc2 = rotation(disk, plan, params, radii) ** 2
             sigma = _central_dispersion(radii, heights, vcirc2)
             taken = dict(vcirc=_signed_sqrt(vcirc2) * u.km / u.s)
+        elif equilibrium.mode == 'jeans':
+            sigma = _jeans_dispersion(disk, plan, params, radii, mass)
+            taken = {}
         else:
             name = equilibrium.density
             surface = mass.model.component(name).surface_density(
@@ -386,6 +391,33 @@ def _central_dispersion(
         omega2[0] = omega2[1]
     return heights * np.sqrt(
         np.where(np.isfinite(omega2) & (omega2 >= 0), omega2, np.nan))
+
+
+def _jeans_dispersion(
+        disk: 'Disk',
+        plan: 'DiskPlan',
+        params: ParamValues,
+        radii: np.ndarray,
+        mass: _Mass
+) -> np.ndarray:
+    """
+    Return the dispersion (km/s) of the jeans equilibrium (see Kinematics)
+    of a disk at its subnodes (radii, arcsec), in the vertical force of
+    the mass of its galaxy (see jeans_dispersions); at the centre, the
+    value at the next subnode.
+    """
+    kpc = mass.kpc_per_arcsec
+
+    def vertical_force(R: np.ndarray, z: np.ndarray) -> np.ndarray:
+        R, z = np.broadcast_arrays(R, z)
+        return mass.model.vertical_force(
+            R * kpc, z * kpc, mass.params, mass.context) * kpc
+    off = radii > 0
+    sigma = np.empty_like(radii)
+    sigma[off] = jeans_dispersions(
+        disk, plan, params, radii[off], vertical_force)
+    sigma[~off] = sigma[off][0]
+    return sigma
 
 
 def _self_gravitating_dispersion(
