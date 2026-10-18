@@ -11,10 +11,15 @@ import pytest
 EPS, ERROR = 1e-12, 1e-11
 
 
-def transform(driver, nufft, strengths, shape):
+def transform(driver, nufft, data, shape):
     out = driver.mem_alloc_d(shape, np.complex128)
-    nufft(driver.mem_copy_h2d(strengths), out)
+    nufft(driver.mem_copy_h2d(data), out)
     return driver.mem_copy_d2h(out)
+
+
+def modes(shape):
+    """Return the integer frequencies k = q - shape // 2 of each axis."""
+    return np.indices(shape) - np.array(shape)[:, None, None] // 2
 
 
 def relative_error(result, expected):
@@ -42,10 +47,26 @@ def test_type1_is_the_direct_sum(driver):
     strengths = rng.standard_normal(300) + 1j * rng.standard_normal(300)
     plan = driver.nufft().type1(points, shape, 1, EPS)
     result = transform(driver, plan, strengths, shape)
-    ky, kx = np.indices(shape) - np.array(shape)[:, None, None] // 2
+    ky, kx = modes(shape)
     expected = np.exp(2j * np.pi * (
         ky[..., None] * points[:, 0] + kx[..., None] * points[:, 1])) \
         @ strengths
+    assert relative_error(result, expected) < ERROR
+
+
+def test_type2_is_the_direct_sum_of_each_array(driver):
+    # Three arrays of 5 x 8 modes at once
+    rng = np.random.default_rng(3)
+    shape = (5, 8)
+    points = rng.uniform(-0.5, 0.5, (300, 2))
+    arrays = rng.standard_normal((3, *shape)) \
+        + 1j * rng.standard_normal((3, *shape))
+    plan = driver.nufft().type2(points, shape, -1, EPS, ntransforms=3)
+    result = transform(driver, plan, arrays, (3, 300))
+    ky, kx = modes(shape)
+    phases = np.exp(-2j * np.pi * (
+        points[:, 0, None, None] * ky + points[:, 1, None, None] * kx))
+    expected = np.einsum('jyx,tyx->tj', phases, arrays)
     assert relative_error(result, expected) < ERROR
 
 
@@ -62,6 +83,11 @@ def test_type3_arguments_are_checked(driver, arguments, message):
         driver.nufft().type3(**arguments)
 
 
-def test_type1_needs_an_axis_for_each_dimension(driver):
+def test_arrays_need_an_axis_for_each_dimension(driver):
     with pytest.raises(ValueError, match="an axis for each dimension"):
         driver.nufft().type1(np.zeros((4, 2)), (8,), 1, EPS)
+
+
+def test_type2_needs_a_positive_number_of_arrays(driver):
+    with pytest.raises(ValueError, match="ntransforms"):
+        driver.nufft().type2(np.zeros((4, 2)), (8, 8), -1, EPS, 0)

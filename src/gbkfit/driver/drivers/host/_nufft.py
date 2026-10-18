@@ -47,6 +47,20 @@ class DriverNUFFTHost(DriverNUFFT):
         plan.setpts(**_points(points))
         return _NUFFTHost(plan)
 
+    def _type2(
+            self,
+            points: tuple[np.ndarray, ...],
+            shape: tuple[int, ...],
+            sign: int,
+            eps: float,
+            ntransforms: int
+    ) -> NUFFT:
+        plan = finufft.Plan(
+            2, shape, n_trans=ntransforms, eps=eps, isign=sign,
+            dtype=np.complex128)
+        plan.setpts(**_points(points))
+        return _NUFFTHost(plan)
+
 
 class _NUFFTHost(NUFFT):
     """A NUFFT of a FINUFFT plan."""
@@ -54,8 +68,8 @@ class _NUFFTHost(NUFFT):
     def __init__(self, plan: Any):
         self._plan = plan
 
-    def __call__(self, strengths: DeviceArray, out: DeviceArray) -> None:
-        self._plan.execute(strengths, out=out)
+    def __call__(self, data: DeviceArray, out: DeviceArray) -> None:
+        self._plan.execute(data, out=out)
 
 
 def _points(

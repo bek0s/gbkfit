@@ -47,22 +47,35 @@ class DriverNUFFTCuda(DriverNUFFT):
     ) -> NUFFT:
         return self._nufft(1, shape, _points(points), sign, eps)
 
+    def _type2(
+            self,
+            points: tuple[np.ndarray, ...],
+            shape: tuple[int, ...],
+            sign: int,
+            eps: float,
+            ntransforms: int
+    ) -> NUFFT:
+        return self._nufft(2, shape, _points(points), sign, eps, ntransforms)
+
     def _nufft(
             self,
             nufft_type: int,
             modes_or_dimensions: int | tuple[int, ...],
             points: dict[str, np.ndarray],
             sign: int,
-            eps: float
+            eps: float,
+            ntransforms: int = 1
     ) -> NUFFT:
         """
         Return a NUFFT of a cuFINUFFT plan of a type, of the arguments of
-        its setpts (see _points), on the host.
+        its setpts (see _points), on the host, and of a number of
+        transforms.
         """
         with self._device:
             plan = cufinufft.Plan(
-                nufft_type, modes_or_dimensions, eps=eps, isign=sign,
-                dtype=np.complex128, gpu_device_id=self._device.id)
+                nufft_type, modes_or_dimensions, n_trans=ntransforms, eps=eps,
+                isign=sign, dtype=np.complex128,
+                gpu_device_id=self._device.id)
             plan.setpts(**{
                 name: cp.asarray(values) for name, values in points.items()})
         return _NUFFTCuda(plan, self._device)
@@ -75,9 +88,9 @@ class _NUFFTCuda(NUFFT):
         self._plan = plan
         self._device = device
 
-    def __call__(self, strengths: DeviceArray, out: DeviceArray) -> None:
+    def __call__(self, data: DeviceArray, out: DeviceArray) -> None:
         with self._device:
-            self._plan.execute(strengths, out=out)
+            self._plan.execute(data, out=out)
 
 
 def _points(

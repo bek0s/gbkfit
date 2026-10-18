@@ -6,6 +6,7 @@ driver.
 """
 
 import abc
+import numbers
 import types
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any, TypeAlias, Union
@@ -210,29 +211,31 @@ class NUFFT(abc.ABC):
     """
     A non-uniform discrete Fourier transform of fixed points by a NUFFT on
     a driver (see DriverNUFFT): made once for its points, then applied to
-    any strengths at them.
+    any data at them.
     """
 
     @abc.abstractmethod
-    def __call__(self, strengths: DeviceArray, out: DeviceArray) -> None:
+    def __call__(self, data: DeviceArray, out: DeviceArray) -> None:
         """
-        Transform the strengths of the points into out: contiguous
-        complex128 arrays on the driver, of one value per point and of the
-        shape of the transform.
+        Transform data into out: contiguous complex128 arrays on the
+        driver, of the shapes of the input and the output of the
+        transform (see DriverNUFFT).
         """
 
 
 class DriverNUFFT(abc.ABC):
     """
-    The non-uniform FFTs of a driver (FINUFFT): sums of complex strengths
-    c_j at points x_j (of 1 to 3 dimensions),
+    The non-uniform FFTs of a driver (FINUFFT): sums of complex values c_j
+    at points x_j (of 1 to 3 dimensions),
 
         f_k = sum_j c_j exp(sign 2 pi i x_j . s_k),
 
-    at frequencies s_k (e.g. the visibilities of a sky model), to a
-    relative tolerance eps (the 2-norm of the error of f over that of f).
-    Their points and frequencies are fixed when they are made, after which
-    each transform of strengths is fast.
+    at frequencies s_k (type 3; e.g. the visibilities of a sky model) or
+    at the integer frequencies of the modes of an array (type 1), and the
+    sums of such modes at points (type 2), to a relative tolerance eps
+    (the 2-norm of the error of the result over that of the result).
+    Their points are fixed when they are made, after which each transform
+    is fast.
 
     They are of float64, of complex128 arrays: float32 rounds phases of
     hundreds of radians to more than the tolerance (e.g. errors of 4e-5 in
@@ -315,14 +318,57 @@ class DriverNUFFT(abc.ABC):
             the array, the sign is not -1 or 1, or the tolerance not
             positive.
         """
-        points = _nufft_columns(points, 'points', 2 * np.pi)
-        shape = tuple(int(n) for n in shape)
-        if len(shape) != len(points):
-            raise ValueError(
-                f"the array must have an axis for each dimension of the "
-                f"points ({len(points)}); its shape is {shape}")
+        points, shape = _array_points(points, shape)
         _check_nufft_options(sign, eps)
         return self._type1(points, shape, sign, eps)
+
+    def type2(
+            self,
+            points: np.ndarray,
+            shape: tuple[int, ...],
+            sign: int,
+            eps: float,
+            ntransforms: int = 1
+    ) -> NUFFT:
+        """
+        Return the NUFFT from the modes of arrays to points (type 2, the
+        adjoint of type 1): of the index q of an array f of a shape,
+
+            c_j = sum_q f[q] exp(sign 2 pi i x_j . k),  k = q - shape // 2
+
+        (e.g. the visibilities of an image whose pixels are uniform in the
+        direction cosines, at x_j their baselines in cycles per pixel), of
+        several arrays at once.
+
+        Parameters
+        ----------
+        points : numpy.ndarray
+            The points x_j, in cycles per unit of k, of shape (n, d), on
+            the host: a column for each axis of the arrays.
+        shape : tuple of int
+            The shape of the arrays, of d = 1 to 3 axes.
+        sign : {-1, 1}
+            The sign of the exponent.
+        eps : float
+            The relative tolerance.
+        ntransforms : int, optional
+            The number of arrays of each transform: its input is of shape
+            (ntransforms, *shape), and its output (ntransforms, n).
+
+        Raises
+        ------
+        ValueError
+            If the points are not of 1 to 3 dimensions, or not of those of
+            the arrays, the sign is not -1 or 1, the tolerance not
+            positive, or the number of arrays not a positive integer.
+        """
+        points, shape = _array_points(points, shape)
+        _check_nufft_options(sign, eps)
+        if not isinstance(ntransforms, numbers.Integral) or ntransforms < 1:
+            raise ValueError(
+                f"ntransforms must be a positive integer; it is "
+                f"{ntransforms!r}")
+        return self._type2(points, shape, sign, eps, int(ntransforms))
 
     @abc.abstractmethod
     def _type3(
@@ -350,6 +396,20 @@ class DriverNUFFT(abc.ABC):
         columns of the points, times 2 pi.
         """
 
+    @abc.abstractmethod
+    def _type2(
+            self,
+            points: tuple[np.ndarray, ...],
+            shape: tuple[int, ...],
+            sign: int,
+            eps: float,
+            ntransforms: int
+    ) -> NUFFT:
+        """
+        Return the NUFFT of type 2 (see type2) of checked arguments: the
+        columns of the points, times 2 pi.
+        """
+
 
 def _nufft_columns(
         points: np.ndarray,
@@ -368,6 +428,23 @@ def _nufft_columns(
     return tuple(
         np.ascontiguousarray(scale * column, np.float64)
         for column in points.T)
+
+
+def _array_points(
+        points: np.ndarray,
+        shape: tuple[int, ...]
+) -> tuple[tuple[np.ndarray, ...], tuple[int, ...]]:
+    """
+    Return the columns of the points of a NUFFT of the modes of arrays (see
+    _nufft_columns), times 2 pi, and the shape of the arrays.
+    """
+    points = _nufft_columns(points, 'points', 2 * np.pi)
+    shape = tuple(int(n) for n in shape)
+    if len(shape) != len(points):
+        raise ValueError(
+            f"the arrays must have an axis for each dimension of the points "
+            f"({len(points)}); their shape is {shape}")
+    return points, shape
 
 
 def _check_nufft_options(sign: int, eps: float) -> None:
