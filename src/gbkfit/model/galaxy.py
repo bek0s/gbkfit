@@ -77,12 +77,13 @@ class Galaxy(parseutils.Serializable):
         see Lines.values; the dust of an image absorbs at the effective
         wavelength of its band over 1 + redshift), and for its distance by
         redshift (see DistanceRedshift); the systemic velocity of its
-        components is the velocity offset from it. With physical units, its
-        light is dimmed by it (and by the systemic velocity of each
-        component; see _units.line_factor). 0 by default; required (0 for
-        none) when a component emits in bands with a unit and has no
-        systemic velocity, as nothing else then tells how far its light is
-        dimmed.
+        components is the velocity offset from it (a relativistic radial
+        velocity, the same on every spectral axis; see LinePlacement).
+        With physical units, its light is dimmed by it (and by the
+        systemic velocity of each component; see _units.line_factor). 0 by
+        default; required (0 for none) when a component emits in bands
+        with a unit and has no systemic velocity, as nothing else then
+        tells how far its light is dimmed.
     driver : Driver, optional
         Where its own computations run: its gravity, in float64, once for
         all the observations of it, whatever their drivers (see

@@ -356,22 +356,22 @@ class Lines:
         (a grid of one axis; an array of shape (nlines, 3); see
         DiskPlan.evaluate), of a component of a galaxy of the given
         redshift, such that a line of velocity v (in the frame of the
-        galaxy, e.g. the systemic velocity of the component) is at offset
-        + scale * v on the axis, with a flux of 1 (the ratios are
-        parameters): exactly for a component at the systemic velocity 0
-        (see LinePlacement for others). One line without a name is at the
-        velocity of the axis (offset 0, scale 1), whatever the redshift.
+        galaxy, e.g. the motions within it) is at offset + scale * v on
+        the axis, with a flux of 1 (the ratios are parameters): for a
+        component at the systemic velocity 0 (see LinePlacement for
+        others). One line without a name is at the velocity of the axis
+        (offset 0, scale 1), whatever the redshift.
 
         With optical velocities (a rest wavelength), a line of rest
-        wavelength w at velocity v is at w (1 + z) (1 + v / c), which is
-        at the velocity c (k - 1) + k v of the axis, where k is w (1 + z)
-        over the rest of the axis. With radio velocities (a rest
-        frequency), a line of rest frequency f at velocity v is at f / (1
-        + z) (1 - v / c), which is at the velocity c (1 - k) + k v, where k
-        is f / (1 + z) over the rest. The rest of the axis can be that of
-        a line in the frame of the galaxy (k = 1 + z) or as observed (k
-        = 1): its velocities are then near c z or near 0, and those of the
-        galaxy are the same.
+        wavelength w is at w (1 + z) (1 + v / c), to first order in v,
+        which is at the velocity c (k - 1) + k v of the axis, where k is w
+        (1 + z) over the rest of the axis. With radio velocities (a rest
+        frequency), a line of rest frequency f is at f / (1 + z) (1 - v /
+        c), which is at the velocity c (1 - k) + k v, where k is f / (1 +
+        z) over the rest. The rest of the axis can be that of a line in
+        the frame of the galaxy (k = 1 + z) or as observed (k = 1): its
+        velocities are then near c z or near 0, and those of the galaxy
+        are the same.
 
         The rest wavelengths of the lines are in vacuum. If those of the
         axis are in air (see gridutils.Coords), w (1 + z) is that of each
@@ -440,6 +440,66 @@ class Lines:
         return np.array([frequency * (1 + redshift)])
 
 
+def doppler(velocity: float | np.ndarray) -> float | np.ndarray:
+    """
+    Return the Doppler factor of a radial velocity (km/s, relativistic):
+    the 1 + z of its light, sqrt((1 + v / c) / (1 - v / c)).
+    """
+    beta = velocity / _C
+    return np.sqrt((1 + beta) / (1 - beta))
+
+
+class _OpticalVelocities:
+    """The velocities of a rest wavelength: c (D - 1), D the 1 + z."""
+
+    @staticmethod
+    def factor(velocity: np.ndarray) -> np.ndarray:
+        return 1 + velocity / _C
+
+    @staticmethod
+    def velocity(factor: np.ndarray) -> np.ndarray:
+        return _C * (factor - 1)
+
+    @staticmethod
+    def stretch(velocity: np.ndarray) -> np.ndarray:
+        return 1 + velocity / _C
+
+
+class _RadioVelocities:
+    """The velocities of a rest frequency: c (1 - 1 / D), D the 1 + z."""
+
+    @staticmethod
+    def factor(velocity: np.ndarray) -> np.ndarray:
+        return 1 / (1 - velocity / _C)
+
+    @staticmethod
+    def velocity(factor: np.ndarray) -> np.ndarray:
+        return _C * (1 - 1 / factor)
+
+    @staticmethod
+    def stretch(velocity: np.ndarray) -> np.ndarray:
+        return 1 - velocity / _C
+
+
+class _RelativisticVelocities:
+    """
+    Relativistic velocities, c (D^2 - 1) / (D^2 + 1), D the 1 + z: those
+    of an axis without a rest (VELO).
+    """
+
+    @staticmethod
+    def factor(velocity: np.ndarray) -> np.ndarray:
+        return doppler(velocity)
+
+    @staticmethod
+    def velocity(factor: np.ndarray) -> np.ndarray:
+        return _C * (factor ** 2 - 1) / (factor ** 2 + 1)
+
+    @staticmethod
+    def stretch(velocity: np.ndarray) -> np.ndarray:
+        return 1 - (velocity / _C) ** 2
+
+
 class LinePlacement:
     """
     Where the lines of a component are on a spectral axis, with the
@@ -448,42 +508,56 @@ class LinePlacement:
     (the systemic velocity plus the motions within the galaxy, e.g. its
     rotation) is at offset + scale * v on the axis.
 
-    The rows of Lines.values (rows; the flux of each is left out) place
-    the lines exactly for the systemic velocity 0. At another, a line is
-    at u = offset + scale * vsys on the axis, as with those rows: the
-    redshift of the galaxy and the systemic velocity add up exactly, (1 +
-    z) (1 + vsys / c) with optical velocities and (1 + z) / (1 - vsys / c)
-    with radio ones. But the systemic velocity stretches the motions about
-    it too: one km/s of the galaxy at u spans 1 + u / c km/s of an axis of
-    optical velocities, and 1 - u / c km/s of one of radio velocities
-    (e.g. on an axis of HI at rest, with the galaxy at the redshift 0 and
-    vsys = 10000 km/s, the rotation spans 3.3% fewer km/s of the axis
-    than its own). The scale is that, at each line, and the offset keeps
-    the line at u, so that the rotation and the dispersion are those in
-    the rest frame of the galaxy.
+    The systemic velocity is the radial velocity of the component from the
+    redshift of the galaxy, relativistic: a line is redshifted by D0
+    doppler(vsys), D0 its 1 + z at the systemic velocity 0 (which the rows
+    of Lines.values place exactly), whatever the axis. Its centre is the
+    velocity of the axis of that factor D: c (D - 1) on an axis of
+    optical velocities (a rest wavelength), c (1 - 1 / D) on one of radio
+    velocities (a rest frequency), and c (D^2 - 1) / (D^2 + 1) on an axis
+    without a rest, whose velocities are relativistic, as those of the
+    galaxy (VELO). So one systemic velocity places a galaxy alike on axes
+    of every convention (e.g. its cubes of HI and of Halpha; read in the
+    convention of each axis, as an optical velocity on one and a radio one
+    on the other, it would place them c (D_radio - D_optical), about vsys^2
+    / c, apart: 83 km/s at 5000 km/s).
 
-    The motions about the systemic velocity are linear on the axis (the
-    convention of the axis: optical or radio). The Doppler effect has
-    terms of their second order too (v^2 / 2c: 0.15 km/s at 300 km/s, the
-    same on both sides of the galaxy, so that they do not change its
-    rotation), which are left out.
+    The systemic velocity stretches the motions about it: one km/s of the
+    galaxy at the centre u spans 1 + u / c km/s of an axis of optical
+    velocities, 1 - u / c km/s of one of radio velocities, and 1 - (u /
+    c)^2 km/s of one of relativistic velocities (e.g. on an axis of HI at
+    rest, with the galaxy at the redshift 0 and vsys = 10000 km/s, the
+    rotation spans 3.3% fewer km/s of the axis than its own). The scale is
+    that, at each line, and the offset keeps the line at u, so that the
+    rotation and the dispersion are those in the rest frame of the galaxy.
 
-    An axis without a rest has no convention: its velocities are taken as
-    those of the galaxy (exact for a small systemic velocity, e.g. with the
-    redshift of the galaxy set).
+    The motions about the systemic velocity are linear on the axis. The
+    Doppler effect has terms of their second order too (v^2 / 2c: 0.15
+    km/s at 300 km/s, the same on both sides of the galaxy, so that they
+    do not change its rotation), which are left out.
     """
 
     def __init__(self, rows: np.ndarray, spectral: gridutils.Grid):
         rest = spectral.coords.rest
-        self._offsets = np.array(rows[:, 0], dtype=float)
-        self._scales = np.array(rows[:, 1], dtype=float)
-        # (the stretch per km/s of the axis: + for optical velocities, -
-        # for radio ones, none without a rest)
-        self._sign = None if rest is None \
-            else 1.0 if rest.unit == astropy.units.m else -1.0
+        if rest is None:
+            self._convention = _RelativisticVelocities
+        elif rest.unit.is_equivalent(astropy.units.m):
+            self._convention = _OpticalVelocities
+        else:
+            self._convention = _RadioVelocities
+        # The 1 + z of each line at the systemic velocity 0
+        self._factors = self._convention.factor(
+            np.array(rows[:, 0], dtype=float))
 
     def __len__(self) -> int:
-        return len(self._offsets)
+        return len(self._factors)
+
+    def centres(self, vsys: float) -> np.ndarray:
+        """
+        Return the velocity of the axis at the centre of each line (km/s),
+        with the component at the given systemic velocity (km/s).
+        """
+        return self._convention.velocity(self._factors * doppler(vsys))
 
     def __call__(self, vsys: float) -> np.ndarray:
         """
@@ -491,10 +565,8 @@ class LinePlacement:
         (nlines, 2)), with the component at the given systemic velocity
         (km/s).
         """
-        if self._sign is None:
-            return np.column_stack((self._offsets, self._scales))
-        centres = self._offsets + self._scales * vsys
-        scales = 1 + self._sign * centres / _C
+        centres = self.centres(vsys)
+        scales = self._convention.stretch(centres)
         return np.column_stack((centres - scales * vsys, scales))
 
 

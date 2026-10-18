@@ -7,6 +7,13 @@ import numpy as np
 import pytest
 
 
+C = 299792.458
+
+# The 1 + z of a galaxy at the redshift 0 and vsys = 10000 km/s, a
+# relativistic velocity
+D = np.sqrt((1 + 10000 / C) / (1 - 10000 / C))
+
+
 def line_flux(driver, evaluate_cases, dispersion):
     """
     The flux of the line of each spaxel (the sum over the channels times
@@ -144,32 +151,39 @@ def test_the_redshift_places_the_lines(rest, k):
     assert nii_scale == pytest.approx(k * 6585.27 / 6564.61, rel=1e-12)
 
 
-@pytest.mark.parametrize('rest, sign', [
-    ('1420.405751768 MHz', -1), ('6564.61 Angstrom', 1), (None, 0)])
-def test_the_systemic_velocity_stretches_the_motions(rest, sign):
+@pytest.mark.parametrize('rest, centre, stretch', [
+    ('1420.405751768 MHz', C * (1 - 1 / D), 1 / D),
+    ('6564.61 Angstrom', C * (D - 1), D),
+    (None, 10000, 1 - (10000 / C) ** 2)])
+def test_the_systemic_velocity_is_one_on_every_axis(rest, centre, stretch):
     # A galaxy at the redshift 0 and vsys = 10000 km/s, on an axis of the
-    # rest of its line: the line stays where it is, and a km/s of the
-    # galaxy spans 1 - vsys / c km/s of a radio axis, 1 + vsys / c of an
-    # optical one; an axis without a rest has no convention (1)
+    # rest of its line: the line is at the velocity of its 1 + z in the
+    # convention of the axis, c (1 - 1 / D) for radio velocities, c (D -
+    # 1) for optical ones, and 10000 km/s on an axis without a rest, of
+    # relativistic velocities; a km/s of the galaxy spans 1 - u / c, 1 +
+    # u / c and 1 - (u / c)^2 km/s of them (1 / D, D and 1 - (vsys / c)^2)
     from gbkfit.model.components.lines import LinePlacement, Lines
     from gbkfit.utils import gridutils
     spectral = gridutils.make_grid((41,), 10, spectral_axis=0, rest=rest)
     rows = Lines(None).values(spectral, 0.0)
     (offset, scale), = LinePlacement(rows, spectral)(10000)
-    assert offset + scale * 10000 == pytest.approx(10000, rel=1e-12)
-    assert scale == pytest.approx(1 + sign * 10000 / 299792.458, rel=1e-12)
+    assert offset + scale * 10000 == pytest.approx(centre, rel=1e-12)
+    assert scale == pytest.approx(stretch, rel=1e-12)
 
 
 def test_the_dispersion_is_in_the_frame_of_the_galaxy(driver, evaluate_cases):
     # A disk of HI of dispersion 30 km/s, without rotation, at vsys 0 and
-    # 10000 km/s on a radio axis of the rest of HI: its line is 1 - vsys / c
-    # as wide on the axis (to 1e-5: the channels add their width^2 / 12)
+    # 10000 km/s on a radio axis of the rest of HI: its line, at the radio
+    # velocity u = c (1 - 1 / D), is 1 - u / c = 1 / D as wide on the axis
+    # (to 1e-5: the channels add their width^2 / 12)
     def width(vsys):
+        doppler = np.sqrt((1 + vsys / C) / (1 - vsys / C))
+        centre = C * (1 - 1 / doppler)
         case = dict(
             driver=dict(type=driver.type()),
             observable=dict(
                 type='pixel_spectra', size=[8, 8, 201], step=[1, 1, 2],
-                rval=[0, 0, vsys], rest='1420.405751768 MHz'),
+                rval=[0, 0, centre], rest='1420.405751768 MHz'),
             line_of_sight=dict(type='flat'),
             galaxy=dict(components=[dict(
                 type='smdisk', loose=False, tilted=False,
@@ -184,9 +198,8 @@ def test_the_dispersion_is_in_the_frame_of_the_galaxy(driver, evaluate_cases):
             pt_a=1, vpt_rt=2, vpt_vt=0, dpt_a=30)
         data, _ = evaluate_cases([case], properties)
         spectrum = data[0]['spectra']['d'].sum(axis=(1, 2))
-        velocity = vsys + 2 * (np.arange(201) - 100)
+        velocity = centre + 2 * (np.arange(201) - 100)
         mean = np.sum(spectrum * velocity) / spectrum.sum()
         return np.sqrt(np.sum(spectrum * (velocity - mean) ** 2)
                        / spectrum.sum())
-    assert width(10000) / width(0) == pytest.approx(
-        1 - 10000 / 299792.458, rel=1e-4)
+    assert width(10000) / width(0) == pytest.approx(1 / D, rel=1e-4)

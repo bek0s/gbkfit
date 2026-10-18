@@ -59,12 +59,17 @@ def with_lines(component, lines):
     return component | dict(emission=dict(type='lines', lines=lines))
 
 
-def placed(properties, ratio, offset):
+def placed(properties, convention, offset):
     """
-    The properties of a line without a name where a line at offset + ratio
-    * vsys is: it moves as that line (see LinePlacement).
+    The properties of a line without a name where a line of the given
+    offset is: it moves as that line (see LinePlacement), with the 1 + z
+    of the offset times that of vsys, at its relativistic velocity.
     """
-    return properties | dict(vsys=offset + ratio * properties['vsys'])
+    factor = 1 + offset / C if convention == 'optical' \
+        else 1 / (1 - offset / C)
+    beta = properties['vsys'] / C
+    factor *= np.sqrt((1 + beta) / (1 - beta))
+    return properties | dict(vsys=C * (factor ** 2 - 1) / (factor ** 2 + 1))
 
 
 @pytest.mark.parametrize('rest, lines, convention', [
@@ -82,8 +87,9 @@ def placed(properties, ratio, offset):
      [dict(name='co13', rest='330.587965 GHz'),
       dict(name='c18o', rest='0.91030867 mm')], 'radio')])
 def test_lines_are_at_their_places(driver, rest, lines, convention):
-    # The second line, with the flux ratio, is a line without a name at
-    # offset + k vsys, where k is the ratio of the rests (of the
+    # The second line, with the flux ratio, is a line without a name where
+    # it is, at offset, c (k - 1) for optical velocities and c (1 - k) for
+    # radio ones at vsys = 0, where k is the ratio of the rests (of the
     # wavelengths with optical velocities, of the frequencies with radio
     # velocities), with the same motions: the scale of each line is that
     # where it lands on the axis
@@ -97,7 +103,7 @@ def test_lines_are_at_their_places(driver, rest, lines, convention):
     offset = C * (k - 1) if convention == 'optical' else C * (1 - k)
     second = evaluate(
         driver, galaxy_of(COMPONENT), scube(rest),
-        placed(PROPERTIES, k, offset))
+        placed(PROPERTIES, convention, offset))
     np.testing.assert_allclose(
         double, single + 0.4 * second, rtol=1e-4, atol=1e-6 * single.max())
     # The lines are apart: the second is at about offset km/s
@@ -124,15 +130,18 @@ def test_lines_of_a_monte_carlo_disk_share_the_clouds(driver):
 
 
 def test_one_line_without_a_rest_is_at_the_velocity_of_the_axis(driver):
-    # Without lines, the line is at the velocity of the axis, whatever the
-    # rest of the axis. With a rest (here of optical velocities), the
-    # motions about the systemic velocity are those of the galaxy, each
-    # spanning 1 + vsys / c km/s of the axis (see LinePlacement); without
-    # a rest, the axis has no convention, and they are its own
-    stretch = 1 + PROPERTIES['vsys'] / C
+    # Without lines, the line is at the rest of the axis, whatever it is.
+    # With a rest (here of optical velocities), the line is at u = c (D -
+    # 1), D the 1 + z of vsys, and the motions about it are those of the
+    # galaxy, each spanning 1 + u / c km/s of the axis (see LinePlacement);
+    # an axis without a rest is of relativistic velocities: the line at
+    # vsys = u spans 1 - (u / c)^2 km/s of it for each km/s of the galaxy
+    beta = PROPERTIES['vsys'] / C
+    centre = C * (np.sqrt((1 + beta) / (1 - beta)) - 1)
+    stretch = 1 / (1 - centre / C)
     without = evaluate(
         driver, galaxy_of(COMPONENT), scube(None), PROPERTIES | dict(
-            vpt_vt=stretch * PROPERTIES['vpt_vt'],
+            vsys=centre, vpt_vt=stretch * PROPERTIES['vpt_vt'],
             dpt_a=stretch * PROPERTIES['dpt_a']))
     with_rest = evaluate(
         driver, galaxy_of(COMPONENT), scube('6583.45 Angstrom'), PROPERTIES)

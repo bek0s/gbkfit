@@ -93,6 +93,11 @@ HALPHA = 6564.61 * u.Angstrom
 C = 299792.458
 
 
+def doppler(vsys):
+    """The 1 + z of a systemic velocity (relativistic; see LinePlacement)."""
+    return np.sqrt((1 + vsys / C) / (1 - vsys / C))
+
+
 def factors(
         source, target, rest=HI, rows=((0, 1, 1),), redshift=0.0, **options):
     """
@@ -122,13 +127,14 @@ def test_hi_mass_is_its_moment_0_by_the_textbook():
     # hand for NGC 1313 (to 0.1%, the rounding of those constants) at the
     # rest frequency, which the textbook takes; at a systemic velocity,
     # the brightness temperature is that at the frequency of the line
-    # there, and the data see the HI dimmed by (1 + z)^-3, its km/s
-    # spanning 1 - vsys / c = 1 / (1 + z) km/s of the radio axis: (1 +
-    # z)^-4 in all (as M_HI = 2.356e5 D_L^2 int S du, u of the axis)
+    # there, and the data see the HI dimmed by (1 + z)^-3 (1 + z that of
+    # vsys), its km/s spanning 1 - u / c = 1 / (1 + z) km/s of the radio
+    # axis (u the radio velocity of the line): (1 + z)^-4 in all (as M_HI
+    # = 2.356e5 D_L^2 int S du, u of the axis)
     hi = factors('Msun/pc2', 'Jy/beam km/s', beam=BEAM, integrated=True)
     for vsys in (0, 470, 5000):
         assert hi(vsys) == pytest.approx(
-            1.249e20 * 66 * 53.7 / 1.105e24 * (1 - vsys / C) ** 4, rel=1e-3)
+            1.249e20 * 66 * 53.7 / 1.105e24 * doppler(vsys) ** -4, rel=1e-3)
 
 
 def test_light_per_frequency_or_wavelength_is_per_km_s_of_the_axis():
@@ -136,33 +142,33 @@ def test_light_per_frequency_or_wavelength_is_per_km_s_of_the_axis():
     # energy is c / lambda_rest km/s per Angstrom of the axis (lambda_rest
     # of the axis, at any velocity), times the area of a spaxel; and on an
     # axis of radio velocities, nu_rest / c Hz per km/s; the energy is
-    # dimmed by (1 + z)^-4, 1 + z = 1 + vsys / c for optical velocities,
-    # 1 / (1 - vsys / c) for radio ones
+    # dimmed by (1 + z)^-4, 1 + z that of vsys on both axes
     halpha = factors(
         '1e-17 erg/s/cm2/arcsec2', '1e-20 erg/s/cm2/Angstrom', HALPHA)
     hi = factors('1e-17 erg/s/cm2/arcsec2', 'Jy/arcsec2')
     for vsys in (0, 50000):
         assert halpha(vsys) == pytest.approx(
-            1e-17 * PIXEL / 1e-20 * C / 6564.61 / (1 + vsys / C) ** 4,
+            1e-17 * PIXEL / 1e-20 * C / 6564.61 / doppler(vsys) ** 4,
             rel=1e-12)
         assert hi(vsys) == pytest.approx(
-            1e-17 * 1e-3 / 1e-26 * C / 1420.405751768e6 * (1 - vsys / C) ** 4,
+            1e-17 * 1e-3 / 1e-26 * C / 1420.405751768e6 * doppler(vsys) ** -4,
             rel=1e-12)
 
 
 def test_the_temperature_of_a_line_at_its_frequency():
-    # K km/s per channel is K dimmed by 1 / (1 + z) = 1 - vsys / c, times
-    # the km/s of the radio axis that a km/s of the galaxy spans at the
-    # line (1 - u / c), also for a line of another rest (k = 1.02); in
-    # Jy/beam, the intensity at the rest frequency dimmed by (1 + z)^-3
+    # K km/s per channel is K dimmed by 1 / (1 + z), 1 + z that of vsys,
+    # times the km/s of the radio axis that a km/s of the galaxy spans at
+    # the line (1 - u / c = 1 / (1 + z)), also for a line of another rest
+    # (k = 1.02, which spans k / (1 + z)); in Jy/beam, the intensity at the
+    # rest frequency dimmed by (1 + z)^-3
     assert factors('K km/s', 'K')(470) == pytest.approx(
-        (1 - 470 / C) ** 2, rel=1e-12)
+        doppler(470) ** -2, rel=1e-12)
     assert factors('K km/s', 'K', rows=[(-C * 0.02, 1.02, 1)])(470) \
-        == pytest.approx(1.02 * (1 - 470 / C) ** 2, rel=1e-12)
+        == pytest.approx(1.02 * doppler(470) ** -2, rel=1e-12)
     jansky = factors('K km/s', 'Jy/beam', beam=BEAM)
     for vsys in (0, 3000):
         expected = (1 * u.K).to(u.Jy / u.sr, u.brightness_temperature(HI)) \
-            * BEAM * u.arcsec ** 2 * (1 - vsys / C) ** 4
+            * BEAM * u.arcsec ** 2 * doppler(vsys) ** -4
         assert jansky(vsys) == pytest.approx(expected.to_value(u.Jy), rel=1e-9)
 
 
@@ -191,7 +197,10 @@ def test_the_beam_of_each_channel_at_the_line():
     channels = factors(
         'Jy km/s/arcsec2', 'Jy/beam', beam=np.array([100.0, 200.0]),
         beam_spectral=[0, 100] * u.km / u.s)
-    assert channels(50) == pytest.approx(150 * (1 - 50 / C) ** 4)
+    # (the beam at the line, at the radio velocity of vsys)
+    centre = C * (1 - 1 / doppler(50))
+    assert channels(50) == pytest.approx(
+        (100 + centre) * doppler(50) ** -4, rel=1e-12)
 
 
 def test_light_with_a_unit_needs_the_rest_of_the_axis():
@@ -215,11 +224,11 @@ def test_bands_per_beam_and_per_pixel():
 def test_bands_dimmed_by_the_redshift():
     # Per Hz by (1 + z)^-3, per Angstrom by (1 + z)^-5 (the galaxy emits
     # at (1 + z) times the frequency of the band), 1 + z = (1 + redshift)
-    # (1 + vsys / c)
+    # times that of vsys
     jy, per_a = (parse_unit(unit) for unit in (
         'Jy/arcsec2', '1e-20 erg/s/cm2/Angstrom/arcsec2'))
     band = Band('h', '1.65 um')
-    one_plus_z = 2.5 * (1 + 3000 / C)
+    one_plus_z = 2.5 * doppler(3000)
     assert BandFactors(jy, DataUnit(u.Jy, PIXEL), band, 1.5)(3000) \
         == pytest.approx(PIXEL / one_plus_z ** 3, rel=1e-12)
     assert BandFactors(per_a, DataUnit(per_a * u.arcsec ** 2, PIXEL), band,
@@ -266,4 +275,4 @@ def test_the_mass_of_a_unit_of_light(info, expected):
 def test_data_per_pixel_named_so():
     # (e.g. BUNIT JY/PIXEL): the light of a pixel, as without the name
     assert factors('Jy km/s/arcsec2', 'JY/PIXEL')(470) \
-        == pytest.approx(PIXEL * (1 - 470 / C) ** 4, rel=1e-12)
+        == pytest.approx(PIXEL * doppler(470) ** -4, rel=1e-12)

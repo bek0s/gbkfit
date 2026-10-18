@@ -19,7 +19,7 @@ import numpy as np
 
 from gbkfit.utils import gridutils, unitutils
 from gbkfit.utils.parseutils import ConfigError
-from .lines import Band, air_refractive_index
+from .lines import Band, LinePlacement, air_refractive_index, doppler
 
 if TYPE_CHECKING:
     from .base import Component
@@ -50,11 +50,7 @@ __all__ = [
 # the units of the data. Such an option would skip the dimming here (in
 # line_factor and BandFactors), and undo it, times (1 + z)^n with n of
 # each kind of unit, in mass_per_unit and OpacityScales, which take the
-# light as the galaxy emits it. The gravity of a galaxy has no spectral
-# axis, so there the convention of vsys (radio or optical) is not known,
-# which matters at second order (about 0.1% per power of 1 + z at 10000
-# km/s): the option would need the redshift of the galaxy set, leaving
-# vsys small.
+# light as the galaxy emits it.
 
 
 # The units of the lines: their light integrated over the line, per
@@ -388,8 +384,8 @@ class LineFactors:
                 f"each line: the spectral axis needs its rest (RESTFRQ or "
                 f"RESTWAV in the header of the data, or the option rest)")
         self._axis = _Axis(coords.rest, coords.medium)
+        self._placement = LinePlacement(rows, spectral)
         self._offsets = np.array(rows[:, 0], dtype=float)
-        self._scales = np.array(rows[:, 1], dtype=float)
         self._emitted = np.array(frequencies, dtype=float)
         self._beam = _BeamCurve(target, self._axis)
         # The factor of each line at its frequency at the systemic velocity
@@ -428,7 +424,7 @@ class LineFactors:
 
     def _frequency(self, vsys: float) -> np.ndarray:
         """Return the frequency (Hz) of each line at a systemic velocity."""
-        return self._axis.frequency(self._offsets + self._scales * vsys)
+        return self._axis.frequency(self._placement.centres(vsys))
 
     def redshifts(self, vsys: float) -> np.ndarray:
         """
@@ -443,8 +439,7 @@ class LineFactors:
         Return the factor of each line, with the component at the given
         systemic velocity (km/s).
         """
-        factors = self._factors * self._beam(
-            self._offsets + self._scales * vsys)
+        factors = self._factors * self._beam(self._placement.centres(vsys))
         return factors * (self._frequency(vsys) / self._frequencies) \
             ** self._powers
 
@@ -532,9 +527,9 @@ class BandFactors:
     its rest frame, at the frequency of the band times 1 + z (which band
     that is there, e.g. for a mass-to-light ratio, is up to the user): the
     image sees its intensity dimmed by (1 + z)^-3 (see line_factor). 1 + z
-    is (1 + redshift) (1 + vsys / c): the redshift of the galaxy, and the
-    systemic velocity of the component, if it has one (as an optical
-    velocity: an image has no spectral axis). The factor is a power of
+    is (1 + redshift) doppler(vsys): the redshift of the galaxy, and the
+    systemic velocity of the component, if it has one (relativistic, as
+    on every spectral axis; see LinePlacement). The factor is a power of
     1 + z, which two redshifts give exactly.
 
     Raises
@@ -575,7 +570,7 @@ class BandFactors:
         Return the factor (an array of one), with the component at the
         given systemic velocity (km/s).
         """
-        return np.array([self._factor * (1 + vsys / _C) ** self._power])
+        return np.array([self._factor * doppler(vsys) ** self._power])
 
 
 def _band_factor(
