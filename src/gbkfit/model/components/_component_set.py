@@ -3,7 +3,7 @@ The components of a galaxy: their parameters (ComponentSet), and their
 evaluation on the grid of an observation (ComponentSetPlan).
 """
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from typing import Any
 
 import numpy as np
@@ -13,6 +13,7 @@ from gbkfit.params import ParamDesc, ParamValues
 from gbkfit.utils import gridutils, iterutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
 from ..distance import Distance
+from ..gravity import Gravity, GravityNewton
 from ..mass import MassModel
 from . import _units
 from ._component_plans import ComponentPlans
@@ -42,11 +43,13 @@ def _with_mass_params(
         params: dict[str, ParamDesc],
         components: Sequence[Component],
         distance: Distance | None,
-        mass_model: MassModel | None
+        mass_model: MassModel | None,
+        gravity: Gravity | None
 ) -> dict[str, ParamDesc]:
     """
     Return the parameters of the components of a galaxy, and those of its
-    distance and its mass (if any). Raise ConfigError if components take
+    distance, its mass and its gravity (if any; Newtonian by default).
+    Raise ConfigError if components take
     the circular velocity of the mass (see
     Component.circular_velocity_params) and there is none, if there is
     mass and no component uses it (nor a disk in vertical equilibrium,
@@ -57,9 +60,11 @@ def _with_mass_params(
     component that is not a disk of the galaxy (see
     Component.density_disk), if the pressure support or the equilibrium
     of a disk takes the density of a mass component that the galaxy does
-    not have, if a jeans equilibrium takes the vertical force of a mass
-    component that does not give it, or if the names of the parameters
-    repeat.
+    not have, if the gravity is given without mass, if it does not give
+    what a feature takes (see Gravity: the vertical force of a jeans
+    equilibrium, the self-gravitating sheets of a self_gravitating
+    equilibrium or pressure support, the shares of a dark fraction), or
+    if the names of the parameters repeat.
     """
     moved = any(cmp.circular_velocity_params() for cmp in components)
     balanced = [
@@ -95,8 +100,13 @@ def _with_mass_params(
         raise ConfigError(
             "the distance of a galaxy is used by its mass only; give the "
             "galaxy mass, or no distance")
+    if gravity is not None and mass_model is None:
+        raise ConfigError(
+            "the gravity of a galaxy is that of its mass; give the galaxy "
+            "mass, or no gravity")
     if mass_model is None:
         return params
+    gravity = GravityNewton() if gravity is None else gravity
     disks = [cmp.name() for cmp in components
              if cmp.density_disk() is not None]
     for mass_component in mass_model.components():
@@ -127,21 +137,56 @@ def _with_mass_params(
                 f"takes the surface density of the mass component "
                 f"{equilibrium.density!r}, which its galaxy does not have; "
                 f"its mass components: {mass_names}")
-        if equilibrium.mode == 'jeans' and (forceless := [
-                component.name() for component in mass_model.components()
-                if not component.gives_vertical_force()]):
-            raise ConfigError(
-                f"the jeans equilibrium of the component {cmp.name()!r} "
-                f"takes the vertical force of every mass component of its "
-                f"galaxy, which {forceless} do not give (user components "
-                f"give their circular velocity only)")
-    gravity = distance.pdescs() | mass_model.pdescs()
-    if repeated := sorted(params.keys() & gravity.keys()):
+        if equilibrium.mode == 'jeans':
+            _check_gravity(
+                gravity.check_vertical_force, mass_model,
+                what=f"the jeans equilibrium of the component "
+                     f"{cmp.name()!r} takes the vertical force of the "
+                     f"gravity of its galaxy")
+        if equilibrium.mode == 'self_gravitating':
+            _check_gravity(
+                gravity.check_self_gravitating_sheets,
+                what=f"the self_gravitating equilibrium of the component "
+                     f"{cmp.name()!r} takes the vertical structure of "
+                     f"self-gravitating sheets in Newtonian gravity")
+    for cmp in components:
+        disk = cmp.density_disk()
+        supports = {} if disk is None else disk.pressure_supported_params()
+        if any(s.mode == 'self_gravitating' for s in supports.values()):
+            _check_gravity(
+                gravity.check_self_gravitating_sheets,
+                what=f"the self_gravitating pressure support of the "
+                     f"component {cmp.name()!r} takes the vertical structure "
+                     f"of self-gravitating sheets in Newtonian gravity")
+    for mass_component in mass_model.components():
+        if mass_component.takes_shares():
+            _check_gravity(
+                gravity.check_shares,
+                what=f"the mass component {mass_component.name()!r} takes "
+                     f"the shares of the components in the squared circular "
+                     f"velocity (its dark fraction)")
+    taken = distance.pdescs() | mass_model.pdescs() | gravity.pdescs()
+    if repeated := sorted(params.keys() & taken.keys()):
         raise ConfigError(
-            f"the parameters of the distance and the mass have the names "
-            f"of parameters of the components: {repeated}; rename the "
-            f"components")
-    return params | gravity
+            f"the parameters of the distance, the mass and the gravity have "
+            f"the names of parameters of the components: {repeated}; rename "
+            f"the components")
+    return params | taken
+
+
+def _check_gravity(
+        check: Callable[..., None], *args: Any, what: str
+) -> None:
+    """
+    Call a check of what a gravity gives (see Gravity) with the given
+    arguments, and raise ConfigError with what a feature takes (what) if
+    it does not give it.
+    """
+    try:
+        check(*args)
+    except ConfigError as e:
+        raise ConfigError(
+            f"{what}, which it does not give: {e.message}") from None
 
 
 def _component_prefixes(components: Sequence[Component]) -> list[str]:
@@ -243,9 +288,9 @@ def _constants(
 
 class ComponentSet:
     """
-    The components of a galaxy, its distance and its mass: their
-    parameters, and their evaluation on the grids of observations (see
-    ComponentSetPlan).
+    The components of a galaxy, its distance, its mass and its gravity
+    (Newtonian if not given): their parameters, and their evaluation on
+    the grids of observations (see ComponentSetPlan).
 
     Raises
     ------
@@ -261,7 +306,8 @@ class ComponentSet:
             self,
             components: Component | Sequence[Component],
             distance: Distance | None = None,
-            mass_model: MassModel | None = None
+            mass_model: MassModel | None = None,
+            gravity: Gravity | None = None
     ):
         components = iterutils.tuplify(components)
         if not components:
@@ -271,9 +317,10 @@ class ComponentSet:
         self._prefixes = _component_prefixes(components)
         params, self._mappings = _merge_params(components, self._prefixes)
         self._params = _with_mass_params(
-            params, components, distance, mass_model)
+            params, components, distance, mass_model, gravity)
         self._distance = distance
         self._mass_model = mass_model
+        self._gravity = GravityNewton() if gravity is None else gravity
 
     def components(self) -> tuple[Component, ...]:
         return self._components
@@ -287,6 +334,10 @@ class ComponentSet:
 
     def mass_model(self) -> MassModel | None:
         return self._mass_model
+
+    def gravity(self) -> Gravity:
+        """Return the gravity of its mass (Newtonian if not given)."""
+        return self._gravity
 
     def mappings(self) -> tuple[dict[str, str], ...]:
         """Return the parameter names of each component, by its own names."""

@@ -1,8 +1,8 @@
 """
-The gravity of a galaxy (GravityPlan): the circular velocity of its mass
-at the radii of the components it moves, and the dispersion of the disks
-it holds up (their vertical equilibrium), evaluated once for all the
-observations of the galaxy.
+The gravity of a galaxy (GravityPlan): the circular velocity of its mass,
+in its gravity (see Gravity), at the radii of the components it moves,
+and the dispersion of the disks it holds up (their vertical
+equilibrium), evaluated once for all the observations of the galaxy.
 """
 
 import dataclasses
@@ -15,6 +15,7 @@ from astropy.table import Table
 
 from gbkfit.driver import Driver
 from gbkfit.params import ParamValues
+from ..gravity import GravityField
 from ..mass import MassContext, MassModel
 from ..mass.units import G
 from ._units import mass_per_unit
@@ -51,26 +52,30 @@ _MAX_TILT = 20.0
 class GalaxyMass:
     """
     The mass of a galaxy in one evaluation: its model, the values of the
-    parameters of the galaxy, the context of the mass, and the length of
-    an arcsec in the galaxy (kpc).
+    parameters of the galaxy, the context of the mass, the length of an
+    arcsec in the galaxy (kpc), and the field of the mass in the gravity
+    of the galaxy (see Gravity).
     """
     model: MassModel
     params: ParamValues
     context: MassContext
     kpc_per_arcsec: float
+    field: GravityField
 
 
 class GravityPlan:
     """
-    The gravity of a galaxy: the circular velocity of its mass at the
-    radii of the components it moves (those with the velocity trait
-    'mass', see Component.circular_velocity_params), with the pressure
-    support of each where its traits ask for it (see
-    Disk.pressure_supported_params); and the dispersion of the vertical
-    equilibrium of the disks it holds up, at their subnodes (those with
-    an equilibrium, see Kinematics): in the circular velocity of the mass
-    ('central'; without mass, that of the rotation of each disk), or in
-    the surface density of a mass component ('self_gravitating').
+    The gravity of a galaxy: the circular velocity of its mass, in its
+    gravity (see Gravity), at the radii of the components it moves (those
+    with the velocity trait 'mass', see
+    Component.circular_velocity_params), with the pressure support of
+    each where its traits ask for it (see Disk.pressure_supported_params);
+    and the dispersion of the vertical equilibrium of the disks it holds
+    up, at their subnodes (those with an equilibrium, see Kinematics): in
+    the circular velocity of the mass ('central'; without mass, that of
+    the rotation of each disk), in the vertical force of the mass
+    ('jeans'), or in the surface density of a mass component
+    ('self_gravitating').
 
     It takes the disks it moves and follows as concentric and flat: their
     rings around one centre, in one plane, whatever their geometries (the
@@ -145,19 +150,21 @@ class GravityPlan:
             it gives a component (see Component.circular_velocity_params),
             '{component}_{parameter}_rotation', a table of its radii, in
             the plane of the disk at its midplane ('radius', arcsec;
-            'radius_kpc'), the circular velocity of each component of the
-            mass ('vcirc_{name}', km/s; signed: negative where the
-            component pulls outwards) and of all ('vcirc'), and with
-            pressure support, its term ('pressure', (km/s)^2), and the
-            values given ('vrot', km/s); for each disk it holds up,
+            'radius_kpc'), the Newtonian circular velocity of each
+            component of the mass ('vcirc_{name}', km/s; signed: negative
+            where the component pulls outwards) and of all ('vnewton'),
+            the circular velocity of the mass in the gravity of the galaxy
+            ('vcirc'; that of all with Newtonian gravity, see Gravity), and
+            with pressure support, its term ('pressure', (km/s)^2), and
+            the values given ('vrot', km/s); for each disk it holds up,
             '{component}_equilibrium', a table of its subnodes ('radius',
             arcsec), its rms height there ('height', arcsec), what its
             equilibrium takes there: the circular velocity ('vcirc', km/s;
             'central') or the surface density ('surface_density',
             Msun/kpc^2; 'self_gravitating'; none for 'jeans'), and the
             dispersion of its equilibrium ('sigma', km/s). The components
-            are named after
-            their names, or their positions ('component0'). With them and
+            are named after their names, or their positions
+            ('component0'). With them and
             mass, a warning says where the rings of the disks it moves,
             holds up and follows depart from the centre or the plane of
             the first ring of the first: by more than 15% of their radius,
@@ -187,7 +194,7 @@ class GravityPlan:
         if out_extra is not None:
             self._warn_geometry(params)
         mass = self.mass(params)
-        kpc_per_arcsec, context = mass.kpc_per_arcsec, mass.context
+        kpc_per_arcsec = mass.kpc_per_arcsec
         # The mass is evaluated once, at the radii of all the components:
         # those of the parameters it gives, then the subnodes of the disks
         # it holds up in a central equilibrium
@@ -200,14 +207,14 @@ class GravityPlan:
         nmoved = len(every)
         every += [components[i].density_disk().subrnodes() for i in central]
         ends = np.cumsum([len(r) for r in every])[:-1]
+        # (the parts, the Newtonian vcirc2 of each mass component, for the
+        # rotation tables only)
+        parts, vcirc2 = {}, []
         if every:
-            parts = mass_model.vcirc2_components(
-                np.concatenate(every) * kpc_per_arcsec, params, context)
-            # (the sum of the parts is the vcirc2 of the mass model)
-            vcirc2 = np.split(sum(parts.values()), ends)
-        else:
-            # (only disks in a self-gravitating equilibrium)
-            parts, vcirc2 = {}, []
+            R = np.concatenate(every) * kpc_per_arcsec
+            vcirc2 = np.split(mass.field.vcirc2(R), ends)
+            if out_extra is not None:
+                parts = mass_model.vcirc2_components(R, params, mass.context)
         # The equilibria first: the pressure support of their disks takes
         # their dispersion
         central_vcirc2 = dict(zip(central, vcirc2[nmoved:]))
@@ -223,14 +230,15 @@ class GravityPlan:
             disk = components[i].density_disk()
             values.setdefault(i, {})
             for name, r in cmp_radii.items():
-                v2 = next(moved_vcirc2)
+                vcirc2_r = next(moved_vcirc2)
+                v2 = vcirc2_r
                 pressure = None
                 if support := disk.pressure_supported_params().get(name):
                     density = None if support.density is None \
                         else _pressure_density(
                             mass_model, support,
                             np.asarray(r, dtype=float) * kpc_per_arcsec,
-                            params, context)
+                            params, mass.context)
                     pressure = pressure_support(
                         disk, self._disk_plans[i], own[i], r, support.mode,
                         density, values[i].get(EQUILIBRIUM_DISPERSION))
@@ -244,7 +252,7 @@ class GravityPlan:
                     label = components[i].name() or f'component{i}'
                     out_extra[f'{label}_{name}_rotation'] = _rotation_table(
                         np.asarray(r, dtype=float), kpc_per_arcsec,
-                        cmp_parts, pressure, values[i][name])
+                        cmp_parts, vcirc2_r, pressure, values[i][name])
         return values
 
     def mass(self, params: ParamValues) -> GalaxyMass | None:
@@ -270,7 +278,9 @@ class GravityPlan:
                     self._component_params(i, params), kpc_per_arcsec,
                     self._mass_per_unit[i])
                 for i in self._followed})
-        return GalaxyMass(mass_model, params, context, kpc_per_arcsec)
+        return GalaxyMass(
+            mass_model, params, context, kpc_per_arcsec,
+            component_set.gravity().field(mass_model, params, context))
 
     def _equilibrium(
             self,
@@ -426,8 +436,7 @@ def _jeans_dispersion(
 
     def vertical_force(R: np.ndarray, z: np.ndarray) -> np.ndarray:
         R, z = np.broadcast_arrays(R, z)
-        return mass.model.vertical_force(
-            R * kpc, z * kpc, mass.params, mass.context) * kpc
+        return mass.field.vertical_force(R * kpc, z * kpc) * kpc
     off = radii > 0
     sigma = np.empty_like(radii)
     sigma[off] = jeans_dispersions(
@@ -492,14 +501,17 @@ def _rotation_table(
         radii: np.ndarray,
         kpc_per_arcsec: float,
         parts: dict[str, np.ndarray],
+        vcirc2: np.ndarray,
         pressure: np.ndarray | None,
         rotation: np.ndarray
 ) -> Table:
     """
     Return the table of the rotation of a component at the given radii
-    (arcsec): the square of the circular velocity of each component of
-    the mass (parts, by name), its pressure support (if any) and its
-    rotation (see GravityPlan.evaluate).
+    (arcsec): the Newtonian square of the circular velocity of each
+    component of the mass (parts, by name) and that of all, the square of
+    the circular velocity of the mass in the gravity of the galaxy
+    (vcirc2), its pressure support (if any) and its rotation (see
+    GravityPlan.evaluate).
     """
     kms = u.km / u.s
     table = Table()
@@ -507,7 +519,8 @@ def _rotation_table(
     table['radius_kpc'] = radii * kpc_per_arcsec * u.kpc
     for name, part in parts.items():
         table[f'vcirc_{name}'] = _signed_sqrt(part) * kms
-    table['vcirc'] = _signed_sqrt(sum(parts.values())) * kms
+    table['vnewton'] = _signed_sqrt(sum(parts.values())) * kms
+    table['vcirc'] = _signed_sqrt(vcirc2) * kms
     if pressure is not None:
         table['pressure'] = pressure * kms ** 2
     table['vrot'] = rotation * kms

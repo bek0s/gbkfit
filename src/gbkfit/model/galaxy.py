@@ -26,6 +26,7 @@ from .components.lines import Band, LineCatalogue
 from .components.points import Point
 from .components.roles import BandEmission
 from .distance import Distance, distance_parser
+from .gravity import Gravity, gravity_parser
 from .mass import MassComponent, MassModel, mass_component_parser
 
 
@@ -54,10 +55,11 @@ class Galaxy(parseutils.Serializable):
 
     Its parameters are those of its components, each prefixed by its name
     when there are several ('disk_pt_a'), and those of its geometries
-    ('{geometry}_posa'), its distance ('distance') and its mass
-    ('mass_{name}_*'). A name prefixes them all when there are several
-    galaxies (see ObservationGroup), whose order along the line of sight
-    the ObservationGroup gives (see its option depth_order).
+    ('{geometry}_posa'), its distance ('distance'), its mass
+    ('mass_{name}_*') and its gravity ('gravity_*'). A name prefixes them
+    all when there are several galaxies (see ObservationGroup), whose
+    order along the line of sight the ObservationGroup gives (see its
+    option depth_order).
 
     In configurations, its option geometries lists the geometries that
     its components name (see Geometry).
@@ -72,6 +74,9 @@ class Galaxy(parseutils.Serializable):
     distance : Distance, optional
         Its distance, which converts arcsec to kpc for its mass (required
         with mass, and used by it only).
+    gravity : Gravity, optional
+        How its mass pulls (with mass only): Newtonian by default (see
+        GravityNewton).
     redshift : float, optional
         Its one redshift: for what it emits and absorbs in its rest frame
         (its named lines are at their rest wavelengths times 1 + redshift,
@@ -155,6 +160,8 @@ class Galaxy(parseutils.Serializable):
             mass_component_parser, info, 'mass')
         parseutils.load_option_and_update_info(
             distance_parser, info, 'distance')
+        parseutils.load_option_and_update_info(
+            gravity_parser, info, 'gravity')
         return cls(**parseutils.parse_options_for_callable(
             info, cls.__init__))
 
@@ -168,6 +175,8 @@ class Galaxy(parseutils.Serializable):
             info.update(mass=mass_component_parser.dump(list(self._mass)))
         if self.distance() is not None:
             info.update(distance=distance_parser.dump(self.distance()))
+        if self._gravity is not None:
+            info.update(gravity=gravity_parser.dump(self._gravity))
         if self._redshift is not None:
             info.update(redshift=self._redshift)
         return info
@@ -179,7 +188,8 @@ class Galaxy(parseutils.Serializable):
             distance: Distance | None = None,
             redshift: float | None = None,
             driver: Driver | None = None,
-            name: str | None = None
+            name: str | None = None,
+            gravity: Gravity | None = None
     ):
         parseutils.check_name(name)
         if redshift is not None and not redshift > -1:
@@ -188,7 +198,8 @@ class Galaxy(parseutils.Serializable):
         self._redshift = redshift
         mass = iterutils.tuplify(mass)
         mass_model = MassModel(mass) if mass else None
-        self._component_set = ComponentSet(components, distance, mass_model)
+        self._component_set = ComponentSet(
+            components, distance, mass_model, gravity)
         if redshift is None:
             _check_redshift_not_needed(self._component_set.components())
         self._pdescs = self._component_set.pdescs()
@@ -197,6 +208,7 @@ class Galaxy(parseutils.Serializable):
             from gbkfit.driver.drivers.host import DriverHost
             driver = DriverHost()
         self._mass = mass
+        self._gravity = gravity
         self._driver = driver
         self._name = name
 
@@ -230,6 +242,10 @@ class Galaxy(parseutils.Serializable):
     def distance(self) -> Distance | None:
         """Return its distance, if given."""
         return self._component_set.distance()
+
+    def gravity(self) -> Gravity:
+        """Return the gravity of its mass (Newtonian if not given)."""
+        return self._component_set.gravity()
 
     def redshift(self) -> float:
         """Return its redshift (0 if not given)."""

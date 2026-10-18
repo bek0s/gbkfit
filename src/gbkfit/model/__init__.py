@@ -1,5 +1,6 @@
 from .distance import *
 from .galaxy import *
+from .gravity import *
 from .mass import *
 
 from . import components

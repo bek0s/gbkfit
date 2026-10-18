@@ -33,11 +33,13 @@ class GalaxyFunctions:
     (see bind). With mass:
 
     - vcirc(R): the circular velocity of its mass (km/s) at the radii R
-      (kpc, in the plane of its disks), signed as in the rotation tables
-      of its gravity: negative where its square is (see
-      GravityPlan.evaluate)
-    - vcirc_{name}(R): that of its mass component of the name, signed
-      (negative where it pulls outwards)
+      (kpc, in the plane of its disks), in its gravity (see Gravity),
+      signed as in the rotation tables of its gravity: negative where its
+      square is (see GravityPlan.evaluate)
+    - vnewton(R): that of its mass in Newtonian gravity (vcirc(R), with
+      Newtonian gravity), signed
+    - vcirc_{name}(R): that of its mass component of the name in
+      Newtonian gravity, signed (negative where it pulls outwards)
     - kpc_per_arcsec: the length of an arcsec in it (kpc)
 
     For each of its disks with velocity or dispersion traits, named
@@ -92,7 +94,7 @@ class GalaxyFunctions:
             for i in self._suffixes}
         names = []
         if mass_model is not None:
-            names += ['vcirc'] + [
+            names += ['vcirc', 'vnewton'] + [
                 f'vcirc_{cmp.name()}' for cmp in mass_model.components()]
             names += ['kpc_per_arcsec']
         for suffix in self._suffixes.values():
@@ -115,10 +117,16 @@ class GalaxyFunctions:
             self._gravity.evaluate, params))
         functions: dict[str, Any] = {}
         if mass is not None:
-            functions['vcirc'] = functools.partial(_vcirc, mass, None)
+            functions['vcirc'] = functools.partial(
+                _vcirc, 'vcirc', mass.field.vcirc2)
+            functions['vnewton'] = functools.partial(
+                _vcirc, 'vnewton', functools.partial(
+                    mass.model.vcirc2, params=mass.params,
+                    context=mass.context))
             for cmp in mass.model.components():
                 functions[f'vcirc_{cmp.name()}'] = functools.partial(
-                    _vcirc, mass, cmp.name())
+                    _vcirc, f'vcirc_{cmp.name()}', functools.partial(
+                        _component_vcirc2, mass, cmp.name()))
             functions['kpc_per_arcsec'] = mass.kpc_per_arcsec
         for i, suffix in self._suffixes.items():
             functions[f'rotation{suffix}'] = functools.partial(
@@ -206,10 +214,14 @@ class GalaxyFunctions:
         return radii
 
 
-def _vcirc(mass: GalaxyMass, name: str | None, R: npt.ArrayLike) -> np.ndarray:
+def _vcirc(
+        function: str,
+        vcirc2: Callable[[np.ndarray], np.ndarray],
+        R: npt.ArrayLike
+) -> np.ndarray:
     """
-    Return the circular velocity (km/s, signed) of the mass of a galaxy,
-    or of its mass component of the given name, at the radii R (kpc).
+    Return a circular velocity (km/s, signed) of the function of the given
+    name, from its square (vcirc2, of radii in kpc), at the radii R (kpc).
 
     Raises
     ------
@@ -218,11 +230,19 @@ def _vcirc(mass: GalaxyMass, name: str | None, R: npt.ArrayLike) -> np.ndarray:
     """
     radii = np.asarray(R, dtype=float)
     if not np.all(np.isfinite(radii) & (radii >= 0)):
-        function = 'vcirc' if name is None else f'vcirc_{name}'
         raise ValueError(
             f"{function}: the radii must be finite and at least 0; they are "
             f"{radii}")
-    parts = mass.model.vcirc2_components(
-        radii.ravel(), mass.params, mass.context)
-    vcirc2 = sum(parts.values()) if name is None else parts[name]
-    return (np.sign(vcirc2) * np.sqrt(np.abs(vcirc2))).reshape(radii.shape)
+    v2 = vcirc2(radii.ravel())
+    return (np.sign(v2) * np.sqrt(np.abs(v2))).reshape(radii.shape)
+
+
+def _component_vcirc2(
+        mass: GalaxyMass, name: str, R: np.ndarray
+) -> np.ndarray:
+    """
+    Return the Newtonian square of the circular velocity ((km/s)^2) of the
+    mass component of the given name of the mass of a galaxy, at the
+    radii R (kpc).
+    """
+    return mass.model.vcirc2_components(R, mass.params, mass.context)[name]

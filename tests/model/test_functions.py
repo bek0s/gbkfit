@@ -63,8 +63,8 @@ def test_circular_velocity_of_the_mass():
     galaxy = gas_galaxy()
     functions = galaxy.plan_functions()
     assert functions.names() == (
-        'vcirc', 'vcirc_bh', 'vcirc_halo', 'kpc_per_arcsec', 'rotation_gas',
-        'dispersion_gas')
+        'vcirc', 'vnewton', 'vcirc_bh', 'vcirc_halo', 'kpc_per_arcsec',
+        'rotation_gas', 'dispersion_gas')
     bound = functions.bind(PARAMS)
     R = np.array([0.5, 2.0, 8.0])
     np.testing.assert_allclose(
@@ -79,7 +79,8 @@ def test_circular_velocity_of_the_mass():
     extra = {}
     galaxy.plan_gravity().evaluate(PARAMS, extra)
     table = extra['gas_vpt_vt_rotation']
-    for name in ('vcirc', 'vcirc_bh', 'vcirc_halo'):
+    np.testing.assert_array_equal(bound['vnewton'](R), bound['vcirc'](R))
+    for name in ('vcirc', 'vnewton', 'vcirc_bh', 'vcirc_halo'):
         np.testing.assert_allclose(
             bound[name](table['radius_kpc'].value), table[name].value,
             rtol=1e-12)

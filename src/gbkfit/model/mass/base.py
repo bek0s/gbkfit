@@ -288,6 +288,15 @@ class MassComponent(parseutils.TypedSerializable, abc.ABC):
         """
         return True
 
+    def takes_shares(self) -> bool:
+        """
+        Check whether it takes the shares of the components in the squared
+        circular velocity of the mass (e.g. a spheroid given by its dark
+        fraction, see DarkFraction), which the gravity of its galaxy must
+        give (see Gravity.check_shares); here, it does not.
+        """
+        return False
+
     def vertical_force(
             self,
             R: npt.ArrayLike,

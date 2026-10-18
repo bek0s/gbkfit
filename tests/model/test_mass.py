@@ -1502,8 +1502,9 @@ def test_the_gravity_warns_of_a_disk_far_from_flat(caplog, tilt, warns):
 
 def test_the_gravity_writes_the_rotation_it_gives():
     # With extras, a table of the radii of the rotation it gives a disk,
-    # the circular velocity of each mass component and of all (signed),
-    # the pressure support, and the rotation: sqrt(vcirc^2 + pressure)
+    # the circular velocity of each mass component and of all (signed;
+    # in Newtonian gravity, vnewton and vcirc are the same), the pressure
+    # support, and the rotation: sqrt(vcirc^2 + pressure)
     galaxy = disk_galaxy(
         'smdisk', dict(type='mass', pressure_support='jeans'), MASS,
         DISTANCE)
@@ -1513,7 +1514,7 @@ def test_the_gravity_writes_the_rotation_it_gives():
     table = extra['component0_vpt_vt_rotation']
     assert table.colnames == [
         'radius', 'radius_kpc', 'vcirc_stars', 'vcirc_gas', 'vcirc_halo',
-        'vcirc', 'pressure', 'vrot']
+        'vnewton', 'vcirc', 'pressure', 'vrot']
     np.testing.assert_allclose(
         table['radius'], galaxy.components()[0].density_disk().subrnodes())
     np.testing.assert_allclose(
@@ -1522,6 +1523,7 @@ def test_the_gravity_writes_the_rotation_it_gives():
                  for name in ('stars', 'gas', 'halo'))
     np.testing.assert_allclose(
         np.sign(table['vcirc']) * table['vcirc'] ** 2, vcirc2, rtol=1e-12)
+    np.testing.assert_array_equal(table['vnewton'], table['vcirc'])
     np.testing.assert_allclose(table['vrot'], given[0]['vpt_vt'])
     np.testing.assert_allclose(
         table['vrot'] ** 2, vcirc2 + table['pressure'], rtol=1e-9)

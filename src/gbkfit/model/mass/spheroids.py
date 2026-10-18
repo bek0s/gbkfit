@@ -275,6 +275,9 @@ class MassSpheroid(MassComponent):
     def responds_to(self) -> tuple[str, ...]:
         return self._baryons
 
+    def takes_shares(self) -> bool:
+        return self._dark_fraction is not None
+
     def pdescs(self) -> dict[str, ParamDesc]:
         pdescs = self._profile.pdescs() | self._shape.pdescs()
         if self._dark_fraction is not None:
