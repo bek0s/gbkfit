@@ -13,6 +13,7 @@ import pytest
 
 from gbkfit.tasks import prep
 from gbkfit.utils import fitsutils
+from gbkfit.utils.parseutils import ConfigError
 
 
 # A spectral cube with a degenerate Stokes axis, as radio cubes often have:
@@ -692,3 +693,33 @@ def test_the_flux_of_a_pixel(unit, factor, flux):
         cube.header, 'cube.fits', cube.data.shape[0])
     assert scale == pytest.approx(factor, rel=1e-9)
     assert (1 * flux_unit).to_value(parse_unit(flux)) == pytest.approx(1)
+
+
+def test_the_noise_of_a_cube_is_that_of_its_negative_values():
+    # A blob of 1 on noise of 0.01 to 0.1 from channel to channel: the
+    # error of each channel is its noise (the faint wings of the blob,
+    # which sigma clipping keeps, raised the dispersion of all the values
+    # by up to 17% on smaller channels), to its scatter (1.5% here)
+    from gbkfit.prep import noise_errors
+    rng = np.random.default_rng(1)
+    z, y, x = np.indices((6, 100, 100))
+    sigma = np.linspace(0.01, 0.1, 6)[:, None, None]
+    blob = np.exp(-((x - 50) ** 2 + (y - 40) ** 2) / 50)
+    data = blob + sigma * rng.standard_normal(z.shape)
+    errors = noise_errors(data, np.ones(z.shape))
+    np.testing.assert_allclose(
+        errors, np.broadcast_to(sigma, errors.shape), rtol=0.08)
+
+
+def test_the_errors_of_a_prepared_cube_can_be_its_noise():
+    write_cube('cube.fits')
+    data = fits.getdata('cube.fits')
+    noisy = data + 0.05 * np.random.default_rng(2).standard_normal(data.shape)
+    fits.writeto('cube.fits', noisy.astype(np.float32), overwrite=True)
+    prep_pixel_spectra('cube.fits', noise_error=True)
+    np.testing.assert_allclose(
+        fits.getdata('prep_cube_noise.fits'), 0.05, rtol=0.3)
+    with pytest.raises(ConfigError, match="not both"):
+        prep.prep_pixel_spectra(
+            'cube.fits', 'errors.fits', None, *[None] * 9, False, None,
+            'float32', noise_error=True)

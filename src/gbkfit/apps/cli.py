@@ -464,13 +464,19 @@ def _make_parser() -> argparse.ArgumentParser:
         '--bins', type=str, required=True, metavar='BINS',
         help="the map of the bin of each pixel of the cube (negative for "
              "none)")
-    parsers_prep.add_parser('pixel_spectra', parents=[
-        parser_prep_input_1, parser_prep_rest,
-        parser_prep_roi_spat_2d, parser_prep_roi_spec_1d,
-        parser_prep_clip_1, parser_prep_ccl, parser_prep_nanpad,
-        parser_prep_dtype, parser_prep_minify, parser_common_output,
-        parser_common],
+    parser_prep_pixel_spectra = parsers_prep.add_parser(
+        'pixel_spectra', parents=[
+            parser_prep_input_1, parser_prep_rest,
+            parser_prep_roi_spat_2d, parser_prep_roi_spec_1d,
+            parser_prep_clip_1, parser_prep_ccl, parser_prep_nanpad,
+            parser_prep_dtype, parser_prep_minify, parser_common_output,
+            parser_common],
         help="spectra on a grid of pixels (a spectral cube)")
+    parser_prep_pixel_spectra.add_argument(
+        '--noise-error', action='store_true',
+        help="estimate the errors from the noise of each channel, from its "
+             "negative values (instead of an errors file; the noise must be "
+             "of mean 0, e.g. without continuum)")
     parser_prep_psf_muse = parsers_prep.add_parser(
         'psf_muse', parents=[parser_common_output, parser_common],
         help="the PSF of a MUSE cube (from its header), as a table")
@@ -611,7 +617,8 @@ def _run_prep(args: argparse.Namespace) -> None:
             args.ccl_lcount, args.ccl_pcount, args.ccl_lratio,
             args.sclip_sigma, args.sclip_iters,
             args.minify, args.nanpad, args.dtype,
-            args.velocity_rest, args.velocity, output_dir=output_dir)
+            args.velocity_rest, args.velocity, output_dir=output_dir,
+            noise_error=args.noise_error)
 
 
 def _run_fit(args: argparse.Namespace) -> None:

@@ -35,6 +35,7 @@ __all__ = [
     'largest_regions_mask',
     'muse_lsf_table',
     'muse_psf_table',
+    'noise_errors',
     'pixel_fluxes',
     'range_mask',
     'sigma_clip_mask'
@@ -482,6 +483,37 @@ def sigma_clip_mask(
     kept = np.ma.masked_array(data, mask=(mask == 0))
     return ~astropy.stats.sigma_clip(
         kept, sigma=sigma, maxiters=maxiters).mask
+
+
+def noise_errors(data: np.ndarray, mask: np.ndarray) -> np.ndarray:
+    """
+    Return the errors of the values of a cube from its noise: for each
+    channel, the robust dispersion of its negative values (of those the
+    mask keeps), 1.4826 times the median of their absolute values, which
+    emission (positive) does not bias, unlike the dispersion of all the
+    values, even sigma-clipped (its faint wings stay); NaN for channels
+    with fewer than 5 negative values. The noise must be of mean 0 (e.g.
+    of a cube without continuum, as the models are).
+
+    Parameters
+    ----------
+    data : np.ndarray
+        The cube, of shape (nz, ny, nx).
+    mask : np.ndarray
+        The mask of the values that count (nonzero).
+
+    Returns
+    -------
+    np.ndarray
+        The errors, of the shape of the cube: the same at every pixel of
+        a channel.
+    """
+    errors = np.full(data.shape[0], np.nan)
+    for channel, (values, kept) in enumerate(zip(data, mask)):
+        negative = values[(kept != 0) & (values < 0)]
+        if negative.size >= 5:
+            errors[channel] = 1.4826 * np.median(-negative)
+    return np.broadcast_to(errors[:, None, None], data.shape).copy()
 
 
 def largest_regions_mask(

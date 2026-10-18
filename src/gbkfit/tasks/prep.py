@@ -187,7 +187,8 @@ def prep_pixel_spectra(
         dtype: npt.DTypeLike,
         velocity_rest: str | None = None,
         velocity: str | None = None,
-        output_dir: str = '.'
+        output_dir: str = '.',
+        noise_error: bool = False
 ) -> None:
     """
     Prepare a cube (pixel_spectra): crop it to a region (roi_spat: x from,
@@ -195,16 +196,35 @@ def prep_pixel_spectra(
     valid pixels (minify), pad it (nanpad), and convert its spectral axis
     to velocities (velocity_rest). velocity is the convention of the
     velocities of an axis that does not state it (see FitsArrays.read).
+    With noise_error, the errors are the noise of each channel of the
+    cropped cube, from its negative values (see prep.noise_errors),
+    written as prep_<name of the cube>_noise.fits.
+
+    Raises
+    ------
+    ConfigError
+        If both noise_error and an errors file are given.
     """
+    if noise_error and file_e is not None:
+        raise ConfigError(
+            "give a file of the errors or estimate them from the noise "
+            "(noise_error), not both")
     arrays = FitsArrays.read(file_d, file_e, file_m, velocity)
     channels, ys, xs = slice(None), slice(None), slice(None)
     if roi_spat is not None:
         xs, ys = slice(*roi_spat[0:2]), slice(*roi_spat[2:4])
     if roi_spec is not None:
         channels = slice(*roi_spec)
+    arrays = arrays.crop((channels, ys, xs))
+    if noise_error:
+        # (of the noise before the clipping, which masks some of it)
+        arrays = FitsArrays(
+            arrays.data, prep.noise_errors(arrays.data, arrays.mask),
+            arrays.mask, arrays.header)
+        file_e = os.path.splitext(file_d)[0] + '_noise.fits'
     arrays = _clip(
-        arrays.crop((channels, ys, xs)), clip_min, clip_max, sclip_sigma,
-        sclip_iters, ccl_lcount, ccl_pcount, ccl_lratio)
+        arrays, clip_min, clip_max, sclip_sigma, sclip_iters, ccl_lcount,
+        ccl_pcount, ccl_lratio)
     _write(arrays, minify, nanpad, velocity_rest, (file_d, file_e, file_m),
            dtype, output_dir)
 
