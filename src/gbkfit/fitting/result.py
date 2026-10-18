@@ -226,6 +226,35 @@ class FitSolution:
     covariance: Covariance | None
     laplace: Posterior | None
 
+    @property
+    def nfitted(self) -> int:
+        """
+        The number of fitted quantities: the free elements and the nuisance
+        parameters (nresiduals - dof).
+        """
+        return self.nresiduals - self.dof
+
+    @property
+    def aic(self) -> float:
+        """
+        The Akaike information criterion, 2 k - 2 ln L, of the k fitted
+        quantities (see nfitted) and the log-likelihood L: the lower, the
+        better a model, of several fitted to the same data.
+        """
+        return 2 * self.nfitted - 2 * self.log_likelihood
+
+    @property
+    def bic(self) -> float:
+        """
+        The Bayesian information criterion, k ln n - 2 ln L, of the k fitted
+        quantities (see nfitted), the n residuals and the log-likelihood L.
+        Like the likelihood, it takes the values as independent (of
+        correlated values, e.g. the pixels within a beam, n is more than
+        the independent ones, and k ln n penalises too much).
+        """
+        return self.nfitted * float(np.log(self.nresiduals)) \
+            - 2 * self.log_likelihood
+
 
 @dataclasses.dataclass(frozen=True)
 class FitResult:
@@ -385,7 +414,7 @@ def _solution_summary(solution: FitSolution) -> dict[str, Any]:
         nresiduals=solution.nresiduals, dof=solution.dof,
         reduced_chi2=solution.reduced_chi2,
         log_likelihood=solution.log_likelihood,
-        log_prior=solution.log_prior)
+        log_prior=solution.log_prior, aic=solution.aic, bic=solution.bic)
     if (cov := solution.covariance) is not None:
         info['covariance'] = dict(
             names=list(cov.names), std=cov.std, element_std=cov.element_std,

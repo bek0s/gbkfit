@@ -678,3 +678,16 @@ def test_fits_report_their_progress():
     best = [report.best_chi2 for report in reports]
     assert nevals == sorted(nevals) and best == sorted(best, reverse=True)
     assert set(reports[-1].best) == set(result.best().free)
+
+
+def test_the_information_criteria_of_a_solution():
+    # Of 3 fitted quantities, 100 residuals and ln L = -50: AIC = 2 x 3 +
+    # 100, BIC = 3 ln 100 + 100
+    from gbkfit.fitting.result import FitSolution
+    solution = FitSolution(
+        free={}, values={}, elements={}, chi2=100.0, nresiduals=100, dof=97,
+        reduced_chi2=100 / 97, log_likelihood=-50.0, log_prior=None,
+        covariance=None, laplace=None)
+    assert solution.nfitted == 3
+    assert solution.aic == pytest.approx(106)
+    assert solution.bic == pytest.approx(3 * np.log(100) + 100)
