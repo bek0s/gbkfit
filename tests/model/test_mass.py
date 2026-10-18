@@ -1390,6 +1390,36 @@ def test_pressure_support_takes_the_density_of_a_mass_component(mode):
         * np.gradient(profile, r, edge_order=2) / profile, rtol=1e-5)
 
 
+@pytest.mark.parametrize('mode', ['jeans', 'self_gravitating'])
+def test_pressure_support_takes_the_density_of_a_mass_disk_of_its_disk(mode):
+    # A mass disk that follows the disk (its surface density and vertical
+    # structure) has its density at its subnodes, upsilon times it, which
+    # the pressure does not see: the support of the density of the disk
+    disk = with_traits(
+        DISK, vptraits=dict(type='mass', pressure_support=mode),
+        htraits=dict(type='sech2', zmax=8)) | dict(type='smdisk', name='gas')
+    mass = [
+        dict(type='disk', name='hi', surface=dict(
+            type='component', component='gas'),
+            vertical=dict(type='component', component='gas')),
+        dict(type='spheroid', name='halo', profile=dict(
+            type='pseudo_isothermal', parameters='density_radius'))]
+
+    def rotation(density):
+        support = disk | dict(kinematics=disk['kinematics'] | dict(
+            vptraits=disk['kinematics']['vptraits'] | density))
+        galaxy = galaxy_parser.load(dict(
+            components=[support], mass=copy.deepcopy(mass),
+            distance=copy.deepcopy(DISTANCE)))
+        params = {f'gas_{key}': value
+                  for key, value in DISK_PROPERTIES.items()} | dict(
+            gas_ht_s=0.5, distance=10, mass_hi_upsilon=1e8,
+            mass_halo_log_rho=7, mass_halo_rs=3)
+        return galaxy.plan_gravity().evaluate(params)[0]['vpt_vt']
+    np.testing.assert_allclose(
+        rotation(dict(pressure_density='hi')), rotation({}), rtol=1e-10)
+
+
 def test_pressure_density_is_a_mass_component_that_gives_it():
     vptraits = dict(
         type='mass', pressure_support='jeans', pressure_density='dust')

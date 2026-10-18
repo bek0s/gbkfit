@@ -17,7 +17,7 @@ from gbkfit.params import ParamDesc, ParamValues
 from gbkfit.params.pdescs import ParamScalarDesc
 from gbkfit.utils import parseutils
 from gbkfit.utils.parseutils import ConfigError
-from .base import MassContext
+from .base import ComponentDensity, MassContext
 
 
 __all__ = [
@@ -283,9 +283,31 @@ class VerticalComponent(DiskVertical):
             params: ParamValues,
             context: MassContext
     ) -> np.ndarray:
-        raise NotImplementedError(
-            "the vertical structure of a component is given on rings only "
-            "(see VerticalComponent.shapes)")
+        # The shape at each point, from those at the two subnodes around it
+        if self.thin(context):
+            raise NotImplementedError(
+                "a thin disk has a surface density, not a density")
+        R, z = np.broadcast_arrays(
+            np.asarray(R, dtype=float), np.asarray(z, dtype=float))
+        density, knots, sigmas, total = self._shape_knots(context)
+        if len(knots) == 1:
+            left = right = np.zeros(R.shape, dtype=int)
+            t = np.zeros(R.shape)
+        else:
+            radii = np.clip(R, knots[0], knots[-1])
+            right = np.clip(np.searchsorted(knots, radii), 1, len(knots) - 1)
+            left = right - 1
+            t = (radii - knots[left]) / (knots[right] - knots[left])
+
+        def at(nodes: np.ndarray) -> np.ndarray:
+            # (the shape at the subnodes of the given indices, at z)
+            out = np.empty(R.shape)
+            for k in np.unique(nodes):
+                points = nodes == k
+                pdfs = density.height_pdfs(knots[k:k + 1], z[points])
+                out[points] = sigmas[:, k] @ pdfs[:, 0] / total[k]
+            return out
+        return (1 - t) * at(left) + t * at(right)
 
     def knots(self, context: MassContext) -> np.ndarray:
         """
@@ -307,6 +329,32 @@ class VerticalComponent(DiskVertical):
         ValueError
             If the component has no density at any of its subnodes.
         """
+        density, knots, sigmas, total = self._shape_knots(context)
+        pdfs = density.height_pdfs(knots, z)
+        shapes = np.einsum('tk,tkz->kz', sigmas, pdfs) / total[:, None]
+        # Linear between the subnodes with density, held beyond them
+        if len(knots) == 1:
+            return np.repeat(shapes, len(R), axis=0)
+        R = np.clip(R, knots[0], knots[-1])
+        right = np.clip(np.searchsorted(knots, R), 1, len(knots) - 1)
+        left = right - 1
+        t = ((R - knots[left]) / (knots[right] - knots[left]))[:, None]
+        return (1 - t) * shapes[left] + t * shapes[right]
+
+    def _shape_knots(
+            self, context: MassContext
+    ) -> tuple[ComponentDensity, np.ndarray, np.ndarray, np.ndarray]:
+        """
+        Return the density of the component, and the subnodes at which it
+        takes the shape, those with density (kpc), with the surface
+        density of each term there (an array of shape (terms, subnodes))
+        and their sum.
+
+        Raises
+        ------
+        ValueError
+            If the component has no density at any of its subnodes.
+        """
         density = context.density(self._component)
         knots = density.knots(self._rstep)
         sigmas = density.surface_densities(knots)
@@ -316,18 +364,7 @@ class VerticalComponent(DiskVertical):
             raise ValueError(
                 f"the component {self._component!r} has no density, so no "
                 f"vertical structure")
-        pdfs = density.height_pdfs(knots[full], z)
-        shapes = np.einsum('tk,tkz->kz', sigmas[:, full], pdfs) \
-            / total[full, None]
-        # Linear between the subnodes with density, held beyond them
-        knots = knots[full]
-        if len(knots) == 1:
-            return np.repeat(shapes, len(R), axis=0)
-        R = np.clip(R, knots[0], knots[-1])
-        right = np.clip(np.searchsorted(knots, R), 1, len(knots) - 1)
-        left = right - 1
-        t = ((R - knots[left]) / (knots[right] - knots[left]))[:, None]
-        return (1 - t) * shapes[left] + t * shapes[right]
+        return density, knots[full], sigmas[:, full], total[full]
 
 
 disk_vertical_parser = parseutils.TypedParser(DiskVertical, [
