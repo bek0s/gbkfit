@@ -74,6 +74,26 @@ def test_profiling_writes_the_timings(tmp_path, mode):
     assert timings['model_eval']['count'] == 3
 
 
+def test_mock_data_and_their_configuration(tmp_path):
+    # Two mocks of noise of rms 0.01: the model plus the noise, with the
+    # rms as their errors, and a configuration of each that fits it: at
+    # the parameters of the model, its residuals are of one standard
+    # deviation
+    config = yaml.load(REFERENCE_DIR / 'thin_disk_pixel_spectra.yaml')
+    config['mock'] = dict(
+        noise=dict(type='gauss', rms=0.01), nmocks=2, seed=3)
+    outputs = run_eval('mock', config, tmp_path / 'mock')
+    mocks = [outputs[f'mock{k}_observation0_spectra_d'] for k in (0, 1)]
+    noise = mocks[0] - outputs['model_0_spectra_d']
+    assert noise.std() == pytest.approx(0.01, rel=0.01)
+    np.testing.assert_array_equal(
+        outputs['mock0_observation0_spectra_e'], np.float32(0.01))
+    assert not np.array_equal(*mocks)
+    mock = yaml.load(tmp_path / 'mock' / 'output' / 'mock0.yaml')
+    outputs = run_eval('objective', mock, tmp_path / 'fit')
+    assert outputs['residual_spectra_d'].std() == pytest.approx(1, rel=0.01)
+
+
 def test_rotation_curve_from_radial_nodes(tmp_path):
     # A rotation curve given by an expression of the radial nodes of the
     # disk and of user-defined parameters is the same as the one given by

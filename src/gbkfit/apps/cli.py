@@ -256,8 +256,10 @@ def _make_parser() -> argparse.ArgumentParser:
         parser_common_config, parser_results_output, parser_common],
         help="evaluate model")
     parser_eval.add_argument(
-        'mode', type=str, choices=['model', 'objective'],
-        help="the evaluation mode")
+        'mode', type=str, choices=['model', 'objective', 'mock'],
+        help="the evaluation mode: the model, the objective (the "
+             "residuals against the data), or mock data of the "
+             "observations (the model plus noise; see the section 'mock')")
     parser_eval.add_argument(
         'config', type=str,
         help="configuration file path; json and yaml formats are supported")
