@@ -104,7 +104,7 @@ def test_measurement_sets_are_read_as_stokes_i():
     error = np.sqrt(1 / weights[:, 0] + 1 / weights[:, 1]) / 2
     np.testing.assert_allclose(dataset['re'].error()[0], error)
     coverage = dataset.coverage()
-    np.testing.assert_allclose(coverage.uvw(), uvw)
+    np.testing.assert_allclose(coverage.uvw(), -uvw)
     np.testing.assert_allclose(coverage.phase_centre(), (150, -30))
     assert coverage.frame() == 'LSRK' and coverage.rest().value == 1.4204e9
 

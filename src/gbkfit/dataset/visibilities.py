@@ -42,9 +42,12 @@ class UVCoverage:
     Parameters
     ----------
     uvw : numpy.ndarray
-        The baselines (u, v, w) of the rows, in m, in the frame of the
-        phase centre (u to the east, v to the north, w to it), of shape
-        (nrows, 3).
+        The baselines b = (u, v, w) of the rows, in m, in the frame of the
+        phase centre p (u to the east, v to the north, w to it), of shape
+        (nrows, 3): of the visibilities V(b) = sum of the flux at each
+        direction s times exp(-2 pi i b . (s - p)) (b in wavelengths);
+        those of a measurement set are -UVW (see
+        DatasetVisibilities.from_ms).
     frequencies : Sequence of float
         The frequencies of the channels (Hz): uniform, in the rest frame
         given.
@@ -311,7 +314,10 @@ class DatasetVisibilities(Dataset):
         its own visibilities, or the mean of those of the parallel hands
         (RR and LL, or XX and YY), left out where either is flagged. The
         errors of each part are 1 / sqrt(weight), of WEIGHT_SPECTRUM if
-        given, else of WEIGHT.
+        given, else of WEIGHT. The visibilities of a measurement set are
+        sums of exp(+2 pi i UVW . (s - p)), so their baselines b (see
+        UVCoverage) are -UVW (checked against those that CASA predicts;
+        see tests/data/visibilities).
 
         Parameters
         ----------
@@ -379,7 +385,7 @@ class DatasetVisibilities(Dataset):
             rows = main.query(
                 f'FIELD_ID == {index} && DATA_DESC_ID == {description} '
                 f'&& ANTENNA1 != ANTENNA2')
-            uvw = rows.getcol('UVW')
+            uvw = -rows.getcol('UVW')
             visibilities = rows.getcol(column)
             flags = rows.getcol('FLAG') | rows.getcol('FLAG_ROW')[:, None, None]
             weights = rows.getcol('WEIGHT_SPECTRUM') \
