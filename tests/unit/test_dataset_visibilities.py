@@ -48,11 +48,18 @@ def test_the_channels_are_checked(options, message):
         visibilities(**options)
 
 
-def write_ms(path, uvw, data, flags, weights, frequencies, rest=None):
+def write_ms(
+        path, uvw, data, flags, weights, frequencies, rest=None,
+        antennas=None, times=None):
     # A measurement set of one field and one spectral window (LSRK), with
-    # the cross-correlations XX and YY of the baselines
+    # the cross-correlations XX and YY of the baselines: by default, each
+    # row of its own, at one time
     tables = pytest.importorskip('casacore.tables')
     nrows = len(uvw)
+    if antennas is None:
+        antennas = np.zeros(nrows, int), np.arange(1, nrows + 1)
+    if times is None:
+        times = np.zeros(nrows), np.ones(nrows)
     with tables.default_ms(path, tables.maketabdesc(
             [tables.makearrcoldesc('DATA', 0j, ndim=2)])) as ms:
         ms.addrows(nrows)
@@ -61,8 +68,10 @@ def write_ms(path, uvw, data, flags, weights, frequencies, rest=None):
         ms.putcol('FLAG', flags)
         ms.putcol('WEIGHT', weights)
         ms.putcol('SIGMA', 1 / np.sqrt(weights))
-        ms.putcol('ANTENNA1', np.zeros(nrows, int))
-        ms.putcol('ANTENNA2', np.arange(1, nrows + 1))
+        ms.putcol('ANTENNA1', antennas[0])
+        ms.putcol('ANTENNA2', antennas[1])
+        ms.putcol('TIME', times[0])
+        ms.putcol('INTERVAL', times[1])
     rows = dict(
         FIELD=dict(PHASE_DIR=np.radians([[[150, -30]]]), NAME=['galaxy'],
                    SOURCE_ID=[0]),
@@ -118,3 +127,31 @@ def test_measurement_sets_need_a_rest_frequency():
         DatasetVisibilities.from_ms('test.ms')
     dataset = DatasetVisibilities.from_ms('test.ms', rest=HI)
     assert dataset.coverage().rest().unit == 'Hz'
+
+
+def test_errors_can_be_estimated_from_the_scatter_of_the_data():
+    # Three baselines of Stokes I of noise 0.5, 1 and 2 in each part (of
+    # weights all 1), at 100 times 10 s apart in two scans 1000 s apart,
+    # in rows out of the order of time: their errors are the dispersion of
+    # their second differences in time
+    rng = np.random.default_rng(4)
+    ntimes, nchannels = 100, 3
+    order = rng.permutation(3 * ntimes)
+    baseline = np.tile([0, 1, 2], ntimes)[order]
+    antennas = np.array([[0, 0, 1], [1, 2, 2]])[:, baseline]
+    time = np.repeat(
+        10.0 * np.arange(ntimes) + 1000 * (np.arange(ntimes) >= 50), 3)[order]
+    sigma = np.array([0.5, 1, 2])[baseline]
+    shape = (3 * ntimes, nchannels, 2)
+    # (each hand of noise sqrt(2) sigma, of their mean I of sigma)
+    data = 1 + 0.5j + np.sqrt(2) * sigma[:, None, None] * (
+        rng.standard_normal(shape) + 1j * rng.standard_normal(shape))
+    write_ms(
+        'test.ms', rng.uniform(-1e3, 1e3, (3 * ntimes, 3)), data,
+        np.zeros(shape, bool), np.ones((3 * ntimes, 2)), FREQUENCIES,
+        antennas=antennas, times=(time, np.full(3 * ntimes, 10.0)))
+    dataset = DatasetVisibilities.from_ms('test.ms', rest=HI, error='scatter')
+    for key in ('re', 'im'):
+        np.testing.assert_allclose(
+            dataset[key].error(), np.broadcast_to(sigma, (3, 3 * ntimes)),
+            rtol=0.2)

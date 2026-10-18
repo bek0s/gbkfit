@@ -248,8 +248,8 @@ class DatasetVisibilities(Dataset):
             cls, info: dict[str, Any], prefix: str = ''
     ) -> 'DatasetVisibilities':
         options = parseutils.parse_options(
-            info, required=set(), optional={'file', 'ms', 'field', 'spw',
-                                            'column', 'rest'})
+            info, required=set(), optional={
+                'file', 'ms', 'field', 'spw', 'column', 'rest', 'error'})
         if ('file' in options) == ('ms' in options):
             raise ConfigError(
                 "the visibilities are read from a file (option file) or a "
@@ -309,7 +309,8 @@ class DatasetVisibilities(Dataset):
             field: int | str | None = None,
             spw: int = 0,
             column: str = 'DATA',
-            rest: str | astropy.units.Quantity | None = None
+            rest: str | astropy.units.Quantity | None = None,
+            error: str = 'weights'
     ) -> 'DatasetVisibilities':
         """
         Read the dataset from a measurement set (python-casacore): the
@@ -317,15 +318,14 @@ class DatasetVisibilities(Dataset):
         its own visibilities, or the mean of those of the parallel hands
         (RR and LL, or XX and YY), left out where either is flagged. The
         errors of each part are 1 / sqrt(weight), of WEIGHT_SPECTRUM if
-        given, else of WEIGHT. The visibilities of a measurement set are
+        given, else of WEIGHT, or estimated from the data (see error). The
+        visibilities of a measurement set are
         sums of exp(+2 pi i UVW . (s - p)), so their baselines b (see
         UVCoverage) are -UVW (checked against those that CASA predicts;
         see tests/data/visibilities).
 
-        Not supported yet: errors estimated from the scatter of the
-        visibilities (for weights of the wrong scale, fit a noise scale);
-        several fields or spectral windows in one dataset (one dataset
-        each).
+        Not supported yet: several fields or spectral windows in one
+        dataset (one dataset each).
 
         Parameters
         ----------
@@ -341,6 +341,22 @@ class DatasetVisibilities(Dataset):
         rest : str or Quantity, optional
             The rest frequency (see UVCoverage); by default, that of the
             source of the field (REST_FREQUENCY of the table SOURCE).
+        error : str, optional
+            The errors: 'weights' (by default), those of the weights of the
+            set; or 'scatter', estimated from the visibilities themselves
+            (for weights of the wrong scale, or that differ from baseline
+            to baseline): those of a baseline at three consecutive times
+            (in one scan: at most 1.5 integrations apart) see nearly the
+            same sky, so V(t - 1) - 2 V(t) + V(t + 1) is noise of 6 times
+            the variance, without the part of the sky that changes
+            linearly in time. The error of each part, of each baseline, is
+            the robust dispersion (1.4826 times the median absolute
+            deviation) of these over all its times and channels, over
+            sqrt(6); that of baselines with fewer than 5 is missing. The
+            sky must change little in three integrations (e.g. the phase
+            of a source 25 arcsec from the phase centre turns by up to
+            0.25 rad in 6 s at 1 km and 230 GHz: 6% of its flux remains in
+            each second difference, 25% in a first one).
 
         Returns
         -------
@@ -352,10 +368,14 @@ class DatasetVisibilities(Dataset):
         ConfigError
             If the field, the spectral window or the column are not in the
             measurement set, it has neither Stokes I nor a pair of parallel
-            hands, or no rest frequency (see UVCoverage).
+            hands, or no rest frequency (see UVCoverage), or error is not
+            one of those.
         ModuleNotFoundError
             If python-casacore is not installed.
         """
+        if error not in ('weights', 'scatter'):
+            raise ConfigError(
+                f"error must be 'weights' or 'scatter'; it is {error!r}")
         try:
             from casacore import tables
         except ModuleNotFoundError as e:
@@ -400,12 +420,18 @@ class DatasetVisibilities(Dataset):
                 if 'WEIGHT_SPECTRUM' in rows.colnames() \
                 and rows.iscelldefined('WEIGHT_SPECTRUM', 0) \
                 else rows.getcol('WEIGHT')[:, None, :]
+            baselines = rows.getcol('ANTENNA1'), rows.getcol('ANTENNA2')
+            times = rows.getcol('TIME'), rows.getcol('INTERVAL')
             rows.close()
-        stokes, error, mask = _ms_stokes_i(
+        stokes, sigma, mask = _ms_stokes_i(
             visibilities, flags, weights, products)
+        sigma_re = sigma_im = sigma
+        if error == 'scatter':
+            sigma_re, sigma_im = _scatter_errors(
+                np.where(mask, stokes, np.nan), *baselines, *times)
         return cls(
-            Data(stokes.real.T, mask.T, error.T, 'Jy'),
-            Data(stokes.imag.T, mask.T, error.T, 'Jy'),
+            Data(stokes.real.T, mask.T, sigma_re.T, 'Jy'),
+            Data(stokes.imag.T, mask.T, sigma_im.T, 'Jy'),
             UVCoverage(uvw, frequencies, phase_centre, frame, rest))
 
     def dump(
@@ -493,6 +519,38 @@ def _ms_rest(subtable: Any, source: int) -> astropy.units.Quantity:
     if len(values) == 0:
         raise error
     return float(values[0]) * astropy.units.Hz
+
+
+def _scatter_errors(
+        visibilities: np.ndarray,
+        antenna1: np.ndarray,
+        antenna2: np.ndarray,
+        time: np.ndarray,
+        interval: np.ndarray
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Return the errors of the real and the imaginary parts of visibilities
+    of shape (nrows, nchannels) (NaN where flagged), estimated from the
+    second differences of those of each baseline at consecutive times
+    (see DatasetVisibilities.from_ms).
+    """
+    errors = np.full((2,) + visibilities.shape, np.nan)
+    baselines = antenna1 * (antenna2.max() + 1) + antenna2
+    for baseline in np.unique(baselines):
+        rows = np.flatnonzero(baselines == baseline)
+        rows = rows[np.argsort(time[rows])]
+        # The triples of consecutive times in one scan
+        apart = np.diff(time[rows]) <= 1.5 * np.maximum(
+            interval[rows[1:]], interval[rows[:-1]])
+        middle = np.flatnonzero(apart[:-1] & apart[1:]) + 1
+        differences = visibilities[rows[middle - 1]] \
+            - 2 * visibilities[rows[middle]] + visibilities[rows[middle + 1]]
+        for part, values in enumerate((differences.real, differences.imag)):
+            values = values[np.isfinite(values)]
+            if values.size >= 5:
+                deviation = np.median(np.abs(values - np.median(values)))
+                errors[part][rows] = 1.4826 * deviation / np.sqrt(6)
+    return errors[0], errors[1]
 
 
 def _ms_stokes_i(
