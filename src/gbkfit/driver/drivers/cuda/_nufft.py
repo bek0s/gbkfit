@@ -22,7 +22,7 @@ class DriverNUFFTCuda(DriverNUFFT):
     """
     The non-uniform FFTs of the cuda driver: cuFINUFFT, on its GPU (in the
     default stream, as all the work of the driver). The points and the
-    frequencies are uploaded when a NUFFT is made.
+    frequencies are uploaded when a NUFFT is made or moved.
     """
 
     def __init__(self, device: cp.cuda.Device):
@@ -36,9 +36,9 @@ class DriverNUFFTCuda(DriverNUFFT):
             eps: float,
             ntransforms: int
     ) -> NUFFT:
-        return self._nufft(
-            3, len(points), _points(points, frequencies), sign, eps,
-            ntransforms)
+        return _NUFFTCuda(
+            3, len(points), points, frequencies, sign, eps, ntransforms,
+            self._device)
 
     def _type1(
             self,
@@ -48,7 +48,8 @@ class DriverNUFFTCuda(DriverNUFFT):
             eps: float,
             ntransforms: int
     ) -> NUFFT:
-        return self._nufft(1, shape, _points(points), sign, eps, ntransforms)
+        return _NUFFTCuda(
+            1, shape, points, (), sign, eps, ntransforms, self._device)
 
     def _type2(
             self,
@@ -58,48 +59,55 @@ class DriverNUFFTCuda(DriverNUFFT):
             eps: float,
             ntransforms: int
     ) -> NUFFT:
-        return self._nufft(2, shape, _points(points), sign, eps, ntransforms)
-
-    def _nufft(
-            self,
-            nufft_type: int,
-            modes_or_dimensions: int | tuple[int, ...],
-            points: dict[str, np.ndarray],
-            sign: int,
-            eps: float,
-            ntransforms: int
-    ) -> NUFFT:
-        """
-        Return a NUFFT of a cuFINUFFT plan of a type, of the arguments of
-        its setpts (see _points), on the host, and of a number of
-        transforms.
-        """
-        with self._device:
-            plan = cufinufft.Plan(
-                nufft_type, modes_or_dimensions, n_trans=ntransforms, eps=eps,
-                isign=sign, dtype=np.complex128,
-                gpu_device_id=self._device.id)
-            plan.setpts(**{
-                name: cp.asarray(values) for name, values in points.items()})
-        return _NUFFTCuda(plan, self._device)
+        return _NUFFTCuda(
+            2, shape, points, (), sign, eps, ntransforms, self._device)
 
 
 class _NUFFTCuda(NUFFT):
-    """A NUFFT of a cuFINUFFT plan, on a GPU."""
+    """
+    A NUFFT of a cuFINUFFT plan on a GPU (see _NUFFTHost of the host
+    driver, of the same arguments).
+    """
 
-    def __init__(self, plan: Any, device: cp.cuda.Device):
-        self._plan = plan
+    def __init__(
+            self,
+            nufft_type: int,
+            modes_or_dimensions: int | tuple[int, ...],
+            points: tuple[np.ndarray, ...],
+            frequencies: tuple[np.ndarray, ...],
+            sign: int,
+            eps: float,
+            ntransforms: int,
+            device: cp.cuda.Device
+    ):
+        super().__init__(nufft_type, len(points))
         self._device = device
+        with device:
+            self._plan = cufinufft.Plan(
+                nufft_type, modes_or_dimensions, n_trans=ntransforms,
+                eps=eps, isign=sign, dtype=np.complex128,
+                gpu_device_id=device.id)
+        self._set_points(points, frequencies)
 
     def __call__(self, data: DeviceArray, out: DeviceArray) -> None:
         with self._device:
             self._plan.execute(data, out=out)
 
+    def _set_points(
+            self,
+            points: tuple[np.ndarray, ...],
+            frequencies: tuple[np.ndarray, ...]
+    ) -> None:
+        with self._device:
+            self._plan.setpts(**{
+                name: cp.asarray(values)
+                for name, values in _points(points, frequencies).items()})
+
 
 def _points(
         points: tuple[np.ndarray, ...],
-        frequencies: tuple[np.ndarray, ...] = ()
-) -> dict[str, np.ndarray]:
+        frequencies: tuple[np.ndarray, ...]
+) -> dict[str, Any]:
     """
     Return the points and the frequencies of a NUFFT as the arguments of
     the setpts of cuFINUFFT: their columns x, y, z and s, t, u.

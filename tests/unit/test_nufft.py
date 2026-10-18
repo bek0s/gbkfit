@@ -73,6 +73,32 @@ def test_type2_is_the_direct_sum_of_each_array(driver):
     assert relative_error(result, expected) < ERROR
 
 
+def test_moved_transforms_are_those_of_their_new_points(driver):
+    # A type 2 and a type 3, made for other points and moved to these
+    rng = np.random.default_rng(4)
+    shape = (5, 8)
+    points = rng.uniform(-0.5, 0.5, (300, 2))
+    arrays = rng.standard_normal(shape) + 1j * rng.standard_normal(shape)
+    plan = driver.nufft().type2(np.zeros((300, 2)), shape, -1, EPS)
+    plan.set_points(points)
+    ky, kx = modes(shape)
+    expected = np.exp(-2j * np.pi * (
+        points[:, 0, None, None] * ky + points[:, 1, None, None] * kx)) \
+        .reshape(300, -1) @ arrays.ravel()
+    assert relative_error(
+        transform(driver, plan, arrays, (300,)), expected) < ERROR
+    frequencies = rng.uniform(-1, 1, (200, 3)) * 1e4
+    points = rng.uniform(-1, 1, (300, 3)) * 1e-3
+    strengths = rng.standard_normal(300) + 1j * rng.standard_normal(300)
+    plan = driver.nufft().type3(points / 2, frequencies / 2, -1, EPS)
+    plan.set_points(points, frequencies)
+    expected = np.exp(-2j * np.pi * frequencies @ points.T) @ strengths
+    assert relative_error(
+        transform(driver, plan, strengths, (200,)), expected) < ERROR
+    with pytest.raises(ValueError, match="type 3"):
+        plan.set_points(points)
+
+
 @pytest.mark.parametrize('arguments, message', [
     (dict(points=np.zeros((4, 4))), "shape \\(n, d\\)"),
     (dict(frequencies=np.zeros((4, 2))), "dimensions of the points"),

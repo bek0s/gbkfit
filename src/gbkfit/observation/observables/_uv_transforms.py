@@ -6,12 +6,12 @@ the drivers (see UVTransform).
 
 import abc
 import math
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 
 import numpy as np
 import scipy.special
 
-from gbkfit.driver import DeviceArray, Driver
+from gbkfit.driver import DeviceArray, Driver, NUFFT
 from gbkfit.utils import gridutils
 
 
@@ -44,11 +44,13 @@ class UVTransform(abc.ABC):
     phase centre to p, which is exact: V(b) = V_c(b) exp(-2 pi i b . (c -
     p)).
 
-    Each channel is transformed by a NUFFT made for it in each call, so
-    that the memory of the device holds those of one channel only. Not
-    done yet: keeping the NUFFTs of the channels that fit in its memory
-    (an exact speed-up: their setup took 1/8 to 1 times as long as their
-    transform, measured 2026-10-19).
+    One NUFFT (and one of the adjoint), made in the first call, is moved
+    to the points of each channel in each call (see NUFFT.set_points),
+    which is faster than making one (e.g. 0.2 ms rather than 3 ms on a
+    GPU, of a transform of 5 ms), and the memory of the device holds that
+    of one channel. Not done yet: keeping a NUFFT for each channel, which
+    would save the moves too (1 to 20% of the time of the transforms,
+    measured 2026-10-19), but needs the memory of one for each.
 
     Parameters
     ----------
@@ -89,6 +91,8 @@ class UVTransform(abc.ABC):
         self._driver = driver
         self._nufft = driver.nufft()
         self._eps = eps
+        self._forward: NUFFT | None = None
+        self._backward: NUFFT | None = None
         size_x, size_y = grid.size[:2]
         self._shape = (size_y, size_x)
         self._baselines = _grid_baselines(grid, uvw, frequencies, phase_centre)
@@ -248,8 +252,9 @@ class UVTransformExact(UVTransform):
             out: DeviceArray
     ) -> None:
         baselines, _ = self._baselines[channel]
-        nufft = self._nufft.type3(self._points, baselines, -1, self._eps)
-        nufft(data.reshape(-1), out.reshape(-1))
+        self._forward = _moved(self._forward, lambda: self._nufft.type3(
+            self._points, baselines, -1, self._eps), self._points, baselines)
+        self._forward(data.reshape(-1), out.reshape(-1))
 
     def _adjoint_transform(
             self,
@@ -258,8 +263,9 @@ class UVTransformExact(UVTransform):
             out: DeviceArray
     ) -> None:
         baselines, _ = self._baselines[channel]
-        nufft = self._nufft.type3(baselines, self._points, 1, self._eps)
-        nufft(data.reshape(-1), out.reshape(-1))
+        self._backward = _moved(self._backward, lambda: self._nufft.type3(
+            baselines, self._points, 1, self._eps), baselines, self._points)
+        self._backward(data.reshape(-1), out.reshape(-1))
 
 
 class _UVTransformGrid(UVTransform):
@@ -320,9 +326,10 @@ class _UVTransformGrid(UVTransform):
             data: DeviceArray,
             out: DeviceArray
     ) -> None:
-        nufft = self._nufft.type2(
-            self._points[channel], self._shape, -1, self._eps, len(data))
-        nufft(data, out)
+        points = self._points[channel]
+        self._forward = _moved(self._forward, lambda: self._nufft.type2(
+            points, self._shape, -1, self._eps, len(data)), points)
+        self._forward(data, out)
 
     def _adjoint_transform(
             self,
@@ -330,9 +337,10 @@ class _UVTransformGrid(UVTransform):
             data: DeviceArray,
             out: DeviceArray
     ) -> None:
-        nufft = self._nufft.type1(
-            self._points[channel], self._shape, 1, self._eps, len(data))
-        nufft(data, out)
+        points = self._points[channel]
+        self._backward = _moved(self._backward, lambda: self._nufft.type1(
+            points, self._shape, 1, self._eps, len(data)), points)
+        self._backward(data, out)
 
 
 class _WTerm(abc.ABC):
@@ -451,6 +459,21 @@ class UVTransformFlat(_UVTransformGrid):
 # The transforms, by their names in the options of the observables
 uv_transforms = dict(
     exact=UVTransformExact, sin=UVTransformSin, flat=UVTransformFlat)
+
+
+def _moved(
+        nufft: NUFFT | None,
+        make: Callable[[], NUFFT],
+        *points: np.ndarray
+) -> NUFFT:
+    """
+    Return a NUFFT moved to points (see NUFFT.set_points), or, if there is
+    none yet, the one that make makes (at them).
+    """
+    if nufft is None:
+        return make()
+    nufft.set_points(*points)
+    return nufft
 
 
 def _grid_baselines(

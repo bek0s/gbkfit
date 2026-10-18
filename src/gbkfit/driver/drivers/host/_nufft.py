@@ -31,11 +31,8 @@ class DriverNUFFTHost(DriverNUFFT):
             eps: float,
             ntransforms: int
     ) -> NUFFT:
-        plan = finufft.Plan(
-            3, len(points), n_trans=ntransforms, eps=eps, isign=sign,
-            dtype=np.complex128)
-        plan.setpts(**_points(points, frequencies))
-        return _NUFFTHost(plan)
+        return _NUFFTHost(
+            3, len(points), points, frequencies, sign, eps, ntransforms)
 
     def _type1(
             self,
@@ -45,11 +42,7 @@ class DriverNUFFTHost(DriverNUFFT):
             eps: float,
             ntransforms: int
     ) -> NUFFT:
-        plan = finufft.Plan(
-            1, shape, n_trans=ntransforms, eps=eps, isign=sign,
-            dtype=np.complex128)
-        plan.setpts(**_points(points))
-        return _NUFFTHost(plan)
+        return _NUFFTHost(1, shape, points, (), sign, eps, ntransforms)
 
     def _type2(
             self,
@@ -59,27 +52,47 @@ class DriverNUFFTHost(DriverNUFFT):
             eps: float,
             ntransforms: int
     ) -> NUFFT:
-        plan = finufft.Plan(
-            2, shape, n_trans=ntransforms, eps=eps, isign=sign,
-            dtype=np.complex128)
-        plan.setpts(**_points(points))
-        return _NUFFTHost(plan)
+        return _NUFFTHost(2, shape, points, (), sign, eps, ntransforms)
 
 
 class _NUFFTHost(NUFFT):
-    """A NUFFT of a FINUFFT plan."""
+    """
+    A NUFFT of a FINUFFT plan of a type, of the number of dimensions of
+    type 3 or the shape of the arrays of types 1 and 2, and of columns of
+    points and frequencies (see DriverNUFFT._type3).
+    """
 
-    def __init__(self, plan: Any):
-        self._plan = plan
+    def __init__(
+            self,
+            nufft_type: int,
+            modes_or_dimensions: int | tuple[int, ...],
+            points: tuple[np.ndarray, ...],
+            frequencies: tuple[np.ndarray, ...],
+            sign: int,
+            eps: float,
+            ntransforms: int
+    ):
+        super().__init__(nufft_type, len(points))
+        self._plan = finufft.Plan(
+            nufft_type, modes_or_dimensions, n_trans=ntransforms, eps=eps,
+            isign=sign, dtype=np.complex128)
+        self._set_points(points, frequencies)
 
     def __call__(self, data: DeviceArray, out: DeviceArray) -> None:
         self._plan.execute(data, out=out)
 
+    def _set_points(
+            self,
+            points: tuple[np.ndarray, ...],
+            frequencies: tuple[np.ndarray, ...]
+    ) -> None:
+        self._plan.setpts(**_points(points, frequencies))
+
 
 def _points(
         points: tuple[np.ndarray, ...],
-        frequencies: tuple[np.ndarray, ...] = ()
-) -> dict[str, np.ndarray]:
+        frequencies: tuple[np.ndarray, ...]
+) -> dict[str, Any]:
     """
     Return the points and the frequencies of a NUFFT as the arguments of
     the setpts of FINUFFT: their columns x, y, z and s, t, u.

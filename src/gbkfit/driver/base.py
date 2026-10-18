@@ -209,10 +209,21 @@ class DriverFFT(abc.ABC):
 
 class NUFFT(abc.ABC):
     """
-    A non-uniform discrete Fourier transform of fixed points by a NUFFT on
-    a driver (see DriverNUFFT): made once for its points, then applied to
-    any data at them.
+    A non-uniform discrete Fourier transform by a NUFFT on a driver (see
+    DriverNUFFT), made for its points: applied to any data at them, and
+    moved to other points (set_points) faster than another is made.
+
+    Parameters
+    ----------
+    nufft_type : int
+        Its type: 1, 2 or 3 (see DriverNUFFT).
+    ndim : int
+        The number of dimensions of its points.
     """
+
+    def __init__(self, nufft_type: int, ndim: int):
+        self._type = nufft_type
+        self._ndim = ndim
 
     @abc.abstractmethod
     def __call__(self, data: DeviceArray, out: DeviceArray) -> None:
@@ -220,6 +231,55 @@ class NUFFT(abc.ABC):
         Transform data into out: contiguous complex128 arrays on the
         driver, of the shapes of the input and the output of the
         transform (see DriverNUFFT).
+        """
+
+    def set_points(
+            self,
+            points: np.ndarray,
+            frequencies: np.ndarray | None = None
+    ) -> None:
+        """
+        Move the transform to other points, and other frequencies for type
+        3 (see DriverNUFFT), of as many dimensions.
+
+        Parameters
+        ----------
+        points : numpy.ndarray
+            The points, of shape (n, d), on the host.
+        frequencies : numpy.ndarray, optional
+            The frequencies of type 3, of shape (m, d), on the host.
+
+        Raises
+        ------
+        ValueError
+            If the points or the frequencies are not of the dimensions of
+            the transform, or frequencies are given to a transform of type
+            1 or 2, or not to one of type 3.
+        """
+        if (frequencies is None) != (self._type != 3):
+            raise ValueError(
+                "frequencies are those of a transform of type 3, which needs "
+                "them")
+        points = _nufft_columns(points, 'points', 2 * np.pi)
+        frequencies = () if frequencies is None \
+            else _nufft_columns(frequencies, 'frequencies', 1)
+        if len(points) != self._ndim \
+                or (frequencies and len(frequencies) != self._ndim):
+            raise ValueError(
+                f"the points and frequencies must be of the {self._ndim} "
+                f"dimensions of the transform")
+        self._set_points(points, frequencies)
+
+    @abc.abstractmethod
+    def _set_points(
+            self,
+            points: tuple[np.ndarray, ...],
+            frequencies: tuple[np.ndarray, ...]
+    ) -> None:
+        """
+        Move the transform to other points (see set_points), of checked
+        columns: those of the points, times 2 pi, and of the frequencies
+        (none for types 1 and 2).
         """
 
 
