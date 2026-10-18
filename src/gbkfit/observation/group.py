@@ -3,13 +3,15 @@ from typing import Any, NamedTuple, Self
 
 import numpy as np
 
+from gbkfit.dataset import Data, Dataset
 from gbkfit.driver import Driver
 from gbkfit.model import Galaxy
 from gbkfit.params import ParamDesc, ParamScalarDesc, ParamValues
 from gbkfit.utils import iterutils, parseutils, threadutils, timeutils
 from gbkfit.utils.parseutils import ConfigError
 from ._scene import DepthUnit, Scene, make_scene
-from .observables import ModelData
+from .noise import Noise
+from .observables import HostModelData, ModelData
 from .observation import Observation
 
 
@@ -248,6 +250,28 @@ class ObservationGroup:
         """Return the times of the steps of the evaluations of the group."""
         return self._timers
 
+    def _gravity(
+            self,
+            params: ParamValues,
+            out_extra: dict[str, Any] | None
+    ) -> list[dict[int, ParamValues]]:
+        """
+        Evaluate what the gravity of each galaxy gives its components (see
+        GravityPlan.evaluate); its extra outputs go to out_extra, if
+        given, prefixed by the prefix of the galaxy.
+        """
+        gravity = []
+        for plan, mapping, prefix in zip(
+                self._gravity_plans, self._mappings, self._prefixes):
+            extra = {} if out_extra is not None else None
+            gravity.append(plan.evaluate(
+                {name: params[full] for name, full in mapping.items()},
+                extra))
+            if out_extra is not None:
+                out_extra |= {
+                    f'{prefix}{key}': value for key, value in extra.items()}
+        return gravity
+
     def model_d(
             self,
             params: ParamValues,
@@ -276,17 +300,7 @@ class ObservationGroup:
         with (self._timers.measure('model_eval'),
               threadutils.single_threaded_blas()):
             with self._timers.measure('model_gravity'):
-                gravity = []
-                for plan, mapping, prefix in zip(
-                        self._gravity_plans, self._mappings, self._prefixes):
-                    extra = {} if out_extra is not None else None
-                    gravity.append(plan.evaluate(
-                        {name: params[full] for name, full in mapping.items()},
-                        extra))
-                    if out_extra is not None:
-                        out_extra |= {
-                            f'{prefix}{key}': value
-                            for key, value in extra.items()}
+                gravity = self._gravity(params, out_extra)
             for i, plan in enumerate(self._plans):
                 out_extra_i = {} if out_extra is not None else None
                 self._d_model_data[i] = plan.evaluate(
@@ -296,6 +310,85 @@ class ObservationGroup:
                     for key, val in out_extra_i.items():
                         out_extra[f'{self.extra_prefix(i)}{key}'] = val
         return self._d_model_data
+
+    def mock(
+            self,
+            params: ParamValues,
+            noises: Noise | Sequence[Noise],
+            nmocks: int = 1,
+            nsamples: int = 100,
+            seed: int | None = None
+    ) -> list[list[Dataset]]:
+        """
+        Draw mock data of the observations: their model data measured
+        from what their instruments record of the model plus noise (see
+        ObservablePlan.mock), with their errors.
+
+        The data that are what the instrument records plus the noise (e.g.
+        spectra) have its dispersion as their errors; those measured from
+        them (e.g. moments) the scatter of their values over nsamples
+        other draws (the standard deviation, of the values that are
+        finite in at least two draws; the others are missing).
+
+        Parameters
+        ----------
+        params : dict
+            The parameters of the galaxies, prefixed (see pdescs).
+        noises : Noise or Sequence of Noise
+            The noise of the data of every observation, or of each.
+        nmocks : int, optional
+            The number of mock datasets of each observation.
+        nsamples : int, optional
+            The number of draws of the errors of measured data.
+        seed : int, optional
+            The seed of the random numbers; the same seed gives the same
+            mock data. By default, the mock data differ from run to run.
+
+        Returns
+        -------
+        list of list of Dataset
+            The mock datasets of each observation, in the units of its
+            model.
+
+        Raises
+        ------
+        ConfigError
+            If there is not one noise per observation, or one, a noise does
+            not suit the data of its observation (see Noise.draw), or
+            nmocks or nsamples (needed) is below 1 or 2.
+        """
+        noises = list(noises) if isinstance(noises, Sequence) \
+            else [noises] * len(self._observations)
+        if len(noises) != len(self._observations):
+            raise ConfigError(
+                f"there are {len(self._observations)} observations, but "
+                f"{len(noises)} noises")
+        if nmocks < 1:
+            raise ConfigError(f"nmocks must be at least 1; it is {nmocks}")
+        gravity = self._gravity(params, None)
+        streams = np.random.SeedSequence(seed).spawn(len(self._observations))
+        mocks = []
+        for i, (obs, plan, noise, stream) in enumerate(zip(
+                self._observations, self._plans, noises, streams)):
+            with parseutils.config_path('observations', i):
+                errors = plan.exact_errors(noise)
+                if errors is None and nsamples < 2:
+                    raise ConfigError(
+                        f"the errors of measured data are the scatter of "
+                        f"nsamples draws, at least 2; nsamples is {nsamples}")
+                draws = plan.mock(
+                    params, [gravity[g] for g in self._seen_galaxies[i]],
+                    noise, np.random.default_rng(stream),
+                    nmocks + (nsamples if errors is None else 0))
+            if errors is None:
+                errors = _scatter(draws[nmocks:])
+            observable = obs.observable()
+            mocks.append([
+                observable.dataset({
+                    key: Data(item['d'], error=errors[key])
+                    for key, item in draw.items()})
+                for draw in draws[:nmocks]])
+        return mocks
 
     def model_h(
             self,
@@ -329,6 +422,26 @@ class ObservationGroup:
                             h_item[k] = driver.mem_copy_d2h(
                                 d_array, h_item[k])
         return self._h_model_data
+
+
+def _scatter(draws: Sequence[HostModelData]) -> dict[str, np.ndarray]:
+    """
+    Return the scatter of the values of each data item over draws of
+    them: the standard deviation of the values that are finite in at
+    least two draws (NaN for the others).
+    """
+    scatter = {}
+    for key in draws[0]:
+        values = np.stack([draw[key]['d'] for draw in draws])
+        finite = np.isfinite(values)
+        count = finite.sum(axis=0)
+        values = np.where(finite, values, 0)
+        with np.errstate(divide='ignore', invalid='ignore'):
+            mean = values.sum(axis=0) / count
+            variance = np.where(
+                finite, (values - mean) ** 2, 0).sum(axis=0) / (count - 1)
+        scatter[key] = np.where(count >= 2, np.sqrt(variance), np.nan)
+    return scatter
 
 
 def _depth_order(

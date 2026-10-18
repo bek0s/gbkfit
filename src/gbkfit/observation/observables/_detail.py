@@ -70,6 +70,16 @@ def grid_options(grid: gridutils.Grid) -> dict[str, Any]:
     return options
 
 
+def dataset_grid_options(grid: gridutils.Grid) -> dict[str, Any]:
+    """
+    Return the options of the grid of a dataset on the grid of an
+    observable: its grid options but the size, which the data give.
+    """
+    options = grid_options(grid)
+    del options['size']
+    return options
+
+
 def require_no_options_from_data(
         cls: type[Observable], info: dict[str, Any], dataset: Dataset
 ) -> None:

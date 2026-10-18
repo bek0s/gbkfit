@@ -1,11 +1,11 @@
 import abc
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, Any, Self, TypeAlias
 
 import astropy.units
 import numpy as np
 
-from gbkfit.dataset import Dataset
+from gbkfit.dataset import Data, Dataset
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.instrument import Instrument
 from gbkfit.model import Emission
@@ -185,6 +185,25 @@ class Observable(parseutils.TypedSerializable, abc.ABC):
         Check whether its model can lack values (NaN) where the data have
         some (e.g. the velocity of a spectrum below its mask_cutoff): the
         likelihood then needs a residual for them (see LikelihoodGaussian).
+        """
+        pass
+
+    @abc.abstractmethod
+    def dataset(self, items: Mapping[str, Data]) -> Dataset:
+        """
+        Make the dataset of data items measured as this observable (e.g.
+        mock data): the inverse of from_data.
+
+        Parameters
+        ----------
+        items : Mapping
+            The data items, by name (see keys).
+
+        Returns
+        -------
+        Dataset
+            The dataset, of the dataset class, where the observable is
+            modelled.
         """
         pass
 

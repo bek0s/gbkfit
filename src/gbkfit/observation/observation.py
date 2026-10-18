@@ -443,6 +443,40 @@ class Observation(parseutils.Serializable):
         observation._driver = driver
         return observation
 
+    def with_data(
+            self, data: Dataset, likelihood: Likelihood | None = None
+    ) -> Self:
+        """
+        Return a copy of it with other data (e.g. mock data; see
+        ObservationGroup.mock).
+
+        Parameters
+        ----------
+        data : Dataset
+            The data, of its observable.
+        likelihood : Likelihood, optional
+            Their likelihood; by default its own, if it has data, or that
+            of data without one (see __init__).
+
+        Returns
+        -------
+        Observation
+            The copy, whose model is evaluated on its driver.
+
+        Raises
+        ------
+        ConfigError
+            If the data are not those of its observable, or do not go with
+            the likelihood (see __init__).
+        """
+        return type(self)(
+            self._observable, self._line_of_sight, self._driver,
+            self._foreground, self._instrument, self._galaxies,
+            self._components, self._lines, self._band, self._weights,
+            self._calibration, data,
+            likelihood if likelihood is not None else self._likelihood,
+            self._scale, self._dtype.name, self._fft_dtype.name, self._name)
+
     def observable(self) -> Observable:
         """Return the observable."""
         return self._observable

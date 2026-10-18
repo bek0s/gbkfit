@@ -1,10 +1,10 @@
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, Any
 
 import astropy.units
 import numpy as np
 
-from gbkfit.dataset import Dataset, DatasetSlitSpectra
+from gbkfit.dataset import Data, Dataset, DatasetSlitSpectra
 from gbkfit.driver import Driver
 from gbkfit.instrument import Instrument
 from gbkfit.model import LineEmission
@@ -181,6 +181,10 @@ class SlitSpectra(Observable):
 
     def keys(self) -> tuple[str, ...]:
         return ('spectra',)
+
+    def dataset(self, items: Mapping[str, Data]) -> DatasetSlitSpectra:
+        return DatasetSlitSpectra(
+            items['spectra'], **_detail.dataset_grid_options(self.grid()))
 
     def data_unit(self, dataset: Dataset | None) -> DataUnit | None:
         # (a pixel spans the step along the slit and the width of the slit)

@@ -1,10 +1,10 @@
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, Any
 
 import astropy.units
 import numpy as np
 
-from gbkfit.dataset import Dataset, DatasetRegionMoments
+from gbkfit.dataset import Data, Dataset, DatasetRegionMoments
 from gbkfit.driver import Driver
 from gbkfit.instrument import Instrument
 from gbkfit.model import LineEmission
@@ -236,6 +236,11 @@ spec_medium, method : optional
 
     def keys(self) -> tuple[str, ...]:
         return tuple(f'moment{i}' for i in self._orders)
+
+    def dataset(self, items: Mapping[str, Data]) -> DatasetRegionMoments:
+        return DatasetRegionMoments(
+            {order: items[f'moment{order}'] for order in self.orders()},
+            self.regions())
 
     def data_unit(self, dataset: Dataset | None) -> DataUnit | None:
         return _detail.region_data_unit(

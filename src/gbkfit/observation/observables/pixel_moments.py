@@ -1,10 +1,10 @@
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, Any
 
 import astropy.units
 import numpy as np
 
-from gbkfit.dataset import Dataset, DatasetPixelMoments
+from gbkfit.dataset import Data, Dataset, DatasetPixelMoments
 from gbkfit.driver import Driver
 from gbkfit.instrument import Instrument
 from gbkfit.model import LineEmission
@@ -202,6 +202,11 @@ class PixelMoments(Observable):
 
     def keys(self) -> tuple[str, ...]:
         return tuple(f'moment{i}' for i in self._orders)
+
+    def dataset(self, items: Mapping[str, Data]) -> DatasetPixelMoments:
+        return DatasetPixelMoments(
+            {order: items[f'moment{order}'] for order in self.orders()},
+            **_detail.dataset_grid_options(self.grid()))
 
     def data_unit(self, dataset: Dataset | None) -> DataUnit | None:
         return _detail.data_unit(

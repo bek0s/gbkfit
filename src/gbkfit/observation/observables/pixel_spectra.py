@@ -1,10 +1,10 @@
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, Any
 
 import astropy.units
 import numpy as np
 
-from gbkfit.dataset import Dataset, DatasetPixelSpectra
+from gbkfit.dataset import Data, Dataset, DatasetPixelSpectra
 from gbkfit.driver import Driver
 from gbkfit.instrument import Instrument
 from gbkfit.model import LineEmission
@@ -156,6 +156,10 @@ class PixelSpectra(Observable):
 
     def keys(self) -> tuple[str, ...]:
         return ('spectra',)
+
+    def dataset(self, items: Mapping[str, Data]) -> DatasetPixelSpectra:
+        return DatasetPixelSpectra(
+            items['spectra'], **_detail.dataset_grid_options(self.grid()))
 
     def data_unit(self, dataset: Dataset | None) -> DataUnit | None:
         return _detail.data_unit(

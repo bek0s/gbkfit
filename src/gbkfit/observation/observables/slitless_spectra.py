@@ -1,4 +1,4 @@
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, Any
 
 import astropy.constants
@@ -7,7 +7,7 @@ import numpy as np
 import numpy.polynomial.polynomial as npp
 import scipy.sparse
 
-from gbkfit.dataset import Dataset, DatasetSlitlessSpectra
+from gbkfit.dataset import Data, Dataset, DatasetSlitlessSpectra
 from gbkfit.driver import Driver
 from gbkfit.instrument import Instrument
 from gbkfit.model import LineEmission
@@ -318,6 +318,10 @@ class SlitlessSpectra(Observable):
 
     def keys(self) -> tuple[str, ...]:
         return ('spectra',)
+
+    def dataset(self, items: Mapping[str, Data]) -> DatasetSlitlessSpectra:
+        return DatasetSlitlessSpectra(
+            items['spectra'], **_detail.dataset_grid_options(self.grid()))
 
     def data_unit(self, dataset: Dataset | None) -> DataUnit | None:
         # (the light of a pixel is integrated over the lines, as moment 0)

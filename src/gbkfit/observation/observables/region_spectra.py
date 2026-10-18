@@ -1,10 +1,10 @@
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, Any
 
 import astropy.units
 import numpy as np
 
-from gbkfit.dataset import Dataset, DatasetRegionSpectra
+from gbkfit.dataset import Data, Dataset, DatasetRegionSpectra
 from gbkfit.driver import Driver
 from gbkfit.instrument import Instrument
 from gbkfit.model import LineEmission
@@ -204,6 +204,12 @@ class RegionSpectra(Observable):
 
     def keys(self) -> tuple[str, ...]:
         return ('spectra',)
+
+    def dataset(self, items: Mapping[str, Data]) -> DatasetRegionSpectra:
+        coords = self.spectral_grid().coords
+        return DatasetRegionSpectra(
+            items['spectra'], self.regions(), coords.step[0],
+            coords.rpix[0], coords.rval[0], coords.rest, coords.medium)
 
     def data_unit(self, dataset: Dataset | None) -> DataUnit | None:
         return _detail.region_data_unit(dataset, 'spectra', False)
