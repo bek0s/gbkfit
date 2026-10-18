@@ -523,6 +523,13 @@ class Driver(parseutils.TypedSerializable, abc.ABC):
         """Set every value of a device array."""
 
     @abc.abstractmethod
+    def mem_copy_d2d(self, d_src: DeviceArray, d_dst: DeviceArray) -> None:
+        """
+        Copy a device array into another of its shape, in the type of the
+        other (e.g. the real parts of complex128 values into float32).
+        """
+
+    @abc.abstractmethod
     def math_add(
             self,
             x1: DeviceArray,

@@ -62,6 +62,9 @@ class DriverHost(Driver):
     def mem_fill(self, x: DeviceArray, value: float) -> None:
         x.fill(value)
 
+    def mem_copy_d2d(self, d_src: DeviceArray, d_dst: DeviceArray) -> None:
+        np.copyto(d_dst, d_src, casting='same_kind')
+
     def math_add(
             self,
             x1: DeviceArray,

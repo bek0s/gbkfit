@@ -90,6 +90,10 @@ class UVTransform(abc.ABC):
         self._shape = (size_y, size_x)
         self._baselines = _grid_baselines(grid, uvw, frequencies, phase_centre)
 
+    def nrows(self) -> int:
+        """Return the number of rows of the visibilities."""
+        return len(self._baselines[0][0])
+
     def __call__(self, cube: DeviceArray, out: DeviceArray) -> None:
         """
         Compute the visibilities of a cube.

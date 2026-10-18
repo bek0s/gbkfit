@@ -22,6 +22,13 @@ def test_driver_memory(driver):
     assert np.all(arr_h_1 == 2 * value)
 
 
+def test_device_arrays_are_copied_in_the_type_of_the_target(driver):
+    values = np.array([1.5 + 2j, -3 + 4j])
+    real = driver.mem_alloc_d(2, np.float32)
+    driver.mem_copy_d2d(driver.mem_copy_h2d(values).real, real)
+    np.testing.assert_array_equal(driver.mem_copy_d2h(real), [1.5, -3])
+
+
 def test_unknown_driver_options_are_reported():
     # (they were dropped: e.g. a device, which the host driver does not
     # take)

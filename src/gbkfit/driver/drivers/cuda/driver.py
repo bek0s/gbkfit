@@ -100,6 +100,10 @@ class DriverCuda(Driver):
         with self._device:
             x.fill(value)
 
+    def mem_copy_d2d(self, d_src: DeviceArray, d_dst: DeviceArray) -> None:
+        with self._device:
+            cp.copyto(d_dst, d_src, casting='same_kind')
+
     def math_add(
             self,
             x1: DeviceArray,

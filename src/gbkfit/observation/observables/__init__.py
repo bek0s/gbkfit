@@ -6,6 +6,7 @@ from .region_moments import *
 from .region_spectra import *
 from .slit_spectra import *
 from .slitless_spectra import *
+from .visibilities import *
 
 
 def _register_observables():
@@ -18,7 +19,8 @@ def _register_observables():
         RegionMoments,
         RegionSpectra,
         SlitSpectra,
-        SlitlessSpectra
+        SlitlessSpectra,
+        Visibilities
     ])
 
 
