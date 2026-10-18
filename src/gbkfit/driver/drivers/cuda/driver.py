@@ -7,7 +7,8 @@ import numpy as np
 import numpy.typing as npt
 
 import gbkfit.driver.native._cuda as native_module
-from gbkfit.driver.base import DeviceArray, Driver, DriverFFT, Shape
+from gbkfit.driver.base import (
+    DeviceArray, Driver, DriverFFT, DriverNUFFT, Shape)
 from gbkfit.utils.parseutils import ConfigError
 
 
@@ -123,3 +124,7 @@ class DriverCuda(Driver):
     def fft(self, dtype: npt.DTypeLike) -> DriverFFT:
         from ._fft import DriverFFTCuda
         return DriverFFTCuda(dtype, self._device)
+
+    def nufft(self) -> DriverNUFFT:
+        from ._nufft import DriverNUFFTCuda
+        return DriverNUFFTCuda(self._device)

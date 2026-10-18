@@ -4,7 +4,8 @@ import numpy as np
 import numpy.typing as npt
 
 import gbkfit.driver.native._host as native_module
-from gbkfit.driver.base import DeviceArray, Driver, DriverFFT, Shape
+from gbkfit.driver.base import (
+    DeviceArray, Driver, DriverFFT, DriverNUFFT, Shape)
 
 
 __all__ = [
@@ -83,3 +84,7 @@ class DriverHost(Driver):
     def fft(self, dtype: npt.DTypeLike) -> DriverFFT:
         from ._fft import DriverFFTHost
         return DriverFFTHost(native_module, dtype)
+
+    def nufft(self) -> DriverNUFFT:
+        from ._nufft import DriverNUFFTHost
+        return DriverNUFFTHost()

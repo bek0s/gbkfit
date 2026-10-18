@@ -1,7 +1,8 @@
 """
 The drivers: the memory and the native (C++/CUDA) modules of a device,
 the host CPU or a CUDA GPU, on which observations evaluate their models
-(and galaxies their gravity); and the FFT of a driver.
+(and galaxies their gravity); and the FFTs and non-uniform FFTs of a
+driver.
 """
 
 import abc
@@ -23,7 +24,9 @@ __all__ = [
     'DeviceArray',
     'Driver',
     'DriverFFT',
+    'DriverNUFFT',
     'FFTConvolution',
+    'NUFFT',
     'driver_by_name',
     'driver_parser'
 ]
@@ -203,6 +206,178 @@ class DriverFFT(abc.ABC):
         """Return the convolution (see convolution), of checked arguments."""
 
 
+class NUFFT(abc.ABC):
+    """
+    A non-uniform discrete Fourier transform of fixed points by a NUFFT on
+    a driver (see DriverNUFFT): made once for its points, then applied to
+    any strengths at them.
+    """
+
+    @abc.abstractmethod
+    def __call__(self, strengths: DeviceArray, out: DeviceArray) -> None:
+        """
+        Transform the strengths of the points into out: contiguous
+        complex128 arrays on the driver, of one value per point and of the
+        shape of the transform.
+        """
+
+
+class DriverNUFFT(abc.ABC):
+    """
+    The non-uniform FFTs of a driver (FINUFFT): sums of complex strengths
+    c_j at points x_j (of 1 to 3 dimensions),
+
+        f_k = sum_j c_j exp(sign 2 pi i x_j . s_k),
+
+    at frequencies s_k (e.g. the visibilities of a sky model), to a
+    relative tolerance eps (the 2-norm of the error of f over that of f).
+    Their points and frequencies are fixed when they are made, after which
+    each transform of strengths is fast.
+
+    They are of float64, of complex128 arrays: float32 rounds phases of
+    hundreds of radians to more than the tolerance (e.g. errors of 4e-5 in
+    the visibilities of 256 x 256 pixels sampling 8 km baselines at 21 cm,
+    measured 2026-10-18).
+    """
+
+    def type3(
+            self,
+            points: np.ndarray,
+            frequencies: np.ndarray,
+            sign: int,
+            eps: float
+    ) -> NUFFT:
+        """
+        Return the NUFFT from points to frequencies (type 3),
+
+            f_k = sum_j c_j exp(sign 2 pi i x_j . s_k).
+
+        Parameters
+        ----------
+        points : numpy.ndarray
+            The points x_j, of shape (n, d), on the host.
+        frequencies : numpy.ndarray
+            The frequencies s_k, in cycles per unit of the points, of shape
+            (m, d), on the host.
+        sign : {-1, 1}
+            The sign of the exponent.
+        eps : float
+            The relative tolerance.
+
+        Raises
+        ------
+        ValueError
+            If the points or the frequencies are not of 1 to 3 dimensions,
+            or not of the same, the sign is not -1 or 1, or the tolerance
+            not positive.
+        """
+        points = _nufft_columns(points, 'points', 2 * np.pi)
+        frequencies = _nufft_columns(frequencies, 'frequencies', 1)
+        if len(frequencies) != len(points):
+            raise ValueError(
+                f"the frequencies must be of the dimensions of the points "
+                f"({len(points)}); they are of {len(frequencies)}")
+        _check_nufft_options(sign, eps)
+        return self._type3(points, frequencies, sign, eps)
+
+    def type1(
+            self,
+            points: np.ndarray,
+            shape: tuple[int, ...],
+            sign: int,
+            eps: float
+    ) -> NUFFT:
+        """
+        Return the NUFFT from points to the modes of an array (type 1): of
+        the index q of the array f of a shape,
+
+            f[q] = sum_j c_j exp(sign 2 pi i x_j . k),  k = q - shape // 2
+
+        (e.g. the dirty image of visibilities, at x_j their baselines in
+        cycles per pixel).
+
+        Parameters
+        ----------
+        points : numpy.ndarray
+            The points x_j, in cycles per unit of k, of shape (n, d), on
+            the host: a column for each axis of the array.
+        shape : tuple of int
+            The shape of the array, of d = 1 to 3 axes.
+        sign : {-1, 1}
+            The sign of the exponent.
+        eps : float
+            The relative tolerance.
+
+        Raises
+        ------
+        ValueError
+            If the points are not of 1 to 3 dimensions, or not of those of
+            the array, the sign is not -1 or 1, or the tolerance not
+            positive.
+        """
+        points = _nufft_columns(points, 'points', 2 * np.pi)
+        shape = tuple(int(n) for n in shape)
+        if len(shape) != len(points):
+            raise ValueError(
+                f"the array must have an axis for each dimension of the "
+                f"points ({len(points)}); its shape is {shape}")
+        _check_nufft_options(sign, eps)
+        return self._type1(points, shape, sign, eps)
+
+    @abc.abstractmethod
+    def _type3(
+            self,
+            points: tuple[np.ndarray, ...],
+            frequencies: tuple[np.ndarray, ...],
+            sign: int,
+            eps: float
+    ) -> NUFFT:
+        """
+        Return the NUFFT of type 3 (see type3) of checked arguments: the
+        columns of the points, times 2 pi, and of the frequencies.
+        """
+
+    @abc.abstractmethod
+    def _type1(
+            self,
+            points: tuple[np.ndarray, ...],
+            shape: tuple[int, ...],
+            sign: int,
+            eps: float
+    ) -> NUFFT:
+        """
+        Return the NUFFT of type 1 (see type1) of checked arguments: the
+        columns of the points, times 2 pi.
+        """
+
+
+def _nufft_columns(
+        points: np.ndarray,
+        name: str,
+        scale: float
+) -> tuple[np.ndarray, ...]:
+    """
+    Return the columns of the points of a NUFFT, of shape (n, d), times a
+    scale, as contiguous float64 arrays.
+    """
+    points = np.asarray(points)
+    if points.ndim != 2 or not 1 <= points.shape[1] <= 3:
+        raise ValueError(
+            f"the {name} must be of shape (n, d), of d = 1 to 3 dimensions; "
+            f"their shape is {points.shape}")
+    return tuple(
+        np.ascontiguousarray(scale * column, np.float64)
+        for column in points.T)
+
+
+def _check_nufft_options(sign: int, eps: float) -> None:
+    """Check the sign of the exponent and the tolerance of a NUFFT."""
+    if sign not in (-1, 1):
+        raise ValueError(f"sign must be -1 or 1; it is {sign}")
+    if not eps > 0:
+        raise ValueError(f"eps must be positive; it is {eps}")
+
+
 class Driver(parseutils.TypedSerializable, abc.ABC):
     """
     A device on which models are evaluated: its memory, its native module
@@ -315,6 +490,18 @@ class Driver(parseutils.TypedSerializable, abc.ABC):
     @abc.abstractmethod
     def fft(self, dtype: npt.DTypeLike) -> DriverFFT:
         """Return a new FFT of the driver, for a floating type."""
+
+    @abc.abstractmethod
+    def nufft(self) -> DriverNUFFT:
+        """
+        Return the non-uniform FFTs of the driver.
+
+        Raises
+        ------
+        ModuleNotFoundError
+            If the NUFFT library of the driver is not installed (an
+            optional dependency).
+        """
 
 
 driver_parser = parseutils.TypedParser(Driver)
