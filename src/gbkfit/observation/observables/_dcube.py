@@ -373,13 +373,18 @@ class DCubePlan:
                 _kernel_cube(dcube, grid_hi).astype(fft_dtype, copy=False),
                 shape_hi, dtype=dtype)
 
-        # The response of the primary beam on the high-res grid (one image
-        # for all channels), if there is one
+        # The response of the primary beam on the high-res grid, if there
+        # is one: one image for all channels, or one for each channel of a
+        # beam that varies with the frequency
         self._pbeam_hi = None
-        if dcube.primary_beam() is not None:
-            pbeam_hi = dcube.primary_beam().response(grid_hi)
-            self._pbeam_hi = driver.mem_copy_h2d(
-                pbeam_hi[None].astype(dtype))
+        beam = dcube.primary_beam()
+        if beam is not None:
+            velocities = grid_hi.zero()[2] \
+                + step_hi[2] * np.arange(size_hi[2])
+            beams = beam.at(velocities * _KMS, grid_hi.coords.rest) \
+                if beam.varies() else [beam]
+            pbeam_hi = np.array([x.response(grid_hi) for x in beams])
+            self._pbeam_hi = driver.mem_copy_h2d(pbeam_hi.astype(dtype))
 
         # The low- and high-res data and weight cubes; without oversampling
         # and padding they are one
@@ -575,4 +580,5 @@ class DCubePlan:
                     dcube, self._grid_hi).astype(
                         dcube.fft_dtype(), copy=False))
         if pbeam_hi is not None:
-            out_extra.update(pbeam_hi=driver.mem_copy_d2h(pbeam_hi)[0])
+            pbeam = driver.mem_copy_d2h(pbeam_hi)
+            out_extra.update(pbeam_hi=pbeam[0] if len(pbeam) == 1 else pbeam)

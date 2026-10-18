@@ -5,6 +5,7 @@ of the model before the PSF.
 
 import copy
 
+import astropy.units as u
 import gbkfit.params
 import numpy as np
 import pytest
@@ -25,13 +26,32 @@ GALAXY = dict(components=[dict(
 PROPERTIES = dict(xpos=0.3, ypos=-0.6, posa=50, incl=60, pt_a=1, pt_s=4)
 
 
-def evaluate(driver, observable):
+# A galaxy of lines (seen by spectral cubes), and the speed of light
+LINE_GALAXY = dict(components=[dict(
+    type='smdisk', loose=False, tilted=False,
+    rnodes=list(range(0, 40, 4)),
+    density=dict(ptraits=dict(type='exponential')),
+    kinematics=dict(
+        vptraits=dict(type='arctan', direction='tan'),
+        dptraits=dict(type='uniform')),
+    emission=dict(type='lines'))])
+
+LINE_PROPERTIES = dict(
+    vsys=0, xpos=0.3, ypos=-0.6, posa=50, incl=60, pt_a=1, pt_s=12,
+    vpt_rt=6, vpt_vt=60, dpt_a=20)
+
+C = 299792.458
+
+
+def evaluate(
+        driver, observable, galaxy=GALAXY, properties=PROPERTIES,
+        key='brightness'):
     group = observation_group([dict(
-        driver=dict(type=driver.type()), galaxy=GALAXY,
+        driver=dict(type=driver.type()), galaxy=galaxy,
         line_of_sight=dict(type='flat'),
         observable=copy.deepcopy(observable))])
-    params = gbkfit.params.ParamSpace(group.pdescs(), PROPERTIES)
-    return group.model_h(params.evaluate())[0]['brightness']['d'].copy()
+    params = gbkfit.params.ParamSpace(group.pdescs(), properties)
+    return group.model_h(params.evaluate())[0][key]['d'].copy()
 
 
 @pytest.mark.parametrize('beam_class', [PrimaryBeamGauss, PrimaryBeamAiry])
@@ -89,8 +109,43 @@ def test_instrument_round_trip():
     instrument = instrument_parser.load(copy.deepcopy(info))
     assert isinstance(instrument, Instrument)
     dumped = instrument_parser.dump(instrument)
-    assert dumped['primary_beam'] == info['primary_beam']
+    assert dumped['primary_beam'] == info['primary_beam'] | dict(frequency=None)
     assert instrument_parser.dump(instrument_parser.load(dumped)) == dumped
+
+
+def test_the_primary_beam_of_a_dish_scales_with_the_wavelength():
+    # Of fwhm 60 arcsec at 1.4 GHz: 120 at 0.7 GHz; at 60 arcsec from its
+    # centre, 1/16 and 1/2
+    grid = gridutils.make_grid((1, 1), rpix=(0, 0))
+    beam = PrimaryBeamGauss(fwhm=60, x=60, frequency=1.4e9)
+    responses = [x.response(grid)[0, 0]
+                 for x in beam.at([1.4e9, 0.7e9] * u.Hz)]
+    np.testing.assert_allclose(responses, [1 / 16, 1 / 2])
+    # (and at radio velocities, of a rest frequency)
+    half = beam.at(C / 2 * u.km / u.s, rest=1.4e9 * u.Hz)
+    assert half.response(grid)[0, 0] == pytest.approx(1 / 2)
+
+
+def test_the_primary_beam_of_each_channel_attenuates_it(driver):
+    # A beam of 40 arcsec at the rest frequency: at -70 to 70 km/s, its
+    # fwhm changes by 5e-4, which changes it by 1e-3 at its fwhm
+    cube = dict(type='pixel_spectra', size=[16, 16, 8], step=[5, 5, 20],
+                rest='1420.405752 MHz')
+    beam = dict(type='gauss', fwhm=40, x=2, y=-1, frequency=1420.405752e6)
+    plain = evaluate(driver, cube, LINE_GALAXY, LINE_PROPERTIES, 'spectra')
+    attenuated = evaluate(
+        driver, cube | dict(primary_beam=beam), LINE_GALAXY, LINE_PROPERTIES,
+        'spectra')
+    grid = gridutils.make_grid(
+        (16, 16, 8), (5, 5, 20), spectral_axis=2, rest='1420.405752 MHz')
+    velocities = grid.zero()[2] + 20 * np.arange(8)
+    responses = np.array([
+        x.response(grid) for x in PrimaryBeamGauss(
+            40, 2, -1, 1420.405752e6).at(
+            velocities * u.km / u.s, rest=grid.coords.rest)])
+    np.testing.assert_allclose(
+        attenuated, plain * responses, rtol=1e-5, atol=1e-6 * plain.max())
+    assert np.ptp(responses, axis=0).max() > 1e-4
 
 
 def test_primary_beam_needs_a_positive_fwhm():

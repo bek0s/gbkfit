@@ -8,12 +8,13 @@ import os.path
 from collections.abc import Sequence
 from typing import Any
 
+import astropy.units as u
 import numpy as np
 import scipy.ndimage
 import scipy.special
 
 from gbkfit.utils import fitsutils, gridutils, parseutils
-from . import _detail
+from . import _detail, varying
 from ._detail import check_scale
 
 
@@ -34,7 +35,7 @@ _AIRY_HALF_MAXIMUM = 1.616339948310703
 class PrimaryBeam(parseutils.TypedSerializable, abc.ABC):
     """
     The response of a telescope to the sky, which attenuates its light
-    before the PSF.
+    before the PSF: the same at all frequencies, or of each (see varies).
     """
 
     @abc.abstractmethod
@@ -62,10 +63,45 @@ class PrimaryBeam(parseutils.TypedSerializable, abc.ABC):
             The options.
         """
 
+    def varies(self) -> bool:
+        """
+        Check whether the response varies along the spectral axis (with
+        the frequency).
+
+        Returns
+        -------
+        bool
+            Whether it varies; here, it does not (see at).
+        """
+        return False
+
+    def at(
+            self, points: u.Quantity, rest: u.Quantity | None = None
+    ) -> 'PrimaryBeam | list[PrimaryBeam]':
+        """
+        Return the primary beam at points of the spectral axis.
+
+        Parameters
+        ----------
+        points : Quantity
+            Wavelengths, frequencies or velocities: one, or a sequence.
+        rest : Quantity, optional
+            The rest of the spectral axis (see gridutils.Coords); needed
+            for velocities, if the beam varies.
+
+        Returns
+        -------
+        PrimaryBeam or list of PrimaryBeam
+            The beam (one that does not vary) at each point, or at the
+            point; here, itself.
+        """
+        return varying.per_point(points, lambda points_: [self] * len(points_))
+
     @abc.abstractmethod
     def response(self, grid: gridutils.Grid) -> np.ndarray:
         """
-        Return the response at the pixels of a grid.
+        Return the response at the pixels of a grid (at the frequency of
+        its fwhm, for a beam that varies).
 
         Parameters
         ----------
@@ -82,7 +118,8 @@ class PrimaryBeam(parseutils.TypedSerializable, abc.ABC):
 class PrimaryBeamRadial(PrimaryBeam, abc.ABC):
     """
     A response that depends on the distance from its centre, the pointing,
-    where it is 1.
+    where it is 1; of a width that is the same at all frequencies, or
+    inversely proportional to the frequency (that of a dish, lambda / D).
 
     Parameters
     ----------
@@ -90,6 +127,15 @@ class PrimaryBeamRadial(PrimaryBeam, abc.ABC):
         The full width at half maximum (arcsec), the unit of the distance.
     x, y : float, optional
         The pointing (arcsec, like xpos and ypos).
+    frequency : float, optional
+        The frequency of the fwhm (Hz), for a width fwhm frequency / nu at
+        the frequency nu of each channel; without it, the width is fwhm
+        at all frequencies.
+
+    Raises
+    ------
+    ConfigError
+        If the fwhm or the frequency is not positive.
     """
 
     def dump(
@@ -97,13 +143,37 @@ class PrimaryBeamRadial(PrimaryBeam, abc.ABC):
             overwrite: bool = False
     ) -> dict[str, Any]:
         # A radial response has no data to write
-        return dict(type=self.type(), fwhm=self._fwhm, x=self._x, y=self._y)
+        return dict(
+            type=self.type(), fwhm=self._fwhm, x=self._x, y=self._y,
+            frequency=self._frequency)
 
-    def __init__(self, fwhm: float, x: float = 0, y: float = 0):
+    def __init__(
+            self,
+            fwhm: float,
+            x: float = 0,
+            y: float = 0,
+            frequency: float | None = None
+    ):
         check_scale('fwhm', fwhm)
+        if frequency is not None:
+            check_scale('frequency', frequency)
         self._fwhm = fwhm
         self._x = x
         self._y = y
+        self._frequency = frequency
+
+    def varies(self) -> bool:
+        return self._frequency is not None
+
+    def at(
+            self, points: u.Quantity, rest: u.Quantity | None = None
+    ) -> 'PrimaryBeam | list[PrimaryBeam]':
+        if not self.varies():
+            return super().at(points, rest)
+        return varying.per_point(points, lambda points_: [
+            type(self)(self._fwhm * self._frequency / frequency, self._x,
+                       self._y)
+            for frequency in varying.to_frequencies(points_, rest)])
 
     def response(self, grid: gridutils.Grid) -> np.ndarray:
         x, y = gridutils.sky_positions(grid)

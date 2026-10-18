@@ -169,6 +169,33 @@ def to_velocities(
     return _convert(as_points(points), _KMS, rest)
 
 
+def to_frequencies(
+        points: u.Quantity, rest: u.Quantity | None = None
+) -> np.ndarray:
+    """
+    Return points of the spectral axis as frequencies.
+
+    Parameters
+    ----------
+    points : Quantity
+        Wavelengths, frequencies or velocities.
+    rest : Quantity, optional
+        The rest of the spectral axis (see gridutils.Coords); needed for
+        velocities.
+
+    Returns
+    -------
+    ndarray
+        The frequencies (Hz).
+
+    Raises
+    ------
+    ConfigError
+        If the rest is needed but not given.
+    """
+    return _convert(as_points(points), u.Hz, rest)
+
+
 def load_points(info: dict[str, Any]) -> u.Quantity | None:
     """
     Remove the points of the spectral axis from a configuration, if any,
