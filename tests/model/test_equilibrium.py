@@ -138,6 +138,30 @@ def test_self_gravitating_equilibrium_in_a_mass_disk():
     assert kinematics['equilibrium_density'] == 'gas'
 
 
+def test_self_gravitating_equilibrium_in_its_own_mass_disk():
+    # Sigma of a mass disk that follows the disk: upsilon times its density
+    # at its subnodes (exact for its exponential there)
+    disk = with_kinematics(
+        DISK, equilibrium='self_gravitating', equilibrium_density='gas') \
+        | dict(name='gas')
+    balanced = galaxy(
+        disk, mass=[dict(
+            type='disk', name='gas', surface=dict(type='component',
+                                                  component='gas'),
+            vertical=dict(type='component', component='gas'))],
+        distance=dict(type='direct', cosmology='Planck18'))
+    params = {f'gas_{key}': value for key, value in PROPERTIES.items()} \
+        | dict(distance=10, mass_gas_upsilon=1e9)
+    extra = {}
+    balanced.plan_gravity().evaluate(params, extra)
+    table = extra['gas_equilibrium']
+    surface = 1e9 * np.exp(-np.array(table['radius']) / 4)
+    np.testing.assert_allclose(table['surface_density'], surface, rtol=1e-12)
+    np.testing.assert_allclose(
+        table['sigma'] ** 2,
+        2 * np.sqrt(3) * G * surface * 1 * KPC_PER_ARCSEC, rtol=1e-8)
+
+
 def test_pressure_support_takes_the_dispersion_of_the_equilibrium():
     # The rotation with pressure support of a disk in equilibrium is that
     # of the disk whose node-wise dispersion traits at the subnodes are

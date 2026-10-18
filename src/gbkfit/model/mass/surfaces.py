@@ -24,7 +24,7 @@ from gbkfit.params.pdescs import ParamScalarDesc, ParamVectorDesc
 from gbkfit.utils import parseutils
 from gbkfit.utils.parseutils import ConfigError
 from . import _disk_gravity, _disk_vertical, _numerics
-from .base import MassContext
+from .base import ComponentDensity, MassContext
 from .units import G
 from .vertical import DiskVertical, VerticalComponent, VerticalLaw
 
@@ -689,9 +689,13 @@ class SurfaceComponent(DiskSurface):
             params: ParamValues,
             context: MassContext
     ) -> np.ndarray:
-        raise NotImplementedError(
-            "a surface density that follows a component is given on rings "
-            "only")
+        # (at the subnodes, linear between them, and 0 beyond the edges of
+        # the component, as its gravity takes it)
+        density = context.density(self._component)
+        knots = density.knots(self._rstep)
+        return self._upsilon(density, params) * np.interp(
+            R, knots, np.sum(density.surface_densities(knots), axis=0),
+            left=0, right=0)
 
     def vcirc2(
             self,
@@ -702,9 +706,7 @@ class SurfaceComponent(DiskSurface):
     ) -> np.ndarray:
         density = context.density(self._component)
         knots = density.knots(self._rstep)
-        upsilon = params['upsilon']
-        if (mass := density.mass_per_unit()) is not None:
-            upsilon = upsilon * mass
+        upsilon = self._upsilon(density, params)
         R = np.asarray(R, dtype=float)
         if vertical.thin(context):
             gravity = _disk_gravity.thin_disk_gravity(knots, R.ravel())
@@ -737,9 +739,7 @@ class SurfaceComponent(DiskSurface):
     ) -> np.ndarray:
         density = context.density(self._component)
         knots = density.knots(self._rstep)
-        upsilon = params['upsilon']
-        if (mass := density.mass_per_unit()) is not None:
-            upsilon = upsilon * mass
+        upsilon = self._upsilon(density, params)
         R, z = np.broadcast_arrays(
             np.asarray(R, dtype=float), np.asarray(z, dtype=float))
         if vertical.thin(context) or isinstance(vertical, VerticalLaw):
@@ -755,6 +755,18 @@ class SurfaceComponent(DiskSurface):
             upsilon * density.surface_densities(force.radii),
             density.height_pdfs(force.radii, force.heights),
             density.height_pdfs).reshape(R.shape)
+
+    @staticmethod
+    def _upsilon(density: ComponentDensity, params: ParamValues) -> float:
+        """
+        Return the mass surface density (Msun/kpc^2) of one unit of the
+        density of the component: upsilon, times the mass of a unit of its
+        density if it has a physical unit.
+        """
+        upsilon = params['upsilon']
+        if (mass := density.mass_per_unit()) is not None:
+            upsilon = upsilon * mass
+        return upsilon
 
 
 disk_surface_parser = parseutils.TypedParser(DiskSurface, [
