@@ -69,7 +69,8 @@ def test_recorded_data_have_the_noise_as_their_error(driver, name):
         np.testing.assert_array_equal(again[0][key].data(), mocks[0][key].data())
 
 
-def test_the_errors_of_moments_are_their_scatter(driver):
+@pytest.mark.parametrize('method', ['moments', 'gaussian_fit'])
+def test_the_errors_of_moments_are_their_scatter(driver, method):
     # The moments of the spectra of the cube plus noise (a twentieth of
     # its peak): their errors, the scatter of 100 other draws, are the
     # scatter of the mock moments, where the model is bright (the moments
@@ -77,7 +78,7 @@ def test_the_errors_of_moments_are_their_scatter(driver):
     # the model)
     group = group_of(driver, dict(
         type='pixel_moments', size=[16, 17], spec_size=31, spec_step=20,
-        mask_cutoff=1e-4))
+        mask_cutoff=1e-4, method=method))
     model, extra, params = evaluate(group)
     peak = extra['observation0_dcube_lo'].data.max()
     mocks = group.mock(

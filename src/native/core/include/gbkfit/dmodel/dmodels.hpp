@@ -255,69 +255,63 @@ dmodel_gaussian_sse(
     return sse;
 }
 
-// The moment maps of a Gaussian fitted to the spectrum of the pixel (x,
-// y) of a cube by least squares (Levenberg-Marquardt), as moments: its
-// flux (order 0), centre (1) and dispersion (2), the only orders. The
-// spectra whose moment 0 is not above the cutoff, and those whose fit
-// fails, are masked as with the moments (moment 0 is then their flux). The fit
-// is of a Gaussian sampled at the centres of the channels, in channel
-// units, and starts from the moments. The channels of the spectrum are
-// stride values apart, as in dmodel_mmaps_moments.
-template<typename T> constexpr void
-dmodel_mmaps_gaussian(
-        int x, int y,
-        int size_x, int size_y, int size_z,
-        T step_z, T zero_z,
-        const T* spectrum, int stride,
-        T cutoff, int norders, const int* orders,
-        T* mmaps_d, T* mmaps_m)
+// Whether the Gaussian a exp(-(k - c)^2 / (2 s^2)) (channel units) is
+// one of a line of a spectrum of size_z channels: bright (a > 0), centred
+// within the channels (from -0.5 to size_z - 0.5), and not wider than
+// them (0 < s <= size_z)
+template<typename T> constexpr bool
+dmodel_gaussian_in_band(int size_z, T a, T c, T s)
+{
+    return a > 0 && c >= T{-0.5} && c <= size_z - T{0.5}
+        && s > 0 && s <= size_z;
+}
+
+// The Gaussian a exp(-(k - c)^2 / (2 s^2)) (channel units) fitted to a
+// spectrum of size_z channels, stride values apart, by least squares
+// (Levenberg-Marquardt) from (a, c, s), which it updates. The steps that
+// leave the Gaussians of a line of the spectrum (see
+// dmodel_gaussian_in_band) are rejected, as those that do not lower the
+// residuals. Return the sum of the squared residuals of the fit, or
+// infinity if the start is not one of those Gaussians.
+template<typename T> constexpr T
+dmodel_gaussian_fit(
+        int size_z, const T* spectrum, int stride, T& a, T& c, T& s)
 {
     constexpr int MAX_ITERATIONS = 100;
     constexpr T TOLERANCE = T{1e-6};
-    const int idx_2d = index_2d_to_1d(x, y, size_x);
-
-    // The moments, in channel units
-    T m0 = 0, m1 = 0, m2 = 0;
-    for (int z = 0; z < size_z; ++z)
-    {
-        const T i = spectrum[z * stride];
-        m0 += i;
-        m1 += i * z;
+    if (!dmodel_gaussian_in_band(size_z, a, c, s)) {
+        return INFINITY;
     }
-    m1 /= m0;
-    for (int z = 0; z < size_z; ++z)
-    {
-        const T i = spectrum[z * stride];
-        m2 += i * (z - m1) * (z - m1);
-    }
-    m2 = std::sqrt(std::max(m2 / m0, T{0.25}));
-
-    // The fit: amplitude a, centre c and dispersion s, from the moments
-    T a = m0 / (m2 * std::sqrt(2 * PI<T>));
-    T c = m1;
-    T s = m2;
-    bool valid = std::abs(m0 * step_z) > cutoff && std::isfinite(a);
-    T sse = valid
-            ? dmodel_gaussian_sse(size_z, spectrum, stride, a, c, s)
-            : T{0};
+    T sse = dmodel_gaussian_sse(size_z, spectrum, stride, a, c, s);
     T lambda = T{1e-3};
-    for (int iteration = 0; valid && iteration < MAX_ITERATIONS; ++iteration)
+    // The normal equations J^T J and J^T r of the residuals, made again
+    // only when the fit moves (a rejected step only raises the damping)
+    T jj[3][3], jr[3];
+    bool moved = true;
+    for (int iteration = 0; iteration < MAX_ITERATIONS; ++iteration)
     {
-        // The normal equations J^T J and J^T r of the residuals
-        T jj[3][3] = {{0}}, jr[3] = {0};
-        for (int z = 0; z < size_z; ++z)
+        if (moved)
         {
-            const T u = (z - c) / s;
-            const T g = std::exp(T{-0.5} * u * u);
-            const T r = a * g - spectrum[z * stride];
-            const T j[3] = {g, a * g * u / s, a * g * u * u / s};
             for (int p = 0; p < 3; ++p) {
-                jr[p] += j[p] * r;
+                jr[p] = 0;
                 for (int q = 0; q < 3; ++q)
-                    jj[p][q] += j[p] * j[q];
+                    jj[p][q] = 0;
             }
+            for (int z = 0; z < size_z; ++z)
+            {
+                const T u = (z - c) / s;
+                const T g = std::exp(T{-0.5} * u * u);
+                const T r = a * g - spectrum[z * stride];
+                const T j[3] = {g, a * g * u / s, a * g * u * u / s};
+                for (int p = 0; p < 3; ++p) {
+                    jr[p] += j[p] * r;
+                    for (int q = 0; q < 3; ++q)
+                        jj[p][q] += j[p] * j[q];
+                }
+            }
+            moved = false;
         }
-        // Solve (J^T J + lambda diag(J^T J)) step = -J^T r (Cramer)
+        // The damped step, by Cramer's rule
         T m[3][3];
         for (int p = 0; p < 3; ++p)
             for (int q = 0; q < 3; ++q)
@@ -343,7 +337,7 @@ dmodel_mmaps_gaussian(
         const T a_new = a + delta[0];
         const T c_new = c + delta[1];
         const T s_new = s + delta[2];
-        const T sse_new = s_new > 0
+        const T sse_new = dmodel_gaussian_in_band(size_z, a_new, c_new, s_new)
                 ? dmodel_gaussian_sse(size_z, spectrum, stride,
                                       a_new, c_new, s_new)
                 : NAN;
@@ -354,6 +348,7 @@ dmodel_mmaps_gaussian(
             s = s_new;
             sse = sse_new;
             lambda /= 10;
+            moved = true;
             if (converged) {
                 break;
             }
@@ -364,7 +359,107 @@ dmodel_mmaps_gaussian(
             }
         }
     }
-    valid = valid && std::isfinite(a) && std::isfinite(c) && s > 0;
+    return sse;
+}
+
+// The start of a Gaussian fit (channel units) at the brightest channel of
+// a spectrum of size_z channels, stride values apart: its value (a), the
+// channel (c), and the dispersion of the width at half the value (s; the
+// crossings of half the value interpolated between the channels, or the
+// ends of the spectrum, and at least half a channel)
+template<typename T> constexpr void
+dmodel_gaussian_peak(
+        int size_z, const T* spectrum, int stride, T& a, T& c, T& s)
+{
+    int peak = 0;
+    for (int z = 1; z < size_z; ++z)
+        if (spectrum[z * stride] > spectrum[peak * stride])
+            peak = z;
+    a = spectrum[peak * stride];
+    const T half = a / 2;
+    T lo = 0, hi = size_z - 1;
+    for (int z = peak - 1; z >= 0; --z)
+    {
+        const T i = spectrum[z * stride];
+        if (i < half) {
+            lo = z + (half - i) / (spectrum[(z + 1) * stride] - i);
+            break;
+        }
+    }
+    for (int z = peak + 1; z < size_z; ++z)
+    {
+        const T i = spectrum[z * stride];
+        if (i < half) {
+            hi = z - (half - i) / (spectrum[(z - 1) * stride] - i);
+            break;
+        }
+    }
+    // (the FWHM of a Gaussian is 2 sqrt(2 ln 2) = 2.3548 dispersions)
+    c = peak;
+    s = std::max((hi - lo) / T{2.3548200450309493}, T{0.5});
+}
+
+// The moment maps of a Gaussian fitted to the spectrum of the pixel (x,
+// y) of a cube by least squares (see dmodel_gaussian_fit), as moments:
+// its flux (order 0), centre (1) and dispersion (2), the only orders. The
+// fit is of a Gaussian sampled at the centres of the channels, in channel
+// units, from two starts: the moments of the spectrum, and its brightest
+// channel (see dmodel_gaussian_peak); that of the smaller residuals is
+// kept, that from the moments if they are equal. (In noise, the moments
+// of the whole spectrum can start the fit far from the line, where it
+// falls on a spike of noise or on the wing of a Gaussian beyond the
+// spectrum.) The spectra whose moment 0 is not above the cutoff, and
+// those that no Gaussian of a line fits (see dmodel_gaussian_in_band),
+// are masked as with the moments (moment 0 is then their flux). The
+// channels of the spectrum are stride values apart, as in
+// dmodel_mmaps_moments.
+template<typename T> constexpr void
+dmodel_mmaps_gaussian(
+        int x, int y,
+        int size_x, int size_y, int size_z,
+        T step_z, T zero_z,
+        const T* spectrum, int stride,
+        T cutoff, int norders, const int* orders,
+        T* mmaps_d, T* mmaps_m)
+{
+    const int idx_2d = index_2d_to_1d(x, y, size_x);
+
+    // The moments, in channel units
+    T m0 = 0, m1 = 0, m2 = 0;
+    for (int z = 0; z < size_z; ++z)
+    {
+        const T i = spectrum[z * stride];
+        m0 += i;
+        m1 += i * z;
+    }
+    m1 /= m0;
+    for (int z = 0; z < size_z; ++z)
+    {
+        const T i = spectrum[z * stride];
+        m2 += i * (z - m1) * (z - m1);
+    }
+    m2 = std::sqrt(std::max(m2 / m0, T{0.25}));
+
+    // The fits: amplitude a, centre c and dispersion s
+    T a = m0 / (m2 * std::sqrt(2 * PI<T>));
+    T c = m1;
+    T s = m2;
+    bool valid = std::abs(m0 * step_z) > cutoff;
+    if (valid)
+    {
+        const T sse = dmodel_gaussian_fit(size_z, spectrum, stride, a, c, s);
+        T a_peak = 0, c_peak = 0, s_peak = 0;
+        dmodel_gaussian_peak(
+                size_z, spectrum, stride, a_peak, c_peak, s_peak);
+        const T sse_peak = dmodel_gaussian_fit(
+                size_z, spectrum, stride, a_peak, c_peak, s_peak);
+        if (sse_peak < sse) {
+            a = a_peak;
+            c = c_peak;
+            s = s_peak;
+        }
+        valid = sse_peak < INFINITY || sse < INFINITY;
+    }
     mmaps_m[idx_2d] = valid;
 
     // The moments of the Gaussian, in the units of the spectral axis:

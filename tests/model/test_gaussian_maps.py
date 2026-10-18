@@ -66,6 +66,29 @@ def test_gaussian_fit_recovers_gaussians(driver):
     np.testing.assert_allclose(maps['moment2'][good], sigma[good], rtol=1e-3)
 
 
+def test_gaussian_fit_of_noisy_spectra_stays_on_the_line(driver):
+    # A line of dispersion 1.5 channels at S/N 10 per channel, in 4000
+    # spectra: every fit is of the line (from the moments of the whole
+    # spectrum alone, some fell on a spike of noise or on the wing of a
+    # Gaussian beyond the spectrum, of flux up to 1e13)
+    rng = np.random.default_rng(3)
+    nz, ny, nx = 31, 40, 100
+    channels = np.arange(nz)[:, None, None]
+    line = np.exp(-0.5 * ((channels - 15) / 1.5) ** 2)
+    cube = line + rng.standard_normal((nz, ny, nx)) / 10
+    plan = MomentsPlan(
+        driver, (nx, ny), (0, 1, 2), 1e-6, 'gaussian_fit', np.float32)
+    maps = plan.evaluate(
+        (1, 1, 1), (0, 0, 0),
+        driver.mem_copy_h2d(cube.astype(np.float32)), None)
+    flux, centre, sigma = (
+        driver.mem_copy_d2h(maps[f'moment{order}']['d']) for order in range(3))
+    assert (driver.mem_copy_d2h(maps['moment0']['m']) == 1).all()
+    np.testing.assert_allclose(flux, 1.5 * np.sqrt(2 * np.pi), rtol=0.5)
+    np.testing.assert_allclose(centre, 15, atol=1.5)
+    np.testing.assert_allclose(sigma, 1.5, rtol=0.6)
+
+
 def test_gaussian_fit_without_beam_smearing_is_the_moments(driver):
     # Without a psf, each spectrum of a thin disk is one line, whose fit
     # is its moments (up to the channel integration of the model)
