@@ -147,7 +147,9 @@ class MassSpheroid(MassComponent):
       v^2(r') r' / r. (Burkert et al. 2010, Eq. 18, which DysmalPy's
       documentation quotes, writes v^2(r') for this term, smaller by r /
       r': it does not keep the mass that Eq. 19 moves within r.) Its
-      density, forces off its plane and potential are not given.
+      forces are those of its spherical shells, -v^2(r) / r^2 toward the
+      centre (r the spherical radius); its density and potential are not
+      given.
     - given by its dark matter fraction (see DarkFraction): fdm = v^2 /
       (v^2 + v_b^2) at r_fdm (two parameters, instead of the parameter it
       sets), of its circular velocity, contracted if it is, and that of
@@ -329,7 +331,14 @@ class MassSpheroid(MassComponent):
             context: MassContext
     ) -> tuple[np.ndarray, np.ndarray]:
         if self._contraction is not None:
-            return super().forces(R, z, params, context)
+            # (spherical: the pull of its mass within the spherical radius)
+            R, z = np.broadcast_arrays(
+                np.asarray(R, dtype=float), np.asarray(z, dtype=float))
+            r = np.hypot(R, z)
+            scale = -np.divide(
+                self.vcirc2(r, params, context), r ** 2,
+                out=np.zeros_like(r), where=r > 0)
+            return scale * R, scale * z
         return self._shape.forces(
             R, z, self._profile, self._given(params, context), context)
 

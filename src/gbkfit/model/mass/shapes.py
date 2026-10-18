@@ -208,7 +208,11 @@ class ShapeFlattened(SpheroidShape):
     velocity in its plane (Binney & Tremaine 2008, 2.132) is v^2(R) = 4
     pi G int_0^R rho_sph(m) m^2 dm / sqrt(R^2 - e^2 m^2), e^2 = 1 - q^2,
     computed by quadrature (to about 1e-10 of the integral of the
-    profile). Its forces off its plane and its potential are not given.
+    profile). Its forces anywhere (Binney & Tremaine 2008, 2.140, with x =
+    (1 + u)^-1/2): F_R = -4 pi G R int_0^1 rho_sph(m) x^2 dx / (1 - e^2
+    x^2)^(1/2) and F_z = -4 pi G z int_0^1 rho_sph(m) x^2 dx / (1 - e^2
+    x^2)^(3/2), m^2 = x^2 (R^2 + z^2 / (1 - e^2 x^2)), by the same
+    quadrature (x = sin(phi)). Its potential is not given.
     """
 
     @staticmethod
@@ -256,6 +260,34 @@ class ShapeFlattened(SpheroidShape):
         q = params['q']
         return profile.density(
             np.hypot(R, np.asarray(z, dtype=float) / q), params, context) / q
+
+    def forces(
+            self,
+            R: npt.ArrayLike,
+            z: npt.ArrayLike,
+            profile: SpheroidProfile,
+            params: ParamValues,
+            context: MassContext
+    ) -> tuple[np.ndarray, np.ndarray]:
+        # With x = sin(phi), 1 - e^2 x^2 = cos^2(phi) + q^2 sin^2(phi)
+        R, z = np.broadcast_arrays(
+            np.asarray(R, dtype=float), np.asarray(z, dtype=float))
+        q = params['q']
+        sin, cos = np.sin(_FLATTENED_PHI), np.cos(_FLATTENED_PHI)
+        squashed = cos ** 2 + q ** 2 * sin ** 2
+        weights = _FLATTENED_WEIGHTS * sin ** 2 * cos
+        radii, heights = R.ravel(), z.ravel()
+        force_R, force_z = np.zeros_like(radii), np.zeros_like(radii)
+        # (no force at the centre)
+        off = (radii > 0) | (heights != 0)
+        m = sin * np.sqrt(
+            radii[off, None] ** 2 + heights[off, None] ** 2 / squashed)
+        density = profile.density(m, params, context) * weights
+        force_R[off] = -4 * np.pi * G * radii[off] * (
+            density @ squashed ** -0.5)
+        force_z[off] = -4 * np.pi * G * heights[off] * (
+            density @ squashed ** -1.5)
+        return force_R.reshape(R.shape), force_z.reshape(R.shape)
 
 
 spheroid_shape_parser = parseutils.TypedParser(SpheroidShape, [

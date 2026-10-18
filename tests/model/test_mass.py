@@ -454,6 +454,52 @@ def test_flattened_spheroids_are_their_potential_integrals():
             [vcirc2(R) for R in radius], rtol=1e-7)
 
 
+@pytest.mark.parametrize('q', [0.3, 1.0, 2.0])
+def test_flattened_spheroids_give_their_forces_anywhere(q):
+    # Off their plane, those of a homoeoid density rho(m) / q (Binney &
+    # Tremaine 2.140): F_R = -2 pi G R int rho du / ((1 + u)^2 (q^2 +
+    # u)^(1/2)) and F_z = -2 pi G z int rho du / ((1 + u) (q^2 +
+    # u)^(3/2)), m^2 = R^2 / (1 + u) + z^2 / (q^2 + u); a sphere at q = 1
+    profile, params = SPHERES[1]
+    flat = MassSpheroid('s', profile, ShapeFlattened())
+    R, z = np.array([0.5, 4, 30, 3]), np.array([0.2, 3, 10, 0])
+
+    def force(R, z, power, axis):
+        def integrand(u):
+            m = np.sqrt(R ** 2 / (1 + u) + z ** 2 / (q ** 2 + u))
+            return float(profile.density(np.array(m), params, CONTEXT)) \
+                / ((1 + u) ** (2.5 - power) * (q ** 2 + u) ** power)
+        return -2 * np.pi * G * axis * scipy.integrate.quad(
+            integrand, 0, np.inf, epsabs=0, epsrel=1e-10, limit=400)[0]
+    force_R, force_z = flat.forces(R, z, params | dict(q=q), CONTEXT)
+    np.testing.assert_allclose(
+        force_R, [force(*point, 0.5, point[0]) for point in zip(R, z)],
+        rtol=1e-7)
+    np.testing.assert_allclose(
+        force_z, [force(*point, 1.5, point[1]) for point in zip(R, z)],
+        rtol=1e-7, atol=1e-12)
+    if q == 1:
+        sphere = MassSpheroid('s', profile).forces(R, z, params, CONTEXT)
+        np.testing.assert_allclose(force_R, sphere[0], rtol=1e-7)
+        np.testing.assert_allclose(force_z, sphere[1], rtol=1e-7)
+
+
+def test_contracted_halos_pull_toward_their_centre():
+    # Spherical shells: -v^2(r) / r^2 toward the centre, of the contracted
+    # circular velocity at the spherical radius r
+    model = mass_model(BARYONS + [responding_halo(contraction='blumenthal86')])
+    halo = model.component('halo')
+    values = BARYON_VALUES | dict(mass_halo_log_m=12, mass_halo_c=5)
+    params = model.component_params('halo', values)
+    context = model._context(halo, values, CONTEXT)
+    R, z = np.array([0.5, 3, 20]), np.array([0.3, 4, 0])
+    r = np.hypot(R, z)
+    force_R, force_z = halo.forces(R, z, params, context)
+    scale = -halo.vcirc2(r, params, context) / r ** 2
+    np.testing.assert_allclose(force_R, scale * R, rtol=1e-12)
+    np.testing.assert_allclose(force_z, scale * z, rtol=1e-12)
+
+
 def test_flat_sersic_spheroids_are_thin_disks():
     # Squashed to a sheet, a Sersic spheroid of index 1 is the thin
     # exponential disk of its mass and of the scale length re / b(1): seen
