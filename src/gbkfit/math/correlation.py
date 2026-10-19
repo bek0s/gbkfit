@@ -7,7 +7,7 @@ from collections.abc import Sequence
 
 import numpy as np
 import scipy.fft
-import scipy.linalg
+import scipy.linalg.lapack
 
 
 __all__ = [
@@ -127,5 +127,6 @@ def whitening_matrix(matrix: np.ndarray, white_floor: float) -> np.ndarray:
     factor = np.linalg.cholesky(floored)
     if np.min(np.diag(factor), initial=1) ** 2 < MIN_CONDITIONAL_VARIANCE:
         raise np.linalg.LinAlgError("the matrix is nearly singular")
-    return scipy.linalg.solve_triangular(
-        factor, np.eye(len(factor)), lower=True)
+    # (the inverse of a triangular matrix, n^3 / 3 operations)
+    inverse, _ = scipy.linalg.lapack.dtrtri(factor, lower=1)
+    return inverse
