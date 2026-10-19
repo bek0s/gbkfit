@@ -6,6 +6,7 @@ import scipy.special
 from gbkfit.dataset import Dataset
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.observation import ObservationGroup
+from gbkfit.observation.likelihood import Whitening, whitening
 from gbkfit.params import ParamDesc, ParamValues
 from gbkfit.utils import iterutils
 from gbkfit.utils.parseutils import ConfigError
@@ -25,6 +26,48 @@ class _Noise(NamedTuple):
     scale: str | None
     jitter: str | None
     scale_minimum: float
+
+
+class _Whitener:
+    """
+    The whitening of the residuals of a data item (see Whitening) on the
+    device of a driver, for residuals of a shape and a type: the indices
+    of its pixels, its matrices (that of the sky transposed), and the
+    residuals of its pixels and their products.
+    """
+
+    def __init__(
+            self,
+            driver: Driver,
+            whitening: Whitening,
+            shape: tuple[int, ...],
+            dtype: np.dtype
+    ):
+        self._driver = driver
+        self._pixels = driver.mem_copy_h2d(whitening.pixels)
+        self._spatial = None if whitening.spatial is None \
+            else driver.mem_copy_h2d(np.ascontiguousarray(
+                whitening.spatial.T, dtype))
+        self._spectral = None if whitening.spectral is None \
+            else driver.mem_copy_h2d(whitening.spectral.astype(dtype))
+        # (the channels by the pixels; one channel for an image)
+        size = (int(np.prod(shape[:-2])), whitening.pixels.size)
+        self._values = driver.mem_alloc_d(size, dtype)
+        self._products = driver.mem_alloc_d(size, dtype)
+
+    def __call__(self, residual: DeviceArray) -> None:
+        """Whiten the residuals of the item (of its shape) in place."""
+        driver = self._driver
+        values, products = self._values, self._products
+        flat = residual.reshape(values.shape[0], -1)
+        driver.mem_gather(flat, self._pixels, out=values)
+        if self._spatial is not None:
+            driver.math_matmul(values, self._spatial, out=products)
+            values, products = products, values
+        if self._spectral is not None:
+            driver.math_matmul(self._spectral, values, out=products)
+            values, products = products, values
+        driver.mem_scatter(values, self._pixels, flat)
 
 
 class Objective:
@@ -55,6 +98,11 @@ class Objective:
     residuals of its data items by their noise in place of their errors,
     and adds the noise residual of each of those items after all the
     other residuals of the observations (see residuals and noise_chi2).
+
+    The weighted residuals of a data item whose noise is correlated are
+    whitened (see LikelihoodGaussian): the sum of their squares is its
+    chi-square. The objective works out their whitening on its first
+    evaluation (see prepare).
 
     The methods for fitters return totals over all observations and new
     arrays (chi2, log_likelihood, residuals). The others return a value
@@ -147,6 +195,9 @@ class Objective:
         self._d_noise_sums = iterutils.make_list(n, None)
         self._noise_residuals = [
             np.zeros(len(noise)) for noise in self._noise]
+        # The whitening of the residuals of the data items of each
+        # observation whose noise is correlated, by name
+        self._whiteners = iterutils.make_list(n, {})
         # The native objective of each observation, for its driver
         self._backends = iterutils.make_list(n, None)
         # The memory is allocated on the first evaluation (see prepare)
@@ -183,8 +234,10 @@ class Objective:
 
     def prepare(self) -> None:
         """
-        Allocate the memory of the residuals, and copy the data to the
-        device of each observation. The first evaluation calls it.
+        Allocate the memory of the residuals, copy the data to the device of
+        each observation, and work out the whitening of the residuals of
+        data items whose noise is correlated (once, for every evaluation;
+        e.g. about 1 s for 7000 pixels). The first evaluation calls it.
         """
         for i in range(self.nobservations()):
             dataset = self._datasets[i]
@@ -232,6 +285,10 @@ class Objective:
                     self._h_residual_vector[i][slice_].reshape(shape)
                 self._d_residual_nddata[i][key] = \
                     self._d_residual_vector[i][slice_].reshape(shape)
+                if (correlation := dataset.noise_correlation(key)) is not None:
+                    self._whiteners[i][key] = _Whitener(driver, whitening(
+                        key, data.mask(), correlation,
+                        observation.likelihood().white_floor()), shape, dtype)
             self._backends[i] = driver.native_class('Objective', dtype)()
             if self._amplitude_items[i] is not None:
                 spectra = shape[1:]
@@ -559,6 +616,9 @@ class Objective:
                         *self._upper_limits[i][key],
                         *self._noise_values(i, key, params),
                         self._d_residual_nddata[i][key])
+                    if weighted and key in self._whiteners[i]:
+                        self._whiteners[i][key](
+                            self._d_residual_nddata[i][key])
                 if self._noise[i]:
                     self._update_noise_residuals(
                         i, model_data[i], params, weighted)

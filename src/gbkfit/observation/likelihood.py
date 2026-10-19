@@ -8,17 +8,30 @@ from typing import Any, Self
 
 import numpy as np
 
+from gbkfit.dataset import NoiseCorrelation
+from gbkfit.math.correlation import (
+    correlation_matrix, periodic_correlation, whitening_matrix)
 from gbkfit.params import ParamDesc, ParamScalarDesc, ParamValues
 from gbkfit.utils import parseutils
 from gbkfit.utils.parseutils import ConfigError
 
 
 __all__ = [
+    'MAX_CORRELATED_PIXELS',
     'FittedNoise',
     'Likelihood',
     'LikelihoodGaussian',
-    'likelihood_parser'
+    'Whitening',
+    'correlated_pixels',
+    'likelihood_parser',
+    'whitening'
 ]
+
+
+# The most pixels of the sky over which the noise of a data item can be
+# correlated (see LikelihoodGaussian): its dense correlation matrix takes
+# 8 n^2 bytes (3.2 GB)
+MAX_CORRELATED_PIXELS = 20000
 
 
 @dataclasses.dataclass(frozen=True)
@@ -125,6 +138,14 @@ class Likelihood(parseutils.TypedSerializable, abc.ABC):
         """
         Return the standard deviation of the prior of the amplitudes, if
         any (see LikelihoodGaussian).
+        """
+        pass
+
+    @abc.abstractmethod
+    def white_floor(self) -> float:
+        """
+        Return the share of the variance of correlated noise taken as white
+        (see LikelihoodGaussian).
         """
         pass
 
@@ -245,6 +266,30 @@ class LikelihoodGaussian(Likelihood):
     chi-square has the noise residuals; the reduced chi-square of a fit
     does not (see Objective.noise_chi2).
 
+    The residuals of a data item whose noise is correlated (see Data:
+    e.g. by the beam of a radio image) are whitened. The noise of its
+    values has the covariance S C S, S the diagonal of their noise (their
+    errors, or sigma: the jitter is correlated as the noise) over their
+    weights, and C the correlation of the noise of the data: its
+    chi-square is r^T C^-1 r, of its residuals r (as above), the sum of
+    the squares of the whitened residuals L^-1 r, L the Cholesky factor
+    of C (C = L L^T). They are those of the values that the data do not
+    mask, the values the model lacks among them (with missing_residual).
+    C has a white floor f, (1 - f) C + f I, a share f of the variance
+    without correlation, which keeps it positive definite where the
+    shape of the correlation alone makes it singular (e.g. a Gaussian
+    beam on pixels much smaller than it); the noise of a cube correlated
+    on the sky and along its spectral axis has a floor on each, C =
+    C_xy' (x) C_z'. The determinant of C is the same at every parameter,
+    and left out of the log-likelihood (a fitted noise adds its noise
+    residual as above). The mask of a cube must keep whole spectra (the
+    same pixels in every channel), so that C is that product, and the
+    pixels must be at most MAX_CORRELATED_PIXELS (C is a dense matrix).
+    Correlated noise does not go with upper limits (the probability of
+    correlated non-detections has no closed form) or amplitudes of
+    spectra (the best amplitude of each spectrum would depend on the
+    others).
+
     Parameters
     ----------
     weights : float or Mapping, optional
@@ -269,6 +314,9 @@ class LikelihoodGaussian(Likelihood):
         with the scale, and only with it) and 'jitter' (whether a fitted
         jitter adds to them), at least one of the two fitted; see above.
         None by default.
+    white_floor : float, optional
+        The share of the variance of correlated noise taken as white, in
+        [0, 1) (see above); 0.01 by default.
 
     Raises
     ------
@@ -276,7 +324,8 @@ class LikelihoodGaussian(Likelihood):
         If missing_residual is negative or not finite, an upper limit is
         not a finite limit and a finite, positive error, amplitudes is not
         'per_spectrum', amplitude_sigma is missing with it, given without
-        it, or not positive, or the noise of an item is not as above.
+        it, or not positive, the noise of an item is not as above, or the
+        white floor is not in [0, 1).
     """
 
     @staticmethod
@@ -297,7 +346,8 @@ class LikelihoodGaussian(Likelihood):
         return dict(
             type=self.type(), weights=self._weights,
             missing_residual=self._missing_residual) \
-            | limits | amplitudes | noise
+            | limits | amplitudes | noise \
+            | dict(white_floor=self._white_floor)
 
     def __init__(
             self,
@@ -306,7 +356,8 @@ class LikelihoodGaussian(Likelihood):
             upper_limits: Mapping[str, Mapping[str, float]] | None = None,
             amplitudes: str | None = None,
             amplitude_sigma: float | None = None,
-            noise: Mapping[str, Mapping[str, Any]] | None = None
+            noise: Mapping[str, Mapping[str, Any]] | None = None,
+            white_floor: float = 0.01
     ):
         if missing_residual is not None and not (
                 math.isfinite(missing_residual) and missing_residual >= 0):
@@ -339,6 +390,10 @@ class LikelihoodGaussian(Likelihood):
         self._noise = {
             key: _check_noise(key, info)
             for key, info in (noise or {}).items()}
+        if not 0 <= white_floor < 1:
+            raise ConfigError(
+                f"option 'white_floor' must be in [0, 1); it is {white_floor}")
+        self._white_floor = float(white_floor)
 
     def pdescs(self) -> dict[str, ParamDesc]:
         """
@@ -382,6 +437,98 @@ class LikelihoodGaussian(Likelihood):
 
     def fitted_noise(self) -> dict[str, FittedNoise]:
         return dict(self._noise)
+
+    def white_floor(self) -> float:
+        return self._white_floor
+
+
+@dataclasses.dataclass(frozen=True)
+class Whitening:
+    """
+    The whitening of the residuals of a data item whose noise is
+    correlated (see LikelihoodGaussian and whitening). Its values are on
+    pixels of the sky (the last two axes of its arrays) and, for a cube,
+    on channels (its first axis). The residuals of the pixels it keeps,
+    as a matrix R of the channels by those pixels (one row for an image),
+    are whitened into spectral R spatial^T, with the whitening of each
+    axis whose noise is correlated (None for the others).
+    """
+    pixels: np.ndarray
+    spatial: np.ndarray | None
+    spectral: np.ndarray | None
+
+
+def correlated_pixels(key: str, mask: np.ndarray) -> np.ndarray:
+    """
+    Return the flat indices of the pixels of the sky that a data item
+    whose noise is correlated keeps (see Whitening), of its mask; raise
+    ConfigError unless it keeps the same pixels in every channel, and at
+    most MAX_CORRELATED_PIXELS.
+    """
+    channels = mask.reshape(-1, *mask.shape[-2:])
+    if np.any(channels != channels[0]):
+        raise ConfigError(
+            f"the noise of '{key}' is correlated, so its mask must keep "
+            f"whole spectra (the same pixels in every channel); it does not")
+    pixels = np.flatnonzero(channels[0])
+    if pixels.size > MAX_CORRELATED_PIXELS:
+        raise ConfigError(
+            f"the noise of '{key}' is correlated over {pixels.size} pixels; "
+            f"at most {MAX_CORRELATED_PIXELS} can be (mask more of them)")
+    return pixels
+
+
+def whitening(
+        key: str,
+        mask: np.ndarray,
+        correlation: NoiseCorrelation,
+        white_floor: float
+) -> Whitening:
+    """
+    Return the whitening of the residuals of a data item whose noise is
+    correlated (see LikelihoodGaussian), of its mask and of the
+    correlation of its noise, with a white floor.
+
+    Raises
+    ------
+    ConfigError
+        If its mask is not one of correlated noise (see correlated_pixels),
+        or its correlation is not positive definite with the white floor.
+    """
+    pixels = correlated_pixels(key, mask)
+    spatial = spectral = None
+    if correlation.spatial is not None:
+        points = np.column_stack(np.unravel_index(pixels, mask.shape[-2:]))
+        spatial = _whitening(
+            key, correlation.spatial, points, white_floor)
+    if correlation.spectral is not None:
+        points = np.arange(mask.shape[0])[:, None]
+        spectral = _whitening(
+            key, correlation.spectral, points, white_floor)
+    return Whitening(pixels, spatial, spectral)
+
+
+def _whitening(
+        key: str,
+        shape: np.ndarray,
+        points: np.ndarray,
+        white_floor: float
+) -> np.ndarray:
+    """
+    Return the whitening of the values at points of a grid (see
+    whitening_matrix), of the shape of the correlation of the noise of
+    data item key on the separations of the grid (see NoiseCorrelation),
+    with a white floor; raise ConfigError if it is not positive definite.
+    """
+    matrix = correlation_matrix(
+        periodic_correlation(shape, shape.shape), points)
+    try:
+        return whitening_matrix(matrix, white_floor)
+    except np.linalg.LinAlgError:
+        raise ConfigError(
+            f"the correlation of the noise of '{key}' is singular with the "
+            f"white floor {white_floor} (see LikelihoodGaussian): raise it"
+        ) from None
 
 
 def _check_noise(key: str, info: Mapping[str, Any]) -> FittedNoise:

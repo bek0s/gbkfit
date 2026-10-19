@@ -247,3 +247,61 @@ def test_a_model_without_values_where_the_data_have_some_pays(driver):
         (0 - dataset['moment0'].data()[without & has_data]) / 0.01,
         rtol=1e-4, atol=1e-3)
     assert objective.chi2(compact) > objective.chi2(truth)
+
+
+def correlated_data(rng, correlation):
+    """
+    An image of noise whose errors differ, with some pixels masked, and
+    the correlation of its noise.
+    """
+    mask = np.ones((24, 32))
+    mask[:3] = 0
+    mask[rng.integers(0, 24, 20), rng.integers(0, 32, 20)] = 0
+    return Data(
+        rng.normal(0.1, 1, (24, 32)), mask=mask,
+        error=rng.uniform(0.2, 0.6, (24, 32)),
+        spatial_correlation=correlation)
+
+
+def test_correlated_noise_has_the_chi2_of_its_covariance(driver):
+    # chi2 = r^T C^-1 r over the kept pixels: r = w (m - d) / s, s =
+    # sqrt((f e)^2 + j^2), and C = (1 - floor) K + floor I, K_ab the
+    # correlation at the separation of pixels a and b (an elongated beam,
+    # which a swap of x and y would turn)
+    from gbkfit.instrument import PSFGauss
+    data = correlated_data(np.random.default_rng(5), PSFGauss(2, 0.5, 20))
+    noise = dict(brightness=dict(scale=True, scale_minimum=0.1, jitter=True))
+    objective, params = make_objective(
+        driver, data, LikelihoodGaussian(
+            weights=2.0, noise=noise, white_floor=0.05), 'obs',
+        obs_noise_scale_brightness=1.3, obs_noise_jitter_brightness=0.2)
+    model = objective.group().model_h(params)[0]['brightness']['d']
+    sigma = np.hypot(1.3 * data.error(), 0.2)
+    kept = data.mask() != 0
+    r = (2 * (model - data.data()) / sigma)[kept]
+    y, x = np.nonzero(kept)
+    shape = objective.datasets()[0].noise_correlation('brightness').spatial
+    k = shape[23 + y[:, None] - y, 31 + x[:, None] - x]
+    c = 0.95 * k + 0.05 * np.eye(len(k))
+    chi2 = objective.chi2(params) - objective.noise_chi2()
+    assert chi2 == pytest.approx(r @ np.linalg.solve(c, r), rel=1e-4)
+    residuals = objective.residuals(params)[:-1]
+    assert np.sum(residuals ** 2) == pytest.approx(chi2, rel=1e-5)
+    # The residuals of each value, unweighted, are not whitened
+    unweighted = objective.residual_nddata_h(params, False)[0]['brightness']
+    np.testing.assert_allclose(
+        unweighted[kept], r / 2, rtol=1e-5, atol=1e-6)
+
+
+def test_correlated_noise_goes_without_upper_limits_and_a_floor_of_0():
+    from gbkfit.instrument import PSFGauss
+    data = correlated_data(np.random.default_rng(6), PSFGauss(4))
+    with pytest.raises(ConfigError, match="does not go with upper limits"):
+        make_objective(DriverHost(), data, LikelihoodGaussian(
+            upper_limits=dict(brightness=dict(limit=0.01, error=0.2))))
+    # (a Gaussian beam of sigma 4 pixels alone is singular on them: its
+    # power at the shortest wavelength, of 2 pixels, is exp(-8 pi^2))
+    objective, params = make_objective(
+        DriverHost(), data, LikelihoodGaussian(white_floor=0))
+    with pytest.raises(ConfigError, match="singular"):
+        objective.chi2(params)

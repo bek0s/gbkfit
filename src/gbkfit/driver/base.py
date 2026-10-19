@@ -625,6 +625,39 @@ class Driver(parseutils.TypedSerializable, abc.ABC):
         """Return x1 * x2 (into out, if given)."""
 
     @abc.abstractmethod
+    def math_matmul(
+            self,
+            x1: DeviceArray,
+            x2: DeviceArray,
+            out: DeviceArray | None = None
+    ) -> DeviceArray:
+        """Return the matrix product x1 @ x2 (into out, if given)."""
+
+    @abc.abstractmethod
+    def mem_gather(
+            self,
+            x: DeviceArray,
+            indices: DeviceArray,
+            out: DeviceArray | None = None
+    ) -> DeviceArray:
+        """
+        Return the values of a device array at indices along its last axis,
+        x[..., indices] (into out, if given).
+        """
+
+    @abc.abstractmethod
+    def mem_scatter(
+            self,
+            x: DeviceArray,
+            indices: DeviceArray,
+            out: DeviceArray
+    ) -> None:
+        """
+        Write the values of a device array to indices along the last axis
+        of another, out[..., indices] = x.
+        """
+
+    @abc.abstractmethod
     def native_module(self) -> types.ModuleType:
         """Return the native (C++/CUDA) module of the driver."""
 

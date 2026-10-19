@@ -122,6 +122,33 @@ class DriverCuda(Driver):
         with self._device:
             return cp.multiply(x1, x2, out=out)
 
+    def math_matmul(
+            self,
+            x1: DeviceArray,
+            x2: DeviceArray,
+            out: DeviceArray | None = None
+    ) -> DeviceArray:
+        with self._device:
+            return cp.matmul(x1, x2, out=out)
+
+    def mem_gather(
+            self,
+            x: DeviceArray,
+            indices: DeviceArray,
+            out: DeviceArray | None = None
+    ) -> DeviceArray:
+        with self._device:
+            return cp.take(x, indices, axis=-1, out=out)
+
+    def mem_scatter(
+            self,
+            x: DeviceArray,
+            indices: DeviceArray,
+            out: DeviceArray
+    ) -> None:
+        with self._device:
+            out[..., indices] = x
+
     def native_module(self) -> types.ModuleType:
         return native_module
 

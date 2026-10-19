@@ -17,7 +17,8 @@ from gbkfit.utils import parseutils
 from gbkfit.utils.parseutils import ConfigError
 from ._scene import Scene, check_component_names
 from .foreground import Foreground, foreground_parser
-from .likelihood import Likelihood, LikelihoodGaussian, likelihood_parser
+from .likelihood import (
+    Likelihood, LikelihoodGaussian, correlated_pixels, likelihood_parser)
 from .line_of_sight import LineOfSight, line_of_sight_parser
 from .observables import Observable, ObservablePlan, observable_parser
 from .weights import Weights, weights_parser
@@ -138,8 +139,9 @@ class Observation(parseutils.Serializable):
         or it has a calibration, its likelihood fits a noise but it has no
         name, or fits the noise of items that the observable does not
         have, or both the scale and the jitter of the noise of an item
-        whose errors are all equal (see _check_noise), the observable
-        cannot be seen
+        whose errors are all equal (see _check_noise), the noise of an
+        item is correlated where its data or its likelihood cannot take
+        it (see _check_correlations), the observable cannot be seen
         through the instrument (see Observable.check_instrument), the
         dtype or the fft_dtype is not one of the native modules (see
         Driver.dtypes), or the fft_dtype is less precise than the dtype.
@@ -353,6 +355,7 @@ class Observation(parseutils.Serializable):
             if likelihood.amplitudes() is not None:
                 _check_amplitudes(observable, calibration)
             _check_noise(likelihood, observable, data)
+            _check_correlations(likelihood, observable, data)
             if name is None and likelihood.pdescs():
                 raise ConfigError(
                     "an observation with a fitted noise needs a name, which "
@@ -592,6 +595,32 @@ def _check_noise(
                 f"the scale and the jitter of the noise of '{key}' cannot "
                 f"both be fitted: its errors are all equal, or it has none, "
                 f"so only (scale error)^2 + jitter^2 counts; fit one of them")
+
+
+def _check_correlations(
+        likelihood: Likelihood,
+        observable: Observable,
+        data: Dataset
+) -> None:
+    """
+    Raise ConfigError unless the items of the data whose noise is
+    correlated can be (see Dataset.noise_correlation), keep the pixels of
+    correlated noise (see correlated_pixels), and have no upper limits or
+    amplitudes of spectra in their likelihood (see LikelihoodGaussian).
+    """
+    for key in observable.keys():
+        if data.noise_correlation(key) is None:
+            continue
+        correlated_pixels(key, data[key].mask())
+        if likelihood.upper_limit(key) is not None:
+            raise ConfigError(
+                f"the noise of '{key}' is correlated, which does not go "
+                f"with upper limits")
+        if likelihood.amplitudes() is not None \
+                and key == observable.spectra_item():
+            raise ConfigError(
+                f"the noise of '{key}' is correlated, which does not go "
+                f"with amplitudes of spectra")
 
 
 def _check_beams(data: Dataset, instrument: Instrument) -> None:

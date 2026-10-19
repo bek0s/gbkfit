@@ -13,6 +13,7 @@ import numpy as np
 import scipy.fft
 
 from gbkfit.instrument import LSF, PSF, lsf_parser, psf_parser
+from gbkfit.math.correlation import periodic_correlation
 from gbkfit.utils import fitsutils, gridutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
 
@@ -341,24 +342,18 @@ def _correlated(
 
     The noise is periodic, so its first m - k + 1 values along each axis
     (m its size, k that of the correlation) have the correlation (divided
-    by its value at the centre) exactly. The filter is the
-    square root of its power spectrum: that of its symmetric part, without
-    negative parts (none for a correlation).
+    by its value at the centre) exactly. The filter is the square root of
+    the power spectrum of the nearest correlation on the periodic grid of
+    the noise (see periodic_correlation).
     """
     shape = white.shape[-naxes:]
     axes = tuple(range(-naxes, 0))
-    size = correlation.shape[-naxes:]
-    # The correlation on the periodic grid of the noise, centred on 0
-    kernel = np.zeros(correlation.shape[:-naxes] + shape)
-    kernel[(..., *(slice(0, n) for n in size))] = correlation
-    kernel = np.roll(kernel, [-(n // 2) for n in size], axis=axes)
-    power = np.maximum(scipy.fft.rfftn(kernel, axes=axes).real, 0)
-    # The variance of the noise it gives: its value at 0
-    variance = scipy.fft.irfftn(power, shape, axes=axes)[
-        (..., *(0,) * naxes)]
-    gain = np.sqrt(power / variance[(..., *(None,) * naxes)])
+    # (the power spectrum of a correlation is not negative, but rounding
+    # can leave values a hair below 0)
+    power = np.maximum(scipy.fft.rfftn(
+        periodic_correlation(correlation, shape), axes=axes).real, 0)
     return scipy.fft.irfftn(
-        scipy.fft.rfftn(white, axes=axes) * gain, shape, axes=axes)
+        scipy.fft.rfftn(white, axes=axes) * np.sqrt(power), shape, axes=axes)
 
 
 noise_parser = parseutils.TypedParser(Noise, [NoiseGauss])
