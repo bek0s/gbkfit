@@ -28,6 +28,8 @@ def kernel_consts_cases():
         for type_, cls in parser.registered_classes().items():
             if kind == 'rht':
                 options, consts = dict(zmax=5.0, rnodes=True), (5.0, True)
+            elif kind == 'vht' and type_ == 'mass':
+                options, consts = dict(zmax=5.0), (5.0, 33)
             elif kind in ('vht', 'dht'):
                 options, consts = dict(), (False,)
             elif kind == 'zpt' and type_.endswith('harmonic'):
