@@ -278,6 +278,69 @@ def test_vertical_forces_of_thick_disks_are_their_stacked_sheets():
         [stacked(*point) for point in zip(R, z)], rtol=5e-4)
 
 
+def ring_radial_force(sigma, R, z, edges):
+    """
+    The radial force of a thin disk (see ring_vertical_force): the pull of
+    its rings, -G sigma(a) 2 a / (R D) [K(m) - E(m) (a^2 - R^2 + z^2) / ((a
+    - R)^2 + z^2)] da, D^2 = (a + R)^2 + z^2, m = 4 a R / D^2.
+    """
+    def pull(a):
+        far2 = (a + R) ** 2 + z ** 2
+        m = 4 * a * R / far2
+        return -G * float(sigma(np.array(a))) * 2 * a / (R * np.sqrt(far2)) \
+            * (scipy.special.ellipk(m) - scipy.special.ellipe(m)
+               * (a ** 2 - R ** 2 + z ** 2) / ((a - R) ** 2 + z ** 2))
+    lo, hi = edges[0], edges[-1]
+    points = sorted(
+        p for p in {*edges, R, R - 10 * abs(z), R + 10 * abs(z)}
+        if lo < p < hi)
+    return scipy.integrate.quad(
+        pull, lo, hi, points=points, limit=2000, epsabs=0, epsrel=1e-11)[0]
+
+
+def test_radial_forces_of_disks_are_the_pull_of_their_rings():
+    # Off the plane, the pull of their rings: a thin nodewise disk with a
+    # hole, a thin exponential one (from its tables), and a thick one, its
+    # stacked sheets (to about 1e-3, see _disk_forces); in the plane, that
+    # of the circular velocity, which they approach
+    nodewise = MassDisk('d', SurfaceNodewise([1, 3, 6, 10]), VerticalThin())
+    params = dict(log_sigma=[8, 7.5, 7])
+    sigma = functools.partial(
+        nodewise.surface_density, params=params, context=CONTEXT)
+    R, z = np.meshgrid([0.5, 1, 2, 5, 10, 14], [0.01, 0.3, 2, -1])
+    np.testing.assert_allclose(
+        nodewise.forces(R, z, params, CONTEXT)[0],
+        np.vectorize(lambda r, h: ring_radial_force(
+            sigma, r, h, [1, 3, 6, 10]))(R, z), rtol=1e-4)
+    R = np.array([2.0, 5.0])
+    in_plane = -nodewise.vcirc2(R, params, CONTEXT) / R
+    np.testing.assert_array_equal(
+        nodewise.forces(R, 0, params, CONTEXT)[0], in_plane)
+    np.testing.assert_allclose(
+        nodewise.forces(R, 1e-6, params, CONTEXT)[0], in_plane, rtol=1e-5)
+    exponential = MassDisk('d', SurfaceExponential(), VerticalThin())
+    params = dict(log_m=10, rd=3)
+    sigma = functools.partial(
+        exponential.surface_density, params=params, context=CONTEXT)
+    R, z = np.meshgrid([1, 5, 20], [0.005, 0.2, 3])
+    np.testing.assert_allclose(
+        exponential.forces(R, z, params, CONTEXT)[0],
+        np.vectorize(lambda r, h: ring_radial_force(
+            sigma, r, h, [0, 120]))(R, z), rtol=5e-4)
+    thick = MassDisk('d', SurfaceExponential(), VerticalExponential())
+    params = dict(log_m=10, rd=3, hz=0.3)
+
+    def stacked(R, z):
+        return scipy.integrate.quad(
+            lambda h: VerticalExponential.pdf(h, 0.3) * ring_radial_force(
+                sigma, R, z - h, [0, 120]), -12, 12, points=[0, z],
+            limit=200, epsabs=0, epsrel=1e-9)[0]
+    R, z = np.array([2, 5, 10]), np.array([0.1, 0.5, 0.05])
+    np.testing.assert_allclose(
+        thick.forces(R, z, params, CONTEXT)[0],
+        [stacked(*point) for point in zip(R, z)], rtol=1e-3)
+
+
 def test_unresolved_heights_are_errors():
     disk = nodewise_disk([0, 1, 2], 'sech2')
     with pytest.raises(ValueError, match="heights are not resolved"):
@@ -775,6 +838,29 @@ def test_user_component_is_its_function(tmp_path):
         1e4 * radius / (radius + 1))
     with pytest.raises(ConfigError, match="does not define a function"):
         MassUser('mine', str(tmp_path / 'curve.py'), 'other')
+
+
+def test_user_component_gives_its_forces_by_a_function(tmp_path):
+    # Those of a point mass; without the function, in the plane only
+    (tmp_path / 'point.py').write_text(
+        "import numpy as np\n"
+        "def vcirc2(R, params):\n"
+        "    return params['gm'] / R\n"
+        "def forces(R, z, params):\n"
+        "    scale = -params['gm'] / np.hypot(R, z) ** 3\n"
+        "    return scale * R, scale * z\n")
+    path = str(tmp_path / 'point.py')
+    component = MassUser('mine', path, 'vcirc2', ['gm'], forces='forces')
+    params = dict(gm=G * 1e10)
+    R, z = np.array([1.0, 3.0]), np.array([0.5, -2.0])
+    expected = MassPoint('bh').forces(R, z, dict(log_m=10), CONTEXT)
+    np.testing.assert_allclose(
+        component.forces(R, z, params, CONTEXT), expected, rtol=1e-10)
+    assert component.gives_forces()
+    in_plane = MassUser('mine', path, 'vcirc2', ['gm'])
+    assert not in_plane.gives_forces()
+    with pytest.raises(NotImplementedError, match="in its plane"):
+        in_plane.forces(R, z, params, CONTEXT)
 
 
 def test_mass_model_adds_its_components():

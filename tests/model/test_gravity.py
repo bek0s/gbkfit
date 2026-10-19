@@ -109,6 +109,25 @@ def test_mond_circular_velocity(interpolation):
         type='mond', interpolation=interpolation)
 
 
+def test_mond_forces_anywhere():
+    # Of a point mass, nu(y) g_N, y = |g_N| / a0, g_N = -G M (R, z) / r^3;
+    # in the plane, those of its circular velocity
+    mond = galaxy(
+        mass=POINT, distance=DISTANCE,
+        gravity=dict(type='mond', interpolation='simple'))
+    field = mond.plan_gravity().mass(PARAMS).field
+    R, z = np.array([0.1, 2.0, 10.0, 5.0]), np.array([0.5, -1.0, 20.0, 0])
+    a0 = 1.2e-10 * KPC / 1e6
+    r = np.hypot(R, z)
+    nu = NU['simple'](G * 1e10 / (r ** 2 * a0))
+    force_R, force_z = field.forces(R, z)
+    np.testing.assert_allclose(force_R, -nu * G * 1e10 * R / r ** 3, rtol=1e-6)
+    np.testing.assert_allclose(force_z, -nu * G * 1e10 * z / r ** 3, rtol=1e-6)
+    np.testing.assert_array_equal(field.vertical_force(R, z), force_z)
+    np.testing.assert_allclose(
+        -R[3] * force_R[3], field.vcirc2(R[3:]), rtol=1e-12)
+
+
 def test_mond_without_a0_is_newtonian_gravity():
     mond = galaxy(
         mass=POINT, distance=DISTANCE,
@@ -119,8 +138,6 @@ def test_mond_without_a0_is_newtonian_gravity():
 
 
 @pytest.mark.parametrize('disk, mass, message', [
-    (with_kinematics(equilibrium='jeans'), POINT,
-     "jeans equilibrium of the component 'gas' takes the vertical force"),
     (with_kinematics(
         equilibrium='self_gravitating', equilibrium_density='stars'), MASS,
      "self_gravitating equilibrium of the component 'gas'"),

@@ -62,13 +62,23 @@ class GravityField(abc.ABC):
         """
 
     @abc.abstractmethod
+    def forces(
+            self, R: npt.ArrayLike, z: npt.ArrayLike
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """
+        Return the forces per unit mass ((km/s)^2/kpc), radial and
+        vertical, at the points (R, z) (kpc), broadcast together, if its
+        gravity gives them (see Gravity.check_forces).
+        """
+
+    @abc.abstractmethod
     def vertical_force(
             self, R: npt.ArrayLike, z: npt.ArrayLike
     ) -> np.ndarray:
         """
         Return the vertical force per unit mass ((km/s)^2/kpc) at the
         points (R, z) (kpc), if its gravity gives it (see
-        Gravity.check_vertical_force).
+        Gravity.check_forces).
         """
 
 
@@ -79,8 +89,8 @@ class Gravity(parseutils.TypedSerializable, abc.ABC):
     circular velocity in the plane; the features that need more check
     when the galaxy is made that its gravity gives it:
 
-    - the vertical force anywhere, which the jeans equilibrium takes
-      (see check_vertical_force and parts.Kinematics)
+    - the forces anywhere (off the plane too), which the jeans
+      equilibrium takes (see check_forces and parts.Kinematics)
     - the vertical structure of self-gravitating isothermal sheets,
       which the self_gravitating equilibrium and pressure support take
       (see check_self_gravitating_sheets, parts.Kinematics and
@@ -107,10 +117,10 @@ class Gravity(parseutils.TypedSerializable, abc.ABC):
         """
 
     @abc.abstractmethod
-    def check_vertical_force(self, mass_model: MassModel) -> None:
+    def check_forces(self, mass_model: MassModel) -> None:
         """
-        Raise ConfigError, saying why, unless its fields give the vertical
-        force of the mass model anywhere.
+        Raise ConfigError, saying why, unless its fields give the forces
+        of the mass model anywhere (off the plane too).
         """
 
     @abc.abstractmethod
@@ -150,13 +160,8 @@ class GravityNewton(Gravity):
     ) -> GravityField:
         return _NewtonField(mass_model, params, context)
 
-    def check_vertical_force(self, mass_model: MassModel) -> None:
-        if forceless := [
-                component.name() for component in mass_model.components()
-                if not component.gives_vertical_force()]:
-            raise ConfigError(
-                f"the mass components {forceless} do not give it (user "
-                f"components give their circular velocity only)")
+    def check_forces(self, mass_model: MassModel) -> None:
+        _check_components_give_forces(mass_model)
 
     def check_self_gravitating_sheets(self) -> None:
         pass
@@ -181,6 +186,11 @@ class _NewtonField(GravityField):
     def vcirc2(self, R: npt.ArrayLike) -> np.ndarray:
         return self._mass_model.vcirc2(R, self._params, self._context)
 
+    def forces(
+            self, R: npt.ArrayLike, z: npt.ArrayLike
+    ) -> tuple[np.ndarray, np.ndarray]:
+        return self._mass_model.forces(R, z, self._params, self._context)
+
     def vertical_force(
             self, R: npt.ArrayLike, z: npt.ArrayLike
     ) -> np.ndarray:
@@ -204,17 +214,19 @@ class GravityMOND(Gravity):
     - 'rar': nu(y) = 1 / (1 - exp(-sqrt(y))) (McGaugh, Lelli & Schombert
       2016, the radial acceleration relation)
 
-    The algebraic form is exact for spherical mass, and an approximation
-    for disks, which rotation-curve fits take: exact for a Kuzmin disk,
-    very good for exponential disks, worse for disks with holes or sharp
-    edges (Brada & Milgrom 1995). It gives the circular velocity in the
-    plane only: not the vertical force off the plane (the algebraic form
-    has none), the vertical structure of self-gravitating sheets, or the
-    shares of the components (the squared circular velocities of MOND do
-    not add up); and there is no external field effect. The Newtonian
-    circular velocities of the components remain in the rotation tables
-    and the functions of the galaxy (see GravityPlan.evaluate and
-    GalaxyFunctions).
+    Its forces anywhere follow the same rule, nu(|g_N| / a0) g_N, of the
+    Newtonian acceleration g_N = (F_R, F_z) of all the mass (in the
+    plane, those of v^2). The algebraic form is exact for spherical mass
+    and for a Kuzmin disk, and an approximation for other disks, which
+    rotation-curve fits take: very good for exponential disks in their
+    plane, worse for disks with holes or sharp edges (Brada & Milgrom
+    1995); off the plane, its field is not that of a potential (nu g_N
+    curls). It does not give the vertical structure of self-gravitating
+    sheets, or the shares of the components (the squared circular
+    velocities of MOND do not add up); and there is no external field
+    effect. The Newtonian circular velocities of the components remain
+    in the rotation tables and the functions of the galaxy (see
+    GravityPlan.evaluate and GalaxyFunctions).
 
     Parameters
     ----------
@@ -260,10 +272,9 @@ class GravityMOND(Gravity):
             _MOND_NU[self._interpolation],
             float(params['gravity_a0']) * A0_UNIT)
 
-    def check_vertical_force(self, mass_model: MassModel) -> None:
-        raise ConfigError(
-            "MOND, in its algebraic form, gives the circular velocity in the "
-            "plane only")
+    def check_forces(self, mass_model: MassModel) -> None:
+        # (of the Newtonian forces of all the mass)
+        _check_components_give_forces(mass_model)
 
     def check_self_gravitating_sheets(self) -> None:
         raise ConfigError(
@@ -304,11 +315,36 @@ class _MONDField(GravityField):
             nu = self._nu(y)
         return np.where(v2 == 0, 0.0, nu * v2)
 
+    def forces(
+            self, R: npt.ArrayLike, z: npt.ArrayLike
+    ) -> tuple[np.ndarray, np.ndarray]:
+        force_R, force_z = self._newton.forces(R, z)
+        # (y = |g_N| / a0 is infinite with a0 = 0, where nu is 1; where g_N
+        # = 0, nu g_N is 0)
+        size = np.hypot(force_R, force_z)
+        y = size / self._a0 if self._a0 > 0 else np.full_like(size, np.inf)
+        with np.errstate(divide='ignore'):
+            nu = np.where(size == 0, 0.0, self._nu(y))
+        return nu * force_R, nu * force_z
+
     def vertical_force(
             self, R: npt.ArrayLike, z: npt.ArrayLike
     ) -> np.ndarray:
-        raise NotImplementedError(
-            "MOND, in its algebraic form, gives no vertical force")
+        return self.forces(R, z)[1]
+
+
+def _check_components_give_forces(mass_model: MassModel) -> None:
+    """
+    Raise ConfigError unless every component of the mass model gives its
+    forces off its plane (see MassComponent.gives_forces).
+    """
+    if forceless := [
+            component.name() for component in mass_model.components()
+            if not component.gives_forces()]:
+        raise ConfigError(
+            f"the mass components {forceless} do not give their forces off "
+            f"their plane (user components give them by a function of the "
+            f"forces, see MassUser)")
 
 
 gravity_parser = parseutils.TypedParser(Gravity, [GravityNewton, GravityMOND])

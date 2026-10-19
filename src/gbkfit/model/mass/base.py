@@ -275,15 +275,15 @@ class MassComponent(parseutils.TypedSerializable, abc.ABC):
         ------
         NotImplementedError
             For points off its plane, if the component does not give its
-            forces there.
+            forces there (see gives_forces).
         """
         return forces_in_plane(
             R, z, lambda radii: self.vcirc2(radii, params, context),
             f"the mass component '{self.type()}'")
 
-    def gives_vertical_force(self) -> bool:
+    def gives_forces(self) -> bool:
         """
-        Check whether it gives its vertical force off its plane (see
+        Check whether it gives its forces off its plane (see forces and
         vertical_force); here, it does.
         """
         return True
@@ -313,7 +313,7 @@ class MassComponent(parseutils.TypedSerializable, abc.ABC):
         ------
         NotImplementedError
             For points off its plane, if the component does not give its
-            vertical force there (see gives_vertical_force).
+            forces there (see gives_forces).
         """
         return self.forces(R, z, params, context)[1]
 

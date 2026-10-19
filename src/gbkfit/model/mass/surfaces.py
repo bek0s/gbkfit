@@ -5,8 +5,8 @@ That of an exponential disk follows from the Hankel transform S(k) of
 its surface density (Binney & Tremaine 2008, 2.165): v^2(R) = 2 pi G R
 int_0^inf k J1(k R) S(k) T(k) dk, with T(k) the transform of the pdf of
 its height (1 for a thin disk); that of the others, from the pull of
-their rings (see _disk_gravity). The vertical force of each anywhere, from
-the pull of their rings off their plane (see _disk_vertical).
+their rings (see _disk_gravity). The forces of each off their plane, from
+the pull of their rings there (see _disk_forces).
 """
 
 import abc
@@ -23,7 +23,7 @@ from gbkfit.params import ParamDesc, ParamValues
 from gbkfit.params.pdescs import ParamScalarDesc, ParamVectorDesc
 from gbkfit.utils import parseutils
 from gbkfit.utils.parseutils import ConfigError
-from . import _disk_gravity, _disk_vertical, _numerics
+from . import _disk_forces, _disk_gravity, _numerics
 from .base import ComponentDensity, MassContext
 from .units import G
 from .vertical import DiskVertical, VerticalComponent, VerticalLaw
@@ -218,8 +218,9 @@ class DiskSurface(parseutils.TypedSerializable, abc.ABC):
         pass
 
     @abc.abstractmethod
-    def vertical_force(
+    def force(
             self,
+            axis: _disk_forces.Axis,
             R: npt.ArrayLike,
             z: npt.ArrayLike,
             vertical: DiskVertical,
@@ -227,24 +228,26 @@ class DiskSurface(parseutils.TypedSerializable, abc.ABC):
             context: MassContext
     ) -> np.ndarray:
         """
-        Return the vertical force anywhere of the disk of this surface
-        density and the vertical structure (see
-        MassComponent.vertical_force), by the pull of its rings (see
-        _disk_vertical), of the density that its circular velocity takes.
+        Return the radial ('R') or the vertical ('z') force per unit mass
+        ((km/s)^2/kpc) of the disk of this surface density and the
+        vertical structure at the points (R, z) (kpc), broadcast together,
+        by the pull of its rings off its plane (see _disk_forces), of the
+        density that its circular velocity takes (see MassComponent.forces
+        for the other arguments).
         """
         pass
 
 
-def _vertical_force_law(
-        force: _disk_vertical.DiskVerticalForce,
+def _force_law(
+        force: _disk_forces.DiskForce,
         sigma: np.ndarray,
         vertical: DiskVertical,
         params: ParamValues,
         context: MassContext
 ) -> np.ndarray:
     """
-    Return the vertical force of the disk of the surface density sigma at
-    the density points of force, thin or of a vertical law.
+    Return the force of the disk of the surface density sigma at the
+    density points of force, thin or of a vertical law.
     """
     if vertical.thin(context):
         return force.thin(sigma)
@@ -361,8 +364,9 @@ class SurfaceExponential(DiskSurface):
             np.array([shapes, np.broadcast_to(outer, shapes.shape)]))
         return G * mass / rd * out + inner.reshape(R.shape)
 
-    def vertical_force(
+    def force(
             self,
+            axis: _disk_forces.Axis,
             R: npt.ArrayLike,
             z: npt.ArrayLike,
             vertical: DiskVertical,
@@ -370,14 +374,14 @@ class SurfaceExponential(DiskSurface):
             context: MassContext
     ) -> np.ndarray:
         # From the tables of the disk of M = rd = 1 (see
-        # _disk_vertical.ExponentialVerticalForce); as thick as a
-        # component, as vcirc2: of the outer shape at every radius, and the
-        # difference to the shape within the subnodes, of the rings
+        # _disk_forces.ExponentialForce); as thick as a component, as
+        # vcirc2: of the outer shape at every radius, and the difference to
+        # the shape within the subnodes, of the rings
         mass = 10 ** params['log_m']
         rd = params['rd']
         R, z = np.broadcast_arrays(
             np.asarray(R, dtype=float), np.asarray(z, dtype=float))
-        force = _disk_vertical.exponential_vertical_force(R, z, rd)
+        force = _disk_forces.exponential_force(axis, R, z, rd)
         if vertical.thin(context):
             return force.thin(mass).reshape(R.shape)
         if isinstance(vertical, VerticalLaw):
@@ -390,8 +394,8 @@ class SurfaceExponential(DiskSurface):
 
         def outer(r: np.ndarray, h: np.ndarray) -> np.ndarray:
             return vertical.shapes(edge, h, context)[None]
-        rings = _disk_vertical.disk_vertical_force(
-            _component_knots(vertical.knots(context), rd), R, z,
+        rings = _disk_forces.disk_force(
+            axis, _component_knots(vertical.knots(context), rd), R, z,
             _COMPONENT_DEGREE)
         sigma = self.surface_density(rings.radii, params, context)
         shapes = vertical.shapes(rings.radii, rings.heights, context)
@@ -463,8 +467,9 @@ class SurfaceGaussianRing(DiskSurface):
             params['r_peak'], self._sigma(params))
         return out.reshape(R.shape)
 
-    def vertical_force(
+    def force(
             self,
+            axis: _disk_forces.Axis,
             R: npt.ArrayLike,
             z: npt.ArrayLike,
             vertical: DiskVertical,
@@ -486,7 +491,7 @@ class SurfaceGaussianRing(DiskSurface):
         knots = np.unique(np.clip(
             peak + sigma * np.arange(-_RING_REACH, _RING_REACH + 0.25, 0.5),
             0, None))
-        force = _disk_vertical.disk_vertical_force(knots, R, z, 8)
+        force = _disk_forces.disk_force(axis, knots, R, z, 8)
         return force.thin(
             self.surface_density(force.radii, params, context)
         ).reshape(R.shape)
@@ -588,8 +593,9 @@ class SurfaceNodewise(DiskSurface):
                 vertical.shapes(gravity.radii, gravity.heights, context)[None])
         return v2.reshape(R.shape)
 
-    def vertical_force(
+    def force(
             self,
+            axis: _disk_forces.Axis,
             R: npt.ArrayLike,
             z: npt.ArrayLike,
             vertical: DiskVertical,
@@ -599,12 +605,13 @@ class SurfaceNodewise(DiskSurface):
         R, z = np.broadcast_arrays(
             np.asarray(R, dtype=float), np.asarray(z, dtype=float))
         if vertical.thin(context) or isinstance(vertical, VerticalLaw):
-            force = _disk_vertical.disk_vertical_force(self._nodes, R, z)
+            force = _disk_forces.disk_force(axis, self._nodes, R, z)
             sigma = self.surface_density(force.radii, params, context)
-            return _vertical_force_law(
+            return _force_law(
                 force, sigma, vertical, params, context).reshape(R.shape)
-        force = _disk_vertical.disk_vertical_force(
-            np.union1d(self._nodes, vertical.knots(context)), R, z, degree=2)
+        force = _disk_forces.disk_force(
+            axis, np.union1d(self._nodes, vertical.knots(context)), R, z,
+            degree=2)
         return force.thick(
             self.surface_density(force.radii, params, context)[None],
             vertical.shapes(force.radii, force.heights, context)[None],
@@ -729,8 +736,9 @@ class SurfaceComponent(DiskSurface):
                 density.height_pdfs(gravity.radii, gravity.heights))
         return v2.reshape(R.shape)
 
-    def vertical_force(
+    def force(
             self,
+            axis: _disk_forces.Axis,
             R: npt.ArrayLike,
             z: npt.ArrayLike,
             vertical: DiskVertical,
@@ -743,14 +751,14 @@ class SurfaceComponent(DiskSurface):
         R, z = np.broadcast_arrays(
             np.asarray(R, dtype=float), np.asarray(z, dtype=float))
         if vertical.thin(context) or isinstance(vertical, VerticalLaw):
-            force = _disk_vertical.disk_vertical_force(knots, R, z)
+            force = _disk_forces.disk_force(axis, knots, R, z)
             sigma = upsilon * np.sum(
                 density.surface_densities(force.radii), axis=0)
-            return _vertical_force_law(
+            return _force_law(
                 force, sigma, vertical, params, context).reshape(R.shape)
         # (as thick as the same component: each term)
-        force = _disk_vertical.disk_vertical_force(
-            np.union1d(knots, vertical.knots(context)), R, z)
+        force = _disk_forces.disk_force(
+            axis, np.union1d(knots, vertical.knots(context)), R, z)
         return force.thick(
             upsilon * density.surface_densities(force.radii),
             density.height_pdfs(force.radii, force.heights),

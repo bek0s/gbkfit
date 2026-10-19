@@ -139,7 +139,7 @@ def _with_mass_params(
                 f"its mass components: {mass_names}")
         if equilibrium.mode == 'jeans':
             _check_gravity(
-                gravity.check_vertical_force, mass_model,
+                gravity.check_forces, mass_model,
                 what=f"the jeans equilibrium of the component "
                      f"{cmp.name()!r} takes the vertical force of the "
                      f"gravity of its galaxy")

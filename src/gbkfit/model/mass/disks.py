@@ -11,7 +11,7 @@ import numpy.typing as npt
 from gbkfit.params import ParamDesc, ParamValues
 from gbkfit.utils import parseutils
 from gbkfit.utils.parseutils import ConfigError
-from .base import MassComponent, MassContext
+from .base import MassComponent, MassContext, forces_in_plane
 from .surfaces import DiskSurface, disk_surface_parser
 from .vertical import DiskVertical, disk_vertical_parser
 
@@ -29,8 +29,9 @@ class MassDisk(MassComponent):
     each chosen on its own. A disk follows at most one component (by its
     surface density, its vertical structure, or both); following it by
     both, it is the density of the component itself (each of its terms of
-    the pdf of its height). Its forces are given in its plane, its
-    vertical force anywhere (see DiskSurface.vertical_force).
+    the pdf of its height). Its forces are given anywhere: in its plane,
+    the radial force of its circular velocity; off it, the pull of its
+    rings (see DiskSurface.force).
 
     Parameters
     ----------
@@ -121,6 +122,31 @@ class MassDisk(MassComponent):
     ) -> np.ndarray:
         return self._surface.surface_density(R, params, context)
 
+    def forces(
+            self,
+            R: npt.ArrayLike,
+            z: npt.ArrayLike,
+            params: ParamValues,
+            context: MassContext
+    ) -> tuple[np.ndarray, np.ndarray]:
+        # (the radial force in its plane by its circular velocity, exactly
+        # as it rotates there; off it, by the pull of its rings)
+        R, z = np.broadcast_arrays(
+            np.asarray(R, dtype=float), np.asarray(z, dtype=float))
+        force_R, force_z = np.empty_like(R), np.zeros_like(R)
+        plane, off = z == 0, z != 0
+        if plane.any():
+            force_R[plane] = forces_in_plane(
+                R[plane], 0,
+                lambda radii: self.vcirc2(radii, params, context),
+                f"the mass disk {self.name()!r}")[0]
+        if off.any():
+            force_R[off] = self._surface.force(
+                'R', R[off], z[off], self._vertical, params, context)
+            force_z[off] = self.vertical_force(
+                R[off], z[off], params, context)
+        return force_R, force_z
+
     def vertical_force(
             self,
             R: npt.ArrayLike,
@@ -128,6 +154,4 @@ class MassDisk(MassComponent):
             params: ParamValues,
             context: MassContext
     ) -> np.ndarray:
-        # (anywhere, by the pull of its rings; its forces, in its plane)
-        return self._surface.vertical_force(
-            R, z, self._vertical, params, context)
+        return self._surface.force('z', R, z, self._vertical, params, context)

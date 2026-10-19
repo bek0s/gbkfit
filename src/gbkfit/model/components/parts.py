@@ -186,10 +186,10 @@ class Kinematics(parseutils.Serializable):
     of the disk above its midplane over its density there (rho of its
     density traits and density height traits), with F_z the vertical
     force of every mass component (see mass.MassComponent.vertical_force:
-    not that of user components); exact for any mass and profile of the
-    height, given the isothermal dispersion. At the centre, the value at
-    the next subnode, as for 'central' (a point mass there makes it
-    infinite).
+    user components give it by their function of the forces); exact for
+    any mass and profile of the height, given the isothermal dispersion.
+    At the centre, the value at the next subnode, as for 'central' (a
+    point mass there makes it infinite).
 
     Parameters
     ----------
