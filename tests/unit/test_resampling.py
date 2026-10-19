@@ -9,7 +9,7 @@ import pytest
 from gbkfit.dataset import (
     Data, DatasetPixelBrightness, DatasetPixelMoments, DatasetPixelSpectra,
     DatasetRegionMoments, DatasetRegionSpectra, DatasetSlitlessSpectra,
-    DatasetSlitSpectra)
+    DatasetSlitSpectra, DatasetVisibilities, UVCoverage)
 from gbkfit.region import RegionsBins
 from gbkfit.utils.parseutils import ConfigError
 
@@ -77,3 +77,37 @@ def test_grids_of_every_kind_redraw_in_blocks(dataset, key, size):
     assert np.isin(drawn[np.isfinite(r)], r).all()
     with pytest.raises(ConfigError, match='positive integer for each of'):
         dataset.check_blocks(size + [1])
+
+
+def test_visibilities_redraw_in_cells_of_the_uv_plane():
+    # Rows on a lattice of 10 m, in cells of 20 m: each cell takes the
+    # rows of one cell, each that at its own place in the cell (but for
+    # the place of row 0, which lacks a residual), in every channel and
+    # both parts
+    u, v = np.meshgrid(np.arange(1, 80, 10.0), np.arange(1, 40, 10.0))
+    uvw = np.column_stack([u.ravel(), v.ravel(), np.zeros(u.size)])
+    shape = (3, len(uvw))
+    item = Data(np.zeros(shape), error=np.ones(shape))
+    dataset = DatasetVisibilities(item, item, UVCoverage(
+        uvw, 1.42e9 - np.arange(3) * 1e5, (150, -30), 'LSRK',
+        '1420.405752 MHz'))
+    dataset.check_blocks([20])
+    r = residuals(shape)
+    drawn = dataset.resample_blocks(
+        dict(re=r, im=2 * r), [20], np.random.default_rng(4))
+    assert np.array_equal(np.isnan(drawn['re']), np.isnan(r))
+    np.testing.assert_array_equal(drawn['im'], 2 * drawn['re'])
+    cell = np.floor(uvw[:, :2] / 20)
+    place = uvw[:, :2] - cell * 20
+    sources = {}
+    for row in range(shape[1]):
+        source, = np.flatnonzero(r[1] == drawn['re'][1, row])
+        finite = np.isfinite(r[:, row])
+        np.testing.assert_array_equal(
+            drawn['re'][finite, row], r[finite, source])
+        assert sources.setdefault(tuple(cell[row]), tuple(cell[source])) \
+            == tuple(cell[source])
+        if not np.array_equal(place[row], place[0]):
+            np.testing.assert_array_equal(place[source], place[row])
+    with pytest.raises(ConfigError, match='one positive number'):
+        dataset.check_blocks([20, 3])

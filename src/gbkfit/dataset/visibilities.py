@@ -1,9 +1,11 @@
+import numbers
 import os.path
 from collections.abc import Mapping, Sequence
 from typing import Any
 
 import astropy.units
 import numpy as np
+import scipy.spatial
 
 from gbkfit.utils import gridutils, parseutils, unitutils
 from gbkfit.utils.parseutils import ConfigError
@@ -473,6 +475,77 @@ class DatasetVisibilities(Dataset):
     def coverage(self) -> UVCoverage:
         """Return where the visibilities are measured."""
         return self._coverage
+
+    def check_blocks(self, size: Sequence[float]) -> None:
+        """
+        Raise ConfigError unless the size is of blocks of visibilities: the
+        side of square cells of the uv plane (m, as the baselines; see
+        resample_blocks).
+        """
+        _uv_cell(size)
+
+    def resample_blocks(
+            self,
+            residuals: Mapping[str, np.ndarray],
+            size: Sequence[float],
+            rng: np.random.Generator
+    ) -> dict[str, np.ndarray]:
+        """
+        Return residuals of its visibilities redrawn in cells of the uv
+        plane (see Dataset.resample_blocks): squares of the side of the
+        size (m, as the baselines), of the rows whose baselines (u, v) fall
+        in them. Each cell takes the residuals of a cell drawn at random
+        from those with rows that have residuals in every channel and both
+        parts; each of its rows, those of the row of that cell nearest its
+        own place in its cell, in every channel and both parts (so that
+        their correlations, e.g. of Hanning smoothing, remain). The thermal
+        noise of visibilities is independent, which the covariance takes;
+        cells of about the scale over which the misfit of the model
+        correlates in the uv plane (the inverse of its angular size, in
+        wavelengths: e.g. 0.7 km for 1 arcmin at 21 cm) keep that too.
+        """
+        cell = _uv_cell(size)
+        u, v = self._coverage.uvw()[:, 0], self._coverage.uvw()[:, 1]
+        valid = np.logical_and.reduce(
+            [np.isfinite(r).all(axis=0) for r in residuals.values()])
+        if not valid.any():
+            raise ConfigError(
+                "no row of the visibilities has residuals in every channel")
+        corner = np.floor(np.column_stack([u, v]) / cell)
+        place = np.column_stack([u, v]) - corner * cell
+        _, cell_of_row = np.unique(corner, axis=0, return_inverse=True)
+        cell_of_row = cell_of_row.ravel()
+        donors = np.unique(cell_of_row[valid])
+        drawn = donors[rng.integers(len(donors), size=cell_of_row.max() + 1)]
+        # The nearest row of the drawn cell: the cells are apart in a third
+        # coordinate by more than the size of a cell, so that the nearest
+        # row of the place of a row in a cell is that of that cell
+        apart = 4 * cell
+        tree = scipy.spatial.cKDTree(np.column_stack(
+            [place[valid], cell_of_row[valid] * apart]))
+        _, nearest = tree.query(
+            np.column_stack([place, drawn[cell_of_row] * apart]))
+        source = np.flatnonzero(valid)[nearest]
+        return {
+            key: np.where(np.isfinite(r), r[:, source], np.nan)
+            for key, r in residuals.items()}
+
+
+def _uv_cell(size: Sequence[float]) -> float:
+    """
+    Return the side of the cells of the uv plane (m) of the size of the
+    blocks of visibilities (see DatasetVisibilities.resample_blocks).
+    Raise ConfigError unless it is one positive number.
+    """
+    size = tuple(size)
+    if len(size) != 1 or not (
+            isinstance(size[0], numbers.Real)
+            and not isinstance(size[0], bool) and size[0] > 0):
+        raise ConfigError(
+            f"the size of the blocks of visibilities is the side of the "
+            f"cells of the uv plane (m), one positive number; it is "
+            f"{list(size)}")
+    return float(size[0])
 
 
 def _savez(
