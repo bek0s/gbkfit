@@ -1,4 +1,4 @@
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 import astropy.io.fits
@@ -7,7 +7,7 @@ import numpy as np
 from gbkfit.region import Regions, regions_parser
 from gbkfit.utils import parseutils
 from gbkfit.utils.parseutils import ConfigError
-from . import _detail
+from . import _detail, _resampling
 from .base import Dataset
 from .data import Data, FitsFile, dump_data
 
@@ -15,6 +15,10 @@ from .data import Data, FitsFile, dump_data
 __all__ = [
     'DatasetRegionMoments'
 ]
+
+
+# The axes of its blocks of residuals (see resample_blocks)
+_BLOCK_AXES = ('the regions',)
 
 
 class DatasetRegionMoments(Dataset):
@@ -128,3 +132,26 @@ class DatasetRegionMoments(Dataset):
     def orders(self) -> tuple[int, ...]:
         """Return the orders of the moments."""
         return _detail.moment_orders(self)
+
+    def check_blocks(self, size: Sequence[float]) -> None:
+        """
+        Raise ConfigError unless the size is of blocks of regions: a positive
+        integer for each of the regions (see resample_blocks).
+        """
+        _resampling.block_size(size, _BLOCK_AXES)
+
+    def resample_blocks(
+            self,
+            residuals: Mapping[str, np.ndarray],
+            size: Sequence[float],
+            rng: np.random.Generator
+    ) -> dict[str, np.ndarray]:
+        """
+        Return residuals of its moments redrawn in blocks of regions (see
+        Dataset.resample_blocks), of the size (regions): runs of consecutive
+        regions, in their order, so of 1 region unless their order follows the
+        sky (e.g. fibres in a row). The noise that neighbouring regions share
+        (e.g. bins smaller than the beam) is then not kept.
+        """
+        return _resampling.resample_blocks(
+            residuals, size, _BLOCK_AXES, rng)

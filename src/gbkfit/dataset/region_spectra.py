@@ -1,4 +1,4 @@
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 import astropy.units
@@ -7,7 +7,7 @@ import numpy as np
 from gbkfit.region import Regions, regions_parser
 from gbkfit.utils import fitsutils, gridutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
-from . import _detail
+from . import _detail, _resampling
 from .base import Dataset
 from .data import Data, FitsFile, dump_data
 
@@ -15,6 +15,10 @@ from .data import Data, FitsFile, dump_data
 __all__ = [
     'DatasetRegionSpectra'
 ]
+
+
+# The axes of its blocks of residuals (see resample_blocks)
+_BLOCK_AXES = ('the regions', 'the channels')
 
 
 class DatasetRegionSpectra(Dataset):
@@ -179,3 +183,28 @@ class DatasetRegionSpectra(Dataset):
     def spectral_grid(self) -> gridutils.Grid:
         """Return the grid of the spectral axis (one axis)."""
         return self._spectral_grid
+
+    def check_blocks(self, size: Sequence[float]) -> None:
+        """
+        Raise ConfigError unless the size is of blocks of regions and channels:
+        a positive integer for each of the regions and the channels (see
+        resample_blocks).
+        """
+        _resampling.block_size(size, _BLOCK_AXES)
+
+    def resample_blocks(
+            self,
+            residuals: Mapping[str, np.ndarray],
+            size: Sequence[float],
+            rng: np.random.Generator
+    ) -> dict[str, np.ndarray]:
+        """
+        Return residuals of its spectra redrawn in blocks of regions and
+        channels (see Dataset.resample_blocks), of the size (regions,
+        channels): runs of consecutive regions, in their order, so of 1 region
+        unless their order follows the sky (e.g. fibres in a row). The noise
+        that neighbouring regions share (e.g. bins smaller than the beam) is
+        then not kept.
+        """
+        return _resampling.resample_blocks(
+            residuals, size, _BLOCK_AXES, rng)

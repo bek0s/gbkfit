@@ -8,13 +8,18 @@ import pytest
 
 from gbkfit.dataset import (
     Data, DatasetPixelBrightness, DatasetPixelMoments, DatasetPixelSpectra,
-    DatasetSlitlessSpectra, DatasetSlitSpectra)
+    DatasetRegionMoments, DatasetRegionSpectra, DatasetSlitlessSpectra,
+    DatasetSlitSpectra)
+from gbkfit.region import RegionsBins
 from gbkfit.utils.parseutils import ConfigError
 
 
 # A grid of 7 x 5 pixels of 1 arcsec, centred on its middle pixel
 SHAPE = (5, 7)
 GRID = dict(step=1, rpix=(3, 2))
+
+# Bins of 7 regions
+BINS = RegionsBins(np.arange(14).reshape(2, 7) % 7)
 
 
 def residuals(shape: tuple[int, ...], seed: int = 0) -> np.ndarray:
@@ -60,6 +65,8 @@ def test_blocks_refused_without_room():
     (DatasetPixelSpectra(Data(np.ones((6, *SHAPE)))), 'spectra', [2, 2, 3]),
     (DatasetSlitSpectra(Data(np.ones((6, 7)))), 'spectra', [3, 2]),
     (DatasetSlitlessSpectra(Data(np.ones(SHAPE))), 'spectra', [2, 2]),
+    (DatasetRegionMoments({0: Data(np.ones(7))}, BINS), 'moment0', [1]),
+    (DatasetRegionSpectra(Data(np.ones((6, 7))), BINS), 'spectra', [1, 3]),
 ])
 def test_grids_of_every_kind_redraw_in_blocks(dataset, key, size):
     dataset.check_blocks(size)
