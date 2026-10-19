@@ -112,8 +112,12 @@ class Observation(parseutils.Serializable):
         How many times the model is oversampled along each axis of the
         data (an accuracy setting); 1 by default.
     dtype : str, optional
-        The floating type of the model: 'float32' (by default) or
-        'float64'.
+        The floating type of the model: 'float32' or 'float64'. By default
+        float64 if the noise of an item of its data is correlated (see
+        Data): the whitening of its residuals (see LikelihoodGaussian)
+        magnifies the rounding of a float32 model enough to stop least
+        squares up to about 1 sigma short of the best fit (NGC 1313 of
+        LVHIS, 2026-10-20); float32 otherwise.
     fft_dtype : str, optional
         The floating type of the FFT convolutions of the model by the PSF
         and the LSF: 'float64' (by default) or 'float32' (faster, for a
@@ -301,7 +305,7 @@ class Observation(parseutils.Serializable):
             data: Dataset | None = None,
             likelihood: Likelihood | None = None,
             scale: Sequence[int] | None = None,
-            dtype: str = 'float32',
+            dtype: str | None = None,
             fft_dtype: str = 'float64',
             name: str | None = None
     ):
@@ -396,6 +400,9 @@ class Observation(parseutils.Serializable):
         self._data = data
         self._likelihood = likelihood
         self._scale = scale
+        if dtype is None:
+            dtype = 'float64' if data is not None \
+                and _has_correlated_noise(data) else 'float32'
         self._dtype = _check_dtype(dtype)
         self._fft_dtype = _check_dtype(fft_dtype, 'fft_dtype')
         if self._fft_dtype.itemsize < self._dtype.itemsize:
@@ -603,6 +610,14 @@ def _check_noise(
                 f"the scale and the jitter of the noise of '{key}' cannot "
                 f"both be fitted: its errors are all equal, or it has none, "
                 f"so only (scale error)^2 + jitter^2 counts; fit one of them")
+
+
+def _has_correlated_noise(data: Dataset) -> bool:
+    """Return whether the noise of an item of the data is correlated."""
+    return any(
+        item.spatial_correlation() is not None
+        or item.spectral_correlation() is not None
+        for item in data.values())
 
 
 def _check_correlations(

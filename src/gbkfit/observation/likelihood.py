@@ -288,7 +288,8 @@ class LikelihoodGaussian(Likelihood):
     Correlated noise does not go with upper limits (the probability of
     correlated non-detections has no closed form) or amplitudes of
     spectra (the best amplitude of each spectrum would depend on the
-    others).
+    others). Observations of correlated noise are in float64 by default
+    (see Observation).
 
     Parameters
     ----------

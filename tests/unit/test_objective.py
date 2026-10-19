@@ -293,6 +293,16 @@ def test_correlated_noise_has_the_chi2_of_its_covariance(driver):
         unweighted[kept], r / 2, rtol=1e-5, atol=1e-6)
 
 
+def test_correlated_noise_is_in_float64_by_default():
+    # (the whitening magnifies the rounding of float32 models)
+    from gbkfit.instrument import PSFGauss
+    data = correlated_data(np.random.default_rng(6), PSFGauss(2))
+    objective, _ = make_objective(DriverHost(), data)
+    assert objective.group().observations()[0].dtype() == np.float64
+    objective, _ = make_objective(DriverHost(), Data(np.ones((24, 32))))
+    assert objective.group().observations()[0].dtype() == np.float32
+
+
 def test_correlated_noise_goes_without_upper_limits_and_a_floor_of_0():
     from gbkfit.instrument import PSFGauss
     data = correlated_data(np.random.default_rng(6), PSFGauss(4))
