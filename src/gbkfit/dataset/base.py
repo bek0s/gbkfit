@@ -284,6 +284,27 @@ class Dataset(parseutils.TypedSerializable, Mapping[str, Data], abc.ABC):
         raise ConfigError(
             f"the noise of {self.type()} data cannot be correlated")
 
+    def mask_whole_spectra(self) -> Self:
+        """
+        Return a copy of it with each spectrum of its data items masked
+        whole where they mask any of its values (the union of the masks
+        of the channels), as correlated noise needs (see
+        LikelihoodGaussian). The kinds of data with spectra on the sky
+        offer it; the others raise ConfigError.
+
+        Returns
+        -------
+        Dataset
+            The copy.
+
+        Raises
+        ------
+        ConfigError
+            If the kind of data does not offer it.
+        """
+        raise ConfigError(
+            f"the spectra of {self.type()} data cannot be masked whole")
+
 
 class DatasetTypedParser(parseutils.TypedParser):
     """

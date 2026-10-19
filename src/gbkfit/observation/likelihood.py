@@ -469,7 +469,10 @@ def correlated_pixels(key: str, mask: np.ndarray) -> np.ndarray:
     if np.any(channels != channels[0]):
         raise ConfigError(
             f"the noise of '{key}' is correlated, so its mask must keep "
-            f"whole spectra (the same pixels in every channel); it does not")
+            f"whole spectra (the same pixels in every channel, e.g. not a "
+            f"mask of the emission); it does not. The option "
+            f"mask_whole_spectra of the data masks every spectrum with a "
+            f"masked channel")
     pixels = np.flatnonzero(channels[0])
     if pixels.size > MAX_CORRELATED_PIXELS:
         raise ConfigError(

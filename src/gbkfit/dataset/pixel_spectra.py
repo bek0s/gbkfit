@@ -184,6 +184,16 @@ class DatasetPixelSpectra(Dataset):
         """
         return _outliers.screen_grid(self, size, _AXES, nsigma)
 
+    def mask_whole_spectra(self) -> 'DatasetPixelSpectra':
+        """
+        Return a copy of it with each spectrum of its cube masked whole
+        where it masks any of its channels (see Dataset.mask_whole_spectra).
+        """
+        cube = self['spectra']
+        whole = np.all(cube.mask() != 0, axis=0)
+        return self.with_data(dict(
+            spectra=np.where(whole, cube.data(), np.nan)))
+
     def noise_correlation(self, key: str) -> NoiseCorrelation | None:
         """
         Return the correlation of the noise of a data item on the

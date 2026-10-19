@@ -164,7 +164,11 @@ class Observation(parseutils.Serializable):
         of a band of the catalogue, or a band (its name and wavelength).
         Its data can have the option outliers, {size, nsigma}: the data
         are screened for outliers as they are read, which are masked (see
-        Dataset.screen_outliers), and their number logged.
+        Dataset.screen_outliers), and their number logged. They can also
+        have the option mask_whole_spectra (false by default): then
+        every spectrum with a masked value is masked whole (see
+        Dataset.mask_whole_spectra), after the outliers, and their number
+        logged.
 
         Parameters
         ----------
@@ -206,10 +210,14 @@ class Observation(parseutils.Serializable):
             with parseutils.config_path('data'):
                 data_info = dict(info['data'])
                 outliers = data_info.pop('outliers', None)
+                whole = data_info.pop('mask_whole_spectra', False)
                 dataset = observable_cls.dataset_class.load(data_info)
                 if outliers is not None:
                     with parseutils.config_path('outliers'):
                         dataset = _screened(dataset, outliers)
+                if whole:
+                    with parseutils.config_path('mask_whole_spectra'):
+                        dataset = _masked_whole(dataset)
             info['data'] = dataset
         parseutils.load_option_and_update_info(
             likelihood_parser, info, 'likelihood')
@@ -651,6 +659,21 @@ def _check_beams(data: Dataset, instrument: Instrument) -> None:
 
 
 observation_parser = parseutils.BasicParser(Observation)
+
+
+def _masked_whole(dataset: Dataset) -> Dataset:
+    """
+    Return a dataset with every spectrum of its data that has a masked
+    value masked whole (see Dataset.mask_whole_spectra), and log how many
+    values each item loses.
+    """
+    masked = dataset.mask_whole_spectra()
+    counts = {
+        key: int(np.count_nonzero(dataset[key].mask())
+                 - np.count_nonzero(masked[key].mask()))
+        for key in dataset}
+    _log.info(f"values masked with whole spectra: {counts}")
+    return masked
 
 
 def _screened(dataset: Dataset, info: Any) -> Dataset:
