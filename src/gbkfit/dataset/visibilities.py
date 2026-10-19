@@ -530,6 +530,13 @@ class DatasetVisibilities(Dataset):
             key: np.where(np.isfinite(r), r[:, source], np.nan)
             for key, r in residuals.items()}
 
+    # (Visibilities do not screen their outliers (see
+    # Dataset.screen_outliers), on purpose: those of visibilities are
+    # interference, which varies with time and frequency on each baseline,
+    # and these rows have no time. CASA's flagdata flags it per baseline
+    # (e.g. its modes rflag and tfcrop), and from_ms reads those flags; a
+    # screening in cells of the uv plane would be cruder, and duplicate it.)
+
 
 def _uv_cell(size: Sequence[float]) -> float:
     """
