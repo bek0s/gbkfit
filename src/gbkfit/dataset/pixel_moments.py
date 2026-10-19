@@ -125,7 +125,6 @@ class DatasetPixelMoments(Dataset):
         """Return the orders of the moments."""
         return _detail.moment_orders(self)
 
-
     def resample_blocks(
             self,
             residuals: Mapping[str, np.ndarray],
@@ -137,24 +136,3 @@ class DatasetPixelMoments(Dataset):
         (see Dataset.resample_blocks), of the size (x, y).
         """
         return _resampling.resample_blocks(residuals, size, rng)
-
-    def resample_flips(
-            self,
-            residuals: Mapping[str, np.ndarray],
-            model: Mapping[str, np.ndarray],
-            size: Sequence[int],
-            centre: Sequence[float],
-            posa: float,
-            rng: np.random.Generator
-    ) -> dict[str, np.ndarray]:
-        """
-        Return residuals of its moment maps redrawn by the symmetries of a
-        disk (see Dataset.resample_flips), in blocks of pixels of the size
-        (x, y). Where the sides swap, the velocities mirror about the
-        systemic one (v - vsys -> vsys - v), so that the residuals of the
-        odd orders change sign (the mean velocity, and the odd central
-        moments), and those of the even ones do not.
-        """
-        return _resampling.resample_flips(
-            self._grid, residuals, size, centre, posa, rng,
-            signs={f'moment{order}': (-1) ** order for order in self.orders()})

@@ -138,7 +138,6 @@ class DatasetPixelSpectra(Dataset):
         """Return the grid of the pixels and channels."""
         return self._grid
 
-
     def resample_blocks(
             self,
             residuals: Mapping[str, np.ndarray],
@@ -151,30 +150,3 @@ class DatasetPixelSpectra(Dataset):
         channels).
         """
         return _resampling.resample_blocks(residuals, size, rng)
-
-    def resample_flips(
-            self,
-            residuals: Mapping[str, np.ndarray],
-            model: Mapping[str, np.ndarray],
-            size: Sequence[int],
-            centre: Sequence[float],
-            posa: float,
-            rng: np.random.Generator
-    ) -> dict[str, np.ndarray]:
-        """
-        Return residuals of its cube redrawn by the symmetries of a disk
-        (see Dataset.resample_flips), in blocks of pixels and channels of
-        the size (x, y, channels). The channels move with the line of the
-        model: the residual at an offset from the centre of the line of
-        the model spectrum at a pixel comes from that offset from the
-        centre at its image, mirrored (dv -> -dv) where the sides swap. The
-        centre of a spectrum is its mean channel weighted by its flux, and
-        that of the whole model for the spectra without flux (below 1e-6
-        of the brightest: round-off). So the channels follow the axis of
-        any convention and redshift, and the motions of the model; with
-        several lines in the cube (e.g. Halpha and [NII]) the mirror is
-        no symmetry, and blocks suit (see resample_blocks).
-        """
-        return _resampling.resample_flips(
-            self._grid, residuals, size, centre, posa, rng,
-            spectra=model['spectra'])
