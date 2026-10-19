@@ -281,10 +281,20 @@ class LikelihoodGaussian(Likelihood):
     beam on pixels much smaller than it); the noise of a cube correlated
     on the sky and along its spectral axis has a floor on each, C =
     C_xy' (x) C_z'. The determinant of C is the same at every parameter,
-    and left out of the log-likelihood (a fitted noise adds its noise
-    residual as above). The mask of a cube must keep whole spectra (the
-    same pixels in every channel), so that C is that product, and the
-    pixels must be at most MAX_CORRELATED_PIXELS (C is a dense matrix).
+    and left out of the log-likelihood. A fitted noise adds its noise
+    residual as above, of the terms of its values times the share
+    n_ind / n of the n values that count, n_ind the independent values
+    they are worth (see Whitening): its sum is n_ind log f^2 for a scale
+    f. With all n (the Gaussian of C exactly), the best scale would be
+    f^2 = chi2 / n, too small where the noise of the data has less
+    variance than the floor gives C (e.g. beam noise alone, which has
+    none from pixel to pixel): on 20 mocks of NGC 1313 of LVHIS, f = 0.47
+    of the true noise, and errors half the scatter of the fits; counting
+    n_ind, f = 1.00 and errors of the scatter (2026-10-21; the user chose
+    this, rather than the exact Gaussian). The mask of a cube must keep
+    whole spectra (the same pixels in every channel), so that C is that
+    product, and the pixels must be at most MAX_CORRELATED_PIXELS (C is a
+    dense matrix).
     Correlated noise does not go with upper limits (the probability of
     correlated non-detections has no closed form) or amplitudes of
     spectra (the best amplitude of each spectrum would depend on the

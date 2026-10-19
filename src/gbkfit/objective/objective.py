@@ -200,6 +200,11 @@ class Objective:
         # of independent values they are worth (see Whitening)
         self._whiteners = iterutils.make_list(n, {})
         self._nindependent = iterutils.make_list(n, {})
+        # The share of its values that each data item whose noise is fitted
+        # counts in its noise residual: 1, but the independent values they
+        # are worth over their number for correlated noise (see
+        # LikelihoodGaussian)
+        self._noise_shares = [np.ones(len(noise)) for noise in self._noise]
         # The native objective of each observation, for its driver
         self._backends = iterutils.make_list(n, None)
         # The memory is allocated on the first evaluation (see prepare)
@@ -309,6 +314,10 @@ class Objective:
                 (self._h_noise_sums[i],
                  self._d_noise_sums[i]) = driver.mem_alloc_s(
                     len(self._noise[i]), np.float64)
+            for j, key in enumerate(self._noise[i]):
+                if key in self._nindependent[i]:
+                    self._noise_shares[i][j] = self._nindependent[i][key] \
+                        / np.count_nonzero(dataset[key].mask())
         self._prepared = True
 
     def chi2(
@@ -691,7 +700,7 @@ class Objective:
         # (each term is at least 0, but rounding can leave a sum of terms
         # of 0, at the smallest scale and no jitter, a hair below it)
         self._noise_residuals[i][...] = np.sqrt(
-            np.maximum(self._h_noise_sums[i], 0))
+            np.maximum(self._h_noise_sums[i], 0) * self._noise_shares[i])
 
     def _scale_spectra(
             self,

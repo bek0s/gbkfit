@@ -289,6 +289,11 @@ def test_correlated_noise_has_the_chi2_of_its_covariance(driver):
     # Noise of exactly K gives the chi-square tr(K C^-1) on average
     assert objective.nindependent() == pytest.approx(
         np.trace(np.linalg.solve(c, k)))
+    # The noise residual counts the values as the independent ones they
+    # are worth: c^2 log(s^2 / (f_min e)^2) of each, times n_ind / n
+    share = objective.nindependent() / np.count_nonzero(kept)
+    assert objective.noise_chi2() == pytest.approx(share * np.sum(
+        4 * np.log((sigma / (0.1 * data.error()))[kept] ** 2)), rel=1e-6)
     residuals = objective.residuals(params)[:-1]
     assert np.sum(residuals ** 2) == pytest.approx(chi2, rel=1e-5)
     # The residuals of each value, unweighted, are not whitened
