@@ -3,9 +3,10 @@ from typing import Any
 
 import numpy as np
 
+from gbkfit.instrument import PSF
 from gbkfit.utils import gridutils
 from . import _detail, _outliers, _resampling
-from .base import Dataset
+from .base import Dataset, NoiseCorrelation
 from .data import Data, FitsFile
 
 
@@ -17,6 +18,9 @@ __all__ = [
 # The axes of its blocks and windows (see resample_blocks and
 # screen_outliers)
 _AXES = ('x', 'y')
+
+# The axes along which its noise can be correlated (see Data)
+_CORRELATIONS = ('spatial',)
 
 
 class DatasetPixelMoments(Dataset):
@@ -51,7 +55,7 @@ class DatasetPixelMoments(Dataset):
             cls, info: dict[str, Any], prefix: str = ''
     ) -> 'DatasetPixelMoments':
         info = dict(info)
-        files = _detail.pop_moment_options(info, prefix)
+        files = _detail.pop_moment_options(info, prefix, _CORRELATIONS)
         return _detail.load_with_files(cls, info, cls.ndim, **files)
 
     @classmethod
@@ -65,7 +69,8 @@ class DatasetPixelMoments(Dataset):
             step: float | Sequence[float] | None = None,
             rpix: float | Sequence[float] | None = None,
             rval: float | Sequence[float] | None = None,
-            rota: float | None = None
+            rota: float | None = None,
+            spatial_correlations: Mapping[int, PSF] | None = None
     ) -> 'DatasetPixelMoments':
         """
         Read the dataset from FITS files, with the world coordinates of the
@@ -95,6 +100,9 @@ class DatasetPixelMoments(Dataset):
         rota : float, optional
             The rotation of the grid on the sky; by default, that of the
             headers.
+        spatial_correlations : Mapping, optional
+            The correlations of the noise of some of the moment maps on the
+            sky (see Data).
 
         Returns
         -------
@@ -102,7 +110,8 @@ class DatasetPixelMoments(Dataset):
             The dataset.
         """
         items, coords = _detail.read_moments(
-            moments, masks, errors, units, beams, rpix, rval)
+            moments, masks, errors, units, beams, rpix, rval,
+            spatial_correlations)
         return cls(items, **_detail.grid_coords(coords, step, rota))
 
     def dump(
@@ -159,3 +168,10 @@ class DatasetPixelMoments(Dataset):
         (x, y) about each.
         """
         return _outliers.screen_grid(self, size, _AXES, nsigma)
+
+    def noise_correlation(self, key: str) -> NoiseCorrelation | None:
+        """
+        Return the correlation of the noise of a data item on the
+        separations of its pixels (see Dataset.noise_correlation).
+        """
+        return _detail.grid_noise_correlation(self, key)

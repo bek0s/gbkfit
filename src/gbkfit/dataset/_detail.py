@@ -8,36 +8,50 @@ from typing import TYPE_CHECKING, Any
 import astropy.units
 import numpy as np
 
+from gbkfit.instrument import PSF, lsf_parser, psf_parser
 from gbkfit.utils import fitsutils, gridutils, parseutils, unitutils
 from gbkfit.utils.parseutils import ConfigError
 from .data import Data, FitsFile, dump_data, fits_file
 
 if TYPE_CHECKING:
-    from .base import Dataset
+    from .base import Dataset, NoiseCorrelation
 
 
 # The options of the files of a data item
 _ITEM_OPTIONS = ('data', 'mask', 'error', 'unit', 'beam')
 
+# The parsers of the correlations of the noise of a data item, by kind
+# (see Data)
+_CORRELATION_PARSERS = dict(spatial=psf_parser, spectral=lsf_parser)
+
 # The orders of the moments that datasets can hold
 _ORDERS = range(8)
 
 
-def item_options(info: Any, prefix: str) -> dict[str, Any]:
+def item_options(
+        info: Any,
+        prefix: str,
+        correlations: Sequence[str] = ()
+) -> dict[str, Any]:
     """
     Return the options of a data item from its configuration (the file of
     its data, and optionally those of its mask and its error, or one
-    error, its unit and its beam), as the arguments data, mask, error,
-    unit and beam of Data.from_files, with the prefix prepended to the
-    filenames.
+    error, its unit, its beam, and the correlations of its noise of the
+    given kinds, if its dataset takes them: see Dataset.noise_correlations),
+    as the arguments data, mask, error, unit, beam, spatial_correlation and
+    spectral_correlation of Data.from_files, with the prefix prepended to
+    the filenames of the arrays.
     """
+    names = [f'{kind}_correlation' for kind in correlations]
     if not isinstance(info, Mapping):
         raise ConfigError(
             f"a data item has the file of its data ('data'), and optionally "
             f"those of its mask ('mask') and error ('error'), its unit "
-            f"('unit') and beam ('beam'); it is {info!r}")
+            f"('unit'), beam ('beam') and the correlations of its noise "
+            f"{names}; it is {info!r}")
     info = parseutils.parse_options(
-        info, required={'data'}, optional={'mask', 'error', 'unit', 'beam'})
+        info, required={'data'},
+        optional={'mask', 'error', 'unit', 'beam', *names})
     options = {}
     for key, value in info.items():
         if value is None:
@@ -45,45 +59,65 @@ def item_options(info: Any, prefix: str) -> dict[str, Any]:
         if key in ('unit', 'beam') \
                 or (key == 'error' and isinstance(value, (int, float))):
             options[key] = value
+        elif key in names:
+            kind = key.removesuffix('_correlation')
+            with parseutils.config_path(key):
+                options[key] = _CORRELATION_PARSERS[kind].load(value)
         else:
             with parseutils.config_path(key):
                 options[key] = fits_file(value, prefix)
     return options
 
 
-def pop_item_options(info: dict[str, Any], prefix: str) -> dict[str, Any]:
+def pop_item_options(
+        info: dict[str, Any],
+        prefix: str,
+        correlations: Sequence[str] = ()
+) -> dict[str, Any]:
     """
     Remove the options of the one data item of a dataset from its
     configuration, where they are given beside its own options, and
-    return them (see item_options).
+    return them (see item_options; with the correlations of the noise of
+    the given kinds).
     """
+    keys = (*_ITEM_OPTIONS, *(f'{kind}_correlation' for kind in correlations))
     return item_options(
-        {key: info.pop(key) for key in _ITEM_OPTIONS if key in info}, prefix)
+        {key: info.pop(key) for key in keys if key in info}, prefix,
+        correlations)
 
 
-def pop_moment_options(info: dict[str, Any], prefix: str) -> dict[str, Any]:
+def pop_moment_options(
+        info: dict[str, Any],
+        prefix: str,
+        correlations: Sequence[str] = ()
+) -> dict[str, Any]:
     """
     Remove the data items moment0 to moment7 from the configuration of a
     dataset, and return their options as the arguments moments, masks,
-    errors, units and beams of its from_files (see item_options).
+    errors, units and beams of its from_files (see item_options), and
+    spatial_correlations if the noise of moments can be correlated on the
+    sky (correlations has 'spatial').
     """
     moments, masks, errors, units, beams = {}, {}, {}, {}, {}
+    spatial = {}
     for order in _ORDERS:
         name = f'moment{order}'
         if info.get(name) is None:
             info.pop(name, None)
             continue
         with parseutils.config_path(name):
-            options = item_options(info.pop(name), prefix)
+            options = item_options(info.pop(name), prefix, correlations)
         moments[order] = options['data']
         for key, values in (
                 ('mask', masks), ('error', errors), ('unit', units),
-                ('beam', beams)):
+                ('beam', beams), ('spatial_correlation', spatial)):
             if key in options:
                 values[order] = options[key]
+    correlated = dict(spatial_correlations=spatial) \
+        if 'spatial' in correlations else {}
     return dict(
         moments=moments, masks=masks, errors=errors, units=units,
-        beams=beams)
+        beams=beams) | correlated
 
 
 def load_with_files(
@@ -146,7 +180,8 @@ def _in_kms(data: Data, order: int) -> Data:
     error = data.error()
     return Data(
         data.data() * factor, data.mask(),
-        None if error is None else error * factor, kms, data.beam())
+        None if error is None else error * factor, kms, data.beam(),
+        data.spatial_correlation(), data.spectral_correlation())
 
 
 def moment_orders(dataset: 'Dataset') -> tuple[int, ...]:
@@ -161,7 +196,8 @@ def read_moments(
         units: Mapping[int, str] | None = None,
         beams: Mapping[int, Mapping[str, Any]] | None = None,
         rpix: float | Sequence[float] | None = None,
-        rval: float | Sequence[float] | None = None
+        rval: float | Sequence[float] | None = None,
+        spatial_correlations: Mapping[int, PSF] | None = None
 ) -> tuple[dict[int, Data], gridutils.Coords]:
     """
     Read the moments of the given orders from their files (see
@@ -172,17 +208,19 @@ def read_moments(
     errors = errors or {}
     units = units or {}
     beams = beams or {}
+    spatial_correlations = spatial_correlations or {}
     if extra := sorted(
-            (set(masks) | set(errors) | set(units) | set(beams))
-            - set(moments)):
+            (set(masks) | set(errors) | set(units) | set(beams)
+             | set(spatial_correlations)) - set(moments)):
         raise ConfigError(
-            f"the moments {extra} have masks, errors, units or beams but no "
-            f"data")
+            f"the moments {extra} have masks, errors, units, beams or "
+            f"correlations of their noise but no data")
     items, coords = {}, {}
     for order, data in moments.items():
         items[order], coords[order] = Data.from_files(
             data, masks.get(order), errors.get(order), rpix, rval,
-            unit=units.get(order), beam=beams.get(order))
+            unit=units.get(order), beam=beams.get(order),
+            spatial_correlation=spatial_correlations.get(order))
     if not coords:
         raise ConfigError("a dataset needs at least one moment")
     first = next(iter(coords.values()))
@@ -263,8 +301,56 @@ def dump_grid_dataset(
             filename, array, grid.coords, grid.spectral_axis, overwrite)
     for key, item in dataset.items():
         info[key] = dump_data(
-            item, item_filenames(prefix, key), write, dump_path)
+            item, item_filenames(prefix, key), write, dump_path,
+            f'{prefix}{key}_', overwrite)
     return info
+
+
+def grid_noise_correlation(
+        dataset: 'Dataset', key: str
+) -> 'NoiseCorrelation | None':
+    """
+    Return the correlation of the noise of a data item of a dataset on a
+    grid (see Dataset.noise_correlation): the shapes of its correlations
+    on the pixels and the channels of the grid, out to the largest
+    separations of the data, divided by their values at their centres.
+    Raise ConfigError if it has a spectral correlation but the grid no
+    spectral axis, or a shape is not largest at its centre.
+    """
+    from .base import NoiseCorrelation
+    item = dataset[key]
+    spatial, spectral = item.spatial_correlation(), item.spectral_correlation()
+    if spatial is None and spectral is None:
+        return None
+    grid = dataset.grid()
+    if spectral is not None and grid.spectral_axis is None:
+        raise ConfigError(
+            f"the noise of '{key}' has a spectral correlation, but the "
+            f"data have no spectral axis")
+    if spatial is not None:
+        nx, ny = grid.size[:2]
+        spatial = _centred(spatial.asarray(
+            grid.coords.step[:2], (2 * nx - 1, 2 * ny - 1),
+            rota=grid.coords.rota), key)
+    if spectral is not None:
+        axis = grid.spectral_axis
+        spectral = _centred(spectral.asarray(
+            abs(grid.coords.step[axis]), 2 * grid.size[axis] - 1), key)
+    return NoiseCorrelation(spatial, spectral)
+
+
+def _centred(shape: np.ndarray, key: str) -> np.ndarray:
+    """
+    Return the shape of a correlation of the noise of data item key (of
+    odd sizes) divided by its value at its centre, or raise ConfigError
+    unless that is its largest (the variance of the noise).
+    """
+    centre = shape[tuple(n // 2 for n in shape.shape)]
+    if not centre > 0 or np.any(shape > centre):
+        raise ConfigError(
+            f"the correlation of the noise of '{key}' must be largest at "
+            f"its centre (at a separation of 0)")
+    return shape / centre
 
 
 def item_filenames(prefix: str, key: str) -> dict[str, str]:

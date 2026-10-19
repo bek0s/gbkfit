@@ -379,7 +379,8 @@ def test_datasets_from_files_in_python(tmp_path):
     (lambda: DatasetPixelMoments({8: Data(np.ones((2, 2)))}),
      "orders of the moments are 0 to 7"),
     (lambda: DatasetPixelMoments.from_files({0: 'm0.fits'}, masks={1: 'm'}),
-     r"moments \[1\] have masks, errors, units or beams but no data")])
+     r"moments \[1\] have masks, errors, units, beams or correlations of "
+     r"their noise but no data")])
 def test_moments_of_datasets_are_checked(call, message):
     with pytest.raises(ConfigError, match=message):
         call()
@@ -429,3 +430,65 @@ def test_moments_of_velocity_are_in_km_s():
     np.testing.assert_allclose(dataset['moment3'].data(), 2)
     with pytest.raises(ConfigError, match="not a unit of velocity"):
         DatasetPixelMoments({1: Data(np.ones((4, 4)), unit='Jy')})
+
+
+def test_noise_correlation_is_the_shape_on_the_pixel_separations(tmp_path):
+    # A round beam of FWHM 4 pixels is half its peak 2 pixels away; the
+    # correlation reaches the largest separations of the data (8 x 20)
+    for name in ('moment0', 'moment1'):
+        fits.writeto(tmp_path / f'{name}.fits', np.ones((8, 20)))
+    info = dict(
+        type='pixel_moments',
+        moment0=dict(data=str(tmp_path / 'moment0.fits')),
+        moment1=dict(
+            data=str(tmp_path / 'moment1.fits'),
+            spatial_correlation=dict(type='gauss_beam', bmaj=4, bmin=4)))
+    dataset = dataset_parser.load(info)
+    assert dataset.noise_correlation('moment0') is None
+    correlation = dataset.noise_correlation('moment1')
+    assert correlation.spectral is None
+    spatial = correlation.spatial
+    assert spatial.shape == (15, 39)
+    assert spatial[7, 19] == 1
+    np.testing.assert_allclose(spatial[7, 21], 0.5)
+    np.testing.assert_allclose(spatial, spatial[::-1, ::-1])
+    # It is dumped with its item
+    loaded = dataset_parser.load(dataset.dump(prefix=str(tmp_path / 'd_')))
+    np.testing.assert_array_equal(
+        loaded.noise_correlation('moment1').spatial, spatial)
+
+
+def test_noise_correlation_along_the_channels():
+    from gbkfit.instrument import LSFGauss
+    # A Gaussian of sigma 10 km/s on channels of 10 km/s
+    data = Data(np.ones((5, 4, 3)), spectral_correlation=LSFGauss(10))
+    dataset = DatasetPixelSpectra(data, step=(1, 1, 10))
+    correlation = dataset.noise_correlation('spectra')
+    assert correlation.spatial is None
+    np.testing.assert_allclose(
+        correlation.spectral, np.exp(-0.5 * np.arange(-4, 5) ** 2))
+
+
+def test_noise_correlations_only_where_the_data_have_them(tmp_path, caplog):
+    import astropy.units as u
+    from gbkfit.instrument import LSFGauss, PSFGauss, SpectralTable
+    fits.writeto(tmp_path / 'data.fits', np.ones((8, 20)))
+    # An image has no spectral axis: the option is not one of its own
+    dataset_parser.load(dict(
+        type='pixel_brightness', data=str(tmp_path / 'data.fits'),
+        spectral_correlation=dict(type='gauss', sigma=10)))
+    assert "unknown options: 'spectral_correlation'" in caplog.text
+    image = DatasetPixelBrightness(
+        Data(np.ones((8, 20)), spectral_correlation=LSFGauss(10)))
+    with pytest.raises(ConfigError, match="no spectral axis"):
+        image.noise_correlation('brightness')
+    # Spectra along a slit are not on a grid of the sky
+    slit = DatasetSlitSpectra(
+        Data(np.ones((8, 20)), spatial_correlation=PSFGauss(1)))
+    with pytest.raises(ConfigError, match="cannot be correlated"):
+        slit.noise_correlation('spectra')
+    # A correlation does not vary along the spectral axis
+    sigma = SpectralTable([5000, 7000] * u.AA, [1, 2])
+    with pytest.raises(ConfigError, match="must not vary"):
+        Data(np.ones((8, 20)), spatial_correlation=PSFGauss.varying(
+            sigma=sigma))

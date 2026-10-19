@@ -10,6 +10,7 @@ from typing import Any, NamedTuple, TypeAlias
 import astropy.units
 import numpy as np
 
+from gbkfit.instrument import LSF, PSF, lsf_parser, psf_parser
 from gbkfit.utils import fitsutils, gridutils, parseutils, unitutils
 from gbkfit.utils.parseutils import ConfigError
 
@@ -104,13 +105,24 @@ class Data:
     """
     Measured values with their mask and error: arrays of one shape, as
     copies (float arrays keep their type, and the others become float64;
-    the mask and the error take the type of the values), and their unit
-    and beam, if known.
+    the mask and the error take the type of the values), their unit and
+    beam, if known, and the correlation of their noise, if any.
 
     Where the values were measured (e.g. on the pixels of a grid) is
     described by their dataset. The values that are masked (mask 0), not
     finite, or have an error that is not finite or is 0 (e.g. blank
     pixels of an error map) are NaN, with mask 0.
+
+    The noise of values on the sky can be correlated (e.g. by the beam of
+    a radio image, or by the resampling of the spaxels of an IFU cube),
+    and that of values along a spectral axis too (e.g. by Hanning
+    smoothing): the correlation of the noise of two values at the
+    separation (dx, dy) on the sky and dz along the spectral axis is then
+    C_xy(dx, dy) C_z(dz), the shapes of the PSF spatial_correlation and
+    of the LSF spectral_correlation divided by their values at their
+    centres (as the noise of mocks; see NoiseGauss). Their likelihood
+    takes it (see LikelihoodGaussian); the kinds of data whose noise can
+    be correlated say where (see Dataset.noise_correlation).
 
     Parameters
     ----------
@@ -125,13 +137,19 @@ class Data:
     beam : Beam or Mapping, optional
         Their beam, for units per beam (e.g. Jy/beam): a Beam, or its
         options bmaj, bmin and bpa.
+    spatial_correlation : PSF, optional
+        The correlation of their noise on the sky (e.g. the beam:
+        PSFGaussBeam); it must not vary along the spectral axis.
+    spectral_correlation : LSF, optional
+        The correlation of their noise along the spectral axis; it must
+        not vary.
 
     Raises
     ------
     ConfigError
         If the mask is not finite, an error is negative, the arrays are
-        not of one shape, the unit is not a unit, or the widths of the
-        beam are not positive.
+        not of one shape, the unit is not a unit, the widths of the beam
+        are not positive, or a correlation varies.
     """
 
     def __init__(
@@ -140,7 +158,9 @@ class Data:
             mask: np.ndarray | None = None,
             error: np.ndarray | None = None,
             unit: str | astropy.units.UnitBase | None = None,
-            beam: Beam | Mapping[str, Any] | None = None
+            beam: Beam | Mapping[str, Any] | None = None,
+            spatial_correlation: PSF | None = None,
+            spectral_correlation: LSF | None = None
     ):
         data = _as_float(data)
         mask = np.ones_like(data) if mask is None \
@@ -175,6 +195,14 @@ class Data:
         self._unit = unitutils.parse_unit(unit) if isinstance(unit, str) \
             else unit
         self._beam = _make_beam(beam)
+        for kind, correlation in (
+                ('spatial', spatial_correlation),
+                ('spectral', spectral_correlation)):
+            if correlation is not None and correlation.varies():
+                raise ConfigError(
+                    f"the {kind} correlation of the noise must not vary")
+        self._spatial_correlation = spatial_correlation
+        self._spectral_correlation = spectral_correlation
 
     @classmethod
     def from_files(
@@ -188,13 +216,15 @@ class Data:
             spectral_axis: int | None = None,
             medium: str | None = None,
             unit: str | None = None,
-            beam: Mapping[str, Any] | None = None
+            beam: Mapping[str, Any] | None = None,
+            spatial_correlation: PSF | None = None,
+            spectral_correlation: LSF | None = None
     ) -> tuple['Data', gridutils.Coords]:
         """
         Read a data item from FITS files, with the unit and the beam of the
         header of the file of its values unless given (see
         fitsutils.read_unit and read_beam; a unit of the header that is
-        not a unit is left out).
+        not a unit is left out), and the correlation of its noise, if any.
 
         Parameters
         ----------
@@ -210,6 +240,10 @@ class Data:
             The unit of the values (see Data).
         beam : Mapping, optional
             The options of their beam (see Beam).
+        spatial_correlation : PSF, optional
+            The correlation of their noise on the sky (see Data).
+        spectral_correlation : LSF, optional
+            The correlation of their noise along the spectral axis.
 
         Returns
         -------
@@ -242,7 +276,9 @@ class Data:
             unit = _header_unit(filename, hdu)
         if beam is None:
             beam = fitsutils.read_beam(filename, hdu)
-        return cls(values, masks, errors, unit, beam), coords
+        return cls(
+            values, masks, errors, unit, beam, spatial_correlation,
+            spectral_correlation), coords
 
     def ndim(self) -> int:
         """Return the number of axes of the arrays."""
@@ -280,11 +316,22 @@ class Data:
         """Return the beam of the values, if known."""
         return self._beam
 
+    def spatial_correlation(self) -> PSF | None:
+        """Return the correlation of the noise on the sky, if any."""
+        return self._spatial_correlation
+
+    def spectral_correlation(self) -> LSF | None:
+        """
+        Return the correlation of the noise along the spectral axis, if
+        any.
+        """
+        return self._spectral_correlation
+
     def with_data(self, data: np.ndarray) -> 'Data':
         """
         Return a copy with other values (e.g. those of a bootstrap), of its
-        dtype, and its mask, error, unit and beam: the values it masks
-        stay masked.
+        dtype, and its mask, error, unit, beam and correlations of the
+        noise: the values it masks stay masked.
 
         Raises
         ------
@@ -293,7 +340,8 @@ class Data:
         """
         return Data(
             np.asarray(data, self.dtype()), self._mask, self._error,
-            self._unit, self._beam)
+            self._unit, self._beam, self._spatial_correlation,
+            self._spectral_correlation)
 
 
 def _header_unit(
@@ -334,12 +382,15 @@ def dump_data(
         data: Data,
         filenames: Mapping[str, str],
         write: Callable[[str, np.ndarray], None],
-        dump_path: bool = True
+        dump_path: bool = True,
+        prefix: str = '',
+        overwrite: bool = False
 ) -> dict[str, Any]:
     """
     Write the arrays of a data item to files, and return its
-    configuration: the file of each array, and its unit and beam (one
-    beam, not those of the channels of a cube; see Data.from_files).
+    configuration: the file of each array, its unit and beam (one beam,
+    not those of the channels of a cube; see Data.from_files), and the
+    correlations of its noise, if any.
 
     Parameters
     ----------
@@ -353,6 +404,11 @@ def dump_data(
     dump_path : bool, optional
         Whether the configuration has the paths of the files, or only
         their names.
+    prefix : str, optional
+        The start of the names of the files of the correlations (e.g. of
+        an image), if any.
+    overwrite : bool, optional
+        Whether to overwrite the existing files of the correlations.
 
     Returns
     -------
@@ -375,4 +431,11 @@ def dump_data(
         parseutils.warn(
             "the beams of the channels of a data item are not dumped; give "
             "its beam in its configuration (beam: {bmaj, bmin, bpa})")
+    kwargs = dict(dump_path=dump_path, overwrite=overwrite)
+    if (spatial := data.spatial_correlation()) is not None:
+        info['spatial_correlation'] = psf_parser.dump(
+            spatial, prefix=f'{prefix}spatial_correlation_', **kwargs)
+    if (spectral := data.spectral_correlation()) is not None:
+        info['spectral_correlation'] = lsf_parser.dump(
+            spectral, prefix=f'{prefix}spectral_correlation_', **kwargs)
     return info

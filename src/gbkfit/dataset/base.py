@@ -1,7 +1,7 @@
 import abc
 import copy
 from collections.abc import Iterator, Mapping, Sequence
-from typing import Any, Self
+from typing import Any, NamedTuple, Self
 
 import numpy as np
 
@@ -12,8 +12,22 @@ from .data import Data
 
 __all__ = [
     'Dataset',
+    'NoiseCorrelation',
     'dataset_parser'
 ]
+
+
+class NoiseCorrelation(NamedTuple):
+    """
+    The correlation of the noise of a data item on the separations of its
+    values (see Dataset.noise_correlation): of two values dy and dx pixels
+    apart on the sky, spatial[ny - 1 + dy, nx - 1 + dx], and dz channels
+    apart along the spectral axis, spectral[nz - 1 + dz] (ny, nx and nz
+    the numbers of pixels and channels of the data); 1 at a separation of
+    0, and None along the axes along which it is not correlated.
+    """
+    spatial: np.ndarray | None
+    spectral: np.ndarray | None
 
 
 class Dataset(parseutils.TypedSerializable, Mapping[str, Data], abc.ABC):
@@ -240,6 +254,35 @@ class Dataset(parseutils.TypedSerializable, Mapping[str, Data], abc.ABC):
         """
         raise ConfigError(
             f"the residuals of {self.type()} data cannot be redrawn in blocks")
+
+    def noise_correlation(self, key: str) -> NoiseCorrelation | None:
+        """
+        Return the correlation of the noise of a data item on the
+        separations of its values (see Data), or None if it has none. The
+        kinds of data whose noise can be correlated say where (e.g. on the
+        sky, for the pixels of an image); the others raise ConfigError.
+
+        Parameters
+        ----------
+        key : str
+            The name of the data item.
+
+        Returns
+        -------
+        NoiseCorrelation or None
+            The correlation.
+
+        Raises
+        ------
+        ConfigError
+            If the kind of data, or its axes, cannot have it.
+        """
+        item = self[key]
+        if item.spatial_correlation() is None \
+                and item.spectral_correlation() is None:
+            return None
+        raise ConfigError(
+            f"the noise of {self.type()} data cannot be correlated")
 
 
 class DatasetTypedParser(parseutils.TypedParser):

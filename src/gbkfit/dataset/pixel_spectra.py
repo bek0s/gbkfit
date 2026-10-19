@@ -4,9 +4,10 @@ from typing import Any
 import astropy.units
 import numpy as np
 
+from gbkfit.instrument import LSF, PSF
 from gbkfit.utils import gridutils
 from . import _detail, _outliers, _resampling
-from .base import Dataset
+from .base import Dataset, NoiseCorrelation
 from .data import Data, FitsFile
 
 
@@ -18,6 +19,9 @@ __all__ = [
 # The axes of its blocks and windows (see resample_blocks and
 # screen_outliers)
 _AXES = ('x', 'y', 'the channels')
+
+# The axes along which its noise can be correlated (see Data)
+_CORRELATIONS = ('spatial', 'spectral')
 
 
 class DatasetPixelSpectra(Dataset):
@@ -56,7 +60,7 @@ class DatasetPixelSpectra(Dataset):
             cls, info: dict[str, Any], prefix: str = ''
     ) -> 'DatasetPixelSpectra':
         info = dict(info)
-        files = _detail.pop_item_options(info, prefix)
+        files = _detail.pop_item_options(info, prefix, _CORRELATIONS)
         return _detail.load_with_files(cls, info, cls.ndim, **files)
 
     @classmethod
@@ -72,7 +76,9 @@ class DatasetPixelSpectra(Dataset):
             rval: float | Sequence[float] | None = None,
             rota: float | None = None,
             rest: str | astropy.units.Quantity | None = None,
-            medium: str | None = None
+            medium: str | None = None,
+            spatial_correlation: PSF | None = None,
+            spectral_correlation: LSF | None = None
     ) -> 'DatasetPixelSpectra':
         """
         Read the dataset from FITS files, with the world coordinates of the
@@ -106,6 +112,10 @@ class DatasetPixelSpectra(Dataset):
             The medium of the wavelengths of a rest wavelength (see
             gridutils.make_medium); by default, that of the header (see
             fitsutils.read_data).
+        spatial_correlation : PSF, optional
+            The correlation of the noise on the sky (see Data).
+        spectral_correlation : LSF, optional
+            The correlation of the noise along the spectral axis.
 
         Returns
         -------
@@ -114,7 +124,7 @@ class DatasetPixelSpectra(Dataset):
         """
         item, coords = Data.from_files(
             data, mask, error, rpix, rval, rest, cls.spectral_axis, medium,
-            unit, beam)
+            unit, beam, spatial_correlation, spectral_correlation)
         return cls(item, **_detail.grid_coords(coords, step, rota, True))
 
     def dump(
@@ -173,3 +183,11 @@ class DatasetPixelSpectra(Dataset):
         (x, y, channels) about each.
         """
         return _outliers.screen_grid(self, size, _AXES, nsigma)
+
+    def noise_correlation(self, key: str) -> NoiseCorrelation | None:
+        """
+        Return the correlation of the noise of a data item on the
+        separations of its pixels and channels (see
+        Dataset.noise_correlation).
+        """
+        return _detail.grid_noise_correlation(self, key)
