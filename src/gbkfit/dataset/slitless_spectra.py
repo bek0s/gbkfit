@@ -1,8 +1,10 @@
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+import numpy as np
+
 from gbkfit.utils import gridutils
-from . import _detail
+from . import _detail, _resampling
 from .base import Dataset
 from .data import Data, FitsFile
 
@@ -10,6 +12,10 @@ from .data import Data, FitsFile
 __all__ = [
     'DatasetSlitlessSpectra'
 ]
+
+
+# The axes of its blocks of residuals (see resample_blocks)
+_BLOCK_AXES = ('x', 'y')
 
 
 class DatasetSlitlessSpectra(Dataset):
@@ -123,3 +129,23 @@ class DatasetSlitlessSpectra(Dataset):
     def grid(self) -> gridutils.Grid:
         """Return the grid of the pixels of the detector."""
         return self._grid
+
+    def check_blocks(self, size: Sequence[float]) -> None:
+        """
+        Raise ConfigError unless the size is of blocks of pixels of the
+        detector: a positive integer for each of x and y (see resample_blocks).
+        """
+        _resampling.block_size(size, _BLOCK_AXES)
+
+    def resample_blocks(
+            self,
+            residuals: Mapping[str, np.ndarray],
+            size: Sequence[float],
+            rng: np.random.Generator
+    ) -> dict[str, np.ndarray]:
+        """
+        Return residuals of its image redrawn in blocks of pixels of the
+        detector (see Dataset.resample_blocks), of the size (x, y).
+        """
+        return _resampling.resample_blocks(
+            residuals, size, _BLOCK_AXES, rng)

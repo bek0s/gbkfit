@@ -90,20 +90,21 @@ class BootstrapBlocks(BootstrapScheme):
     """
     Residuals redrawn in blocks (see Dataset.resample_blocks): each block
     takes those of a block drawn at random, with replacement, from those
-    with residuals in all of their values. Blocks of at least a beam
-    (and of the width of the line spread in channels) keep the
-    correlations of the noise.
+    with residuals in all of their values. Each kind of data says what
+    its blocks are (see Dataset.check_blocks; e.g. pixels and channels of
+    a cube). Blocks of at least a beam (and of the width of the line
+    spread in channels) keep the correlations of the noise.
 
     Parameters
     ----------
-    size : Sequence of int
-        The size of the blocks along each axis of the data (e.g. x, y and
-        the channels of a cube).
+    size : Sequence of float
+        The size of the blocks (e.g. x, y and the channels of a cube, in
+        pixels and channels).
 
     Raises
     ------
     ConfigError
-        If the size is not of positive integers.
+        If the size is not of positive numbers.
     """
 
     @staticmethod
@@ -113,25 +114,22 @@ class BootstrapBlocks(BootstrapScheme):
     def dump(self) -> dict[str, Any]:
         return dict(type=self.type(), size=list(self._size))
 
-    def __init__(self, size: Sequence[int]):
+    def __init__(self, size: Sequence[float]):
         size = tuple(size)
         if not size or not all(
-                isinstance(n, numbers.Integral) and not isinstance(n, bool)
-                and n >= 1 for n in size):
+                isinstance(n, numbers.Real) and not isinstance(n, bool)
+                and n > 0 for n in size):
             raise ConfigError(
-                f"the size of the blocks is a positive integer for each axis "
-                f"of the data; it is {list(size)}")
+                f"the size of the blocks is of positive numbers; it is "
+                f"{list(size)}")
         self._size = size
 
-    def size(self) -> tuple[int, ...]:
+    def size(self) -> tuple[float, ...]:
         """Return the size of the blocks."""
         return self._size
 
     def check(self, dataset: Dataset, params: ParamSpace) -> None:
-        if len(self._size) != dataset.ndim:
-            raise ConfigError(
-                f"the size of the blocks has {len(self._size)} entries, but "
-                f"the data have {dataset.ndim} axes")
+        dataset.check_blocks(self._size)
 
     def resample(
             self,

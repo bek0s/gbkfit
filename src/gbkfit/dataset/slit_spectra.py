@@ -2,9 +2,10 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 import astropy.units
+import numpy as np
 
 from gbkfit.utils import gridutils
-from . import _detail
+from . import _detail, _resampling
 from .base import Dataset
 from .data import Data, FitsFile
 
@@ -12,6 +13,10 @@ from .data import Data, FitsFile
 __all__ = [
     'DatasetSlitSpectra'
 ]
+
+
+# The axes of its blocks of residuals (see resample_blocks)
+_BLOCK_AXES = ('the position along the slit', 'the channels')
 
 
 class DatasetSlitSpectra(Dataset):
@@ -138,3 +143,25 @@ class DatasetSlitSpectra(Dataset):
     def grid(self) -> gridutils.Grid:
         """Return the grid of the positions and channels."""
         return self._grid
+
+    def check_blocks(self, size: Sequence[float]) -> None:
+        """
+        Raise ConfigError unless the size is of blocks of positions along the
+        slit and channels: a positive integer for each of the position along
+        the slit and the channels (see resample_blocks).
+        """
+        _resampling.block_size(size, _BLOCK_AXES)
+
+    def resample_blocks(
+            self,
+            residuals: Mapping[str, np.ndarray],
+            size: Sequence[float],
+            rng: np.random.Generator
+    ) -> dict[str, np.ndarray]:
+        """
+        Return residuals of its spectra redrawn in blocks of positions along
+        the slit and channels (see Dataset.resample_blocks), of the size
+        (position along the slit, channels).
+        """
+        return _resampling.resample_blocks(
+            residuals, size, _BLOCK_AXES, rng)

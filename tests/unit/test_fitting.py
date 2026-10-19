@@ -530,8 +530,8 @@ def test_a_bootstrap_refits_the_model_plus_its_residuals_redrawn(tmp_path):
 
 @pytest.mark.parametrize('scheme, message', [
     ([dict(type='blocks', size=[4, 4])] * 2, 'one for each of the 1 obs'),
-    (dict(type='blocks', size=[4, 4, 2]), 'the data have 2 axes'),
-    (dict(type='blocks', size=[4, 0]), 'a positive integer'),
+    (dict(type='blocks', size=[4, 4, 2]), 'for each of x and y'),
+    (dict(type='blocks', size=[4, 0]), 'of positive numbers'),
 ])
 def test_bootstrap_options_that_do_not_suit_the_fit_refused(scheme, message):
     from gbkfit.fitting import BootstrapOptions, bootstrap, fitter_parser

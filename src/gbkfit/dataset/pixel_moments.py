@@ -14,6 +14,10 @@ __all__ = [
 ]
 
 
+# The axes of its blocks of residuals (see resample_blocks)
+_BLOCK_AXES = ('x', 'y')
+
+
 class DatasetPixelMoments(Dataset):
     """
     Moments of the spectra on a grid of pixels: moment maps of some of the
@@ -125,14 +129,22 @@ class DatasetPixelMoments(Dataset):
         """Return the orders of the moments."""
         return _detail.moment_orders(self)
 
+    def check_blocks(self, size: Sequence[float]) -> None:
+        """
+        Raise ConfigError unless the size is of blocks of pixels: a positive
+        integer for each of x and y (see resample_blocks).
+        """
+        _resampling.block_size(size, _BLOCK_AXES)
+
     def resample_blocks(
             self,
             residuals: Mapping[str, np.ndarray],
-            size: Sequence[int],
+            size: Sequence[float],
             rng: np.random.Generator
     ) -> dict[str, np.ndarray]:
         """
-        Return residuals of its moment maps redrawn in blocks of pixels
-        (see Dataset.resample_blocks), of the size (x, y).
+        Return residuals of its moment maps redrawn in blocks of pixels (see
+        Dataset.resample_blocks), of the size (x, y).
         """
-        return _resampling.resample_blocks(residuals, size, rng)
+        return _resampling.resample_blocks(
+            residuals, size, _BLOCK_AXES, rng)

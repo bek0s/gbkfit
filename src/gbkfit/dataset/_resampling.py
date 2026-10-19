@@ -1,6 +1,7 @@
 """
-The resampling of the residuals of data on grids of pixels, for
-bootstraps (see Dataset.resample_blocks).
+The resampling of the residuals of data on grids (e.g. of pixels, or of
+positions along a slit and channels), for bootstraps (see
+Dataset.resample_blocks).
 """
 
 import numbers
@@ -11,22 +12,23 @@ import numpy as np
 from gbkfit.utils.parseutils import ConfigError
 
 
-def _block_size(
-        size: Sequence[int], shape: tuple[int, ...]
+def block_size(
+        size: Sequence[float], axes: Sequence[str]
 ) -> tuple[int, ...]:
     """
-    Return the size of blocks of the options (FITS order: x, y and the
-    channels) in numpy order. Raise ConfigError unless it is a positive
-    integer for each axis of the data.
+    Return the size of blocks of the options, along the axes of the data
+    (FITS order, e.g. x, y and the channels), in numpy order. Raise
+    ConfigError unless it is a positive integer for each axis.
     """
-    axes = 'x, y and the channels' if len(shape) == 3 else 'x and y'
     size = tuple(size)
-    if len(size) != len(shape) or not all(
+    if len(size) != len(axes) or not all(
             isinstance(n, numbers.Integral) and not isinstance(n, bool)
             and n >= 1 for n in size):
+        names = axes[0] if len(axes) == 1 \
+            else f"{', '.join(axes[:-1])} and {axes[-1]}"
         raise ConfigError(
             f"the size of the blocks of these data is a positive integer for "
-            f"each of {axes}; it is {list(size)}")
+            f"each of {names}; it is {list(size)}")
     return size[::-1]
 
 
@@ -64,15 +66,16 @@ def _window_sums(x: np.ndarray, size: tuple[int, ...]) -> np.ndarray:
 
 def resample_blocks(
         residuals: Mapping[str, np.ndarray],
-        size: Sequence[int],
+        size: Sequence[float],
+        axes: Sequence[str],
         rng: np.random.Generator
 ) -> dict[str, np.ndarray]:
     """
-    Return residuals on a grid redrawn in blocks (see
-    Dataset.resample_blocks).
+    Return residuals on a grid redrawn in blocks of a size along its axes
+    (see block_size and Dataset.resample_blocks).
     """
     shape = next(iter(residuals.values())).shape
-    size = _block_size(size, shape)
+    size = block_size(size, axes)
     valid = np.logical_and.reduce(
         [np.isfinite(r) for r in residuals.values()]).astype(np.int64)
     origins = np.argwhere(_window_sums(valid, size) == np.prod(size))

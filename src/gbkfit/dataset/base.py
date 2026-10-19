@@ -146,10 +146,19 @@ class Dataset(parseutils.TypedSerializable, Mapping[str, Data], abc.ABC):
             for key, item in self._items.items()}
         return dataset
 
+    def check_blocks(self, size: Sequence[float]) -> None:
+        """
+        Raise ConfigError unless its data can be redrawn in blocks of a
+        size (see resample_blocks): the kinds of data that offer it say
+        what their blocks are; the others raise it.
+        """
+        raise ConfigError(
+            f"the residuals of {self.type()} data cannot be redrawn in blocks")
+
     def resample_blocks(
             self,
             residuals: Mapping[str, np.ndarray],
-            size: Sequence[int],
+            size: Sequence[float],
             rng: np.random.Generator
     ) -> dict[str, np.ndarray]:
         """
@@ -158,16 +167,17 @@ class Dataset(parseutils.TypedSerializable, Mapping[str, Data], abc.ABC):
         block drawn at random (with replacement) from the blocks with
         residuals in all of their values, in every item. The items share
         the draws, so that the correlations of their residuals remain.
-        The kinds of data that offer it say what their blocks are; the
-        others raise ConfigError.
+        The kinds of data that offer it say what their blocks are (see
+        check_blocks); the others raise ConfigError.
 
         Parameters
         ----------
         residuals : Mapping
             The residuals of each data item, of its shape: NaN where there
             are none (e.g. masked values, or values the model lacks).
-        size : Sequence of int
-            The size of the blocks along each axis of the data.
+        size : Sequence of float
+            The size of the blocks (e.g. in pixels, along each axis of an
+            image).
         rng : np.random.Generator
             The random numbers.
 

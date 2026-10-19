@@ -15,6 +15,10 @@ __all__ = [
 ]
 
 
+# The axes of its blocks of residuals (see resample_blocks)
+_BLOCK_AXES = ('x', 'y', 'the channels')
+
+
 class DatasetPixelSpectra(Dataset):
     """
     Spectra on a grid of pixels: a spectral cube.
@@ -138,15 +142,23 @@ class DatasetPixelSpectra(Dataset):
         """Return the grid of the pixels and channels."""
         return self._grid
 
+    def check_blocks(self, size: Sequence[float]) -> None:
+        """
+        Raise ConfigError unless the size is of blocks of pixels and channels:
+        a positive integer for each of x, y and the channels (see
+        resample_blocks).
+        """
+        _resampling.block_size(size, _BLOCK_AXES)
+
     def resample_blocks(
             self,
             residuals: Mapping[str, np.ndarray],
-            size: Sequence[int],
+            size: Sequence[float],
             rng: np.random.Generator
     ) -> dict[str, np.ndarray]:
         """
-        Return residuals of its cube redrawn in blocks of pixels and
-        channels (see Dataset.resample_blocks), of the size (x, y,
-        channels).
+        Return residuals of its cube redrawn in blocks of pixels and channels
+        (see Dataset.resample_blocks), of the size (x, y, channels).
         """
-        return _resampling.resample_blocks(residuals, size, rng)
+        return _resampling.resample_blocks(
+            residuals, size, _BLOCK_AXES, rng)

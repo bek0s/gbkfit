@@ -7,7 +7,8 @@ import numpy as np
 import pytest
 
 from gbkfit.dataset import (
-    Data, DatasetPixelBrightness, DatasetPixelMoments, DatasetPixelSpectra)
+    Data, DatasetPixelBrightness, DatasetPixelMoments, DatasetPixelSpectra,
+    DatasetSlitlessSpectra, DatasetSlitSpectra)
 from gbkfit.utils.parseutils import ConfigError
 
 
@@ -54,13 +55,18 @@ def test_blocks_refused_without_room():
         moments().resample_blocks(r, [2, 2, 2], np.random.default_rng())
 
 
-def test_images_and_cubes_redraw_in_blocks():
-    image = DatasetPixelBrightness(Data(np.ones(SHAPE)), **GRID)
-    cube = DatasetPixelSpectra(Data(np.ones((6, *SHAPE))))
-    for dataset, key, size in (
-            (image, 'brightness', [2, 2]), (cube, 'spectra', [2, 2, 3])):
-        r = residuals(dataset.shape())
-        drawn = dataset.resample_blocks(
-            {key: r}, size, np.random.default_rng(3))[key]
-        assert np.array_equal(np.isnan(drawn), np.isnan(r))
-        assert np.isin(drawn[np.isfinite(r)], r).all()
+@pytest.mark.parametrize('dataset, key, size', [
+    (DatasetPixelBrightness(Data(np.ones(SHAPE))), 'brightness', [2, 2]),
+    (DatasetPixelSpectra(Data(np.ones((6, *SHAPE)))), 'spectra', [2, 2, 3]),
+    (DatasetSlitSpectra(Data(np.ones((6, 7)))), 'spectra', [3, 2]),
+    (DatasetSlitlessSpectra(Data(np.ones(SHAPE))), 'spectra', [2, 2]),
+])
+def test_grids_of_every_kind_redraw_in_blocks(dataset, key, size):
+    dataset.check_blocks(size)
+    r = residuals(dataset.shape())
+    drawn = dataset.resample_blocks(
+        {key: r}, size, np.random.default_rng(3))[key]
+    assert np.array_equal(np.isnan(drawn), np.isnan(r))
+    assert np.isin(drawn[np.isfinite(r)], r).all()
+    with pytest.raises(ConfigError, match='positive integer for each of'):
+        dataset.check_blocks(size + [1])

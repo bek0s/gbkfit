@@ -14,6 +14,10 @@ __all__ = [
 ]
 
 
+# The axes of its blocks of residuals (see resample_blocks)
+_BLOCK_AXES = ('x', 'y')
+
+
 class DatasetPixelBrightness(Dataset):
     """
     Brightness on a grid of pixels: an image.
@@ -119,14 +123,22 @@ class DatasetPixelBrightness(Dataset):
         """Return the grid of the pixels."""
         return self._grid
 
+    def check_blocks(self, size: Sequence[float]) -> None:
+        """
+        Raise ConfigError unless the size is of blocks of pixels: a positive
+        integer for each of x and y (see resample_blocks).
+        """
+        _resampling.block_size(size, _BLOCK_AXES)
+
     def resample_blocks(
             self,
             residuals: Mapping[str, np.ndarray],
-            size: Sequence[int],
+            size: Sequence[float],
             rng: np.random.Generator
     ) -> dict[str, np.ndarray]:
         """
         Return residuals of its image redrawn in blocks of pixels (see
         Dataset.resample_blocks), of the size (x, y).
         """
-        return _resampling.resample_blocks(residuals, size, rng)
+        return _resampling.resample_blocks(
+            residuals, size, _BLOCK_AXES, rng)
