@@ -1,8 +1,10 @@
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+import numpy as np
+
 from gbkfit.utils import gridutils
-from . import _detail
+from . import _detail, _resampling
 from .base import Dataset
 from .data import Data, FitsFile
 
@@ -116,3 +118,33 @@ class DatasetPixelBrightness(Dataset):
     def grid(self) -> gridutils.Grid:
         """Return the grid of the pixels."""
         return self._grid
+
+
+    def resample_blocks(
+            self,
+            residuals: Mapping[str, np.ndarray],
+            size: Sequence[int],
+            rng: np.random.Generator
+    ) -> dict[str, np.ndarray]:
+        """
+        Return residuals of its image redrawn in blocks of pixels (see
+        Dataset.resample_blocks), of the size (x, y).
+        """
+        return _resampling.resample_blocks(residuals, size, rng)
+
+    def resample_flips(
+            self,
+            residuals: Mapping[str, np.ndarray],
+            model: Mapping[str, np.ndarray],
+            size: Sequence[int],
+            centre: Sequence[float],
+            posa: float,
+            rng: np.random.Generator
+    ) -> dict[str, np.ndarray]:
+        """
+        Return residuals of its image redrawn by the symmetries of a disk
+        (see Dataset.resample_flips), in blocks of pixels of the size (x,
+        y); brightness is the same on both sides.
+        """
+        return _resampling.resample_flips(
+            self._grid, residuals, size, centre, posa, rng)

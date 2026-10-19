@@ -115,6 +115,100 @@ class Dataset(parseutils.TypedSerializable, Mapping[str, Data], abc.ABC):
         """
         return self._first().dtype()
 
+    def resample_blocks(
+            self,
+            residuals: Mapping[str, np.ndarray],
+            size: Sequence[int],
+            rng: np.random.Generator
+    ) -> dict[str, np.ndarray]:
+        """
+        Return residuals of its data redrawn in blocks, for a bootstrap:
+        cut into blocks of a size, each of which takes the residuals of a
+        block drawn at random (with replacement) from the blocks with
+        residuals in all of their values, in every item. The items share
+        the draws, so that the correlations of their residuals remain.
+        The kinds of data that offer it say what their blocks are; the
+        others raise ConfigError.
+
+        Parameters
+        ----------
+        residuals : Mapping
+            The residuals of each data item, of its shape: NaN where there
+            are none (e.g. masked values, or values the model lacks).
+        size : Sequence of int
+            The size of the blocks along each axis of the data.
+        rng : np.random.Generator
+            The random numbers.
+
+        Returns
+        -------
+        dict
+            The redrawn residuals of each item, as new arrays: NaN where
+            it has none.
+
+        Raises
+        ------
+        ConfigError
+            If the kind of data does not offer it, the size is not one of
+            its blocks, or no block has residuals in all of its values.
+        """
+        raise ConfigError(
+            f"the residuals of {self.type()} data cannot be redrawn in blocks")
+
+    def resample_flips(
+            self,
+            residuals: Mapping[str, np.ndarray],
+            model: Mapping[str, np.ndarray],
+            size: Sequence[int],
+            centre: Sequence[float],
+            posa: float,
+            rng: np.random.Generator
+    ) -> dict[str, np.ndarray]:
+        """
+        Return residuals of its data redrawn by the symmetries of a disk,
+        for a bootstrap: cut into blocks of a size, each of which takes
+        the residuals of its image under a symmetry drawn at random for
+        it: unchanged, rotated by 180 degrees about the centre, or
+        mirrored about the major or the minor axis. Each value takes that
+        of the value nearest its image; those whose image is off the data
+        or has no residual keep their own. Exact for flat disks; for warps,
+        blocks suit (see resample_blocks). The kinds of data that offer it
+        say how their values change where the approaching and receding
+        sides swap (the rotation and the mirror about the minor axis); the
+        others raise ConfigError.
+
+        Parameters
+        ----------
+        residuals : Mapping
+            The residuals of each data item, of its shape: NaN where there
+            are none (e.g. masked values, or values the model lacks).
+        model : Mapping
+            The model of each data item, which the residuals are of.
+        size : Sequence of int
+            The size of the blocks along each axis of the data.
+        centre : Sequence of float
+            The centre of the disk on the sky, x and y (arcsec; as xpos
+            and ypos).
+        posa : float
+            The position angle of its major axis (degrees; as posa).
+        rng : np.random.Generator
+            The random numbers.
+
+        Returns
+        -------
+        dict
+            The redrawn residuals of each item, as new arrays: NaN where
+            it has none.
+
+        Raises
+        ------
+        ConfigError
+            If the kind of data does not offer it, or the size is not one
+            of its blocks.
+        """
+        raise ConfigError(
+            f"the residuals of {self.type()} data cannot be flipped")
+
 
 class DatasetTypedParser(parseutils.TypedParser):
     """
