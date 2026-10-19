@@ -113,3 +113,42 @@ def test_a_fit_resumes_from_its_output_directory(tmp_path):
     run_cli(tmp_path, 'fit', '--resume', 'fit')
     resumed = json.loads((tmp_path / 'fit' / 'result.json').read_text())
     assert resumed['solutions'][0]['free'] == first['solutions'][0]['free']
+
+
+@pytest.mark.slow
+def test_a_fit_is_bootstrapped_as_it_ends_or_later(tmp_path):
+    # With a section 'bootstrap', the fit refits its residuals redrawn as
+    # it ends; later, the fit is bootstrapped again from its output
+    # directory, by another configuration, with another fitter
+    config = yaml.load(REFERENCE_DIR / 'thin_disk_pixel_spectra.yaml')
+    yaml.dump(config, tmp_path / 'model.yaml')
+    run_cli(tmp_path, 'eval', 'model', 'model.yaml', '--output-dir', 'model')
+    model = fits.getdata(tmp_path / 'model' / 'model_0_spectra_d.fits')
+    fits.writeto(tmp_path / 'data.fits', model)
+    observation = config['observations'][0]
+    observation['data'] = dict(
+        data='data.fits', error=0.01 * float(model.max()),
+        step=observation['observable'].pop('step'))
+    observation['observable'].pop('size')
+    config['params']['properties'] |= dict(
+        xpos=dict(value=0, min=-3, max=3),
+        posa=dict(value=40, min=0, max=90))
+    config['fitter'] = dict(type='scipy.least_squares')
+    scheme = dict(type='blocks', size=[3, 3, 2])
+    config['bootstrap'] = dict(nsamples=3, scheme=scheme)
+    yaml.dump(config, tmp_path / 'fit.yaml')
+    run_cli(tmp_path, 'fit', 'fit.yaml', '--output-dir', 'fit')
+    result = json.loads((tmp_path / 'fit' / 'result.json').read_text())
+    assert (result['bootstrap']['nsamples'],
+            result['bootstrap']['nfailed']) == (3, 0)
+    rows = (tmp_path / 'fit' / 'bootstrap.csv').read_text().splitlines()
+    assert len(rows) == 1 + 3
+    later = dict(bootstrap=dict(
+        nsamples=4, scheme=scheme,
+        fitter=dict(type='scipy.least_squares', method='lm')))
+    yaml.dump(later, tmp_path / 'later.yaml')
+    run_cli(tmp_path, 'fit', '--bootstrap', 'fit', 'later.yaml')
+    result = json.loads((tmp_path / 'fit' / 'result.json').read_text())
+    assert result['bootstrap']['nsamples'] == 4
+    assert result['bootstrap']['options']['fitter']['method'] == 'lm'
+    assert yaml.load(tmp_path / 'fit' / 'bootstrap.yaml') == later

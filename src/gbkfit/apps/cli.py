@@ -505,6 +505,11 @@ def _make_parser() -> argparse.ArgumentParser:
              "from the configuration and the log of evaluations it has; "
              "instead of a configuration")
     parser_fit.add_argument(
+        '--bootstrap', type=str, metavar='OUTPUT',
+        help="bootstrap the errors of the fit in this output directory, by "
+             "the section 'bootstrap' of the configuration given, and add "
+             "them to its result; instead of fitting")
+    parser_fit.add_argument(
         '--no-evaluation-log', action='store_true',
         help="do not log the evaluations of the fit (evaluations.bin), "
              "which it resumes from")
@@ -622,15 +627,26 @@ def _run_prep(args: argparse.Namespace) -> None:
 
 
 def _run_fit(args: argparse.Namespace) -> None:
-    """Run the fit task (or resume a fit)."""
+    """Run the fit task (or resume a fit, or bootstrap one)."""
     import gbkfit.tasks.fit
-    if (args.config is None) == (args.resume is None):
+    if args.resume is not None and args.bootstrap is not None:
+        raise ConfigError(
+            "give the output directory of a fit to resume (--resume) or to "
+            "bootstrap (--bootstrap), not both")
+    if args.bootstrap is not None and args.config is None:
+        raise ConfigError(
+            "a bootstrap (--bootstrap) needs the configuration of its "
+            "section 'bootstrap'")
+    if args.bootstrap is None and (args.config is None) == (
+            args.resume is None):
         raise ConfigError(
             "give a configuration, or the output directory of a fit to "
             "resume (--resume), not both")
     with parseutils.strict_mode(args.strict):
         if args.resume is not None:
             gbkfit.tasks.fit.resume(args.resume)
+        elif args.bootstrap is not None:
+            gbkfit.tasks.fit.bootstrap(args.bootstrap, args.config)
         else:
             gbkfit.tasks.fit.fit(
                 args.config, args.output_dir, args.output_dir_mode,
