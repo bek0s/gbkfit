@@ -20,6 +20,7 @@ from gbkfit.utils import numutils
 
 
 __all__ = [
+    'Bootstrap',
     'Covariance',
     'Evidence',
     'FitResult',
@@ -169,6 +170,71 @@ class Posterior:
 
 
 @dataclasses.dataclass(frozen=True)
+class Bootstrap:
+    """
+    The bootstrap of a solution (see bootstrap): the best fits of refits
+    of data made of its model plus its residuals redrawn, which scatter
+    as the best fit does over data with other noise of the same kind.
+
+    Attributes
+    ----------
+    names : tuple of str
+        The elements (all of them: free, tied and fixed), in order, then
+        those of the derived values (see FitSolution.derived), which are
+        NaN in the samples where they cannot be evaluated.
+    samples : np.ndarray
+        The best fit of each refit that succeeded, one per row.
+    failures : tuple of str
+        Why each of the other refits failed.
+    options : dict
+        The configuration of the bootstrap (see BootstrapOptions).
+    """
+    names: tuple[str, ...]
+    samples: np.ndarray
+    failures: tuple[str, ...]
+    options: dict[str, Any]
+
+    def std(self) -> dict[str, float]:
+        """
+        Return the standard deviation of each element over the refits
+        (NaN with fewer than two).
+        """
+        std = np.std(self.samples, axis=0, ddof=1) \
+            if len(self.samples) >= 2 else np.full(len(self.names), np.nan)
+        return dict(zip(self.names, std.tolist()))
+
+    def summary(self) -> dict[str, tuple[float, float, float]]:
+        """
+        Return the 16th, 50th and 84th percentiles of each element over the
+        refits (the median and a 68% interval).
+        """
+        values = weighted_quantiles(self.samples, [0.16, 0.5, 0.84])
+        return {
+            name: (float(v[0]), float(v[1]), float(v[2]))
+            for name, v in zip(self.names, values.T)}
+
+    def info(self) -> dict[str, Any]:
+        """
+        Return its summary, for result.json: the number of refits that
+        succeeded and failed, why those failed, and the standard deviation
+        and the percentiles of each element (see std and summary).
+        """
+        return dict(
+            nsamples=len(self.samples), nfailed=len(self.failures),
+            failures=list(self.failures), std=self.std(),
+            quantiles=self.summary(), options=self.options)
+
+    def dump(self, output_dir: str) -> None:
+        """
+        Write its samples to bootstrap.csv in a directory, with the names
+        of the elements as the header.
+        """
+        _write_csv(
+            os.path.join(output_dir, 'bootstrap.csv'), list(self.names),
+            self.samples)
+
+
+@dataclasses.dataclass(frozen=True)
 class Evidence:
     """
     The Bayesian evidence (marginal likelihood) of nested samplers.
@@ -301,6 +367,8 @@ class FitResult:
     diagnostics : dict
         Numbers that tell how well the fitter worked (e.g. the acceptance
         fraction of an MCMC sampler).
+    bootstrap : Bootstrap or None
+        The bootstrap of the best solution, if run (see bootstrap).
     raw : object
         The result object of the fitter's library, for experts (not
         dumped).
@@ -316,6 +384,7 @@ class FitResult:
     success: bool
     message: str
     diagnostics: dict[str, Any]
+    bootstrap: Bootstrap | None = None
     raw: object = dataclasses.field(default=None, repr=False)
 
     def best(self) -> FitSolution:
@@ -325,7 +394,8 @@ class FitResult:
     def summary(self) -> str:
         """
         Return a summary for humans: the best fit and its errors, of the
-        free elements and the derived values.
+        free elements and the derived values (with those of the bootstrap,
+        if run).
         """
         best = self.best()
         lines = [
@@ -337,20 +407,24 @@ class FitResult:
         if self.evidence is not None:
             lines.append(f"log Z: {self.evidence.log_z:.6g}")
         posterior = self.posterior or best.laplace
-        quantiles = posterior.summary() if posterior else {}
+        columns = [posterior.summary() if posterior else {}]
+        labels = ['posterior' if self.posterior else 'laplace']
+        if self.bootstrap is not None:
+            columns.append(self.bootstrap.summary())
+            labels.append('bootstrap')
         std = best.covariance.std | best.covariance.derived_std \
             if best.covariance else {}
-        label = 'posterior' if self.posterior else 'laplace'
         lines.append(
             f"{'name':<16} {'best':>12} {'std':>12} "
-            f"{label + ' 16/50/84':>38}")
+            + ' '.join(f"{label + ' 16/50/84':>38}" for label in labels))
         for name, value in (best.free | best.derived).items():
-            q = quantiles.get(name)
-            q_text = '' if q is None else (
-                f"{q[0]:>12.6g} {q[1]:>12.6g} {q[2]:>12.6g}")
-            lines.append(
+            q_texts = [
+                f"{q[0]:>12.6g} {q[1]:>12.6g} {q[2]:>12.6g}"
+                if (q := column.get(name)) is not None else ' ' * 38
+                for column in columns]
+            lines.append((
                 f"{name:<16} {value:>12.6g} {std.get(name, math.nan):>12.6g} "
-                f"{q_text}")
+                + ' '.join(q_texts)).rstrip())
         if best.covariance and best.covariance.unconstrained:
             lines.append(
                 f"unconstrained directions involve: "
@@ -365,8 +439,9 @@ class FitResult:
         Write the result to a directory: a summary (result.json), and the
         arrays as CSV files with the names of the elements as headers:
         the covariance matrix and the Laplace samples of each solution
-        (solution_<i>_covariance.csv, solution_<i>_laplace.csv) and the
-        posterior samples, with their weights if any (posterior.csv).
+        (solution_<i>_covariance.csv, solution_<i>_laplace.csv), the
+        posterior samples, with their weights if any (posterior.csv), and
+        the samples of the bootstrap, if run (bootstrap.csv).
 
         Parameters
         ----------
@@ -382,7 +457,9 @@ class FitResult:
             else dataclasses.asdict(self.evidence),
             posterior=None if self.posterior is None
             else self.posterior.summary(),
-            solutions=[_solution_summary(s) for s in self.solutions])
+            solutions=[_solution_summary(s) for s in self.solutions],
+            bootstrap=None if self.bootstrap is None
+            else self.bootstrap.info())
         with open(os.path.join(output_dir, 'result.json'), 'w') as f:
             json.dump(numutils.nativify(summary), f, indent=2)
 
@@ -407,6 +484,8 @@ class FitResult:
                 header.append('weight')
                 rows = np.column_stack((rows, posterior.weights))
             _write_csv(path('posterior.csv'), header, rows)
+        if self.bootstrap is not None:
+            self.bootstrap.dump(output_dir)
 
 
 def _write_csv(

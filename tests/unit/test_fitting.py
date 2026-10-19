@@ -494,6 +494,55 @@ def test_derived_values_that_fail_are_reported():
     assert result.best().covariance.derived_std == {}
     assert "derived value 'bad'" in result.diagnostics['derived_errors'][0]
 
+def test_a_bootstrap_refits_the_model_plus_its_residuals_redrawn(tmp_path):
+    # Refits of the residuals redrawn in blocks: of white noise, they
+    # scatter about as the covariance says; the derived values are those
+    # of each refit
+    import dataclasses
+    import json
+    from gbkfit.fitting import (
+        BootstrapBlocks, BootstrapOptions, bootstrap, fitter_parser)
+    objective = mock_objective(DriverHost())
+    params = ParamSpace(
+        objective.pdescs(), bounded_properties(),
+        derived=dict(d='xpos + 2 * ypos'))
+    fitter = fitter_parser.load(dict(type='scipy.least_squares'))
+    result = fitter.fit(objective, params)
+    boot = bootstrap(
+        objective, params, result.best().elements, fitter,
+        BootstrapOptions(10, BootstrapBlocks([4, 4])))
+    assert boot.samples.shape == (10, 7) and not boot.failures
+    x, y, d = (boot.samples[:, boot.names.index(name)]
+               for name in ('xpos', 'ypos', 'd'))
+    np.testing.assert_allclose(d, x + 2 * y, rtol=1e-12)
+    std = result.best().covariance.std
+    for name in TRUE:
+        assert 0.5 < boot.std()[name] / std[name] < 2
+    result = dataclasses.replace(result, bootstrap=boot)
+    assert 'bootstrap 16/50/84' in result.summary()
+    result.dump(str(tmp_path))
+    dumped = json.loads((tmp_path / 'result.json').read_text())['bootstrap']
+    assert (dumped['nsamples'], dumped['nfailed']) == (10, 0)
+    assert dumped['options']['scheme'] == dict(type='blocks', size=[4, 4])
+    header = (tmp_path / 'bootstrap.csv').read_text().split('\n')[0]
+    assert header == ','.join(boot.names)
+
+
+@pytest.mark.parametrize('scheme, message', [
+    ([dict(type='blocks', size=[4, 4])] * 2, 'one for each of the 1 obs'),
+    (dict(type='blocks', size=[4, 4, 2]), 'the data have 2 axes'),
+    (dict(type='blocks', size=[4, 0]), 'a positive integer'),
+])
+def test_bootstrap_options_that_do_not_suit_the_fit_refused(scheme, message):
+    from gbkfit.fitting import BootstrapOptions, bootstrap, fitter_parser
+    objective = mock_objective(DriverHost())
+    params = ParamSpace(objective.pdescs(), bounded_properties())
+    fitter = fitter_parser.load(dict(type='scipy.least_squares'))
+    with pytest.raises(ConfigError, match=message):
+        bootstrap(objective, params, TRUE, fitter, BootstrapOptions.load(
+            dict(nsamples=5, scheme=scheme)))
+
+
 @pytest.mark.parametrize('fitter', [
     dict(type='scipy.least_squares', method='trf'),
     dict(type='scipy.least_squares', method='lm'),

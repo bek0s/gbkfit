@@ -219,6 +219,29 @@ class ObservationGroup:
             [obs.with_driver(driver) for obs in self._observations],
             self._given_depth_order)
 
+    def with_data(self, datasets: Sequence[Dataset]) -> Self:
+        """
+        Return a group of the same galaxies and observations, with other
+        data: one dataset for each observation (e.g. those of a bootstrap;
+        see Observation.with_data), under its likelihood; with its own
+        plans.
+
+        Raises
+        ------
+        ConfigError
+            If there is not one dataset per observation, or a dataset does
+            not suit its observation.
+        """
+        if len(datasets) != len(self._observations):
+            raise ConfigError(
+                f"there are {len(self._observations)} observations, but "
+                f"{len(datasets)} datasets")
+        return type(self)(
+            self._galaxies,
+            [obs.with_data(data)
+             for obs, data in zip(self._observations, datasets)],
+            self._given_depth_order)
+
     def galaxies(self) -> tuple[Galaxy, ...]:
         """Return the galaxies."""
         return self._galaxies

@@ -1,6 +1,7 @@
 import abc
+import copy
 from collections.abc import Iterator, Mapping, Sequence
-from typing import Any
+from typing import Any, Self
 
 import numpy as np
 
@@ -114,6 +115,36 @@ class Dataset(parseutils.TypedSerializable, Mapping[str, Data], abc.ABC):
             The dtype.
         """
         return self._first().dtype()
+
+    def with_data(self, data: Mapping[str, np.ndarray]) -> Self:
+        """
+        Return a copy with other values of its data items (e.g. those of a
+        bootstrap; see Data.with_data), where they were measured.
+
+        Parameters
+        ----------
+        data : Mapping
+            The values of each of its items, of its shape.
+
+        Returns
+        -------
+        Dataset
+            The copy.
+
+        Raises
+        ------
+        ConfigError
+            If they are not the values of its items.
+        """
+        if set(data) != set(self._items):
+            raise ConfigError(
+                f"the values must be those of the data items "
+                f"{list(self._items)}; they are of {list(data)}")
+        dataset = copy.copy(self)
+        dataset._items = {
+            key: item.with_data(data[key])
+            for key, item in self._items.items()}
+        return dataset
 
     def resample_blocks(
             self,

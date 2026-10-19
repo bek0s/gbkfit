@@ -6,7 +6,9 @@ from collections.abc import Mapping
 from numbers import Real
 from typing import Any, Self
 
-from gbkfit.params import ParamDesc, ParamScalarDesc
+import numpy as np
+
+from gbkfit.params import ParamDesc, ParamScalarDesc, ParamValues
 from gbkfit.utils import parseutils
 from gbkfit.utils.parseutils import ConfigError
 
@@ -74,6 +76,24 @@ class Likelihood(parseutils.TypedSerializable, abc.ABC):
         return (
             f'{self._prefix}noise_scale_{key}' if noise.scale else None,
             f'{self._prefix}noise_jitter_{key}' if noise.jitter else None)
+
+    def noise(
+            self,
+            key: str,
+            error: np.ndarray | None,
+            params: ParamValues
+    ) -> np.ndarray:
+        """
+        Return the noise of the values of the data item of the given name,
+        of its errors (1 where it has none), at the values of the
+        parameters: the errors, or with a fitted noise (see
+        LikelihoodGaussian), sqrt((f e)^2 + j^2).
+        """
+        error = np.ones(()) if error is None else error
+        scale, jitter = self.noise_params(key)
+        return np.hypot(
+            (1.0 if scale is None else float(params[scale])) * error,
+            0.0 if jitter is None else float(params[jitter]))
 
     @abc.abstractmethod
     def missing_residual(self) -> float | None:

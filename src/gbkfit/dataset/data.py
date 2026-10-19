@@ -280,6 +280,21 @@ class Data:
         """Return the beam of the values, if known."""
         return self._beam
 
+    def with_data(self, data: np.ndarray) -> 'Data':
+        """
+        Return a copy with other values (e.g. those of a bootstrap), of its
+        dtype, and its mask, error, unit and beam: the values it masks
+        stay masked.
+
+        Raises
+        ------
+        ConfigError
+            If the values are not of its shape.
+        """
+        return Data(
+            np.asarray(data, self.dtype()), self._mask, self._error,
+            self._unit, self._beam)
+
 
 def _header_unit(
         filename: str, hdu: int | str

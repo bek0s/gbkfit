@@ -3,11 +3,12 @@ The base class of the fitters, and what their runs give.
 """
 
 import abc
+import copy
 import dataclasses
 import importlib.metadata
 import time
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, Self
 
 import numpy as np
 
@@ -112,6 +113,17 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
     def uncertainty(self) -> UncertaintyOptions:
         """Return the options of the uncertainty."""
         return self._uncertainty
+
+    def without_uncertainty(self) -> Self:
+        """
+        Return a copy of it that works out no uncertainty of its solutions
+        (e.g. the refits of a bootstrap, whose spread is their
+        uncertainty; see bootstrap).
+        """
+        fitter = copy.copy(self)
+        fitter._uncertainty = UncertaintyOptions(
+            covariance=False, laplace_samples=0)
+        return fitter
 
     def dump_common(self) -> dict[str, Any]:
         """Return the options of all fitters, for dump."""
