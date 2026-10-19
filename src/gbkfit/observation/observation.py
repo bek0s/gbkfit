@@ -1,4 +1,5 @@
 import copy
+import logging
 from collections.abc import Mapping, Sequence
 from typing import Any, Self
 
@@ -26,6 +27,9 @@ __all__ = [
     'Observation',
     'observation_parser'
 ]
+
+
+_log = logging.getLogger(__name__)
 
 
 def _check_dtype(dtype: npt.DTypeLike, name: str = 'dtype') -> np.dtype:
@@ -156,6 +160,9 @@ class Observation(parseutils.Serializable):
         level. It can be left out when there is one driver, and the
         observation has the host when there are none. Its band is the name
         of a band of the catalogue, or a band (its name and wavelength).
+        Its data can have the option outliers, {size, nsigma}: the data
+        are screened for outliers as they are read, which are masked (see
+        Dataset.screen_outliers), and their number logged.
 
         Parameters
         ----------
@@ -195,8 +202,12 @@ class Observation(parseutils.Serializable):
             observable_cls = observable_parser.registered_class(
                 observable_type)
             with parseutils.config_path('data'):
-                dataset = observable_cls.dataset_class.load(
-                    dict(info['data']))
+                data_info = dict(info['data'])
+                outliers = data_info.pop('outliers', None)
+                dataset = observable_cls.dataset_class.load(data_info)
+                if outliers is not None:
+                    with parseutils.config_path('outliers'):
+                        dataset = _screened(dataset, outliers)
             info['data'] = dataset
         parseutils.load_option_and_update_info(
             likelihood_parser, info, 'likelihood')
@@ -611,3 +622,23 @@ def _check_beams(data: Dataset, instrument: Instrument) -> None:
 
 
 observation_parser = parseutils.BasicParser(Observation)
+
+
+def _screened(dataset: Dataset, info: Any) -> Dataset:
+    """
+    Return a dataset with its outliers masked by the options of its
+    configuration (size and nsigma; see Dataset.screen_outliers), and log
+    how many each item has.
+    """
+    if not isinstance(info, Mapping):
+        raise ConfigError(
+            f"outliers are screened by the options size and nsigma; they "
+            f"are {info!r}")
+    options = parseutils.parse_options(info, required={'size', 'nsigma'})
+    screened = dataset.screen_outliers(options['size'], options['nsigma'])
+    counts = {
+        key: int(np.count_nonzero(dataset[key].mask())
+                 - np.count_nonzero(screened[key].mask()))
+        for key in dataset}
+    _log.info(f"outliers masked in the data: {counts}")
+    return screened

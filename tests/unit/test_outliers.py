@@ -2,8 +2,11 @@
 Tests of the screening of data for outliers (see Dataset.screen_outliers).
 """
 
+import logging
+
 import numpy as np
 import pytest
+from astropy.io import fits
 
 from gbkfit.dataset import (
     Data, DatasetPixelBrightness, DatasetPixelMoments, DatasetPixelSpectra,
@@ -79,3 +82,21 @@ def test_apertures_have_centres():
         ApertureCircle(1, 2, 1), ApertureRectangle(-3, 4, 2, 1, 30),
         AperturePolygon([[0, 0], [4, 0], [4, 2], [0, 2]])])
     np.testing.assert_allclose(regions.centres(), [[1, 2], [-3, 4], [2, 1]])
+
+
+def test_the_data_of_an_observation_are_screened_as_they_are_read(
+        tmp_path, caplog):
+    from gbkfit.observation import observation_parser
+    image = np.random.default_rng(6).normal(0, 1, (12, 16))
+    image[5, 7] = 30
+    fits.writeto(tmp_path / 'image.fits', image)
+    data = dict(
+        data=str(tmp_path / 'image.fits'),
+        outliers=dict(size=[3, 3], nsigma=6))
+    with caplog.at_level(logging.INFO):
+        observation = observation_parser.load(dict(
+            line_of_sight=dict(type='flat'), data=data,
+            observable=dict(type='pixel_brightness')))
+    screened = observation.data()['brightness'].data()
+    assert np.argwhere(np.isnan(screened)).tolist() == [[5, 7]]
+    assert "outliers masked in the data: {'brightness': 1}" in caplog.text
