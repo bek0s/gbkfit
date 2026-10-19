@@ -90,7 +90,8 @@ class Gravity(parseutils.TypedSerializable, abc.ABC):
     when the galaxy is made that its gravity gives it:
 
     - the forces anywhere (off the plane too), which the jeans
-      equilibrium takes (see check_forces and parts.Kinematics)
+      equilibrium and the rotation at each height take (see check_forces,
+      parts.Kinematics and traits.VHTraitMass)
     - the vertical structure of self-gravitating isothermal sheets,
       which the self_gravitating equilibrium and pressure support take
       (see check_self_gravitating_sheets, parts.Kinematics and

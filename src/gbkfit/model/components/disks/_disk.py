@@ -185,6 +185,15 @@ class Disk(abc.ABC):
         """
         return self._traits.pressure_supported_params()
 
+    def rotation_factor_params(self) -> dict[str, float]:
+        """
+        Return the parameters that are not in pdescs, but whose values are
+        the factors of the rotation in the gravity of their galaxy at a
+        height, at the subnodes: their heights (arcsec), by name (see
+        traits.VHTraitMass). The disk plans need them with the others.
+        """
+        return self._traits.rotation_factor_params()
+
     @abc.abstractmethod
     def plan(
             self,

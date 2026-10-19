@@ -61,10 +61,10 @@ def _with_mass_params(
     Component.density_disk), if the pressure support or the equilibrium
     of a disk takes the density of a mass component that the galaxy does
     not have, if the gravity is given without mass, if it does not give
-    what a feature takes (see Gravity: the vertical force of a jeans
-    equilibrium, the self-gravitating sheets of a self_gravitating
-    equilibrium or pressure support, the shares of a dark fraction), or
-    if the names of the parameters repeat.
+    what a feature takes (see Gravity: the forces of a jeans equilibrium
+    or of the rotation at each height, the self-gravitating sheets of a
+    self_gravitating equilibrium or pressure support, the shares of a
+    dark fraction), or if the names of the parameters repeat.
     """
     moved = any(cmp.circular_velocity_params() for cmp in components)
     balanced = [
@@ -158,6 +158,12 @@ def _with_mass_params(
                 what=f"the self_gravitating pressure support of the "
                      f"component {cmp.name()!r} takes the vertical structure "
                      f"of self-gravitating sheets in Newtonian gravity")
+        if disk is not None and disk.rotation_factor_params():
+            _check_gravity(
+                gravity.check_forces, mass_model,
+                what=f"the rotation at each height of the component "
+                     f"{cmp.name()!r} takes the radial force of the gravity "
+                     f"of its galaxy off its plane")
     for mass_component in mass_model.components():
         if mass_component.takes_shares():
             _check_gravity(

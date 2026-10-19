@@ -42,9 +42,9 @@ TRAIT_PREFIXES = dict(
 
 # The traits that the cones take: the polar traits of the radius and the
 # azimuth alone (not the mixtures, maps and distortions of the plane of a
-# disk), every height trait, and every velocity trait but the rotation in
-# the gravity of the galaxy (mass, of a disk), around the axis ('tan') or
-# out of the apex ('out')
+# disk), and every height trait and velocity trait but the rotation in the
+# gravity of the galaxy (mass, of a disk), around the axis ('tan') or out
+# of the apex ('out')
 CONE_TRAITS = TraitTable('cone', dict(
     rpt=(
         traits.RPTraitUniform, traits.RPTraitExponential,
@@ -55,7 +55,9 @@ CONE_TRAITS = TraitTable('cone', dict(
     vpt=tuple(
         cls for cls in traits.vpt_parser.registered_classes().values()
         if cls is not traits.VPTraitMass),
-    vht=tuple(traits.vht_parser.registered_classes().values()),
+    vht=tuple(
+        cls for cls in traits.vht_parser.registered_classes().values()
+        if cls is not traits.VHTraitMass),
     dpt=(
         traits.DPTraitUniform, traits.DPTraitExponential,
         traits.DPTraitGauss, traits.DPTraitGGauss, traits.DPTraitLorentz,

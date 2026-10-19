@@ -61,9 +61,9 @@ def trait_configs(parser):
     """
     configs = []
     for type_, cls in parser.registered_classes().items():
-        # (the trait mass has no parameters: its values come from the
-        # mass of its galaxy; see test_mass)
-        if cls is traits.VPTraitMass:
+        # (the traits mass have no parameters: their values come from the
+        # mass of their galaxy; see test_mass)
+        if cls in (traits.VPTraitMass, traits.VHTraitMass):
             continue
         options = inspect.signature(cls.__init__).parameters
         config = dict(type=type_)

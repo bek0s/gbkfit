@@ -61,6 +61,27 @@ def _height_traits(
     return value
 
 
+def _check_rotation_at_heights(vptrait: traits.VPTrait) -> None:
+    """
+    Raise ConfigError unless the velocity polar trait can pair with the
+    velocity height trait 'mass': the trait 'mass', whose pressure support
+    at the heights has the density it takes (see traits.VHTraitMass).
+    """
+    if not isinstance(vptrait, traits.VPTraitMass):
+        raise ConfigError(
+            f"the velocity height trait 'mass' is the rotation in the "
+            f"gravity at each height: it pairs with the velocity trait "
+            f"'mass' only, not {vptrait.type()!r}")
+    support = vptrait.pressure_support()
+    if support is not None and support.mode == 'self_gravitating' \
+            and support.density is None:
+        raise ConfigError(
+            "the velocity height trait 'mass' takes the self_gravitating "
+            "pressure support at each height in the sheet of the surface "
+            "density of a mass component, of the scale height sigma^2 / "
+            "(pi G Sigma): give pressure_density")
+
+
 def _dump_traits(
         parser: parseutils.TypedParser,
         value: tuple[traits.Trait | None, ...] | None
@@ -217,8 +238,11 @@ class Kinematics(parseutils.Serializable):
     ConfigError
         If there are no polar traits or too many, not one height trait
         for each polar trait, several velocity traits 'mass' (the
-        rotation in the gravity would count more than once), or the
-        equilibrium is not valid.
+        rotation in the gravity would count more than once), a velocity
+        height trait 'mass' that does not pair with the velocity trait
+        'mass' or takes its self_gravitating pressure support without
+        pressure_density (see traits.VHTraitMass), or the equilibrium is
+        not valid.
     """
 
     @classmethod
@@ -267,6 +291,9 @@ class Kinematics(parseutils.Serializable):
         self._dptraits = _polar_traits('dptraits', dptraits)
         self._vhtraits = _height_traits(
             'vhtraits', vhtraits, len(self._vptraits), 'vptraits')
+        for vptrait, vhtrait in zip(self._vptraits, self._vhtraits or ()):
+            if isinstance(vhtrait, traits.VHTraitMass):
+                _check_rotation_at_heights(vptrait)
         self._dhtraits = _height_traits(
             'dhtraits', dhtraits, len(self._dptraits), 'dptraits')
         if equilibrium not in (None,) + EQUILIBRIUM_MODES:

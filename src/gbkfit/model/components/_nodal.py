@@ -97,15 +97,18 @@ class TraitParams:
     and for each trait, the smooth parameters before the node-wise ones.
     circular_velocity has the names of those whose values are the
     circular velocity of the mass of the galaxy (see
-    traits.Trait.circular_velocity_params), and pressure_support those of
+    traits.Trait.circular_velocity_params), pressure_support those of
     them corrected for the pressure of the disk, with how (see
-    traits.Trait.pressure_support).
+    traits.Trait.pressure_support), and rotation_factor those whose
+    values are the factors of the rotation in the gravity at a height,
+    with their heights (see traits.Trait.rotation_factor_params).
     """
     pdescs: dict[str, ParamDesc]
     sampling: dict[str, str | None]
     pnames: tuple[dict[str, str], ...]
     circular_velocity: tuple[str, ...]
     pressure_support: dict[str, PressureSupport]
+    rotation_factor: dict[str, float]
 
 
 def _trait_params(
@@ -145,7 +148,11 @@ def _trait_params(
             mapping[name]: trait.pressure_support()
             for trait, mapping in zip(traits_, mappings)
             if trait.pressure_support() is not None
-            for name in trait.circular_velocity_params()})
+            for name in trait.circular_velocity_params()},
+        rotation_factor={
+            mapping[name]: height
+            for trait, mapping in zip(traits_, mappings)
+            for name, height in trait.rotation_factor_params().items()})
 
 
 def _trait_constants(
@@ -255,6 +262,9 @@ class NodalTraits:
         self._pressure_supported_params = {
             name: mode for params in self._params.values()
             for name, mode in params.pressure_support.items()}
+        self._rotation_factor_params = {
+            name: height for params in self._params.values()
+            for name, height in params.rotation_factor.items()}
 
     def kinds(self) -> tuple[str, ...]:
         """Return the kinds of its traits."""
@@ -271,12 +281,13 @@ class NodalTraits:
     def pdescs(self) -> dict[str, ParamDesc]:
         """
         Return the parameters of its traits, but those that its galaxy
-        gives (see circular_velocity_params).
+        gives (see circular_velocity_params and rotation_factor_params).
         """
         pdescs = {}
         for params in self._params.values():
             pdescs.update(params.pdescs)
-        for name in self._circular_velocity_params:
+        for name in [*self._circular_velocity_params,
+                     *self._rotation_factor_params]:
             del pdescs[name]
         return pdescs
 
@@ -295,6 +306,15 @@ class NodalTraits:
         by their names (see traits.VPTraitMass).
         """
         return self._pressure_supported_params
+
+    def rotation_factor_params(self) -> dict[str, float]:
+        """
+        Return the parameters whose values are not given, but are the
+        factors of the rotation in the gravity of their galaxy at a
+        height, at the subnodes: their heights (arcsec), by name (see
+        traits.VHTraitMass).
+        """
+        return self._rotation_factor_params
 
     def values(
             self, kind: str, params: ParamValues

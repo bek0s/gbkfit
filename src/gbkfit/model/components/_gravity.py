@@ -69,13 +69,14 @@ class GravityPlan:
     gravity (see Gravity), at the radii of the components it moves (those
     with the velocity trait 'mass', see
     Component.circular_velocity_params), with the pressure support of
-    each where its traits ask for it (see Disk.pressure_supported_params);
-    and the dispersion of the vertical equilibrium of the disks it holds
-    up, at their subnodes (those with an equilibrium, see Kinematics): in
-    the circular velocity of the mass ('central'; without mass, that of
-    the rotation of each disk), in the vertical force of the mass
-    ('jeans'), or in the surface density of a mass component
-    ('self_gravitating').
+    each where its traits ask for it (see Disk.pressure_supported_params),
+    and at each height, where they ask for it (the velocity height trait
+    'mass', see Disk.rotation_factor_params); and the dispersion of the
+    vertical equilibrium of the disks it holds up, at their subnodes
+    (those with an equilibrium, see Kinematics): in the circular velocity
+    of the mass ('central'; without mass, that of the rotation of each
+    disk), in the vertical force of the mass ('jeans'), or in the surface
+    density of a mass component ('self_gravitating').
 
     It takes the disks it moves and follows as concentric and flat: their
     rings around one centre, in one plane, whatever their geometries (the
@@ -177,8 +178,10 @@ class GravityPlan:
             The values that the gravity gives each component it moves or
             holds up, by the index of the component: the circular
             velocity at the radii of its parameters (km/s, see
-            Component.circular_velocity_params), NaN where its square is
-            negative or infinite (there is no circular orbit); and the
+            Component.circular_velocity_params), 0 where its square is
+            negative and NaN where it is infinite (see _rotation); the
+            factors of its rotation at the heights of its velocity height
+            trait 'mass', at its subnodes (see _rotation_factors); and the
             dispersion of the equilibrium of its disk at its subnodes
             (km/s, as EQUILIBRIUM_DISPERSION, see Kinematics).
         """
@@ -243,8 +246,7 @@ class GravityPlan:
                         disk, self._disk_plans[i], own[i], r, support.mode,
                         density, values[i].get(EQUILIBRIUM_DISPERSION))
                     v2 = v2 + pressure
-                values[i][name] = np.sqrt(
-                    np.where(np.isfinite(v2) & (v2 >= 0), v2, np.nan))
+                values[i][name] = _rotation(v2)
                 cmp_parts = {
                     mass_name: next(pieces)
                     for mass_name, pieces in part_pieces.items()}
@@ -253,7 +255,50 @@ class GravityPlan:
                     out_extra[f'{label}_{name}_rotation'] = _rotation_table(
                         np.asarray(r, dtype=float), kpc_per_arcsec,
                         cmp_parts, vcirc2_r, pressure, values[i][name])
+            if heights := disk.rotation_factor_params():
+                values[i] |= self._rotation_factors(
+                    i, mass, heights, own.get(i),
+                    values[i].get(EQUILIBRIUM_DISPERSION))
         return values
+
+    def _rotation_factors(
+            self,
+            index: int,
+            mass: GalaxyMass,
+            heights: dict[str, float],
+            params: ParamValues | None,
+            equilibrium: np.ndarray | None
+    ) -> ParamValues:
+        """
+        Return the factors of the rotation of the disk of the component of
+        the given index at the heights of its velocity height trait 'mass'
+        (heights, arcsec, by the names of their parameters), at its
+        subnodes: v(R, z) / v(R, 0), v(R, z)^2 = -R F_R(R, z) in the
+        gravity of the mass, plus its pressure support at z, if any (see
+        traits.VHTraitMass), from the values of its parameters (by its own
+        names; given with pressure support) and the dispersion of its
+        vertical equilibrium (if any), v as _rotation takes it; 1 where
+        v(R, 0) is 0.
+        """
+        disk = self._component_set.components()[index].density_disk()
+        kpc_per_arcsec = mass.kpc_per_arcsec
+        r = np.asarray(disk.subrnodes(), dtype=float)
+        z = np.array(list(heights.values()))
+        R = r * kpc_per_arcsec
+        force_R, _ = mass.field.forces(R[:, None], z * kpc_per_arcsec)
+        v2 = -R[:, None] * force_R
+        support = next(iter(disk.pressure_supported_params().values()), None)
+        if support is not None:
+            density = None if support.density is None else _pressure_density(
+                mass.model, support, R, mass.params, mass.context,
+                z * kpc_per_arcsec)
+            v2 = v2 + pressure_support(
+                disk, self._disk_plans[index], params, r, support.mode,
+                density, equilibrium, z, kpc_per_arcsec)
+        v = _rotation(v2)
+        factors = np.divide(
+            v, v[:, :1], out=np.ones_like(v), where=v[:, :1] != 0)
+        return dict(zip(heights, factors.T))
 
     def mass(self, params: ParamValues) -> GalaxyMass | None:
         """
@@ -387,18 +432,22 @@ def _pressure_density(
         support: PressureSupport,
         R: np.ndarray,
         params: ParamValues,
-        context: MassContext
+        context: MassContext,
+        z: np.ndarray | None = None
 ) -> np.ndarray:
     """
     Return the density of the mass component of a pressure support (see
-    traits.VPTraitMass) at the radii R (kpc): at its midplane for
-    'jeans', its surface density for 'self_gravitating'.
+    traits.VPTraitMass) at the radii R (kpc): for 'jeans', at its
+    midplane, or at the heights z (kpc; an array of shape (len(R),
+    len(z))); for 'self_gravitating', its surface density.
     """
     component = mass_model.component(support.density)
     own = mass_model.component_params(support.density, params)
-    if support.mode == 'jeans':
+    if support.mode == 'self_gravitating':
+        return component.surface_density(R, own, context)
+    if z is None:
         return component.density(R, np.zeros_like(R), own, context)
-    return component.surface_density(R, own, context)
+    return component.density(R[:, None], z, own, context)
 
 
 def _central_dispersion(
@@ -455,6 +504,17 @@ def _self_gravitating_dispersion(
     """
     sigma2 = 2 * np.sqrt(3) * G * surface * heights
     return np.sqrt(np.where(sigma2 >= 0, sigma2, np.nan))
+
+
+def _rotation(v2: np.ndarray) -> np.ndarray:
+    """
+    Return the rotation (km/s) of the given squared rotation ((km/s)^2):
+    0 where it is negative (the mass pulls outwards, or the pressure
+    exceeds the gravity: no rotation, as DysmalPy takes it), NaN where it
+    is infinite (there is no circular orbit, e.g. at a jump of the surface
+    density of a thin disk).
+    """
+    return np.sqrt(np.where(np.isfinite(v2), np.maximum(v2, 0), np.nan))
 
 
 def _signed_sqrt(v2: np.ndarray) -> np.ndarray:

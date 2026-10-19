@@ -1518,6 +1518,133 @@ def test_pressure_density_is_a_mass_component_that_gives_it():
         galaxy.plan_gravity().evaluate(DISK_PROPERTIES | MASS_PROPERTIES)
 
 
+def rotation_at_heights(vptraits, mass, params):
+    """
+    The galaxy of a thick disk (DISK, of sech2 height traits to zmax 8)
+    of the velocity traits vptraits and 'mass' at each height, and of the
+    given mass, and the values that its gravity gives the disk at the
+    values params of its parameters.
+    """
+    disk = with_traits(
+        DISK, vptraits=vptraits, htraits=dict(type='sech2', zmax=8))
+    disk['kinematics'] |= dict(vhtraits=dict(type='mass', zmax=8))
+    galaxy = galaxy_parser.load(dict(
+        components=[disk | dict(type='smdisk')], mass=copy.deepcopy(mass),
+        distance=copy.deepcopy(DISTANCE)))
+    return galaxy, galaxy.plan_gravity().evaluate(params)[0]
+
+
+def test_rotation_at_each_height_of_a_point_mass(driver):
+    # v(R, z)^2 = G M R^2 / r^3, plus the jeans pressure support of the
+    # disk, of a constant height profile and a uniform dispersion: R
+    # d(rho sigma^2)/dR / rho at every height, of the exponential surface
+    # density (by the three-point derivative on the subnodes, as the disk
+    # takes it); v = 0 where v^2 < 0 (the pressure exceeds the gravity),
+    # at the midplane and at the heights; the factors v(R, z) / v(R, 0) at
+    # the subnodes and the 33 heights of the table (1 where v(R, 0) = 0),
+    # which the disk interpolates linearly
+    from gbkfit.model.components._component_set import IMAGE_SPECTRAL_AXIS
+    params = DISK_PROPERTIES | dict(
+        ht_s=1, dpt_a=100, distance=10, mass_bh_log_m=10)
+    galaxy, given = rotation_at_heights(
+        dict(type='mass', pressure_support='jeans'),
+        [dict(type='point', name='bh')], params)
+    component = galaxy.components()[0]
+    r = np.array(component.density_disk().subrnodes())[:, None]
+    z = np.linspace(0, 8, 33)
+    density = np.exp(-r / 4)
+    support = r * np.gradient(
+        density * 100 ** 2, r[:, 0], axis=0, edge_order=2) / density
+    R = r[1:] * KPC_PER_ARCSEC
+    v2 = G * 1e10 * R ** 2 / np.hypot(R, z * KPC_PER_ARCSEC) ** 3 \
+        + support[1:]
+    v = np.sqrt(np.maximum(v2, 0))
+    assert np.any(v2[:, 0] < 0) and np.any((v2[:, 0] > 0) & (v2[:, -1] < 0))
+    np.testing.assert_allclose(given['vpt_vt'][1:], v[:, 0], rtol=1e-8)
+    factors = np.array([given[f'vht_f{k}'] for k in range(33)]).T
+    np.testing.assert_allclose(
+        factors[1:], np.divide(
+            v, v[:, :1], out=np.ones_like(v), where=v[:, :1] > 0),
+        rtol=1e-8, atol=1e-7)
+    np.testing.assert_array_equal(factors[0], 1)
+    plan = component.plan(
+        driver, IMAGE_SPECTRAL_AXIS, np.dtype(np.float64), None, None, True,
+        None, None, 0.0).disk_plan()
+    values = {p: params[p] for p in component.pdescs()} | given
+    heights = [0.125, 4.125, 7.875, 9]
+    np.testing.assert_allclose(
+        plan.evaluate_height_traits(values, 'vht', r[10], heights)[0],
+        np.interp(heights, z, factors[10]), rtol=1e-12)
+    radius = (r[10] + r[11]) / 2
+    np.testing.assert_allclose(
+        plan.evaluate_height_traits(values, 'vht', radius, z[5])[0],
+        (factors[10, 5] + factors[11, 5]) / 2, rtol=1e-12)
+
+
+def test_self_gravitating_rotation_at_each_height():
+    # In the isothermal sheet of the surface density S of an exponential
+    # mass disk (scale length 1 kpc) and a uniform dispersion sigma, rho
+    # sigma^2 ~ S^2 sech^2(z / z0), z0 = sigma^2 / (pi G S): R d(rho
+    # sigma^2)/dR / rho = sigma^2 R (-2 + 2 u tanh(u)), u = z / z0, R in
+    # kpc, to the precision of the three-point derivative on the subnodes
+    params = DISK_PROPERTIES | dict(
+        ht_s=1, distance=10, mass_gas_log_m=9.5, mass_gas_rd=1,
+        mass_bh_log_m=10.5)
+    mass = [
+        dict(type='disk', name='gas', surface=dict(type='exponential'),
+             vertical=dict(type='thin')),
+        dict(type='point', name='bh')]
+    galaxy, given = rotation_at_heights(dict(
+        type='mass', pressure_support='self_gravitating',
+        pressure_density='gas'), mass, params)
+    disk = galaxy.components()[0].density_disk()
+    R = np.array(disk.subrnodes())[1:, None] * KPC_PER_ARCSEC
+    z = np.linspace(0, 8, 33) * KPC_PER_ARCSEC
+    surface = 10 ** 9.5 / (2 * np.pi) * np.exp(-R)
+    u = np.pi * G * surface * z / 15 ** 2
+    model = mass_model(mass)
+    force_R = model.forces(R, z, dict(
+        mass_gas_log_m=9.5, mass_gas_rd=1, mass_bh_log_m=10.5), CONTEXT)[0]
+    v2 = -R * force_R + 15 ** 2 * R * (-2 + 2 * u * np.tanh(u))
+    factors = np.array([given[f'vht_f{k}'] for k in range(33)]).T[1:]
+    assert np.all(v2 > 0) and np.max(u) > 1
+    np.testing.assert_allclose(
+        factors, np.sqrt(v2 / v2[:, :1]), rtol=2e-3)
+
+
+@pytest.mark.parametrize('vptraits, user, message', [
+    (dict(type='arctan', direction='tan'), False,
+     "pairs with the velocity trait 'mass' only, not 'arctan'"),
+    (dict(type='mass', pressure_support='self_gravitating'), False,
+     "give pressure_density"),
+    (dict(type='mass'), True,
+     r"\['mine'\] do not give their forces off their plane")])
+def test_rotation_at_each_height_is_checked(
+        tmp_path, vptraits, user, message):
+    (tmp_path / 'curve.py').write_text(
+        "def vcirc2(R, params):\n    return 100 * R\n")
+    mass = [dict(
+        type='user', name='mine', file=str(tmp_path / 'curve.py'),
+        func='vcirc2')] if user else MASS
+    disk = with_traits(
+        DISK, vptraits=vptraits, htraits=dict(type='sech2', zmax=8)
+    ) | dict(type='smdisk')
+    disk['kinematics'] |= dict(vhtraits=dict(type='mass', zmax=8))
+    with pytest.raises(ConfigError, match=message):
+        galaxy_parser.load(dict(
+            components=[disk], mass=copy.deepcopy(mass),
+            distance=copy.deepcopy(DISTANCE)))
+
+
+def test_rotation_at_each_height_option():
+    from gbkfit.model.components import traits
+    trait = traits.vht_parser.load(dict(type='mass', zmax=3))
+    assert traits.vht_parser.dump(trait) == dict(type='mass', zmax=3.0)
+    assert list(trait.rotation_factor_params().values())[-1] == 3.0
+    with pytest.raises(ConfigError, match="zmax must be a positive length"):
+        traits.VHTraitMass(0)
+
+
 def test_one_mass_trait_per_disk():
     from gbkfit.model.components import traits
     from gbkfit.model.components.parts import Kinematics

@@ -58,6 +58,7 @@ constexpr int VHT_UID_ONE = 1;
 constexpr int VHT_UID_LINEAR = 2;
 constexpr int VHT_UID_EXP = 3;
 constexpr int VHT_UID_GAUSS = 4;
+constexpr int VHT_UID_MASS = 5;
 
 // Dispersion polar traits
 constexpr int DPT_UID_UNIFORM = 1;
@@ -1644,6 +1645,25 @@ h_factor_gauss(T z, T p)
     return std::exp(-z * z / (2 * p * p));
 }
 
+// The factor of the rotation in the gravity of the galaxy at the height z
+// (see traits.VHTraitMass): from its table at the n = consts[1] heights
+// from 0 to zmax = consts[0], n node-wise parameters one after the other,
+// linear between the heights and between the nodes; above zmax, the
+// factor at zmax
+template<typename T> constexpr T
+h_factor_table(int rnidx, const T* rnodes, int nrnodes, T r, T z,
+               const T* consts, const T* params)
+{
+    const T zmax = consts[0];
+    const int n = static_cast<int>(consts[1]);
+    const T u = std::min(std::abs(z) / zmax, T{1}) * (n - 1);
+    const int k = std::min(static_cast<int>(u), n - 2);
+    const T t = u - k;
+    const T lo = nodewise(r, rnidx, rnodes, params, k * nrnodes, 1);
+    const T hi = nodewise(r, rnidx, rnodes, params, (k + 1) * nrnodes, 1);
+    return lo + t * (hi - lo);
+}
+
 template<typename T> constexpr void
 vh_trait(
         T& out,
@@ -1651,8 +1671,6 @@ vh_trait(
         int rnidx, const T* rnodes, int nrnodes,
         T r, T z)
 {
-    (void)nrnodes;
-
     switch (uid)
     {
     case VHT_UID_ONE:
@@ -1669,6 +1687,9 @@ vh_trait(
     case VHT_UID_GAUSS:
         out = h_factor_gauss(
                 z, h_factor_param(rnidx, rnodes, r, consts, params));
+        break;
+    case VHT_UID_MASS:
+        out = h_factor_table(rnidx, rnodes, nrnodes, r, z, consts, params);
         break;
     default:
         out = NAN;

@@ -153,6 +153,11 @@ VHT_UID_ONE = 1
 VHT_UID_LINEAR = 2
 VHT_UID_EXP = 3
 VHT_UID_GAUSS = 4
+VHT_UID_MASS = 5
+
+# The heights of the table of the velocity height trait 'mass' (see
+# VHTraitMass): this many, from 0 to its zmax
+VHT_MASS_NHEIGHTS = 33
 
 # Dispersion polar traits
 DPT_UID_UNIFORM = 1
@@ -551,6 +556,15 @@ class Trait(parseutils.TypedSerializable, abc.ABC):
         VPTraitMass); not here.
         """
         return None
+
+    def rotation_factor_params(self) -> dict[str, float]:
+        """
+        Return the node-wise parameters whose values are not given, but
+        are the factors of the rotation in the gravity of their galaxy at
+        a height, v(R, z) / v(R, 0), at the radii where they are sampled
+        (see VHTraitMass): their heights (arcsec), by name; none here.
+        """
+        return {}
 
 
 class TraitFeatureZmax:
@@ -2407,11 +2421,13 @@ class VPTraitMass(VPTrait):
     the circular velocity at the rings it is evaluated on, which its
     galaxy computes from the parameters of its distance and its mass at
     each evaluation, and with pressure support, the
-    rotation of the gas of its disk in that gravity; NaN where its square
-    is negative or infinite (there is no circular orbit, e.g. at a jump of
-    the surface density of a thin disk, or where the pressure exceeds the
-    gravity). A tangential speed (it has no option direction). It has no
-    parameters of its own, and its galaxy must have mass.
+    rotation of the gas of its disk in that gravity; 0 where its square is
+    negative (the mass pulls outwards, e.g. inside a ring, or the pressure
+    exceeds the gravity: no rotation, as DysmalPy takes it), NaN where it
+    is infinite (there is no circular orbit, e.g. at a jump of the surface
+    density of a thin disk). A tangential speed (it has no option
+    direction). It has no parameters of its own, and its galaxy must have
+    mass.
 
     With pressure_support 'jeans', the rotation of an isotropic gas at the
     midplane of its disk (the radial Jeans equation): v^2 = v_c^2 + (R /
@@ -2437,6 +2453,9 @@ class VPTraitMass(VPTrait):
     surface density ('self_gravitating'; e.g. that of the mass disk, as
     DysmalPy's types 1 and 2 take its effective radius), with the
     dispersion of its disk.
+
+    The rotation is the same at every height, or with the velocity height
+    trait 'mass', that of the gravity at each height (see VHTraitMass).
 
     Parameters
     ----------
@@ -2520,6 +2539,69 @@ class VHTraitOne(VHTrait):
     def __init__(self):
         super().__init__(
             rnodes=False, sampling=SAMPLING_DEFAULT)
+
+
+class VHTraitMass(TraitFeatureZmax, VHTrait):
+    """
+    The rotation in the gravity of the galaxy at each height: the factor
+    v(R, z) / v(R, 0) of its velocity polar trait 'mass' (see
+    VPTraitMass), with which it pairs, of the rotation of a circular orbit
+    at the height z in the radial force of the mass of the galaxy there,
+    v(R, z)^2 = -R F_R(R, z) (see gravity.Gravity), plus the pressure
+    support of the trait 'mass' at z, if any: 'jeans', with the density of
+    its disk at z (its density traits times its density height traits) or
+    that of the mass component of pressure_density, and its dispersion at
+    z (with its dispersion height traits); 'self_gravitating', in the
+    isothermal sheet of the surface density S of the mass component of
+    pressure_density (required: the disk has no mass) and the dispersion
+    sigma at the midplane, of the density ~ sech^2(z / z0), z0 = sigma^2 /
+    (pi G S). v(R, z) is 0 where its square is negative, and NaN where it
+    is infinite, as at the midplane; the factor is 1 where v(R, 0) is 0
+    (no rotation at any height). Its galaxy computes it at each
+    evaluation, at the subnodes of the disk and at VHT_MASS_NHEIGHTS
+    heights from 0 to zmax, and its disk interpolates it linearly between
+    them; above zmax, it is the factor at zmax. The rings of the disk are
+    taken flat (coplanar and concentric), as for the rotation at its
+    midplane. It has no parameters of its own.
+
+    Parameters
+    ----------
+    zmax : float
+        The highest height (arcsec) of its table: that of the density
+        height traits of its disk.
+
+    Raises
+    ------
+    ConfigError
+        If zmax is not a positive length.
+    """
+
+    @staticmethod
+    def type() -> str:
+        return 'mass'
+
+    @staticmethod
+    def uid() -> int:
+        return VHT_UID_MASS
+
+    def dump(self) -> dict[str, Any]:
+        # (its rnodes and sampling are not options)
+        return dict(type=self.type(), zmax=self.zmax())
+
+    def __init__(self, zmax: float):
+        super().__init__(zmax=zmax, rnodes=True, sampling='subrings')
+
+    def consts(self) -> tuple[float, ...]:
+        return (self.zmax(), VHT_MASS_NHEIGHTS)
+
+    def params_rnw(self, nnodes: int) -> dict[str, ParamDesc]:
+        return {
+            name: ParamVectorDesc(nnodes)
+            for name in self.rotation_factor_params()}
+
+    def rotation_factor_params(self) -> dict[str, float]:
+        heights = np.linspace(0, self.zmax(), VHT_MASS_NHEIGHTS)
+        return {f'f{k}': float(z) for k, z in enumerate(heights)}
 
 
 class VHTraitP1(VHTrait, abc.ABC):
@@ -3492,7 +3574,8 @@ vht_parser = parseutils.TypedParser(VHTrait, [
     VHTraitOne,
     VHTraitLinear,
     VHTraitExponential,
-    VHTraitGauss])
+    VHTraitGauss,
+    VHTraitMass])
 
 # Dispersion polar traits parser
 dpt_parser = parseutils.TypedParser(DPTrait, [
