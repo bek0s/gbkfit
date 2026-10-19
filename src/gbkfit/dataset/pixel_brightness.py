@@ -4,7 +4,7 @@ from typing import Any
 import numpy as np
 
 from gbkfit.utils import gridutils
-from . import _detail, _resampling
+from . import _detail, _outliers, _resampling
 from .base import Dataset
 from .data import Data, FitsFile
 
@@ -14,8 +14,9 @@ __all__ = [
 ]
 
 
-# The axes of its blocks of residuals (see resample_blocks)
-_BLOCK_AXES = ('x', 'y')
+# The axes of its blocks and windows (see resample_blocks and
+# screen_outliers)
+_AXES = ('x', 'y')
 
 
 class DatasetPixelBrightness(Dataset):
@@ -128,7 +129,7 @@ class DatasetPixelBrightness(Dataset):
         Raise ConfigError unless the size is of blocks of pixels: a positive
         integer for each of x and y (see resample_blocks).
         """
-        _resampling.block_size(size, _BLOCK_AXES)
+        _resampling.block_size(size, _AXES)
 
     def resample_blocks(
             self,
@@ -141,4 +142,14 @@ class DatasetPixelBrightness(Dataset):
         Dataset.resample_blocks), of the size (x, y).
         """
         return _resampling.resample_blocks(
-            residuals, size, _BLOCK_AXES, rng)
+            residuals, size, _AXES, rng)
+
+    def screen_outliers(
+            self, size: Sequence[float], nsigma: float
+    ) -> 'DatasetPixelBrightness':
+        """
+        Return a copy of it with the outliers of its image masked (see
+        Dataset.screen_outliers): of the other pixels of a window of the size
+        (x, y) about each.
+        """
+        return _outliers.screen_grid(self, size, _AXES, nsigma)

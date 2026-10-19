@@ -5,7 +5,7 @@ import astropy.units
 import numpy as np
 
 from gbkfit.utils import gridutils
-from . import _detail, _resampling
+from . import _detail, _outliers, _resampling
 from .base import Dataset
 from .data import Data, FitsFile
 
@@ -15,8 +15,9 @@ __all__ = [
 ]
 
 
-# The axes of its blocks of residuals (see resample_blocks)
-_BLOCK_AXES = ('x', 'y', 'the channels')
+# The axes of its blocks and windows (see resample_blocks and
+# screen_outliers)
+_AXES = ('x', 'y', 'the channels')
 
 
 class DatasetPixelSpectra(Dataset):
@@ -148,7 +149,7 @@ class DatasetPixelSpectra(Dataset):
         a positive integer for each of x, y and the channels (see
         resample_blocks).
         """
-        _resampling.block_size(size, _BLOCK_AXES)
+        _resampling.block_size(size, _AXES)
 
     def resample_blocks(
             self,
@@ -161,4 +162,14 @@ class DatasetPixelSpectra(Dataset):
         (see Dataset.resample_blocks), of the size (x, y, channels).
         """
         return _resampling.resample_blocks(
-            residuals, size, _BLOCK_AXES, rng)
+            residuals, size, _AXES, rng)
+
+    def screen_outliers(
+            self, size: Sequence[float], nsigma: float
+    ) -> 'DatasetPixelSpectra':
+        """
+        Return a copy of it with the outliers of its cube masked (see
+        Dataset.screen_outliers): of the other voxels of a window of the size
+        (x, y, channels) about each.
+        """
+        return _outliers.screen_grid(self, size, _AXES, nsigma)

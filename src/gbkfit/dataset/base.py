@@ -146,6 +146,51 @@ class Dataset(parseutils.TypedSerializable, Mapping[str, Data], abc.ABC):
             for key, item in self._items.items()}
         return dataset
 
+    def screen_outliers(self, size: Sequence[float], nsigma: float) -> Self:
+        """
+        Return a copy of it with the outliers of its data items masked:
+        the values x further from the median m of their neighbours than
+        nsigma times a robust scatter s, |x - m| > nsigma s. The scatter is
+        the larger of that of the neighbours, 1.4826 times the median of
+        their absolute deviations from m (as the standard deviation of
+        Gaussian noise), which keeps the values where the data vary fast,
+        and that of the item, 1.4826 times the median of |x - m| over its
+        values, which keeps those whose few neighbours agree by chance.
+        The neighbours are those with values, the value itself not among
+        them; a value with fewer than 3 is kept. Each item is screened by
+        itself. The kinds of data
+        that offer it say what the neighbours of a value are (e.g. the
+        other pixels of a window about it); the others raise ConfigError.
+
+        It is for values that no sky can give: e.g. failed fits of moment
+        maps, hot pixels, cosmic rays, spikes of interference. Of data
+        seen through a PSF, a window no wider than the beam keeps what is
+        real (e.g. compact clumps), which spans the window; on a smooth
+        gradient (e.g. the rotation in a velocity map), m is the value
+        itself, and s grows with the gradient.
+
+        Parameters
+        ----------
+        size : Sequence of float
+            The size of the neighbourhoods (e.g. of the windows, in
+            pixels, along each axis of an image).
+        nsigma : float
+            How far an outlier is, in units of the scatter.
+
+        Returns
+        -------
+        Dataset
+            The copy.
+
+        Raises
+        ------
+        ConfigError
+            If the kind of data does not offer it, the size is not of its
+            neighbourhoods, or nsigma is not positive.
+        """
+        raise ConfigError(
+            f"the data of {self.type()} cannot be screened for outliers")
+
     def check_blocks(self, size: Sequence[float]) -> None:
         """
         Raise ConfigError unless its data can be redrawn in blocks of a

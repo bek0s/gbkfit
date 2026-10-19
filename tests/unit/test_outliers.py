@@ -1,0 +1,54 @@
+"""
+Tests of the screening of data for outliers (see Dataset.screen_outliers).
+"""
+
+import numpy as np
+import pytest
+
+from gbkfit.dataset import (
+    Data, DatasetPixelBrightness, DatasetPixelMoments, DatasetPixelSpectra)
+from gbkfit.utils.parseutils import ConfigError
+
+
+def test_a_spike_in_a_velocity_map_is_masked_not_its_gradient():
+    # A rotating velocity map with noise of 2 km/s, a failed fit of 160
+    # km/s where its neighbours have about 100, and a masked pixel
+    j, i = np.indices((20, 30))
+    velocity = 100 + 8 * (i - 15) + np.random.default_rng(1).normal(
+        0, 2, (20, 30))
+    velocity[10, 15] = 160
+    velocity[3, 4] = np.nan
+    maps = DatasetPixelMoments({1: Data(velocity)})
+    screened = maps.screen_outliers([3, 3], 5)['moment1'].data()
+    masked = np.isnan(screened) & ~np.isnan(velocity)
+    assert np.argwhere(masked).tolist() == [[10, 15]]
+    assert np.isnan(screened[3, 4])
+
+
+def test_a_hot_pixel_is_masked_not_a_clump_seen_through_the_psf():
+    j, i = np.indices((25, 25))
+    image = 10 * np.exp(-((i - 8) ** 2 + (j - 12) ** 2) / (2 * 1.5 ** 2)) \
+        + np.random.default_rng(2).normal(0, 0.01, (25, 25))
+    image[18, 18] = 5
+    screened = DatasetPixelBrightness(Data(image)).screen_outliers(
+        [3, 3], 5)['brightness'].data()
+    assert np.argwhere(np.isnan(screened)).tolist() == [[18, 18]]
+
+
+def test_a_spike_in_a_cube_is_masked():
+    cube = np.random.default_rng(3).normal(0, 1, (12, 10, 10))
+    cube[6, 5, 5] = 40
+    screened = DatasetPixelSpectra(Data(cube)).screen_outliers(
+        [3, 3, 3], 6)['spectra'].data()
+    assert np.argwhere(np.isnan(screened)).tolist() == [[6, 5, 5]]
+
+
+@pytest.mark.parametrize('size, nsigma, message', [
+    ([2, 3], 5, 'an odd positive integer for each of x and y'),
+    ([3, 3, 3], 5, 'for each of x and y'),
+    ([3, 3], -1, 'nsigma of the outliers is a positive number'),
+])
+def test_screening_options_refused(size, nsigma, message):
+    image = DatasetPixelBrightness(Data(np.ones((5, 5))))
+    with pytest.raises(ConfigError, match=message):
+        image.screen_outliers(size, nsigma)
