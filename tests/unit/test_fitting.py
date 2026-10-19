@@ -687,6 +687,48 @@ def check_posterior(result):
 # drivers
 
 @pytest.mark.slow
+def test_bootstrap_errors_take_the_noise_the_beam_correlates():
+    # Noise correlated by the PSF (as the beam correlates that of radio
+    # data): the covariance, which takes it as independent, gives errors
+    # about 3.5 times smaller than the scatter of the fits over
+    # independent mocks; the bootstrap, in blocks of about 2 FWHM of the
+    # PSF, about that scatter (0.85 of it on average over 8 mocks, 1/2 in
+    # blocks of 2 pixels)
+    from gbkfit.fitting import (
+        BootstrapBlocks, BootstrapOptions, bootstrap, fitter_parser)
+    from gbkfit.observation import NoiseGauss
+
+    def group(dataset):
+        observation = Observation(
+            PixelBrightness.from_data(dataset), Flat(), DriverHost(),
+            instrument=Instrument(psf=PSFGauss(1.5)), data=dataset)
+        return ObservationGroup(galaxy_parser.load(GALAXY), observation)
+    image = group(DatasetPixelBrightness(Data(np.zeros((48, 48)))))
+    values = ParamSpace(image.pdescs(), TRUE).evaluate()
+    peak = image.model_h(values)[0]['brightness']['d'].max()
+    noise = NoiseGauss(rms=0.01 * peak, spatial_correlation='instrument')
+    fitter = fitter_parser.load(dict(type='scipy.least_squares'))
+    fits = []
+    for dataset in image.mock(values, noise, nmocks=41, seed=5)[0]:
+        objective = Objective(group(dataset))
+        params = ParamSpace(objective.pdescs(), bounded_properties())
+        fits.append((objective, params, fitter.fit(objective, params)))
+    scatter = np.std(
+        [[result.best().free[name] for name in TRUE] for *_, result in fits],
+        axis=0, ddof=1)
+    ratios = []
+    for objective, params, result in fits[:4]:
+        covariance = np.array(
+            [result.best().covariance.std[name] for name in TRUE])
+        assert np.all(covariance < 0.5 * scatter)
+        boot = bootstrap(
+            objective, params, result.best().elements, fitter,
+            BootstrapOptions(40, BootstrapBlocks([8, 8])))
+        ratios.append(np.array([boot.std()[name] for name in TRUE]) / scatter)
+    assert 0.7 < np.mean(ratios) < 1.3
+
+
+@pytest.mark.slow
 def test_emcee_posterior_agrees_with_the_covariance():
     pytest.importorskip('emcee')
     from gbkfit.fitting.fitters.emcee import FitterEmcee
