@@ -23,6 +23,7 @@ from .components.cones import SMCone
 from .components.disks import MCDisk, SMDisk
 from .components.geometries import Geometry, geometry_parser
 from .components.lines import Band, LineCatalogue
+from .components.particles import Particles
 from .components.points import Point
 from .components.roles import BandEmission
 from .distance import Distance, distance_parser
@@ -41,7 +42,8 @@ component_parser = parseutils.TypedParser(Component, [
     SMDisk,
     MCDisk,
     SMCone,
-    Point])
+    Point,
+    Particles])
 
 
 class Galaxy(parseutils.Serializable):

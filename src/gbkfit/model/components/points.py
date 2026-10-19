@@ -57,23 +57,19 @@ def _light_pdescs(
     return pdescs | light.pdescs()
 
 
-def _spectral_plan(
-        driver: Driver,
+def line_light(
         spectral: gridutils.Grid,
-        dtype: np.dtype,
-        depth: bool,
-        opacity_ratios: np.ndarray | None,
         lines: Lines,
         unit: astropy.units.UnitBase | None,
         names: Sequence[str] | None,
         data_unit: DataUnit | None,
         redshift: float
-) -> 'PointPlan':
+) -> tuple[Fluxes, LinePlacement]:
     """
-    Return the plan of a spectral point with the given lines and the unit
-    of its light (if any), of the lines of the given names (all if None),
-    at the redshift of its galaxy, in the unit of the data (see
-    Component.plan).
+    Return the fluxes of the rows and the placement of the lines of the
+    given names (all if None) of a component with the given lines and
+    unit of its light (if any), at the redshift of its galaxy, in the unit
+    of the data (see Component.plan).
     """
     selected = lines.select(names)
     rows = lines.values(spectral, redshift)[list(selected)]
@@ -84,11 +80,28 @@ def _spectral_plan(
         (row, lines.ratio_name(index))
         for row, index in enumerate(selected)
         if lines.ratio_name(index) is not None]
-    return PointPlan(
-        driver, dtype, depth, opacity_ratios, Fluxes(
-            len(rows), ratios, line_factors(
-                unit, data_unit, rows, spectral, frequencies)),
-        LinePlacement(rows, spectral))
+    return Fluxes(
+        len(rows), ratios,
+        line_factors(unit, data_unit, rows, spectral, frequencies)), \
+        LinePlacement(rows, spectral)
+
+
+def band_light(
+        bands: Bands,
+        unit: astropy.units.UnitBase | None,
+        band: Band | None,
+        data_unit: DataUnit | None,
+        redshift: float
+) -> Fluxes:
+    """
+    Return the flux of the one row of the light of a component in the
+    given band, with its bands and the unit of its light (if any), in the
+    unit of the data (see Component.plan).
+    """
+    ratio = bands.ratio_name(band)
+    return Fluxes(
+        1, [(0, ratio)] if ratio is not None else [],
+        band_factors(unit, data_unit, band, redshift))
 
 
 def _pixels(
@@ -378,11 +391,9 @@ class Point(Component):
     ) -> PointPlan:
         unit = self.emission().unit()
         if self._lines is None:
-            ratio = self._bands.ratio_name(band)
             return PointPlan(
-                driver, dtype, self._depth, opacity_ratios, Fluxes(
-                    1, [(0, ratio)] if ratio is not None else [],
-                    band_factors(unit, data_unit, band, redshift)))
-        return _spectral_plan(
-            driver, spectral, dtype, self._depth, opacity_ratios,
-            self._lines, unit, lines, data_unit, redshift)
+                driver, dtype, self._depth, opacity_ratios,
+                band_light(self._bands, unit, band, data_unit, redshift))
+        return PointPlan(
+            driver, dtype, self._depth, opacity_ratios, *line_light(
+                spectral, self._lines, unit, lines, data_unit, redshift))
