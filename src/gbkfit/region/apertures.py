@@ -5,6 +5,7 @@ import numpy as np
 
 from gbkfit.math import overlap
 from gbkfit.utils import gridutils, parseutils
+from gbkfit.utils.parseutils import ConfigError
 
 
 __all__ = [
@@ -83,6 +84,14 @@ class Aperture(parseutils.TypedSerializable, abc.ABC):
     """
 
     @abc.abstractmethod
+    def centre(self) -> tuple[float, float]:
+        """
+        The centre of the aperture, x and y (arcsec): of a polygon, the
+        centroid of its area. Raise ConfigError if it has none (a field).
+        """
+        pass
+
+    @abc.abstractmethod
     def overlaps(self, grid: gridutils.Grid) -> tuple[np.ndarray, np.ndarray]:
         """
         The pixels of a spatial grid (flat indices, x fastest) that overlap
@@ -115,6 +124,9 @@ class ApertureEllipse(Aperture):
         self._b = b
         self._posa = posa
 
+    def centre(self):
+        return self._x, self._y
+
     def overlaps(self, grid):
         return _ellipse_overlaps(
             self, grid, (self._x, self._y), self._a, self._b, self._posa)
@@ -137,6 +149,9 @@ class ApertureCircle(Aperture):
         self._x = x
         self._y = y
         self._radius = radius
+
+    def centre(self):
+        return self._x, self._y
 
     def overlaps(self, grid):
         return _ellipse_overlaps(
@@ -187,6 +202,13 @@ class AperturePolygon(Aperture):
             raise RuntimeError("the polygon has no area")
         self._vertices = vertices
 
+    def centre(self):
+        x, y = self._vertices.T
+        cross = x * np.roll(y, -1) - np.roll(x, -1) * y
+        area = cross.sum() / 2
+        return (float(((x + np.roll(x, -1)) * cross).sum() / (6 * area)),
+                float(((y + np.roll(y, -1)) * cross).sum() / (6 * area)))
+
     def overlaps(self, grid):
         return _polygon_overlaps(self, grid, self._vertices)
 
@@ -215,6 +237,9 @@ class ApertureRectangle(Aperture):
         self._length = length
         self._width = width
         self._posa = posa
+
+    def centre(self):
+        return self._x, self._y
 
     def overlaps(self, grid):
         along, across = _axes(self._posa)
@@ -255,6 +280,9 @@ class ApertureField(Aperture):
 
     def __init__(self):
         pass
+
+    def centre(self):
+        raise ConfigError("a field (the whole grid) has no centre")
 
     def overlaps(self, grid):
         npix = int(np.prod(grid.size[:2]))

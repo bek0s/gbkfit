@@ -6,7 +6,11 @@ import numpy as np
 import pytest
 
 from gbkfit.dataset import (
-    Data, DatasetPixelBrightness, DatasetPixelMoments, DatasetPixelSpectra)
+    Data, DatasetPixelBrightness, DatasetPixelMoments, DatasetPixelSpectra,
+    DatasetRegionMoments, DatasetRegionSpectra)
+from gbkfit.region import (
+    ApertureCircle, AperturePolygon, ApertureRectangle, RegionsApertures,
+    RegionsBins)
 from gbkfit.utils.parseutils import ConfigError
 
 
@@ -52,3 +56,26 @@ def test_screening_options_refused(size, nsigma, message):
     image = DatasetPixelBrightness(Data(np.ones((5, 5))))
     with pytest.raises(ConfigError, match=message):
         image.screen_outliers(size, nsigma)
+
+
+def test_a_bad_bin_is_masked_by_its_nearest_bins():
+    # Bins of single pixels in a row (centres 1" apart): a velocity that
+    # rises along the row, with one bin far off it
+    bins = RegionsBins(np.arange(12).reshape(1, 12))
+    velocity = 10 * np.arange(12) + np.random.default_rng(4).normal(0, 1, 12)
+    velocity[6] = 300
+    maps = DatasetRegionMoments({1: Data(velocity)}, bins)
+    screened = maps.screen_outliers([4], 5)['moment1'].data()
+    assert np.flatnonzero(np.isnan(screened)).tolist() == [6]
+    spectra = np.random.default_rng(5).normal(0, 1, (9, 12))
+    spectra[4, 3] = 50
+    screened = DatasetRegionSpectra(Data(spectra), bins).screen_outliers(
+        [2, 3], 6)['spectra'].data()
+    assert np.argwhere(np.isnan(screened)).tolist() == [[4, 3]]
+
+
+def test_apertures_have_centres():
+    regions = RegionsApertures([
+        ApertureCircle(1, 2, 1), ApertureRectangle(-3, 4, 2, 1, 30),
+        AperturePolygon([[0, 0], [4, 0], [4, 2], [0, 2]])])
+    np.testing.assert_allclose(regions.centres(), [[1, 2], [-3, 4], [2, 1]])

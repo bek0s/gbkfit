@@ -7,7 +7,7 @@ import numpy as np
 from gbkfit.region import Regions, regions_parser
 from gbkfit.utils import parseutils
 from gbkfit.utils.parseutils import ConfigError
-from . import _detail, _resampling
+from . import _detail, _outliers, _resampling
 from .base import Dataset
 from .data import Data, FitsFile, dump_data
 
@@ -155,3 +155,22 @@ class DatasetRegionMoments(Dataset):
         """
         return _resampling.resample_blocks(
             residuals, size, _BLOCK_AXES, rng)
+
+    def screen_outliers(
+            self, size: Sequence[float], nsigma: float
+    ) -> 'DatasetRegionMoments':
+        """
+        Return a copy of it with the outliers of its moments masked (see
+        Dataset.screen_outliers): of the values of the regions nearest each, by
+        their centres (see Regions.centres), of the size (number of nearest
+        regions).
+        """
+        nnearest, _ = _outliers.region_size(
+            size, self._regions.nregions(), False)
+        nsigma = _outliers.check_nsigma(nsigma)
+        centres = self._regions.centres()
+        return self.with_data({
+            key: np.where(_outliers.region_outliers(
+                item.data()[None], centres, nnearest, 1, nsigma)[0],
+                np.nan, item.data())
+            for key, item in self.items()})

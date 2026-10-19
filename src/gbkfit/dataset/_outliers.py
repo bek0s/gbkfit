@@ -9,6 +9,7 @@ from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
 import numpy as np
+import scipy.spatial
 
 from gbkfit.utils.parseutils import ConfigError
 
@@ -120,6 +121,69 @@ def grid_outliers(
             windows[start:start + step].reshape(-1, nwindow), nwindow // 2,
             axis=1)
         flat = slice(start * nslab, start * nslab + len(neighbours))
+        median[flat], scatter[flat], count[flat] = neighbour_stats(neighbours)
+    return outliers(
+        values.ravel(), median, scatter, count, nsigma).reshape(values.shape)
+
+
+def region_size(
+        size: Sequence[float], nregions: int, channels: bool
+) -> tuple[int, int]:
+    """
+    Return the number of nearest regions and the size of the window of
+    channels (1 without channels) of the options. Raise ConfigError
+    unless the first is a positive integer below the number of regions,
+    and the second, with channels, an odd positive integer.
+    """
+    size = tuple(size)
+    shape = ("the number of nearest regions, and an odd size of the window "
+             "of channels") if channels else "the number of nearest regions"
+    integers = all(
+        isinstance(n, numbers.Integral) and not isinstance(n, bool)
+        and n >= 1 for n in size)
+    if len(size) != 1 + channels or not integers or size[0] >= nregions \
+            or (channels and size[1] % 2 == 0):
+        raise ConfigError(
+            f"the size of the neighbourhoods of these data is {shape}, "
+            f"positive integers (fewer regions than the {nregions}); it is "
+            f"{list(size)}")
+    return size[0], size[1] if channels else 1
+
+
+def region_outliers(
+        values: np.ndarray,
+        centres: np.ndarray,
+        nnearest: int,
+        window: int,
+        nsigma: float
+) -> np.ndarray:
+    """
+    Return where the values of regions (nchannels, nregions) are outliers
+    of their neighbours (see outliers): the values of the region and of
+    its nearest regions, by their centres (nregions, 2), in a window of
+    channels centred on the value, but itself.
+    """
+    nchannels, nregions = values.shape
+    # Each region and its nearest regions, itself first
+    _, nearest = scipy.spatial.cKDTree(centres).query(centres, nnearest + 1)
+    regions = np.array([
+        [i, *row[row != i][:nnearest]] for i, row in enumerate(nearest)])
+    half = window // 2
+    padded = np.pad(values, [(half, half), (0, 0)], constant_values=np.nan)
+    nneighbourhood = window * (nnearest + 1)
+    median, scatter = np.empty(values.size), np.empty(values.size)
+    count = np.empty(values.size, dtype=int)
+    # (in slabs of channels, to bound the copies of the neighbourhoods)
+    step = max(1, _CHUNK // (nneighbourhood * nregions))
+    for start in range(0, nchannels, step):
+        channels = np.arange(start, min(start + step, nchannels))[:, None] \
+            + np.arange(window)
+        neighbours = padded[
+            channels[:, None, :, None], regions[None, :, None, :]]
+        neighbours = np.delete(
+            neighbours.reshape(-1, nneighbourhood), half * (nnearest + 1),
+            axis=1)
+        flat = slice(start * nregions, start * nregions + len(neighbours))
         median[flat], scatter[flat], count[flat] = neighbour_stats(neighbours)
     return outliers(
         values.ravel(), median, scatter, count, nsigma).reshape(values.shape)

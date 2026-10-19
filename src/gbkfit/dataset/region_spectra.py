@@ -7,7 +7,7 @@ import numpy as np
 from gbkfit.region import Regions, regions_parser
 from gbkfit.utils import fitsutils, gridutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
-from . import _detail, _resampling
+from . import _detail, _outliers, _resampling
 from .base import Dataset
 from .data import Data, FitsFile, dump_data
 
@@ -208,3 +208,22 @@ class DatasetRegionSpectra(Dataset):
         """
         return _resampling.resample_blocks(
             residuals, size, _BLOCK_AXES, rng)
+
+    def screen_outliers(
+            self, size: Sequence[float], nsigma: float
+    ) -> 'DatasetRegionSpectra':
+        """
+        Return a copy of it with the outliers of its spectra masked (see
+        Dataset.screen_outliers): of the values of the region and of the
+        regions nearest it, by their centres (see Regions.centres), in a window
+        of channels centred on each, of the size (number of nearest regions,
+        channels).
+        """
+        nnearest, window = _outliers.region_size(
+            size, self._regions.nregions(), True)
+        nsigma = _outliers.check_nsigma(nsigma)
+        spectra = self['spectra'].data()
+        return self.with_data(dict(spectra=np.where(
+            _outliers.region_outliers(
+                spectra, self._regions.centres(), nnearest, window, nsigma),
+            np.nan, spectra)))

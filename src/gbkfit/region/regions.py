@@ -39,6 +39,16 @@ class Regions(parseutils.TypedSerializable, abc.ABC):
         pass
 
     @abc.abstractmethod
+    def centres(self) -> np.ndarray:
+        """
+        The centre of each region, x and y (arcsec, in the frame of the
+        model, like xpos and ypos), of shape (nregions, 2): of bins, the
+        mean of the positions of their pixels; of apertures, their centres
+        (see Aperture.centre).
+        """
+        pass
+
+    @abc.abstractmethod
     def weights(self, grid: gridutils.Grid) -> scipy.sparse.csr_array:
         """
         The weights of the pixels of a spatial grid in the regions: a
@@ -146,6 +156,13 @@ class RegionsBins(Regions):
     def grid(self):
         return self._grid
 
+    def centres(self):
+        weights = self.weights(self._grid)
+        x, y = gridutils.sky_positions(self._grid)
+        totals = np.asarray(weights.sum(axis=1)).ravel()
+        return np.column_stack(
+            [weights @ x.ravel(), weights @ y.ravel()]) / totals[:, None]
+
     def weights(self, grid):
         if grid != self._grid:
             raise RuntimeError(
@@ -195,6 +212,9 @@ class RegionsApertures(Regions):
 
     def grid(self):
         return None
+
+    def centres(self):
+        return np.array([aperture.centre() for aperture in self._apertures])
 
     def weights(self, grid):
         npix = int(np.prod(grid.size[:2]))
