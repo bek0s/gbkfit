@@ -89,7 +89,14 @@ class SMDisk(Component):
     rnmin, rnmax, rnsep, rnlen, rnodes : optional
         The radii of its rings (arcsec): rnodes; or rnmin, rnmax and rnsep
         (every rnsep); or rnmin, rnmax and rnlen (rnlen rings). Those of
-        its geometry if it is warped.
+        its geometry if it is warped. The disk ends at its first and last
+        radii, and is evaluated at the centres of the pixels: at an edge
+        inside the data where its density is not about 0 (e.g. an
+        exponential cut at three scale lengths), pixels switch on and off
+        as its geometry changes, so that the chi-square jumps and the
+        covariance errors come out too small (5 times, in a test of
+        visibilities); place its edges beyond the data, or where its
+        density is about 0.
     rstep : float, optional
         The width of the rings it is evaluated on, at most half the
         smallest separation of its radii; by default that, or 1 if less.
