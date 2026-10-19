@@ -452,11 +452,17 @@ class Whitening:
     on channels (its first axis). The residuals of the pixels it keeps,
     as a matrix R of the channels by those pixels (one row for an image),
     are whitened into spectral R spatial^T, with the whitening of each
-    axis whose noise is correlated (None for the others).
+    axis whose noise is correlated (None for the others). Noise of exactly
+    the correlation C of the data (without the white floor) gives them
+    the chi-square tr(C C'^-1) on average, nindependent: the number of
+    independent values they are worth (e.g. one in 4.5 of the pixels of
+    the moment maps of NGC 1313 of LVHIS, of a beam of 6.6 by 5.4 pixels,
+    with a floor of 0.01).
     """
     pixels: np.ndarray
     spatial: np.ndarray | None
     spectral: np.ndarray | None
+    nindependent: float
 
 
 def correlated_pixels(key: str, mask: np.ndarray) -> np.ndarray:
@@ -500,16 +506,34 @@ def whitening(
         or its correlation is not positive definite with the white floor.
     """
     pixels = correlated_pixels(key, mask)
+    nchannels = mask.shape[0] if mask.ndim == 3 else 1
     spatial = spectral = None
     if correlation.spatial is not None:
         points = np.column_stack(np.unravel_index(pixels, mask.shape[-2:]))
         spatial = _whitening(
             key, correlation.spatial, points, white_floor)
     if correlation.spectral is not None:
-        points = np.arange(mask.shape[0])[:, None]
+        points = np.arange(nchannels)[:, None]
         spectral = _whitening(
             key, correlation.spectral, points, white_floor)
-    return Whitening(pixels, spatial, spectral)
+    nindependent = _nindependent(spatial, pixels.size, white_floor) \
+        * _nindependent(spectral, nchannels, white_floor)
+    return Whitening(pixels, spatial, spectral, nindependent)
+
+
+def _nindependent(
+        whitening: np.ndarray | None, size: int, white_floor: float
+) -> float:
+    """
+    Return the number of independent values that the values of an axis
+    of a size are worth, of their whitening (see Whitening; all of them
+    without one): tr(C C'^-1) of their correlation C, with C' = (1 - f) C
+    + f I, which is (size - f tr(C'^-1)) / (1 - f), and tr(C'^-1) the sum
+    of the squares of the whitening W (C'^-1 = W^T W).
+    """
+    if whitening is None:
+        return size
+    return (size - white_floor * np.sum(whitening ** 2)) / (1 - white_floor)
 
 
 def _whitening(

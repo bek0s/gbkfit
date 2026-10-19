@@ -859,7 +859,8 @@ def test_the_information_criteria_of_a_solution():
     from gbkfit.fitting.result import FitSolution
     solution = FitSolution(
         free={}, values={}, elements={}, derived={}, chi2=100.0,
-        nresiduals=100, dof=97, reduced_chi2=100 / 97, log_likelihood=-50.0,
+        nresiduals=100, nfitted=3, dof=97, reduced_chi2=100 / 97,
+        log_likelihood=-50.0,
         log_prior=None, covariance=None, laplace=None)
     assert solution.nfitted == 3
     assert solution.aic == pytest.approx(106)

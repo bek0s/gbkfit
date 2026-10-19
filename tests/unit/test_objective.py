@@ -102,6 +102,7 @@ def test_masked_values_do_not_count(driver):
     data = Data(np.ones((24, 32)), mask=mask)
     objective, params = make_objective(driver, data)
     assert objective.nresiduals() == 24 * 32 - 5 * 32
+    assert objective.nindependent() == objective.nresiduals()
     residuals = objective.residuals(params).reshape(24, 32)
     np.testing.assert_array_equal(residuals[:5], 0)
 
@@ -285,6 +286,9 @@ def test_correlated_noise_has_the_chi2_of_its_covariance(driver):
     c = 0.95 * k + 0.05 * np.eye(len(k))
     chi2 = objective.chi2(params) - objective.noise_chi2()
     assert chi2 == pytest.approx(r @ np.linalg.solve(c, r), rel=1e-4)
+    # Noise of exactly K gives the chi-square tr(K C^-1) on average
+    assert objective.nindependent() == pytest.approx(
+        np.trace(np.linalg.solve(c, k)))
     residuals = objective.residuals(params)[:-1]
     assert np.sum(residuals ** 2) == pytest.approx(chi2, rel=1e-5)
     # The residuals of each value, unweighted, are not whitened

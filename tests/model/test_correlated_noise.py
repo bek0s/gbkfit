@@ -78,6 +78,8 @@ def test_cubes_have_the_chi2_of_the_product_of_their_correlations(driver):
     r = r.ravel()
     assert obj.chi2(params) == pytest.approx(
         r @ np.linalg.solve(c, r), rel=1e-4)
+    assert obj.nindependent() == pytest.approx(
+        np.trace(np.linalg.solve(c, np.kron(k_z, k_xy))))
 
 
 def test_cubes_of_correlated_noise_keep_whole_spectra(driver):

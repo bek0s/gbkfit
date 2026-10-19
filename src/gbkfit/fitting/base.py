@@ -342,7 +342,8 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
         chi2, log_likelihood = objective.chi2_and_log_likelihood(values)
         nresiduals = objective.nresiduals()
         nevals = 1
-        dof = nresiduals - problem.ndim() - objective.nnuisance()
+        nfitted = problem.ndim() + objective.nnuisance()
+        dof = objective.nindependent() - nfitted
         # (the noise residuals of a fitted noise are not of the data: a
         # reduced chi-square with them would scale the covariance wrongly)
         reduced_chi2 = (chi2 - objective.noise_chi2()) / dof if dof > 0 \
@@ -370,6 +371,7 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
             derived=derived,
             chi2=chi2,
             nresiduals=nresiduals,
+            nfitted=nfitted,
             dof=dof,
             reduced_chi2=reduced_chi2,
             log_likelihood=log_likelihood,

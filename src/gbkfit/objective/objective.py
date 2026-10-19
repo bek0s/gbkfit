@@ -196,8 +196,10 @@ class Objective:
         self._noise_residuals = [
             np.zeros(len(noise)) for noise in self._noise]
         # The whitening of the residuals of the data items of each
-        # observation whose noise is correlated, by name
+        # observation whose noise is correlated, by name, and the numbers
+        # of independent values they are worth (see Whitening)
         self._whiteners = iterutils.make_list(n, {})
+        self._nindependent = iterutils.make_list(n, {})
         # The native objective of each observation, for its driver
         self._backends = iterutils.make_list(n, None)
         # The memory is allocated on the first evaluation (see prepare)
@@ -286,9 +288,12 @@ class Objective:
                 self._d_residual_nddata[i][key] = \
                     self._d_residual_vector[i][slice_].reshape(shape)
                 if (correlation := dataset.noise_correlation(key)) is not None:
-                    self._whiteners[i][key] = _Whitener(driver, whitening(
+                    whitening_ = whitening(
                         key, data.mask(), correlation,
-                        observation.likelihood().white_floor()), shape, dtype)
+                        observation.likelihood().white_floor())
+                    self._whiteners[i][key] = _Whitener(
+                        driver, whitening_, shape, dtype)
+                    self._nindependent[i][key] = whitening_.nindependent
             self._backends[i] = driver.native_class('Objective', dtype)()
             if self._amplitude_items[i] is not None:
                 spectra = shape[1:]
@@ -454,6 +459,23 @@ class Objective:
                 self._datasets, self._group.observations(),
                 self._upper_limits)
             for key in obs.observable().keys()) + self.nnuisance()
+
+    def nindependent(self) -> float:
+        """
+        Return the number of independent residuals that the residuals are
+        worth (see nresiduals): the chi-square that the noise of the data
+        gives them on average, one for each that counts, but those of the
+        data items whose noise is correlated, which are worth fewer (see
+        Whitening). The degrees of freedom of a fit are of them. It works
+        out the whitening of the residuals, if not yet (see prepare).
+        """
+        if not self._prepared:
+            self.prepare()
+        total = float(self.nresiduals())
+        for dataset, nindependent in zip(self._datasets, self._nindependent):
+            for key, n in nindependent.items():
+                total += n - np.count_nonzero(dataset[key].mask())
+        return total
 
     def _nprior(self, i: int) -> int:
         """

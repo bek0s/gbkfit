@@ -273,10 +273,14 @@ class FitSolution:
         The chi-square.
     nresiduals : int
         The number of residuals that count (not masked).
-    dof : int
-        The degrees of freedom: nresiduals less the free elements and the
+    nfitted : int
+        The number of fitted quantities: the free elements and the
         nuisance parameters that the objective solves (see
         Objective.nnuisance).
+    dof : float
+        The degrees of freedom: the number of independent residuals (see
+        Objective.nindependent; nresiduals, but fewer for correlated
+        noise) less nfitted.
     reduced_chi2 : float
         chi2 / dof (nan if dof <= 0).
     log_likelihood : float
@@ -298,20 +302,13 @@ class FitSolution:
     derived: dict[str, float]
     chi2: float
     nresiduals: int
-    dof: int
+    nfitted: int
+    dof: float
     reduced_chi2: float
     log_likelihood: float
     log_prior: float | None
     covariance: Covariance | None
     laplace: Posterior | None
-
-    @property
-    def nfitted(self) -> int:
-        """
-        The number of fitted quantities: the free elements and the nuisance
-        parameters (nresiduals - dof).
-        """
-        return self.nresiduals - self.dof
 
     @property
     def aic(self) -> float:
@@ -402,7 +399,7 @@ class FitResult:
             f"fitter: {self.fitter.get('type')}; success: {self.success} "
             f"({self.message})",
             f"model evaluations: {self.nevals}; time: {self.time:.1f} s",
-            f"chi2: {best.chi2:.6g}; dof: {best.dof}; reduced chi2: "
+            f"chi2: {best.chi2:.6g}; dof: {best.dof:.6g}; reduced chi2: "
             f"{best.reduced_chi2:.6g}"]
         if self.evidence is not None:
             lines.append(f"log Z: {self.evidence.log_z:.6g}")
@@ -508,7 +505,8 @@ def _solution_summary(solution: FitSolution) -> dict[str, Any]:
     info: dict[str, Any] = dict(
         free=solution.free, elements=solution.elements,
         derived=solution.derived, chi2=solution.chi2,
-        nresiduals=solution.nresiduals, dof=solution.dof,
+        nresiduals=solution.nresiduals, nfitted=solution.nfitted,
+        dof=solution.dof,
         reduced_chi2=solution.reduced_chi2,
         log_likelihood=solution.log_likelihood,
         log_prior=solution.log_prior, aic=solution.aic, bic=solution.bic)

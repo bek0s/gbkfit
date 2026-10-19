@@ -38,7 +38,10 @@ class UncertaintyOptions(parseutils.Serializable):
         evaluations per free element).
     scale : bool, optional
         Whether to scale the covariance by the reduced chi-square (when
-        the errors of the data are not trusted).
+        the errors of the data are not trusted): the chi-square over the
+        degrees of freedom, of the independent residuals (see
+        FitSolution.dof), so that correlated noise of its stated errors
+        leaves the covariance as it is.
     laplace_samples : int, optional
         The number of samples of the Gaussian (Laplace) approximation of
         the posterior at each solution (0 for none).
