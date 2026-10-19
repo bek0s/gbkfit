@@ -1,4 +1,5 @@
-from typing import Any, NamedTuple
+from collections.abc import Sequence
+from typing import Any, NamedTuple, Self
 
 import numpy as np
 import scipy.special
@@ -31,29 +32,59 @@ class _Noise(NamedTuple):
 class _Whitener:
     """
     The whitening of the residuals of a data item (see Whitening) on the
-    device of a driver, for residuals of a shape and a type: the indices
-    of its pixels, its matrices (that of the sky transposed), and the
-    residuals of its pixels and their products.
+    device of a driver: the indices of its pixels and its matrices (that
+    of the sky transposed), which copies share (see shared), and the
+    residuals of its pixels and their products, of its own.
     """
 
     def __init__(
             self,
             driver: Driver,
-            whitening: Whitening,
-            shape: tuple[int, ...],
+            pixels: DeviceArray,
+            spatial: DeviceArray | None,
+            spectral: DeviceArray | None,
+            nchannels: int,
             dtype: np.dtype
     ):
         self._driver = driver
-        self._pixels = driver.mem_copy_h2d(whitening.pixels)
-        self._spatial = None if whitening.spatial is None \
-            else driver.mem_copy_h2d(np.ascontiguousarray(
-                whitening.spatial.T, dtype))
-        self._spectral = None if whitening.spectral is None \
-            else driver.mem_copy_h2d(whitening.spectral.astype(dtype))
+        self._pixels = pixels
+        self._spatial = spatial
+        self._spectral = spectral
+        self._dtype = dtype
         # (the channels by the pixels; one channel for an image)
-        size = (int(np.prod(shape[:-2])), whitening.pixels.size)
+        size = (nchannels, pixels.size)
         self._values = driver.mem_alloc_d(size, dtype)
         self._products = driver.mem_alloc_d(size, dtype)
+
+    @classmethod
+    def on_device(
+            cls,
+            driver: Driver,
+            whitening: Whitening,
+            shape: tuple[int, ...],
+            dtype: np.dtype
+    ) -> Self:
+        """
+        Return the whitening on the device of a driver, for residuals of a
+        shape and a type.
+        """
+        spatial = None if whitening.spatial is None \
+            else driver.mem_copy_h2d(np.ascontiguousarray(
+                whitening.spatial.T, dtype))
+        spectral = None if whitening.spectral is None \
+            else driver.mem_copy_h2d(whitening.spectral.astype(dtype))
+        return cls(
+            driver, driver.mem_copy_h2d(whitening.pixels), spatial, spectral,
+            int(np.prod(shape[:-2])), dtype)
+
+    def shared(self) -> Self:
+        """
+        Return a copy that shares its pixels and matrices, with residuals
+        of its own.
+        """
+        return type(self)(
+            self._driver, self._pixels, self._spatial, self._spectral,
+            self._values.shape[0], self._dtype)
 
     def __call__(self, residual: DeviceArray) -> None:
         """Whiten the residuals of the item (of its shape) in place."""
@@ -102,7 +133,14 @@ class Objective:
     The weighted residuals of a data item whose noise is correlated are
     whitened (see LikelihoodGaussian): the sum of their squares is its
     chi-square. The objective works out their whitening on its first
-    evaluation (see prepare).
+    evaluation (see prepare); its copies with other data share it (see
+    with_data).
+
+    Its memory on the devices (and the host) is allocated on the first
+    evaluation, and released by close, or when Python collects it. An
+    objective is a context manager that closes on exit: fitters can keep
+    it alive after a fit (e.g. lmfit, in reference cycles), with its
+    memory, until Python collects it.
 
     The methods for fitters return totals over all observations and new
     arrays (chi2, log_likelihood, residuals). The others return a value
@@ -130,6 +168,51 @@ class Objective:
                 f"none: {missing}")
         self._group = group
         self._datasets = tuple(obs.data() for obs in observations)
+        # The weight of each data item, and the residual of the values the
+        # model does not have, from the likelihood
+        self._weights_u = tuple(
+            {key: obs.likelihood().weight(key)
+             for key in obs.observable().keys()}
+            for obs in observations)
+        # (none where the model cannot lack values: NaN would show one)
+        missing = [obs.likelihood().missing_residual() for obs in observations]
+        self._missing_residuals = tuple(
+            np.nan if residual is None else residual for residual in missing)
+        # The upper limit of each data item where it is masked, and its
+        # noise (NaN for none; see LikelihoodGaussian)
+        self._upper_limits = tuple(
+            {key: obs.likelihood().upper_limit(key) or (np.nan, np.nan)
+             for key in obs.observable().keys()}
+            for obs in observations)
+        # The data item of the spectra of amplitudes of each observation,
+        # if any, and the standard deviation of their prior
+        self._amplitude_items = tuple(
+            obs.observable().spectra_item()
+            if obs.likelihood().amplitudes() is not None else None
+            for obs in observations)
+        self._amplitude_sigmas = tuple(
+            obs.likelihood().amplitude_sigma() for obs in observations)
+        # The data items of each observation whose noise is fitted, by
+        # name, and their noise residuals, in float64 (each sums a term of
+        # every value of its item: float32 would round it off)
+        self._noise = tuple(
+            {key: _Noise(*obs.likelihood().noise_params(key),
+                         noise.scale_minimum if noise.scale else 1.0)
+             for key, noise in obs.likelihood().fitted_noise().items()}
+            for obs in observations)
+        self._noise_residuals = [
+            np.zeros(len(noise)) for noise in self._noise]
+        # The whitening to share with copies of it of other data, of each
+        # data item of each observation, by name (see with_data)
+        self._shared = iterutils.make_list(n, {})
+        self._reset_memory()
+
+    def _reset_memory(self) -> None:
+        """
+        Drop its memory (see prepare and close): the next evaluation
+        allocates it again.
+        """
+        n = self.nobservations()
         # The data items of each observation, one after the other, in 1d
         # arrays: the data (d), masks (m) and errors (e)
         self._d_dataset_d_vector = iterutils.make_list(n, None)
@@ -148,53 +231,21 @@ class Objective:
         # The sum of the residuals of each observation (1d, size 1)
         self._h_residual_scalar = iterutils.make_list(n, None)
         self._d_residual_scalar = iterutils.make_list(n, None)
-        # The weight of each data item, and the residual of the values the
-        # model does not have, from the likelihood
-        self._weights_u = tuple(
-            {key: obs.likelihood().weight(key)
-             for key in obs.observable().keys()}
-            for obs in observations)
-        # (none where the model cannot lack values: NaN would show one)
-        missing = [obs.likelihood().missing_residual() for obs in observations]
-        self._missing_residuals = tuple(
-            np.nan if residual is None else residual for residual in missing)
-        # The upper limit of each data item where it is masked, and its
-        # noise (NaN for none; see LikelihoodGaussian)
-        self._upper_limits = tuple(
-            {key: obs.likelihood().upper_limit(key) or (np.nan, np.nan)
-             for key in obs.observable().keys()}
-            for obs in observations)
-        # The data item of the spectra of amplitudes of each observation,
-        # if any, and the standard deviation of their prior; the sums of
-        # each spectrum (A and B, see LikelihoodGaussian) on the host (h)
-        # and the device (d), the amplitudes, which scale the spectra of
-        # the model, and the residuals of their prior (views of the end of
-        # the residuals of the observation)
-        self._amplitude_items = tuple(
-            obs.observable().spectra_item()
-            if obs.likelihood().amplitudes() is not None else None
-            for obs in observations)
-        self._amplitude_sigmas = tuple(
-            obs.likelihood().amplitude_sigma() for obs in observations)
+        # The sums of each spectrum of amplitudes (A and B, see
+        # LikelihoodGaussian) on the host (h) and the device (d), the
+        # amplitudes, which scale the spectra of the model, and the
+        # residuals of their prior (views of the end of the residuals of
+        # the observation)
         self._h_amplitude_sums = iterutils.make_list(n, None)
         self._d_amplitude_sums = iterutils.make_list(n, None)
         self._h_amplitudes = iterutils.make_list(n, None)
         self._d_amplitudes = iterutils.make_list(n, None)
         self._h_prior_residuals = iterutils.make_list(n, None)
         self._d_prior_residuals = iterutils.make_list(n, None)
-        # The data items of each observation whose noise is fitted, by
-        # name; the squares of their noise residuals on the host (h) and
-        # the device (d), and the noise residuals, in float64 (each sums a
-        # term of every value of its item: float32 would round it off)
-        self._noise = tuple(
-            {key: _Noise(*obs.likelihood().noise_params(key),
-                         noise.scale_minimum if noise.scale else 1.0)
-             for key, noise in obs.likelihood().fitted_noise().items()}
-            for obs in observations)
+        # The squares of the noise residuals of the data items whose noise
+        # is fitted, on the host (h) and the device (d)
         self._h_noise_sums = iterutils.make_list(n, None)
         self._d_noise_sums = iterutils.make_list(n, None)
-        self._noise_residuals = [
-            np.zeros(len(noise)) for noise in self._noise]
         # The whitening of the residuals of the data items of each
         # observation whose noise is correlated, by name, and the numbers
         # of independent values they are worth (see Whitening)
@@ -231,6 +282,42 @@ class Objective:
         """
         return Objective(self._group.with_driver(driver))
 
+    def with_data(self, datasets: Sequence[Dataset]) -> 'Objective':
+        """
+        Return a copy of it with other data of its observations (e.g. those
+        of a bootstrap; see ObservationGroup.with_data). The copy shares
+        the whitening of the residuals of the data items whose noise is
+        correlated as before, with the same masks, if it is worked out
+        (see prepare): e.g. the refits of a bootstrap work it out once.
+        """
+        objective = Objective(self._group.with_data(datasets))
+        for i, dataset in enumerate(objective.datasets()):
+            before = self._datasets[i]
+            for key, whitener in self._whiteners[i].items():
+                item, old = dataset[key], before[key]
+                if item.spatial_correlation() is old.spatial_correlation() \
+                        and item.spectral_correlation() \
+                        is old.spectral_correlation() \
+                        and np.array_equal(item.mask(), old.mask()):
+                    objective._shared[i][key] = (
+                        whitener, self._nindependent[i][key])
+        return objective
+
+    def close(self) -> None:
+        """
+        Release its memory on the devices and the host now, rather than
+        when Python collects it (e.g. hundreds of megabytes of the whitening
+        of correlated noise; see the class). The next evaluation allocates
+        it again.
+        """
+        self._reset_memory()
+
+    def __enter__(self) -> Self:
+        return self
+
+    def __exit__(self, *exc_info: object) -> None:
+        self.close()
+
     def pdescs(self) -> dict[str, ParamDesc]:
         """Return the parameters of the models, by name (prefixed)."""
         return self._group.pdescs()
@@ -244,8 +331,11 @@ class Objective:
         Allocate the memory of the residuals, copy the data to the device of
         each observation, and work out the whitening of the residuals of
         data items whose noise is correlated (once, for every evaluation;
-        e.g. about 1 s for 7000 pixels). The first evaluation calls it.
+        e.g. about 4 s for 7000 pixels), unless shared (see with_data). The
+        first evaluation calls it; it does nothing once done (until close).
         """
+        if self._prepared:
+            return
         for i in range(self.nobservations()):
             dataset = self._datasets[i]
             observation = self._group.observations()[i]
@@ -292,11 +382,16 @@ class Objective:
                     self._h_residual_vector[i][slice_].reshape(shape)
                 self._d_residual_nddata[i][key] = \
                     self._d_residual_vector[i][slice_].reshape(shape)
-                if (correlation := dataset.noise_correlation(key)) is not None:
+                if key in self._shared[i]:
+                    whitener, nindependent = self._shared[i][key]
+                    self._whiteners[i][key] = whitener.shared()
+                    self._nindependent[i][key] = nindependent
+                elif (correlation := dataset.noise_correlation(key)) \
+                        is not None:
                     whitening_ = whitening(
                         key, data.mask(), correlation,
                         observation.likelihood().white_floor())
-                    self._whiteners[i][key] = _Whitener(
+                    self._whiteners[i][key] = _Whitener.on_device(
                         driver, whitening_, shape, dtype)
                     self._nindependent[i][key] = whitening_.nindependent
             self._backends[i] = driver.native_class('Objective', dtype)()
@@ -478,8 +573,7 @@ class Objective:
         Whitening). The degrees of freedom of a fit are of them. It works
         out the whitening of the residuals, if not yet (see prepare).
         """
-        if not self._prepared:
-            self.prepare()
+        self.prepare()
         total = float(self.nresiduals())
         for dataset, nindependent in zip(self._datasets, self._nindependent):
             for key, n in nindependent.items():
@@ -626,8 +720,7 @@ class Objective:
             out_extra: dict[str, Any] | None = None
     ) -> None:
         """Evaluate the models and the residuals."""
-        if not self._prepared:
-            self.prepare()
+        self.prepare()
         model_data = self._group.model_d(params, out_extra)
         with self._group.timers().measure('objective_residual_eval'):
             for i in range(self.nobservations()):

@@ -338,6 +338,8 @@ def bootstrap(
     except ParamEvaluationError:
         derived = ()
     names = tuple(params.kinds()) + derived
+    # (the refits share its whitening of correlated noise; see with_data)
+    objective.prepare()
     rows = []
     failures = []
     for k in range(options.nsamples()):
@@ -354,8 +356,9 @@ def bootstrap(
                 for key in dataset}))
         refit = f"bootstrap refit {k + 1}/{options.nsamples()}"
         try:
-            result = refitter.fit(
-                Objective(group.with_data(datasets)), start_params)
+            # (closed after the refit: the fitter can keep it alive)
+            with objective.with_data(datasets) as refit_objective:
+                result = refitter.fit(refit_objective, start_params)
         except (ParamEvaluationError, RuntimeError) as e:
             failures.append(str(e))
             _log.warning(f"{refit} failed: {e}")
