@@ -186,17 +186,6 @@ def test_a_disk_that_emits_lines_needs_kinematics(name):
     assert "a disk that emits lines needs kinematics" in message
 
 
-def test_a_disk_has_no_outward_velocity():
-    # (the direction 'out' is along the radius from the apex of a cone)
-    outward = ARCTAN | dict(direction='out')
-    message = component_error(
-        'lines_smdisk_thin', kinematics=KINEMATICS | dict(vptraits=outward))
-    assert (
-        "a disk takes velocity traits along ['tan', 'rad', 'ver', 'los']; "
-        "velocity polar trait arctan (class=VPTraitArctan) is along "
-        "'out'") in message
-
-
 @pytest.mark.parametrize('name', COMPONENTS)
 def test_a_component_needs_emission_or_opacity(name):
     message = component_error(name, emission=..., opacity=...)

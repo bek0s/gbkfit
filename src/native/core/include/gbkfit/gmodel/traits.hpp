@@ -1541,14 +1541,17 @@ vp_trait(
 }
 
 // The line-of-sight velocity of the speed v of a velocity polar trait of
-// a disk of inclination incl, at the radius r and the azimuth theta of
-// its plane, by the direction of the speed: tangential, v cos(theta)
-// sin(incl); radial (positive outwards), v sin(theta) sin(incl);
-// vertical (positive along z), v cos(incl); or the line of sight, v. The
-// tangential and radial directions are undefined at the centre, where
-// the velocity is 0.
+// a disk of inclination incl, at the radius r, the azimuth theta and the
+// height z of the disk, by the direction of the speed: tangential, v
+// cos(theta) sin(incl); radial (positive outwards, in the plane), v
+// sin(theta) sin(incl); vertical (positive along z), v cos(incl);
+// outward (from the centre, along the radius of the sphere, sqrt(r^2 +
+// z^2): away from the plane on either side), v (r sin(theta) sin(incl) +
+// z cos(incl)) / sqrt(r^2 + z^2); or the line of sight, v. The
+// tangential and radial directions are undefined on the axis, and the
+// outward one at the centre, where the velocity is 0.
 template<typename T> constexpr T
-vp_disk_project(T v, int direction, T r, T theta, T incl)
+vp_disk_project(T v, int direction, T r, T theta, T z, T incl)
 {
     switch (direction)
     {
@@ -1558,6 +1561,12 @@ vp_disk_project(T v, int direction, T r, T theta, T incl)
         return r == 0 ? 0 : v * (std::sin(theta) * std::sin(incl));
     case VPT_DIRECTION_VER:
         return v * std::cos(incl);
+    case VPT_DIRECTION_OUT: {
+        const T radius = std::sqrt(r * r + z * z);
+        return radius == 0 ? 0 : v * (
+                (r * std::sin(theta) * std::sin(incl) + z * std::cos(incl))
+                / radius);
+    }
     case VPT_DIRECTION_LOS:
         return v;
     default:
@@ -1570,10 +1579,11 @@ vp_disk_project(T v, int direction, T r, T theta, T incl)
 // of sight, in place, each by its direction (see vp_disk_project)
 template<typename T> constexpr void
 vp_disk_project_traits(
-        T* values, int n, const int* directions, T r, T theta, T incl)
+        T* values, int n, const int* directions, T r, T theta, T z, T incl)
 {
     for (int i = 0; i < n; ++i)
-        values[i] = vp_disk_project(values[i], directions[i], r, theta, incl);
+        values[i] = vp_disk_project(
+                values[i], directions[i], r, theta, z, incl);
 }
 
 // The line-of-sight velocity of the speed v of a velocity polar trait of

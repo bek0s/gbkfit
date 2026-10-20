@@ -41,8 +41,7 @@ TRAIT_PREFIXES = dict(
     rpt='pt', rht='ht', vpt='vpt', vht='vht', dpt='dpt', dht='dht',
     zpt='zpt', spt='spt')
 
-# The traits that the disks take: every type, along every direction but
-# 'out' (of the cones)
+# The traits that the disks take: every type, along every direction
 DISK_TRAITS = TraitTable('disk', {
     kind: tuple(parser.registered_classes().values())
     for kind, parser in dict(
@@ -50,7 +49,7 @@ DISK_TRAITS = TraitTable('disk', {
         vpt=traits.vpt_parser, vht=traits.vht_parser,
         dpt=traits.dpt_parser, dht=traits.dht_parser,
         zpt=traits.zpt_parser, spt=traits.spt_parser).items()},
-    ('tan', 'rad', 'ver', 'los'))
+    ('tan', 'rad', 'ver', 'out', 'los'))
 
 
 def load_disk_component(

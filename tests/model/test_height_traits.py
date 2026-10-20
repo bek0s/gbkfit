@@ -311,3 +311,43 @@ def test_a_lifted_midplane_carries_its_light(driver, caplog, disk_type):
     assert 'zmax shapes the disk' in caplog.text
     np.testing.assert_allclose(
         limited, at_zmax, rtol=1e-5, atol=1e-7 * at_zmax.max())
+
+
+def test_outward_speeds_of_a_thin_disk_are_radial(driver):
+    # In its plane, the radius of the sphere is that of the disk
+    thin = DISK | dict(density=dict(ptraits=dict(type='exponential')))
+    properties = {
+        key: value for key, value in PROPERTIES.items()
+        if key not in ('ht_s', 'vpt_rt', 'vpt_vt')}
+
+    def cube(direction, speed):
+        disk = thin | dict(kinematics=DISK['kinematics'] | dict(
+            vptraits=dict(type='uniform', direction=direction)))
+        return evaluate(driver, disk, properties | {speed: 40})
+    # (to rounding: r / sqrt(r^2) is not 1 in floats)
+    np.testing.assert_allclose(
+        cube('out', 'vpt_vo'), cube('rad', 'vpt_vr'), rtol=1e-4, atol=1e-9)
+
+
+def test_outward_speeds_of_a_thick_disk_leave_both_faces(driver):
+    # Face-on, the speed v along the radius of the sphere is seen as v z /
+    # sqrt(R^2 + z^2) at the height z: away from the plane on either side
+    disk = with_kinematics(vptraits=dict(type='uniform', direction='out'))
+    properties = {
+        key: value for key, value in PROPERTIES.items()
+        if key not in ('vpt_rt', 'vpt_vt')} | dict(vpt_vo=40, incl=0)
+    group = observe(driver, disk)
+    params = gbkfit.params.ParamSpace(group.pdescs(), properties)
+    extra = {}
+    group.model_h(params.evaluate(), extra)
+    vdata = extra['observation0_model_component0_vdata']
+    coords = vdata.coords
+    nz = vdata.data.shape[0]
+    z = coords.rval[2] + (np.arange(nz) - coords.rpix[2]) * coords.step[2]
+    # (the spaxel (20, 19), 4.2 and 0.4 arcsec from the centre of the
+    # disk, at the pixel (15.8, 19.4); within zmax of its plane)
+    R = np.hypot(20 - 15.8, 19 - 19.4)
+    within = np.abs(z) < DISK['density']['htraits']['zmax']
+    np.testing.assert_allclose(
+        vdata.data[within, 19, 20], 40 * z[within] / np.hypot(R, z[within]),
+        rtol=1e-5, atol=1e-4)

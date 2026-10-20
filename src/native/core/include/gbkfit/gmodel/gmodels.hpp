@@ -798,7 +798,8 @@ gmodel_mcdisk_evaluate_cloud(
             xd, yd, rd, theta, height,
             [&](T* values) {
                 vp_disk_project_traits(
-                        values, a.vpt.n, a.vpt_directions, rd, theta, incli);
+                        values, a.vpt.n, a.vpt_directions, rd, theta, height,
+                        incli);
             });
 
     // Apply systemic velocity
@@ -1058,8 +1059,10 @@ gmodel_smdisk_evaluate_spaxel(
             a.vpt, a.vht, rnidx, a.rnodes, a.nrnodes,
             xn, yn, rn, theta, zn,
             [&](T* values) {
+                // (a thin disk is in its plane: zn is not a height)
                 vp_disk_project_traits(
-                        values, a.vpt.n, a.vpt_directions, rn, theta, incli);
+                        values, a.vpt.n, a.vpt_directions, rn, theta,
+                        is_thin ? T(0) : zn, incli);
             });
 
     // Apply systemic velocity
@@ -1281,9 +1284,11 @@ gmodel_disk_traits_point(int j, const DiskTraitsArgs<T>& a)
         case TraitKind::VPT:
             gmodel_disk_ptraits_point<vp_trait<T>>(values, j, rnidx, a);
             if (a.project) {
+                // (polar traits, in the plane of the disk: z = 0)
                 vp_disk_project_traits(
                         values, a.traits.n, a.directions, a.r[j],
-                        a.theta[j] * DEG_TO_RAD<T>, a.incl * DEG_TO_RAD<T>);
+                        a.theta[j] * DEG_TO_RAD<T>, T(0),
+                        a.incl * DEG_TO_RAD<T>);
             }
             break;
         case TraitKind::DPT:

@@ -51,15 +51,19 @@ A velocity polar trait is a speed v along its direction (its option
 direction; the trait mass is tangential), and its speed parameter is
 named after it: tangential ('tan', vt, around the axis), radial ('rad',
 vr, in the plane of a disk, positive outwards), vertical ('ver', vv,
-along z, positive along it), outward ('out', vo, along r on a cone,
-positive away from the apex) or the line of sight ('los', vl). On a
-disk, the speeds are projected on the line of sight as v cos(theta)
-sin(incl), v sin(theta) sin(incl), v cos(incl) and v; on a cone, the
-tangential and outward ones as v cos(theta) sin(incl) and v (sin(a)
-sin(theta) sin(incl) + cos(a) cos(incl)), a the angle of the point from
-the positive side of the axis. The tangential and radial ones are 0 at
-the centre of a disk, the tangential one on the axis of a cone and the
-outward one at its apex, where their directions are undefined.
+along z, positive along it), outward ('out', vo, along the radius of
+the sphere about the centre of a disk or the apex of a cone, positive
+away from it: on a disk, away from its plane on either side, e.g. a
+wind of its gas) or the line of sight ('los', vl). On a disk, the
+speeds are projected on the line of sight as v cos(theta) sin(incl), v
+sin(theta) sin(incl), v cos(incl), v (sin(a) sin(theta) sin(incl) +
+cos(a) cos(incl)) and v, a the angle of the point from the positive
+side of the axis (sin(a) = R / r and cos(a) = z / r, at the radius R,
+the height z and r = sqrt(R^2 + z^2)); on a cone, the tangential and
+outward ones as on a disk. The tangential and radial ones are 0 on the
+axis of a disk, the tangential one on the axis of a cone, and the
+outward ones at the centre of a disk and the apex of a cone, where
+their directions are undefined.
 
 Node-wise parameters (those of the nw_ traits, and of the height traits
 with rnodes) have a value for each node: at its radii (sampling
@@ -1926,8 +1930,8 @@ class VPTraitUniform(TraitFeatureDirection, VPTrait):
     Parameters
     ----------
     direction : str
-        The direction of its speed: 'tan', 'rad', 'ver' or 'los' (see the
-        module docstring).
+        The direction of its speed: 'tan', 'rad', 'ver', 'out' or 'los'
+        (see the module docstring).
 
     Raises
     ------
@@ -1958,8 +1962,8 @@ class VPTraitArctan(TraitFeatureDirection, VPTrait):
     Parameters
     ----------
     direction : str
-        The direction of its speed: 'tan', 'rad', 'ver' or 'los' (see the
-        module docstring).
+        The direction of its speed: 'tan', 'rad', 'ver', 'out' or 'los'
+        (see the module docstring).
 
     Raises
     ------
@@ -1990,8 +1994,8 @@ class VPTraitBoissier(TraitFeatureDirection, VPTrait):
     Parameters
     ----------
     direction : str
-        The direction of its speed: 'tan', 'rad', 'ver' or 'los' (see the
-        module docstring).
+        The direction of its speed: 'tan', 'rad', 'ver', 'out' or 'los'
+        (see the module docstring).
 
     Raises
     ------
@@ -2023,8 +2027,8 @@ class VPTraitEpinat(TraitFeatureDirection, VPTrait):
     Parameters
     ----------
     direction : str
-        The direction of its speed: 'tan', 'rad', 'ver' or 'los' (see the
-        module docstring).
+        The direction of its speed: 'tan', 'rad', 'ver', 'out' or 'los'
+        (see the module docstring).
 
     Raises
     ------
@@ -2059,8 +2063,8 @@ class VPTraitLRamp(TraitFeatureDirection, VPTrait):
     Parameters
     ----------
     direction : str
-        The direction of its speed: 'tan', 'rad', 'ver' or 'los' (see the
-        module docstring).
+        The direction of its speed: 'tan', 'rad', 'ver', 'out' or 'los'
+        (see the module docstring).
 
     Raises
     ------
@@ -2091,8 +2095,8 @@ class VPTraitTanh(TraitFeatureDirection, VPTrait):
     Parameters
     ----------
     direction : str
-        The direction of its speed: 'tan', 'rad', 'ver' or 'los' (see the
-        module docstring).
+        The direction of its speed: 'tan', 'rad', 'ver', 'out' or 'los'
+        (see the module docstring).
 
     Raises
     ------
@@ -2124,8 +2128,8 @@ class VPTraitPolyex(TraitFeatureDirection, VPTrait):
     Parameters
     ----------
     direction : str
-        The direction of its speed: 'tan', 'rad', 'ver' or 'los' (see the
-        module docstring).
+        The direction of its speed: 'tan', 'rad', 'ver', 'out' or 'los'
+        (see the module docstring).
 
     Raises
     ------
@@ -2161,8 +2165,8 @@ class VPTraitRix(TraitFeatureDirection, VPTrait):
     Parameters
     ----------
     direction : str
-        The direction of its speed: 'tan', 'rad', 'ver' or 'los' (see the
-        module docstring).
+        The direction of its speed: 'tan', 'rad', 'ver', 'out' or 'los'
+        (see the module docstring).
 
     Raises
     ------
@@ -2198,8 +2202,8 @@ class VPTraitCourteau(TraitFeatureDirection, VPTrait):
     Parameters
     ----------
     direction : str
-        The direction of its speed: 'tan', 'rad', 'ver' or 'los' (see the
-        module docstring).
+        The direction of its speed: 'tan', 'rad', 'ver', 'out' or 'los'
+        (see the module docstring).
 
     Raises
     ------
@@ -2235,8 +2239,8 @@ class VPTraitBrandt(TraitFeatureDirection, VPTrait):
     Parameters
     ----------
     direction : str
-        The direction of its speed: 'tan', 'rad', 'ver' or 'los' (see the
-        module docstring).
+        The direction of its speed: 'tan', 'rad', 'ver', 'out' or 'los'
+        (see the module docstring).
 
     Raises
     ------
@@ -2271,8 +2275,8 @@ class VPTraitIso(TraitFeatureDirection, VPTrait):
     Parameters
     ----------
     direction : str
-        The direction of its speed: 'tan', 'rad', 'ver' or 'los' (see the
-        module docstring).
+        The direction of its speed: 'tan', 'rad', 'ver', 'out' or 'los'
+        (see the module docstring).
 
     Raises
     ------
@@ -2304,8 +2308,8 @@ class VPTraitNFW(TraitFeatureDirection, VPTrait):
     Parameters
     ----------
     direction : str
-        The direction of its speed: 'tan', 'rad', 'ver' or 'los' (see the
-        module docstring).
+        The direction of its speed: 'tan', 'rad', 'ver', 'out' or 'los'
+        (see the module docstring).
 
     Raises
     ------
@@ -2335,8 +2339,8 @@ class VPTraitNWUniform(TraitFeatureSampling, TraitFeatureDirection, VPTrait):
     Parameters
     ----------
     direction : str
-        The direction of its speed: 'tan', 'rad', 'ver' or 'los' (see the
-        module docstring).
+        The direction of its speed: 'tan', 'rad', 'ver', 'out' or 'los'
+        (see the module docstring).
     sampling : str, optional
         Where the values of its node-wise parameters are given: 'rnodes',
         at the radii of the rings, or 'subrings', at the rings it is
@@ -2377,8 +2381,8 @@ class VPTraitNWHarmonic(
     Parameters
     ----------
     direction : str
-        The direction of its speed: 'tan', 'rad', 'ver' or 'los' (see the
-        module docstring).
+        The direction of its speed: 'tan', 'rad', 'ver', 'out' or 'los'
+        (see the module docstring).
     order : int
         The order m of the harmonic: the pattern repeats every 360 / m
         degrees, and order 0 is an axisymmetric a(r).
