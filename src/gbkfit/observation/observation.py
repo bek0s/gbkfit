@@ -121,7 +121,16 @@ class Observation(parseutils.Serializable):
         there are data, and none without data.
     scale : Sequence of int, optional
         How many times the model is oversampled along each axis of the
-        data (an accuracy setting); 1 by default.
+        data (an accuracy setting); 1 by default. The smooth components
+        are sampled at the centre of each (sub)pixel, which differs from
+        the mean of the pixel where the light or the velocity changes
+        within it: at the centre of a disk a few pixels across, at edges
+        inside the data, and in cubes, whose lines then miss the
+        broadening by the velocity gradient within the pixel. On a mock
+        disk of scale length 2.5 pixels at peak S/N 20, 1 biased the
+        dispersion by +2 error bars and 2 by +0.5; on LVHIS data, of many
+        pixels per beam, it changed nothing (see
+        notes/adaptive-pixel-sampling.md).
     dtype : str, optional
         The floating type of the model: 'float32' or 'float64'. By default
         float64 if the noise of an item of its data is correlated (see
