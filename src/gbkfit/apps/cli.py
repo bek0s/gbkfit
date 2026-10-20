@@ -200,17 +200,21 @@ def _number_range(
 
 
 def _output_parser(
-        default_mode: Literal['terminate', 'overwrite', 'unique']
+        default_mode: Literal['terminate', 'overwrite', 'unique'],
+        default_dir: str | None = 'output',
+        default_dir_text: str = 'output'
 ) -> argparse.ArgumentParser:
     """
     Return the parser of the options of the output directory of a task,
-    with a default for what to do if it exists.
+    with its default (and its text in the help), and a default for what
+    to do if it exists.
     """
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument(
-        '--output-dir', type=str, default='output',
+        '--output-dir', type=str, default=default_dir,
         metavar='OUTPUT',
-        help="the path of the directory to store the task's output")
+        help=f"the path of the directory to store the task's output; "
+             f"default: {default_dir_text}")
     parser.add_argument(
         '--output-dir-mode', choices=['terminate', 'overwrite', 'unique'],
         default=default_mode,
@@ -519,12 +523,14 @@ def _make_parser() -> argparse.ArgumentParser:
     #
 
     parser_plot = parsers_task.add_parser('plot', parents=[
-        parser_common_output, parser_common],
+        _output_parser('overwrite', None, 'the folder plots of the run'),
+        parser_common],
         help="plot fitting results")
     parser_plot.add_argument(
         'result_dir', type=str,
         metavar='result-dir',
-        help="the path of the output directory of a fitting run")
+        help="the path of the output directory of a fitting run (or of an "
+             "evaluation of the objective)")
     parser_plot.add_argument(
         '--format', type=str, default='pdf', choices=['pdf', 'png'],
         help="the format of the created figures")

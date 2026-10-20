@@ -58,7 +58,11 @@ Status = Literal['running', 'complete', 'failed']
 
 # The formats of the products, by file extension
 _FORMATS = {
-    '.fits': 'fits', '.ecsv': 'ecsv', '.json': 'json', '.yaml': 'yaml'}
+    '.fits': 'fits', '.ecsv': 'ecsv', '.json': 'json', '.yaml': 'yaml',
+    '.png': 'png', '.pdf': 'pdf', '.svg': 'svg'}
+
+# The formats of figures, written as the bytes of their files
+_FIGURES = ('png', 'pdf', 'svg')
 
 # The values that JSON and YAML products hold (with lists and dicts of
 # them)
@@ -88,6 +92,9 @@ class Product:
         The shape of its array (numpy order), or (nrows,) of a table.
     description : str or None
         What it is, in words.
+    sources : tuple of str or None
+        The products it is made from, by their paths (e.g. those of the
+        run that a figure shows).
     """
     path: str
     kind: str
@@ -96,6 +103,7 @@ class Product:
     unit: str | None = None
     shape: tuple[int, ...] | None = None
     description: str | None = None
+    sources: tuple[str, ...] | None = None
 
     def matches(self, kind: str | None, ids: Mapping[str, str]) -> bool:
         """
@@ -111,17 +119,19 @@ class Product:
             path=self.path, kind=self.kind, ids=self.ids, format=self.format,
             unit=self.unit,
             shape=None if self.shape is None else list(self.shape),
-            description=self.description)
+            description=self.description,
+            sources=None if self.sources is None else list(self.sources))
         return {key: x for key, x in info.items() if x is not None}
 
     @classmethod
     def load(cls, info: Mapping[str, Any]) -> 'Product':
         """Return the product of an entry of a manifest."""
-        shape = info.get('shape')
+        shape, sources = info.get('shape'), info.get('sources')
         return cls(
             info['path'], info['kind'], dict(info.get('ids', {})),
             info['format'], info.get('unit'),
-            None if shape is None else tuple(shape), info.get('description'))
+            None if shape is None else tuple(shape), info.get('description'),
+            None if sources is None else tuple(sources))
 
 
 class Run:
@@ -305,6 +315,7 @@ class RunWriter:
             *,
             unit: str | None = None,
             description: str | None = None,
+            sources: Iterable[str] | None = None,
             **ids: str
     ) -> Product:
         """
@@ -321,7 +332,9 @@ class RunWriter:
         - .ecsv: an astropy Table, with the units of its columns and the
           provenance in its metadata;
         - .json and .yaml: numbers, strings, lists and dicts (strict JSON:
-          NaN and infinities are null).
+          NaN and infinities are null);
+        - .png, .pdf and .svg: the bytes of a figure (e.g. from
+          matplotlib's savefig).
 
         Parameters
         ----------
@@ -337,6 +350,8 @@ class RunWriter:
             own).
         description : str, optional
             What it is, in words.
+        sources : Iterable of str, optional
+            The products it is made from, by their paths.
         **ids : str
             What it is of (e.g. observation='ngc1313', item='vlos').
 
@@ -361,7 +376,8 @@ class RunWriter:
         write, unit, shape = self._writer(path, format_, kind, value, unit)
         _write_atomic(self.filename(path), write)
         return self._add(Product(
-            path, kind, ids, format_, unit, shape, description))
+            path, kind, ids, format_, unit, shape, description,
+            None if sources is None else tuple(sources)))
 
     def record(
             self,
@@ -449,6 +465,8 @@ class RunWriter:
                 return lambda f: Path(f).write_text(text), None, None
             return (lambda f: ruamel.yaml.YAML().dump(values, Path(f)),
                     None, None)
+        if format_ in _FIGURES and isinstance(value, bytes):
+            return lambda f: Path(f).write_bytes(value), None, None
         raise TypeError(
             f"{path}: a {type(value).__name__} cannot be written as "
             f"{format_}")

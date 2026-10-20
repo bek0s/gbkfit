@@ -45,8 +45,8 @@ def eval_(
     and write the outputs as a run (see gbkfit.outputs; its option 'mode'
     is the mode): the configuration (config.yaml, kind 'config'), the
     parameters and the derived values (params.json, 'params'), the
-    models, or the data and the residuals, and their extra outputs (see
-    data_outputs and evaluation_outputs).
+    models and their extra outputs, and in the mode 'objective' the data
+    and the residuals too (see data_outputs and evaluation_outputs).
 
     The mode 'mock' writes the models (as 'model'), and mock data of the
     observations: their models measured from what their instruments
@@ -135,8 +135,7 @@ def _eval(
 
     _log.info("evaluating...")
     outputs = _detail.evaluation_outputs(
-        group, objective, param_values, mode != 'objective',
-        mode == 'objective')
+        group, objective, param_values, True, mode == 'objective')
     if objective is not None:
         outputs |= _detail.data_outputs(group)
         _log.info(f"chi-square: {objective.chi2(param_values)}")
