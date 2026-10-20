@@ -251,6 +251,24 @@ def test_mcdisk_harmonic_brightness_matches_smdisk(driver, order, amplitude):
     assert relative_difference(mcdisk.sum(0), smdisk.sum(0)) < 0.02
 
 
+def test_mcdisk_spiral_wave_density_matches_smdisk(driver):
+    # An exponential disk plus the density of a spiral density wave of 3
+    # arms in its rotation, whose clouds in each ring are those of the
+    # harmonic of its phase there. The arms (the disk without the plain
+    # exponential) are 7% of its light: two realisations of them differ
+    # by about 7%, and a wrong phase by about 100%.
+    component = dict(cflux=2e-5, density=dict(
+        ptraits=[dict(type='exponential'), dict(type='spiral', order=3)],
+        htraits=[dict(type='sech2', zmax=8), dict(type='sech2', zmax=8)]))
+    properties = dict(pt1_p=40, pt1_c=100, pt1_e=0.3, pt1_o=0, ht1_s=1)
+    mcdisk = evaluate_disk('mcdisk', driver.type(), component, properties)
+    del component['cflux']
+    smdisk = evaluate_disk('smdisk', driver.type(), component, properties)
+    plain = evaluate_disk('smdisk', driver.type())
+    assert relative_difference(
+        (mcdisk - plain).sum(0), (smdisk - plain).sum(0)) < 0.15
+
+
 @pytest.mark.parametrize('p', [0, 90, -90, 180, 270])
 def test_mcdisk_azimuthal_selection_matches_smdisk(driver, p):
     # Only the azimuths within s / 2 of p are kept, for any p. A third of

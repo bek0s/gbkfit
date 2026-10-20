@@ -61,11 +61,11 @@ def trait_configs(parser):
     configs = []
     for type_, cls in parser.registered_classes().items():
         # (the traits mass have no parameters: their values come from the
-        # mass of their galaxy, see test_mass; and a spiral wave takes the
-        # rotation of other traits, see test_flows)
+        # mass of their galaxy, see test_mass; and the spiral waves take
+        # the rotation of other traits, see test_flows)
         if cls in (
                 traits.VPTraitMass, traits.VHTraitMass,
-                traits.VPTraitSpiral):
+                traits.VPTraitSpiral, traits.RPTraitSpiral):
             continue
         options = inspect.signature(cls.__init__).parameters
         config = dict(type=type_)

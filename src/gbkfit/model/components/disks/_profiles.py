@@ -16,7 +16,7 @@ import numpy as np
 from gbkfit.params import ParamValues
 from ...mass.units import G
 from .._nodal import subring_radii
-from ..traits import VPTraitSpiral
+from ..traits import RPTraitSpiral, TraitFeatureSpiral
 from ._disk import Disk, DiskPlan
 
 
@@ -195,14 +195,18 @@ def _with_given(disk: Disk, params: ParamValues) -> ParamValues:
     """
     Return the values of the parameters of a disk with those that its
     model gives it (see Disk.circular_velocity_params) as NaN, if left
-    out: its profiles do not depend on them.
+    out: its profiles do not depend on them; but the tables of its
+    density waves as 0 (see Disk.wave_params): its profiles take their
+    azimuthal means, which are 0 whatever their tables.
     """
+    nsubrnodes = len(disk.subrnodes())
     given = {
         name: np.full(len(radii), np.nan)
         for name, radii in disk.circular_velocity_params().items()}
     given |= {
-        name: np.full(len(disk.subrnodes()), np.nan)
-        for name in [*disk.rotation_factor_params(), *disk.wave_params()]}
+        name: np.full(nsubrnodes, np.nan)
+        for name in disk.rotation_factor_params()}
+    given |= {name: np.zeros(nsubrnodes) for name in disk.wave_params()}
     return given | dict(params)
 
 
@@ -484,9 +488,11 @@ def density_waves(
 ) -> ParamValues:
     """
     Return the tables of the density waves of a disk at its subnodes, by
-    the names of their parameters (see traits.VPTraitSpiral): in its
-    rotation there (see rotation), and the derivative of the rotation by
-    the second-order three-point formula.
+    the names of their parameters (see traits.TraitFeatureSpiral): in its
+    rotation there (see rotation), with the derivative of the rotation by
+    the second-order three-point formula, and for the density of a wave,
+    in the density of the disk without its waves (the azimuthal mean of
+    the sum of its other density polar traits).
 
     Parameters
     ----------
@@ -502,15 +508,42 @@ def density_waves(
     r = np.asarray(disk.subrnodes(), dtype=float)
     v = rotation(disk, plan, params, r)
     dv = np.gradient(v, r, edge_order=2)
+    density = _density_without_waves(disk, plan, params, r) \
+        if any(isinstance(trait, RPTraitSpiral)
+               for trait in disk.traits('rpt')) else None
     tables = {}
-    for trait, values, names in zip(
-            disk.traits('vpt'), disk.trait_values('vpt', params),
-            disk.trait_params('vpt').pnames):
-        if isinstance(trait, VPTraitSpiral):
-            tables |= {
-                names[name]: table
-                for name, table in trait.wave(r, v, dv, values).items()}
+    for kind in ('rpt', 'vpt'):
+        for trait, values, names in zip(
+                disk.traits(kind), disk.trait_values(kind, params),
+                disk.trait_params(kind).pnames):
+            if isinstance(trait, TraitFeatureSpiral):
+                tables |= {
+                    names[name]: table for name, table in trait.wave(
+                        r, v, dv, density, values).items()}
     return tables
+
+
+def _density_without_waves(
+        disk: Disk, plan: DiskPlan, params: ParamValues, r: np.ndarray
+) -> np.ndarray:
+    """
+    Return the azimuthal mean of the sum of the density polar traits of a
+    disk but its density waves, at the radii r (arcsec, on the disk), of
+    all of the disk (not only where its selection traits keep it).
+    """
+    others = [
+        not isinstance(trait, RPTraitSpiral) for trait in disk.traits('rpt')]
+    r = r[:, None]
+
+    def values(theta: np.ndarray) -> np.ndarray:
+        densities = plan.evaluate_polar_traits(params, 'rpt', r, theta)
+        return np.sum(
+            densities[others], axis=0, keepdims=True, dtype=float)
+    axisymmetric = all(
+        trait.axisymmetric()
+        for trait, other in zip(disk.traits('rpt'), others) if other)
+    return _azimuthal_mean(
+        values, axisymmetric, _edges(disk, params, ('rpt',), r[:, 0]))[0]
 
 
 def dispersion(

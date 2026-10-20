@@ -19,6 +19,7 @@ constexpr int RPT_UID_MIXTURE_MOFFAT = 54;
 constexpr int RPT_UID_NW_UNIFORM = 101;
 constexpr int RPT_UID_NW_HARMONIC = 102;
 constexpr int RPT_UID_NW_DISTORTION = 103;
+constexpr int RPT_UID_SPIRAL = 104;
 constexpr int RPT_UID_MAP = 151;
 
 // Density height traits
@@ -583,6 +584,20 @@ rp_trait_nw_harmonic(
     p_trait_nw_harmonic(out, rnidx, rnodes, nrnodes, r, theta, consts, params);
 }
 
+// Draw the azimuth out_t of a cloud from |cos(k (t - p))| (k > 0, p in
+// radians): one of its 2k lobes, centred on p + j pi / k, then the offset d
+// from the centre of the lobe, whose density cos(k d) on (-pi / 2k, pi /
+// 2k) has the cdf (1 + sin(k d)) / 2; out_s is the sign of the cosine
+// there, positive in the even lobes.
+template<typename T> constexpr void
+harmonic_azimuth_rnd(T& out_s, T& out_t, RNG<T>& rng, int k, T p)
+{
+    int j = std::min(int(rng() * 2 * k), 2 * k - 1);
+    T d = std::asin(2 * rng() - 1) / k;
+    out_t = wrap_angle(p + j * PI<T> / k + d);
+    out_s = j % 2 ? -1 : 1;
+}
+
 template<typename T> constexpr void
 rp_trait_nw_harmonic_rnd(
         T& out_s, T& out_r, T& out_t, RNG<T>& rng,
@@ -591,20 +606,46 @@ rp_trait_nw_harmonic_rnd(
 {
     rp_trait_sample_polar_coords_nw(out_r, out_t, rng, rnidx, rnodes);
     int k = std::rint(consts[0]);
-    // A harmonic of order 0 is uniform (and has no phase parameter)
+    // A harmonic of order 0 is uniform (and has no phase parameter). The
+    // sign of the amplitude is in the flux of the clouds.
     out_s = 1;
     if (k == 0)
         return;
-    // Draw the azimuth from |cos(k (t - p))|: one of its 2k lobes, centred
-    // on p + j pi / k, then the offset d from the centre of the lobe, whose
-    // density cos(k d) on (-pi / 2k, pi / 2k) has the cdf (1 + sin(k d)) / 2.
-    // The cosine is positive in the even lobes. The sign of the amplitude
-    // is in the flux of the clouds.
     T p = params[nrnodes + rnidx] * DEG_TO_RAD<T>;
-    int j = std::min(int(rng() * 2 * k), 2 * k - 1);
-    T d = std::asin(2 * rng() - 1) / k;
-    out_t = wrap_angle(p + j * PI<T> / k + d);
-    out_s = j % 2 ? -1 : 1;
+    harmonic_azimuth_rnd(out_s, out_t, rng, k, p);
+}
+
+// The density of a spiral density wave of m = consts[0] arms (see
+// traits.RPTraitSpiral): a cos(m (theta - p) - f), of p = params[0] and
+// the tables a and f at the subnodes (after the four parameters p, c, e
+// and o)
+template<typename T> constexpr void
+rp_trait_spiral(
+        T& out,
+        int rnidx, const T* rnodes, int nrnodes, T r, T theta,
+        const T* consts, const T* params)
+{
+    int m = std::rint(consts[0]);
+    T p = params[0] * DEG_TO_RAD<T>;
+    T a = nodewise(r, rnidx, rnodes, params, 4, 1);
+    T f = nodewise(r, rnidx, rnodes, params, 4 + nrnodes, 1);
+    out = a * std::cos(m * (theta - p) - f);
+}
+
+// A cloud of a spiral density wave in the ring rnidx: of the harmonic a
+// cos(m (theta - p) - f) of the f of the ring, whose maxima are at the
+// azimuths p + f / m (see harmonic_azimuth_rnd). The sign of a is in the
+// flux of the clouds.
+template<typename T> constexpr void
+rp_trait_spiral_rnd(
+        T& out_s, T& out_r, T& out_t, RNG<T>& rng,
+        int rnidx, const T* rnodes, int nrnodes,
+        const T* consts, const T* params)
+{
+    rp_trait_sample_polar_coords_nw(out_r, out_t, rng, rnidx, rnodes);
+    int m = std::rint(consts[0]);
+    T p = params[0] * DEG_TO_RAD<T> + params[4 + nrnodes + rnidx] / m;
+    harmonic_azimuth_rnd(out_s, out_t, rng, m, p);
 }
 
 template<typename T> constexpr void
@@ -1343,6 +1384,10 @@ rp_trait(T& out,
         rp_trait_nw_harmonic(
                 out, rnidx, rnodes, nrnodes, r, theta, consts, params);
         break;
+    case RPT_UID_SPIRAL:
+        rp_trait_spiral(
+                out, rnidx, rnodes, nrnodes, r, theta, consts, params);
+        break;
     case RPT_UID_NW_DISTORTION:
         rp_trait_nw_distortion(
                 out, rnidx, rnodes, nrnodes, r, theta, params);
@@ -1431,6 +1476,11 @@ rp_trait_rnd(
         break;
     case RPT_UID_NW_HARMONIC:
         rp_trait_nw_harmonic_rnd(
+                out_s, out_r, out_t,
+                rng, rnidx, rnodes, nrnodes, consts, params);
+        break;
+    case RPT_UID_SPIRAL:
+        rp_trait_spiral_rnd(
                 out_s, out_r, out_t,
                 rng, rnidx, rnodes, nrnodes, consts, params);
         break;

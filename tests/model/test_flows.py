@@ -1,13 +1,15 @@
 """
 Tests of the flows of the plane of a disk: along a bar (the velocity
 traits bar and nw_bar), in two wedges (wedge) and of a spiral density
-wave (spiral), seen on the line of sight as their formulas give.
+wave (spiral), seen on the line of sight as their formulas give; and of
+the density of a spiral density wave (the density trait spiral).
 """
 
 import numpy as np
 import pytest
 
 from gbkfit.model import component_parser, galaxy_parser
+from gbkfit.model.components.disks._profiles import DiskDensity
 from gbkfit.model.components.traits import VPTraitSpiral
 from gbkfit.utils.parseutils import ConfigError
 
@@ -21,17 +23,21 @@ R = _rng.uniform(0.1, 11.9, 400)
 THETA = _rng.uniform(-180, 180, 400)
 
 
-def disk_config(vptraits):
-    """A disk of the nodes RNODES, of the velocity traits."""
+def disk_config(vptraits, ptraits=None):
+    """
+    A disk of the nodes RNODES, of the velocity traits and the density
+    traits (by default, an exponential).
+    """
     return dict(
         type='smdisk', loose=False, tilted=False, rnodes=RNODES,
-        density=dict(ptraits=dict(type='exponential')),
+        density=dict(ptraits=ptraits or dict(type='exponential')),
         kinematics=dict(vptraits=vptraits, dptraits=dict(type='uniform')),
         emission=dict(type='lines'))
 
 
-def disk(vptraits):
-    return component_parser.load(disk_config(vptraits)).density_disk()
+def disk(vptraits, ptraits=None):
+    return component_parser.load(
+        disk_config(vptraits, ptraits)).density_disk()
 
 
 # The values of the parameters of the disk but those of its velocity
@@ -142,13 +148,13 @@ def test_the_tables_of_a_spiral_wave_are_those_of_davies():
     v = np.full_like(r, 100.0)
     values = dict(c=50, e=0.1, o=0)
     for winding, sense in (('trailing', -1), ('leading', 1)):
-        tables = VPTraitSpiral(3, winding).wave(r, v, 0 * v, values)
+        tables = VPTraitSpiral(3, winding).wave(r, v, 0 * v, None, values)
         expected = davies(r, 100, 3, 50, 0.1, 0, sense)
         for name in ('ar', 'at', 'f'):
             np.testing.assert_allclose(tables[name], expected[name])
     assert tables['ar'][1:] == pytest.approx(-0.1 * 50 * 3 / np.sqrt(7))
     # One arm in a flat rotation has no wave (m^2 Omega^2 < kappa^2)
-    tables = VPTraitSpiral(1).wave(r, v, 0 * v, values)
+    tables = VPTraitSpiral(1).wave(r, v, 0 * v, None, values)
     assert not any(np.any(table) for table in tables.values())
 
 
@@ -177,7 +183,48 @@ def test_a_spiral_wave_in_the_rotation_of_its_disk(driver):
         expected, rtol=1e-9, atol=1e-9)
 
 
+# A disk of an exponential density and a flat rotation, with the density
+# of a wave of 3 trailing arms
+WAVE_VPTRAITS = dict(type='uniform', direction='tan')
+WAVE_PTRAITS = [dict(type='exponential'), dict(type='spiral', order=3)]
+WAVE_VALUES = DISK_VALUES | dict(
+    vpt_vt=100, pt1_p=40, pt1_c=50, pt1_e=0.3, pt1_o=2)
+
+
+def test_the_density_of_a_spiral_wave(driver):
+    # e Sigma_0 cos(phi), Sigma_0 the exponential: its tables at the
+    # subnodes (no wave at the centre), which the gravity of the galaxy
+    # gives, interpolated linearly
+    galaxy = galaxy_parser.load(dict(
+        components=[disk_config(WAVE_VPTRAITS, WAVE_PTRAITS)]))
+    given = galaxy.plan_gravity().evaluate(WAVE_VALUES)[0]
+    wave_disk = disk(WAVE_VPTRAITS, WAVE_PTRAITS)
+    subrnodes = np.asarray(wave_disk.subrnodes())
+    density = np.where(subrnodes > 0, 0.3 * np.exp(-subrnodes / 3), 0)
+    f = davies(subrnodes, 100, 3, 50, 0.3, 2, -1)['f']
+    phi = 3 * np.deg2rad(THETA - 40) - np.interp(R, subrnodes, f)
+    plan = wave_disk.plan(driver, 0, np.float64)
+    np.testing.assert_allclose(
+        plan.evaluate_polar_traits(WAVE_VALUES | given, 'rpt', R, THETA)[1],
+        np.interp(R, subrnodes, density) * np.cos(phi), rtol=1e-9,
+        atol=1e-12)
+
+
+def test_the_gravity_takes_no_density_of_a_spiral_wave(driver):
+    # (its azimuthal mean is 0, whatever its tables)
+    wave_disk = disk(WAVE_VPTRAITS, WAVE_PTRAITS)
+    density = DiskDensity(
+        wave_disk, wave_disk.plan(driver, 0, np.float64), WAVE_VALUES, 1.0)
+    radii = np.array([0.5, 3.0, 7.5])
+    np.testing.assert_allclose(
+        density.surface_densities(radii),
+        [np.exp(-radii / 3), np.zeros(3)], atol=1e-12)
+
+
 def test_a_spiral_wave_needs_the_rotation_of_its_disk():
-    with pytest.raises(ConfigError, match="give the disk tangential"):
-        disk([dict(type='spiral', order=2),
-              dict(type='uniform', direction='rad')])
+    for ptraits, vptraits in (
+            (None, [dict(type='spiral', order=2),
+                    dict(type='uniform', direction='rad')]),
+            (WAVE_PTRAITS, dict(type='uniform', direction='rad'))):
+        with pytest.raises(ConfigError, match="give the disk tangential"):
+            disk(vptraits, ptraits)

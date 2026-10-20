@@ -79,7 +79,7 @@ class GravityPlan:
     of the mass ('central'; without mass, that of the rotation of each
     disk), in the vertical force of the mass ('jeans'), or in the surface
     density of a mass component ('self_gravitating'); and the tables of
-    the density waves of its disks (the velocity trait 'spiral', see
+    the density waves of its disks (the traits 'spiral', see
     Disk.wave_params), in the rotation of each disk, at its subnodes.
 
     It takes the disks it moves and follows as concentric and flat: their

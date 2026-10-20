@@ -167,6 +167,7 @@ def make_disk(
     traits_ = _disk_traits(
         density, kinematics, emission, opacity, zptraits, sptraits)
     DISK_TRAITS.check(traits_)
+    _check_waves(traits_)
     # (not the coefficients of line opacity: a uniform one is common, e.g.
     # one spin temperature)
     check_traits_common(sum(traits_.values(), ()))
@@ -180,6 +181,22 @@ def make_disk(
         traits_=traits_, prefixes=TRAIT_PREFIXES | dict(opt=opacity_prefixes),
         opacity_lines=opacity_lines,
         equilibrium=None if kinematics is None else kinematics.equilibrium())
+
+
+def _check_waves(traits_: dict[str, tuple[traits.Trait, ...]]) -> None:
+    """
+    Raise ConfigError if a disk has a spiral density wave (see
+    traits.TraitFeatureSpiral) but no tangential velocity traits: the wave
+    is in its rotation.
+    """
+    waves = any(
+        isinstance(trait, traits.TraitFeatureSpiral)
+        for kind in ('rpt', 'vpt') for trait in traits_.get(kind, ()))
+    if waves and not any(
+            trait.direction() == 'tan' for trait in traits_.get('vpt', ())):
+        raise ConfigError(
+            "the traits 'spiral' are a density wave in the rotation of "
+            "their disk: give the disk tangential velocity traits")
 
 
 def line_opacity_traits(
