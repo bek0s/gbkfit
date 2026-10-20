@@ -416,6 +416,51 @@ def test_a_stopped_emcee_keeps_its_chain_so_far(tmp_path):
     assert len(chain) == nsteps
 
 
+def test_a_stopped_zeus_keeps_its_chain_so_far(tmp_path):
+    # The steps go to the log as the chain runs (16 walkers, 6 elements
+    # and the log-probability)
+    pytest.importorskip('zeus')
+    from gbkfit.fitting import fitter_parser
+    objective = mock_objective(DriverHost())
+    params = ParamSpace(objective.pdescs(), prior_properties(10))
+    fitter = fitter_parser.load(dict(type='zeus', nwalkers=16, nsteps=100))
+    result = fitter.fit(
+        objective, params, control=StopAfter(16 * 40),
+        log=EvaluationLog(str(tmp_path / 'evaluations.bin')))
+    nsteps = result.diagnostics['nsteps']
+    assert not result.success and 0 < nsteps < 100
+    assert result.posterior is not None
+    with open(tmp_path / 'evaluations-chain.bin', 'rb') as file:
+        file.readline()
+        file.readline()
+        chain = np.frombuffer(file.read()).reshape(-1, 16, 6 + 1)
+    assert len(chain) == nsteps
+
+
+def test_zeus_is_seeded_and_leaves_the_global_random_numbers_alone():
+    # (zeus draws the global random numbers of NumPy and of random)
+    pytest.importorskip('zeus')
+    import random
+    from gbkfit.fitting.fitters.zeus import FitterZeus
+    objective = mock_objective(DriverHost())
+    params = ParamSpace(objective.pdescs(), prior_properties(10))
+    np.random.seed(7)
+    random.seed(7)
+    numpy_state = np.random.get_state()[1].copy()
+    random_state = random.getstate()
+    chains = [
+        FitterZeus(nwalkers=16, nsteps=6, seed=3).fit(
+            objective, params).posterior.samples
+        for _ in range(2)]
+    np.testing.assert_array_equal(chains[0], chains[1])
+    np.testing.assert_array_equal(np.random.get_state()[1], numpy_state)
+    assert random.getstate() == random_state
+    with pytest.raises(ConfigError, match="must be even"):
+        FitterZeus(nwalkers=15)
+    with pytest.raises(ConfigError, match="start after a burn-in"):
+        FitterZeus(nsteps=10, burnin=0, moves='global')
+
+
 def test_least_squares_take_priors_with_residuals_only():
     from gbkfit.fitting.fitparams import FitParamLeastSquares
     info = dict(
@@ -738,6 +783,20 @@ def test_emcee_posterior_agrees_with_the_covariance():
         properties[name] |= dict(value=TRUE[name], width=1e-3)
     params = ParamSpace(objective.pdescs(), properties)
     result = FitterEmcee(nwalkers=24, nsteps=1000, burnin=300).fit(
+        objective, params)
+    check_posterior(result)
+
+
+@pytest.mark.slow
+def test_zeus_posterior_agrees_with_the_covariance():
+    pytest.importorskip('zeus')
+    from gbkfit.fitting.fitters.zeus import FitterZeus
+    objective = mock_objective(DriverHost())
+    properties = prior_properties(10)
+    for name in properties:
+        properties[name] |= dict(value=TRUE[name], width=1e-3)
+    params = ParamSpace(objective.pdescs(), properties)
+    result = FitterZeus(nwalkers=24, nsteps=400, burnin=100).fit(
         objective, params)
     check_posterior(result)
 

@@ -10,6 +10,7 @@ fitter_parser.register_optional({
     'multistart': 'gbkfit.fitting.fitters.multistart.FitterMultiStart',
     'cmaes': 'gbkfit.fitting.fitters.cmaes.FitterCMAES',
     'emcee': 'gbkfit.fitting.fitters.emcee.FitterEmcee',
+    'zeus': 'gbkfit.fitting.fitters.zeus.FitterZeus',
     'nautilus': 'gbkfit.fitting.fitters.nautilus.FitterNautilus',
     'dynesty.static': 'gbkfit.fitting.fitters.dynesty.FitterDynestyStatic',
     'dynesty.dynamic': 'gbkfit.fitting.fitters.dynesty.FitterDynestyDynamic',
