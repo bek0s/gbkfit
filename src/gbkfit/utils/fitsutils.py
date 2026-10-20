@@ -527,7 +527,8 @@ def write_data(
         coords: Coords,
         spectral_axis: int | None = None,
         overwrite: bool = False,
-        unit: str | None = None
+        unit: str | None = None,
+        cards: typing.Mapping[str, typing.Any] | None = None
 ) -> None:
     """
     Write data with the world coordinates of the model to a FITS file.
@@ -553,6 +554,8 @@ def write_data(
         Whether to overwrite an existing file.
     unit : str, optional
         The unit of the data (BUNIT), if known.
+    cards : Mapping, optional
+        Further header cards, by keyword (e.g. provenance).
 
     Raises
     ------
@@ -582,6 +585,7 @@ def write_data(
             f"axis is {spectral_axis}")
     if unit is not None:
         header['BUNIT'] = unit
+    header.update(cards or {})
     astropy.io.fits.writeto(
         filename, data, header,
         output_verify='exception', overwrite=overwrite, checksum=True)
@@ -592,7 +596,8 @@ def write_spectra(
         data: np.ndarray,
         coords: Coords,
         overwrite: bool = False,
-        unit: str | None = None
+        unit: str | None = None,
+        cards: typing.Mapping[str, typing.Any] | None = None
 ) -> None:
     """
     Write spectra of regions to a FITS file.
@@ -612,10 +617,13 @@ def write_spectra(
         Whether to overwrite an existing file.
     unit : str, optional
         The unit of the spectra (BUNIT), if known.
+    cards : Mapping, optional
+        Further header cards, by keyword (e.g. provenance).
     """
     header = astropy.io.fits.Header(_velocity_header(coords, 2, 0))
     if unit is not None:
         header['BUNIT'] = unit
+    header.update(cards or {})
     astropy.io.fits.writeto(
         filename, data, header,
         output_verify='exception', overwrite=overwrite, checksum=True)
