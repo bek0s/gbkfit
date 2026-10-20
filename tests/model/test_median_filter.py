@@ -7,7 +7,7 @@ import numpy as np
 import pytest
 import scipy.ndimage
 
-from gbkfit.model import galaxy_parser
+from gbkfit.model import Extras, galaxy_parser
 from gbkfit.observation import (
     Flat, Observation, ObservationGroup, PixelBrightness, PixelMoments,
     PixelSpectra, observable_parser)
@@ -66,14 +66,14 @@ def test_images_and_cubes_are_filtered_on_the_sky(driver):
 
 def test_moment_maps_are_of_the_filtered_spectra(driver):
     # (the cube of the spectra, an extra output, is that of the filter)
-    filtered, plain = {}, {}
+    filtered, plain = Extras(), Extras()
     model(driver, PixelMoments(size=(24, 20), orders=(0, 1), median_size=3),
           disk('lines'), 'moment1', filtered)
     model(driver, PixelMoments(size=(24, 20), orders=(0, 1)), disk('lines'),
           'moment1', plain)
-    key = 'observation0_dcube_lo'
     np.testing.assert_array_equal(
-        filtered[key].data, zero_padded_median(plain[key].data, 3))
+        filtered.get('dcube_lo').data,
+        zero_padded_median(plain.get('dcube_lo').data, 3))
 
 
 def test_the_median_size_is_an_odd_number_of_at_least_3():

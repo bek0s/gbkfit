@@ -160,7 +160,7 @@ def _fit_figures(source: Run) -> list[_Figure]:
             continue
         error = _find(source, 'error', **ids)
         residual = _find(source, 'residual', **ids)
-        psf = _find(source, 'extra', name=f'{observation}_psf_lo')
+        psf = _find(source, 'extra', observation=observation, name='psf_lo')
         figure = _fit_figure(
             key, _read(source, data), _read(source, error),
             _read(source, model), _read(source, residual),

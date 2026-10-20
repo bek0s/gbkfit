@@ -90,6 +90,8 @@ class Product:
         carry their own).
     shape : tuple of int or None
         The shape of its array (numpy order), or (nrows,) of a table.
+    title : str or None
+        A short title (e.g. for the caption of a figure of it).
     description : str or None
         What it is, in words.
     sources : tuple of str or None
@@ -102,6 +104,7 @@ class Product:
     format: str
     unit: str | None = None
     shape: tuple[int, ...] | None = None
+    title: str | None = None
     description: str | None = None
     sources: tuple[str, ...] | None = None
 
@@ -119,7 +122,7 @@ class Product:
             path=self.path, kind=self.kind, ids=self.ids, format=self.format,
             unit=self.unit,
             shape=None if self.shape is None else list(self.shape),
-            description=self.description,
+            title=self.title, description=self.description,
             sources=None if self.sources is None else list(self.sources))
         return {key: x for key, x in info.items() if x is not None}
 
@@ -130,7 +133,8 @@ class Product:
         return cls(
             info['path'], info['kind'], dict(info.get('ids', {})),
             info['format'], info.get('unit'),
-            None if shape is None else tuple(shape), info.get('description'),
+            None if shape is None else tuple(shape), info.get('title'),
+            info.get('description'),
             None if sources is None else tuple(sources))
 
 
@@ -314,6 +318,7 @@ class RunWriter:
             value: Any,
             *,
             unit: str | None = None,
+            title: str | None = None,
             description: str | None = None,
             sources: Iterable[str] | None = None,
             **ids: str
@@ -348,6 +353,8 @@ class RunWriter:
         unit : str, optional
             The unit of an array (data on a grid and spectra carry their
             own).
+        title : str, optional
+            A short title (e.g. for the caption of a figure of it).
         description : str, optional
             What it is, in words.
         sources : Iterable of str, optional
@@ -376,7 +383,7 @@ class RunWriter:
         write, unit, shape = self._writer(path, format_, kind, value, unit)
         _write_atomic(self.filename(path), write)
         return self._add(Product(
-            path, kind, ids, format_, unit, shape, description,
+            path, kind, ids, format_, unit, shape, title, description,
             None if sources is None else tuple(sources)))
 
     def record(
@@ -385,6 +392,7 @@ class RunWriter:
             kind: str,
             format: str,
             *,
+            title: str | None = None,
             description: str | None = None,
             **ids: str
     ) -> Product:
@@ -399,7 +407,7 @@ class RunWriter:
         """
         path = _check_path(path)
         return self._add(Product(
-            path, kind, ids, format, None, None, description))
+            path, kind, ids, format, None, None, title, description))
 
     def filename(self, path: str) -> str:
         """

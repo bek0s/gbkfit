@@ -8,7 +8,7 @@ import numpy as np
 from gbkfit.dataset import Data, Dataset
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.instrument import Instrument
-from gbkfit.model import Emission
+from gbkfit.model import Emission, Extras
 from gbkfit.model.components._units import DataUnit
 from gbkfit.params import ParamValues
 from gbkfit.utils import gridutils, parseutils
@@ -458,7 +458,7 @@ class ObservablePlan(abc.ABC):
             self,
             params: ParamValues,
             gravity: Sequence[dict[int, ParamValues]],
-            out_extra: dict[str, Any] | None
+            out_extra: Extras | None
     ) -> ModelData:
         """
         Evaluate the model data.
@@ -471,9 +471,10 @@ class ObservablePlan(abc.ABC):
             What the gravity of each galaxy it sees gives its components
             (see GravityPlan.evaluate), in the order of the galaxies of
             its scene.
-        out_extra : dict, optional
-            Where the extra outputs go, if wanted; those of the model are
-            prefixed 'model_'.
+        out_extra : Extras, optional
+            Where the extra outputs go, if wanted: those of the instrument
+            (e.g. the model cube), and those of the model (with the ids of
+            their galaxies, and of their components).
 
         Returns
         -------

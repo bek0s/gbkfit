@@ -12,7 +12,7 @@ import numpy as np
 import pytest
 
 from gbkfit.instrument import instrument_parser
-from gbkfit.model import galaxy_parser
+from gbkfit.model import Extras, galaxy_parser
 from gbkfit.observation import (
     Flat, Foreground, LensDeflectionMap, Observation, ObservationGroup,
     observable_parser)
@@ -102,7 +102,7 @@ def test_feature_combinations(driver, name, lens):
     group = ObservationGroup(
         [galaxy_parser.load(copy.deepcopy(GALAXY))], [observation])
     params = gbkfit.params.ParamSpace(group.pdescs(), PROPERTIES)
-    extra = {}
+    extra = Extras()
     data = group.model_h(params.evaluate(), extra)[0]
     observable = observation.observable()
     assert set(data) == set(observable.keys())
@@ -115,4 +115,4 @@ def test_feature_combinations(driver, name, lens):
     # The extra outputs can be written as their observables give them
     for key, value in data.items():
         observable.output(value['d'])
-    assert any(key.startswith('observation0_model_') for key in extra)
+    assert extra.find(observation='observation0', galaxy='galaxy0')

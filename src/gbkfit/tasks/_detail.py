@@ -21,6 +21,7 @@ import gbkfit.model
 import gbkfit.observation
 import gbkfit.outputs
 from gbkfit.driver import Driver, driver_by_name, driver_parser
+from gbkfit.model import Extra, Extras
 from gbkfit.objective import Objective
 from gbkfit.observation import DepthGroup, Observation, ObservationGroup
 from gbkfit.params import (
@@ -335,21 +336,22 @@ def load_params(
 class Output(NamedTuple):
     """
     An output of a task, to write as a product of its run (see
-    gbkfit.outputs): its path in the run, kind, value and ids.
+    gbkfit.outputs): its path in the run, kind, value and ids, and its
+    title and description, if any.
     """
     path: str
     kind: str
     value: Any
     ids: dict[str, str]
+    title: str | None = None
+    description: str | None = None
 
 
-def observation_name(group: ObservationGroup, index: int) -> str:
-    """
-    Return the name of the observation of the given index in the outputs:
-    its name, or 'observation{index}'.
-    """
-    name = group.observations()[index].name()
-    return f'observation{index}' if name is None else name
+# The folders of the extra outputs by their ids, in this order (see
+# _extra_output)
+_EXTRA_FOLDERS = dict(
+    observation='observations', galaxy='galaxies', group='groups',
+    component='components')
 
 
 def data_outputs(group: ObservationGroup) -> dict[str, Output]:
@@ -366,7 +368,7 @@ def data_outputs(group: ObservationGroup) -> dict[str, Output]:
     for i, observation in enumerate(group.observations()):
         if (dataset := observation.data()) is None:
             continue
-        name = observation_name(group, i)
+        name = group.observation_label(i)
         observable = observation.observable()
         for key in observable.keys():
             item = dataset[key]
@@ -442,15 +444,15 @@ def evaluation_outputs(
     make of them ('model_image', in place of the item: the name of the
     image; see Observable.images), and of the data minus them
     ('residual_image'), with the weights of the data. The extra outputs
-    of the models are 'extra' (extra/<name>, by their names; e.g. the
-    cubes of the components).
+    of the models are 'extra', with their titles and descriptions (see
+    _extra_output).
     """
     outputs = []
-    extra: dict[str, Any] = {}
+    extra = Extras()
     if model:
         for i, data_i in enumerate(group.model_h(values, extra)):
             observation = group.observations()[i]
-            name = observation_name(group, i)
+            name = group.observation_label(i)
             observable = observation.observable()
             for key, value in data_i.items():
                 for kind, part in (
@@ -475,22 +477,19 @@ def evaluation_outputs(
             data = copy.deepcopy(objective.residual_nddata_h(
                 values, weighted, None if model or weighted else extra))
             for i, data_i in enumerate(data):
-                name = observation_name(group, i)
+                name = group.observation_label(i)
                 observable = group.observations()[i].observable()
                 outputs += [
                     _observation_output(
                         name, kind, key, observable.output(value))
                     for key, value in data_i.items()]
-    outputs += [
-        Output(f'extra/{key}{_extension(value)}', 'extra', value,
-               dict(name=key))
-        for key, value in extra.items()]
+    outputs += [_extra_output(x) for x in extra]
     outputs = {output.path: output for output in outputs}
     if residuals:
         for i, amplitudes in enumerate(objective.amplitudes()):
             if amplitudes is None:
                 continue
-            name = observation_name(group, i)
+            name = group.observation_label(i)
             output = Output(
                 f'observations/{name}/amplitudes.fits', 'amplitudes',
                 amplitudes, dict(observation=name))
@@ -535,6 +534,27 @@ def _images(
             for image, x in observable.images(
                 driver, residual, weights, units).items()]
     return images
+
+
+def _extra_output(extra: Extra) -> Output:
+    """
+    Return an extra output of a model (kind 'extra', with its ids and its
+    name as the id 'name'), in the folders of its ids (see
+    _EXTRA_FOLDERS; e.g. observations/<observation>/galaxies/<galaxy>/
+    components/<component>/<name>), or in observations/<observation>/
+    extra/<name> if it is of the observation alone (e.g. the model cube;
+    its folder holds the other outputs of the observation by kind).
+    """
+    folders = []
+    for key, folder in _EXTRA_FOLDERS.items():
+        if key in extra.ids:
+            folders += [folder, extra.ids[key]]
+    if set(extra.ids) == {'observation'}:
+        folders.append('extra')
+    return Output(
+        '/'.join(folders + [f'{extra.name}{_extension(extra.value)}']),
+        'extra', extra.value, extra.ids | dict(name=extra.name),
+        extra.title, extra.description)
 
 
 def _observation_output(
@@ -612,7 +632,9 @@ def write_outputs(
 ) -> None:
     """Write outputs as products of a run (see RunWriter.write)."""
     for output in outputs.values():
-        run.write(output.path, output.kind, output.value, **output.ids)
+        run.write(
+            output.path, output.kind, output.value, title=output.title,
+            description=output.description, **output.ids)
 
 
 def write_config(

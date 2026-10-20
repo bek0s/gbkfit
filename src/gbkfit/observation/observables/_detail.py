@@ -12,6 +12,7 @@ import numpy as np
 from gbkfit.dataset import Dataset
 from gbkfit.driver import Driver
 from gbkfit.instrument import Instrument
+from gbkfit.model import Extras
 from gbkfit.model.components._units import DataUnit, flux_per_area
 from gbkfit.params import ParamValues
 from gbkfit.region import Regions
@@ -336,17 +337,18 @@ class DCubePlanBase(ObservablePlan):
             self,
             params: ParamValues,
             gravity: Sequence[dict[int, ParamValues]],
-            out_extra: dict[str, Any] | None
+            out_extra: Extras | None
     ) -> ModelData:
-        model_extra = None if out_extra is None else {}
+        model_extra = None if out_extra is None else Extras()
         self._evaluate_model(params, gravity, model_extra)
         self._dcube_plan.evaluate(
             out_extra, self._extra_lo, self._extra_hi,
             self._flux_scale(params))
         if model_extra:
-            out_extra.update(
-                {f'model_{k}': self._model_extra(v)
-                 for k, v in model_extra.items()})
+            for extra in model_extra:
+                out_extra.add(
+                    extra.name, self._model_extra(extra.value), extra.title,
+                    extra.description, **extra.ids)
         return self._measure()
 
     def mock(
@@ -412,7 +414,7 @@ class DCubePlanBase(ObservablePlan):
             self,
             params: ParamValues,
             gravity: Sequence[dict[int, ParamValues]],
-            model_extra: dict[str, Any] | None
+            model_extra: Extras | None
     ) -> None:
         """
         Evaluate the model on the high-res cube (or on the source plane of

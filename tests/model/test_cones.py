@@ -83,7 +83,7 @@ def test_a_cone_has_the_light_of_its_walls_on_its_sides(
     flux = data[0]['brightness']['d'].sum() * 0.5 ** 2
     expected = nsides * np.pi * (10 ** 2 - 4 ** 2) * np.sin(np.radians(30))
     assert flux == pytest.approx(expected, rel=5e-3)
-    bdata = extra['observation0_model_component0_bdata']
+    bdata = extra.get('bdata', component='component0')
     z = cone_frame(bdata, **GEOMETRY)[2]
     lit = bdata.data > 0
     assert lit.sum() > 1000
@@ -110,7 +110,7 @@ def test_the_velocity_of_each_voxel(
         [case(driver, cone, observable)],
         GEOMETRY | HOLLOW_PROPERTIES | dict(vsys=20, dpt_a=10) | {
             f'vpt_{speed}': 100})
-    vdata = extra['observation0_model_component0_vdata']
+    vdata = extra.get('vdata', component='component0')
     x, y, z = cone_frame(vdata, **GEOMETRY)
     incl = np.radians(GEOMETRY['incl'])
     if direction == 'tan':
@@ -139,7 +139,7 @@ def test_a_uniform_wall_is_a_hard_cone(driver, evaluate_cases):
     _, extra = evaluate_cases([image(driver, cone)], GEOMETRY | dict(
         wall=30, pt_a=1,
         ht_s=list(np.multiply(rnodes, np.sin(np.radians(10))))))
-    bdata = extra['observation0_model_component0_bdata']
+    bdata = extra.get('bdata', component='component0')
     x, y, z = cone_frame(bdata, **GEOMETRY)
     r = np.sqrt(x ** 2 + y ** 2 + z ** 2)
     theta = np.degrees(np.arctan2(np.hypot(x, y), np.abs(z)))
@@ -173,7 +173,7 @@ def test_the_dust_of_the_disk_dims_the_far_cone(
             driver, cone, line_of_sight=line_of_sight, components=[dust])]
         clear, _ = evaluate_cases(group, properties | dict(dust_pt_a=0))
         dimmed, extra = evaluate_cases(group, properties)
-        tau = extra['observation0_model_total_odata'].data.sum(axis=0)
+        tau = extra.get('total_odata').data.sum(axis=0)
         clear, dimmed = (
             data[0]['brightness']['d'] for data in (clear, dimmed))
         visible = clear > 1e-3 * clear.max()

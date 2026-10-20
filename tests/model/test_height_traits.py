@@ -11,6 +11,7 @@ import logging
 import gbkfit.params
 import numpy as np
 import pytest
+from gbkfit.model import Extras
 from gbkfit.utils.parseutils import ConfigError
 from modelutils import observation_group
 
@@ -179,9 +180,9 @@ def test_height_traits_at_each_height(driver, height, values, factor):
     group = observe(driver, component)
     params = gbkfit.params.ParamSpace(
         group.pdescs(), properties | dict(incl=0))
-    extra = {}
+    extra = Extras()
     group.model_h(params.evaluate(), extra)
-    ddata = extra['observation0_model_component0_ddata']
+    ddata = extra.get('ddata', component='component0')
     coords = ddata.coords
     nz = ddata.data.shape[0]
     z = coords.rval[2] + (np.arange(nz) - coords.rpix[2]) * coords.step[2]
@@ -237,7 +238,7 @@ def test_a_profile_wide_for_its_zmax_warns(driver, caplog, scale, warns):
     # zmax (8) cuts 2e-7 of a sech2 profile of scale height 1, and 3.6% of
     # one of 4: zmax then shapes the density (with extra outputs)
     caplog.set_level(logging.WARNING)
-    flux(observe(driver, DISK), PROPERTIES | dict(ht_s=scale), {})
+    flux(observe(driver, DISK), PROPERTIES | dict(ht_s=scale), Extras())
     assert ('zmax shapes the density' in caplog.text) == warns
 
 
@@ -290,10 +291,10 @@ def test_a_lifted_midplane_carries_its_light(driver, caplog, disk_type):
     group = observe(driver, component)
     properties = PROPERTIES | dict(incl=0)
     flat = flux(group, properties | dict(zpt_a=[0] * 14))
-    extra = {}
+    extra = Extras()
     lifted = flux(group, properties | dict(zpt_a=[12] * 14), extra)
     np.testing.assert_allclose(lifted, flat, rtol=1e-5)
-    bdata = extra['observation0_model_component0_bdata']
+    bdata = extra.get('bdata', component='component0')
     assert mean_depth(bdata) == pytest.approx(12, abs=0.05)
     # zmax is the valid range of the amplitude: a lift of 30 is not a
     # valid value. The kernels limit the displacement to zmax all the same
@@ -307,7 +308,7 @@ def test_a_lifted_midplane_carries_its_light(driver, caplog, disk_type):
         group.pdescs(), properties | dict(zpt_a=[20] * 14)).evaluate()
     caplog.set_level(logging.WARNING)
     limited = group.model_h(
-        values | dict(zpt_a=np.full(14, 30.0)), {})[0]['spectra']['d']
+        values | dict(zpt_a=np.full(14, 30.0)), Extras())[0]['spectra']['d']
     assert 'zmax shapes the disk' in caplog.text
     np.testing.assert_allclose(
         limited, at_zmax, rtol=1e-5, atol=1e-7 * at_zmax.max())
@@ -338,9 +339,9 @@ def test_outward_speeds_of_a_thick_disk_leave_both_faces(driver):
         if key not in ('vpt_rt', 'vpt_vt')} | dict(vpt_vo=40, incl=0)
     group = observe(driver, disk)
     params = gbkfit.params.ParamSpace(group.pdescs(), properties)
-    extra = {}
+    extra = Extras()
     group.model_h(params.evaluate(), extra)
-    vdata = extra['observation0_model_component0_vdata']
+    vdata = extra.get('vdata', component='component0')
     coords = vdata.coords
     nz = vdata.data.shape[0]
     z = coords.rval[2] + (np.arange(nz) - coords.rpix[2]) * coords.step[2]
@@ -363,9 +364,9 @@ def test_speeds_away_from_the_plane_leave_both_faces(driver):
         if key not in ('vpt_rt', 'vpt_vt')} | dict(vpt_va=40, incl=0)
     group = observe(driver, disk)
     params = gbkfit.params.ParamSpace(group.pdescs(), properties)
-    extra = {}
+    extra = Extras()
     group.model_h(params.evaluate(), extra)
-    vdata = extra['observation0_model_component0_vdata']
+    vdata = extra.get('vdata', component='component0')
     coords = vdata.coords
     nz = vdata.data.shape[0]
     z = coords.rval[2] + (np.arange(nz) - coords.rpix[2]) * coords.step[2]

@@ -8,7 +8,7 @@ all the observations of the galaxy.
 
 import dataclasses
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import astropy.units as u
 import numpy as np
@@ -16,6 +16,7 @@ from astropy.table import Table
 
 from gbkfit.driver import Driver
 from gbkfit.params import ParamValues
+from ..extras import Extras
 from ..gravity import GravityField
 from ..mass import MassContext, MassModel
 from ..mass.units import G
@@ -48,6 +49,23 @@ _log = logging.getLogger(__name__)
 # tilt of about 20 degrees).
 _MAX_OFFSET = 0.15
 _MAX_TILT = 20.0
+
+# The descriptions of the extra outputs of the gravity (see
+# GravityPlan.evaluate)
+_ROTATION_DESCRIPTION = (
+    "The rotation that the gravity of the galaxy gives a parameter of the "
+    "component, at its radii in the plane of the disk (radius, arcsec; "
+    "radius_kpc): the Newtonian circular velocity of each component of the "
+    "mass (vcirc_<name>, km/s; negative where it pulls outwards) and of "
+    "all (vnewton), the circular velocity in the gravity of the galaxy "
+    "(vcirc), with pressure support its term (pressure, (km/s)^2), and the "
+    "rotation given (vrot, km/s).")
+_EQUILIBRIUM_DESCRIPTION = (
+    "The vertical equilibrium of the disk of the component at its "
+    "subnodes (radius, arcsec): its rms height (height, arcsec), what the "
+    "equilibrium takes there (the circular velocity, vcirc, km/s, or the "
+    "surface density, surface_density, Msun/kpc^2), and the velocity "
+    "dispersion that holds it up (sigma, km/s).")
 
 
 @dataclasses.dataclass(frozen=True)
@@ -146,7 +164,7 @@ class GravityPlan:
     def evaluate(
             self,
             params: ParamValues,
-            out_extra: dict[str, Any] | None = None
+            out_extra: Extras | None = None
     ) -> dict[int, ParamValues]:
         """
         Evaluate the gravity.
@@ -155,10 +173,12 @@ class GravityPlan:
         ----------
         params : ParamValues
             The values of the parameters of the galaxy (see Galaxy.pdescs).
-        out_extra : dict, optional
-            Where the extra outputs go, if wanted: for each parameter that
-            it gives a component (see Component.circular_velocity_params),
-            '{component}_{parameter}_rotation', a table of its radii, in
+        out_extra : Extras, optional
+            Where the extra outputs go, if wanted, with the id 'component'
+            (its name, or its position: e.g. 'component0'): for each
+            parameter that it gives a component (see
+            Component.circular_velocity_params), '{parameter}_rotation',
+            a table of its radii, in
             the plane of the disk at its midplane ('radius', arcsec;
             'radius_kpc'), the Newtonian circular velocity of each
             component of the mass ('vcirc_{name}', km/s; signed: negative
@@ -167,14 +187,12 @@ class GravityPlan:
             ('vcirc'; that of all with Newtonian gravity, see Gravity), and
             with pressure support, its term ('pressure', (km/s)^2), and
             the values given ('vrot', km/s); for each disk it holds up,
-            '{component}_equilibrium', a table of its subnodes ('radius',
+            'equilibrium', a table of its subnodes ('radius',
             arcsec), its rms height there ('height', arcsec), what its
             equilibrium takes there: the circular velocity ('vcirc', km/s;
             'central') or the surface density ('surface_density',
             Msun/kpc^2; 'self_gravitating'; none for 'jeans'), and the
-            dispersion of its equilibrium ('sigma', km/s). The components
-            are named after their names, or their positions
-            ('component0'). With them and
+            dispersion of its equilibrium ('sigma', km/s). With them and
             mass, a warning says where the rings of the disks it moves,
             holds up and follows depart from the centre or the plane of
             the first ring of the first: by more than 15% of their radius,
@@ -262,10 +280,12 @@ class GravityPlan:
                     mass_name: next(pieces)
                     for mass_name, pieces in part_pieces.items()}
                 if out_extra is not None:
-                    label = components[i].name() or f'component{i}'
-                    out_extra[f'{label}_{name}_rotation'] = _rotation_table(
-                        np.asarray(r, dtype=float), kpc_per_arcsec,
-                        cmp_parts, vcirc2_r, pressure, values[i][name])
+                    out_extra.add(
+                        f'{name}_rotation', _rotation_table(
+                            np.asarray(r, dtype=float), kpc_per_arcsec,
+                            cmp_parts, vcirc2_r, pressure, values[i][name]),
+                        f"Rotation curve ({name})", _ROTATION_DESCRIPTION,
+                        component=components[i].name() or f'component{i}')
             if heights := disk.rotation_factor_params():
                 values[i] |= self._rotation_factors(
                     i, mass, heights, own.get(i),
@@ -363,7 +383,7 @@ class GravityPlan:
             params: ParamValues,
             mass: GalaxyMass | None,
             vcirc2: np.ndarray | None,
-            out_extra: dict[str, Any] | None
+            out_extra: Extras | None
     ) -> np.ndarray:
         """
         Return the dispersion of the vertical equilibrium (km/s) of the
@@ -398,9 +418,11 @@ class GravityPlan:
                 heights * mass.kpc_per_arcsec, surface)
             taken = dict(surface_density=surface * u.solMass / u.kpc ** 2)
         if out_extra is not None:
-            label = component.name() or f'component{index}'
-            out_extra[f'{label}_equilibrium'] = _equilibrium_table(
-                radii, heights, taken, sigma)
+            out_extra.add(
+                'equilibrium', _equilibrium_table(
+                    radii, heights, taken, sigma),
+                "Vertical equilibrium", _EQUILIBRIUM_DESCRIPTION,
+                component=component.name() or f'component{index}')
         return sigma
 
     def _warn_geometry(self, params: ParamValues) -> None:

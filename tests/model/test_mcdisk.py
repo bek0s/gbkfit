@@ -10,6 +10,8 @@ import sys
 import numpy as np
 import pytest
 import ruamel.yaml
+
+from gbkfit.model import Extras
 from modelutils import config_group
 
 
@@ -320,10 +322,10 @@ def test_mcdisk_harmonic_clouds_take_the_sign_of_the_harmonic(driver):
     properties = dict(pt_a=0, pt1_a=[1] * 11, pt1_p=[40] * 11, ht1_s=1)
     brightness = {}
     for disk, options in [('mcdisk', dict(cflux=0.5)), ('smdisk', {})]:
-        extra = {}
+        extra = Extras()
         evaluate_disk(
             disk, driver.type(), component | options, properties, extra)
-        bdata = extra['observation0_model_component0_bdata'].data
+        bdata = extra.get('bdata', component='component0').data
         brightness[disk] = bdata.sum(0)
     smdisk = brightness['smdisk']
     clear = np.abs(smdisk) > 0.5 * np.abs(smdisk).max()
@@ -351,15 +353,15 @@ def test_mcdisk_velocity_is_the_mean_of_the_clouds(driver):
     obs_group = config_group(config)
     params = gbkfit.params.ParamSpace(
         obs_group.pdescs(), config['params']['properties'])
-    extra = {}
+    extra = Extras()
     scube = obs_group.model_h(params.evaluate(), extra)[0]['spectra']['d']
     velocities = (np.arange(120) - 59.5) * 5
     intensity = scube.sum(axis=0)
     bright = intensity > 0.01 * intensity.max()
     moment1 = np.tensordot(velocities, scube, axes=1)[bright] / \
         intensity[bright]
-    brightness = extra['observation0_model_component0_bdata'].data
-    velocity = np.nan_to_num(extra['observation0_model_component0_vdata'].data)
+    brightness = extra.get('bdata', component='component0').data
+    velocity = np.nan_to_num(extra.get('vdata', component='component0').data)
     mean = (brightness * velocity).sum(0)[bright] / \
         brightness.sum(0)[bright]
     np.testing.assert_allclose(mean, moment1, atol=0.05)

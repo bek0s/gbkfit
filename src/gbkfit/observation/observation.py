@@ -146,8 +146,8 @@ class Observation(parseutils.Serializable):
         which spoils the faint ones (e.g. their moments, and the
         finite-difference derivatives of fits).
     name : str, optional
-        Its name, which prefixes its extra outputs instead of its position
-        (see ObservationGroup).
+        Its name, which is the id of its extra outputs instead of its
+        position (see ObservationGroup.observation_label).
 
     Raises
     ------

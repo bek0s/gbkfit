@@ -8,6 +8,7 @@ import gbkfit.params
 import numpy as np
 import pytest
 
+from gbkfit.model import Extras
 from gbkfit.observation import NoiseGauss
 from modelutils import observation_group
 
@@ -49,7 +50,7 @@ def group_of(driver, observable):
 def evaluate(group):
     """The model data of the observation and its parameters."""
     params = gbkfit.params.ParamSpace(group.pdescs(), PROPERTIES).evaluate()
-    extra = {}
+    extra = Extras()
     data = group.model_h(params, extra)[0]
     return {k: v['d'].copy() for k, v in data.items()}, extra, params
 
@@ -80,7 +81,7 @@ def test_the_errors_of_moments_are_their_scatter(driver, method):
         type='pixel_moments', size=[16, 17], spec_size=31, spec_step=20,
         mask_cutoff=1e-4, method=method))
     model, extra, params = evaluate(group)
-    peak = extra['observation0_dcube_lo'].data.max()
+    peak = extra.get('dcube_lo').data.max()
     mocks = group.mock(
         params, NoiseGauss(rms=0.05 * peak), nmocks=100, seed=2)[0]
     bright = model['moment0'] > 0.2 * model['moment0'].max()

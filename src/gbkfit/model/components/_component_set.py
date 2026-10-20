@@ -13,6 +13,7 @@ from gbkfit.params import ParamDesc, ParamValues
 from gbkfit.utils import gridutils, iterutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
 from ..distance import Distance
+from ..extras import Extras
 from ..gravity import Gravity, GravityNewton
 from ..mass import MassModel
 from . import _units
@@ -199,8 +200,8 @@ def _check_gravity(
 
 def _component_prefixes(components: Sequence[Component]) -> list[str]:
     """
-    Return the prefix of the parameters, constants and extra outputs of
-    each component of a galaxy: its name and '_', or none for one
+    Return the prefix of the parameters and the constants of each
+    component of a galaxy: its name and '_', or none for one
     component without a name. Raise ConfigError if several components do
     not all have names (see parseutils.item_prefixes).
     """
@@ -444,15 +445,16 @@ class ComponentSetPlan:
             params: ParamValues,
             gravity: dict[int, ParamValues],
             outputs: dict[str, DeviceArray | None],
-            out_extra: dict[str, Any] | None
+            out_extra: Extras | None
     ) -> LineResolution | None:
         """
         Add the light of the emitters to the output array, the 'image' or
         the 'scube' in outputs, with the parameters of the galaxy and those
         that its gravity gives its components (see
-        GravityPlan.evaluate). The extra outputs of each component are
-        named after its name, or its position (e.g. 'disk_bdata' or
-        'component0_bdata'), and the totals 'total_*'. With extra outputs,
+        GravityPlan.evaluate). The extra outputs of each component have
+        its name, or its position, as the id 'component' (e.g. 'disk' or
+        'component0'), and their totals none (see
+        ComponentPlans.add_extras). With extra outputs,
         a warning says where zmax shapes a disk (see
         ComponentPlans.warn_truncation), and it returns how finely it
         resolves the lines (see LineResolution: their light only); None

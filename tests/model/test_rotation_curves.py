@@ -79,7 +79,7 @@ def test_rotation_curves(driver, trait, evaluate_cases):
         vsys=0, xpos=0, ypos=0, posa=0, incl=incl, pt_a=1, pt_s=4,
         dpt_a=20) | {f'vpt_{k}': v for k, v in values.items()}
     _, extra = evaluate_cases([case], properties)
-    velocity = extra['observation0_model_component0_vdata'].data
+    velocity = extra.get('vdata', component='component0').data
     # The major axis (posa 0) is the y axis, through x = 0 (column 16);
     # the receding side (positive velocities) is north
     j = np.arange(41)
@@ -120,7 +120,7 @@ def test_rotation_curves_near_the_centre(driver, trait, evaluate_cases):
         pt_s=4, dpt_a=20) | {f'vpt_{k}': v for k, v in values.items()}
     data, extra = evaluate_cases([case], properties)
     assert np.isfinite(data[0]['spectra']['d']).all()
-    velocity = extra['observation0_model_component0_vdata'].data
+    velocity = extra.get('vdata', component='component0').data
     expected = curve(radius, **values) * np.sin(np.radians(incl))
     assert velocity[4, 4] == pytest.approx(expected, rel=1e-3)
 
@@ -143,7 +143,7 @@ def test_the_centre_does_not_move(driver, evaluate_cases, trait, values):
     _, extra = evaluate_cases([case], dict(
         vsys=0, xpos=0, ypos=0, posa=0, incl=60, pt_a=1, pt_s=4,
         dpt_a=20) | {f'vpt_{k}': v for k, v in values.items()})
-    velocity = extra['observation0_model_component0_vdata'].data
+    velocity = extra.get('vdata', component='component0').data
     # (the centre is the pixel 16, 16; the pixels on its diagonals move)
     assert velocity[16, 16] == 0
     assert np.all(velocity[[15, 15, 17, 17], [15, 17, 15, 17]] != 0)

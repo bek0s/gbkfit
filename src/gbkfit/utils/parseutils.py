@@ -272,9 +272,9 @@ def item_prefixes(
     """
     Return the prefixes of the parameter names of the items of a list.
 
-    The prefixes also apply to the names of the constants and the extra
-    outputs of the items. They come from the names of the items, if every
-    item has one, or else from their positions.
+    The prefixes also apply to the names of the constants of the items.
+    They come from the names of the items, if every item has one, or else
+    from their positions.
 
     Parameters
     ----------

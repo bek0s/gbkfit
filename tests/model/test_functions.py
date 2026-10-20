@@ -9,7 +9,7 @@ import copy
 import numpy as np
 import pytest
 
-from gbkfit.model import galaxy_parser
+from gbkfit.model import Extras, galaxy_parser
 
 
 # The gravitational constant (kpc (km/s)^2 / Msun)
@@ -81,9 +81,9 @@ def test_circular_velocity_of_the_mass():
     # (a number gives an array of no dimensions)
     assert bound['vcirc'](2.0).shape == ()
     # The same as the rotation table of the gravity
-    extra = {}
+    extra = Extras()
     galaxy.plan_gravity().evaluate(PARAMS, extra)
-    table = extra['gas_vpt_vt_rotation']
+    table = extra.get('vpt_vt_rotation', component='gas')
     np.testing.assert_array_equal(bound['vnewton'](R), bound['vcirc'](R))
     for name in ('vcirc', 'vnewton', 'vcirc_bh', 'vcirc_halo'):
         np.testing.assert_allclose(
@@ -101,9 +101,9 @@ def test_rotation_and_dispersion_as_the_gravity_gives_them():
     galaxy = gas_galaxy(mass=[copy.deepcopy(MASS[1])])
     params = PARAMS | dict(distance=100)
     bound = galaxy.plan_functions().bind(params)
-    extra = {}
+    extra = Extras()
     galaxy.plan_gravity().evaluate(params, extra)
-    rotation = extra['gas_vpt_vt_rotation']
+    rotation = extra.get('vpt_vt_rotation', component='gas')
     radii = rotation['radius'].value
     assert np.all(np.isfinite(rotation['vrot']))
     assert np.any(rotation['pressure'].value != 0)
@@ -114,7 +114,7 @@ def test_rotation_and_dispersion_as_the_gravity_gives_them():
         bound['rotation_gas'](middle),
         (rotation['vrot'].value[1:] + rotation['vrot'].value[:-1]) / 2,
         rtol=1e-12)
-    sigma = extra['gas_equilibrium']['sigma'].value
+    sigma = extra.get('equilibrium', component='gas')['sigma'].value
     np.testing.assert_allclose(
         bound['dispersion_gas'](radii), np.hypot(10, sigma), rtol=1e-12)
     np.testing.assert_allclose(

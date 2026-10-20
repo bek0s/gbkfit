@@ -6,13 +6,13 @@ grid of the observation (ScenePlan).
 
 import abc
 from collections.abc import Sequence
-from typing import TYPE_CHECKING, Any, NamedTuple
+from typing import TYPE_CHECKING, NamedTuple
 
 import numpy as np
 
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.model import (
-    Band, BandEmission, DustOpacity, Emission, Galaxy, LineOpacity)
+    Band, BandEmission, DustOpacity, Emission, Extras, Galaxy, LineOpacity)
 from gbkfit.model.components._component_plans import opacity_cubes
 from gbkfit.model.components._component_set import (
     IMAGE_SPECTRAL_AXIS, ComponentSetPlan)
@@ -61,15 +61,15 @@ class Scene:
     their order), and the unit of its data, which the light of the
     emitters takes (see Component.plan; None without data). The
     parameters of each galaxy have the names of the mapping of the galaxy
-    among those of the observation group, and its extra outputs the
-    prefix of the galaxy (those of a group, its name).
+    among those of the observation group, and its extra outputs its label
+    as the id 'galaxy' (those of a group, its name as the id 'group').
     """
 
     def __init__(
             self,
             galaxies: Sequence[Galaxy],
             mappings: Sequence[dict[str, str]],
-            prefixes: Sequence[str],
+            labels: Sequence[str],
             emitters: Sequence[tuple[int, ...]],
             lines: tuple[str, ...] | None,
             band: Band | None,
@@ -79,7 +79,7 @@ class Scene:
     ):
         self._galaxies = tuple(galaxies)
         self._mappings = tuple(mappings)
-        self._prefixes = tuple(prefixes)
+        self._labels = tuple(labels)
         self._emitters = tuple(emitters)
         self._lines = lines
         self._band = band
@@ -151,30 +151,24 @@ class ScenePlan(abc.ABC):
             params: ParamValues,
             gravity: Sequence[dict[int, ParamValues]],
             data: DeviceArray,
-            out_extra: dict[str, Any] | None
+            out_extra: Extras | None
     ) -> None:
         """
         Add the light of the galaxies to the data (the image or spectral
         cube), with the parameters of the observation group (params) and
         what the gravity of each galaxy gives its components (gravity, see
         GravityPlan.evaluate). The extra outputs of each galaxy have its
-        prefix.
+        label as the id 'galaxy', and those of a group of galaxies its
+        name as the id 'group'.
         """
         scene = self._scene
         values = [
             {name: params[full] for name, full in mapping.items()}
             for mapping in scene._mappings]
-        extras = [{} for _ in values] if out_extra is not None else None
-        group_extras = {} if out_extra is not None else None
+        extras = None if out_extra is None else [
+            out_extra.scoped(galaxy=label) for label in scene._labels]
         self._evaluate(
-            params, values, gravity, {self._key: data}, extras, group_extras)
-        if out_extra is not None:
-            for prefix, extra in zip(scene._prefixes, extras):
-                out_extra.update(
-                    {f'{prefix}{key}': value for key, value in extra.items()})
-            for name, extra in group_extras.items():
-                out_extra.update(
-                    {f'{name}_{key}': value for key, value in extra.items()})
+            params, values, gravity, {self._key: data}, extras, out_extra)
 
     @abc.abstractmethod
     def _evaluate(
@@ -183,8 +177,8 @@ class ScenePlan(abc.ABC):
             params: list[ParamValues],
             gravity: Sequence[dict[int, ParamValues]],
             outputs: dict[str, DeviceArray],
-            extras: list[dict[str, Any]] | None,
-            group_extras: dict[str, dict[str, Any]] | None
+            extras: list[Extras] | None,
+            group_extras: Extras | None
     ) -> None:
         """
         Add the light of the galaxies to the output array (see evaluate),
@@ -192,8 +186,8 @@ class ScenePlan(abc.ABC):
         the separations of the galaxies of a group, see DepthUnit), those
         of each galaxy (by its own names) and what its gravity gives its
         components; with extras, the extra outputs of each galaxy go to
-        its item, and those of each group of galaxies to group_extras, by
-        its name.
+        its item, and those of each group of galaxies to group_extras,
+        with its name as the id 'group'.
         """
         pass
 
@@ -234,8 +228,8 @@ class AdditiveScenePlan(ScenePlan):
             params: list[ParamValues],
             gravity: Sequence[dict[int, ParamValues]],
             outputs: dict[str, DeviceArray],
-            extras: list[dict[str, Any]] | None,
-            group_extras: dict[str, dict[str, Any]] | None
+            extras: list[Extras] | None,
+            group_extras: Extras | None
     ) -> None:
         resolutions = [
             plan.evaluate(
@@ -314,8 +308,8 @@ class TransferScenePlan(ScenePlan):
             params: list[ParamValues],
             gravity: Sequence[dict[int, ParamValues]],
             outputs: dict[str, DeviceArray],
-            extras: list[dict[str, Any]] | None,
-            group_extras: dict[str, dict[str, Any]] | None
+            extras: list[Extras] | None,
+            group_extras: Extras | None
     ) -> None:
         for state in (self._opacity_front, self._tau):
             if state is not None:
@@ -333,7 +327,7 @@ class TransferScenePlan(ScenePlan):
             if extras is not None:
                 unit_extras = [extras[g] for g in unit.galaxies]
                 march_extra = unit_extras[0] if unit.name is None \
-                    else group_extras.setdefault(unit.name, {})
+                    else group_extras.scoped(group=unit.name)
             positions = [
                 0.0 if name is None else float(group_params[name])
                 for name in unit.separations]
@@ -368,7 +362,7 @@ def _bounding_radius(galaxy: Galaxy, emitters: Sequence[int]) -> float:
 def make_scene(
         galaxies: Sequence[Galaxy],
         mappings: Sequence[dict[str, str]],
-        prefixes: Sequence[str],
+        labels: Sequence[str],
         components: Sequence[str] | None,
         lines: tuple[str, ...] | None,
         band: Band | None,
@@ -426,7 +420,7 @@ def make_scene(
                 raise ConfigError(
                     f"component {_label(galaxy, i)}: {e}") from e
     return Scene(
-        galaxies, mappings, prefixes, [tuple(e) for e in emitters], lines,
+        galaxies, mappings, labels, [tuple(e) for e in emitters], lines,
         band, line_of_sight, order, data_unit)
 
 

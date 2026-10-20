@@ -8,7 +8,7 @@ import pytest
 import scipy.stats
 
 from gbkfit.dataset import Data, DatasetPixelSpectra
-from gbkfit.model import galaxy_parser
+from gbkfit.model import Extras, galaxy_parser
 from gbkfit.objective import Objective
 from gbkfit.observation import (
     LikelihoodGaussian, Observation, ObservationGroup, PixelMoments,
@@ -86,9 +86,9 @@ def test_amplitudes_take_the_brightness_of_each_spectrum(driver):
     scales = rng.uniform(0.5, 2, SIZE[1::-1])
     error = 1e-3 * spectra.max()
     obj, values = objective(driver, spectra * scales, error)
-    extra = {}
+    extra = Extras()
     chi2 = obj.chi2(values, extra)
-    amplitudes = extra['observation0_amplitudes']
+    amplitudes = extra.get('amplitudes')
     np.testing.assert_allclose(
         amplitudes, best_amplitudes(spectra, spectra * scales, error),
         rtol=1e-5)
@@ -97,7 +97,7 @@ def test_amplitudes_take_the_brightness_of_each_spectrum(driver):
     assert chi2 == pytest.approx(
         np.sum(((amplitudes - 1) / SIGMA) ** 2), rel=1e-3)
     np.testing.assert_array_equal(
-        obj.amplitudes()[0], extra['observation0_amplitudes'])
+        obj.amplitudes()[0], extra.get('amplitudes'))
     plain, _ = objective(driver, spectra * scales, error, None)
     assert plain.chi2(values) > 1e3
     assert obj.nnuisance() == SIZE[0] * SIZE[1]

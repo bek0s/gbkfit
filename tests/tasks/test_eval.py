@@ -77,7 +77,14 @@ def test_objective_residuals(tmp_path):
         array(run, 'data', observation='observation0', item='spectra'),
         model + 1)
     # The extra outputs of the model (e.g. the high-resolution cube)
-    assert run.products('extra', name='observation0_dcube_hi')
+    dcube_hi = run.product(
+        'extra', observation='observation0', name='dcube_hi')
+    assert dcube_hi.path == 'observations/observation0/extra/dcube_hi.fits'
+    assert dcube_hi.title and dcube_hi.description
+    bdata = run.product('extra', component='component0', name='bdata')
+    assert bdata.path == (
+        'observations/observation0/galaxies/galaxy0/components/component0/'
+        'bdata.fits')
 
 
 @pytest.mark.parametrize('mode', ['model', 'objective'])

@@ -7,6 +7,7 @@ observable.
 import numpy as np
 import pytest
 
+from gbkfit.model import Extras
 from gbkfit.utils import gridutils
 
 
@@ -58,27 +59,27 @@ def test_dcube_extras_have_the_layout_of_the_data(evaluate_cases, name):
         k: v for k, v in PROPERTIES.items()
         if name != 'pixel_brightness' or not k.startswith(('v', 'd'))}
     _, extra = evaluate_cases([case], properties)
-    dcube_lo = extra['observation0_dcube_lo']
+    dcube_lo = extra.get('dcube_lo')
     assert isinstance(dcube_lo, gridutils.GridData)
     assert dcube_lo.data.shape == shape
     assert dcube_lo.spectral_axis == spectral_axis
     assert len(dcube_lo.coords.step) == len(shape)
     # The high-res grid is on the sky, except across the slit
-    dcube_hi = extra['observation0_dcube_hi']
+    dcube_hi = extra.get('dcube_hi')
     if name == 'slit_spectra':
         assert isinstance(dcube_hi, np.ndarray)
     else:
         assert isinstance(dcube_hi, gridutils.GridData)
         assert dcube_hi.spectral_axis == spectral_axis
     # The PSF is an array of offsets, not on the grid
-    assert isinstance(extra['observation0_psf_hi'], np.ndarray)
+    assert isinstance(extra.get('psf_hi'), np.ndarray)
 
 
 def test_dcube_extras_have_the_coordinates_of_the_observable(evaluate_cases):
     observable, galaxy, _, _ = CASES['pixel_spectra']
     case = flat_case(observable, galaxy)
     _, extra = evaluate_cases([case], PROPERTIES)
-    coords = extra['observation0_dcube_lo'].coords
+    coords = extra.get('dcube_lo').coords
     assert coords.step == (1, 1, 10)
     assert coords.rpix == (7.5, 5.5, 9.5)
     assert coords.rval == (150, 2, 0)
@@ -95,11 +96,11 @@ def test_model_extras_are_on_the_sky(evaluate_cases, name):
         k: v for k, v in PROPERTIES.items()
         if name != 'pixel_brightness' or not k.startswith(('v', 'd'))}
     _, extra = evaluate_cases([case], properties)
-    bdata = extra['observation0_model_component0_bdata']
+    bdata = extra.get('bdata', component='component0')
     if name == 'slit_spectra':
         assert isinstance(bdata, np.ndarray)
         return
-    dcube_hi = extra['observation0_dcube_hi']
+    dcube_hi = extra.get('dcube_hi')
     assert isinstance(bdata, gridutils.GridData)
     assert bdata.data.ndim == 2 and bdata.spectral_axis is None
     assert bdata.coords == dcube_hi.coords.axes(0, 1)
@@ -115,8 +116,31 @@ def test_grid_extras_have_a_line_of_sight_axis(evaluate_cases):
         line_of_sight=dict(type='grid', depth=dict(extent=5.0, step=0.5)),
         galaxy=dict(components=[thick_disk]))
     _, extra = evaluate_cases([case], PROPERTIES | dict(ht_s=1))
-    bdata = extra['observation0_model_component0_bdata']
+    bdata = extra.get('bdata', component='component0')
     assert bdata.data.shape[0] == 10 and bdata.spectral_axis is None
-    sky = extra['observation0_dcube_hi'].coords.axes(0, 1)
+    sky = extra.get('dcube_hi').coords.axes(0, 1)
     assert bdata.coords.axes(0, 1) == sky
     assert bdata.coords.axes(2) == gridutils.Coords((0.5,), (4.5,), (0.0,), 0)
+
+
+def test_extras_have_the_ids_of_their_scopes():
+    extras = Extras()
+    galaxy = extras.scoped(observation='cube').scoped(galaxy='north')
+    galaxy.add('vdata', 1, 'Velocity', 'The velocity.', component='disk')
+    galaxy.add('vdata', 2, 'Velocity', 'The velocity.', component='gas')
+    extras.add('dcube_lo', 3, 'Model cube', 'The model.', observation='cube')
+    assert extras.get('vdata', component='gas') == 2
+    (extra,) = extras.find('vdata', component='disk')
+    assert extra.ids == dict(
+        observation='cube', galaxy='north', component='disk')
+    assert len(extras.find(observation='cube')) == 3
+    with pytest.raises(LookupError, match="there are 2 extra outputs"):
+        extras.get('vdata')
+
+
+def test_extras_of_a_model_have_titles_and_descriptions(evaluate_cases):
+    observable, galaxy, _, _ = CASES['pixel_spectra']
+    _, extras = evaluate_cases([flat_case(observable, galaxy)], PROPERTIES)
+    assert {x.name for x in extras} >= {
+        'dcube_lo', 'psf_lo', 'bdata', 'vdata', 'total_bdata'}
+    assert all(x.title and x.description for x in extras)

@@ -126,7 +126,7 @@ def face_on_optical_depth(
         dust_xpos=0, dust_ypos=0, dust_posa=0, dust_incl=0,
         **dust_properties)
     _, extra = evaluate_cases([case], properties)
-    return extra['observation0_model_total_odata'].data.sum(axis=0)
+    return extra.get('total_odata').data.sum(axis=0)
 
 
 def test_dust_density_gives_the_face_on_optical_depth(
@@ -227,7 +227,7 @@ def image_and_optical_depth(driver, evaluate_cases, opacity, depth_step):
         dust_xpos=0, dust_ypos=0, dust_posa=30, dust_incl=60,
         dust_pt_a=opacity, dust_pt_s=4, dust_ht_s=1)
     data, extra = evaluate_cases([case], properties)
-    tau = extra['observation0_model_total_odata'].data.sum(axis=0)
+    tau = extra.get('total_odata').data.sum(axis=0)
     return data[0]['brightness']['d'], tau
 
 
@@ -314,7 +314,7 @@ def test_dust_dims_a_thin_disk_in_front_of_its_plane(driver, evaluate_cases):
         properties | FACE_ON_DUST | dict(dust_pt_a=0))
     dimmed, extra = evaluate_cases(
         [face_on_dust_case(driver, [stars])], properties | FACE_ON_DUST)
-    tau = extra['observation0_model_total_odata'].data.sum(axis=0)
+    tau = extra.get('total_odata').data.sum(axis=0)
     clear, dimmed = (data[0]['brightness']['d'] for data in (clear, dimmed))
     visible = clear > 1e-3 * clear.max()
     assert tau[visible].max() > 0.4
@@ -338,7 +338,7 @@ def test_dust_dims_a_point_in_front_of_its_depth(
         properties['nucleus_depth'] = depth
     data, extra = evaluate_cases(
         [face_on_dust_case(driver, [nucleus])], properties | FACE_ON_DUST)
-    tau = extra['observation0_model_total_odata'].data.sum(axis=0)[12, 12]
+    tau = extra.get('total_odata').data.sum(axis=0)[12, 12]
     assert data[0]['brightness']['d'][12, 12] == pytest.approx(
         np.exp(-fraction * tau), rel=1e-5)
 
@@ -399,7 +399,7 @@ def lines_in_dust(driver, evaluate_cases, emitter, laws, lines, opacity):
         **({} if lines is None else dict(lines=lines)))
     data, extra = evaluate_cases([case], properties)
     taus = [
-        extra[f'observation0_model_dust{i}_odata'].data.sum(axis=0)
+        extra.get('odata', component=f'dust{i}').data.sum(axis=0)
         for i in range(len(laws))]
     return data[0]['spectra']['d'], taus
 

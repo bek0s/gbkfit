@@ -52,7 +52,7 @@ def test_loose_disk_systemic_velocity(driver, evaluate_cases):
         vsys=50, xpos=3, ypos=-2, posa=0, incl=45,
         pt_a=1, pt_s=4, vpt_vt=0, dpt_a=10)
     _, extra = evaluate_cases([case], properties)
-    velocity = extra['observation0_model_component0_vdata'].data
+    velocity = extra.get('vdata', component='component0').data
     on_disk = np.isfinite(velocity)
     assert on_disk.sum() > 100
     np.testing.assert_allclose(velocity[on_disk], 50)

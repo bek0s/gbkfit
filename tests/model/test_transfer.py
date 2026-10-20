@@ -6,7 +6,7 @@ fields of the light of the emitters, which the march reads.
 import numpy as np
 import pytest
 
-from gbkfit.model import galaxy_parser
+from gbkfit.model import Extras, galaxy_parser
 from gbkfit.observation import DepthGroup
 from gbkfit.utils import gridutils
 
@@ -415,13 +415,20 @@ def test_slabs_give_the_same_model(driver, evaluate_cases, disk_type):
     (cube, extra), *others = models
     for other_cube, other_extra in others:
         assert_same_model(other_cube, cube)
-        assert other_extra.keys() == extra.keys()
-        for key in ('total_odata', 'total_bdata', 'gas_vdata',
-                    'outflow_vdata'):
-            name = f'observation0_model_{key}'
+        assert names(other_extra) == names(extra)
+        for name, ids in (
+                ('total_odata', {}), ('total_bdata', {}),
+                ('vdata', dict(component='gas')),
+                ('vdata', dict(component='outflow'))):
+            value = extra.get(name, **ids).data
             np.testing.assert_allclose(
-                other_extra[name].data, extra[name].data, rtol=1e-5,
-                atol=1e-6 * np.nanmax(np.abs(extra[name].data)))
+                other_extra.get(name, **ids).data, value, rtol=1e-5,
+                atol=1e-6 * np.nanmax(np.abs(value)))
+
+
+def names(extra):
+    """Return the names and the ids of the extra outputs."""
+    return {(x.name, tuple(sorted(x.ids.items()))) for x in extra}
 
 
 def galaxies_model(
@@ -447,7 +454,7 @@ def galaxies_model(
         observation_parser.load([observation], drivers=[{None: driver}]),
         depth_order)
     params = gbkfit.params.ParamSpace(group.pdescs(), properties)
-    extra = {} if with_extras else None
+    extra = Extras() if with_extras else None
     data = group.model_h(params.evaluate(), extra)
     return next(iter(data[0].values()))['d'], extra
 
@@ -486,7 +493,7 @@ def test_the_dust_of_a_galaxy_dims_the_galaxies_behind_it(
     clear, _ = galaxies_model(driver, galaxies[:1], properties, **image)
     model, extra = galaxies_model(
         driver, galaxies, properties, order, **image)
-    tau = extra['observation0_model_front_total_odata'].data.sum(axis=0)
+    tau = extra.get('total_odata', galaxy='front').data.sum(axis=0)
     wavelength = LineCatalogue().band('sdss_r').wavelength().to_value('um')
     ratio = 3 - 2.5 * (wavelength / 1.5 - 0.2)
     expected = clear * np.exp(-ratio * tau) if dust_in_front else clear
@@ -561,8 +568,8 @@ def test_a_group_at_one_place_is_a_galaxy_of_all(driver):
     pair, extra = galaxies_model(
         driver, galaxies, properties, [DepthGroup('pair', ('a', 'b'))])
     assert_same_model(pair, one)
-    assert 'observation0_model_pair_total_unabsorbed' in extra
-    assert 'observation0_model_a_gas_bdata' in extra
+    assert extra.find('total_unabsorbed', group='pair')
+    assert extra.find('bdata', galaxy='a', component='gas')
 
 
 @pytest.mark.parametrize('separation', [100, -100])
@@ -660,12 +667,12 @@ def test_transfer_extras(driver, evaluate_cases):
     _, extra = evaluate_transfer(evaluate_cases, transfer_case(
         driver, [line_opacity(GAS, dict(type='uniform')), DUST],
         subchannels=2), PROPERTIES | dict(gas_op_a=1 / source))
-    unabsorbed = extra['observation0_model_total_unabsorbed']
-    line_tau = extra['observation0_model_total_line_tau']
+    unabsorbed = extra.get('total_unabsorbed')
+    line_tau = extra.get('total_line_tau')
     assert unabsorbed.spectral_axis == line_tau.spectral_axis == 2
     assert_same_model(unabsorbed.data, thin)
     assert_same_model(line_tau.data, thin / source)
-    assert 'observation0_model_total_obdata' not in extra
+    assert not extra.find('total_obdata')
 
 
 def test_subchannels_option():
@@ -741,4 +748,4 @@ def test_lines_of_zero_dispersion_are_left_out_of_the_checks(
     _, extra = evaluate_transfer(
         evaluate_cases, transfer_case(driver, [gas]),
         PROPERTIES | dict(gas_op_a=50, gas_dpt_a=0))
-    assert extra['observation0_model_total_line_tau'].data.max() > 1
+    assert extra.get('total_line_tau').data.max() > 1

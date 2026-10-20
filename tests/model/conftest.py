@@ -5,6 +5,7 @@ import sys
 import pytest
 
 from gbkfit import outputs
+from gbkfit.model import Extras
 from modelutils import observation_group
 
 
@@ -34,8 +35,7 @@ def evaluate_cases():
     Return a function that evaluates cases of the tests (see
     split_case) through the Python API. It returns the model data of
     every observation (on the host) and the extra outputs (e.g. the
-    velocity field of each component), keyed as in
-    `ObservationGroup.model_h`.
+    velocity field of each component; see gbkfit.model.Extras).
     """
     import gbkfit.params
 
@@ -44,7 +44,7 @@ def evaluate_cases():
         params = gbkfit.params.ParamSpace(
             group.pdescs(), properties, constants=group.constants(),
             modes=modes)
-        extra = {}
+        extra = Extras()
         data = group.model_h(params.evaluate(), extra)
         return data, extra
     return evaluate

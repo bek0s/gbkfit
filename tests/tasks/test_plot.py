@@ -34,8 +34,8 @@ def write_run(directory, task, with_posterior=False):
                 observation='observation0', item=key)
     psf = np.exp(-((x - 10) ** 2 / 2 + (y - 8) ** 2 / 8))
     run.write(
-        'extra/observation0_psf_lo.fits', 'extra', psf,
-        name='observation0_psf_lo')
+        'observations/observation0/extra/psf_lo.fits', 'extra', psf,
+        observation='observation0', name='psf_lo')
     if task == 'fit':
         elements = dict(a=1.0, b=2.0, c=3.0)
         solution = dict(free=dict(a=1.0, b=2.0), elements=elements)

@@ -10,7 +10,7 @@ import numpy as np
 import pytest
 import scipy.integrate
 
-from gbkfit.model import galaxy_parser
+from gbkfit.model import Extras, galaxy_parser
 from gbkfit.model.components.disks._disk import EQUILIBRIUM_DISPERSION
 from gbkfit.utils.parseutils import ConfigError
 
@@ -93,9 +93,9 @@ def test_central_equilibrium_in_the_mass_of_the_galaxy():
     balanced = galaxy(
         DISK, mass=mass, distance=dict(type='direct', cosmology='Planck18'))
     params = PROPERTIES | dict(distance=10, mass_bh_log_m=10)
-    extra = {}
+    extra = Extras()
     given = balanced.plan_gravity().evaluate(params, extra)
-    table = extra['component0_equilibrium']
+    table = extra.get('equilibrium', component='component0')
     radii = np.array(balanced.constants()['subrnodes'])
     vcirc = np.sqrt(G * 1e10 / (radii[1:] * KPC_PER_ARCSEC))
     np.testing.assert_allclose(table['radius'], radii)
@@ -122,9 +122,9 @@ def test_self_gravitating_equilibrium_in_a_mass_disk():
             DISK, equilibrium='self_gravitating', equilibrium_density='gas'),
         mass=mass, distance=dict(type='direct', cosmology='Planck18'))
     params = PROPERTIES | dict(distance=10, mass_gas_log_m=9, mass_gas_rd=0.3)
-    extra = {}
+    extra = Extras()
     given = balanced.plan_gravity().evaluate(params, extra)
-    table = extra['component0_equilibrium']
+    table = extra.get('equilibrium', component='component0')
     R = np.array(balanced.constants()['subrnodes']) * KPC_PER_ARCSEC
     surface = 1e9 / (2 * np.pi * 0.3 ** 2) * np.exp(-R / 0.3)
     np.testing.assert_allclose(table['surface_density'], surface, rtol=1e-12)
@@ -152,9 +152,9 @@ def test_self_gravitating_equilibrium_in_its_own_mass_disk():
         distance=dict(type='direct', cosmology='Planck18'))
     params = {f'gas_{key}': value for key, value in PROPERTIES.items()} \
         | dict(distance=10, mass_gas_upsilon=1e9)
-    extra = {}
+    extra = Extras()
     balanced.plan_gravity().evaluate(params, extra)
-    table = extra['gas_equilibrium']
+    table = extra.get('equilibrium', component='gas')
     surface = 1e9 * np.exp(-np.array(table['radius']) / 4)
     np.testing.assert_allclose(table['surface_density'], surface, rtol=1e-12)
     np.testing.assert_allclose(
@@ -176,13 +176,13 @@ def test_pressure_support_takes_the_dispersion_of_the_equilibrium():
         supported, dptraits=dict(type='nw_uniform', sampling='subrings'),
         equilibrium=None), **info)
     params = PROPERTIES | dict(distance=10, mass_bh_log_m=10, dpt_a=10)
-    extra = {}
+    extra = Extras()
     rotation = balanced.plan_gravity().evaluate(params, extra)[0]['vpt_vt']
-    sigma = np.hypot(10, extra['component0_equilibrium']['sigma'])
-    extra = {}
+    sigma = np.hypot(10, extra.get('equilibrium', component='component0')['sigma'])
+    extra = Extras()
     expected = given.plan_gravity().evaluate(
         params | dict(dpt_a=sigma), extra)[0]['vpt_vt']
-    assert np.max(-extra['component0_vpt_vt_rotation']['pressure']) > 100
+    assert np.max(-extra.get('vpt_vt_rotation', component='component0')['pressure']) > 100
     np.testing.assert_allclose(rotation, expected, rtol=1e-10)
 
 
@@ -194,9 +194,9 @@ def test_jeans_equilibrium_in_a_point_mass():
         mass=[dict(type='point', name='bh')],
         distance=dict(type='direct', cosmology='Planck18'))
     params = PROPERTIES | dict(distance=10, mass_bh_log_m=10)
-    extra = {}
+    extra = Extras()
     balanced.plan_gravity().evaluate(params, extra)
-    sigma = extra['component0_equilibrium']['sigma']
+    sigma = extra.get('equilibrium', component='component0')['sigma']
     radii = np.array(balanced.constants()['subrnodes'])
 
     def weight(R):
@@ -226,9 +226,9 @@ def test_jeans_equilibrium_of_a_thin_self_gravitating_layer():
         distance=dict(type='direct', cosmology='Planck18'))
     params = {f'gas_{key}': value for key, value in PROPERTIES.items()} \
         | dict(gas_ht_s=0.05, distance=10, mass_gas_upsilon=1e9)
-    extra = {}
+    extra = Extras()
     balanced.plan_gravity().evaluate(params, extra)
-    table = extra['gas_equilibrium']
+    table = extra.get('equilibrium', component='gas')
     radii = np.array(table['radius'])
     inner = (radii > 2) & (radii < 12)
     surface = 1e9 * np.exp(-radii / 4)

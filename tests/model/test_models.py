@@ -191,12 +191,15 @@ def test_model(driver, name, evaluate_cases, ndarrays_regression):
     case, properties = CASES[name]
     case = dict(case, driver=dict(type=driver.type()))
     data, extra = evaluate_cases([case], properties, MODES.get(name))
-    # The extra outputs on a grid are compared by their data
+    # The extra outputs on a grid are compared by their data, named after
+    # their ids and names (e.g. 'observation0.galaxy0.disk1.vdata')
     outputs = {
         f'data_{key}': data_[key]['d']
         for data_ in data for key in data_} | {
-        key: value.data if isinstance(value, gridutils.GridData) else value
-        for key, value in extra.items()}
+        '.'.join([*x.ids.values(), x.name]):
+            x.value.data if isinstance(x.value, gridutils.GridData)
+            else x.value
+        for x in extra}
     # Thick disks on cuda and Monte Carlo disks are not bitwise
     # reproducible, because the threads add to the outputs in a different
     # order; their float32 sums of many terms differ by about 1e-5

@@ -8,7 +8,7 @@ import copy
 import numpy as np
 import pytest
 
-from gbkfit.model import GravityNewton, galaxy_parser
+from gbkfit.model import Extras, GravityNewton, galaxy_parser
 from gbkfit.utils.parseutils import ConfigError
 
 
@@ -92,14 +92,14 @@ def test_mond_circular_velocity(interpolation):
     for name in ('vnewton', 'vcirc_bh'):
         np.testing.assert_allclose(
             bound[name](R), np.sqrt(vnewton2), rtol=1e-6)
-    extra = {}
+    extra = Extras()
     given = mond.plan_gravity().evaluate(PARAMS, extra)
-    table = extra['gas_vpt_vt_rotation']
+    table = extra.get('vpt_vt_rotation', component='gas')
     np.testing.assert_allclose(
         table['vcirc'].value, bound['vcirc'](table['radius_kpc'].value),
         rtol=1e-12)
     np.testing.assert_allclose(given[0]['vpt_vt'], table['vcirc'].value)
-    equilibrium = extra['gas_equilibrium']
+    equilibrium = extra.get('equilibrium', component='gas')
     kpc_per_arcsec = mond.distance().kpc_per_arcsec(PARAMS, 0)
     np.testing.assert_allclose(
         equilibrium['vcirc'].value[1:],

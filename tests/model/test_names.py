@@ -1,12 +1,13 @@
 """
 Tests for the names of components and galaxies: a component needs a name
 when its galaxy has several, and a galaxy when there are several; the
-name prefixes the parameters, constants and extra outputs.
+name prefixes the parameters and constants, and is the id of the extra
+outputs.
 """
 
 import pytest
 
-from gbkfit.model import galaxy_parser
+from gbkfit.model import Extras, galaxy_parser
 
 
 THIN = dict(ptraits=dict(type='exponential'))
@@ -145,9 +146,9 @@ def extra_outputs(group_, prefixes):
         for prefix in prefixes for name, value in DISK_PROPERTIES.items()}
     params = gbkfit.params.ParamSpace(
         group_.pdescs(), properties, constants=group_.constants())
-    extra = {}
+    extra = Extras()
     group_.model_h(params.evaluate(), extra)
-    return set(extra)
+    return {(x.name, *x.ids.values()) for x in extra}
 
 
 def test_names_name_the_extra_outputs():
@@ -155,7 +156,7 @@ def test_names_name_the_extra_outputs():
         [galaxy(components=[disk(THIN, name='disk')])],
         [observation(name='hi')])
     extra = extra_outputs(group_, ['disk_'])
-    assert {'hi_model_disk_bdata', 'hi_dcube_lo'} <= extra
+    assert {('bdata', 'hi', 'galaxy0', 'disk'), ('dcube_lo', 'hi')} <= extra
 
 
 def test_galaxy_names_prefix_the_extra_outputs():
@@ -164,5 +165,5 @@ def test_galaxy_names_prefix_the_extra_outputs():
         [galaxy('north', components), galaxy('south', components)],
         [observation(['north', 'south'], name='hi')])
     extra = extra_outputs(group_, ['north_disk_', 'south_disk_'])
-    assert {'hi_model_north_disk_bdata', 'hi_model_south_disk_bdata'} \
-        <= extra
+    assert {('bdata', 'hi', 'north', 'disk'),
+            ('bdata', 'hi', 'south', 'disk')} <= extra

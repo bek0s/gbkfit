@@ -15,7 +15,7 @@ import pytest
 import scipy.integrate
 import scipy.special
 
-from gbkfit.model import galaxy_parser
+from gbkfit.model import Extras, galaxy_parser
 from gbkfit.model.distance import (
     KPC_PER_ARCSEC_MPC, DistanceDirect, DistanceRedshift)
 from gbkfit.model.mass import (
@@ -1562,9 +1562,9 @@ def test_pressure_support_takes_the_density_of_a_mass_component(mode):
         mass_stars_log_m=10, mass_stars_re=_numerics.sersic_b(1),
         mass_stars_n=1, mass_stars_q=0.2, mass_halo_log_rho=7,
         mass_halo_rs=3)
-    extra = {}
+    extra = Extras()
     galaxy.plan_gravity().evaluate(params, extra)
-    table = extra['component0_vpt_vt_rotation']
+    table = extra.get('vpt_vt_rotation', component='component0')
     r = np.asarray(table['radius'])
     profile = np.exp(-np.asarray(table['radius_kpc'])) \
         ** dict(jeans=1, self_gravitating=2)[mode]
@@ -1590,9 +1590,9 @@ def test_pressure_support_adds_the_densities_of_mass_components():
         distance=10, mass_hi_log_m=9.5, mass_hi_rd=2, mass_hi_hz=0.1,
         mass_h2_log_m=9, mass_h2_rd=1, mass_h2_hz=0.1, mass_halo_log_rho=7,
         mass_halo_rs=3)
-    extra = {}
+    extra = Extras()
     galaxy.plan_gravity().evaluate(params, extra)
-    table = extra['component0_vpt_vt_rotation']
+    table = extra.get('vpt_vt_rotation', component='component0')
     r, R = np.asarray(table['radius']), np.asarray(table['radius_kpc'])
     profile = 10 ** 9.5 / 4 * np.exp(-R / 2) + 10 ** 9 * np.exp(-R)
     np.testing.assert_allclose(
@@ -1833,7 +1833,7 @@ def test_the_gravity_warns_of_a_disk_far_from_flat(caplog, tilt, warns):
     params = DISK_PROPERTIES | MASS_PROPERTIES | dict(
         posa=np.full(nodes, 30.0), incl=np.linspace(60, 60 + tilt, nodes))
     caplog.set_level(logging.WARNING)
-    galaxy.plan_gravity().evaluate(params, {})
+    galaxy.plan_gravity().evaluate(params, Extras())
     assert ('tilted by' in caplog.text) == warns
 
 
@@ -1846,9 +1846,9 @@ def test_the_gravity_writes_the_rotation_it_gives():
         'smdisk', dict(type='mass', pressure_support='jeans'), MASS,
         DISTANCE)
     params = DISK_PROPERTIES | MASS_PROPERTIES
-    extra = {}
+    extra = Extras()
     given = galaxy.plan_gravity().evaluate(params, extra)
-    table = extra['component0_vpt_vt_rotation']
+    table = extra.get('vpt_vt_rotation', component='component0')
     assert table.colnames == [
         'radius', 'radius_kpc', 'vcirc_stars', 'vcirc_gas', 'vcirc_halo',
         'vnewton', 'vcirc', 'pressure', 'vrot']

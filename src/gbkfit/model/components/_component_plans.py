@@ -15,6 +15,7 @@ from gbkfit.driver import DeviceArray, Driver
 from gbkfit.params import ParamValues
 from gbkfit.utils import gridutils
 from gbkfit.utils.parseutils import ConfigError
+from ..extras import Extras
 from ._units import DataUnit
 from .base import DepthAxis, NativeGrid, OpacityCubes
 from .disks._disk import Disk, DiskPlan
@@ -47,6 +48,51 @@ _CUT_AZIMUTHS = 64
 # least this share of the light of the brightest voxel of their component
 # (see ComponentPlans.light_resolution)
 _BRIGHT = 0.05
+
+# Where the grid of the extra outputs of the components is (see
+# ComponentPlans.extra)
+_ON_THE_GRID = (
+    "On the pixels of the observation (finer by its option scale), along "
+    "the line of sight if it has a depth axis (z = 0 at the plane of the "
+    "galaxy, away from the viewer), or else in an image.")
+
+# The titles and the descriptions of the extra outputs of each component,
+# by name, and of their totals over the components of a galaxy (see
+# ComponentPlans.add_extras)
+_COMPONENT_EXTRAS = dict(
+    bdata=(
+        "Brightness",
+        "The light that the component emits in each voxel, before any "
+        "opacity."),
+    odata=(
+        "Optical depth of dust at V",
+        "The optical depth at V of the dust of the component in each "
+        "voxel."),
+    vdata=(
+        "Velocity",
+        "The line-of-sight velocity of the component in each voxel (km/s; "
+        "the mean weighted by its density there)."),
+    ddata=(
+        "Velocity dispersion",
+        "The velocity dispersion of the component in each voxel (km/s; "
+        "the mean weighted by its density there)."),
+    obdata=(
+        "Dimmed brightness",
+        "The light of the component in each voxel after the opacity that "
+        "dims it there."))
+_TOTAL_EXTRAS = dict(
+    total_bdata=(
+        "Total brightness",
+        "The light that the components of the galaxy emit in each voxel, "
+        "before any opacity."),
+    total_obdata=(
+        "Total dimmed brightness",
+        "The light of the components of the galaxy in each voxel after the "
+        "opacity that dims it there."),
+    total_odata=(
+        "Total optical depth of dust at V",
+        "The optical depth at V of the dust of the components of the galaxy "
+        "in each voxel."))
 
 
 class ComponentPlans:
@@ -281,29 +327,36 @@ class ComponentPlans:
 
     def add_extras(
             self,
-            out_extra: dict[str, Any],
+            out_extra: Extras,
             extras: dict[int, dict[str, Any]],
             totals: dict[str, np.ndarray],
             depth_zero: float | None = None
     ) -> None:
         """
-        Add the extra outputs of each component (extras, by index) to
-        out_extra, named after its name, or its position if it has none
-        (e.g. 'disk_bdata' or 'component0_bdata'), and the totals
-        ('total_*'): the given ones and the optical depth at V of all the
-        absorbers ('total_odata'); with the given position of the first
-        voxel of the depth axis, if not that of the axis (see extra).
+        Add the extra outputs of each component (extras, by index: e.g.
+        'bdata', see _COMPONENT_EXTRAS) to out_extra, with the id
+        'component': its name, or its position if it has none (e.g.
+        'component0'); and their totals ('total_*', see _TOTAL_EXTRAS):
+        the given ones and the optical depth at V of all the absorbers
+        ('total_odata'); with the given position of the first voxel of the
+        depth axis, if not that of the axis (see extra).
         """
         components = self._component_set.components()
         for index, extra in extras.items():
             label = _label(components, index)
             for key, value in extra.items():
-                out_extra[f'{label}_{key}'] = self.extra(value, depth_zero)
+                title, description = _COMPONENT_EXTRAS[key]
+                out_extra.add(
+                    key, self.extra(value, depth_zero), title,
+                    f"{description} {_ON_THE_GRID}", component=label)
         if self.absorbers:
             totals = dict(odata=sum(
                 extras[i]['odata'] for i in self.absorbers)) | totals
         for name, total in totals.items():
-            out_extra[f'total_{name}'] = self.extra(total, depth_zero)
+            title, description = _TOTAL_EXTRAS[f'total_{name}']
+            out_extra.add(
+                f'total_{name}', self.extra(total, depth_zero), title,
+                f"{description} {_ON_THE_GRID}")
 
     def extra(
             self, data: np.ndarray, depth_zero: float | None = None

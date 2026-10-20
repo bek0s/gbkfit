@@ -217,7 +217,7 @@ def _write_mocks(
         observations = []
         for i, (observation, info) in enumerate(zip(
                 group.observations(), cfg['observations'])):
-            name = _detail.observation_name(group, i)
+            name = group.observation_label(i)
             folder = f'mocks/{k}/observations/{name}'
             directory = os.path.join(run.path, *folder.split('/'))
             os.makedirs(directory, exist_ok=True)

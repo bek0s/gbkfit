@@ -115,7 +115,7 @@ def test_dust_dims_an_image_at_the_rest_wavelength_of_its_band(
             driver, [STARS, dust], 'sdss_r', line_of_sight, redshift)
         data, extra = evaluate_cases(
             [case], properties | dict(dust_pt_a=opacity))
-        tau = extra['observation0_model_total_odata'].data.sum(axis=0)
+        tau = extra.get('total_odata').data.sum(axis=0)
         return data[0]['brightness']['d'], tau
     clear, _ = evaluate(0)
     dimmed, tau = evaluate(0.5)

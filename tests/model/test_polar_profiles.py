@@ -48,7 +48,7 @@ def face_on_disk(driver, evaluate_cases, key, trait):
         pt_a=1, dpt_a=10) | {f'{prefix}_{n}': VALUES[n] for n in names}
     _, extra = evaluate_cases([case], properties)
     output = dict(b='bdata', d='ddata')[key]
-    data = extra[f'observation0_model_component0_{output}'].data
+    data = extra.get(output, component='component0').data
     y, x = (np.indices((33, 33)) - 16) * 0.5
     return data.reshape(33, 33), np.hypot(x, y)
 
@@ -117,7 +117,7 @@ def test_map_lies_where_blobs_lie(driver, evaluate_cases):
             vsys=0, xpos=0, ypos=0, posa=30, incl=60, vpt_vt=0,
             dpt_a=10) | values
         _, extra = evaluate_cases([case], properties)
-        image = extra['observation0_model_component0_bdata'].data \
+        image = extra.get('bdata', component='component0').data \
             .reshape(121, 121)
         centroids.append(
             np.array([np.sum(xx * image), np.sum(yy * image)])

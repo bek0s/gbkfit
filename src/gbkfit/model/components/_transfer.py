@@ -14,6 +14,7 @@ from gbkfit.driver import DeviceArray, Driver
 from gbkfit.params import ParamValues
 from gbkfit.utils import gridutils
 from gbkfit.utils.parseutils import ConfigError
+from ..extras import Extras
 from ._component_plans import ComponentPlans
 from ._units import DataUnit
 from .base import DepthAxis, NativeGrid, OpacityCubes
@@ -55,6 +56,20 @@ MAX_SUBCHANNELS = 64
 _THIN_TAU = 0.1
 _MAX_SPECTRAL_RATIO = 0.75
 _MAX_DEPTH_RATIO = 2.0
+
+# The titles and the descriptions of the extra outputs of the march of a
+# galaxy, or of a group of galaxies (see TransferPlan.evaluate)
+_MARCH_EXTRAS = dict(
+    total_unabsorbed=(
+        "Light without opacity",
+        "The light of the galaxies of the march without any opacity "
+        "(neither their own nor that in front of them), as the model data "
+        "of the observation (an image or a cube), before its instrument."),
+    total_line_tau=(
+        "Optical depth of the lines",
+        "The optical depth of the lines of the galaxies of the march at "
+        "each channel of each spaxel (the mean over its sub-channels), "
+        "before the instrument of the observation."))
 
 
 class LineResolution(NamedTuple):
@@ -286,8 +301,8 @@ class TransferPlan:
             params: Sequence[ParamValues],
             gravity: Sequence[dict[int, ParamValues]],
             outputs: dict[str, DeviceArray | None],
-            out_extra: Sequence[dict[str, Any]] | None,
-            march_extra: dict[str, Any] | None,
+            out_extra: Sequence[Extras] | None,
+            march_extra: Extras | None,
             opacity_front: DeviceArray | None,
             tau: DeviceArray | None,
             positions: Sequence[float] | None = None
@@ -308,12 +323,11 @@ class TransferPlan:
         line opacity, None without line opacity in front or in them).
 
         The extra outputs of the components of each galaxy go to its item
-        of out_extra, named after their names, or their positions (e.g.
-        'disk_bdata' or 'component0_bdata'), with the totals of each
-        galaxy, 'total_*' (see ComponentPlans.add_extras; along the depth
-        axis in the frame of the galaxy, centred on its plane). Those of
-        the march go to march_extra (given with out_extra), of the shape
-        of the output: 'total_unabsorbed', the light of the emitters
+        of out_extra, with the totals of each galaxy, 'total_*' (see
+        ComponentPlans.add_extras; along the depth axis in the frame of
+        the galaxy, centred on its plane). Those of the march go to
+        march_extra (given with out_extra), of the shape of the output
+        (see _MARCH_EXTRAS): 'total_unabsorbed', the light of the emitters
         without opacity (neither their own nor that in front), and with
         line opacity, 'total_line_tau', the optical depth of their lines
         at each channel (the mean of its sub-channels).
@@ -417,14 +431,17 @@ class TransferPlan:
                 light = max(light, plans.light_resolution(
                     values[m], extras[m], self._smoothing))
         plans = self._plans[0]
-        march_extra['total_unabsorbed'] = plans.output_extra(
-            driver.mem_copy_d2h(unabsorbed))
+        march_extra.add(
+            'total_unabsorbed',
+            plans.output_extra(driver.mem_copy_d2h(unabsorbed)),
+            *_MARCH_EXTRAS['total_unabsorbed'])
         spectral = depth = 0.0
         if tau_front is not None:
             line_tau = driver.mem_copy_d2h(tau) - tau_front
-            march_extra['total_line_tau'] = plans.output_extra(
-                line_tau.reshape(
-                    (-1, subchannels) + line_tau.shape[1:]).mean(axis=1))
+            march_extra.add(
+                'total_line_tau', plans.output_extra(line_tau.reshape(
+                    (-1, subchannels) + line_tau.shape[1:]).mean(axis=1)),
+                *_MARCH_EXTRAS['total_line_tau'])
             spectral, depth = resolution.resolution(
                 line_tau.max(axis=0) >= _THIN_TAU)
         return LineResolution(spectral, depth, light)

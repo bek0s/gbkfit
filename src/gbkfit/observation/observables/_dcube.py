@@ -7,6 +7,7 @@ import numpy as np
 import gbkfit.math
 from gbkfit.driver import DeviceArray, Driver, DriverFFT
 from gbkfit.instrument import LSF, LSFPoint, PSF, PSFPoint, PrimaryBeam
+from gbkfit.model import Extras
 from gbkfit.utils import gridutils
 from gbkfit.utils.parseutils import ConfigError
 
@@ -18,6 +19,64 @@ _KMS = u.km / u.s
 # grid of the cube (e.g. cube_extra)
 ExtraFunction: TypeAlias = Callable[
     [np.ndarray, gridutils.Grid], gridutils.GridData | np.ndarray]
+
+# The grids of the extra outputs of DCube: that of the data, and the
+# high-res one, on which the model is evaluated
+_ON_THE_DATA = "On the grid of the data."
+_ON_THE_HIGH_RES = (
+    "On the grid on which the model is evaluated: that of the data, finer "
+    "by the option scale of the observation, and padded for the "
+    "convolution.")
+
+# The titles and the descriptions of the extra outputs of DCube (see
+# DCubePlan.evaluate)
+_CUBE_EXTRAS = dict(
+    dcube_lo=(
+        "Model cube",
+        "The model as the instrument records it, before it is measured "
+        "(e.g. into moments): through the primary beam, the PSF and the "
+        "LSF, downscaled, median-filtered and masked (as the options of "
+        f"the observation say). {_ON_THE_DATA}"),
+    dcube_hi=(
+        "Model cube (high resolution)",
+        "The model through the primary beam, the PSF and the LSF, before "
+        f"it is downscaled to the grid of the data. {_ON_THE_HIGH_RES}"),
+    mcube_lo=(
+        "Mask of the model cube",
+        "Where the model cube has values: 1, or 0 where it is below the "
+        f"option mask_cutoff. {_ON_THE_DATA}"),
+    wcube_lo=(
+        "Weights of the model cube",
+        f"The weights of the model in each voxel. {_ON_THE_DATA}"),
+    wcube_hi=(
+        "Weights of the model cube (high resolution)",
+        f"The weights of the model in each voxel. {_ON_THE_HIGH_RES}"),
+    psf_lo=(
+        "PSF",
+        "The image of the point spread function, centred, on the pixels "
+        "of the data."),
+    psf_hi=(
+        "PSF (high resolution)",
+        "The image of the point spread function, centred, on the pixels "
+        "of the grid of the model (or one of each channel, where it "
+        "varies with the wavelength)."),
+    lsf_lo=(
+        "LSF",
+        "The line spread function, centred, on the channels of the data."),
+    lsf_hi=(
+        "LSF (high resolution)",
+        "The line spread function, centred, on the channels of the grid of "
+        "the model (or one for each channel, where it varies with the "
+        "wavelength)."),
+    pcube_hi=(
+        "PSF and LSF kernel",
+        "The product of the PSF and the LSF, which convolves the model, as "
+        "the FFT takes it: with its centre rolled to the first voxel. "
+        f"{_ON_THE_HIGH_RES}"),
+    pbeam_hi=(
+        "Primary beam",
+        "The primary beam that attenuates the model (one image, or one for "
+        f"each channel). {_ON_THE_HIGH_RES}"))
 
 
 def cube_extra(data: np.ndarray, grid: gridutils.Grid) -> gridutils.GridData:
@@ -456,7 +515,7 @@ class DCubePlan:
 
     def evaluate(
             self,
-            out_extra: dict[str, Any] | None,
+            out_extra: Extras | None,
             extra_lo: ExtraFunction,
             extra_hi: ExtraFunction,
             flux_scale: float | None = None
@@ -551,11 +610,11 @@ class DCubePlan:
 
     def _extras(
             self,
-            out_extra: dict[str, Any],
+            out_extra: Extras,
             extra_lo: ExtraFunction,
             extra_hi: ExtraFunction
     ) -> None:
-        """Write the extra outputs (see evaluate)."""
+        """Write the extra outputs (see evaluate and _CUBE_EXTRAS)."""
         dcube = self._dcube
         step_lo = dcube.step()
         step_hi = self._grid_hi.coords.step
@@ -577,34 +636,36 @@ class DCubePlan:
         def hi(data: DeviceArray) -> gridutils.GridData | np.ndarray:
             return extra_hi(driver.mem_copy_d2h(data), self._grid_hi)
 
-        out_extra.update(dcube_lo=lo(dcube_lo), dcube_hi=hi(dcube_hi))
+        def add(name: str, value: Any) -> None:
+            out_extra.add(name, value, *_CUBE_EXTRAS[name])
+
+        add('dcube_lo', lo(dcube_lo))
+        add('dcube_hi', hi(dcube_hi))
         if mask_cutoff is not None:
-            out_extra.update(mcube_lo=lo(mcube_lo))
+            add('mcube_lo', lo(mcube_lo))
         if has_weights:
-            out_extra.update(wcube_lo=lo(wcube_lo), wcube_hi=hi(wcube_hi))
+            add('wcube_lo', lo(wcube_lo))
+            add('wcube_hi', hi(wcube_hi))
         if self._varies:
             # The images of the PSF and the LSF of the channels, made again
             # (they are not kept on the host)
             psf_images, lsf_kernels = _varying_kernels(
                 dcube, self._grid_hi, self._lsf_size_hi)
             if psf_images is not None:
-                out_extra.update(psf_hi=psf_images)
+                add('psf_hi', psf_images)
             if lsf_kernels is not None:
-                out_extra.update(lsf_hi=lsf_kernels)
+                add('lsf_hi', lsf_kernels)
         else:
             if psf:
-                out_extra.update(
-                    psf_lo=psf.asarray(step_lo[:2], rota=dcube.rota()),
-                    psf_hi=psf.asarray(step_hi[:2], rota=dcube.rota()))
+                add('psf_lo', psf.asarray(step_lo[:2], rota=dcube.rota()))
+                add('psf_hi', psf.asarray(step_hi[:2], rota=dcube.rota()))
             if lsf:
-                out_extra.update(
-                    lsf_lo=lsf.asarray(step_lo[2]),
-                    lsf_hi=lsf.asarray(step_hi[2]))
+                add('lsf_lo', lsf.asarray(step_lo[2]))
+                add('lsf_hi', lsf.asarray(step_hi[2]))
             if psf or lsf:
                 # (made again: it is not kept)
-                out_extra.update(pcube_hi=_kernel_cube(
-                    dcube, self._grid_hi).astype(
-                        dcube.fft_dtype(), copy=False))
+                add('pcube_hi', _kernel_cube(dcube, self._grid_hi).astype(
+                    dcube.fft_dtype(), copy=False))
         if pbeam_hi is not None:
             pbeam = driver.mem_copy_d2h(pbeam_hi)
-            out_extra.update(pbeam_hi=pbeam[0] if len(pbeam) == 1 else pbeam)
+            add('pbeam_hi', pbeam[0] if len(pbeam) == 1 else pbeam)

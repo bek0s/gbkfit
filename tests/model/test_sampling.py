@@ -9,7 +9,7 @@ import numpy as np
 import pytest
 
 from gbkfit.math import interpolation
-from gbkfit.model import galaxy_parser
+from gbkfit.model import Extras, galaxy_parser
 from gbkfit.params.pdescs import ParamScalarDesc
 from gbkfit.params.space import ParamSpace
 from modelutils import observation_group
@@ -137,9 +137,9 @@ def evaluate_curve(component, free):
         vmax=dict(val=100), rt=dict(val=1),
         vpt_vt='vmax * 2 / np.pi * np.arctan(subrnodes / rt)'),
         constants=obs_group.constants())
-    extra = {}
+    extra = Extras()
     obs_group.model_h(space.evaluate(free), extra)
-    return extra['observation0_model_component0_vdata'].data
+    return extra.get('vdata', component='component0').data
 
 
 @pytest.mark.parametrize('vmax, rt', [(150, 2), (220, 4)])
@@ -155,7 +155,7 @@ def test_an_expression_of_the_subnodes_follows_the_curve(
         rstep=0.1)
     _, extra = evaluate_cases(
         [case(analytical)], PROPERTIES | dict(vpt_vt=vmax, vpt_rt=rt))
-    expected = extra['observation0_model_component0_vdata'].data
+    expected = extra.get('vdata', component='component0').data
     actual = evaluate_curve(at_subnodes, dict(vmax=vmax, rt=rt))
     np.testing.assert_allclose(actual, expected, atol=0.1, equal_nan=True)
 

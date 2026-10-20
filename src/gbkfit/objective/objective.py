@@ -6,6 +6,7 @@ import scipy.special
 
 from gbkfit.dataset import Dataset
 from gbkfit.driver import DeviceArray, Driver
+from gbkfit.model import Extras
 from gbkfit.observation import ObservationGroup
 from gbkfit.observation.likelihood import LikelihoodUser, Whitening, whitening
 from gbkfit.params import ParamDesc, ParamValues
@@ -122,8 +123,8 @@ class Objective:
     scales each spectrum of the model by its best amplitude before the
     residuals, whose prior adds a residual of each spectrum after those of
     the data; its log-likelihood has them integrated out. They are
-    nuisance parameters (see nnuisance), and an extra output,
-    '{prefix}amplitudes' (see ObservationGroup.extra_prefix).
+    nuisance parameters (see nnuisance), and an extra output of their
+    observation, 'amplitudes'.
 
     A likelihood with a fitted noise (see LikelihoodGaussian) divides the
     residuals of its data items by their noise in place of their errors,
@@ -433,7 +434,7 @@ class Objective:
     def chi2(
             self,
             params: ParamValues,
-            out_extra: dict[str, Any] | None = None
+            out_extra: Extras | None = None
     ) -> float:
         """
         Return the chi-square of all observations: the sum of their squared
@@ -444,7 +445,7 @@ class Objective:
         ----------
         params : ParamValues
             The parameters of the models, prefixed (see pdescs).
-        out_extra : dict, optional
+        out_extra : Extras, optional
             Where the extra outputs of the models go, if wanted.
 
         Returns
@@ -457,7 +458,7 @@ class Objective:
     def log_likelihood(
             self,
             params: ParamValues,
-            out_extra: dict[str, Any] | None = None
+            out_extra: Extras | None = None
     ) -> float:
         """
         Return the log-likelihood of all observations: -chi2 / 2, and
@@ -470,7 +471,7 @@ class Objective:
         ----------
         params : ParamValues
             The parameters of the models, prefixed (see pdescs).
-        out_extra : dict, optional
+        out_extra : Extras, optional
             Where the extra outputs of the models go, if wanted.
 
         Returns
@@ -483,7 +484,7 @@ class Objective:
     def chi2_and_log_likelihood(
             self,
             params: ParamValues,
-            out_extra: dict[str, Any] | None = None
+            out_extra: Extras | None = None
     ) -> tuple[float, float]:
         """
         Return the chi-square and the log-likelihood of all observations,
@@ -493,7 +494,7 @@ class Objective:
         ----------
         params : ParamValues
             The parameters of the models, prefixed (see pdescs).
-        out_extra : dict, optional
+        out_extra : Extras, optional
             Where the extra outputs of the models go, if wanted.
 
         Returns
@@ -507,7 +508,7 @@ class Objective:
     def residuals(
             self,
             params: ParamValues,
-            out_extra: dict[str, Any] | None = None
+            out_extra: Extras | None = None
     ) -> np.ndarray:
         """
         Return the weighted residuals of all observations, one after the
@@ -519,7 +520,7 @@ class Objective:
         ----------
         params : ParamValues
             The parameters of the models, prefixed (see pdescs).
-        out_extra : dict, optional
+        out_extra : Extras, optional
             Where the extra outputs of the models go, if wanted.
 
         Returns
@@ -610,7 +611,7 @@ class Objective:
             self,
             params: ParamValues,
             squared: bool = True,
-            out_extra: dict[str, Any] | None = None
+            out_extra: Extras | None = None
     ) -> list[float]:
         """
         Return the sum of the weighted residuals of each observation, its
@@ -623,7 +624,7 @@ class Objective:
         squared : bool, optional
             Whether to sum the squared residuals (the chi-square), or their
             absolute values.
-        out_extra : dict, optional
+        out_extra : Extras, optional
             Where the extra outputs of the models go, if wanted.
 
         Returns
@@ -666,7 +667,7 @@ class Objective:
             self,
             params: ParamValues,
             weighted: bool,
-            out_extra: dict[str, Any] | None = None
+            out_extra: Extras | None = None
     ) -> list[np.ndarray]:
         """
         Return the residuals of each observation, on the host: its data
@@ -680,7 +681,7 @@ class Objective:
         weighted : bool
             Whether to apply the weights of the data items (from the
             likelihoods).
-        out_extra : dict, optional
+        out_extra : Extras, optional
             Where the extra outputs of the models go, if wanted.
 
         Returns
@@ -695,7 +696,7 @@ class Objective:
             self,
             params: ParamValues,
             weighted: bool,
-            out_extra: dict[str, Any] | None = None
+            out_extra: Extras | None = None
     ) -> list[DeviceArray]:
         """
         Return the residuals of each observation, on its device (see
@@ -708,7 +709,7 @@ class Objective:
             self,
             params: ParamValues,
             weighted: bool,
-            out_extra: dict[str, Any] | None = None
+            out_extra: Extras | None = None
     ) -> list[dict[str, np.ndarray]]:
         """
         Return the residuals of each data item of each observation, on the
@@ -722,7 +723,7 @@ class Objective:
             self,
             params: ParamValues,
             weighted: bool,
-            out_extra: dict[str, Any] | None = None
+            out_extra: Extras | None = None
     ) -> list[dict[str, DeviceArray]]:
         """
         Return the residuals of each data item of each observation, on its
@@ -735,7 +736,7 @@ class Objective:
             self,
             params: ParamValues,
             weighted: bool,
-            out_extra: dict[str, Any] | None = None
+            out_extra: Extras | None = None
     ) -> None:
         """Evaluate the residuals, and copy them to the host."""
         self._update_residual_d(params, weighted, out_extra)
@@ -749,7 +750,7 @@ class Objective:
             self,
             params: ParamValues,
             weighted: bool,
-            out_extra: dict[str, Any] | None = None
+            out_extra: Extras | None = None
     ) -> None:
         """Evaluate the models and the residuals."""
         self.prepare()
@@ -874,7 +875,7 @@ class Objective:
             i: int,
             model_data: dict[str, dict[str, DeviceArray | None]],
             params: ParamValues,
-            out_extra: dict[str, Any] | None
+            out_extra: Extras | None
     ) -> None:
         """
         Scale each spectrum of the model of observation i by its best
@@ -911,8 +912,12 @@ class Objective:
         driver.mem_copy_h2d(
             self._h_prior_residuals[i], self._d_prior_residuals[i])
         if out_extra is not None:
-            out_extra[f'{self._group.extra_prefix(i)}amplitudes'] = \
-                amplitudes.copy()
+            out_extra.add(
+                'amplitudes', amplitudes.copy(), "Amplitudes of the spectra",
+                "The amplitude of each spectrum of the model that fits the "
+                "data best (see LikelihoodGaussian): the factor of its model "
+                "in the residuals.",
+                observation=self._group.observation_label(i))
 
     def _amplitude_terms(self) -> float:
         """

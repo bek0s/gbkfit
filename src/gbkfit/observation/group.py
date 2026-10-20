@@ -7,7 +7,7 @@ from astropy.coordinates import SkyCoord
 
 from gbkfit.dataset import Data, Dataset
 from gbkfit.driver import Driver
-from gbkfit.model import Galaxy
+from gbkfit.model import Extras, Galaxy
 from gbkfit.model.components._functions import GalaxyFunctions
 from gbkfit.model.components._units import DataUnit
 from gbkfit.model.mass.units import G
@@ -31,7 +31,7 @@ class DepthGroup(NamedTuple):
     """
     Galaxies that can pass through each other along the line of sight
     (e.g. a merger), by name, which radiative transfer evaluates together
-    (see TransferPlan), and the name of the group (which prefixes its
+    (see TransferPlan), and the name of the group (the id 'group' of its
     extra outputs). Each galaxy after the first has a parameter of its
     position along the line of sight from the first, '{galaxy}_separation'
     (arcsec; positive behind it, away from the viewer).
@@ -213,10 +213,14 @@ class ObservationGroup:
             self._pdescs |= pdescs
         self._constants, _ = iterutils.merge_with_prefixes(
             [galaxy.constants() for galaxy in self._galaxies], self._prefixes)
-        # The extra outputs of the observations are named after their names,
-        # or their index if they have none (e.g. 'observation0_')
-        self._extra_prefixes = [
-            f'{name}_' if name is not None else f'observation{i}_'
+        # The ids of the galaxies and of the observations in the extra
+        # outputs: their names, or their positions if they have none (e.g.
+        # 'galaxy0', 'observation0')
+        self._galaxy_labels = [
+            f'galaxy{i}' if name is None else name
+            for i, name in enumerate(galaxy_names)]
+        self._observation_labels = [
+            f'observation{i}' if name is None else name
             for i, name in enumerate(observation_names)]
         plans = []
         seen = []
@@ -310,7 +314,7 @@ class ObservationGroup:
         return make_scene(
             [self._galaxies[j] for j in seen],
             [self._mappings[j] for j in seen],
-            [self._prefixes[j] for j in seen],
+            [self._galaxy_labels[j] for j in seen],
             observation.components(), observation.lines(),
             observation.band(), observation.line_of_sight(),
             observation.observable().emission, order,
@@ -383,12 +387,13 @@ class ObservationGroup:
         """Return the number of observations."""
         return len(self._observations)
 
-    def extra_prefix(self, index: int) -> str:
+    def observation_label(self, index: int) -> str:
         """
-        Return the prefix of the extra outputs of the observation of the
-        given index: its name, or 'observation{index}_'.
+        Return the id of the observation of the given index in the extra
+        outputs (and in the outputs of the tasks): its name, or
+        'observation{index}'.
         """
-        return self._extra_prefixes[index]
+        return self._observation_labels[index]
 
     def pdescs(self) -> dict[str, ParamDesc]:
         """
@@ -426,29 +431,26 @@ class ObservationGroup:
     def _gravity(
             self,
             params: ParamValues,
-            out_extra: dict[str, Any] | None
+            out_extra: Extras | None
     ) -> list[dict[int, ParamValues]]:
         """
         Evaluate what the gravity of each galaxy gives its components (see
         GravityPlan.evaluate); its extra outputs go to out_extra, if
-        given, prefixed by the prefix of the galaxy.
+        given, with the label of the galaxy as the id 'galaxy'.
         """
         gravity = []
-        for plan, mapping, prefix in zip(
-                self._gravity_plans, self._mappings, self._prefixes):
-            extra = {} if out_extra is not None else None
+        for plan, mapping, label in zip(
+                self._gravity_plans, self._mappings, self._galaxy_labels):
             gravity.append(plan.evaluate(
                 {name: params[full] for name, full in mapping.items()},
-                extra))
-            if out_extra is not None:
-                out_extra |= {
-                    f'{prefix}{key}': value for key, value in extra.items()}
+                None if out_extra is None
+                else out_extra.scoped(galaxy=label)))
         return gravity
 
     def model_d(
             self,
             params: ParamValues,
-            out_extra: dict[str, Any] | None = None
+            out_extra: Extras | None = None
     ) -> list[ModelData]:
         """
         Evaluate the model data of the observations, on their drivers,
@@ -458,11 +460,12 @@ class ObservationGroup:
         ----------
         params : dict
             The parameters of the galaxies, prefixed (see pdescs).
-        out_extra : dict, optional
+        out_extra : Extras, optional
             Where the extra outputs go, if wanted: those of each
-            observation prefixed by its name, or 'observation{i}_', and
-            those of the gravity of each galaxy (its rotation tables, see
-            GravityPlan.evaluate) by the prefix of the galaxy.
+            observation with its label as the id 'observation' (see
+            observation_label), and those of the gravity of each galaxy
+            (its rotation tables, see GravityPlan.evaluate) with its name,
+            or 'galaxy{i}', as the id 'galaxy'.
 
         Returns
         -------
@@ -475,14 +478,11 @@ class ObservationGroup:
             with self._timers.measure('model_gravity'):
                 gravity = self._gravity(params, out_extra)
             for i, plan in enumerate(self._plans):
-                out_extra_i = {} if out_extra is not None else None
                 self._d_model_data[i] = plan.evaluate(
                     self._frames[i].moved(params),
                     [gravity[g] for g in self._seen_galaxies[i]],
-                    out_extra_i)
-                if out_extra is not None:
-                    for key, val in out_extra_i.items():
-                        out_extra[f'{self.extra_prefix(i)}{key}'] = val
+                    None if out_extra is None else out_extra.scoped(
+                        observation=self._observation_labels[i]))
         return self._d_model_data
 
     def mock(
@@ -568,7 +568,7 @@ class ObservationGroup:
     def model_h(
             self,
             params: ParamValues,
-            out_extra: dict[str, Any] | None = None
+            out_extra: Extras | None = None
     ) -> list[dict[str, dict[str, np.ndarray | None]]]:
         """
         Evaluate the model data of the observations, on the host.
@@ -577,7 +577,7 @@ class ObservationGroup:
         ----------
         params : dict
             The parameters of the galaxies, prefixed (see pdescs).
-        out_extra : dict, optional
+        out_extra : Extras, optional
             Where the extra outputs go, if wanted (see model_d).
 
         Returns

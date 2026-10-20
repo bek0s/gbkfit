@@ -7,6 +7,7 @@ import numpy as np
 import pytest
 from modelutils import config_group
 
+from gbkfit.model import Extras
 from gbkfit.observation import WeightAzimuthPower, WeightAzimuthRange
 from gbkfit.utils.parseutils import ConfigError
 
@@ -58,9 +59,9 @@ def test_weights_follow_the_plane_of_the_disk(driver):
         dict(type='pixel_spectra', size=[24, 24, 21], step=[1, 1, 20]),
         dict(component='gas', traits=dict(type='azimuth_power', power=1))))
     params = gbkfit.params.ParamSpace(group.pdescs(), PROPERTIES).evaluate()
-    extra = {}
+    extra = Extras()
     weights = group.model_h(params, extra)[0]['spectra']['w']
-    velocity = extra['observation0_model_gas_vdata'].data
+    velocity = extra.get('vdata', component='gas').data
     disk = np.isfinite(velocity)
     assert disk.sum() > 100
     np.testing.assert_allclose(
