@@ -163,6 +163,15 @@ class Observable(parseutils.TypedSerializable, abc.ABC):
         """Return the rotation of the grid on the sky."""
         return self._grid.coords.rota
 
+    def sky_rval(self) -> tuple[float, float]:
+        """
+        Return the RA and Dec (degrees) of the origin of the frame of its
+        model, from which the centres of what it sees are measured (see
+        ObservationGroup): those of the reference pixel of its grid.
+        """
+        rval = self.rval()
+        return float(rval[0]), float(rval[1])
+
     def rest(self) -> astropy.units.Quantity | None:
         """Return the rest of the spectral axis, if any."""
         return self._grid.coords.rest

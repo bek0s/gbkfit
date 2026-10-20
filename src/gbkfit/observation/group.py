@@ -3,6 +3,7 @@ from collections.abc import Sequence
 from typing import Any, NamedTuple, Self
 
 import numpy as np
+from astropy.coordinates import SkyCoord
 
 from gbkfit.dataset import Data, Dataset
 from gbkfit.driver import Driver
@@ -49,23 +50,30 @@ class _Frame(NamedTuple):
     How an observation moves what it sees into its frame (see
     ObservationGroup): the parameters of the centres (x and y) and of the
     systemic velocities (v) of the components of the galaxies it sees,
-    and the names of the parameters of the offsets of its frame, of x, y
-    and the velocity (None for those it does not fit).
+    where the origin of the frame of the first observation is in its
+    frame (arcsec, x and y), and the names of the parameters of the
+    offsets of its frame, of x, y and the velocity (None for those it does
+    not fit).
     """
     x: tuple[str, ...]
     y: tuple[str, ...]
     v: tuple[str, ...]
+    alignment: tuple[float, float]
     offsets: tuple[str | None, str | None, str | None]
 
     def moved(self, params: ParamValues) -> ParamValues:
         """
         Return the parameters with the centres and the systemic velocities
-        moved by the offsets (the parameters themselves without offsets).
+        moved by the alignment and the offsets (the parameters themselves
+        without either).
         """
-        if self.offsets == (None, None, None):
+        if self.alignment == (0, 0) and self.offsets == (None, None, None):
             return params
-        shifts = [
+        offsets = [
             0.0 if name is None else params[name] for name in self.offsets]
+        shifts = [
+            self.alignment[0] + offsets[0], self.alignment[1] + offsets[1],
+            offsets[2]]
         moved = dict(params)
         for names, shift in zip((self.x, self.y, self.v), shifts):
             for name in names:
@@ -93,13 +101,26 @@ class ObservationGroup:
     through radiative transfer, is dimmed by the opacity of the galaxies
     in front (see depth_order). The parameters and constants of the
     galaxies are prefixed by their names when they have names (which they
-    need when there are several; e.g. 'north_'). An observation with
-    offsets of its frame (see Observation) sees the galaxies moved by
-    them: the centres and systemic velocities of all their components;
-    each galaxy needs an observation without them. The plans of the
-    observations are made here, once (copies of the group with other data
-    share them; see with_data). The gravity of each galaxy is
-    evaluated once for all the observations of it (see
+    need when there are several; e.g. 'north_').
+
+    The centres of the components (xpos, ypos) are measured from the
+    origin of the frame of the first observation: its reference pixel,
+    at the RA and Dec of its grid (see Observable.sky_rval). The others
+    see them moved by where that origin is in their frames, from their
+    RA and Dec: e.g. a cube whose reference pixel is 2 arcsec west of that
+    of the first sees them at xpos - 2 in its frame (2 arcsec further east
+    of its origin), so that the data of several instruments meet on the
+    sky as their coordinates say. (The frames are aligned by that shift alone:
+    those of reference pixels far apart near a pole also turn, by about
+    their separation times tan(Dec), which is warned of; e.g. 0.04 deg
+    for 1 arcmin at Dec -66.5 deg.) An observation with offsets of its
+    frame (see Observation) sees the galaxies moved by them too, for what
+    the coordinates do not know (e.g. the errors of their astrometry);
+    each galaxy needs an observation without them.
+
+    The plans of the observations are made here, once (copies of the
+    group with other data share them; see with_data). The gravity of each
+    galaxy is evaluated once for all the observations of it (see
     Galaxy.plan_gravity).
 
     Parameters
@@ -210,8 +231,9 @@ class ObservationGroup:
         self._gravity_plans = tuple(
             galaxy.plan_gravity() for galaxy in self._galaxies)
         self._frames = tuple(
-            self._frame(seen, observation)
-            for seen, observation in zip(seen, self._observations))
+            self._frame(seen, observation, alignment)
+            for seen, observation, alignment in zip(
+                seen, self._observations, _alignments(self._observations)))
         _check_offsets(self._galaxies, self._observations, seen)
         self._init_evaluations()
 
@@ -245,10 +267,15 @@ class ObservationGroup:
                 f"galaxies are {known}")
         return sorted(known.index(name) for name in names)
 
-    def _frame(self, seen: list[int], observation: Observation) -> _Frame:
+    def _frame(
+            self,
+            seen: list[int],
+            observation: Observation,
+            alignment: tuple[float, float]
+    ) -> _Frame:
         """
         Return the frame of an observation that sees the galaxies of the
-        given indices (see _Frame).
+        given indices, with the given alignment (see _Frame).
         """
         names = {key: [] for key in _FRAME_PARAMS}
         for g in seen:
@@ -261,7 +288,7 @@ class ObservationGroup:
                         names[key].append(name)
         return _Frame(
             tuple(names['x']), tuple(names['y']), tuple(names['v']),
-            observation.offset_params())
+            alignment, observation.offset_params())
 
     def _scene(self, seen: list[int], observation: Observation) -> Scene:
         """
@@ -603,6 +630,54 @@ class _GroupFunctions(ParamFunctions):
                 {name: values[full] for name, full in mapping.items()})
             bound |= {f'{prefix}{name}': value for name, value in own.items()}
         return bound
+
+
+# Warn of observations whose origins are further apart on the sky (deg),
+# or whose frames turn by more (deg; see _alignments)
+_ALIGNMENT_SEPARATION_WARNING = 1.0
+_ALIGNMENT_ROTATION_WARNING = 0.1
+
+
+def _alignments(
+        observations: Sequence[Observation]
+) -> list[tuple[float, float]]:
+    """
+    Return where the origin of the frame of the first observation is in
+    the frame of each (arcsec, x to the west and y to the north), of the
+    RA and Dec of their origins (see Observable.sky_rval). Warn (see
+    parseutils.warn) of origins more than _ALIGNMENT_SEPARATION_WARNING
+    apart (e.g. one of data without coordinates, at RA and Dec 0), and of
+    frames that turn by more than _ALIGNMENT_ROTATION_WARNING: the frames
+    are aligned by a shift; that of an origin far from the first, near a
+    pole, also turns by about the separation times tan(Dec).
+    """
+    first = SkyCoord(*observations[0].observable().sky_rval(), unit='deg')
+    alignments = []
+    for i, observation in enumerate(observations):
+        origin = SkyCoord(*observation.observable().sky_rval(), unit='deg')
+        east, north = origin.spherical_offsets_to(first)
+        alignments.append(
+            (-float(east.to_value('arcsec')),
+             float(north.to_value('arcsec'))))
+        separation = origin.separation(first).to_value('deg')
+        if separation > _ALIGNMENT_SEPARATION_WARNING:
+            parseutils.warn(
+                f"the origins of the frames of observations 0 and {i} (the "
+                f"RA and Dec of their reference pixels) are {separation:g} "
+                f"deg apart: check their coordinates")
+        elif separation > 0:
+            # (the convergence of the meridians: the bearing from the origin
+            # to the first, less the bearing back, less 180 deg)
+            bearings = origin.position_angle(first) \
+                - first.position_angle(origin)
+            rotation = bearings.to_value('deg') % 360 - 180
+            if abs(rotation) > _ALIGNMENT_ROTATION_WARNING:
+                parseutils.warn(
+                    f"the frames of observations 0 and {i} turn by "
+                    f"{rotation:.2g} deg against each other, which their "
+                    f"alignment leaves out: their reference pixels are "
+                    f"{separation * 60:.2g} arcmin apart")
+    return alignments
 
 
 def _check_offsets(

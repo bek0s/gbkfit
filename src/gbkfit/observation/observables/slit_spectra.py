@@ -10,6 +10,7 @@ from gbkfit.instrument import Instrument
 from gbkfit.model import LineEmission
 from gbkfit.model.components._units import DataUnit
 from gbkfit.utils import gridutils
+from gbkfit.utils.parseutils import ConfigError
 from . import _dcube, _detail
 from .base import ModelData, Observable
 
@@ -59,6 +60,10 @@ class SlitSpectra(Observable):
         default) or 'air' (see gridutils.make_medium).
     slit_width : float, optional
         The width of the slit; by default, the step along it.
+    sky_rval : Sequence of float, optional
+        The RA and Dec (degrees) of the reference point of the slit (rpix
+        along it), the origin of its frame (see Observable.sky_rval);
+        (0, 0) by default, as the grids of data without coordinates.
     smooth_weights : bool, optional
         Whether the weights of the model are smoothed by the PSF and the
         LSF, as the model is.
@@ -71,8 +76,8 @@ class SlitSpectra(Observable):
     Raises
     ------
     ConfigError
-        If slit_width is not positive, mask_cutoff is negative, or
-        mask_apply is true without it.
+        If slit_width is not positive, sky_rval is not two numbers,
+        mask_cutoff is negative, or mask_apply is true without it.
     """
 
     dataset_class = DatasetSlitSpectra
@@ -99,6 +104,7 @@ class SlitSpectra(Observable):
             cls,
             dataset: DatasetSlitSpectra,
             slit_width: float | None = None,
+            sky_rval: Sequence[float] = (0, 0),
             smooth_weights: bool = False,
             mask_cutoff: float | None = None,
             mask_apply: bool = False
@@ -110,7 +116,9 @@ class SlitSpectra(Observable):
         ----------
         dataset : DatasetSlitSpectra
             The spectra.
-        slit_width, smooth_weights, mask_cutoff, mask_apply : optional
+        slit_width, sky_rval, smooth_weights : optional
+            As those of SlitSpectra.
+        mask_cutoff, mask_apply : optional
             As those of SlitSpectra.
 
         Returns
@@ -127,8 +135,8 @@ class SlitSpectra(Observable):
         cls._require_dataset_class(dataset)
         return cls(
             **_detail.grid_options(dataset.grid()), slit_width=slit_width,
-            smooth_weights=smooth_weights, mask_cutoff=mask_cutoff,
-            mask_apply=mask_apply)
+            sky_rval=sky_rval, smooth_weights=smooth_weights,
+            mask_cutoff=mask_cutoff, mask_apply=mask_apply)
 
     def dump(
             self,
@@ -147,6 +155,7 @@ class SlitSpectra(Observable):
             rest=_detail.dump_rest(self.rest()),
             medium=self.medium(),
             slit_width=self._slit_width,
+            sky_rval=self._sky_rval,
             smooth_weights=self._smooth_weights,
             mask_cutoff=self._mask_cutoff,
             mask_apply=self._mask_apply), data)
@@ -161,6 +170,7 @@ class SlitSpectra(Observable):
             rest: str | astropy.units.Quantity | None = None,
             medium: str | None = None,
             slit_width: float | None = None,
+            sky_rval: Sequence[float] = (0, 0),
             smooth_weights: bool = False,
             mask_cutoff: float | None = None,
             mask_apply: bool = False
@@ -169,6 +179,12 @@ class SlitSpectra(Observable):
         if slit_width is None:
             slit_width = self.step()[0]
         _detail.check_positive('slit_width', slit_width)
+        sky_rval = tuple(sky_rval)
+        if len(sky_rval) != 2:
+            raise ConfigError(
+                f"sky_rval is the RA and Dec of the reference point of the "
+                f"slit; it is {sky_rval}")
+        self._sky_rval = float(sky_rval[0]), float(sky_rval[1])
         _detail.check_mask_options(mask_cutoff, mask_apply)
         self._slit_width = slit_width
         self._smooth_weights = smooth_weights
@@ -178,6 +194,9 @@ class SlitSpectra(Observable):
     def slit_width(self) -> float:
         """Return the width of the slit."""
         return self._slit_width
+
+    def sky_rval(self) -> tuple[float, float]:
+        return self._sky_rval
 
     def keys(self) -> tuple[str, ...]:
         return ('spectra',)

@@ -3,12 +3,15 @@ Tests of the frames of observations: the offsets that an observation
 fits (see Observation) move what it sees.
 """
 
+import astropy.units as u
 import numpy as np
 import pytest
+from astropy.coordinates import SkyCoord
 
 from gbkfit.model import galaxy_parser
 from gbkfit.observation import (
-    Flat, Observation, ObservationGroup, PixelMoments, observation_parser)
+    Flat, Observation, ObservationGroup, PixelMoments, SlitSpectra,
+    observable_parser, observation_parser)
 from gbkfit.params import ParamSpace
 from gbkfit.utils.parseutils import ConfigError
 
@@ -30,19 +33,24 @@ PARAMS = dict(
     core_xpos=0.5, core_ypos=-1, core_vsys=10, core_flux=5, core_disp=30)
 
 
-def moments(driver, offsets=None, **values):
+# The RA and Dec of the reference pixel of the first observation (deg)
+ORIGIN = (49.5, -66.5)
+
+
+def moments(driver, offsets=None, origin=ORIGIN, **values):
     """
     The moment maps of observation 'b' of the galaxy, which has the given
-    offsets, with observation 'a' as the reference, at PARAMS and the
-    given values.
+    offsets and the RA and Dec of its reference pixel, with observation
+    'a' (its reference pixel at ORIGIN) first, at PARAMS and the given
+    values.
     """
     observations = [
         Observation(
-            PixelMoments(size=(32, 32), spec_size=81, spec_step=5,
-                         orders=(0, 1)),
+            PixelMoments(size=(32, 32), rval=rval, spec_size=81,
+                         spec_step=5, orders=(0, 1)),
             Flat(), driver, name=name, offsets=offsets if name == 'b'
             else None)
-        for name in ('a', 'b')]
+        for name, rval in (('a', ORIGIN), ('b', origin))]
     group = ObservationGroup([galaxy_parser.load(GALAXY)], observations)
     params = ParamSpace(group.pdescs(), PARAMS | values)
     return group.model_h(params.evaluate())[1]
@@ -82,3 +90,33 @@ def test_a_galaxy_needs_an_observation_without_offsets():
         for name in ('a', 'b')]
     with pytest.raises(ConfigError, match="offsets of position; one needs"):
         ObservationGroup([galaxy_parser.load(GALAXY)], observations)
+
+
+def test_observations_are_aligned_by_their_coordinates(driver):
+    # A cube whose reference pixel is 2 arcsec west of that of the first
+    # sees the galaxy 2 arcsec further east of it: at x - 2 in its frame
+    first = SkyCoord(*ORIGIN, unit='deg')
+    west = first.spherical_offsets_by(-2 * u.arcsec, 0 * u.arcsec)
+    east, north = west.spherical_offsets_to(first)
+    dx, dy = -east.to_value('arcsec'), north.to_value('arcsec')
+    aligned = moments(driver, origin=(west.ra.deg, west.dec.deg))
+    expected = moments(
+        driver, disk_xpos=dx, disk_ypos=dy, core_xpos=0.5 + dx,
+        core_ypos=-1 + dy)
+    assert dx == pytest.approx(-2)
+    for key in ('moment0', 'moment1'):
+        np.testing.assert_allclose(
+            aligned[key]['d'], expected[key]['d'], rtol=1e-6, atol=1e-6)
+
+
+def test_frames_far_apart_are_warned_of(driver, caplog):
+    # (e.g. data without coordinates, at RA and Dec 0, with real ones)
+    moments(driver, origin=(0, 0))
+    assert "deg apart: check their coordinates" in caplog.text
+
+
+def test_slits_have_the_coordinates_of_their_reference_point():
+    slit = SlitSpectra(size=(10, 11), sky_rval=(49.5, -66.5))
+    assert slit.sky_rval() == (49.5, -66.5)
+    assert observable_parser.load(slit.dump()).sky_rval() == (49.5, -66.5)
+    assert SlitSpectra(size=(10, 11)).sky_rval() == (0, 0)
