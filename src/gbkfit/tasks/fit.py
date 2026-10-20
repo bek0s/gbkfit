@@ -55,7 +55,8 @@ def fit(
     are evaluated at once on copies of the objective on those drivers
     (see EvaluationPool), e.g. one per GPU. As it fits, it shows its
     progress on the console, writes every report of it to
-    logs/progress.jsonl ('progress'), and the configuration at the best
+    logs/progress.jsonl ('progress'), its log to logs/gbkfit.log ('log';
+    see run_log), and the configuration at the best
     fit so far to fit/best.yaml ('best_config'; see _progress), from
     which a stopped fit can start again.
 
@@ -89,7 +90,8 @@ def fit(
         If the configuration is invalid.
     """
     cfg, root = _read_config(config)
-    with gbkfit.outputs.create(output_dir, 'fit', output_dir_mode) as run:
+    with gbkfit.outputs.create(output_dir, 'fit', output_dir_mode) as run, \
+            _detail.run_log(run):
         _log.info(f"output will be stored under directory: {run.path}")
         _detail.write_config(run, _CONFIG, 'config', cfg, root)
         log = None
@@ -126,7 +128,7 @@ def resume(output_dir: str) -> None:
         log = gbkfit.fitting.EvaluationLog.resume(evaluations)
     except ValueError as e:
         raise ConfigError(str(e)) from e
-    with gbkfit.outputs.reopen(output_dir) as run:
+    with gbkfit.outputs.reopen(output_dir) as run, _detail.run_log(run):
         _fit(cfg, root, run, log)
 
 
@@ -165,7 +167,7 @@ def bootstrap(output_dir: str, config: str) -> None:
     with open(result_file) as f:
         result = json.load(f)
     best = result['solutions'][0]
-    with gbkfit.outputs.reopen(output_dir) as run:
+    with gbkfit.outputs.reopen(output_dir) as run, _detail.run_log(run):
         boot = _bootstrap(setup, best['elements'], options)
         result['bootstrap'] = boot.info()
         run.write(_RESULT, 'fit_result', result)

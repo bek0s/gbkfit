@@ -46,7 +46,8 @@ def eval_(
     is the mode): the configuration (config.yaml, kind 'config'), the
     parameters and the derived values (params.json, 'params'), the
     models and their extra outputs, and in the mode 'objective' the data
-    and the residuals too (see data_outputs and evaluation_outputs).
+    and the residuals too (see data_outputs and evaluation_outputs), and
+    the log (logs/gbkfit.log, 'log'; see run_log).
 
     The mode 'mock' writes the models (as 'model'), and mock data of the
     observations: their models measured from what their instruments
@@ -98,7 +99,8 @@ def eval_(
     if mode == 'mock' and 'mock' not in cfg:
         raise ConfigError("the mode 'mock' needs the section 'mock'")
     with gbkfit.outputs.create(
-            output_dir, 'eval', output_dir_mode, dict(mode=mode)) as run:
+            output_dir, 'eval', output_dir_mode, dict(mode=mode)) as run, \
+            _detail.run_log(run):
         _log.info(f"output will be stored under directory: {run.path}")
         _detail.write_config(run, 'config.yaml', 'config', cfg, root)
         _eval(mode, cfg, root, profile_iters, run)

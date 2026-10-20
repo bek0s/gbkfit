@@ -3,11 +3,12 @@ Helpers shared by the tasks: reading configurations, the output
 directory, loading the parts of a configuration, and writing outputs.
 """
 
+import contextlib
 import copy
 import json
 import logging
 import os
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from pathlib import Path
 from typing import Any, Literal, NamedTuple
 
@@ -34,6 +35,12 @@ _log = logging.getLogger(__name__)
 
 # Reads YAML (round trip: dicts keep their order)
 _yaml = ruamel.yaml.YAML()
+
+# The log of a run, and the form of its messages
+_LOG = 'logs/gbkfit.log'
+_LOG_FORMAT = (
+    '{asctime}:{processName}({process}):{threadName}({thread}):'
+    '{levelname}:{name}:{funcName}:{lineno}:{message}')
 
 
 def read_config(
@@ -577,6 +584,26 @@ def _scaled(output: Any, amplitudes: np.ndarray) -> Any:
     if isinstance(output, np.ndarray):
         return output * amplitudes
     return output._replace(data=output.data * amplitudes)
+
+
+@contextlib.contextmanager
+def run_log(run: gbkfit.outputs.RunWriter) -> Iterator[None]:
+    """
+    While the block runs, copy the log of GBKFIT (the logger 'gbkfit', at
+    its level) to the log of a run (logs/gbkfit.log, kind 'log'; appended
+    to, e.g. when a fit resumes), with the time, the process, the thread
+    and the place of each message.
+    """
+    handler = logging.FileHandler(run.filename(_LOG))
+    handler.setFormatter(logging.Formatter(_LOG_FORMAT, style='{'))
+    run.record(_LOG, 'log', 'log')
+    logger = logging.getLogger('gbkfit')
+    logger.addHandler(handler)
+    try:
+        yield
+    finally:
+        logger.removeHandler(handler)
+        handler.close()
 
 
 def write_outputs(

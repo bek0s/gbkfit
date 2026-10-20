@@ -96,6 +96,9 @@ def test_profiling_writes_the_timings(tmp_path, mode):
     run = run_eval(mode, config, tmp_path / mode, '--profile', '3')
     timings = run.read(run.product('timings'))
     assert timings['model_eval']['count'] == 3
+    # (and the log of the run has the messages of the task)
+    log = pathlib.Path(run.filename(run.product('log'))).read_text()
+    assert 'running performance test...' in log
 
 
 def test_mock_data_and_their_configuration(tmp_path):

@@ -17,8 +17,9 @@ def configure_logging(
         log_level: Literal['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']
 ) -> None:
     """
-    Configure logging with specified log level: to the console (stderr)
-    and gbkfit.log. On a terminal, the console log goes through the
+    Configure logging with specified log level: to the console (stderr;
+    the tasks also log to their runs, see tasks._detail.run_log). On a
+    terminal, the console log goes through the
     console of the tasks, so that it shows above the line of the progress
     of a fit (see tasks._progress).
     """
@@ -47,26 +48,14 @@ def configure_logging(
                 'format': '{message}',
                 'style': '{'
             },
-            'file': {
-                'format':
-                    '{asctime}:{processName}({process}):'
-                    '{threadName}({thread}):'
-                    '{levelname}:{name}:{funcName}:{lineno}:{message}',
-                'style': '{'
-            },
         },
         'handlers': {
-            'console': console,
-            'file': {
-                'class': 'logging.FileHandler',
-                'formatter': 'file',
-                'filename': 'gbkfit.log'
-            }
+            'console': console
         },
         'loggers': {
             'gbkfit': {
                 'level': f'{log_level}',
-                'handlers': ['console', 'file'],
+                'handlers': ['console'],
                 'propagate': False
             }
         }

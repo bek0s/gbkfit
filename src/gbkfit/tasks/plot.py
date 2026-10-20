@@ -19,6 +19,7 @@ from matplotlib.patches import Ellipse
 
 import gbkfit.outputs
 from gbkfit.outputs import Product, Run
+from . import _detail
 
 
 __all__ = [
@@ -124,7 +125,8 @@ def plot(
         posterior_params=None if posterior_params is None
         else list(posterior_params))
     with gbkfit.outputs.create(
-            output_dir, 'plot', output_dir_mode, options) as run:
+            output_dir, 'plot', output_dir_mode, options) as run, \
+            _detail.run_log(run):
         for figure in figures:
             buffer = io.BytesIO()
             figure.figure.savefig(
