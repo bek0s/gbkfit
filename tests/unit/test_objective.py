@@ -356,3 +356,19 @@ def test_copies_with_other_data_share_the_whitening_of_their_masks(driver):
                 fresh.chi2(params), rel=1e-6)
             assert (copy._whiteners[0]['brightness']._spatial
                     is whitener._spatial) == shared
+
+
+def test_copies_with_other_data_share_the_plans_of_the_models(driver):
+    # (the models do not depend on the values of the data: a bootstrap
+    # makes them once)
+    rng = np.random.default_rng(12)
+    data = Data(rng.normal(0, 1, (24, 32)))
+    objective, params = make_objective(driver, data)
+    group = objective.group()
+    other = objective.datasets()[0].with_data(
+        dict(brightness=rng.normal(0, 1, (24, 32))))
+    copy = group.with_data([other])
+    assert copy._plans[0] is group._plans[0]
+    np.testing.assert_array_equal(
+        copy.model_h(params)[0]['brightness']['d'],
+        group.model_h(params)[0]['brightness']['d'])

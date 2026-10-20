@@ -1,3 +1,4 @@
+import copy
 from collections.abc import Sequence
 from typing import Any, NamedTuple, Self
 
@@ -7,6 +8,7 @@ from gbkfit.dataset import Data, Dataset
 from gbkfit.driver import Driver
 from gbkfit.model import Galaxy
 from gbkfit.model.components._functions import GalaxyFunctions
+from gbkfit.model.components._units import DataUnit
 from gbkfit.model.mass.units import G
 from gbkfit.params import (
     ParamDesc, ParamFunctions, ParamScalarDesc, ParamValues)
@@ -37,6 +39,17 @@ class DepthGroup(NamedTuple):
     galaxies: tuple[str, ...]
 
 
+def _same_unit(a: DataUnit | None, b: DataUnit | None) -> bool:
+    """
+    Return whether two units of the light of data are the same (see
+    DataUnit, whose beams can be arrays, one for each spectral point).
+    """
+    if a is None or b is None:
+        return a is b
+    return all(np.array_equal(x, y) if isinstance(x, np.ndarray)
+               else x == y for x, y in zip(a, b))
+
+
 class ObservationGroup:
     """
     Galaxies and the observations of them, evaluated together.
@@ -47,7 +60,8 @@ class ObservationGroup:
     in front (see depth_order). The parameters and constants of the
     galaxies are prefixed by their names when they have names (which they
     need when there are several; e.g. 'north_'). The plans of the
-    observations are made here, once. The gravity of each galaxy is
+    observations are made here, once (copies of the group with other data
+    share them; see with_data). The gravity of each galaxy is
     evaluated once for all the observations of it (see
     Galaxy.plan_gravity).
 
@@ -157,6 +171,13 @@ class ObservationGroup:
         self._seen_galaxies = tuple(seen)
         self._gravity_plans = tuple(
             galaxy.plan_gravity() for galaxy in self._galaxies)
+        self._init_evaluations()
+
+    def _init_evaluations(self) -> None:
+        """
+        Make what its evaluations write: the model data of each observation
+        on the host and the device, and the times of the steps.
+        """
         self._h_model_data = [
             {key: dict(d=None, m=None, w=None)
              for key in obs.observable().keys()}
@@ -223,8 +244,17 @@ class ObservationGroup:
         """
         Return a group of the same galaxies and observations, with other
         data: one dataset for each observation (e.g. those of a bootstrap;
-        see Observation.with_data), under its likelihood; with its own
-        plans.
+        see Observation.with_data), under its likelihood.
+
+        The plans of the observations do not depend on the values of their
+        data, only on their unit (see Observation.data_unit): the copy
+        shares the plans of those whose data keep their unit (e.g. all of
+        them, in a bootstrap), and with them the memory of their models,
+        on their devices. So the two must not be evaluated at the same
+        time (e.g. in two threads; copies on other drivers can, see
+        with_driver). A copy whose observations have other parameters
+        (e.g. a likelihood of data that they had none of) has plans of its
+        own.
 
         Raises
         ------
@@ -236,11 +266,23 @@ class ObservationGroup:
             raise ConfigError(
                 f"there are {len(self._observations)} observations, but "
                 f"{len(datasets)} datasets")
-        return type(self)(
-            self._galaxies,
-            [obs.with_data(data)
-             for obs, data in zip(self._observations, datasets)],
-            self._given_depth_order)
+        observations = [
+            obs.with_data(data)
+            for obs, data in zip(self._observations, datasets)]
+        if any(new.pdescs().keys() != old.pdescs().keys()
+               for new, old in zip(observations, self._observations)):
+            return type(self)(
+                self._galaxies, observations, self._given_depth_order)
+        group = copy.copy(self)
+        group._observations = tuple(observations)
+        group._plans = tuple(
+            plan if _same_unit(new.data_unit(), old.data_unit())
+            else new.plan(self._scene(seen, new))
+            for plan, seen, new, old in zip(
+                self._plans, self._seen_galaxies, observations,
+                self._observations))
+        group._init_evaluations()
+        return group
 
     def galaxies(self) -> tuple[Galaxy, ...]:
         """Return the galaxies."""
