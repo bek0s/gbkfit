@@ -103,6 +103,17 @@ class Observation(parseutils.Serializable):
         Whether the flux of its model is times a parameter,
         '{name}_calibration' (e.g. a flux scale between the instruments
         of a joint fit); its name is then required. False by default.
+    offsets : Mapping, optional
+        The offsets of its frame that are fitted, for data whose positions
+        or velocities are off from those of the other observations (e.g.
+        by the error of their astrometry, or of the zero point of their
+        velocities): 'position' (true or false) adds the parameters
+        '{name}_dx' and '{name}_dy' (arcsec, +x to the west, +y to the
+        north), and 'velocity' adds '{name}_dv' (km/s); its name is then
+        required. They move what it sees: the centres (xpos, ypos) and
+        systemic velocities (vsys) of all the components of the galaxies
+        it sees. None by default; a galaxy needs an observation without
+        them (see ObservationGroup).
     data : Dataset, optional
         The data, of the dataset class of the observable.
     likelihood : Likelihood, optional
@@ -134,7 +145,8 @@ class Observation(parseutils.Serializable):
     ConfigError
         If a name is invalid, there are no galaxies or they repeat, a band
         is given to an observable that is not an image, it has a
-        calibration but no name, the scale is not one integer of at least
+        calibration or offsets but no name, the offsets are not position
+        and velocity, true or false, the scale is not one integer of at least
         1
         for each axis, there is a likelihood without data, the data are
         not those of the observable, its model can lack values but its
@@ -273,13 +285,15 @@ class Observation(parseutils.Serializable):
         weights = {} if self._weights is None else dict(
             weights=self._weights.dump())
         calibration = dict(calibration=True) if self._calibration else {}
+        offsets = {} if not self._offsets else dict(offsets=dict(
+            self._offsets))
         # The form of the data is that of the observable: no type
         data = {} if self._data is None else dict(
             data={k: v for k, v in self._data.dump(**kwargs).items()
                   if k != 'type'},
             likelihood=likelihood_parser.dump(self._likelihood))
         return name | galaxies | components | lines | band | weights \
-            | calibration | data | dict(
+            | calibration | offsets | data | dict(
             line_of_sight=line_of_sight_parser.dump(self._line_of_sight),
             foreground=foreground_parser.dump(self._foreground, **kwargs),
             instrument=instrument_parser.dump(self._instrument, **kwargs),
@@ -302,6 +316,7 @@ class Observation(parseutils.Serializable):
             band: Band | None = None,
             weights: Weights | None = None,
             calibration: bool = False,
+            offsets: Mapping[str, bool] | None = None,
             data: Dataset | None = None,
             likelihood: Likelihood | None = None,
             scale: Sequence[int] | None = None,
@@ -334,6 +349,7 @@ class Observation(parseutils.Serializable):
             raise ConfigError(
                 "an observation with a calibration needs a name, which "
                 "names its parameter ('{name}_calibration')")
+        offsets = _check_offsets(offsets, name)
         if band is not None and observable.emission is not BandEmission:
             raise ConfigError(
                 "only images have a band; the lines of spectral cubes are "
@@ -397,6 +413,7 @@ class Observation(parseutils.Serializable):
         self._band = band
         self._weights = weights
         self._calibration = calibration
+        self._offsets = offsets
         self._data = data
         self._likelihood = likelihood
         self._scale = scale
@@ -441,18 +458,39 @@ class Observation(parseutils.Serializable):
 
     def pdescs(self) -> dict[str, ParamScalarDesc]:
         """
-        Return its parameters: that of its calibration, if any (see the
-        class), those of its lens, '{name}_lens_{parameter}' (see
-        Foreground.pdescs), and those of the fitted noise of its
-        likelihood, e.g. '{name}_noise_scale_{item}' (see
-        LikelihoodGaussian).
+        Return its parameters: that of its calibration and those of the
+        offsets of its frame, if any (see the class), those of its lens,
+        '{name}_lens_{parameter}' (see Foreground.pdescs), and those of the
+        fitted noise of its likelihood, e.g. '{name}_noise_scale_{item}'
+        (see LikelihoodGaussian).
         """
         name = self._calibration_param()
         calibration = {} if name is None else {name: ParamScalarDesc(
             desc=f"the flux scale of observation {self._name}")}
+        descs = (
+            "the offset of its frame to the west (arcsec)",
+            "the offset of its frame to the north (arcsec)",
+            "the offset of its velocities (km/s)")
+        offsets = {
+            param: ParamScalarDesc(desc=f"{desc}, of observation {self._name}")
+            for param, desc in zip(self.offset_params(), descs)
+            if param is not None}
         likelihood = {} if self._likelihood is None \
             else self._likelihood.pdescs()
-        return calibration | self._foreground.pdescs() | likelihood
+        return calibration | offsets | self._foreground.pdescs() | likelihood
+
+    def offset_params(self) -> tuple[str | None, str | None, str | None]:
+        """
+        Return the names of the parameters of the offsets of its frame
+        (see the class): of x, y and the velocity, None for those it does
+        not fit.
+        """
+        position = self._offsets.get('position', False)
+        velocity = self._offsets.get('velocity', False)
+        return (
+            f'{self._name}_dx' if position else None,
+            f'{self._name}_dy' if position else None,
+            f'{self._name}_dv' if velocity else None)
 
     def _calibration_param(self) -> str | None:
         """Return the name of the parameter of its calibration, if any."""
@@ -502,7 +540,7 @@ class Observation(parseutils.Serializable):
             self._observable, self._line_of_sight, self._driver,
             self._foreground, self._instrument, self._galaxies,
             self._components, self._lines, self._band, self._weights,
-            self._calibration, data,
+            self._calibration, self._offsets, data,
             likelihood if likelihood is not None else self._likelihood,
             self._scale, self._dtype.name, self._fft_dtype.name, self._name)
 
@@ -564,6 +602,30 @@ class Observation(parseutils.Serializable):
             self._driver, scene, self._foreground, self._instrument,
             self._scale, self._dtype, self._fft_dtype, self._weights,
             self._calibration_param())
+
+
+def _check_offsets(
+        offsets: Mapping[str, bool] | None, name: str | None
+) -> dict[str, bool]:
+    """
+    Return the offsets of the frame of an observation (see Observation),
+    those it fits, or raise ConfigError if they are not position and
+    velocity, true or false, or it has some but no name.
+    """
+    if offsets is None:
+        return {}
+    if not isinstance(offsets, Mapping) \
+            or not set(offsets) <= {'position', 'velocity'} \
+            or not all(isinstance(v, bool) for v in offsets.values()):
+        raise ConfigError(
+            f"offsets are 'position' and 'velocity', true or false; they "
+            f"are {offsets!r}")
+    fitted = {key: True for key, value in offsets.items() if value}
+    if fitted and name is None:
+        raise ConfigError(
+            "an observation with offsets needs a name, which names their "
+            "parameters (e.g. '{name}_dx')")
+    return fitted
 
 
 def _check_amplitudes(observable: Observable, calibration: bool) -> None:

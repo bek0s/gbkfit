@@ -39,6 +39,40 @@ class DepthGroup(NamedTuple):
     galaxies: tuple[str, ...]
 
 
+# The parameters of the components that place them in the frame of an
+# observation: their centre (x, y) and systemic velocity (v)
+_FRAME_PARAMS = dict(x='xpos', y='ypos', v='vsys')
+
+
+class _Frame(NamedTuple):
+    """
+    How an observation moves what it sees into its frame (see
+    ObservationGroup): the parameters of the centres (x and y) and of the
+    systemic velocities (v) of the components of the galaxies it sees,
+    and the names of the parameters of the offsets of its frame, of x, y
+    and the velocity (None for those it does not fit).
+    """
+    x: tuple[str, ...]
+    y: tuple[str, ...]
+    v: tuple[str, ...]
+    offsets: tuple[str | None, str | None, str | None]
+
+    def moved(self, params: ParamValues) -> ParamValues:
+        """
+        Return the parameters with the centres and the systemic velocities
+        moved by the offsets (the parameters themselves without offsets).
+        """
+        if self.offsets == (None, None, None):
+            return params
+        shifts = [
+            0.0 if name is None else params[name] for name in self.offsets]
+        moved = dict(params)
+        for names, shift in zip((self.x, self.y, self.v), shifts):
+            for name in names:
+                moved[name] = params[name] + shift
+        return moved
+
+
 def _same_unit(a: DataUnit | None, b: DataUnit | None) -> bool:
     """
     Return whether two units of the light of data are the same (see
@@ -59,7 +93,10 @@ class ObservationGroup:
     through radiative transfer, is dimmed by the opacity of the galaxies
     in front (see depth_order). The parameters and constants of the
     galaxies are prefixed by their names when they have names (which they
-    need when there are several; e.g. 'north_'). The plans of the
+    need when there are several; e.g. 'north_'). An observation with
+    offsets of its frame (see Observation) sees the galaxies moved by
+    them: the centres and systemic velocities of all their components;
+    each galaxy needs an observation without them. The plans of the
     observations are made here, once (copies of the group with other data
     share them; see with_data). The gravity of each galaxy is
     evaluated once for all the observations of it (see
@@ -88,8 +125,9 @@ class ObservationGroup:
         galaxies it sees (when there are several) or names unknown ones,
         depth_order names unknown galaxies or repeats them, has a group of
         fewer than two galaxies, or of the name of a galaxy or an
-        observation, or what an observation sees does not go with it (see
-        make_scene).
+        observation, every observation of a galaxy has offsets of position
+        or of velocity, or what an observation sees does not go with it
+        (see make_scene).
     """
 
     def __init__(
@@ -171,6 +209,10 @@ class ObservationGroup:
         self._seen_galaxies = tuple(seen)
         self._gravity_plans = tuple(
             galaxy.plan_gravity() for galaxy in self._galaxies)
+        self._frames = tuple(
+            self._frame(seen, observation)
+            for seen, observation in zip(seen, self._observations))
+        _check_offsets(self._galaxies, self._observations, seen)
         self._init_evaluations()
 
     def _init_evaluations(self) -> None:
@@ -202,6 +244,24 @@ class ObservationGroup:
                 f"observation {i} refers to unknown galaxies {unknown}; the "
                 f"galaxies are {known}")
         return sorted(known.index(name) for name in names)
+
+    def _frame(self, seen: list[int], observation: Observation) -> _Frame:
+        """
+        Return the frame of an observation that sees the galaxies of the
+        given indices (see _Frame).
+        """
+        names = {key: [] for key in _FRAME_PARAMS}
+        for g in seen:
+            galaxy, mapping = self._galaxies[g], self._mappings[g]
+            for i in range(len(galaxy.components())):
+                params = galaxy.component_params(i)
+                for key, own in _FRAME_PARAMS.items():
+                    name = mapping[params[own]] if own in params else None
+                    if name is not None and name not in names[key]:
+                        names[key].append(name)
+        return _Frame(
+            tuple(names['x']), tuple(names['y']), tuple(names['v']),
+            observation.offset_params())
 
     def _scene(self, seen: list[int], observation: Observation) -> Scene:
         """
@@ -390,7 +450,8 @@ class ObservationGroup:
             for i, plan in enumerate(self._plans):
                 out_extra_i = {} if out_extra is not None else None
                 self._d_model_data[i] = plan.evaluate(
-                    params, [gravity[g] for g in self._seen_galaxies[i]],
+                    self._frames[i].moved(params),
+                    [gravity[g] for g in self._seen_galaxies[i]],
                     out_extra_i)
                 if out_extra is not None:
                     for key, val in out_extra_i.items():
@@ -463,7 +524,8 @@ class ObservationGroup:
                         f"the errors of measured data are the scatter of "
                         f"nsamples draws, at least 2; nsamples is {nsamples}")
                 draws = plan.mock(
-                    params, [gravity[g] for g in self._seen_galaxies[i]],
+                    self._frames[i].moved(params),
+                    [gravity[g] for g in self._seen_galaxies[i]],
                     noise, np.random.default_rng(stream),
                     nmocks + (nsamples if errors is None else 0))
             if errors is None:
@@ -541,6 +603,28 @@ class _GroupFunctions(ParamFunctions):
                 {name: values[full] for name, full in mapping.items()})
             bound |= {f'{prefix}{name}': value for name, value in own.items()}
         return bound
+
+
+def _check_offsets(
+        galaxies: Sequence[Galaxy],
+        observations: Sequence[Observation],
+        seen: Sequence[Sequence[int]]
+) -> None:
+    """
+    Raise ConfigError if every observation that sees a galaxy has offsets
+    of position, or of velocity (see Observation): they would move its
+    centre, or its systemic velocity, with nothing to place it.
+    """
+    for g, galaxy in enumerate(galaxies):
+        offsets = [
+            obs.offset_params()
+            for obs, indices in zip(observations, seen) if g in indices]
+        for kind, k in (('position', 0), ('velocity', 2)):
+            if offsets and all(params[k] is not None for params in offsets):
+                raise ConfigError(
+                    f"every observation of galaxy {galaxy.name() or g} has "
+                    f"offsets of {kind}; one needs none, whose frame places "
+                    f"the galaxy")
 
 
 def _scatter(draws: Sequence[HostModelData]) -> dict[str, np.ndarray]:
