@@ -2,7 +2,6 @@
 The emcee MCMC sampler.
 """
 
-import math
 import typing
 from typing import Any, Literal
 
@@ -11,7 +10,8 @@ import numpy as np
 
 from gbkfit.fitting.base import FitRun, Fitter
 from gbkfit.fitting.control import FitStopped
-from gbkfit.fitting.fitparams import FitParam, FitParamClass, FitParamPrior
+from gbkfit.fitting.fitparams import FitParam, FitParamClass, FitParamWalkers
+from gbkfit.fitting.fitters._detail import start_walkers
 from gbkfit.fitting.priors import Prior
 from gbkfit.fitting.problem import FitProblem
 from gbkfit.fitting.uncertainty import UncertaintyOptions
@@ -24,63 +24,11 @@ __all__ = [
 ]
 
 
-class FitParamEmcee(FitParamPrior):
+class FitParamEmcee(FitParamWalkers):
     """
     The options of a free element for emcee: its prior, and where the
-    walkers start.
-
-    The walkers start uniformly in a box of the given width around the
-    value, if a width is given, or else from the prior.
-
-    Parameters
-    ----------
-    prior : Prior
-        The prior (in a config, min and max without a prior give a
-        uniform one).
-    value : float, optional
-        The centre of the box of the walkers.
-    width : float, optional
-        The width of the box of the walkers (needs a value).
-
-    Raises
-    ------
-    ConfigError
-        If the value is not in the support of the prior, or a width is
-        given without a value, or is not positive.
+    walkers start (see FitParamWalkers).
     """
-
-    def dump(self) -> dict[str, Any]:
-        info = super().dump()
-        if self._width is not None:
-            info['width'] = self._width
-        return info
-
-    def __init__(
-            self,
-            prior: Prior,
-            value: float | None = None,
-            width: float | None = None
-    ):
-        super().__init__(prior, value)
-        if width is not None and value is None:
-            raise ConfigError("option 'width' needs option 'value'")
-        if width is not None and not (math.isfinite(width) and width > 0):
-            raise ConfigError(
-                f"option 'width' must be finite and positive; it is {width}")
-        self._width = width
-
-    def width(self) -> float | None:
-        """Return the width of the box of the walkers, if any."""
-        return self._width
-
-    def sample_start(self, rng: np.random.Generator, size: int) -> np.ndarray:
-        """Return the starting values of the walkers."""
-        if self._width is None:
-            return self.prior().sample(rng, size)
-        value = typing.cast(float, self.value())
-        lo = max(value - self._width / 2, self.minimum())
-        hi = min(value + self._width / 2, self.maximum())
-        return rng.uniform(lo, hi, size)
 
 
 class FitterEmcee(Fitter):
@@ -241,19 +189,7 @@ class FitterEmcee(Fitter):
     ) -> emcee.State:
         """
         Return the starting points of the walkers and their posterior
-        densities, all finite: in the support of the prior, and where the
-        parameters can be evaluated (redrawn up to 100 times).
+        densities, all finite (see start_walkers).
         """
-        coords = np.stack(
-            [p.sample_start(rng, nwalkers) for p in params], axis=1)
-        log_prob = problem.log_posterior_batch(coords)
-        for _ in range(100):
-            bad = np.flatnonzero(~np.isfinite(log_prob))
-            if not len(bad):
-                return emcee.State(coords, log_prob=log_prob)
-            coords[bad] = np.stack(
-                [p.sample_start(rng, len(bad)) for p in params], axis=1)
-            log_prob[bad] = problem.log_posterior_batch(coords[bad])
-        raise ConfigError(
-            "could not start the walkers where the posterior density is "
-            "positive")
+        coords, log_prob = start_walkers(problem, params, nwalkers, rng)
+        return emcee.State(coords, log_prob=log_prob)

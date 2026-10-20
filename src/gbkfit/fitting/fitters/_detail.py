@@ -4,13 +4,49 @@ Helpers shared by the fitters.
 
 import math
 from collections.abc import Callable, Sequence
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 import numpy as np
 
+from gbkfit.fitting.fitparams import FitParamWalkers
 from gbkfit.fitting.result import Evidence
 from gbkfit.fitting.uncertainty import finite_difference_steps, jacobian
 from gbkfit.utils import threadutils
+from gbkfit.utils.parseutils import ConfigError
+
+if TYPE_CHECKING:
+    from gbkfit.fitting.problem import FitProblem
+
+
+def start_walkers(
+        problem: 'FitProblem',
+        params: Sequence[FitParamWalkers],
+        nwalkers: int,
+        rng: np.random.Generator
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Return the starting points of an ensemble of walkers and their
+    posterior densities, all finite: in the support of the prior, and
+    where the parameters can be evaluated (redrawn up to 100 times).
+
+    Raises
+    ------
+    ConfigError
+        If no finite posterior density was drawn for some walker.
+    """
+    coords = np.stack(
+        [p.sample_start(rng, nwalkers) for p in params], axis=1)
+    log_prob = problem.log_posterior_batch(coords)
+    for _ in range(100):
+        bad = np.flatnonzero(~np.isfinite(log_prob))
+        if not len(bad):
+            return coords, log_prob
+        coords[bad] = np.stack(
+            [p.sample_start(rng, len(bad)) for p in params], axis=1)
+        log_prob[bad] = problem.log_posterior_batch(coords[bad])
+    raise ConfigError(
+        "could not start the walkers where the posterior density is "
+        "positive")
 
 
 def relative_step(

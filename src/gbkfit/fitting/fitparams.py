@@ -7,8 +7,11 @@ object of its class of them.
 import abc
 import copy
 import math
+import typing
 from collections.abc import Mapping
 from typing import Any, Self, TypeAlias
+
+import numpy as np
 
 from gbkfit.fitting.priors import Prior, PriorUniform, prior_parser
 from gbkfit.utils import parseutils
@@ -20,7 +23,8 @@ __all__ = [
     'FitParamBounded',
     'FitParamClass',
     'FitParamLeastSquares',
-    'FitParamPrior'
+    'FitParamPrior',
+    'FitParamWalkers'
 ]
 
 
@@ -283,3 +287,62 @@ class FitParamPrior(FitParam):
         return _scale(
             self.minimum(), self.maximum(),
             width if math.isfinite(width) else self._prior.width())
+
+
+class FitParamWalkers(FitParamPrior):
+    """
+    The options of a free element for an ensemble of walkers (emcee,
+    zeus): its prior, and where the walkers start.
+
+    The walkers start uniformly in a box of the given width around the
+    value, if a width is given, or else from the prior.
+
+    Parameters
+    ----------
+    prior : Prior
+        The prior (in a config, min and max without a prior give a
+        uniform one).
+    value : float, optional
+        The centre of the box of the walkers.
+    width : float, optional
+        The width of the box of the walkers (needs a value).
+
+    Raises
+    ------
+    ConfigError
+        If the value is not in the support of the prior, or a width is
+        given without a value, or is not positive.
+    """
+
+    def dump(self) -> dict[str, Any]:
+        info = super().dump()
+        if self._width is not None:
+            info['width'] = self._width
+        return info
+
+    def __init__(
+            self,
+            prior: Prior,
+            value: float | None = None,
+            width: float | None = None
+    ):
+        super().__init__(prior, value)
+        if width is not None and value is None:
+            raise ConfigError("option 'width' needs option 'value'")
+        if width is not None and not (math.isfinite(width) and width > 0):
+            raise ConfigError(
+                f"option 'width' must be finite and positive; it is {width}")
+        self._width = width
+
+    def width(self) -> float | None:
+        """Return the width of the box of the walkers, if any."""
+        return self._width
+
+    def sample_start(self, rng: np.random.Generator, size: int) -> np.ndarray:
+        """Return the starting values of the walkers."""
+        if self._width is None:
+            return self.prior().sample(rng, size)
+        value = typing.cast(float, self.value())
+        lo = max(value - self._width / 2, self.minimum())
+        hi = min(value + self._width / 2, self.maximum())
+        return rng.uniform(lo, hi, size)
