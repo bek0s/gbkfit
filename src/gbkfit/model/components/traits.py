@@ -2483,6 +2483,12 @@ class VPTraitWedge(TraitFeatureDirection, VPTrait):
     the others. Its parameters: v, p (degrees) and s (degrees, the full
     width of each wedge).
 
+    Its wedges have sharp edges, which p and s place: the model, which
+    samples the wedges at points, does not change while an edge moves
+    between two of them, so that fits by the slopes of the chi-square
+    (least squares) do not move p and s, and give them errors of 0. Fit
+    them with a fitter that takes no slopes (e.g. CMA-ES, or a sampler).
+
     Parameters
     ----------
     direction : str
@@ -2537,6 +2543,12 @@ class VPTraitBar(VPTraitPlanar):
     p) and y across it, the velocity is v sign(x) along the axis where
     |y| < s / 2, with v_y = v sign(x) sin(p). The strip reaches the edge
     of the disk. Its parameters: v, p (degrees) and s (arcsec).
+
+    Its strip has sharp edges, which s places: the model, which samples
+    the strip at points, does not change while an edge moves between two
+    of them, so that fits by the slopes of the chi-square (least squares)
+    do not move s, and give it an error of 0. Fit it with a fitter that
+    takes no slopes (e.g. CMA-ES, or a sampler).
     """
 
     @staticmethod
@@ -2569,7 +2581,8 @@ class VPTraitNWBar(TraitFeatureSampling, VPTraitPlanar):
     the distance |x| from the centre along the axis, of a value at each
     node (at the distances of the radii of the nodes); 0 within the first
     or beyond the last (e.g. a bar of a length: speeds of 0 beyond it).
-    Its parameters: p (degrees) and s (arcsec); v, node-wise.
+    Its parameters: p (degrees) and s (arcsec); v, node-wise. Fit s with
+    a fitter that takes no slopes (see VPTraitBar).
 
     Parameters
     ----------
