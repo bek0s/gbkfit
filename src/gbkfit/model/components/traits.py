@@ -494,11 +494,12 @@ class PressureSupport:
     """
     How the rotation of a disk in the gravity of its galaxy is corrected
     for its pressure (see VPTraitMass): mode, 'jeans' or
-    'self_gravitating', and density, the name of the mass component of
-    the galaxy whose density it takes, or None for that of the disk.
+    'self_gravitating', and density, the names of the mass components of
+    the galaxy whose densities it takes (their sum), or None for that of
+    the disk.
     """
     mode: str
-    density: str | None = None
+    density: tuple[str, ...] | None = None
 
 
 class Trait(parseutils.TypedSerializable, abc.ABC):
@@ -2446,13 +2447,14 @@ class VPTraitMass(VPTrait):
     al. 2010), whatever its density height traits (DysmalPy's pressure
     support of types 1 and 2, for an exponential and a Sersic S).
 
-    With pressure_density, the name of a mass component of its galaxy,
-    the pressure takes the density of that component instead of that of
-    its disk: its density at its midplane ('jeans'; e.g. the gas of a
-    thick mass disk, as DysmalPy's pressure support of type 3), or its
-    surface density ('self_gravitating'; e.g. that of the mass disk, as
-    DysmalPy's types 1 and 2 take its effective radius), with the
-    dispersion of its disk.
+    With pressure_density, the names of mass components of its galaxy
+    (one, or several: e.g. its atomic and its molecular gas), the
+    pressure takes the sum of their densities instead of that of its
+    disk: at their midplane ('jeans'; e.g. the gas of thick mass disks,
+    as DysmalPy's pressure support of type 3, which adds its gas
+    components), or their surface densities ('self_gravitating'; e.g.
+    that of the mass disk, as DysmalPy's types 1 and 2 take its
+    effective radius), with the dispersion of its disk.
 
     The rotation is the same at every height, or with the velocity height
     trait 'mass', that of the gravity at each height (see VHTraitMass).
@@ -2462,15 +2464,17 @@ class VPTraitMass(VPTrait):
     pressure_support : str, optional
         The pressure support: none (the default), 'jeans' or
         'self_gravitating'.
-    pressure_density : str, optional
-        The name of the mass component whose density the pressure takes;
-        by default, that of its disk.
+    pressure_density : str or Sequence of str, optional
+        The name of the mass component whose density the pressure takes,
+        or the names of several, whose densities add up; by default, that
+        of its disk.
 
     Raises
     ------
     ConfigError
-        If pressure_support or pressure_density is not valid, or
-        pressure_density is given without pressure_support.
+        If pressure_support or pressure_density is not valid (names that
+        repeat, or none), or pressure_density is given without
+        pressure_support.
     """
 
     @staticmethod
@@ -2485,14 +2489,15 @@ class VPTraitMass(VPTrait):
         info = {}
         if (support := self._pressure_support) is not None:
             info['pressure_support'] = support.mode
-            if support.density is not None:
-                info['pressure_density'] = support.density
+            if (names := support.density) is not None:
+                info['pressure_density'] = \
+                    names[0] if len(names) == 1 else list(names)
         return super().dump() | info
 
     def __init__(
             self,
             pressure_support: str | None = None,
-            pressure_density: str | None = None
+            pressure_density: str | Sequence[str] | None = None
     ):
         if pressure_support not in (None, 'jeans', 'self_gravitating'):
             raise ConfigError(
@@ -2503,7 +2508,16 @@ class VPTraitMass(VPTrait):
                 raise ConfigError(
                     "pressure_density is the density of the pressure "
                     "support: it needs pressure_support")
-            parseutils.check_name(pressure_density)
+            pressure_density = (pressure_density,) \
+                if isinstance(pressure_density, str) \
+                else tuple(pressure_density)
+            if not pressure_density \
+                    or len(set(pressure_density)) != len(pressure_density):
+                raise ConfigError(
+                    f"pressure_density names mass components, at least one "
+                    f"and each once; it is {list(pressure_density)}")
+            for name in pressure_density:
+                parseutils.check_name(name)
         self._pressure_support = None if pressure_support is None \
             else PressureSupport(pressure_support, pressure_density)
 
@@ -2550,10 +2564,11 @@ class VHTraitMass(TraitFeatureZmax, VHTrait):
     v(R, z)^2 = -R F_R(R, z) (see gravity.Gravity), plus the pressure
     support of the trait 'mass' at z, if any: 'jeans', with the density of
     its disk at z (its density traits times its density height traits) or
-    that of the mass component of pressure_density, and its dispersion at
-    z (with its dispersion height traits); 'self_gravitating', in the
-    isothermal sheet of the surface density S of the mass component of
-    pressure_density (required: the disk has no mass) and the dispersion
+    that of the mass components of pressure_density (their sum), and its
+    dispersion at z (with its dispersion height traits);
+    'self_gravitating', in the isothermal sheet of the surface density S
+    of the mass components of pressure_density (required: the disk has
+    no mass) and the dispersion
     sigma at the midplane, of the density ~ sech^2(z / z0), z0 = sigma^2 /
     (pi G S). v(R, z) is 0 where its square is negative, and NaN where it
     is infinite, as at the midplane; the factor is 1 where v(R, 0) is 0

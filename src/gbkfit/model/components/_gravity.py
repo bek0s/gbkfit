@@ -436,18 +436,20 @@ def _pressure_density(
         z: np.ndarray | None = None
 ) -> np.ndarray:
     """
-    Return the density of the mass component of a pressure support (see
-    traits.VPTraitMass) at the radii R (kpc): for 'jeans', at its
-    midplane, or at the heights z (kpc; an array of shape (len(R),
-    len(z))); for 'self_gravitating', its surface density.
+    Return the density of the mass components of a pressure support (see
+    traits.VPTraitMass), their sum, at the radii R (kpc): for 'jeans', at
+    their midplane, or at the heights z (kpc; an array of shape (len(R),
+    len(z))); for 'self_gravitating', their surface density.
     """
-    component = mass_model.component(support.density)
-    own = mass_model.component_params(support.density, params)
-    if support.mode == 'self_gravitating':
-        return component.surface_density(R, own, context)
-    if z is None:
-        return component.density(R, np.zeros_like(R), own, context)
-    return component.density(R[:, None], z, own, context)
+    def density(name: str) -> np.ndarray:
+        component = mass_model.component(name)
+        own = mass_model.component_params(name, params)
+        if support.mode == 'self_gravitating':
+            return component.surface_density(R, own, context)
+        if z is None:
+            return component.density(R, np.zeros_like(R), own, context)
+        return component.density(R[:, None], z, own, context)
+    return sum(density(name) for name in support.density)
 
 
 def _central_dispersion(

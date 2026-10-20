@@ -1530,6 +1530,11 @@ def test_pressure_support_option():
         type='mass', pressure_support='jeans', pressure_density='gas')
     with pytest.raises(ConfigError, match="needs pressure_support"):
         traits.VPTraitMass(pressure_density='gas')
+    several = dict(
+        type='mass', pressure_support='jeans', pressure_density=['hi', 'h2'])
+    assert traits.vpt_parser.dump(traits.vpt_parser.load(several)) == several
+    with pytest.raises(ConfigError, match="each once"):
+        traits.VPTraitMass('jeans', ['hi', 'hi'])
 
 
 @pytest.mark.parametrize('mode', ['jeans', 'self_gravitating'])
@@ -1563,6 +1568,33 @@ def test_pressure_support_takes_the_density_of_a_mass_component(mode):
     r = np.asarray(table['radius'])
     profile = np.exp(-np.asarray(table['radius_kpc'])) \
         ** dict(jeans=1, self_gravitating=2)[mode]
+    np.testing.assert_allclose(
+        table['pressure'], DISK_PROPERTIES['dpt_a'] ** 2 * r
+        * np.gradient(profile, r, edge_order=2) / profile, rtol=1e-5)
+
+
+def test_pressure_support_adds_the_densities_of_mass_components():
+    # Two thick exponential gas disks of one thickness (e.g. the atomic
+    # and the molecular gas), of the scale lengths 2 and 1 kpc: the
+    # 'jeans' pressure of the sum of their densities at their midplane,
+    # ~ M_hi / rd_hi^2 exp(-R / rd_hi) + M_h2 / rd_h2^2 exp(-R / rd_h2)
+    mass = [
+        dict(type='disk', name=name, surface=dict(type='exponential'),
+             vertical=dict(type='sech2')) for name in ('hi', 'h2')] + [
+        dict(type='spheroid', name='halo', profile=dict(
+            type='pseudo_isothermal', parameters='density_radius'))]
+    galaxy = disk_galaxy('smdisk', dict(
+        type='mass', pressure_support='jeans',
+        pressure_density=['hi', 'h2']), mass, DISTANCE)
+    params = DISK_PROPERTIES | dict(
+        distance=10, mass_hi_log_m=9.5, mass_hi_rd=2, mass_hi_hz=0.1,
+        mass_h2_log_m=9, mass_h2_rd=1, mass_h2_hz=0.1, mass_halo_log_rho=7,
+        mass_halo_rs=3)
+    extra = {}
+    galaxy.plan_gravity().evaluate(params, extra)
+    table = extra['component0_vpt_vt_rotation']
+    r, R = np.asarray(table['radius']), np.asarray(table['radius_kpc'])
+    profile = 10 ** 9.5 / 4 * np.exp(-R / 2) + 10 ** 9 * np.exp(-R)
     np.testing.assert_allclose(
         table['pressure'], DISK_PROPERTIES['dpt_a'] ** 2 * r
         * np.gradient(profile, r, edge_order=2) / profile, rtol=1e-5)

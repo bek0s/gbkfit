@@ -121,13 +121,15 @@ def _with_mass_params(
         disk = cmp.density_disk()
         supports = {} if disk is None else disk.pressure_supported_params()
         for support in supports.values():
-            if support.density is not None \
-                    and support.density not in mass_names:
+            unknown = [
+                name for name in support.density or ()
+                if name not in mass_names]
+            if unknown:
                 raise ConfigError(
                     f"the pressure support of the component {cmp.name()!r} "
-                    f"takes the density of the mass component "
-                    f"{support.density!r}, which its galaxy does not have; "
-                    f"its mass components: {mass_names}")
+                    f"takes the density of the mass components {unknown}, "
+                    f"which its galaxy does not have; its mass components: "
+                    f"{mass_names}")
     for cmp in balanced:
         equilibrium = cmp.density_disk().equilibrium()
         if equilibrium.density is not None \
