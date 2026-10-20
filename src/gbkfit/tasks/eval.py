@@ -11,6 +11,7 @@ from typing import Any, Literal, NamedTuple
 import pandas as pd
 
 import gbkfit.objective
+import gbkfit.outputs
 from gbkfit.observation import (
     Likelihood, Noise, ObservationGroup, likelihood_parser, noise_parser)
 from gbkfit.params import ParamValues
@@ -41,18 +42,21 @@ def eval_(
     """
     Evaluate the galaxies of a configuration at its parameters (their
     fixed values, and the 'value' of the free ones), or its objective,
-    and write the outputs: the parameters and the derived values
-    (gbkfit_eval_params), the models, or the data and the residuals
-    (FITS), and their extra outputs.
+    and write the outputs as a run (see gbkfit.outputs; its option 'mode'
+    is the mode): the configuration (config.yaml, kind 'config'), the
+    parameters and the derived values (params.json, 'params'), the
+    models, or the data and the residuals, and their extra outputs (see
+    data_outputs and evaluation_outputs).
 
     The mode 'mock' writes the models (as 'model'), and mock data of the
     observations: their models measured from what their instruments
     record of the models plus noise, with their errors (see
-    ObservationGroup.mock). Each mock is the files of the data of each
-    observation (mock<k>_<observation prefix>...) and a configuration
-    that fits them, mock<k>.yaml: the configuration with each
-    observation of its mock data. The section 'mock' of the
-    configuration has the options
+    ObservationGroup.mock). Each mock k is the files of the data of each
+    observation (in mocks/<k>/observations/<observation>/, kind
+    'mock_data') and a configuration that fits them (mocks/<k>/
+    config.yaml, 'mock_config'): the configuration with each observation
+    of its mock data. The section 'mock' of the configuration has the
+    options
 
     - noise: the noise of every observation, or a list of one for each
       (see Noise);
@@ -74,11 +78,11 @@ def eval_(
         The configuration file (YAML or JSON); its relative paths are
         relative to its directory (or to its section 'root').
     profile_iters : int
-        The number of evaluations to time (gbkfit_eval_timings).
+        The number of evaluations to time (timings.json, kind 'timings').
     output_dir : str
-        The output directory.
+        The directory of the run.
     output_dir_mode : {'terminate', 'overwrite', 'unique'}
-        What to do if the output directory exists (see make_output_dir).
+        What to do if the directory exists (see gbkfit.outputs.create).
 
     Raises
     ------
@@ -93,9 +97,21 @@ def eval_(
          'mock'))
     if mode == 'mock' and 'mock' not in cfg:
         raise ConfigError("the mode 'mock' needs the section 'mock'")
-    output_dir = _detail.make_output_dir(output_dir, output_dir_mode)
-    _log.info(f"output will be stored under directory: {output_dir}")
+    with gbkfit.outputs.create(
+            output_dir, 'eval', output_dir_mode, dict(mode=mode)) as run:
+        _log.info(f"output will be stored under directory: {run.path}")
+        _detail.write_config(run, 'config.yaml', 'config', cfg, root)
+        _eval(mode, cfg, root, profile_iters, run)
 
+
+def _eval(
+        mode: Literal['model', 'objective', 'mock'],
+        cfg: dict[str, Any],
+        root: str,
+        profile_iters: int,
+        run: gbkfit.outputs.RunWriter
+) -> None:
+    """Evaluate a configuration, and write the outputs (see eval_)."""
     with parseutils.paths_relative_to(root):
         _log.info("setting up galaxies and observations...")
         group = _detail.load_observation_group(cfg)
@@ -113,12 +129,9 @@ def eval_(
 
     _log.info("calculating model parameters...")
     param_values = params.evaluate()
-    _detail.dump_dict(
-        numutils.nativify(dict(
-            params=param_values,
-            eparams=params.element_values(param_values),
-            derived=params.derived_values(param_values))),
-        os.path.join(output_dir, 'gbkfit_eval_params'))
+    run.write('params.json', 'params', dict(
+        params=param_values, eparams=params.element_values(param_values),
+        derived=params.derived_values(param_values)))
 
     _log.info("evaluating...")
     outputs = _detail.evaluation_outputs(
@@ -128,10 +141,10 @@ def eval_(
         outputs |= _detail.data_outputs(group)
         _log.info(f"chi-square: {objective.chi2(param_values)}")
     _log.info("storing outputs to the filesystem...")
-    _detail.write_outputs(output_dir, outputs, 'gbkfit_eval_extra')
+    _detail.write_outputs(run, outputs)
     if mock is not None:
         _log.info(f"drawing {mock.nmocks} mock datasets...")
-        _write_mocks(cfg, root, group, param_values, mock, output_dir)
+        _write_mocks(cfg, root, group, param_values, mock, run)
 
     if profile_iters > 0:
         _log.info("running performance test...")
@@ -147,9 +160,7 @@ def eval_(
             name: stats.to_dict()
             for name, stats in group.timers().stats().items()})
         _log.info(pd.DataFrame.from_dict(time_stats, orient='index'))
-        _detail.dump_dict(
-            time_stats, os.path.join(output_dir, 'gbkfit_eval_timings'))
-
+        run.write('timings.json', 'timings', time_stats)
 
 
 def _load_mock(info: dict[str, Any], nobservations: int) -> _Mock:
@@ -191,7 +202,7 @@ def _write_mocks(
         group: ObservationGroup,
         values: ParamValues,
         mock: _Mock,
-        output_dir: str
+        run: gbkfit.outputs.RunWriter
 ) -> None:
     """
     Draw the mock data of the observations of a group at the parameter
@@ -205,18 +216,43 @@ def _write_mocks(
         observations = []
         for i, (observation, info) in enumerate(zip(
                 group.observations(), cfg['observations'])):
-            prefix = os.path.join(
-                output_dir, f'mock{k}_{group.extra_prefix(i)}')
+            name = _detail.observation_name(group, i)
+            folder = f'mocks/{k}/observations/{name}'
+            directory = os.path.join(run.path, *folder.split('/'))
+            os.makedirs(directory, exist_ok=True)
             with parseutils.config_path('mock'):
                 mocked = observation.with_data(
                     datasets[i][k], mock.likelihoods[i])
+            # (the paths of the files of the data are relative to the
+            # root of the configuration, as its other paths)
+            prefix = directory + os.sep
+            mocked_info = _rebased(
+                mocked.dump(prefix), prefix,
+                os.path.relpath(directory, root) + os.sep)
+            for filename in sorted(os.listdir(directory)):
+                run.record(
+                    f'{folder}/{filename}', 'mock_data',
+                    os.path.splitext(filename)[1].lstrip('.'),
+                    mock=str(k), observation=name)
             # (the driver of an observation is the name of one of those
             # of the configuration)
             driver = {} if info.get('driver') is None \
                 else dict(driver=info['driver'])
-            observations.append(driver | mocked.dump(prefix))
-        # (relative paths stay relative to the directory of the
-        # configuration, so that it runs from anywhere)
-        _detail.write_yaml(
-            dict(root=root) | sections | dict(observations=observations),
-            os.path.join(output_dir, f'mock{k}.yaml'))
+            observations.append(driver | mocked_info)
+        _detail.write_config(
+            run, f'mocks/{k}/config.yaml', 'mock_config',
+            sections | dict(observations=observations), root, mock=str(k))
+
+
+def _rebased(info: Any, prefix: str, new_prefix: str) -> Any:
+    """
+    Return the options of a configuration (nested dicts and lists) with
+    the strings that start with a prefix starting with another one.
+    """
+    if isinstance(info, str) and info.startswith(prefix):
+        return new_prefix + info.removeprefix(prefix)
+    if isinstance(info, list):
+        return [_rebased(item, prefix, new_prefix) for item in info]
+    if isinstance(info, dict):
+        return {k: _rebased(v, prefix, new_prefix) for k, v in info.items()}
+    return info

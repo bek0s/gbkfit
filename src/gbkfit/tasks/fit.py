@@ -4,7 +4,6 @@ the result.
 """
 
 import contextlib
-import copy
 import dataclasses
 import json
 import logging
@@ -19,6 +18,7 @@ from typing import Any, Literal, NamedTuple
 import gbkfit.driver
 import gbkfit.fitting
 import gbkfit.objective
+import gbkfit.outputs
 import gbkfit.observation
 import gbkfit.params
 from gbkfit.utils import numutils, parseutils
@@ -29,11 +29,12 @@ from . import _detail, _progress
 _log = logging.getLogger(__name__)
 
 
-# The files of a fit in its output directory, to resume it from (and to
-# bootstrap it)
+# The paths of products of a fit in its run (see gbkfit.outputs): the
+# configuration and the log of the evaluations, to resume it from, and the
+# result, to bootstrap it
 _CONFIG = 'config.yaml'
-_EVALUATIONS = 'evaluations.bin'
-_RESULT = 'result.json'
+_EVALUATIONS = 'logs/evaluations.bin'
+_RESULT = 'fit/result.json'
 
 
 def fit(
@@ -43,30 +44,32 @@ def fit(
         evaluation_log: bool = True
 ) -> None:
     """
-    Fit the galaxies of a configuration to its data, and write the result
-    (see FitResult.dump), the data and the models and residuals at the
-    best fit (FITS; see the plot task), and restart.yaml: the
+    Fit the galaxies of a configuration to its data, and write the outputs
+    as a run (see gbkfit.outputs): the configuration (config.yaml, kind
+    'config'), the result in fit/ (see FitResult.write), the data and the
+    models and residuals at the best fit (see data_outputs and
+    evaluation_outputs), and fit/restart.yaml ('restart_config'): the
     configuration with the free parameters starting at the best fit, to
     fit again from there (e.g. with another fitter). With a section
     'parallel' ({drivers: [names]}), the batches of points of the fitter
     are evaluated at once on copies of the objective on those drivers
     (see EvaluationPool), e.g. one per GPU. As it fits, it shows its
     progress on the console, writes every report of it to
-    progress.jsonl, and the configuration at the best fit so far to
-    best.yaml (see _progress), from which a stopped fit can start again.
+    logs/progress.jsonl ('progress'), and the configuration at the best
+    fit so far to fit/best.yaml ('best_config'; see _progress), from
+    which a stopped fit can start again.
 
     With a section 'bootstrap' (see BootstrapOptions), the errors of the
     best fit are then bootstrapped too (see gbkfit.fitting.bootstrap),
-    after the outputs of the fit are written, which are written again
-    with the bootstrap (see FitResult.dump); a fit can be bootstrapped
-    later as well (see bootstrap).
+    after the outputs of the fit are written, and the result is written
+    again with the bootstrap; a fit can be bootstrapped later as well (see
+    bootstrap).
 
     Ctrl-C stops the fit, which ends with the best point so far (and the
     chain so far of an MCMC sampler; see Fitter.fit); a second Ctrl-C
-    quits at once. The configuration (config.yaml) and, unless turned
-    off, the log of the evaluations (evaluations.bin; see EvaluationLog)
-    go to the output directory, from which a stopped or killed fit
-    resumes (see resume).
+    quits at once. Unless turned off, the evaluations are logged
+    (logs/evaluations.bin, 'evaluations'; see EvaluationLog), from which
+    a stopped or killed fit resumes (see resume).
 
     Parameters
     ----------
@@ -74,9 +77,9 @@ def fit(
         The configuration file (YAML or JSON); its relative paths are
         relative to its directory (or to its section 'root').
     output_dir : str
-        The output directory.
+        The directory of the run.
     output_dir_mode : {'terminate', 'overwrite', 'unique'}
-        What to do if the output directory exists (see make_output_dir).
+        What to do if the directory exists (see gbkfit.outputs.create).
     evaluation_log : bool, optional
         Whether to log the evaluations, to resume from (true by default).
 
@@ -86,64 +89,62 @@ def fit(
         If the configuration is invalid.
     """
     cfg, root = _read_config(config)
-    output_dir = _detail.make_output_dir(output_dir, output_dir_mode)
-    _log.info(f"output will be stored under directory: {output_dir}")
-    _detail.write_yaml(
-        dict(root=root) | copy.deepcopy(cfg),
-        os.path.join(output_dir, _CONFIG))
-    log = gbkfit.fitting.EvaluationLog(
-        os.path.join(output_dir, _EVALUATIONS)) if evaluation_log else None
-    _fit(cfg, root, output_dir, log)
+    with gbkfit.outputs.create(output_dir, 'fit', output_dir_mode) as run:
+        _log.info(f"output will be stored under directory: {run.path}")
+        _detail.write_config(run, _CONFIG, 'config', cfg, root)
+        log = None
+        if evaluation_log:
+            log = gbkfit.fitting.EvaluationLog(run.filename(_EVALUATIONS))
+            run.record(_EVALUATIONS, 'evaluations', 'bin')
+        _fit(cfg, root, run, log)
 
 
 def resume(output_dir: str) -> None:
     """
-    Resume a fit that stopped or was killed, in its output directory: run
-    it again from its configuration (config.yaml), answering the fitter
-    from the log of its evaluations (evaluations.bin) while it lasts (see
-    EvaluationLog), and write its outputs there (see fit). The fit must
-    have had the log; a least-squares fit, which has nothing in it, starts
-    again (fit best.yaml instead, to start from its best point).
+    Resume a fit that stopped or was killed, in its run: run it again from
+    its configuration, answering the fitter from the log of its
+    evaluations while it lasts (see EvaluationLog), and write its outputs
+    to the run (see fit). The fit must have had the log; a least-squares
+    fit, which has nothing in it, starts again (fit fit/best.yaml
+    instead, to start from its best point).
 
     Parameters
     ----------
     output_dir : str
-        The output directory of the fit.
+        The directory of the run of the fit.
 
     Raises
     ------
     ConfigError
-        If the directory has no configuration or log of a fit, or the
-        configuration is invalid.
+        If the directory is not the run of a fit with a configuration and
+        a log, or the configuration is invalid.
     """
-    paths = [
-        os.path.join(output_dir, name) for name in (_CONFIG, _EVALUATIONS)]
-    if missing := [path for path in paths if not os.path.isfile(path)]:
-        raise ConfigError(
-            f"cannot resume the fit in {output_dir}: missing {missing}")
-    cfg, root = _read_config(paths[0])
+    config, evaluations = _products_of_fit(
+        output_dir, 'resume', 'config', 'evaluations')
+    cfg, root = _read_config(config)
     try:
-        log = gbkfit.fitting.EvaluationLog.resume(paths[1])
+        log = gbkfit.fitting.EvaluationLog.resume(evaluations)
     except ValueError as e:
         raise ConfigError(str(e)) from e
-    _fit(cfg, root, output_dir, log)
+    with gbkfit.outputs.reopen(output_dir) as run:
+        _fit(cfg, root, run, log)
 
 
 def bootstrap(output_dir: str, config: str) -> None:
     """
-    Bootstrap the errors of a fit in its output directory (see
+    Bootstrap the errors of a fit in its run (see
     gbkfit.fitting.bootstrap): rebuild its objective from its
-    configuration (config.yaml), refit from its best fit (result.json)
-    by the section 'bootstrap' of a configuration (see BootstrapOptions;
-    the refits use the fitter of the fit unless it gives one), and add
-    the bootstrap to the result (the entry 'bootstrap' of result.json,
-    and bootstrap.csv; see FitResult.dump), and the configuration, as
-    bootstrap.yaml.
+    configuration, refit from its best fit by the section 'bootstrap' of
+    a configuration (see BootstrapOptions; the refits use the fitter of
+    the fit unless it gives one), and add the bootstrap to the result
+    (the entry 'bootstrap' of fit/result.json, and fit/bootstrap.ecsv;
+    see FitResult.write), and the configuration, as fit/bootstrap.yaml
+    (kind 'bootstrap_config').
 
     Parameters
     ----------
     output_dir : str
-        The output directory of the fit.
+        The directory of the run of the fit.
     config : str
         The configuration file of the bootstrap (YAML or JSON), with only
         the section 'bootstrap'.
@@ -151,30 +152,51 @@ def bootstrap(output_dir: str, config: str) -> None:
     Raises
     ------
     ConfigError
-        If the directory has no configuration or result of a fit, or a
-        configuration is invalid.
+        If the directory is not the run of a fit with a configuration and
+        a result, or a configuration is invalid.
     """
-    paths = [
-        os.path.join(output_dir, name) for name in (_CONFIG, _RESULT)]
-    if missing := [path for path in paths if not os.path.isfile(path)]:
-        raise ConfigError(
-            f"cannot bootstrap the fit in {output_dir}: missing {missing}")
-    cfg, root = _read_config(paths[0])
+    config_file, result_file = _products_of_fit(
+        output_dir, 'bootstrap', 'config', 'fit_result')
+    cfg, root = _read_config(config_file)
     _log.info(f"reading the configuration of the bootstrap: {config}...")
     bootstrap_cfg, _ = _detail.read_config(config, ('bootstrap',))
     setup = _set_up(cfg, root)
     options = _load_bootstrap(bootstrap_cfg, setup)
-    with open(paths[1]) as f:
+    with open(result_file) as f:
         result = json.load(f)
     best = result['solutions'][0]
-    boot = _bootstrap(setup, best['elements'], options)
-    result['bootstrap'] = boot.info()
-    with open(paths[1], 'w') as f:
-        json.dump(numutils.nativify(result), f, indent=2)
-    boot.dump(output_dir)
-    _detail.write_yaml(
-        bootstrap_cfg, os.path.join(output_dir, 'bootstrap.yaml'))
+    with gbkfit.outputs.reopen(output_dir) as run:
+        boot = _bootstrap(setup, best['elements'], options)
+        result['bootstrap'] = boot.info()
+        run.write(_RESULT, 'fit_result', result)
+        run.write('fit/bootstrap.ecsv', 'bootstrap', boot.table())
+        run.write('fit/bootstrap.yaml', 'bootstrap_config', bootstrap_cfg)
     _log.info(f"bootstrap:\n{_bootstrap_summary(best, boot)}")
+
+
+def _products_of_fit(output_dir: str, action: str, *kinds: str) -> list[str]:
+    """
+    Return the files of the products of the given kinds of the run of a
+    fit (to resume it or to bootstrap it: the action).
+
+    Raises
+    ------
+    ConfigError
+        If the directory is not the run of a fit, or it has not one of
+        each of the products, or their files are missing.
+    """
+    try:
+        run = gbkfit.outputs.open(output_dir)
+        if run.task != 'fit':
+            raise ValueError(f"it is a run of the task {run.task!r}")
+        files = [run.filename(run.product(kind)) for kind in kinds]
+    except (ValueError, LookupError) as e:
+        raise ConfigError(f"cannot {action} the fit in {output_dir}: {e}") \
+            from e
+    if missing := [f for f in files if not os.path.isfile(f)]:
+        raise ConfigError(
+            f"cannot {action} the fit in {output_dir}: missing {missing}")
+    return files
 
 
 def _read_config(config: str) -> tuple[dict[str, Any], str]:
@@ -281,10 +303,10 @@ def _bootstrap_summary(
 def _fit(
         cfg: dict[str, Any],
         root: str,
-        output_dir: str,
+        run: gbkfit.outputs.RunWriter,
         log: gbkfit.fitting.EvaluationLog | None
 ) -> None:
-    """Fit a configuration, and write the outputs (see fit)."""
+    """Fit a configuration, and write the outputs to its run (see fit)."""
     setup = _set_up(cfg, root)
     group, objective, fitter, params = \
         setup.group, setup.objective, setup.fitter, setup.params
@@ -296,10 +318,11 @@ def _fit(
 
     def write_best(values: dict[str, float]) -> None:
         _write_config(
-            cfg, root, params, values, os.path.join(output_dir, 'best.yaml'))
+            run, 'fit/best.yaml', 'best_config', cfg, root, params, values)
 
     progress = _progress.JsonLinesProgress(
-        os.path.join(output_dir, 'progress.jsonl'))
+        run.filename('logs/progress.jsonl'))
+    run.record('logs/progress.jsonl', 'progress', 'jsonl')
     best = _progress.BestValues(write_best)
     control = gbkfit.fitting.FitControl()
     with pool or contextlib.nullcontext(), _stop_on_interrupt(control), \
@@ -308,16 +331,18 @@ def _fit(
             objective, params, (console, progress, best), control, log, pool)
     _log.info(f"model-fitting completed (elapsed time: {result.time:.1f} s)")
 
-    _log.info(f"saving result under '{output_dir}'...")
-    result.dump(output_dir)
+    _log.info(f"saving result under '{run.path}'...")
+    result.write(run)
     outputs = _detail.data_outputs(group) | _detail.evaluation_outputs(
         group, objective, result.best().values, True, True)
-    _detail.write_outputs(output_dir, outputs, 'gbkfit_fit_extra')
-    _write_restart(cfg, root, params, result, output_dir)
+    _detail.write_outputs(run, outputs)
+    _write_config(
+        run, 'fit/restart.yaml', 'restart_config', cfg, root, params,
+        result.best().elements)
     if options is not None:
         result = dataclasses.replace(result, bootstrap=_bootstrap(
             setup, result.best().elements, options))
-        result.dump(output_dir)
+        result.write(run)
     _log.info(f"result:\n{result.summary()}")
 
 
@@ -346,42 +371,24 @@ def _stop_on_interrupt(control: gbkfit.fitting.FitControl) -> Iterator[None]:
         signal.signal(signal.SIGINT, previous)
 
 
-def _write_restart(
-        cfg: dict[str, Any],
-        root: str,
-        params: gbkfit.params.ParamSpace,
-        result: gbkfit.fitting.FitResult,
-        output_dir: str
-) -> None:
-    """
-    Write restart.yaml: the configuration with the free parameters
-    starting at the best fit (see _write_config).
-    """
-    _write_config(
-        cfg, root, params, result.best().elements,
-        os.path.join(output_dir, 'restart.yaml'))
-
-
 def _write_config(
+        run: gbkfit.outputs.RunWriter,
+        path: str,
+        kind: str,
         cfg: dict[str, Any],
         root: str,
         params: gbkfit.params.ParamSpace,
-        values: dict[str, float],
-        filename: str
+        values: dict[str, float]
 ) -> None:
     """
     Write the configuration with the free parameters starting at the given
-    values (by element name), and its directory as its root (so that it
-    runs from anywhere): to a temporary file first, then renamed, so that
-    the file is never half written.
+    values (by element name) as a product of a run (see
+    _detail.write_config).
     """
     try:
         config = params.with_values(values).dump()
     except ConfigError as e:
-        _log.warning(f"{os.path.basename(filename)} is not written: {e}")
+        _log.warning(f"{path} is not written: {e}")
         return
-    temporary = filename + '.tmp'
-    _detail.write_yaml(
-        dict(root=root) | cfg | dict(params=numutils.nativify(config)),
-        temporary)
-    os.replace(temporary, filename)
+    _detail.write_config(
+        run, path, kind, cfg | dict(params=numutils.nativify(config)), root)

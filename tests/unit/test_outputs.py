@@ -63,6 +63,17 @@ def test_a_product_of_the_same_path_is_replaced():
     assert reader.read(reader.product('best')) == dict(chi2=5.0)
 
 
+def test_reopened_runs_keep_their_products():
+    with outputs.create('run', 'fit') as run:
+        run.write('fit/result.json', 'fit_result', dict(chi2=1.0))
+    with outputs.reopen('run') as run:
+        assert outputs.open('run').status == 'running'
+        run.write('fit/bootstrap.ecsv', 'bootstrap', Table(dict(a=[1.0])))
+    reader = outputs.open('run')
+    assert [p.kind for p in reader.products()] == ['fit_result', 'bootstrap']
+    assert reader.status == 'complete'
+
+
 def test_a_run_left_by_an_error_has_failed():
     with pytest.raises(RuntimeError):
         with outputs.create('run', 'fit'):

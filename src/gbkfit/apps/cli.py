@@ -511,7 +511,7 @@ def _make_parser() -> argparse.ArgumentParser:
              "them to its result; instead of fitting")
     parser_fit.add_argument(
         '--no-evaluation-log', action='store_true',
-        help="do not log the evaluations of the fit (evaluations.bin), "
+        help="do not log the evaluations of the fit (logs/evaluations.bin), "
              "which it resumes from")
 
     #

@@ -551,11 +551,11 @@ def test_errors_propagate_to_tied_and_fixed_elements():
     assert laplace['ypos'][1] == pytest.approx(laplace['xpos'][1] - 1.1)
 
 
-def test_derived_values_get_errors_and_samples(tmp_path):
+def test_derived_values_get_errors_and_samples():
     # The error of a derived value is propagated from the covariance, as
     # that of a tied element (here of xpos + 2 ypos, with their
     # covariance), and its Laplace samples are its values at theirs
-    import json
+    from gbkfit import outputs
     from gbkfit.fitting import fitter_parser
     objective = mock_objective(DriverHost())
     params = ParamSpace(
@@ -582,12 +582,14 @@ def test_derived_values_get_errors_and_samples(tmp_path):
         rtol=1e-12)
     assert any(line.startswith('vs[1] ') for line in result.summary().split(
         '\n'))
-    result.dump(str(tmp_path))
-    dumped = json.loads((tmp_path / 'result.json').read_text())['solutions']
-    assert dumped[0]['derived'] == best.derived
-    assert dumped[0]['covariance']['derived_std'] == cov.derived_std
-    header = (tmp_path / 'solution_0_laplace.csv').read_text().split('\n')[0]
-    assert header.endswith(',d,vs[0],vs[1]')
+    with outputs.create('run', 'fit') as run:
+        result.write(run)
+    run = outputs.open('run')
+    written = run.read(run.product('fit_result'))['solutions']
+    assert written[0]['derived'] == best.derived
+    assert written[0]['covariance']['derived_std'] == cov.derived_std
+    laplace = run.read(run.product('laplace', solution='0'))
+    assert laplace.colnames[-3:] == ['d', 'vs[0]', 'vs[1]']
 
 
 def test_derived_values_that_fail_are_reported():
@@ -602,12 +604,12 @@ def test_derived_values_that_fail_are_reported():
     assert result.best().covariance.derived_std == {}
     assert "derived value 'bad'" in result.diagnostics['derived_errors'][0]
 
-def test_a_bootstrap_refits_the_model_plus_its_residuals_redrawn(tmp_path):
+def test_a_bootstrap_refits_the_model_plus_its_residuals_redrawn():
     # Refits of the residuals redrawn in blocks: of white noise, they
     # scatter about as the covariance says; the derived values are those
     # of each refit
     import dataclasses
-    import json
+    from gbkfit import outputs
     from gbkfit.fitting import (
         BootstrapBlocks, BootstrapOptions, bootstrap, fitter_parser)
     objective = mock_objective(DriverHost())
@@ -628,12 +630,13 @@ def test_a_bootstrap_refits_the_model_plus_its_residuals_redrawn(tmp_path):
         assert 0.5 < boot.std()[name] / std[name] < 2
     result = dataclasses.replace(result, bootstrap=boot)
     assert 'bootstrap 16/50/84' in result.summary()
-    result.dump(str(tmp_path))
-    dumped = json.loads((tmp_path / 'result.json').read_text())['bootstrap']
-    assert (dumped['nsamples'], dumped['nfailed']) == (10, 0)
-    assert dumped['options']['scheme'] == dict(type='blocks', size=[4, 4])
-    header = (tmp_path / 'bootstrap.csv').read_text().split('\n')[0]
-    assert header == ','.join(boot.names)
+    with outputs.create('run', 'fit') as run:
+        result.write(run)
+    run = outputs.open('run')
+    written = run.read(run.product('fit_result'))['bootstrap']
+    assert (written['nsamples'], written['nfailed']) == (10, 0)
+    assert written['options']['scheme'] == dict(type='blocks', size=[4, 4])
+    assert run.read(run.product('bootstrap')).colnames == list(boot.names)
 
 
 @pytest.mark.parametrize('scheme, message', [

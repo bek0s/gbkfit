@@ -189,14 +189,16 @@ def test_the_outputs_of_a_fit_have_the_amplitudes(driver):
     spectra = model(driver)
     error = 1e-3 * spectra.max()
     obj, values = objective(driver, 2 * spectra, error)
-    outputs = evaluation_outputs(obj.group(), obj, values, True, True)
+    outputs = {
+        x.kind: x.value for x in evaluation_outputs(
+            obj.group(), obj, values, True, True).values()}
     np.testing.assert_allclose(
-        outputs['model_0_spectra_d'].data,
+        outputs['model'].data,
         spectra * best_amplitudes(spectra, 2 * spectra, error), rtol=1e-5,
         atol=1e-6 * spectra.max())
     np.testing.assert_allclose(
-        outputs['model_0_spectra_unscaled_d'].data, spectra, rtol=1e-6)
+        outputs['model_unscaled'].data, spectra, rtol=1e-6)
     lit = spectra.sum(axis=0) > 1e-3 * spectra.sum(axis=0).max()
     np.testing.assert_allclose(
-        outputs['residual_extra_observation0_amplitudes'][lit], 2,
+        outputs['amplitudes'][lit], 2,
         rtol=1e-3)

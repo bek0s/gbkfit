@@ -4,7 +4,7 @@ files (FITS, ECSV, JSON and YAML) and a manifest, gbkfit.json, which lists
 every product with its kind (e.g. 'model', 'residual', 'samples') and the
 ids of what it is of (e.g. the observation and the data item). Readers
 look products up by kind and ids, never by file name (see open); tasks
-write them with a RunWriter (see create).
+write them with a RunWriter (see create and reopen).
 
 The manifest is rewritten (atomically, as every file) after each product,
 so a reader always sees a consistent run, also while it is running (its
@@ -16,8 +16,9 @@ import datetime
 import json
 import math
 import os
+import threading
 import uuid
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from pathlib import Path, PurePosixPath
 from types import TracebackType
 from typing import Any, Literal
@@ -39,7 +40,8 @@ __all__ = [
     'Run',
     'RunWriter',
     'create',
-    'open'
+    'open',
+    'reopen'
 ]
 
 
@@ -260,7 +262,8 @@ def open(path: str) -> Run:
 
 class RunWriter:
     """
-    Write the products of a run of a task, and its manifest (see create).
+    Write the products of a run of a task, and its manifest (see create
+    and reopen). Threads can write products at once.
 
     Use it as a context manager: on leaving, the status of the run is
     'complete', or 'failed' if an exception left.
@@ -270,14 +273,17 @@ class RunWriter:
             self,
             path: str,
             task: str,
-            options: Mapping[str, Any]
+            options: Mapping[str, Any],
+            created: str,
+            products: Iterable[Product]
     ) -> None:
         self.path = path
         self._task = task
         self._options = dict(options)
-        self._created = _now()
+        self._created = created
         self._status: Status = 'running'
-        self._products: dict[str, Product] = {}
+        self._products = {product.path: product for product in products}
+        self._lock = threading.Lock()
         self._write_manifest()
 
     def __enter__(self) -> 'RunWriter':
@@ -390,8 +396,9 @@ class RunWriter:
 
     def close(self, status: Status = 'complete') -> None:
         """Write the final status of the run to its manifest."""
-        self._status = status
-        self._write_manifest()
+        with self._lock:
+            self._status = status
+            self._write_manifest()
 
     def _writer(
             self,
@@ -461,9 +468,10 @@ class RunWriter:
                    if not isinstance(v, str)}:
             raise TypeError(
                 f"{product.path}: ids are strings; these are not: {bad}")
-        self._products.pop(product.path, None)
-        self._products[product.path] = product
-        self._write_manifest()
+        with self._lock:
+            self._products.pop(product.path, None)
+            self._products[product.path] = product
+            self._write_manifest()
         return product
 
     def _write_manifest(self) -> None:
@@ -516,7 +524,33 @@ def create(
         If the directory exists and exists is 'terminate', or the path is
         a file.
     """
-    return RunWriter(_make_directory(path, exists), task, options or {})
+    return RunWriter(
+        _make_directory(path, exists), task, options or {}, _now(), ())
+
+
+def reopen(path: str) -> RunWriter:
+    """
+    Reopen a run to write more products (status 'running' again; e.g. to
+    resume a fit, or to add a bootstrap to it), keeping its products.
+
+    Parameters
+    ----------
+    path : str
+        The directory of the run.
+
+    Returns
+    -------
+    RunWriter
+        The writer of the run.
+
+    Raises
+    ------
+    ValueError
+        If the directory is not a run that this GBKFIT reads (see open).
+    """
+    run = open(path)
+    return RunWriter(
+        run.path, run.task, run.options, run.created, run.products())
 
 
 def _make_directory(

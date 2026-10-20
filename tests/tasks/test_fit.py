@@ -11,6 +11,8 @@ import pytest
 import ruamel.yaml
 from astropy.io import fits
 
+from gbkfit import outputs
+
 
 REFERENCE_DIR = pathlib.Path(__file__).parents[1] / 'data' / 'reference_models'
 
@@ -26,6 +28,12 @@ def run_cli(workdir, *args):
         pytest.fail(f"gbkfit-cli failed:\n{result.stderr[-3000:]}")
 
 
+def read(directory, kind, **ids):
+    """Return the one product of a kind and ids of the run in a directory."""
+    run = outputs.open(directory)
+    return run.read(run.product(kind, **ids))
+
+
 @pytest.mark.slow
 def test_fit_recovers_the_parameters_of_noiseless_data(tmp_path):
     pytest.importorskip('lmfit')
@@ -33,7 +41,7 @@ def test_fit_recovers_the_parameters_of_noiseless_data(tmp_path):
     config = yaml.load(REFERENCE_DIR / 'thin_disk_pixel_spectra.yaml')
     yaml.dump(config, tmp_path / 'model.yaml')
     run_cli(tmp_path, 'eval', 'model', 'model.yaml', '--output-dir', 'model')
-    model = fits.getdata(tmp_path / 'model' / 'model_0_spectra_d.fits')
+    model = read(tmp_path / 'model', 'model').data
     fits.writeto(tmp_path / 'data.fits', model)
     # Fit three of its parameters, from elsewhere
     observation = config['observations'][0]
@@ -52,26 +60,27 @@ def test_fit_recovers_the_parameters_of_noiseless_data(tmp_path):
     # to its own directory)
     (tmp_path / 'run').mkdir()
     run_cli(tmp_path / 'run', 'fit', '../fit.yaml', '--output-dir', '../fit')
-    result = json.loads((tmp_path / 'fit' / 'result.json').read_text())
+    run = outputs.open(tmp_path / 'fit')
+    result = run.read(run.product('fit_result'))
     best = result['solutions'][0]['free']
     for name in ('xpos', 'posa', 'vpt_vt'):
         assert best[name] == pytest.approx(truth[name], abs=1e-3)
     # Its progress, every report a line of JSON, the last final; and the
     # configuration at the best fit so far
-    lines = (tmp_path / 'fit' / 'progress.jsonl').read_text().splitlines()
-    assert json.loads(lines[-1])['final']
-    best_config = yaml.load(tmp_path / 'fit' / 'best.yaml')
+    progress = pathlib.Path(run.filename(run.product('progress')))
+    assert json.loads(progress.read_text().splitlines()[-1])['final']
+    best_config = run.read(run.product('best_config'))
     for name in ('xpos', 'posa', 'vpt_vt'):
         assert best_config['params']['properties'][name]['value'] \
             == pytest.approx(truth[name], abs=1e-3)
     # The arrays of the result, and the model and residuals at the best fit
-    for name in ('solution_0_covariance.csv', 'solution_0_laplace.csv',
-                 'model_0_spectra_d.fits', 'residual_spectra_d.fits'):
-        assert (tmp_path / 'fit' / name).exists()
-    # (the extra outputs of the models once, not again for the residuals)
-    assert not list((tmp_path / 'fit').glob('*residual_extra_*'))
+    for kind in ('covariance', 'laplace'):
+        assert run.product(kind, solution='0')
+    for kind in ('data', 'model', 'residual', 'wresidual'):
+        assert run.product(kind, observation='observation0', item='spectra')
     # A configuration that starts another fit at the best fit
-    restart = yaml.load(tmp_path / 'fit' / 'restart.yaml')
+    restart_file = pathlib.Path(run.filename(run.product('restart_config')))
+    restart = yaml.load(restart_file)
     for name in ('xpos', 'posa', 'vpt_vt'):
         assert restart['params']['properties'][name]['value'] == \
             pytest.approx(best[name])
@@ -79,10 +88,11 @@ def test_fit_recovers_the_parameters_of_noiseless_data(tmp_path):
     # which runs from its directory (its root is that of fit.yaml), with
     # another fitter
     restart['fitter'] = dict(type='scipy.least_squares')
-    yaml.dump(restart, tmp_path / 'fit' / 'restart.yaml')
+    yaml.dump(restart, restart_file)
     run_cli(
-        tmp_path / 'fit', 'fit', 'restart.yaml', '--output-dir', '../refit')
-    refit = json.loads((tmp_path / 'refit' / 'result.json').read_text())
+        restart_file.parent, 'fit', restart_file.name,
+        '--output-dir', tmp_path / 'refit')
+    refit = read(tmp_path / 'refit', 'fit_result')
     for name in ('xpos', 'posa', 'vpt_vt'):
         assert refit['solutions'][0]['free'][name] == pytest.approx(
             best[name], abs=1e-3)
@@ -96,7 +106,7 @@ def test_a_fit_resumes_from_its_output_directory(tmp_path):
     config = yaml.load(REFERENCE_DIR / 'thin_disk_pixel_spectra.yaml')
     yaml.dump(config, tmp_path / 'model.yaml')
     run_cli(tmp_path, 'eval', 'model', 'model.yaml', '--output-dir', 'model')
-    model = fits.getdata(tmp_path / 'model' / 'model_0_spectra_d.fits')
+    model = read(tmp_path / 'model', 'model').data
     fits.writeto(tmp_path / 'data.fits', model)
     observation = config['observations'][0]
     observation['data'] = dict(
@@ -109,9 +119,9 @@ def test_a_fit_resumes_from_its_output_directory(tmp_path):
     config['fitter'] = dict(type='cmaes', maxfevals=300)
     yaml.dump(config, tmp_path / 'fit.yaml')
     run_cli(tmp_path, 'fit', 'fit.yaml', '--output-dir', 'fit')
-    first = json.loads((tmp_path / 'fit' / 'result.json').read_text())
+    first = read(tmp_path / 'fit', 'fit_result')
     run_cli(tmp_path, 'fit', '--resume', 'fit')
-    resumed = json.loads((tmp_path / 'fit' / 'result.json').read_text())
+    resumed = read(tmp_path / 'fit', 'fit_result')
     assert resumed['solutions'][0]['free'] == first['solutions'][0]['free']
 
 
@@ -123,7 +133,7 @@ def test_a_fit_is_bootstrapped_as_it_ends_or_later(tmp_path):
     config = yaml.load(REFERENCE_DIR / 'thin_disk_pixel_spectra.yaml')
     yaml.dump(config, tmp_path / 'model.yaml')
     run_cli(tmp_path, 'eval', 'model', 'model.yaml', '--output-dir', 'model')
-    model = fits.getdata(tmp_path / 'model' / 'model_0_spectra_d.fits')
+    model = read(tmp_path / 'model', 'model').data
     fits.writeto(tmp_path / 'data.fits', model)
     observation = config['observations'][0]
     observation['data'] = dict(
@@ -138,17 +148,17 @@ def test_a_fit_is_bootstrapped_as_it_ends_or_later(tmp_path):
     config['bootstrap'] = dict(nsamples=3, scheme=scheme)
     yaml.dump(config, tmp_path / 'fit.yaml')
     run_cli(tmp_path, 'fit', 'fit.yaml', '--output-dir', 'fit')
-    result = json.loads((tmp_path / 'fit' / 'result.json').read_text())
+    result = read(tmp_path / 'fit', 'fit_result')
     assert (result['bootstrap']['nsamples'],
             result['bootstrap']['nfailed']) == (3, 0)
-    rows = (tmp_path / 'fit' / 'bootstrap.csv').read_text().splitlines()
-    assert len(rows) == 1 + 3
+    assert len(read(tmp_path / 'fit', 'bootstrap')) == 3
     later = dict(bootstrap=dict(
         nsamples=4, scheme=scheme,
         fitter=dict(type='scipy.least_squares', method='lm')))
     yaml.dump(later, tmp_path / 'later.yaml')
     run_cli(tmp_path, 'fit', '--bootstrap', 'fit', 'later.yaml')
-    result = json.loads((tmp_path / 'fit' / 'result.json').read_text())
+    result = read(tmp_path / 'fit', 'fit_result')
     assert result['bootstrap']['nsamples'] == 4
     assert result['bootstrap']['options']['fitter']['method'] == 'lm'
-    assert yaml.load(tmp_path / 'fit' / 'bootstrap.yaml') == later
+    assert len(read(tmp_path / 'fit', 'bootstrap')) == 4
+    assert read(tmp_path / 'fit', 'bootstrap_config') == later

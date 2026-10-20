@@ -11,6 +11,8 @@ import pytest
 import ruamel.yaml
 from astropy.io import fits
 
+from gbkfit import outputs
+
 
 REFERENCE_DIR = pathlib.Path(__file__).parents[1] / 'data' / 'reference_models'
 
@@ -19,20 +21,39 @@ yaml = ruamel.yaml.YAML(typ='safe')
 
 def run_eval(mode, config, workdir, *options):
     """
-    Run `gbkfit-cli eval` (with the given command line options) and return
-    its FITS outputs by file name.
+    Run `gbkfit-cli eval` on a configuration (or on a configuration file)
+    in a new directory, with the given command line options, and return
+    its run (see gbkfit.outputs).
     """
     workdir.mkdir()
-    yaml.dump(config, workdir / 'config.yaml')
+    if isinstance(config, dict):
+        yaml.dump(config, workdir / 'config.yaml')
+        config = 'config.yaml'
     result = subprocess.run(
-        [sys.executable, '-m', 'gbkfit.apps.cli', 'eval', mode, 'config.yaml',
+        [sys.executable, '-m', 'gbkfit.apps.cli', 'eval', mode, str(config),
          *options],
         cwd=workdir, capture_output=True, text=True)
     if result.returncode != 0:
         pytest.fail(f"gbkfit-cli failed:\n{result.stderr[-3000:]}")
-    return {
-        path.stem: np.array(fits.getdata(path))
-        for path in (workdir / 'output').glob('*.fits')}
+    return outputs.open(workdir / 'output')
+
+
+def array(run, kind, **ids):
+    """Return the data of the one FITS product of a kind and ids."""
+    return np.array(run.read(run.product(kind, **ids)).data)
+
+
+def mock_data(run, k):
+    """
+    Return the configuration file of mock k of a run, and the values and
+    errors of the data of its observation, by the paths it has.
+    """
+    filename = pathlib.Path(run.filename(run.product('mock_config', mock=k)))
+    config = yaml.load(filename)
+    root = filename.parent / config['root']
+    data = config['observations'][0]['data']
+    return filename, *(
+        np.array(fits.getdata(root / data[part])) for part in ('data', 'error'))
 
 
 def test_objective_residuals(tmp_path):
@@ -41,7 +62,7 @@ def test_objective_residuals(tmp_path):
     # the weighted residual (weight 0.5) is -0.25. The data file has no
     # WCS, so its reference pixel is its centre, as in the model.
     config = yaml.load(REFERENCE_DIR / 'thin_disk_pixel_spectra.yaml')
-    model = run_eval('model', config, tmp_path / 'model')['model_0_spectra_d']
+    model = array(run_eval('model', config, tmp_path / 'model'), 'model')
     fits.writeto(tmp_path / 'data.fits', model + 1)
     observation = config['observations'][0]
     observation['data'] = dict(
@@ -49,11 +70,14 @@ def test_objective_residuals(tmp_path):
         step=observation['observable'].pop('step'))
     observation['observable'].pop('size')
     observation['likelihood'] = dict(type='gaussian', weights=0.5)
-    outputs = run_eval('objective', config, tmp_path / 'objective')
-    np.testing.assert_allclose(outputs['residual_spectra_d'], -0.5, rtol=1e-5)
-    np.testing.assert_allclose(outputs['wresidual_spectra_d'], -0.25, rtol=1e-5)
+    run = run_eval('objective', config, tmp_path / 'objective')
+    np.testing.assert_allclose(array(run, 'residual'), -0.5, rtol=1e-5)
+    np.testing.assert_allclose(array(run, 'wresidual'), -0.25, rtol=1e-5)
+    np.testing.assert_allclose(
+        array(run, 'data', observation='observation0', item='spectra'),
+        model + 1)
     # The extra outputs of the model (e.g. the high-resolution cube)
-    assert 'residual_extra_observation0_dcube_hi' in outputs
+    assert run.products('extra', name='observation0_dcube_hi')
 
 
 @pytest.mark.parametrize('mode', ['model', 'objective'])
@@ -62,15 +86,15 @@ def test_profiling_writes_the_timings(tmp_path, mode):
     # each of the 3, in both modes (objective mode times the chi-square)
     config = yaml.load(REFERENCE_DIR / 'thin_disk_pixel_spectra.yaml')
     if mode == 'objective':
-        model = run_eval('model', config, tmp_path / 'model')
-        fits.writeto(tmp_path / 'data.fits', model['model_0_spectra_d'])
+        model = array(run_eval('model', config, tmp_path / 'model'), 'model')
+        fits.writeto(tmp_path / 'data.fits', model)
         observation = config['observations'][0]
         observation['data'] = dict(
             data=str(tmp_path / 'data.fits'), error=1.0,
             step=observation['observable'].pop('step'))
         observation['observable'].pop('size')
-    run_eval(mode, config, tmp_path / mode, '--profile', '3')
-    timings = yaml.load(tmp_path / mode / 'output' / 'gbkfit_eval_timings.yaml')
+    run = run_eval(mode, config, tmp_path / mode, '--profile', '3')
+    timings = run.read(run.product('timings'))
     assert timings['model_eval']['count'] == 3
 
 
@@ -82,16 +106,16 @@ def test_mock_data_and_their_configuration(tmp_path):
     config = yaml.load(REFERENCE_DIR / 'thin_disk_pixel_spectra.yaml')
     config['mock'] = dict(
         noise=dict(type='gauss', rms=0.01), nmocks=2, seed=3)
-    outputs = run_eval('mock', config, tmp_path / 'mock')
-    mocks = [outputs[f'mock{k}_observation0_spectra_d'] for k in (0, 1)]
-    noise = mocks[0] - outputs['model_0_spectra_d']
+    run = run_eval('mock', config, tmp_path / 'mock')
+    (filename, data0, error0), (_, data1, _) = (
+        mock_data(run, k) for k in ('0', '1'))
+    noise = data0 - array(run, 'model')
     assert noise.std() == pytest.approx(0.01, rel=0.01)
-    np.testing.assert_array_equal(
-        outputs['mock0_observation0_spectra_e'], np.float32(0.01))
-    assert not np.array_equal(*mocks)
-    mock = yaml.load(tmp_path / 'mock' / 'output' / 'mock0.yaml')
-    outputs = run_eval('objective', mock, tmp_path / 'fit')
-    assert outputs['residual_spectra_d'].std() == pytest.approx(1, rel=0.01)
+    np.testing.assert_array_equal(error0, np.float32(0.01))
+    assert not np.array_equal(data0, data1)
+    assert len(run.products('mock_data', mock='0')) == 3
+    fit = run_eval('objective', filename, tmp_path / 'fit')
+    assert array(fit, 'residual').std() == pytest.approx(1, rel=0.01)
 
 
 def test_rotation_curve_from_radial_nodes(tmp_path):
@@ -109,12 +133,12 @@ def test_rotation_curve_from_radial_nodes(tmp_path):
     del properties['vpt_rt']
     config['pdescs'] = dict(vmax=dict(type='scalar'), rt=dict(type='scalar'))
     properties.update(vmax=180, rt=3, vpt_vt='vmax * np.arctan(rnodes / rt)')
-    expression = run_eval('model', config, tmp_path / 'expression')
+    expression = array(
+        run_eval('model', config, tmp_path / 'expression'), 'model')
     del config['pdescs'], properties['vmax'], properties['rt']
     properties['vpt_vt'] = (180 * np.arctan(np.array(rnodes) / 3)).tolist()
-    values = run_eval('model', config, tmp_path / 'values')
-    np.testing.assert_array_equal(
-        expression['model_0_spectra_d'], values['model_0_spectra_d'])
+    values = array(run_eval('model', config, tmp_path / 'values'), 'model')
+    np.testing.assert_array_equal(expression, values)
 
 
 def test_unknown_options(tmp_path):
@@ -145,35 +169,12 @@ def test_outputs_have_the_world_coordinates_of_the_model(tmp_path):
     from gbkfit.utils import fitsutils
     config = yaml.load(REFERENCE_DIR / 'thin_disk_pixel_spectra.yaml')
     config['observations'][0]['observable'].update(rval=[150, 2, 1500], rota=30)
-    run_eval('model', config, tmp_path / 'model')
-    _, coords = fitsutils.read_data(
-        tmp_path / 'model' / 'output' / 'model_0_spectra_d.fits')
+    run = run_eval('model', config, tmp_path / 'model')
+    _, coords = fitsutils.read_data(run.filename(run.product('model')))
     np.testing.assert_allclose(coords.step, [1, 1, 10], rtol=1e-12)
     np.testing.assert_allclose(coords.rpix, [23.5, 23.5, 24.5], rtol=1e-12)
     np.testing.assert_allclose(coords.rval, [150, 2, 1500], rtol=1e-12)
     np.testing.assert_allclose(coords.rota, 30, atol=1e-9)
-
-
-def test_outputs_are_written_by_type(tmp_path):
-    # Data on a grid gets world coordinates, other arrays none, and the
-    # other values go together to gbkfit_eval_extra.json and .yaml
-    import json
-    from gbkfit.tasks import _detail
-    from gbkfit.utils import gridutils
-    coords = gridutils.Coords((1.0, 1.0), (3.5, 3.5), (150.0, 2.0), 0.0)
-    _detail.write_outputs(tmp_path, dict(
-        grid=gridutils.GridData(np.ones((8, 8)), coords, None),
-        array=np.ones((4, 4)),
-        number=np.int64(12345),
-        info=dict(name='disk', sizes=[1, 2])), 'gbkfit_eval_extra')
-    assert fits.getheader(tmp_path / 'grid.fits')['CTYPE1'] == 'RA---TAN'
-    assert 'CTYPE1' not in fits.getheader(tmp_path / 'array.fits')
-    values = json.loads((tmp_path / 'gbkfit_eval_extra.json').read_text())
-    assert values == dict(number=12345, info=dict(name='disk', sizes=[1, 2]))
-    assert (tmp_path / 'gbkfit_eval_extra.yaml').exists()
-    with pytest.raises(TypeError, match="unsupported type: object"):
-        _detail.write_outputs(
-            tmp_path, dict(thing=object()), 'gbkfit_eval_extra')
 
 
 def test_region_spectra_outputs_and_residuals(tmp_path):
@@ -189,10 +190,10 @@ def test_region_spectra_outputs_and_residuals(tmp_path):
         type='region_spectra', regions=regions,
         size=scube['size'][:2], step=scube['step'][:2],
         spec_size=scube['size'][2], spec_step=scube['step'][2])
-    model = run_eval('model', config, tmp_path / 'model')['model_0_spectra_d']
+    run = run_eval('model', config, tmp_path / 'model')
+    model = array(run, 'model')
     assert model.shape == (50, 2)
-    header = fits.getheader(
-        tmp_path / 'model' / 'output' / 'model_0_spectra_d.fits')
+    header = run.read(run.product('model')).header
     assert header['CTYPE2'] == 'VRAD'
     assert header['CDELT2'] == 10
     fits.writeto(tmp_path / 'data.fits', model + 1, header)
@@ -201,8 +202,8 @@ def test_region_spectra_outputs_and_residuals(tmp_path):
         observable.pop(key)
     observation['data'] = dict(
         regions=regions, data=str(tmp_path / 'data.fits'), error=2.0)
-    outputs = run_eval('objective', config, tmp_path / 'objective')
-    np.testing.assert_allclose(outputs['residual_spectra_d'], -0.5, rtol=1e-5)
+    run = run_eval('objective', config, tmp_path / 'objective')
+    np.testing.assert_allclose(array(run, 'residual'), -0.5, rtol=1e-5)
 
 
 def test_one_galaxy_seen_by_two_observations(tmp_path):
@@ -214,9 +215,10 @@ def test_one_galaxy_seen_by_two_observations(tmp_path):
         name='maps', line_of_sight=dict(type='flat'),
         observable=dict(type='pixel_moments', size=[48, 48]))
     config['observations'] = [scube | dict(name='cube'), mmaps]
-    outputs = run_eval('model', config, tmp_path / 'model')
-    assert outputs['model_0_spectra_d'].shape == (50, 48, 48)
-    assert outputs['model_1_moment1_d'].shape == (48, 48)
+    run = run_eval('model', config, tmp_path / 'model')
+    assert array(run, 'model', observation='cube').shape == (50, 48, 48)
+    assert array(
+        run, 'model', observation='maps', item='moment1').shape == (48, 48)
 
 
 def test_configuration_errors_are_reported_without_a_traceback(tmp_path):

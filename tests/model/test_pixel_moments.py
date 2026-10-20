@@ -34,7 +34,7 @@ def test_pixel_moments_matches_moments_of_pixel_spectra(evaluate_config):
     # channel, which adds the variance of a channel (step^2 / 12) to the
     # lines: the spectral cube has channels of 10, and the cube of the
     # moment maps of 1 (the default).
-    mmaps = evaluate_config(REFERENCE_DIR / 'thin_disk_pixel_moments.yaml')
+    run = evaluate_config(REFERENCE_DIR / 'thin_disk_pixel_moments.yaml')
     scube = np.load(REFERENCE_DIR / 'thin_disk_pixel_spectra.npz')['model_0_spectra_d']
     moment1, moment2, intensity = moments_from_scube(
         scube.astype(np.float64), spec_step=10)
@@ -42,7 +42,8 @@ def test_pixel_moments_matches_moments_of_pixel_spectra(evaluate_config):
     bright = intensity > 0.05 * intensity.max()
     for order, expected in ((1, moment1), (2, moment2)):
         np.testing.assert_allclose(
-            mmaps[f'model_0_moment{order}_d'][bright], expected[bright],
+            run.read(run.product('model', item=f'moment{order}')).data[
+                bright], expected[bright],
             atol=0.01, err_msg=f"moment {order}")
 
 

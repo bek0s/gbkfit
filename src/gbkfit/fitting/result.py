@@ -4,19 +4,17 @@ other solutions, the posterior and the evidence (when the fitter gives
 them), and the cost.
 """
 
-import csv
 import dataclasses
-import json
 import math
-import os
-from collections.abc import Iterable, Sequence
+from collections.abc import Sequence
 from typing import Any
 
 import numpy as np
 import numpy.typing as npt
+from astropy.table import Table
 
+from gbkfit.outputs import RunWriter
 from gbkfit.params import ParamValues
-from gbkfit.utils import numutils
 
 
 __all__ = [
@@ -115,6 +113,14 @@ class Covariance:
     at_bounds: tuple[str, ...]
     scaled: bool
 
+    def table(self) -> Table:
+        """
+        Return the matrix as a table: a row of each free element, named in
+        the column 'name', and a column of each.
+        """
+        return Table(
+            [list(self.names), *self.matrix.T], names=['name', *self.names])
+
 
 @dataclasses.dataclass(frozen=True)
 class Posterior:
@@ -167,6 +173,16 @@ class Posterior:
         return {
             name: (float(v[0]), float(v[1]), float(v[2]))
             for name, v in self.quantiles([0.16, 0.5, 0.84]).items()}
+
+    def table(self) -> Table:
+        """
+        Return the samples as a table: a column of each element, and of
+        the weights, if any ('weight').
+        """
+        table = _samples_table(self.names, self.samples)
+        if self.weights is not None:
+            table['weight'] = self.weights
+        return table
 
 
 @dataclasses.dataclass(frozen=True)
@@ -224,14 +240,9 @@ class Bootstrap:
             failures=list(self.failures), std=self.std(),
             quantiles=self.summary(), options=self.options)
 
-    def dump(self, output_dir: str) -> None:
-        """
-        Write its samples to bootstrap.csv in a directory, with the names
-        of the elements as the header.
-        """
-        _write_csv(
-            os.path.join(output_dir, 'bootstrap.csv'), list(self.names),
-            self.samples)
+    def table(self) -> Table:
+        """Return the samples as a table: a column of each element."""
+        return _samples_table(self.names, self.samples)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -431,22 +442,13 @@ class FitResult:
                 f"at a bound: {list(best.covariance.at_bounds)}")
         return '\n'.join(lines)
 
-    def dump(self, output_dir: str) -> None:
+    def info(self) -> dict[str, Any]:
         """
-        Write the result to a directory: a summary (result.json), and the
-        arrays as CSV files with the names of the elements as headers:
-        the covariance matrix and the Laplace samples of each solution
-        (solution_<i>_covariance.csv, solution_<i>_laplace.csv), the
-        posterior samples, with their weights if any (posterior.csv), and
-        the samples of the bootstrap, if run (bootstrap.csv).
-
-        Parameters
-        ----------
-        output_dir : str
-            The directory (made if missing).
+        Return its summary (without the arrays): what was run, the
+        solutions, the summaries of the posterior and of the bootstrap,
+        and the evidence.
         """
-        os.makedirs(output_dir, exist_ok=True)
-        summary = dict(
+        return dict(
             fitter=self.fitter, params=self.params, versions=self.versions,
             nevals=self.nevals, time=self.time, success=self.success,
             message=self.message, diagnostics=self.diagnostics,
@@ -457,47 +459,49 @@ class FitResult:
             solutions=[_solution_summary(s) for s in self.solutions],
             bootstrap=None if self.bootstrap is None
             else self.bootstrap.info())
-        with open(os.path.join(output_dir, 'result.json'), 'w') as f:
-            json.dump(numutils.nativify(summary), f, indent=2)
 
-        def path(name: str) -> str:
-            return os.path.join(output_dir, name)
+    def write(self, run: RunWriter, folder: str = 'fit') -> None:
+        """
+        Write the result as products of a run (see gbkfit.outputs), in a
+        folder: its summary (result.json, kind 'fit_result'; see info),
+        the covariance matrix and the Laplace samples of each solution i
+        (solutions/<i>/covariance.ecsv and laplace.ecsv, kinds
+        'covariance' and 'laplace', id 'solution'), the posterior samples,
+        with their weights if any (posterior.ecsv, 'posterior'), and the
+        samples of the bootstrap, if run (bootstrap.ecsv, 'bootstrap').
+        The tables have a column of each element (see Posterior.table,
+        Covariance.table and Bootstrap.table).
 
+        Parameters
+        ----------
+        run : RunWriter
+            The run.
+        folder : str, optional
+            The folder of the products in the run.
+        """
+        run.write(f'{folder}/result.json', 'fit_result', self.info())
         for i, solution in enumerate(self.solutions):
-            if (cov := solution.covariance) is not None:
-                # (one row per free element, named in its first column)
-                _write_csv(
-                    path(f'solution_{i}_covariance.csv'),
-                    ['name', *cov.names],
-                    [[name, *row] for name, row in zip(cov.names, cov.matrix)])
-            if (laplace := solution.laplace) is not None:
-                _write_csv(
-                    path(f'solution_{i}_laplace.csv'), list(laplace.names),
-                    laplace.samples)
-        if (posterior := self.posterior) is not None:
-            header = list(posterior.names)
-            rows = posterior.samples
-            if posterior.weights is not None:
-                header.append('weight')
-                rows = np.column_stack((rows, posterior.weights))
-            _write_csv(path('posterior.csv'), header, rows)
+            if solution.covariance is not None:
+                run.write(
+                    f'{folder}/solutions/{i}/covariance.ecsv', 'covariance',
+                    solution.covariance.table(), solution=str(i))
+            if solution.laplace is not None:
+                run.write(
+                    f'{folder}/solutions/{i}/laplace.ecsv', 'laplace',
+                    solution.laplace.table(), solution=str(i))
+        if self.posterior is not None:
+            run.write(
+                f'{folder}/posterior.ecsv', 'posterior',
+                self.posterior.table())
         if self.bootstrap is not None:
-            self.bootstrap.dump(output_dir)
+            run.write(
+                f'{folder}/bootstrap.ecsv', 'bootstrap',
+                self.bootstrap.table())
 
 
-def _write_csv(
-        filename: str,
-        header: Sequence[str],
-        rows: Iterable[Sequence[str | float]]
-) -> None:
-    """Write rows of values to a CSV file, numbers to 12 digits."""
-    with open(filename, 'w', newline='') as f:
-        writer = csv.writer(f)
-        writer.writerow(header)
-        for row in rows:
-            writer.writerow([
-                value if isinstance(value, str) else f'{value:.12g}'
-                for value in row])
+def _samples_table(names: Sequence[str], samples: np.ndarray) -> Table:
+    """Return samples (one per row) as a table, a column of each name."""
+    return Table(list(np.asarray(samples).T), names=list(names))
 
 
 def _solution_summary(solution: FitSolution) -> dict[str, Any]:

@@ -37,9 +37,11 @@ Usage:
 where PYTHON is the interpreter of an environment with the version of
 gbkfit that makes the references (now the current code). Every <case>.yaml in this directory is
 evaluated with `gbkfit-cli eval model`, and its FITS outputs are stored
-in <case>.npz, keyed by file name.
+in <case>.npz, keyed by the file names of older versions:
+model_0_<item>_<d, m or w> (the model, its mask and its weights).
 """
 
+import json
 import pathlib
 import subprocess
 import sys
@@ -51,12 +53,24 @@ from astropy.io import fits
 
 HERE = pathlib.Path(__file__).parent
 
+# The kinds of the products of the model, by their parts in the file names
+# of older versions
+PARTS = dict(model='d', model_mask='m', model_weight='w')
+
 
 def evaluate_model(python, config, workdir):
     """Evaluate a model configuration and return its FITS outputs."""
     subprocess.run(
         [python, '-m', 'gbkfit.apps.cli', 'eval', 'model', str(config)],
         cwd=workdir, check=True, capture_output=True)
+    manifest = workdir / 'output' / 'gbkfit.json'
+    if manifest.exists():
+        # (newer versions write a run, whose manifest lists its products)
+        return {
+            f"model_0_{p['ids']['item']}_{PARTS[p['kind']]}":
+                fits.getdata(workdir / 'output' / p['path'])
+            for p in json.loads(manifest.read_text())['products']
+            if p['kind'] in PARTS}
     # Older versions write their outputs to the working directory, newer
     # ones to an output directory, so search both
     return {

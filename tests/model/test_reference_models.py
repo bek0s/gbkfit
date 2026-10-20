@@ -17,12 +17,22 @@ import pytest
 
 REFERENCE_DIR = pathlib.Path(__file__).parents[1] / 'data' / 'reference_models'
 
+# The references are keyed by the file names of older versions:
+# model_0_<item>_<part>, of the kinds of the products by part
+KINDS = dict(d='model', m='model_mask', w='model_weight')
+
 CASES = sorted(path.stem for path in REFERENCE_DIR.glob('*.yaml'))
+
+
+def output(run, name):
+    """Return the product of a run that a reference of a name is of."""
+    item, part = name.removeprefix('model_0_').rsplit('_', 1)
+    return np.array(run.read(run.product(KINDS[part], item=item)).data)
 
 
 @pytest.mark.parametrize('case', CASES)
 def test_reference_model(case, evaluate_config):
-    outputs = evaluate_config(REFERENCE_DIR / f'{case}.yaml')
+    run = evaluate_config(REFERENCE_DIR / f'{case}.yaml')
     references = np.load(REFERENCE_DIR / f'{case}.npz')
     # The moment maps are compared where there is flux (the other outputs
     # everywhere): the moments of the faintest spaxels are ratios of tiny
@@ -35,5 +45,5 @@ def test_reference_model(case, evaluate_config):
         reference = references[name][compared]
         scale = np.nanmax(np.abs(reference))
         np.testing.assert_allclose(
-            outputs[name][compared], reference, rtol=1e-5,
+            output(run, name)[compared], reference, rtol=1e-5,
             atol=1e-5 * scale, err_msg=f"{case}: {name}")

@@ -2,10 +2,9 @@
 import subprocess
 import sys
 
-import numpy as np
 import pytest
-from astropy.io import fits
 
+from gbkfit import outputs
 from modelutils import observation_group
 
 
@@ -13,8 +12,8 @@ from modelutils import observation_group
 def evaluate_config(tmp_path):
     """
     Return a function that evaluates a configuration file with
-    `gbkfit-cli eval model` and returns its FITS outputs, keyed by file
-    name. Each configuration is evaluated in its own directory.
+    `gbkfit-cli eval model` and returns its run (see gbkfit.outputs).
+    Each configuration is evaluated in its own directory.
     """
     def evaluate(config):
         workdir = tmp_path / config.stem
@@ -25,9 +24,7 @@ def evaluate_config(tmp_path):
             cwd=workdir, capture_output=True, text=True)
         if result.returncode != 0:
             pytest.fail(f"gbkfit-cli failed:\n{result.stderr[-3000:]}")
-        return {
-            path.stem: np.array(fits.getdata(path))
-            for path in sorted((workdir / 'output').glob('*.fits'))}
+        return outputs.open(workdir / 'output')
     return evaluate
 
 

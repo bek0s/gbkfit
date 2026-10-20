@@ -170,13 +170,17 @@ def test_the_outputs_have_the_dirty_images(driver):
     group, params = observation_of_data(driver, 0.5)
     outputs = _detail.data_outputs(group) | _detail.evaluation_outputs(
         group, Objective(group), params, True, True)
-    images = {name: outputs[name].data for name in (
-        'data_0_dirty', 'data_0_dirty_beam', 'model_0_dirty',
-        'residual_dirty')}
+    images = {
+        (x.kind, x.ids['image']): x.value.data for x in outputs.values()
+        if x.kind.endswith('_image')}
+    assert sorted(images) == [
+        ('data_image', 'dirty'), ('data_image', 'dirty_beam'),
+        ('model_image', 'dirty'), ('residual_image', 'dirty')]
     assert all(x.shape == (16, 28, 32) for x in images.values())
     np.testing.assert_allclose(
-        images['residual_dirty'],
-        images['data_0_dirty'] - images['model_0_dirty'], atol=1e-6)
+        images['residual_image', 'dirty'],
+        images['data_image', 'dirty'] - images['model_image', 'dirty'],
+        atol=1e-6)
 
 
 def test_mock_visibilities_are_the_model_plus_the_noise(driver):

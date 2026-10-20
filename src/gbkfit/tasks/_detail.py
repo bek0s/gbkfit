@@ -9,9 +9,8 @@ import logging
 import os
 from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, NamedTuple
 
-import astropy.io.fits as fits
 from astropy.table import Table
 import numpy as np
 import ruamel.yaml
@@ -19,6 +18,7 @@ import ruamel.yaml
 import gbkfit.fitting
 import gbkfit.model
 import gbkfit.observation
+import gbkfit.outputs
 from gbkfit.driver import Driver, driver_by_name, driver_parser
 from gbkfit.objective import Objective
 from gbkfit.observation import DepthGroup, Observation, ObservationGroup
@@ -26,14 +26,13 @@ from gbkfit.params import (
     ParamDesc, ParamFunctions, ParamSpace, ParamValues, load_pdescs_dict,
     param_space_parser)
 from gbkfit.utils import (
-    fitsutils, gridutils, iterutils, miscutils, numutils, parseutils,
-    unitutils)
+    gridutils, iterutils, miscutils, parseutils, unitutils)
 from gbkfit.utils.parseutils import ConfigError
 
 
 _log = logging.getLogger(__name__)
 
-# Reads and writes YAML (round trip: dicts keep their order)
+# Reads YAML (round trip: dicts keep their order)
 _yaml = ruamel.yaml.YAML()
 
 
@@ -156,21 +155,6 @@ def make_output_dir(
         except FileExistsError:
             # Another run created it first: try the next one
             continue
-
-
-def dump_dict(info: Any, filename: str) -> None:
-    """Write a dict (of JSON values) to <filename>.json and .yaml."""
-    path = Path(filename)
-    with path.with_suffix('.json').open('w') as f:
-        json.dump(info, f, indent=2)
-    with path.with_suffix('.yaml').open('w') as f:
-        _yaml.dump(info, f)
-
-
-def write_yaml(info: Any, filename: str) -> None:
-    """Write a dict (of JSON values) to a YAML file."""
-    with open(filename, 'w') as f:
-        _yaml.dump(info, f)
 
 
 def merge_pdescs(
@@ -341,34 +325,60 @@ def load_params(
             functions=functions)
 
 
-def data_outputs(group: ObservationGroup) -> dict[str, Any]:
+class Output(NamedTuple):
     """
-    Return the data of the observations as outputs, by name, in the form
-    their observables give them: their values (data_<i>_<item>_d, NaN
-    where masked) and errors (data_<i>_<item>_e), in their units, and the
-    images of their values and of their PSF that their observables make
-    (data_<i>_<name>; e.g. the dirty image and beam of visibilities, see
-    Observable.images and psf_images).
+    An output of a task, to write as a product of its run (see
+    gbkfit.outputs): its path in the run, kind, value and ids.
     """
-    outputs = {}
+    path: str
+    kind: str
+    value: Any
+    ids: dict[str, str]
+
+
+def observation_name(group: ObservationGroup, index: int) -> str:
+    """
+    Return the name of the observation of the given index in the outputs:
+    its name, or 'observation{index}'.
+    """
+    name = group.observations()[index].name()
+    return f'observation{index}' if name is None else name
+
+
+def data_outputs(group: ObservationGroup) -> dict[str, Output]:
+    """
+    Return the data of the observations as outputs, by path, in the form
+    their observables give them: their values (kind 'data', NaN where
+    masked) and errors ('error'), in their units, of each data item, and
+    the images of their values and of their PSF that their observables
+    make ('data_image'; e.g. the dirty image and beam of visibilities, see
+    Observable.images and psf_images), in observations/<observation>/
+    <kind>/<item or image>.
+    """
+    outputs = []
     for i, observation in enumerate(group.observations()):
         if (dataset := observation.data()) is None:
             continue
+        name = observation_name(group, i)
         observable = observation.observable()
         for key in observable.keys():
             item = dataset[key]
-            outputs[f'data_{i}_{key}_d'] = _with_unit(
-                observable.output(item.data()), observation, key)
+            outputs.append(_observation_output(
+                name, 'data', key, _with_unit(
+                    observable.output(item.data()), observation, key)))
             if item.error() is not None:
-                outputs[f'data_{i}_{key}_e'] = _with_unit(
-                    observable.output(item.error()), observation, key)
+                outputs.append(_observation_output(
+                    name, 'error', key, _with_unit(
+                        observable.output(item.error()), observation, key)))
         driver = observation.driver()
         weights = _weights(dataset)
         images = observable.images(
             driver, {key: dataset[key].data() for key in observable.keys()},
             weights, _units(dataset)) | observable.psf_images(driver, weights)
-        outputs |= {f'data_{i}_{name}': x for name, x in images.items()}
-    return outputs
+        outputs += [
+            _observation_output(name, 'data_image', image, x, 'image')
+            for image, x in images.items()]
+    return {output.path: output for output in outputs}
 
 
 def _units(dataset: Any) -> dict[str, Any] | None:
@@ -409,101 +419,154 @@ def evaluation_outputs(
         values: ParamValues,
         model: bool,
         residuals: bool
-) -> dict[str, Any]:
+) -> dict[str, Output]:
     """
-    Return the outputs of an evaluation, by name, in the form their
-    observables give them: the models (model_<i>_<item>_<d|m|w>), the
-    residuals ((model - data) / error) without and with the weights of
-    the data items (residual_<item>_d and wresidual_<item>_d, with _<i>
-    after the prefix if there are several observations; these need the
-    objective), and the extra outputs
-    (<prefix>_extra_<name>; those of the models once, under the first
-    prefix: each residual evaluation evaluates the models again). With
-    the residuals, the free amplitudes of spectra (see
-    LikelihoodGaussian) are residual_extra_<observation prefix>amplitudes,
-    and with the models too, the model of the spectra is that which the
-    residuals compare, times the amplitudes (model_<i>_<item>_d), and the
-    model without them is model_<i>_<item>_unscaled_d. With the models,
-    the images that their observables make of them (model_<i>_<name>; see
-    Observable.images), and of the data minus them (residual_<name>, with
-    _<i> as the residuals), with the weights of the data.
+    Return the outputs of an evaluation, by path, in the form their
+    observables give them, in observations/<observation>/<kind>/<item>
+    of each data item: the models (kind 'model'; 'model_mask' and
+    'model_weight'), and the residuals ((model - data) / error) without
+    and with the weights of the data items ('residual' and 'wresidual';
+    these need the objective). With the residuals, the free amplitudes of
+    spectra (see LikelihoodGaussian) are 'amplitudes'
+    (observations/<observation>/amplitudes), and with the models too, the
+    model of the spectra is that which the residuals compare, times the
+    amplitudes ('model'), and the model without them is
+    'model_unscaled'. With the models, the images that their observables
+    make of them ('model_image', in place of the item: the name of the
+    image; see Observable.images), and of the data minus them
+    ('residual_image'), with the weights of the data. The extra outputs
+    of the models are 'extra' (extra/<name>, by their names; e.g. the
+    cubes of the components).
     """
-    outputs = {}
-    model_extra: dict[str, Any] = {}
+    outputs = []
+    extra: dict[str, Any] = {}
     if model:
-        observations = group.observations()
-        for i, data_i in enumerate(group.model_h(values, model_extra)):
-            observation = observations[i]
+        for i, data_i in enumerate(group.model_h(values, extra)):
+            observation = group.observations()[i]
+            name = observation_name(group, i)
             observable = observation.observable()
             for key, value in data_i.items():
-                for kind in ('d', 'm', 'w'):
-                    if value.get(kind) is not None:
-                        output = observable.output(value[kind])
-                        if kind == 'd':
-                            output = _with_unit(output, observation, key)
-                        outputs[f'model_{i}_{key}_{kind}'] = output
-            outputs |= _images(
-                observation, {k: v['d'] for k, v in data_i.items()},
-                f'model_{i}', 'residual' + f'_{i}' * (len(observations) > 1))
-    extras = [('model', model_extra)]
+                for kind, part in (
+                        ('model', 'd'), ('model_mask', 'm'),
+                        ('model_weight', 'w')):
+                    if value.get(part) is None:
+                        continue
+                    output = observable.output(value[part])
+                    if part == 'd':
+                        output = _with_unit(output, observation, key)
+                    outputs.append(
+                        _observation_output(name, kind, key, output))
+            outputs += _images(
+                observation, name, {k: v['d'] for k, v in data_i.items()})
     if residuals:
         if objective is None:
             raise ValueError("the residuals need an objective")
-        for prefix, weighted in (('residual', False), ('wresidual', True)):
-            extra: dict[str, Any] = {}
-            # (the objective reuses its residual arrays, so copy them)
+        for kind, weighted in (('residual', False), ('wresidual', True)):
+            # (the objective reuses its residual arrays, so copy them;
+            # without the models, the extra outputs are those of the
+            # first residual evaluation, which evaluates the models)
             data = copy.deepcopy(objective.residual_nddata_h(
                 values, weighted, None if model or weighted else extra))
             for i, data_i in enumerate(data):
-                prefix_i = prefix + f'_{i}' * (objective.nobservations() > 1)
+                name = observation_name(group, i)
                 observable = group.observations()[i].observable()
-                for key, value in data_i.items():
-                    outputs[f'{prefix_i}_{key}_d'] = observable.output(value)
-            extras.append((prefix, extra))
-    for prefix, extra in extras:
-        for key, value in extra.items():
-            outputs[f'{prefix}_extra_{key}'] = value
+                outputs += [
+                    _observation_output(
+                        name, kind, key, observable.output(value))
+                    for key, value in data_i.items()]
+    outputs += [
+        Output(f'extra/{key}{_extension(value)}', 'extra', value,
+               dict(name=key))
+        for key, value in extra.items()]
+    outputs = {output.path: output for output in outputs}
     if residuals:
         for i, amplitudes in enumerate(objective.amplitudes()):
             if amplitudes is None:
                 continue
-            outputs[f'residual_extra_{group.extra_prefix(i)}amplitudes'] = \
-                amplitudes
+            name = observation_name(group, i)
+            output = Output(
+                f'observations/{name}/amplitudes.fits', 'amplitudes',
+                amplitudes, dict(observation=name))
+            outputs[output.path] = output
             if model:
                 key = group.observations()[i].observable().spectra_item()
-                name = f'model_{i}_{key}_d'
-                outputs[f'model_{i}_{key}_unscaled_d'] = outputs[name]
-                outputs[name] = _scaled(outputs[name], amplitudes)
+                path = f'observations/{name}/model/{key}.fits'
+                unscaled = outputs[path]
+                outputs[path] = unscaled._replace(
+                    value=_scaled(unscaled.value, amplitudes))
+                output = _observation_output(
+                    name, 'model_unscaled', key, unscaled.value)
+                outputs[output.path] = output
     return outputs
 
 
 def _images(
         observation: Observation,
-        model: Mapping[str, np.ndarray],
-        model_prefix: str,
-        residual_prefix: str
-) -> dict[str, Any]:
+        name: str,
+        model: Mapping[str, np.ndarray]
+) -> list[Output]:
     """
-    Return the images that the observable of an observation makes of its
-    model and of its data minus the model (see Observable.images), by
-    name: <prefix>_<name>, with the prefix of each.
+    Return the images that the observable of an observation (of the given
+    name in the outputs) makes of its model ('model_image') and of its
+    data minus the model ('residual_image'; see Observable.images).
     """
     observable = observation.observable()
     dataset = observation.data()
     driver = observation.driver()
     weights = _weights(dataset)
     units = _units(dataset)
-    images = {
-        f'{model_prefix}_{name}': x for name, x in observable.images(
-            driver, model, weights, units).items()}
+    images = [
+        _observation_output(name, 'model_image', image, x, 'image')
+        for image, x in observable.images(
+            driver, model, weights, units).items()]
     # (an observable that makes no images of its model makes none of the
     # residual either)
     if images and dataset is not None:
         residual = {key: dataset[key].data() - model[key] for key in model}
-        images |= {
-            f'{residual_prefix}_{name}': x for name, x in observable.images(
-                driver, residual, weights, units).items()}
+        images += [
+            _observation_output(name, 'residual_image', image, x, 'image')
+            for image, x in observable.images(
+                driver, residual, weights, units).items()]
     return images
+
+
+def _observation_output(
+        observation: str,
+        kind: str,
+        name: str,
+        value: Any,
+        id_name: str = 'item'
+) -> Output:
+    """
+    Return an output of a kind of an observation, of a data item (or of
+    another id: e.g. 'image'), in observations/<observation>/<kind>/
+    <name>.
+    """
+    return Output(
+        f'observations/{observation}/{kind}/{name}{_extension(value)}', kind,
+        value, {'observation': observation, id_name: name})
+
+
+def _extension(value: Any) -> str:
+    """
+    Return the extension of the file of an output by its type: FITS for
+    arrays (data on a grid and spectra with world coordinates), ECSV for
+    tables, and JSON for other values (numbers, strings, lists and dicts).
+
+    Raises
+    ------
+    TypeError
+        If the type is not of these.
+    """
+    if isinstance(
+            value, (gridutils.GridData, gridutils.SpectraData, np.ndarray)):
+        return '.fits'
+    if isinstance(value, Table):
+        return '.ecsv'
+    if isinstance(value, (bool, int, float, str, list, tuple, dict,
+                          np.generic)):
+        return '.json'
+    raise TypeError(f"outputs of type {type(value).__name__} are unsupported")
 
 
 def _scaled(output: Any, amplitudes: np.ndarray) -> Any:
@@ -517,39 +580,29 @@ def _scaled(output: Any, amplitudes: np.ndarray) -> Any:
 
 
 def write_outputs(
-        output_dir: str,
-        outputs: dict[str, Any],
-        extra_filename: str
+        run: gbkfit.outputs.RunWriter,
+        outputs: Mapping[str, Output]
+) -> None:
+    """Write outputs as products of a run (see RunWriter.write)."""
+    for output in outputs.values():
+        run.write(output.path, output.kind, output.value, **output.ids)
+
+
+def write_config(
+        run: gbkfit.outputs.RunWriter,
+        path: str,
+        kind: str,
+        cfg: Mapping[str, Any],
+        root: str,
+        **ids: str
 ) -> None:
     """
-    Write each output by its type: data on a grid (GridData) and spectra
-    (SpectraData) to a FITS file with world coordinates, other arrays to
-    a FITS file without, tables (astropy Table) to an ECSV file, and the
-    other values (numbers, strings, lists and dicts) together to
-    <extra_filename>.json and .yaml.
+    Write a configuration as a product of a run (YAML), with its root (the
+    directory its relative paths are relative to) relative to the
+    directory of its file.
     """
-    values = {}
-    for name, value in outputs.items():
-        filename = os.path.join(output_dir, f'{name}.fits')
-        if isinstance(value, gridutils.GridData):
-            fitsutils.write_data(
-                filename, value.data, value.coords, value.spectral_axis,
-                overwrite=True, unit=value.unit)
-        elif isinstance(value, gridutils.SpectraData):
-            fitsutils.write_spectra(
-                filename, value.data, value.coords, overwrite=True,
-                unit=value.unit)
-        elif isinstance(value, np.ndarray):
-            fits.writeto(filename, value, overwrite=True)
-        elif isinstance(value, Table):
-            value.write(
-                os.path.join(output_dir, f'{name}.ecsv'), overwrite=True)
-        elif isinstance(value, (bool, int, float, str, list, tuple, dict,
-                                np.generic)):
-            values[name] = numutils.nativify(value)
-        else:
-            raise TypeError(
-                f"output {name} has an unsupported type: "
-                f"{type(value).__name__}")
-    if values:
-        dump_dict(values, os.path.join(output_dir, extra_filename))
+    directory = os.path.dirname(os.path.join(run.path, path))
+    run.write(
+        path, kind,
+        dict(root=os.path.relpath(root, directory)) | copy.deepcopy(cfg),
+        **ids)
