@@ -625,6 +625,20 @@ class Driver(parseutils.TypedSerializable, abc.ABC):
         """Return x1 * x2 (into out, if given)."""
 
     @abc.abstractmethod
+    def math_median(
+            self,
+            x: DeviceArray,
+            size: tuple[int, ...],
+            out: DeviceArray
+    ) -> None:
+        """
+        Write the moving median of x to out (another array of its shape):
+        of each value, the median of the values of a window of the given
+        size along each axis about it (centred, for odd sizes), with zero
+        beyond the edges.
+        """
+
+    @abc.abstractmethod
     def math_matmul(
             self,
             x1: DeviceArray,

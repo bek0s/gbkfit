@@ -126,6 +126,20 @@ def check_mask_options(mask_cutoff: float | None, mask_apply: bool) -> None:
             "(mask_cutoff is null)")
 
 
+def check_median_size(median_size: int | None) -> None:
+    """
+    Raise ConfigError unless the size of a median filter (see
+    DCube.median_size) is an odd number of pixels, at least 3 (a window
+    centred on each pixel), or None.
+    """
+    if median_size is not None and not (
+            isinstance(median_size, int) and median_size >= 3
+            and median_size % 2 == 1):
+        raise ConfigError(
+            f"median_size must be an odd number of pixels, at least 3; it "
+            f"is {median_size!r}")
+
+
 def check_positive(name: str, value: float) -> None:
     """Raise ConfigError unless the value of an option is positive."""
     if not value > 0:
@@ -375,6 +389,8 @@ class DCubePlanBase(ObservablePlan):
         noisy = recorded + noise.draw(rng, dcube.grid(), dcube.psf())
         self._driver.mem_copy_h2d(
             noisy.astype(self._dtype), self._dcube_plan.dcube())
+        # (the data are smoothed with their noise)
+        self._dcube_plan.smooth()
         self._dcube_plan.mask()
         return self._to_host(self._measure())
 

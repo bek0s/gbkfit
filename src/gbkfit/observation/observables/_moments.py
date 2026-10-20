@@ -131,13 +131,15 @@ def spectra_dcube(
         scale: Sequence[int],
         instrument: Instrument,
         dtype: np.dtype,
-        fft_dtype: np.dtype
+        fft_dtype: np.dtype,
+        median_size: int | None = None
 ) -> _dcube.DCube:
     """
     Return the DCube of the spectra that the moments of an observable are
     measured from: on its spatial grid, with its spectral axis centred on
-    spec_rval. The masking of DCube is disabled; the moments are masked
-    by moment 0.
+    spec_rval, smoothed by the median filter of median_size (if given; see
+    DCube). The masking of DCube is disabled; the moments are masked by
+    moment 0.
     """
     spec_size = observable.spec_size()
     return _dcube.DCube(
@@ -156,7 +158,8 @@ def spectra_dcube(
         mask_cutoff=None,
         mask_apply=False,
         dtype=dtype,
-        fft_dtype=fft_dtype)
+        fft_dtype=fft_dtype,
+        median_size=median_size)
 
 
 class MomentsPlan:

@@ -171,9 +171,12 @@ class DCube:
     A cube of the data of an observable (x, y and the spectral axis), of
     the given grid, made from a model evaluated on a finer grid (scale
     times finer along each axis): the primary beam attenuates it, the PSF
-    and the LSF convolve it, it is downscaled to the grid, and masked
-    where its values are not above mask_cutoff (the mask is applied, NaN,
-    if mask_apply). The weights are smoothed by the PSF and the LSF if
+    and the LSF convolve it, it is downscaled to the grid, smoothed by a
+    median filter of median_size pixels on the sky if given (as the data
+    were: each channel takes the median of the median_size by median_size
+    pixels about each, with zero beyond the edges), and masked where its
+    values are not above mask_cutoff (the mask is applied, NaN, if
+    mask_apply). The weights are smoothed by the PSF and the LSF if
     smooth_weights. Its values are of dtype, and the FFTs of its
     convolutions of fft_dtype (at least as precise).
     """
@@ -196,7 +199,8 @@ class DCube:
             mask_cutoff: float | None,
             mask_apply: bool,
             dtype: np.dtype,
-            fft_dtype: np.dtype
+            fft_dtype: np.dtype,
+            median_size: int | None = None
     ):
         # The low-res grid (the grid of the data); the high-res one is made
         # by the plan
@@ -213,6 +217,7 @@ class DCube:
         self._mask_apply = mask_apply
         self._dtype = dtype
         self._fft_dtype = fft_dtype
+        self._median_size = median_size
 
     def grid(self) -> gridutils.Grid:
         return self._grid_lo
@@ -255,6 +260,9 @@ class DCube:
 
     def mask_apply(self) -> bool:
         return self._mask_apply
+
+    def median_size(self) -> int | None:
+        return self._median_size
 
     def dtype(self) -> np.dtype:
         return self._dtype
@@ -404,6 +412,11 @@ class DCubePlan:
                 self._wcube_hi = driver.mem_alloc_d(shape_hi, dtype)
                 driver.mem_fill(self._wcube_hi, 1)
 
+        # The scratch cube of the median filter, if any (of the low-res cube)
+        self._smoothed_lo = None
+        if dcube.median_size() is not None:
+            self._smoothed_lo = driver.mem_alloc_d(shape_lo, dtype)
+
         # The mask cube, if masking is enabled: masking is done on the
         # low-res cube only
         self._mcube_lo = None
@@ -449,12 +462,14 @@ class DCubePlan:
             flux_scale: float | None = None
     ) -> None:
         """
-        Record the high-res cube into the low-res one (see record) and mask
-        it (see mask). The extra outputs on the low- and high-res grids go
-        to out_extra as extra_lo and extra_hi make them from their data and
-        grid (e.g. cube_extra or plain_extra).
+        Record the high-res cube into the low-res one (see record), smooth
+        it (see smooth) and mask it (see mask). The extra outputs on the
+        low- and high-res grids go to out_extra as extra_lo and extra_hi
+        make them from their data and grid (e.g. cube_extra or
+        plain_extra).
         """
         self.record(flux_scale)
+        self.smooth()
         self.mask()
         if out_extra is not None:
             self._extras(out_extra, extra_lo, extra_hi)
@@ -511,6 +526,17 @@ class DCubePlan:
             if has_weights:
                 backend_dmodel.dcube_downscale(
                     dcube.scale(), self._edge_hi, wcube_hi, wcube_lo)
+
+    def smooth(self) -> None:
+        """
+        Smooth the low-res cube by the median filter of its median_size, if
+        any (see DCube): on the sky, channel by channel.
+        """
+        size = self._dcube.median_size()
+        if size is not None:
+            self._driver.math_median(
+                self._dcube_lo, (1, size, size), out=self._smoothed_lo)
+            self._driver.mem_copy_d2d(self._smoothed_lo, self._dcube_lo)
 
     def mask(self) -> None:
         """

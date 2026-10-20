@@ -55,11 +55,18 @@ class PixelSpectra(Observable):
         masked; no masking if None.
     mask_apply : bool, optional
         Whether the masked pixels of the model are NaN.
+    median_size : int, optional
+        The size (an odd number of pixels, at least 3) of the median filter
+        that smoothed the data on the sky, which smooths the model as well
+        (e.g. 3, of cubes smoothed before their maps were made): each
+        channel takes the median of the square of the size about each
+        pixel, with zero beyond the edges (see DCube); none by default.
 
     Raises
     ------
     ConfigError
-        If mask_cutoff is negative, or mask_apply is true without it.
+        If median_size is not an odd number of at least 3, mask_cutoff
+        is negative, or mask_apply is true without it.
     """
 
     dataset_class = DatasetPixelSpectra
@@ -86,7 +93,8 @@ class PixelSpectra(Observable):
             dataset: DatasetPixelSpectra,
             smooth_weights: bool = False,
             mask_cutoff: float | None = None,
-            mask_apply: bool = False
+            mask_apply: bool = False,
+            median_size: int | None = None
     ) -> 'PixelSpectra':
         """
         Make the observable of a spectral cube, on its grid.
@@ -95,7 +103,7 @@ class PixelSpectra(Observable):
         ----------
         dataset : DatasetPixelSpectra
             The spectral cube.
-        smooth_weights, mask_cutoff, mask_apply : optional
+        smooth_weights, mask_cutoff, mask_apply, median_size : optional
             As those of PixelSpectra.
 
         Returns
@@ -113,7 +121,7 @@ class PixelSpectra(Observable):
         return cls(
             **_detail.grid_options(dataset.grid()),
             smooth_weights=smooth_weights, mask_cutoff=mask_cutoff,
-            mask_apply=mask_apply)
+            mask_apply=mask_apply, median_size=median_size)
 
     def dump(
             self,
@@ -133,7 +141,8 @@ class PixelSpectra(Observable):
             medium=self.medium(),
             smooth_weights=self._smooth_weights,
             mask_cutoff=self._mask_cutoff,
-            mask_apply=self._mask_apply), data)
+            mask_apply=self._mask_apply,
+            median_size=self._median_size), data)
 
     def __init__(
             self,
@@ -146,13 +155,16 @@ class PixelSpectra(Observable):
             medium: str | None = None,
             smooth_weights: bool = False,
             mask_cutoff: float | None = None,
-            mask_apply: bool = False
+            mask_apply: bool = False,
+            median_size: int | None = None
     ):
         super().__init__(size, step, rpix, rval, rota, rest, medium)
         _detail.check_mask_options(mask_cutoff, mask_apply)
+        _detail.check_median_size(median_size)
         self._smooth_weights = smooth_weights
         self._mask_cutoff = mask_cutoff
         self._mask_apply = mask_apply
+        self._median_size = median_size
 
     def keys(self) -> tuple[str, ...]:
         return ('spectra',)
@@ -202,7 +214,8 @@ class PixelSpectra(Observable):
             mask_cutoff=self._mask_cutoff,
             mask_apply=self._mask_apply,
             dtype=dtype,
-            fft_dtype=fft_dtype)
+            fft_dtype=fft_dtype,
+            median_size=self._median_size)
         return PixelSpectraPlan(
             dcube, driver, scene, foreground, dtype, weights, calibration)
 

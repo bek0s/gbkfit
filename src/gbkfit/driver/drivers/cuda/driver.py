@@ -3,6 +3,7 @@ from typing import Any
 
 import cupy as cp
 import cupyx as cpx
+import cupyx.scipy.ndimage
 import numpy as np
 import numpy.typing as npt
 
@@ -121,6 +122,16 @@ class DriverCuda(Driver):
     ) -> DeviceArray:
         with self._device:
             return cp.multiply(x1, x2, out=out)
+
+    def math_median(
+            self,
+            x: DeviceArray,
+            size: tuple[int, ...],
+            out: DeviceArray
+    ) -> None:
+        with self._device:
+            cupyx.scipy.ndimage.median_filter(
+                x, size=size, mode='constant', cval=0.0, output=out)
 
     def math_matmul(
             self,

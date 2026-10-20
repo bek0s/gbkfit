@@ -2,6 +2,7 @@ import types
 
 import numpy as np
 import numpy.typing as npt
+import scipy.ndimage
 
 import gbkfit.driver.native._host as native_module
 from gbkfit.driver.base import (
@@ -80,6 +81,15 @@ class DriverHost(Driver):
             out: DeviceArray | None = None
     ) -> DeviceArray:
         return np.multiply(x1, x2, out=out)
+
+    def math_median(
+            self,
+            x: DeviceArray,
+            size: tuple[int, ...],
+            out: DeviceArray
+    ) -> None:
+        scipy.ndimage.median_filter(
+            x, size=size, mode='constant', cval=0.0, output=out)
 
     def math_matmul(
             self,

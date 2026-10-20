@@ -68,12 +68,21 @@ class PixelMoments(Observable):
         How the maps are measured from the spectra, as the maps of the
         data were: 'moments', or 'gaussian_fit' (the flux, centre and
         dispersion of a Gaussian fitted to each, for the orders 0 to 2).
+    median_size : int, optional
+        The size (an odd number of pixels, at least 3) of the median filter
+        that smoothed the cube on the sky before the maps of the data were
+        measured, which smooths the spectra of the model as well (e.g. 3,
+        of cubes of KMOS3D): each channel takes the median of the square of
+        the size about each pixel, with zero beyond the edges (see DCube).
+        The median of a sum is not the sum of the medians: the channels of
+        the model (spec_step) are then those of that cube. None by default.
 
     Raises
     ------
     ConfigError
         If the orders are not valid for the method, mask_cutoff is None or
-        negative, spec_size is less than 1, or spec_step is not positive.
+        negative, spec_size is less than 1, spec_step is not positive, or
+        median_size is not an odd number of at least 3.
     """
 
     dataset_class = DatasetPixelMoments
@@ -109,7 +118,8 @@ class PixelMoments(Observable):
             spec_rval: float | None = None,
             spec_rest: str | astropy.units.Quantity | None = None,
             spec_medium: str | None = None,
-            method: str = 'moments'
+            method: str = 'moments',
+            median_size: int | None = None
     ) -> 'PixelMoments':
         """
         Make the observable of moment maps, on their grid and of their
@@ -119,7 +129,8 @@ class PixelMoments(Observable):
         ----------
         dataset : DatasetPixelMoments
             The moment maps.
-        mask_cutoff, spec_step, spec_rest, spec_medium, method : optional
+        mask_cutoff, spec_step, spec_rest, spec_medium, method, \
+                median_size : optional
             As those of PixelMoments.
         spec_size, spec_rval : optional
             As those of PixelMoments. By default, with moment 1, the
@@ -145,7 +156,7 @@ class PixelMoments(Observable):
                 dataset, spec_step, spec_size, spec_rval),
             mask_cutoff=mask_cutoff, orders=dataset.orders(),
             spec_step=spec_step, spec_rest=spec_rest,
-            spec_medium=spec_medium, method=method)
+            spec_medium=spec_medium, method=method, median_size=median_size)
 
     def dump(
             self,
@@ -168,7 +179,8 @@ class PixelMoments(Observable):
             spec_rval=self._spec_rval,
             spec_rest=_detail.dump_rest(self._spec_rest),
             spec_medium=self._spec_medium,
-            method=self._method), data)
+            method=self._method,
+            median_size=self._median_size), data)
 
     def __init__(
             self,
@@ -184,9 +196,12 @@ class PixelMoments(Observable):
             spec_rval: float = 0,
             spec_rest: str | astropy.units.Quantity | None = None,
             spec_medium: str | None = None,
-            method: str = 'moments'
+            method: str = 'moments',
+            median_size: int | None = None
     ):
         super().__init__(size, step, rpix, rval, rota)
+        _detail.check_median_size(median_size)
+        self._median_size = median_size
         self._orders = _moments.check_moment_options(
             orders, mask_cutoff, method, spec_size, spec_step)
         if spec_size is None:
@@ -260,7 +275,7 @@ class PixelMoments(Observable):
             raise ConfigError(
                 "the method gaussian_fit does not support weights yet")
         dcube = _moments.spectra_dcube(
-            self, scale, instrument, dtype, fft_dtype)
+            self, scale, instrument, dtype, fft_dtype, self._median_size)
         return PixelMomentsPlan(
             self, dcube, driver, scene, foreground, dtype, weights,
             calibration)

@@ -52,11 +52,18 @@ class PixelBrightness(Observable):
         masked; no masking if None.
     mask_apply : bool, optional
         Whether the masked pixels of the model are NaN.
+    median_size : int, optional
+        The size (an odd number of pixels, at least 3) of the median filter
+        that smoothed the data on the sky, which smooths the model as well
+        (e.g. 3, of cubes smoothed before their maps were made): each
+        channel takes the median of the square of the size about each
+        pixel, with zero beyond the edges (see DCube); none by default.
 
     Raises
     ------
     ConfigError
-        If mask_cutoff is negative, or mask_apply is true without it.
+        If median_size is not an odd number of at least 3, mask_cutoff
+        is negative, or mask_apply is true without it.
     """
 
     dataset_class = DatasetPixelBrightness
@@ -82,7 +89,8 @@ class PixelBrightness(Observable):
             cls,
             dataset: DatasetPixelBrightness,
             mask_cutoff: float | None = None,
-            mask_apply: bool = False
+            mask_apply: bool = False,
+            median_size: int | None = None
     ) -> 'PixelBrightness':
         """
         Make the observable of an image, on its grid.
@@ -91,7 +99,7 @@ class PixelBrightness(Observable):
         ----------
         dataset : DatasetPixelBrightness
             The image.
-        mask_cutoff, mask_apply : optional
+        mask_cutoff, mask_apply, median_size : optional
             As those of PixelBrightness.
 
         Returns
@@ -108,7 +116,7 @@ class PixelBrightness(Observable):
         cls._require_dataset_class(dataset)
         return cls(
             **_detail.grid_options(dataset.grid()), mask_cutoff=mask_cutoff,
-            mask_apply=mask_apply)
+            mask_apply=mask_apply, median_size=median_size)
 
     def dump(
             self,
@@ -125,7 +133,8 @@ class PixelBrightness(Observable):
             rval=self.rval(),
             rota=self.rota(),
             mask_cutoff=self._mask_cutoff,
-            mask_apply=self._mask_apply), data)
+            mask_apply=self._mask_apply,
+            median_size=self._median_size), data)
 
     def __init__(
             self,
@@ -135,12 +144,15 @@ class PixelBrightness(Observable):
             rval: Sequence[float] = (0, 0),
             rota: float = 0,
             mask_cutoff: float | None = None,
-            mask_apply: bool = False
+            mask_apply: bool = False,
+            median_size: int | None = None
     ):
         super().__init__(size, step, rpix, rval, rota)
         _detail.check_mask_options(mask_cutoff, mask_apply)
+        _detail.check_median_size(median_size)
         self._mask_cutoff = mask_cutoff
         self._mask_apply = mask_apply
+        self._median_size = median_size
 
     def keys(self) -> tuple[str, ...]:
         return ('brightness',)
@@ -192,7 +204,8 @@ class PixelBrightness(Observable):
             mask_cutoff=self._mask_cutoff,
             mask_apply=self._mask_apply,
             dtype=dtype,
-            fft_dtype=fft_dtype)
+            fft_dtype=fft_dtype,
+            median_size=self._median_size)
         return PixelBrightnessPlan(
             dcube, driver, scene, foreground, dtype, weights, calibration)
 
