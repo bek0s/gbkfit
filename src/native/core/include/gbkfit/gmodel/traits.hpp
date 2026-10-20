@@ -58,6 +58,7 @@ constexpr int VPT_DIRECTION_VER = 3;
 constexpr int VPT_DIRECTION_LOS = 4;
 constexpr int VPT_DIRECTION_OUT = 5;
 constexpr int VPT_DIRECTION_PLANE = 6;
+constexpr int VPT_DIRECTION_AWAY = 7;
 
 // Velocity height traits
 constexpr int VHT_UID_ONE = 1;
@@ -1692,14 +1693,15 @@ vp_trait(
 // a disk of inclination incl, at the radius r, the azimuth theta and the
 // height z of the disk, by the direction of the speed: tangential, v
 // cos(theta) sin(incl); radial (positive outwards, in the plane), v
-// sin(theta) sin(incl); vertical (positive along z), v cos(incl);
-// outward (from the centre, along the radius of the sphere, sqrt(r^2 +
-// z^2): away from the plane on either side), v (r sin(theta) sin(incl) +
-// z cos(incl)) / sqrt(r^2 + z^2); the line of sight, v; or for a planar
-// trait (a velocity in the plane), whose v is its part along the azimuth
-// 90 degrees, v sin(incl). The tangential and radial directions are
-// undefined on the axis, and the outward one at the centre, where the
-// velocity is 0.
+// sin(theta) sin(incl); vertical (positive along z), v cos(incl); away
+// from the midplane (along z, on both faces), v sign(z) cos(incl), 0 at
+// the midplane; outward (from the centre, along the radius of the
+// sphere, sqrt(r^2 + z^2): away from the plane on either side), v (r
+// sin(theta) sin(incl) + z cos(incl)) / sqrt(r^2 + z^2); the line of
+// sight, v; or for a planar trait (a velocity in the plane), whose v is
+// its part along the azimuth 90 degrees, v sin(incl). The tangential and
+// radial directions are undefined on the axis, and the outward one at
+// the centre, where the velocity is 0.
 template<typename T> constexpr T
 vp_disk_project(T v, int direction, T r, T theta, T z, T incl)
 {
@@ -1711,6 +1713,8 @@ vp_disk_project(T v, int direction, T r, T theta, T z, T incl)
         return r == 0 ? 0 : v * (std::sin(theta) * std::sin(incl));
     case VPT_DIRECTION_VER:
         return v * std::cos(incl);
+    case VPT_DIRECTION_AWAY:
+        return v * sign(z) * std::cos(incl);
     case VPT_DIRECTION_OUT: {
         const T radius = std::sqrt(r * r + z * z);
         return radius == 0 ? 0 : v * (

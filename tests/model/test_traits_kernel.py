@@ -19,8 +19,8 @@ RNODES = list(range(0, 14, 2))
 # the model unchanged (e.g. an elongated blob at an angle)
 VALUES = dict(
     a=1.0, s=3.0, b=2.0, r=4.0, t=40.0, q=0.6, p=30.0, g=1.5,
-    rt=2.0, vt=150.0, vr=20.0, vv=10.0, vo=25.0, vl=15.0, v=40.0, z0=0.5,
-    rmin=1.0, rmax=8.0, n=1.5)
+    rt=2.0, vt=150.0, vr=20.0, vv=10.0, va=12.0, vo=25.0, vl=15.0, v=40.0,
+    z0=0.5, rmin=1.0, rmax=8.0, n=1.5)
 
 # Each kind of trait of a disk, named after the prefix of its parameters:
 # the part of the disk it belongs to (None: the disk itself), its option

@@ -50,7 +50,7 @@ DISK_TRAITS = TraitTable('disk', {
         vpt=traits.vpt_parser, vht=traits.vht_parser,
         dpt=traits.dpt_parser, dht=traits.dht_parser,
         zpt=traits.zpt_parser, spt=traits.spt_parser).items()},
-    ('tan', 'rad', 'ver', 'out', 'los', 'plane'))
+    ('tan', 'rad', 'ver', 'away', 'out', 'los', 'plane'))
 
 
 def load_disk_component(
@@ -312,6 +312,12 @@ def _disk_traits(
                 "the vertical equilibrium of the kinematics needs density "
                 "height traits (a thick disk): the height of the disk sets "
                 "its dispersion")
+        if not thick and any(
+                trait.direction() == 'away'
+                for trait in kinematics.vptraits()):
+            raise ConfigError(
+                "velocity traits away from the plane ('away') need density "
+                "height traits (a thick disk, whose faces they leave)")
         result.update(vpt=kinematics.vptraits(), dpt=kinematics.dptraits())
         if thick:
             result.update(

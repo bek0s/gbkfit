@@ -351,3 +351,34 @@ def test_outward_speeds_of_a_thick_disk_leave_both_faces(driver):
     np.testing.assert_allclose(
         vdata.data[within, 19, 20], 40 * z[within] / np.hypot(R, z[within]),
         rtol=1e-5, atol=1e-4)
+
+
+def test_speeds_away_from_the_plane_leave_both_faces(driver):
+    # Face-on, the speed v away from the midplane is seen as v sign(z) at
+    # the height z: away from the viewer above the plane, towards them
+    # below it (TiRiFiC's VVER)
+    disk = with_kinematics(vptraits=dict(type='uniform', direction='away'))
+    properties = {
+        key: value for key, value in PROPERTIES.items()
+        if key not in ('vpt_rt', 'vpt_vt')} | dict(vpt_va=40, incl=0)
+    group = observe(driver, disk)
+    params = gbkfit.params.ParamSpace(group.pdescs(), properties)
+    extra = {}
+    group.model_h(params.evaluate(), extra)
+    vdata = extra['observation0_model_component0_vdata']
+    coords = vdata.coords
+    nz = vdata.data.shape[0]
+    z = coords.rval[2] + (np.arange(nz) - coords.rpix[2]) * coords.step[2]
+    within = np.abs(z) < DISK['density']['htraits']['zmax']
+    np.testing.assert_allclose(
+        vdata.data[within, 19, 20], 40 * np.sign(z[within]), atol=1e-4)
+
+
+def test_speeds_away_from_the_plane_need_a_thick_disk():
+    thin = DISK | dict(
+        density=dict(ptraits=dict(type='exponential')),
+        kinematics=DISK['kinematics'] | dict(
+            vptraits=dict(type='uniform', direction='away')))
+    from gbkfit.model import component_parser
+    with pytest.raises(ConfigError, match="need density height traits"):
+        component_parser.load(thin)
