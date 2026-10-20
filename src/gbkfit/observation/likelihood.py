@@ -2,9 +2,9 @@ import abc
 import copy
 import dataclasses
 import math
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping, Sequence
 from numbers import Real
-from typing import Any, Self
+from typing import Any, Literal, Self
 
 import numpy as np
 
@@ -12,7 +12,7 @@ from gbkfit.dataset import NoiseCorrelation
 from gbkfit.math.correlation import (
     correlation_matrix, periodic_correlation, whitening_matrix)
 from gbkfit.params import ParamDesc, ParamScalarDesc, ParamValues
-from gbkfit.utils import parseutils
+from gbkfit.utils import funcutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
 
 
@@ -21,6 +21,7 @@ __all__ = [
     'FittedNoise',
     'Likelihood',
     'LikelihoodGaussian',
+    'LikelihoodUser',
     'Whitening',
     'correlated_pixels',
     'likelihood_parser',
@@ -108,6 +109,13 @@ class Likelihood(parseutils.TypedSerializable, abc.ABC):
             (1.0 if scale is None else float(params[scale])) * error,
             0.0 if jitter is None else float(params[jitter]))
 
+    def weight(self, key: str) -> float:
+        """
+        Return the weight of the residuals of the data item of the given
+        name (see LikelihoodGaussian); 1 here.
+        """
+        return 1.0
+
     @abc.abstractmethod
     def missing_residual(self) -> float | None:
         """
@@ -115,6 +123,14 @@ class Likelihood(parseutils.TypedSerializable, abc.ABC):
         the data have one, if given (see LikelihoodGaussian).
         """
         pass
+
+    def takes_lacking_values(self) -> bool:
+        """
+        Check whether it takes the values that the model lacks where the
+        data have some (e.g. the velocity of a spectrum below the
+        mask_cutoff of a moment map): with a missing_residual here.
+        """
+        return self.missing_residual() is not None
 
     @abc.abstractmethod
     def upper_limit(self, key: str) -> tuple[float, float] | None:
@@ -621,4 +637,155 @@ def _check_upper_limit(
     return dict(limit=value, error=error)
 
 
-likelihood_parser = parseutils.TypedParser(Likelihood, [LikelihoodGaussian])
+class LikelihoodUser(Likelihood):
+    """
+    A likelihood given by a Python function (as BayesianBBarolo's
+    log_like), which the objective calls on the host at each evaluation,
+    for each data item of the observation: func(item, data, model, error,
+    mask, params), with item the name of the item (e.g. 'moment1'), data
+    and model arrays of its shape (the model NaN where it lacks a value),
+    error its errors and mask its mask (None without; values where it is
+    0 do not count), and params the values of the parameters of the
+    likelihood (a dict, by their names in it). It returns, by its form:
+
+    - 'residuals': the residual r of each value (an array of the shape of
+      the data), of the log-likelihood -r^2 / 2 (e.g. (model - data) /
+      error for Gaussian noise; sign(x) sqrt(2 log(1 + x^2)) of x = (model
+      - data) / s for Cauchy noise of the scale s), which the objective
+      takes as those of LikelihoodGaussian (times the weights of the
+      model and of the data mask); every fitter takes them;
+    - 'log_likelihood': the log-likelihood of the item (a number, of the
+      values its mask keeps); the chi-square of the item is -2 log L, and
+      least squares do not take it (they need residuals).
+
+    It has none of the options of LikelihoodGaussian (fitted noise, upper
+    limits, amplitudes of spectra, missing_residual; correlated noise is
+    not whitened): its function does what it needs, and takes the values
+    that the model lacks.
+
+    Parameters
+    ----------
+    file : str
+        The Python file that defines the function (relative to the
+        configuration).
+    func : str
+        The name of the function.
+    form : {'residuals', 'log_likelihood'}
+        What the function returns.
+    params : Sequence of str, optional
+        The names of the parameters of the likelihood, which its
+        observation names (see with_prefix).
+
+    Raises
+    ------
+    ConfigError
+        If the function cannot be loaded, the form is not valid, or the
+        names of the parameters are not valid or repeat.
+    """
+
+    @staticmethod
+    def type() -> str:
+        return 'user'
+
+    def dump(self) -> dict[str, Any]:
+        return dict(
+            type=self.type(), file=self._file, func=self._func_name,
+            form=self._form, params=list(self._params))
+
+    def __init__(
+            self,
+            file: str,
+            func: str,
+            form: Literal['residuals', 'log_likelihood'],
+            params: Sequence[str] = ()
+    ):
+        if form not in ('residuals', 'log_likelihood'):
+            raise ConfigError(
+                f"form must be 'residuals' or 'log_likelihood'; it is "
+                f"{form!r}")
+        for param in params:
+            parseutils.check_name(param)
+        names = list(params)
+        if repeated := sorted({p for p in names if names.count(p) > 1}):
+            raise ConfigError(f"the parameters repeat: {repeated}")
+        try:
+            self._func: Callable[..., Any] = \
+                funcutils.load_function_from_file(
+                    parseutils.resolve_path(file), func)
+        except RuntimeError as e:
+            raise ConfigError(str(e)) from e
+        self._file = file
+        self._func_name = func
+        self._form = form
+        self._params = tuple(params)
+
+    def form(self) -> str:
+        """Return what its function returns: its form."""
+        return self._form
+
+    def pdescs(self) -> dict[str, ParamDesc]:
+        return {f'{self._prefix}{name}': ParamScalarDesc()
+                for name in self._params}
+
+    def fitted_noise(self) -> dict[str, FittedNoise]:
+        return {}
+
+    def missing_residual(self) -> float | None:
+        return None
+
+    def takes_lacking_values(self) -> bool:
+        return True
+
+    def upper_limit(self, key: str) -> tuple[float, float] | None:
+        return None
+
+    def amplitudes(self) -> str | None:
+        return None
+
+    def amplitude_sigma(self) -> float | None:
+        return None
+
+    def white_floor(self) -> float:
+        return 0.0
+
+    def evaluate(
+            self,
+            key: str,
+            data: np.ndarray,
+            model: np.ndarray,
+            error: np.ndarray | None,
+            mask: np.ndarray | None,
+            params: ParamValues
+    ) -> np.ndarray | float:
+        """
+        Return what its function returns for a data item, at the values
+        of the parameters of the observation (prefixed): the residuals of
+        its values, or its log-likelihood, by its form.
+
+        Raises
+        ------
+        ValueError
+            If the function returns residuals not of the shape of the data,
+            or not one log-likelihood.
+        """
+        values = {name: params[f'{self._prefix}{name}']
+                  for name in self._params}
+        result = self._func(key, data, model, error, mask, values)
+        if self._form == 'residuals':
+            residuals = np.asarray(result, dtype=float)
+            if residuals.shape != data.shape:
+                raise ValueError(
+                    f"the function '{self._func_name}' of the likelihood "
+                    f"returned residuals of shape {residuals.shape} for the "
+                    f"data item '{key}' of shape {data.shape}")
+            return residuals
+        if np.ndim(result) != 0:
+            raise ValueError(
+                f"the function '{self._func_name}' of the likelihood "
+                f"returned {np.shape(result)} values for the data item "
+                f"'{key}': a log-likelihood is one number")
+        return float(result)
+
+
+likelihood_parser = parseutils.TypedParser(
+    Likelihood, [LikelihoodGaussian, LikelihoodUser])

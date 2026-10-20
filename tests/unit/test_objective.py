@@ -372,3 +372,75 @@ def test_copies_with_other_data_share_the_plans_of_the_models(driver):
     np.testing.assert_array_equal(
         copy.model_h(params)[0]['brightness']['d'],
         group.model_h(params)[0]['brightness']['d'])
+
+
+USER_LIKELIHOODS = '''
+import numpy as np
+
+
+def gaussian_residuals(item, data, model, error, mask, params):
+    return (model - data) / error
+
+
+def gaussian_log_likelihood(item, data, model, error, mask, params):
+    return -0.5 * np.sum(((model - data) / error)[mask != 0] ** 2)
+
+
+def cauchy_residuals(item, data, model, error, mask, params):
+    x = (model - data) / params['s']
+    return np.sign(x) * np.sqrt(2 * np.log1p(x ** 2))
+'''
+
+
+def user_data():
+    # (a third of the pixels masked)
+    rng = np.random.default_rng(1)
+    mask = np.ones((24, 32))
+    mask[:8] = 0
+    return Data(rng.normal(0.1, 1, (24, 32)), error=np.full((24, 32), 0.5),
+                mask=mask)
+
+
+def test_user_likelihoods_of_gaussian_noise_are_the_gaussian(
+        driver, tmp_path):
+    from gbkfit.observation import LikelihoodUser
+    file = tmp_path / 'likelihoods.py'
+    file.write_text(USER_LIKELIHOODS)
+    gaussian, params = make_objective(driver, user_data())
+    residuals, _ = make_objective(driver, user_data(), LikelihoodUser(
+        str(file), 'gaussian_residuals', 'residuals'))
+    log_likelihood, _ = make_objective(driver, user_data(), LikelihoodUser(
+        str(file), 'gaussian_log_likelihood', 'log_likelihood'))
+    chi2 = gaussian.chi2(params)
+    np.testing.assert_allclose(
+        residuals.residuals(params), gaussian.residuals(params), rtol=1e-5,
+        atol=1e-6)
+    assert residuals.chi2(params) == pytest.approx(chi2, rel=1e-5)
+    assert log_likelihood.chi2(params) == pytest.approx(chi2, rel=1e-5)
+    assert log_likelihood.log_likelihood(params) == pytest.approx(
+        -chi2 / 2, rel=1e-5)
+    with pytest.raises(ConfigError, match="has no residuals"):
+        log_likelihood.residuals(params)
+    from gbkfit.observation import likelihood_parser
+    info = dict(type='user', file=str(file), func='gaussian_log_likelihood',
+                form='log_likelihood', params=[])
+    assert likelihood_parser.dump(likelihood_parser.load(info)) == info
+
+
+def test_user_likelihoods_take_parameters_of_their_observation(
+        driver, tmp_path):
+    # (Cauchy noise of the scale s: -2 log L = sum 2 log(1 + x^2))
+    from gbkfit.observation import LikelihoodUser
+    file = tmp_path / 'likelihoods.py'
+    file.write_text(USER_LIKELIHOODS)
+    cauchy = LikelihoodUser(str(file), 'cauchy_residuals', 'residuals', ['s'])
+    objective, params = make_objective(
+        driver, user_data(), cauchy, name='hst', hst_s=0.7)
+    assert 'hst_s' in objective.pdescs()
+    gaussian, _ = make_objective(driver, user_data())
+    x = gaussian.residual_nddata_h(params, False)[0]['brightness'] * 0.5 / 0.7
+    kept = user_data().mask() != 0
+    assert objective.chi2(params) == pytest.approx(
+        np.sum(2 * np.log1p(x[kept] ** 2)), rel=1e-5)
+    with pytest.raises(ConfigError, match="needs a name"):
+        make_objective(driver, user_data(), cauchy)

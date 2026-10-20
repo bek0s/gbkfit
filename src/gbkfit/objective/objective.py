@@ -7,7 +7,7 @@ import scipy.special
 from gbkfit.dataset import Dataset
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.observation import ObservationGroup
-from gbkfit.observation.likelihood import Whitening, whitening
+from gbkfit.observation.likelihood import LikelihoodUser, Whitening, whitening
 from gbkfit.params import ParamDesc, ParamValues
 from gbkfit.utils import iterutils
 from gbkfit.utils.parseutils import ConfigError
@@ -106,17 +106,17 @@ class Objective:
     The comparison of the models of a group of observations with their
     data, each under its likelihood.
 
-    The likelihood is Gaussian. The residual of each value is
-    (model - data) / error, times the weights of the model (if any) and
-    of the data item (from the likelihood of its observation). Values
-    the data mask have a residual of 0 and do not count. Where the data
-    have a value but the model none (NaN, e.g. the velocity of a spectrum
-    without flux), the residual is the missing_residual of the
-    likelihood (times the weight of the item): a model must not lower the
-    chi-square by having no values. A data item with an upper limit
-    (see LikelihoodGaussian) gives its masked values the residual of a
-    non-detection instead. Each observation checks that its data are of
-    the form of its model (see Observation).
+    The likelihood is Gaussian (but a user likelihood, see below). The
+    residual of each value is (model - data) / error, times the weights
+    of the model (if any) and of the data item (from the likelihood of
+    its observation). Values the data mask have a residual of 0 and do
+    not count. Where the data have a value but the model none (NaN, e.g.
+    the velocity of a spectrum without flux), the residual is the
+    missing_residual of the likelihood (times the weight of the item): a
+    model must not lower the chi-square by having no values. A data item
+    with an upper limit (see LikelihoodGaussian) gives its masked values
+    the residual of a non-detection instead. Each observation checks that
+    its data are of the form of its model (see Observation).
 
     A likelihood with amplitudes of spectra (see LikelihoodGaussian)
     scales each spectrum of the model by its best amplitude before the
@@ -135,6 +135,13 @@ class Objective:
     chi-square. The objective works out their whitening on its first
     evaluation (see prepare); its copies with other data share it (see
     with_data).
+
+    An observation of a user likelihood (see LikelihoodUser) has the
+    residuals its function gives for each data item, on the host, times
+    the weights of the model, of the data mask and of the item, as above;
+    or of a function of the log-likelihood, residuals of 0 and the
+    chi-square -2 log L (see residual_sums), which has no residuals for
+    least squares (see residuals).
 
     Its memory on the devices (and the host) is allocated on the first
     evaluation, and released by close, or when Python collects it. An
@@ -202,6 +209,13 @@ class Objective:
             for obs in observations)
         self._noise_residuals = [
             np.zeros(len(noise)) for noise in self._noise]
+        # The user likelihood of each observation, if any, and the
+        # chi-square of those of the log-likelihood (see LikelihoodUser)
+        self._users = tuple(
+            obs.likelihood()
+            if isinstance(obs.likelihood(), LikelihoodUser) else None
+            for obs in observations)
+        self._user_chi2 = [0.0] * n
         # The whitening to share with copies of it of other data, of each
         # data item of each observation, by name (see with_data)
         self._shared = iterutils.make_list(n, {})
@@ -386,7 +400,8 @@ class Objective:
                     whitener, nindependent = self._shared[i][key]
                     self._whiteners[i][key] = whitener.shared()
                     self._nindependent[i][key] = nindependent
-                elif (correlation := dataset.noise_correlation(key)) \
+                elif self._users[i] is None and (
+                        correlation := dataset.noise_correlation(key)) \
                         is not None:
                     whitening_ = whitening(
                         key, data.mask(), correlation,
@@ -514,6 +529,7 @@ class Objective:
             the residuals of earlier calls, e.g. scipy's least_squares,
             need one).
         """
+        self._check_residuals()
         vectors = self.residual_vector_h(params, True, out_extra)
         return np.concatenate(
             [*vectors, *self._noise_residuals], dtype=np.float64)
@@ -615,6 +631,8 @@ class Objective:
         list of float
             The sum of each observation.
         """
+        if not squared:
+            self._check_residuals()
         self._update_residual_d(params, True, out_extra)
         sums = []
         with self._group.timers().measure('objective_residual_sum_eval'):
@@ -627,8 +645,22 @@ class Objective:
                     self._d_residual_scalar[i], self._h_residual_scalar[i])
                 noise = self._noise_residuals[i]
                 sums.append(float(self._h_residual_scalar[i][0]) + float(
-                    np.sum(noise ** 2) if squared else np.sum(np.abs(noise))))
+                    np.sum(noise ** 2) if squared else np.sum(np.abs(noise)))
+                    + self._user_chi2[i])
         return sums
+
+    def _check_residuals(self) -> None:
+        """
+        Raise ConfigError if an observation has a user likelihood of the
+        log-likelihood, which has no residuals (see LikelihoodUser).
+        """
+        for i, user in enumerate(self._users):
+            if user is not None and user.form() == 'log_likelihood':
+                raise ConfigError(
+                    f"the likelihood of observation {i} is a function of "
+                    f"the log-likelihood, which has no residuals (e.g. for "
+                    f"least squares); give the residuals instead "
+                    f"(form 'residuals'), or use another fitter")
 
     def residual_vector_h(
             self,
@@ -724,6 +756,10 @@ class Objective:
         model_data = self._group.model_d(params, out_extra)
         with self._group.timers().measure('objective_residual_eval'):
             for i in range(self.nobservations()):
+                if self._users[i] is not None:
+                    self._update_user_residuals(
+                        i, model_data[i], params, weighted)
+                    continue
                 if self._amplitude_items[i] is not None:
                     self._scale_spectra(i, model_data[i], params, out_extra)
                 observable = self._group.observations()[i].observable()
@@ -746,6 +782,44 @@ class Objective:
                 if self._noise[i]:
                     self._update_noise_residuals(
                         i, model_data[i], params, weighted)
+
+    def _update_user_residuals(
+            self,
+            i: int,
+            model_data: dict[str, dict[str, DeviceArray | None]],
+            params: ParamValues,
+            weighted: bool
+    ) -> None:
+        """
+        Evaluate the residuals of observation i, of a user likelihood (see
+        LikelihoodUser), on the host, and copy them to its device: those
+        its function gives each data item, times the weights of the model,
+        of the data mask and of the item (if weighted); or of a function
+        of the log-likelihood, residuals of 0, and its chi-square.
+        """
+        likelihood = self._users[i]
+        driver = self._group.observations()[i].driver()
+        self._user_chi2[i] = 0.0
+        for key in self._group.observations()[i].observable().keys():
+            item = self._datasets[i][key]
+            mask = item.mask()
+            model = np.asarray(
+                driver.mem_copy_d2h(model_data[key]['d']), dtype=np.float64)
+            result = likelihood.evaluate(
+                key, item.data(), model, item.error(), mask, params)
+            residuals = self._h_residual_nddata[i][key]
+            if likelihood.form() == 'log_likelihood':
+                self._user_chi2[i] -= 2 * result
+                residuals[...] = 0
+                continue
+            if (weights := model_data[key]['w']) is not None:
+                result = result * driver.mem_copy_d2h(weights)
+            if mask is not None:
+                result = np.where(mask != 0, result * mask, 0)
+            weight = self._weights_u[i][key] if weighted else 1.0
+            residuals[...] = result * weight
+        driver.mem_copy_h2d(
+            self._h_residual_vector[i], self._d_residual_vector[i])
 
     def _noise_values(
             self,

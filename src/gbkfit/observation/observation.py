@@ -386,13 +386,13 @@ class Observation(parseutils.Serializable):
             _check_correlations(likelihood, observable, data)
             if name is None and likelihood.pdescs():
                 raise ConfigError(
-                    "an observation with a fitted noise needs a name, which "
-                    "names its parameters (e.g. '{name}_noise_scale_"
-                    "moment1')")
+                    "an observation whose likelihood has parameters (e.g. "
+                    "a fitted noise) needs a name, which names them (e.g. "
+                    "'{name}_noise_scale_moment1')")
             likelihood = likelihood.with_prefix(
                 '' if name is None else f'{name}_')
             if observable.model_can_lack_values() \
-                    and likelihood.missing_residual() is None:
+                    and not likelihood.takes_lacking_values():
                 raise ConfigError(
                     "the model of the observable can lack values where the "
                     "data have some (e.g. the velocity of a spectrum below "
