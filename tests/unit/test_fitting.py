@@ -487,6 +487,43 @@ def test_zeus_is_seeded_and_leaves_the_global_random_numbers_alone():
         FitterZeus(nsteps=10, burnin=0, moves='global')
 
 
+def test_a_grid_maps_the_chi2_of_two_free_elements():
+    # (the others fixed at the truth, which is on the grid: its lowest
+    # point, to the noise)
+    from gbkfit.fitting.fitters.grid import FitterGrid
+    objective = mock_objective(DriverHost())
+    properties = TRUE | dict(
+        posa=dict(min=36, max=44, n=9), incl=dict(min=50, max=60, n=11))
+    params = ParamSpace(objective.pdescs(), properties)
+    result = FitterGrid(batch=7).fit(objective, params)
+    grid = result.diagnostics['grid']
+    chi2 = np.array(grid['chi2'])
+    assert grid['names'] == ['posa', 'incl'] and chi2.shape == (9, 11)
+    assert result.success and result.nevals == 9 * 11
+    assert result.best().free == dict(posa=40, incl=55)
+    i, j = np.unravel_index(np.argmin(chi2), chi2.shape)
+    assert (grid['axes'][0][i], grid['axes'][1][j]) == (40, 55)
+    assert chi2[2, 3] == pytest.approx(objective.chi2(params.evaluate(
+        [grid['axes'][0][2], grid['axes'][1][3]])))
+
+
+def test_a_stopped_grid_keeps_the_points_it_evaluated():
+    from gbkfit.fitting.fitters.grid import FitterGrid
+    objective = mock_objective(DriverHost())
+    params = ParamSpace(objective.pdescs(), TRUE | dict(
+        posa=dict(min=36, max=44, n=9), incl=dict(min=50, max=60, n=6)))
+    result = FitterGrid(batch=10).fit(
+        objective, params, control=StopAfter(25))
+    chi2 = np.array(result.diagnostics['grid']['chi2'])
+    assert not result.success and result.message.startswith('stopped')
+    assert np.count_nonzero(np.isfinite(chi2)) == 20
+    with pytest.raises(ConfigError, match="more than max_points"):
+        FitterGrid(max_points=50).fit(objective, params)
+    from gbkfit.fitting.fitters.grid import FitParamGrid
+    with pytest.raises(ConfigError, match="at least 2"):
+        FitParamGrid(0, 1, 1)
+
+
 def test_least_squares_take_priors_with_residuals_only():
     from gbkfit.fitting.fitparams import FitParamLeastSquares
     info = dict(

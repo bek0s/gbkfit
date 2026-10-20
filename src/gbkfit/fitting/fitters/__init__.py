@@ -8,6 +8,7 @@ fitter_parser.register_optional({
     'scipy.least_squares':
         'gbkfit.fitting.fitters.scipy.FitterScipyLeastSquares',
     'multistart': 'gbkfit.fitting.fitters.multistart.FitterMultiStart',
+    'grid': 'gbkfit.fitting.fitters.grid.FitterGrid',
     'cmaes': 'gbkfit.fitting.fitters.cmaes.FitterCMAES',
     'emcee': 'gbkfit.fitting.fitters.emcee.FitterEmcee',
     'zeus': 'gbkfit.fitting.fitters.zeus.FitterZeus',
