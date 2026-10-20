@@ -982,6 +982,13 @@ class SPTrait(PTrait, abc.ABC):
     """
     A selection polar trait: 1 where it selects its component, 0
     elsewhere.
+
+    What it selects has sharp edges, which its parameters place: the
+    model, which samples its component at points, does not change while
+    an edge moves between two of them, so that fits by the slopes of the
+    chi-square (least squares) do not move its parameters, and give them
+    errors of 0. Fit them with a fitter that takes no slopes (e.g.
+    CMA-ES, or a sampler).
     """
 
     @abc.abstractmethod
@@ -3783,7 +3790,8 @@ class ZPTraitNWHarmonic(
 class SPTraitAzimuthalRange(SPTrait):
     """
     A wedge of the component: the azimuths within s / 2 of p. Its parameters:
-    p, the azimuth of its centre, and s, its full width.
+    p, the azimuth of its centre, and s, its full width (fitted without
+    slopes, see SPTrait).
     """
 
     @staticmethod
@@ -3815,7 +3823,8 @@ class SPTraitAzimuthalRange(SPTrait):
 class SPTraitRadialRange(SPTrait):
     """
     A range of radii of the component (a ring of a disk): the radii from
-    rmin (inclusive) to rmax (exclusive). Its parameters: rmin and rmax.
+    rmin (inclusive) to rmax (exclusive). Its parameters: rmin and rmax
+    (fitted without slopes, see SPTrait).
     """
 
     @staticmethod
@@ -3839,7 +3848,8 @@ class SPTraitNWAzimuthalRange(
         TraitFeatureSampling, SPTrait):
     """
     A wedge of the component at each node: the azimuths within s(r) / 2
-    of p(r). Its parameters, node-wise: p and s.
+    of p(r). Its parameters, node-wise: p and s (fitted without slopes,
+    see SPTrait).
 
     Parameters
     ----------
