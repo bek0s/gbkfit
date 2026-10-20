@@ -344,26 +344,56 @@ gmodel_selected(
         int rnidx, const T* rnodes, int nrnodes,
         T x, T y, T r, T theta)
 {
-    T values[TRAIT_NUM_MAX] = {0};
-    p_traits<sp_trait<T>>(
-            values,
-            spt.n, spt.uids,
-            spt.cvalues, spt.ccounts,
-            spt.pvalues, spt.pcounts,
-            rnidx, rnodes, nrnodes,
-            x, y, r, theta);
+    // (plain loops in the kernels, not traits_each: on a GPU, the locals
+    // that a lambda captures by reference can go to local memory)
+    const T* cvalues = spt.cvalues;
+    const T* pvalues = spt.pvalues;
     for (int i = 0; i < spt.n; ++i)
-        if (!values[i])
+    {
+        T value = 0;
+        sp_trait<T>(
+                value, spt.uids[i], cvalues, pvalues, rnidx, rnodes, nrnodes,
+                x, y, r, theta);
+        if (!value)
             return false;
+        cvalues += spt.ccounts[i];
+        pvalues += spt.pcounts[i];
+    }
     return true;
+}
+
+// The sum of the polar traits of the set pt at the point (x, y, r, theta)
+// of the plane of a component, in the ring rnidx (e.g. the displacement
+// of the vertical distortion traits)
+template<auto PTraitFunT, typename T> constexpr T
+gmodel_ptraits_sum(
+        const TraitSet<T>& pt,
+        int rnidx, const T* rnodes, int nrnodes,
+        T x, T y, T r, T theta)
+{
+    const T* cvalues = pt.cvalues;
+    const T* pvalues = pt.pvalues;
+    T sum = 0;
+    for (int i = 0; i < pt.n; ++i)
+    {
+        T value = 0;
+        PTraitFunT(
+                value, pt.uids[i], cvalues, pvalues, rnidx, rnodes, nrnodes,
+                x, y, r, theta);
+        sum += value;
+        cvalues += pt.ccounts[i];
+        pvalues += pt.pcounts[i];
+    }
+    return sum;
 }
 
 // The sum of the polar traits of the set pt at the point (x, y, r, theta)
 // of the plane of a component, in the ring rnidx, each times its height
 // trait of the set ht at the height |h| (or alone without height traits:
-// a thin component). project(values) transforms the values of the polar
-// traits first (e.g. the speeds of the velocity traits onto the line of
-// sight; see vp_disk_project_traits).
+// a thin component), one trait at a time (no array of their values, see
+// traits_each). project(i, value) transforms the value of polar trait i
+// first (e.g. the speed of a velocity trait onto the line of sight; see
+// vp_disk_project).
 template<auto PTraitFunT, auto HTraitFunT, typename T, typename ProjectT>
 constexpr T
 gmodel_traits_sum(
@@ -371,31 +401,45 @@ gmodel_traits_sum(
         int rnidx, const T* rnodes, int nrnodes,
         T x, T y, T r, T theta, T h, ProjectT project)
 {
-    T pvalues[TRAIT_NUM_MAX] = {0};
-    T hvalues[TRAIT_NUM_MAX] = {0};
-    p_traits<PTraitFunT>(
-            pvalues,
-            pt.n, pt.uids,
-            pt.cvalues, pt.ccounts,
-            pt.pvalues, pt.pcounts,
-            rnidx, rnodes, nrnodes,
-            x, y, r, theta);
-    project(pvalues);
-    if (ht.uids)
-    {
-        h_traits<HTraitFunT>(
-                hvalues,
-                pt.n, ht.uids,
-                ht.cvalues, ht.ccounts,
-                ht.pvalues, ht.pcounts,
-                rnidx, rnodes, nrnodes,
-                r, std::abs(h));
-    }
+    const T* pcvalues = pt.cvalues;
+    const T* ppvalues = pt.pvalues;
+    const T* hcvalues = ht.cvalues;
+    const T* hpvalues = ht.pvalues;
     T sum = 0;
     for (int i = 0; i < pt.n; ++i)
-        sum += pvalues[i] * (ht.uids ? hvalues[i] : 1);
+    {
+        T value = 0;
+        PTraitFunT(
+                value, pt.uids[i], pcvalues, ppvalues, rnidx, rnodes, nrnodes,
+                x, y, r, theta);
+        value = project(i, value);
+        if (ht.uids)
+        {
+            T hvalue = 0;
+            HTraitFunT(
+                    hvalue, ht.uids[i], hcvalues, hpvalues, rnidx, rnodes,
+                    nrnodes, r, std::abs(h));
+            value *= hvalue;
+            hcvalues += ht.ccounts[i];
+            hpvalues += ht.pcounts[i];
+        }
+        sum += value;
+        pcvalues += pt.ccounts[i];
+        ppvalues += pt.pcounts[i];
+    }
     return sum;
 }
+
+// The project of gmodel_traits_sum of the traits that are not projected:
+// their values as they are
+struct Unprojected
+{
+    template<typename T> constexpr T
+    operator()(int, T value) const
+    {
+        return value;
+    }
+};
 
 template<typename T> constexpr void
 transform_cpos(T& x, T& y, T xpos, T ypos)
@@ -637,19 +681,21 @@ gmodel_line_opacity(
         T* coefficients, int rnidx, T x, T y, T r, T theta,
         const DiskArgs<T>& a, int nlines)
 {
-    T values[TRAIT_NUM_MAX] = {0};
-    p_traits<rp_trait<T>>(
-            values,
-            a.opt.n, a.opt.uids,
-            a.opt.cvalues, a.opt.ccounts,
-            a.opt.pvalues, a.opt.pcounts,
-            rnidx, a.rnodes, a.nrnodes,
-            x, y, r, theta);
     for (int l = 0; l < nlines; ++l)
         coefficients[l] = 0;
+    const T* cvalues = a.opt.cvalues;
+    const T* pvalues = a.opt.pvalues;
     for (int i = 0; i < a.opt.n; ++i)
+    {
+        T value = 0;
+        rp_trait<T>(
+                value, a.opt.uids[i], cvalues, pvalues, rnidx, a.rnodes,
+                a.nrnodes, x, y, r, theta);
         if (a.opt_rows[i] >= 0)
-            coefficients[a.opt_rows[i]] += values[i];
+            coefficients[a.opt_rows[i]] += value;
+        cvalues += a.opt.ccounts[i];
+        pvalues += a.opt.pcounts[i];
+    }
 }
 
 // The velocity that the moments of the clouds of a Monte Carlo disk are
@@ -683,7 +729,6 @@ gmodel_mcdisk_evaluate_cloud(
     const T* rht_pptr = a.rht.pvalues;
     T xd=0, yd=0, zd=0, rd=0, theta=0, sign=1;
     T vsysi=0, xposi=0, yposi=0, posai=0, incli=0;
-    T ptvalues[TRAIT_NUM_MAX] = {0};
     T rvalue=0, vvalue=0, dvalue=0, zvalue=0;
 
     // Find the pool of the cloud; its clouds share its flux
@@ -746,16 +791,8 @@ gmodel_mcdisk_evaluate_cloud(
     // Vertical distortion traits
     if (a.zpt.uids)
     {
-        p_traits<zp_trait<T>>(
-                ptvalues,
-                a.zpt.n, a.zpt.uids,
-                a.zpt.cvalues, a.zpt.ccounts,
-                a.zpt.pvalues, a.zpt.pcounts,
-                rnidx, a.rnodes, a.nrnodes,
-                xd, yd, rd, theta);
-
-        for (int i = 0; i < a.zpt.n; ++i)
-            zvalue += ptvalues[i];
+        zvalue = gmodel_ptraits_sum<zp_trait<T>>(
+                a.zpt, rnidx, a.rnodes, a.nrnodes, xd, yd, rd, theta);
 
         // The distortion displaces the midplane
         zd += zvalue;
@@ -796,10 +833,9 @@ gmodel_mcdisk_evaluate_cloud(
     vvalue = gmodel_traits_sum<vp_trait<T>, vh_trait<T>>(
             a.vpt, a.vht, rnidx, a.rnodes, a.nrnodes,
             xd, yd, rd, theta, height,
-            [&](T* values) {
-                vp_disk_project_traits(
-                        values, a.vpt.n, a.vpt_directions, rd, theta, height,
-                        incli);
+            [&](int i, T value) {
+                return vp_disk_project(
+                        value, a.vpt_directions[i], rd, theta, height, incli);
             });
 
     // Apply systemic velocity
@@ -808,7 +844,7 @@ gmodel_mcdisk_evaluate_cloud(
     // Dispersion traits
     dvalue = gmodel_traits_sum<dp_trait<T>, dh_trait<T>>(
             a.dpt, a.dht, rnidx, a.rnodes, a.nrnodes,
-            xd, yd, rd, theta, height, [](T*) {});
+            xd, yd, rd, theta, height, Unprojected{});
 
     // Ensure positive dispersion
     // Ideally, we want the caller to never use parameter values that result in
@@ -1006,7 +1042,6 @@ gmodel_smdisk_evaluate_spaxel(
     theta = std::atan2(yn, xn);
 
     // These are needed for trait evaluation
-    T ptvalues[TRAIT_NUM_MAX] = {0};
     T rvalue=0, vvalue=0, dvalue=0, zvalue=0;
 
     // Selection traits
@@ -1016,16 +1051,8 @@ gmodel_smdisk_evaluate_spaxel(
     // Vertical distortion traits
     if (a.zpt.uids)
     {
-        p_traits<zp_trait<T>>(
-                ptvalues,
-                a.zpt.n, a.zpt.uids,
-                a.zpt.cvalues, a.zpt.ccounts,
-                a.zpt.pvalues, a.zpt.pcounts,
-                rnidx, a.rnodes, a.nrnodes,
-                xn, yn, rn, theta);
-
-        for (int i = 0; i < a.zpt.n; ++i)
-            zvalue += ptvalues[i];
+        zvalue = gmodel_ptraits_sum<zp_trait<T>>(
+                a.zpt, rnidx, a.rnodes, a.nrnodes, xn, yn, rn, theta);
 
         // The distortion displaces the midplane: the height of the voxel
         // above it (as the Monte Carlo disk places its clouds)
@@ -1035,7 +1062,7 @@ gmodel_smdisk_evaluate_spaxel(
     // Density traits
     rvalue = gmodel_traits_sum<rp_trait<T>, rh_trait<T>>(
             a.rpt, a.rht, rnidx, a.rnodes, a.nrnodes,
-            xn, yn, rn, theta, zn, [](T*) {});
+            xn, yn, rn, theta, zn, Unprojected{});
 
     // Discard pixels with zero density
     if (!rvalue) {
@@ -1058,10 +1085,10 @@ gmodel_smdisk_evaluate_spaxel(
     vvalue = gmodel_traits_sum<vp_trait<T>, vh_trait<T>>(
             a.vpt, a.vht, rnidx, a.rnodes, a.nrnodes,
             xn, yn, rn, theta, zn,
-            [&](T* values) {
+            [&](int i, T value) {
                 // (a thin disk is in its plane: zn is not a height)
-                vp_disk_project_traits(
-                        values, a.vpt.n, a.vpt_directions, rn, theta,
+                return vp_disk_project(
+                        value, a.vpt_directions[i], rn, theta,
                         is_thin ? T(0) : zn, incli);
             });
 
@@ -1071,7 +1098,7 @@ gmodel_smdisk_evaluate_spaxel(
     // Dispersion traits
     dvalue = gmodel_traits_sum<dp_trait<T>, dh_trait<T>>(
             a.dpt, a.dht, rnidx, a.rnodes, a.nrnodes,
-            xn, yn, rn, theta, zn, [](T*) {});
+            xn, yn, rn, theta, zn, Unprojected{});
 
     // Ensure positive dispersion
     // Ideally, we want the caller to never use parameter values that result in
@@ -1188,7 +1215,7 @@ gmodel_smcone_evaluate_voxel(
     // Density traits, integrated along the spatial z axis
     T rvalue = gmodel_traits_sum<rp_trait<T>, rh_trait<T>>(
             a.rpt, a.rht, rnidx, a.rnodes, a.nrnodes,
-            xn, yn, rn, theta, dn, [](T*) {});
+            xn, yn, rn, theta, dn, Unprojected{});
     if (!rvalue)
         return;
     rvalue *= g.spat_step[2];
@@ -1198,17 +1225,16 @@ gmodel_smcone_evaluate_voxel(
     T vvalue = gmodel_traits_sum<vp_trait<T>, vh_trait<T>>(
             a.vpt, a.vht, rnidx, a.rnodes, a.nrnodes,
             xn, yn, rn, theta, dn,
-            [&](T* values) {
-                vp_cone_project_traits(
-                        values, a.vpt.n, a.vpt_directions,
-                        xn, yn, zn, rn, incli);
+            [&](int i, T value) {
+                return vp_cone_project(
+                        value, a.vpt_directions[i], xn, yn, zn, rn, incli);
             });
     vvalue += a.vsys ? a.vsys[0] : 0;
 
     // Dispersion traits (positive, as that of a disk)
     const T dvalue = std::abs(gmodel_traits_sum<dp_trait<T>, dh_trait<T>>(
             a.dpt, a.dht, rnidx, a.rnodes, a.nrnodes,
-            xn, yn, rn, theta, dn, [](T*) {}));
+            xn, yn, rn, theta, dn, Unprojected{}));
 
     // The opacity in front of the light, and the light that it lets
     // through (that of the image, or of the first line)
@@ -1230,29 +1256,30 @@ gmodel_smcone_evaluate_voxel(
 }
 
 // The polar traits of the set of a DiskTraitsArgs at its point j, in the
-// ring rnidx, into values
-template<auto PTraitFunT, typename T> constexpr void
+// ring rnidx, passed to visit(i, value) one at a time (see traits_each)
+template<auto PTraitFunT, typename T, typename VisitT> constexpr void
 gmodel_disk_ptraits_point(
-        T* values, int j, int rnidx, const DiskTraitsArgs<T>& a)
+        VisitT visit, int j, int rnidx, const DiskTraitsArgs<T>& a)
 {
     const TraitSet<T>& t = a.traits;
     const T r = a.r[j];
     const T theta = a.theta[j] * DEG_TO_RAD<T>;
-    p_traits<PTraitFunT>(
-            values, t.n, t.uids, t.cvalues, t.ccounts, t.pvalues, t.pcounts,
+    traits_each<PTraitFunT>(
+            visit, t.n, t.uids, t.cvalues, t.ccounts, t.pvalues, t.pcounts,
             rnidx, a.rnodes, a.nrnodes,
             r * std::cos(theta), r * std::sin(theta), r, theta);
 }
 
 // The height traits of the set of a DiskTraitsArgs at its point j, in the
-// ring rnidx, into values: at |z|, as the disk kernels evaluate them
-template<auto HTraitFunT, typename T> constexpr void
+// ring rnidx, passed to visit(i, value) one at a time: at |z|, as the
+// disk kernels evaluate them
+template<auto HTraitFunT, typename T, typename VisitT> constexpr void
 gmodel_disk_htraits_point(
-        T* values, int j, int rnidx, const DiskTraitsArgs<T>& a)
+        VisitT visit, int j, int rnidx, const DiskTraitsArgs<T>& a)
 {
     const TraitSet<T>& t = a.traits;
-    h_traits<HTraitFunT>(
-            values, t.n, t.uids, t.cvalues, t.ccounts, t.pvalues, t.pcounts,
+    traits_each<HTraitFunT>(
+            visit, t.n, t.uids, t.cvalues, t.ccounts, t.pvalues, t.pcounts,
             rnidx, a.rnodes, a.nrnodes, a.r[j], std::abs(a.z[j]));
 }
 
@@ -1269,53 +1296,58 @@ gmodel_disk_htraits_point(
 template<typename T> constexpr void
 gmodel_disk_traits_point(int j, const DiskTraitsArgs<T>& a)
 {
-    T values[TRAIT_NUM_MAX] = {0};
+    // (the value of trait i goes to row i of the output)
+    auto write = [&](int i, T value) { a.out[i * a.npoints + j] = value; };
     int rnidx = a.nrnodes - 1;
     if (a.r[j] != a.rnodes[rnidx]
             && !disk_info(rnidx, a.r[j], a.nrnodes, a.rnodes)) {
         for (int i = 0; i < a.traits.n; ++i)
-            values[i] = NAN;
-    } else {
-        switch (a.kind)
-        {
-        case TraitKind::RPT:
-            gmodel_disk_ptraits_point<rp_trait<T>>(values, j, rnidx, a);
-            break;
-        case TraitKind::VPT:
-            gmodel_disk_ptraits_point<vp_trait<T>>(values, j, rnidx, a);
-            if (a.project) {
-                // (polar traits, in the plane of the disk: z = 0)
-                vp_disk_project_traits(
-                        values, a.traits.n, a.directions, a.r[j],
-                        a.theta[j] * DEG_TO_RAD<T>, T(0),
-                        a.incl * DEG_TO_RAD<T>);
-            }
-            break;
-        case TraitKind::DPT:
-            gmodel_disk_ptraits_point<dp_trait<T>>(values, j, rnidx, a);
-            break;
-        case TraitKind::ZPT:
-            gmodel_disk_ptraits_point<zp_trait<T>>(values, j, rnidx, a);
-            break;
-        case TraitKind::SPT:
-            gmodel_disk_ptraits_point<sp_trait<T>>(values, j, rnidx, a);
-            break;
-        case TraitKind::OPT:
-            gmodel_disk_ptraits_point<rp_trait<T>>(values, j, rnidx, a);
-            break;
-        case TraitKind::RHT:
-            gmodel_disk_htraits_point<rh_trait<T>>(values, j, rnidx, a);
-            break;
-        case TraitKind::VHT:
-            gmodel_disk_htraits_point<vh_trait<T>>(values, j, rnidx, a);
-            break;
-        case TraitKind::DHT:
-            gmodel_disk_htraits_point<dh_trait<T>>(values, j, rnidx, a);
-            break;
-        }
+            write(i, NAN);
+        return;
     }
-    for (int i = 0; i < a.traits.n; ++i)
-        a.out[i * a.npoints + j] = values[i];
+    switch (a.kind)
+    {
+    case TraitKind::RPT:
+        gmodel_disk_ptraits_point<rp_trait<T>>(write, j, rnidx, a);
+        break;
+    case TraitKind::VPT:
+        if (a.project) {
+            // (polar traits, in the plane of the disk: z = 0)
+            const T theta = a.theta[j] * DEG_TO_RAD<T>;
+            const T incl = a.incl * DEG_TO_RAD<T>;
+            gmodel_disk_ptraits_point<vp_trait<T>>(
+                    [&](int i, T value) {
+                        write(i, vp_disk_project(
+                                value, a.directions[i], a.r[j], theta, T(0),
+                                incl));
+                    },
+                    j, rnidx, a);
+        } else {
+            gmodel_disk_ptraits_point<vp_trait<T>>(write, j, rnidx, a);
+        }
+        break;
+    case TraitKind::DPT:
+        gmodel_disk_ptraits_point<dp_trait<T>>(write, j, rnidx, a);
+        break;
+    case TraitKind::ZPT:
+        gmodel_disk_ptraits_point<zp_trait<T>>(write, j, rnidx, a);
+        break;
+    case TraitKind::SPT:
+        gmodel_disk_ptraits_point<sp_trait<T>>(write, j, rnidx, a);
+        break;
+    case TraitKind::OPT:
+        gmodel_disk_ptraits_point<rp_trait<T>>(write, j, rnidx, a);
+        break;
+    case TraitKind::RHT:
+        gmodel_disk_htraits_point<rh_trait<T>>(write, j, rnidx, a);
+        break;
+    case TraitKind::VHT:
+        gmodel_disk_htraits_point<vh_trait<T>>(write, j, rnidx, a);
+        break;
+    case TraitKind::DHT:
+        gmodel_disk_htraits_point<dh_trait<T>>(write, j, rnidx, a);
+        break;
+    }
 }
 
 } // namespace gbkfit

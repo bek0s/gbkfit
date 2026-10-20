@@ -38,7 +38,7 @@ _log = logging.getLogger(__name__)
 
 # The most traits of one kind that the native kernels take (TRAIT_NUM_MAX
 # in constants.hpp)
-MAX_TRAITS = 4
+MAX_TRAITS = 16
 
 
 @dataclass(frozen=True)

@@ -1731,17 +1731,6 @@ vp_disk_project(T v, int direction, T r, T theta, T z, T incl)
     }
 }
 
-// Project the speeds of the n velocity polar traits of a disk on the line
-// of sight, in place, each by its direction (see vp_disk_project)
-template<typename T> constexpr void
-vp_disk_project_traits(
-        T* values, int n, const int* directions, T r, T theta, T z, T incl)
-{
-    for (int i = 0; i < n; ++i)
-        values[i] = vp_disk_project(
-                values[i], directions[i], r, theta, z, incl);
-}
-
 // The line-of-sight velocity of the speed v of a velocity polar trait of
 // a cone of inclination incl, at the point (x, y, z) of its frame (the
 // frame of a thick disk whose spin axis is the axis of the cone) at the
@@ -1767,17 +1756,6 @@ vp_cone_project(T v, int direction, T x, T y, T z, T r, T incl)
         assert(false);
         return NAN;
     }
-}
-
-// Project the speeds of the n velocity polar traits of a cone on the line
-// of sight, in place, each by its direction (see vp_cone_project)
-template<typename T> constexpr void
-vp_cone_project_traits(
-        T* values, int n, const int* directions, T x, T y, T z, T r, T incl)
-{
-    for (int i = 0; i < n; ++i)
-        values[i] = vp_cone_project(
-                values[i], directions[i], x, y, z, r, incl);
 }
 
 // The factors of the velocity and dispersion height traits at the height
@@ -2036,35 +2014,26 @@ sp_trait(
     }
 }
 
-template<auto Fun, typename T, typename ...Ts> constexpr void
-p_traits(
-        T* out,
+// Evaluate the ntraits traits of a set with Fun (a polar or a height
+// trait function, see rp_trait and rh_trait) one at a time, and pass the
+// index and the value of each to visit(i, value): no array holds their
+// values, so that the kernels keep none on their stack, whatever
+// TRAIT_NUM_MAX (on a GPU, it would take registers or local memory)
+template<auto Fun, typename T, typename VisitT, typename ...Ts>
+constexpr void
+traits_each(
+        VisitT visit,
         int ntraits, const int* uids,
         const T* cvalues, const int* ccounts,
         const T* pvalues, const int* pcounts,
         int rnidx, const T* rnodes, int nrnodes,
         Ts ...args)
 {
-    for(int i = 0; i < ntraits; ++i)
+    for (int i = 0; i < ntraits; ++i)
     {
-        Fun(out[i], uids[i], cvalues, pvalues, rnidx, rnodes, nrnodes, args...);
-        cvalues += ccounts[i];
-        pvalues += pcounts[i];
-    }
-}
-
-template<auto Fun, typename T, typename ...Ts> constexpr void
-h_traits(
-        T* out,
-        int ntraits, const int* uids,
-        const T* cvalues, const int* ccounts,
-        const T* pvalues, const int* pcounts,
-        int rnidx, const T* rnodes, int nrnodes,
-        Ts ...args)
-{
-    for(int i = 0; i < ntraits; ++i)
-    {
-        Fun(out[i], uids[i], cvalues, pvalues, rnidx, rnodes, nrnodes, args...);
+        T value = 0;
+        Fun(value, uids[i], cvalues, pvalues, rnidx, rnodes, nrnodes, args...);
+        visit(i, value);
         cvalues += ccounts[i];
         pvalues += pcounts[i];
     }

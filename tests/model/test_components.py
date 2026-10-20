@@ -239,11 +239,13 @@ def test_errors_have_paths():
         "sampling must be")
 
 
-def test_at_most_4_traits_of_a_kind():
-    # The native kernels take at most 4 traits of each kind
+def test_at_most_max_traits_of_a_kind():
+    # The native kernels take at most MAX_TRAITS traits of each kind
+    from gbkfit.model.components._nodal import MAX_TRAITS
     message = part_error(
-        'band_smdisk_thin', 'density', ptraits=[EXPONENTIAL] * 5)
-    assert "at most 4 ptraits" in message
+        'band_smdisk_thin', 'density',
+        ptraits=[EXPONENTIAL] * (MAX_TRAITS + 1))
+    assert f"at most {MAX_TRAITS} ptraits" in message
 
 
 @pytest.mark.parametrize('trait, message', [

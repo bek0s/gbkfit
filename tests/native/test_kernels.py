@@ -17,6 +17,7 @@ import scipy.integrate
 import scipy.special
 
 from gbkfit.model.components import traits
+from gbkfit.model.components._nodal import MAX_TRAITS
 
 
 DTYPE = np.float32
@@ -634,8 +635,8 @@ def disk_image(driver, rnodes=21, ntraits=1, heights=False, vpt=False,
 
 
 @pytest.mark.parametrize('options, message', [
-    # The kernels keep the values of the traits of a set in arrays of 4
-    (dict(ntraits=5), "at most 4 traits"),
+    # The kernels take at most MAX_TRAITS traits of a set
+    (dict(ntraits=MAX_TRAITS + 1), f"at most {MAX_TRAITS} traits"),
     (dict(rnodes=1), "at least two radial nodes"),
     # A thick disk multiplies each polar trait by its height trait
     (dict(heights=True, vpt=True), "needs the height traits"),

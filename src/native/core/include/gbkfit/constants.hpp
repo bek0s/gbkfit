@@ -5,7 +5,10 @@ namespace gbkfit {
 template<typename T>
 constexpr T LINE_WIDTH_MULTIPLIER = 5;
 
-constexpr int TRAIT_NUM_MAX = 4;
+// The most traits of a set (e.g. TiRiFiC's 16 velocity terms). The
+// kernels sum the traits one at a time, so it costs no memory per pixel
+// (only the per-line coefficients of line opacity are in arrays of it).
+constexpr int TRAIT_NUM_MAX = 16;
 
 // The most cubes of opacity (one for each extinction law of the dust; see
 // GridArgs::opacity) that the disk kernels read

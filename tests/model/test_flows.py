@@ -289,3 +289,18 @@ def test_the_parameters_of_the_wavenumbers():
         type='spiral', order=2, wavenumber='given')
     with pytest.raises(ConfigError, match="winds the arms by its sign"):
         VPTraitSpiral(2, winding='leading', wavenumber='given')
+
+
+def test_a_disk_takes_as_many_velocity_traits_as_the_kernels_do(driver):
+    # (e.g. TiRiFiC's 16 velocity terms): 16 tangential speeds of 10 km/s
+    # are seen as one of 160 km/s
+    from gbkfit.model.components._nodal import MAX_TRAITS
+    many = disk([dict(type='uniform', direction='tan')] * MAX_TRAITS)
+    params = DISK_VALUES | {
+        f'vpt{i if i else ""}_vt': 10.0 for i in range(MAX_TRAITS)}
+    values = many.plan(driver, 0, np.float64).evaluate_polar_traits(
+        params, 'vpt', R, THETA, INCL)
+    np.testing.assert_allclose(
+        values.sum(axis=0), seen(
+            driver, dict(type='uniform', direction='tan'),
+            dict(vt=10.0 * MAX_TRAITS)), rtol=1e-12)

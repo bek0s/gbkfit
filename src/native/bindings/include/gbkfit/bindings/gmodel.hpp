@@ -39,8 +39,8 @@ struct TraitSetArrays
         require(ccounts.shape(0) == n && pcounts.shape(0) == n,
                 "a trait set needs a constant and a parameter count "
                 "for each trait");
-        // (the kernels keep the values of the traits of a set on the
-        // stack, in arrays of TRAIT_NUM_MAX)
+        // (the kernels take at most TRAIT_NUM_MAX traits of a set, e.g.
+        // the per-line coefficients of line opacity are in arrays of it)
         require(n <= size_t(TRAIT_NUM_MAX),
                 "a trait set has at most " + std::to_string(TRAIT_NUM_MAX)
                 + " traits");
