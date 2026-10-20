@@ -153,6 +153,7 @@ VPT_UID_BAR = 14
 VPT_UID_NW_UNIFORM = 101
 VPT_UID_NW_HARMONIC = 102
 VPT_UID_NW_BAR = 103
+VPT_UID_SPIRAL = 104
 
 # Velocity polar traits: the directions of their speeds
 VPT_DIRECTION_TAN = 1
@@ -596,6 +597,15 @@ class Trait(parseutils.TypedSerializable, abc.ABC):
         (see VHTraitMass): their heights (arcsec), by name; none here.
         """
         return {}
+
+    def wave_params(self) -> tuple[str, ...]:
+        """
+        Return the names of the node-wise parameters whose values are not
+        given, but are the tables of a density wave in the rotation of
+        their disk, at the radii where they are sampled (see
+        VPTraitSpiral); none here.
+        """
+        return ()
 
 
 class TraitFeatureZmax:
@@ -1499,7 +1509,8 @@ class RPTraitNWDistortion(TraitFeatureSampling, RPTrait):
     A surface density around one azimuth at each ring: a(r)
     exp(-(dtheta r)^2 / (2 s(r)^2)), with dtheta the azimuth from p(r)
     (radians, within half a turn). Its parameters, node-wise: a, the peak,
-    p, its azimuth, and s, its width along the ring.
+    p, its azimuth, and s, its width along the ring. A p that changes with
+    r winds it into a spiral arm.
 
     Parameters
     ----------
@@ -2601,6 +2612,143 @@ class VPTraitNWBar(TraitFeatureSampling, VPTraitPlanar):
         return _splits_bar(r, params)
 
 
+class VPTraitSpiral(TraitFeatureOrder, VPTraitPlanar):
+    """
+    A spiral density wave in the gas of a disk, of m arms (its option
+    order), as DysmalPy's SpiralDensityWave: the response of a gas of the
+    sound speed c to a perturbation of the relative density e (epsilon)
+    rotating at the pattern speed o (Omega_p), in the rotation V(R) of
+    its disk (the linear theory of tightly wound arms, Davies et al. 2009,
+    ApJ 702, 114, appendix). Its velocity has the radial part v_R = -e m
+    (Omega - o) / k cos(phi) and the tangential part v_t = e kappa^2 /
+    (2 k Omega) sin(phi), phi = m (theta - p) - f(R), where Omega = V / R
+    and kappa^2 = 2 (V / R) (dV/dR + V / R) are the angular and the
+    epicyclic frequency of the rotation, the radial wavenumber k of the
+    arms follows from the dispersion relation of a gas without its own
+    gravity, k^2 c^2 = m^2 (Omega - o)^2 - kappa^2, and f(R) is its
+    integral from the first node: the density of the wave, e rho_0
+    cos(phi), peaks on the arms m (theta - p) = f(R) + 2 pi n. It gives
+    the velocities only, not that density (its disk has its own density
+    traits).
+
+    The rotation V(R) is that of its disk at its midplane (the azimuthal
+    mean of the sum of its tangential velocity traits, parametric or
+    'mass', see _profiles.rotation), which its galaxy computes at each
+    evaluation, at its subnodes, with dV/dR by the second-order
+    three-point formula and f by the trapezoid rule; the tables of the
+    wave there are interpolated linearly between them, so that the
+    subnodes must follow f where the arms wind tightly (rstep). There is
+    no wave, and its velocity is 0, where k^2 < 0 (between the Lindblad
+    resonances, m^2 (Omega - o)^2 < kappa^2), where the disk does not
+    rotate, and at its centre. Towards the edges of those radii, k tends
+    to 0 and the velocity grows without bound (v_R = -e c / eta, eta = k c
+    / (m |Omega - o|)): the linear theory does not hold there.
+
+    The arms trail (by default) or lead the rotation of the disk: their
+    outer parts lag behind it or run ahead of it, k of the sign of -Omega
+    or of Omega (theta increases in the direction of a positive
+    rotation).
+
+    Its parameters: p (degrees), the azimuth of the arms where f = 0; c
+    (km/s, positive); e; and o (km/s per arcsec, positive in the
+    direction of a positive rotation). The tables of the wave are not
+    parameters (see wave_params).
+
+    Parameters
+    ----------
+    order : int
+        The number m of arms, at least 1.
+    winding : str, optional
+        How the arms wind: 'trailing' (the default) or 'leading'.
+
+    Raises
+    ------
+    ConfigError
+        If an option is not valid.
+    """
+
+    @staticmethod
+    def type() -> str:
+        return 'spiral'
+
+    @staticmethod
+    def uid() -> int:
+        return VPT_UID_SPIRAL
+
+    def dump(self) -> dict[str, Any]:
+        info = dict(winding=self.winding()) \
+            if self.winding() != 'trailing' else {}
+        return super().dump() | info
+
+    def __init__(self, order: int, winding: str = 'trailing'):
+        super().__init__(order=order)
+        if self.order() < 1:
+            raise ConfigError(
+                f"order is the number of arms, at least 1; it is {order}")
+        if winding not in ('trailing', 'leading'):
+            raise ConfigError(
+                f"winding must be 'trailing' or 'leading'; it is "
+                f"{winding!r}")
+        self._winding = winding
+
+    def winding(self) -> str:
+        """Return how the arms wind: 'trailing' or 'leading'."""
+        return self._winding
+
+    def sampling(self) -> str:
+        return 'subrings'
+
+    def params_sm(self) -> dict[str, ParamDesc]:
+        return dict(
+            p=ParamScalarDesc(),
+            c=ParamScalarDesc(),
+            e=ParamScalarDesc(),
+            o=ParamScalarDesc())
+
+    def params_rnw(self, nnodes: int) -> dict[str, ParamDesc]:
+        return dict(
+            ar=ParamVectorDesc(nnodes),
+            at=ParamVectorDesc(nnodes),
+            f=ParamVectorDesc(nnodes))
+
+    def wave_params(self) -> tuple[str, ...]:
+        return 'ar', 'at', 'f'
+
+    def wave(
+            self,
+            r: np.ndarray,
+            v: np.ndarray,
+            dv: np.ndarray,
+            params: dict[str, np.ndarray]
+    ) -> dict[str, np.ndarray]:
+        """
+        Return the tables of the wave at the radii r (arcsec, increasing:
+        the subnodes of its disk), in the rotation v of its disk there
+        (km/s) of the derivative dv (km/s per arcsec), for the values of
+        its parameters (c, e and o): the amplitudes of its radial and
+        tangential velocities ('ar' and 'at', km/s; v_R = ar cos(phi) and
+        v_t = at sin(phi)) and f ('f', radians), by name.
+        """
+        m = self.order()
+        c, e, o = (float(params[name]) for name in ('c', 'e', 'o'))
+        r = np.asarray(r, dtype=float)
+        rotating = (r > 0) & (v != 0)
+        omega = np.divide(v, r, out=np.zeros_like(r), where=rotating)
+        kappa2 = 2 * omega * (dv + omega)
+        k2 = (m ** 2 * (omega - o) ** 2 - kappa2) / c ** 2
+        waves = rotating & (k2 > 0)
+        sense = -1 if self.winding() == 'trailing' else 1
+        k = sense * np.sign(omega) * np.sqrt(np.where(waves, k2, 0))
+        steps = np.diff(r) * (k[1:] + k[:-1]) / 2
+        return dict(
+            ar=np.divide(
+                -e * m * (omega - o), k, out=np.zeros_like(r), where=waves),
+            at=np.divide(
+                e * kappa2, 2 * k * omega, out=np.zeros_like(r),
+                where=waves),
+            f=np.concatenate(([0], np.cumsum(steps))))
+
+
 class VPTraitMass(VPTrait):
     """
     The rotation curve of the mass of its galaxy (see gbkfit.model.mass):
@@ -3339,7 +3487,8 @@ class DPTraitNWDistortion(TraitFeatureSampling, DPTrait):
     A velocity dispersion around one azimuth at each ring: a(r)
     exp(-(dtheta r)^2 / (2 s(r)^2)), with dtheta the azimuth from p(r)
     (radians, within half a turn). Its parameters, node-wise: a, the peak,
-    p, its azimuth, and s, its width along the ring.
+    p, its azimuth, and s, its width along the ring. A p that changes with
+    r winds it into a spiral arm.
 
     Parameters
     ----------
@@ -3770,6 +3919,7 @@ vpt_parser = parseutils.TypedParser(VPTrait, [
     VPTraitWedge,
     VPTraitBar,
     VPTraitNWBar,
+    VPTraitSpiral,
     VPTraitMass])
 
 # Velocity height traits parser

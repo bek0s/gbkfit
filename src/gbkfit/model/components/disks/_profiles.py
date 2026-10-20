@@ -3,8 +3,9 @@ The radial profiles of a disk, as its galaxy takes them for gravity: the
 azimuthal means of its traits, for the mass components that follow it
 (see mass.ComponentDensity), for its pressure support (see
 traits.VPTraitMass), and its rms height, rotation and jeans dispersion,
-for its vertical equilibrium (see parts.Kinematics); and its rotation
-and dispersion, for the functions of its galaxy (see GalaxyFunctions).
+for its vertical equilibrium (see parts.Kinematics); its rotation, for
+its density waves (see traits.VPTraitSpiral); and its rotation and
+dispersion, for the functions of its galaxy (see GalaxyFunctions).
 """
 
 import dataclasses
@@ -15,6 +16,7 @@ import numpy as np
 from gbkfit.params import ParamValues
 from ...mass.units import G
 from .._nodal import subring_radii
+from ..traits import VPTraitSpiral
 from ._disk import Disk, DiskPlan
 
 
@@ -200,7 +202,7 @@ def _with_given(disk: Disk, params: ParamValues) -> ParamValues:
         for name, radii in disk.circular_velocity_params().items()}
     given |= {
         name: np.full(len(disk.subrnodes()), np.nan)
-        for name in disk.rotation_factor_params()}
+        for name in [*disk.rotation_factor_params(), *disk.wave_params()]}
     return given | dict(params)
 
 
@@ -467,10 +469,48 @@ def rotation(
             * heights
         return np.sum(
             speeds[tangential], axis=0, keepdims=True, dtype=float)
-    kinds = ('vpt',)
+    # (the other traits, e.g. a spiral wave, do not make its sum vary)
+    axisymmetric = all(
+        trait.axisymmetric()
+        for trait, along in zip(disk.traits('vpt'), tangential) if along)
     return _azimuthal_mean(
-        values, _axisymmetric(disk, kinds),
-        _edges(disk, params, kinds, r[:, 0]))[0]
+        values, axisymmetric, _edges(disk, params, ('vpt',), r[:, 0]))[0]
+
+
+def density_waves(
+        disk: Disk,
+        plan: DiskPlan,
+        params: ParamValues
+) -> ParamValues:
+    """
+    Return the tables of the density waves of a disk at its subnodes, by
+    the names of their parameters (see traits.VPTraitSpiral): in its
+    rotation there (see rotation), and the derivative of the rotation by
+    the second-order three-point formula.
+
+    Parameters
+    ----------
+    disk : Disk
+        The disk.
+    plan : DiskPlan
+        A plan of the disk, which evaluates its traits.
+    params : ParamValues
+        The values of the parameters of the disk (see DiskDensity), with
+        those that its galaxy gives its velocity traits 'mass', if any.
+    """
+    params = _with_given(disk, params)
+    r = np.asarray(disk.subrnodes(), dtype=float)
+    v = rotation(disk, plan, params, r)
+    dv = np.gradient(v, r, edge_order=2)
+    tables = {}
+    for trait, values, names in zip(
+            disk.traits('vpt'), disk.trait_values('vpt', params),
+            disk.trait_params('vpt').pnames):
+        if isinstance(trait, VPTraitSpiral):
+            tables |= {
+                names[name]: table
+                for name, table in trait.wave(r, v, dv, values).items()}
+    return tables
 
 
 def dispersion(

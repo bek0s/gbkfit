@@ -288,6 +288,13 @@ class Kinematics(parseutils.Serializable):
             raise ConfigError(
                 "a disk takes at most one velocity trait 'mass': each "
                 "adds the whole rotation in the gravity")
+        if any(isinstance(trait, traits.VPTraitSpiral)
+               for trait in self._vptraits) \
+                and not any(trait.direction() == 'tan'
+                            for trait in self._vptraits):
+            raise ConfigError(
+                "the velocity trait 'spiral' is a wave in the rotation of "
+                "its disk: give the disk tangential velocity traits")
         self._dptraits = _polar_traits('dptraits', dptraits)
         self._vhtraits = _height_traits(
             'vhtraits', vhtraits, len(self._vptraits), 'vptraits')

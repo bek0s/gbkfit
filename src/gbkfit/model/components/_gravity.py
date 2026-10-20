@@ -1,8 +1,9 @@
 """
 The gravity of a galaxy (GravityPlan): the circular velocity of its mass,
 in its gravity (see Gravity), at the radii of the components it moves,
-and the dispersion of the disks it holds up (their vertical
-equilibrium), evaluated once for all the observations of the galaxy.
+the dispersion of the disks it holds up (their vertical equilibrium),
+and the density waves in the rotation of its disks, evaluated once for
+all the observations of the galaxy.
 """
 
 import dataclasses
@@ -21,7 +22,8 @@ from ..mass.units import G
 from ._units import mass_per_unit
 from .disks._disk import EQUILIBRIUM_DISPERSION
 from .disks._profiles import (
-    DiskDensity, jeans_dispersions, pressure_support, rms_heights, rotation)
+    DiskDensity, density_waves, jeans_dispersions, pressure_support,
+    rms_heights, rotation)
 from .traits import PressureSupport
 
 if TYPE_CHECKING:
@@ -76,7 +78,9 @@ class GravityPlan:
     (those with an equilibrium, see Kinematics): in the circular velocity
     of the mass ('central'; without mass, that of the rotation of each
     disk), in the vertical force of the mass ('jeans'), or in the surface
-    density of a mass component ('self_gravitating').
+    density of a mass component ('self_gravitating'); and the tables of
+    the density waves of its disks (the velocity trait 'spiral', see
+    Disk.wave_params), in the rotation of each disk, at its subnodes.
 
     It takes the disks it moves and follows as concentric and flat: their
     rings around one centre, in one plane, whatever their geometries (the
@@ -86,11 +90,11 @@ class GravityPlan:
 
     It is evaluated once for all the observations of the galaxy, on the
     given driver and in float64, whatever the drivers and dtypes of the
-    observations (pressure support differentiates the profiles of a disk,
-    which float32 makes noisy): the disks of the components that its mass
-    follows (see DiskDensity), of those with pressure support and of
-    those it holds up sample their profiles there; the rest is on the
-    host.
+    observations (pressure support and density waves differentiate the
+    profiles of a disk, which float32 makes noisy): the disks of the
+    components that its mass follows (see DiskDensity), of those with
+    pressure support or density waves and of those it holds up sample
+    their profiles there; the rest is on the host.
 
     Parameters
     ----------
@@ -124,12 +128,17 @@ class GravityPlan:
             i for i, cmp in enumerate(components)
             if (disk := cmp.density_disk()) is not None
             and disk.equilibrium() is not None)
+        self._waving = tuple(
+            i for i, cmp in enumerate(components)
+            if (disk := cmp.density_disk()) is not None
+            and disk.wave_params())
         # (the mass of a unit of the density of each, if it has a unit)
         self._mass_per_unit = {
             i: mass_per_unit(components[i].emission()) for i in self._followed}
-        planned = sorted(set(self._followed) | set(self._balanced) | {
-            i for i in self._moved
-            if components[i].density_disk().pressure_supported_params()})
+        planned = sorted(
+            set(self._followed) | set(self._balanced) | set(self._waving)
+            | {i for i in self._moved
+               if components[i].density_disk().pressure_supported_params()})
         self._disk_plans = {
             i: components[i].density_disk().plan(driver, 0, np.float64)
             for i in planned}
@@ -181,18 +190,20 @@ class GravityPlan:
             Component.circular_velocity_params), 0 where its square is
             negative and NaN where it is infinite (see _rotation); the
             factors of its rotation at the heights of its velocity height
-            trait 'mass', at its subnodes (see _rotation_factors); and the
+            trait 'mass', at its subnodes (see _rotation_factors); the
             dispersion of the equilibrium of its disk at its subnodes
-            (km/s, as EQUILIBRIUM_DISPERSION, see Kinematics).
+            (km/s, as EQUILIBRIUM_DISPERSION, see Kinematics); and the
+            tables of the density waves of its disk, at its subnodes (see
+            Disk.wave_params).
         """
         component_set = self._component_set
         mass_model = component_set.mass_model()
         own = {i: self._component_params(i, params) for i in self._disk_plans}
         if mass_model is None:
-            return {
+            return self._with_waves(own, {
                 i: {EQUILIBRIUM_DISPERSION: self._equilibrium(
                     i, own[i], None, None, out_extra)}
-                for i in self._balanced}
+                for i in self._balanced})
         components = component_set.components()
         if out_extra is not None:
             self._warn_geometry(params)
@@ -259,6 +270,25 @@ class GravityPlan:
                 values[i] |= self._rotation_factors(
                     i, mass, heights, own.get(i),
                     values[i].get(EQUILIBRIUM_DISPERSION))
+        return self._with_waves(own, values)
+
+    def _with_waves(
+            self,
+            params: dict[int, ParamValues],
+            values: dict[int, ParamValues]
+    ) -> dict[int, ParamValues]:
+        """
+        Return the values that the gravity gives the components (values),
+        with the tables of the density waves of the disks that have them
+        (see density_waves), in the rotation of each with the values of
+        its parameters (params, by its own names) and those it is given.
+        """
+        components = self._component_set.components()
+        for i in self._waving:
+            given = values.setdefault(i, {})
+            given |= density_waves(
+                components[i].density_disk(), self._disk_plans[i],
+                params[i] | given)
         return values
 
     def _rotation_factors(

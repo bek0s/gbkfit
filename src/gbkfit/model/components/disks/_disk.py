@@ -194,6 +194,15 @@ class Disk(abc.ABC):
         """
         return self._traits.rotation_factor_params()
 
+    def wave_params(self) -> tuple[str, ...]:
+        """
+        Return the names of the parameters that are not in pdescs, but
+        whose values are the tables of a density wave in its rotation, at
+        its subnodes, which its galaxy computes (see
+        traits.VPTraitSpiral). The disk plans need them with the others.
+        """
+        return self._traits.wave_params()
+
     @abc.abstractmethod
     def plan(
             self,

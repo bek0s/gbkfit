@@ -48,6 +48,7 @@ constexpr int VPT_UID_BAR = 14;
 constexpr int VPT_UID_NW_UNIFORM = 101;
 constexpr int VPT_UID_NW_HARMONIC = 102;
 constexpr int VPT_UID_NW_BAR = 103;
+constexpr int VPT_UID_SPIRAL = 104;
 
 // Velocity polar traits: the directions of their speeds
 constexpr int VPT_DIRECTION_TAN = 1;
@@ -1110,6 +1111,27 @@ vp_trait_nw_bar(
     out = bar_flow(v, p, s, r, theta);
 }
 
+// The part v_y, along the azimuth 90 degrees, of the velocity of a spiral
+// density wave of m = consts[0] arms (see traits.VPTraitSpiral): v_R
+// sin(theta) + v_t cos(theta), v_R = a_R cos(phi) and v_t = a_t sin(phi),
+// phi = m (theta - p) - f, of p = params[0] and the tables a_R, a_t and f
+// at the subnodes (after the four parameters p, c, e and o)
+template<typename T> constexpr void
+vp_trait_spiral(
+        T& out,
+        int rnidx, const T* rnodes, int nrnodes, T r, T theta,
+        const T* consts, const T* params)
+{
+    int m = std::rint(consts[0]);
+    T p = params[0] * DEG_TO_RAD<T>;
+    T ar = nodewise(r, rnidx, rnodes, params, 4, 1);
+    T at = nodewise(r, rnidx, rnodes, params, 4 + nrnodes, 1);
+    T f = nodewise(r, rnidx, rnodes, params, 4 + 2 * nrnodes, 1);
+    T phi = m * (theta - p) - f;
+    out = ar * std::cos(phi) * std::sin(theta)
+        + at * std::sin(phi) * std::cos(theta);
+}
+
 template<typename T> constexpr void
 dp_trait_uniform(T& out, const T* params)
 {
@@ -1601,6 +1623,10 @@ vp_trait(
     case VPT_UID_NW_BAR:
         vp_trait_nw_bar(
                 out, rnodes, nrnodes, r, theta, params);
+        break;
+    case VPT_UID_SPIRAL:
+        vp_trait_spiral(
+                out, rnidx, rnodes, nrnodes, r, theta, consts, params);
         break;
     default:
         out = NAN;
