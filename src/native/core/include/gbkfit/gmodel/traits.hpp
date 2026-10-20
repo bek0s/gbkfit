@@ -43,8 +43,11 @@ constexpr int VPT_UID_COURTEAU = 9;
 constexpr int VPT_UID_BRANDT = 10;
 constexpr int VPT_UID_ISO = 11;
 constexpr int VPT_UID_NFW = 12;
+constexpr int VPT_UID_WEDGE = 13;
+constexpr int VPT_UID_BAR = 14;
 constexpr int VPT_UID_NW_UNIFORM = 101;
 constexpr int VPT_UID_NW_HARMONIC = 102;
+constexpr int VPT_UID_NW_BAR = 103;
 
 // Velocity polar traits: the directions of their speeds
 constexpr int VPT_DIRECTION_TAN = 1;
@@ -52,6 +55,7 @@ constexpr int VPT_DIRECTION_RAD = 2;
 constexpr int VPT_DIRECTION_VER = 3;
 constexpr int VPT_DIRECTION_LOS = 4;
 constexpr int VPT_DIRECTION_OUT = 5;
+constexpr int VPT_DIRECTION_PLANE = 6;
 
 // Velocity height traits
 constexpr int VHT_UID_ONE = 1;
@@ -1053,6 +1057,59 @@ vp_trait_nw_harmonic(
     p_trait_nw_harmonic(out, rnidx, rnodes, nrnodes, r, theta, consts, params);
 }
 
+// The speed v within the two opposite wedges of the full width s centred
+// at the azimuths p and p + 180 degrees, 0 outside
+template<typename T> constexpr void
+vp_trait_wedge(T& out, T theta, const T* params)
+{
+    T v = params[0];
+    T p = params[1] * DEG_TO_RAD<T>;
+    T s = params[2] * DEG_TO_RAD<T>;
+    out = std::abs(std::cos(theta - p)) >= std::cos(s * T{0.5}) ? v : 0;
+}
+
+// The part v_y, along the azimuth 90 degrees, of the flow of the speed v
+// along the axis of a bar at the azimuth p, away from its centre, within
+// the strip of the full width s along the axis: v sign(x) sin(p) where
+// |y| < s / 2, x along the axis and y across it, 0 outside
+template<typename T> constexpr T
+bar_flow(T v, T p, T s, T r, T theta)
+{
+    T x = r * std::cos(theta - p);
+    T y = r * std::sin(theta - p);
+    return std::abs(y) < s * T{0.5} ? v * sign(x) * std::sin(p) : 0;
+}
+
+template<typename T> constexpr void
+vp_trait_bar(T& out, T r, T theta, const T* params)
+{
+    T v = params[0];
+    T p = params[1] * DEG_TO_RAD<T>;
+    T s = params[2];
+    out = bar_flow(v, p, s, r, theta);
+}
+
+// A flow along a bar (see bar_flow) of the speed v(|x|) at the distance
+// |x| along its axis, of the values params[2 + i] at the distances
+// rnodes[i] (interpolated linearly), 0 within the first or beyond the
+// last
+template<typename T> constexpr void
+vp_trait_nw_bar(
+        T& out, const T* rnodes, int nrnodes, T r, T theta, const T* params)
+{
+    T p = params[0] * DEG_TO_RAD<T>;
+    T s = params[1];
+    T d = std::abs(r * std::cos(theta - p));
+    out = 0;
+    if (d < rnodes[0] || d >= rnodes[nrnodes - 1])
+        return;
+    int index = 1;
+    while (d >= rnodes[index])
+        ++index;
+    T v = nodewise(d, index, rnodes, params, 2, 1);
+    out = bar_flow(v, p, s, r, theta);
+}
+
 template<typename T> constexpr void
 dp_trait_uniform(T& out, const T* params)
 {
@@ -1533,6 +1590,18 @@ vp_trait(
         vp_trait_nw_harmonic(
                 out, rnidx, rnodes, nrnodes, r, theta, consts, params);
         break;
+    case VPT_UID_WEDGE:
+        vp_trait_wedge(
+                out, theta, params);
+        break;
+    case VPT_UID_BAR:
+        vp_trait_bar(
+                out, r, theta, params);
+        break;
+    case VPT_UID_NW_BAR:
+        vp_trait_nw_bar(
+                out, rnodes, nrnodes, r, theta, params);
+        break;
     default:
         out = NAN;
         assert(false);
@@ -1547,9 +1616,11 @@ vp_trait(
 // sin(theta) sin(incl); vertical (positive along z), v cos(incl);
 // outward (from the centre, along the radius of the sphere, sqrt(r^2 +
 // z^2): away from the plane on either side), v (r sin(theta) sin(incl) +
-// z cos(incl)) / sqrt(r^2 + z^2); or the line of sight, v. The
-// tangential and radial directions are undefined on the axis, and the
-// outward one at the centre, where the velocity is 0.
+// z cos(incl)) / sqrt(r^2 + z^2); the line of sight, v; or for a planar
+// trait (a velocity in the plane), whose v is its part along the azimuth
+// 90 degrees, v sin(incl). The tangential and radial directions are
+// undefined on the axis, and the outward one at the centre, where the
+// velocity is 0.
 template<typename T> constexpr T
 vp_disk_project(T v, int direction, T r, T theta, T z, T incl)
 {
@@ -1569,6 +1640,8 @@ vp_disk_project(T v, int direction, T r, T theta, T z, T incl)
     }
     case VPT_DIRECTION_LOS:
         return v;
+    case VPT_DIRECTION_PLANE:
+        return v * std::sin(incl);
     default:
         assert(false);
         return NAN;

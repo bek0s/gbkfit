@@ -10,7 +10,6 @@ import numpy as np
 import pytest
 
 from gbkfit.model.components import traits
-from gbkfit.model.components.disks._detail import DISK_TRAITS
 from modelutils import observation_group
 
 
@@ -20,8 +19,8 @@ RNODES = list(range(0, 14, 2))
 # the model unchanged (e.g. an elongated blob at an angle)
 VALUES = dict(
     a=1.0, s=3.0, b=2.0, r=4.0, t=40.0, q=0.6, p=30.0, g=1.5,
-    rt=2.0, vt=150.0, vr=20.0, vv=10.0, vo=25.0, vl=15.0, z0=0.5, rmin=1.0,
-    rmax=8.0, n=1.5)
+    rt=2.0, vt=150.0, vr=20.0, vv=10.0, vo=25.0, vl=15.0, v=40.0, z0=0.5,
+    rmin=1.0, rmax=8.0, n=1.5)
 
 # Each kind of trait of a disk, named after the prefix of its parameters:
 # the part of the disk it belongs to (None: the disk itself), its option
@@ -81,7 +80,7 @@ def trait_configs(parser):
         elif 'direction' in options:
             configs += [
                 config | dict(direction=direction)
-                for direction in DISK_TRAITS.directions]
+                for direction in traits.VPT_DIRECTIONS]
         else:
             configs.append(config)
     return configs
@@ -199,10 +198,11 @@ def test_every_trait_parameter_changes_the_model(
 def axisymmetry_cases():
     """
     Every type of the polar traits whose azimuthal means the gravity of
-    a galaxy takes (density, dispersion and selection; see DiskDensity),
-    and harmonics also of order 0.
+    a galaxy and the rotation of a disk take (density, dispersion,
+    selection and velocity; see DiskDensity and _profiles.rotation), and
+    harmonics also of order 0.
     """
-    for kind in ('pt', 'dpt', 'spt'):
+    for kind in ('pt', 'dpt', 'spt', 'vpt'):
         for config in trait_configs(KINDS[kind][2]):
             configs = [config]
             if 'order' in config:
@@ -228,7 +228,7 @@ def test_traits_are_axisymmetric_as_they_declare(kind, config):
             params[name] = value if pdesc.type() == 'scalar' \
                 else np.full(pdesc.size(), value)
     disk = component.density_disk()
-    native_kind = dict(pt='rpt', dpt='dpt', spt='spt')[kind]
+    native_kind = dict(pt='rpt', dpt='dpt', spt='spt', vpt='vpt')[kind]
     values = disk.plan(DriverHost(), 0, np.float64).evaluate_polar_traits(
         params, native_kind, np.array([[1.3], [5.1], [9.7]]),
         np.linspace(0, 360, 97, endpoint=False))[0]

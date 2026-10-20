@@ -46,7 +46,8 @@ class TraitTable:
     """
     The traits that a type of component takes: the classes of the traits
     of each of its kinds (e.g. 'vpt'), and the directions of its velocity
-    polar traits (see traits.VPT_DIRECTIONS).
+    polar traits (see traits.VPT_DIRECTIONS; 'plane' for the planar ones,
+    see traits.VPTraitPlanar).
     """
     component: str
     classes: dict[str, tuple[type[Trait], ...]]

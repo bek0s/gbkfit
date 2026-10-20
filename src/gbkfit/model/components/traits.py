@@ -65,6 +65,12 @@ axis of a disk, the tangential one on the axis of a cone, and the
 outward ones at the centre of a disk and the apex of a cone, where
 their directions are undefined.
 
+The planar velocity polar traits of a disk (e.g. the flow along a bar)
+are not speeds along one direction, but velocities in its plane, with a
+radial and a tangential part: they have no option direction, and their
+velocity is projected on the line of sight as v_y sin(incl), v_y its
+part along the azimuth 90 degrees (see VPTraitPlanar).
+
 Node-wise parameters (those of the nw_ traits, and of the height traits
 with rnodes) have a value for each node: at its radii (sampling
 'rnodes'), interpolated to the nodes the component is evaluated on (its
@@ -142,8 +148,11 @@ VPT_UID_COURTEAU = 9
 VPT_UID_BRANDT = 10
 VPT_UID_ISO = 11
 VPT_UID_NFW = 12
+VPT_UID_WEDGE = 13
+VPT_UID_BAR = 14
 VPT_UID_NW_UNIFORM = 101
 VPT_UID_NW_HARMONIC = 102
+VPT_UID_NW_BAR = 103
 
 # Velocity polar traits: the directions of their speeds
 VPT_DIRECTION_TAN = 1
@@ -151,6 +160,7 @@ VPT_DIRECTION_RAD = 2
 VPT_DIRECTION_VER = 3
 VPT_DIRECTION_LOS = 4
 VPT_DIRECTION_OUT = 5
+VPT_DIRECTION_PLANE = 6
 
 # Velocity height traits
 VHT_UID_ONE = 1
@@ -370,6 +380,22 @@ def _splits_around(
     w = np.where((lengths <= 2 * widest[..., None]) & (w < 180), w, np.nan)
     t = np.asarray(t, dtype=float)[..., None]
     return np.concatenate((t, t - w, t + w), axis=-1).reshape(len(r), -1)
+
+
+def _splits_bar(r: np.ndarray, params: dict[str, np.ndarray]) -> np.ndarray:
+    """
+    Return the azimuths (degrees) at which the azimuthal means split the
+    circles of the radii r across a flow along a bar (see VPTraitBar):
+    where they cross the edges of its strip, at p - a, p + a, p + 180 - a
+    and p + 180 + a (sin(a) = s / (2 r)), or within it, its axis (a = 90
+    degrees), where the flow turns.
+    """
+    r = np.asarray(r, dtype=float)[:, None]
+    p = params['p']
+    ratio = np.divide(
+        np.abs(params['s']) / 2, r, out=np.full_like(r, np.inf), where=r > 0)
+    a = np.rad2deg(np.arcsin(np.minimum(ratio, 1)))
+    return np.concatenate((p - a, p + a, p + 180 - a, p + 180 + a), axis=1)
 
 
 def _splits_nw_distortion(
@@ -869,6 +895,24 @@ class VPTrait(PTrait, abc.ABC):
         parts.Kinematics); here, a speed of the radius only.
         """
         return True
+
+
+class VPTraitPlanar(VPTrait, abc.ABC):
+    """
+    A planar velocity polar trait: a velocity in the plane of a disk, with
+    a radial and a tangential part (see the module docstring). Its kernel
+    gives v_y, its part along the azimuth 90 degrees, which is projected
+    on the line of sight as v_y sin(incl).
+    """
+
+    def direction(self) -> str:
+        return 'plane'
+
+    def direction_uid(self) -> int:
+        return VPT_DIRECTION_PLANE
+
+    def axisymmetric(self) -> bool:
+        return False
 
 
 class VHTrait(HTrait, abc.ABC):
@@ -2420,6 +2464,143 @@ class VPTraitNWHarmonic(
         return self.order() == 0
 
 
+class VPTraitWedge(TraitFeatureDirection, VPTrait):
+    """
+    A uniform speed within two opposite wedges of a disk (e.g. a radial
+    flow, as DysmalPy's UniformWedgeFlow): v at the azimuths within s / 2
+    of p or of p + 180 degrees, |cos(theta - p)| >= cos(s / 2), and 0 at
+    the others. Its parameters: v, p (degrees) and s (degrees, the full
+    width of each wedge).
+
+    Parameters
+    ----------
+    direction : str
+        The direction of its speed: 'tan', 'rad', 'ver', 'out' or 'los'
+        (see the module docstring).
+
+    Raises
+    ------
+    ConfigError
+        If an option is not valid.
+    """
+
+    @staticmethod
+    def type() -> str:
+        return 'wedge'
+
+    @staticmethod
+    def uid() -> int:
+        return VPT_UID_WEDGE
+
+    def __init__(self, direction: str):
+        super().__init__(direction=direction)
+
+    def params_sm(self) -> dict[str, ParamDesc]:
+        return {
+            self.speed(): ParamScalarDesc(),
+            'p': ParamScalarDesc(),
+            's': ParamScalarDesc()}
+
+    def axisymmetric(self) -> bool:
+        return False
+
+    def azimuthal_edges(
+            self,
+            r: np.ndarray,
+            params: dict[str, np.ndarray],
+            subrnodes: Sequence[float]
+    ) -> np.ndarray | None:
+        p, s = params['p'], params['s']
+        return np.tile(
+            [p - s / 2, p + s / 2, p + 180 - s / 2, p + 180 + s / 2],
+            (len(r), 1))
+
+
+class VPTraitBar(VPTraitPlanar):
+    """
+    A uniform flow along a bar, in the plane of a disk (as DysmalPy's
+    UniformBarFlow): the speed v along the axis of the bar, away from its
+    centre on both sides (inwards if v < 0), within the strip of the full
+    width s along the axis, and 0 outside. The axis is at the azimuth p
+    (and p + 180 degrees); at the distance x along it (positive towards
+    p) and y across it, the velocity is v sign(x) along the axis where
+    |y| < s / 2, with v_y = v sign(x) sin(p). The strip reaches the edge
+    of the disk. Its parameters: v, p (degrees) and s (arcsec).
+    """
+
+    @staticmethod
+    def type() -> str:
+        return 'bar'
+
+    @staticmethod
+    def uid() -> int:
+        return VPT_UID_BAR
+
+    def params_sm(self) -> dict[str, ParamDesc]:
+        return dict(
+            v=ParamScalarDesc(),
+            p=ParamScalarDesc(),
+            s=ParamScalarDesc())
+
+    def azimuthal_edges(
+            self,
+            r: np.ndarray,
+            params: dict[str, np.ndarray],
+            subrnodes: Sequence[float]
+    ) -> np.ndarray | None:
+        return _splits_bar(r, params)
+
+
+class VPTraitNWBar(TraitFeatureSampling, VPTraitPlanar):
+    """
+    A flow along a bar whose speed is given at distances along it (as
+    DysmalPy's VariableXBarFlow): as VPTraitBar, with the speed v(|x|) at
+    the distance |x| from the centre along the axis, of a value at each
+    node (at the distances of the radii of the nodes); 0 within the first
+    or beyond the last (e.g. a bar of a length: speeds of 0 beyond it).
+    Its parameters: p (degrees) and s (arcsec); v, node-wise.
+
+    Parameters
+    ----------
+    sampling : str, optional
+        Where the values of its node-wise parameters are given: 'rnodes',
+        at the radii of the rings, or 'subrings', at the rings it is
+        evaluated on (see the module docstring).
+
+    Raises
+    ------
+    ConfigError
+        If an option is not valid.
+    """
+
+    @staticmethod
+    def type() -> str:
+        return 'nw_bar'
+
+    @staticmethod
+    def uid() -> int:
+        return VPT_UID_NW_BAR
+
+    def __init__(self, sampling: str = SAMPLING_DEFAULT):
+        super().__init__(sampling=sampling)
+
+    def params_sm(self) -> dict[str, ParamDesc]:
+        return dict(
+            p=ParamScalarDesc(),
+            s=ParamScalarDesc())
+
+    def params_rnw(self, nnodes: int) -> dict[str, ParamDesc]:
+        return dict(v=ParamVectorDesc(nnodes))
+
+    def azimuthal_edges(
+            self,
+            r: np.ndarray,
+            params: dict[str, np.ndarray],
+            subrnodes: Sequence[float]
+    ) -> np.ndarray | None:
+        return _splits_bar(r, params)
+
+
 class VPTraitMass(VPTrait):
     """
     The rotation curve of the mass of its galaxy (see gbkfit.model.mass):
@@ -3586,6 +3767,9 @@ vpt_parser = parseutils.TypedParser(VPTrait, [
     VPTraitNFW,
     VPTraitNWUniform,
     VPTraitNWHarmonic,
+    VPTraitWedge,
+    VPTraitBar,
+    VPTraitNWBar,
     VPTraitMass])
 
 # Velocity height traits parser
