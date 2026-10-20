@@ -5,10 +5,12 @@ for each free element, independent of the others.
 
 import abc
 import math
+from collections.abc import Mapping
 from typing import Any
 
 import numpy as np
 import numpy.typing as npt
+import scipy.optimize
 import scipy.special
 import scipy.stats
 
@@ -23,6 +25,7 @@ __all__ = [
     'PriorHalfCauchy',
     'PriorHalfGauss',
     'PriorLogUniform',
+    'PriorScipy',
     'PriorSine',
     'PriorUniform',
     'prior_parser'
@@ -640,6 +643,105 @@ class PriorHalfCauchy(Prior):
         return self._scale * np.tan(np.pi / 2 * u)
 
 
+def _max_log_pdf(frozen: Any) -> float:
+    """
+    Return the largest log-density of a frozen distribution of
+    scipy.stats (at its most probable value): the largest on a grid of its
+    quantiles, refined between the neighbours of that point; or its
+    log-density at its median, if that is infinite (an unbounded
+    density).
+    """
+    x = frozen.ppf(np.linspace(1e-6, 1 - 1e-6, 2001))
+    log_pdf = frozen.logpdf(x)
+    i = int(np.nanargmax(log_pdf))
+    best = float(log_pdf[i])
+    lo, hi = x[max(i - 1, 0)], x[min(i + 1, len(x) - 1)]
+    if lo < hi:
+        result = scipy.optimize.minimize_scalar(
+            lambda t: -frozen.logpdf(t), bounds=(lo, hi), method='bounded')
+        best = max(best, -float(result.fun))
+    return best if math.isfinite(best) \
+        else float(frozen.logpdf(frozen.ppf(0.5)))
+
+
+class PriorScipy(Prior):
+    """
+    A prior of any continuous distribution of scipy.stats (e.g. a
+    log-normal prior on a mass: the distribution 'lognorm', of the
+    parameters s and scale): of its name and the values of its
+    parameters (its shapes, loc and scale, by name, as scipy.stats takes
+    them).
+
+    Its chi-square is 0 at its most probable value, which it finds
+    numerically (or at its median, where its density is unbounded). It
+    has no residual for least squares.
+
+    Parameters
+    ----------
+    distribution : str
+        The name of a continuous distribution of scipy.stats.
+    params : Mapping of str to float, optional
+        The values of its parameters, by name.
+
+    Raises
+    ------
+    ConfigError
+        If the distribution is not a continuous one of scipy.stats, or its
+        parameters are not valid for it.
+    """
+
+    @staticmethod
+    def type() -> str:
+        return 'scipy'
+
+    def dump(self) -> dict[str, Any]:
+        return dict(
+            type=self.type(), distribution=self._distribution,
+            params=dict(self._params))
+
+    def __init__(
+            self,
+            distribution: str,
+            params: Mapping[str, float] | None = None
+    ):
+        family = getattr(scipy.stats, distribution, None)
+        if not isinstance(family, scipy.stats.rv_continuous):
+            raise ConfigError(
+                f"distribution must be the name of a continuous distribution "
+                f"of scipy.stats; it is {distribution!r}")
+        params = {name: float(value) for name, value in (params or {}).items()}
+        try:
+            frozen = family(**params)
+            median = float(frozen.ppf(0.5))
+        except TypeError as e:
+            raise ConfigError(
+                f"the parameters of the distribution {distribution!r} are not "
+                f"valid: {e}") from e
+        if not math.isfinite(median):
+            raise ConfigError(
+                f"the parameters of the distribution {distribution!r} are not "
+                f"valid: {params}")
+        self._distribution = distribution
+        self._params = params
+        self._frozen = frozen
+        self._max_log_pdf = _max_log_pdf(frozen)
+
+    def minimum(self) -> float:
+        return float(self._frozen.support()[0])
+
+    def maximum(self) -> float:
+        return float(self._frozen.support()[1])
+
+    def log_pdf(self, x: npt.ArrayLike) -> np.ndarray:
+        return np.asarray(self._frozen.logpdf(x), dtype=float)
+
+    def chi2(self, x: npt.ArrayLike) -> np.ndarray:
+        return -2 * (self.log_pdf(x) - self._max_log_pdf)
+
+    def ppf(self, u: npt.ArrayLike) -> np.ndarray:
+        return np.asarray(self._frozen.ppf(u), dtype=float)
+
+
 prior_parser = parseutils.TypedParser(Prior)
 prior_parser.register(PriorUniform)
 prior_parser.register(PriorLogUniform)
@@ -648,3 +750,4 @@ prior_parser.register(PriorGauss)
 prior_parser.register(PriorGaussTrunc)
 prior_parser.register(PriorHalfGauss)
 prior_parser.register(PriorHalfCauchy)
+prior_parser.register(PriorScipy)

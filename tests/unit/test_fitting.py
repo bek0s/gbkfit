@@ -8,13 +8,14 @@ import math
 import numpy as np
 import pytest
 import scipy.integrate
+import scipy.stats
 
 from gbkfit.dataset import Data, DatasetPixelBrightness
 from gbkfit.driver.drivers.host import DriverHost
 from gbkfit.fitting import (
     EvaluationLog, EvaluationPool, FitControl, FitParamPrior, FitProblem,
     PriorGauss, PriorGaussTrunc, PriorHalfCauchy, PriorHalfGauss,
-    PriorLogUniform, PriorSine, PriorUniform)
+    PriorLogUniform, PriorScipy, PriorSine, PriorUniform)
 from gbkfit.instrument import Instrument, PSFGauss
 from gbkfit.model import galaxy_parser
 from gbkfit.objective import Objective
@@ -86,7 +87,8 @@ def test_fitter_configs_round_trip():
 @pytest.mark.parametrize('prior', [
     PriorUniform(-1, 3), PriorLogUniform(0.1, 10), PriorGauss(1, 2),
     PriorGaussTrunc(1, 2, 0, 2), PriorSine(20, 85), PriorHalfGauss(2),
-    PriorHalfCauchy(0.5)])
+    PriorHalfCauchy(0.5), PriorScipy('lognorm', dict(s=0.5, scale=2)),
+    PriorScipy('beta', dict(a=2, b=5))])
 def test_priors_are_normalised_and_ppf_inverts_their_cdf(prior):
     # (over the whole support: the half-Cauchy has 1% of its mass beyond
     # 60 scales)
@@ -137,6 +139,30 @@ def test_priors_load_from_their_configs_and_round_trip():
     for info in (dict(type='half_gauss', std=2.0),
                  dict(type='half_cauchy', scale=0.5)):
         assert prior_parser.dump(prior_parser.load(info)) == info
+
+
+def test_priors_of_scipy_distributions():
+    # A log-normal prior on a mass of 10^10.5 Msun, to 0.2 dex: its
+    # chi-square is 0 at its most probable value, scale exp(-s^2)
+    from gbkfit.fitting import prior_parser
+    s, scale = 0.2 * math.log(10), 10 ** 10.5
+    prior = PriorScipy('lognorm', dict(s=s, scale=scale))
+    x = np.array([1e10, 10 ** 10.5, 1e11])
+    np.testing.assert_allclose(
+        prior.log_pdf(x), scipy.stats.lognorm(s, scale=scale).logpdf(x))
+    assert prior.chi2(scale * math.exp(-s ** 2)) == pytest.approx(
+        0, abs=1e-9)
+    assert (prior.minimum(), prior.maximum()) == (0, np.inf)
+    assert not prior.has_residual()
+    info = dict(type='scipy', distribution='lognorm',
+                params=dict(s=s, scale=scale))
+    assert prior_parser.dump(prior_parser.load(info)) == info
+    with pytest.raises(ConfigError, match="continuous distribution"):
+        PriorScipy('poisson', dict(mu=3))
+    with pytest.raises(ConfigError, match="are not valid"):
+        PriorScipy('lognorm', dict(s=-1))
+    with pytest.raises(ConfigError, match="are not valid"):
+        PriorScipy('lognorm', dict(shape=1))
 
 
 def test_min_and_max_without_a_prior_are_a_uniform_prior():
