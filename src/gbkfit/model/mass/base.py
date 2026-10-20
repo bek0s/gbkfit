@@ -220,6 +220,30 @@ class MassComponent(parseutils.TypedSerializable, abc.ABC):
         """
         pass
 
+    @abc.abstractmethod
+    def enclosed_mass(
+            self,
+            r: npt.ArrayLike,
+            params: ParamValues,
+            context: MassContext
+    ) -> np.ndarray:
+        """
+        Return its mass (Msun) within the spheres of the radii r (kpc)
+        about its centre (see vcirc2 for the other arguments): e.g. of a
+        disk, its mass within the heights |z| < sqrt(r^2 - R^2) at each
+        radius R < r (all of it, if thin).
+
+        Raises
+        ------
+        NotImplementedError
+            If the component does not give it (see gives_enclosed_mass).
+        """
+        pass
+
+    def gives_enclosed_mass(self) -> bool:
+        """Check whether it gives its enclosed mass; here, it does."""
+        return True
+
     def density(
             self,
             R: npt.ArrayLike,
@@ -357,19 +381,6 @@ class MassSpherical(MassComponent, abc.ABC):
             context: MassContext
     ) -> np.ndarray:
         """Return its density (Msun/kpc^3) at the spherical radii r."""
-        pass
-
-    @abc.abstractmethod
-    def enclosed_mass(
-            self,
-            r: npt.ArrayLike,
-            params: ParamValues,
-            context: MassContext
-    ) -> np.ndarray:
-        """
-        Return its mass (Msun) within the spherical radii r (kpc; see
-        vcirc2 for the other arguments).
-        """
         pass
 
     def vcirc2(

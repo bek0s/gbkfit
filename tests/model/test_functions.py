@@ -63,8 +63,8 @@ def test_circular_velocity_of_the_mass():
     galaxy = gas_galaxy()
     functions = galaxy.plan_functions()
     assert functions.names() == (
-        'vcirc', 'vnewton', 'vcirc_bh', 'vcirc_halo', 'kpc_per_arcsec',
-        'rotation_gas', 'dispersion_gas')
+        'vcirc', 'vnewton', 'vcirc_bh', 'vcirc_halo', 'mass', 'mass_bh',
+        'mass_halo', 'kpc_per_arcsec', 'rotation_gas', 'dispersion_gas')
     bound = functions.bind(PARAMS)
     R = np.array([0.5, 2.0, 8.0])
     np.testing.assert_allclose(
@@ -73,6 +73,11 @@ def test_circular_velocity_of_the_mass():
         bound['vcirc'](R) ** 2,
         bound['vcirc_bh'](R) ** 2 + bound['vcirc_halo'](R) ** 2, rtol=1e-12)
     assert bound['kpc_per_arcsec'] == pytest.approx(KPC_PER_ARCSEC, rel=1e-9)
+    # The enclosed masses, in total and of each component
+    np.testing.assert_allclose(bound['mass_bh'](R), 1e10)
+    np.testing.assert_allclose(
+        bound['mass'](R), bound['mass_bh'](R) + bound['mass_halo'](R),
+        rtol=1e-12)
     # (a number gives an array of no dimensions)
     assert bound['vcirc'](2.0).shape == ()
     # The same as the rotation table of the gravity

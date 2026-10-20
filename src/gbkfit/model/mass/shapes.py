@@ -9,6 +9,7 @@ from typing import Any
 
 import numpy as np
 import numpy.typing as npt
+import scipy.integrate
 
 from gbkfit.params import ParamDesc, ParamValues
 from gbkfit.params.pdescs import ParamScalarDesc
@@ -42,6 +43,48 @@ def _flattened_nodes() -> tuple[np.ndarray, np.ndarray]:
 
 
 _FLATTENED_PHI, _FLATTENED_WEIGHTS = _flattened_nodes()
+
+
+def _flattened_enclosed_mass(
+        r: float,
+        profile: SpheroidProfile,
+        params: ParamValues,
+        context: MassContext
+) -> float:
+    """
+    Return the mass of a flattened spheroid (see ShapeFlattened) within
+    the sphere of the radius r: that of the shells of m wholly inside it
+    (each keeps the mass of its sphere, M(<m) of the profile), and the
+    share that it cuts of the others, whose mass is uniform in the cosine
+    mu of the angle of their points (R = m sqrt(1 - mu^2), z = q m mu): of
+    an oblate one (q < 1), within m < r and the share 1 - sqrt((1 - r^2 /
+    m^2) / (1 - q^2)) for r < m < r / q; of a prolate one (q > 1), within
+    m < r / q and the share sqrt((r^2 / m^2 - 1) / (q^2 - 1)) for r / q <
+    m < r. The share is integrated by adaptive quadrature (to 1e-10).
+    """
+    q = params['q']
+    if r <= 0:
+        return 0.0
+    if q == 1:
+        return float(profile.enclosed_mass(np.array([r]), params, context)[0])
+    if q < 1:
+        whole, edge = r, np.inf if q == 0 else r / q
+
+        def share(m: float) -> float:
+            return 1 - np.sqrt((1 - r ** 2 / m ** 2) / (1 - q ** 2))
+    else:
+        whole, edge = r / q, r
+
+        def share(m: float) -> float:
+            return np.sqrt((r ** 2 / m ** 2 - 1) / (q ** 2 - 1))
+
+    def shells(m: float) -> float:
+        density = profile.density(np.array([m]), params, context)[0]
+        return 4 * np.pi * m ** 2 * density * share(m)
+    inside = profile.enclosed_mass(np.array([whole]), params, context)[0]
+    cut, _ = scipy.integrate.quad(
+        shells, whole, edge, epsabs=0, epsrel=1e-10, limit=200)
+    return float(inside) + cut
 
 
 class SpheroidShape(parseutils.TypedSerializable, abc.ABC):
@@ -89,6 +132,20 @@ class SpheroidShape(parseutils.TypedSerializable, abc.ABC):
         """
         Return the density of the spheroid at the points (R, z) (see
         MassComponent.density).
+        """
+        pass
+
+    @abc.abstractmethod
+    def enclosed_mass(
+            self,
+            r: npt.ArrayLike,
+            profile: SpheroidProfile,
+            params: ParamValues,
+            context: MassContext
+    ) -> np.ndarray:
+        """
+        Return the mass of the spheroid within the spheres of the radii r
+        (see MassComponent.enclosed_mass).
         """
         pass
 
@@ -166,6 +223,15 @@ class ShapeSphere(SpheroidShape):
             context: MassContext
     ) -> np.ndarray:
         return profile.density(np.hypot(R, z), params, context)
+
+    def enclosed_mass(
+            self,
+            r: npt.ArrayLike,
+            profile: SpheroidProfile,
+            params: ParamValues,
+            context: MassContext
+    ) -> np.ndarray:
+        return profile.enclosed_mass(r, params, context)
 
     def forces(
             self,
@@ -260,6 +326,19 @@ class ShapeFlattened(SpheroidShape):
         q = params['q']
         return profile.density(
             np.hypot(R, np.asarray(z, dtype=float) / q), params, context) / q
+
+    def enclosed_mass(
+            self,
+            r: npt.ArrayLike,
+            profile: SpheroidProfile,
+            params: ParamValues,
+            context: MassContext
+    ) -> np.ndarray:
+        r = np.asarray(r, dtype=float)
+        masses = [
+            _flattened_enclosed_mass(radius, profile, params, context)
+            for radius in r.ravel()]
+        return np.reshape(masses, r.shape)
 
     def forces(
             self,

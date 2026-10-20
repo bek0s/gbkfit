@@ -825,6 +825,98 @@ def test_halo_options_are_checked(options, message):
         ProfileNFW(**options)
 
 
+def sphere_integral(density, radius, epsrel=1e-10):
+    """
+    The integral of a density(R, z) over the sphere of a radius about the
+    centre (in spherical coordinates, and even in z): 4 pi int_0^radius s^2
+    int_0^1 density(s sqrt(1 - mu^2), s mu) dmu ds.
+    """
+    def shell(mu, s):
+        return s ** 2 * float(density(s * np.sqrt(1 - mu ** 2), s * mu))
+    return 4 * np.pi * scipy.integrate.dblquad(
+        shell, 0, radius, 0, 1, epsabs=0, epsrel=epsrel)[0]
+
+
+@pytest.mark.parametrize('vertical', ['thin', 'exponential', 'sech2', 'gauss'])
+def test_disks_enclose_the_mass_of_their_density_within_spheres(vertical):
+    # Thin: M (1 - (1 + x) exp(-x)), x = r / rd; thick: the integral of
+    # its density over the sphere
+    disk = exponential_disk(vertical)
+    params = dict(log_m=10, rd=2, hz=0.4)
+    radius = np.array([0.5, 3, 12])
+    if vertical == 'thin':
+        x = radius / 2
+        expected = 1e10 * (1 - (1 + x) * np.exp(-x))
+    else:
+        expected = [sphere_integral(
+            lambda R, z: disk.density(R, z, params, CONTEXT), r)
+            for r in radius]
+    np.testing.assert_allclose(
+        disk.enclosed_mass(radius, params, CONTEXT), expected, rtol=1e-8)
+
+
+def test_disks_as_thick_as_a_component_enclose_their_density():
+    # Of two flaring layers: the integral of its density over the sphere,
+    # 2 pi int R int_-h^h rho dz dR (h = sqrt(r^2 - R^2)), with R = r
+    # sin(phi), by Gauss-Legendre rules between its subnodes, where its
+    # shape bends
+    context = MassContext(1, 1, dict(hi=Layers(flare=1)))
+    vertical = VerticalComponent('hi')
+    disk = MassDisk('d', SurfaceExponential(), vertical)
+    params = dict(log_m=10, rd=2)
+    radius = 4.0
+    t, w = np.polynomial.legendre.leggauss(60)
+    knots = vertical.knots(context)
+    edges = np.arcsin(np.union1d([0, radius], knots[knots < radius]) / radius)
+    expected = 0.0
+    for a, b in zip(edges[:-1], edges[1:]):
+        phi = (a + b) / 2 + (b - a) / 2 * t
+        R, h = radius * np.sin(phi), radius * np.cos(phi)
+        z = h[:, None] * (1 + t) / 2
+        rho = disk.density(
+            np.broadcast_to(R[:, None], z.shape), z, params, context)
+        column = h * (rho @ w)
+        expected += 2 * np.pi * (b - a) / 2 * np.sum(w * R * column * h)
+    np.testing.assert_allclose(
+        disk.enclosed_mass(radius, params, context), expected, rtol=1e-7)
+
+
+@pytest.mark.parametrize('q', [0.3, 1.0, 2.0])
+def test_flattened_spheroids_enclose_the_mass_of_their_density(q):
+    # Oblate, a sphere and prolate: the integral of the density over the
+    # sphere; at q = 1, the mass of the profile
+    profile, params = SPHERES[1]
+    flat = MassSpheroid('s', profile, ShapeFlattened())
+    params = params | dict(q=q)
+    radius = np.array([0.5, 4, 30])
+    expected = [sphere_integral(
+        lambda R, z: flat.density(R, z, params, CONTEXT), r) for r in radius]
+    np.testing.assert_allclose(
+        flat.enclosed_mass(radius, params, CONTEXT), expected, rtol=1e-8)
+    if q == 1:
+        np.testing.assert_allclose(
+            flat.enclosed_mass(radius, params, CONTEXT),
+            profile.enclosed_mass(radius, params, CONTEXT), rtol=1e-12)
+
+
+def test_user_component_gives_its_enclosed_mass_by_a_function(tmp_path):
+    (tmp_path / 'point.py').write_text(
+        "import numpy as np\n"
+        "def vcirc2(R, params):\n"
+        "    return params['gm'] / R\n"
+        "def mass(r, params):\n"
+        "    return np.full_like(r, params['gm'] / 4.30091727e-6)\n")
+    path = str(tmp_path / 'point.py')
+    component = MassUser('mine', path, 'vcirc2', ['gm'], mass='mass')
+    assert component.gives_enclosed_mass()
+    np.testing.assert_allclose(component.enclosed_mass(
+        np.array([1.0, 3.0]), dict(gm=G * 1e10), CONTEXT), 1e10)
+    without = MassUser('mine', path, 'vcirc2', ['gm'])
+    assert not without.gives_enclosed_mass()
+    with pytest.raises(NotImplementedError, match="no function"):
+        without.enclosed_mass(np.array([1.0]), dict(gm=1), CONTEXT)
+
+
 def test_user_component_is_its_function(tmp_path):
     (tmp_path / 'curve.py').write_text(
         "def vcirc2(R, params):\n"

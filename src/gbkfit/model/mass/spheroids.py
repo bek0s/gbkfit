@@ -23,6 +23,7 @@ from .halos import (
     ProfilePseudoIsothermal, ProfileZhao)
 from .profiles import ProfileSersic, SpheroidProfile
 from .shapes import ShapeSphere, SpheroidShape, spheroid_shape_parser
+from .units import G
 
 
 __all__ = [
@@ -302,6 +303,19 @@ class MassSpheroid(MassComponent):
         params = self._given(params, context)
         return self._responding_vcirc2(
             np.asarray(R, dtype=float), params, context)
+
+    def enclosed_mass(
+            self,
+            r: npt.ArrayLike,
+            params: ParamValues,
+            context: MassContext
+    ) -> np.ndarray:
+        if self._contraction is not None:
+            # (spherical: the mass of its circular velocity, v^2 r / G)
+            r = np.asarray(r, dtype=float)
+            return self.vcirc2(r, params, context) * r / G
+        return self._shape.enclosed_mass(
+            r, self._profile, self._given(params, context), context)
 
     def density(
             self,

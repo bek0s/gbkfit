@@ -7,6 +7,7 @@ from typing import Any
 
 import numpy as np
 import numpy.typing as npt
+import scipy.integrate
 
 from gbkfit.params import ParamDesc, ParamValues
 from gbkfit.utils import parseutils
@@ -121,6 +122,31 @@ class MassDisk(MassComponent):
             context: MassContext
     ) -> np.ndarray:
         return self._surface.surface_density(R, params, context)
+
+    def enclosed_mass(
+            self,
+            r: npt.ArrayLike,
+            params: ParamValues,
+            context: MassContext
+    ) -> np.ndarray:
+        # 2 pi int_0^r Sigma(R) s(R, sqrt(r^2 - R^2)) R dR, s the share of
+        # the mass at R within that height (see DiskVertical.share_within),
+        # by adaptive quadrature (to 1e-10)
+        def mass(radius: float) -> float:
+            def ring(R: float) -> float:
+                height = np.sqrt(max(radius ** 2 - R ** 2, 0))
+                sigma = self._surface.surface_density(
+                    np.array([R]), params, context)[0]
+                share = self._vertical.share_within(
+                    R, height, params, context)
+                return 2 * np.pi * R * sigma * float(share)
+            value, _ = scipy.integrate.quad(
+                ring, 0, radius, epsabs=0, epsrel=1e-10, limit=200)
+            return value
+        r = np.asarray(r, dtype=float)
+        return np.reshape(
+            [mass(radius) if radius > 0 else 0.0 for radius in r.ravel()],
+            r.shape)
 
     def forces(
             self,

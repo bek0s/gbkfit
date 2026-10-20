@@ -11,6 +11,7 @@ from typing import Any
 
 import numpy as np
 import numpy.typing as npt
+import scipy.integrate
 import scipy.special
 
 from gbkfit.params import ParamDesc, ParamValues
@@ -79,6 +80,21 @@ class DiskVertical(parseutils.TypedSerializable, abc.ABC):
         """
         pass
 
+    @abc.abstractmethod
+    def share_within(
+            self,
+            R: npt.ArrayLike,
+            h: npt.ArrayLike,
+            params: ParamValues,
+            context: MassContext
+    ) -> np.ndarray:
+        """
+        Return the share of the mass at the radii R within the heights
+        |z| < h (kpc), broadcast together: all of it (1) if the disk is
+        thin.
+        """
+        pass
+
 
 class VerticalLaw(DiskVertical, abc.ABC):
     """
@@ -102,10 +118,30 @@ class VerticalLaw(DiskVertical, abc.ABC):
     ) -> np.ndarray:
         return self.pdf(z, params['hz'])
 
+    def share_within(
+            self,
+            R: npt.ArrayLike,
+            h: npt.ArrayLike,
+            params: ParamValues,
+            context: MassContext
+    ) -> np.ndarray:
+        R, h = np.broadcast_arrays(
+            np.asarray(R, dtype=float), np.asarray(h, dtype=float))
+        return self.within(h, params['hz'])
+
     @staticmethod
     @abc.abstractmethod
     def pdf(z: npt.ArrayLike, h: float) -> np.ndarray:
         """Return the pdf p(z) at the heights z, for the scale height h."""
+        pass
+
+    @staticmethod
+    @abc.abstractmethod
+    def within(heights: np.ndarray, h: float) -> np.ndarray:
+        """
+        Return the share of the pdf within the heights |z| < heights, for
+        the scale height h.
+        """
         pass
 
     @staticmethod
@@ -144,9 +180,22 @@ class VerticalThin(VerticalLaw):
         raise NotImplementedError(
             "a thin disk has a surface density, not a density")
 
+    def share_within(
+            self,
+            R: npt.ArrayLike,
+            h: npt.ArrayLike,
+            params: ParamValues,
+            context: MassContext
+    ) -> np.ndarray:
+        return np.ones(np.broadcast(np.asarray(R), np.asarray(h)).shape)
+
     @staticmethod
     def pdf(z: npt.ArrayLike, h: float) -> np.ndarray:
         raise NotImplementedError("a thin disk has no pdf of the height")
+
+    @staticmethod
+    def within(heights: np.ndarray, h: float) -> np.ndarray:
+        return np.ones_like(heights)
 
     @staticmethod
     def transform(k: npt.ArrayLike, h: float) -> np.ndarray:
@@ -169,6 +218,10 @@ class VerticalExponential(VerticalLaw):
         return np.exp(-z / h) / (2 * h)
 
     @staticmethod
+    def within(heights: np.ndarray, h: float) -> np.ndarray:
+        return -np.expm1(-heights / h)
+
+    @staticmethod
     def transform(k: npt.ArrayLike, h: float) -> np.ndarray:
         return 1 / (1 + np.asarray(k, dtype=float) * h)
 
@@ -187,6 +240,10 @@ class VerticalSech2(VerticalLaw):
     def pdf(z: npt.ArrayLike, h: float) -> np.ndarray:
         z = np.abs(np.asarray(z, dtype=float))
         return 1 / (2 * h * np.cosh(np.minimum(z / h, 350)) ** 2)
+
+    @staticmethod
+    def within(heights: np.ndarray, h: float) -> np.ndarray:
+        return np.tanh(heights / h)
 
     @staticmethod
     def transform(k: npt.ArrayLike, h: float) -> np.ndarray:
@@ -211,6 +268,10 @@ class VerticalGauss(VerticalLaw):
     def pdf(z: npt.ArrayLike, h: float) -> np.ndarray:
         z = np.abs(np.asarray(z, dtype=float))
         return np.exp(-z ** 2 / (2 * h ** 2)) / (np.sqrt(2 * np.pi) * h)
+
+    @staticmethod
+    def within(heights: np.ndarray, h: float) -> np.ndarray:
+        return scipy.special.erf(heights / (np.sqrt(2) * h))
 
     @staticmethod
     def transform(k: npt.ArrayLike, h: float) -> np.ndarray:
@@ -290,14 +351,7 @@ class VerticalComponent(DiskVertical):
         R, z = np.broadcast_arrays(
             np.asarray(R, dtype=float), np.asarray(z, dtype=float))
         density, knots, sigmas, total = self._shape_knots(context)
-        if len(knots) == 1:
-            left = right = np.zeros(R.shape, dtype=int)
-            t = np.zeros(R.shape)
-        else:
-            radii = np.clip(R, knots[0], knots[-1])
-            right = np.clip(np.searchsorted(knots, radii), 1, len(knots) - 1)
-            left = right - 1
-            t = (radii - knots[left]) / (knots[right] - knots[left])
+        left, right, t = _between(R, knots)
 
         def at(nodes: np.ndarray) -> np.ndarray:
             # (the shape at the subnodes of the given indices, at z)
@@ -308,6 +362,35 @@ class VerticalComponent(DiskVertical):
                 out[points] = sigmas[:, k] @ pdfs[:, 0] / total[k]
             return out
         return (1 - t) * at(left) + t * at(right)
+
+    def share_within(
+            self,
+            R: npt.ArrayLike,
+            h: npt.ArrayLike,
+            params: ParamValues,
+            context: MassContext
+    ) -> np.ndarray:
+        # The shares of the shapes at the two subnodes around each radius
+        # (by adaptive quadrature, to 1e-10; the shapes are even in z)
+        R, h = np.broadcast_arrays(
+            np.asarray(R, dtype=float), np.asarray(h, dtype=float))
+        if self.thin(context):
+            return np.ones(R.shape)
+        density, knots, sigmas, total = self._shape_knots(context)
+        left, right, t = _between(R, knots)
+
+        def share(k: int, height: float) -> float:
+            def shape(z: float) -> float:
+                pdfs = density.height_pdfs(knots[k:k + 1], np.array([z]))
+                return float(sigmas[:, k] @ pdfs[:, 0, 0]) / total[k]
+            value, _ = scipy.integrate.quad(
+                shape, 0, height, epsabs=0, epsrel=1e-10, limit=200)
+            return 2 * value
+        shares = [
+            (1 - tk) * share(lk, hk) + tk * share(rk, hk)
+            for lk, rk, tk, hk in zip(
+                left.ravel(), right.ravel(), t.ravel(), h.ravel())]
+        return np.reshape(shares, R.shape)
 
     def knots(self, context: MassContext) -> np.ndarray:
         """
@@ -333,12 +416,8 @@ class VerticalComponent(DiskVertical):
         pdfs = density.height_pdfs(knots, z)
         shapes = np.einsum('tk,tkz->kz', sigmas, pdfs) / total[:, None]
         # Linear between the subnodes with density, held beyond them
-        if len(knots) == 1:
-            return np.repeat(shapes, len(R), axis=0)
-        R = np.clip(R, knots[0], knots[-1])
-        right = np.clip(np.searchsorted(knots, R), 1, len(knots) - 1)
-        left = right - 1
-        t = ((R - knots[left]) / (knots[right] - knots[left]))[:, None]
+        left, right, t = _between(np.asarray(R, dtype=float), knots)
+        t = t[:, None]
         return (1 - t) * shapes[left] + t * shapes[right]
 
     def _shape_knots(
@@ -365,6 +444,24 @@ class VerticalComponent(DiskVertical):
                 f"the component {self._component!r} has no density, so no "
                 f"vertical structure")
         return density, knots[full], sigmas[:, full], total[full]
+
+
+def _between(
+        R: np.ndarray, knots: np.ndarray
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Return the indices of the subnodes on either side of each radius R,
+    and how far between them it is (0 to 1), clipped to the first and the
+    last: a value linear between the subnodes, held beyond them, is (1 -
+    t) times that at left plus t times that at right.
+    """
+    if len(knots) == 1:
+        zeros = np.zeros(R.shape, dtype=int)
+        return zeros, zeros, np.zeros(R.shape)
+    radii = np.clip(R, knots[0], knots[-1])
+    right = np.clip(np.searchsorted(knots, radii), 1, len(knots) - 1)
+    left = right - 1
+    return left, right, (radii - knots[left]) / (knots[right] - knots[left])
 
 
 disk_vertical_parser = parseutils.TypedParser(DiskVertical, [

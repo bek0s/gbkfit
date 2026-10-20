@@ -189,6 +189,50 @@ class MassModel(parseutils.Serializable):
             lambda component, own, ctx: component.vcirc2(R, own, ctx),
             params, context)
 
+    def enclosed_mass(
+            self,
+            r: npt.ArrayLike,
+            params: ParamValues,
+            context: MassContext
+    ) -> np.ndarray:
+        """
+        Return its mass (Msun) within the spheres of the radii r (kpc):
+        that of all its components (see MassComponent.enclosed_mass).
+
+        Raises
+        ------
+        NotImplementedError
+            If a component does not give it (see gives_enclosed_mass).
+        """
+        if not self.gives_enclosed_mass():
+            raise NotImplementedError(
+                "not every mass component gives its enclosed mass")
+        return sum(self.enclosed_mass_components(r, params, context).values())
+
+    def enclosed_mass_components(
+            self,
+            r: npt.ArrayLike,
+            params: ParamValues,
+            context: MassContext
+    ) -> dict[str, np.ndarray]:
+        """
+        Return the mass of each component that gives it within the spheres
+        of the radii r, by the name of the component (see enclosed_mass).
+        """
+        return {
+            component.name(): component.enclosed_mass(
+                r, self.component_params(component.name(), params),
+                self._context(component, params, context))
+            for component in self._components
+            if component.gives_enclosed_mass()}
+
+    def gives_enclosed_mass(self) -> bool:
+        """
+        Check whether every component gives its enclosed mass (see
+        MassComponent.gives_enclosed_mass).
+        """
+        return all(cmp.gives_enclosed_mass() for cmp in self._components)
+
     def density(
             self,
             R: npt.ArrayLike,

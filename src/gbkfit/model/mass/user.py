@@ -29,8 +29,12 @@ class MassUser(MassComponent):
     forces(R, z, params), with R and z the points (kpc, two arrays of one
     shape), which returns its forces per unit mass there ((km/s)^2/kpc,
     -dPhi/dR and -dPhi/dz, two arrays of their shape), anywhere (e.g. for
-    the jeans equilibrium; in its plane, -vcirc2 / R and 0). Without
-    forces, it gives them in its plane only. It gives nothing else: its
+    the jeans equilibrium; in its plane, -vcirc2 / R and 0); and
+    optionally mass(r, params), with r the radii of spheres about its
+    centre (kpc, an array), which returns its mass within them (Msun, an
+    array of the shape of r; e.g. for the enclosed masses of the
+    functions of the galaxy). Without forces, it gives them in its plane
+    only; without mass, no enclosed mass. It gives nothing else: its
     density and its potential raise NotImplementedError.
 
     Parameters
@@ -46,6 +50,8 @@ class MassUser(MassComponent):
         The names of its parameters.
     forces : str, optional
         The name of the function of the forces.
+    mass : str, optional
+        The name of the function of the enclosed mass.
 
     Raises
     ------
@@ -61,10 +67,13 @@ class MassUser(MassComponent):
     def gives_forces(self) -> bool:
         return self._forces is not None
 
+    def gives_enclosed_mass(self) -> bool:
+        return self._mass is not None
+
     def dump(self) -> dict[str, Any]:
         return super().dump() | dict(
             file=self._file, func=self._func_name, params=list(self._params),
-            forces=self._forces_name)
+            forces=self._forces_name, mass=self._mass_name)
 
     def __init__(
             self,
@@ -72,7 +81,8 @@ class MassUser(MassComponent):
             file: str,
             func: str,
             params: Sequence[str] = (),
-            forces: str | None = None
+            forces: str | None = None,
+            mass: str | None = None
     ):
         super().__init__(name)
         for param in params:
@@ -85,11 +95,14 @@ class MassUser(MassComponent):
             self._func = funcutils.load_function_from_file(path, func)
             self._forces = None if forces is None \
                 else funcutils.load_function_from_file(path, forces)
+            self._mass = None if mass is None \
+                else funcutils.load_function_from_file(path, mass)
         except RuntimeError as e:
             raise ConfigError(str(e)) from e
         self._file = file
         self._func_name = func
         self._forces_name = forces
+        self._mass_name = mass
         self._params = tuple(params)
 
     def pdescs(self) -> dict[str, ParamDesc]:
@@ -130,3 +143,22 @@ class MassUser(MassComponent):
                 f"'{self.name()}' must return two arrays of the shape of the "
                 f"points, {R.shape}")
         return forces[0], forces[1]
+
+    def enclosed_mass(
+            self,
+            r: npt.ArrayLike,
+            params: ParamValues,
+            context: MassContext
+    ) -> np.ndarray:
+        if self._mass is None:
+            raise NotImplementedError(
+                f"the mass component '{self.name()}' has no function of its "
+                f"enclosed mass (see MassUser)")
+        r = np.asarray(r, dtype=float)
+        mass = np.asarray(self._mass(r, dict(params)), dtype=float)
+        if mass.shape != r.shape:
+            raise ValueError(
+                f"the function '{self._mass_name}' of the mass component "
+                f"'{self.name()}' returned an array of shape {mass.shape} "
+                f"for radii of shape {r.shape}")
+        return mass

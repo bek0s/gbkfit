@@ -1,7 +1,8 @@
 """
 The functions of a galaxy (GalaxyFunctions) that the derived values of
-its parameters can use (see ParamSpace): the circular velocity of its
-mass, and the rotation and dispersion of its disks, at any radius.
+its parameters can use (see ParamSpace): the circular velocity and the
+enclosed mass of its mass, and the rotation and dispersion of its disks,
+at any radius.
 """
 
 import functools
@@ -40,6 +41,12 @@ class GalaxyFunctions:
       Newtonian gravity), signed
     - vcirc_{name}(R): that of its mass component of the name in
       Newtonian gravity, signed (negative where it pulls outwards)
+    - mass(r): its mass (Msun) within the spheres of the radii r (kpc)
+      about its centre, in any gravity (see MassModel.enclosed_mass), if
+      every mass component gives it
+    - mass_{name}(r): that of its mass component of the name, if it gives
+      it (a user component without a function of it does not; see
+      MassUser)
     - kpc_per_arcsec: the length of an arcsec in it (kpc)
 
     For each of its disks with velocity or dispersion traits, named
@@ -96,6 +103,11 @@ class GalaxyFunctions:
         if mass_model is not None:
             names += ['vcirc', 'vnewton'] + [
                 f'vcirc_{cmp.name()}' for cmp in mass_model.components()]
+            if mass_model.gives_enclosed_mass():
+                names += ['mass']
+            names += [
+                f'mass_{cmp.name()}' for cmp in mass_model.components()
+                if cmp.gives_enclosed_mass()]
             names += ['kpc_per_arcsec']
         for suffix in self._suffixes.values():
             names += [f'rotation{suffix}', f'dispersion{suffix}']
@@ -127,6 +139,17 @@ class GalaxyFunctions:
                 functions[f'vcirc_{cmp.name()}'] = functools.partial(
                     _vcirc, f'vcirc_{cmp.name()}', functools.partial(
                         _component_vcirc2, mass, cmp.name()))
+            if mass.model.gives_enclosed_mass():
+                functions['mass'] = functools.partial(
+                    _enclosed_mass, 'mass', functools.partial(
+                        mass.model.enclosed_mass, params=mass.params,
+                        context=mass.context))
+            for cmp in mass.model.components():
+                if cmp.gives_enclosed_mass():
+                    functions[f'mass_{cmp.name()}'] = functools.partial(
+                        _enclosed_mass, f'mass_{cmp.name()}',
+                        functools.partial(
+                            _component_enclosed_mass, mass, cmp.name()))
             functions['kpc_per_arcsec'] = mass.kpc_per_arcsec
         for i, suffix in self._suffixes.items():
             functions[f'rotation{suffix}'] = functools.partial(
@@ -246,3 +269,37 @@ def _component_vcirc2(
     radii R (kpc).
     """
     return mass.model.vcirc2_components(R, mass.params, mass.context)[name]
+
+
+def _enclosed_mass(
+        function: str,
+        masses: Callable[[np.ndarray], np.ndarray],
+        r: npt.ArrayLike
+) -> np.ndarray:
+    """
+    Return an enclosed mass (Msun) of the function of the given name (of
+    radii in kpc) at the radii r (kpc).
+
+    Raises
+    ------
+    ValueError
+        If a radius is negative or not finite.
+    """
+    radii = np.asarray(r, dtype=float)
+    if not np.all(np.isfinite(radii) & (radii >= 0)):
+        raise ValueError(
+            f"{function}: the radii must be finite and at least 0; they are "
+            f"{radii}")
+    return np.reshape(masses(radii.ravel()), radii.shape)
+
+
+def _component_enclosed_mass(
+        mass: GalaxyMass, name: str, r: np.ndarray
+) -> np.ndarray:
+    """
+    Return the mass (Msun) of the mass component of the given name of the
+    mass of a galaxy within the spheres of the radii r (kpc), in its
+    context (e.g. a contracted halo, with the baryons it responds to).
+    """
+    return mass.model.enclosed_mass_components(
+        r, mass.params, mass.context)[name]
