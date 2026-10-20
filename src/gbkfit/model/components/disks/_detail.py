@@ -185,12 +185,13 @@ def make_disk(
 
 def _check_waves(traits_: dict[str, tuple[traits.Trait, ...]]) -> None:
     """
-    Raise ConfigError if a disk has a spiral density wave (see
-    traits.TraitFeatureSpiral) but no tangential velocity traits: the wave
-    is in its rotation.
+    Raise ConfigError if a disk has a spiral density wave that takes its
+    rotation (see traits.TraitFeatureSpiral) but no tangential velocity
+    traits.
     """
     waves = any(
         isinstance(trait, traits.TraitFeatureSpiral)
+        and trait.takes_rotation()
         for kind in ('rpt', 'vpt') for trait in traits_.get(kind, ()))
     if waves and not any(
             trait.direction() == 'tan' for trait in traits_.get('vpt', ())):

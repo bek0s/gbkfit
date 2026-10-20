@@ -617,8 +617,8 @@ rp_trait_nw_harmonic_rnd(
 
 // The density of a spiral density wave of m = consts[0] arms (see
 // traits.RPTraitSpiral): a cos(m (theta - p) - f), of p = params[0] and
-// the tables a and f at the subnodes (after the four parameters p, c, e
-// and o)
+// the tables a and f at the subnodes, after the consts[1] parameters that
+// are not node-wise
 template<typename T> constexpr void
 rp_trait_spiral(
         T& out,
@@ -626,9 +626,10 @@ rp_trait_spiral(
         const T* consts, const T* params)
 {
     int m = std::rint(consts[0]);
+    int offset = std::rint(consts[1]);
     T p = params[0] * DEG_TO_RAD<T>;
-    T a = nodewise(r, rnidx, rnodes, params, 4, 1);
-    T f = nodewise(r, rnidx, rnodes, params, 4 + nrnodes, 1);
+    T a = nodewise(r, rnidx, rnodes, params, offset, 1);
+    T f = nodewise(r, rnidx, rnodes, params, offset + nrnodes, 1);
     out = a * std::cos(m * (theta - p) - f);
 }
 
@@ -644,7 +645,8 @@ rp_trait_spiral_rnd(
 {
     rp_trait_sample_polar_coords_nw(out_r, out_t, rng, rnidx, rnodes);
     int m = std::rint(consts[0]);
-    T p = params[0] * DEG_TO_RAD<T> + params[4 + nrnodes + rnidx] / m;
+    int offset = std::rint(consts[1]);
+    T p = params[0] * DEG_TO_RAD<T> + params[offset + nrnodes + rnidx] / m;
     harmonic_azimuth_rnd(out_s, out_t, rng, m, p);
 }
 
@@ -1156,7 +1158,7 @@ vp_trait_nw_bar(
 // density wave of m = consts[0] arms (see traits.VPTraitSpiral): v_R
 // sin(theta) + v_t cos(theta), v_R = a_R cos(phi) and v_t = a_t sin(phi),
 // phi = m (theta - p) - f, of p = params[0] and the tables a_R, a_t and f
-// at the subnodes (after the four parameters p, c, e and o)
+// at the subnodes, after the consts[1] parameters that are not node-wise
 template<typename T> constexpr void
 vp_trait_spiral(
         T& out,
@@ -1164,10 +1166,11 @@ vp_trait_spiral(
         const T* consts, const T* params)
 {
     int m = std::rint(consts[0]);
+    int offset = std::rint(consts[1]);
     T p = params[0] * DEG_TO_RAD<T>;
-    T ar = nodewise(r, rnidx, rnodes, params, 4, 1);
-    T at = nodewise(r, rnidx, rnodes, params, 4 + nrnodes, 1);
-    T f = nodewise(r, rnidx, rnodes, params, 4 + 2 * nrnodes, 1);
+    T ar = nodewise(r, rnidx, rnodes, params, offset, 1);
+    T at = nodewise(r, rnidx, rnodes, params, offset + nrnodes, 1);
+    T f = nodewise(r, rnidx, rnodes, params, offset + 2 * nrnodes, 1);
     T phi = m * (theta - p) - f;
     out = ar * std::cos(phi) * std::sin(theta)
         + at * std::sin(phi) * std::cos(theta);

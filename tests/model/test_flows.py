@@ -10,7 +10,7 @@ import pytest
 
 from gbkfit.model import component_parser, galaxy_parser
 from gbkfit.model.components.disks._profiles import DiskDensity
-from gbkfit.model.components.traits import VPTraitSpiral
+from gbkfit.model.components.traits import RPTraitSpiral, VPTraitSpiral
 from gbkfit.utils.parseutils import ConfigError
 
 
@@ -228,3 +228,64 @@ def test_a_spiral_wave_needs_the_rotation_of_its_disk():
             (WAVE_PTRAITS, dict(type='uniform', direction='rad'))):
         with pytest.raises(ConfigError, match="give the disk tangential"):
             disk(vptraits, ptraits)
+
+
+def test_a_given_wavenumber_winds_the_wave_as_given():
+    # That of the dispersion relation (in a flat rotation, trailing),
+    # given, makes the same wave
+    r = np.linspace(0.5, 12, 24)
+    v = np.full_like(r, 100.0)
+    omega = 100 / r
+    k = -np.sqrt(9 * (omega - 2) ** 2 - 2 * omega ** 2) / 50
+    dispersion = VPTraitSpiral(3).wave(
+        r, v, 0 * v, None, dict(c=50, e=0.1, o=2))
+    given = VPTraitSpiral(3, wavenumber='given').wave(
+        r, v, 0 * v, None, dict(e=0.1, o=2, k=k))
+    for name in ('ar', 'at', 'f'):
+        np.testing.assert_allclose(given[name], dispersion[name])
+
+
+def test_the_arms_of_an_image_by_a_given_wavenumber(driver):
+    # Two trailing arms of the pitch angle 20 degrees (a logarithmic
+    # spiral), in the light of a disk without kinematics: k = -2 / (R
+    # tan(20 degrees)), and f its integral by the trapezoid rule
+    component = dict(
+        type='smdisk', loose=False, tilted=False, rnodes=RNODES,
+        density=dict(ptraits=[
+            dict(type='exponential'),
+            dict(type='spiral', order=2, wavenumber='given')]),
+        emission=dict(type='band'))
+    image_disk = component_parser.load(component).density_disk()
+    subrnodes = np.asarray(image_disk.subrnodes())
+    k = -2 / (np.where(subrnodes > 0, subrnodes, np.inf)
+              * np.tan(np.deg2rad(20)))
+    values = dict(
+        xpos=0, ypos=0, posa=0, incl=INCL, pt_a=1, pt_s=3, pt1_p=40,
+        pt1_e=0.3, pt1_k=k)
+    galaxy = galaxy_parser.load(dict(components=[component]))
+    given = galaxy.plan_gravity().evaluate(values)[0]
+    f = np.concatenate(
+        ([0], np.cumsum(np.diff(subrnodes) * (k[1:] + k[:-1]) / 2)))
+    density = np.where(subrnodes > 0, 0.3 * np.exp(-subrnodes / 3), 0)
+    phi = 2 * np.deg2rad(THETA - 40) - np.interp(R, subrnodes, f)
+    plan = image_disk.plan(driver, 0, np.float64)
+    np.testing.assert_allclose(
+        plan.evaluate_polar_traits(values | given, 'rpt', R, THETA)[1],
+        np.interp(R, subrnodes, density) * np.cos(phi), rtol=1e-9,
+        atol=1e-12)
+
+
+def test_the_parameters_of_the_wavenumbers():
+    dispersion = dict(p=None, c=None, e=None, o=None)
+    assert VPTraitSpiral(2).params_sm().keys() == dispersion.keys()
+    assert RPTraitSpiral(2).params_sm().keys() == dispersion.keys()
+    assert list(VPTraitSpiral(2, wavenumber='given').params_sm()) \
+        == ['p', 'e', 'o']
+    assert list(RPTraitSpiral(2, wavenumber='given').params_sm()) \
+        == ['p', 'e']
+    assert list(RPTraitSpiral(2, wavenumber='given').params_rnw(3)) \
+        == ['a', 'f', 'k']
+    assert RPTraitSpiral(2, wavenumber='given').dump() == dict(
+        type='spiral', order=2, wavenumber='given')
+    with pytest.raises(ConfigError, match="winds the arms by its sign"):
+        VPTraitSpiral(2, winding='leading', wavenumber='given')

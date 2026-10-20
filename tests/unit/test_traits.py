@@ -38,8 +38,10 @@ def kernel_consts_cases():
                 options, consts = dict(zmax=5.0), (5.0,)
             elif type_.startswith('mixture'):
                 options, consts = dict(nblobs=3), (3,)
-            elif type_.endswith('harmonic') or type_ == 'spiral':
+            elif type_.endswith('harmonic'):
                 options, consts = dict(order=2), (2,)
+            elif type_ == 'spiral':
+                options, consts = dict(order=2), (2, 4)
             elif type_ == 'map':
                 options, consts = dict(size=[3, 2], step=2.0), (3, 2, 2.0)
             else:

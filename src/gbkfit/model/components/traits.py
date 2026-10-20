@@ -779,29 +779,38 @@ class TraitFeatureOrder:
 class TraitFeatureSpiral(TraitFeatureOrder):
     """
     A spiral density wave of m arms (the option order) in the gas of a
-    disk, in its rotation V(R): the options, parameters and wavenumber of
-    the spiral traits, a mixin (see VPTraitSpiral and RPTraitSpiral).
+    disk: the options, parameters and wavenumber of the spiral traits, a
+    mixin (see VPTraitSpiral and RPTraitSpiral).
 
     The wave is the response of a gas of the sound speed c to a
     perturbation of the relative density e (epsilon) rotating at the
-    pattern speed o (Omega_p), in the linear theory of tightly wound arms
-    (Davies et al. 2009, ApJ 702, 114, appendix). Its density is e rho_0
-    cos(phi), phi = m (theta - p) - f(R), which peaks on the arms m (theta
-    - p) = f(R) + 2 pi n. The radial wavenumber k = df/dR of the arms
-    follows from the dispersion relation of a gas without its own
-    gravity, k^2 c^2 = m^2 (Omega - o)^2 - kappa^2, where Omega = V / R
-    and kappa^2 = 2 (V / R) (dV/dR + V / R) are the angular and the
-    epicyclic frequency of the rotation, and f(R) is its integral from
-    the first node. The arms trail (by default) or lead the rotation of
+    pattern speed o (Omega_p), in the rotation V(R) of the disk, in the
+    linear theory of tightly wound arms (Davies et al. 2009, ApJ 702,
+    114, appendix). Its density is e rho_0 cos(phi), phi = m (theta - p) -
+    f(R), which peaks on the arms m (theta - p) = f(R) + 2 pi n: f(R) is
+    the integral from the first node of the radial wavenumber k = df/dR
+    of the arms, whose azimuth changes outwards by k / m (radians per
+    arcsec). Omega = V / R and kappa^2 = 2 (V / R) (dV/dR + V / R) are
+    the angular and the epicyclic frequency of the rotation.
+
+    k follows from the dispersion relation of a gas without its own
+    gravity (the option wavenumber 'dispersion', the default), k^2 c^2 =
+    m^2 (Omega - o)^2 - kappa^2: there is no wave where k^2 < 0 (between
+    the Lindblad resonances, m^2 (Omega - o)^2 < kappa^2), where the disk
+    does not rotate, and at its centre. The arms trail (the option
+    winding 'trailing', the default) or lead ('leading') the rotation of
     the disk: their outer parts lag behind it or run ahead of it, k of
     the sign of -Omega or of Omega (theta increases in the direction of a
-    positive rotation). There is no wave where k^2 < 0 (between the
-    Lindblad resonances, m^2 (Omega - o)^2 < kappa^2), where the disk
-    does not rotate, and at its centre.
+    positive rotation). Or k is given (the wavenumber 'given'), of any
+    shape: a node-wise parameter at the subnodes (e.g. a formula of
+    them: k = -m / (R tan(a)) winds trailing arms of the pitch angle a
+    into a logarithmic spiral in a positive rotation), whose sign winds
+    the arms; there is no wave at the centre.
 
-    The rotation V(R) is that of its disk at its midplane (the azimuthal
+    The rotation V(R) is that of the disk at its midplane (the azimuthal
     mean of the sum of its tangential velocity traits, parametric or
-    'mass', see _profiles.rotation): its disk must have tangential
+    'mass', see _profiles.rotation), which the dispersion relation and
+    the velocities of the wave take: the disk must then have tangential
     velocity traits. Its galaxy computes the tables of the wave at each
     evaluation, at the subnodes of the disk, with dV/dR by the
     second-order three-point formula and f by the trapezoid rule; they
@@ -811,42 +820,102 @@ class TraitFeatureSpiral(TraitFeatureOrder):
     (e.g. tied by expressions, 'disk_vpt1_p': 'disk_pt1_p').
 
     Its parameters: p (degrees), the azimuth of the arms where f = 0; c
-    (km/s, positive); e; and o (km/s per arcsec, positive in the
-    direction of a positive rotation). The tables of the wave are not
-    parameters (see Trait.wave_params).
+    (km/s, positive), with the wavenumber of the dispersion relation; e;
+    o (km/s per arcsec, positive in the direction of a positive
+    rotation), with the wavenumber of the dispersion relation or for the
+    velocities; and k (1/arcsec, node-wise at the subnodes), with a given
+    wavenumber. The tables of the wave are not parameters (see
+    Trait.wave_params).
     """
 
     def dump(self) -> dict[str, Any]:
-        info = dict(winding=self.winding()) \
-            if self.winding() != 'trailing' else {}
+        info = {}
+        if self.wavenumber_source() != 'dispersion':
+            info['wavenumber'] = self.wavenumber_source()
+        if self._winding not in (None, 'trailing'):
+            info['winding'] = self._winding
         return super().dump() | info  # noqa
 
     def __init__(self, **kwargs: Any):
         winding = kwargs.pop('winding')
+        wavenumber = kwargs.pop('wavenumber')
         super().__init__(**kwargs)
         if self.order() < 1:
             raise ConfigError(
                 f"order is the number of arms, at least 1; it is "
                 f"{self.order()}")
-        if winding not in ('trailing', 'leading'):
+        if wavenumber not in ('dispersion', 'given'):
+            raise ConfigError(
+                f"wavenumber must be 'dispersion' or 'given'; it is "
+                f"{wavenumber!r}")
+        if winding not in (None, 'trailing', 'leading'):
             raise ConfigError(
                 f"winding must be 'trailing' or 'leading'; it is "
                 f"{winding!r}")
+        if wavenumber == 'given' and winding is not None:
+            raise ConfigError(
+                "a given wavenumber winds the arms by its sign: winding is "
+                "for the wavenumber of the dispersion relation")
+        self._wavenumber = wavenumber
         self._winding = winding
 
-    def winding(self) -> str:
-        """Return how the arms wind: 'trailing' or 'leading'."""
-        return self._winding
+    def wavenumber_source(self) -> str:
+        """
+        Return where its wavenumber comes from: 'dispersion' (the
+        dispersion relation) or 'given'.
+        """
+        return self._wavenumber
+
+    def winding(self) -> str | None:
+        """
+        Return how the arms wind with the wavenumber of the dispersion
+        relation, 'trailing' or 'leading'; None with a given one.
+        """
+        if self._wavenumber == 'given':
+            return None
+        return self._winding or 'trailing'
+
+    @abc.abstractmethod
+    def takes_rotation(self) -> bool:
+        """
+        Check whether the wave takes the rotation of its disk: for its
+        wavenumber of the dispersion relation, or for its velocities.
+        """
+        pass
 
     def sampling(self) -> str:
         return 'subrings'
 
-    def params_sm(self) -> dict[str, ParamDesc]:
-        return dict(
-            p=ParamScalarDesc(),
-            c=ParamScalarDesc(),
-            e=ParamScalarDesc(),
-            o=ParamScalarDesc())
+    def consts(self) -> tuple[float, ...]:
+        # (the kernels read the tables after the parameters that are not
+        # node-wise)
+        return self.order(), len(self.params_sm())
+
+    def _params_sm(self, pattern_speed: bool) -> dict[str, ParamDesc]:
+        """
+        Return its parameters that are not node-wise, p first (the kernels
+        read it there): c with the wavenumber of the dispersion relation,
+        and o with it or if pattern_speed.
+        """
+        dispersion = self._wavenumber == 'dispersion'
+        params = dict(p=ParamScalarDesc())
+        if dispersion:
+            params['c'] = ParamScalarDesc()
+        params['e'] = ParamScalarDesc()
+        if dispersion or pattern_speed:
+            params['o'] = ParamScalarDesc()
+        return params
+
+    def _params_rnw(
+            self, tables: Sequence[str], nnodes: int
+    ) -> dict[str, ParamDesc]:
+        """
+        Return its node-wise parameters: its tables (see wave_params),
+        first (the kernels read them there), and k with a given
+        wavenumber.
+        """
+        names = list(tables) + (['k'] if self._wavenumber == 'given' else [])
+        return {name: ParamVectorDesc(nnodes) for name in names}
 
     def axisymmetric(self) -> bool:
         return False
@@ -862,15 +931,19 @@ class TraitFeatureSpiral(TraitFeatureOrder):
         Return Omega, kappa^2 and k of the wave at the radii r (arcsec,
         increasing: the subnodes of its disk), in the rotation v of its
         disk there (km/s) of the derivative dv (km/s per arcsec), for the
-        values of its parameters (c and o), and where there is a wave (k
-        is 0 elsewhere).
+        values of its parameters (c and o, or k), and where there is a
+        wave (k is 0 elsewhere).
         """
-        m = self.order()
-        c, o = float(params['c']), float(params['o'])
         r = np.asarray(r, dtype=float)
         rotating = (r > 0) & (v != 0)
         omega = np.divide(v, r, out=np.zeros_like(r), where=rotating)
         kappa2 = 2 * omega * (dv + omega)
+        if self._wavenumber == 'given':
+            waves = r > 0
+            k = np.where(waves, np.asarray(params['k'], dtype=float), 0)
+            return omega, kappa2, k, waves
+        m = self.order()
+        c, o = float(params['c']), float(params['o'])
         k2 = (m ** 2 * (omega - o) ** 2 - kappa2) / c ** 2
         waves = rotating & (k2 > 0)
         sense = -1 if self.winding() == 'trailing' else 1
@@ -1692,14 +1765,20 @@ class RPTraitSpiral(TraitFeatureSpiral, RPTrait):
     that the gravity of its galaxy does not take it (see DiskDensity).
     Its velocities are the velocity trait 'spiral' (see VPTraitSpiral).
     The Monte Carlo disks draw its clouds as those of a harmonic in each
-    ring (see RPTraitNWHarmonic), of the phase f of the ring.
+    ring (see RPTraitNWHarmonic), of the phase f of the ring. With a given
+    wavenumber, it does not take the rotation of its disk (e.g. the arms
+    of an image).
 
     Parameters
     ----------
     order : int
         The number m of arms, at least 1.
     winding : str, optional
-        How the arms wind: 'trailing' (the default) or 'leading'.
+        How the arms wind with the wavenumber of the dispersion relation:
+        'trailing' (the default) or 'leading'.
+    wavenumber : str, optional
+        Where the wavenumber comes from: 'dispersion' (the dispersion
+        relation, the default) or 'given' (the parameter k).
 
     Raises
     ------
@@ -1715,13 +1794,22 @@ class RPTraitSpiral(TraitFeatureSpiral, RPTrait):
     def uid() -> int:
         return RPT_UID_SPIRAL
 
-    def __init__(self, order: int, winding: str = 'trailing'):
-        super().__init__(order=order, winding=winding)
+    def __init__(
+            self,
+            order: int,
+            winding: str | None = None,
+            wavenumber: str = 'dispersion'
+    ):
+        super().__init__(order=order, winding=winding, wavenumber=wavenumber)
+
+    def takes_rotation(self) -> bool:
+        return self.wavenumber_source() == 'dispersion'
+
+    def params_sm(self) -> dict[str, ParamDesc]:
+        return self._params_sm(pattern_speed=False)
 
     def params_rnw(self, nnodes: int) -> dict[str, ParamDesc]:
-        return dict(
-            a=ParamVectorDesc(nnodes),
-            f=ParamVectorDesc(nnodes))
+        return self._params_rnw(self.wave_params(), nnodes)
 
     def wave_params(self) -> tuple[str, ...]:
         return 'a', 'f'
@@ -2823,18 +2911,23 @@ class VPTraitSpiral(TraitFeatureSpiral, VPTraitPlanar):
     The velocities of a spiral density wave in the gas of a disk, as
     DysmalPy's SpiralDensityWave (see TraitFeatureSpiral): the radial
     part v_R = -e m (Omega - o) / k cos(phi) and the tangential part v_t =
-    e kappa^2 / (2 k Omega) sin(phi), 0 where there is no wave. Towards
-    the edges of the radii of the wave, k tends to 0 and the velocity
-    grows without bound (v_R = -e c / eta, eta = k c / (m |Omega - o|)):
-    the linear theory does not hold there. Its density is the density
-    trait 'spiral' (see RPTraitSpiral).
+    e kappa^2 / (2 k Omega) sin(phi), 0 where there is no wave, where k is
+    0 or where the disk does not rotate. Towards the edges of the radii of
+    a wave of the dispersion relation, k tends to 0 and the velocity grows
+    without bound (v_R = -e c / eta, eta = k c / (m |Omega - o|)): the
+    linear theory does not hold there. Its density is the density trait
+    'spiral' (see RPTraitSpiral).
 
     Parameters
     ----------
     order : int
         The number m of arms, at least 1.
     winding : str, optional
-        How the arms wind: 'trailing' (the default) or 'leading'.
+        How the arms wind with the wavenumber of the dispersion relation:
+        'trailing' (the default) or 'leading'.
+    wavenumber : str, optional
+        Where the wavenumber comes from: 'dispersion' (the dispersion
+        relation, the default) or 'given' (the parameter k).
 
     Raises
     ------
@@ -2850,14 +2943,22 @@ class VPTraitSpiral(TraitFeatureSpiral, VPTraitPlanar):
     def uid() -> int:
         return VPT_UID_SPIRAL
 
-    def __init__(self, order: int, winding: str = 'trailing'):
-        super().__init__(order=order, winding=winding)
+    def __init__(
+            self,
+            order: int,
+            winding: str | None = None,
+            wavenumber: str = 'dispersion'
+    ):
+        super().__init__(order=order, winding=winding, wavenumber=wavenumber)
+
+    def takes_rotation(self) -> bool:
+        return True
+
+    def params_sm(self) -> dict[str, ParamDesc]:
+        return self._params_sm(pattern_speed=True)
 
     def params_rnw(self, nnodes: int) -> dict[str, ParamDesc]:
-        return dict(
-            ar=ParamVectorDesc(nnodes),
-            at=ParamVectorDesc(nnodes),
-            f=ParamVectorDesc(nnodes))
+        return self._params_rnw(self.wave_params(), nnodes)
 
     def wave_params(self) -> tuple[str, ...]:
         return 'ar', 'at', 'f'
@@ -2878,12 +2979,13 @@ class VPTraitSpiral(TraitFeatureSpiral, VPTraitPlanar):
         """
         m, e, o = self.order(), float(params['e']), float(params['o'])
         omega, kappa2, k, waves = self.wavenumber(r, v, dv, params)
+        moving = waves & (k != 0) & (omega != 0)
         return dict(
             ar=np.divide(
-                -e * m * (omega - o), k, out=np.zeros_like(k), where=waves),
+                -e * m * (omega - o), k, out=np.zeros_like(k), where=moving),
             at=np.divide(
                 e * kappa2, 2 * k * omega, out=np.zeros_like(k),
-                where=waves),
+                where=moving),
             f=_integral(r, k))
 
 
