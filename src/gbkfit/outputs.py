@@ -40,6 +40,7 @@ __all__ = [
     'Run',
     'RunWriter',
     'create',
+    'make_directory',
     'open',
     'reopen'
 ]
@@ -551,7 +552,7 @@ def create(
         a file.
     """
     return RunWriter(
-        _make_directory(path, exists), task, options or {}, _now(), ())
+        make_directory(path, exists), task, options or {}, _now(), ())
 
 
 def reopen(path: str) -> RunWriter:
@@ -579,13 +580,35 @@ def reopen(path: str) -> RunWriter:
         run.path, run.task, run.options, run.created, run.products())
 
 
-def _make_directory(
+def make_directory(
         path: str,
         exists: Literal['terminate', 'overwrite', 'unique']
 ) -> str:
     """
-    Create a directory and return its absolute path (see create). Creating
-    a directory is atomic, so two runs cannot both create the same one.
+    Create the directory of a run, e.g. to know it before the run starts
+    (create then writes into it with exists 'overwrite').
+
+    Creating a directory is atomic, so two runs cannot both create the
+    same one.
+
+    Parameters
+    ----------
+    path : str
+        The directory.
+    exists : {'terminate', 'overwrite', 'unique'}
+        What to do if it exists: fail, use it, or create the first free
+        path with a numeric suffix (e.g. output_2).
+
+    Returns
+    -------
+    str
+        The directory created (or used), absolute.
+
+    Raises
+    ------
+    FileExistsError
+        If the directory exists and exists is 'terminate', or the path is
+        a file.
     """
     path_obj = Path(path).absolute()
     try:
