@@ -1,65 +1,35 @@
+"""
+gbkfit-cli: the command-line tool of GBKFIT. It runs the tasks of the
+library (see gbkfit.tasks) in-process.
+"""
 
 import argparse
-import logging.config
+import logging
 import sys
 from collections.abc import Callable, Sequence
 from typing import Any, Literal
 
+from gbkfit.tasks import log_handler
 from gbkfit.utils import parseutils
 from gbkfit.utils.parseutils import ConfigError
 
-# (not __name__, which is __main__ under python -m, outside the loggers of
-# gbkfit that configure_logging configures)
-_log = logging.getLogger('gbkfit.apps.cli')
+_log = logging.getLogger(__name__)
 
 
 def configure_logging(
         log_level: Literal['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']
 ) -> None:
     """
-    Configure logging with specified log level: to the console (stderr;
-    the tasks also log to their runs, see tasks._detail.run_log). On a
-    terminal, the console log goes through the
-    console of the tasks, so that it shows above the line of the progress
-    of a fit (see tasks._progress).
+    Configure logging with specified log level: GBKFIT and the tool log to
+    the console of the tasks (stderr; see gbkfit.tasks.log_handler; the
+    tasks also log to their runs).
     """
-    # (imported here: the console of the command-line tool only)
-    import rich.highlighter
-    from gbkfit.tasks._console import CONSOLE
-    console: dict[str, Any] = {
-        'class': 'logging.StreamHandler',
-        'formatter': 'console'
-    }
-    if CONSOLE.is_terminal:
-        console = {
-            '()': 'rich.logging.RichHandler',
-            'formatter': 'console',
-            'console': CONSOLE,
-            'show_time': False,
-            'show_level': False,
-            'show_path': False,
-            'highlighter': rich.highlighter.NullHighlighter()
-        }
-    logging.config.dictConfig({
-        'version': 1,
-        'disable_existing_loggers': False,
-        'formatters': {
-            'console': {
-                'format': '{message}',
-                'style': '{'
-            },
-        },
-        'handlers': {
-            'console': console
-        },
-        'loggers': {
-            'gbkfit': {
-                'level': f'{log_level}',
-                'handlers': ['console'],
-                'propagate': False
-            }
-        }
-    })
+    handler = log_handler()
+    for name in ('gbkfit', 'gbkfit_cli'):
+        logger = logging.getLogger(name)
+        logger.setLevel(log_level)
+        logger.addHandler(handler)
+        logger.propagate = False
 
 
 # The options of prep pixel_moments and region_moments with one value for
@@ -566,11 +536,9 @@ def _run_eval(args: argparse.Namespace) -> None:
 
 def _run_prep(args: argparse.Namespace) -> None:
     """Run the prep task."""
-    import gbkfit.tasks._detail
     import gbkfit.tasks.prep
-    output_dir = gbkfit.tasks._detail.make_output_dir(
-        args.output_dir, args.output_dir_mode)
-    _log.info(f"output will be stored under directory: {output_dir}")
+    output = dict(
+        output_dir=args.output_dir, output_dir_mode=args.output_dir_mode)
     if args.prep_task == 'pixel_brightness':
         gbkfit.tasks.prep.prep_pixel_brightness(
             args.data_d, args.data_e, args.data_m,
@@ -578,7 +546,7 @@ def _run_prep(args: argparse.Namespace) -> None:
             args.ccl_lcount, args.ccl_pcount, args.ccl_lratio,
             args.sclip_sigma, args.sclip_iters,
             args.minify, args.nanpad, args.dtype,
-            output_dir=output_dir)
+            **output)
     elif args.prep_task == 'slit_spectra':
         gbkfit.tasks.prep.prep_slit_spectra(
             args.data_d, args.data_e, args.data_m,
@@ -586,7 +554,7 @@ def _run_prep(args: argparse.Namespace) -> None:
             args.ccl_lcount, args.ccl_pcount, args.ccl_lratio,
             args.sclip_sigma, args.sclip_iters,
             args.minify, args.nanpad, args.dtype,
-            args.velocity_rest, args.velocity, output_dir=output_dir)
+            args.velocity_rest, args.velocity, **output)
     elif args.prep_task == 'pixel_moments':
         gbkfit.tasks.prep.prep_pixel_moments(
             args.data_d, args.data_e, args.data_m,
@@ -594,22 +562,22 @@ def _run_prep(args: argparse.Namespace) -> None:
             args.ccl_lcount, args.ccl_pcount, args.ccl_lratio,
             args.sclip_sigma, args.sclip_iters,
             args.minify, args.nanpad, args.dtype,
-            output_dir=output_dir)
+            **output)
     elif args.prep_task == 'region_moments':
         gbkfit.tasks.prep.prep_region_moments(
             args.bins, args.data_d, args.data_e, args.data_m, args.dtype,
-            output_dir=output_dir)
+            **output)
     elif args.prep_task == 'region_spectra':
         gbkfit.tasks.prep.prep_region_spectra(
             args.bins, args.data_d, args.data_e, args.data_m,
             args.roi_spec, args.dtype, args.velocity_rest, args.velocity,
-            output_dir=output_dir)
+            **output)
     elif args.prep_task == 'psf_muse':
-        gbkfit.tasks.prep.prep_psf_muse(args.cube, output_dir)
+        gbkfit.tasks.prep.prep_psf_muse(args.cube, **output)
     elif args.prep_task == 'lsf_muse':
-        gbkfit.tasks.prep.prep_lsf_muse(output_dir)
+        gbkfit.tasks.prep.prep_lsf_muse(**output)
     elif args.prep_task == 'psf_casa_beams':
-        gbkfit.tasks.prep.prep_psf_casa_beams(args.cube, output_dir)
+        gbkfit.tasks.prep.prep_psf_casa_beams(args.cube, **output)
     elif args.prep_task == 'pixel_spectra':
         gbkfit.tasks.prep.prep_pixel_spectra(
             args.data_d, args.data_e, args.data_m,
@@ -617,7 +585,7 @@ def _run_prep(args: argparse.Namespace) -> None:
             args.ccl_lcount, args.ccl_pcount, args.ccl_lratio,
             args.sclip_sigma, args.sclip_iters,
             args.minify, args.nanpad, args.dtype,
-            args.velocity_rest, args.velocity, output_dir=output_dir,
+            args.velocity_rest, args.velocity, **output,
             noise_error=args.noise_error)
 
 
@@ -684,7 +652,3 @@ def main() -> None:
         sys.exit(1)
 
     _log.info("So long and thanks for all the fish!")
-
-
-if __name__ == '__main__':
-    main()

@@ -1,12 +1,16 @@
 """
 The prep task: prepare data files for the datasets of gbkfit (see
 gbkfit.prep), and write the tables of the PSFs and LSFs of instruments.
-Each prepared file is written as prep_<name of the input>.
+Each prepared file is written as prep_<name of the input>, in the output
+directory (output_dir; if it exists: an error with output_dir_mode
+'terminate', written into with 'overwrite', the default, or a new one
+with a numeric suffix with 'unique', e.g. output_2).
 """
 
 import logging
 import os
 from collections.abc import Sequence
+from typing import Literal
 
 import astropy.table
 import astropy.wcs
@@ -18,6 +22,7 @@ from gbkfit import prep
 from gbkfit.prep import FitsArrays
 from gbkfit.utils import fitsutils, unitutils
 from gbkfit.utils.parseutils import ConfigError
+from . import _detail
 
 
 __all__ = [
@@ -37,6 +42,19 @@ _log = logging.getLogger(__name__)
 
 # A range of pixels, as given: its first and last + 1
 _Range = Sequence[int]
+
+# What to do if the output directory exists (see _output_dir)
+_Exists = Literal['terminate', 'overwrite', 'unique']
+
+
+def _output_dir(output_dir: str, mode: _Exists) -> str:
+    """
+    Create the output directory, and return its absolute path (see
+    _detail.make_output_dir).
+    """
+    output_dir = _detail.make_output_dir(output_dir, mode)
+    _log.info(f"output will be stored under directory: {output_dir}")
+    return output_dir
 
 
 def _output(output_dir: str, filename: str | None) -> str | None:
@@ -110,13 +128,15 @@ def prep_pixel_brightness(
         minify: bool,
         nanpad: int | None,
         dtype: npt.DTypeLike,
-        output_dir: str = '.'
+        output_dir: str = '.',
+        output_dir_mode: _Exists = 'overwrite'
 ) -> None:
     """
     Prepare an image (pixel_brightness): crop it to a region (roi_spat:
     x from, x to, y from, y to), clip it, crop it to its valid pixels
     (minify), and pad it with invalid pixels (nanpad).
     """
+    output_dir = _output_dir(output_dir, output_dir_mode)
     arrays = FitsArrays.read(file_d, file_e, file_m)
     if roi_spat is not None:
         x0, x1, y0, y1 = roi_spat
@@ -146,7 +166,8 @@ def prep_slit_spectra(
         dtype: npt.DTypeLike,
         velocity_rest: str | None = None,
         velocity: str | None = None,
-        output_dir: str = '.'
+        output_dir: str = '.',
+        output_dir_mode: _Exists = 'overwrite'
 ) -> None:
     """
     Prepare the spectra along a slit (slit_spectra: positions along x,
@@ -156,6 +177,7 @@ def prep_slit_spectra(
     (velocity_rest). velocity is the convention of the velocities of an
     axis that does not state it (see FitsArrays.read).
     """
+    output_dir = _output_dir(output_dir, output_dir_mode)
     arrays = FitsArrays.read(file_d, file_e, file_m, velocity)
     rows, columns = slice(None), slice(None)
     if roi_spec is not None:
@@ -188,6 +210,7 @@ def prep_pixel_spectra(
         velocity_rest: str | None = None,
         velocity: str | None = None,
         output_dir: str = '.',
+        output_dir_mode: _Exists = 'overwrite',
         noise_error: bool = False
 ) -> None:
     """
@@ -209,6 +232,7 @@ def prep_pixel_spectra(
         raise ConfigError(
             "give a file of the errors or estimate them from the noise "
             "(noise_error), not both")
+    output_dir = _output_dir(output_dir, output_dir_mode)
     arrays = FitsArrays.read(file_d, file_e, file_m, velocity)
     channels, ys, xs = slice(None), slice(None), slice(None)
     if roi_spat is not None:
@@ -244,7 +268,8 @@ def prep_pixel_moments(
         minify: bool,
         nanpad: int | None,
         dtype: npt.DTypeLike,
-        output_dir: str = '.'
+        output_dir: str = '.',
+        output_dir_mode: _Exists = 'overwrite'
 ) -> None:
     """
     Prepare moment maps (pixel_moments), as image (see
@@ -253,6 +278,7 @@ def prep_pixel_moments(
     clip_max, sclip_sigma and sclip_iters) have one value for each map;
     sclip_iters can also be one value for all maps.
     """
+    output_dir = _output_dir(output_dir, output_dir_mode)
     nmaps = len(file_d)
     file_e = file_e or [None] * nmaps
     file_m = file_m or [None] * nmaps
@@ -322,7 +348,8 @@ def prep_region_moments(
         file_e: Sequence[str | None] | None,
         file_m: Sequence[str | None] | None,
         dtype: npt.DTypeLike,
-        output_dir: str = '.'
+        output_dir: str = '.',
+        output_dir_mode: _Exists = 'overwrite'
 ) -> None:
     """
     Prepare binned moment maps (e.g. of MaNGA DAP or GIST) for
@@ -333,6 +360,7 @@ def prep_region_moments(
     (prep_<bins>.fits), and for each map a vector of the value of each
     bin (prep_<map>.fits), whose masked or empty bins are NaN.
     """
+    output_dir = _output_dir(output_dir, output_dir_mode)
     nmaps = len(file_d)
     file_e = file_e or [None] * nmaps
     file_m = file_m or [None] * nmaps
@@ -390,7 +418,8 @@ def prep_region_spectra(
         dtype: npt.DTypeLike,
         velocity_rest: str | None = None,
         velocity: str | None = None,
-        output_dir: str = '.'
+        output_dir: str = '.',
+        output_dir_mode: _Exists = 'overwrite'
 ) -> None:
     """
     Prepare the spectra of the bins of a cube for region_spectra: a map of
@@ -408,6 +437,7 @@ def prep_region_spectra(
     solid angle or per beam become the fluxes of the pixels (see
     prep.pixel_fluxes).
     """
+    output_dir = _output_dir(output_dir, output_dir_mode)
     bins, index, nbins = _read_bins(file_bins)
     cube = FitsArrays.read(file_d, file_e, file_m, velocity)
     fluxes = prep.pixel_fluxes(cube.header, file_d, cube.data.shape[0])
@@ -447,12 +477,17 @@ def _write_table(
     return filename
 
 
-def prep_psf_muse(file: str, output_dir: str = '.') -> None:
+def prep_psf_muse(
+        file: str,
+        output_dir: str = '.',
+        output_dir_mode: _Exists = 'overwrite'
+) -> None:
     """
     Write the PSF of a MUSE cube (from its header) as a table of the
     options alpha and beta of a Moffat PSF against wavelength (see
     gbkfit.prep.muse_psf_table).
     """
+    output_dir = _output_dir(output_dir, output_dir_mode)
     filename = _write_table(
         prep.muse_psf_table(fits.getheader(file, 0)), output_dir, 'psf')
     _log.info(
@@ -461,22 +496,31 @@ def prep_psf_muse(file: str, output_dir: str = '.') -> None:
         f"beta: {{table: {filename}, column: beta}}}}")
 
 
-def prep_lsf_muse(output_dir: str = '.') -> None:
+def prep_lsf_muse(
+        output_dir: str = '.',
+        output_dir_mode: _Exists = 'overwrite'
+) -> None:
     """
     Write the LSF of MUSE as a table of its sigma against wavelength (see
     gbkfit.prep.muse_lsf_table).
     """
+    output_dir = _output_dir(output_dir, output_dir_mode)
     filename = _write_table(prep.muse_lsf_table(), output_dir, 'lsf')
     _log.info(
         f"the LSF is in {filename}; use it as lsf: {{type: gauss, "
         f"sigma: {{table: {filename}, column: sigma}}}}")
 
 
-def prep_psf_casa_beams(file: str, output_dir: str = '.') -> None:
+def prep_psf_casa_beams(
+        file: str,
+        output_dir: str = '.',
+        output_dir_mode: _Exists = 'overwrite'
+) -> None:
     """
     Write the beams of the channels of a cube of CASA as a table of the
     options of a Gaussian beam PSF (see fitsutils.casa_beam_table).
     """
+    output_dir = _output_dir(output_dir, output_dir_mode)
     filename = _write_table(fitsutils.casa_beam_table(file), output_dir, 'psf')
     _log.info(
         f"the beams are in {filename}; use them as psf: {{type: "

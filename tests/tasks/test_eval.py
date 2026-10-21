@@ -1,7 +1,8 @@
 """
-Tests for the eval task (gbkfit-cli eval).
+Tests for the eval task (gbkfit.tasks.eval).
 """
 
+import json
 import pathlib
 import subprocess
 import sys
@@ -19,23 +20,38 @@ REFERENCE_DIR = pathlib.Path(__file__).parents[1] / 'data' / 'reference_models'
 yaml = ruamel.yaml.YAML(typ='safe')
 
 
-def run_eval(mode, config, workdir, *options):
+def run_task(workdir, task, options, *flags):
     """
-    Run `gbkfit-cli eval` on a configuration (or on a configuration file)
-    in a new directory, with the given command line options, and return
-    its run (see gbkfit.outputs).
+    Run a task of gbkfit (python -m gbkfit.tasks, with the given flags) in
+    a directory, and return the finished process.
+    """
+    return subprocess.run(
+        [sys.executable, '-m', 'gbkfit.tasks', *flags, task,
+         json.dumps(options)],
+        cwd=workdir, capture_output=True, text=True)
+
+
+def run_eval(mode, config, workdir, profile_iters=0):
+    """
+    Run the eval task on a configuration (or on a configuration file) in a
+    new directory, and return its run (see gbkfit.outputs).
     """
     workdir.mkdir()
     if isinstance(config, dict):
         yaml.dump(config, workdir / 'config.yaml')
         config = 'config.yaml'
-    result = subprocess.run(
-        [sys.executable, '-m', 'gbkfit.apps.cli', 'eval', mode, str(config),
-         *options],
-        cwd=workdir, capture_output=True, text=True)
+    result = run_task(
+        workdir, 'eval', eval_options(mode, config, profile_iters))
     if result.returncode != 0:
-        pytest.fail(f"gbkfit-cli failed:\n{result.stderr[-3000:]}")
+        pytest.fail(f"eval failed:\n{result.stderr[-3000:]}")
     return outputs.open(workdir / 'output')
+
+
+def eval_options(mode, config, profile_iters=0):
+    """Return the options of the eval task, into output/."""
+    return dict(
+        mode=mode, config=str(config), profile_iters=profile_iters,
+        output_dir='output', output_dir_mode='unique')
 
 
 def array(run, kind, **ids):
@@ -100,7 +116,7 @@ def test_profiling_writes_the_timings(tmp_path, mode):
             data=str(tmp_path / 'data.fits'), error=1.0,
             step=observation['observable'].pop('step'))
         observation['observable'].pop('size')
-    run = run_eval(mode, config, tmp_path / mode, '--profile', '3')
+    run = run_eval(mode, config, tmp_path / mode, profile_iters=3)
     timings = run.read(run.product('timings'))
     assert timings['model_eval']['count'] == 3
     # (and the log of the run has the messages of the task)
@@ -159,15 +175,11 @@ def test_unknown_options(tmp_path):
     component['rnmx'] = component['rnmax']
     yaml.dump(config, tmp_path / 'config.yaml')
 
-    def run(*options):
-        return subprocess.run(
-            [sys.executable, '-m', 'gbkfit.apps.cli', 'eval', 'model',
-             'config.yaml', *options],
-            cwd=tmp_path, capture_output=True, text=True)
-    result = run()
+    options = eval_options('model', 'config.yaml')
+    result = run_task(tmp_path, 'eval', options)
     assert result.returncode == 0
     assert "'rnmx' (did you mean 'rnmax'?)" in result.stderr
-    result = run('--strict')
+    result = run_task(tmp_path, 'eval', options, '--strict')
     assert result.returncode != 0
     assert "galaxies[0].components[0]" in result.stderr
     assert "'rnmx' (did you mean 'rnmax'?)" in result.stderr
@@ -235,9 +247,8 @@ def test_configuration_errors_are_reported_without_a_traceback(tmp_path):
     config = yaml.load(REFERENCE_DIR / 'thin_disk_pixel_spectra.yaml')
     config['params']['properties']['incl'] = 'nonsense +'
     yaml.dump(config, tmp_path / 'config.yaml')
-    result = subprocess.run(
-        [sys.executable, '-m', 'gbkfit.apps.cli', 'eval', 'model',
-         'config.yaml'], cwd=tmp_path, capture_output=True, text=True)
+    result = run_task(
+        tmp_path, 'eval', eval_options('model', 'config.yaml'))
     assert result.returncode == 1
     assert "error: params" in result.stderr
     assert 'Traceback' not in result.stderr

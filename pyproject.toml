@@ -47,17 +47,10 @@ lmfit = ['lmfit']
 nautilus = ['nautilus-sampler']
 cmaes = ['cma']
 ultranest = ['ultranest']
-gui = ['PySide6']
 
 [project.urls]
 Homepage = 'https://github.com/bek0s/gbkfit'
 Documentation = 'https://gbkfit.readthedocs.io'
-
-[project.scripts]
-gbkfit-cli = 'gbkfit.apps.cli:main'
-
-[project.gui-scripts]
-gbkfit-gui = 'gbkfit.apps.gui:main'
 
 [dependency-groups]
 test = ['pytest>=8', 'pytest-regressions']

@@ -1,4 +1,5 @@
 
+import json
 import subprocess
 import sys
 
@@ -12,19 +13,22 @@ from modelutils import observation_group
 @pytest.fixture
 def evaluate_config(tmp_path):
     """
-    Return a function that evaluates a configuration file with
-    `gbkfit-cli eval model` and returns its run (see gbkfit.outputs).
-    Each configuration is evaluated in its own directory.
+    Return a function that evaluates a configuration file with the eval
+    task of gbkfit (python -m gbkfit.tasks) and returns its run (see
+    gbkfit.outputs). Each configuration is evaluated in its own directory.
     """
     def evaluate(config):
         workdir = tmp_path / config.stem
         workdir.mkdir()
+        options = dict(
+            mode='model', config=str(config), profile_iters=0,
+            output_dir='output', output_dir_mode='terminate')
         result = subprocess.run(
-            [sys.executable, '-m', 'gbkfit.apps.cli',
-             'eval', 'model', str(config)],
+            [sys.executable, '-m', 'gbkfit.tasks', 'eval',
+             json.dumps(options)],
             cwd=workdir, capture_output=True, text=True)
         if result.returncode != 0:
-            pytest.fail(f"gbkfit-cli failed:\n{result.stderr[-3000:]}")
+            pytest.fail(f"eval failed:\n{result.stderr[-3000:]}")
         return outputs.open(workdir / 'output')
     return evaluate
 

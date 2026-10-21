@@ -36,7 +36,7 @@ Usage:
 
 where PYTHON is the interpreter of an environment with the version of
 gbkfit that makes the references (now the current code). Every <case>.yaml in this directory is
-evaluated with `gbkfit-cli eval model`, and its FITS outputs are stored
+evaluated by the eval task in mode model, and its FITS outputs are stored
 in <case>.npz, keyed by the file names of older versions:
 model_0_<item>_<d, m or w> (the model, its mask and its weights).
 """
@@ -58,10 +58,26 @@ HERE = pathlib.Path(__file__).parent
 PARTS = dict(model='d', model_mask='m', model_weight='w')
 
 
+def eval_command(python, config):
+    """
+    Return the arguments of `python -m` that evaluate the model of a
+    configuration into output/, by the version of gbkfit of an interpreter:
+    its task runner, or the command-line tool of older versions.
+    """
+    older = subprocess.run(
+        [python, '-c', 'import gbkfit.apps.cli'], capture_output=True)
+    if older.returncode == 0:
+        return ['gbkfit.apps.cli', 'eval', 'model', str(config)]
+    options = dict(
+        mode='model', config=str(config), profile_iters=0,
+        output_dir='output', output_dir_mode='terminate')
+    return ['gbkfit.tasks', 'eval', json.dumps(options)]
+
+
 def evaluate_model(python, config, workdir):
     """Evaluate a model configuration and return its FITS outputs."""
     subprocess.run(
-        [python, '-m', 'gbkfit.apps.cli', 'eval', 'model', str(config)],
+        [python, '-m', *eval_command(python, config)],
         cwd=workdir, check=True, capture_output=True)
     manifest = workdir / 'output' / 'gbkfit.json'
     if manifest.exists():

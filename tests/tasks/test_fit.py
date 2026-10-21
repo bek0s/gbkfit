@@ -1,5 +1,5 @@
 """
-Tests for the fit task (gbkfit-cli fit).
+Tests for the fit task (gbkfit.tasks.fit).
 """
 
 import json
@@ -19,13 +19,23 @@ REFERENCE_DIR = pathlib.Path(__file__).parents[1] / 'data' / 'reference_models'
 yaml = ruamel.yaml.YAML(typ='safe')
 
 
-def run_cli(workdir, *args):
-    """Run gbkfit-cli in a directory; fail the test if it fails."""
+def run_task(workdir, task, **options):
+    """
+    Run a task of gbkfit (python -m gbkfit.tasks) in a directory; fail the
+    test if it fails.
+    """
     result = subprocess.run(
-        [sys.executable, '-m', 'gbkfit.apps.cli', *args],
+        [sys.executable, '-m', 'gbkfit.tasks', task, json.dumps(options)],
         cwd=workdir, capture_output=True, text=True)
     if result.returncode != 0:
-        pytest.fail(f"gbkfit-cli failed:\n{result.stderr[-3000:]}")
+        pytest.fail(f"task {task} failed:\n{result.stderr[-3000:]}")
+
+
+def evaluate_model(workdir):
+    """Evaluate the model of model.yaml in a directory, into model/."""
+    run_task(
+        workdir, 'eval', mode='model', config='model.yaml', profile_iters=0,
+        output_dir='model', output_dir_mode='unique')
 
 
 def read(directory, kind, **ids):
@@ -40,7 +50,7 @@ def test_fit_recovers_the_parameters_of_noiseless_data(tmp_path):
     # The data are the model of the reference config
     config = yaml.load(REFERENCE_DIR / 'thin_disk_pixel_spectra.yaml')
     yaml.dump(config, tmp_path / 'model.yaml')
-    run_cli(tmp_path, 'eval', 'model', 'model.yaml', '--output-dir', 'model')
+    evaluate_model(tmp_path)
     model = read(tmp_path / 'model', 'model').data
     fits.writeto(tmp_path / 'data.fits', model)
     # Fit three of its parameters, from elsewhere
@@ -59,7 +69,9 @@ def test_fit_recovers_the_parameters_of_noiseless_data(tmp_path):
     # (from another directory: the paths of a configuration are relative
     # to its own directory)
     (tmp_path / 'run').mkdir()
-    run_cli(tmp_path / 'run', 'fit', '../fit.yaml', '--output-dir', '../fit')
+    run_task(
+        tmp_path / 'run', 'fit', config='../fit.yaml', output_dir='../fit',
+        output_dir_mode='unique')
     run = outputs.open(tmp_path / 'fit')
     result = run.read(run.product('fit_result'))
     best = result['solutions'][0]['free']
@@ -89,9 +101,9 @@ def test_fit_recovers_the_parameters_of_noiseless_data(tmp_path):
     # another fitter
     restart['fitter'] = dict(type='scipy.least_squares')
     yaml.dump(restart, restart_file)
-    run_cli(
-        restart_file.parent, 'fit', restart_file.name,
-        '--output-dir', tmp_path / 'refit')
+    run_task(
+        restart_file.parent, 'fit', config=restart_file.name,
+        output_dir=str(tmp_path / 'refit'), output_dir_mode='unique')
     refit = read(tmp_path / 'refit', 'fit_result')
     for name in ('xpos', 'posa', 'vpt_vt'):
         assert refit['solutions'][0]['free'][name] == pytest.approx(
@@ -105,7 +117,7 @@ def test_a_fit_resumes_from_its_output_directory(tmp_path):
     pytest.importorskip('cma')
     config = yaml.load(REFERENCE_DIR / 'thin_disk_pixel_spectra.yaml')
     yaml.dump(config, tmp_path / 'model.yaml')
-    run_cli(tmp_path, 'eval', 'model', 'model.yaml', '--output-dir', 'model')
+    evaluate_model(tmp_path)
     model = read(tmp_path / 'model', 'model').data
     fits.writeto(tmp_path / 'data.fits', model)
     observation = config['observations'][0]
@@ -118,9 +130,11 @@ def test_a_fit_resumes_from_its_output_directory(tmp_path):
         posa=dict(value=40, min=0, max=90))
     config['fitter'] = dict(type='cmaes', maxfevals=300)
     yaml.dump(config, tmp_path / 'fit.yaml')
-    run_cli(tmp_path, 'fit', 'fit.yaml', '--output-dir', 'fit')
+    run_task(
+        tmp_path, 'fit', config='fit.yaml', output_dir='fit',
+        output_dir_mode='unique')
     first = read(tmp_path / 'fit', 'fit_result')
-    run_cli(tmp_path, 'fit', '--resume', 'fit')
+    run_task(tmp_path, 'resume', output_dir='fit')
     resumed = read(tmp_path / 'fit', 'fit_result')
     assert resumed['solutions'][0]['free'] == first['solutions'][0]['free']
 
@@ -132,7 +146,7 @@ def test_a_fit_is_bootstrapped_as_it_ends_or_later(tmp_path):
     # directory, by another configuration, with another fitter
     config = yaml.load(REFERENCE_DIR / 'thin_disk_pixel_spectra.yaml')
     yaml.dump(config, tmp_path / 'model.yaml')
-    run_cli(tmp_path, 'eval', 'model', 'model.yaml', '--output-dir', 'model')
+    evaluate_model(tmp_path)
     model = read(tmp_path / 'model', 'model').data
     fits.writeto(tmp_path / 'data.fits', model)
     observation = config['observations'][0]
@@ -147,7 +161,9 @@ def test_a_fit_is_bootstrapped_as_it_ends_or_later(tmp_path):
     scheme = dict(type='blocks', size=[3, 3, 2])
     config['bootstrap'] = dict(nsamples=3, scheme=scheme)
     yaml.dump(config, tmp_path / 'fit.yaml')
-    run_cli(tmp_path, 'fit', 'fit.yaml', '--output-dir', 'fit')
+    run_task(
+        tmp_path, 'fit', config='fit.yaml', output_dir='fit',
+        output_dir_mode='unique')
     result = read(tmp_path / 'fit', 'fit_result')
     assert (result['bootstrap']['nsamples'],
             result['bootstrap']['nfailed']) == (3, 0)
@@ -156,7 +172,7 @@ def test_a_fit_is_bootstrapped_as_it_ends_or_later(tmp_path):
         nsamples=4, scheme=scheme,
         fitter=dict(type='scipy.least_squares', method='lm')))
     yaml.dump(later, tmp_path / 'later.yaml')
-    run_cli(tmp_path, 'fit', '--bootstrap', 'fit', 'later.yaml')
+    run_task(tmp_path, 'bootstrap', output_dir='fit', config='later.yaml')
     result = read(tmp_path / 'fit', 'fit_result')
     assert result['bootstrap']['nsamples'] == 4
     assert result['bootstrap']['options']['fitter']['method'] == 'lm'
