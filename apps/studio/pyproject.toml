@@ -1,0 +1,47 @@
+[build-system]
+requires = ['setuptools>=77', 'setuptools-scm>=8']
+build-backend = 'setuptools.build_meta'
+
+[project]
+name = 'gbkfit-studio'
+dynamic = ['version']
+description = 'The Studio of GBKFIT: set up models, preview them live, fit them, and see their results'
+readme = 'README.rst'
+license = 'BSD-3-Clause'
+authors = [{ name = 'Georgios Bekiaris', email = 'gbkfit@gmail.com' }]
+requires-python = '>=3.12'
+classifiers = [
+    'Development Status :: 3 - Alpha',
+    'Environment :: Web Environment',
+    'Intended Audience :: Science/Research',
+    'Programming Language :: Python :: 3',
+    'Topic :: Scientific/Engineering :: Astronomy'
+]
+dependencies = ['gbkfit-server']
+
+[project.urls]
+Homepage = 'https://github.com/bek0s/gbkfit'
+Documentation = 'https://gbkfit.readthedocs.io'
+
+[project.scripts]
+gbkfit-studio = 'gbkfit_studio.main:main'
+
+# The server serves the page (see gbkfit_studio.page)
+[project.entry-points.'gbkfit_server.pages']
+studio = 'gbkfit_studio:page'
+
+[tool.setuptools.package-data]
+gbkfit_studio = ['page/**/*']
+
+[dependency-groups]
+test = ['pytest>=8']
+
+[tool.pytest.ini_options]
+minversion = '8.0'
+testpaths = ['tests']
+addopts = ['-ra', '--strict-markers', '--strict-config']
+xfail_strict = true
+
+# The version of the repository (that of gbkfit too)
+[tool.setuptools_scm]
+root = '../..'

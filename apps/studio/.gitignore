@@ -1,0 +1,3 @@
+node_modules/
+# (the built page: npm run build)
+src/gbkfit_studio/page/

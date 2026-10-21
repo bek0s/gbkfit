@@ -1,8 +1,11 @@
 *~
 *.fits
 *.json
-# (the contract of the API of the server)
+# (the contract of the API of the server, and the npm package of the Studio)
 !apps/server/openapi.json
+!apps/studio/package.json
+!apps/studio/package-lock.json
+!apps/studio/tsconfig.json
 *.so
 *.user
 .DS_Store
