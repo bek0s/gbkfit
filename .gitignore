@@ -15,5 +15,5 @@ __pycache__/
 .pytest_cache/
 build/
 dist/
-gbkfit.egg-info/
+*.egg-info/
 src/gbkfit/_version.py
