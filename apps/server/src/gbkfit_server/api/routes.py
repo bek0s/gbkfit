@@ -155,16 +155,18 @@ async def close_session(server: ServerDep, id_: str) -> None:
 @router.websocket('/sessions/{id_}/evaluate')
 async def evaluate(websocket: WebSocket, server: ServerDep, id_: str) -> None:
     """
-    Evaluate a live session: the client sends values of free parameters
-    ({values: {element: value}}, e.g. as it moves a slider), and gets the
-    frame of each result (see Session.evaluate). Values sent while others
-    are evaluated replace them (see Latest).
+    Evaluate a live session: the client gets the frame of the data first
+    (see Session.data), then sends values of free parameters ({values:
+    {element: value}}, e.g. as it moves a slider), and gets the frame of
+    each result (see Session.evaluate). Values sent while others are
+    evaluated replace them (see Latest).
     """
     try:
         live = server.sessions.get(id_)
     except NotFound as e:
         raise WebSocketException(status.WS_1008_POLICY_VIOLATION, str(e))
     await websocket.accept()
+    await websocket.send_bytes(live.data())
     latest = Latest()
 
     async def receive() -> None:

@@ -97,7 +97,9 @@ button { font: inherit; color: inherit; }
 .editor .cm-activeLine, .editor .cm-activeLineGutter { background: var(--sel); }
 .editor .cm-cursor { border-left-color: var(--accent); }
 
-.maps { flex: 1; min-height: 0; overflow: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; padding: 12px; }
+.rows { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 18px; padding: 12px; }
+.comparison { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; max-width: 980px; }
+.view-label { font: 11px var(--mono); color: var(--faint); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 4px; }
 .map-head { font: 600 12px var(--display); letter-spacing: .02em; margin-bottom: 6px; }
 .image { margin: 0; display: flex; flex-direction: column; gap: 4px; }
 .image canvas { width: 100%; image-rendering: pixelated; background: var(--panel2); border-radius: 4px; }

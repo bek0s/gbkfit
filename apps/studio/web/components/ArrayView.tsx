@@ -8,15 +8,17 @@ interface Props {
   data: Float32Array;
   shape: number[];
   diverging?: boolean;
+  // The range of the colours of an image (see ImageView)
+  limits?: [number, number];
 }
 
-export function ArrayView({ data, shape, diverging = false }: Props) {
+export function ArrayView({ data, shape, diverging = false, limits }: Props) {
   if (shape.length === 1) return <LineView data={data} />;
-  if (shape.length === 2) return <ImageView data={data} shape={shape} diverging={diverging} />;
+  if (shape.length === 2) return <ImageView data={data} shape={shape} diverging={diverging} limits={limits} />;
   return <CubeView data={data} shape={shape} diverging={diverging} />;
 }
 
-function CubeView({ data, shape, diverging }: Required<Props>) {
+function CubeView({ data, shape, diverging }: Required<Omit<Props, 'limits'>>) {
   const [planes, rows, columns] = shape;
   const [plane, setPlane] = useState(Math.floor(planes / 2));
   const shown = Math.min(plane, planes - 1);

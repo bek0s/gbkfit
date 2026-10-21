@@ -10,6 +10,9 @@ export interface LiveSession {
   config: string | null;
   info: Session | null;
   values: Record<string, number>;
+  // The data of the setup (sent once), and the latest result: the models
+  // and residuals, and the chi-square (header.chi2)
+  data: Frame | null;
   frame: Frame | null;
   error: string | null;
   starting: boolean;
@@ -25,6 +28,7 @@ export function useLiveSession(): LiveSession {
   const [generation, setGeneration] = useState(0);
   const [info, setInfo] = useState<Session | null>(null);
   const [values, setValues] = useState<Record<string, number>>({});
+  const [dataFrame, setDataFrame] = useState<Frame | null>(null);
   const [frame, setFrame] = useState<Frame | null>(null);
   const [error, setError] = useState<string | null>(null);
   const socket = useRef<WebSocket | null>(null);
@@ -47,6 +51,7 @@ export function useLiveSession(): LiveSession {
     let id: string | null = null;
     let closed = false;
     setInfo(null);
+    setDataFrame(null);
     setFrame(null);
     setError(null);
     data(api.POST('/api/v1/sessions', { body: { config } }))
@@ -63,6 +68,7 @@ export function useLiveSession(): LiveSession {
         ws.binaryType = 'arraybuffer';
         ws.onmessage = (event: MessageEvent<ArrayBuffer>) => {
           const result = decode(event.data);
+          if (result.header.type === 'ready') return setDataFrame(result);
           if (result.header.type === 'error') setError(String(result.header.message));
           else {
             setFrame(result);
@@ -101,6 +107,7 @@ export function useLiveSession(): LiveSession {
     config,
     info,
     values,
+    data: dataFrame,
     frame,
     error,
     starting: config !== null && info === null && error === null,

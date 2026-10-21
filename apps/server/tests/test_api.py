@@ -67,9 +67,11 @@ def test_a_session_evaluates_values_sent_over_a_websocket(client, setup):
     assert session['free']['incl']['value'] == 45
     url = f"/api/v1/sessions/{session['id']}/evaluate?token={TOKEN}"
     with client.websocket_connect(url) as websocket:
+        # (the frame of the data comes first: here, none)
+        assert frames.decode(websocket.receive_bytes())[0]['type'] == 'ready'
         websocket.send_json(dict(values=dict(incl=80)))
         header, data = frames.decode(websocket.receive_bytes())
-    assert header['type'] == 'result'
+    assert header['type'] == 'result' and header['chi2'] is None
     assert frames.arrays(header, data)[0].shape == (12, 16)
     assert client.delete(
         f"/api/v1/sessions/{session['id']}").status_code == 204

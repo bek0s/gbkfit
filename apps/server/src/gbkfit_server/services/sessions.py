@@ -59,7 +59,8 @@ class Session:
             process: asyncio.subprocess.Process,
             output: OutputTail,
             reading: asyncio.Task[None],
-            ready: Mapping[str, Any]
+            ready: Mapping[str, Any],
+            data: bytes
     ):
         self._id = id_
         self._config = config
@@ -67,6 +68,7 @@ class Session:
         self._output = output
         self._reading = reading
         self._ready = dict(ready)
+        self._data = frames.encode(self._ready, data)
         self._lock = asyncio.Lock()
 
     @property
@@ -77,21 +79,27 @@ class Session:
     def info(self) -> dict[str, Any]:
         """
         Return the session: its id, its configuration (relative to the
-        workspace), its observations, with their data items, and its free
-        parameters (by element name), with their properties (e.g. their
-        values, min and max).
+        workspace), its free parameters (by element name), with their
+        properties (e.g. their values, min and max), and whether it has
+        data (and so residuals and a chi-square; see worker).
         """
         return dict(
-            id=self._id, config=self._config,
-            observations=self._ready['observations'],
-            free=self._ready['free'])
+            id=self._id, config=self._config, free=self._ready['free'],
+            data=self._ready['data'])
+
+    def data(self) -> bytes:
+        """
+        Return the frame of the data of the configuration (see worker),
+        which do not change with the values.
+        """
+        return self._data
 
     async def evaluate(self, values: Mapping[str, float]) -> bytes:
         """
         Evaluate the models at values of the free parameters (by element
         name; the others keep their latest values), and return the frame
-        of the result for the client: the model of each data item of each
-        observation (see frames.array_frame), or an error ('message').
+        of the result for the client: the models and the residuals, with
+        the chi-square (see worker), or an error ('message').
 
         Raises
         ------
@@ -150,9 +158,9 @@ class Sessions:
         output = OutputTail()
         reading = asyncio.create_task(output.read(process.stderr))
         try:
-            ready, _ = await frames.read_async(process.stdout)
+            ready, data = await frames.read_async(process.stdout)
         except asyncio.IncompleteReadError:
-            ready = dict(type='error', message=None)
+            ready, data = dict(type='error', message=None), b''
         if ready['type'] != 'ready':
             await process.wait()
             await reading
@@ -160,7 +168,8 @@ class Sessions:
                 f"cannot set up {config}: "
                 f"{ready['message'] or output.text()}")
         session = Session(
-            uuid.uuid4().hex[:12], config, process, output, reading, ready)
+            uuid.uuid4().hex[:12], config, process, output, reading, ready,
+            data)
         self._sessions[session.id] = session
         return session
 

@@ -682,28 +682,6 @@
         "title": "JobRequest",
         "description": "A job to run: its task, and the options of the task (see\ngbkfit.tasks), with their paths relative to the workspace. eval and\nfit need a configuration ('config'), and write their run in the runs\nof its setup, unless they give its folder ('output_dir'); resume\nneeds the folder of the run of the fit ('output_dir')."
       },
-      "ObservationInfo": {
-        "properties": {
-          "label": {
-            "type": "string",
-            "title": "Label"
-          },
-          "items": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Items"
-          }
-        },
-        "type": "object",
-        "required": [
-          "label",
-          "items"
-        ],
-        "title": "ObservationInfo",
-        "description": "An observation of a session: its label, and its data items."
-      },
       "ProjectInfo": {
         "properties": {
           "path": {
@@ -833,13 +811,6 @@
             "type": "string",
             "title": "Config"
           },
-          "observations": {
-            "items": {
-              "$ref": "#/components/schemas/ObservationInfo"
-            },
-            "type": "array",
-            "title": "Observations"
-          },
           "free": {
             "additionalProperties": {
               "additionalProperties": true,
@@ -847,17 +818,21 @@
             },
             "type": "object",
             "title": "Free"
+          },
+          "data": {
+            "type": "boolean",
+            "title": "Data"
           }
         },
         "type": "object",
         "required": [
           "id",
           "config",
-          "observations",
-          "free"
+          "free",
+          "data"
         ],
         "title": "SessionInfo",
-        "description": "A live session: its id, its configuration, its observations, and its\nfree parameters (by element name), with their properties (e.g. their\nvalues, min and max)."
+        "description": "A live session: its id, its configuration, its free parameters (by\nelement name), with their properties (e.g. their values, min and\nmax), and whether it has data (and so residuals and a chi-square)."
       },
       "SessionRequest": {
         "properties": {

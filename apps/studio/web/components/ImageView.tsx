@@ -8,12 +8,15 @@ interface Props {
   // (rows, columns)
   shape: number[];
   diverging?: boolean;
+  // The range of the colours (by default, that of the values)
+  limits?: [number, number];
 }
 
-export function ImageView({ data, shape, diverging = false }: Props) {
+export function ImageView({ data, shape, diverging = false, limits }: Props) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const [rows, columns] = shape;
-  const [low, high] = useMemo(() => range(data, diverging), [data, diverging]);
+  const own = useMemo(() => range(data, diverging), [data, diverging]);
+  const [low, high] = limits ?? own;
 
   useEffect(() => {
     const context = canvas.current?.getContext('2d');
@@ -49,7 +52,7 @@ export function ImageView({ data, shape, diverging = false }: Props) {
 const SEQUENTIAL = ['--seq0', '--seq1', '--seq2', '--seq3'];
 const DIVERGING = ['--map-neg2', '--map-neg', '--map-mid', '--map-pos', '--map-pos2'];
 
-function range(data: Float32Array, diverging: boolean): [number, number] {
+export function range(data: Float32Array, diverging: boolean): [number, number] {
   let low = Infinity;
   let high = -Infinity;
   for (const value of data) {

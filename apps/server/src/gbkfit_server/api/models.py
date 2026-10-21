@@ -13,7 +13,6 @@ from gbkfit_server.services.jobs import TASKS
 __all__ = [
     'JobInfo',
     'JobRequest',
-    'ObservationInfo',
     'ProjectInfo',
     'RunInfo',
     'ServerInfo',
@@ -91,19 +90,13 @@ class SessionRequest(BaseModel):
     config: str
 
 
-class ObservationInfo(BaseModel):
-    """An observation of a session: its label, and its data items."""
-    label: str
-    items: list[str]
-
-
 class SessionInfo(BaseModel):
     """
-    A live session: its id, its configuration, its observations, and its
-    free parameters (by element name), with their properties (e.g. their
-    values, min and max).
+    A live session: its id, its configuration, its free parameters (by
+    element name), with their properties (e.g. their values, min and
+    max), and whether it has data (and so residuals and a chi-square).
     """
     id: str
     config: str
-    observations: list[ObservationInfo]
     free: dict[str, dict[str, Any]]
+    data: bool

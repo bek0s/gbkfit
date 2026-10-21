@@ -327,16 +327,6 @@ export interface components {
             };
         };
         /**
-         * ObservationInfo
-         * @description An observation of a session: its label, and its data items.
-         */
-        ObservationInfo: {
-            /** Label */
-            label: string;
-            /** Items */
-            items: string[];
-        };
-        /**
          * ProjectInfo
          * @description A project: its path, the names of its pieces and setups by folder
          *     (e.g. 'galaxies'), and the paths of its runs.
@@ -394,23 +384,23 @@ export interface components {
         };
         /**
          * SessionInfo
-         * @description A live session: its id, its configuration, its observations, and its
-         *     free parameters (by element name), with their properties (e.g. their
-         *     values, min and max).
+         * @description A live session: its id, its configuration, its free parameters (by
+         *     element name), with their properties (e.g. their values, min and
+         *     max), and whether it has data (and so residuals and a chi-square).
          */
         SessionInfo: {
             /** Id */
             id: string;
             /** Config */
             config: string;
-            /** Observations */
-            observations: components["schemas"]["ObservationInfo"][];
             /** Free */
             free: {
                 [key: string]: {
                     [key: string]: unknown;
                 };
             };
+            /** Data */
+            data: boolean;
         };
         /**
          * SessionRequest
