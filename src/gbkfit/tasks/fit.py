@@ -39,7 +39,7 @@ _RESULT = 'fit/result.json'
 
 def fit(
         config: str,
-        output_dir: str,
+        output_dir: str | None,
         output_dir_mode: Literal['terminate', 'overwrite', 'unique'],
         evaluation_log: bool = True
 ) -> None:
@@ -58,7 +58,9 @@ def fit(
     logs/progress.jsonl ('progress'), its log to logs/gbkfit.log ('log';
     see run_log), and the configuration at the best
     fit so far to fit/best.yaml ('best_config'; see _progress), from
-    which a stopped fit can start again.
+    which a stopped fit can start again. In a project, it writes the
+    sources of the configuration too (setup.json, 'setup'; see
+    write_setup).
 
     With a section 'bootstrap' (see BootstrapOptions), the errors of the
     best fit are then bootstrapped too (see gbkfit.fitting.bootstrap),
@@ -75,10 +77,14 @@ def fit(
     Parameters
     ----------
     config : str
-        The configuration file (YAML or JSON); its relative paths are
-        relative to its directory (or to its section 'root').
-    output_dir : str
-        The directory of the run.
+        The configuration file (YAML or JSON), which can name pieces of
+        its project (see gbkfit.project); its relative paths are relative
+        to its section 'root', or else to the folder of its project, or
+        else to its directory.
+    output_dir : str or None
+        The directory of the run; by default (None), the folder of the
+        runs of the setup in its project (runs/<name of the setup>; see
+        gbkfit.project), or else output.
     output_dir_mode : {'terminate', 'overwrite', 'unique'}
         What to do if the directory exists (see gbkfit.outputs.create).
     evaluation_log : bool, optional
@@ -89,16 +95,18 @@ def fit(
     ConfigError
         If the configuration is invalid.
     """
-    cfg, root = _read_config(config)
-    with gbkfit.outputs.create(output_dir, 'fit', output_dir_mode) as run, \
-            _detail.run_log(run):
+    file = _read_config(config)
+    with gbkfit.outputs.create(
+            _detail.run_dir(output_dir, file), 'fit', output_dir_mode) \
+            as run, _detail.run_log(run):
         _log.info(f"output will be stored under directory: {run.path}")
-        _detail.write_config(run, _CONFIG, 'config', cfg, root)
+        _detail.write_config(run, _CONFIG, 'config', file.config, file.root)
+        _detail.write_setup(run, file)
         log = None
         if evaluation_log:
             log = gbkfit.fitting.EvaluationLog(run.filename(_EVALUATIONS))
             run.record(_EVALUATIONS, 'evaluations', 'bin')
-        _fit(cfg, root, run, log)
+        _fit(file.config, file.root, run, log)
 
 
 def resume(output_dir: str) -> None:
@@ -123,13 +131,13 @@ def resume(output_dir: str) -> None:
     """
     config, evaluations = _products_of_fit(
         output_dir, 'resume', 'config', 'evaluations')
-    cfg, root = _read_config(config)
+    file = _read_config(config)
     try:
         log = gbkfit.fitting.EvaluationLog.resume(evaluations)
     except ValueError as e:
         raise ConfigError(str(e)) from e
     with gbkfit.outputs.reopen(output_dir) as run, _detail.run_log(run):
-        _fit(cfg, root, run, log)
+        _fit(file.config, file.root, run, log)
 
 
 def bootstrap(output_dir: str, config: str) -> None:
@@ -159,10 +167,10 @@ def bootstrap(output_dir: str, config: str) -> None:
     """
     config_file, result_file = _products_of_fit(
         output_dir, 'bootstrap', 'config', 'fit_result')
-    cfg, root = _read_config(config_file)
+    file = _read_config(config_file)
     _log.info(f"reading the configuration of the bootstrap: {config}...")
-    bootstrap_cfg, _ = _detail.read_config(config, ('bootstrap',))
-    setup = _set_up(cfg, root)
+    bootstrap_cfg = _detail.read_config(config, ('bootstrap',)).config
+    setup = _set_up(file.config, file.root)
     options = _load_bootstrap(bootstrap_cfg, setup)
     with open(result_file) as f:
         result = json.load(f)
@@ -201,8 +209,8 @@ def _products_of_fit(output_dir: str, action: str, *kinds: str) -> list[str]:
     return files
 
 
-def _read_config(config: str) -> tuple[dict[str, Any], str]:
-    """Read the configuration of a fit, and its root."""
+def _read_config(config: str) -> _detail.ConfigFile:
+    """Read the configuration of a fit."""
     _log.info(f"reading configuration from file: {config}...")
     return _detail.read_config(
         config, ('galaxies', 'observations', 'params', 'fitter'),

@@ -36,7 +36,7 @@ def eval_(
         mode: Literal['model', 'objective', 'mock'],
         config: str,
         profile_iters: int,
-        output_dir: str,
+        output_dir: str | None,
         output_dir_mode: Literal['terminate', 'overwrite', 'unique']
 ) -> None:
     """
@@ -47,7 +47,9 @@ def eval_(
     parameters and the derived values (params.json, 'params'), the
     models and their extra outputs, and in the mode 'objective' the data
     and the residuals too (see data_outputs and evaluation_outputs), and
-    the log (logs/gbkfit.log, 'log'; see run_log).
+    the log (logs/gbkfit.log, 'log'; see run_log); in a project, the
+    sources of the configuration too (setup.json, 'setup'; see
+    write_setup).
 
     The mode 'mock' writes the models (as 'model'), and mock data of the
     observations: their models measured from what their instruments
@@ -76,12 +78,16 @@ def eval_(
     mode : {'model', 'objective', 'mock'}
         What to evaluate.
     config : str
-        The configuration file (YAML or JSON); its relative paths are
-        relative to its directory (or to its section 'root').
+        The configuration file (YAML or JSON), which can name pieces of
+        its project (see gbkfit.project); its relative paths are relative
+        to its section 'root', or else to the folder of its project, or
+        else to its directory.
     profile_iters : int
         The number of evaluations to time (timings.json, kind 'timings').
-    output_dir : str
-        The directory of the run.
+    output_dir : str or None
+        The directory of the run; by default (None), the folder of the
+        runs of the setup in its project (runs/<name of the setup>; see
+        gbkfit.project), or else output.
     output_dir_mode : {'terminate', 'overwrite', 'unique'}
         What to do if the directory exists (see gbkfit.outputs.create).
 
@@ -92,17 +98,19 @@ def eval_(
         no section 'mock'.
     """
     _log.info(f"reading configuration from file: {config}...")
-    cfg, root = _detail.read_config(
+    file = _detail.read_config(
         config, ('galaxies', 'observations', 'params'),
         ('driver', 'drivers', 'lines', 'bands', 'pdescs', 'depth_order',
          'mock'))
+    cfg, root = file.config, file.root
     if mode == 'mock' and 'mock' not in cfg:
         raise ConfigError("the mode 'mock' needs the section 'mock'")
     with gbkfit.outputs.create(
-            output_dir, 'eval', output_dir_mode, dict(mode=mode)) as run, \
-            _detail.run_log(run):
+            _detail.run_dir(output_dir, file), 'eval', output_dir_mode,
+            dict(mode=mode)) as run, _detail.run_log(run):
         _log.info(f"output will be stored under directory: {run.path}")
         _detail.write_config(run, 'config.yaml', 'config', cfg, root)
+        _detail.write_setup(run, file)
         _eval(mode, cfg, root, profile_iters, run)
 
 

@@ -20,6 +20,7 @@ import gbkfit.fitting
 import gbkfit.model
 import gbkfit.observation
 import gbkfit.outputs
+import gbkfit.project
 from gbkfit.driver import Driver, driver_by_name, driver_parser
 from gbkfit.model import Extra, Extras
 from gbkfit.objective import Objective
@@ -44,14 +45,30 @@ _LOG_FORMAT = (
     '{levelname}:{name}:{funcName}:{lineno}:{message}')
 
 
+class ConfigFile(NamedTuple):
+    """
+    A configuration read from its file (see read_config): the
+    configuration, the directory its relative paths are relative to (its
+    root), and the project it is in, if any (see gbkfit.project), with the
+    name of its setup (none out of the folder setups) and its sources (see
+    gbkfit.project.Resolved).
+    """
+    config: dict[str, Any]
+    root: str
+    project: gbkfit.project.Project | None
+    setup: str | None
+    sources: dict[str, Any]
+
+
 def read_config(
         filename: str,
         required: tuple[str, ...],
         optional: tuple[str, ...] = ()
-) -> tuple[dict[str, Any], str]:
+) -> ConfigFile:
     """
-    Read a configuration file (YAML or JSON), and check its sections (see
-    prepare_config).
+    Read a configuration file (YAML or JSON), with the pieces of its
+    project that it names in place (see gbkfit.project.resolve), and check
+    its sections (see prepare_config).
 
     Parameters
     ----------
@@ -62,17 +79,16 @@ def read_config(
 
     Returns
     -------
-    dict
-        The configuration.
-    str
-        The directory its relative paths are relative to: its optional
-        section 'root' (itself relative to the file), or by default the
-        directory of the file.
+    ConfigFile
+        The configuration. Its root is its optional section 'root' (itself
+        relative to the file), or by default the folder of its project, or
+        else the directory of the file.
 
     Raises
     ------
     ConfigError
-        If the file cannot be read, or its sections are invalid.
+        If the file cannot be read, its project is invalid, or its pieces
+        or its sections are invalid.
     """
     filename = os.path.abspath(filename)
     try:
@@ -85,10 +101,51 @@ def read_config(
     if root is not None and not isinstance(root, str):
         raise ConfigError(
             f"section 'root' must be a directory; it is {root!r}")
-    directory = os.path.dirname(filename)
+    try:
+        project = gbkfit.project.find(filename)
+    except ValueError as e:
+        raise ConfigError(str(e)) from e
+    directory = os.path.dirname(filename) if project is None \
+        else project.path
     if root is not None:
-        directory = os.path.normpath(os.path.join(directory, root))
-    return prepare_config(cfg, required, optional), directory
+        directory = os.path.normpath(
+            os.path.join(os.path.dirname(filename), root))
+    setup, sources = None, {}
+    if project is not None:
+        setup = project.setup_name(filename)
+        _log.info(f"in the project {project.path}")
+    if isinstance(cfg, dict):
+        cfg, sources = gbkfit.project.resolve(cfg, filename, project)
+    return ConfigFile(
+        prepare_config(cfg, required, optional), directory, project, setup,
+        sources)
+
+
+def run_dir(output_dir: str | None, config: ConfigFile) -> str:
+    """
+    Return the directory of the run of a configuration: the one given, or
+    by default the folder of the runs of its setup in its project (see
+    gbkfit.project.Project.run_path), or else 'output'.
+    """
+    if output_dir is not None:
+        return output_dir
+    if config.setup is not None:
+        return config.project.run_path(config.setup)
+    return 'output'
+
+
+def write_setup(run: gbkfit.outputs.RunWriter, config: ConfigFile) -> None:
+    """
+    Write the sources of a configuration in a project as a product of a
+    run (setup.json, kind 'setup'; see gbkfit.project.Resolved), with the
+    folder of the project relative to the run ('project').
+    """
+    if config.project is None:
+        return
+    run.write(
+        'setup.json', 'setup',
+        dict(project=os.path.relpath(config.project.path, run.path))
+        | config.sources)
 
 
 def prepare_config(

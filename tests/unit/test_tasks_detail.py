@@ -3,6 +3,7 @@
 import numpy as np
 import pytest
 
+import gbkfit.project
 from gbkfit.tasks import _detail
 from gbkfit.utils.parseutils import ConfigError
 
@@ -33,18 +34,22 @@ def test_make_output_dir(tmp_path):
 
 
 def test_configs_resolve_relative_paths_against_their_root(tmp_path):
-    # (their directory, or their section 'root', relative to it)
+    # (their directory, or their section 'root', relative to it, or the
+    # folder of their project)
     config = tmp_path / 'configs' / 'fit.yaml'
     config.parent.mkdir()
     config.write_text("galaxies: {}\nroot: ../data\n")
-    cfg, root = _detail.read_config(str(config), ('galaxies',))
-    assert cfg == dict(galaxies=[{}])
-    assert root == str(tmp_path / 'data')
+    file = _detail.read_config(str(config), ('galaxies',))
+    assert file.config == dict(galaxies=[{}])
+    assert file.root == str(tmp_path / 'data')
     config.write_text("galaxies: {}\n")
-    assert _detail.read_config(str(config), ('galaxies',))[1] == \
+    assert _detail.read_config(str(config), ('galaxies',)).root == \
         str(config.parent)
     with pytest.raises(ConfigError, match="needs the sections"):
         _detail.read_config(str(config), ('galaxies', 'fitter'))
+    gbkfit.project.create(str(tmp_path))
+    assert _detail.read_config(str(config), ('galaxies',)).root == \
+        str(tmp_path)
 
 
 def observation(**options):

@@ -201,9 +201,12 @@ def _make_parser() -> argparse.ArgumentParser:
     parser_common.add_argument(
         '--verbose', action='store_true', help="enable verbose logging")
 
-    # (the results of eval and fit are never overwritten by default)
+    # (the results of eval and fit are never overwritten by default; they
+    # go to the runs of their setup in a project, see gbkfit.project)
     parser_common_output = _output_parser('overwrite')
-    parser_results_output = _output_parser('unique')
+    parser_results_output = _output_parser(
+        'unique', None,
+        'runs/<name of the setup> for a setup of a project, else output')
 
     parser_common_config = argparse.ArgumentParser(add_help=False)
     parser_common_config.add_argument(

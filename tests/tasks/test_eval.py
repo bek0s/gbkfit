@@ -12,7 +12,7 @@ import pytest
 import ruamel.yaml
 from astropy.io import fits
 
-from gbkfit import outputs
+from gbkfit import outputs, project
 
 
 REFERENCE_DIR = pathlib.Path(__file__).parents[1] / 'data' / 'reference_models'
@@ -165,6 +165,43 @@ def test_rotation_curve_from_radial_nodes(tmp_path):
     properties['vpt_vt'] = (180 * np.arctan(np.array(rnodes) / 3)).tolist()
     values = array(run_eval('model', config, tmp_path / 'values'), 'model')
     np.testing.assert_array_equal(expression, values)
+
+
+def test_a_setup_of_a_project_runs_in_its_runs(tmp_path):
+    # A setup that names the pieces of the reference model, whose data are
+    # its model plus 1 in the folder data of the project (relative to it),
+    # and changes nothing of its parameters
+    config = yaml.load(REFERENCE_DIR / 'thin_disk_pixel_spectra.yaml')
+    model = array(run_eval('model', config, tmp_path / 'model'), 'model')
+    study = tmp_path / 'study'
+    project.create(str(study))
+    (study / 'data').mkdir()
+    fits.writeto(study / 'data/cube.fits', model + 1)
+    observation = config['observations'][0]
+    observation['data'] = dict(
+        data='data/cube.fits', error=2.0,
+        step=observation['observable'].pop('step'))
+    observation['observable'].pop('size')
+    for path, piece in (
+            ('galaxies/disk.yaml', config['galaxies'][0]),
+            ('observations/cube.yaml', observation),
+            ('params/model.yaml', config['params']),
+            ('setups/disk/cube.yaml', dict(
+                driver=config['driver'], galaxies=['disk'],
+                observations='cube',
+                params=['model', dict(properties=dict(incl=60))]))):
+        (study / path).parent.mkdir(parents=True, exist_ok=True)
+        yaml.dump(piece, study / path)
+    options = eval_options('objective', 'study/setups/disk/cube.yaml')
+    result = run_task(tmp_path, 'eval', options | dict(output_dir=None))
+    assert result.returncode == 0, result.stderr
+    run = outputs.open(study / 'runs/disk/cube')
+    np.testing.assert_allclose(array(run, 'residual'), -0.5, rtol=1e-5)
+    setup = run.read(run.product('setup'))
+    assert setup['project'] == '../../..'
+    assert setup['file'] == 'setups/disk/cube.yaml'
+    assert setup['parameters']['incl'] == 'setups/disk/cube.yaml'
+    assert setup['parameters']['vsys'] == 'params/model.yaml'
 
 
 def test_unknown_options(tmp_path):
