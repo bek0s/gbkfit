@@ -21,7 +21,7 @@ export function JobsPanel() {
 }
 
 function JobRow({ job }: { job: Job }) {
-  const { openRun } = useStudio();
+  const { openRun, openPanel, live } = useStudio();
   const reports = useProgress(job.id);
   const last = reports.at(-1);
   const stop = useMutation({
@@ -34,6 +34,17 @@ function JobRow({ job }: { job: Job }) {
         <b>{job.task}</b>
         <span className="kind">{config}</span>
         <span className="badge">{job.state}</span>
+        {job.task !== 'eval' && job.run && last && (
+          <button
+            className="ghost"
+            onClick={() => {
+              live.watch(`${job.run}/config.yaml`, job.id);
+              openPanel('preview');
+            }}
+          >
+            {live.watching === job.id ? 'Watching' : 'Watch'}
+          </button>
+        )}
         {(job.state === 'queued' || job.state === 'running') && (
           <button className="danger" onClick={() => stop.mutate()}>
             Stop

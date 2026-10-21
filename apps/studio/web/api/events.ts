@@ -55,6 +55,8 @@ export function useServerEvents(): boolean {
     source.addEventListener('run', (event) => {
       const { run } = JSON.parse((event as MessageEvent<string>).data) as { run: string };
       void client.invalidateQueries({ queryKey: ['run', run] });
+      // (a new run appears in its project)
+      void client.invalidateQueries({ queryKey: ['project'] });
     });
     source.addEventListener('progress', (event) => {
       const { job, report } = JSON.parse((event as MessageEvent<string>).data) as {

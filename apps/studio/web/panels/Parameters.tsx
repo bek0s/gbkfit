@@ -12,7 +12,7 @@ export function Parameters() {
   return (
     <aside className="side right">
       <div className="colhead">
-        Parameters <span className="sub">{free.length} free</span>
+        Parameters <span className="sub">{live.watching ? 'best of the fit so far' : `${free.length} free`}</span>
       </div>
       <div className="params">
         {free.map(([name, properties]) => {
@@ -31,13 +31,15 @@ export function Parameters() {
                   max={max}
                   step={(max - min) / STEPS}
                   value={value}
-                  onChange={(event) => live.set(name, Number(event.target.value))}
+                  disabled={live.watching !== null}
+                  onChange={(event) => live.set({ [name]: Number(event.target.value) })}
                 />
               ) : (
                 <input
                   type="number"
                   value={value}
-                  onChange={(event) => live.set(name, Number(event.target.value))}
+                  disabled={live.watching !== null}
+                  onChange={(event) => live.set({ [name]: Number(event.target.value) })}
                 />
               )}
             </label>

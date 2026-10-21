@@ -13,6 +13,7 @@ import { useCallback, useMemo, useRef, useState, type FunctionComponent } from '
 import { api, data } from './api/client';
 import { useServerEvents } from './api/events';
 import { useLiveSession } from './api/session';
+import { useFitWatch } from './api/watch';
 import { FilesIcon, JobsIcon, Logo, PreviewIcon } from './components/icons';
 import { EditorPanel } from './panels/EditorPanel';
 import { Explorer } from './panels/Explorer';
@@ -33,6 +34,7 @@ const PANELS: Record<string, FunctionComponent<IDockviewPanelProps>> = {
 export function App() {
   const connected = useServerEvents();
   const live = useLiveSession();
+  useFitWatch(live);
   const dock = useRef<DockviewApi | null>(null);
   const [explorer, setExplorer] = useState(true);
   const jobs = useQuery({ queryKey: ['jobs'], queryFn: () => data(api.GET('/api/v1/jobs')) });

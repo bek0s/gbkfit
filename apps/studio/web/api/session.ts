@@ -16,15 +16,22 @@ export interface LiveSession {
   frame: Frame | null;
   error: string | null;
   starting: boolean;
+  // The job whose fit the session follows (see watch), if any
+  watching: string | null;
   start: (config: string) => void;
+  // Follow a fit: its configuration (that of its run), at the best values
+  // of its job so far (see set)
+  watch: (config: string, job: string) => void;
   // Set the configuration up again (e.g. after it was saved)
   restart: () => void;
   stop: () => void;
-  set: (name: string, value: number) => void;
+  // Evaluate at new values of free parameters (the others keep theirs)
+  set: (values: Record<string, number>) => void;
 }
 
 export function useLiveSession(): LiveSession {
   const [config, setConfig] = useState<string | null>(null);
+  const [watching, setWatching] = useState<string | null>(null);
   const [generation, setGeneration] = useState(0);
   const [info, setInfo] = useState<Session | null>(null);
   const [values, setValues] = useState<Record<string, number>>({});
@@ -35,10 +42,11 @@ export function useLiveSession(): LiveSession {
   const busy = useRef(false);
   const pending = useRef<Record<string, number> | null>(null);
 
+  // (values set before the socket opens, or while an evaluation is in
+  // flight, wait: see onopen and onmessage)
   const send = useCallback((update: Record<string, number>) => {
     const ws = socket.current;
-    if (ws === null || ws.readyState !== WebSocket.OPEN) return;
-    if (busy.current) {
+    if (ws === null || ws.readyState !== WebSocket.OPEN || busy.current) {
       pending.current = { ...(pending.current ?? {}), ...update };
       return;
     }
@@ -81,7 +89,11 @@ export function useLiveSession(): LiveSession {
             send(next);
           }
         };
-        ws.onopen = () => send({});
+        ws.onopen = () => {
+          const first = pending.current ?? {};
+          pending.current = null;
+          send(first);
+        };
         socket.current = ws;
       })
       .catch((e: Error) => setError(e.message));
@@ -96,9 +108,9 @@ export function useLiveSession(): LiveSession {
   }, [config, generation]);
 
   const set = useCallback(
-    (name: string, value: number) => {
-      setValues((current) => ({ ...current, [name]: value }));
-      send({ [name]: value });
+    (update: Record<string, number>) => {
+      setValues((current) => ({ ...current, ...update }));
+      send(update);
     },
     [send],
   );
@@ -111,9 +123,20 @@ export function useLiveSession(): LiveSession {
     frame,
     error,
     starting: config !== null && info === null && error === null,
-    start: setConfig,
+    watching,
+    start: (next) => {
+      setWatching(null);
+      setConfig(next);
+    },
+    watch: (next, job) => {
+      setWatching(job);
+      setConfig(next);
+    },
     restart: () => setGeneration((g) => g + 1),
-    stop: () => setConfig(null),
+    stop: () => {
+      setWatching(null);
+      setConfig(null);
+    },
     set,
   };
 }

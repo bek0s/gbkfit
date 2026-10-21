@@ -1,8 +1,10 @@
 // The live preview: for each data item (and each image of it, e.g. the
 // moment maps of a cube) of the setup of the live session, its data, its
 // model and its residual ((model - data) / error) side by side, at the
-// values of the free parameters (see Parameters), as they change; and the
+// values of the free parameters (see Parameters), as they change, or at
+// the best values of a fit it follows (see useFitWatch); and the
 // chi-square.
+import { useProgress } from '../api/events';
 import type { Frame, FrameArray } from '../api/frames';
 import { Comparison, type View } from '../components/Comparison';
 import { format } from '../components/ImageView';
@@ -15,11 +17,18 @@ const COLUMNS = ['data', 'model', 'residual'];
 export function PreviewPanel() {
   const { live } = useStudio();
   const chi2 = live.frame?.header.chi2;
+  const last = useProgress(live.watching ?? '').at(-1);
   return (
     <section className="panel">
       <div className="panel-head">
         <span className="kind">{live.config ?? 'no setup'}</span>
         {typeof chi2 === 'number' && <span className="badge">χ² {format(chi2)}</span>}
+        {live.watching && (
+          <span className="badge">
+            following the fit{last ? ` · ${last.stage} · ${last.nevals} evaluations` : ''}
+            {last?.final ? ' · done' : ''}
+          </span>
+        )}
         <div className="actions">
           {live.config !== null && (
             <button className="ghost" onClick={live.stop}>
