@@ -24,7 +24,7 @@ CONTRACT = pathlib.Path(__file__).parents[1] / 'openapi.json'
 @pytest.fixture
 def client(root):
     """A client of a server of the workspace, with the token."""
-    app = create_app(Server(root, LocalExecutor()), TOKEN)
+    app = create_app(Server(root, LocalExecutor()), TOKEN, {})
     with TestClient(app, headers=dict(authorization=f'Bearer {TOKEN}')) \
             as client:
         yield client
@@ -38,8 +38,8 @@ def test_the_api_needs_the_token(client):
     assert client.get(
         '/api/v1/projects', headers=dict(authorization=''),
         params=dict(token=TOKEN)).status_code == 200
-    # (the server itself does not)
-    assert client.get('/', headers=dict(authorization='')).json()['api'] \
+    # (the information of the server does not)
+    assert client.get('/api', headers=dict(authorization='')).json()['api'] \
         == '/api/v1'
 
 
@@ -78,3 +78,15 @@ def test_a_session_evaluates_values_sent_over_a_websocket(client, setup):
 def test_the_contract_is_that_of_the_api():
     # (python -m gbkfit_server.api > openapi.json writes it)
     assert json.loads(CONTRACT.read_text()) == openapi()
+
+
+def test_the_pages_are_served_and_the_link_leads_to_the_first(root, tmp_path):
+    page = tmp_path / 'page'
+    page.mkdir()
+    (page / 'index.html').write_text('<title>Studio</title>')
+    app = create_app(Server(root, LocalExecutor()), TOKEN, dict(studio=page))
+    with TestClient(app) as client:
+        response = client.get(f'/?token={TOKEN}', follow_redirects=False)
+        assert response.headers['location'] == f'/studio/?token={TOKEN}'
+        assert '<title>Studio</title>' in client.get('/studio/').text
+        assert client.get('/api').json()['pages'] == ['studio']

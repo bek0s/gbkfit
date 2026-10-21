@@ -1,21 +1,24 @@
 """
-The app of the API: its routes under /api/v1 (see routes), behind a
-token, and the responses to the errors of the services.
+The app of the server: its API, under /api/v1 (see routes), behind a
+token, with the responses to the errors of the services; and its pages
+(see pages).
 """
 
 import contextlib
 import secrets
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Callable, Mapping
 from importlib.metadata import version
 
 from fastapi import (
     Depends, FastAPI, HTTPException, Request, WebSocketException, status)
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from starlette.requests import HTTPConnection
 
 from gbkfit_server.services.errors import Failed, Invalid, NotFound
 from gbkfit_server.services.server import Server
 from .models import ServerInfo
+from .pages import installed_pages
 from .routes import router
 
 
@@ -36,11 +39,19 @@ _ERRORS = {
     Failed: status.HTTP_500_INTERNAL_SERVER_ERROR}
 
 
-def create_app(server: Server | None, token: str) -> FastAPI:
+def create_app(
+        server: Server | None,
+        token: str,
+        pages: Mapping[str, str] | None = None
+) -> FastAPI:
     """
     Return the app of a server, whose API needs a token: in the header
     Authorization ('Bearer <token>' or 'token <token>'), or in the query
     (?token=..., e.g. of a link, of events or of a WebSocket).
+
+    It serves the pages at /<name>/, and / leads to the first of them
+    (with the query, e.g. the token), or else to the information of the
+    server (/api).
 
     Parameters
     ----------
@@ -49,6 +60,9 @@ def create_app(server: Server | None, token: str) -> FastAPI:
         openapi).
     token : str
         The token.
+    pages : Mapping of str to str, optional
+        The folders of the built pages, by name; by default those
+        installed (see installed_pages).
 
     Returns
     -------
@@ -66,11 +80,26 @@ def create_app(server: Server | None, token: str) -> FastAPI:
     app.include_router(
         router, prefix=API, dependencies=[Depends(_authorize(token))])
 
-    @app.get('/')
+    pages = installed_pages() if pages is None else dict(pages)
+
+    @app.get('/api')
     def info() -> ServerInfo:
-        """Return the name and version of the server, and its API."""
+        """
+        Return the name and version of the server, its API, and the pages
+        it serves.
+        """
         return ServerInfo(
-            name='gbkfit-server', version=version('gbkfit-server'), api=API)
+            name='gbkfit-server', version=version('gbkfit-server'), api=API,
+            pages=list(pages))
+
+    @app.get('/', include_in_schema=False)
+    def home(request: Request) -> RedirectResponse:
+        target = f'/{next(iter(pages))}/' if pages else '/api'
+        query = request.url.query
+        return RedirectResponse(f'{target}?{query}' if query else target)
+
+    for name, folder in pages.items():
+        app.mount(f'/{name}', StaticFiles(directory=folder, html=True), name)
 
     for error, code in _ERRORS.items():
         app.add_exception_handler(error, _responder(code))
@@ -79,7 +108,7 @@ def create_app(server: Server | None, token: str) -> FastAPI:
 
 def openapi() -> dict:
     """Return the schema of the API (its contract, openapi.json)."""
-    return create_app(None, '').openapi()
+    return create_app(None, '', {}).openapi()
 
 
 def _authorize(token: str) -> Callable[[HTTPConnection], None]:

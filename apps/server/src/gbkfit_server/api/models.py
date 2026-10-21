@@ -23,10 +23,14 @@ __all__ = [
 
 
 class ServerInfo(BaseModel):
-    """The server: its name and version, and the path of its API."""
+    """
+    The server: its name and version, the path of its API, and the names
+    of the pages it serves (at /<name>/).
+    """
     name: str
     version: str
     api: str
+    pages: list[str]
 
 
 class ProjectInfo(BaseModel):

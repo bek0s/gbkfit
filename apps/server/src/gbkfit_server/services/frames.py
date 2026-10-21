@@ -27,6 +27,9 @@ __all__ = [
 
 _LENGTH = struct.Struct('>I')
 
+# The type of the arrays: little-endian float32
+_DTYPE = '<f4'
+
 
 def encode(header: dict[str, Any], data: bytes = b'') -> bytes:
     """Return a frame of a header and its data."""
@@ -39,15 +42,16 @@ def array_frame(
         arrays: Sequence[tuple[dict[str, Any], np.ndarray]]
 ) -> bytes:
     """
-    Return a frame of arrays (float32, C order), each with its own header
-    (e.g. its name): the header of the frame lists them ('arrays'), with
-    their shapes and the offsets of their bytes in the data.
+    Return a frame of arrays (little-endian float32, C order), each with
+    its own header (e.g. its name): the header of the frame lists them
+    ('arrays'), with their shapes and the offsets of their bytes in the
+    data.
     """
     entries, chunks, offset = [], [], 0
     for info, array in arrays:
-        array = np.ascontiguousarray(array, dtype=np.float32)
+        array = np.ascontiguousarray(array, dtype=_DTYPE)
         entries.append(info | dict(
-            shape=list(array.shape), dtype='float32', offset=offset,
+            shape=list(array.shape), dtype=_DTYPE, offset=offset,
             nbytes=array.nbytes))
         chunks.append(array.tobytes())
         offset += array.nbytes
@@ -65,7 +69,7 @@ def arrays(header: dict[str, Any], data: bytes) -> list[np.ndarray]:
     """Return the arrays of a frame of arrays (see array_frame)."""
     return [
         np.frombuffer(
-            data, np.float32, math.prod(info['shape']), info['offset'])
+            data, _DTYPE, math.prod(info['shape']), info['offset'])
         .reshape(info['shape'])
         for info in header['arrays']]
 

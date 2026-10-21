@@ -2,8 +2,10 @@
 gbkfit-server: serve the projects of a folder (see gbkfit_server).
 
     gbkfit-server [FOLDER] [--ip IP] [--port PORT] [--jobs N] [--gpus LIST]
+                  [--open]
 
-It prints the link to connect with, which has its token. It listens on
+It prints the link to connect with, which has its token (and opens it
+with --open). It listens on
 this machine only by default; reach a remote one through an SSH tunnel
 (ssh -L 8765:localhost:8765 HOST).
 """
@@ -13,6 +15,8 @@ import logging
 import os
 import secrets
 import sys
+import threading
+import webbrowser
 from importlib.metadata import version
 
 import uvicorn
@@ -49,6 +53,9 @@ def _make_parser() -> argparse.ArgumentParser:
         '--token',
         help="the token of the clients; default: $GBKFIT_SERVER_TOKEN, or "
              "a new random one")
+    parser.add_argument(
+        '--open', action='store_true',
+        help="open the link in the browser (e.g. the Studio)")
     return parser
 
 
@@ -67,11 +74,13 @@ def main() -> None:
     token = args.token or os.environ.get('GBKFIT_SERVER_TOKEN') \
         or secrets.token_urlsafe(32)
     logging.basicConfig(level=logging.INFO, format='{message}', style='{')
+    link = f"http://{args.ip}:{args.port}/?token={token}"
     print(
         f"gbkfit-server {version('gbkfit-server')}: serving "
-        f"{server.workspace.root}\n"
-        f"    http://{args.ip}:{args.port}/?token={token}",
-        file=sys.stderr, flush=True)
+        f"{server.workspace.root}\n    {link}", file=sys.stderr, flush=True)
+    if args.open:
+        # (once the server listens)
+        threading.Timer(1.0, webbrowser.open, [link]).start()
     uvicorn.run(
         create_app(server, token), host=args.ip, port=args.port,
         log_level='warning')

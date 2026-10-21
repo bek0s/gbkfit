@@ -526,11 +526,11 @@
         }
       }
     },
-    "/": {
+    "/api": {
       "get": {
         "summary": "Info",
-        "description": "Return the name and version of the server, and its API.",
-        "operationId": "info__get",
+        "description": "Return the name and version of the server, its API, and the pages\nit serves.",
+        "operationId": "info_api_get",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -804,16 +804,24 @@
           "api": {
             "type": "string",
             "title": "Api"
+          },
+          "pages": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Pages"
           }
         },
         "type": "object",
         "required": [
           "name",
           "version",
-          "api"
+          "api",
+          "pages"
         ],
         "title": "ServerInfo",
-        "description": "The server: its name and version, and the path of its API."
+        "description": "The server: its name and version, the path of its API, and the names\nof the pages it serves (at /<name>/)."
       },
       "SessionInfo": {
         "properties": {
