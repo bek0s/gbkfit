@@ -484,7 +484,8 @@ def evaluation_outputs(
         objective: Objective | None,
         values: ParamValues,
         model: bool,
-        residuals: bool
+        residuals: bool,
+        extra: bool = True
 ) -> dict[str, Output]:
     """
     Return the outputs of an evaluation, by path, in the form their
@@ -500,14 +501,14 @@ def evaluation_outputs(
     'model_unscaled'. With the models, the images that their observables
     make of them ('model_image', in place of the item: the name of the
     image; see Observable.images), and of the data minus them
-    ('residual_image'), with the weights of the data. The extra outputs
-    of the models are 'extra', with their titles and descriptions (see
-    _extra_output).
+    ('residual_image'), with the weights of the data. Unless left out
+    (extra), the extra outputs of the models are 'extra', with their
+    titles and descriptions (see _extra_output).
     """
     outputs = []
-    extra = Extras()
+    extras = Extras() if extra else None
     if model:
-        for i, data_i in enumerate(group.model_h(values, extra)):
+        for i, data_i in enumerate(group.model_h(values, extras)):
             observation = group.observations()[i]
             name = group.observation_label(i)
             observable = observation.observable()
@@ -532,7 +533,7 @@ def evaluation_outputs(
             # without the models, the extra outputs are those of the
             # first residual evaluation, which evaluates the models)
             data = copy.deepcopy(objective.residual_nddata_h(
-                values, weighted, None if model or weighted else extra))
+                values, weighted, None if model or weighted else extras))
             for i, data_i in enumerate(data):
                 name = group.observation_label(i)
                 observable = group.observations()[i].observable()
@@ -540,7 +541,7 @@ def evaluation_outputs(
                     _observation_output(
                         name, kind, key, observable.output(value))
                     for key, value in data_i.items()]
-    outputs += [_extra_output(x) for x in extra]
+    outputs += [_extra_output(x) for x in extras or ()]
     outputs = {output.path: output for output in outputs}
     if residuals:
         for i, amplitudes in enumerate(objective.amplitudes()):

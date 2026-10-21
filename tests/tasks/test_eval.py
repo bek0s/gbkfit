@@ -170,11 +170,29 @@ def test_rotation_curve_from_radial_nodes(tmp_path):
 
 def test_a_configuration_loads_to_evaluate_it_in_python(tmp_path):
     # (at the values of its parameters here, as the task does)
-    config = REFERENCE_DIR / 'thin_disk_pixel_spectra.yaml'
-    group, params = load(str(config))
-    model = group.model_h(params.evaluate())[0]['spectra']['d']
+    config = yaml.load(REFERENCE_DIR / 'thin_disk_pixel_spectra.yaml')
+    evaluation = load(str(REFERENCE_DIR / 'thin_disk_pixel_spectra.yaml'))
+    assert evaluation.objective is None
+    values = evaluation.params.evaluate()
+    model = evaluation.group.model_h(values)[0]['spectra']['d']
     expected = array(run_eval('model', config, tmp_path / 'model'), 'model')
     np.testing.assert_array_equal(model, expected)
+    # With data (the model plus 1, with errors of 2), its outputs have the
+    # data and the residuals, -0.5, as those the task writes
+    fits.writeto(tmp_path / 'data.fits', expected + 1)
+    observation = config['observations'][0]
+    observation['data'] = dict(
+        data=str(tmp_path / 'data.fits'), error=2.0,
+        step=observation['observable'].pop('step'))
+    observation['observable'].pop('size')
+    yaml.dump(config, tmp_path / 'data.yaml')
+    evaluation = load(str(tmp_path / 'data.yaml'))
+    outputs = evaluation.outputs(evaluation.params.evaluate(), data=True)
+    kinds = {output.kind for output in outputs.values()}
+    assert {'model', 'data', 'error', 'residual', 'wresidual'} <= kinds
+    assert 'extra' not in kinds
+    residual = outputs['observations/observation0/residual/spectra.fits']
+    np.testing.assert_allclose(residual.value.data, -0.5, rtol=1e-5)
 
 
 def test_a_setup_of_a_project_runs_in_its_runs(tmp_path):

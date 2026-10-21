@@ -11,7 +11,7 @@ from typing import Any, Literal, NamedTuple
 
 import pandas as pd
 
-import gbkfit.objective
+from gbkfit.objective import Objective
 import gbkfit.outputs
 from gbkfit.observation import (
     Likelihood, Noise, ObservationGroup, likelihood_parser, noise_parser)
@@ -19,10 +19,12 @@ from gbkfit.params import ParamSpace, ParamValues
 from gbkfit.utils import iterutils, numutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
 from . import _detail
+from ._detail import Output
 
 
 __all__ = [
     'Evaluation',
+    'Output',
     'eval_',
     'load'
 ]
@@ -34,10 +36,47 @@ _log = logging.getLogger(__name__)
 class Evaluation(NamedTuple):
     """
     What evaluates a configuration (see load): the observations of its
-    galaxies, and its parameters.
+    galaxies, its parameters, and its objective, if every observation
+    has data (else None).
     """
     group: ObservationGroup
     params: ParamSpace
+    objective: Objective | None
+
+    def outputs(
+            self,
+            values: ParamValues,
+            data: bool = False,
+            extra: bool = False
+    ) -> dict[str, Output]:
+        """
+        Return the outputs of an evaluation, as the task writes them (see
+        eval_), by their paths in a run.
+
+        Parameters
+        ----------
+        values : ParamValues
+            The values of the parameters (see ParamSpace.evaluate).
+        data : bool, optional
+            Whether to add the data of the observations ('data', 'error'
+            and 'data_image'), which do not change with the values.
+        extra : bool, optional
+            Whether to add the extra outputs of the models ('extra'; e.g.
+            their cubes at high resolution).
+
+        Returns
+        -------
+        dict
+            The outputs: the models ('model', and their images,
+            'model_image'), and with the objective the residuals too
+            ('residual', 'wresidual' and 'residual_image').
+        """
+        residuals = self.objective is not None
+        outputs = _detail.evaluation_outputs(
+            self.group, self.objective, values, True, residuals, extra)
+        if data:
+            outputs |= _detail.data_outputs(self.group)
+        return outputs
 
 
 class _Mock(NamedTuple):
@@ -129,40 +168,54 @@ def eval_(
 
 def load(config: str) -> Evaluation:
     """
-    Read a configuration file, and set up the observations of its galaxies
-    and its parameters, to evaluate them (e.g. at other values of the
-    parameters; see ParamSpace.evaluate and ObservationGroup.model_h).
+    Read a configuration file, and set up the observations of its galaxies,
+    its parameters, and its objective if every observation has data, to
+    evaluate them (e.g. at other values of the parameters; see
+    ParamSpace.evaluate, Evaluation.outputs and ObservationGroup.model_h).
 
     Parameters
     ----------
     config : str
-        The configuration file (see eval_).
+        The configuration file (see eval_), or that of a fit (see
+        gbkfit.tasks.fit.fit; its sections of the fit are left out).
 
     Returns
     -------
     Evaluation
-        The observations and the parameters.
+        The observations, the parameters and the objective.
 
     Raises
     ------
     ConfigError
         If the configuration is invalid.
     """
-    file = _read_config(config)
+    file = _read_config(config, _OPTIONAL + _FIT)
     with parseutils.paths_relative_to(file.root):
-        return _set_up(file.config)
+        group, params = _set_up(file.config)
+    objective = None
+    if all(obs.data() is not None for obs in group.observations()):
+        _log.info("setting up objective...")
+        objective = Objective(group)
+    return Evaluation(group, params, objective)
 
 
-def _read_config(config: str) -> _detail.ConfigFile:
+# The sections of the configurations of the task, and those of fits, which
+# load reads too (without them)
+_REQUIRED = ('galaxies', 'observations', 'params')
+_OPTIONAL = (
+    'driver', 'drivers', 'lines', 'bands', 'pdescs', 'depth_order', 'mock')
+_FIT = ('fitter', 'parallel', 'bootstrap')
+
+
+def _read_config(
+        config: str, optional: tuple[str, ...] = _OPTIONAL
+) -> _detail.ConfigFile:
     """Read the configuration of an evaluation."""
     _log.info(f"reading configuration from file: {config}...")
-    return _detail.read_config(
-        config, ('galaxies', 'observations', 'params'),
-        ('driver', 'drivers', 'lines', 'bands', 'pdescs', 'depth_order',
-         'mock'))
+    return _detail.read_config(config, _REQUIRED, optional)
 
 
-def _set_up(cfg: dict[str, Any]) -> Evaluation:
+def _set_up(cfg: dict[str, Any]) -> tuple[ObservationGroup, ParamSpace]:
     """
     Set up the observations and the parameters of a configuration (with
     the paths relative to its root).
@@ -172,7 +225,7 @@ def _set_up(cfg: dict[str, Any]) -> Evaluation:
     _log.info("setting up params...")
     params = _detail.load_params(
         cfg, group.pdescs(), group.constants(), group.plan_functions())
-    return Evaluation(group, params)
+    return group, params
 
 
 def _eval(
@@ -188,7 +241,7 @@ def _eval(
         objective = None
         if mode == 'objective':
             _log.info("setting up objective...")
-            objective = gbkfit.objective.Objective(group)
+            objective = Objective(group)
         mock = None
         if mode == 'mock':
             with parseutils.config_path('mock'):
