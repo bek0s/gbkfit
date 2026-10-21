@@ -13,6 +13,7 @@ import ruamel.yaml
 from astropy.io import fits
 
 from gbkfit import outputs, project
+from gbkfit.tasks.eval import load
 
 
 REFERENCE_DIR = pathlib.Path(__file__).parents[1] / 'data' / 'reference_models'
@@ -165,6 +166,15 @@ def test_rotation_curve_from_radial_nodes(tmp_path):
     properties['vpt_vt'] = (180 * np.arctan(np.array(rnodes) / 3)).tolist()
     values = array(run_eval('model', config, tmp_path / 'values'), 'model')
     np.testing.assert_array_equal(expression, values)
+
+
+def test_a_configuration_loads_to_evaluate_it_in_python(tmp_path):
+    # (at the values of its parameters here, as the task does)
+    config = REFERENCE_DIR / 'thin_disk_pixel_spectra.yaml'
+    group, params = load(str(config))
+    model = group.model_h(params.evaluate())[0]['spectra']['d']
+    expected = array(run_eval('model', config, tmp_path / 'model'), 'model')
+    np.testing.assert_array_equal(model, expected)
 
 
 def test_a_setup_of_a_project_runs_in_its_runs(tmp_path):

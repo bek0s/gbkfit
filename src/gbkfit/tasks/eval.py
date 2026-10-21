@@ -1,7 +1,8 @@
 """
 The eval task: evaluate the galaxies of a configuration, or its objective
 (the residuals against the data), or draw mock data of its observations,
-and write the outputs.
+and write the outputs. Programs that evaluate a configuration themselves
+(e.g. at other values of its parameters) set it up with load.
 """
 
 import logging
@@ -14,13 +15,29 @@ import gbkfit.objective
 import gbkfit.outputs
 from gbkfit.observation import (
     Likelihood, Noise, ObservationGroup, likelihood_parser, noise_parser)
-from gbkfit.params import ParamValues
+from gbkfit.params import ParamSpace, ParamValues
 from gbkfit.utils import iterutils, numutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
 from . import _detail
 
 
+__all__ = [
+    'Evaluation',
+    'eval_',
+    'load'
+]
+
+
 _log = logging.getLogger(__name__)
+
+
+class Evaluation(NamedTuple):
+    """
+    What evaluates a configuration (see load): the observations of its
+    galaxies, and its parameters.
+    """
+    group: ObservationGroup
+    params: ParamSpace
 
 
 class _Mock(NamedTuple):
@@ -97,11 +114,7 @@ def eval_(
         If the configuration is invalid, or the mode is 'mock' and it has
         no section 'mock'.
     """
-    _log.info(f"reading configuration from file: {config}...")
-    file = _detail.read_config(
-        config, ('galaxies', 'observations', 'params'),
-        ('driver', 'drivers', 'lines', 'bands', 'pdescs', 'depth_order',
-         'mock'))
+    file = _read_config(config)
     cfg, root = file.config, file.root
     if mode == 'mock' and 'mock' not in cfg:
         raise ConfigError("the mode 'mock' needs the section 'mock'")
@@ -114,6 +127,54 @@ def eval_(
         _eval(mode, cfg, root, profile_iters, run)
 
 
+def load(config: str) -> Evaluation:
+    """
+    Read a configuration file, and set up the observations of its galaxies
+    and its parameters, to evaluate them (e.g. at other values of the
+    parameters; see ParamSpace.evaluate and ObservationGroup.model_h).
+
+    Parameters
+    ----------
+    config : str
+        The configuration file (see eval_).
+
+    Returns
+    -------
+    Evaluation
+        The observations and the parameters.
+
+    Raises
+    ------
+    ConfigError
+        If the configuration is invalid.
+    """
+    file = _read_config(config)
+    with parseutils.paths_relative_to(file.root):
+        return _set_up(file.config)
+
+
+def _read_config(config: str) -> _detail.ConfigFile:
+    """Read the configuration of an evaluation."""
+    _log.info(f"reading configuration from file: {config}...")
+    return _detail.read_config(
+        config, ('galaxies', 'observations', 'params'),
+        ('driver', 'drivers', 'lines', 'bands', 'pdescs', 'depth_order',
+         'mock'))
+
+
+def _set_up(cfg: dict[str, Any]) -> Evaluation:
+    """
+    Set up the observations and the parameters of a configuration (with
+    the paths relative to its root).
+    """
+    _log.info("setting up galaxies and observations...")
+    group = _detail.load_observation_group(cfg)
+    _log.info("setting up params...")
+    params = _detail.load_params(
+        cfg, group.pdescs(), group.constants(), group.plan_functions())
+    return Evaluation(group, params)
+
+
 def _eval(
         mode: Literal['model', 'objective', 'mock'],
         cfg: dict[str, Any],
@@ -123,15 +184,11 @@ def _eval(
 ) -> None:
     """Evaluate a configuration, and write the outputs (see eval_)."""
     with parseutils.paths_relative_to(root):
-        _log.info("setting up galaxies and observations...")
-        group = _detail.load_observation_group(cfg)
+        group, params = _set_up(cfg)
         objective = None
         if mode == 'objective':
             _log.info("setting up objective...")
             objective = gbkfit.objective.Objective(group)
-        _log.info("setting up params...")
-        params = _detail.load_params(
-            cfg, group.pdescs(), group.constants(), group.plan_functions())
         mock = None
         if mode == 'mock':
             with parseutils.config_path('mock'):
