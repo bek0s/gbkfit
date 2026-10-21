@@ -60,6 +60,10 @@ def test_a_job_writes_a_run_whose_arrays_are_read(client, setup):
     (image,) = frames.arrays(*frames.decode(frame))
     assert image.shape == (12, 16)
     assert client.get('/api/v1/runs/study/nothing').status_code == 404
+    # (any file of it as it is, e.g. its configuration)
+    raw = client.get(f"/api/v1/raw/{job['run']}/config.yaml")
+    assert raw.status_code == 200 and b'galaxies' in raw.content
+    assert client.get('/api/v1/raw/study/nothing.png').status_code == 404
 
 
 def test_a_session_evaluates_values_sent_over_a_websocket(client, setup):

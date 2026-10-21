@@ -139,6 +139,20 @@ class Workspace:
         except (FileNotFoundError, IsADirectoryError) as e:
             raise NotFound(f"no file '{relative}'") from e
 
+    def file(self, relative: str) -> str:
+        """
+        Return the absolute path of a file.
+
+        Raises
+        ------
+        NotFound
+            If the file does not exist.
+        """
+        path = self.path(relative)
+        if not os.path.isfile(path):
+            raise NotFound(f"no file '{relative}'")
+        return path
+
     def write_text(self, relative: str, text: str) -> None:
         """
         Write the text of a file, and its folders: atomically, so that

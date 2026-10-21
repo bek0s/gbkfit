@@ -150,6 +150,42 @@
         }
       }
     },
+    "/api/v1/raw/{path}": {
+      "get": {
+        "summary": "Raw",
+        "description": "Return a file as it is, of the type of its name (e.g. a figure, to\nshow in a page with the token in the query).",
+        "operationId": "raw_api_v1_raw__path__get",
+        "parameters": [
+          {
+            "name": "path",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Path"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/octet-stream": {}
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/runs/{path}": {
       "get": {
         "summary": "Run",

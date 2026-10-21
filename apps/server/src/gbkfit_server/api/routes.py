@@ -13,7 +13,7 @@ from typing import Annotated
 from fastapi import (
     APIRouter, Body, Depends, Response, WebSocket, WebSocketException,
     status)
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import FileResponse, PlainTextResponse
 from fastapi.sse import EventSourceResponse, ServerSentEvent
 from starlette.requests import HTTPConnection
 
@@ -68,6 +68,17 @@ def write_file(
 ) -> None:
     """Write the text of a file, and its folders."""
     server.workspace.write_text(path, text)
+
+
+@router.get(
+    '/raw/{path:path}', response_class=FileResponse,
+    responses={200: {'content': {'application/octet-stream': {}}}})
+def raw(server: ServerDep, path: str) -> FileResponse:
+    """
+    Return a file as it is, of the type of its name (e.g. a figure, to
+    show in a page with the token in the query).
+    """
+    return FileResponse(server.workspace.file(path))
 
 
 @router.get('/runs/{path:path}')

@@ -110,7 +110,7 @@ button { font: inherit; color: inherit; }
 .line svg { width: 100%; height: 120px; background: var(--panel2); border-radius: 4px; }
 .line polyline, .trace polyline { fill: none; stroke: var(--accent); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
 .line figcaption { justify-content: space-between; }
-.plane { display: flex; align-items: center; gap: 8px; font: 11px var(--mono); color: var(--faint); }
+.plane { display: flex; align-items: center; gap: 8px; font: 11px var(--mono); color: var(--faint); max-width: 980px; }
 .plane input { flex: 1; accent-color: var(--accent); }
 
 .param { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; padding: 8px 6px; border-bottom: 1px solid var(--line); }
@@ -137,3 +137,27 @@ button { font: inherit; color: inherit; }
 .product .hint { padding: 0; }
 .product .image, .product .cube, .product .line { max-width: 560px; }
 .cube { display: flex; flex-direction: column; gap: 6px; }
+
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; padding: 2px; gap: 2px; }
+.seg button { border: 0; background: transparent; color: var(--muted); border-radius: 6px; padding: 2px 10px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--sel); color: var(--fg); }
+
+.summary { display: flex; flex-direction: column; gap: 10px; max-width: 980px; }
+.summary-head { display: flex; align-items: center; gap: 10px; }
+.summary-head select { margin-left: auto; background: var(--panel2); color: var(--fg); border: 1px solid var(--line); border-radius: 6px; padding: 2px 6px; font: 12px var(--mono); }
+.badge.ok { color: var(--ok); }
+.badge.bad { color: var(--err); }
+.stats { display: flex; flex-wrap: wrap; gap: 6px 22px; margin: 0; }
+.stats dt { font: 11px var(--mono); color: var(--faint); text-transform: uppercase; letter-spacing: .06em; }
+.stats dd { margin: 0; font: 13px var(--mono); font-variant-numeric: tabular-nums; }
+.params-table { border-collapse: collapse; font: 12.5px var(--mono); font-variant-numeric: tabular-nums; }
+.params-table th { text-align: right; font: 11px var(--mono); color: var(--faint); padding: 4px 10px; border-bottom: 1px solid var(--line); font-weight: 400; }
+.params-table td { text-align: right; padding: 4px 10px; border-bottom: 1px solid var(--line); }
+.params-table th:first-child, .params-table td.name { text-align: left; }
+
+.figures { max-width: 980px; }
+.figure-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+.figure { margin: 0; display: flex; flex-direction: column; gap: 4px; }
+/* (the figures of matplotlib are drawn for a white page) */
+.figure img { width: 100%; background: #fff; border-radius: 4px; }
+.figure figcaption { font: 11px var(--mono); color: var(--faint); }
