@@ -17,7 +17,32 @@ export interface paths {
          */
         get: operations["projects_api_v1_projects_get"];
         put?: never;
-        post?: never;
+        /**
+         * Create Project
+         * @description Create a project, with the folders of its pieces.
+         */
+        post: operations["create_project_api_v1_projects_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/pieces": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Piece
+         * @description Create a piece (or a setup) of a project from its template; return
+         *     its path.
+         */
+        post: operations["create_piece_api_v1_pieces_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -403,6 +428,20 @@ export interface components {
             };
         };
         /**
+         * PieceRequest
+         * @description A piece (or a setup) to create from its template: its project, its
+         *     folder (galaxies, observations, params, fitters or setups), and its
+         *     name (its path in the folder, without .yaml).
+         */
+        PieceRequest: {
+            /** Project */
+            project: string;
+            /** Folder */
+            folder: string;
+            /** Name */
+            name: string;
+        };
+        /**
          * ProjectInfo
          * @description A project: its path, the names of its pieces and setups by folder
          *     (e.g. 'galaxies'), and the paths of its runs.
@@ -416,6 +455,14 @@ export interface components {
             };
             /** Runs */
             runs: string[];
+        };
+        /**
+         * ProjectRequest
+         * @description A project to create: its folder (its path).
+         */
+        ProjectRequest: {
+            /** Path */
+            path: string;
         };
         /**
          * RunInfo
@@ -524,6 +571,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": string[];
+                };
+            };
+        };
+    };
+    create_project_api_v1_projects_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProjectRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectInfo"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_piece_api_v1_pieces_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PieceRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": string;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

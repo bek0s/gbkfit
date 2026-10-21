@@ -22,7 +22,3 @@ export function useStudio(): Studio {
 export function isSetup(path: string): boolean {
   return /(^|\/)setups\/.+\.yaml$/.test(path);
 }
-
-export function basename(path: string): string {
-  return path.slice(path.lastIndexOf('/') + 1);
-}

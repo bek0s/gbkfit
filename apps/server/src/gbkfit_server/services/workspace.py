@@ -15,6 +15,7 @@ from astropy.io import fits
 
 import gbkfit.outputs
 import gbkfit.project
+from gbkfit.utils.parseutils import ConfigError
 
 from .errors import Invalid, NotFound
 
@@ -124,6 +125,48 @@ class Workspace:
             self.relative(manifest.parent)
             for manifest in Path(path, 'runs').rglob(gbkfit.outputs.MANIFEST))
         return ProjectInfo(self.relative(path), pieces, runs)
+
+    def create_project(self, relative: str) -> ProjectInfo:
+        """
+        Create a project (see gbkfit.project.create).
+
+        Raises
+        ------
+        Invalid
+            If the folder is a project, or in one.
+        """
+        path = self.path(relative)
+        try:
+            if (outer := gbkfit.project.find(path)) is not None:
+                raise Invalid(
+                    f"'{relative}' is in the project "
+                    f"'{self.relative(outer.path)}'")
+            gbkfit.project.create(path)
+        except (OSError, ValueError) as e:
+            raise Invalid(f"cannot create the project '{relative}': {e}") \
+                from e
+        return self.project(relative)
+
+    def create_piece(self, project: str, folder: str, name: str) -> str:
+        """
+        Create a piece (or a setup) of a project from its template (see
+        gbkfit.project.Project.create_piece), and return its path.
+
+        Raises
+        ------
+        NotFound
+            If the project does not exist.
+        Invalid
+            If the folder or the name is invalid, or the piece exists.
+        """
+        try:
+            target = gbkfit.project.open(self.path(project))
+        except ValueError as e:
+            raise NotFound(str(e)) from e
+        try:
+            return self.relative(target.create_piece(folder, name))
+        except (ConfigError, OSError) as e:
+            raise Invalid(f"cannot create the piece '{name}': {e}") from e
 
     def read_text(self, relative: str) -> str:
         """

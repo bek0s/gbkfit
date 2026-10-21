@@ -21,7 +21,7 @@ import { JobsPanel } from './panels/JobsPanel';
 import { Parameters } from './panels/Parameters';
 import { PreviewPanel } from './panels/PreviewPanel';
 import { RunPanel } from './panels/RunPanel';
-import { basename, StudioContext, type Studio } from './studio';
+import { StudioContext, type Studio } from './studio';
 
 // The panels of the dock, by component name
 const PANELS: Record<string, FunctionComponent<IDockviewPanelProps>> = {
@@ -47,7 +47,7 @@ export function App() {
 
   const studio = useMemo<Studio>(
     () => ({
-      openFile: (path) => open(`file:${path}`, 'editor', basename(path), { path }),
+      openFile: (path) => open(`file:${path}`, 'editor', path.split('/').slice(-2).join('/'), { path }),
       openRun: (path) => open(`run:${path}`, 'run', path.replace(/^.*\/runs\//, 'runs/'), { path }),
       openPanel: (kind) => open(kind, kind, kind === 'preview' ? 'Live preview' : 'Jobs'),
       live,

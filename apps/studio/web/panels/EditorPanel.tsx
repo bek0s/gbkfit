@@ -52,7 +52,7 @@ export function EditorPanel({ params, api: panel }: IDockviewPanelProps<{ path: 
 
   const dirty = text !== null && text !== saved.current;
   useEffect(() => {
-    panel.setTitle(`${dirty ? '● ' : ''}${path.slice(path.lastIndexOf('/') + 1)}`);
+    panel.setTitle(`${dirty ? '● ' : ''}${path.split('/').slice(-2).join('/')}`);
   }, [dirty, panel, path]);
 
   // (the keys of the editor are set once: they save its latest text)

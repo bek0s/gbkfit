@@ -169,3 +169,14 @@ button { font: inherit; color: inherit; }
 .editor .cm-tooltip { background: var(--panel2); color: var(--fg); border: 1px solid var(--line); font: 12px var(--mono); max-width: 640px; }
 .editor .cm-diagnostic-error { border-left-color: var(--err); }
 .editor .cm-diagnostic-warning { border-left-color: var(--accent); }
+
+.ghost.small { margin-left: auto; font: 11px var(--mono); padding: 1px 8px; }
+.row.folder { padding: 0 4px 0 18px; cursor: default; }
+.row.folder:hover { background: transparent; }
+.row-main { flex: 1; text-align: left; border: 0; background: transparent; color: var(--muted); font: inherit; padding: 3px 0; cursor: pointer; }
+.row.folder .add { flex: none; border: 0; background: transparent; color: var(--faint); font: 13px var(--mono); width: 20px; border-radius: 4px; cursor: pointer; visibility: hidden; }
+.row.folder:hover .add { visibility: visible; }
+.row.folder .add:hover { background: var(--sel); color: var(--accent); }
+.name-input { padding: 2px 8px 4px 34px; }
+.name-input input { width: 100%; background: var(--panel2); color: var(--fg); border: 1px solid var(--accent); border-radius: 6px; padding: 3px 6px; font: 12px var(--mono); }
+.name-input .error { padding: 2px 0; }

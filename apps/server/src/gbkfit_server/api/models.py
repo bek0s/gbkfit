@@ -12,6 +12,8 @@ from gbkfit_server.services.jobs import TASKS
 
 __all__ = [
     'CheckRequest',
+    'PieceRequest',
+    'ProjectRequest',
     'CheckResult',
     'Diagnostic',
     'JobInfo',
@@ -121,3 +123,19 @@ class Diagnostic(BaseModel):
 class CheckResult(BaseModel):
     """The problems of a text (see the checker of the server)."""
     diagnostics: list[Diagnostic]
+
+
+class ProjectRequest(BaseModel):
+    """A project to create: its folder (its path)."""
+    path: str
+
+
+class PieceRequest(BaseModel):
+    """
+    A piece (or a setup) to create from its template: its project, its
+    folder (galaxies, observations, params, fitters or setups), and its
+    name (its path in the folder, without .yaml).
+    """
+    project: str
+    folder: str
+    name: str

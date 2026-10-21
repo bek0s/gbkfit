@@ -27,7 +27,6 @@ def write_data_setup(root):
     (data/image.fits, with errors of 0.01).
     """
     study = pathlib.Path(root, 'study')
-    (study / 'data').mkdir()
     yaml.dump(dict(
         observable=dict(type='pixel_brightness'),
         line_of_sight=dict(type='flat'),

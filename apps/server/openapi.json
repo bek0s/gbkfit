@@ -26,6 +26,83 @@
             }
           }
         }
+      },
+      "post": {
+        "summary": "Create Project",
+        "description": "Create a project, with the folders of its pieces.",
+        "operationId": "create_project_api_v1_projects_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectInfo"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/pieces": {
+      "post": {
+        "summary": "Create Piece",
+        "description": "Create a piece (or a setup) of a project from its template; return\nits path.",
+        "operationId": "create_piece_api_v1_pieces_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PieceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string",
+                  "title": "Response Create Piece Api V1 Pieces Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/v1/projects/{path}": {
@@ -821,6 +898,30 @@
         "title": "JobRequest",
         "description": "A job to run: its task, and the options of the task (see\ngbkfit.tasks), with their paths relative to the workspace. eval and\nfit need a configuration ('config'), and write their run in the runs\nof its setup, unless they give its folder ('output_dir'); resume\nneeds the folder of the run of the fit ('output_dir')."
       },
+      "PieceRequest": {
+        "properties": {
+          "project": {
+            "type": "string",
+            "title": "Project"
+          },
+          "folder": {
+            "type": "string",
+            "title": "Folder"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "project",
+          "folder",
+          "name"
+        ],
+        "title": "PieceRequest",
+        "description": "A piece (or a setup) to create from its template: its project, its\nfolder (galaxies, observations, params, fitters or setups), and its\nname (its path in the folder, without .yaml)."
+      },
       "ProjectInfo": {
         "properties": {
           "path": {
@@ -853,6 +954,20 @@
         ],
         "title": "ProjectInfo",
         "description": "A project: its path, the names of its pieces and setups by folder\n(e.g. 'galaxies'), and the paths of its runs."
+      },
+      "ProjectRequest": {
+        "properties": {
+          "path": {
+            "type": "string",
+            "title": "Path"
+          }
+        },
+        "type": "object",
+        "required": [
+          "path"
+        ],
+        "title": "ProjectRequest",
+        "description": "A project to create: its folder (its path)."
       },
       "RunInfo": {
         "properties": {

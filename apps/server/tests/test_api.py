@@ -116,3 +116,18 @@ def test_a_text_is_checked_in_place(client, root, setup):
     assert diagnostic['message'].endswith('(in setups/disk.yaml)')
     lines = text.splitlines()
     assert 'ptraits' in lines[diagnostic['line'] - 1]
+
+
+def test_projects_and_pieces_are_created_from_templates(client):
+    response = client.post('/api/v1/projects', json=dict(path='new'))
+    assert response.status_code == 201
+    assert response.json()['pieces']['setups'] == []
+    assert client.post('/api/v1/projects', json=dict(
+        path='new/inner')).status_code == 400
+    path = client.post('/api/v1/pieces', json=dict(
+        project='new', folder='galaxies', name='disk')).json()
+    assert path == 'new/galaxies/disk.yaml'
+    assert 'smdisk' in client.get(f'/api/v1/files/{path}').text
+    assert client.post('/api/v1/pieces', json=dict(
+        project='new', folder='galaxies', name='disk')).status_code == 400
+    assert sorted(client.get('/api/v1/projects').json()) == ['new', 'study']

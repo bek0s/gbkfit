@@ -22,8 +22,8 @@ from gbkfit_server.services.errors import Failed, NotFound
 from gbkfit_server.services.server import Server
 from gbkfit_server.services.sessions import Latest
 from .models import (
-    CheckRequest, CheckResult, JobInfo, JobRequest, ProjectInfo, RunInfo,
-    SessionInfo, SessionRequest)
+    CheckRequest, CheckResult, JobInfo, JobRequest, PieceRequest,
+    ProjectInfo, ProjectRequest, RunInfo, SessionInfo, SessionRequest)
 
 
 __all__ = [
@@ -46,6 +46,23 @@ ServerDep = Annotated[Server, Depends(_server)]
 def projects(server: ServerDep) -> list[str]:
     """List the paths of the projects of the workspace."""
     return server.workspace.projects()
+
+
+@router.post('/projects', status_code=status.HTTP_201_CREATED)
+def create_project(server: ServerDep, request: ProjectRequest) -> ProjectInfo:
+    """Create a project, with the folders of its pieces."""
+    return ProjectInfo.model_validate(
+        server.workspace.create_project(request.path), from_attributes=True)
+
+
+@router.post('/pieces', status_code=status.HTTP_201_CREATED)
+def create_piece(server: ServerDep, request: PieceRequest) -> str:
+    """
+    Create a piece (or a setup) of a project from its template; return
+    its path.
+    """
+    return server.workspace.create_piece(
+        request.project, request.folder, request.name)
 
 
 @router.get('/projects/{path:path}')
