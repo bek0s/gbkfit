@@ -143,7 +143,9 @@ def warn(message: str) -> None:
     Log a warning about the part of the configuration being loaded.
 
     The warning starts with the path to that part, as errors do (see
-    config_path).
+    config_path). Its record has it as a ConfigError too (its attribute
+    config_problem), for programs that collect the warnings (e.g. to
+    show them in place).
 
     Parameters
     ----------
@@ -155,7 +157,7 @@ def warn(message: str) -> None:
     located = ConfigError(message)
     for segments, context in reversed(_location.get()):
         _add_location(located, segments, context)
-    _log.warning(str(located))
+    _log.warning(str(located), extra=dict(config_problem=located))
 
 
 class ConfigError(RuntimeError):

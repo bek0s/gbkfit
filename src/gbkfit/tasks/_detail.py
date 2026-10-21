@@ -63,7 +63,8 @@ class ConfigFile(NamedTuple):
 def read_config(
         filename: str,
         required: tuple[str, ...],
-        optional: tuple[str, ...] = ()
+        optional: tuple[str, ...] = (),
+        texts: Mapping[str, str] | None = None
 ) -> ConfigFile:
     """
     Read a configuration file (YAML or JSON), with the pieces of its
@@ -76,6 +77,10 @@ def read_config(
         The file.
     required, optional : tuple of str
         The names of the required and the optional sections.
+    texts : Mapping of str to str, optional
+        Texts to read in place of files, by their absolute paths: of the
+        configuration, or of pieces of its project (e.g. edits not saved
+        yet).
 
     Returns
     -------
@@ -91,9 +96,13 @@ def read_config(
         or its sections are invalid.
     """
     filename = os.path.abspath(filename)
+    texts = texts or {}
     try:
-        with open(filename) as f:
-            cfg = _yaml.load(f)
+        if filename in texts:
+            cfg = _yaml.load(texts[filename])
+        else:
+            with open(filename) as f:
+                cfg = _yaml.load(f)
     except (OSError, ruamel.yaml.YAMLError) as e:
         raise ConfigError(
             f"cannot read the configuration file {filename}: {e}") from e
@@ -105,6 +114,8 @@ def read_config(
         project = gbkfit.project.find(filename)
     except ValueError as e:
         raise ConfigError(str(e)) from e
+    if project is not None and texts:
+        project = gbkfit.project.Project(project.path, texts)
     directory = os.path.dirname(filename) if project is None \
         else project.path
     if root is not None:

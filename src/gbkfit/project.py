@@ -69,10 +69,14 @@ class Project:
     ----------
     path : str
         The folder of the project.
+    texts : Mapping of str to str, optional
+        Texts to read in place of files of the project, by their absolute
+        paths (e.g. edits not saved yet).
     """
 
-    def __init__(self, path: str):
+    def __init__(self, path: str, texts: Mapping[str, str] | None = None):
         self._path = os.path.abspath(path)
+        self._texts = dict(texts or {})
 
     @property
     def path(self) -> str:
@@ -102,8 +106,9 @@ class Project:
             piece does not exist, cannot be read, or is not a dictionary.
         """
         filename = self.piece_file(section, name)
+        text = self._texts.get(filename)
         try:
-            piece = _yaml.load(Path(filename))
+            piece = _yaml.load(Path(filename) if text is None else text)
         except FileNotFoundError:
             raise ConfigError(
                 f"the project has no piece '{name}' of {section} "
