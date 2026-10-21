@@ -117,3 +117,14 @@ def test_a_project_is_found_above_its_files(study, tmp_path):
         format=project.FORMAT, version=project.FORMAT_VERSION + 1))
     with pytest.raises(ValueError, match="newer"):
         project.find(tmp_path / 'newer' / 'setups')
+
+
+def test_pieces_are_made_from_templates_in_their_folders(study):
+    path = study.create_piece('observations', 'ngc1313/halpha')
+    assert path == os.path.join(study.path, 'observations/ngc1313/halpha.yaml')
+    with pytest.raises(FileExistsError):
+        study.create_piece('observations', 'ngc1313/halpha')
+    with pytest.raises(ConfigError, match="pieces are in the folders"):
+        study.create_piece('runs', 'x')
+    with pytest.raises(ConfigError, match="must be a path in setups/"):
+        study.create_piece('setups', '../x')

@@ -7,6 +7,7 @@ import pathlib
 
 import ruamel.yaml
 
+from gbkfit import project
 from gbkfit.tasks.check import Problem, check
 
 
@@ -42,3 +43,12 @@ def test_a_configuration_that_cannot_be_read_has_an_error(tmp_path):
     assert check(str(filename), {str(filename): 'fitter: {}\n'}).problems \
         == [Problem('error', [], "the configuration needs the sections "
                                  "['galaxies', 'observations', 'params']")]
+
+
+def test_the_templates_of_a_project_make_a_setup_without_problems(tmp_path):
+    study = project.create(str(tmp_path / 'study'))
+    for folder in ('galaxies', 'observations', 'params', 'fitters'):
+        study.create_piece(folder, 'first')
+    setup = study.create_piece('setups', 'first')
+    assert 'galaxies: [first]' in pathlib.Path(setup).read_text()
+    assert check(setup).problems == []

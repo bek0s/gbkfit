@@ -38,6 +38,7 @@ __all__ = [
     'FORMAT_VERSION',
     'MARKER',
     'Project',
+    'TEMPLATES',
     'Resolved',
     'create',
     'find',
@@ -58,6 +59,73 @@ _FOLDERS = dict(
     fitter='fitters')
 
 _yaml = ruamel.yaml.YAML(typ='safe')
+
+# The templates of new pieces and setups, by folder (see
+# Project.create_piece): a disk seen in a cube; a setup names the first
+# piece of each folder ({galaxies}, ...)
+TEMPLATES = {
+    'galaxies': """\
+# A galaxy: here a thin disk with an exponential surface brightness, an
+# arctan rotation curve and a uniform velocity dispersion, seen in an
+# emission line. Its parameters are named after its component (disk_*).
+components:
+- type: smdisk
+  name: disk
+  loose: false
+  tilted: false
+  rnodes: [0, 2, 4, 6, 8, 10, 12, 14, 16, 18]
+  density:
+    ptraits: {type: exponential}
+  kinematics:
+    vptraits: {type: arctan, direction: tan}
+    dptraits: {type: uniform}
+  emission: {type: lines}
+""",
+    'observations': """\
+# An observation: here a cube of 48 x 48 spaxels of 1 arcsec and 40
+# channels of 10 km/s, with Gaussian PSF and LSF. To fit data, give them
+# instead of the size (paths relative to the project):
+#   data: {data: data/cube.fits, error: data/error.fits, step: [1, 1, 10]}
+observable:
+  type: pixel_spectra
+  size: [48, 48, 40]
+  step: [1, 1, 10]
+line_of_sight: {type: flat}
+instrument:
+  psf: {type: gauss, sigma: 1.5}
+  lsf: {type: gauss, sigma: 15.0}
+""",
+    'params': """\
+# Parameters: fixed values, and free ones (value, min, max). Setups list
+# layers of them; a later layer replaces each parameter it gives.
+properties:
+  disk_xpos: 0
+  disk_ypos: 0
+  disk_vsys: 0
+  disk_posa: {value: 30, min: 0, max: 180}
+  disk_incl: {value: 60, min: 5, max: 85}
+  disk_pt_a: 1
+  disk_pt_s: 5
+  disk_vpt_rt: 3
+  disk_vpt_vt: {value: 180, min: 50, max: 300}
+  disk_dpt_a: 20
+""",
+    'fitters': """\
+# A fitter: here least squares (scipy), the quickest; samplers give
+# posteriors (e.g. type: nautilus).
+type: scipy.least_squares
+""",
+    'setups': """\
+# A setup: the pieces of the project it is made of, by name (their paths
+# in their folders, without .yaml), or written in place. Preview it, or
+# evaluate or fit it (a fit needs data and a fitter).
+driver: {{type: host}}
+galaxies: [{galaxies}]
+observations: [{observations}]
+params: [{params}]
+# fitter: {fitters}
+""",
+}
 
 
 class Project:
@@ -131,13 +199,7 @@ class Project:
         ConfigError
             If the name is not a path in the folder of the pieces.
         """
-        folder = os.path.join(self._path, _FOLDERS[section])
-        filename = os.path.normpath(os.path.join(folder, f'{name}.yaml'))
-        if os.path.isabs(name) or not filename.startswith(folder + os.sep):
-            raise ConfigError(
-                f"the name of a piece must be a path in {_FOLDERS[section]}/; "
-                f"it is '{name}'")
-        return filename
+        return self._file(_FOLDERS[section], name)
 
     def setup_name(self, filename: str) -> str | None:
         """
@@ -154,10 +216,73 @@ class Project:
         """Return the folder of the runs of a setup by name (runs/<name>)."""
         return os.path.join(self._path, 'runs', name)
 
+    def names(self, folder: str) -> list[str]:
+        """Return the names of the pieces (or setups) of a folder."""
+        return sorted(
+            path.relative_to(Path(self._path, folder)).with_suffix('')
+            .as_posix()
+            for path in Path(self._path, folder).rglob('*.yaml'))
+
+    def create_piece(self, folder: str, name: str) -> str:
+        """
+        Create a piece (or a setup) from the template of its folder (see
+        TEMPLATES), and return its file. A setup names the first piece of
+        each folder, if there is one.
+
+        Parameters
+        ----------
+        folder : {'galaxies', 'observations', 'params', 'fitters', 'setups'}
+            The folder.
+        name : str
+            The name of the piece (e.g. 'ngc1313/hi').
+
+        Returns
+        -------
+        str
+            The file of the piece (absolute).
+
+        Raises
+        ------
+        ConfigError
+            If the folder is not one of pieces or setups, or the name is
+            not a path in it.
+        FileExistsError
+            If the piece exists.
+        """
+        if folder not in TEMPLATES:
+            raise ConfigError(
+                f"pieces are in the folders {list(TEMPLATES)}; not {folder!r}")
+        filename = self._file(folder, name)
+        text = TEMPLATES[folder]
+        if folder == 'setups':
+            text = text.format(**{
+                f: next(iter(self.names(f)), '') for f in _FOLDERS.values()})
+        Path(filename).parent.mkdir(parents=True, exist_ok=True)
+        with Path(filename).open('x') as f:
+            f.write(text)
+        return filename
+
+    def _file(self, folder: str, name: str) -> str:
+        """
+        Return the file of a name in a folder of the project (absolute).
+
+        Raises
+        ------
+        ConfigError
+            If the name is not a path in the folder.
+        """
+        base = os.path.join(self._path, folder)
+        filename = os.path.normpath(os.path.join(base, f'{name}.yaml'))
+        if os.path.isabs(name) or not filename.startswith(base + os.sep):
+            raise ConfigError(
+                f"the name of a piece must be a path in {folder}/; it is "
+                f"'{name}'")
+        return filename
 
 def create(path: str) -> Project:
     """
-    Create a project: its folder, if needed, and its marker.
+    Create a project: its folder, if needed, its marker, and the folders
+    of its pieces, setups, data and runs.
 
     Parameters
     ----------
@@ -177,6 +302,8 @@ def create(path: str) -> Project:
     os.makedirs(path, exist_ok=True)
     with Path(path, MARKER).open('x') as f:
         _yaml.dump(dict(format=FORMAT, version=FORMAT_VERSION), f)
+    for folder in (*TEMPLATES, 'data', 'runs'):
+        os.makedirs(os.path.join(path, folder), exist_ok=True)
     return Project(path)
 
 

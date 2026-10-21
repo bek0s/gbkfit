@@ -203,7 +203,6 @@ def test_a_setup_of_a_project_runs_in_its_runs(tmp_path):
     model = array(run_eval('model', config, tmp_path / 'model'), 'model')
     study = tmp_path / 'study'
     project.create(str(study))
-    (study / 'data').mkdir()
     fits.writeto(study / 'data/cube.fits', model + 1)
     observation = config['observations'][0]
     observation['data'] = dict(
