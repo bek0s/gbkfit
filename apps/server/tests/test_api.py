@@ -96,3 +96,23 @@ def test_the_pages_are_served_and_the_link_leads_to_the_first(root, tmp_path):
         assert response.headers['location'] == f'/studio/?token={TOKEN}'
         assert '<title>Studio</title>' in client.get('/studio/').text
         assert client.get('/api').json()['pages'] == ['studio']
+
+
+def test_a_text_is_checked_in_place(client, root, setup):
+    # A setup with an unknown section, and a piece with a misspelt type
+    # (in the setup that names it)
+    text = (pathlib.Path(root) / setup).read_text() + 'bogus: 1\n'
+    (diagnostic,) = client.post('/api/v1/check', json=dict(
+        path=setup, text=text)).json()['diagnostics']
+    assert diagnostic['severity'] == 'warning'
+    assert "'bogus'" in diagnostic['message']
+    piece = 'study/galaxies/disk.yaml'
+    text = (pathlib.Path(root) / piece).read_text().replace(
+        'exponential', 'exponentail')
+    (diagnostic,) = client.post('/api/v1/check', json=dict(
+        path=piece, text=text)).json()['diagnostics']
+    assert diagnostic['severity'] == 'error'
+    assert "did you mean 'exponential'" in diagnostic['message']
+    assert diagnostic['message'].endswith('(in setups/disk.yaml)')
+    lines = text.splitlines()
+    assert 'ptraits' in lines[diagnostic['line'] - 1]

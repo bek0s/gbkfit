@@ -11,6 +11,9 @@ from gbkfit_server.services.jobs import TASKS
 
 
 __all__ = [
+    'CheckRequest',
+    'CheckResult',
+    'Diagnostic',
     'JobInfo',
     'JobRequest',
     'ProjectInfo',
@@ -100,3 +103,21 @@ class SessionInfo(BaseModel):
     config: str
     free: dict[str, dict[str, Any]]
     data: bool
+
+
+class CheckRequest(BaseModel):
+    """The text of a file to check (e.g. not saved yet), and its path."""
+    path: str
+    text: str
+
+
+class Diagnostic(BaseModel):
+    """A problem of a text: its line (from 1), severity and message."""
+    line: int
+    severity: Literal['error', 'warning']
+    message: str
+
+
+class CheckResult(BaseModel):
+    """The problems of a text (see the checker of the server)."""
+    diagnostics: list[Diagnostic]

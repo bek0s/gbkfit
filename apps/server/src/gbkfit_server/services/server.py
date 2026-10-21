@@ -2,6 +2,7 @@
 The server: its services, which the API serves (see gbkfit_server.api).
 """
 
+from .checks import Checks
 from .events import Events
 from .executors import Executor
 from .jobs import Jobs
@@ -31,6 +32,7 @@ class Server:
     events : Events
     jobs : Jobs
     sessions : Sessions
+    checks : Checks
     """
 
     def __init__(self, root: str, executor: Executor):
@@ -38,6 +40,7 @@ class Server:
         self.events = Events()
         self.jobs = Jobs(self.workspace, executor, self.events)
         self.sessions = Sessions(self.workspace)
+        self.checks = Checks(self.workspace)
 
     async def close(self) -> None:
         """Close the sessions, and stop the jobs."""

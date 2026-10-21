@@ -186,6 +186,45 @@
         }
       }
     },
+    "/api/v1/check": {
+      "post": {
+        "summary": "Check",
+        "description": "Check the text of a file (e.g. as it is edited) as its task would:\na configuration itself, a piece of a project in the setups that name\nit; and return its problems, by line.",
+        "operationId": "check_api_v1_check_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CheckRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CheckResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/runs/{path}": {
       "get": {
         "summary": "Run",
@@ -584,6 +623,70 @@
   },
   "components": {
     "schemas": {
+      "CheckRequest": {
+        "properties": {
+          "path": {
+            "type": "string",
+            "title": "Path"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text"
+          }
+        },
+        "type": "object",
+        "required": [
+          "path",
+          "text"
+        ],
+        "title": "CheckRequest",
+        "description": "The text of a file to check (e.g. not saved yet), and its path."
+      },
+      "CheckResult": {
+        "properties": {
+          "diagnostics": {
+            "items": {
+              "$ref": "#/components/schemas/Diagnostic"
+            },
+            "type": "array",
+            "title": "Diagnostics"
+          }
+        },
+        "type": "object",
+        "required": [
+          "diagnostics"
+        ],
+        "title": "CheckResult",
+        "description": "The problems of a text (see the checker of the server)."
+      },
+      "Diagnostic": {
+        "properties": {
+          "line": {
+            "type": "integer",
+            "title": "Line"
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "error",
+              "warning"
+            ],
+            "title": "Severity"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "line",
+          "severity",
+          "message"
+        ],
+        "title": "Diagnostic",
+        "description": "A problem of a text: its line (from 1), severity and message."
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {

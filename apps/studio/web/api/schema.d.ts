@@ -89,6 +89,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Check
+         * @description Check the text of a file (e.g. as it is edited) as its task would:
+         *     a configuration itself, a piece of a project in the setups that name
+         *     it; and return its problems, by line.
+         */
+        post: operations["check_api_v1_check_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/runs/{path}": {
         parameters: {
             query?: never;
@@ -287,6 +309,39 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * CheckRequest
+         * @description The text of a file to check (e.g. not saved yet), and its path.
+         */
+        CheckRequest: {
+            /** Path */
+            path: string;
+            /** Text */
+            text: string;
+        };
+        /**
+         * CheckResult
+         * @description The problems of a text (see the checker of the server).
+         */
+        CheckResult: {
+            /** Diagnostics */
+            diagnostics: components["schemas"]["Diagnostic"][];
+        };
+        /**
+         * Diagnostic
+         * @description A problem of a text: its line (from 1), severity and message.
+         */
+        Diagnostic: {
+            /** Line */
+            line: number;
+            /**
+             * Severity
+             * @enum {string}
+             */
+            severity: "error" | "warning";
+            /** Message */
+            message: string;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -586,6 +641,39 @@ export interface operations {
                 };
                 content: {
                     "application/octet-stream": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    check_api_v1_check_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CheckRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CheckResult"];
                 };
             };
             /** @description Validation Error */

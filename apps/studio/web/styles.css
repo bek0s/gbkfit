@@ -5,6 +5,7 @@
   --fg: #e6eaf2; --muted: #96a0b5; --faint: #7b869c;
   --accent: #e8b04b; --on-accent: #1d1405; --ok: #43d08f; --err: #ff7676;
   --sel: rgba(232, 176, 75, .13);
+  --key: #c8d3e6; --num: #e8b04b; --str: #8fd3a8; --com: #7b869c;
   --map-mid: #131a28; --map-neg: #3d7cf5; --map-neg2: #a7c8ff; --map-pos: #ef4f5c; --map-pos2: #ffb3aa;
   --seq0: #0f1520; --seq1: #6b2f7a; --seq2: #e8724b; --seq3: #fbe3a0;
   --sans: "IBM Plex Sans", "Helvetica Neue", Helvetica, sans-serif;
@@ -18,6 +19,7 @@
     --fg: #141a26; --muted: #566075; --faint: #6b7487;
     --accent: #a8700f; --on-accent: #ffffff; --ok: #12804f; --err: #c62f37;
     --sel: rgba(168, 112, 15, .1);
+    --key: #24324a; --num: #9a5f00; --str: #1d7a46; --com: #6b7487;
     --map-mid: #f1f3f7; --map-neg: #2f69d6; --map-neg2: #16357a; --map-pos: #d6333c; --map-pos2: #7d151b;
     --seq0: #ffffff; --seq1: #f2c48d; --seq2: #c8503a; --seq3: #3b1240;
     color-scheme: light;
@@ -161,3 +163,9 @@ button { font: inherit; color: inherit; }
 /* (the figures of matplotlib are drawn for a white page) */
 .figure img { width: 100%; background: #fff; border-radius: 4px; }
 .figure figcaption { font: 11px var(--mono); color: var(--faint); }
+
+.editor .cm-lintRange-error { background-image: none; text-decoration: underline wavy var(--err); text-underline-offset: 3px; }
+.editor .cm-lintRange-warning { background-image: none; text-decoration: underline wavy var(--accent); text-underline-offset: 3px; }
+.editor .cm-tooltip { background: var(--panel2); color: var(--fg); border: 1px solid var(--line); font: 12px var(--mono); max-width: 640px; }
+.editor .cm-diagnostic-error { border-left-color: var(--err); }
+.editor .cm-diagnostic-warning { border-left-color: var(--accent); }

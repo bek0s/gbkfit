@@ -22,7 +22,8 @@ from gbkfit_server.services.errors import Failed, NotFound
 from gbkfit_server.services.server import Server
 from gbkfit_server.services.sessions import Latest
 from .models import (
-    JobInfo, JobRequest, ProjectInfo, RunInfo, SessionInfo, SessionRequest)
+    CheckRequest, CheckResult, JobInfo, JobRequest, ProjectInfo, RunInfo,
+    SessionInfo, SessionRequest)
 
 
 __all__ = [
@@ -79,6 +80,17 @@ def raw(server: ServerDep, path: str) -> FileResponse:
     show in a page with the token in the query).
     """
     return FileResponse(server.workspace.file(path))
+
+
+@router.post('/check')
+async def check(server: ServerDep, request: CheckRequest) -> CheckResult:
+    """
+    Check the text of a file (e.g. as it is edited) as its task would:
+    a configuration itself, a piece of a project in the setups that name
+    it; and return its problems, by line.
+    """
+    return CheckResult.model_validate(dict(
+        diagnostics=await server.checks.check(request.path, request.text)))
 
 
 @router.get('/runs/{path:path}')
