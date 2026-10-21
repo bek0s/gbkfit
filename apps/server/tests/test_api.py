@@ -1,0 +1,80 @@
+"""
+Tests for the API of the server: its token, and the round trips of a
+project, a job and its run, and a live session.
+"""
+
+import json
+import pathlib
+import time
+
+import pytest
+from fastapi.testclient import TestClient
+
+from gbkfit_server.api import create_app, openapi
+from gbkfit_server.services import frames
+from gbkfit_server.services.executors import LocalExecutor
+from gbkfit_server.services.server import Server
+
+
+TOKEN = 'secret'
+
+CONTRACT = pathlib.Path(__file__).parents[1] / 'openapi.json'
+
+
+@pytest.fixture
+def client(root):
+    """A client of a server of the workspace, with the token."""
+    app = create_app(Server(root, LocalExecutor()), TOKEN)
+    with TestClient(app, headers=dict(authorization=f'Bearer {TOKEN}')) \
+            as client:
+        yield client
+
+
+def test_the_api_needs_the_token(client):
+    assert client.get('/api/v1/projects').json() == ['study']
+    assert client.get(
+        '/api/v1/projects', headers=dict(authorization='Bearer wrong')
+    ).status_code == 401
+    assert client.get(
+        '/api/v1/projects', headers=dict(authorization=''),
+        params=dict(token=TOKEN)).status_code == 200
+    # (the server itself does not)
+    assert client.get('/', headers=dict(authorization='')).json()['api'] \
+        == '/api/v1'
+
+
+def test_a_job_writes_a_run_whose_arrays_are_read(client, setup):
+    response = client.post('/api/v1/jobs', json=dict(task='eval', options=dict(
+        mode='model', config=setup, profile_iters=0)))
+    assert response.status_code == 201
+    job = response.json()
+    for _ in range(600):
+        job = client.get(f"/api/v1/jobs/{job['id']}").json()
+        if job['state'] not in ('queued', 'running'):
+            break
+        time.sleep(0.1)
+    assert job['state'] == 'complete', job['output']
+    run = client.get(f"/api/v1/runs/{job['run']}").json()
+    (model,) = [p for p in run['products'] if p['kind'] == 'model']
+    frame = client.get(f"/api/v1/arrays/{job['run']}/{model['path']}").content
+    (image,) = frames.arrays(*frames.decode(frame))
+    assert image.shape == (12, 16)
+    assert client.get('/api/v1/runs/study/nothing').status_code == 404
+
+
+def test_a_session_evaluates_values_sent_over_a_websocket(client, setup):
+    session = client.post('/api/v1/sessions', json=dict(config=setup)).json()
+    assert session['free']['incl']['value'] == 45
+    url = f"/api/v1/sessions/{session['id']}/evaluate?token={TOKEN}"
+    with client.websocket_connect(url) as websocket:
+        websocket.send_json(dict(values=dict(incl=80)))
+        header, data = frames.decode(websocket.receive_bytes())
+    assert header['type'] == 'result'
+    assert frames.arrays(header, data)[0].shape == (12, 16)
+    assert client.delete(
+        f"/api/v1/sessions/{session['id']}").status_code == 204
+
+
+def test_the_contract_is_that_of_the_api():
+    # (python -m gbkfit_server.api > openapi.json writes it)
+    assert json.loads(CONTRACT.read_text()) == openapi()

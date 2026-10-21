@@ -1,6 +1,8 @@
 *~
 *.fits
 *.json
+# (the contract of the API of the server)
+!apps/server/openapi.json
 *.so
 *.user
 .DS_Store
