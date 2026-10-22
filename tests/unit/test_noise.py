@@ -7,7 +7,7 @@ import numpy as np
 import pytest
 
 from gbkfit.instrument import LSFConvolution, LSFHanning, PSFGauss
-from gbkfit.observation.noise import NoiseGauss, noise_parser
+from gbkfit.observation.noise import NoiseGauss, NoiseStudentT, noise_parser
 from gbkfit.utils import gridutils
 from gbkfit.utils.parseutils import ConfigError
 
@@ -37,6 +37,20 @@ def test_white_noise_has_the_dispersion_of_each_value():
     error = np.tile(np.linspace(1, 3, 128), (128, 1))
     noise = NoiseGauss(error=error).draw(rng, GRID, None)
     np.testing.assert_allclose(noise.std(axis=(0, 1)) / error[0], 1, rtol=0.03)
+
+
+def test_student_t_noise_has_the_dispersion_and_heavier_tails():
+    # Of rms 2 at dof 5: its dispersion 2, and its kurtosis 3 + 6 / (dof -
+    # 4) = 9, beyond the 3 of Gaussian noise
+    rng = np.random.default_rng(2)
+    noise = NoiseStudentT(5, rms=2).draw(rng, GRID, None)
+    assert noise.std() == pytest.approx(2, rel=0.01)
+    kurtosis = np.mean(noise ** 4) / np.mean(noise ** 2) ** 2
+    assert kurtosis > 6
+    info = dict(type='student_t', dof=5, rms=2)
+    assert noise_parser.dump(noise_parser.load(dict(info))) == info
+    with pytest.raises(ConfigError, match="dof must be above 2"):
+        NoiseStudentT(2, rms=1)
 
 
 def test_the_beam_is_the_correlation_of_the_noise():

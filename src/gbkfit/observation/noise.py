@@ -21,6 +21,7 @@ from gbkfit.utils.parseutils import ConfigError
 __all__ = [
     'Noise',
     'NoiseGauss',
+    'NoiseStudentT',
     'noise_parser'
 ]
 
@@ -165,11 +166,7 @@ class NoiseGauss(Noise):
 
     @classmethod
     def load(cls, info: dict[str, Any]) -> Self:
-        info = dict(info)
-        file = parseutils.load_option(parseutils.parse_file, info, 'error')
-        if file is not None:
-            with parseutils.config_path('error'):
-                info['error'] = fitsutils.read_data(*file)[0]
+        info = _load_error(info)
         if isinstance(info.get('spatial_correlation'), dict):
             parseutils.load_option_and_update_info(
                 psf_parser, info, 'spatial_correlation')
@@ -181,14 +178,8 @@ class NoiseGauss(Noise):
             self, prefix: str = '', dump_path: bool = True,
             overwrite: bool = False
     ) -> dict[str, Any]:
-        info = dict(type=self.type())
-        if self._rms is not None:
-            info.update(rms=self._rms)
-        else:
-            filename = f'{prefix}noise_error.fits'
-            astropy.io.fits.writeto(filename, self._error, overwrite=overwrite)
-            info.update(
-                error=filename if dump_path else os.path.basename(filename))
+        info = dict(type=self.type()) | _dump_dispersion(
+            self._rms, self._error, prefix, dump_path, overwrite)
         kwargs = dict(prefix=prefix, dump_path=dump_path, overwrite=overwrite)
         spatial = self._spatial_correlation
         if spatial is not None:
@@ -206,14 +197,7 @@ class NoiseGauss(Noise):
             spatial_correlation: PSF | str | None = None,
             spectral_correlation: LSF | None = None
     ):
-        if (rms is None) == (error is None):
-            raise ConfigError("give one of rms and error")
-        if rms is not None and not rms > 0:
-            raise ConfigError(f"rms must be positive; it is {rms}")
-        if error is not None:
-            error = np.asarray(error, dtype=float)
-            if np.any(error < 0):
-                raise ConfigError("the error map has negative values")
+        error = _check_dispersion(rms, error)
         if isinstance(spatial_correlation, str) \
                 and spatial_correlation != INSTRUMENT:
             raise ConfigError(
@@ -243,15 +227,7 @@ class NoiseGauss(Noise):
         return self._spectral_correlation
 
     def sigma(self, grid: gridutils.Grid) -> np.ndarray:
-        shape = grid.size[::-1]
-        if self._rms is not None:
-            return np.full(shape, self._rms)
-        try:
-            return np.broadcast_to(self._error, shape).copy()
-        except ValueError:
-            raise ConfigError(
-                f"the error map, of shape {self._error.shape}, does not "
-                f"broadcast to the data, of shape {shape}") from None
+        return _dispersion(self._rms, self._error, grid)
 
     def draw(
             self,
@@ -325,6 +301,155 @@ class NoiseGauss(Noise):
         return spectral.asarray(abs(grid.coords.step[grid.spectral_axis]))
 
 
+class NoiseStudentT(Noise):
+    """
+    Student-t noise of mean 0 and of dof degrees of freedom (above 2), of
+    the dispersion rms at every value or of an error map (as NoiseGauss),
+    independent from value to value: heavier tails than Gaussian noise
+    (outliers), e.g. to test how fits take them; Gaussian as dof grows.
+    Its values are t draws times sigma sqrt((dof - 2) / dof), whose
+    dispersion is sigma.
+
+    Its configuration has the error map as a FITS file (see NoiseGauss).
+
+    Parameters
+    ----------
+    dof : float
+        The degrees of freedom.
+    rms : float, optional
+        The dispersion of every value.
+    error : ndarray, optional
+        The dispersion of each value (see NoiseGauss).
+
+    Raises
+    ------
+    ConfigError
+        If dof is not above 2, not exactly one of rms and error is given,
+        rms is not positive, or the error map has negative values.
+    """
+
+    @staticmethod
+    def type() -> str:
+        return 'student_t'
+
+    @classmethod
+    def load(cls, info: dict[str, Any]) -> Self:
+        return super().load(_load_error(info))
+
+    def dump(
+            self, prefix: str = '', dump_path: bool = True,
+            overwrite: bool = False
+    ) -> dict[str, Any]:
+        return dict(type=self.type(), dof=self._dof) | _dump_dispersion(
+            self._rms, self._error, prefix, dump_path, overwrite)
+
+    def __init__(
+            self,
+            dof: float,
+            rms: float | None = None,
+            error: np.ndarray | None = None
+    ):
+        if not dof > 2:
+            raise ConfigError(
+                f"dof must be above 2 (a finite dispersion); it is {dof}")
+        self._dof = dof
+        self._rms = rms
+        self._error = _check_dispersion(rms, error)
+
+    def dof(self) -> float:
+        """Return the degrees of freedom."""
+        return self._dof
+
+    def sigma(self, grid: gridutils.Grid) -> np.ndarray:
+        return _dispersion(self._rms, self._error, grid)
+
+    def draw(
+            self,
+            rng: np.random.Generator,
+            grid: gridutils.Grid,
+            psf: PSF | None
+    ) -> np.ndarray:
+        sigma = self.sigma(grid)
+        t = rng.standard_t(self._dof, sigma.shape)
+        return t * sigma * np.sqrt((self._dof - 2) / self._dof)
+
+
+def _load_error(info: dict[str, Any]) -> dict[str, Any]:
+    """Return the options of a noise with its error map read (if any)."""
+    info = dict(info)
+    file = parseutils.load_option(parseutils.parse_file, info, 'error')
+    if file is not None:
+        with parseutils.config_path('error'):
+            info['error'] = fitsutils.read_data(*file)[0]
+    return info
+
+
+def _dump_dispersion(
+        rms: float | None,
+        error: np.ndarray | None,
+        prefix: str,
+        dump_path: bool,
+        overwrite: bool
+) -> dict[str, Any]:
+    """
+    Return the options of the dispersion of a noise: rms, or its error map
+    written to a file.
+    """
+    if rms is not None:
+        return dict(rms=rms)
+    filename = f'{prefix}noise_error.fits'
+    astropy.io.fits.writeto(filename, error, overwrite=overwrite)
+    return dict(error=filename if dump_path else os.path.basename(filename))
+
+
+def _check_dispersion(
+        rms: float | None, error: np.ndarray | None) -> np.ndarray | None:
+    """
+    Return the error map (as an array, if any) of a noise of one of rms
+    and error.
+
+    Raises
+    ------
+    ConfigError
+        If not exactly one is given, rms is not positive, or the error map
+        has negative values.
+    """
+    if (rms is None) == (error is None):
+        raise ConfigError("give one of rms and error")
+    if rms is not None and not rms > 0:
+        raise ConfigError(f"rms must be positive; it is {rms}")
+    if error is not None:
+        error = np.asarray(error, dtype=float)
+        if np.any(error < 0):
+            raise ConfigError("the error map has negative values")
+    return error
+
+
+def _dispersion(
+        rms: float | None,
+        error: np.ndarray | None,
+        grid: gridutils.Grid
+) -> np.ndarray:
+    """
+    Return the dispersion of each value of data on a grid, of rms or of
+    the error map.
+
+    Raises
+    ------
+    ConfigError
+        If the error map does not broadcast to the data.
+    """
+    shape = grid.size[::-1]
+    if rms is not None:
+        return np.full(shape, rms)
+    try:
+        return np.broadcast_to(error, shape).copy()
+    except ValueError:
+        raise ConfigError(
+            f"the error map, of shape {error.shape}, does not broadcast to "
+            f"the data, of shape {shape}") from None
+
+
 def _velocities(grid: gridutils.Grid) -> np.ndarray:
     """Return the velocities of the channels of a grid (km/s)."""
     step = grid.coords.step[2]
@@ -356,4 +481,4 @@ def _correlated(
         scipy.fft.rfftn(white, axes=axes) * np.sqrt(power), shape, axes=axes)
 
 
-noise_parser = parseutils.TypedParser(Noise, [NoiseGauss])
+noise_parser = parseutils.TypedParser(Noise, [NoiseGauss, NoiseStudentT])
