@@ -21,7 +21,7 @@ from .base import MassComponent, MassContext
 from .halos import (
     ProfileBurkert, ProfileDekelZhao, ProfileEinasto, ProfileNFW,
     ProfilePseudoIsothermal, ProfileZhao)
-from .profiles import ProfileSersic, SpheroidProfile
+from .profiles import ProfileNodewise, ProfileSersic, SpheroidProfile
 from .shapes import ShapeSphere, SpheroidShape, spheroid_shape_parser
 from .units import G
 
@@ -36,6 +36,7 @@ __all__ = [
 
 spheroid_profile_parser = parseutils.TypedParser(SpheroidProfile, [
     ProfileSersic,
+    ProfileNodewise,
     ProfileNFW,
     ProfileBurkert,
     ProfilePseudoIsothermal,

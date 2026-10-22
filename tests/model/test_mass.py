@@ -21,7 +21,8 @@ from gbkfit.model.distance import (
 from gbkfit.model.mass import (
     DarkFraction, MassContext, MassDisk, MassModel, MassPoint, MassSpheroid,
     MassUser, ProfileBurkert, ProfileDekelZhao, ProfileEinasto, ProfileNFW,
-    ProfilePseudoIsothermal, ProfileSersic, ProfileZhao, ShapeFlattened,
+    ProfileNodewise, ProfilePseudoIsothermal, ProfileSersic, ProfileZhao,
+    ShapeFlattened,
     SurfaceComponent, SurfaceExponential, SurfaceGaussianRing,
     SurfaceNodewise, VerticalComponent,
     VerticalExponential, VerticalGauss, VerticalSech2, VerticalThin,
@@ -547,6 +548,75 @@ def test_sersic_of_index_1_is_the_deprojected_exponential():
         sigma0 / (np.pi * rd) * scipy.special.k0(radius / rd), rtol=1e-6)
     assert sersic.enclosed_mass(1e3, params, CONTEXT) \
         == pytest.approx(mass, rel=1e-8)
+
+
+NODEWISE_NODES = [0, 0.5, 1.5, 3, 6]
+NODEWISE_PARAMS = dict(log_sigma=[9.5, 9.0, 8.4, 7.6])
+
+
+def test_nodewise_spheroids_are_the_deprojections_of_their_profile():
+    # Projected again, its density is its surface density; its mass is the
+    # integral of its density, and in all that of its surface density; its
+    # potential pulls with G M(<r) / r^2, and is -G M / r beyond its nodes
+    profile = ProfileNodewise(NODEWISE_NODES)
+    params = NODEWISE_PARAMS
+
+    def density(r):
+        return float(profile.density(np.array([r]), params, CONTEXT)[0])
+    for R in (0.2, 1.0, 4.0):
+        projected = scipy.integrate.quad(
+            lambda t: 2 * R * np.cosh(t) * density(R * np.cosh(t)),
+            0, np.arccosh(6 / R), epsrel=1e-10, limit=400)[0]
+        assert projected == pytest.approx(
+            profile.surface_density(R, params, CONTEXT), rel=1e-7)
+    for r in (0.7, 2.5):
+        mass = scipy.integrate.quad(
+            lambda s: 4 * np.pi * s ** 2 * density(s), 0, r,
+            points=[n for n in NODEWISE_NODES if n < r], epsrel=1e-10,
+            limit=400)[0]
+        assert profile.enclosed_mass(r, params, CONTEXT) == pytest.approx(
+            mass, rel=1e-7)
+    total = scipy.integrate.quad(
+        lambda R: 2 * np.pi * R * profile.surface_density(R, params, CONTEXT),
+        0, 6, points=NODEWISE_NODES, epsrel=1e-12)[0]
+    assert profile.enclosed_mass(10.0, params, CONTEXT) == pytest.approx(
+        total, rel=1e-10)
+    r, step = np.array([0.3, 2.0, 5.0]), 1e-5
+    pull = (profile.potential(r + step, params, CONTEXT)
+            - profile.potential(r - step, params, CONTEXT)) / (2 * step)
+    np.testing.assert_allclose(
+        pull, G * profile.enclosed_mass(r, params, CONTEXT) / r ** 2,
+        rtol=1e-6)
+    assert profile.potential(np.array([20.0]), params, CONTEXT)[0] \
+        == pytest.approx(-G * total / 20, rel=1e-10)
+
+
+def test_nodewise_spheroids_of_a_sampled_sersic_are_the_sersic():
+    # Of its projected density at 400 nodes (to 20 re), the Sersic spheroid
+    # (to the linear sampling), spherical and flattened
+    sersic = dict(log_m=10.5, re=1.5, n=2.0)
+    nodes = np.concatenate(([0], np.geomspace(1e-3, 30, 400)))
+    params = dict(log_sigma=np.log10(
+        ProfileSersic().surface_density(nodes[:-1], sersic, CONTEXT)))
+    radius = np.array([0.2, 1, 3, 8])
+    for shape, q in ((None, {}), (ShapeFlattened(), dict(q=0.6))):
+        np.testing.assert_allclose(
+            MassSpheroid('b', ProfileNodewise(nodes), shape).vcirc2(
+                radius, params | q, CONTEXT),
+            MassSpheroid('b', ProfileSersic(), shape).vcirc2(
+                radius, sersic | q, CONTEXT), rtol=1e-3)
+
+
+def test_nodewise_spheroids_load_and_check_their_nodes():
+    info = dict(type='spheroid', name='bulge',
+                profile=dict(type='nodewise', nodes=NODEWISE_NODES))
+    spheroid = mass_component_parser.load(copy.deepcopy(info))
+    assert mass_component_parser.dump(spheroid)['profile'] == info['profile']
+    assert spheroid.pdescs()['log_sigma'].size() == 4
+    for nodes in ([0.5, 1], [0, 2, 1], [0]):
+        with pytest.raises(
+                ConfigError, match="the nodes of a nodewise profile"):
+            ProfileNodewise(nodes)
 
 
 def test_flattened_spheroids_of_axis_ratio_1_are_spheres():

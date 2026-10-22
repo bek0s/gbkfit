@@ -5,6 +5,7 @@ enclosed masses; the halos are in halos.
 """
 
 import abc
+from collections.abc import Sequence
 from typing import Any
 
 import numpy as np
@@ -12,14 +13,16 @@ import numpy.typing as npt
 import scipy.special
 
 from gbkfit.params import ParamDesc, ParamValues
-from gbkfit.params.pdescs import ParamScalarDesc
+from gbkfit.params.pdescs import ParamScalarDesc, ParamVectorDesc
 from gbkfit.utils import parseutils
+from gbkfit.utils.parseutils import ConfigError
 from . import _numerics
 from .base import MassContext
 from .units import G
 
 
 __all__ = [
+    'ProfileNodewise',
     'ProfileSersic',
     'SpheroidProfile'
 ]
@@ -177,3 +180,169 @@ class ProfileSersic(SpheroidProfile):
         """Return its mass, its effective radius and its unit tables."""
         return (10 ** params['log_m'], params['re'],
                 _numerics.sersic_tables(float(params['n'])))
+
+
+class ProfileNodewise(SpheroidProfile):
+    """
+    The spherical deprojection of a projected density given at radial
+    nodes (kpc), as the surface density of a nodewise disk (see
+    surfaces.SurfaceNodewise): 10^log_sigma (Msun/kpc^2) at each node but
+    the last, where it is 0, linear in between, and 0 beyond; e.g. the
+    surface density of a bulge, measured (times a mass-to-light ratio) or
+    free. Of any shape, it keeps that projection face-on (see
+    shapes.ShapeFlattened).
+
+    Its density, enclosed mass and potential are exact for that profile:
+    with the slope k of the projected density S on each segment [a, b] of
+    the nodes, the Abel deprojection rho(r) = -1/pi int_r^inf S'(R) / sqrt(
+    R^2 - r^2) dR is -1/pi sum k [acosh(b / r) - acosh(max(a, r) / r)] over
+    the segments beyond r (a logarithmic cusp at the centre, where S
+    falls), M(<r) = -4 int
+    S'(R) I(R, r) dR with I = int_0^min(r, R) s^2 / sqrt(R^2 - s^2) ds,
+    and 4 pi int_r^inf rho s ds = -4 int_r^inf S'(R) sqrt(R^2 - r^2) dR,
+    each in closed form on each segment.
+
+    Parameters
+    ----------
+    nodes : Sequence of float
+        The radii (kpc) of its nodes: at least two, from 0, increasing (a
+        projected density with a hole at the centre would need a negative
+        density).
+
+    Raises
+    ------
+    ConfigError
+        If the nodes are not valid.
+    """
+
+    @staticmethod
+    def type() -> str:
+        return 'nodewise'
+
+    def dump(self) -> dict[str, Any]:
+        return super().dump() | dict(nodes=self._nodes.tolist())
+
+    def __init__(self, nodes: Sequence[float]):
+        nodes = np.asarray(nodes, dtype=float)
+        if (nodes.ndim != 1 or len(nodes) < 2 or not np.all(np.isfinite(nodes))
+                or nodes[0] != 0 or np.any(np.diff(nodes) <= 0)):
+            raise ConfigError(
+                f"the nodes of a nodewise profile must be at least two "
+                f"radii, from 0, increasing; they are {nodes.tolist()}")
+        self._nodes = nodes
+
+    def nodes(self) -> np.ndarray:
+        """Return the radii (kpc) of its nodes."""
+        return self._nodes
+
+    def pdescs(self) -> dict[str, ParamDesc]:
+        return dict(log_sigma=ParamVectorDesc(
+            len(self._nodes) - 1,
+            desc="log10 of the projected density (Msun/kpc^2) at each node "
+                 "but the last"))
+
+    def density(
+            self,
+            r: np.ndarray,
+            params: ParamValues,
+            context: MassContext
+    ) -> np.ndarray:
+        r = np.asarray(r, dtype=float)[..., None]
+        a, b, k = self._segments(params)
+        span, beyond = _segment_spans(a, b, r)
+        with np.errstate(invalid='ignore'):
+            terms = np.where(beyond & (k != 0), k * span, 0)
+        return -terms.sum(axis=-1) / np.pi
+
+    def enclosed_mass(
+            self,
+            r: npt.ArrayLike,
+            params: ParamValues,
+            context: MassContext
+    ) -> np.ndarray:
+        r = np.asarray(r, dtype=float)[..., None]
+        a, b, k = self._segments(params)
+        moments = _deprojected_mass_moment(b, r) \
+            - _deprojected_mass_moment(a, r)
+        return -4 * np.sum(k * moments, axis=-1)
+
+    def surface_density(
+            self,
+            R: npt.ArrayLike,
+            params: ParamValues,
+            context: MassContext
+    ) -> np.ndarray:
+        sigma = np.append(10 ** np.asarray(params['log_sigma']), 0)
+        return np.interp(R, self._nodes, sigma, right=0)
+
+    def potential(
+            self,
+            r: np.ndarray,
+            params: ParamValues,
+            context: MassContext
+    ) -> np.ndarray:
+        # -G (M(<r) / r + 4 pi int_r^inf rho s ds), the second term -4 sum
+        # k [R sqrt(R^2 - r^2) / 2 - r^2 / 2 ln(R + sqrt(R^2 - r^2))] from
+        # max(a, r) to b
+        r = np.asarray(r, dtype=float)
+        mass = self.enclosed_mass(r, params, context)
+        a, b, k = self._segments(params)
+        rr = r[..., None]
+        span, beyond = _segment_spans(a, b, rr)
+        lower = np.maximum(a, rr)
+        with np.errstate(invalid='ignore'):
+            outer = (b * np.sqrt(np.maximum(b ** 2 - rr ** 2, 0))
+                     - lower * np.sqrt(np.maximum(lower ** 2 - rr ** 2, 0))
+                     - np.where(rr > 0, rr ** 2 * span, 0)) / 2
+            outer = -4 * np.sum(np.where(beyond, k * outer, 0), axis=-1)
+        inner = np.divide(mass, r, out=np.zeros_like(r), where=r > 0)
+        return -G * (inner + outer)
+
+    def _segments(
+            self,
+            params: ParamValues
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """
+        Return the inner and outer radii of the segments of the nodes, and
+        the slope of the projected density on each.
+        """
+        sigma = np.append(10 ** np.asarray(params['log_sigma']), 0)
+        return (self._nodes[:-1], self._nodes[1:],
+                np.diff(sigma) / np.diff(self._nodes))
+
+
+def _segment_spans(
+        a: np.ndarray,
+        b: np.ndarray,
+        r: np.ndarray
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Return acosh(b / r) - acosh(max(a, r) / r) of the segments [a, b] at
+    the radii r (broadcast), as ln((b + sqrt(b^2 - r^2)) / (L + sqrt(L^2 -
+    r^2))), L = max(a, r), finite at r = 0 but on a segment from 0 (where
+    it is infinite); and which segments reach beyond r (b > r).
+    """
+    lower = np.maximum(a, r)
+    beyond = b > r
+    with np.errstate(divide='ignore', invalid='ignore'):
+        span = np.log(
+            (b + np.sqrt(np.maximum(b ** 2 - r ** 2, 0)))
+            / (lower + np.sqrt(np.maximum(lower ** 2 - r ** 2, 0))))
+    return span, beyond
+
+
+def _deprojected_mass_moment(R: np.ndarray, r: np.ndarray) -> np.ndarray:
+    """
+    Return P(R, r), an antiderivative in R of I(R, r) = int_0^min(r, R)
+    s^2 / sqrt(R^2 - s^2) ds (see ProfileNodewise), continuous at R = r:
+    pi R^3 / 12 within r, and beyond it R^3 / 6 asin(r / R) - r R sqrt(R^2
+    - r^2) / 6 + r^3 / 3 acosh(R / r) (0 at r = 0).
+    """
+    R, r = np.broadcast_arrays(R, r)
+    inside = R <= r
+    with np.errstate(divide='ignore', invalid='ignore'):
+        outside = (
+            R ** 3 / 6 * np.arcsin(np.where(inside, 1, r / R))
+            - r * R * np.sqrt(np.maximum(R ** 2 - r ** 2, 0)) / 6
+            + r ** 3 / 3 * np.arccosh(np.where(inside | (r == 0), 1, R / r)))
+    return np.where(inside, np.pi * R ** 3 / 12, outside)
