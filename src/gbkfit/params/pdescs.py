@@ -5,9 +5,13 @@ A description has no name: the name of a parameter is its key in the
 dict of parameters it belongs to. Models that combine others give the
 parameters of each a prefix (e.g. 'vt' of a trait becomes 'hi_vpt_vt' of
 a model), and their dicts share the descriptions.
+
+Vector parameters of the same size can be the columns of a table (see
+ParamTable), whose rows are e.g. the blobs of a mixture trait.
 """
 
 import abc
+import dataclasses
 import numbers
 from collections.abc import Mapping
 from typing import Any
@@ -19,13 +23,60 @@ from gbkfit.utils.parseutils import ConfigError
 
 
 __all__ = [
+    'ParamColumn',
     'ParamDesc',
     'ParamScalarDesc',
+    'ParamTable',
     'ParamVectorDesc',
+    'param_tables',
     'pdesc_parser',
     'load_pdescs_dict',
     'dump_pdescs_dict'
 ]
+
+
+class ParamTable:
+    """
+    A table of parameters: vector parameters of the same size, its
+    columns (see ParamColumn), whose elements of one index form a row
+    (e.g. a blob of a mixture trait: its radius, azimuth, amplitude...),
+    and its empty row: the values of columns with which a row adds nothing
+    to the model (e.g. amplitude 0, with a valid size). Every fitter fits
+    all its rows, but one that varies their number (see FitterEryn) uses
+    some and writes the empty row into the others. The descriptions of
+    its columns share it: a table is told apart from another by its
+    identity, whatever the names its columns get in the models that
+    combine others.
+
+    Parameters
+    ----------
+    desc : str
+        What a row is, for people (e.g. "blob").
+    empty : Mapping[str, float]
+        The empty row: values of columns, by column name.
+    """
+
+    def __init__(self, desc: str, empty: Mapping[str, float]):
+        self._desc = desc
+        self._empty = {name: float(value) for name, value in empty.items()}
+
+    def desc(self) -> str:
+        """Return what a row is."""
+        return self._desc
+
+    def empty(self) -> dict[str, float]:
+        """Return the empty row: values of columns, by column name."""
+        return dict(self._empty)
+
+
+@dataclasses.dataclass(frozen=True)
+class ParamColumn:
+    """
+    A column of a table of parameters (see ParamTable): the table, and the
+    name of the column in it.
+    """
+    table: ParamTable
+    name: str
 
 
 class ParamDesc(parseutils.TypedSerializable, abc.ABC):
@@ -157,6 +208,9 @@ class ParamVectorDesc(ParamDesc):
         What it is (see ParamDesc).
     minimum, maximum : float, optional
         The valid range of each element (see ParamDesc).
+    column : ParamColumn, optional
+        The column of a table it is, if any (see ParamTable): set by the
+        models that declare tables, not part of configurations.
 
     Raises
     ------
@@ -174,17 +228,46 @@ class ParamVectorDesc(ParamDesc):
             size: int,
             desc: str | None = None,
             minimum: float | None = None,
-            maximum: float | None = None
+            maximum: float | None = None,
+            column: ParamColumn | None = None
     ):
         super().__init__(size, desc, minimum, maximum)
+        self._column = column
 
     def is_scalar(self) -> bool:
         return False
+
+    def column(self) -> ParamColumn | None:
+        """Return the column of a table it is, if any."""
+        return self._column
 
 
 pdesc_parser = parseutils.TypedParser(ParamDesc, [
     ParamScalarDesc,
     ParamVectorDesc])
+
+
+def param_tables(
+        pdescs: Mapping[str, ParamDesc]
+) -> list[tuple[ParamTable, dict[str, str]]]:
+    """
+    Return the tables of parameters (see ParamTable), in the order of
+    their first columns: each table, with the name of the parameter of
+    each of its columns, by column name.
+
+    Parameters
+    ----------
+    pdescs : Mapping
+        The descriptions of the parameters, by name.
+    """
+    tables: dict[int, tuple[ParamTable, dict[str, str]]] = {}
+    for name, pdesc in pdescs.items():
+        column = pdesc.column() if isinstance(pdesc, ParamVectorDesc) \
+            else None
+        if column is not None:
+            table = column.table
+            tables.setdefault(id(table), (table, {}))[1][column.name] = name
+    return list(tables.values())
 
 
 def load_pdescs_dict(info: Mapping[str, Any]) -> dict[str, ParamDesc]:

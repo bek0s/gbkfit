@@ -126,7 +126,8 @@ import numpy as np
 import scipy.special
 
 import gbkfit.math
-from gbkfit.params.pdescs import ParamDesc, ParamScalarDesc, ParamVectorDesc
+from gbkfit.params.pdescs import (
+    ParamColumn, ParamDesc, ParamScalarDesc, ParamTable, ParamVectorDesc)
 from gbkfit.utils import parseutils
 from gbkfit.utils.parseutils import ConfigError
 
@@ -274,25 +275,30 @@ DPT_DIRECTIONS = dict(
 DPT_DIRECTION_DEFAULT = 'iso'
 
 
-def _ptrait_params_mixture_6p(nblobs: int) -> dict[str, ParamDesc]:
-    return dict(
-        r=ParamVectorDesc(nblobs),  # polar coord (radius)
-        t=ParamVectorDesc(nblobs),  # polar coord (angle)
-        a=ParamVectorDesc(nblobs),  # amplitude
-        s=ParamVectorDesc(nblobs),  # size
-        q=ParamVectorDesc(nblobs),  # axis ratio (minor/major)
-        p=ParamVectorDesc(nblobs))  # position angle relative to t
+def _ptrait_params_mixture(
+        nblobs: int, table: ParamTable, shape: bool
+) -> dict[str, ParamDesc]:
+    """
+    Return the parameters of a mixture trait: the columns of its table of
+    blobs (with the shape b of the 7-parameter mixtures).
+    """
+    names = ('r', 't', 'a', 's', 'b', 'q', 'p') if shape \
+        else ('r', 't', 'a', 's', 'q', 'p')
+    return {
+        name: ParamVectorDesc(nblobs, column=ParamColumn(table, name))
+        for name in names}
 
 
-def _ptrait_params_mixture_7p(nblobs: int) -> dict[str, ParamDesc]:
-    return dict(
-        r=ParamVectorDesc(nblobs),  # polar coord (radius)
-        t=ParamVectorDesc(nblobs),  # polar coord (angle)
-        a=ParamVectorDesc(nblobs),  # amplitude
-        s=ParamVectorDesc(nblobs),  # size
-        b=ParamVectorDesc(nblobs),  # shape
-        q=ParamVectorDesc(nblobs),  # axis ratio (minor/major)
-        p=ParamVectorDesc(nblobs))  # position angle relative to t
+def _ptrait_params_mixture_6p(
+        nblobs: int, table: ParamTable
+) -> dict[str, ParamDesc]:
+    return _ptrait_params_mixture(nblobs, table, False)
+
+
+def _ptrait_params_mixture_7p(
+        nblobs: int, table: ParamTable
+) -> dict[str, ParamDesc]:
+    return _ptrait_params_mixture(nblobs, table, True)
 
 
 def _ptrait_params_nw_harmonic(
@@ -781,7 +787,10 @@ class TraitFeatureRNodes:
 
 class TraitFeatureNBlobs:
     """
-    The option nblobs of a mixture trait: a mixin.
+    The option nblobs of a mixture trait: a mixin. Its blobs are the rows
+    of a table of its parameters (see ParamTable), whose empty row is a
+    blob of amplitude 0 (of size and axis ratio 1, valid whatever the
+    profile): a fitter that varies the number of rows can drop blobs.
     """
 
     def dump(self) -> dict[str, Any]:
@@ -793,11 +802,16 @@ class TraitFeatureNBlobs:
         if not nblobs >= 1:
             raise ConfigError(f"nblobs must be at least 1; it is {nblobs}")
         self._nblobs = nblobs
+        self._table = ParamTable('blob', dict(a=0, s=1, q=1))
         super().__init__(**kwargs)
 
     def nblobs(self) -> int:
         """Return the number of blobs."""
         return self._nblobs
+
+    def table(self) -> ParamTable:
+        """Return the table of its blobs (see ParamTable)."""
+        return self._table
 
     def consts(self) -> tuple[float, ...]:
         return (self.nblobs(),)
@@ -1514,7 +1528,7 @@ class RPTraitMixtureExponential(TraitFeatureNBlobs, RPTrait):
         return False
 
     def params_sm(self) -> dict[str, ParamDesc]:
-        return _ptrait_params_mixture_6p(self.nblobs())
+        return _ptrait_params_mixture_6p(self.nblobs(), self.table())
 
     def has_analytical_integral(self) -> bool:
         return True
@@ -1560,7 +1574,7 @@ class RPTraitMixtureGauss(TraitFeatureNBlobs, RPTrait):
         return False
 
     def params_sm(self) -> dict[str, ParamDesc]:
-        return _ptrait_params_mixture_6p(self.nblobs())
+        return _ptrait_params_mixture_6p(self.nblobs(), self.table())
 
     def has_analytical_integral(self) -> bool:
         return True
@@ -1607,7 +1621,7 @@ class RPTraitMixtureGGauss(TraitFeatureNBlobs, RPTrait):
         return False
 
     def params_sm(self) -> dict[str, ParamDesc]:
-        return _ptrait_params_mixture_7p(self.nblobs())
+        return _ptrait_params_mixture_7p(self.nblobs(), self.table())
 
     def has_analytical_integral(self) -> bool:
         return True
@@ -1654,7 +1668,7 @@ class RPTraitMixtureMoffat(TraitFeatureNBlobs, RPTrait):
         return False
 
     def params_sm(self) -> dict[str, ParamDesc]:
-        return _ptrait_params_mixture_7p(self.nblobs())
+        return _ptrait_params_mixture_7p(self.nblobs(), self.table())
 
     def has_analytical_integral(self) -> bool:
         return True
@@ -3697,7 +3711,7 @@ class DPTraitMixtureExponential(TraitFeatureNBlobs, DPTrait):
         return False
 
     def params_sm(self) -> dict[str, ParamDesc]:
-        return _ptrait_params_mixture_6p(self.nblobs())
+        return _ptrait_params_mixture_6p(self.nblobs(), self.table())
 
 
 class DPTraitMixtureGauss(TraitFeatureNBlobs, DPTrait):
@@ -3741,7 +3755,7 @@ class DPTraitMixtureGauss(TraitFeatureNBlobs, DPTrait):
         return False
 
     def params_sm(self) -> dict[str, ParamDesc]:
-        return _ptrait_params_mixture_6p(self.nblobs())
+        return _ptrait_params_mixture_6p(self.nblobs(), self.table())
 
 
 class DPTraitMixtureGGauss(TraitFeatureNBlobs, DPTrait):
@@ -3786,7 +3800,7 @@ class DPTraitMixtureGGauss(TraitFeatureNBlobs, DPTrait):
         return False
 
     def params_sm(self) -> dict[str, ParamDesc]:
-        return _ptrait_params_mixture_7p(self.nblobs())
+        return _ptrait_params_mixture_7p(self.nblobs(), self.table())
 
 
 class DPTraitMixtureMoffat(TraitFeatureNBlobs, DPTrait):
@@ -3830,7 +3844,7 @@ class DPTraitMixtureMoffat(TraitFeatureNBlobs, DPTrait):
         return False
 
     def params_sm(self) -> dict[str, ParamDesc]:
-        return _ptrait_params_mixture_7p(self.nblobs())
+        return _ptrait_params_mixture_7p(self.nblobs(), self.table())
 
 
 class DPTraitNWUniform(TraitFeatureSampling, DPTrait):
