@@ -389,6 +389,26 @@ class ParamSpace(parseutils.Serializable):
         """Return the modes of the vector parameters that have one."""
         return self._modes
 
+    def own_settings(self) -> set[str]:
+        """
+        Return the elements of vectors set apart from the other elements of
+        their vector, by element name: by a key with a subscript (e.g.
+        'v[0]'), by a list of properties (one for each element), or by
+        options spread over the elements but the starting value ('*min',
+        not '*value').
+        """
+        own = set()
+        for key, value in self._properties.items():
+            parsed = parse_key(key, self._pdescs)
+            if parsed is None or parsed.indices is None:
+                continue
+            spread = isinstance(value, Mapping) and any(
+                option.startswith('*') and option != '*value'
+                for option in value)
+            if parsed.name != key.strip() or _is_list(value) or spread:
+                own.update(element_names(parsed.name, parsed.indices))
+        return own
+
     def priors(self) -> list[dict[str, Any]]:
         """
         Return the priors on several parameters, as their configurations

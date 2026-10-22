@@ -11,6 +11,7 @@ fitter_parser.register_optional({
     'grid': 'gbkfit.fitting.fitters.grid.FitterGrid',
     'cmaes': 'gbkfit.fitting.fitters.cmaes.FitterCMAES',
     'emcee': 'gbkfit.fitting.fitters.emcee.FitterEmcee',
+    'eryn': 'gbkfit.fitting.fitters.eryn.FitterEryn',
     'zeus': 'gbkfit.fitting.fitters.zeus.FitterZeus',
     'nautilus': 'gbkfit.fitting.fitters.nautilus.FitterNautilus',
     'dynesty.static': 'gbkfit.fitting.fitters.dynesty.FitterDynestyStatic',

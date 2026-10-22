@@ -789,8 +789,8 @@ class TraitFeatureNBlobs:
     """
     The option nblobs of a mixture trait: a mixin. Its blobs are the rows
     of a table of its parameters (see ParamTable), whose empty row is a
-    blob of amplitude 0 (of size and axis ratio 1, valid whatever the
-    profile): a fitter that varies the number of rows can drop blobs.
+    blob of amplitude 0: a fitter that varies the number of rows can drop
+    blobs.
     """
 
     def dump(self) -> dict[str, Any]:
@@ -802,7 +802,7 @@ class TraitFeatureNBlobs:
         if not nblobs >= 1:
             raise ConfigError(f"nblobs must be at least 1; it is {nblobs}")
         self._nblobs = nblobs
-        self._table = ParamTable('blob', dict(a=0, s=1, q=1))
+        self._table = ParamTable('blob', dict(a=0))
         super().__init__(**kwargs)
 
     def nblobs(self) -> int:

@@ -26,5 +26,5 @@ def test_mixture_blobs_are_tables_of_their_galaxy():
     assert dcolumns == {name: f'dpt1_{name}' for name in 'rtasbqp'}
     assert blobs is not dblobs
     assert blobs.desc() == 'blob'
-    assert blobs.empty() == dict(a=0.0, s=1.0, q=1.0)
+    assert blobs.empty() == dict(a=0.0)
     assert galaxy.pdescs()['pt1_r'].size() == 3
