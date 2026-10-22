@@ -19,8 +19,8 @@ from gbkfit.utils import parseutils
 from gbkfit.utils.parseutils import ConfigError
 from .base import MassComponent, MassContext
 from .halos import (
-    ProfileBurkert, ProfileDekelZhao, ProfileEinasto, ProfileNFW,
-    ProfilePseudoIsothermal, ProfileZhao)
+    ProfileBurkert, ProfileCoreNFW, ProfileDekelZhao, ProfileEinasto,
+    ProfileNFW, ProfileNFWTruncated, ProfilePseudoIsothermal, ProfileZhao)
 from .profiles import ProfileNodewise, ProfileSersic, SpheroidProfile
 from .shapes import ShapeSphere, SpheroidShape, spheroid_shape_parser
 from .units import G
@@ -42,7 +42,9 @@ spheroid_profile_parser = parseutils.TypedParser(SpheroidProfile, [
     ProfilePseudoIsothermal,
     ProfileEinasto,
     ProfileZhao,
-    ProfileDekelZhao])
+    ProfileDekelZhao,
+    ProfileCoreNFW,
+    ProfileNFWTruncated])
 
 # The contractions of halos (see MassSpheroid)
 CONTRACTIONS = ('blumenthal86',)

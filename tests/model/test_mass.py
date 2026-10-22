@@ -20,9 +20,9 @@ from gbkfit.model.distance import (
     KPC_PER_ARCSEC_MPC, DistanceDirect, DistanceRedshift)
 from gbkfit.model.mass import (
     DarkFraction, MassContext, MassDisk, MassModel, MassPoint, MassSpheroid,
-    MassUser, ProfileBurkert, ProfileDekelZhao, ProfileEinasto, ProfileNFW,
-    ProfileNodewise, ProfilePseudoIsothermal, ProfileSersic, ProfileZhao,
-    ShapeFlattened,
+    MassUser, ProfileBurkert, ProfileCoreNFW, ProfileDekelZhao,
+    ProfileEinasto, ProfileNFW, ProfileNFWTruncated, ProfileNodewise,
+    ProfilePseudoIsothermal, ProfileSersic, ProfileZhao, ShapeFlattened,
     SurfaceComponent, SurfaceExponential, SurfaceGaussianRing,
     SurfaceNodewise, VerticalComponent,
     VerticalExponential, VerticalGauss, VerticalSech2, VerticalThin,
@@ -484,7 +484,30 @@ SPHERES = [
     (ProfileDekelZhao('density_radius'), dict(log_rho=7, rs=5, a=0.5)),
     (ProfileDekelZhao('density_radius'), dict(log_rho=7, rs=5, a=1.5)),
     (ProfileSersic(), dict(log_m=10, re=1.5, n=0.6)),
-    (ProfileSersic(), dict(log_m=10, re=1.5, n=4))]
+    (ProfileSersic(), dict(log_m=10, re=1.5, n=4)),
+    (ProfileCoreNFW('density_radius'), dict(log_rho=7, rs=10, rc=1.5, n=0.8)),
+    (ProfileNFWTruncated('density_radius'), dict(log_rho=7, rs=10, rt=30))]
+
+
+def test_cored_and_truncated_nfw_halos_change_the_nfw_halo():
+    # Of the scales of the NFW halo of their parameters: cored (Read et al.
+    # 2016), its mass times tanh(r / r_c)^n, the NFW halo without a core
+    # (n = 0); truncated, the NFW halo far within r_t
+    nfw = ProfileNFW()
+    params = dict(log_m=12, c=8)
+    radius = np.array([0.3, 2, 15, 80])
+    core = ProfileCoreNFW()
+    for n in (0.0, 0.7):
+        cored = params | dict(rc=2.0, n=n)
+        assert core.scales(cored, CONTEXT) == nfw.scales(params, CONTEXT)
+        np.testing.assert_allclose(
+            core.enclosed_mass(radius, cored, CONTEXT),
+            nfw.enclosed_mass(radius, params, CONTEXT)
+            * np.tanh(radius / 2) ** n, rtol=1e-12)
+    truncated = ProfileNFWTruncated()
+    np.testing.assert_allclose(
+        truncated.enclosed_mass(radius, params | dict(rt=1e7), CONTEXT),
+        nfw.enclosed_mass(radius, params, CONTEXT), rtol=1e-5)
 
 
 @pytest.mark.parametrize('profile, params', SPHERES)

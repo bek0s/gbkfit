@@ -32,6 +32,7 @@ __all__ = [
     'PARAMETERISATIONS',
     'check_parameterisation',
     'parameterisation_pdescs',
+    'halo_scale_radius',
     'halo_scales'
 ]
 
@@ -125,6 +126,39 @@ def halo_scales(
     """
     if parameterisation == 'density_radius':
         return 10 ** params['log_rho'], params['rs']
+    mass, radius = _mass_and_radius(
+        parameterisation, params, overdensity_density)
+    c = params['c']
+    r_s = radius / c
+    return mass / (4 * np.pi * r_s ** 3 * mass_shape(c)), r_s
+
+
+def halo_scale_radius(
+        parameterisation: str,
+        params: ParamValues,
+        overdensity_density: float | None
+) -> float:
+    """
+    Return r_s (kpc) of a halo from the values of the parameters of its
+    parameterisation, and D rho_ref (see halo_scales): it does not depend
+    on the shape of its profile.
+    """
+    if parameterisation == 'density_radius':
+        return params['rs']
+    _, radius = _mass_and_radius(
+        parameterisation, params, overdensity_density)
+    return radius / params['c']
+
+
+def _mass_and_radius(
+        parameterisation: str,
+        params: ParamValues,
+        overdensity_density: float
+) -> tuple[float, float]:
+    """
+    Return M_D (Msun) and r_D (kpc) of a halo of the parameterisation of
+    a mass or of a velocity (see halo_scales).
+    """
     if parameterisation == 'mass_concentration':
         mass = 10 ** params['log_m']
         radius = np.cbrt(3 * mass / (4 * np.pi * overdensity_density))
@@ -133,6 +167,4 @@ def halo_scales(
         radius = params['v'] / np.sqrt(
             4 / 3 * np.pi * G * overdensity_density)
         mass = params['v'] ** 2 * radius / G
-    c = params['c']
-    r_s = radius / c
-    return mass / (4 * np.pi * r_s ** 3 * mass_shape(c)), r_s
+    return mass, radius
