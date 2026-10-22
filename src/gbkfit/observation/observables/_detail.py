@@ -364,9 +364,20 @@ class DCubePlanBase(ObservablePlan):
         dcube_plan = self._dcube_plan
         dcube_plan.record(self._flux_scale(params))
         recorded = self._driver.mem_copy_d2h(dcube_plan.dcube())
-        return [self._mock_once(recorded, noise, rng) for _ in range(ndraws)]
+        draws = [self._mock_once(recorded, noise, rng) for _ in range(ndraws)]
+        return draws, self._exact_errors(noise, recorded)
 
-    def exact_errors(self, noise: 'Noise') -> dict[str, np.ndarray] | None:
+    def has_exact_errors(self) -> bool:
+        return False
+
+    def _exact_errors(
+            self, noise: 'Noise', recorded: np.ndarray
+    ) -> dict[str, np.ndarray] | None:
+        """
+        Return the exact errors of mock data of the recorded low-res cube
+        without noise (on the host), if known (see has_exact_errors);
+        None here.
+        """
         return None
 
     # How the extra outputs of the low- and high-res cubes are made from
@@ -388,7 +399,8 @@ class DCubePlanBase(ObservablePlan):
         slitless spectra, in the image) override this.
         """
         dcube = self._dcube
-        noisy = recorded + noise.draw(rng, dcube.grid(), dcube.psf())
+        noisy = recorded + noise.draw(
+            rng, dcube.grid(), dcube.psf(), recorded)
         self._driver.mem_copy_h2d(
             noisy.astype(self._dtype), self._dcube_plan.dcube())
         # (the data are smoothed with their noise)

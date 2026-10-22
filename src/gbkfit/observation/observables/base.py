@@ -491,11 +491,13 @@ class ObservablePlan(abc.ABC):
             noise: 'Noise',
             rng: np.random.Generator,
             ndraws: int
-    ) -> list[HostModelData]:
+    ) -> tuple[list[HostModelData], dict[str, np.ndarray] | None]:
         """
         Draw mock data: the model data measured from the data that the
         instrument records of the model plus noise, ndraws times, each
-        with its own noise. The model is evaluated once.
+        with its own noise, and their exact errors. The model is evaluated
+        once: the noise of every draw and the errors are of its data
+        without noise (the signal; see Noise).
 
         Parameters
         ----------
@@ -514,6 +516,10 @@ class ObservablePlan(abc.ABC):
             The model data of each draw, on the host: of each data item,
             the data ('d') and their mask ('m') as evaluate gives them;
             no weights.
+        dict or None
+            The error of each value of each data item, by name, if known
+            exactly (see has_exact_errors): the dispersion of the noise of
+            the signal.
 
         Raises
         ------
@@ -524,24 +530,13 @@ class ObservablePlan(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def exact_errors(self, noise: 'Noise') -> dict[str, np.ndarray] | None:
+    def has_exact_errors(self) -> bool:
         """
-        Return the errors of the data items of mock data, if they are
-        known exactly.
-
-        Parameters
-        ----------
-        noise : Noise
-            The noise of the recorded data.
-
-        Returns
-        -------
-        dict or None
-            The error of each value of each data item, by name: the
-            dispersion of the noise, if the items are the recorded data
-            plus the noise (e.g. spectra); None if they are measured from
-            them (e.g. moments), when their errors are those of the
-            scatter of draws (see mock).
+        Check whether the errors of mock data are known exactly (see
+        mock): if the data items are the recorded data plus the noise
+        (e.g. spectra), the dispersion of the noise; not if they are
+        measured from them (e.g. moments), when their errors are those of
+        the scatter of draws.
         """
         pass
 

@@ -428,14 +428,17 @@ class VisibilitiesPlan(_detail.DCubePlanBase):
         self._evaluate_model(params, gravity, None)
         self._dcube_plan.record(self._flux_scale(params))
         recorded = self._to_host(self._measure())
-        return [{
-            key: dict(d=(item['d'] + noise.draw(rng, self._noise_grid, None))
-                      .astype(self._dtype), m=None)
+        draws = [{
+            key: dict(d=(item['d'] + noise.draw(
+                rng, self._noise_grid, None, item['d'])).astype(self._dtype),
+                m=None)
             for key, item in recorded.items()} for _ in range(ndraws)]
+        errors = {key: noise.sigma(self._noise_grid, item['d'])
+                  for key, item in recorded.items()}
+        return draws, errors
 
-    def exact_errors(self, noise: 'Noise') -> dict[str, np.ndarray]:
-        sigma = noise.sigma(self._noise_grid)
-        return dict(re=sigma, im=sigma)
+    def has_exact_errors(self) -> bool:
+        return True
 
     def noise_grid(self) -> gridutils.Grid:
         """

@@ -265,8 +265,14 @@ class SlitSpectraPlan(_detail.DCubePlanBase):
         # model, which are on the sky, are plain arrays
         return value.data
 
-    def exact_errors(self, noise: 'Noise') -> dict[str, np.ndarray]:
-        return dict(spectra=noise.sigma(self._dcube.grid())[:, 0, :])
+    def has_exact_errors(self) -> bool:
+        return True
+
+    def _exact_errors(
+            self, noise: 'Noise', recorded: np.ndarray
+    ) -> dict[str, np.ndarray]:
+        return dict(
+            spectra=noise.sigma(self._dcube.grid(), recorded)[:, 0, :])
 
     # The slit has no position on the sky, so the extra outputs of the
     # high-res grid are plain arrays

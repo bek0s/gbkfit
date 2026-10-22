@@ -216,8 +216,13 @@ class PixelBrightnessPlan(_detail.DCubePlanBase):
         # Image models are evaluated on the x and y axes
         return self._dcube_plan.scratch_grid().spatial()
 
-    def exact_errors(self, noise: 'Noise') -> dict[str, np.ndarray]:
-        return dict(brightness=noise.sigma(self._dcube.grid())[0])
+    def has_exact_errors(self) -> bool:
+        return True
+
+    def _exact_errors(
+            self, noise: 'Noise', recorded: np.ndarray
+    ) -> dict[str, np.ndarray]:
+        return dict(brightness=noise.sigma(self._dcube.grid(), recorded)[0])
 
     _extra_lo = staticmethod(_image_extra)
     _extra_hi = staticmethod(_image_extra)

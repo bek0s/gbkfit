@@ -21,6 +21,7 @@ from gbkfit.utils.parseutils import ConfigError
 __all__ = [
     'Noise',
     'NoiseGauss',
+    'NoisePoisson',
     'NoiseStudentT',
     'noise_parser'
 ]
@@ -62,7 +63,7 @@ class Noise(parseutils.TypedSerializable, abc.ABC):
         """
 
     @abc.abstractmethod
-    def sigma(self, grid: gridutils.Grid) -> np.ndarray:
+    def sigma(self, grid: gridutils.Grid, signal: np.ndarray) -> np.ndarray:
         """
         Return the dispersion of the noise of each value of data on a grid.
 
@@ -70,6 +71,10 @@ class Noise(parseutils.TypedSerializable, abc.ABC):
         ----------
         grid : Grid
             The grid of the data.
+        signal : ndarray
+            The data without noise, which the noise is added to (of the
+            shape of the data); noise that does not depend on them ignores
+            them.
 
         Returns
         -------
@@ -88,7 +93,8 @@ class Noise(parseutils.TypedSerializable, abc.ABC):
             self,
             rng: np.random.Generator,
             grid: gridutils.Grid,
-            psf: PSF | None
+            psf: PSF | None,
+            signal: np.ndarray
     ) -> np.ndarray:
         """
         Draw the noise of data on a grid.
@@ -101,6 +107,9 @@ class Noise(parseutils.TypedSerializable, abc.ABC):
             The grid of the data.
         psf : PSF, optional
             The PSF of the instrument that records the data.
+        signal : ndarray
+            The data without noise, which the noise is added to (see
+            sigma).
 
         Returns
         -------
@@ -226,16 +235,17 @@ class NoiseGauss(Noise):
         """Return the correlation along the spectral axis, if any."""
         return self._spectral_correlation
 
-    def sigma(self, grid: gridutils.Grid) -> np.ndarray:
+    def sigma(self, grid: gridutils.Grid, signal: np.ndarray) -> np.ndarray:
         return _dispersion(self._rms, self._error, grid)
 
     def draw(
             self,
             rng: np.random.Generator,
             grid: gridutils.Grid,
-            psf: PSF | None
+            psf: PSF | None,
+            signal: np.ndarray
     ) -> np.ndarray:
-        sigma = self.sigma(grid)
+        sigma = self.sigma(grid, signal)
         spatial = self._spatial_kernels(grid, psf)
         spectral = self._spectral_kernel(grid)
         # White noise of unit variance on a periodic grid larger than the
@@ -360,18 +370,72 @@ class NoiseStudentT(Noise):
         """Return the degrees of freedom."""
         return self._dof
 
-    def sigma(self, grid: gridutils.Grid) -> np.ndarray:
+    def sigma(self, grid: gridutils.Grid, signal: np.ndarray) -> np.ndarray:
         return _dispersion(self._rms, self._error, grid)
 
     def draw(
             self,
             rng: np.random.Generator,
             grid: gridutils.Grid,
-            psf: PSF | None
+            psf: PSF | None,
+            signal: np.ndarray
     ) -> np.ndarray:
-        sigma = self.sigma(grid)
+        sigma = self.sigma(grid, signal)
         t = rng.standard_t(self._dof, sigma.shape)
         return t * sigma * np.sqrt((self._dof - 2) / self._dof)
+
+
+class NoisePoisson(Noise):
+    """
+    Poisson noise of data of counts: the data become counts / gain, the
+    counts Poisson draws of the signal (the data without noise) times the
+    gain, of the dispersion sqrt(signal gain) / gain (a signal below 0,
+    e.g. of the ringing of a convolution, counts as 0). Independent from
+    value to value.
+
+    Parameters
+    ----------
+    gain : float, optional
+        The counts per unit of the data (e.g. of the photons per unit of
+        flux).
+
+    Raises
+    ------
+    ConfigError
+        If the gain is not positive.
+    """
+
+    @staticmethod
+    def type() -> str:
+        return 'poisson'
+
+    def dump(
+            self, prefix: str = '', dump_path: bool = True,
+            overwrite: bool = False
+    ) -> dict[str, Any]:
+        return dict(type=self.type(), gain=self._gain)
+
+    def __init__(self, gain: float = 1.0):
+        if not gain > 0:
+            raise ConfigError(f"gain must be positive; it is {gain}")
+        self._gain = gain
+
+    def gain(self) -> float:
+        """Return the counts per unit of the data."""
+        return self._gain
+
+    def sigma(self, grid: gridutils.Grid, signal: np.ndarray) -> np.ndarray:
+        return np.sqrt(np.maximum(signal, 0) * self._gain) / self._gain
+
+    def draw(
+            self,
+            rng: np.random.Generator,
+            grid: gridutils.Grid,
+            psf: PSF | None,
+            signal: np.ndarray
+    ) -> np.ndarray:
+        counts = rng.poisson(np.maximum(signal, 0) * self._gain)
+        return counts / self._gain - signal
 
 
 def _load_error(info: dict[str, Any]) -> dict[str, Any]:
@@ -481,4 +545,5 @@ def _correlated(
         scipy.fft.rfftn(white, axes=axes) * np.sqrt(power), shape, axes=axes)
 
 
-noise_parser = parseutils.TypedParser(Noise, [NoiseGauss, NoiseStudentT])
+noise_parser = parseutils.TypedParser(
+    Noise, [NoiseGauss, NoiseStudentT, NoisePoisson])

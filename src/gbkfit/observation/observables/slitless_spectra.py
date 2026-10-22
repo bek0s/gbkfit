@@ -458,8 +458,14 @@ class SlitlessSpectraPlan(_detail.DCubePlanBase):
         self._shape = size[::-1]
         self._grid = grid
 
-    def exact_errors(self, noise: 'Noise') -> dict[str, np.ndarray]:
-        return dict(spectra=noise.sigma(self._grid))
+    def has_exact_errors(self) -> bool:
+        return True
+
+    def _exact_errors(
+            self, noise: 'Noise', recorded: np.ndarray
+    ) -> dict[str, np.ndarray]:
+        # (the noise is in the image of the recorded cube)
+        return dict(spectra=noise.sigma(self._grid, self._image_of(recorded)))
 
     def _measure(self) -> ModelData:
         cube = self._dcube_plan.dcube()
@@ -470,7 +476,12 @@ class SlitlessSpectraPlan(_detail.DCubePlanBase):
     def _mock_once(
             self, recorded: np.ndarray, noise: 'Noise', rng: np.random.Generator
     ) -> HostModelData:
-        self._driver.mem_copy_h2d(recorded, self._dcube_plan.dcube())
-        data = self._to_host(self._measure())
-        data['spectra']['d'] += noise.draw(rng, self._grid, self._dcube.psf())
+        data = dict(spectra=dict(d=self._image_of(recorded), m=None))
+        data['spectra']['d'] += noise.draw(
+            rng, self._grid, self._dcube.psf(), data['spectra']['d'].copy())
         return data
+
+    def _image_of(self, recorded: np.ndarray) -> np.ndarray:
+        """Return the image (on the host) of the recorded cube."""
+        self._driver.mem_copy_h2d(recorded, self._dcube_plan.dcube())
+        return self._to_host(self._measure())['spectra']['d']

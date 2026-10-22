@@ -545,16 +545,16 @@ class ObservationGroup:
         for i, (obs, plan, noise, stream) in enumerate(zip(
                 self._observations, self._plans, noises, streams)):
             with parseutils.config_path('observations', i):
-                errors = plan.exact_errors(noise)
-                if errors is None and nsamples < 2:
+                exact = plan.has_exact_errors()
+                if not exact and nsamples < 2:
                     raise ConfigError(
                         f"the errors of measured data are the scatter of "
                         f"nsamples draws, at least 2; nsamples is {nsamples}")
-                draws = plan.mock(
+                draws, errors = plan.mock(
                     self._frames[i].moved(params),
                     [gravity[g] for g in self._seen_galaxies[i]],
                     noise, np.random.default_rng(stream),
-                    nmocks + (nsamples if errors is None else 0))
+                    nmocks + (0 if exact else nsamples))
             if errors is None:
                 errors = _scatter(draws[nmocks:])
             observable = obs.observable()

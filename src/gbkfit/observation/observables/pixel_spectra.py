@@ -222,8 +222,13 @@ class PixelSpectra(Observable):
 
 class PixelSpectraPlan(_detail.DCubePlanBase):
 
-    def exact_errors(self, noise: 'Noise') -> dict[str, np.ndarray]:
-        return dict(spectra=noise.sigma(self._dcube.grid()))
+    def has_exact_errors(self) -> bool:
+        return True
+
+    def _exact_errors(
+            self, noise: 'Noise', recorded: np.ndarray
+    ) -> dict[str, np.ndarray]:
+        return dict(spectra=noise.sigma(self._dcube.grid(), recorded))
 
     def _measure(self) -> ModelData:
         plan = self._dcube_plan
