@@ -7,6 +7,7 @@ import astropy.io.fits as fits
 import astropy.wcs
 import numpy as np
 import pytest
+import scipy.ndimage
 
 from gbkfit.tasks import prep
 from gbkfit.utils import fitsutils
@@ -715,3 +716,51 @@ def test_the_continuum_of_spectra_is_subtracted():
     good = np.isfinite(cube)
     np.testing.assert_allclose(less[good], np.broadcast_to(line, cube.shape)[good],
                                atol=1e-6)
+
+
+@pytest.mark.parametrize('tessellation', ['wvt', 'cvt'])
+def test_voronoi_bins_are_of_the_target_sn(tessellation):
+    # An exponential disk on noise, in a circle: each pixel of the circle
+    # in one bin, of connected pixels, the bins of about the target S/N
+    # (to some 10%: Cappellari & Copin 2003)
+    import gbkfit.prep
+    rng = np.random.default_rng(4)
+    y, x = np.indices((60, 60)) - 29.5
+    r = np.hypot(x, 1.4 * y)
+    signal = 100 * np.exp(-r / 6) + 2 * rng.standard_normal(r.shape)
+    signal[r > 27] = np.nan
+    noise = np.full(r.shape, 2.0)
+    bins = gbkfit.prep.voronoi_bins(signal, noise, 20, tessellation)
+    assert np.array_equal(bins >= 0, np.isfinite(signal))
+    nbins = bins.max() + 1
+    for i in range(nbins):
+        assert scipy.ndimage.label(bins == i, np.ones((3, 3)))[1] == 1
+    binned = bins >= 0
+    sn = (np.bincount(bins[binned], signal[binned])
+          / np.sqrt(np.bincount(bins[binned], noise[binned] ** 2)))
+    assert np.median(sn) == pytest.approx(20, rel=0.1)
+    assert sn.min() > 0.6 * 20
+    with pytest.raises(ValueError, match="below the target"):
+        gbkfit.prep.voronoi_bins(signal, noise, 1e6)
+
+
+def test_voronoi_bins_are_the_regions_of_spectra():
+    # Bins of the summed cube (of no unit: its spectra are sums), written
+    # with its spatial coordinates: the bins of region spectra, of every
+    # pixel
+    import gbkfit.prep
+    from gbkfit.region.regions import RegionsBins
+    write_cube('cube.fits', {k: v for k, v in HEADER.items() if k != 'BUNIT'})
+    cube = fits.getdata('cube.fits')[0].astype(float)
+    signal = cube.sum(axis=0)
+    bins = gbkfit.prep.voronoi_bins(signal, np.full(signal.shape, 0.05), 30)
+    header = {k: v for k, v in HEADER.items() if k[-1] in '12'}
+    fits.writeto('bins.fits', bins, fits.Header(header))
+    prep.prep_region_spectra(
+        'bins.fits', 'cube.fits', None, None, None, 'float64')
+    nbins = bins.max() + 1
+    spectra = fits.getdata('prep_cube.fits')
+    assert nbins > 1 and spectra.shape == (SHAPE[1], nbins)
+    np.testing.assert_allclose(spectra.sum(axis=1), cube.sum(axis=(1, 2)))
+    regions = RegionsBins.load(dict(file='prep_bins.fits'))
+    assert regions.nregions() == nbins

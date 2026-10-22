@@ -2,14 +2,16 @@
 Data preparation: data read from FITS files made ready for the datasets
 of gbkfit (cropped, masked, clipped, in the axis order and direction of
 the model, and with velocity spectral axes), the binning of maps and
-cubes for region datasets, and the tables of the PSFs and LSFs of
-instruments. The prep task of gbkfit-cli is a client of this module.
+cubes for region datasets (and Voronoi bins of a map to a target
+signal-to-noise), and the tables of the PSFs and LSFs of instruments.
+The prep task of gbkfit-cli is a client of this module.
 """
 
 import dataclasses
 import logging
 import re
 from collections.abc import Sequence
+from typing import Literal
 
 import astropy.constants
 import astropy.io.fits as fits
@@ -21,6 +23,7 @@ import astropy.wcs.utils
 import numpy as np
 import numpy.typing as npt
 import scipy.ndimage
+import scipy.spatial
 import skimage.measure
 
 from gbkfit.utils import fitsutils, gridutils, unitutils
@@ -41,7 +44,8 @@ __all__ = [
     'pixel_fluxes',
     'range_mask',
     'sigma_clip_mask',
-    'subtract_continuum'
+    'subtract_continuum',
+    'voronoi_bins'
 ]
 
 
@@ -58,6 +62,15 @@ _REST_KEYWORDS = ('RESTWAV', 'RESTFRQ', 'RESTWAVE', 'RESTFREQ')
 
 # The wavelengths (Angstrom) of the tables of MUSE (its range, and more)
 _MUSE_WAVELENGTHS = np.arange(4600.0, 9401.0, 50.0)
+
+# The bin accretion of Voronoi binning (Cappellari & Copin 2003): a bin
+# stops growing above this roundness, and is kept if its S/N reaches this
+# fraction of the target (the pixels of the others join the nearest bin)
+_VORONOI_MAX_ROUNDNESS = 0.3
+_VORONOI_KEPT_FRACTION = 0.8
+
+# The most iterations of the tessellation of Voronoi binning
+_VORONOI_MAX_ITERATIONS = 1000
 
 
 def _has_wcs(header: fits.Header) -> bool:
@@ -644,6 +657,263 @@ def bounding_box(mask: np.ndarray) -> tuple[slice, ...]:
             "no valid pixels are left to crop the data to; relax the "
             "clipping, or do not minify")
     return tuple(slice(i.min(), i.max() + 1) for i in nonzero)
+
+
+def voronoi_bins(
+        signal: np.ndarray,
+        noise: np.ndarray,
+        target: float,
+        tessellation: Literal['wvt', 'cvt'] | None = 'wvt'
+) -> np.ndarray:
+    """
+    Return Voronoi bins of a map of about a target signal-to-noise each
+    (Cappellari & Copin 2003): the bin of each pixel, as the bins of
+    region datasets (see bin_index and the regions 'bins'). The pixels of
+    finite signal and finite positive noise are binned; the S/N of a bin
+    is the sum of the signal of its pixels over the sum of their noise in
+    quadrature (of uncorrelated noise).
+
+    Bin accretion makes the bins, from the pixel of highest S/N: a bin
+    grows by the pixel nearest its centroid while that pixel is next to
+    it, the bin stays round (roundness at most 0.3) and its S/N gets
+    closer to the target; each next bin starts at the pixel nearest the
+    centroid of the pixels binned so far. The pixels of the bins below
+    80% of the target join the nearest bin kept. The iterations of a
+    tessellation then even out the S/N of the bins and their shapes: of a
+    weighted Voronoi tessellation ('wvt', Diehl & Statler 2006), or of a
+    centroidal one whose bins hold about the same (S/N)^2 ('cvt',
+    Cappellari & Copin 2003); None keeps the bins of the accretion.
+
+    Parameters
+    ----------
+    signal : np.ndarray
+        The signal of each pixel (a map).
+    noise : np.ndarray
+        The noise of each pixel (its standard deviation).
+    target : float
+        The target S/N of the bins.
+    tessellation : {'wvt', 'cvt'} or None, optional
+        The tessellation of the iterations.
+
+    Returns
+    -------
+    np.ndarray
+        The bin of each pixel (int32), from 0; -1 for no bin.
+
+    Raises
+    ------
+    ValueError
+        If the signal and the noise are not maps of the same shape, the
+        tessellation is unknown, or no bin reaches the target.
+    """
+    signal = np.asarray(signal, dtype=float)
+    noise = np.asarray(noise, dtype=float)
+    if signal.ndim != 2 or signal.shape != noise.shape:
+        raise ValueError(
+            f"the signal and the noise must be maps of the same shape; "
+            f"they have shapes {signal.shape} and {noise.shape}")
+    if tessellation not in ('wvt', 'cvt', None):
+        raise ValueError(
+            f"the tessellation must be 'wvt', 'cvt' or None, not "
+            f"{tessellation!r}")
+    with np.errstate(invalid='ignore'):
+        valid = np.isfinite(signal) & np.isfinite(noise) & (noise > 0)
+    total = signal[valid].sum() / np.sqrt(np.sum(noise[valid] ** 2))
+    if not total >= target:
+        raise ValueError(
+            f"all the pixels together have a S/N of {total:.3g}, below the "
+            f"target ({target})")
+    labels, kept = _voronoi_accretion(signal, noise, valid, target)
+    if not kept.any():
+        raise ValueError(
+            f"no bin of the accretion reaches "
+            f"{_VORONOI_KEPT_FRACTION:.0%} of the target ({target})")
+    # (np.argwhere goes through the pixels in the order of labels[valid])
+    points = np.argwhere(valid).astype(float)
+    labels = labels[valid]
+    lost = ~kept[labels]
+    labels = (np.cumsum(kept) - 1)[labels]
+    generators = _centroids(points[~lost], labels[~lost])
+    labels[lost] = _nearest_generators(
+        points[lost], generators, np.ones(len(generators)))
+    signal, noise2 = signal[valid], noise[valid] ** 2
+    if tessellation is not None:
+        labels = _voronoi_tessellation(
+            points, signal, noise2, labels, tessellation)
+    bins = np.full(valid.shape, -1, dtype=np.int32)
+    bins[valid] = labels
+    _log.info(f"{labels.max() + 1} Voronoi bins")
+    return bins
+
+
+def _voronoi_accretion(
+        signal: np.ndarray,
+        noise: np.ndarray,
+        valid: np.ndarray,
+        target: float
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Return the bins of the bin accretion of voronoi_bins: the bin of each
+    pixel (from 0; -2 for the invalid pixels), and whether each bin is
+    kept.
+    """
+    labels = np.where(valid, -1, -2)
+    members = np.empty((np.count_nonzero(valid), 2))
+    snr = np.where(valid, signal / np.where(valid, noise, 1), -np.inf)
+    start = np.array(np.unravel_index(np.argmax(snr), snr.shape))
+    binned, nbinned = np.zeros(2), 0
+    kept = []
+    while True:
+        label, size = len(kept), 1
+        members[0] = start
+        labels[tuple(start)] = label
+        sum_signal = signal[tuple(start)]
+        sum_noise2 = noise[tuple(start)] ** 2
+        sn = sum_signal / np.sqrt(sum_noise2)
+        centre = members[0].copy()
+        # (no pixel brings a bin at the target closer to it)
+        while sn < target:
+            # (a pixel next to the bin is within r_max + 1 of its centre)
+            radius = np.sqrt(np.max(
+                np.sum((members[:size] - centre) ** 2, axis=1))) + 1.5
+            pixel = _nearest_free(labels, centre, radius)
+            if pixel is None or not _touches(labels, pixel, label):
+                break
+            members[size] = pixel
+            grown = members[:size + 1]
+            grown_centre = grown.mean(axis=0)
+            r_max = np.sqrt(np.max(np.sum((grown - grown_centre) ** 2, axis=1)))
+            roundness = r_max / np.sqrt((size + 1) / np.pi) - 1
+            pixel = tuple(pixel)
+            grown_sn = (sum_signal + signal[pixel]) / np.sqrt(
+                sum_noise2 + noise[pixel] ** 2)
+            if (roundness > _VORONOI_MAX_ROUNDNESS
+                    or abs(grown_sn - target) >= abs(sn - target)):
+                break
+            labels[pixel] = label
+            size += 1
+            sum_signal += signal[pixel]
+            sum_noise2 += noise[pixel] ** 2
+            sn, centre = grown_sn, grown_centre
+        kept.append(sn >= _VORONOI_KEPT_FRACTION * target)
+        binned += members[:size].sum(axis=0)
+        nbinned += size
+        free = np.argwhere(labels == -1)
+        if not free.size:
+            return labels, np.array(kept)
+        start = free[np.argmin(
+            np.sum((free - binned / nbinned) ** 2, axis=1))]
+
+
+def _nearest_free(
+        labels: np.ndarray, point: np.ndarray, radius: float
+) -> np.ndarray | None:
+    """
+    Return the pixel without a bin yet (label -1) nearest a point, if one
+    is within a radius of it.
+    """
+    lower = np.maximum(np.floor(point - radius).astype(int), 0)
+    upper = np.minimum(
+        np.ceil(point + radius).astype(int) + 1, labels.shape)
+    window = labels[lower[0]:upper[0], lower[1]:upper[1]]
+    free = np.argwhere(window == -1) + lower
+    if not free.size:
+        return None
+    distances = np.sum((free - point) ** 2, axis=1)
+    nearest = np.argmin(distances)
+    return free[nearest] if distances[nearest] <= radius ** 2 else None
+
+
+def _touches(labels: np.ndarray, pixel: np.ndarray, label: int) -> bool:
+    """Return whether a pixel is next to one of a bin, along an axis."""
+    y, x = pixel
+    ny, nx = labels.shape
+    return ((y > 0 and labels[y - 1, x] == label)
+            or (y + 1 < ny and labels[y + 1, x] == label)
+            or (x > 0 and labels[y, x - 1] == label)
+            or (x + 1 < nx and labels[y, x + 1] == label))
+
+
+def _voronoi_tessellation(
+        points: np.ndarray,
+        signal: np.ndarray,
+        noise2: np.ndarray,
+        labels: np.ndarray,
+        tessellation: Literal['wvt', 'cvt']
+) -> np.ndarray:
+    """
+    Return the bins of points (from 0) after the iterations of the
+    tessellation of voronoi_bins from bins, until the bins stop changing;
+    of the signal and noise squared of the points.
+    """
+    tiny = np.finfo(float).tiny
+    # (of a centroidal tessellation of density rho, rho A^2 is about the
+    # same for every bin of area A; so with rho = (S/N)^4 per pixel, so is
+    # the (S/N)^2 of the bins, Cappellari & Copin 2003, Sect. 4)
+    density = (np.maximum(signal ** 4 / noise2 ** 2, tiny)
+               if tessellation == 'cvt' else np.ones(len(points)))
+    for iteration in range(1, _VORONOI_MAX_ITERATIONS + 1):
+        generators = _centroids(points, labels, density)
+        scales = np.ones(len(generators))
+        if tessellation == 'wvt':
+            # (Diehl & Statler 2006, eq. 4)
+            sn = (np.bincount(labels, signal)
+                  / np.sqrt(np.bincount(labels, noise2)))
+            scales = np.sqrt(np.bincount(labels) / np.maximum(sn, tiny))
+        nearest = _nearest_generators(points, generators, scales)
+        # (without the bins left empty)
+        nearest = np.unique(nearest, return_inverse=True)[1]
+        if np.array_equal(nearest, labels):
+            _log.info(f"the Voronoi bins converged in {iteration} iterations")
+            return labels
+        labels = nearest
+    _log.warning(
+        f"the Voronoi bins did not converge in {_VORONOI_MAX_ITERATIONS} "
+        f"iterations")
+    return labels
+
+
+def _centroids(
+        points: np.ndarray,
+        labels: np.ndarray,
+        weights: np.ndarray | None = None
+) -> np.ndarray:
+    """Return the centroid of the points of each label, from 0, weighted."""
+    weights = np.ones(len(points)) if weights is None else weights
+    return np.column_stack([
+        np.bincount(labels, weights * p) for p in points.T]) / np.bincount(
+            labels, weights)[:, None]
+
+
+def _nearest_generators(
+        points: np.ndarray, generators: np.ndarray, scales: np.ndarray
+) -> np.ndarray:
+    """
+    Return the generator nearest each point in distance over the scale of
+    the generator (of a weighted Voronoi tessellation; of a Voronoi one
+    with scales of 1).
+    """
+    tree = scipy.spatial.cKDTree(generators)
+    which = np.empty(len(points), dtype=int)
+    todo = np.arange(len(points))
+    k = 16
+    while todo.size:
+        k = min(k, len(generators))
+        distances, nearest = tree.query(points[todo], k)
+        distances = distances.reshape(todo.size, k)
+        nearest = nearest.reshape(todo.size, k)
+        scaled = distances / scales[nearest]
+        rows = np.arange(todo.size)
+        best = np.argmin(scaled, axis=1)
+        which[todo] = nearest[rows, best]
+        if k == len(generators):
+            break
+        # (the others are at least the kth distance away: in distance over
+        # scale, at least that over the largest scale; else, search more)
+        sure = scaled[rows, best] <= distances[:, -1] / scales.max()
+        todo = todo[~sure]
+        k *= 4
+    return which
 
 
 def bin_index(bins: np.ndarray) -> tuple[np.ndarray, int]:
