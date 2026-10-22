@@ -56,6 +56,30 @@ def test_totals_agree_with_the_residuals(driver):
         -0.5 * objective.chi2(params))
 
 
+def test_the_log_likelihoods_of_the_points_sum_to_it(driver):
+    # (and the samples of a fit give them, one evaluation each; not with
+    # a fitted noise, whose terms are sums over the points)
+    from gbkfit.analysis import pointwise_log_likelihoods
+    rng = np.random.default_rng(1)
+    data = Data(rng.normal(0.1, 1, (24, 32)), error=np.full((24, 32), 0.5))
+    objective, params = make_objective(
+        driver, data, LikelihoodGaussian(weights=2.0))
+    pointwise = objective.pointwise_log_likelihood(params)
+    assert pointwise.sum() == pytest.approx(
+        objective.log_likelihood(params), rel=1e-5)
+    space = ParamSpace(objective.pdescs(), PROPERTIES | dict(
+        pt_a=dict(min=0, max=2)))
+    lls = pointwise_log_likelihoods(objective, space, [[1.0], [0.5]])
+    assert lls.shape == (2, len(pointwise))
+    np.testing.assert_allclose(lls[0], pointwise, rtol=1e-6)
+    noise = dict(brightness=dict(scale=True, scale_minimum=0.1))
+    objective, params = make_objective(
+        driver, data, LikelihoodGaussian(noise=noise), 'obs',
+        obs_noise_scale_brightness=1.0)
+    with pytest.raises(NotImplementedError, match="fitted noise"):
+        objective.pointwise_log_likelihood(params)
+
+
 def test_residuals_are_a_new_array_on_every_call(driver):
     # (scipy's least_squares keeps the arrays of earlier calls)
     data = Data(np.ones((24, 32)))

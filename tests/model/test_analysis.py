@@ -10,8 +10,8 @@ from modelutils import observation_group
 
 import gbkfit.params
 from gbkfit.analysis import (
-    asymmetry_maps, information_gain, kinematic_pa, kinemetry, pattern_speed,
-    pv_diagram, structure_function, trace_rotation)
+    asymmetry_maps, compare, information_gain, kinematic_pa, kinemetry, loo,
+    pattern_speed, pv_diagram, structure_function, trace_rotation, waic)
 
 
 PA, INCL, VSYS, VMAX, RT = 130.0, 55.0, 1200.0, 200.0, 3.0
@@ -152,6 +152,30 @@ def test_the_information_gain_of_a_gaussian_posterior():
         np.log(10) + 1 / 200 - 0.5, abs=0.03)
     assert information_gain(samples, PriorUniform(-10, 10)) == pytest.approx(
         np.log(20) - 0.5 * np.log(2 * np.pi * np.e), abs=0.03)
+
+
+def test_loo_and_waic_of_a_gaussian_mean():
+    # Data N(mu, 1) of a flat prior on mu: its posterior is N(mean, 1 /
+    # n), which predicts y_i by N(mean, 1 + 1 / n), and leaving y_i out
+    # by N(mean_-i, 1 + 1 / (n - 1))
+    rng = np.random.default_rng(8)
+    y = rng.normal(0.3, 1, 40)
+    n = len(y)
+    mu = rng.normal(y.mean(), 1 / np.sqrt(n), 4000)
+    ll = -0.5 * (y - mu[:, None]) ** 2 - 0.5 * np.log(2 * np.pi)
+    others = (y.sum() - y) / (n - 1)
+    variance = 1 + 1 / (n - 1)
+    exact = np.sum(-0.5 * (y - others) ** 2 / variance
+                   - 0.5 * np.log(2 * np.pi * variance))
+    lppd = np.sum(-0.5 * (y - y.mean()) ** 2 / (1 + 1 / n)
+                  - 0.5 * np.log(2 * np.pi * (1 + 1 / n)))
+    found = loo(ll)
+    assert found.elpd == pytest.approx(exact, abs=0.1)
+    assert np.all(found.pareto_k < 0.7)
+    assert found.p_eff == pytest.approx(lppd - exact, abs=0.1)
+    assert waic(ll).elpd == pytest.approx(exact, abs=0.2)
+    assert loo(ll, blocks=np.arange(n)).elpd == pytest.approx(found.elpd)
+    assert compare(found, found) == (0, 0)
 
 
 def test_bins_are_taken_as_maps_are():

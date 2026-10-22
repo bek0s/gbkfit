@@ -535,6 +535,38 @@ class Objective:
         return np.concatenate(
             [*vectors, *self._noise_residuals], dtype=np.float64)
 
+    def pointwise_log_likelihood(self, params: ParamValues) -> np.ndarray:
+        """
+        Return the log-likelihood of each data point of all observations,
+        in the order of residuals: -r^2 / 2 of its weighted residual r, so
+        that they sum to the log-likelihood (see log_likelihood); for
+        comparisons of models that leave points out (e.g. analysis.loo).
+        With correlated noise, the points are the components of the
+        whitening, not the pixels.
+
+        Parameters
+        ----------
+        params : ParamValues
+            The parameters of the models, prefixed (see pdescs).
+
+        Returns
+        -------
+        np.ndarray
+            The log-likelihood of each point.
+
+        Raises
+        ------
+        NotImplementedError
+            If an observation fits its noise or the amplitudes of its
+            spectra, whose terms are sums over many points.
+        """
+        if any(self._noise) or self.nnuisance():
+            raise NotImplementedError(
+                "the log-likelihood of each point is not given with a fitted "
+                "noise or free amplitudes of spectra: their terms are sums "
+                "over many points")
+        return -0.5 * self.residuals(params) ** 2
+
     def noise_chi2(self) -> float:
         """
         Return the sum of the squared noise residuals of all observations
