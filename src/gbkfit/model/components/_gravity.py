@@ -372,7 +372,8 @@ class GravityPlan:
                     components[i].density_disk(), self._disk_plans[i],
                     self._component_params(i, params), kpc_per_arcsec,
                     self._mass_per_unit[i])
-                for i in self._followed})
+                for i in self._followed},
+            baryon_fraction=distance.baryon_fraction())
         return GalaxyMass(
             mass_model, params, context, kpc_per_arcsec,
             component_set.gravity().field(mass_model, params, context))

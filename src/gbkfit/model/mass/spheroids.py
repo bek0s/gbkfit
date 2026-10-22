@@ -20,7 +20,8 @@ from gbkfit.utils.parseutils import ConfigError
 from .base import MassComponent, MassContext
 from .halos import (
     ProfileBurkert, ProfileCoreNFW, ProfileDekelZhao, ProfileEinasto,
-    ProfileNFW, ProfileNFWTruncated, ProfilePseudoIsothermal, ProfileZhao)
+    ProfileHalo, ProfileNFW, ProfileNFWTruncated, ProfilePseudoIsothermal,
+    ProfileZhao)
 from .profiles import ProfileNodewise, ProfileSersic, SpheroidProfile
 from .shapes import ShapeSphere, SpheroidShape, spheroid_shape_parser
 from .units import G
@@ -47,7 +48,12 @@ spheroid_profile_parser = parseutils.TypedParser(SpheroidProfile, [
     ProfileNFWTruncated])
 
 # The contractions of halos (see MassSpheroid)
-CONTRACTIONS = ('blumenthal86',)
+CONTRACTIONS = ('blumenthal86', 'gnedin04', 'cautun20')
+
+# The orbit-averaged radii of the contraction of Gnedin et al. (2004):
+# r_bar = A0 r_D (r / r_D)^w
+_GNEDIN04_A0 = 0.85
+_GNEDIN04_W = 0.8
 
 # The bisections of the initial radius of a contracted shell, in ln r
 # over [ln r, ln r + _CONTRACTION_RANGE] (to the precision of floats)
@@ -58,32 +64,67 @@ _CONTRACTION_BISECTIONS = 80
 def _contracted(
         R: np.ndarray,
         halo_vcirc2: Callable[[np.ndarray], np.ndarray],
-        baryons_vcirc2: np.ndarray
+        baryons_vcirc2: Callable[[np.ndarray], np.ndarray],
+        a0: float = 1.0,
+        w: float = 1.0,
+        r_d: float = 1.0
 ) -> np.ndarray:
     """
     Return the squared circular velocity at the radii R of a halo
-    contracted adiabatically by baryons (Blumenthal et al. 1986): the
-    dark matter within r' ends within r, with r' M(r') = r (M(r') +
-    M_b(r)) (Burkert et al. 2010, Eq. 19), M = v^2 r / G of the halo
-    before (halo_vcirc2, a function of the radius) and of the baryons in
-    the plane (baryons_vcirc2, at R): v^2 = G M(r') / r = v^2(r') r' / r.
-    NaN where the baryons push outwards (negative v^2).
+    contracted adiabatically by baryons, of the orbit-averaged radii
+    r_bar = a0 r_D (r / r_D)^w (Gnedin et al. 2004; r_bar = r, a0 = w =
+    1: Blumenthal et al. 1986): the dark matter within r_bar' of the shell
+    of the radius r' ends within r_bar of r, with r' M(r_bar') = r (M(
+    r_bar') + M_b(r_bar)) (Burkert et al. 2010, Eq. 19, with the radii of
+    Gnedin et al.), M = v^2 r / G of the halo before and of the baryons
+    in the plane (halo_vcirc2 and baryons_vcirc2, functions of the
+    radius): at R = r_bar, v^2 = G M(r_bar') / R. NaN where the baryons
+    push outwards (negative v^2).
     """
     out = np.full_like(R, np.nan)
-    valid = (R > 0) & (baryons_vcirc2 >= 0)
+    baryons_all = baryons_vcirc2(R) * R
+    valid = (R > 0) & (baryons_all >= 0)
     out[R == 0] = 0
-    r = R[valid]
-    baryons = baryons_vcirc2[valid] * r
+    averaged = R[valid]
+    baryons = baryons_all[valid]
+    # (the radius of the shell whose orbit-averaged radius is R)
+    r = r_d * (averaged / (a0 * r_d)) ** (1 / w)
     lo = np.log(r)
     hi = lo + _CONTRACTION_RANGE
     for _ in range(_CONTRACTION_BISECTIONS):
         mid = (lo + hi) / 2
         x = np.exp(mid)
-        halo = halo_vcirc2(x) * x
+        x_averaged = a0 * r_d * (x / r_d) ** w
+        halo = halo_vcirc2(x_averaged) * x_averaged
         inside = x * halo < r * (halo + baryons)
         lo, hi = np.where(inside, mid, lo), np.where(inside, hi, mid)
-    x = np.exp((lo + hi) / 2)
-    out[valid] = halo_vcirc2(x) * x / r
+    x_averaged = a0 * r_d * (np.exp((lo + hi) / 2) / r_d) ** w
+    out[valid] = halo_vcirc2(x_averaged) * x_averaged / averaged
+    return out
+
+
+def _contracted_cautun20(
+        R: np.ndarray,
+        halo_vcirc2: Callable[[np.ndarray], np.ndarray],
+        baryons_vcirc2: Callable[[np.ndarray], np.ndarray],
+        baryon_fraction: float
+) -> np.ndarray:
+    """
+    Return the squared circular velocity at the radii R of a halo
+    contracted by baryons as Cautun et al. (2020, Eq. 11) fit their
+    simulations: its mass within r times 0.45 + 0.38 (eta + 1.16)^0.53,
+    eta = M_b (1 - f_b) / (f_b M) of the masses M = v^2 r / G within r of
+    the halo before (of dark matter only) and of the baryons in the plane
+    (halo_vcirc2 and baryons_vcirc2, functions of the radius), f_b the
+    cosmic baryon fraction (about 1 at eta = 1: baryons that follow the
+    dark matter). NaN where the baryons push outwards (negative v^2).
+    """
+    halo, baryons = halo_vcirc2(R), baryons_vcirc2(R)
+    with np.errstate(divide='ignore', invalid='ignore'):
+        eta = baryons * (1 - baryon_fraction) / (baryon_fraction * halo)
+        out = halo * (0.45 + 0.38 * (eta + 1.16) ** 0.53)
+    out = np.where(baryons < 0, np.nan, out)
+    out[R == 0] = 0
     return out
 
 
@@ -150,10 +191,15 @@ class MassSpheroid(MassComponent):
       before and of the baryons in the plane: v^2(r) = G M(r') / r =
       v^2(r') r' / r. (Burkert et al. 2010, Eq. 18, which DysmalPy's
       documentation quotes, writes v^2(r') for this term, smaller by r /
-      r': it does not keep the mass that Eq. 19 moves within r.) Its
-      forces are those of its spherical shells, -v^2(r) / r^2 toward the
-      centre (r the spherical radius); its density and potential are not
-      given.
+      r': it does not keep the mass that Eq. 19 moves within r.) Or
+      'gnedin04' (a halo of a radius r_D: of a parameterisation of a mass
+      or a velocity): the same with the orbit-averaged radii r_bar = 0.85
+      r_D (r / r_D)^0.8 in the masses (Gnedin et al. 2004). Or 'cautun20':
+      the mass of the halo within r times 0.45 + 0.38 (eta + 1.16)^0.53,
+      eta = M_b (1 - f_b) / (f_b M) (Cautun et al. 2020, Eq. 11; f_b the
+      cosmic baryon fraction of the cosmology of the galaxy). Its forces
+      are those of its spherical shells, -v^2(r) / r^2 toward the centre
+      (r the spherical radius); its density and potential are not given.
     - given by its dark matter fraction (see DarkFraction): fdm = v^2 /
       (v^2 + v_b^2) at r_fdm (two parameters, instead of the parameter it
       sets), of its circular velocity, contracted if it is, and that of
@@ -170,8 +216,8 @@ class MassSpheroid(MassComponent):
     baryons : Sequence of str, optional
         The names of the mass components of its model that it responds to.
     contraction : str, optional
-        Its contraction by the baryons: none (the default) or
-        'blumenthal86'.
+        Its contraction by the baryons: none (the default),
+        'blumenthal86', 'gnedin04' or 'cautun20'.
     dark_fraction : DarkFraction, optional
         Its dark matter fraction, which sets one of its parameters.
 
@@ -236,6 +282,13 @@ class MassSpheroid(MassComponent):
                 raise ConfigError(
                     "the contraction of a spheroid is that of spherical "
                     "shells: it needs a spherical shape")
+            if contraction == 'gnedin04' and not (
+                    isinstance(profile, ProfileHalo)
+                    and profile.parameterisation() != 'density_radius'):
+                raise ConfigError(
+                    "the contraction 'gnedin04' takes the radius r_D of a "
+                    "halo: it needs a halo of a parameterisation of a mass "
+                    "or a velocity")
         if (contraction is not None or dark_fraction is not None) \
                 and not baryons:
             raise ConfigError(
@@ -393,11 +446,26 @@ class MassSpheroid(MassComponent):
         """
         def vcirc2(radii: np.ndarray) -> np.ndarray:
             return self._shape.vcirc2(radii, self._profile, params, context)
+
+        def baryons(radii: np.ndarray) -> np.ndarray:
+            return self._baryons_vcirc2(radii, context)
         if self._contraction is None:
             return vcirc2(R)
-        return _contracted(
-            R.ravel(), vcirc2, self._baryons_vcirc2(R.ravel(), context)
-        ).reshape(R.shape)
+        if self._contraction == 'cautun20':
+            if context.baryon_fraction is None:
+                raise ValueError(
+                    "the contraction 'cautun20' takes the cosmic baryon "
+                    "fraction, which the cosmology of the galaxy lacks "
+                    "(Omega_b)")
+            out = _contracted_cautun20(
+                R.ravel(), vcirc2, baryons, context.baryon_fraction)
+        elif self._contraction == 'gnedin04':
+            out = _contracted(
+                R.ravel(), vcirc2, baryons, _GNEDIN04_A0, _GNEDIN04_W,
+                self._profile.halo_radius(params, context))
+        else:
+            out = _contracted(R.ravel(), vcirc2, baryons)
+        return out.reshape(R.shape)
 
     def _given(
             self, params: ParamValues, context: MassContext) -> ParamValues:

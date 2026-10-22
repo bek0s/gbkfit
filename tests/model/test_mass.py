@@ -6,6 +6,7 @@ velocity.
 """
 
 import copy
+import dataclasses
 import functools
 import logging
 
@@ -797,6 +798,51 @@ def test_contracted_halos_keep_the_dark_matter_of_their_shells():
             lambda x: x * halo_mass(x) - r * (halo_mass(x) + baryon_v2 * r),
             r, 1e4 * r, xtol=1e-14, rtol=1e-15)
         assert v2 == pytest.approx(halo_mass(initial) / r, rel=1e-10)
+
+
+def test_gnedin_and_cautun_contractions():
+    # Gnedin et al. (2004): within R = r_bar, the dark matter the halo had
+    # within r_bar' of the shell r', with r' M(r_bar') = r (M(r_bar') +
+    # M_b(R)), r_bar = 0.85 r_D (r / r_D)^0.8, against r' found by root
+    # finding; it contracts the halo less than Blumenthal et al. Cautun et
+    # al. (2020): its formula, of the baryon fraction of the context
+    params = BARYON_VALUES | dict(mass_halo_log_m=12, mass_halo_c=5)
+    radius = np.array([0.5, 2, 5, 20])
+    context = dataclasses.replace(CONTEXT, baryon_fraction=0.16)
+    parts = {
+        name: mass_model(
+            BARYONS + [responding_halo(contraction=name)]
+        ).vcirc2_components(radius, params, context)
+        for name in ('blumenthal86', 'gnedin04', 'cautun20')}
+    halo, halo_params = MassSpheroid('h', ProfileNFW()), dict(log_m=12, c=5)
+    r_d = 5 * ProfileNFW().scales(halo_params, context)[1]
+
+    def averaged(r):
+        return 0.85 * r_d * (r / r_d) ** 0.8
+
+    def mass(r):
+        return float(halo.vcirc2(
+            np.array([averaged(r)]), halo_params, context)[0]) * averaged(r)
+    baryons = parts['gnedin04']['stars'] + parts['gnedin04']['bulge']
+    for R, baryon_v2, v2 in zip(radius, baryons, parts['gnedin04']['halo']):
+        r = r_d * (R / (0.85 * r_d)) ** (1 / 0.8)
+        initial = scipy.optimize.brentq(
+            lambda x: x * mass(x) - r * (mass(x) + baryon_v2 * R),
+            r, 1e4 * r, xtol=1e-14, rtol=1e-15)
+        assert v2 == pytest.approx(mass(initial) / R, rel=1e-10)
+    before = halo.vcirc2(radius, halo_params, context)
+    assert np.all(before < parts['gnedin04']['halo'])
+    assert np.all(parts['gnedin04']['halo'] < parts['blumenthal86']['halo'])
+    eta = baryons * 0.84 / (0.16 * before)
+    np.testing.assert_allclose(
+        parts['cautun20']['halo'],
+        before * (0.45 + 0.38 * (eta + 1.16) ** 0.53), rtol=1e-12)
+    with pytest.raises(ValueError, match="cosmic baryon fraction"):
+        mass_model(BARYONS + [responding_halo(contraction='cautun20')]
+                   ).vcirc2(radius, params, CONTEXT)
+    with pytest.raises(ConfigError, match="takes the radius r_D"):
+        MassSpheroid('h', ProfileNFW('density_radius'), baryons=['stars'],
+                     contraction='gnedin04')
 
 
 @pytest.mark.parametrize('profile, solve, bounds, given', [

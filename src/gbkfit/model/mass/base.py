@@ -107,7 +107,8 @@ class MassContext:
     galaxy that they follow, by the names of the components, and the
     squared circular velocities of the mass components that they respond
     to (see MassComponent.responds_to), as functions of the radius (kpc),
-    by their names.
+    by their names; and the cosmic baryon fraction Omega_b / Omega_m, if
+    known (for the contractions of halos that take it).
     """
     critical_density: float
     omega_m: float
@@ -115,6 +116,7 @@ class MassContext:
         default_factory=dict)
     vcirc2s: Mapping[str, Callable[[np.ndarray], np.ndarray]] = \
         dataclasses.field(default_factory=dict)
+    baryon_fraction: float | None = None
 
     def density(self, component: str) -> ComponentDensity:
         """

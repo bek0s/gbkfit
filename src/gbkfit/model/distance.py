@@ -71,6 +71,15 @@ def _omega_m(cosmology: str, redshift: float) -> float:
     return float(_cosmology(cosmology).Om(redshift))
 
 
+def _baryon_fraction(cosmology: str) -> float | None:
+    """
+    Return the cosmic baryon fraction, Omega_b / Omega_m (None if the
+    cosmology has no Omega_b).
+    """
+    cosmo = _cosmology(cosmology)
+    return None if cosmo.Ob0 is None else float(cosmo.Ob0 / cosmo.Om0)
+
+
 class Distance(parseutils.TypedSerializable, abc.ABC):
     """
     The distance of a galaxy: its parameters, the length of an arcsec at
@@ -162,6 +171,13 @@ class Distance(parseutils.TypedSerializable, abc.ABC):
         (see epoch for the arguments).
         """
         return _omega_m(self._cosmology_name, self.epoch(params, redshift))
+
+    def baryon_fraction(self) -> float | None:
+        """
+        Return the cosmic baryon fraction, Omega_b / Omega_m (the same at
+        every epoch; None if the cosmology has no Omega_b).
+        """
+        return _baryon_fraction(self._cosmology_name)
 
 
 class DistanceDirect(Distance):

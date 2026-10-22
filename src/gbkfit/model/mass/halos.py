@@ -87,6 +87,26 @@ class ProfileHalo(SpheroidProfile, abc.ABC):
     def pdescs(self) -> dict[str, ParamDesc]:
         return parameterisation_pdescs(self._parameters) | self._shape_pdescs()
 
+    def parameterisation(self) -> str:
+        """Return its parameterisation (see halo_params)."""
+        return self._parameters
+
+    def halo_radius(self, params: ParamValues, context: MassContext) -> float:
+        """
+        Return its radius r_D (kpc), c r_s, of a parameterisation of a
+        mass or a velocity.
+
+        Raises
+        ------
+        ValueError
+            If its parameterisation is 'density_radius', of no r_D.
+        """
+        if self._parameters == 'density_radius':
+            raise ValueError(
+                "a halo of the parameters 'density_radius' has no radius r_D")
+        _, r_s = self.scales(params, context)
+        return params['c'] * r_s
+
     def scales(
             self, params: ParamValues, context: MassContext
     ) -> tuple[float, float]:
