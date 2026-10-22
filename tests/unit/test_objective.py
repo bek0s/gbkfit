@@ -80,6 +80,29 @@ def test_the_log_likelihoods_of_the_points_sum_to_it(driver):
         objective.pointwise_log_likelihood(params)
 
 
+def test_prior_predictive_checks_tell_priors_that_reach_the_data(driver):
+    # Data of the model at pt_a = 1 with noise: priors about it predict
+    # them (most within the 5-95 band); priors far from it do not (the
+    # faint pixels, about 0 in every model, stay within the band)
+    from gbkfit.analysis import prior_predictive
+    rng = np.random.default_rng(5)
+    empty, values = make_objective(driver, Data(np.zeros((24, 32))))
+    model = empty.group().model_h(values)[0]['brightness']['d']
+    error = np.full(model.shape, 0.01 * model.max())
+    data = Data(model + rng.normal(0, 1, model.shape) * error, error=error)
+    objective, _ = make_objective(driver, data)
+    near = ParamSpace(objective.pdescs(), PROPERTIES | dict(
+        pt_a=dict(min=0.98, max=1.02)))
+    far = ParamSpace(objective.pdescs(), PROPERTIES | dict(
+        pt_a=dict(min=3, max=4)))
+    good = prior_predictive(objective, near, ndraws=40, seed=1)
+    bad = prior_predictive(objective, far, ndraws=40, seed=1)
+    assert good.coverage[0]['brightness'] > 0.85
+    assert bad.coverage[0]['brightness'] \
+        < good.coverage[0]['brightness'] - 0.2
+    assert np.median(bad.chi2) > 100 * np.median(good.chi2)
+
+
 def test_residuals_are_a_new_array_on_every_call(driver):
     # (scipy's least_squares keeps the arrays of earlier calls)
     data = Data(np.ones((24, 32)))
