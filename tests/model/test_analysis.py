@@ -10,7 +10,8 @@ from modelutils import observation_group
 
 import gbkfit.params
 from gbkfit.analysis import (
-    asymmetry_maps, kinematic_pa, kinemetry, pattern_speed)
+    asymmetry_maps, kinematic_pa, kinemetry, pattern_speed, pv_diagram,
+    trace_rotation)
 
 
 PA, INCL, VSYS, VMAX, RT = 130.0, 55.0, 1200.0, 200.0, 3.0
@@ -95,6 +96,31 @@ def test_the_pattern_speed_of_a_turning_bar_is_found():
     assert found.omega == pytest.approx(omega, rel=1e-9)
     assert found.intercept == pytest.approx(0, abs=1e-9)
     assert len(found.offsets) > 10
+
+
+def test_the_rotation_is_traced_on_position_velocity_diagrams():
+    # A cube of a thin disk of a flat rotation (200 km/s beyond the
+    # centre) and Gaussian lines of 10 km/s: along its major axis, the
+    # peaks are the rotation; the envelopes at eta of the peak lie sigma
+    # sqrt(-2 ln eta) beyond them, which their dispersion takes away
+    x, y = grid(61)
+    angle, incl, sigma = np.radians(PA), np.radians(60.0), 10.0
+    dx, dy = x - 30, y - 30
+    along = -dx * np.sin(angle) + dy * np.cos(angle)
+    across = (-dx * np.cos(angle) - dy * np.sin(angle)) / np.cos(incl)
+    radius = np.hypot(along, across)
+    vlos = 200 * np.tanh(radius / 2) * np.sin(incl) * np.divide(
+        along, radius, out=np.zeros_like(radius), where=radius > 0)
+    velocities = np.arange(-300, 301, 2.0)
+    cube = np.exp(-0.5 * ((velocities[:, None, None] - vlos) / sigma) ** 2)
+    cube[:, radius > 28] = 0
+    pv = pv_diagram(cube, velocities, (30, 30), PA)
+    outer = (np.abs(pv.positions) >= 10) & (np.abs(pv.positions) <= 20)
+    peak = trace_rotation(pv, 0, 60, method='peak')
+    np.testing.assert_allclose(peak.rotation[outer], 200, rtol=0.02)
+    offset = sigma * np.sqrt(-2 * np.log(0.2)) / np.sin(incl)
+    envelope = trace_rotation(pv, 0, 60, eta=0.2, dispersion=offset)
+    np.testing.assert_allclose(envelope.rotation[outer], 200, rtol=0.02)
 
 
 def test_bins_are_taken_as_maps_are():
