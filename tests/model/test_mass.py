@@ -24,7 +24,7 @@ from gbkfit.model.mass import (
     ProfileEinasto, ProfileNFW, ProfileNFWTruncated, ProfileNodewise,
     ProfilePseudoIsothermal, ProfileSersic, ProfileZhao, ShapeFlattened,
     SurfaceComponent, SurfaceExponential, SurfaceGaussianRing,
-    SurfaceNodewise, VerticalComponent,
+    SurfaceNodewise, VerticalComponent, VerticalSech,
     VerticalExponential, VerticalGauss, VerticalSech2, VerticalThin,
     mass_component_parser)
 from gbkfit.model.mass import _disk_gravity
@@ -43,6 +43,7 @@ CONTEXT = MassContext(
 # The vertical laws, by type
 LAWS = dict(
     thin=VerticalThin, exponential=VerticalExponential, sech2=VerticalSech2,
+    sech=VerticalSech,
     gauss=VerticalGauss)
 
 
@@ -84,10 +85,11 @@ def test_exponential_disk_is_its_potential():
         result, [vcirc2(r) for r in radius], rtol=1e-4)
 
 
-@pytest.mark.parametrize('vertical', ['exponential', 'sech2', 'gauss'])
+@pytest.mark.parametrize('vertical', ['exponential', 'sech2', 'sech', 'gauss'])
 def test_thick_disks_of_vanishing_thickness_are_thin(vertical):
     # (the numerical integral of a thick disk against Freeman's closed
-    # form; the transforms of the vertical laws against their densities)
+    # form; the transforms and shares of the vertical laws against their
+    # densities)
     radius = np.concatenate(([0], np.geomspace(1e-3, 1e3, 61)))
     thin = exponential_disk().vcirc2(
         radius, dict(log_m=10, rd=3), CONTEXT)
@@ -100,9 +102,13 @@ def test_thick_disks_of_vanishing_thickness_are_thin(vertical):
             0, np.inf)
         assert LAWS[vertical].transform(np.array(k), 0.7) \
             == pytest.approx(expected, rel=1e-10)
+    share, _ = scipy.integrate.quad(
+        lambda z: 2 * LAWS[vertical].pdf(z, 0.7), 0, 1.3)
+    assert LAWS[vertical].within(np.array(1.3), 0.7) \
+        == pytest.approx(share, rel=1e-10)
 
 
-@pytest.mark.parametrize('vertical', ['thin', 'sech2', 'gauss'])
+@pytest.mark.parametrize('vertical', ['thin', 'sech2', 'sech', 'gauss'])
 def test_disks_of_any_profile_are_exponential_disks(vertical):
     # The pull of the rings of an exponential profile (up to 30 rd, where
     # it is negligible) against the exponential disk (Freeman's closed
@@ -930,7 +936,8 @@ def sphere_integral(density, radius, epsrel=1e-10):
         shell, 0, radius, 0, 1, epsabs=0, epsrel=epsrel)[0]
 
 
-@pytest.mark.parametrize('vertical', ['thin', 'exponential', 'sech2', 'gauss'])
+@pytest.mark.parametrize(
+    'vertical', ['thin', 'exponential', 'sech2', 'sech', 'gauss'])
 def test_disks_enclose_the_mass_of_their_density_within_spheres(vertical):
     # Thin: M (1 - (1 + x) exp(-x)), x = r / rd; thick: the integral of
     # its density over the sphere

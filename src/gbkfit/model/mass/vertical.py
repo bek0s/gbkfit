@@ -27,6 +27,7 @@ __all__ = [
     'VerticalExponential',
     'VerticalGauss',
     'VerticalLaw',
+    'VerticalSech',
     'VerticalSech2',
     'VerticalThin',
     'disk_vertical_parser'
@@ -255,6 +256,34 @@ class VerticalSech2(VerticalLaw):
         return np.where(a > 0, transform, 1)
 
 
+class VerticalSech(VerticalLaw):
+    """
+    The sech law: p(z) = sech(z / h) / (pi h), with the share within |z|
+    < H of (2 / pi) arctan(sinh(H / h)), and T(k) = (psi(a/4 + 3/4) -
+    psi(a/4 + 1/4)) / pi with a = k h (psi: the digamma function).
+    """
+
+    @staticmethod
+    def type() -> str:
+        return 'sech'
+
+    @staticmethod
+    def pdf(z: npt.ArrayLike, h: float) -> np.ndarray:
+        # (sech(x) = 2 e^-x / (1 + e^-2x), for x >= 0)
+        x = np.abs(np.asarray(z, dtype=float)) / h
+        return 2 * np.exp(-x) / (1 + np.exp(-2 * x)) / (np.pi * h)
+
+    @staticmethod
+    def within(heights: np.ndarray, h: float) -> np.ndarray:
+        return 2 / np.pi * np.arctan(np.sinh(np.minimum(heights / h, 700)))
+
+    @staticmethod
+    def transform(k: npt.ArrayLike, h: float) -> np.ndarray:
+        a = np.asarray(k, dtype=float) * h
+        return (scipy.special.digamma(a / 4 + 0.75)
+                - scipy.special.digamma(a / 4 + 0.25)) / np.pi
+
+
 class VerticalGauss(VerticalLaw):
     """
     The Gaussian law, of dispersion h: T(k) = erfcx(k h / sqrt(2)).
@@ -468,5 +497,6 @@ disk_vertical_parser = parseutils.TypedParser(DiskVertical, [
     VerticalThin,
     VerticalExponential,
     VerticalSech2,
+    VerticalSech,
     VerticalGauss,
     VerticalComponent])
