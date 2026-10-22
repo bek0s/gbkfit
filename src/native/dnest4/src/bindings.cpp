@@ -8,6 +8,7 @@
 #include <iomanip>
 #include <initializer_list>
 #include <iostream>
+#include <mutex>
 #include <stdexcept>
 #include <streambuf>
 #include <string>
@@ -160,16 +161,32 @@ protected:
     int overflow(int c) override { return c; }
 };
 
-// Silences std::cout while it lives (DNest4 reports its progress there)
+// Silences std::cout while any sampler runs (DNest4 reports its progress
+// there): std::cout is shared by the threads, so the first run silences
+// it and the last restores it (each restoring what it found would restore
+// the buffer of a run that ended first, if the runs end in another order)
 class Silence
 {
 public:
-    Silence() : old_(std::cout.rdbuf(&buffer_)) {}
-    ~Silence() { std::cout.rdbuf(old_); }
+    Silence()
+    {
+        const std::lock_guard<std::mutex> lock(mutex_);
+        if (runs_++ == 0)
+            old_ = std::cout.rdbuf(&buffer_);
+    }
+
+    ~Silence()
+    {
+        const std::lock_guard<std::mutex> lock(mutex_);
+        if (--runs_ == 0)
+            std::cout.rdbuf(old_);
+    }
 
 private:
-    NullBuffer buffer_;
-    std::streambuf* old_;
+    static inline std::mutex mutex_;
+    static inline int runs_ = 0;
+    static inline std::streambuf* old_ = nullptr;
+    static inline NullBuffer buffer_;
 };
 
 // Clears the shape of the running sampler when it ends (or raises)
