@@ -66,6 +66,37 @@ def test_gaussian_fit_recovers_gaussians(driver):
     np.testing.assert_allclose(maps['moment2'][good], sigma[good], rtol=1e-3)
 
 
+@pytest.mark.parametrize('step', [5.0, -5.0])
+def test_gauss_hermite_fit_recovers_the_series(driver, step):
+    # Spectra that are Gauss-Hermite series (van der Marel & Franx 1993) of
+    # the velocity: the fit finds their flux, centre, dispersion, h3 and
+    # h4, whichever way the velocities run along the channels
+    rng = np.random.default_rng(4)
+    nz, ny, nx = 81, 3, 4
+    zero = -200.0 if step > 0 else 200.0
+    flux = rng.uniform(1, 10, (ny, nx))
+    centre = rng.uniform(-80, 80, (ny, nx))
+    sigma = rng.uniform(10, 30, (ny, nx))
+    h3 = rng.uniform(-0.15, 0.15, (ny, nx))
+    h4 = rng.uniform(-0.1, 0.1, (ny, nx))
+    w = (zero + np.arange(nz)[:, None, None] * step - centre) / sigma
+    hermite3 = (2 * w ** 3 - 3 * w) / np.sqrt(3)
+    hermite4 = (4 * w ** 4 - 12 * w ** 2 + 3) / np.sqrt(24)
+    amplitude = flux / (sigma * np.sqrt(2 * np.pi) * (1 + h4 * np.sqrt(6) / 4))
+    cube = amplitude * np.exp(-0.5 * w ** 2) * (1 + h3 * hermite3 + h4 * hermite4)
+    plan = MomentsPlan(
+        driver, (nx, ny), (0, 1, 2, 3, 4), 1e-6, 'gauss_hermite', np.float32)
+    maps = plan.evaluate(
+        (1, 1, step), (0, 0, zero),
+        driver.mem_copy_h2d(cube.astype(np.float32)), None)
+    maps = {key: driver.mem_copy_d2h(value['d']) for key, value in maps.items()}
+    np.testing.assert_allclose(maps['moment0'], flux * np.sign(step), rtol=1e-3)
+    np.testing.assert_allclose(maps['moment1'], centre, atol=0.05)
+    np.testing.assert_allclose(np.abs(maps['moment2']), sigma, rtol=1e-3)
+    np.testing.assert_allclose(maps['moment3'], h3, atol=2e-3)
+    np.testing.assert_allclose(maps['moment4'], h4, atol=2e-3)
+
+
 def test_gaussian_fit_of_noisy_spectra_stays_on_the_line(driver):
     # A line of dispersion 1.5 channels at S/N 10 per channel, in 4000
     # spectra: every fit is of the line (from the moments of the whole
@@ -137,7 +168,8 @@ def test_gaussian_fit_of_bins(driver):
 
 @pytest.mark.parametrize('options, message', [
     (dict(method='gauss'), "method must be one of"),
-    (dict(method='gaussian_fit', orders=[1, 3]), "between 0 and 2")])
+    (dict(method='gaussian_fit', orders=[1, 3]), "between 0 and 2"),
+    (dict(method='gauss_hermite', orders=[1, 5]), "between 0 and 4")])
 def test_method_options_are_checked(options, message):
     from gbkfit.observation import PixelMoments
     with pytest.raises(RuntimeError, match=message):

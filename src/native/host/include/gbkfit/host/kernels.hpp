@@ -173,7 +173,7 @@ dmodel_mmaps_moments(
     });
 }
 
-template<typename T> void
+template<bool Hermite, typename T> void
 dmodel_mmaps_gaussian(
         int size_x, int size_y, int size_z,
         T step_z, T zero_z,
@@ -184,7 +184,7 @@ dmodel_mmaps_gaussian(
     for_each_spectrum(
             size_x, size_y, size_z, dcube_d, static_cast<const T*>(nullptr),
             [&](int x, int y, const T* spectrum, const T*) {
-        gbkfit::dmodel_mmaps_gaussian(
+        gbkfit::dmodel_mmaps_gaussian<Hermite>(
                 x, y,
                 size_x, size_y, size_z,
                 step_z, zero_z,
@@ -522,8 +522,11 @@ struct Wrapper
     }
 
     static void
-    dmodel_mmaps_gaussian(auto... args) {
-        kernels::dmodel_mmaps_gaussian<T>(args...);
+    dmodel_mmaps_gaussian(bool hermite, auto... args) {
+        if (hermite)
+            kernels::dmodel_mmaps_gaussian<true, T>(args...);
+        else
+            kernels::dmodel_mmaps_gaussian<false, T>(args...);
     }
 
     static void

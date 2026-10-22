@@ -268,7 +268,7 @@ def test_mmaps_gaussian(driver):
     dmodel.mmaps_gaussian(
         (1, 1, step), (0, 0, zero), memory.to_device(cube.astype(DTYPE)),
         0.1, memory.to_device(np.array([0, 1, 2], np.int32)),
-        mmaps_d, mmaps_m)
+        mmaps_d, mmaps_m, hermite=False)
 
     expected = [
         amplitude * sigma * np.sqrt(2 * np.pi) * step,
@@ -331,7 +331,8 @@ def test_mmaps_mask_by_the_flux_in_the_units_of_the_axis(driver, method):
         dmodel.mmaps_moments(
             *args, None, cutoff, orders, mmaps_d, mmaps_m, None)
     else:
-        dmodel.mmaps_gaussian(*args, cutoff, orders, mmaps_d, mmaps_m)
+        dmodel.mmaps_gaussian(
+            *args, cutoff, orders, mmaps_d, mmaps_m, hermite=False)
     np.testing.assert_array_equal(memory.to_host(mmaps_m), [[0, 1, 0, 1]])
     np.testing.assert_allclose(
         memory.to_host(mmaps_d)[0, 0, [1, 3]], flux[[1, 3]], rtol=1e-4)

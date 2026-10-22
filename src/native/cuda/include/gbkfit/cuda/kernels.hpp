@@ -110,7 +110,7 @@ dcube_moments(
             mmaps_d, mmaps_m, mmaps_w);
 }
 
-template<typename T> __global__ void
+template<bool Hermite, typename T> __global__ void
 dmodel_mmaps_gaussian(
         int size_x, int size_y, int size_z,
         T step_z, T zero_z,
@@ -128,7 +128,7 @@ dmodel_mmaps_gaussian(
     index_1d_to_2d(x, y, tid, size_x);
 
     // The spectrum of the pixel is read from the cube, as in dcube_moments
-    gbkfit::dmodel_mmaps_gaussian(
+    gbkfit::dmodel_mmaps_gaussian<Hermite>(
             x, y,
             size_x, size_y, size_z,
             step_z, zero_z,

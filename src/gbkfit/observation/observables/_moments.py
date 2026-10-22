@@ -27,9 +27,13 @@ SPEC_STEP = 1
 SPEC_RANGE = 1000
 
 # How the moment maps are measured from the spectra of a cube: their
-# moments, or the moments of a Gaussian fitted to them (its flux, centre
-# and dispersion)
-METHODS = ('moments', 'gaussian_fit')
+# moments, the moments of a Gaussian fitted to them (its flux, centre and
+# dispersion), or a Gauss-Hermite series fitted to them (its flux, centre,
+# dispersion, h3 and h4)
+METHODS = ('moments', 'gaussian_fit', 'gauss_hermite')
+
+# The highest order of the maps of each method
+_MAX_ORDERS = dict(moments=7, gaussian_fit=2, gauss_hermite=4)
 
 # The smallest dispersion (km/s) a spectral axis derived from the data
 # leaves room for (see spectral_axis_from_data)
@@ -86,14 +90,14 @@ def check_moment_options(
     """
     Return the moment orders, sorted and unique. Raise ConfigError unless
     they are valid for the method (see METHODS; a Gaussian has moments 0
-    to 2), masking is enabled (mask_cutoff, not negative), as the moments
-    need, and the spectral axis has channels (if its size is given) of a
-    positive width.
+    to 2, a Gauss-Hermite series 0 to 4), masking is enabled (mask_cutoff,
+    not negative), as the moments need, and the spectral axis has channels
+    (if its size is given) of a positive width.
     """
     if method not in METHODS:
         raise ConfigError(
             f"method must be one of {list(METHODS)}; it is {method!r}")
-    max_order = 7 if method == 'moments' else 2
+    max_order = _MAX_ORDERS[method]
     orders = tuple(sorted(set(orders)))
     if not orders:
         raise ConfigError("at least one moment order is required")
@@ -216,10 +220,11 @@ class MomentsPlan:
         # the data). A guess: the round-off of the float32 FFT convolution
         # (moment 0 had pixels of -3.5e-8, though the brightness is >= 0).
         # Workaround: a disk bright beyond the data.
-        if self._method == 'gaussian_fit':
+        if self._method in ('gaussian_fit', 'gauss_hermite'):
             self._backend.mmaps_gaussian(
                 step, zero, cube, self._mask_cutoff, self._mmaps_o,
-                self._mmaps_d, self._mmaps_m)
+                self._mmaps_d, self._mmaps_m,
+                hermite=self._method == 'gauss_hermite')
         else:
             self._backend.mmaps_moments(
                 step, zero, cube, wcube, self._mask_cutoff, self._mmaps_o,

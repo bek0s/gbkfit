@@ -112,6 +112,7 @@ Wrapper<T>::dmodel_mmaps_moments(
 
 template<typename T> void
 Wrapper<T>::dmodel_mmaps_gaussian(
+        bool hermite,
         int size_x, int size_y, int size_z,
         T step_z, T zero_z,
         const T* dcube_d,
@@ -119,7 +120,10 @@ Wrapper<T>::dmodel_mmaps_gaussian(
         T* mmaps_d, T* mmaps_m)
 {
     const int n = size_x * size_y;
-    launch("mmaps_gaussian", n, kernels::dmodel_mmaps_gaussian<T>,
+    auto kernel = hermite
+            ? kernels::dmodel_mmaps_gaussian<true, T>
+            : kernels::dmodel_mmaps_gaussian<false, T>;
+    launch(hermite ? "mmaps_gauss_hermite" : "mmaps_gaussian", n, kernel,
             size_x, size_y, size_z,
             step_z, zero_z,
             dcube_d,

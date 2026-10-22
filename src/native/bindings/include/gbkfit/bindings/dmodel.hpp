@@ -108,12 +108,14 @@ struct DModel
     }
 
     // The moment maps of the given orders (0, 1 or 2) of a Gaussian fitted
-    // to each spectrum of dcube_d, with the moment map mask in mmaps_m
+    // to each spectrum of dcube_d, with the moment map mask in mmaps_m;
+    // with hermite, of a Gauss-Hermite series (also orders 3 and 4: h3,
+    // h4)
     static void
     mmaps_gaussian(
             std::array<T, 3> step, std::array<T, 3> zero,
             ConstCube dcube_d, T cutoff, Orders orders,
-            Cube mmaps_d, Image mmaps_m)
+            Cube mmaps_d, Image mmaps_m, bool hermite)
     {
         const typename Kernels::DeviceScope scope(mmaps_d.device_id());
         const auto size = size_xyz(dcube_d);
@@ -126,6 +128,7 @@ struct DModel
                 && int(mmaps_m.shape(1)) == size[0],
                 "mmaps_m must have shape (ny, nx)");
         Kernels::dmodel_mmaps_gaussian(
+                hermite,
                 size[0], size[1], size[2],
                 step[2], zero[2],
                 dcube_d.data(),
@@ -221,7 +224,8 @@ struct DModel
                         nb::arg("cutoff"),
                         nb::arg("orders").noconvert(),
                         nb::arg("mmaps_d").noconvert(),
-                        nb::arg("mmaps_m").noconvert())
+                        nb::arg("mmaps_m").noconvert(),
+                        nb::arg("hermite"))
                 .def_static("lens_resample", &lens_resample,
                         ReleaseGil(),
                         nb::arg("source_x").noconvert(),

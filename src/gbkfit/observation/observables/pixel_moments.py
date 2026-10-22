@@ -66,8 +66,11 @@ class PixelMoments(Observable):
         default) or 'air' (see gridutils.make_medium).
     method : str, optional
         How the maps are measured from the spectra, as the maps of the
-        data were: 'moments', or 'gaussian_fit' (the flux, centre and
-        dispersion of a Gaussian fitted to each, for the orders 0 to 2).
+        data were: 'moments'; 'gaussian_fit' (the flux, centre and
+        dispersion of a Gaussian fitted to each, for the orders 0 to 2);
+        or 'gauss_hermite' (of a Gauss-Hermite series fitted to each, for
+        the orders 0 to 4: its flux, centre, dispersion, h3 and h4, with
+        the polynomials of van der Marel & Franx 1993, as pPXF).
     median_size : int, optional
         The size (an odd number of pixels, at least 3) of the median filter
         that smoothed the cube on the sky before the maps of the data were
@@ -271,9 +274,9 @@ class PixelMoments(Observable):
             weights: 'Weights | None',
             calibration: str | None
     ) -> 'PixelMomentsPlan':
-        if weights is not None and self._method == 'gaussian_fit':
+        if weights is not None and self._method != 'moments':
             raise ConfigError(
-                "the method gaussian_fit does not support weights yet")
+                f"the method {self._method} does not support weights yet")
         dcube = _moments.spectra_dcube(
             self, scale, instrument, dtype, fft_dtype, self._median_size)
         return PixelMomentsPlan(

@@ -52,6 +52,7 @@ struct Wrapper
 
     static void
     dmodel_mmaps_gaussian(
+            bool hermite,
             int size_x, int size_y, int size_z,
             T step_z, T zero_z,
             const T* dcube_d,
