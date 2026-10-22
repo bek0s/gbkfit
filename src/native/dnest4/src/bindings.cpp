@@ -43,7 +43,9 @@ struct Shape
     nb::callable log_likelihood;
 };
 
-const Shape* shape = nullptr;
+// (one per thread: DNest4 runs in the thread that calls run, and samplers
+// may run in several threads at once)
+thread_local const Shape* shape = nullptr;
 
 // The prior of the rows of the tables: uniform in the unit cube, as the
 // coordinates of the RJObject are
@@ -195,7 +197,7 @@ run(int fixed,
     const std::string& levels_file)
 {
     if (shape)
-        throw std::runtime_error("DNest4 is already running");
+        throw std::runtime_error("DNest4 is already running in this thread");
     if (fixed < 0 || columns.size() != rows.size())
         throw std::invalid_argument("invalid shape of the model");
     for (size_t i = 0; i < columns.size(); ++i)

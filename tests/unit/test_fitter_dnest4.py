@@ -5,6 +5,7 @@ on likelihoods of known integrals.
 """
 
 import math
+import threading
 
 import numpy as np
 import pytest
@@ -103,6 +104,40 @@ def test_posterior_of_the_number_of_rows_and_the_evidence(tmp_path):
     counts = output.samples[:, 2].astype(int)
     p = np.bincount(counts, weights=post.weights, minlength=4)
     assert p == pytest.approx(np.array([1, 2, 4, 8]) / 15, abs=0.04)
+
+
+def test_samplers_run_in_several_threads_at_once(tmp_path):
+    # (each waits for the other at its first evaluation: both run at once)
+    started = set()
+    both_started = threading.Event()
+
+    def log_likelihood(fixed, rows):
+        if threading.get_ident() not in started:
+            started.add(threading.get_ident())
+            if len(started) == 2:
+                both_started.set()
+            both_started.wait(timeout=10)
+        return -float(fixed[0])
+
+    def run(name, saves):
+        files = DNest4Files(str(tmp_path / name))
+        (tmp_path / name).mkdir()
+        _dnest4.run(
+            1, [], [], log_likelihood, particles=2,
+            new_level_interval=100, save_interval=10, thread_steps=10,
+            max_levels=5, lambda_=10, beta=100, max_saves=saves, seed=1,
+            sample_file=files.sample(), sample_info_file=files.sample_info(),
+            levels_file=files.levels())
+        results[name] = len(files.read().info)
+
+    results = {}
+    threads = [threading.Thread(target=run, args=(f'run{i}', 50 * (i + 1)))
+               for i in range(2)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    assert results == dict(run0=50, run1=100)
 
 
 class StopAfter(FitControl):
