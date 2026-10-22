@@ -64,7 +64,8 @@ def test_circular_velocity_of_the_mass():
     functions = galaxy.plan_functions()
     assert functions.names() == (
         'vcirc', 'vnewton', 'vcirc_bh', 'vcirc_halo', 'mass', 'mass_bh',
-        'mass_halo', 'kpc_per_arcsec', 'rotation_gas', 'dispersion_gas')
+        'mass_halo', 'slope', 'slope_bh', 'slope_halo', 'kpc_per_arcsec',
+        'rotation_gas', 'dispersion_gas')
     bound = functions.bind(PARAMS)
     R = np.array([0.5, 2.0, 8.0])
     np.testing.assert_allclose(
@@ -89,6 +90,28 @@ def test_circular_velocity_of_the_mass():
         np.testing.assert_allclose(
             bound[name](table['radius_kpc'].value), table[name].value,
             rtol=1e-12)
+
+
+def test_density_slopes_of_the_mass():
+    # Of a halo, the slope of its density: -1 - 2 x / (1 + x) of an NFW
+    # halo (x = r / r_s); of a point mass, none (no density away from it);
+    # of both, that of the halo (the point mass adds mass, not density)
+    mass = [MASS[0], dict(
+        type='spheroid', name='halo',
+        profile=dict(type='nfw', parameters='density_radius'))]
+    params = {k: v for k, v in PARAMS.items()
+              if not k.startswith('mass_halo')}
+    params |= dict(mass_halo_log_rho=7, mass_halo_rs=12)
+    bound = gas_galaxy(mass=copy.deepcopy(mass)).plan_functions().bind(params)
+    r = np.array([0.5, 3.0, 12.0, 40.0])
+    x = r / 12
+    np.testing.assert_allclose(
+        bound['slope_halo'](r), -1 - 2 * x / (1 + x), rtol=1e-5)
+    assert np.isnan(bound['slope_bh'](r)).all()
+    np.testing.assert_allclose(
+        bound['slope'](r), bound['slope_halo'](r), rtol=1e-4)
+    with pytest.raises(ValueError, match="finite and positive"):
+        bound['slope'](0.0)
 
 
 def test_rotation_and_dispersion_as_the_gravity_gives_them():

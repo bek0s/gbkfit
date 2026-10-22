@@ -1,8 +1,8 @@
 """
 The functions of a galaxy (GalaxyFunctions) that the derived values of
-its parameters can use (see ParamSpace): the circular velocity and the
-enclosed mass of its mass, and the rotation and dispersion of its disks,
-at any radius.
+its parameters can use (see ParamSpace): the circular velocity, the
+enclosed mass and the density slope of its mass, and the rotation and
+dispersion of its disks, at any radius.
 """
 
 import functools
@@ -27,6 +27,12 @@ __all__ = [
 ]
 
 
+# The step in ln r of the differences of the density slopes (see
+# _density_slope): their error, about 1e-6, and that of masses of
+# quadratures (to about 1e-10) amplified by 1 / step^2
+_SLOPE_STEP = 1e-3
+
+
 class GalaxyFunctions:
     """
     The functions of a galaxy that the derived values of its parameters
@@ -47,6 +53,13 @@ class GalaxyFunctions:
     - mass_{name}(r): that of its mass component of the name, if it gives
       it (a user component without a function of it does not; see
       MassUser)
+    - slope(r): the logarithmic slope d ln rho / d ln r of the spherically
+      averaged density of its mass, rho(r) = (dM / dr) / (4 pi r^2), at
+      the radii r > 0 (kpc), from its enclosed mass M (see mass): of a
+      spherical mass (e.g. a halo), that of its density; NaN where it has
+      none (e.g. about a point mass alone)
+    - slope_{name}(r): that of its mass component of the name, if it
+      gives its enclosed mass
     - kpc_per_arcsec: the length of an arcsec in it (kpc)
 
     For each of its disks with velocity or dispersion traits, named
@@ -110,6 +123,11 @@ class GalaxyFunctions:
             names += [
                 f'mass_{cmp.name()}' for cmp in mass_model.components()
                 if cmp.gives_enclosed_mass()]
+            if mass_model.gives_enclosed_mass():
+                names += ['slope']
+            names += [
+                f'slope_{cmp.name()}' for cmp in mass_model.components()
+                if cmp.gives_enclosed_mass()]
             names += ['kpc_per_arcsec']
         for suffix in self._suffixes.values():
             names += [f'rotation{suffix}', f'dispersion{suffix}']
@@ -141,17 +159,21 @@ class GalaxyFunctions:
                 functions[f'vcirc_{cmp.name()}'] = functools.partial(
                     _vcirc, f'vcirc_{cmp.name()}', functools.partial(
                         _component_vcirc2, mass, cmp.name()))
+            masses = {}
             if mass.model.gives_enclosed_mass():
-                functions['mass'] = functools.partial(
-                    _enclosed_mass, 'mass', functools.partial(
-                        mass.model.enclosed_mass, params=mass.params,
-                        context=mass.context))
+                masses[''] = functools.partial(
+                    mass.model.enclosed_mass, params=mass.params,
+                    context=mass.context)
             for cmp in mass.model.components():
                 if cmp.gives_enclosed_mass():
-                    functions[f'mass_{cmp.name()}'] = functools.partial(
-                        _enclosed_mass, f'mass_{cmp.name()}',
-                        functools.partial(
-                            _component_enclosed_mass, mass, cmp.name()))
+                    masses[f'_{cmp.name()}'] = functools.partial(
+                        _component_enclosed_mass, mass, cmp.name())
+            for suffix, enclosed in masses.items():
+                functions[f'mass{suffix}'] = functools.partial(
+                    _enclosed_mass, f'mass{suffix}', enclosed)
+            for suffix, enclosed in masses.items():
+                functions[f'slope{suffix}'] = functools.partial(
+                    _density_slope, f'slope{suffix}', enclosed)
             functions['kpc_per_arcsec'] = mass.kpc_per_arcsec
         for i, suffix in self._suffixes.items():
             functions[f'rotation{suffix}'] = functools.partial(
@@ -308,3 +330,35 @@ def _component_enclosed_mass(
     """
     return mass.model.enclosed_mass_components(
         r, mass.params, mass.context)[name]
+
+
+def _density_slope(
+        function: str,
+        masses: Callable[[np.ndarray], np.ndarray],
+        r: npt.ArrayLike
+) -> np.ndarray:
+    """
+    Return the logarithmic slope of a spherically averaged density (see
+    GalaxyFunctions), of the enclosed masses of the function of the given
+    name (of radii in kpc), at the radii r (kpc): with L(s) = ln M(e^s),
+    rho = M L' / (4 pi r^3), so d ln rho / d ln r = L' + L'' / L' - 3, by
+    central differences of the step _SLOPE_STEP in s; NaN where L' is not
+    positive (no density).
+
+    Raises
+    ------
+    ValueError
+        If a radius is not positive or not finite.
+    """
+    radii = np.asarray(r, dtype=float)
+    if not np.all(np.isfinite(radii) & (radii > 0)):
+        raise ValueError(
+            f"{function}: the radii must be finite and positive; they are "
+            f"{radii}")
+    s, h = np.log(radii.ravel()), _SLOPE_STEP
+    with np.errstate(divide='ignore', invalid='ignore'):
+        lo, mid, hi = (np.log(masses(np.exp(s + d))) for d in (-h, 0, h))
+        first = (hi - lo) / (2 * h)
+        second = (hi - 2 * mid + lo) / h ** 2
+        slope = np.where(first > 0, first + second / first - 3, np.nan)
+    return slope.reshape(radii.shape)
