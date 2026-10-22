@@ -39,3 +39,5 @@ endif()
 if(GBKFIT_CUDA)
   add_subdirectory(src/native/cuda)
 endif()
+
+add_subdirectory(src/native/dnest4)
