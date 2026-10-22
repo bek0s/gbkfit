@@ -10,8 +10,8 @@ from modelutils import observation_group
 
 import gbkfit.params
 from gbkfit.analysis import (
-    asymmetry_maps, kinematic_pa, kinemetry, pattern_speed, pv_diagram,
-    trace_rotation)
+    asymmetry_maps, information_gain, kinematic_pa, kinemetry, pattern_speed,
+    pv_diagram, structure_function, trace_rotation)
 
 
 PA, INCL, VSYS, VMAX, RT = 130.0, 55.0, 1200.0, 200.0, 3.0
@@ -121,6 +121,37 @@ def test_the_rotation_is_traced_on_position_velocity_diagrams():
     offset = sigma * np.sqrt(-2 * np.log(0.2)) / np.sin(incl)
     envelope = trace_rotation(pv, 0, 60, eta=0.2, dispersion=offset)
     np.testing.assert_allclose(envelope.rotation[outer], 200, rtol=0.02)
+
+
+def test_structure_functions_are_the_mean_over_pairs_of_pixels():
+    # Against every pair of the pixels with values of a small map, and 2
+    # sigma^2 at every separation for white noise
+    rng = np.random.default_rng(6)
+    values = rng.normal(size=(7, 9))
+    values[2, 3] = values[5, 1] = np.nan
+    found = structure_function(values, edges=[0.5, 1.5, 3.0, 6.0])
+    y, x = np.nonzero(np.isfinite(values))
+    v = values[y, x]
+    i, j = np.triu_indices(len(v), k=1)
+    separation = np.hypot(x[i] - x[j], y[i] - y[j])
+    squares = (v[i] - v[j]) ** 2
+    for k, (lo, hi) in enumerate([(0.5, 1.5), (1.5, 3.0), (3.0, 6.0)]):
+        inside = (separation >= lo) & (separation < hi)
+        assert found.pairs[k] == inside.sum()
+        assert found.value[k] == pytest.approx(squares[inside].mean(), rel=1e-9)
+    noise = structure_function(rng.normal(0, 2, (64, 64)))
+    np.testing.assert_allclose(noise.value[:20], 8, rtol=0.05)
+
+
+def test_the_information_gain_of_a_gaussian_posterior():
+    # D(N(0, 1) || prior): of a Gaussian prior of 10, ln 10 + 1 / 200 -
+    # 1 / 2; of a uniform prior over [-10, 10], ln 20 - ln(2 pi e) / 2
+    from gbkfit.fitting import PriorGauss, PriorUniform
+    samples = np.random.default_rng(7).normal(size=20000)
+    assert information_gain(samples, PriorGauss(0, 10)) == pytest.approx(
+        np.log(10) + 1 / 200 - 0.5, abs=0.03)
+    assert information_gain(samples, PriorUniform(-10, 10)) == pytest.approx(
+        np.log(20) - 0.5 * np.log(2 * np.pi * np.e), abs=0.03)
 
 
 def test_bins_are_taken_as_maps_are():
