@@ -879,6 +879,18 @@ def test_nautilus_posterior_agrees_with_the_covariance():
 
 
 @pytest.mark.slow
+def test_dnest4_posterior_agrees_with_the_covariance():
+    from gbkfit.fitting.fitters.dnest4 import FitterDNest4
+    objective = mock_objective(DriverHost())
+    params = ParamSpace(objective.pdescs(), prior_properties(10))
+    result = FitterDNest4(
+        new_level_interval=1000, save_interval=100, max_saves=2000
+    ).fit(objective, params)
+    check_posterior(result)
+    assert math.isfinite(result.evidence.log_z)
+
+
+@pytest.mark.slow
 def test_dynesty_posterior_agrees_with_the_covariance():
     pytest.importorskip('dynesty')
     from gbkfit.fitting.fitters.dynesty import FitterDynestyStatic

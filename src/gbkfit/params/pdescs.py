@@ -42,7 +42,7 @@ class ParamTable:
     (e.g. a blob of a mixture trait: its radius, azimuth, amplitude...),
     and its empty row: the values of columns with which a row adds nothing
     to the model (e.g. amplitude 0, with a valid size). Every fitter fits
-    all its rows, but one that varies their number (see FitterEryn) uses
+    all its rows, but one that varies their number (see FitterDNest4) uses
     some and writes the empty row into the others. The descriptions of
     its columns share it: a table is told apart from another by its
     identity, whatever the names its columns get in the models that
