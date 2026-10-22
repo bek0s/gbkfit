@@ -684,3 +684,34 @@ def test_the_errors_of_a_prepared_cube_can_be_its_noise():
         prep.prep_pixel_spectra(
             'cube.fits', 'errors.fits', None, *[None] * 9, False, None,
             'float32', noise_error=True)
+
+
+def test_grown_masks_keep_faint_values_next_to_bright_ones():
+    # From the seeds (S/N >= 5), the values of S/N >= 2 that touch them;
+    # not those apart
+    import gbkfit.prep
+    snr = np.zeros((7, 9))
+    snr[3, 2] = 6
+    snr[3, 3:6] = 3
+    snr[0, 8] = 3
+    mask = gbkfit.prep.grown_mask(snr, 5, 2)
+    assert mask[3, 2:6].all() and mask.sum() == 4
+    with pytest.raises(ValueError, match="at least the threshold"):
+        gbkfit.prep.grown_mask(snr, 1, 2)
+
+
+def test_the_continuum_of_spectra_is_subtracted():
+    # A line on a linear continuum, different in each spectrum: fitted
+    # outside the line, the continuum goes, the line stays
+    import gbkfit.prep
+    z = np.arange(40)[:, None, None]
+    rng = np.random.default_rng(3)
+    slope, offset = rng.uniform(-1, 1, (2, 1, 3, 4))
+    line = 5 * np.exp(-0.5 * ((z - 20) / 2) ** 2)
+    cube = line + slope * z + offset
+    cube[0, 1, 1] = np.nan
+    channels = np.abs(np.arange(40) - 20) <= 12
+    less, continuum = gbkfit.prep.subtract_continuum(cube, channels, 1)
+    good = np.isfinite(cube)
+    np.testing.assert_allclose(less[good], np.broadcast_to(line, cube.shape)[good],
+                               atol=1e-6)

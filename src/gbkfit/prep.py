@@ -20,6 +20,7 @@ import astropy.wcs
 import astropy.wcs.utils
 import numpy as np
 import numpy.typing as npt
+import scipy.ndimage
 import skimage.measure
 
 from gbkfit.utils import fitsutils, gridutils, unitutils
@@ -32,13 +33,15 @@ __all__ = [
     'bin_spectra',
     'bin_values',
     'bounding_box',
+    'grown_mask',
     'largest_regions_mask',
     'muse_lsf_table',
     'muse_psf_table',
     'noise_errors',
     'pixel_fluxes',
     'range_mask',
-    'sigma_clip_mask'
+    'sigma_clip_mask',
+    'subtract_continuum'
 ]
 
 
@@ -514,6 +517,89 @@ def noise_errors(data: np.ndarray, mask: np.ndarray) -> np.ndarray:
         if negative.size >= 5:
             errors[channel] = 1.4826 * np.median(-negative)
     return np.broadcast_to(errors[:, None, None], data.shape).copy()
+
+
+def grown_mask(
+        snr: np.ndarray,
+        seed: float,
+        grow: float
+) -> np.ndarray:
+    """
+    Return the mask (True where kept) grown from seeds: the values whose
+    signal-to-noise reaches grow and that connect (through neighbours
+    along the axes) to one that reaches seed (seed >= grow), as the masks
+    of SoFiA, 3D Barolo or qubefit keep faint emission next to bright
+    emission and drop isolated noise. Of a map or a cube (or any number of
+    axes); NaN values are not kept.
+
+    Raises
+    ------
+    ValueError
+        If seed is below grow.
+    """
+    if seed < grow:
+        raise ValueError(
+            f"the seed threshold ({seed}) must be at least the threshold "
+            f"of growth ({grow})")
+    with np.errstate(invalid='ignore'):
+        seeds, allowed = snr >= seed, snr >= grow
+    return scipy.ndimage.binary_propagation(seeds, mask=allowed)
+
+
+def subtract_continuum(
+        data: np.ndarray,
+        line: np.ndarray,
+        degree: int = 1
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Return a cube less its continuum, and the continuum: of each spectrum,
+    the polynomial of the given degree in the channel fitted by least
+    squares to its channels outside the line (and with values; NaN where
+    a spectrum has fewer of them than the degree needs).
+
+    Parameters
+    ----------
+    data : np.ndarray
+        The cube, of shape (nz, ny, nx).
+    line : np.ndarray
+        The channels of the line (True; nz), which the fit leaves out.
+    degree : int, optional
+        The degree of the polynomial (0: a constant).
+
+    Returns
+    -------
+    tuple of np.ndarray
+        The cube less its continuum, and the continuum (both of the shape
+        of the cube).
+
+    Raises
+    ------
+    ValueError
+        If line is not one value per channel, or the degree is negative.
+    """
+    line = np.asarray(line, dtype=bool)
+    if line.shape != data.shape[:1] or degree < 0:
+        raise ValueError(
+            "line must have one value per channel, and the degree be at "
+            "least 0")
+    nz = data.shape[0]
+    spectra = data.reshape(nz, -1)
+    # (the channels about the middle, for a well-conditioned fit)
+    z = np.arange(nz) - (nz - 1) / 2
+    design = np.vander(z, degree + 1)
+    continuum = np.full(spectra.shape, np.nan)
+    usable = ~line[:, None] & np.isfinite(spectra)
+    # (the spectra of the same usable channels share one fit)
+    patterns, which = np.unique(usable.T, axis=0, return_inverse=True)
+    for k, pattern in enumerate(patterns):
+        columns = np.flatnonzero(which.ravel() == k)
+        if pattern.sum() <= degree:
+            continue
+        coefficients, *_ = np.linalg.lstsq(
+            design[pattern], spectra[pattern][:, columns], rcond=None)
+        continuum[:, columns] = design @ coefficients
+    continuum = continuum.reshape(data.shape)
+    return data - continuum, continuum
 
 
 def largest_regions_mask(
