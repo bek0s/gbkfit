@@ -18,10 +18,16 @@ import numpy.typing as npt
 __all__ = [
     'c200_dutton14',
     'cvir_dutton14',
+    'dc14_alpha',
+    'dc14_beta',
+    'dc14_c',
+    'dc14_gamma',
     'dz_a',
     'dz_c',
     'dz_c2',
+    'dz_c2_apostle',
     'dz_s1',
+    'dz_s1_apostle',
     'log_mhalo_behroozi13',
     'log_mhalo_moster13'
 ]
@@ -145,6 +151,97 @@ def dz_c2(
                - np.asarray(log_mvir, dtype=float))
     y = _dz_ratio_x(log_mstar, log_mvir, 2.43e-2, 1.37)
     return cvir_dutton14(log_mvir, z, h) * (1.14 * (1 + y) - x ** 0.142)
+
+
+def dz_s1_apostle(
+        log_mstar: npt.ArrayLike, log_mvir: npt.ArrayLike) -> np.ndarray:
+    """
+    Return the inner slope s1 of the Dekel-Zhao halo of a galaxy of the
+    stellar mass M_star and the virial mass M_vir as halos of APOSTLE
+    respond (Bose et al. 2019: no cores), in the fit of Jiang et al.
+    (2021, SatGen): log10(20 + (x / 8.77e-3)^1.66) + 0.158, x = M_star /
+    M_vir.
+    """
+    x = 10 ** (np.asarray(log_mstar, dtype=float)
+               - np.asarray(log_mvir, dtype=float))
+    return np.log10(20 + (x / 8.77e-3) ** 1.66) + 0.158
+
+
+def dz_c2_apostle(
+        log_mstar: npt.ArrayLike,
+        log_mvir: npt.ArrayLike,
+        z: npt.ArrayLike = 0.0,
+        h: float = 0.671
+) -> np.ndarray:
+    """
+    Return the concentration c2 of the Dekel-Zhao halo of a galaxy of the
+    stellar mass M_star and the virial mass M_vir as halos of APOSTLE
+    respond (see dz_s1_apostle): c_DMO (1 + 227 x^1.45), x = M_star /
+    M_vir, with c_DMO = cvir_dutton14(log_mvir, z, h).
+    """
+    x = 10 ** (np.asarray(log_mstar, dtype=float)
+               - np.asarray(log_mvir, dtype=float))
+    return cvir_dutton14(log_mvir, z, h) * (1 + 227 * x ** 1.45)
+
+
+def _dc14_x(log_mstar: npt.ArrayLike, log_mvir: npt.ArrayLike) -> np.ndarray:
+    """Return X = log10(M_star / M_vir) of the DC14 relations."""
+    return np.asarray(log_mstar, dtype=float) \
+        - np.asarray(log_mvir, dtype=float)
+
+
+def dc14_alpha(
+        log_mstar: npt.ArrayLike, log_mvir: npt.ArrayLike) -> np.ndarray:
+    """
+    Return alpha of the Zhao halo (see mass.ProfileZhao) of a galaxy of
+    the stellar mass M_star and the virial mass M_vir (DC14: Di Cintio et
+    al. 2014, Eq. 3; for X = log10(M_star / M_vir) in [-4.1, -1.3]): 2.94
+    - log10((10^(X + 2.33))^-1.08 + (10^(X + 2.33))^2.29).
+    """
+    y = 10 ** (_dc14_x(log_mstar, log_mvir) + 2.33)
+    return 2.94 - np.log10(y ** -1.08 + y ** 2.29)
+
+
+def dc14_beta(
+        log_mstar: npt.ArrayLike, log_mvir: npt.ArrayLike) -> np.ndarray:
+    """
+    Return beta of the Zhao halo of a galaxy (see dc14_alpha): 4.23 +
+    1.34 X + 0.26 X^2.
+    """
+    x = _dc14_x(log_mstar, log_mvir)
+    return 4.23 + 1.34 * x + 0.26 * x ** 2
+
+
+def dc14_gamma(
+        log_mstar: npt.ArrayLike, log_mvir: npt.ArrayLike) -> np.ndarray:
+    """
+    Return gamma of the Zhao halo of a galaxy (see dc14_alpha): -0.06 +
+    log10((10^(X + 2.56))^-0.68 + 10^(X + 2.56)).
+    """
+    y = 10 ** (_dc14_x(log_mstar, log_mvir) + 2.56)
+    return -0.06 + np.log10(y ** -0.68 + y)
+
+
+def dc14_c(
+        log_mstar: npt.ArrayLike,
+        log_mvir: npt.ArrayLike,
+        z: npt.ArrayLike = 0.0,
+        h: float = 0.671
+) -> np.ndarray:
+    """
+    Return the concentration c = R_vir / r_s of the Zhao halo of a galaxy
+    (see dc14_alpha; r_s of the formula of mass.ProfileZhao): that of
+    r_-2 (where the slope of the density is -2), c_DMO (1 + 3e-5 exp(3.4
+    (X + 4.5))) (Di Cintio et al. 2014, Eq. 6), with c_DMO =
+    cvir_dutton14(log_mvir, z, h), times r_-2 / r_s = ((2 - gamma) /
+    (beta - 2))^(1 / alpha).
+    """
+    x = _dc14_x(log_mstar, log_mvir)
+    alpha = dc14_alpha(log_mstar, log_mvir)
+    beta = dc14_beta(log_mstar, log_mvir)
+    gamma = dc14_gamma(log_mstar, log_mvir)
+    c_2 = cvir_dutton14(log_mvir, z, h) * (1 + 3e-5 * np.exp(3.4 * (x + 4.5)))
+    return c_2 * ((2 - gamma) / (beta - 2)) ** (1 / alpha)
 
 
 def _log_mstar_moster13(

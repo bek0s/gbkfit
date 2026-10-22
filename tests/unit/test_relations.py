@@ -39,6 +39,40 @@ def test_dekel_zhao_halos_of_few_stars_are_dark_matter_only():
     assert relations.dz_c2(5, 11) == pytest.approx(c_dmo, rel=1e-2)
 
 
+def test_apostle_dekel_zhao_halos_of_few_stars_keep_no_core():
+    # At M_star / M_vir -> 0: s1 = log10(20) + 0.158, and c2 that of the
+    # dark matter only halo; more stars make the slope steeper
+    assert relations.dz_s1_apostle(-10, 11) == pytest.approx(
+        np.log10(20) + 0.158, rel=1e-12)
+    assert relations.dz_c2_apostle(-10, 11) == pytest.approx(
+        relations.cvir_dutton14(11, 0), rel=1e-12)
+    assert relations.dz_s1_apostle(9, 11) > relations.dz_s1_apostle(7, 11)
+
+
+def test_dc14_halos():
+    # Of few stars (X = -4.1), nearly NFW (alpha, beta, gamma = 1, 3, 1);
+    # and c puts the slope -2 of the Zhao profile at R_vir / c_-2, c_-2 =
+    # c_DMO (1 + 3e-5 exp(3.4 (X + 4.5)))
+    np.testing.assert_allclose(
+        [relations.dc14_alpha(6.9, 11), relations.dc14_beta(6.9, 11),
+         relations.dc14_gamma(6.9, 11)], [1, 3, 1], atol=0.12)
+    log_mstar, log_mvir = 9.0, 11.0
+    alpha, beta, gamma = (
+        float(f(log_mstar, log_mvir)) for f in (
+            relations.dc14_alpha, relations.dc14_beta, relations.dc14_gamma))
+    c = float(relations.dc14_c(log_mstar, log_mvir))
+    c_2 = relations.cvir_dutton14(log_mvir, 0) * (
+        1 + 3e-5 * np.exp(3.4 * (log_mstar - log_mvir + 4.5)))
+    x, step = c / c_2, 1e-6
+
+    def log_density(x):
+        return -gamma * np.log(x) - (beta - gamma) / alpha * np.log1p(
+            x ** alpha)
+    slope = (log_density(x * np.exp(step)) - log_density(
+        x * np.exp(-step))) / (2 * step)
+    assert slope == pytest.approx(-2, rel=1e-8)
+
+
 def test_halo_masses_invert_their_stellar_mass_relations():
     # At M = M1: m / M = N (Moster et al. 2013), and log10 m = log10(eps
     # M1) (Behroozi et al. 2013); and the inverse of each relation
