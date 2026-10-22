@@ -9,7 +9,8 @@ import pytest
 from modelutils import observation_group
 
 import gbkfit.params
-from gbkfit.analysis import asymmetry_maps, kinematic_pa, kinemetry
+from gbkfit.analysis import (
+    asymmetry_maps, kinematic_pa, kinemetry, pattern_speed)
 
 
 PA, INCL, VSYS, VMAX, RT = 130.0, 55.0, 1200.0, 200.0, 3.0
@@ -71,6 +72,29 @@ def test_a_disturbed_disk_is_asymmetric():
     asymmetry = asymmetry_maps(disturbed, x, y, (20, 20), PA, systemic=VSYS)
     assert asymmetry.a_rc > 10 * calm.a_rc
     assert np.nanmax(np.abs(asymmetry.rotation)) == pytest.approx(40, abs=2)
+
+
+def test_the_pattern_speed_of_a_turning_bar_is_found():
+    # A disk with a bar (30 degrees from the line of nodes) turning as a
+    # rigid body at omega obeys the continuity equation, and its velocity
+    # is omega sin(i) X on the sky: the slits find omega exactly
+    omega = 15.0
+    x, y = grid()
+    angle, incl = np.radians(PA), np.radians(INCL)
+    dx, dy = x - 20, y - 20
+    along = -dx * np.sin(angle) + dy * np.cos(angle)
+    across = (-dx * np.cos(angle) - dy * np.sin(angle)) / np.cos(incl)
+    bar = np.radians(30)
+    xb = along * np.cos(bar) + across * np.sin(bar)
+    yb = -along * np.sin(bar) + across * np.cos(bar)
+    flux = np.exp(-np.hypot(along, across) / 6) \
+        + 2 * np.exp(-(xb / 8) ** 2 - (yb / 2.5) ** 2)
+    velocity = VSYS + omega * np.sin(incl) * along
+    found = pattern_speed(
+        flux, velocity, x, y, (20, 20), PA, incl=INCL, systemic=VSYS)
+    assert found.omega == pytest.approx(omega, rel=1e-9)
+    assert found.intercept == pytest.approx(0, abs=1e-9)
+    assert len(found.offsets) > 10
 
 
 def test_bins_are_taken_as_maps_are():
