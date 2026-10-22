@@ -82,6 +82,25 @@ def _check_rotation_at_heights(vptrait: traits.VPTrait) -> None:
             "(pi G Sigma): give pressure_density")
 
 
+def _check_dispersion_directions(
+        dptraits: tuple[traits.DPTrait, ...]
+) -> None:
+    """
+    Raise ConfigError unless every direction of the dispersion has a
+    dispersion polar trait, its own or an isotropic one (see traits),
+    once a trait is along a direction.
+    """
+    given = {trait.direction() for trait in dptraits}
+    if traits.DPT_DIRECTION_DEFAULT in given:
+        return
+    for direction in traits.DPT_DIRECTIONS:
+        if direction != traits.DPT_DIRECTION_DEFAULT \
+                and direction not in given:
+            raise ConfigError(
+                f"no dispersion trait for the direction {direction!r}; give "
+                f"one, or an {traits.DPT_DIRECTION_DEFAULT!r} trait")
+
+
 def _dump_traits(
         parser: parseutils.TypedParser,
         value: tuple[traits.Trait | None, ...] | None
@@ -155,19 +174,24 @@ class Density(parseutils.Serializable):
         return self._htraits is not None
 
 
-# The modes of the vertical equilibrium of a disk (see Kinematics)
+# The modes of the vertical equilibrium of a disk, and the directions of
+# its dispersion (see Kinematics)
 EQUILIBRIUM_MODES = ('central', 'self_gravitating', 'jeans')
+EQUILIBRIUM_DIRECTIONS = ('iso', 'ver')
+EQUILIBRIUM_DIRECTION_DEFAULT = 'iso'
 
 
 @dataclasses.dataclass(frozen=True)
 class Equilibrium:
     """
-    The vertical equilibrium of a disk (see Kinematics): its mode, and
-    for 'self_gravitating', density, the name of the mass component of its
-    galaxy whose surface density holds the disk up.
+    The vertical equilibrium of a disk (see Kinematics): its mode, for
+    'self_gravitating', density, the name of the mass component of its
+    galaxy whose surface density holds the disk up, and direction, that
+    of its dispersion: 'iso' (every direction) or 'ver' (z only).
     """
     mode: str
     density: str | None = None
+    direction: str = EQUILIBRIUM_DIRECTION_DEFAULT
 
 
 class Kinematics(parseutils.Serializable):
@@ -210,14 +234,21 @@ class Kinematics(parseutils.Serializable):
     user components give it by their function of the forces); exact for
     any mass and profile of the height, given the isothermal dispersion.
     At the centre, the value at the next subnode, as for 'central' (a
-    point mass there makes it infinite).
+    point mass there makes it infinite). The dispersion of the equilibrium
+    is isotropic (equilibrium_direction 'iso', the default: it adds to the
+    dispersion along every direction) or vertical ('ver': it adds to
+    sigma_z only, the dispersion that holds the disk up; see traits for
+    the directions of the dispersion).
 
     Parameters
     ----------
     vptraits : VPTrait or Sequence of VPTrait
         The velocity polar traits (parameters 'vpt_*').
     dptraits : DPTrait or Sequence of DPTrait
-        The velocity dispersion polar traits (parameters 'dpt_*').
+        The velocity dispersion polar traits (parameters 'dpt_*'),
+        isotropic or each along a direction (see traits): once one is
+        along a direction, every direction needs its own or an isotropic
+        one.
     vhtraits : VHTrait or Sequence of VHTrait, optional
         The velocity height traits of a thick component, one for each
         velocity polar trait (None items or none at all: the velocity does
@@ -232,12 +263,17 @@ class Kinematics(parseutils.Serializable):
         The name of the mass component whose surface density holds a
         disk of a self-gravitating equilibrium up: required for it, and
         only for it.
+    equilibrium_direction : str, optional
+        The direction of the dispersion of the equilibrium: 'iso' (the
+        default), every direction, or 'ver', z only. Only with
+        equilibrium.
 
     Raises
     ------
     ConfigError
         If there are no polar traits or too many, not one height trait
-        for each polar trait, several velocity traits 'mass' (the
+        for each polar trait, a direction of the dispersion without a
+        dispersion trait, several velocity traits 'mass' (the
         rotation in the gravity would count more than once), a velocity
         height trait 'mass' that does not pair with the velocity trait
         'mass' or takes its self_gravitating pressure support without
@@ -269,6 +305,8 @@ class Kinematics(parseutils.Serializable):
             info['equilibrium'] = equilibrium.mode
             if equilibrium.density is not None:
                 info['equilibrium_density'] = equilibrium.density
+            if equilibrium.direction != EQUILIBRIUM_DIRECTION_DEFAULT:
+                info['equilibrium_direction'] = equilibrium.direction
         return info
 
     def __init__(
@@ -280,7 +318,8 @@ class Kinematics(parseutils.Serializable):
             dhtraits:
             traits.DHTrait | Sequence[traits.DHTrait | None] | None = None,
             equilibrium: str | None = None,
-            equilibrium_density: str | None = None
+            equilibrium_density: str | None = None,
+            equilibrium_direction: str | None = None
     ):
         self._vptraits = _polar_traits('vptraits', vptraits)
         if sum(isinstance(trait, traits.VPTraitMass)
@@ -289,6 +328,7 @@ class Kinematics(parseutils.Serializable):
                 "a disk takes at most one velocity trait 'mass': each "
                 "adds the whole rotation in the gravity")
         self._dptraits = _polar_traits('dptraits', dptraits)
+        _check_dispersion_directions(self._dptraits)
         self._vhtraits = _height_traits(
             'vhtraits', vhtraits, len(self._vptraits), 'vptraits')
         for vptrait, vhtrait in zip(self._vptraits, self._vhtraits or ()):
@@ -308,8 +348,19 @@ class Kinematics(parseutils.Serializable):
                 "required for it, and only for it")
         if equilibrium_density is not None:
             parseutils.check_name(equilibrium_density)
-        self._equilibrium = None if equilibrium is None \
-            else Equilibrium(equilibrium, equilibrium_density)
+        if equilibrium_direction is not None and equilibrium is None:
+            raise ConfigError(
+                "equilibrium_direction is the direction of the dispersion "
+                "of the vertical equilibrium: it needs equilibrium")
+        if equilibrium_direction is None:
+            equilibrium_direction = EQUILIBRIUM_DIRECTION_DEFAULT
+        if equilibrium_direction not in EQUILIBRIUM_DIRECTIONS:
+            raise ConfigError(
+                f"equilibrium_direction must be one of "
+                f"{list(EQUILIBRIUM_DIRECTIONS)}; it is "
+                f"{equilibrium_direction!r}")
+        self._equilibrium = None if equilibrium is None else Equilibrium(
+            equilibrium, equilibrium_density, equilibrium_direction)
 
     def vptraits(self) -> tuple[traits.VPTrait, ...]:
         """Return the velocity polar traits."""

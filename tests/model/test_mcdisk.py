@@ -419,6 +419,20 @@ def test_mcdisk_dispersion_mixture_matches_smdisk(driver):
     assert relative_difference(mcdisk, smdisk) < 0.05
 
 
+def test_mcdisk_dispersion_directions_match_smdisk(driver):
+    # The dispersion of a cloud is the velocity ellipsoid on its line of
+    # sight, as that of a voxel
+    component = dict(cflux=1e-5, kinematics=dict(dptraits=[
+        dict(type='uniform', direction='rad'),
+        dict(type='uniform', direction='tan'),
+        dict(type='uniform', direction='ver')]))
+    properties = dict(dpt_a=40, dpt1_a=20, dpt2_a=10)
+    mcdisk = evaluate_disk('mcdisk', driver.type(), component, properties)
+    del component['cflux']
+    smdisk = evaluate_disk('smdisk', driver.type(), component, properties)
+    assert relative_difference(mcdisk, smdisk) < 0.05
+
+
 def test_mcdisk_moffat_blobs_need_a_finite_flux(driver):
     component = dict(density=dict(
         ptraits=dict(type='mixture_moffat', nblobs=2),

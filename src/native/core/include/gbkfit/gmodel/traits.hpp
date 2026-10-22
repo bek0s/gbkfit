@@ -83,6 +83,13 @@ constexpr int DPT_UID_NW_UNIFORM = 101;
 constexpr int DPT_UID_NW_HARMONIC = 102;
 constexpr int DPT_UID_NW_DISTORTION = 103;
 
+// Dispersion polar traits: the directions of their dispersions (an
+// isotropic trait adds to every direction; see gmodel_disk_dispersion)
+constexpr int DPT_DIRECTION_ISO = 0;
+constexpr int DPT_DIRECTION_RAD = 1;
+constexpr int DPT_DIRECTION_TAN = 2;
+constexpr int DPT_DIRECTION_VER = 3;
+
 // Dispersion height traits
 constexpr int DHT_UID_ONE = 1;
 constexpr int DHT_UID_LINEAR = 2;

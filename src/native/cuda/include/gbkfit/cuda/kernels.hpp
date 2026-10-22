@@ -196,7 +196,9 @@ dmodel_regions_sum(
             cube, out);
 }
 
-template<typename T, bool HasOpacity, bool HasFields, bool HasLineOpacity>
+template<
+        typename T, bool HasOpacity, bool HasFields, bool HasLineOpacity,
+        bool Anisotropic>
 __global__ void
 gmodel_mcdisk_evaluate(
         GBKFIT_GRID_CONSTANT const DiskArgs<T> a,
@@ -212,8 +214,8 @@ gmodel_mcdisk_evaluate(
     // Each cloud has its own stream of random numbers
     RNG<T> rng(mc.seed, tid);
     gbkfit::gmodel_mcdisk_evaluate_cloud<
-            atomic_add<T>, HasOpacity, HasFields, HasLineOpacity>(
-                    rng, tid, a, g, mc, f);
+            atomic_add<T>, HasOpacity, HasFields, HasLineOpacity,
+            Anisotropic>(rng, tid, a, g, mc, f);
 }
 
 template<typename T> __global__ void
@@ -229,7 +231,9 @@ gmodel_mcdisk_fields_moments(DiskArgs<T> a, GridArgs<T> g, FieldsArgs<T> f)
     gbkfit::gmodel_mcdisk_fields_moments(tid, a, g, f);
 }
 
-template<typename T, bool HasOpacity, bool HasFields, bool HasLineOpacity>
+template<
+        typename T, bool HasOpacity, bool HasFields, bool HasLineOpacity,
+        bool Anisotropic>
 __global__ void
 gmodel_smdisk_evaluate(
         GBKFIT_GRID_CONSTANT const DiskArgs<T> a,
@@ -251,8 +255,8 @@ gmodel_smdisk_evaluate(
     const int z = tid / (1LL * g.spat_size[0] * g.spat_size[1]);
 
     gbkfit::gmodel_smdisk_evaluate_spaxel<
-            atomic_add<T>, HasOpacity, HasFields, HasLineOpacity>(
-                    x, y, z, a, g, f);
+            atomic_add<T>, HasOpacity, HasFields, HasLineOpacity,
+            Anisotropic>(x, y, z, a, g, f);
 }
 
 template<typename T, bool HasOpacity, bool HasFields>

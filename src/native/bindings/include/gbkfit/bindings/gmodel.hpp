@@ -52,7 +52,9 @@ struct TraitSetArrays
 // The arrays that describe a disk: its radial nodes, its geometry (with
 // the sines and cosines of posa and incl of a loose or tilted disk, see
 // gbkfit::DiskArgs), its traits (with the direction of each velocity
-// polar trait) and the dispersion of its vertical equilibrium, if any.
+// polar trait, and of each dispersion polar trait if any is not
+// isotropic) and the dispersion of its vertical equilibrium, if any (with
+// whether it is along z only).
 // They are created once, and their values are updated in place before
 // each evaluation.
 template<typename T, typename Device>
@@ -71,9 +73,11 @@ struct DiskArrays
     Values incl;
     Traits rpt, rht, vpt, vht, dpt, dht, zpt, spt, opt;
     Array<Device, const int, nb::ndim<1>> vpt_directions;
+    Array<Device, const int, nb::ndim<1>> dpt_directions;
     Array<Device, const int, nb::ndim<1>> opt_rows;
     Values posa_incl_sincos;
     Values deq;
+    bool deq_vertical;
 };
 
 // The arrays that describe a cone: its sides, its radial nodes (shells),
@@ -446,8 +450,10 @@ struct GModel
                         const Traits* zpt, const Traits* spt,
                         const Traits* opt,
                         Array<Device, const int, nb::ndim<1>> vpt_directions,
+                        Array<Device, const int, nb::ndim<1>> dpt_directions,
                         Array<Device, const int, nb::ndim<1>> opt_rows,
-                        Values posa_incl_sincos, Values deq) {
+                        Values posa_incl_sincos, Values deq,
+                        bool deq_vertical) {
                     auto optional = [](const Traits* traits) {
                         return traits ? std::optional(*traits) : std::nullopt;
                     };
@@ -456,8 +462,8 @@ struct GModel
                             incl, optional(rpt), optional(rht),
                             optional(vpt), optional(vht), optional(dpt),
                             optional(dht), optional(zpt), optional(spt),
-                            optional(opt), vpt_directions, opt_rows,
-                            posa_incl_sincos, deq};
+                            optional(opt), vpt_directions, dpt_directions,
+                            opt_rows, posa_incl_sincos, deq, deq_vertical};
                 },
                 nb::arg("loose"), nb::arg("tilted"),
                 nb::arg("rnodes").noconvert(),
@@ -476,10 +482,12 @@ struct GModel
                 nb::arg("spt").none() = nb::none(),
                 nb::arg("opt").none() = nb::none(),
                 nb::arg("vpt_directions").noconvert().none() = nb::none(),
+                nb::arg("dpt_directions").noconvert().none() = nb::none(),
                 nb::arg("opt_rows").noconvert().none() = nb::none(),
                 nb::arg("posa_incl_sincos").noconvert().none()
                         = nb::none(),
-                nb::arg("deq").noconvert().none() = nb::none());
+                nb::arg("deq").noconvert().none() = nb::none(),
+                nb::arg("deq_vertical") = false);
 
         nb::class_<Cone>(m, ("Cone" + suffix).c_str())
                 .def("__init__", [](
@@ -728,6 +736,12 @@ private:
         a.vpt_directions = vpt_directions(disk);
         a.vht = trait_set(disk.vht);
         a.dpt = trait_set(disk.dpt);
+        require(!disk.dpt_directions.is_valid()
+                || (disk.dpt && disk.dpt_directions.shape(0)
+                                == disk.dpt->uids.shape(0)),
+                "dpt_directions needs a direction for each dispersion polar "
+                "trait, and goes with them only");
+        a.dpt_directions = data(disk.dpt_directions);
         a.dht = trait_set(disk.dht);
         a.zpt = trait_set(disk.zpt);
         a.spt = trait_set(disk.spt);
@@ -750,6 +764,9 @@ private:
                 || disk.deq.shape(0) == size_t(a.nrnodes),
                 "deq needs a value for each node");
         a.deq = data(disk.deq);
+        require(!disk.deq_vertical || disk.deq.is_valid(),
+                "deq_vertical needs deq");
+        a.deq_vertical = disk.deq_vertical;
         return a;
     }
 

@@ -26,7 +26,8 @@ The kinds of traits, and how the traits of one kind combine:
   line of sight, times its height trait (a factor of the height, 1 at 0
   for most).
 - dispersion (dpt, dht): the velocity dispersion; the absolute value of
-  the sum of the polar traits, each times its height trait.
+  the sum of the polar traits, each times its height trait. On a disk,
+  the polar traits can each be along one direction (see below).
 - vertical distortion (zpt): the sum displaces the plane of a disk (its
   midplane) along z, each within its zmax.
 - selection (spt): 1 where a trait selects the component, 0 elsewhere;
@@ -66,6 +67,25 @@ tangential and outward ones as on a disk. The tangential and radial ones are 0 o
 axis of a disk, the tangential one on the axis of a cone, and the
 outward ones at the centre of a disk and the apex of a cone, where
 their directions are undefined.
+
+A dispersion polar trait is isotropic (its option direction 'iso', the
+default: the same dispersion along every direction) or, on a disk, along
+one direction: radial ('rad', sigma_R, in the plane), tangential ('tan',
+sigma_phi, around the axis) or vertical ('ver', sigma_z, along z). The
+dispersion along each direction is then the absolute value of the sum of
+the isotropic traits and the traits along it (each times its height
+trait), and that on the line of sight is the velocity ellipsoid of the
+three seen along it: sqrt(sigma_phi^2 cos^2(theta) sin^2(incl) +
+sigma_R^2 sin^2(theta) sin^2(incl) + sigma_z^2 cos^2(incl)), the
+dispersion of the isotropic traits alone where all are isotropic. Once
+a trait is along a direction, every direction needs a trait: its own or
+an isotropic one (see parts.Kinematics). The dispersion on the line of
+sight sets only two of the three at each radius, sigma_phi^2
+sin^2(incl) + sigma_z^2 cos^2(incl) (on the major axis) and sigma_R^2
+sin^2(incl) + sigma_z^2 cos^2(incl) (on the minor axis): a fit needs a
+ratio (e.g. of the traits 'rad', 'tan' and 'ver' in this order, sigma_z
+= sigma_R / 2 is the parameter expression dpt2_a: 'dpt_a * 0.5') or a
+prior.
 
 The planar velocity polar traits of a disk (e.g. the flow along a bar)
 are not speeds along one direction, but velocities in its plane, with a
@@ -194,6 +214,12 @@ DPT_UID_NW_UNIFORM = 101
 DPT_UID_NW_HARMONIC = 102
 DPT_UID_NW_DISTORTION = 103
 
+# Velocity dispersion polar traits: the directions of their dispersions
+DPT_DIRECTION_ISO = 0
+DPT_DIRECTION_RAD = 1
+DPT_DIRECTION_TAN = 2
+DPT_DIRECTION_VER = 3
+
 # Dispersion height traits
 DHT_UID_ONE = 1
 DHT_UID_LINEAR = 2
@@ -236,6 +262,16 @@ VPT_DIRECTIONS = dict(
     los=VPTDirection(VPT_DIRECTION_LOS, 'vl'),
     out=VPTDirection(VPT_DIRECTION_OUT, 'vo'),
     away=VPTDirection(VPT_DIRECTION_AWAY, 'va'))
+
+# The directions of the dispersions of the velocity dispersion polar
+# traits, by name: their uids in the native kernels (see the module
+# docstring)
+DPT_DIRECTIONS = dict(
+    iso=DPT_DIRECTION_ISO,
+    rad=DPT_DIRECTION_RAD,
+    tan=DPT_DIRECTION_TAN,
+    ver=DPT_DIRECTION_VER)
+DPT_DIRECTION_DEFAULT = 'iso'
 
 
 def _ptrait_params_mixture_6p(nblobs: int) -> dict[str, ParamDesc]:
@@ -669,6 +705,34 @@ class TraitFeatureDirection:
     def direction(self) -> str:
         """Return the direction of its speed (see VPT_DIRECTIONS)."""
         return self._direction
+
+
+class TraitFeatureDispersionDirection:
+    """
+    The option direction of a velocity dispersion polar trait: a mixin.
+    """
+
+    def dump(self) -> dict[str, Any]:
+        dump_direction = self.direction() != DPT_DIRECTION_DEFAULT
+        info = dict(direction=self.direction()) if dump_direction else dict()
+        return super().dump() | info  # noqa
+
+    def __init__(self, **kwargs: Any):
+        direction = kwargs.pop('direction')
+        if direction not in DPT_DIRECTIONS:
+            raise ConfigError(
+                f"direction must be one of {list(DPT_DIRECTIONS)}; "
+                f"it is {direction!r}")
+        self._direction = direction
+        super().__init__(**kwargs)
+
+    def direction(self) -> str:
+        """Return the direction of its dispersion (see DPT_DIRECTIONS)."""
+        return self._direction
+
+    def direction_uid(self) -> int:
+        """Return the identifier of its direction in the native kernels."""
+        return DPT_DIRECTIONS[self.direction()]
 
 
 class TraitFeatureSampling:
@@ -1125,9 +1189,10 @@ class VHTrait(HTrait, abc.ABC):
         return (self.rnodes(),)
 
 
-class DPTrait(PTrait, abc.ABC):
+class DPTrait(TraitFeatureDispersionDirection, PTrait, abc.ABC):
     """
-    A velocity dispersion polar trait.
+    A velocity dispersion polar trait: isotropic, or along one direction
+    of a disk (its option direction, see the module docstring).
     """
 
     @abc.abstractmethod
@@ -3022,7 +3087,11 @@ class VPTraitMass(VPTrait):
     traits): rho ~ S^2 / sigma^2 and rho sigma^2 ~ S^2, so that v^2 =
     v_c^2 + 2 sigma^2 dln S / dln R for an axisymmetric disk (Burkert et
     al. 2010), whatever its density height traits (DysmalPy's pressure
-    support of types 1 and 2, for an exponential and a Sersic S).
+    support of types 1 and 2, for an exponential and a Sersic S). A disk
+    whose dispersion is not isotropic (see the module docstring) takes
+    the Jeans equation of its velocity ellipsoid: v^2 = v_c^2 + (R / rho)
+    d(rho sigma_R^2)/dR + sigma_R^2 - sigma_phi^2, with sigma_z in rho of
+    'self_gravitating' (see _profiles.pressure_support).
 
     With pressure_density, the names of mass components of its galaxy
     (one, or several: e.g. its atomic and its molecular gas), the
@@ -3327,6 +3396,17 @@ class DPTraitUniform(DPTrait):
     """
     A uniform velocity dispersion: a. Its parameter: a, the dispersion
     (km/s).
+
+    Parameters
+    ----------
+    direction : str, optional
+        The direction of its dispersion: 'iso' (the default), 'rad', 'tan'
+        or 'ver' (see the module docstring).
+
+    Raises
+    ------
+    ConfigError
+        If an option is not valid.
     """
 
     @staticmethod
@@ -3336,6 +3416,9 @@ class DPTraitUniform(DPTrait):
     @staticmethod
     def uid() -> int:
         return DPT_UID_UNIFORM
+
+    def __init__(self, direction: str = DPT_DIRECTION_DEFAULT):
+        super().__init__(direction=direction)
 
     def axisymmetric(self) -> bool:
         return True
@@ -3348,6 +3431,17 @@ class DPTraitExponential(DPTrait):
     """
     An exponential velocity dispersion: a exp(-r / s). Its parameters: a,
     the dispersion (km/s) at the centre, and s, the scale length.
+
+    Parameters
+    ----------
+    direction : str, optional
+        The direction of its dispersion: 'iso' (the default), 'rad', 'tan'
+        or 'ver' (see the module docstring).
+
+    Raises
+    ------
+    ConfigError
+        If an option is not valid.
     """
 
     @staticmethod
@@ -3357,6 +3451,9 @@ class DPTraitExponential(DPTrait):
     @staticmethod
     def uid() -> int:
         return DPT_UID_EXP
+
+    def __init__(self, direction: str = DPT_DIRECTION_DEFAULT):
+        super().__init__(direction=direction)
 
     def axisymmetric(self) -> bool:
         return True
@@ -3372,6 +3469,17 @@ class DPTraitGauss(DPTrait):
     A Gaussian velocity dispersion: a exp(-r^2 / (2 s^2)). Its parameters:
     a, the dispersion (km/s) at the centre, and s, the dispersion of the
     Gaussian.
+
+    Parameters
+    ----------
+    direction : str, optional
+        The direction of its dispersion: 'iso' (the default), 'rad', 'tan'
+        or 'ver' (see the module docstring).
+
+    Raises
+    ------
+    ConfigError
+        If an option is not valid.
     """
 
     @staticmethod
@@ -3381,6 +3489,9 @@ class DPTraitGauss(DPTrait):
     @staticmethod
     def uid() -> int:
         return DPT_UID_GAUSS
+
+    def __init__(self, direction: str = DPT_DIRECTION_DEFAULT):
+        super().__init__(direction=direction)
 
     def axisymmetric(self) -> bool:
         return True
@@ -3397,6 +3508,17 @@ class DPTraitGGauss(DPTrait):
     parameters: a, the dispersion (km/s) at the centre, s, the scale
     length, and b, the shape (1 is the exponential, and 2 a Gaussian of
     dispersion s / sqrt(2)).
+
+    Parameters
+    ----------
+    direction : str, optional
+        The direction of its dispersion: 'iso' (the default), 'rad', 'tan'
+        or 'ver' (see the module docstring).
+
+    Raises
+    ------
+    ConfigError
+        If an option is not valid.
     """
 
     @staticmethod
@@ -3406,6 +3528,9 @@ class DPTraitGGauss(DPTrait):
     @staticmethod
     def uid() -> int:
         return DPT_UID_GGAUSS
+
+    def __init__(self, direction: str = DPT_DIRECTION_DEFAULT):
+        super().__init__(direction=direction)
 
     def axisymmetric(self) -> bool:
         return True
@@ -3422,6 +3547,17 @@ class DPTraitLorentz(DPTrait):
     A Lorentzian velocity dispersion: a s^2 / (r^2 + s^2). Its parameters:
     a, the dispersion (km/s) at the centre, and s, the half width at half
     maximum.
+
+    Parameters
+    ----------
+    direction : str, optional
+        The direction of its dispersion: 'iso' (the default), 'rad', 'tan'
+        or 'ver' (see the module docstring).
+
+    Raises
+    ------
+    ConfigError
+        If an option is not valid.
     """
 
     @staticmethod
@@ -3431,6 +3567,9 @@ class DPTraitLorentz(DPTrait):
     @staticmethod
     def uid() -> int:
         return DPT_UID_LORENTZ
+
+    def __init__(self, direction: str = DPT_DIRECTION_DEFAULT):
+        super().__init__(direction=direction)
 
     def axisymmetric(self) -> bool:
         return True
@@ -3446,6 +3585,17 @@ class DPTraitMoffat(DPTrait):
     A Moffat velocity dispersion: a (1 + (r / s)^2)^-b. Its parameters: a,
     the dispersion (km/s) at the centre, s, the core radius, and b, the
     power of the fall.
+
+    Parameters
+    ----------
+    direction : str, optional
+        The direction of its dispersion: 'iso' (the default), 'rad', 'tan'
+        or 'ver' (see the module docstring).
+
+    Raises
+    ------
+    ConfigError
+        If an option is not valid.
     """
 
     @staticmethod
@@ -3455,6 +3605,9 @@ class DPTraitMoffat(DPTrait):
     @staticmethod
     def uid() -> int:
         return DPT_UID_MOFFAT
+
+    def __init__(self, direction: str = DPT_DIRECTION_DEFAULT):
+        super().__init__(direction=direction)
 
     def axisymmetric(self) -> bool:
         return True
@@ -3470,6 +3623,17 @@ class DPTraitSech2(DPTrait):
     """
     A sech^2 velocity dispersion: a sech^2(r / s). Its parameters: a, the
     dispersion (km/s) at the centre, and s, the scale length.
+
+    Parameters
+    ----------
+    direction : str, optional
+        The direction of its dispersion: 'iso' (the default), 'rad', 'tan'
+        or 'ver' (see the module docstring).
+
+    Raises
+    ------
+    ConfigError
+        If an option is not valid.
     """
 
     @staticmethod
@@ -3479,6 +3643,9 @@ class DPTraitSech2(DPTrait):
     @staticmethod
     def uid() -> int:
         return DPT_UID_SECH2
+
+    def __init__(self, direction: str = DPT_DIRECTION_DEFAULT):
+        super().__init__(direction=direction)
 
     def axisymmetric(self) -> bool:
         return True
@@ -3502,6 +3669,9 @@ class DPTraitMixtureExponential(TraitFeatureNBlobs, DPTrait):
     ----------
     nblobs : int
         The number of blobs.
+    direction : str, optional
+        The direction of its dispersion: 'iso' (the default), 'rad', 'tan'
+        or 'ver' (see the module docstring).
 
     Raises
     ------
@@ -3517,8 +3687,11 @@ class DPTraitMixtureExponential(TraitFeatureNBlobs, DPTrait):
     def uid() -> int:
         return DPT_UID_MIXTURE_EXP
 
-    def __init__(self, nblobs: int):
-        super().__init__(nblobs=nblobs)
+    def __init__(
+            self,
+            nblobs: int,
+            direction: str = DPT_DIRECTION_DEFAULT):
+        super().__init__(nblobs=nblobs, direction=direction)
 
     def axisymmetric(self) -> bool:
         return False
@@ -3540,6 +3713,9 @@ class DPTraitMixtureGauss(TraitFeatureNBlobs, DPTrait):
     ----------
     nblobs : int
         The number of blobs.
+    direction : str, optional
+        The direction of its dispersion: 'iso' (the default), 'rad', 'tan'
+        or 'ver' (see the module docstring).
 
     Raises
     ------
@@ -3555,8 +3731,11 @@ class DPTraitMixtureGauss(TraitFeatureNBlobs, DPTrait):
     def uid() -> int:
         return DPT_UID_MIXTURE_GAUSS
 
-    def __init__(self, nblobs: int):
-        super().__init__(nblobs=nblobs)
+    def __init__(
+            self,
+            nblobs: int,
+            direction: str = DPT_DIRECTION_DEFAULT):
+        super().__init__(nblobs=nblobs, direction=direction)
 
     def axisymmetric(self) -> bool:
         return False
@@ -3579,6 +3758,9 @@ class DPTraitMixtureGGauss(TraitFeatureNBlobs, DPTrait):
     ----------
     nblobs : int
         The number of blobs.
+    direction : str, optional
+        The direction of its dispersion: 'iso' (the default), 'rad', 'tan'
+        or 'ver' (see the module docstring).
 
     Raises
     ------
@@ -3594,8 +3776,11 @@ class DPTraitMixtureGGauss(TraitFeatureNBlobs, DPTrait):
     def uid() -> int:
         return DPT_UID_MIXTURE_GGAUSS
 
-    def __init__(self, nblobs: int):
-        super().__init__(nblobs=nblobs)
+    def __init__(
+            self,
+            nblobs: int,
+            direction: str = DPT_DIRECTION_DEFAULT):
+        super().__init__(nblobs=nblobs, direction=direction)
 
     def axisymmetric(self) -> bool:
         return False
@@ -3617,6 +3802,9 @@ class DPTraitMixtureMoffat(TraitFeatureNBlobs, DPTrait):
     ----------
     nblobs : int
         The number of blobs.
+    direction : str, optional
+        The direction of its dispersion: 'iso' (the default), 'rad', 'tan'
+        or 'ver' (see the module docstring).
 
     Raises
     ------
@@ -3632,8 +3820,11 @@ class DPTraitMixtureMoffat(TraitFeatureNBlobs, DPTrait):
     def uid() -> int:
         return DPT_UID_MIXTURE_MOFFAT
 
-    def __init__(self, nblobs: int):
-        super().__init__(nblobs=nblobs)
+    def __init__(
+            self,
+            nblobs: int,
+            direction: str = DPT_DIRECTION_DEFAULT):
+        super().__init__(nblobs=nblobs, direction=direction)
 
     def axisymmetric(self) -> bool:
         return False
@@ -3653,6 +3844,9 @@ class DPTraitNWUniform(TraitFeatureSampling, DPTrait):
         Where the values of its node-wise parameters are given: 'rnodes',
         at the radii of the rings, or 'subrings', at the rings it is
         evaluated on (see the module docstring).
+    direction : str, optional
+        The direction of its dispersion: 'iso' (the default), 'rad', 'tan'
+        or 'ver' (see the module docstring).
 
     Raises
     ------
@@ -3670,8 +3864,9 @@ class DPTraitNWUniform(TraitFeatureSampling, DPTrait):
 
     def __init__(
             self,
-            sampling: str = SAMPLING_DEFAULT):
-        super().__init__(sampling=sampling)
+            sampling: str = SAMPLING_DEFAULT,
+            direction: str = DPT_DIRECTION_DEFAULT):
+        super().__init__(sampling=sampling, direction=direction)
 
     def axisymmetric(self) -> bool:
         return True
@@ -3697,6 +3892,9 @@ class DPTraitNWHarmonic(
         Where the values of its node-wise parameters are given: 'rnodes',
         at the radii of the rings, or 'subrings', at the rings it is
         evaluated on (see the module docstring).
+    direction : str, optional
+        The direction of its dispersion: 'iso' (the default), 'rad', 'tan'
+        or 'ver' (see the module docstring).
 
     Raises
     ------
@@ -3715,8 +3913,9 @@ class DPTraitNWHarmonic(
     def __init__(
             self,
             order: int,
-            sampling: str = SAMPLING_DEFAULT):
-        super().__init__(order=order, sampling=sampling)
+            sampling: str = SAMPLING_DEFAULT,
+            direction: str = DPT_DIRECTION_DEFAULT):
+        super().__init__(order=order, sampling=sampling, direction=direction)
 
     def axisymmetric(self) -> bool:
         # (a harmonic of order 0 is uniform)
@@ -3740,6 +3939,9 @@ class DPTraitNWDistortion(TraitFeatureSampling, DPTrait):
         Where the values of its node-wise parameters are given: 'rnodes',
         at the radii of the rings, or 'subrings', at the rings it is
         evaluated on (see the module docstring).
+    direction : str, optional
+        The direction of its dispersion: 'iso' (the default), 'rad', 'tan'
+        or 'ver' (see the module docstring).
 
     Raises
     ------
@@ -3757,8 +3959,9 @@ class DPTraitNWDistortion(TraitFeatureSampling, DPTrait):
 
     def __init__(
             self,
-            sampling: str = SAMPLING_DEFAULT):
-        super().__init__(sampling=sampling)
+            sampling: str = SAMPLING_DEFAULT,
+            direction: str = DPT_DIRECTION_DEFAULT):
+        super().__init__(sampling=sampling, direction=direction)
 
     def axisymmetric(self) -> bool:
         return False

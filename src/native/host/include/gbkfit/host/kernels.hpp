@@ -257,7 +257,9 @@ dmodel_regions_sum(
     }
 }
 
-template<typename T, bool HasOpacity, bool HasFields, bool HasLineOpacity>
+template<
+        typename T, bool HasOpacity, bool HasFields, bool HasLineOpacity,
+        bool Anisotropic>
 void
 gmodel_mcdisk_evaluate(
         const DiskArgs<T>& a, const GridArgs<T>& g, const MCDiskArgs<T>& mc,
@@ -270,8 +272,8 @@ gmodel_mcdisk_evaluate(
     {
         RNG<T> rng(mc.seed, ci);
         gbkfit::gmodel_mcdisk_evaluate_cloud<
-                atomic_add<T>, HasOpacity, HasFields, HasLineOpacity>(
-                        rng, ci, a, g, mc, f);
+                atomic_add<T>, HasOpacity, HasFields, HasLineOpacity,
+                Anisotropic>(rng, ci, a, g, mc, f);
     }
 
     // The fields of each voxel, from the moments of its clouds.
@@ -285,7 +287,9 @@ gmodel_mcdisk_evaluate(
     }
 }
 
-template<typename T, bool HasOpacity, bool HasFields, bool HasLineOpacity>
+template<
+        typename T, bool HasOpacity, bool HasFields, bool HasLineOpacity,
+        bool Anisotropic>
 void
 gmodel_smdisk_evaluate(
         const DiskArgs<T>& a, const GridArgs<T>& g, const FieldsArgs<T>& f)
@@ -302,7 +306,8 @@ gmodel_smdisk_evaluate(
     for(int z = 0; z < size_z; ++z) {
 
     gbkfit::gmodel_smdisk_evaluate_spaxel<
-            add<T>, HasOpacity, HasFields, HasLineOpacity>(x, y, z, a, g, f);
+            add<T>, HasOpacity, HasFields, HasLineOpacity, Anisotropic>(
+                    x, y, z, a, g, f);
 
     }
     }
@@ -537,36 +542,59 @@ struct Wrapper
     }
 
     // (the kernels of the fields of disks with line opacity and without, of
-    // disks dimmed by opacity, and of the others: see
+    // disks dimmed by opacity, and of the others, each of an isotropic
+    // dispersion and of an anisotropic one: see
     // gmodel_mcdisk_evaluate_cloud)
     static void
     gmodel_mcdisk_evaluate(
             const DiskArgs<T>& a, const GridArgs<T>& g,
             const MCDiskArgs<T>& mc, const FieldsArgs<T>& f) {
-        namespace k = kernels;
-        if (f.fields && a.opt.uids)
-            k::gmodel_mcdisk_evaluate<T, false, true, true>(a, g, mc, f);
-        else if (f.fields)
-            k::gmodel_mcdisk_evaluate<T, false, true, false>(a, g, mc, f);
-        else if (g.opacity)
-            k::gmodel_mcdisk_evaluate<T, true, false, false>(a, g, mc, f);
+        if (gbkfit::gmodel_disk_anisotropic(a))
+            mcdisk_evaluate<true>(a, g, mc, f);
         else
-            k::gmodel_mcdisk_evaluate<T, false, false, false>(a, g, mc, f);
+            mcdisk_evaluate<false>(a, g, mc, f);
+    }
+
+    template<bool Anisotropic> static void
+    mcdisk_evaluate(
+            const DiskArgs<T>& a, const GridArgs<T>& g,
+            const MCDiskArgs<T>& mc, const FieldsArgs<T>& f) {
+        namespace k = kernels;
+        constexpr bool A = Anisotropic;
+        if (f.fields && a.opt.uids)
+            k::gmodel_mcdisk_evaluate<T, false, true, true, A>(a, g, mc, f);
+        else if (f.fields)
+            k::gmodel_mcdisk_evaluate<T, false, true, false, A>(a, g, mc, f);
+        else if (g.opacity)
+            k::gmodel_mcdisk_evaluate<T, true, false, false, A>(a, g, mc, f);
+        else
+            k::gmodel_mcdisk_evaluate<T, false, false, false, A>(a, g, mc, f);
     }
 
     static void
     gmodel_smdisk_evaluate(
             const DiskArgs<T>& a, const GridArgs<T>& g,
             const FieldsArgs<T>& f) {
-        namespace k = kernels;
-        if (f.fields && a.opt.uids)
-            k::gmodel_smdisk_evaluate<T, false, true, true>(a, g, f);
-        else if (f.fields)
-            k::gmodel_smdisk_evaluate<T, false, true, false>(a, g, f);
-        else if (g.opacity)
-            k::gmodel_smdisk_evaluate<T, true, false, false>(a, g, f);
+        if (gbkfit::gmodel_disk_anisotropic(a))
+            smdisk_evaluate<true>(a, g, f);
         else
-            k::gmodel_smdisk_evaluate<T, false, false, false>(a, g, f);
+            smdisk_evaluate<false>(a, g, f);
+    }
+
+    template<bool Anisotropic> static void
+    smdisk_evaluate(
+            const DiskArgs<T>& a, const GridArgs<T>& g,
+            const FieldsArgs<T>& f) {
+        namespace k = kernels;
+        constexpr bool A = Anisotropic;
+        if (f.fields && a.opt.uids)
+            k::gmodel_smdisk_evaluate<T, false, true, true, A>(a, g, f);
+        else if (f.fields)
+            k::gmodel_smdisk_evaluate<T, false, true, false, A>(a, g, f);
+        else if (g.opacity)
+            k::gmodel_smdisk_evaluate<T, true, false, false, A>(a, g, f);
+        else
+            k::gmodel_smdisk_evaluate<T, false, false, false, A>(a, g, f);
     }
 
     // (the kernels of the fields, of cones dimmed by opacity, and of the

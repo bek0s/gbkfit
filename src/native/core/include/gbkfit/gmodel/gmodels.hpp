@@ -387,17 +387,18 @@ gmodel_ptraits_sum(
     return sum;
 }
 
-// The sum of the polar traits of the set pt at the point (x, y, r, theta)
-// of the plane of a component, in the ring rnidx, each times its height
-// trait of the set ht at the height |h| (or alone without height traits:
-// a thin component), one trait at a time (no array of their values, see
-// traits_each). project(i, value) transforms the value of polar trait i
-// first (e.g. the speed of a velocity trait onto the line of sight; see
-// vp_disk_project).
-template<auto PTraitFunT, auto HTraitFunT, typename T, typename ProjectT>
-constexpr T
-gmodel_traits_sum(
-        const TraitSet<T>& pt, const TraitSet<T>& ht,
+// Each polar trait of the set pt at the point (x, y, r, theta) of the
+// plane of a component, in the ring rnidx, times its height trait of the
+// set ht at the height |h| (or alone without height traits: a thin
+// component), passed to visit(i, value) one at a time (no array of their
+// values, see traits_each). project(i, value) transforms the value of
+// polar trait i first (e.g. the speed of a velocity trait onto the line
+// of sight; see vp_disk_project).
+template<auto PTraitFunT, auto HTraitFunT, typename T, typename VisitT,
+         typename ProjectT>
+constexpr void
+gmodel_traits_each(
+        VisitT visit, const TraitSet<T>& pt, const TraitSet<T>& ht,
         int rnidx, const T* rnodes, int nrnodes,
         T x, T y, T r, T theta, T h, ProjectT project)
 {
@@ -405,7 +406,6 @@ gmodel_traits_sum(
     const T* ppvalues = pt.pvalues;
     const T* hcvalues = ht.cvalues;
     const T* hpvalues = ht.pvalues;
-    T sum = 0;
     for (int i = 0; i < pt.n; ++i)
     {
         T value = 0;
@@ -423,10 +423,24 @@ gmodel_traits_sum(
             hcvalues += ht.ccounts[i];
             hpvalues += ht.pcounts[i];
         }
-        sum += value;
+        visit(i, value);
         pcvalues += pt.ccounts[i];
         ppvalues += pt.pcounts[i];
     }
+}
+
+// The sum of the traits of gmodel_traits_each
+template<auto PTraitFunT, auto HTraitFunT, typename T, typename ProjectT>
+constexpr T
+gmodel_traits_sum(
+        const TraitSet<T>& pt, const TraitSet<T>& ht,
+        int rnidx, const T* rnodes, int nrnodes,
+        T x, T y, T r, T theta, T h, ProjectT project)
+{
+    T sum = 0;
+    gmodel_traits_each<PTraitFunT, HTraitFunT>(
+            [&](int, T value) { sum += value; },
+            pt, ht, rnidx, rnodes, nrnodes, x, y, r, theta, h, project);
     return sum;
 }
 
@@ -440,6 +454,79 @@ struct Unprojected
         return value;
     }
 };
+
+// Whether the dispersion of a disk is anisotropic: its dispersion traits
+// have directions, or the dispersion of its equilibrium is along z only
+// (see gmodel_disk_dispersion)
+template<typename T> constexpr bool
+gmodel_disk_anisotropic(const DiskArgs<T>& a)
+{
+    return a.dpt_directions || a.deq_vertical;
+}
+
+// The velocity dispersion of a disk on the line of sight at the point
+// (x, y, r, theta) of its plane, in the ring rnidx, at the height h above
+// it, seen at the inclination incl (radians): its dispersion traits (each
+// polar trait times its height trait), positive, with the dispersion of
+// its vertical equilibrium in quadrature. Isotropic, the absolute value of
+// the sum of the traits. Anisotropic (see gmodel_disk_anisotropic), the
+// velocity ellipsoid: the dispersion along each direction (radial,
+// tangential, vertical) is the absolute value of the sum of the isotropic
+// traits and those along it, with the equilibrium along every direction
+// or along z only (deq_vertical), and that on the line of sight is
+// sqrt(s_tan^2 cos^2(theta) sin^2(incl) + s_rad^2 sin^2(theta) sin^2(incl)
+// + s_ver^2 cos^2(incl)). Anisotropic is a template parameter, so that the
+// kernels of isotropic disks have none of the code of the ellipsoid (nor
+// its registers and local memory, on a GPU).
+template<bool Anisotropic, typename T> constexpr T
+gmodel_disk_dispersion(
+        const DiskArgs<T>& a, int rnidx, T x, T y, T r, T theta, T h, T incl)
+{
+    // Ensure positive dispersion
+    // Ideally, we want the caller to never use parameter values that result in
+    // a negative dispersion. Unfortunately, this is hard to achieve.
+    // Forcing a positive dispersion is a reasonable solution.
+    if constexpr (!Anisotropic)
+    {
+        const T dvalue = std::abs(gmodel_traits_sum<dp_trait<T>, dh_trait<T>>(
+                a.dpt, a.dht, rnidx, a.rnodes, a.nrnodes,
+                x, y, r, theta, h, Unprojected{}));
+        return a.deq ? std::hypot(dvalue, lerp(r, rnidx, a.rnodes, a.deq))
+                     : dvalue;
+    }
+    else
+    {
+        // The sum of the traits along each direction (DPT_DIRECTION_*)
+        T sums[4] = {0, 0, 0, 0};
+        gmodel_traits_each<dp_trait<T>, dh_trait<T>>(
+                [&](int i, T value) {
+                    sums[a.dpt_directions ? a.dpt_directions[i]
+                                          : DPT_DIRECTION_ISO] += value;
+                },
+                a.dpt, a.dht, rnidx, a.rnodes, a.nrnodes,
+                x, y, r, theta, h, Unprojected{});
+        const T iso = sums[DPT_DIRECTION_ISO];
+        T srad = std::abs(iso + sums[DPT_DIRECTION_RAD]);
+        T stan = std::abs(iso + sums[DPT_DIRECTION_TAN]);
+        T sver = std::abs(iso + sums[DPT_DIRECTION_VER]);
+        if (a.deq)
+        {
+            const T deq = lerp(r, rnidx, a.rnodes, a.deq);
+            sver = std::hypot(sver, deq);
+            if (!a.deq_vertical) {
+                srad = std::hypot(srad, deq);
+                stan = std::hypot(stan, deq);
+            }
+        }
+
+        // The velocity ellipsoid on the line of sight
+        const T sin_incl = std::sin(incl);
+        const T rad = srad * std::sin(theta) * sin_incl;
+        const T tan = stan * std::cos(theta) * sin_incl;
+        const T ver = sver * std::cos(incl);
+        return std::sqrt(rad * rad + tan * tan + ver * ver);
+    }
+}
 
 template<typename T> constexpr void
 transform_cpos(T& x, T& y, T xpos, T ypos)
@@ -711,12 +798,13 @@ gmodel_fields_vref(const DiskArgs<T>& a)
 // Evaluate the cloud ci of a Monte Carlo disk. HasOpacity is whether
 // opacity dims the disk (g.opacity is not null), HasFields whether it
 // writes the fields of the march instead of its light (f.fields is not
-// null), and HasLineOpacity whether they have its line opacity (a.opt has
-// traits): template parameters, so that the other kernels have none of
-// their code (nor its registers and local memory, on a GPU).
+// null), HasLineOpacity whether they have its line opacity (a.opt has
+// traits), and Anisotropic whether its dispersion is anisotropic (see
+// gmodel_disk_dispersion): template parameters, so that the other kernels
+// have none of their code (nor its registers and local memory, on a GPU).
 template<
         auto AtomicAddFunT, bool HasOpacity, bool HasFields,
-        bool HasLineOpacity, typename T>
+        bool HasLineOpacity, bool Anisotropic, typename T>
 constexpr void
 gmodel_mcdisk_evaluate_cloud(
         RNG<T>& rng, int ci, const DiskArgs<T>& a, const GridArgs<T>& g,
@@ -841,21 +929,10 @@ gmodel_mcdisk_evaluate_cloud(
     // Apply systemic velocity
     vvalue += vsysi;
 
-    // Dispersion traits
-    dvalue = gmodel_traits_sum<dp_trait<T>, dh_trait<T>>(
-            a.dpt, a.dht, rnidx, a.rnodes, a.nrnodes,
-            xd, yd, rd, theta, height, Unprojected{});
-
-    // Ensure positive dispersion
-    // Ideally, we want the caller to never use parameter values that result in
-    // a negative dispersion. Unfortunately, this is hard to achieve.
-    // Forcing a positive dispersion is a reasonable solution.
-    dvalue = std::abs(dvalue);
-
-    // The dispersion of the vertical equilibrium, in quadrature
-    if (a.deq) {
-        dvalue = std::hypot(dvalue, lerp(rd, rnidx, a.rnodes, a.deq));
-    }
+    // Dispersion traits, and the dispersion of the vertical equilibrium,
+    // on the line of sight
+    dvalue = gmodel_disk_dispersion<Anisotropic>(
+            a, rnidx, xd, yd, rd, theta, height, incli);
 
     // The opacity in front of the light, and the light that it lets
     // through (that of the image, or of the first line)
@@ -967,11 +1044,12 @@ gmodel_smdisk_size_z(const DiskArgs<T>& a, const GridArgs<T>& g)
 // spectrum of its spaxel, which the other voxels of the spaxel add to too:
 // it must be atomic if they are evaluated in parallel. Only this voxel
 // writes to its other outputs. HasOpacity is whether opacity dims the disk,
-// HasFields whether it writes the fields of the march, and HasLineOpacity
-// whether they have its line opacity (see gmodel_mcdisk_evaluate_cloud).
+// HasFields whether it writes the fields of the march, HasLineOpacity
+// whether they have its line opacity, and Anisotropic whether its
+// dispersion is anisotropic (see gmodel_mcdisk_evaluate_cloud).
 template<
         auto AddFunT, bool HasOpacity, bool HasFields, bool HasLineOpacity,
-        typename T>
+        bool Anisotropic, typename T>
 constexpr void
 gmodel_smdisk_evaluate_spaxel(
         int x, int y, int z, const DiskArgs<T>& a, const GridArgs<T>& g,
@@ -1095,21 +1173,10 @@ gmodel_smdisk_evaluate_spaxel(
     // Apply systemic velocity
     vvalue += vsysi;
 
-    // Dispersion traits
-    dvalue = gmodel_traits_sum<dp_trait<T>, dh_trait<T>>(
-            a.dpt, a.dht, rnidx, a.rnodes, a.nrnodes,
-            xn, yn, rn, theta, zn, Unprojected{});
-
-    // Ensure positive dispersion
-    // Ideally, we want the caller to never use parameter values that result in
-    // a negative dispersion. Unfortunately, this is hard to achieve.
-    // Forcing a positive dispersion is a reasonable solution.
-    dvalue = std::abs(dvalue);
-
-    // The dispersion of the vertical equilibrium, in quadrature
-    if (a.deq) {
-        dvalue = std::hypot(dvalue, lerp(rn, rnidx, a.rnodes, a.deq));
-    }
+    // Dispersion traits, and the dispersion of the vertical equilibrium,
+    // on the line of sight
+    dvalue = gmodel_disk_dispersion<Anisotropic>(
+            a, rnidx, xn, yn, rn, theta, zn, incli);
 
     // The opacity in front of the light (that of a thin disk is a layer,
     // which only the opacity in front of it dims), and the light that it

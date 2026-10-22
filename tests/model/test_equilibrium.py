@@ -86,6 +86,32 @@ def test_central_equilibrium_is_the_dispersion_of_the_rotation(
         rtol=1e-6, atol=1e-7)
 
 
+@pytest.mark.parametrize('disk_type', ['smdisk', 'mcdisk'])
+def test_equilibrium_along_z_is_the_dispersion_of_sigma_z(driver, disk_type):
+    # With equilibrium_direction 'ver', the dispersion of the equilibrium
+    # is sigma_z alone: the disk is that of traits of sigma_R = sigma_phi
+    # = 0 and sigma_z of h V / R at its subnodes
+    disk = DISK | dict(type=disk_type)
+    if disk_type == 'mcdisk':
+        disk |= dict(cflux=1e-3)
+    balanced = galaxy(with_kinematics(disk, equilibrium_direction='ver'))
+    given = galaxy(with_kinematics(
+        disk, dptraits=[
+            dict(type='uniform', direction='rad'),
+            dict(type='uniform', direction='tan'),
+            dict(type='nw_uniform', sampling='subrings', direction='ver')],
+        equilibrium=None))
+    radii = np.array(given.constants()['subrnodes'])
+    rotation = 200 * 2 / np.pi * np.arctan(radii / 3)
+    sigma = np.zeros_like(radii)
+    sigma[1:] = 1 * rotation[1:] / radii[1:]
+    sigma[0] = sigma[1]
+    np.testing.assert_allclose(
+        evaluate(driver, balanced, PROPERTIES),
+        evaluate(driver, given, PROPERTIES | dict(dpt1_a=0, dpt2_a=sigma)),
+        rtol=1e-6, atol=1e-7)
+
+
 def test_central_equilibrium_in_the_mass_of_the_galaxy():
     # With mass (a point), sigma = h V_c / R, V_c^2 = G M / R (kpc), which
     # the gravity gives the disk and writes in its table

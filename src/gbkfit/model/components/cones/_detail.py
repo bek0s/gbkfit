@@ -45,7 +45,8 @@ TRAIT_PREFIXES = dict(
 # disk), and every height trait and velocity trait but the rotation in the
 # gravity of the galaxy (mass, of a disk) and the flows in wedges, along
 # bars and of spiral waves of a disk, around the axis ('tan') or out of
-# the apex ('out')
+# the apex ('out'); dispersion traits isotropic only (a cone has no
+# radial, tangential and vertical directions of a disk)
 CONE_TRAITS = TraitTable('cone', dict(
     rpt=(
         traits.RPTraitUniform, traits.RPTraitExponential,
@@ -70,7 +71,7 @@ CONE_TRAITS = TraitTable('cone', dict(
     spt=(
         traits.SPTraitRadialRange, traits.SPTraitAzimuthalRange,
         traits.SPTraitNWAzimuthalRange)),
-    ('tan', 'out'))
+    ('tan', 'out'), ('iso',))
 
 
 def load_cone_component(

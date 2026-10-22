@@ -31,9 +31,12 @@ struct DiskArgs
     // traits, and vertical distortion (z) and selection (s) polar traits.
     // A height trait set has as many traits as its polar trait set, or
     // none (a thin disk). The velocity polar traits are speeds, each along
-    // its direction (VPT_DIRECTION_*, see vp_disk_project).
+    // its direction (VPT_DIRECTION_*, see vp_disk_project). The dispersion
+    // polar traits are isotropic, or each along its direction
+    // (DPT_DIRECTION_*, see gmodel_disk_dispersion; none: all isotropic).
     TraitSet<T> rpt, rht, vpt, vht, dpt, dht, zpt, spt;
     const int* vpt_directions = nullptr;
+    const int* dpt_directions = nullptr;
 
     // The polar traits of the coefficients of its line opacity, and the
     // line of each: its row in GridArgs::lines, or -1 if the line is not
@@ -43,8 +46,9 @@ struct DiskArgs
 
     // The dispersion of the vertical equilibrium of the disk at each node,
     // if it has one: it adds to that of the dispersion traits in
-    // quadrature
+    // quadrature, along every direction or along z only (deq_vertical)
     const T* deq = nullptr;
+    bool deq_vertical = false;
 };
 
 // The kinds of traits of a disk: the trait sets of DiskArgs

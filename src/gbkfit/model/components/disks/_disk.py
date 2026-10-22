@@ -275,7 +275,9 @@ class DiskPlan(NodalPlan):
             if disk.traits('opt') else None,
             posa_incl_sincos=buffer.device('posa_incl_sincos'),
             deq=buffer.device('deq')
-            if disk.equilibrium() is not None else None)
+            if disk.equilibrium() is not None else None,
+            deq_vertical=disk.equilibrium() is not None
+            and disk.equilibrium().direction == 'ver')
 
         self._disk = disk
         self._driver = driver

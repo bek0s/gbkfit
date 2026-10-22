@@ -42,7 +42,8 @@ TRAIT_PREFIXES = dict(
     zpt='zpt', spt='spt')
 
 # The traits that the disks take: every type, along every direction, and
-# the planar velocity traits, in their plane
+# the planar velocity traits, in their plane; dispersion traits isotropic
+# or along each direction
 DISK_TRAITS = TraitTable('disk', {
     kind: tuple(parser.registered_classes().values())
     for kind, parser in dict(
@@ -50,7 +51,8 @@ DISK_TRAITS = TraitTable('disk', {
         vpt=traits.vpt_parser, vht=traits.vht_parser,
         dpt=traits.dpt_parser, dht=traits.dht_parser,
         zpt=traits.zpt_parser, spt=traits.spt_parser).items()},
-    ('tan', 'rad', 'ver', 'away', 'out', 'los', 'plane'))
+    ('tan', 'rad', 'ver', 'away', 'out', 'los', 'plane'),
+    tuple(traits.DPT_DIRECTIONS))
 
 
 def load_disk_component(

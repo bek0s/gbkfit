@@ -30,7 +30,9 @@ from ._units import DataUnit, OpacityScales, band_factors, line_factors
 from .base import ComponentPlan, FieldsLayout, NativeGrid
 from .lines import Band, Bands, LinePlacement, Lines
 from .roles import BandEmission, Emission, LineEmission
-from .traits import HTrait, PressureSupport, Trait, VPTrait, trait_desc
+from .traits import (
+    DPT_DIRECTION_DEFAULT, DPTrait, HTrait, PressureSupport, Trait, VPTrait,
+    trait_desc)
 
 
 _log = logging.getLogger(__name__)
@@ -45,13 +47,15 @@ MAX_TRAITS = 16
 class TraitTable:
     """
     The traits that a type of component takes: the classes of the traits
-    of each of its kinds (e.g. 'vpt'), and the directions of its velocity
+    of each of its kinds (e.g. 'vpt'), the directions of its velocity
     polar traits (see traits.VPT_DIRECTIONS; 'plane' for the planar ones,
-    see traits.VPTraitPlanar).
+    see traits.VPTraitPlanar) and those of its dispersion polar traits
+    (see traits.DPT_DIRECTIONS).
     """
     component: str
     classes: dict[str, tuple[type[Trait], ...]]
     directions: tuple[str, ...]
+    dispersion_directions: tuple[str, ...]
 
     def check(self, traits_: dict[str, Sequence[Trait]]) -> None:
         """
@@ -72,6 +76,12 @@ class TraitTable:
                         f"a {self.component} takes velocity traits along "
                         f"{list(self.directions)}; {desc} is along "
                         f"{trait.direction()!r}")
+                if isinstance(trait, DPTrait) and trait.direction() \
+                        not in self.dispersion_directions:
+                    raise ConfigError(
+                        f"a {self.component} takes dispersion traits along "
+                        f"{list(self.dispersion_directions)}; {desc} is "
+                        f"along {trait.direction()!r}")
 
 
 def with_default_height_traits(
@@ -428,7 +438,10 @@ def native_traits(
     Return the traits of a component as its native class takes them: the
     native set of the traits of each kind that has traits, with the values
     of their parameters in the group of their kind in the buffer, and
-    with velocity polar traits, the direction of each ('vpt_directions').
+    with velocity polar traits, the direction of each ('vpt_directions'),
+    and with dispersion polar traits not all isotropic, the direction of
+    each ('dpt_directions'; without it, the kernels take them all as
+    isotropic).
     """
 
     def to_device(values: list, dtype_: Any) -> DeviceArray:
@@ -448,6 +461,12 @@ def native_traits(
     if 'vpt' in result:
         result['vpt_directions'] = to_device(
             [trait.direction_uid() for trait in traits.traits('vpt')],
+            np.int32)
+    if 'dpt' in result and any(
+            trait.direction() != DPT_DIRECTION_DEFAULT
+            for trait in traits.traits('dpt')):
+        result['dpt_directions'] = to_device(
+            [trait.direction_uid() for trait in traits.traits('dpt')],
             np.int32)
     return result
 

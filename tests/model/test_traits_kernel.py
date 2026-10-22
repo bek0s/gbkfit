@@ -80,7 +80,9 @@ def trait_configs(parser):
         if 'rnodes' in options:
             configs += [
                 config | dict(rnodes=False), config | dict(rnodes=True)]
-        elif 'direction' in options:
+        elif 'direction' in options and issubclass(cls, traits.VPTrait):
+            # (the dispersion traits isotropic, by default; see
+            # test_dispersion_directions)
             configs += [
                 config | dict(direction=direction)
                 for direction in traits.VPT_DIRECTIONS]

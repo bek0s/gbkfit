@@ -122,6 +122,49 @@ def test_rotation_and_dispersion_as_the_gravity_gives_them():
         np.hypot(10, (sigma[1:] + sigma[:-1]) / 2), rtol=1e-12)
 
 
+def test_pressure_support_of_the_velocity_ellipsoid():
+    # The radial Jeans equation of the velocity ellipsoid: the pressure of
+    # sigma_R, and sigma_R^2 - sigma_phi^2 (each with the dispersion of the
+    # central equilibrium in quadrature), at the subnodes; the same
+    # dispersion along every direction is isotropic
+    def with_dispersion(dptraits):
+        gas = copy.deepcopy(GAS)
+        gas['kinematics']['dptraits'] = dptraits
+        return gas_galaxy(components=[gas], mass=[copy.deepcopy(MASS[1])])
+
+    def rotation_table(galaxy, params):
+        extra = Extras()
+        galaxy.plan_gravity().evaluate(params, extra)
+        return extra.get('vpt_vt_rotation', component='gas'), extra
+
+    directions = [
+        dict(type='uniform', direction=direction)
+        for direction in ('rad', 'tan', 'ver')]
+    params = PARAMS | dict(distance=100, gas_dpt_a=30)
+    isotropic, extra = rotation_table(
+        with_dispersion(dict(type='uniform')), params)
+    expected = isotropic['pressure'].value
+    same, _ = rotation_table(
+        with_dispersion(directions),
+        params | dict(gas_dpt1_a=30, gas_dpt2_a=30))
+    np.testing.assert_array_equal(same['pressure'].value, expected)
+    values = params | dict(gas_dpt1_a=20, gas_dpt2_a=10)
+    ellipsoid, _ = rotation_table(with_dispersion(directions), values)
+    np.testing.assert_allclose(
+        ellipsoid['pressure'].value, expected + 30 ** 2 - 20 ** 2,
+        rtol=1e-12)
+    # Its dispersion along each direction
+    radii = isotropic['radius'].value
+    sigma = extra.get('equilibrium', component='gas')['sigma'].value
+    bound = with_dispersion(directions).plan_functions().bind(values)
+    for direction, value in dict(rad=30, tan=20, ver=10).items():
+        np.testing.assert_allclose(
+            bound['dispersion_gas'](radii, direction),
+            np.hypot(value, sigma), rtol=1e-12)
+    with pytest.raises(ValueError, match='give its direction'):
+        bound['dispersion_gas'](radii)
+
+
 def test_functions_of_a_disk_without_mass():
     # Its functions are named after no component; its rotation is that of
     # its traits at any radius

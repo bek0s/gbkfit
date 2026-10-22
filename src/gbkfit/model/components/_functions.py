@@ -61,7 +61,9 @@ class GalaxyFunctions:
     - dispersion_{component}(R): its velocity dispersion at its midplane
       (km/s): the azimuthal mean of its dispersion traits, with the
       dispersion of its vertical equilibrium in quadrature (see
-      dispersion)
+      dispersion); dispersion_{component}(R, direction), along a
+      direction, 'rad', 'tan' or 'ver' (see traits), as a disk whose
+      dispersion is not isotropic needs
 
     The functions take numbers or arrays of radii, and return arrays of
     their shape. They have their own plans of the gravity and of the
@@ -182,19 +184,22 @@ class GalaxyFunctions:
             index: int,
             params: ParamValues,
             given: Callable[[], dict[int, ParamValues]],
-            R: npt.ArrayLike
+            R: npt.ArrayLike,
+            direction: str | None = None
     ) -> np.ndarray:
         """
         Return the dispersion (km/s) of the disk of the component of the
-        given index at the radii R (arcsec), at the values of the
-        parameters of the galaxy and with what its gravity gives it.
+        given index at the radii R (arcsec), along the direction if given,
+        at the values of the parameters of the galaxy and with what its
+        gravity gives it.
         """
         disk = self._component_set.components()[index].density_disk()
         radii = self._radii(index, R, 'dispersion')
         values = self._disk_params(index, params, given)
         return dispersion(
             disk, self._disk_plans[index], values, radii.ravel(),
-            values.get(EQUILIBRIUM_DISPERSION)).reshape(radii.shape)
+            values.get(EQUILIBRIUM_DISPERSION), direction
+        ).reshape(radii.shape)
 
     def _disk_params(
             self,

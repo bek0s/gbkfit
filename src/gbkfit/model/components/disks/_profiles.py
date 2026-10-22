@@ -16,7 +16,8 @@ import numpy as np
 from gbkfit.params import ParamValues
 from ...mass.units import G
 from .._nodal import subring_radii
-from ..traits import RPTraitSpiral, TraitFeatureSpiral
+from ..parts import EQUILIBRIUM_DIRECTION_DEFAULT
+from ..traits import DPT_DIRECTION_DEFAULT, RPTraitSpiral, TraitFeatureSpiral
 from ._disk import Disk, DiskPlan
 
 
@@ -189,6 +190,49 @@ def _axisymmetric(disk: Disk, kinds: Sequence[str]) -> bool:
     """
     return all(
         trait.axisymmetric() for kind in kinds for trait in disk.traits(kind))
+
+
+def _isotropic(disk: Disk) -> bool:
+    """
+    Check whether the dispersion of a disk is the same along every
+    direction: its dispersion polar traits and the dispersion of its
+    vertical equilibrium, if any, isotropic (see traits and
+    parts.Kinematics).
+    """
+    equilibrium = disk.equilibrium()
+    return all(
+        trait.direction() == DPT_DIRECTION_DEFAULT
+        for trait in disk.traits('dpt')) and (
+            equilibrium is None
+            or equilibrium.direction == EQUILIBRIUM_DIRECTION_DEFAULT)
+
+
+def _dispersions(
+        disk: Disk,
+        values: np.ndarray,
+        balanced: np.ndarray | float,
+        directions: Sequence[str]
+) -> list[np.ndarray]:
+    """
+    Return the dispersion of a disk along each of the given directions
+    ('rad', 'tan' or 'ver'; 'iso' for an isotropic disk, see _isotropic),
+    from the values of its dispersion polar traits times their height
+    traits (values, a row for each trait, in their order): the sum of its
+    isotropic traits and those along the direction, with the dispersion of
+    its vertical equilibrium (balanced) in quadrature along the directions
+    it adds to (every one, or 'ver' only).
+    """
+    equilibrium = disk.equilibrium()
+    vertical = equilibrium is not None and equilibrium.direction == 'ver'
+    result = []
+    for direction in directions:
+        rows = [
+            i for i, trait in enumerate(disk.traits('dpt'))
+            if trait.direction() in (DPT_DIRECTION_DEFAULT, direction)]
+        total = np.sum(values[rows], axis=0, dtype=float)
+        balances = not vertical or direction == 'ver'
+        result.append(np.hypot(total, balanced) if balances else np.abs(total))
+    return result
 
 
 def _with_given(disk: Disk, params: ParamValues) -> ParamValues:
@@ -551,14 +595,17 @@ def dispersion(
         plan: DiskPlan,
         params: ParamValues,
         radii: np.ndarray,
-        equilibrium: np.ndarray | None = None
+        equilibrium: np.ndarray | None = None,
+        direction: str | None = None
 ) -> np.ndarray:
     """
     Return the velocity dispersion of a disk at its midplane, at radii
     (arcsec, on the disk), in km/s: the azimuthal mean of the sum of its
     dispersion polar traits times its dispersion height traits at z = 0,
     with the dispersion of its vertical equilibrium in quadrature, if
-    any (as pressure_support takes it).
+    any (as pressure_support takes it); along a direction, if given
+    ('rad', 'tan' or 'ver': its isotropic traits and those along it, see
+    traits), as it must be for a disk whose dispersion is not isotropic.
 
     Parameters
     ----------
@@ -574,7 +621,22 @@ def dispersion(
         The dispersion of the vertical equilibrium of the disk at its
         subnodes (km/s, see parts.Kinematics), interpolated linearly
         between them, as the disk is evaluated.
+    direction : str, optional
+        The direction: 'rad', 'tan' or 'ver'.
+
+    Raises
+    ------
+    ValueError
+        If the direction is not valid, or not given for a disk whose
+        dispersion is not isotropic.
     """
+    if direction is None and not _isotropic(disk):
+        raise ValueError(
+            "the dispersion of the disk is not isotropic: give its "
+            "direction, 'rad', 'tan' or 'ver'")
+    if direction not in (None, 'rad', 'tan', 'ver'):
+        raise ValueError(
+            f"direction must be 'rad', 'tan' or 'ver'; it is {direction!r}")
     params = _with_given(disk, params)
     r = np.asarray(radii, dtype=float)[:, None]
     balanced = np.zeros(r.shape) if equilibrium is None \
@@ -584,9 +646,10 @@ def dispersion(
     heights = _at_midplane(disk, plan, params, 'dht', r)
 
     def values(theta: np.ndarray) -> np.ndarray:
-        return np.hypot(np.sum(
+        return _dispersions(
+            disk,
             plan.evaluate_polar_traits(params, 'dpt', r, theta) * heights,
-            axis=0, keepdims=True, dtype=float), balanced)
+            balanced, (direction or DPT_DIRECTION_DEFAULT,))[0][None]
     kinds = ('dpt',)
     return _azimuthal_mean(
         values, _axisymmetric(disk, kinds),
@@ -622,6 +685,14 @@ def pressure_support(
     isothermal sheet of the given surface density S, sigma at the
     midplane). The derivative by the second-order three-point formula on
     the radii. NaN where it has no density.
+
+    A disk whose dispersion is not isotropic (see traits) has the radial
+    Jeans equation of its velocity ellipsoid: (R / rho) d(rho
+    sigma_R^2)/dR + sigma_R^2 - sigma_phi^2, with the azimuthal means of
+    rho sigma_R^2 and of rho sigma_phi^2 (the means of sigma_R^2 -
+    sigma_phi^2 weighted by rho); in the isothermal sheet, rho is
+    proportional to S^2 / sigma_z^2 and z0 = sigma_z^2 / (pi G S). With
+    every dispersion isotropic, the support above.
 
     Parameters
     ----------
@@ -681,46 +752,63 @@ def pressure_support(
     # (pi G S z: z / z0 times sigma^2, of shape (heights, radii, 1))
     sheet_heights = None if not sheet or heights is None \
         else np.pi * G * given * z[:, None, None] * kpc_per_arcsec
+    isotropic = _isotropic(disk)
+    directions = ('iso',) if isotropic else ('rad', 'tan', 'ver')
 
     def values(theta: np.ndarray) -> np.ndarray:
-        dispersion = np.hypot(np.sum(
+        # (sigma_R, sigma_phi and sigma_z, the same if isotropic)
+        sigmas = _dispersions(
+            disk,
             plan.evaluate_polar_traits(params, 'dpt', r, theta)[:, None]
-            * dispersion_heights, axis=0, dtype=float), balanced)
+            * dispersion_heights, balanced, directions)
+        if isotropic:
+            radial = tangential = vertical = sigmas[0]
+        else:
+            radial, tangential, vertical = sigmas
         if given is not None:
             own = np.broadcast_to(given, np.broadcast_shapes(
-                given.shape, dispersion.shape))
+                given.shape, radial.shape))
         else:
             own = np.sum(
                 plan.evaluate_polar_traits(params, 'rpt', r, theta)[:, None]
                 * density_heights, axis=0, dtype=float)
             own = own * _selected(disk, plan, params, r, theta)
         if not sheet:
-            rows = np.stack((own, own * dispersion ** 2))
+            rows = (own, own * radial ** 2)
+            if not isotropic:
+                rows += (own * tangential ** 2,)
         else:
-            # (rho ~ S^2 / sigma^2: infinite without dispersion, where the
-            # disk has no thickness and no pressure; nor any above it)
+            # (rho ~ S^2 / sigma_z^2: infinite without dispersion, where
+            # the disk has no thickness and no pressure; nor any above it)
             squared = own ** 2
             if sheet_heights is not None:
                 shape = np.broadcast_shapes(
-                    sheet_heights.shape, dispersion.shape)
+                    sheet_heights.shape, vertical.shape)
                 u = np.divide(
-                    sheet_heights, dispersion ** 2, where=dispersion != 0,
+                    sheet_heights, vertical ** 2, where=vertical != 0,
                     out=np.where(np.broadcast_to(
                         sheet_heights, shape) != 0, np.inf, 0.0))
                 with np.errstate(over='ignore'):
                     squared = squared / np.cosh(u) ** 2
-            rows = np.stack((np.divide(
-                squared, dispersion ** 2, where=dispersion != 0,
-                out=np.where(squared != 0, np.inf, 0.0)), squared))
+            rho = np.divide(
+                squared, vertical ** 2, where=vertical != 0,
+                out=np.where(squared != 0, np.inf, 0.0))
+            rows = (rho, squared) if isotropic else (
+                rho, rho * radial ** 2, rho * tangential ** 2)
+        rows = np.stack(rows)
         # (the heights in the rows of the azimuthal means)
         return rows.reshape(-1, *rows.shape[2:])
     kinds = ('rpt', 'spt', 'dpt') if density is None else ('dpt',)
-    density, pressure = _azimuthal_mean(
+    density, pressure, *tangential = _azimuthal_mean(
         values, _axisymmetric(disk, kinds),
-        _edges(disk, params, kinds, r[:, 0])).reshape(2, len(z), len(r))
+        _edges(disk, params, kinds, r[:, 0])).reshape(-1, len(z), len(r))
     gradient = np.gradient(pressure, r[:, 0], axis=-1, edge_order=2)
+    support = r[:, 0] * gradient
+    if not isotropic:
+        # (rho (sigma_R^2 - sigma_phi^2))
+        support = support + (pressure - tangential[0])
     support = np.divide(
-        r[:, 0] * gradient, density, out=np.full_like(density, np.nan),
+        support, density, out=np.full_like(density, np.nan),
         where=density != 0).T
     return support[:, 0] if heights is None else support
 

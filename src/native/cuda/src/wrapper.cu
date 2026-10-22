@@ -163,20 +163,42 @@ Wrapper<T>::dmodel_regions_sum(
             cube, out);
 }
 
+// The kernel of a Monte Carlo disk: of the fields of disks with line
+// opacity and without, of disks dimmed by opacity, or of the others (see
+// gmodel_mcdisk_evaluate_cloud)
+template<typename T, bool Anisotropic> auto
+mcdisk_kernel(const DiskArgs<T>& a, const GridArgs<T>& g, const FieldsArgs<T>& f)
+{
+    namespace k = kernels;
+    constexpr bool A = Anisotropic;
+    return f.fields && a.opt.uids ? k::gmodel_mcdisk_evaluate<T, 0, 1, 1, A>
+            : f.fields ? k::gmodel_mcdisk_evaluate<T, 0, 1, 0, A>
+            : g.opacity ? k::gmodel_mcdisk_evaluate<T, 1, 0, 0, A>
+            : k::gmodel_mcdisk_evaluate<T, 0, 0, 0, A>;
+}
+
+// The kernel of a smooth disk (see mcdisk_kernel)
+template<typename T, bool Anisotropic> auto
+smdisk_kernel(const DiskArgs<T>& a, const GridArgs<T>& g, const FieldsArgs<T>& f)
+{
+    namespace k = kernels;
+    constexpr bool A = Anisotropic;
+    return f.fields && a.opt.uids ? k::gmodel_smdisk_evaluate<T, 0, 1, 1, A>
+            : f.fields ? k::gmodel_smdisk_evaluate<T, 0, 1, 0, A>
+            : g.opacity ? k::gmodel_smdisk_evaluate<T, 1, 0, 0, A>
+            : k::gmodel_smdisk_evaluate<T, 0, 0, 0, A>;
+}
+
 template<typename T> void
 Wrapper<T>::gmodel_mcdisk_evaluate(
         const DiskArgs<T>& a, const GridArgs<T>& g, const MCDiskArgs<T>& mc,
         const FieldsArgs<T>& f)
 {
-    // (the kernels of the fields of disks with line opacity and without, of
-    // disks dimmed by opacity, and of the others: see
-    // gmodel_mcdisk_evaluate_cloud)
-    namespace k = kernels;
+    // (of an isotropic dispersion or an anisotropic one: see
+    // gmodel_disk_dispersion)
     launch("gmodel_mcdisk_evaluate", mc.nclouds,
-            f.fields && a.opt.uids ? k::gmodel_mcdisk_evaluate<T, 0, 1, 1>
-            : f.fields ? k::gmodel_mcdisk_evaluate<T, 0, 1, 0>
-            : g.opacity ? k::gmodel_mcdisk_evaluate<T, 1, 0, 0>
-            : k::gmodel_mcdisk_evaluate<T, 0, 0, 0>,
+            gbkfit::gmodel_disk_anisotropic(a) ? mcdisk_kernel<T, true>(a, g, f)
+            : mcdisk_kernel<T, false>(a, g, f),
             a, g, mc, f);
     // The fields of each voxel, from the moments of its clouds
     if (f.fields) {
@@ -196,12 +218,9 @@ Wrapper<T>::gmodel_smdisk_evaluate(
     const long long n = 1LL * g.spat_size[0] * g.spat_size[1]
             * gbkfit::gmodel_smdisk_size_z(a, g);
     // (see gmodel_mcdisk_evaluate)
-    namespace k = kernels;
     launch("gmodel_smdisk_evaluate", n,
-            f.fields && a.opt.uids ? k::gmodel_smdisk_evaluate<T, 0, 1, 1>
-            : f.fields ? k::gmodel_smdisk_evaluate<T, 0, 1, 0>
-            : g.opacity ? k::gmodel_smdisk_evaluate<T, 1, 0, 0>
-            : k::gmodel_smdisk_evaluate<T, 0, 0, 0>,
+            gbkfit::gmodel_disk_anisotropic(a) ? smdisk_kernel<T, true>(a, g, f)
+            : smdisk_kernel<T, false>(a, g, f),
             a, g, f);
 }
 
