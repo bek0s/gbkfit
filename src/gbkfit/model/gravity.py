@@ -1,7 +1,8 @@
 """
 The gravity of a galaxy: how its mass (see MassModel) pulls, in
-Newtonian gravity (GravityNewton, by default), in MOND (GravityMOND) or
-in the f(R) gravity of Hu & Sawicki (GravityHuSawicki).
+Newtonian gravity (GravityNewton, by default), in MOND (GravityMOND), in
+the f(R) gravity of Hu & Sawicki (GravityHuSawicki) or in Palatini f(R)
+gravity (GravityPalatini).
 Each gravity gives the field of the mass in one evaluation (see
 GravityField), whose circular velocity in the plane moves the
 components; what else a field gives (see Gravity), the features that
@@ -33,6 +34,7 @@ __all__ = [
     'GravityHuSawicki',
     'GravityMOND',
     'GravityNewton',
+    'GravityPalatini',
     'MOND_INTERPOLATIONS',
     'gravity_parser'
 ]
@@ -53,6 +55,12 @@ MOND_INTERPOLATIONS = tuple(_MOND_NU)
 
 # The square of the speed of light ((km/s)^2)
 _C2 = astropy.constants.c.to_value('km/s') ** 2
+
+# The central differences of the gradient of the density of Palatini
+# f(R): their steps, of this fraction of R and of |z|, and at least this
+# much (kpc)
+_PALATINI_STEP = 1e-4
+_PALATINI_MIN_STEP = 1e-9
 
 # The outer radius of the field of f(R) (kpc): this many of its Compton
 # wavelengths (beyond which it is in equilibrium with the density), and
@@ -554,6 +562,134 @@ class _HuSawickiField(GravityField):
         return self.forces(R, z)[1]
 
 
+class GravityPalatini(Gravity):
+    """
+    Palatini f(R) gravity in its weak-field limit, of any f(R) = R + alpha
+    R^2 + O(R^3) (Toniato et al. 2020; Hernandez-Arboleda et al. 2023, eq.
+    16): the Poisson equation of the potential of the motion is
+    laplacian(Phi) = 4 pi G (rho + 2 alpha laplacian(rho)), so Phi = Phi_N
+    + 8 pi G alpha rho, of the density rho of all the mass. Its correction
+    is local: where there is mass (in vacuum, it is Newtonian gravity).
+    Its squared circular velocity is v^2 = v_N^2 + 8 pi G alpha R
+    drho/dR, at z = 0 (their eq. 32), and its forces are the Newtonian
+    ones minus 8 pi G alpha grad(rho). Its parameter: 'gravity_alpha',
+    alpha (kpc^2; disks are stable for alpha < 0, which pulls inwards
+    where the density falls outwards).
+
+    The gradient of the density is numerical: central differences of
+    steps of 1e-4 of R and of |z| (relative truncation errors of about
+    (1e-4 R / L)^2 / 6, for a density that changes on scales L). Thin
+    disks have no
+    density in their plane (the correction there depends on Sigma(R)
+    Z(0) of a vertical law Z, infinite for a thin disk), and raise
+    NotImplementedError; point masses have none away from the centre. It
+    does not give the vertical structure of self-gravitating sheets, or
+    the shares of the components (those of the dark fraction are
+    Newtonian). The Newtonian circular velocities of the components remain
+    in the rotation tables and the functions of the galaxy (see
+    GravityPlan.evaluate and GalaxyFunctions).
+    """
+
+    @staticmethod
+    def type() -> str:
+        return 'palatini'
+
+    def dump(self) -> dict[str, Any]:
+        return dict(type=self.type())
+
+    def pdescs(self) -> dict[str, ParamScalarDesc]:
+        return dict(gravity_alpha=ParamScalarDesc(
+            desc="alpha of f(R) = R + alpha R^2 (kpc^2)"))
+
+    def field(
+            self,
+            mass_model: MassModel,
+            params: ParamValues,
+            context: MassContext
+    ) -> GravityField:
+
+        def density(R: np.ndarray, z: np.ndarray) -> np.ndarray:
+            try:
+                return mass_model.density(R, z, params, context)
+            except NotImplementedError as e:
+                raise NotImplementedError(
+                    f"Palatini f(R) gravity takes the density of the mass "
+                    f"components: {e}") from e
+
+        return _PalatiniField(
+            _NewtonField(mass_model, params, context), density,
+            8 * np.pi * G * float(params['gravity_alpha']))
+
+    def check_forces(self, mass_model: MassModel) -> None:
+        # (of the Newtonian forces of all the mass)
+        _check_components_give_forces(mass_model)
+
+    def check_self_gravitating_sheets(self) -> None:
+        raise ConfigError(
+            "the self-gravitating sheets of Palatini f(R) gravity are not "
+            "those of Newtonian gravity")
+
+    def check_shares(self) -> None:
+        raise ConfigError(
+            "the shares of the components that the dark fraction takes are "
+            "Newtonian, not those of Palatini f(R) gravity")
+
+
+class _PalatiniField(GravityField):
+    """
+    The field of a mass model in Palatini f(R) gravity (see
+    GravityPalatini): its Newtonian field, plus -scale grad(rho) of its
+    density rho, a function of (R, z) (scale = 8 pi G alpha).
+    """
+
+    def __init__(
+            self,
+            newton: GravityField,
+            density: Callable[[np.ndarray, np.ndarray], np.ndarray],
+            scale: float
+    ):
+        self._newton = newton
+        self._density = density
+        self._scale = scale
+
+    def vcirc2(self, R: npt.ArrayLike) -> np.ndarray:
+        R = np.asarray(R, dtype=float)
+        grad_R, _ = self._gradient(R, np.zeros_like(R))
+        return self._newton.vcirc2(R) + self._scale * R * grad_R
+
+    def forces(
+            self, R: npt.ArrayLike, z: npt.ArrayLike
+    ) -> tuple[np.ndarray, np.ndarray]:
+        force_R, force_z = self._newton.forces(R, z)
+        grad_R, grad_z = self._gradient(R, z)
+        return (force_R - self._scale * grad_R,
+                force_z - self._scale * grad_z)
+
+    def vertical_force(
+            self, R: npt.ArrayLike, z: npt.ArrayLike
+    ) -> np.ndarray:
+        return self.forces(R, z)[1]
+
+    def _gradient(
+            self, R: npt.ArrayLike, z: npt.ArrayLike
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """
+        Return the gradient of the density, (drho/dR, drho/dz), at the
+        points (R, z), by central differences (none without a correction).
+        """
+        R, z = np.broadcast_arrays(
+            np.asarray(R, dtype=float), np.asarray(z, dtype=float))
+        if self._scale == 0:
+            return np.zeros_like(R), np.zeros_like(R)
+        step_R = _PALATINI_STEP * np.maximum(R, _PALATINI_MIN_STEP)
+        step_z = _PALATINI_STEP * np.maximum(np.abs(z), _PALATINI_MIN_STEP)
+        grad_R = (self._density(R + step_R, z)
+                  - self._density(R - step_R, z)) / (2 * step_R)
+        grad_z = (self._density(R, z + step_z)
+                  - self._density(R, z - step_z)) / (2 * step_z)
+        return grad_R, grad_z
+
+
 def _check_components_give_forces(mass_model: MassModel) -> None:
     """
     Raise ConfigError unless every component of the mass model gives its
@@ -569,4 +705,4 @@ def _check_components_give_forces(mass_model: MassModel) -> None:
 
 
 gravity_parser = parseutils.TypedParser(
-    Gravity, [GravityNewton, GravityMOND, GravityHuSawicki])
+    Gravity, [GravityNewton, GravityMOND, GravityHuSawicki, GravityPalatini])

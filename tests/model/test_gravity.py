@@ -1,6 +1,7 @@
 """
 Tests of the gravity of galaxies (see Gravity): how their mass pulls, in
-Newtonian gravity, in MOND or in f(R) gravity.
+Newtonian gravity, in MOND or in f(R) gravity (of Hu & Sawicki, and
+Palatini).
 """
 
 import copy
@@ -263,3 +264,51 @@ def test_hu_sawicki_options():
                       gravity=dict(type='hu_sawicki', screened=['stars']))
     assert screened.gravity().screened() == ('stars',)
     assert 'gravity_log_phi_ext' not in screened.gravity().pdescs()
+
+
+def test_palatini_corrections_of_the_density_gradient():
+    # Of a thick exponential disk, rho = Sigma(R) exp(-|z| / hz) / (2 hz):
+    # v^2 = v_N^2 + 8 pi G alpha R drho/dR, and the forces the Newtonian
+    # ones minus 8 pi G alpha grad(rho), with drho/dR = -rho / rd and
+    # drho/dz = -sign(z) rho / hz; none with alpha = 0
+    disk = [dict(type='disk', name='stars', surface=dict(type='exponential'),
+                 vertical=dict(type='exponential'))]
+    galaxy_ = galaxy(mass=disk, distance=DISTANCE,
+                     gravity=dict(type='palatini'))
+    assert galaxy_parser.dump(galaxy_)['gravity'] == dict(type='palatini')
+    params = PARAMS | dict(mass_stars_log_m=10, mass_stars_rd=3,
+                           mass_stars_hz=0.3, gravity_alpha=-0.5)
+    mass = galaxy_.plan_gravity().mass(params)
+    R, z = np.array([1.0, 5, 10]), np.array([0.2, -0.5, 1])
+    scale = 8 * np.pi * G * -0.5
+
+    def rho(z):
+        sigma = 1e10 / (2 * np.pi * 9) * np.exp(-R / 3)
+        return sigma * np.exp(-np.abs(z) / 0.3) / 0.6
+
+    newton = mass.model.vcirc2(R, mass.params, mass.context)
+    np.testing.assert_allclose(
+        mass.field.vcirc2(R), newton - scale * R * rho(0) / 3, rtol=1e-7)
+    force_R, force_z = mass.model.forces(R, z, mass.params, mass.context)
+    expected = (force_R + scale * rho(z) / 3,
+                force_z + scale * np.sign(z) * rho(z) / 0.3)
+    np.testing.assert_allclose(mass.field.forces(R, z), expected, rtol=1e-7)
+    bound = galaxy_.plan_functions().bind(params | dict(gravity_alpha=0))
+    np.testing.assert_array_equal(bound['vcirc'](R), bound['vnewton'](R))
+
+
+def test_palatini_needs_the_density():
+    # Thin disks have none in their plane; the dark fraction takes
+    # Newtonian shares
+    galaxy_ = galaxy(mass=MASS, distance=DISTANCE,
+                     gravity=dict(type='palatini'))
+    params = PARAMS | dict(mass_stars_log_m=10, mass_stars_rd=3,
+                           gravity_alpha=-0.5)
+    with pytest.raises(NotImplementedError, match="takes the density"):
+        galaxy_.plan_functions().bind(params)['vcirc'](np.array([5.0]))
+    with pytest.raises(ConfigError, match="dark fraction"):
+        galaxy(mass=MASS + [dict(
+            type='spheroid', name='halo', profile=dict(type='nfw'),
+            baryons=['stars'],
+            dark_fraction=dict(solve='log_m', bounds=[9.0, 15.0]))],
+            distance=DISTANCE, gravity=dict(type='palatini'))
