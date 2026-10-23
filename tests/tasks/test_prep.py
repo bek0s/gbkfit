@@ -823,3 +823,26 @@ def test_nirspec_msa_spectra_of_a_source_in_a_slitlet():
         wave = 4e-6
         dx, _ = slitlet.trace.offsets(wave, [x, x + 0.5], [y, y])
         assert (x + 0.5 + dx[1]) - (x + dx[0]) == pytest.approx(0.5, abs=0.02)
+
+
+@pytest.mark.skipif(
+    not {'GBKFIT_TEST_NIRSPEC_CAL', 'GBKFIT_TEST_NIRSPEC_S2D'} <= set(
+        os.environ),
+    reason="needs the cal and s2d files of a source of NIRSpec MSA in "
+           "GBKFIT_TEST_NIRSPEC_CAL and GBKFIT_TEST_NIRSPEC_S2D")
+def test_nirspec_msa_rectified_spectra_of_a_source_in_a_slitlet():
+    # The s2d of 3 nods, each the background of the others, aligned on the
+    # sky: each nod moved back to the sky, of weight 1/3, and the others
+    # subtracted from it, of weights -1/6
+    pytest.importorskip('jwst')
+    import gbkfit.prep
+    spectra = gbkfit.prep.nirspec_msa_rectified(
+        os.environ['GBKFIT_TEST_NIRSPEC_S2D'],
+        os.environ['GBKFIT_TEST_NIRSPEC_CAL'])
+    assert spectra.resampled
+    weights = [e.weight() for e in spectra.exposures]
+    np.testing.assert_allclose(weights, [1 / 3, -1 / 6, -1 / 6] * 3)
+    for exposure in spectra.exposures:
+        if exposure.weight() > 0:
+            np.testing.assert_allclose(
+                exposure.image_offset(), np.negative(exposure.sky_offset()))
