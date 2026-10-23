@@ -35,7 +35,8 @@ RECORDED = dict(
     slit_spectra=dict(size=[16, 31], step=[1, 20]),
     slitless_spectra=dict(
         size=[16, 12], spec_size=21, spec_step=30, spec_rest='4 um',
-        trace_wave='4 um', trace_dx=[0, 2.99792458e5 / 120]))
+        trace=dict(type='polynomial', wave='4 um',
+                   dx=[0, 2.99792458e5 / 120])))
 
 
 def group_of(driver, observable):

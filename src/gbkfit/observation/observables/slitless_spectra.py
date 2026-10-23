@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, Any
 import astropy.constants
 import astropy.units
 import numpy as np
-import numpy.polynomial.polynomial as npp
+import numpy.typing as npt
 import scipy.sparse
 
 from gbkfit.dataset import Data, Dataset, DatasetSlitlessSpectra
@@ -12,11 +12,12 @@ from gbkfit.driver import Driver
 from gbkfit.instrument import Instrument
 from gbkfit.model import LineEmission
 from gbkfit.model.components._units import DataUnit
-from gbkfit.utils import gridutils
+from gbkfit.utils import gridutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
 from . import _dcube, _detail, _moments
 from ._region_sums import RegionSumsPlan
 from .base import HostModelData, ModelData, Observable
+from .traces import Trace, trace_parser
 
 if TYPE_CHECKING:
     from .._scene import Scene
@@ -27,11 +28,15 @@ if TYPE_CHECKING:
 
 __all__ = [
     'SlitlessSpectra',
-    'pixel_footprint'
+    'pixel_footprint',
+    'pixel_footprints'
 ]
 
 
 _C = astropy.constants.c.to_value('km/s')
+
+# The segments of a chunk of pixel_footprints (a bound of its memory)
+_FOOTPRINT_CHUNK = 20000
 
 
 def _tri(s: np.ndarray) -> np.ndarray:
@@ -67,28 +72,64 @@ def pixel_footprint(
     weights : np.ndarray
         The fraction of the light in each.
     """
-    (ax, ay), (bx, by) = start, end
-    lx, ly = bx - ax, by - ay
-    px = np.arange(np.floor(min(ax, bx)) - 1, np.ceil(max(ax, bx)) + 2)
-    py = np.arange(np.floor(min(ay, by)) - 1, np.ceil(max(ay, by)) + 2)
-    p, q = (a.ravel() for a in np.meshgrid(px, py))
+    _, p, q, weights = pixel_footprints([start], [end])
+    return p, q, weights
+
+
+def pixel_footprints(
+        starts: npt.ArrayLike, ends: npt.ArrayLike
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Return the footprints of pixels moved along segments (see
+    pixel_footprint), from starts to ends (of shape (n, 2), pixels): the
+    segment of each fraction, its pixel (p, q) and the fraction.
+    """
+    starts = np.asarray(starts, dtype=float).reshape(-1, 2)
+    ends = np.asarray(ends, dtype=float).reshape(-1, 2)
+    out: list[list[np.ndarray]] = [[], [], [], []]
+    for first in range(0, len(starts), _FOOTPRINT_CHUNK):
+        chunk = slice(first, first + _FOOTPRINT_CHUNK)
+        for k, part in enumerate(
+                _footprints(starts[chunk], ends[chunk], first)):
+            out[k].append(part)
+    index, p, q, weights = (np.concatenate(parts) for parts in out)
+    return index, p.astype(int), q.astype(int), weights
+
+
+def _footprints(
+        starts: np.ndarray, ends: np.ndarray, first: int
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Return the footprints of a chunk of segments (see pixel_footprints),
+    the first of which is of the index first.
+    """
+    ax, ay = starts[:, 0:1], starts[:, 1:2]
+    lx, ly = ends[:, 0:1] - ax, ends[:, 1:2] - ay
+    corner = np.floor(np.minimum(starts, ends)) - 1
+    span = (np.ceil(np.maximum(starts, ends)) + 2 - corner).max(axis=0)
+    ox, oy = (o.ravel() for o in np.meshgrid(
+        np.arange(span[0]), np.arange(span[1])))
+    p, q = corner[:, 0:1] + ox, corner[:, 1:2] + oy
     # (the kinks: p - x(t) or q - y(t) at -1, 0 or 1)
     breaks = [np.zeros_like(p), np.ones_like(p)]
     for c in (-1, 0, 1):
-        if lx != 0:
-            breaks.append((p - c - ax) / lx)
-        if ly != 0:
-            breaks.append((q - c - ay) / ly)
-    t = np.sort(np.clip(np.stack(breaks, axis=1), 0, 1), axis=1)
-    t0, t1 = t[:, :-1], t[:, 1:]
+        for pixel, origin, length in ((p, ax, lx), (q, ay, ly)):
+            breaks.append(np.divide(
+                pixel - c - origin, length, out=np.zeros_like(pixel),
+                where=length != 0))
+    t = np.sort(np.clip(np.stack(breaks, axis=-1), 0, 1), axis=-1)
+    t0, t1 = t[..., :-1], t[..., 1:]
 
     def overlap(t_: np.ndarray) -> np.ndarray:
-        return _tri(p[:, None] - ax - t_ * lx) * _tri(q[:, None] - ay - t_ * ly)
+        return (_tri(p[..., None] - ax[..., None] - t_ * lx[..., None])
+                * _tri(q[..., None] - ay[..., None] - t_ * ly[..., None]))
     weights = np.sum(
         (t1 - t0) / 6 * (overlap(t0) + 4 * overlap((t0 + t1) / 2)
-                         + overlap(t1)), axis=1)
+                         + overlap(t1)), axis=-1)
     keep = weights > 0
-    return p[keep].astype(int), q[keep].astype(int), weights[keep]
+    index = np.broadcast_to(
+        first + np.arange(len(starts))[:, None], p.shape)
+    return index[keep], p[keep], q[keep], weights[keep]
 
 
 class SlitlessSpectra(Observable):
@@ -111,14 +152,13 @@ class SlitlessSpectra(Observable):
     The grid of the image is that of the detector, with the world
     coordinates of the undispersed light (see DatasetSlitlessSpectra);
     the cube of the model covers the sky whose light of the channels can
-    land on the image. The trace is
-
-        dx(w) = sum_n trace_dx[n] ((w - trace_wave) / 1 um)^n
-
-    (pixels of the detector) and likewise dy, for a wavelength w in the
-    medium of the spectral axis. It is the same for the whole image (the
-    trace changes slowly across the detector). The spectral axis covers
-    the lines; the continuum is not modelled.
+    land on the image (the reach of the trace at the corners of the image,
+    then at those of that sky: the trace changes slowly across the
+    detector). The trace (see Trace) gives the offsets of each wavelength
+    from the place of its undispersed light: the same at every place (see
+    TracePolynomial), or varying across the detector (see
+    TraceGrismConf). The spectral axis covers the lines; the continuum is
+    not modelled.
 
     Its configuration has the options below, but those of the grid when
     it has data, which give them (see from_data).
@@ -134,12 +174,8 @@ class SlitlessSpectra(Observable):
     spec_rest : str or Quantity
         The rest wavelength of the velocities of the spectral axis (see
         gridutils.make_rest).
-    trace_wave : str or Quantity
-        The wavelength the trace is expanded about.
-    trace_dx : Sequence of float
-        The coefficients of the trace along x (pixels; see above).
-    trace_dy : Sequence of float, optional
-        The coefficients of the trace along y; 0 by default.
+    trace : Trace
+        The trace of the disperser.
     step, rpix, rval : Sequence of float, optional
         The world coordinates of the image (see gridutils.Coords); rpix
         is the centre by default.
@@ -157,8 +193,8 @@ class SlitlessSpectra(Observable):
     Raises
     ------
     ConfigError
-        If spec_step is not positive, spec_size is less than 1, spec_rest
-        is not a wavelength, or trace_dx is empty.
+        If spec_step is not positive, spec_size is less than 1, or
+        spec_rest is not a wavelength.
     """
 
     dataset_class = DatasetSlitlessSpectra
@@ -178,6 +214,9 @@ class SlitlessSpectra(Observable):
             cls, info: dict[str, Any],
             dataset: DatasetSlitlessSpectra | None = None
     ) -> 'SlitlessSpectra':
+        info = dict(info)
+        parseutils.load_option_and_update_info(
+            trace_parser, info, 'trace', required=True)
         return _detail.load_observable(cls, info, dataset, 2)
 
     @classmethod
@@ -186,9 +225,7 @@ class SlitlessSpectra(Observable):
             dataset: DatasetSlitlessSpectra,
             spec_step: float,
             spec_rest: str | astropy.units.Quantity,
-            trace_wave: str | astropy.units.Quantity,
-            trace_dx: Sequence[float],
-            trace_dy: Sequence[float] = (0.0,),
+            trace: Trace,
             spec_size: int | None = None,
             spec_rval: float = 0,
             spec_medium: str | None = None
@@ -200,9 +237,9 @@ class SlitlessSpectra(Observable):
         ----------
         dataset : DatasetSlitlessSpectra
             The image.
-        spec_step, spec_rest, trace_wave, trace_dx :
+        spec_step, spec_rest, trace :
             As those of SlitlessSpectra.
-        trace_dy, spec_size, spec_rval, spec_medium : optional
+        spec_size, spec_rval, spec_medium : optional
             As those of SlitlessSpectra.
 
         Returns
@@ -219,9 +256,8 @@ class SlitlessSpectra(Observable):
         cls._require_dataset_class(dataset)
         return cls(
             **_detail.grid_options(dataset.grid()), spec_step=spec_step,
-            spec_rest=spec_rest, trace_wave=trace_wave, trace_dx=trace_dx,
-            trace_dy=trace_dy, spec_size=spec_size, spec_rval=spec_rval,
-            spec_medium=spec_medium)
+            spec_rest=spec_rest, trace=trace, spec_size=spec_size,
+            spec_rval=spec_rval, spec_medium=spec_medium)
 
     def dump(
             self,
@@ -242,18 +278,14 @@ class SlitlessSpectra(Observable):
             spec_rval=self._spec_rval,
             spec_rest=_detail.dump_rest(self._spec_rest),
             spec_medium=self._spec_medium,
-            trace_wave=str(self._trace_wave),
-            trace_dx=list(self._trace_dx),
-            trace_dy=list(self._trace_dy)), data)
+            trace=trace_parser.dump(self._trace)), data)
 
     def __init__(
             self,
             size: Sequence[int],
             spec_step: float,
             spec_rest: str | astropy.units.Quantity,
-            trace_wave: str | astropy.units.Quantity,
-            trace_dx: Sequence[float],
-            trace_dy: Sequence[float] = (0.0,),
+            trace: Trace,
             step: Sequence[float] = (1, 1),
             rpix: Sequence[float] | None = None,
             rval: Sequence[float] = (0, 0),
@@ -273,20 +305,12 @@ class SlitlessSpectra(Observable):
             raise ConfigError(
                 f"the spectral axis of slitless spectra needs a rest "
                 f"wavelength (spec_rest); it is {spec_rest!r}")
-        wave = gridutils.make_rest(trace_wave)
-        if wave is None or wave.unit != astropy.units.m:
-            raise ConfigError(
-                f"trace_wave must be a wavelength; it is {trace_wave!r}")
-        if not len(trace_dx) or not len(trace_dy):
-            raise ConfigError("trace_dx and trace_dy need coefficients")
         self._spec_size = spec_size
         self._spec_step = spec_step
         self._spec_rval = spec_rval
         self._spec_rest = rest
         self._spec_medium = gridutils.make_medium(spec_medium, rest)
-        self._trace_wave = wave
-        self._trace_dx = tuple(float(c) for c in trace_dx)
-        self._trace_dy = tuple(float(c) for c in trace_dy)
+        self._trace = trace
 
     def spec_size(self) -> int:
         """Return the number of channels of the model."""
@@ -308,13 +332,9 @@ class SlitlessSpectra(Observable):
         """Return the medium of the wavelengths."""
         return self._spec_medium
 
-    def trace(self, wavelength: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-        """
-        Return the trace (dx, dy; pixels) at wavelengths (m, in the medium
-        of the spectral axis).
-        """
-        um = (np.asarray(wavelength) - self._trace_wave.value) * 1e6
-        return npp.polyval(um, self._trace_dx), npp.polyval(um, self._trace_dy)
+    def trace(self) -> Trace:
+        """Return the trace of the disperser."""
+        return self._trace
 
     def keys(self) -> tuple[str, ...]:
         return ('spectra',)
@@ -351,17 +371,8 @@ class SlitlessSpectra(Observable):
     ) -> 'SlitlessSpectraPlan':
         if weights is not None:
             raise ConfigError("slitless spectra do not support weights yet")
-        channels = self._channel_edges()
-        footprints = [
-            pixel_footprint(*zip(*self.trace(edges))) for edges in channels]
-        # The sky of the cube: the pixels whose light of some channel can
-        # land on the image (offset from those of the image by -offset)
-        reach = np.array([
-            (p.min(), p.max(), q.min(), q.max()) for p, q, _ in footprints])
-        offset = (-int(reach[:, 1].max()), -int(reach[:, 3].max()))
-        size = (
-            self.size()[0] + int(reach[:, 1].max() - reach[:, 0].min()),
-            self.size()[1] + int(reach[:, 3].max() - reach[:, 2].min()))
+        edges = self._channel_edges()
+        offset, size = self._sky(edges)
         rpix = self.rpix()
         dcube = _dcube.DCube(
             size=size + (self._spec_size,),
@@ -381,52 +392,89 @@ class SlitlessSpectra(Observable):
             mask_apply=False,
             dtype=dtype,
             fft_dtype=fft_dtype)
-        dispersion = self._dispersion(footprints, size, offset)
+        dispersion = self._dispersion(edges, size, offset)
         return SlitlessSpectraPlan(
             dcube, dispersion, self.grid(), driver, scene, foreground, dtype,
             calibration)
 
-    def _channel_edges(self) -> list[np.ndarray]:
+    def _channel_edges(self) -> np.ndarray:
         """
         Return the wavelengths (m) of the edges of each channel of the
-        model: spec_rest (1 + v / c) at their velocities.
+        model (one row each): spec_rest (1 + v / c) at their velocities.
         """
         step, n = self._spec_step, self._spec_size
         centres = self._spec_rval + step * (np.arange(n) - (n - 1) / 2)
-        rest = self._spec_rest.value
-        return [rest * (1 + (v + np.array([-0.5, 0.5]) * step) / _C)
-                for v in centres]
+        velocities = centres[:, None] + np.array([-0.5, 0.5]) * step
+        return self._spec_rest.value * (1 + velocities / _C)
+
+    def _sky(
+            self, edges: np.ndarray
+    ) -> tuple[tuple[int, int], tuple[int, int]]:
+        """
+        Return the sky of the cube, the pixels whose light of some channel
+        (of the edges of its wavelengths) can land on the image: its offset
+        from the image (pixels) and its size. Of the reach of the trace at
+        the corners and the edges of the image, then of that sky (the trace
+        changes slowly across the detector), and a pixel more each way (of
+        the footprints of the pixels).
+        """
+        width, height = self.size()
+        lo, hi = np.zeros(2), np.array([width - 1, height - 1], dtype=float)
+        for _ in range(2):
+            x, y = (a.ravel() for a in np.meshgrid(
+                np.linspace(lo[0], hi[0], 5), np.linspace(lo[1], hi[1], 5)))
+            dx, dy = self._trace.offsets(edges.ravel()[:, None], x, y)
+            lo = np.array([-dx.max(), -dy.max()])
+            hi = np.array([width - 1 - dx.min(), height - 1 - dy.min()])
+        lo, hi = np.floor(lo) - 1, np.ceil(hi) + 1
+        offset = (int(lo[0]), int(lo[1]))
+        return offset, (int(hi[0] - lo[0]) + 1, int(hi[1] - lo[1]) + 1)
 
     def _dispersion(
             self,
-            footprints: list[tuple[np.ndarray, np.ndarray, np.ndarray]],
+            edges: np.ndarray,
             size: tuple[int, int],
             offset: tuple[int, int]
     ) -> scipy.sparse.csr_array:
         """
         Return the matrix that disperses the cube of the model (flattened,
         of shape (nz, ny, nx) on the sky of the given size, offset from the
-        image) into the image (flattened): the footprint of each channel
-        (see pixel_footprint) at each pixel of the sky, times the width of
-        the channel (km/s), so that the image is the light integrated over
-        velocity.
+        image) into the image (flattened): the footprint (see
+        pixel_footprint) of each pixel of the sky moved by the trace there,
+        from the start of each channel (of the edges of its wavelengths) to
+        its end, times the width of the channel (km/s), so that the image
+        is the light integrated over velocity.
         """
         nx, ny = size
         width, height = self.size()
         j, i = np.mgrid[:ny, :nx]
-        rows, cols, data = [], [], []
-        for k, (p, q, weights) in enumerate(footprints):
-            x = (i.ravel()[:, None] + offset[0] + p).ravel()
-            y = (j.ravel()[:, None] + offset[1] + q).ravel()
-            voxel = np.repeat(k * nx * ny + np.arange(nx * ny), len(p))
-            inside = (x >= 0) & (x < width) & (y >= 0) & (y < height)
-            rows.append(y[inside] * width + x[inside])
-            cols.append(voxel[inside])
-            data.append(np.tile(weights, nx * ny)[inside])
+        x = (i.ravel() + offset[0]).astype(float)
+        y = (j.ravel() + offset[1]).astype(float)
+        # (the voxels in the order of the cube: channel, then pixel; the
+        # segment of each from its place, a whole pixel)
+        dx, dy = self._trace.offsets(edges[:, :, None], x, y)
+        segments = np.stack(
+            [dx[:, 0], dy[:, 0], dx[:, 1], dy[:, 1]], axis=-1).reshape(-1, 4)
+        # (the footprints of the distinct segments, moved to each place: one
+        # per channel of a trace the same at every place)
+        distinct, inverse = np.unique(
+            segments, axis=0, return_inverse=True)
+        segment, p, q, weights = pixel_footprints(
+            distinct[:, :2], distinct[:, 2:])
+        counts = np.bincount(segment, minlength=len(distinct))
+        first = np.cumsum(counts) - counts
+        counts, first = counts[inverse], first[inverse]
+        voxel = np.repeat(np.arange(len(inverse)), counts)
+        entry = np.repeat(first - (np.cumsum(counts) - counts), counts) \
+            + np.arange(counts.sum())
+        p = p[entry] + np.tile(x, len(edges))[voxel].astype(int)
+        q = q[entry] + np.tile(y, len(edges))[voxel].astype(int)
+        weights = weights[entry]
+        inside = (p >= 0) & (p < width) & (q >= 0) & (q < height)
         matrix = scipy.sparse.coo_array(
-            (np.concatenate(data) * abs(self._spec_step),
-             (np.concatenate(rows), np.concatenate(cols))),
-            shape=(width * height, len(footprints) * nx * ny))
+            (weights[inside] * abs(self._spec_step),
+             (q[inside] * width + p[inside], voxel[inside])),
+            shape=(width * height, len(edges) * nx * ny))
         return matrix.tocsr()
 
 
