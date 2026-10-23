@@ -339,6 +339,18 @@ class SlitlessSpectra(Observable):
     def keys(self) -> tuple[str, ...]:
         return ('spectra',)
 
+    def spectra_item(self) -> str | None:
+        return 'spectra'
+
+    def spectra_axis(self) -> int:
+        # (each line of the image along the dispersion, that over which the
+        # trace moves the most across the channels at the centre of the
+        # image: x, the last axis of the image, or y)
+        edges = self._channel_edges()[[0, -1], [0, 1]]
+        centre = (np.array(self.size()) - 1) / 2
+        dx, dy = self._trace.offsets(edges, *centre)
+        return 1 if abs(dx[1] - dx[0]) >= abs(dy[1] - dy[0]) else 0
+
     def dataset(self, items: Mapping[str, Data]) -> DatasetSlitlessSpectra:
         return DatasetSlitlessSpectra(
             items['spectra'], **_detail.dataset_grid_options(self.grid()))

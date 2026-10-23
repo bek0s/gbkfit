@@ -323,15 +323,15 @@ template<typename T> void
 Wrapper<T>::objective_amplitude_sums(
         const T* obs_d, const T* obs_e, const T* obs_m,
         const T* mdl_d, const T* mdl_w,
-        T scale, T jitter, int nchannels, int nspectra,
+        T scale, T jitter, int nouter, int nchannels, int ninner,
         double* a, double* b)
 {
-    const int n = nspectra;
+    const int n = nouter * ninner;
     launch("objective_amplitude_sums", n,
             kernels::objective_amplitude_sums<T>,
             obs_d, obs_e, obs_m,
             mdl_d, mdl_w,
-            scale, jitter, nchannels, nspectra, a, b);
+            scale, jitter, nouter, nchannels, ninner, a, b);
 }
 
 // The term of value i of a noise residual (see

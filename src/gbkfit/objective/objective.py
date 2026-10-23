@@ -193,11 +193,14 @@ class Objective:
              for key in obs.observable().keys()}
             for obs in observations)
         # The data item of the spectra of amplitudes of each observation,
-        # if any, and the standard deviation of their prior
+        # if any, the axis of its spectra, and the standard deviation of
+        # their prior
         self._amplitude_items = tuple(
             obs.observable().spectra_item()
             if obs.likelihood().amplitudes() is not None else None
             for obs in observations)
+        self._amplitude_axes = tuple(
+            obs.observable().spectra_axis() for obs in observations)
         self._amplitude_sigmas = tuple(
             obs.likelihood().amplitude_sigma() for obs in observations)
         # The data items of each observation whose noise is fitted, by
@@ -412,7 +415,11 @@ class Objective:
                     self._nindependent[i][key] = whitening_.nindependent
             self._backends[i] = driver.native_class('Objective', dtype)()
             if self._amplitude_items[i] is not None:
-                spectra = shape[1:]
+                # (one of each per spectrum: of the shape of the data, of 1
+                # along the axis of the spectra, to scale them)
+                spectra = tuple(
+                    1 if k == self._amplitude_axes[i] else n
+                    for k, n in enumerate(shape))
                 sums = [driver.mem_alloc_s(spectra, np.float64)
                         for _ in range(2)]
                 self._h_amplitude_sums[i] = [h for h, _ in sums]
@@ -581,12 +588,14 @@ class Objective:
         """
         Return the free amplitudes of the spectra of each observation (see
         LikelihoodGaussian), of the last evaluation, as new arrays of the
-        shape of the spectra but their first axis; None for the
-        observations without them, or before an evaluation.
+        shape of the spectra but their axis; None for the observations
+        without them, or before an evaluation.
         """
         return [
-            None if amplitudes is None else amplitudes.copy()
-            for amplitudes in self._h_amplitudes]
+            None if amplitudes is None
+            else np.squeeze(amplitudes, axis).copy()
+            for amplitudes, axis in zip(
+                self._h_amplitudes, self._amplitude_axes)]
 
     def nnuisance(self) -> int:
         """
@@ -637,7 +646,8 @@ class Objective:
         key = self._amplitude_items[i]
         if key is None:
             return 0
-        return int(np.prod(self._datasets[i][key].shape()[1:]))
+        shape = self._datasets[i][key].shape()
+        return int(np.prod(shape)) // shape[self._amplitude_axes[i]]
 
     def residual_sums(
             self,
@@ -914,7 +924,7 @@ class Objective:
         amplitude (see LikelihoodGaussian), write the residuals of their
         prior, and keep their sums for the log-likelihood; with extras, the
         amplitudes go to them ('{prefix}amplitudes', of the shape of the
-        spectra but their first axis).
+        spectra but their axis).
         """
         key = self._amplitude_items[i]
         driver = self._group.observations()[i].driver()
@@ -924,7 +934,7 @@ class Objective:
             self._d_dataset_e_nddata[i].get(key),
             self._d_dataset_m_nddata[i].get(key),
             model['d'], model['w'], *self._noise_values(i, key, params),
-            *self._d_amplitude_sums[i])
+            self._amplitude_axes[i], *self._d_amplitude_sums[i])
         for h, d in zip(self._h_amplitude_sums[i], self._d_amplitude_sums[i]):
             driver.mem_copy_d2h(d, h)
         # The best amplitude: the minimum of the chi-square of the spectrum
@@ -945,7 +955,9 @@ class Objective:
             self._h_prior_residuals[i], self._d_prior_residuals[i])
         if out_extra is not None:
             out_extra.add(
-                'amplitudes', amplitudes.copy(), "Amplitudes of the spectra",
+                'amplitudes',
+                np.squeeze(amplitudes, self._amplitude_axes[i]).copy(),
+                "Amplitudes of the spectra",
                 "The amplitude of each spectrum of the model that fits the "
                 "data best (see LikelihoodGaussian): the factor of its model "
                 "in the residuals.",

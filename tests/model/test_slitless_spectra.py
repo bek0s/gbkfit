@@ -191,3 +191,43 @@ def test_traces_that_vary_across_the_detector_move_each_pixel():
             np.average(pixels % 40, weights=column[pixels]), middle,
             atol=1e-9)
         np.testing.assert_allclose(column.sum(), 30, rtol=1e-12)
+
+
+def test_slitless_spectra_have_amplitudes_per_row(driver):
+    # Free amplitudes scale each line of the image along the dispersion
+    # (the rows: the trace runs along x), as geko's row amplitudes: of data
+    # that are the model times a scale for each row, of no noise but a
+    # small error, the best amplitudes, (sum m d / e^2 + 1/s^2) / (sum m^2
+    # / e^2 + 1/s^2), are those scales where the rows have light
+    from gbkfit.dataset import Data, DatasetSlitlessSpectra
+    from gbkfit.model import galaxy_parser
+    from gbkfit.objective import Objective
+    from gbkfit.observation import (
+        Flat, LikelihoodGaussian, Observation, ObservationGroup,
+        observable_parser)
+    model = evaluate(driver, SLITLESS)
+    scales = 1 + 0.3 * np.sin(np.arange(model.shape[0]))
+    error = 1e-3
+    dataset = DatasetSlitlessSpectra(Data(
+        model * scales[:, None], error=np.full_like(model, error)))
+    options = {k: v for k, v in SLITLESS.items() if k not in ('type', 'size')}
+    observable = observable_parser.load(
+        dict(type='slitless_spectra') | copy.deepcopy(options), dataset)
+    assert observable.spectra_axis() == 1
+    observation = Observation(
+        observable, Flat(), driver, data=dataset, likelihood=(
+            LikelihoodGaussian(amplitudes='per_spectrum',
+                               amplitude_sigma=0.5)))
+    group = ObservationGroup(
+        [galaxy_parser.load(copy.deepcopy(GALAXY))], [observation])
+    objective = Objective(group)
+    params = gbkfit.params.ParamSpace(group.pdescs(), PROPERTIES)
+    objective.residual_nddata_h(params.evaluate(), False)
+    amplitudes = objective.amplitudes()[0]
+    a = (model ** 2).sum(axis=1) / error ** 2 + 1 / 0.5 ** 2
+    b = (model * dataset['spectra'].data()).sum(axis=1) / error ** 2 \
+        + 1 / 0.5 ** 2
+    assert amplitudes.shape == (model.shape[0],)
+    np.testing.assert_allclose(amplitudes, b / a, rtol=1e-4)
+    bright = model.sum(axis=1) > 0.1 * model.sum(axis=1).max()
+    np.testing.assert_allclose(amplitudes[bright], scales[bright], rtol=1e-3)

@@ -456,33 +456,42 @@ objective_residual_sum(
     sum[0] = sum_;
 }
 
-// The sums of each spectrum (of nspectra; its value of channel c at c *
-// nspectra + s) that its amplitude takes (see
-// gbkfit::objective_amplitude_terms). Each thread sums a block of
-// spectra channel by channel, reading the values of each channel of the
-// block in order.
+// The sums of each spectrum (of nouter * ninner, each of nchannels: the
+// value of channel c of spectrum s = o * ninner + i at (o * nchannels +
+// c) * ninner + i) that its amplitude takes (see
+// gbkfit::objective_amplitude_terms). Each thread sums a block of the
+// spectra of one o channel by channel, reading the values of each
+// channel of the block in order (where the spectra are along the first
+// axis, nouter = 1; along the last, ninner = 1 and a block is a
+// spectrum).
 template<typename T> void
 objective_amplitude_sums(
         const T* obs_d, const T* obs_e, const T* obs_m,
         const T* mdl_d, const T* mdl_w,
-        T scale, T jitter, int nchannels, int nspectra, double* a, double* b)
+        T scale, T jitter, int nouter, int nchannels, int ninner,
+        double* a, double* b)
 {
     constexpr int BLOCK = 256;
+    const int nblocks = (ninner + BLOCK - 1) / BLOCK;
     #pragma omp parallel for
-    for(int s0 = 0; s0 < nspectra; s0 += BLOCK) {
+    for(int task = 0; task < nouter * nblocks; ++task) {
 
-        const int n = std::min(BLOCK, nspectra - s0);
+        const int o = task / nblocks;
+        const int i0 = (task % nblocks) * BLOCK;
+        const int n = std::min(BLOCK, ninner - i0);
         double sum_a[BLOCK] = {}, sum_b[BLOCK] = {};
         for (int c = 0; c < nchannels; ++c) {
-            const long long i0 = (long long)c * nspectra + s0;
+            const long long first =
+                    ((long long)o * nchannels + c) * ninner + i0;
             for (int k = 0; k < n; ++k) {
                 gbkfit::objective_amplitude_terms(
-                        i0 + k,
+                        first + k,
                         obs_d, obs_e, obs_m,
                         mdl_d, mdl_w,
                         scale, jitter, sum_a[k], sum_b[k]);
             }
         }
+        const long long s0 = (long long)o * ninner + i0;
         for (int k = 0; k < n; ++k) {
             a[s0 + k] = sum_a[k];
             b[s0 + k] = sum_b[k];

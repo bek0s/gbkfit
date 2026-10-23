@@ -238,13 +238,20 @@ class Observable(parseutils.TypedSerializable, abc.ABC):
 
     def spectra_item(self) -> str | None:
         """
-        Return the name of its data item of spectra, along the first axis
-        of its arrays (one spectrum at each point of the other axes), if
-        it has one: the spectra that free amplitudes scale (see
+        Return the name of its data item of spectra, along an axis of its
+        arrays (see spectra_axis; one spectrum at each point of the other
+        axes), if it has one: the spectra that free amplitudes scale (see
         LikelihoodGaussian). None here; observables of spectra override
         this.
         """
         return None
+
+    def spectra_axis(self) -> int:
+        """
+        Return the axis of the arrays of its data item of spectra along
+        which each spectrum runs (see spectra_item): the first here.
+        """
+        return 0
 
     def check_instrument(self, instrument: Instrument) -> None:
         """

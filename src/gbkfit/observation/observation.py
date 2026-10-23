@@ -647,7 +647,8 @@ def _check_amplitudes(observable: Observable, calibration: bool) -> None:
         desc = parseutils.make_typed_desc(observable.__class__, 'observable')
         raise ConfigError(
             f"free amplitudes scale spectra (e.g. those of pixel_spectra, "
-            f"slit_spectra or region_spectra); {desc} has none")
+            f"slit_spectra, region_spectra, or the lines of slitless_spectra "
+            f"along the dispersion); {desc} has none")
     if calibration:
         raise ConfigError(
             "free amplitudes take the flux scale of the model: an "

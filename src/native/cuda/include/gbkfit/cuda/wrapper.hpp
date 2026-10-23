@@ -115,7 +115,7 @@ struct Wrapper
     objective_amplitude_sums(
             const T* obs_d, const T* obs_e, const T* obs_m,
             const T* mdl_d, const T* mdl_w,
-            T scale, T jitter, int nchannels, int nspectra,
+            T scale, T jitter, int nouter, int nchannels, int ninner,
             double* a, double* b);
 
     static void

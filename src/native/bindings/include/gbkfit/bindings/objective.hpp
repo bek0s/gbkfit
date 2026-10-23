@@ -55,32 +55,40 @@ struct Objective
                 residual.data(), int(residual.size()), squared, sum.data());
     }
 
-    // The sums of each spectrum (the values along the first axis, at each
+    // The sums of each spectrum (the values along the axis, at each
     // point of the others) that its amplitude takes, into a and b
-    // (of the shape of the other axes; see
+    // (of one value per point of the other axes; see
     // gbkfit::objective_amplitude_terms), each value with its noise (as
     // in residual)
     static void
     amplitude_sums(
             ConstData obs_d, ConstData obs_e, ConstData obs_m,
             ConstData mdl_d, ConstData mdl_w, T scale, T jitter,
-            Sums a, Sums b)
+            int axis, Sums a, Sums b)
     {
         const typename Kernels::DeviceScope scope(a.device_id());
         require_same_shape(obs_e, obs_d, "obs_e", "obs_d");
         require_same_shape(obs_m, obs_d, "obs_m", "obs_d");
         require_same_shape(mdl_d, obs_d, "mdl_d", "obs_d");
         require_same_shape(mdl_w, obs_d, "mdl_w", "obs_d");
-        require(obs_d.ndim() >= 1 && obs_d.shape(0) > 0,
-                "obs_d must have a first axis");
-        const int nchannels = int(obs_d.shape(0));
-        const int nspectra = int(obs_d.size() / obs_d.shape(0));
-        require(a.size() == size_t(nspectra) && b.size() == size_t(nspectra),
+        require(axis >= 0 && size_t(axis) < obs_d.ndim()
+                && obs_d.shape(axis) > 0,
+                "obs_d must have the axis of the spectra");
+        size_t nouter = 1, ninner = 1;
+        for (size_t k = 0; k < obs_d.ndim(); ++k) {
+            if (k < size_t(axis)) {
+                nouter *= obs_d.shape(k);
+            } else if (k > size_t(axis)) {
+                ninner *= obs_d.shape(k);
+            }
+        }
+        require(a.size() == nouter * ninner && b.size() == nouter * ninner,
                 "a and b must have one value per spectrum");
         Kernels::objective_amplitude_sums(
                 obs_d.data(), data(obs_e), data(obs_m),
                 mdl_d.data(), data(mdl_w),
-                scale, jitter, nchannels, nspectra, a.data(), b.data());
+                scale, jitter, int(nouter), int(obs_d.shape(axis)),
+                int(ninner), a.data(), b.data());
     }
 
     // The square of the noise residual of a data item whose noise is
@@ -136,6 +144,7 @@ struct Objective
                         nb::arg("mdl_w").noconvert().none(),
                         nb::arg("scale"),
                         nb::arg("jitter"),
+                        nb::arg("axis"),
                         nb::arg("a").noconvert(),
                         nb::arg("b").noconvert())
                 .def_static("noise_sum", &noise_sum,

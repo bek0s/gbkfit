@@ -203,8 +203,10 @@ class LikelihoodGaussian(Likelihood):
     of which a blank says nothing.
 
     With amplitudes 'per_spectrum' (spectra only, e.g. those of
-    pixel_spectra), each spectrum of the model is times an amplitude of
-    its own, a >= 0: the fit then takes the shape of each spectrum from
+    pixel_spectra, or each line of the image of slitless_spectra along
+    the dispersion, as the row amplitudes of geko), each spectrum of the
+    model is times an amplitude of its own, a >= 0: the fit then takes
+    the shape of each spectrum from
     the model (where its lines are, how wide; with beam smearing, also how
     the light of the model weighs its velocities), and its brightness
     mostly from the data, which suits a model whose light misses
