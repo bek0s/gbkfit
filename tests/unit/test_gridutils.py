@@ -2,6 +2,7 @@
 Tests for the grids of pixels with world coordinates.
 """
 
+import astropy.io.fits as fits
 import astropy.wcs
 import numpy as np
 import pytest
@@ -70,3 +71,28 @@ def test_velocity_conventions_follow_the_rest():
     for convention, rest in (('radio', wave), ('log', freq), ('log', None)):
         with pytest.raises(ConfigError, match="convention"):
             gridutils.make_convention(convention, rest)
+
+
+def test_logarithmic_wavelengths_are_log_velocities(tmp_path):
+    # An axis of WAVE-LOG, w = S exp(x / S), is linear in c ln(w / rest):
+    # of step c CDELT / S and value c ln(S / rest) at the reference pixel;
+    # written back as it was
+    c = 299792.458
+    rest, crval, cdelt = 6564.61e-10, 6600e-10, 0.8e-10 * 6600 / 6564.61
+    header = fits.Header(dict(
+        CTYPE1='RA---TAN', CRVAL1=150, CRPIX1=3, CDELT1=-1 / 3600,
+        CTYPE2='DEC--TAN', CRVAL2=2, CRPIX2=3, CDELT2=1 / 3600,
+        CTYPE3='WAVE-LOG', CUNIT3='m', CRVAL3=crval, CRPIX3=5,
+        CDELT3=cdelt, RESTWAV=rest))
+    fits.writeto(tmp_path / 'cube.fits', np.zeros((9, 5, 5)), header)
+    data, coords = fitsutils.read_data(str(tmp_path / 'cube.fits'))
+    assert coords.convention == 'log'
+    assert coords.step[2] == pytest.approx(c * cdelt / crval, rel=1e-12)
+    assert coords.rpix[2] == pytest.approx(4)
+    assert coords.rval[2] == pytest.approx(c * np.log(crval / rest),
+                                           rel=1e-12)
+    fitsutils.write_data(str(tmp_path / 'out.fits'), data, coords, 2)
+    out = fits.getheader(tmp_path / 'out.fits')
+    assert out['CTYPE3'] == 'WAVE-LOG'
+    assert out['CRVAL3'] == pytest.approx(crval, rel=1e-12)
+    assert out['CDELT3'] == pytest.approx(cdelt, rel=1e-12)

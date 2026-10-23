@@ -764,3 +764,22 @@ def test_voronoi_bins_are_the_regions_of_spectra():
     np.testing.assert_allclose(spectra.sum(axis=1), cube.sum(axis=(1, 2)))
     regions = RegionsBins.load(dict(file='prep_bins.fits'))
     assert regions.nregions() == nbins
+
+
+def test_logarithmic_wavelengths_get_the_rest():
+    # A WAVE-LOG axis keeps its type and gets the rest, which the reading
+    # takes as the log velocities c ln(w / rest)
+    header = {k: v for k, v in HEADER.items() if k[-1] != '4'} | dict(
+        CTYPE3='WAVE-LOG', CUNIT3='m', CRVAL3=6600e-10, CRPIX3=6,
+        CDELT3=1e-13)
+    del header['BUNIT']
+    fits.writeto('cube.fits', np.ones(SHAPE[1:], np.float32),
+                 fits.Header(header))
+    prep_pixel_spectra('cube.fits', velocity_rest='6564.61 Angstrom')
+    out = fits.getheader('prep_cube.fits')
+    assert out['CTYPE3'] == 'WAVE-LOG'
+    assert out['RESTWAV'] == pytest.approx(6564.61e-10)
+    _, coords = fitsutils.read_data('prep_cube.fits')
+    assert coords.convention == 'log'
+    assert coords.step[2] == pytest.approx(
+        299792.458 * 1e-13 / 6600e-10, rel=1e-9)

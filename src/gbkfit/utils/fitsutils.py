@@ -10,6 +10,7 @@ coordinates become those of the model (see coords_from_wcs).
 
 import typing
 
+import astropy.constants
 import astropy.io.fits
 import astropy.table
 import astropy.units
@@ -45,6 +46,9 @@ __all__ = [
 VELOCITY_TYPES = ('VRAD', 'VOPT', 'VELO')
 
 _KM_S = astropy.units.km / astropy.units.s
+
+# The speed of light (km/s)
+_C = astropy.constants.c.to_value('km/s')
 
 # The values of the header keyword AIRORVAC of each medium of wavelengths
 # (see gridutils.make_medium)
@@ -199,6 +203,7 @@ def read_data(
         raise ConfigError(
             f"{filename}: the header has world coordinates for {wcs.naxis} "
             f"axes, but the data has {data.ndim}")
+    wcs, log = _log_velocity_axis(filename, wcs, rest)
     data, wcs = to_model_axes(data, wcs)
     spec = wcs.wcs.spec
     if spectral_axis is not None and spec >= 0 and spec != spectral_axis:
@@ -209,7 +214,56 @@ def read_data(
     if medium is None and coords.medium is not None:
         coords = coords._replace(
             medium=_header_medium(filename, header) or coords.medium)
+    if log:
+        coords = coords._replace(convention='log')
     return np.ascontiguousarray(data), coords
+
+
+def _log_velocity_axis(
+        source: str,
+        wcs: astropy.wcs.WCS,
+        rest: str | astropy.units.Quantity | None
+) -> tuple[astropy.wcs.WCS, bool]:
+    """
+    Return the world coordinates with a spectral axis of logarithmic
+    wavelengths (WAVE-LOG, in vacuum: w = S exp(x / S) of the intermediate
+    coordinate x, S at the reference pixel) as the linear axis of their
+    log velocities c ln(w / rest) (km/s; as VOPT, of the rest), exactly,
+    and whether it was; others unchanged. The rest is that given, or that
+    of the WCS (RESTWAV).
+
+    Raises
+    ------
+    ConfigError
+        If an axis of logarithmic wavelengths has no rest wavelength.
+    """
+    s = wcs.wcs.spec
+    if s < 0 or wcs.wcs.ctype[s] != 'WAVE-LOG':
+        return wcs, False
+    rest = make_rest(rest)
+    if rest is None and wcs.wcs.restwav > 0:
+        rest = wcs.wcs.restwav * astropy.units.m
+    if rest is None or not rest.unit.is_equivalent(astropy.units.m):
+        raise ConfigError(
+            f"{source}: the spectral axis of logarithmic wavelengths "
+            f"({wcs.wcs.ctype[s]}) needs a rest wavelength (RESTWAV, or the "
+            f"rest)")
+    wcs = wcs.deepcopy()
+    unit = astropy.units.Unit(str(wcs.wcs.cunit[s]) or 'm')
+    crval = float(wcs.wcs.crval[s])
+    factor = _C / crval
+    if wcs.wcs.has_cd():
+        cd = wcs.wcs.cd.copy()
+        cd[s, :] *= factor
+        wcs.wcs.cd = cd
+    else:
+        wcs.wcs.cdelt[s] *= factor
+    wcs.wcs.crval[s] = _C * np.log(crval / rest.to_value(unit))
+    wcs.wcs.ctype[s] = 'VOPT'
+    wcs.wcs.cunit[s] = 'km/s'
+    wcs.wcs.restwav, wcs.wcs.restfrq = rest.to_value(astropy.units.m), 0
+    wcs.wcs.set()
+    return wcs, True
 
 
 def coords_from_wcs(
@@ -672,10 +726,18 @@ def _velocity_header(coords, n, index=None):
     Return the header keywords of the spectral axis, FITS axis n, whose
     world coordinates are those of axis index of coords (by default
     n - 1): optical velocities with a rest wavelength, radio velocities
-    with a rest frequency or without a rest.
+    with a rest frequency or without a rest, and the logarithmic
+    wavelengths (WAVE-LOG) of the log velocities of a rest wavelength.
     """
     index = n - 1 if index is None else index
     rest = coords.rest
+    if coords.convention == 'log':
+        crval = rest.value * np.exp(coords.rval[index] / _C)
+        return {
+            f'CTYPE{n}': 'WAVE-LOG', f'CUNIT{n}': 'm',
+            f'CDELT{n}': coords.step[index] * crval / _C,
+            f'CRPIX{n}': coords.rpix[index] + 1, f'CRVAL{n}': crval,
+            'RESTWAV': rest.value, 'AIRORVAC': _HEADER_MEDIUMS[coords.medium]}
     header = {
         f'CTYPE{n}': 'VRAD', f'CUNIT{n}': 'km/s',
         f'CDELT{n}': coords.step[index],

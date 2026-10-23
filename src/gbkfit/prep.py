@@ -145,7 +145,9 @@ def _spectral_to_velocity(
 ) -> fits.Header:
     """
     Return the header with its spectral axis converted to the velocities
-    of a rest (see gridutils.make_rest): a linear wavelength axis (WAVE, or
+    of a rest (see gridutils.make_rest), or an axis of logarithmic
+    wavelengths (WAVE-LOG) with the rest, which the reading of the data
+    takes as log velocities: a linear wavelength axis (WAVE, or
     AWAV with a rest in air too) to the optical velocities c (w / rest -
     1), a linear frequency axis (FREQ) to the radio velocities c (1 - f /
     rest). Both are linear in the pixels, so the conversion is exact; the
@@ -162,6 +164,16 @@ def _spectral_to_velocity(
         raise ConfigError("the data have no spectral axis to convert")
     ctype = wcs.wcs.ctype[s]
     kind = ctype[:4]
+    if ctype == 'WAVE-LOG':
+        # (logarithmic wavelengths stay: they are read as the log
+        # velocities of the rest, linear, see fitsutils.read_data)
+        wcs.wcs.restwav = rest.to_value(
+            astropy.units.m, astropy.units.spectral())
+        wcs.wcs.restfrq = 0
+        _log.info(f"the spectral axis ({ctype}) gets the rest {rest}")
+        header = _with_wcs(header, wcs)
+        header['AIRORVAC'] = 'vac'
+        return header
     if ctype[4:].strip('-').strip():
         raise ConfigError(
             f"the spectral axis ({ctype}) is not linear in its coordinate")
