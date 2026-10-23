@@ -202,6 +202,30 @@ def test_functions_of_a_disk_without_mass():
     np.testing.assert_allclose(bound['dispersion'](R), 20, rtol=1e-12)
 
 
+def test_functions_of_a_galaxy_of_mass_alone():
+    # (e.g. for its rotation curve) Its parameters are those of its mass
+    # and its distance; observations on the sky see nothing of it
+    from gbkfit.observation import Flat, ObservationGroup, ObservationSky
+    from gbkfit.observation import PixelBrightness
+    from gbkfit.utils.parseutils import ConfigError
+    info = dict(mass=copy.deepcopy(MASS), distance=dict(type='direct'))
+    galaxy = galaxy_parser.load(copy.deepcopy(info))
+    assert galaxy.components() == ()
+    assert set(galaxy.pdescs()) == {
+        'distance', 'mass_bh_log_m', 'mass_halo_log_m', 'mass_halo_c'}
+    dumped = galaxy_parser.dump(galaxy)
+    assert 'components' not in dumped
+    assert galaxy_parser.load(dumped).pdescs().keys() == galaxy.pdescs().keys()
+    bound = galaxy.plan_functions().bind(PARAMS)
+    np.testing.assert_allclose(
+        bound['vcirc_bh'](2.0), np.sqrt(G * 1e10 / 2.0), rtol=1e-9)
+    with pytest.raises(ConfigError, match="it sees none"):
+        ObservationGroup(
+            galaxy, ObservationSky(PixelBrightness(size=(4, 4)), Flat()))
+    with pytest.raises(ConfigError, match="at least one component, or mass"):
+        galaxy_parser.load(dict())
+
+
 def test_radii_outside_refused():
     bound = gas_galaxy().plan_functions().bind(PARAMS)
     with pytest.raises(ValueError, match='rotation_gas: the radii must be'):

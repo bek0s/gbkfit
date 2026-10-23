@@ -52,9 +52,9 @@ def _with_mass_params(
     distance, its mass and its gravity (if any; Newtonian by default).
     Raise ConfigError if components take
     the circular velocity of the mass (see
-    Component.circular_velocity_params) and there is none, if there is
-    mass and no component uses it (nor a disk in vertical equilibrium,
-    see Kinematics), if a disk in a central equilibrium has neither mass
+    Component.circular_velocity_params) and there is none, if there are
+    components and mass but no component uses it (nor a disk in vertical
+    equilibrium, see Kinematics), if a disk in a central equilibrium has neither mass
     nor rotation (tangential velocity traits) or one in another
     equilibrium no mass, if the mass has no distance or the distance no
     mass (its only user), if a mass component follows a
@@ -75,7 +75,8 @@ def _with_mass_params(
     if moved and mass_model is None:
         raise ConfigError(
             "the 'mass' velocity traits need the mass of their galaxy")
-    if mass_model is not None and not moved and not balanced:
+    if mass_model is not None and components and not moved \
+            and not balanced:
         raise ConfigError(
             "no component uses the mass of its galaxy; give the components "
             "that it moves 'mass' velocity traits, or those it holds up a "
@@ -302,10 +303,13 @@ class ComponentSet:
     (Newtonian if not given): their parameters, and their evaluation on
     the grids of observations (see ComponentSetPlan).
 
+    A galaxy of mass alone has no components.
+
     Raises
     ------
     ConfigError
-        If there are no components, several without names, or the names
+        If there are no components and no mass, several components
+        without names, or the names
         of the components, their geometries and their parameters
         conflict, the mass and the components do not go together (see
         _with_mass_params), or components give one line different units
@@ -320,8 +324,8 @@ class ComponentSet:
             gravity: Gravity | None = None
     ):
         components = iterutils.tuplify(components)
-        if not components:
-            raise ConfigError("a galaxy needs at least one component")
+        if not components and mass_model is None:
+            raise ConfigError("a galaxy needs at least one component, or mass")
         _units.check_line_units_agree(components)
         self._components = components
         self._prefixes = _component_prefixes(components)

@@ -68,8 +68,11 @@ class Galaxy(parseutils.Serializable):
 
     Parameters
     ----------
-    components : Component or Sequence of Component
-        Its components; they need names when there are several.
+    components : Component or Sequence of Component, optional
+        Its components; they need names when there are several. A galaxy
+        of mass alone has none: observations on the sky see nothing of
+        it, and its mass is for what is measured of it (e.g. its rotation
+        curve).
     mass : MassComponent or Sequence of MassComponent, optional
         Its mass: the components of its mass (disks, spheroids, point
         masses, ...; a disk can follow the density of one of its disks).
@@ -103,11 +106,11 @@ class Galaxy(parseutils.Serializable):
     Raises
     ------
     ConfigError
-        If there are no components, several without names, the names or
-        parameters conflict, the mass, the distance and the components do
-        not go together (e.g. 'mass' velocity traits without mass, or a
-        mass disk that follows no disk of the galaxy), or the redshift is
-        not above -1, or missing where it is required.
+        If there are no components and no mass, several components without
+        names, the names or parameters conflict, the mass, the distance
+        and the components do not go together (e.g. 'mass' velocity traits
+        without mass, or a mass disk that follows no disk of the galaxy),
+        or the redshift is not above -1, or missing where it is required.
     """
 
     @classmethod
@@ -155,7 +158,7 @@ class Galaxy(parseutils.Serializable):
         _detail.load_geometries(info, ('components',))
         components = info.get('components')
         parseutils.load_option_and_update_info(
-            component_parser, info, 'components', required=True,
+            component_parser, info, 'components',
             catalogue=[catalogue] * len(components)
             if iterutils.is_sequence(components) else catalogue)
         parseutils.load_option_and_update_info(
@@ -172,7 +175,9 @@ class Galaxy(parseutils.Serializable):
         geometries = self.geometries()
         if geometries:
             info.update(geometries=geometry_parser.dump(geometries))
-        info.update(components=component_parser.dump(list(self.components())))
+        if self.components():
+            info.update(
+                components=component_parser.dump(list(self.components())))
         if self._mass:
             info.update(mass=mass_component_parser.dump(list(self._mass)))
         if self.distance() is not None:
@@ -185,7 +190,7 @@ class Galaxy(parseutils.Serializable):
 
     def __init__(
             self,
-            components: Component | Sequence[Component],
+            components: Component | Sequence[Component] = (),
             mass: MassComponent | Sequence[MassComponent] | None = None,
             distance: Distance | None = None,
             redshift: float | None = None,

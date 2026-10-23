@@ -112,19 +112,10 @@ def test_observation_loads(kind):
     strict_load(config(kind))
 
 
-def test_components_cannot_be_missing():
-    message = galaxy_error(dict())
-    assert "option 'components' is required but not provided" in message
-
-
-def test_components_cannot_be_null():
-    message = galaxy_error(dict(components=None))
-    assert "option 'components' cannot be null" in message
-
-
-def test_components_cannot_be_empty():
-    message = galaxy_error(dict(components=[]))
-    assert "a galaxy needs at least one component" in message
+@pytest.mark.parametrize('info', [dict(), dict(components=[])])
+def test_galaxies_without_components_need_mass(info):
+    message = galaxy_error(info)
+    assert "a galaxy needs at least one component, or mass" in message
 
 
 @pytest.mark.parametrize('kind', FLAT_KINDS)
