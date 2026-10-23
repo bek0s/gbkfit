@@ -185,6 +185,38 @@ def test_grismconf_traces_follow_their_parameter():
     np.testing.assert_allclose(dy, 1e-3 * x0 * y0 * t, rtol=1e-10)
 
 
+def test_grismconf_traces_from_files(tmp_path):
+    # A GRISMCONF file (of two orders, with comments and other keys) gives
+    # the trace of its coefficients, of the order asked
+    from gbkfit.observation.observables.traces import (
+        TraceGrismConf, trace_parser)
+    path = tmp_path / 'grism.conf'
+    path.write_text(
+        "# Wavelength unit: Micron\nNAXIS 2048 2048\n\nBEAM_+1\n"
+        "DISPL_+1_0 4 1e-5 0\nDISPL_+1_1 0.1\nDISPL_+1_2 0.01\n"
+        "DISPX_+1_0 3 0.01 -0.02\nDISPX_+1_1 50\n"
+        "DISPY_+1_0 0\nDISPY_+1_1 0 0 0 0 1e-3 0\n"
+        "SENSITIVITY_+1 sens.fits\nXRANGE_+1 -125.00 125.00\n\n"
+        "BEAM_+2\nDISPL_+2_0 2\nDISPL_+2_1 1\nDISPX_+2_0 0\n"
+        "DISPX_+2_1 99\nDISPY_+2_0 0\n")
+    trace = trace_parser.load(dict(
+        type='grismconf', file=str(path), origin=[100, 200]))
+    expected = TraceGrismConf(
+        displ=[[4, 1e-5, 0], [0.1], [0.01]],
+        dispx=[[3, 0.01, -0.02], [50]],
+        dispy=[[0], [0, 0, 0, 0, 1e-3, 0]], origin=[100, 200])
+    wavelength, x, y = np.array([4.05e-6, 4.1e-6]), [0.0, 10], [5.0, 30]
+    np.testing.assert_allclose(
+        trace.offsets(wavelength, x, y), expected.offsets(wavelength, x, y))
+    second = TraceGrismConf.read(str(path), order=2)
+    np.testing.assert_allclose(second.offsets(2.5e-6, 0.0, 0.0), [49.5, 0])
+    with pytest.raises(RuntimeError, match="no order '-1'"):
+        TraceGrismConf.read(str(path), order=-1)
+    path.write_text("# Wavelength unit: Angstrom\nBEAM_+1\n")
+    with pytest.raises(RuntimeError, match="not micron"):
+        TraceGrismConf.read(str(path))
+
+
 def test_grismconf_traces_constant_over_the_detector(driver):
     # A trace of GRISMCONF that is the same at every place is that of the
     # polynomials: w(t) = 4 + t (um) and dx(t) = c / (4 STEP) t

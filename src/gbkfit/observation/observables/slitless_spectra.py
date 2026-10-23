@@ -327,7 +327,10 @@ class SlitlessSpectra(Observable):
     The light within each pixel of the sky is spread evenly over it; the
     sky can be sampled by sky_sampling pixels for each pixel of the image
     along each axis, to place the light within a pixel (e.g. across
-    shutters of a few pixels). The image can combine several exposures,
+    shutters of a few pixels). Where the trace moves the light by about a
+    pixel or more across a line, this matters: of a disk of a few pixels
+    moved a pixel by each 30 km/s, the image of whole pixels errs by 6% of
+    its peak, of 3 pixels each way by 0.7%. The image can combine several exposures,
     of the sky at offsets (e.g. nods), with weights (e.g. to subtract the
     background as the reduction did; see Exposure). An image resampled
     from the detector by drizzle, of a square kernel of a pixel (e.g.

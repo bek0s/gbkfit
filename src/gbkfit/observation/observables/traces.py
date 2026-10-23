@@ -6,6 +6,7 @@ place of its undispersed light.
 
 import abc
 import os.path
+import re
 from collections.abc import Sequence
 from typing import Any
 
@@ -138,6 +139,9 @@ class TraceGrismConf(Trace):
         The place on the detector (x0, y0; pixels) of the first pixel of
         the image (e.g. of a cutout); (0, 0) by default.
 
+    Its configuration has the coefficients, or a GRISMCONF file and the
+    order (file and order, and origin; see read).
+
     Raises
     ------
     ConfigError
@@ -148,6 +152,86 @@ class TraceGrismConf(Trace):
     @staticmethod
     def type() -> str:
         return 'grismconf'
+
+    @classmethod
+    def load(cls, info: dict[str, Any]) -> 'TraceGrismConf':
+        if 'file' not in info:
+            return super().load(info)
+        options = parseutils.parse_options(
+            info, ['file'], ['order', 'origin'])
+        return cls.read(
+            parseutils.resolve_path(options.pop('file')), **options)
+
+    @classmethod
+    def read(
+            cls,
+            filename: str,
+            order: str | int = '+1',
+            origin: Sequence[float] = (0, 0)
+    ) -> 'TraceGrismConf':
+        """
+        Read the trace of an order of a GRISMCONF file (e.g. those of the
+        grisms of JWST NIRCam and NIRISS): its keys DISPL_{order}_{n},
+        DISPX_{order}_{n} and DISPY_{order}_{n}, the coefficients of the
+        polynomials of the place for t^n (wavelengths in micron).
+
+        Parameters
+        ----------
+        filename : str
+            The file.
+        order : str or int, optional
+            The order (e.g. '+1', 0 or -1).
+        origin : Sequence of float, optional
+            The pixel of the detector of the first pixel of the image.
+
+        Returns
+        -------
+        TraceGrismConf
+            The trace.
+
+        Raises
+        ------
+        ConfigError
+            If the file lacks the order or some of its coefficients, or
+            gives its wavelengths in other units than micron.
+        """
+        beam = order if isinstance(order, str) \
+            else f'+{order}' if order > 0 else str(order)
+        terms: dict[str, dict[int, list[float]]] = dict(
+            DISPL={}, DISPX={}, DISPY={})
+        beams = []
+        with open(filename) as file:
+            for line in file:
+                fields = line.split()
+                if not fields:
+                    continue
+                if fields[0] == '#':
+                    unit = re.match(
+                        r'#\s*wavelength unit:\s*(\S+)', line, re.I)
+                    if unit and unit.group(1).lower() != 'micron':
+                        raise ConfigError(
+                            f"the GRISMCONF file {filename!r} gives its "
+                            f"wavelengths in {unit.group(1)}, not micron")
+                    continue
+                key, *values = fields
+                if key.startswith('BEAM_'):
+                    beams.append(key[5:])
+                name, _, rest = key.partition('_')
+                beam_, _, power = rest.rpartition('_')
+                if name in terms and beam_ == beam and power.isdigit():
+                    terms[name][int(power)] = [float(v) for v in values]
+        if beam not in beams:
+            raise ConfigError(
+                f"the GRISMCONF file {filename!r} has no order {beam!r}; its "
+                f"orders are {beams}")
+        coefficients = {}
+        for name, powers in terms.items():
+            if sorted(powers) != list(range(len(powers))) or not powers:
+                raise ConfigError(
+                    f"the GRISMCONF file {filename!r} lacks coefficients "
+                    f"{name}_{beam}_n: it has those of n = {sorted(powers)}")
+            coefficients[name.lower()] = [powers[n] for n in sorted(powers)]
+        return cls(**coefficients, origin=origin)
 
     def dump(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
         return dict(
