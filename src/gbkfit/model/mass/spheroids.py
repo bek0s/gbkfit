@@ -133,10 +133,10 @@ class MassSpheroid(MassComponent):
     ConfigError
         If the name or the names of the baryons are not valid, it has a
         response but is not spherical, or of a profile that the response
-        does not take, or parameters of the response repeat those of its
-        profile and shape, there are no baryons for a response or a dark
-        fraction, or a dark fraction sets a parameter that the spheroid
-        does not have.
+        does not take, or without the baryons it needs, or parameters of
+        the response repeat those of its profile and shape, there are no
+        baryons for a dark fraction, or a dark fraction sets a parameter
+        that the spheroid does not have.
     """
 
     @staticmethod
@@ -191,15 +191,15 @@ class MassSpheroid(MassComponent):
                     "the response of a spheroid is that of spherical "
                     "shells: it needs a spherical shape")
             response.check_profile(profile)
+            response.check_baryons(baryons)
             if repeated := sorted(own.keys() & response.pdescs().keys()):
                 raise ConfigError(
                     f"the parameters of the response repeat those of the "
                     f"profile and the shape: {repeated}")
-        if (response is not None or dark_fraction is not None) \
-                and not baryons:
+        if dark_fraction is not None and not baryons:
             raise ConfigError(
-                "a response or a dark fraction needs the baryons that the "
-                "spheroid responds to (baryons)")
+                "a dark fraction needs the baryons that the spheroid "
+                "responds to (baryons)")
         if dark_fraction is not None and dark_fraction.solve() not in own:
             raise ConfigError(
                 f"the dark fraction sets {dark_fraction.solve()!r}, which "

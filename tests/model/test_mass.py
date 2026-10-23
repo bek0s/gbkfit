@@ -24,11 +24,10 @@ from gbkfit.model.mass import (
     MassUser, ProfileBurkert, ProfileCoreNFW, ProfileDekelZhao,
     ProfileEinasto, ProfileNFW, ProfileNFWTruncated, ProfileNodewise,
     ProfilePseudoIsothermal, ProfileSersic, ProfileZhao,
-    ResponseBlumenthal86, ResponseGnedin04, ShapeFlattened, SurfaceComponent,
-    SurfaceExponential, SurfaceGaussianRing, SurfaceNodewise,
-    VerticalComponent, VerticalSech,
-    VerticalExponential, VerticalGauss, VerticalSech2, VerticalThin,
-    mass_component_parser)
+    ResponseBlumenthal86, ResponseGnedin04, ResponseSIDM, ShapeFlattened,
+    SurfaceComponent, SurfaceExponential, SurfaceGaussianRing,
+    SurfaceNodewise, VerticalComponent, VerticalSech, VerticalExponential,
+    VerticalGauss, VerticalSech2, VerticalThin, mass_component_parser)
 from gbkfit.model.mass import _disk_gravity
 from gbkfit.utils.parseutils import ConfigError
 
@@ -716,7 +715,8 @@ def test_flattened_spheroids_give_their_forces_anywhere(q):
 def test_contracted_halos_pull_toward_their_centre():
     # Spherical shells: -v^2(r) / r^2 toward the centre, of the contracted
     # circular velocity at the spherical radius r
-    model = mass_model(BARYONS + [responding_halo(response=dict(type='blumenthal86'))])
+    model = mass_model(
+        BARYONS + [responding_halo(response=dict(type='blumenthal86'))])
     halo = model.component('halo')
     values = BARYON_VALUES | dict(mass_halo_log_m=12, mass_halo_c=5)
     params = model.component_params('halo', values)
@@ -784,7 +784,8 @@ def test_contracted_halos_keep_the_dark_matter_of_their_shells():
     # Within r, the dark matter the halo had within r', with r' M(r') =
     # r (M(r') + M_b(r)) (M = v^2 r, in units of G), against r' found by
     # root finding at each radius
-    model = mass_model(BARYONS + [responding_halo(response=dict(type='blumenthal86'))])
+    model = mass_model(
+        BARYONS + [responding_halo(response=dict(type='blumenthal86'))])
     params = BARYON_VALUES | dict(mass_halo_log_m=12, mass_halo_c=5)
     radius = np.array([0.5, 2, 5, 20, 100])
     parts = model.vcirc2_components(radius, params, CONTEXT)
@@ -892,6 +893,97 @@ def test_responding_halos_are_checked():
         key: info[key] for key in ('baryons', 'response', 'dark_fraction')}
     assert mass_component_parser.dump(
         mass_component_parser.load(copy.deepcopy(dumped))) == dumped
+
+
+# The units of the scattering of SIDM: cm^2/g in kpc^2/Msun, and km/s
+# times Gyr in kpc
+SIGMA_UNIT = 2.0883573729600e-10
+TIME_UNIT = 1.0227121650456948
+
+
+@pytest.mark.parametrize('with_baryons', [False, True])
+def test_sidm_cores(with_baryons):
+    # The isothermal core of SIDM (Jiang et al. 2023): at r1, one
+    # scattering in the age, (4 / sqrt(pi)) rho v sigma_m t_age = 1 (rho
+    # and the Jeans velocity dispersion v of the halo before, in the
+    # potential of the halo and of the baryons); within, the isothermal
+    # Jeans-Poisson equation (solved here by solve_ivp), of the density and
+    # the mass of the halo before at r1; outside, the halo before
+    baryons = [BARYONS[0]] if with_baryons else []
+    halo = dict(type='spheroid', name='halo', profile=dict(type='nfw'),
+                baryons=['stars'] if with_baryons else [],
+                response=dict(type='sidm'))
+    model = mass_model(baryons + [halo])
+    params = BARYON_VALUES | dict(
+        mass_halo_log_m=11, mass_halo_c=15, mass_halo_sigma_m=1,
+        mass_halo_t_age=10)
+    own = dict(log_m=11, c=15, sigma_m=1, t_age=10)
+    before = MassSpheroid('h', ProfileNFW())
+
+    def halo_v2(r):
+        return before.vcirc2(r, own, CONTEXT)
+
+    stars = mass_model(baryons) if with_baryons else None
+
+    def baryons_v2(r):
+        if stars is None:
+            return np.zeros_like(r)
+        return stars.vcirc2(r, params, CONTEXT)
+
+    core = model.component('halo').response().core(
+        halo_v2, baryons_v2, ProfileNFW(), own, CONTEXT)
+    r1 = core.r1
+
+    def mass(r, v2):
+        return v2(np.array([r]))[0] * r / G
+
+    rho1 = ProfileNFW().density(np.array([r1]), own, CONTEXT)[0]
+    pressure = scipy.integrate.quad(
+        lambda r: ProfileNFW().density(np.array([r]), own, CONTEXT)[0] * G
+        * (mass(r, halo_v2) + mass(r, baryons_v2)) / r ** 2,
+        r1, np.inf, epsrel=1e-10, limit=400)[0]
+    scatterings = (4 / np.sqrt(np.pi) * rho1 * np.sqrt(pressure / rho1)
+                   * SIGMA_UNIT * 10 * TIME_UNIT)
+    assert scatterings == pytest.approx(1, rel=1e-3)
+
+    def isothermal(r, state):
+        y, m = state
+        return [G * (m + mass(r, baryons_v2)) / (r ** 2 * core.v0 ** 2),
+                4 * np.pi * r ** 2 * core.rho0 * np.exp(-y)]
+
+    start = 1e-4 * r1
+    m0 = 4 * np.pi / 3 * core.rho0 * start ** 3
+    radii = np.array([0.1, 0.5, 0.9]) * r1
+    solution = scipy.integrate.solve_ivp(
+        isothermal, (start, r1),
+        [G * (m0 + mass(start, baryons_v2)) / (2 * start * core.v0 ** 2), m0],
+        t_eval=np.append(radii, r1), rtol=1e-11, atol=0)
+    y, m = solution.y
+    assert core.rho0 * np.exp(-y[-1]) == pytest.approx(rho1, rel=1e-4)
+    assert m[-1] == pytest.approx(mass(r1, halo_v2), rel=1e-5)
+    R = np.append(radii, [1.5 * r1, 3 * r1])
+    v2 = model.vcirc2_components(R, params, CONTEXT)['halo']
+    np.testing.assert_allclose(v2[:3], G * m[:3] / radii, rtol=1e-5)
+    np.testing.assert_array_equal(v2[3:], halo_v2(R[3:]))
+    without = model.vcirc2_components(
+        R, params | dict(mass_halo_sigma_m=0), CONTEXT)['halo']
+    np.testing.assert_array_equal(without, halo_v2(R))
+
+
+def test_sidm_responses_are_checked():
+    # Of dark matter alone, or with a contraction of the halo before, which
+    # needs baryons and is not SIDM
+    info = responding_halo(response=dict(
+        type='sidm', contraction=dict(type='gnedin04')))
+    dumped = mass_component_parser.dump(
+        mass_component_parser.load(copy.deepcopy(info)))
+    assert dumped['response'] == info['response']
+    MassSpheroid('h', ProfileNFW(), response=ResponseSIDM())
+    with pytest.raises(ConfigError, match="needs the baryons"):
+        MassSpheroid('h', ProfileNFW(), response=ResponseSIDM(
+            ResponseBlumenthal86()))
+    with pytest.raises(ConfigError, match="is not SIDM"):
+        ResponseSIDM(ResponseSIDM())
 
 
 HALOS = [
