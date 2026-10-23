@@ -1,5 +1,6 @@
 from .foreground import *
 from .group import *
+from .lens_masses import *
 from .likelihood import *
 from .line_of_sight import *
 from .noise import *

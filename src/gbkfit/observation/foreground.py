@@ -1,34 +1,30 @@
-import abc
 import copy
-import math
-import os.path
 from collections.abc import Mapping, Sequence
 from typing import Any, Self
 
 import numpy as np
-import scipy.ndimage
 
-from gbkfit.dataset import FitsFile, fits_file
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.params import ParamScalarDesc, ParamValues
-from gbkfit.utils import fitsutils, gridutils, parseutils
+from gbkfit.utils import gridutils, iterutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
+
+from .lens_masses import LensMass, lens_mass_parser
 
 
 __all__ = [
     'Foreground',
     'Lens',
-    'LensDeflectionMap',
     'LensPlan',
-    'LensSIE',
     'foreground_parser',
     'lens_parser'
 ]
 
 
-class Lens(parseutils.TypedSerializable, abc.ABC):
+class Lens(parseutils.Serializable):
     """
-    A gravitational lens in front of a model.
+    A gravitational lens in front of a model: masses between it and the
+    telescope (see LensMass), whose deflections add up.
 
     The light of each point of the image plane comes from the point of
     the source plane, where the model is, at its position less the
@@ -38,9 +34,9 @@ class Lens(parseutils.TypedSerializable, abc.ABC):
     gridutils.sky_positions); each pixel of the image takes the bilinear
     interpolation of the source at its position on the source plane.
 
-    A lens may have parameters (see pdescs), of the observation it is in
-    front of (see Foreground.pdescs): its deflection is then evaluated
-    for each evaluation of the model.
+    Its parameters are those of its masses (see pdescs), of the
+    observation it is in front of (see Foreground.pdescs): its deflection
+    is then evaluated for each evaluation of the model.
 
     Parameters
     ----------
@@ -48,28 +44,79 @@ class Lens(parseutils.TypedSerializable, abc.ABC):
         The number of pixels of the grid of the source plane (nx, ny).
     source_step : Sequence of float
         The size of its pixels (arcsec).
+    masses : LensMass or Sequence of LensMass
+        Its masses.
+
+    Raises
+    ------
+    ConfigError
+        If it has no masses, or only some of its masses have names (see
+        pdescs).
     """
 
+    @classmethod
+    def load(cls, info: dict[str, Any], prefix: str = '') -> 'Lens':
+        masses = info.get('masses')
+        parseutils.load_option_and_update_info(
+            lens_mass_parser, info, 'masses', required=True,
+            prefix=[prefix] * len(masses)
+            if iterutils.is_sequence(masses) else prefix)
+        return cls(**parseutils.parse_options_for_callable(
+            info, cls.__init__))
+
+    def dump(
+            self, prefix: str = '', dump_path: bool = True,
+            overwrite: bool = False
+    ) -> dict[str, Any]:
+        count = len(self._masses)
+        masses = lens_mass_parser.dump(
+            list(self._masses),
+            prefix=[f'{prefix}lens_{item}' for item in self._prefixes],
+            dump_path=[dump_path] * count, overwrite=[overwrite] * count)
+        return dict(
+            source_size=self._source_grid.size,
+            source_step=self._source_grid.coords.step, masses=masses)
+
     def __init__(
-            self, source_size: Sequence[int], source_step: Sequence[float]
+            self,
+            source_size: Sequence[int],
+            source_step: Sequence[float],
+            masses: LensMass | Sequence[LensMass]
     ):
+        masses = iterutils.tuplify(masses)
+        if not masses:
+            raise ConfigError("a lens needs at least one mass")
         self._source_grid = gridutils.make_grid(
             tuple(source_size), tuple(source_step))
+        self._masses = masses
+        self._prefixes = parseutils.item_prefixes(
+            [mass.name() for mass in masses], 'masses', 'mass', False)
+        self._pdescs, self._mappings = iterutils.merge_with_prefixes(
+            [mass.pdescs() for mass in masses], self._prefixes)
 
     def source_grid(self) -> gridutils.Grid:
         """Return the grid of the source plane (x and y)."""
         return self._source_grid
 
-    def pdescs(self) -> dict[str, ParamScalarDesc]:
-        """Return its parameters, by name (none by default)."""
-        return {}
+    def masses(self) -> tuple[LensMass, ...]:
+        """Return its masses."""
+        return self._masses
 
-    @abc.abstractmethod
+    def pdescs(self) -> dict[str, ParamScalarDesc]:
+        """
+        Return its parameters, by name: those of its masses, with the
+        name of each mass and '_' before them when it has several (e.g.
+        'shear_gamma'), or 'mass' and its index for masses without names
+        ('mass1_gamma'; none for the first).
+        """
+        return dict(self._pdescs)
+
     def deflection(
             self, grid: gridutils.Grid, params: ParamValues
     ) -> tuple[np.ndarray, np.ndarray]:
         """
-        Return the deflection at the pixels of a grid of the image plane.
+        Return the deflection at the pixels of a grid of the image plane:
+        the sum of those of its masses.
 
         Parameters
         ----------
@@ -84,7 +131,14 @@ class Lens(parseutils.TypedSerializable, abc.ABC):
             The deflection (arcsec) along x and y of the frame of the
             model, each of shape (ny, nx).
         """
-        pass
+        alpha_x = np.zeros(grid.size[1::-1])
+        alpha_y = np.zeros(grid.size[1::-1])
+        for mass, names in zip(self._masses, self._mappings):
+            mass_x, mass_y = mass.deflection(grid, {
+                name: params[full] for name, full in names.items()})
+            alpha_x += mass_x
+            alpha_y += mass_y
+        return alpha_x, alpha_y
 
     def plan(
             self,
@@ -200,294 +254,9 @@ class LensPlan:
             self._source_x, self._source_y, source, image)
 
 
-class LensDeflectionMap(Lens):
-    """
-    A lens of a given deflection: maps of it on a grid of the image plane
-    (e.g. from a lens model), placed by their RA and Dec.
-
-    Between the pixels of the maps the deflection is interpolated
-    (bilinearly), and beyond them it is that of their nearest edge (e.g.
-    in the padding of the convolution).
-
-    Parameters
-    ----------
-    alpha_x, alpha_y : np.ndarray
-        The deflection (arcsec) along x and y of the frame of the model
-        (like xpos and ypos), each of shape (ny, nx).
-    source_size, source_step : Sequence
-        The grid of the source plane (see Lens).
-    step, rpix, rval : float or Sequence of float, optional
-        The world coordinates of the maps (see gridutils.make_grid).
-    rota : float, optional
-        The rotation of the maps on the sky.
-    scaled : bool, optional
-        Whether the deflection is scaled by a parameter, 'scale' (fixed
-        or fitted; see pdescs): e.g. D_LS / D_S of the source over that
-        of the maps, when they are of a source at another redshift.
-
-    Raises
-    ------
-    ConfigError
-        If the maps are not two finite images of one shape.
-    """
-
-    @staticmethod
-    def type() -> str:
-        return 'deflection_map'
-
-    @classmethod
-    def load(
-            cls, info: dict[str, Any], prefix: str = ''
-    ) -> 'LensDeflectionMap':
-        info = dict(info)
-        files = {}
-        for key in ('alpha_x', 'alpha_y'):
-            files[key] = parseutils.load_option(
-                fits_file, info, key, required=True, prefix=prefix)
-            del info[key]
-        options = parseutils.parse_options_for_callable(
-            info, cls.from_files, ignore_params=list(files))
-        return cls.from_files(**files, **options)
-
-    @classmethod
-    def from_files(
-            cls,
-            alpha_x: FitsFile,
-            alpha_y: FitsFile,
-            source_size: Sequence[int],
-            source_step: Sequence[float],
-            step: float | Sequence[float] | None = None,
-            rpix: float | Sequence[float] | None = None,
-            rval: float | Sequence[float] | None = None,
-            rota: float | None = None,
-            scaled: bool = False
-    ) -> 'LensDeflectionMap':
-        """
-        Read a lens from FITS files of its deflection maps, with the world
-        coordinates of the files unless given; they must agree.
-
-        Parameters
-        ----------
-        alpha_x, alpha_y : str or tuple
-            The files of the maps: each a filename, or a filename and the
-            HDU.
-        source_size, source_step : Sequence
-            The grid of the source plane (see Lens).
-        step, rpix, rval : float or Sequence of float, optional
-            The world coordinates of the maps (see gridutils.make_grid); by
-            default, those of the headers. Either rpix or rval can be
-            given, and the other comes from the headers (see
-            fitsutils.read_data).
-        rota : float, optional
-            The rotation of the maps on the sky; by default, that of the
-            headers.
-        scaled : bool, optional
-            Whether the deflection is scaled by a parameter (see the
-            class).
-
-        Returns
-        -------
-        LensDeflectionMap
-            The lens.
-
-        Raises
-        ------
-        ConfigError
-            If the maps have different world coordinates.
-        """
-        maps = []
-        for file in (alpha_x, alpha_y):
-            filename, hdu = (file, 0) if isinstance(file, str) else file
-            maps.append(fitsutils.read_data(filename, hdu, rpix, rval))
-        (data_x, coords), (data_y, coords_y) = maps
-        if coords_y != coords:
-            raise ConfigError(
-                "the deflection maps have different world coordinates")
-        return cls(
-            data_x, data_y, source_size, source_step,
-            coords.step if step is None else step, coords.rpix, coords.rval,
-            coords.rota if rota is None else rota, scaled)
-
-    def dump(
-            self, prefix: str = '', dump_path: bool = True,
-            overwrite: bool = False
-    ) -> dict[str, Any]:
-        coords = self._grid.coords
-        info = dict(type=self.type())
-        for key, data in (
-                ('alpha_x', self._alpha_x), ('alpha_y', self._alpha_y)):
-            filename = f'{prefix}lens_{key}.fits'
-            fitsutils.write_data(filename, data, coords, None, overwrite)
-            info[key] = filename if dump_path else os.path.basename(filename)
-        info |= dict(
-            source_size=self._source_grid.size,
-            source_step=self._source_grid.coords.step)
-        if self._scaled:
-            info['scaled'] = True
-        return info
-
-    def __init__(
-            self,
-            alpha_x: np.ndarray,
-            alpha_y: np.ndarray,
-            source_size: Sequence[int],
-            source_step: Sequence[float],
-            step: float | Sequence[float] | None = None,
-            rpix: float | Sequence[float] | None = None,
-            rval: float | Sequence[float] | None = None,
-            rota: float | None = None,
-            scaled: bool = False
-    ):
-        super().__init__(source_size, source_step)
-        alpha_x = np.asarray(alpha_x, dtype=float)
-        alpha_y = np.asarray(alpha_y, dtype=float)
-        if alpha_x.ndim != 2 or alpha_x.shape != alpha_y.shape:
-            raise ConfigError(
-                f"the deflection maps must be two images of one shape; they "
-                f"have the shapes {alpha_x.shape} and {alpha_y.shape}")
-        if not (np.all(np.isfinite(alpha_x)) and np.all(np.isfinite(alpha_y))):
-            raise ConfigError("the deflection maps must be finite")
-        self._alpha_x = alpha_x
-        self._alpha_y = alpha_y
-        self._grid = gridutils.make_grid(
-            alpha_x.shape[::-1], step, rpix, rval, rota)
-        self._scaled = scaled
-
-    def pdescs(self) -> dict[str, ParamScalarDesc]:
-        if not self._scaled:
-            return {}
-        return dict(scale=ParamScalarDesc(
-            "the scale of the deflection (e.g. D_LS / D_S)", minimum=0))
-
-    def deflection(
-            self, grid: gridutils.Grid, params: ParamValues
-    ) -> tuple[np.ndarray, np.ndarray]:
-        gridutils.check_overlap(grid, self._grid, "the deflection maps")
-        pixel_x, pixel_y = gridutils.pixels_on(grid, self._grid)
-        scale = params['scale'] if self._scaled else 1.0
-
-        def sample(data):
-            return scale * scipy.ndimage.map_coordinates(
-                data, [pixel_y, pixel_x], order=1, mode='nearest')
-        return sample(self._alpha_x), sample(self._alpha_y)
 
 
-class LensSIE(Lens):
-    """
-    A singular isothermal ellipsoid (SIE), optionally with an external
-    shear: the standard model of a galaxy lens, of convergence
-
-        kappa = theta_e / (2 sqrt(q u^2 + v^2 / q))
-
-    along its major (u) and minor (v) axes, whose deflection is analytic
-    (Kormann et al. 1994): with f = sqrt(1 - q^2) and
-    psi = sqrt(q^2 u^2 + v^2),
-
-        alpha_u = theta_e sqrt(q) / f * arctan(f u / psi)
-        alpha_v = theta_e sqrt(q) / f * arctanh(f v / psi)
-
-    (theta_e u / r and theta_e v / r, a singular isothermal sphere, for
-    q = 1). The shear, of strength gamma, stretches the images along the
-    position angle gamma_pa: its deflection is linear around the centre.
-
-    Its parameters (see pdescs): theta_e (arcsec, the Einstein radius of
-    the sphere of the same mass), q (the axis ratio), pa (the position
-    angle of the major axis, north through east, as that of disks), x and
-    y (the centre, arcsec, in the frame of the model, as xpos and ypos),
-    and with shear, gamma and gamma_pa.
-
-    Parameters
-    ----------
-    source_size, source_step : Sequence
-        The grid of the source plane (see Lens).
-    shear : bool, optional
-        Whether it has an external shear.
-    """
-
-    @staticmethod
-    def type() -> str:
-        return 'sie'
-
-    def dump(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
-        return dict(
-            type=self.type(), source_size=self._source_grid.size,
-            source_step=self._source_grid.coords.step, shear=self._shear)
-
-    def __init__(
-            self,
-            source_size: Sequence[int],
-            source_step: Sequence[float],
-            shear: bool = False
-    ):
-        super().__init__(source_size, source_step)
-        self._shear = shear
-
-    def pdescs(self) -> dict[str, ParamScalarDesc]:
-        pdescs = dict(
-            theta_e=ParamScalarDesc(
-                "the Einstein radius (arcsec)", minimum=0),
-            # (q > 0 keeps the deflection finite)
-            q=ParamScalarDesc("the axis ratio", minimum=1e-3, maximum=1),
-            pa=ParamScalarDesc("the position angle (degrees)"),
-            x=ParamScalarDesc("the centre along x (arcsec)"),
-            y=ParamScalarDesc("the centre along y (arcsec)"))
-        if self._shear:
-            pdescs |= dict(
-                gamma=ParamScalarDesc("the external shear", minimum=0),
-                gamma_pa=ParamScalarDesc(
-                    "the position angle of the shear (degrees)"))
-        return pdescs
-
-    def deflection(
-            self, grid: gridutils.Grid, params: ParamValues
-    ) -> tuple[np.ndarray, np.ndarray]:
-        x, y = gridutils.sky_positions(grid)
-        x = x - params['x']
-        y = y - params['y']
-        # Along the major axis (u, at the position angle, from +y towards
-        # -x) and the minor axis (v)
-        pa = math.radians(params['pa'])
-        sin_pa, cos_pa = math.sin(pa), math.cos(pa)
-        u = -sin_pa * x + cos_pa * y
-        v = cos_pa * x + sin_pa * y
-        alpha_u, alpha_v = _sie_deflection(
-            u, v, params['theta_e'], params['q'])
-        alpha_x = -sin_pa * alpha_u + cos_pa * alpha_v
-        alpha_y = cos_pa * alpha_u + sin_pa * alpha_v
-        if self._shear:
-            # (the angle from +x of the position angle is 90 degrees more)
-            angle = 2 * math.radians(params['gamma_pa'] + 90)
-            gamma1 = params['gamma'] * math.cos(angle)
-            gamma2 = params['gamma'] * math.sin(angle)
-            alpha_x = alpha_x + gamma1 * x + gamma2 * y
-            alpha_y = alpha_y + gamma2 * x - gamma1 * y
-        return alpha_x, alpha_y
-
-
-def _sie_deflection(
-        u: np.ndarray,
-        v: np.ndarray,
-        theta_e: float,
-        q: float
-) -> tuple[np.ndarray, np.ndarray]:
-    """
-    Return the deflection of an SIE along its major (u) and minor (v)
-    axes (see LensSIE); 0 at its centre.
-    """
-    r = np.hypot(u, v)
-    centre = r == 0
-    if q > 1 - 1e-8:
-        with np.errstate(invalid='ignore', divide='ignore'):
-            scale = np.where(centre, 0, theta_e / r)
-        return scale * u, scale * v
-    f = math.sqrt(1 - q * q)
-    psi = np.where(centre, 1, np.sqrt(q * q * u * u + v * v))
-    scale = theta_e * math.sqrt(q) / f
-    return (scale * np.arctan(f * u / psi),
-            scale * np.arctanh(f * v / psi))
-
-
-lens_parser = parseutils.TypedParser(Lens, [LensDeflectionMap, LensSIE])
+lens_parser = parseutils.BasicParser(Lens)
 
 
 class Foreground(parseutils.Serializable):
