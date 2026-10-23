@@ -27,6 +27,7 @@ import scipy.sparse.linalg
 
 
 __all__ = [
+    'CellMasses',
     'FieldGradient',
     'FieldGrid',
     'solve_field'
@@ -38,6 +39,10 @@ _log = logging.getLogger(__name__)
 # The gradient of a field, (dw/dR, dw/dz), at points (R, z)
 FieldGradient = Callable[
     [np.ndarray, np.ndarray], tuple[np.ndarray, np.ndarray]]
+
+# The masses (Msun) in the cells between the spheres of radii and the
+# latitudes (from the plane) of edges, at both sides of the plane
+CellMasses = Callable[[np.ndarray, np.ndarray], np.ndarray]
 
 # The cells of the grids: log-spaced in radius from the inner radius
 # (kpc); in latitude, from the plane to the pole, finer near the plane
@@ -57,16 +62,17 @@ _TOLERANCE = 1e-9
 
 class FieldGrid:
     """
-    A grid of the field from the centre of a galaxy to the radius rmax
-    (kpc), above its plane (the field below it is its mirror image): its
-    cells, their volumes, the gradients between them (see flux_matrix),
-    and the points that average a density over them.
+    A grid of the field from near the centre of a galaxy (its inner
+    radius) to the radius rmax (kpc), above its plane (the field below it
+    is its mirror image): its cells, between radii and latitudes (from
+    the plane), their volumes, and the gradients between them (see
+    flux_matrix).
 
     Parameters
     ----------
     rmax : float
-        The outer radius (kpc), at which the field is that of the
-        density there (see solve_field).
+        The outer radius (kpc), at which the field is in equilibrium with
+        the density there (see solve_field).
     dlnr : float
         The width of the cells in ln r.
     nlat : int
@@ -124,25 +130,6 @@ class FieldGrid:
         boundary[index[-1]] = outer
         return matrix, boundary
 
-    def mean(
-            self, function: Callable[[np.ndarray, np.ndarray], np.ndarray]
-    ) -> np.ndarray:
-        """
-        Return the mean of a function of (R, z) over each cell, by 2 x 2
-        Gauss-Legendre points in r^3 and sin(b) (in which the volume is
-        uniform).
-        """
-        nodes = np.array([-1, 1]) / np.sqrt(3)
-
-        def points(edges: np.ndarray) -> np.ndarray:
-            middle, half = (edges[1:] + edges[:-1]) / 2, np.diff(edges) / 2
-            return middle[:, None] + half[:, None] * nodes
-
-        r = np.cbrt(points(self.r_edges ** 3))[:, None, :, None]
-        b = np.arcsin(points(np.sin(self.b_edges)))[None, :, None, :]
-        values = function(r * np.cos(b), r * np.sin(b))
-        return values.mean(axis=(2, 3))
-
     def gradient(self, w: np.ndarray, w_out: np.ndarray) -> FieldGradient:
         """
         Return the gradient of a field (dw/dR, dw/dz) at any points (R, z),
@@ -192,19 +179,20 @@ class FieldGrid:
 
 def solve_field(
         rmax: float,
-        density: Callable[[np.ndarray, np.ndarray], np.ndarray],
+        masses: CellMasses,
         a: float,
         b: float,
         n: float
 ) -> tuple[FieldGrid, np.ndarray, np.ndarray]:
     """
-    Return the field w = f_R / fbar_R of a density (Msun/kpc^3, a function
-    of (R, z)), of the constants a (kpc^-2) and b (kpc / Msun) of the field
-    equation and the index n of Hu-Sawicki (see the module), to the radius
-    rmax (kpc): the grid of its solution, and w at the centres of its cells
-    and at its outer edge (at the latitudes of the cells). At the outer
-    edge, beyond the Compton wavelength, w is in equilibrium with the
-    density there: a (w^(-1/(n+1)) - 1) = b rho.
+    Return the field w = f_R / fbar_R of a mass, of the constants a
+    (kpc^-2) and b (kpc / Msun) of the field equation and the index n of
+    Hu-Sawicki (see the module), to the radius rmax (kpc): the grid of its
+    solution, and w at the centres of its cells and at its outer edge (at
+    the latitudes of the cells). The source of each cell is its mean
+    density, of its mass (that within the inner radius sources nothing).
+    At the outer edge, beyond the Compton wavelength, w is in equilibrium
+    with the density of the outer cells: a (w^(-1/(n+1)) - 1) = b rho.
 
     Raises
     ------
@@ -215,14 +203,14 @@ def solve_field(
     for dlnr, nlat in _LEVELS:
         finer = FieldGrid(rmax, dlnr, nlat)
         initial = None if grid is None else _interpolated(grid, u, finer)
-        u, w_out = _solve(finer, density, a, b, n, initial)
+        u, w_out = _solve(finer, masses, a, b, n, initial)
         grid = finer
     return grid, np.exp(u).reshape(grid.shape), w_out
 
 
 def _solve(
         grid: FieldGrid,
-        density: Callable[[np.ndarray, np.ndarray], np.ndarray],
+        masses: CellMasses,
         a: float,
         b: float,
         n: float,
@@ -238,12 +226,12 @@ def _solve(
     """
     power = -1 / (n + 1)
     matrix, boundary = grid.flux_matrix()
-    outer = grid.r_edges[-1]
-    w_out = (1 + b * density(
-        outer * np.cos(grid.b), outer * np.sin(grid.b)) / a) ** -(n + 1)
+    # (the masses at both sides of the plane, the volumes above it)
+    density = masses(grid.r_edges, grid.b_edges) / (2 * grid.volumes)
+    w_out = (1 + b * density[-1] / a) ** -(n + 1)
     boundary = boundary * np.tile(w_out, grid.shape[0])
     volumes = grid.volumes.ravel()
-    source = b * grid.mean(density).ravel()
+    source = b * density.ravel()
     u = initial
     if u is None:
         linear = 1 + scipy.sparse.linalg.spsolve(

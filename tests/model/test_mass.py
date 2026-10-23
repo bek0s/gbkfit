@@ -2010,3 +2010,28 @@ def test_the_gravity_writes_the_rotation_it_gives():
     np.testing.assert_allclose(table['vrot'], given[0]['vpt_vt'])
     np.testing.assert_allclose(
         table['vrot'] ** 2, vcirc2 + table['pressure'], rtol=1e-9)
+
+
+@pytest.mark.parametrize('vertical', [None, 'thin', 'sech2'])
+def test_cell_masses_add_up(vertical):
+    # The masses of the cells between spheres and latitudes add up to the
+    # mass between the inner and the outer sphere: of a halo (of its
+    # enclosed mass), and of a thin disk (in the cells next to its plane)
+    # or a thick one (of its density)
+    if vertical is None:
+        component = dict(type='spheroid', name='c', profile=dict(
+            type='nfw', parameters='density_radius'))
+        params = dict(mass_c_log_rho=7, mass_c_rs=10)
+    else:
+        component = dict(type='disk', name='c', surface=dict(
+            type='exponential'), vertical=dict(type=vertical))
+        params = dict(mass_c_log_m=10, mass_c_rd=3, mass_c_hz=0.3)
+    model = MassModel.load(dict(components=[component]))
+    r_edges = np.geomspace(0.01, 200, 250)
+    b_edges = np.pi / 2 * np.linspace(0, 1, 41) ** 2
+    masses = model.cell_masses(r_edges, b_edges, params, CONTEXT)
+    enclosed = model.enclosed_mass(r_edges[[0, -1]], params, CONTEXT)
+    np.testing.assert_allclose(
+        masses.sum(), enclosed[1] - enclosed[0], rtol=1e-4)
+    if vertical == 'thin':
+        assert np.all(masses[:, 1:] == 0)

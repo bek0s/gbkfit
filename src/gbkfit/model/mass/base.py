@@ -269,6 +269,44 @@ class MassComponent(parseutils.TypedSerializable, abc.ABC):
         raise NotImplementedError(
             f"the mass component '{self.type()}' does not give its density")
 
+    def cell_masses(
+            self,
+            r_edges: np.ndarray,
+            b_edges: np.ndarray,
+            params: ParamValues,
+            context: MassContext
+    ) -> np.ndarray:
+        """
+        Return its mass (Msun) in each cell between the spheres of the
+        radii r_edges (kpc) and the latitudes b_edges (radians, from its
+        plane), at both sides of the plane, of shape (len(r_edges) - 1,
+        len(b_edges) - 1) (see vcirc2 for the other arguments). By default,
+        of its density at 2 x 2 points of each cell at either side, by
+        Gauss-Legendre quadrature in r^3 and sin(b), in which the volume is
+        uniform.
+
+        Raises
+        ------
+        NotImplementedError
+            If the component does not give its density.
+        """
+        r_edges = np.asarray(r_edges, dtype=float)
+        b_edges = np.asarray(b_edges, dtype=float)
+        nodes = np.array([-1, 1]) / np.sqrt(3)
+
+        def points(edges: np.ndarray) -> np.ndarray:
+            middle, half = (edges[1:] + edges[:-1]) / 2, np.diff(edges) / 2
+            return middle[:, None] + half[:, None] * nodes
+
+        r = np.cbrt(points(r_edges ** 3))[:, None, :, None]
+        b = np.arcsin(points(np.sin(b_edges)))[None, :, None, :]
+        R, z = r * np.cos(b), r * np.sin(b)
+        density = (self.density(R, z, params, context)
+                   + self.density(R, -z, params, context)) / 2
+        volumes = 4 * np.pi / 3 * np.outer(
+            np.diff(r_edges ** 3), np.diff(np.sin(b_edges)))
+        return density.mean(axis=(2, 3)) * volumes
+
     def surface_density(
             self,
             R: npt.ArrayLike,
@@ -388,6 +426,19 @@ class MassSpherical(MassComponent, abc.ABC):
     ) -> np.ndarray:
         """Return its density (Msun/kpc^3) at the spherical radii r."""
         pass
+
+    def cell_masses(
+            self,
+            r_edges: np.ndarray,
+            b_edges: np.ndarray,
+            params: ParamValues,
+            context: MassContext
+    ) -> np.ndarray:
+        # (of its enclosed mass: the share of a shell between the latitudes
+        # b1 < |b| < b2 is sin(b2) - sin(b1))
+        return np.outer(
+            np.diff(self.enclosed_mass(r_edges, params, context)),
+            np.diff(np.sin(b_edges)))
 
     def vcirc2(
             self,

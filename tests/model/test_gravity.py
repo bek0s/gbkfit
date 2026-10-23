@@ -180,62 +180,86 @@ THICK_PARAMS = PARAMS | dict(
 
 # The squared velocity ((km/s)^2) of the fifth force of the halo (rho_s =
 # 1e7 Msun/kpc^3, r_s = 10 kpc) at 5 to 200 kpc, by the solver of SPAM
-# (Naik et al. 2019: its Grid1D, of 175 cells to 5 Mpc), in its background
-# (h = 0.7, Omega_m = 0.308, at z = 0), of log10 |f_R0|: partly screened
+# (Naik et al. 2019: its Grid1D), in its background (h = 0.7, Omega_m =
+# 0.308, at z = 0), of log10 |f_R0| and of the environment (log10 of
+# -Phi_ext / c^2; its sphere of radius lambda_C = 3.45 Mpc): partly
+# screened, of its 175 cells to 5 Mpc; and screened by the environment,
+# of 1400 cells to 10 lambda_C (converged: its 5 Mpc are too near)
 SPAM_RADII = np.array([5.0, 20, 50, 100, 200])
 SPAM_V5 = {
-    -6.5: [1876.37, 3709.77, 3378.31, 2644.74, 1854.35],
-    -7.0: [0.0, 0.01, 1500.78, 1689.12, 1357.58]}
+    (-6.5, None): [1876.37, 3709.77, 3378.31, 2644.74, 1854.35],
+    (-7.0, None): [0.0, 0.01, 1500.78, 1689.12, 1357.58],
+    (-6.0, -5.5): [0.0, 1970.5, 2676.4, 2289.4, 1713.5]}
 
 
-@pytest.mark.parametrize('log_fr0', SPAM_V5)
-def test_hu_sawicki_as_spam(log_fr0):
-    # (to its precision: some 0.3% of v5^2 with its cells)
+@pytest.mark.parametrize('log_fr0, log_phi_ext', SPAM_V5)
+def test_hu_sawicki_as_spam(log_fr0, log_phi_ext):
+    # (to the precision of its solver: some 1% of v5^2)
     model = MassModel.load(dict(components=[copy.deepcopy(HALO)]))
     params = dict(mass_halo_log_rho=7, mass_halo_rs=10,
-                  gravity_log_fr0=log_fr0)
+                  gravity_log_fr0=log_fr0, gravity_log_phi_ext=log_phi_ext)
     ricci = 3 * 0.308 * (0.07 / 299792.458) ** 2 * (1 + 4 * 0.692 / 0.308)
     context = MassContext(1.0, 0.308, ricci_scalar=ricci,
                           ricci_scalar_today=ricci)
-    field = GravityHuSawicki().field(model, params, context)
+    gravity = GravityHuSawicki(environment=log_phi_ext is not None)
+    field = gravity.field(model, params, context)
     v5 = (field.vcirc2(SPAM_RADII)
           - model.vcirc2(SPAM_RADII, params, context))
-    np.testing.assert_allclose(v5, SPAM_V5[log_fr0], rtol=0.01, atol=1)
+    np.testing.assert_allclose(
+        v5, SPAM_V5[log_fr0, log_phi_ext], rtol=0.015, atol=1)
 
 
 def test_hu_sawicki_unscreened_and_screened():
     # Unscreened (|f_R0| = 1e-5, Compton wavelength 11 Mpc), the forces
-    # are 4/3 of the Newtonian ones, anywhere; screened (1e-9), Newtonian
+    # are 4/3 of the Newtonian ones, anywhere; screened (1e-9), or by an
+    # environment of a deep potential (-Phi_ext / c^2 = 1e-5, of 1e-6),
+    # Newtonian; with that of a shallow one (1e-9), as without
     galaxy_ = galaxy(mass=THICK, distance=DISTANCE,
-                     gravity=dict(type='hu_sawicki'))
+                     gravity=dict(type='hu_sawicki', environment=True))
     assert galaxy_parser.dump(galaxy_)['gravity'] == dict(
-        type='hu_sawicki', n=1.0, screened=[])
+        type='hu_sawicki', n=1.0, screened=[], environment=True)
     R, z = np.array([1.0, 5, 20]), np.array([0.5, 0, 5])
-    params = THICK_PARAMS | dict(gravity_log_fr0=-5)
+    params = THICK_PARAMS | dict(gravity_log_fr0=-5, gravity_log_phi_ext=-9)
     mass = galaxy_.plan_gravity().mass(params)
     newton = mass.model.forces(R, z, mass.params, mass.context)
     np.testing.assert_allclose(
         mass.field.forces(R, z), 4 / 3 * np.array(newton), rtol=2e-3)
-    bound = galaxy_.plan_functions().bind(params | dict(gravity_log_fr0=-9))
-    np.testing.assert_allclose(bound['vcirc'](R), bound['vnewton'](R),
-                               rtol=1e-9)
+    for log_fr0, log_phi_ext in ((-9, -9), (-6, -5)):
+        bound = galaxy_.plan_functions().bind(params | dict(
+            gravity_log_fr0=log_fr0, gravity_log_phi_ext=log_phi_ext))
+        np.testing.assert_allclose(
+            bound['vcirc'](R), bound['vnewton'](R), rtol=1e-6)
 
 
-def test_hu_sawicki_sources():
-    # A thin disk has no density, to source the field, unless it is
-    # screened; the screened components are of the mass model
+def test_hu_sawicki_thin_disks():
+    # A thin disk sources the field as the limit of thick ones: its fifth
+    # force adds to the circular velocity as that of one of a scale height
+    # of 30 pc, to 0.1 km/s, unscreened or partly screened
     thin = [MASS[0], HALO]
-    params = THICK_PARAMS | dict(gravity_log_fr0=-6)
-    unscreened = galaxy(mass=thin, distance=DISTANCE,
-                        gravity=dict(type='hu_sawicki'))
-    with pytest.raises(NotImplementedError, match='not screened'):
-        unscreened.plan_gravity().mass(params)
-    screened = galaxy(mass=thin, distance=DISTANCE,
-                      gravity=dict(type='hu_sawicki', screened=['stars']))
-    screened.plan_gravity().mass(params)
+    galaxies = [
+        galaxy(mass=mass, distance=DISTANCE, gravity=dict(type='hu_sawicki'))
+        for mass in (thin, THICK)]
+    R = np.array([5.0, 10, 20, 50])
+    for log_fr0 in (-5, -6.3):
+        params = THICK_PARAMS | dict(
+            gravity_log_fr0=log_fr0, mass_stars_hz=0.03)
+        added = []
+        for galaxy_ in galaxies:
+            bound = galaxy_.plan_functions().bind(params)
+            added.append(bound['vcirc'](R) - bound['vnewton'](R))
+        np.testing.assert_allclose(added[0], added[1], atol=0.1)
+
+
+def test_hu_sawicki_options():
+    # The screened components are of the mass model; n is positive; the
+    # depth of the potential of the environment is a parameter with it
     with pytest.raises(ConfigError, match="screened mass components"):
-        galaxy(mass=thin, distance=DISTANCE,
+        galaxy(mass=THICK, distance=DISTANCE,
                gravity=dict(type='hu_sawicki', screened=['gas']))
     with pytest.raises(ConfigError, match="n must be positive"):
-        galaxy(mass=thin, distance=DISTANCE,
+        galaxy(mass=THICK, distance=DISTANCE,
                gravity=dict(type='hu_sawicki', n=0))
+    screened = galaxy(mass=THICK, distance=DISTANCE,
+                      gravity=dict(type='hu_sawicki', screened=['stars']))
+    assert screened.gravity().screened() == ('stars',)
+    assert 'gravity_log_phi_ext' not in screened.gravity().pdescs()

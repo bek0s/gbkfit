@@ -370,25 +370,31 @@ class GravityHuSawicki(Gravity):
     galaxy (an overdensity in a universe of mean density, so far from it
     f_R is in equilibrium with its density, and fbar_R where there is
     none). Where the field is unscreened, the fifth force is a third of
-    the Newtonian one within the Compton wavelength (some Mpc for |f_R0|
-    = 1e-6, at the epoch 0); where the density is high enough, the field
-    is screened and the gravity Newtonian. Its parameter: 'gravity_log_fr0',
-    log10 |f_R0|.
+    the Newtonian one within the Compton wavelength lambda_C (some Mpc for
+    |f_R0| = 1e-6, at the epoch 0); where the density is high enough, the
+    field is screened and the gravity Newtonian. Its parameter:
+    'gravity_log_fr0', log10 |f_R0|.
 
     The field is solved in each evaluation, on a grid of the meridional
-    plane to beyond its Compton wavelength, as SPAM (Naik et al. 2019)
-    does: some 0.1 to 1 s (more where the screening is partial). It is
-    sourced by the density of the mass components (point masses have
-    none: compact, they screen themselves), but those screened (e.g. the
-    stars, as SPAM can: each star screens itself); thin disks have no
-    density (that the screening needs), and raise NotImplementedError.
-    The environment of the galaxy does not screen it. Its forces anywhere
-    are those of the Newtonian forces of all the mass, plus the fifth
-    force; it does not give the vertical structure of self-gravitating
-    sheets, or the shares of the components (the fifth force is not a sum
-    over them). The Newtonian circular velocities of the components remain
-    in the rotation tables and the functions of the galaxy (see
-    GravityPlan.evaluate and GalaxyFunctions).
+    plane to beyond lambda_C, as SPAM (Naik et al. 2019) does: some 0.1 to
+    1 s (more where the screening is partial). It is sourced by the mass
+    of the mass components (in each cell of the grid; thin disks in the
+    cells next to the plane), but of those screened (e.g. the stars, as
+    SPAM can: each star screens itself), and but within 10 pc of the
+    centre (e.g. a point mass, compact, screens itself). With the
+    environment, its parameter 'gravity_log_phi_ext' is log10 of the depth
+    of the Newtonian potential of the environment of the galaxy, -Phi_ext
+    / c^2 (e.g. of the screening maps of Desmond et al. 2018), which also
+    sources the field as SPAM models it: a sphere of uniform density and
+    of radius lambda_C about the galaxy, of potential Phi_ext at its
+    centre (which only sources the field: its Newtonian force is left
+    out). Its forces anywhere are those of the Newtonian forces of all the
+    mass, plus the fifth force; it does not give the vertical structure
+    of self-gravitating sheets, or the shares of the components (the
+    fifth force is not a sum over them). The Newtonian circular
+    velocities of the components remain in the rotation tables and the
+    functions of the galaxy (see GravityPlan.evaluate and
+    GalaxyFunctions).
 
     Parameters
     ----------
@@ -396,6 +402,8 @@ class GravityHuSawicki(Gravity):
         The index n of Hu & Sawicki (1 by default, as SPAM).
     screened : sequence of str, optional
         The names of the mass components that do not source the field.
+    environment : bool, optional
+        Whether the environment of the galaxy sources the field.
 
     Raises
     ------
@@ -409,13 +417,20 @@ class GravityHuSawicki(Gravity):
 
     def dump(self) -> dict[str, Any]:
         return dict(
-            type=self.type(), n=self._n, screened=list(self._screened))
+            type=self.type(), n=self._n, screened=list(self._screened),
+            environment=self._environment)
 
-    def __init__(self, n: float = 1, screened: Sequence[str] = ()):
+    def __init__(
+            self,
+            n: float = 1,
+            screened: Sequence[str] = (),
+            environment: bool = False
+    ):
         if not n > 0:
             raise ConfigError(f"n must be positive; it is {n}")
         self._n = float(n)
         self._screened = tuple(screened)
+        self._environment = bool(environment)
 
     def n(self) -> float:
         """Return the index n of Hu & Sawicki."""
@@ -425,10 +440,19 @@ class GravityHuSawicki(Gravity):
         """Return the names of the mass components that do not source it."""
         return self._screened
 
+    def environment(self) -> bool:
+        """Return whether the environment of the galaxy sources it."""
+        return self._environment
+
     def pdescs(self) -> dict[str, ParamScalarDesc]:
-        return dict(gravity_log_fr0=ParamScalarDesc(
+        pdescs = dict(gravity_log_fr0=ParamScalarDesc(
             desc="log10 of |f_R0|, the scalar field of the background "
                  "today"))
+        if self._environment:
+            pdescs['gravity_log_phi_ext'] = ParamScalarDesc(
+                desc="log10 of -Phi_ext / c^2, the depth of the Newtonian "
+                     "potential of the environment")
+        return pdescs
 
     def field(
             self,
@@ -445,21 +469,31 @@ class GravityHuSawicki(Gravity):
             context.ricci_scalar_today / ricci) ** (n + 1)
         a = ricci / (3 * background)
         b = 8 * np.pi * G / (3 * _C2 * background)
+        compton = np.sqrt((n + 1) / a)
+        # (of the uniform sphere of the environment: Phi(0) = -2 pi G rho
+        # lambda_C^2)
+        environment = 0.0
+        if self._environment:
+            environment = (10 ** float(params['gravity_log_phi_ext']) * _C2
+                           / (2 * np.pi * G * compton ** 2))
         sources = [
             component.name() for component in mass_model.components()
             if component.name() not in self._screened]
 
-        def density(R: np.ndarray, z: np.ndarray) -> np.ndarray:
+        def masses(r_edges: np.ndarray, b_edges: np.ndarray) -> np.ndarray:
             try:
-                return mass_model.density(R, z, params, context, sources)
+                galaxy = mass_model.cell_masses(
+                    r_edges, b_edges, params, context, sources)
             except NotImplementedError as e:
                 raise NotImplementedError(
-                    f"the field of f(R) gravity is sourced by the density "
-                    f"of the mass components that are not screened: "
-                    f"{e}") from e
+                    f"the field of f(R) gravity is sourced by the mass of "
+                    f"the mass components that are not screened: {e}") from e
+            return galaxy + 4 * np.pi / 3 * environment * np.outer(
+                np.diff(np.minimum(r_edges, compton) ** 3),
+                np.diff(np.sin(b_edges)))
 
-        rmax = max(_FR_RMAX_COMPTON * np.sqrt((n + 1) / a), _FR_RMAX_MIN)
-        grid, w, w_out = solve_field(rmax, density, a, b, n)
+        rmax = max(_FR_RMAX_COMPTON * compton, _FR_RMAX_MIN)
+        grid, w, w_out = solve_field(rmax, masses, a, b, n)
         return _HuSawickiField(
             _NewtonField(mass_model, params, context),
             grid.gradient(w, w_out), _C2 * background / 2)

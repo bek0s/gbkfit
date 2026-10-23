@@ -123,6 +123,28 @@ class MassDisk(MassComponent):
     ) -> np.ndarray:
         return self._surface.surface_density(R, params, context)
 
+    def cell_masses(
+            self,
+            r_edges: np.ndarray,
+            b_edges: np.ndarray,
+            params: ParamValues,
+            context: MassContext
+    ) -> np.ndarray:
+        if not self._vertical.thin(context):
+            return super().cell_masses(r_edges, b_edges, params, context)
+        # (thin: all the mass in the plane, in the cells next to it: that
+        # of the rings between the radii, by 4-point Gauss-Legendre in R)
+        r_edges = np.asarray(r_edges, dtype=float)
+        nodes, weights = np.polynomial.legendre.leggauss(4)
+        middle, half = (r_edges[1:] + r_edges[:-1]) / 2, np.diff(r_edges) / 2
+        R = middle[:, None] + half[:, None] * nodes
+        sigma = self._surface.surface_density(R, params, context)
+        masses = np.zeros((r_edges.size - 1, np.size(b_edges) - 1))
+        if b_edges[0] == 0:
+            masses[:, 0] = 2 * np.pi * half * np.sum(
+                weights * R * sigma, axis=1)
+        return masses
+
     def enclosed_mass(
             self,
             r: npt.ArrayLike,
