@@ -154,6 +154,7 @@ def spectra_dcube(
         rota=observable.rota(),
         rest=observable.spec_rest(),
         medium=observable.spec_medium(),
+        convention=observable.spec_convention(),
         scale=tuple(scale) + (1,),
         primary_beam=instrument.primary_beam(),
         psf=instrument.psf(),

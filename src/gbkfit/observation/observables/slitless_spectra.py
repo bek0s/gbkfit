@@ -189,6 +189,9 @@ class SlitlessSpectra(Observable):
     spec_medium : str, optional
         The medium of the wavelengths: 'vacuum' (the default) or 'air'
         (see gridutils.make_medium).
+    spec_convention : str, optional
+        The convention of the velocities: 'optical' (the default) or 'log'
+        (see gridutils.make_convention).
 
     Raises
     ------
@@ -228,7 +231,8 @@ class SlitlessSpectra(Observable):
             trace: Trace,
             spec_size: int | None = None,
             spec_rval: float = 0,
-            spec_medium: str | None = None
+            spec_medium: str | None = None,
+            spec_convention: str | None = None
     ) -> 'SlitlessSpectra':
         """
         Make the observable of slitless spectra, on their grid.
@@ -239,7 +243,7 @@ class SlitlessSpectra(Observable):
             The image.
         spec_step, spec_rest, trace :
             As those of SlitlessSpectra.
-        spec_size, spec_rval, spec_medium : optional
+        spec_size, spec_rval, spec_medium, spec_convention : optional
             As those of SlitlessSpectra.
 
         Returns
@@ -257,7 +261,8 @@ class SlitlessSpectra(Observable):
         return cls(
             **_detail.grid_options(dataset.grid()), spec_step=spec_step,
             spec_rest=spec_rest, trace=trace, spec_size=spec_size,
-            spec_rval=spec_rval, spec_medium=spec_medium)
+            spec_rval=spec_rval, spec_medium=spec_medium,
+            spec_convention=spec_convention)
 
     def dump(
             self,
@@ -278,6 +283,7 @@ class SlitlessSpectra(Observable):
             spec_rval=self._spec_rval,
             spec_rest=_detail.dump_rest(self._spec_rest),
             spec_medium=self._spec_medium,
+            spec_convention=self._spec_convention,
             trace=trace_parser.dump(self._trace)), data)
 
     def __init__(
@@ -292,7 +298,8 @@ class SlitlessSpectra(Observable):
             rota: float = 0,
             spec_size: int | None = None,
             spec_rval: float = 0,
-            spec_medium: str | None = None
+            spec_medium: str | None = None,
+            spec_convention: str | None = None
     ):
         super().__init__(size, step, rpix, rval, rota)
         _detail.check_positive('spec_step', spec_step)
@@ -310,6 +317,8 @@ class SlitlessSpectra(Observable):
         self._spec_rval = spec_rval
         self._spec_rest = rest
         self._spec_medium = gridutils.make_medium(spec_medium, rest)
+        self._spec_convention = gridutils.make_convention(
+            spec_convention, rest)
         self._trace = trace
 
     def spec_size(self) -> int:
@@ -331,6 +340,10 @@ class SlitlessSpectra(Observable):
     def spec_medium(self) -> str:
         """Return the medium of the wavelengths."""
         return self._spec_medium
+
+    def spec_convention(self) -> str:
+        """Return the convention of the velocities of the rest."""
+        return self._spec_convention
 
     def trace(self) -> Trace:
         """Return the trace of the disperser."""
@@ -395,6 +408,7 @@ class SlitlessSpectra(Observable):
             rota=self.rota(),
             rest=self._spec_rest,
             medium=self._spec_medium,
+            convention=self._spec_convention,
             scale=tuple(scale) + (1,),
             primary_beam=instrument.primary_beam(),
             psf=instrument.psf(),
@@ -412,11 +426,14 @@ class SlitlessSpectra(Observable):
     def _channel_edges(self) -> np.ndarray:
         """
         Return the wavelengths (m) of the edges of each channel of the
-        model (one row each): spec_rest (1 + v / c) at their velocities.
+        model (one row each) at their velocities: spec_rest (1 + v / c) of
+        optical velocities, spec_rest exp(v / c) of log ones.
         """
         step, n = self._spec_step, self._spec_size
         centres = self._spec_rval + step * (np.arange(n) - (n - 1) / 2)
         velocities = centres[:, None] + np.array([-0.5, 0.5]) * step
+        if self._spec_convention == 'log':
+            return self._spec_rest.value * np.exp(velocities / _C)
         return self._spec_rest.value * (1 + velocities / _C)
 
     def _sky(

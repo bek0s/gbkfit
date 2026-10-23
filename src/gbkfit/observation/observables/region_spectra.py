@@ -63,6 +63,10 @@ class RegionSpectra(Observable):
         The spatial grid of the cube (see gridutils.make_grid), for
         regions on the sky (apertures): size is then required. Regions on
         a grid (bins) give it, and it must not be given.
+    spec_convention : str, optional
+        The convention of the velocities of the rest: 'optical' (the
+        default of a rest wavelength), 'log' (of an axis uniform in ln w),
+        or 'radio' (see gridutils.make_convention).
 
     Raises
     ------
@@ -88,7 +92,7 @@ class RegionSpectra(Observable):
         # regions on a grid
         return (
             ('regions', 'spec_size', 'spec_step', 'spec_rpix', 'spec_rval',
-             'spec_rest', 'spec_medium')
+             'spec_rest', 'spec_medium', 'spec_convention')
             + _detail.spatial_options_from_regions(dataset.regions()))
 
     @classmethod
@@ -140,7 +144,8 @@ class RegionSpectra(Observable):
         return cls(
             dataset.regions(), spectral.size[0], coords.step[0],
             coords.rpix[0], coords.rval[0], coords.rest, coords.medium,
-            size, step, rpix, rval, rota)
+            size, step, rpix, rval, rota,
+            spec_convention=coords.convention)
 
     def dump(
             self,
@@ -160,7 +165,8 @@ class RegionSpectra(Observable):
                 spec_rpix=self.rpix()[2],
                 spec_rval=self.rval()[2],
                 spec_rest=_detail.dump_rest(self.rest()),
-                spec_medium=self.medium())
+                spec_medium=self.medium(),
+                spec_convention=self.convention())
         return info | _detail.dump_spatial_grid(self, self._regions)
 
     def __init__(
@@ -176,7 +182,8 @@ class RegionSpectra(Observable):
             step: Sequence[float] | None = None,
             rpix: Sequence[float] | None = None,
             rval: Sequence[float] | None = None,
-            rota: float | None = None
+            rota: float | None = None,
+            spec_convention: str | None = None
     ):
         spatial = _detail.spatial_grid_of_regions(
             regions, size, step, rpix, rval, rota)
@@ -188,7 +195,7 @@ class RegionSpectra(Observable):
             coords.step + (spec_step,),
             coords.rpix + (spec_rpix,),
             coords.rval + (spec_rval,),
-            coords.rota, spec_rest, spec_medium)
+            coords.rota, spec_rest, spec_medium, spec_convention)
         self._regions = regions
         # The area of each pixel in the regions, so that their sums are
         # fluxes (an error if apertures are not inside the grid)
@@ -209,7 +216,8 @@ class RegionSpectra(Observable):
         coords = self.spectral_grid().coords
         return DatasetRegionSpectra(
             items['spectra'], self.regions(), coords.step[0],
-            coords.rpix[0], coords.rval[0], coords.rest, coords.medium)
+            coords.rpix[0], coords.rval[0], coords.rest, coords.medium,
+            coords.convention)
 
     def data_unit(self, dataset: Dataset | None) -> DataUnit | None:
         return _detail.region_data_unit(dataset, 'spectra', False)
@@ -259,6 +267,7 @@ class RegionSpectra(Observable):
             rota=self.rota(),
             rest=self.rest(),
             medium=self.medium(),
+            convention=self.convention(),
             scale=tuple(scale),
             primary_beam=instrument.primary_beam(),
             psf=instrument.psf(),

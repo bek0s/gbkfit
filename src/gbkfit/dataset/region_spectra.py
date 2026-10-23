@@ -48,6 +48,10 @@ class DatasetRegionSpectra(Dataset):
     medium : str, optional
         The medium of the wavelengths of a rest wavelength (see
         gridutils.make_medium).
+    convention : str, optional
+        The convention of the velocities of a rest: 'optical' (the default
+        of a rest wavelength), 'log' (of an axis uniform in ln w), or
+        'radio' (see gridutils.make_convention).
 
     Raises
     ------
@@ -131,7 +135,7 @@ class DatasetRegionSpectra(Dataset):
             spectra, regions,
             step=coords.step[1] if step is None else step,
             rpix=coords.rpix[1], rval=coords.rval[1], rest=coords.rest,
-            medium=coords.medium)
+            medium=coords.medium, convention=coords.convention)
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,
@@ -153,7 +157,7 @@ class DatasetRegionSpectra(Dataset):
             rpix=spectral.rpix[0],
             rval=spectral.rval[0],
             rest=None if spectral.rest is None else str(spectral.rest),
-            medium=spectral.medium) | item
+            medium=spectral.medium, convention=spectral.convention) | item
 
     def __init__(
             self,
@@ -163,7 +167,8 @@ class DatasetRegionSpectra(Dataset):
             rpix: float | None = None,
             rval: float = 0,
             rest: str | astropy.units.Quantity | None = None,
-            medium: str | None = None
+            medium: str | None = None,
+            convention: str | None = None
     ):
         super().__init__(dict(spectra=spectra))
         nchannels, nregions = spectra.shape()
@@ -174,7 +179,7 @@ class DatasetRegionSpectra(Dataset):
         self._regions = regions
         self._spectral_grid = gridutils.make_grid(
             (nchannels,), step, rpix, rval, 0, spectral_axis=0, rest=rest,
-            medium=medium)
+            medium=medium, convention=convention)
 
     def regions(self) -> Regions:
         """Return the regions."""

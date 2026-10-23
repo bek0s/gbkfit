@@ -64,6 +64,10 @@ class PixelMoments(Observable):
     spec_medium : str, optional
         The medium of the wavelengths of a rest wavelength: 'vacuum' (the
         default) or 'air' (see gridutils.make_medium).
+    spec_convention : str, optional
+        The convention of the velocities of the rest: 'optical' (the
+        default of a rest wavelength), 'log', or 'radio' (see
+        gridutils.make_convention); that of the velocities of the maps.
     method : str, optional
         How the maps are measured from the spectra, as the maps of the
         data were: 'moments'; 'gaussian_fit' (the flux, centre and
@@ -121,6 +125,7 @@ class PixelMoments(Observable):
             spec_rval: float | None = None,
             spec_rest: str | astropy.units.Quantity | None = None,
             spec_medium: str | None = None,
+            spec_convention: str | None = None,
             method: str = 'moments',
             median_size: int | None = None
     ) -> 'PixelMoments':
@@ -132,8 +137,8 @@ class PixelMoments(Observable):
         ----------
         dataset : DatasetPixelMoments
             The moment maps.
-        mask_cutoff, spec_step, spec_rest, spec_medium, method, \
-                median_size : optional
+        mask_cutoff, spec_step, spec_rest, spec_medium, spec_convention, \
+                method, median_size : optional
             As those of PixelMoments.
         spec_size, spec_rval : optional
             As those of PixelMoments. By default, with moment 1, the
@@ -159,7 +164,8 @@ class PixelMoments(Observable):
                 dataset, spec_step, spec_size, spec_rval),
             mask_cutoff=mask_cutoff, orders=dataset.orders(),
             spec_step=spec_step, spec_rest=spec_rest,
-            spec_medium=spec_medium, method=method, median_size=median_size)
+            spec_medium=spec_medium, spec_convention=spec_convention,
+            method=method, median_size=median_size)
 
     def dump(
             self,
@@ -182,6 +188,7 @@ class PixelMoments(Observable):
             spec_rval=self._spec_rval,
             spec_rest=_detail.dump_rest(self._spec_rest),
             spec_medium=self._spec_medium,
+            spec_convention=self._spec_convention,
             method=self._method,
             median_size=self._median_size), data)
 
@@ -199,6 +206,7 @@ class PixelMoments(Observable):
             spec_rval: float = 0,
             spec_rest: str | astropy.units.Quantity | None = None,
             spec_medium: str | None = None,
+            spec_convention: str | None = None,
             method: str = 'moments',
             median_size: int | None = None
     ):
@@ -217,6 +225,8 @@ class PixelMoments(Observable):
         self._spec_rest = gridutils.make_rest(spec_rest)
         self._spec_medium = gridutils.make_medium(
             spec_medium, self._spec_rest)
+        self._spec_convention = gridutils.make_convention(
+            spec_convention, self._spec_rest)
 
     def keys(self) -> tuple[str, ...]:
         return tuple(f'moment{i}' for i in self._orders)
@@ -258,6 +268,9 @@ class PixelMoments(Observable):
 
     def spec_medium(self) -> str | None:
         return self._spec_medium
+
+    def spec_convention(self) -> str | None:
+        return self._spec_convention
 
     def check_instrument(self, instrument: Instrument) -> None:
         _moments.warn_unmasked_noise(self._mask_cutoff, instrument)

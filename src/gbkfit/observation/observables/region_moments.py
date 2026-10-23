@@ -51,7 +51,7 @@ class RegionMoments(Observable):
         regions on the sky (apertures): size is then required. Regions on
         a grid (bins) give it, and it must not be given.
     mask_cutoff, orders, spec_size, spec_step, spec_rval, spec_rest, \
-spec_medium, method : optional
+spec_medium, spec_convention, method : optional
         As those of PixelMoments: the regions whose moment 0 is not above
         mask_cutoff are masked.
 
@@ -107,6 +107,7 @@ spec_medium, method : optional
             spec_rval: float | None = None,
             spec_rest: str | astropy.units.Quantity | None = None,
             spec_medium: str | None = None,
+            spec_convention: str | None = None,
             method: str = 'moments'
     ) -> 'RegionMoments':
         """
@@ -142,7 +143,8 @@ spec_medium, method : optional
                 dataset, spec_step, spec_size, spec_rval),
             mask_cutoff=mask_cutoff, orders=dataset.orders(),
             spec_step=spec_step, spec_rest=spec_rest,
-            spec_medium=spec_medium, method=method)
+            spec_medium=spec_medium, spec_convention=spec_convention,
+            method=method)
 
     def dump(
             self,
@@ -165,6 +167,7 @@ spec_medium, method : optional
             spec_rval=self._spec_rval,
             spec_rest=_detail.dump_rest(self._spec_rest),
             spec_medium=self._spec_medium,
+            spec_convention=self._spec_convention,
             method=self._method)
 
     def __init__(
@@ -182,6 +185,7 @@ spec_medium, method : optional
             spec_rval: float = 0,
             spec_rest: str | astropy.units.Quantity | None = None,
             spec_medium: str | None = None,
+            spec_convention: str | None = None,
             method: str = 'moments'
     ):
         spatial = _detail.spatial_grid_of_regions(
@@ -202,6 +206,8 @@ spec_medium, method : optional
         self._spec_rest = gridutils.make_rest(spec_rest)
         self._spec_medium = gridutils.make_medium(
             spec_medium, self._spec_rest)
+        self._spec_convention = gridutils.make_convention(
+            spec_convention, self._spec_rest)
         # The area of each pixel in the regions, so that their sums are
         # fluxes (an error if apertures are not inside the grid)
         self._weights = flux_weights(regions, spatial)
@@ -233,6 +239,9 @@ spec_medium, method : optional
 
     def spec_medium(self) -> str | None:
         return self._spec_medium
+
+    def spec_convention(self) -> str | None:
+        return self._spec_convention
 
     def keys(self) -> tuple[str, ...]:
         return tuple(f'moment{i}' for i in self._orders)
