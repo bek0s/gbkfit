@@ -12,10 +12,11 @@ from gbkfit.driver import Driver
 from gbkfit.instrument import Instrument
 from gbkfit.model import LineEmission
 from gbkfit.model.components._units import DataUnit
-from gbkfit.utils import gridutils, parseutils
+from gbkfit.utils import gridutils, iterutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
 from . import _dcube, _detail, _moments
 from ._region_sums import RegionSumsPlan
+from .apertures import Aperture, aperture_parser
 from .base import HostModelData, ModelData, Observable
 from .traces import Trace, trace_parser
 
@@ -27,7 +28,9 @@ if TYPE_CHECKING:
 
 
 __all__ = [
+    'Exposure',
     'SlitlessSpectra',
+    'exposure_parser',
     'pixel_footprint',
     'pixel_footprints'
 ]
@@ -39,31 +42,43 @@ _C = astropy.constants.c.to_value('km/s')
 _FOOTPRINT_CHUNK = 20000
 
 
-def _tri(s: np.ndarray) -> np.ndarray:
-    """Return the overlap of two unit intervals whose centres are s apart."""
-    return np.maximum(0.0, 1.0 - np.abs(s))
+def _overlap(s: np.ndarray, width: np.ndarray) -> np.ndarray:
+    """
+    Return the overlap of an interval of a width and a unit interval whose
+    centres are s apart: linear in s but at s = +-(width - 1) / 2 and
+    +-(width + 1) / 2.
+    """
+    return np.maximum(
+        0.0, np.minimum(width / 2, s + 0.5) - np.maximum(-width / 2, s - 0.5))
 
 
 def pixel_footprint(
-        start: tuple[float, float], end: tuple[float, float]
+        start: tuple[float, float],
+        end: tuple[float, float],
+        size: tuple[float, float] = (1, 1)
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
-    Return where the light of a pixel lands when it is moved uniformly
-    along a straight segment: the light of the pixel centred at 0, spread
-    evenly over the copies of the pixel centred on the segment from start
-    to end (in pixels), in each pixel (p, q) of the grid.
+    Return where the light of a box (a pixel, or a part of it) lands when
+    it is moved uniformly along a straight segment: the light of the box
+    centred at 0, spread evenly over the copies of the box centred on the
+    segment from start to end (in pixels), in each pixel (p, q) of the
+    grid.
 
     The fraction in a pixel is the mean over the segment of the overlap of
-    the moved pixel with it: the integral over t in [0, 1] of tri(p - x(t))
-    tri(q - y(t)), where (x, y) moves from start to end and tri(s) = max(0,
-    1 - |s|). Between the values of t where either factor has a kink, the
-    product is a quadratic, so Simpson's rule on each such interval is
-    exact. The fractions add up to 1.
+    the moved box with it, over the area of the box: the integral over t
+    in [0, 1] of o_x(p - x(t)) o_y(q - y(t)) / (w_x w_y), where (x, y)
+    moves from start to end and o_x(s) is the overlap of an interval of
+    the width w_x of the box with a unit interval s apart (likewise o_y).
+    Between the values of t where either factor has a kink, the product is
+    a quadratic, so Simpson's rule on each such interval is exact. The
+    fractions add up to 1.
 
     Parameters
     ----------
     start, end : tuple of float
         The ends of the segment (x, y).
+    size : tuple of float, optional
+        The widths of the box (pixels); a pixel by default.
 
     Returns
     -------
@@ -72,64 +87,160 @@ def pixel_footprint(
     weights : np.ndarray
         The fraction of the light in each.
     """
-    _, p, q, weights = pixel_footprints([start], [end])
+    _, p, q, weights = pixel_footprints([start], [end], [size])
     return p, q, weights
 
 
 def pixel_footprints(
-        starts: npt.ArrayLike, ends: npt.ArrayLike
+        starts: npt.ArrayLike,
+        ends: npt.ArrayLike,
+        sizes: npt.ArrayLike | None = None
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
-    Return the footprints of pixels moved along segments (see
-    pixel_footprint), from starts to ends (of shape (n, 2), pixels): the
-    segment of each fraction, its pixel (p, q) and the fraction.
+    Return the footprints of boxes moved along segments (see
+    pixel_footprint), from starts to ends (of shape (n, 2), pixels), of
+    the given sizes (of shape (n, 2); pixels by default): the segment of
+    each fraction, its pixel (p, q) and the fraction.
     """
     starts = np.asarray(starts, dtype=float).reshape(-1, 2)
     ends = np.asarray(ends, dtype=float).reshape(-1, 2)
+    sizes = np.ones_like(starts) if sizes is None \
+        else np.asarray(sizes, dtype=float).reshape(-1, 2)
     out: list[list[np.ndarray]] = [[], [], [], []]
     for first in range(0, len(starts), _FOOTPRINT_CHUNK):
         chunk = slice(first, first + _FOOTPRINT_CHUNK)
-        for k, part in enumerate(
-                _footprints(starts[chunk], ends[chunk], first)):
+        for k, part in enumerate(_footprints(
+                starts[chunk], ends[chunk], sizes[chunk], first)):
             out[k].append(part)
     index, p, q, weights = (np.concatenate(parts) for parts in out)
     return index, p.astype(int), q.astype(int), weights
 
 
 def _footprints(
-        starts: np.ndarray, ends: np.ndarray, first: int
+        starts: np.ndarray, ends: np.ndarray, sizes: np.ndarray, first: int
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
-    Return the footprints of a chunk of segments (see pixel_footprints),
-    the first of which is of the index first.
+    Return the footprints of a chunk of boxes and segments (see
+    pixel_footprints), the first of which is of the index first.
     """
     ax, ay = starts[:, 0:1], starts[:, 1:2]
     lx, ly = ends[:, 0:1] - ax, ends[:, 1:2] - ay
-    corner = np.floor(np.minimum(starts, ends)) - 1
-    span = (np.ceil(np.maximum(starts, ends)) + 2 - corner).max(axis=0)
+    wx, wy = sizes[:, 0:1], sizes[:, 1:2]
+    # (the pixels within (w + 1) / 2 of the segment)
+    reach = (sizes + 1) / 2
+    corner = np.floor(np.minimum(starts, ends) - reach)
+    span = (np.ceil(np.maximum(starts, ends) + reach) + 1 - corner).max(
+        axis=0)
     ox, oy = (o.ravel() for o in np.meshgrid(
         np.arange(span[0]), np.arange(span[1])))
     p, q = corner[:, 0:1] + ox, corner[:, 1:2] + oy
-    # (the kinks: p - x(t) or q - y(t) at -1, 0 or 1)
+    # (the kinks: p - x(t) or q - y(t) at +-(w - 1) / 2 or +-(w + 1) / 2)
     breaks = [np.zeros_like(p), np.ones_like(p)]
-    for c in (-1, 0, 1):
-        for pixel, origin, length in ((p, ax, lx), (q, ay, ly)):
+    for pixel, origin, length, width in (
+            (p, ax, lx, wx), (q, ay, ly, wy)):
+        for kink in (-(width + 1) / 2, -(width - 1) / 2, (width - 1) / 2,
+                     (width + 1) / 2):
             breaks.append(np.divide(
-                pixel - c - origin, length, out=np.zeros_like(pixel),
+                pixel - kink - origin, length, out=np.zeros_like(pixel),
                 where=length != 0))
     t = np.sort(np.clip(np.stack(breaks, axis=-1), 0, 1), axis=-1)
-    t0, t1 = t[..., :-1], t[..., 1:]
 
     def overlap(t_: np.ndarray) -> np.ndarray:
-        return (_tri(p[..., None] - ax[..., None] - t_ * lx[..., None])
-                * _tri(q[..., None] - ay[..., None] - t_ * ly[..., None]))
+        return (_overlap(p[..., None] - ax[..., None] - t_ * lx[..., None],
+                         wx[..., None])
+                * _overlap(q[..., None] - ay[..., None] - t_ * ly[..., None],
+                           wy[..., None]))
+    # (Simpson's rule on each interval, of the values at the breaks shared
+    # by the intervals on either side)
+    at_breaks = overlap(t)
     weights = np.sum(
-        (t1 - t0) / 6 * (overlap(t0) + 4 * overlap((t0 + t1) / 2)
-                         + overlap(t1)), axis=-1)
+        (t[..., 1:] - t[..., :-1]) / 6
+        * (at_breaks[..., :-1] + 4 * overlap((t[..., :-1] + t[..., 1:]) / 2)
+           + at_breaks[..., 1:]), axis=-1) / (wx * wy)
     keep = weights > 0
     index = np.broadcast_to(
         first + np.arange(len(starts))[:, None], p.shape)
     return index[keep], p[keep], q[keep], weights[keep]
+
+
+def _unique_rows(rows: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Return the distinct rows of an array and the index of the distinct row
+    of each row (as np.unique with axis=0, by a faster lexical sort).
+    """
+    order = np.lexsort(rows.T[::-1])
+    ordered = rows[order]
+    new = np.ones(len(rows), dtype=bool)
+    new[1:] = np.any(ordered[1:] != ordered[:-1], axis=1)
+    inverse = np.empty(len(rows), dtype=int)
+    inverse[order] = np.cumsum(new) - 1
+    return ordered[new], inverse
+
+
+class Exposure(parseutils.Serializable):
+    """
+    An exposure combined into the image of slitless spectra (see
+    SlitlessSpectra): of the sky at an offset from the instrument (e.g.
+    after a nod of the telescope), with its image moved by an offset (e.g.
+    back by the nod, when the reduction aligns the exposures on the sky)
+    and weighted. Spectra whose background is subtracted with the
+    exposures of the other nods (e.g. A - (B + C) / 2) are the exposures
+    of the nods of weights 1, -1/2 and -1/2.
+
+    Parameters
+    ----------
+    sky_offset : Sequence of float, optional
+        The offset of the sky (x, y; arcsec along the axes of the image):
+        the light of each place of the sky passes the aperture and lands
+        on the detector as that of the place plus the offset.
+    image_offset : Sequence of float, optional
+        The offset of its image (x, y; arcsec).
+    weight : float, optional
+        Its weight.
+
+    Raises
+    ------
+    ConfigError
+        If an offset is not two numbers, or the weight is not finite.
+    """
+
+    def dump(self) -> dict[str, Any]:
+        return dict(
+            sky_offset=list(self._sky_offset),
+            image_offset=list(self._image_offset), weight=self._weight)
+
+    def __init__(
+            self,
+            sky_offset: Sequence[float] = (0, 0),
+            image_offset: Sequence[float] = (0, 0),
+            weight: float = 1
+    ):
+        for name, offset in (
+                ('sky_offset', sky_offset), ('image_offset', image_offset)):
+            if len(offset) != 2:
+                raise ConfigError(
+                    f"{name} must be two offsets (x, y); it is {offset}")
+        if not np.isfinite(weight):
+            raise ConfigError(
+                f"the weight of an exposure must be finite; it is {weight}")
+        self._sky_offset = tuple(float(value) for value in sky_offset)
+        self._image_offset = tuple(float(value) for value in image_offset)
+        self._weight = float(weight)
+
+    def sky_offset(self) -> tuple[float, float]:
+        """Return the offset of the sky (arcsec)."""
+        return self._sky_offset
+
+    def image_offset(self) -> tuple[float, float]:
+        """Return the offset of its image (arcsec)."""
+        return self._image_offset
+
+    def weight(self) -> float:
+        """Return its weight."""
+        return self._weight
+
+
+exposure_parser = parseutils.BasicParser(Exposure)
 
 
 class SlitlessSpectra(Observable):
@@ -159,6 +270,22 @@ class SlitlessSpectra(Observable):
     TracePolynomial), or varying across the detector (see
     TraceGrismConf). The spectral axis covers the lines; the continuum is
     not modelled.
+
+    An aperture in front of the disperser (e.g. the shutters of JWST
+    NIRSpec; see Aperture) lets only the light of its open parts through:
+    the light of each pixel of the sky, seen through the PSF, is clipped
+    to them, and the open parts are dispersed by the trace where they are.
+    The light from across a shutter thus lands on the detector moved along
+    the dispersion, as that of other wavelengths. The spectrograph after
+    the aperture then blurs the spectra by its own LSF (the instrument's,
+    with an aperture), along the trace.
+
+    The light within each pixel of the sky is spread evenly over it; the
+    sky can be sampled by sky_sampling pixels for each pixel of the image
+    along each axis, to place the light within a pixel (e.g. across
+    shutters of a few pixels). The image can combine several exposures,
+    of the sky at offsets (e.g. nods), with weights (e.g. to subtract the
+    background as the reduction did; see Exposure).
 
     Its configuration has the options below, but those of the grid when
     it has data, which give them (see from_data).
@@ -192,12 +319,20 @@ class SlitlessSpectra(Observable):
     spec_convention : str, optional
         The convention of the velocities: 'optical' (the default) or 'log'
         (see gridutils.make_convention).
+    aperture : Aperture, optional
+        The aperture in front of the disperser, if any.
+    exposures : Exposure or Sequence of Exposure, optional
+        The exposures combined into the image; one, of the sky as it is,
+        by default.
+    sky_sampling : int, optional
+        The pixels of the sky for each pixel of the image, along each axis.
 
     Raises
     ------
     ConfigError
-        If spec_step is not positive, spec_size is less than 1, or
-        spec_rest is not a wavelength.
+        If spec_step is not positive, spec_size is less than 1, spec_rest
+        is not a wavelength, there are no exposures, or sky_sampling is
+        not an integer of at least 1.
     """
 
     dataset_class = DatasetSlitlessSpectra
@@ -220,6 +355,10 @@ class SlitlessSpectra(Observable):
         info = dict(info)
         parseutils.load_option_and_update_info(
             trace_parser, info, 'trace', required=True)
+        parseutils.load_option_and_update_info(
+            aperture_parser, info, 'aperture')
+        parseutils.load_option_and_update_info(
+            exposure_parser, info, 'exposures')
         return _detail.load_observable(cls, info, dataset, 2)
 
     @classmethod
@@ -232,7 +371,10 @@ class SlitlessSpectra(Observable):
             spec_size: int | None = None,
             spec_rval: float = 0,
             spec_medium: str | None = None,
-            spec_convention: str | None = None
+            spec_convention: str | None = None,
+            aperture: Aperture | None = None,
+            exposures: Exposure | Sequence[Exposure] | None = None,
+            sky_sampling: int = 1
     ) -> 'SlitlessSpectra':
         """
         Make the observable of slitless spectra, on their grid.
@@ -243,7 +385,8 @@ class SlitlessSpectra(Observable):
             The image.
         spec_step, spec_rest, trace :
             As those of SlitlessSpectra.
-        spec_size, spec_rval, spec_medium, spec_convention : optional
+        spec_size, spec_rval, spec_medium, spec_convention, aperture,
+        exposures, sky_sampling : optional
             As those of SlitlessSpectra.
 
         Returns
@@ -262,7 +405,8 @@ class SlitlessSpectra(Observable):
             **_detail.grid_options(dataset.grid()), spec_step=spec_step,
             spec_rest=spec_rest, trace=trace, spec_size=spec_size,
             spec_rval=spec_rval, spec_medium=spec_medium,
-            spec_convention=spec_convention)
+            spec_convention=spec_convention, aperture=aperture,
+            exposures=exposures, sky_sampling=sky_sampling)
 
     def dump(
             self,
@@ -284,7 +428,10 @@ class SlitlessSpectra(Observable):
             spec_rest=_detail.dump_rest(self._spec_rest),
             spec_medium=self._spec_medium,
             spec_convention=self._spec_convention,
-            trace=trace_parser.dump(self._trace)), data)
+            trace=trace_parser.dump(self._trace),
+            aperture=aperture_parser.dump(self._aperture),
+            exposures=exposure_parser.dump(list(self._exposures)),
+            sky_sampling=self._sky_sampling), data)
 
     def __init__(
             self,
@@ -299,7 +446,10 @@ class SlitlessSpectra(Observable):
             spec_size: int | None = None,
             spec_rval: float = 0,
             spec_medium: str | None = None,
-            spec_convention: str | None = None
+            spec_convention: str | None = None,
+            aperture: Aperture | None = None,
+            exposures: Exposure | Sequence[Exposure] | None = None,
+            sky_sampling: int = 1
     ):
         super().__init__(size, step, rpix, rval, rota)
         _detail.check_positive('spec_step', spec_step)
@@ -319,7 +469,19 @@ class SlitlessSpectra(Observable):
         self._spec_medium = gridutils.make_medium(spec_medium, rest)
         self._spec_convention = gridutils.make_convention(
             spec_convention, rest)
+        exposures = (Exposure(),) if exposures is None \
+            else iterutils.tuplify(exposures)
+        if not exposures:
+            raise ConfigError("slitless spectra need at least one exposure")
+        if isinstance(sky_sampling, bool) \
+                or not isinstance(sky_sampling, int) or sky_sampling < 1:
+            raise ConfigError(
+                f"sky_sampling must be an integer of at least 1; it is "
+                f"{sky_sampling!r}")
         self._trace = trace
+        self._aperture = aperture
+        self._exposures = exposures
+        self._sky_sampling = sky_sampling
 
     def spec_size(self) -> int:
         """Return the number of channels of the model."""
@@ -349,6 +511,18 @@ class SlitlessSpectra(Observable):
         """Return the trace of the disperser."""
         return self._trace
 
+    def aperture(self) -> Aperture | None:
+        """Return the aperture in front of the disperser, if any."""
+        return self._aperture
+
+    def exposures(self) -> tuple[Exposure, ...]:
+        """Return the exposures combined into the image."""
+        return self._exposures
+
+    def sky_sampling(self) -> int:
+        """Return the pixels of the sky for each pixel of the image."""
+        return self._sky_sampling
+
     def keys(self) -> tuple[str, ...]:
         return ('spectra',)
 
@@ -377,10 +551,11 @@ class SlitlessSpectra(Observable):
         return False
 
     def check_instrument(self, instrument: Instrument) -> None:
-        if instrument.lsf() is not None:
+        if instrument.lsf() is not None and self._aperture is None:
             raise ConfigError(
-                "slitless spectra have no LSF: the PSF along the trace sets "
-                "their resolution; remove the LSF of the instrument")
+                "slitless spectra without an aperture have no LSF: the PSF "
+                "along the trace sets their resolution; remove the LSF of "
+                "the instrument, or give the aperture")
 
     def plan(
             self,
@@ -398,11 +573,14 @@ class SlitlessSpectra(Observable):
             raise ConfigError("slitless spectra do not support weights yet")
         edges = self._channel_edges()
         offset, size = self._sky(edges)
-        rpix = self.rpix()
+        rpix, step, k = self.rpix(), self.step(), self._sky_sampling
+        # (the centre of sub-pixel i of the sky is at offset - 1/2 + (i +
+        # 1/2) / k pixels of the image)
         dcube = _dcube.DCube(
-            size=size + (self._spec_size,),
-            step=self.step() + (self._spec_step,),
-            rpix=(rpix[0] - offset[0], rpix[1] - offset[1],
+            size=(size[0] * k, size[1] * k, self._spec_size),
+            step=(step[0] / k, step[1] / k, self._spec_step),
+            rpix=((rpix[0] - offset[0] + 0.5) * k - 0.5,
+                  (rpix[1] - offset[1] + 0.5) * k - 0.5,
                   self._spec_size / 2 - 0.5),
             rval=self.rval() + (self._spec_rval,),
             rota=self.rota(),
@@ -412,7 +590,7 @@ class SlitlessSpectra(Observable):
             scale=tuple(scale) + (1,),
             primary_beam=instrument.primary_beam(),
             psf=instrument.psf(),
-            lsf=None,
+            lsf=instrument.lsf(),
             smooth_weights=False,
             mask_cutoff=None,
             mask_apply=False,
@@ -436,28 +614,64 @@ class SlitlessSpectra(Observable):
             return self._spec_rest.value * np.exp(velocities / _C)
         return self._spec_rest.value * (1 + velocities / _C)
 
+    def _pixels(self, offset: Sequence[float]) -> np.ndarray:
+        """Return an offset (arcsec along the axes of the image) in pixels."""
+        return np.asarray(offset, dtype=float) / np.asarray(self.step())
+
     def _sky(
             self, edges: np.ndarray
     ) -> tuple[tuple[int, int], tuple[int, int]]:
         """
         Return the sky of the cube, the pixels whose light of some channel
-        (of the edges of its wavelengths) can land on the image: its offset
-        from the image (pixels) and its size. Of the reach of the trace at
-        the corners and the edges of the image, then of that sky (the trace
-        changes slowly across the detector), and a pixel more each way (of
-        the footprints of the pixels).
+        (of the edges of its wavelengths) can land on the image in some
+        exposure, through the aperture if any: its offset from the image
+        (pixels) and its size, and a pixel more each way (of the
+        footprints of the pixels).
+        """
+        los, his = [], []
+        for exposure in self._exposures:
+            lo, hi = self._reach(edges, self._pixels(exposure.image_offset()))
+            if self._aperture is not None:
+                # (the pixels that overlap its rectangles)
+                rectangles = self._aperture.rectangles()
+                x = self.rpix()[0] + rectangles[:, :2] / self.step()[0]
+                y = self.rpix()[1] + rectangles[:, 2:] / self.step()[1]
+                lo = np.maximum(lo, [x.min() - 0.5, y.min() - 0.5])
+                hi = np.minimum(hi, [x.max() + 0.5, y.max() + 0.5])
+            if np.all(lo <= hi):
+                sky_offset = self._pixels(exposure.sky_offset())
+                los.append(lo - sky_offset)
+                his.append(hi - sky_offset)
+        if not los:
+            raise ConfigError(
+                "no light of the sky can land on the image of the slitless "
+                "spectra; check the aperture and the exposures")
+        lo = np.floor(np.min(los, axis=0)) - 1
+        hi = np.ceil(np.max(his, axis=0)) + 1
+        offset = (int(lo[0]), int(lo[1]))
+        return offset, (int(hi[0] - lo[0]) + 1, int(hi[1] - lo[1]) + 1)
+
+    def _reach(
+            self, edges: np.ndarray, image_offset: np.ndarray
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """
+        Return the box (its lower and upper corners, pixels) of the places
+        on the detector whose light of some channel can land on the image
+        moved by image_offset (pixels): of the reach of the trace at the
+        corners and the edges of the image, then of that box (the trace
+        changes slowly across the detector).
         """
         width, height = self.size()
-        lo, hi = np.zeros(2), np.array([width - 1, height - 1], dtype=float)
+        lo = -image_offset
+        hi = np.array([width - 1, height - 1]) - image_offset
         for _ in range(2):
             x, y = (a.ravel() for a in np.meshgrid(
                 np.linspace(lo[0], hi[0], 5), np.linspace(lo[1], hi[1], 5)))
             dx, dy = self._trace.offsets(edges.ravel()[:, None], x, y)
-            lo = np.array([-dx.max(), -dy.max()])
-            hi = np.array([width - 1 - dx.min(), height - 1 - dy.min()])
-        lo, hi = np.floor(lo) - 1, np.ceil(hi) + 1
-        offset = (int(lo[0]), int(lo[1]))
-        return offset, (int(hi[0] - lo[0]) + 1, int(hi[1] - lo[1]) + 1)
+            lo = np.array([-dx.max(), -dy.max()]) - image_offset
+            hi = np.array([width - 1 - dx.min(), height - 1 - dy.min()]) \
+                - image_offset
+        return lo, hi
 
     def _dispersion(
             self,
@@ -467,44 +681,105 @@ class SlitlessSpectra(Observable):
     ) -> scipy.sparse.csr_array:
         """
         Return the matrix that disperses the cube of the model (flattened,
-        of shape (nz, ny, nx) on the sky of the given size, offset from the
-        image) into the image (flattened): the footprint (see
-        pixel_footprint) of each pixel of the sky moved by the trace there,
-        from the start of each channel (of the edges of its wavelengths) to
-        its end, times the width of the channel (km/s), so that the image
-        is the light integrated over velocity.
+        of shape (nz, ny, nx), of sky_sampling pixels for each pixel of the
+        sky of the given size, offset from the image) into the image
+        (flattened). For each exposure, the footprint (see
+        pixel_footprints) of each pixel of the cube (of each of its parts
+        open in the aperture, if any) at its place in the exposure, moved
+        by the trace there from the start of each channel (of the edges of
+        its wavelengths) to its end, and by the offset of the image of the
+        exposure; times the weight of the exposure, the area of the part
+        (pixels of the image: each pixel of the cube holds the light of a
+        pixel of the image over its area) and the width of the channel
+        (km/s), so that the image is the light integrated over velocity.
         """
-        nx, ny = size
+        k = self._sky_sampling
+        nx, ny = size[0] * k, size[1] * k
+        # (the pixel of the image of each pixel of the cube, and the centre
+        # of the latter from that of the former, both in pixels of the
+        # image: the footprints of the same centres and segments are the
+        # same in every pixel)
+        j, i = (a.ravel() for a in np.mgrid[:ny, :nx])
+        base = np.column_stack([offset[0] + i // k, offset[1] + j // k])
+        centres = np.column_stack(
+            [(i % k + 0.5) / k - 0.5, (j % k + 0.5) / k - 0.5])
+        sizes = np.full(centres.shape, 1 / k)
+        matrix = scipy.sparse.csr_array(
+            (self.size()[0] * self.size()[1], len(edges) * nx * ny))
+        for exposure in self._exposures:
+            index, parts, part_sizes = self._open_parts(
+                base, centres + self._pixels(exposure.sky_offset()), sizes)
+            matrix = matrix + self._footprints_matrix(
+                edges, nx * ny, base[index], index, parts, part_sizes,
+                self._pixels(exposure.image_offset()), exposure.weight())
+        return matrix.tocsr()
+
+    def _open_parts(
+            self, base: np.ndarray, centres: np.ndarray, sizes: np.ndarray
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """
+        Return the parts of boxes (of the pixels base, the centres from
+        them and the sizes, in pixels of the image) open in the aperture:
+        the box of each part, its centre (from its pixel) and its sizes;
+        the whole boxes without an aperture.
+        """
+        if self._aperture is None:
+            return np.arange(len(base)), centres, sizes
+        rpix, step = np.asarray(self.rpix()), np.asarray(self.step())
+        index, parts, part_sizes = self._aperture.clip(
+            (base + centres - rpix) * step, sizes * step, step)
+        return index, parts / step + rpix - base[index], part_sizes / step
+
+    def _footprints_matrix(
+            self,
+            edges: np.ndarray,
+            npixels: int,
+            base: np.ndarray,
+            index: np.ndarray,
+            centres: np.ndarray,
+            sizes: np.ndarray,
+            image_offset: np.ndarray,
+            weight: float
+    ) -> scipy.sparse.coo_array:
+        """
+        Return the matrix of the footprints of boxes of the cube (see
+        _dispersion): of the pixels base (of the image), the centres from
+        them and the sizes (pixels of the image), of the pixels index of
+        the cube (of npixels per channel), with the image moved by
+        image_offset (pixels) and weighted.
+        """
         width, height = self.size()
-        j, i = np.mgrid[:ny, :nx]
-        x = (i.ravel() + offset[0]).astype(float)
-        y = (j.ravel() + offset[1]).astype(float)
-        # (the voxels in the order of the cube: channel, then pixel; the
-        # segment of each from its place, a whole pixel)
-        dx, dy = self._trace.offsets(edges[:, :, None], x, y)
-        segments = np.stack(
-            [dx[:, 0], dy[:, 0], dx[:, 1], dy[:, 1]], axis=-1).reshape(-1, 4)
-        # (the footprints of the distinct segments, moved to each place: one
-        # per channel of a trace the same at every place)
-        distinct, inverse = np.unique(
-            segments, axis=0, return_inverse=True)
+        nboxes = len(index)
+        # (the segment of each box and channel from its pixel, of the trace
+        # at its place, and its sizes)
+        dx, dy = self._trace.offsets(edges[:, :, None], *(base + centres).T)
+        x0 = centres[:, 0] + image_offset[0]
+        y0 = centres[:, 1] + image_offset[1]
+        rows = np.concatenate([
+            np.stack([x0 + dx[:, 0], y0 + dy[:, 0], x0 + dx[:, 1],
+                      y0 + dy[:, 1]], axis=-1).reshape(-1, 4),
+            np.tile(sizes, (len(edges), 1))], axis=1)
+        # (the footprints of the distinct rows, moved to each pixel: one
+        # per channel and centre of a trace the same at every place)
+        distinct, inverse = _unique_rows(rows)
         segment, p, q, weights = pixel_footprints(
-            distinct[:, :2], distinct[:, 2:])
+            distinct[:, 0:2], distinct[:, 2:4], distinct[:, 4:6])
         counts = np.bincount(segment, minlength=len(distinct))
         first = np.cumsum(counts) - counts
         counts, first = counts[inverse], first[inverse]
-        voxel = np.repeat(np.arange(len(inverse)), counts)
+        row = np.repeat(np.arange(len(inverse)), counts)
         entry = np.repeat(first - (np.cumsum(counts) - counts), counts) \
             + np.arange(counts.sum())
-        p = p[entry] + np.tile(x, len(edges))[voxel].astype(int)
-        q = q[entry] + np.tile(y, len(edges))[voxel].astype(int)
-        weights = weights[entry]
+        channel, box = np.divmod(row, nboxes)
+        p = p[entry] + base[box, 0]
+        q = q[entry] + base[box, 1]
+        weights = weights[entry] * np.prod(sizes[box], axis=-1) \
+            * abs(self._spec_step) * weight
         inside = (p >= 0) & (p < width) & (q >= 0) & (q < height)
-        matrix = scipy.sparse.coo_array(
-            (weights[inside] * abs(self._spec_step),
-             (q[inside] * width + p[inside], voxel[inside])),
-            shape=(width * height, len(edges) * nx * ny))
-        return matrix.tocsr()
+        voxel = channel * npixels + index[box]
+        return scipy.sparse.coo_array(
+            (weights[inside], (q[inside] * width + p[inside], voxel[inside])),
+            shape=(width * height, len(edges) * npixels))
 
 
 class SlitlessSpectraPlan(_detail.DCubePlanBase):

@@ -36,11 +36,12 @@ SLITLESS = dict(
         type='polynomial', wave='4 um', dx=[0, 2.99792458e5 / (4 * STEP)]))
 
 
-def evaluate(driver, observable):
+def evaluate(driver, observable, properties=PROPERTIES):
     group = observation_group([
         dict(driver=dict(type=driver.type()), galaxy=GALAXY,
-             line_of_sight=dict(type='flat'), observable=observable)])
-    params = gbkfit.params.ParamSpace(group.pdescs(), PROPERTIES)
+             line_of_sight=dict(type='flat'),
+             observable=copy.deepcopy(observable))])
+    params = gbkfit.params.ParamSpace(group.pdescs(), properties)
     data = group.model_h(params.evaluate())[0]
     return next(iter(data.values()))['d'].copy()
 
@@ -66,6 +67,20 @@ def test_pixel_footprint_of_a_slanted_segment_matches_sampling():
     t, ux, uy = rng.random((3, 400_000))
     x = np.rint(start[0] + t * (end[0] - start[0]) + ux - 0.5)
     y = np.rint(start[1] + t * (end[1] - start[1]) + uy - 0.5)
+    sampled = [np.mean((x == a) & (y == b)) for a, b in zip(p, q)]
+    np.testing.assert_allclose(sampled, weights, atol=3e-3)
+
+
+def test_pixel_footprint_of_a_box_matches_sampling():
+    # (a part of a pixel: e.g. the part of a pixel of the sky open in a
+    # shutter)
+    start, end, size = (0.2, 0.1), (3.7, 0.9), (0.3, 0.6)
+    p, q, weights = pixel_footprint(start, end, size)
+    assert weights.sum() == pytest.approx(1)
+    rng = np.random.default_rng(1)
+    t, ux, uy = rng.random((3, 400_000))
+    x = np.rint(start[0] + t * (end[0] - start[0]) + (ux - 0.5) * size[0])
+    y = np.rint(start[1] + t * (end[1] - start[1]) + (uy - 0.5) * size[1])
     sampled = [np.mean((x == a) & (y == b)) for a, b in zip(p, q)]
     np.testing.assert_allclose(sampled, weights, atol=3e-3)
 
@@ -231,3 +246,105 @@ def test_slitless_spectra_have_amplitudes_per_row(driver):
     np.testing.assert_allclose(amplitudes, b / a, rtol=1e-4)
     bright = model.sum(axis=1) > 0.1 * model.sum(axis=1).max()
     np.testing.assert_allclose(amplitudes[bright], scales[bright], rtol=1e-3)
+
+
+def disperse_by_hand(cube, rows, column, width):
+    # The light of the sky pixels (rows, column) of a cube on the grid of
+    # the image, dispersed as in test_slitless_spectra_are_the_cube_dispersed
+    image = np.zeros((cube.shape[1], width))
+    for k in range(NZ):
+        m = k - (NZ - 1) // 2
+        for s, weight in ((-1, 1 / 8), (0, 3 / 4), (1, 1 / 8)):
+            if 0 <= column + m + s < width:
+                image[rows, column + m + s] += \
+                    weight * STEP * cube[k, rows, column]
+    return image
+
+
+def test_shutters_let_through_the_light_of_their_sky(driver):
+    # Two shutters over the column 5 of the image (x from -3 to -2 arcsec
+    # of its centre, 7.5), over the rows 3-4 and 6-7, with a bar over the
+    # row 5: the image is the light of the sky under them, dispersed. And
+    # a shutter over all the sky lets all of it through
+    width, height = SIZE
+    shutters = SLITLESS | dict(aperture=dict(
+        type='shutters', size=[1, 2], pitch=3, count=2,
+        centre=[-2.5, -0.5]))
+    cube = evaluate(driver, dict(
+        type='pixel_spectra', size=[width, height, NZ], step=[1, 1, STEP]))
+    np.testing.assert_allclose(
+        evaluate(driver, shutters),
+        disperse_by_hand(cube, [3, 4, 6, 7], 5, width),
+        rtol=1e-4, atol=1e-6 * cube.max())
+    everything = SLITLESS | dict(aperture=dict(
+        type='shutters', size=[1000, 1000]))
+    np.testing.assert_allclose(
+        evaluate(driver, everything), evaluate(driver, SLITLESS),
+        rtol=1e-6, atol=1e-9)
+
+
+def test_a_finer_sky_places_the_light_within_its_pixels(driver):
+    # Of the same light (the model on 6 x 6 points of each pixel), the sky
+    # sampled by 1, 3 and 6 pixels for each pixel of the image: the light
+    # within the pixels moves along the trace with them, so the images
+    # converge, with the same light in total
+    images = [
+        evaluate(driver, SLITLESS | dict(scale=[6 // k] * 2, sky_sampling=k))
+        for k in (1, 3, 6)]
+    np.testing.assert_allclose(
+        [image.sum() for image in images], images[2].sum(), rtol=1e-3)
+    errors = [np.abs(image - images[2]).max() for image in images[:2]]
+    assert errors[1] < 0.2 * errors[0]
+
+
+def test_nods_subtract_the_other_exposures(driver):
+    # Three exposures of the sky moved by 0 and +-3 pixels along the slit,
+    # of weights 1, -1/2 and -1/2: the image of the galaxy moved likewise
+    shutters = SLITLESS | dict(aperture=dict(
+        type='shutters', size=[3, 2], pitch=3, count=3))
+    nods = shutters | dict(exposures=[
+        dict(weight=1), dict(sky_offset=[0, 3], weight=-0.5),
+        dict(sky_offset=[0, -3], weight=-0.5)])
+
+    def moved(dy):
+        return evaluate(driver, shutters, PROPERTIES | dict(
+            ypos=PROPERTIES['ypos'] + dy))
+    expected = moved(0) - (moved(3) + moved(-3)) / 2
+    np.testing.assert_allclose(
+        evaluate(driver, nods), expected, rtol=1e-5,
+        atol=1e-6 * np.abs(expected).max())
+    # The image of an exposure can be moved too (one row up)
+    up = evaluate(driver, SLITLESS | dict(
+        exposures=dict(image_offset=[0, 1])))
+    np.testing.assert_allclose(
+        up[1:], evaluate(driver, SLITLESS)[:-1], rtol=1e-5, atol=1e-9)
+
+
+def test_an_aperture_lets_the_spectrograph_blur_the_spectra(driver):
+    # Behind an aperture, the LSF of the instrument blurs the spectra along
+    # the trace, keeping their light
+    shutter = SLITLESS | dict(aperture=dict(type='shutters', size=[3, 6]))
+    sharp = evaluate(driver, shutter)
+    blurred = evaluate(driver, shutter | dict(
+        lsf=dict(type='gauss', sigma=40)))
+    assert blurred.sum() == pytest.approx(sharp.sum(), rel=1e-3)
+    assert blurred.max() < 0.9 * sharp.max()
+
+
+def test_apertures_and_exposures_from_configurations():
+    from gbkfit.observation import observable_parser
+    info = SLITLESS | dict(
+        aperture=dict(type='shutters', size=[0.2, 0.46], pitch=0.53,
+                      count=3, centre=[0.1, 0]),
+        exposures=[dict(), dict(sky_offset=[0, 0.53], weight=-1)],
+        sky_sampling=4)
+    observable = observable_parser.load(copy.deepcopy(info))
+    assert observable.aperture().rectangles().shape == (3, 4)
+    assert [e.weight() for e in observable.exposures()] == [1, -1]
+    dumped = observable_parser.dump(observable)
+    assert observable_parser.dump(observable_parser.load(dumped)) == dumped
+    with pytest.raises(RuntimeError, match="pitch"):
+        observable_parser.load(SLITLESS | dict(aperture=dict(
+            type='shutters', size=[0.2, 0.46], count=3)))
+    with pytest.raises(RuntimeError, match="sky_sampling"):
+        observable_parser.load(SLITLESS | dict(sky_sampling=0))
