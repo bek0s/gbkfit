@@ -12,6 +12,7 @@ from .halos import *
 from .model import *
 from .points import *
 from .profiles import *
+from .responses import *
 from .shapes import *
 from .spheroids import *
 from .surfaces import *

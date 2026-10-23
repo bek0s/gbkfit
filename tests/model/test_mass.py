@@ -23,9 +23,10 @@ from gbkfit.model.mass import (
     DarkFraction, MassContext, MassDisk, MassModel, MassPoint, MassSpheroid,
     MassUser, ProfileBurkert, ProfileCoreNFW, ProfileDekelZhao,
     ProfileEinasto, ProfileNFW, ProfileNFWTruncated, ProfileNodewise,
-    ProfilePseudoIsothermal, ProfileSersic, ProfileZhao, ShapeFlattened,
-    SurfaceComponent, SurfaceExponential, SurfaceGaussianRing,
-    SurfaceNodewise, VerticalComponent, VerticalSech,
+    ProfilePseudoIsothermal, ProfileSersic, ProfileZhao,
+    ResponseBlumenthal86, ResponseGnedin04, ShapeFlattened, SurfaceComponent,
+    SurfaceExponential, SurfaceGaussianRing, SurfaceNodewise,
+    VerticalComponent, VerticalSech,
     VerticalExponential, VerticalGauss, VerticalSech2, VerticalThin,
     mass_component_parser)
 from gbkfit.model.mass import _disk_gravity
@@ -715,7 +716,7 @@ def test_flattened_spheroids_give_their_forces_anywhere(q):
 def test_contracted_halos_pull_toward_their_centre():
     # Spherical shells: -v^2(r) / r^2 toward the centre, of the contracted
     # circular velocity at the spherical radius r
-    model = mass_model(BARYONS + [responding_halo(contraction='blumenthal86')])
+    model = mass_model(BARYONS + [responding_halo(response=dict(type='blumenthal86'))])
     halo = model.component('halo')
     values = BARYON_VALUES | dict(mass_halo_log_m=12, mass_halo_c=5)
     params = model.component_params('halo', values)
@@ -783,7 +784,7 @@ def test_contracted_halos_keep_the_dark_matter_of_their_shells():
     # Within r, the dark matter the halo had within r', with r' M(r') =
     # r (M(r') + M_b(r)) (M = v^2 r, in units of G), against r' found by
     # root finding at each radius
-    model = mass_model(BARYONS + [responding_halo(contraction='blumenthal86')])
+    model = mass_model(BARYONS + [responding_halo(response=dict(type='blumenthal86'))])
     params = BARYON_VALUES | dict(mass_halo_log_m=12, mass_halo_c=5)
     radius = np.array([0.5, 2, 5, 20, 100])
     parts = model.vcirc2_components(radius, params, CONTEXT)
@@ -811,7 +812,7 @@ def test_gnedin_and_cautun_contractions():
     context = dataclasses.replace(CONTEXT, baryon_fraction=0.16)
     parts = {
         name: mass_model(
-            BARYONS + [responding_halo(contraction=name)]
+            BARYONS + [responding_halo(response=dict(type=name))]
         ).vcirc2_components(radius, params, context)
         for name in ('blumenthal86', 'gnedin04', 'cautun20')}
     halo, halo_params = MassSpheroid('h', ProfileNFW()), dict(log_m=12, c=5)
@@ -838,22 +839,23 @@ def test_gnedin_and_cautun_contractions():
         parts['cautun20']['halo'],
         before * (0.45 + 0.38 * (eta + 1.16) ** 0.53), rtol=1e-12)
     with pytest.raises(ValueError, match="cosmic baryon fraction"):
-        mass_model(BARYONS + [responding_halo(contraction='cautun20')]
+        mass_model(BARYONS + [responding_halo(response=dict(type='cautun20'))]
                    ).vcirc2(radius, params, CONTEXT)
     with pytest.raises(ConfigError, match="takes the radius r_D"):
         MassSpheroid('h', ProfileNFW('density_radius'), baryons=['stars'],
-                     contraction='gnedin04')
+                     response=ResponseGnedin04())
 
 
 @pytest.mark.parametrize('profile, solve, bounds, given', [
     ('nfw', 'log_m', [9, 15], dict(mass_halo_c=8)),
     ('burkert', 'c', [1, 100], dict(mass_halo_log_m=11.8))])
-@pytest.mark.parametrize('contraction', [{}, dict(contraction='blumenthal86')])
+@pytest.mark.parametrize(
+    'response', [{}, dict(response=dict(type='blumenthal86'))])
 def test_dark_fractions_set_a_parameter_of_the_halo(
-        profile, solve, bounds, given, contraction):
+        profile, solve, bounds, given, response):
     model = mass_model(BARYONS + [responding_halo(
         profile=dict(type=profile),
-        dark_fraction=dict(solve=solve, bounds=bounds)) | contraction])
+        dark_fraction=dict(solve=solve, bounds=bounds)) | response])
     assert f'mass_halo_{solve}' not in model.pdescs()
     params = BARYON_VALUES | given | dict(mass_halo_fdm=0.3, mass_halo_r_fdm=5)
     parts = model.vcirc2_components(np.array([5.0]), params, CONTEXT)
@@ -866,28 +868,28 @@ def test_dark_fractions_set_a_parameter_of_the_halo(
 
 def test_responding_halos_are_checked():
     with pytest.raises(ConfigError, match="needs the baryons"):
-        MassSpheroid('h', ProfileNFW(), contraction='blumenthal86')
+        MassSpheroid('h', ProfileNFW(), response=ResponseBlumenthal86())
     with pytest.raises(ConfigError, match="spherical shape"):
         MassSpheroid(
             'h', ProfileNFW(), ShapeFlattened(), baryons=['stars'],
-            contraction='blumenthal86')
+            response=ResponseBlumenthal86())
     with pytest.raises(ConfigError, match="not a parameter"):
         MassSpheroid('h', ProfileNFW(), baryons=['stars'],
                      dark_fraction=DarkFraction('q', [0.1, 1]))
     with pytest.raises(ConfigError, match="does not have"):
-        mass_model([responding_halo(contraction='blumenthal86')])
+        mass_model([responding_halo(response=dict(type='blumenthal86'))])
     with pytest.raises(ConfigError, match="in a loop"):
         mass_model([
             responding_halo(name='a', baryons=['b']),
             responding_halo(name='b', baryons=['a'])])
     info = responding_halo(
-        contraction='blumenthal86',
+        response=dict(type='blumenthal86'),
         dark_fraction=dict(solve='log_m', bounds=[9.0, 15.0]))
     dumped = mass_component_parser.dump(
         mass_component_parser.load(copy.deepcopy(info)))
     assert {key: dumped[key] for key in (
-        'baryons', 'contraction', 'dark_fraction')} == {
-        key: info[key] for key in ('baryons', 'contraction', 'dark_fraction')}
+        'baryons', 'response', 'dark_fraction')} == {
+        key: info[key] for key in ('baryons', 'response', 'dark_fraction')}
     assert mass_component_parser.dump(
         mass_component_parser.load(copy.deepcopy(dumped))) == dumped
 

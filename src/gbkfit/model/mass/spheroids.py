@@ -1,12 +1,12 @@
 """
 Spheroids (e.g. a bulge, or a dark matter halo): a profile (see profiles
 and halos) of a shape (see shapes), a sphere or a flattened spheroid; a
-halo can respond to the gravity of the baryons (contracted adiabatically,
-or given by its dark matter fraction).
+halo can respond to the gravity of the baryons (see responses: e.g.
+contracted adiabatically), or be given by its dark matter fraction.
 """
 
 import math
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from typing import Any
 
 import numpy as np
@@ -20,9 +20,9 @@ from gbkfit.utils.parseutils import ConfigError
 from .base import MassComponent, MassContext
 from .halos import (
     ProfileBurkert, ProfileCoreNFW, ProfileDekelZhao, ProfileEinasto,
-    ProfileHalo, ProfileNFW, ProfileNFWTruncated, ProfilePseudoIsothermal,
-    ProfileZhao)
+    ProfileNFW, ProfileNFWTruncated, ProfilePseudoIsothermal, ProfileZhao)
 from .profiles import ProfileNodewise, ProfileSersic, SpheroidProfile
+from .responses import HaloResponse, halo_response_parser
 from .shapes import ShapeSphere, SpheroidShape, spheroid_shape_parser
 from .units import G
 
@@ -46,87 +46,6 @@ spheroid_profile_parser = parseutils.TypedParser(SpheroidProfile, [
     ProfileDekelZhao,
     ProfileCoreNFW,
     ProfileNFWTruncated])
-
-# The contractions of halos (see MassSpheroid)
-CONTRACTIONS = ('blumenthal86', 'gnedin04', 'cautun20')
-
-# The orbit-averaged radii of the contraction of Gnedin et al. (2004):
-# r_bar = A0 r_D (r / r_D)^w
-_GNEDIN04_A0 = 0.85
-_GNEDIN04_W = 0.8
-
-# The bisections of the initial radius of a contracted shell, in ln r
-# over [ln r, ln r + _CONTRACTION_RANGE] (to the precision of floats)
-_CONTRACTION_RANGE = 50.0
-_CONTRACTION_BISECTIONS = 80
-
-
-def _contracted(
-        R: np.ndarray,
-        halo_vcirc2: Callable[[np.ndarray], np.ndarray],
-        baryons_vcirc2: Callable[[np.ndarray], np.ndarray],
-        a0: float = 1.0,
-        w: float = 1.0,
-        r_d: float = 1.0
-) -> np.ndarray:
-    """
-    Return the squared circular velocity at the radii R of a halo
-    contracted adiabatically by baryons, of the orbit-averaged radii
-    r_bar = a0 r_D (r / r_D)^w (Gnedin et al. 2004; r_bar = r, a0 = w =
-    1: Blumenthal et al. 1986): the dark matter within r_bar' of the shell
-    of the radius r' ends within r_bar of r, with r' M(r_bar') = r (M(
-    r_bar') + M_b(r_bar)) (Burkert et al. 2010, Eq. 19, with the radii of
-    Gnedin et al.), M = v^2 r / G of the halo before and of the baryons
-    in the plane (halo_vcirc2 and baryons_vcirc2, functions of the
-    radius): at R = r_bar, v^2 = G M(r_bar') / R. NaN where the baryons
-    push outwards (negative v^2).
-    """
-    out = np.full_like(R, np.nan)
-    baryons_all = baryons_vcirc2(R) * R
-    valid = (R > 0) & (baryons_all >= 0)
-    out[R == 0] = 0
-    averaged = R[valid]
-    baryons = baryons_all[valid]
-    # (the radius of the shell whose orbit-averaged radius is R)
-    r = r_d * (averaged / (a0 * r_d)) ** (1 / w)
-    lo = np.log(r)
-    hi = lo + _CONTRACTION_RANGE
-    for _ in range(_CONTRACTION_BISECTIONS):
-        mid = (lo + hi) / 2
-        x = np.exp(mid)
-        x_averaged = a0 * r_d * (x / r_d) ** w
-        halo = halo_vcirc2(x_averaged) * x_averaged
-        inside = x * halo < r * (halo + baryons)
-        lo, hi = np.where(inside, mid, lo), np.where(inside, hi, mid)
-    x_averaged = a0 * r_d * (np.exp((lo + hi) / 2) / r_d) ** w
-    out[valid] = halo_vcirc2(x_averaged) * x_averaged / averaged
-    return out
-
-
-def _contracted_cautun20(
-        R: np.ndarray,
-        halo_vcirc2: Callable[[np.ndarray], np.ndarray],
-        baryons_vcirc2: Callable[[np.ndarray], np.ndarray],
-        baryon_fraction: float
-) -> np.ndarray:
-    """
-    Return the squared circular velocity at the radii R of a halo
-    contracted by baryons as Cautun et al. (2020, Eq. 11) fit their
-    simulations: its mass within r times 0.45 + 0.38 (eta + 1.16)^0.53,
-    eta = M_b (1 - f_b) / (f_b M) of the masses M = v^2 r / G within r of
-    the halo before (of dark matter only) and of the baryons in the plane
-    (halo_vcirc2 and baryons_vcirc2, functions of the radius), f_b the
-    cosmic baryon fraction (about 1 at eta = 1: baryons that follow the
-    dark matter). NaN where the baryons push outwards (negative v^2).
-    """
-    halo, baryons = halo_vcirc2(R), baryons_vcirc2(R)
-    with np.errstate(divide='ignore', invalid='ignore'):
-        eta = baryons * (1 - baryon_fraction) / (baryon_fraction * halo)
-        out = halo * (0.45 + 0.38 * (eta + 1.16) ** 0.53)
-    out = np.where(baryons < 0, np.nan, out)
-    out[R == 0] = 0
-    return out
-
 
 class DarkFraction(parseutils.Serializable):
     """
@@ -185,25 +104,14 @@ class MassSpheroid(MassComponent):
     A spheroid (e.g. a dark matter halo) can respond to the gravity of
     baryons, mass components of its model (see MassComponent.responds_to):
 
-    - contracted ('blumenthal86'; spherical only): the dark matter within
-      r' ends within r, with r' M(r') = r (M(r') + M_b(r)) (Blumenthal et
-      al. 1986; Burkert et al. 2010, Eq. 19), M = v^2 r / G of the halo
-      before and of the baryons in the plane: v^2(r) = G M(r') / r =
-      v^2(r') r' / r. (Burkert et al. 2010, Eq. 18, which DysmalPy's
-      documentation quotes, writes v^2(r') for this term, smaller by r /
-      r': it does not keep the mass that Eq. 19 moves within r.) Or
-      'gnedin04' (a halo of a radius r_D: of a parameterisation of a mass
-      or a velocity): the same with the orbit-averaged radii r_bar = 0.85
-      r_D (r / r_D)^0.8 in the masses (Gnedin et al. 2004). Or 'cautun20':
-      the mass of the halo within r times 0.45 + 0.38 (eta + 1.16)^0.53,
-      eta = M_b (1 - f_b) / (f_b M) (Cautun et al. 2020, Eq. 11; f_b the
-      cosmic baryon fraction of the cosmology of the galaxy). Its forces
-      are those of its spherical shells, -v^2(r) / r^2 toward the centre
-      (r the spherical radius); its density and potential are not given.
+    - by a response (see HaloResponse; spherical only): e.g. contracted
+      adiabatically, with the parameters of the response. Its forces are
+      those of its spherical shells, -v^2(r) / r^2 toward the centre (r
+      the spherical radius); its density and potential are not given.
     - given by its dark matter fraction (see DarkFraction): fdm = v^2 /
       (v^2 + v_b^2) at r_fdm (two parameters, instead of the parameter it
-      sets), of its circular velocity, contracted if it is, and that of
-      the baryons.
+      sets), of its circular velocity, after its response if it has one,
+      and that of the baryons.
 
     Parameters
     ----------
@@ -215,19 +123,20 @@ class MassSpheroid(MassComponent):
         Its shape; by default, a sphere.
     baryons : Sequence of str, optional
         The names of the mass components of its model that it responds to.
-    contraction : str, optional
-        Its contraction by the baryons: none (the default),
-        'blumenthal86', 'gnedin04' or 'cautun20'.
+    response : HaloResponse, optional
+        Its response to the baryons; none by default.
     dark_fraction : DarkFraction, optional
         Its dark matter fraction, which sets one of its parameters.
 
     Raises
     ------
     ConfigError
-        If the name or the names of the baryons are not valid, the
-        contraction is not valid or the spheroid not spherical, there are
-        no baryons for a contraction or a dark fraction, or a dark
-        fraction sets a parameter that the spheroid does not have.
+        If the name or the names of the baryons are not valid, it has a
+        response but is not spherical, or of a profile that the response
+        does not take, or parameters of the response repeat those of its
+        profile and shape, there are no baryons for a response or a dark
+        fraction, or a dark fraction sets a parameter that the spheroid
+        does not have.
     """
 
     @staticmethod
@@ -241,6 +150,8 @@ class MassSpheroid(MassComponent):
         parseutils.load_option_and_update_info(
             spheroid_shape_parser, info, 'shape')
         parseutils.load_option_and_update_info(
+            halo_response_parser, info, 'response')
+        parseutils.load_option_and_update_info(
             dark_fraction_parser, info, 'dark_fraction')
         return cls(**parseutils.parse_options_for_callable(
             info, cls.__init__))
@@ -251,8 +162,8 @@ class MassSpheroid(MassComponent):
             shape=spheroid_shape_parser.dump(self._shape))
         if self._baryons:
             info['baryons'] = list(self._baryons)
-        if self._contraction is not None:
-            info['contraction'] = self._contraction
+        if self._response is not None:
+            info['response'] = halo_response_parser.dump(self._response)
         if self._dark_fraction is not None:
             info['dark_fraction'] = dark_fraction_parser.dump(
                 self._dark_fraction)
@@ -264,7 +175,7 @@ class MassSpheroid(MassComponent):
             profile: SpheroidProfile,
             shape: SpheroidShape | None = None,
             baryons: Sequence[str] = (),
-            contraction: str | None = None,
+            response: HaloResponse | None = None,
             dark_fraction: DarkFraction | None = None
     ):
         super().__init__(name)
@@ -273,28 +184,22 @@ class MassSpheroid(MassComponent):
             parseutils.check_name(baryon)
         if repeated := sorted({b for b in baryons if baryons.count(b) > 1}):
             raise ConfigError(f"the baryons repeat: {repeated}")
-        if contraction is not None:
-            if contraction not in CONTRACTIONS:
-                raise ConfigError(
-                    f"contraction must be one of {list(CONTRACTIONS)}; it "
-                    f"is {contraction!r}")
+        own = profile.pdescs() | shape.pdescs()
+        if response is not None:
             if not shape.spherical():
                 raise ConfigError(
-                    "the contraction of a spheroid is that of spherical "
+                    "the response of a spheroid is that of spherical "
                     "shells: it needs a spherical shape")
-            if contraction == 'gnedin04' and not (
-                    isinstance(profile, ProfileHalo)
-                    and profile.parameterisation() != 'density_radius'):
+            response.check_profile(profile)
+            if repeated := sorted(own.keys() & response.pdescs().keys()):
                 raise ConfigError(
-                    "the contraction 'gnedin04' takes the radius r_D of a "
-                    "halo: it needs a halo of a parameterisation of a mass "
-                    "or a velocity")
-        if (contraction is not None or dark_fraction is not None) \
+                    f"the parameters of the response repeat those of the "
+                    f"profile and the shape: {repeated}")
+        if (response is not None or dark_fraction is not None) \
                 and not baryons:
             raise ConfigError(
-                "a contraction or a dark fraction needs the baryons that "
-                "the spheroid responds to (baryons)")
-        own = profile.pdescs() | shape.pdescs()
+                "a response or a dark fraction needs the baryons that the "
+                "spheroid responds to (baryons)")
         if dark_fraction is not None and dark_fraction.solve() not in own:
             raise ConfigError(
                 f"the dark fraction sets {dark_fraction.solve()!r}, which "
@@ -303,7 +208,7 @@ class MassSpheroid(MassComponent):
         self._profile = profile
         self._shape = shape
         self._baryons = tuple(baryons)
-        self._contraction = contraction
+        self._response = response
         self._dark_fraction = dark_fraction
 
     def profile(self) -> SpheroidProfile:
@@ -318,9 +223,9 @@ class MassSpheroid(MassComponent):
         """Return the names of the baryons it responds to."""
         return self._baryons
 
-    def contraction(self) -> str | None:
-        """Return its contraction, if any."""
-        return self._contraction
+    def response(self) -> HaloResponse | None:
+        """Return its response to the baryons, if any."""
+        return self._response
 
     def dark_fraction(self) -> DarkFraction | None:
         """Return its dark fraction, if any."""
@@ -337,6 +242,8 @@ class MassSpheroid(MassComponent):
 
     def pdescs(self) -> dict[str, ParamDesc]:
         pdescs = self._profile.pdescs() | self._shape.pdescs()
+        if self._response is not None:
+            pdescs |= self._response.pdescs()
         if self._dark_fraction is not None:
             del pdescs[self._dark_fraction.solve()]
             pdescs |= dict(
@@ -354,7 +261,7 @@ class MassSpheroid(MassComponent):
             params: ParamValues,
             context: MassContext
     ) -> np.ndarray:
-        if self._contraction is None and self._dark_fraction is None:
+        if self._response is None and self._dark_fraction is None:
             return self._shape.vcirc2(R, self._profile, params, context)
         params = self._given(params, context)
         return self._responding_vcirc2(
@@ -366,7 +273,7 @@ class MassSpheroid(MassComponent):
             params: ParamValues,
             context: MassContext
     ) -> np.ndarray:
-        if self._contraction is not None:
+        if self._response is not None:
             # (spherical: the mass of its circular velocity, v^2 r / G)
             r = np.asarray(r, dtype=float)
             return self.vcirc2(r, params, context) * r / G
@@ -380,7 +287,7 @@ class MassSpheroid(MassComponent):
             params: ParamValues,
             context: MassContext
     ) -> np.ndarray:
-        self._check_not_contracted('density')
+        self._check_no_response('density')
         return self._shape.density(
             R, z, self._profile, self._given(params, context), context)
 
@@ -392,7 +299,7 @@ class MassSpheroid(MassComponent):
     ) -> np.ndarray:
         # (that of its profile, whatever its shape: squashing a sphere
         # with the mass of each shell kept keeps its face-on projection)
-        self._check_not_contracted('surface density')
+        self._check_no_response('surface density')
         return self._profile.surface_density(
             R, self._given(params, context), context)
 
@@ -403,7 +310,7 @@ class MassSpheroid(MassComponent):
             params: ParamValues,
             context: MassContext
     ) -> tuple[np.ndarray, np.ndarray]:
-        if self._contraction is not None:
+        if self._response is not None:
             # (spherical: the pull of its mass within the spherical radius)
             R, z = np.broadcast_arrays(
                 np.asarray(R, dtype=float), np.asarray(z, dtype=float))
@@ -422,15 +329,16 @@ class MassSpheroid(MassComponent):
             params: ParamValues,
             context: MassContext
     ) -> np.ndarray:
-        self._check_not_contracted('potential')
+        self._check_no_response('potential')
         return self._shape.potential(
             R, z, self._profile, self._given(params, context), context)
 
-    def _check_not_contracted(self, what: str) -> None:
-        """Raise NotImplementedError if it is contracted."""
-        if self._contraction is not None:
+    def _check_no_response(self, what: str) -> None:
+        """Raise NotImplementedError if it responds to its baryons."""
+        if self._response is not None:
             raise NotImplementedError(
-                f"the {what} of a contracted spheroid is not given")
+                f"the {what} of a spheroid that responds to its baryons is "
+                f"not given")
 
     def _baryons_vcirc2(
             self, R: np.ndarray, context: MassContext) -> np.ndarray:
@@ -441,31 +349,20 @@ class MassSpheroid(MassComponent):
             self, R: np.ndarray, params: ParamValues, context: MassContext
     ) -> np.ndarray:
         """
-        Return its squared circular velocity at R, contracted if it is,
-        for the values of all the parameters of its profile and shape.
+        Return its squared circular velocity at R, after its response if
+        it has one, for the values of all the parameters of its profile,
+        shape and response.
         """
         def vcirc2(radii: np.ndarray) -> np.ndarray:
             return self._shape.vcirc2(radii, self._profile, params, context)
 
         def baryons(radii: np.ndarray) -> np.ndarray:
             return self._baryons_vcirc2(radii, context)
-        if self._contraction is None:
+        if self._response is None:
             return vcirc2(R)
-        if self._contraction == 'cautun20':
-            if context.baryon_fraction is None:
-                raise ValueError(
-                    "the contraction 'cautun20' takes the cosmic baryon "
-                    "fraction, which the cosmology of the galaxy lacks "
-                    "(Omega_b)")
-            out = _contracted_cautun20(
-                R.ravel(), vcirc2, baryons, context.baryon_fraction)
-        elif self._contraction == 'gnedin04':
-            out = _contracted(
-                R.ravel(), vcirc2, baryons, _GNEDIN04_A0, _GNEDIN04_W,
-                self._profile.halo_radius(params, context))
-        else:
-            out = _contracted(R.ravel(), vcirc2, baryons)
-        return out.reshape(R.shape)
+        return self._response.vcirc2(
+            R.ravel(), vcirc2, baryons, self._profile, params, context
+        ).reshape(R.shape)
 
     def _given(
             self, params: ParamValues, context: MassContext) -> ParamValues:
