@@ -428,7 +428,9 @@ class SlitlessSpectra(Observable):
             spec_rest=_detail.dump_rest(self._spec_rest),
             spec_medium=self._spec_medium,
             spec_convention=self._spec_convention,
-            trace=trace_parser.dump(self._trace),
+            trace=trace_parser.dump(
+                self._trace, prefix=prefix, dump_path=dump_path,
+                overwrite=overwrite),
             aperture=aperture_parser.dump(self._aperture),
             exposures=exposure_parser.dump(list(self._exposures)),
             sky_sampling=self._sky_sampling), data)

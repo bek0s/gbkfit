@@ -5,13 +5,16 @@ place of its undispersed light.
 """
 
 import abc
+import os.path
 from collections.abc import Sequence
 from typing import Any
 
+import astropy.io.fits as fits
 import astropy.units
 import numpy as np
 import numpy.polynomial.polynomial as npp
 import numpy.typing as npt
+import scipy.interpolate
 
 from gbkfit.utils import gridutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
@@ -21,6 +24,7 @@ __all__ = [
     'Trace',
     'TraceGrismConf',
     'TracePolynomial',
+    'TraceTable',
     'trace_parser'
 ]
 
@@ -80,7 +84,7 @@ class TracePolynomial(Trace):
     def type() -> str:
         return 'polynomial'
 
-    def dump(self) -> dict[str, Any]:
+    def dump(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
         return dict(type=self.type(), wave=str(self._wave),
                     dx=list(self._dx), dy=list(self._dy))
 
@@ -145,7 +149,7 @@ class TraceGrismConf(Trace):
     def type() -> str:
         return 'grismconf'
 
-    def dump(self) -> dict[str, Any]:
+    def dump(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
         return dict(
             type=self.type(),
             displ=[list(c) for c in self._displ],
@@ -242,6 +246,156 @@ def _field_polynomials(
     return values[1:] * powers
 
 
+class TraceTable(Trace):
+    """
+    A trace tabulated at the nodes of a grid of wavelengths and places
+    (e.g. sampled from the model of an instrument: see
+    prep.nirspec_msa_spectra), interpolated between them by cubic splines
+    along each axis. Places beyond the grid take the offsets of its
+    nearest edge; wavelengths beyond it are refused.
+
+    Its configuration is a FITS file of it (see read and write).
+
+    Parameters
+    ----------
+    wave : Sequence of float
+        The wavelengths of the nodes (m, in the medium of the spectral
+        axis; ascending, at least 4).
+    x, y : Sequence of float
+        The places of the nodes (pixels of the image, from its first
+        pixel; ascending, at least 4 each).
+    dx, dy : np.ndarray
+        The offsets at the nodes (pixels), of shape (nwave, ny, nx).
+
+    Raises
+    ------
+    ConfigError
+        If there are fewer than 4 nodes along an axis, they are not
+        ascending, or the offsets are not finite or not of their shape.
+    """
+
+    @staticmethod
+    def type() -> str:
+        return 'table'
+
+    @classmethod
+    def load(cls, info: dict[str, Any]) -> 'TraceTable':
+        options = parseutils.parse_options(info, ['file'], [])
+        return cls.read(parseutils.resolve_path(options['file']))
+
+    def dump(
+            self, prefix: str = '', dump_path: bool = True,
+            overwrite: bool = False
+    ) -> dict[str, Any]:
+        filename = f'{prefix}trace.fits'
+        self.write(filename, overwrite)
+        return dict(
+            file=filename if dump_path else os.path.basename(filename))
+
+    @classmethod
+    def read(cls, filename: str) -> 'TraceTable':
+        """
+        Read a trace from a FITS file of its nodes and offsets (see write).
+
+        Raises
+        ------
+        ConfigError
+            If the file lacks an extension of the trace.
+        """
+        with fits.open(filename) as hdus:
+            names = [hdu.name for hdu in hdus]
+            if missing := [n for n in _TABLE_EXTENSIONS if n not in names]:
+                raise ConfigError(
+                    f"the trace file {filename!r} lacks the extensions "
+                    f"{missing}")
+            return cls(*(np.array(hdus[n].data) for n in _TABLE_EXTENSIONS))
+
+    def write(self, filename: str, overwrite: bool = False) -> None:
+        """
+        Write it to a FITS file: the extensions WAVE (m), X, Y (pixels),
+        DX and DY (pixels, of shape (nwave, ny, nx)).
+        """
+        arrays = (self._wave, self._x, self._y, self._dx, self._dy)
+        fits.HDUList([fits.PrimaryHDU()] + [
+            fits.ImageHDU(array, name=name)
+            for name, array in zip(_TABLE_EXTENSIONS, arrays)]).writeto(
+            filename, overwrite=overwrite)
+
+    def __init__(
+            self,
+            wave: Sequence[float],
+            x: Sequence[float],
+            y: Sequence[float],
+            dx: npt.ArrayLike,
+            dy: npt.ArrayLike
+    ):
+        nodes = [np.asarray(a, dtype=float) for a in (wave, y, x)]
+        for name, axis in zip(('wave', 'y', 'x'), nodes):
+            if axis.ndim != 1 or len(axis) < 4 \
+                    or not np.all(np.diff(axis) > 0):
+                raise ConfigError(
+                    f"the nodes {name} of a trace table must be at least 4, "
+                    f"ascending")
+        shape = tuple(len(axis) for axis in nodes)
+        offsets = [np.asarray(a, dtype=float) for a in (dx, dy)]
+        for name, values in zip(('dx', 'dy'), offsets):
+            if values.shape != shape or not np.all(np.isfinite(values)):
+                raise ConfigError(
+                    f"the offsets {name} of a trace table must be finite, "
+                    f"of the shape of its nodes {shape}; they are of the "
+                    f"shape {values.shape}")
+        self._wave, self._y, self._x = nodes
+        self._dx, self._dy = offsets
+        self._splines = [_cubic_spline(nodes, values) for values in offsets]
+
+    def offsets(
+            self,
+            wavelength: npt.ArrayLike,
+            x: npt.ArrayLike,
+            y: npt.ArrayLike
+    ) -> tuple[np.ndarray, np.ndarray]:
+        wavelength, x, y = np.broadcast_arrays(
+            np.asarray(wavelength, dtype=float), np.asarray(x, dtype=float),
+            np.asarray(y, dtype=float))
+        if wavelength.size and not (
+                wavelength.min() >= self._wave[0]
+                and wavelength.max() <= self._wave[-1]):
+            raise ConfigError(
+                f"the trace table covers the wavelengths {self._wave[0]:.6g} "
+                f"to {self._wave[-1]:.6g} m; the spectral axis reaches "
+                f"{wavelength.min():.6g} to {wavelength.max():.6g} m")
+        points = np.stack([
+            wavelength.ravel(),
+            np.clip(y, self._y[0], self._y[-1]).ravel(),
+            np.clip(x, self._x[0], self._x[-1]).ravel()], axis=-1)
+        return tuple(
+            spline(points).reshape(wavelength.shape)
+            for spline in self._splines)
+
+
+# The extensions of the FITS files of trace tables
+_TABLE_EXTENSIONS = ('WAVE', 'X', 'Y', 'DX', 'DY')
+
+
+def _cubic_spline(
+        nodes: Sequence[np.ndarray], values: np.ndarray
+) -> scipy.interpolate.NdBSpline:
+    """
+    Return the cubic spline (not-a-knot) through values at the nodes of a
+    grid: a product of splines along each axis, whose coefficients are
+    those of the interpolation along each axis in turn (exact, unlike the
+    iterative solve of scipy's RegularGridInterpolator).
+    """
+    coefficients, knots = values, []
+    for axis, axis_nodes in enumerate(nodes):
+        spline = scipy.interpolate.make_interp_spline(
+            axis_nodes, coefficients, k=3, axis=axis)
+        coefficients = np.moveaxis(spline.c, 0, axis)
+        knots.append(spline.t)
+    return scipy.interpolate.NdBSpline(tuple(knots), coefficients, 3)
+
+
 trace_parser = parseutils.TypedParser(Trace, [
     TracePolynomial,
-    TraceGrismConf])
+    TraceGrismConf,
+    TraceTable])

@@ -348,3 +348,49 @@ def test_apertures_and_exposures_from_configurations():
             type='shutters', size=[0.2, 0.46], count=3)))
     with pytest.raises(RuntimeError, match="sky_sampling"):
         observable_parser.load(SLITLESS | dict(sky_sampling=0))
+
+
+def polynomial_table(wave, x, y, dy=0.0):
+    # The trace of SLITLESS (dx = c / (4 STEP) per um about 4 um), sampled
+    # at nodes, with a dy of dy x y
+    from gbkfit.observation.observables.traces import TraceTable
+    w, yy, xx = np.meshgrid(wave, y, x, indexing='ij')
+    dx = 2.99792458e5 / (4 * STEP) * (w - 4e-6) / 1e-6
+    return TraceTable(wave, x, y, dx, dy * xx * yy)
+
+
+def test_trace_tables_interpolate_their_nodes():
+    wave = np.linspace(3.99e-6, 4.01e-6, 9)
+    table = polynomial_table(
+        wave, np.arange(-5.0, 25), np.arange(-5.0, 20), dy=1e-3)
+    # (at the nodes, between them, and beyond the places: those of the edge)
+    dx, dy = table.offsets(wave[[2, 2]], [3.0, 3.5], [4.0, 4.5])
+    np.testing.assert_allclose(
+        dx, 2.99792458e5 / (4 * STEP) * (wave[2] - 4e-6) / 1e-6, atol=1e-9)
+    np.testing.assert_allclose(dy, [1e-3 * 12, 1e-3 * 3.5 * 4.5], rtol=1e-6)
+    np.testing.assert_allclose(
+        table.offsets(4e-6, 100.0, -100.0)[1], 1e-3 * 24 * -5, rtol=1e-9)
+    with pytest.raises(RuntimeError, match="covers the wavelengths"):
+        table.offsets(4.02e-6, 0.0, 0.0)
+
+
+def test_trace_tables_disperse_as_their_traces(driver, tmp_path):
+    # A table of the trace of SLITLESS, from a file, gives its image
+    from gbkfit.observation import observable_parser
+    edges = 4e-6 * (1 + np.array([-1, 1]) * STEP * (NZ / 2 + 1) / 2.99792458e5)
+    table = polynomial_table(
+        np.linspace(*edges, 12), np.arange(-15.0, 31), np.arange(-3.0, 15))
+    table.write(str(tmp_path / 'trace.fits'))
+    tabled = SLITLESS | dict(trace=dict(
+        type='table', file=str(tmp_path / 'trace.fits')))
+    expected = evaluate(driver, SLITLESS)
+    np.testing.assert_allclose(
+        evaluate(driver, tabled), expected, rtol=1e-5,
+        atol=1e-6 * expected.max())
+    observable = observable_parser.load(copy.deepcopy(tabled))
+    dumped = observable_parser.dump(observable, prefix=str(tmp_path / 'd_'))
+    assert dumped['trace']['file'] == str(tmp_path / 'd_trace.fits')
+    again = observable_parser.load(dumped)
+    np.testing.assert_allclose(
+        again.trace().offsets(4e-6, 3.0, 4.0),
+        observable.trace().offsets(4e-6, 3.0, 4.0))
