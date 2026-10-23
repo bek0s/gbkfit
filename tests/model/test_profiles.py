@@ -186,3 +186,75 @@ def test_outputs_of_profiles_are_tables():
     table = outputs['observations/rc/model/vcirc.ecsv'].value
     np.testing.assert_array_equal(table['radius'], [1, 3] * u.kpc)
     assert table['value'].unit == u.km / u.s
+
+
+# A rotmod file of SPARC, made up: radius (kpc), Vobs, errV, Vgas,
+# Vdisk, Vbul (km/s), at 10 Mpc
+ROTMOD = (
+    "# Distance = 10 Mpc\n"
+    "# Rad Vobs errV Vgas Vdisk Vbul\n"
+    "0.5 40.0 5.0 -3.0 50.0 0.0\n"
+    "1.0 70.0 4.0 5.0 80.0 0.0\n"
+    "2.0 100.0 4.0 12.0 95.0 0.0\n"
+    "4.0 120.0 5.0 20.0 90.0 0.0\n")
+
+
+def rotmod_info(file, column):
+    """The configuration of a curve of a rotmod file of SPARC."""
+    return dict(
+        file=str(file), format='ascii.no_header',
+        radius=dict(column='col1', unit='kpc'), distance=10,
+        velocity=dict(column=column))
+
+
+def test_table_mass_of_its_curve(tmp_path):
+    # v^2 = upsilon V |V| at its radii, signed; at twice its distance its
+    # radii and V^2 are twice theirs
+    from gbkfit.model import mass_component_parser
+    file = tmp_path / 'rotmod.dat'
+    file.write_text(ROTMOD)
+    gas = mass_component_parser.load(
+        dict(type='table', name='gas') | rotmod_info(file, 'col4'))
+    galaxy = galaxy_parser.load(dict(
+        mass=[mass_component_parser.dump(gas)], distance=dict(type='direct')))
+    assert 'mass' not in galaxy.plan_functions().names()
+    radii = np.array([0.5, 1.0, 2.0, 4.0])
+    gas_v = np.array([-3.0, 5.0, 12.0, 20.0])
+    for distance, scale in ((10, 1), (20, 2)):
+        bound = galaxy.plan_functions().bind(
+            dict(distance=distance, mass_gas_upsilon=1.5))
+        np.testing.assert_allclose(
+            bound['vcirc'](radii * scale) ** 2 * np.sign(gas_v),
+            1.5 * scale * gas_v * np.abs(gas_v), rtol=1e-12)
+    with pytest.raises(ValueError, match="has a table to the radius 4"):
+        bound['vcirc'](9.0)
+
+
+def test_rotation_curve_of_sparc(tmp_path):
+    # A fit of SPARC: the gas and the disk of the rotmod file, and a halo;
+    # the observed curve of the file, of its distance
+    file = tmp_path / 'rotmod.dat'
+    file.write_text(ROTMOD)
+    galaxy = galaxy_parser.load(dict(
+        mass=[dict(type='table', name='gas') | rotmod_info(file, 'col4'),
+              dict(type='table', name='disk') | rotmod_info(file, 'col5'),
+              dict(type='spheroid', name='halo', profile=dict(type='nfw'))],
+        distance=dict(type='direct')))
+    observation = observation_parser.load(dict(
+        type='profile', name='rc', inclination=60,
+        data=dict(
+            file=str(file), format='ascii.no_header',
+            radius=dict(column='col1', unit='kpc'), distance=10,
+            vcirc=dict(column='col2', error='col3'))))
+    params = dict(
+        distance=10, mass_gas_upsilon=1, mass_disk_upsilon=0.5,
+        mass_halo_log_m=11.5, mass_halo_c=10, rc_incl=60)
+    objective = Objective(ObservationGroup(galaxy, observation))
+    radii = np.array([0.5, 1.0, 2.0, 4.0])
+    halo = galaxy.plan_functions().bind(params)['vcirc_halo'](radii)
+    gas = np.array([-3.0, 5.0, 12.0, 20.0])
+    disk = np.array([50.0, 80.0, 95.0, 90.0])
+    vcirc = np.sqrt(gas * np.abs(gas) + 0.5 * disk ** 2 + halo ** 2)
+    vobs, errv = np.array([40.0, 70, 100, 120]), np.array([5.0, 4, 4, 5])
+    assert objective.chi2(params) == pytest.approx(
+        np.sum(((vcirc - vobs) / errv) ** 2), rel=1e-10)

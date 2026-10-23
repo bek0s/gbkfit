@@ -6,7 +6,7 @@ import astropy.units as u
 import numpy as np
 from astropy.table import Table
 
-from gbkfit.utils import parseutils, unitutils
+from gbkfit.utils import parseutils, tableutils
 from gbkfit.utils.parseutils import ConfigError
 from . import _resampling
 from .base import Dataset
@@ -113,17 +113,13 @@ class DatasetProfile(Dataset):
             options, required={'file', 'radius'},
             optional={'format', 'distance'})
         with parseutils.config_path('file'):
-            filename, _ = parseutils.parse_file(options['file'])
-            try:
-                table = Table.read(prefix + filename, format=options.get(
-                    'format'))
-            except (OSError, ValueError) as e:
-                raise ConfigError(
-                    f"cannot read the table {filename}: {e}") from e
+            table = tableutils.read_table(
+                options['file'], options.get('format'), prefix)
         with parseutils.config_path('radius'):
             radius = parseutils.parse_options(
                 options['radius'], required={'column'}, optional={'unit'})
-            radii = _column(table, radius['column'], radius.get('unit'))
+            radii = tableutils.read_column(
+                table, radius['column'], radius.get('unit'))
             if radii.unit is u.dimensionless_unscaled:
                 raise ConfigError(
                     "the radii need their unit (e.g. unit: kpc), which their "
@@ -214,30 +210,6 @@ class DatasetProfile(Dataset):
             residuals, size, _BLOCK_AXES, rng)
 
 
-def _column(
-        table: Table, name: Any, unit: str | None
-) -> u.Quantity:
-    """
-    Return a column of a table, by name, as floats with a unit: the unit
-    given, or else that of the column (none if it has none), and NaN where
-    it is masked. Raise ConfigError if the table has no such column, or
-    its values are not numbers.
-    """
-    if name not in table.colnames:
-        raise ConfigError(
-            f"the table has no column {name!r}; its columns are "
-            f"{table.colnames}")
-    column = table[name]
-    try:
-        values = np.ma.filled(
-            np.ma.asarray(column, dtype=float), np.nan)
-    except (TypeError, ValueError):
-        raise ConfigError(f"the column {name!r} is not of numbers") from None
-    if unit is not None:
-        return values * unitutils.parse_unit(unit)
-    return values * (column.unit or u.dimensionless_unscaled)
-
-
 def _item(table: Table, info: Any) -> Data:
     """
     Return a data item of a table from its configuration (see
@@ -250,14 +222,14 @@ def _item(table: Table, info: Any) -> Data:
             f"column) and unit ('unit'); it is {info!r}")
     info = parseutils.parse_options(
         info, required={'column'}, optional=set(_ITEM_OPTIONS) - {'column'})
-    values = _column(table, info['column'], info.get('unit'))
+    values = tableutils.read_column(table, info['column'], info.get('unit'))
     unit = None if values.unit is u.dimensionless_unscaled else values.unit
     error = info.get('error')
     if isinstance(error, (int, float)):
         error = np.full(values.shape, float(error))
     elif error is not None:
         with parseutils.config_path('error'):
-            error = _column(table, error, None)
+            error = tableutils.read_column(table, error, None)
             if error.unit is not u.dimensionless_unscaled:
                 try:
                     error = error.to(values.unit)
@@ -269,5 +241,6 @@ def _item(table: Table, info: Any) -> Data:
     mask = None
     if info.get('mask') is not None:
         with parseutils.config_path('mask'):
-            mask = np.nan_to_num(_column(table, info['mask'], None).value)
+            mask = np.nan_to_num(
+                tableutils.read_column(table, info['mask'], None).value)
     return Data(values.value, mask, error, unit)

@@ -108,9 +108,11 @@ class MassContext:
     squared circular velocities of the mass components that they respond
     to (see MassComponent.responds_to), as functions of the radius (kpc),
     by their names; the cosmic baryon fraction Omega_b / Omega_m, if
-    known (for the contractions of halos that take it); and the Ricci
+    known (for the contractions of halos that take it); the Ricci
     scalar of the background universe (kpc^-2) at the epoch of the galaxy
-    and today, if known (for f(R) gravity).
+    and today, if known (for f(R) gravity); and the length of an arcsec in
+    the galaxy (kpc), if known (for tables measured at a distance, see
+    MassTable).
     """
     critical_density: float
     omega_m: float
@@ -121,6 +123,7 @@ class MassContext:
     baryon_fraction: float | None = None
     ricci_scalar: float | None = None
     ricci_scalar_today: float | None = None
+    kpc_per_arcsec: float | None = None
 
     def density(self, component: str) -> ComponentDensity:
         """

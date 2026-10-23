@@ -16,6 +16,7 @@ from .responses import *
 from .shapes import *
 from .spheroids import *
 from .surfaces import *
+from .tables import *
 from .units import *
 from .user import *
 from .vertical import *
