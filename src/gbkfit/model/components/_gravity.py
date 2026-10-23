@@ -463,6 +463,9 @@ class GravityPlan:
                 for name in ('xpos', 'ypos', 'posa', 'incl')))
             label = components[i].name() or f'component{i}'
             rings += [(label, *ring) for ring in zip(*geometry)]
+        # (a galaxy of mass alone has none)
+        if not rings:
+            return
         ref, _, x0, y0, posa0, incl0 = rings[0]
         normal0 = _normal(posa0, incl0)
         offset = max(

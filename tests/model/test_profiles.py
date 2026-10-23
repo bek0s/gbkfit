@@ -178,11 +178,12 @@ def test_outputs_of_profiles_are_tables():
     data = observation.dataset({'vcirc': Data(
         [100.0, 150.0], error=[5.0, 5.0], unit='km/s')})
     group = ObservationGroup(mass_galaxy(), observation.with_data(data))
+    # (with the extra outputs of the gravity of a galaxy of mass alone)
     outputs = _detail.evaluation_outputs(
-        group, Objective(group), PARAMS, True, True, False)
-    assert set(outputs) == {
+        group, Objective(group), PARAMS, True, True)
+    assert {
         f'observations/rc/{kind}/vcirc.ecsv'
-        for kind in ('model', 'residual', 'wresidual')}
+        for kind in ('model', 'residual', 'wresidual')} <= set(outputs)
     table = outputs['observations/rc/model/vcirc.ecsv'].value
     np.testing.assert_array_equal(table['radius'], [1, 3] * u.kpc)
     assert table['value'].unit == u.km / u.s
