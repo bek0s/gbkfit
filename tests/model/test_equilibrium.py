@@ -53,9 +53,9 @@ def with_kinematics(disk, **kinematics):
 def evaluate(driver, galaxy_, properties):
     """Evaluate a spectral cube of a galaxy, along a line of sight grid."""
     from gbkfit.observation import (
-        Observation, ObservationGroup, PixelSpectra, line_of_sight_parser)
+        ObservationGroup, ObservationSky, PixelSpectra, line_of_sight_parser)
     from gbkfit.params import ParamSpace
-    group = ObservationGroup([galaxy_], [Observation(
+    group = ObservationGroup([galaxy_], [ObservationSky(
         PixelSpectra(size=(32, 32, 51), step=(1, 1, 10)),
         line_of_sight_parser.load(dict(type='grid')), driver)])
     params = ParamSpace(group.pdescs(), properties)

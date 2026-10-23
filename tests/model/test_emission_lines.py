@@ -199,8 +199,8 @@ def evaluate_observation(driver, galaxy, observable, properties, **options):
     from gbkfit.model import galaxy_parser
     from gbkfit.observation import ObservationGroup, observation_parser
     observation = observation_parser.load(
-        copy.deepcopy(
-            dict(observable=observable, line_of_sight=FLAT) | options),
+        copy.deepcopy(dict(
+            type='sky', observable=observable, line_of_sight=FLAT) | options),
         drivers={None: driver})
     group = ObservationGroup(
         [galaxy_parser.load(copy.deepcopy(galaxy))], [observation])
@@ -285,6 +285,7 @@ def test_a_component_must_have_a_selected_line(driver):
 def test_line_selection_round_trip(driver):
     from gbkfit.observation import observation_parser
     info = dict(
+        type='sky',
         observable=scube('6562.8 Angstrom'), line_of_sight=FLAT,
         lines=['ha'])
     dumped = observation_parser.dump(

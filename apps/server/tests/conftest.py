@@ -17,6 +17,7 @@ PIECES = {
         density=dict(ptraits=dict(type='exponential')),
         emission=dict(type='band'))]),
     'observations/image.yaml': dict(
+        type='sky',
         observable=dict(type='pixel_brightness', size=[16, 12]),
         line_of_sight=dict(type='flat')),
     'params/disk.yaml': dict(properties=dict(

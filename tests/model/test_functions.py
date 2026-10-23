@@ -213,9 +213,9 @@ def test_radii_outside_refused():
 def test_functions_of_a_group_prefixed():
     from gbkfit.driver.drivers.host import DriverHost
     from gbkfit.observation import (
-        Observation, ObservationGroup, PixelSpectra, line_of_sight_parser)
+        ObservationGroup, ObservationSky, PixelSpectra, line_of_sight_parser)
     galaxy = gas_galaxy(name='north')
-    group = ObservationGroup([galaxy], [Observation(
+    group = ObservationGroup([galaxy], [ObservationSky(
         PixelSpectra(size=(8, 8, 5), step=(1, 1, 10)),
         line_of_sight_parser.load(dict(type='grid')), DriverHost())])
     functions = group.plan_functions()
@@ -235,9 +235,9 @@ def test_derived_values_of_a_group():
     # galaxies (see ParamSpace)
     from gbkfit.driver.drivers.host import DriverHost
     from gbkfit.observation import (
-        Observation, ObservationGroup, PixelSpectra, line_of_sight_parser)
+        ObservationGroup, ObservationSky, PixelSpectra, line_of_sight_parser)
     from gbkfit.params import param_space_parser
-    group = ObservationGroup([gas_galaxy()], [Observation(
+    group = ObservationGroup([gas_galaxy()], [ObservationSky(
         PixelSpectra(size=(8, 8, 5), step=(1, 1, 10)),
         line_of_sight_parser.load(dict(type='grid')), DriverHost())])
     params = param_space_parser.load(

@@ -216,10 +216,10 @@ def test_observation_dumps_the_image_of_its_primary_beam(tmp_path):
     # with the prefix of the dump, which can be dumped again (overwrite)
     from gbkfit.driver.drivers.host import DriverHost
     from gbkfit.instrument import PrimaryBeamImage
-    from gbkfit.observation import Flat, Observation, observation_parser
+    from gbkfit.observation import Flat, ObservationSky, observation_parser
     from gbkfit.observation.observables import PixelBrightness
     beam = PrimaryBeamImage(np.ones((8, 8)))
-    observation = Observation(
+    observation = ObservationSky(
         PixelBrightness(size=(8, 8)), Flat(), DriverHost(),
         instrument=Instrument(primary_beam=beam))
     prefix = str(tmp_path / 'out_')

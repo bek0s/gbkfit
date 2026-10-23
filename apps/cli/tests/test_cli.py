@@ -38,6 +38,7 @@ def test_eval_writes_a_run(tmp_path):
             density=dict(ptraits=dict(type='exponential')),
             emission=dict(type='band'))])],
         observations=[dict(
+            type='sky',
             observable=dict(type='pixel_brightness', size=[16, 12]),
             line_of_sight=dict(type='flat'))],
         params=dict(properties=dict(

@@ -38,8 +38,8 @@ def evaluate(driver, foreground=None, properties=PROPERTIES, observable=IMAGE,
         observable=copy.deepcopy(observable))])
     observation = group.observations()[0]
     if foreground is not None:
-        from gbkfit.observation import Observation, ObservationGroup
-        observation = Observation(
+        from gbkfit.observation import ObservationGroup, ObservationSky
+        observation = ObservationSky(
             observation.observable(), observation.line_of_sight(),
             observation.driver(), foreground=foreground,
             instrument=observation.instrument(), name='obs')

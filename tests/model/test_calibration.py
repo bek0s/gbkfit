@@ -25,8 +25,8 @@ def config(driver, observables, calibration):
             dptraits=dict(type='uniform')),
         emission=dict(type='lines'))
     observations = [
-        dict(observable=observable, line_of_sight=dict(type='flat'),
-             name=name)
+        dict(type='sky', observable=observable,
+             line_of_sight=dict(type='flat'), name=name)
         for observable, name in zip(observables, ['first', 'second'])]
     observations[0]['calibration'] = calibration
     return dict(

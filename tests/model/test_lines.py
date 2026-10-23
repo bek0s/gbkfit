@@ -82,6 +82,7 @@ def lines_config(lines, catalogue=None):
                 dptraits=dict(type='uniform')),
             emission=dict(type='lines', lines=lines))])],
         observations=[dict(
+            type='sky',
             observable=dict(
                 type='pixel_spectra', size=[8, 8, 10],
                 rest='6564.61 Angstrom'),

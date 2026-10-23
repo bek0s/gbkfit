@@ -73,6 +73,7 @@ def config(kind, components=None, line_of_sight=None):
     return dict(
         galaxies=[dict(components=components)],
         observations=[dict(
+            type='sky',
             observable=observable, line_of_sight=line_of_sight)])
 
 

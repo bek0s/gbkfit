@@ -55,6 +55,7 @@ def test_configs_resolve_relative_paths_against_their_root(tmp_path):
 def observation(**options):
     """The configuration of an observation of GALAXY, with options."""
     return dict(
+        type='sky',
         line_of_sight=dict(type='flat'),
         observable=dict(type='pixel_brightness', size=[8, 8])) | options
 
@@ -98,6 +99,7 @@ MASSIVE = dict(
     distance=dict(type='direct'))
 
 CUBE = dict(
+    type='sky',
     line_of_sight=dict(type='flat'),
     observable=dict(type='pixel_spectra', size=[8, 8, 5]))
 
@@ -149,6 +151,7 @@ def test_parallel_evaluations_are_on_drivers_of_the_configuration(tmp_path):
     cfg = dict(
         galaxies=[GALAXY], drivers=dict(cpu1=HOST, cpu2=HOST),
         observations=[dict(
+            type='sky',
             line_of_sight=dict(type='flat'),
             observable=dict(type='pixel_brightness'),
             data=dict(data=str(tmp_path / 'image.fits')), driver='cpu1')])

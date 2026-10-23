@@ -14,7 +14,8 @@ galaxies:
       dptraits: {type: uniform}
     emission: {type: lines}
 observations:
-- line_of_sight: {type: flat}
+- type: sky
+  line_of_sight: {type: flat}
   observable:
     type: pixel_spectra
     size: [48, 48, 50]

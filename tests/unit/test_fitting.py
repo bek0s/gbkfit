@@ -20,7 +20,8 @@ from gbkfit.instrument import Instrument, PSFGauss
 from gbkfit.model import galaxy_parser
 from gbkfit.objective import Objective
 from gbkfit.observation import (
-    Flat, LikelihoodGaussian, Observation, ObservationGroup, PixelBrightness)
+    Flat, LikelihoodGaussian, ObservationGroup, ObservationSky,
+    PixelBrightness)
 from gbkfit.params import ParamEvaluationError, ParamSpace
 from gbkfit.utils.parseutils import ConfigError
 
@@ -49,7 +50,7 @@ def mock_objective(
     times it, under a likelihood, of an observation of a name.
     """
     def group(dataset, likelihood=None):
-        observation = Observation(
+        observation = ObservationSky(
             PixelBrightness.from_data(dataset), Flat(), driver,
             instrument=Instrument(psf=PSFGauss(1.5)), data=dataset,
             likelihood=likelihood, name=name)
@@ -810,7 +811,7 @@ def test_bootstrap_errors_take_the_noise_the_beam_correlates():
     from gbkfit.observation import NoiseGauss
 
     def group(dataset):
-        observation = Observation(
+        observation = ObservationSky(
             PixelBrightness.from_data(dataset), Flat(), DriverHost(),
             instrument=Instrument(psf=PSFGauss(1.5)), data=dataset)
         return ObservationGroup(galaxy_parser.load(GALAXY), observation)

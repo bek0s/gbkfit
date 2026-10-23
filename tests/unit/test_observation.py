@@ -9,7 +9,7 @@ import pytest
 from gbkfit.dataset import Data, DatasetPixelMoments
 from gbkfit.instrument import Instrument, LSFGauss
 from gbkfit.observation import (
-    Flat, LikelihoodGaussian, Observation, PixelBrightness, PixelMoments,
+    Flat, LikelihoodGaussian, ObservationSky, PixelBrightness, PixelMoments,
     observation_parser)
 from gbkfit.utils import parseutils
 from gbkfit.utils.parseutils import ConfigError
@@ -26,7 +26,7 @@ def test_observable_from_data():
     assert observable.grid() == data.grid()
     assert observable.orders() == (0, 1)
     assert observable.spec_rval() == 1500
-    observation = Observation(
+    observation = ObservationSky(
         observable, Flat(), data=data,
         likelihood=LikelihoodGaussian(missing_residual=3))
     assert observation.driver().type() == 'host'
@@ -39,16 +39,26 @@ def test_a_model_that_can_lack_values_needs_their_residual():
         {0: Data(np.ones((8, 20))), 1: Data(np.full((8, 20), 1500.0))})
     observable = PixelMoments.from_data(data, spec_step=5)
     with pytest.raises(ConfigError, match="option missing_residual"):
-        Observation(observable, Flat(), data=data)
+        ObservationSky(observable, Flat(), data=data)
 
 
 def test_observable_options_are_checked():
     with pytest.raises(ConfigError, match="mask_apply needs a mask_cutoff"):
         PixelBrightness(size=(8, 8), mask_apply=True)
     with pytest.raises(ConfigError, match="no spectral axis for an LSF"):
-        Observation(
+        ObservationSky(
             PixelBrightness(size=(8, 8)), Flat(),
             instrument=Instrument(lsf=LSFGauss(10)))
+
+
+def test_observations_need_their_type():
+    info = dict(
+        line_of_sight=dict(type='flat'),
+        observable=dict(type='pixel_brightness', size=[4, 4]))
+    with pytest.raises(ConfigError, match="'type' is required.*'sky'"):
+        observation_parser.load(info)
+    observation = observation_parser.load(info | dict(type='sky'))
+    assert observation_parser.dump(observation)['type'] == 'sky'
 
 
 def test_instrument_warnings_have_the_path_of_the_configuration(caplog):
@@ -56,10 +66,11 @@ def test_instrument_warnings_have_the_path_of_the_configuration(caplog):
     # warnings have the path of the observation
     with parseutils.config_path('observations'):
         observation_parser.load([dict(
+            type='sky',
             line_of_sight=dict(type='flat'),
             observable=dict(
                 type='pixel_spectra', size=[4, 4, 4], smooth_weights=True))])
-    assert "observations[0]: smooth_weights is true" in caplog.text
+    assert "observations[0] [sky]: smooth_weights is true" in caplog.text
 
 
 @pytest.mark.parametrize('dtype', ['float16', 'int32', 'complex'])
@@ -69,11 +80,12 @@ def test_dtypes_without_kernels_are_errors(dtype):
     from gbkfit.dataset import DatasetPixelBrightness
     observable = PixelBrightness.from_data(DatasetPixelBrightness(dataset))
     with pytest.raises(ConfigError, match="dtype must be one of"):
-        Observation(observable, Flat(), dtype=dtype)
+        ObservationSky(observable, Flat(), dtype=dtype)
 
 
 def test_ffts_are_float64_by_default_and_not_less_precise_than_models():
     observable = PixelBrightness(size=(8, 8))
-    assert Observation(observable, Flat()).fft_dtype() == np.float64
+    assert ObservationSky(observable, Flat()).fft_dtype() == np.float64
     with pytest.raises(ConfigError, match=r"fft_dtype \(float32\) is less"):
-        Observation(observable, Flat(), dtype='float64', fft_dtype='float32')
+        ObservationSky(
+            observable, Flat(), dtype='float64', fft_dtype='float32')

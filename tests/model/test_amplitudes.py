@@ -11,7 +11,7 @@ from gbkfit.dataset import Data, DatasetPixelSpectra
 from gbkfit.model import Extras, galaxy_parser
 from gbkfit.objective import Objective
 from gbkfit.observation import (
-    LikelihoodGaussian, Observation, ObservationGroup, PixelMoments,
+    LikelihoodGaussian, ObservationGroup, ObservationSky, PixelMoments,
     PixelSpectra, line_of_sight_parser)
 from gbkfit.params import ParamSpace
 from gbkfit.utils.parseutils import ConfigError
@@ -46,7 +46,7 @@ def objective(
     dataset = DatasetPixelSpectra(
         Data(data, error=np.full_like(data, error)), step=STEP)
     group = ObservationGroup(
-        [galaxy_parser.load(GALAXY)], [Observation(
+        [galaxy_parser.load(GALAXY)], [ObservationSky(
             PixelSpectra.from_data(dataset),
             line_of_sight_parser.load(dict(type='flat')), driver,
             data=dataset, likelihood=LikelihoodGaussian(
@@ -157,7 +157,7 @@ def test_amplitudes_scale_spectra_only(observable, calibration, message):
         data = DatasetPixelSpectra(Data(np.zeros((5, 4, 4))))
         observable = PixelSpectra.from_data(data)
     with pytest.raises(ConfigError, match=message):
-        Observation(
+        ObservationSky(
             observable, line_of_sight_parser.load(dict(type='flat')),
             data=data, likelihood=likelihood, calibration=calibration,
             name='obs')

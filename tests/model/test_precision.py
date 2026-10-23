@@ -52,6 +52,7 @@ def evaluate(driver, case, dtype, fft_dtype='float64'):
     galaxy, observable, line_of_sight, instrument = CASES[case]
     group = ObservationGroup([galaxy_parser.load(galaxy)], [
         observation_parser.load(dict(
+            type='sky',
             observable=observable, line_of_sight=line_of_sight,
             instrument=instrument, dtype=dtype, fft_dtype=fft_dtype),
             drivers={None: driver})])

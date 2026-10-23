@@ -136,14 +136,14 @@ def test_slitless_spectra_objective_residual(driver):
     from gbkfit.model import galaxy_parser
     from gbkfit.objective import Objective
     from gbkfit.observation import (
-        Flat, Observation, ObservationGroup, observable_parser)
+        Flat, ObservationGroup, ObservationSky, observable_parser)
     model = evaluate(driver, SLITLESS)
     dataset = DatasetSlitlessSpectra(
         Data(model + 1, error=np.full_like(model, 2)))
     options = {k: v for k, v in SLITLESS.items() if k not in ('type', 'size')}
     observable = observable_parser.load(
         dict(type='slitless_spectra') | copy.deepcopy(options), dataset)
-    observation = Observation(observable, Flat(), driver, data=dataset)
+    observation = ObservationSky(observable, Flat(), driver, data=dataset)
     group = ObservationGroup(
         [galaxy_parser.load(copy.deepcopy(GALAXY))], [observation])
     objective = Objective(group)
@@ -267,7 +267,7 @@ def test_slitless_spectra_have_amplitudes_per_row(driver):
     from gbkfit.model import galaxy_parser
     from gbkfit.objective import Objective
     from gbkfit.observation import (
-        Flat, LikelihoodGaussian, Observation, ObservationGroup,
+        Flat, LikelihoodGaussian, ObservationGroup, ObservationSky,
         observable_parser)
     model = evaluate(driver, SLITLESS)
     scales = 1 + 0.3 * np.sin(np.arange(model.shape[0]))
@@ -278,7 +278,7 @@ def test_slitless_spectra_have_amplitudes_per_row(driver):
     observable = observable_parser.load(
         dict(type='slitless_spectra') | copy.deepcopy(options), dataset)
     assert observable.spectra_axis() == 1
-    observation = Observation(
+    observation = ObservationSky(
         observable, Flat(), driver, data=dataset, likelihood=(
             LikelihoodGaussian(amplitudes='per_spectrum',
                                amplitude_sigma=0.5)))

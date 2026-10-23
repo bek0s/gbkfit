@@ -180,7 +180,7 @@ class Objective:
         # model does not have, from the likelihood
         self._weights_u = tuple(
             {key: obs.likelihood().weight(key)
-             for key in obs.observable().keys()}
+             for key in obs.keys()}
             for obs in observations)
         # (none where the model cannot lack values: NaN would show one)
         missing = [obs.likelihood().missing_residual() for obs in observations]
@@ -190,17 +190,17 @@ class Objective:
         # noise (NaN for none; see LikelihoodGaussian)
         self._upper_limits = tuple(
             {key: obs.likelihood().upper_limit(key) or (np.nan, np.nan)
-             for key in obs.observable().keys()}
+             for key in obs.keys()}
             for obs in observations)
         # The data item of the spectra of amplitudes of each observation,
         # if any, the axis of its spectra, and the standard deviation of
         # their prior
         self._amplitude_items = tuple(
-            obs.observable().spectra_item()
+            obs.spectra_item()
             if obs.likelihood().amplitudes() is not None else None
             for obs in observations)
         self._amplitude_axes = tuple(
-            obs.observable().spectra_axis() for obs in observations)
+            obs.spectra_axis() for obs in observations)
         self._amplitude_sigmas = tuple(
             obs.likelihood().amplitude_sigma() for obs in observations)
         # The data items of each observation whose noise is fitted, by
@@ -358,7 +358,7 @@ class Objective:
             dataset = self._datasets[i]
             observation = self._group.observations()[i]
             driver = observation.driver()
-            keys = observation.observable().keys()
+            keys = observation.keys()
             dtype = observation.dtype()
             # The data items, one after the other (they have one shape);
             # the residuals, and after them those of the prior of the
@@ -620,7 +620,7 @@ class Objective:
             for dataset, obs, limits in zip(
                 self._datasets, self._group.observations(),
                 self._upper_limits)
-            for key in obs.observable().keys()) + self.nnuisance()
+            for key in obs.keys()) + self.nnuisance()
 
     def nindependent(self) -> float:
         """
@@ -805,8 +805,8 @@ class Objective:
                     continue
                 if self._amplitude_items[i] is not None:
                     self._scale_spectra(i, model_data[i], params, out_extra)
-                observable = self._group.observations()[i].observable()
-                for key in observable.keys():
+                observation = self._group.observations()[i]
+                for key in observation.keys():
                     weight = self._weights_u[i][key] if weighted else 1.0
                     self._backends[i].residual(
                         self._d_dataset_d_nddata[i][key],
@@ -843,7 +843,7 @@ class Objective:
         likelihood = self._users[i]
         driver = self._group.observations()[i].driver()
         self._user_chi2[i] = 0.0
-        for key in self._group.observations()[i].observable().keys():
+        for key in self._group.observations()[i].keys():
             item = self._datasets[i][key]
             mask = item.mask()
             model = np.asarray(

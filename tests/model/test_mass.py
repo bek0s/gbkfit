@@ -1320,9 +1320,9 @@ def evaluate(driver, galaxy, line_of_sight, properties):
     ('flat' or 'grid').
     """
     from gbkfit.observation import (
-        Observation, ObservationGroup, PixelSpectra, line_of_sight_parser)
+        ObservationGroup, ObservationSky, PixelSpectra, line_of_sight_parser)
     from gbkfit.params import ParamSpace
-    group = ObservationGroup([galaxy], [Observation(
+    group = ObservationGroup([galaxy], [ObservationSky(
         PixelSpectra(size=(32, 32, 51), step=(1, 1, 10)),
         line_of_sight_parser.load(dict(type=line_of_sight)), driver)])
     params = ParamSpace(group.pdescs(), properties)
@@ -2028,7 +2028,7 @@ def test_observations_of_a_galaxy_share_its_gravity(driver, monkeypatch):
     from gbkfit.driver.drivers.host import DriverHost
     from gbkfit.model.components._gravity import GravityPlan
     from gbkfit.observation import (
-        Observation, ObservationGroup, PixelSpectra, line_of_sight_parser)
+        ObservationGroup, ObservationSky, PixelSpectra, line_of_sight_parser)
     from gbkfit.params import ParamSpace
     calls = []
     evaluate_gravity = GravityPlan.evaluate
@@ -2043,7 +2043,7 @@ def test_observations_of_a_galaxy_share_its_gravity(driver, monkeypatch):
         DISTANCE, driver=driver)
     assert galaxy.driver() is driver
     group = ObservationGroup([galaxy], [
-        Observation(
+        ObservationSky(
             PixelSpectra(size=(32, 32, 51), step=(1, 1, 10)),
             line_of_sight_parser.load(dict(type='flat')), obs_driver,
             dtype=dtype)

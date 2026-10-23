@@ -16,6 +16,7 @@ def split_case(case):
     driver = case.pop('driver')
     observable = dict(case.pop('observable'))
     observation = dict(
+        type='sky',
         observable=observable,
         line_of_sight=case.pop('line_of_sight'),
         instrument={k: observable.pop(k)

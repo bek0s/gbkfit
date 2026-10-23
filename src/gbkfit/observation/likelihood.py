@@ -317,7 +317,7 @@ class LikelihoodGaussian(Likelihood):
     correlated non-detections has no closed form) or amplitudes of
     spectra (the best amplitude of each spectrum would depend on the
     others). Observations of correlated noise are in float64 by default
-    (see Observation).
+    (see ObservationSky).
 
     Parameters
     ----------

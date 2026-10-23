@@ -14,7 +14,8 @@ import pandas as pd
 from gbkfit.objective import Objective
 import gbkfit.outputs
 from gbkfit.observation import (
-    Likelihood, Noise, ObservationGroup, likelihood_parser, noise_parser)
+    Likelihood, Noise, ObservationGroup, likelihood_parser, noise_parser,
+    observation_parser)
 from gbkfit.params import ParamSpace, ParamValues
 from gbkfit.utils import iterutils, numutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
@@ -346,7 +347,7 @@ def _write_mocks(
             # root of the configuration, as its other paths)
             prefix = directory + os.sep
             mocked_info = _rebased(
-                mocked.dump(prefix), prefix,
+                observation_parser.dump(mocked, prefix), prefix,
                 os.path.relpath(directory, root) + os.sep)
             for filename in sorted(os.listdir(directory)):
                 run.record(

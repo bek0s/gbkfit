@@ -14,8 +14,8 @@ import pytest
 from gbkfit.instrument import instrument_parser
 from gbkfit.model import Extras, galaxy_parser
 from gbkfit.observation import (
-    Flat, Foreground, Lens, LensDeflectionMap, Observation, ObservationGroup,
-    observable_parser)
+    Flat, Foreground, Lens, LensDeflectionMap, ObservationGroup,
+    ObservationSky, observable_parser)
 
 
 def component(name, **emission):
@@ -94,7 +94,7 @@ def test_feature_combinations(driver, name, lens):
         # A constant deflection: the source moved by (1, -1) arcsec
         foreground = Foreground(Lens((40, 40), (0.5, 0.5), LensDeflectionMap(
             np.ones((40, 40)), -np.ones((40, 40)))))
-    observation = Observation(
+    observation = ObservationSky(
         observable_parser.load(info), Flat(), driver,
         foreground=foreground,
         instrument=instrument_parser.load(copy.deepcopy(instrument)),

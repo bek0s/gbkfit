@@ -14,8 +14,8 @@ from gbkfit.driver.drivers.host import DriverHost
 from gbkfit.model import galaxy_parser
 from gbkfit.objective import Objective
 from gbkfit.observation import (
-    Flat, LikelihoodGaussian, Observation, ObservationGroup, PixelBrightness,
-    PixelMoments, observable_parser)
+    Flat, LikelihoodGaussian, ObservationGroup, ObservationSky,
+    PixelBrightness, PixelMoments, observable_parser)
 from gbkfit.params import ParamSpace
 from gbkfit.utils.parseutils import ConfigError
 
@@ -35,7 +35,7 @@ def make_objective(driver, data, likelihood=None, name=None, **values):
     the parameters (PROPERTIES and the given values).
     """
     dataset = DatasetPixelBrightness(data)
-    observation = Observation(
+    observation = ObservationSky(
         PixelBrightness.from_data(dataset), Flat(), driver, data=dataset,
         likelihood=likelihood, name=name)
     group = ObservationGroup(galaxy_parser.load(GALAXY), observation)
@@ -240,7 +240,7 @@ def test_a_fitted_noise_has_parameters_of_the_observation():
 
 def test_an_observation_without_data_is_an_error(driver):
     dataset = DatasetPixelBrightness(Data(np.ones((24, 32))))
-    observation = Observation(
+    observation = ObservationSky(
         PixelBrightness.from_data(dataset), Flat(), driver)
     group = ObservationGroup(galaxy_parser.load(GALAXY), observation)
     with pytest.raises(ConfigError, match="needs data"):
@@ -268,7 +268,7 @@ def test_a_model_without_values_where_the_data_have_some_pays(driver):
     def group(observable, dataset=None):
         likelihood = None if dataset is None \
             else LikelihoodGaussian(missing_residual=3)
-        observation = Observation(
+        observation = ObservationSky(
             observable, Flat(), driver, data=dataset, likelihood=likelihood)
         return ObservationGroup(galaxy_parser.load(KINEMATICS), observation)
     image = group(observable_parser.load(dict(

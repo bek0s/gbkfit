@@ -10,7 +10,7 @@ import pytest
 from gbkfit.dataset import Beam, Data, DatasetPixelSpectra
 from gbkfit.model import galaxy_parser
 from gbkfit.observation import (
-    Observation, ObservationGroup, PixelSpectra, line_of_sight_parser)
+    ObservationGroup, ObservationSky, PixelSpectra, line_of_sight_parser)
 from gbkfit.params import ParamSpace
 from gbkfit.utils.parseutils import ConfigError
 
@@ -55,7 +55,7 @@ def model(
             Data(np.zeros(SIZE[::-1]), unit=data_unit, beam=beam),
             step=STEP, rval=(0, 0, 470), rest=HI)
     group = ObservationGroup(
-        [galaxy_parser.load(dict(components=components))], [Observation(
+        [galaxy_parser.load(dict(components=components))], [ObservationSky(
             observable, line_of_sight_parser.load(dict(type=line_of_sight)),
             driver, data=data)])
     space = ParamSpace(group.pdescs(), params)

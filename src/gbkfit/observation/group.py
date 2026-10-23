@@ -15,7 +15,7 @@ from gbkfit.params import (
     ParamDesc, ParamFunctions, ParamScalarDesc, ParamValues)
 from gbkfit.utils import iterutils, parseutils, threadutils, timeutils
 from gbkfit.utils.parseutils import ConfigError
-from ._scene import DepthUnit, Scene, make_scene
+from ._scene import DepthUnit, SeenGalaxies
 from .noise import Noise
 from .observables import HostModelData, ModelData
 from .observation import Observation
@@ -104,19 +104,22 @@ class ObservationGroup:
     need when there are several; e.g. 'north_').
 
     The centres of the components (xpos, ypos) are measured from the
-    origin of the frame of the first observation: its reference pixel,
-    at the RA and Dec of its grid (see Observable.sky_rval). The others
+    origin of the frame of the first observation on the sky (see
+    Observation.sky_origin): its reference pixel, at the RA and Dec of its
+    grid (see Observable.sky_rval). The other observations on the sky
     see them moved by where that origin is in their frames, from their
     RA and Dec: e.g. a cube whose reference pixel is 2 arcsec west of that
     of the first sees them at xpos - 2 in its frame (2 arcsec further east
     of its origin), so that the data of several instruments meet on the
-    sky as their coordinates say. (The frames are aligned by that shift alone:
-    those of reference pixels far apart near a pole also turn, by about
-    their separation times tan(Dec), which is warned of; e.g. 0.04 deg
-    for 1 arcmin at Dec -66.5 deg.) An observation with offsets of its
-    frame (see Observation) sees the galaxies moved by them too, for what
-    the coordinates do not know (e.g. the errors of their astrometry);
-    each galaxy needs an observation without them.
+    sky as their coordinates say. (The frames are aligned by that shift
+    alone: those of reference pixels far apart near a pole also turn, by
+    about their separation times tan(Dec), which is warned of; e.g. 0.04
+    deg for 1 arcmin at Dec -66.5 deg.) An observation with offsets of
+    its frame (see ObservationSky) sees the galaxies moved by them too,
+    for what the coordinates do not know (e.g. the errors of their
+    astrometry); each galaxy seen on the sky needs an observation on the
+    sky without them. The observations that are not on the sky see the
+    parameters as they are.
 
     The plans of the observations are made here, once (copies of the
     group with other data share them; see with_data). The gravity of each
@@ -148,7 +151,7 @@ class ObservationGroup:
         fewer than two galaxies, or of the name of a galaxy or an
         observation, every observation of a galaxy has offsets of position
         or of velocity, or what an observation sees does not go with it
-        (see make_scene).
+        (see Observation.plan).
     """
 
     def __init__(
@@ -227,8 +230,7 @@ class ObservationGroup:
         for i, observation in enumerate(self._observations):
             with parseutils.config_path('observations', i):
                 seen.append(self._seen(i, observation))
-                plans.append(observation.plan(
-                    self._scene(seen[-1], observation)))
+                plans.append(observation.plan(self._seen_by(seen[-1])))
         self._plans = tuple(plans)
         # The indices of the galaxies that each observation sees
         self._seen_galaxies = tuple(seen)
@@ -247,8 +249,7 @@ class ObservationGroup:
         on the host and the device, and the times of the steps.
         """
         self._h_model_data = [
-            {key: dict(d=None, m=None, w=None)
-             for key in obs.observable().keys()}
+            {key: dict(d=None, m=None, w=None) for key in obs.keys()}
             for obs in self._observations]
         self._d_model_data = [dict() for _ in self._observations]
         # The times of the steps of its evaluations (and of those of the
@@ -294,11 +295,11 @@ class ObservationGroup:
             tuple(names['x']), tuple(names['y']), tuple(names['v']),
             alignment, observation.offset_params())
 
-    def _scene(self, seen: list[int], observation: Observation) -> Scene:
+    def _seen_by(self, seen: list[int]) -> SeenGalaxies:
         """
-        Return what an observation sees (see make_scene): the galaxies of
-        the given indices, in the depth order of those of them in it (a
-        group of which it sees one galaxy is that galaxy).
+        Return the galaxies of the given indices as an observation sees
+        them: in the depth order of those of them in it (a group of which
+        it sees one galaxy is that galaxy).
         """
         order = None
         if self._depth_order is not None:
@@ -311,14 +312,11 @@ class ObservationGroup:
                 elif visible:
                     order.append(DepthUnit(galaxies, name, tuple(
                         self._separations.get(g) for g in visible)))
-        return make_scene(
-            [self._galaxies[j] for j in seen],
-            [self._mappings[j] for j in seen],
-            [self._galaxy_labels[j] for j in seen],
-            observation.components(), observation.lines(),
-            observation.band(), observation.line_of_sight(),
-            observation.observable().emission, order,
-            observation.data_unit())
+        return SeenGalaxies(
+            tuple(self._galaxies[j] for j in seen),
+            tuple(self._mappings[j] for j in seen),
+            tuple(self._galaxy_labels[j] for j in seen),
+            None if order is None else tuple(order))
 
     def with_driver(self, driver: Driver) -> Self:
         """
@@ -368,7 +366,7 @@ class ObservationGroup:
         group._observations = tuple(observations)
         group._plans = tuple(
             plan if _same_unit(new.data_unit(), old.data_unit())
-            else new.plan(self._scene(seen, new))
+            else new.plan(self._seen_by(seen))
             for plan, seen, new, old in zip(
                 self._plans, self._seen_galaxies, observations,
                 self._observations))
@@ -557,9 +555,8 @@ class ObservationGroup:
                     nmocks + (0 if exact else nsamples))
             if errors is None:
                 errors = _scatter(draws[nmocks:])
-            observable = obs.observable()
             mocks.append([
-                observable.dataset({
+                obs.dataset({
                     key: Data(item['d'], error=errors[key])
                     for key, item in draw.items()})
                 for draw in draws[:nmocks]])
@@ -642,19 +639,29 @@ def _alignments(
         observations: Sequence[Observation]
 ) -> list[tuple[float, float]]:
     """
-    Return where the origin of the frame of the first observation is in
-    the frame of each (arcsec, x to the west and y to the north), of the
-    RA and Dec of their origins (see Observable.sky_rval). Warn (see
-    parseutils.warn) of origins more than _ALIGNMENT_SEPARATION_WARNING
-    apart (e.g. one of data without coordinates, at RA and Dec 0), and of
-    frames that turn by more than _ALIGNMENT_ROTATION_WARNING: the frames
-    are aligned by a shift; that of an origin far from the first, near a
-    pole, also turns by about the separation times tan(Dec).
+    Return where the origin of the frame of the first observation on the
+    sky is in the frame of each (arcsec, x to the west and y to the
+    north), of the RA and Dec of their origins (see
+    Observation.sky_origin); (0, 0) for those that are not on the sky.
+    Warn (see parseutils.warn) of origins more than
+    _ALIGNMENT_SEPARATION_WARNING apart (e.g. one of data without
+    coordinates, at RA and Dec 0), and of frames that turn by more than
+    _ALIGNMENT_ROTATION_WARNING: the frames are aligned by a shift; that
+    of an origin far from the first, near a pole, also turns by about the
+    separation times tan(Dec).
     """
-    first = SkyCoord(*observations[0].observable().sky_rval(), unit='deg')
+    origins = [observation.sky_origin() for observation in observations]
+    on_sky = [i for i, origin in enumerate(origins) if origin is not None]
+    if not on_sky:
+        return [(0.0, 0.0)] * len(observations)
+    f = on_sky[0]
+    first = SkyCoord(*origins[f], unit='deg')
     alignments = []
-    for i, observation in enumerate(observations):
-        origin = SkyCoord(*observation.observable().sky_rval(), unit='deg')
+    for i, origin in enumerate(origins):
+        if origin is None:
+            alignments.append((0.0, 0.0))
+            continue
+        origin = SkyCoord(*origin, unit='deg')
         east, north = origin.spherical_offsets_to(first)
         alignments.append(
             (-float(east.to_value('arcsec')),
@@ -662,7 +669,7 @@ def _alignments(
         separation = origin.separation(first).to_value('deg')
         if separation > _ALIGNMENT_SEPARATION_WARNING:
             parseutils.warn(
-                f"the origins of the frames of observations 0 and {i} (the "
+                f"the origins of the frames of observations {f} and {i} (the "
                 f"RA and Dec of their reference pixels) are {separation:g} "
                 f"deg apart: check their coordinates")
         elif separation > 0:
@@ -673,7 +680,7 @@ def _alignments(
             rotation = bearings.to_value('deg') % 360 - 180
             if abs(rotation) > _ALIGNMENT_ROTATION_WARNING:
                 parseutils.warn(
-                    f"the frames of observations 0 and {i} turn by "
+                    f"the frames of observations {f} and {i} turn by "
                     f"{rotation:.2g} deg against each other, which their "
                     f"alignment leaves out: their reference pixels are "
                     f"{separation * 60:.2g} arcmin apart")
@@ -686,14 +693,16 @@ def _check_offsets(
         seen: Sequence[Sequence[int]]
 ) -> None:
     """
-    Raise ConfigError if every observation that sees a galaxy has offsets
-    of position, or of velocity (see Observation): they would move its
-    centre, or its systemic velocity, with nothing to place it.
+    Raise ConfigError if every observation on the sky that sees a galaxy
+    has offsets of position, or of velocity (see ObservationSky): they
+    would move its centre, or its systemic velocity, with nothing to place
+    it.
     """
     for g, galaxy in enumerate(galaxies):
         offsets = [
             obs.offset_params()
-            for obs, indices in zip(observations, seen) if g in indices]
+            for obs, indices in zip(observations, seen)
+            if g in indices and obs.sky_origin() is not None]
         for kind, k in (('position', 0), ('velocity', 2)):
             if offsets and all(params[k] is not None for params in offsets):
                 raise ConfigError(

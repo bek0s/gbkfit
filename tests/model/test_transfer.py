@@ -443,6 +443,7 @@ def galaxies_model(
     import gbkfit.params
     from gbkfit.observation import ObservationGroup, observation_parser
     observation = dict(
+        type='sky',
         observable=dict(
             type='pixel_spectra', size=[24, 24, 31], step=[1, 1, 10]),
         line_of_sight=dict(type='transfer'),

@@ -95,6 +95,7 @@ def test_the_data_of_an_observation_are_screened_as_they_are_read(
         outliers=dict(size=[3, 3], nsigma=6))
     with caplog.at_level(logging.INFO):
         observation = observation_parser.load(dict(
+            type='sky',
             line_of_sight=dict(type='flat'), data=data,
             observable=dict(type='pixel_brightness')))
     screened = observation.data()['brightness'].data()

@@ -425,33 +425,31 @@ _EXTRA_FOLDERS = dict(
 def data_outputs(group: ObservationGroup) -> dict[str, Output]:
     """
     Return the data of the observations as outputs, by path, in the form
-    their observables give them: their values (kind 'data', NaN where
-    masked) and errors ('error'), in their units, of each data item, and
-    the images of their values and of their PSF that their observables
-    make ('data_image'; e.g. the dirty image and beam of visibilities, see
-    Observable.images and psf_images), in observations/<observation>/
-    <kind>/<item or image>.
+    the observations give them (see Observation.output): their values
+    (kind 'data', NaN where masked) and errors ('error'), in their units,
+    of each data item, and the images of their values and of their PSF
+    that the observations make ('data_image'; e.g. the dirty image and
+    beam of visibilities, see Observation.images and psf_images), in
+    observations/<observation>/<kind>/<item or image>.
     """
     outputs = []
     for i, observation in enumerate(group.observations()):
         if (dataset := observation.data()) is None:
             continue
         name = group.observation_label(i)
-        observable = observation.observable()
-        for key in observable.keys():
+        for key in observation.keys():
             item = dataset[key]
             outputs.append(_observation_output(
                 name, 'data', key, _with_unit(
-                    observable.output(item.data()), observation, key)))
+                    observation.output(item.data()), observation, key)))
             if item.error() is not None:
                 outputs.append(_observation_output(
                     name, 'error', key, _with_unit(
-                        observable.output(item.error()), observation, key)))
-        driver = observation.driver()
+                        observation.output(item.error()), observation, key)))
         weights = _weights(dataset)
-        images = observable.images(
-            driver, {key: dataset[key].data() for key in observable.keys()},
-            weights, _units(dataset)) | observable.psf_images(driver, weights)
+        images = observation.images(
+            {key: dataset[key].data() for key in observation.keys()},
+            weights, _units(dataset)) | observation.psf_images(weights)
         outputs += [
             _observation_output(name, 'data_image', image, x, 'image')
             for image, x in images.items()]
@@ -499,8 +497,8 @@ def evaluation_outputs(
         extra: bool = True
 ) -> dict[str, Output]:
     """
-    Return the outputs of an evaluation, by path, in the form their
-    observables give them, in observations/<observation>/<kind>/<item>
+    Return the outputs of an evaluation, by path, in the form the
+    observations give them, in observations/<observation>/<kind>/<item>
     of each data item: the models (kind 'model'; 'model_mask' and
     'model_weight'), and the residuals ((model - data) / error) without
     and with the weights of the data items ('residual' and 'wresidual';
@@ -509,9 +507,9 @@ def evaluation_outputs(
     (observations/<observation>/amplitudes), and with the models too, the
     model of the spectra is that which the residuals compare, times the
     amplitudes ('model'), and the model without them is
-    'model_unscaled'. With the models, the images that their observables
+    'model_unscaled'. With the models, the images that the observations
     make of them ('model_image', in place of the item: the name of the
-    image; see Observable.images), and of the data minus them
+    image; see Observation.images), and of the data minus them
     ('residual_image'), with the weights of the data. Unless left out
     (extra), the extra outputs of the models are 'extra', with their
     titles and descriptions (see _extra_output).
@@ -522,14 +520,13 @@ def evaluation_outputs(
         for i, data_i in enumerate(group.model_h(values, extras)):
             observation = group.observations()[i]
             name = group.observation_label(i)
-            observable = observation.observable()
             for key, value in data_i.items():
                 for kind, part in (
                         ('model', 'd'), ('model_mask', 'm'),
                         ('model_weight', 'w')):
                     if value.get(part) is None:
                         continue
-                    output = observable.output(value[part])
+                    output = observation.output(value[part])
                     if part == 'd':
                         output = _with_unit(output, observation, key)
                     outputs.append(
@@ -547,10 +544,10 @@ def evaluation_outputs(
                 values, weighted, None if model or weighted else extras))
             for i, data_i in enumerate(data):
                 name = group.observation_label(i)
-                observable = group.observations()[i].observable()
+                observation = group.observations()[i]
                 outputs += [
                     _observation_output(
-                        name, kind, key, observable.output(value))
+                        name, kind, key, observation.output(value))
                     for key, value in data_i.items()]
     outputs += [_extra_output(x) for x in extras or ()]
     outputs = {output.path: output for output in outputs}
@@ -564,7 +561,7 @@ def evaluation_outputs(
                 amplitudes, dict(observation=name))
             outputs[output.path] = output
             if model:
-                key = group.observations()[i].observable().spectra_item()
+                key = group.observations()[i].spectra_item()
                 path = f'observations/{name}/model/{key}.fits'
                 unscaled = outputs[path]
                 outputs[path] = unscaled._replace(
@@ -581,27 +578,24 @@ def _images(
         model: Mapping[str, np.ndarray]
 ) -> list[Output]:
     """
-    Return the images that the observable of an observation (of the given
-    name in the outputs) makes of its model ('model_image') and of its
-    data minus the model ('residual_image'; see Observable.images).
+    Return the images that an observation (of the given name in the
+    outputs) makes of its model ('model_image') and of its data minus the
+    model ('residual_image'; see Observation.images).
     """
-    observable = observation.observable()
     dataset = observation.data()
-    driver = observation.driver()
     weights = _weights(dataset)
     units = _units(dataset)
     images = [
         _observation_output(name, 'model_image', image, x, 'image')
-        for image, x in observable.images(
-            driver, model, weights, units).items()]
-    # (an observable that makes no images of its model makes none of the
+        for image, x in observation.images(model, weights, units).items()]
+    # (an observation that makes no images of its model makes none of the
     # residual either)
     if images and dataset is not None:
         residual = {key: dataset[key].data() - model[key] for key in model}
         images += [
             _observation_output(name, 'residual_image', image, x, 'image')
-            for image, x in observable.images(
-                driver, residual, weights, units).items()]
+            for image, x in observation.images(
+                residual, weights, units).items()]
     return images
 
 

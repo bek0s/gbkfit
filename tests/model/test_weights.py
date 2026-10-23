@@ -40,6 +40,7 @@ def config(driver, observable, weights, component=None):
         driver=dict(type=driver.type()),
         galaxies=[dict(components=[gas])],
         observations=[dict(
+            type='sky',
             observable=observable, line_of_sight=dict(type='flat'),
             weights=weights)])
 

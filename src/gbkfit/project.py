@@ -86,6 +86,7 @@ components:
 # channels of 10 km/s, with Gaussian PSF and LSF. To fit data, give them
 # instead of the size (paths relative to the project):
 #   data: {data: data/cube.fits, error: data/error.fits, step: [1, 1, 10]}
+type: sky
 observable:
   type: pixel_spectra
   size: [48, 48, 40]

@@ -44,7 +44,7 @@ SCUBE = dict(type='pixel_spectra', size=[32, 41, 51], step=[1, 1, 10])
 
 
 def observation(driver, components=None, **options):
-    info = dict(observable=SCUBE, line_of_sight=FLAT)
+    info = dict(type='sky', observable=SCUBE, line_of_sight=FLAT)
     if components is not None:
         info['components'] = components
     return observation_parser.load(

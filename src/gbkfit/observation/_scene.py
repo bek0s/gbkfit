@@ -32,6 +32,7 @@ __all__ = [
     'DepthUnit',
     'Scene',
     'ScenePlan',
+    'SeenGalaxies',
     'TransferScenePlan',
     'make_scene'
 ]
@@ -49,6 +50,20 @@ class DepthUnit(NamedTuple):
     galaxies: tuple[int, ...]
     name: str | None = None
     separations: tuple[str | None, ...] = (None,)
+
+
+class SeenGalaxies(NamedTuple):
+    """
+    The galaxies an observation sees (see ObservationGroup): the
+    galaxies, the mapping of the parameters of each to those of the
+    observation group, their labels (the id 'galaxy' of their extra
+    outputs), and their order along the line of sight, front to back (in
+    units, see DepthUnit; None if not given).
+    """
+    galaxies: tuple[Galaxy, ...]
+    mappings: tuple[dict[str, str], ...]
+    labels: tuple[str, ...]
+    order: tuple[DepthUnit, ...] | None
 
 
 class Scene:
@@ -360,26 +375,22 @@ def _bounding_radius(galaxy: Galaxy, emitters: Sequence[int]) -> float:
 
 
 def make_scene(
-        galaxies: Sequence[Galaxy],
-        mappings: Sequence[dict[str, str]],
-        labels: Sequence[str],
+        seen: SeenGalaxies,
         components: Sequence[str] | None,
         lines: tuple[str, ...] | None,
         band: Band | None,
         line_of_sight: 'LineOfSight',
         emission: type[Emission],
-        order: Sequence[DepthUnit] | None = None,
         data_unit: DataUnit | None = None
 ) -> Scene:
     """
-    Return the scene of an observation of the given galaxies (see Scene),
-    which sees the emission of the given type (see Observable.emission),
-    in the given band if known (an image), of their order along the line
-    of sight, front to back (in units, if given; see DepthUnit and
-    ObservationGroup: depth_order), and of the unit of its data, if any
-    (see Observable.data_unit). The names of the components it sees (all
-    those with that emission, in its band, if None) are qualified by the
-    names of their galaxies ('galaxy.component') when it sees several.
+    Return the scene of an observation of the galaxies it sees (see
+    Scene), which sees the emission of the given type (see
+    Observable.emission), in the given band if known (an image), and of
+    the unit of its data, if any (see Observable.data_unit). The names of
+    the components it sees (all those with that emission, in its band, if
+    None) are qualified by the names of their galaxies
+    ('galaxy.component') when it sees several.
 
     Raises
     ------
@@ -393,6 +404,7 @@ def make_scene(
         components of different units (its model is then in the unit of
         its components).
     """
+    galaxies, order = seen.galaxies, seen.order
     kind = "an image, which sees the components that emit in a band" \
         if emission is BandEmission else \
         "a spectral cube, which sees the components that emit lines"
@@ -420,8 +432,8 @@ def make_scene(
                 raise ConfigError(
                     f"component {_label(galaxy, i)}: {e}") from e
     return Scene(
-        galaxies, mappings, labels, [tuple(e) for e in emitters], lines,
-        band, line_of_sight, order, data_unit)
+        galaxies, seen.mappings, seen.labels, [tuple(e) for e in emitters],
+        lines, band, line_of_sight, order, data_unit)
 
 
 def _has_opacity(galaxy: Galaxy, emitters: Sequence[int]) -> bool:

@@ -128,6 +128,7 @@ def test_region_moments_observation_from_data(tmp_path):
     assert loaded.regions() == dataset.regions()
     np.testing.assert_array_equal(loaded['moment1'].data(), [1400, 1500, 1600])
     info = dict(
+        type='sky',
         data=data_info, line_of_sight=FLAT,
         observable=dict(type='region_moments', spec_step=2),
         likelihood=dict(type='gaussian', missing_residual=3))
@@ -150,8 +151,8 @@ def test_region_moments_observation_dumps_its_bins_with_the_prefix(driver, tmp_p
     # Without data, the bins are options of the observable: their file is
     # named with the prefix of the dump, which can be dumped again
     from gbkfit.observation import (
-        Flat, Observation, RegionMoments, observation_parser)
-    observation = Observation(RegionMoments(
+        Flat, ObservationSky, RegionMoments, observation_parser)
+    observation = ObservationSky(RegionMoments(
         RegionsBins(np.arange(16).reshape(4, 4) % 3), spec_size=11),
         Flat(), driver)
     prefix = str(tmp_path / 'out_')
@@ -167,7 +168,7 @@ def test_region_moments_objective_residual(driver):
     from gbkfit.objective import Objective
     from gbkfit.instrument import instrument_parser
     from gbkfit.observation import (
-        Flat, LikelihoodGaussian, RegionMoments, Observation,
+        Flat, LikelihoodGaussian, RegionMoments, ObservationSky,
         ObservationGroup)
     index = np.full((41, 32), -1)
     index[10:20, 5:15] = 0
@@ -177,7 +178,7 @@ def test_region_moments_objective_residual(driver):
     instrument = instrument_parser.load(copy.deepcopy(INSTRUMENT))
     group = ObservationGroup(
         [galaxy_parser.load(copy.deepcopy(GALAXY))],
-        [Observation(observable, Flat(), driver, instrument=instrument)])
+        [ObservationSky(observable, Flat(), driver, instrument=instrument)])
     params = gbkfit.params.ParamSpace(group.pdescs(), PROPERTIES)
     model = {
         key: value['d'].copy()
@@ -188,7 +189,7 @@ def test_region_moments_objective_residual(driver):
         for key, value in model.items()}, regions)
     group = ObservationGroup(
         [galaxy_parser.load(copy.deepcopy(GALAXY))],
-        [Observation(
+        [ObservationSky(
             observable, Flat(), driver, instrument=instrument,
             data=dataset, likelihood=LikelihoodGaussian(missing_residual=3))])
     residual = Objective(group).residual_nddata_h(params.evaluate(), False)

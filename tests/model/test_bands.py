@@ -132,6 +132,7 @@ def test_configurations_name_bands():
         galaxies=[dict(components=[dict(
             STARS, emission=dict(type='band', bands=['sdss_g', 'mine']))])],
         observations=[dict(
+            type='sky',
             observable=dict(type='pixel_brightness', size=[8, 8]),
             line_of_sight=dict(type='flat'), band='mine')])
     group = config_group(config)

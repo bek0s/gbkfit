@@ -9,7 +9,7 @@ import scipy.ndimage
 
 from gbkfit.model import Extras, galaxy_parser
 from gbkfit.observation import (
-    Flat, Observation, ObservationGroup, PixelBrightness, PixelMoments,
+    Flat, ObservationGroup, ObservationSky, PixelBrightness, PixelMoments,
     PixelSpectra, observable_parser)
 from gbkfit.params import ParamSpace
 from gbkfit.utils.parseutils import ConfigError
@@ -34,7 +34,8 @@ PARAMS = dict(
 
 def model(driver, observable, galaxy, item, out_extra=None):
     """The model data of an item of an observation of a galaxy."""
-    group = ObservationGroup(galaxy, Observation(observable, Flat(), driver))
+    group = ObservationGroup(
+        galaxy, ObservationSky(observable, Flat(), driver))
     params = ParamSpace(group.pdescs(), {
         key: value for key, value in PARAMS.items()
         if key in group.pdescs()}).evaluate()

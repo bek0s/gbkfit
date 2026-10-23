@@ -32,6 +32,7 @@ def spectra(driver, psf=None, lsf=None, scale=(1, 1, 1)):
     """The spectra of the galaxy seen with the PSF and the LSF."""
     group = ObservationGroup([galaxy_parser.load(GALAXY)], [
         observation_parser.load(dict(
+            type='sky',
             scale=list(scale),
             line_of_sight=dict(type='flat'),
             instrument=dict(psf=psf, lsf=lsf),

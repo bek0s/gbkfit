@@ -125,7 +125,7 @@ class LineEmission(Emission):
         emits it, in its rest frame: each observation sees it dimmed by the
         redshift (see _units.line_factor). Without a unit, the density is
         in the units of the data of each observation of it (see
-        Observation), as observed.
+        ObservationSky), as observed.
 
     Raises
     ------

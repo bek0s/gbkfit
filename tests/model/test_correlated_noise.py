@@ -11,7 +11,7 @@ from gbkfit.instrument import LSFGauss, PSFGauss
 from gbkfit.model import galaxy_parser
 from gbkfit.objective import Objective
 from gbkfit.observation import (
-    LikelihoodGaussian, Observation, ObservationGroup, PixelSpectra,
+    LikelihoodGaussian, ObservationGroup, ObservationSky, PixelSpectra,
     line_of_sight_parser)
 from gbkfit.params import ParamSpace
 from gbkfit.utils.parseutils import ConfigError
@@ -35,7 +35,7 @@ def objective(driver, data, likelihood):
     """The objective of a disk seen in a cube, under a likelihood."""
     dataset = DatasetPixelSpectra(data, step=STEP)
     group = ObservationGroup(
-        [galaxy_parser.load(GALAXY)], [Observation(
+        [galaxy_parser.load(GALAXY)], [ObservationSky(
             PixelSpectra.from_data(dataset),
             line_of_sight_parser.load(dict(type='flat')), driver,
             data=dataset, likelihood=likelihood)])

@@ -175,6 +175,7 @@ def test_observation_dump_has_every_option(observable_type):
     from gbkfit.observation import observation_parser
     observable, instrument, scale = OBSERVABLES[observable_type]
     info = dict(
+        type='sky',
         name='obs', galaxies=['galaxy'], components=['gas'], lines=['ha'],
         line_of_sight=LINE_OF_SIGHT,
         instrument=instrument,

@@ -298,6 +298,7 @@ def test_one_galaxy_seen_by_two_observations(tmp_path):
     config = yaml.load(REFERENCE_DIR / 'thin_disk_pixel_spectra.yaml')
     scube = config['observations'][0]
     mmaps = dict(
+        type='sky',
         name='maps', line_of_sight=dict(type='flat'),
         observable=dict(type='pixel_moments', size=[48, 48]))
     config['observations'] = [scube | dict(name='cube'), mmaps]

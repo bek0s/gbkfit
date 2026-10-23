@@ -123,13 +123,13 @@ def test_one_galaxy_observed_on_grids_with_different_steps(driver, kind):
     # the galaxy on their own grid
     from gbkfit.model import galaxy_parser
     from gbkfit.observation import (
-        Flat, Observation, ObservationGroup, observable_parser)
+        Flat, ObservationGroup, ObservationSky, observable_parser)
     galaxy_info, observable_type, size, key, properties = \
         FLAT_OBSERVATIONS[kind]
 
     def observation(step):
         steps = (step, step, 10)[:len(size)]
-        return Observation(observable_parser.load(dict(
+        return ObservationSky(observable_parser.load(dict(
             type=observable_type, size=list(size), step=list(steps))),
             Flat(), driver)
 

@@ -1,6 +1,6 @@
 """
 Tests of the frames of observations: the offsets that an observation
-fits (see Observation) move what it sees.
+fits (see ObservationSky) move what it sees.
 """
 
 import astropy.units as u
@@ -10,7 +10,7 @@ from astropy.coordinates import SkyCoord
 
 from gbkfit.model import galaxy_parser
 from gbkfit.observation import (
-    Flat, Observation, ObservationGroup, PixelMoments, SlitSpectra,
+    Flat, ObservationGroup, ObservationSky, PixelMoments, SlitSpectra,
     observable_parser, observation_parser)
 from gbkfit.params import ParamSpace
 from gbkfit.utils.parseutils import ConfigError
@@ -45,7 +45,7 @@ def moments(driver, offsets=None, origin=ORIGIN, **values):
     values.
     """
     observations = [
-        Observation(
+        ObservationSky(
             PixelMoments(size=(32, 32), rval=rval, spec_size=81,
                          spec_step=5, orders=(0, 1)),
             Flat(), driver, name=name, offsets=offsets if name == 'b'
@@ -70,21 +70,21 @@ def test_offsets_move_all_that_an_observation_sees(driver):
 
 def test_offsets_are_parameters_of_named_observations():
     observable = PixelMoments(size=(8, 8), spec_size=11, orders=(0,))
-    observation = Observation(
+    observation = ObservationSky(
         observable, Flat(), name='sinfoni', offsets=dict(position=True))
     assert set(observation.pdescs()) == {'sinfoni_dx', 'sinfoni_dy'}
-    loaded = observation_parser.load(observation.dump())
+    loaded = observation_parser.load(observation_parser.dump(observation))
     assert loaded.offset_params() == ('sinfoni_dx', 'sinfoni_dy', None)
     with pytest.raises(ConfigError, match="needs a name"):
-        Observation(observable, Flat(), offsets=dict(velocity=True))
+        ObservationSky(observable, Flat(), offsets=dict(velocity=True))
     with pytest.raises(ConfigError, match="'position' and 'velocity'"):
-        Observation(observable, Flat(), name='a', offsets=dict(x=True))
+        ObservationSky(observable, Flat(), name='a', offsets=dict(x=True))
 
 
 def test_a_galaxy_needs_an_observation_without_offsets():
     # (offsets alone would move its centre with nothing to place it)
     observations = [
-        Observation(
+        ObservationSky(
             PixelMoments(size=(8, 8), spec_size=11, orders=(0,)), Flat(),
             name=name, offsets=dict(position=True))
         for name in ('a', 'b')]

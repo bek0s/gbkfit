@@ -394,7 +394,7 @@ def _models(
     for i, model in enumerate(group.model_h(values)):
         items = {key: item['d'].copy() for key, item in model.items()}
         if amplitudes[i] is not None:
-            key = group.observations()[i].observable().spectra_item()
+            key = group.observations()[i].spectra_item()
             items[key] = items[key] * amplitudes[i]
         models.append(items)
     return models
