@@ -374,12 +374,20 @@ class ObservationProfile(Observation):
             likelihood=likelihood if likelihood is not None
             else self._likelihood, name=self._name)
 
-    def output(self, data: np.ndarray) -> Table:
+    def output(
+            self,
+            data: np.ndarray,
+            unit: u.UnitBase | None = None
+    ) -> Table:
         """
         Return an array of the form of its data as an output: a table of
-        its radii ('radius') and the values ('value').
+        its radii ('radius') and the values ('value', in the unit, if
+        given).
         """
-        return Table(dict(radius=self._radii, value=np.asarray(data)))
+        values = np.asarray(data)
+        return Table(dict(
+            radius=self._radii,
+            value=values if unit is None else values * unit))
 
     def plan(self, seen: SeenGalaxies) -> ObservablePlan:
         """

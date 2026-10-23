@@ -13,7 +13,7 @@ from gbkfit.model import Band, BandEmission, LineCatalogue, band_parser
 from gbkfit.model.components._units import DataUnit
 from gbkfit.model.components.roles import load_band
 from gbkfit.params import ParamDesc, ParamScalarDesc
-from gbkfit.utils import gridutils, parseutils
+from gbkfit.utils import gridutils, parseutils, unitutils
 from gbkfit.utils.parseutils import ConfigError
 from ._scene import SeenGalaxies, check_component_names, make_scene
 from .foreground import Foreground, foreground_parser
@@ -520,13 +520,20 @@ class ObservationSky(Observation):
         return self._observable.data_unit(self._data)
 
     def output(
-            self, data: np.ndarray
+            self,
+            data: np.ndarray,
+            unit: astropy.units.UnitBase | None = None
     ) -> gridutils.GridData | gridutils.SpectraData | np.ndarray:
         """
         Return an array of the form of its data as an output, as its
-        observable gives it (see Observable.output).
+        observable gives it (see Observable.output), with the unit, if
+        given and the output takes it (GridData, SpectraData).
         """
-        return self._observable.output(data)
+        output = self._observable.output(data)
+        if unit is None or not isinstance(
+                output, (gridutils.GridData, gridutils.SpectraData)):
+            return output
+        return output._replace(unit=unitutils.format_unit(unit))
 
     def images(
             self,

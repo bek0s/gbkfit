@@ -5,6 +5,7 @@ from typing import Self
 
 import astropy.units
 import numpy as np
+from astropy.table import Table
 
 from gbkfit.dataset import Data, Dataset
 from gbkfit.driver import Driver
@@ -275,8 +276,10 @@ class Observation(parseutils.TypedSerializable, abc.ABC):
 
     @abc.abstractmethod
     def output(
-            self, data: np.ndarray
-    ) -> gridutils.GridData | gridutils.SpectraData | np.ndarray:
+            self,
+            data: np.ndarray,
+            unit: astropy.units.UnitBase | None = None
+    ) -> gridutils.GridData | gridutils.SpectraData | Table | np.ndarray:
         """
         Return an array of the form of its data as an output (e.g. on the
         grid of its data, with their world coordinates).
@@ -285,10 +288,13 @@ class Observation(parseutils.TypedSerializable, abc.ABC):
         ----------
         data : np.ndarray
             The array: the model, its mask or weights, or a residual.
+        unit : astropy.units.UnitBase, optional
+            The unit of its values, if known (e.g. that of the data, and of
+            the model, which is in it), which the output takes.
 
         Returns
         -------
-        GridData or SpectraData or np.ndarray
+        GridData or SpectraData or Table or np.ndarray
             The output.
         """
 

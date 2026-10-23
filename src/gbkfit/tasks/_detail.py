@@ -12,6 +12,7 @@ from collections.abc import Iterator, Mapping, Sequence
 from pathlib import Path
 from typing import Any, Literal, NamedTuple
 
+import astropy.units
 from astropy.table import Table
 import numpy as np
 import ruamel.yaml
@@ -439,13 +440,13 @@ def data_outputs(group: ObservationGroup) -> dict[str, Output]:
         name = group.observation_label(i)
         for key in observation.keys():
             item = dataset[key]
+            unit = item.unit()
             outputs.append(_observation_output(
-                name, 'data', key, _with_unit(
-                    observation.output(item.data()), observation, key)))
+                name, 'data', key, observation.output(item.data(), unit)))
             if item.error() is not None:
                 outputs.append(_observation_output(
-                    name, 'error', key, _with_unit(
-                        observation.output(item.error()), observation, key)))
+                    name, 'error', key,
+                    observation.output(item.error(), unit)))
         weights = _weights(dataset)
         images = observation.images(
             {key: dataset[key].data() for key in observation.keys()},
@@ -475,23 +476,15 @@ def _weights(dataset: Any) -> dict[str, np.ndarray] | None:
             for key, x in dataset.items()}
 
 
-def _with_unit(output: Any, observation: Observation, key: str) -> Any:
+def _unit(
+        observation: Observation, key: str
+) -> astropy.units.UnitBase | None:
     """
-    Return an output of a data item of an observation (or of its model,
-    which is in the unit of its data) with the unit of the item, if it
-    has one and the output takes it (see GridData, SpectraData; a table
-    of values, see ObservationProfile.output, has it in its column
-    'value').
+    Return the unit of a data item of an observation (which its model
+    takes too), if it has data with one; None otherwise.
     """
     data = observation.data()
-    if data is None or data[key].unit() is None:
-        return output
-    if isinstance(output, Table):
-        output['value'].unit = data[key].unit()
-        return output
-    if not isinstance(output, (gridutils.GridData, gridutils.SpectraData)):
-        return output
-    return output._replace(unit=unitutils.format_unit(data[key].unit()))
+    return None if data is None else data[key].unit()
 
 
 def evaluation_outputs(
@@ -532,9 +525,9 @@ def evaluation_outputs(
                         ('model_weight', 'w')):
                     if value.get(part) is None:
                         continue
-                    output = observation.output(value[part])
-                    if part == 'd':
-                        output = _with_unit(output, observation, key)
+                    output = observation.output(
+                        value[part],
+                        _unit(observation, key) if part == 'd' else None)
                     outputs.append(
                         _observation_output(name, kind, key, output))
             outputs += _images(
