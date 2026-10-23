@@ -2,7 +2,7 @@
 Mass models: the components of the mass of a galaxy, which add up.
 """
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Collection, Sequence
 from typing import Any
 
 import dataclasses
@@ -238,15 +238,22 @@ class MassModel(parseutils.Serializable):
             R: npt.ArrayLike,
             z: npt.ArrayLike,
             params: ParamValues,
-            context: MassContext
+            context: MassContext,
+            components: Collection[str] | None = None
     ) -> np.ndarray:
         """
         Return its density at the points (R, z) (see
-        MassComponent.density).
+        MassComponent.density): that of all its components, or of those of
+        the given names.
         """
-        return sum(self._each(
-            lambda component, own, ctx: component.density(R, z, own, ctx),
-            params, context).values())
+        total = np.zeros(np.broadcast_shapes(np.shape(R), np.shape(z)))
+        for component in self._components:
+            name = component.name()
+            if components is None or name in components:
+                total = total + component.density(
+                    R, z, self.component_params(name, params),
+                    self._context(component, params, context))
+        return total
 
     def forces(
             self,

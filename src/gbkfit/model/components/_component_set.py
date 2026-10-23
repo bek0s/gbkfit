@@ -108,6 +108,7 @@ def _with_mass_params(
     if mass_model is None:
         return params
     gravity = GravityNewton() if gravity is None else gravity
+    gravity.check_mass_model(mass_model)
     disks = [cmp.name() for cmp in components
              if cmp.density_disk() is not None]
     for mass_component in mass_model.components():

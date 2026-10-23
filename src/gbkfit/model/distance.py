@@ -14,13 +14,16 @@ import abc
 import functools
 from typing import Any
 
+import astropy.constants
 import astropy.cosmology
 import astropy.units
+import numpy as np
 
 from gbkfit.params import ParamValues
 from gbkfit.params.pdescs import ParamScalarDesc
 from gbkfit.utils import parseutils
 from gbkfit.utils.parseutils import ConfigError
+from .mass.units import G
 
 
 __all__ = [
@@ -37,6 +40,9 @@ KPC_PER_ARCSEC_MPC = (1 * astropy.units.arcsec).to_value('rad') * 1e3
 
 # The cosmology by default: Planck Collaboration (2020), Table 2
 COSMOLOGY_DEFAULT = 'Planck18'
+
+# The speed of light (km/s)
+_C = astropy.constants.c.to_value('km/s')
 
 
 def _cosmology(name: str) -> astropy.cosmology.Cosmology:
@@ -69,6 +75,20 @@ def _critical_density(cosmology: str, redshift: float) -> float:
 def _omega_m(cosmology: str, redshift: float) -> float:
     """Return the matter density parameter at a redshift."""
     return float(_cosmology(cosmology).Om(redshift))
+
+
+@functools.lru_cache(maxsize=256)
+def _ricci_scalar(cosmology: str, redshift: float) -> float:
+    """
+    Return the Ricci scalar of the background universe (kpc^-2) at a
+    redshift: 8 pi G (rho_m + (1 - 3 w) rho_de) / c^2, of its matter and
+    its dark energy (radiation is traceless; the massive neutrinos, which
+    astropy keeps apart from the matter, add some 0.05%: left out).
+    """
+    cosmo = _cosmology(cosmology)
+    density = cosmo.critical_density(redshift).to_value('solMass / kpc3') * (
+        cosmo.Om(redshift) + (1 - 3 * cosmo.w(redshift)) * cosmo.Ode(redshift))
+    return float(8 * np.pi * G * density / _C ** 2)
 
 
 def _baryon_fraction(cosmology: str) -> float | None:
@@ -171,6 +191,18 @@ class Distance(parseutils.TypedSerializable, abc.ABC):
         (see epoch for the arguments).
         """
         return _omega_m(self._cosmology_name, self.epoch(params, redshift))
+
+    def ricci_scalar(self, params: ParamValues, redshift: float) -> float:
+        """
+        Return the Ricci scalar of the background universe (kpc^-2) at the
+        epoch of the galaxy (see epoch for the arguments).
+        """
+        return _ricci_scalar(
+            self._cosmology_name, self.epoch(params, redshift))
+
+    def ricci_scalar_today(self) -> float:
+        """Return the Ricci scalar of the background universe today."""
+        return _ricci_scalar(self._cosmology_name, 0.0)
 
     def baryon_fraction(self) -> float | None:
         """

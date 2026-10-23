@@ -1,6 +1,7 @@
 """
 The gravity of a galaxy: how its mass (see MassModel) pulls, in
-Newtonian gravity (GravityNewton, by default) or in MOND (GravityMOND).
+Newtonian gravity (GravityNewton, by default), in MOND (GravityMOND) or
+in the f(R) gravity of Hu & Sawicki (GravityHuSawicki).
 Each gravity gives the field of the mass in one evaluation (see
 GravityField), whose circular velocity in the plane moves the
 components; what else a field gives (see Gravity), the features that
@@ -8,9 +9,10 @@ need it check when the galaxy is made.
 """
 
 import abc
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from typing import Any
 
+import astropy.constants
 import astropy.units
 import numpy as np
 import numpy.typing as npt
@@ -19,13 +21,16 @@ from gbkfit.params import ParamValues
 from gbkfit.params.pdescs import ParamScalarDesc
 from gbkfit.utils import parseutils
 from gbkfit.utils.parseutils import ConfigError
+from ._scalar_field import FieldGradient, solve_field
 from .mass import MassContext, MassModel
+from .mass.units import G
 
 
 __all__ = [
     'A0_UNIT',
     'Gravity',
     'GravityField',
+    'GravityHuSawicki',
     'GravityMOND',
     'GravityNewton',
     'MOND_INTERPOLATIONS',
@@ -45,6 +50,15 @@ _MOND_NU: dict[str, Callable[[np.ndarray], np.ndarray]] = dict(
 
 # The names of the interpolation functions of MOND
 MOND_INTERPOLATIONS = tuple(_MOND_NU)
+
+# The square of the speed of light ((km/s)^2)
+_C2 = astropy.constants.c.to_value('km/s') ** 2
+
+# The outer radius of the field of f(R) (kpc): this many of its Compton
+# wavelengths (beyond which it is in equilibrium with the density), and
+# at least this much
+_FR_RMAX_COMPTON = 10.0
+_FR_RMAX_MIN = 1000.0
 
 
 class GravityField(abc.ABC):
@@ -115,6 +129,13 @@ class Gravity(parseutils.TypedSerializable, abc.ABC):
         """
         Return the field of a mass model, at the values of the parameters
         of its galaxy (those of the gravity among them), in its context.
+        """
+
+    def check_mass_model(self, mass_model: MassModel) -> None:
+        """
+        Raise ConfigError, saying why, unless it takes the mass model of
+        its galaxy (e.g. the names of its components it refers to); here,
+        it does.
         """
 
     @abc.abstractmethod
@@ -334,6 +355,171 @@ class _MONDField(GravityField):
         return self.forces(R, z)[1]
 
 
+class GravityHuSawicki(Gravity):
+    """
+    The f(R) gravity of Hu & Sawicki (2007), with its chameleon screening:
+    the Newtonian field of all the mass, plus the fifth force (c^2 / 2)
+    grad(f_R) of the scalar field f_R, of the quasi-static equation
+
+        laplacian(f_R) = (R(f_R) - Rbar) / 3 - 8 pi G rho / (3 c^2)
+
+    with R(f_R) = Rbar (fbar_R / f_R)^(1/(n+1)) (Hu & Sawicki 2007, of
+    high curvature), Rbar and fbar_R the Ricci scalar and the field of the
+    background at the epoch of the galaxy, fbar_R = f_R0 (Rbar_0 /
+    Rbar)^(n+1) of the field today f_R0, and rho the density of the
+    galaxy (an overdensity in a universe of mean density, so far from it
+    f_R is in equilibrium with its density, and fbar_R where there is
+    none). Where the field is unscreened, the fifth force is a third of
+    the Newtonian one within the Compton wavelength (some Mpc for |f_R0|
+    = 1e-6, at the epoch 0); where the density is high enough, the field
+    is screened and the gravity Newtonian. Its parameter: 'gravity_log_fr0',
+    log10 |f_R0|.
+
+    The field is solved in each evaluation, on a grid of the meridional
+    plane to beyond its Compton wavelength, as SPAM (Naik et al. 2019)
+    does: some 0.1 to 1 s (more where the screening is partial). It is
+    sourced by the density of the mass components (point masses have
+    none: compact, they screen themselves), but those screened (e.g. the
+    stars, as SPAM can: each star screens itself); thin disks have no
+    density (that the screening needs), and raise NotImplementedError.
+    The environment of the galaxy does not screen it. Its forces anywhere
+    are those of the Newtonian forces of all the mass, plus the fifth
+    force; it does not give the vertical structure of self-gravitating
+    sheets, or the shares of the components (the fifth force is not a sum
+    over them). The Newtonian circular velocities of the components remain
+    in the rotation tables and the functions of the galaxy (see
+    GravityPlan.evaluate and GalaxyFunctions).
+
+    Parameters
+    ----------
+    n : float, optional
+        The index n of Hu & Sawicki (1 by default, as SPAM).
+    screened : sequence of str, optional
+        The names of the mass components that do not source the field.
+
+    Raises
+    ------
+    ConfigError
+        If n is not positive.
+    """
+
+    @staticmethod
+    def type() -> str:
+        return 'hu_sawicki'
+
+    def dump(self) -> dict[str, Any]:
+        return dict(
+            type=self.type(), n=self._n, screened=list(self._screened))
+
+    def __init__(self, n: float = 1, screened: Sequence[str] = ()):
+        if not n > 0:
+            raise ConfigError(f"n must be positive; it is {n}")
+        self._n = float(n)
+        self._screened = tuple(screened)
+
+    def n(self) -> float:
+        """Return the index n of Hu & Sawicki."""
+        return self._n
+
+    def screened(self) -> tuple[str, ...]:
+        """Return the names of the mass components that do not source it."""
+        return self._screened
+
+    def pdescs(self) -> dict[str, ParamScalarDesc]:
+        return dict(gravity_log_fr0=ParamScalarDesc(
+            desc="log10 of |f_R0|, the scalar field of the background "
+                 "today"))
+
+    def field(
+            self,
+            mass_model: MassModel,
+            params: ParamValues,
+            context: MassContext
+    ) -> GravityField:
+        if context.ricci_scalar is None or context.ricci_scalar_today is None:
+            raise ValueError(
+                "f(R) gravity takes the Ricci scalar of the background "
+                "universe, which the context of the mass does not give")
+        n, ricci = self._n, context.ricci_scalar
+        background = 10 ** float(params['gravity_log_fr0']) * (
+            context.ricci_scalar_today / ricci) ** (n + 1)
+        a = ricci / (3 * background)
+        b = 8 * np.pi * G / (3 * _C2 * background)
+        sources = [
+            component.name() for component in mass_model.components()
+            if component.name() not in self._screened]
+
+        def density(R: np.ndarray, z: np.ndarray) -> np.ndarray:
+            try:
+                return mass_model.density(R, z, params, context, sources)
+            except NotImplementedError as e:
+                raise NotImplementedError(
+                    f"the field of f(R) gravity is sourced by the density "
+                    f"of the mass components that are not screened: "
+                    f"{e}") from e
+
+        rmax = max(_FR_RMAX_COMPTON * np.sqrt((n + 1) / a), _FR_RMAX_MIN)
+        grid, w, w_out = solve_field(rmax, density, a, b, n)
+        return _HuSawickiField(
+            _NewtonField(mass_model, params, context),
+            grid.gradient(w, w_out), _C2 * background / 2)
+
+    def check_mass_model(self, mass_model: MassModel) -> None:
+        names = [component.name() for component in mass_model.components()]
+        if unknown := [name for name in self._screened if name not in names]:
+            raise ConfigError(
+                f"the screened mass components {unknown} are not in the "
+                f"mass model; its components: {names}")
+
+    def check_forces(self, mass_model: MassModel) -> None:
+        # (of the Newtonian forces of all the mass)
+        _check_components_give_forces(mass_model)
+
+    def check_self_gravitating_sheets(self) -> None:
+        raise ConfigError(
+            "the self-gravitating sheets of f(R) gravity are not those of "
+            "Newtonian gravity")
+
+    def check_shares(self) -> None:
+        raise ConfigError(
+            "the fifth force of f(R) gravity is not a sum over the "
+            "components")
+
+
+class _HuSawickiField(GravityField):
+    """
+    The field of a mass model in f(R) gravity (see GravityHuSawicki): its
+    Newtonian field, plus the fifth force -scale grad(w) of the field w =
+    f_R / fbar_R (scale = c^2 |fbar_R| / 2, (km/s)^2), of the gradient of
+    w (kpc^-1) at any points (R, z).
+    """
+
+    def __init__(
+            self, newton: GravityField, gradient: FieldGradient, scale: float
+    ):
+        self._newton = newton
+        self._gradient = gradient
+        self._scale = scale
+
+    def vcirc2(self, R: npt.ArrayLike) -> np.ndarray:
+        R = np.asarray(R, dtype=float)
+        grad_R, _ = self._gradient(R, np.zeros_like(R))
+        return self._newton.vcirc2(R) + self._scale * R * grad_R
+
+    def forces(
+            self, R: npt.ArrayLike, z: npt.ArrayLike
+    ) -> tuple[np.ndarray, np.ndarray]:
+        force_R, force_z = self._newton.forces(R, z)
+        grad_R, grad_z = self._gradient(R, z)
+        return (force_R - self._scale * grad_R,
+                force_z - self._scale * grad_z)
+
+    def vertical_force(
+            self, R: npt.ArrayLike, z: npt.ArrayLike
+    ) -> np.ndarray:
+        return self.forces(R, z)[1]
+
+
 def _check_components_give_forces(mass_model: MassModel) -> None:
     """
     Raise ConfigError unless every component of the mass model gives its
@@ -348,4 +534,5 @@ def _check_components_give_forces(mass_model: MassModel) -> None:
             f"forces, see MassUser)")
 
 
-gravity_parser = parseutils.TypedParser(Gravity, [GravityNewton, GravityMOND])
+gravity_parser = parseutils.TypedParser(
+    Gravity, [GravityNewton, GravityMOND, GravityHuSawicki])

@@ -1,6 +1,6 @@
 """
 Tests of the gravity of galaxies (see Gravity): how their mass pulls, in
-Newtonian gravity or in MOND.
+Newtonian gravity, in MOND or in f(R) gravity.
 """
 
 import copy
@@ -8,7 +8,8 @@ import copy
 import numpy as np
 import pytest
 
-from gbkfit.model import Extras, GravityNewton, galaxy_parser
+from gbkfit.model import Extras, GravityHuSawicki, GravityNewton, galaxy_parser
+from gbkfit.model.mass import MassContext, MassModel
 from gbkfit.utils.parseutils import ConfigError
 
 
@@ -164,3 +165,77 @@ def test_mond_needs_an_interpolation_function():
     with pytest.raises(ConfigError, match="must be one of"):
         galaxy(mass=POINT, distance=DISTANCE,
                gravity=dict(type='mond', interpolation='best'))
+
+
+# A halo and a thick disk of stars, for f(R) gravity
+HALO = dict(
+    type='spheroid', name='halo',
+    profile=dict(type='nfw', parameters='density_radius'))
+THICK = [dict(
+    type='disk', name='stars', surface=dict(type='exponential'),
+    vertical=dict(type='exponential')), HALO]
+THICK_PARAMS = PARAMS | dict(
+    mass_stars_log_m=10.7, mass_stars_rd=3, mass_stars_hz=0.3,
+    mass_halo_log_rho=7, mass_halo_rs=10)
+
+# The squared velocity ((km/s)^2) of the fifth force of the halo (rho_s =
+# 1e7 Msun/kpc^3, r_s = 10 kpc) at 5 to 200 kpc, by the solver of SPAM
+# (Naik et al. 2019: its Grid1D, of 175 cells to 5 Mpc), in its background
+# (h = 0.7, Omega_m = 0.308, at z = 0), of log10 |f_R0|: partly screened
+SPAM_RADII = np.array([5.0, 20, 50, 100, 200])
+SPAM_V5 = {
+    -6.5: [1876.37, 3709.77, 3378.31, 2644.74, 1854.35],
+    -7.0: [0.0, 0.01, 1500.78, 1689.12, 1357.58]}
+
+
+@pytest.mark.parametrize('log_fr0', SPAM_V5)
+def test_hu_sawicki_as_spam(log_fr0):
+    # (to its precision: some 0.3% of v5^2 with its cells)
+    model = MassModel.load(dict(components=[copy.deepcopy(HALO)]))
+    params = dict(mass_halo_log_rho=7, mass_halo_rs=10,
+                  gravity_log_fr0=log_fr0)
+    ricci = 3 * 0.308 * (0.07 / 299792.458) ** 2 * (1 + 4 * 0.692 / 0.308)
+    context = MassContext(1.0, 0.308, ricci_scalar=ricci,
+                          ricci_scalar_today=ricci)
+    field = GravityHuSawicki().field(model, params, context)
+    v5 = (field.vcirc2(SPAM_RADII)
+          - model.vcirc2(SPAM_RADII, params, context))
+    np.testing.assert_allclose(v5, SPAM_V5[log_fr0], rtol=0.01, atol=1)
+
+
+def test_hu_sawicki_unscreened_and_screened():
+    # Unscreened (|f_R0| = 1e-5, Compton wavelength 11 Mpc), the forces
+    # are 4/3 of the Newtonian ones, anywhere; screened (1e-9), Newtonian
+    galaxy_ = galaxy(mass=THICK, distance=DISTANCE,
+                     gravity=dict(type='hu_sawicki'))
+    assert galaxy_parser.dump(galaxy_)['gravity'] == dict(
+        type='hu_sawicki', n=1.0, screened=[])
+    R, z = np.array([1.0, 5, 20]), np.array([0.5, 0, 5])
+    params = THICK_PARAMS | dict(gravity_log_fr0=-5)
+    mass = galaxy_.plan_gravity().mass(params)
+    newton = mass.model.forces(R, z, mass.params, mass.context)
+    np.testing.assert_allclose(
+        mass.field.forces(R, z), 4 / 3 * np.array(newton), rtol=2e-3)
+    bound = galaxy_.plan_functions().bind(params | dict(gravity_log_fr0=-9))
+    np.testing.assert_allclose(bound['vcirc'](R), bound['vnewton'](R),
+                               rtol=1e-9)
+
+
+def test_hu_sawicki_sources():
+    # A thin disk has no density, to source the field, unless it is
+    # screened; the screened components are of the mass model
+    thin = [MASS[0], HALO]
+    params = THICK_PARAMS | dict(gravity_log_fr0=-6)
+    unscreened = galaxy(mass=thin, distance=DISTANCE,
+                        gravity=dict(type='hu_sawicki'))
+    with pytest.raises(NotImplementedError, match='not screened'):
+        unscreened.plan_gravity().mass(params)
+    screened = galaxy(mass=thin, distance=DISTANCE,
+                      gravity=dict(type='hu_sawicki', screened=['stars']))
+    screened.plan_gravity().mass(params)
+    with pytest.raises(ConfigError, match="screened mass components"):
+        galaxy(mass=thin, distance=DISTANCE,
+               gravity=dict(type='hu_sawicki', screened=['gas']))
+    with pytest.raises(ConfigError, match="n must be positive"):
+        galaxy(mass=thin, distance=DISTANCE,
+               gravity=dict(type='hu_sawicki', n=0))

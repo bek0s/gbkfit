@@ -373,7 +373,9 @@ class GravityPlan:
                     self._component_params(i, params), kpc_per_arcsec,
                     self._mass_per_unit[i])
                 for i in self._followed},
-            baryon_fraction=distance.baryon_fraction())
+            baryon_fraction=distance.baryon_fraction(),
+            ricci_scalar=distance.ricci_scalar(params, redshift),
+            ricci_scalar_today=distance.ricci_scalar_today())
         return GalaxyMass(
             mass_model, params, context, kpc_per_arcsec,
             component_set.gravity().field(mass_model, params, context))
