@@ -41,21 +41,42 @@ _C = astropy.constants.c.to_value('km/s')
 # The segments of a chunk of pixel_footprints (a bound of its memory)
 _FOOTPRINT_CHUNK = 20000
 
+# The nodes and weights of the rule of Gauss and Legendre of 3 nodes on
+# [-1, 1]
+_GAUSS_LEGENDRE_3 = (
+    (-np.sqrt(0.6), 5 / 9), (0.0, 8 / 9), (np.sqrt(0.6), 5 / 9))
 
-def _overlap(s: np.ndarray, width: np.ndarray) -> np.ndarray:
+
+# The responses of the pixels of an image to light along an axis, by the
+# distance u from their centres (pixels): of the pixels of the detector, a
+# box of a pixel; of pixels resampled from them by drizzle (of a square
+# kernel of a pixel), the box spread by a pixel more, a triangle. Each has
+# the places of its kinks and its integral from -inf to u, piecewise of
+# that degree in u
+_PIXEL_RESPONSES = dict(
+    box=((-0.5, 0.5), 1, lambda u: np.clip(u + 0.5, 0.0, 1.0)),
+    triangle=((-1.0, 0.0, 1.0), 2, lambda u: np.where(
+        u < 0, np.clip(u + 1, 0.0, 1.0) ** 2 / 2,
+        1 - np.clip(1 - u, 0.0, 1.0) ** 2 / 2)))
+
+
+def _overlap(
+        s: np.ndarray, width: np.ndarray, response: str
+) -> np.ndarray:
     """
-    Return the overlap of an interval of a width and a unit interval whose
-    centres are s apart: linear in s but at s = +-(width - 1) / 2 and
-    +-(width + 1) / 2.
+    Return the light that a pixel of a response takes from an interval of
+    light of a width, whose centre is s from its own (the integral of the
+    response over the interval).
     """
-    return np.maximum(
-        0.0, np.minimum(width / 2, s + 0.5) - np.maximum(-width / 2, s - 0.5))
+    integral = _PIXEL_RESPONSES[response][2]
+    return integral(s + width / 2) - integral(s - width / 2)
 
 
 def pixel_footprint(
         start: tuple[float, float],
         end: tuple[float, float],
-        size: tuple[float, float] = (1, 1)
+        size: tuple[float, float] = (1, 1),
+        response: str = 'box'
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Return where the light of a box (a pixel, or a part of it) lands when
@@ -67,10 +88,14 @@ def pixel_footprint(
     The fraction in a pixel is the mean over the segment of the overlap of
     the moved box with it, over the area of the box: the integral over t
     in [0, 1] of o_x(p - x(t)) o_y(q - y(t)) / (w_x w_y), where (x, y)
-    moves from start to end and o_x(s) is the overlap of an interval of
-    the width w_x of the box with a unit interval s apart (likewise o_y).
-    Between the values of t where either factor has a kink, the product is
-    a quadratic, so Simpson's rule on each such interval is exact. The
+    moves from start to end and o_x(s) is the integral of the response of
+    the pixel along x over an interval of the width w_x of the box, s from
+    its centre (likewise o_y): of a box of a pixel (the pixels of the
+    detector), or of a triangle of two (pixels resampled from those of the
+    detector by drizzle, of a square kernel of a pixel). Between the
+    values of t where either factor has a kink, the product is a
+    polynomial (a quadratic, or a quartic), so Simpson's rule (or that of
+    Gauss and Legendre of 3 nodes) on each such interval is exact. The
     fractions add up to 1.
 
     Parameters
@@ -79,6 +104,8 @@ def pixel_footprint(
         The ends of the segment (x, y).
     size : tuple of float, optional
         The widths of the box (pixels); a pixel by default.
+    response : str, optional
+        The response of the pixels: 'box' (the default) or 'triangle'.
 
     Returns
     -------
@@ -87,20 +114,22 @@ def pixel_footprint(
     weights : np.ndarray
         The fraction of the light in each.
     """
-    _, p, q, weights = pixel_footprints([start], [end], [size])
+    _, p, q, weights = pixel_footprints([start], [end], [size], response)
     return p, q, weights
 
 
 def pixel_footprints(
         starts: npt.ArrayLike,
         ends: npt.ArrayLike,
-        sizes: npt.ArrayLike | None = None
+        sizes: npt.ArrayLike | None = None,
+        response: str = 'box'
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
     Return the footprints of boxes moved along segments (see
     pixel_footprint), from starts to ends (of shape (n, 2), pixels), of
-    the given sizes (of shape (n, 2); pixels by default): the segment of
-    each fraction, its pixel (p, q) and the fraction.
+    the given sizes (of shape (n, 2); pixels by default), on pixels of a
+    response: the segment of each fraction, its pixel (p, q) and the
+    fraction.
     """
     starts = np.asarray(starts, dtype=float).reshape(-1, 2)
     ends = np.asarray(ends, dtype=float).reshape(-1, 2)
@@ -110,53 +139,68 @@ def pixel_footprints(
     for first in range(0, len(starts), _FOOTPRINT_CHUNK):
         chunk = slice(first, first + _FOOTPRINT_CHUNK)
         for k, part in enumerate(_footprints(
-                starts[chunk], ends[chunk], sizes[chunk], first)):
+                starts[chunk], ends[chunk], sizes[chunk], response, first)):
             out[k].append(part)
     index, p, q, weights = (np.concatenate(parts) for parts in out)
     return index, p.astype(int), q.astype(int), weights
 
 
 def _footprints(
-        starts: np.ndarray, ends: np.ndarray, sizes: np.ndarray, first: int
+        starts: np.ndarray,
+        ends: np.ndarray,
+        sizes: np.ndarray,
+        response: str,
+        first: int
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
-    Return the footprints of a chunk of boxes and segments (see
-    pixel_footprints), the first of which is of the index first.
+    Return the footprints of a chunk of boxes and segments on pixels of a
+    response (see pixel_footprints), the first of which is of the index
+    first.
     """
+    knots, degree, _ = _PIXEL_RESPONSES[response]
     ax, ay = starts[:, 0:1], starts[:, 1:2]
     lx, ly = ends[:, 0:1] - ax, ends[:, 1:2] - ay
     wx, wy = sizes[:, 0:1], sizes[:, 1:2]
-    # (the pixels within (w + 1) / 2 of the segment)
-    reach = (sizes + 1) / 2
+    # (the pixels within w / 2 of the segment and the response)
+    reach = sizes / 2 + max(knots)
     corner = np.floor(np.minimum(starts, ends) - reach)
     span = (np.ceil(np.maximum(starts, ends) + reach) + 1 - corner).max(
         axis=0)
     ox, oy = (o.ravel() for o in np.meshgrid(
         np.arange(span[0]), np.arange(span[1])))
     p, q = corner[:, 0:1] + ox, corner[:, 1:2] + oy
-    # (the kinks: p - x(t) or q - y(t) at +-(w - 1) / 2 or +-(w + 1) / 2)
+    # (the kinks: p - x(t) or q - y(t) at a knot of the response, less or
+    # plus w / 2)
     breaks = [np.zeros_like(p), np.ones_like(p)]
     for pixel, origin, length, width in (
             (p, ax, lx, wx), (q, ay, ly, wy)):
-        for kink in (-(width + 1) / 2, -(width - 1) / 2, (width - 1) / 2,
-                     (width + 1) / 2):
-            breaks.append(np.divide(
-                pixel - kink - origin, length, out=np.zeros_like(pixel),
-                where=length != 0))
+        for knot in knots:
+            for side in (-0.5, 0.5):
+                breaks.append(np.divide(
+                    pixel - knot - side * width - origin, length,
+                    out=np.zeros_like(pixel), where=length != 0))
     t = np.sort(np.clip(np.stack(breaks, axis=-1), 0, 1), axis=-1)
 
     def overlap(t_: np.ndarray) -> np.ndarray:
         return (_overlap(p[..., None] - ax[..., None] - t_ * lx[..., None],
-                         wx[..., None])
+                         wx[..., None], response)
                 * _overlap(q[..., None] - ay[..., None] - t_ * ly[..., None],
-                           wy[..., None]))
-    # (Simpson's rule on each interval, of the values at the breaks shared
-    # by the intervals on either side)
-    at_breaks = overlap(t)
-    weights = np.sum(
-        (t[..., 1:] - t[..., :-1]) / 6
-        * (at_breaks[..., :-1] + 4 * overlap((t[..., :-1] + t[..., 1:]) / 2)
-           + at_breaks[..., 1:]), axis=-1) / (wx * wy)
+                           wy[..., None], response))
+    t0, t1 = t[..., :-1], t[..., 1:]
+    if degree == 1:
+        # (Simpson's rule on each interval, of the values at the breaks
+        # shared by the intervals on either side)
+        at_breaks = overlap(t)
+        weights = np.sum((t1 - t0) / 6 * (
+            at_breaks[..., :-1] + 4 * overlap((t0 + t1) / 2)
+            + at_breaks[..., 1:]), axis=-1)
+    else:
+        # (that of Gauss and Legendre of 3 nodes, exact for quintics)
+        weights = sum(
+            weight * np.sum((t1 - t0) / 2 * overlap(
+                (t0 + t1) / 2 + node * (t1 - t0) / 2), axis=-1)
+            for node, weight in _GAUSS_LEGENDRE_3)
+    weights = weights / (wx * wy)
     keep = weights > 0
     index = np.broadcast_to(
         first + np.arange(len(starts))[:, None], p.shape)
@@ -285,7 +329,11 @@ class SlitlessSpectra(Observable):
     along each axis, to place the light within a pixel (e.g. across
     shutters of a few pixels). The image can combine several exposures,
     of the sky at offsets (e.g. nods), with weights (e.g. to subtract the
-    background as the reduction did; see Exposure).
+    background as the reduction did; see Exposure). An image resampled
+    from the detector by drizzle, of a square kernel of a pixel (e.g.
+    rectified spectra), takes the light of each pixel of the detector by
+    overlap: its light lands spread by a pixel more (see pixel_footprint),
+    of the pixels of the detector taken of the size of its own.
 
     Its configuration has the options below, but those of the grid when
     it has data, which give them (see from_data).
@@ -326,6 +374,8 @@ class SlitlessSpectra(Observable):
         by default.
     sky_sampling : int, optional
         The pixels of the sky for each pixel of the image, along each axis.
+    resampled : bool, optional
+        Whether the image was resampled from the detector by drizzle.
 
     Raises
     ------
@@ -374,7 +424,8 @@ class SlitlessSpectra(Observable):
             spec_convention: str | None = None,
             aperture: Aperture | None = None,
             exposures: Exposure | Sequence[Exposure] | None = None,
-            sky_sampling: int = 1
+            sky_sampling: int = 1,
+            resampled: bool = False
     ) -> 'SlitlessSpectra':
         """
         Make the observable of slitless spectra, on their grid.
@@ -386,7 +437,7 @@ class SlitlessSpectra(Observable):
         spec_step, spec_rest, trace :
             As those of SlitlessSpectra.
         spec_size, spec_rval, spec_medium, spec_convention, aperture,
-        exposures, sky_sampling : optional
+        exposures, sky_sampling, resampled : optional
             As those of SlitlessSpectra.
 
         Returns
@@ -406,7 +457,8 @@ class SlitlessSpectra(Observable):
             spec_rest=spec_rest, trace=trace, spec_size=spec_size,
             spec_rval=spec_rval, spec_medium=spec_medium,
             spec_convention=spec_convention, aperture=aperture,
-            exposures=exposures, sky_sampling=sky_sampling)
+            exposures=exposures, sky_sampling=sky_sampling,
+            resampled=resampled)
 
     def dump(
             self,
@@ -433,7 +485,8 @@ class SlitlessSpectra(Observable):
                 overwrite=overwrite),
             aperture=aperture_parser.dump(self._aperture),
             exposures=exposure_parser.dump(list(self._exposures)),
-            sky_sampling=self._sky_sampling), data)
+            sky_sampling=self._sky_sampling,
+            resampled=self._resampled), data)
 
     def __init__(
             self,
@@ -451,7 +504,8 @@ class SlitlessSpectra(Observable):
             spec_convention: str | None = None,
             aperture: Aperture | None = None,
             exposures: Exposure | Sequence[Exposure] | None = None,
-            sky_sampling: int = 1
+            sky_sampling: int = 1,
+            resampled: bool = False
     ):
         super().__init__(size, step, rpix, rval, rota)
         _detail.check_positive('spec_step', spec_step)
@@ -484,6 +538,7 @@ class SlitlessSpectra(Observable):
         self._aperture = aperture
         self._exposures = exposures
         self._sky_sampling = sky_sampling
+        self._resampled = resampled
 
     def spec_size(self) -> int:
         """Return the number of channels of the model."""
@@ -524,6 +579,10 @@ class SlitlessSpectra(Observable):
     def sky_sampling(self) -> int:
         """Return the pixels of the sky for each pixel of the image."""
         return self._sky_sampling
+
+    def resampled(self) -> bool:
+        """Check whether the image was resampled from the detector."""
+        return self._resampled
 
     def keys(self) -> tuple[str, ...]:
         return ('spectra',)
@@ -628,7 +687,7 @@ class SlitlessSpectra(Observable):
         (of the edges of its wavelengths) can land on the image in some
         exposure, through the aperture if any: its offset from the image
         (pixels) and its size, and a pixel more each way (of the
-        footprints of the pixels).
+        footprints of the pixels; two of resampled pixels).
         """
         los, his = [], []
         for exposure in self._exposures:
@@ -648,8 +707,9 @@ class SlitlessSpectra(Observable):
             raise ConfigError(
                 "no light of the sky can land on the image of the slitless "
                 "spectra; check the aperture and the exposures")
-        lo = np.floor(np.min(los, axis=0)) - 1
-        hi = np.ceil(np.max(his, axis=0)) + 1
+        margin = 2 if self._resampled else 1
+        lo = np.floor(np.min(los, axis=0)) - margin
+        hi = np.ceil(np.max(his, axis=0)) + margin
         offset = (int(lo[0]), int(lo[1]))
         return offset, (int(hi[0] - lo[0]) + 1, int(hi[1] - lo[1]) + 1)
 
@@ -765,7 +825,8 @@ class SlitlessSpectra(Observable):
         # per channel and centre of a trace the same at every place)
         distinct, inverse = _unique_rows(rows)
         segment, p, q, weights = pixel_footprints(
-            distinct[:, 0:2], distinct[:, 2:4], distinct[:, 4:6])
+            distinct[:, 0:2], distinct[:, 2:4], distinct[:, 4:6],
+            'triangle' if self._resampled else 'box')
         counts = np.bincount(segment, minlength=len(distinct))
         first = np.cumsum(counts) - counts
         counts, first = counts[inverse], first[inverse]

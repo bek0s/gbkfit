@@ -85,6 +85,23 @@ def test_pixel_footprint_of_a_box_matches_sampling():
     np.testing.assert_allclose(sampled, weights, atol=3e-3)
 
 
+def test_pixel_footprint_on_resampled_pixels_matches_sampling():
+    # Pixels resampled by drizzle (of a square kernel of a pixel) take the
+    # light of each pixel of the detector by overlap: that of the box moved
+    # by a uniform offset of up to half a pixel more
+    start, end, size = (0.2, 0.1), (3.7, 0.9), (0.3, 0.6)
+    p, q, weights = pixel_footprint(start, end, size, 'triangle')
+    assert weights.sum() == pytest.approx(1)
+    rng = np.random.default_rng(2)
+    t, ux, uy, vx, vy = rng.random((5, 400_000))
+    x = np.rint(start[0] + t * (end[0] - start[0]) + (ux - 0.5) * size[0]
+                + vx - 0.5)
+    y = np.rint(start[1] + t * (end[1] - start[1]) + (uy - 0.5) * size[1]
+                + vy - 0.5)
+    sampled = [np.mean((x == a) & (y == b)) for a, b in zip(p, q)]
+    np.testing.assert_allclose(sampled, weights, atol=3e-3)
+
+
 @pytest.mark.parametrize('psf', [None, dict(type='gauss', sigma=1.5)])
 def test_slitless_spectra_are_the_cube_dispersed(driver, psf):
     # Channel m from the centre spans dx from m - 1/2 to m + 1/2, so each
@@ -331,13 +348,22 @@ def test_an_aperture_lets_the_spectrograph_blur_the_spectra(driver):
     assert blurred.max() < 0.9 * sharp.max()
 
 
+def test_resampled_spectra_spread_the_light_by_a_pixel_more(driver):
+    # (of the same light in total, of a galaxy within the image)
+    compact = PROPERTIES | dict(pt_s=1, vpt_vt=60)
+    plain = evaluate(driver, SLITLESS, compact)
+    resampled = evaluate(driver, SLITLESS | dict(resampled=True), compact)
+    assert resampled.sum() == pytest.approx(plain.sum(), rel=1e-3)
+    assert resampled.max() < plain.max()
+
+
 def test_apertures_and_exposures_from_configurations():
     from gbkfit.observation import observable_parser
     info = SLITLESS | dict(
         aperture=dict(type='shutters', size=[0.2, 0.46], pitch=0.53,
                       count=3, centre=[0.1, 0]),
         exposures=[dict(), dict(sky_offset=[0, 0.53], weight=-1)],
-        sky_sampling=4)
+        sky_sampling=4, resampled=True)
     observable = observable_parser.load(copy.deepcopy(info))
     assert observable.aperture().rectangles().shape == (3, 4)
     assert [e.weight() for e in observable.exposures()] == [1, -1]
